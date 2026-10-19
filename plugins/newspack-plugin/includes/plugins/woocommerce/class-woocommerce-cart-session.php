@@ -10,30 +10,31 @@ namespace Newspack;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Resets a session cart that no longer unserializes, so the user's saved cart loads instead.
+ * Keeps a session cart that no longer unserializes from breaking every request.
  *
- * A domain search-replace that misses the cart nested inside the session row
- * leaves it unreadable. For a user with a saved-cart merge pending, which every
- * login sets, WC_Cart_Session::get_cart_from_session() then throws a TypeError
- * from array_merge(). WooCommerce clears the pending merge only after that call,
- * so without this reset the user hits the same fatal on every request.
+ * A domain search-replace that rewrites a URL inside the cart nested in the
+ * session row, without fixing the length declared before it, leaves the cart
+ * unreadable. For a user with a saved-cart merge pending, which every login
+ * sets, WC_Cart_Session::get_cart_from_session() then throws a TypeError from
+ * array_merge(). WooCommerce clears the pending merge only after that call, so
+ * without this reset the user hits the same fatal on every request.
  */
-class WooCommerce_Cart_Session {
+final class WooCommerce_Cart_Session {
 	/**
 	 * Initialize hooks.
 	 */
-	public static function init() {
+	public static function init(): void {
 		\add_action( 'woocommerce_load_cart_from_session', [ __CLASS__, 'reset_unreadable_cart' ] );
 	}
 
 	/**
 	 * Remove a session cart that isn't an array, so WooCommerce treats the session as having no cart.
 	 *
-	 * Runs before WooCommerce reads the cart. Removing the value also marks the
-	 * session as changed, so WooCommerce saves it without the broken cart and the
-	 * reset is logged once per session.
+	 * Runs before WooCommerce reads the cart. The reset is saved with the
+	 * session, so a broken session is logged when it is repaired rather than on
+	 * every request.
 	 */
-	public static function reset_unreadable_cart() {
+	public static function reset_unreadable_cart(): void {
 		if ( ! function_exists( 'WC' ) || ! WC()->session ) {
 			return;
 		}

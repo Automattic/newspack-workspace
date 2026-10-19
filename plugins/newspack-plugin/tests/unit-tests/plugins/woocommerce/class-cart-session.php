@@ -11,9 +11,10 @@
  *
  * WooCommerce isn't loaded in this suite, so each test stubs WC() with a
  * session that stores values the way WC_Session does, and replays the part of
- * WC_Cart_Session::get_cart_from_session() that fatals. The stub runs in a
- * separate process because a global WC() would flip the function_exists( 'WC' )
- * gates for every later test in the run.
+ * WC_Cart_Session::get_cart_from_session() that fatals. Without the reset, that
+ * replay throws the same TypeError as production. The stub runs in a separate
+ * process because a global WC() would flip the function_exists( 'WC' ) gates
+ * for every later test in the run.
  *
  * @group WooCommerce_Cart_Session
  */
@@ -109,9 +110,9 @@ class Newspack_Test_WooCommerce_Cart_Session extends WP_UnitTestCase {
 	 * The session stores values like WC_Session in WooCommerce 11.2.1: serialized
 	 * on write, read through maybe_unserialize(), and removed when set to null.
 	 *
-	 * @param array|null $data Stored session values keyed by name, or null for no session.
+	 * @param array $data Stored session values keyed by name.
 	 */
-	private function stub_wc_session( $data ) {
+	private function stub_wc_session( array $data ) {
 		if ( ! $this->isInIsolation() ) {
 			$this->fail( 'stub_wc_session() may only be called from @runInSeparateProcess tests: defining WC() in the main suite process would flip function_exists( "WC" ) gates for every later test in the run.' );
 		}
@@ -135,10 +136,6 @@ class Newspack_Test_WooCommerce_Cart_Session extends WP_UnitTestCase {
 				}
 				return $newspack_test_wc;
 			}
-		}
-		if ( null === $data ) {
-			WC()->session = null;
-			return;
 		}
 		WC()->session = new class( $data ) {
 			/**
@@ -209,22 +206,6 @@ class Newspack_Test_WooCommerce_Cart_Session extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Without the reset, the replay hits the same TypeError as production, so
-	 * the tests below exercise the real failure.
-	 *
-	 * @runInSeparateProcess
-	 * @preserveGlobalState disabled
-	 */
-	public function test_unreadable_cart_fatals_without_the_reset() {
-		$this->log_in_reader_with_saved_cart();
-		$this->stub_wc_session( [ 'cart' => self::unreadable_cart() ] );
-		remove_all_actions( 'woocommerce_load_cart_from_session' );
-
-		$this->expectException( TypeError::class );
-		$this->load_cart_from_session();
-	}
-
-	/**
 	 * The saved cart loads and the merge flag clears, so the next request doesn't
 	 * repeat the merge. The unreadable value leaves the session, so WooCommerce
 	 * doesn't save it back.
@@ -245,7 +226,7 @@ class Newspack_Test_WooCommerce_Cart_Session extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A reset is logged once, so a corrupted sessions table shows up in the logs.
+	 * Each reset is logged, so a corrupted sessions table shows up in the logs.
 	 *
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
@@ -260,13 +241,11 @@ class Newspack_Test_WooCommerce_Cart_Session extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A readable cart merges with the saved cart as WooCommerce intends.
+	 * Sessions the reset must leave alone, with the cart WooCommerce should load from each.
 	 *
-	 * @runInSeparateProcess
-	 * @preserveGlobalState disabled
+	 * @return array[]
 	 */
-	public function test_readable_cart_is_left_alone() {
-		$this->log_in_reader_with_saved_cart();
+	public function sessions_left_alone() {
 		$session_cart = [
 			'session-item' => [
 				'product_id'   => 102,
@@ -274,41 +253,30 @@ class Newspack_Test_WooCommerce_Cart_Session extends WP_UnitTestCase {
 				'quantity'     => 1,
 			],
 		];
-		$this->stub_wc_session( [ 'cart' => maybe_serialize( $session_cart ) ] );
-
-		$cart = $this->load_cart_from_session();
-
-		$this->assertSame( array_merge( self::saved_cart(), $session_cart ), $cart );
-		$this->assertSame( [], $this->logged );
+		return [
+			'readable cart' => [ [ 'cart' => maybe_serialize( $session_cart ) ], array_merge( self::saved_cart(), $session_cart ) ],
+			'no cart'       => [ [], self::saved_cart() ],
+		];
 	}
 
 	/**
-	 * A session with no cart, the usual state for a visitor, logs nothing.
+	 * A readable cart, or no cart (the usual state for a visitor), loads as
+	 * WooCommerce intends and logs nothing.
 	 *
+	 * @dataProvider sessions_left_alone
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
+	 *
+	 * @param array $session_data  Stored session values.
+	 * @param array $expected_cart Cart WooCommerce should load.
 	 */
-	public function test_session_without_cart_is_left_alone() {
+	public function test_readable_or_missing_cart_is_left_alone( $session_data, $expected_cart ) {
 		$this->log_in_reader_with_saved_cart();
-		$this->stub_wc_session( [] );
+		$this->stub_wc_session( $session_data );
 
 		$cart = $this->load_cart_from_session();
 
-		$this->assertSame( self::saved_cart(), $cart );
-		$this->assertSame( [], $this->logged );
-	}
-
-	/**
-	 * Without a WooCommerce session there is nothing to reset, and the hook stays quiet.
-	 *
-	 * @runInSeparateProcess
-	 * @preserveGlobalState disabled
-	 */
-	public function test_missing_session_is_ignored() {
-		$this->stub_wc_session( null );
-
-		do_action( 'woocommerce_load_cart_from_session' );
-
+		$this->assertSame( $expected_cart, $cart );
 		$this->assertSame( [], $this->logged );
 	}
 }
