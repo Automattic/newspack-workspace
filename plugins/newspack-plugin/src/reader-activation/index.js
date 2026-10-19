@@ -451,8 +451,9 @@ function checkNewsletterSubscription() {
  * Record that a newsletter form was submitted in this browser.
  *
  * Only the browser-side hint is written here. The subscriber flag itself is
- * set by the server, and `.newspack-subscribe-form` (a generic class for
- * third-party forms) additionally asks the server to re-check it.
+ * set by the server. A form with `.newspack-subscribe-form` (a generic class
+ * for third-party forms, Gravity Forms included) also asks the server to
+ * re-check it when submitted by a logged-in reader.
  */
 export function attachNewsletterFormListener() {
 	const newspackForms = [ '.newspack-newsletters-subscribe' ];
@@ -502,6 +503,17 @@ export function attachNewsletterFormListener() {
 		if ( window.gform?.utils?.addAsyncFilter && gformIds.includes( event.detail?.formId ) ) {
 			gform.utils.addAsyncFilter( 'gform/submission/pre_submission', async data => {
 				markSignup();
+				// The server hook only covers Gravity Forms feeds it knows how to read,
+				// so a form with the generic class asks for a check the same way other
+				// third-party forms do. The server queues a follow-up check, which
+				// covers a provider that has not received the signup yet.
+				try {
+					if ( data?.form?.matches?.( '.newspack-subscribe-form' ) ) {
+						checkNewsletterSubscription();
+					}
+				} catch ( err ) {
+					// Nothing here may interrupt the form submission.
+				}
 				return data;
 			} );
 		}

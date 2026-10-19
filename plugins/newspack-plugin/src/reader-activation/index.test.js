@@ -722,6 +722,23 @@ describe( 'newsletter form listener', () => {
 		expect( opens ).toEqual( [] );
 		delete window.gform;
 	} );
+	it( 'checks the server when a Gravity Forms form with the subscribe class submits', async () => {
+		let filter;
+		window.gform = { utils: { addAsyncFilter: ( name, fn ) => ( filter = fn ) } };
+		const subscribeForm = addForm( '<form class="newspack-subscribe-form" id="gform_1" data-formid="1"></form>' );
+		document.dispatchEvent( new CustomEvent( 'gform/post_render', { detail: { formId: 1 } } ) );
+		const data = { form: subscribeForm };
+		await expect( filter( data ) ).resolves.toBe( data );
+		expect( store.get( 'newsletter_signup_client' ) ).toBe( true );
+		expect( opens ).toHaveLength( 1 );
+		expect( opens[ 0 ][ 1 ] ).toBe( 'http://test/wp-json/newspack/v1/reader-data/newsletter-check' );
+
+		// Another Gravity Forms form on the page goes through the same filter.
+		const otherData = { form: addForm( '<form id="gform_2" data-formid="2"></form>' ) };
+		await expect( filter( otherData ) ).resolves.toBe( otherData );
+		expect( opens ).toHaveLength( 1 );
+		delete window.gform;
+	} );
 	it( 'checks the server after a newspack-subscribe-form submit while logged in', () => {
 		const form = addForm( '<form class="newspack-subscribe-form"></form>' );
 		store.set( 'custom_other', 'keep', false );
