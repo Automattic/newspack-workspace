@@ -53,6 +53,8 @@ final class Reader_Data_Trust {
 	/**
 	 * Outgoing metadata fields whose values are read from browser-written reader
 	 * data (see Sync\Contact_Metadata\Engagement::get_metadata()), as raw keys.
+	 * A test writes every BROWSER_KEYS value and fails if a field outside this
+	 * list changes.
 	 */
 	const BROWSER_FED_OUTGOING_FIELDS = [
 		'First_Visit_Date',
@@ -163,22 +165,19 @@ final class Reader_Data_Trust {
 		return self::cached(
 			'round_trip',
 			function () {
-				$labels = Metadata::get_all_fields();
+				$labels = Metadata::get_keys();
 				$keys   = [];
 				foreach ( self::get_stored_incoming_fields() as $integration_id => $fields ) {
 					$integration = Integrations::get_integration( $integration_id );
 					if ( ! $integration ) {
 						continue;
 					}
-					$enabled  = $integration->get_enabled_outgoing_fields();
 					$sent_as  = [];
 					$perstags = [];
-					foreach ( self::BROWSER_FED_OUTGOING_FIELDS as $raw_key ) {
-						if ( isset( $labels[ $raw_key ] ) && in_array( $labels[ $raw_key ], $enabled, true ) ) {
-							$sent_name  = $integration->get_metadata_prefix() . $labels[ $raw_key ];
-							$sent_as[]  = $sent_name;
-							$perstags[] = strtoupper( str_replace( '-', '_', sanitize_title( $sent_name ) ) );
-						}
+					foreach ( array_intersect( $integration->get_enabled_outgoing_fields_keys(), self::BROWSER_FED_OUTGOING_FIELDS ) as $raw_key ) {
+						$sent_name  = $integration->get_metadata_prefix() . $labels[ $raw_key ];
+						$sent_as[]  = $sent_name;
+						$perstags[] = strtoupper( str_replace( '-', '_', sanitize_title( $sent_name ) ) );
 					}
 					if ( empty( $sent_as ) ) {
 						continue;

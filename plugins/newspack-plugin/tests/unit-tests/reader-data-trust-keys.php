@@ -213,6 +213,44 @@ class Newspack_Test_Reader_Data_Trust_Keys extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Exactly the listed outgoing fields carry browser-written reader data.
+	 */
+	public function test_browser_fed_outgoing_fields_match_contact_metadata() {
+		$user_id = $this->factory()->user->create();
+		$classes = [];
+		foreach ( glob( dirname( __DIR__, 2 ) . '/includes/reader-activation/sync/contact-metadata/class-*.php' ) as $file ) {
+			$class = 'Newspack\\Reader_Activation\\Sync\\Contact_Metadata\\' . str_replace( '-', '_', ucwords( substr( basename( $file, '.php' ), 6 ), '-' ) );
+			if ( class_exists( $class ) && ! ( new ReflectionClass( $class ) )->isAbstract() ) {
+				$classes[] = $class;
+			}
+		}
+		$this->assertContains( 'Newspack\\Reader_Activation\\Sync\\Contact_Metadata\\Engagement', $classes );
+
+		$collect = function () use ( $classes, $user_id ) {
+			$metadata = [];
+			foreach ( $classes as $class ) {
+				$metadata = array_merge( $metadata, ( new $class( $user_id ) )->get_metadata() );
+			}
+			return $metadata;
+		};
+
+		$before      = $collect();
+		$category_id = $this->factory()->category->create();
+		foreach ( Reader_Data_Trust::BROWSER_KEYS as $key ) {
+			// A JS-millisecond timestamp also reads as a count; categories are an ID list.
+			$value = 'favorite_categories' === $key ? wp_json_encode( [ $category_id ] ) : '1700000000000';
+			Reader_Data::update_item( $user_id, $key, $value, false );
+		}
+		$after = $collect();
+
+		$changed = array_keys( array_diff_assoc( array_map( 'wp_json_encode', $after ), array_map( 'wp_json_encode', $before ) ) );
+		sort( $changed );
+		$listed = Reader_Data_Trust::BROWSER_FED_OUTGOING_FIELDS;
+		sort( $listed );
+		$this->assertSame( $listed, $changed );
+	}
+
+	/**
 	 * Saving an incoming field that collides with a browser key logs it once.
 	 */
 	public function test_collision_is_logged_on_save() {
