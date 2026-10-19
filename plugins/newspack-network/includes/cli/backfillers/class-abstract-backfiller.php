@@ -125,7 +125,7 @@ abstract class Abstract_Backfiller {
 	 * WP-CLI's helper uses flush_runtime where the cache supports it, and otherwise empties the
 	 * drop-in's in-memory arrays directly, which covers Memcached drop-ins without flush_runtime.
 	 * Never falls back to wp_cache_flush(): on a persistent cache that empties the cache for the
-	 * whole site, not just this process. Where neither is available, this frees nothing.
+	 * whole site, not just this process. Where neither applies, this frees nothing.
 	 */
 	protected function free_runtime_cache() {
 		if ( ! $this->can_flush_runtime_cache() ) {
@@ -144,7 +144,11 @@ abstract class Abstract_Backfiller {
 	 * @return bool
 	 */
 	protected function can_flush_runtime_cache() {
-		return wp_cache_supports( 'flush_runtime' ) || function_exists( 'WP_CLI\Utils\wp_clear_object_cache' );
+		if ( wp_cache_supports( 'flush_runtime' ) ) {
+			return true;
+		}
+		// WP-CLI's helper can only empty a drop-in that keeps its in-memory copy in `cache`.
+		return function_exists( 'WP_CLI\Utils\wp_clear_object_cache' ) && isset( $GLOBALS['wp_object_cache']->cache );
 	}
 
 	/**
