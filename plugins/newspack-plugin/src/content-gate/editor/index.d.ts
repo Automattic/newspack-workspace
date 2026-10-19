@@ -25,6 +25,8 @@ type AccessRuleConfig = {
 	has_options: boolean;
 	empty_grants_access?: boolean;
 	requires_value?: boolean;
+	trusted_keys?: string[];
+	is_untrusted?: boolean;
 };
 type ActiveRule = {
 	slug: string;

@@ -52,6 +52,11 @@ jest.mock( '@wordpress/components', () => ( {
 		/>
 	),
 	ExternalLink: ( { children } ) => children,
+	Notice: ( { children, status } ) => (
+		<div role="alert" data-status={ status }>
+			{ children }
+		</div>
+	),
 	TextareaControl: ( { label, value, onChange } ) => (
 		<textarea aria-label={ label } value={ value || '' } onChange={ e => onChange( e.target.value ) } />
 	),
@@ -574,6 +579,43 @@ describe( 'incoming-field operator reconciliation on save', () => {
 				},
 			],
 		},
+	} );
+
+	describe( 'access rule warning', () => {
+		const withAccessRuleField = isAccessRule => ( {
+			esp: {
+				...INTEGRATION,
+				settings: [
+					{
+						key: 'incoming_metadata_fields',
+						type: 'metadata',
+						label: 'Inbound',
+						value: { AMOUNT: 'range' },
+						options: [
+							{
+								value: 'AMOUNT',
+								label: 'Amount',
+								value_type: 'number',
+								matching_function: 'range',
+								has_options: false,
+								is_access_rule: isAccessRule,
+							},
+						],
+					},
+				],
+			},
+		} );
+
+		it( 'warns on an enabled inbound field that content gates can use', () => {
+			renderConfigureView( { integrations: withAccessRuleField( true ) } );
+			expect( screen.getByRole( 'alert' ) ).toHaveTextContent( /Content gates can use this field/ );
+			expect( screen.getByRole( 'alert' ) ).toHaveAttribute( 'data-status', 'warning' );
+		} );
+
+		it( 'says nothing on a field content gates cannot use', () => {
+			renderConfigureView( { integrations: withAccessRuleField( false ) } );
+			expect( screen.queryByRole( 'alert' ) ).toBeNull();
+		} );
 	} );
 
 	// The row displays the only valid option ('Number'), but a single-option select

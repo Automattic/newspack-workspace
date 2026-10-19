@@ -1884,6 +1884,7 @@ abstract class Integration {
 							'value_type'        => $incoming_field->get_value_type(),
 							'matching_function' => $incoming_field->get_matching_function(),
 							'has_options'       => ! empty( $options ),
+							'is_access_rule'    => $incoming_field->is_access_rule(),
 						];
 					},
 					is_wp_error( $incoming_fields ) ? [] : $incoming_fields

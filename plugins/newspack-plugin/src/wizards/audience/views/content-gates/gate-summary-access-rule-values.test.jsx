@@ -19,6 +19,7 @@ window.newspackAudienceContentGates = {
 		},
 		institution: { name: 'Institutional access', has_options: true, requires_value: true, options: [] },
 		email_domain: { name: 'Whitelisted email domain', has_options: false, empty_grants_access: true, requires_value: true },
+		reader_data: { name: 'Reader data', has_options: false, empty_grants_access: true, requires_value: true, trusted_keys: [ 'plan' ] },
 		esp__DONATION: { name: 'Donation total', has_options: false, is_range: true, empty_grants_access: true, requires_value: true },
 	},
 	available_content_rules: {},
@@ -303,5 +304,20 @@ describe( 'gate summary, long rule values', () => {
 		expect( screen.queryByRole( 'button' ) ).not.toBeInTheDocument();
 		expect( paragraph.textContent.match( /Institution \d+/g ) ).toHaveLength( INSTITUTIONS.length );
 		expect( paragraph.contains( paragraph.ownerDocument.activeElement ) ).toBe( true );
+	} );
+} );
+
+describe( 'gate summary, reader data rule', () => {
+	it( 'flags a key the server never sets as matching no reader', () => {
+		renderPaidAccess( gateWith( { slug: 'reader_data', value: 'utm_source=x' } ) );
+
+		expect( screen.getByText( 'utm_source=x (matches no reader)', { exact: false } ) ).toBeInTheDocument();
+	} );
+
+	it( 'shows a key the server sets as it is', () => {
+		renderPaidAccess( gateWith( { slug: 'reader_data', value: 'plan=x' } ) );
+
+		expect( screen.getByText( 'plan=x', { exact: false } ) ).toBeInTheDocument();
+		expect( screen.queryByText( /matches no reader/ ) ).not.toBeInTheDocument();
 	} );
 } );

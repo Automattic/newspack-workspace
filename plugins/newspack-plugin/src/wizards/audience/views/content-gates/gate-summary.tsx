@@ -23,7 +23,7 @@ import {
 } from '../../../../content-gate/access-rule-options';
 import { getMeteringCount, isMalformedAccessRuleValue, isUnconfiguredAccessRuleValue, isUnconstrainedAccessRuleValue } from './utils';
 import { normalizeOneTimePurchaseValue } from '../../../../content-gate/components/one-time-purchase-rule-control';
-import { hasUnusableRangeBounds, normalizeRangeValue } from '../../../../content-gate/utils/access-rule-value';
+import { getUntrustedReaderDataKeys, hasUnusableRangeBounds, normalizeRangeValue } from '../../../../content-gate/utils/access-rule-value';
 
 const availableAccessRules = window.newspackAudienceContentGates.available_access_rules || {};
 
@@ -233,6 +233,21 @@ const formatRangeValue = ( value: unknown ): string =>
  *                      the page for a rule the caller did not supply.
  */
 const formatAccessRuleValue = ( rule: GateAccessRule, optionsBySlug: Record< string, AccessRuleOption[] > ): string | string[] => {
+	const config = availableAccessRules[ rule.slug ];
+	const text = formatKnownAccessRuleValue( rule, optionsBySlug );
+	// The server never sets the key, so the rule matches no reader whatever the value
+	// reads as. Only a single line can carry the flag; a list is flagged in the editor.
+	if ( 'string' === typeof text && '' !== text && ( config?.is_untrusted || getUntrustedReaderDataKeys( config, rule.value ).length > 0 ) ) {
+		return sprintf(
+			// translators: %s: the stored value. Shown when the rule names reader data the server never sets; the rule then matches no reader.
+			__( '%s (matches no reader)', 'newspack-plugin' ),
+			text
+		);
+	}
+	return text;
+};
+
+const formatKnownAccessRuleValue = ( rule: GateAccessRule, optionsBySlug: Record< string, AccessRuleOption[] > ): string | string[] => {
 	const config = availableAccessRules[ rule.slug ];
 	const options = optionsBySlug[ rule.slug ] ?? config?.options;
 	if ( 'one_time_purchase' === rule.slug ) {

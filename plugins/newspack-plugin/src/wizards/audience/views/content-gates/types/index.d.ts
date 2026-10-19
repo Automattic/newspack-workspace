@@ -41,6 +41,10 @@ type AccessRule = {
 	has_options: boolean;
 	empty_grants_access?: boolean;
 	requires_value?: boolean;
+	// Reader-data keys the server writes itself; present only on the `reader_data` rule.
+	trusted_keys?: string[];
+	// Whether the rule's key is one the server doesn't manage, so it matches no reader.
+	is_untrusted?: boolean;
 	// Whether the rule can judge a signed-out visitor, and so can let one skip registration.
 	supports_anonymous?: boolean;
 	placeholder?: string;

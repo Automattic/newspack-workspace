@@ -143,3 +143,34 @@ describe( 'InstitutionEdit — IP range warnings', () => {
 		expect( select( WIZARD_STORE_NAMESPACE ).getNotices() ).toEqual( [] );
 	} );
 } );
+
+describe( 'InstitutionEdit, reader data keys', () => {
+	const renderWithReaderData = async readerData => {
+		window.newspackAudienceContentGates = {
+			available_access_rules: { reader_data: { name: 'Reader data', trusted_keys: [ 'plan' ] } },
+		};
+		apiFetch.mockResolvedValue( {
+			...institutionFixture( '' ),
+			meta: { np_institution_email_domain: '', np_institution_ip_range: '', np_institution_reader_data: readerData },
+		} );
+		renderEditor( { id: '7' } );
+		// A stored value switches the rule on by itself.
+		await screen.findByRole( 'textbox', { name: 'Key=value pairs (semicolon-delimited)' } );
+	};
+
+	afterEach( () => {
+		delete window.newspackAudienceContentGates;
+	} );
+
+	it( 'says a key the server never sets matches no reader', async () => {
+		await renderWithReaderData( 'utm_source=x' );
+
+		expect( screen.getByRole( 'note' ) ).toHaveTextContent( /utm_source isn’t set by the site’s server/ );
+	} );
+
+	it( 'says nothing about a key the server sets', async () => {
+		await renderWithReaderData( 'plan=x' );
+
+		expect( screen.queryByRole( 'note' ) ).not.toBeInTheDocument();
+	} );
+} );

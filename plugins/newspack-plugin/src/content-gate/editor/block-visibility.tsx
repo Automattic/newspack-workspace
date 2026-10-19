@@ -37,7 +37,12 @@ import {
 	resolveAccessRuleOptionTokens,
 } from '../access-rule-options';
 import { getAccessRuleOptionSource, isOptionBackedAccessRule } from '../access-rule-option-sources';
-import { getAccessRuleValueNotice, isAccessRulePickerInert, isUnconstrainedAccessRuleValue } from '../utils/access-rule-value';
+import {
+	getAccessRuleValueNotice,
+	getUntrustedAccessRuleNotice,
+	isAccessRulePickerInert,
+	isUnconstrainedAccessRuleValue,
+} from '../utils/access-rule-value';
 import AccessRuleValueNotice from '../components/access-rule-value-notice';
 import OneTimePurchaseRuleControl from '../components/one-time-purchase-rule-control';
 import RangeRuleControl from '../components/range-rule-control';
@@ -259,21 +264,28 @@ export const AccessRuleValueControl = ( {
 			</>
 		);
 	} else {
+		// Only the untrusted-key verdict applies here; the help text already covers an empty value.
+		const valueNotice = getUntrustedAccessRuleNotice( config, value );
 		control = (
-			<TextControl
-				hideLabelFromVision
-				label={ config.name }
-				placeholder={ config.placeholder ?? '' }
-				help={
-					isUnconstrainedAccessRuleValue( config, value )
-						? __( 'Left empty, this rule grants access to everyone. Enter at least one value, or turn the rule off.', 'newspack-plugin' )
-						: __( 'Separate with commas.', 'newspack-plugin' )
-				}
-				value={ typeof value === 'string' ? value : '' }
-				onChange={ onChange as ( value: string ) => void }
-				__next40pxDefaultSize
-				__nextHasNoMarginBottom
-			/>
+			<AccessRuleValueNotice label={ config.name } notice={ valueNotice }>
+				<TextControl
+					hideLabelFromVision
+					label={ config.name }
+					placeholder={ config.placeholder ?? '' }
+					help={
+						isUnconstrainedAccessRuleValue( config, value )
+							? __(
+									'Left empty, this rule grants access to everyone. Enter at least one value, or turn the rule off.',
+									'newspack-plugin'
+							  )
+							: __( 'Separate with commas.', 'newspack-plugin' )
+					}
+					value={ typeof value === 'string' ? value : '' }
+					onChange={ onChange as ( value: string ) => void }
+					__next40pxDefaultSize
+					__nextHasNoMarginBottom
+				/>
+			</AccessRuleValueNotice>
 		);
 	}
 
