@@ -415,8 +415,12 @@ function attachAuthCookiesListener() {
 
 /**
  * Ask the server to re-check the logged-in reader's newsletter status and load
- * the result into the store. A failed or rate-limited check is ignored: the
- * server also re-checks on its own hooks, so this is only a faster refresh.
+ * the result into the store. A failed or rate-limited check is ignored.
+ *
+ * The request is sent with `keepalive` so it outlives a form that submits by
+ * leaving the page. Its answer only reaches the store while this page is still
+ * open; otherwise what lasts is the follow-up check the server queues when the
+ * provider does not yet show a subscription.
  */
 function checkNewsletterSubscription() {
 	const apiNonce = getApiNonce();
@@ -424,27 +428,29 @@ function checkNewsletterSubscription() {
 	if ( ! window.newspack_ras_config?.is_logged_in || ! apiUrl || ! apiNonce ) {
 		return;
 	}
-	const req = new XMLHttpRequest();
-	req.open( 'POST', `${ apiUrl }/newsletter-check`, true );
-	req.setRequestHeader( 'X-WP-Nonce', apiNonce );
-	req.onreadystatechange = () => {
-		if ( 4 !== req.readyState || 200 !== req.status ) {
-			return;
-		}
-		try {
+	fetch( `${ apiUrl }/newsletter-check`, {
+		method: 'POST',
+		keepalive: true,
+		credentials: 'same-origin',
+		headers: { 'X-WP-Nonce': apiNonce },
+	} )
+		.then( res => ( 200 === res.status ? res.json() : null ) )
+		.then( body => {
+			if ( ! body ) {
+				return;
+			}
 			const items = {};
-			for ( const [ key, value ] of Object.entries( JSON.parse( req.responseText )?.items || {} ) ) {
+			for ( const [ key, value ] of Object.entries( body?.items || {} ) ) {
 				// rehydrate() cannot store a null, and a key the server omitted stays as it was.
 				if ( null !== value && undefined !== value ) {
 					items[ key ] = value;
 				}
 			}
 			store.rehydrate( items );
-		} catch ( err ) {
+		} )
+		.catch( () => {
 			// Ignored on purpose, see above.
-		}
-	};
-	req.send();
+		} );
 }
 
 /**

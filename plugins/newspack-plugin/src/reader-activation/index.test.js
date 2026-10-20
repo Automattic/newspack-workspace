@@ -657,8 +657,7 @@ describe( 'register() transport options', () => {
 } );
 
 describe( 'newsletter form listener', () => {
-	let sends;
-	let opens;
+	let requests;
 	beforeEach( () => {
 		window.newspack_reader_data = {
 			api_url: 'http://test/wp-json/newspack/v1/reader-data',
@@ -667,16 +666,13 @@ describe( 'newsletter form listener', () => {
 		};
 		window.newspack_ras_config = { is_logged_in: true };
 		localStorage.clear();
-		opens = [];
-		sends = [];
-		jest.spyOn( XMLHttpRequest.prototype, 'open' ).mockImplementation( function ( ...args ) {
-			opens.push( args );
-			this._args = args;
-		} );
-		jest.spyOn( XMLHttpRequest.prototype, 'setRequestHeader' ).mockImplementation( () => {} );
-		jest.spyOn( XMLHttpRequest.prototype, 'send' ).mockImplementation( function ( body ) {
-			sends.push( { xhr: this, body } );
-		} );
+		requests = [];
+		global.fetch = jest.fn(
+			( url, options ) =>
+				new Promise( resolve => {
+					requests.push( { url, options, resolve } );
+				} )
+		);
 		document.body.innerHTML = '';
 	} );
 	afterEach( () => {
@@ -684,12 +680,12 @@ describe( 'newsletter form listener', () => {
 		document.body.innerHTML = '';
 		delete window.newspack_reader_data;
 		delete window.newspack_ras_config;
+		delete global.fetch;
 	} );
-	const respond = ( xhr, status, responseText ) => {
-		Object.defineProperty( xhr, 'readyState', { value: 4, configurable: true } );
-		Object.defineProperty( xhr, 'status', { value: status, configurable: true } );
-		Object.defineProperty( xhr, 'responseText', { value: responseText, configurable: true } );
-		xhr.onreadystatechange();
+	const settle = () => new Promise( resolve => setTimeout( resolve, 0 ) );
+	const respond = ( request, status, responseText ) => {
+		request.resolve( { status, json: () => Promise.resolve( JSON.parse( responseText ) ) } );
+		return settle();
 	};
 	const addForm = markup => {
 		document.body.insertAdjacentHTML( 'beforeend', markup );
@@ -703,13 +699,13 @@ describe( 'newsletter form listener', () => {
 		wrap.querySelector( 'form' ).dispatchEvent( new Event( 'newspack-newsletters-subscribe-success' ) );
 		expect( store.get( 'newsletter_signup_client' ) ).toBe( true );
 		expect( store.get( 'is_newsletter_subscriber' ) ).toBeNull();
-		expect( opens ).toEqual( [] );
+		expect( requests ).toEqual( [] );
 	} );
 	it( 'sets the client signal on a mc4wp submit without calling the endpoint', () => {
 		const form = addForm( '<form class="mc4wp-form"></form>' );
 		submit( form );
 		expect( store.get( 'newsletter_signup_client' ) ).toBe( true );
-		expect( opens ).toEqual( [] );
+		expect( requests ).toEqual( [] );
 	} );
 	it( 'sets the client signal in the Gravity Forms filter and returns the data', async () => {
 		let filter;
@@ -719,7 +715,7 @@ describe( 'newsletter form listener', () => {
 		const data = { a: 1 };
 		await expect( filter( data ) ).resolves.toBe( data );
 		expect( store.get( 'newsletter_signup_client' ) ).toBe( true );
-		expect( opens ).toEqual( [] );
+		expect( requests ).toEqual( [] );
 		delete window.gform;
 	} );
 	it( 'checks the server when a Gravity Forms form with the subscribe class submits', async () => {
@@ -730,39 +726,48 @@ describe( 'newsletter form listener', () => {
 		const data = { form: subscribeForm };
 		await expect( filter( data ) ).resolves.toBe( data );
 		expect( store.get( 'newsletter_signup_client' ) ).toBe( true );
-		expect( opens ).toHaveLength( 1 );
-		expect( opens[ 0 ][ 1 ] ).toBe( 'http://test/wp-json/newspack/v1/reader-data/newsletter-check' );
+		expect( requests ).toHaveLength( 1 );
+		expect( requests[ 0 ].url ).toBe( 'http://test/wp-json/newspack/v1/reader-data/newsletter-check' );
 
 		// Another Gravity Forms form on the page goes through the same filter.
 		const otherData = { form: addForm( '<form id="gform_2" data-formid="2"></form>' ) };
 		await expect( filter( otherData ) ).resolves.toBe( otherData );
-		expect( opens ).toHaveLength( 1 );
+		expect( requests ).toHaveLength( 1 );
 		delete window.gform;
 	} );
-	it( 'checks the server after a newspack-subscribe-form submit while logged in', () => {
+	it( 'checks the server after a newspack-subscribe-form submit while logged in', async () => {
 		const form = addForm( '<form class="newspack-subscribe-form"></form>' );
 		store.set( 'custom_other', 'keep', false );
 		submit( form );
 		expect( store.get( 'newsletter_signup_client' ) ).toBe( true );
-		expect( opens ).toHaveLength( 1 );
-		expect( opens[ 0 ][ 0 ] ).toBe( 'POST' );
-		expect( opens[ 0 ][ 1 ] ).toBe( 'http://test/wp-json/newspack/v1/reader-data/newsletter-check' );
-		expect( sends[ 0 ].body ).toBeUndefined();
-		respond( sends[ 0 ].xhr, 200, JSON.stringify( { items: { is_newsletter_subscriber: 'true' } } ) );
+		expect( requests ).toHaveLength( 1 );
+		expect( requests[ 0 ].url ).toBe( 'http://test/wp-json/newspack/v1/reader-data/newsletter-check' );
+		// keepalive lets the check outlive a submit that navigates away.
+		expect( requests[ 0 ].options ).toEqual( {
+			method: 'POST',
+			keepalive: true,
+			credentials: 'same-origin',
+			headers: { 'X-WP-Nonce': 'abc' },
+		} );
+		await respond( requests[ 0 ], 200, JSON.stringify( { items: { is_newsletter_subscriber: 'true' } } ) );
 		expect( store.get( 'is_newsletter_subscriber' ) ).toBe( true );
 		expect( store.get( 'custom_other' ) ).toBe( 'keep' );
 	} );
-	it( 'does not store a null result from the server', () => {
+	it( 'does not store a null result from the server', async () => {
 		const form = addForm( '<form class="newspack-subscribe-form"></form>' );
 		submit( form );
-		expect( () => respond( sends[ 0 ].xhr, 200, JSON.stringify( { items: { is_newsletter_subscriber: null } } ) ) ).not.toThrow();
+		await respond( requests[ 0 ], 200, JSON.stringify( { items: { is_newsletter_subscriber: null } } ) );
 		expect( store.get( 'is_newsletter_subscriber' ) ).toBeNull();
 	} );
-	it( 'swallows a rate-limited or failed check', () => {
+	it( 'swallows a rate-limited or failed check', async () => {
 		const err = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
 		const form = addForm( '<form class="newspack-subscribe-form"></form>' );
 		submit( form );
-		expect( () => respond( sends[ 0 ].xhr, 429, '{"code":"x"}' ) ).not.toThrow();
+		await respond( requests[ 0 ], 429, '{"code":"x"}' );
+		expect( store.get( 'is_newsletter_subscriber' ) ).toBeNull();
+		submit( form );
+		requests[ 1 ].resolve( Promise.reject( new Error( 'network' ) ) );
+		await settle();
 		expect( err ).not.toHaveBeenCalled();
 	} );
 	it( 'sends no request while logged out', () => {
@@ -770,6 +775,6 @@ describe( 'newsletter form listener', () => {
 		const form = addForm( '<form class="newspack-subscribe-form"></form>' );
 		submit( form );
 		expect( store.get( 'newsletter_signup_client' ) ).toBe( true );
-		expect( opens ).toEqual( [] );
+		expect( requests ).toEqual( [] );
 	} );
 } );
