@@ -1,31 +1,51 @@
-@use "../../variables/breakpoints";
+@use "../../mixins";
 
 .newspack-ui {
 	.newspack-ui__button {
+		--newspack-ui-button-bg: var(--newspack-ui-color-neutral-fill);
+		--newspack-ui-button-bg-hover: var(--newspack-ui-color-neutral-fill-hover);
+		--newspack-ui-button-bg-pressed: var(--newspack-ui-color-neutral-fill-pressed);
+		--newspack-ui-button-ink: var(--newspack-ui-color-text);
+		--newspack-ui-button-ink-pressed: var(--newspack-ui-button-ink);
+		--newspack-ui-button-border: transparent;
+		--newspack-ui-button-border-hover: var(--newspack-ui-button-border);
+		--newspack-ui-button-height: var(--newspack-ui-spacer-9);
+		--newspack-ui-button-padding-block: var(--newspack-ui-spacer-2);
+		--newspack-ui-button-padding-inline: var(--newspack-ui-spacer-4);
+		--newspack-ui-button-gap: var(--newspack-ui-spacer-1);
+		--newspack-ui-button-font-size: var(--newspack-ui-font-size-body);
+		--newspack-ui-button-line-height: var(--newspack-ui-line-height-body);
+		--newspack-ui-button-bg-disabled: var(--newspack-ui-color-surface-subtle);
+		--newspack-ui-button-ink-disabled: var(--newspack-ui-color-disabled-ink);
+		--newspack-ui-button-focus: var(--newspack-ui-color-focus);
+		--newspack-ui-button-focus-inner: var(--newspack-ui-button-border);
+
 		align-items: center;
-		background: var(--newspack-ui-color-neutral-10);
+		background: var(--newspack-ui-button-bg);
 		border: 0;
-		border-radius: var(--newspack-ui-border-radius-m);
-		color: var(--newspack-ui-color-neutral-90);
+		border-radius: var(--newspack-ui-radius-button);
+		box-shadow: inset 0 0 0 1px var(--newspack-ui-button-border);
+		color: var(--newspack-ui-button-ink);
 		cursor: pointer;
 		display: inline-flex;
 		font-family: var(--newspack-ui-font-family);
-		font-size: var(--newspack-ui-font-size-s);
+		font-size: var(--newspack-ui-button-font-size);
 		font-style: normal;
 		font-weight: var(--newspack-ui-font-weight-strong);
-		gap: calc(var(--newspack-ui-spacer-5) * 0.5);
-		letter-spacing: initial; // Override for custom styles.
-		text-transform: none; // Override for custom styles.
+		gap: var(--newspack-ui-button-gap);
 		justify-content: center;
-		line-height: var(--newspack-ui-line-height-s);
+		letter-spacing: initial;
+		line-height: var(--newspack-ui-button-line-height);
 		margin-bottom: var(--newspack-ui-spacer-2);
-		min-height: var(--newspack-ui-spacer-9);
-		padding: var(--newspack-ui-spacer-2) var(--newspack-ui-spacer-5);
+		min-height: var(--newspack-ui-button-height);
+		padding: var(--newspack-ui-button-padding-block) var(--newspack-ui-button-padding-inline);
 		text-decoration: none;
+		text-transform: none;
 		transition:
-			background-color 125ms ease-in-out,
-			border-color 125ms ease-in-out,
-			outline 125ms ease-in-out;
+			background-color var(--newspack-ui-duration-color) ease,
+			color var(--newspack-ui-duration-color) ease,
+			box-shadow var(--newspack-ui-duration-color) ease,
+			transform var(--newspack-ui-duration-press) var(--newspack-ui-ease-out);
 		white-space: nowrap;
 
 		&:last-child {
@@ -36,32 +56,57 @@
 			margin-bottom: 0;
 		}
 
-		@media only screen and ( min-width: breakpoints.$tablet_width ) {
+		@include mixins.media( tablet ) {
 			&:not(.newspack-ui__button--wide) {
 				margin-bottom: 0;
 			}
 		}
 
-		&:hover {
-			background: var(--newspack-ui-color-neutral-30);
-			color: var(--newspack-ui-color-neutral-90);
+		&:hover,
+		&:focus {
+			background: var(--newspack-ui-button-bg);
+			color: var(--newspack-ui-button-ink);
+		}
+
+		@media ( hover: hover ) and ( pointer: fine ) {
+			&:hover {
+				background: var(--newspack-ui-button-bg-hover);
+				box-shadow: inset 0 0 0 1px var(--newspack-ui-button-border-hover);
+			}
+		}
+
+		&:active {
+			background: var(--newspack-ui-button-bg-pressed);
+			color: var(--newspack-ui-button-ink-pressed);
+			transform: scale(0.97);
+
+			@media ( prefers-reduced-motion: reduce ) {
+				transform: none;
+			}
 		}
 
 		&:disabled:where(:not(.newspack-ui__button--loading)),
-		&.disabled:where(:not(.newspack-ui__button--loading)) {
-			background: var(--newspack-ui-color-neutral-5) !important;
-			color: var(--newspack-ui-color-neutral-40) !important;
+		&.disabled:where(:not(.newspack-ui__button--loading)),
+		&[aria-disabled="true"]:where(:not(.newspack-ui__button--loading)) {
+			background: var(--newspack-ui-button-bg-disabled) !important;
+			color: var(--newspack-ui-button-ink-disabled) !important;
 			cursor: default;
 			pointer-events: none;
+			transform: none;
+
+			&:not(:focus-visible) {
+				box-shadow: none !important;
+			}
 		}
 
 		&:focus {
-			outline: none; // override theme default style.
+			outline: none;
 		}
 
 		&:focus-visible {
-			outline: 2px solid var(--newspack-ui-color-button-bg);
-			outline-offset: 1px;
+			@include mixins.focus-line( var(--newspack-ui-button-focus), inset 0 0 0 1px var(--newspack-ui-button-focus-inner) );
+
+			transition: none;
 		}
 
 		&__row {
@@ -72,21 +117,23 @@
 
 		// Sizes
 		&--x-small {
-			border-radius: var(--newspack-ui-border-radius-xs);
-			font-size: var(--newspack-ui-font-size-xs);
-			gap: calc(var(--newspack-ui-spacer-2) * 0.5);
-			line-height: var(--newspack-ui-line-height-xs);
-			min-height: var(--newspack-ui-spacer-7);
-			padding: calc(var(--newspack-ui-spacer-1) * 0.75) var(--newspack-ui-spacer-2);
+			--newspack-ui-button-height: calc(var(--newspack-ui-spacer-1) * 3.5);
+			--newspack-ui-button-padding-block: var(--newspack-ui-spacer-half);
+			--newspack-ui-button-padding-inline: calc(var(--newspack-ui-spacer-1) * 1.25);
+			--newspack-ui-button-gap: calc(var(--newspack-ui-spacer-1) * 0.75);
+			--newspack-ui-button-font-size: var(--newspack-ui-font-size-small);
+			--newspack-ui-button-line-height: var(--newspack-ui-line-height-small);
+
+			border-radius: calc(var(--newspack-ui-radius-button) * 0.75);
 		}
 
 		&--small {
-			border-radius: var(--newspack-ui-border-radius-s);
-			font-size: var(--newspack-ui-font-size-xs);
-			gap: calc(var(--newspack-ui-spacer-3) * 0.5);
-			line-height: var(--newspack-ui-line-height-xs);
-			min-height: var(--newspack-ui-spacer-8);
-			padding: var(--newspack-ui-spacer-1) var(--newspack-ui-spacer-3);
+			--newspack-ui-button-height: var(--newspack-ui-spacer-7);
+			--newspack-ui-button-padding-block: var(--newspack-ui-spacer-1);
+			--newspack-ui-button-padding-inline: calc(var(--newspack-ui-spacer-1) * 1.75);
+			--newspack-ui-button-gap: calc(var(--newspack-ui-spacer-1) * 0.75);
+			--newspack-ui-button-font-size: var(--newspack-ui-font-size-small);
+			--newspack-ui-button-line-height: var(--newspack-ui-line-height-small);
 		}
 
 		&--medium {
@@ -94,183 +141,106 @@
 		}
 
 		// Styles
-		&--primary {
-			background: var(--newspack-ui-color-button-bg);
-			color: var(--newspack-ui-color-button-text);
-
-			&:hover {
-				background: var(--newspack-ui-color-button-bg-hover);
-				color: var(--newspack-ui-color-button-text-hover);
-			}
-
-			&:disabled:where(:not(.newspack-ui__button--loading)) {
-				background: var(--newspack-ui-color-neutral-30) !important;
-				color: var(--newspack-ui-color-neutral-0) !important;
-			}
+		&--primary,
+		&--accent,
+		&--branded,
+		&--primary-light,
+		&--destructive:not(.newspack-ui__button--ghost, .newspack-ui__button--outline) {
+			--newspack-ui-button-focus: var(--newspack-ui-button-bg);
+			--newspack-ui-button-focus-inner: var(--newspack-ui-button-ink);
 		}
 
-		&--primary-light {
-			background: var(--newspack-ui-color-neutral-0);
-			color: var(--newspack-ui-color-neutral-90);
-
-			&:hover {
-				background: var(--newspack-ui-color-neutral-5);
-				color: var(--newspack-ui-color-neutral-90);
-			}
-
-			&:disabled:where(:not(.newspack-ui__button--loading)) {
-				background: var(--newspack-ui-color-neutral-0) !important;
-				color: var(--newspack-ui-color-neutral-30) !important;
-			}
+		&--primary {
+			--newspack-ui-button-bg: var(--newspack-ui-color-btn);
+			--newspack-ui-button-bg-hover: var(--newspack-ui-color-btn-hover);
+			--newspack-ui-button-bg-pressed: var(--newspack-ui-color-btn-pressed);
+			--newspack-ui-button-ink: var(--newspack-ui-color-btn-ink);
 		}
 
 		&--accent,
 		&--branded {
-			background: var(--newspack-ui-color-primary);
-			color: var(--newspack-ui-color-against-primary);
+			--newspack-ui-button-bg: var(--newspack-ui-color-primary);
+			--newspack-ui-button-bg-hover: color-mix(in oklab, var(--newspack-ui-color-primary) var(--newspack-ui-color-mix-hover), var(--newspack-ui-color-neutral-100));
+			--newspack-ui-button-bg-pressed: color-mix(in oklab, var(--newspack-ui-color-primary) var(--newspack-ui-color-mix-pressed), var(--newspack-ui-color-neutral-100));
+			--newspack-ui-button-ink: var(--newspack-ui-color-against-primary);
+		}
 
-			&:hover {
-				background: color-mix(in srgb, var(--newspack-ui-color-primary) 80%, black);
-				color: var(--newspack-ui-color-against-primary);
-			}
-
-			&:focus-visible {
-				outline-color: var(--newspack-ui-color-primary);
-			}
-
-			&:disabled:where(:not(.newspack-ui__button--loading)) {
-				background: color-mix(in srgb, var(--newspack-ui-color-primary) 20%, white) !important;
-				color: var(--newspack-ui-color-against-primary) !important;
-			}
+		&--primary-light {
+			--newspack-ui-button-bg: var(--newspack-ui-color-base);
+			--newspack-ui-button-bg-hover: color-mix(in oklab, var(--newspack-ui-color-base) var(--newspack-ui-color-mix-hover), var(--newspack-ui-color-contrast));
+			--newspack-ui-button-bg-pressed: color-mix(in oklab, var(--newspack-ui-color-base) var(--newspack-ui-color-mix-pressed), var(--newspack-ui-color-contrast));
+			--newspack-ui-button-ink: var(--newspack-ui-color-contrast);
 		}
 
 		&--secondary {
-			background: var(--newspack-ui-color-neutral-10);
-			color: var(--newspack-ui-color-neutral-90);
-
-			&:hover {
-				background: var(--newspack-ui-color-neutral-30);
-				color: var(--newspack-ui-color-neutral-90);
-			}
-
-			&:disabled:where(:not(.newspack-ui__button--loading)) {
-				background: var(--newspack-ui-color-neutral-5) !important;
-				color: var(--newspack-ui-color-neutral-40) !important;
-			}
+			--newspack-ui-button-bg: var(--newspack-ui-color-neutral-fill);
+			--newspack-ui-button-bg-hover: var(--newspack-ui-color-neutral-fill-hover);
+			--newspack-ui-button-bg-pressed: var(--newspack-ui-color-neutral-fill-pressed);
+			--newspack-ui-button-ink: var(--newspack-ui-color-text);
+			--newspack-ui-button-focus: var(--newspack-ui-color-focus);
+			--newspack-ui-button-focus-inner: var(--newspack-ui-button-border);
 		}
 
 		&--ghost,
 		&--ghost-light,
 		&--outline {
-			background: transparent;
-			color: var(--newspack-ui-color-neutral-90);
+			--newspack-ui-button-bg: transparent;
+			--newspack-ui-button-bg-hover: var(--newspack-ui-color-neutral-fill);
+			--newspack-ui-button-bg-pressed: var(--newspack-ui-color-neutral-fill-hover);
+			--newspack-ui-button-bg-disabled: transparent;
+			--newspack-ui-button-ink: var(--newspack-ui-color-text);
+			--newspack-ui-button-focus: var(--newspack-ui-color-focus);
+			--newspack-ui-button-focus-inner: var(--newspack-ui-button-border);
+		}
 
-			&:hover {
-				background: var(--newspack-ui-color-neutral-5);
-				color: var(--newspack-ui-color-neutral-90);
+		&--outline {
+			--newspack-ui-button-bg-disabled: var(--newspack-ui-color-surface-subtle);
+			--newspack-ui-button-border: var(--newspack-ui-color-border-outline);
+
+			&:focus-visible {
+				@include mixins.focus-edge( var(--newspack-ui-button-focus), $inset: true );
 			}
 
-			&:disabled:where(:not(.newspack-ui__button--loading)) {
-				background: transparent !important;
-				color: var(--newspack-ui-color-neutral-30) !important;
+			@media ( forced-colors: active ) {
+				&.newspack-ui__button:not(:focus-visible) {
+					outline: 1px solid CanvasText;
+					outline-offset: -1px;
+				}
 			}
 		}
 
 		&--ghost-light {
-			color: var(--newspack-ui-color-neutral-60);
-
-			&:hover {
-				color: var(--newspack-ui-color-neutral-60);
-			}
+			--newspack-ui-button-ink: var(--newspack-ui-color-text-muted);
 		}
 
-		// Ghost button for use on a dark surface (e.g. snackbars).
 		&--ghost-dark {
-			background: transparent;
-			color: var(--newspack-ui-color-neutral-0);
-
-			&:hover {
-				background: var(--newspack-ui-color-neutral-80);
-				color: var(--newspack-ui-color-neutral-0);
-			}
-
-			&:focus-visible {
-				outline-color: var(--newspack-ui-color-neutral-0);
-			}
-
-			&:disabled:where(:not(.newspack-ui__button--loading)) {
-				background: transparent !important;
-				color: var(--newspack-ui-color-neutral-60) !important;
-			}
-		}
-
-		&--outline {
-			border: 1px solid var(--newspack-ui-color-neutral-30);
-			padding:
-				calc(var(--newspack-ui-spacer-2) - 1px)
-				calc(var(--newspack-ui-spacer-5) - 1px);
-
-			&[class*="--x-small"] {
-				padding:
-					calc(var(--newspack-ui-spacer-1) * 0.75 - 1px)
-					calc(var(--newspack-ui-spacer-2) - 1px);
-			}
-
-			&[class*="--small"] {
-				padding:
-					calc(var(--newspack-ui-spacer-1) - 1px)
-					calc(var(--newspack-ui-spacer-3) - 1px);
-			}
-
-			&:hover {
-				border-color: var(--newspack-ui-color-neutral-40);
-			}
-
-			&:disabled:where(:not(.newspack-ui__button--loading)) {
-				border-color: var(--newspack-ui-color-neutral-10);
-			}
+			--newspack-ui-button-bg: transparent;
+			--newspack-ui-button-bg-hover: color-mix(in oklab, var(--newspack-ui-color-inverse-bg) var(--newspack-ui-color-mix-hover), var(--newspack-ui-color-inverse-ink));
+			--newspack-ui-button-bg-pressed: color-mix(in oklab, var(--newspack-ui-color-inverse-bg) var(--newspack-ui-color-mix-pressed), var(--newspack-ui-color-inverse-ink));
+			--newspack-ui-button-ink: var(--newspack-ui-color-inverse-ink);
+			--newspack-ui-button-focus: var(--newspack-ui-color-inverse-ink);
 		}
 
 		&--destructive {
-			background: var(--newspack-ui-color-error-50);
-			color: var(--newspack-ui-color-neutral-0);
+			--newspack-ui-button-bg: var(--newspack-ui-color-error-fill);
+			--newspack-ui-button-bg-hover: var(--newspack-ui-color-error-fill-hover);
+			--newspack-ui-button-bg-pressed: var(--newspack-ui-color-error-fill-pressed);
+			--newspack-ui-button-ink: var(--newspack-ui-color-on-error);
 
-			&:hover {
-				background: var(--newspack-ui-color-error-60);
-				color: var(--newspack-ui-color-neutral-0);
+			&.newspack-ui__button--ghost,
+			&.newspack-ui__button--outline {
+				--newspack-ui-button-bg: transparent;
+				--newspack-ui-button-bg-hover: var(--newspack-ui-color-error-tint-hover);
+				--newspack-ui-button-bg-pressed: var(--newspack-ui-color-error-tint-pressed);
+				--newspack-ui-button-ink: var(--newspack-ui-color-error);
+				--newspack-ui-button-ink-pressed: var(--newspack-ui-color-error-text);
+				--newspack-ui-button-focus: var(--newspack-ui-color-focus);
+				--newspack-ui-button-focus-inner: var(--newspack-ui-button-border);
 			}
 
-			&:focus-visible {
-				outline-color: var(--newspack-ui-color-error-50);
-			}
-
-			&:disabled:where(:not(.newspack-ui__button--loading)) {
-				background: var(--newspack-ui-color-error-5) !important;
-				color: var(--newspack-ui-color-neutral-0) !important;
-			}
-
-			&[class*="--ghost"],
-			&[class*="--outline"] {
-				background: transparent;
-				color: var(--newspack-ui-color-error-50);
-
-				&:hover {
-					background: var(--newspack-ui-color-neutral-5);
-					color: var(--newspack-ui-color-error-50);
-				}
-
-				&:disabled:where(:not(.newspack-ui__button--loading)) {
-					background: transparent !important;
-					color: var(--newspack-ui-color-error-5) !important;
-				}
-			}
-			&[class*="--outline"] {
-				border-color: var(--newspack-ui-color-neutral-30);
-				&:hover {
-					background: transparent;
-					border-color: var(--newspack-ui-color-error-50);
-					color: var(--newspack-ui-color-error-60);
-				}
+			&.newspack-ui__button--outline {
+				--newspack-ui-color-border-outline-mix: 70%;
+				--newspack-ui-button-border: var(--newspack-ui-color-border-outline);
 			}
 		}
 
@@ -281,7 +251,7 @@
 			width: 100%;
 		}
 
-		@media only screen and ( min-width: breakpoints.$tablet_width ) {
+		@include mixins.media( tablet ) {
 			&--wide-on-mobile {
 				display: inline-flex;
 				width: auto;
@@ -291,26 +261,17 @@
 		// Icon-only
 		&--icon {
 			display: grid;
-			height: var(--newspack-ui-spacer-7);
+			height: var(--newspack-ui-spacer-8);
 			min-height: unset;
 			padding: 0;
 			place-items: center;
-			width: var(--newspack-ui-spacer-7);
+			width: var(--newspack-ui-spacer-8);
 
-			// Sizes
-			&.newspack-ui__button--x-small {
-				height: var(--newspack-ui-spacer-7);
-				width: var(--newspack-ui-spacer-7);
-			}
-
-			&.newspack-ui__button--small {
-				height: var(--newspack-ui-spacer-8);
-				width: var(--newspack-ui-spacer-8);
-			}
-
+			&.newspack-ui__button--x-small,
+			&.newspack-ui__button--small,
 			&.newspack-ui__button--medium {
-				height: var(--newspack-ui-spacer-9);
-				width: var(--newspack-ui-spacer-9);
+				height: var(--newspack-ui-button-height);
+				width: var(--newspack-ui-button-height);
 			}
 		}
 
@@ -330,64 +291,123 @@
 			}
 
 			&::before {
-				animation: button-loading 900ms infinite linear;
-				border: 1.5px solid;
-				border-color: currentcolor currentcolor transparent transparent;
-				border-radius: 50%;
+				@include mixins.spinner;
+
 				content: "";
 				display: block;
-				height: calc(var(--newspack-ui-spacer-1) * 2.25);
 				position: absolute;
-				width: calc(var(--newspack-ui-spacer-1) * 2.25);
 			}
 		}
 
-		// Override margin for text + icon buttons.
 		&:not(&--icon) {
+			svg {
+				margin-block: calc(( min(1lh, var(--newspack-ui-spacer-5)) - var(--newspack-ui-spacer-5) ) / 2);
+			}
 
 			.newspack-ui__svg-icon--account {
-				margin: 0 -4px;
+				margin-inline: -4px;
 			}
 
 			.newspack-ui__svg-icon--arrow-left {
-				margin: 0 -4px;
+				margin-inline: -4px;
 			}
 
 			.newspack-ui__svg-icon--arrow-right {
-				margin: 0 -4px;
+				margin-inline: -4px;
 			}
 
 			.newspack-ui__svg-icon--chevron-down-small {
-				margin: 0 -8px;
+				margin-inline: -8px;
 			}
 
 			.newspack-ui__svg-icon--google {
-				margin: 0 -2px;
+				margin-inline: -2px;
 			}
 
 			.newspack-ui__svg-icon--line-solid {
-				margin: 0 -5px;
+				margin-inline: -5px;
 			}
 
 			.newspack-ui__svg-icon--more {
-				margin: 0 -8px;
+				margin-inline: -8px;
 			}
 		}
 	}
+
+	.newspack-ui__link {
+		--newspack-ui-link-hit-block: var(--newspack-ui-spacer-half);
+		--newspack-ui-link-hit-inline: calc(var(--newspack-ui-spacer-1) * 0.75);
+
+		color: var(--newspack-ui-color-text);
+		cursor: pointer;
+		font-family: var(--newspack-ui-font-family);
+		font-size: var(--newspack-ui-font-size-small);
+		font-weight: var(--newspack-ui-font-weight-medium);
+		line-height: var(--newspack-ui-line-height-small);
+		position: relative;
+		text-decoration: underline;
+		text-decoration-color: color-mix(in oklab, var(--newspack-ui-color-text) 50%, var(--newspack-ui-color-surface));
+		text-underline-offset: 3px;
+		transition:
+			text-decoration-color var(--newspack-ui-duration-color) ease,
+			color var(--newspack-ui-duration-color) ease;
+
+		@media ( pointer: coarse ) {
+			--newspack-ui-link-hit-block: calc(( var(--newspack-ui-touch-target) - 1lh ) / 2);
+			--newspack-ui-link-hit-inline: var(--newspack-ui-spacer-1);
+		}
+
+		&::after {
+			content: "";
+			inset: calc(var(--newspack-ui-link-hit-block) * -1) calc(var(--newspack-ui-link-hit-inline) * -1);
+			position: absolute;
+		}
+
+		@media ( hover: hover ) and ( pointer: fine ) {
+			&:hover {
+				color: var(--newspack-ui-color-text);
+				text-decoration-color: var(--newspack-ui-color-text);
+			}
+		}
+
+		&:focus {
+			outline: none;
+		}
+
+		&:focus-visible {
+			@include mixins.focus-line( $radius: calc(var(--newspack-ui-radius-control) * 0.5) );
+		}
+
+		&.newspack-ui__link--muted,
+		&:disabled,
+		&[aria-disabled="true"] {
+			color: var(--newspack-ui-color-text-muted);
+			font-weight: var(--newspack-ui-font-weight-regular);
+			text-decoration: none;
+		}
+
+		&:disabled,
+		&[aria-disabled="true"] {
+			cursor: default;
+			pointer-events: none;
+		}
+
+		&:is(button) {
+			appearance: none;
+			background: none;
+			border: 0;
+			border-radius: 0;
+			margin: 0;
+			min-height: 0;
+			padding: 0;
+		}
+	}
+
 	br + .newspack-ui__button,
 	.newspack-ui__demo .newspack-ui__button + .newspack-ui__button {
 		margin-top: var(--newspack-ui-spacer-2);
 	}
 	.newspack-ui__demo .newspack-ui__stack--horizontal .newspack-ui__button {
 		margin-block: 0;
-	}
-}
-
-@keyframes button-loading {
-	0% {
-		transform: rotate(0deg);
-	}
-	100% {
-		transform: rotate(360deg);
 	}
 }

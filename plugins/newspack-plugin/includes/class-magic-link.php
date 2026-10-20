@@ -867,19 +867,18 @@ final class Magic_Link {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		if ( isset( $_GET[ self::AUTH_ACTION_RESULT ] ) && 0 === \absint( $_GET[ self::AUTH_ACTION_RESULT ] ) ) {
 			\add_action(
-				'before_header',
+				'after_header',
 				function () {
 					?>
-					<style>
-						.newspack-magic-link-error {
-							text-align: center;
-							padding: 1em;
-							font-size: 0.7em;
-							border-bottom: 1px solid var( --wc-red );
-						}
-					</style>
-					<div class="newspack-magic-link-error">
-						<?php \esc_html_e( 'We were not able to authenticate your account. Please try logging in again.', 'newspack-plugin' ); ?>
+					<div class="newspack-ui newspack-magic-link-error">
+						<div class="wrapper">
+							<div class="newspack-ui__notice newspack-ui__notice--error newspack-ui__spacing-top--5 newspack-ui__spacing-bottom--0" role="alert">
+								<?php Newspack_UI::print_notice_icon( 'error' ); ?>
+								<div>
+									<p><?php \esc_html_e( 'We were not able to authenticate your account. Please try logging in again.', 'newspack-plugin' ); ?></p>
+								</div>
+							</div>
+						</div>
 					</div>
 					<?php
 				},

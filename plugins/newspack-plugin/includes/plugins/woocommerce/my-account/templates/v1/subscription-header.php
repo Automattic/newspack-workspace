@@ -224,7 +224,8 @@ if ( ! empty( $actions['change_payment_method']['name'] ) ) {
 							</a>
 						</li>
 					<?php endif; ?>
-					<?php foreach ( $actions as $key => $action_link ) : ?>
+					<?php $dropdown_actions = array_diff_key( $actions, [ 'cancel' => true ] ) + array_intersect_key( $actions, [ 'cancel' => true ] ); ?>
+					<?php foreach ( $dropdown_actions as $key => $action_link ) : ?>
 						<?php
 						$classes = [
 							'newspack-ui__button',

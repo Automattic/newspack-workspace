@@ -88,7 +88,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 			);
 			?>
 			<?php do_action( 'woocommerce_subscriptions_change_payment_after_submit' ); ?>
-			<button class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide" id="checkout_cancel" type="button"><?php echo esc_html( Modal_Checkout::get_modal_checkout_labels( 'checkout_cancel' ) ); ?></button>
 
 			<input type="hidden" name="woocommerce_change_payment" value="<?php echo esc_attr( $subscription->get_id() ); ?>" />
 		</div>

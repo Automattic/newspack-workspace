@@ -120,6 +120,7 @@
 	// Specific assignments - general:
 	--newspack-ui-color-border: var(--newspack-ui-color-neutral-30);
 	--newspack-ui-color-border-hover: var(--newspack-ui-color-text-muted);
+	--newspack-ui-color-border-outline-mix: 60%;
 	--newspack-ui-color-body-bg: var(--newspack-ui-color-surface);
 	--newspack-ui-color-divider-start: var(--newspack-ui-color-surface);
 	--newspack-ui-color-divider-end: transparent;
@@ -147,4 +148,10 @@
 		--newspack-ui-color-input-border-disabled: var(--newspack-ui-color-neutral-50);
 		--newspack-ui-color-input-bg-disabled: var(--newspack-ui-color-neutral-fill-pressed);
 	}
+}
+
+:root,
+.newspack-ui__button,
+.newspack-ui__badge {
+	--newspack-ui-color-border-outline: color-mix(in srgb, currentcolor var(--newspack-ui-color-border-outline-mix), transparent);
 }

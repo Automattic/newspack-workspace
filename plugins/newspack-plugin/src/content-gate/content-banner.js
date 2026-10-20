@@ -2,6 +2,7 @@
 import domReady from '@wordpress/dom-ready';
 import { queuePageReload } from '../reader-activation/utils';
 import { getMeteringSettings, getMeteringStoreKey } from './utils/metering-settings';
+import { getNoticeIcon } from '../newspack-ui/js/icons';
 
 import './content-banner.scss';
 
@@ -72,19 +73,19 @@ domReady( () => {
 
 	const copy = ev => {
 		ev.preventDefault();
-		if ( 'true' === copyButton.getAttribute( 'aria-disabled' ) ) {
+		if ( copyButton.hasAttribute( 'data-copied' ) ) {
 			return;
 		}
 		urlInput.select();
 		document.execCommand( 'copy' );
 		const originalText = copyButton.textContent;
-		// aria-disabled rather than disabled, which would drop focus out of the modal.
-		copyButton.setAttribute( 'aria-disabled', 'true' );
+		// A data flag rather than disabled or aria-disabled: disabled drops focus out of the modal, and both would style the confirmation as unavailable.
+		copyButton.setAttribute( 'data-copied', '' );
 		copyButton.textContent = newspack_content_gifting.copied_label;
 		copyButton.focus();
 		setTimeout( () => {
 			copyButton.textContent = originalText;
-			copyButton.removeAttribute( 'aria-disabled' );
+			copyButton.removeAttribute( 'data-copied' );
 		}, 5000 );
 	};
 
@@ -131,8 +132,12 @@ domReady( () => {
 					}
 				} )
 				.catch( err => {
-					errorMessage.innerHTML = err.message || 'An error occurred. Please try again.';
-					errorMessage.style.display = 'block';
+					errorMessage.textContent = err.message || 'An error occurred. Please try again.';
+					const errorIcon = getNoticeIcon( 'error' );
+					if ( errorIcon ) {
+						errorMessage.prepend( errorIcon );
+					}
+					errorMessage.style.display = '';
 					info.style.display = 'none';
 					linkContainer.style.display = 'none';
 				} )

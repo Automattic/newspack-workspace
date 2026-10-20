@@ -1,31 +1,139 @@
+@use "../mixins";
+
 .newspack-ui {
 	&__tabs {
 		&__list {
+			box-shadow: inset 0 -1px 0 var(--newspack-ui-color-border);
 			display: flex;
 			flex-direction: row;
 			flex-wrap: wrap;
-			gap: var(--newspack-ui-spacer-5);
-			box-shadow: inset 0 -1px 0 var(--newspack-ui-color-border);
+			gap: 0;
 
-			.newspack-ui__button {
+			.newspack-ui__button,
+			> a {
+				--newspack-ui-button-bg: transparent;
+				--newspack-ui-button-bg-hover: transparent;
+				--newspack-ui-button-bg-pressed: transparent;
+				--newspack-ui-button-bg-disabled: transparent;
+				--newspack-ui-button-ink: var(--newspack-ui-color-text-subtle);
+
+				align-items: center;
+				background: transparent;
 				border-radius: 0;
-				box-shadow: inset 0 -1px 0 var(--newspack-ui-color-border);
-				color: var(--newspack-ui-color-text-muted);
-				padding-inline: 0;
+				box-shadow: none;
+				color: var(--newspack-ui-color-text-subtle);
+				display: inline-flex;
+				flex: none;
+				font-size: var(--newspack-ui-font-size-body);
+				font-weight: var(--newspack-ui-font-weight-medium);
+				gap: var(--newspack-ui-spacer-1);
+				line-height: var(--newspack-ui-line-height-body);
+				margin: 0;
+				min-height: var(--newspack-ui-spacer-9);
+				padding: 0 var(--newspack-ui-spacer-3);
+				text-decoration: none;
+				transform: none;
+				transition:
+					color var(--newspack-ui-duration-color) ease,
+					box-shadow var(--newspack-ui-duration-color) ease;
+				white-space: nowrap;
 
-				&:hover {
-					background: transparent;
+				@media ( hover: hover ) and ( pointer: fine ) {
+					&:hover {
+						background: transparent;
+						box-shadow: none;
+						color: var(--newspack-ui-color-text);
+					}
 				}
 
-				&.selected {
-					box-shadow: inset 0 -2px 0 var(--newspack-ui-color-selected);
+				&[aria-disabled="true"] {
+					color: var(--newspack-ui-color-disabled-ink);
+				}
+
+				&.selected,
+				&[aria-selected="true"],
+				&[aria-current="page"] {
+					--newspack-ui-tabs-indicator: inset 0 -2px 0 var(--newspack-ui-color-selected);
+
+					box-shadow: var(--newspack-ui-tabs-indicator);
 					color: var(--newspack-ui-color-text);
+
+					@media ( forced-colors: active ) {
+						border-bottom: 2px solid Highlight;
+					}
+				}
+
+				&:focus-visible {
+					@include mixins.focus-line( $inner: var(--newspack-ui-tabs-indicator, 0 0 transparent), $inset: true, $radius: calc(var(--newspack-ui-radius-control) * 0.5) );
+				}
+
+				.newspack-ui__badge {
+					background: none;
+					color: var(--newspack-ui-color-text-subtle);
+					font-size: var(--newspack-ui-font-size-small);
+					font-variant-numeric: tabular-nums;
+					font-weight: var(--newspack-ui-font-weight-regular);
+					height: auto;
+					letter-spacing: normal;
+					box-shadow: none;
+					line-height: inherit;
+					padding: 0;
 				}
 			}
 		}
 
-		&--stretch &__list .newspack-ui__button {
-			flex: 1 1 0;
+		&--small &__list {
+			.newspack-ui__button,
+			> a {
+				font-size: var(--newspack-ui-font-size-small);
+				line-height: var(--newspack-ui-line-height-small);
+				min-height: var(--newspack-ui-spacer-8);
+				padding: 0 var(--newspack-ui-spacer-2);
+			}
+		}
+
+		&--stretch &__list {
+			.newspack-ui__button,
+			> a {
+				flex: 1 1 0;
+				justify-content: center;
+			}
+		}
+
+		&--scroll &__list {
+			--newspack-ui-tabs-fade: var(--newspack-ui-spacer-6);
+			--newspack-ui-tabs-baseline: linear-gradient(#000, #000);
+
+			flex-wrap: nowrap;
+			mask-position: 0 100%, 0 0;
+			mask-repeat: no-repeat;
+			mask-size: 100% 1px, 100% 100%;
+			overflow-x: auto;
+			scrollbar-width: none;
+
+			&::-webkit-scrollbar {
+				display: none;
+			}
+
+			&.is-overflowing-end {
+				mask-image: var(--newspack-ui-tabs-baseline), linear-gradient(to left, transparent, #000 var(--newspack-ui-tabs-fade));
+			}
+
+			&.is-overflowing-start {
+				mask-image: var(--newspack-ui-tabs-baseline), linear-gradient(to right, transparent, #000 var(--newspack-ui-tabs-fade));
+			}
+
+			&.is-overflowing-start.is-overflowing-end {
+				mask-image: var(--newspack-ui-tabs-baseline), linear-gradient(to right, transparent, #000 var(--newspack-ui-tabs-fade), #000 calc(100% - var(--newspack-ui-tabs-fade)), transparent);
+			}
+
+			[dir="rtl"] &.is-overflowing-end {
+				mask-image: var(--newspack-ui-tabs-baseline), linear-gradient(to right, transparent, #000 var(--newspack-ui-tabs-fade));
+			}
+
+			[dir="rtl"] &.is-overflowing-start {
+				mask-image: var(--newspack-ui-tabs-baseline), linear-gradient(to left, transparent, #000 var(--newspack-ui-tabs-fade));
+			}
 		}
 
 		&__content {

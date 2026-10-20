@@ -155,6 +155,27 @@ describe( 'newspack-ui modal dialogs', () => {
 		return event;
 	};
 
+	it( 'keeps an open modal above the on-screen keyboard', async () => {
+		const viewport = new EventTarget();
+		viewport.height = window.innerHeight;
+		viewport.offsetTop = 0;
+		Object.defineProperty( window, 'visualViewport', { value: viewport, configurable: true } );
+		try {
+			const { modal } = renderDialog( '<input type="text" />' );
+			await open( modal );
+
+			viewport.height = window.innerHeight - 300;
+			viewport.dispatchEvent( new Event( 'resize' ) );
+			expect( modal.style.getPropertyValue( '--newspack-ui-keyboard-offset' ) ).toBe( '300px' );
+
+			modal.setAttribute( 'data-state', 'closed' );
+			await nextTask();
+			expect( modal.style.getPropertyValue( '--newspack-ui-keyboard-offset' ) ).toBe( '' );
+		} finally {
+			delete window.visualViewport;
+		}
+	} );
+
 	it( 'opens as a modal labelled by its heading', async () => {
 		const { modal } = renderDialog( '<input type="email" />' );
 		await open( modal );

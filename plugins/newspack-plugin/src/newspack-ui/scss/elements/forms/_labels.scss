@@ -1,3 +1,5 @@
+@use "../../mixins";
+
 .newspack-ui {
 	label {
 		color: var(--newspack-ui-label-color);
@@ -11,39 +13,13 @@
 		// For labels containing radio, checkbox inputs:
 		&:has(input[type="checkbox"]),
 		&:has(input[type="radio"]) {
-			display: grid !important;
-			font-weight: var(--newspack-ui-font-weight-regular);
-			gap: 0 var(--newspack-ui-spacer-1);
-			grid-template-columns: var(--newspack-ui-control-size) 1fr;
-
-			> *:not(input) {
-				grid-column: 2 / span 1;
-			}
-
-			> input {
-				margin-top: calc((1lh - var(--newspack-ui-control-size)) / 2);
-			}
-
-			&:has(input:disabled) {
-				color: var(--newspack-ui-color-text-muted);
-				cursor: not-allowed;
-			}
+			@include mixins.choice-layout;
 
 			// For creating a bordered 'list' of radio, checkbox inputs:
 			&.newspack-ui__input-card {
-				border: 1px solid var(--newspack-ui-color-border);
-				border-radius: var(--newspack-ui-border-radius-m);
-				cursor: pointer;
-				font-weight: var(--newspack-ui-font-weight-regular);
-				gap: 0 var(--newspack-ui-spacer-3);
-				margin-bottom: var(--newspack-ui-spacer-5);
-				padding: var(--newspack-ui-spacer-3);
-				transition: background-color 125ms ease-in-out, border-color 125ms ease-in-out;
+				@include mixins.input-card;
 
-				&:has(> input:checked) {
-					background: var(--newspack-ui-color-surface-subtle);
-					border-color: var(--newspack-ui-color-selected);
-				}
+				margin-bottom: var(--newspack-ui-spacer-5);
 
 				+ .newspack-ui__input-card {
 					margin-top: calc(var(--newspack-ui-spacer-2) * -1);
@@ -72,11 +48,16 @@
 
 		.required {
 			color: var(--newspack-ui-color-error-text);
+			margin-inline-start: 2px;
+		}
+
+		> :is(input, select, textarea):not([type="checkbox"], [type="radio"], [type="hidden"]) {
+			margin-top: var(--newspack-ui-spacer-1);
 		}
 	}
 
 	&__label-optional {
-		color: var(--newspack-ui-color-text-muted);
+		color: var(--newspack-ui-color-text-subtle);
 		font-weight: var(--newspack-ui-font-weight-regular);
 	}
 

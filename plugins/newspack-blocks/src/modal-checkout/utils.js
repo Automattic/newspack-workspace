@@ -116,6 +116,60 @@ export function isPaymentChallengeShown( doc ) {
 	);
 }
 
+const PAYMENT_SECTION = '.woocommerce-checkout-payment';
+
+/**
+ * Note the payment control that has focus, so it can be found again once a checkout
+ * refresh has replaced the payment section.
+ *
+ * @param {Document} doc The page's document.
+ *
+ * @return {{id: string, name: string}|null} The control's id, and its group's name if it is a radio. Null when focus is elsewhere.
+ */
+export function getPaymentFocus( doc ) {
+	const { activeElement } = doc;
+	if ( ! activeElement?.closest?.( PAYMENT_SECTION ) ) {
+		return null;
+	}
+	return {
+		id: activeElement.id || '',
+		name: 'radio' === activeElement.type ? activeElement.name : '',
+	};
+}
+
+/**
+ * Return focus to the payment control noted before a checkout refresh, if the refresh
+ * dropped it to the body. A radio goes to the checked one in its group; otherwise the
+ * control with the same id, then the checked payment method.
+ *
+ * @param {Document} doc          The page's document.
+ * @param {Object}   focused      What getPaymentFocus() noted.
+ * @param {string}   focused.id   The control's id.
+ * @param {string}   focused.name The radio group's name, if the control is a radio.
+ *
+ * @return {HTMLElement|null} The control that took focus.
+ */
+export function restorePaymentFocus( doc, { id, name } ) {
+	const { activeElement } = doc;
+	if ( activeElement && activeElement !== doc.body ) {
+		return null;
+	}
+	const candidates = [
+		name && [ ...doc.querySelectorAll( `${ PAYMENT_SECTION } input[type="radio"]:checked` ) ].find( input => input.name === name ),
+		id && doc.getElementById( id ),
+		doc.querySelector( 'input[name="payment_method"]:checked' ),
+	];
+	for ( const candidate of candidates ) {
+		if ( candidate ) {
+			candidate.focus( { preventScroll: true } );
+			if ( doc.activeElement === candidate ) {
+				return candidate;
+			}
+		}
+	}
+	return null;
+}
+
 /**
  * Create a hidden input field.
  *
@@ -244,20 +298,6 @@ export function onCheckoutReady( container, callback ) {
 		callback();
 	} else {
 		container.addEventListener( 'checkout-ready', callback );
-	}
-}
-
-/**
- * Run a callback when the checkout is canceled.
- *
- * @param {Object}   container The container element inside the iframe document.
- * @param {Function} callback  The callback to execute when the checkout is canceled.
- */
-export function onCheckoutCancel( container, callback ) {
-	if ( container.checkoutCancel ) {
-		callback();
-	} else {
-		container.addEventListener( 'checkout-cancel', callback );
 	}
 }
 
@@ -536,4 +576,36 @@ export function setCloseButtonsDisabled( buttons, disabled ) {
 			button.removeAttribute( 'aria-disabled' );
 		}
 	} );
+}
+
+/**
+ * Run a callback once a modal that was just closed has finished transitioning out.
+ * It runs straight away when nothing in the modal is transitioning. Looping
+ * animations, such as a spinner's, are not waited for.
+ *
+ * @param {HTMLElement} el       The modal container, already closed.
+ * @param {Function}    callback The callback.
+ * @return {Function} Runs the callback now, if it hasn't run yet.
+ */
+export function afterModalExit( el, callback ) {
+	let done = false;
+	let timer = null;
+	const finish = () => {
+		if ( ! done ) {
+			done = true;
+			clearTimeout( timer );
+			callback();
+		}
+	};
+	const getEndTime = animation => animation.effect?.getComputedTiming().endTime;
+	const animations = ( typeof el.getAnimations === 'function' ? el.getAnimations( { subtree: true } ) : [] ).filter( animation =>
+		Number.isFinite( getEndTime( animation ) )
+	);
+	if ( ! animations.length ) {
+		finish();
+		return finish;
+	}
+	timer = setTimeout( finish, Math.max( ...animations.map( getEndTime ) ) + 100 );
+	Promise.allSettled( animations.map( animation => animation.finished ) ).then( finish );
+	return finish;
 }

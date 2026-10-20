@@ -683,6 +683,7 @@ function get_block_button_styles( $attrs = [] ) {
 
 	if ( ! is_button_background_default( $attrs ) ) {
 		$style .= 'background-color: ' . $attrs['backgroundColor'] . ';';
+		$style .= '--newspack-newsletters-subscribe-button-bg: ' . $attrs['backgroundColor'] . ';';
 	}
 	return $style;
 }

@@ -12,6 +12,7 @@ import { getBackTarget, shouldReuseActiveCode } from './auth-form-helpers';
 
 import './google-oauth';
 import './otp-input';
+import { getNoticeIcon } from '../newspack-ui/js/icons';
 
 import './style.scss';
 
@@ -84,6 +85,12 @@ window.newspackRAS.push( function ( readerActivation ) {
 					} else {
 						messageContentElement.classList.remove( 'newspack-ui__inline-error' );
 						messageContentElement.classList.add( 'newspack-ui__helper-text' );
+					}
+					messageContentElement.querySelector( ':scope > [data-message-icon]' )?.remove();
+					const icon = isError ? getNoticeIcon( 'error' ) : null;
+					if ( icon ) {
+						icon.setAttribute( 'data-message-icon', '' );
+						messageContentElement.prepend( icon );
 					}
 					messageContentElement.style.display = 'block';
 				} else {

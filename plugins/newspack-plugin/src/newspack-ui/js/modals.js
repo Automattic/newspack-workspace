@@ -5,6 +5,7 @@
 
 import { domReady, isButtonLoading, setButtonLoading } from '../../utils';
 import { getFocusableElements, getInitialFocus, isVisible } from './focus';
+import { getNoticeIcon } from './icons';
 
 window.newspackRAS = window.newspackRAS || [];
 
@@ -46,7 +47,10 @@ function labelDialog( modal ) {
 	if ( modal.hasAttribute( 'aria-labelledby' ) || modal.hasAttribute( 'aria-label' ) ) {
 		return;
 	}
-	const heading = modal.querySelector( '.newspack-ui__modal__header h2' );
+	const header = modal.querySelector( '.newspack-ui__modal__header' );
+	const heading = header?.hidden
+		? modal.querySelector( '.newspack-ui__modal__content :is(h1, h2, h3, h4, h5, h6)' ) || header.querySelector( 'h2' )
+		: header?.querySelector( 'h2' );
 	if ( ! heading ) {
 		return;
 	}
@@ -167,10 +171,42 @@ function openDialog( modal ) {
 
 	modal.showModal();
 	openDialogs.push( modal );
+	followKeyboard( modal );
 	moveNotices();
 	( getInitialFocus( modal ) || modal ).focus();
 	watchExternalLayers();
 	syncExternalLayers();
+}
+
+/**
+ * Keep a modal inside the visible viewport while the on-screen keyboard is open.
+ * iOS overlays the keyboard instead of resizing the page, which would hide the
+ * bottom sheet's actions behind it.
+ *
+ * @param {HTMLDialogElement} modal The modal element.
+ */
+function followKeyboard( modal ) {
+	const viewport = window.visualViewport;
+	if ( ! viewport || modal._unfollowKeyboard ) {
+		return;
+	}
+	const update = () => {
+		const offset = Math.max( 0, Math.round( window.innerHeight - viewport.height - viewport.offsetTop ) );
+		if ( offset ) {
+			modal.style.setProperty( '--newspack-ui-keyboard-offset', `${ offset }px` );
+		} else {
+			modal.style.removeProperty( '--newspack-ui-keyboard-offset' );
+		}
+	};
+	viewport.addEventListener( 'resize', update );
+	viewport.addEventListener( 'scroll', update );
+	modal._unfollowKeyboard = () => {
+		viewport.removeEventListener( 'resize', update );
+		viewport.removeEventListener( 'scroll', update );
+		modal.style.removeProperty( '--newspack-ui-keyboard-offset' );
+		modal._unfollowKeyboard = null;
+	};
+	update();
 }
 
 /**
@@ -185,6 +221,7 @@ function closeDialog( modal ) {
 	}
 	modal._steppedDown = false;
 	modal._focusBeforeStepDown = null;
+	modal._unfollowKeyboard?.();
 	if ( modal.open ) {
 		modal.close();
 	}
@@ -473,6 +510,10 @@ domReady( function () {
 							const errorsDiv = document.createElement( 'div' );
 							errorsDiv.textContent = error || 'An error occurred.';
 							errorsDiv.classList.add( 'newspack-ui__notice', 'newspack-ui__notice--error' );
+							const errorIcon = getNoticeIcon( 'error' );
+							if ( errorIcon ) {
+								errorsDiv.prepend( errorIcon );
+							}
 							errorsDiv.setAttribute( 'role', 'alert' );
 							content.insertBefore( errorsDiv, content.firstChild );
 						} )
