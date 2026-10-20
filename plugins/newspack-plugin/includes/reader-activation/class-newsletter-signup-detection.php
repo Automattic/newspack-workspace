@@ -87,13 +87,18 @@ final class Newsletter_Signup_Detection {
 	}
 
 	/**
-	 * Check the current reader's newsletter subscription.
+	 * Check the current reader's newsletter subscription, unless a check already
+	 * ran for them within the rate limit the REST route uses.
 	 */
 	private static function check_current_reader() {
 		if ( ! self::can_check_current_reader() ) {
 			return;
 		}
-		Reader_Data::refresh_newsletter_subscription_and_recheck( \get_current_user_id() );
+		$user_id = \get_current_user_id();
+		if ( ! Reader_Data::claim_newsletter_check( $user_id ) ) {
+			return;
+		}
+		Reader_Data::refresh_newsletter_subscription_and_recheck( $user_id );
 	}
 }
 Newsletter_Signup_Detection::init();

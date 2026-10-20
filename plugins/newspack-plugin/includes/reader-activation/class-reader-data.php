@@ -664,13 +664,10 @@ final class Reader_Data {
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public static function api_check_newsletter_subscription() {
-		$user_id       = \get_current_user_id();
-		$transient_key = 'newspack_reader_data_nl_check_' . $user_id;
-		if ( false !== \get_transient( $transient_key ) ) {
+		$user_id = \get_current_user_id();
+		if ( ! self::claim_newsletter_check( $user_id ) ) {
 			return new \WP_Error( 'rate_limited', __( 'Please wait before checking again.', 'newspack-plugin' ), [ 'status' => 429 ] );
 		}
-		// Set before the lookup, so overlapping requests cannot both reach the provider.
-		\set_transient( $transient_key, time(), self::NEWSLETTER_CHECK_INTERVAL );
 
 		self::refresh_newsletter_subscription_and_recheck( $user_id );
 
@@ -682,6 +679,28 @@ final class Reader_Data {
 				],
 			]
 		);
+	}
+
+	/**
+	 * Claim the reader's newsletter check slot, which the REST route and the
+	 * third-party signup hooks share, so one form submit reaching both asks the
+	 * provider once.
+	 *
+	 * The slot is taken before the lookup runs, which keeps back-to-back calls from
+	 * both reaching the provider. It is not an atomic lock: two requests reading
+	 * the transient at the same moment can both claim it.
+	 *
+	 * @param int $user_id User ID.
+	 *
+	 * @return bool Whether the slot was free and is now claimed.
+	 */
+	public static function claim_newsletter_check( int $user_id ): bool {
+		$transient_key = 'newspack_reader_data_nl_check_' . $user_id;
+		if ( false !== \get_transient( $transient_key ) ) {
+			return false;
+		}
+		\set_transient( $transient_key, time(), self::NEWSLETTER_CHECK_INTERVAL );
+		return true;
 	}
 
 	/**

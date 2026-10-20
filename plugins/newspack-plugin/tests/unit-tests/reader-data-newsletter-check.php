@@ -148,10 +148,41 @@ class Newspack_Test_Reader_Data_Newsletter_Check extends WP_UnitTestCase {
 		Newspack_Newsletters_Subscription::$contact_lists[ $this->email ] = [ 'list-1' ];
 
 		$this->assertSame( 200, $this->check_request()->get_status() );
+		$this->assertSame( 1, Newspack_Newsletters_Subscription::$get_contact_lists_calls );
 		$second = $this->check_request();
 
 		$this->assertSame( 429, $second->get_status() );
 		$this->assertSame( 'rate_limited', $second->as_error()->get_error_code() );
+		$this->assertSame( 1, Newspack_Newsletters_Subscription::$get_contact_lists_calls );
+	}
+
+	/**
+	 * A signup hook that runs right after the route asks the provider no second time.
+	 */
+	public function test_signup_hook_shares_the_route_rate_limit() {
+		wp_set_current_user( $this->user_id );
+		Newspack_Newsletters_Subscription::$contact_lists[ $this->email ] = [ 'list-1' ];
+		GFAPI::$feeds[7]['gravityformsmailchimp']                        = [ [ 'id' => 1 ] ];
+
+		$this->assertSame( 200, $this->check_request()->get_status() );
+		do_action( 'mc4wp_form_subscribed', null, $this->email, [], [] );
+		do_action( 'gform_after_submission', [ 'id' => 1 ], [ 'id' => 7 ] );
+
+		$this->assertSame( 1, Newspack_Newsletters_Subscription::$get_contact_lists_calls );
+	}
+
+	/**
+	 * The route answers 429 right after a signup hook checked the reader.
+	 */
+	public function test_route_shares_the_signup_hook_rate_limit() {
+		wp_set_current_user( $this->user_id );
+		Newspack_Newsletters_Subscription::$contact_lists[ $this->email ] = [ 'list-1' ];
+
+		do_action( 'mc4wp_form_subscribed', null, $this->email, [], [] );
+		$response = $this->check_request();
+
+		$this->assertSame( 429, $response->get_status() );
+		$this->assertSame( 1, Newspack_Newsletters_Subscription::$get_contact_lists_calls );
 	}
 
 	/**
