@@ -44,7 +44,7 @@ $display_email           = $is_pending_email_change ? $pending_email_change : $u
 				name="account_first_name"
 				id="account_first_name"
 				autocomplete="given-name"
-				placeholder="<?php esc_attr_e( 'Your First Name', 'newspack-plugin' ); ?>"
+				placeholder="<?php esc_attr_e( 'Your first name', 'newspack-plugin' ); ?>"
 				value="<?php echo esc_attr( $user->first_name ); ?>"
 				aria-required="true"
 			/>
@@ -57,7 +57,7 @@ $display_email           = $is_pending_email_change ? $pending_email_change : $u
 				name="account_last_name"
 				id="account_last_name"
 				autocomplete="family-name"
-				placeholder="<?php esc_attr_e( 'Your Last Name', 'newspack-plugin' ); ?>"
+				placeholder="<?php esc_attr_e( 'Your last name', 'newspack-plugin' ); ?>"
 				value="<?php echo esc_attr( $user->last_name ); ?>"
 				aria-required="true"
 			/>
@@ -72,7 +72,7 @@ $display_email           = $is_pending_email_change ? $pending_email_change : $u
 				name="account_display_name"
 				id="account_display_name"
 				autocomplete="name"
-				placeholder="<?php esc_attr_e( 'Your Display Name', 'newspack-plugin' ); ?>"
+				placeholder="<?php esc_attr_e( 'Your display name', 'newspack-plugin' ); ?>"
 				value="<?php echo ! Reader_Activation::reader_has_generic_display_name() ? \esc_attr( $user->display_name ) : ''; ?>"
 			/>
 			<span class="legend"><?php esc_html_e( 'This is how your name is displayed publicly.', 'newspack-plugin' ); ?></span>

@@ -117,6 +117,7 @@ export default function ReaderRegistrationEdit( {
 					<TextControl
 						label={ __( 'Input placeholder', 'newspack-plugin' ) }
 						value={ placeholder }
+						placeholder={ __( 'Your email address', 'newspack-plugin' ) }
 						disabled={ inFlight }
 						onChange={ value => setAttributes( { placeholder: value } ) }
 					/>
@@ -297,7 +298,7 @@ export default function ReaderRegistrationEdit( {
 								<div className="newspack-registration__main">
 									<div>
 										<div className="newspack-registration__inputs">
-											<input type="email" placeholder={ placeholder } />
+											<input type="email" placeholder={ placeholder || __( 'Your email address', 'newspack-plugin' ) } />
 											<button type="submit" className="newspack-ui__button newspack-ui__button--primary">
 												<RichText
 													onChange={ value => setAttributes( { label: value } ) }

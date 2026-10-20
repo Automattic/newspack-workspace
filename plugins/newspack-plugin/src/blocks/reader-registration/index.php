@@ -203,6 +203,7 @@ function render_block( $attrs, $content ) {
 	$default_attrs = [
 		'label'           => __( 'Continue', 'newspack-plugin' ),
 		'newsletterLabel' => __( 'Subscribe to our newsletter', 'newspack-plugin' ),
+		'placeholder'     => __( 'Your email address', 'newspack-plugin' ),
 	];
 	$attrs         = \wp_parse_args( $attrs, $default_attrs );
 	foreach ( $default_attrs as $key => $value ) {

@@ -656,17 +656,17 @@ class Newspack_UI {
 		ob_start();
 		?>
 		<div class="newspack-ui newspack-ui__demo">
-			<h1>Component Demo</h1>
+			<h1>Component demo</h1>
 
 			<ul>
 				<li><a href="?ui-demo#typography">Typography</a></li>
 				<li><a href="?ui-demo#boxes">Boxes</a></li>
-				<li><a href="?ui-demo#form-elements">Form Elements</a></li>
-				<li><a href="?ui-demo#checkbox-radio-lists">Checkbox/Radio Lists</a></li>
+				<li><a href="?ui-demo#form-elements">Form elements</a></li>
+				<li><a href="?ui-demo#checkbox-radio-lists">Checkbox/radio lists</a></li>
 				<li><a href="?ui-demo#order-table">Order table</a></li>
 				<li><a href="?ui-demo#buttons">Buttons</a></li>
 				<li><a href="?ui-demo#tabs">Tabs</a></li>
-				<li><a href="#buttons-icon">Buttons Icon</a></li>
+				<li><a href="#buttons-icon">Buttons icon</a></li>
 				<li><a href="?ui-demo#modals">Modals</a></li>
 			</ul>
 
@@ -880,7 +880,7 @@ class Newspack_UI {
 
 				<p>
 					<label for="email-input-demo">Email input <abbr class="newspack-ui__required" title="required">*</abbr></label>
-					<input type="email" placeholder="Email Address">
+					<input type="email" placeholder="Email address">
 				</p>
 
 				<p>
@@ -943,7 +943,7 @@ class Newspack_UI {
 				</p>
 
 				<p>
-					<label for="select-control-demo">Select Controls</label>
+					<label for="select-control-demo">Select controls</label>
 					<select id="select-control-demo">
 						<option value="1">Option 1</option>
 						<option value="2">Option 2</option>
@@ -955,7 +955,7 @@ class Newspack_UI {
 
 			<hr>
 
-			<h2 id="checkbox-radio-lists">Checkbox/Radio Lists</h2>
+			<h2 id="checkbox-radio-lists">Checkbox/radio lists</h2>
 
 			<label class="newspack-ui__input-card">
 				<input type="radio" name="list-radio-option" checked>
@@ -1069,20 +1069,20 @@ class Newspack_UI {
 
 			<h2 id="buttons">Buttons</h2>
 			<p><code>newspack-ui__button--primary</code>, <code>--accent</code>, <code>--secondary</code>, <code>--ghost</code>, and <code>--destructive</code> classes for colours/borders, and <code>newspack-ui__button--wide</code> for being 100% wide</p>
-			<button class="newspack-ui__button newspack-ui__button--primary">Primary Button</button><br>
-			<button class="newspack-ui__button newspack-ui__button--primary" disabled>Primary Button Disabled</button><br>
-			<button class="newspack-ui__button newspack-ui__button--accent">Accent Button</button><br>
-			<button class="newspack-ui__button newspack-ui__button--accent" disabled>Accent Button Disabled</button><br>
-			<button class="newspack-ui__button newspack-ui__button--secondary">Secondary Button</button><br>
-			<button class="newspack-ui__button newspack-ui__button--secondary" disabled>Secondary Button Disabled</button><br>
-			<button class="newspack-ui__button newspack-ui__button--ghost">Ghost Button</button><br>
-			<button class="newspack-ui__button newspack-ui__button--ghost" disabled>Ghost Button Disabled</button><br>
-			<button class="newspack-ui__button newspack-ui__button--outline">Outline Button</button><br>
-			<button class="newspack-ui__button newspack-ui__button--outline" disabled>Outline Button Disabled</button><br>
-			<button class="newspack-ui__button newspack-ui__button--destructive">Destructive Button</button><br>
-			<button class="newspack-ui__button newspack-ui__button--destructive" disabled>Destructive Button Disabled</button><br>
-			<button class="newspack-ui__button newspack-ui__button--destructive newspack-ui__button--ghost">Destructive Ghost Button</button><br>
-			<button class="newspack-ui__button newspack-ui__button--destructive newspack-ui__button--ghost" disabled>Destructive Ghost Button Disabled</button><br>
+			<button class="newspack-ui__button newspack-ui__button--primary">Primary button</button><br>
+			<button class="newspack-ui__button newspack-ui__button--primary" disabled>Primary button disabled</button><br>
+			<button class="newspack-ui__button newspack-ui__button--accent">Accent button</button><br>
+			<button class="newspack-ui__button newspack-ui__button--accent" disabled>Accent button disabled</button><br>
+			<button class="newspack-ui__button newspack-ui__button--secondary">Secondary button</button><br>
+			<button class="newspack-ui__button newspack-ui__button--secondary" disabled>Secondary button disabled</button><br>
+			<button class="newspack-ui__button newspack-ui__button--ghost">Ghost button</button><br>
+			<button class="newspack-ui__button newspack-ui__button--ghost" disabled>Ghost button disabled</button><br>
+			<button class="newspack-ui__button newspack-ui__button--outline">Outline button</button><br>
+			<button class="newspack-ui__button newspack-ui__button--outline" disabled>Outline button disabled</button><br>
+			<button class="newspack-ui__button newspack-ui__button--destructive">Destructive button</button><br>
+			<button class="newspack-ui__button newspack-ui__button--destructive" disabled>Destructive button disabled</button><br>
+			<button class="newspack-ui__button newspack-ui__button--destructive newspack-ui__button--ghost">Destructive ghost button</button><br>
+			<button class="newspack-ui__button newspack-ui__button--destructive newspack-ui__button--ghost" disabled>Destructive ghost button disabled</button><br>
 			<button class="newspack-ui__button newspack-ui__button--outline newspack-ui__button--google-oauth">
 				<?php Newspack_UI_Icons::print_svg( 'google' ); ?>
 				<span>
@@ -1091,10 +1091,10 @@ class Newspack_UI {
 			</button>
 
 			<h3>Wide buttons</h3>
-			<button class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide">Primary Button</button>
-			<button class="newspack-ui__button newspack-ui__button--accent newspack-ui__button--wide">Accent Button</button>
-			<button class="newspack-ui__button newspack-ui__button--secondary newspack-ui__button--wide">Secondary Button</button>
-			<button class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide">Ghost Button</button>
+			<button class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide">Primary button</button>
+			<button class="newspack-ui__button newspack-ui__button--accent newspack-ui__button--wide">Accent button</button>
+			<button class="newspack-ui__button newspack-ui__button--secondary newspack-ui__button--wide">Secondary button</button>
+			<button class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide">Ghost button</button>
 			<button class="newspack-ui__button newspack-ui__button--secondary newspack-ui__button--wide">
 				<?php Newspack_UI_Icons::print_svg( 'google' ); ?>
 				<span>
@@ -1137,63 +1137,63 @@ class Newspack_UI {
 
 			<p>Uses the <code>newspack-ui__button--x-small</code> and <code>newspack-ui__button--small</code> classes to get different sizes (medium is the default for this button styles).</p>
 
-			<button class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--x-small">X-Small Button</button><br />
+			<button class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--x-small">X-small button</button><br />
 			<button class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--x-small">
 				<?php Newspack_UI_Icons::print_svg( 'account' ); ?>
-				X-Small Button
+				X-small button
 			</button><br />
 			<button class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--x-small">
-				X-Small Button
+				X-small button
 				<?php Newspack_UI_Icons::print_svg( 'account' ); ?>
 			</button><br />
-			<button class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--small">Small Button</button><br />
+			<button class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--small">Small button</button><br />
 			<button class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--small">
 				<?php Newspack_UI_Icons::print_svg( 'account' ); ?>
-				Small Button
+				Small button
 			</button><br />
 			<button class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--small">
-				Small Button
+				Small button
 				<?php Newspack_UI_Icons::print_svg( 'account' ); ?>
 			</button><br />
 			<button class="newspack-ui__button newspack-ui__button--primary">
 				<?php Newspack_UI_Icons::print_svg( 'account' ); ?>
-				Medium Button (default)
+				Medium button (default)
 			</button><br />
 			<button class="newspack-ui__button newspack-ui__button--primary">
-				Medium Button (default)
+				Medium button (default)
 				<?php Newspack_UI_Icons::print_svg( 'account' ); ?>
 			</button>
 
 			<hr>
 
 			<button class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--loading">
-				<span>Loading Button</span>
+				<span>Loading button</span>
 			</button><br>
 
 			<button class="newspack-ui__button newspack-ui__button--outline newspack-ui__button--small newspack-ui__button--loading">
-				<span>Loading Button</span>
+				<span>Loading button</span>
 			</button><br>
 
 			<button class="newspack-ui__button newspack-ui__button--destructive newspack-ui__button--x-small newspack-ui__button--loading">
-				<span>Loading Button</span>
+				<span>Loading button</span>
 			</button>
 
 			<hr>
 
-			<h2>Segmented Controls</h2>
+			<h2>Segmented controls</h2>
 
 			<div class="newspack-ui__segmented-control">
 				<div class="newspack-ui__segmented-control__tabs">
-					<button class="newspack-ui__button newspack-ui__button--small selected" aria-pressed="true">Tab One</button>
-					<button class="newspack-ui__button newspack-ui__button--small" aria-pressed="false">Tab Two</button>
-					<button class="newspack-ui__button newspack-ui__button--small" aria-pressed="false">Tab Three</button>
-					<button class="newspack-ui__button newspack-ui__button--small" aria-pressed="false">Tab Four</button>
-					<button class="newspack-ui__button newspack-ui__button--small" aria-pressed="false">Tab Five</button>
+					<button class="newspack-ui__button newspack-ui__button--small selected" aria-pressed="true">Tab one</button>
+					<button class="newspack-ui__button newspack-ui__button--small" aria-pressed="false">Tab two</button>
+					<button class="newspack-ui__button newspack-ui__button--small" aria-pressed="false">Tab three</button>
+					<button class="newspack-ui__button newspack-ui__button--small" aria-pressed="false">Tab four</button>
+					<button class="newspack-ui__button newspack-ui__button--small" aria-pressed="false">Tab five</button>
 				</div>
 			</div>
 
 			<div class="newspack-ui__segmented-control__form-control newspack-ui__spacing-top--6">
-				<label>Segmented Control (Form) <abbr class="newspack-ui__required" title="required">*</abbr></label>
+				<label>Segmented control (form) <abbr class="newspack-ui__required" title="required">*</abbr></label>
 				<div class="newspack-ui__segmented-control__tabs">
 					<button class="newspack-ui__button newspack-ui__button--small selected" aria-pressed="true">True</button>
 					<button class="newspack-ui__button newspack-ui__button--small" aria-pressed="false">False</button>
@@ -1211,26 +1211,26 @@ class Newspack_UI {
 					<div class="newspack-ui__segmented-control__panel">
 						<label class="newspack-ui__input-card">
 							<input type="checkbox" name="checkbox-option-1">
-							<strong>Monthly Option 1</strong>
+							<strong>Monthly option 1</strong>
 							<span class="newspack-ui__helper-text">Friday roundup of the most relevant stories.</span>
 						</label>
 
 						<label class="newspack-ui__input-card">
 							<input type="checkbox" name="checkbox-option-1">
-							<strong>Monthly Option 2</strong>
+							<strong>Monthly option 2</strong>
 							<span class="newspack-ui__helper-text">Friday roundup of the most relevant stories.</span>
 						</label>
 					</div><!-- .newspack-ui__segmented-control__panel -->
 					<div class="newspack-ui__segmented-control__panel">
 						<label class="newspack-ui__input-card">
 							<input type="checkbox" name="checkbox-option-1">
-							<strong>Annual Option 1</strong>
+							<strong>Annual option 1</strong>
 							<span class="newspack-ui__helper-text">Friday roundup of the most relevant stories.</span>
 						</label>
 
 						<label class="newspack-ui__input-card">
 							<input type="checkbox" name="checkbox-option-1">
-							<strong>Annual Option 2</strong>
+							<strong>Annual option 2</strong>
 							<span class="newspack-ui__helper-text">Friday roundup of the most relevant stories.</span>
 						</label>
 					</div><!-- .newspack-ui__segmented-control__panel -->
@@ -1240,14 +1240,14 @@ class Newspack_UI {
 			<hr>
 
 			<h2 id="tabs">Tabs</h2>
-			<p>Underline-style tabs. Built on Ghost button + bottom box-shadow. Drop-in replacement for <code>newspack-ui__segmented-control</code> where the underline aesthetic is preferred.</p>
+			<p>Underline-style tabs. Built on ghost button + bottom box-shadow. Drop-in replacement for <code>newspack-ui__segmented-control</code> where the underline aesthetic is preferred.</p>
 
 			<h3>Default</h3>
 			<div class="newspack-ui__tabs">
 				<div class="newspack-ui__tabs__list" role="tablist">
-					<button type="button" role="tab" class="newspack-ui__button newspack-ui__button--ghost selected"><?php esc_html_e( 'Tab One', 'newspack-plugin' ); ?></button>
-					<button type="button" role="tab" class="newspack-ui__button newspack-ui__button--ghost"><?php esc_html_e( 'Tab Two', 'newspack-plugin' ); ?></button>
-					<button type="button" role="tab" class="newspack-ui__button newspack-ui__button--ghost"><?php esc_html_e( 'Tab Three', 'newspack-plugin' ); ?></button>
+					<button type="button" role="tab" class="newspack-ui__button newspack-ui__button--ghost selected"><?php esc_html_e( 'Tab one', 'newspack-plugin' ); ?></button>
+					<button type="button" role="tab" class="newspack-ui__button newspack-ui__button--ghost"><?php esc_html_e( 'Tab two', 'newspack-plugin' ); ?></button>
+					<button type="button" role="tab" class="newspack-ui__button newspack-ui__button--ghost"><?php esc_html_e( 'Tab three', 'newspack-plugin' ); ?></button>
 				</div>
 			</div>
 
@@ -1288,48 +1288,48 @@ class Newspack_UI {
 
 			<hr>
 
-			<h2 id="buttons-icon">Buttons Icon</h2>
+			<h2 id="buttons-icon">Buttons icon</h2>
 
 			<p>Uses the same classes as the <code>newspack-ui__button</code> but we add an extra class to it <code>newspack-ui__button--icon</code></p>
 			<button class="newspack-ui__button newspack-ui__button--icon">
 				<?php Newspack_UI_Icons::print_svg( 'menu' ); ?>
-				<span class="screen-reader-text"><?php esc_html_e( 'Open Menu', 'newspack-plugin' ); ?></span>
+				<span class="screen-reader-text"><?php esc_html_e( 'Open menu', 'newspack-plugin' ); ?></span>
 			</button>
 			<button class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--icon">
 				<?php Newspack_UI_Icons::print_svg( 'menu' ); ?>
-				<span class="screen-reader-text"><?php esc_html_e( 'Open Menu', 'newspack-plugin' ); ?></span>
+				<span class="screen-reader-text"><?php esc_html_e( 'Open menu', 'newspack-plugin' ); ?></span>
 			</button>
 			<button class="newspack-ui__button newspack-ui__button--accent newspack-ui__button--icon">
 				<?php Newspack_UI_Icons::print_svg( 'menu' ); ?>
-				<span class="screen-reader-text"><?php esc_html_e( 'Open Menu', 'newspack-plugin' ); ?></span>
+				<span class="screen-reader-text"><?php esc_html_e( 'Open menu', 'newspack-plugin' ); ?></span>
 			</button>
 			<button class="newspack-ui__button newspack-ui__button--secondary newspack-ui__button--icon">
 				<?php Newspack_UI_Icons::print_svg( 'menu' ); ?>
-				<span class="screen-reader-text"><?php esc_html_e( 'Open Menu', 'newspack-plugin' ); ?></span>
+				<span class="screen-reader-text"><?php esc_html_e( 'Open menu', 'newspack-plugin' ); ?></span>
 			</button>
 			<button class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--icon">
 				<?php Newspack_UI_Icons::print_svg( 'menu' ); ?>
-				<span class="screen-reader-text"><?php esc_html_e( 'Open Menu', 'newspack-plugin' ); ?></span>
+				<span class="screen-reader-text"><?php esc_html_e( 'Open menu', 'newspack-plugin' ); ?></span>
 			</button>
 			<button class="newspack-ui__button newspack-ui__button--outline newspack-ui__button--icon">
 				<?php Newspack_UI_Icons::print_svg( 'menu' ); ?>
-				<span class="screen-reader-text"><?php esc_html_e( 'Open Menu', 'newspack-plugin' ); ?></span>
+				<span class="screen-reader-text"><?php esc_html_e( 'Open menu', 'newspack-plugin' ); ?></span>
 			</button>
 			<button class="newspack-ui__button newspack-ui__button--destructive newspack-ui__button--icon">
 				<?php Newspack_UI_Icons::print_svg( 'menu' ); ?>
-				<span class="screen-reader-text"><?php esc_html_e( 'Open Menu', 'newspack-plugin' ); ?></span>
+				<span class="screen-reader-text"><?php esc_html_e( 'Open menu', 'newspack-plugin' ); ?></span>
 			</button>
 
 			<p>Uses the <code>newspack-ui__button--small</code> and <code>newspack-ui__button--medium</code> CSS classes to get different sizes (x-small is the default).</p>
 
 			<button class="newspack-ui__button newspack-ui__button--icon newspack-ui__button--small">
 				<?php Newspack_UI_Icons::print_svg( 'menu' ); ?>
-				<span class="screen-reader-text"><?php esc_html_e( 'Open Menu', 'newspack-plugin' ); ?></span>
+				<span class="screen-reader-text"><?php esc_html_e( 'Open menu', 'newspack-plugin' ); ?></span>
 			</button>
 
 			<button class="newspack-ui__button newspack-ui__button--icon newspack-ui__button--medium">
 				<?php Newspack_UI_Icons::print_svg( 'menu' ); ?>
-				<span class="screen-reader-text"><?php esc_html_e( 'Open Menu', 'newspack-plugin' ); ?></span>
+				<span class="screen-reader-text"><?php esc_html_e( 'Open menu', 'newspack-plugin' ); ?></span>
 			</button>
 
 			<hr>
@@ -1362,7 +1362,7 @@ class Newspack_UI {
 			<div class="newspack-ui__box">
 				<div class="newspack-ui__modal newspack-ui__modal--small">
 					<header class="newspack-ui__modal__header">
-						<h2>Auth Modal Contents Default</h2>
+						<h2>Auth modal contents default</h2>
 
 						<button class="newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__modal__close">
 							<span class="screen-reader-text"><?php esc_html_e( 'Close', 'newspack-plugin' ); ?></span>
@@ -1384,10 +1384,10 @@ class Newspack_UI {
 						<form>
 							<p>
 								<label for="email-input-demo">Email input</label>
-								<input type="email" placeholder="Email Address">
+								<input type="email" placeholder="Email address">
 							</p>
 
-							<button class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide">Sign In</button>
+							<button class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide">Sign in</button>
 							<button class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide">Sign in to existing account</button>
 						</form>
 					</section>
@@ -1401,7 +1401,7 @@ class Newspack_UI {
 			<div class="newspack-ui__box">
 				<div class="newspack-ui__modal newspack-ui__modal--small">
 					<header class="newspack-ui__modal__header">
-						<h2>Auth Modal Contents OTP</h2>
+						<h2>Auth modal contents OTP</h2>
 
 						<button class="newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__modal__close">
 							<span class="screen-reader-text"><?php esc_html_e( 'Close', 'newspack-plugin' ); ?></span>
@@ -1421,8 +1421,8 @@ class Newspack_UI {
 							<p class="newspack-ui__helper-text">Sign in by entering the code sent to email@address.com, or by clicking the magic link in the email.</p>
 
 							<button class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide">Continue</button>
-							<button class="newspack-ui__button newspack-ui__button--secondary newspack-ui__button--wide">Resend Code</button>
-							<button class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide">Go Back</button>
+							<button class="newspack-ui__button newspack-ui__button--secondary newspack-ui__button--wide">Resend code</button>
+							<button class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide">Go back</button>
 						</form>
 					</section>
 				</div><!-- .newspack-ui__modal--small -->
@@ -1431,7 +1431,7 @@ class Newspack_UI {
 			<div class="newspack-ui__box">
 				<div class="newspack-ui__modal newspack-ui__modal--small">
 					<header class="newspack-ui__modal__header">
-						<h2>Auth Modal Contents Success</h2>
+						<h2>Auth modal contents success</h2>
 
 						<button class="newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__modal__close">
 							<span class="screen-reader-text"><?php esc_html_e( 'Close', 'newspack-plugin' ); ?></span>
@@ -1463,7 +1463,7 @@ class Newspack_UI {
 			<div class="newspack-ui__box">
 				<div class="newspack-ui__modal newspack-ui__modal--small">
 					<header class="newspack-ui__modal__header">
-						<h2>Auth Modal Contents Success + PW</h2>
+						<h2>Auth modal contents success + PW</h2>
 
 						<button class="newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__modal__close">
 							<span class="screen-reader-text"><?php esc_html_e( 'Close', 'newspack-plugin' ); ?></span>
@@ -1495,7 +1495,7 @@ class Newspack_UI {
 								<input type="password">
 							</p>
 							<p>
-								<label>Confirm Password</label>
+								<label>Confirm password</label>
 								<input type="password">
 								<span class="newspack-ui__helper-text">If you don't set a password, you can always log in with a magic link or one-time code sent to your email.</span>
 							</p>
@@ -1511,7 +1511,7 @@ class Newspack_UI {
 			<div class="newspack-ui__box">
 				<div class="newspack-ui__modal newspack-ui__modal--small">
 					<header class="newspack-ui__modal__header">
-						<h2>Newsletters Signup Form</h2>
+						<h2>Newsletters signup form</h2>
 
 						<button class="newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__modal__close">
 							<span class="screen-reader-text"><?php esc_html_e( 'Close', 'newspack-plugin' ); ?></span>
@@ -1665,7 +1665,7 @@ class Newspack_UI {
 			<div class="newspack-ui__box">
 				<div class="newspack-ui__modal newspack-ui__modal--small">
 					<header class="newspack-ui__modal__header">
-						<h2>Change Subscription</h2>
+						<h2>Change subscription</h2>
 
 						<button class="newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__modal__close">
 							<span class="screen-reader-text"><?php esc_html_e( 'Close', 'newspack-plugin' ); ?></span>
@@ -1683,43 +1683,43 @@ class Newspack_UI {
 								<div class="newspack-ui__segmented-control__panel">
 									<label class="newspack-ui__input-card">
 										<input type="checkbox" name="checkbox-option-1">
-										<strong>Monthly Option 1</strong>
+										<strong>Monthly option 1</strong>
 										<span class="newspack-ui__helper-text">Friday roundup of the most relevant stories.</span>
 									</label>
 
 									<label class="newspack-ui__input-card">
 										<input type="checkbox" name="checkbox-option-1">
-										<strong>Monthly Option 2</strong>
+										<strong>Monthly option 2</strong>
 										<span class="newspack-ui__helper-text">Friday roundup of the most relevant stories.</span>
 									</label>
 								</div><!-- .newspack-ui__segmented-control__panel -->
 								<div class="newspack-ui__segmented-control__panel">
 									<label class="newspack-ui__input-card">
 										<input type="checkbox" name="checkbox-option-1">
-										<strong>Annual Option 1</strong>
+										<strong>Annual option 1</strong>
 										<span class="newspack-ui__helper-text">Friday roundup of the most relevant stories.</span>
 									</label>
 
 									<label class="newspack-ui__input-card">
 										<input type="checkbox" name="checkbox-option-1">
-										<strong>Annual Option 2</strong>
+										<strong>Annual option 2</strong>
 										<span class="newspack-ui__helper-text">Friday roundup of the most relevant stories.</span>
 									</label>
 								</div><!-- .newspack-ui__segmented-control__panel -->
 							</div><!-- .newspack-ui__segmented-control__content -->
 						</div><!-- .newspack-ui__segmented-control -->
-						<button class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide">Change Subscription</button>
+						<button class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide">Change subscription</button>
 						<button class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide">Cancel</button>
 					</section>
 				</div><!-- .newspack-ui__modal--small -->
 			</div><!-- .newspack-ui__box -->
 
-			<button id="open-modal-example" class="newspack-ui__button newspack-ui__button--primary">Open Modal</button>
+			<button id="open-modal-example" class="newspack-ui__button newspack-ui__button--primary">Open modal</button>
 			<dialog id="newspack-modal-example" class="newspack-ui__modal-container">
 				<div class="newspack-ui__modal-container__overlay"></div>
 				<div class="newspack-ui__modal newspack-ui__modal--small">
 						<header class="newspack-ui__modal__header">
-							<h2>Auth Modal Contents Default</h2>
+							<h2>Auth modal contents default</h2>
 
 							<button class="newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__modal__close">
 								<span class="screen-reader-text"><?php esc_html_e( 'Close', 'newspack-plugin' ); ?></span>
@@ -1741,10 +1741,10 @@ class Newspack_UI {
 							<form>
 								<p>
 									<label for="email-input-demo">Email input</label>
-									<input type="email" placeholder="Email Address">
+									<input type="email" placeholder="Email address">
 								</p>
 
-								<button class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide">Sign In</button>
+								<button class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide">Sign in</button>
 								<button class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide">Sign in to existing account</button>
 							</form>
 						</section>

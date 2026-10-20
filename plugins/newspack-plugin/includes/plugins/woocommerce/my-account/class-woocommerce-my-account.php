@@ -1029,7 +1029,7 @@ class WooCommerce_My_Account {
 		// If there are active memberships without subscriptions, present them in a table.
 		if ( $memberships_without_subs ) {
 			echo '<div class="woocommerce-memberships-without-subs">';
-			echo '<h2>' . esc_html__( 'Active Memberships', 'newspack-plugin' ) . '</h2>';
+			echo '<h2>' . esc_html__( 'Active memberships', 'newspack-plugin' ) . '</h2>';
 			echo '<p>' . esc_html__( 'These memberships are active, but don\'t have an associated subscription. They will need to be manually renewed when they expire.', 'newspack-plugin' ) . '</p>';
 			wc_get_template(
 				'myaccount/my-memberships.php',
