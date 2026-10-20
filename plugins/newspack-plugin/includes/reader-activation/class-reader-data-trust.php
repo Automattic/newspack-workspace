@@ -242,6 +242,11 @@ final class Reader_Data_Trust {
 			// Donor status is derived from orders and subscriptions, so a value the
 			// server never wrote can be recomputed from them instead of dropped.
 			$computed = self::compute_is_donor( $user_id );
+			// A stored `true` can come from a source outside WooCommerce, such as an
+			// ESP's donor field, so a lookup that finds no donation leaves it in place.
+			if ( false === $computed && $is_set && true === json_decode( $value ) ) {
+				return null;
+			}
 			if ( null !== $computed ) {
 				Reader_Data::update_item( $user_id, $key, $computed );
 				$value  = Reader_Data::get_data( $user_id, $key );

@@ -221,6 +221,19 @@ class Newspack_Test_Reader_Data_Trust_Donor extends WP_UnitTestCase {
 	}
 
 	/**
+	 * An unmarked `true` from outside WooCommerce stays in place when no donation is found.
+	 */
+	public function test_unmarked_true_is_kept_when_recompute_finds_no_donation() {
+		$this->set_tracking( true );
+		add_filter( 'newspack_reader_data_compute_is_donor', '__return_false' );
+		$this->store_unmarked( 'true' );
+
+		$this->assertNull( Reader_Data_Trust::get_trusted_value( $this->user_id, 'is_donor' ) );
+		$this->assertSame( 'true', get_user_meta( $this->user_id, Reader_Data::get_meta_key_name( 'is_donor' ), true ) );
+		$this->assertFalse( Reader_Data_Trust::has_valid_mark( $this->user_id, 'is_donor' ) );
+	}
+
+	/**
 	 * An unset value is recomputed too.
 	 */
 	public function test_unset_value_is_recomputed() {
