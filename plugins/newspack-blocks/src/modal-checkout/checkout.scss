@@ -653,8 +653,8 @@
 		}
 
 		&:has(div.stripe-source-errors[role="alert"]:not(:empty)) {
-			--newspack-ui-color-input-border: var(--newspack-ui-color-error-60, np-colors.$error-600);
-			--newspack-ui-color-input-border-hover: var(--newspack-ui-color-error-60, np-colors.$error-600);
+			--newspack-ui-color-input-border: var(--newspack-ui-color-error, #{np-colors.$error-600});
+			--newspack-ui-color-input-border-hover: var(--newspack-ui-color-error, #{np-colors.$error-600});
 
 			.wc-stripe-elements-field,
 			.wc-stripe-iban-element-field {
@@ -869,8 +869,8 @@
 
 	// Errors
 	.woocommerce-invalid {
-		--newspack-ui-color-input-border: var(--newspack-ui-color-error-60, np-colors.$error-600);
-		--newspack-ui-color-input-border-hover: var(--newspack-ui-color-error-60, np-colors.$error-600);
+		--newspack-ui-color-input-border: var(--newspack-ui-color-error, #{np-colors.$error-600});
+		--newspack-ui-color-input-border-hover: var(--newspack-ui-color-error, #{np-colors.$error-600});
 
 		input:not([type="hidden"], [type="submit"], [type="button"], [type="reset"]),
 		textarea,
@@ -903,7 +903,7 @@
 	p#newspack_subscription_confirmation_field,
 	//Terms and Conditions checkbox
 	.woocommerce-terms-and-conditions-wrapper > p.form-row {
-		--newspack-ui-color-input-border: var(--newspack-ui-color-neutral-60, np-colors.$neutral-600);
+		--newspack-ui-color-input-border: var(--newspack-ui-color-neutral-60, #{np-colors.$neutral-600});
 
 		background: var(--newspack-ui-color-neutral-5, np-colors.$neutral-050);
 		border-color: var(--newspack-ui-color-border, np-colors.$neutral-300);
@@ -914,8 +914,8 @@
 		padding: var(--newspack-ui-spacer-5, 24px);
 
 		&.woocommerce-invalid {
-			--newspack-ui-color-input-border: var(--newspack-ui-color-error-60, np-colors.$error-600);
-			--newspack-ui-color-input-border-hover: var(--newspack-ui-color-error-60, np-colors.$error-600);
+			--newspack-ui-color-input-border: var(--newspack-ui-color-error, #{np-colors.$error-600});
+			--newspack-ui-color-input-border-hover: var(--newspack-ui-color-error, #{np-colors.$error-600});
 		}
 
 		label {

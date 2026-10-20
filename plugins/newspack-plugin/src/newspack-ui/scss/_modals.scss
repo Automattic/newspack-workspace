@@ -80,7 +80,7 @@
 			align-items: center;
 			background: var(--newspack-ui-color-body-bg);
 			border-bottom: 1px solid var(--newspack-ui-color-border);
-			color: var(--newspack-ui-color-neutral-90);
+			color: var(--newspack-ui-color-text);
 			display: flex;
 			justify-content: space-between;
 			position: sticky;
@@ -115,7 +115,7 @@
 
 		&__content {
 			backface-visibility: visible;
-			color: var(--newspack-ui-color-neutral-90);
+			color: var(--newspack-ui-color-text);
 			padding: var(--newspack-ui-spacer-5);
 
 			// Make sure there's enough space above the first button in modals.
@@ -126,8 +126,8 @@
 		}
 
 		&__footer {
-			background: var(--newspack-ui-color-neutral-5);
-			color: var(--newspack-ui-color-neutral-60);
+			background: var(--newspack-ui-color-surface-subtle);
+			color: var(--newspack-ui-color-text-muted);
 			font-size: var(--newspack-ui-font-size-xs);
 			line-height: var(--newspack-ui-line-height-xs);
 			a {

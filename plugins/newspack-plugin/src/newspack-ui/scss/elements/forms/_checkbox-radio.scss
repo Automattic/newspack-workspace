@@ -5,7 +5,7 @@
 		background: var(--newspack-ui-color-input-bg);
 		border: solid 1px var(--newspack-ui-color-input-border);
 		box-shadow: none;
-		color: var(--newspack-ui-color-neutral-0);
+		color: var(--newspack-ui-color-on-selected);
 		cursor: pointer;
 		display: inline-grid;
 		flex-shrink: 0;
@@ -51,8 +51,8 @@
 		}
 
 		&:checked:disabled {
-			background: var(--newspack-ui-color-neutral-60);
-			border-color: var(--newspack-ui-color-neutral-60);
+			background: var(--newspack-ui-color-text-muted);
+			border-color: var(--newspack-ui-color-text-muted);
 		}
 	}
 
@@ -66,17 +66,15 @@
 		border-radius: var(--newspack-ui-border-radius-2xs);
 
 		&::before {
-			background:
-				transparent
-				url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='24' height='24'%3E%3Cpath d='M16.7 7.1l-6.3 8.5-3.3-2.5-.9 1.2 4.5 3.4L17.9 8z' fill='white'%3E%3C/path%3E%3C/svg%3E")
-				0 0 no-repeat;
+			background: currentcolor;
+			mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M16.7 7.1l-6.3 8.5-3.3-2.5-.9 1.2 4.5 3.4L17.9 8z'/%3E%3C/svg%3E") center / contain no-repeat;
 			height: var(--newspack-ui-spacer-5);
 			margin: 0;
 			width: var(--newspack-ui-spacer-5);
 		}
 
 		&:checked {
-			background: var(--newspack-ui-color-neutral-90);
+			background: var(--newspack-ui-color-selected);
 			border-color: transparent;
 		}
 	}
@@ -85,15 +83,42 @@
 		border-radius: 100%;
 
 		&::before {
-			background: var(--newspack-ui-color-neutral-0);
+			background: currentcolor;
 			border-radius: 100%;
 			height: var(--newspack-ui-spacer-1);
 			width: var(--newspack-ui-spacer-1);
 		}
 
 		&:checked {
-			background: var(--newspack-ui-color-neutral-90);
-			border-color: var(--newspack-ui-color-neutral-90);
+			background: var(--newspack-ui-color-selected);
+			border-color: var(--newspack-ui-color-selected);
+		}
+	}
+
+	@media ( forced-colors: active ) {
+		input[type="checkbox"],
+		input[type="radio"] {
+			&:checked {
+				--newspack-ui-forced-mark: Highlight;
+				--newspack-ui-forced-tick: HighlightText;
+
+				forced-color-adjust: none;
+
+				&::before {
+					background: var(--newspack-ui-forced-tick);
+				}
+			}
+
+			&:checked:disabled {
+				--newspack-ui-forced-mark: GrayText;
+				--newspack-ui-forced-tick: Canvas;
+			}
+
+			&:checked,
+			&:checked:disabled {
+				background: var(--newspack-ui-forced-mark);
+				border-color: var(--newspack-ui-forced-mark);
+			}
 		}
 	}
 }

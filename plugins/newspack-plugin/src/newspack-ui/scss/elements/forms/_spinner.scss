@@ -3,7 +3,7 @@
 		flex-direction: column;
 		gap: var(--newspack-ui-spacer-5);
 		align-items: center;
-		background: var(--newspack-ui-color-neutral-0);
+		background: var(--newspack-ui-color-surface);
 		border-radius: var(--newspack-ui-border-radius-m);
 		display: flex;
 		height: 100%;
@@ -18,7 +18,7 @@
 			animation: spin 900ms infinite linear;
 			border: 1.5px solid;
 			border-color:
-				var(--newspack-ui-color-neutral-90) var(--newspack-ui-color-neutral-90)
+				var(--newspack-ui-color-text) var(--newspack-ui-color-text)
 				var(--newspack-ui-color-body-bg) var(--newspack-ui-color-body-bg);
 			border-radius: 50%;
 			height: calc(var(--newspack-ui-spacer-1) * 2.25);

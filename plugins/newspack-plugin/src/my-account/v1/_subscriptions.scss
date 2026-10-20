@@ -24,10 +24,10 @@
 			}
 		}
 		thead th {
-			color: var(--newspack-ui-color-neutral-90);
+			color: var(--newspack-ui-color-text);
 		}
 		td.product-name {
-			color: var(--newspack-ui-color-neutral-60);
+			color: var(--newspack-ui-color-text-muted);
 			font-weight: 600;
 		}
 		& + .subscription_details {
@@ -136,7 +136,7 @@
 			}
 		}
 		&--order-status-label {
-			background: var(--newspack-ui-color-neutral-60);
+			background: var(--newspack-ui-color-text-muted);
 			border-radius: 100%;
 			display: inline-grid;
 			height: var(--newspack-ui-spacer-1);
@@ -145,16 +145,16 @@
 			width: var(--newspack-ui-spacer-1);
 			&.completed,
 			&.refunded {
-				background: var(--newspack-ui-color-success-50);
+				background: var(--newspack-ui-color-success);
 			}
 			&.on-hold,
 			&.pending,
 			&.processing {
-				background: var(--newspack-ui-color-warning-50);
+				background: var(--newspack-ui-color-warning-dot);
 			}
 			&.cancelled,
 			&.failed {
-				background: var(--newspack-ui-color-error-50);
+				background: var(--newspack-ui-color-error);
 			}
 		}
 	}

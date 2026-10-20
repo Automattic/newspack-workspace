@@ -46,7 +46,7 @@
 	// Per-tab info line shown when one tab is empty but the other has content
 	// (e.g. "No pending invitations." on the Invitations tab when members exist).
 	&__panel-info {
-		color: var(--newspack-ui-color-neutral-60);
+		color: var(--newspack-ui-color-text-muted);
 		margin: var(--newspack-ui-spacer-5) 0;
 		text-align: center;
 	}

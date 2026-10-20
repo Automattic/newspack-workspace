@@ -25,7 +25,7 @@
 			}
 
 			&:has(input:disabled) {
-				color: var(--newspack-ui-color-neutral-60);
+				color: var(--newspack-ui-color-text-muted);
 				cursor: not-allowed;
 			}
 
@@ -41,8 +41,8 @@
 				transition: background-color 125ms ease-in-out, border-color 125ms ease-in-out;
 
 				&:has(> input:checked) {
-					background: var(--newspack-ui-color-neutral-5);
-					border-color: var(--newspack-ui-color-neutral-90);
+					background: var(--newspack-ui-color-surface-subtle);
+					border-color: var(--newspack-ui-color-selected);
 				}
 
 				+ .newspack-ui__input-card {
@@ -71,17 +71,17 @@
 		}
 
 		.required {
-			color: var(--newspack-ui-color-error-50);
+			color: var(--newspack-ui-color-error-text);
 		}
 	}
 
 	&__label-optional {
-		color: var(--newspack-ui-color-neutral-60);
+		color: var(--newspack-ui-color-text-muted);
 		font-weight: 400;
 	}
 
 	&__required {
-		color: var(--newspack-ui-color-error-50);
+		color: var(--newspack-ui-color-error-text);
 
 		&[title] {
 			text-decoration: none;

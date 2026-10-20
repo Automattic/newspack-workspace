@@ -24,7 +24,7 @@
 		}
 
 		&__tabs {
-			background: var(--newspack-ui-color-neutral-10);
+			background: var(--newspack-ui-color-neutral-fill);
 			border-radius: var(--newspack-ui-border-radius-m);
 			display: flex;
 			flex-wrap: wrap;
@@ -46,7 +46,7 @@
 				background: transparent;
 				border: 1px solid transparent;
 				border-radius: var(--newspack-ui-border-radius-s);
-				color: var(--newspack-ui-color-neutral-70);
+				color: var(--newspack-ui-color-text-muted);
 				cursor: pointer;
 				padding:
 					calc(var(--newspack-ui-spacer-2) - 1px)
@@ -82,9 +82,9 @@
 				}
 
 				&.selected {
-					background: var(--newspack-ui-color-neutral-0);
+					background: var(--newspack-ui-color-surface);
 					border-color: currentcolor;
-					color: var(--newspack-ui-color-neutral-90);
+					color: var(--newspack-ui-color-text);
 				}
 			}
 		}

@@ -42,13 +42,7 @@
 		width: 100%;
 
 		tr {
-			border-bottom: 1px solid var(--newspack-ui-color-neutral-10);
-		}
-		thead tr {
-			border-bottom-color: var(--newspack-ui-color-border);
-		}
-		&.order_details thead tr {
-			border-bottom-color: var(--newspack-ui-color-neutral-10);
+			border-bottom: 1px solid var(--newspack-ui-color-border);
 		}
 	}
 	.shop_table {
@@ -79,7 +73,7 @@
 			white-space: nowrap;
 		}
 		th {
-			color: var(--newspack-ui-color-neutral-60);
+			color: var(--newspack-ui-color-text-muted);
 			font-weight: 600;
 		}
 		button,
@@ -124,7 +118,7 @@
 		}
 	}
 	.is-destructive {
-		color: var(--newspack-ui-color-error-50);
+		color: var(--newspack-ui-color-error-text);
 	}
 	.woocommerce-pagination {
 		.button {
@@ -144,7 +138,7 @@
 	.woocommerce-PaymentBox {
 		p {
 			@extend .newspack-ui__font--xs;
-			color: var(--newspack-ui-color-neutral-60);
+			color: var(--newspack-ui-color-text-muted);
 			margin: 0 0 var(--newspack-ui-spacer-2);
 			&:last-child,
 			label.checkbox {

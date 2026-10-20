@@ -5,12 +5,12 @@
 			flex-direction: row;
 			flex-wrap: wrap;
 			gap: var(--newspack-ui-spacer-5);
-			box-shadow: inset 0 -1px 0 var(--newspack-ui-color-neutral-30);
+			box-shadow: inset 0 -1px 0 var(--newspack-ui-color-border);
 
 			.newspack-ui__button {
 				border-radius: 0;
-				box-shadow: inset 0 -1px 0 var(--newspack-ui-color-neutral-30);
-				color: var(--newspack-ui-color-neutral-60);
+				box-shadow: inset 0 -1px 0 var(--newspack-ui-color-border);
+				color: var(--newspack-ui-color-text-muted);
 				padding-inline: 0;
 
 				&:hover {
@@ -18,8 +18,8 @@
 				}
 
 				&.selected {
-					box-shadow: inset 0 -2px 0 var(--newspack-ui-color-neutral-90);
-					color: var(--newspack-ui-color-neutral-90);
+					box-shadow: inset 0 -2px 0 var(--newspack-ui-color-selected);
+					color: var(--newspack-ui-color-text);
 				}
 			}
 		}
