@@ -202,12 +202,19 @@ done
 final=$(cat "$COMPOUND_COUNTER" 2>/dev/null || echo 0)
 [[ "$final" -gt "$observed_max" ]] && observed_max="$final"
 
-# What must never happen is the counter exceeding N, which would mean two
-# waiters were both inside the critical section at once.
-if [[ "$observed_max" -le "$N" ]]; then
-	echo "  ok: compound stale lock + stale recovery mutex never let two waiters in at once (counter == $observed_max, <= $N)"
+# With both $lockdir and $recovering stuck stale and nobody ever clearing
+# them, the correct outcome is that nobody ever acquires at all -- the
+# counter must stay exactly 0. "<= N" is not a safe stand-in for that: N
+# unsynchronized waiters doing a plain read-sleep-write on $COMPOUND_COUNTER
+# lose updates against each other (each overwrites with the same stale
+# value+1 another just read), so the counter can land anywhere from 1 up to
+# N purely from that race -- never exceeding N even with zero serialization.
+# A "<= N" check would pass on a completely broken lock just as readily as
+# on a correct one; only "== 0" actually distinguishes them here.
+if [[ "$observed_max" -eq 0 ]]; then
+	echo "  ok: compound stale lock + stale recovery mutex admitted no waiters (counter == 0)"
 else
-	echo "  FAIL: counter == $observed_max exceeds $N -- two waiters' critical sections overlapped"
+	echo "  FAIL: counter == $observed_max, expected 0 -- a waiter entered the critical section despite both the lock and its recovery mutex being stuck stale"
 	failures=$((failures + 1))
 fi
 

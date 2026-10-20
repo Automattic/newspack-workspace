@@ -77,7 +77,15 @@ env_create_lock_acquire() {
     local last_seen_mtime=""
     while true; do
         local mkdir_err
-        mkdir_err=$(mkdir "$lockdir" 2>&1) && break
+        # LC_ALL=C pins mkdir's own error text to English for the match
+        # below. Newspack has contributors worldwide, and a developer
+        # running this under a non-English locale would otherwise get
+        # "File exists" translated -- on GNU coreutils in particular,
+        # strerror() is gettext-translated when a matching message catalog
+        # is installed -- which would make ordinary lock contention look
+        # like a real error and fail every concurrent create immediately
+        # instead of waiting.
+        mkdir_err=$(LC_ALL=C mkdir "$lockdir" 2>&1) && break
         # mkdir fails this way whenever $lockdir already exists -- the normal,
         # expected shape of contention with another waiter. Any other reason
         # (a read-only or missing $NABSPATH, a permissions error) means this
@@ -97,21 +105,19 @@ env_create_lock_acquire() {
         #
         # A *successful* read is not safe to act on directly either: two
         # waiters can both read the same old mtime and both decide "stale" at
-        # nearly the same moment. An earlier version of this reclaimed by
-        # renaming the lock dir aside to inspect it, planning to put it back
-        # if a fresh `mkdir` had won the race between the read and the act --
-        # but *moving it at all* leaves the path briefly absent, and a third
-        # waiter's `mkdir` can fill that gap and believe it holds the lock
-        # while the original holder still does too. Reproduced directly in
-        # testing (three subshells entering the counted section at once), so
-        # this instead never relocates a directory that might still be live:
-        # the destructive step runs behind its own one-holder-at-a-time
-        # mkdir-mutex (`$lockdir.recovering`), with staleness re-checked
-        # in place immediately before acting. At most one process ever wins
-        # that mutex at a time, so at most one `rmdir` ever runs against a
-        # given stale generation; everyone else only ever competes for
-        # `$lockdir` itself once it's already gone, which plain `mkdir`
-        # resolves to exactly one winner.
+        # nearly the same moment. Relocating the directory to inspect it
+        # first (renaming it aside, restoring it if a fresh `mkdir` turns
+        # out to have won the race) isn't safe either: moving it at all
+        # leaves the path briefly absent, and a third waiter's `mkdir` can
+        # fill that gap and believe it holds the lock while the original
+        # holder still does too. So never relocate a directory that might
+        # still be live: the destructive step runs behind its own
+        # one-holder-at-a-time mkdir-mutex (`$lockdir.recovering`), with
+        # staleness re-checked in place immediately before acting. At most
+        # one process ever wins that mutex at a time, so at most one
+        # `rmdir` ever runs against a given stale generation; everyone else
+        # only ever competes for `$lockdir` itself once it's already gone,
+        # which plain `mkdir` resolves to exactly one winner.
         local mtime
         mtime=$(lockdir_mtime "$lockdir") || mtime=""
         # A different mtime (including empty, meaning the dir briefly isn't
@@ -130,10 +136,21 @@ env_create_lock_acquire() {
                 local mtime2
                 mtime2=$(lockdir_mtime "$lockdir") || mtime2=""
                 if [[ -n "$mtime2" ]] && (( $(date +%s) - mtime2 > 60 )); then
+                    # `rmdir` only removes an empty directory; nothing in
+                    # this script ever writes into $lockdir, but a stray
+                    # file left by something else (an editor's .DS_Store,
+                    # say) would make this fail silently every time. Don't
+                    # `continue` unconditionally past it: the mtime won't
+                    # have changed, so the very next iteration reaches this
+                    # same branch, wins $recovering again instantly, and
+                    # retries the same failing rmdir -- a tight loop with
+                    # no sleep and no attempts counted, never reaching the
+                    # timeout below. Falling through to the ordinary
+                    # attempts/sleep accounting bounds it like every other
+                    # path through this function.
                     rmdir "$lockdir" 2>/dev/null || true
                 fi
                 rmdir "$recovering" 2>/dev/null || true
-                continue
             fi
             # Lost the race for $recovering: either another waiter is already
             # running the reclaim above (fine -- it'll release in a couple of
@@ -141,19 +158,14 @@ env_create_lock_acquire() {
             # was itself abandoned by a crash or Ctrl-C mid-reclaim (nothing
             # protects this function with a trap of its own, so an interrupt
             # here is possible, if rare). Don't try to tell those two apart
-            # with the same stale-mtime-then-rmdir move that just got
-            # protected behind $recovering in the first place -- a second,
-            # unprotected copy of that move, now racing over $recovering
-            # itself, reopens the identical bug: two waiters can read the
-            # same old mtime on $recovering and the slower one's rmdir can
-            # delete the faster one's fresh reclaim of it, letting both into
-            # the section $recovering exists to make exclusive. Reproduced
-            # directly in testing (10 concurrent waiters, a stale $lockdir
-            # and a stale $recovering seeded together: 1/20 runs let two
-            # waiters' critical sections overlap). Falling through to the
-            # ordinary wait/timeout below is always safe -- an abandoned
-            # $recovering costs a bounded wait and a message naming both
-            # directories to clear by hand, never a second holder.
+            # with a second, unprotected stale-mtime-then-rmdir on
+            # $recovering itself: that reopens the identical two-holder bug
+            # one level down (two waiters reading the same old mtime, the
+            # slower one's rmdir deleting the faster one's fresh reclaim of
+            # it). Falling through to the ordinary wait/timeout below is
+            # always safe instead -- an abandoned $recovering costs a
+            # bounded wait and a message naming both directories to clear
+            # by hand, never a second holder.
         fi
         attempts=$((attempts + 1))
         # Comfortably longer than the 60s staleness window above: a holder
@@ -402,9 +414,16 @@ case $1 in
                 # this path, a sibling create has already gotten far enough
                 # to be using it; leave it alone instead of deleting out
                 # from under that env. The path is matched relative to
-                # $NABSPATH, which is how compose files mount it.
+                # $NABSPATH, which is how compose files mount it, anchored
+                # on what always follows the worktree segment in a mount
+                # line -- a `/` for a monorepo worktree (more path segments
+                # follow, e.g. `/plugins/<repo>`) or a `:` for a repos/
+                # worktree (the host path ends right there) -- so a bare
+                # substring match can't mistake "foo" for a sibling
+                # "foo-bar" worktree.
                 local wt_rel="${created_wtdirs[$i]#"$NABSPATH"/}"
-                if grep -lF "$wt_rel" "$NABSPATH"/docker-compose.env-*.yml >/dev/null 2>&1; then
+                if grep -lF "$wt_rel/" "$NABSPATH"/docker-compose.env-*.yml >/dev/null 2>&1 ||
+                   grep -lF "$wt_rel:" "$NABSPATH"/docker-compose.env-*.yml >/dev/null 2>&1; then
                     echo "Note: leaving worktree ${created_wtdirs[$i]} in place -- another env's compose file already references it" >&2
                     continue
                 fi
@@ -436,7 +455,16 @@ case $1 in
         done
         docker_ips=$(docker_bound_loopback_ips)
         if ! env_create_lock_acquire; then
-            wt_rollback
+            # No wt_rollback here, unlike the two worktree-creation failures
+            # above: by this point the worktrees this run made are valid
+            # and already shared (a second concurrent create for the same
+            # branch may have seen one as pre-existing and skipped making
+            # its own, relying on it staying put -- see wt_rollback's own
+            # compose-file check, which can't protect a worktree before any
+            # compose file exists yet, exactly the state two creates stuck
+            # on this same lock would both be in). The lock timing out is
+            # unrelated to whether the worktrees are good; leave them for a
+            # later `create` to reuse via the "pre-existing worktree" check.
             exit 1
         fi
         trap 'env_create_lock_release' EXIT
