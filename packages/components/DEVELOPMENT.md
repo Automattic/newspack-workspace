@@ -96,7 +96,7 @@ Their class names are hashed CSS modules, so never target them from our styleshe
 - **`Divider`** – Use between logical sections (e.g. between ActionCards) to separate content without another card. Margins are 32px (48px at larger breakpoints) so spacing stays consistent with the rest of the layout.
 - **`EmptyState`** – Use when a list has nothing in it yet, or an onboarding view stands in for a feature that is not set up. Compound: `EmptyState.Root` wraps `EmptyState.Header` and `EmptyState.Actions`. Render it only when the *unfiltered* collection is empty, so a search matching nothing keeps the DataViews "no results" treatment. See [src/empty-state/README.md](src/empty-state/README.md).
 - **`Grid`** – Use for laying out several items in columns (e.g. multiple controls or cards). Default gap is 32px; use `columns` and `gutter` modifiers (8, 16, 24, 32, 48) when you need tighter or looser spacing. For a single row or a simple vertical stack, use **`Stack`** from `@wordpress/ui` in new code; Grid is still used that way in many places and is fine to leave as-is until we refactor.
-- **`SectionHeader`** – Use to start a new section; pair with a short description so the section’s goal is clear. Pass `noMargin`: the space around it comes from the parent `Stack` gap or the `Divider` before it, or from the page padding when it is the first item. Its default 48px top and 32px bottom margins predate this and stay only on untouched screens.
+- **`SectionHeader`** – Use to start a new section; pair with a short description so the section’s goal is clear. Pass `noMargin`. The space above it comes from the parent `Stack` gap or the `Divider` before it, or from the page content padding when it is the first item; the space below or beside it comes from the parent `Stack` or `Grid` gap. Its default 48px top and 32px bottom margins predate this rule; new and reworked sections pass `noMargin`.
 - **`Drawer`** – Panel that slides in from the right edge for editing one item without leaving the list. Compound: `Drawer.Root`, `Header`, `Title`, `CloseIcon`, `Content`, `Divider`, `Footer`, `Action`. `isDirty` on the root makes every way of closing it ask before discarding edits. See [src/drawer/README.md](src/drawer/README.md).
 - **`StatCard`** – Use for a single headline figure with a label above it and a description below. Compound: `StatCard.Root` wraps `Label`, `Body` (holding `Value` and an optional `Secondary`) and `Footer`, with `Delta` riding in the `Value`'s `suffix` for a change beside the figure. Format the figure yourself and pass a string; a `null`, `undefined` or blank `value` gets the shared null glyph rather than a misleading zero. The figure is sized by a container query, so give the cards a definite width (a Grid track, a `flex: 1` item) and equal widths across a row to keep one type scale. See [src/stat-card/README.md](src/stat-card/README.md).
 
@@ -679,7 +679,7 @@ The `Grid` collapses to one column below 744px, so the header sits above its fie
 
 A route that edits one item under a tabbed `Wizard` sets `isHidden` (to keep it out of the tabs) and `hideTabbedNavigation` (to hide the tab bar) on its section, and gives its `breadcrumbs` a parent crumb with a `url` so the trail leads back.
 
-Prefer these patterns (and the spacing scale above) over one-off margins so layout stays consistent with Card, ActionCard, and SectionHeader.
+Prefer these patterns (and the spacing scale above) over one-off margins so layout stays consistent with Card, ActionCard, and Divider.
 
 ### Responsive breakpoints
 
@@ -706,7 +706,7 @@ Common composition patterns keep screens predictable. Use these as a reference w
 ```
 Wizard
   GlobalNotices
-  SectionHeader          ← one per section, noMargin
+  SectionHeader          ← noMargin; spaced by the Divider or Stack gap before it
   Card                   ← 32px margin
     ActionCard            ← 24px padding, optional toggle
       Grid or Stack       ← 32px gap (Grid default; Stack gap="2xl")
