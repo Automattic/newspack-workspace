@@ -17,7 +17,7 @@ A drag-and-drop sortable list of cards. Each item displays a title and a status 
 | `id` | `string` \| `number` | Unique identifier for the item. Used as the React `key`. |
 | `title` | `string` | Label rendered in the card header. |
 | `badge` | `{ label: string; intent?: BadgeIntent }` | Status badge for the row. Omit it, or leave `label` empty, to render no badge. `intent` defaults to `none`. See [`BadgeIntent`](../types.ts) for the available intents. |
-| `secondaryBadge` | `{ label: string; intent?: BadgeIntent; tooltip?: string }` | A second badge after `badge`, such as a warning. With `tooltip`, it renders as a `TooltipBadge` that explains it. Omit it, or leave `label` empty, to render none. |
+| `secondaryBadge` | `{ label: string; intent?: BadgeIntent; tooltip?: string }` | A second badge after `badge`, such as a warning. With `tooltip`, it renders as a `TooltipBadge` that explains it. Omit it, or leave `label` empty, to render none. `intent` defaults to `none`. |
 
 ## Usage
 
