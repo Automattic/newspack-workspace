@@ -238,7 +238,7 @@ const formatAccessRuleValue = ( rule: GateAccessRule, optionsBySlug: Record< str
 		'' === shown
 			? __( 'Matches no reader', 'newspack-plugin' )
 			: sprintf(
-					// translators: %s: the stored value. Shown when the rule reads data the server never sets; the rule then matches no reader.
+					// translators: %s: the stored value. Shown when the browser can also set the data the rule reads; the rule then matches no reader.
 					__( '%s (matches no reader)', 'newspack-plugin' ),
 					shown
 			  );

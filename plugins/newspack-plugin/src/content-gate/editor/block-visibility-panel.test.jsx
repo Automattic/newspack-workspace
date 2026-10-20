@@ -177,10 +177,10 @@ describe( 'block visibility panel, reader data rule', () => {
 			newspackAccessControlRules: { custom_access: { active: true, access_rules: [ [ { slug: 'reader_data', value } ] ] } },
 		} );
 
-	it( 'says a key the server never sets matches no reader', () => {
+	it( 'says a key the browser can also set matches no reader', () => {
 		renderReaderData( 'utm_source=x' );
 
-		expect( screen.getByRole( 'note' ) ).toHaveTextContent( /utm_source isn’t set by the site’s server, so this rule matches no reader/ );
+		expect( screen.getByRole( 'note' ) ).toHaveTextContent( /The browser can also set utm_source, so this rule matches no reader/ );
 	} );
 
 	it( 'says nothing about a key the server sets', () => {

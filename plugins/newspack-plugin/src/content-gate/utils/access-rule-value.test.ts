@@ -36,14 +36,12 @@ describe( 'getUntrustedReaderDataKeys', () => {
 describe( 'getAccessRuleValueNotice for reader data', () => {
 	it( 'names a single untrusted key', () => {
 		expect( getAccessRuleValueNotice( readerData, 'utm_source=x', false ) ).toBe(
-			'utm_source isn’t set by the site’s server, so this rule matches no reader. Use a key the server sets, or remove it.'
+			'The browser can also set utm_source, so this rule matches no reader.'
 		);
 	} );
 
 	it( 'names several untrusted keys', () => {
-		expect( getAccessRuleValueNotice( readerData, 'a=1;b=2', false ) ).toBe(
-			'a, b aren’t set by the site’s server, so this rule matches no reader. Use keys the server sets, or remove them.'
-		);
+		expect( getAccessRuleValueNotice( readerData, 'a=1;b=2', false ) ).toBe( 'The browser can also set a, b, so this rule matches no reader.' );
 	} );
 
 	it( 'returns no notice when all keys are trusted', () => {

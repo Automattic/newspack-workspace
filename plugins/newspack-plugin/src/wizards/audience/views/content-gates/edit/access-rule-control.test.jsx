@@ -277,10 +277,10 @@ describe( 'AccessRuleControl reader data rule', () => {
 		return onChange;
 	};
 
-	it( 'says a key the server never sets matches no reader, and still lets the value change', () => {
+	it( 'says a key the browser can also set matches no reader, and still lets the value change', () => {
 		const onChange = renderReaderData( 'utm_source=x' );
 
-		expect( screen.getByRole( 'note' ) ).toHaveTextContent( /utm_source isn’t set by the site’s server, so this rule matches no reader/ );
+		expect( screen.getByRole( 'note' ) ).toHaveTextContent( /The browser can also set utm_source, so this rule matches no reader/ );
 		fireEvent.change( screen.getByRole( 'textbox' ), { target: { value: 'utm_source=y' } } );
 		expect( onChange ).toHaveBeenCalledWith( 'utm_source=y' );
 	} );

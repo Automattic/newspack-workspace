@@ -162,10 +162,10 @@ describe( 'InstitutionEdit, reader data keys', () => {
 		delete window.newspackAudienceContentGates;
 	} );
 
-	it( 'says a key the server never sets matches no reader', async () => {
+	it( 'says a key the browser can also set matches no reader', async () => {
 		await renderWithReaderData( 'utm_source=x' );
 
-		expect( screen.getByRole( 'note' ) ).toHaveTextContent( /utm_source isn’t set by the site’s server/ );
+		expect( screen.getByRole( 'note' ) ).toHaveTextContent( /The browser can also set utm_source/ );
 	} );
 
 	it( 'says nothing about a key the server sets', async () => {

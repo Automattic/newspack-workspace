@@ -26,15 +26,15 @@ export type AccessRuleShape = {
 	empty_grants_access?: boolean;
 	requires_value?: boolean;
 	options?: unknown[];
-	// Reader-data keys the server writes itself; present only on the `reader_data` rule.
+	// Reader-data keys only the server writes; present only on the `reader_data` rule.
 	trusted_keys?: string[];
 	// Set on a promoted-field rule whose key the server doesn't manage.
 	is_untrusted?: boolean;
 };
 
 /**
- * The keys in a `key=value;…` reader-data rule that the server never sets, so the rule
- * can't match any reader. Parses as the server does: items split on `;`, trimmed, key
+ * The keys in a `key=value;…` reader-data rule outside `trusted_keys`. The browser can
+ * also set them, so the rule can't match any reader. Parses as the server does: items split on `;`, trimmed, key
  * taken before the first `=`. Items with no `=` or an empty key are malformed rather than
  * untrusted, and are left out. Empty when the rule declares no trusted keys.
  *
@@ -238,8 +238,8 @@ export const getUntrustedAccessRuleNotice = ( config: AccessRuleShape | undefine
 		return sprintf(
 			// translators: %s: comma-separated reader data keys.
 			_n(
-				'%s isn’t set by the site’s server, so this rule matches no reader. Use a key the server sets, or remove it.',
-				'%s aren’t set by the site’s server, so this rule matches no reader. Use keys the server sets, or remove them.',
+				'The browser can also set %s, so this rule matches no reader.',
+				'The browser can also set %s, so this rule matches no reader.',
 				untrustedKeys.length,
 				'newspack-plugin'
 			),

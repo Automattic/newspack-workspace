@@ -311,7 +311,7 @@ describe( 'gate summary, long rule values', () => {
 } );
 
 describe( 'gate summary, reader data rule', () => {
-	it( 'flags a key the server never sets as matching no reader', () => {
+	it( 'flags a key the browser can also set as matching no reader', () => {
 		renderPaidAccess( gateWith( { slug: 'reader_data', value: 'utm_source=x' } ) );
 
 		expect( screen.getByText( 'utm_source=x (matches no reader)', { exact: false } ) ).toBeInTheDocument();
