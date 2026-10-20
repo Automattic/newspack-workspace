@@ -147,7 +147,7 @@ function render_honeypot_field( $placeholder = '' ) {
 	}
 
 	if ( empty( $placeholder ) ) {
-		$placeholder = __( 'Enter your email address', 'newspack-plugin' );
+		$placeholder = __( 'Your email address', 'newspack-newsletters' );
 	}
 	?>
 	<input class="nphp" tabindex="-1" aria-hidden="true" name="email" type="email" autocomplete="off" placeholder="<?php echo \esc_attr( $placeholder ); ?>" />
@@ -368,6 +368,20 @@ function render_block( $attrs ) {
  * @return string
  */
 function render_form( $attrs, $lists ) {
+	$default_attrs = [
+		'placeholder'         => __( 'Your email address', 'newspack-newsletters' ),
+		'emailLabel'          => __( 'Email address', 'newspack-newsletters' ),
+		'namePlaceholder'     => __( 'Your name', 'newspack-newsletters' ),
+		'nameLabel'           => __( 'Name', 'newspack-newsletters' ),
+		'lastNamePlaceholder' => __( 'Your last name', 'newspack-newsletters' ),
+		'lastNameLabel'       => __( 'Last name', 'newspack-newsletters' ),
+	];
+	foreach ( $default_attrs as $key => $value ) {
+		if ( empty( $attrs[ $key ] ) ) {
+			$attrs[ $key ] = $value;
+		}
+	}
+
 	$list_config     = $lists['config'];
 	$available_lists = $lists['accessible'];
 	$block_id        = \wp_rand( 0, 99999 );

@@ -664,7 +664,7 @@ class Subscriptions_Tiers {
 	 */
 	public static function render_existing_subscription_info( $product, $subscription, $render_button = true ) {
 		$url = $subscription->get_view_order_url();
-		$label = __( 'View Subscription', 'newspack-plugin' );
+		$label = __( 'View subscription', 'newspack-plugin' );
 		?>
 		<div class="newspack-ui__notice newspack-ui__notice--warning">
 			<?php Newspack_UI::print_notice_icon( 'warning' ); ?>
@@ -845,8 +845,8 @@ class Subscriptions_Tiers {
 			}
 		}
 
-		$default_title        = $switch_data ? __( 'Change Subscription', 'newspack-plugin' ) : __( 'Complete your transaction', 'newspack-plugin' );
-		$default_button_label = $switch_data ? __( 'Change Subscription', 'newspack-plugin' ) : __( 'Purchase', 'newspack-plugin' );
+		$default_title        = $switch_data ? __( 'Change subscription', 'newspack-plugin' ) : __( 'Complete your transaction', 'newspack-plugin' );
+		$default_button_label = $switch_data ? __( 'Change subscription', 'newspack-plugin' ) : __( 'Purchase', 'newspack-plugin' );
 
 		$title        = $title ?? $default_title;
 		$button_label = $button_label ?? $default_button_label;
@@ -955,7 +955,7 @@ class Subscriptions_Tiers {
 	 * @param string           $initial_state Optional initial state.
 	 */
 	public static function render_modal( $product = null, $title = null, $button_label = null, $switch_data = null, $initial_state = 'closed' ) {
-		$default_title = $switch_data ? __( 'Change Subscription', 'newspack-plugin' ) : __( 'Complete your transaction', 'newspack-plugin' );
+		$default_title = $switch_data ? __( 'Change subscription', 'newspack-plugin' ) : __( 'Complete your transaction', 'newspack-plugin' );
 		?>
 		<dialog class="newspack-ui newspack-ui__modal-container newspack__subscription-tiers" data-state="<?php echo esc_attr( $initial_state ); ?>" data-product-id="<?php echo esc_attr( $product ? $product->get_id() : '' ); ?>" data-subscription-id="<?php echo esc_attr( $switch_data ? $switch_data['subscription']->get_id() : '' ); ?>">
 			<div class="newspack-ui__modal-container__overlay"></div>

@@ -119,7 +119,7 @@ class My_Account_UI_V1 {
 				'resubscribe_title'           => __( 'Renew subscription', 'newspack-plugin' ),
 				'renewal_early_title'         => __( 'Renew subscription early', 'newspack-plugin' ),
 				'change_payment_method_title' => __( 'Change payment method', 'newspack-plugin' ),
-				'switch_subscription_title'   => __( 'Change Subscription', 'newspack-plugin' ),
+				'switch_subscription_title'   => __( 'Change subscription', 'newspack-plugin' ),
 				'invite_link_copied'          => __( 'Invite link copied.', 'newspack-plugin' ),
 				'invite_link_regenerated'     => __( 'New invite link copied. Any older link no longer works.', 'newspack-plugin' ),
 				'invite_link_copy_failed'     => __( 'Couldn\'t copy the invite link to your clipboard. Copy it manually:', 'newspack-plugin' ),
@@ -989,7 +989,7 @@ class My_Account_UI_V1 {
 		Newspack_UI::generate_modal(
 			[
 				'id'              => 'add-payment-method',
-				'title'           => __( 'Add Payment Method', 'newspack-plugin' ),
+				'title'           => __( 'Add payment method', 'newspack-plugin' ),
 				'content'         => $content,
 				'content_is_safe' => true, // Allow the contents of `woocommerce_account_add_payment_method` to be rendered as is.
 				'size'            => 'small',

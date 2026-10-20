@@ -771,7 +771,7 @@ class My_Account {
 		}
 		$back_link = [
 			'url'   => \home_url( '/' ),
-			'label' => \__( 'Back to Homepage', 'newspack-plugin' ),
+			'label' => \__( 'Back to homepage', 'newspack-plugin' ),
 		];
 		$nav_items = [];
 		foreach ( $tabs as $slug => $label ) {
