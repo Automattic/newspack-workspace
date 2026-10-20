@@ -16,6 +16,10 @@ wc_print_notices();
 
 $is_group_member_subscription = Group_Subscription::is_group_subscription( $subscription )
 	&& Group_Subscription::user_is_member( get_current_user_id(), $subscription );
+$hide_totals                  = $is_group_member_subscription || Zero_Total_Renewals::is_free( $subscription );
+// A $0 subscription can still have paid orders behind it, such as a sign-up fee or a
+// switch from a paid plan, so only a complimentary one drops its billing history.
+$hide_history = $is_group_member_subscription || Complimentary_Access::is_complimentary_order( $subscription );
 
 /**
  * Newspack: Render the custom subscription page header.
@@ -24,10 +28,10 @@ $is_group_member_subscription = Group_Subscription::is_group_subscription( $subs
  */
 do_action( 'newspack_subscription_header', $subscription );
 
-// Members don't pay for the subscription, so the financial totals and billing
-// history are noise. Keep only the details table (which surfaces the manager
-// to contact) and the Leave group action.
-if ( ! $is_group_member_subscription ) {
+// Group members and readers on a $0 subscription don't pay for it, so the
+// financial totals are noise. Keep the details table, which surfaces a group's
+// manager to contact.
+if ( ! $hide_totals ) {
 	/**
 	 * Gets subscription totals table template.
 	 *
@@ -44,7 +48,7 @@ if ( ! $is_group_member_subscription ) {
  */
 do_action( 'woocommerce_subscription_details_table', $subscription );
 
-if ( ! $is_group_member_subscription ) {
+if ( ! $hide_history ) {
 	/**
 	 * Newspack: Related Orders table becomes the "Billing History" table.
 	 */

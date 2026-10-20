@@ -41,8 +41,12 @@ import { STATUS_INDICATORS, STATUS_LABELS, displayStatuses, statusRank } from '.
 
 // A subscriber's group memberships, in the shape the column helpers expect
 // ([{ group, role }]). The endpoint embeds them flat on the item as
-// item.groups = [{ id, plan, status, role, editUrl }].
-const groupEntriesOf = item => ( item.groups || [] ).map( g => ( { group: { plan: g.plan, status: g.status, editUrl: g.editUrl }, role: g.role } ) );
+// item.groups = [{ id, plan, status, role, editUrl, isComplimentary }].
+const groupEntriesOf = item =>
+	( item.groups || [] ).map( g => ( {
+		group: { plan: g.plan, status: g.status, editUrl: g.editUrl, isComplimentary: !! g.isComplimentary },
+		role: g.role,
+	} ) );
 
 // Every subscription a subscriber has, group and individual alike: cohorts they
 // own or belong to (tagged by role) plus their own individual subscriptions.
@@ -53,12 +57,14 @@ const planEntries = ( item, groupEntries ) => {
 		plan: group.plan,
 		status: group.status,
 		editUrl: group.editUrl,
+		isComplimentary: group.isComplimentary,
 		role,
 	} ) );
 	const individual = ( item.subscriptions || [] ).map( s => ( {
 		plan: s.plan,
 		status: s.status,
 		editUrl: s.editUrl,
+		isComplimentary: !! s.isComplimentary,
 		role: null,
 	} ) );
 	// Active subscriptions list first, then on-hold, then cancelled.
@@ -225,6 +231,24 @@ export default function SubscriberList() {
 						</VStack>
 					);
 				},
+			},
+			{
+				id: 'access',
+				label: __( 'Access', 'newspack-plugin' ),
+				// Hidden by default. Filtered server-side, like the plan filter: the
+				// `access` param matches readers whose Subscription column shows a
+				// complimentary subscription.
+				elements: [ { value: 'complimentary', label: __( 'Complimentary', 'newspack-plugin' ) } ],
+				filterBy: { operators: [ 'is' ] },
+				enableSorting: false,
+				getValue: ( { item } ) =>
+					visiblePlanEntries( planEntries( item, groupEntriesOf( item ) ) ).some( e => e.isComplimentary ) ? 'complimentary' : '',
+				render: ( { item } ) =>
+					visiblePlanEntries( planEntries( item, groupEntriesOf( item ) ) ).some( e => e.isComplimentary ) ? (
+						<span>{ __( 'Complimentary', 'newspack-plugin' ) }</span>
+					) : (
+						<span>—</span>
+					),
 			},
 			{
 				id: 'groupRole',

@@ -178,6 +178,18 @@ class Newspack_Test_Complimentary_Access extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A flagged variation is left out of the visible children that WooCommerce builds the
+	 * price range from and Subscriptions picks the "From:" price from, so a paid plan
+	 * isn't advertised as "From: $0.00". The full list of children keeps it.
+	 */
+	public function test_flagged_variation_is_left_out_of_the_price_range() {
+		$parent   = wc_get_product( self::PARENT_ID );
+		$children = [ self::COMP_ID, self::PAID_ID ];
+		$this->assertSame( [ self::PAID_ID ], Complimentary_Access::filter_visible_children( $children, $parent, true ) );
+		$this->assertSame( $children, Complimentary_Access::filter_visible_children( $children, $parent, false ) );
+	}
+
+	/**
 	 * Restamping is queued only for a real flag change. Every subscription product save
 	 * writes the option, mostly as a first "no", and deleting a comp product removes its
 	 * flag but must leave the stamps.

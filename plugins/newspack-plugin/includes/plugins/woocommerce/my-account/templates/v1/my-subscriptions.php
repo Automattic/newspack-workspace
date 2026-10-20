@@ -36,6 +36,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 		foreach ( $subscriptions as $subscription_id => $subscription ) :
 			$is_group_subscription        = Group_Subscription::is_group_subscription( $subscription );
 			$is_group_member_subscription = $is_group_subscription && Group_Subscription::user_is_member( get_current_user_id(), $subscription );
+			// A group member has the owner's subscription injected into their list, and the owner's next-payment date and total are private to the owner. A $0 subscription has no payments to show.
+			$hide_billing = $is_group_member_subscription || Zero_Total_Renewals::is_free( $subscription );
 			?>
 		<tr class="order woocommerce-orders-table__row woocommerce-orders-table__row--status-<?php echo esc_attr( $subscription->get_status() ); ?>">
 			<td class="subscription-product-name woocommerce-orders-table__cell woocommerce-orders-table__cell-subscription-product-name woocommerce-orders-table__cell-order-product-name" data-title="<?php esc_attr_e( 'Product', 'newspack-plugin' ); ?>">
@@ -56,8 +58,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 				<?php echo esc_attr( wcs_get_subscription_status_name( $subscription->get_status() ) ); ?>
 			</td>
 			<td class="subscription-next-payment order-date woocommerce-orders-table__cell woocommerce-orders-table__cell-subscription-next-payment woocommerce-orders-table__cell-order-date" data-title="<?php echo esc_attr_x( 'Next Payment', 'table heading', 'newspack-plugin' ); ?>">
-				<?php if ( $is_group_member_subscription ) : ?>
-					<?php // A group member has the owner's subscription injected into their list; the owner's next-payment date and total are private to the owner. ?>
+				<?php if ( $hide_billing ) : ?>
 					—
 				<?php else : ?>
 					<?php echo esc_attr( $subscription->get_date_to_display( 'next_payment' ) ); ?>
@@ -67,7 +68,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 				<?php endif; ?>
 			</td>
 			<td class="subscription-total order-total woocommerce-orders-table__cell woocommerce-orders-table__cell-subscription-total woocommerce-orders-table__cell-order-total" data-title="<?php echo esc_attr_x( 'Total', 'Used in data attribute. Escaped', 'newspack-plugin' ); ?>">
-				<?php echo $is_group_member_subscription ? esc_html( '—' ) : wp_kses_post( $subscription->get_formatted_order_total() ); ?>
+				<?php echo $hide_billing ? esc_html( '—' ) : wp_kses_post( $subscription->get_formatted_order_total() ); ?>
 			</td>
 			<td class="subscription-actions order-actions woocommerce-orders-table__cell woocommerce-orders-table__cell-subscription-actions woocommerce-orders-table__cell-order-actions">
 				<a href="<?php echo esc_url( $subscription->get_view_order_url() ); ?>" class="woocommerce-button button view<?php echo esc_attr( wc_wp_theme_get_element_class_name( 'button' ) ? ' ' . wc_wp_theme_get_element_class_name( 'button' ) : '' ); ?>"><?php echo esc_html_x( 'View', 'view a subscription', 'newspack-plugin' ); ?></a>
