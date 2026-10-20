@@ -45,7 +45,7 @@
 			-webkit-text-fill-color: currentcolor;
 			background-color: var(--newspack-ui-color-input-bg-disabled);
 			border-color: var(--newspack-ui-color-input-border-disabled);
-			color: var(--newspack-ui-color-neutral-60);
+			color: var(--newspack-ui-color-text-muted);
 			cursor: not-allowed;
 			opacity: 1;
 		}
@@ -69,7 +69,7 @@
 		}
 
 		&__currency {
-			background: var(--newspack-ui-color-neutral-10);
+			background: var(--newspack-ui-color-neutral-fill);
 			display: grid;
 			font-weight: 600;
 			font-size: var(--newspack-ui-font-size-s);

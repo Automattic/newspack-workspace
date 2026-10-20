@@ -9,8 +9,10 @@
 	--newspack-ui-color-neutral-30: #{colors.$neutral-300};
 	--newspack-ui-color-neutral-40: #{colors.$neutral-400};
 	--newspack-ui-color-neutral-50: #{colors.$neutral-500};
+	--newspack-ui-color-neutral-55: #{colors.$neutral-550};
 	--newspack-ui-color-neutral-60: #{colors.$neutral-600};
 	--newspack-ui-color-neutral-70: #{colors.$neutral-700};
+	--newspack-ui-color-neutral-75: #{colors.$neutral-750};
 	--newspack-ui-color-neutral-80: #{colors.$neutral-800};
 	--newspack-ui-color-neutral-90: #{colors.$neutral-900};
 	--newspack-ui-color-neutral-100: #{colors.$neutral-1000};
@@ -54,12 +56,61 @@
 	--newspack-ui-color-error-5: #{colors.$error-050};
 	--newspack-ui-color-error-50: #{colors.$error-500};
 	--newspack-ui-color-error-60: #{colors.$error-600};
+	--newspack-ui-color-error-70: #{colors.$error-700};
+	--newspack-ui-color-error-80: #{colors.$error-800};
 
-	//Warning:
+	// Warning:
 	--newspack-ui-color-warning-0: #{colors.$warning-000};
 	--newspack-ui-color-warning-5: #{colors.$warning-050};
 	--newspack-ui-color-warning-30: #{colors.$warning-300};
 	--newspack-ui-color-warning-40: #{colors.$warning-400};
+	--newspack-ui-color-warning-50: #{colors.$warning-500};
+	--newspack-ui-color-warning-60: #{colors.$warning-600};
+
+	--newspack-ui-color-base: var(--newspack-ui-color-neutral-0);
+	--newspack-ui-color-contrast: var(--newspack-ui-color-neutral-90);
+	--newspack-ui-color-accent: var(--newspack-ui-color-contrast);
+
+	--newspack-ui-color-text: var(--newspack-ui-color-contrast);
+	--newspack-ui-color-text-muted: var(--newspack-ui-color-neutral-75);
+	--newspack-ui-color-text-subtle: var(--newspack-ui-color-neutral-55);
+	--newspack-ui-color-surface: var(--newspack-ui-color-base);
+	--newspack-ui-color-surface-subtle: color-mix(in oklab, var(--newspack-ui-color-text) 4%, var(--newspack-ui-color-surface));
+	--newspack-ui-color-surface-sunken: color-mix(in oklab, var(--newspack-ui-color-text) 7%, var(--newspack-ui-color-surface));
+	--newspack-ui-color-neutral-fill: color-mix(in oklab, var(--newspack-ui-color-text) 7%, var(--newspack-ui-color-surface));
+	--newspack-ui-color-neutral-fill-hover: color-mix(in oklab, var(--newspack-ui-color-text) 13%, var(--newspack-ui-color-surface));
+	--newspack-ui-color-neutral-fill-pressed: color-mix(in oklab, var(--newspack-ui-color-text) 19%, var(--newspack-ui-color-surface));
+	--newspack-ui-color-border-control: var(--newspack-ui-color-neutral-50);
+	--newspack-ui-color-selected: var(--newspack-ui-color-text);
+	--newspack-ui-color-on-selected: var(--newspack-ui-color-surface);
+	--newspack-ui-color-focus: var(--newspack-ui-color-text);
+	--newspack-ui-color-btn: var(--newspack-ui-color-button-bg);
+	--newspack-ui-color-btn-ink: var(--newspack-ui-color-button-text);
+	--newspack-ui-color-btn-hover: var(--newspack-ui-color-button-bg-hover);
+	--newspack-ui-color-btn-pressed: color-mix(in oklab, var(--newspack-ui-color-btn) var(--newspack-ui-color-mix-pressed), var(--newspack-ui-color-surface));
+	--newspack-ui-color-disabled-ink: color-mix(in oklab, var(--newspack-ui-color-text) 45%, var(--newspack-ui-color-surface));
+	--newspack-ui-color-inverse-bg: var(--newspack-ui-color-text);
+	--newspack-ui-color-inverse-ink: var(--newspack-ui-color-surface);
+	--newspack-ui-color-mix-hover: 85%;
+	--newspack-ui-color-mix-pressed: 75%;
+	--newspack-ui-color-success: var(--newspack-ui-color-success-50);
+	--newspack-ui-color-success-text: var(--newspack-ui-color-success-60);
+	--newspack-ui-color-success-tint: var(--newspack-ui-color-success-0);
+	--newspack-ui-color-success-border: var(--newspack-ui-color-success-5);
+	--newspack-ui-color-warning: var(--newspack-ui-color-warning-40);
+	--newspack-ui-color-warning-text: var(--newspack-ui-color-warning-60);
+	--newspack-ui-color-warning-dot: var(--newspack-ui-color-warning-50);
+	--newspack-ui-color-warning-tint: var(--newspack-ui-color-warning-0);
+	--newspack-ui-color-warning-border: var(--newspack-ui-color-warning-5);
+	--newspack-ui-color-error: var(--newspack-ui-color-error-50);
+	--newspack-ui-color-error-tint: var(--newspack-ui-color-error-0);
+	--newspack-ui-color-error-border: var(--newspack-ui-color-error-5);
+	--newspack-ui-color-error-fill: var(--newspack-ui-color-error-50);
+	--newspack-ui-color-error-fill-hover: var(--newspack-ui-color-error-60);
+	--newspack-ui-color-error-fill-pressed: var(--newspack-ui-color-error-70);
+	--newspack-ui-color-error-tint-hover: var(--newspack-ui-color-error-0);
+	--newspack-ui-color-error-tint-pressed: var(--newspack-ui-color-error-5);
+	--newspack-ui-color-on-error: var(--newspack-ui-color-neutral-0);
 
 	// Theme variables - from the classic and block themes; overridden in class-newspack-ui.php for block theme.
 	--newspack-ui-color-primary: var(--newspack-theme-color-primary, var(--newspack-ui-color-primary-60));
@@ -67,31 +118,32 @@
 
 	// Specific assignments - general:
 	--newspack-ui-color-border: var(--newspack-ui-color-neutral-30);
-	--newspack-ui-color-body-bg: var(--newspack-ui-color-neutral-0);
-	--newspack-ui-color-divider-start: var(--newspack-ui-color-neutral-0);
+	--newspack-ui-color-border-hover: var(--newspack-ui-color-text-muted);
+	--newspack-ui-color-body-bg: var(--newspack-ui-color-surface);
+	--newspack-ui-color-divider-start: var(--newspack-ui-color-surface);
 	--newspack-ui-color-divider-end: transparent;
 
 	// Specific assignments - form elements - buttons:
-	--newspack-ui-color-button-bg: var(--newspack-ui-color-neutral-90);
-	--newspack-ui-color-button-bg-hover: var(--newspack-ui-color-neutral-60);
-	--newspack-ui-color-button-text: var(--newspack-ui-color-neutral-0);
-	--newspack-ui-color-button-text-hover: var(--newspack-ui-color-neutral-0);
+	--newspack-ui-color-button-bg: var(--newspack-ui-color-accent);
+	--newspack-ui-color-button-bg-hover: color-mix(in oklab, var(--newspack-ui-color-button-bg) var(--newspack-ui-color-mix-hover), var(--newspack-ui-color-surface));
+	--newspack-ui-color-button-text: var(--newspack-ui-color-base);
+	--newspack-ui-color-button-text-hover: var(--newspack-ui-color-button-text);
 
 	// Specific assignments - form elements - inputs:
-	--newspack-ui-color-input-border: var(--newspack-ui-color-neutral-50);
-	--newspack-ui-color-input-border-hover: var(--newspack-ui-color-neutral-70);
-	--newspack-ui-color-input-border-focus: var(--newspack-ui-color-neutral-90);
-	--newspack-ui-color-input-border-disabled: var(--newspack-ui-color-neutral-30);
-	--newspack-ui-color-input-bg: var(--newspack-ui-color-neutral-0);
-	--newspack-ui-color-input-bg-disabled: var(--newspack-ui-color-neutral-10);
+	--newspack-ui-color-input-border: var(--newspack-ui-color-border-control);
+	--newspack-ui-color-input-border-hover: var(--newspack-ui-color-border-hover);
+	--newspack-ui-color-input-border-focus: var(--newspack-ui-color-focus);
+	--newspack-ui-color-input-border-disabled: var(--newspack-ui-color-border);
+	--newspack-ui-color-input-bg: var(--newspack-ui-color-surface);
+	--newspack-ui-color-input-bg-disabled: var(--newspack-ui-color-surface-sunken);
 	--newspack-ui-color-error-text: var(--newspack-ui-color-error-60);
-	--newspack-ui-label-color: var(--newspack-ui-color-neutral-90);
+	--newspack-ui-label-color: var(--newspack-ui-color-text);
 
 	// Alternatives for when prefers-contrast is set to 'more':
 	@media (prefers-contrast: more) {
 		--newspack-ui-color-input-border: var(--newspack-ui-color-neutral-60);
 		--newspack-ui-color-input-border-hover: var(--newspack-ui-color-neutral-80);
 		--newspack-ui-color-input-border-disabled: var(--newspack-ui-color-neutral-50);
-		--newspack-ui-color-input-bg-disabled: var(--newspack-ui-color-neutral-30);
+		--newspack-ui-color-input-bg-disabled: var(--newspack-ui-color-neutral-fill-pressed);
 	}
 }

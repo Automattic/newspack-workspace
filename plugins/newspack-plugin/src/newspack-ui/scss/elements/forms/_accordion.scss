@@ -28,8 +28,8 @@
 					overflow: hidden;
 				}
 				&.active {
-					background-color: var(--newspack-ui-color-neutral-5);
-					border-color: var(--newspack-ui-color-neutral-90);
+					background-color: var(--newspack-ui-color-surface-subtle);
+					border-color: var(--newspack-ui-color-selected);
 					> div {
 						max-height: 1000px;
 						opacity: 1;
