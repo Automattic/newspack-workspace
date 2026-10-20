@@ -27,7 +27,9 @@ final class Reader_Data_Trust {
 	 * Incoming field keys are the provider's own field names and share the store's
 	 * namespace. One that equals a key below cannot be made read-only, because the
 	 * browser store refuses writes to read-only keys and the script writing it would
-	 * stop working. A test scans both plugins' sources to keep this list complete.
+	 * stop working. A test scans both plugins' sources for the literal keys passed
+	 * to `store.set()` and `store.add()` and fails on one missing here; a key built
+	 * at runtime or passed as a constant is not found by it.
 	 *
 	 * `is_donor` stays listed although it is read-only where the server tracks
 	 * donors: elsewhere the browser still writes it.
@@ -409,7 +411,7 @@ final class Reader_Data_Trust {
 	 *
 	 * @return string
 	 */
-	private static function get_stored_value( $user_id, $key ) {
+	private static function get_stored_value( int $user_id, string $key ): string {
 		$value = \get_user_meta( $user_id, Reader_Data::get_meta_key_name( $key ), true );
 		return is_scalar( $value ) ? (string) $value : (string) wp_json_encode( $value );
 	}

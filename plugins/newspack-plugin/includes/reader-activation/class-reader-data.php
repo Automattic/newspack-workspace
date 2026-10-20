@@ -46,7 +46,7 @@ final class Reader_Data {
 		add_action( 'wp_enqueue_scripts', [ __CLASS__, 'config_script' ] );
 		add_action( 'init', [ __CLASS__, 'register_data_event_handlers' ] );
 		add_filter( 'newspack_session_hydration_response', [ __CLASS__, 'add_reader_data_to_hydration' ], 10, 2 );
-		add_action( self::RECHECK_HOOK, [ __CLASS__, 'handle_recheck' ] );
+		add_action( self::RECHECK_HOOK, [ __CLASS__, 'handle_recheck' ], 10, 1 );
 	}
 
 	/**
@@ -106,9 +106,11 @@ final class Reader_Data {
 		 * Filters the list of read-only reader data keys.
 		 *
 		 * This list is used for both client-side configuration (via wp_localize_script)
-		 * and server-side REST API enforcement. Note that filter callbacks relying on
-		 * page-context conditionals (is_page, get_the_ID, etc.) will only affect the
-		 * client-side path.
+		 * and server-side REST API enforcement. A key added here also becomes one that
+		 * reader-data access rules trust (see Reader_Data_Trust::get_trusted_keys()).
+		 * A callback relying on page-context conditionals (is_page, get_the_ID, etc.)
+		 * therefore does not reach REST API enforcement, but does change which rules
+		 * can match on the page where it applies.
 		 *
 		 * @param string[] $keys Names of read-only keys.
 		 */
@@ -754,7 +756,7 @@ final class Reader_Data {
 	 *
 	 * @param int $user_id User ID.
 	 */
-	public static function handle_recheck( $user_id ) {
+	public static function handle_recheck( $user_id ): void {
 		self::refresh_newsletter_subscription( (int) $user_id );
 	}
 

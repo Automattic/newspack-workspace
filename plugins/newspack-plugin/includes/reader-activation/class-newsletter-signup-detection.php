@@ -28,8 +28,8 @@ final class Newsletter_Signup_Detection {
 	/**
 	 * Initialize hooks.
 	 */
-	public static function init() {
-		add_action( 'mc4wp_form_subscribed', [ __CLASS__, 'handle_mc4wp_subscribed' ] );
+	public static function init(): void {
+		add_action( 'mc4wp_form_subscribed', [ __CLASS__, 'handle_mc4wp_subscribed' ], 10, 0 );
 		// Late, so add-on feeds that run during submission have reached the provider.
 		add_action( 'gform_after_submission', [ __CLASS__, 'handle_gform_submission' ], 100, 2 );
 	}
@@ -37,7 +37,7 @@ final class Newsletter_Signup_Detection {
 	/**
 	 * Mailchimp for WordPress form subscribed.
 	 */
-	public static function handle_mc4wp_subscribed() {
+	public static function handle_mc4wp_subscribed(): void {
 		self::check_current_reader();
 	}
 
@@ -47,7 +47,7 @@ final class Newsletter_Signup_Detection {
 	 * @param array $entry The entry.
 	 * @param array $form  The form.
 	 */
-	public static function handle_gform_submission( $entry, $form ) {
+	public static function handle_gform_submission( $entry, $form ): void {
 		if ( ! self::can_check_current_reader() ) {
 			return;
 		}
@@ -90,7 +90,7 @@ final class Newsletter_Signup_Detection {
 	 * Check the current reader's newsletter subscription, unless a check already
 	 * ran for them within the rate limit the REST route uses.
 	 */
-	private static function check_current_reader() {
+	private static function check_current_reader(): void {
 		if ( ! self::can_check_current_reader() ) {
 			return;
 		}
