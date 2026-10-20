@@ -1,3 +1,10 @@
+## newspack [6.55.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.2...newspack@6.55.3) (2026-10-19)
+
+
+### Bug Fixes
+
+* **revisions:** remove revisions control ([#1216](https://github.com/Automattic/newspack-workspace/issues/1216)) ([01cdad4](https://github.com/Automattic/newspack-workspace/commit/01cdad4a030d6f4555a977b037692c7e7720fc16))
+
 ## newspack [6.55.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.1...newspack@6.55.2) (2026-10-15)
 
 

@@ -17,6 +17,7 @@ import {
 	onCheckoutComplete,
 	onCheckoutCancel,
 	onCheckoutPlaceOrderStart,
+	onCheckoutPlaceOrderGatewayAction,
 	onCheckoutPlaceOrderError,
 	onCheckoutPlaceOrderCriticalError,
 	createHiddenInput,
@@ -24,6 +25,11 @@ import {
 	getCheckoutData,
 	getFormattedAmount,
 	getInitialFocus,
+	hasFrameProcessingScreen,
+	mountFrameProcessingScreen,
+	preventDisabledCloseClicks,
+	removeFrameProcessingScreen,
+	setCloseButtonsDisabled,
 } from './utils';
 import {
 	resolveCheckoutButtonForm,
@@ -116,6 +122,11 @@ domReady( () => {
 	const modalContent = modalCheckout.querySelector( `.${ MODAL_CLASS_PREFIX }__content` );
 	const modalCheckoutHiddenInput = createHiddenInput( 'modal_checkout', '1' );
 	const spinner = modalContent.querySelector( `.${ CLASS_PREFIX }__spinner` );
+	const closeButtons = modalCheckout.querySelectorAll( `.${ MODAL_CLASS_PREFIX }__close` );
+	preventDisabledCloseClicks( modalCheckout, `.${ MODAL_CLASS_PREFIX }__close` );
+	// newspack-ui's processing screen already covers the modal header, close button included,
+	// and the checkout document only has styles for a processing screen of its own with newspack-ui.
+	const HAS_NEWSPACK_UI = CLASS_PREFIX === 'newspack-ui';
 	let modalTrigger = document.querySelector( '.newspack-reader__account-link' )?.[ 0 ];
 	// Initialize empty iframe.
 	const initialHeight = '600px'; // Fixed initial height to avoid too much layout shift.
@@ -133,6 +144,10 @@ domReady( () => {
 		iframeResizeObserver.observe( container );
 		if ( spinner.style.display !== 'none' ) {
 			spinner.style.display = 'none';
+		}
+		// A gateway step in progress keeps the processing screen, and the disabled close button, in place.
+		if ( ! hasFrameProcessingScreen( container.ownerDocument ) ) {
+			setCloseButtonsDisabled( closeButtons, false );
 		}
 		if ( iframe.style.visibility !== 'visible' ) {
 			iframe.style.visibility = 'visible';
@@ -207,6 +222,9 @@ domReady( () => {
 				processingPaymentTimeouts.push( timeoutId );
 			} );
 			spinner.appendChild( processingPaymentText );
+			if ( HAS_NEWSPACK_UI ) {
+				setCloseButtonsDisabled( closeButtons, true );
+			}
 		};
 
 		const hideProcessingPaymentScreen = () => {
@@ -214,6 +232,18 @@ domReady( () => {
 			spinner.removeAttribute( 'aria-busy' );
 			clearProcessingPaymentTimeouts();
 			spinner.querySelectorAll( `.${ PROCESSING_PAYMENT_TEXT_CLASS }` ).forEach( node => node.remove() );
+			removeFrameProcessingScreen( container.ownerDocument );
+			setCloseButtonsDisabled( closeButtons, false );
+		};
+
+		// The gateway draws its step (e.g. a 3D Secure challenge) inside the checkout
+		// document, so the screen in this document would cover it. Move the processing
+		// screen into the checkout document, where the gateway's step sits on top of it.
+		const moveProcessingPaymentScreenToCheckout = () => {
+			spinner.style.display = 'none';
+			if ( HAS_NEWSPACK_UI ) {
+				mountFrameProcessingScreen( container.ownerDocument, `${ CLASS_PREFIX }__spinner`, processingPaymentText );
+			}
 		};
 
 		onCheckoutCancel( container, () => {
@@ -222,12 +252,15 @@ domReady( () => {
 
 		onCheckoutPlaceOrderStart( container, renderProcessingPaymentScreen );
 
+		onCheckoutPlaceOrderGatewayAction( container, moveProcessingPaymentScreenToCheckout );
+
 		onCheckoutPlaceOrderError( container, hideProcessingPaymentScreen );
 
 		// The processing screen steps aside for a payment challenge, and comes back
-		// while the payment finishes.
+		// while the payment finishes. Once it has moved into the checkout document,
+		// under the gateway's step, that copy stays in charge.
 		container.addEventListener( 'checkout-payment-challenge', ( { detail } ) => {
-			if ( 'true' === spinner.getAttribute( 'aria-busy' ) ) {
+			if ( 'true' === spinner.getAttribute( 'aria-busy' ) && ! hasFrameProcessingScreen( container.ownerDocument ) ) {
 				spinner.style.display = detail.shown ? 'none' : 'flex';
 			}
 		} );
@@ -638,6 +671,7 @@ domReady( () => {
 	} );
 
 	const closeCheckout = () => {
+		setCloseButtonsDisabled( closeButtons, false );
 		const container = iframe?.contentDocument?.querySelector( `#${ IFRAME_CONTAINER_ID }` );
 		const afterSuccessUrlInput = container?.querySelector( 'input[name="after_success_url"]' );
 		const afterSuccessBehaviorInput = container?.querySelector( 'input[name="after_success_behavior"]' );
@@ -831,7 +865,7 @@ domReady( () => {
 	/**
 	 * Handle modal checkout close button.
 	 */
-	modalCheckout.querySelectorAll( `.${ MODAL_CLASS_PREFIX }__close` ).forEach( button => {
+	closeButtons.forEach( button => {
 		button.addEventListener( 'click', ev => {
 			ev.preventDefault();
 			closeCheckout();
