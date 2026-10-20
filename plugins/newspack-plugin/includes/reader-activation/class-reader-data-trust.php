@@ -71,10 +71,19 @@ final class Reader_Data_Trust {
 	private static $cache = [];
 
 	/**
-	 * Clear the per-request key cache.
+	 * Per-request donor status by user ID, so a value update_item() refuses to
+	 * store does not repeat the order lookup on every rule evaluation.
+	 *
+	 * @var array<int, bool|null>
+	 */
+	private static $donor_cache = [];
+
+	/**
+	 * Clear the per-request caches.
 	 */
 	public static function reset_cache(): void {
-		self::$cache = [];
+		self::$cache       = [];
+		self::$donor_cache = [];
 	}
 
 	/**
@@ -275,8 +284,8 @@ final class Reader_Data_Trust {
 	 * Whether the user is a donor, according to their orders and subscriptions.
 	 *
 	 * A recurring donor counts only through an active subscription, so a former
-	 * recurring donor (whose parent and renewal orders remain) is not a donor.
-	 * Only one-time donation orders count.
+	 * recurring donor (whose parent, renewal, switch and resubscribe orders
+	 * remain) is not a donor. Only one-time donation orders count.
 	 *
 	 * @param int $user_id User ID.
 	 *
@@ -287,7 +296,20 @@ final class Reader_Data_Trust {
 		if ( $user_id <= 0 || ! Donations::has_server_side_donor_tracking() ) {
 			return null;
 		}
+		if ( ! array_key_exists( $user_id, self::$donor_cache ) ) {
+			self::$donor_cache[ $user_id ] = self::lookup_is_donor( $user_id );
+		}
+		return self::$donor_cache[ $user_id ];
+	}
 
+	/**
+	 * Look up the user's donor status, uncached.
+	 *
+	 * @param int $user_id User ID.
+	 *
+	 * @return bool|null Null when the order lookup is unavailable.
+	 */
+	private static function lookup_is_donor( int $user_id ): ?bool {
 		/**
 		 * Filters the computed donor status. A boolean replaces the WooCommerce
 		 * lookup; any other return value is ignored.
@@ -326,7 +348,7 @@ final class Reader_Data_Trust {
 			]
 		);
 		foreach ( $orders as $order ) {
-			if ( function_exists( 'wcs_order_contains_subscription' ) && \wcs_order_contains_subscription( $order, [ 'parent', 'renewal' ] ) ) {
+			if ( function_exists( 'wcs_order_contains_subscription' ) && \wcs_order_contains_subscription( $order, 'any' ) ) {
 				continue;
 			}
 			if ( Donations::is_donation_order( $order ) ) {
