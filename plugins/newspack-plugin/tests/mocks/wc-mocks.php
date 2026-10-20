@@ -2133,13 +2133,16 @@ function wcs_order_contains_renewal( $order ) {
  * meta real WCS stores on them; a parent order is one a subscription names as
  * its parent. Real WCS defaults to parent, resubscribe and switch.
  *
- * @param WC_Order     $order      Order.
+ * @param WC_Order|int $order      Order or order ID.
  * @param string|array $order_type Relationship type(s).
  *
  * @return bool
  */
 function wcs_order_contains_subscription( $order, $order_type = [ 'parent', 'resubscribe', 'switch' ] ) {
 	global $subscriptions_database;
+	if ( is_int( $order ) ) {
+		$order = wc_get_order( $order );
+	}
 	if ( ! $order instanceof \WC_Order ) {
 		return false;
 	}
