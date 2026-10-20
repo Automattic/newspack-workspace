@@ -1572,4 +1572,87 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 
 		$this->assertStringContainsString( '<pstyle:blockquote>We raised $1 million last year.', $content );
 	}
+
+	/**
+	 * Test that the style names setting is blank for every key when unset.
+	 */
+	public function test_style_names_setting_default() {
+		delete_option( InDesign_Exporter::STYLE_NAMES_OPTION );
+		$names = InDesign_Exporter::get_style_names_setting();
+		$this->assertSame( InDesign_Exporter::STYLE_NAME_KEYS, array_keys( $names ) );
+		$this->assertSame( array_fill_keys( InDesign_Exporter::STYLE_NAME_KEYS, '' ), $names );
+	}
+
+	/**
+	 * Test that the default style names come from Newspack's converter defaults.
+	 */
+	public function test_default_style_names() {
+		$names = InDesign_Exporter::get_default_style_names();
+		$this->assertSame( '24head', $names['headline'] );
+		$this->assertSame( 'byline', $names['byline'] );
+		$this->assertSame( 'PhotoCaption', $names['photo_caption'] );
+		$this->assertSame( 'PhotoCredit', $names['photo_credit'] );
+	}
+
+	/**
+	 * Test that names containing characters that break Tagged Text or the converter are rejected.
+	 */
+	public function test_is_valid_style_name() {
+		$this->assertTrue( InDesign_Exporter::is_valid_style_name( '' ) );
+		$this->assertTrue( InDesign_Exporter::is_valid_style_name( 'Body Text' ) );
+		$this->assertFalse( InDesign_Exporter::is_valid_style_name( 'Body>' ) );
+		$this->assertFalse( InDesign_Exporter::is_valid_style_name( '<Body' ) );
+		$this->assertFalse( InDesign_Exporter::is_valid_style_name( 'Price $1' ) );
+		$this->assertFalse( InDesign_Exporter::is_valid_style_name( 'a\\b' ) );
+		$this->assertFalse( InDesign_Exporter::is_valid_style_name( 42 ) );
+	}
+
+	/**
+	 * Test that only the names the publisher set are passed to the converter, and that the byline keeps its "By " text.
+	 */
+	public function test_converter_styles_apply_saved_names() {
+		update_option(
+			InDesign_Exporter::STYLE_NAMES_OPTION,
+			[
+				'headline'     => 'Headline',
+				'byline'       => 'Byline',
+				'photo_credit' => 'Credit',
+			]
+		);
+		$styles = InDesign_Exporter::get_converter_styles();
+		$this->assertSame(
+			[
+				'headline'     => '<pstyle:Headline>',
+				'byline'       => '<pstyle:Byline>By ',
+				'photo_credit' => '<pstyle:Credit>',
+			],
+			$styles
+		);
+	}
+
+	/**
+	 * Test that an export uses the publisher's style names for the body and photo tags.
+	 */
+	public function test_convert_post_uses_saved_style_names() {
+		update_option(
+			InDesign_Exporter::STYLE_NAMES_OPTION,
+			[
+				'headline'      => 'Head',
+				'paragraph'     => 'Body',
+				'photo_caption' => 'Caption',
+			]
+		);
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<!-- wp:paragraph --><p>Hello.</p><!-- /wp:paragraph -->',
+			]
+		);
+
+		$converter = new InDesign_Converter( InDesign_Exporter::get_converter_styles() );
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<pstyle:Head>Test Post', $content );
+		$this->assertStringContainsString( '<pstyle:Body>Hello.', $content );
+	}
 }

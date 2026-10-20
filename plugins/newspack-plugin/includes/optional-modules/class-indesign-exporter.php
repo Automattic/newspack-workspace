@@ -67,6 +67,33 @@ class InDesign_Exporter {
 	public const EXCLUDE_CAPTIONS_DEFAULT = false;
 
 	/**
+	 * Option name storing the publisher's InDesign paragraph style names, keyed by converter style key.
+	 *
+	 * A blank or missing key keeps Newspack's default name.
+	 *
+	 * @var string
+	 */
+	public const STYLE_NAMES_OPTION = 'newspack_indesign_export_style_names';
+
+	/**
+	 * Converter style keys whose InDesign style name the publisher can change.
+	 *
+	 * @var string[]
+	 */
+	public const STYLE_NAME_KEYS = [
+		'headline',
+		'subhead',
+		'byline',
+		'paragraph',
+		'horizontal_rule',
+		'pullquote',
+		'pullquote_name',
+		'blockquote',
+		'photo_caption',
+		'photo_credit',
+	];
+
+	/**
 	 * Post types hidden from the admin setting because they have no editorial
 	 * "article content" to export (lists, feeds, store products, etc.).
 	 *
@@ -429,7 +456,7 @@ class InDesign_Exporter {
 	 * @param array $post_ids Array of post IDs to export.
 	 */
 	private static function export_posts( $post_ids ) {
-		$converter        = new InDesign_Converter();
+		$converter        = new InDesign_Converter( self::get_converter_styles() );
 		$include_captions = ! self::get_exclude_captions_setting();
 		$platform         = self::get_platform_setting();
 		$exported_files   = [];
@@ -484,6 +511,71 @@ class InDesign_Exporter {
 	 */
 	public static function get_exclude_captions_setting() {
 		return (bool) get_option( self::EXCLUDE_CAPTIONS_OPTION, self::EXCLUDE_CAPTIONS_DEFAULT );
+	}
+
+	/**
+	 * Get the publisher's style names, keyed by converter style key.
+	 *
+	 * Blank strings mean the key keeps Newspack's default name.
+	 *
+	 * @return array Style name strings keyed by converter style key.
+	 */
+	public static function get_style_names_setting() {
+		$saved = get_option( self::STYLE_NAMES_OPTION, [] );
+		$names = [];
+		foreach ( self::STYLE_NAME_KEYS as $key ) {
+			$names[ $key ] = is_array( $saved ) && isset( $saved[ $key ] ) && is_string( $saved[ $key ] ) ? $saved[ $key ] : '';
+		}
+		return $names;
+	}
+
+	/**
+	 * Get Newspack's default InDesign style name for each style key that can be renamed.
+	 *
+	 * @return array Default style names keyed by converter style key.
+	 */
+	public static function get_default_style_names() {
+		$names = [];
+		foreach ( InDesign_Converter::get_default_styles() as $key => $tag ) {
+			if ( in_array( $key, self::STYLE_NAME_KEYS, true ) ) {
+				$names[ $key ] = preg_replace( '/^<pstyle:([^>]*)>.*$/s', '$1', $tag );
+			}
+		}
+		return $names;
+	}
+
+	/**
+	 * Whether a string can be used as an InDesign style name in Tagged Text.
+	 *
+	 * Blank is valid and means "keep Newspack's name". Names can't contain < or >,
+	 * which end the tag, or $ or \, which break the replacement in Newspack's converter.
+	 *
+	 * @param mixed $name The name to check.
+	 * @return bool True if the name is valid.
+	 */
+	public static function is_valid_style_name( $name ) {
+		return is_string( $name ) && ! preg_match( '/[<>$\\\\]/', $name );
+	}
+
+	/**
+	 * Get the style list to pass to Newspack's converter, with the publisher's names applied.
+	 *
+	 * Keeps the text that follows each default tag, such as "By " after the byline style.
+	 *
+	 * @return array Converter style values keyed by converter style key. Empty when no names are set.
+	 */
+	public static function get_converter_styles() {
+		$names    = self::get_style_names_setting();
+		$defaults = InDesign_Converter::get_default_styles();
+		$styles   = [];
+		foreach ( self::STYLE_NAME_KEYS as $key ) {
+			if ( '' === $names[ $key ] ) {
+				continue;
+			}
+			$suffix         = preg_replace( '/^<pstyle:[^>]*>/', '', $defaults[ $key ] );
+			$styles[ $key ] = '<pstyle:' . $names[ $key ] . '>' . $suffix;
+		}
+		return $styles;
 	}
 
 	/**
