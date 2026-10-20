@@ -128,6 +128,21 @@ class Newspack_Test_Complimentary_Access extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Subscriptions saves a new renewal once with its subscription's meta copied and no
+	 * line items yet. That save must keep the inherited stamp.
+	 */
+	public function test_stamp_survives_renewal_saved_before_items() {
+		$renewal = new WC_Order(
+			[
+				'status' => 'pending',
+				'meta'   => [ Complimentary_Access::META_KEY => 'yes' ],
+			]
+		);
+		Complimentary_Access::stamp( $renewal );
+		$this->assertTrue( Complimentary_Access::is_complimentary_order( $renewal ) );
+	}
+
+	/**
 	 * Restamping a flagged product's subscriptions reaches their renewal orders too, and
 	 * persists only the meta, so the reader isn't re-synced as a changed subscription.
 	 */
@@ -190,9 +205,12 @@ class Newspack_Test_Complimentary_Access extends WP_UnitTestCase {
 			Complimentary_Access::handle_flag_added( 1, $product_id, Complimentary_Access::META_KEY, 'yes' );
 			$this->assertCount( 1, $queued_batches );
 
+			Complimentary_Access::handle_flag_changed( 1, $product_id, Complimentary_Access::META_KEY );
+			$this->assertCount( 2, $queued_batches );
+
 			Complimentary_Access::handle_product_deletion( $product_id );
 			Complimentary_Access::handle_flag_changed( [ 1 ], $product_id, Complimentary_Access::META_KEY );
-			$this->assertCount( 1, $queued_batches );
+			$this->assertCount( 2, $queued_batches );
 		} finally {
 			remove_filter( 'pre_as_enqueue_async_action', $capture, 10 );
 		}

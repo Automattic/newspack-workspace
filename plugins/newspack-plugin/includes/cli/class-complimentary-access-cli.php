@@ -57,10 +57,24 @@ class Complimentary_Access_CLI {
 				WP_CLI::line( sprintf( 'Already flagged: %s', $label ) );
 				continue;
 			}
-			if ( ! Complimentary_Access::qualifies_for_flag( $product ) ) {
-				if ( Complimentary_Access::is_free_product( $product ) && 'none' === Complimentary_Access::get_subscription_holders( $product->get_id() ) ) {
-					WP_CLI::line( sprintf( 'Needs review, $0 with no subscriptions: %s', $label ) );
+			$has_no_price = '' === (string) $product->get_price( 'edit' );
+			if ( ! $has_no_price && ! Complimentary_Access::is_free_product( $product ) ) {
+				continue;
+			}
+			// Read once: on a comp product it loads every subscription. This is the
+			// same test as Complimentary_Access::qualifies_for_flag().
+			$holders = Complimentary_Access::get_subscription_holders( $product->get_id() );
+			if ( $has_no_price ) {
+				// WooCommerce won't sell a product with no price, but an admin can still assign it.
+				if ( 'granted' === $holders ) {
+					WP_CLI::line( sprintf( 'Needs review, no price and only granted subscriptions: %s', $label ) );
 				}
+				continue;
+			}
+			if ( 'none' === $holders ) {
+				WP_CLI::line( sprintf( 'Needs review, $0 with no subscriptions: %s', $label ) );
+			}
+			if ( 'granted' !== $holders ) {
 				continue;
 			}
 			if ( ! $dry_run ) {

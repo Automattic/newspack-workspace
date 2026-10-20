@@ -328,8 +328,6 @@ class Teams_Migration {
 					)
 				);
 			}
-
-			self::maybe_flag_complimentary_product( $migration_product, $dry_run );
 		}
 
 		$team_query = [
@@ -351,6 +349,11 @@ class Teams_Migration {
 		$unknown_team_ids = array_diff( $team_ids, $teams );
 		if ( $unknown_team_ids ) {
 			WP_CLI::error( sprintf( 'Not a published team: %s. Fix the --team-ids input and re-run.', implode( ', ', $unknown_team_ids ) ) );
+		}
+
+		// After the last check that can abort the run: flagging takes the product off sale.
+		if ( $migration_product ) {
+			self::maybe_flag_complimentary_product( $migration_product, $dry_run );
 		}
 
 		if ( $dry_run ) {
@@ -2541,13 +2544,16 @@ class Teams_Migration {
 	 *
 	 * Comps are often migrated onto the reader's former paid product, and some $0
 	 * products are sold on purpose. Neither may be flagged: the flag takes a product off
-	 * sale. So only a $0 product nobody bought is flagged, by the test pre-marking uses.
+	 * sale. So only a $0 product nobody bought is flagged: pre-marking's test, without its
+	 * need for an existing grant, since the operator named this product as the comp target.
 	 *
 	 * @param \WC_Product $product Migration product.
 	 * @param bool        $dry_run Whether this is a dry run.
 	 */
 	private static function maybe_flag_complimentary_product( $product, $dry_run ) {
-		if ( ! \Newspack\WooCommerce_Subscriptions::is_active() ) {
+		// The product editor shows the flag only while content gates are on, so an
+		// admin couldn't see or clear one set without them.
+		if ( ! \Newspack\WooCommerce_Subscriptions::is_active() || ! \Newspack\Content_Gate::is_newspack_feature_enabled() ) {
 			return;
 		}
 		if ( \Newspack\Complimentary_Access::is_complimentary_product( $product ) ) {

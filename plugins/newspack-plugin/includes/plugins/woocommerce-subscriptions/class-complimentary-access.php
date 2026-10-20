@@ -68,7 +68,7 @@ class Complimentary_Access {
 	 *
 	 * @var int[]
 	 */
-	private static $deleting_product_ids = [];
+	private static array $deleting_product_ids = [];
 
 	/**
 	 * Initialize hooks and filters.
@@ -80,7 +80,7 @@ class Complimentary_Access {
 
 		add_filter( 'newspack_custom_product_options', [ __CLASS__, 'add_custom_product_option' ] );
 
-		// After Product_Purchase_Restriction (999), which can otherwise re-allow a purchase.
+		// Late, after Subscriptions' limiter (12), which turns a refused product purchasable again for a switch.
 		foreach ( [ 'woocommerce_is_purchasable', 'woocommerce_variation_is_purchasable', 'woocommerce_subscription_is_purchasable', 'woocommerce_subscription_variation_is_purchasable' ] as $filter ) {
 			add_filter( $filter, [ __CLASS__, 'filter_is_purchasable' ], 1000, 2 );
 		}
@@ -164,15 +164,20 @@ class Complimentary_Access {
 	 * sell a paid variation beside a comp one. A line item whose product no longer exists
 	 * can't be judged, so the answer is null unless another item is flagged. That
 	 * includes a deleted variation, whose line item WooCommerce then reads back as the
-	 * variable parent.
+	 * variable parent. An order with no line items can't be judged either: Subscriptions
+	 * saves a new renewal once, with its subscription's meta copied, before adding items.
 	 *
 	 * @param \WC_Abstract_Order $order Subscription or order.
 	 *
 	 * @return bool|null Null when it can't be told.
 	 */
 	public static function has_complimentary_item( $order ): ?bool {
+		$items = $order->get_items( 'line_item' );
+		if ( empty( $items ) ) {
+			return null;
+		}
 		$has_unknown_item = false;
-		foreach ( $order->get_items( 'line_item' ) as $item ) {
+		foreach ( $items as $item ) {
 			if ( ! is_callable( [ $item, 'get_product_id' ] ) ) {
 				continue;
 			}
@@ -253,7 +258,9 @@ class Complimentary_Access {
 	 * @param int $post_id Post ID.
 	 */
 	public static function handle_product_deletion( $post_id ) {
-		self::$deleting_product_ids[] = (int) $post_id;
+		if ( in_array( get_post_type( $post_id ), [ 'product', 'product_variation' ], true ) ) {
+			self::$deleting_product_ids[ (int) $post_id ] = true;
+		}
 	}
 
 	/**
@@ -285,7 +292,7 @@ class Complimentary_Access {
 	 * @param string    $meta_key  Meta key.
 	 */
 	public static function handle_flag_changed( $meta_id, $object_id, $meta_key ) {
-		if ( self::META_KEY !== $meta_key || in_array( (int) $object_id, self::$deleting_product_ids, true ) ) {
+		if ( self::META_KEY !== $meta_key || isset( self::$deleting_product_ids[ (int) $object_id ] ) ) {
 			return;
 		}
 		self::schedule_product_sync( $object_id );
