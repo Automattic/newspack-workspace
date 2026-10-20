@@ -19,16 +19,17 @@ describe( 'AccessRuleValueNotice', () => {
 		const { rerender } = render( renderNotice() );
 		const input = screen.getByRole( 'textbox' );
 		input.focus();
+		expect( screen.queryByRole( 'group' ) ).not.toBeInTheDocument();
 
 		rerender( renderNotice( 'This rule matches no reader.' ) );
 		expect( screen.getByRole( 'textbox' ) ).toBe( input );
 		expect( input ).toHaveFocus();
-		expect( screen.getByRole( 'group' ) ).toHaveAttribute( 'aria-describedby', screen.getByRole( 'note' ).id );
+		expect( screen.getByRole( 'group', { name: 'Reader data' } ) ).toHaveAttribute( 'aria-describedby', screen.getByRole( 'note' ).id );
 
 		rerender( renderNotice() );
 		expect( screen.getByRole( 'textbox' ) ).toBe( input );
 		expect( input ).toHaveFocus();
-		expect( screen.getByRole( 'group' ) ).not.toHaveAttribute( 'aria-describedby' );
+		expect( screen.queryByRole( 'group' ) ).not.toBeInTheDocument();
 		expect( screen.queryByRole( 'note' ) ).not.toBeInTheDocument();
 	} );
 } );
