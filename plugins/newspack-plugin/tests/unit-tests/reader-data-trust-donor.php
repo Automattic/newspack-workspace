@@ -37,7 +37,12 @@ class Newspack_Test_Reader_Data_Trust_Donor extends WP_UnitTestCase {
 	 * Set up.
 	 */
 	public function set_up() {
+		global $orders_database, $subscriptions_database;
 		parent::set_up();
+		// The subscription mock scans every stored subscription's parent ID, so
+		// orders and subscriptions left by other tests can change the outcome.
+		$orders_database        = [];
+		$subscriptions_database = [];
 		$this->user_id             = $this->factory()->user->create();
 		$this->donation_product_id = $this->factory()->post->create( [ 'post_type' => 'product' ] );
 		update_post_meta( $this->donation_product_id, WooCommerce_Products::DONATION_FLAG_META_KEY, wc_bool_to_string( true ) );
