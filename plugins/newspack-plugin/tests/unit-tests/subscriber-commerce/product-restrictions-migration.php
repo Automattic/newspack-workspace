@@ -87,6 +87,14 @@ class Test_Product_Restrictions_Migration extends \WP_UnitTestCase {
 			'monthly' => $this->factory->post->create( [ 'post_type' => 'wc_membership_plan' ] ),
 			'annual'  => $this->factory->post->create( [ 'post_type' => 'wc_membership_plan' ] ),
 		];
+		foreach ( [ 11, 22 ] as $subscription_product_id ) {
+			wc_create_mock_product(
+				[
+					'id'   => $subscription_product_id,
+					'type' => 'subscription',
+				]
+			);
+		}
 		update_post_meta( $plan_ids['monthly'], '_product_ids', [ 11 ] );
 		update_post_meta( $plan_ids['annual'], '_product_ids', [ 22 ] );
 
@@ -196,6 +204,23 @@ class Test_Product_Restrictions_Migration extends \WP_UnitTestCase {
 						'membership_plan_id' => 600,
 					]
 				),
+				$this->memberships_rule(
+					[
+						'id'                 => 'rule_4',
+						'membership_plan_id' => 0,
+					]
+				),
+				// A tag rule on a plan with no subscription is skipped for its
+				// taxonomy, so it keeps no category restriction alive.
+				$this->memberships_rule(
+					[
+						'id'                 => 'rule_5',
+						'membership_plan_id' => 999,
+						'content_type'       => 'taxonomy',
+						'content_type_name'  => 'product_tag',
+						'object_ids'         => [ 8 ],
+					]
+				),
 			],
 			$this->plan_products_getter(),
 			[],
@@ -205,7 +230,21 @@ class Test_Product_Restrictions_Migration extends \WP_UnitTestCase {
 		);
 
 		$this->assertEmpty( $mapped['rules'] );
-		$this->assertSame( [ 'rule_1', 'rule_2', 'rule_3' ], wp_list_pluck( $mapped['skipped'], 'source' ) );
+		$this->assertSame(
+			[
+				'rule_1' => 'Plan grants access without a subscription product — pick the subscription(s) by hand.',
+				'rule_2' => 'Targets the "product_tag" taxonomy, which subscriber-only products cannot express — re-target it by product or category.',
+				'rule_3' => 'Plan is not published, so Memberships does not apply this rule.',
+				'rule_4' => 'Rule names no membership plan.',
+				'rule_5' => 'Targets the "product_tag" taxonomy, which subscriber-only products cannot express — re-target it by product or category.',
+			],
+			wp_list_pluck( $mapped['skipped'], 'reason', 'source' )
+		);
+		$this->assertSame(
+			[ Product_Restrictions_Migration::migrated_rule_id( 999, Product_Targeting::TARGETING_PRODUCTS ) ],
+			$mapped['still_enforced_rule_ids'],
+			'Only the rule Memberships still enforces keeps its earlier restriction.'
+		);
 	}
 
 	/**
@@ -388,12 +427,6 @@ class Test_Product_Restrictions_Migration extends \WP_UnitTestCase {
 		$rules = Subscriber_Only_Products::get_rules();
 		$this->assertEqualsCanonicalizing( [ $monthly_id, $publisher_rule['id'] ], wp_list_pluck( $rules, 'id' ), 'The annual rule, whose source is gone, is removed; the publisher\'s own rule is not touched.' );
 		$this->assertFalse( Subscriber_Only_Products::get_rule( $monthly_id )['active'], 'The monthly rule stays paused.' );
-
-		// The plan loses its granting product. Memberships still enforces the
-		// rule, so the restriction stays rather than opening the products up.
-		delete_post_meta( $stored_rules[0]['membership_plan_id'], '_product_ids' );
-		$command->migrate_product_restrictions( [], [ 'live' => true ] );
-		$this->assertNotNull( Subscriber_Only_Products::get_rule( $monthly_id ), 'A rule skipped for a decision keeps its restriction.' );
 	}
 
 	/**
@@ -429,21 +462,74 @@ class Test_Product_Restrictions_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Unreadable Memberships rules stop the command. Read as an empty rule
-	 * set, they would mark every migrated restriction stale and delete it.
+	 * Eligibility looks for an active subscription, so a one-time product that
+	 * grants a plan can never satisfy a restriction. It is left out of the
+	 * audience and reported; a plan granted only that way needs a decision.
+	 */
+	public function test_one_time_granting_products_are_left_out_of_the_audience() {
+		$this->store_memberships_rules(
+			[
+				$this->memberships_rule( [ 'membership_plan_id' => 'monthly' ] ),
+				$this->memberships_rule(
+					[
+						'id'                 => 'rule_2',
+						'membership_plan_id' => 'annual',
+						'object_ids'         => [ 103 ],
+					]
+				),
+			]
+		);
+		wc_create_mock_product(
+			[
+				'id'   => 44,
+				'type' => 'simple',
+			]
+		);
+		$stored_rules = get_option( Product_Restrictions_Migration::MEMBERSHIPS_RULES_OPTION );
+		update_post_meta( $stored_rules[0]['membership_plan_id'], '_product_ids', [ 11, 44 ] );
+		update_post_meta( $stored_rules[1]['membership_plan_id'], '_product_ids', [ 44 ] );
+
+		( new Product_Restrictions_Migration() )->migrate_product_restrictions( [], [ 'live' => true ] );
+
+		$rules = Subscriber_Only_Products::get_rules();
+		$this->assertSame( [ [ 11 ] ], wp_list_pluck( $rules, 'subscription_product_ids' ), 'Only the subscription joins the audience; the plan granted by a one-time product alone is skipped.' );
+		$one_time_warnings = array_filter(
+			\WP_CLI::$warnings,
+			function ( $warning ) {
+				return false !== strpos( $warning, 'product(s) 44' );
+			}
+		);
+		$this->assertCount( 2, $one_time_warnings, 'Each plan granted by the one-time product is reported.' );
+	}
+
+	/**
+	 * Missing or unreadable Memberships rules stop the command. Read as an
+	 * empty rule set, they would mark every migrated restriction stale and
+	 * delete it.
 	 */
 	public function test_unreadable_memberships_rules_change_nothing() {
 		$this->store_memberships_rules( [ $this->memberships_rule( [ 'membership_plan_id' => 'monthly' ] ) ] );
 		$command = new Product_Restrictions_Migration();
 		$command->migrate_product_restrictions( [], [ 'live' => true ] );
 		$migrated_rules = Subscriber_Only_Products::get_rules();
+		$this->assertNotEmpty( $migrated_rules );
 
-		update_option( Product_Restrictions_Migration::MEMBERSHIPS_RULES_OPTION, 'not-an-array' );
-		try {
-			$command->migrate_product_restrictions( [], [ 'live' => true ] );
-			$this->fail( 'The command should stop on unreadable rules.' );
-		} catch ( \WP_CLI_Mock_Exception $exception ) {
-			$this->assertSame( $migrated_rules, Subscriber_Only_Products::get_rules() );
+		$break_source_data = [
+			'unreadable' => function () {
+				update_option( Product_Restrictions_Migration::MEMBERSHIPS_RULES_OPTION, 'not-an-array' );
+			},
+			'missing'    => function () {
+				delete_option( Product_Restrictions_Migration::MEMBERSHIPS_RULES_OPTION );
+			},
+		];
+		foreach ( $break_source_data as $case => $break ) {
+			$break();
+			try {
+				$command->migrate_product_restrictions( [], [ 'live' => true ] );
+				$this->fail( "The command should stop on $case rules." );
+			} catch ( \WP_CLI_Mock_Exception $exception ) {
+				$this->assertSame( $migrated_rules, Subscriber_Only_Products::get_rules(), "Nothing changes on $case rules." );
+			}
 		}
 	}
 }

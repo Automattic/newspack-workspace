@@ -15,6 +15,7 @@ namespace Newspack\CLI;
 use Newspack\Product_Targeting;
 use Newspack\Subscriber_Commerce;
 use Newspack\Subscriber_Only_Products;
+use Newspack\WooCommerce_Subscriptions;
 use WP_CLI;
 
 defined( 'ABSPATH' ) || exit;
@@ -58,7 +59,8 @@ class Product_Restrictions_Migration {
 	 * products that grant that plan. Dry-run by default; pass --live to write.
 	 * Re-running brings the restrictions it wrote back in line with Memberships:
 	 * it updates them in place, removes any whose source rule is gone, and keeps
-	 * a restriction paused if the publisher paused it.
+	 * a restriction paused if the publisher paused it. Any other edit made to a
+	 * migrated restriction in Access Control is overwritten.
 	 *
 	 * ## OPTIONS
 	 *
@@ -82,21 +84,31 @@ class Product_Restrictions_Migration {
 			WP_CLI::line( '' );
 		}
 
-		$memberships_rules = get_option( self::MEMBERSHIPS_RULES_OPTION, [] );
-		// Read as "no rules", unreadable source data would mark every migrated
-		// restriction stale, and a live run would delete them all.
+		$memberships_rules = get_option( self::MEMBERSHIPS_RULES_OPTION );
+		// Treating missing or unreadable source data as "no rules" would mark
+		// every migrated restriction stale, and a live run would delete them all.
 		if ( ! is_array( $memberships_rules ) ) {
-			WP_CLI::error( sprintf( 'The %s option is not an array, so the Memberships rules cannot be read. Nothing was changed.', self::MEMBERSHIPS_RULES_OPTION ) );
+			WP_CLI::error( sprintf( 'The %s option is missing or not an array, so the Memberships rules cannot be read. Nothing was changed.', self::MEMBERSHIPS_RULES_OPTION ) );
 		}
-		$mapped            = self::map_rules(
+
+		$non_subscription_grants = [];
+		$mapped                  = self::map_rules(
 			$memberships_rules,
-			[ Discounts_Migration::class, 'get_plan_subscription_product_ids' ],
+			function ( int $plan_id ) use ( &$non_subscription_grants ): array {
+				$granting_product_ids     = Discounts_Migration::get_plan_subscription_product_ids( $plan_id );
+				$subscription_product_ids = self::filter_subscription_products( $granting_product_ids );
+				$other_product_ids        = array_values( array_diff( $granting_product_ids, $subscription_product_ids ) );
+				if ( ! empty( $other_product_ids ) ) {
+					$non_subscription_grants[ $plan_id ] = $other_product_ids;
+				}
+				return $subscription_product_ids;
+			},
 			self::get_force_public_product_ids(),
 			function ( int $plan_id ): bool {
 				return 'publish' === get_post_status( $plan_id );
 			}
 		);
-		$stale_rule_ids    = self::get_stale_rule_ids( $mapped['rules'], $mapped['still_enforced_rule_ids'] );
+		$stale_rule_ids          = self::get_stale_rule_ids( $mapped['rules'], $mapped['still_enforced_rule_ids'] );
 
 		if ( empty( $mapped['rules'] ) && empty( $mapped['skipped'] ) && empty( $stale_rule_ids ) ) {
 			WP_CLI::success( 'No WooCommerce Memberships product restrictions found. Nothing to migrate.' );
@@ -189,6 +201,18 @@ class Product_Restrictions_Migration {
 			);
 		}
 
+		// Eligibility looks for an active subscription, so a one-time product
+		// that grants a plan in Memberships can't let anyone buy after the flip.
+		foreach ( $non_subscription_grants as $plan_id => $product_ids ) {
+			WP_CLI::warning(
+				sprintf(
+					'Plan %1$s is also granted by product(s) %2$s, which are not subscriptions. Readers who joined that way cannot buy its restricted products after the flip.',
+					self::describe_plan( $plan_id ),
+					implode( ', ', $product_ids )
+				)
+			);
+		}
+
 		$unchanged_count = count( wp_list_filter( $summary, [ 'result' => 'unchanged' ] ) );
 		WP_CLI::success(
 			sprintf(
@@ -251,7 +275,7 @@ class Product_Restrictions_Migration {
 	/**
 	 * Convert WooCommerce Memberships rules into subscriber-only product restrictions.
 	 *
-	 * Pure apart from the injected plan resolver, so the mapping can be tested
+	 * Pure apart from the injected plan callbacks, so the mapping can be tested
 	 * without WP-CLI.
 	 *
 	 * @param array         $memberships_rules        Raw `wc_memberships_rules` option value.
@@ -297,6 +321,11 @@ class Product_Restrictions_Migration {
 				];
 			};
 
+			if ( ! $plan_id ) {
+				$skip( 'Rule names no membership plan.' );
+				continue;
+			}
+
 			// Memberships stores no `active` flag on product restrictions; it
 			// applies a plan's rules only while the plan is published.
 			if ( $plan_is_published && ! call_user_func( $plan_is_published, $plan_id ) ) {
@@ -307,24 +336,6 @@ class Product_Restrictions_Migration {
 			$object_ids  = array_values( array_filter( array_map( 'absint', (array) ( $memberships_rule['object_ids'] ?? [] ) ) ) );
 			$is_taxonomy = 'taxonomy' === ( $memberships_rule['content_type'] ?? '' );
 
-			$subscription_product_ids = $plan_id ? array_map( 'intval', (array) call_user_func( $plan_products_getter, $plan_id ) ) : [];
-			if ( empty( $subscription_product_ids ) ) {
-				// A restriction naming no subscription is skipped by the store as
-				// unbuyable-by-everyone, so the rule would migrate and do nothing.
-				$skip( 'Plan grants access without a subscription product — pick the subscription(s) by hand.' );
-				// Memberships still enforces this rule, so the restriction an
-				// earlier run wrote for it must stay until someone decides.
-				if ( $plan_id ) {
-					if ( empty( $object_ids ) ) {
-						$skipped_targeting = Product_Targeting::TARGETING_ALL;
-					} else {
-						$skipped_targeting = $is_taxonomy ? Product_Targeting::TARGETING_CATEGORY : Product_Targeting::TARGETING_PRODUCTS;
-					}
-					$still_enforced_rule_ids[] = self::migrated_rule_id( $plan_id, $skipped_targeting );
-				}
-				continue;
-			}
-
 			if ( $is_taxonomy && self::SUPPORTED_TAXONOMY !== ( $memberships_rule['content_type_name'] ?? '' ) ) {
 				$skip(
 					sprintf(
@@ -332,6 +343,22 @@ class Product_Restrictions_Migration {
 						(string) ( $memberships_rule['content_type_name'] ?? 'unknown' )
 					)
 				);
+				continue;
+			}
+
+			$subscription_product_ids = array_map( 'intval', (array) call_user_func( $plan_products_getter, $plan_id ) );
+			if ( empty( $subscription_product_ids ) ) {
+				// A restriction naming no subscription is skipped by the store as
+				// unbuyable-by-everyone, so the rule would migrate and do nothing.
+				$skip( 'Plan grants access without a subscription product — pick the subscription(s) by hand.' );
+				// Memberships still enforces this rule, so the restriction an
+				// earlier run wrote for it must stay until someone decides.
+				if ( empty( $object_ids ) ) {
+					$skipped_targeting = Product_Targeting::TARGETING_ALL;
+				} else {
+					$skipped_targeting = $is_taxonomy ? Product_Targeting::TARGETING_CATEGORY : Product_Targeting::TARGETING_PRODUCTS;
+				}
+				$still_enforced_rule_ids[] = self::migrated_rule_id( $plan_id, $skipped_targeting );
 				continue;
 			}
 
@@ -488,8 +515,26 @@ class Product_Restrictions_Migration {
 	 * @return array
 	 */
 	private static function without_created_at( array $rule ): array {
-		unset( $rule['created_at'], $rule['_source_plan_id'] );
+		unset( $rule['created_at'] );
 		return $rule;
+	}
+
+	/**
+	 * The subscription products among a plan's granting products.
+	 *
+	 * @param int[] $product_ids Product ids.
+	 * @return int[]
+	 */
+	public static function filter_subscription_products( array $product_ids ): array {
+		return array_values(
+			array_filter(
+				$product_ids,
+				function ( $product_id ) {
+					$product = wc_get_product( $product_id );
+					return $product && WooCommerce_Subscriptions::is_subscription_product( $product );
+				}
+			)
+		);
 	}
 
 	/**
