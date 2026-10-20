@@ -166,6 +166,7 @@ Their class names are hashed CSS modules, so never target them from our styleshe
 - **`IntegrationIcon`** - Logo for a third-party integration, picked by `provider`. It is `aria-hidden` and renders nothing for an unknown provider, so keep the provider's name in visible text beside it
 - **`NewspackIcon`** - Newspack icon wrapper component
 - **`Popover`** - Legacy popover wrapper (class component); use `Popover` from `@wordpress/ui` in new code (see [From @wordpress/ui](#from-wordpressui) for its parts)
+- **`TooltipBadge`** - A `@wordpress/ui` `Badge` with a tooltip that explains it, for a marker whose meaning isn't obvious from its label (e.g. a gate priority warning). Takes `label`, `tooltip` and `intent`. Screen readers get the tooltip as the badge's description. The tooltip never opens on touch, so it can only add context, never carry something the reader needs
 - **`WebPreview`** - Web preview iframe component
 
 ### Settings Components
@@ -673,6 +674,8 @@ Spacing is based on an **8px unit**. Use these values so new styles match existi
 The `Grid` collapses to one column below 744px, so the header sits above its fields on narrow screens. Fields drop their own bottom margin so the `Stack` gap is the only spacing: Newspack `TextControl` takes `withMargin={ false }` plus `__nextHasNoMarginBottom` and `__next40pxDefaultSize`; core `ToggleControl` and `CheckboxControl` take `__nextHasNoMarginBottom`. Content that needs the full width (logs, card pickers, tables) stacks its `SectionHeader` above it instead. Some existing editors predate this: their right column is a `VStack` (`spacing={ 4 }` or `{ 6 }`) and their `SectionHeader` has no `noMargin`. New and reworked sections follow the example. A grid of cards that each open their own screen is a different pattern and has no `SectionHeader` column.
 
 **Settings tabs** are built from two-column sections. Save sits in the page header, published with `setHeaderData( { actions } )` from the wizard store and disabled until something changes. The header keeps whichever callback it was handed, so read the latest handler from a ref; passing the save function directly saves stale state. Pair it with `useUnsavedChangesDialog`. See `plugins/newspack-plugin/src/wizards/newspack/views/settings/seo/index.tsx`.
+
+**A screen's description goes in the page header subtitle**, under the title, not in a `SectionHeader` or an intro card at the top of the content. Set it with `subHeaderText` (on a `Wizard` section, or as a `withWizardScreen` prop) when it is fixed. Under `Wizard`, set it with `setHeaderData( { subTitle } )` when it depends on state; the Metering tab, for example, describes the current meter. `setHeaderData` wins over `subHeaderText`, and `Wizard` resets header data on every route change, so there is nothing to clear. A route that edits one item under a tabbed wizard sets `hideTabbedNavigation` on its section, so the tab bar is hidden and the breadcrumbs lead back. See `plugins/newspack-plugin/src/wizards/audience/views/content-gates/`.
 
 Prefer these patterns (and the spacing scale above) over one-off margins so layout stays consistent with Card, ActionCard, and SectionHeader.
 
