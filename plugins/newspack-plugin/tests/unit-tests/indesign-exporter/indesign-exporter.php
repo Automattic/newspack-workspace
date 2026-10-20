@@ -1604,6 +1604,9 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 		$this->assertFalse( InDesign_Exporter::is_valid_style_name( '<Body' ) );
 		$this->assertFalse( InDesign_Exporter::is_valid_style_name( 'Price $1' ) );
 		$this->assertFalse( InDesign_Exporter::is_valid_style_name( 'a\\b' ) );
+		$this->assertFalse( InDesign_Exporter::is_valid_style_name( "Body\nText" ) );
+		$this->assertFalse( InDesign_Exporter::is_valid_style_name( "Body\rText" ) );
+		$this->assertFalse( InDesign_Exporter::is_valid_style_name( "Body\tText" ) );
 		$this->assertFalse( InDesign_Exporter::is_valid_style_name( 42 ) );
 	}
 

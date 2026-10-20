@@ -549,12 +549,13 @@ class InDesign_Exporter {
 	 *
 	 * Blank is valid and means "keep Newspack's name". Names can't contain < or >,
 	 * which end the tag, or $ or \, which break the replacement in Newspack's converter.
+	 * They also can't contain control characters, such as line breaks, which split the tag.
 	 *
 	 * @param mixed $name The name to check.
 	 * @return bool True if the name is valid.
 	 */
 	public static function is_valid_style_name( $name ) {
-		return is_string( $name ) && ! preg_match( '/[<>$\\\\]/', $name );
+		return is_string( $name ) && ! preg_match( '/[\x00-\x1F\x7F<>$\\\\]/', $name );
 	}
 
 	/**

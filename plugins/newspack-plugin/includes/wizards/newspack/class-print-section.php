@@ -137,7 +137,7 @@ class Print_Section extends Wizard_Section {
 			foreach ( InDesign_Exporter::STYLE_NAME_KEYS as $key ) {
 				$name = isset( $style_names[ $key ] ) ? $style_names[ $key ] : '';
 				if ( ! InDesign_Exporter::is_valid_style_name( $name ) ) {
-					return new \WP_Error( 'invalid_param', __( 'Invalid parameter for indesign_style_names. Style names can\'t contain < > $ or \\.', 'newspack-plugin' ), [ 'status' => 400 ] );
+					return new \WP_Error( 'invalid_param', __( 'Invalid parameter for indesign_style_names. Style names can\'t contain < > $ \\ or line breaks.', 'newspack-plugin' ), [ 'status' => 400 ] );
 				}
 				$clean_style_names[ $key ] = trim( $name );
 			}
