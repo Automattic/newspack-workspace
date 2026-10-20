@@ -134,6 +134,11 @@ class Subscriber_Only_Products_API {
 			'default' => [],
 		];
 		return [
+			'subscription_targeting'   => [
+				'type'    => 'string',
+				'enum'    => [ Subscriber_Commerce::SUBSCRIPTION_TARGETING_SPECIFIC, Subscriber_Commerce::SUBSCRIPTION_TARGETING_ALL ],
+				'default' => Subscriber_Commerce::SUBSCRIPTION_TARGETING_SPECIFIC,
+			],
 			'subscription_product_ids' => $id_list,
 			'product_ids'              => $id_list,
 			'category_ids'             => $id_list,
@@ -181,6 +186,7 @@ class Subscriber_Only_Products_API {
 
 		$rule = [
 			'id'                       => $id,
+			'subscription_targeting'   => $request->get_param( 'subscription_targeting' ),
 			'subscription_product_ids' => $request->get_param( 'subscription_product_ids' ),
 			'targeting'                => $request->get_param( 'targeting' ),
 			'product_ids'              => $request->get_param( 'product_ids' ),

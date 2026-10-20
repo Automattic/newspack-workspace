@@ -52,7 +52,7 @@ const ContentGatesPriority = ( {
 		} ) );
 	}, [ sortedGates ] );
 
-	const updatePriorities = useRef< ( updates: Gate[] ) => void >();
+	const updatePriorities = useRef< ( updates: Gate[] ) => void >( undefined );
 	const handleUpdateGatePriorities = ( updates: Gate[] ) => {
 		if ( isFetching ) {
 			return;

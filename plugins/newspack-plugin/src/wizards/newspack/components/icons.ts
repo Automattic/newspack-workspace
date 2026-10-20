@@ -7,6 +7,7 @@
  */
 import {
 	chartBar,
+	cog,
 	currencyDollar,
 	envelope,
 	formatListBullets,
@@ -14,6 +15,7 @@ import {
 	help,
 	mapMarker,
 	megaphone,
+	page,
 	payment,
 	post,
 	postDate,
@@ -21,13 +23,12 @@ import {
 	rotateRight,
 	settings,
 	store,
-	tool,
 } from '@wordpress/icons';
 
 /**
  * Internal dependencies
  */
-import { ad, emailAd, gift } from '../../../../packages/icons';
+import { ad, chartReport, emailAd, gift } from '../../../../packages/icons';
 
 /**
  * Export Dashboard Icons
@@ -35,6 +36,7 @@ import { ad, emailAd, gift } from '../../../../packages/icons';
 export const icons = {
 	// WordPress
 	chartBar,
+	cog,
 	currencyDollar,
 	envelope,
 	formatListBullets,
@@ -42,6 +44,7 @@ export const icons = {
 	help,
 	mapMarker,
 	megaphone,
+	page,
 	payment,
 	post,
 	postDate,
@@ -49,9 +52,9 @@ export const icons = {
 	rotateRight,
 	settings,
 	store,
-	tool,
 	// Newspack
 	ad,
+	chartReport,
 	emailAd,
 	gift,
 };

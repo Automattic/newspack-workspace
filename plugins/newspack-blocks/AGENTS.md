@@ -173,6 +173,7 @@ All endpoints use the `newspack-blocks/v1` namespace. Controllers live alongside
 |---|---|---|
 | `GET /articles` | `WP_REST_Newspack_Articles_Controller` | Public |
 | `GET /newspack-blocks-posts` | Same controller | `edit_posts` |
+| `POST /newspack-blocks-posts-batch` | Same controller; runs each query through `/newspack-blocks-posts` in document order, carrying the deduplication list from one query to the next. | `edit_posts` |
 | `GET /newspack-blocks-specific-posts` | Same controller | `edit_posts` |
 | `GET /authors` | `WP_REST_Newspack_Authors_Controller` | `edit_posts` |
 | `GET /author-list` | `WP_REST_Newspack_Author_List_Controller` | `edit_posts` |

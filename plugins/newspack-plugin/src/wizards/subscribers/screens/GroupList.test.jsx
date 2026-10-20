@@ -2,6 +2,8 @@
  * The group list publishes its row count to the wizard header. A read still in
  * flight, or one that never landed, has no count to publish: "(0)" would assert
  * the site has no groups.
+ *
+ * Its search and Subscription filter run client-side over the loaded groups.
  */
 
 /**
@@ -28,15 +30,21 @@ jest.mock( '@wordpress/a11y', () => ( { speak: jest.fn() } ) );
 
 jest.mock( '../../../../packages/components/src/wizard/store', () => ( { WIZARD_STORE_NAMESPACE: 'test/group-list' } ) );
 
-// Only the header count is under test, so DataViews renders nothing; the count
-// itself comes from filterSortAndPaginate, which stays real.
+// DataViews renders nothing, but records its props so a test can drive the view
+// and read the rows filterSortAndPaginate produced, which stays real. The list
+// reads the router at module scope, so the proxy has to answer here too.
+let dataViewsProps;
 jest.mock( '../../../../packages/components/src', () => ( {
-	DataViews: () => null,
+	DataViews: props => {
+		dataViewsProps = props;
+		return null;
+	},
 	// A real button, because the focus restoration needs a host node to land on.
 	Button: require( 'react' ).forwardRef( ( { children, ...props }, ref ) =>
 		require( 'react' ).createElement( 'button', { ...props, ref }, children )
 	),
 	Waiting: () => null,
+	Router: { useHistory: () => ( { push: jest.fn() } ), useLocation: () => ( { pathname: '/' } ) },
 } ) );
 
 jest.mock( '../data/use-avatars', () => ( { SHOW_AVATARS: false, useAvatars: () => ( { avatars: {}, loading: false } ) } ) );
@@ -59,6 +67,7 @@ const group = id => ( {
 	id,
 	owner: { name: `Owner ${ id }`, email: `owner${ id }@example.com`, editUrl: '' },
 	plan: 'Team plan',
+	product: 'Team Annual',
 	members: 3,
 	seatLimit: 5,
 	status: 'active',
@@ -214,5 +223,58 @@ describe( 'the GroupList retry affordance', () => {
 		} );
 
 		expect( screen.getByRole( 'button', { name: 'Retry' } ) ).not.toHaveFocus();
+	} );
+} );
+
+describe( 'the group list search', () => {
+	beforeEach( () => {
+		headerCalls = [];
+		apiFetch.mockReset();
+	} );
+
+	const searchFor = async term => {
+		await act( async () => {
+			dataViewsProps.onChangeView( { ...dataViewsProps.view, search: term } );
+		} );
+		return dataViewsProps.data.map( item => item.id );
+	};
+
+	it( 'matches the owner name, owner email, group name and subscription', async () => {
+		apiFetch.mockResolvedValue( {
+			items: [
+				{ ...group( 1 ), owner: { name: 'Ada Lovelace', email: 'ada@example.test' } },
+				{ ...group( 2 ), owner: { name: 'Grace Hopper', email: 'grace@navy.example.test' } },
+				{ ...group( 3 ), plan: 'Harbor Newsroom' },
+				{ ...group( 4 ), product: 'Campus Site License' },
+			],
+		} );
+		await act( async () => {
+			render( <GroupList /> );
+		} );
+
+		expect( await searchFor( 'lovelace' ) ).toEqual( [ 1 ] );
+		expect( await searchFor( 'navy.example' ) ).toEqual( [ 2 ] );
+		expect( await searchFor( 'harbor' ) ).toEqual( [ 3 ] );
+		expect( await searchFor( 'campus' ) ).toEqual( [ 4 ] );
+	} );
+
+	// The fixture's group name and product differ, so this fails if the filter
+	// is keyed on the group name.
+	it( 'filters the Subscription column by product, not group name', async () => {
+		apiFetch.mockResolvedValue( { items: [ group( 1 ), { ...group( 2 ), product: 'Campus Site License' } ] } );
+		await act( async () => {
+			render( <GroupList /> );
+		} );
+
+		const subscriptionField = dataViewsProps.fields.find( field => field.id === 'product' );
+		expect( subscriptionField.elements.map( element => element.value ) ).toEqual( [ 'Team Annual', 'Campus Site License' ] );
+
+		await act( async () => {
+			dataViewsProps.onChangeView( {
+				...dataViewsProps.view,
+				filters: [ ...dataViewsProps.view.filters, { field: 'product', operator: 'isAny', value: [ 'Campus Site License' ] } ],
+			} );
+		} );
+		expect( dataViewsProps.data.map( item => item.id ) ).toEqual( [ 2 ] );
 	} );
 } );

@@ -66,7 +66,7 @@ export default function PromoUrlModal( { item, closeModal }: { item: Subscriptio
 	// The chosen page is held on its own so it survives the search results
 	// being replaced by a later query.
 	const [ selectedChoice, setSelectedChoice ] = useState< PromoPageChoice | null >( null );
-	const searchTimeout = useRef< ReturnType< typeof setTimeout > >();
+	const searchTimeout = useRef< ReturnType< typeof setTimeout > >( undefined );
 	const searchRequestId = useRef( 0 );
 
 	const [ variationId, setVariationId ] = useState< number | '' >( '' );

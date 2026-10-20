@@ -42,7 +42,7 @@ All icons in this package are designed on a **24×24 grid/viewbox**. This ensure
 
 ## Available Icons
 
-This package includes 49 custom icons:
+This package includes 50 custom icons:
 
 - `accessibility` - Accessibility icon
 - `activity` - Activity icon
@@ -86,6 +86,7 @@ This package includes 49 custom icons:
 - `phone` - Phone icon
 - `playlist` - Playlist icon
 - `postAvatar` - Post avatar icon
+- `print` - Print icon
 - `priority` - Priority icon
 - `readerRegistration` - Reader registration icon
 - `searchEmpty` - Empty search icon
