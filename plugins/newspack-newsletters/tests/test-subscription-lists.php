@@ -211,6 +211,76 @@ class Subscription_Lists_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Request the lists config over REST.
+	 *
+	 * @param string|null $context Value for the `context` parameter, or null to omit it.
+	 *
+	 * @return WP_REST_Response
+	 */
+	private function request_lists_config( $context = null ) {
+		$request = new WP_REST_Request( 'GET', '/newspack-newsletters/v1/lists_config' );
+		if ( null !== $context ) {
+			$request->set_param( 'context', $context );
+		}
+		return rest_get_server()->dispatch( $request );
+	}
+
+	/**
+	 * Someone editing a post gets every list, including one the lists filter
+	 * hides from them as a reader. Otherwise the block reads it as deleted.
+	 */
+	public function test_edit_context_returns_lists_the_filter_hides() {
+		Newspack_Newsletters::set_service_provider( 'mailchimp' );
+		$hidden_id = self::$posts['only_mailchimp'];
+		$hide      = function ( $lists ) use ( $hidden_id ) {
+			return array_values(
+				array_filter(
+					$lists,
+					function ( $list ) use ( $hidden_id ) {
+						return $list->get_id() !== $hidden_id;
+					}
+				)
+			);
+		};
+		$hidden_public_id = ( new Subscription_List( $hidden_id ) )->get_public_id();
+		add_filter( 'newspack_newsletters_subscription_lists', $hide );
+
+		$results = [];
+		foreach ( [ 'author', 'contributor' ] as $role ) {
+			wp_set_current_user( self::factory()->user->create( [ 'role' => $role ] ) );
+			$results[ $role ] = [
+				'view' => $this->request_lists_config(),
+				'edit' => $this->request_lists_config( 'edit' ),
+			];
+		}
+		remove_filter( 'newspack_newsletters_subscription_lists', $hide );
+		wp_set_current_user( 0 );
+
+		foreach ( $results as $role => $responses ) {
+			$this->assertArrayNotHasKey( $hidden_public_id, $responses['view']->get_data(), "The default response stays filtered for a $role." );
+			$this->assertSame( 200, $responses['edit']->get_status(), "A $role may use the edit context." );
+			$this->assertArrayHasKey( $hidden_public_id, $responses['edit']->get_data(), "The edit context shows a $role every list." );
+		}
+	}
+
+	/**
+	 * The edit context is for people who can edit posts. The default stays public.
+	 */
+	public function test_edit_context_needs_edit_posts() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'subscriber' ] ) );
+		$subscriber_status = $this->request_lists_config( 'edit' )->get_status();
+		wp_set_current_user( 0 );
+		$logged_out_status  = $this->request_lists_config( 'edit' )->get_status();
+		$default_status     = $this->request_lists_config()->get_status();
+		$bad_context_status = $this->request_lists_config( 'bogus' )->get_status();
+
+		$this->assertSame( 403, $subscriber_status, 'A subscriber is refused.' );
+		$this->assertSame( 401, $logged_out_status, 'A logged-out request is refused.' );
+		$this->assertSame( 200, $default_status, 'The default context stays public.' );
+		$this->assertSame( 400, $bad_context_status, 'An unknown context is rejected.' );
+	}
+
+	/**
 	 * Test get_filtered
 	 */
 	public function test_get_filtered() {

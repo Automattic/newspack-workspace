@@ -3,7 +3,6 @@
 /**
  * Internal dependencies.
  */
-import * as a11y from './accessibility.js';
 import { sendVerificationOTP } from './inline-verification.js';
 import { isButtonLoading, setButtonLoading } from '../utils';
 
@@ -125,6 +124,5 @@ export function openVerificationModal( config = {} ) {
 	modal.addEventListener( 'closeModal', handleClose, { signal } );
 
 	modal.setAttribute( 'data-state', 'open' );
-	a11y.trapFocus( modal );
 	return true;
 }

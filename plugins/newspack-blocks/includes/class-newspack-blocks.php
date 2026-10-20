@@ -864,6 +864,50 @@ class Newspack_Blocks {
 	}
 
 	/**
+	 * Restrict a list of post types to those a Homepage Posts or Carousel query may
+	 * read: publicly-viewable types, plus any explicitly allow-listed via the
+	 * `newspack_blocks_articles_allowed_post_types` filter.
+	 *
+	 * Every query those blocks build goes through this, so the front end, the editor
+	 * routes (open to anyone who can edit posts, Contributors included) and the
+	 * public articles route all serve the same post types. Disallowed types are
+	 * dropped; the returned list may be empty when none qualify (the caller then
+	 * returns no results).
+	 *
+	 * An empty request means `post`: blocks saved before the post type picker required
+	 * a selection carry `"postType":[]`. WP_Query's own default widened to every type
+	 * sharing a queried custom taxonomy, which this deliberately does not.
+	 *
+	 * @param array|string $post_types Requested post type(s).
+	 * @return array Allowed post types (may be empty).
+	 */
+	public static function filter_viewable_post_types( $post_types ) {
+		if ( empty( $post_types ) ) {
+			$post_types = [ 'post' ];
+		}
+		/**
+		 * Post types Homepage Posts and Carousel blocks may query in addition to the
+		 * publicly-viewable ones. Each entry is an explicit, per-CPT decision to
+		 * expose that type's published posts to unauthenticated callers, including
+		 * through the public articles REST route — do not add types whose published
+		 * content should stay off it. A non-viewable type that declares `newspack_blocks`
+		 * support but is left off this list can still be picked in the block's post
+		 * type panel, but its blocks render empty.
+		 *
+		 * @param string[] $allowed Post type slugs to allow. Default empty.
+		 */
+		$allowed = (array) apply_filters( 'newspack_blocks_articles_allowed_post_types', [] );
+		return array_values(
+			array_filter(
+				(array) $post_types,
+				function ( $type ) use ( $allowed ) {
+					return is_string( $type ) && ( is_post_type_viewable( $type ) || in_array( $type, $allowed, true ) );
+				}
+			)
+		);
+	}
+
+	/**
 	 * Builds and returns query args based on block attributes.
 	 *
 	 * @param array $attributes An array of block attributes.
@@ -884,10 +928,18 @@ class Newspack_Blocks {
 			$newspack_blocks_all_specific_posts_ids = self::get_specific_posts_from_blocks( $blocks, $block_name );
 		}
 
-		$post_type              = isset( $attributes['postType'] ) ? $attributes['postType'] : [ 'post' ];
+		// Every block render goes through here, including core's block-renderer route and draft
+		// previews, which are open to anyone who can edit posts. So the post type restriction
+		// lives here rather than in each caller.
+		$post_type              = self::filter_viewable_post_types( isset( $attributes['postType'] ) ? $attributes['postType'] : [ 'post' ] );
 		$included_post_statuses = [ 'publish' ];
 		if ( current_user_can( 'edit_others_posts' ) && isset( $attributes['includedPostStatuses'] ) ) {
-			$included_post_statuses = $attributes['includedPostStatuses'];
+			// Only the statuses the editor offers. Anything else (private, or core's request-*
+			// statuses) would let the editor routes read content the block was never meant to show.
+			$included_post_statuses = array_values( array_intersect( (array) $attributes['includedPostStatuses'], [ 'publish', 'draft', 'future' ] ) );
+			if ( empty( $included_post_statuses ) ) {
+				$included_post_statuses = [ 'publish' ];
+			}
 		}
 		$authors                    = isset( $attributes['authors'] ) ? $attributes['authors'] : array();
 		$categories                 = isset( $attributes['categories'] ) ? $attributes['categories'] : array();
@@ -1039,11 +1091,19 @@ class Newspack_Blocks {
 			}
 		}
 
+		if ( empty( $post_type ) ) {
+			// Every requested post type was disallowed. Match nothing rather than let
+			// WP_Query fall back to its default post type.
+			$args['post__in'] = [ 0 ];
+		}
+
 		/**
 		 * Customize the WP_Query arguments to fetch post articles before the actual query is executed.
 		 *
 		 * The filter is called after the build_articles_query() function is called by a Newspack block to
 		 * build the WP_Query arguments based on the given attributes and block requesting the query.
+		 * When no requested post type is allowed, `post__in` is `[ 0 ]` so the query matches nothing;
+		 * allow a post type through `newspack_blocks_articles_allowed_post_types` rather than here.
 		 *
 		 * @param array     $args       WP_Query arguments as created by build_articles_query()
 		 * @param array     $attributes The attributes initial passed to build_articles_query()

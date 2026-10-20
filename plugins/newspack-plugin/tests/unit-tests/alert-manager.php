@@ -48,6 +48,7 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 		remove_all_actions( 'newspack_alert' );
 		remove_all_actions( 'newspack_log' );
 		remove_all_actions( 'newspack_integration_health_changed' );
+		remove_all_filters( 'newspack_integration_health_issue_url' );
 		remove_all_filters( 'newspack_alert_pattern_rules' );
 		remove_all_filters( 'newspack_alert_failure_record' );
 		delete_option( Alert_Manager::FAILURE_LOG_OPTION );
@@ -1566,6 +1567,128 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 		$this->assertCount( 1, $this->captured['integration_health_check_failed']['error'], 'The outage still pages.' );
 		$this->assertCount( 1, $this->captured['integration_health_check_recovered']['warning'], 'The recovery still reaches the log.' );
 		$this->assertCount( 2, $this->captured['integration_health_changed_listener_failed']['warning'], 'Each failed dispatch reaches the log.' );
+	}
+
+	/**
+	 * An outage an issue tracks reaches the log with the issue URL instead of
+	 * paging, and the URL stays on the record and on the broken change. The
+	 * record turns broken only once the answer is in.
+	 */
+	public function test_health_check_tracked_outage_reaches_the_log_with_its_issue() {
+		$this->capture_alerts( 'integration_health_check_failed' );
+		$asked   = [];
+		$changed = [];
+		add_filter(
+			'newspack_integration_health_issue_url',
+			function ( $issue_url, $change ) use ( &$asked ) {
+				$asked[] = $change + [ 'stored_status' => get_option( Alert_Manager::HEALTH_STATE_OPTION )['esp']['status'] ];
+				return 'https://linear.app/example/issue/NP-1';
+			},
+			10,
+			2
+		);
+		add_action(
+			'newspack_integration_health_changed',
+			function ( $data ) use ( &$changed ) {
+				$changed[] = $data;
+			}
+		);
+
+		$this->break_integration( 'esp' );
+
+		$this->assertCount( 1, $asked, 'Only the broken transition asks for an issue.' );
+		$this->assertSame( 'broken', $asked[0]['state'] );
+		$this->assertSame( 'failing', $asked[0]['stored_status'], 'The record turns broken only after the answer, so a run that dies waiting asks again.' );
+		$this->assertCount( 0, $this->captured['integration_health_check_failed']['error'], 'A tracked outage does not page.' );
+		$this->assertStringContainsString( 'Tracked in https://linear.app/example/issue/NP-1.', end( $this->captured['integration_health_check_failed']['warning'] )['message'] );
+		$this->assertSame( 'https://linear.app/example/issue/NP-1', get_option( Alert_Manager::HEALTH_STATE_OPTION )['esp']['issue_url'] );
+		$this->assertSame( 'https://linear.app/example/issue/NP-1', $changed[0]['issue_url'] );
+	}
+
+	/**
+	 * The issue URL travels with the outage's closing change, so whoever
+	 * opened the issue can update it: on a pass, and on a run that stops
+	 * checking the integration.
+	 */
+	public function test_health_check_issue_url_travels_with_recovery_and_disconnection() {
+		add_filter( 'newspack_integration_health_issue_url', fn() => 'https://linear.app/example/issue/NP-1' );
+		$changed = [];
+		add_action(
+			'newspack_integration_health_changed',
+			function ( $data ) use ( &$changed ) {
+				$changed[ $data['state'] ] = $data;
+			}
+		);
+
+		$this->break_integration( 'esp' );
+		do_action(
+			'newspack_integration_health_check_passed',
+			[
+				'integration_id'   => 'esp',
+				'integration_name' => 'Mock esp',
+			]
+		);
+		$this->break_integration( 'crm' );
+		do_action( 'newspack_integration_health_checks_completed', [] );
+
+		$this->assertSame( 'https://linear.app/example/issue/NP-1', $changed['recovered']['issue_url'] );
+		$this->assertSame( 'https://linear.app/example/issue/NP-1', $changed['disconnected']['issue_url'] );
+	}
+
+	/**
+	 * An outage pages when nothing usable tracks it: a callback that throws,
+	 * or one that returns something other than an absolute https URL.
+	 *
+	 * @dataProvider data_unusable_issue_urls
+	 *
+	 * @param callable $callback The issue URL filter callback.
+	 */
+	public function test_health_check_pages_when_no_usable_issue_tracks_the_outage( $callback ) {
+		$this->capture_alerts( 'integration_health_check_failed' );
+		add_filter( 'newspack_integration_health_issue_url', $callback );
+
+		$this->break_integration( 'esp' );
+
+		$this->assertCount( 1, $this->captured['integration_health_check_failed']['error'] );
+		$this->assertArrayNotHasKey( 'issue_url', get_option( Alert_Manager::HEALTH_STATE_OPTION )['esp'] );
+	}
+
+	/**
+	 * A callback that throws is reported in the log, since the page that follows
+	 * looks the same as an untracked outage's.
+	 */
+	public function test_health_check_issue_url_callback_failure_is_logged() {
+		$this->capture_alerts( 'integration_health_issue_url_failed' );
+		add_filter(
+			'newspack_integration_health_issue_url',
+			// phpcs:ignore WordPressVIPMinimum.Hooks.AlwaysReturnInFilter -- Throwing is what this test is about.
+			function () {
+				throw new \RuntimeException( 'Simulated hub failure.' );
+			}
+		);
+
+		$this->break_integration( 'esp' );
+
+		$this->assertCount( 1, $this->captured['integration_health_issue_url_failed']['warning'] );
+	}
+
+	/**
+	 * Issue URL callbacks that must not stop the page.
+	 */
+	public function data_unusable_issue_urls() {
+		return [
+			'throws'            => [
+				function () {
+					throw new \RuntimeException( 'Simulated hub failure.' );
+				},
+			],
+			'plain http'        => [ fn() => 'http://linear.app/example/issue/NP-1' ],
+			'no scheme'         => [ fn() => 'NP-1' ],
+			'relative'          => [ fn() => '/issue/NP-1' ],
+			'protocol-relative' => [ fn() => '//linear.app/example/issue/NP-1' ],
+			'no host'           => [ fn() => 'https:NP-1' ],
+			'not a string'      => [ fn() => [ 'https://linear.app/example/issue/NP-1' ] ],
+		];
 	}
 
 	/**

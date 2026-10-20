@@ -1,11 +1,6 @@
 /* globals newspack_ras_config */
 
 /**
- * Internal dependencies.
- */
-import * as a11y from './accessibility.js';
-
-/**
  * Helpers for the pre-registration confirmation modal rendered in wp_footer by
  * Reader_Activation::render_confirmation_modal().
  *
@@ -93,7 +88,6 @@ function openConfirmationModal( config = {} ) {
 	modal.addEventListener( 'closeModal', handleClose, { signal } );
 
 	modal.setAttribute( 'data-state', 'open' );
-	a11y.trapFocus( modal );
 	return true;
 }
 

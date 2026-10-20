@@ -124,12 +124,14 @@ domReady( function () {
 			fileName.textContent = fileInput.files?.[ 0 ]?.name || '';
 			removeFile.classList.toggle( 'hidden', ! fileName.textContent );
 		};
+		const uploadButton = bulkForm.querySelector( '.newspack-my-account__group_subscription__invite-bulk__upload' );
+		uploadButton.addEventListener( 'click', () => fileInput.click() );
 		fileInput.addEventListener( 'change', showFileName );
 		removeFile.addEventListener( 'click', event => {
 			event.preventDefault();
 			fileInput.value = '';
 			showFileName();
-			fileInput.focus();
+			uploadButton.focus();
 		} );
 
 		// Send stays focusable while it can't be used, so a keyboard user can reach it and

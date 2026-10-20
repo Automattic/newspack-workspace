@@ -842,6 +842,25 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 	}
 
 	/**
+	 * An account Access Control never restricts needs no seat, so the helper's
+	 * filter moves the line here too. A reader stays eligible either way.
+	 */
+	public function test_is_eligible_member_follows_the_skip_filter() {
+		$author_id = $this->create_role_user( 'author' );
+		$reader_id = $this->create_reader_user();
+		$skip      = function ( $skips, $user_id ) use ( $author_id, $reader_id ) {
+			return in_array( $user_id, [ $author_id, $reader_id ], true ) ? true : $skips;
+		};
+		add_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10, 2 );
+		$author_eligible = Group_Subscription::is_eligible_member( $author_id );
+		$reader_eligible = Group_Subscription::is_eligible_member( $reader_id );
+		remove_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10 );
+
+		$this->assertFalse( $author_eligible, 'An author filtered in is not eligible.' );
+		$this->assertTrue( $reader_eligible, 'Reader status is authoritative.' );
+	}
+
+	/**
 	 * A non-existent user is never eligible.
 	 */
 	public function test_is_eligible_member_rejects_missing_user() {

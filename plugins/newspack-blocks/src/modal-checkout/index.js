@@ -8,7 +8,7 @@ import './checkout.scss';
  * Internal dependencies
  */
 import { manageCheckoutAttempt, manageCheckoutSuccess, manageLoaded, managePagination } from './analytics';
-import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
+import { domReady, getTabbableElements, isPaymentChallengeShown, isSameDocumentRedirect, onCheckoutPlaceOrderProcessing } from './utils';
 
 ( $ => {
 	domReady( () => {
@@ -25,6 +25,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 		const cancelEvent = new CustomEvent( 'checkout-cancel' );
 		const placeOrderStartEvent = new CustomEvent( 'checkout-place-order-start' );
 		const placeOrderSuccessEvent = new CustomEvent( 'checkout-place-order-success' );
+		const placeOrderGatewayActionEvent = new CustomEvent( 'checkout-place-order-gateway-action' );
 		const placeOrderErrorEvent = new CustomEvent( 'checkout-place-order-error' );
 		const placeOrderCriticalErrorEvent = new CustomEvent( 'checkout-place-order-critical-error' );
 
@@ -120,15 +121,48 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 				handlePaymentMethodSelect();
 
 				/**
+				 * Tell the modal when a payment challenge, like 3D Secure, shows or goes while
+				 * an order is being placed, so its processing screen doesn't cover it.
+				 */
+				let challengeShown = false;
+				let challengeFrame = null;
+				const syncPaymentChallenge = () => {
+					challengeFrame = null;
+					const shown = isPaymentChallengeShown( document );
+					if ( shown !== challengeShown ) {
+						challengeShown = shown;
+						container.dispatchEvent( new CustomEvent( 'checkout-payment-challenge', { detail: { shown } } ) );
+					}
+				};
+				const challengeObserver = new MutationObserver( () => {
+					if ( ! challengeFrame ) {
+						challengeFrame = window.requestAnimationFrame( syncPaymentChallenge );
+					}
+				} );
+				container.addEventListener( 'checkout-place-order-error', () => {
+					challengeObserver.disconnect();
+					challengeShown = false;
+				} );
+
+				/**
 				 * Bubble up checkout place order event.
 				 */
 				let placedOrder = false;
+				// Set while the gateway shows its own step in place after the order is placed (e.g. a 3D Secure challenge).
+				let awaitingGatewayAction = false;
 				$form.on( 'checkout_place_order', function () {
 					if ( placedOrder ) {
 						return;
 					}
 					placedOrder = true;
+					awaitingGatewayAction = false;
 					container.dispatchEvent( placeOrderStartEvent );
+					challengeObserver.observe( document.body, {
+						childList: true,
+						subtree: true,
+						attributes: true,
+						attributeFilter: [ 'style', 'class' ],
+					} );
 				} );
 				onCheckoutPlaceOrderProcessing( container, function () {
 					if ( ! placedOrder ) {
@@ -140,16 +174,22 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						container.dispatchEvent( placeOrderErrorEvent );
 					}
 				} );
-				$form.on( 'checkout_place_order_success', function () {
+				$form.on( 'checkout_place_order_success', function ( event, result ) {
 					placedOrder = false;
 					container.dispatchEvent( placeOrderSuccessEvent );
+					if ( isSameDocumentRedirect( result?.redirect, window.location.href ) ) {
+						awaitingGatewayAction = true;
+						container.dispatchEvent( placeOrderGatewayActionEvent );
+					}
 				} );
 
 				$( document.body ).on( 'checkout_error', function ( event, errors ) {
-					if ( ! placedOrder ) {
+					// A gateway step that fails or is canceled reports its error here, after the order was placed.
+					if ( ! placedOrder && ! awaitingGatewayAction ) {
 						return;
 					}
 					placedOrder = false;
+					awaitingGatewayAction = false;
 					if ( errors && errors.indexOf( newspackBlocksModalCheckout.labels.critical_error ) >= 0 ) {
 						container.dispatchEvent( placeOrderCriticalErrorEvent );
 						return;
@@ -1053,10 +1093,34 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 			setReady( false );
 		} );
 
-		// Close modal when 'Esc' key is pressed and focus is inside of the iframe.
+		// The checkout dialog can't see keys pressed in here. Escape reaches it as the
+		// dialog's own cancel, so a payment in progress keeps it open, and Tab from the
+		// last control wraps to the dialog's first.
 		document.addEventListener( 'keydown', function ( ev ) {
+			const dialog = window.frameElement?.closest( 'dialog' );
 			if ( ev.key === 'Escape' ) {
-				parent.newspackCloseModalCheckout();
+				// An open dropdown, like the country field's, closes on its own Escape.
+				if ( ev.defaultPrevented || ev.target.closest?.( '.select2-dropdown, .select2-container--open' ) ) {
+					return;
+				}
+				if ( dialog ) {
+					dialog.dispatchEvent( new Event( 'cancel', { cancelable: true } ) );
+				} else {
+					parent.newspackCloseModalCheckout();
+				}
+				return;
+			}
+			if ( ev.key !== 'Tab' || ev.shiftKey || ev.defaultPrevented || ! dialog ) {
+				return;
+			}
+			const tabbable = getTabbableElements( document.body );
+			if ( ev.target !== tabbable[ tabbable.length - 1 ] ) {
+				return;
+			}
+			const first = getTabbableElements( dialog )[ 0 ];
+			if ( first && first !== window.frameElement ) {
+				ev.preventDefault();
+				first.focus();
 			}
 		} );
 
