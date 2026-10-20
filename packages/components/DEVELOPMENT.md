@@ -675,9 +675,9 @@ The `Grid` collapses to one column below 744px, so the header sits above its fie
 
 **Settings tabs** are built from two-column sections. Save sits in the page header, published with `setHeaderData( { actions } )` from the wizard store and disabled until something changes. The header keeps whichever callback it was handed, so read the latest handler from a ref; passing the save function directly saves stale state. Pair it with `useUnsavedChangesDialog`. See `plugins/newspack-plugin/src/wizards/newspack/views/settings/seo/index.tsx`.
 
-**A screen's description goes in the page header subtitle**, under the title. That holds for settings tabs, list screens and item editors alike. It replaces an intro `SectionHeader` or card that describes the screen, and a `Wizard` section `description` or `sectionDescription`, which draw one; a `sectionTitle` on its own stays, as the item title on an editor route. When one full-width block is the whole screen, its description is the subtitle too. The subtitle is hidden visually below 782px, so it describes the screen and never carries something needed to use it. Set it with `subHeaderText` (on a `Wizard` section, or as a `withWizardScreen` prop), or under `Wizard` with `setHeaderData( { subTitle } )`, which wins over `subHeaderText`. A section that already publishes header actions sets its subtitle in the same call, and one whose description depends on state has to: the Metering tab describes the current meter. A tabbed `Wizard` resets header data on every route change, so there is nothing to clear, but a section that stays mounted while its route params change must publish again. See `plugins/newspack-plugin/src/wizards/audience/views/content-gates/`.
+**A screen's description goes in the page header subtitle**, under the title. That holds for settings tabs, list screens and item editors alike. It replaces an intro `SectionHeader` or card that describes the screen, and a `Wizard` section `description` or `sectionDescription`, which draw one; a `sectionTitle` on its own stays, as the item title on an editor route. When one full-width block is the whole screen, its description is the subtitle too. The subtitle is hidden visually below 782px, so it describes the screen and never carries something needed to use it. Set it with `subHeaderText` (on a `Wizard` section, or as a `withWizardScreen` prop), or under `Wizard` with `setHeaderData( { subTitle } )`, which wins over `subHeaderText`. A section that already publishes header actions sets its subtitle in the same call. Copy that depends on the section's own state has to use `setHeaderData`: the Metering tab describes the current meter. A `Wizard` with more than one section resets header data on every route change, so there is nothing to clear, but a section that stays mounted while its route params change must publish again. See `plugins/newspack-plugin/src/wizards/audience/views/content-gates/`.
 
-A route that edits one item under a tabbed wizard sets `isHidden` (to keep it out of the tabs) and `hideTabbedNavigation` (to hide the tab bar) on its section, and gives its `breadcrumbs` a parent crumb with a `url` so the trail leads back.
+A route that edits one item under a tabbed `Wizard` sets `isHidden` (to keep it out of the tabs) and `hideTabbedNavigation` (to hide the tab bar) on its section, and gives its `breadcrumbs` a parent crumb with a `url` so the trail leads back.
 
 Prefer these patterns (and the spacing scale above) over one-off margins so layout stays consistent with Card, ActionCard, and SectionHeader.
 
@@ -706,7 +706,7 @@ Common composition patterns keep screens predictable. Use these as a reference w
 ```
 Wizard
   GlobalNotices
-  SectionHeader          ← 48px top margin
+  SectionHeader          ← one per section, 48px top margin
   Card                   ← 32px margin
     ActionCard            ← 24px padding, optional toggle
       Grid or Stack       ← 32px gap (Grid default; Stack gap="2xl")
