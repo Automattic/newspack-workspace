@@ -419,14 +419,14 @@ class Edit extends Component {
 													</div>
 												) }
 												{ showTagLabels && post.newspack_tag_labels && (
-													<div className="tag-labels">
+													<div className="newspack-tag-labels tag-labels">
 														{ post.newspack_tag_labels.map( ( newspack_tag_label, index ) => {
 															return newspack_tag_label.link ? (
-																<a key={ index } href={ newspack_tag_label.link } className="tag-label flag">
+																<a key={ index } href={ newspack_tag_label.link } className="newspack-tag-label tag-label flag">
 																	{ newspack_tag_label.flag }
 																</a>
 															) : (
-																<span key={ index } className="tag-label flag">
+																<span key={ index } className="newspack-tag-label tag-label flag">
 																	{ newspack_tag_label.flag }
 																</span>
 															);
