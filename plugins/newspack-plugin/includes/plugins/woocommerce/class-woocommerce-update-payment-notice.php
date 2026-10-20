@@ -122,6 +122,7 @@ class WooCommerce_Update_Payment_Notice {
 				$notice,
 				[
 					'id'       => $notice_id,
+					'type'     => 'warning',
 					'autohide' => false,
 				]
 			);
@@ -229,7 +230,7 @@ class WooCommerce_Update_Payment_Notice {
 			add_filter(
 				'newspack_ui_notice_is_urgent',
 				function( $is_urgent, $printed_notice ) use ( $notice ) {
-					if ( $printed_notice === $notice ) {
+					if ( self::normalize_notice( $printed_notice ) === self::normalize_notice( $notice ) ) {
 						$is_urgent = true;
 					}
 					return $is_urgent;
@@ -240,6 +241,18 @@ class WooCommerce_Update_Payment_Notice {
 		}
 
 		return $notices;
+	}
+
+	/**
+	 * Reduce a notice to its plain text, so a notice matches the same notice after
+	 * WooCommerce has sanitized its markup.
+	 *
+	 * @param string $notice The notice markup.
+	 *
+	 * @return string The normalized text.
+	 */
+	private static function normalize_notice( $notice ) {
+		return preg_replace( '/\s+/', ' ', trim( html_entity_decode( \wp_strip_all_tags( $notice ), ENT_QUOTES, 'UTF-8' ) ) );
 	}
 
 	/**

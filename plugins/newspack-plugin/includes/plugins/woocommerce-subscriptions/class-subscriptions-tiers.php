@@ -600,7 +600,7 @@ class Subscriptions_Tiers {
 		?>
 		<label class="newspack-ui__input-card <?php echo $current ? esc_attr( 'current' ) : ''; ?>">
 			<?php if ( $current ) : ?>
-				<span class="newspack-ui__badge newspack-ui__badge--primary"><?php _e( 'Current', 'newspack-plugin' ); ?></span>
+				<span class="newspack-ui__badge newspack-ui__badge--secondary"><?php _e( 'Current', 'newspack-plugin' ); ?></span>
 			<?php endif; ?>
 			<input type="radio" name="product_id" value="<?php echo esc_attr( $product->get_id() ); ?>"<?php echo $seats ? ' data-per-seat="1" data-seats-min="' . esc_attr( $seats['min'] ) . '" data-seats-max="' . esc_attr( $seats['max'] > 0 ? $seats['max'] : '' ) . '"' : ''; ?> <?php echo esc_attr( $selected ? 'checked' : '' ); ?>>
 			<strong><?php echo esc_html( self::get_product_title( $product, $show_variation_attributes ) ); ?></strong>
@@ -667,6 +667,7 @@ class Subscriptions_Tiers {
 		$label = __( 'View Subscription', 'newspack-plugin' );
 		?>
 		<div class="newspack-ui__notice newspack-ui__notice--warning">
+			<?php Newspack_UI::print_notice_icon( 'warning' ); ?>
 			<span class="newspack-ui__notice__content">
 				<?php
 				printf(
@@ -936,7 +937,6 @@ class Subscriptions_Tiers {
 					<?php _e( 'Sign in to an existing account', 'newspack-plugin' ); ?>
 				</button>
 			<?php endif; ?>
-			<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-ui__modal__cancel"><?php _e( 'Cancel', 'newspack-plugin' ); ?></button>
 		</form>
 		<?php
 	}

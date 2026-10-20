@@ -1,3 +1,5 @@
+@use "../mixins";
+
 .newspack-ui {
 	&__segmented-control {
 		align-items: center;
@@ -25,66 +27,56 @@
 
 		&__tabs {
 			background: var(--newspack-ui-color-neutral-fill);
-			border-radius: var(--newspack-ui-border-radius-m);
+			border-radius: calc(var(--newspack-ui-radius-button) * 1.5);
 			display: flex;
 			flex-wrap: wrap;
-			gap: var(--newspack-ui-spacer-1);
+			gap: var(--newspack-ui-spacer-half);
 			justify-content: center;
-			padding: var(--newspack-ui-spacer-1);
-
-			&:has([class*="--x-small"]) {
-				gap: calc(var(--newspack-ui-spacer-1) * 0.75);
-				padding: calc(var(--newspack-ui-spacer-1) * 0.75);
-			}
-
-			&:has([class*="--small"]) {
-				gap: calc(var(--newspack-ui-spacer-1) / 2);
-				padding: calc(var(--newspack-ui-spacer-1) / 2);
-			}
+			padding: var(--newspack-ui-spacer-half);
 
 			.newspack-ui__button {
-				background: transparent;
-				border: 1px solid transparent;
-				border-radius: var(--newspack-ui-border-radius-s);
-				color: var(--newspack-ui-color-text-muted);
+				--newspack-ui-button-bg: transparent;
+				--newspack-ui-button-bg-hover: transparent;
+				--newspack-ui-button-bg-pressed: transparent;
+				--newspack-ui-button-bg-disabled: transparent;
+				--newspack-ui-button-ink: var(--newspack-ui-color-text-muted);
+
+				border-radius: var(--newspack-ui-radius-button);
 				cursor: pointer;
-				padding:
-					calc(var(--newspack-ui-spacer-2) - 1px)
-					calc(var(--newspack-ui-spacer-5) - 1px);
+				font-weight: var(--newspack-ui-font-weight-medium);
+				margin: 0;
+				transform: none;
 
-				&[class*="--x-small"] {
-					padding:
-						calc(var(--newspack-ui-spacer-1) * 0.75 - 1px)
-						calc(var(--newspack-ui-spacer-2) - 1px);
+				&:not([class*="--small"]) {
+					--newspack-ui-button-height: var(--newspack-ui-spacer-8);
+					--newspack-ui-button-padding-block: var(--newspack-ui-spacer-1);
+					--newspack-ui-button-padding-inline: calc(var(--newspack-ui-spacer-1) * 2.25);
 				}
 
-				&[class*="--small"] {
-					padding:
-						calc(var(--newspack-ui-spacer-1) - 1px)
-						calc(var(--newspack-ui-spacer-3) - 1px);
+				@media ( hover: hover ) and ( pointer: fine ) {
+					&:hover {
+						color: var(--newspack-ui-color-text);
+					}
 				}
 
-				&:hover {
-					background: transparent;
-				}
+				&.selected,
+				&[aria-selected="true"] {
+					--newspack-ui-button-bg: var(--newspack-ui-color-surface);
+					--newspack-ui-button-bg-hover: var(--newspack-ui-color-surface);
+					--newspack-ui-button-bg-pressed: var(--newspack-ui-color-surface);
+					--newspack-ui-button-border: var(--newspack-ui-color-border-outline);
+					--newspack-ui-button-ink: var(--newspack-ui-color-text);
 
-				&:focus {
-					outline: none;
-				}
+					&:focus-visible {
+						@include mixins.focus-edge( $inset: true );
+					}
 
-				&:focus-visible {
-					outline: 2px solid var(--newspack-ui-color-button-bg);
-					outline-offset: 2px;
-				}
-
-				&:not(:last-child) {
-					margin: 0;
-				}
-
-				&.selected {
-					background: var(--newspack-ui-color-surface);
-					border-color: currentcolor;
-					color: var(--newspack-ui-color-text);
+					@media ( forced-colors: active ) {
+						&:not(:focus-visible) {
+							outline: 1px solid Highlight;
+							outline-offset: -1px;
+						}
+					}
 				}
 			}
 		}

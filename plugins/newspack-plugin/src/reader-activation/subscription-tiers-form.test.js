@@ -26,7 +26,6 @@ function renderForm( { flatIsCurrent = false, flatIsSelected = true, seatsValue 
 				<input type="number" name="quantity" id="newspack-group-seats-item-554" step="1" min="3" value="${ seatsValue }" data-original-value="${ originalValue }"${ disabled }>
 			</p>
 			<button type="submit">Change Subscription</button>
-			<button type="button" class="newspack-ui__modal__cancel">Cancel</button>
 		</form>
 	`;
 	init();

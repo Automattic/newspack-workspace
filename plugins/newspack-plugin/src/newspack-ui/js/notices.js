@@ -1,4 +1,5 @@
-import { domReady } from './utils';
+import { domReady, getTransitionTime } from './utils';
+import { getNoticeIcon } from './icons';
 
 domReady( function () {
 	// Create the live regions up front so they are registered before any message is injected.
@@ -102,10 +103,48 @@ function openNotice( element, remove = true ) {
 	const content = element.querySelector( '.newspack-ui__snackbar__content' );
 	announce( content ? content.textContent.trim() : '', element.dataset.type === 'error' );
 	if ( element.dataset.autohide !== 'false' ) {
-		setTimeout( () => {
-			closeNotice( element, remove );
-		}, 8000 );
+		scheduleAutohide( element, remove );
 	}
+}
+
+/**
+ * Hide a snackbar after 8 seconds of being visible, pausing while the reader
+ * hovers it or has focus inside it, so an action such as Undo stays reachable.
+ *
+ * @param {HTMLElement} element Snackbar item.
+ * @param {boolean}     remove  Whether to remove the item once hidden.
+ */
+function scheduleAutohide( element, remove ) {
+	let remaining = 8000;
+	let startedAt = 0;
+	let timer = null;
+	const run = () => {
+		if ( timer || element.matches( ':hover' ) || element.contains( element.ownerDocument.activeElement ) ) {
+			return;
+		}
+		startedAt = Date.now();
+		timer = setTimeout( () => {
+			timer = null;
+			closeNotice( element, remove );
+		}, remaining );
+	};
+	const pause = () => {
+		if ( ! timer ) {
+			return;
+		}
+		clearTimeout( timer );
+		timer = null;
+		remaining = Math.max( 0, remaining - ( Date.now() - startedAt ) );
+	};
+	element.addEventListener( 'mouseenter', pause );
+	element.addEventListener( 'focusin', pause );
+	element.addEventListener( 'mouseleave', run );
+	element.addEventListener( 'focusout', event => {
+		if ( ! element.contains( event.relatedTarget ) ) {
+			run();
+		}
+	} );
+	run();
 }
 
 /**
@@ -117,12 +156,9 @@ function openNotice( element, remove = true ) {
 function closeNotice( element, remove = true ) {
 	element.classList.remove( 'active' );
 	if ( remove ) {
-		// Wait for the slide-out and slot collapse before removing from the DOM. This 500ms must
-		// stay >= the exit transition in _notices.scss (transform 250ms + height 200ms delayed 250ms);
-		// shortening it there without updating this clips the animation.
 		setTimeout( () => {
 			element.remove();
-		}, 500 );
+		}, getTransitionTime( element ) );
 	}
 	if ( element.dataset.noticeId ) {
 		wp.ajax.send( 'newspack_ui_notice_dismissed', {
@@ -138,7 +174,7 @@ function closeNotice( element, remove = true ) {
  * Dynamically create and show a snackbar notice.
  *
  * @param {string} message Message text to show.
- * @param {string} type    Severity; drives the ARIA announcement and the type icon ('error' and 'warning').
+ * @param {string} type    Severity; drives the ARIA announcement and the type icon ('info', 'error' and 'warning').
  */
 function createNotice( message, type = 'success' ) {
 	const wrapper = getWrapper();
@@ -154,11 +190,11 @@ function createNotice( message, type = 'success' ) {
 	item.dataset.type = type;
 	item.setAttribute( 'data-autohide', 'true' );
 
-	const typeIcon = window.newspackUIData?.icons?.[ type ];
+	const typeIcon = [ 'info', 'error', 'warning' ].includes( type ) ? getNoticeIcon( type ) : null;
 	if ( typeIcon ) {
 		const icon = document.createElement( 'span' );
 		icon.classList.add( 'newspack-ui__snackbar__icon' );
-		icon.innerHTML = typeIcon;
+		icon.appendChild( typeIcon );
 		item.appendChild( icon );
 	}
 

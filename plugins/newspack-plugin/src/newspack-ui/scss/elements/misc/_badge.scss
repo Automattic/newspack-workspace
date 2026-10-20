@@ -1,57 +1,63 @@
 .newspack-ui__badge {
-	background: var(--newspack-ui-color-neutral-0);
-	border-radius: var(--newspack-ui-border-radius-2xs);
-	color: var(--newspack-ui-color-neutral-90);
-	display: inline-grid;
+	align-items: center;
+	background: var(--newspack-ui-color-surface-sunken);
+	border-radius: var(--newspack-ui-radius-badge);
+	color: var(--newspack-ui-color-text-muted);
+	cursor: default;
+	display: inline-flex;
 	font-family: var(--newspack-ui-font-family);
-	font-size: var(--newspack-ui-font-size-xs);
+	font-size: var(--newspack-ui-font-size-caption);
 	font-weight: var(--newspack-ui-font-weight-strong);
-	line-height: var(--newspack-ui-line-height-xs);
-	padding: calc(var(--newspack-ui-spacer-1) / 4) calc(var(--newspack-ui-spacer-1) * 0.75);
-	place-items: center;
+	height: var(--newspack-ui-spacer-4);
+	justify-content: center;
+	letter-spacing: 0.01em;
+	line-height: 1;
+	padding: 0 calc(var(--newspack-ui-spacer-1) * 0.75);
+	white-space: nowrap;
 
 	&--primary {
-		background: var(--newspack-ui-color-neutral-90);
-		color: var(--newspack-ui-color-neutral-0);
+		background: var(--newspack-ui-color-btn);
+		color: var(--newspack-ui-color-btn-ink);
 	}
 
 	&--secondary {
-		background: var(--newspack-ui-color-neutral-10);
+		background: var(--newspack-ui-color-neutral-fill);
+		color: var(--newspack-ui-color-text);
 	}
 
 	&--outline {
-		background: var(--newspack-ui-color-neutral-0);
-		color: var(--newspack-ui-color-neutral-60);
-		outline: 1px solid var(--newspack-ui-color-neutral-30);
-		outline-offset: -1px;
+		background: none;
+		box-shadow: inset 0 0 0 1px var(--newspack-ui-color-border-outline);
+		color: var(--newspack-ui-color-text);
 	}
 
 	&--success {
-		--newspack-ui-badge-dot-color: var(--newspack-ui-color-success-50);
+		--newspack-ui-status-color: var(--newspack-ui-color-success);
 
-		background: var(--newspack-ui-color-success-0);
+		background: var(--newspack-ui-color-success-tint);
+		color: var(--newspack-ui-color-success-text);
 	}
 
 	&--error {
-		--newspack-ui-badge-dot-color: var(--newspack-ui-color-error-50);
+		--newspack-ui-status-color: var(--newspack-ui-color-error);
 
-		background: var(--newspack-ui-color-error-0);
+		background: var(--newspack-ui-color-error-tint);
+		color: var(--newspack-ui-color-error-text);
 	}
 
 	&--warning {
-		--newspack-ui-badge-dot-color: var(--newspack-ui-color-warning-40);
+		--newspack-ui-status-color: var(--newspack-ui-color-warning-dot);
 
-		background: var(--newspack-ui-color-warning-0);
+		background: var(--newspack-ui-color-warning-tint);
+		color: var(--newspack-ui-color-warning-text);
 	}
 
 	&--dot {
-		align-items: baseline;
-		display: inline-flex;
 		gap: calc(var(--newspack-ui-spacer-1) * 0.75);
 
 		&::before {
 			align-self: center;
-			background: var(--newspack-ui-badge-dot-color, var(--newspack-ui-color-neutral-60));
+			background: var(--newspack-ui-badge-dot-color, var(--newspack-ui-status-color, var(--newspack-ui-color-text-subtle)));
 			border-radius: 50%;
 			content: "";
 			flex-shrink: 0;
@@ -65,22 +71,90 @@
 		}
 	}
 
-	&--pulse::before {
-		animation: newspack-ui-badge-pulse 2s ease-out infinite;
+	@media ( forced-colors: active ) {
+		border: 1px solid CanvasText;
+	}
+}
 
-		@media ( prefers-reduced-motion: reduce ) {
-			animation: none;
+.newspack-ui__status {
+	--newspack-ui-status-color: var(--newspack-ui-color-text-subtle);
+
+	align-items: baseline;
+	color: var(--newspack-ui-color-text);
+	display: inline-flex;
+	font-family: var(--newspack-ui-font-family);
+	font-size: inherit;
+	font-weight: var(--newspack-ui-font-weight-regular);
+	gap: var(--newspack-ui-spacer-half);
+	line-height: inherit;
+	white-space: nowrap;
+
+	> svg {
+		align-self: center;
+		color: var(--newspack-ui-status-color);
+		fill: currentcolor;
+		flex: none;
+		height: 1.25em;
+		margin-inline-start: calc(1.25em / -6);
+		width: 1.25em;
+
+		@media ( forced-colors: active ) {
+			color: CanvasText;
 		}
+	}
+
+	&--success {
+		--newspack-ui-status-color: var(--newspack-ui-color-success);
+	}
+
+	&--error {
+		--newspack-ui-status-color: var(--newspack-ui-color-error);
+	}
+
+	&--warning {
+		--newspack-ui-status-color: var(--newspack-ui-color-warning-dot);
+	}
+
+	&--live {
+		--newspack-ui-status-color: var(--newspack-ui-color-success);
+
+		font-weight: var(--newspack-ui-font-weight-medium);
+	}
+}
+
+.newspack-ui__status--live::before {
+	align-self: center;
+	margin-inline: calc((1.25em - var(--newspack-ui-spacer-1)) / 2 - 1.25em / 6) calc((1.25em - var(--newspack-ui-spacer-1)) / 2);
+	background: var(--newspack-ui-badge-dot-color, var(--newspack-ui-status-color, var(--newspack-ui-color-text-subtle)));
+	border-radius: 50%;
+	content: "";
+	flex-shrink: 0;
+	height: var(--newspack-ui-spacer-1);
+	width: var(--newspack-ui-spacer-1);
+
+	@media ( forced-colors: active ) {
+		background: CanvasText;
+		forced-color-adjust: none;
+	}
+}
+
+.newspack-ui__status--live::before,
+.newspack-ui__badge--dot.newspack-ui__badge--pulse::before {
+	animation: newspack-ui-badge-pulse 2s ease-out infinite;
+
+	@media ( prefers-reduced-motion: reduce ) {
+		animation: none;
+		box-shadow: 0 0 0 var(--newspack-ui-spacer-half) color-mix(in srgb, var(--newspack-ui-badge-dot-color, var(--newspack-ui-status-color, var(--newspack-ui-color-text-subtle))) 22%, transparent);
 	}
 }
 
 @keyframes newspack-ui-badge-pulse {
 	0% {
-		box-shadow: 0 0 0 0 color-mix(in srgb, var(--newspack-ui-badge-dot-color, var(--newspack-ui-color-neutral-60)) 60%, transparent);
+		box-shadow: 0 0 0 0 color-mix(in srgb, var(--newspack-ui-badge-dot-color, var(--newspack-ui-status-color, var(--newspack-ui-color-text-subtle))) 60%, transparent);
 	}
 
 	70%,
 	100% {
-		box-shadow: 0 0 0 calc(var(--newspack-ui-spacer-1) / 2) transparent;
+		box-shadow: 0 0 0 var(--newspack-ui-spacer-half) transparent;
 	}
 }

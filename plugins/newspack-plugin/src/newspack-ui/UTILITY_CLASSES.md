@@ -17,14 +17,16 @@ Default direction is `row`, default gap is `spacer-2` (12px).
 |-------|--------|
 | `newspack-ui__stack--horizontal` | `flex-direction: row` |
 | `newspack-ui__stack--vertical` | `flex-direction: column` |
+| `newspack-ui__stack--vertical-below-mobile` | `flex-direction: column` under 600px; combine with `--horizontal` to switch to a row from 600px |
 
 ### Gap
 
-`newspack-ui__stack--gap-{n}` — overrides the default gap. `n` is `0–12`.
+`newspack-ui__stack--gap-{n}` — overrides the default gap. `n` is `0–12` or `half`.
 
 | Step | Value |
 |------|-------|
 | 0 | 0 |
+| half | 4px |
 | 1 | 8px |
 | 2 | 12px |
 | 3 | 16px |
@@ -74,6 +76,22 @@ Default direction is `row`, default gap is `spacer-2` (12px).
   <p>Item one</p>
   <p>Item two</p>
 </div>
+```
+
+---
+
+## Link
+
+`newspack-ui__link` styles a quiet text link for minor actions (small, medium weight, underline at 50% of the text color). It works on `<a>` and `<button>`, and pads its hit area to at least 24px tall, 44px under a coarse pointer, without changing layout.
+
+| Class | Effect |
+|-------|--------|
+| `newspack-ui__link` | Text link in the text color |
+| `newspack-ui__link--muted` | Muted color, no underline (e.g. secondary navigation such as Sign out). Disabled links, such as a resend countdown, also turn muted, at regular weight |
+
+```html
+<a class="newspack-ui__link" href="#">Forgot password?</a>
+<button type="button" class="newspack-ui__link">Change</button>
 ```
 
 ---

@@ -3,6 +3,8 @@
 .newspack-ui {
 	.newspack-ui {
 		&__dropdown {
+			--newspack-ui-dropdown-min-width: 220px;
+
 			display: inline-flex;
 			position: relative;
 
@@ -22,47 +24,77 @@
 				margin: 0;
 			}
 			&__content {
-				background: var(--newspack-ui-color-body-bg);
+				background: var(--newspack-ui-color-surface);
 				border: 1px solid var(--newspack-ui-color-border);
-				border-radius: var(--newspack-ui-border-radius-m);
-				font-size: var(--newspack-ui-font-size-xs);
-				opacity: 0;
-				position: absolute;
-				left: 0;
-				min-width: 160px;
-				padding: var(--newspack-ui-spacer-1) 0;
-				pointer-events: none;
-				top: calc(100% + var(--newspack-ui-spacer-1));
-				transform: scaleY(0);
-				transition: opacity 125ms ease-in-out;
-				z-index: 1;
+				border-radius: var(--newspack-ui-radius-control);
 				@include mixins.newspack-ui-elevation( 1 );
+
+				font-size: var(--newspack-ui-font-size-body);
+				left: 0;
+				min-width: var(--newspack-ui-dropdown-min-width);
+				opacity: 0;
+				padding: var(--newspack-ui-spacer-half);
+				pointer-events: none;
+				position: absolute;
+				top: calc(100% + var(--newspack-ui-spacer-half));
+				transform: translateY(-4px);
+				transition:
+					opacity var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out),
+					transform var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out),
+					visibility 0s linear var(--newspack-ui-duration-reveal);
+				visibility: hidden;
+				z-index: 1;
+
+				@media ( prefers-reduced-motion: reduce ) {
+					transform: none;
+				}
+
 				ul {
+					display: flex;
+					flex-direction: column;
 					list-style: none;
 					margin: 0;
 					padding: 0;
 					li {
 						margin: 0;
 						padding: 0;
+
+						&:not(:has(.cancel, .delete, .wcs_deletion_error, .newspack-ui__button--destructive)) + li:has(.cancel, .delete, .wcs_deletion_error, .newspack-ui__button--destructive) {
+							border-top: 1px solid var(--newspack-ui-color-border);
+							margin-top: var(--newspack-ui-spacer-half);
+							padding-top: var(--newspack-ui-spacer-half);
+						}
+
 						.newspack-ui__button {
-							border-radius: 0;
+							--newspack-ui-button-bg: transparent;
+							--newspack-ui-button-bg-hover: var(--newspack-ui-color-neutral-fill);
+							--newspack-ui-button-bg-pressed: var(--newspack-ui-color-neutral-fill-hover);
+							--newspack-ui-button-ink: var(--newspack-ui-color-text);
+							--newspack-ui-button-border: transparent;
+
+							border-radius: calc(var(--newspack-ui-radius-control) * 0.5);
 							display: flex;
-							font-size: var(--newspack-ui-font-size-xs);
+							font-size: var(--newspack-ui-font-size-body);
+							font-weight: var(--newspack-ui-font-weight-medium);
 							justify-content: start;
-							line-height: var(--newspack-ui-line-height-xs);
-							min-height: var(--newspack-ui-spacer-7);
-							padding: var(--newspack-ui-spacer-2) var(--newspack-ui-spacer-5);
+							line-height: var(--newspack-ui-line-height-body);
+							min-height: var(--newspack-ui-target-size);
+							padding: var(--newspack-ui-spacer-1) var(--newspack-ui-spacer-2);
+							transform: none;
 							white-space: nowrap;
 							width: 100%;
+
 							&.cancel,
 							&.delete,
 							&.wcs_deletion_error,
 							&--destructive {
-								color: var(--newspack-ui-color-error-text) !important;
+								--newspack-ui-button-bg-hover: var(--newspack-ui-color-error-tint-hover);
+								--newspack-ui-button-bg-pressed: var(--newspack-ui-color-error-tint-pressed);
+								--newspack-ui-button-ink: var(--newspack-ui-color-error-text);
 							}
 
 							&:focus-visible {
-								outline-offset: -1px;
+								@include mixins.focus-line( $inset: true );
 							}
 						}
 					}
@@ -70,9 +102,14 @@
 			}
 			&.active {
 				.newspack-ui__dropdown__content {
-					pointer-events: auto;
 					opacity: 1;
-					transform: scaleY(1);
+					pointer-events: auto;
+					transform: translateY(0);
+					transition:
+						opacity var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out),
+						transform var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out),
+						visibility 0s;
+					visibility: visible;
 				}
 			}
 		}

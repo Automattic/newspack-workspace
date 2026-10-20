@@ -11,11 +11,11 @@ import './modal.scss';
 import { manageDismissed, manageOpened } from './analytics';
 import {
 	afterDeferredScripts,
+	afterModalExit,
 	domReady,
 	iframeReady,
 	onCheckoutReady,
 	onCheckoutComplete,
-	onCheckoutCancel,
 	onCheckoutPlaceOrderStart,
 	onCheckoutPlaceOrderGatewayAction,
 	onCheckoutPlaceOrderError,
@@ -186,7 +186,7 @@ domReady( () => {
 		 * see into the iframe, so focus waits on the heading until then. Focus the
 		 * reader has moved to the Close button in the meantime stays there.
 		 */
-		const focusCheckout = () => {
+		const focusCheckout = ( target = null ) => {
 			if ( hasFocused || 'open' !== modalCheckout.dataset.state ) {
 				return;
 			}
@@ -195,7 +195,7 @@ domReady( () => {
 			if ( active && active !== iframe && active !== modalCheckout && modalCheckout.contains( active ) && active.tabIndex >= 0 ) {
 				return;
 			}
-			getInitialFocus( container )?.focus();
+			( target || getInitialFocus( container ) )?.focus();
 		};
 
 		const processingPaymentText = document.createElement( 'p' );
@@ -246,10 +246,6 @@ domReady( () => {
 			}
 		};
 
-		onCheckoutCancel( container, () => {
-			closeCheckout();
-		} );
-
 		onCheckoutPlaceOrderStart( container, renderProcessingPaymentScreen );
 
 		onCheckoutPlaceOrderGatewayAction( container, moveProcessingPaymentScreenToCheckout );
@@ -278,6 +274,7 @@ domReady( () => {
 			// Revert modal title and width default value.
 			setModalSize();
 			setModalTitle( checkoutTitle );
+			setModalHeaderHidden( false );
 			if ( iframe.contentWindow?.newspackBlocksModalCheckout?.checkout_nonce ) {
 				// Store the checkout nonce for later use.
 				// We store the nonce from the iframe content window to ensure the nonce was generated for a logged in session
@@ -296,12 +293,14 @@ domReady( () => {
 				window.newspackReaderActivation.refreshNewslettersSignupModal( window.newspackReaderActivation.getReader().email );
 			}
 
-			// Update the modal title and width to reflect successful transaction.
+			// Update the modal title and width to reflect the transaction's result.
+			const isSuccess = !! container.querySelector( '.modal-checkout-thankyou' );
 			setModalSize( 'small' );
-			setModalTitle( newspackBlocksModal.labels.thankyou_modal_title );
+			setModalTitle( isSuccess ? newspackBlocksModal.labels.thankyou_modal_title : checkoutTitle );
+			setModalHeaderHidden( isSuccess );
 			setModalReady( container );
 			hideProcessingPaymentScreen();
-			focusCheckout();
+			focusCheckout( container.querySelector( 'h2#modal-checkout-product-details' ) );
 		} );
 
 		// Resubmit modal checkout form if an unrecoverable error is encountered.
@@ -656,8 +655,13 @@ domReady( () => {
 		if ( contentRect ) {
 			const vh = 0.01 * Math.max( document.documentElement.clientHeight, window.innerHeight || 0 );
 			const headerHeight = modalCheckout.querySelector( `.${ MODAL_CLASS_PREFIX }__header` )?.offsetHeight || 0;
-			const maxHeight = 90 * vh - headerHeight;
-			const contentHeight = contentRect.top + contentRect.bottom;
+			// Without a title bar, the content keeps a strip above the iframe for the sheet's swipe to start on.
+			const strip = Math.max(
+				0,
+				parseFloat( window.getComputedStyle( modalContent ).paddingTop ) + parseFloat( window.getComputedStyle( iframe ).marginTop ) || 0
+			);
+			const maxHeight = 90 * vh - headerHeight - strip;
+			const contentHeight = entries[ 0 ].borderBoxSize?.[ 0 ]?.blockSize ?? contentRect.top + contentRect.bottom;
 			const iframeHeight = Math.min( contentHeight, maxHeight );
 			if ( iframeHeight === 0 ) {
 				// If height is 0, hide iframe content instead of resizing to avoid layout shift.
@@ -665,12 +669,19 @@ domReady( () => {
 				return;
 			}
 			// Match iframe and modal content heights to avoid inner iframe scollbar.
-			modalContent.style.height = iframeHeight + 'px';
+			modalContent.style.height = iframeHeight + strip + 'px';
 			iframe.style.height = iframeHeight + 'px';
 		}
 	} );
 
+	let finishPendingReset = null;
+	const runPendingReset = () => {
+		finishPendingReset?.();
+		finishPendingReset = null;
+	};
+
 	const closeCheckout = () => {
+		runPendingReset();
 		setCloseButtonsDisabled( closeButtons, false );
 		const container = iframe?.contentDocument?.querySelector( `#${ IFRAME_CONTAINER_ID }` );
 		const afterSuccessUrlInput = container?.querySelector( 'input[name="after_success_url"]' );
@@ -686,19 +697,11 @@ domReady( () => {
 
 		// Only close the modal if the iframe contentDocument is null, the checkout is not complete, or we are not redirecting.
 		const shouldCloseModal = ! iframe.contentDocument || ! afterSuccessUrlInput || ! afterSuccessBehaviorInput || ! container?.checkoutComplete;
-		if ( shouldCloseModal || hasNewsletterPopup ) {
-			spinner.style.display = 'flex';
+		const closesModal = shouldCloseModal || hasNewsletterPopup;
+		const resetsTitle = !! container?.checkoutComplete && shouldCloseModal;
+		if ( closesModal ) {
 			// A payment abandoned mid-way would otherwise keep the next checkout from closing on Escape.
 			spinner.removeAttribute( 'aria-busy' );
-			if ( iframe && modalContent.contains( iframe ) ) {
-				// Reset iframe and modal content heights.
-				iframe._ready = false;
-				iframe.src = 'about:blank';
-				iframe.style.height = initialHeight;
-				iframe.style.visibility = 'hidden';
-				modalContent.style.height = initialHeight;
-				modalContent.removeChild( iframe );
-			}
 
 			if ( iframeResizeObserver ) {
 				iframeResizeObserver.disconnect();
@@ -711,6 +714,32 @@ domReady( () => {
 			}
 
 			document.dispatchEvent( checkoutClosedEvent );
+
+			if ( resetsTitle ) {
+				checkoutTitle = newspackBlocksModal.labels.checkout_modal_title;
+			}
+
+			const resetCheckout = () => {
+				// Checkout opened again before the exit finished already holds its next screen.
+				if ( 'open' === modalCheckout.dataset.state ) {
+					return;
+				}
+				spinner.style.display = 'flex';
+				if ( iframe && modalContent.contains( iframe ) ) {
+					iframe._ready = false;
+					iframe.src = 'about:blank';
+					iframe.style.height = initialHeight;
+					iframe.style.visibility = 'hidden';
+					modalContent.style.height = initialHeight;
+					modalContent.removeChild( iframe );
+				}
+				if ( resetsTitle ) {
+					setModalSize();
+					setModalTitle( checkoutTitle );
+					setModalHeaderHidden( false );
+				}
+			};
+			finishPendingReset = afterModalExit( modalCheckout, resetCheckout );
 		}
 
 		if ( container?.checkoutComplete ) {
@@ -771,13 +800,6 @@ domReady( () => {
 			} else {
 				handleCheckoutComplete();
 			}
-
-			// Ensure we always reset the modal title and width once the modal closes.
-			if ( shouldCloseModal ) {
-				checkoutTitle = newspackBlocksModal.labels.checkout_modal_title;
-				setModalSize();
-				setModalTitle( checkoutTitle );
-			}
 		} else {
 			window?.newspackReaderActivation?.setPendingCheckout?.();
 			// Analytics: Track a dismissal event (modal has been manually closed without completing the checkout).
@@ -788,11 +810,13 @@ domReady( () => {
 	};
 
 	const openCheckout = url => {
+		runPendingReset();
 		if ( url ) {
 			iframe.src = url;
 		}
 
 		spinner.style.display = 'flex';
+		setModalHeaderHidden( false );
 		openModal( modalCheckout );
 		modalContent.appendChild( iframe );
 		modalCheckout.addEventListener( 'click', ev => {
@@ -842,6 +866,18 @@ domReady( () => {
 		}
 
 		modalTitle.innerText = title;
+	};
+
+	/**
+	 * Show or hide the modal's title bar. The thank-you screen goes without one.
+	 *
+	 * @param {boolean} hidden Whether to hide it.
+	 */
+	const setModalHeaderHidden = hidden => {
+		const header = modalCheckout.querySelector( `.${ MODAL_CLASS_PREFIX }__header` );
+		if ( header ) {
+			header.hidden = hidden;
+		}
 	};
 
 	/**
@@ -1183,6 +1219,7 @@ domReady( () => {
 		checkoutTitle = title || newspackBlocksModal.labels.checkout_modal_title;
 		// Set the modal title early, even though it may be overridden by the modal content.
 		setModalTitle( checkoutTitle );
+		setModalHeaderHidden( false );
 
 		/**
 		 * Start with the default checkout URL.
