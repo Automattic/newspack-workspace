@@ -219,12 +219,11 @@ export const isUnconstrainedAccessRuleValue = ( config: AccessRuleShape | undefi
 export const isUnconfiguredAccessRuleValue = ( config: AccessRuleShape | undefined, value: unknown ) =>
 	Boolean( config?.requires_value ) && isEmptyValueForRule( config, value );
 
-const getUntrustedFieldNotice = () =>
-	__( 'This field’s name is also used for data the browser records, so this rule matches no reader.', 'newspack-plugin' );
+const getUntrustedFieldNotice = () => __( 'The browser can also set this field’s value, so this rule matches no reader.', 'newspack-plugin' );
 
 /**
- * The caution for a rule that can't match any reader because the server never sets what
- * it reads: a `reader_data` rule naming keys outside `trusted_keys`, or a promoted field
+ * The caution for a rule that can't match any reader because the browser can set what it
+ * reads: a `reader_data` rule naming keys outside `trusted_keys`, or a promoted field
  * flagged `is_untrusted`. Undefined where neither applies.
  *
  * @param config The rule's registry entry.

@@ -299,6 +299,6 @@ describe( 'AccessRuleControl untrusted boolean field', () => {
 		};
 		render( <AccessRuleControl slug="flag" value={ true } onChange={ jest.fn() } /> );
 
-		expect( screen.getByText( /also used for data the browser records, so this rule matches no reader/ ) ).toBeInTheDocument();
+		expect( screen.getByText( /can also set this field’s value, so this rule matches no reader/ ) ).toBeInTheDocument();
 	} );
 } );

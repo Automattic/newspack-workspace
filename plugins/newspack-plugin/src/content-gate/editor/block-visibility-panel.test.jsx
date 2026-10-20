@@ -197,6 +197,6 @@ describe( 'block visibility panel, untrusted boolean field', () => {
 			newspackAccessControlRules: { custom_access: { active: true, access_rules: [ [ { slug: 'flag_untrusted', value: true } ] ] } },
 		} );
 
-		expect( screen.getByText( /also used for data the browser records, so this rule matches no reader/ ) ).toBeInTheDocument();
+		expect( screen.getByText( /can also set this field’s value, so this rule matches no reader/ ) ).toBeInTheDocument();
 	} );
 } );

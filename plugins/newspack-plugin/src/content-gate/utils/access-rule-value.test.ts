@@ -56,7 +56,7 @@ describe( 'getAccessRuleValueNotice for reader data', () => {
 
 	it( 'explains a promoted field whose name the browser also uses', () => {
 		expect( getAccessRuleValueNotice( { is_untrusted: true }, 'x', false ) ).toBe(
-			'This field’s name is also used for data the browser records, so this rule matches no reader.'
+			'The browser can also set this field’s value, so this rule matches no reader.'
 		);
 	} );
 } );

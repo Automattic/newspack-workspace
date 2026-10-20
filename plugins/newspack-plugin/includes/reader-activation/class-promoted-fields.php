@@ -158,8 +158,9 @@ class Promoted_Fields {
 				// the granting ones are refused a save here. Closing the gap belongs
 				// with the rest of the unconfigured-rule warnings, in NPPD-2227.
 				'requires_value'      => $empty_grants_access,
-				// A key the browser also writes is not server-managed, so the rule
-				// matches nobody; the editor says so.
+				// A key the browser also writes, or the ESP's copy of an outgoing
+				// field fed from browser data, holds a value the browser can set,
+				// so the rule matches nobody; the editor says so.
 				'is_untrusted'        => ! Reader_Data_Trust::is_trusted_key( $field->get_key() ),
 				'callback'            => function ( $user_id, $args ) use ( $field ) {
 					return self::evaluate_field( $field, $user_id, $args );
