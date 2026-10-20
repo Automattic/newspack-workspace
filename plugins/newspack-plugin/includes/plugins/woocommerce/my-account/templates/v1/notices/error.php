@@ -1,6 +1,8 @@
 <?php
 /**
- * Show error messages as inline error notices.
+ * Show error messages as inline error notices for signed-in readers. Signed-out
+ * readers, whose account forms sit outside newspack-ui, get a snackbar that
+ * stays until dismissed.
  *
  * @author   Newspack
  * @category WooCommerce Subscriptions/Templates
@@ -12,6 +14,10 @@ namespace Newspack;
 defined( 'ABSPATH' ) || exit;
 
 if ( ! $notices ) {
+	return;
+}
+if ( ! \is_user_logged_in() ) {
+	My_Account_UI_V1::add_snackbar_notices( $notices, 'error' );
 	return;
 }
 foreach ( $notices as $notice ) {

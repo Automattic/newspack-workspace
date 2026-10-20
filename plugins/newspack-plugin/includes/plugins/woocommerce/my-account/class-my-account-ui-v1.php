@@ -15,7 +15,6 @@ use Newspack\Reader_Data;
 use Newspack\WooCommerce_Connection;
 use Newspack\WooCommerce_My_Account;
 use Newspack\Newspack_UI;
-use Newspack\Newspack_UI_Icons;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -33,6 +32,7 @@ class My_Account_UI_V1 {
 		\add_filter( 'body_class', [ __CLASS__, 'add_body_class' ] );
 		\add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_assets' ], 11 );
 		\add_filter( 'wc_get_template', [ __CLASS__, 'wc_get_template' ], 1, 5 );
+		\add_filter( 'wc_get_template', [ __CLASS__, 'wc_get_notice_template' ], 11, 2 );
 		\add_filter( 'woocommerce_account_menu_items', [ __CLASS__, 'my_account_menu_items' ], 1001 );
 		\add_filter( 'newspack_myaccount_required_fields', [ __CLASS__, 'account_settings_required_fields' ] );
 		\add_action( 'newspack_woocommerce_after_edit_account_form', [ __CLASS__, 'delete_account_modal' ] );
@@ -54,6 +54,11 @@ class My_Account_UI_V1 {
 		\add_action( 'woocommerce_account_content', [ __CLASS__, 'render_content_around_shortcode' ], 0 );
 		\add_action( 'newspack_subscription_header', [ __CLASS__, 'render_subscription_header' ] );
 		\add_filter( 'woocommerce_my_subscriptions_payment_method', [ __CLASS__, 'formatted_payment_method' ], 10, 2 );
+		\add_action( 'woocommerce_account_content', [ __CLASS__, 'render_page_title' ], 1 );
+		\add_action( 'woocommerce_account_content', [ __CLASS__, 'print_urgent_notices' ], 2 );
+		\add_action( 'woocommerce_my_account_my_orders_column_order-status', [ __CLASS__, 'render_order_status_column' ] );
+		\add_action( 'woocommerce_my_account_my_orders_column_order-number', [ __CLASS__, 'render_order_number_column' ] );
+		\add_filter( 'woocommerce_account_orders_columns', [ __CLASS__, 'orders_columns' ] );
 	}
 
 	/**
@@ -176,11 +181,11 @@ class My_Account_UI_V1 {
 	}
 
 	/**
-	 * Whether to override WooCommerce notice templates with snackbar versions.
+	 * Whether to override WooCommerce notice templates with the v1 versions: inline
+	 * error and info notices for signed-in readers, snackbars for success notices
+	 * and for the signed-out account forms, which sit outside newspack-ui.
 	 *
-	 * Only applies on My Account pages after the main query has run. Currently
-	 * the same condition governs error, notice, and success templates. If a
-	 * future case needs more granular handling, this is the place to diverge.
+	 * Only applies on My Account pages after the main query has run.
 	 *
 	 * @return bool
 	 */
@@ -189,6 +194,79 @@ class My_Account_UI_V1 {
 			&& function_exists( 'did_action' )
 			&& \did_action( 'wp' )
 			&& \is_account_page();
+	}
+
+	/**
+	 * Queue WooCommerce notices as snackbars, which print in their own newspack-ui
+	 * container. Errors and urgent notices stay until dismissed.
+	 *
+	 * @param array[] $notices WooCommerce notices, each with `notice` and `data` keys.
+	 * @param string  $type    Notice type: success, info, warning or error.
+	 */
+	public static function add_snackbar_notices( array $notices, string $type ): void {
+		foreach ( $notices as $notice ) {
+			$is_urgent = \apply_filters( 'newspack_ui_notice_is_urgent', false, $notice['notice'] );
+			Newspack_UI::add_notice(
+				$notice['notice'],
+				[
+					'id'             => uniqid( 'newspack-myaccount-' . $type . '-' ),
+					'type'           => 'info' === $type && $is_urgent ? 'warning' : $type,
+					'autohide'       => 'error' !== $type && ! $is_urgent,
+					'active_on_load' => true,
+				]
+			);
+		}
+	}
+
+	/**
+	 * Take the urgent notices out of WooCommerce's queue and print them inline, so
+	 * they sit under the page title on classic and block themes alike. The
+	 * subscription page titles itself in its header, so they follow that header.
+	 */
+	public static function print_urgent_notices(): void {
+		if ( ! function_exists( 'wc_get_notices' ) || ! function_exists( 'wc_set_notices' ) ) {
+			return;
+		}
+		$urgent    = [];
+		$remaining = [];
+		foreach ( \wc_get_notices() as $type => $notices ) {
+			foreach ( (array) $notices as $notice ) {
+				$message = is_array( $notice ) ? ( $notice['notice'] ?? '' ) : (string) $notice;
+				if ( \apply_filters( 'newspack_ui_notice_is_urgent', false, $message ) ) {
+					$urgent[] = is_array( $notice ) ? $notice : [
+						'notice' => $message,
+						'data'   => [],
+					];
+				} else {
+					$remaining[ $type ][] = $notice;
+				}
+			}
+		}
+		if ( empty( $urgent ) ) {
+			return;
+		}
+		\wc_set_notices( $remaining );
+		if ( \get_query_var( 'view-subscription' ) ) {
+			\add_action(
+				'newspack_woocommerce_after_subscription_header',
+				function() use ( $urgent ) {
+					self::render_notice_template( $urgent );
+				}
+			);
+			return;
+		}
+		self::render_notice_template( $urgent );
+	}
+
+	/**
+	 * Render notices through the v1 notice template, which prints urgent notices
+	 * inline. Included directly, since block themes swap WooCommerce's own notice
+	 * templates for theirs.
+	 *
+	 * @param array[] $notices WooCommerce notices, each with `notice` and `data` keys.
+	 */
+	private static function render_notice_template( array $notices ): void {
+		include __DIR__ . '/templates/v1/notices/notice.php';
 	}
 
 	/**
@@ -209,6 +287,8 @@ class My_Account_UI_V1 {
 				return __DIR__ . '/templates/v1/form-edit-address.php';
 			case 'myaccount/my-subscriptions.php':
 				return __DIR__ . '/templates/v1/my-subscriptions.php';
+			case 'myaccount/view-order.php':
+				return __DIR__ . '/templates/v1/view-order.php';
 			case 'myaccount/view-subscription.php':
 				return __DIR__ . '/templates/v1/view-subscription.php';
 			case 'myaccount/subscription-details.php':
@@ -227,24 +307,30 @@ class My_Account_UI_V1 {
 				return __DIR__ . '/templates/v1/group-subscription-members.php';
 			case 'order/order-again.php':
 				return __DIR__ . '/templates/v1/order-again.php';
-			case 'notices/error.php':
-				if ( ! self::should_override_notice_template() ) {
+			case 'order/order-details-customer.php':
+				if ( ! function_exists( 'is_wc_endpoint_url' ) || ! \is_wc_endpoint_url( 'view-order' ) ) {
 					return $template;
 				}
-				return __DIR__ . '/templates/v1/notices/error.php';
-			case 'notices/notice.php':
-				if ( ! self::should_override_notice_template() ) {
-					return $template;
-				}
-				return __DIR__ . '/templates/v1/notices/notice.php';
-			case 'notices/success.php':
-				if ( ! self::should_override_notice_template() ) {
-					return $template;
-				}
-				return __DIR__ . '/templates/v1/notices/success.php';
+				return __DIR__ . '/templates/v1/order-details-customer.php';
 			default:
 				return $template;
 		}
+	}
+
+	/**
+	 * Use the v1 notice templates on My Account pages. Hooked after WooCommerce
+	 * Blocks swaps in its own notice templates on block themes, so both kinds of
+	 * theme print the same notices.
+	 *
+	 * @param string $template      Template path.
+	 * @param string $template_name Template name.
+	 * @return string Template path.
+	 */
+	public static function wc_get_notice_template( $template, $template_name ) {
+		if ( ! in_array( $template_name, [ 'notices/error.php', 'notices/notice.php', 'notices/success.php' ], true ) || ! self::should_override_notice_template() ) {
+			return $template;
+		}
+		return __DIR__ . '/templates/v1/' . $template_name;
 	}
 
 	/**
@@ -372,30 +458,22 @@ class My_Account_UI_V1 {
 			$newsletter_subscriptions = json_decode( $newsletter_subscriptions );
 		}
 
+		$has_alternatives = ! empty( $active_subscriptions ) || ! empty( $newsletter_subscriptions ) || $active_donations;
+
 		ob_start();
 		?>
-		<h2 class="newspack-ui__font--l">
-			<?php esc_html_e( 'Are you sure?', 'newspack-plugin' ); ?>
-		</h2>
 		<p>
 			<?php
 			echo esc_html(
 				sprintf(
 					// Translators: %s will be displayed only if the user has active subscriptions or newsletter subscriptions.
 					__( 'Deleting your account is permanent and cannot be undone. All your data will be removed from our systems. %s', 'newspack-plugin' ),
-					! empty( $active_subscriptions ) || ! empty( $newsletter_subscriptions ) || $active_donations ? __( 'Your newsletter subscriptions and all recurring payments will be cancelled.', 'newspack-plugin' ) : ''
+					$has_alternatives ? __( 'Your newsletter subscriptions and all recurring payments will be cancelled.', 'newspack-plugin' ) : ''
 				)
 			);
 			?>
 		</p>
-		<?php if ( ! empty( $active_subscriptions ) || ! empty( $newsletter_subscriptions ) || $active_donations ) : ?>
-		<p>
-			<?php
-			esc_html_e( 'Instead of deleting your account, you may want to:', 'newspack-plugin' );
-			?>
-		</p>
-			<?php
-		endif;
+		<?php
 		$alternative_rows = [];
 		if ( ! empty( $active_subscriptions ) || $active_donations ) {
 			$alternative_rows[] = [
@@ -415,85 +493,78 @@ class My_Account_UI_V1 {
 		}
 		if ( ! empty( $alternative_rows ) ) :
 			?>
-		<div class="newspack-ui__grid newspack-ui__grid--subgrid newspack-ui__grid--gap-5 newspack-ui__spacing-top--5">
-			<?php foreach ( $alternative_rows as $index => $row ) : ?>
-				<?php if ( $index > 0 ) : ?>
-				<hr>
-				<?php endif; ?>
-				<div class="newspack-ui__stack newspack-ui__stack--horizontal newspack-ui__stack--align-center">
-					<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-0">
-						<p class="newspack-ui__font--s newspack-ui__font--bold"><?php echo esc_html( $row['title'] ); ?></p>
-						<p class="newspack-ui__helper-text"><?php echo esc_html( $row['description'] ); ?></p>
-					</div>
-					<div class="newspack-ui__stack newspack-ui__stack--vertical">
-						<a class="newspack-ui__button newspack-ui__button--secondary" href="<?php echo esc_url( $row['href'] ); ?>">
-							<?php echo esc_html( $row['button'] ); ?>
-						</a>
+		<p class="newspack-ui__color-text-gray"><?php esc_html_e( 'Instead of deleting your account, you may want to:', 'newspack-plugin' ); ?></p>
+		<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-2 newspack-ui__spacing-top--2">
+			<hr>
+			<?php foreach ( $alternative_rows as $row ) : ?>
+				<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-0">
+					<p class="newspack-ui__font--medium"><?php echo esc_html( $row['title'] ); ?></p>
+					<div class="newspack-ui__stack newspack-ui__stack--horizontal newspack-ui__stack--vertical-below-mobile newspack-ui__stack--justify-between newspack-ui__stack--align-baseline newspack-ui__stack--gap-0">
+						<p class="newspack-ui__helper-text newspack-ui__spacing-top--0 newspack-ui__spacing-right--3"><?php echo esc_html( $row['description'] ); ?></p>
+						<a class="newspack-ui__link" href="<?php echo esc_url( $row['href'] ); ?>"><?php echo esc_html( $row['button'] ); ?></a>
 					</div>
 				</div>
+				<hr>
 			<?php endforeach; ?>
 		</div>
 			<?php
 		endif;
 		$content_send_email = ob_get_clean();
 
-		// Modal to send the delete account email.
-		$has_alternatives = ! empty( $active_subscriptions ) || $active_donations || ! empty( $newsletter_subscriptions );
-		Newspack_UI::generate_modal(
-			[
-				'id'      => 'delete-account',
-				'title'   => __( 'Delete account', 'newspack-plugin' ),
-				'content' => $content_send_email,
-				'size'    => $has_alternatives ? 'medium' : 'small',
-				'actions' => [
-					'confirm' => [
-						'label' => __( 'Delete account', 'newspack-plugin' ),
-						'type'  => 'destructive',
-						'fetch' => [
-							'url'    => \rest_url( 'newspack/v1/delete-account' ),
-							'method' => 'POST',
-							'next'   => 'delete-account-email-sent',
-							'nonce'  => \wp_create_nonce( 'wp_rest' ),
-							'body'   => [
-								'user_id' => \wp_get_current_user()->ID,
-							],
-						],
-					],
-					'cancel'  => [
-						'label'  => __( 'Cancel', 'newspack-plugin' ),
-						'type'   => 'ghost',
-						'action' => 'close',
-					],
-				],
-			]
-		);
-
 		ob_start();
 		?>
-		<div class="newspack-ui__box newspack-ui__box--text-center">
-			<span class="newspack-ui__icon newspack-ui__icon--neutral">
-				<?php Newspack_UI_Icons::print_svg( 'email' ); ?>
+		<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--align-center newspack-ui__stack--gap-half">
+			<span class="newspack-ui__icon newspack-ui__icon--large newspack-ui__icon--success">
+				<?php Newspack_UI_Icons::print_svg( 'published' ); ?>
 			</span>
-			<p>
-				<strong><?php esc_html_e( 'Your account deletion has been requested.', 'newspack-plugin' ); ?></strong>
-			</p>
-			<p><?php esc_html_e( 'We just sent instructions on how to delete your account to', 'newspack-plugin' ); ?> <strong><?php echo esc_html( \wp_get_current_user()->user_email ); ?></strong>.</p>
+			<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-1">
+				<h2 class="newspack-ui__font--m"><?php esc_html_e( 'Your account deletion has been requested.', 'newspack-plugin' ); ?></h2>
+				<p class="newspack-ui__color-text-gray"><?php esc_html_e( 'We just sent instructions on how to delete your account to', 'newspack-plugin' ); ?> <strong><?php echo esc_html( $user->user_email ); ?></strong>.</p>
+			</div>
 		</div>
 		<?php
 		$content_email_sent = ob_get_clean();
 
-		// Modal to confirm that the email was sent.
 		Newspack_UI::generate_modal(
 			[
-				'id'      => 'delete-account-email-sent',
-				'title'   => __( 'Delete account', 'newspack-plugin' ),
-				'content' => $content_email_sent,
-				'size'    => 'small',
-				'actions' => [
-					'continue' => [
-						'label'  => __( 'Continue', 'newspack-plugin' ),
-						'type'   => 'primary',
-						'action' => 'close',
+				'id'    => 'delete-account',
+				'steps' => [
+					'request'    => [
+						'title'   => __( 'Delete account', 'newspack-plugin' ),
+						'content' => $content_send_email,
+						'size'    => $has_alternatives ? 'medium' : 'small',
+						'actions' => [
+							'cancel'  => [
+								'label'  => __( 'Cancel', 'newspack-plugin' ),
+								'type'   => 'outline',
+								'action' => 'close',
+							],
+							'confirm' => [
+								'label' => __( 'Delete account', 'newspack-plugin' ),
+								'type'  => [ 'destructive', 'outline' ],
+								'fetch' => [
+									'url'    => \rest_url( 'newspack/v1/delete-account' ),
+									'method' => 'POST',
+									'next'   => 'email-sent',
+									'nonce'  => \wp_create_nonce( 'wp_rest' ),
+									'body'   => [
+										'user_id' => $user->ID,
+									],
+								],
+							],
+						],
+					],
+					'email-sent' => [
+						'hide_header' => true,
+						'content'     => $content_email_sent,
+						'size'        => 'small',
+						'actions'     => [
+							'continue' => [
+								'label'  => __( 'Continue', 'newspack-plugin' ),
+								'type'   => 'primary',
+								'action' => 'close',
+							],
+						],
 					],
 				],
 			]
@@ -518,9 +589,6 @@ class My_Account_UI_V1 {
 		}
 		ob_start();
 		?>
-		<h2 class="newspack-ui__font--l">
-			<?php esc_html_e( 'Are you sure?', 'newspack-plugin' ); ?>
-		</h2>
 		<p>
 			<?php esc_html_e( 'Confirm to delete your account permanently.', 'newspack-plugin' ); ?>&nbsp;
 			<strong><?php esc_html_e( 'Caution, this action is irreversible!', 'newspack-plugin' ); ?></strong>
@@ -547,7 +615,7 @@ class My_Account_UI_V1 {
 					],
 					'cancel'   => [
 						'label'  => __( 'Cancel', 'newspack-plugin' ),
-						'type'   => 'ghost',
+						'type'   => 'outline',
 						'action' => 'close',
 					],
 				],
@@ -612,9 +680,6 @@ class My_Account_UI_V1 {
 			$next_payment_date = $next_payment ? $subscription->get_date_to_display( 'next_payment' ) : null;
 			ob_start();
 			?>
-			<h2 class="newspack-ui__font--l">
-				<?php esc_html_e( 'Are you sure?', 'newspack-plugin' ); ?>
-			</h2>
 			<p>
 				<?php
 				echo wp_kses_post(
@@ -626,7 +691,7 @@ class My_Account_UI_V1 {
 				);
 				?>
 			</p>
-			<p>
+			<p class="newspack-ui__color-text-gray">
 				<?php esc_html_e( 'After this, your subscription access will end unless you choose to renew.', 'newspack-plugin' ); ?>
 			</p>
 			<?php
@@ -644,7 +709,7 @@ class My_Account_UI_V1 {
 						],
 						'cancel'  => [
 							'label'  => __( 'Keep subscription', 'newspack-plugin' ),
-							'type'   => 'ghost',
+							'type'   => 'outline',
 							'action' => 'close',
 						],
 					],
@@ -898,7 +963,7 @@ class My_Account_UI_V1 {
 							],
 							'cancel' => [
 								'label'  => __( 'Cancel', 'newspack-plugin' ),
-								'type'   => 'ghost',
+								'type'   => 'outline',
 								'action' => 'close',
 							],
 						],
@@ -927,17 +992,10 @@ class My_Account_UI_V1 {
 				'title'           => __( 'Add Payment Method', 'newspack-plugin' ),
 				'content'         => $content,
 				'content_is_safe' => true, // Allow the contents of `woocommerce_account_add_payment_method` to be rendered as is.
-				'size'            => 'medium',
+				'size'            => 'small',
 				'form'            => 'POST',
 				'form_class'      => 'newspack-ui__accordion newspack-ui__accordion--open',
 				'form_id'         => 'add_payment_method',
-				'actions'         => [
-					'cancel' => [
-						'label'  => __( 'Cancel', 'newspack-plugin' ),
-						'type'   => 'ghost',
-						'action' => 'close',
-					],
-				],
 			]
 		);
 	}
@@ -985,13 +1043,6 @@ class My_Account_UI_V1 {
 					'form'            => 'POST',
 					'form_id'         => 'edit_address_' . $address_type,
 					'form_action'     => $edit_address_url,
-					'actions'         => [
-						'cancel' => [
-							'label'  => __( 'Cancel', 'newspack-plugin' ),
-							'type'   => 'ghost',
-							'action' => 'close',
-						],
-					],
 				]
 			);
 		}
@@ -1083,7 +1134,7 @@ class My_Account_UI_V1 {
 								],
 								'cancel' => [
 									'label'  => __( 'Cancel', 'newspack-plugin' ),
-									'type'   => 'ghost',
+									'type'   => 'outline',
 									'action' => 'close',
 								],
 							],
@@ -1211,6 +1262,359 @@ class My_Account_UI_V1 {
 		// Strip "via" from the payment method (case-insensitive).
 		$payment_method = str_ireplace( 'via ', '', $payment_method );
 		return $payment_method;
+	}
+
+	/**
+	 * The current page's title, and whether it repeats the current navigation item.
+	 *
+	 * @return array{title: string, matches_nav: bool}|null The title and whether it matches the navigation, or null when the page renders its own.
+	 */
+	public static function get_page_title(): ?array {
+		if ( ! function_exists( 'WC' ) || ! function_exists( 'wc_get_account_menu_items' ) ) {
+			return null;
+		}
+		$endpoint = \WC()->query->get_current_endpoint();
+		// The subscription and group pages title themselves, with the product or group name.
+		if ( in_array( $endpoint, [ 'view-subscription', Group_Subscription_MyAccount::GROUP_ENDPOINT ], true ) ) {
+			return null;
+		}
+		$menu_items = \wc_get_account_menu_items();
+		if ( $endpoint && isset( $menu_items[ $endpoint ] ) ) {
+			return [
+				'title'       => $menu_items[ $endpoint ],
+				'matches_nav' => true,
+			];
+		}
+		// Payment methods and addresses share this page, which the menu calls "Payment information".
+		if ( 'payment-methods' === $endpoint ) {
+			return [
+				'title'       => __( 'Payment information', 'newspack-plugin' ),
+				'matches_nav' => false,
+			];
+		}
+		if ( $endpoint ) {
+			$title = \WC()->query->get_endpoint_title( $endpoint );
+			return $title ? [
+				'title'       => $title,
+				'matches_nav' => false,
+			] : null;
+		}
+		foreach ( $menu_items as $menu_endpoint => $label ) {
+			if ( \wc_is_current_account_menu_item( $menu_endpoint ) ) {
+				return [
+					'title'       => $label,
+					'matches_nav' => true,
+				];
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Render the page title at the top of the account content.
+	 */
+	public static function render_page_title(): void {
+		if ( self::render_order_header() ) {
+			return;
+		}
+		$page_title = self::get_page_title();
+		if ( empty( $page_title ) ) {
+			return;
+		}
+		$classes = [ 'newspack-my-account__page-title', 'newspack-ui__font--l' ];
+		if ( $page_title['matches_nav'] ) {
+			$classes[] = 'newspack-my-account__page-title--matches-nav';
+		}
+		printf( '<h1 class="%s">%s</h1>', esc_attr( implode( ' ', $classes ) ), wp_kses_post( $page_title['title'] ) );
+	}
+
+	/**
+	 * Render the order page header: the title, the order's status and its actions.
+	 *
+	 * @return bool Whether the header was rendered.
+	 */
+	private static function render_order_header(): bool {
+		if ( 'view-order' !== \WC()->query->get_current_endpoint() ) {
+			return false;
+		}
+		$order_id = \absint( \get_query_var( 'view-order' ) );
+		$order    = $order_id ? \wc_get_order( $order_id ) : false;
+		if ( ! $order || ! \current_user_can( 'view_order', $order_id ) ) { // phpcs:ignore WordPress.WP.Capabilities.Unknown -- WooCommerce's meta capability, checked the same way by the view-order endpoint.
+			return false;
+		}
+		\remove_action( 'woocommerce_order_details_after_order_table', 'woocommerce_order_again_button' );
+		\remove_action( 'woocommerce_order_details_after_order_table', 'WC_Subscriptions_Order::add_subscriptions_to_view_order_templates' );
+		\load_template(
+			__DIR__ . '/templates/v1/order-header.php',
+			false,
+			[
+				'order'   => $order,
+				'actions' => array_diff_key( \wc_get_account_orders_actions( $order ), [ 'view' => true ] ),
+			]
+		);
+		return true;
+	}
+
+	/**
+	 * The status modifier for an order or subscription status: success for settled
+	 * states, warning for failed and pending-payment ones, error for cancelled and
+	 * expired ones, neutral for the rest.
+	 *
+	 * @param string $status Order or subscription status, without the `wc-` prefix.
+	 * @return string The `newspack-ui__status` modifier, or an empty string for neutral.
+	 */
+	public static function get_status_modifier( string $status ): string {
+		$status = str_replace( 'wc-', '', $status );
+		if ( in_array( $status, [ 'active', 'completed' ], true ) ) {
+			return 'success';
+		}
+		if ( in_array( $status, [ 'failed', 'pending' ], true ) ) {
+			return 'warning';
+		}
+		if ( in_array( $status, [ 'cancelled', 'expired' ], true ) ) {
+			return 'error';
+		}
+		return '';
+	}
+
+	/**
+	 * The icon that marks an order or subscription status: a tick for settled
+	 * states, a crossed circle for ended ones, the warning notice's triangle for
+	 * a failed payment, and a clock or part-filled circle for states still in progress.
+	 *
+	 * @param string $status Order or subscription status, without the `wc-` prefix.
+	 * @return string A `Newspack_UI_Icons` icon name.
+	 */
+	public static function get_status_icon( string $status ): string {
+		$status = str_replace( 'wc-', '', $status );
+		$icons  = [
+			'active'         => 'published',
+			'completed'      => 'published',
+			'cancelled'      => 'notAllowed',
+			'expired'        => 'notAllowed',
+			'failed'         => Newspack_UI::get_notice_icons()['warning'],
+			'pending-cancel' => 'scheduled',
+		];
+		return $icons[ $status ] ?? 'pending';
+	}
+
+	/**
+	 * Render a status as an icon and its label. The icon is decorative; the label carries the status.
+	 *
+	 * @param string $status Order or subscription status.
+	 * @param string $label  Label to show.
+	 */
+	public static function render_status( string $status, string $label ): void {
+		self::print_status( self::get_status_modifier( $status ), self::get_status_icon( $status ), $label );
+	}
+
+	/**
+	 * Print a status: its decorative icon, then its label.
+	 *
+	 * @param string $modifier The `newspack-ui__status` modifier, or an empty string for neutral.
+	 * @param string $icon     A `Newspack_UI_Icons` icon name.
+	 * @param string $label    Label to show.
+	 */
+	private static function print_status( string $modifier, string $icon, string $label ): void {
+		?>
+		<span class="newspack-ui__status<?php echo $modifier ? ' newspack-ui__status--' . esc_attr( $modifier ) : ''; ?>"><?php Newspack_UI_Icons::print_svg( $icon ); ?><?php echo esc_html( $label ); ?></span>
+		<?php
+	}
+
+	/**
+	 * Whether a subscription is on hold because a renewal payment failed: its latest
+	 * renewal order is failed or pending payment, and the reader can pay it, so the
+	 * label agrees with the Pay action that order's page offers.
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 * @return bool
+	 */
+	public static function subscription_payment_failed( $subscription ): bool {
+		if ( ! $subscription->has_status( 'on-hold' ) ) {
+			return false;
+		}
+		$last_renewal = $subscription->get_last_order( 'all', [ 'renewal' ] );
+		return is_a( $last_renewal, 'WC_Order' )
+			&& $last_renewal->has_status( [ 'failed', 'pending' ] )
+			&& self::order_can_be_paid( $last_renewal );
+	}
+
+	/**
+	 * The status modifier for a subscription: on hold reads as a warning, since
+	 * the reader has lost access until it is resolved.
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 * @return string The `newspack-ui__status` modifier, or an empty string for neutral.
+	 */
+	public static function get_subscription_status_modifier( $subscription ): string {
+		return $subscription->has_status( 'on-hold' ) ? 'warning' : self::get_status_modifier( $subscription->get_status() );
+	}
+
+	/**
+	 * The status label for a subscription, naming a failed renewal payment as such.
+	 *
+	 * @param \WC_Subscription $subscription   The subscription.
+	 * @param bool|null        $payment_failed Whether its renewal payment failed, when the caller already knows.
+	 * @return string
+	 */
+	public static function get_subscription_status_label( $subscription, ?bool $payment_failed = null ): string {
+		if ( $payment_failed ?? self::subscription_payment_failed( $subscription ) ) {
+			return __( 'Payment failed', 'newspack-plugin' );
+		}
+		return \wcs_get_subscription_status_name( $subscription->get_status() );
+	}
+
+	/**
+	 * Render a subscription's status as an icon and its label.
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 */
+	public static function render_subscription_status( $subscription ): void {
+		$payment_failed = self::subscription_payment_failed( $subscription );
+		$icon           = self::get_status_icon( $payment_failed ? 'failed' : $subscription->get_status() );
+		self::print_status( self::get_subscription_status_modifier( $subscription ), $icon, self::get_subscription_status_label( $subscription, $payment_failed ) );
+	}
+
+	/**
+	 * The status label for an order: a completed order reads as paid.
+	 *
+	 * @param \WC_Order $order The order.
+	 * @return string
+	 */
+	public static function get_order_status_label( $order ): string {
+		$status = $order->get_status();
+		return 'completed' === $status ? __( 'Paid', 'newspack-plugin' ) : \wc_get_order_status_name( $status );
+	}
+
+	/**
+	 * How the order header names a subscription, led by "your": a donation by how
+	 * often it renews, anything else by its product.
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 * @return string
+	 */
+	public static function get_subscription_reference( $subscription ): string {
+		if ( WooCommerce_Update_Payment_Notice::is_donation_subscription( $subscription ) ) {
+			$period = 1 === (int) $subscription->get_billing_interval() ? $subscription->get_billing_period() : '';
+			switch ( $period ) {
+				case 'day':
+					return __( 'your daily donation', 'newspack-plugin' );
+				case 'week':
+					return __( 'your weekly donation', 'newspack-plugin' );
+				case 'month':
+					return __( 'your monthly donation', 'newspack-plugin' );
+				case 'year':
+					return __( 'your annual donation', 'newspack-plugin' );
+				default:
+					return __( 'your recurring donation', 'newspack-plugin' );
+			}
+		}
+		$items   = array_values( $subscription->get_items() );
+		$product = empty( $items ) ? null : $items[0]->get_product();
+		if ( $product ) {
+			/* translators: %s: the subscription's product name, such as "Digital Subscription". */
+			return sprintf( __( 'your %s', 'newspack-plugin' ), $product->get_name() );
+		}
+		return __( 'your subscription', 'newspack-plugin' );
+	}
+
+	/**
+	 * The lines the order header adds under the order date, one per subscription the
+	 * order pays for: what the payment was for, linking to that subscription's page.
+	 *
+	 * @param \WC_Order $order The order.
+	 * @return string[] Each line's markup, escaped.
+	 */
+	public static function get_order_subscription_lines( $order ): array {
+		if ( ! function_exists( 'wcs_get_subscriptions_for_order' ) ) {
+			return [];
+		}
+		$is_renewal = function_exists( 'wcs_order_contains_renewal' ) && \wcs_order_contains_renewal( $order );
+		$lines      = [];
+		foreach ( \wcs_get_subscriptions_for_order( $order, [ 'order_type' => [ 'parent', 'renewal', 'switch' ] ] ) as $subscription ) {
+			if ( (int) $subscription->get_parent_id() === (int) $order->get_id() ) {
+				/* translators: %s: a link to the subscription, such as "your monthly donation" or "your Premium Subscription". */
+				$format = __( 'First payment for %s', 'newspack-plugin' );
+			} elseif ( $is_renewal ) {
+				/* translators: %s: a link to the subscription, such as "your monthly donation" or "your Premium Subscription". */
+				$format = __( 'Renewal for %s', 'newspack-plugin' );
+			} else {
+				/* translators: %s: a link to the subscription, such as "your monthly donation" or "your Premium Subscription". */
+				$format = __( 'Payment for %s', 'newspack-plugin' );
+			}
+			$link    = sprintf(
+				'<a class="newspack-ui__link" href="%1$s">%2$s</a>',
+				\esc_url( $subscription->get_view_order_url() ),
+				\esc_html( self::get_subscription_reference( $subscription ) )
+			);
+			$lines[] = sprintf( \esc_html( $format ), $link );
+		}
+		return $lines;
+	}
+
+	/**
+	 * Whether the reader can pay for an order from My Account: WooCommerce's own
+	 * Pay condition, after plugins have filtered the order actions.
+	 *
+	 * @param \WC_Order $order The order.
+	 * @return bool
+	 */
+	public static function order_can_be_paid( $order ): bool {
+		return isset( \wc_get_account_orders_actions( $order )['pay'] );
+	}
+
+	/**
+	 * Render an order's status and, when the order can be paid, a "Pay now" link after it.
+	 *
+	 * @param \WC_Order $order   The order.
+	 * @param string    $label   Status label to show.
+	 * @param bool      $can_pay Whether to add the "Pay now" link.
+	 */
+	public static function render_order_status( $order, string $label, bool $can_pay ): void {
+		self::render_status( $order->get_status(), $label );
+		if ( ! $can_pay ) {
+			return;
+		}
+		$amount = html_entity_decode( \wp_strip_all_tags( \wc_price( $order->get_total(), [ 'currency' => $order->get_currency() ] ) ), ENT_QUOTES, 'UTF-8' );
+		?>
+		<span class="newspack-my-account__order-pay"><span aria-hidden="true">&middot;</span> <a class="newspack-ui__link pay" href="<?php echo \esc_url( $order->get_checkout_payment_url() ); ?>" aria-label="<?php /* translators: 1: the amount due, 2: the order number. */ echo \esc_attr( sprintf( __( 'Pay now, %1$s for order #%2$s', 'newspack-plugin' ), $amount, $order->get_order_number() ) ); ?>"><?php \esc_html_e( 'Pay now', 'newspack-plugin' ); ?></a></span>
+		<?php
+	}
+
+	/**
+	 * Render the status column of the Orders table.
+	 *
+	 * @param \WC_Order $order The order.
+	 */
+	public static function render_order_status_column( $order ): void {
+		self::render_order_status( $order, self::get_order_status_label( $order ), self::order_can_be_paid( $order ) );
+	}
+
+	/**
+	 * Render the order number cell in the Orders table: WooCommerce's link, plus the
+	 * chevron the stacked phone layout shows at the end of each row.
+	 *
+	 * @param \WC_Order $order Order.
+	 */
+	public static function render_order_number_column( $order ): void {
+		?>
+		<a href="<?php echo \esc_url( $order->get_view_order_url() ); ?>" aria-label="<?php /* translators: %s: the order number. */ echo \esc_attr( sprintf( __( 'View order number %s', 'newspack-plugin' ), $order->get_order_number() ) ); ?>">
+			<?php echo \esc_html( _x( '#', 'hash before order number', 'newspack-plugin' ) . $order->get_order_number() ); ?>
+			<?php Newspack_UI_Icons::print_svg( 'chevronRight' ); ?>
+		</a>
+		<?php
+	}
+
+	/**
+	 * Drop the actions column from the Orders table. The order number links to the
+	 * order, whose page lists the order's actions; "Pay now" sits in the status cell.
+	 *
+	 * @param array $columns Orders table columns.
+	 * @return array Orders table columns.
+	 */
+	public static function orders_columns( array $columns ): array {
+		unset( $columns['order-actions'] );
+		return $columns;
 	}
 }
 My_Account_UI_V1::init();

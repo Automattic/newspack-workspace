@@ -1,3 +1,5 @@
+@use "../../newspack-ui/scss/mixins";
+
 .newspack-ui .newspack-my-account__group_subscription {
 	&__tabs {
 		margin-bottom: var(--newspack-ui-spacer-5);
@@ -61,7 +63,7 @@
 	&__invites--actions {
 		&--manager {
 			display: none !important;
-			@media ( min-width: 768px ) {
+			@include mixins.media( tablet ) {
 				display: table-cell !important;
 				&::after {
 					content: '';

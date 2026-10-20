@@ -6,6 +6,7 @@ import './modals';
 import './dropdowns';
 import './accordions';
 import './password-toggle';
+import './scroll-edges';
 
 // Public API.
 window.newspackUI = window.newspackUI || {};

@@ -436,13 +436,17 @@ class Newspack_UI {
 	 *     @type string $title The modal title.
 	 *     @type string $content The modal content HTML.
 	 *     @type bool   $content_is_safe Whether the content is already safe HTML.
+	 *     @type bool   $hide_header Optional. Hide the title bar and Close button, as on a success screen. Escape and a
+	 *                              swipe down still close the modal, and focus and the dialog's name move to the
+	 *                              first heading in the content.
 	 *     @type string $footer The modal footer HTML.
 	 *     @type string $form The form method to use. If given, modal content and action buttons will be wrapped in a form element.
 	 *     @type array $actions {
 	 *         @type string $label The button label.
-	 *         @type string $type The button type.
+	 *         @type string|string[] $type The button type, or several combined variants such as [ 'destructive', 'outline' ].
 	 *         @type string $action The action to perform when the button is clicked. Currently only: 'close' to close the modal.
 	 *         @type string $url The URL to navigate to when the button is clicked.
+	 *         @type bool   $autofocus Whether focus lands on this action when the modal or step opens.
 	 *         @type array {
 	 *               $fetch Data to trigger a REST API request.
 	 *               @type string $url The URL to send the request to.
@@ -450,9 +454,17 @@ class Newspack_UI {
 	 *               @type string $nonce The nonce to use for the request.
 	 *               @type array $body The body to send with a POST request.
 	 *               @type array $params Parameters to send with a GET request.
-	 *               @type string $next The ID for another modal to open after the action is completed.
+	 *               @type string $next The step to show, or the ID for another modal to open, after the action is completed.
 	 *         }
 	 *     }
+	 *     @type string $actions_layout Optional. A medium or larger modal or step prints its actions in a right-aligned
+	 *                                  row at their natural width, filling the width on small screens; 'column' stacks
+	 *                                  them at full width instead. A small or x-small modal or step always stacks them.
+	 *     @type array $steps Optional. Steps shown one at a time in the same dialog, keyed by step name. Each step takes
+	 *                        its own title, content, content_is_safe, footer, form, actions and hide_header, which default to empty
+	 *                        rather than the modal's. Size, actions_layout, form_action and form_class fall back to the
+	 *                        modal's. A step with a form gets its own form_id: the given one, else the modal's suffixed
+	 *                        with the step name. The first step shows when the modal opens.
 	 * }
 	 */
 	public static function generate_modal( $args ) {
@@ -467,11 +479,57 @@ class Newspack_UI {
 				'form_class'  => '',
 			]
 		);
+		$steps = ! empty( $args['steps'] ) && is_array( $args['steps'] ) ? $args['steps'] : [];
 		?>
-		<dialog id="newspack-my-account__<?php echo esc_attr( $args['id'] ); ?>" class="newspack-ui__modal-container" data-state="<?php echo esc_attr( $args['state'] ); ?>">
+		<dialog id="newspack-my-account__<?php echo esc_attr( $args['id'] ); ?>" class="newspack-ui__modal-container" data-state="<?php echo esc_attr( $args['state'] ); ?>"<?php echo $steps ? ' data-step="' . esc_attr( array_key_first( $steps ) ) . '"' : ''; ?>>
 			<div class="newspack-ui__modal-container__overlay"></div>
+			<?php if ( $steps ) : ?>
+			<div class="newspack-ui__modal newspack-ui__modal--steps">
+				<div class="newspack-ui__modal__steps">
+					<?php
+					$is_first_step = true;
+					foreach ( $steps as $step_name => $step ) :
+						$step = array_merge(
+							$args,
+							[
+								'title'           => '',
+								'content'         => '',
+								'content_is_safe' => false,
+								'footer'          => '',
+								'form'            => '',
+								'form_id'         => $args['form_id'] ? $args['form_id'] . '-' . $step_name : '',
+								'actions'         => [],
+								'hide_header'     => false,
+							],
+							$step
+						);
+						?>
+						<div class="newspack-ui__modal__step newspack-ui__modal--<?php echo esc_attr( $step['size'] ); ?>" data-step="<?php echo esc_attr( $step_name ); ?>"<?php echo $is_first_step ? '' : ' inert'; ?>>
+							<?php self::render_modal_body( $step ); ?>
+						</div>
+						<?php
+						$is_first_step = false;
+					endforeach;
+					?>
+				</div>
+			</div>
+			<?php else : ?>
 			<div class="newspack-ui__modal newspack-ui__modal--<?php echo esc_attr( $args['size'] ); ?>">
-				<header class="newspack-ui__modal__header">
+				<?php self::render_modal_body( $args ); ?>
+			</div><!-- .newspack-ui__modal__small -->
+			<?php endif; ?>
+		</dialog>
+		<?php
+	}
+
+	/**
+	 * Render a modal's header, content, actions and footer.
+	 *
+	 * @param array $args Modal or step arguments, as described in generate_modal().
+	 */
+	private static function render_modal_body( array $args ): void {
+		?>
+				<header class="newspack-ui__modal__header"<?php echo empty( $args['hide_header'] ) ? '' : ' hidden'; ?>>
 					<?php if ( ! empty( $args['title'] ) ) : ?>
 						<h2><?php echo wp_kses_post( $args['title'] ); ?></h2>
 					<?php endif; ?>
@@ -541,28 +599,41 @@ class Newspack_UI {
 						?>
 						<?php
 						if ( ! empty( $args['actions'] ) ) :
+							$actions_in_row = 'column' !== ( $args['actions_layout'] ?? '' ) && ! in_array( $args['size'] ?? 'small', [ 'small', 'x-small' ], true );
+							if ( $actions_in_row ) :
+								?>
+								<div class="newspack-ui__stack newspack-ui__stack--horizontal newspack-ui__stack--justify-end newspack-ui__stack--gap-2 newspack-ui__spacing-top--5">
+								<?php
+							endif;
 							foreach ( $args['actions'] as $action ) :
 								$classes = [
 									'newspack-ui__button',
-									'newspack-ui__button--wide',
-									'newspack-ui__button--' . ( $action['type'] ?? 'secondary' ),
+									$actions_in_row ? 'newspack-ui__button--wide-on-mobile' : 'newspack-ui__button--wide',
 								];
+								foreach ( (array) ( $action['type'] ?? 'secondary' ) as $type ) {
+									$classes[] = 'newspack-ui__button--' . $type;
+								}
 								if ( ! empty( $action['action'] ) ) {
 									$classes[] = 'newspack-ui__modal__' . $action['action'];
 								}
 								$fetch_data = ! empty( $action['fetch'] ) ? 'data-fetch=' . \wp_json_encode( $action['fetch'] ) : '';
 								?>
 								<?php if ( isset( $action['url'] ) ) : ?>
-								<a href="<?php echo esc_url( $action['url'] ); ?>" class="<?php echo esc_attr( implode( ' ', $classes ) ); ?>" <?php echo esc_attr( $fetch_data ); ?>>
+								<a href="<?php echo esc_url( $action['url'] ); ?>" class="<?php echo esc_attr( implode( ' ', $classes ) ); ?>" <?php echo esc_attr( $fetch_data ); ?><?php echo ! empty( $action['autofocus'] ) ? ' data-autofocus' : ''; ?>>
 									<span><?php echo wp_kses_post( $action['label'] ); ?></span>
 								</a>
 							<?php else : ?>
-								<button type="submit" class="<?php echo esc_attr( implode( ' ', $classes ) ); ?>" <?php echo esc_attr( $fetch_data ); ?>>
+								<button type="submit" class="<?php echo esc_attr( implode( ' ', $classes ) ); ?>" <?php echo esc_attr( $fetch_data ); ?><?php echo ! empty( $action['autofocus'] ) ? ' data-autofocus' : ''; ?>>
 									<span><?php echo wp_kses_post( $action['label'] ); ?></span>
 								</button>
 								<?php
 							endif;
 						endforeach;
+							if ( $actions_in_row ) :
+								?>
+								</div>
+								<?php
+							endif;
 						endif;
 						?>
 				<?php if ( ! empty( $args['form'] ) ) : ?>
@@ -575,8 +646,6 @@ class Newspack_UI {
 					<?php echo wp_kses_post( $args['footer'] ); ?>
 				</footer>
 				<?php endif; ?>
-			</div><!-- .newspack-ui__modal__small -->
-		</dialog>
 		<?php
 	}
 

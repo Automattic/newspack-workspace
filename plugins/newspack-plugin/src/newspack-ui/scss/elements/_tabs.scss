@@ -9,8 +9,8 @@
 			flex-wrap: wrap;
 			gap: 0;
 
-			.newspack-ui__button,
-			> a {
+			.newspack-ui__tabs & .newspack-ui__button,
+			.newspack-ui__tabs & > a {
 				--newspack-ui-button-bg: transparent;
 				--newspack-ui-button-bg-hover: transparent;
 				--newspack-ui-button-bg-pressed: transparent;

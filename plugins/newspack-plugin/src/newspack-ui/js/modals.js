@@ -4,8 +4,10 @@
  */
 
 import { domReady, isButtonLoading, setButtonLoading } from '../../utils';
-import { getFocusableElements, getInitialFocus, isVisible } from './focus';
+import { getFocusableElements, getInitialFocus, isProgrammaticFocus, isVisible } from './focus';
 import { getNoticeIcon } from './icons';
+import { resetSteps, showStep } from './modal-steps';
+import { observeScrollEdges } from './scroll-edges';
 
 window.newspackRAS = window.newspackRAS || [];
 
@@ -134,7 +136,7 @@ function syncExternalLayers() {
 			modal.showModal();
 			const target = modal._focusBeforeStepDown;
 			modal._focusBeforeStepDown = null;
-			( target && target.isConnected && isVisible( target ) ? target : getInitialFocus( modal ) || modal ).focus();
+			( target && target.isConnected && isVisible( target ) ? target : getInitialFocus( modal ) ).focus();
 		}
 	} );
 }
@@ -173,7 +175,7 @@ function openDialog( modal ) {
 	openDialogs.push( modal );
 	followKeyboard( modal );
 	moveNotices();
-	( getInitialFocus( modal ) || modal ).focus();
+	getInitialFocus( modal ).focus();
 	watchExternalLayers();
 	syncExternalLayers();
 }
@@ -282,7 +284,7 @@ function setupDialog( modal ) {
 		}
 		if ( modal.querySelector( '[aria-busy="true"]' ) ) {
 			modal.showModal();
-			( getInitialFocus( modal ) || modal ).focus();
+			getInitialFocus( modal ).focus();
 			return;
 		}
 		modal.setAttribute( 'data-state', 'closed' );
@@ -302,7 +304,15 @@ function setupDialog( modal ) {
 		// Measured by position, so focus on the heading or the dialog itself wraps too.
 		const elements = [ ...modal.querySelectorAll( '*' ) ];
 		const position = elements.indexOf( active );
-		if ( event.shiftKey && ! focusable.some( element => elements.indexOf( element ) < position ) ) {
+		// From the title the modal opened on, Tab goes on to the content rather than back to Close.
+		const next =
+			! event.shiftKey &&
+			isProgrammaticFocus( active ) &&
+			focusable.find( element => elements.indexOf( element ) > position && ! element.closest( '.newspack-ui__modal__header' ) );
+		if ( next ) {
+			event.preventDefault();
+			focusInto( next );
+		} else if ( event.shiftKey && ! focusable.some( element => elements.indexOf( element ) < position ) ) {
 			event.preventDefault();
 			focusInto( focusable[ focusable.length - 1 ], true );
 		} else if ( ! event.shiftKey && ! focusable.some( element => elements.indexOf( element ) > position ) ) {
@@ -343,6 +353,9 @@ function handleModalOverlay( modal, state ) {
  */
 function applyModalState( modal, oldState ) {
 	const newState = modal.dataset.state;
+	if ( newState === 'open' && oldState !== 'open' ) {
+		resetSteps( modal );
+	}
 	if ( isDialog( modal ) ) {
 		if ( 'open' === newState ) {
 			openDialog( modal );
@@ -442,6 +455,8 @@ domReady( function () {
 		// Set up mutation observer for automatic overlay management
 		setupModalObserver( modal );
 
+		modal.querySelectorAll( '.newspack-ui__modal, .newspack-ui__modal__steps' ).forEach( scroller => observeScrollEdges( scroller, 'y' ) );
+
 		closeButtons.forEach( closeButton => {
 			closeButton.addEventListener( 'click', e => {
 				e.preventDefault();
@@ -455,8 +470,7 @@ domReady( function () {
 		// that keeps the page, like one posting into an iframe, is released when its
 		// modal opens again. Covers both shapes: form IS the modal content, or form
 		// lives inside a content section.
-		const modalForm = modal.querySelector( 'form.newspack-ui__modal__content, .newspack-ui__modal__content form' );
-		if ( modalForm ) {
+		modal.querySelectorAll( 'form.newspack-ui__modal__content, .newspack-ui__modal__content form' ).forEach( modalForm => {
 			modalForm.addEventListener( 'submit', event => {
 				const submitButton = modalForm.querySelector( 'button[type="submit"]' );
 				setTimeout( () => {
@@ -466,7 +480,7 @@ domReady( function () {
 					}
 				} );
 			} );
-		}
+		} );
 
 		const fetchButtons = [ ...modal.querySelectorAll( '[data-fetch]' ) ];
 		fetchButtons.forEach( fetchButton => {
@@ -477,7 +491,8 @@ domReady( function () {
 				}
 				const fetchData = JSON.parse( fetchButton.getAttribute( 'data-fetch' ) );
 				if ( fetchData.url && fetchData.nonce ) {
-					const errors = content.querySelector( '.newspack-ui__notice--error' );
+					const fetchContent = fetchButton.closest( '.newspack-ui__modal__content' ) || content;
+					const errors = fetchContent.querySelector( '.newspack-ui__notice--error' );
 					if ( errors ) {
 						errors.parentElement.removeChild( errors );
 					}
@@ -498,7 +513,7 @@ domReady( function () {
 							return json;
 						} )
 						.then( () => {
-							if ( fetchData.next ) {
+							if ( fetchData.next && ! showStep( modal, fetchData.next ) ) {
 								const nextModal = document.getElementById( `newspack-my-account__${ fetchData.next }` );
 								if ( nextModal ) {
 									modal.setAttribute( 'data-state', 'closed' );
@@ -515,7 +530,7 @@ domReady( function () {
 								errorsDiv.prepend( errorIcon );
 							}
 							errorsDiv.setAttribute( 'role', 'alert' );
-							content.insertBefore( errorsDiv, content.firstChild );
+							fetchContent.insertBefore( errorsDiv, fetchContent.firstChild );
 						} )
 						.finally( () => {
 							setButtonLoading( fetchButton, false );
