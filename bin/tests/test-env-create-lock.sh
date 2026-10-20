@@ -104,17 +104,15 @@ else
 fi
 
 # --- Concurrent stale-lock recovery: reclaiming must never let two waiters in at once ---
-# A solitary stale lock with nobody else contending (the test above) can't
-# tell this design apart from either of two earlier, broken ones this branch
-# went through: a bare rmdir-on-stale-mtime, and a since-reverted mv-based
-# reclaim that moved the lock dir aside to inspect it. All three clear a lone
-# stale lock promptly. What distinguishes them is concurrent reclaim -- each
-# of those designs was seen letting more than one waiter into the counted
-# section at once under this same shape (N waiters, a pre-backdated lock)
-# during development. The race window is narrow and timing-dependent, so
-# treat a clean pass as inconclusive rather than as proof nothing is wrong;
-# a failure, on the other hand, is real evidence of exactly the shape of bug
-# this lock exists to close.
+# A solitary stale lock with nobody else contending (the test above) proves
+# a stale lock gets cleared, but not that clearing it is safe under
+# contention -- a reclaim that destroys a live waiter's fresh lock instead
+# of a dead one's would pass that test just as cleanly. This is the shape
+# (N waiters, a pre-backdated lock) that actually exercises that risk. The
+# race window is narrow and timing-dependent, so treat a clean pass as
+# inconclusive rather than as proof nothing is wrong; a failure, on the
+# other hand, is real evidence of exactly the shape of bug this lock exists
+# to close.
 CONCURRENT_LOCKDIR="$NABSPATH/.env-create.lock"
 CONCURRENT_COUNTER="$WORK/concurrent-counter"
 rm -rf "$CONCURRENT_LOCKDIR"
@@ -152,10 +150,9 @@ fi
 # This is the precondition that actually exercised the ".recovering" reclaim
 # bug (a crash between its own mkdir and rmdir leaves it behind too, not just
 # the main lock) -- the test above backdates only the main lock, which never
-# reaches that secondary path. Like the test above, this one's race window is
-# narrow and timing-dependent (a clean pass doesn't prove the bug is absent),
-# but it's the only assertion that exercises this specific path at all, and
-# it costs nothing when it doesn't fire.
+# reaches that secondary path. Unlike the test above, this one's expected
+# outcome (nobody ever acquires) needs no race to land on: the assertion
+# fails deterministically whenever a waiter gets in at all.
 #
 # Unlike the single-stale-lock case above, a stuck ".recovering" has no
 # automatic reclaim by design (see the comment in env_create_lock_acquire):

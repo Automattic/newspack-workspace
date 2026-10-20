@@ -136,18 +136,12 @@ env_create_lock_acquire() {
                 local mtime2
                 mtime2=$(lockdir_mtime "$lockdir") || mtime2=""
                 if [[ -n "$mtime2" ]] && (( $(date +%s) - mtime2 > 60 )); then
-                    # `rmdir` only removes an empty directory; nothing in
-                    # this script ever writes into $lockdir, but a stray
-                    # file left by something else (an editor's .DS_Store,
-                    # say) would make this fail silently every time. Don't
-                    # `continue` unconditionally past it: the mtime won't
-                    # have changed, so the very next iteration reaches this
-                    # same branch, wins $recovering again instantly, and
-                    # retries the same failing rmdir -- a tight loop with
-                    # no sleep and no attempts counted, never reaching the
-                    # timeout below. Falling through to the ordinary
-                    # attempts/sleep accounting bounds it like every other
-                    # path through this function.
+                    # `rmdir` only removes an empty directory; a stray file
+                    # inside $lockdir (nothing here writes one, but
+                    # something else could) makes this fail silently. A
+                    # failure here still falls through to the ordinary
+                    # attempts/sleep accounting below, bounding it the same
+                    # as every other path through this function.
                     rmdir "$lockdir" 2>/dev/null || true
                 fi
                 rmdir "$recovering" 2>/dev/null || true
@@ -175,7 +169,7 @@ env_create_lock_acquire() {
         # before the lock is taken, so the holder itself never stalls on it;
         # this margin is for other slowness, e.g. a loaded filesystem.)
         if [[ "$attempts" -gt 900 ]]; then
-            echo "Error: timed out waiting for another 'n env create' to finish picking an IP (stale lock? rmdir $lockdir; if $lockdir.recovering also exists, rmdir that too)" >&2
+            echo "Error: timed out waiting for another 'n env create' to finish picking an IP (stale lock? rm -r $lockdir; if $lockdir.recovering also exists, rm -r that too)" >&2
             return 1
         fi
         sleep 0.1
@@ -465,6 +459,9 @@ case $1 in
             # on this same lock would both be in). The lock timing out is
             # unrelated to whether the worktrees are good; leave them for a
             # later `create` to reuse via the "pre-existing worktree" check.
+            if [[ "${#created_wtdirs[@]}" -gt 0 ]]; then
+                echo "Note: this run's worktrees are left in place for reuse: ${created_wtdirs[*]}" >&2
+            fi
             exit 1
         fi
         trap 'env_create_lock_release' EXIT
