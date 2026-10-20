@@ -17,7 +17,10 @@
 #
 # Also covers the stale-lock recovery: a lock dir older than the staleness
 # window is cleared rather than wedging every later create behind a crashed
-# process that will never release it.
+# process that will never release it. And a static check that `create`'s own
+# two call sites actually invoke the lock, in the right order -- the tests
+# above exercise the lock functions directly and would stay green even if
+# `create` stopped calling them.
 #
 # Run: bash bin/tests/test-env-create-lock.sh
 
@@ -36,6 +39,12 @@ export NABSPATH="$WORK"
 set -- "test-env-create-lock-sourcing"
 # shellcheck source=../env.sh
 . "$SCRIPT_DIR/../env.sh" >/dev/null
+# _common.sh (sourced by env.sh) resets NABSPATH to the real tree's path
+# unless it finds an `n` script under the path we exported -- $WORK has none.
+# Re-pin it now, after sourcing, which is when that override actually fires;
+# otherwise every lock call below silently operates on the real worktree's
+# .env-create.lock instead of this test's sandbox.
+export NABSPATH="$WORK"
 
 failures=0
 
@@ -73,20 +82,70 @@ else
 fi
 
 # --- Stale-lock recovery: a lock left by a dead process is cleared, not waited out ---
-rm -rf "$WORK/.env-create.lock"
-mkdir "$WORK/.env-create.lock"
+LOCKDIR="$NABSPATH/.env-create.lock"
+rm -rf "$LOCKDIR"
+mkdir "$LOCKDIR"
 backdate_stamp=$(date -v-70S +%Y%m%d%H%M.%S 2>/dev/null) || backdate_stamp=$(date -d '-70 seconds' +%Y%m%d%H%M.%S)
-touch -t "$backdate_stamp" "$WORK/.env-create.lock"
+touch -t "$backdate_stamp" "$LOCKDIR"
 
 start=$(date +%s)
-env_create_lock_acquire
-elapsed=$(( $(date +%s) - start ))
-env_create_lock_release
-
-if [[ "$elapsed" -lt 5 ]]; then
-	echo "  ok: a lock older than the staleness window is cleared promptly (${elapsed}s), not waited out"
+if env_create_lock_acquire; then
+	elapsed=$(( $(date +%s) - start ))
+	env_create_lock_release
+	if [[ "$elapsed" -lt 5 ]]; then
+		echo "  ok: a lock older than the staleness window is cleared promptly (${elapsed}s), not waited out"
+	else
+		echo "  FAIL: a stale lock blocked acquisition for ${elapsed}s instead of being cleared"
+		failures=$((failures + 1))
+	fi
 else
-	echo "  FAIL: a stale lock blocked acquisition for ${elapsed}s instead of being cleared"
+	echo "  FAIL: env_create_lock_acquire timed out instead of reclaiming the stale lock"
+	failures=$((failures + 1))
+fi
+
+# --- Call-site coverage: `create` must actually call the lock, in order ---
+# A static check, since the two tests above exercise the lock functions
+# directly and would stay green even if `create` stopped calling them.
+create_start=$(grep -n '^[[:space:]]*create)' "$SCRIPT_DIR/../env.sh" | head -1 | cut -d: -f1) || true
+# The arm's own closing `;;` sits at 8-space indentation, one level in from
+# `case $1 in`; a plain `;;` grep hits a nested case's closing `;;` first
+# (e.g. the per-flag arg parser inside `create)`), which stops short of the
+# lock calls this check exists to find.
+create_end=""
+[[ -n "$create_start" ]] && create_end=$(tail -n "+$create_start" "$SCRIPT_DIR/../env.sh" | grep -n '^        ;;$' | head -1 | cut -d: -f1)
+
+if [[ -n "$create_start" && -n "$create_end" ]]; then
+	create_arm=$(sed -n "${create_start},$((create_start + create_end - 1))p" "$SCRIPT_DIR/../env.sh")
+else
+	echo "  FAIL: couldn't locate the \`create)\` case arm in env.sh to check call-site ordering"
+	failures=$((failures + 1))
+	create_arm=""
+fi
+
+# Each grep may legitimately match nothing (that's the failure this check is
+# looking for), and with pipefail a no-match grep makes the whole pipeline's
+# exit status non-zero; guard every assignment or `set -e` kills the test
+# right here instead of reaching the FAIL lines below.
+acquire_line=$(grep -n 'env_create_lock_acquire' <<< "$create_arm" | head -1 | cut -d: -f1) || true
+next_ip_line=$(grep -n 'next_loopback_ip' <<< "$create_arm" | head -1 | cut -d: -f1) || true
+# A plain substring match also hits `trap 'env_create_lock_release' EXIT`,
+# which sits well before the exec and would mask a deleted release call as
+# still "present". Only count an actual call: the bare function name as its
+# own statement.
+release_line=$(grep -n '^[[:space:]]*env_create_lock_release[[:space:]]*$' <<< "$create_arm" | head -1 | cut -d: -f1) || true
+exec_line=$(grep -n '^[[:space:]]*exec ' <<< "$create_arm" | head -1 | cut -d: -f1) || true
+
+if [[ -n "$acquire_line" && -n "$next_ip_line" && "$acquire_line" -lt "$next_ip_line" ]]; then
+	echo "  ok: create's \`create)\` arm acquires the lock before picking an IP"
+else
+	echo "  FAIL: create's lock-acquire call is missing, or doesn't precede next_loopback_ip"
+	failures=$((failures + 1))
+fi
+
+if [[ -n "$release_line" && -n "$exec_line" && "$release_line" -lt "$exec_line" ]]; then
+	echo "  ok: create's \`create)\` arm releases the lock before its first exec"
+else
+	echo "  FAIL: create's lock-release call is missing, or doesn't precede the first exec"
 	failures=$((failures + 1))
 fi
 
