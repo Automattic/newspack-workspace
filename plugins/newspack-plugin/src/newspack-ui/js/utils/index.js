@@ -97,13 +97,14 @@ export const setupTabController = ( element, classnames ) => {
 	};
 
 	const updateAria = activeIndex => {
-		if ( ! isTablist ) {
-			return;
-		}
 		tab_headers.forEach( ( t, j ) => {
 			const isActive = j === activeIndex;
-			t.setAttribute( 'aria-selected', isActive ? 'true' : 'false' );
-			t.setAttribute( 'tabindex', isActive ? '0' : '-1' );
+			if ( isTablist ) {
+				t.setAttribute( 'aria-selected', isActive ? 'true' : 'false' );
+				t.setAttribute( 'tabindex', isActive ? '0' : '-1' );
+			} else if ( t.tagName === 'BUTTON' ) {
+				t.setAttribute( 'aria-pressed', isActive ? 'true' : 'false' );
+			}
 		} );
 	};
 

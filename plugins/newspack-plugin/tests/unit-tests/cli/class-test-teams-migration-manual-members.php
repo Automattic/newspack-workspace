@@ -1231,8 +1231,8 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 	/**
 	 * INDIVIDUAL mode regression guard: an editor (who has edit_others_posts and
 	 * so already bypasses the content gate) must still be skipped — no personal
-	 * subscription created. This is the edit_others_posts-only predicate, not
-	 * group eligibility.
+	 * subscription created. This is the shared access check
+	 * (Content_Gate::should_skip_access_checks()), not group eligibility.
 	 */
 	public function test_individual_mode_skips_an_editor() {
 		$plan_id   = $this->create_plan( 'manual-only' );
@@ -1247,6 +1247,30 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		);
 
 		$this->assertEmpty( $this->get_migration_subscription_ids_for_user( $editor_id ), 'An editor must not receive a personal subscription — they already bypass the content gate.' );
+	}
+
+	/**
+	 * INDIVIDUAL mode skips an account Access Control never restricts, so the
+	 * helper's filter moves the line here too.
+	 */
+	public function test_individual_mode_follows_the_skip_filter() {
+		$plan_id = $this->create_plan( 'manual-only' );
+		$user_id = $this->create_reader_user();
+		$this->create_membership( $plan_id, $user_id );
+		$skip = function ( $skips, $filtered_user_id ) use ( $user_id ) {
+			return $filtered_user_id === $user_id ? true : $skips;
+		};
+		add_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10, 2 );
+		$output = $this->run_migrate_manual_members(
+			[
+				'plan-ids' => (string) $plan_id,
+				'live'     => true,
+			]
+		);
+		remove_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10 );
+
+		$this->assertEmpty( $this->get_migration_subscription_ids_for_user( $user_id ), 'An account that is never restricted needs no personal subscription.' );
+		$this->assertStringContainsString( 'skipped — Access Control never restricts this account', $output );
 	}
 
 	/**

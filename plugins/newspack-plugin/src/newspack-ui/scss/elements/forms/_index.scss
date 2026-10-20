@@ -51,19 +51,34 @@
 	}
 
 	& &__inline-error {
-		color: var(--newspack-ui-color-error-50);
+		color: var(--newspack-ui-color-error-text);
+		padding-inline-start: calc(var(--newspack-ui-spacer-4) + var(--newspack-ui-spacer-1) / 2);
+		position: relative;
+
+		&::before {
+			background: currentcolor;
+			content: "";
+			height: var(--newspack-ui-spacer-4);
+			inset-inline-start: 0;
+			mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill-rule='evenodd' d='M12.218 5.377a.25.25 0 0 0-.436 0l-7.29 12.96a.25.25 0 0 0 .218.373h14.58a.25.25 0 0 0 .218-.372l-7.29-12.96Zm-1.743-.735c.669-1.19 2.381-1.19 3.05 0l7.29 12.96a1.75 1.75 0 0 1-1.525 2.608H4.71a1.75 1.75 0 0 1-1.525-2.608l7.29-12.96ZM12.75 17.46h-1.5v-1.5h1.5v1.5Zm-1.5-3h1.5v-5h-1.5v5Z'/%3E%3C/svg%3E") center / contain no-repeat;
+			position: absolute;
+			top: 0;
+			width: var(--newspack-ui-spacer-4);
+		}
 	}
 
 	// Error class to apply to specific fields.
 	& &__field-error,
 	[data-form-status="400"] {
 		// Attribute added to sign-up modal form on failure.
-		--newspack-ui-color-input-border: var(--newspack-ui-color-error-50);
-		--newspack-ui-color-input-border-focus: var(--newspack-ui-color-error-50);
-		--newspack-ui-label-color: var(--newspack-ui-color-error-50);
+		--newspack-ui-color-input-border: var(--newspack-ui-color-error-60);
+		--newspack-ui-color-input-border-hover: var(--newspack-ui-color-error-60);
 
-		.newspack-ui__label-optional {
-			color: inherit;
+		&:is(input, select, textarea),
+		input:not([type="hidden"], [type="submit"], [type="button"], [type="reset"]),
+		select,
+		textarea {
+			box-shadow: inset 0 0 0 1px var(--newspack-ui-color-input-border);
 		}
 	}
 }

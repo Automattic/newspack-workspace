@@ -1115,6 +1115,52 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * End-to-end with the real ESP integration in flag mode: the deletion
+	 * fields reach the reader's member of the configured audience. Mailchimp
+	 * rejects a push without an audience, so pushing without one sends nothing.
+	 */
+	public function test_handle_account_deletion_esp_flag_mode_writes_fields_to_the_existing_member() {
+		\Newspack_Newsletters_Contacts::reset_calls();
+		\Newspack_Newsletters_Subscription::$contact_data = [
+			'reader@example.com' => [ 'lists' => [ 'list-abc' => [ 'status' => 'subscribed' ] ] ],
+		];
+		$this->reset_integrations();
+
+		$esp = new \Newspack\Reader_Activation\Integrations\ESP();
+		Integrations::register( $esp );
+		\update_option( Integrations::OPTION_NAME, [ 'esp' ] );
+		\update_option( 'newspack_integration_settings_esp_mailchimp_audience_id', 'list-abc' );
+		\update_option( 'newspack_newsletters_service_provider', 'mailchimp' );
+		$esp->update_settings_field_value( 'sync_account_deletion', true );
+		$esp->update_settings_field_value( 'account_deletion_handling', 'flag' );
+
+		\Newspack\Reader_Activation\Contact_Sync::handle_account_deletion(
+			'reader@example.com',
+			[
+				'email'    => 'reader@example.com',
+				'metadata' => [],
+			],
+			'TestContext'
+		);
+
+		$upsert_calls = \Newspack_Newsletters_Contacts::$upsert_calls;
+		$prefix       = $esp->get_metadata_prefix();
+
+		\delete_option( Integrations::OPTION_NAME );
+		\delete_option( 'newspack_integration_settings_esp_mailchimp_audience_id' );
+		\Newspack_Newsletters_Contacts::reset_calls();
+		\Newspack_Newsletters_Subscription::reset_calls();
+
+		$this->assertCount( 1, $upsert_calls );
+		$this->assertSame( 'list-abc', $upsert_calls[0]['master_list_id'] );
+		$this->assertArrayHasKey( $prefix . 'Account_Deleted', $upsert_calls[0]['contact']['metadata'] );
+		$this->assertSame(
+			\Newspack\Reader_Activation\Contact_Sync::DELETED_MEMBERSHIP_STATUS,
+			$upsert_calls[0]['contact']['metadata'][ $prefix . 'Membership_Status' ]
+		);
+	}
+
+	/**
 	 * A provider without list management (Campaign Monitor) has no lists to
 	 * clear, so its "not supported" answer is the cleanup already being done.
 	 * Returning the error instead would schedule five retries that can never
