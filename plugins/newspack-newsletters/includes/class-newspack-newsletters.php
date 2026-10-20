@@ -1311,26 +1311,26 @@ final class Newspack_Newsletters {
 	/**
 	 * Permission check for post-scoped authoring routes.
 	 *
-	 * @deprecated 3.42 Use Newspack_Newsletters::api_target_post_permissions_check().
+	 * @deprecated 3.44 Use Newspack_Newsletters::api_target_post_permissions_check().
 	 *
 	 * @param WP_REST_Request $request API request object.
 	 * @return bool|WP_Error
 	 */
 	public static function api_edit_post_permissions_check( $request ) {
-		_deprecated_function( __METHOD__, '3.42', 'Newspack_Newsletters::api_target_post_permissions_check' );
+		_deprecated_function( __METHOD__, '3.44', 'Newspack_Newsletters::api_target_post_permissions_check' );
 		return self::api_target_post_permissions_check( $request );
 	}
 
 	/**
 	 * Permission check for the non-post routes the editor calls on load.
 	 *
-	 * @deprecated 3.42 Use Newspack_Newsletters::api_contributor_permissions_check().
+	 * @deprecated 3.44 Use Newspack_Newsletters::api_contributor_permissions_check().
 	 *
 	 * @param WP_REST_Request $request API request object.
 	 * @return bool|WP_Error
 	 */
 	public static function api_edit_posts_permissions_check( $request ) {
-		_deprecated_function( __METHOD__, '3.42', 'Newspack_Newsletters::api_contributor_permissions_check' );
+		_deprecated_function( __METHOD__, '3.44', 'Newspack_Newsletters::api_contributor_permissions_check' );
 		return self::api_contributor_permissions_check( $request );
 	}
 
