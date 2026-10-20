@@ -96,7 +96,7 @@ Their class names are hashed CSS modules, so never target them from our styleshe
 - **`Divider`** – Use between logical sections (e.g. between ActionCards) to separate content without another card. Margins are 32px (48px at larger breakpoints) so spacing stays consistent with the rest of the layout.
 - **`EmptyState`** – Use when a list has nothing in it yet, or an onboarding view stands in for a feature that is not set up. Compound: `EmptyState.Root` wraps `EmptyState.Header` and `EmptyState.Actions`. Render it only when the *unfiltered* collection is empty, so a search matching nothing keeps the DataViews "no results" treatment. See [src/empty-state/README.md](src/empty-state/README.md).
 - **`Grid`** – Use for laying out several items in columns (e.g. multiple controls or cards). Default gap is 32px; use `columns` and `gutter` modifiers (8, 16, 24, 32, 48) when you need tighter or looser spacing. For a single row or a simple vertical stack, use **`Stack`** from `@wordpress/ui` in new code; Grid is still used that way in many places and is fine to leave as-is until we refactor.
-- **`SectionHeader`** – Use to start a new section; pair with a short description so the section’s goal is clear. Top margin (48px) and bottom (32px) create clear separation from previous content and the section body.
+- **`SectionHeader`** – Use to start a new section; pair with a short description so the section’s goal is clear. Pass `noMargin`: the space around it comes from the parent `Stack` gap or the `Divider` before it, or from the page padding when it is the first item. Its default 48px top and 32px bottom margins predate this and stay only on untouched screens.
 - **`Drawer`** – Panel that slides in from the right edge for editing one item without leaving the list. Compound: `Drawer.Root`, `Header`, `Title`, `CloseIcon`, `Content`, `Divider`, `Footer`, `Action`. `isDirty` on the root makes every way of closing it ask before discarding edits. See [src/drawer/README.md](src/drawer/README.md).
 - **`StatCard`** – Use for a single headline figure with a label above it and a description below. Compound: `StatCard.Root` wraps `Label`, `Body` (holding `Value` and an optional `Secondary`) and `Footer`, with `Delta` riding in the `Value`'s `suffix` for a change beside the figure. Format the figure yourself and pass a string; a `null`, `undefined` or blank `value` gets the shared null glyph rather than a misleading zero. The figure is sized by a container query, so give the cards a definite width (a Grid track, a `flex: 1` item) and equal widths across a row to keep one type scale. See [src/stat-card/README.md](src/stat-card/README.md).
 
@@ -646,8 +646,8 @@ Spacing is based on an **8px unit**. Use these values so new styles match existi
 | **8px** | Tight gaps, badge padding, small padding (e.g. ActionCard is-small) | Inline or dense UI |
 | **16px** | Gaps between related controls, buttons card gap, margins inside ActionCard region-children for Card/Grid/TextControl | Related items, form rows |
 | **24px** | Default ActionCard region padding, toggle/region gaps, expandable content padding and sibling spacing | Default internal padding and gaps within a card |
-| **32px** | Card vertical margin, Grid default gap and margin, SectionHeader first-child top, Newspack Notice margin, Divider margin | Section rhythm, between blocks |
-| **48px** | SectionHeader top margin, buttons card top margin, Divider margins (large breakpoint), Card horizontal padding (small screens) | Major section separation |
+| **32px** | Card vertical margin, Grid default gap and margin, Newspack Notice margin, Divider margin | Section rhythm, between blocks |
+| **48px** | Buttons card top margin, Divider margins (large breakpoint), Card horizontal padding (small screens) | Major section separation |
 | **64px** | Card horizontal padding (large screens) | Large-screen card padding |
 
 **In code:** Card uses `margin: 32px 0` and `padding: 16px 48px` (32px 64px at 744px+). ActionCard uses 24px for region padding and 24px between regions; region-children use `padding: 0 24px 24px` (0 32px 32px for is-medium). Grid uses `grid-gap: 32px` and `margin: 32px 0` by default, with optional gutter classes (`__gutter-8`, `__gutter-16`, etc.). When adding new components or overrides, prefer these values (or 8px multiples) instead of ad-hoc spacing.
@@ -706,7 +706,7 @@ Common composition patterns keep screens predictable. Use these as a reference w
 ```
 Wizard
   GlobalNotices
-  SectionHeader          ← one per section, 48px top margin
+  SectionHeader          ← one per section, noMargin
   Card                   ← 32px margin
     ActionCard            ← 24px padding, optional toggle
       Grid or Stack       ← 32px gap (Grid default; Stack gap="2xl")
