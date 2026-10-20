@@ -121,20 +121,22 @@ const renderSendList = ( { item } ) => {
 };
 
 const renderAuthor = ( { item } ) => {
-	const author = item?._embedded?.author?.[ 0 ];
+	const author = item?.newspack_newsletters_author;
 	if ( ! author ) {
 		return '';
 	}
 	return <UserRow { ...avatarPropsFromAuthor( author ) } label={ author.name || '' } />;
 };
 
+const termNames = ( item, taxonomy ) =>
+	termsForTaxonomy( item, taxonomy )
+		.map( term => term?.name )
+		.filter( Boolean );
+
 const renderTerms =
 	taxonomy =>
 	( { item } ) =>
-		termsForTaxonomy( item, taxonomy )
-			.map( term => term?.name )
-			.filter( Boolean )
-			.join( ', ' );
+		termNames( item, taxonomy ).join( ', ' );
 
 const renderPublicPage = ( { item } ) => {
 	const isPublic = !! item?.meta?.is_public;
@@ -212,7 +214,7 @@ export function getFields( { authors = [], categories = [], tags = [], sendLists
 			} ) ),
 			filterBy: { operators: [ 'isAny' ], isPrimary: true },
 			enableSorting: true,
-			getValue: ( { item } ) => String( item?._embedded?.author?.[ 0 ]?.id || '' ),
+			getValue: ( { item } ) => String( item?.newspack_newsletters_author?.id || '' ),
 			render: renderAuthor,
 		},
 		{
@@ -224,11 +226,7 @@ export function getFields( { authors = [], categories = [], tags = [], sendLists
 			} ) ),
 			filterBy: { operators: [ 'isAny' ], isPrimary: true },
 			enableSorting: false,
-			getValue: ( { item } ) =>
-				termsForTaxonomy( item, 'category' )
-					.map( term => term?.name )
-					.filter( Boolean )
-					.join( ', ' ),
+			getValue: ( { item } ) => termNames( item, 'category' ).join( ', ' ),
 			render: renderTerms( 'category' ),
 		},
 		{
@@ -240,11 +238,7 @@ export function getFields( { authors = [], categories = [], tags = [], sendLists
 			} ) ),
 			filterBy: { operators: [ 'isAny' ], isPrimary: true },
 			enableSorting: false,
-			getValue: ( { item } ) =>
-				termsForTaxonomy( item, 'post_tag' )
-					.map( term => term?.name )
-					.filter( Boolean )
-					.join( ', ' ),
+			getValue: ( { item } ) => termNames( item, 'post_tag' ).join( ', ' ),
 			render: renderTerms( 'post_tag' ),
 		},
 		{
@@ -267,3 +261,5 @@ export function getFields( { authors = [], categories = [], tags = [], sendLists
 		},
 	];
 }
+
+export const FIELD_IDS = getFields().map( field => field.id );

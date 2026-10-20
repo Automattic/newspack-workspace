@@ -143,7 +143,7 @@ export default function Prompt( { inFlight, prompt, setInFlight, setPrompts }: P
 			checkbox={ prompt.ready && ! isDirty ? 'checked' : 'unchecked' }
 		>
 			{
-				<Grid columns={ 2 } gutter={ 64 } className="newspack-ras-campaign__grid">
+				<Grid columns={ 2 } noMargin className="newspack-ras-campaign__grid">
 					<div className="newspack-ras-campaign__fields">
 						{ prompt.user_input_fields.map( ( field: InputField ) => (
 							<Fragment key={ field.name }>

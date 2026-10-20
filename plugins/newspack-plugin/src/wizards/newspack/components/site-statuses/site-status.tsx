@@ -8,8 +8,9 @@
 // WordPress
 import { __, _n, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
-import { useState, useEffect } from '@wordpress/element';
+import { forwardRef, useState, useEffect } from '@wordpress/element';
 import { Tooltip } from '@wordpress/components';
+import { Card } from '@wordpress/ui';
 // Internal
 import SiteActionModal from './site-status-modal';
 
@@ -24,6 +25,21 @@ const defaultStatuses = {
 	'error-preflight': undefined,
 	'error-request': undefined,
 };
+
+// Forwards refs and spreads props so `Tooltip` can anchor itself to the pill.
+const StatusPill = forwardRef<
+	HTMLDivElement,
+	{
+		className: string;
+		render?: React.ReactElement< Record< string, unknown > >;
+		children: React.ReactNode;
+	}
+>( ( { className, render, children, ...props }, ref ) => (
+	<Card.Root ref={ ref } className={ className } render={ render } { ...props }>
+		<Card.Content className="newspack-site-status__content">{ children }</Card.Content>
+	</Card.Root>
+) );
+StatusPill.displayName = 'StatusPill';
 
 const SiteStatus = ( { label = '', isPreflightValid = true, dependencies: dependenciesProp, statuses, endpoint, configLink, then }: Status ) => {
 	const parsedStatusLabels: Record< StatusLabels, string > = {
@@ -105,10 +121,11 @@ const SiteStatus = ( { label = '', isPreflightValid = true, dependencies: depend
 			{ /* Error UI, link user to config */ }
 			{ requestStatus === 'error' && (
 				<Tooltip text={ __( 'Click to navigate to configuration', 'newspack-plugin' ) }>
-					<a href={ configLink } className={ classes }>
+					{ /* eslint-disable-next-line jsx-a11y/anchor-has-content -- content is supplied via the Card children through @wordpress/ui's render prop. */ }
+					<StatusPill className={ classes } render={ <a href={ configLink } /> }>
 						{ label }: <span>{ parsedStatusLabels[ requestStatus ] }</span>
-						<span className="hidden">{ __( 'Configure?' ) }</span>
-					</a>
+						<span className="hidden">{ __( 'Configure?', 'newspack-plugin' ) }</span>
+					</StatusPill>
 				</Tooltip>
 			) }
 			{ /* Error Dependencies, dependencies install modal */ }
@@ -116,21 +133,21 @@ const SiteStatus = ( { label = '', isPreflightValid = true, dependencies: depend
 				<Tooltip
 					text={ sprintf(
 						// translators: %s is a comma separated list of needed dependencies.
-						__( '%s must be installed & activated!' ),
+						__( '%s must be installed & activated!', 'newspack-plugin' ),
 						failedDependencies.map( dep => dependencies[ dep ].label ).join( ', ' )
 					) }
 				>
-					<button onClick={ () => setIsModalVisible( true ) } className={ classes }>
+					<StatusPill className={ classes } render={ <button type="button" onClick={ () => setIsModalVisible( true ) } /> }>
 						{ label }: <span>{ _n( 'Missing dependency', 'Missing dependencies', failedDependencies.length, 'newspack-plugin' ) }</span>
 						<span className="hidden">
 							{ _n( 'Install dependency', 'Install dependencies', failedDependencies.length, 'newspack-plugin' ) }
 						</span>
-					</button>
+					</StatusPill>
 				</Tooltip>
 			) }
 			{ /* Display standard UI for the rest */ }
 			{ [ 'error-preflight', 'success', 'idle', 'pending', 'error-request' ].includes( requestStatus ) && (
-				<div className={ classes }>
+				<StatusPill className={ classes }>
 					{ label }:{ ' ' }
 					<span>
 						{ requestStatus === 'error-request'
@@ -141,7 +158,7 @@ const SiteStatus = ( { label = '', isPreflightValid = true, dependencies: depend
 							  )
 							: parsedStatusLabels[ requestStatus ] }
 					</span>
-				</div>
+				</StatusPill>
 			) }
 		</>
 	);
