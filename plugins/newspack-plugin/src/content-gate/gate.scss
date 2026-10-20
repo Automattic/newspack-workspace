@@ -54,6 +54,9 @@
 			[data-size="full-width"] & {
 				background: #fff;
 			}
+			.newspack-is-block-theme [data-size="full-width"] & {
+				border-radius: var(--newspack-ui-radius-sheet, 16px) var(--newspack-ui-radius-sheet, 16px) 0 0;
+			}
 			@media ( min-width: 600px ) {
 				[data-position="center"] & {
 					bottom: auto;
@@ -78,6 +81,15 @@
 				[data-position="center"] & {
 					border-radius: 5px;
 				}
+			}
+			.newspack-is-block-theme & {
+				border-radius: var(--newspack-ui-radius-sheet, 16px) var(--newspack-ui-radius-sheet, 16px) 0 0;
+			}
+		}
+		@media ( min-width: 600px ) {
+			.newspack-is-block-theme [data-position="center"] &__container,
+			.newspack-is-block-theme [data-position="center"] &__content {
+				border-radius: var(--newspack-ui-radius-surface, 12px);
 			}
 		}
 	}

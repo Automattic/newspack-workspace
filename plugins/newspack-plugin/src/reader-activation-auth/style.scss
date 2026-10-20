@@ -5,68 +5,10 @@
 	input[type="email"].nphp {
 		@include mixins.visuallyHidden;
 	}
-
-	.response-container {
-		margin-bottom: 12px;
-	}
 }
 
 .entry-content .newspack-reader,
 .newspack-reader {
-	/**
-	 * Newsletters subscription lists.
-	 */
-	&__lists {
-		flex: 1 1 100%;
-		font-size: var(--newspack-ui-font-size-small);
-		line-height: var(--newspack-ui-line-height-small);
-		border: 1px solid var(--newspack-ui-color-border);
-		border-radius: 2px;
-		padding: 0.5em;
-		box-sizing: border-box;
-		max-height: 21vh;
-		overflow-y: scroll;
-		h3 {
-			display: none;
-		}
-		ul {
-			list-style: none;
-			margin: 0;
-			padding: 0;
-			display: flex;
-			flex-wrap: wrap;
-			min-width: 100%;
-			li {
-				flex: 1 1 33.3333%;
-				display: flex;
-				min-width: 142px;
-				box-sizing: border-box;
-				margin: 0.5em;
-				padding: 0;
-			}
-		}
-
-		&__checkbox {
-			align-items: center;
-			display: flex;
-			flex: 0 0 auto;
-			height: 1.6em;
-			margin: 0 0.5rem 0 0;
-		}
-
-		&__title {
-			display: block;
-		}
-
-		&__description {
-			display: block;
-			font-size: var(--newspack-ui-font-size-small);
-			line-height: var(--newspack-ui-line-height-small);
-			color: var(--newspack-ui-color-text-muted);
-			margin: 0;
-		}
-	}
-
 	/**
 	 * Third party auth.
 	 */

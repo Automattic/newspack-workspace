@@ -289,6 +289,29 @@ final class Magic_Link {
 	}
 
 	/**
+	 * Get an OTP code as email HTML, in two groups like the sign-in form shows it.
+	 *
+	 * The digits stay one unbroken string, so copying the code and one-time-code
+	 * autofill on phones still read the plain code. The gap is wider letter spacing
+	 * on the last digit of the first group, which email clients support more widely
+	 * than margins or padding on inline elements.
+	 *
+	 * @param string $code OTP code.
+	 *
+	 * @return string The code as HTML.
+	 */
+	public static function get_otp_code_html( string $code ): string {
+		$length = strlen( $code );
+		if ( $length < 2 ) {
+			return esc_html( $code );
+		}
+		$split = (int) ceil( $length / 2 );
+		return esc_html( substr( $code, 0, $split - 1 ) )
+			. '<span style="letter-spacing:0.75em">' . esc_html( $code[ $split - 1 ] ) . '</span>'
+			. esc_html( substr( $code, $split ) );
+	}
+
+	/**
 	 * Generate an OTP to be used as part of a token.
 	 *
 	 * @param \WP_User $user User to generate OTP for.
@@ -620,7 +643,7 @@ final class Magic_Link {
 			$email_type           = 'OTP_AUTH';
 			$email_placeholders[] = [
 				'template' => '*MAGIC_LINK_OTP*',
-				'value'    => $token_data['otp']['code'],
+				'value'    => self::get_otp_code_html( $token_data['otp']['code'] ),
 			];
 		}
 
@@ -724,7 +747,7 @@ final class Magic_Link {
 	 *
 	 * @param int    $user_id User ID.
 	 * @param string $hash    OTP hash.
-	 * @param string $code    OTP code.
+	 * @param string $code    OTP code. Anything but digits is ignored, so a code pasted with a space or a dash still matches.
 	 *
 	 * @return array|\WP_Error {
 	 *   Token data.
@@ -736,6 +759,7 @@ final class Magic_Link {
 	 * }
 	 */
 	public static function validate_otp( $user_id, $hash, $code ) {
+		$code   = preg_replace( '/\D/', '', (string) $code );
 		$errors = new \WP_Error();
 		$user   = \get_user_by( 'id', $user_id );
 
@@ -1007,7 +1031,7 @@ final class Magic_Link {
 				return self::send_otp_request_response( __( "You've reached the maximum attempts for this code, try again.", 'newspack-plugin' ), false, [ 'expired' => true ] );
 			}
 			if ( 'invalid_otp' === $authenticated->get_error_code() ) {
-				return self::send_otp_request_response( __( 'Code not recognized, try again.', 'newspack-plugin' ), false );
+				return self::send_otp_request_response( __( "That code isn't right.", 'newspack-plugin' ), false, [ 'invalid_code' => true ] );
 			}
 		}
 
