@@ -237,9 +237,11 @@ function decode( str ) {
 }
 
 /**
- * Browser-only key recording that this browser submitted a newsletter signup
- * form. It is never synced and is a segmentation hint, not proof of a
- * subscription; the server-managed `is_newsletter_subscriber` is the latter.
+ * Browser-only key recording when this browser last submitted a newsletter
+ * signup form, in seconds since the epoch. It is never synced and is a
+ * segmentation hint, not proof of a subscription; the server-managed
+ * `is_newsletter_subscriber` is the latter. Campaigns read it only while it is
+ * recent, so a reader who later unsubscribes stops matching.
  *
  * @type {string}
  */

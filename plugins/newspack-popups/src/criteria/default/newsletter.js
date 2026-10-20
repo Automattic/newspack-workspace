@@ -28,6 +28,30 @@ export function isFromEmail() {
 }
 
 /**
+ * Seconds a browser-side newsletter signup keeps matching "subscribers" segments.
+ */
+const SIGNUP_HINT_LIFETIME = 24 * 60 * 60;
+
+/**
+ * Whether the browser-side signup hint records a signup in the last day.
+ *
+ * The hint is the signup time in seconds. It is not cleared when a reader later
+ * unsubscribes, so it only counts while recent; by then the server-managed
+ * `is_newsletter_subscriber` has caught up. Any other value, including the
+ * `true` older versions stored, is not a hint.
+ *
+ * @param {*} hint Stored `newsletter_signup_client` value.
+ * @return {boolean} Whether the hint is a recent signup time.
+ */
+export function isRecentSignupHint( hint ) {
+	if ( 'number' !== typeof hint || ! Number.isFinite( hint ) ) {
+		return false;
+	}
+	const now = Date.now() / 1000;
+	return hint <= now && now - hint < SIGNUP_HINT_LIFETIME;
+}
+
+/**
  * Matching function for the 'newsletter' criteria.
  *
  * @param {Object} config    The segment criteria config.
@@ -36,7 +60,7 @@ export function isFromEmail() {
  * @return {boolean} Whether the criteria matches.
  */
 export function matchNewsletter( config, { store } ) {
-	const isSubscriber = store.get( 'is_newsletter_subscriber' ) || store.get( 'newsletter_signup_client' ) || isFromEmail();
+	const isSubscriber = store.get( 'is_newsletter_subscriber' ) || isRecentSignupHint( store.get( 'newsletter_signup_client' ) ) || isFromEmail();
 	switch ( config.value ) {
 		case 'subscribers':
 			return isSubscriber;

@@ -468,7 +468,7 @@ export function attachNewsletterFormListener() {
 
 	const markSignup = () => {
 		try {
-			store.set( NEWSLETTER_SIGNUP_CLIENT_KEY, true, false );
+			store.set( NEWSLETTER_SIGNUP_CLIENT_KEY, Math.floor( Date.now() / 1000 ), false );
 		} catch ( err ) {
 			// A storage failure must not interrupt the form submission.
 		}

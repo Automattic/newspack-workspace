@@ -1,5 +1,7 @@
 import { matchNewsletter, isFromEmail } from './newsletter';
 
+const nowInSeconds = () => Math.floor( Date.now() / 1000 );
+
 /**
  * Build the second argument the matching function receives, with a stubbed
  * reader data library store returning the given subscriber value.
@@ -27,9 +29,24 @@ describe( 'newsletter criteria matching', () => {
 		expect( matchNewsletter( { value: 'non-subscribers' }, makeRas( true ) ) ).toBe( false );
 	} );
 
-	it( 'treats a reader with the browser-side signup signal as a subscriber', () => {
-		expect( matchNewsletter( { value: 'subscribers' }, makeRas( false, true ) ) ).toBe( true );
-		expect( matchNewsletter( { value: 'non-subscribers' }, makeRas( false, true ) ) ).toBe( false );
+	it( 'treats a reader with a recent browser-side signup signal as a subscriber', () => {
+		const signedUpAnHourAgo = nowInSeconds() - 60 * 60;
+		expect( matchNewsletter( { value: 'subscribers' }, makeRas( false, signedUpAnHourAgo ) ) ).toBe( true );
+		expect( matchNewsletter( { value: 'non-subscribers' }, makeRas( false, signedUpAnHourAgo ) ) ).toBe( false );
+	} );
+
+	it( 'stops treating a browser-side signup signal as a subscriber after a day', () => {
+		const signedUpTwoDaysAgo = nowInSeconds() - 2 * 24 * 60 * 60;
+		expect( matchNewsletter( { value: 'subscribers' }, makeRas( false, signedUpTwoDaysAgo ) ) ).toBe( false );
+		expect( matchNewsletter( { value: 'non-subscribers' }, makeRas( false, signedUpTwoDaysAgo ) ) ).toBe( true );
+	} );
+
+	it.each( [
+		[ 'a legacy true', true ],
+		[ 'a future time', nowInSeconds() + 60 * 60 ],
+		[ 'a numeric string', String( nowInSeconds() ) ],
+	] )( 'ignores %s as the browser-side signup signal', ( _label, hint ) => {
+		expect( matchNewsletter( { value: 'subscribers' }, makeRas( false, hint ) ) ).toBe( false );
 	} );
 
 	it( 'treats a reader arriving with utm_medium=email as a subscriber', () => {

@@ -683,6 +683,12 @@ describe( 'newsletter form listener', () => {
 		delete global.fetch;
 	} );
 	const settle = () => new Promise( resolve => setTimeout( resolve, 0 ) );
+	// The hint is the signup time in seconds, which campaigns read as recent or not.
+	const expectRecentSignupHint = () => {
+		const hint = store.get( 'newsletter_signup_client' );
+		expect( typeof hint ).toBe( 'number' );
+		expect( Math.abs( Date.now() / 1000 - hint ) ).toBeLessThan( 5 );
+	};
 	const respond = ( request, status, responseText ) => {
 		request.resolve( { status, json: () => Promise.resolve( JSON.parse( responseText ) ) } );
 		return settle();
@@ -697,14 +703,14 @@ describe( 'newsletter form listener', () => {
 	it( 'sets the client signal on the first-party success event', () => {
 		const wrap = addForm( '<div class="newspack-newsletters-subscribe"><form></form></div>' );
 		wrap.querySelector( 'form' ).dispatchEvent( new Event( 'newspack-newsletters-subscribe-success' ) );
-		expect( store.get( 'newsletter_signup_client' ) ).toBe( true );
+		expectRecentSignupHint();
 		expect( store.get( 'is_newsletter_subscriber' ) ).toBeNull();
 		expect( requests ).toEqual( [] );
 	} );
 	it( 'sets the client signal on a mc4wp submit without calling the endpoint', () => {
 		const form = addForm( '<form class="mc4wp-form"></form>' );
 		submit( form );
-		expect( store.get( 'newsletter_signup_client' ) ).toBe( true );
+		expectRecentSignupHint();
 		expect( requests ).toEqual( [] );
 	} );
 	it( 'sets the client signal in the Gravity Forms filter and returns the data', async () => {
@@ -714,7 +720,7 @@ describe( 'newsletter form listener', () => {
 		document.dispatchEvent( new CustomEvent( 'gform/post_render', { detail: { formId: 1 } } ) );
 		const data = { a: 1 };
 		await expect( filter( data ) ).resolves.toBe( data );
-		expect( store.get( 'newsletter_signup_client' ) ).toBe( true );
+		expectRecentSignupHint();
 		expect( requests ).toEqual( [] );
 		delete window.gform;
 	} );
@@ -725,7 +731,7 @@ describe( 'newsletter form listener', () => {
 		document.dispatchEvent( new CustomEvent( 'gform/post_render', { detail: { formId: 1 } } ) );
 		const data = { form: subscribeForm };
 		await expect( filter( data ) ).resolves.toBe( data );
-		expect( store.get( 'newsletter_signup_client' ) ).toBe( true );
+		expectRecentSignupHint();
 		expect( requests ).toHaveLength( 1 );
 		expect( requests[ 0 ].url ).toBe( 'http://test/wp-json/newspack/v1/reader-data/newsletter-check' );
 
@@ -739,7 +745,7 @@ describe( 'newsletter form listener', () => {
 		const form = addForm( '<form class="newspack-subscribe-form"></form>' );
 		store.set( 'custom_other', 'keep', false );
 		submit( form );
-		expect( store.get( 'newsletter_signup_client' ) ).toBe( true );
+		expectRecentSignupHint();
 		expect( requests ).toHaveLength( 1 );
 		expect( requests[ 0 ].url ).toBe( 'http://test/wp-json/newspack/v1/reader-data/newsletter-check' );
 		// keepalive lets the check outlive a submit that navigates away.
@@ -774,7 +780,7 @@ describe( 'newsletter form listener', () => {
 		window.newspack_ras_config = { is_logged_in: false };
 		const form = addForm( '<form class="newspack-subscribe-form"></form>' );
 		submit( form );
-		expect( store.get( 'newsletter_signup_client' ) ).toBe( true );
+		expectRecentSignupHint();
 		expect( requests ).toEqual( [] );
 	} );
 } );
