@@ -248,12 +248,16 @@
 		&--wide,
 		&--wide-on-mobile {
 			display: flex;
+			text-align: center;
+			text-wrap: balance;
+			white-space: normal;
 			width: 100%;
 		}
 
 		@include mixins.media( tablet ) {
 			&--wide-on-mobile {
 				display: inline-flex;
+				white-space: nowrap;
 				width: auto;
 			}
 		}

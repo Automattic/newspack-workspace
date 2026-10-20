@@ -42,6 +42,7 @@ class Newspack_UI {
 			\add_action( 'wp_enqueue_scripts', [ __CLASS__, 'colors_css_wrap' ] );
 			\add_action( 'admin_enqueue_scripts', [ __CLASS__, 'colors_css_wrap' ] );
 		}
+		add_filter( 'body_class', [ __CLASS__, 'add_block_theme_body_class' ] );
 		add_action( 'wp_footer', [ __CLASS__, 'print_notices' ], 100 );
 		add_action( 'woocommerce_before_template_part', [ __CLASS__, 'start_woocommerce_notice' ] );
 		add_action( 'woocommerce_after_template_part', [ __CLASS__, 'add_woocommerce_notice_icons' ] );
@@ -49,6 +50,20 @@ class Newspack_UI {
 
 		add_action( 'wp_ajax_newspack_ui_notice_dismissed', [ __CLASS__, 'ajax_notice_dismissed' ] );
 		add_action( 'wp_ajax_nopriv_newspack_ui_notice_dismissed', [ __CLASS__, 'ajax_notice_dismissed' ] );
+	}
+
+	/**
+	 * Mark pages rendered by a block theme, so newspack-ui styles that only suit block themes can be scoped to them.
+	 *
+	 * @param string[] $classes Body classes.
+	 *
+	 * @return string[]
+	 */
+	public static function add_block_theme_body_class( array $classes ): array {
+		if ( wp_is_block_theme() ) {
+			$classes[] = 'newspack-is-block-theme';
+		}
+		return $classes;
 	}
 
 	/**
@@ -100,7 +115,8 @@ class Newspack_UI {
 
 	/**
 	 * Map of notice types to the Newspack UI icon each notice prints, for
-	 * inline notices and field errors.
+	 * inline notices and field errors, plus the plain `check` that marks a
+	 * field's success status line.
 	 *
 	 * @return array<string, string> Notice type => icon name.
 	 */
@@ -110,6 +126,7 @@ class Newspack_UI {
 			'success' => 'published',
 			'warning' => 'error',
 			'error'   => 'caution',
+			'check'   => 'check',
 		];
 	}
 
@@ -271,6 +288,19 @@ class Newspack_UI {
 		if ( isset( $icons[ $type ] ) ) {
 			Newspack_UI_Icons::print_svg( $icons[ $type ] );
 		}
+	}
+
+	/**
+	 * Print the show/hide button for a newspack-ui password field. It carries both
+	 * eye icons; CSS shows the one that matches the field's current state.
+	 */
+	public static function print_password_toggle(): void {
+		?>
+		<button type="button" class="newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__password-toggle" aria-label="<?php \esc_attr_e( 'Show password', 'newspack-plugin' ); ?>" data-label-show="<?php \esc_attr_e( 'Show password', 'newspack-plugin' ); ?>" data-label-hide="<?php \esc_attr_e( 'Hide password', 'newspack-plugin' ); ?>">
+			<?php Newspack_UI_Icons::print_svg( 'seen' ); ?>
+			<?php Newspack_UI_Icons::print_svg( 'unseen' ); ?>
+		</button>
+		<?php
 	}
 
 	/**
@@ -984,7 +1014,7 @@ class Newspack_UI {
 			<button class="newspack-ui__button newspack-ui__button--destructive" disabled>Destructive Button Disabled</button><br>
 			<button class="newspack-ui__button newspack-ui__button--destructive newspack-ui__button--ghost">Destructive Ghost Button</button><br>
 			<button class="newspack-ui__button newspack-ui__button--destructive newspack-ui__button--ghost" disabled>Destructive Ghost Button Disabled</button><br>
-			<button class="newspack-ui__button newspack-ui__button--secondary newspack-ui__button--google-oauth">
+			<button class="newspack-ui__button newspack-ui__button--outline newspack-ui__button--google-oauth">
 				<?php Newspack_UI_Icons::print_svg( 'google' ); ?>
 				<span>
 					Sign in with Google
@@ -1273,7 +1303,7 @@ class Newspack_UI {
 
 					<section class="newspack-ui__modal__content">
 
-						<button class="newspack-ui__button newspack-ui__button--secondary newspack-ui__button--google-oauth newspack-ui__button--wide">
+						<button class="newspack-ui__button newspack-ui__button--outline newspack-ui__button--google-oauth newspack-ui__button--wide">
 							<?php Newspack_UI_Icons::print_svg( 'google' ); ?>
 							Sign in with Google
 						</button>
@@ -1313,15 +1343,10 @@ class Newspack_UI {
 					<section class="newspack-ui__modal__content">
 						<form>
 							<p>
-								<label>Entry the code sent to your email</label>
-								<div class="newspack-ui__code-input">
-									<input type="text" maxlength="1">
-									<input type="text" maxlength="1">
-									<input type="text" maxlength="1">
-									<input type="text" maxlength="1">
-									<input type="text" maxlength="1">
-									<input type="text" maxlength="1">
-								</div>
+								<label for="otp-input-demo">Entry the code sent to your email</label>
+								<span class="newspack-ui__code-input">
+									<input id="otp-input-demo" name="otp_code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6">
+								</span>
 							</p>
 
 							<p class="newspack-ui__helper-text">Sign in by entering the code sent to email@address.com, or by clicking the magic link in the email.</p>
@@ -1635,7 +1660,7 @@ class Newspack_UI {
 
 						<section class="newspack-ui__modal__content">
 
-							<button class="newspack-ui__button newspack-ui__button--secondary newspack-ui__button--google-oauth newspack-ui__button--wide">
+							<button class="newspack-ui__button newspack-ui__button--outline newspack-ui__button--google-oauth newspack-ui__button--wide">
 								<?php Newspack_UI_Icons::print_svg( 'google', 20 ); ?>
 								Sign in with Google
 							</button>

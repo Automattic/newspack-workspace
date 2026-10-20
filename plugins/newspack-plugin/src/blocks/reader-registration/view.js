@@ -10,8 +10,9 @@ import { maybeConfirmRegistration } from '../../reader-activation-auth/confirmat
 import { openNewslettersSignupModal } from '../../reader-activation-newsletters/newsletters-modal';
 import { wireInlineVerificationBox } from '../../reader-activation-auth/inline-verification';
 import { getNoticeIcon } from '../../newspack-ui/js/icons';
+import { announce } from '../../newspack-ui/js/announce';
 
-const EMAIL_ERROR_CODES = [ 'invalid_email', 'newspack_register_reader_empty_email', 'unauthorized' ];
+const EMAIL_ERROR_CODES = [ 'invalid_email', 'newspack_register_reader_empty_email' ];
 
 window.newspackRAS = window.newspackRAS || [];
 
@@ -92,16 +93,25 @@ window.newspackRAS.push( function ( readerActivation ) {
 				container.classList.toggle( 'newspack-registration--in-progress', isLoading );
 			};
 
-			const setEmailError = hasError => {
+			const emailErrorId = `${ form.id || 'newspack-registration' }-email-error`;
+			const setEmailError = ( message = '' ) => {
 				if ( ! emailInput ) {
 					return;
 				}
-				emailInput.classList.toggle( 'newspack-ui__field-error', hasError );
-				if ( hasError ) {
-					emailInput.setAttribute( 'aria-invalid', 'true' );
-					if ( messageElement?.id ) {
-						emailInput.setAttribute( 'aria-describedby', messageElement.id );
+				form.querySelector( `#${ emailErrorId }` )?.remove();
+				if ( message ) {
+					const errorElement = document.createElement( 'span' );
+					errorElement.id = emailErrorId;
+					errorElement.className = 'newspack-ui__inline-error';
+					errorElement.textContent = message;
+					const errorIcon = getNoticeIcon( 'error' );
+					if ( errorIcon ) {
+						errorElement.prepend( errorIcon );
 					}
+					emailInput.after( errorElement );
+					emailInput.setAttribute( 'aria-invalid', 'true' );
+					emailInput.setAttribute( 'aria-describedby', emailErrorId );
+					announce( message, true );
 				} else {
 					emailInput.removeAttribute( 'aria-invalid' );
 					emailInput.removeAttribute( 'aria-describedby' );
@@ -111,7 +121,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 			form.startLoginFlow = () => {
 				messageElement.classList.add( 'newspack-registration--hidden' );
 				messageElement.innerHTML = '';
-				setEmailError( false );
+				setEmailError();
 				setLoading( true );
 			};
 
@@ -244,20 +254,24 @@ window.newspackRAS.push( function ( readerActivation ) {
 							}
 						}
 					}
-				} else {
-					setEmailError( EMAIL_ERROR_CODES.some( code => data?.errors?.[ code ] ) );
-					if ( messageNode ) {
-						messageNode.classList.add( 'newspack-ui__inline-error' );
-						messageNode.setAttribute( 'role', 'alert' );
-						const errorIcon = getNoticeIcon( 'error' );
-						if ( errorIcon ) {
-							messageNode.prepend( errorIcon );
-						}
-						messageElement.appendChild( messageNode );
-						messageElement.classList.remove( 'newspack-registration--hidden' );
+				} else if ( message && EMAIL_ERROR_CODES.some( code => data?.errors?.[ code ] ) ) {
+					setEmailError( message );
+				} else if ( messageNode ) {
+					messageNode.classList.add( 'newspack-ui__inline-error' );
+					messageNode.setAttribute( 'role', 'alert' );
+					const errorIcon = getNoticeIcon( 'error' );
+					if ( errorIcon ) {
+						messageNode.prepend( errorIcon );
 					}
+					messageElement.appendChild( messageNode );
+					messageElement.classList.remove( 'newspack-registration--hidden' );
 				}
 				setLoading( false );
+			};
+
+			const endWithInvalidEmail = () => {
+				const message = window.newspack_reader_activation_labels?.invalid_email || 'Please enter a valid email address.';
+				return form.endLoginFlow( message, 400, { errors: { invalid_email: [ message ] } } );
 			};
 
 			form.addEventListener( 'submit', ev => {
@@ -265,14 +279,12 @@ window.newspackRAS.push( function ( readerActivation ) {
 				form.startLoginFlow();
 
 				if ( ! form.npe?.value ) {
-					form.endLoginFlow( 'Please enter a valid email address.', 400 );
-					return setEmailError( true );
+					return endWithInvalidEmail();
 				}
 
 				body = new FormData( form );
 				if ( ! body.has( 'npe' ) || ! body.get( 'npe' ) ) {
-					form.endLoginFlow( 'Please enter a valid email address.', 400 );
-					return setEmailError( true );
+					return endWithInvalidEmail();
 				}
 
 				const submitForm = () => {

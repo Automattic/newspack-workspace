@@ -3,16 +3,18 @@
 /**
  * Internal dependencies.
  */
-import { domReady, formatTime, setButtonLoading } from '../utils';
+import { domReady, formatTime, isButtonLoading, setButtonLoading } from '../utils';
 import { getPendingCheckout } from '../reader-activation/checkout';
 import { openNewslettersSignupModal } from '../reader-activation-newsletters/newsletters-modal';
 import { openVerificationModal } from './verification-modal';
 import { maybeConfirmRegistration } from './confirmation-modal';
-import { getBackTarget, shouldReuseActiveCode } from './auth-form-helpers';
+import { shouldReuseActiveCode } from './auth-form-helpers';
 
 import './google-oauth';
-import './otp-input';
+import { clearOTPRejection, initOTPInput, rejectOTPCode } from './otp-input';
 import { getNoticeIcon } from '../newspack-ui/js/icons';
+import { announce } from '../newspack-ui/js/announce';
+import { setPasswordVisible } from '../newspack-ui/js/password-visibility';
 
 import './style.scss';
 
@@ -35,13 +37,24 @@ window.newspackRAS.push( function ( readerActivation ) {
 
 			const actionInput = form.querySelector( 'input[name="action"]' );
 			const emailInput = form.querySelector( 'input[name="npe"]' );
-			const otpCodeInput = form.querySelector( 'input[name="otp_code"]' );
+			const otpCodeInput = initOTPInput( form.querySelector( 'input[name="otp_code"]' ) );
 			const passwordInput = form.querySelector( 'input[name="password"]' );
 			const submitButtons = form.querySelectorAll( '[type="submit"]' );
 			const backButtons = container.querySelectorAll( '[data-back]' );
 			const sendCodeButton = container.querySelector( '[data-send-code]' );
 			const resendCodeButton = container.querySelector( '[data-resend-code]' );
+			const clearLoading = () =>
+				[ ...submitButtons, sendCodeButton, resendCodeButton, ...container.querySelectorAll( '.newspack-ui__button--google-oauth' ) ].forEach(
+					control => {
+						if ( isButtonLoading( control ) ) {
+							setButtonLoading( control, false );
+						}
+					}
+				);
 			const messageContentElement = container.querySelector( '.response' );
+			if ( messageContentElement && ! messageContentElement.id ) {
+				messageContentElement.id = `newspack-reader-auth-response-${ containers.indexOf( container ) }`;
+			}
 
 			/**
 			 * Check if the current URL has a redirect parameter.
@@ -80,23 +93,28 @@ window.newspackRAS.push( function ( readerActivation ) {
 						messageContentElement.appendChild( message );
 					}
 					if ( isError ) {
-						messageContentElement.classList.remove( 'newspack-ui__helper-text' );
+						messageContentElement.classList.remove( 'newspack-ui__helper-text', 'newspack-ui__helper-text--success' );
 						messageContentElement.classList.add( 'newspack-ui__inline-error' );
 					} else {
 						messageContentElement.classList.remove( 'newspack-ui__inline-error' );
-						messageContentElement.classList.add( 'newspack-ui__helper-text' );
+						messageContentElement.classList.add( 'newspack-ui__helper-text', 'newspack-ui__helper-text--success' );
 					}
 					messageContentElement.querySelector( ':scope > [data-message-icon]' )?.remove();
-					const icon = isError ? getNoticeIcon( 'error' ) : null;
+					const icon = getNoticeIcon( isError ? 'error' : 'check' );
 					if ( icon ) {
 						icon.setAttribute( 'data-message-icon', '' );
 						messageContentElement.prepend( icon );
 					}
 					messageContentElement.style.display = 'block';
+					announce( messageContentElement.textContent.trim(), isError );
 				} else {
 					messageContentElement.style.display = 'none';
 					messageContentElement.innerHTML = '';
-					messageContentElement.classList.remove( 'newspack-ui__inline-error', 'newspack-ui__helper-text' );
+					messageContentElement.classList.remove(
+						'newspack-ui__inline-error',
+						'newspack-ui__helper-text',
+						'newspack-ui__helper-text--success'
+					);
 				}
 			};
 
@@ -104,19 +122,27 @@ window.newspackRAS.push( function ( readerActivation ) {
 			 * Handle auth form action selection.
 			 */
 			let formAction;
-			// Whether a one-time code has been sent in this modal session. A per-session flag,
+			// The address a one-time code has been sent to in this modal session. Per session,
 			// not the np_otp_hash cookie, which persists ~29 minutes across sessions and would
 			// make a genuine first "email me a code" click skip the send (NPPM-3054).
-			let codeSent = false;
+			let codeSentTo = '';
+
+			/**
+			 * Whether going back would close the modal rather than return to the email step.
+			 *
+			 * @return {boolean} True when a back control would close the modal.
+			 */
+			const backClosesModal = () =>
+				!! container.closest( '.newspack-ui__modal-container' ) &&
+				!! ( container.config?.backButtonClosesModal || readerActivation.getReader()?.authenticated );
 			container.setFormAction = ( action, shouldFocus = false ) => {
 				if ( ! FORM_ALLOWED_ACTIONS.includes( action ) ) {
 					action = 'signin';
 				}
 				// Moving to any form step ends the previous step's in-flight request, so release the
-				// submit button's loading state here. This is the single owner for the transition
-				// case (signin -> pwd/otp, -> success, back button): startLoginFlow() sets it, every
-				// step change clears it. Same-state errors clear it in endLoginFlow() instead.
-				submitButtons.forEach( button => setButtonLoading( button, false ) );
+				// loading state of every control here: startLoginFlow() sets it, every step change
+				// clears it. Same-state errors clear it in endLoginFlow() instead.
+				clearLoading();
 				// Signin and success steps should clear any modal errors or messages.
 				if ( 'signin' === action || 'success' === action ) {
 					form.setMessageContent();
@@ -132,23 +158,29 @@ window.newspackRAS.push( function ( readerActivation ) {
 						form.setAttribute( 'data-skip-recaptcha', '1' );
 					}
 				}
-				if ( 'otp' === action ) {
-					if ( ! readerActivation.getOTPHash() ) {
-						return;
-					}
-					const emailAddressElements = container.querySelectorAll( '.email-address' );
-					emailAddressElements.forEach( element => {
-						element.textContent = readerActivation.getReader()?.email || '';
+				if ( 'otp' === action && ! readerActivation.getOTPHash() ) {
+					return;
+				}
+				if ( 'otp' === action || 'pwd' === action ) {
+					const email = readerActivation.getReader()?.email || emailInput?.value || '';
+					container.querySelectorAll( '.email-address' ).forEach( element => {
+						element.textContent = email;
 					} );
-					// Focus on the first input.
-					const firstInput = container.querySelector( '.otp-field input[type="text"]' );
-					if ( firstInput ) {
-						firstInput.focus();
-					}
+				}
+				clearOTPRejection( otpCodeInput );
+				if ( 'pwd' !== action && passwordInput ) {
+					setPasswordVisible( passwordInput.closest( '.newspack-ui__password-field' ), false );
 				}
 				formAction = action;
 				actionInput.value = action;
+				container.dataset.formAction = action;
 				container.removeAttribute( 'data-form-status' );
+				const dialog = container.closest( '.newspack-ui__modal-container[aria-labelledby]' );
+				const successTitle = container.querySelector( '.success-title[id]' );
+				if ( dialog && successTitle ) {
+					dialog.defaultLabelledBy ??= dialog.getAttribute( 'aria-labelledby' );
+					dialog.setAttribute( 'aria-labelledby', 'success' === action ? successTitle.id : dialog.defaultLabelledBy );
+				}
 				container.querySelectorAll( '[data-action]' ).forEach( item => {
 					if ( 'none' !== item.style.display ) {
 						item.prevDisplay = item.style.display;
@@ -157,6 +189,10 @@ window.newspackRAS.push( function ( readerActivation ) {
 				} );
 				container.querySelectorAll( '[data-action~="' + action + '"]' ).forEach( item => {
 					item.style.display = item.prevDisplay;
+				} );
+				const hideBack = backClosesModal();
+				container.querySelectorAll( '[data-back-target]' ).forEach( control => {
+					control.hidden = hideBack;
 				} );
 				if ( shouldFocus ) {
 					if ( action === 'pwd' && emailInput.value ) {
@@ -197,16 +233,12 @@ window.newspackRAS.push( function ( readerActivation ) {
 			backButtons.forEach( backButton => {
 				backButton.addEventListener( 'click', function ( ev ) {
 					ev.preventDefault();
-					// Close the modal instead of navigating back when configured or if the reader is authenticated.
-					if ( container.config?.backButtonClosesModal || readerActivation.getReader()?.authenticated ) {
-						const modal = container.closest( '.newspack-ui__modal-container' );
-						if ( modal ) {
-							modal.setAttribute( 'data-state', 'closed' );
-							return;
-						}
+					if ( backClosesModal() ) {
+						container.closest( '.newspack-ui__modal-container' ).setAttribute( 'data-state', 'closed' );
+						return;
 					}
 					form.setMessageContent();
-					container.setFormAction( getBackTarget( formAction, container.readerHasPassword ), true );
+					container.setFormAction( backButton.dataset.backTarget || 'signin', true );
 				} );
 			} );
 
@@ -226,7 +258,11 @@ window.newspackRAS.push( function ( readerActivation ) {
 						resendCodeButton.textContent = resendCodeButton.originalButtonText;
 						clearInterval( resendCodeButton.otpTimerInterval );
 					}
-					resendCodeButton.disabled = !! remaining;
+					if ( remaining ) {
+						resendCodeButton.setAttribute( 'aria-disabled', 'true' );
+					} else {
+						resendCodeButton.removeAttribute( 'aria-disabled' );
+					}
 				};
 				const remaining = readerActivation.getOTPTimeRemaining();
 				if ( remaining ) {
@@ -242,18 +278,21 @@ window.newspackRAS.push( function ( readerActivation ) {
 				[ sendCodeButton, resendCodeButton ].forEach( button => {
 					button.addEventListener( 'click', function ( ev ) {
 						ev.preventDefault();
+						if ( 'true' === ev.currentTarget.getAttribute( 'aria-disabled' ) ) {
+							return;
+						}
 						form.setMessageContent();
 						// A reader who already requested a code and returned to the password step can
 						// choose the code again. Show the existing code-entry step instead of asking the
 						// server for a new code, which would restart the resend cooldown and strand the
 						// code already in their inbox. Only the "email me a code" button reuses; resend
 						// always requests a fresh code.
-						if ( shouldReuseActiveCode( ev.currentTarget === sendCodeButton, codeSent ) ) {
-							container.setFormAction( 'otp' );
+						if ( shouldReuseActiveCode( ev.currentTarget === sendCodeButton, !! codeSentTo && codeSentTo === emailInput.value ) ) {
+							container.setFormAction( 'otp', true );
 							handleOTPTimer();
 							return;
 						}
-						form.startLoginFlow();
+						form.startLoginFlow( ev.currentTarget );
 						const body = new FormData();
 						body.set( 'reader-activation-auth-form', 1 );
 						body.set( 'npe', emailInput.value );
@@ -282,17 +321,18 @@ window.newspackRAS.push( function ( readerActivation ) {
 								form.setMessageContent(
 									formAction === 'pwd' ? newspack_reader_activation_labels.code_sent : newspack_reader_activation_labels.code_resent
 								);
-								container.setFormAction( 'otp' );
-								codeSent = true;
+								container.setFormAction( 'otp', true );
+								codeSentTo = body.get( 'npe' );
 								if ( ! readerActivation.getOTPTimeRemaining() ) {
 									readerActivation.setOTPTimer();
 								}
 							} )
 							.finally( () => {
-								handleOTPTimer();
 								// startLoginFlow() set the loading state for this send/resend request; this
 								// branch doesn't route through setFormAction() on error, so clear it here.
-								submitButtons.forEach( submitButton => setButtonLoading( submitButton, false ) );
+								// Before handleOTPTimer(), so the resend cooldown keeps its aria-disabled.
+								clearLoading();
+								handleOTPTimer();
 							} );
 					} );
 				} );
@@ -300,13 +340,13 @@ window.newspackRAS.push( function ( readerActivation ) {
 
 			container.querySelectorAll( '[data-set-action]' ).forEach( setActionListener );
 
-			form.startLoginFlow = () => {
+			form.startLoginFlow = ( trigger = submitButtons[ 0 ] ) => {
 				container.removeAttribute( 'data-form-status' );
 				// Set the loading state here for both the modal and the inline auth form (e.g.
 				// /my-account). Removal is centralized in setFormAction() (on every step change)
 				// and endLoginFlow() (on errors), with the few AJAX branches that bypass those
 				// clearing it directly.
-				submitButtons.forEach( button => setButtonLoading( button, true ) );
+				setButtonLoading( trigger, true );
 				form.setMessageContent();
 			};
 
@@ -324,7 +364,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 						form.setMessageContent( message, true );
 						messageContentElement.querySelectorAll( '[data-set-action]' ).forEach( setActionListener );
 					}
-					submitButtons.forEach( button => setButtonLoading( button, false ) );
+					clearLoading();
 				}
 				if ( status === 200 ) {
 					if ( data?.email ) {
@@ -407,7 +447,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 						// branch opens the verification modal instead of routing through setFormAction(),
 						// so clear it now, leaving the auth form interactive when we switch back to it in
 						// OTP state on Send code.
-						submitButtons.forEach( button => setButtonLoading( button, false ) );
+						clearLoading();
 
 						// Restore the auth modal's inline display before invoking any callback
 						// that might close or re-open it. Skipping this leaves data-state='open'
@@ -456,7 +496,9 @@ window.newspackRAS.push( function ( readerActivation ) {
 						}
 						container.setFormAction( 'success' );
 						container.querySelector( '.success-title' ).innerHTML = labels.success_title || '';
-						container.querySelector( '.success-description' ).innerHTML = labels.success_description || '';
+						const successDescription = container.querySelector( '.success-description' );
+						successDescription.innerHTML = labels.success_description || '';
+						successDescription.hidden = ! labels.success_description;
 						const callbackButton = container.querySelector( '.auth-callback' );
 						if ( callbackButton && callback ) {
 							callbackButton.addEventListener( 'click', ev => {
@@ -486,6 +528,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 						if ( data?.redirect_to && continueButton ) {
 							continueButton.setAttribute( 'href', data.redirect_to );
 						}
+						continueButton?.focus();
 
 						// Auto-redirect if we have a redirect query parameter.
 						const urlParams = new URLSearchParams( window.location.search );
@@ -515,7 +558,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 			 */
 			form.addEventListener( 'submit', ev => {
 				ev.preventDefault();
-				form.startLoginFlow();
+				form.startLoginFlow( ev.submitter || undefined );
 
 				const action = form.action?.value;
 
@@ -555,6 +598,9 @@ window.newspackRAS.push( function ( readerActivation ) {
 								container.setFormAction( 'signin' );
 							}
 							form.endLoginFlow( data.message, 400 );
+							if ( data.invalid_code && otpCodeInput ) {
+								rejectOTPCode( otpCodeInput, [ ...submitButtons ], messageContentElement );
+							}
 						} );
 				} else {
 					const submitForm = () =>
@@ -574,13 +620,6 @@ window.newspackRAS.push( function ( readerActivation ) {
 											readerActivation.setReaderEmail( body.get( 'npe' ) );
 										}
 										if ( data.action ) {
-											// A `signin` response of 'pwd' means the reader has a password; 'otp' means
-											// they don't. Remember it so "Go Back" from the code step can return them to
-											// the password step (NPPM-3054). Other transitions (resend, verify) don't set
-											// data.action here, so the flag survives them.
-											if ( 'pwd' === data.action || 'otp' === data.action ) {
-												container.readerHasPassword = 'pwd' === data.action;
-											}
 											container.setFormAction( data.action, true );
 											if ( data.action === 'otp' ) {
 												readerActivation.setOTPTimer();
@@ -609,7 +648,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 							onCancel: () => {
 								// startLoginFlow() set the loading state; cancelling keeps us on the signin step
 								// without routing through setFormAction(), so clear it here.
-								submitButtons.forEach( button => setButtonLoading( button, false ) );
+								clearLoading();
 							},
 						} );
 					} else {

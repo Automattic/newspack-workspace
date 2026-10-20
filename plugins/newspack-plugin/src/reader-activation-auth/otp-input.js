@@ -4,118 +4,102 @@
 import { domReady } from '../utils';
 
 /**
- * Initialize OTP input - transforms a single input into multiple digit inputs.
+ * Initialize an OTP input: keep its value to digits only, cut at the code length
+ * from `data-otp-length`, and expose the length and how many digits are typed so
+ * the ticks under the empty slots can follow the caret.
  *
- * @param {HTMLInputElement} originalInput The original input element with name="otp_code".
+ * @param {HTMLInputElement} input The input element with name="otp_code".
  *
- * @return {HTMLInputElement|null} The hidden input holding the OTP code value, the original input if maxlength is missing, or null if no input provided.
+ * @return {HTMLInputElement|null} The same input, or null if no input provided.
  */
-export function initOTPInput( originalInput ) {
-	if ( ! originalInput ) {
+export function initOTPInput( input ) {
+	if ( ! input ) {
 		return null;
 	}
-	const length = parseInt( originalInput.getAttribute( 'maxlength' ) );
-	if ( ! length ) {
-		return originalInput;
+	if ( input.dataset.otpReady ) {
+		return input;
 	}
-	const inputContainer = originalInput.parentNode;
-	inputContainer.removeChild( originalInput );
-	const values = [];
-	const otpCodeInput = document.createElement( 'input' );
-	otpCodeInput.setAttribute( 'type', 'hidden' );
-	otpCodeInput.setAttribute( 'name', 'otp_code' );
-	inputContainer.appendChild( otpCodeInput );
-	for ( let i = 0; i < length; i++ ) {
-		const digit = document.createElement( 'input' );
-		digit.setAttribute( 'type', 'text' );
-		digit.setAttribute( 'pattern', '[0-9]' );
-		digit.setAttribute( 'autocomplete', 0 === i ? 'one-time-code' : 'off' );
-		digit.setAttribute( 'inputmode', 'numeric' );
-		digit.setAttribute( 'data-index', i );
-		digit.addEventListener( 'keydown', ev => {
-			const prev = inputContainer.querySelector( `[data-index="${ i - 1 }"]` );
-			const next = inputContainer.querySelector( `[data-index="${ i + 1 }"]` );
-			switch ( ev.key ) {
-				case 'Backspace':
-					ev.preventDefault();
-					ev.target.value = '';
-					if ( prev ) {
-						prev.focus();
-					}
-					values[ i ] = '';
-					otpCodeInput.value = values.join( '' );
-					break;
-				case 'ArrowLeft':
-					ev.preventDefault();
-					if ( prev ) {
-						prev.focus();
-					}
-					break;
-				case 'ArrowRight':
-					ev.preventDefault();
-					if ( next ) {
-						next.focus();
-					}
-					break;
-				default:
-					if ( ev.key.match( /^[0-9]$/ ) ) {
-						ev.preventDefault();
-						ev.target.value = ev.key;
-						ev.target.dispatchEvent(
-							new Event( 'input', {
-								bubbles: true,
-								cancelable: true,
-							} )
-						);
-						if ( next ) {
-							next.focus();
-						}
-					}
-					break;
-			}
-		} );
-		digit.addEventListener( 'input', ev => {
-			const otpInput = ev.target.value.trim();
-			if ( length === otpInput.length ) {
-				for ( let index = 0; index < length; index++ ) {
-					const char = otpInput[ index ];
-					if ( /^[0-9]$/.test( char ) ) {
-						const input = inputContainer.querySelector( `[data-index="${ index }"]` );
-						input.value = char;
-						values[ index ] = char;
-					}
-				}
-				otpCodeInput.value = values.join( '' );
-				return;
-			} else if ( otpInput.match( /^[0-9]$/ ) ) {
-				values[ i ] = otpInput;
-				const next = inputContainer.querySelector( `[data-index="${ i + 1 }"]` );
-				if ( next ) {
-					next.focus();
-				}
-			} else {
-				ev.target.value = '';
-			}
-			otpCodeInput.value = values.join( '' );
-		} );
-		digit.addEventListener( 'paste', ev => {
-			ev.preventDefault();
-			const paste = ( ev.clipboardData || window.clipboardData ).getData( 'text' );
-			if ( paste.length !== length ) {
-				return;
-			}
-			for ( let j = 0; j < length; j++ ) {
-				if ( paste[ j ].match( /^[0-9]$/ ) ) {
-					const digitInput = inputContainer.querySelector( `[data-index="${ j }"]` );
-					digitInput.value = paste[ j ];
-					values[ j ] = paste[ j ];
-				}
-			}
-			otpCodeInput.value = values.join( '' );
-		} );
-		inputContainer.appendChild( digit );
+	input.dataset.otpReady = '1';
+	const length = parseInt( input.dataset.otpLength ) || 0;
+	if ( length ) {
+		input.style.setProperty( '--newspack-ui-otp-length', String( length ) );
 	}
-	return otpCodeInput;
+	const sync = () => {
+		const digits = input.value.replace( /\D/g, '' );
+		const value = length ? digits.slice( 0, length ) : digits;
+		if ( value !== input.value ) {
+			input.value = value;
+		}
+		input.style.setProperty( '--newspack-ui-otp-typed', String( value.length ) );
+	};
+	input.addEventListener( 'input', sync );
+	sync();
+
+	// Letter spacing cannot use a percentage, so the slots get the field's width in pixels.
+	const place = () => {
+		if ( input.clientWidth ) {
+			input.style.setProperty( '--newspack-ui-otp-field', `${ input.clientWidth }px` );
+		}
+	};
+	if ( typeof ResizeObserver === 'function' ) {
+		new ResizeObserver( place ).observe( input );
+	}
+	place();
+	return input;
+}
+
+/**
+ * Mark the code in an OTP input as rejected: flag it as invalid, select it so the
+ * first keystroke replaces it, and keep the submit buttons disabled until the code
+ * changes, so the same wrong code cannot be sent twice.
+ *
+ * @param {HTMLInputElement}    input         The OTP input.
+ * @param {HTMLButtonElement[]} submitButtons The form's submit buttons.
+ * @param {HTMLElement|null}    message       The element holding the error message.
+ */
+export function rejectOTPCode( input, submitButtons, message = null ) {
+	clearOTPRejection( input );
+	const rejected = input.value;
+	const setDisabled = disabled => submitButtons.forEach( button => ( button.disabled = disabled ) );
+	input.setAttribute( 'aria-invalid', 'true' );
+	const describedBy = ( input.getAttribute( 'aria-describedby' ) || '' ).split( ' ' ).filter( Boolean );
+	if ( message?.id && ! describedBy.includes( message.id ) ) {
+		input.setAttribute( 'aria-describedby', [ ...describedBy, message.id ].join( ' ' ) );
+	}
+	setDisabled( true );
+	const onInput = () => {
+		if ( input.value !== rejected ) {
+			clearOTPRejection( input );
+		}
+	};
+	input.addEventListener( 'input', onInput );
+	input._clearOTPRejection = () => {
+		input.removeEventListener( 'input', onInput );
+		input.removeAttribute( 'aria-invalid' );
+		const ids = ( input.getAttribute( 'aria-describedby' ) || '' ).split( ' ' ).filter( id => id && id !== message?.id );
+		if ( ids.length ) {
+			input.setAttribute( 'aria-describedby', ids.join( ' ' ) );
+		} else {
+			input.removeAttribute( 'aria-describedby' );
+		}
+		input.closest( '[data-form-status]' )?.removeAttribute( 'data-form-status' );
+		setDisabled( false );
+	};
+	input.focus();
+	input.select();
+}
+
+/**
+ * Undo rejectOTPCode().
+ *
+ * @param {HTMLInputElement} input The OTP input.
+ */
+export function clearOTPRejection( input ) {
+	if ( input?._clearOTPRejection ) {
+		const clear = input._clearOTPRejection;
+		input._clearOTPRejection = null;
+		clear();
+	}
 }
 
 /**
@@ -126,5 +110,4 @@ export function initAllOTPInputs() {
 	otpInputs.forEach( initOTPInput );
 }
 
-// Auto-initialize on DOM ready for backwards compatibility
 domReady( initAllOTPInputs );

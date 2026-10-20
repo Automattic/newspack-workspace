@@ -183,7 +183,7 @@
 			color: var(--newspack-ui-color-text);
 			padding: var(--newspack-ui-spacer-4) var(--newspack-ui-spacer-5) var(--newspack-ui-spacer-5);
 
-			.newspack-ui__button:not(:first-child, a.newspack-ui__button):first-of-type {
+			.newspack-ui__button:not(:first-child, a.newspack-ui__button, .newspack-ui__button--icon):first-of-type {
 				margin-top: var(--newspack-ui-spacer-5);
 			}
 		}
