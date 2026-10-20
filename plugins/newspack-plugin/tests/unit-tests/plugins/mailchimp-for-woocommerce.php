@@ -85,18 +85,35 @@ class Newspack_Test_Mailchimp_For_WooCommerce extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The plugin sends a reader with no stored opt-in as "transactional" on any profile update in
-	 * wp-admin or admin-ajax, such as Newspack's contact sync after registration. A reader who
-	 * subscribed through Newspack has no stored opt-in, so the update would unsubscribe them.
+	 * The plugin sends a reader with no stored opt-in, or a stored "0", as "transactional" on any
+	 * profile update in wp-admin or admin-ajax, such as Newspack's contact sync after registration.
+	 * A reader who subscribed through Newspack has neither, so the update would unsubscribe them.
 	 */
 	public function test_profile_update_skips_the_plugin_without_a_stored_opt_in() {
 		$new_reader        = $this->create_customer( 'new-reader@example.test', 'subscribed' );
 		$opted_in_customer = $this->create_customer( 'opted-in@example.test', 'subscribed', '1' );
 
+		$opted_out_reader = $this->create_customer( 'opted-out-reader@example.test', 'subscribed', '0' );
+
 		do_action( 'profile_update', $new_reader->ID, $new_reader );
+		do_action( 'profile_update', $opted_out_reader->ID, $opted_out_reader );
 		do_action( 'profile_update', $opted_in_customer->ID, $opted_in_customer );
 
 		$this->assertSame( [ $opted_in_customer->ID ], MailChimp_Service::instance()->updated_users );
+	}
+
+	/**
+	 * An admin who sets "not subscribed" in the plugin's own wp-admin profile field means it, so
+	 * that update still reaches Mailchimp.
+	 */
+	public function test_profile_update_runs_the_plugin_when_its_opt_in_field_is_saved() {
+		$reader = $this->create_customer( 'reader@example.test', 'subscribed', '0' );
+		$_POST['mailchimp_woocommerce_is_subscribed_radio'] = '0';
+
+		do_action( 'profile_update', $reader->ID, $reader );
+		unset( $_POST['mailchimp_woocommerce_is_subscribed_radio'] );
+
+		$this->assertSame( [ $reader->ID ], MailChimp_Service::instance()->updated_users );
 	}
 
 	/**

@@ -26,12 +26,17 @@ class Mailchimp_For_WooCommerce {
 	}
 
 	/**
-	 * Stop MC4WC from unsubscribing a reader whose opt-in it never stored.
+	 * Stop MC4WC from unsubscribing a reader whose stored opt-in is not "subscribed".
 	 *
 	 * On a profile update in wp-admin or admin-ajax, MC4WC sends the reader's stored opt-in to
-	 * Mailchimp, and sends a reader with none as "transactional". Readers who sign up through
-	 * Newspack have none, and Newspack's contact sync updates their profile from admin-ajax
-	 * after registration, so MC4WC would unsubscribe them right after they subscribe.
+	 * Mailchimp, and sends "" (none) or "0" as "transactional". That flag misses subscriptions
+	 * made outside MC4WC: readers who sign up through Newspack have none, and Newspack's contact
+	 * sync updates their profile from admin-ajax after registration, so MC4WC would unsubscribe
+	 * them right after they subscribe. A reader MC4WC once stored as "0" who subscribes again
+	 * through Newspack would be unsubscribed the same way.
+	 *
+	 * MC4WC's own opt-in field in wp-admin and REST requests set the flag on purpose, so those
+	 * updates still go through.
 	 *
 	 * @param int $user_id User ID.
 	 */
@@ -39,7 +44,11 @@ class Mailchimp_For_WooCommerce {
 		if ( ! \class_exists( '\MailChimp_Service' ) ) {
 			return;
 		}
-		if ( '' === get_user_meta( $user_id, 'mailchimp_woocommerce_is_subscribed', true ) ) {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Only checks whether the field was submitted; core verifies the profile form's nonce.
+		if ( isset( $_POST['mailchimp_woocommerce_is_subscribed_radio'] ) || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
+			return;
+		}
+		if ( in_array( get_user_meta( $user_id, 'mailchimp_woocommerce_is_subscribed', true ), [ '', '0' ], true ) ) {
 			remove_action( 'profile_update', [ \MailChimp_Service::instance(), 'handleUserUpdated' ], 100 );
 		}
 	}
