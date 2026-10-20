@@ -340,6 +340,7 @@ function Print() {
 				<Stack direction="column" gap="xl">
 					{ STYLE_NAME_FIELDS.map( ( { key, label } ) => (
 						<TextControl
+							__next40pxDefaultSize
 							__nextHasNoMarginBottom
 							key={ key }
 							label={ label }
