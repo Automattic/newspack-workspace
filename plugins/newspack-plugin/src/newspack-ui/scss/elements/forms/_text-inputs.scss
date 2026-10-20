@@ -71,7 +71,7 @@
 		&__currency {
 			background: var(--newspack-ui-color-neutral-fill);
 			display: grid;
-			font-weight: 600;
+			font-weight: var(--newspack-ui-font-weight-strong);
 			font-size: var(--newspack-ui-font-size-s);
 			line-height: var(--newspack-ui-line-height-s);
 			place-items: center;

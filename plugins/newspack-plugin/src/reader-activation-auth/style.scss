@@ -18,7 +18,8 @@
 	 */
 	&__lists {
 		flex: 1 1 100%;
-		font-size: 0.8rem;
+		font-size: var(--newspack-ui-font-size-small);
+		line-height: var(--newspack-ui-line-height-small);
 		border: 1px solid var(--newspack-ui-color-border);
 		border-radius: 2px;
 		padding: 0.5em;
@@ -59,7 +60,8 @@
 
 		&__description {
 			display: block;
-			font-size: 0.8rem;
+			font-size: var(--newspack-ui-font-size-small);
+			line-height: var(--newspack-ui-line-height-small);
 			color: var(--newspack-ui-color-text-muted);
 			margin: 0;
 		}
@@ -69,7 +71,8 @@
 	 * Third party auth.
 	 */
 	&__logins {
-		font-size: 1rem;
+		font-size: var(--newspack-ui-font-size-body);
+		line-height: var(--newspack-ui-line-height-body);
 		margin-top: 0.8rem;
 		&--disabled {
 			button {

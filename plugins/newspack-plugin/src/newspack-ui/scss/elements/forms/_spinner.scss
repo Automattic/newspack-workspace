@@ -25,7 +25,7 @@
 			width: calc(var(--newspack-ui-spacer-1) * 2.25);
 		}
 		p:not(.newspack-ui__font--normal) {
-			font-weight: 600;
+			font-weight: var(--newspack-ui-font-weight-strong);
 		}
 	}
 }
