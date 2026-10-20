@@ -392,7 +392,7 @@ class Subscriptions_Tiers {
 				continue;
 			}
 
-			if ( $product->get_status() === 'private' ) {
+			if ( $product->get_status() === 'private' || Complimentary_Access::is_complimentary_product( $product ) ) {
 				continue;
 			}
 
