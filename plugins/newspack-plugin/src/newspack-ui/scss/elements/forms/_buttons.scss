@@ -12,7 +12,7 @@
 		font-family: var(--newspack-ui-font-family);
 		font-size: var(--newspack-ui-font-size-s);
 		font-style: normal;
-		font-weight: 600;
+		font-weight: var(--newspack-ui-font-weight-strong);
 		gap: calc(var(--newspack-ui-spacer-5) * 0.5);
 		letter-spacing: initial; // Override for custom styles.
 		text-transform: none; // Override for custom styles.

@@ -90,8 +90,6 @@
 			h2 {
 				color: inherit;
 				font-family: var(--newspack-ui-font-family);
-				font-size: var(--newspack-ui-font-size-s);
-				line-height: var(--newspack-ui-line-height-s);
 				margin: 0;
 
 				&[tabindex="-1"]:focus {
@@ -140,11 +138,6 @@
 			max-width: var(--newspack-ui-width-s);
 		}
 
-		// Contents
-		h3 {
-			font-size: var(--newspack-ui-font-size-s);
-		}
-
 		&__footer,
 		&__content {
 			> *:first-child {
@@ -163,7 +156,7 @@
 		h5,
 		h6,
 		strong {
-			font-weight: 600;
+			font-weight: var(--newspack-ui-font-weight-strong);
 		}
 	}
 }

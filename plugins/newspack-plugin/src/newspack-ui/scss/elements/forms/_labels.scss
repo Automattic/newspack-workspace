@@ -3,16 +3,16 @@
 		color: var(--newspack-ui-label-color);
 		display: block;
 		font-family: var(--newspack-ui-font-family);
-		font-size: var(--newspack-ui-font-size-s);
-		font-weight: 600;
-		line-height: var(--newspack-ui-line-height-s);
+		font-size: var(--newspack-ui-font-size-body);
+		font-weight: var(--newspack-ui-font-weight-medium);
+		line-height: var(--newspack-ui-line-height-body);
 		margin: 0 0 var(--newspack-ui-spacer-1);
 
 		// For labels containing radio, checkbox inputs:
 		&:has(input[type="checkbox"]),
 		&:has(input[type="radio"]) {
 			display: grid !important;
-			font-weight: normal;
+			font-weight: var(--newspack-ui-font-weight-regular);
 			gap: 0 var(--newspack-ui-spacer-1);
 			grid-template-columns: var(--newspack-ui-control-size) 1fr;
 
@@ -34,7 +34,7 @@
 				border: 1px solid var(--newspack-ui-color-border);
 				border-radius: var(--newspack-ui-border-radius-m);
 				cursor: pointer;
-				font-weight: normal;
+				font-weight: var(--newspack-ui-font-weight-regular);
 				gap: 0 var(--newspack-ui-spacer-3);
 				margin-bottom: var(--newspack-ui-spacer-5);
 				padding: var(--newspack-ui-spacer-3);
@@ -77,7 +77,7 @@
 
 	&__label-optional {
 		color: var(--newspack-ui-color-text-muted);
-		font-weight: 400;
+		font-weight: var(--newspack-ui-font-weight-regular);
 	}
 
 	&__required {

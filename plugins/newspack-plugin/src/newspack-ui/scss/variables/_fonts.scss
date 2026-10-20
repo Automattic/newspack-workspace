@@ -1,3 +1,5 @@
+@use "../mixins";
+
 @font-face {
 	font-family: Inter;
 	font-style: normal;
@@ -20,27 +22,48 @@
 	--newspack-ui-font-weight-medium: 500;
 	--newspack-ui-font-weight-strong: 600;
 
+	--newspack-ui-font-size-caption: 12px;
+	--newspack-ui-line-height-caption: 1.3333;
+	--newspack-ui-font-size-small: 14px;
+	--newspack-ui-line-height-small: 1.4286;
+	--newspack-ui-font-size-body: 16px;
+	--newspack-ui-line-height-body: 1.5;
+	--newspack-ui-font-size-title-m: 20px;
+	--newspack-ui-line-height-title-m: 1.4;
+	--newspack-ui-font-size-title-l: 24px;
+	--newspack-ui-line-height-title-l: 1.3333;
+	--newspack-ui-font-size-display: 32px;
+	--newspack-ui-line-height-display: 1.25;
+	--newspack-ui-letter-spacing-title-m: -0.012em;
+	--newspack-ui-letter-spacing-title-l: -0.018em;
+	--newspack-ui-letter-spacing-display: -0.02em;
+
+	@include mixins.media( tablet ) {
+		--newspack-ui-font-size-title-l: 28px;
+		--newspack-ui-line-height-title-l: 1.2857;
+	}
+
 	// Fonts - sizes
-	--newspack-ui-font-size-2xs: 12px;
-	--newspack-ui-font-size-xs: 14px;
-	--newspack-ui-font-size-s: 16px;
-	--newspack-ui-font-size-m: clamp(1.125rem, 0.929rem + 0.402vw, 1.25rem); // 18px - 20px
-	--newspack-ui-font-size-l: clamp(1.25rem, 0.857rem + 0.803vw, 1.5rem); // 20px - 24px
-	--newspack-ui-font-size-xl: clamp(1.375rem, 0.394rem + 2.008vw, 2rem); // 22px - 32px
-	--newspack-ui-font-size-2xl: clamp(1.625rem, 0.055rem + 3.213vw, 2.625rem); // 26px - 42px
-	--newspack-ui-font-size-3xl: clamp(1.75rem, -0.213rem + 4.016vw, 3rem); // 28px - 48px
-	--newspack-ui-font-size-4xl: clamp(2rem, -1.141rem + 6.426vw, 4rem); // 32px - 64px
-	--newspack-ui-font-size-5xl: clamp(2.125rem, -2.39rem + 9.237vw, 5rem); // 34px - 80px
-	--newspack-ui-font-size-6xl: clamp(2.25rem, -3.639rem + 12.048vw, 6rem); // 36px - 96px
+	--newspack-ui-font-size-2xs: var(--newspack-ui-font-size-caption);
+	--newspack-ui-font-size-xs: var(--newspack-ui-font-size-small);
+	--newspack-ui-font-size-s: var(--newspack-ui-font-size-body);
+	--newspack-ui-font-size-m: var(--newspack-ui-font-size-title-m);
+	--newspack-ui-font-size-l: var(--newspack-ui-font-size-title-l);
+	--newspack-ui-font-size-xl: var(--newspack-ui-font-size-display);
+	--newspack-ui-font-size-2xl: clamp(34px, 21.44px + 1.606vw, 42px);
+	--newspack-ui-font-size-3xl: clamp(36px, 17.152px + 2.41vw, 48px);
+	--newspack-ui-font-size-4xl: clamp(40px, 2.32px + 4.819vw, 64px);
+	--newspack-ui-font-size-5xl: clamp(42px, -17.664px + 7.631vw, 80px);
+	--newspack-ui-font-size-6xl: clamp(44px, -37.648px + 10.442vw, 96px);
 
 	// Fonts - line heights
 	// TODO: would this make more sense as mixins with the accompanying font sizes?
-	--newspack-ui-line-height-2xs: 1.3333;
-	--newspack-ui-line-height-xs: 1.4286;
-	--newspack-ui-line-height-s: 1.5;
-	--newspack-ui-line-height-m: 1.6;
-	--newspack-ui-line-height-l: 1.5;
-	--newspack-ui-line-height-xl: 1.375;
+	--newspack-ui-line-height-2xs: var(--newspack-ui-line-height-caption);
+	--newspack-ui-line-height-xs: var(--newspack-ui-line-height-small);
+	--newspack-ui-line-height-s: var(--newspack-ui-line-height-body);
+	--newspack-ui-line-height-m: var(--newspack-ui-line-height-title-m);
+	--newspack-ui-line-height-l: var(--newspack-ui-line-height-title-l);
+	--newspack-ui-line-height-xl: var(--newspack-ui-line-height-display);
 	--newspack-ui-line-height-2xl: 1.3333;
 	--newspack-ui-line-height-3xl: 1.25;
 	--newspack-ui-line-height-4xl: 1.125;

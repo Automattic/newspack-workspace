@@ -10,10 +10,10 @@
 		thead th,
 		td.product-name,
 		td.total {
-			font-weight: 700;
+			font-weight: var(--newspack-ui-font-weight-strong);
 		}
 		th.product-total {
-			font-weight: 400;
+			font-weight: var(--newspack-ui-font-weight-regular);
 		}
 	}
 	table.shop_table.order_details {
@@ -28,7 +28,7 @@
 		}
 		td.product-name {
 			color: var(--newspack-ui-color-text-muted);
-			font-weight: 600;
+			font-weight: var(--newspack-ui-font-weight-strong);
 		}
 		& + .subscription_details {
 			margin-top: var(--newspack-ui-spacer-2);
@@ -38,7 +38,7 @@
 		margin-bottom: var(--newspack-ui-spacer-5);
 		td:first-child,
 		.subscription-payment-method {
-			font-weight: 700;
+			font-weight: var(--newspack-ui-font-weight-strong);
 		}
 		tr:only-child {
 			border-bottom: none;

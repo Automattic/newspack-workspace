@@ -73,7 +73,7 @@
 		}
 
 		h1 {
-			font-weight: 700;
+			font-weight: var(--newspack-ui-font-weight-strong);
 			padding: 0 var(--newspack-ui-spacer-3);
 		}
 
@@ -108,7 +108,7 @@
 		background-repeat: no-repeat;
 		color: var(--newspack-ui-color-text-muted);
 		display: block;
-		font-weight: 600;
+		font-weight: var(--newspack-ui-font-weight-strong);
 		margin-right: var(--newspack-ui-spacer-3);
 		padding: var(--newspack-ui-spacer-3);
 		text-decoration: none;
@@ -209,7 +209,7 @@
 				&.newspack-my-account__navigation-footer-item a {
 					color: var(--newspack-ui-color-text-muted);
 					font-size: var(--newspack-ui-font-size-xs);
-					font-weight: 400;
+					font-weight: var(--newspack-ui-font-weight-regular);
 					margin: 0;
 					padding: calc(var(--newspack-ui-spacer-1) * 0.75) 0;
 					text-decoration: underline;

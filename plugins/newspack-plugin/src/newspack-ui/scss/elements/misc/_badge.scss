@@ -5,7 +5,7 @@
 	display: inline-grid;
 	font-family: var(--newspack-ui-font-family);
 	font-size: var(--newspack-ui-font-size-xs);
-	font-weight: 600;
+	font-weight: var(--newspack-ui-font-weight-strong);
 	line-height: var(--newspack-ui-line-height-xs);
 	padding: calc(var(--newspack-ui-spacer-1) / 4) calc(var(--newspack-ui-spacer-1) * 0.75);
 	place-items: center;
