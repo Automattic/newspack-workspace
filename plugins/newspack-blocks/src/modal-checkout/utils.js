@@ -79,6 +79,17 @@ export function getTabbableElements( root ) {
 }
 
 /**
+ * The first field Tab can reach inside an element.
+ *
+ * @param {HTMLElement} root The element to look in.
+ *
+ * @return {HTMLElement|null} The field.
+ */
+export function getFirstField( root ) {
+	return getTabbableElements( root ).find( element => element.matches( FIELDS ) ) || null;
+}
+
+/**
  * Where focus lands in a checkout screen: its first field, else its first action.
  *
  * @param {HTMLElement} root The element to look in.
@@ -86,8 +97,7 @@ export function getTabbableElements( root ) {
  * @return {HTMLElement|null} The element to focus.
  */
 export function getInitialFocus( root ) {
-	const tabbable = getTabbableElements( root );
-	return tabbable.find( element => element.matches( FIELDS ) ) || tabbable[ 0 ] || null;
+	return getFirstField( root ) || getTabbableElements( root )[ 0 ] || null;
 }
 
 // Payment providers put card fields on the page too. Only their overlays, fixed over it,

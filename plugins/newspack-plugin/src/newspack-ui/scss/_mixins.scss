@@ -156,6 +156,20 @@ $font-size-classes: ".newspack-ui__font--2xs, .newspack-ui__font--xs, .newspack-
 	width: calc(var(--newspack-ui-spacer-1) * 2.25);
 }
 
+@mixin body-table {
+	font-size: var(--newspack-ui-font-size-body);
+	line-height: var(--newspack-ui-line-height-body);
+	margin: 0;
+
+	th,
+	td {
+		border: 0;
+		font-size: inherit;
+		line-height: inherit;
+		padding-block: calc(var(--newspack-ui-spacer-1) * 1.75);
+	}
+}
+
 @mixin media( $res ) {
 	@if mobile == $res {
 		@media only screen and ( min-width: breakpoints.$mobile_width ) {

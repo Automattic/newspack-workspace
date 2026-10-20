@@ -32,7 +32,7 @@
 
 	a,
 	a:hover {
-		&:not(.newspack-ui__button) {
+		&:not(.newspack-ui__button):not(:where(.newspack-ui__tabs__list > a)) {
 			color: inherit;
 		}
 	}

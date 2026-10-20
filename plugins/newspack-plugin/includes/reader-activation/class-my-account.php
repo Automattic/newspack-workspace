@@ -755,58 +755,35 @@ class My_Account {
 	}
 
 	/**
-	 * Render the native navigation menu.
-	 *
-	 * Mirrors the structure of templates/v1/navigation.php so the sidebar CSS
-	 * (dist/my-account-v1.css) applies, using native tab data instead of
-	 * WooCommerce menu functions.
+	 * Render the native navigation menu, with the markup of the WooCommerce
+	 * account page (templates/v1/navigation-menu.php) and native tab data.
 	 */
 	protected static function render_navigation(): void {
-		$current = self::get_current_endpoint();
-		$tabs    = self::get_tabs();
-		$logout  = null;
+		$current          = self::get_current_endpoint();
+		$tabs             = self::get_tabs();
+		$sign_out_url     = '';
+		$sign_out_label   = '';
+		$sign_out_classes = 'woocommerce-MyAccount-navigation-link woocommerce-MyAccount-navigation-link--customer-logout';
 		if ( isset( $tabs['customer-logout'] ) ) {
-			$logout = $tabs['customer-logout'];
+			$sign_out_url   = \wp_logout_url( \home_url( '/' ) );
+			$sign_out_label = $tabs['customer-logout'];
 			unset( $tabs['customer-logout'] );
 		}
-		$site_logo = \get_site_icon_url( 96 );
-		?>
-		<nav class="woocommerce-MyAccount-navigation newspack-ui" aria-label="<?php \esc_attr_e( 'Account pages', 'newspack-plugin' ); ?>">
-			<div class="newspack-my-account__navigation-header">
-				<?php if ( ! empty( $site_logo ) ) : ?>
-					<a class="newspack-my-account__site-logo" href="<?php echo \esc_url( \home_url( '/' ) ); ?>" title="<?php \esc_attr_e( 'Back to Homepage', 'newspack-plugin' ); ?>" aria-label="<?php \esc_attr_e( 'Back to Homepage', 'newspack-plugin' ); ?>">
-						<img src="<?php echo \esc_url( $site_logo ); ?>" alt="" />
-					</a>
-				<?php endif; ?>
-				<a href="<?php echo \esc_url( \home_url( '/' ) ); ?>" class="newspack-my-account__home-link newspack-ui__button newspack-ui__button--small newspack-ui__button--ghost-light">
-					<?php Newspack_UI_Icons::print_svg( 'chevronLeft' ); ?>
-					<?php \esc_html_e( 'Back to Homepage', 'newspack-plugin' ); ?>
-				</a>
-				<ul>
-					<?php foreach ( $tabs as $newspack_tab_slug => $newspack_tab_label ) : ?>
-						<?php $is_current = ( $newspack_tab_slug === $current ) || ( '' === $current && self::ENDPOINT_EDIT_ACCOUNT === $newspack_tab_slug ); ?>
-						<li class="<?php echo \esc_attr( $is_current ? 'is-active' : '' ); ?>">
-							<a href="<?php echo \esc_url( self::get_endpoint_url( $newspack_tab_slug ) ); ?>"<?php echo $is_current ? ' aria-current="page"' : ''; ?> class="newspack-ui__button newspack-ui__button--small <?php echo $is_current ? 'newspack-ui__button--accent' : 'newspack-ui__button--ghost'; ?>">
-								<?php echo \esc_html( $newspack_tab_label ); ?>
-							</a>
-						</li>
-					<?php endforeach; ?>
-				</ul>
-			</div>
-			<?php if ( $logout ) : ?>
-			<div class="newspack-my-account__navigation-footer">
-				<ul>
-					<li class="woocommerce-MyAccount-navigation-link woocommerce-MyAccount-navigation-link--customer-logout">
-						<a href="<?php echo \esc_url( \wp_logout_url( \home_url( '/' ) ) ); ?>" class="newspack-ui__button newspack-ui__button--small newspack-ui__button--ghost">
-							<?php echo \esc_html( $logout ); ?>
-							<?php Newspack_UI_Icons::print_svg( 'logout' ); ?>
-						</a>
-					</li>
-				</ul>
-			</div>
-			<?php endif; ?>
-		</nav>
-		<?php
+		$back_link = [
+			'url'   => \home_url( '/' ),
+			'label' => \__( 'Back to Homepage', 'newspack-plugin' ),
+		];
+		$nav_items = [];
+		foreach ( $tabs as $slug => $label ) {
+			$is_current  = ( $slug === $current ) || ( '' === $current && self::ENDPOINT_EDIT_ACCOUNT === $slug );
+			$nav_items[] = [
+				'url'        => self::get_endpoint_url( $slug ),
+				'label'      => $label,
+				'classes'    => 'woocommerce-MyAccount-navigation-link woocommerce-MyAccount-navigation-link--' . $slug . ( $is_current ? ' is-active' : '' ),
+				'is_current' => $is_current,
+			];
+		}
+		include NEWSPACK_ABSPATH . 'includes/plugins/woocommerce/my-account/templates/v1/navigation-menu.php';
 	}
 
 	/**

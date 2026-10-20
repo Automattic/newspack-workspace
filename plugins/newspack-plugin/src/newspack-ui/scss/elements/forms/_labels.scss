@@ -56,6 +56,10 @@
 		}
 	}
 
+	&__label-row label {
+		margin: 0;
+	}
+
 	&__label-optional {
 		color: var(--newspack-ui-color-text-subtle);
 		font-weight: var(--newspack-ui-font-weight-regular);

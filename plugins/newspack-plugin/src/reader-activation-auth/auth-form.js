@@ -14,6 +14,7 @@ import './google-oauth';
 import { clearOTPRejection, initOTPInput, rejectOTPCode } from './otp-input';
 import { getNoticeIcon } from '../newspack-ui/js/icons';
 import { announce } from '../newspack-ui/js/announce';
+import { getInitialFocus } from '../newspack-ui/js/focus';
 import { setPasswordVisible } from '../newspack-ui/js/password-visibility';
 
 import './style.scss';
@@ -528,7 +529,8 @@ window.newspackRAS.push( function ( readerActivation ) {
 						if ( data?.redirect_to && continueButton ) {
 							continueButton.setAttribute( 'href', data.redirect_to );
 						}
-						continueButton?.focus();
+						const modal = container.closest( '.newspack-ui__modal-container' );
+						( modal ? getInitialFocus( modal ) : continueButton )?.focus();
 
 						// Auto-redirect if we have a redirect query parameter.
 						const urlParams = new URLSearchParams( window.location.search );

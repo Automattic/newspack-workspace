@@ -1,7 +1,18 @@
 @use "../../mixins";
 
+@mixin button-size-medium {
+	--newspack-ui-button-height: var(--newspack-ui-spacer-9);
+	--newspack-ui-button-padding-block: var(--newspack-ui-spacer-2);
+	--newspack-ui-button-padding-inline: var(--newspack-ui-spacer-4);
+	--newspack-ui-button-gap: var(--newspack-ui-spacer-1);
+	--newspack-ui-button-font-size: var(--newspack-ui-font-size-body);
+	--newspack-ui-button-line-height: var(--newspack-ui-line-height-body);
+}
+
 .newspack-ui {
 	.newspack-ui__button {
+		@include button-size-medium;
+
 		--newspack-ui-button-bg: var(--newspack-ui-color-neutral-fill);
 		--newspack-ui-button-bg-hover: var(--newspack-ui-color-neutral-fill-hover);
 		--newspack-ui-button-bg-pressed: var(--newspack-ui-color-neutral-fill-pressed);
@@ -9,12 +20,6 @@
 		--newspack-ui-button-ink-pressed: var(--newspack-ui-button-ink);
 		--newspack-ui-button-border: transparent;
 		--newspack-ui-button-border-hover: var(--newspack-ui-button-border);
-		--newspack-ui-button-height: var(--newspack-ui-spacer-9);
-		--newspack-ui-button-padding-block: var(--newspack-ui-spacer-2);
-		--newspack-ui-button-padding-inline: var(--newspack-ui-spacer-4);
-		--newspack-ui-button-gap: var(--newspack-ui-spacer-1);
-		--newspack-ui-button-font-size: var(--newspack-ui-font-size-body);
-		--newspack-ui-button-line-height: var(--newspack-ui-line-height-body);
 		--newspack-ui-button-bg-disabled: var(--newspack-ui-color-surface-subtle);
 		--newspack-ui-button-ink-disabled: var(--newspack-ui-color-disabled-ink);
 		--newspack-ui-button-focus: var(--newspack-ui-color-focus);
@@ -138,6 +143,12 @@
 
 		&--medium {
 			// is the default.
+		}
+
+		&--medium-on-mobile {
+			@include mixins.media-below( mobile ) {
+				@include button-size-medium;
+			}
 		}
 
 		// Styles

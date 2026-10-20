@@ -10,7 +10,8 @@
 	}
 
 	&__modal--small {
-		form p {
+		form p,
+		form :where(div:has(> .newspack-ui__password-field)) {
 			margin: 0 0 var(--newspack-ui-spacer-2);
 
 			&:last-child {

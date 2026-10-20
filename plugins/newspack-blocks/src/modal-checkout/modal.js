@@ -24,6 +24,7 @@ import {
 	triggerFormSubmit,
 	getCheckoutData,
 	getFormattedAmount,
+	getFirstField,
 	getInitialFocus,
 	hasFrameProcessingScreen,
 	mountFrameProcessingScreen,
@@ -828,14 +829,14 @@ domReady( () => {
 
 	/**
 	 * Move focus off the Close button the browser puts it on when a dialog opens,
-	 * following newspack-ui's rule: first field, else first action, else the heading.
+	 * following newspack-ui's rule: first field, else the heading.
 	 *
 	 * @param {HTMLDialogElement} el The dialog.
 	 */
 	const focusOpenedDialog = el => {
 		const content = el.querySelector( `.${ MODAL_CLASS_PREFIX }__content` );
 		const heading = el.querySelector( `.${ MODAL_CLASS_PREFIX }__header h2` );
-		const target = ( content && getInitialFocus( content ) ) || heading;
+		const target = ( content && getFirstField( content ) ) || heading;
 		if ( target === heading && heading ) {
 			heading.tabIndex = -1;
 		}
