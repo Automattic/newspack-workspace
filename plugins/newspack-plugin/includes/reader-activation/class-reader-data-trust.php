@@ -355,12 +355,13 @@ final class Reader_Data_Trust {
 			]
 		);
 		foreach ( $orders as $order ) {
+			if ( ! Donations::is_donation_order( $order ) ) {
+				continue;
+			}
 			if ( function_exists( 'wcs_order_contains_subscription' ) && \wcs_order_contains_subscription( $order, 'any' ) ) {
 				continue;
 			}
-			if ( Donations::is_donation_order( $order ) ) {
-				return true;
-			}
+			return true;
 		}
 
 		return false;
