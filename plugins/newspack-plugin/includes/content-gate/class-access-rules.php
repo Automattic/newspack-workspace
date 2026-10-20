@@ -128,7 +128,15 @@ class Access_Rules {
 	 *                                        with composite (non-scalar, non-list) value shapes
 	 *                                        must provide one — Content_Gate_API delegates to it
 	 *                                        instead of the generic list/scalar sanitization.
+	 *                                        Returning a WP_Error refuses the value and fails
+	 *                                        the save, with the generic invalid-value message
+	 *                                        in place of the callback's own.
 	 *     @type bool     $is_boolean         Whether the rule is a boolean rule.
+	 *     @type bool     $is_range           Optional. Whether the rule's value is a pair of
+	 *                                        numeric bounds, `[ 'min' => …, 'max' => … ]`, either
+	 *                                        of which may be absent. Defaults to false. The
+	 *                                        editors render a min/max control for it; the rule
+	 *                                        must also declare a `sanitize_callback` for that shape.
 	 *     @type bool     $empty_grants_access
 	 *                                        Optional. Whether the rule's callback reads an empty
 	 *                                        value as "no constraint", so leaving it empty grants
@@ -189,6 +197,7 @@ class Access_Rules {
 				'options'             => [],
 				'has_options'         => $has_options,
 				'is_boolean'          => false,
+				'is_range'            => false,
 				// Both are properties of the rule's callback rather than of the
 				// value's shape, and they are not the same question: the two
 				// free-text rules grant every reader when left blank and

@@ -1,3 +1,43 @@
+## newspack [6.55.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.3...newspack@6.55.4) (2026-10-20)
+
+
+### Bug Fixes
+
+* **tag-labels:** stop tags named "Labels" from restyling posts ([#1267](https://github.com/Automattic/newspack-workspace/issues/1267)) ([0e9cb8a](https://github.com/Automattic/newspack-workspace/commit/0e9cb8a0cd2d10fe30f3c59fc423ee0b2338788b))
+
+## newspack [6.55.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.2...newspack@6.55.3) (2026-10-19)
+
+
+### Bug Fixes
+
+* **revisions:** remove revisions control ([#1216](https://github.com/Automattic/newspack-workspace/issues/1216)) ([01cdad4](https://github.com/Automattic/newspack-workspace/commit/01cdad4a030d6f4555a977b037692c7e7720fc16))
+
+## newspack [6.55.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.1...newspack@6.55.2) (2026-10-15)
+
+
+### Bug Fixes
+
+* **bylines:** limit custom bylines to the post-content allowlist ([#1181](https://github.com/Automattic/newspack-workspace/issues/1181)) ([326a031](https://github.com/Automattic/newspack-workspace/commit/326a031019fc516e69e5923184ba94e4d4d2c2cf))
+
+## newspack [6.55.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.0...newspack@6.55.1) (2026-10-14)
+
+
+### Bug Fixes
+
+* **reader-activation:** stop repeat checkout after verifying (NPPM-3540) ([#1299](https://github.com/Automattic/newspack-workspace/issues/1299)) ([582450f](https://github.com/Automattic/newspack-workspace/commit/582450f3f4800d576974d54d7238a253e66cbbc7))
+
+# newspack [6.55.0](https://github.com/Automattic/newspack-workspace/compare/newspack@6.54.0...newspack@6.55.0) (2026-10-14)
+
+
+### Features
+
+* **newsletters:** show premium lists in the subscription form ([#1291](https://github.com/Automattic/newspack-workspace/issues/1291)) ([456d762](https://github.com/Automattic/newspack-workspace/commit/456d762ba465aafc6e5be08ed47836acafaad1a6))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.11.0
+
 # newspack [6.54.0](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.13...newspack@6.54.0) (2026-10-12)
 
 

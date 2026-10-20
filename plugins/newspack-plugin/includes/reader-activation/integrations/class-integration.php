@@ -73,7 +73,8 @@ abstract class Integration {
 	 * WP_Error code pull_contact_data() should return when the provider has no
 	 * contact for the reader. Not a failure: no re-run can make an absent
 	 * contact appear, so batch drivers count these readers as skipped rather
-	 * than errored.
+	 * than errored. The sync framework returns the same code for an update-only
+	 * push that every integration declined, for the same reason.
 	 *
 	 * @var string
 	 */
@@ -611,7 +612,7 @@ abstract class Integration {
 	 * @param array|null $existing_contact Optional. Existing contact data if available.
 	 * @param array      $options          Optional. Sync options, passed through to push_contact_data().
 	 *
-	 * @return true|\WP_Error The push_contact_data() result, unchanged.
+	 * @return true|array|\WP_Error The push_contact_data() result, unchanged.
 	 */
 	final public function push_contact( $contact, $context = '', $existing_contact = null, $options = [] ) {
 		
@@ -656,9 +657,57 @@ abstract class Integration {
 	 * @param string     $context Optional. The context of the sync.
 	 * @param array|null $existing_contact Optional. Existing contact data if available.
 	 *
-	 * @return true|\WP_Error True on success or WP_Error on failure.
+	 * @return true|array|\WP_Error True on success or WP_Error on failure. A success that left
+	 *                              fields out can return an array listing their names under
+	 *                              `unsynced_fields`, so the push log records the push as incomplete.
 	 */
 	abstract public function push_contact_data( $contact, $context = '', $existing_contact = null );
+
+	/**
+	 * Whether pushing this contact would update a live record the integration holds.
+	 *
+	 * Consulted by the sync framework only on an update-only push (the
+	 * `existing_only` sync option, which the backfill CLI sets unless
+	 * `--create-missing` is passed), before `push_contact_data()`: `false` makes the
+	 * framework skip this integration for the reader (tallied as skipped, not
+	 * failed), a `WP_Error` is treated as a failed push, and `true` lets the
+	 * push proceed. Answer by what the push would do: `true` only when it would
+	 * update a live record, `false` when it would create one or restore an
+	 * archived or deleted one. Any answer other than a boolean or a `WP_Error`
+	 * is treated as a failed check. Override it where the external system can be
+	 * asked; the override is what makes `supports_contact_lookup()` true. An
+	 * integration that cannot ask is refused on an update-only push rather than
+	 * pushed, because a push there is an upsert that would create the contact.
+	 *
+	 * @param string $email The contact's email address.
+	 *
+	 * @return bool|\WP_Error True if the push would update a live record, false if it would create or restore one, WP_Error if the lookup failed or is unsupported.
+	 */
+	public function contact_exists( string $email ) {
+		return new \WP_Error(
+			'newspack_integration_contact_lookup_unsupported',
+			sprintf(
+				// Translators: %s is the integration id.
+				__( 'Integration "%s" cannot check whether a contact exists.', 'newspack-plugin' ),
+				$this->get_id()
+			)
+		);
+	}
+
+	/**
+	 * Whether the integration can answer `contact_exists()`.
+	 *
+	 * Implementing `contact_exists()` is the opt-in: this is true as soon as a
+	 * subclass overrides it, so an integration written before the lookup
+	 * existed reports false rather than "yes". On an update-only push the sync
+	 * withholds the push from an integration that reports false: an unknown
+	 * must resolve to "do not create", or update-only guarantees nothing.
+	 *
+	 * @return bool
+	 */
+	public function supports_contact_lookup(): bool {
+		return ( new \ReflectionMethod( $this, 'contact_exists' ) )->getDeclaringClass()->getName() !== self::class;
+	}
 
 	/**
 	 * Whether this integration can hard-delete a contact from its external system.
@@ -681,7 +730,9 @@ abstract class Integration {
 	 *
 	 * Integrations that support hard deletion should override this AND
 	 * `supports_hard_delete()`. The default returns a "not implemented" WP_Error
-	 * so the dispatcher can log and skip.
+	 * so the dispatcher can log and skip. When the system holds no contact for
+	 * the email, answer with a WP_Error whose only code is
+	 * CONTACT_NOT_FOUND_ERROR_CODE: the deletion then ends without a retry.
 	 *
 	 * @param string $email Email address of the contact to delete.
 	 * @return true|\WP_Error True on success, WP_Error otherwise.
@@ -787,14 +838,21 @@ abstract class Integration {
 	}
 
 	/**
-	 * Declare a WooCommerce My Account menu item for this integration.
+	 * Declare a My Account menu item for this integration.
 	 *
 	 * Return null (default) to opt out. Otherwise return:
 	 *   [
 	 *     'slug'     => 'rewards',              // endpoint slug, unique across integrations.
 	 *     'label'    => __( 'Rewards', 'newspack-plugin' ),
-	 *     'position' => 25,                     // optional, menu sort order.
+	 *     'position' => 2,                      // optional, zero-based index into WooCommerce's menu.
 	 *   ]
+	 *
+	 * The index applies to WooCommerce's menu as it stands before Newspack's
+	 * own My Account filters drop and reorder tabs. Without a position, the item
+	 * is appended before Log out. A position at or past the end lands after Log
+	 * out on WooCommerce's own account page; Newspack's default account UI moves
+	 * Log out to its footer, so there the item is last. Newspack's My Account
+	 * page without WooCommerce ignores the position and appends the item.
 	 *
 	 * The slug must not collide with a core My Account endpoint or one owned by
 	 * another plugin's My Account bridge — `newsletters` is reserved by

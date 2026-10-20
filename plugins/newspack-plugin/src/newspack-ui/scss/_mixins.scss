@@ -1,6 +1,8 @@
 @use "../../../packages/colors/colors.module" as colors;
 @use "variables/breakpoints";
 
+$font-size-classes: ".newspack-ui__font--2xs, .newspack-ui__font--xs, .newspack-ui__font--s, .newspack-ui__font--m, .newspack-ui__font--l, .newspack-ui__font--xl, .newspack-ui__font--2xl, .newspack-ui__font--3xl, .newspack-ui__font--4xl, .newspack-ui__font--5xl, .newspack-ui__font--6xl";
+
 @mixin newspack-ui-elevation( $size: 1 ) {
 	@if $size == 1 {
 		box-shadow: 0 1px 10px colors.$overlay-050;

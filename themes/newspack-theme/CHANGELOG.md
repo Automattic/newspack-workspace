@@ -1,3 +1,17 @@
+## newspack-theme [2.28.1](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.28.0...newspack-theme@2.28.1) (2026-10-20)
+
+
+### Bug Fixes
+
+* **tag-labels:** stop tags named "Labels" from restyling posts ([#1267](https://github.com/Automattic/newspack-workspace/issues/1267)) ([0e9cb8a](https://github.com/Automattic/newspack-workspace/commit/0e9cb8a0cd2d10fe30f3c59fc423ee0b2338788b))
+
+# newspack-theme [2.28.0](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.27.2...newspack-theme@2.28.0) (2026-10-14)
+
+
+### Features
+
+* **newsletters:** show premium lists in the subscription form ([#1291](https://github.com/Automattic/newspack-workspace/issues/1291)) ([456d762](https://github.com/Automattic/newspack-workspace/commit/456d762ba465aafc6e5be08ed47836acafaad1a6))
+
 ## newspack-theme [2.27.2](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.27.1...newspack-theme@2.27.2) (2026-10-12)
 
 

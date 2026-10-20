@@ -46,6 +46,33 @@ $is_active           = Group_Subscription_MyAccount::is_subscription_active( $su
 $active_tab          = ( isset( $_GET['activeTab'] ) && 'invites' === sanitize_key( wp_unslash( $_GET['activeTab'] ) ) ) ? 'invites' : 'members'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 $group_label_lower   = Group_Subscription::get_label_lower( 'singular' );
 $is_completely_empty = empty( $members ) && empty( $all_invites );
+
+/**
+ * Render a search field that narrows a table's rows client-side (see
+ * src/my-account/v1/group-member-search.js). The page renders every row, so a group
+ * of a few hundred filters without a request.
+ *
+ * @param string $list            'members' or 'invites'; keys the element IDs.
+ * @param string $label           Accessible label; says what the field matches on.
+ * @param string $status_template Result count announced to screen readers, with %1$d
+ *                                (matching rows) and %2$d (all rows) placeholders.
+ */
+$render_search_field = static function ( string $list, string $label, string $status_template ): void {
+	$input_id = 'newspack-my-account__group_subscription__search-' . $list;
+	?>
+	<div class="newspack-my-account__group_subscription__search" data-status-template="<?php echo esc_attr( $status_template ); ?>">
+		<label for="<?php echo esc_attr( $input_id ); ?>" class="screen-reader-text"><?php echo esc_html( $label ); ?></label>
+		<input
+			type="search"
+			id="<?php echo esc_attr( $input_id ); ?>"
+			aria-controls="newspack-my-account__group_subscription__table-<?php echo esc_attr( $list ); ?>"
+			placeholder="<?php echo esc_attr( $label ); ?>"
+			autocomplete="off"
+		>
+		<p class="newspack-ui__helper-text newspack-my-account__group_subscription__search-status" data-search-status aria-live="polite"></p>
+	</div>
+	<?php
+};
 ?>
 <?php if ( ! $is_manageable ) : ?>
 	<div class="newspack-ui__notice newspack-ui__notice--info newspack-my-account__group_subscription__inactive-notice" role="status">
@@ -67,7 +94,7 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 <?php if ( $is_completely_empty ) : ?>
 	<div class="newspack-ui__box newspack-ui__box--border newspack-ui__box--text-center newspack-ui__box--2x-large">
 		<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--align-center newspack-ui__stack--gap-1">
-			<h3 class="newspack-ui__font--l"><?php esc_html_e( "You haven't added anyone yet", 'newspack-plugin' ); ?></h3>
+			<h3 class="newspack-ui__font--m"><?php esc_html_e( "You haven't added anyone yet", 'newspack-plugin' ); ?></h3>
 			<p class="newspack-ui__spacing-top--0 newspack-ui__spacing-bottom--3">
 				<?php
 				echo esc_html(
@@ -82,6 +109,7 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 			<?php if ( $is_active ) : ?>
 				<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-2 newspack-my-account__group_subscription__empty-actions">
 					<button type="button" class="newspack-ui__button newspack-ui__button--secondary newspack-ui__button--wide newspack-my-account__subscription--invite-member"><?php esc_html_e( 'Invite by email', 'newspack-plugin' ); ?></button>
+					<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-my-account__subscription--invite-bulk"><?php esc_html_e( 'Invite in bulk', 'newspack-plugin' ); ?></button>
 					<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-my-account__group_subscription__invite-link__copy" data-error-text="<?php echo esc_attr( __( 'Could not copy. Please try again.', 'newspack-plugin' ) ); ?>"><span><?php esc_html_e( 'Copy invite link', 'newspack-plugin' ); ?></span></button>
 					<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-my-account__group_subscription__invite-link__confirm-regenerate <?php echo esc_attr( ! $invite_link ? 'hidden' : '' ); ?>"><?php esc_html_e( 'Regenerate invite link', 'newspack-plugin' ); ?></button>
 					<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-ui__button--destructive newspack-my-account__group_subscription__invite-link__confirm-disable <?php echo esc_attr( ! $invite_link ? 'hidden' : '' ); ?>"><?php esc_html_e( 'Disable invite link', 'newspack-plugin' ); ?></button>
@@ -129,7 +157,15 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 			<?php esc_html_e( 'Your invitations are still pending. Anyone who accepts will appear here.', 'newspack-plugin' ); ?>
 		</p>
 	<?php endif; ?>
-	<table class="shop_table shop_table_responsive newspack-my-account__group_subscription__members">
+	<?php
+	$render_search_field(
+		'members',
+		__( 'Search by name or email', 'newspack-plugin' ),
+		/* translators: 1: number of members matching the search, 2: total number of members. */
+		_n( 'Showing %1$d of %2$d member', 'Showing %1$d of %2$d members', count( $members_by_id ), 'newspack-plugin' )
+	);
+	?>
+	<table id="newspack-my-account__group_subscription__table-members" class="shop_table shop_table_responsive newspack-my-account__group_subscription__members">
 		<thead>
 			<tr>
 				<th><?php esc_html_e( 'Name', 'newspack-plugin' ); ?></th>
@@ -150,16 +186,17 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 			// the managers and group settings every iteration. Apply the same
 			// newspack_group_subscription_user_is_manager filter user_is_manager() applies, so the
 			// extension point is preserved.
-			$is_manager  = (bool) apply_filters( 'newspack_group_subscription_user_is_manager', in_array( $user_id, $managers, true ), $user_id, $subscription );
-			$is_owner    = $user_id === (int) $subscription->get_user_id();
-			$member_role = $is_manager ? __( 'Manager', 'newspack-plugin' ) : __( 'Member', 'newspack-plugin' );
+			$is_manager    = (bool) apply_filters( 'newspack_group_subscription_user_is_manager', in_array( $user_id, $managers, true ), $user_id, $subscription );
+			$is_owner      = $user_id === (int) $subscription->get_user_id();
+			$display_label = newspack_get_user_display_label( $user );
+			$member_role   = $is_manager ? __( 'Manager', 'newspack-plugin' ) : __( 'Member', 'newspack-plugin' );
 			if ( $is_owner ) {
 				$member_role = __( 'Owner', 'newspack-plugin' );
 			}
 			?>
-			<tr>
+			<tr data-search-text="<?php echo esc_attr( $display_label . ' ' . sanitize_email( $user->user_email ) ); ?>">
 				<td data-title="<?php esc_attr_e( 'Name', 'newspack-plugin' ); ?>">
-					<strong><?php echo esc_html( newspack_get_user_display_label( $user ) ); ?></strong>
+					<strong><?php echo esc_html( $display_label ); ?></strong>
 					<?php if ( $user_id === $current_user_id ) : ?>
 						<?php esc_html_e( ' (you)', 'newspack-plugin' ); ?>
 					<?php endif; ?>
@@ -200,7 +237,7 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 											type="button"
 											class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--destructive newspack-my-account__group_subscription__remove-member"
 											data-member-id="<?php echo esc_attr( $user->ID ); ?>"
-											data-member-name="<?php echo esc_attr( newspack_get_user_display_label( $user ) ); ?>"
+											data-member-name="<?php echo esc_attr( $display_label ); ?>"
 										>
 											<?php \esc_html_e( 'Remove member', 'newspack-plugin' ); ?>
 										</button>
@@ -214,6 +251,9 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 		<?php endforeach; ?>
 		</tbody>
 	</table>
+	<p class="newspack-my-account__group_subscription__panel-info" data-search-empty hidden>
+		<?php esc_html_e( 'No members match your search.', 'newspack-plugin' ); ?>
+	</p>
 			</div><!-- .newspack-ui__tabs__panel (members) -->
 			<div
 			id="newspack-my-account__group_subscription__panel-invites"
@@ -227,7 +267,15 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 			<?php esc_html_e( 'No pending invitations.', 'newspack-plugin' ); ?>
 		</p>
 	<?php else : ?>
-	<table class="shop_table shop_table_responsive newspack-my-account__group_subscription__invites">
+		<?php
+		$render_search_field(
+			'invites',
+			__( 'Search by email', 'newspack-plugin' ),
+			/* translators: 1: number of invitations matching the search, 2: total number of invitations. */
+			_n( 'Showing %1$d of %2$d invitation', 'Showing %1$d of %2$d invitations', count( $all_invites ), 'newspack-plugin' )
+		);
+		?>
+	<table id="newspack-my-account__group_subscription__table-invites" class="shop_table shop_table_responsive newspack-my-account__group_subscription__invites">
 		<thead>
 			<tr>
 				<th><?php esc_html_e( 'Sent to', 'newspack-plugin' ); ?></th>
@@ -239,7 +287,7 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 		<?php
 		foreach ( $all_invites as $key => $invite ) :
 			?>
-			<tr>
+			<tr data-search-text="<?php echo esc_attr( sanitize_email( $invite['email'] ) ); ?>">
 				<td data-title="<?php esc_attr_e( 'Sent to', 'newspack-plugin' ); ?>"><a href="mailto:<?php echo esc_attr( sanitize_email( $invite['email'] ) ); ?>"><?php echo esc_html( sanitize_email( $invite['email'] ) ); ?></a></td>
 				<td data-title="<?php esc_attr_e( 'Status', 'newspack-plugin' ); ?>"><?php echo esc_html( Group_Subscription_Invite::is_invite_expired( $invite ) ? __( 'Expired', 'newspack-plugin' ) : __( 'Pending', 'newspack-plugin' ) ); ?></td>
 				<td class="newspack-my-account__group_subscription__invites--actions order-actions">
@@ -278,6 +326,9 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 		<?php endforeach; ?>
 		</tbody>
 	</table>
+	<p class="newspack-my-account__group_subscription__panel-info" data-search-empty hidden>
+		<?php esc_html_e( 'No invitations match your search.', 'newspack-plugin' ); ?>
+	</p>
 	<?php endif; ?>
 			</div><!-- .newspack-ui__tabs__panel (invites) -->
 		</div><!-- .newspack-ui__tabs__content -->
@@ -285,7 +336,7 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 <?php endif; // ! $is_completely_empty ?>
 
 	<!-- .newspack-ui__modal: invite by email -->
-	<div id="newspack-my-account__group_subscription--invite-member" class="newspack-ui__modal-container">
+	<dialog id="newspack-my-account__group_subscription--invite-member" class="newspack-ui__modal-container">
 		<div class="newspack-ui__modal-container__overlay"></div>
 		<div class="newspack-ui__modal newspack-ui__modal--small">
 				<header class="newspack-ui__modal__header">
@@ -348,10 +399,90 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 					<?php endif; ?>
 				</section>
 			</div><!-- .newspack-ui__modal__small -->
-	</div> <!-- .newspack-ui__modal-container -->
+	</dialog>
+
+	<!-- .newspack-ui__modal: invite in bulk -->
+	<dialog id="newspack-my-account__group_subscription--invite-bulk" class="newspack-ui__modal-container">
+		<div class="newspack-ui__modal-container__overlay"></div>
+		<div class="newspack-ui__modal newspack-ui__modal--small">
+			<header class="newspack-ui__modal__header">
+				<h2><?php esc_html_e( 'Invite in bulk', 'newspack-plugin' ); ?></h2>
+				<button class="newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__modal__close">
+					<span class="screen-reader-text"><?php esc_html_e( 'Close', 'newspack-plugin' ); ?></span>
+					<?php Newspack_UI_Icons::print_svg( 'close' ); ?>
+				</button>
+			</header>
+			<section class="newspack-ui__modal__content">
+				<?php if ( $is_at_limit ) : ?>
+					<p>
+						<?php
+						echo esc_html(
+							sprintf(
+								/* translators: 1: lowercase singular group label, 2: lowercase singular group label (again). */
+								__( 'You have reached the member limit for this %1$s. Please remove some members or cancel pending invitations before inviting more %2$s members.', 'newspack-plugin' ),
+								$group_label_lower,
+								$group_label_lower
+							)
+						);
+						?>
+					</p>
+				<?php else : ?>
+					<div class="newspack-ui__notice newspack-ui__notice--error newspack-my-account__group_subscription__invite-bulk__error hidden" role="alert"><p class="newspack-ui__spacing-top--0 newspack-ui__spacing-bottom--0"></p></div>
+					<?php // Step 1: the list. The server parses it, so the review below shows exactly what it will send. ?>
+					<form
+						class="newspack-my-account__group_subscription__invite-bulk__input"
+						data-error-text="<?php echo esc_attr( __( 'Something went wrong. Please try again.', 'newspack-plugin' ) ); ?>"
+						data-unfinished-text="<?php echo esc_attr( __( 'The request didn\'t finish, so some invitations may have been sent. Check the Invitations tab before trying again.', 'newspack-plugin' ) ); ?>"
+					>
+						<p>
+							<?php
+							echo esc_html(
+								sprintf(
+									/* translators: %s: duration label like "30 days" or "1 hour". */
+									__( 'Each person gets an email with a link to join. The link expires in %s.', 'newspack-plugin' ),
+									Group_Subscription_Invite::get_expiration_label()
+								)
+							);
+							?>
+						</p>
+						<p>
+							<label for="newspack-group-subscription-invite-bulk-emails"><?php esc_html_e( 'Email addresses', 'newspack-plugin' ); ?></label>
+							<textarea id="newspack-group-subscription-invite-bulk-emails" name="emails" rows="5" aria-describedby="newspack-group-subscription-invite-bulk-help"></textarea>
+							<span id="newspack-group-subscription-invite-bulk-help" class="newspack-ui__helper-text">
+								<?php
+								echo esc_html(
+									sprintf(
+										/* translators: %d: the most people one list may invite. */
+										__( 'Separate addresses with commas, spaces or new lines, or upload a CSV file with the addresses in its first column. Up to %d people at a time.', 'newspack-plugin' ),
+										Group_Subscription_Bulk_Invite::MAX_INVITES
+									)
+								);
+								?>
+							</span>
+						</p>
+						<input type="file" class="newspack-my-account__group_subscription__invite-bulk__file" name="csv" accept=".csv,text/csv" hidden>
+						<button type="button" class="newspack-ui__button newspack-ui__button--secondary newspack-ui__button--wide newspack-my-account__group_subscription__invite-bulk__upload"><?php esc_html_e( 'Upload CSV', 'newspack-plugin' ); ?></button>
+						<div class="newspack-my-account__group_subscription__invite-bulk__file-row">
+							<span class="newspack-my-account__group_subscription__invite-bulk__filename"></span>
+							<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--small newspack-my-account__group_subscription__invite-bulk__remove-file hidden"><?php esc_html_e( 'Remove file', 'newspack-plugin' ); ?></button>
+						</div>
+						<button type="submit" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide"><span><?php esc_html_e( 'Review', 'newspack-plugin' ); ?></span></button>
+						<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-ui__modal__close"><?php esc_html_e( 'Cancel', 'newspack-plugin' ); ?></button>
+					</form>
+					<?php // Step 2: the review, then the outcome. Filled in by group-subscriptions.js. ?>
+					<div class="newspack-my-account__group_subscription__invite-bulk__review hidden" tabindex="-1">
+						<ul class="newspack-my-account__group_subscription__invite-bulk__summary"></ul>
+						<button type="button" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide newspack-my-account__group_subscription__invite-bulk__send"><span><?php esc_html_e( 'Send invitations', 'newspack-plugin' ); ?></span></button>
+						<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-my-account__group_subscription__invite-bulk__back"><?php esc_html_e( 'Back', 'newspack-plugin' ); ?></button>
+						<a href="<?php echo esc_url( add_query_arg( 'activeTab', 'invites' ) ); ?>" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide newspack-my-account__group_subscription__invite-bulk__done hidden"><?php esc_html_e( 'Done', 'newspack-plugin' ); ?></a>
+					</div>
+				<?php endif; ?>
+			</section>
+		</div>
+	</dialog>
 
 	<!-- .newspack-ui__modal: regenerate invite link -->
-	<div id="newspack-my-account__group_subscription--confirm-regenerate-link" class="newspack-ui__modal-container">
+	<dialog id="newspack-my-account__group_subscription--confirm-regenerate-link" class="newspack-ui__modal-container">
 		<div class="newspack-ui__modal-container__overlay"></div>
 		<div class="newspack-ui__modal newspack-ui__modal--small">
 				<header class="newspack-ui__modal__header">
@@ -372,7 +503,7 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 						<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-ui__modal__close"><?php esc_html_e( 'Cancel', 'newspack-plugin' ); ?></button>
 				</section>
 			</div><!-- .newspack-ui__modal__small -->
-	</div> <!-- .newspack-ui__modal-container -->
+	</dialog>
 
 	<!-- .newspack-ui__modal: confirm remove member -->
 	<?php
@@ -382,7 +513,7 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 		$group_label_lower
 	);
 	?>
-	<div id="newspack-my-account__group_subscription--confirm-remove-member" class="newspack-ui__modal-container">
+	<dialog id="newspack-my-account__group_subscription--confirm-remove-member" class="newspack-ui__modal-container">
 		<div class="newspack-ui__modal-container__overlay"></div>
 		<div class="newspack-ui__modal newspack-ui__modal--small">
 				<header class="newspack-ui__modal__header">
@@ -395,7 +526,7 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 				</header>
 
 				<form class="newspack-ui__modal__content" method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-					<h2 class="font-size newspack-ui__font--l"><?php esc_html_e( 'Are you sure?', 'newspack-plugin' ); ?></h2>
+					<h2 class="newspack-ui__font--l"><?php esc_html_e( 'Are you sure?', 'newspack-plugin' ); ?></h2>
 					<p>
 						<?php
 						echo wp_kses(
@@ -421,10 +552,10 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 					</button>
 				</form>
 			</div><!-- .newspack-ui__modal__small -->
-	</div> <!-- .newspack-ui__modal-container -->
+	</dialog>
 
 	<!-- .newspack-ui__modal: disable invite link -->
-	<div id="newspack-my-account__group_subscription--confirm-disable-link" class="newspack-ui__modal-container">
+	<dialog id="newspack-my-account__group_subscription--confirm-disable-link" class="newspack-ui__modal-container">
 		<div class="newspack-ui__modal-container__overlay"></div>
 		<div class="newspack-ui__modal newspack-ui__modal--small">
 				<header class="newspack-ui__modal__header">
@@ -437,7 +568,7 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 				</header>
 
 				<section class="newspack-ui__modal__content">
-						<h2 class="font-size newspack-ui__font--l"><?php esc_html_e( 'Are you sure?', 'newspack-plugin' ); ?></h2>
+						<h2 class="newspack-ui__font--l"><?php esc_html_e( 'Are you sure?', 'newspack-plugin' ); ?></h2>
 						<p>
 							<?php esc_html_e( 'Any invite link for this group will stop working. Anyone who hasn\'t joined yet will no longer be able to. You can create a new link at any time.', 'newspack-plugin' ); ?>
 						</p>
@@ -446,5 +577,5 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 						<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-ui__modal__close"><?php esc_html_e( 'Cancel', 'newspack-plugin' ); ?></button>
 				</section>
 			</div><!-- .newspack-ui__modal__small -->
-	</div> <!-- .newspack-ui__modal-container -->
+	</dialog>
 </div>

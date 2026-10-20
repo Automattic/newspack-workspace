@@ -78,7 +78,9 @@ export default function ReaderRegistrationEdit( {
 		if ( newspack_blocks.has_newsletters && newsletterSubscription ) {
 			setInFlight( true );
 			apiFetch( {
-				path: '/newspack-newsletters/v1/lists_config',
+				// The edit context returns every list, including ones the person editing
+				// could not join as a reader; without it, they could not see or keep them.
+				path: '/newspack-newsletters/v1/lists_config?context=edit',
 			} )
 				.then( setListConfig )
 				.finally( () => setInFlight( false ) );

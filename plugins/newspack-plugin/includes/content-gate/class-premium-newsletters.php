@@ -34,6 +34,27 @@ class Premium_Newsletters {
 	private static $restricted_lists = [];
 
 	/**
+	 * Why the sign-up being filtered lost a gated list, if it did. One of
+	 * 'not_own_address', 'no_access', or '' when nothing was refused.
+	 *
+	 * Read when the refusal is turned into a message for the reader.
+	 *
+	 * @var string
+	 */
+	private static $sign_up_refusal = '';
+
+	/**
+	 * The address, lowercased, that $sign_up_refusal was recorded for.
+	 *
+	 * A sign-up that never reaches filter_subscribe_lists() resets nothing, yet its
+	 * error can carry the same code. Keeping the address lets the message callback
+	 * claim only an error raised for the address the refusal was recorded for.
+	 *
+	 * @var string
+	 */
+	private static $sign_up_refusal_email = '';
+
+	/**
 	 * Hook name for the scheduled access check action.
 	 */
 	const SCHEDULED_HOOK = 'newspack_premium_newsletters_access_check';
@@ -111,6 +132,15 @@ class Premium_Newsletters {
 		// Filter the subscription lists.
 		add_filter( 'newspack_newsletters_subscription_lists', [ __CLASS__, 'filter_subscription_lists' ] );
 
+		// Refuse sign-ups to gated lists unless the reader is signing up their own address.
+		add_filter( 'newspack_newsletters_subscribe_lists', [ __CLASS__, 'filter_subscribe_lists' ], 10, 2 );
+
+		// Tell a reader who was refused a premium list what to do about it.
+		add_filter( 'newspack_newsletters_add_contact_reader_error_message', [ __CLASS__, 'filter_sign_up_error_message' ], 20, 3 );
+
+		// Tell the Newsletter Subscription Form block which lists are gated.
+		add_filter( 'newspack_newsletters_subscription_list_gates', [ __CLASS__, 'filter_list_gates' ] );
+
 		// Register Data Events handlers.
 		add_action( 'init', [ __CLASS__, 'register_handlers' ] );
 
@@ -139,6 +169,27 @@ class Premium_Newsletters {
 		}
 		self::$gates = Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish', true );
 		return self::$gates;
+	}
+
+	/**
+	 * Whether the site has any premium newsletter gate.
+	 *
+	 * Without one no list can be gated, so callers skip their per-list work. Only
+	 * these gates can restrict a list: Content_Restriction_Control::get_post_gates()
+	 * reads no others for a list post.
+	 *
+	 * Reads Content_Gate directly rather than get_gates(): that one memoizes in a
+	 * static nothing clears outside tests, so a process that outlives a request
+	 * would never see a gate published after its first check. Content_Gate's own
+	 * cache is flushed on every post and meta write. That covers this check only:
+	 * the per-list answer comes from Content_Restriction_Control's memo, another
+	 * static nothing clears, so in such a process a list keeps the answer it got
+	 * the first time it was judged.
+	 *
+	 * @return bool
+	 */
+	private static function has_newsletter_gates(): bool {
+		return ! empty( Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish', true ) );
 	}
 
 	/**
@@ -460,15 +511,8 @@ class Premium_Newsletters {
 			return $lists;
 		}
 
-		// With no gates at all, no list can be restricted, so skip the per-list
-		// check entirely. Both kinds have to be absent: get_gates()'s $is_newsletter
-		// argument selects between premium newsletter gates and ordinary ones rather
-		// than widening to both — the meta query is EXISTS vs NOT EXISTS — while the
-		// per-list check below runs through Content_Restriction_Control, which
-		// honours any gate whose content rules match the list. Testing only the
-		// newsletter half would skip lists an ordinary gate restricts. In non-test
-		// requests both gate lookups are cached (Content_Gate::get_gates cache is
-		// disabled under PHPUnit), so the fast path stays cheap.
+		// With no gate of either kind, no list can be restricted, so skip the
+		// per-list check entirely.
 		if ( empty( self::get_gates() ) && empty( Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish' ) ) ) {
 			return $lists;
 		}
@@ -488,6 +532,166 @@ class Premium_Newsletters {
 			)
 		);
 		return $lists;
+	}
+
+	/**
+	 * Remove lists a reader may not join from a sign-up.
+	 *
+	 * Display is all filter_subscription_lists() decides. Without this, a request
+	 * naming a gated list's ID subscribes the contact anyway, and they stay
+	 * subscribed until a later event queues their access check.
+	 *
+	 * A gated list can be joined only by the logged-in reader signing up their
+	 * own address, and only if their account has access. The submitted address is
+	 * compared with the session reader's own and nothing more: the account behind
+	 * it, if there is one, is never looked up. If the result depended on that
+	 * account, anyone could submit another person's address and learn from it
+	 * whether that person has access.
+	 *
+	 * @param string[] $lists   Public IDs of the lists requested.
+	 * @param array    $contact Contact information, with an `email` key.
+	 *
+	 * @return string[] The lists the sign-up may proceed with.
+	 */
+	public static function filter_subscribe_lists( $lists, $contact = [] ) {
+		// Reset before any early return, so a refusal recorded here is never read for a later sign-up.
+		self::$sign_up_refusal       = '';
+		self::$sign_up_refusal_email = '';
+		if ( ! is_array( $lists ) || empty( $lists ) || ! self::is_access_control_active() ) {
+			return $lists;
+		}
+		if ( ! self::has_newsletter_gates() ) {
+			return $lists;
+		}
+		if ( ! class_exists( 'Newspack\Newsletters\Subscription_Lists' ) || ! method_exists( 'Newspack\Newsletters\Subscription_List', 'from_public_id' ) ) {
+			return $lists;
+		}
+		$session_user   = wp_get_current_user();
+		$email          = is_array( $contact ) && isset( $contact['email'] ) && is_string( $contact['email'] ) ? trim( $contact['email'] ) : '';
+		$is_own_address = $session_user->exists() && '' !== $email && 0 === strcasecmp( $email, $session_user->user_email );
+
+		return array_values(
+			array_filter(
+				$lists,
+				function ( $public_id ) use ( $is_own_address, $session_user, $email ) {
+					$list = Subscription_List::from_public_id( $public_id );
+					// A public ID can name any post, not only a list. Judging those would
+					// turn a sign-up attempt into a way to probe every gate on the site,
+					// so anything that isn't a list passes through unjudged.
+					if ( ! $list || \Newspack\Newsletters\Subscription_Lists::CPT !== get_post_type( $list->get_id() ) ) {
+						return true;
+					}
+					if ( ! Content_Restriction_Control::post_has_restrictions( false, $list->get_id() ) ) {
+						return true;
+					}
+					// The reason comes from the same two facts as the rule: whether this is the
+					// session reader's own address, and whether that reader has access. The
+					// access check stays behind the address check, so it never runs for an
+					// address that isn't theirs.
+					if ( ! $is_own_address ) {
+						self::$sign_up_refusal       = 'not_own_address';
+						self::$sign_up_refusal_email = strtolower( $email );
+						return false;
+					}
+					if ( Content_Restriction_Control::is_post_restricted( false, $list->get_id(), $session_user->ID ) ) {
+						self::$sign_up_refusal       = 'no_access';
+						self::$sign_up_refusal_email = strtolower( $email );
+						return false;
+					}
+					return true;
+				}
+			)
+		);
+	}
+
+	/**
+	 * Replace the generic sign-up error with one that explains a premium list
+	 * refusal.
+	 *
+	 * The generic message tells a refused reader nothing. These two say what
+	 * happened, and neither says anything about another account's access: the
+	 * first goes to every request for an address that is not the session
+	 * reader's, whatever that address's account can read, and the second is
+	 * about the session reader's own account.
+	 *
+	 * They do tell a new address from a registered one. A sign-up form can
+	 * create an account for a new address and sign the visitor in as it before
+	 * the lists are checked, so that visitor gets the second message. The same
+	 * response already says as much: it carries the new reader's login cookie.
+	 *
+	 * @param string $message   The reader-facing message so far.
+	 * @param array  $params    Details of the sign-up request, with an `email` key.
+	 * @param mixed  $raw_error The error the sign-up produced.
+	 *
+	 * @return string
+	 */
+	public static function filter_sign_up_error_message( $message, $params = [], $raw_error = null ) {
+		if ( ! is_wp_error( $raw_error ) || 'newspack_newsletters_lists_not_allowed' !== $raw_error->get_error_code() ) {
+			return $message;
+		}
+		$email = is_array( $params ) && isset( $params['email'] ) && is_string( $params['email'] ) ? strtolower( trim( $params['email'] ) ) : '';
+		if ( '' === self::$sign_up_refusal || $email !== self::$sign_up_refusal_email ) {
+			return $message;
+		}
+		if ( 'not_own_address' === self::$sign_up_refusal ) {
+			return __( 'Sign in with this email address to subscribe to premium newsletters.', 'newspack-plugin' );
+		}
+		if ( 'no_access' === self::$sign_up_refusal ) {
+			return __( 'This account doesn\'t include access to premium newsletters.', 'newspack-plugin' );
+		}
+		return $message;
+	}
+
+	/**
+	 * Report the premium newsletter gates that restrict each subscription list.
+	 *
+	 * Uses the same matcher that decides access, so a gate is listed here exactly
+	 * when it can restrict the list: published, with registration or paid access
+	 * switched on, and content rules that match.
+	 *
+	 * @param array[] $list_gates Gates keyed by public list ID.
+	 *
+	 * @return array[] Gates keyed by public list ID. Each gate has `id` and `title`,
+	 *                 plus `edit_url` for users who can open the wizard.
+	 */
+	public static function filter_list_gates( $list_gates ) {
+		$list_gates = is_array( $list_gates ) ? $list_gates : [];
+		if ( ! self::is_access_control_active() || ! class_exists( 'Newspack\Newsletters\Subscription_Lists' ) ) {
+			return $list_gates;
+		}
+		if ( ! self::has_newsletter_gates() ) {
+			return $list_gates;
+		}
+		// The Premium Newsletters wizard's capability and page slug. The link goes
+		// to the wizard's edit route rather than the gate's post editor, which
+		// edits the layout readers see and not the gate's rules.
+		$can_edit = current_user_can( 'manage_options' );
+		foreach ( \Newspack\Newsletters\Subscription_Lists::get_all() as $list ) {
+			// The marker must mean the same thing as the sign-up check, which honors
+			// a list marked exempt. get_post_gates() alone would mark it as gated
+			// while anyone can join it.
+			if ( ! Content_Restriction_Control::post_has_restrictions( false, $list->get_id() ) ) {
+				continue;
+			}
+			$gates = Content_Restriction_Control::get_post_gates( $list->get_id() );
+			if ( empty( $gates ) ) {
+				continue;
+			}
+			$list_gates[ $list->get_public_id() ] = array_map(
+				function ( $gate ) use ( $can_edit ) {
+					$item = [
+						'id'    => (int) $gate['id'],
+						'title' => (string) $gate['title'],
+					];
+					if ( $can_edit ) {
+						$item['edit_url'] = admin_url( 'admin.php?page=newspack-premium-newsletters#/edit/' . (int) $gate['id'] );
+					}
+					return $item;
+				},
+				array_values( $gates )
+			);
+		}
+		return $list_gates;
 	}
 
 	/**

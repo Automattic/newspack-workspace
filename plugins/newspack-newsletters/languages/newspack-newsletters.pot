@@ -2,14 +2,14 @@
 # This file is distributed under the GPL2.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Newsletters 3.42.0\n"
+"Project-Id-Version: Newspack Newsletters 3.43.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-newsletters\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-12T18:26:19+00:00\n"
+"POT-Creation-Date: 2026-10-14T15:48:04+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-newsletters\n"
@@ -106,8 +106,8 @@ msgstr ""
 #: includes/admin/pages/class-layouts-list-page.php:92
 #: includes/admin/pages/class-newsletters-list-page.php:102
 #: includes/admin/pages/class-settings-page.php:59
-#: includes/class-newspack-newsletters-subscription.php:1339
-#: includes/class-newspack-newsletters-subscription.php:1352
+#: includes/class-newspack-newsletters-subscription.php:1379
+#: includes/class-newspack-newsletters-subscription.php:1392
 msgid "Newsletters"
 msgstr ""
 
@@ -458,9 +458,13 @@ msgid_plural "%d newsletters now have public page disabled."
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/class-newspack-newsletters-contacts.php:323
-#: includes/class-newspack-newsletters-contacts.php:358
-#: includes/class-newspack-newsletters-subscription.php:1025
+#: includes/class-newspack-newsletters-contacts.php:153
+msgid "The selected lists are not available for this email address."
+msgstr ""
+
+#: includes/class-newspack-newsletters-contacts.php:442
+#: includes/class-newspack-newsletters-contacts.php:477
+#: includes/class-newspack-newsletters-subscription.php:1065
 msgid "Not supported for this provider"
 msgstr ""
 
@@ -701,8 +705,6 @@ msgstr ""
 #: includes/class-subscription-lists.php:163
 #: includes/class-subscription-lists.php:164
 #: includes/class-subscription-lists.php:166
-#: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:235
 msgid "Subscription Lists"
 msgstr ""
 
@@ -758,9 +760,9 @@ msgstr ""
 
 #: includes/class-newspack-newsletters-settings.php:488
 #: includes/class-newspack-newsletters-settings.php:494
-#: includes/class-newspack-newsletters-subscription.php:1176
-#: includes/class-newspack-newsletters-subscription.php:1277
-#: includes/class-newspack-newsletters-subscription.php:1280
+#: includes/class-newspack-newsletters-subscription.php:1216
+#: includes/class-newspack-newsletters-subscription.php:1317
+#: includes/class-newspack-newsletters-subscription.php:1320
 msgid "Invalid request."
 msgstr ""
 
@@ -773,8 +775,8 @@ msgid "Local lists are not available for the configured provider."
 msgstr ""
 
 #: includes/class-newspack-newsletters-subscription.php:352
-#: includes/class-subscription-lists.php:758
-#: includes/class-subscription-lists.php:959
+#: includes/class-subscription-lists.php:766
+#: includes/class-subscription-lists.php:967
 msgid "Subscription list not found."
 msgstr ""
 
@@ -783,8 +785,8 @@ msgid "Local lists must be edited via /lists/local/{id}."
 msgstr ""
 
 #: includes/class-newspack-newsletters-subscription.php:388
-#: includes/class-subscription-lists.php:694
-#: includes/class-subscription-lists.php:776
+#: includes/class-subscription-lists.php:702
+#: includes/class-subscription-lists.php:784
 #: dist/admin-shell.js:206
 #: dist/wizard-bridge.js:1
 #: src/admin-shell/screens/settings/local-list-modal.js:86
@@ -800,85 +802,85 @@ msgstr ""
 msgid "List"
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:601
-#: includes/class-newspack-newsletters-subscription.php:647
-#: includes/class-newspack-newsletters-subscription.php:720
+#: includes/class-newspack-newsletters-subscription.php:635
+#: includes/class-newspack-newsletters-subscription.php:675
+#: includes/class-newspack-newsletters-subscription.php:748
 msgid "Provider is not set."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:651
-#: includes/class-subscription-lists.php:870
-#: includes/class-subscription-lists.php:909
+#: includes/class-newspack-newsletters-subscription.php:679
+#: includes/class-subscription-lists.php:878
+#: includes/class-subscription-lists.php:917
 msgid "Invalid list configuration."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:715
+#: includes/class-newspack-newsletters-subscription.php:743
 msgid "Missing email address."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:724
+#: includes/class-newspack-newsletters-subscription.php:752
 msgid "Provider does not handle the contact-exists check."
 msgstr ""
 
 #. translators: %s: User display name.
-#: includes/class-newspack-newsletters-subscription.php:1208
+#: includes/class-newspack-newsletters-subscription.php:1248
 #, php-format
 msgid "Hello, %s!"
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:1209
+#: includes/class-newspack-newsletters-subscription.php:1249
 msgid "Verify your email address by visiting the following address:"
 msgstr ""
 
 #. translators: %s Site title.
-#: includes/class-newspack-newsletters-subscription.php:1226
+#: includes/class-newspack-newsletters-subscription.php:1266
 #, php-format
 msgid "[%s] Verify your email"
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:1259
+#: includes/class-newspack-newsletters-subscription.php:1299
 msgid "Check your email address for a verification link."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:1272
+#: includes/class-newspack-newsletters-subscription.php:1312
 msgid "You're not logged in."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:1287
+#: includes/class-newspack-newsletters-subscription.php:1327
 msgid "Your email has been verified."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:1413
+#: includes/class-newspack-newsletters-subscription.php:1453
 msgid "Please verify your email address before managing your newsletters subscriptions."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:1417
+#: includes/class-newspack-newsletters-subscription.php:1457
 msgid "Verify Email"
 msgstr ""
 
 #. translators: %s: Error message.
-#: includes/class-newspack-newsletters-subscription.php:1438
+#: includes/class-newspack-newsletters-subscription.php:1478
 #, php-format
 msgid "Error while attempting to subscribe: %s"
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:1446
+#: includes/class-newspack-newsletters-subscription.php:1486
 msgid "Manage your newsletter preferences."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:1480
+#: includes/class-newspack-newsletters-subscription.php:1520
 msgid "Update subscriptions"
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:1505
+#: includes/class-newspack-newsletters-subscription.php:1545
 msgid "You must be logged in and verified to update your subscriptions."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:1534
+#: includes/class-newspack-newsletters-subscription.php:1574
 msgid "You must select newsletters to update."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:1536
+#: includes/class-newspack-newsletters-subscription.php:1576
 msgid "Your subscriptions were updated."
 msgstr ""
 
@@ -1204,23 +1206,23 @@ msgstr ""
 msgid "Other providers this list is already configured for:"
 msgstr ""
 
-#: includes/class-subscription-lists.php:767
-#: includes/class-subscription-lists.php:967
+#: includes/class-subscription-lists.php:775
+#: includes/class-subscription-lists.php:975
 msgid "This subscription list is not a local list."
 msgstr ""
 
-#: includes/class-subscription-lists.php:975
+#: includes/class-subscription-lists.php:983
 msgid "Could not delete the subscription list."
 msgstr ""
 
-#: includes/class-subscription-lists.php:1024
+#: includes/class-subscription-lists.php:1032
 #: dist/admin-shell.js:200
 #: src/admin-shell/screens/advertisers-list/fields.js:54
 #: src/admin-shell/screens/advertisers-list/modal.js:173
 msgid "Description"
 msgstr ""
 
-#: includes/class-subscription-lists.php:1041
+#: includes/class-subscription-lists.php:1049
 msgid "Back to Subscription Lists management"
 msgstr ""
 
@@ -2407,11 +2409,19 @@ msgstr ""
 msgid "Error loading the reCaptcha library."
 msgstr ""
 
-#: src/blocks/subscribe/index.php:549
+#. translators: %s: label marking a premium list, such as "Premium".
+#: src/blocks/subscribe/index.php:188
+#: dist/blocks.js:11
+#: src/blocks/subscribe/edit.js:508
+#, php-format,js-format
+msgid "(%s)"
+msgstr ""
+
+#: src/blocks/subscribe/index.php:758
 msgid "You must enter a valid email address."
 msgstr ""
 
-#: src/blocks/subscribe/index.php:553
+#: src/blocks/subscribe/index.php:762
 msgid "You must select a list."
 msgstr ""
 
@@ -2660,11 +2670,11 @@ msgstr ""
 
 #: dist/admin-shell.js:195
 #: dist/admin-shell.js:200
-#: dist/blocks.js:4
+#: dist/blocks.js:11
 #: src/admin-shell/components/rename-form/index.js:55
 #: src/admin-shell/screens/advertisers-list/fields.js:46
 #: src/admin-shell/screens/advertisers-list/modal.js:165
-#: src/blocks/subscribe/edit.js:385
+#: src/blocks/subscribe/edit.js:535
 #: src/newsletter-editor/sidebar/sender.js:56
 msgid "Name"
 msgstr ""
@@ -3815,221 +3825,284 @@ msgstr ""
 msgid "Custom Start Date"
 msgstr ""
 
-#: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:30
+#. translators: 1: title of the moved item. 2: its new position. 3: total number of items.
+#: dist/blocks.js:4
+#: src/blocks/subscribe/edit.js:67
 msgid "Initial"
 msgstr ""
 
-#: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:31
+#: dist/blocks.js:4
+#: src/blocks/subscribe/edit.js:68
 msgid "Success"
 msgstr ""
 
-#: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:139
-msgid "Form settings"
+#: dist/blocks.js:4
+#: src/blocks/subscribe/edit.js:191
+msgid "Edit Lists"
 msgstr ""
 
-#: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:141
+#: dist/blocks.js:4
+#: src/blocks/subscribe/edit.js:192
+msgid "Premium"
+msgstr ""
+
+#. translators: %s: names of the access gates restricting a list, separated by commas.
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:204
+#, js-format
+msgid "Gated by %s"
+msgstr ""
+
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:226
+msgid "Form"
+msgstr ""
+
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:233
+msgid "You must enable lists for subscription."
+msgstr ""
+
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:238
+msgid "You must select at least one list."
+msgstr ""
+
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:249
+msgid "List position"
+msgstr ""
+
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:250
+msgid "Show lists before or after the email input field."
+msgstr ""
+
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:254
+msgid "Before"
+msgstr ""
+
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:255
+msgid "After"
+msgstr ""
+
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:259
 msgid "Display input labels"
 msgstr ""
 
-#: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:146
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:264
 msgid "Email placeholder"
 msgstr ""
 
-#: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:151
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:269
 msgid "Display name field"
 msgstr ""
 
-#: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:158
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:276
 #: src/service-providers/example/index.js:32
 msgid "Name placeholder"
 msgstr ""
 
-#: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:163
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:281
 msgid "Display \"Last Name\" field"
 msgstr ""
 
-#: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:169
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:287
 msgid "\"Last Name\" placeholder"
 msgstr ""
 
-#: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:178
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:296
 msgid "Display list description"
 msgstr ""
 
-#: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:184
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:304
+msgid "Always show premium lists"
+msgstr ""
+
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:305
+msgid "Readers without access see premium lists, but can’t sign up for them."
+msgstr ""
+
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:310
+msgid "Premium list label"
+msgstr ""
+
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:328
+msgid "Manage your subscription lists"
+msgstr ""
+
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:336
+msgid "Turn on the lists readers can sign up for in this form, and put them in the order they appear."
+msgstr ""
+
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:340
+msgid "Turn on at least one list to save."
+msgstr ""
+
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:351
 msgid "After subscribe"
 msgstr ""
 
-#: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:186
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:353
 msgid "Post-signup button"
 msgstr ""
 
-#: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:187
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:354
 msgid "After a successful signup, present a button that sends the reader to another page."
 msgstr ""
 
-#: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:190
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:357
 msgid "Show the success message"
 msgstr ""
 
-#: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:191
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:358
 msgid "Go to a custom URL"
 msgstr ""
 
-#: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:192
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:359
 msgid "Go to the previous page"
 msgstr ""
 
-#: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:198
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:365
 msgid "Button label"
 msgstr ""
 
-#: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:205
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:372
 msgid "Custom URL"
 msgstr ""
 
-#: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:206
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:373
 msgid "https://example.com"
 msgstr ""
 
-#: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:212
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:379
 msgid "Styles"
 msgstr ""
 
-#: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:214
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:381
 msgid "Make sure to pick a color that will contrast against the rest of your site's color scheme, to help this block stand out!"
 msgstr ""
 
-#: dist/blocks.js:1
+#: dist/blocks.js:7
 #: dist/editorBlocks.js:21
-#: src/blocks/subscribe/edit.js:225
+#: src/blocks/subscribe/edit.js:392
 #: src/editor/blocks/posts-inserter/index.js:262
 #: src/newsletter-editor/styling/index.js:337
 msgid "Text"
 msgstr ""
 
-#: dist/blocks.js:1
+#: dist/blocks.js:7
 #: dist/editorBlocks.js:21
-#: src/blocks/subscribe/edit.js:230
+#: src/blocks/subscribe/edit.js:397
 #: src/newsletter-editor/styling/index.js:342
 msgid "Background"
 msgstr ""
 
-#: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:240
-msgid "You must enable lists for subscription."
-msgstr ""
-
-#: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:247
-msgid "You must select at least one list."
-msgstr ""
-
-#: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:266
-msgid "Manage your subscription lists"
-msgstr ""
-
-#: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:270
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:403
 msgid "Mailchimp Settings"
 msgstr ""
 
-#: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:272
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:405
 msgid "Enable double opt-in"
 msgstr ""
 
-#: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:273
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:406
 msgid "Whether the new contact will have its status as \"pending\" until email confirmation"
 msgstr ""
 
-#: dist/blocks.js:1
-#: src/blocks/subscribe/edit.js:283
+#: dist/blocks.js:7
+#: src/blocks/subscribe/edit.js:416
 msgid "Spam protection"
 msgstr ""
 
 #. translators: %s is either 'enabled' or 'disabled'.
-#: dist/blocks.js:4
-#: src/blocks/subscribe/edit.js:287
+#: dist/blocks.js:10
+#: src/blocks/subscribe/edit.js:420
 #, js-format
 msgid "reCAPTCHA is currently %s."
 msgstr ""
 
-#: dist/blocks.js:4
-#: src/blocks/subscribe/edit.js:289
+#: dist/blocks.js:10
+#: src/blocks/subscribe/edit.js:422
 msgid "enabled"
 msgstr ""
 
-#: dist/blocks.js:4
-#: src/blocks/subscribe/edit.js:290
+#: dist/blocks.js:10
+#: src/blocks/subscribe/edit.js:423
 msgid "disabled"
 msgstr ""
 
-#: dist/blocks.js:4
-#: src/blocks/subscribe/edit.js:295
+#: dist/blocks.js:10
+#: src/blocks/subscribe/edit.js:428
 msgid "It's highly recommended that you enable reCAPTCHA protection to prevent spambots from using this form!"
 msgstr ""
 
-#: dist/blocks.js:4
-#: src/blocks/subscribe/edit.js:303
+#: dist/blocks.js:10
+#: src/blocks/subscribe/edit.js:436
 msgid "Configure your reCAPTCHA settings."
 msgstr ""
 
-#: dist/blocks.js:4
-#: src/blocks/subscribe/edit.js:311
+#: dist/blocks.js:10
+#: src/blocks/subscribe/edit.js:444
 msgid "Edited State"
 msgstr ""
 
-#: dist/blocks.js:4
-#: src/blocks/subscribe/edit.js:339
+#: dist/blocks.js:10
+#: src/blocks/subscribe/edit.js:473
 msgid "A previously selected list is no longer available. Please, revise the subscription lists selection."
 msgstr ""
 
-#: dist/blocks.js:4
-#: src/blocks/subscribe/edit.js:399
+#: dist/blocks.js:11
+#: src/blocks/subscribe/edit.js:549
 msgid "Last Name"
 msgstr ""
 
-#: dist/blocks.js:4
-#: src/blocks/subscribe/edit.js:415
+#: dist/blocks.js:11
+#: src/blocks/subscribe/edit.js:565
 msgid "Email Address"
 msgstr ""
 
-#: dist/blocks.js:4
-#: src/blocks/subscribe/edit.js:425
+#: dist/blocks.js:11
+#: src/blocks/subscribe/edit.js:575
 msgid "Sign up"
 msgstr ""
 
-#: dist/blocks.js:4
-#: src/blocks/subscribe/edit.js:439
+#: dist/blocks.js:11
+#: src/blocks/subscribe/edit.js:589
 msgid "Success message"
 msgstr ""
 
-#: dist/blocks.js:4
-#: src/blocks/subscribe/edit.js:454
+#: dist/blocks.js:11
+#: src/blocks/subscribe/edit.js:604
 msgid "Continue"
 msgstr ""
 
@@ -5178,6 +5251,12 @@ msgstr ""
 #: src/blocks/subscribe/block.json
 msgctxt "block style label"
 msgid "Modern Grid"
+msgstr ""
+
+#: dist/blocks/subscribe/block.json
+#: src/blocks/subscribe/block.json
+msgctxt "block style label"
+msgid "Legacy"
 msgstr ""
 
 #: dist/editor/blocks/ad/block.json
