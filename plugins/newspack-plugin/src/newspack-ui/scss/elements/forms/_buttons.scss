@@ -418,11 +418,7 @@
 		}
 	}
 
-	br + .newspack-ui__button,
-	.newspack-ui__demo .newspack-ui__button + .newspack-ui__button {
+	br + .newspack-ui__button {
 		margin-top: var(--newspack-ui-spacer-2);
-	}
-	.newspack-ui__demo .newspack-ui__stack--horizontal .newspack-ui__button {
-		margin-block: 0;
 	}
 }
