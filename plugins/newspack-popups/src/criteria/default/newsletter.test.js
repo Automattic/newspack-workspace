@@ -6,11 +6,23 @@ const nowInSeconds = () => Math.floor( Date.now() / 1000 );
  * Build the second argument the matching function receives, with a stubbed
  * reader data library store returning the given subscriber value.
  *
- * @param {boolean} value Value returned by store.get( 'is_newsletter_subscriber' ).
+ * @param {boolean} value        Value returned by store.get( 'is_newsletter_subscriber' ).
+ * @param {*}       clientSignal Value returned by store.get( 'newsletter_signup_client' ).
+ * @param {boolean} isLoggedIn   Whether the stored reader is authenticated.
  * @return {Object} Stubbed reader activation object.
  */
-const makeRas = ( value, clientSignal = false ) => ( {
-	store: { get: key => ( 'newsletter_signup_client' === key ? clientSignal : value ) },
+const makeRas = ( value, clientSignal = false, isLoggedIn = false ) => ( {
+	store: {
+		get: key => {
+			if ( 'newsletter_signup_client' === key ) {
+				return clientSignal;
+			}
+			if ( 'reader' === key ) {
+				return { authenticated: isLoggedIn };
+			}
+			return value;
+		},
+	},
 } );
 
 describe( 'newsletter criteria matching', () => {
@@ -35,18 +47,25 @@ describe( 'newsletter criteria matching', () => {
 		expect( matchNewsletter( { value: 'non-subscribers' }, makeRas( false, signedUpAnHourAgo ) ) ).toBe( false );
 	} );
 
-	it( 'stops treating a browser-side signup signal as a subscriber after a day', () => {
-		const signedUpTwoDaysAgo = nowInSeconds() - 2 * 24 * 60 * 60;
-		expect( matchNewsletter( { value: 'subscribers' }, makeRas( false, signedUpTwoDaysAgo ) ) ).toBe( false );
-		expect( matchNewsletter( { value: 'non-subscribers' }, makeRas( false, signedUpTwoDaysAgo ) ) ).toBe( true );
+	it( 'stops treating the signup signal of a logged-in reader as a subscriber after a day', () => {
+		const signedUp25HoursAgo = nowInSeconds() - 25 * 60 * 60;
+		expect( matchNewsletter( { value: 'subscribers' }, makeRas( false, signedUp25HoursAgo, true ) ) ).toBe( false );
+		expect( matchNewsletter( { value: 'non-subscribers' }, makeRas( false, signedUp25HoursAgo, true ) ) ).toBe( true );
+	} );
+
+	it( 'keeps treating the signup signal of a logged-out reader as a subscriber after a day', () => {
+		const signedUp25HoursAgo = nowInSeconds() - 25 * 60 * 60;
+		expect( matchNewsletter( { value: 'subscribers' }, makeRas( false, signedUp25HoursAgo ) ) ).toBe( true );
+		expect( matchNewsletter( { value: 'non-subscribers' }, makeRas( false, signedUp25HoursAgo ) ) ).toBe( false );
 	} );
 
 	it.each( [
-		[ 'a legacy true', true ],
+		[ 'a boolean true', true ],
 		[ 'a future time', nowInSeconds() + 60 * 60 ],
 		[ 'a numeric string', String( nowInSeconds() ) ],
 	] )( 'ignores %s as the browser-side signup signal', ( _label, hint ) => {
 		expect( matchNewsletter( { value: 'subscribers' }, makeRas( false, hint ) ) ).toBe( false );
+		expect( matchNewsletter( { value: 'subscribers' }, makeRas( false, hint, true ) ) ).toBe( false );
 	} );
 
 	it( 'treats a reader arriving with utm_medium=email as a subscriber', () => {
