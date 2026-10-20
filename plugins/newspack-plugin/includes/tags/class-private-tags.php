@@ -28,6 +28,7 @@ defined( 'ABSPATH' ) || exit;
  * In the admin area and Gutenberg editor:
  * - A "Private" column is added to the Tags list table, with a checkbox in Quick Edit.
  * - It is labeled "(private)" in the admin and Gutenberg editor.
+ * - Entering its labeled name in the editor's Tags field reuses it rather than creating a new tag.
  *
  * Note: This is a presentation-layer feature, not an access control mechanism.
  * Private tags remain in the database and may still be exposed by plugins or
@@ -147,6 +148,8 @@ class Private_Tags {
 		// Admin: label private tags so editors can identify them.
 		add_filter( 'term_name', [ __CLASS__, 'append_private_label_to_name' ], 10, 3 );
 		add_filter( 'rest_prepare_post_tag', [ __CLASS__, 'append_private_label_to_rest' ], 10, 2 );
+		// Admin: map a typed labeled name back to the private tag so no public duplicate is created.
+		add_filter( 'rest_pre_insert_post_tag', [ __CLASS__, 'strip_private_label_from_rest' ], 10, 2 );
 
 		// Admin: Private column and Quick Edit support.
 		add_filter( 'manage_edit-post_tag_columns', [ __CLASS__, 'add_private_column' ], 10, 1 );
@@ -706,6 +709,70 @@ class Private_Tags {
 		}
 
 		return $response;
+	}
+
+	/**
+	 * Strip the "(private)" label from a tag name created via the REST API (Gutenberg editor).
+	 *
+	 * Editors only see private tags with the label (see append_private_label_to_rest()),
+	 * but the stored name has none. When the full labeled name is typed in the editor's
+	 * Tags field, Gutenberg POSTs it as a new tag and wp_insert_term() would create a
+	 * public duplicate. Stripping the label makes wp_insert_term() return a term_exists
+	 * error with the private tag's ID, which Gutenberg assigns to the post instead.
+	 *
+	 * The name is only changed when the remaining text matches an existing private tag,
+	 * so a new tag whose real name ends in "(private)" can still be created. Updates and
+	 * requests with an explicit slug are left alone: in both, a changed name would not
+	 * resolve to the private tag and could leave two tags with the same name.
+	 *
+	 * @param \stdClass        $prepared_term Term data about to be passed to wp_insert_term().
+	 * @param \WP_REST_Request $request       The REST request.
+	 * @return \stdClass
+	 */
+	public static function strip_private_label_from_rest( $prepared_term, $request ) {
+		if ( ! empty( $request['id'] ) || ! empty( $prepared_term->slug ) ) {
+			return $prepared_term;
+		}
+		if ( ! isset( $prepared_term->name ) || ! is_string( $prepared_term->name ) ) {
+			return $prepared_term;
+		}
+
+		$label = self::get_private_label();
+		$name  = trim( $prepared_term->name );
+		if ( substr( $name, -strlen( $label ) ) !== $label ) {
+			return $prepared_term;
+		}
+
+		$private_ids = self::get_private_tag_ids();
+		if ( empty( $private_ids ) ) {
+			return $prepared_term;
+		}
+
+		$base_name = substr( $name, 0, -strlen( $label ) );
+		$matches   = get_terms(
+			[
+				'taxonomy'               => 'post_tag',
+				'name'                   => $base_name,
+				'hide_empty'             => false,
+				'update_term_meta_cache' => false,
+			]
+		);
+		if ( ! is_array( $matches ) ) {
+			return $prepared_term;
+		}
+
+		// get_terms() matches names per the DB collation, which ignores accents, while
+		// wp_insert_term() compares the sanitized name strictly. Compare the same way so
+		// the name is only stripped when wp_insert_term() will find the existing tag.
+		$db_name = wp_unslash( sanitize_term_field( 'name', $base_name, 0, 'post_tag', 'db' ) );
+		foreach ( $matches as $match ) {
+			if ( in_array( $match->term_id, $private_ids, true ) && strtolower( $match->name ) === strtolower( $db_name ) ) {
+				$prepared_term->name = $base_name;
+				break;
+			}
+		}
+
+		return $prepared_term;
 	}
 
 	/**
