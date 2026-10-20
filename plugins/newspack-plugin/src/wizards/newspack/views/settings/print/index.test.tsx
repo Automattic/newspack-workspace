@@ -23,6 +23,30 @@ const SETTINGS: PrintData = {
 		{ label: 'Pages', value: 'page' },
 	],
 	indesign_exclude_captions: false,
+	indesign_style_names: {
+		headline: '',
+		subhead: '',
+		byline: '',
+		paragraph: '',
+		horizontal_rule: '',
+		pullquote: '',
+		pullquote_name: '',
+		blockquote: '',
+		photo_caption: '',
+		photo_credit: '',
+	},
+	indesign_default_style_names: {
+		headline: '24head',
+		subhead: '12sub',
+		byline: 'byline',
+		paragraph: 'text',
+		horizontal_rule: 'hr',
+		pullquote: 'pullquote',
+		pullquote_name: 'pullquotename',
+		blockquote: 'blockquote',
+		photo_caption: 'PhotoCaption',
+		photo_credit: 'PhotoCredit',
+	},
 };
 
 let server: PrintData;
@@ -150,6 +174,7 @@ describe( 'when InDesign export is on', () => {
 			indesign_platform: 'win',
 			indesign_post_types: [ 'post', 'page' ],
 			indesign_exclude_captions: true,
+			indesign_style_names: SETTINGS.indesign_style_names,
 		} );
 		expect( headerAction( 'Save' ).disabled ).toBe( true );
 		expect(

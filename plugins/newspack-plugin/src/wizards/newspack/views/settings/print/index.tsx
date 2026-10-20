@@ -6,7 +6,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { CheckboxControl, Notice, SelectControl } from '@wordpress/components';
+import { CheckboxControl, Notice, SelectControl, TextControl } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { useEffect, useRef, useState } from '@wordpress/element';
 import { Stack } from '@wordpress/ui';
@@ -26,12 +26,39 @@ const PLATFORM_OPTIONS: { label: string; value: IndesignPlatform }[] = [
 	{ label: __( 'Mac (ASCII-MAC)', 'newspack-plugin' ), value: 'mac' },
 ];
 
-type PrintSettings = Pick< PrintData, 'indesign_platform' | 'indesign_post_types' | 'indesign_exclude_captions' >;
+const STYLE_NAME_FIELDS: { key: IndesignStyleNameKey; label: string }[] = [
+	{ key: 'headline', label: __( 'Headline', 'newspack-plugin' ) },
+	{ key: 'subhead', label: __( 'Subhead (deck)', 'newspack-plugin' ) },
+	{ key: 'byline', label: __( 'Byline', 'newspack-plugin' ) },
+	{ key: 'paragraph', label: __( 'Body', 'newspack-plugin' ) },
+	{ key: 'horizontal_rule', label: __( 'Horizontal rule', 'newspack-plugin' ) },
+	{ key: 'pullquote', label: __( 'Pull quote', 'newspack-plugin' ) },
+	{ key: 'pullquote_name', label: __( 'Pull quote name', 'newspack-plugin' ) },
+	{ key: 'blockquote', label: __( 'Block quote', 'newspack-plugin' ) },
+	{ key: 'photo_caption', label: __( 'Photo caption', 'newspack-plugin' ) },
+	{ key: 'photo_credit', label: __( 'Photo credit', 'newspack-plugin' ) },
+];
+
+const blankStyleNames = (): Record< IndesignStyleNameKey, string > => ( {
+	headline: '',
+	subhead: '',
+	byline: '',
+	paragraph: '',
+	horizontal_rule: '',
+	pullquote: '',
+	pullquote_name: '',
+	blockquote: '',
+	photo_caption: '',
+	photo_credit: '',
+} );
+
+type PrintSettings = Pick< PrintData, 'indesign_platform' | 'indesign_post_types' | 'indesign_exclude_captions' | 'indesign_style_names' >;
 
 const toSettings = ( data: PrintData ): PrintSettings => ( {
 	indesign_platform: data.indesign_platform,
 	indesign_post_types: data.indesign_post_types,
 	indesign_exclude_captions: data.indesign_exclude_captions,
+	indesign_style_names: data.indesign_style_names,
 } );
 
 // Post-type order carries no meaning, so re-checking a box must not read as a change.
@@ -47,6 +74,8 @@ function Print() {
 			indesign_post_types: [ 'post' ],
 			available_post_types: [],
 			indesign_exclude_captions: false,
+			indesign_style_names: blankStyleNames(),
+			indesign_default_style_names: blankStyleNames(),
 		},
 	} );
 	const { setHeaderData, addNotice, removeNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
@@ -91,6 +120,12 @@ function Print() {
 			} )
 			.catch( () => undefined );
 	};
+
+	const setStyleName = ( key: IndesignStyleNameKey, value: string ) =>
+		setSettings( current => ( {
+			...current,
+			indesign_style_names: { ...current.indesign_style_names, [ key ]: value },
+		} ) );
 
 	const togglePostType = ( slug: string, checked: boolean ) =>
 		setSettings( current => ( {
@@ -289,6 +324,31 @@ function Print() {
 						disabled={ isFetching }
 						onChange={ ( checked: boolean ) => setSettings( current => ( { ...current, indesign_exclude_captions: checked } ) ) }
 					/>
+				</Stack>
+			</Grid>
+			<Divider alignment="full-width" variant="tertiary" />
+			<Grid columns={ 2 } gutter={ 32 } noMargin>
+				<SectionHeader
+					noMargin
+					heading={ 2 }
+					title={ __( 'Style Names', 'newspack-plugin' ) }
+					description={ __(
+						"Type the exact name of each paragraph style in your InDesign template. Leave a field blank to keep Newspack's name.",
+						'newspack-plugin'
+					) }
+				/>
+				<Stack direction="column" gap="xl">
+					{ STYLE_NAME_FIELDS.map( ( { key, label } ) => (
+						<TextControl
+							__nextHasNoMarginBottom
+							key={ key }
+							label={ label }
+							value={ settings.indesign_style_names[ key ] }
+							placeholder={ apiData.indesign_default_style_names[ key ] }
+							disabled={ isFetching }
+							onChange={ ( value: string ) => setStyleName( key, value ) }
+						/>
+					) ) }
 				</Stack>
 			</Grid>
 		</WizardsTab>
