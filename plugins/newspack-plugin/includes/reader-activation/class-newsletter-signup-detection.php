@@ -87,8 +87,9 @@ final class Newsletter_Signup_Detection {
 	}
 
 	/**
-	 * Check the current reader's newsletter subscription, unless a check already
-	 * ran for them within the rate limit the REST route uses.
+	 * Check the current reader's newsletter subscription. When a check already ran
+	 * for them within the rate limit the REST route uses, queue a follow-up check
+	 * instead.
 	 */
 	private static function check_current_reader(): void {
 		if ( ! self::can_check_current_reader() ) {
@@ -96,6 +97,11 @@ final class Newsletter_Signup_Detection {
 		}
 		$user_id = \get_current_user_id();
 		if ( ! Reader_Data::claim_newsletter_check( $user_id ) ) {
+			// The browser's check can run before the provider has this signup, and
+			// a reader already subscribed to another list queues no recheck there.
+			if ( Reader_Data::can_check_newsletter_subscription() ) {
+				Reader_Data::schedule_recheck( $user_id );
+			}
 			return;
 		}
 		Reader_Data::refresh_newsletter_subscription_and_recheck( $user_id );

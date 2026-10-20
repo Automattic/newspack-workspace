@@ -172,6 +172,22 @@ class Newspack_Test_Reader_Data_Newsletter_Check extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A signup hook that finds the slot held by the route queues a recheck, so a
+	 * list added after the route's lookup still reaches the stored lists.
+	 */
+	public function test_signup_hook_queues_recheck_when_route_holds_the_slot() {
+		wp_set_current_user( $this->user_id );
+		Newspack_Newsletters_Subscription::$contact_lists[ $this->email ] = [ 'list-1' ];
+
+		$this->assertSame( 200, $this->check_request()->get_status() );
+		$this->assertSame( 0, $this->count_rechecks() );
+		do_action( 'mc4wp_form_subscribed', null, $this->email, [], [] );
+
+		$this->assertSame( 1, $this->count_rechecks() );
+		$this->assertSame( 1, Newspack_Newsletters_Subscription::$get_contact_lists_calls );
+	}
+
+	/**
 	 * The route answers 429 right after a signup hook checked the reader.
 	 */
 	public function test_route_shares_the_signup_hook_rate_limit() {
