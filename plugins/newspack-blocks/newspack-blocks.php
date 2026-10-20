@@ -8,6 +8,7 @@
  * Text Domain:     newspack-blocks
  * Domain Path:     /languages
  * Version:         4.36.2
+ * Requires PHP:    8.1
  *
  * @package         Newspack_Blocks
  */
