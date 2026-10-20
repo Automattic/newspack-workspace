@@ -39,6 +39,20 @@ next_loopback_ip() {
     echo "127.0.0.$octet"
 }
 
+# Read a lock directory's mtime as epoch seconds, or print nothing if that
+# fails (directory gone, permissions). Branch on `stat --version` rather than
+# trying BSD's `-f %m` and falling back to GNU's `-c %Y` on failure: GNU stat
+# accepts `-f` (it means "describe the filesystem", not "describe the file")
+# and doesn't reliably fail on an unknown format directive, so that fallback
+# chain isn't a safe way to tell the two apart.
+lockdir_mtime() {
+    if stat --version >/dev/null 2>&1; then
+        stat -c %Y "$1" 2>/dev/null
+    else
+        stat -f %m "$1" 2>/dev/null
+    fi
+}
+
 # Serialize the loopback-IP pick and the compose-file write across concurrent
 # `n env create` runs (NPPM-3647). Without this, two creates started together
 # can both call next_loopback_ip() and read the same free IP, because neither
@@ -51,33 +65,62 @@ env_create_lock_acquire() {
         # A lock held longer than this outlived any plausible IP-pick-and-write;
         # the process that made it is gone (killed, crashed) rather than slow.
         # Clear it so a crash doesn't wedge every later `create` behind a lock
-        # nothing will ever release. Only act when stat actually reads an
-        # mtime: a failed stat means the directory is gone *right now*, not
-        # that it's stale -- the holder may have just released it and a third
-        # waiter may have just recreated it, and rmdir-ing on that reading
-        # would delete the third waiter's live lock instead of nothing.
-        # Branch on `stat --version` rather than trying BSD's `-f %m` and
-        # falling back to GNU's `-c %Y` on failure: GNU stat accepts `-f`
-        # (it means "describe the filesystem", not "describe the file") and
-        # doesn't reliably fail on an unknown format directive, so that
-        # fallback chain isn't a safe way to tell the two apart.
-        local mtime=""
-        if stat --version >/dev/null 2>&1; then
-            mtime=$(stat -c %Y "$lockdir" 2>/dev/null) || mtime=""
-        else
-            mtime=$(stat -f %m "$lockdir" 2>/dev/null) || mtime=""
-        fi
-        if [[ -n "$mtime" ]]; then
-            local age=$(( $(date +%s) - mtime ))
-            if [[ "$age" -gt 60 ]]; then
-                rmdir "$lockdir" 2>/dev/null || true
-                continue
+        # nothing will ever release. A failed `lockdir_mtime` read means the
+        # directory is gone *right now*, not that it's stale -- skip reclaim
+        # and loop back to `mkdir` instead.
+        #
+        # A *successful* read is not safe to act on directly either: two
+        # waiters can both read the same old mtime and both decide "stale" at
+        # nearly the same moment. An earlier version of this reclaimed by
+        # renaming the lock dir aside to inspect it, planning to put it back
+        # if a fresh `mkdir` had won the race between the read and the act --
+        # but *moving it at all* leaves the path briefly absent, and a third
+        # waiter's `mkdir` can fill that gap and believe it holds the lock
+        # while the original holder still does too. Reproduced directly in
+        # testing (three subshells entering the counted section at once), so
+        # this instead never relocates a directory that might still be live:
+        # the destructive step runs behind its own one-holder-at-a-time
+        # mkdir-mutex (`$lockdir.recovering`), with staleness re-checked
+        # in place immediately before acting. At most one process ever wins
+        # that mutex at a time, so at most one `rmdir` ever runs against a
+        # given stale generation; everyone else only ever competes for
+        # `$lockdir` itself once it's already gone, which plain `mkdir`
+        # resolves to exactly one winner.
+        local mtime
+        mtime=$(lockdir_mtime "$lockdir") || mtime=""
+        if [[ -n "$mtime" ]] && (( $(date +%s) - mtime > 60 )); then
+            local recovering="$lockdir.recovering"
+            # The recovery mutex itself can be left behind by a crash mid-
+            # reclaim (between its own mkdir and rmdir, a far shorter window
+            # than a whole `create` run), which would otherwise wedge every
+            # later stale-lock recovery forever. Clear it the same way if
+            # it's gone stale. Racing this clear is harmless: what it gates
+            # is re-reading $lockdir's own mtime and, only if still stale,
+            # an idempotent rmdir -- safe to run twice, never a reason two
+            # processes could believe they hold the main lock at once.
+            local rec_mtime
+            rec_mtime=$(lockdir_mtime "$recovering") || rec_mtime=""
+            if [[ -n "$rec_mtime" ]] && (( $(date +%s) - rec_mtime > 60 )); then
+                rmdir "$recovering" 2>/dev/null || true
             fi
+            if mkdir "$recovering" 2>/dev/null; then
+                local mtime2
+                mtime2=$(lockdir_mtime "$lockdir") || mtime2=""
+                if [[ -n "$mtime2" ]] && (( $(date +%s) - mtime2 > 60 )); then
+                    rmdir "$lockdir" 2>/dev/null || true
+                fi
+                rmdir "$recovering" 2>/dev/null || true
+            fi
+            continue
         fi
         attempts=$((attempts + 1))
-        if [[ "$attempts" -gt 300 ]]; then
+        # Comfortably longer than the 60s staleness window above: a holder
+        # that is merely slow (e.g. `docker ps` hanging while Docker Desktop
+        # starts) must never time out here before staleness would even have
+        # considered it abandoned.
+        if [[ "$attempts" -gt 900 ]]; then
             echo "Error: timed out waiting for another 'n env create' to finish picking an IP (stale lock? rmdir $lockdir)" >&2
-            exit 1
+            return 1
         fi
         sleep 0.1
     done
@@ -333,7 +376,10 @@ case $1 in
                 created_wtdirs+=("$wt_c")
             fi
         done
-        env_create_lock_acquire
+        if ! env_create_lock_acquire; then
+            wt_rollback
+            exit 1
+        fi
         trap 'env_create_lock_release' EXIT
         ip=$(next_loopback_ip)
         if [[ -z "$domain" ]]; then
