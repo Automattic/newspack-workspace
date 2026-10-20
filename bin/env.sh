@@ -39,6 +39,54 @@ next_loopback_ip() {
     echo "127.0.0.$octet"
 }
 
+# Serialize the loopback-IP pick and the compose-file write across concurrent
+# `n env create` runs (NPPM-3647). Without this, two creates started together
+# can both call next_loopback_ip() and read the same free IP, because neither
+# has written a compose file claiming it yet. mkdir is atomic on both
+# filesystems this runs on (APFS, ext4) and needs no extra binary.
+env_create_lock_acquire() {
+    local lockdir="$NABSPATH/.env-create.lock"
+    local attempts=0
+    while ! mkdir "$lockdir" 2>/dev/null; do
+        # A lock held longer than this outlived any plausible IP-pick-and-write;
+        # the process that made it is gone (killed, crashed) rather than slow.
+        # Clear it so a crash doesn't wedge every later `create` behind a lock
+        # nothing will ever release. Only act when stat actually reads an
+        # mtime: a failed stat means the directory is gone *right now*, not
+        # that it's stale -- the holder may have just released it and a third
+        # waiter may have just recreated it, and rmdir-ing on that reading
+        # would delete the third waiter's live lock instead of nothing.
+        # Branch on `stat --version` rather than trying BSD's `-f %m` and
+        # falling back to GNU's `-c %Y` on failure: GNU stat accepts `-f`
+        # (it means "describe the filesystem", not "describe the file") and
+        # doesn't reliably fail on an unknown format directive, so that
+        # fallback chain isn't a safe way to tell the two apart.
+        local mtime=""
+        if stat --version >/dev/null 2>&1; then
+            mtime=$(stat -c %Y "$lockdir" 2>/dev/null) || mtime=""
+        else
+            mtime=$(stat -f %m "$lockdir" 2>/dev/null) || mtime=""
+        fi
+        if [[ -n "$mtime" ]]; then
+            local age=$(( $(date +%s) - mtime ))
+            if [[ "$age" -gt 60 ]]; then
+                rmdir "$lockdir" 2>/dev/null || true
+                continue
+            fi
+        fi
+        attempts=$((attempts + 1))
+        if [[ "$attempts" -gt 300 ]]; then
+            echo "Error: timed out waiting for another 'n env create' to finish picking an IP (stale lock? rmdir $lockdir)" >&2
+            exit 1
+        fi
+        sleep 0.1
+    done
+}
+
+env_create_lock_release() {
+    rmdir "$NABSPATH/.env-create.lock" 2>/dev/null || true
+}
+
 # Read domain from a compose file's WP_DOMAIN env var.
 domain_for_env() {
     grep 'WP_DOMAIN=' "$1" | head -1 | sed 's/.*WP_DOMAIN=//'
@@ -285,6 +333,8 @@ case $1 in
                 created_wtdirs+=("$wt_c")
             fi
         done
+        env_create_lock_acquire
+        trap 'env_create_lock_release' EXIT
         ip=$(next_loopback_ip)
         if [[ -z "$domain" ]]; then
             domain="${env_name}.test"
@@ -347,6 +397,12 @@ networks:
     external: true
 YAML
         echo "Created $compose_file (db: $db_name, domain: $domain, ip: $ip)"
+        # The IP is claimed by the compose file above now existing, so a
+        # concurrent create's next_loopback_ip() call will see it. Release
+        # before the alias/hosts setup below, which is per-IP and needs no
+        # serialization now that IPs can't collide.
+        trap - EXIT
+        env_create_lock_release
         # Check networking prerequisites (macOS only — Linux routes all 127.x.x.x by default).
         if [[ "$(uname)" == "Darwin" ]] && ! lo0_alias_exists "$ip"; then
             warn_if_manage_host_stale
