@@ -546,7 +546,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 														/>
 													) }
 													{ checked && option.is_access_rule && (
-														<Notice status="warning" isDismissible={ false }>
+														<Notice status="warning" isDismissible={ false } spokenMessage="">
 															{ __(
 																'Content gates can use this field. If readers can edit it in the email provider’s subscription preferences, it shouldn’t decide who sees content.',
 																'newspack-plugin'

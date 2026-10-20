@@ -52,8 +52,8 @@ jest.mock( '@wordpress/components', () => ( {
 		/>
 	),
 	ExternalLink: ( { children } ) => children,
-	Notice: ( { children, status } ) => (
-		<div role="alert" data-status={ status }>
+	Notice: ( { children, status, spokenMessage } ) => (
+		<div role="alert" data-status={ status } data-spoken-message={ spokenMessage }>
 			{ children }
 		</div>
 	),
@@ -610,6 +610,8 @@ describe( 'incoming-field operator reconciliation on save', () => {
 			renderConfigureView( { integrations: withAccessRuleField( true ) } );
 			expect( screen.getByRole( 'alert' ) ).toHaveTextContent( /Content gates can use this field/ );
 			expect( screen.getByRole( 'alert' ) ).toHaveAttribute( 'data-status', 'warning' );
+			// Standing configuration, so it is not announced on every visit.
+			expect( screen.getByRole( 'alert' ) ).toHaveAttribute( 'data-spoken-message', '' );
 		} );
 
 		it( 'says nothing on a field content gates cannot use', () => {
