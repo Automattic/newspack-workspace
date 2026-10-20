@@ -14,7 +14,13 @@ import { Stack } from '@wordpress/ui';
  */
 import { gateMatchesPost } from './gate-matching';
 import { AgeDurationFields } from '../components/published-age-rule-control';
-import { AGE_OVERRIDE_META_KEY, PUBLISHED_AGE_RULE, formatAgeDuration, isUsableAgeDuration, normalizeAgeDuration } from '../utils/published-age';
+import {
+	AGE_OVERRIDE_META_KEY,
+	PUBLISHED_AGE_RULE,
+	formatAgeDuration,
+	isUnsavedUnusableDuration,
+	normalizeAgeDuration,
+} from '../utils/published-age';
 import './post-settings.scss';
 
 const { gates = [], taxonomyMap = {}, canEditGates = false } = window.newspackContentGates || {};
@@ -50,14 +56,10 @@ function PostSettings() {
 	const ageOverride = meta[ AGE_OVERRIDE_META_KEY ];
 	// The schema stores only a known unit, so a unit is set exactly when the override is on.
 	const isAgeOverrideOn = Boolean( ageOverride?.duration_unit );
-	const editedDuration = normalizeAgeDuration( ageOverride );
-	const savedDuration = normalizeAgeDuration( savedAgeOverride );
-	// Only an unsaved edit locks saving: a stored value may have no control on screen to correct it.
 	const isUnusableEdit =
-		isAgeOverrideOn &&
-		! isUsableAgeDuration( editedDuration ) &&
-		( editedDuration.duration_value !== savedDuration.duration_value || editedDuration.duration_unit !== savedDuration.duration_unit );
+		isAgeOverrideOn && isUnsavedUnusableDuration( normalizeAgeDuration( ageOverride ), normalizeAgeDuration( savedAgeOverride ) );
 	const { editPost, lockPostSaving, unlockPostSaving, lockPostAutosaving, unlockPostAutosaving } = useDispatch( 'core/editor' );
+	const { createNotice, removeNotice } = useDispatch( 'core/notices' );
 
 	useEffect( () => {
 		if ( ! isUnusableEdit ) {
@@ -65,9 +67,15 @@ function PostSettings() {
 		}
 		lockPostSaving( AGE_OVERRIDE_META_KEY );
 		lockPostAutosaving( AGE_OVERRIDE_META_KEY );
+		// The field error lives in a sidebar panel that may be closed, so say why saving is off where it is always seen.
+		createNotice( 'warning', __( 'Saving is paused: fix the time window under Access Control Settings.', 'newspack-plugin' ), {
+			id: AGE_OVERRIDE_META_KEY,
+			isDismissible: false,
+		} );
 		return () => {
 			unlockPostSaving( AGE_OVERRIDE_META_KEY );
 			unlockPostAutosaving( AGE_OVERRIDE_META_KEY );
+			removeNotice( AGE_OVERRIDE_META_KEY );
 		};
 	}, [ isUnusableEdit ] );
 

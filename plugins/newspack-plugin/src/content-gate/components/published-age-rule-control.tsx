@@ -48,18 +48,25 @@ const invalidCountMessage = () =>
 export function AgeDurationFields( { value, onChange }: { value: unknown; onChange: ( value: AgeDuration ) => void } ) {
 	const duration = normalizeAgeDuration( value );
 	const isCountUsable = isUsableCount( duration );
+	const isUnitMissing = '' === duration.duration_unit;
+	let errorMessage = '';
+	if ( ! isCountUsable ) {
+		errorMessage = invalidCountMessage();
+	} else if ( isUnitMissing ) {
+		errorMessage = __( 'Choose a unit.', 'newspack-plugin' );
+	}
 	const id = useInstanceId( AgeDurationFields, 'newspack-published-age-duration' );
 	return (
 		<BaseControl
 			id={ id }
 			className="newspack-published-age-rule__duration"
 			help={
-				isCountUsable ? undefined : (
+				errorMessage ? (
 					<span className="newspack-published-age-rule__error">
 						<Icon icon={ error } size={ 16 } />
-						{ invalidCountMessage() }
+						{ errorMessage }
 					</span>
-				)
+				) : undefined
 			}
 			__nextHasNoMarginBottom
 		>
@@ -90,6 +97,7 @@ export function AgeDurationFields( { value, onChange }: { value: unknown; onChan
 					<SelectControl
 						label={ __( 'Duration unit', 'newspack-plugin' ) }
 						value={ duration.duration_unit }
+						aria-invalid={ isCountUsable && isUnitMissing }
 						options={ [
 							...( '' === duration.duration_unit
 								? [ { value: '', label: __( 'Choose a unit', 'newspack-plugin' ), disabled: true } ]

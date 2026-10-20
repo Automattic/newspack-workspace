@@ -62,6 +62,16 @@ export const isUsableAgeDuration = ( duration: AgeDuration ) =>
 	'' !== duration.duration_unit;
 
 /**
+ * Whether an edited duration should block saving: it is unusable and differs from the stored one.
+ * A stored unusable value never blocks, since the control that would correct it may not be on screen.
+ *
+ * @param edited The duration being edited.
+ * @param saved  The stored duration.
+ */
+export const isUnsavedUnusableDuration = ( edited: AgeDuration, saved: AgeDuration ) =>
+	! isUsableAgeDuration( edited ) && ( edited.duration_value !== saved.duration_value || edited.duration_unit !== saved.duration_unit );
+
+/**
  * Read a stored rule value into the shape the controls edit.
  *
  * @param value The rule's stored value.

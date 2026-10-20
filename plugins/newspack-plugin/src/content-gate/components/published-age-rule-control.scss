@@ -23,3 +23,8 @@
 	--wp-components-color-accent: var(--wpds-color-stroke-interactive-error, #{wp-colors.$alert-red});
 	border-color: var(--wpds-color-stroke-interactive-error, #{wp-colors.$alert-red});
 }
+
+// The select draws its border on a sibling backdrop, so the invalid state is read from the field.
+.newspack-published-age-rule__field:has(select[aria-invalid="true"]) .components-input-control__backdrop {
+	border-color: var(--wpds-color-stroke-interactive-error, #{wp-colors.$alert-red});
+}

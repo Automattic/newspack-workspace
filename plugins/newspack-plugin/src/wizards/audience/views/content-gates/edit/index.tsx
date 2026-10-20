@@ -722,6 +722,8 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 											label: __( 'Edit layout', 'newspack-plugin' ),
 											href: ! isNew ? getEditGateLayoutUrl( gate.id, 'registration' ) : undefined,
 											onClick: isNew ? () => handleCreate( 'registration' ) : undefined,
+											// On a new gate this saves first, so it waits for a usable age rule like Save does.
+											disabled: isNew && hasUnusableAgeRule,
 											icon: pencil,
 									  }
 									: undefined
@@ -748,6 +750,8 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 										label: __( 'Edit layout', 'newspack-plugin' ),
 										href: ! isNew ? getEditGateLayoutUrl( gate.id, 'custom_access' ) : undefined,
 										onClick: isNew ? () => handleCreate( 'custom_access' ) : undefined,
+										// On a new gate this saves first, so it waits for a usable age rule like Save does.
+										disabled: isNew && hasUnusableAgeRule,
 										icon: pencil,
 								  }
 								: undefined
