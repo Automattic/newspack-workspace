@@ -138,7 +138,7 @@
 					! notices.length && el(
 						ExternalLink,
 						{
-							href: 'https://github.com/Automattic/super-cool-ad-inserter-plugin/blob/trunk/docs/configuration.md'
+							href: 'https://github.com/Automattic/newspack-workspace/blob/main/plugins/super-cool-ad-inserter/docs/configuration.md'
 						},
 						'View the documentation.'
 					),
