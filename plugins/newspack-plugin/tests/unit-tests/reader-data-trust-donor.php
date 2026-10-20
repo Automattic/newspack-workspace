@@ -41,6 +41,9 @@ class Newspack_Test_Reader_Data_Trust_Donor extends WP_UnitTestCase {
 		$this->user_id             = $this->factory()->user->create();
 		$this->donation_product_id = $this->factory()->post->create( [ 'post_type' => 'product' ] );
 		update_post_meta( $this->donation_product_id, WooCommerce_Products::DONATION_FLAG_META_KEY, wc_bool_to_string( true ) );
+		// The teams tests leave this override set, and it makes the renewal mock
+		// ignore the `_subscription_renewal` meta these fixtures rely on.
+		unset( $GLOBALS['teams_mock_is_renewal'] );
 		Reader_Data_Trust::reset_cache();
 	}
 
