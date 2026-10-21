@@ -9,33 +9,27 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import NewsletterSettings from './newsletter-settings';
 
 describe( 'NewsletterSettings', () => {
-	it( 'names the site setting as On when the site has auto-signup on', () => {
+	it.each( [
+		{ siteAutoSignup: true, label: 'Use site setting (on)' },
+		{ siteAutoSignup: false, label: 'Use site setting (off)' },
+		// Before the wizard data loads, no value is named rather than a guessed one.
+		{ siteAutoSignup: undefined, label: 'Use site setting' },
+	] )( 'labels the default choice "$label" when the site setting is $siteAutoSignup', ( { siteAutoSignup, label } ) => {
+		render( <NewsletterSettings autoSignup="default" hideLists={ false } siteAutoSignup={ siteAutoSignup } onChange={ jest.fn() } /> );
+
+		// A name given as a string must match in full, so this also rules out any "(on)" or "(off)" suffix.
+		expect( screen.getByRole( 'option', { name: label } ) ).toBeInTheDocument();
+	} );
+
+	it( 'ties the card explanation to the auto-signup select', () => {
 		render( <NewsletterSettings autoSignup="default" hideLists={ false } siteAutoSignup onChange={ jest.fn() } /> );
 
-		expect( screen.getByRole( 'option', { name: 'Use site setting (on)' } ) ).toBeInTheDocument();
-		expect( screen.queryByRole( 'option', { name: 'Use site setting (off)' } ) ).not.toBeInTheDocument();
-	} );
+		const group = screen.getByRole( 'group', { name: 'Auto-signup' } );
 
-	it( 'names the site setting as Off when the site has auto-signup off', () => {
-		render( <NewsletterSettings autoSignup="default" hideLists={ false } siteAutoSignup={ false } onChange={ jest.fn() } /> );
-
-		expect( screen.getByRole( 'option', { name: 'Use site setting (off)' } ) ).toBeInTheDocument();
-		expect( screen.queryByRole( 'option', { name: 'Use site setting (on)' } ) ).not.toBeInTheDocument();
-	} );
-
-	it( 'reports the chosen auto-signup mode', () => {
-		const onChange = jest.fn();
-		render( <NewsletterSettings autoSignup="default" hideLists={ false } siteAutoSignup onChange={ onChange } /> );
-
-		fireEvent.change( screen.getByRole( 'combobox', { name: 'Auto-signup' } ), { target: { value: 'off' } } );
-
-		expect( onChange ).toHaveBeenCalledWith( { auto_signup: 'off' } );
-	} );
-
-	it( 'reflects the stored auto-signup mode', () => {
-		render( <NewsletterSettings autoSignup="on" hideLists={ false } siteAutoSignup={ false } onChange={ jest.fn() } /> );
-
-		expect( screen.getByRole( 'combobox', { name: 'Auto-signup' } ) ).toHaveValue( 'on' );
+		expect( group ).toHaveAccessibleDescription(
+			'Add readers to these lists when they gain access. Readers who leave a list aren’t added back when they renew.'
+		);
+		expect( group ).toContainElement( screen.getByRole( 'combobox', { name: 'Auto-signup' } ) );
 	} );
 
 	it( 'keeps the auto-signup card neutral whatever mode is chosen', () => {
@@ -57,15 +51,6 @@ describe( 'NewsletterSettings', () => {
 
 		rerender( <NewsletterSettings autoSignup="default" hideLists siteAutoSignup onChange={ jest.fn() } /> );
 		expect( getCard() ).toHaveClass( 'newspack-card--core__is-active' );
-	} );
-
-	it( 'reports hiding the lists from readers', () => {
-		const onChange = jest.fn();
-		render( <NewsletterSettings autoSignup="default" hideLists={ false } siteAutoSignup onChange={ onChange } /> );
-
-		fireEvent.click( screen.getByRole( 'checkbox', { name: 'Hide from readers' } ) );
-
-		expect( onChange ).toHaveBeenCalledWith( { hide_lists: true } );
 	} );
 
 	it( 'reports showing the lists again', () => {

@@ -102,7 +102,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		status: defaultGateStatus,
 		content_rules: isNewsletter ? [ { slug: 'newsletters', value: [] } ] : [ { slug: 'post_types', value: [ 'post' ] } ],
 		content_rules_match: 'all',
-		// Only premium newsletter gates have these; a content gate's payload must not carry them.
+		// Only premium newsletter gates carry these settings.
 		...( isNewsletter ? { auto_signup: 'default' as const, hide_lists: false } : {} ),
 		registration: {
 			active: false,
@@ -202,7 +202,6 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 				title,
 				content_rules: contentRules,
 				content_rules_match: contentRulesMatch,
-				// Content gates never send these, so a content gate's payload stays what it was.
 				...( isNewsletter ? { auto_signup: autoSignup, hide_lists: hideLists } : {} ),
 				registration,
 				custom_access: customAccess,
@@ -254,7 +253,6 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 				title,
 				content_rules: contentRules,
 				content_rules_match: contentRulesMatch,
-				// Content gates never send these, so a content gate's payload stays what it was.
 				...( isNewsletter ? { auto_signup: autoSignup, hide_lists: hideLists } : {} ),
 				registration,
 				custom_access: customAccess,

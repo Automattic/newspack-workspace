@@ -326,13 +326,18 @@ export const getMeteringDescription = ( siteMeter?: SiteMeterConfig ) => {
  * setting's current value, so a publisher sees what "follow the site" means without
  * opening Advanced Settings.
  *
- * @param siteAutoSignup Whether the site-wide auto-signup setting is on.
+ * @param siteAutoSignup Whether the site-wide auto-signup setting is on. Undefined until the
+ *                       wizard data has loaded, when the first choice names no value rather
+ *                       than guess one.
  */
-export const getAutoSignupOptions = ( siteAutoSignup?: boolean ): Array< { label: string; value: AutoSignupMode } > => [
-	{
-		value: 'default',
-		label: siteAutoSignup ? __( 'Use site setting (on)', 'newspack-plugin' ) : __( 'Use site setting (off)', 'newspack-plugin' ),
-	},
-	{ value: 'on', label: __( 'On', 'newspack-plugin' ) },
-	{ value: 'off', label: __( 'Off', 'newspack-plugin' ) },
-];
+export const getAutoSignupOptions = ( siteAutoSignup?: boolean ): Array< { label: string; value: AutoSignupMode } > => {
+	let siteSettingLabel: string = __( 'Use site setting', 'newspack-plugin' );
+	if ( typeof siteAutoSignup === 'boolean' ) {
+		siteSettingLabel = siteAutoSignup ? __( 'Use site setting (on)', 'newspack-plugin' ) : __( 'Use site setting (off)', 'newspack-plugin' );
+	}
+	return [
+		{ value: 'default', label: siteSettingLabel },
+		{ value: 'on', label: __( 'On', 'newspack-plugin' ) },
+		{ value: 'off', label: __( 'Off', 'newspack-plugin' ) },
+	];
+};
