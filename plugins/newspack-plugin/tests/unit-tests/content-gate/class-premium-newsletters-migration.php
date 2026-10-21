@@ -1328,8 +1328,8 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 		$split = $this->invoke_private_static( 'split_payload_by_auto_signup', [ $payload, [ 'premium' ] ] );
 
 		$this->assertNull( $split['instructions'] );
-		// The sibling comes first, so it is written before a gate already titled like
-		// the group is narrowed: if the sibling fails, nothing has moved yet.
+		// The sibling comes first, so a failed sibling is known before the group's gate
+		// is written, and that gate is then written whole.
 		$this->assertSame( [ 'Premium (auto-signup)', 'Premium' ], array_column( $split['payloads'], 'title' ) );
 		[ $auto_signup, $opt_in ] = $split['payloads'];
 
@@ -1357,6 +1357,10 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 			],
 			$auto_signup['content_rules']
 		);
+
+		// What the gate is written with if the sibling can't be created: the group's
+		// payload whole, its auto-signup left alone.
+		$this->assertSame( $payload + [ 'auto_signup' => null ], $opt_in['unsplit'] );
 
 		$narrowed_keys = array_flip( [ 'title', 'list_ids', 'content_rules', 'auto_signup', 'split_from', 'unsplit' ] );
 		foreach ( $split['payloads'] as $narrowed ) {
