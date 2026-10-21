@@ -30,8 +30,9 @@ final class Contrast {
 	 * against the accent) and --wp--preset--color--accent-contrast-hover for the
 	 * button hover state (scored against the resolved hover background). The values
 	 * are derived, not pickable, so they are intentionally not registered as palette
-	 * presets and never appear in color pickers. enqueue_block_assets runs in both
-	 * the front end and the iframed editor canvas.
+	 * presets and never appear in color pickers. A focus ring fallback is added
+	 * when an accent fill is too faint against the base color. enqueue_block_assets
+	 * runs in both the front end and the iframed editor canvas.
 	 *
 	 * @return void
 	 */
@@ -53,7 +54,12 @@ final class Contrast {
 			$declarations[] = sprintf( '--wp--preset--color--accent-contrast-hover: %s;', $contrast_hover );
 		}
 
-		if ( empty( $declarations ) ) {
+		$css = self::get_focus_fill_css( $accent );
+		if ( ! empty( $declarations ) ) {
+			$css = sprintf( ':root, .editor-styles-wrapper { %s }', implode( ' ', $declarations ) ) . ( '' === $css ? '' : ' ' . $css );
+		}
+
+		if ( '' === $css ) {
 			// Nothing derivable, so leave the properties unset and let the
 			// theme.json fallbacks apply.
 			return;
@@ -62,13 +68,88 @@ final class Contrast {
 		$handle = 'newspack-block-theme-accent-contrast';
 		\wp_register_style( $handle, false, [], \wp_get_theme()->get( 'Version' ) );
 		\wp_enqueue_style( $handle );
-		\wp_add_inline_style(
-			$handle,
-			sprintf(
-				':root, .editor-styles-wrapper { %s }',
-				implode( ' ', $declarations )
-			)
+		\wp_add_inline_style( $handle, $css );
+	}
+
+	/**
+	 * Fall back to the focus color for the filled-button focus ring when an accent
+	 * fill would not reach 3:1 against the base color.
+	 *
+	 * The ring of a filled button is drawn in its fill color by default, so a pale
+	 * accent on a light base leaves a ring that is too faint to see. The selectors
+	 * carry one class of specificity so they win over the stylesheet's
+	 * zero-specificity defaults, which load later.
+	 *
+	 * @param string $accent The resolved accent palette color.
+	 * @return string The CSS rule, or an empty string when every fill reads.
+	 */
+	private static function get_focus_fill_css( string $accent ): string {
+		$base = self::resolve_palette_color( 'base' );
+		if ( '' === $base ) {
+			return '';
+		}
+
+		$selectors = [];
+		if ( self::is_low_contrast( $accent, $base ) ) {
+			$selectors[] = ':where(.wp-element-button, .wp-block-button__link, button:not([class]), input[type="submit"]):not([class*="-background-color"])';
+			$selectors[] = ':where(.wp-element-button, .wp-block-button__link):is(.has-accent-background-color, .has-primary-background-color)';
+		}
+
+		$accent_2 = self::resolve_palette_color( 'accent-2' );
+		if ( '' !== $accent_2 && self::is_low_contrast( $accent_2, $base ) ) {
+			$selectors[] = ':where(.wp-element-button, .wp-block-button__link):is(.has-accent-2-background-color, .has-secondary-background-color)';
+		}
+
+		if ( empty( $selectors ) ) {
+			return '';
+		}
+
+		return sprintf(
+			'%s { --wp--custom--focus--fill: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)); }',
+			implode( ', ', $selectors )
 		);
+	}
+
+	/**
+	 * Whether two colors fall under the WCAG 3:1 non-text contrast minimum.
+	 *
+	 * @param string $foreground Hexadecimal color.
+	 * @param string $background Hexadecimal color.
+	 * @return bool True when both parse and their contrast ratio is under 3:1.
+	 */
+	private static function is_low_contrast( string $foreground, string $background ): bool {
+		$foreground_l = self::get_relative_luminance( $foreground );
+		$background_l = self::get_relative_luminance( $background );
+		if ( null === $foreground_l || null === $background_l ) {
+			return false;
+		}
+
+		$ratio = ( max( $foreground_l, $background_l ) + 0.05 ) / ( min( $foreground_l, $background_l ) + 0.05 );
+
+		return $ratio < 3;
+	}
+
+	/**
+	 * Compute the WCAG 2 relative luminance of a hex color.
+	 *
+	 * @param string $hex Hexadecimal color.
+	 * @return float|null Relative luminance in the 0..1 range, or null when unparseable.
+	 */
+	private static function get_relative_luminance( string $hex ): ?float {
+		$channels = self::parse_hex_channels( $hex );
+		if ( null === $channels ) {
+			return null;
+		}
+
+		$linear = array_map(
+			function ( $channel ) {
+				$channel = $channel / 255;
+				return $channel <= 0.04045 ? $channel / 12.92 : pow( ( $channel + 0.055 ) / 1.055, 2.4 );
+			},
+			$channels
+		);
+
+		return 0.2126 * $linear[0] + 0.7152 * $linear[1] + 0.0722 * $linear[2];
 	}
 
 	/**

@@ -11,6 +11,7 @@ body .jetpack-instant-search {
 	--jp--color--background-light: var(--wp--custom--color--neutral-5);
 	--jp--color--border: var(--wp--custom--color--neutral-30);
 	--jp--sidebar--width: calc(1px + var(--wp--preset--spacing--30) + var(--wp--custom--width--x-small) + var(--wp--preset--spacing--30));
+	--wp--custom--focus--color: var(--jp--color--text);
 
 	&[class*="--dark"] {
 		--jp--color--text: var(--wp--custom--color--neutral-0);
@@ -53,8 +54,7 @@ body .jetpack-instant-search {
 		}
 
 		&:focus-visible {
-			outline: 2px solid var(--jp--color--text);
-			outline-offset: 1px;
+			@include mixins.focus-line(var(--jp--color--text));
 		}
 	}
 
@@ -73,11 +73,12 @@ body .jetpack-instant-search {
 			padding:
 				calc(var(--newspack-ui-spacer-base, var(--wp--preset--spacing--20)) / 2 - 1px)
 				calc(var(--newspack-ui-spacer-base, var(--wp--preset--spacing--20)) - 1px);
-			transition: outline 125ms ease-in-out;
+			transition:
+				border-color 125ms ease-in-out,
+				box-shadow 125ms ease-in-out;
 
 			&:focus {
-				outline: 2px solid var(--jp--color--text) !important;
-				outline-offset: 1px;
+				@include mixins.focus-edge(var(--jp--color--text), !important);
 			}
 		}
 	}
@@ -117,7 +118,7 @@ body .jetpack-instant-search {
 				position: absolute;
 				transition:
 					background 125ms ease-in-out,
-					outline 125ms ease-in-out;
+					box-shadow 125ms ease-in-out;
 				width: var(--wp--custom--spacing--55);
 				z-index: -1;
 			}
@@ -134,8 +135,7 @@ body .jetpack-instant-search {
 
 			&:focus-visible {
 				&::before {
-					outline: 2px solid var(--jp--color--text);
-					outline-offset: 1px;
+					@include mixins.focus-line(var(--jp--color--text));
 				}
 			}
 		}
@@ -156,12 +156,11 @@ body .jetpack-instant-search {
 		border-color: var(--jp--color--border) !important;
 
 		&-label {
-			transition: outline 125ms ease-in-out;
+			transition: box-shadow 125ms ease-in-out;
 
 			&:focus-within {
+				@include mixins.focus-line-inset(var(--jp--color--text));
 				border-radius: var(--newspack-ui-radius-control, var(--wp--custom--border--radius-large));
-				outline: 2px solid var(--jp--color--text);
-				outline-offset: -4px;
 			}
 		}
 
@@ -305,7 +304,7 @@ body .jetpack-instant-search {
 				transition:
 					background 125ms ease-in-out,
 					color 125ms ease-in-out,
-					outline 125ms ease-in-out;
+					box-shadow 125ms ease-in-out;
 
 				&:hover {
 					background: var(--jp--color--text-light) !important;
@@ -318,8 +317,7 @@ body .jetpack-instant-search {
 				}
 
 				&:focus-visible {
-					outline: 2px solid var(--jp--color--text) !important;
-					outline-offset: 1px;
+					@include mixins.focus-line-filled(var(--jp--color--text), var(--jp--color--background), !important);
 				}
 
 				&:disabled {
@@ -465,7 +463,7 @@ body .jetpack-instant-search {
 
 				input[type="checkbox"] {
 					position: relative;
-					@include mixins.checkbox-radio;
+					@include mixins.checkbox-radio(!important);
 					@include mixins.checkbox;
 					margin-top: 1px;
 				}
@@ -487,7 +485,7 @@ body .jetpack-instant-search {
 			}
 
 			&:focus-visible {
-				outline: 2px solid var(--jp--color--text) !important;
+				@include mixins.focus-line(var(--jp--color--text), !important);
 			}
 		}
 	}
@@ -497,16 +495,18 @@ body .jetpack-instant-search {
 	}
 
 	&__search-sort-select {
+		background-color: transparent;
 		border-color: var(--jp--color--border);
 		border-radius: var(--newspack-ui-radius-control, var(--wp--custom--border--radius-large));
 		color: inherit;
 		min-height: var(--wp--preset--spacing--50);
 		padding: calc(var(--newspack-ui-spacer-base, var(--wp--preset--spacing--20)) / 2);
-		transition: outline 125ms ease-in-out;
+		transition:
+			border-color 125ms ease-in-out,
+			box-shadow 125ms ease-in-out;
 
 		&:focus-visible {
-			outline: 2px solid var(--jp--color--text);
-			outline-offset: -1px;
+			@include mixins.focus-edge(var(--jp--color--text));
 		}
 	}
 
@@ -569,8 +569,7 @@ body .jetpack-instant-search {
 			}
 
 			&:focus-visible {
-				outline: 2px solid var(--jp--color--text) !important;
-				outline-offset: 2px;
+				@include mixins.focus-line(var(--jp--color--text), !important);
 			}
 		}
 	}
