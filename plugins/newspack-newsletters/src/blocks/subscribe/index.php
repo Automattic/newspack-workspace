@@ -282,10 +282,10 @@ function get_block_lists( $attrs ) {
 	// withholds those from the filtered config, so they are the premium lists the
 	// unfiltered read has and the filtered one lacks. Woo Memberships leaves them
 	// in the config and removes them from the block's available lists instead,
-	// except in its "Hide completely" mode (see filter_list_gates() in its
-	// integration). In both cases the access check stays the only judge. A list
-	// no gate reports stays hidden, whatever removed it: showing its title here
-	// would undo that.
+	// except when its "Hide completely" mode drops a list a rule names directly
+	// (see Woocommerce_Memberships::filter_list_gates()). With either plugin the
+	// access check stays the only judge. A list no gate reports stays hidden,
+	// whatever removed it: showing its title here would undo that.
 	$gated = [];
 	if ( $show_premium ) {
 		$all_lists = \Newspack_Newsletters_Subscription::get_unfiltered_lists_config();

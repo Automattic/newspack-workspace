@@ -164,9 +164,11 @@ class Woocommerce_Memberships {
 	 * One exception: in Memberships' "Hide completely" mode, when a plan's rule
 	 * names a list directly, Memberships leaves that list out of the list query for
 	 * a reader without access. The block never sees it, so that reader gets no
-	 * premium row for it. A rule that covers every list doesn't filter the query,
-	 * so those lists still show as premium rows when the block asks for them, as
-	 * they do under Access Control.
+	 * premium row for it. Hiding the list is what that mode is for, so nothing here
+	 * works around it. A rule that covers every list hides nothing here, because
+	 * Memberships applies it through a query filter and Subscription_Lists::get_all()
+	 * reads lists with filters suppressed. Those lists still show as premium rows
+	 * when the block asks for them, as they do under Access Control.
 	 *
 	 * @param array[] $list_gates Gates keyed by public list ID.
 	 * @return array[] Gates keyed by public list ID. Each gate is a plan with `id`

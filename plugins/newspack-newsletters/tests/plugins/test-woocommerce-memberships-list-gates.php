@@ -190,7 +190,7 @@ class Woocommerce_Memberships_List_Gates_Test extends WP_UnitTestCase {
 
 	/**
 	 * A plan's edit link goes only to a user who may edit the plan. An Editor,
-	 * who can edit every post, can't edit plans and gets no link.
+	 * who can edit others' posts and pages, can't edit plans and gets no link.
 	 *
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
