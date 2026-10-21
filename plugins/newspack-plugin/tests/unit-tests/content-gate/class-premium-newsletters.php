@@ -579,6 +579,7 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		$list_id     = $this->create_gated_list();
 		$user_id     = $this->create_reader( true );
 		$evaluations = 0;
+		// The fixture gate's only rule is a subscription rule, so each call is one judgment against a gate.
 		add_filter(
 			'newspack_access_rules_has_active_subscription',
 			function ( $has_subscription ) use ( &$evaluations ) {
@@ -2629,9 +2630,10 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * An admin-ajax request is an admin request that can render front-end markup,
-	 * such as infinite scroll loading more posts, so it leaves a hidden list out
-	 * as the front end does. It keeps a restricted list, as every admin request does.
+	 * An admin-ajax request isn't an admin screen. Background jobs run there as well
+	 * as under WP-Cron, so it leaves a hidden list out as the front end does, and a
+	 * job sees the same lists whichever runner handles it. It keeps a restricted
+	 * list, as every admin request does.
 	 */
 	public function test_filter_subscription_lists_drops_hidden_lists_in_admin_ajax() {
 		list( $hidden_id )     = $this->create_list_behind_gate( true );
@@ -2787,8 +2789,8 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * An admin-ajax request can render the Subscribe block for readers, so a hidden
-	 * list carries no gate there either.
+	 * An admin-ajax request isn't an admin screen, so a hidden list carries no gate
+	 * there either, matching the lists filter_subscription_lists() leaves out.
 	 */
 	public function test_filter_list_gates_omits_hidden_lists_in_admin_ajax() {
 		list( $hidden_id )  = $this->create_list_behind_gate( true );
