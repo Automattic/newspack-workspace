@@ -58,7 +58,6 @@ class Newspack_Test_Reader_Data_Trust_Donor extends WP_UnitTestCase {
 	public function tear_down() {
 		remove_all_filters( 'newspack_has_server_side_donor_tracking' );
 		remove_all_filters( 'newspack_reader_data_compute_is_donor' );
-		delete_transient( Reader_Data_Trust::NO_DONATION_TRANSIENT_PREFIX . $this->user_id );
 		Reader_Data_Trust::reset_cache();
 		parent::tear_down();
 	}
@@ -240,30 +239,6 @@ class Newspack_Test_Reader_Data_Trust_Donor extends WP_UnitTestCase {
 		$this->assertNull( Reader_Data_Trust::get_trusted_value( $this->user_id, 'is_donor' ) );
 		$this->assertSame( 'true', get_user_meta( $this->user_id, Reader_Data::get_meta_key_name( 'is_donor' ), true ) );
 		$this->assertFalse( Reader_Data_Trust::has_valid_mark( $this->user_id, 'is_donor' ) );
-	}
-
-	/**
-	 * A kept `true` whose lookup found no donation is not looked up again in a
-	 * later request.
-	 */
-	public function test_kept_true_lookup_is_not_repeated_across_requests() {
-		$this->set_tracking( true );
-		$lookups = 0;
-		add_filter(
-			'newspack_reader_data_compute_is_donor',
-			function () use ( &$lookups ) {
-				++$lookups;
-				return false;
-			}
-		);
-		$this->store_unmarked( 'true' );
-
-		$this->assertNull( Reader_Data_Trust::get_trusted_value( $this->user_id, 'is_donor' ) );
-		Reader_Data_Trust::reset_cache();
-		$this->assertNull( Reader_Data_Trust::get_trusted_value( $this->user_id, 'is_donor' ) );
-
-		$this->assertSame( 1, $lookups );
-		$this->assertSame( 'true', get_user_meta( $this->user_id, Reader_Data::get_meta_key_name( 'is_donor' ), true ) );
 	}
 
 	/**

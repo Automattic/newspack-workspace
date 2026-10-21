@@ -21,12 +21,6 @@ final class Reader_Data_Trust {
 	const MARK_META_PREFIX = 'newspack_reader_data_mark_';
 
 	/**
-	 * Transient prefix recording that a donor lookup for an unmarked `true` found
-	 * no donation.
-	 */
-	const NO_DONATION_TRANSIENT_PREFIX = 'newspack_reader_data_no_donation_';
-
-	/**
 	 * Keys the browser writes through the reader data store (`store.set()` and
 	 * `store.add()` in newspack-plugin and newspack-popups).
 	 *
@@ -247,21 +241,12 @@ final class Reader_Data_Trust {
 		$value  = Reader_Data::get_data( $user_id, $key );
 		$is_set = is_string( $value ) && '' !== $value;
 		if ( 'is_donor' === $key && ( ! $is_set || ! self::has_valid_mark( $user_id, $key ) ) ) {
-			$is_kept_true = $is_set && true === json_decode( $value );
-			// A lookup that found no donation behind a kept `true` is remembered for a
-			// day. It needs no invalidation: once the server writes `is_donor` the
-			// value carries a mark and this path no longer runs.
-			$no_donation_transient = self::NO_DONATION_TRANSIENT_PREFIX . $user_id;
-			if ( $is_kept_true && false !== \get_transient( $no_donation_transient ) ) {
-				return null;
-			}
 			// Donor status is derived from orders and subscriptions, so a value the
 			// server never wrote can be recomputed from them instead of dropped.
 			$computed = self::compute_is_donor( $user_id );
 			// A stored `true` can come from a source outside WooCommerce, such as an
 			// ESP's donor field, so a lookup that finds no donation leaves it in place.
-			if ( false === $computed && $is_kept_true ) {
-				\set_transient( $no_donation_transient, 1, DAY_IN_SECONDS );
+			if ( false === $computed && $is_set && true === json_decode( $value ) ) {
 				return null;
 			}
 			if ( null !== $computed ) {
