@@ -67,7 +67,7 @@ class Premium_Newsletters_Migration {
 	 * with lists on both sides is split in two, with the same access rules: the gate
 	 * with the group's title keeps the modal lists and is set to Off, and a sibling
 	 * titled "<title> (auto-signup)" takes the rest and is set to On. When the run
-	 * can't tell (a list has no ESP list, or another plan's gate already has the
+	 * can't tell (a list has no ESP list, or another plan or its gate already uses the
 	 * sibling's title) the gate keeps its setting and the run prints how to set it by
 	 * hand. A gate already set to On or Off keeps that unless --set-auto-signup is
 	 * passed. A new sibling starts with the hide setting of the gate it splits from.
@@ -408,21 +408,22 @@ class Premium_Newsletters_Migration {
 		WP_CLI::line( "These gates do not restrict anything yet, and they do not change anyone's newsletter subscriptions: both the restriction filter and the premium newsletter access check stand down while WooCommerce Memberships is active. They take effect when WooCommerce Memberships is deactivated, so check them before that, not after." );
 		// Written but unenforceable is worse than not written at all — it looks
 		// migrated. Call it out after the success line so it is not lost in the table.
-		// A gate that failed to write is called out there too, since the success line
-		// counts only the gates written.
-		if ( $failed ) {
-			WP_CLI::warning(
-				sprintf(
-					'%d gate(s) failed to write (see the ERROR rows above). Fix the cause and re-run before deactivating WooCommerce Memberships.',
-					$failed
-				)
-			);
-		}
+		// "Of those" refers to the gates the success line counts, so this comes first.
 		if ( $unenforceable ) {
 			WP_CLI::warning(
 				sprintf(
 					'%d of those gate(s) will not restrict as intended (see the WARN rows above). Fix them before deactivating WooCommerce Memberships.',
 					$unenforceable
+				)
+			);
+		}
+		// A gate that failed to write is called out too, since the success line counts
+		// only the gates written.
+		if ( $failed ) {
+			WP_CLI::warning(
+				sprintf(
+					'%d gate(s) failed to write (see the ERROR rows above). Fix the cause and re-run before deactivating WooCommerce Memberships.',
+					$failed
 				)
 			);
 		}
@@ -1839,9 +1840,9 @@ class Premium_Newsletters_Migration {
 	 *
 	 * Two cases are left to the operator, as one gate with no setting to write and
 	 * instructions to print. A list with no ESP list can't be matched against the
-	 * modal, so its side is unknown. A sibling title that another group uses can't be
-	 * written: gate identity is the title, so the sibling would overwrite that
-	 * group's gate.
+	 * modal, so its side is unknown. A sibling title that another plan or its gate
+	 * already uses ({@see taken_gate_titles()} is the rule) can't be written: gate
+	 * identity is the title, so the sibling would overwrite that gate.
 	 *
 	 * @param array    $payload      A payload from build_gate_payload().
 	 * @param string[] $taken_titles Lower-cased gate titles, from taken_gate_titles().
@@ -1896,7 +1897,7 @@ class Premium_Newsletters_Migration {
 			return [
 				'payloads'     => [ $narrow( $title, $payload['list_ids'], null ) ],
 				'instructions' => sprintf(
-					'"%1$s" mixes lists readers opt into (%2$s) with lists WooCommerce Memberships added readers to automatically (%3$s), but "%4$s" is another plan\'s gate title, so it isn\'t split. Rename the plan behind "%4$s" and re-run to split it.',
+					'"%1$s" mixes lists readers opt into (%2$s) with lists WooCommerce Memberships added readers to automatically (%3$s), but another plan or its gate already uses the title "%4$s", so it isn\'t split. Rename the plan behind "%4$s" and re-run to split it.',
 					$title,
 					implode( ', ', $derived['modal'] ),
 					implode( ', ', $derived['non_modal'] ),
@@ -1954,7 +1955,7 @@ class Premium_Newsletters_Migration {
 			if ( isset( $failed_splits[ $gate_key ], $payload['unsplit'] ) ) {
 				WP_CLI::warning(
 					sprintf(
-						'"%1$s" keeps all its lists and its auto-signup setting, because "%2$s", which takes some of them, could not be created. Re-run to split it.',
+						'"%1$s" is written with all the group\'s lists and its auto-signup left as it is (a new gate follows the site setting), because "%2$s", which takes some of them, could not be created. Re-run to split it before deactivating WooCommerce Memberships.',
 						$payload['title'],
 						$failed_splits[ $gate_key ]
 					)

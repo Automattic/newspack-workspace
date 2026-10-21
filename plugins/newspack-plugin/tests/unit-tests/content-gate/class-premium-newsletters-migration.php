@@ -1607,7 +1607,7 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 		$this->assertSame( $payload['content_rules'], \Newspack\Content_Rules::get_gate_content_rules( $rows[1]['gate_id'] ) );
 		// The run couldn't apply the split, so it writes no setting derived from it.
 		$this->assertSame( 'default', \Newspack\Content_Gate::get_newsletter_gate_settings( $rows[1]['gate_id'] )['auto_signup'] );
-		$this->assertStringContainsString( '"Premium" keeps all its lists', implode( "\n", \WP_CLI::$warnings ) );
+		$this->assertStringContainsString( '"Premium" is written with all the group\'s lists and its auto-signup left as it is (a new gate follows the site setting), because "Premium (auto-signup)", which takes some of them, could not be created. Re-run to split it before deactivating WooCommerce Memberships.', implode( "\n", \WP_CLI::$warnings ) );
 	}
 
 	/**
