@@ -155,3 +155,5 @@ export const getFrequencyLabelWithAmount = ( amount: number, frequencySlug: Dona
 
 	return template.replace( 'AMOUNT_PLACEHOLDER', getFormattedAmount( amount ) ).replace( 'FREQUENCY_PLACEHOLDER', frequency );
 };
+
+export const isModernStyle = ( className?: string ) => ( className || '' ).split( /\s+/ ).includes( 'is-style-modern' );
