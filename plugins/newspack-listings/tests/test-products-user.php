@@ -317,6 +317,20 @@ class ProductsUserTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The meta and comments of a post the customer wrote that is not a listing cannot be edited either.
+	 */
+	public function test_own_non_listing_post_meta_and_comments_cannot_be_edited() {
+		$customer_id = $this->create_listing_customer();
+		$post_id     = self::factory()->post->create( [ 'post_author' => $customer_id ] );
+		$comment_id  = self::factory()->comment->create( [ 'comment_post_ID' => $post_id ] );
+
+		$this->assertFalse( user_can( $customer_id, 'edit_post_meta', $post_id, 'some_key' ) );
+		$this->assertFalse( user_can( $customer_id, 'edit_comment', $comment_id ) );
+		wp_set_current_user( $customer_id );
+		$this->assertSame( 403, $this->rest_status( 'POST', "/wp/v2/comments/$comment_id", [ 'content' => 'Changed' ] ) );
+	}
+
+	/**
 	 * Each of the customer's own listings, and its revisions, can be edited outside the editor screen.
 	 */
 	public function test_own_listing_can_be_edited_per_post() {
