@@ -1,3 +1,10 @@
+## newspack [6.55.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.4...newspack@6.55.5) (2026-10-21)
+
+
+### Bug Fixes
+
+* stop Mailchimp for WooCommerce unsubscribing subscribed readers (NPPD-2490, [#1339](https://github.com/Automattic/newspack-workspace/issues/1339)) ([5e7a222](https://github.com/Automattic/newspack-workspace/commit/5e7a222665867578df79cb678d23c9df8682ae61))
+
 ## newspack [6.55.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.3...newspack@6.55.4) (2026-10-20)
 
 
