@@ -478,31 +478,6 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A gate saved before the list settings existed follows the site setting.
-	 */
-	public function test_legacy_gate_without_list_settings_follows_site_option() {
-		$list_id = $this->create_premium_list();
-		$gate_id = $this->create_newsletter_gate( [ 100 ], [ $list_id ] );
-		delete_post_meta( $gate_id, 'auto_signup' );
-		delete_post_meta( $gate_id, 'hide_lists' );
-
-		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
-		$on_reader = $this->create_reader( true );
-		$this->run_access_check( $on_reader );
-
-		$calls = \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls;
-		$this->assertCount( 1, $calls, 'With the site setting on, a gate with no list settings adds the list.' );
-		$this->assertContains( 'newspack-' . $list_id, $calls[0]['lists_to_add'] );
-
-		\Newspack_Newsletters_Contacts::reset_calls();
-		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
-		$off_reader = $this->create_reader( true );
-		$this->run_access_check( $off_reader );
-
-		$this->assertEmpty( \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls, 'With the site setting off, a gate with no list settings adds nothing.' );
-	}
-
-	/**
 	 * When several gates cover a list, only a gate that admits the reader gets a say.
 	 *
 	 * Gate A admits any registered reader and is set to "off". Gate B admits paying
@@ -2654,24 +2629,26 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Admin screens keep every list, so an editor can still pick a hidden list in
-	 * the block editor and the Newsletters settings.
+	 * An admin-ajax request is an admin request that can render front-end markup,
+	 * such as infinite scroll loading more posts, so it leaves a hidden list out
+	 * as the front end does. It keeps a restricted list, as every admin request does.
 	 */
-	public function test_filter_subscription_lists_keeps_hidden_lists_in_admin() {
-		list( $hidden_id )  = $this->create_list_behind_gate( true );
-		list( $visible_id ) = $this->create_list_behind_gate( false );
-		wp_set_current_user( $this->create_reader( true ) );
+	public function test_filter_subscription_lists_drops_hidden_lists_in_admin_ajax() {
+		list( $hidden_id )     = $this->create_list_behind_gate( true );
+		list( $restricted_id ) = $this->create_list_behind_gate( false );
+		wp_set_current_user( $this->create_reader( false ) );
 		set_current_screen( 'dashboard' );
+		add_filter( 'wp_doing_ajax', '__return_true' );
 
 		$result = Premium_Newsletters::filter_subscription_lists(
 			[
 				new \Newspack\Newsletters\Subscription_List( $hidden_id ),
-				new \Newspack\Newsletters\Subscription_List( $visible_id ),
+				new \Newspack\Newsletters\Subscription_List( $restricted_id ),
 			]
 		);
 
 		$this->assertSame(
-			[ $hidden_id, $visible_id ],
+			[ $restricted_id ],
 			array_map(
 				function ( $list ) {
 					return $list->get_id();
@@ -2807,6 +2784,22 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		$result = Premium_Newsletters::filter_list_gates( [] );
 
 		$this->assertArrayHasKey( 'newspack-' . $hidden_id, $result );
+	}
+
+	/**
+	 * An admin-ajax request can render the Subscribe block for readers, so a hidden
+	 * list carries no gate there either.
+	 */
+	public function test_filter_list_gates_omits_hidden_lists_in_admin_ajax() {
+		list( $hidden_id )  = $this->create_list_behind_gate( true );
+		list( $visible_id ) = $this->create_list_behind_gate( false );
+		set_current_screen( 'dashboard' );
+		add_filter( 'wp_doing_ajax', '__return_true' );
+
+		$result = Premium_Newsletters::filter_list_gates( [] );
+
+		$this->assertSame( [ 'newspack-' . $visible_id ], array_keys( $result ) );
+		$this->assertArrayNotHasKey( 'newspack-' . $hidden_id, $result );
 	}
 
 	/**

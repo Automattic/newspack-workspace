@@ -516,12 +516,18 @@ class Premium_Newsletters {
 	 * keeps it off all of them. It also keeps a hidden list out of the set My Account removes a
 	 * reader from when they save, so saving that form can never unsubscribe them from it.
 	 *
+	 * Admin requests keep every list, so an editor can still pick any of them. An admin-ajax
+	 * request is an admin request that can render front-end markup (newspack-theme's infinite
+	 * scroll loads archive pages through it), so it leaves hidden lists out as the front end
+	 * does, while keeping restricted lists as every admin request does.
+	 *
 	 * @param array $lists The lists.
 	 *
 	 * @return array The filtered lists.
 	 */
 	public static function filter_subscription_lists( $lists ) {
-		if ( is_admin() ) {
+		$keeps_restricted = is_admin();
+		if ( $keeps_restricted && ! wp_doing_ajax() ) {
 			return $lists;
 		}
 
@@ -540,8 +546,8 @@ class Premium_Newsletters {
 		$lists = array_values(
 			array_filter(
 				$lists,
-				function( $list ) {
-					return ! Content_Restriction_Control::is_post_restricted( false, $list->get_id() )
+				function( $list ) use ( $keeps_restricted ) {
+					return ( $keeps_restricted || ! Content_Restriction_Control::is_post_restricted( false, $list->get_id() ) )
 						&& ! self::is_list_hidden( $list->get_id() );
 				}
 			)
@@ -664,7 +670,8 @@ class Premium_Newsletters {
 	 * when it can restrict the list: published, with registration or paid access
 	 * switched on, and content rules that match. The one exception is on the front
 	 * end, where a list hidden from readers is left out of the map, so the Subscribe
-	 * block's "show premium lists" mode never renders it.
+	 * block's "show premium lists" mode never renders it. That includes admin-ajax
+	 * requests, which can render the block for readers too.
 	 *
 	 * @param array[] $list_gates Gates keyed by public list ID.
 	 *
@@ -692,7 +699,7 @@ class Premium_Newsletters {
 			}
 			// The editor reads this map from an admin request and keeps the gate, so it
 			// can still name a hidden list.
-			if ( ! is_admin() && self::is_list_hidden( $list->get_id() ) ) {
+			if ( ( ! is_admin() || wp_doing_ajax() ) && self::is_list_hidden( $list->get_id() ) ) {
 				continue;
 			}
 			$gates = Content_Restriction_Control::get_post_gates( $list->get_id() );
