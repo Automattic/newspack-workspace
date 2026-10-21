@@ -38,6 +38,16 @@ class Premium_Newsletters_Migration {
 	const NEWSLETTER_LIST_CPT_FALLBACK = 'newspack_nl_list';
 
 	/**
+	 * Appended to a group's gate title to name the sibling gate that takes the
+	 * group's auto-signup lists when its lists disagree.
+	 *
+	 * The sibling's title is its identity on a re-run, as every gate's title is here,
+	 * so changing this suffix makes the next run create new siblings and report the
+	 * old ones as untouched.
+	 */
+	const AUTO_SIGNUP_SIBLING_SUFFIX = ' (auto-signup)';
+
+	/**
 	 * Create or update Newspack Access Control premium newsletter gates from
 	 * WooCommerce Membership plans.
 	 *
@@ -48,10 +58,18 @@ class Premium_Newsletters_Migration {
 	 * title is all matching plan names joined with " | ".
 	 *
 	 * Registration mode is always activated; paid access mode only when every plan in
-	 * the group requires a purchase (see group_requires_purchase()). The site-wide
-	 * auto-signup setting is derived from the post-checkout signup modal. Settling
-	 * that setting takes a full run: it is one option for the whole site, so a
-	 * --plan run reports what it would be but never writes it.
+	 * the group requires a purchase (see group_requires_purchase()).
+	 *
+	 * Each gate's auto-signup setting records what WooCommerce Memberships did: it
+	 * added new members to every list their plan restricted, except lists shown in
+	 * the post-checkout signup modal, which readers opted into. A gate whose lists are
+	 * all in the modal is set to Off, and one with none of them there to On. A group
+	 * with lists on both sides is split in two, with the same access rules: the gate
+	 * with the group's title keeps the modal lists and is set to Off, and a sibling
+	 * titled "<title> (auto-signup)" takes the rest and is set to On. When the run
+	 * can't tell (a list has no ESP list, or another group already uses the sibling's
+	 * title) the gate keeps its setting and the run prints how to set it by hand. A
+	 * gate already set to On or Off keeps that unless --set-auto-signup is passed.
 	 *
 	 * Dry-run by default; pass --live to write.
 	 *
@@ -77,13 +95,13 @@ class Premium_Newsletters_Migration {
 	 * : Apply the changes. Without this flag the command runs as a dry-run and writes nothing.
 	 *
 	 * [--plan=<id>]
-	 * : Only process the plan with this post ID. Useful for testing; never writes the site-wide auto-signup setting.
+	 * : Only process the plan with this post ID. Useful for testing.
 	 *
 	 * [--one-time-duration=<duration>]
 	 * : How long access lasts after a one-time purchase. Accepts "forever", "<n>days" or "<n>months". Each plan's own access length is read by default, so this is only needed for a plan whose access ends on a fixed calendar date, which is not a duration from the purchase. Applies to every such plan in the run.
 	 *
 	 * [--set-auto-signup]
-	 * : Apply the derived auto-signup setting even though the site already has one set. Without this the command reports the difference and leaves the existing setting alone, because it is a publisher's choice rather than a migration artefact. A site that has never set it is written either way.
+	 * : Apply the derived auto-signup setting to gates already set to On or Off. Without this the command reports the difference and leaves such a gate alone, because its setting is a publisher's choice rather than a migration artefact. A gate that follows the site setting is written either way.
 	 *
 	 * [--yes]
 	 * : Answer yes to the pre-flight confirmation prompt shown when gates would be created alongside gates the same plans were migrated to individually. Required for non-interactive runs (cron, `ssh host "wp ..."`): with no terminal to answer the prompt, the command errors out rather than exiting silently mid-migration.
@@ -94,6 +112,8 @@ class Premium_Newsletters_Migration {
 	 *     wp newspack migrate-premium-newsletters --live
 	 *     wp newspack migrate-premium-newsletters --plan=711923
 	 *     wp newspack migrate-premium-newsletters --one-time-duration=12months
+	 *
+	 *     # Also apply the derived auto-signup setting to gates already set to On or Off.
 	 *     wp newspack migrate-premium-newsletters --live --set-auto-signup
 	 *
 	 * @param array $args       Positional args (unused).
@@ -193,7 +213,6 @@ class Premium_Newsletters_Migration {
 
 		$summary         = [];
 		$skipped         = [];
-		$migrated_lists  = [];
 		$all_lists_plans = [];
 
 		$plan_groups = self::group_plans_by_lists( $plan_ids, $skipped, $all_lists_plans );
@@ -277,6 +296,21 @@ class Premium_Newsletters_Migration {
 			self::report_dropped_paywall( $payload );
 		}
 
+		// Split by auto-signup here, after the per-group warnings so a split group's
+		// are printed once, and before the prompt so the operator has seen every gate
+		// the run can't settle by the time they answer it. Every group's title is
+		// taken: gate identity is the title, so a sibling named like another group's
+		// gate would overwrite that gate's lists.
+		$taken_titles  = array_map( fn( $group ) => trim( strtolower( self::gate_title( $group ) ) ), array_values( $plan_groups ) );
+		$gate_payloads = [];
+		foreach ( $payloads as $payload ) {
+			$split = self::split_payload_by_auto_signup( $payload, $taken_titles );
+			if ( null !== $split['instructions'] ) {
+				WP_CLI::warning( $split['instructions'] );
+			}
+			$gate_payloads = array_merge( $gate_payloads, $split['payloads'] );
+		}
+
 		// Regrouping can merge plans a previous run migrated separately — most likely
 		// after a --plan run, which writes a gate titled for that one plan. Gate
 		// identity is the title, so the merged title matches no existing gate and this
@@ -313,13 +347,16 @@ class Premium_Newsletters_Migration {
 			);
 		}
 
-		// Every group's title is unique (the collision check above errors out
-		// otherwise), so the write loop can treat a title as naming one gate.
-		$titles_written = array_fill_keys( array_map( fn( $payload ) => trim( strtolower( $payload['title'] ) ), $payloads ), true );
+		// Every gate title is unique: the collision check above errors out over two
+		// groups sharing one, and a sibling is never named like a group. So the write
+		// loop can treat a title as naming one gate.
+		$titles_written = array_fill_keys( array_map( fn( $payload ) => trim( strtolower( $payload['title'] ) ), $gate_payloads ), true );
 
-		$progress = \WP_CLI\Utils\make_progress_bar( 'Migrating premium newsletter gates', $group_count );
+		$force_auto_signup = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'set-auto-signup', false );
 
-		foreach ( $payloads as $payload ) {
+		$progress = \WP_CLI\Utils\make_progress_bar( 'Migrating premium newsletter gates', count( $gate_payloads ) );
+
+		foreach ( $gate_payloads as $payload ) {
 			$progress->tick();
 
 			$list_ids     = $payload['list_ids'];
@@ -369,13 +406,12 @@ class Premium_Newsletters_Migration {
 					'gate_id'     => '—',
 					'lists'       => count( $list_ids ),
 					'access_type' => $access_type,
+					'auto_signup' => '—',
 				];
 				continue;
 			}
 
-			// Only lists behind a gate this run actually wrote feed the site-wide
-			// auto-signup derivation; a group whose write failed migrated nothing.
-			$migrated_lists = array_merge( $migrated_lists, $list_ids );
+			$auto_signup = self::apply_auto_signup( $gate_title, $gate_id, $payload['auto_signup'], $force_auto_signup, $dry_run );
 
 			$verification_issues = [];
 			if ( ! $dry_run && $gate_id ) {
@@ -402,6 +438,7 @@ class Premium_Newsletters_Migration {
 				'gate_id'     => $gate_id ?? '(pending)',
 				'lists'       => count( $list_ids ),
 				'access_type' => $access_type,
+				'auto_signup' => $auto_signup,
 			];
 		}
 
@@ -420,24 +457,16 @@ class Premium_Newsletters_Migration {
 					'Gate ID'     => $row['gate_id'],
 					'Lists'       => $row['lists'],
 					'Access Type' => $row['access_type'],
+					// Skipped plans write no gate, so their rows carry no setting.
+					'Auto-signup' => $row['auto_signup'] ?? '—',
 				],
 				array_merge( $summary, $skipped )
 			),
-			[ 'Plan Name', 'Action', 'Gate ID', 'Lists', 'Access Type' ]
+			[ 'Plan Name', 'Action', 'Gate ID', 'Lists', 'Access Type', 'Auto-signup' ]
 		);
 
 		WP_CLI::line( '' );
-		$untouched_gates = self::report_stale_gates( $titles_written, $dry_run, (bool) $plan_id );
-
-		WP_CLI::line( '' );
-		self::report_auto_signup(
-			array_values( array_unique( $migrated_lists ) ),
-			$dry_run,
-			(bool) $plan_id,
-			self::count_incomplete_groups( $summary ),
-			(bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'set-auto-signup', false ),
-			$untouched_gates
-		);
+		self::report_stale_gates( $titles_written, $dry_run, (bool) $plan_id );
 
 		WP_CLI::line( '' );
 		$processed = count(
@@ -482,9 +511,9 @@ class Premium_Newsletters_Migration {
 	 * a bare `--plan` draws only a warning, then the flag is stripped and the command
 	 * receives the flag's default — so the in-method guard against an unusable --plan
 	 * value can never fire on a real invocation, and a run the operator scoped to one
-	 * plan would silently widen to every plan on the site (and, under --live, write the
-	 * site-wide auto-signup setting). Reading the raw argv is the only place the
-	 * mistake is still visible.
+	 * plan would silently widen to every plan on the site (and, under --live, write a
+	 * gate for each of them). Reading the raw argv is the only place the mistake is
+	 * still visible.
 	 *
 	 * Shared with Premium_Newsletters_Verify, which passes its own flag list. The flags
 	 * differ per command; the scan is the guard standing between a mistyped flag and a
@@ -558,29 +587,6 @@ class Premium_Newsletters_Migration {
 		return sprintf(
 			'Gates will not enforce on this site: %s. Enforcement asks Content_Gate::is_gating_active(), which needs both — so the gates below will be written but stay dormant, restricting nobody and subscribing nobody, until that is fixed.',
 			implode( ', and ', $missing )
-		);
-	}
-
-	/**
-	 * How many of this run's groups must be kept out of the auto-signup derivation.
-	 *
-	 * A group whose gate failed to write migrated nothing; a group reported as a WARN
-	 * row wrote a gate the evaluator cannot enforce. Either way its lists are not
-	 * behind a working gate, so the site-wide setting must not be derived as if they
-	 * were. Counted from the summary rows rather than tracked through the write loop:
-	 * the rows are what the operator is shown, and $migrated_lists is appended before
-	 * verify_migrated_gate() runs, so it cannot tell the two apart on its own.
-	 *
-	 * @param array[] $summary The run's summary rows, each carrying an 'action'.
-	 *
-	 * @return int The number of rows that failed to write or will not enforce.
-	 */
-	private static function count_incomplete_groups( array $summary ): int {
-		return count(
-			array_filter(
-				$summary,
-				fn( $row ) => str_starts_with( $row['action'], 'ERROR' ) || str_starts_with( $row['action'], 'WARN' )
-			)
 		);
 	}
 
@@ -1250,10 +1256,11 @@ class Premium_Newsletters_Migration {
 	 * $written_keys and is filtered out — so a warm get_gates() cache cannot change
 	 * the outcome.
 	 *
-	 * A --plan run is skipped rather than reported. It writes at most one title, so
-	 * every other gate on the site comes back as stale: the run cannot compute
-	 * staleness, and a list of gates an operator has no reason to retire trains them
-	 * to skim the warning that matters on a full run.
+	 * A --plan run is skipped rather than reported. It writes only that plan's gate
+	 * (two, when its lists are split by auto-signup), so every other gate on the site
+	 * comes back as stale: the run cannot compute staleness, and a list of gates an
+	 * operator has no reason to retire trains them to skim the warning that matters
+	 * on a full run.
 	 *
 	 * @param array<string,bool> $written_keys Lower-cased gate titles this run wrote, as keys.
 	 * @param bool               $dry_run      Whether this is a dry run.
@@ -1264,7 +1271,7 @@ class Premium_Newsletters_Migration {
 	 */
 	private static function report_stale_gates( array $written_keys, bool $dry_run, bool $plan_scoped = false ): bool {
 		if ( $plan_scoped ) {
-			WP_CLI::line( 'Skipping the untouched-gate check: a --plan run writes one gate, so it cannot tell which of the others no plan accounts for. Re-run without --plan to see them.' );
+			WP_CLI::line( 'Skipping the untouched-gate check: a --plan run writes only that plan\'s gate(s), so it cannot tell which of the others no plan accounts for. Re-run without --plan to see them.' );
 			return false;
 		}
 		$stale = self::find_stale_newsletter_gates(
@@ -1340,13 +1347,12 @@ class Premium_Newsletters_Migration {
 	 * actually renders from. A list that has since been unpublished, or otherwise
 	 * dropped from that live set, still counts as a modal list here even though the
 	 * modal would no longer show it. That gap is left in place because of the
-	 * direction it errs in: over-counting a list as modal can only push
-	 * derive_auto_signup() toward OFF or toward the undecided value that writes
-	 * nothing, never toward ON — so the operator is left to opt readers in
-	 * deliberately rather than the migration silently auto-enrolling someone who was
-	 * never actually offered that list. (get_lists_config() is not a remote call: it
-	 * reads local Subscription_List CPT posts, and is_active() is a plain
-	 * post_status check; it returns a WP_Error only when no ESP provider is
+	 * direction it errs in: over-counting a list as modal can only stop this run from
+	 * setting its gate to On, never make it do so — so the operator is left to opt
+	 * readers in deliberately rather than the migration silently auto-enrolling
+	 * someone who was never actually offered that list. (get_lists_config() is not a
+	 * remote call: it reads local Subscription_List CPT posts, and is_active() is a
+	 * plain post_status check; it returns a WP_Error only when no ESP provider is
 	 * configured at all — that is not a failure mode this derivation needs to guard
 	 * against.)
 	 *
@@ -1370,18 +1376,21 @@ class Premium_Newsletters_Migration {
 	}
 
 	/**
-	 * Derive the site-wide auto-signup setting from the restricted lists.
+	 * Derive a gate's auto-signup setting from its restricted lists.
 	 *
 	 * Before Access Control, activating a membership auto-subscribed the member to
 	 * every list the plan restricted, except lists shown in the post-checkout signup
-	 * modal, which were left to reader opt-in. `newspack_premium_newsletters_auto_signup`
-	 * is a single site-wide option, so that per-list distinction only survives when
-	 * every restricted list falls on the same side. A split returns a null value:
-	 * one flag cannot express it, and either guess has a victim — on subscribes
-	 * readers who opted out, off drops readers who expected the list.
+	 * modal, which were left to reader opt-in. A gate's setting covers all of its
+	 * lists, so that per-list distinction only survives when every list falls on the
+	 * same side. A split returns a null value alongside both sides, which is what
+	 * split_payload_by_auto_signup() divides the gate by: one value can't express it,
+	 * and either guess has a victim — on subscribes readers who opted out, off drops
+	 * readers who expected the list.
 	 *
 	 * A list whose public ID cannot be resolved is reported separately and counted as
-	 * non-modal, matching the pre-Access-Control default.
+	 * non-modal, matching the pre-Access-Control default. The caller doesn't act on
+	 * that default: split_payload_by_auto_signup() leaves such a gate's setting to the
+	 * operator.
 	 *
 	 * @param int[] $list_ids The restricted newsletter list post IDs.
 	 *
@@ -1800,171 +1809,139 @@ class Premium_Newsletters_Migration {
 	}
 
 	/**
-	 * Derive, report, and (in live mode) write the site-wide auto-signup setting.
+	 * Split a group's gate payload by the auto-signup setting its lists need.
 	 *
-	 * A site that has never set the option is written without ceremony: there is no
-	 * choice to override, and a zero-touch migration is the whole point. A site that
-	 * has one set is left alone and told about the difference instead. The stored
-	 * value and the default are both readable as "on", so a run that overwrote them
-	 * alike would silently undo a publisher who had turned auto-signup off — and
-	 * turning it back on subscribes their readers to lists at the provider, which is
-	 * not something to do on an inference. --set-auto-signup is how an operator says
-	 * they mean it.
+	 * A gate's auto-signup covers every list on it, but WooCommerce Memberships
+	 * decided per list ({@see derive_auto_signup()}). A group whose lists all fall on
+	 * one side keeps one gate set to that side. A group with lists on both sides
+	 * becomes two gates: the group's own title keeps the modal lists, set to Off, so a
+	 * gate an earlier run wrote under that title keeps the lists readers opted into;
+	 * a sibling titled with AUTO_SIGNUP_SIBLING_SUFFIX takes the rest, set to On. The
+	 * two partition the group's lists and carry its access rules unchanged, so every
+	 * reader the group admitted keeps every list.
 	 *
-	 * A run in which any group failed to write, or was reported as a WARN row, takes
-	 * the same report-only path. The derivation is over the lists this run migrated,
-	 * and a group that wrote nothing — or wrote a gate the evaluator cannot enforce —
-	 * keeps its lists out of that view. Dropping lists can only collapse a
-	 * disagreement into a determinate value, never the reverse, and the option
-	 * defaults to ON: so the shape that does damage is a modal group succeeding while
-	 * a non-modal group fails, which derives false and turns auto-signup off
-	 * site-wide from a partial view. Members then stop being auto-subscribed to lists
-	 * they should get, with nothing to show for it. Re-runs are idempotent, so fixing
-	 * the failure and running again settles the setting.
+	 * Two cases are left to the operator, as one gate with no setting to write and
+	 * instructions to print. A list with no ESP list can't be matched against the
+	 * modal, so its side is unknown. A sibling title that another group in this run
+	 * already uses can't be written: gate identity is the title, so the sibling would
+	 * overwrite that group's gate.
 	 *
-	 * The boundary is this run's summary rows. A plan skipped before any write is not
-	 * counted here; a manual-only plan's lists are named in their own warning instead
-	 * ({@see report_manual_only_plan()}).
+	 * @param array    $payload      A payload from build_gate_payload().
+	 * @param string[] $taken_titles Lower-cased gate titles of every group in this run.
 	 *
-	 * A --plan run is the exception: the option is site-wide, but the derivation only
-	 * sees the lists that one plan restricts. If the site's other lists sit on the
-	 * other side of the modal split, writing it would flip a global setting from a
-	 * partial view — turning auto-signup on for readers who declined those lists at
-	 * checkout, or off for readers who expected them. So a --plan run reports the
-	 * derivation and says why it is not written; settling the setting takes a full run.
-	 *
-	 * @param int[] $list_ids          All newsletter list IDs this run migrated.
-	 * @param bool  $dry_run           Whether this is a dry run.
-	 * @param bool  $plan_scoped       Whether the run was narrowed to a single plan with --plan.
-	 * @param int   $incomplete_groups How many groups failed to write or will not enforce
-	 *                                 ({@see count_incomplete_groups()}).
-	 * @param bool  $force             Whether --set-auto-signup was passed, allowing the
-	 *                                 run to overwrite a setting the site already has.
-	 * @param bool  $untouched_gates   Whether published gates this run did not write are
-	 *                                 still restricting lists of their own
-	 *                                 ({@see report_stale_gates()}).
-	 *
-	 * @return void
+	 * @return array 'payloads' are the gate payloads to write, each the input with
+	 *               'title', 'list_ids' and the newsletters rule's value narrowed, plus
+	 *               'auto_signup': 'on', 'off', or null to leave the gate's setting
+	 *               alone. 'instructions' is the warning to print, or null.
 	 */
-	private static function report_auto_signup( array $list_ids, bool $dry_run, bool $plan_scoped = false, int $incomplete_groups = 0, bool $force = false, bool $untouched_gates = false ): void {
-		$derived = self::derive_auto_signup( $list_ids );
-		// A sentinel default rather than 1: get_option() cannot otherwise tell a stored
-		// "on" from an absent option, and those two mean different things here.
-		$stored  = \get_option( 'newspack_premium_newsletters_auto_signup', null );
-		$is_set  = null !== $stored;
-		$current = $is_set ? (bool) $stored : true;
+	private static function split_payload_by_auto_signup( array $payload, array $taken_titles ): array {
+		$title   = $payload['title'];
+		$derived = self::derive_auto_signup( $payload['list_ids'] );
 
-		if ( ! empty( $derived['unresolved'] ) ) {
-			WP_CLI::warning(
-				sprintf(
-					'Could not resolve an ESP list for list(s) %s, so they are treated as auto-signup lists. Confirm them in Newsletters > Premium.',
-					implode( ', ', $derived['unresolved'] )
-				)
-			);
-		}
-
-		if ( null === $derived['value'] ) {
-			if ( ! empty( $derived['modal'] ) && ! empty( $derived['non_modal'] ) ) {
-				WP_CLI::warning(
-					sprintf(
-						'Auto-signup is one site-wide setting, but these lists disagree: %s appear in the post-checkout signup modal (auto-signup off), while %s do not (auto-signup on). Leaving it %s — set it in Newsletters > Premium.',
-						implode( ', ', $derived['modal'] ),
-						implode( ', ', $derived['non_modal'] ),
-						$current ? 'on' : 'off'
-					)
-				);
-				return;
+		$narrow = function ( string $gate_title, array $list_ids, ?string $auto_signup ) use ( $payload ): array {
+			$narrowed                = $payload;
+			$narrowed['title']       = $gate_title;
+			$narrowed['list_ids']    = $list_ids;
+			$narrowed['auto_signup'] = $auto_signup;
+			foreach ( $narrowed['content_rules'] as $index => $rule ) {
+				if ( 'newsletters' === $rule['slug'] ) {
+					$narrowed['content_rules'][ $index ]['value'] = array_map( 'strval', $list_ids );
+				}
 			}
-			// Nothing to derive from at all. Said out loud rather than passed over in
-			// silence: a run where every group failed reaches here, and the absence of an
-			// auto-signup line reads exactly like a run that had nothing to change.
-			WP_CLI::warning(
-				sprintf(
-					'Auto-signup was not derived: this run migrated no newsletter lists%s. Leaving it %s — check it in Newsletters > Premium.',
-					$incomplete_groups ? sprintf( ', because all %d gate(s) it touched either failed to write or will not enforce', $incomplete_groups ) : '',
-					$current ? 'on' : 'off'
-				)
-			);
-			return;
+			return $narrowed;
+		};
+
+		// Checked before the value: derive_auto_signup() counts an unresolved list as
+		// non-modal, which would set a gate to On on a guess.
+		if ( ! empty( $derived['unresolved'] ) ) {
+			return [
+				'payloads'     => [ $narrow( $title, $payload['list_ids'], null ) ],
+				'instructions' => sprintf(
+					'"%1$s" keeps its auto-signup setting: list(s) %2$s have no ESP list, so this run can\'t tell whether WooCommerce Memberships added readers to them automatically. Set auto-signup on the gate in Newsletters > Premium.',
+					$title,
+					implode( ', ', $derived['unresolved'] )
+				),
+			];
 		}
 
-		$derived_label = $derived['value'] ? 'on' : 'off';
-		$current_label = $current ? 'on' : 'off';
+		if ( null !== $derived['value'] ) {
+			return [
+				'payloads'     => [ $narrow( $title, $payload['list_ids'], $derived['value'] ? 'on' : 'off' ) ],
+				'instructions' => null,
+			];
+		}
 
-		if ( $derived['value'] === $current ) {
-			WP_CLI::line( sprintf( 'Auto-signup is already %s; leaving it unchanged.', $current_label ) );
-			return;
+		$sibling_title = $title . self::AUTO_SIGNUP_SIBLING_SUFFIX;
+		if ( in_array( trim( strtolower( $sibling_title ) ), $taken_titles, true ) ) {
+			return [
+				'payloads'     => [ $narrow( $title, $payload['list_ids'], null ) ],
+				'instructions' => sprintf(
+					'"%1$s" mixes lists readers opt into (%2$s) with lists WooCommerce Memberships added readers to automatically (%3$s), but "%4$s" is already a gate title in this run, so it isn\'t split. To split it by hand: duplicate the gate in Newsletters > Premium, move lists %3$s to the copy, then set the copy\'s auto-signup to On and the original\'s to Off.',
+					$title,
+					implode( ', ', $derived['modal'] ),
+					implode( ', ', $derived['non_modal'] ),
+					$sibling_title
+				),
+			];
 		}
-		// Reported before the dry-run branch so a --plan --live operator, who has every
-		// reason to expect a write, is told which of the two reasons applies.
-		if ( $plan_scoped ) {
-			WP_CLI::line(
-				sprintf(
-					'Auto-signup derives to %s from this plan\'s lists (currently %s), but a --plan run never writes it: the setting is site-wide, and one plan\'s lists cannot stand for the rest of the site\'s. Re-run without --plan to settle it.',
-					$derived_label,
-					$current_label
-				)
-			);
-			return;
+
+		return [
+			'payloads'     => [
+				$narrow( $title, $derived['modal'], 'off' ),
+				$narrow( $sibling_title, $derived['non_modal'], 'on' ),
+			],
+			'instructions' => null,
+		];
+	}
+
+	/**
+	 * Write a gate's derived auto-signup setting, and say what the gate will do.
+	 *
+	 * A gate following the site setting has no choice to override, so it is written;
+	 * that includes every gate this run creates. A gate already set to On or Off that
+	 * differs from the derived value is left alone: someone may have chosen it, and
+	 * this run can't tell that from a value an earlier run wrote. Turning one On
+	 * subscribes readers to lists at the ESP once the access check is live, so it
+	 * takes --set-auto-signup to say the operator means it.
+	 *
+	 * Checked before the dry-run branch, so a dry run predicts the warning rather
+	 * than promising a write.
+	 *
+	 * @param string      $title   The gate title, for the warning.
+	 * @param int|null    $gate_id The gate, or null for one a dry run would create.
+	 * @param string|null $derived 'on' or 'off', or null when the run can't tell.
+	 * @param bool        $force   Whether --set-auto-signup was passed.
+	 * @param bool        $dry_run Whether this is a dry run.
+	 *
+	 * @return string The Auto-signup label for the summary table.
+	 */
+	private static function apply_auto_signup( string $title, ?int $gate_id, ?string $derived, bool $force, bool $dry_run ): string {
+		$current = $gate_id ? \Newspack\Content_Gate::get_newsletter_gate_settings( $gate_id )['auto_signup'] : 'default';
+
+		if ( null === $derived ) {
+			// Said the same way for a gate that exists and one that doesn't yet, so a dry
+			// run and the live run that follows it print the same label.
+			return 'default' === $current ? 'follow site setting' : $current;
 		}
-		// Before the dry-run branch for the same reason as the --plan case above, and so
-		// a dry run predicts the suppression instead of promising a write.
-		if ( $incomplete_groups ) {
-			WP_CLI::line(
-				sprintf(
-					'Auto-signup derives to %s from the lists this run migrated (currently %s), but %d gate(s) failed to write or will not enforce, so their lists are missing from that view — and a missing list can only turn a genuine disagreement into a decision. Leaving the setting alone: fix those gate(s) and re-run to settle it.',
-					$derived_label,
-					$current_label,
-					$incomplete_groups
-				)
-			);
-			return;
-		}
-		// The option governs get_restricted_lists(), the union of every published
-		// premium gate's lists, while the derivation sees only the lists this run
-		// migrated. A gate this run did not write contributes lists to the first and
-		// not the second, which is the partial view the method's own reasoning warns
-		// about, so the same report-only path applies.
-		if ( $untouched_gates ) {
-			WP_CLI::line(
-				sprintf(
-					'Auto-signup derives to %s from the lists this run migrated (currently %s), but the gate(s) named above are still restricting lists this run never saw, and the setting governs those too. Leaving it alone: retire or migrate them and re-run to settle it.',
-					$derived_label,
-					$current_label
-				)
-			);
-			return;
-		}
-		// Before the dry-run branch for the same reason as the two cases above: a dry
-		// run should predict the suppression rather than promise a write.
-		if ( $is_set && ! $force ) {
+
+		if ( 'default' !== $current && $current !== $derived && ! $force ) {
 			WP_CLI::warning(
 				sprintf(
-					'Auto-signup derives to %s from the lists this run migrated, but the site already has it set to %s — a setting someone chose, which this run has no way to tell from one it inherited. Leaving it alone: set it in Newsletters > Premium, or re-run with --set-auto-signup to apply the derived value.',
-					$derived_label,
-					$current_label
+					'"%1$s" (gate %2$d) has auto-signup set to %3$s, and this run derives %4$s. Leaving it: re-run with --set-auto-signup to apply the derived value.',
+					$title,
+					$gate_id,
+					$current,
+					$derived
 				)
 			);
-			return;
+			return 'kept ' . $current;
 		}
+
 		if ( $dry_run ) {
-			WP_CLI::line(
-				sprintf(
-					'Auto-signup would be set to %s (currently %s%s).',
-					$derived_label,
-					$current_label,
-					$is_set ? '' : ', never set'
-				)
-			);
-			return;
+			return $derived . ' (dry-run)';
 		}
-		\update_option( 'newspack_premium_newsletters_auto_signup', $derived['value'] ? 1 : 0, false );
-		WP_CLI::line(
-			sprintf(
-				'Auto-signup set to %s (%s).',
-				$derived_label,
-				$is_set ? sprintf( 'was %s', $current_label ) : 'it had never been set'
-			)
-		);
+
+		\Newspack\Content_Gate::update_newsletter_gate_settings( $gate_id, [ 'auto_signup' => $derived ] );
+		return $derived;
 	}
 }
