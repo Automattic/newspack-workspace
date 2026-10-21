@@ -31,7 +31,7 @@ class SegmentsMigrationTest extends WP_UnitTestCase {
 
 		global $wpdb;
 		// The test suite turns this into a temporary table, dropped with the connection.
-		$wpdb->query( "CREATE TABLE {$wpdb->prefix}newspack_campaigns_reader_events ( id bigint(20) NOT NULL AUTO_INCREMENT, client_id varchar(100) NOT NULL, type varchar(20) NOT NULL, date_created datetime NOT NULL, PRIMARY KEY (id) )" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
+		$wpdb->query( "CREATE TABLE {$wpdb->prefix}newspack_campaigns_reader_events ( id bigint(20) NOT NULL AUTO_INCREMENT, client_id varchar(100) NOT NULL, type varchar(20) NOT NULL, context varchar(255) NOT NULL DEFAULT '', date_created datetime NOT NULL, PRIMARY KEY (id) )" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
 	}
 
 	/**
@@ -46,6 +46,13 @@ class SegmentsMigrationTest extends WP_UnitTestCase {
 	/**
 	 * The migration relays values recorded in the browser, so it writes them
 	 * without the mark that says the server wrote them.
+	 *
+	 * Runs in its own process because the account-arrival suite defines a minimal
+	 * stand-in for Reader_Data when its file is included, and a class cannot be
+	 * redefined, so this test would otherwise never see the real one.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
 	 */
 	public function test_migration_writes_values_without_server_mark() {
 		global $wpdb;
