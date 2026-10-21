@@ -144,6 +144,26 @@ class Test_Group_Subscription_Teams_Invite extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Create an author user -- eligible for group membership by default, but not a
+	 * reader (no `_newspack_reader` meta and not a reader role).
+	 *
+	 * @return int User ID.
+	 */
+	private function create_author_user(): int {
+		$user_id = wp_insert_user(
+			[
+				'user_login' => 'author-' . wp_generate_password( 6, false ),
+				'user_pass'  => wp_generate_password(),
+				'user_email' => 'author-' . wp_generate_password( 6, false ) . '@test.com',
+				'role'       => 'author',
+			]
+		);
+		$this->assertNotWPError( $user_id, 'Fixture author user creation should succeed.' );
+		$this->user_ids[] = $user_id;
+		return $user_id;
+	}
+
+	/**
 	 * Create an active, group-enabled subscription owned by $owner_id, marked as
 	 * migrated from $team_id — the shape migrate-teams leaves behind.
 	 *
@@ -394,6 +414,34 @@ class Test_Group_Subscription_Teams_Invite extends WP_UnitTestCase {
 		$second = Group_Subscription_Teams_Invite::resolve_invitation_token( 'tok-member' );
 		$this->assertWPError( $second, 'A removed reader must not re-admit themselves with the original link.' );
 		$this->assertSame( Group_Subscription_Invite::RESULT_JOIN_TEAM_INVALID, $second->get_error_code() );
+	}
+
+	/**
+	 * A member who has since lost eligibility (e.g. an author promoted to editor)
+	 * must still be recognised as an existing member, not handed a fresh invite.
+	 * user_is_member() reads through get_group_subscriptions_for_user(), which
+	 * filters out ineligible users entirely -- so before the fix, this resolver
+	 * would not see the existing membership and would fall through to minting
+	 * (and re-refusing) a new invite instead of the sign-in message.
+	 */
+	public function test_a_member_who_lost_eligibility_still_gets_the_sign_in_message() {
+		$owner        = $this->create_reader();
+		$member       = $this->create_author_user();
+		$member_email = get_userdata( $member )->user_email;
+		$team_id      = $this->create_team( $owner );
+		$subscription = $this->create_migrated_group_subscription( $owner, $team_id );
+		// A live invite for the same address, from before they joined -- so that
+		// without the raw membership check running first, find_live_invite() would
+		// hand it straight back instead of routing to the sign-in message.
+		Group_Subscription_Invite::generate_invite( $subscription, $member_email, false );
+		Group_Subscription::update_members( $subscription, [ $member ] );
+		get_user_by( 'id', $member )->set_role( 'editor' );
+		$this->create_team_invitation( $team_id, $member_email, 'tok-lost-eligibility' );
+
+		$result = Group_Subscription_Teams_Invite::resolve_invitation_token( 'tok-lost-eligibility' );
+
+		$this->assertWPError( $result, 'A member who lost eligibility must not be handed a fresh invite.' );
+		$this->assertSame( Group_Subscription_Invite::RESULT_JOIN_TEAM_SIGN_IN, $result->get_error_code(), 'Existing membership should still be recognised even though the member is no longer eligible.' );
 	}
 
 	/**

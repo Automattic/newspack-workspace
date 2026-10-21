@@ -6,7 +6,7 @@
  * WordPress dependencies.
  */
 import { Component, RawHTML } from '@wordpress/element';
-import { Icon, bug, check, help, info } from '@wordpress/icons';
+import { Icon, check, help, info } from '@wordpress/icons';
 
 /**
  * Internal dependencies.
@@ -23,23 +23,10 @@ class Notice extends Component {
 	 * Render
 	 */
 	render() {
-		const {
-			className,
-			debugMode,
-			isError,
-			isHandoff,
-			isHelp,
-			isSuccess,
-			isWarning,
-			noticeText,
-			rawHTML,
-			style = {},
-			children = null,
-		} = this.props;
+		const { className, isError, isHandoff, isHelp, isSuccess, isWarning, noticeText, rawHTML, style = {}, children = null } = this.props;
 		const classes = classnames(
 			'newspack-notice',
 			className,
-			debugMode && 'newspack-notice__is-debug',
 			isError && 'newspack-notice__is-error',
 			isHandoff && 'newspack-notice__is-handoff',
 			isHelp && 'newspack-notice__is-help',
@@ -51,8 +38,6 @@ class Notice extends Component {
 			noticeIcon = help;
 		} else if ( isSuccess ) {
 			noticeIcon = check;
-		} else if ( debugMode ) {
-			noticeIcon = bug;
 		} else {
 			noticeIcon = info;
 		}

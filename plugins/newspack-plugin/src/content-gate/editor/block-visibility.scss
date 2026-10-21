@@ -12,6 +12,16 @@
 	.components-form-token-field .components-form-token-field__help {
 		margin-top: wp-vars.$grid-unit-10;
 	}
+	// Tokens don't wrap by default, so one long label (a status marker plus the ID) widens
+	// the whole panel past the sidebar and cuts off the tokens and the notice below them.
+	.components-form-token-field__token {
+		max-width: 100%;
+	}
+	.components-form-token-field__token-text {
+		min-width: 0;
+		overflow-wrap: anywhere;
+		white-space: normal;
+	}
 	// Caution under a picker holding IDs the option list cannot describe, and the note
 	// shown when the option list could not be refreshed. Gutenberg's
 	// `.block-editor-block-inspector p` rule zeroes the margin, so restore it here.

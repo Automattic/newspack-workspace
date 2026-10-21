@@ -1,0 +1,107 @@
+name: Constants catalog (reusable)
+
+# Shared routine behind every repository's own constants-catalog.yml caller.
+# Replaces the old central scanner, which cloned every repository with a
+# personal access token from one workflow in the hub. Each repository now
+# scans only itself, with the token-free GITHUB_TOKEN, and posts its own slice
+# to the hub. This repository is public, so a private caller can use this
+# reusable workflow with no credentials of its own beyond the signing secret.
+#
+# The scanner it runs lives in this repository at bin/constants-scanner.php --
+# newspack-scripts, where the previous reusable workflows lived, is frozen and
+# gets nothing new.
+
+on:
+  workflow_call:
+    inputs:
+      source:
+        description: 'Label recorded in the catalog for this run''s constants (e.g. the repository name).'
+        required: true
+        type: string
+      hub-url:
+        description: 'Base URL of the hub site that receives the catalog (newspack-manager-admin).'
+        required: true
+        type: string
+      scanner-ref:
+        description: 'newspack-workspace ref to check out the scanner from.'
+        required: false
+        type: string
+        default: main
+      php-version:
+        description: 'PHP version to run the scanner with.'
+        required: false
+        type: string
+        default: '8.3'
+    secrets:
+      signing-secret:
+        description: 'HMAC secret shared with the hub, used to sign the posted catalog.'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  scan-and-push:
+    name: Scan and push
+    runs-on: ubuntu-latest
+    steps:
+      # The caller's own checkout, scanned as `inputs.source`. Checked out
+      # under source/ rather than the workspace root so the scanner's own
+      # files (checked out next, below) are never themselves scanned.
+      - name: Check out ${{ inputs.source }}
+        uses: actions/checkout@v4
+        with:
+          path: source
+
+      # Public, so this needs no token even when the caller is private. When
+      # the caller IS newspack-workspace, this checks it out a second time --
+      # harmless, and it keeps one code path for every caller instead of a
+      # special case for scanning ourselves.
+      - name: Check out the scanner (newspack-workspace@${{ inputs.scanner-ref }})
+        uses: actions/checkout@v4
+        with:
+          repository: Automattic/newspack-workspace
+          ref: ${{ inputs.scanner-ref }}
+          path: scanner
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # 2.37.1
+        with:
+          php-version: ${{ inputs.php-version }}
+          coverage: none
+
+      - name: Scan
+        env:
+          SOURCE: ${{ inputs.source }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          php scanner/bin/constants-scanner.php \
+            --source="$SOURCE"=source \
+            --branch="$SOURCE"="$REF_NAME" \
+            --sha="$SOURCE"="$SHA" \
+            --format=json --output=catalog.json
+          jq '{schema_version, generated_at, sources, count: (.constants | length)}' catalog.json
+
+      - name: Push to the hub
+        env:
+          HUB_URL: ${{ inputs.hub-url }}
+          SIGNING_SECRET: ${{ secrets.signing-secret }}
+        run: |
+          set -euo pipefail
+          if [ -z "$HUB_URL" ] || [ -z "$SIGNING_SECRET" ]; then
+            echo "hub-url input and signing-secret secret must both be set." >&2
+            exit 1
+          fi
+          signature="sha256=$(openssl dgst -sha256 -hmac "$SIGNING_SECRET" -binary < catalog.json | xxd -p -c 256)"
+          status="$(curl -sS -o response.json -w '%{http_code}' \
+            -X POST "${HUB_URL%/}/wp-json/newspack-manager-admin/v1/constants-catalog" \
+            -H 'Content-Type: application/json' \
+            -H "X-Newspack-Signature-256: ${signature}" \
+            --data-binary @catalog.json)"
+          cat response.json; echo
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            echo "Hub responded with HTTP $status" >&2
+            exit 1
+          fi

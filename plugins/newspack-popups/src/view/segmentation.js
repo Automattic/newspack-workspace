@@ -5,10 +5,12 @@ import {
 	closeOverlay,
 	getAbOverride,
 	getBestPrioritySegment,
+	getBestPrioritySegmentFromSnapshot,
 	getIntersectionObserver,
 	getRawId,
 	getOverride,
 	handleSeen,
+	isSwitchedSession,
 	shouldPromptBeDisplayed,
 	syncMatchedSegments,
 } from './utils';
@@ -23,7 +25,11 @@ export const handleSegmentation = prompts => {
 			return;
 		}
 		const segments = newspack_popups_view?.segments || {};
-		const matchingSegment = getBestPrioritySegment( segments );
+		// An admin switched into the reader's account sees the reader's stored
+		// segment; a match computed here would come from the admin's browser.
+		const resolveMatchingSegment = () =>
+			isSwitchedSession() ? getBestPrioritySegmentFromSnapshot( ras, segments ) : getBestPrioritySegment( segments );
+		const matchingSegment = resolveMatchingSegment();
 		debug( 'matchingSegment', matchingSegment );
 
 		// Register segments and set match via RAS if available.
@@ -70,7 +76,7 @@ export const handleSegmentation = prompts => {
 				const unhide = () => {
 					// Conditions may have changed since the prompt was delayed.
 					// Verify whether the prompt can still be displayed.
-					const updatedMatchingSegment = getBestPrioritySegment( segments );
+					const updatedMatchingSegment = resolveMatchingSegment();
 					if ( ras?.segments ) {
 						ras.segments.setMatch( updatedMatchingSegment );
 					}

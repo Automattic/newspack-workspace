@@ -131,6 +131,7 @@ class Promoted_Fields {
 			if ( ! $field->is_access_rule() ) {
 				continue;
 			}
+			$empty_grants_access = in_array( $field->get_matching_function(), [ 'list__not_in', 'range' ], true );
 			Access_Rules::register_rule(
 				[
 					'id'                  => $key,
@@ -146,9 +147,17 @@ class Promoted_Fields {
 					// `list__not_in` naming nothing excludes nobody, and `range` with no
 					// bounds falls back to 0..PHP_INT_MAX. Either admits every reader who
 					// holds the field at all. `list__in`, `date_range` and `default` deny
-					// on an empty value, so declaring them would refuse a save that is
-					// merely narrow.
-					'empty_grants_access' => in_array( $field->get_matching_function(), [ 'list__not_in', 'range' ], true ),
+					// on an empty value instead.
+					'empty_grants_access' => $empty_grants_access,
+					// Narrower than the flag's own definition, which counts any empty
+					// value as unconfigured whichever way the rule then evaluates: a
+					// `list__in` field naming nothing denies every reader, saves without
+					// refusal, and reads as a blank condition in the gate summary. Only
+					// the granting ones are refused a save here, so that this change
+					// leaves promoted fields evaluating and saving as they did. Closing
+					// the gap belongs with the rest of the unconfigured-rule warnings, in
+					// NPPD-2227.
+					'requires_value'      => $empty_grants_access,
 					'callback'            => function ( $user_id, $args ) use ( $field ) {
 						return self::evaluate_field( $field, $user_id, $args );
 					},

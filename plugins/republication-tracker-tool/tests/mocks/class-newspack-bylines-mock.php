@@ -6,10 +6,8 @@
  * filters in compatibility-newspack-bylines.php look for, so this plugin's
  * isolated suite can exercise that integration without loading newspack-plugin
  * itself (CI runs each plugin's suite alone, so the real class is never
- * loaded here). Loaded per-test, not in the bootstrap — once required,
- * Newspack\Bylines exists for the rest of that PHPUnit process, so a
- * "class doesn't exist" degrade-path test would need to run before any
- * other test loads this file.
+ * loaded here). Required from the Custom Byline tests' set_up() rather than
+ * the bootstrap, so only those tests depend on it.
  *
  * @package Republication_Tracker_Tool
  */

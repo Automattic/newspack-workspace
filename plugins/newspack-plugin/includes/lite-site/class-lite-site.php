@@ -21,7 +21,7 @@ class Lite_Site {
 	 */
 	public static function init() {
 		// The standalone Newspack Lite Site plugin supersedes this module, so skip initialization to avoid conflicts.
-		if ( defined( 'NEWSPACK_LITE_SITE_PLUGIN_FILE' ) ) {
+		if ( defined( 'NEWSPACK_LITE_SITE_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Presence check for another Newspack plugin, not a configurable constant.
 			return;
 		}
 

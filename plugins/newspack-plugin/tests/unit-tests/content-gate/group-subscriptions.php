@@ -213,11 +213,26 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Test get_managers() with a non-existent subscription returns an empty-ish result.
+	 * Test get_managers() with a non-existent subscription returns no managers.
 	 */
 	public function test_get_managers_invalid_subscription() {
 		$managers = Group_Subscription::get_managers( 99999 );
-		$this->assertContains( 0, $managers, 'Invalid subscription should return [0]' );
+		$this->assertSame( [], $managers, 'An unresolvable subscription has no managers.' );
+	}
+
+	/**
+	 * A subscription whose owner has been deleted carries no phantom manager. WooCommerce
+	 * zeroes customer_id when the user goes, and seeding that into the manager list would
+	 * make the list match an unauthenticated caller, whose ID is also zero.
+	 */
+	public function test_get_managers_omits_deleted_owner() {
+		$group_sub = $this->create_group_subscription( 0 );
+
+		$this->assertSame(
+			[],
+			Group_Subscription::get_managers( $group_sub ),
+			'A group whose owner was deleted has no managers.'
+		);
 	}
 
 	/**
@@ -275,9 +290,9 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Test update_members() skips non-reader users.
+	 * Test update_members() skips non-eligible users.
 	 */
-	public function test_update_members_skips_non_readers() {
+	public function test_update_members_skips_non_eligible_users() {
 		$owner_id    = $this->create_reader_user();
 		$non_reader  = wp_insert_user(
 			[
@@ -292,7 +307,7 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 
 		$result = Group_Subscription::update_members( $group_sub, [ $non_reader ] );
 
-		$this->assertEmpty( $result['members_added'], 'Non-readers should not be added' );
+		$this->assertEmpty( $result['members_added'], 'Non-eligible users should not be added' );
 	}
 
 	/**
@@ -407,6 +422,20 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A caller with no user ID does not manage a group whose owner was deleted.
+	 * get_current_user_id() and a zeroed customer_id are both integer zero, so the
+	 * manager comparison would otherwise match one to the other.
+	 */
+	public function test_user_is_manager_rejects_unauthenticated_caller_on_ownerless_group() {
+		$group_sub = $this->create_group_subscription( 0 );
+
+		$this->assertFalse(
+			Group_Subscription::user_is_manager( 0, $group_sub ),
+			'A caller with no user ID must not manage an ownerless group.'
+		);
+	}
+
+	/**
 	 * Test get_group_subscriptions_for_user() returns IDs when $ids_only is true.
 	 */
 	public function test_get_group_subscriptions_for_user_ids_only() {
@@ -421,13 +450,13 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Test get_group_subscriptions_for_user() returns empty array for non-readers.
+	 * Test get_group_subscriptions_for_user() returns empty array for non-eligible users.
 	 */
-	public function test_get_group_subscriptions_for_non_reader() {
+	public function test_get_group_subscriptions_for_non_eligible_user() {
 		$admin_id = $this->create_admin_user();
 
 		$result = Group_Subscription::get_group_subscriptions_for_user( $admin_id, true );
-		$this->assertEmpty( $result, 'Non-reader users should not have group subscriptions' );
+		$this->assertEmpty( $result, 'Non-eligible users should not have group subscriptions' );
 	}
 
 	/**
@@ -692,9 +721,9 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 
 	/**
 	 * Test generate_invite() returns WP_Error when the email belongs to a WP user
-	 * who is not a Reader Activation reader (e.g. an editor).
+	 * who is not eligible for group membership (e.g. an editor).
 	 */
-	public function test_generate_invite_non_reader_wp_user() {
+	public function test_generate_invite_non_eligible_wp_user() {
 		$admin_id     = $this->create_admin_user();
 		$owner_id     = $this->create_reader_user();
 		$group_sub    = $this->create_group_subscription( $owner_id );
@@ -717,7 +746,7 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 
 		$this->assertWPError( $result );
 		$this->assertEquals(
-			'newspack_group_subscription_invite_non_reader',
+			'newspack_group_subscription_invite_not_eligible',
 			$result->get_error_code()
 		);
 	}
@@ -1858,12 +1887,25 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Test the REST /invite-link endpoint returns 403 when the caller passes
-	 * the permission callback (manage_woocommerce admin) but is not the
-	 * manager of the target subscription. The WP_Error from generate_link_invite()
-	 * must surface as a 403 status.
+	 * Test the REST /invite-link endpoint mints the OWNER's link when the caller is
+	 * a store admin acting on the group's behalf.
+	 *
+	 * This replaces an assertion that the same request returned 403. That was the
+	 * shipped behaviour, but it made the admin path useless rather than safe: the
+	 * permission callback admitted the admin and generate_link_invite() then refused
+	 * them, so an admin could never produce an invite link at all. An admin is never
+	 * a manager of the groups they administer, and generate_link_invite() mints only
+	 * for a manager.
+	 *
+	 * Group_Subscription_API::resolve_link_manager_id() therefore resolves an admin
+	 * to the subscription owner, so the mint succeeds and the resulting link is the
+	 * group's own — the same one the owner sees in My Account.
+	 *
+	 * Owners and managers are unaffected: for them the resolver returns their own ID.
+	 * A reader who is neither is still refused at the permission callback — see the
+	 * sibling test_rest_invite_link_permission_denied.
 	 */
-	public function test_rest_invite_link_not_manager_returns_403() {
+	public function test_rest_invite_link_admin_mints_link_for_the_owner() {
 		$admin_id  = $this->create_admin_user();
 		$owner_id  = $this->create_reader_user();
 		$group_sub = $this->create_group_subscription( $owner_id );
@@ -1875,12 +1917,13 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		$request->set_param( 'subscription_id', $group_sub->get_id() );
 
 		$response = rest_get_server()->dispatch( $request );
-		$this->assertEquals( 403, $response->get_status() );
+		$this->assertEquals( 200, $response->get_status() );
 
 		$data = $response->get_data();
-		$this->assertEquals(
-			'newspack_group_subscription_link_invite_not_manager',
-			is_array( $data ) ? ( $data['code'] ?? null ) : null
+		$this->assertArrayHasKey( 'key', $data );
+		$this->assertTrue(
+			Group_Subscription_Invite::validate_link_invite( $group_sub, $data['key'] ),
+			'An admin-minted link must validate at click time, or the admin can only create dead links.'
 		);
 	}
 

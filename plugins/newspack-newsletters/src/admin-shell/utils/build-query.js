@@ -18,10 +18,11 @@ function asArray( value ) {
  * @param {Object}                                    [options.fieldToQueryParam]  Map of non-status filter fields → REST query params.
  * @param {Object}                                    [options.sortFieldToOrderby] Map of view.sort.field → REST `orderby`. When omitted, sort is pass-through.
  * @param {number}                                    [options.defaultPerPage]     Default `per_page` when `view.perPage` is missing. Defaults to 20.
+ * @param {number}                                    [options.fetchAllChunkSize]  Rows one request of an "All" walk asks for. Defaults to `FETCH_ALL_CHUNK_SIZE`.
  * @param {string}                                    [options.defaultStatuses]    Comma-joined statuses to use when no status filter is active.
  * @param {string}                                    [options.statusFilterParam]  REST param to receive status-filter values. When omitted, `status` is used.
  * @param {string}                                    [options.defaultStatusParam] REST param to receive `defaultStatuses`. Defaults to `'status'`.
- * @param {Object}                                    [options.extraParams]        Fixed params merged into the result (e.g. `{ _embed: 'author,wp:term' }`).
+ * @param {Object}                                    [options.extraParams]        Fixed params merged into the result (e.g. `{ _fields: 'id,title' }`).
  * @param {boolean}                                   [options.supportsOffset]     When `true`, `view.offset` overrides `page` so callers can address mid-collection windows.
  * @param {Array<{ viewKey: string, param: string }>} [options.arrayParams]        Pass-through bindings for array-valued view fields (e.g. `view.author`).
  * @return {Object} Flat REST query params.
@@ -31,6 +32,7 @@ export function buildQueryParams( view = {}, options = {} ) {
 		fieldToQueryParam = {},
 		sortFieldToOrderby = null,
 		defaultPerPage = 20,
+		fetchAllChunkSize = FETCH_ALL_CHUNK_SIZE,
 		defaultStatuses = null,
 		statusFilterParam = null,
 		defaultStatusParam = 'status',
@@ -39,12 +41,12 @@ export function buildQueryParams( view = {}, options = {} ) {
 		arrayParams = [],
 	} = options;
 
-	// "All" walks the collection in max-size chunks starting at page 1;
+	// "All" walks the collection in chunks starting at page 1;
 	// `use-collection-data` follows `X-WP-TotalPages` for the rest.
 	const fetchAll = isFetchAllPerPage( view.perPage );
 
 	const params = {
-		per_page: fetchAll ? FETCH_ALL_CHUNK_SIZE : view.perPage || defaultPerPage,
+		per_page: fetchAll ? fetchAllChunkSize : view.perPage || defaultPerPage,
 		context: 'edit',
 		...extraParams,
 	};

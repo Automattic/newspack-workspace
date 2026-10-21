@@ -183,4 +183,43 @@ class Test_Subscriber_Commerce extends \WP_UnitTestCase {
 		);
 		$this->assertSame( gmdate( 'Y-m-d' ), $rule['created_at'] );
 	}
+
+	/**
+	 * A rule that says nothing about its audience means the subscriptions it
+	 * names, so every rule stored before the "all subscriptions" mode existed
+	 * keeps exactly the reach it had.
+	 */
+	public function test_sanitize_base_rule_defaults_to_specific_subscriptions() {
+		$rule = Subscriber_Commerce::sanitize_base_rule( [ 'subscription_product_ids' => [ 10 ] ] );
+
+		$this->assertSame( Subscriber_Commerce::SUBSCRIPTION_TARGETING_SPECIFIC, $rule['subscription_targeting'] );
+		$this->assertSame( [ 10 ], $rule['subscription_product_ids'] );
+	}
+
+	/**
+	 * An unrecognized audience mode falls back to the narrow one. "All
+	 * subscriptions" is the wider reading, and garbage must never widen who a
+	 * rule reaches.
+	 */
+	public function test_sanitize_base_rule_falls_back_to_specific_subscriptions() {
+		$rule = Subscriber_Commerce::sanitize_base_rule( [ 'subscription_targeting' => 'everyone' ] );
+
+		$this->assertSame( Subscriber_Commerce::SUBSCRIPTION_TARGETING_SPECIFIC, $rule['subscription_targeting'] );
+	}
+
+	/**
+	 * "All subscriptions" drops the named ids, the same way a targeting mode
+	 * drops the fields it no longer uses: a rule re-pointed in the editor must
+	 * not keep matching through selections the publisher can no longer see.
+	 */
+	public function test_sanitize_base_rule_clears_ids_for_all_subscriptions() {
+		$rule = Subscriber_Commerce::sanitize_base_rule(
+			[
+				'subscription_targeting'   => Subscriber_Commerce::SUBSCRIPTION_TARGETING_ALL,
+				'subscription_product_ids' => [ 10, 11 ],
+			]
+		);
+
+		$this->assertSame( [], $rule['subscription_product_ids'] );
+	}
 }

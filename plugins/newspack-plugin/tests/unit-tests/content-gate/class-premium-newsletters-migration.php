@@ -1725,7 +1725,7 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	/**
 	 * When regrouping merges plans a previous run migrated separately — the likely
 	 * shape after a --plan run — the gates those plans were written to are named so
-	 * the operator can retire them before a stale, stricter gate wins the evaluation.
+	 * the operator can retire them before a stale gate, ranked above the new one, decides.
 	 */
 	public function test_find_superseded_gates_names_gates_the_merged_plans_already_have() {
 		$group          = [ $this->make_named_plan( 'Plan A' ), $this->make_named_plan( 'Plan B' ) ];
@@ -1862,8 +1862,8 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	/**
 	 * Two plans overlapping on one list without matching on the rest become two
 	 * gates over that list. WooCommerce Memberships grants it to a holder of either
-	 * plan while gates resolve restrictive-wins, so the stricter gate would decide
-	 * and the other plan's readers would lose the list. Computable from the grouping,
+	 * plan while only the higher-priority gate decides, so the other plan's readers
+	 * would lose the list. Computable from the grouping,
 	 * so it is caught before any write.
 	 */
 	public function test_find_lists_shared_across_groups_fires_for_overlapping_groups() {
@@ -1909,8 +1909,8 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 
 	/**
 	 * A published premium newsletter gate no group wrote is a gate no current plan
-	 * accounts for. It keeps restricting its lists, and the first restricting gate
-	 * wins — so it has to be named. Gates in the content bucket are somebody else's
+	 * accounts for. It keeps applying to its lists, and the highest-priority gate on
+	 * a list decides — so it has to be named. Gates in the content bucket are somebody else's
 	 * business and must not be dragged in.
 	 */
 	public function test_report_stale_gates_names_an_untouched_newsletter_gate() {
@@ -2269,9 +2269,9 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The evaluator ends each gate's turn on `if ( $is_restricted && $gate_layout_id )`,
-	 * and the settings getters always return a gate_layout_id defaulting to 0 — so the
-	 * `??` fallbacks beside it never fire and a gate with no layout restricts nothing.
+	 * The evaluator passes over a gate that refuses a reader with no layout to show
+	 * them, and the settings getters always return a gate_layout_id defaulting to 0 — so
+	 * the `??` fallbacks there never fire and a gate with no layout restricts nothing.
 	 * create_gate() can produce exactly that: it discards a WP_Error from
 	 * create_gate_layout() and still returns the gate ID.
 	 */

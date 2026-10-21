@@ -59,6 +59,7 @@ services:
       - HOST_PORT=${PORT_WORDPRESS:-80}
      # - COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME
       - APACHE_RUN_USER=${USE_CUSTOM_APACHE_USER:-www-data}
+      - WP_ENVIRONMENT_TYPE=local
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ## Probes memcached -- see docker-compose.yml for the rationale.

@@ -15,6 +15,13 @@ class Metering {
 	const METERING_META_KEY = 'np_content_metering';
 
 	/**
+	 * ID of the element the allowance is printed into. A DOM contract: the frontend
+	 * reads the payload from it (`src/content-gate/utils/metering-settings.js`), and
+	 * a site's optimizer allowlist may name it, so renaming it breaks both.
+	 */
+	const SETTINGS_ELEMENT_ID = 'newspack-content-gate-metering-settings';
+
+	/**
 	 * Article view activity to be handled by frontend metering.
 	 *
 	 * @var array|null
@@ -29,10 +36,17 @@ class Metering {
 	private static $logged_in_metering_cache = [];
 
 	/**
+	 * Nesting depth of get_metered_excerpt().
+	 *
+	 * @var int
+	 */
+	private static $excerpt_build_depth = 0;
+
+	/**
 	 * Initialize hooks.
 	 */
 	public static function init() {
-		add_filter( 'newspack_content_gate_restrict_post', [ __CLASS__, 'restrict_post' ] );
+		add_filter( 'newspack_content_gate_restrict_post', [ __CLASS__, 'restrict_post' ], 10, 2 );
 		add_action( 'enqueue_block_editor_assets', [ __CLASS__, 'enqueue_block_editor_assets' ], 11 ); // Render after gate layout editor.
 		add_action( 'init', [ __CLASS__, 'register_meta' ] );
 		add_action( 'wp_footer', [ __CLASS__, 'enqueue_scripts' ] );
@@ -43,12 +57,30 @@ class Metering {
 	/**
 	 * Whether to restrict the post.
 	 *
-	 * @param bool $restrict Whether to restrict the post.
+	 * A metered view spends the reader's allowance on the article they opened, so
+	 * it unlocks that article and nothing else. Every other restricted post that
+	 * shares the page — a Query Loop, a listing block — is asked about by ID and
+	 * stays restricted. Without the queried-object test the whole page would open
+	 * on one metered read, since the predicates below answer for whichever post
+	 * the loop has set up rather than for the one being asked about.
+	 *
+	 * @param bool     $restrict Whether to restrict the post.
+	 * @param int|null $post_id  Post being asked about. Null when the caller has
+	 *                           no post in hand, which keeps the current post's
+	 *                           allowance as the answer.
 	 *
 	 * @return bool
 	 */
-	public static function restrict_post( $restrict ) {
-		if ( $restrict && self::is_metering() ) {
+	public static function restrict_post( $restrict, $post_id = null ) {
+		// is_singular() first: on an archive get_queried_object_id() answers with a
+		// term ID, and on an author archive a user ID. Those sequences are
+		// independent of post IDs, so a bare comparison treats a listed post whose ID
+		// happens to match the queried term as the article being read — and unlocks
+		// its paid body in the listing.
+		if ( null !== $post_id && ( ! is_singular() || (int) $post_id !== (int) get_queried_object_id() ) ) {
+			return $restrict;
+		}
+		if ( $restrict && self::is_metering( $post_id ) ) {
 			return false;
 		}
 		return $restrict;
@@ -448,11 +480,17 @@ class Metering {
 		$gate_layout_id = Content_Gate::get_gate_layout_id();
 		$gate_post_id   = Content_Gate::get_gate_post_id();
 		$handle         = 'newspack-content-gate-metering';
+		// The queried post, not the global one: this runs at wp_footer, where a
+		// widget or sidebar query that skipped wp_reset_postdata() has left the
+		// global on its own last post. Everything else in the payload below —
+		// the gate, the meter key, the count — is resolved against the queried
+		// object, so the post the payload names has to be that post too.
+		$metered_post = \get_post( \get_queried_object_id() );
 		\wp_enqueue_script(
 			$handle,
 			Newspack::plugin_url() . '/dist/content-gate-metering.js',
 			[],
-			filemtime( dirname( NEWSPACK_PLUGIN_FILE ) . '/dist/content-gate-metering.js' ),
+			Newspack::asset_version( 'content-gate-metering' ),
 			[
 				'in_footer' => true,
 				'strategy'  => 'defer',
@@ -460,9 +498,19 @@ class Metering {
 		);
 
 		$settings = self::get_effective_settings( $gate_post_id, false );
-		\wp_localize_script(
-			$handle,
-			'newspack_metering_settings',
+
+		/*
+		 * The tag must stay non-executable. Metering makes the server send the whole
+		 * article, so the meter is the only thing withholding it, and a meter that cannot
+		 * read its allowance hands every metered article to anonymous readers. An
+		 * executable tag is one an optimizer may reorder or hold back; `application/json`
+		 * is data the parser puts in the DOM.
+		 *
+		 * JSON_HEX_TAG because `excerpt` carries post HTML: a literal `<script` after an
+		 * HTML comment opener would otherwise put the tokenizer into script-data-escaped
+		 * state on cores whose `wp_get_inline_script_tag()` predates the HTML API.
+		 */
+		$payload = \wp_json_encode(
 			[
 				'visible_paragraphs' => \get_post_meta( $gate_layout_id, 'visible_paragraphs', true ),
 				'use_more_tag'       => \get_post_meta( $gate_layout_id, 'use_more_tag', true ),
@@ -470,12 +518,156 @@ class Metering {
 				'period'             => $settings['period'],
 				'gate_id'            => $gate_post_id,
 				'meter_key'          => self::get_meter_key( $gate_post_id, false ),
-				'post_id'            => get_the_ID(),
+				'post_id'            => $metered_post->ID,
 				'article_view'       => self::$article_view,
-				'excerpt'            => apply_filters( 'newspack_gate_content', Content_Gate::get_restricted_post_excerpt( get_post() ) ),
+				'excerpt'            => self::get_metered_excerpt( $metered_post ),
 				'other_settings'     => Content_Gate_Advanced_Settings::get_settings(),
+			],
+			JSON_HEX_TAG
+		);
+
+		// An unencodable payload (invalid UTF-8 in the post, most often) would print an
+		// empty element, which reads to the frontend exactly like an unmetered page.
+		if ( false === $payload ) {
+			Logger::error( 'Could not encode metering settings for post ' . get_the_ID() . '; the meter will not run.', 'CONTENT-GATE-METERING' );
+			return;
+		}
+
+		\wp_print_inline_script_tag(
+			$payload,
+			[
+				'type' => 'application/json',
+				'id'   => self::SETTINGS_ELEMENT_ID,
 			]
 		);
+	}
+
+	/**
+	 * The content the frontend metering strategy swaps in once a reader's views are spent.
+	 *
+	 * Built as the locked view, to match the teaser the server-side path substitutes
+	 * for a reader with no access. Several things follow from that and none is
+	 * cosmetic, because for an anonymous reader this string is the only gated markup
+	 * the site ever produces — the response itself carries the whole post, and the
+	 * browser is what decides between them:
+	 *
+	 * - Metering is short-circuited off while it is built. is_metering() answers for
+	 *   the request, where the frontend strategy's answer is "the browser will
+	 *   decide"; an integration reading that as "this reader has access" leaves its
+	 *   embed unlocked. The reader's own spent-or-not state is not knowable here and
+	 *   is not the question: this excerpt is only ever rendered to a reader who is
+	 *   out of views.
+	 * - The 'the_content' callbacks above Content_Gate::RESTRICTION_PRIORITY are
+	 *   applied, the ones the server-side teaser gets by being substituted into that
+	 *   chain. Without them a third-party gate never sees this string at all.
+	 * - The metered post is made the current post for the build. A per-post
+	 *   integration keys its gating on get_the_ID() or the global post, and
+	 *   server-side it reads them inside a real 'the_content' pass, where they are
+	 *   the article. At wp_footer they are whatever the last query to skip
+	 *   wp_reset_postdata() left behind, so a callback would decline to gate an
+	 *   excerpt it believes belongs to another post.
+	 * - The server-side restriction is declined for the duration
+	 *   ({@see self::suppress_restriction_for_excerpt()}). Building a string is not
+	 *   rendering a page, and the request must come out of it in the state it went
+	 *   in.
+	 *
+	 * @param \WP_Post $metered_post Post being metered.
+	 *
+	 * @return string
+	 */
+	public static function get_metered_excerpt( \WP_Post $metered_post ): string {
+		self::begin_excerpt_build();
+
+		// The late callbacks below read get_the_ID() and the global post to decide
+		// whose embed they are gating, so the metered post has to be the current one
+		// for the build. Restored to whatever was there rather than reset to the main
+		// query's post: this runs at wp_footer, inside whatever loop state the page
+		// has reached, and changing that state is the drift this method works around.
+		//
+		// The global is assigned directly, never through setup_postdata(): that
+		// function fires 'the_post', where Content_Gate::restrict_post() listens, and
+		// dispatching it here restricts the post mid-build — which folds the gate into
+		// the very string the browser swaps in, doubling the gate on a post short
+		// enough that its teaser is the whole body. Any global only setup_postdata()
+		// populates ($authordata, $pages) should be set explicitly here rather than by
+		// dispatching the action.
+		$previous_post   = $GLOBALS['post'] ?? null;
+		$GLOBALS['post'] = $metered_post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Restored in the finally below.
+
+		try {
+			$excerpt = Content_Gate::get_restricted_post_excerpt( $metered_post );
+			return Content_Gate::apply_late_content_filters( $excerpt );
+		} finally {
+			$GLOBALS['post'] = $previous_post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Restoring the global this method displaced.
+			self::end_excerpt_build();
+		}
+	}
+
+	/**
+	 * Scope the filters an excerpt build needs to that build.
+	 *
+	 * Counted rather than added and removed outright, because apply_late_content_filters()
+	 * hands the excerpt to third-party callbacks and one of those can call back into
+	 * get_metered_excerpt(). An inner call unwinding first would take the filters off and
+	 * leave the outer excerpt — the one actually served — composed with metering answering
+	 * true again and the restriction live, which is the leak this pair exists to close.
+	 */
+	private static function begin_excerpt_build() {
+		if ( 0 === self::$excerpt_build_depth++ ) {
+			add_filter( 'newspack_content_gate_metering_short_circuit', [ __CLASS__, 'short_circuit_metering_for_excerpt' ] );
+			add_filter( 'newspack_content_gate_restrict_post', [ __CLASS__, 'suppress_restriction_for_excerpt' ], PHP_INT_MAX );
+		}
+	}
+
+	/**
+	 * Release the filters {@see self::begin_excerpt_build()} took, once the outermost
+	 * build has unwound.
+	 */
+	private static function end_excerpt_build() {
+		if ( 0 === --self::$excerpt_build_depth ) {
+			remove_filter( 'newspack_content_gate_metering_short_circuit', [ __CLASS__, 'short_circuit_metering_for_excerpt' ] );
+			remove_filter( 'newspack_content_gate_restrict_post', [ __CLASS__, 'suppress_restriction_for_excerpt' ], PHP_INT_MAX );
+		}
+	}
+
+	/**
+	 * Decline the server-side restriction, for the duration of an excerpt build.
+	 *
+	 * Content_Gate::restrict_post() listens on 'the_post', and a late 'the_content'
+	 * callback that runs a secondary loop ends it with wp_reset_postdata(), which
+	 * re-fires that action for the main post. At wp_footer on a frontend-metered post
+	 * none of restrict_post()'s own guards decline it — no gate render has been
+	 * claimed, and the metered post is the main query's post — and the build's metering
+	 * short-circuit removes the one that otherwise would. Without this the request
+	 * comes out of the build with the post object rewritten, the gate claimed as
+	 * rendered and Content_Gate's content-locked flag set, none of which is true of a
+	 * reader who still has views.
+	 *
+	 * Last word, at PHP_INT_MAX: the build renders nothing a reader sees, so no
+	 * third-party answer to this filter is about it.
+	 *
+	 * @param bool $restrict Whether to restrict the post.
+	 *
+	 * @return false
+	 */
+	public static function suppress_restriction_for_excerpt( $restrict ) {
+		return false;
+	}
+
+	/**
+	 * Report metering as not applying, for the duration of an excerpt build.
+	 *
+	 * A named callback rather than '__return_true' so that removing it cannot take
+	 * another caller's identical callable off the filter with it. Named apart from
+	 * {@see Content_Gifting::short_circuit_metering()} because the two answer for
+	 * different reasons and only one of them is scoped to a single call.
+	 *
+	 * @param mixed $short_circuit Incoming short-circuit value.
+	 *
+	 * @return true
+	 */
+	public static function short_circuit_metering_for_excerpt( $short_circuit ) {
+		return true;
 	}
 
 	/**
@@ -704,9 +896,13 @@ class Metering {
 	 * Whether the content should be allowed to render. If it's frontend metered,
 	 * it will be handled by the frontend metering strategy.
 	 *
+	 * @param int|null $post_id Post the allowance is being spent on. Defaults to
+	 *                          the current post, which is only the same thing
+	 *                          while the loop sits on the article being read.
+	 *
 	 * @return bool
 	 */
-	public static function is_metering() {
+	public static function is_metering( $post_id = null ) {
 		/**
 		 * Short-circuit the metering check. Anything other than null
 		 * will prevent the metering logic from running.
@@ -725,7 +921,7 @@ class Metering {
 			return false;
 		}
 
-		return self::is_frontend_metering() || self::is_logged_in_metering_allowed();
+		return self::is_frontend_metering() || self::is_logged_in_metering_allowed( $post_id );
 	}
 
 	/**

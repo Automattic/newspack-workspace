@@ -6,7 +6,7 @@
  * Author URI:      https://labs.inn.org
  * Text Domain:     republication-tracker-tool
  * Domain Path:     /languages
- * Version:         2.9.2
+ * Version:         2.9.4
  *
  * @package         Republication_Tracker_Tool
  */
@@ -249,6 +249,29 @@ final class Republication_Tracker_Tool {
 	}
 
 	/**
+	 * Whether a post may be offered for republication.
+	 *
+	 * One rule for every republish surface (the `/republish/` page, the widget
+	 * and the block), since each copies `post_content` without WordPress's own
+	 * visibility handling: only what a logged-out visitor could read at the
+	 * permalink, and never a password-protected post.
+	 *
+	 * The password test reads the post rather than the visitor's password
+	 * cookie. The copy carries a republication license, and a post password
+	 * limits who may read a post, not who may redistribute it, so entering the
+	 * password must not unlock the copy.
+	 *
+	 * @param int|\WP_Post $post Post ID or object.
+	 * @return bool
+	 */
+	public static function is_post_republishable( $post ): bool {
+		$post = get_post( $post );
+		return $post instanceof \WP_Post
+			&& is_post_publicly_viewable( $post )
+			&& '' === (string) $post->post_password;
+	}
+
+	/**
 	 * Create tracking pixel HTML markup.
 	 *
 	 * @param int $post_id ID of the post to track.
@@ -403,11 +426,11 @@ final class Republication_Tracker_Tool {
 	 * Get the formatted byline and site name (e.g. "by John Doe, Site Name")
 	 * shared by the HTML and plain text versions of the republishable content.
 	 *
-	 * @param string       $author The author name to start from, before filtering.
+	 * @param string|null  $author The author name to start from, before filtering.
 	 * @param WP_Post|null $post   Optional. The post being republished; defaults to the current post.
 	 * @return string The byline text (may contain HTML author links).
 	 */
-	public static function get_byline_text( $author, $post = null ) {
+	public static function get_byline_text( $author, $post = null ): string {
 		/**
 		 * Allow filtering of the byline that is output in the share dialog and the copyable plaintext.
 		 *
@@ -426,7 +449,7 @@ final class Republication_Tracker_Tool {
 		/**
 		 * Allow filtering of the byline format (e.g. "by %s") output in the share
 		 * dialog and the copyable plaintext. Should contain a %s (or %1$s)
-		 * placeholder for the byline itself. Substituted with str_replace(), not
+		 * placeholder for the byline itself. Substituted with strtr(), not
 		 * sprintf(), so a malformed value degrades instead of fataling.
 		 *
 		 * @param string       $format The byline format. Defaults to "by %s".
@@ -441,10 +464,15 @@ final class Republication_Tracker_Tool {
 			$post
 		);
 
+		$placeholders = array(
+			'%1$s' => $byline,
+			'%s'   => $byline,
+		);
+
 		return sprintf(
 			// translators: %1$s is the formatted byline (e.g. "by John Doe"), %2$s is the site name.
 			__( '%1$s, %2$s', 'republication-tracker-tool' ),
-			wp_kses_post( str_replace( array( '%1$s', '%s' ), $byline, $byline_format ) ),
+			wp_kses_post( strtr( $byline_format, $placeholders ) ),
 			wp_kses_post( get_bloginfo( 'name' ) )
 		);
 	}

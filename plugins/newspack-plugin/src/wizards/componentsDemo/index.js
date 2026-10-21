@@ -30,7 +30,6 @@ import {
 	ActionCard,
 	AutocompleteWithSuggestions,
 	AutocompleteWithLatestPosts,
-	BoxContrast,
 	Button,
 	Card,
 	CardFeature,
@@ -38,6 +37,7 @@ import {
 	CardSettingsGroup,
 	CollapsibleGroup,
 	ColorPicker,
+	DebugBadge,
 	EmptyState,
 	Footer,
 	Grid,
@@ -45,7 +45,6 @@ import {
 	ImageUpload,
 	InfoButton,
 	Modal,
-	Notice,
 	Page,
 	PluginInstaller,
 	PluginSettings,
@@ -61,6 +60,7 @@ import {
 	WebPreview,
 } from '../../../packages/components/src';
 import * as newspackIcons from '../../../packages/icons';
+import colors from '../../../packages/colors/colors.module.scss';
 
 class ComponentsDemo extends Component {
 	/**
@@ -165,7 +165,7 @@ class ComponentsDemo extends Component {
 
 		return (
 			<Fragment>
-				{ newspack_aux_data.is_debug_mode && <Notice debugMode /> }
+				<DebugBadge />
 				<Page
 					breadcrumbItems={ [ { label: __( 'Components Demo', 'newspack-plugin' ) } ] }
 					subTitle={ __( 'Simple components used for composing the UI of Newspack', 'newspack-plugin' ) }
@@ -556,14 +556,6 @@ class ComponentsDemo extends Component {
 							</EmptyState.Root>
 						</Card>
 						<Card>
-							<h2>{ __( 'Notice', 'newspack-plugin' ) }</h2>
-							<Notice noticeText={ __( 'This is an info notice.', 'newspack-plugin' ) } />
-							<Notice noticeText={ __( 'This is an error notice.', 'newspack-plugin' ) } isError />
-							<Notice noticeText={ __( 'This is a help notice.', 'newspack-plugin' ) } isHelp />
-							<Notice noticeText={ __( 'This is a success notice.', 'newspack-plugin' ) } isSuccess />
-							<Notice noticeText={ __( 'This is a warning notice.', 'newspack-plugin' ) } isWarning />
-						</Card>
-						<Card>
 							<h2>{ __( 'Plugin installer', 'newspack-plugin' ) }</h2>
 							<PluginInstaller
 								plugins={ [ 'woocommerce', 'wordpress-seo' ] }
@@ -878,16 +870,10 @@ class ComponentsDemo extends Component {
 									] }
 									onChange={ selectValues => this.setState( { selectValues } ) }
 								/>
-								<Notice
-									noticeText={
-										<>
-											{ __( 'Selected:', 'newspack-plugin' ) }{ ' ' }
-											{ this.state.selectValues.length > 0
-												? this.state.selectValues.join( ', ' )
-												: __( 'none', 'newspack-plugin' ) }
-										</>
-									}
-								/>
+								<p>
+									{ __( 'Selected:', 'newspack-plugin' ) }{ ' ' }
+									{ this.state.selectValues.length > 0 ? this.state.selectValues.join( ', ' ) : __( 'none', 'newspack-plugin' ) }
+								</p>
 							</Grid>
 						</Card>
 						<Card>
@@ -1141,27 +1127,6 @@ class ComponentsDemo extends Component {
 							</div>
 						</Card>
 						<Card>
-							<h2>{ __( 'Box Contrast', 'newspack-plugin' ) }</h2>
-							<p>
-								Component for adding color black/white depending on contrast ratio for <code>hexColor</code> prop value.
-							</p>
-							<h3>{ __( 'Demo 1:', 'newspack-plugin' ) }</h3>
-							<BoxContrast hexColor="#e5bd13">#e5bd13</BoxContrast>
-							<BoxContrast hexColor="#e5bd13" isInverted>
-								#e5bd13 / Inverted
-							</BoxContrast>
-							<h3>{ __( 'Demo 2:', 'newspack-plugin' ) }</h3>
-							<BoxContrast hexColor="#003da5">#003da5</BoxContrast>
-							<BoxContrast hexColor="#003da5" isInverted>
-								#003da5 / Inverted
-							</BoxContrast>
-							<h3>{ __( 'Demo 3:', 'newspack-plugin' ) }</h3>
-							<BoxContrast hexColor="#51f1ff">#e5bd13</BoxContrast>
-							<BoxContrast hexColor="#51f1ff" isInverted>
-								#51f1ff / Inverted
-							</BoxContrast>
-						</Card>
-						<Card>
 							<h2>{ __( 'CardFeature', 'newspack-plugin' ) }</h2>
 							<p>
 								{ __(
@@ -1218,7 +1183,11 @@ class ComponentsDemo extends Component {
 									headingLevel={ 4 }
 									title={ __( 'Content gifting', 'newspack-plugin' ) }
 									description={ __( 'Let subscribers share gated articles with non-subscribers.', 'newspack-plugin' ) }
-									icon={ { node: <Icon icon={ settings } />, fill: '#757575', backgroundColor: '#f0f0f0' } }
+									icon={ {
+										node: <Icon icon={ settings } />,
+										fill: colors[ 'neutral-600' ],
+										backgroundColor: colors[ 'neutral-100' ],
+									} }
 									enabled={ false }
 									onEnable={ () => {} }
 									onConfigure={ () => {} }
@@ -1227,7 +1196,11 @@ class ComponentsDemo extends Component {
 									headingLevel={ 4 }
 									title={ __( 'Content gifting', 'newspack-plugin' ) }
 									description={ __( 'Let subscribers share gated articles with non-subscribers.', 'newspack-plugin' ) }
-									icon={ { node: <Icon icon={ settings } />, fill: '#003da5', backgroundColor: '#dfe7f4', radius: 'full' } }
+									icon={ {
+										node: <Icon icon={ settings } />,
+										fill: colors[ 'primary-600' ],
+										backgroundColor: colors[ 'primary-000' ],
+									} }
 									enabled={ true }
 									onEnable={ () => {} }
 									onConfigure={ () => {} }

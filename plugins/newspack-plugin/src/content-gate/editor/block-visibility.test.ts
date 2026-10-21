@@ -160,15 +160,11 @@ describe( 'block-visibility access rule value control', () => {
 		expect( controlOf( control ).type ).toBe( TextControl );
 	} );
 
-	it( 'takes the picker out of play when an empty value would grant everyone', () => {
-		// The seeded default is an empty array, which `institution` evaluates as "no
-		// constraint" — so an interactive picker with no options offers exactly one
-		// expressible answer, and it opens the gate.
-		const control = renderControl(
-			'institution',
-			{ name: 'Institutional access', has_options: true, empty_grants_access: true, options: [] },
-			[]
-		);
+	it( 'takes the picker out of play when the rule needs a value it cannot offer', () => {
+		// The seeded default is an empty array, so an interactive picker with no
+		// options offers exactly one expressible answer, and it is the one that leaves
+		// the rule describing nobody.
+		const control = renderControl( 'institution', { name: 'Institutional access', has_options: true, requires_value: true, options: [] }, [] );
 
 		expect( pickerOf( control ).props.disabled ).toBe( true );
 	} );
@@ -190,7 +186,7 @@ describe( 'block-visibility access rule value control', () => {
 			{
 				name: 'Institutional access',
 				has_options: true,
-				empty_grants_access: true,
+				requires_value: true,
 				options: [ { value: 1, label: 'Springfield University' } ],
 			},
 			'Shelbyville University'

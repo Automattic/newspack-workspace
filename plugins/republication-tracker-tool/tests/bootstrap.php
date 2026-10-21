@@ -30,6 +30,11 @@ require_once __DIR__ . '/mocks/coauthors-plus-mock.php';
  */
 function _manually_load_plugin() {
 	require dirname( __DIR__ ) . '/republication-tracker-tool.php';
+
+	// The CAP filter replaces whatever byline it's given, so registering it
+	// suite-wide would hide the WP post author path from every test. Tests that
+	// cover CAP add it back themselves.
+	remove_filter( 'republication_tracker_tool_byline', 'republication_tracker_tool_byline_filter_cap', 10 );
 }
 tests_add_filter( 'muplugins_loaded', '_manually_load_plugin' );
 

@@ -66,12 +66,27 @@ describe( 'viewToParams', () => {
 		expect( params ).not.toHaveProperty( 'groupRole' );
 	} );
 
-	it( 'omits the status param when the filter is present but empty', () => {
+	it( "sends the plans filter as the endpoint's `plan` param", () => {
+		// The field is `plans` (the Subscription column) but the endpoint arg is
+		// `plan`; a mismatch here silently returns the unfiltered list.
 		const params = viewToParams( {
 			...baseView,
-			filters: [ { field: 'status', operator: 'isAny', value: [] } ],
+			filters: [ { field: 'plans', operator: 'isAny', value: [ 'Acme Team', 'Digital Monthly' ] } ],
 		} );
-		expect( params ).not.toHaveProperty( 'status' );
+		expect( params.plan ).toEqual( [ 'Acme Team', 'Digital Monthly' ] );
+	} );
+
+	// An empty selection must not reach the endpoint: `status=` / `plan=` with no
+	// values filters to nobody rather than to everybody.
+	it.each( [
+		[ 'status', 'status' ],
+		[ 'plans', 'plan' ],
+	] )( 'omits the %s filter from the params when its value is empty', ( field, param ) => {
+		const params = viewToParams( {
+			...baseView,
+			filters: [ { field, operator: 'isAny', value: [] } ],
+		} );
+		expect( params ).not.toHaveProperty( param );
 	} );
 } );
 
@@ -98,6 +113,21 @@ describe( 'useSubscribers', () => {
 		expect( result.current.items ).toEqual( [ { id: 7 } ] );
 		expect( result.current.total ).toBe( 42 );
 		expect( result.current.pages ).toBe( 3 );
+	} );
+
+	it( 'settles on a result with no rows, so a filter matching nobody is still a settled screen', async () => {
+		// The screen reserves its blanking spinner for `! settled`. Deriving that from
+		// items.length instead would send a zero-result view back to the full-page
+		// spinner on its next refetch, unmounting DataViews mid-interaction and taking
+		// the search box's focus with it.
+		apiFetch.mockResolvedValue( { items: [], total: 0, pages: 0 } );
+
+		const { result } = renderHook( () => useSubscribers( baseView ) );
+
+		expect( result.current.settled ).toBe( false );
+
+		await waitFor( () => expect( result.current.settled ).toBe( true ) );
+		expect( result.current.items ).toEqual( [] );
 	} );
 
 	it( 'surfaces the failure instead of passing an empty page off as the answer', async () => {

@@ -36,7 +36,7 @@ function republication_tracker_tool_get_newspack_custom_byline( $post = null ) {
  * can override CAP's result when both are active. Author links are stripped
  * so the byline is plain text, like the WP author and CAP bylines.
  *
- * @param String       $author_string The string returned by get_the_author() (or a prior byline filter).
+ * @param String       $author_string The author name passed to get_byline_text(), or a prior byline filter's result.
  * @param WP_Post|null $post          Optional. The post being republished; defaults to the current post.
  * @return String the byline.
  */
@@ -55,9 +55,10 @@ add_filter( 'republication_tracker_tool_byline', 'republication_tracker_tool_byl
 /**
  * Filter the Republication Tracker Tool Byline Format
  *
- * Suppresses this plugin's own "by %s" format when a Custom Byline is
- * active, since that text already includes its own leading word (e.g.
- * "By ...").
+ * Suppresses this plugin's own "by %s" format when the byline being wrapped
+ * is the Custom Byline, since that text already includes its own leading
+ * word (e.g. "By ..."). A byline changed by a later filter in any way,
+ * including appending, keeps the format.
  *
  * @param string       $format The byline format (should contain a %s placeholder).
  * @param string       $byline The resolved byline the format will wrap.
@@ -65,7 +66,9 @@ add_filter( 'republication_tracker_tool_byline', 'republication_tracker_tool_byl
  * @return string
  */
 function republication_tracker_tool_byline_format_filter_newspack_bylines( $format, $byline = '', $post = null ) {
-	if ( empty( republication_tracker_tool_get_newspack_custom_byline( $post ) ) ) {
+	$custom_byline = republication_tracker_tool_get_newspack_custom_byline( $post );
+
+	if ( empty( $custom_byline ) || wp_strip_all_tags( $custom_byline ) !== $byline ) {
 		return $format;
 	}
 

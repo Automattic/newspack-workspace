@@ -22,25 +22,6 @@
 		margin-right: 4px;
 	}
 
-	&__is-debug {
-		background: np-colors.$primary-600;
-		border-radius: 50%;
-		bottom: 16px;
-		box-shadow: 0 0 8px 4px rgba(black, 0.08);
-		color: white;
-		font-weight: bold;
-		margin: 0 16px;
-		padding: 6px;
-		position: fixed;
-		text-transform: uppercase;
-		z-index: 9997;
-
-		> svg {
-			fill: white;
-			margin: 0;
-		}
-	}
-
 	&__is-error {
 		background: color.adjust(wp-colors.$alert-red, $lightness: 35%);
 

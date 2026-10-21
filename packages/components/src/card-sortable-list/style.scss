@@ -7,6 +7,14 @@ $drop-duration: 400ms; /* must match DROP_ANIMATION_DURATION in index.tsx */
 		cursor: grab;
 
 		/*
+		 * Keep a card's title in the case it was written in. The block editor
+		 * sidebar uppercases every h3 (`.interface-complementary-area h3`).
+		 */
+		.newspack-card--core__header-content h3 {
+			text-transform: none;
+		}
+
+		/*
 		 * Animate items sliding to fill/make space around the dragged item.
 		 */
 		transition: transform $shift-duration ease;

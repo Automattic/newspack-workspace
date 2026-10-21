@@ -7,11 +7,16 @@
  */
 import { __, sprintf } from '@wordpress/i18n';
 import { FormTokenField } from '@wordpress/components';
-import type { TokenItem } from '@wordpress/components/build-types/form-token-field/types.d.ts';
+import type { TokenItem } from '../../../../../content-gate/access-rule-options';
 import apiFetch from '@wordpress/api-fetch';
 import { useEffect, useState, useCallback, useMemo } from '@wordpress/element';
 import { decodeEntities } from '@wordpress/html-entities';
 import { addQueryArgs } from '@wordpress/url';
+
+/**
+ * Internal dependencies.
+ */
+import { mergeTokenSelection, normalizeRuleIds, selectedTokenLabels } from './content-rule-tokens';
 
 const debounce = ( func: ( search?: string ) => void, wait: number ) => {
 	let timeout: ReturnType< typeof setTimeout >;
@@ -78,12 +83,13 @@ export default function ContentRuleControlTokenField( { slug, value, exclusion, 
 
 	// Fetch current items.
 	useEffect( () => {
-		if ( ! value || value.length === 0 ) {
+		const ids = normalizeRuleIds( value );
+		if ( ids.length === 0 ) {
 			return;
 		}
 		apiFetch< { db_id?: number; id: number; name: string; type_label?: string }[] >( {
 			path: addQueryArgs( endpoint, {
-				include: value.join( ',' ),
+				include: ids.join( ',' ),
 				per_page: 100,
 				_fields: 'db_id,id,name,type_label',
 			} ),
@@ -116,11 +122,7 @@ export default function ContentRuleControlTokenField( { slug, value, exclusion, 
 		debouncedFetchSuggestions( search );
 	};
 
-	const tokens = useMemo( () => {
-		const items = [ ...savedItems, ...suggestions ];
-		const result = items.filter( i => value.includes( i.value ) ).map( i => i.label );
-		return [ ...new Set( result ) ];
-	}, [ value, savedItems, suggestions ] );
+	const tokens = useMemo( () => selectedTokenLabels( value, [ ...savedItems, ...suggestions ] ), [ value, savedItems, suggestions ] );
 
 	const staticLabels = useMemo( () => {
 		return tokens.length === 0
@@ -133,19 +135,9 @@ export default function ContentRuleControlTokenField( { slug, value, exclusion, 
 
 	const handleChange = useCallback(
 		( newTokens: ( string | TokenItem )[] ) => {
-			const items = [ ...savedItems, ...suggestions ];
-
-			// Find items.
-			const foundItems = newTokens.map( t => {
-				if ( typeof t === 'string' ) {
-					const [ val ] = t.split( ':' );
-					return items.find( i => i.value === val );
-				}
-				return items.find( i => i.value === t.value );
-			} );
-			onChange( foundItems.filter( i => i !== undefined ).map( i => i.value ) );
+			onChange( mergeTokenSelection( value, [ ...savedItems, ...suggestions ], newTokens ) );
 		},
-		[ savedItems, suggestions, onChange ]
+		[ value, savedItems, suggestions, onChange ]
 	);
 
 	if ( ! rule || ! Array.isArray( value ) ) {
