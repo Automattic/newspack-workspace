@@ -959,6 +959,7 @@ class WooCommerce_Subscriptions {
 		include_once __DIR__ . '/class-zero-total-renewals.php';
 		include_once __DIR__ . '/class-subscription-reactivation.php';
 		include_once __DIR__ . '/class-complimentary-access.php';
+		include_once __DIR__ . '/class-complimentary-access-reports.php';
 
 		On_Hold_Duration::init();
 		Renewal::init();
@@ -968,6 +969,7 @@ class WooCommerce_Subscriptions {
 		Zero_Total_Renewals::init();
 		Subscription_Reactivation::init();
 		Complimentary_Access::init();
+		Complimentary_Access_Reports::init();
 	}
 
 	/**
