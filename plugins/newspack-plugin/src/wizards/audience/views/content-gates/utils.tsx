@@ -320,3 +320,19 @@ export const getMeteringDescription = ( siteMeter?: SiteMeterConfig ) => {
 		siteMeter.period === 'week' ? __( 'weekly', 'newspack-plugin' ) : __( 'monthly', 'newspack-plugin' )
 	);
 };
+
+/**
+ * The auto-signup choices for a premium newsletter gate. The first names the site-wide
+ * setting's current value, so a publisher sees what "follow the site" means without
+ * opening Advanced Settings.
+ *
+ * @param siteAutoSignup Whether the site-wide auto-signup setting is on.
+ */
+export const getAutoSignupOptions = ( siteAutoSignup?: boolean ): Array< { label: string; value: AutoSignupMode } > => [
+	{
+		value: 'default',
+		label: siteAutoSignup ? __( 'Use site setting (on)', 'newspack-plugin' ) : __( 'Use site setting (off)', 'newspack-plugin' ),
+	},
+	{ value: 'on', label: __( 'On', 'newspack-plugin' ) },
+	{ value: 'off', label: __( 'Off', 'newspack-plugin' ) },
+];

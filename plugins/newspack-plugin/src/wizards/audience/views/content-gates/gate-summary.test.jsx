@@ -96,3 +96,46 @@ describe( 'gate summary metering copy', () => {
 		expect( summarise( gate, 'custom_access' ) ).toContain( '1 free view per week before content is restricted (this gate only)' );
 	} );
 } );
+
+describe( 'gate summary subscriptions', () => {
+	beforeEach( () => {
+		window.newspackAudienceContentGates = { available_access_rules: {} };
+	} );
+
+	const subscriptionsText = ( gate, { isNewsletter = true, siteAutoSignup = false } = {} ) => {
+		const { getGateSummarySections } = require( './gate-summary' );
+		const section = getGateSummarySections( gate, isNewsletter, SPLIT_METER, {}, siteAutoSignup ).find( entry => entry.key === 'subscriptions' );
+		return section ? render( <>{ section.content }</> ).container.textContent : null;
+	};
+
+	it( 'names the site setting a premium newsletter inherits, and that its lists are hidden', () => {
+		const gate = { ...buildGate(), auto_signup: 'default', hide_lists: true };
+
+		const text = subscriptionsText( gate, { siteAutoSignup: false } );
+
+		expect( text ).toContain( 'Auto-signup: Use site setting (off)' );
+		expect( text ).toContain( 'Hidden from readers: Yes' );
+	} );
+
+	it( 'names the chosen mode when the gate overrides the site setting', () => {
+		const gate = { ...buildGate(), auto_signup: 'on', hide_lists: false };
+
+		const text = subscriptionsText( gate, { siteAutoSignup: false } );
+
+		expect( text ).toContain( 'Auto-signup: On' );
+		expect( text ).toContain( 'Hidden from readers: No' );
+	} );
+
+	it( 'treats a gate stored without the settings as using the site setting and showing its lists', () => {
+		const text = subscriptionsText( buildGate(), { siteAutoSignup: true } );
+
+		expect( text ).toContain( 'Auto-signup: Use site setting (on)' );
+		expect( text ).toContain( 'Hidden from readers: No' );
+	} );
+
+	it( 'leaves the section out of a content gate', () => {
+		const gate = { ...buildGate(), auto_signup: 'on', hide_lists: true };
+
+		expect( subscriptionsText( gate, { isNewsletter: false } ) ).toBeNull();
+	} );
+} );

@@ -87,7 +87,10 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 				<VStack>
 					<ToggleControl
 						label={ __( 'Auto Signup', 'newspack-plugin' ) }
-						help={ __( 'Automatically sign up users when they meet access requirements for premium newsletters.', 'newspack-plugin' ) }
+						help={ __(
+							'Automatically sign up readers when they meet access requirements for premium newsletters. Each premium newsletter can override this.',
+							'newspack-plugin'
+						) }
 						checked={ config?.auto_signup }
 						onChange={ value => setConfig( { ...config, auto_signup: value } ) }
 					/>

@@ -21,7 +21,13 @@ import {
 	getMissingOptionLabel,
 	type AccessRuleOption,
 } from '../../../../content-gate/access-rule-options';
-import { getMeteringCount, isMalformedAccessRuleValue, isUnconfiguredAccessRuleValue, isUnconstrainedAccessRuleValue } from './utils';
+import {
+	getAutoSignupOptions,
+	getMeteringCount,
+	isMalformedAccessRuleValue,
+	isUnconfiguredAccessRuleValue,
+	isUnconstrainedAccessRuleValue,
+} from './utils';
 import { normalizeOneTimePurchaseValue } from '../../../../content-gate/components/one-time-purchase-rule-control';
 import { hasUnusableRangeBounds, normalizeRangeValue } from '../../../../content-gate/utils/access-rule-value';
 
@@ -414,22 +420,26 @@ const formatMetering = ( metering: Metering, siteCount?: number, sitePeriod?: Me
 };
 
 /**
- * Build the Content rules / Registered access / Paid access sections for a gate.
+ * Build the Content rules / Registered access / Paid access sections for a gate,
+ * plus Subscriptions for a premium newsletter gate.
  *
- * @param gate          The gate (live edit state or a saved gate).
- * @param isNewsletter  Whether this is a premium-newsletter gate (hides registration).
- * @param siteMeter     The shared allowance, so a summary can name where its count comes from.
- * @param optionsBySlug The options to name each rule's values with, from
- *                      `useAccessRuleOptions()`. The list localised with the page goes
- *                      stale while the app is open — institutions are created and
- *                      deleted in it — and a summary built from it would call an
- *                      institution added a moment ago "not listed".
+ * @param gate           The gate (live edit state or a saved gate).
+ * @param isNewsletter   Whether this is a premium-newsletter gate (hides registration).
+ * @param siteMeter      The shared allowance, so a summary can name where its count comes from.
+ * @param optionsBySlug  The options to name each rule's values with, from
+ *                       `useAccessRuleOptions()`. The list localised with the page goes
+ *                       stale while the app is open — institutions are created and
+ *                       deleted in it — and a summary built from it would call an
+ *                       institution added a moment ago "not listed".
+ * @param siteAutoSignup The site-wide auto-signup setting, which a premium newsletter gate
+ *                       set to "Use site setting" follows.
  */
 export const getGateSummarySections = (
 	gate: Gate,
 	isNewsletter = false,
 	siteMeter?: SiteMeterConfig,
-	optionsBySlug: Record< string, AccessRuleOption[] > = {}
+	optionsBySlug: Record< string, AccessRuleOption[] > = {},
+	siteAutoSignup?: boolean
 ): GateSummarySection[] => {
 	const sections: GateSummarySection[] = [];
 
@@ -518,6 +528,25 @@ export const getGateSummarySections = (
 			</>
 		),
 	} );
+
+	if ( isNewsletter ) {
+		const autoSignupLabel = getAutoSignupOptions( siteAutoSignup ).find( option => option.value === ( gate.auto_signup ?? 'default' ) )?.label;
+		sections.push( {
+			key: 'subscriptions',
+			label: __( 'Subscriptions', 'newspack-plugin' ),
+			content: (
+				<>
+					<p>
+						<strong>{ __( 'Auto-signup:', 'newspack-plugin' ) }</strong> { autoSignupLabel }
+					</p>
+					<p>
+						<strong>{ __( 'Hidden from readers:', 'newspack-plugin' ) }</strong>{ ' ' }
+						{ gate.hide_lists ? __( 'Yes', 'newspack-plugin' ) : __( 'No', 'newspack-plugin' ) }
+					</p>
+				</>
+			),
+		} );
+	}
 
 	return sections;
 };

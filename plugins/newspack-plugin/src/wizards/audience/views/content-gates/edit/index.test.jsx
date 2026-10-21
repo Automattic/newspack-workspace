@@ -2,6 +2,7 @@
  * External dependencies
  */
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 
 /**
  * WordPress dependencies
@@ -13,6 +14,7 @@ import { dispatch, select } from '@wordpress/data';
  * Internal dependencies
  */
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from '../consts';
+import { PREMIUM_NEWSLETTERS_WIZARD_SLUG } from '../../../../newsletters/views/premium-newsletters/consts';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
@@ -67,6 +69,14 @@ const STORED_GATE = {
 	custom_access: { active: true, metering: { enabled: false, count: 1, period: 'month' }, access_rules: mockStoredRules },
 };
 
+// A newsletter gate stored before the list settings existed: it lacks both keys.
+const NEWSLETTER_GATE = {
+	...STORED_GATE,
+	id: 9,
+	content_rules: [ { slug: 'newsletters', value: [] } ],
+};
+const NEWSLETTER_CONFIG = { auto_signup: true };
+
 const REFUSAL = 'Invalid value for the Subscription access rule.';
 let refuseSaves = false;
 
@@ -78,6 +88,23 @@ const accessRules = () => JSON.parse( screen.getByTestId( 'access-rules' ).textC
 const updateGatesData = gates =>
 	dispatch( WIZARD_STORE_NAMESPACE ).updateWizardSettings( { slug: AUDIENCE_CONTENT_GATES_WIZARD_SLUG, path: [ 'gates' ], value: gates } );
 
+const renderNewsletterEdit = async () => {
+	render(
+		<MemoryRouter>
+			<Edit
+				match={ { params: { id: String( NEWSLETTER_GATE.id ) } } }
+				updateGatesData={ updateGatesData }
+				slug={ PREMIUM_NEWSLETTERS_WIZARD_SLUG }
+				isNewsletter
+			/>
+		</MemoryRouter>
+	);
+	await waitFor( () => expect( headerAction( 'Save' ) ).toBeDefined() );
+	await waitFor( () => expect( accessRules() ).toEqual( mockStoredRules ) );
+};
+
+const savedGate = () => apiFetch.mock.calls.map( ( [ request ] ) => request ).find( request => request.method === 'POST' ).data.gate;
+
 const renderEdit = async () => {
 	render( <Edit match={ { params: { id: String( STORED_GATE.id ) } } } updateGatesData={ updateGatesData } /> );
 	await waitFor( () => expect( headerAction( 'Save' ) ).toBeDefined() );
@@ -85,9 +112,15 @@ const renderEdit = async () => {
 };
 
 beforeEach( () => {
-	apiFetch.mockImplementation( ( { method = 'GET', data } ) => {
+	// A save test reads the request it made, not one left by an earlier test.
+	apiFetch.mockClear();
+	apiFetch.mockImplementation( ( { method = 'GET', path, data } ) => {
 		if ( method === 'GET' ) {
-			return Promise.resolve( { gates: [ STORED_GATE ], config: {} } );
+			return Promise.resolve(
+				path.endsWith( PREMIUM_NEWSLETTERS_WIZARD_SLUG )
+					? { gates: [ NEWSLETTER_GATE ], config: NEWSLETTER_CONFIG }
+					: { gates: [ STORED_GATE ], config: {} }
+			);
 		}
 		if ( refuseSaves ) {
 			return Promise.reject( {
@@ -102,6 +135,10 @@ beforeEach( () => {
 	dispatch( WIZARD_STORE_NAMESPACE ).setAPIDataForWizard( {
 		slug: AUDIENCE_CONTENT_GATES_WIZARD_SLUG,
 		data: { gates: [ STORED_GATE ], config: {} },
+	} );
+	dispatch( WIZARD_STORE_NAMESPACE ).setAPIDataForWizard( {
+		slug: PREMIUM_NEWSLETTERS_WIZARD_SLUG,
+		data: { gates: [ NEWSLETTER_GATE ], config: NEWSLETTER_CONFIG },
 	} );
 } );
 
@@ -130,5 +167,56 @@ describe( 'Content gate editor', () => {
 		await act( async () => {} );
 
 		expect( headerAction( 'Set to active' ) ).toBeDefined();
+	} );
+} );
+
+describe( 'Premium newsletter list settings', () => {
+	it( 'shows the Subscriptions section, naming the site setting', async () => {
+		await renderNewsletterEdit();
+
+		expect( screen.getByRole( 'heading', { name: 'Subscriptions' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'option', { name: 'Use site setting (on)' } ) ).toBeInTheDocument();
+	} );
+
+	it( 'saves a gate stored without the settings as using the site setting and showing its lists', async () => {
+		await renderNewsletterEdit();
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Edit access rules' } ) );
+		await runHeaderAction( 'Save' );
+
+		expect( savedGate() ).toEqual( expect.objectContaining( { auto_signup: 'default', hide_lists: false } ) );
+	} );
+
+	it( 'saves the auto-signup mode the editor picks', async () => {
+		await renderNewsletterEdit();
+
+		fireEvent.change( screen.getByRole( 'combobox', { name: 'Auto-signup' } ), { target: { value: 'on' } } );
+		await runHeaderAction( 'Save' );
+
+		expect( savedGate() ).toEqual( expect.objectContaining( { auto_signup: 'on', hide_lists: false } ) );
+	} );
+
+	it( 'saves the hiding choice, and counts it as a change that can be saved', async () => {
+		await renderNewsletterEdit();
+		expect( headerAction( 'Save' ).disabled ).toBe( true );
+
+		fireEvent.click( screen.getByRole( 'checkbox', { name: 'Hide from readers' } ) );
+		expect( headerAction( 'Save' ).disabled ).toBe( false );
+		await runHeaderAction( 'Save' );
+
+		expect( savedGate() ).toEqual( expect.objectContaining( { auto_signup: 'default', hide_lists: true } ) );
+	} );
+
+	it( 'leaves the Subscriptions section and both keys out of a content gate', async () => {
+		await renderEdit();
+
+		expect( screen.queryByRole( 'heading', { name: 'Subscriptions' } ) ).not.toBeInTheDocument();
+
+		await runHeaderAction( 'Rename' );
+		fireEvent.change( screen.getByRole( 'textbox', { name: /gate name/i } ), { target: { value: 'Edited title' } } );
+		await runHeaderAction( 'Save' );
+
+		expect( savedGate() ).not.toHaveProperty( 'auto_signup' );
+		expect( savedGate() ).not.toHaveProperty( 'hide_lists' );
 	} );
 } );

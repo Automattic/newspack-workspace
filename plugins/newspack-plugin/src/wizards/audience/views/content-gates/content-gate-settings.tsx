@@ -43,6 +43,7 @@ export default function ContentGateSettings( {
 	const wizardData = useWizardData( slug ) as ContentGatesWizardData;
 	const gates = ( wizardData?.gates || [] ) as Gate[];
 	const siteMeter = wizardData?.config?.site_meter;
+	const siteAutoSignup = wizardData?.config?.auto_signup;
 	// Premium newsletter gates are left out: their screen has no priority modal to act on a
 	// warning, and they match lists by ID, which the overlap check doesn't model.
 	const priorityWarning = useMemo( () => ( isNewsletter ? undefined : getPriorityWarnings( gates )[ gate.id ] ), [ gates, gate.id, isNewsletter ] );
@@ -271,7 +272,7 @@ export default function ContentGateSettings( {
 			>
 				<CardBody>
 					<Grid className="newspack-content-gates__gate__settings" gutter={ 16 } noMargin>
-						{ getGateSummarySections( gate, isNewsletter, siteMeter, accessRuleOptions ).map( section => (
+						{ getGateSummarySections( gate, isNewsletter, siteMeter, accessRuleOptions, siteAutoSignup ).map( section => (
 							<div key={ section.key } className="newspack-content-gates__gate__summary-section">
 								<h4>{ section.label }</h4>
 								{ section.content }
