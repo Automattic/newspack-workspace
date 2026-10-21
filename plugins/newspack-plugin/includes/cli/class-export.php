@@ -44,6 +44,9 @@ class Export {
 	 * [--per-member]
 	 * : Write one row per reader: the owner of each subscription, then each member of a group subscription. Adds reader and group columns ahead of the subscription columns. Rows follow --status: pass --status=active,pending-cancel to list only readers who have access now.
 	 *
+	 * [--include-complimentary]
+	 * : Include complimentary subscriptions, which grant access an admin gave for free. They are left out by default.
+	 *
 	 * [--month=<yyyymm>]
 	 * : Only subscriptions created in this month, e.g. 202605.
 	 *
@@ -176,7 +179,8 @@ class Export {
 		}
 		if ( 'subscriptions' === $type ) {
 			$raw['statuses']   = self::split_list( $assoc_args['status'] ?? '' );
-			$raw['per_member'] = \WP_CLI\Utils\get_flag_value( $assoc_args, 'per-member', false );
+			$raw['per_member']            = \WP_CLI\Utils\get_flag_value( $assoc_args, 'per-member', false );
+			$raw['include_complimentary'] = \WP_CLI\Utils\get_flag_value( $assoc_args, 'include-complimentary', false );
 		}
 
 		// selection_submitted is deliberately not set here. It exists so an

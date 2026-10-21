@@ -541,31 +541,44 @@ class Complimentary_Access {
 	/**
 	 * Apply the `complimentary` filter to a list query.
 	 *
-	 * `exclude` matches a missing stamp, which holds because a cleared stamp is deleted
-	 * rather than stored as "no".
-	 *
 	 * @param array            $args    Query arguments.
 	 * @param \WP_REST_Request $request Request.
 	 *
 	 * @return array
 	 */
 	public static function filter_rest_query( $args, $request ) {
-		$mode = $request->get_param( 'complimentary' );
-		if ( 'only' === $mode ) {
-			$clause = [
-				'key'   => self::META_KEY,
-				'value' => 'yes',
-			];
-		} elseif ( 'exclude' === $mode ) {
-			$clause = [
-				'key'     => self::META_KEY,
-				'compare' => 'NOT EXISTS',
-			];
-		} else {
+		$clause = self::get_meta_query_clause( (string) $request->get_param( 'complimentary' ) );
+		if ( ! $clause ) {
 			return $args;
 		}
 		$args['meta_query']   = $args['meta_query'] ?? []; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 		$args['meta_query'][] = $clause;
 		return $args;
+	}
+
+	/**
+	 * Meta query clause that keeps only stamped subscriptions or orders, or leaves them out.
+	 *
+	 * `exclude` matches a missing stamp, which holds because a cleared stamp is deleted
+	 * rather than stored as "no".
+	 *
+	 * @param string $mode `only` or `exclude`; anything else filters nothing.
+	 *
+	 * @return array|null Clause, or null for no filter.
+	 */
+	public static function get_meta_query_clause( string $mode ): ?array {
+		if ( 'only' === $mode ) {
+			return [
+				'key'   => self::META_KEY,
+				'value' => 'yes',
+			];
+		}
+		if ( 'exclude' === $mode ) {
+			return [
+				'key'     => self::META_KEY,
+				'compare' => 'NOT EXISTS',
+			];
+		}
+		return null;
 	}
 }

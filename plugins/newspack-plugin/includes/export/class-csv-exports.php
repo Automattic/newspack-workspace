@@ -195,7 +195,8 @@ final class CSV_Exports {
 		}
 		if ( 'subscriptions' === $type ) {
 			$config['statuses']   = self::sanitize_statuses( $raw['statuses'] ?? [] );
-			$config['per_member'] = ! empty( $raw['per_member'] );
+			$config['per_member']            = ! empty( $raw['per_member'] );
+			$config['include_complimentary'] = ! empty( $raw['include_complimentary'] );
 		}
 
 		return $config;
@@ -563,6 +564,15 @@ final class CSV_Exports {
 						</label>
 						<p class="description" id="<?php echo \esc_attr( $id ); ?>-per-member-desc">
 							<?php \esc_html_e( 'Adds a row for each member of a group subscription, after the owner\'s row. Each row names the reader, whether they own the subscription or belong to its group, and the group\'s name. Rows follow the status selection: choose Active and Pending Cancellation to list only readers who have access now.', 'newspack-plugin' ); ?>
+						</p>
+					</div>
+					<div class="newspack-csv-export-modal__field">
+						<label>
+							<input type="checkbox" name="include_complimentary" value="1" aria-describedby="<?php echo \esc_attr( $id ); ?>-include-complimentary-desc">
+							<?php \esc_html_e( 'Include complimentary subscriptions', 'newspack-plugin' ); ?>
+						</label>
+						<p class="description" id="<?php echo \esc_attr( $id ); ?>-include-complimentary-desc">
+							<?php \esc_html_e( 'Complimentary subscriptions grant access an admin gave for free. They are left out unless this is checked or the list is filtered to show them.', 'newspack-plugin' ); ?>
 						</p>
 					</div>
 				<?php endif; ?>
