@@ -336,7 +336,7 @@ class ProductsUserTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A per-post check for a user ID that no longer resolves is left to core rather than failing.
+	 * A per-post check for a user ID that matches no user is left to core rather than failing.
 	 */
 	public function test_per_post_check_for_missing_user_does_not_fail() {
 		$post_id = self::factory()->post->create();
