@@ -34,9 +34,10 @@ export type AccessRuleShape = {
 
 /**
  * The keys in a `key=value;…` reader-data rule outside `trusted_keys`. The browser can
- * also set them, so the rule can't match any reader. Parses as the server does: items split on `;`, trimmed, key
- * taken before the first `=`. Items with no `=` or an empty key are malformed rather than
- * untrusted, and are left out. Empty when the rule declares no trusted keys.
+ * also set them, so the rule can't match any reader. Parses as the server does: items
+ * split on `;`, trimmed, key taken before the first `=`. Items with no `=` or an empty
+ * key are malformed rather than untrusted, and are left out. Empty when the rule
+ * declares no trusted keys.
  *
  * @param config The rule's registry entry.
  * @param value  The rule's stored value.
