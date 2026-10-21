@@ -44,6 +44,7 @@ final class Reader_Data_Trust {
 		'is_donor',
 		'last_active',
 		'matched_segments',
+		'newsletter_signup_client',
 		'pageviews',
 		'paywall_hits',
 		'pending_checkout',
