@@ -1333,7 +1333,6 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 		$this->assertSame( [ 'Premium (auto-signup)', 'Premium' ], array_column( $split['payloads'], 'title' ) );
 		[ $auto_signup, $opt_in ] = $split['payloads'];
 
-		$this->assertSame( 'Premium', $opt_in['title'] );
 		$this->assertSame( [ $this->list_a ], $opt_in['list_ids'] );
 		$this->assertSame( 'off', $opt_in['auto_signup'] );
 		$this->assertSame(
@@ -1346,7 +1345,6 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 			$opt_in['content_rules']
 		);
 
-		$this->assertSame( 'Premium (auto-signup)', $auto_signup['title'] );
 		$this->assertSame( [ $this->list_b ], $auto_signup['list_ids'] );
 		$this->assertSame( 'on', $auto_signup['auto_signup'] );
 		$this->assertSame( 'Premium', $auto_signup['split_from'] );
@@ -1389,20 +1387,44 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 
 	/**
 	 * A --plan run writes only that plan's gates, but another plan's gate keeps its
-	 * title whatever the run's scope. A sibling named like it would overwrite it, so
-	 * the group is left whole, as on a full run.
+	 * title whatever the run's scope, so its title is taken all the same.
 	 */
-	public function test_plan_scoped_split_leaves_the_group_whole_when_another_plan_has_the_sibling_title() {
-		$this->set_signup_modal_lists( [ $this->list_a ] );
+	public function test_taken_gate_titles_count_another_groups_title_on_a_plan_run() {
 		$plan_groups      = [ 'scoped' => [ $this->make_named_plan( 'Premium' ) ] ];
 		$site_plan_groups = $plan_groups + [ 'other' => [ $this->make_named_plan( 'Premium (auto-signup)' ) ] ];
 
 		$taken_titles = $this->invoke_private_static( 'taken_gate_titles', [ $plan_groups, $site_plan_groups ] );
-		$split        = $this->invoke_private_static( 'split_payload_by_auto_signup', [ $this->make_gate_payload( [ $this->list_a, $this->list_b ] ), $taken_titles ] );
 
-		$this->assertCount( 1, $split['payloads'] );
-		$this->assertNull( $split['payloads'][0]['auto_signup'] );
-		$this->assertStringContainsString( 'Rename the plan behind "Premium (auto-signup)" and re-run to split it.', $split['instructions'] );
+		$this->assertContains( 'premium (auto-signup)', $taken_titles );
+	}
+
+	/**
+	 * An earlier --plan run titles its gate after its one plan, even when that plan
+	 * shares its lists with another and a full run groups them. A plan named like
+	 * another group's sibling may therefore hold that title already.
+	 */
+	public function test_taken_gate_titles_count_a_plan_named_like_another_groups_sibling() {
+		$plan_groups = [
+			'mixed'  => [ $this->make_named_plan( 'Premium' ) ],
+			'shared' => [ $this->make_named_plan( 'Premium (auto-signup)' ), $this->make_named_plan( 'Other' ) ],
+		];
+
+		$taken_titles = $this->invoke_private_static( 'taken_gate_titles', [ $plan_groups, $plan_groups ] );
+
+		$this->assertContains( 'premium (auto-signup)', $taken_titles );
+	}
+
+	/**
+	 * A group's own sibling title is the run's to write, on a full run and on a
+	 * --plan run for a plan that shares its lists. Counting it as taken would leave
+	 * every such group unsplit.
+	 */
+	public function test_taken_gate_titles_leave_a_groups_own_sibling_title_free() {
+		$alone  = [ 'alone' => [ $this->make_named_plan( 'Premium' ) ] ];
+		$shared = [ 'shared' => [ $this->make_named_plan( 'Premium' ), $this->make_named_plan( 'Other' ) ] ];
+
+		$this->assertNotContains( 'premium (auto-signup)', $this->invoke_private_static( 'taken_gate_titles', [ $alone, $alone ] ) );
+		$this->assertNotContains( 'premium (auto-signup)', $this->invoke_private_static( 'taken_gate_titles', [ $alone, $shared ] ) );
 	}
 
 	/**
@@ -1611,14 +1633,14 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	 * A sibling is a gate this run writes, so it must not be named as untouched: that
 	 * would tell the operator to retire a gate the migration depends on.
 	 */
-	public function test_written_gate_keys_include_a_split_groups_sibling() {
+	public function test_planned_written_keys_include_a_split_groups_sibling() {
 		$this->set_signup_modal_lists( [ $this->list_a ] );
-		$split = $this->invoke_private_static(
-			'split_payload_by_auto_signup',
-			[ $this->make_gate_payload( [ $this->list_a, $this->list_b ] ), [ 'premium' ] ]
-		);
 
-		$written_keys = $this->invoke_private_static( 'written_gate_keys', [ $split['payloads'] ] );
+		$planned = $this->invoke_private_static(
+			'plan_gate_payloads',
+			[ [ $this->make_gate_payload( [ $this->list_a, $this->list_b ] ) ], [ 'premium' ] ]
+		);
+		$written_keys = $planned['written_keys'];
 		ksort( $written_keys );
 
 		$this->assertSame(

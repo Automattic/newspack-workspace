@@ -299,23 +299,19 @@ class Premium_Newsletters_Migration {
 
 		// Split by auto-signup here, after the per-group warnings so a split group's
 		// are printed once, and before the prompt so the operator has seen every gate
-		// the run can't settle by the time they answer it. A --plan run groups every
-		// published plan as well, read-only and without warnings, to learn which
-		// titles the other plans' gates hold.
+		// the run can't settle by the time they answer it. A sibling can't take a title
+		// another gate may hold: any group's title on a full run, or any plan's own
+		// name, which an earlier --plan run gives its gate. So a --plan run groups
+		// every published plan as well, read-only and without warnings.
 		$site_plan_groups = $plan_groups;
 		if ( $plan_id ) {
 			$site_skipped         = [];
 			$site_all_lists_plans = [];
 			$site_plan_groups     = self::group_plans_by_lists( self::get_plans(), $site_skipped, $site_all_lists_plans, true );
 		}
-		$taken_titles  = self::taken_gate_titles( $plan_groups, $site_plan_groups );
-		$gate_payloads = [];
-		foreach ( $payloads as $payload ) {
-			$split = self::split_payload_by_auto_signup( $payload, $taken_titles );
-			if ( null !== $split['instructions'] ) {
-				WP_CLI::warning( $split['instructions'] );
-			}
-			$gate_payloads = array_merge( $gate_payloads, $split['payloads'] );
+		$planned = self::plan_gate_payloads( $payloads, self::taken_gate_titles( $plan_groups, $site_plan_groups ) );
+		foreach ( $planned['instructions'] as $instructions ) {
+			WP_CLI::warning( $instructions );
 		}
 
 		// Regrouping can merge plans a previous run migrated separately — most likely
@@ -354,14 +350,12 @@ class Premium_Newsletters_Migration {
 			);
 		}
 
-		$titles_written = self::written_gate_keys( $gate_payloads );
-
 		$force_auto_signup = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'set-auto-signup', false );
 
 		// Every gate title is unique: the collision check above errors out over two
 		// groups sharing one, and a sibling is never named like a group. So the writes
 		// can treat a title as naming one gate.
-		$summary = self::write_gate_payloads( $gate_payloads, $existing_gates, $dry_run, $force_auto_signup );
+		$summary = self::write_gate_payloads( $planned['gate_payloads'], $existing_gates, $dry_run, $force_auto_signup );
 
 		WP_CLI::line( '' );
 
@@ -386,7 +380,7 @@ class Premium_Newsletters_Migration {
 		);
 
 		WP_CLI::line( '' );
-		self::report_stale_gates( $titles_written, $dry_run, (bool) $plan_id );
+		self::report_stale_gates( $planned['written_keys'], $dry_run, (bool) $plan_id );
 
 		WP_CLI::line( '' );
 		$failed        = count(
@@ -594,10 +588,12 @@ class Premium_Newsletters_Migration {
 	/**
 	 * Gate titles an auto-signup sibling can't take.
 	 *
-	 * Gate identity is the title, so a sibling named like another group's gate would
+	 * Gate identity is the title, so a sibling named like another gate would
 	 * overwrite that gate's lists. That holds on a --plan run too: it writes only the
 	 * one plan's gates, but every other plan's gate keeps its title, so the groups a
-	 * full run would write are counted as well as this run's.
+	 * full run would write are counted as well as this run's. Each plan's own name
+	 * is counted too, since an earlier --plan run titles its gate after its one plan
+	 * even when a full run groups that plan with another.
 	 *
 	 * @param array<string,array> $plan_groups      This run's groups, map of fingerprint => plan descriptors.
 	 * @param array<string,array> $site_plan_groups The groups a full run would write, in the same shape.
@@ -605,8 +601,14 @@ class Premium_Newsletters_Migration {
 	 * @return string[] Lower-cased gate titles.
 	 */
 	private static function taken_gate_titles( array $plan_groups, array $site_plan_groups ): array {
-		$groups = array_merge( array_values( $plan_groups ), array_values( $site_plan_groups ) );
-		return array_values( array_unique( array_map( fn( $group ) => trim( strtolower( self::gate_title( $group ) ) ), $groups ) ) );
+		$titles = [];
+		foreach ( array_merge( array_values( $plan_groups ), array_values( $site_plan_groups ) ) as $group ) {
+			$titles[] = self::gate_title( $group );
+			foreach ( $group as $plan ) {
+				$titles[] = $plan['name'];
+			}
+		}
+		return array_values( array_unique( array_map( fn( $title ) => trim( strtolower( $title ) ), $titles ) ) );
 	}
 
 	/**
@@ -1786,6 +1788,37 @@ class Premium_Newsletters_Migration {
 		}
 
 		return $plan_groups;
+	}
+
+	/**
+	 * The gate payloads the run writes, from the groups' payloads.
+	 *
+	 * Each group's payload is split by auto-signup, and the written titles are read
+	 * from the split payloads rather than the groups', so a sibling counts as written
+	 * ({@see written_gate_keys()}).
+	 *
+	 * @param array[]  $payloads     Payloads from build_gate_payload(), one per group.
+	 * @param string[] $taken_titles Lower-cased gate titles, from taken_gate_titles().
+	 *
+	 * @return array 'gate_payloads', in write order; 'instructions', the warnings
+	 *               split_payload_by_auto_signup() returned; 'written_keys', from
+	 *               written_gate_keys().
+	 */
+	private static function plan_gate_payloads( array $payloads, array $taken_titles ): array {
+		$gate_payloads = [];
+		$instructions  = [];
+		foreach ( $payloads as $payload ) {
+			$split = self::split_payload_by_auto_signup( $payload, $taken_titles );
+			if ( null !== $split['instructions'] ) {
+				$instructions[] = $split['instructions'];
+			}
+			$gate_payloads = array_merge( $gate_payloads, $split['payloads'] );
+		}
+		return [
+			'gate_payloads' => $gate_payloads,
+			'instructions'  => $instructions,
+			'written_keys'  => self::written_gate_keys( $gate_payloads ),
+		];
 	}
 
 	/**
