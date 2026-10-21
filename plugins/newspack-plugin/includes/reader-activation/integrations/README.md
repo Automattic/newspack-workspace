@@ -923,7 +923,7 @@ function maybe_register_from_landing_page() {
         // Same method as the frontend endpoint uses, so one
         // `newspack_registered_reader` handler covers both paths.
         'registration_method'         => 'integration-registration-my_integration',
-        'current_page_url'            => home_url( add_query_arg( null, null ) ),
+        'current_page_url'            => home_url( remove_query_arg( 'my_service_id' ) ),
         'my_integration_contact_id' => $record['contact']['id'] ?? '',
     ];
 
