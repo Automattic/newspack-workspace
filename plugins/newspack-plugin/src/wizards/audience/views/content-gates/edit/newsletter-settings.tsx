@@ -54,7 +54,7 @@ export default function NewsletterSettings( { autoSignup, hideLists, siteAutoSig
 				actionType="toggle"
 				title={ __( 'Hide from readers', 'newspack-plugin' ) }
 				description={ __(
-					'Keep these lists out of My Account, sign-up forms, registration, and the post-checkout modal. Readers are still added and removed as their access changes.',
+					'Keep these lists out of My Account, sign-up forms, registration, and the post-checkout modal. Auto-signup and removal when access ends still apply.',
 					'newspack-plugin'
 				) }
 				icon={ unseen }

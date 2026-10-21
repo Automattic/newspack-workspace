@@ -77,6 +77,10 @@ const NEWSLETTER_GATE = {
 };
 const NEWSLETTER_CONFIG = { auto_signup: true };
 
+// The newsletter gate the store and the mocked server hand back. A test that needs a gate
+// with settings already chosen swaps it with storeNewsletterGate().
+let storedNewsletterGate = NEWSLETTER_GATE;
+
 const REFUSAL = 'Invalid value for the Subscription access rule.';
 let refuseSaves = false;
 
@@ -87,6 +91,14 @@ const accessRules = () => JSON.parse( screen.getByTestId( 'access-rules' ).textC
 // Stands in for the wizard's updateGatesData, which writes the saved gates back to the store.
 const updateGatesData = gates =>
 	dispatch( WIZARD_STORE_NAMESPACE ).updateWizardSettings( { slug: AUDIENCE_CONTENT_GATES_WIZARD_SLUG, path: [ 'gates' ], value: gates } );
+
+const storeNewsletterGate = gate => {
+	storedNewsletterGate = gate;
+	dispatch( WIZARD_STORE_NAMESPACE ).setAPIDataForWizard( {
+		slug: PREMIUM_NEWSLETTERS_WIZARD_SLUG,
+		data: { gates: [ gate ], config: NEWSLETTER_CONFIG },
+	} );
+};
 
 const renderNewsletterEdit = async () => {
 	render(
@@ -118,7 +130,7 @@ beforeEach( () => {
 		if ( method === 'GET' ) {
 			return Promise.resolve(
 				path.endsWith( PREMIUM_NEWSLETTERS_WIZARD_SLUG )
-					? { gates: [ NEWSLETTER_GATE ], config: NEWSLETTER_CONFIG }
+					? { gates: [ storedNewsletterGate ], config: NEWSLETTER_CONFIG }
 					: { gates: [ STORED_GATE ], config: {} }
 			);
 		}
@@ -136,10 +148,7 @@ beforeEach( () => {
 		slug: AUDIENCE_CONTENT_GATES_WIZARD_SLUG,
 		data: { gates: [ STORED_GATE ], config: {} },
 	} );
-	dispatch( WIZARD_STORE_NAMESPACE ).setAPIDataForWizard( {
-		slug: PREMIUM_NEWSLETTERS_WIZARD_SLUG,
-		data: { gates: [ NEWSLETTER_GATE ], config: NEWSLETTER_CONFIG },
-	} );
+	storeNewsletterGate( NEWSLETTER_GATE );
 } );
 
 describe( 'Content gate editor', () => {
@@ -205,6 +214,22 @@ describe( 'Premium newsletter list settings', () => {
 		await runHeaderAction( 'Save' );
 
 		expect( savedGate() ).toEqual( expect.objectContaining( { auto_signup: 'default', hide_lists: true } ) );
+	} );
+
+	it( 'keeps the settings a stored gate already has, and saves them unchanged', async () => {
+		// A gate whose settings are not the defaults, so a load that reset them would show.
+		storeNewsletterGate( { ...NEWSLETTER_GATE, auto_signup: 'on', hide_lists: true } );
+		await renderNewsletterEdit();
+
+		expect( screen.getByRole( 'option', { name: 'On' } ).selected ).toBe( true );
+		expect( screen.getByRole( 'checkbox', { name: 'Hide from readers' } ) ).toBeChecked();
+
+		await runHeaderAction( 'Rename' );
+		fireEvent.change( screen.getByRole( 'textbox', { name: /premium newsletter name/i } ), { target: { value: 'Edited title' } } );
+		await runHeaderAction( 'Save' );
+
+		// Only the title changed, so the save must carry the stored settings through.
+		expect( savedGate() ).toEqual( expect.objectContaining( { title: 'Edited title', auto_signup: 'on', hide_lists: true } ) );
 	} );
 
 	it( 'leaves the Subscriptions section and both keys out of a content gate', async () => {
