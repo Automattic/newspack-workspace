@@ -1,3 +1,10 @@
+## newspack [6.55.6](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.5...newspack@6.55.6) (2026-10-21)
+
+
+### Bug Fixes
+
+* **reader-activation:** register the corrected address after a cancel ([#1304](https://github.com/Automattic/newspack-workspace/issues/1304)) ([b8af2d4](https://github.com/Automattic/newspack-workspace/commit/b8af2d47e382ae78c60fc7fe019c9c402813a7b4))
+
 ## newspack [6.55.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.4...newspack@6.55.5) (2026-10-21)
 
 
