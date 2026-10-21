@@ -295,6 +295,11 @@ final class Reader_Data_Trust {
 	 * recurring donor (whose parent, renewal, switch and resubscribe orders
 	 * remain) is not a donor. Only one-time donation orders count.
 	 *
+	 * That holds only while WooCommerce Subscriptions is active, because only it can
+	 * tell a subscription's orders from a one-time donation's. With it inactive, a
+	 * former recurring donor's retained orders count as one-time donations, and the
+	 * stored result keeps matching after the plugin is reactivated.
+	 *
 	 * @param int $user_id User ID.
 	 *
 	 * @return bool|null Null when the platform does not track donors server-side,
