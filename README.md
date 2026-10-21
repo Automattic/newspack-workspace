@@ -215,9 +215,9 @@ This command will allow you to copy one or many plugins from your local env to t
 
 This is useful if you want to replace the plugin in the site with the custom branch you have checked out, or if you want to upload any other plugin you have.
 
-## Mailhog
+## Mailpit
 
-Mailhog is running by default so you can see all the emails that are sent from your WordPress site.
+Mailpit is running by default so you can see all the emails that are sent from your WordPress site.
 
 Visit http://localhost:8025 to see it.
 
