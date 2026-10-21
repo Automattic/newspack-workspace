@@ -867,8 +867,9 @@ The URL is the only input, and anyone can copy or forge it. Logging someone in f
 - **Use this path only when the service verifies the email address.** The API proves what the record says, not that the visitor owns the email in it. If the service accepts any address without confirming it, someone can create a record with an existing reader's email and follow its landing URL to log in as that reader. When the service doesn't verify emails, send a magic link instead of logging the reader in.
 - **Expire the link.** Refuse records older than a short window, and treat a missing or unreadable timestamp as expired. A URL found later in browser history or a shared link then logs no one in.
 - **Use each identifier once.** Record each identifier as used before calling the API, so a reload, a second tab or a copied URL can't register or log in twice. The example below leaves this out: put something in place that survives across requests, such as a database row or a persistent object cache entry, and treat a failure to record it as a reason to stop. Let the identifier be used again only when the API call or the registration fails, so the reader can retry by reloading.
+- **Limit lookups per visitor.** Every new identifier in the URL costs one call to the service's API, so a script cycling through made-up values can run up the API quota. Count lookups per IP address, and stop before calling the API once a visitor passes a small limit. As with single use, the example leaves this out.
 - **Never switch sessions.** If someone else is logged in, leave the session alone and log the mismatch.
-- **Log in readers only.** `Reader_Activation::set_current_reader()` checks no credentials, so check `Reader_Activation::is_user_reader()` first. That keeps a URL from logging anyone in as an editor or administrator.
+- **Log in readers only.** `Reader_Activation::set_current_reader()` checks no credentials, but it refuses any account that isn't a reader, so a URL can't log anyone in as an editor or administrator. Check its return value and stop on an error.
 - **Keep the response out of the page cache.** Call `nocache_headers()` before setting the login cookie.
 
 ```php
@@ -930,12 +931,10 @@ function maybe_register_from_landing_page() {
         return;
     }
 
-    // A returning reader: log them in. Never log in a non-reader account.
+    // A returning reader: log them in. set_current_reader() refuses
+    // non-reader accounts.
     $user = get_user_by( 'email', $email );
     if ( $user ) {
-        if ( ! Reader_Activation::is_user_reader( $user ) ) {
-            return;
-        }
         if ( is_wp_error( Reader_Activation::set_current_reader( $user->ID ) ) ) {
             return;
         }
