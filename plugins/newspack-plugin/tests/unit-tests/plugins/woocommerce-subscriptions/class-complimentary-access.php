@@ -190,6 +190,30 @@ class Newspack_Test_Complimentary_Access extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A reader can't cancel their own complimentary subscription, but a store manager can,
+	 * even one holding it, and so can code running with no one logged in. A paid
+	 * subscription is untouched.
+	 */
+	public function test_reader_cannot_cancel_a_complimentary_subscription() {
+		$reader_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		$comp      = $this->subscribe( self::COMP_ID );
+		$paid      = $this->subscribe( self::PAID_ID );
+		foreach ( [ $comp, $paid ] as $subscription ) {
+			$subscription->data['customer_id'] = $reader_id;
+			Complimentary_Access::stamp( $subscription );
+		}
+
+		$this->assertTrue( Complimentary_Access::filter_reader_can_cancel( true, $comp ) );
+
+		wp_set_current_user( $reader_id );
+		$this->assertFalse( Complimentary_Access::filter_reader_can_cancel( true, $comp ) );
+		$this->assertTrue( Complimentary_Access::filter_reader_can_cancel( true, $paid ) );
+
+		wp_get_current_user()->add_cap( 'manage_woocommerce' );
+		$this->assertTrue( Complimentary_Access::filter_reader_can_cancel( true, $comp ) );
+	}
+
+	/**
 	 * Restamping is queued only for a real flag change. Every subscription product save
 	 * writes the option, mostly as a first "no", and deleting a comp product removes its
 	 * flag but must leave the stamps.

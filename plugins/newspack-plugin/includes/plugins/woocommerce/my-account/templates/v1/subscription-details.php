@@ -14,8 +14,8 @@ namespace Newspack;
 defined( 'ABSPATH' ) || exit;
 
 $is_group_member_subscription = Group_Subscription::is_group_subscription( $subscription ) && Group_Subscription::user_is_member( get_current_user_id(), $subscription );
-// A reader who pays nothing has no payments to show, so the table keeps only when their access started and ends.
-$is_free_subscription = ! $is_group_member_subscription && Zero_Total_Renewals::is_free( $subscription );
+// A complimentary reader has no payments to show, so the table keeps only when their access started and ends.
+$is_complimentary_subscription = ! $is_group_member_subscription && Complimentary_Access::is_complimentary_order( $subscription );
 
 ?>
 <table class="shop_table subscription_details">
@@ -26,7 +26,7 @@ $is_free_subscription = ! $is_group_member_subscription && Zero_Total_Renewals::
 			<?php
 			$dates_to_display = apply_filters(
 				'wcs_subscription_details_table_dates_to_display',
-				$is_free_subscription
+				$is_complimentary_subscription
 					? [
 						'start_date' => __( 'Member since', 'newspack-plugin' ),
 						'end'        => _x( 'End date', 'customer subscription table header', 'newspack-plugin' ),
@@ -52,7 +52,7 @@ $is_free_subscription = ! $is_group_member_subscription && Zero_Total_Renewals::
 			<?php endforeach; ?>
 			<?php do_action( 'wcs_subscription_details_table_after_dates', $subscription ); ?>
 		<?php endif; ?>
-		<?php if ( ! $is_group_member_subscription && ! $is_free_subscription && \WCS_My_Account_Auto_Renew_Toggle::can_user_toggle_auto_renewal( $subscription ) ) : ?>
+		<?php if ( ! $is_group_member_subscription && ! $is_complimentary_subscription && \WCS_My_Account_Auto_Renew_Toggle::can_user_toggle_auto_renewal( $subscription ) ) : ?>
 			<tr>
 				<td><?php esc_html_e( 'Auto renew', 'newspack-plugin' ); ?></td>
 				<td>
@@ -115,7 +115,7 @@ $is_free_subscription = ! $is_group_member_subscription && Zero_Total_Renewals::
 				<?php
 			endif;
 			?>
-		<?php elseif ( ! $is_free_subscription ) : ?>
+		<?php elseif ( ! $is_complimentary_subscription ) : ?>
 			<?php do_action( 'wcs_subscription_details_table_before_payment_method', $subscription ); ?>
 		<tr>
 			<td><?php esc_html_e( 'Payment method', 'newspack-plugin' ); ?></td>

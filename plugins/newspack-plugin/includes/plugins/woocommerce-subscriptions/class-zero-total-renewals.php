@@ -65,13 +65,12 @@ class Zero_Total_Renewals {
 	 * subscription `migrate-manual-members` creates, so both have to be zero.
 	 * `Teams_Migration::subscription_is_paid()` draws the same line. A reader comped with
 	 * an unlimited recurring coupon rather than the CLI keeps their $0.00 receipts.
-	 * My Account draws the same line when it hides a subscription's payment details.
 	 *
 	 * @param \WC_Abstract_Order $order Order or subscription to test.
 	 *
 	 * @return bool
 	 */
-	public static function is_free( $order ): bool {
+	private static function is_free( $order ) {
 		return 0.0 >= (float) $order->get_total() && 0.0 >= (float) $order->get_subtotal();
 	}
 
