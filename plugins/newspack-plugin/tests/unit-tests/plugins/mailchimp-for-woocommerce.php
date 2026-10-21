@@ -103,6 +103,25 @@ class Newspack_Test_Mailchimp_For_WooCommerce extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A profile update can run inside another, for example when a callback updates a second user.
+	 * The inner skip finds the handler already removed, and the plugin's handler is still back in
+	 * place once both updates finish.
+	 */
+	public function test_profile_update_restores_the_handler_after_a_nested_update() {
+		$reader       = $this->create_customer( 'outer@example.test', 'subscribed' );
+		$other_reader = $this->create_customer( 'inner@example.test', 'subscribed' );
+		$update_other_reader = function () use ( $other_reader, &$update_other_reader ) {
+			remove_action( 'profile_update', $update_other_reader, 100 );
+			do_action( 'profile_update', $other_reader->ID, $other_reader );
+		};
+		add_action( 'profile_update', $update_other_reader, 100 );
+
+		do_action( 'profile_update', $reader->ID, $reader );
+
+		$this->assertSame( 100, has_action( 'profile_update', [ MailChimp_Service::instance(), 'handleUserUpdated' ] ) );
+	}
+
+	/**
 	 * An admin who sets "not subscribed" in the plugin's own wp-admin profile field means it, so
 	 * that update still reaches Mailchimp.
 	 */
@@ -137,22 +156,22 @@ class Newspack_Test_Mailchimp_For_WooCommerce extends WP_UnitTestCase {
 	 * The lookup runs once per customer in a request, and only for a registered customer the
 	 * plugin neither opted in nor looked up: it sends opted-in customers as subscribed, checks
 	 * Mailchimp itself for guests, and reads the status first in a sync of existing contacts.
-	 * A failed lookup is tried again on the next order.
+	 * A customer not in the audience yet is looked up again on the next order.
 	 */
 	public function test_order_looks_up_each_customer_once_and_only_when_needed() {
 		$opted_in_customer = $this->create_customer( 'opted-in@example.test', 'subscribed', '1' );
 		$synced_customer   = $this->create_customer( 'synced@example.test', 'transactional', '' );
 		$repeat_customer   = $this->create_customer( 'repeat@example.test', 'transactional', '' );
-		$failed_customer   = $this->create_customer( 'failed@example.test', null, '' );
+		$unlisted_customer = $this->create_customer( 'unlisted@example.test', null, '' );
 
 		$this->filter_order( ( new MailChimp_WooCommerce_Customer( $opted_in_customer, $opted_in_customer->user_email ) )->setOptInStatus( true ) );
 		$this->filter_order( new MailChimp_WooCommerce_Customer( null, 'guest@example.test' ) );
 		$this->filter_order( ( new MailChimp_WooCommerce_Customer( $synced_customer, $synced_customer->user_email ) )->setMailchimpStatus( 'transactional' ) );
 		$this->filter_order( new MailChimp_WooCommerce_Customer( $repeat_customer, $repeat_customer->user_email ) );
 		$this->filter_order( new MailChimp_WooCommerce_Customer( $repeat_customer, $repeat_customer->user_email ) );
-		$this->filter_order( new MailChimp_WooCommerce_Customer( $failed_customer, $failed_customer->user_email ) );
-		$this->filter_order( new MailChimp_WooCommerce_Customer( $failed_customer, $failed_customer->user_email ) );
+		$this->filter_order( new MailChimp_WooCommerce_Customer( $unlisted_customer, $unlisted_customer->user_email ) );
+		$this->filter_order( new MailChimp_WooCommerce_Customer( $unlisted_customer, $unlisted_customer->user_email ) );
 
-		$this->assertSame( [ 'repeat@example.test', 'failed@example.test', 'failed@example.test' ], $GLOBALS['newspack_test_mailchimp_status_lookups'] );
+		$this->assertSame( [ 'repeat@example.test', 'unlisted@example.test', 'unlisted@example.test' ], $GLOBALS['newspack_test_mailchimp_status_lookups'] );
 	}
 }

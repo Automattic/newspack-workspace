@@ -98,8 +98,9 @@ class Mailchimp_For_WooCommerce {
 		if ( ! $customer || ! $customer->getWordpressUser() || $customer->getOptInStatus() || null !== $customer->getMailchimpStatus() ) {
 			return $order;
 		}
-		// A sync sends many orders in one request, often several from the same customer. A failed
-		// lookup returns null, which isset() treats as missing, so the next order tries again.
+		// A sync sends many orders in one request, often several from the same customer. The lookup
+		// returns null when it fails or the contact is not in the audience yet, and isset() treats a
+		// cached null as missing, so the next order looks again.
 		$email = $customer->getEmailAddress();
 		if ( ! isset( self::$mailchimp_statuses[ $email ] ) ) {
 			self::$mailchimp_statuses[ $email ] = \mailchimp_get_subscriber_status( $email );
