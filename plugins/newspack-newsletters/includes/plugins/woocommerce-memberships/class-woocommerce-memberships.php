@@ -64,6 +64,7 @@ class Woocommerce_Memberships {
 		add_filter( 'newspack_newsletters_manage_newsletters_available_lists', [ __CLASS__, 'filter_lists_objects' ] );
 		add_filter( 'newspack_post_registration_newsletters_lists', [ __CLASS__, 'filter_lists_objects' ], 10, 2 );
 		add_filter( 'newspack_auth_form_newsletters_lists', [ __CLASS__, 'filter_lists_objects' ] );
+		add_filter( 'newspack_newsletters_subscription_list_gates', [ __CLASS__, 'filter_list_gates' ] );
 		add_action( 'wc_memberships_user_membership_status_changed', [ __CLASS__, 'handle_membership_status_change' ], 10, 3 );
 		add_action( 'wc_memberships_user_membership_saved', [ __CLASS__, 'add_user_to_lists' ], 10, 2 );
 		add_action( 'wc_memberships_user_membership_deleted', [ __CLASS__, 'deleted_membership' ] );
@@ -144,6 +145,74 @@ class Woocommerce_Memberships {
 			},
 			ARRAY_FILTER_USE_KEY
 		);
+	}
+
+	/**
+	 * Report the membership plans that restrict each subscription list.
+	 *
+	 * This lets the Newsletter Subscription Form block mark and show premium lists
+	 * while Memberships controls access, so publishers can set the block up before
+	 * moving to Access Control. Access Control's premium newsletter gates report
+	 * through the same filter but stand down while Memberships is active, so only
+	 * one of the two answers at a time.
+	 *
+	 * A list is reported exactly when filter_lists() would check access to it, so
+	 * the premium marker agrees with sign-up, including for a list Memberships
+	 * marks as public.
+	 *
+	 * @param array[] $list_gates Gates keyed by public list ID.
+	 * @return array[] Gates keyed by public list ID. Each gate is a plan with `id`
+	 *                 and `title`, plus `edit_url` when the current user may edit it.
+	 */
+	public static function filter_list_gates( $list_gates ) {
+		$list_gates = is_array( $list_gates ) ? $list_gates : [];
+		if ( ! self::is_enabled() || ! function_exists( 'wc_memberships' ) ) {
+			return $list_gates;
+		}
+		foreach ( Subscription_Lists::get_all() as $list ) {
+			$plans = self::get_restricting_plans( $list->get_id() );
+			if ( empty( $plans ) ) {
+				continue;
+			}
+			$list_gates[ $list->get_public_id() ] = array_map(
+				function ( $plan ) {
+					$item = [
+						'id'    => (int) $plan->get_id(),
+						'title' => (string) $plan->get_name(),
+					];
+					// Plan names are for the editor. Readers never get an edit link.
+					if ( current_user_can( 'edit_post', $plan->get_id() ) ) {
+						$edit_url = get_edit_post_link( $plan->get_id(), 'raw' );
+						if ( $edit_url ) {
+							$item['edit_url'] = $edit_url;
+						}
+					}
+					return $item;
+				},
+				$plans
+			);
+		}
+		return $list_gates;
+	}
+
+	/**
+	 * Get the published membership plans whose content rules restrict a list.
+	 *
+	 * @param int $list_post_id The list's post ID.
+	 * @return \WC_Memberships_Membership_Plan[] Empty when nothing restricts the list.
+	 */
+	private static function get_restricting_plans( $list_post_id ) {
+		if ( ! \wc_memberships_is_post_content_restricted( $list_post_id ) ) {
+			return [];
+		}
+		$plans = [];
+		foreach ( \wc_memberships()->get_rules_instance()->get_post_content_restriction_rules( $list_post_id ) as $rule ) {
+			$plan = $rule->get_membership_plan();
+			if ( $plan instanceof \WC_Memberships_Membership_Plan ) {
+				$plans[ $plan->get_id() ] = $plan;
+			}
+		}
+		return array_values( $plans );
 	}
 
 	/**

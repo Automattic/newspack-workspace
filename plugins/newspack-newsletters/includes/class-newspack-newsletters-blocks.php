@@ -22,8 +22,9 @@ final class Newspack_Newsletters_Blocks {
 	/**
 	 * Get the access gates that restrict each subscription list.
 	 *
-	 * Newsletters has no notion of gates itself. Whatever restricts lists (Access
-	 * Control in Newspack) reports them here. The subscribe block reads the map in
+	 * Newsletters has no notion of gates itself. Whatever restricts lists reports
+	 * them here: Access Control in Newspack, or the membership plans of Woo
+	 * Memberships while that still controls access. The subscribe block reads the map in
 	 * the editor, to mark and preview gated lists, and on every front-end render,
 	 * to badge premium lists and to tell which hidden lists it may show.
 	 *
