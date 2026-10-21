@@ -9,9 +9,9 @@
  * Test that the /republish/ page attributes the republished post, not
  * whatever post the page's main query left as the global post.
  *
- * These tests rely on the CAP and Newspack\Bylines mocks falling back to the
- * global post, like the real ones; that's what makes them fail if the
- * template stops setting it.
+ * These tests rely on get_the_author() and the Newspack\Bylines mock falling
+ * back to the global post, like the real one; that's what makes them fail if
+ * the template stops setting it.
  */
 class RepublishTemplateBylineTest extends WP_UnitTestCase {
 
@@ -91,7 +91,7 @@ class RepublishTemplateBylineTest extends WP_UnitTestCase {
 
 	/**
 	 * Both tabs should use the republished post's author, not the global
-	 * post's (the CAP mock reads the global post, like real CAP).
+	 * post's (the HTML tab's get_the_author() reads the global post).
 	 */
 	public function test_both_tabs_use_republished_post_author() {
 		$output = $this->render_template();
