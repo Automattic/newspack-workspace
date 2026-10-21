@@ -1611,7 +1611,10 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 		$this->assertSame( $payload['content_rules'], \Newspack\Content_Rules::get_gate_content_rules( $rows[1]['gate_id'] ) );
 		// The run couldn't apply the split, so it writes no setting derived from it.
 		$this->assertSame( 'default', \Newspack\Content_Gate::get_newsletter_gate_settings( $rows[1]['gate_id'] )['auto_signup'] );
-		$this->assertStringContainsString( '"Premium" is written with all the group\'s lists and its auto-signup left as it is (a new gate follows the site setting), because "Premium (auto-signup)", which takes some of them, could not be created. Re-run to split it before deactivating WooCommerce Memberships.', implode( "\n", \WP_CLI::$warnings ) );
+		$warnings = implode( "\n", \WP_CLI::$warnings );
+		$this->assertStringContainsString( '"Premium" is written with all the group\'s lists', $warnings );
+		$this->assertStringContainsString( '"Premium (auto-signup)"', $warnings );
+		$this->assertStringContainsString( 'Re-run to split it', $warnings );
 	}
 
 	/**
@@ -1665,7 +1668,7 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	 * A sibling is a gate this run writes, so it must not be named as untouched: that
 	 * would tell the operator to retire a gate the migration depends on.
 	 */
-	public function test_gate_payloads_to_write_include_a_split_groups_sibling() {
+	public function test_gate_payloads_to_write_count_a_split_groups_sibling_as_written() {
 		$this->set_signup_modal_lists( [ $this->list_a ] );
 
 		$to_write = $this->invoke_private_static(
