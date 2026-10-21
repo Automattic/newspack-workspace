@@ -63,10 +63,25 @@ RUN a2enmod rewrite
 COPY .env /tmp/.env
 
 # Install requested version of PHP.
+# A plain apt-get update only warns when the PPA is unavailable, and the
+# install then fails with "Unable to locate package", so fail and retry here.
 RUN \
 	: "${PHP_VERSION:?Build argument PHP_VERSION needs to be set and non-empty.}" \
 	&& export DEBIAN_FRONTEND=noninteractive \
-	&& apt-get update \
+	&& retry_apt_update() { \
+		local attempt=0 delay=10 max_retries=5; \
+		until apt-get update --error-on=any; do \
+			attempt=$((attempt + 1)); \
+			if [ $attempt -ge $max_retries ]; then \
+				echo "apt-get update failed after $max_retries attempts" >&2; \
+				return 1; \
+			fi; \
+			echo "apt-get update failed (attempt $attempt). Retrying in $delay seconds..." >&2; \
+			sleep $delay; \
+			delay=$((delay * 2)); \
+		done; \
+	} \
+	&& retry_apt_update \
 	&& apt-get install -y \
 		libapache2-mod-php${PHP_VERSION} \
 		php${PHP_VERSION} \
