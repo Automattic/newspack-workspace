@@ -98,6 +98,7 @@
 
 			.newspack-ui__modal {
 				border-radius: var(--newspack-ui-radius-sheet) var(--newspack-ui-radius-sheet) 0 0;
+				box-shadow: 0 var(--newspack-ui-spacer-5) var(--newspack-ui-color-surface);
 				opacity: 1;
 				padding-bottom: env(safe-area-inset-bottom);
 				transform: translateY(100%);
@@ -107,6 +108,25 @@
 					opacity: 0;
 					transform: none;
 					transition: opacity var(--newspack-ui-duration-modal) ease;
+				}
+			}
+
+			.newspack-ui__modal__header {
+				padding-top: var(--newspack-ui-spacer-6);
+				touch-action: pinch-zoom;
+				user-select: none;
+
+				&::before {
+					background-color: color-mix(in srgb, currentcolor 23%, transparent);
+					border-radius: var(--newspack-ui-radius-pill);
+					content: "";
+					height: var(--newspack-ui-spacer-half);
+					inset-inline: 0;
+					margin-inline: auto;
+					pointer-events: none;
+					position: absolute;
+					top: var(--newspack-ui-spacer-1);
+					width: var(--newspack-ui-spacer-8);
 				}
 			}
 
