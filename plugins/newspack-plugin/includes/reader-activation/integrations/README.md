@@ -706,7 +706,7 @@ function onComplete( detail ) {
             first_name: contact.firstName || '',
             last_name: contact.lastName || '',
             metadata: {
-                my_integration_contact_id: contact.id || '',
+                my_integration_supporter_id: contact.id || '',
             },
         } )
         .catch( error => {
