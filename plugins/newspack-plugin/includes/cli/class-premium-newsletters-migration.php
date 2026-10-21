@@ -70,8 +70,8 @@ class Premium_Newsletters_Migration {
 	 * can't tell (a list has no ESP list, or another plan's gate already has the
 	 * sibling's title) the gate keeps its setting and the run prints how to set it by
 	 * hand. A gate already set to On or Off keeps that unless --set-auto-signup is
-	 * passed, and so does a new sibling split from such a gate, which also hides its
-	 * lists from readers when that gate does.
+	 * passed. A new sibling starts with the hide setting of the gate it splits from.
+	 * It keeps that gate's On or Off unless --set-auto-signup is passed.
 	 *
 	 * Dry-run by default; pass --live to write.
 	 *
@@ -389,12 +389,13 @@ class Premium_Newsletters_Migration {
 		self::report_stale_gates( $titles_written, $dry_run, (bool) $plan_id );
 
 		WP_CLI::line( '' );
-		$processed = count(
+		$failed        = count(
 			array_filter(
 				$summary,
-				fn( $r ) => ! str_starts_with( $r['action'], 'ERROR' )
+				fn( $r ) => str_starts_with( $r['action'], 'ERROR' )
 			)
 		);
+		$processed     = count( $summary ) - $failed;
 		$unenforceable = count(
 			array_filter(
 				$summary,
@@ -413,6 +414,16 @@ class Premium_Newsletters_Migration {
 		WP_CLI::line( "These gates do not restrict anything yet, and they do not change anyone's newsletter subscriptions: both the restriction filter and the premium newsletter access check stand down while WooCommerce Memberships is active. They take effect when WooCommerce Memberships is deactivated, so check them before that, not after." );
 		// Written but unenforceable is worse than not written at all — it looks
 		// migrated. Call it out after the success line so it is not lost in the table.
+		// A gate that failed to write is called out there too, since the success line
+		// counts only the gates written.
+		if ( $failed ) {
+			WP_CLI::warning(
+				sprintf(
+					'%d gate(s) failed to write (see the ERROR rows above). Fix the cause and re-run before deactivating WooCommerce Memberships.',
+					$failed
+				)
+			);
+		}
 		if ( $unenforceable ) {
 			WP_CLI::warning(
 				sprintf(
@@ -1789,9 +1800,9 @@ class Premium_Newsletters_Migration {
 	 * two partition the group's lists and carry its access rules unchanged, so every
 	 * reader the group admitted keeps every list.
 	 *
-	 * The sibling comes first, so it is written before an existing gate under the
-	 * group's title is narrowed: if the sibling can't be written, the existing gate
-	 * hasn't given up its lists yet ({@see write_gate_payloads()}).
+	 * The sibling comes first, so it is written before the gate under the group's
+	 * title is narrowed: if the sibling can't be written, that gate is written whole
+	 * instead ({@see write_gate_payloads()}).
 	 *
 	 * Two cases are left to the operator, as one gate with no setting to write and
 	 * instructions to print. A list with no ESP list can't be matched against the
@@ -1806,8 +1817,9 @@ class Premium_Newsletters_Migration {
 	 *               'title', 'list_ids' and the newsletters rule's value narrowed, plus
 	 *               'auto_signup': 'on', 'off', or null to leave the gate's setting
 	 *               alone. A sibling also carries 'split_from', the title of the gate
-	 *               it takes its lists from. 'instructions' is the warning to print,
-	 *               or null.
+	 *               it takes its lists from, and that gate carries 'unsplit', the
+	 *               payload to write in its place if the sibling can't be created.
+	 *               'instructions' is the warning to print, or null.
 	 */
 	private static function split_payload_by_auto_signup( array $payload, array $taken_titles ): array {
 		$title   = $payload['title'];
@@ -1862,11 +1874,10 @@ class Premium_Newsletters_Migration {
 
 		$sibling               = $narrow( $sibling_title, $derived['non_modal'], 'on' );
 		$sibling['split_from'] = $title;
+		$opt_in                = $narrow( $title, $derived['modal'], 'off' );
+		$opt_in['unsplit']     = $narrow( $title, $payload['list_ids'], null );
 		return [
-			'payloads'     => [
-				$sibling,
-				$narrow( $title, $derived['modal'], 'off' ),
-			],
+			'payloads'     => [ $sibling, $opt_in ],
 			'instructions' => null,
 		];
 	}
@@ -1883,9 +1894,12 @@ class Premium_Newsletters_Migration {
 	 * auto-signup as one set by hand. Read when the sibling is written, which is
 	 * before that gate's own payload ({@see split_payload_by_auto_signup()}).
 	 *
-	 * When a sibling can't be created, the gate it splits from is left as it was.
-	 * Narrowed without its sibling, it would leave the sibling's lists behind no
-	 * gate, which opens them to every reader.
+	 * When a sibling can't be created, the gate it splits from is written whole
+	 * instead, whether or not it exists yet: every list of the group, with the
+	 * group's access rules and its auto-signup setting left alone, as for a group
+	 * the run can't split. Narrowed without its sibling, it would leave the
+	 * sibling's lists behind no gate, which opens them to every reader. A re-run
+	 * splits it.
 	 *
 	 * @param array[] $gate_payloads     Payloads from split_payload_by_auto_signup(), in write order.
 	 * @param array   $existing_gates    Map of lower-cased title => ID of the gates published before the run.
@@ -1896,16 +1910,27 @@ class Premium_Newsletters_Migration {
 	 */
 	private static function write_gate_payloads( array $gate_payloads, array $existing_gates, bool $dry_run, bool $force_auto_signup ): array {
 		$summary = [];
-		// Lower-cased title => title of the sibling that failed, for each gate to leave alone.
+		// Lower-cased title => title of the sibling that failed, for each gate to write whole.
 		$failed_splits = [];
 		$progress      = \WP_CLI\Utils\make_progress_bar( 'Migrating premium newsletter gates', count( $gate_payloads ) );
 
 		foreach ( $gate_payloads as $payload ) {
 			$progress->tick();
 
+			$gate_key = trim( strtolower( $payload['title'] ) );
+			if ( isset( $failed_splits[ $gate_key ], $payload['unsplit'] ) ) {
+				WP_CLI::warning(
+					sprintf(
+						'"%1$s" keeps all its lists and its auto-signup setting, because "%2$s", which takes some of them, could not be created. Re-run to split it.',
+						$payload['title'],
+						$failed_splits[ $gate_key ]
+					)
+				);
+				$payload = $payload['unsplit'];
+			}
+
 			$list_ids     = $payload['list_ids'];
 			$gate_title   = $payload['title'];
-			$gate_key     = trim( strtolower( $gate_title ) );
 			$has_purchase = $payload['has_purchase'];
 			$access_type  = $payload['access_type'];
 
@@ -1913,25 +1938,6 @@ class Premium_Newsletters_Migration {
 			// '(pending)' on a dry run, and the write path below fills it in on --live.
 			$action  = array_key_exists( $gate_key, $existing_gates ) ? 'updated' : 'created';
 			$gate_id = $existing_gates[ $gate_key ] ?? null;
-
-			if ( isset( $failed_splits[ $gate_key ] ) ) {
-				WP_CLI::warning(
-					sprintf(
-						'Skipped "%1$s": "%2$s", which takes the rest of its lists, could not be created. Re-run to write both.',
-						$gate_title,
-						$failed_splits[ $gate_key ]
-					)
-				);
-				$summary[] = [
-					'plan_name'   => $gate_title,
-					'action'      => sprintf( 'ERROR: not written, "%s" failed', $failed_splits[ $gate_key ] ),
-					'gate_id'     => $gate_id ?? '—',
-					'lists'       => count( $list_ids ),
-					'access_type' => $access_type,
-					'auto_signup' => '—',
-				];
-				continue;
-			}
 
 			$split_from = null;
 			$source_key = isset( $payload['split_from'] ) ? trim( strtolower( $payload['split_from'] ) ) : null;

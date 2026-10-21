@@ -1360,7 +1360,7 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 			$auto_signup['content_rules']
 		);
 
-		$narrowed_keys = array_flip( [ 'title', 'list_ids', 'content_rules', 'auto_signup', 'split_from' ] );
+		$narrowed_keys = array_flip( [ 'title', 'list_ids', 'content_rules', 'auto_signup', 'split_from', 'unsplit' ] );
 		foreach ( $split['payloads'] as $narrowed ) {
 			$this->assertSame( array_diff_key( $payload, $narrowed_keys ), array_diff_key( $narrowed, $narrowed_keys ) );
 		}
@@ -1553,22 +1553,58 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * When the sibling can't be created, the gate titled like the group is left as it
-	 * was. Narrowed without its sibling, it would leave the moved lists behind no gate.
+	 * Make creating the auto-signup sibling of the "Premium" group fail, while every
+	 * other post insert goes through.
 	 */
-	public function test_write_gate_payloads_leaves_the_split_gate_alone_when_its_sibling_fails() {
+	private function fail_premium_sibling_create() {
+		add_filter(
+			'wp_insert_post_empty_content',
+			fn( $maybe_empty, $postarr ) => 'Premium (auto-signup)' === ( $postarr['post_title'] ?? '' ) ? true : $maybe_empty,
+			10,
+			2
+		);
+	}
+
+	/**
+	 * When the sibling can't be created on a first run, the group's gate is created
+	 * with every list of the group. Created with only its own share, it would leave
+	 * the sibling's lists behind no gate, open to every reader.
+	 */
+	public function test_write_gate_payloads_creates_the_group_whole_when_its_sibling_fails() {
 		$this->set_signup_modal_lists( [ $this->list_a ] );
-		$original_id  = $this->create_premium_gate( [ $this->list_a, $this->list_b ], true, 'Premium' );
-		$rules_before = \Newspack\Content_Rules::get_gate_content_rules( $original_id );
-		$split        = $this->invoke_private_static( 'split_payload_by_auto_signup', [ $this->make_gate_payload( [ $this->list_a, $this->list_b ] ), [ 'premium' ] ] );
-		// Every post insert fails from here, so the sibling can't be created.
-		add_filter( 'wp_insert_post_empty_content', '__return_true' );
+		// A registration-only plan: creating a gate with paid access builds its layout
+		// from product data the WooCommerce mocks don't carry.
+		$payload = $this->invoke_private_static( 'build_gate_payload', [ [ $this->make_payload_plan( 'signup', [], [ $this->list_a, $this->list_b ], 'Premium' ) ] ] );
+		$split   = $this->invoke_private_static( 'split_payload_by_auto_signup', [ $payload, [ 'premium' ] ] );
+		$this->fail_premium_sibling_create();
+
+		$rows = $this->invoke_private_static( 'write_gate_payloads', [ $split['payloads'], [], false, false ] );
+
+		$this->assertStringStartsWith( 'ERROR', $rows[0]['action'] );
+		$this->assertSame( 'created', $rows[1]['action'] );
+		$this->assertSame( $payload['content_rules'], \Newspack\Content_Rules::get_gate_content_rules( $rows[1]['gate_id'] ) );
+		// The run couldn't apply the split, so it writes no setting derived from it.
+		$this->assertSame( 'default', \Newspack\Content_Gate::get_newsletter_gate_settings( $rows[1]['gate_id'] )['auto_signup'] );
+		$this->assertStringContainsString( '"Premium" keeps all its lists', implode( "\n", \WP_CLI::$warnings ) );
+	}
+
+	/**
+	 * When the sibling can't be created, a gate already titled like the group gets
+	 * every list of the group back, whatever an earlier run left on it.
+	 */
+	public function test_write_gate_payloads_writes_the_group_whole_to_an_existing_gate_when_its_sibling_fails() {
+		$this->set_signup_modal_lists( [ $this->list_a ] );
+		$original_id = $this->create_premium_gate( [ $this->list_a ], true, 'Premium' );
+		$payload     = $this->make_gate_payload( [ $this->list_a, $this->list_b ] );
+		$split       = $this->invoke_private_static( 'split_payload_by_auto_signup', [ $payload, [ 'premium' ] ] );
+		$this->fail_premium_sibling_create();
 
 		$rows = $this->invoke_private_static( 'write_gate_payloads', [ $split['payloads'], [ 'premium' => $original_id ], false, false ] );
 
-		$this->assertSame( $rules_before, \Newspack\Content_Rules::get_gate_content_rules( $original_id ) );
 		$this->assertStringStartsWith( 'ERROR', $rows[0]['action'] );
-		$this->assertStringStartsWith( 'ERROR', $rows[1]['action'] );
+		$this->assertSame( 'updated', $rows[1]['action'] );
+		$this->assertSame( $payload['content_rules'], \Newspack\Content_Rules::get_gate_content_rules( $original_id ) );
+		$this->assertSame( 'default', \Newspack\Content_Gate::get_newsletter_gate_settings( $original_id )['auto_signup'] );
 	}
 
 	/**
