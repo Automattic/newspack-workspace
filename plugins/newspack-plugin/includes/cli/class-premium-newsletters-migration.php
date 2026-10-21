@@ -67,9 +67,11 @@ class Premium_Newsletters_Migration {
 	 * with lists on both sides is split in two, with the same access rules: the gate
 	 * with the group's title keeps the modal lists and is set to Off, and a sibling
 	 * titled "<title> (auto-signup)" takes the rest and is set to On. When the run
-	 * can't tell (a list has no ESP list, or another group already uses the sibling's
-	 * title) the gate keeps its setting and the run prints how to set it by hand. A
-	 * gate already set to On or Off keeps that unless --set-auto-signup is passed.
+	 * can't tell (a list has no ESP list, or another plan's gate already has the
+	 * sibling's title) the gate keeps its setting and the run prints how to set it by
+	 * hand. A gate already set to On or Off keeps that unless --set-auto-signup is
+	 * passed, and so does a new sibling split from such a gate, which also hides its
+	 * lists from readers when that gate does.
 	 *
 	 * Dry-run by default; pass --live to write.
 	 *
@@ -101,7 +103,7 @@ class Premium_Newsletters_Migration {
 	 * : How long access lasts after a one-time purchase. Accepts "forever", "<n>days" or "<n>months". Each plan's own access length is read by default, so this is only needed for a plan whose access ends on a fixed calendar date, which is not a duration from the purchase. Applies to every such plan in the run.
 	 *
 	 * [--set-auto-signup]
-	 * : Apply the derived auto-signup setting to gates already set to On or Off. Without this the command reports the difference and leaves such a gate alone, because its setting is a publisher's choice rather than a migration artefact. A gate that follows the site setting is written either way.
+	 * : Apply the derived auto-signup setting to gates already set to On or Off, and to a new sibling split from one. Without this the command reports the difference and leaves such a gate alone, because its setting is a publisher's choice rather than a migration artefact. A gate that follows the site setting is written either way.
 	 *
 	 * [--yes]
 	 * : Answer yes to the pre-flight confirmation prompt shown when gates would be created alongside gates the same plans were migrated to individually. Required for non-interactive runs (cron, `ssh host "wp ..."`): with no terminal to answer the prompt, the command errors out rather than exiting silently mid-migration.
@@ -211,7 +213,6 @@ class Premium_Newsletters_Migration {
 			);
 		}
 
-		$summary         = [];
 		$skipped         = [];
 		$all_lists_plans = [];
 
@@ -298,10 +299,16 @@ class Premium_Newsletters_Migration {
 
 		// Split by auto-signup here, after the per-group warnings so a split group's
 		// are printed once, and before the prompt so the operator has seen every gate
-		// the run can't settle by the time they answer it. Every group's title is
-		// taken: gate identity is the title, so a sibling named like another group's
-		// gate would overwrite that gate's lists.
-		$taken_titles  = array_map( fn( $group ) => trim( strtolower( self::gate_title( $group ) ) ), array_values( $plan_groups ) );
+		// the run can't settle by the time they answer it. A --plan run groups every
+		// published plan as well, read-only and without warnings, to learn which
+		// titles the other plans' gates hold.
+		$site_plan_groups = $plan_groups;
+		if ( $plan_id ) {
+			$site_skipped         = [];
+			$site_all_lists_plans = [];
+			$site_plan_groups     = self::group_plans_by_lists( self::get_plans(), $site_skipped, $site_all_lists_plans, true );
+		}
+		$taken_titles  = self::taken_gate_titles( $plan_groups, $site_plan_groups );
 		$gate_payloads = [];
 		foreach ( $payloads as $payload ) {
 			$split = self::split_payload_by_auto_signup( $payload, $taken_titles );
@@ -347,102 +354,15 @@ class Premium_Newsletters_Migration {
 			);
 		}
 
-		// Every gate title is unique: the collision check above errors out over two
-		// groups sharing one, and a sibling is never named like a group. So the write
-		// loop can treat a title as naming one gate.
-		$titles_written = array_fill_keys( array_map( fn( $payload ) => trim( strtolower( $payload['title'] ) ), $gate_payloads ), true );
+		$titles_written = self::written_gate_keys( $gate_payloads );
 
 		$force_auto_signup = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'set-auto-signup', false );
 
-		$progress = \WP_CLI\Utils\make_progress_bar( 'Migrating premium newsletter gates', count( $gate_payloads ) );
+		// Every gate title is unique: the collision check above errors out over two
+		// groups sharing one, and a sibling is never named like a group. So the writes
+		// can treat a title as naming one gate.
+		$summary = self::write_gate_payloads( $gate_payloads, $existing_gates, $dry_run, $force_auto_signup );
 
-		foreach ( $gate_payloads as $payload ) {
-			$progress->tick();
-
-			$list_ids     = $payload['list_ids'];
-			$gate_title   = $payload['title'];
-			$gate_key     = trim( strtolower( $gate_title ) );
-			$has_purchase = $payload['has_purchase'];
-			$access_type  = $payload['access_type'];
-
-			// A null gate ID means the gate does not exist yet; the summary prints it as
-			// '(pending)' on a dry run, and the write path below fills it in on --live.
-			$action  = array_key_exists( $gate_key, $existing_gates ) ? 'updated' : 'created';
-			$gate_id = $existing_gates[ $gate_key ] ?? null;
-
-			$write_error = '';
-			if ( ! $dry_run ) {
-				if ( null === $gate_id ) {
-					$result = \Newspack\Content_Gate::create_gate(
-						[
-							'title'               => $payload['title'],
-							'status'              => 'publish',
-							'content_rules'       => $payload['content_rules'],
-							'content_rules_match' => $payload['content_rules_match'],
-							'registration'        => $payload['registration'],
-							'custom_access'       => $payload['custom_access'],
-						],
-						\Newspack\Content_Gate::GATE_CPT,
-						true
-					);
-					if ( \is_wp_error( $result ) ) {
-						$write_error = $result->get_error_message();
-					} else {
-						$gate_id = $result;
-					}
-				} else {
-					\Newspack\Content_Rules::update_gate_content_rules( $gate_id, $payload['content_rules'] );
-					\Newspack\Content_Rules::update_gate_content_rules_match( $gate_id, $payload['content_rules_match'] );
-					\Newspack\Content_Gate::update_registration_settings( $gate_id, $payload['registration'] );
-					\Newspack\Content_Gate::update_custom_access_settings( $gate_id, $payload['custom_access'] );
-				}
-			}
-
-			if ( '' !== $write_error ) {
-				WP_CLI::warning( sprintf( 'Failed to create gate "%s": %s', $gate_title, $write_error ) );
-				$summary[] = [
-					'plan_name'   => $gate_title,
-					'action'      => 'ERROR: ' . $write_error,
-					'gate_id'     => '—',
-					'lists'       => count( $list_ids ),
-					'access_type' => $access_type,
-					'auto_signup' => '—',
-				];
-				continue;
-			}
-
-			$auto_signup = self::apply_auto_signup( $gate_title, $gate_id, $payload['auto_signup'], $force_auto_signup, $dry_run );
-
-			$verification_issues = [];
-			if ( ! $dry_run && $gate_id ) {
-				$verification_issues = self::verify_migrated_gate( $gate_id, $has_purchase );
-				foreach ( $verification_issues as $issue ) {
-					WP_CLI::warning( sprintf( '"%s" (gate %d) will not restrict as intended: %s', $gate_title, $gate_id, $issue ) );
-				}
-			} elseif ( $dry_run ) {
-				$verification_issues = self::compute_pre_write_issues( $list_ids, $has_purchase, $payload['product_ids'], $gate_id );
-				foreach ( $verification_issues as $issue ) {
-					WP_CLI::warning( sprintf( '"%s" will not migrate correctly: %s', $gate_title, $issue ) );
-				}
-			}
-
-			if ( ! empty( $verification_issues ) ) {
-				$row_action = 'WARN: ' . implode( '; ', $verification_issues );
-			} else {
-				$row_action = $dry_run ? $action . ' (dry-run)' : $action;
-			}
-
-			$summary[] = [
-				'plan_name'   => $gate_title,
-				'action'      => $row_action,
-				'gate_id'     => $gate_id ?? '(pending)',
-				'lists'       => count( $list_ids ),
-				'access_type' => $access_type,
-				'auto_signup' => $auto_signup,
-			];
-		}
-
-		$progress->finish();
 		WP_CLI::line( '' );
 
 		WP_CLI::line( $dry_run ? '=== DRY RUN SUMMARY ===' : '=== MIGRATION SUMMARY ===' );
@@ -658,6 +578,24 @@ class Premium_Newsletters_Migration {
 	 */
 	private static function gate_title( array $group ): string {
 		return implode( ' | ', array_column( $group, 'name' ) );
+	}
+
+	/**
+	 * Gate titles an auto-signup sibling can't take.
+	 *
+	 * Gate identity is the title, so a sibling named like another group's gate would
+	 * overwrite that gate's lists. That holds on a --plan run too: it writes only the
+	 * one plan's gates, but every other plan's gate keeps its title, so the groups a
+	 * full run would write are counted as well as this run's.
+	 *
+	 * @param array<string,array> $plan_groups      This run's groups, map of fingerprint => plan descriptors.
+	 * @param array<string,array> $site_plan_groups The groups a full run would write, in the same shape.
+	 *
+	 * @return string[] Lower-cased gate titles.
+	 */
+	private static function taken_gate_titles( array $plan_groups, array $site_plan_groups ): array {
+		$groups = array_merge( array_values( $plan_groups ), array_values( $site_plan_groups ) );
+		return array_values( array_unique( array_map( fn( $group ) => trim( strtolower( self::gate_title( $group ) ) ), $groups ) ) );
 	}
 
 	/**
@@ -1226,6 +1164,22 @@ class Premium_Newsletters_Migration {
 	}
 
 	/**
+	 * The gate titles this run writes.
+	 *
+	 * Read from the payloads after the auto-signup split, so a sibling counts as
+	 * written. report_stale_gates() names every published gate missing from this,
+	 * and a sibling named there would be one the operator is told to retire,
+	 * leaving its lists behind no gate.
+	 *
+	 * @param array[] $gate_payloads Payloads from split_payload_by_auto_signup().
+	 *
+	 * @return array<string,bool> Lower-cased gate titles, as keys.
+	 */
+	private static function written_gate_keys( array $gate_payloads ): array {
+		return array_fill_keys( array_map( fn( $payload ) => trim( strtolower( $payload['title'] ) ), $gate_payloads ), true );
+	}
+
+	/**
 	 * Published premium newsletter gates whose titles this run did not write.
 	 *
 	 * @param array[]            $gates        Gate descriptors from Content_Gate::get_gates(),
@@ -1752,12 +1706,14 @@ class Premium_Newsletters_Migration {
 	 * @param array $skipped         Skipped-plan summary rows, appended to by reference.
 	 * @param array $all_lists_plans Names of plans restricting every list, appended to by
 	 *                               reference. The caller refuses the run over these.
+	 * @param bool  $quiet           Skip manual-only plans without warning about their
+	 *                               lists, for grouping plans the run won't write.
 	 *
 	 * @return array<string,array> Map of fingerprint => list of plan descriptors, each
 	 *                             [ 'pid', 'name', 'access_method', 'list_ids', 'product_ids',
 	 *                             'one_time_duration' ].
 	 */
-	private static function group_plans_by_lists( array $plan_ids, array &$skipped, array &$all_lists_plans ): array {
+	private static function group_plans_by_lists( array $plan_ids, array &$skipped, array &$all_lists_plans, bool $quiet = false ): array {
 		$plan_groups = [];
 
 		foreach ( $plan_ids as $pid ) {
@@ -1783,7 +1739,9 @@ class Premium_Newsletters_Migration {
 			$list_ids = self::extract_list_ids( $rules );
 
 			if ( 'manual-only' === $access_method ) {
-				$skipped[] = self::report_manual_only_plan( $plan_name, $list_ids );
+				if ( ! $quiet ) {
+					$skipped[] = self::report_manual_only_plan( $plan_name, $list_ids );
+				}
 				continue;
 			}
 
@@ -1831,19 +1789,25 @@ class Premium_Newsletters_Migration {
 	 * two partition the group's lists and carry its access rules unchanged, so every
 	 * reader the group admitted keeps every list.
 	 *
+	 * The sibling comes first, so it is written before an existing gate under the
+	 * group's title is narrowed: if the sibling can't be written, the existing gate
+	 * hasn't given up its lists yet ({@see write_gate_payloads()}).
+	 *
 	 * Two cases are left to the operator, as one gate with no setting to write and
 	 * instructions to print. A list with no ESP list can't be matched against the
-	 * modal, so its side is unknown. A sibling title that another group in this run
-	 * already uses can't be written: gate identity is the title, so the sibling would
-	 * overwrite that group's gate.
+	 * modal, so its side is unknown. A sibling title that another group uses can't be
+	 * written: gate identity is the title, so the sibling would overwrite that
+	 * group's gate.
 	 *
 	 * @param array    $payload      A payload from build_gate_payload().
-	 * @param string[] $taken_titles Lower-cased gate titles of every group in this run.
+	 * @param string[] $taken_titles Lower-cased gate titles, from taken_gate_titles().
 	 *
 	 * @return array 'payloads' are the gate payloads to write, each the input with
 	 *               'title', 'list_ids' and the newsletters rule's value narrowed, plus
 	 *               'auto_signup': 'on', 'off', or null to leave the gate's setting
-	 *               alone. 'instructions' is the warning to print, or null.
+	 *               alone. A sibling also carries 'split_from', the title of the gate
+	 *               it takes its lists from. 'instructions' is the warning to print,
+	 *               or null.
 	 */
 	private static function split_payload_by_auto_signup( array $payload, array $taken_titles ): array {
 		$title   = $payload['title'];
@@ -1887,7 +1851,7 @@ class Premium_Newsletters_Migration {
 			return [
 				'payloads'     => [ $narrow( $title, $payload['list_ids'], null ) ],
 				'instructions' => sprintf(
-					'"%1$s" mixes lists readers opt into (%2$s) with lists WooCommerce Memberships added readers to automatically (%3$s), but "%4$s" is already a gate title in this run, so it isn\'t split. Rename the plan behind "%4$s" and re-run to split it.',
+					'"%1$s" mixes lists readers opt into (%2$s) with lists WooCommerce Memberships added readers to automatically (%3$s), but "%4$s" is another plan\'s gate title, so it isn\'t split. Rename the plan behind "%4$s" and re-run to split it.',
 					$title,
 					implode( ', ', $derived['modal'] ),
 					implode( ', ', $derived['non_modal'] ),
@@ -1896,13 +1860,165 @@ class Premium_Newsletters_Migration {
 			];
 		}
 
+		$sibling               = $narrow( $sibling_title, $derived['non_modal'], 'on' );
+		$sibling['split_from'] = $title;
 		return [
 			'payloads'     => [
+				$sibling,
 				$narrow( $title, $derived['modal'], 'off' ),
-				$narrow( $sibling_title, $derived['non_modal'], 'on' ),
 			],
 			'instructions' => null,
 		];
+	}
+
+	/**
+	 * Write each gate payload, or on a dry run say what writing it would do.
+	 *
+	 * Runs after every pre-flight check and prompt, so it reads no input and
+	 * decides nothing the operator has to answer.
+	 *
+	 * A sibling this run creates takes lists from the gate it splits from, and when
+	 * that gate exists, the choices made on it were made for those lists too: the
+	 * sibling starts with its hide setting, and apply_auto_signup() treats its
+	 * auto-signup as one set by hand. Read when the sibling is written, which is
+	 * before that gate's own payload ({@see split_payload_by_auto_signup()}).
+	 *
+	 * When a sibling can't be created, the gate it splits from is left as it was.
+	 * Narrowed without its sibling, it would leave the sibling's lists behind no
+	 * gate, which opens them to every reader.
+	 *
+	 * @param array[] $gate_payloads     Payloads from split_payload_by_auto_signup(), in write order.
+	 * @param array   $existing_gates    Map of lower-cased title => ID of the gates published before the run.
+	 * @param bool    $dry_run           Whether this is a dry run.
+	 * @param bool    $force_auto_signup Whether --set-auto-signup was passed.
+	 *
+	 * @return array[] One summary row per payload.
+	 */
+	private static function write_gate_payloads( array $gate_payloads, array $existing_gates, bool $dry_run, bool $force_auto_signup ): array {
+		$summary = [];
+		// Lower-cased title => title of the sibling that failed, for each gate to leave alone.
+		$failed_splits = [];
+		$progress      = \WP_CLI\Utils\make_progress_bar( 'Migrating premium newsletter gates', count( $gate_payloads ) );
+
+		foreach ( $gate_payloads as $payload ) {
+			$progress->tick();
+
+			$list_ids     = $payload['list_ids'];
+			$gate_title   = $payload['title'];
+			$gate_key     = trim( strtolower( $gate_title ) );
+			$has_purchase = $payload['has_purchase'];
+			$access_type  = $payload['access_type'];
+
+			// A null gate ID means the gate does not exist yet; the summary prints it as
+			// '(pending)' on a dry run, and the write path below fills it in on --live.
+			$action  = array_key_exists( $gate_key, $existing_gates ) ? 'updated' : 'created';
+			$gate_id = $existing_gates[ $gate_key ] ?? null;
+
+			if ( isset( $failed_splits[ $gate_key ] ) ) {
+				WP_CLI::warning(
+					sprintf(
+						'Skipped "%1$s": "%2$s", which takes the rest of its lists, could not be created. Re-run to write both.',
+						$gate_title,
+						$failed_splits[ $gate_key ]
+					)
+				);
+				$summary[] = [
+					'plan_name'   => $gate_title,
+					'action'      => sprintf( 'ERROR: not written, "%s" failed', $failed_splits[ $gate_key ] ),
+					'gate_id'     => $gate_id ?? '—',
+					'lists'       => count( $list_ids ),
+					'access_type' => $access_type,
+					'auto_signup' => '—',
+				];
+				continue;
+			}
+
+			$split_from = null;
+			$source_key = isset( $payload['split_from'] ) ? trim( strtolower( $payload['split_from'] ) ) : null;
+			if ( null !== $source_key && null === $gate_id && isset( $existing_gates[ $source_key ] ) ) {
+				$split_from = [
+					'id'    => $existing_gates[ $source_key ],
+					'title' => $payload['split_from'],
+				] + \Newspack\Content_Gate::get_newsletter_gate_settings( $existing_gates[ $source_key ] );
+			}
+
+			$write_error = '';
+			if ( ! $dry_run ) {
+				if ( null === $gate_id ) {
+					$gate_args = [
+						'title'               => $payload['title'],
+						'status'              => 'publish',
+						'content_rules'       => $payload['content_rules'],
+						'content_rules_match' => $payload['content_rules_match'],
+						'registration'        => $payload['registration'],
+						'custom_access'       => $payload['custom_access'],
+					];
+					if ( null !== $split_from ) {
+						$gate_args['hide_lists'] = $split_from['hide_lists'];
+					}
+					$result = \Newspack\Content_Gate::create_gate( $gate_args, \Newspack\Content_Gate::GATE_CPT, true );
+					if ( \is_wp_error( $result ) ) {
+						$write_error = $result->get_error_message();
+					} else {
+						$gate_id = $result;
+					}
+				} else {
+					\Newspack\Content_Rules::update_gate_content_rules( $gate_id, $payload['content_rules'] );
+					\Newspack\Content_Rules::update_gate_content_rules_match( $gate_id, $payload['content_rules_match'] );
+					\Newspack\Content_Gate::update_registration_settings( $gate_id, $payload['registration'] );
+					\Newspack\Content_Gate::update_custom_access_settings( $gate_id, $payload['custom_access'] );
+				}
+			}
+
+			if ( '' !== $write_error ) {
+				WP_CLI::warning( sprintf( 'Failed to create gate "%s": %s', $gate_title, $write_error ) );
+				if ( null !== $source_key ) {
+					$failed_splits[ $source_key ] = $gate_title;
+				}
+				$summary[] = [
+					'plan_name'   => $gate_title,
+					'action'      => 'ERROR: ' . $write_error,
+					'gate_id'     => '—',
+					'lists'       => count( $list_ids ),
+					'access_type' => $access_type,
+					'auto_signup' => '—',
+				];
+				continue;
+			}
+
+			$auto_signup = self::apply_auto_signup( $gate_title, $gate_id, $payload['auto_signup'], $force_auto_signup, $dry_run, $split_from );
+
+			$verification_issues = [];
+			if ( ! $dry_run && $gate_id ) {
+				$verification_issues = self::verify_migrated_gate( $gate_id, $has_purchase );
+				foreach ( $verification_issues as $issue ) {
+					WP_CLI::warning( sprintf( '"%s" (gate %d) will not restrict as intended: %s', $gate_title, $gate_id, $issue ) );
+				}
+			} elseif ( $dry_run ) {
+				$verification_issues = self::compute_pre_write_issues( $list_ids, $has_purchase, $payload['product_ids'], $gate_id );
+				foreach ( $verification_issues as $issue ) {
+					WP_CLI::warning( sprintf( '"%s" will not migrate correctly: %s', $gate_title, $issue ) );
+				}
+			}
+
+			if ( ! empty( $verification_issues ) ) {
+				$row_action = 'WARN: ' . implode( '; ', $verification_issues );
+			} else {
+				$row_action = $dry_run ? $action . ' (dry-run)' : $action;
+			}
+
+			$summary[] = [
+				'plan_name'   => $gate_title,
+				'action'      => $row_action,
+				'gate_id'     => $gate_id ?? '(pending)',
+				'lists'       => count( $list_ids ),
+				'access_type' => $access_type,
+				'auto_signup' => $auto_signup,
+			];
+		}
+
+		$progress->finish();
+		return $summary;
 	}
 
 	/**
@@ -1915,18 +2031,25 @@ class Premium_Newsletters_Migration {
 	 * subscribes readers to lists at the ESP once the access check is live, so it
 	 * takes --set-auto-signup to say the operator means it.
 	 *
+	 * A sibling this run creates has no setting of its own yet, but an On or Off on
+	 * the gate it splits from was set for its lists too. One that differs from the
+	 * derived value is kept the same way, by writing it to the sibling.
+	 *
 	 * Checked before the dry-run branch, so a dry run predicts the warning rather
 	 * than promising a write.
 	 *
-	 * @param string      $title   The gate title, for the warning.
-	 * @param int|null    $gate_id The gate, or null for one a dry run would create.
-	 * @param string|null $derived 'on' or 'off', or null when the run can't tell.
-	 * @param bool        $force   Whether --set-auto-signup was passed.
-	 * @param bool        $dry_run Whether this is a dry run.
+	 * @param string      $title      The gate title, for the warning.
+	 * @param int|null    $gate_id    The gate, or null for one a dry run would create.
+	 * @param string|null $derived    'on' or 'off', or null when the run can't tell.
+	 * @param bool        $force      Whether --set-auto-signup was passed.
+	 * @param bool        $dry_run    Whether this is a dry run.
+	 * @param array|null  $split_from For a sibling this run creates from an existing
+	 *                                gate's lists, that gate's 'id', 'title' and
+	 *                                'auto_signup'. Null otherwise.
 	 *
 	 * @return string The Auto-signup label for the summary table.
 	 */
-	private static function apply_auto_signup( string $title, ?int $gate_id, ?string $derived, bool $force, bool $dry_run ): string {
+	private static function apply_auto_signup( string $title, ?int $gate_id, ?string $derived, bool $force, bool $dry_run, ?array $split_from = null ): string {
 		$current = $gate_id ? \Newspack\Content_Gate::get_newsletter_gate_settings( $gate_id )['auto_signup'] : 'default';
 
 		if ( null === $derived ) {
@@ -1935,9 +2058,9 @@ class Premium_Newsletters_Migration {
 			}
 			// Said the same way for a gate that exists and one that doesn't yet, so a dry
 			// run and the live run that follows it print the same label. It names the
-			// resolved value because "follow site setting" alone doesn't tell the operator
+			// resolved value because "use site setting" alone doesn't tell the operator
 			// whether readers will be signed up.
-			return \Newspack\Premium_Newsletters::is_site_auto_signup_on() ? 'follow site setting (on)' : 'follow site setting (off)';
+			return \Newspack\Premium_Newsletters::is_site_auto_signup_on() ? 'use site setting (on)' : 'use site setting (off)';
 		}
 
 		if ( 'default' !== $current && $current !== $derived && ! $force ) {
@@ -1951,6 +2074,24 @@ class Premium_Newsletters_Migration {
 				)
 			);
 			return 'kept ' . $current;
+		}
+
+		$inherited = $split_from['auto_signup'] ?? 'default';
+		if ( 'default' !== $inherited && $inherited !== $derived && ! $force ) {
+			WP_CLI::warning(
+				sprintf(
+					'"%1$s" takes its lists from "%2$s" (gate %3$d), which has auto-signup set to %4$s, and this run derives %5$s. Setting it to %4$s: re-run with --set-auto-signup to apply the derived value.',
+					$title,
+					$split_from['title'],
+					$split_from['id'],
+					$inherited,
+					$derived
+				)
+			);
+			if ( ! $dry_run ) {
+				\Newspack\Content_Gate::update_newsletter_gate_settings( $gate_id, [ 'auto_signup' => $inherited ] );
+			}
+			return 'kept ' . $inherited;
 		}
 
 		if ( $dry_run ) {

@@ -1269,18 +1269,17 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	/**
 	 * Build the payload a one-plan group restricting the given lists would write.
 	 *
-	 * A purchase plan, so the payload carries paid access rules: a split must hand
-	 * those to both gates unchanged.
+	 * A purchase plan named "Premium", so the payload carries paid access rules: a
+	 * split must hand those to both gates unchanged.
 	 *
-	 * @param int[]  $list_ids The lists the plan restricts.
-	 * @param string $title    The plan name, which becomes the gate title.
+	 * @param int[] $list_ids The lists the plan restricts.
 	 *
 	 * @return array The gate payload.
 	 */
-	private function make_gate_payload( array $list_ids, string $title = 'Premium' ): array {
+	private function make_gate_payload( array $list_ids ): array {
 		return $this->invoke_private_static(
 			'build_gate_payload',
-			[ [ $this->make_payload_plan( 'purchase', [ $this->product ], $list_ids, $title ) ] ]
+			[ [ $this->make_payload_plan( 'purchase', [ $this->product ], $list_ids, 'Premium' ) ] ]
 		);
 	}
 
@@ -1317,21 +1316,6 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * With custom lists off there is no modal, so no list was left to opt-in, whatever
-	 * the saved list selection says.
-	 */
-	public function test_split_payload_sets_on_when_custom_lists_are_off() {
-		update_option( 'newspack_reader_activation_use_custom_lists', 0 );
-		update_option( 'newspack_reader_activation_newsletter_lists', [ [ 'id' => $this->public_id_for( $this->list_a ) ] ] );
-		$payload = $this->make_gate_payload( [ $this->list_a ] );
-
-		$split = $this->invoke_private_static( 'split_payload_by_auto_signup', [ $payload, [ 'premium' ] ] );
-
-		$this->assertCount( 1, $split['payloads'] );
-		$this->assertSame( 'on', $split['payloads'][0]['auto_signup'] );
-	}
-
-	/**
 	 * A gate's auto-signup covers all its lists, so a group whose lists sit on both
 	 * sides of the modal becomes two gates. Each must restrict exactly its own lists
 	 * and admit exactly the readers the group admitted: everything but the title, the
@@ -1344,8 +1328,10 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 		$split = $this->invoke_private_static( 'split_payload_by_auto_signup', [ $payload, [ 'premium' ] ] );
 
 		$this->assertNull( $split['instructions'] );
-		$this->assertCount( 2, $split['payloads'] );
-		[ $opt_in, $auto_signup ] = $split['payloads'];
+		// The sibling comes first, so it is written before a gate already titled like
+		// the group is narrowed: if the sibling fails, nothing has moved yet.
+		$this->assertSame( [ 'Premium (auto-signup)', 'Premium' ], array_column( $split['payloads'], 'title' ) );
+		[ $auto_signup, $opt_in ] = $split['payloads'];
 
 		$this->assertSame( 'Premium', $opt_in['title'] );
 		$this->assertSame( [ $this->list_a ], $opt_in['list_ids'] );
@@ -1363,6 +1349,7 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 		$this->assertSame( 'Premium (auto-signup)', $auto_signup['title'] );
 		$this->assertSame( [ $this->list_b ], $auto_signup['list_ids'] );
 		$this->assertSame( 'on', $auto_signup['auto_signup'] );
+		$this->assertSame( 'Premium', $auto_signup['split_from'] );
 		$this->assertSame(
 			[
 				[
@@ -1373,10 +1360,8 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 			$auto_signup['content_rules']
 		);
 
-		$narrowed_keys = array_flip( [ 'title', 'list_ids', 'content_rules', 'auto_signup' ] );
+		$narrowed_keys = array_flip( [ 'title', 'list_ids', 'content_rules', 'auto_signup', 'split_from' ] );
 		foreach ( $split['payloads'] as $narrowed ) {
-			$this->assertSame( $payload['registration'], $narrowed['registration'] );
-			$this->assertSame( $payload['custom_access'], $narrowed['custom_access'] );
 			$this->assertSame( array_diff_key( $payload, $narrowed_keys ), array_diff_key( $narrowed, $narrowed_keys ) );
 		}
 	}
@@ -1400,6 +1385,24 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 		// plans again, so the fix named is the one that survives a re-run.
 		$this->assertStringContainsString( 'Rename the plan behind "Premium (auto-signup)" and re-run to split it.', $split['instructions'] );
 		$this->assertStringNotContainsString( 'duplicate', $split['instructions'] );
+	}
+
+	/**
+	 * A --plan run writes only that plan's gates, but another plan's gate keeps its
+	 * title whatever the run's scope. A sibling named like it would overwrite it, so
+	 * the group is left whole, as on a full run.
+	 */
+	public function test_plan_scoped_split_leaves_the_group_whole_when_another_plan_has_the_sibling_title() {
+		$this->set_signup_modal_lists( [ $this->list_a ] );
+		$plan_groups      = [ 'scoped' => [ $this->make_named_plan( 'Premium' ) ] ];
+		$site_plan_groups = $plan_groups + [ 'other' => [ $this->make_named_plan( 'Premium (auto-signup)' ) ] ];
+
+		$taken_titles = $this->invoke_private_static( 'taken_gate_titles', [ $plan_groups, $site_plan_groups ] );
+		$split        = $this->invoke_private_static( 'split_payload_by_auto_signup', [ $this->make_gate_payload( [ $this->list_a, $this->list_b ] ), $taken_titles ] );
+
+		$this->assertCount( 1, $split['payloads'] );
+		$this->assertNull( $split['payloads'][0]['auto_signup'] );
+		$this->assertStringContainsString( 'Rename the plan behind "Premium (auto-signup)" and re-run to split it.', $split['instructions'] );
 	}
 
 	/**
@@ -1487,31 +1490,108 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	public function test_apply_auto_signup_labels_a_gate_following_the_site_setting_with_its_value() {
 		$gate_id = $this->create_premium_gate( [ $this->list_a ] );
 
-		$this->assertSame( 'follow site setting (on)', $this->invoke_private_static( 'apply_auto_signup', [ 'Pending', null, null, false, true ] ) );
-		$this->assertSame( 'follow site setting (on)', $this->invoke_private_static( 'apply_auto_signup', [ 'Premium fixture', $gate_id, null, false, false ] ) );
+		$this->assertSame( 'use site setting (on)', $this->invoke_private_static( 'apply_auto_signup', [ 'Pending', null, null, false, true ] ) );
+		$this->assertSame( 'use site setting (on)', $this->invoke_private_static( 'apply_auto_signup', [ 'Premium fixture', $gate_id, null, false, false ] ) );
 
 		update_option( \Newspack\Premium_Newsletters::AUTO_SIGNUP_OPTION, 0 );
 
-		$this->assertSame( 'follow site setting (off)', $this->invoke_private_static( 'apply_auto_signup', [ 'Pending', null, null, false, true ] ) );
-		$this->assertSame( 'follow site setting (off)', $this->invoke_private_static( 'apply_auto_signup', [ 'Premium fixture', $gate_id, null, false, false ] ) );
+		$this->assertSame( 'use site setting (off)', $this->invoke_private_static( 'apply_auto_signup', [ 'Pending', null, null, false, true ] ) );
+		$this->assertSame( 'use site setting (off)', $this->invoke_private_static( 'apply_auto_signup', [ 'Premium fixture', $gate_id, null, false, false ] ) );
 	}
 
 	/**
-	 * A sibling gate is one this run wrote, so naming it as untouched would tell the
-	 * operator to retire a gate the migration depends on.
+	 * Whether --set-auto-signup was passed, and what a new sibling's auto-signup and
+	 * summary label should then be when the gate it splits from is set to Off.
+	 *
+	 * @return array[]
 	 */
-	public function test_report_stale_gates_counts_a_sibling_title_as_written() {
+	public function data_new_sibling_auto_signup() {
+		return [
+			'kept without --set-auto-signup'  => [ false, 'off', 'kept off' ],
+			'replaced with --set-auto-signup' => [ true, 'on', 'on' ],
+		];
+	}
+
+	/**
+	 * A sibling this run creates takes lists from a gate that already exists, and the
+	 * choices made on that gate were made for those lists too. Hiding them carries
+	 * over, and an auto-signup set by hand is kept the way it would be on the gate
+	 * itself: only --set-auto-signup replaces it.
+	 *
+	 * @dataProvider data_new_sibling_auto_signup
+	 *
+	 * @param bool   $force                Whether --set-auto-signup was passed.
+	 * @param string $expected_auto_signup The sibling's stored auto-signup.
+	 * @param string $expected_label       The sibling's summary label.
+	 */
+	public function test_write_gate_payloads_carries_the_split_gates_choices_to_a_new_sibling( bool $force, string $expected_auto_signup, string $expected_label ) {
+		$this->set_signup_modal_lists( [ $this->list_a ] );
+		$original_id = $this->create_premium_gate( [ $this->list_a, $this->list_b ], false, 'Premium' );
+		\Newspack\Content_Gate::update_newsletter_gate_settings(
+			$original_id,
+			[
+				'auto_signup' => 'off',
+				'hide_lists'  => true,
+			]
+		);
+		// A registration-only plan: creating a gate with paid access builds its layout
+		// from product data the WooCommerce mocks don't carry.
+		$payload = $this->invoke_private_static( 'build_gate_payload', [ [ $this->make_payload_plan( 'signup', [], [ $this->list_a, $this->list_b ], 'Premium' ) ] ] );
+		$split   = $this->invoke_private_static( 'split_payload_by_auto_signup', [ $payload, [ 'premium' ] ] );
+
+		$rows = $this->invoke_private_static( 'write_gate_payloads', [ $split['payloads'], [ 'premium' => $original_id ], false, $force ] );
+
+		$this->assertSame( 'created', $rows[0]['action'] );
+		$this->assertSame(
+			[
+				'auto_signup' => $expected_auto_signup,
+				'hide_lists'  => true,
+			],
+			\Newspack\Content_Gate::get_newsletter_gate_settings( $rows[0]['gate_id'] )
+		);
+		$this->assertSame( $expected_label, $rows[0]['auto_signup'] );
+	}
+
+	/**
+	 * When the sibling can't be created, the gate titled like the group is left as it
+	 * was. Narrowed without its sibling, it would leave the moved lists behind no gate.
+	 */
+	public function test_write_gate_payloads_leaves_the_split_gate_alone_when_its_sibling_fails() {
+		$this->set_signup_modal_lists( [ $this->list_a ] );
+		$original_id  = $this->create_premium_gate( [ $this->list_a, $this->list_b ], true, 'Premium' );
+		$rules_before = \Newspack\Content_Rules::get_gate_content_rules( $original_id );
+		$split        = $this->invoke_private_static( 'split_payload_by_auto_signup', [ $this->make_gate_payload( [ $this->list_a, $this->list_b ] ), [ 'premium' ] ] );
+		// Every post insert fails from here, so the sibling can't be created.
+		add_filter( 'wp_insert_post_empty_content', '__return_true' );
+
+		$rows = $this->invoke_private_static( 'write_gate_payloads', [ $split['payloads'], [ 'premium' => $original_id ], false, false ] );
+
+		$this->assertSame( $rules_before, \Newspack\Content_Rules::get_gate_content_rules( $original_id ) );
+		$this->assertStringStartsWith( 'ERROR', $rows[0]['action'] );
+		$this->assertStringStartsWith( 'ERROR', $rows[1]['action'] );
+	}
+
+	/**
+	 * A sibling is a gate this run writes, so it must not be named as untouched: that
+	 * would tell the operator to retire a gate the migration depends on.
+	 */
+	public function test_written_gate_keys_include_a_split_groups_sibling() {
 		$this->set_signup_modal_lists( [ $this->list_a ] );
 		$split = $this->invoke_private_static(
 			'split_payload_by_auto_signup',
 			[ $this->make_gate_payload( [ $this->list_a, $this->list_b ] ), [ 'premium' ] ]
 		);
-		$this->create_premium_gate( [ $this->list_b ], false, $split['payloads'][1]['title'] );
-		$written_keys = array_fill_keys( array_map( fn( $payload ) => trim( strtolower( $payload['title'] ) ), $split['payloads'] ), true );
 
-		$this->invoke_private_static( 'report_stale_gates', [ $written_keys, false, false ] );
+		$written_keys = $this->invoke_private_static( 'written_gate_keys', [ $split['payloads'] ] );
+		ksort( $written_keys );
 
-		$this->assertSame( [], \WP_CLI::$warnings );
+		$this->assertSame(
+			[
+				'premium'               => true,
+				'premium (auto-signup)' => true,
+			],
+			$written_keys
+		);
 	}
 
 	/**
