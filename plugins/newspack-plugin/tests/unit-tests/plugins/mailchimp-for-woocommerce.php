@@ -105,7 +105,8 @@ class Newspack_Test_Mailchimp_For_WooCommerce extends WP_UnitTestCase {
 	/**
 	 * A profile update can run inside another, for example when a callback updates a second user.
 	 * The inner skip finds the handler already removed, and the plugin's handler is still back in
-	 * place once both updates finish.
+	 * place once both updates finish. The nested update runs at priority 100, the one point where
+	 * the outer update has removed the handler and not yet restored it.
 	 */
 	public function test_profile_update_restores_the_handler_after_a_nested_update() {
 		$reader       = $this->create_customer( 'outer@example.test', 'subscribed' );
@@ -118,6 +119,7 @@ class Newspack_Test_Mailchimp_For_WooCommerce extends WP_UnitTestCase {
 
 		do_action( 'profile_update', $reader->ID, $reader );
 
+		$this->assertSame( [], MailChimp_Service::instance()->updated_users );
 		$this->assertSame( 100, has_action( 'profile_update', [ MailChimp_Service::instance(), 'handleUserUpdated' ] ) );
 	}
 
