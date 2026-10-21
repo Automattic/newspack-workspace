@@ -309,8 +309,8 @@ class Premium_Newsletters_Migration {
 			$site_all_lists_plans = [];
 			$site_plan_groups     = self::group_plans_by_lists( self::get_plans(), $site_skipped, $site_all_lists_plans, true );
 		}
-		$planned = self::plan_gate_payloads( $payloads, self::taken_gate_titles( $plan_groups, $site_plan_groups ) );
-		foreach ( $planned['instructions'] as $instructions ) {
+		$to_write = self::gate_payloads_to_write( $payloads, self::taken_gate_titles( $plan_groups, $site_plan_groups ) );
+		foreach ( $to_write['instructions'] as $instructions ) {
 			WP_CLI::warning( $instructions );
 		}
 
@@ -355,7 +355,7 @@ class Premium_Newsletters_Migration {
 		// Every gate title is unique: the collision check above errors out over two
 		// groups sharing one, and a sibling is never named like a group. So the writes
 		// can treat a title as naming one gate.
-		$summary = self::write_gate_payloads( $planned['gate_payloads'], $existing_gates, $dry_run, $force_auto_signup );
+		$summary = self::write_gate_payloads( $to_write['gate_payloads'], $existing_gates, $dry_run, $force_auto_signup );
 
 		WP_CLI::line( '' );
 
@@ -380,7 +380,7 @@ class Premium_Newsletters_Migration {
 		);
 
 		WP_CLI::line( '' );
-		self::report_stale_gates( $planned['written_keys'], $dry_run, (bool) $plan_id );
+		self::report_stale_gates( $to_write['written_keys'], $dry_run, (bool) $plan_id );
 
 		WP_CLI::line( '' );
 		$failed        = count(
@@ -1805,7 +1805,7 @@ class Premium_Newsletters_Migration {
 	 *               split_payload_by_auto_signup() returned; 'written_keys', from
 	 *               written_gate_keys().
 	 */
-	private static function plan_gate_payloads( array $payloads, array $taken_titles ): array {
+	private static function gate_payloads_to_write( array $payloads, array $taken_titles ): array {
 		$gate_payloads = [];
 		$instructions  = [];
 		foreach ( $payloads as $payload ) {

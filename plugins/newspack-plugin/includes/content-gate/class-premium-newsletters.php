@@ -517,7 +517,7 @@ class Premium_Newsletters {
 	 * reader from when they save, so saving that form can never unsubscribe them from it.
 	 *
 	 * Admin screens keep every list, so an editor can still pick any of them. An admin-ajax
-	 * request leaves hidden lists out ({@see is_reader_facing_request()}), and keeps
+	 * request leaves hidden lists out ({@see leaves_hidden_lists_out()}), and keeps
 	 * restricted lists as every admin request does.
 	 *
 	 * @param array $lists The lists.
@@ -525,7 +525,7 @@ class Premium_Newsletters {
 	 * @return array The filtered lists.
 	 */
 	public static function filter_subscription_lists( $lists ) {
-		if ( ! self::is_reader_facing_request() ) {
+		if ( ! self::leaves_hidden_lists_out() ) {
 			return $lists;
 		}
 
@@ -560,19 +560,19 @@ class Premium_Newsletters {
 	 * Whether lists hidden from readers are left out of this request.
 	 *
 	 * Admin screens show them, so an editor can still pick any list. An admin-ajax
-	 * request isn't an admin screen. Background jobs run there (Action Scheduler's
-	 * async runner, the Data Events remote-post fallback) as well as under WP-Cron,
-	 * where is_admin() is already false. Treating admin-ajax the same way means a job
-	 * that rewrites a reader's lists sees the same lists whichever runner handles it,
-	 * so it can't drop a hidden list. No first-party reader page renders through
-	 * admin-ajax.
+	 * request isn't an admin screen. Background jobs run under admin-ajax (Action
+	 * Scheduler's async runner, Data Events' remote-post dispatch) as well as WP-Cron,
+	 * where is_admin() is false. Treating admin-ajax the same way leaves hidden lists
+	 * out under either runner, so neither removes a reader from one. Restricted lists
+	 * are unaffected: filter_subscription_lists() keeps them on any admin request. No
+	 * first-party reader page renders through admin-ajax.
 	 *
 	 * The lists filter and the list-gates filter both ask this. The Subscribe block's
 	 * "show premium lists" mode only works when they agree.
 	 *
 	 * @return bool
 	 */
-	private static function is_reader_facing_request(): bool {
+	private static function leaves_hidden_lists_out(): bool {
 		return ! is_admin() || wp_doing_ajax();
 	}
 
@@ -690,7 +690,7 @@ class Premium_Newsletters {
 	 * Uses the same matcher that decides access, so a gate is listed here exactly
 	 * when it can restrict the list: published, with registration or paid access
 	 * switched on, and content rules that match. The one exception is a request that
-	 * isn't an admin screen ({@see is_reader_facing_request()}), where a list hidden
+	 * isn't an admin screen ({@see leaves_hidden_lists_out()}), where a list hidden
 	 * from readers is left out of the map, so the Subscribe block's "show premium
 	 * lists" mode never renders it.
 	 *
@@ -720,7 +720,7 @@ class Premium_Newsletters {
 			}
 			// The editor reads this map from an admin request and keeps the gate, so it
 			// can still name a hidden list.
-			if ( self::is_reader_facing_request() && self::is_list_hidden( $list->get_id() ) ) {
+			if ( self::leaves_hidden_lists_out() && self::is_list_hidden( $list->get_id() ) ) {
 				continue;
 			}
 			$gates = Content_Restriction_Control::get_post_gates( $list->get_id() );
@@ -940,8 +940,8 @@ class Premium_Newsletters {
 	 * the reader up. With every gate on "default" both paths reduce to the site-wide option,
 	 * so that is returned without judging the reader against any gate.
 	 *
-	 * Callers ask only about a list a published gate names. On a site where no gate sets
-	 * its own auto-signup, the answer for any other list is the site-wide option too.
+	 * Callers ask only about a list a published gate names. For any other list the answer
+	 * is the site-wide option while no gate sets its own auto-signup, and false once one does.
 	 *
 	 * @param int $list_id List post ID.
 	 * @param int $user_id Reader to decide for.

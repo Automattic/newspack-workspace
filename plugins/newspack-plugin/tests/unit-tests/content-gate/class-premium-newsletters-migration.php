@@ -1633,14 +1633,14 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	 * A sibling is a gate this run writes, so it must not be named as untouched: that
 	 * would tell the operator to retire a gate the migration depends on.
 	 */
-	public function test_planned_written_keys_include_a_split_groups_sibling() {
+	public function test_gate_payloads_to_write_include_a_split_groups_sibling() {
 		$this->set_signup_modal_lists( [ $this->list_a ] );
 
-		$planned = $this->invoke_private_static(
-			'plan_gate_payloads',
+		$to_write = $this->invoke_private_static(
+			'gate_payloads_to_write',
 			[ [ $this->make_gate_payload( [ $this->list_a, $this->list_b ] ) ], [ 'premium' ] ]
 		);
-		$written_keys = $planned['written_keys'];
+		$written_keys = $to_write['written_keys'];
 		ksort( $written_keys );
 
 		$this->assertSame(

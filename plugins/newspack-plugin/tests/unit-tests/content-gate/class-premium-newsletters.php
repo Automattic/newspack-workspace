@@ -2632,8 +2632,8 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	/**
 	 * An admin-ajax request isn't an admin screen. Background jobs run there as well
 	 * as under WP-Cron, so it leaves a hidden list out as the front end does, and a
-	 * job sees the same lists whichever runner handles it. It keeps a restricted
-	 * list, as every admin request does.
+	 * job under either runner can't remove a reader from that list. It keeps a
+	 * restricted list, as every admin request does.
 	 */
 	public function test_filter_subscription_lists_drops_hidden_lists_in_admin_ajax() {
 		list( $hidden_id )     = $this->create_list_behind_gate( true );
