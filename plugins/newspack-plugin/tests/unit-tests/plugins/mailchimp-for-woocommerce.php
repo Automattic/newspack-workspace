@@ -137,18 +137,22 @@ class Newspack_Test_Mailchimp_For_WooCommerce extends WP_UnitTestCase {
 	 * The lookup runs once per customer in a request, and only for a registered customer the
 	 * plugin neither opted in nor looked up: it sends opted-in customers as subscribed, checks
 	 * Mailchimp itself for guests, and reads the status first in a sync of existing contacts.
+	 * A failed lookup is tried again on the next order.
 	 */
 	public function test_order_looks_up_each_customer_once_and_only_when_needed() {
 		$opted_in_customer = $this->create_customer( 'opted-in@example.test', 'subscribed', '1' );
 		$synced_customer   = $this->create_customer( 'synced@example.test', 'transactional', '' );
 		$repeat_customer   = $this->create_customer( 'repeat@example.test', 'transactional', '' );
+		$failed_customer   = $this->create_customer( 'failed@example.test', null, '' );
 
 		$this->filter_order( ( new MailChimp_WooCommerce_Customer( $opted_in_customer, $opted_in_customer->user_email ) )->setOptInStatus( true ) );
 		$this->filter_order( new MailChimp_WooCommerce_Customer( null, 'guest@example.test' ) );
 		$this->filter_order( ( new MailChimp_WooCommerce_Customer( $synced_customer, $synced_customer->user_email ) )->setMailchimpStatus( 'transactional' ) );
 		$this->filter_order( new MailChimp_WooCommerce_Customer( $repeat_customer, $repeat_customer->user_email ) );
 		$this->filter_order( new MailChimp_WooCommerce_Customer( $repeat_customer, $repeat_customer->user_email ) );
+		$this->filter_order( new MailChimp_WooCommerce_Customer( $failed_customer, $failed_customer->user_email ) );
+		$this->filter_order( new MailChimp_WooCommerce_Customer( $failed_customer, $failed_customer->user_email ) );
 
-		$this->assertSame( [ 'repeat@example.test' ], $GLOBALS['newspack_test_mailchimp_status_lookups'] );
+		$this->assertSame( [ 'repeat@example.test', 'failed@example.test', 'failed@example.test' ], $GLOBALS['newspack_test_mailchimp_status_lookups'] );
 	}
 }

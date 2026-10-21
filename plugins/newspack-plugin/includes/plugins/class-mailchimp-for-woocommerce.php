@@ -18,14 +18,14 @@ class Mailchimp_For_WooCommerce {
 	 *
 	 * @var bool
 	 */
-	private static $removed_profile_update_handler = false;
+	private static bool $removed_profile_update_handler = false;
 
 	/**
 	 * Mailchimp statuses read during this request, keyed by email address.
 	 *
-	 * @var array
+	 * @var array<string, string|null>
 	 */
-	private static $mailchimp_statuses = [];
+	private static array $mailchimp_statuses = [];
 
 	/**
 	 * Initialize hooks and filters.
@@ -63,7 +63,9 @@ class Mailchimp_For_WooCommerce {
 			return;
 		}
 		if ( in_array( get_user_meta( $user_id, 'mailchimp_woocommerce_is_subscribed', true ), [ '', '0' ], true ) ) {
-			self::$removed_profile_update_handler = remove_action( 'profile_update', [ \MailChimp_Service::instance(), 'handleUserUpdated' ], 100 );
+			if ( remove_action( 'profile_update', [ \MailChimp_Service::instance(), 'handleUserUpdated' ], 100 ) ) {
+				self::$removed_profile_update_handler = true;
+			}
 		}
 	}
 
@@ -92,13 +94,14 @@ class Mailchimp_For_WooCommerce {
 	 */
 	public static function keep_subscribed_customer_subscribed( $order ) {
 		$customer = $order->getCustomer();
-		// A status is already set when MC4WC read it, as a sync of existing contacts only does.
+		// MC4WC sets the Mailchimp status only when it read it, which only a sync of existing contacts does.
 		if ( ! $customer || ! $customer->getWordpressUser() || $customer->getOptInStatus() || null !== $customer->getMailchimpStatus() ) {
 			return $order;
 		}
-		// A sync sends many orders in one request, often several from the same customer.
+		// A sync sends many orders in one request, often several from the same customer. A failed
+		// lookup returns null, which isset() treats as missing, so the next order tries again.
 		$email = $customer->getEmailAddress();
-		if ( ! array_key_exists( $email, self::$mailchimp_statuses ) ) {
+		if ( ! isset( self::$mailchimp_statuses[ $email ] ) ) {
 			self::$mailchimp_statuses[ $email ] = \mailchimp_get_subscriber_status( $email );
 		}
 		if ( 'subscribed' === self::$mailchimp_statuses[ $email ] ) {
