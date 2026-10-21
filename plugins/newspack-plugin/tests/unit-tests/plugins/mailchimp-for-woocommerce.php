@@ -176,4 +176,40 @@ class Newspack_Test_Mailchimp_For_WooCommerce extends WP_UnitTestCase {
 
 		$this->assertSame( [ 'repeat@example.test', 'unlisted@example.test', 'unlisted@example.test' ], $GLOBALS['newspack_test_mailchimp_status_lookups'] );
 	}
+
+	/**
+	 * A plugin version without the customer methods the integration reads gets its orders back
+	 * unchanged, so its order sync keeps running as it would without Newspack.
+	 */
+	public function test_order_is_left_alone_when_the_plugin_lacks_the_customer_methods() {
+		$customer         = $this->create_customer( 'renamed@example.test', 'subscribed', '' );
+		$renamed_customer = new class( $customer ) {
+			/**
+			 * The customer's WordPress user.
+			 *
+			 * @var WP_User
+			 */
+			public $user;
+
+			/**
+			 * Constructor.
+			 *
+			 * @param WP_User $user WordPress user.
+			 */
+			public function __construct( $user ) {
+				$this->user = $user;
+			}
+
+			/**
+			 * Get the WordPress user.
+			 */
+			public function getWordpressUser() { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid -- The plugin's method name.
+				return $this->user;
+			}
+		};
+		$order = new MailChimp_WooCommerce_Order( $renamed_customer );
+
+		$this->assertSame( $order, apply_filters( 'mailchimp_filter_ecommerce_order', $order, null ) );
+		$this->assertSame( [], $GLOBALS['newspack_test_mailchimp_status_lookups'] );
+	}
 }

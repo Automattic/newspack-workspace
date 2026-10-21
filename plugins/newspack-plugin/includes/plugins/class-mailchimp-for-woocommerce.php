@@ -93,9 +93,18 @@ class Mailchimp_For_WooCommerce {
 	 * @return \MailChimp_WooCommerce_Order
 	 */
 	public static function keep_subscribed_customer_subscribed( $order ) {
-		$customer = $order->getCustomer();
+		// A plugin release that renames these leaves its orders as they would be without this filter.
+		$customer = method_exists( $order, 'getCustomer' ) ? $order->getCustomer() : null;
+		foreach ( [ 'getWordpressUser', 'getOptInStatus', 'setOptInStatus', 'getMailchimpStatus', 'getEmailAddress' ] as $customer_method ) {
+			if ( ! $customer || ! method_exists( $customer, $customer_method ) ) {
+				return $order;
+			}
+		}
+		if ( ! function_exists( 'mailchimp_get_subscriber_status' ) ) {
+			return $order;
+		}
 		// MC4WC sets the Mailchimp status only when it read it, which only a sync of existing contacts does.
-		if ( ! $customer || ! $customer->getWordpressUser() || $customer->getOptInStatus() || null !== $customer->getMailchimpStatus() ) {
+		if ( ! $customer->getWordpressUser() || $customer->getOptInStatus() || null !== $customer->getMailchimpStatus() ) {
 			return $order;
 		}
 		// A sync sends many orders in one request, often several from the same customer. The lookup
