@@ -241,9 +241,11 @@ function decode( str ) {
  * signup form, in seconds since the epoch. It is never synced and is a
  * segmentation hint, not proof of a subscription; the server-managed
  * `is_newsletter_subscriber` is the latter. For a logged-in reader, campaigns
- * read it only for a day, after which the server value has reached the browser
- * and a reader who later unsubscribes stops matching. A logged-out reader never
- * receives that value, so for them the hint keeps counting.
+ * read it only for a day. Where the site can check the ESP, the server value
+ * has reached the browser by then, and a reader who later unsubscribes stops
+ * matching. Where it can't, the signup stops counting after the day. A
+ * logged-out reader never receives that value, so for them the hint keeps
+ * counting.
  *
  * @type {string}
  */

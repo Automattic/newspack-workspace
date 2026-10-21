@@ -38,9 +38,10 @@ const SIGNUP_HINT_LIFETIME = 24 * 60 * 60;
  *
  * The hint is the signup time in seconds, and any value that isn't a number is
  * not a hint. It is not cleared when a reader later unsubscribes. For a
- * logged-in reader it only counts for a day, because by then the
- * server-managed `is_newsletter_subscriber` reaches the browser and has caught
- * up. A logged-out reader never receives that value, so the hint keeps counting.
+ * logged-in reader it only counts for a day. Where the site can check the ESP,
+ * the server-managed `is_newsletter_subscriber` has reached the browser and
+ * caught up by then; where it can't, the signup stops counting after the day.
+ * A logged-out reader never receives that value, so the hint keeps counting.
  *
  * @param {*}       hint       Stored `newsletter_signup_client` value.
  * @param {boolean} isLoggedIn Whether the reader is authenticated.
