@@ -85,6 +85,8 @@ class Complimentary_Access {
 			add_filter( $filter, [ __CLASS__, 'filter_is_purchasable' ], 1000, 2 );
 		}
 		add_filter( 'woocommerce_variation_is_visible', [ __CLASS__, 'filter_variation_is_visible' ], 10, 4 );
+		add_filter( 'woocommerce_get_children', [ __CLASS__, 'filter_visible_children' ], 10, 3 );
+		add_filter( 'woocommerce_can_subscription_be_updated_to_cancelled', [ __CLASS__, 'filter_reader_can_cancel' ], 10, 2 );
 
 		add_action( 'woocommerce_before_subscription_object_save', [ __CLASS__, 'stamp' ] );
 		add_action( 'woocommerce_before_order_object_save', [ __CLASS__, 'stamp' ] );
@@ -250,6 +252,48 @@ class Complimentary_Access {
 	 */
 	public static function filter_variation_is_visible( $visible, $variation_id, $parent_id, $variation ) {
 		return $visible && ! self::is_complimentary_product( $variation );
+	}
+
+	/**
+	 * Leave flagged variations out of a variable product's visible children.
+	 *
+	 * WooCommerce builds the product's price range from them, and Subscriptions picks
+	 * its "From:" price from them when it syncs the product, so a $0 comp variation
+	 * would otherwise advertise a paid plan as "From: $0.00". Subscriptions stores that
+	 * price at sync, which runs whenever a variation is saved.
+	 *
+	 * @param int[]       $children     Child IDs.
+	 * @param \WC_Product $product      Variable product.
+	 * @param bool        $visible_only Whether these are the visible children.
+	 *
+	 * @return int[]
+	 */
+	public static function filter_visible_children( $children, $product, $visible_only = false ) {
+		// Only a variable subscription's variations can be flagged.
+		if ( ! $visible_only || ! is_array( $children ) || ! $product instanceof \WC_Product || ! $product->is_type( 'variable-subscription' ) ) {
+			return $children;
+		}
+		return array_values( array_filter( $children, fn( $child_id ) => ! self::is_complimentary_product( $child_id ) ) );
+	}
+
+	/**
+	 * Stop a reader cancelling their own complimentary subscription.
+	 *
+	 * The access is granted by the publisher, so only the publisher ends it. This hides
+	 * the Cancel action in My Account and refuses a cancel request made from it. Store
+	 * managers, and code running without a logged-in reader, can still cancel.
+	 *
+	 * @param bool             $can_cancel   Whether the subscription can be cancelled.
+	 * @param \WC_Subscription $subscription Subscription.
+	 *
+	 * @return bool
+	 */
+	public static function filter_reader_can_cancel( $can_cancel, $subscription ) {
+		if ( ! $can_cancel || ! self::is_complimentary_order( $subscription ) ) {
+			return $can_cancel;
+		}
+		$user_id = get_current_user_id();
+		return ! $user_id || (int) $subscription->get_customer_id() !== $user_id || current_user_can( 'manage_woocommerce' );
 	}
 
 	/**
