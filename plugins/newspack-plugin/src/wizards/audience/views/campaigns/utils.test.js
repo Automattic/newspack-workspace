@@ -94,6 +94,8 @@ describe( 'segmentDescription', () => {
 		// Once the list names resolve, it renders the human-readable label.
 		await waitFor( () => expect( container.textContent ).toContain( 'Not subscribed to:' ) );
 		await waitFor( () => expect( container.textContent ).toContain( 'Weekly Digest' ) );
+		// Names come from the unfiltered config, so a list a gate hides from readers keeps its name.
+		expect( apiFetch ).toHaveBeenCalledWith( { path: '/newspack-newsletters/v1/lists_config?context=edit' } );
 	} );
 
 	it( 'names saved subscription products as deleted when none of them exist any more', async () => {
