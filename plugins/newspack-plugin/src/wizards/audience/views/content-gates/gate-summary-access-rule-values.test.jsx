@@ -334,9 +334,14 @@ describe( 'gate summary, reader data rule', () => {
 
 describe( 'gate summary, untrusted promoted fields', () => {
 	it( 'marks a list-valued field', () => {
-		renderPaidAccess( gateWith( { slug: 'esp__PLAN', value: [ 'gold' ] } ), { esp__PLAN: [ { value: 'gold', label: 'Gold' } ] } );
+		renderPaidAccess( gateWith( { slug: 'esp__PLAN', value: [ 'gold', 'silver' ] } ), {
+			esp__PLAN: [
+				{ value: 'gold', label: 'Gold' },
+				{ value: 'silver', label: 'Silver' },
+			],
+		} );
 
-		expect( screen.getByText( /Gold.*\(matches no reader\)/ ) ).toBeInTheDocument();
+		expect( screen.getByText( /Gold \(#gold\) or Silver \(#silver\) \(matches no reader\)/ ) ).toBeInTheDocument();
 	} );
 
 	it( 'marks a boolean field', () => {

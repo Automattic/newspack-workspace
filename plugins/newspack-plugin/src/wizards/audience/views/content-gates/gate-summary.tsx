@@ -253,7 +253,7 @@ const formatAccessRuleValue = ( rule: GateAccessRule, optionsBySlug: Record< str
 	// one marker, not two.
 	if ( config?.is_untrusted ) {
 		const shown = config.is_range ? formatRangeBounds( rule.value ) : formatKnownAccessRuleValue( rule, optionsBySlug );
-		return unmatched( Array.isArray( shown ) ? shown.join( ', ' ) : shown );
+		return unmatched( Array.isArray( shown ) ? shown.join( VALUE_SEPARATOR ) : shown );
 	}
 	const text = formatKnownAccessRuleValue( rule, optionsBySlug );
 	if ( 'string' === typeof text && '' !== text && getUntrustedReaderDataKeys( config, rule.value ).length > 0 ) {
