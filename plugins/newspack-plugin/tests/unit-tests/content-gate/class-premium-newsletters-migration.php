@@ -1396,6 +1396,10 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 		$this->assertNull( $split['payloads'][0]['auto_signup'] );
 		$this->assertSame( [ $this->list_a, $this->list_b ], $split['payloads'][0]['list_ids'] );
 		$this->assertStringContainsString( '"Premium (auto-signup)"', $split['instructions'] );
+		// Splitting by hand is undone by the next run, which writes the gates from the
+		// plans again, so the fix named is the one that survives a re-run.
+		$this->assertStringContainsString( 'Rename the plan behind "Premium (auto-signup)" and re-run to split it.', $split['instructions'] );
+		$this->assertStringNotContainsString( 'duplicate', $split['instructions'] );
 	}
 
 	/**
@@ -1473,7 +1477,23 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 
 		$this->assertSame( 'off', \Newspack\Content_Gate::get_newsletter_gate_settings( $gate_id )['auto_signup'] );
 		$this->assertSame( 'off', $label );
-		$this->assertSame( 'follow site setting', $this->invoke_private_static( 'apply_auto_signup', [ 'Pending', null, null, false, true ] ) );
+	}
+
+	/**
+	 * A gate following the site setting is labelled with the value it resolves to, so
+	 * the operator reads whether readers will be signed up rather than having to look
+	 * the option up. The site-wide option defaults to on.
+	 */
+	public function test_apply_auto_signup_labels_a_gate_following_the_site_setting_with_its_value() {
+		$gate_id = $this->create_premium_gate( [ $this->list_a ] );
+
+		$this->assertSame( 'follow site setting (on)', $this->invoke_private_static( 'apply_auto_signup', [ 'Pending', null, null, false, true ] ) );
+		$this->assertSame( 'follow site setting (on)', $this->invoke_private_static( 'apply_auto_signup', [ 'Premium fixture', $gate_id, null, false, false ] ) );
+
+		update_option( \Newspack\Premium_Newsletters::AUTO_SIGNUP_OPTION, 0 );
+
+		$this->assertSame( 'follow site setting (off)', $this->invoke_private_static( 'apply_auto_signup', [ 'Pending', null, null, false, true ] ) );
+		$this->assertSame( 'follow site setting (off)', $this->invoke_private_static( 'apply_auto_signup', [ 'Premium fixture', $gate_id, null, false, false ] ) );
 	}
 
 	/**
@@ -1795,6 +1815,48 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 			],
 			$superseded
 		);
+	}
+
+	/**
+	 * A plan an earlier run split by auto-signup left two gates, its own and its
+	 * "(auto-signup)" sibling. Merging the plan into a bigger group supersedes both,
+	 * and the sibling is named under its title as written.
+	 */
+	public function test_find_superseded_gates_names_an_earlier_sibling() {
+		$group          = [ $this->make_named_plan( 'Gold' ), $this->make_named_plan( 'Silver' ) ];
+		$existing_gates = [
+			'gold'               => 11,
+			'gold (auto-signup)' => 12,
+			'silver'             => 22,
+		];
+
+		$superseded = $this->invoke_private_static( 'find_superseded_gates', [ $group, 'gold | silver', $existing_gates ] );
+
+		$this->assertSame(
+			[
+				'Gold'               => 11,
+				'Gold (auto-signup)' => 12,
+				'Silver'             => 22,
+			],
+			$superseded
+		);
+	}
+
+	/**
+	 * Only a sibling of a merged plan is superseded: a sibling that sits alone, with no
+	 * plain gate for its plan, is still named, and one belonging to a plan outside
+	 * the group is not.
+	 */
+	public function test_find_superseded_gates_names_a_lone_sibling_and_ignores_other_plans_siblings() {
+		$group          = [ $this->make_named_plan( 'Gold' ), $this->make_named_plan( 'Silver' ) ];
+		$existing_gates = [
+			'gold (auto-signup)'   => 12,
+			'bronze (auto-signup)' => 33,
+		];
+
+		$superseded = $this->invoke_private_static( 'find_superseded_gates', [ $group, 'gold | silver', $existing_gates ] );
+
+		$this->assertSame( [ 'Gold (auto-signup)' => 12 ], $superseded );
 	}
 
 	/**

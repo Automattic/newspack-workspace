@@ -1187,7 +1187,9 @@ class Premium_Newsletters_Migration {
 	 * When regrouping merges plans a previous run migrated separately, the merged
 	 * title matches no existing gate — so the run creates a new gate while the
 	 * originals stay published and keep restricting the same lists. Naming them lets
-	 * the operator retire them.
+	 * the operator retire them. A plan whose lists an earlier run split by auto-signup
+	 * left two gates, the plan's own and its AUTO_SIGNUP_SIBLING_SUFFIX sibling, so
+	 * both are named.
 	 *
 	 * @param array[] $group          Plan descriptors, each carrying a 'name' key.
 	 * @param string  $gate_key       The group's own lower-cased gate title.
@@ -1209,6 +1211,15 @@ class Premium_Newsletters_Migration {
 			if ( isset( $existing_gates[ $plan_key ] ) ) {
 				$seen[ $plan_key ]           = true;
 				$superseded[ $plan['name'] ] = $existing_gates[ $plan_key ];
+			}
+
+			// The sibling an earlier split wrote keeps restricting the plan's lists
+			// just as the plan's own gate does, so it needs retiring too.
+			$sibling_key = $plan_key . strtolower( self::AUTO_SIGNUP_SIBLING_SUFFIX );
+			if ( $sibling_key !== $gate_key && ! isset( $seen[ $sibling_key ] ) && isset( $existing_gates[ $sibling_key ] ) ) {
+				$sibling_title                = $plan['name'] . self::AUTO_SIGNUP_SIBLING_SUFFIX;
+				$seen[ $sibling_key ]         = true;
+				$superseded[ $sibling_title ] = $existing_gates[ $sibling_key ];
 			}
 		}
 		return $superseded;
@@ -1876,7 +1887,7 @@ class Premium_Newsletters_Migration {
 			return [
 				'payloads'     => [ $narrow( $title, $payload['list_ids'], null ) ],
 				'instructions' => sprintf(
-					'"%1$s" mixes lists readers opt into (%2$s) with lists WooCommerce Memberships added readers to automatically (%3$s), but "%4$s" is already a gate title in this run, so it isn\'t split. To split it by hand: duplicate the gate in Newsletters > Premium, move lists %3$s to the copy, then set the copy\'s auto-signup to On and the original\'s to Off.',
+					'"%1$s" mixes lists readers opt into (%2$s) with lists WooCommerce Memberships added readers to automatically (%3$s), but "%4$s" is already a gate title in this run, so it isn\'t split. Rename the plan behind "%4$s" and re-run to split it.',
 					$title,
 					implode( ', ', $derived['modal'] ),
 					implode( ', ', $derived['non_modal'] ),
@@ -1919,9 +1930,14 @@ class Premium_Newsletters_Migration {
 		$current = $gate_id ? \Newspack\Content_Gate::get_newsletter_gate_settings( $gate_id )['auto_signup'] : 'default';
 
 		if ( null === $derived ) {
+			if ( 'default' !== $current ) {
+				return $current;
+			}
 			// Said the same way for a gate that exists and one that doesn't yet, so a dry
-			// run and the live run that follows it print the same label.
-			return 'default' === $current ? 'follow site setting' : $current;
+			// run and the live run that follows it print the same label. It names the
+			// resolved value because "follow site setting" alone doesn't tell the operator
+			// whether readers will be signed up.
+			return (bool) \get_option( \Newspack\Premium_Newsletters::AUTO_SIGNUP_OPTION, 1 ) ? 'follow site setting (on)' : 'follow site setting (off)';
 		}
 
 		if ( 'default' !== $current && $current !== $derived && ! $force ) {
