@@ -2686,6 +2686,35 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A list marked exempt is open to everyone and Access Control does not govern it,
+	 * so a gate that also covers it can't hide it.
+	 */
+	public function test_exempt_list_is_not_hidden() {
+		list( $exempt_id )  = $this->create_list_behind_gate( true );
+		list( $visible_id ) = $this->create_list_behind_gate( false );
+		update_post_meta( $exempt_id, Content_Restriction_Control::IS_EXEMPT_META_KEY, true );
+		wp_set_current_user( $this->create_reader( true ) );
+
+		$this->assertFalse( Premium_Newsletters::is_list_hidden( $exempt_id ) );
+
+		$result = Premium_Newsletters::filter_subscription_lists(
+			[
+				new \Newspack\Newsletters\Subscription_List( $exempt_id ),
+				new \Newspack\Newsletters\Subscription_List( $visible_id ),
+			]
+		);
+		$this->assertSame(
+			[ $exempt_id, $visible_id ],
+			array_map(
+				function ( $list ) {
+					return $list->get_id();
+				},
+				$result
+			)
+		);
+	}
+
+	/**
 	 * A published gate with neither registration nor paid access on restricts
 	 * nothing, so it hides nothing either.
 	 */

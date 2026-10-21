@@ -836,8 +836,10 @@ class Premium_Newsletters {
 	 *
 	 * Asked of the gates that currently restrict the list, so a draft gate, or one with
 	 * neither registration nor paid access on, hides nothing. One gate that hides the
-	 * list is enough, even when another gate covering it shows it. Hiding only changes
-	 * what readers see: the access check still adds and removes readers on a hidden list.
+	 * list is enough, even when another gate covering it shows it. A list marked exempt
+	 * is never hidden: Access Control does not govern it, and the sign-up check and the
+	 * list markers already treat it that way. Hiding only changes what readers see: the
+	 * access check still adds and removes readers on a hidden list.
 	 *
 	 * @param int $list_id List post ID.
 	 *
@@ -846,6 +848,11 @@ class Premium_Newsletters {
 	public static function is_list_hidden( int $list_id ): bool {
 		// Gates are inert until they take over from Memberships: see is_access_control_active().
 		if ( ! self::is_access_control_active() ) {
+			return false;
+		}
+		// The same test the sign-up check and filter_list_gates() use, so an exempt list
+		// that a gate also covers reads as ungated here too.
+		if ( ! Content_Restriction_Control::post_has_restrictions( false, $list_id ) ) {
 			return false;
 		}
 		foreach ( Content_Restriction_Control::get_post_gates( $list_id ) as $gate ) {
