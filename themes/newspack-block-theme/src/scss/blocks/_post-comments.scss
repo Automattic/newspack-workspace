@@ -41,14 +41,16 @@
 	}
 
 	.comment-form-cookies-consent {
-		gap: var(--wp--preset--spacing--20);
+		gap: var(--wp--custom--spacing--25);
 
 		input[type="checkbox"] {
-			margin-top: 2px !important;
+			font-size: var(--wp--preset--font-size--small);
+			line-height: var(--wp--custom--line-height--small);
+			margin-top: calc((1lh - var(--wp--custom--spacing--35)) / 2) !important;
 		}
 
 		label {
-			font-weight: normal;
+			font-weight: 400;
 			margin-bottom: 0;
 		}
 	}
