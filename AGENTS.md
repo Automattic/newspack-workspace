@@ -93,7 +93,7 @@ Direct pushes to `main` are blocked.
 Everything goes through the `n` script at the repository root. It is context-aware: run it from inside `plugins/<project>/`, `themes/<project>/`, `additional-sites-html/<site>/` or `manager-html/` and it targets that project or site, otherwise the main site. It works in interactive and non-interactive (CI, agent) contexts. `ncd <name>` jumps between projects (install with `n cd-install`).
 
 ```bash
-n start [8.2]                 # Start containers (default PHP 8.3)
+n start                       # Start containers
 n stop | n restart
 
 n build [name]                # Build current project, or a named one ('newspack-' optional)
@@ -118,7 +118,7 @@ Run any command with `--help` for its full options.
 
 ```bash
 cp default.env .env
-./build-image.sh              # or ./build-image-82.sh for PHP 8.2
+./build-image.sh              # add --no-cache to pick up a PHP patch release
 n start && n install
 n ci-build all
 n setup --yes                 # Bootstrap site with content and plugins

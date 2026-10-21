@@ -15,4 +15,5 @@ docker build \
     --build-arg APACHE_RUN_USER="$APACHE_USER" \
     --build-arg PHPUNIT_VERSION=9.5.10 \
     --progress=plain \
+    "$@" \
     .
