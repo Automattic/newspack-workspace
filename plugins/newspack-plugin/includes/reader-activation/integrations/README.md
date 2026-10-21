@@ -828,7 +828,10 @@ add_action(
             plugins_url( 'dist/registration.js', MY_PLUGIN_FILE ),
             [ 'newspack-reader-activation' ],
             MY_PLUGIN_VERSION,
-            true
+            [
+                'strategy'  => 'defer',
+                'in_footer' => true,
+            ]
         );
     }
 );
