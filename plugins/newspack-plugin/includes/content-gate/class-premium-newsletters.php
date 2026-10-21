@@ -661,7 +661,9 @@ class Premium_Newsletters {
 	 *
 	 * Uses the same matcher that decides access, so a gate is listed here exactly
 	 * when it can restrict the list: published, with registration or paid access
-	 * switched on, and content rules that match.
+	 * switched on, and content rules that match. The one exception is on the front
+	 * end, where a list hidden from readers is left out of the map, so the Subscribe
+	 * block's "show premium lists" mode never renders it.
 	 *
 	 * @param array[] $list_gates Gates keyed by public list ID.
 	 *
@@ -895,9 +897,10 @@ class Premium_Newsletters {
 	 * and does not admit them. One admitting gate set to "on" is enough to sign them up.
 	 *
 	 * When no gate admits the reader by its own rules, they were let in some other way:
-	 * a staff account, another plugin's bypass, or a gate with no access mode on. The
-	 * lists' own gates decide then, and any of them resolving to "on" signs the reader
-	 * up. With every gate on "default" both paths reduce to the site-wide option.
+	 * a staff account that skips access checks, a user who can edit the list post, a
+	 * list whose gates have no access mode on, or every gate refusing without a layout
+	 * to show. The lists' own gates decide then, and any of them resolving to "on" signs
+	 * the reader up. With every gate on "default" both paths reduce to the site-wide option.
 	 *
 	 * @param int $list_id List post ID.
 	 * @param int $user_id Reader to decide for.
