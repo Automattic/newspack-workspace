@@ -563,9 +563,11 @@ class Premium_Newsletters {
 	 * request isn't an admin screen. Background jobs run under admin-ajax (Action
 	 * Scheduler's async runner, Data Events' remote-post dispatch) as well as WP-Cron,
 	 * where is_admin() is false. Treating admin-ajax the same way leaves hidden lists
-	 * out under either runner, so neither removes a reader from one. Restricted lists
-	 * are unaffected: filter_subscription_lists() keeps them on any admin request. No
-	 * first-party reader page renders through admin-ajax.
+	 * out under either runner, so a job that rewrites a reader's lists from this set
+	 * can't drop a hidden one. The access check still adds and removes readers on
+	 * hidden lists ({@see is_list_hidden()}). Restricted lists are unaffected:
+	 * filter_subscription_lists() keeps them on any admin request. No first-party
+	 * reader page renders through admin-ajax.
 	 *
 	 * The lists filter and the list-gates filter both ask this. The Subscribe block's
 	 * "show premium lists" mode only works when they agree.

@@ -67,11 +67,11 @@ class Premium_Newsletters_Migration {
 	 * with lists on both sides is split in two, with the same access rules: the gate
 	 * with the group's title keeps the modal lists and is set to Off, and a sibling
 	 * titled "<title> (auto-signup)" takes the rest and is set to On. When the run
-	 * can't tell (a list has no ESP list, or another plan or its gate already uses the
-	 * sibling's title) the gate keeps its setting and the run prints how to set it by
-	 * hand. A gate already set to On or Off keeps that unless --set-auto-signup is
-	 * passed. A new sibling starts with the hide setting of the gate it splits from.
-	 * It keeps that gate's On or Off unless --set-auto-signup is passed.
+	 * can't settle it (a list has no ESP list, or another plan or its gate already uses
+	 * the sibling's title) the gate keeps its setting and the run prints what to do. A
+	 * gate already set to On or Off keeps that unless --set-auto-signup is passed. A new
+	 * sibling starts with the hide setting of the gate it splits from. It keeps that
+	 * gate's On or Off unless --set-auto-signup is passed.
 	 *
 	 * Dry-run by default; pass --live to write.
 	 *
