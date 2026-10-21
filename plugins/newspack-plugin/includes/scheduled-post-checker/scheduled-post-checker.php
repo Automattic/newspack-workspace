@@ -72,9 +72,9 @@ function nspc_get_post_types() {
  *
  * Customizer changesets are age-limited and queried separately: a changeset that's days
  * old can overwrite settings someone has changed since, so anything past the window is
- * left for this job to ignore. That only stops this job's own replay — WP core still
- * treats an aged-out changeset as active, so a human in the Customizer can build a new
- * save on it, and this checker will then rescue that save too.
+ * left for this job to ignore. That only stops this job's own replay: the next time
+ * someone opens the Customizer, WordPress Core publishes the newest stranded changeset,
+ * whatever its age, and tells them it just published, so they can review and adjust it.
  */
 function nspc_run_check() {
 	$post_types    = nspc_get_post_types();
