@@ -234,7 +234,7 @@ function render_gated_list_item( $list, $attrs, $checkbox_id ) {
  * @return array|null {
  *     Null when the block has nothing to render.
  *
- *     @type array[]  $config     Lists the reader can sign up for, keyed by public ID.
+ *     @type array[]  $config     The lists config from get_lists_config(), keyed by public ID.
  *     @type string[] $accessible Public IDs of the block's lists the reader can sign up for.
  *     @type array[]  $gated      The block's lists the reader may see but not join, keyed by public ID.
  *     @type string[] $order      Public IDs in the order their rows render.
@@ -282,8 +282,8 @@ function get_block_lists( $attrs ) {
 	// withholds those from the filtered config, so they are the premium lists the
 	// unfiltered read has and the filtered one lacks. Woo Memberships leaves them
 	// in the config and removes them from the block's available lists instead. In
-	// both cases the access check stays the only judge. A list withheld for any
-	// other reason stays hidden: showing its title here would undo that.
+	// both cases the access check stays the only judge. A list no gate reports
+	// stays hidden, whatever removed it: showing its title here would undo that.
 	$gated = [];
 	if ( $show_premium ) {
 		$all_lists = \Newspack_Newsletters_Subscription::get_unfiltered_lists_config();

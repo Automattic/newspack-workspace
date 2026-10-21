@@ -153,12 +153,18 @@ class Woocommerce_Memberships {
 	 * This lets the Newsletter Subscription Form block mark and show premium lists
 	 * while Memberships controls access, so publishers can set the block up before
 	 * moving to Access Control. Access Control's premium newsletter gates report
-	 * through the same filter but stand down while Memberships is active, so only
+	 * through the same filter but stand down while Memberships is active (see
+	 * Premium_Newsletters::is_access_control_active() in newspack-plugin), so only
 	 * one of the two answers at a time.
 	 *
 	 * A list is reported exactly when filter_lists() would check access to it, so
 	 * the premium marker agrees with sign-up, including for a list Memberships
 	 * marks as public.
+	 *
+	 * In Memberships' "Hide completely" mode, a reader without access never gets a
+	 * list a plan restricts by name: Memberships leaves it out of the list query.
+	 * The block then shows that reader no premium row for it, which is the point of
+	 * that mode, so nothing here works around it.
 	 *
 	 * @param array[] $list_gates Gates keyed by public list ID.
 	 * @return array[] Gates keyed by public list ID. Each gate is a plan with `id`
@@ -180,7 +186,9 @@ class Woocommerce_Memberships {
 						'id'    => (int) $plan->get_id(),
 						'title' => (string) $plan->get_name(),
 					];
-					// Plan names are for the editor. Readers never get an edit link.
+					// The link opens the plan's own edit screen, so the plan's
+					// capabilities decide who gets it, not manage_options as for
+					// Access Control's wizard link.
 					if ( current_user_can( 'edit_post', $plan->get_id() ) ) {
 						$edit_url = get_edit_post_link( $plan->get_id(), 'raw' );
 						if ( $edit_url ) {
