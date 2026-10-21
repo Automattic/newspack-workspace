@@ -163,7 +163,7 @@ start() {
         compose_files+=(-f docker-compose.override.yml)
     fi
     # Compose never refreshes an image it already has. Offline, the current one is used.
-    docker compose "${compose_files[@]}" pull --quiet --ignore-pull-failures adminer >/dev/null 2>&1
+    docker compose "${compose_files[@]}" pull --quiet --ignore-pull-failures adminer mailpit >/dev/null 2>&1
     docker compose "${compose_files[@]}" up -d
 
     # Create shared network for inter-container communication.
