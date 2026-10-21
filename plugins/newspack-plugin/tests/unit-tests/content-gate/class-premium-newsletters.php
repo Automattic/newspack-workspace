@@ -2590,6 +2590,208 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	// =========================================================================
+	// Per-gate list hiding — is_list_hidden()
+	// =========================================================================
+
+	/**
+	 * Create a premium newsletter list behind a gate that hides its lists.
+	 *
+	 * @param bool $hide Whether the gate hides its lists from readers.
+	 *
+	 * @return int[] The list post ID, then the gate post ID.
+	 */
+	private function create_list_behind_gate( bool $hide ): array {
+		$list_id = $this->create_premium_list();
+		$gate_id = $this->create_newsletter_gate( [ 100 ], [ $list_id ] );
+		$this->set_gate_list_settings( $gate_id, [ 'hide_lists' => $hide ] );
+		return [ $list_id, $gate_id ];
+	}
+
+	/**
+	 * A reader who has access still doesn't get a hidden list in the lists shown to
+	 * them, while the lists of other gates stay.
+	 */
+	public function test_filter_subscription_lists_drops_a_hidden_list_the_reader_can_access() {
+		list( $hidden_id )  = $this->create_list_behind_gate( true );
+		list( $visible_id ) = $this->create_list_behind_gate( false );
+		wp_set_current_user( $this->create_reader( true ) );
+
+		$result = Premium_Newsletters::filter_subscription_lists(
+			[
+				new \Newspack\Newsletters\Subscription_List( $hidden_id ),
+				new \Newspack\Newsletters\Subscription_List( $visible_id ),
+			]
+		);
+
+		// Had the reader lacked access, the visible list would be gone too.
+		$this->assertCount( 1, $result );
+		$this->assertSame( $visible_id, $result[0]->get_id() );
+	}
+
+	/**
+	 * Admin screens keep every list, so an editor can still pick a hidden list in
+	 * the block editor and the Newsletters settings.
+	 */
+	public function test_filter_subscription_lists_keeps_hidden_lists_in_admin() {
+		list( $hidden_id )  = $this->create_list_behind_gate( true );
+		list( $visible_id ) = $this->create_list_behind_gate( false );
+		wp_set_current_user( $this->create_reader( true ) );
+		set_current_screen( 'dashboard' );
+
+		$result = Premium_Newsletters::filter_subscription_lists(
+			[
+				new \Newspack\Newsletters\Subscription_List( $hidden_id ),
+				new \Newspack\Newsletters\Subscription_List( $visible_id ),
+			]
+		);
+
+		$this->assertSame(
+			[ $hidden_id, $visible_id ],
+			array_map(
+				function ( $list ) {
+					return $list->get_id();
+				},
+				$result
+			)
+		);
+	}
+
+	/**
+	 * One gate that hides a list is enough, even when another gate covering the
+	 * same list shows it.
+	 */
+	public function test_list_is_hidden_when_any_gate_hides_it() {
+		list( $list_id )  = $this->create_list_behind_gate( true );
+		$shown_gate_id    = $this->create_newsletter_gate( [ 200 ], [ $list_id ] );
+		$this->set_gate_list_settings( $shown_gate_id, [ 'hide_lists' => false ] );
+		list( $other_id ) = $this->create_list_behind_gate( false );
+
+		$this->assertTrue( Premium_Newsletters::is_list_hidden( $list_id ) );
+		$this->assertFalse( Premium_Newsletters::is_list_hidden( $other_id ), 'A list no gate hides is shown.' );
+	}
+
+	/**
+	 * A draft gate restricts nothing, so it hides nothing either.
+	 */
+	public function test_draft_gate_does_not_hide_its_lists() {
+		list( $list_id, $gate_id ) = $this->create_list_behind_gate( true );
+		wp_update_post(
+			[
+				'ID'          => $gate_id,
+				'post_status' => 'draft',
+			]
+		);
+
+		$this->assertFalse( Premium_Newsletters::is_list_hidden( $list_id ) );
+	}
+
+	/**
+	 * A published gate with neither registration nor paid access on restricts
+	 * nothing, so it hides nothing either.
+	 */
+	public function test_gate_without_an_access_mode_does_not_hide_its_lists() {
+		list( $list_id, $gate_id ) = $this->create_list_behind_gate( true );
+		Content_Gate::update_custom_access_settings( $gate_id, [ 'active' => false ] );
+
+		$this->assertFalse( Premium_Newsletters::is_list_hidden( $list_id ) );
+	}
+
+	/**
+	 * With Audience Management off, gates restrict nothing, so nothing is hidden.
+	 */
+	public function test_hidden_lists_are_not_hidden_when_gating_is_inactive() {
+		list( $list_id ) = $this->create_list_behind_gate( true );
+
+		add_filter( 'newspack_reader_activation_enabled', '__return_false' );
+		$hidden = Premium_Newsletters::is_list_hidden( $list_id );
+		remove_filter( 'newspack_reader_activation_enabled', '__return_false' );
+
+		$this->assertFalse( $hidden );
+	}
+
+	/**
+	 * While Woo Memberships is active it still decides who can join a list, so no
+	 * list is hidden by a gate.
+	 *
+	 * Runs isolated because WC_Memberships, once declared, would make
+	 * Memberships::is_active() true for every later test in this process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_hidden_lists_are_not_hidden_while_memberships_is_active() {
+		require dirname( __DIR__, 2 ) . '/mocks/wc-memberships-active-mock.php';
+
+		list( $list_id ) = $this->create_list_behind_gate( true );
+
+		$this->assertFalse( Premium_Newsletters::is_list_hidden( $list_id ) );
+	}
+
+	/**
+	 * The Subscribe block's "show premium lists" mode renders every list that has a
+	 * gate but is missing from the shown lists, so a hidden list must carry no gate
+	 * on the front end.
+	 */
+	public function test_filter_list_gates_omits_hidden_lists_on_the_front_end() {
+		list( $hidden_id )  = $this->create_list_behind_gate( true );
+		list( $visible_id ) = $this->create_list_behind_gate( false );
+
+		$result = Premium_Newsletters::filter_list_gates( [] );
+
+		$this->assertSame( [ 'newspack-' . $visible_id ], array_keys( $result ) );
+		$this->assertArrayNotHasKey( 'newspack-' . $hidden_id, $result );
+	}
+
+	/**
+	 * The block editor reads the same map from an admin request, and keeps a hidden
+	 * list's gate so the editor can still name it.
+	 */
+	public function test_filter_list_gates_keeps_hidden_lists_in_admin() {
+		list( $hidden_id ) = $this->create_list_behind_gate( true );
+		set_current_screen( 'dashboard' );
+
+		$result = Premium_Newsletters::filter_list_gates( [] );
+
+		$this->assertArrayHasKey( 'newspack-' . $hidden_id, $result );
+	}
+
+	/**
+	 * Hiding is only about what readers see. A hidden list still gains a reader who
+	 * has access, and still loses one whose access ends.
+	 */
+	public function test_access_check_still_adds_and_removes_a_hidden_list() {
+		list( $list_id, $gate_id ) = $this->create_list_behind_gate( true );
+		$this->set_gate_list_settings( $gate_id, [ 'auto_signup' => 'on' ] );
+
+		$user_id      = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$email        = get_userdata( $user_id )->user_email;
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id' => $user_id,
+				'status'      => 'active',
+				'products'    => [ 100 ],
+			]
+		);
+
+		$this->run_access_check( $user_id );
+
+		$calls = \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls;
+		$this->assertCount( 1, $calls, 'A reader with access is added to a hidden list.' );
+		$this->assertContains( 'newspack-' . $list_id, $calls[0]['lists_to_add'] );
+
+		\Newspack_Newsletters_Contacts::reset_calls();
+		\Newspack_Newsletters_Subscription::$contact_lists[ $email ] = [ 'newspack-' . $list_id ];
+		$subscription->set_status( 'cancelled' );
+
+		$this->run_access_check( $user_id );
+
+		$calls = \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls;
+		$this->assertCount( 1, $calls, 'A reader whose subscription lapses is removed from a hidden list.' );
+		$this->assertContains( 'newspack-' . $list_id, $calls[0]['lists_to_remove'] );
+		$this->assertEmpty( $calls[0]['lists_to_add'] );
+	}
+
+	// =========================================================================
 	// filter_subscribe_lists() — sign-up enforcement
 	// =========================================================================
 

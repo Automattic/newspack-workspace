@@ -507,7 +507,13 @@ class Premium_Newsletters {
 	}
 
 	/**
-	 * Filter the subscription lists to prevent premium newsletters from being shown when restricted.
+	 * Filter the subscription lists to prevent premium newsletters from being shown when restricted
+	 * or when their gate hides them.
+	 *
+	 * Newsletters builds every reader-facing list surface from the lists this returns: My Account,
+	 * sign-up forms, registration and the post-checkout modal. Dropping a hidden list here is what
+	 * keeps it off all of them. It also keeps a hidden list out of the set My Account removes a
+	 * reader from when they save, so saving that form can never unsubscribe them from it.
 	 *
 	 * @param array $lists The lists.
 	 *
@@ -534,7 +540,8 @@ class Premium_Newsletters {
 			array_filter(
 				$lists,
 				function( $list ) {
-					return ! Content_Restriction_Control::is_post_restricted( false, $list->get_id() );
+					return ! Content_Restriction_Control::is_post_restricted( false, $list->get_id() )
+						&& ! self::is_list_hidden( $list->get_id() );
 				}
 			)
 		);
@@ -680,6 +687,14 @@ class Premium_Newsletters {
 			if ( ! Content_Restriction_Control::post_has_restrictions( false, $list->get_id() ) ) {
 				continue;
 			}
+			// The block's "show premium lists" mode renders every list that has a gate
+			// but is missing from the lists readers are shown. A hidden list is missing
+			// from them on purpose, so on the front end it must not carry a gate either.
+			// The editor gets this map from an admin request and keeps the gate, so it
+			// can still name the list.
+			if ( ! is_admin() && self::is_list_hidden( $list->get_id() ) ) {
+				continue;
+			}
 			$gates = Content_Restriction_Control::get_post_gates( $list->get_id() );
 			if ( empty( $gates ) ) {
 				continue;
@@ -814,6 +829,31 @@ class Premium_Newsletters {
 	 */
 	private static function is_access_control_active(): bool {
 		return Content_Gate::is_gating_active() && ! Memberships::is_active();
+	}
+
+	/**
+	 * Whether a gate hides a list from readers.
+	 *
+	 * Asked of the gates that currently restrict the list, so a draft gate, or one with
+	 * neither registration nor paid access on, hides nothing. One gate that hides the
+	 * list is enough, even when another gate covering it shows it. Hiding only changes
+	 * what readers see: the access check still adds and removes readers on a hidden list.
+	 *
+	 * @param int $list_id List post ID.
+	 *
+	 * @return bool
+	 */
+	public static function is_list_hidden( int $list_id ): bool {
+		// Gates are inert until they take over from Memberships: see is_access_control_active().
+		if ( ! self::is_access_control_active() ) {
+			return false;
+		}
+		foreach ( Content_Restriction_Control::get_post_gates( $list_id ) as $gate ) {
+			if ( ! empty( $gate['hide_lists'] ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
