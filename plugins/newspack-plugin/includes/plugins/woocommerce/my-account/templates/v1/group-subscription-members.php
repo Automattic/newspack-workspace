@@ -336,7 +336,7 @@ $render_search_field = static function ( string $list, string $label, string $st
 <?php endif; // ! $is_completely_empty ?>
 
 	<!-- .newspack-ui__modal: invite by email -->
-	<div id="newspack-my-account__group_subscription--invite-member" class="newspack-ui__modal-container">
+	<dialog id="newspack-my-account__group_subscription--invite-member" class="newspack-ui__modal-container">
 		<div class="newspack-ui__modal-container__overlay"></div>
 		<div class="newspack-ui__modal newspack-ui__modal--small">
 				<header class="newspack-ui__modal__header">
@@ -399,10 +399,10 @@ $render_search_field = static function ( string $list, string $label, string $st
 					<?php endif; ?>
 				</section>
 			</div><!-- .newspack-ui__modal__small -->
-	</div> <!-- .newspack-ui__modal-container -->
+	</dialog>
 
 	<!-- .newspack-ui__modal: invite in bulk -->
-	<div id="newspack-my-account__group_subscription--invite-bulk" class="newspack-ui__modal-container">
+	<dialog id="newspack-my-account__group_subscription--invite-bulk" class="newspack-ui__modal-container">
 		<div class="newspack-ui__modal-container__overlay"></div>
 		<div class="newspack-ui__modal newspack-ui__modal--small">
 			<header class="newspack-ui__modal__header">
@@ -460,12 +460,12 @@ $render_search_field = static function ( string $list, string $label, string $st
 								?>
 							</span>
 						</p>
-						<p>
-							<input type="file" id="newspack-group-subscription-invite-bulk-csv" class="newspack-my-account__group_subscription__invite-bulk__file" name="csv" accept=".csv,text/csv">
-							<label for="newspack-group-subscription-invite-bulk-csv" class="newspack-ui__button newspack-ui__button--secondary newspack-ui__button--small"><?php esc_html_e( 'Upload CSV', 'newspack-plugin' ); ?></label>
+						<input type="file" class="newspack-my-account__group_subscription__invite-bulk__file" name="csv" accept=".csv,text/csv" hidden>
+						<button type="button" class="newspack-ui__button newspack-ui__button--secondary newspack-ui__button--wide newspack-my-account__group_subscription__invite-bulk__upload"><?php esc_html_e( 'Upload CSV', 'newspack-plugin' ); ?></button>
+						<div class="newspack-my-account__group_subscription__invite-bulk__file-row">
 							<span class="newspack-my-account__group_subscription__invite-bulk__filename"></span>
 							<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--small newspack-my-account__group_subscription__invite-bulk__remove-file hidden"><?php esc_html_e( 'Remove file', 'newspack-plugin' ); ?></button>
-						</p>
+						</div>
 						<button type="submit" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide"><span><?php esc_html_e( 'Review', 'newspack-plugin' ); ?></span></button>
 						<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-ui__modal__close"><?php esc_html_e( 'Cancel', 'newspack-plugin' ); ?></button>
 					</form>
@@ -479,10 +479,10 @@ $render_search_field = static function ( string $list, string $label, string $st
 				<?php endif; ?>
 			</section>
 		</div>
-	</div>
+	</dialog>
 
 	<!-- .newspack-ui__modal: regenerate invite link -->
-	<div id="newspack-my-account__group_subscription--confirm-regenerate-link" class="newspack-ui__modal-container">
+	<dialog id="newspack-my-account__group_subscription--confirm-regenerate-link" class="newspack-ui__modal-container">
 		<div class="newspack-ui__modal-container__overlay"></div>
 		<div class="newspack-ui__modal newspack-ui__modal--small">
 				<header class="newspack-ui__modal__header">
@@ -503,7 +503,7 @@ $render_search_field = static function ( string $list, string $label, string $st
 						<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-ui__modal__close"><?php esc_html_e( 'Cancel', 'newspack-plugin' ); ?></button>
 				</section>
 			</div><!-- .newspack-ui__modal__small -->
-	</div> <!-- .newspack-ui__modal-container -->
+	</dialog>
 
 	<!-- .newspack-ui__modal: confirm remove member -->
 	<?php
@@ -513,7 +513,7 @@ $render_search_field = static function ( string $list, string $label, string $st
 		$group_label_lower
 	);
 	?>
-	<div id="newspack-my-account__group_subscription--confirm-remove-member" class="newspack-ui__modal-container">
+	<dialog id="newspack-my-account__group_subscription--confirm-remove-member" class="newspack-ui__modal-container">
 		<div class="newspack-ui__modal-container__overlay"></div>
 		<div class="newspack-ui__modal newspack-ui__modal--small">
 				<header class="newspack-ui__modal__header">
@@ -552,10 +552,10 @@ $render_search_field = static function ( string $list, string $label, string $st
 					</button>
 				</form>
 			</div><!-- .newspack-ui__modal__small -->
-	</div> <!-- .newspack-ui__modal-container -->
+	</dialog>
 
 	<!-- .newspack-ui__modal: disable invite link -->
-	<div id="newspack-my-account__group_subscription--confirm-disable-link" class="newspack-ui__modal-container">
+	<dialog id="newspack-my-account__group_subscription--confirm-disable-link" class="newspack-ui__modal-container">
 		<div class="newspack-ui__modal-container__overlay"></div>
 		<div class="newspack-ui__modal newspack-ui__modal--small">
 				<header class="newspack-ui__modal__header">
@@ -577,5 +577,5 @@ $render_search_field = static function ( string $list, string $label, string $st
 						<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-ui__modal__close"><?php esc_html_e( 'Cancel', 'newspack-plugin' ); ?></button>
 				</section>
 			</div><!-- .newspack-ui__modal__small -->
-	</div> <!-- .newspack-ui__modal-container -->
+	</dialog>
 </div>

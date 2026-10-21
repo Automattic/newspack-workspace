@@ -578,39 +578,46 @@ class Test_Push_Log extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Previous rows that must not absorb a repeat.
+	 * Previous rows a clean push must not fold into.
 	 *
 	 * @return array[]
 	 */
-	public function rows_that_do_not_absorb_a_repeat(): array {
+	public function rows_a_clean_push_does_not_fold_into(): array {
 		return [
-			'a failed push'   => [
+			'a failed push'                    => [
 				[
 					'result'      => new \WP_Error( 'provider_down', 'ESP 503' ),
 					'error_class' => 'transient',
 				],
 			],
-			'a benign result' => [
+			'a benign result'                  => [
 				[
 					'result'      => new \WP_Error( 'member_exists', 'Member exists' ),
 					'error_class' => 'benign',
 				],
 			],
-			'a deletion flag' => [
+			'a deletion flag'                  => [
 				[ 'operation' => Push_Log::OPERATION_FLAG ],
+			],
+			'a push saved without some fields' => [
+				[
+					'result'      => new \WP_Error( Push_Log::ERROR_FIELDS_NOT_SYNCED, 'The provider saved the contact without these fields: NP_Total_Paid.' ),
+					'error_class' => 'permanent_config',
+				],
 			],
 		];
 	}
 
 	/**
 	 * Only a clean successful upsert stands for "this data is at the
-	 * provider". Anything else before a success means that success is news.
+	 * provider", so a clean push folds only into one. Anything else before a
+	 * success means that success is news.
 	 *
 	 * @param array $previous_attempt Overrides for the row recorded first.
 	 *
-	 * @dataProvider rows_that_do_not_absorb_a_repeat
+	 * @dataProvider rows_a_clean_push_does_not_fold_into
 	 */
-	public function test_only_a_clean_successful_upsert_absorbs_a_repeat( array $previous_attempt ) {
+	public function test_a_clean_push_folds_only_into_a_clean_success( array $previous_attempt ) {
 		$this->record( $previous_attempt );
 		$this->record();
 

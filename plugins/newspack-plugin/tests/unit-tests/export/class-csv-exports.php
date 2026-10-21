@@ -133,13 +133,14 @@ class Newspack_Test_CSV_Exports extends WP_UnitTestCase {
 	public function test_sanitize_export_config_rejects_unknown_values() {
 		$config = CSV_Exports::sanitize_export_config(
 			[
-				'date_from'  => '2026-02-30',
-				'date_to'    => 'yesterday',
-				'delimiter'  => 'tilde',
-				'roles'      => [ 'subscriber', 'not_a_role' ],
-				'statuses'   => [ 'active', 'not_a_status' ],
-				'meta_keys'  => [ 'never_written' ],
-				'per_member' => '1',
+				'date_from'             => '2026-02-30',
+				'date_to'               => 'yesterday',
+				'delimiter'             => 'tilde',
+				'roles'                 => [ 'subscriber', 'not_a_role' ],
+				'statuses'              => [ 'active', 'not_a_status' ],
+				'meta_keys'             => [ 'never_written' ],
+				'per_member'            => '1',
+				'include_complimentary' => '1',
 			],
 			'users'
 		);
@@ -151,17 +152,20 @@ class Newspack_Test_CSV_Exports extends WP_UnitTestCase {
 		$this->assertSame( CSV_Exports::DEFAULT_DATE_FORMAT, $config['date_format'] );
 		$this->assertArrayNotHasKey( 'statuses', $config, 'Statuses belong to the subscriptions export only.' );
 		$this->assertArrayNotHasKey( 'per_member', $config, 'Per-member rows belong to the subscriptions export only.' );
+		$this->assertArrayNotHasKey( 'include_complimentary', $config, 'Complimentary subscriptions belong to the subscriptions export only.' );
 		$this->assertSame( [], $config['meta_keys'], 'A meta key the site does not store is not exportable.' );
 
 		$subscriptions = CSV_Exports::sanitize_export_config(
 			[
-				'statuses'   => [ 'active', 'not_a_status' ],
-				'per_member' => '1',
+				'statuses'              => [ 'active', 'not_a_status' ],
+				'per_member'            => '1',
+				'include_complimentary' => '1',
 			],
 			'subscriptions'
 		);
 		$this->assertSame( [ 'wc-active' ], $subscriptions['statuses'] );
 		$this->assertTrue( $subscriptions['per_member'] );
+		$this->assertTrue( $subscriptions['include_complimentary'] );
 		$this->assertArrayNotHasKey( 'roles', $subscriptions );
 	}
 

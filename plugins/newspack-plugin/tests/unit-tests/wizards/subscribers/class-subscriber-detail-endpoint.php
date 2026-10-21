@@ -476,12 +476,12 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 		$row = $items[0];
 
 		$this->assertSame(
-			[ 'editUrl', 'id', 'plan', 'status' ],
+			[ 'editUrl', 'id', 'isComplimentary', 'plan', 'status' ],
 			$this->sorted_keys( $row['subscriptions'][0] ),
 			'A list row\'s individual subscription is the lean shape — no billing keys.'
 		);
 		$this->assertSame(
-			[ 'editUrl', 'id', 'plan', 'role', 'status' ],
+			[ 'editUrl', 'id', 'isComplimentary', 'plan', 'role', 'status' ],
 			$this->sorted_keys( $row['groups'][0] ),
 			'A list row\'s group entry is the lean shape — no billing, owner, seats or joinedAt.'
 		);

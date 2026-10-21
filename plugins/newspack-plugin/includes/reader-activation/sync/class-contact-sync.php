@@ -325,6 +325,11 @@ class Contact_Sync extends Sync {
 	 * only this class knows which attempt of a chain a push was and whether
 	 * another attempt follows.
 	 *
+	 * A result that names `unsynced_fields` was accepted without those fields,
+	 * for example by a Mailchimp audience at its merge field cap. The row is
+	 * written as a permanent failure so it needs attention, while the caller
+	 * keeps its success: a retry would meet the same limit.
+	 *
 	 * @param Integration $integration The integration the operation targeted.
 	 * @param array       $args        Push_Log::record_attempt() arguments, without the
 	 *                                 integration's own. `direction` ('push' or 'deletion')
@@ -337,13 +342,21 @@ class Contact_Sync extends Sync {
 		// `direction` is this method's own argument, not a push log field.
 		$direction = $args['direction'] ?? 'push';
 		unset( $args['direction'] );
+		$error_class = \is_wp_error( $result ) ? self::classify_error( $result, $direction ) : null;
+		if ( \is_array( $result ) && ! empty( $result['unsynced_fields'] ) ) {
+			$args['result'] = new \WP_Error(
+				Push_Log::ERROR_FIELDS_NOT_SYNCED,
+				sprintf( 'The provider saved the contact without these fields: %s.', implode( ', ', (array) $result['unsynced_fields'] ) )
+			);
+			$error_class    = 'permanent_config';
+		}
 		return Push_Log::record_attempt(
 			array_merge(
 				$args,
 				[
 					'integration_id' => $integration->get_id(),
 					'hash_prefix'    => $integration->get_metadata_prefix(),
-					'error_class'    => \is_wp_error( $result ) ? self::classify_error( $result, $direction ) : null,
+					'error_class'    => $error_class,
 				]
 			)
 		);
@@ -823,17 +836,18 @@ class Contact_Sync extends Sync {
 				if ( \is_wp_error( $cleanup_result ) ) {
 					$errors[] = sprintf( '[%s] %s', $integration_id, $cleanup_result->get_error_message() );
 					static::log( sprintf( 'Flag-deletion cleanup failed for integration "%s" of %s: %s', $integration_id, $email, $cleanup_result->get_error_message() ) );
-					// Only when the push did not end the row as failed. A failed
-					// push is already on the row and must not be overwritten, and
+					// Only when the push reached the integration: it landed,
+					// landed without some fields, or came back benign. A push that
+					// failed is already on the row and must not be overwritten, and
 					// a transient one is retried, and the retry that ends the chain
-					// runs the cleanup again. A benign answer is a success with no
-					// retry behind it, so nothing else would record that the
-					// reader is still on a list.
+					// runs the cleanup again. The other outcomes have no retry
+					// behind them, so nothing else would record that the reader is
+					// still on a list.
 					$push_was_benign = \is_wp_error( $result ) && 'benign' === $error_class;
 					if ( ! \is_wp_error( $result ) || $push_was_benign ) {
 						$reason = $push_was_benign
 							? 'The contact was already deleted at the integration, but removing the reader from lists failed: %s'
-							: 'The deletion flag was pushed, but removing the reader from lists failed: %s';
+							: 'The deletion flag reached the integration, but removing the reader from lists failed: %s';
 						Push_Log::mark_failed( $log_id, 'flag_cleanup_failed', sprintf( $reason, $cleanup_result->get_error_message() ) );
 					}
 				} else {
@@ -1596,14 +1610,15 @@ class Contact_Sync extends Sync {
 			$cleanup_result = $integration->flag_deletion_cleanup( $email );
 			if ( \is_wp_error( $cleanup_result ) ) {
 				static::log( sprintf( 'Flag-deletion cleanup failed after retry %d for integration "%s" of %s: %s', $retry_count, $integration_id, $email, $cleanup_result->get_error_message() ) );
-				// Only when the push landed or came back benign. A failed push
+				// Only when the push reached the integration: it landed, landed
+				// without some fields, or came back benign. A push that failed
 				// already ended the row as failed, and the Sync Activity screen
 				// would read `flag_cleanup_failed` on it as a push that was
 				// delivered.
 				if ( ! \is_wp_error( $result ) || $push_was_benign ) {
 					$reason = $push_was_benign
 						? 'The contact was already deleted at the integration, but removing the reader from lists failed: %s'
-						: 'The deletion flag was pushed, but removing the reader from lists failed: %s';
+						: 'The deletion flag reached the integration, but removing the reader from lists failed: %s';
 					Push_Log::mark_failed( $log_id, 'flag_cleanup_failed', sprintf( $reason, $cleanup_result->get_error_message() ) );
 				}
 			} else {

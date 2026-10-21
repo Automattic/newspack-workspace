@@ -166,6 +166,32 @@ class Newspack_Test_Perfmatters extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Saving the Perfmatters settings while reader activation is off stores
+	 * `newspack-plugin` in the delay list. Once reader activation is on, the merge
+	 * must not bring it back, or the first click on the sign-in button or a
+	 * `#signin_modal` link does nothing. Without reader activation, Newspack
+	 * delays it by default.
+	 */
+	public function test_newspack_plugin_delayed_only_without_reader_activation() {
+		add_filter( 'newspack_reader_activation_enabled', '__return_true' );
+		$options = Perfmatters::set_defaults(
+			[
+				'assets' => [
+					'delay_js_inclusions' => [ 'newspack-plugin', 'publisher-script' ],
+				],
+			]
+		);
+		$this->assertNotContains( 'newspack-plugin', $options['assets']['delay_js_inclusions'] );
+		$this->assertContains( 'publisher-script', $options['assets']['delay_js_inclusions'] );
+		remove_filter( 'newspack_reader_activation_enabled', '__return_true' );
+
+		add_filter( 'newspack_reader_activation_enabled', '__return_false' );
+		$options = Perfmatters::set_defaults( [] );
+		remove_filter( 'newspack_reader_activation_enabled', '__return_false' );
+		$this->assertContains( 'newspack-plugin', $options['assets']['delay_js_inclusions'] );
+	}
+
+	/**
 	 * When WooCommerce content is present, the callback vetoes the strip
 	 * (returns false) regardless of the incoming value.
 	 */

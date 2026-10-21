@@ -1,3 +1,17 @@
+## @automattic/newspack-blocks [4.36.3](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.2...newspack-blocks@4.36.3) (2026-10-20)
+
+
+### Bug Fixes
+
+* **tag-labels:** stop tags named "Labels" from restyling posts ([#1267](https://github.com/Automattic/newspack-workspace/issues/1267)) ([0e9cb8a](https://github.com/Automattic/newspack-workspace/commit/0e9cb8a0cd2d10fe30f3c59fc423ee0b2338788b))
+
+## @automattic/newspack-blocks [4.36.2](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.1...newspack-blocks@4.36.2) (2026-10-15)
+
+
+### Bug Fixes
+
+* **modal-checkout:** keep the 3D Secure step visible during processing ([#1289](https://github.com/Automattic/newspack-workspace/issues/1289)) ([e92052b](https://github.com/Automattic/newspack-workspace/commit/e92052b6ed8d1d91231b3fe48c38658e75718d25))
+
 ## @automattic/newspack-blocks [4.36.1](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.0...newspack-blocks@4.36.1) (2026-10-14)
 
 

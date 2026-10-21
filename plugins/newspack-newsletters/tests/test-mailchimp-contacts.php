@@ -141,8 +141,9 @@ class Newsletters_Contacts_Test extends WP_UnitTestCase {
 
 		if ( preg_match( '/lists\/.*\/merge-fields/', $endpoint ) ) {
 			return [
-				'status' => 200,
-				'tag'    => 'FNAME',
+				'status'   => 200,
+				'merge_id' => 1,
+				'tag'      => 'FNAME',
 			];
 		}
 		return [
@@ -902,13 +903,16 @@ class Newsletters_Contacts_Test extends WP_UnitTestCase {
 
 	/**
 	 * Add a contact to an audience that refuses every new merge field, as
-	 * Mailchimp does at its merge field cap, and return the upsert payload.
+	 * Mailchimp does at its merge field cap.
 	 *
 	 * @param string $email    Contact email. Use a new one per call: the provider caches upserts by email.
 	 * @param array  $metadata Contact metadata.
-	 * @return array|null The member PUT payload, or null if no upsert was sent.
+	 * @return array {
+	 *     @type array|null     $0 The member PUT payload, or null if no upsert was sent.
+	 *     @type array|WP_Error $1 The upsert result.
+	 * }
 	 */
-	private function get_upsert_payload_at_merge_field_cap( $email, $metadata ) {
+	private function upsert_at_merge_field_cap( $email, $metadata ) {
 		$payload       = null;
 		$refuse_create = function ( $response, $endpoint ) {
 			if ( preg_match( '/lists\/.*\/merge-fields/', $endpoint ) ) {
@@ -929,8 +933,9 @@ class Newsletters_Contacts_Test extends WP_UnitTestCase {
 		remove_filter( 'newspack_mailchimp_merge_fields', [ 'Newspack_Newsletters_Mailchimp_Api', 'mock_merge_fields' ] );
 		add_filter( 'mailchimp_mock_post', $refuse_create, 20, 2 );
 		add_filter( 'mailchimp_mock_put', $capture, 20, 3 );
+		$result = null;
 		try {
-			Newspack_Newsletters_Contacts::upsert(
+			$result = Newspack_Newsletters_Contacts::upsert(
 				[
 					'email'    => $email,
 					'metadata' => $metadata,
@@ -942,7 +947,7 @@ class Newsletters_Contacts_Test extends WP_UnitTestCase {
 			remove_filter( 'mailchimp_mock_put', $capture, 20 );
 			add_filter( 'newspack_mailchimp_merge_fields', [ 'Newspack_Newsletters_Mailchimp_Api', 'mock_merge_fields' ] );
 		}
-		return $payload;
+		return [ $payload, $result ];
 	}
 
 	/**
@@ -950,7 +955,7 @@ class Newsletters_Contacts_Test extends WP_UnitTestCase {
 	 * a contact whose fields all fail to be created must not send an empty one.
 	 */
 	public function test_upsert_omits_merge_fields_when_no_field_can_be_created() {
-		$payload = $this->get_upsert_payload_at_merge_field_cap( 'merge-cap-none@example.test', [ 'NP_Account_Deleted' => '1' ] );
+		[ $payload ] = $this->upsert_at_merge_field_cap( 'merge-cap-none@example.test', [ 'NP_Account_Deleted' => '1' ] );
 
 		$this->assertIsArray( $payload );
 		$this->assertArrayNotHasKey( 'merge_fields', $payload );
@@ -961,7 +966,7 @@ class Newsletters_Contacts_Test extends WP_UnitTestCase {
 	 * when others fail to be created.
 	 */
 	public function test_upsert_sends_existing_merge_fields_when_others_cannot_be_created() {
-		$payload = $this->get_upsert_payload_at_merge_field_cap(
+		[ $payload ] = $this->upsert_at_merge_field_cap(
 			'merge-cap-some@example.test',
 			[
 				'Name'               => 'Jane',
@@ -970,5 +975,23 @@ class Newsletters_Contacts_Test extends WP_UnitTestCase {
 		);
 
 		$this->assertSame( [ 'FNAME' => 'Jane' ], $payload['merge_fields'] );
+	}
+
+	/**
+	 * The upsert still succeeds without the fields Mailchimp would not create,
+	 * so the result has to name them, or the caller records a full sync.
+	 */
+	public function test_upsert_result_names_the_fields_that_could_not_be_created() {
+		[ , $result ] = $this->upsert_at_merge_field_cap(
+			'merge-cap-result@example.test',
+			[
+				'Name'                 => 'Jane',
+				'NP_Account_Deleted'   => '1',
+				'NP_Membership_Status' => 'user-deleted',
+			]
+		);
+
+		$this->assertNotWPError( $result );
+		$this->assertSame( [ 'NP_Account_Deleted', 'NP_Membership_Status', 'origin_newspack' ], $result['unsynced_fields'] ?? null );
 	}
 }

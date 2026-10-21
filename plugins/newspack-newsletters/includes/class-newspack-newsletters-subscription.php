@@ -82,7 +82,14 @@ class Newspack_Newsletters_Subscription {
 			[
 				'methods'             => \WP_REST_Server::READABLE,
 				'callback'            => [ __CLASS__, 'api_get_lists_config' ],
-				'permission_callback' => '__return_true',
+				'permission_callback' => [ __CLASS__, 'api_lists_config_permissions_check' ],
+				'args'                => [
+					'context' => [
+						'type'    => 'string',
+						'enum'    => [ 'view', 'edit' ],
+						'default' => 'view',
+					],
+				],
 			]
 		);
 		register_rest_route(
@@ -236,12 +243,37 @@ class Newspack_Newsletters_Subscription {
 	}
 
 	/**
-	 * API method to retrieve the current lists configuration.
+	 * Who may read the lists config in the requested context.
+	 *
+	 * `view` is public and lists what the requester may sign up for. `edit` is
+	 * for someone editing a post. They need every list, so a block's saved
+	 * selection survives lists they could not join as a reader.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 *
+	 * @return true|WP_Error
+	 */
+	public static function api_lists_config_permissions_check( $request ) {
+		if ( 'edit' !== $request['context'] || current_user_can( 'edit_posts' ) ) {
+			return true;
+		}
+		return new WP_Error(
+			'newspack_newsletters_rest_forbidden_context',
+			__( 'Sorry, you are not allowed to edit posts.', 'newspack-newsletters' ),
+			[ 'status' => rest_authorization_required_code() ]
+		);
+	}
+
+	/**
+	 * API method to retrieve the lists configuration.
+	 *
+	 * @param WP_REST_Request $request Request.
 	 *
 	 * @return WP_REST_Response|WP_Error WP_REST_Response on success, or WP_Error object on failure.
 	 */
-	public static function api_get_lists_config() {
-		return \rest_ensure_response( self::get_lists_config() );
+	public static function api_get_lists_config( $request ) {
+		$lists_config = 'edit' === $request['context'] ? self::get_unfiltered_lists_config() : self::get_lists_config();
+		return \rest_ensure_response( $lists_config );
 	}
 
 	/**

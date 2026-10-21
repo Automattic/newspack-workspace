@@ -193,18 +193,26 @@ describe( 'SyncActivityDetails', () => {
 		expect( screen.queryByRole( 'heading', { name: 'Fields sent' } ) ).toBeNull();
 	} );
 
-	it( 'reads a flag whose list cleanup failed as data that did arrive', async () => {
-		await renderDetails( {
-			entry: entry( {
+	it.each( [
+		[
+			'a flag whose list cleanup failed',
+			{
 				operation: 'flag',
-				status: 'failed',
 				error_class: 'transient',
 				error_code: 'flag_cleanup_failed',
-				error_message: 'The deletion flag was pushed, but removing the reader from lists failed.',
-			} ),
-			compared_to: null,
-			fields,
-		} );
+				error_message: 'The deletion flag reached the integration, but removing the reader from lists failed.',
+			},
+		],
+		[
+			'a push saved without some fields',
+			{
+				error_class: 'permanent_config',
+				error_code: 'fields_not_synced',
+				error_message: 'The provider saved the contact without these fields: NP_Total Paid.',
+			},
+		],
+	] )( 'reads %s as data that did arrive', async ( _label, overrides ) => {
+		await renderDetails( { entry: entry( { status: 'failed', ...overrides } ), compared_to: null, fields } );
 
 		expect( screen.getByRole( 'heading', { name: 'Fields sent' } ) ).toBeTruthy();
 		expect( screen.queryByRole( 'heading', { name: 'Not delivered' } ) ).toBeNull();

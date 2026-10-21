@@ -191,13 +191,21 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				enableGlobalSearch: true,
 				getValue: ( { item } ) => item.name,
 				render: ( { item } ) => (
-					<Button
-						variant="link"
-						className="newspack-subscription-products__name-link"
-						onClick={ () => history.push( `/edit/${ item.id }` ) }
-					>
-						<strong>{ item.name }</strong>
-					</Button>
+					<>
+						<Button
+							variant="link"
+							className="newspack-subscription-products__name-link"
+							onClick={ () => history.push( `/edit/${ item.id }` ) }
+						>
+							<strong>{ item.name }</strong>
+						</Button>
+						{ item.is_complimentary && (
+							<>
+								{ ' ' }
+								<Badge intent="informational">{ __( 'Complimentary', 'newspack-plugin' ) }</Badge>
+							</>
+						) }
+					</>
 				),
 			},
 			{
@@ -233,6 +241,10 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 						) : (
 							<span className="newspack-subscription-products__muted">&mdash;</span>
 						);
+					}
+					// A complimentary product isn't sold, so its $0 price would read as a free plan.
+					if ( item.is_complimentary ) {
+						return <span>{ __( 'Complimentary', 'newspack-plugin' ) }</span>;
 					}
 					const label = item.type === 'variable-subscription' && item.price_range_label ? item.price_range_label : item.price_label;
 					return label ? <span>{ label }</span> : <span className="newspack-subscription-products__muted">&mdash;</span>;
@@ -350,7 +362,12 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				id: 'effective_price',
 				label: __( 'Effective price', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.policy?.effective_price ?? -1,
-				render: ( { item } ) => <EffectivePrice policy={ item.policy } currency={ currency } />,
+				render: ( { item } ) =>
+					item.is_complimentary ? (
+						<span className="newspack-subscription-products__muted">&mdash;</span>
+					) : (
+						<EffectivePrice policy={ item.policy } currency={ currency } />
+					),
 			},
 		],
 		[ statusElements, categoryElements, currency, history ]

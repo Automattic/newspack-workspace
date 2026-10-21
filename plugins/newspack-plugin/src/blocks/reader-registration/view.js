@@ -3,7 +3,7 @@
  * Internal dependencies
  */
 import './style.scss';
-import { domReady } from '../../utils';
+import { domReady, setButtonLoading } from '../../utils';
 import { openAuthModal } from '../../reader-activation-auth/auth-modal';
 import { openVerificationModal } from '../../reader-activation-auth/verification-modal';
 import { maybeConfirmRegistration } from '../../reader-activation-auth/confirmation-modal';
@@ -87,13 +87,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 			const emailInput = form.querySelector( 'input[name="npe"]' );
 
 			const setLoading = isLoading => {
-				submitElement.disabled = isLoading;
-				submitElement.classList.toggle( 'newspack-ui__button--loading', isLoading );
-				if ( isLoading ) {
-					submitElement.setAttribute( 'aria-busy', 'true' );
-				} else {
-					submitElement.removeAttribute( 'aria-busy' );
-				}
+				setButtonLoading( submitElement, isLoading );
 				container.classList.toggle( 'newspack-registration--in-progress', isLoading );
 			};
 

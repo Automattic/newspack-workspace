@@ -1001,11 +1001,12 @@ class Group_Subscription {
 	 * Whether a user may be a member of a group subscription.
 	 *
 	 * This gates new membership grants (adding a member, accepting an invite) and the read path
-	 * (resolving a user's group subscriptions for access). Every user is eligible except staff,
-	 * meaning a user with `edit_others_posts`, whatever other roles they hold. The content gate
-	 * lets anyone who can edit a post read it, so staff do not need a seat, while everyone else
-	 * can be restricted by the gate and needs a path to access through a group. A reader is
-	 * eligible whatever their capabilities: reader status is authoritative, and
+	 * (resolving a user's group subscriptions for access). Every user is eligible except an account
+	 * Access Control never restricts ({@see Content_Gate::should_skip_access_checks()}), by default
+	 * staff, whatever other roles they hold. The content gate lets those accounts read everything,
+	 * so they do not need a seat, while everyone else can be restricted by the gate and needs a
+	 * path to access through a group. A reader is eligible whatever their capabilities: reader
+	 * status is authoritative, and
 	 * `Reader_Activation::is_user_reader()` already excludes administrators and editors.
 	 * Publishers can opt users in or out via the `newspack_group_subscription_member_eligible` filter.
 	 *
@@ -1024,7 +1025,7 @@ class Group_Subscription {
 			return false;
 		}
 
-		$eligible = Reader_Activation::is_user_reader( $user ) || ! \user_can( $user, 'edit_others_posts' );
+		$eligible = Reader_Activation::is_user_reader( $user ) || ! Content_Gate::should_skip_access_checks( $user );
 
 		/**
 		 * Filters whether a user is eligible to be a member of a group subscription.
