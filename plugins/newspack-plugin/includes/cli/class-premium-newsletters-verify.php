@@ -1637,6 +1637,10 @@ class Premium_Newsletters_Verify {
 			$public_ids[ $list_id ] = self::public_id_for_list( $list_id );
 		}
 
+		// Also once per gate: whether any list can sign a reader up doesn't vary by
+		// reader, and when none can, the per-list lookup below is skipped for all.
+		$can_auto_signup = \Newspack\Premium_Newsletters::can_any_list_auto_signup();
+
 		$rows         = [];
 		$in_batch     = 0;
 		$checked      = 0;
@@ -1716,7 +1720,7 @@ class Premium_Newsletters_Verify {
 					// gates can differ, and only the ones that admit this reader count.
 					// Only an entitled, unsubscribed reader's status depends on it, so the
 					// lookup is skipped for everyone else.
-					$auto_signup = ! $is_restricted && ! $is_subscribed && \Newspack\Premium_Newsletters::is_auto_signup_list( (int) $list_id, (int) $user_id );
+					$auto_signup = $can_auto_signup && ! $is_restricted && ! $is_subscribed && \Newspack\Premium_Newsletters::is_auto_signup_list( (int) $list_id, (int) $user_id );
 					$status      = self::classify_reader( $is_restricted, $is_subscribed, $auto_signup );
 
 					if ( 'leak' === $status && $live ) {

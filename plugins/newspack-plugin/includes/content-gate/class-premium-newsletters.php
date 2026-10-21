@@ -909,7 +909,8 @@ class Premium_Newsletters {
 	 * a staff account that skips access checks, a user who can edit the list post, a
 	 * list whose gates have no access mode on, or every gate refusing without a layout
 	 * to show. The lists' own gates decide then, and any of them resolving to "on" signs
-	 * the reader up. With every gate on "default" both paths reduce to the site-wide option.
+	 * the reader up. With every gate on "default" both paths reduce to the site-wide option,
+	 * so that is returned without judging the reader against any gate.
 	 *
 	 * @param int $list_id List post ID.
 	 * @param int $user_id Reader to decide for.
@@ -917,6 +918,10 @@ class Premium_Newsletters {
 	 * @return bool
 	 */
 	public static function is_auto_signup_list( int $list_id, int $user_id ): bool {
+		if ( ! self::has_auto_signup_override() ) {
+			return self::is_site_auto_signup_on();
+		}
+
 		$admitting_gates = array_filter(
 			Content_Restriction_Control::get_post_gates( $list_id ),
 			function ( $gate ) use ( $user_id ) {
@@ -958,16 +963,33 @@ class Premium_Newsletters {
 	}
 
 	/**
+	 * Whether any published premium newsletter gate sets its own auto-signup.
+	 *
+	 * Reads Content_Gate directly, like can_any_list_auto_signup().
+	 *
+	 * @return bool
+	 */
+	private static function has_auto_signup_override(): bool {
+		foreach ( Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish', true ) as $gate ) {
+			if ( in_array( $gate['auto_signup'] ?? 'default', [ 'on', 'off' ], true ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Whether auto-signup can apply to any list on the site.
 	 *
 	 * True when the site-wide option is on, or any gate is set to "on". It is the
 	 * cheap test for work that only matters if some list might sign a reader up,
-	 * such as the renewal snapshot. Reads Content_Gate directly: its cache is
-	 * flushed on every gate write, where self::$gates is not.
+	 * such as the renewal snapshot and the per-list auto-signup lookup. Reads
+	 * Content_Gate directly: its cache is flushed on every gate write, where
+	 * self::$gates is not.
 	 *
 	 * @return bool
 	 */
-	private static function can_any_list_auto_signup(): bool {
+	public static function can_any_list_auto_signup(): bool {
 		if ( self::is_site_auto_signup_on() ) {
 			return true;
 		}
@@ -1011,8 +1033,10 @@ class Premium_Newsletters {
 		$subscribed_lists = $is_renewal_check
 			? get_user_meta( $user_id, self::SUBSCRIBED_LISTS_META_KEY, true )
 			: '';
-		// A remove-only check never adds lists; see the SOURCE_* constants.
-		$can_add_lists   = ! self::is_remove_only_source( $source );
+		// A remove-only check never adds lists; see the SOURCE_* constants. Nor does
+		// any check while no list can sign a reader up, and asking that once here
+		// spares judging the reader against every gate on every list.
+		$can_add_lists   = ! self::is_remove_only_source( $source ) && self::can_any_list_auto_signup();
 		$lists_to_add    = [];
 		$lists_to_remove = [];
 

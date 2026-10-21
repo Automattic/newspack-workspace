@@ -596,6 +596,31 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		$this->assertContains( 'newspack-' . $list_id, $calls[0]['lists_to_add'] );
 	}
 
+	/**
+	 * With no gate setting its own auto-signup, every gate follows the site setting,
+	 * so the lookup answers with that setting and judges the reader against no gate.
+	 */
+	public function test_auto_signup_lookup_judges_no_gate_when_every_gate_follows_the_site_setting() {
+		$list_id     = $this->create_gated_list();
+		$user_id     = $this->create_reader( true );
+		$evaluations = 0;
+		add_filter(
+			'newspack_access_rules_has_active_subscription',
+			function ( $has_subscription ) use ( &$evaluations ) {
+				++$evaluations;
+				return $has_subscription;
+			}
+		);
+
+		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
+		$this->assertFalse( Premium_Newsletters::is_auto_signup_list( $list_id, $user_id ) );
+
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+		$this->assertTrue( Premium_Newsletters::is_auto_signup_list( $list_id, $user_id ) );
+
+		$this->assertSame( 0, $evaluations );
+	}
+
 	// =========================================================================
 	// Group C — maybe_enqueue_access_check() — removing behaviour
 	// =========================================================================
