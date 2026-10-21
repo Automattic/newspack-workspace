@@ -64,26 +64,27 @@ COPY .env /tmp/.env
 
 # Install requested version of PHP.
 # The PPA can be briefly unavailable. A plain apt-get update only warns, and the
-# install then fails with "Unable to locate package", so the update fails and
-# retries instead, and each package download gets extra retries.
+# install then fails with "Unable to locate package", so the update fails on any
+# error and every apt command retries. A retried install keeps the packages it
+# already downloaded.
 RUN \
 	: "${PHP_VERSION:?Build argument PHP_VERSION needs to be set and non-empty.}" \
 	&& export DEBIAN_FRONTEND=noninteractive \
-	&& retry_apt_update() { \
+	&& retry() { \
 		local attempt=0 delay=10 max_retries=6; \
-		until apt-get update --error-on=any; do \
+		until "$@"; do \
 			attempt=$((attempt + 1)); \
 			if [ $attempt -ge $max_retries ]; then \
-				echo "apt-get update failed after $max_retries attempts" >&2; \
+				echo "$1 $2 failed after $max_retries attempts" >&2; \
 				return 1; \
 			fi; \
-			echo "apt-get update failed (attempt $attempt). Retrying in $delay seconds..." >&2; \
+			echo "$1 $2 failed (attempt $attempt). Retrying in $delay seconds..." >&2; \
 			sleep $delay; \
 			delay=$((delay * 2)); \
 		done; \
 	} \
-	&& retry_apt_update \
-	&& apt-get install -y -o Acquire::Retries=10 \
+	&& retry apt-get update --error-on=any \
+	&& retry apt-get install -y -o Acquire::Retries=10 \
 		libapache2-mod-php${PHP_VERSION} \
 		php${PHP_VERSION} \
 		php${PHP_VERSION}-bcmath \
@@ -105,7 +106,7 @@ RUN \
 		phpunit \
 	php-pear \
 	php${PHP_VERSION}-dev \
-	&& apt-get install -y --no-install-recommends -o Acquire::Retries=10 \
+	&& retry apt-get install -y --no-install-recommends -o Acquire::Retries=10 \
 		php${PHP_VERSION}-apcu \
 		php${PHP_VERSION}-gd \
 		php${PHP_VERSION}-imagick \
