@@ -64,7 +64,7 @@ final class Products_User extends Products {
 	 * @return bool[] Filtered array of allowed/disallowed capabilities.
 	 */
 	public function allow_customers_to_edit_own_posts( $allcaps, $caps, $args ) {
-		$capabilities        = [ 'edit_post', 'edit_posts', 'edit_published_posts', 'publish_posts' ];
+		$capabilities        = [ 'edit_post', 'publish_post', 'edit_posts', 'edit_published_posts', 'publish_posts' ];
 		$capability          = $args[0];
 		$user_id             = $args[1];
 		$post_id             = isset( $args[2] ) ? $args[2] : null;
@@ -93,9 +93,42 @@ final class Products_User extends Products {
 			if ( 'edit_posts' === $capability && ( $is_edit_screen || self::is_editor_read_request() ) ) {
 				$allcaps[ $capability ] = 1;
 			}
+
+			// WordPress resolves a per-post check against the primitives map_meta_cap() put in $caps, never the
+			// meta capability asked about, so a refusal has to clear those. Allowed checks keep the stored caps.
+			if ( $post_id && in_array( $capability, [ 'edit_post', 'publish_post' ], true ) && ! self::may_edit_post( $user_id, $post_id ) ) {
+				foreach ( $caps as $cap ) {
+					$allcaps[ $cap ] = 0;
+				}
+			}
 		}
 
 		return $allcaps;
+	}
+
+	/**
+	 * Whether a customer may edit a given post: one of their own listings, a revision of one, or media they uploaded.
+	 *
+	 * @param int $user_id ID of the customer.
+	 * @param int $post_id ID of the post being checked.
+	 *
+	 * @return boolean True if the post is one the customer may edit.
+	 */
+	private static function may_edit_post( $user_id, $post_id ) {
+		$post = get_post( $post_id );
+		if ( $post && 'revision' === $post->post_type ) {
+			$post = get_post( $post->post_parent );
+		}
+		if ( ! $post ) {
+			return false;
+		}
+
+		// Uploading from the editor checks the new attachment, which belongs to the customer but is not a listing.
+		if ( 'attachment' === $post->post_type ) {
+			return (int) $post->post_author === (int) $user_id;
+		}
+
+		return self::does_user_own_listing( $user_id, $post->ID );
 	}
 
 	/**

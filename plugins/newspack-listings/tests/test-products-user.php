@@ -297,4 +297,66 @@ class ProductsUserTest extends WP_UnitTestCase {
 			$this->assertSame( 403, $this->rest_status( 'POST', "/wp/v2/posts/$post_id", array_merge( [ 'title' => 'Changed' ], $extra ) ) );
 		}
 	}
+
+	/**
+	 * A post the customer wrote that is not a listing cannot be edited or published, here or over REST.
+	 */
+	public function test_own_non_listing_post_cannot_be_edited() {
+		$customer_id = $this->create_listing_customer();
+		$post_id     = self::factory()->post->create(
+			[
+				'post_author' => $customer_id,
+				'post_status' => 'draft',
+			]
+		);
+
+		$this->assertFalse( user_can( $customer_id, 'edit_post', $post_id ) );
+		$this->assertFalse( user_can( $customer_id, 'publish_post', $post_id ) );
+		wp_set_current_user( $customer_id );
+		$this->assertSame( 403, $this->rest_status( 'POST', "/wp/v2/posts/$post_id", [ 'title' => 'Changed' ] ) );
+	}
+
+	/**
+	 * Each of the customer's own listings, and its revisions, can be edited outside the editor screen.
+	 */
+	public function test_own_listing_can_be_edited_per_post() {
+		$customer_id = $this->create_listing_customer();
+
+		foreach ( $this->listing_types as $type ) {
+			$listing_id = $this->create_listing( $customer_id, $type );
+			$this->assertTrue( user_can( $customer_id, 'edit_post', $listing_id ), $type );
+
+			$revision_id = _wp_put_post_revision( get_post( $listing_id ) );
+			$this->assertTrue( user_can( $customer_id, 'edit_post', $revision_id ), $type . ' revision' );
+		}
+	}
+
+	/**
+	 * Media the customer uploaded can be edited, as the editor does after an upload.
+	 */
+	public function test_own_attachment_can_be_edited() {
+		$customer_id   = $this->create_listing_customer();
+		$listing_id    = $this->create_listing( $customer_id );
+		$attachment_id = self::factory()->attachment->create(
+			[
+				'post_author'    => $customer_id,
+				'post_parent'    => $listing_id,
+				'post_mime_type' => 'image/jpeg',
+			]
+		);
+
+		$this->assertTrue( user_can( $customer_id, 'edit_post', $attachment_id ) );
+		wp_set_current_user( $customer_id );
+		$this->assertSame( 200, $this->rest_status( 'POST', "/wp/v2/media/$attachment_id", [ 'alt_text' => 'Alt' ] ) );
+	}
+
+	/**
+	 * A listing owned by someone else cannot be edited.
+	 */
+	public function test_another_users_listing_cannot_be_edited() {
+		$customer_id = $this->create_listing_customer();
+		$listing_id  = $this->create_listing( $this->create_listing_customer() );
+
+		$this->assertFalse( user_can( $customer_id, 'edit_post', $listing_id ) );
+	}
 }
