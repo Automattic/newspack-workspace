@@ -1613,7 +1613,7 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 		$this->assertSame( 'default', \Newspack\Content_Gate::get_newsletter_gate_settings( $rows[1]['gate_id'] )['auto_signup'] );
 		$warnings = implode( "\n", \WP_CLI::$warnings );
 		$this->assertStringContainsString( '"Premium" is written with all the group\'s lists', $warnings );
-		$this->assertStringContainsString( '"Premium (auto-signup)"', $warnings );
+		$this->assertStringContainsString( 'because "Premium (auto-signup)"', $warnings );
 		$this->assertStringContainsString( 'Re-run to split it', $warnings );
 	}
 
@@ -1624,8 +1624,6 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	 */
 	public function test_write_gate_payloads_skips_the_fallback_warning_when_the_group_fails_too() {
 		$this->set_signup_modal_lists( [ $this->list_a ] );
-		// A registration-only plan: creating a gate with paid access builds its layout
-		// from product data the WooCommerce mocks don't carry.
 		$payload = $this->invoke_private_static( 'build_gate_payload', [ [ $this->make_payload_plan( 'signup', [], [ $this->list_a, $this->list_b ], 'Premium' ) ] ] );
 		$split   = $this->invoke_private_static( 'split_payload_by_auto_signup', [ $payload, [ 'premium' ] ] );
 		$this->fail_premium_sibling_create();
