@@ -37,10 +37,12 @@ final class Newspack_Newsletters_Blocks {
 		 * The subscribe block reads this map in the editor and on every front-end
 		 * render. A list counts as gated only when its entry is a non-empty array of
 		 * gates. A list left out of the lists a reader is shown appears as a premium row
-		 * only when it is gated here, so report every list a gate restricts. A callback
-		 * may also leave out a list readers must never see, which the block then renders
-		 * in neither mode. Each gate holds `id`, `title` and, for a user who may edit
-		 * it, `edit_url`.
+		 * only when it is gated here, so report every list a gate restricts. A list
+		 * missing from both the reader's lists and this map renders in neither mode, so
+		 * on a request that renders for readers a callback may also leave out a list
+		 * readers must never see. The editor reads the same map, so keep such a list
+		 * there. Each gate holds `id`, `title` and, for a user who may edit it,
+		 * `edit_url`.
 		 *
 		 * @param array[] $list_gates Gates keyed by public list ID.
 		 */
