@@ -161,10 +161,12 @@ class Woocommerce_Memberships {
 	 * the premium marker agrees with sign-up, including for a list Memberships
 	 * marks as public.
 	 *
-	 * In Memberships' "Hide completely" mode, a reader without access never gets a
-	 * list a plan restricts by name: Memberships leaves it out of the list query.
-	 * The block then shows that reader no premium row for it, which is the point of
-	 * that mode, so nothing here works around it.
+	 * One exception: in Memberships' "Hide completely" mode, when a plan's rule
+	 * names a list directly, Memberships leaves that list out of the list query for
+	 * a reader without access. The block never sees it, so that reader gets no
+	 * premium row for it. A rule that covers every list doesn't filter the query,
+	 * so those lists still show as premium rows when the block asks for them, as
+	 * they do under Access Control.
 	 *
 	 * @param array[] $list_gates Gates keyed by public list ID.
 	 * @return array[] Gates keyed by public list ID. Each gate is a plan with `id`

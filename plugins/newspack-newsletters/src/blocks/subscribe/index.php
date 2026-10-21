@@ -281,9 +281,11 @@ function get_block_lists( $attrs ) {
 	// The gated lists are the premium ones the reader can't join. Access Control
 	// withholds those from the filtered config, so they are the premium lists the
 	// unfiltered read has and the filtered one lacks. Woo Memberships leaves them
-	// in the config and removes them from the block's available lists instead. In
-	// both cases the access check stays the only judge. A list no gate reports
-	// stays hidden, whatever removed it: showing its title here would undo that.
+	// in the config and removes them from the block's available lists instead,
+	// except in its "Hide completely" mode (see filter_list_gates() in its
+	// integration). In both cases the access check stays the only judge. A list
+	// no gate reports stays hidden, whatever removed it: showing its title here
+	// would undo that.
 	$gated = [];
 	if ( $show_premium ) {
 		$all_lists = \Newspack_Newsletters_Subscription::get_unfiltered_lists_config();
