@@ -26,7 +26,7 @@ $content = Republication_Tracker_Tool_Content::get_republishable_content( $post-
 
 $content_footer = Republication_Tracker_Tool::create_content_footer( $post );
 
-$byline_text = Republication_Tracker_Tool::get_byline_text( get_the_author() );
+$byline_text = Republication_Tracker_Tool::get_byline_text( get_the_author(), $post );
 
 /**
  * The article title, byline, source site, and date

@@ -106,6 +106,20 @@ class CustomBylineAttributionTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Get the Plain Text tab's textarea contents from rendered modal markup.
+	 *
+	 * @param string $output The rendered widget markup.
+	 * @return string The Plain Text tab's contents, or an empty string if it isn't rendered.
+	 */
+	private function get_plain_text_tab( $output ) {
+		if ( ! preg_match( '/<textarea[^>]*id="republication-tracker-tool-plain-text-content"[^>]*>(.*?)<\/textarea>/s', $output, $matches ) ) {
+			return '';
+		}
+
+		return $matches[1];
+	}
+
+	/**
 	 * The republish modal should attribute the post to the active Custom
 	 * Byline value, not the WP post author.
 	 */
@@ -156,6 +170,7 @@ class CustomBylineAttributionTest extends WP_UnitTestCase {
 	 * guest authors when both are present on the same post.
 	 */
 	public function test_republish_modal_prefers_custom_byline_over_cap_guest_author() {
+		add_filter( 'republication_tracker_tool_byline', 'republication_tracker_tool_byline_filter_cap', 10 );
 		$GLOBALS['_test_cap_coauthors'] = 'CAP Guest Author';
 
 		$output = $this->render_modal();
@@ -177,9 +192,11 @@ class CustomBylineAttributionTest extends WP_UnitTestCase {
 
 		delete_option( 'republication_tracker_tool_enable_plain_text' );
 
+		$plain_text = $this->get_plain_text_tab( $output );
+
 		$this->assertStringContainsString( 'id="republication-tracker-tool-plain-text-content"', $output, 'The Plain Text tab should be rendered when enabled.' );
-		$this->assertStringContainsString( 'By Jane Smith, Test Blog', $output, 'The Plain Text tab should attribute the post to the Custom Byline value.' );
-		$this->assertStringNotContainsString( 'By John Doe', $output, 'The Plain Text tab should not fall back to the WP post author when a Custom Byline is active.' );
+		$this->assertStringContainsString( 'By Jane Smith, Test Blog', $plain_text, 'The Plain Text tab should attribute the post to the Custom Byline value.' );
+		$this->assertStringNotContainsString( 'John Doe', $plain_text, 'The Plain Text tab should not fall back to the WP post author when a Custom Byline is active.' );
 	}
 
 	/**
@@ -191,12 +208,9 @@ class CustomBylineAttributionTest extends WP_UnitTestCase {
 			return 'por %1$s';
 		};
 		add_filter( 'republication_tracker_tool_byline_format', $positional_format );
-		// The CAP mock (loaded in bootstrap) replaces the byline argument with this global.
-		$GLOBALS['_test_cap_coauthors'] = 'John Doe';
 
 		$byline_text = Republication_Tracker_Tool::get_byline_text( 'John Doe' );
 
-		unset( $GLOBALS['_test_cap_coauthors'] );
 		remove_filter( 'republication_tracker_tool_byline_format', $positional_format );
 
 		$this->assertSame( 'por John Doe, Test Blog', $byline_text );
@@ -238,6 +252,7 @@ class CustomBylineAttributionTest extends WP_UnitTestCase {
 	public function test_republish_modal_html_and_plain_text_tabs_share_byline_format() {
 		update_post_meta( $this->test_post->ID, '_newspack_byline_active', false );
 		update_option( 'republication_tracker_tool_enable_plain_text', 'on' );
+		add_filter( 'republication_tracker_tool_byline', 'republication_tracker_tool_byline_filter_cap', 10 );
 		$GLOBALS['_test_cap_coauthors'] = 'CAP Guest Author';
 
 		$output = $this->render_modal();
@@ -247,6 +262,41 @@ class CustomBylineAttributionTest extends WP_UnitTestCase {
 
 		// Once each in the modal's visible article info, the HTML tab and the Plain Text tab.
 		$this->assertSame( 3, substr_count( $output, 'by CAP Guest Author, Test Blog' ), 'Both the HTML and Plain Text tabs should prefix the CAP byline with "by".' );
+	}
+
+	/**
+	 * Plain Text content should use the Custom Byline of the post it's built
+	 * for, not the global post's (e.g. on the /republish/ page, where the
+	 * global post is the newest post).
+	 */
+	public function test_plain_text_uses_custom_byline_of_given_post_not_global_post() {
+		global $post;
+
+		$post_without_custom_byline = $this->factory->post->create_and_get(
+			array(
+				'post_title'  => 'Post without Custom Byline',
+				'post_status' => 'publish',
+				'post_author' => $this->test_post->post_author,
+			)
+		);
+
+		// The global post has an active Custom Byline; the requested post doesn't.
+		$post = $this->test_post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		setup_postdata( $this->test_post );
+
+		$without_output = Republication_Tracker_Tool_Content::get_republishable_plain_text_content( $post_without_custom_byline );
+
+		// And the other way around.
+		$post = $post_without_custom_byline; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		setup_postdata( $post_without_custom_byline );
+
+		$with_output = Republication_Tracker_Tool_Content::get_republishable_plain_text_content( $this->test_post );
+
+		wp_delete_post( $post_without_custom_byline->ID, true );
+
+		$this->assertStringContainsString( 'by John Doe, Test Blog', $without_output, 'Plain Text should use the requested post\'s author when only the global post has a Custom Byline.' );
+		$this->assertStringNotContainsString( 'Jane Smith', $without_output, 'Plain Text should not use the global post\'s Custom Byline.' );
+		$this->assertStringContainsString( 'By Jane Smith, Test Blog', $with_output, 'Plain Text should use the requested post\'s Custom Byline when the global post has none.' );
 	}
 
 	/**

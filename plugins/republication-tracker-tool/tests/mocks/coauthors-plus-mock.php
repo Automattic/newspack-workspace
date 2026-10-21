@@ -7,7 +7,8 @@
  * without CAP actually installed. Must be loaded before the plugin bootstraps
  * (from tests/bootstrap.php, not a test's set_up()) since that compatibility
  * file's own registration is gated on function_exists( 'coauthors' ) at
- * plugin-load time.
+ * plugin-load time. The bootstrap then removes the CAP byline filter, so only
+ * the tests that add it back run with CAP active.
  *
  * @package Republication_Tracker_Tool
  */

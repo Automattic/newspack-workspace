@@ -142,7 +142,7 @@ class Republication_Tracker_Tool_Content {
 
 		// Get article metadata.
 		$article_title = get_the_title( $post_object );
-		$author_byline = Republication_Tracker_Tool::get_byline_text( get_the_author_meta( 'display_name', $post_object->post_author ) );
+		$author_byline = Republication_Tracker_Tool::get_byline_text( get_the_author_meta( 'display_name', $post_object->post_author ), $post_object );
 		$article_date  = gmdate( 'F j, Y', strtotime( $post_object->post_date ) );
 
 		// Add the article title.
