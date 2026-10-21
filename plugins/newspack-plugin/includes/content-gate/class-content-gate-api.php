@@ -247,7 +247,7 @@ class Content_Gate_API {
 		if ( isset( $gate['content_rules_match'] ) ) {
 			$sanitized['content_rules_match'] = in_array( $gate['content_rules_match'], [ 'all', 'any' ], true ) ? $gate['content_rules_match'] : 'all';
 		}
-		// An unknown sign-up mode is dropped rather than coerced, so the stored mode stays.
+		// An unknown auto-signup mode is dropped rather than coerced, so the stored mode stays.
 		if ( isset( $gate['auto_signup'] ) && in_array( $gate['auto_signup'], Content_Gate::AUTO_SIGNUP_MODES, true ) ) {
 			$sanitized['auto_signup'] = $gate['auto_signup'];
 		}

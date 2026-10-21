@@ -68,7 +68,8 @@ class Premium_Newsletters {
 	/**
 	 * WP option key for the site-wide auto-signup setting: whether a reader who gains
 	 * access to a restricted list is added to it. A gate set to "default" follows it.
-	 * Stores: bool (1 or 0); absent reads as on.
+	 * Stores: bool (1 or 0); absent reads as on, so read it through
+	 * is_site_auto_signup_on().
 	 */
 	const AUTO_SIGNUP_OPTION = 'newspack_premium_newsletters_auto_signup';
 
@@ -689,11 +690,8 @@ class Premium_Newsletters {
 			if ( ! Content_Restriction_Control::post_has_restrictions( false, $list->get_id() ) ) {
 				continue;
 			}
-			// The block's "show premium lists" mode renders every list that has a gate
-			// but is missing from the lists readers are shown. A hidden list is missing
-			// from them on purpose, so on the front end it must not carry a gate either.
-			// The editor gets this map from an admin request and keeps the gate, so it
-			// can still name the list.
+			// The editor reads this map from an admin request and keeps the gate, so it
+			// can still name a hidden list.
 			if ( ! is_admin() && self::is_list_hidden( $list->get_id() ) ) {
 				continue;
 			}
@@ -852,8 +850,6 @@ class Premium_Newsletters {
 		if ( ! self::is_access_control_active() ) {
 			return false;
 		}
-		// The same test the sign-up check and filter_list_gates() use, so an exempt list
-		// that a gate also covers reads as ungated here too.
 		if ( ! Content_Restriction_Control::post_has_restrictions( false, $list_id ) ) {
 			return false;
 		}
@@ -863,6 +859,19 @@ class Premium_Newsletters {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Whether the site-wide auto-signup option is on.
+	 *
+	 * An option that was never saved reads as on. Every read of the option goes
+	 * through here, so the access check, the editor's "Use site setting" label and
+	 * the migrator's summary can't disagree about a site that never saved it.
+	 *
+	 * @return bool
+	 */
+	public static function is_site_auto_signup_on(): bool {
+		return (bool) get_option( self::AUTO_SIGNUP_OPTION, 1 );
 	}
 
 	/**
@@ -876,7 +885,7 @@ class Premium_Newsletters {
 	 *
 	 * @return bool
 	 */
-	public static function get_gate_auto_signup( array $gate ): bool {
+	private static function gate_signs_up_readers( array $gate ): bool {
 		$mode = $gate['auto_signup'] ?? 'default';
 		if ( 'on' === $mode ) {
 			return true;
@@ -884,7 +893,7 @@ class Premium_Newsletters {
 		if ( 'off' === $mode ) {
 			return false;
 		}
-		return (bool) get_option( self::AUTO_SIGNUP_OPTION, 1 );
+		return self::is_site_auto_signup_on();
 	}
 
 	/**
@@ -941,7 +950,7 @@ class Premium_Newsletters {
 	 */
 	private static function any_gate_signs_up( array $gates ): bool {
 		foreach ( $gates as $gate ) {
-			if ( self::get_gate_auto_signup( $gate ) ) {
+			if ( self::gate_signs_up_readers( $gate ) ) {
 				return true;
 			}
 		}
@@ -958,8 +967,8 @@ class Premium_Newsletters {
 	 *
 	 * @return bool
 	 */
-	private static function any_gate_auto_signup(): bool {
-		if ( (bool) get_option( self::AUTO_SIGNUP_OPTION, 1 ) ) {
+	private static function can_any_list_auto_signup(): bool {
+		if ( self::is_site_auto_signup_on() ) {
 			return true;
 		}
 		foreach ( Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish', true ) as $gate ) {
@@ -1341,7 +1350,7 @@ class Premium_Newsletters {
 		// Capture the renewal-time snapshot when auto-signup can apply to any list.
 		// Without it the snapshot has no effect (check_access only consults it
 		// inside the auto-signup branch), so skip the ESP fetch in that case.
-		if ( self::any_gate_auto_signup() && class_exists( 'Newspack_Newsletters_Subscription' ) ) {
+		if ( self::can_any_list_auto_signup() && class_exists( 'Newspack_Newsletters_Subscription' ) ) {
 			$email         = $user->user_email;
 			$current_lists = Newspack_Newsletters_Subscription::get_contact_lists( $email );
 			if ( is_array( $current_lists ) ) {

@@ -1937,7 +1937,7 @@ class Premium_Newsletters_Migration {
 			// run and the live run that follows it print the same label. It names the
 			// resolved value because "follow site setting" alone doesn't tell the operator
 			// whether readers will be signed up.
-			return (bool) \get_option( \Newspack\Premium_Newsletters::AUTO_SIGNUP_OPTION, 1 ) ? 'follow site setting (on)' : 'follow site setting (off)';
+			return \Newspack\Premium_Newsletters::is_site_auto_signup_on() ? 'follow site setting (on)' : 'follow site setting (off)';
 		}
 
 		if ( 'default' !== $current && $current !== $derived && ! $force ) {
