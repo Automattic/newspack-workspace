@@ -1,3 +1,24 @@
+## newspack [6.55.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.4...newspack@6.55.5) (2026-10-21)
+
+
+### Bug Fixes
+
+* stop Mailchimp for WooCommerce unsubscribing subscribed readers (NPPD-2490, [#1339](https://github.com/Automattic/newspack-workspace/issues/1339)) ([5e7a222](https://github.com/Automattic/newspack-workspace/commit/5e7a222665867578df79cb678d23c9df8682ae61))
+
+## newspack [6.55.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.3...newspack@6.55.4) (2026-10-20)
+
+
+### Bug Fixes
+
+* **tag-labels:** stop tags named "Labels" from restyling posts ([#1267](https://github.com/Automattic/newspack-workspace/issues/1267)) ([0e9cb8a](https://github.com/Automattic/newspack-workspace/commit/0e9cb8a0cd2d10fe30f3c59fc423ee0b2338788b))
+
+## newspack [6.55.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.2...newspack@6.55.3) (2026-10-19)
+
+
+### Bug Fixes
+
+* **revisions:** remove revisions control ([#1216](https://github.com/Automattic/newspack-workspace/issues/1216)) ([01cdad4](https://github.com/Automattic/newspack-workspace/commit/01cdad4a030d6f4555a977b037692c7e7720fc16))
+
 ## newspack [6.55.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.1...newspack@6.55.2) (2026-10-15)
 
 

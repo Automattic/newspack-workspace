@@ -66,6 +66,12 @@ describe( 'viewToParams', () => {
 		expect( params ).not.toHaveProperty( 'groupRole' );
 	} );
 
+	it( "sends the single-valued Access filter as the endpoint's `access` array", () => {
+		const params = viewToParams( { ...baseView, filters: [ { field: 'access', operator: 'is', value: 'complimentary' } ] } );
+		expect( params.access ).toEqual( [ 'complimentary' ] );
+		expect( viewToParams( { ...baseView, filters: [ { field: 'access', operator: 'is' } ] } ) ).not.toHaveProperty( 'access' );
+	} );
+
 	it( "sends the plans filter as the endpoint's `plan` param", () => {
 		// The field is `plans` (the Subscription column) but the endpoint arg is
 		// `plan`; a mismatch here silently returns the unfiltered list.

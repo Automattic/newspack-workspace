@@ -255,4 +255,54 @@ class TestBackfillerBatchedLoading extends \WP_UnitTestCase {
 			WP_CLI::$output
 		);
 	}
+
+	/**
+	 * A backfiller that builds every event up front still has the in-memory cache freed every batch.
+	 */
+	public function test_process_events_frees_in_memory_cache_for_events_built_up_front() {
+		wp_cache_set( 'sentinel', 0, 'backfill_test' );
+
+		$backfiller = new class( null, null, false, true ) extends Abstract_Backfiller {
+
+			const BATCH_SIZE = 2;
+
+			/**
+			 * Three events, built before processing starts.
+			 *
+			 * @return Reader_Registered[]
+			 */
+			public function get_events() {
+				return array_map(
+					function ( $email ) {
+						return new Reader_Registered( get_bloginfo( 'url' ), [ 'email' => $email ], 1000 );
+					},
+					[ 'a@example.test', 'b@example.test', 'c@example.test' ]
+				);
+			}
+
+			/**
+			 * Reports whether the cached sentinel survived since the previous event, then sets it again.
+			 *
+			 * @param Reader_Registered $event Event.
+			 * @return string
+			 */
+			protected function get_processed_item_output( $event ) {
+				$survived = false !== wp_cache_get( 'sentinel', 'backfill_test' );
+				wp_cache_set( 'sentinel', 1, 'backfill_test' );
+				return $event->get_email() . ( $survived ? ' kept' : ' freed' );
+			}
+		};
+
+		$backfiller->process_events();
+
+		$this->assertSame(
+			[
+				'👉 a@example.test kept',
+				'👉 b@example.test freed',
+				'👉 c@example.test kept',
+			],
+			WP_CLI::$output,
+			'The cache is freed once per batch of two, not per event.'
+		);
+	}
 }

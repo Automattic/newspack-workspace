@@ -75,9 +75,11 @@ class Block_Visibility {
 		// REST requests are deliberately NOT exempt: a context check is not a permission
 		// check, and access has to be evaluated per requester. Authoring contexts that
 		// arrive over REST (block renderer, preview, query-loop rendering inside the
-		// editor) are covered by the `edit_post` check further down, which needs a post
-		// in scope — where none is set up, it fails closed. Re-adding a blanket REST
-		// exemption here would widen what is readable; the REST cases in
+		// editor) are covered further down, by the `edit_post` check, which needs a
+		// post in scope, and by Content_Gate::should_skip_access_checks(), which does
+		// not. With no post in scope, only an account that skips access checks gets
+		// through; everyone else fails closed. Re-adding a blanket REST exemption
+		// here would widen what is readable; the REST cases in
 		// Newspack_Test_Block_Visibility pin the behaviour.
 		//
 		// An editor warming a listing teaser gets no bypass either: the string they
@@ -230,8 +232,9 @@ class Block_Visibility {
 			}
 		}
 
-		// Don't restrict content for users who can edit the post it's in.
-		if ( ! empty( $post_id ) && user_can( $user_id, 'edit_post', $post_id ) ) {
+		// Don't restrict content for users who can edit the post it's in, nor any
+		// content for an account Access Control never restricts.
+		if ( ( ! empty( $post_id ) && user_can( $user_id, 'edit_post', $post_id ) ) || Content_Gate::should_skip_access_checks( (int) $user_id ) ) {
 			return false;
 		}
 
@@ -712,7 +715,7 @@ class Block_Visibility {
 					? $access_passes
 					: Access_Rules::evaluate_anonymous_rules( $registration['access_rules'] ?? [] );
 			} elseif ( ! empty( $registration['require_verification'] ) ) {
-				$registration_passes = (bool) get_user_meta( $user_id, Reader_Activation::EMAIL_VERIFIED, true );
+				$registration_passes = Content_Gate::is_email_verification_met( (int) $user_id );
 			}
 		}
 

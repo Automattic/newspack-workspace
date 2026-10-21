@@ -1,3 +1,10 @@
+## newspack-network [2.22.14](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.13...newspack-network@2.22.14) (2026-10-20)
+
+
+### Bug Fixes
+
+* **network:** require manage_options to manage nodes ([#1212](https://github.com/Automattic/newspack-workspace/issues/1212)) ([a48ccf6](https://github.com/Automattic/newspack-workspace/commit/a48ccf6056966c77a00e5ab83d450c7a0c5ccaa6))
+
 ## newspack-network [2.22.13](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.12...newspack-network@2.22.13) (2026-10-12)
 
 

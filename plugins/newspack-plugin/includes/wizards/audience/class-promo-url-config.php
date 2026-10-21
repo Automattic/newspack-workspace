@@ -73,7 +73,7 @@ final class Promo_Url_Config {
 			if ( ! $child || ! in_array( $child->get_type(), [ 'subscription', 'variable-subscription' ], true ) ) {
 				continue;
 			}
-			if ( 'private' === $child->get_status() ) {
+			if ( 'private' === $child->get_status() || \Newspack\Complimentary_Access::is_complimentary_product( $child ) ) {
 				continue;
 			}
 			if ( $child->is_type( 'variable-subscription' ) ) {

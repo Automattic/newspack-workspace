@@ -255,7 +255,7 @@ Deletion propagates through the push pipeline, so push-capable integrations also
 
 The dispatcher lives at `Contact_Sync::handle_account_deletion()` and is called from the `reader_delete_sync` data event handler, which is registered while at least one integration can sync (`Contact_Sync::has_one_syncable_integration()`). It walks the enabled, set-up integrations with outbound sync on and `sync_account_deletion` set.
 
-Flag mode is two steps: the metadata push, then the integration's `flag_deletion_cleanup( $email )`, which ends further outreach. The flag push passes `skip_lists` to ask for an upsert that adds the reader to no list. That only holds for an integration whose `push_contact_data()` reads `$options`, so an integration that implements the cleanup, and whose push can add a contact to a list, must honor `skip_lists`. Otherwise the deletion adds the reader back to a list until the cleanup runs, and leaves them there when the cleanup fails. The dispatcher **skips flag mode entirely for an integration that keeps the base no-op cleanup**, because the push alone would leave the deleted reader reachable at the provider. An integration with neither `supports_hard_delete()` nor a cleanup override therefore propagates no deletions, whatever its settings say. The built-in Mailchimp integration overrides the cleanup to clear the contact from every list (`Newspack_Newsletters_Contacts::update_lists()`). Mailchimp keeps every contact in an audience, so that integration honors `skip_lists` by updating only the reader's existing member of the configured audience, leaving the member's status as it is. When the audience has no live member for the reader, it pushes nothing and answers `ras_contact_not_found`. The deletion path treats that code as benign, from any integration, when it is the error's only code: the push log row ends as a `success` with no retry, and the cleanup still runs.
+Flag mode is two steps: the metadata push, then the integration's `flag_deletion_cleanup( $email )`, which ends further outreach. The flag push passes `skip_lists` to ask for an upsert that adds the reader to no list. That only holds for an integration whose `push_contact_data()` reads `$options`, so an integration that implements the cleanup, and whose push can add a contact to a list, must honor `skip_lists`. Otherwise the deletion adds the reader back to a list until the cleanup runs, and leaves them there when the cleanup fails. The dispatcher **skips flag mode entirely for an integration that keeps the base no-op cleanup**, because the push alone would leave the deleted reader reachable at the provider. An integration with neither `supports_hard_delete()` nor a cleanup override therefore propagates no deletions, whatever its settings say. The built-in Mailchimp integration overrides the cleanup to remove the contact from every list offered for sign-up (`Newspack_Newsletters_Contacts::update_lists()`), then to unsubscribe it from the audience the integration syncs to, since the subscription lives on the audience member rather than on its groups or tags. Without that step, a reader who joined through a group or tag, or whose audience is no longer offered, would keep receiving campaigns sent to the whole audience. Audiences neither synced nor offered for sign-up are left alone, as the flag push leaves them. Mailchimp keeps every contact in an audience, so that integration honors `skip_lists` by updating only the reader's existing member of the configured audience, leaving the member's status as it is. When the audience has no live member for the reader, it pushes nothing and answers `ras_contact_not_found`. The deletion path treats that code as benign, from any integration, when it is the error's only code: the push log row ends as a `success` with no retry, and the cleanup still runs.
 
 The cleanup runs whether or not the push succeeded, since the reader must stop receiving outreach either way. Its failures fold into `handle_account_deletion()`'s aggregated error, and mark the push log row `flag_cleanup_failed` when the push landed or came back benign (see [Push Log](#push-log)), but are **not** scheduled for retry on their own; that gap mirrors the legacy deletion path this replaced and is tracked separately as hardening work. When a failed flag push is retried, the retry that ends the chain (one that lands, comes back benign, hits a permanent error, or is the last attempt) runs the cleanup again, whatever its own push answered.
 
@@ -619,7 +619,7 @@ do_action(
 do_action( 'newspack_integration_health_checks_completed', [ 'esp' ] );
 ```
 
-`Newspack\Alert_Manager` consumes all three and keeps one health record per integration in the `newspack_integration_health_state` option. Slack is paged once, on the `Alert_Manager::HEALTH_BROKEN_THRESHOLD`-th consecutive failure, and every other failure reaches the log at warning severity; a gap longer than `Alert_Manager::HEALTH_STREAK_MAX_GAP` between failures restarts a count that has not paged yet. That transition, the pass that ends it, and a run that stops checking a broken integration (disabled, or no longer set up) fire:
+`Newspack\Alert_Manager` consumes all three and keeps one health record per integration in the `newspack_integration_health_state` option. Slack is paged once, on the `Alert_Manager::HEALTH_BROKEN_THRESHOLD`-th consecutive failure, unless an issue tracks the outage (see below), and every other failure reaches the log at warning severity; a gap longer than `Alert_Manager::HEALTH_STREAK_MAX_GAP` between failures restarts a count that has not turned broken yet. That transition, the pass that ends it, and a run that stops checking a broken integration (disabled, or no longer set up) fire:
 
 ```php
 do_action(
@@ -632,11 +632,27 @@ do_action(
         'error'            => '403: API Access has been disabled for this account.',
         'first_failed_at'  => 1790000000,
         'failures'         => 3,
+        'issue_url'        => '', // the issue tracking this outage, if any (see below)
     ]
 );
 ```
 
 One event per outage in each direction, so a consumer can open and close a ticket without deduplicating hourly repeats itself. Staging hosts (`*.newspackstaging.com`) fire it too; only their alerts are capped at Watch, so a consumer that should skip staging has to check the host itself.
+
+Just before the `broken` event, the `newspack_integration_health_issue_url` filter asks whether an issue tracks the outage. A callback that returns an absolute `https` URL with a host takes ownership: the transition reaches the log with the URL instead of paging Slack, and the URL is stored with the record and sent with the outage's `recovered` or `disconnected` event. Any other answer, `''` included, or a callback that throws, leaves the page in place. Newspack Manager uses it to open a Linear issue for a publisher-side break.
+
+Unlike the event, the filter can run more than once for one outage, and an answer can be dropped after a callback acted on it: the outage then pages, and `recovered` carries `''`. Find or reuse an issue by site and `integration_id`, with `first_failed_at` to tell outages apart, not by the `issue_url` a later event carries.
+
+```php
+add_filter(
+    'newspack_integration_health_issue_url',
+    function ( $issue_url, $change ) {
+        return 'publisher' === $change['error_class'] ? open_tracking_issue( $change ) : $issue_url;
+    },
+    10,
+    2
+);
+```
 
 While an integration is broken, its contact-sync failures don't page either: retry exhaustion reaches the log at warning severity, and its failures stay out of the failure log the pattern alerts read. A record whose last failure is older than `Alert_Manager::HEALTH_STREAK_MAX_GAP` no longer counts, so a check that stops running cannot keep an integration muted.
 

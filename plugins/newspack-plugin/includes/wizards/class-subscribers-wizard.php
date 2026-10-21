@@ -299,6 +299,15 @@ class Subscribers_Wizard extends Wizard {
 						'sanitize_callback' => 'rest_sanitize_request_arg',
 						'validate_callback' => 'rest_validate_request_arg',
 					],
+					'access'   => [
+						'type'              => 'array',
+						'items'             => [
+							'type' => 'string',
+							'enum' => [ 'complimentary' ],
+						],
+						'sanitize_callback' => 'rest_sanitize_request_arg',
+						'validate_callback' => 'rest_validate_request_arg',
+					],
 					'plan'     => [
 						'type'              => 'array',
 						'items'             => [ 'type' => 'string' ],
@@ -1557,10 +1566,11 @@ class Subscribers_Wizard extends Wizard {
 				continue; // Group subscriptions are surfaced via get_group_memberships().
 			}
 			$entry = [
-				'id'      => (int) $subscription->get_id(),
-				'plan'    => $this->individual_plan_name( $subscription ),
-				'status'  => self::map_subscription_status( $subscription->get_status() ),
-				'editUrl' => $this->subscription_edit_url( $subscription ),
+				'id'              => (int) $subscription->get_id(),
+				'plan'            => $this->individual_plan_name( $subscription ),
+				'status'          => self::map_subscription_status( $subscription->get_status() ),
+				'editUrl'         => $this->subscription_edit_url( $subscription ),
+				'isComplimentary' => Complimentary_Access::is_complimentary_order( $subscription ),
 			];
 			$out[] = $detailed
 				? array_merge(
@@ -1622,6 +1632,9 @@ class Subscribers_Wizard extends Wizard {
 			// is ending even while its status still maps to active (still entitled).
 			'endDate'         => $this->subscription_date( $subscription, 'end' ) ?? $this->subscription_date( $subscription, 'cancelled' ),
 			'lastPayment'     => $this->subscription_date( $subscription, 'last_order_date_paid' ),
+			// A complimentary subscription is billed nothing, so the card shows
+			// "Complimentary" in place of its price and payment dates.
+			'isComplimentary' => Complimentary_Access::is_complimentary_order( $subscription ),
 		];
 	}
 
@@ -1798,10 +1811,11 @@ class Subscribers_Wizard extends Wizard {
 				$owner_id     = (int) $subscription->get_user_id();
 				$managers     = array_map( 'intval', Group_Subscription::get_managers( $subscription ) );
 				$entry        = [
-					'id'      => (int) $subscription->get_id(),
-					'plan'    => (string) $group['settings']['name'],
-					'status'  => self::map_subscription_status( $subscription->get_status() ),
-					'editUrl' => $this->subscription_edit_url( $subscription ),
+					'id'              => (int) $subscription->get_id(),
+					'plan'            => (string) $group['settings']['name'],
+					'status'          => self::map_subscription_status( $subscription->get_status() ),
+					'editUrl'         => $this->subscription_edit_url( $subscription ),
+					'isComplimentary' => Complimentary_Access::is_complimentary_order( $subscription ),
 				];
 				foreach ( array_map( 'intval', Group_Subscription::get_all_members( $subscription ) ) as $member_id ) {
 					if ( $member_id === $owner_id ) {
@@ -1832,10 +1846,11 @@ class Subscribers_Wizard extends Wizard {
 	 *   (non-cancelled) subscription; a reader with no subscription at all has
 	 *   no status.
 	 *
-	 * It is re-encoded in three other places, each of which points back here and
-	 * must be changed in step or the endpoint's filter will contradict the badge
-	 * it filters on:
+	 * It is re-encoded in these places, each of which must be changed in step or
+	 * the endpoint's filters will contradict the badge and column they filter on:
 	 *   - customer_ids_for_statuses() below — the endpoint's `status` filter.
+	 *   - customer_ids_for_plans() and customer_ids_for_complimentary() below —
+	 *     the `plan` and `access` filters, which drop a cancelled plan the same way.
 	 *   - displayStatuses() in src/wizards/subscribers/status.js — the row's
 	 *     status badges.
 	 *   - visiblePlanEntries in src/wizards/subscribers/screens/SubscriberList.jsx
@@ -2069,8 +2084,8 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
-	 * Resolve the `include` user-ID set for the active subscription-status / plan
-	 * filters, or null when neither is present.
+	 * Resolve the `include` user-ID set for the active subscription-status, plan
+	 * and access filters, or null when none is present.
 	 *
 	 * Each active filter resolves to a set of customer IDs; the sets are
 	 * intersected so multiple filters narrow (AND) rather than widen. The result
@@ -2086,7 +2101,8 @@ class Subscribers_Wizard extends Wizard {
 	private function resolve_filter_include( $request ) {
 		$status_filter = array_filter( array_map( 'sanitize_text_field', (array) $request->get_param( 'status' ) ) );
 		$plan_filter   = array_filter( array_map( 'sanitize_text_field', (array) $request->get_param( 'plan' ) ) );
-		if ( empty( $status_filter ) && empty( $plan_filter ) ) {
+		$access_filter = array_filter( array_map( 'sanitize_text_field', (array) $request->get_param( 'access' ) ) );
+		if ( empty( $status_filter ) && empty( $plan_filter ) && empty( $access_filter ) ) {
 			return null;
 		}
 
@@ -2096,6 +2112,9 @@ class Subscribers_Wizard extends Wizard {
 		}
 		if ( ! empty( $plan_filter ) ) {
 			$sets[] = $this->customer_ids_for_plans( $plan_filter );
+		}
+		if ( in_array( 'complimentary', $access_filter, true ) ) {
+			$sets[] = $this->customer_ids_for_complimentary();
 		}
 
 		$include = array_shift( $sets );
@@ -2282,6 +2301,67 @@ class Subscribers_Wizard extends Wizard {
 			$ids = array_merge( $ids, array_diff( $cancelled_ids, $this->customer_ids_for_raw_statuses( [ 'active', 'pending', 'on-hold' ] ) ) );
 		}
 
+		return array_values( array_unique( array_filter( $ids ) ) );
+	}
+
+	/**
+	 * Customer IDs holding a complimentary subscription, individual or group.
+	 *
+	 * Reduced like customer_ids_for_plans(): a cancelled comp qualifies its holder only
+	 * when nothing live remains, since the Subscription column hides it otherwise. A
+	 * group's members inherit its stamp, as they inherit its status. Walked a chunk at
+	 * a time up to FILTER_INCLUDE_CAP, as in customer_ids_for_raw_statuses().
+	 *
+	 * @return int[]
+	 */
+	private function customer_ids_for_complimentary(): array {
+		$ids           = [];
+		$cancelled_ids = [];
+		$groups        = $this->get_group_subscriptions();
+		foreach ( $groups as $group ) {
+			if ( ! Complimentary_Access::is_complimentary_order( $group['subscription'] ) ) {
+				continue;
+			}
+			$members = array_map( 'intval', Group_Subscription::get_all_members( $group['subscription'] ) );
+			if ( 'cancelled' === self::map_subscription_status( $group['subscription']->get_status() ) ) {
+				$cancelled_ids = array_merge( $cancelled_ids, $members );
+			} else {
+				$ids = array_merge( $ids, $members );
+			}
+		}
+		$can_scan = function_exists( 'wcs_get_subscriptions' );
+		for ( $page = 1; $can_scan && ( $page - 1 ) * self::FILTER_SCAN_CHUNK < self::FILTER_INCLUDE_CAP; $page++ ) {
+			$subs = \wcs_get_subscriptions(
+				[
+					'subscriptions_per_page' => self::FILTER_SCAN_CHUNK,
+					'offset'                 => ( $page - 1 ) * self::FILTER_SCAN_CHUNK,
+					'orderby'                => 'ID',
+					'subscription_status'    => $this->wcs_statuses_for( [ 'active', 'pending', 'on-hold', 'cancelled' ] ),
+					'meta_query'             => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+						[
+							'key'   => Complimentary_Access::META_KEY,
+							'value' => 'yes',
+						],
+					],
+				]
+			);
+			foreach ( $subs as $subscription ) {
+				if ( isset( $groups[ (int) $subscription->get_id() ] ) ) {
+					continue; // Counted with its members above.
+				}
+				if ( 'cancelled' === self::map_subscription_status( $subscription->get_status() ) ) {
+					$cancelled_ids[] = (int) $subscription->get_customer_id();
+				} else {
+					$ids[] = (int) $subscription->get_customer_id();
+				}
+			}
+			if ( count( $subs ) < self::FILTER_SCAN_CHUNK ) {
+				break;
+			}
+		}
+		if ( ! empty( $cancelled_ids ) ) {
+			$ids = array_merge( $ids, array_diff( $cancelled_ids, $this->customer_ids_for_raw_statuses( [ 'active', 'pending', 'on-hold' ] ) ) );
+		}
 		return array_values( array_unique( array_filter( $ids ) ) );
 	}
 

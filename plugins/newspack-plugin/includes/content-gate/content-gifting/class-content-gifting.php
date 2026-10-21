@@ -758,20 +758,15 @@ class Content_Gifting {
 	/**
 	 * Get the timestamp of the current expiration period for the gifting reset interval.
 	 *
+	 * Gift limits share the content-gate meters' calendar, so a reader's gifts and free
+	 * views reset at the same moment.
+	 *
 	 * @return int
 	 */
 	public static function get_current_expiration_timestamp() {
 		$interval = self::get_gifting_reset_interval();
-		switch ( $interval ) {
-			case 'day':
-				return strtotime( 'tomorrow' );
-			case 'week':
-				return strtotime( 'next monday' );
-			case 'month':
-				return mktime( 0, 0, 0, gmdate( 'n' ) + 1, 1 );
-			default:
-				return 0;
-		}
+		// Metering reads an empty period as "the gate's own period", which gifting has none of.
+		return $interval ? Metering::get_expiration_time( $interval ) : 0;
 	}
 
 	/**
