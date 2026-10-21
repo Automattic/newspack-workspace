@@ -40,6 +40,7 @@ final class Products_User extends Products {
 	public function __construct() {
 		// WP user actions to add capabilities and admin access for WC customers, who normally can't access the post editor.
 		add_filter( 'user_has_cap', [ $this, 'allow_customers_to_edit_own_posts' ], 10, 3 );
+		add_filter( 'map_meta_cap', [ __CLASS__, 'limit_customer_post_caps' ], 10, 4 );
 		add_filter( 'rest_request_before_callbacks', [ __CLASS__, 'push_rest_method' ], 10, 3 );
 		add_filter( 'rest_request_after_callbacks', [ __CLASS__, 'pop_rest_method' ], 10, 3 );
 		add_filter( 'allowed_block_types_all', [ $this, 'restrict_blocks_for_customers' ], 10, 2 );
@@ -64,7 +65,7 @@ final class Products_User extends Products {
 	 * @return bool[] Filtered array of allowed/disallowed capabilities.
 	 */
 	public function allow_customers_to_edit_own_posts( $allcaps, $caps, $args ) {
-		$capabilities        = [ 'edit_post', 'publish_post', 'edit_posts', 'edit_published_posts', 'publish_posts' ];
+		$capabilities        = [ 'edit_post', 'edit_posts', 'edit_published_posts', 'publish_posts' ];
 		$capability          = $args[0];
 		$user_id             = $args[1];
 		$post_id             = isset( $args[2] ) ? $args[2] : null;
@@ -78,7 +79,8 @@ final class Products_User extends Products {
 			$is_published   = 'publish' === get_post_status( get_the_ID() );
 			$is_edit_screen = self::is_own_listing_edit_screen( $user_id );
 
-			// Outside the editor screen of one of the customer's own listings, disallow.
+			// Outside the editor screen of one of the customer's own listings, disallow. This governs the broad primitives
+			// only: a per-post check never reads the meta capability's key, and is limited in limit_customer_post_caps().
 			if ( ! $is_edit_screen ) {
 				$allcaps[ $capability ] = 0;
 			}
@@ -93,24 +95,39 @@ final class Products_User extends Products {
 			if ( 'edit_posts' === $capability && ( $is_edit_screen || self::is_editor_read_request() ) ) {
 				$allcaps[ $capability ] = 1;
 			}
-
-			// WordPress resolves a per-post check against the primitives map_meta_cap() put in $caps, never the
-			// meta capability asked about, so a refusal has to clear those. Allowed checks keep the stored caps.
-			if ( $post_id && in_array( $capability, [ 'edit_post', 'publish_post' ], true ) && ! self::may_edit_post( $user_id, $post_id ) ) {
-				foreach ( $caps as $cap ) {
-					$allcaps[ $cap ] = 0;
-				}
-			}
 		}
 
 		return $allcaps;
 	}
 
 	/**
+	 * Refuse a customer's per-post edit or publish check on any post they may not edit.
+	 *
+	 * Filtering the mapping rather than the user's capabilities also covers the checks core resolves through
+	 * `edit_post` internally, such as post meta and comments on a post.
+	 *
+	 * @param string[] $caps    Primitive capabilities the check requires.
+	 * @param string   $cap     Capability being checked.
+	 * @param int      $user_id ID of the user being checked.
+	 * @param array    $args    Arguments to the check; the first is the post.
+	 *
+	 * @return string[] The capabilities unchanged, or `do_not_allow` to refuse.
+	 */
+	public static function limit_customer_post_caps( $caps, $cap, $user_id, $args ) {
+		if ( ! in_array( $cap, [ 'edit_post', 'publish_post' ], true ) || ! $user_id || empty( $args[0] ) ) {
+			return $caps;
+		}
+		if ( ! self::is_listing_customer( $user_id ) || self::may_edit_post( $user_id, $args[0] ) ) {
+			return $caps;
+		}
+		return [ 'do_not_allow' ];
+	}
+
+	/**
 	 * Whether a customer may edit a given post: one of their own listings, a revision of one, or media they uploaded.
 	 *
-	 * @param int $user_id ID of the customer.
-	 * @param int $post_id ID of the post being checked.
+	 * @param int          $user_id ID of the customer.
+	 * @param int|\WP_Post $post_id Post being checked, or its ID.
 	 *
 	 * @return boolean True if the post is one the customer may edit.
 	 */
