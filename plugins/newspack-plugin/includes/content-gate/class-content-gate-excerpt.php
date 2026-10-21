@@ -254,41 +254,73 @@ class Content_Gate_Excerpt {
 		}
 
 		if ( has_blocks( $content ) ) {
-			$blocks = parse_blocks( $content );
+			// A classic chunk in a block post parses as one block of several
+			// paragraphs, and the teaser counts those paragraphs like any others.
+			$blocks = [];
+			foreach ( parse_blocks( $content ) as $block ) {
+				if ( null === $block['blockName'] ) {
+					array_push( $blocks, ...self::paragraph_blocks( $block['innerHTML'] ) );
+				} else {
+					$blocks[] = $block;
+				}
+			}
 		} else {
 			// A classic post is one freeform block. Its paragraphs, as the teaser's
 			// wpautop() pass makes them, stand in for blocks.
-			$blocks = [];
-			foreach ( preg_split( '#(?<=</p>)#', wpautop( $content ), -1, PREG_SPLIT_NO_EMPTY ) as $paragraph ) {
-				$blocks[] = [
-					'blockName'    => null,
-					'attrs'        => [],
-					'innerBlocks'  => [],
-					'innerHTML'    => $paragraph,
-					'innerContent' => [ $paragraph ],
-				];
-			}
+			$blocks = self::paragraph_blocks( wpautop( $content ) );
 		}
+
+		// Core's excerpt renders these one inner block at a time, never the wrapper
+		// itself, so they are compared that way too: a render filter on the wrapper
+		// does not apply there.
+		$wrappers = (array) apply_filters( 'excerpt_allowed_wrapper_blocks', [ 'core/columns', 'core/column', 'core/group' ] );
 
 		$seen = '';
 		$kept = '';
-		self::take_free_blocks( $blocks, $target, $seen, $kept );
+		self::take_free_blocks( $blocks, $target, $wrappers, $seen, $kept );
 		return $kept;
+	}
+
+	/**
+	 * Freeform blocks for each paragraph of some HTML, split as the teaser splits it.
+	 *
+	 * @param string $html HTML.
+	 * <PERSON_dad35182025b> array Parsed blocks.
+	 */
+	private static function paragraph_blocks( string $html ): array {
+		$blocks = [];
+		foreach ( preg_split( '#(?<=</p>)#', $html, -1, PREG_SPLIT_NO_EMPTY ) as $paragraph ) {
+			$blocks[] = [
+				'blockName'    => null,
+				'attrs'        => [],
+				'innerBlocks'  => [],
+				'innerHTML'    => $paragraph,
+				'innerContent' => [ $paragraph ],
+			];
+		}
+		return $blocks;
 	}
 
 	/**
 	 * Append blocks to $kept while their text continues the teaser's.
 	 *
 	 * @param array  $blocks Parsed blocks.
-	 * @param string $target The teaser's comparable text.
-	 * @param string $seen   Comparable text of the blocks kept so far.
-	 * @param string $kept   Markup of the blocks kept so far.
+	 * @param string $target   The teaser's comparable text.
+	 * @param array  $wrappers Names of the blocks always entered.
+	 * @param string $seen     Comparable text of the blocks kept so far.
+	 * @param string $kept     Markup of the blocks kept so far.
 	 * @return bool Whether the free part has ended.
 	 */
-	private static function take_free_blocks( array $blocks, string $target, string &$seen, string &$kept ): bool {
+	private static function take_free_blocks( array $blocks, string $target, array $wrappers, string &$seen, string &$kept ): bool {
 		foreach ( $blocks as $block ) {
 			if ( $seen === $target ) {
 				return true;
+			}
+			if ( in_array( $block['blockName'], $wrappers, true ) ) {
+				if ( self::take_free_blocks( $block['innerBlocks'], $target, $wrappers, $seen, $kept ) ) {
+					return true;
+				}
+				continue;
 			}
 			$markup = serialize_block( $block );
 			// The text steps of the teaser's `newspack_gate_content` pass, called
@@ -301,7 +333,7 @@ class Content_Gate_Excerpt {
 				$kept .= $markup;
 				continue;
 			}
-			if ( ! empty( $block['innerBlocks'] ) && ! self::take_free_blocks( $block['innerBlocks'], $target, $seen, $kept ) ) {
+			if ( ! empty( $block['innerBlocks'] ) && ! self::take_free_blocks( $block['innerBlocks'], $target, $wrappers, $seen, $kept ) ) {
 				continue;
 			}
 			return true;
@@ -317,6 +349,9 @@ class Content_Gate_Excerpt {
 	 * @return string
 	 */
 	private static function comparable_text( string $html ): string {
+		// The `u` pattern fails on invalid UTF-8, which a free block can render; the
+		// excerpt keeps the block's own markup, so only this comparison drops it.
+		$html = wp_check_invalid_utf8( $html, true );
 		return preg_replace( '/\s+/u', '', html_entity_decode( wp_strip_all_tags( $html ), ENT_QUOTES | ENT_HTML5, 'UTF-8' ) );
 	}
 

@@ -454,6 +454,50 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A block post that opens with a classic chunk, as imports leave behind, parses
+	 * that chunk as one block of several paragraphs. The teaser counts the chunk's
+	 * paragraphs like any others, so the excerpt takes the ones it shows.
+	 */
+	public function test_excerpt_takes_the_free_paragraphs_of_a_classic_chunk() {
+		$post_id = $this->create_restricted_post(
+			[
+				'post_content' => '<p>' . self::FREE_MARKER . " opening line.</p>\n<p>Second free line.</p>\n<p>" . self::PAID_MARKER . " is behind the gate.</p>\n"
+					. '<!-- wp:paragraph --><p>Closing paid line.</p><!-- /wp:paragraph -->',
+			]
+		);
+
+		$this->assertSame( self::FREE_MARKER . ' opening line. Second free line.', get_the_excerpt( $post_id ) );
+	}
+
+	/**
+	 * Invalid UTF-8 in the free part, such as a shortcode that cuts a multibyte
+	 * character in half, still builds an excerpt.
+	 */
+	public function test_invalid_utf8_in_the_free_part_still_builds_an_excerpt() {
+		add_shortcode(
+			'np_test_bad_utf8',
+			static function () {
+				return substr( 'é', 0, 1 );
+			}
+		);
+		try {
+			$post_id = $this->create_restricted_post(
+				[
+					'post_content' => '<!-- wp:paragraph --><p>' . self::FREE_MARKER . ' opening [np_test_bad_utf8] line.</p><!-- /wp:paragraph -->'
+						. '<!-- wp:paragraph --><p>Second free line.</p><!-- /wp:paragraph -->'
+						. '<!-- wp:paragraph --><p>' . self::PAID_MARKER . ' is behind the gate.</p><!-- /wp:paragraph -->',
+				]
+			);
+			$excerpt = get_the_excerpt( $post_id );
+		} finally {
+			remove_shortcode( 'np_test_bad_utf8' );
+		}
+
+		$this->assertStringStartsWith( self::FREE_MARKER, $excerpt );
+		$this->assertStringNotContainsString( self::PAID_MARKER, $excerpt );
+	}
+
+	/**
 	 * Homepage Posts builds its excerpt from a listing post's `post_content`, so
 	 * that carries the excerpt's teaser, while the card's content render keeps the
 	 * image.
@@ -862,6 +906,35 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 
 		$this->assertStringContainsString( self::FREE_MARKER, $excerpt, 'The cut starts at the opening paragraph, which is the premise of this test.' );
 		$this->assertStringNotContainsString( self::PAID_MARKER, $excerpt );
+	}
+
+	/**
+	 * A wrapper whose render filter hides part of it is compared one inner block at
+	 * a time, as core's excerpt renders it, so the hidden block stays out.
+	 */
+	public function test_excerpt_leaves_out_a_block_a_wrapper_filter_hides() {
+		$hide_marked_paragraph = static function ( $content ) {
+			return preg_replace( '#<p[^>]*>HIDDENTEXT[^<]*</p>#', '', $content );
+		};
+		add_filter( 'render_block_core/group', $hide_marked_paragraph );
+		try {
+			$post_id = $this->create_restricted_post(
+				[
+					'post_content' => '<!-- wp:group --><div class="wp-block-group">'
+						. '<!-- wp:paragraph --><p>' . self::FREE_MARKER . ' opening line.</p><!-- /wp:paragraph -->'
+						. '<!-- wp:paragraph --><p>HIDDENTEXT line.</p><!-- /wp:paragraph -->'
+						. '</div><!-- /wp:group -->'
+						. '<!-- wp:paragraph --><p>Second free line.</p><!-- /wp:paragraph -->'
+						. '<!-- wp:paragraph --><p>' . self::PAID_MARKER . ' is behind the gate.</p><!-- /wp:paragraph -->',
+				]
+			);
+			$excerpt = get_the_excerpt( $post_id );
+		} finally {
+			remove_filter( 'render_block_core/group', $hide_marked_paragraph );
+		}
+
+		$this->assertStringStartsWith( self::FREE_MARKER, $excerpt );
+		$this->assertStringNotContainsString( 'HIDDENTEXT', $excerpt );
 	}
 
 	/**
