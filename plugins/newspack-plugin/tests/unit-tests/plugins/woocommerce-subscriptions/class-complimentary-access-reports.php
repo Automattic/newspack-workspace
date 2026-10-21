@@ -216,12 +216,19 @@ class Newspack_Test_Complimentary_Access_Reports extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The "Complimentary" filter narrows a list stored as posts; the list keeps comps without it.
+	 * A list stored as posts leaves comps out unless its "Complimentary" filter asks for them.
 	 */
 	public function test_list_filter_narrows_the_posts_list() {
+		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
+			define( 'NEWSPACK_CONTENT_GATES', true );
+		}
 		set_current_screen( 'edit-shop_subscription' );
-		$list_ids = function () {
-			$query                  = new WP_Query();
+		$list_ids = function ( $filter ) {
+			unset( $_GET[ Complimentary_Access_Reports::LIST_FILTER_PARAM ] );
+			if ( $filter ) {
+				$_GET[ Complimentary_Access_Reports::LIST_FILTER_PARAM ] = $filter;
+			}
+			$query                   = new WP_Query();
 			$GLOBALS['wp_the_query'] = $query;
 			$query->set( 'post_type', 'shop_subscription' );
 			$query->set( 'post_status', 'wc-active' );
@@ -232,12 +239,26 @@ class Newspack_Test_Complimentary_Access_Reports extends WP_UnitTestCase {
 			return $ids;
 		};
 
-		$this->assertCount( 3, $list_ids() );
+		try {
+			$this->assertSame( $this->paid_ids, $list_ids( null ), 'Comps are left out by default.' );
+			$this->assertSame( $this->paid_ids, $list_ids( 'exclude' ) );
+			$this->assertSame( [ $this->comp_id ], $list_ids( 'only' ) );
+			$this->assertCount( 3, $list_ids( 'all' ) );
+		} finally {
+			unset( $_GET[ Complimentary_Access_Reports::LIST_FILTER_PARAM ] );
+		}
+	}
+
+	/**
+	 * The subscriptions list filtered to comps drops its payment columns.
+	 */
+	public function test_comp_list_drops_payment_columns() {
+		$columns = array_fill_keys( [ 'status', 'recurring_total', 'next_payment_date', 'last_payment_date', 'end_date', 'orders' ], '' );
+
+		$this->assertSame( $columns, Complimentary_Access_Reports::filter_subscription_list_columns( $columns ) );
 		try {
 			$_GET[ Complimentary_Access_Reports::LIST_FILTER_PARAM ] = 'only';
-			$this->assertSame( [ $this->comp_id ], $list_ids() );
-			$_GET[ Complimentary_Access_Reports::LIST_FILTER_PARAM ] = 'exclude';
-			$this->assertSame( $this->paid_ids, $list_ids() );
+			$this->assertSame( [ 'status', 'end_date' ], array_keys( Complimentary_Access_Reports::filter_subscription_list_columns( $columns ) ) );
 		} finally {
 			unset( $_GET[ Complimentary_Access_Reports::LIST_FILTER_PARAM ] );
 		}
@@ -257,8 +278,8 @@ class Newspack_Test_Complimentary_Access_Reports extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The export leaves comps out unless asked; an export from a list filtered to comps keeps
-	 * that filter.
+	 * The export leaves comps out unless asked; an export from a list filtered to comps, or to
+	 * all access types, keeps that filter.
 	 */
 	public function test_export_excludes_comps_by_default() {
 		$excluded = Complimentary_Access::get_meta_query_clause( 'exclude' );
@@ -267,5 +288,6 @@ class Newspack_Test_Complimentary_Access_Reports extends WP_UnitTestCase {
 		$this->assertSame( [ $excluded ], Complimentary_Access_Reports::filter_export_query_args( [], [], [] )['meta_query'] );
 		$this->assertArrayNotHasKey( 'meta_query', Complimentary_Access_Reports::filter_export_query_args( [], [], [ 'include_complimentary' => true ] ) );
 		$this->assertSame( [ $only ], Complimentary_Access_Reports::filter_export_query_args( [], [ Complimentary_Access_Reports::LIST_FILTER_PARAM => 'only' ], [] )['meta_query'] );
+		$this->assertArrayNotHasKey( 'meta_query', Complimentary_Access_Reports::filter_export_query_args( [], [ Complimentary_Access_Reports::LIST_FILTER_PARAM => 'all' ], [] ) );
 	}
 }

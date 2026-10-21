@@ -19,8 +19,8 @@ defined( 'ABSPATH' ) || exit;
  * ESP sync and reader data, so each report surface is filtered through a hook of its own.
  * WooCommerce Subscriptions' Retention rate report has no hook and still counts comps.
  *
- * Comps stay in the subscription and order lists, which gain a filter for them, and the
- * subscriptions CSV export leaves them out unless asked to include them.
+ * The subscription and order lists gain a filter for comps that leaves them out by default, and
+ * the subscriptions CSV export leaves them out unless asked to include them.
  */
 class Complimentary_Access_Reports {
 	/**
@@ -63,11 +63,11 @@ class Complimentary_Access_Reports {
 	];
 
 	/**
-	 * Statuses the filtered HPOS list queries, which tell its pagination count apart from its view counts.
+	 * Stamped subscriptions or orders per status, keyed by type, for the list counts.
 	 *
-	 * @var string[]|null
+	 * @var array<string, array<string, int>>
 	 */
-	private static ?array $list_statuses = null;
+	private static array $stamped_counts = [];
 
 	/**
 	 * This connection's `GROUP_CONCAT()` limit before the reports raised it, or 0 when unraised.
@@ -129,7 +129,15 @@ class Complimentary_Access_Reports {
 		add_filter( 'woocommerce_shop_subscription_list_table_order_count', [ __CLASS__, 'filter_list_order_count' ], 10, 2 );
 		add_filter( 'woocommerce_shop_order_list_table_should_render_blank_state', [ __CLASS__, 'filter_list_blank_state' ] );
 		add_filter( 'woocommerce_shop_subscription_list_table_should_render_blank_state', [ __CLASS__, 'filter_list_blank_state' ] );
+		add_filter( 'wp_count_posts', [ __CLASS__, 'filter_legacy_list_counts' ], 10, 2 );
+		// After WooCommerce Subscriptions rebuilds its HPOS views (10).
+		foreach ( [ 'woocommerce_page_wc-orders', 'woocommerce_page_wc-orders--shop_subscription', 'edit-shop_order', 'edit-shop_subscription' ] as $screen_id ) {
+			add_filter( "views_{$screen_id}", [ __CLASS__, 'filter_list_view_links' ], 20 );
+		}
 		add_action( 'pre_get_posts', [ __CLASS__, 'filter_legacy_list_query' ] );
+		// After WooCommerce Subscriptions adds its columns (10).
+		add_filter( 'manage_woocommerce_page_wc-orders--shop_subscription_columns', [ __CLASS__, 'filter_subscription_list_columns' ], 20 );
+		add_filter( 'manage_edit-shop_subscription_columns', [ __CLASS__, 'filter_subscription_list_columns' ], 20 );
 
 		// Subscriptions CSV export.
 		add_filter( 'newspack_subscriptions_export_query_args', [ __CLASS__, 'filter_export_query_args' ], 10, 3 );
@@ -491,14 +499,29 @@ class Complimentary_Access_Reports {
 	}
 
 	/**
-	 * The "Complimentary" filter value of the current list request.
+	 * The "Complimentary" filter value the current list request asked for.
+	 *
+	 * @return string `all`, `only`, `exclude`, or '' when the request doesn't set the filter.
+	 */
+	private static function get_requested_list_filter(): string {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$value = isset( $_GET[ self::LIST_FILTER_PARAM ] ) ? sanitize_key( wp_unslash( $_GET[ self::LIST_FILTER_PARAM ] ) ) : '';
+		return in_array( $value, [ 'all', 'only', 'exclude' ], true ) ? $value : '';
+	}
+
+	/**
+	 * The "Complimentary" filter applied to the current list.
+	 *
+	 * Lists leave comps out unless the filter asks for them, wherever the filter is shown.
 	 *
 	 * @return string `only`, `exclude`, or '' for no filter.
 	 */
 	private static function get_list_filter_value(): string {
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$value = isset( $_GET[ self::LIST_FILTER_PARAM ] ) ? sanitize_key( wp_unslash( $_GET[ self::LIST_FILTER_PARAM ] ) ) : '';
-		return in_array( $value, [ 'only', 'exclude' ], true ) ? $value : '';
+		$requested = self::get_requested_list_filter();
+		if ( '' === $requested ) {
+			return Content_Gate::is_newspack_feature_enabled() ? 'exclude' : '';
+		}
+		return 'all' === $requested ? '' : $requested;
 	}
 
 	/**
@@ -514,8 +537,9 @@ class Complimentary_Access_Reports {
 			return;
 		}
 		$current = self::get_list_filter_value();
+		$current = '' === $current ? 'all' : $current;
 		$options = [
-			''        => 'shop_subscription' === $type ? __( 'All subscriptions', 'newspack-plugin' ) : __( 'All orders', 'newspack-plugin' ),
+			'all'     => __( 'All access types', 'newspack-plugin' ),
 			'only'    => __( 'Complimentary', 'newspack-plugin' ),
 			'exclude' => __( 'Not complimentary', 'newspack-plugin' ), // phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.PostNotIn_exclude -- A filter option, not a query argument.
 		];
@@ -539,7 +563,6 @@ class Complimentary_Access_Reports {
 	public static function filter_list_query_args( $args ) {
 		$clause = Complimentary_Access::get_meta_query_clause( self::get_list_filter_value() );
 		if ( $clause ) {
-			self::$list_statuses  = (array) ( $args['status'] ?? [] );
 			$args['meta_query']   = $args['meta_query'] ?? []; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 			$args['meta_query'][] = $clause;
 		}
@@ -547,12 +570,10 @@ class Complimentary_Access_Reports {
 	}
 
 	/**
-	 * Count the filtered HPOS list for its pagination.
+	 * Count the filtered HPOS list for its status views and pagination.
 	 *
-	 * Without other filters, the list takes its total from the per-status counts WooCommerce
-	 * caches, which include comps, so the "Complimentary" view would report the whole list. The
-	 * status views share this count, but their links drop the filter, so they keep the full
-	 * counts: only the count of the statuses the list queried changes.
+	 * Without other filters, the list takes its counts from the per-status counts WooCommerce
+	 * caches, which include comps.
 	 *
 	 * @param int      $count    Number of subscriptions or orders with the statuses.
 	 * @param string[] $statuses Statuses counted.
@@ -560,42 +581,133 @@ class Complimentary_Access_Reports {
 	 * @return int
 	 */
 	public static function filter_list_order_count( $count, $statuses ) {
-		$clause = Complimentary_Access::get_meta_query_clause( self::get_list_filter_value() );
-		if ( ! $clause || null === self::$list_statuses ) {
+		$type = 'woocommerce_shop_subscription_list_table_order_count' === current_filter() ? 'shop_subscription' : 'shop_order';
+		return self::get_filtered_count( (int) $count, $type, (array) $statuses );
+	}
+
+	/**
+	 * Count the filtered list of a list stored as posts for its status views.
+	 *
+	 * @param object $counts Number of posts per status.
+	 * @param string $type   Post type.
+	 *
+	 * @return object
+	 */
+	public static function filter_legacy_list_counts( $counts, $type ) {
+		if ( ! is_admin() || ! in_array( $type, [ 'shop_order', 'shop_subscription' ], true ) || ! function_exists( 'get_current_screen' ) || 'edit-' . $type !== get_current_screen()?->id ) {
+			return $counts;
+		}
+		$counts = clone $counts;
+		foreach ( get_object_vars( $counts ) as $status => $count ) {
+			$counts->$status = self::get_filtered_count( (int) $count, $type, [ $status ] );
+		}
+		return $counts;
+	}
+
+	/**
+	 * Narrow a list count to the "Complimentary" filter.
+	 *
+	 * @param int      $count    Number of subscriptions or orders with the statuses.
+	 * @param string   $type     `shop_subscription` or `shop_order`.
+	 * @param string[] $statuses Statuses counted.
+	 *
+	 * @return int
+	 */
+	private static function get_filtered_count( int $count, string $type, array $statuses ): int {
+		$mode = self::get_list_filter_value();
+		if ( '' === $mode ) {
 			return $count;
 		}
-		$statuses      = (array) $statuses;
-		$list_statuses = self::$list_statuses;
-		sort( $statuses );
-		sort( $list_statuses );
-		if ( $statuses !== $list_statuses ) {
-			return $count;
+		if ( ! isset( self::$stamped_counts[ $type ] ) ) {
+			global $wpdb;
+			// phpcs:disable WordPress.DB.DirectDatabaseQuery
+			if ( self::is_hpos() ) {
+				$rows = $wpdb->get_results( $wpdb->prepare( "SELECT records.status, COUNT(*) AS total FROM {$wpdb->prefix}wc_orders AS records INNER JOIN {$wpdb->prefix}wc_orders_meta AS meta ON meta.order_id = records.id AND meta.meta_key = %s WHERE records.type = %s GROUP BY records.status", Complimentary_Access::META_KEY, $type ) );
+			} else {
+				$rows = $wpdb->get_results( $wpdb->prepare( "SELECT records.post_status AS status, COUNT(*) AS total FROM {$wpdb->posts} AS records INNER JOIN {$wpdb->postmeta} AS meta ON meta.post_id = records.ID AND meta.meta_key = %s WHERE records.post_type = %s GROUP BY records.post_status", Complimentary_Access::META_KEY, $type ) );
+			}
+			// phpcs:enable WordPress.DB.DirectDatabaseQuery
+			self::$stamped_counts[ $type ] = array_map( 'intval', wp_list_pluck( $rows, 'total', 'status' ) );
 		}
-		$results = wc_get_orders(
-			[
-				'type'       => 'woocommerce_shop_subscription_list_table_order_count' === current_filter() ? 'shop_subscription' : 'shop_order',
-				'status'     => (array) $statuses,
-				'meta_query' => [ $clause ], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
-				'limit'      => 1,
-				'return'     => 'ids',
-				'paginate'   => true,
-			]
+		$stamped = array_sum( array_intersect_key( self::$stamped_counts[ $type ], array_flip( $statuses ) ) );
+		return 'only' === $mode ? $stamped : max( 0, $count - $stamped );
+	}
+
+	/**
+	 * Keep the "Complimentary" filter on the list's status views.
+	 *
+	 * A filter the list asked for stays on the views' links. On the HPOS subscriptions list,
+	 * WooCommerce Subscriptions counts the views itself, with no filter, so their counts are
+	 * narrowed here; a status left with none drops out, as it would from WooCommerce's own views.
+	 *
+	 * @param string[] $views View links, keyed by status, or `all`.
+	 *
+	 * @return string[]
+	 */
+	public static function filter_list_view_links( $views ) {
+		if ( ! is_array( $views ) ) {
+			return $views;
+		}
+		if ( 'views_woocommerce_page_wc-orders--shop_subscription' === current_filter() && '' !== self::get_list_filter_value() ) {
+			$all_statuses = array_filter( array_keys( $views ), fn( $status ) => 'all' !== $status && get_post_status_object( $status )?->show_in_admin_all_list );
+			foreach ( $views as $status => $view ) {
+				$statuses = 'all' === $status ? $all_statuses : [ $status ];
+				$view     = preg_replace_callback(
+					'/<span class="count">\((\d+)\)<\/span>/',
+					fn( $match ) => '<span class="count">(' . self::get_filtered_count( (int) $match[1], 'shop_subscription', $statuses ) . ')</span>',
+					$view
+				);
+				if ( 'all' !== $status && false !== strpos( $view, '<span class="count">(0)</span>' ) ) {
+					unset( $views[ $status ] );
+					continue;
+				}
+				$views[ $status ] = $view;
+			}
+		}
+		$requested = self::get_requested_list_filter();
+		if ( '' === $requested ) {
+			return $views;
+		}
+		return array_map(
+			fn( $view ) => preg_replace_callback(
+				'/href=([\'"])(.*?)\1/',
+				fn( $match ) => 'href=' . $match[1] . esc_url( add_query_arg( self::LIST_FILTER_PARAM, $requested, html_entity_decode( $match[2] ) ) ) . $match[1],
+				$view
+			),
+			$views
 		);
-		return (int) $results->total;
 	}
 
 	/**
 	 * Keep the filtered HPOS list on screen when nothing matches.
 	 *
 	 * An empty list otherwise turns into WooCommerce's first-run screen, which has no filters to
-	 * clear the "Complimentary" one with.
+	 * clear the "Complimentary" one with. That screen stays for a store with no orders at all.
 	 *
 	 * @param bool|null $should_render Whether to render the blank state; null lets WooCommerce decide.
 	 *
 	 * @return bool|null
 	 */
 	public static function filter_list_blank_state( $should_render ) {
-		return '' === self::get_list_filter_value() ? $should_render : false;
+		if ( '' === self::get_list_filter_value() ) {
+			return $should_render;
+		}
+		$type = 'woocommerce_shop_subscription_list_table_should_render_blank_state' === current_filter() ? 'shop_subscription' : 'shop_order';
+		return 0 === array_sum( OrderUtil::get_count_for_type( $type ) );
+	}
+
+	/**
+	 * Drop the payment columns from the subscriptions list filtered to comps, which never pay.
+	 *
+	 * @param array $columns List columns, keyed by ID.
+	 *
+	 * @return array
+	 */
+	public static function filter_subscription_list_columns( $columns ) {
+		if ( 'only' !== self::get_list_filter_value() ) {
+			return $columns;
+		}
+		return array_diff_key( $columns, array_flip( [ 'recurring_total', 'next_payment_date', 'last_payment_date', 'orders' ] ) );
 	}
 
 	/**
@@ -618,7 +730,8 @@ class Complimentary_Access_Reports {
 	/**
 	 * Leave comps out of the subscriptions CSV export unless it asks for them.
 	 *
-	 * An export started from a list filtered by "Complimentary" keeps that filter.
+	 * An export started from a list filtered to "Complimentary" or "All access types" keeps that
+	 * filter; otherwise the export's own option decides.
 	 *
 	 * @param array $args   Query arguments.
 	 * @param array $params Captured list parameters.
@@ -627,9 +740,14 @@ class Complimentary_Access_Reports {
 	 * @return array
 	 */
 	public static function filter_export_query_args( $args, $params = [], $config = [] ) {
-		$mode = isset( $params[ self::LIST_FILTER_PARAM ] ) && in_array( $params[ self::LIST_FILTER_PARAM ], [ 'only', 'exclude' ], true )
-			? $params[ self::LIST_FILTER_PARAM ]
-			: ( empty( $config['include_complimentary'] ) ? 'exclude' : '' );
+		$list_filter = $params[ self::LIST_FILTER_PARAM ] ?? '';
+		if ( 'only' === $list_filter ) {
+			$mode = 'only';
+		} elseif ( 'all' === $list_filter || ! empty( $config['include_complimentary'] ) ) {
+			$mode = '';
+		} else {
+			$mode = 'exclude';
+		}
 		$clause = Complimentary_Access::get_meta_query_clause( $mode );
 		if ( $clause ) {
 			$args['meta_query']   = $args['meta_query'] ?? []; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
