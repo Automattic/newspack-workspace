@@ -46,7 +46,7 @@ const SIGNUP_HINT_LIFETIME = 24 * 60 * 60;
  * @param {boolean} isLoggedIn Whether the reader is authenticated.
  * @return {boolean} Whether the hint records a signup that still counts.
  */
-export function isRecentSignupHint( hint, isLoggedIn ) {
+export function isCountingSignupHint( hint, isLoggedIn ) {
 	if ( 'number' !== typeof hint || ! Number.isFinite( hint ) ) {
 		return false;
 	}
@@ -68,7 +68,7 @@ export function isRecentSignupHint( hint, isLoggedIn ) {
 export function matchNewsletter( config, { store } ) {
 	const isLoggedIn = Boolean( store.get( 'reader' )?.authenticated );
 	const isSubscriber =
-		store.get( 'is_newsletter_subscriber' ) || isRecentSignupHint( store.get( 'newsletter_signup_client' ), isLoggedIn ) || isFromEmail();
+		store.get( 'is_newsletter_subscriber' ) || isCountingSignupHint( store.get( 'newsletter_signup_client' ), isLoggedIn ) || isFromEmail();
 	switch ( config.value ) {
 		case 'subscribers':
 			return isSubscriber;
