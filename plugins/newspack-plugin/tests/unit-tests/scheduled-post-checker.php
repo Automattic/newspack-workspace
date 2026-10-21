@@ -303,6 +303,35 @@ class Scheduled_Post_Checker_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A rescued changeset is reported as rescued, even with NEWSPACK_LOG_LEVEL unset:
+	 * core trashes it on publish, so this report is the only record of the rescue.
+	 */
+	public function test_rescued_changeset_is_reported() {
+		$changeset_id = $this->create_overdue_future_post(
+			'customize_changeset',
+			[
+				'post_name'    => wp_generate_uuid4(),
+				'post_content' => wp_json_encode( [] ),
+			]
+		);
+
+		$reports = [];
+		$this->add_cleanup_filter(
+			'newspack_log',
+			function ( $code, $message, $params ) use ( &$reports ) {
+				if ( 0 === strpos( $code, 'newspack_scheduled_post_checker_' ) ) {
+					$reports[] = [ $code, $params['data']['changeset_id'] ];
+				}
+			},
+			3
+		);
+
+		\Newspack\Scheduled_Post_Checker\nspc_run_check();
+
+		$this->assertSame( [ [ 'newspack_scheduled_post_checker_rescued_changeset', $changeset_id ] ], $reports );
+	}
+
+	/**
 	 * The boundary itself, not just comfortably inside/outside it: an hour under the
 	 * 3-day limit is rescued, an hour over is left alone.
 	 */

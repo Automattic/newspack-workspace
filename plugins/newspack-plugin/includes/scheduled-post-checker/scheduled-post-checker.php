@@ -137,8 +137,23 @@ function nspc_rescue_changesets() {
 
 	foreach ( $rescuable as $changeset_id ) {
 		$missed_gmt = strtotime( get_post_field( 'post_date_gmt', $changeset_id ) . ' GMT' );
-		Logger::log( sprintf( 'Rescuing changeset %d, %s overdue.', $changeset_id, human_time_diff( $missed_gmt ) ), LOGGER_HEADER );
 		check_and_publish_future_post( $changeset_id );
+
+		// Core trashes a changeset once it publishes, so this is the rescue's only record: log it
+		// locally and to Newspack Manager, as for a stranded changeset below. One still `future` failed.
+		$failed  = 'future' === get_post_status( $changeset_id );
+		$message = sprintf(
+			$failed ? 'Failed to rescue changeset %d, %s overdue.' : 'Rescued changeset %d, %s overdue.',
+			$changeset_id,
+			human_time_diff( $missed_gmt )
+		);
+		Logger::log( $message, LOGGER_HEADER, $failed ? 'error' : 'info' );
+		Logger::newspack_log(
+			$failed ? 'newspack_scheduled_post_checker_rescue_failed' : 'newspack_scheduled_post_checker_rescued_changeset',
+			$message,
+			[ 'changeset_id' => $changeset_id ],
+			$failed ? 'error' : 'debug'
+		);
 	}
 
 	// Bounded and self-limiting: once a stranded changeset is logged, the meta flag
