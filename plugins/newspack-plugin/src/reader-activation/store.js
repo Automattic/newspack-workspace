@@ -240,8 +240,10 @@ function decode( str ) {
  * Browser-only key recording when this browser last submitted a newsletter
  * signup form, in seconds since the epoch. It is never synced and is a
  * segmentation hint, not proof of a subscription; the server-managed
- * `is_newsletter_subscriber` is the latter. Campaigns read it only while it is
- * recent, so a reader who later unsubscribes stops matching.
+ * `is_newsletter_subscriber` is the latter. For a logged-in reader, campaigns
+ * read it only for a day, after which the server value has reached the browser
+ * and a reader who later unsubscribes stops matching. A logged-out reader never
+ * receives that value, so for them the hint keeps counting.
  *
  * @type {string}
  */
