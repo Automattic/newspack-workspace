@@ -84,7 +84,7 @@ RUN \
 		done; \
 	} \
 	&& retry apt-get update --error-on=any \
-	&& retry apt-get install -y -o Acquire::Retries=10 \
+	&& retry apt-get install -y -o Acquire::Retries=5 \
 		libapache2-mod-php${PHP_VERSION} \
 		php${PHP_VERSION} \
 		php${PHP_VERSION}-bcmath \
@@ -106,7 +106,7 @@ RUN \
 		phpunit \
 	php-pear \
 	php${PHP_VERSION}-dev \
-	&& retry apt-get install -y --no-install-recommends -o Acquire::Retries=10 \
+	&& retry apt-get install -y --no-install-recommends -o Acquire::Retries=5 \
 		php${PHP_VERSION}-apcu \
 		php${PHP_VERSION}-gd \
 		php${PHP_VERSION}-imagick \
