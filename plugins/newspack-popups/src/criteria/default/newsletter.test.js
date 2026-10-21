@@ -47,6 +47,12 @@ describe( 'newsletter criteria matching', () => {
 		expect( matchNewsletter( { value: 'non-subscribers' }, makeRas( false, signedUpAnHourAgo ) ) ).toBe( false );
 	} );
 
+	it( 'treats a logged-in reader with a recent signup signal as a subscriber', () => {
+		const signedUpAnHourAgo = nowInSeconds() - 60 * 60;
+		expect( matchNewsletter( { value: 'subscribers' }, makeRas( false, signedUpAnHourAgo, true ) ) ).toBe( true );
+		expect( matchNewsletter( { value: 'non-subscribers' }, makeRas( false, signedUpAnHourAgo, true ) ) ).toBe( false );
+	} );
+
 	it( 'stops treating the signup signal of a logged-in reader as a subscriber after a day', () => {
 		const signedUp25HoursAgo = nowInSeconds() - 25 * 60 * 60;
 		expect( matchNewsletter( { value: 'subscribers' }, makeRas( false, signedUp25HoursAgo, true ) ) ).toBe( false );
