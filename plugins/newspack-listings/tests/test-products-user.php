@@ -336,6 +336,15 @@ class ProductsUserTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A per-post check for a user ID that no longer resolves is left to core rather than failing.
+	 */
+	public function test_per_post_check_for_missing_user_does_not_fail() {
+		$post_id = self::factory()->post->create();
+
+		$this->assertNotContains( 'do_not_allow', map_meta_cap( 'edit_post', PHP_INT_MAX, $post_id ) );
+	}
+
+	/**
 	 * A revision of a post the customer wrote that is not a listing cannot be edited.
 	 */
 	public function test_own_non_listing_revision_cannot_be_edited() {
