@@ -211,7 +211,7 @@ class Alert_Manager {
 	public static function schedule_pattern_scan() {
 		register_deactivation_hook( NEWSPACK_PLUGIN_FILE, [ __CLASS__, 'deactivate_pattern_scan' ] );
 
-		if ( defined( 'NEWSPACK_CRON_DISABLE' ) && is_array( NEWSPACK_CRON_DISABLE ) && in_array( self::PATTERN_SCAN_HOOK, NEWSPACK_CRON_DISABLE, true ) ) {
+		if ( defined( 'NEWSPACK_CRON_DISABLE' ) && is_array( NEWSPACK_CRON_DISABLE ) && in_array( self::PATTERN_SCAN_HOOK, NEWSPACK_CRON_DISABLE, true ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Documented in plugins/newspack-plugin/includes/oauth/class-oauth-transients.php.
 			self::deactivate_pattern_scan();
 		} elseif ( ! wp_next_scheduled( self::PATTERN_SCAN_HOOK ) ) {
 			wp_schedule_event( time(), 'hourly', self::PATTERN_SCAN_HOOK );

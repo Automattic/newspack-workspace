@@ -57,7 +57,7 @@ class Connect_Node {
 			return false;
 		}
 		$nonce_data = $nonces[ $node_id ];
-		if ( $nonce_data['nonce'] !== $nonce ) {
+		if ( ! is_string( $nonce ) || ! isset( $nonce_data['nonce'] ) || ! is_string( $nonce_data['nonce'] ) || ! hash_equals( $nonce_data['nonce'], $nonce ) ) {
 			return false;
 		}
 		if ( time() - $nonce_data['time'] > 60 * 60 ) {
@@ -108,6 +108,8 @@ class Connect_Node {
 		if ( ! $verified_nonce ) {
 			return new WP_REST_Response( array( 'error' => 'Invalid link.' ), 403 );
 		}
+
+		$node->mark_paired();
 
 		$response_body = [
 			'secret_key' => $node->get_secret_key(),

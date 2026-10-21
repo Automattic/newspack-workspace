@@ -168,12 +168,12 @@ describe( 'AdsQuickEditPanel taxonomy handling', () => {
 		ad_placement: [ 20 ],
 	} );
 
-	// The embedded id is deliberately absent from `ADVERTISERS`, so the
-	// options list cannot render it and the embed is the only source.
-	const withEmbeddedTerms = () => ( {
+	// The id is deliberately absent from `ADVERTISERS`, so the options list
+	// cannot render it and the terms field is the only source.
+	const withNamedTerms = () => ( {
 		...makeItem( 'publish' ),
 		newspack_nl_advertiser: [ 55 ],
-		_embedded: { 'wp:term': [ [ { id: 55, name: 'Beta Corp', taxonomy: 'newspack_nl_advertiser' } ] ] },
+		newspack_newsletters_terms: { newspack_nl_advertiser: [ { id: 55, name: 'Beta Corp' } ] },
 	} );
 
 	it( 'hydrates the fields from raw term IDs when the embed is absent', async () => {
@@ -182,17 +182,17 @@ describe( 'AdsQuickEditPanel taxonomy handling', () => {
 		expect( screen.getByText( 'Header' ) ).toBeInTheDocument();
 	} );
 
-	it( 'still reads embedded terms when they are present', async () => {
-		renderPanel( withEmbeddedTerms() );
+	it( 'still reads the terms field when it is present', async () => {
+		renderPanel( withNamedTerms() );
 		expect( await screen.findByText( 'Beta Corp' ) ).toBeInTheDocument();
 	} );
 
-	// The embed can render a token the options list has never seen. Editing
-	// then looks available but is a trap: the suggestions and the token
+	// The terms field can render a token the options list has never seen.
+	// Editing then looks available but is a trap: the suggestions and the token
 	// validator both come from the options list, so removing the token makes it
 	// impossible to type back, and the save would write the taxonomy empty.
-	it( 'holds a field read-only when only the embed can account for a stored term', async () => {
-		renderPanel( withEmbeddedTerms() );
+	it( 'holds a field read-only when only the terms field can account for a stored term', async () => {
+		renderPanel( withNamedTerms() );
 		expect( await screen.findByText( 'Beta Corp' ) ).toBeInTheDocument();
 		await waitFor( () => expect( visibleNotices() ).toContain( ADVERTISERS_UNAVAILABLE ) );
 		expect( screen.getByLabelText( 'Advertiser' ) ).toBeDisabled();
@@ -200,9 +200,9 @@ describe( 'AdsQuickEditPanel taxonomy handling', () => {
 
 	// The same shape when the options request fails outright: `fetchAllTerms`
 	// swallows the failure and settles empty, which must not read as success
-	// just because the embed still renders the token.
+	// just because the terms field still renders the token.
 	it( 'holds a field read-only when its options request settled empty', async () => {
-		renderPanel( withEmbeddedTerms(), { advertisers: [] } );
+		renderPanel( withNamedTerms(), { advertisers: [] } );
 		expect( await screen.findByText( 'Beta Corp' ) ).toBeInTheDocument();
 		await waitFor( () => expect( visibleNotices() ).toContain( ADVERTISERS_UNAVAILABLE ) );
 		expect( screen.getByLabelText( 'Advertiser' ) ).toBeDisabled();
@@ -265,7 +265,7 @@ describe( 'AdsQuickEditPanel taxonomy handling', () => {
 		renderPanel( {
 			...makeItem( 'publish' ),
 			categories: allCategories.map( c => c.id ),
-			_embedded: { 'wp:term': [ allCategories.slice( 0, 10 ).map( c => ( { ...c, taxonomy: 'category' } ) ) ] },
+			newspack_newsletters_terms: { category: allCategories.slice( 0, 10 ) },
 		} );
 
 		expect( await screen.findByText( 'Cat 11' ) ).toBeInTheDocument();
@@ -305,7 +305,7 @@ describe( 'AdsQuickEditPanel taxonomy handling', () => {
 			...makeItem( 'publish' ),
 			categories: allCategories.map( c => c.id ),
 			// A truncated embed: the 11th term is missing until the fetch lands.
-			_embedded: { 'wp:term': [ allCategories.slice( 0, 10 ).map( c => ( { ...c, taxonomy: 'category' } ) ) ] },
+			newspack_newsletters_terms: { category: allCategories.slice( 0, 10 ) },
 		} );
 
 		expect( await screen.findByLabelText( 'Categories' ) ).toBeDisabled();

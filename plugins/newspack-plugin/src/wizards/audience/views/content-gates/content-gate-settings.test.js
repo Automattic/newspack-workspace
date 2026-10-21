@@ -50,7 +50,10 @@ jest.mock( '@wordpress/data', () => ( {
 
 jest.mock( '@wordpress/components', () => {
 	const React = require( 'react' );
-	return { CardBody: ( { children } ) => React.createElement( 'div', null, children ) };
+	return {
+		CardBody: ( { children } ) => React.createElement( 'div', null, children ),
+		Notice: ( { children } ) => React.createElement( 'div', null, children ),
+	};
 } );
 
 // Card renders its action items (nested arrays) as clickable buttons so the
@@ -63,9 +66,10 @@ jest.mock( '../../../../../packages/components/src', () => {
 			React.createElement(
 				'div',
 				null,
+				React.createElement( 'button', { 'aria-label': __experimentalCoreProps?.actionsLabel } ),
 				( __experimentalCoreProps?.actions || [] )
 					.flat()
-					.map( a => React.createElement( 'button', { key: a.label, onClick: a.action }, a.label ) ),
+					.map( a => React.createElement( 'button', { key: a.label, onClick: a.action, 'aria-label': a.ariaLabel }, a.label ) ),
 				children
 			),
 		Router: { useHistory: () => ( { push: () => {} } ) },
@@ -87,6 +91,7 @@ jest.mock( './utils', () => ( {
 	getEditGateLayoutUrl: () => '#',
 	getGateStatus: () => 'Active',
 	getGateStatusBadgeIntent: () => 'stable',
+	getPriorityWarnings: () => ( {} ),
 } ) );
 
 describe( 'ContentGateSettings per-gate actions', () => {
@@ -101,7 +106,7 @@ describe( 'ContentGateSettings per-gate actions', () => {
 		render( <ContentGateSettings gate={ mockGate } updateGatesData={ () => {} } /> );
 
 		// gate.status === 'publish' -> the toggle action is labelled "Set to inactive".
-		fireEvent.click( screen.getByRole( 'button', { name: 'Set to inactive' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Set to inactive: Gate X' } ) );
 
 		await waitFor( () => {
 			expect( mockAddNotice ).toHaveBeenCalledWith(
@@ -121,7 +126,7 @@ describe( 'ContentGateSettings per-gate actions', () => {
 
 		// The Delete action routes through useConfirmDialog, mocked to fire its
 		// callback immediately -> handleDelete -> failed DELETE -> onError.
-		fireEvent.click( screen.getByRole( 'button', { name: 'Delete' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Delete: Gate X' } ) );
 
 		await waitFor( () => {
 			expect( mockAddNotice ).toHaveBeenCalledWith(
@@ -130,6 +135,16 @@ describe( 'ContentGateSettings per-gate actions', () => {
 					id: 'content-gate-delete-error',
 				} )
 			);
+		} );
+	} );
+
+	it( 'names the actions menu and each action after the gate', () => {
+		const ContentGateSettings = require( './content-gate-settings' ).default;
+		render( <ContentGateSettings gate={ mockGate } updateGatesData={ () => {} } /> );
+
+		expect( screen.getByRole( 'button', { name: 'Gate actions: Gate X' } ) ).toBeInTheDocument();
+		[ 'Edit', 'Set to inactive', 'Duplicate', 'Delete' ].forEach( label => {
+			expect( screen.getByRole( 'button', { name: `${ label }: Gate X` } ) ).toBeInTheDocument();
 		} );
 	} );
 } );

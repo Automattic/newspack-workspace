@@ -37,7 +37,7 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 		}
 	}, [ showModal ] );
 
-	const updateConfig = useRef< ( _config: PremiumNewslettersConfig ) => void >();
+	const updateConfig = useRef< ( _config: PremiumNewslettersConfig ) => void >( undefined );
 	const handleUpdateConfig = ( _config: PremiumNewslettersConfig ) => {
 		if ( isFetching ) {
 			return;

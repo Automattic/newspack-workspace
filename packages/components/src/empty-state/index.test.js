@@ -45,6 +45,16 @@ describe( 'EmptyState.Root', () => {
 		expect( stack ).toHaveStyle( { gap: 'var(--wpds-dimension-gap-2xl, 32px)' } );
 	} );
 
+	it( 'tightens the stack gap when small', () => {
+		const { container } = render(
+			<EmptyState.Root size="small">
+				<p>body</p>
+			</EmptyState.Root>
+		);
+		const stack = container.querySelector( '.newspack-empty-state' ).firstElementChild;
+		expect( stack ).toHaveStyle( { gap: 'var(--wpds-dimension-gap-xl, 24px)' } );
+	} );
+
 	// Consumers key `:has()` selectors off this class, so losing it changes their
 	// layout without failing anything.
 	it( 'merges className onto the grid', () => {

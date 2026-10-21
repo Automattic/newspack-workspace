@@ -77,6 +77,15 @@ export const settingsFieldRenders = field => {
 };
 
 /**
+ * Whether an integration's settings page would show anything. Without a field
+ * to render, the page would be empty, so nothing should lead to it.
+ *
+ * @param {Object[]} [settings] The integration's field declarations.
+ * @return {boolean} True when at least one field renders.
+ */
+export const hasSettingsToShow = settings => ( settings || [] ).some( settingsFieldRenders );
+
+/**
  * Render a single settings field.
  *
  * @param {Object}   props          Component props.

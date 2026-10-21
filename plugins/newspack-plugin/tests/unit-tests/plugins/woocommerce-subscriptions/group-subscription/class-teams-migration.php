@@ -138,6 +138,26 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Create an author (a non-reader who is nonetheless an eligible group member —
+	 * Group_Subscription::is_eligible_member() includes authors/contributors by default).
+	 *
+	 * @return int User ID.
+	 */
+	private function create_author(): int {
+		$user_id = wp_insert_user(
+			[
+				'user_login' => 'author-' . wp_generate_password( 6, false ),
+				'user_pass'  => wp_generate_password(),
+				'user_email' => 'author-' . wp_generate_password( 6, false ) . '@test.com',
+				'role'       => 'author',
+			]
+		);
+		$this->assertNotWPError( $user_id, 'Fixture author creation should succeed.' );
+		$this->user_ids[] = $user_id;
+		return $user_id;
+	}
+
+	/**
 	 * Create an active, group-enabled subscription owned by $owner_id.
 	 *
 	 * @param int $owner_id Owner user ID.
@@ -284,15 +304,30 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The add_group_member() helper skips editors/admins — they are not readers and
+	 * The add_group_member() helper adds an eligible author — previously skipped
+	 * as a non-reader, now eligible via Group_Subscription::is_eligible_member(),
+	 * which includes authors/contributors by default alongside readers.
+	 */
+	public function test_add_group_member_adds_author() {
+		$owner        = $this->create_reader();
+		$author       = $this->create_author();
+		$subscription = $this->create_group_subscription( $owner );
+
+		$this->assertSame( 'added', Teams_Migration::add_group_member( $subscription, $author ), 'An eligible author should be added.' );
+		$this->assertTrue( (bool) Group_Subscription::user_is_member( $author, $subscription ), 'The author should now hold group membership.' );
+	}
+
+	/**
+	 * The add_group_member() helper skips editors/admins — they are not eligible
+	 * group members (Group_Subscription::is_eligible_member() excludes them) and
 	 * already have full access, so they should not be recorded as group members.
 	 */
-	public function test_add_group_member_skips_non_readers() {
+	public function test_add_group_member_reports_not_eligible_for_editor() {
 		$owner        = $this->create_reader();
 		$editor       = $this->create_editor();
 		$subscription = $this->create_group_subscription( $owner );
 
-		$this->assertSame( 'not_reader', Teams_Migration::add_group_member( $subscription, $editor ), 'A non-reader (editor) should be skipped.' );
+		$this->assertSame( 'not_eligible', Teams_Migration::add_group_member( $subscription, $editor ), 'A non-eligible user (editor) should be skipped.' );
 		$this->assertFalse( (bool) Group_Subscription::user_is_member( $editor, $subscription ), 'The editor should not become a group member.' );
 	}
 
@@ -320,6 +355,31 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		$managers = array_map( 'intval', Group_Subscription::get_managers( $subscription ) );
 		$this->assertContains( $manager_member, $managers, 'The promoted member should now be a manager.' );
 		$this->assertNotContains( $plain_member, $managers, 'The plain member should not be a manager.' );
+	}
+
+	/**
+	 * A dry-run's projected manager-promotion count must match what the live path would
+	 * actually promote. The live path (promote_managers_from_team_roles()) gates only on
+	 * team-role and group membership — and add_group_member() grants membership to any
+	 * Group_Subscription::is_eligible_member() user, which includes authors/contributors
+	 * by default. count_dry_run_manager_promotions() used the narrower
+	 * Reader_Activation::is_user_reader() as its own membership stand-in (no member meta
+	 * exists yet mid dry-run), so it under-counted an author-role manager the live path
+	 * would promote.
+	 */
+	public function test_dry_run_manager_promotion_count_includes_eligible_author_manager() {
+		$owner        = $this->create_reader();
+		$author       = $this->create_author();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [ $author ], $subscription->get_id() );
+		$this->set_team_role( $author, $team_id, 'manager' );
+
+		$count_dry_run_manager_promotions_method = new \ReflectionMethod( Teams_Migration::class, 'count_dry_run_manager_promotions' );
+		$count_dry_run_manager_promotions_method->setAccessible( true );
+
+		$count = $count_dry_run_manager_promotions_method->invoke( null, $subscription, $team_id, [ $author ], $owner );
+
+		$this->assertSame( 1, $count, 'An eligible author manager should be counted among projected promotions, matching the live path.' );
 	}
 
 	/**

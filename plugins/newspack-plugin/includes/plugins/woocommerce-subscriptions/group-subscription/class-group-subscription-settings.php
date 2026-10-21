@@ -44,6 +44,12 @@ class Group_Subscription_Settings {
 	const GROUP_NAME_MAX_LENGTH = 100;
 
 	/**
+	 * Subscription meta holding the comma-separated email domains whose readers join
+	 * the group on verifying their address. Set per group, never inherited from the product.
+	 */
+	const EMAIL_DOMAINS_META_KEY = self::GROUP_SUBSCRIPTION_META_PREFIX . 'email_domains';
+
+	/**
 	 * Initialize hooks and filters.
 	 */
 	public static function init() {
@@ -319,6 +325,20 @@ class Group_Subscription_Settings {
 	}
 
 	/**
+	 * Normalize an email domain list to one canonical form, e.g. "example.com,example.org",
+	 * so matching never depends on how the admin typed it.
+	 *
+	 * @param mixed $domains The raw domain list.
+	 *
+	 * @return string The normalized list, e.g. "example.com,example.org".
+	 */
+	public static function sanitize_email_domains( $domains ) {
+		$domains = preg_split( '/[\s,]+/', strtolower( (string) $domains ) );
+		$domains = array_map( fn( $domain ) => ltrim( $domain, '@' ), $domains );
+		return implode( ',', array_unique( array_filter( $domains ) ) );
+	}
+
+	/**
 	 * Get the group subscription settings for a product.
 	 *
 	 * @param WC_Product|int $product The product object or ID.
@@ -560,6 +580,14 @@ class Group_Subscription_Settings {
 			if ( in_array( 'enabled', $changed_keys, true ) ) {
 				self::clear_group_subscription_ids_cache();
 			}
+
+			/**
+			 * Fires after a group subscription's settings are saved with at least one change.
+			 *
+			 * @param \WC_Subscription $subscription The group subscription.
+			 * @param string[]         $changed_keys The settings that changed.
+			 */
+			do_action( 'newspack_group_subscription_settings_updated', $subscription, $changed_keys );
 		}
 	}
 
@@ -678,7 +706,7 @@ class Group_Subscription_Settings {
 				continue;
 			}
 			$member_user = get_user_by( 'id', $member_id );
-			if ( $member_user && Reader_Activation::is_user_reader( $member_user ) ) {
+			if ( $member_user ) {
 				$member_rows[] = [
 					'user'       => $member_user,
 					'is_manager' => in_array( $member_id, $managers, true ),
@@ -698,9 +726,10 @@ class Group_Subscription_Settings {
 		$seat_limit      = Group_Subscription::get_member_seat_limit( $subscription );
 		$pending_invites = Group_Subscription_Invite::get_invites( $subscription, false );
 		$is_at_limit     = null !== $seat_limit && ( count( $members ) + count( $pending_invites ) ) >= $seat_limit;
-		// Members in the raw set but not rendered as spot-marked rows (a manager who also carries
-		// member meta, or a non-reader member) still consume a spot; the JS adds this offset to
-		// its rendered-row tally so its live count matches this server-side one.
+		// Members in the raw set but not rendered as their own spot-marked row (the owner,
+		// skipped above, plus any member whose get_user_by() returned null because the user
+		// was deleted out-of-band) still consume a spot; the JS adds this offset to its
+		// rendered-row tally so its live count matches this server-side one.
 		$spots_offset = count( $members ) - count( $member_rows );
 		?>
 		<div class="newspack-group-subscription__container<?php echo $is_at_limit ? ' is-at-limit' : ''; ?>" data-subscription-id="<?php echo \esc_attr( $subscription->get_id() ); ?>" data-member-limit="<?php echo \esc_attr( null === $seat_limit ? '' : (string) $seat_limit ); ?>" data-spots-offset="<?php echo \esc_attr( (string) $spots_offset ); ?>">
@@ -742,6 +771,20 @@ class Group_Subscription_Settings {
 							'label'         => __( 'Group subscription name', 'newspack-plugin' ),
 							'value'         => $settings['name'],
 							'type'          => 'text',
+							'wrapper_class' => 'show_if_newspack_group_subscription_enabled',
+						]
+					);
+					// Stored comma-separated, shown one domain per line so a long list stays editable.
+					\woocommerce_wp_textarea_input(
+						[
+							'id'            => self::EMAIL_DOMAINS_META_KEY,
+							'name'          => self::EMAIL_DOMAINS_META_KEY,
+							'label'         => __( 'Auto-join email domains', 'newspack-plugin' ),
+							'desc_tip'      => true,
+							'description'   => __( 'Readers who verify an email address on one of these domains join this group automatically while it has a free seat. Enter one domain per line.', 'newspack-plugin' ),
+							'placeholder'   => "example.com\nexample.org",
+							'value'         => str_replace( ',', "\n", (string) $subscription->get_meta( self::EMAIL_DOMAINS_META_KEY, true ) ),
+							'rows'          => 5,
 							'wrapper_class' => 'show_if_newspack_group_subscription_enabled',
 						]
 					);
@@ -936,6 +979,14 @@ class Group_Subscription_Settings {
 
 		if ( ! empty( $changed ) ) {
 			self::update_subscription_settings( $subscription, $changed );
+		}
+
+		if ( isset( $_POST[ self::EMAIL_DOMAINS_META_KEY ] ) ) {
+			$email_domains = self::sanitize_email_domains( sanitize_textarea_field( wp_unslash( $_POST[ self::EMAIL_DOMAINS_META_KEY ] ) ) );
+			if ( $email_domains !== $subscription->get_meta( self::EMAIL_DOMAINS_META_KEY, true ) ) {
+				$subscription->update_meta_data( self::EMAIL_DOMAINS_META_KEY, $email_domains );
+				$subscription->save();
+			}
 		}
 
 		// Effective group status can flip via inherited product settings without a meta write; refresh the cached ID set when it changed.

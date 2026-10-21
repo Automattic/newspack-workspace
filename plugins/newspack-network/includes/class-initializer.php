@@ -27,6 +27,7 @@ class Initializer {
 			Hub\Event_Listeners::init();
 			Hub\Database\Subscriptions::init();
 			Hub\Database\Orders::init();
+			Hub\Database\Event_Log::init();
 			Hub\Newspack_Ads_GAM::init();
 			Hub\Connect_Node::init();
 		}
@@ -63,6 +64,7 @@ class Initializer {
 		Woocommerce\Events::init();
 		Woocommerce\Product_Admin::init();
 		Woocommerce_Subscriptions\My_Account::init();
+		Woocommerce_Subscriptions\Group_Seats::init();
 		Woocommerce_Memberships\Admin::init();
 		Woocommerce_Memberships\Events::init();
 		Woocommerce_Memberships\Subscriptions_Integration::init();

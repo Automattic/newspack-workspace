@@ -57,7 +57,7 @@ class Premium_Newsletters_Wizard extends Wizard {
 	 * Constructor.
 	 */
 	public function __construct() {
-		if ( ! defined( 'NEWSPACK_NEWSLETTERS_PLUGIN_FILE' ) ) {
+		if ( ! defined( 'NEWSPACK_NEWSLETTERS_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Presence check for another Newspack plugin, not a configurable constant.
 			return;
 		}
 

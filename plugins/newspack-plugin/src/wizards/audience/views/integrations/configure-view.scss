@@ -27,3 +27,19 @@
 		width: 200px;
 	}
 }
+
+.newspack-outbound-field-row {
+	align-items: flex-start;
+	display: flex;
+	gap: 8px;
+
+	&__checkbox {
+		flex: 1;
+	}
+
+	&__badges {
+		display: inline-flex;
+		gap: 4px;
+		padding-top: 2px;
+	}
+}

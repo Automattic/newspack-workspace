@@ -539,14 +539,18 @@ class Starter_Content_Generated extends Starter_Content_Provider {
 			return null;
 		}
 
+		// wp_handle_sideload() takes $file by reference and writes back into it, so the
+		// array has to be a variable — passing a literal here throws (#1002).
+		$file = [
+			'name'     => 'automated_upload.jpg',
+			'type'     => mime_content_type( $temp_file ),
+			'tmp_name' => $temp_file,
+			'error'    => 0,
+			'size'     => filesize( $temp_file ),
+		];
+
 		$file_attributes = wp_handle_sideload(
-			[
-				'name'     => 'automated_upload.jpg',
-				'type'     => mime_content_type( $temp_file ),
-				'tmp_name' => $temp_file,
-				'error'    => 0,
-				'size'     => filesize( $temp_file ),
-			],
+			$file,
 			[
 				'test_form'   => false,
 				'test_size'   => true,
@@ -555,6 +559,10 @@ class Starter_Content_Generated extends Starter_Content_Provider {
 		);
 
 		if ( is_wp_error( $file_attributes ) || ! empty( $file_attributes['error'] ) ) {
+			// download_url() leaves cleanup to the caller, and _wp_handle_upload() only
+			// unlinks the temp file on a successful move, so every failure above this
+			// point abandons it in the system temp directory.
+			wp_delete_file( $temp_file );
 			return null;
 		}
 

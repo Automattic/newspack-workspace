@@ -8,6 +8,7 @@ import { getPendingCheckout } from '../reader-activation/checkout';
 import { openNewslettersSignupModal } from '../reader-activation-newsletters/newsletters-modal';
 import { openVerificationModal } from './verification-modal';
 import { maybeConfirmRegistration } from './confirmation-modal';
+import { getBackTarget, shouldReuseActiveCode } from './auth-form-helpers';
 
 import './google-oauth';
 import './otp-input';
@@ -97,6 +98,10 @@ window.newspackRAS.push( function ( readerActivation ) {
 			 * Handle auth form action selection.
 			 */
 			let formAction;
+			// Whether a one-time code has been sent in this modal session. A per-session flag,
+			// not the np_otp_hash cookie, which persists ~29 minutes across sessions and would
+			// make a genuine first "email me a code" click skip the send (NPPM-3054).
+			let codeSent = false;
 			container.setFormAction = ( action, shouldFocus = false ) => {
 				if ( ! FORM_ALLOWED_ACTIONS.includes( action ) ) {
 					action = 'signin';
@@ -173,7 +178,11 @@ window.newspackRAS.push( function ( readerActivation ) {
 					emailInput.value = reader?.email || '';
 				}
 				setTimeout( function () {
-					if ( reader?.authenticated && formAction !== 'success' ) {
+					// A reader who has just registered is authenticated but still owes the
+					// verification step. Resolving the flow here would report success to the
+					// opener while the verification modal is up, and modal checkout answers
+					// that by opening the checkout over it.
+					if ( reader?.authenticated && formAction !== 'success' && ! form.isVerifying ) {
 						form.endLoginFlow( null, 200 );
 					}
 				}, 1000 );
@@ -193,7 +202,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 						}
 					}
 					form.setMessageContent();
-					container.setFormAction( 'signin', true );
+					container.setFormAction( getBackTarget( formAction, container.readerHasPassword ), true );
 				} );
 			} );
 
@@ -230,6 +239,16 @@ window.newspackRAS.push( function ( readerActivation ) {
 					button.addEventListener( 'click', function ( ev ) {
 						ev.preventDefault();
 						form.setMessageContent();
+						// A reader who already requested a code and returned to the password step can
+						// choose the code again. Show the existing code-entry step instead of asking the
+						// server for a new code, which would restart the resend cooldown and strand the
+						// code already in their inbox. Only the "email me a code" button reuses; resend
+						// always requests a fresh code.
+						if ( shouldReuseActiveCode( ev.currentTarget === sendCodeButton, codeSent ) ) {
+							container.setFormAction( 'otp' );
+							handleOTPTimer();
+							return;
+						}
 						form.startLoginFlow();
 						const body = new FormData();
 						body.set( 'reader-activation-auth-form', 1 );
@@ -260,6 +279,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 									formAction === 'pwd' ? newspack_reader_activation_labels.code_sent : newspack_reader_activation_labels.code_resent
 								);
 								container.setFormAction( 'otp' );
+								codeSent = true;
 								if ( ! readerActivation.getOTPTimeRemaining() ) {
 									readerActivation.setOTPTimer();
 								}
@@ -351,8 +371,13 @@ window.newspackRAS.push( function ( readerActivation ) {
 					// Post-registration email verification: detour the new reader through the verification
 					// modal before completing the auth flow. The newsletters signup modal is shown after the
 					// verification step (or its dismissal) and before the original onSuccess/onClose callbacks.
+					// An opener whose own flow verifies the reader, as a checkout does, passes skipVerification.
 					const needsVerification =
-						data?.registered && newspack_ras_config?.verify_new_reader_accounts && data?.verified !== true && data?.verification_nonce;
+						! container.config?.skipVerification &&
+						data?.registered &&
+						newspack_ras_config?.verify_new_reader_accounts &&
+						data?.verified !== true &&
+						data?.verification_nonce;
 
 					let callback;
 					if ( ! container.config?.skipNewslettersSignup && data?.registered && container.authCallback ) {
@@ -424,7 +449,13 @@ window.newspackRAS.push( function ( readerActivation ) {
 							},
 							onDismiss: () => {
 								restoreAuthModal();
-								callback?.( message, data );
+								if ( callback ) {
+									callback( message, data );
+								} else {
+									// An inline form has no opener to hand back to, so it finishes by
+									// itself. No data: passing the registration would reopen this step.
+									form.endLoginFlow( null, 200 );
+								}
 								form.isVerifying = false;
 							},
 						} );
@@ -561,6 +592,13 @@ window.newspackRAS.push( function ( readerActivation ) {
 											readerActivation.setReaderEmail( body.get( 'npe' ) );
 										}
 										if ( data.action ) {
+											// A `signin` response of 'pwd' means the reader has a password; 'otp' means
+											// they don't. Remember it so "Go Back" from the code step can return them to
+											// the password step (NPPM-3054). Other transitions (resend, verify) don't set
+											// data.action here, so the flag survives them.
+											if ( 'pwd' === data.action || 'otp' === data.action ) {
+												container.readerHasPassword = 'pwd' === data.action;
+											}
 											container.setFormAction( data.action, true );
 											if ( data.action === 'otp' ) {
 												readerActivation.setOTPTimer();

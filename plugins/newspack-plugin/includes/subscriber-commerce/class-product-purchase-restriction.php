@@ -122,7 +122,7 @@ class Product_Purchase_Restriction {
 		}
 
 		$user_id = null === $user_id ? get_current_user_id() : (int) $user_id;
-		// The verdict rests on Subscriber_Eligibility::user_has(), which reads
+		// The verdict rests on Subscriber_Eligibility::user_matches_rule(), which reads
 		// `payment_recovery_grace` from the ambient evaluation context that
 		// with_evaluation_context() swaps around each gate. Key on it for the same
 		// reason that layer does, so a verdict reached inside one gate's context
@@ -163,7 +163,7 @@ class Product_Purchase_Restriction {
 				// rule names a way in, so more rules can only widen access.
 				$can_purchase = false;
 				foreach ( $rules as $rule ) {
-					if ( Subscriber_Eligibility::user_has( $user_id, $rule['subscription_product_ids'] ) ) {
+					if ( Subscriber_Eligibility::user_matches_rule( $user_id, $rule ) ) {
 						$can_purchase = true;
 						break;
 					}
@@ -193,7 +193,27 @@ class Product_Purchase_Restriction {
 		if ( null === self::$rules ) {
 			self::$rules = Subscriber_Only_Products::get_active_rules();
 		}
-		return Product_Targeting::get_matching_rules( self::$rules, $product );
+		$matching_rules = Product_Targeting::get_matching_rules( self::$rules, $product );
+
+		// A rule open to every subscriber leaves the subscriptions themselves on
+		// sale, whatever its targeting reaches. Otherwise "all subscribers" plus
+		// "all products" is a store nobody can enter: the only way to satisfy the
+		// rule is to hold a subscription, and the rule refuses the sale of one.
+		// A rule that names its subscriptions is not exempted — naming a
+		// subscription and restricting it is two deliberate choices, where this is
+		// the incidental sweep of a mode that names nothing.
+		if ( WooCommerce_Subscriptions::is_subscription_product( $product ) ) {
+			$matching_rules = array_values(
+				array_filter(
+					$matching_rules,
+					function ( $rule ) {
+						return ! Subscriber_Commerce::covers_all_subscriptions( $rule );
+					}
+				)
+			);
+		}
+
+		return $matching_rules;
 	}
 
 	/**
@@ -519,6 +539,11 @@ class Product_Purchase_Restriction {
 	 * it too — is left out rather than pointed at, so the notice never sends
 	 * someone to a product they've just been barred from purchasing.
 	 *
+	 * A rule open to every subscriber names none, and naming only what a narrower
+	 * rule beside it lists would tell the reader to buy one particular subscription
+	 * when any of them unlocks the product. So one such rule suppresses the whole
+	 * list, and the notice falls back to saying the product is for subscribers.
+	 *
 	 * @param \WC_Product $product The product.
 	 *
 	 * @return string[] The links, keyed by subscription product ID.
@@ -530,6 +555,9 @@ class Product_Purchase_Restriction {
 
 		$links = [];
 		foreach ( self::get_restricting_rules( $product ) as $rule ) {
+			if ( Subscriber_Commerce::covers_all_subscriptions( $rule ) ) {
+				return [];
+			}
 			foreach ( $rule['subscription_product_ids'] as $subscription_id ) {
 				$subscription_id = (int) $subscription_id;
 				if ( isset( $links[ $subscription_id ] ) ) {

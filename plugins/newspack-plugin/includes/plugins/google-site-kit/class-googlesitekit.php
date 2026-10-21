@@ -305,9 +305,6 @@ class GoogleSiteKit {
 		$current_user = wp_get_current_user();
 		$is_logged_in = 0 < $current_user->ID;
 		$params['is_reader'] = $is_logged_in && Reader_Activation::is_user_reader( $current_user ) ? 'yes' : 'no';
-		if ( ! empty( $current_user->user_email ) ) {
-			$params['email_hash'] = md5( $current_user->user_email );
-		}
 
 		$reader_data = method_exists( 'Newspack\Reader_Data', 'get_data' ) ? Reader_Data::get_data( $current_user->ID ) : [];
 
@@ -372,9 +369,13 @@ class GoogleSiteKit {
 		if ( ! $user || ! $user->ID ) {
 			return $labels;
 		}
-		// Match the framing of the surrounding params (`is_reader`, `is_subscriber`):
-		// only attribute groups to actual readers, not admins/editors.
-		if ( ! Reader_Activation::is_user_reader( $user ) ) {
+		// Attribution follows group-member eligibility, not reader status: a
+		// non-reader author/contributor who is an eligible group member (by
+		// default, or via the newspack_group_subscription_member_eligible
+		// filter) still gets real gated access and should be attributed for
+		// it. Admins/editors remain non-eligible by default, so they are
+		// still excluded here.
+		if ( ! Group_Subscription::is_eligible_member( $user ) ) {
 			return $labels;
 		}
 		$user_id = (int) $user->ID;
@@ -390,11 +391,11 @@ class GoogleSiteKit {
 	 *
 	 * Answers the restriction outcome first and attributes second. Whether the
 	 * reader is blocked is decided by Content_Gate::is_post_restricted(), the
-	 * same filter the rendering path enforces — restriction is AND across every
-	 * gate on the post, so a gate the reader passes says nothing about a second
-	 * gate that still blocks them. Only once the reader is known to be through
-	 * do the passing rules get mapped to a source label; a blocked reader is
-	 * reported as blocked no matter what any individual gate would have granted.
+	 * same filter the rendering path enforces. Gates compose first-match: the
+	 * highest-priority gate on the post decides alone, so it is the only gate
+	 * that can say how a reader got in, and a lower-ranked gate is never read
+	 * here. Only once the reader is known to be through do the passing rules
+	 * get mapped to a source label; a blocked reader is reported as blocked.
 	 *
 	 * The two halves are scoped differently, on purpose. *Attribution* looks
 	 * only at rules on gates with custom access active, mirroring how the ESP
@@ -402,10 +403,10 @@ class GoogleSiteKit {
 	 * reported by `is_reader` and `logged_in`, and naming a regwall pass as an
 	 * access source would mean reimplementing verification logic that lives in
 	 * Content_Restriction_Control. The *blocked* outcome reflects the whole
-	 * restriction path, so `gated` and `metering_eligible` can originate from a
-	 * registration wall or a Woo Memberships plan on a post that also carries a
-	 * custom-access gate. That is the reader's experience either way — the post
-	 * has a custom-access gate on it and they did not get in.
+	 * restriction path, so `gated` and `metering_eligible` can originate from the
+	 * deciding gate's own registration wall, or from a Woo Memberships plan, as
+	 * long as the deciding gate has custom access. A post whose deciding gate has
+	 * no custom access reports `no_custom_access_gate`, whatever gates rank below it.
 	 *
 	 * Every call here is free of side effects. In particular it must never
 	 * reach Metering::is_logged_in_metering_allowed(), which records a metered
@@ -441,7 +442,10 @@ class GoogleSiteKit {
 
 		$gates      = [];
 		$unreadable = false;
-		foreach ( (array) Content_Restriction_Control::get_post_gates( $post_id ) as $gate ) {
+		// Only the deciding gate: a lower-ranked gate is never consulted for any
+		// reader, so its rules cannot be how this one got in.
+		$deciding_gate = array_slice( (array) Content_Restriction_Control::get_post_gates( $post_id ), 0, 1 );
+		foreach ( $deciding_gate as $gate ) {
 			if ( is_wp_error( $gate ) ) {
 				$unreadable = true;
 				continue;
@@ -460,17 +464,13 @@ class GoogleSiteKit {
 		}
 
 		// The single source of truth for "did this reader get in", and the same
-		// one the rendering path enforces: AND across every gate on the post,
-		// plus the verification walls and exemptions this class does not model.
-		// A blocked reader is reported as blocked; no passing gate outranks it.
+		// one the rendering path enforces, including the verification walls and
+		// exemptions this class does not model.
 		if ( Content_Gate::is_post_restricted( $post_id ) ) {
-			// Metering belongs to the gate that actually stopped this reader,
-			// which is the one is_post_restricted() just recorded — not to any
-			// gate on the post. A reader who passes a metering gate and is then
-			// stopped by a hard one gets no free views, so reading the whole
-			// list here would report a soft block that never happened. A
-			// restriction with no recorded gate (a filter forcing the outcome)
-			// falls through to the hard answer.
+			// Metering belongs to the gate that stopped this reader, which is the
+			// one is_post_restricted() just recorded — not to any gate on the
+			// post. A restriction with no recorded gate (a filter forcing the
+			// outcome) falls through to the hard answer.
 			$blocking_gate_id = Content_Gate::get_gate_post_id( $post_id );
 			if ( $blocking_gate_id && Metering::offers_metering( $blocking_gate_id ) ) {
 				return self::memo_access_source( $memo_key, 'metering_eligible' );
@@ -525,7 +525,7 @@ class GoogleSiteKit {
 			// unreadable-gate case above.
 			return '';
 		}
-		// Every gate's rule set was empty, so no gate ever applied to anybody.
+		// The deciding gate's rule set was empty, so it restricts nobody.
 		return $unreadable ? '' : self::memo_access_source( $memo_key, 'no_custom_access_gate' );
 	}
 
@@ -625,10 +625,9 @@ class GoogleSiteKit {
 	/**
 	 * The reader/content parameters to mirror into the dataLayer for Google Tag Manager.
 	 *
-	 * Starts from the same set sent to Site Kit's gtag config, but drops `email_hash`:
-	 * the hashed email is only needed by Site Kit's own gtag config (which still receives
-	 * it), and pushing it to the dataLayer would expose it to every tag in the publisher's
-	 * GTM container, including third-party ones.
+	 * Mirrors the custom-dimension set sent to Site Kit's gtag config. That set is
+	 * intentionally coarse and anonymized (yes/no flags, anonymized group IDs), carrying no
+	 * reader identifier, so it is safe to expose to every tag in a publisher's GTM container.
 	 *
 	 * @return array Parameters to push to window.dataLayer.
 	 */
@@ -637,19 +636,11 @@ class GoogleSiteKit {
 		 * Filters the Newspack parameters pushed to the dataLayer for Google Tag Manager.
 		 *
 		 * Mirrors the `newspack_ga4_custom_parameters` set sent to Site Kit's gtag config.
-		 * Note that `email_hash` is always stripped afterwards (see below) and cannot be
-		 * re-added through this filter.
+		 * Everything here is readable by every tag in the container, so do not add reader PII.
 		 *
 		 * @param array $params Parameters pushed to window.dataLayer.
 		 */
-		$params = apply_filters( 'newspack_ga4_data_layer_params', self::get_custom_event_parameters() );
-
-		// Always keep the hashed email out of the dataLayer - enforced after the filter so it
-		// cannot be re-added. It is only needed by Site Kit's own gtag config (which still
-		// receives it) and must not reach the third-party tags in a publisher's GTM container.
-		unset( $params['email_hash'] );
-
-		return $params;
+		return apply_filters( 'newspack_ga4_data_layer_params', self::get_custom_event_parameters() );
 	}
 
 	/**

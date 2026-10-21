@@ -457,20 +457,31 @@ class Newspack_Test_Institution extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that an empty value keeps its no-constraint semantics while a populated
-	 * value of the wrong shape (e.g. a free-text string saved by a picker that
-	 * degraded to a text box) fails closed instead of granting access to everyone.
+	 * Test that a rule naming no institution matches nobody, whichever way it was
+	 * left empty, and that a value of a shape the rule cannot read does the same.
+	 *
+	 * The empty case is the one that decides whether switching the rule on before
+	 * publishing any institution opens the gate to everyone or closes it to
+	 * everyone. The contrast at the end is what stops a regression here from
+	 * reading as "institutions never match".
 	 */
-	public function test_evaluate_fails_closed_for_populated_non_array_value() {
+	public function test_evaluate_matches_nobody_when_no_institution_is_named() {
 		$reader_id = $this->create_reader( 'reader@fail-closed.edu' );
 
-		$this->assertTrue( Institution::evaluate( $reader_id, [] ), 'An empty array means no constraint.' );
-		$this->assertTrue( Institution::evaluate( $reader_id, null ), 'Null means no constraint.' );
-		$this->assertTrue( Institution::evaluate( $reader_id, '' ), 'An empty string means no constraint.' );
+		$this->assertFalse( Institution::evaluate( $reader_id, [] ), 'An empty array names no institution.' );
+		$this->assertFalse( Institution::evaluate( $reader_id, null ), 'Null names no institution.' );
+		$this->assertFalse( Institution::evaluate( $reader_id, '' ), 'An empty string names no institution.' );
+		$this->assertFalse( Institution::evaluate( 0, [] ), 'An anonymous visitor is denied on the same value.' );
 
 		$this->assertFalse( Institution::evaluate( $reader_id, 'Springfield University' ), 'A populated non-array value must not grant access.' );
 		$this->assertFalse( Institution::evaluate( $reader_id, '0' ), 'A falsy string is still a value someone typed.' );
 		$this->assertFalse( Institution::evaluate( $reader_id, 0 ), 'A falsy number is still a value someone typed.' );
+
+		$inst_id = Institution::create( 'Fail Closed University', '', [ 'email_domain' => 'fail-closed.edu' ] );
+		$this->assertIsInt( $inst_id );
+		$this->post_ids[] = $inst_id;
+		delete_transient( Institution::TRANSIENT_KEY );
+		$this->assertTrue( Institution::evaluate( $reader_id, [ $inst_id ] ), 'A rule naming an institution the reader belongs to still grants.' );
 	}
 
 	/**
