@@ -13,7 +13,7 @@ import { people, unseen } from '@wordpress/icons';
 /**
  * Internal dependencies.
  */
-import { CardSettingsGroup } from '../../../../../../packages/components/src';
+import { Card, CardSettingsGroup } from '../../../../../../packages/components/src';
 import { getAutoSignupOptions } from '../utils';
 
 interface NewsletterSettingsProps {
@@ -27,16 +27,30 @@ interface NewsletterSettingsProps {
 export default function NewsletterSettings( { autoSignup, hideLists, siteAutoSignup, onChange }: NewsletterSettingsProps ) {
 	return (
 		<Stack direction="column" gap="lg">
-			<CardSettingsGroup
-				actionType="none"
-				title={ __( 'Auto-signup', 'newspack-plugin' ) }
-				description={ __(
-					'Add readers to these lists when they gain access. Readers who leave a list aren’t added back when they renew.',
-					'newspack-plugin'
-				) }
-				icon={ people }
-				// A "none" card shows its body only while active, and there is nothing to collapse.
-				isActive
+			{ /*
+			 * A plain Card, not a CardSettingsGroup: that component only shows its body while active, and an active
+			 * card gets the blue "switched on" look, which this always-visible select must not have.
+			 */ }
+			<Card
+				className="newspack-card--core--settings-group"
+				isSmall
+				__experimentalCoreCard
+				__experimentalCoreProps={ {
+					header: (
+						<>
+							<h3>{ __( 'Auto-signup', 'newspack-plugin' ) }</h3>
+							<p>
+								{ __(
+									'Add readers to these lists when they gain access. Readers who leave a list aren’t added back when they renew.',
+									'newspack-plugin'
+								) }
+							</p>
+						</>
+					),
+					icon: people,
+					iconBackgroundColor: true,
+					title: __( 'Auto-signup', 'newspack-plugin' ),
+				} }
 			>
 				<CardBody size="small">
 					<SelectControl
@@ -49,7 +63,7 @@ export default function NewsletterSettings( { autoSignup, hideLists, siteAutoSig
 						onChange={ ( value: AutoSignupMode ) => onChange( { auto_signup: value } ) }
 					/>
 				</CardBody>
-			</CardSettingsGroup>
+			</Card>
 			<CardSettingsGroup
 				actionType="toggle"
 				title={ __( 'Hide from readers', 'newspack-plugin' ) }
