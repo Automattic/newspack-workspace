@@ -63,13 +63,14 @@ RUN a2enmod rewrite
 COPY .env /tmp/.env
 
 # Install requested version of PHP.
-# A plain apt-get update only warns when the PPA is unavailable, and the
-# install then fails with "Unable to locate package", so fail and retry here.
+# The PPA can be briefly unavailable. A plain apt-get update only warns, and the
+# install then fails with "Unable to locate package", so the update fails and
+# retries instead, and each package download gets extra retries.
 RUN \
 	: "${PHP_VERSION:?Build argument PHP_VERSION needs to be set and non-empty.}" \
 	&& export DEBIAN_FRONTEND=noninteractive \
 	&& retry_apt_update() { \
-		local attempt=0 delay=10 max_retries=5; \
+		local attempt=0 delay=10 max_retries=6; \
 		until apt-get update --error-on=any; do \
 			attempt=$((attempt + 1)); \
 			if [ $attempt -ge $max_retries ]; then \
@@ -82,7 +83,7 @@ RUN \
 		done; \
 	} \
 	&& retry_apt_update \
-	&& apt-get install -y \
+	&& apt-get install -y -o Acquire::Retries=10 \
 		libapache2-mod-php${PHP_VERSION} \
 		php${PHP_VERSION} \
 		php${PHP_VERSION}-bcmath \
@@ -104,7 +105,7 @@ RUN \
 		phpunit \
 	php-pear \
 	php${PHP_VERSION}-dev \
-	&& apt-get install -y --no-install-recommends \
+	&& apt-get install -y --no-install-recommends -o Acquire::Retries=10 \
 		php${PHP_VERSION}-apcu \
 		php${PHP_VERSION}-gd \
 		php${PHP_VERSION}-imagick \
