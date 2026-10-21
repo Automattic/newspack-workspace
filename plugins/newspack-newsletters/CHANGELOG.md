@@ -1,3 +1,10 @@
+## newspack-newsletters [3.43.1](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.43.0...newspack-newsletters@3.43.1) (2026-10-21)
+
+
+### Bug Fixes
+
+* **newsletters:** fatal when classes load without the main plugin file ([#1365](https://github.com/Automattic/newspack-workspace/issues/1365)) ([25dfbbd](https://github.com/Automattic/newspack-workspace/commit/25dfbbd391d96384816fac730cb3c1dec8b33bbf))
+
 # newspack-newsletters [3.43.0](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.42.0...newspack-newsletters@3.43.0) (2026-10-14)
 
 
