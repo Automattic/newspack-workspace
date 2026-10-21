@@ -706,7 +706,7 @@ function onComplete( detail ) {
             first_name: contact.firstName || '',
             last_name: contact.lastName || '',
             metadata: {
-                my_integration_supporter_id: contact.id || '',
+                my_integration_contact_id: contact.id || '',
             },
         } )
         .catch( error => {
@@ -771,12 +771,12 @@ class My_Integration extends Integration {
 
         $metadata = $request->get_param( 'metadata' );
         $email    = $request->get_param( 'npe' );
-        if ( ! is_array( $metadata ) || empty( $metadata['my_integration_supporter_id'] ) || empty( $email ) || ! is_email( $email ) ) {
+        if ( ! is_array( $metadata ) || empty( $metadata['my_integration_contact_id'] ) || empty( $email ) || ! is_email( $email ) ) {
             return false;
         }
 
         // An ID that exists is not enough: it must belong to this email.
-        return self::supporter_belongs_to( $metadata['my_integration_supporter_id'], $email );
+        return self::contact_belongs_to( $metadata['my_integration_contact_id'], $email );
     }
 
     /**
@@ -789,27 +789,27 @@ class My_Integration extends Integration {
         }
 
         $metadata = $request->get_param( 'metadata' );
-        if ( ! is_array( $metadata ) || empty( $metadata['my_integration_supporter_id'] ) ) {
+        if ( ! is_array( $metadata ) || empty( $metadata['my_integration_contact_id'] ) ) {
             return;
         }
 
-        $supporter_id = $metadata['my_integration_supporter_id'];
-        if ( ! self::supporter_belongs_to( $supporter_id, $user->user_email ) ) {
+        $contact_id = $metadata['my_integration_contact_id'];
+        if ( ! self::contact_belongs_to( $contact_id, $user->user_email ) ) {
             return;
         }
 
-        update_user_meta( $user->ID, 'my_integration_supporter_id', $supporter_id );
+        update_user_meta( $user->ID, 'my_integration_contact_id', $contact_id );
     }
 
     /**
      * Fails closed: an API error counts as "does not belong".
      */
-    private static function supporter_belongs_to( string $supporter_id, string $email ): bool {
-        $supporter = My_Service_API::get_supporter( $supporter_id );
-        if ( is_wp_error( $supporter ) || empty( $supporter['email'] ) ) {
+    private static function contact_belongs_to( string $contact_id, string $email ): bool {
+        $contact = My_Service_API::get_contact( $contact_id );
+        if ( is_wp_error( $contact ) || empty( $contact['email'] ) ) {
             return false;
         }
-        return strtolower( $supporter['email'] ) === strtolower( $email );
+        return strtolower( $contact['email'] ) === strtolower( $email );
     }
 }
 ```
@@ -864,8 +864,9 @@ Some services can send the reader to a page on the site once they finish, with a
 The URL is the only input, and anyone can copy or forge it. Logging someone in from it is only safe when the server re-checks everything through the service's API and limits how long and how often a URL works. Here are a few best practices:
 
 - **Read identity from the API, never from the URL.** The URL only carries a lookup key. The email, the name and the IDs saved on the reader all come from the service's response.
+- **Use this path only when the service verifies the email address.** The API proves what the record says, not that the visitor owns the email in it. If the service accepts any address without confirming it, someone can create a record with an existing reader's email and follow its landing URL to log in as that reader. When the service doesn't verify emails, send a magic link instead of logging the reader in.
 - **Expire the link.** Refuse records older than a short window, and treat a missing or unreadable timestamp as expired. A URL found later in browser history or a shared link then logs no one in.
-- **Use each identifier once.** Claim it in the object cache before calling the API (`wp_cache_add()` succeeds for the first caller only), so a reload or a second tab can't register or log in twice. Release the claim when the API call or the registration fails, so the reader can retry by reloading.
+- **Use each identifier once.** Record each identifier as used before calling the API, so a reload, a second tab or a copied URL can't register or log in twice. The example below leaves this out: put something in place that survives across requests, such as a database row or a persistent object cache entry, and treat a failure to record it as a reason to stop. Let the identifier be used again only when the API call or the registration fails, so the reader can retry by reloading.
 - **Never switch sessions.** If someone else is logged in, leave the session alone and log the mismatch.
 - **Log in readers only.** `Reader_Activation::set_current_reader()` checks no credentials, so check `Reader_Activation::is_user_reader()` first. That keeps a URL from logging anyone in as an editor or administrator.
 - **Keep the response out of the page cache.** Call `nocache_headers()` before setting the login cookie.
@@ -893,15 +894,8 @@ function maybe_register_from_landing_page() {
         return;
     }
 
-    // Use each identifier once.
-    $claim_key = 'my_integration_landing_' . md5( $record_id );
-    if ( false === wp_cache_add( $claim_key, 1, 'my_integration', DAY_IN_SECONDS ) ) {
-        return;
-    }
-
     $record = My_Service_API::get_record( $record_id );
     if ( is_wp_error( $record ) ) {
-        wp_cache_delete( $claim_key, 'my_integration' ); // Let a reload retry.
         return;
     }
 
@@ -952,10 +946,7 @@ function maybe_register_from_landing_page() {
     // A new reader: register_reader() creates the account, logs them in
     // (third argument), and passes $metadata to `newspack_registered_reader`.
     $name    = trim( ( $record['contact']['first_name'] ?? '' ) . ' ' . ( $record['contact']['last_name'] ?? '' ) );
-    $user_id = Reader_Activation::register_reader( $email, $name, true, $metadata );
-    if ( is_wp_error( $user_id ) || ! $user_id ) {
-        wp_cache_delete( $claim_key, 'my_integration' ); // Let a reload retry.
-    }
+    Reader_Activation::register_reader( $email, $name, true, $metadata );
 }
 ```
 
