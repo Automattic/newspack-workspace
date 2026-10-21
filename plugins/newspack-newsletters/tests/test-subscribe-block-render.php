@@ -484,9 +484,8 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A list that no gate restricts, removed by the block's own filter, is hidden
-	 * outright. It is not a gated list, so showPremium does not bring it back as a
-	 * gated row.
+	 * A list that no gate restricts, removed by the block's own filter, stays
+	 * hidden even with showPremium on.
 	 */
 	public function test_list_removed_by_the_block_filter_is_hidden_not_gated() {
 		$kept    = $this->get_list( 'only_mailchimp' );

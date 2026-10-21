@@ -210,8 +210,10 @@ class Woocommerce_Memberships_List_Gates_Test extends WP_UnitTestCase {
 		$plan_id = self::factory()->post->create( [ 'post_type' => 'wc_membership_plan' ] );
 		$this->register_plan( $plan_id, 'Digital', [ $list ] );
 
-		// Memberships grants these to administrators and shop managers.
-		$manager = new WP_User( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		// Memberships grants these to administrators and shop managers. An Editor
+		// given them stands in for a shop manager: it lacks manage_options, so only
+		// the plan's own capabilities can earn it the link.
+		$manager = new WP_User( self::factory()->user->create( [ 'role' => 'editor' ] ) );
 		foreach ( [ 'edit_membership_plans', 'edit_others_membership_plans', 'edit_published_membership_plans' ] as $cap ) {
 			$manager->add_cap( $cap );
 		}
@@ -309,11 +311,11 @@ class Woocommerce_Memberships_List_Gates_Test extends WP_UnitTestCase {
 	 */
 	public function test_block_renders_the_same_after_the_switch_to_access_control() {
 		$this->activate_memberships();
-		$free    = $this->create_list( 'Free Daily' );
-		$premium = $this->create_list( 'Members Weekly' );
-		$member  = self::factory()->user->create( [ 'role' => 'subscriber' ] );
-		$reader  = self::factory()->user->create( [ 'role' => 'subscriber' ] );
-		$readers = [ 0, $reader, $member ];
+		$free     = $this->create_list( 'Free Daily' );
+		$premium  = $this->create_list( 'Members Weekly' );
+		$member   = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		$reader   = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		$readers  = [ 0, $reader, $member ];
 		$list_ids = [ $free->get_public_id(), $premium->get_public_id() ];
 
 		$this->register_plan( 101, 'Digital', [ $premium ] );
