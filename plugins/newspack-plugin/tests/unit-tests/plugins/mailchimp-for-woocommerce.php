@@ -23,16 +23,7 @@ class Newspack_Test_Mailchimp_For_WooCommerce extends WP_UnitTestCase {
 		MailChimp_Service::instance()->updated_users      = [];
 		$GLOBALS['newspack_test_mailchimp_statuses']      = [];
 		$GLOBALS['newspack_test_mailchimp_status_lookups'] = [];
-	}
-
-	/**
-	 * Clean up the hooks and the version override.
-	 */
-	public function tear_down() {
-		remove_action( 'woocommerce_edit_account_form', [ MailChimp_WooCommerce_Public::instance(), 'user_my_account_opt_in' ], 100 );
-		remove_action( 'profile_update', [ MailChimp_Service::instance(), 'handleUserUpdated' ], 100 );
-		remove_all_filters( 'newspack_my_account_version' );
-		parent::tear_down();
+		( new ReflectionProperty( Mailchimp_For_WooCommerce::class, 'mailchimp_statuses' ) )->setValue( null, [] );
 	}
 
 	/**
@@ -64,30 +55,26 @@ class Newspack_Test_Mailchimp_For_WooCommerce extends WP_UnitTestCase {
 
 	/**
 	 * The plugin saves its opt-in on every account details save, but skips the save when its
-	 * form callback is not hooked. Newspack's My Account never renders that form, so the
-	 * callback goes, and with it the save that marked every reader "not subscribed".
+	 * form callback is not hooked. Newspack's My Account, which applies with Reader Activation on,
+	 * never renders that form, so the callback goes, and with it the save that marked every
+	 * reader "not subscribed". Without Reader Activation, WooCommerce's own form renders the
+	 * plugin's radio, so the opt-in stays.
 	 */
-	public function test_opt_in_is_unhooked_on_newspack_my_account() {
+	public function test_opt_in_is_unhooked_only_with_reader_activation() {
+		add_filter( 'newspack_reader_activation_enabled', '__return_false' );
 		Mailchimp_For_WooCommerce::remove_account_details_opt_in();
-
-		$this->assertFalse( has_action( 'woocommerce_edit_account_form', [ MailChimp_WooCommerce_Public::instance(), 'user_my_account_opt_in' ] ) );
-	}
-
-	/**
-	 * The core WooCommerce My Account (version 0) renders the plugin's radio, so the opt-in stays.
-	 */
-	public function test_opt_in_stays_on_core_woocommerce_my_account() {
-		add_filter( 'newspack_my_account_version', fn() => '0.0.0' );
-
-		Mailchimp_For_WooCommerce::remove_account_details_opt_in();
-
 		$this->assertSame( 100, has_action( 'woocommerce_edit_account_form', [ MailChimp_WooCommerce_Public::instance(), 'user_my_account_opt_in' ] ) );
+
+		remove_filter( 'newspack_reader_activation_enabled', '__return_false' );
+		Mailchimp_For_WooCommerce::remove_account_details_opt_in();
+		$this->assertFalse( has_action( 'woocommerce_edit_account_form', [ MailChimp_WooCommerce_Public::instance(), 'user_my_account_opt_in' ] ) );
 	}
 
 	/**
 	 * The plugin sends a reader with no stored opt-in, or a stored "0", as "transactional" on any
 	 * profile update in wp-admin or admin-ajax, such as Newspack's contact sync after registration.
 	 * A reader who subscribed through Newspack has neither, so the update would unsubscribe them.
+	 * The handler is back in place for the next user, so the opted-in customer's update still runs.
 	 */
 	public function test_profile_update_skips_the_plugin_without_a_stored_opt_in() {
 		$new_reader        = $this->create_customer( 'new-reader@example.test', 'subscribed' );
@@ -100,6 +87,19 @@ class Newspack_Test_Mailchimp_For_WooCommerce extends WP_UnitTestCase {
 		do_action( 'profile_update', $opted_in_customer->ID, $opted_in_customer );
 
 		$this->assertSame( [ $opted_in_customer->ID ], MailChimp_Service::instance()->updated_users );
+	}
+
+	/**
+	 * The integration re-adds the plugin's handler only after removing it, so a site that
+	 * unhooked the handler keeps it unhooked.
+	 */
+	public function test_profile_update_leaves_a_handler_the_site_removed() {
+		$reader = $this->create_customer( 'unhooked@example.test', 'subscribed' );
+		remove_action( 'profile_update', [ MailChimp_Service::instance(), 'handleUserUpdated' ], 100 );
+
+		do_action( 'profile_update', $reader->ID, $reader );
+
+		$this->assertFalse( has_action( 'profile_update', [ MailChimp_Service::instance(), 'handleUserUpdated' ] ) );
 	}
 
 	/**
@@ -134,15 +134,21 @@ class Newspack_Test_Mailchimp_For_WooCommerce extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Opted-in customers and guests need no lookup: the plugin already sends opted-in customers
-	 * as subscribed, and checks Mailchimp itself for guests.
+	 * The lookup runs once per customer in a request, and only for a registered customer the
+	 * plugin neither opted in nor looked up: it sends opted-in customers as subscribed, checks
+	 * Mailchimp itself for guests, and reads the status first in a sync of existing contacts.
 	 */
-	public function test_order_looks_up_only_registered_customers_who_are_not_opted_in() {
+	public function test_order_looks_up_each_customer_once_and_only_when_needed() {
 		$opted_in_customer = $this->create_customer( 'opted-in@example.test', 'subscribed', '1' );
+		$synced_customer   = $this->create_customer( 'synced@example.test', 'transactional', '' );
+		$repeat_customer   = $this->create_customer( 'repeat@example.test', 'transactional', '' );
 
 		$this->filter_order( ( new MailChimp_WooCommerce_Customer( $opted_in_customer, $opted_in_customer->user_email ) )->setOptInStatus( true ) );
 		$this->filter_order( new MailChimp_WooCommerce_Customer( null, 'guest@example.test' ) );
+		$this->filter_order( ( new MailChimp_WooCommerce_Customer( $synced_customer, $synced_customer->user_email ) )->setMailchimpStatus( 'transactional' ) );
+		$this->filter_order( new MailChimp_WooCommerce_Customer( $repeat_customer, $repeat_customer->user_email ) );
+		$this->filter_order( new MailChimp_WooCommerce_Customer( $repeat_customer, $repeat_customer->user_email ) );
 
-		$this->assertSame( [], $GLOBALS['newspack_test_mailchimp_status_lookups'] );
+		$this->assertSame( [ 'repeat@example.test' ], $GLOBALS['newspack_test_mailchimp_status_lookups'] );
 	}
 }

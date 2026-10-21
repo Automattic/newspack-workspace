@@ -153,6 +153,16 @@ if ( ! class_exists( 'MailChimp_WooCommerce_Customer' ) ) {
 		}
 
 		/**
+		 * Set the Mailchimp status, as the plugin does when it reads it during a sync.
+		 *
+		 * @param string $status_in_mailchimp Status in Mailchimp.
+		 */
+		public function setMailchimpStatus( $status_in_mailchimp ) {
+			$this->status_in_mailchimp = $status_in_mailchimp;
+			return $this;
+		}
+
+		/**
 		 * Get the WordPress user.
 		 */
 		public function getWordpressUser() {

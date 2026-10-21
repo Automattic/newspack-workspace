@@ -14,6 +14,20 @@ defined( 'ABSPATH' ) || exit;
  */
 class Mailchimp_For_WooCommerce {
 	/**
+	 * Whether this class removed MC4WC's profile update handler for the current user update.
+	 *
+	 * @var bool
+	 */
+	private static $removed_profile_update_handler = false;
+
+	/**
+	 * Mailchimp statuses read during this request, keyed by email address.
+	 *
+	 * @var array
+	 */
+	private static $mailchimp_statuses = [];
+
+	/**
 	 * Initialize hooks and filters.
 	 */
 	public static function init() {
@@ -35,8 +49,8 @@ class Mailchimp_For_WooCommerce {
 	 * them right after they subscribe. A reader MC4WC once stored as "0" who subscribes again
 	 * through Newspack would be unsubscribed the same way.
 	 *
-	 * MC4WC's own opt-in field in wp-admin and REST requests set the flag on purpose, so those
-	 * updates still go through.
+	 * MC4WC's own opt-in field in wp-admin sets the flag on purpose, so an update that saves
+	 * it still goes through.
 	 *
 	 * @param int $user_id User ID.
 	 */
@@ -45,11 +59,11 @@ class Mailchimp_For_WooCommerce {
 			return;
 		}
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Only checks whether the field was submitted; core verifies the profile form's nonce.
-		if ( isset( $_POST['mailchimp_woocommerce_is_subscribed_radio'] ) || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
+		if ( isset( $_POST['mailchimp_woocommerce_is_subscribed_radio'] ) ) {
 			return;
 		}
 		if ( in_array( get_user_meta( $user_id, 'mailchimp_woocommerce_is_subscribed', true ), [ '', '0' ], true ) ) {
-			remove_action( 'profile_update', [ \MailChimp_Service::instance(), 'handleUserUpdated' ], 100 );
+			self::$removed_profile_update_handler = remove_action( 'profile_update', [ \MailChimp_Service::instance(), 'handleUserUpdated' ], 100 );
 		}
 	}
 
@@ -57,9 +71,11 @@ class Mailchimp_For_WooCommerce {
 	 * Re-hook MC4WC's profile update handler for the next user updated in this request.
 	 */
 	public static function restore_profile_update_handler() {
-		if ( \class_exists( '\MailChimp_Service' ) && ! has_action( 'profile_update', [ \MailChimp_Service::instance(), 'handleUserUpdated' ] ) ) {
-			add_action( 'profile_update', [ \MailChimp_Service::instance(), 'handleUserUpdated' ], 100, 2 );
+		if ( ! self::$removed_profile_update_handler ) {
+			return;
 		}
+		self::$removed_profile_update_handler = false;
+		add_action( 'profile_update', [ \MailChimp_Service::instance(), 'handleUserUpdated' ], 100, 2 );
 	}
 
 	/**
@@ -76,11 +92,16 @@ class Mailchimp_For_WooCommerce {
 	 */
 	public static function keep_subscribed_customer_subscribed( $order ) {
 		$customer = $order->getCustomer();
-		// MC4WC reads the Mailchimp status itself for guests, and during a sync.
+		// A status is already set when MC4WC read it, as a sync of existing contacts only does.
 		if ( ! $customer || ! $customer->getWordpressUser() || $customer->getOptInStatus() || null !== $customer->getMailchimpStatus() ) {
 			return $order;
 		}
-		if ( 'subscribed' === \mailchimp_get_subscriber_status( $customer->getEmailAddress() ) ) {
+		// A sync sends many orders in one request, often several from the same customer.
+		$email = $customer->getEmailAddress();
+		if ( ! array_key_exists( $email, self::$mailchimp_statuses ) ) {
+			self::$mailchimp_statuses[ $email ] = \mailchimp_get_subscriber_status( $email );
+		}
+		if ( 'subscribed' === self::$mailchimp_statuses[ $email ] ) {
 			$customer->setOptInStatus( true );
 			update_user_meta( $customer->getWordpressUser()->ID, 'mailchimp_woocommerce_is_subscribed', '1' );
 		}
@@ -95,14 +116,12 @@ class Mailchimp_For_WooCommerce {
 	 * reader's Mailchimp status to transactional. MC4WC skips that handler when its form
 	 * callback is not hooked, so removing the callback turns off both. Readers manage their
 	 * subscriptions on the My Account Newsletters page instead.
+	 *
+	 * Newspack's My Account applies only with Reader Activation on. Without it, WooCommerce's own
+	 * account details form renders the field, and the opt-in works there.
 	 */
 	public static function remove_account_details_opt_in() {
-		if ( ! \class_exists( '\MailChimp_WooCommerce_Public' ) || ! \class_exists( __NAMESPACE__ . '\WooCommerce_My_Account' ) ) {
-			return;
-		}
-
-		// The core WooCommerce My Account renders the field, so the opt-in works there.
-		if ( version_compare( WooCommerce_My_Account::get_version(), '1.0.0', '<' ) ) {
+		if ( ! \class_exists( '\MailChimp_WooCommerce_Public' ) || ! Reader_Activation::is_enabled() ) {
 			return;
 		}
 
