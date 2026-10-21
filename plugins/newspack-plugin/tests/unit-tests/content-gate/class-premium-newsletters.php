@@ -206,6 +206,18 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Store the list settings on a newsletter gate.
+	 *
+	 * @param int   $gate_id  Gate post ID.
+	 * @param array $settings Settings to store, e.g. [ 'auto_signup' => 'on' ].
+	 *
+	 * @return void
+	 */
+	private function set_gate_list_settings( int $gate_id, array $settings ): void {
+		Content_Gate::update_newsletter_gate_settings( $gate_id, $settings );
+	}
+
+	/**
 	 * Create a reader, optionally with a subscription that satisfies the gates
 	 * create_gated_list() makes.
 	 *
@@ -413,6 +425,175 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		// Production code calls get_contact_lists(), finds the list already present,
 		// and exits early before calling add_and_remove_lists.
 		$this->assertEmpty( \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls );
+	}
+
+	// =========================================================================
+	// Per-gate auto-signup — maybe_enqueue_access_check()
+	// =========================================================================
+
+	/**
+	 * Queue and run an access check for a reader, as a subscription change would.
+	 *
+	 * @param int $user_id Reader to check.
+	 *
+	 * @return void
+	 */
+	private function run_access_check( int $user_id ): void {
+		Premium_Newsletters::maybe_enqueue_access_check( time(), [ 'user_id' => $user_id ], null );
+		Premium_Newsletters::process_access_check_queue();
+	}
+
+	/**
+	 * A gate set to "on" signs the reader up even when the site setting is off.
+	 */
+	public function test_gate_set_to_on_adds_lists_when_site_auto_signup_is_off() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
+
+		$list_id = $this->create_premium_list();
+		$gate_id = $this->create_newsletter_gate( [ 100 ], [ $list_id ] );
+		$this->set_gate_list_settings( $gate_id, [ 'auto_signup' => 'on' ] );
+		$user_id = $this->create_reader( true );
+
+		$this->run_access_check( $user_id );
+
+		$calls = \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls;
+		$this->assertCount( 1, $calls );
+		$this->assertContains( 'newspack-' . $list_id, $calls[0]['lists_to_add'] );
+	}
+
+	/**
+	 * A gate set to "off" leaves the reader unsubscribed even when the site setting is on.
+	 */
+	public function test_gate_set_to_off_does_not_add_lists_when_site_auto_signup_is_on() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+
+		$list_id = $this->create_premium_list();
+		$gate_id = $this->create_newsletter_gate( [ 100 ], [ $list_id ] );
+		$this->set_gate_list_settings( $gate_id, [ 'auto_signup' => 'off' ] );
+		$user_id = $this->create_reader( true );
+
+		$this->run_access_check( $user_id );
+
+		$this->assertEmpty( \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls );
+	}
+
+	/**
+	 * A gate saved before the list settings existed follows the site setting.
+	 */
+	public function test_legacy_gate_without_list_settings_follows_site_option() {
+		$list_id = $this->create_premium_list();
+		$gate_id = $this->create_newsletter_gate( [ 100 ], [ $list_id ] );
+		delete_post_meta( $gate_id, 'auto_signup' );
+		delete_post_meta( $gate_id, 'hide_lists' );
+
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+		$on_reader = $this->create_reader( true );
+		$this->run_access_check( $on_reader );
+
+		$calls = \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls;
+		$this->assertCount( 1, $calls, 'With the site setting on, a gate with no list settings adds the list.' );
+		$this->assertContains( 'newspack-' . $list_id, $calls[0]['lists_to_add'] );
+
+		\Newspack_Newsletters_Contacts::reset_calls();
+		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
+		$off_reader = $this->create_reader( true );
+		$this->run_access_check( $off_reader );
+
+		$this->assertEmpty( \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls, 'With the site setting off, a gate with no list settings adds nothing.' );
+	}
+
+	/**
+	 * When several gates cover a list, only a gate that admits the reader gets a say.
+	 *
+	 * Gate A admits any registered reader and is set to "off". Gate B admits paying
+	 * readers and is set to "on". A reader who only registered got in through A, so
+	 * the list stays unsubscribed. A reader who also pays gets in through B as well,
+	 * so the list is added.
+	 */
+	public function test_reader_admitted_only_by_a_gate_set_to_off_is_not_auto_subscribed() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
+
+		$list_id = $this->create_premium_list();
+
+		// Created first, so it ranks above gate B and admits the reader before B is asked.
+		$gate_a = Content_Gate::create_gate( [ 'title' => 'Registration Newsletter Gate' ], Content_Gate::GATE_CPT, true );
+		$this->gate_ids[] = $gate_a;
+		Content_Gate::update_registration_settings( $gate_a, [ 'active' => true ] );
+		Content_Rules::update_gate_content_rules(
+			$gate_a,
+			[
+				[
+					'slug'  => 'newsletters',
+					'value' => [ $list_id ],
+				],
+			]
+		);
+		$this->set_gate_list_settings( $gate_a, [ 'auto_signup' => 'off' ] );
+
+		$gate_b = $this->create_newsletter_gate( [ 100 ], [ $list_id ] );
+		$this->set_gate_list_settings( $gate_b, [ 'auto_signup' => 'on' ] );
+
+		$registered_only = $this->create_reader( false );
+		$this->run_access_check( $registered_only );
+		$this->assertEmpty( \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls, 'A reader admitted only by the "off" gate must not be signed up.' );
+
+		$paying = $this->create_reader( true );
+		$this->run_access_check( $paying );
+		$calls = \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls;
+		$this->assertCount( 1, $calls, 'A reader the "on" gate also admits is signed up.' );
+		$this->assertContains( 'newspack-' . $list_id, $calls[0]['lists_to_add'] );
+	}
+
+	/**
+	 * The renewal snapshot is taken, and honored, when only a gate turns auto-signup on.
+	 */
+	public function test_renewal_snapshot_is_taken_and_honored_when_only_a_gate_is_on() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
+
+		$list_id = $this->create_premium_list();
+		$gate_id = $this->create_newsletter_gate( [ 100 ], [ $list_id ] );
+		$this->set_gate_list_settings( $gate_id, [ 'auto_signup' => 'on' ] );
+		$user_id = $this->create_reader( true );
+		$email   = get_userdata( $user_id )->user_email;
+
+		// The reader has left the list since they signed up.
+		\Newspack_Newsletters_Subscription::$contact_lists[ $email ] = [];
+
+		Premium_Newsletters::set_subscribed_lists( time(), [ 'user_id' => $user_id ], null );
+
+		$this->assertIsArray(
+			get_user_meta( $user_id, Premium_Newsletters::SUBSCRIBED_LISTS_META_KEY, true ),
+			'A gate set to "on" needs the snapshot even though the site setting is off.'
+		);
+
+		Premium_Newsletters::process_access_check_queue();
+
+		$this->assertEmpty(
+			\Newspack_Newsletters_Contacts::$add_and_remove_lists_calls,
+			'A reader who left the list must not be re-added on renewal.'
+		);
+	}
+
+	/**
+	 * A reader no gate admits by its own rules, yet who is not restricted, is judged
+	 * by the gates that cover the list.
+	 *
+	 * An administrator skips every access check, so the gate's paid rule never admits
+	 * them. The list's gate decides whether they are signed up.
+	 */
+	public function test_reader_no_gate_admits_falls_back_to_the_lists_gates() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
+
+		$list_id = $this->create_premium_list();
+		$gate_id = $this->create_newsletter_gate( [ 100 ], [ $list_id ] );
+		$this->set_gate_list_settings( $gate_id, [ 'auto_signup' => 'on' ] );
+		$admin_id = $this->factory->user->create( [ 'role' => 'administrator' ] );
+
+		$this->run_access_check( $admin_id );
+
+		$calls = \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls;
+		$this->assertCount( 1, $calls );
+		$this->assertContains( 'newspack-' . $list_id, $calls[0]['lists_to_add'] );
 	}
 
 	// =========================================================================

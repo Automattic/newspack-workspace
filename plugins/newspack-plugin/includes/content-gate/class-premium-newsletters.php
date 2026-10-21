@@ -66,6 +66,13 @@ class Premium_Newsletters {
 	const QUEUE_OPTION = 'newspack_premium_newsletters_access_check_queue';
 
 	/**
+	 * WP option key for the site-wide auto-signup setting: whether a reader who gains
+	 * access to a restricted list is added to it. A gate set to "default" follows it.
+	 * Stores: bool (1 or 0); absent reads as on.
+	 */
+	const AUTO_SIGNUP_OPTION = 'newspack_premium_newsletters_auto_signup';
+
+	/**
 	 * Log a warning once the queue exceeds this many unique user IDs.
 	 */
 	const MAX_QUEUE_SIZE = 500;
@@ -810,6 +817,110 @@ class Premium_Newsletters {
 	}
 
 	/**
+	 * Whether a gate signs readers up to its lists automatically.
+	 *
+	 * A gate set to "on" or "off" decides for itself. Any other value, including a
+	 * gate saved before the setting existed, follows the site-wide option, so a site
+	 * that never touches the per-gate setting behaves as it always has.
+	 *
+	 * @param array $gate Gate data from {@see Content_Gate::get_gate()}.
+	 *
+	 * @return bool
+	 */
+	public static function get_gate_auto_signup( array $gate ): bool {
+		$mode = $gate['auto_signup'] ?? 'default';
+		if ( 'on' === $mode ) {
+			return true;
+		}
+		if ( 'off' === $mode ) {
+			return false;
+		}
+		return (bool) get_option( self::AUTO_SIGNUP_OPTION, 1 );
+	}
+
+	/**
+	 * Whether a reader who has access to a list is signed up to it automatically.
+	 *
+	 * Callers ask this only after finding the reader unrestricted for the list, and
+	 * a list can sit behind several gates. The gates that admit the reader by their
+	 * own rules decide, so a reader who got in through a gate set to "off" is left
+	 * to opt in themselves even when another gate covering the list is set to "on"
+	 * and does not admit them. One admitting gate set to "on" is enough to sign them up.
+	 *
+	 * When no gate admits the reader by its own rules, they were let in some other way:
+	 * a staff account, another plugin's bypass, or a gate with no access mode on. The
+	 * lists' own gates decide then, and any of them resolving to "on" signs the reader
+	 * up. With every gate on "default" both paths reduce to the site-wide option.
+	 *
+	 * @param int $list_id List post ID.
+	 * @param int $user_id Reader to decide for.
+	 *
+	 * @return bool
+	 */
+	public static function is_auto_signup_list( int $list_id, int $user_id ): bool {
+		$admitting_gates = array_filter(
+			Content_Restriction_Control::get_post_gates( $list_id ),
+			function ( $gate ) use ( $user_id ) {
+				return ! Content_Restriction_Control::evaluate_gate( $gate, $user_id )['restricted'];
+			}
+		);
+		if ( ! empty( $admitting_gates ) ) {
+			return self::any_gate_signs_up( $admitting_gates );
+		}
+
+		$list_gates = array_filter(
+			Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish', true ),
+			function ( $gate ) use ( $list_id ) {
+				foreach ( $gate['content_rules'] as $content_rule ) {
+					if ( 'newsletters' === $content_rule['slug'] && in_array( $list_id, array_map( 'intval', (array) $content_rule['value'] ), true ) ) {
+						return true;
+					}
+				}
+				return false;
+			}
+		);
+		return self::any_gate_signs_up( $list_gates );
+	}
+
+	/**
+	 * Whether any of the given gates signs readers up automatically.
+	 *
+	 * @param array[] $gates Gate data from {@see Content_Gate::get_gate()}.
+	 *
+	 * @return bool
+	 */
+	private static function any_gate_signs_up( array $gates ): bool {
+		foreach ( $gates as $gate ) {
+			if ( self::get_gate_auto_signup( $gate ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether auto-signup can apply to any list on the site.
+	 *
+	 * True when the site-wide option is on, or any gate is set to "on". It is the
+	 * cheap test for work that only matters if some list might sign a reader up,
+	 * such as the renewal snapshot. Reads Content_Gate directly: its cache is
+	 * flushed on every gate write, where self::$gates is not.
+	 *
+	 * @return bool
+	 */
+	private static function any_gate_auto_signup(): bool {
+		if ( (bool) get_option( self::AUTO_SIGNUP_OPTION, 1 ) ) {
+			return true;
+		}
+		foreach ( Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish', true ) as $gate ) {
+			if ( 'on' === ( $gate['auto_signup'] ?? '' ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Check list access for the user.
 	 *
 	 * The renewal snapshot is only consulted when this access check was enqueued
@@ -842,7 +953,7 @@ class Premium_Newsletters {
 			? get_user_meta( $user_id, self::SUBSCRIBED_LISTS_META_KEY, true )
 			: '';
 		// A remove-only check never adds lists; see the SOURCE_* constants.
-		$auto_signup     = ! self::is_remove_only_source( $source ) && (bool) get_option( 'newspack_premium_newsletters_auto_signup', 1 );
+		$can_add_lists   = ! self::is_remove_only_source( $source );
 		$lists_to_add    = [];
 		$lists_to_remove = [];
 
@@ -865,7 +976,7 @@ class Premium_Newsletters {
 		foreach ( $restricted_lists as $list_id ) {
 			if ( Content_Restriction_Control::is_post_restricted( false, $list_id, $user_id ) ) {
 				$lists_to_remove[] = $list_id;
-			} elseif ( $auto_signup ) {
+			} elseif ( $can_add_lists && self::is_auto_signup_list( (int) $list_id, (int) $user_id ) ) {
 				if ( ! is_array( $subscribed_lists ) ) {
 					$lists_to_add[] = $list_id;
 				} elseif (
@@ -1177,11 +1288,10 @@ class Premium_Newsletters {
 	 * @param \WP_User $user The reader whose access the renewal decides.
 	 */
 	private static function snapshot_lists_and_enqueue_renewal_check( $user ) {
-		// Capture the renewal-time snapshot when auto-signup is enabled. Without
-		// auto-signup the snapshot has no effect (check_access only consults it
+		// Capture the renewal-time snapshot when auto-signup can apply to any list.
+		// Without it the snapshot has no effect (check_access only consults it
 		// inside the auto-signup branch), so skip the ESP fetch in that case.
-		$auto_signup = (bool) get_option( 'newspack_premium_newsletters_auto_signup', 1 );
-		if ( $auto_signup && class_exists( 'Newspack_Newsletters_Subscription' ) ) {
+		if ( self::any_gate_auto_signup() && class_exists( 'Newspack_Newsletters_Subscription' ) ) {
 			$email         = $user->user_email;
 			$current_lists = Newspack_Newsletters_Subscription::get_contact_lists( $email );
 			if ( is_array( $current_lists ) ) {
