@@ -1615,6 +1615,34 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The fallback warning says the group's gate was written, so it waits for that
+	 * write to succeed. When the group's own create fails too, the operator sees both
+	 * failures and no claim that a gate exists.
+	 */
+	public function test_write_gate_payloads_skips_the_fallback_warning_when_the_group_fails_too() {
+		$this->set_signup_modal_lists( [ $this->list_a ] );
+		// A registration-only plan: creating a gate with paid access builds its layout
+		// from product data the WooCommerce mocks don't carry.
+		$payload = $this->invoke_private_static( 'build_gate_payload', [ [ $this->make_payload_plan( 'signup', [], [ $this->list_a, $this->list_b ], 'Premium' ) ] ] );
+		$split   = $this->invoke_private_static( 'split_payload_by_auto_signup', [ $payload, [ 'premium' ] ] );
+		$this->fail_premium_sibling_create();
+		add_filter(
+			'wp_insert_post_empty_content',
+			fn( $maybe_empty, $postarr ) => 'Premium' === ( $postarr['post_title'] ?? '' ) ? true : $maybe_empty,
+			10,
+			2
+		);
+
+		$rows = $this->invoke_private_static( 'write_gate_payloads', [ $split['payloads'], [], false, false ] );
+
+		$this->assertStringStartsWith( 'ERROR', $rows[0]['action'] );
+		$this->assertStringStartsWith( 'ERROR', $rows[1]['action'] );
+		$warnings = implode( "\n", \WP_CLI::$warnings );
+		$this->assertStringContainsString( 'Failed to create gate "Premium"', $warnings );
+		$this->assertStringNotContainsString( 'is written with all the group', $warnings );
+	}
+
+	/**
 	 * When the sibling can't be created, a gate already titled like the group gets
 	 * every list of the group back, whatever an earlier run left on it.
 	 */

@@ -1933,7 +1933,8 @@ class Premium_Newsletters_Migration {
 	 * group's access rules and its auto-signup setting left alone, as for a group
 	 * the run can't split. Narrowed without its sibling, it would leave the
 	 * sibling's lists behind no gate, which opens them to every reader. A re-run
-	 * splits it.
+	 * splits it. The run warns about that fallback only once the whole gate has been
+	 * written, so the warning never says a gate was written when its own write failed.
 	 *
 	 * @param array[] $gate_payloads     Payloads from split_payload_by_auto_signup(), in write order.
 	 * @param array   $existing_gates    Map of lower-cased title => ID of the gates published before the run.
@@ -1952,15 +1953,11 @@ class Premium_Newsletters_Migration {
 			$progress->tick();
 
 			$gate_key = trim( strtolower( $payload['title'] ) );
+			// Title of the failed sibling when this gate is written whole in its place.
+			$unsplit_because = null;
 			if ( isset( $failed_splits[ $gate_key ], $payload['unsplit'] ) ) {
-				WP_CLI::warning(
-					sprintf(
-						'"%1$s" is written with all the group\'s lists and its auto-signup left as it is (a new gate follows the site setting), because "%2$s", which takes some of them, could not be created. Re-run to split it before deactivating WooCommerce Memberships.',
-						$payload['title'],
-						$failed_splits[ $gate_key ]
-					)
-				);
-				$payload = $payload['unsplit'];
+				$unsplit_because = $failed_splits[ $gate_key ];
+				$payload         = $payload['unsplit'];
 			}
 
 			$list_ids     = $payload['list_ids'];
@@ -2024,6 +2021,17 @@ class Premium_Newsletters_Migration {
 					'auto_signup' => '—',
 				];
 				continue;
+			}
+
+			// Said once the write has gone through, so it never claims a gate was written when it wasn't.
+			if ( null !== $unsplit_because ) {
+				WP_CLI::warning(
+					sprintf(
+						'"%1$s" is written with all the group\'s lists and its auto-signup left as it is (a new gate follows the site setting), because "%2$s", which takes some of them, could not be created. Re-run to split it before deactivating WooCommerce Memberships.',
+						$gate_title,
+						$unsplit_because
+					)
+				);
 			}
 
 			$auto_signup = self::apply_auto_signup( $gate_title, $gate_id, $payload['auto_signup'], $force_auto_signup, $dry_run, $split_from );
