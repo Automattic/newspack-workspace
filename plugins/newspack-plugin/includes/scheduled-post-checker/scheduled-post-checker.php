@@ -121,7 +121,8 @@ function nspc_rescue_changesets() {
 			'post_type'      => 'customize_changeset',
 			'fields'         => 'ids',
 			'posts_per_page' => 100,
-			// Oldest first, so a later changeset overwrites an earlier one.
+			// Oldest first, so where two changesets edit the same option or theme
+			// setting, the later one wins.
 			'order'          => 'ASC',
 			'date_query'     => [
 				[
