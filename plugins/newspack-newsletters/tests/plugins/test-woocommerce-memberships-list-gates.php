@@ -186,11 +186,11 @@ class Woocommerce_Memberships_List_Gates_Test extends WP_UnitTestCase {
 			],
 			Newspack_Newsletters_Blocks::get_list_gates()
 		);
-		$this->assertArrayNotHasKey( $free->get_public_id(), Newspack_Newsletters_Blocks::get_list_gates() );
 	}
 
 	/**
-	 * A plan's edit link goes only to a user who may edit the plan.
+	 * A plan's edit link goes only to a user who may edit the plan. An Editor,
+	 * who can edit every post, can't edit plans and gets no link.
 	 *
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
@@ -198,15 +198,28 @@ class Woocommerce_Memberships_List_Gates_Test extends WP_UnitTestCase {
 	public function test_list_gates_link_a_plan_only_for_users_who_can_edit_it() {
 		$this->activate_memberships();
 		$list = $this->create_list( 'Members Weekly' );
-		// A post stands in for the plan's own post, so capability checks have something to read.
-		$plan_id = self::factory()->post->create();
+		// The plan post type maps its own capabilities, as Memberships registers it.
+		register_post_type(
+			'wc_membership_plan',
+			[
+				'capability_type' => 'membership_plan',
+				'map_meta_cap'    => true,
+				'show_ui'         => true,
+			]
+		);
+		$plan_id = self::factory()->post->create( [ 'post_type' => 'wc_membership_plan' ] );
 		$this->register_plan( $plan_id, 'Digital', [ $list ] );
 
-		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		// Memberships grants these to administrators and shop managers.
+		$manager = new WP_User( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		foreach ( [ 'edit_membership_plans', 'edit_others_membership_plans', 'edit_published_membership_plans' ] as $cap ) {
+			$manager->add_cap( $cap );
+		}
+		wp_set_current_user( $manager->ID );
 		$gate = Newspack_Newsletters_Blocks::get_list_gates()[ $list->get_public_id() ][0];
 		$this->assertSame( get_edit_post_link( $plan_id, 'raw' ), $gate['edit_url'] );
 
-		foreach ( [ 0, self::factory()->user->create( [ 'role' => 'subscriber' ] ) ] as $user_id ) {
+		foreach ( [ 0, self::factory()->user->create( [ 'role' => 'subscriber' ] ), self::factory()->user->create( [ 'role' => 'editor' ] ) ] as $user_id ) {
 			wp_set_current_user( $user_id );
 			$gate = Newspack_Newsletters_Blocks::get_list_gates()[ $list->get_public_id() ][0];
 			$this->assertArrayNotHasKey( 'edit_url', $gate );
@@ -224,6 +237,9 @@ class Woocommerce_Memberships_List_Gates_Test extends WP_UnitTestCase {
 		$this->activate_memberships();
 		$list = $this->create_list( 'Members Weekly' );
 		$this->register_plan( 101, 'Digital', [ $list ] );
+		$this->assertArrayHasKey( $list->get_public_id(), Newspack_Newsletters_Blocks::get_list_gates(), 'Before it is marked public, the plan gates the list.' );
+		$this->assertSame( [], Woocommerce_Memberships::filter_lists( [ $list->get_public_id() ] ), 'Before it is marked public, a reader without the plan cannot join.' );
+
 		update_post_meta( $list->get_id(), '_wc_memberships_force_public', 'yes' );
 
 		$this->assertArrayNotHasKey( $list->get_public_id(), Newspack_Newsletters_Blocks::get_list_gates() );
@@ -262,12 +278,12 @@ class Woocommerce_Memberships_List_Gates_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A member can sign up for the premium list, which keeps its badge.
+	 * A member sees the premium list with a checkbox and its badge.
 	 *
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
 	 */
-	public function test_member_can_sign_up_for_a_premium_list() {
+	public function test_member_sees_a_premium_list_as_joinable_with_its_badge() {
 		$this->activate_memberships();
 		$free    = $this->create_list( 'Free Daily' );
 		$premium = $this->create_list( 'Members Weekly' );
@@ -298,14 +314,14 @@ class Woocommerce_Memberships_List_Gates_Test extends WP_UnitTestCase {
 		$member  = self::factory()->user->create( [ 'role' => 'subscriber' ] );
 		$reader  = self::factory()->user->create( [ 'role' => 'subscriber' ] );
 		$readers = [ 0, $reader, $member ];
-		$attrs   = [ $free->get_public_id(), $premium->get_public_id() ];
+		$list_ids = [ $free->get_public_id(), $premium->get_public_id() ];
 
 		$this->register_plan( 101, 'Digital', [ $premium ] );
 		$this->grant_plan( $member, 101 );
 		$under_memberships = [];
 		foreach ( $readers as $user_id ) {
 			wp_set_current_user( $user_id );
-			$under_memberships[ $user_id ] = [ $this->render( $attrs, true ), $this->render( $attrs, false ) ];
+			$under_memberships[ $user_id ] = [ $this->render( $list_ids, true ), $this->render( $list_ids, false ) ];
 		}
 
 		// The plans go away with Memberships, and an Access Control gate takes over.
@@ -337,8 +353,8 @@ class Woocommerce_Memberships_List_Gates_Test extends WP_UnitTestCase {
 
 		foreach ( $readers as $user_id ) {
 			wp_set_current_user( $user_id );
-			$this->assertSame( $under_memberships[ $user_id ][0], $this->render( $attrs, true ), "With showPremium on, reader $user_id sees the same block." );
-			$this->assertSame( $under_memberships[ $user_id ][1], $this->render( $attrs, false ), "With showPremium off, reader $user_id sees the same block." );
+			$this->assertSame( $under_memberships[ $user_id ][0], $this->render( $list_ids, true ), "With showPremium on, reader $user_id sees the same block." );
+			$this->assertSame( $under_memberships[ $user_id ][1], $this->render( $list_ids, false ), "With showPremium off, reader $user_id sees the same block." );
 		}
 	}
 
