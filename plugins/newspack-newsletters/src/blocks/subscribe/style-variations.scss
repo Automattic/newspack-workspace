@@ -45,7 +45,7 @@
 				li {
 					background: var(--newspack-ui-color-neutral-0, #fff);
 					border: 1px solid var(--newspack-ui-color-border, #ddd);
-					border-radius: var(--newspack-ui-border-radius-m, 6px);
+					border-radius: var(--newspack-ui-radius-surface, 12px);
 					margin: 0;
 					min-width: 100%;
 					padding: var(--newspack-ui-spacer-3, 16px);
@@ -64,7 +64,7 @@
 
 				input[type="checkbox"] {
 					border-color: var(--newspack-ui-color-input-border, #949494);
-					border-radius: var(--newspack-ui-border-radius-2xs, 2px);
+					border-radius: calc(var(--newspack-ui-radius-control, 8px) * 0.5);
 					height: var(--newspack-ui-control-size, 20px) !important;
 					margin: 0;
 					transition: background-color 125ms ease-in-out, border-color 125ms ease-in-out;
@@ -144,7 +144,7 @@
 		input[type="text"] {
 			background: var(--newspack-ui-color-neutral-0, #fff);
 			border: 1px solid var(--newspack-ui-color-input-border, #949494);
-			border-radius: var(--newspack-ui-border-radius-m, 6px);
+			border-radius: var(--newspack-ui-radius-control, 8px);
 			color: var(--newspack-ui-color-neutral-90, #1e1e1e);
 			font-family: inherit;
 			font-size: inherit;
@@ -179,7 +179,7 @@
 		input[type="submit"],
 		.submit-button {
 			border: 0;
-			border-radius: var(--newspack-ui-border-radius-m, 6px);
+			border-radius: var(--newspack-ui-radius-button, 8px);
 			cursor: pointer;
 			font-family: inherit;
 			font-size: inherit;
@@ -201,7 +201,7 @@
 		.newspack-newsletters-subscribe {
 			&__response {
 				background: var(--newspack-ui-color-success-0, #edfaef);
-				border-radius: var(--newspack-ui-border-radius-m, 6px);
+				border-radius: var(--newspack-ui-radius-surface, 12px);
 				gap: var(--newspack-ui-spacer-5, 24px);
 			}
 
@@ -317,7 +317,7 @@
 			&__list {
 				background: var(--newspack-ui-color-neutral-0, #fff);
 				border: 1px solid var(--newspack-ui-color-border, #ddd);
-				border-radius: var(--newspack-ui-border-radius-m, 6px);
+				border-radius: var(--newspack-ui-radius-surface, 12px);
 				display: flex;
 				flex-wrap: wrap;
 				gap: 0;
