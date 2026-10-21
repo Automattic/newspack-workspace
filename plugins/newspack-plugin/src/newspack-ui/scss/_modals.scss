@@ -98,6 +98,7 @@
 
 			.newspack-ui__modal {
 				border-radius: var(--newspack-ui-radius-sheet) var(--newspack-ui-radius-sheet) 0 0;
+				box-shadow: 0 var(--newspack-ui-spacer-5) var(--newspack-ui-color-surface);
 				opacity: 1;
 				padding-bottom: env(safe-area-inset-bottom);
 				transform: translateY(100%);
@@ -108,6 +109,11 @@
 					transform: none;
 					transition: opacity var(--newspack-ui-duration-modal) ease;
 				}
+			}
+
+			.newspack-ui__modal__header {
+				touch-action: pinch-zoom;
+				user-select: none;
 			}
 
 			&__overlay {
