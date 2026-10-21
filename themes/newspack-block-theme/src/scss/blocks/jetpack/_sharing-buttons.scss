@@ -30,7 +30,7 @@
 			&.style-text {
 				background: var(--newspack-ui-color-neutral-0, var(--wp--preset--color--base));
 				border: 1px solid var(--newspack-ui-color-neutral-30, var(--wp--preset--color--base-3));
-				border-radius: var(--wp--custom--border--radius-small);
+				border-radius: var(--wp--custom--border--radius-medium);
 				box-shadow: none;
 				color: var(--newspack-ui-color-neutral-90, var(--wp--preset--color--contrast));
 				font-family: var(--newspack-ui-font-family, var(--wp--preset--font-family--inter, system-ui, sans-serif));
@@ -84,7 +84,7 @@
 	&.has-huge-icon-size {
 		.style-icon-text,
 		.style-text {
-			border-radius: var(--wp--custom--border--radius-medium);
+			border-radius: var(--wp--custom--border--radius-large);
 			font-size: var(--wp--preset--font-size--small);
 			line-height: var(--wp--custom--line-height--small);
 			min-height: calc(var(--wp--preset--spacing--20) * 5);

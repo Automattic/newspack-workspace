@@ -22,7 +22,7 @@
 	}
 
 	&__button-inside {
-		border-radius: var(--wp--custom--border--radius-medium);
+		border-radius: var(--wp--custom--border--radius-large);
 		width: 100%;
 
 		&:focus-within {
@@ -33,7 +33,7 @@
 		.wp-block-search__inside-wrapper {
 			background-color: var(--wp--preset--color--base);
 			border-color: var(--wp--preset--color--base-4);
-			border-radius: var(--wp--custom--border--radius-medium);
+			border-radius: var(--wp--custom--border--radius-large);
 			box-sizing: border-box;
 
 			@media (prefers-contrast: more) {
@@ -72,6 +72,7 @@
 
 			.wp-block-search__button {
 				@include mixins.button-icon;
+				border-radius: var(--wp--custom--border--radius-small);
 
 				svg {
 					height: var(--wp--preset--spacing--40);
