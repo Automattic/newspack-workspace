@@ -550,8 +550,9 @@ export default function PersonProfile() {
 				<RefundFlow
 					subscription={ modal.subscription }
 					subscriberName={ subscriber.name }
-					// A gift's refund goes back to whoever bought it, not to the reader.
-					payerName={ modal.subscription.giftedBy?.name || subscriber.name }
+					// A gift's refund goes back to whoever bought it, not to the reader;
+					// passing a payer switches RefundFlow to the gift wording.
+					payerName={ modal.subscription.giftedBy ? modal.subscription.giftedBy.name || __( 'Unknown', 'newspack-plugin' ) : undefined }
 					actions={ paymentActions }
 					onClose={ () => setModal( null ) }
 					onDone={ completeFlow }

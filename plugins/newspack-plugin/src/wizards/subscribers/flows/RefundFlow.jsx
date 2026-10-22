@@ -26,7 +26,7 @@ import { fmtCurrency } from '../format';
  * @param {Object}   props                Component props.
  * @param {Object}   props.subscription   The profile subscription entry.
  * @param {string}   props.subscriberName The subscriber's display name.
- * @param {string}   [props.payerName]    Who the refund goes back to, when that is not the subscriber (the purchaser of a gift). Defaults to the subscriber.
+ * @param {string}   [props.payerName]    The gift buyer's name, passed only for a gift: the refund goes back to them while the subscriber holds the access.
  * @param {Object}   props.actions        The payment write calls (usePaymentActions).
  * @param {Function} props.onClose        Close without acting.
  * @param {Function} props.onDone         Called with a success message afterwards.
@@ -48,9 +48,11 @@ export default function RefundFlow( { subscription, subscriberName, payerName, a
 	const refundCurrency = subscription.refundableCurrency || subscription.currency;
 	const amount = fmtCurrency( subscription.refundableAmount, refundCurrency );
 	const name = subscriberName || __( 'The subscriber', 'newspack-plugin' );
-	// A gift is paid for by someone other than the reader holding it, so the
-	// refund names the payer while any line about access still names the reader.
-	const payer = payerName || name;
+	// A gift is paid for by someone other than the reader holding it, so its
+	// lines name the payer as refunded and the reader as the one whose access
+	// changes. The shared wording would say "their access" right after the
+	// payer's name, which reads as the payer's access.
+	const isGift = !! payerName;
 
 	const submit = async () => {
 		const { willRefund, willCancel } = refundIntent( choice, cancelOnly );
@@ -123,30 +125,54 @@ export default function RefundFlow( { subscription, subscriberName, payerName, a
 	} else if ( 'cancel-only' === choice ) {
 		// translators: %s is the subscriber's name.
 		confirmDetail = sprintf( __( '%s’s access ends immediately. No refund is issued.', 'newspack-plugin' ), name );
+	} else if ( 'refund-only' === choice && isGift ) {
+		confirmDetail = subscription.isPendingCancel
+			? sprintf(
+					// translators: 1: the gift buyer's name, 2: the refund amount, 3: the gift recipient's name.
+					__( '%1$s will be refunded %2$s. %3$s’s gift is already ending; a full refund may cancel it immediately.', 'newspack-plugin' ),
+					payerName,
+					amount,
+					name
+			  )
+			: sprintf(
+					// translators: 1: the gift buyer's name, 2: the refund amount, 3: the gift recipient's name.
+					__( '%1$s will be refunded %2$s. %3$s’s access continues and the gift renews normally.', 'newspack-plugin' ),
+					payerName,
+					amount,
+					name
+			  );
 	} else if ( 'refund-only' === choice ) {
 		// A pending-cancel subscription (badged Active) will never renew, so the
 		// copy must not promise a renewal — and a full refund may end it at once.
 		confirmDetail = subscription.isPendingCancel
 			? sprintf(
-					// translators: 1: the name of whoever is refunded, 2: the refund amount.
+					// translators: 1: the subscriber's name, 2: the refund amount.
 					__(
 						'%1$s will be refunded %2$s. Their subscription is already ending; a full refund may cancel it immediately.',
 						'newspack-plugin'
 					),
-					payer,
+					name,
 					amount
 			  )
 			: sprintf(
-					// translators: 1: the name of whoever is refunded, 2: the refund amount.
+					// translators: 1: the subscriber's name, 2: the refund amount.
 					__( '%1$s will be refunded %2$s. Their access continues and they’ll renew normally.', 'newspack-plugin' ),
-					payer,
+					name,
 					amount
 			  );
+	} else if ( isGift ) {
+		confirmDetail = sprintf(
+			// translators: 1: the gift buyer's name, 2: the refund amount, 3: the gift recipient's name.
+			__( '%1$s will be refunded %2$s and %3$s’s access ends immediately.', 'newspack-plugin' ),
+			payerName,
+			amount,
+			name
+		);
 	} else {
 		confirmDetail = sprintf(
-			// translators: 1: the name of whoever is refunded, 2: the refund amount.
+			// translators: 1: the subscriber's name, 2: the refund amount.
 			__( '%1$s will be refunded %2$s and their access ends immediately.', 'newspack-plugin' ),
-			payer,
+			name,
 			amount
 		);
 	}

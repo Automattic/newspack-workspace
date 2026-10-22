@@ -242,13 +242,24 @@ describe( 'the money flows on a gifted subscription', () => {
 		await renderCards( profile( { subscriptions: [ gift() ] } ) );
 		await chooseCardAction( 'Weekly digest', 'Refund or cancel' );
 
-		expect( screen.getByText( /^Gale Giver will be refunded .* Their access continues/ ) ).toBeInTheDocument();
+		expect(
+			screen.getByText( /^Gale Giver will be refunded .*\. Rae Reader’s access continues and the gift renews normally\.$/ )
+		).toBeInTheDocument();
 		expect( screen.queryByText( /Rae Reader will be refunded/ ) ).not.toBeInTheDocument();
 
 		await act( async () => {
 			fireEvent.click( screen.getByRole( 'radio', { name: 'Refund and cancel subscription' } ) );
 		} );
-		expect( screen.getByText( /^Gale Giver will be refunded .* their access ends immediately\./ ) ).toBeInTheDocument();
+		expect( screen.getByText( /^Gale Giver will be refunded .* and Rae Reader’s access ends immediately\.$/ ) ).toBeInTheDocument();
+	} );
+
+	it( 'names the reader whose gift is already ending when it is set to cancel', async () => {
+		await renderCards( profile( { subscriptions: [ gift( { isPendingCancel: true } ) ] } ) );
+		await chooseCardAction( 'Weekly digest', 'Refund or cancel' );
+
+		expect(
+			screen.getByText( /^Gale Giver will be refunded .*\. Rae Reader’s gift is already ending; a full refund may cancel it immediately\.$/ )
+		).toBeInTheDocument();
 	} );
 
 	it( 'still names the reader where the line is about their access ending', async () => {
