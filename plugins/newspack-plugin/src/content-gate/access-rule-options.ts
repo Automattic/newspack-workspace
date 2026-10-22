@@ -366,9 +366,9 @@ export function hasUnlistedAccessRuleValues( options: AccessRuleOption[], value:
  */
 const UNLISTED_VALUES_NOTICES: Record< string, () => string > = {
 	subscription: () =>
-		// translators: "draft" quotes the product label status marker, a separate PHP string ('%1$s [%2$s]'); keep the two in step.
+		// translators: "draft", "pending", "scheduled" and "trash" quote the product status markers, separate PHP strings (_x( 'draft', 'product status marker' ) and its siblings); keep them in step.
 		__(
-			'Entries marked “not listed” or with a status such as “draft” are not products you currently sell — a draft, pending, scheduled or trashed product, a product or variation that was deleted, or a product that is no longer a subscription. They are still checked when access is evaluated, so removing one widens who this gate lets in.',
+			'Entries marked “not listed”, “draft”, “pending”, “scheduled” or “trash” are not products you currently sell — a draft, pending, scheduled or trashed product, a product or variation that was deleted, or a product that is no longer a subscription. They are still checked when access is evaluated, so removing one widens who this gate lets in.',
 			'newspack-plugin'
 		),
 	institution: () =>

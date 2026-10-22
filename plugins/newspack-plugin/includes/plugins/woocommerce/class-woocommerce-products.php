@@ -33,6 +33,11 @@ class WooCommerce_Products {
 	 * status reads as WordPress admin names it ("scheduled" rather than `future`), in the
 	 * viewer's admin language.
 	 *
+	 * The unpublished markers are this plugin's own strings rather than core's status labels
+	 * lowercased in code, so a translator decides their case: lowercasing is wrong in a
+	 * language that capitalizes nouns. A status without its own marker falls back to core's
+	 * label as it is.
+	 *
 	 * The private marker tells a hidden legacy tier apart from a current product of the same
 	 * name. The unpublished marker keeps a saved product's name visible after it is drafted,
 	 * scheduled or trashed, rather than falling back to a generic "deleted" or "not listed"
@@ -58,11 +63,21 @@ class WooCommerce_Products {
 				$status_label
 			);
 		}
+		$unpublished_markers = [
+			/* translators: Marks a product saved as a draft in a product picker, e.g. "All Access [draft]". The Access Control picker notice quotes it; keep the two in step. */
+			'draft'   => _x( 'draft', 'product status marker', 'newspack-plugin' ),
+			/* translators: Marks a product pending review in a product picker, e.g. "All Access [pending]". The Access Control picker notice quotes it; keep the two in step. */
+			'pending' => _x( 'pending', 'product status marker', 'newspack-plugin' ),
+			/* translators: Marks a product scheduled to publish in a product picker, e.g. "All Access [scheduled]". The Access Control picker notice quotes it; keep the two in step. */
+			'future'  => _x( 'scheduled', 'product status marker', 'newspack-plugin' ),
+			/* translators: Marks a trashed product in a product picker, e.g. "All Access [trash]". The Access Control picker notice quotes it; keep the two in step. */
+			'trash'   => _x( 'trash', 'product status marker', 'newspack-plugin' ),
+		];
 		return sprintf(
-			/* translators: 1: product name, 2: lowercase post status label, e.g. "draft" or "trash". The Access Control picker notice quotes this marker; keep the two in step. */
-			__( '%1$s [%2$s]', 'newspack-plugin' ),
+			/* translators: 1: product name, 2: product status marker, e.g. "draft" or "trash". */
+			_x( '%1$s [%2$s]', 'product label with status marker', 'newspack-plugin' ),
 			$name,
-			function_exists( 'mb_strtolower' ) ? mb_strtolower( $status_label ) : strtolower( $status_label )
+			$unpublished_markers[ $status ] ?? $status_label
 		);
 	}
 

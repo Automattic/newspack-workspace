@@ -656,9 +656,9 @@ class Access_Rules {
 	 * produces for a variation, and nothing can have been bought in it.
 	 *
 	 * Draft and pending products keep granting access, but their labels carry a status
-	 * marker ("[draft]") so a publisher can tell them from the products
-	 * they currently sell. Private products and variations are marked too ("[status:
-	 * Private]"), so a hidden legacy tier reads apart from a current one of the same name.
+	 * marker ("[draft]") so a publisher can tell them from the products they currently
+	 * sell. Private products and variations are marked too ("[status: Private]"), so a
+	 * hidden legacy tier reads apart from a current one of the same name.
 	 *
 	 * The result is memoized per request. The list itself is still unbounded and is
 	 * serialized into every editor payload; NPPD-2132 replaces it with a searchable
