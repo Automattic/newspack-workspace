@@ -78,7 +78,12 @@ class RAS {
 			exit;
 		}
 
+		$password_hash = $user->user_pass;
 		Reader_Activation::set_reader_verified( $user );
+
+		if ( \get_userdata( $user->ID )->user_pass !== $password_hash ) {
+			WP_CLI::warning( __( 'The reader\'s password and application passwords were reset, so they now sign in with an emailed code until they set a new password.', 'newspack-plugin' ) );
+		}
 
 		WP_CLI::success(
 			sprintf(
