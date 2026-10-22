@@ -764,6 +764,8 @@ class Private_Tags {
 		// get_terms() matches names per the DB collation, which ignores accents, while
 		// wp_insert_term() compares the sanitized name strictly. Compare the same way so
 		// the name is only stripped when wp_insert_term() will find the existing tag.
+		// The name is slashed first because the REST controller passes wp_insert_term()
+		// a slashed name, and the term name filters unslash it.
 		$db_name = wp_unslash( sanitize_term_field( 'name', wp_slash( $base_name ), 0, 'post_tag', 'db' ) );
 		foreach ( $matches as $match ) {
 			if ( in_array( $match->term_id, $private_ids, true ) && strtolower( $match->name ) === strtolower( $db_name ) ) {

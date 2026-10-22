@@ -322,7 +322,7 @@ class Test_Private_Tags_Integrations extends WP_UnitTestCase {
 	public function test_strip_private_label_from_rest_keeps_name_when_only_accents_match() {
 		$private = $this->make_private_tag( 'Beastié' );
 
-		// Without an accent-insensitive collation the filter returns early and this test proves nothing.
+		// This test only means something when the collation ignores accents, so the name lookup finds "Beastié".
 		$collation_matches = get_terms(
 			[
 				'taxonomy'   => 'post_tag',
