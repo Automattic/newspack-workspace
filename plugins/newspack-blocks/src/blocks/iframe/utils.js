@@ -2,10 +2,11 @@
  * Get the source the editor preview should load, or '' if it should load nothing.
  *
  * Resolves the source the way the browser will, so whitespace or control characters in
- * the scheme are stripped before it is checked. Sources with no scheme follow the same
- * rules as esc_url() in view.php, so the preview loads what the front end will, apart
- * from a relative source, which the editor resolves against its own page. Keep the
- * allowed schemes in step with view.php.
+ * the scheme are stripped before it is checked, and returns only an http(s) URL. For a
+ * source with no scheme it follows esc_url()'s main rules in view.php, so a well-formed
+ * source previews what the front end embeds. It does not copy every esc_url() rewrite:
+ * a malformed source the server repairs may preview nothing, and a relative source
+ * resolves against the editor's page. Keep the allowed schemes in step with view.php.
  *
  * @param {string} src Iframe source.
  * @return {string} The http(s) URL to load, or ''.
