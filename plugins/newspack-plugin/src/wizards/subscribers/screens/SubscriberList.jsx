@@ -431,8 +431,9 @@ export default function SubscriberList() {
 	// sorting are server-side, so every filter toggle and every debounced keystroke
 	// is a refetch — unmounting DataViews for those would take the search box's
 	// focus with it and flash the applied filter chips away mid-interaction. Once a
-	// response has settled the loading state is handed to DataViews instead, for the
-	// same reason avatars fill in progressively rather than holding the table back.
+	// response has settled, a refetch keeps DataViews mounted and shows its loading
+	// state in place (see isRefreshing below), for the same reason avatars fill in
+	// progressively rather than holding the table back.
 	if ( subscribersLoading && ! settled ) {
 		return (
 			<div className="newspack-subscribers__loading">

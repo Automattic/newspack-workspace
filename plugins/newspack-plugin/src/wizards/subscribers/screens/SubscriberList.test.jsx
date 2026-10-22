@@ -275,37 +275,41 @@ describe( 'the subscriber list loading overlay', () => {
 		return container;
 	};
 
-	/** Mount, then start a refetch that never lands. */
+	/** Mount, then start a refetch that lands only when `land` is called. */
 	const mountThenRefetch = async rows => {
 		const container = await mountWith( rows );
-		apiFetch.mockReturnValue( new Promise( () => {} ) );
+		let land;
+		apiFetch.mockReturnValue(
+			new Promise( resolve => {
+				land = resolve;
+			} )
+		);
 		await act( async () => {
 			mockDataViewsProps.onChangeView( { ...mockDataViewsProps.view, page: 2 } );
 		} );
-		return container;
+		return { container, land };
 	};
 
-	it( 'covers the rows while a refetch is in flight', async () => {
-		const container = await mountThenRefetch( 2 );
+	it( 'covers the rows while a refetch is in flight, and clears once it lands', async () => {
+		const { container, land } = await mountThenRefetch( 2 );
 
 		expect( overlayIn( container ) ).not.toBeNull();
 		expect( listIn( container ) ).toHaveAttribute( 'aria-busy', 'true' );
 		expect( mockDataViewsProps.isLoading ).toBe( false );
-	} );
 
-	it( "leaves a refetch with no rows to DataViews' own spinner", async () => {
-		const container = await mountThenRefetch( 0 );
-
-		expect( overlayIn( container ) ).toBeNull();
-		expect( mockDataViewsProps.isLoading ).toBe( true );
-	} );
-
-	it( 'shows no overlay once the rows land', async () => {
-		const container = await mountWith( 2 );
+		await act( async () => {
+			land( { ...page( 2 ), pages: 2 } );
+		} );
 
 		expect( overlayIn( container ) ).toBeNull();
 		expect( listIn( container ) ).not.toHaveAttribute( 'aria-busy' );
-		expect( mockDataViewsProps.isLoading ).toBe( false );
+	} );
+
+	it( "leaves a refetch with no rows to DataViews' own spinner", async () => {
+		const { container } = await mountThenRefetch( 0 );
+
+		expect( overlayIn( container ) ).toBeNull();
+		expect( mockDataViewsProps.isLoading ).toBe( true );
 	} );
 } );
 
