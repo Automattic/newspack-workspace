@@ -178,15 +178,23 @@ class Newspack_Test_Mailchimp_For_WooCommerce extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Billing addresses as checkout collects them, and the address the order should carry.
+	 * Billing addresses as checkout collects them, the reader's saved WooCommerce billing address,
+	 * and the address the order should carry.
 	 */
 	public function partial_address_provider() {
+		$saved_address = [
+			'billing_address_1' => '1 Main St',
+			'billing_address_2' => 'Apt 4',
+			'billing_city'      => 'Albany',
+			'billing_postcode'  => '10036',
+		];
 		return [
-			'postcode and country'         => [
+			'postcode only, nothing saved'          => [
 				[
 					'postal_code' => '10036',
 					'country'     => 'US',
 				],
+				[],
 				[
 					'address1'    => '-',
 					'city'        => '-',
@@ -194,40 +202,55 @@ class Newspack_Test_Mailchimp_For_WooCommerce extends WP_UnitTestCase {
 					'country'     => 'US',
 				],
 			],
-			'street, postcode, no city'    => [
+			'postcode only, saved at that postcode' => [
 				[
-					'address1'    => '1 Main St',
-					'postal_code' => '10036',
+					'postal_code' => '10 036',
 					'country'     => 'US',
 				],
+				$saved_address,
 				[
 					'address1'    => '1 Main St',
-					'city'        => '-',
-					'postal_code' => '10036',
+					'address2'    => 'Apt 4',
+					'city'        => 'Albany',
+					'postal_code' => '10 036',
 					'country'     => 'US',
 				],
 			],
-			'street and city, no postcode' => [
+			'postcode only, saved elsewhere'        => [
 				[
+					'postal_code' => '12207',
+					'country'     => 'US',
+				],
+				$saved_address,
+				[
+					'address1'    => '-',
+					'city'        => '-',
+					'postal_code' => '12207',
+					'country'     => 'US',
+				],
+			],
+			'street and city, no postcode'          => [
+				[
+					'name'     => 'Ann Reader',
+					'phone'    => '5555550100',
 					'address1' => '1 Main St',
 					'city'     => 'Dublin',
-					'province' => 'D',
 					'country'  => 'IE',
 				],
+				$saved_address,
 				[],
 			],
-			'complete'                     => [
+			'complete'                              => [
 				[
-					'address1'    => '1 Main St',
-					'city'        => 'New York',
-					'province'    => 'NY',
+					'address1'    => '2 Elm St',
+					'city'        => 'Albany',
 					'postal_code' => '10036',
 					'country'     => 'US',
 				],
+				$saved_address,
 				[
-					'address1'    => '1 Main St',
-					'city'        => 'New York',
-					'province'    => 'NY',
+					'address1'    => '2 Elm St',
+					'city'        => 'Albany',
 					'postal_code' => '10036',
 					'country'     => 'US',
 				],
@@ -236,19 +259,22 @@ class Newspack_Test_Mailchimp_For_WooCommerce extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Mailchimp copies an order's billing address into the contact's address field, and ignores
-	 * later updates to a contact whose address lacks a street, city, or postcode. A digital
-	 * checkout often collects only a postcode and country. Missing street and city become "-",
-	 * which Mailchimp accepts as complete, and an address without a postcode is not sent.
+	 * Mailchimp replaces a contact's address with the one sent with an order, and ignores later
+	 * updates to a contact whose address lacks a street, city, or postcode.
 	 *
 	 * @dataProvider partial_address_provider
 	 *
 	 * @param array $billing_address The address checkout collected.
+	 * @param array $saved_address   The reader's saved billing address, as user meta.
 	 * @param array $sent_address    The address the order should carry.
 	 */
-	public function test_order_carries_only_an_address_mailchimp_accepts( $billing_address, $sent_address ) {
+	public function test_order_carries_only_an_address_mailchimp_accepts( $billing_address, $saved_address, $sent_address ) {
+		$reader = $this->create_customer( 'reader@example.test', 'subscribed' );
+		foreach ( $saved_address as $key => $value ) {
+			update_user_meta( $reader->ID, $key, $value );
+		}
 		$empty_address = ( new MailChimp_WooCommerce_Address() )->fields;
-		$customer      = new MailChimp_WooCommerce_Customer( null, 'guest@example.test' );
+		$customer      = new MailChimp_WooCommerce_Customer( $reader, $reader->user_email );
 		$customer->getAddress()->fields = array_merge( $empty_address, $billing_address );
 
 		$order = $this->filter_order( $customer );

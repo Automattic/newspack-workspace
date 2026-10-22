@@ -185,6 +185,16 @@ if ( ! class_exists( 'MailChimp_WooCommerce_Customer' ) ) {
 			}
 			return $this->address;
 		}
+
+		/**
+		 * Replace the billing address.
+		 *
+		 * @param MailChimp_WooCommerce_Address $address Address.
+		 */
+		public function setAddress( MailChimp_WooCommerce_Address $address ) {
+			$this->address = $address;
+			return $this;
+		}
 	}
 }
 
@@ -199,6 +209,8 @@ if ( ! class_exists( 'MailChimp_WooCommerce_Address' ) ) {
 		 * @var array<string, string>
 		 */
 		public $fields = [
+			'name'        => '',
+			'phone'       => '',
 			'address1'    => '',
 			'address2'    => '',
 			'city'        => '',

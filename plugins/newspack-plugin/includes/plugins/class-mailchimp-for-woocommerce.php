@@ -125,12 +125,12 @@ class Mailchimp_For_WooCommerce {
 	/**
 	 * Stop an order's billing address from blocking Newspack's contact updates.
 	 *
-	 * Mailchimp copies the address MC4WC sends with an order into the contact's address field.
-	 * When that address lacks a street, city, or postcode, Mailchimp ignores every later update to
-	 * the contact, while still reporting success. Checkouts for digital products often collect
-	 * only a postcode and country. Missing street and city become "-", which Mailchimp accepts as
-	 * complete, so the postcode and country still reach Mailchimp. An address without a postcode
-	 * is not sent at all.
+	 * Mailchimp replaces the contact's address with the one MC4WC sends with an order. When that
+	 * address lacks a street, city, or postcode, Mailchimp ignores every later update to the
+	 * contact, while still reporting success. Checkouts for digital products often collect only a
+	 * postcode and country. A missing street and city come from the reader's saved billing address
+	 * when it has the same postcode, so a returning reader keeps their real address, and become
+	 * "-" otherwise, which Mailchimp accepts as complete. An address without a postcode is not sent.
 	 *
 	 * @param \MailChimp_WooCommerce_Order $order The order MC4WC is about to send.
 	 *
@@ -139,26 +139,63 @@ class Mailchimp_For_WooCommerce {
 	public static function send_only_complete_address( $order ) {
 		$customer = method_exists( $order, 'getCustomer' ) ? $order->getCustomer() : null;
 		$address  = $customer && method_exists( $customer, 'getAddress' ) ? $customer->getAddress() : null;
-		$fields   = [ 'Address1', 'Address2', 'City', 'Province', 'PostalCode', 'Country' ];
-		foreach ( $fields as $field ) {
+		foreach ( [ 'Address1', 'Address2', 'City', 'PostalCode' ] as $field ) {
 			if ( ! $address || ! method_exists( $address, 'get' . $field ) || ! method_exists( $address, 'set' . $field ) ) {
 				return $order;
 			}
 		}
 		if ( ! $address->getPostalCode() ) {
-			// MC4WC leaves empty fields out, so an emptied address is not sent.
-			foreach ( $fields as $field ) {
-				$address->{'set' . $field}( '' );
+			if ( method_exists( $customer, 'setAddress' ) && class_exists( '\MailChimp_WooCommerce_Address' ) ) {
+				// MC4WC leaves an empty address out of what it sends.
+				$customer->setAddress( new \MailChimp_WooCommerce_Address() );
 			}
 			return $order;
 		}
+		if ( $address->getAddress1() && $address->getCity() ) {
+			return $order;
+		}
+		$saved_address = self::get_saved_billing_address( $customer, $address->getPostalCode() );
 		if ( ! $address->getAddress1() ) {
-			$address->setAddress1( '-' );
+			$address->setAddress1( $saved_address['address_1'] ? $saved_address['address_1'] : '-' );
+			if ( ! $address->getAddress2() ) {
+				$address->setAddress2( $saved_address['address_2'] );
+			}
 		}
 		if ( ! $address->getCity() ) {
-			$address->setCity( '-' );
+			$address->setCity( $saved_address['city'] ? $saved_address['city'] : '-' );
 		}
 		return $order;
+	}
+
+	/**
+	 * Get the street and city the reader saved in WooCommerce for the given postcode.
+	 *
+	 * A checkout that hides the street and city leaves the saved ones in place, so they still hold
+	 * the address from the reader's last order that collected it.
+	 *
+	 * @param \MailChimp_WooCommerce_Customer $customer The order's customer.
+	 * @param string                          $postcode The postcode on the order.
+	 *
+	 * @return array{address_1: string, address_2: string, city: string} Empty values when the reader is a guest or saved another postcode.
+	 */
+	private static function get_saved_billing_address( $customer, $postcode ) {
+		$saved_address = [
+			'address_1' => '',
+			'address_2' => '',
+			'city'      => '',
+		];
+		$user          = method_exists( $customer, 'getWordpressUser' ) ? $customer->getWordpressUser() : null;
+		if ( ! $user instanceof \WP_User ) {
+			return $saved_address;
+		}
+		$normalize = fn( $value ) => strtoupper( preg_replace( '/\s+/', '', (string) $value ) );
+		if ( $normalize( get_user_meta( $user->ID, 'billing_postcode', true ) ) !== $normalize( $postcode ) ) {
+			return $saved_address;
+		}
+		foreach ( array_keys( $saved_address ) as $key ) {
+			$saved_address[ $key ] = (string) get_user_meta( $user->ID, 'billing_' . $key, true );
+		}
+		return $saved_address;
 	}
 
 	/**
