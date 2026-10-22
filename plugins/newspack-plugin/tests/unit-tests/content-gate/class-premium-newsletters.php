@@ -1835,6 +1835,42 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		$this->assertSame( Premium_Newsletters::SOURCE_RENEWAL, $this->get_queued_source( $recipient_id ), 'A renewal must queue the recipient with the renewal source.' );
 	}
 
+	/**
+	 * When a gift lapses, its recipient loses the premium lists it paid for. The
+	 * event names the purchaser, but the recipient holds the access.
+	 */
+	public function test_lapsed_gift_removes_recipient_lists() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
+
+		$purchaser_id    = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$recipient_id    = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$recipient_email = get_userdata( $recipient_id )->user_email;
+
+		$list_post_id = $this->create_premium_list();
+		$this->create_newsletter_gate( [ 100 ], [ $list_post_id ] );
+		$subscription = $this->create_gifted_subscription( $purchaser_id, $recipient_id, [ 100 ] );
+
+		\Newspack_Newsletters_Subscription::$contact_lists[ $recipient_email ] = [ 'newspack-' . $list_post_id ];
+		$subscription->set_status( 'cancelled' );
+
+		Premium_Newsletters::handle_product_subscription_changed(
+			time(),
+			[
+				'user_id'         => $purchaser_id,
+				'subscription_id' => $subscription->get_id(),
+				'status_before'   => 'active',
+				'status_after'    => 'cancelled',
+			],
+			null
+		);
+		Premium_Newsletters::process_access_check_queue();
+
+		$calls = $this->get_list_calls_for( $recipient_email );
+		$this->assertCount( 1, $calls, 'The recipient of a lapsed gift must be removed from its premium lists.' );
+		$this->assertContains( 'newspack-' . $list_post_id, $calls[0]['lists_to_remove'] );
+		$this->assertEmpty( $calls[0]['lists_to_add'] );
+	}
+
 	// =========================================================================
 	// Group I — one-time purchases
 	// =========================================================================
