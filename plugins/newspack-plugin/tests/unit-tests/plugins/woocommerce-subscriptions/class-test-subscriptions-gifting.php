@@ -7,6 +7,7 @@
 
 use Newspack\WooCommerce_Subscriptions_Gifting;
 
+require_once NEWSPACK_ABSPATH . 'tests/mocks/wc-mocks.php';
 require_once NEWSPACK_ABSPATH . 'tests/mocks/wcs-gifting-mock.php';
 
 /**
@@ -20,17 +21,21 @@ require_once NEWSPACK_ABSPATH . 'tests/mocks/wcs-gifting-mock.php';
 class Newspack_Test_Subscriptions_Gifting extends WP_UnitTestCase {
 
 	/**
-	 * Reset the gift store so one test's gifts never leak into the next.
+	 * Reset the gift and subscription stores so one test's data never leaks into the next.
 	 */
 	public function set_up() {
 		parent::set_up();
+		global $subscriptions_database;
+		$subscriptions_database  = [];
 		WCS_Gifting::$recipients = [];
 	}
 
 	/**
-	 * Reset the gift store after the last test too.
+	 * Reset the stores after the last test too.
 	 */
 	public function tear_down() {
+		global $subscriptions_database;
+		$subscriptions_database  = [];
 		WCS_Gifting::$recipients = [];
 		parent::tear_down();
 	}

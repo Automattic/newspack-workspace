@@ -187,9 +187,11 @@ describe( 'a gifted subscription on the profile', () => {
 	} );
 
 	it( 'renders a Gifted by row linking to the giver', async () => {
-		await renderCards( profile( { subscriptions: [ subscription( { giftedBy: giver } ) ] } ) );
+		const own = subscription( { id: 32, plan: 'Annual supporter' } );
+		await renderCards( profile( { subscriptions: [ subscription( { giftedBy: giver } ), own ] } ) );
 
-		expect( screen.getByText( 'Gifted by' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Annual supporter' ) ).toBeInTheDocument();
+		expect( screen.getAllByText( 'Gifted by' ) ).toHaveLength( 1 );
 		expect( screen.getByRole( 'link', { name: 'Gale Giver' } ) ).toHaveAttribute( 'href', giver.editUrl );
 	} );
 
@@ -198,13 +200,6 @@ describe( 'a gifted subscription on the profile', () => {
 
 		expect( screen.getByText( 'Gale Giver' ) ).toBeInTheDocument();
 		expect( screen.queryByRole( 'link', { name: 'Gale Giver' } ) ).not.toBeInTheDocument();
-	} );
-
-	it( 'omits the Gifted by row when giftedBy is null', async () => {
-		await renderCards( profile() );
-
-		expect( screen.getByText( 'First subscribed' ) ).toBeInTheDocument();
-		expect( screen.queryByText( 'Gifted by' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'never offers to change the payment method, since the saved cards are the giver’s', async () => {

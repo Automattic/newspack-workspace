@@ -6,9 +6,11 @@
  */
 
 /**
- * Minimal WCS_Gifting stub mirroring the surface
- * WooCommerce_Connection/Teams_Migration consult. A subscription is "gifted"
- * when an entry exists in $recipients; the store is reset per test.
+ * Minimal WCS_Gifting stub mirroring the two static methods the plugin's
+ * gift-aware code calls: is_gifted_subscription() and get_recipient_user(). A
+ * subscription is "gifted" when an entry exists in $recipients. The stub has no
+ * reset: each test class that uses it clears WCS_Gifting::$recipients itself in
+ * set_up() and tear_down().
  */
 if ( ! class_exists( 'WCS_Gifting' ) ) {
 	/**
