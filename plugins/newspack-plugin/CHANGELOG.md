@@ -1,3 +1,10 @@
+## newspack [6.55.7](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.6...newspack@6.55.7) (2026-10-22)
+
+
+### Bug Fixes
+
+* keep Mailchimp contacts updatable after MC4WC orders (NPPD-2491, [#1375](https://github.com/Automattic/newspack-workspace/issues/1375)) ([3978ee2](https://github.com/Automattic/newspack-workspace/commit/3978ee23d8c7273fc8b1780cd4dae1c1d04c1c32))
+
 ## newspack [6.55.6](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.5...newspack@6.55.6) (2026-10-21)
 
 
