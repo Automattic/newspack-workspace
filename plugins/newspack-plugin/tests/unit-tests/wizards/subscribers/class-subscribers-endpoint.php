@@ -746,27 +746,47 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A recipient who also paid for something themselves shows whichever payment is
-	 * more recent. Here the gift's is later, so a reading of the recipient's own
-	 * orders alone gives the wrong date.
+	 * Which of a recipient's two payments is more recent: the gift's or their own.
+	 *
+	 * @return array[] Each row: the gift's last paid date, the recipient's own
+	 *                 order's paid date, and the date the list should show.
 	 */
-	public function test_recipient_last_payment_is_the_latest_of_own_order_and_gift() {
+	public function data_recipient_last_payment_orders() {
+		return [
+			'gift is later'      => [ '2026-08-15 09:00:00', '2026-07-01 09:00:00', '2026-08-15' ],
+			'own order is later' => [ '2026-06-10 09:00:00', '2026-07-01 09:00:00', '2026-07-01' ],
+		];
+	}
+
+	/**
+	 * A recipient who also paid for something themselves shows whichever payment is
+	 * more recent. Both orders are covered: a reading of the recipient's own orders
+	 * alone gets the first wrong, and letting the gift replace their own order gets
+	 * the second wrong.
+	 *
+	 * @dataProvider data_recipient_last_payment_orders
+	 *
+	 * @param string $gift_paid      When the gift's last order was paid.
+	 * @param string $own_order_paid When the recipient's own order was paid.
+	 * @param string $expected       The date the list should show.
+	 */
+	public function test_recipient_last_payment_is_the_latest_of_own_order_and_gift( $gift_paid, $own_order_paid, $expected ) {
 		$this->login_admin();
 		$purchaser_id = $this->create_reader( 'Purchaser' );
 		$recipient_id = $this->create_reader( 'Recipient' );
-		$this->create_gifted_subscription( $purchaser_id, $recipient_id, 'active', 0, [ 'last_order_date_paid' => '2026-08-15 09:00:00' ] );
+		$this->create_gifted_subscription( $purchaser_id, $recipient_id, 'active', 0, [ 'last_order_date_paid' => $gift_paid ] );
 		wc_create_order(
 			[
 				'customer_id' => $recipient_id,
 				'status'      => 'completed',
 				'total'       => 12.5,
-				'date_paid'   => '2026-07-01 09:00:00',
+				'date_paid'   => $own_order_paid,
 			]
 		);
 
 		$by_id = array_column( $this->dispatch()->get_data()['items'], null, 'id' );
 
-		$this->assertSame( '2026-08-15', $by_id[ $recipient_id ]['lastPayment'] );
+		$this->assertSame( $expected, $by_id[ $recipient_id ]['lastPayment'] );
 	}
 
 	/**
