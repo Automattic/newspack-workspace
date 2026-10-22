@@ -78,11 +78,14 @@ class RAS {
 			exit;
 		}
 
-		$password_hash = $user->user_pass;
+		// Readers who never set a password already sign in with a link or code, so
+		// only warn when verifying takes away a credential they had.
+		$had_credentials = true !== Reader_Activation::is_reader_without_password( $user ) || ! empty( \WP_Application_Passwords::get_user_application_passwords( $user->ID ) );
+		$password_hash   = $user->user_pass;
 		Reader_Activation::set_reader_verified( $user );
 
-		if ( \get_userdata( $user->ID )->user_pass !== $password_hash ) {
-			WP_CLI::warning( __( 'The reader\'s password and application passwords were reset, so they now sign in with an emailed code until they set a new password.', 'newspack-plugin' ) );
+		if ( $had_credentials && \get_userdata( $user->ID )->user_pass !== $password_hash ) {
+			WP_CLI::warning( __( 'The reader\'s password and application passwords were reset, so they now sign in with an emailed link or code until they set a new password.', 'newspack-plugin' ) );
 		}
 
 		WP_CLI::success(
