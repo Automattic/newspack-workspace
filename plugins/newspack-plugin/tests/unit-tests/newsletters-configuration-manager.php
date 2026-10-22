@@ -38,7 +38,8 @@ class Newspack_Test_Newsletters_Configuration_Manager extends WP_UnitTestCase {
 
 		$configuration_manager = Configuration_Managers::configuration_manager_class_for_plugin_slug( 'newspack-newsletters' );
 		$contact               = [ 'email' => 'test-reader' ];
-		$result                = $configuration_manager->add_contact( $contact, 'list-1' );
+		// phpcs:ignore phpcsSniffs.Newsletters.ForbiddenMethods.PossibleForbiddenContactsMethods -- this test exercises the deprecated method itself.
+		$result = $configuration_manager->add_contact( $contact, 'list-1' );
 
 		$this->assertTrue( $result );
 		$this->assertCount( 1, Newspack_Newsletters_Contacts::$upsert_calls );
