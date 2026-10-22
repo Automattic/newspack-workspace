@@ -678,13 +678,38 @@ function get_block_button_styles( $attrs = [] ) {
 	$style = '';
 
 	if ( ! is_button_text_default( $attrs ) ) {
-		$style .= 'color: ' . $attrs['textColor'] . ';';
+		$text_color = sanitize_button_color( $attrs['textColor'] );
+		if ( $text_color ) {
+			$style .= 'color: ' . $text_color . ';';
+		}
 	}
 
 	if ( ! is_button_background_default( $attrs ) ) {
-		$style .= 'background-color: ' . $attrs['backgroundColor'] . ';';
+		$background_color = sanitize_button_color( $attrs['backgroundColor'] );
+		if ( $background_color ) {
+			$style .= 'background-color: ' . $background_color . ';';
+			$style .= '--newspack-newsletters-subscribe-button-bg: ' . $background_color . ';';
+		}
 	}
 	return $style;
+}
+
+/**
+ * Validate a button color attribute before it is written into an inline style.
+ *
+ * The color picker stores the color value itself (a palette color's value or a
+ * custom one), which can be a hex code, a color function or a CSS variable.
+ *
+ * @param mixed $color Color attribute value.
+ * @return string The color, or an empty string if it is not a plain CSS color.
+ */
+function sanitize_button_color( $color ) {
+	if ( ! is_string( $color ) ) {
+		return '';
+	}
+	$color = trim( $color );
+	$pattern = '/^(#[0-9a-f]{3,8}|(rgba?|hsla?)\([0-9a-z.,%\s\/+-]+\)|var\(--[a-z0-9_-]+\)|[a-z]+)$/i';
+	return preg_match( $pattern, $color ) ? $color : '';
 }
 
 /**
