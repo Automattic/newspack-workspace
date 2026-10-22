@@ -39,7 +39,6 @@ class Admin_Bar {
 	 */
 	public static function flush_cache() {
 		self::$sites_cache = [];
-		Sites::reset_cache();
 	}
 
 	/**

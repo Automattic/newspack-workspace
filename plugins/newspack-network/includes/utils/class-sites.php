@@ -23,11 +23,11 @@ use Newspack_Network\Node\Settings as Node_Settings;
 class Sites {
 
 	/**
-	 * Remembered result of get_all_sites(), so the hub's Node posts are queried once per request.
+	 * Remembered site names, keyed by normalized URL, so name lookups query the network sites once per request.
 	 *
-	 * @var array|null
+	 * @var array<string, string>|null
 	 */
-	private static $all_sites = null;
+	private static $site_names = null;
 
 	/**
 	 * Get all sites
@@ -35,19 +35,16 @@ class Sites {
 	 * @return array Array of arrays with name and url properties.
 	 */
 	public static function get_all_sites() {
-		if ( null === self::$all_sites ) {
-			self::$all_sites = array_merge( [ self::get_hub() ], self::get_nodes() );
-		}
-		return self::$all_sites;
+		return array_merge( [ self::get_hub() ], self::get_nodes() );
 	}
 
 	/**
-	 * Forget the remembered site list.
+	 * Forget the remembered site names.
 	 *
 	 * @return void
 	 */
 	public static function reset_cache() {
-		self::$all_sites = null;
+		self::$site_names = null;
 	}
 
 	/**
@@ -72,13 +69,19 @@ class Sites {
 	 * @return string The site's name, or its bare domain if the site isn't in the network list.
 	 */
 	public static function get_site_name( $url ) {
-		$normalized_url = self::normalize_url( $url );
-		foreach ( self::get_all_sites() as $site ) {
-			if ( self::normalize_url( $site['url'] ) === $normalized_url ) {
-				return $site['name'];
+		if ( null === self::$site_names ) {
+			self::$site_names = [];
+			foreach ( self::get_all_sites() as $site ) {
+				$key = self::normalize_url( $site['url'] );
+				// The first site listed for a URL wins.
+				if ( ! isset( self::$site_names[ $key ] ) ) {
+					self::$site_names[ $key ] = $site['name'];
+				}
 			}
 		}
-		return $normalized_url;
+
+		$normalized_url = self::normalize_url( $url );
+		return self::$site_names[ $normalized_url ] ?? $normalized_url;
 	}
 
 	/**

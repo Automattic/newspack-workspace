@@ -91,9 +91,9 @@ class Test_Sites_Lookup extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The site list is remembered until the cache is reset.
+	 * Site names are remembered until the cache is reset.
 	 */
-	public function test_site_list_is_cached_until_reset() {
+	public function test_site_names_are_cached_until_reset() {
 		$this->assertSame( 'Hub Gazette', Sites::get_site_name( 'https://hub.example.test' ) );
 
 		update_option( 'newspack_network_hub_name', 'Renamed Hub' );
@@ -101,5 +101,16 @@ class Test_Sites_Lookup extends WP_UnitTestCase {
 
 		Sites::reset_cache();
 		$this->assertSame( 'Renamed Hub', Sites::get_site_name( 'https://hub.example.test' ) );
+	}
+
+	/**
+	 * The public site list stays fresh: only the name lookup is cached.
+	 */
+	public function test_get_all_sites_is_not_cached() {
+		Sites::get_site_name( 'https://hub.example.test' );
+
+		update_option( 'newspack_network_hub_name', 'Renamed Hub' );
+
+		$this->assertSame( 'Renamed Hub', Sites::get_all_sites()[0]['name'] );
 	}
 }
