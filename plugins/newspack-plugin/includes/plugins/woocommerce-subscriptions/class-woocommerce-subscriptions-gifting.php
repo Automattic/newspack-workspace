@@ -34,6 +34,38 @@ class WooCommerce_Subscriptions_Gifting {
 	}
 
 	/**
+	 * Get the gift recipient of a subscription.
+	 *
+	 * Mirrors the gift check content-gate access uses, so callers agree with it on
+	 * who a gifted subscription belongs to.
+	 *
+	 * @param \WC_Subscription $subscription Subscription.
+	 *
+	 * @return int The recipient's user ID, or 0 if the subscription isn't a gift
+	 *             or its recipient account no longer exists.
+	 */
+	public static function get_recipient_id( $subscription ) {
+		if ( ! class_exists( 'WCS_Gifting' ) || ! \WCS_Gifting::is_gifted_subscription( $subscription ) ) {
+			return 0;
+		}
+		$recipient_id = (int) \WCS_Gifting::get_recipient_user( $subscription );
+		return $recipient_id && \get_userdata( $recipient_id ) ? $recipient_id : 0;
+	}
+
+	/**
+	 * Get the user who holds a subscription: the recipient of a gift, otherwise
+	 * the customer who purchased it.
+	 *
+	 * @param \WC_Subscription $subscription Subscription.
+	 *
+	 * @return int User ID.
+	 */
+	public static function get_holder_id( $subscription ) {
+		$recipient_id = self::get_recipient_id( $subscription );
+		return $recipient_id ? $recipient_id : (int) $subscription->get_customer_id();
+	}
+
+	/**
 	 * Ensure that only billing address fields enabled in Reader Revenue settings
 	 * are required for new gift recipient accounts.
 	 *
