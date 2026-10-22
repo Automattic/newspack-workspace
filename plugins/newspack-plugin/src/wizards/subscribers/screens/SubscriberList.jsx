@@ -16,7 +16,7 @@
 /**
  * WordPress dependencies.
  */
-import { useLayoutEffect, useMemo, useState } from '@wordpress/element';
+import { useEffect, useLayoutEffect, useMemo, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -32,6 +32,7 @@ import LoadFailureNotice from '../components/LoadFailureNotice';
 import { useRetryFocus } from '../use-retry-focus';
 import { fmtRelative, fmtDate } from '../format';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
+import { getSavedListView, saveListView } from '../data/list-view-state';
 import { usePlans } from '../data/use-plans';
 import { useSubscribers } from '../data/use-subscribers';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
@@ -105,7 +106,10 @@ const DEFAULT_VIEW = {
 };
 
 export default function SubscriberList() {
-	const [ view, setView ] = useState( DEFAULT_VIEW );
+	// Opening a profile unmounts the list; the saved view brings the reader back
+	// to the filters, search, sort and page they left.
+	const [ view, setView ] = useState( () => getSavedListView() || DEFAULT_VIEW );
+	useEffect( () => saveListView( view ), [ view ] );
 	const history = useHistory();
 	const location = useLocation();
 
