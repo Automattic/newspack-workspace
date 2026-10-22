@@ -157,4 +157,18 @@ class Test_Content_Gifting extends \WP_UnitTestCase {
 		$data = Content_Gifting::get_key_data( $this->post_id, $key );
 		$this->assertEmpty( $data );
 	}
+
+	/**
+	 * Gift limits reset on the same calendar as content-gate meters: midnight in the site's
+	 * time zone, on the day the site's week starts (NPPD-2484).
+	 */
+	public function test_gift_limits_reset_on_the_sites_calendar() {
+		update_option( 'timezone_string', 'America/New_York' );
+		update_option( 'start_of_week', 0 );
+
+		foreach ( [ 'day', 'week', 'month' ] as $interval ) {
+			Content_Gifting::set_gifting_reset_interval( $interval );
+			$this->assertSame( \Newspack\Metering::get_expiration_time( $interval ), Content_Gifting::get_current_expiration_timestamp(), "A gift limit per {$interval} should reset when a meter per {$interval} does" );
+		}
+	}
 }

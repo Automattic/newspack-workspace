@@ -299,6 +299,15 @@ class Subscribers_Wizard extends Wizard {
 						'sanitize_callback' => 'rest_sanitize_request_arg',
 						'validate_callback' => 'rest_validate_request_arg',
 					],
+					'access'   => [
+						'type'              => 'array',
+						'items'             => [
+							'type' => 'string',
+							'enum' => [ 'complimentary' ],
+						],
+						'sanitize_callback' => 'rest_sanitize_request_arg',
+						'validate_callback' => 'rest_validate_request_arg',
+					],
 					'plan'     => [
 						'type'              => 'array',
 						'items'             => [ 'type' => 'string' ],
@@ -338,9 +347,9 @@ class Subscribers_Wizard extends Wizard {
 			]
 		);
 
-		// The wizard's first person-profile write endpoints: on-hold recovery
-		// (NPPD-1753). Both act on one individual subscription; group money
-		// actions deliberately live with the group surface instead.
+		// On-hold recovery (NPPD-1753). Both act on one individual
+		// subscription; group money actions deliberately live with the group
+		// surface instead.
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
 			'/wizard/' . $this->slug . '/subscriptions/(?P<id>\d+)/reactivate',
@@ -384,6 +393,11 @@ class Subscribers_Wizard extends Wizard {
 				],
 			]
 		);
+
+		// The payment-action routes (change payment method, refund/cancel, plan
+		// change, default card) live in their own class; they share this wizard's
+		// permission check so the whole surface has one capability gate.
+		Subscribers_Payments::register_routes( [ $this, 'api_permissions_check' ] );
 	}
 
 	/**
@@ -673,15 +687,19 @@ class Subscribers_Wizard extends Wizard {
 				// see the group list's `editUrl` for the subscription itself.
 				'editUrl' => (string) get_edit_user_link( $owner_id ),
 			] : null,
+			// The group's own name: its custom name when set, else the product name,
+			// else the group label.
 			'plan'        => (string) $settings['name'],
+			// The product alone, which `plan` hides once the group is renamed.
+			'product'     => $this->individual_plan_name( $subscription ),
 			'status'      => self::map_subscription_status( $subscription->get_status() ),
 			// The configured limit is owner-inclusive (0 = unlimited); the member
 			// count is likewise owner-inclusive, so "members / seatLimit" reads true.
 			'seatLimit'   => (int) $settings['limit'],
 			'members'     => Group_Subscription::get_member_count( $subscription ),
 			'createdAt'   => $created_at,
-			// Interim click-through target: the WooCommerce subscription edit
-			// screen (HPOS-safe), until the in-wizard group detail lands (PR 4).
+			// The WooCommerce subscription edit screen (HPOS-safe), linked from the
+			// group's "View subscription" drawer.
 			'editUrl'     => $this->subscription_edit_url( $subscription ),
 			// Always null: nothing on the site records a seat-increase request yet,
 			// so there is nothing to report. The field stays in the response because
@@ -1378,13 +1396,21 @@ class Subscribers_Wizard extends Wizard {
 		// shapes carry it, and they must be judged before the reuse branch
 		// below, because one of them still needs payment: an order parked
 		// on-hold (asynchronous capture, manual review), and an order left
-		// needing payment while the gateway waits on the customer — Stripe
-		// records the charge id and sets the order to `failed` while SCA
-		// authentication is outstanding.
+		// needing payment while the gateway settles a charge it has already
+		// named.
 		//
-		// The transaction id is the discriminator, in both shapes. Offline
-		// gateways (BACS, cheque) also park orders on-hold and record no
-		// transaction, and an ordinary decline leaves a `failed` order with
+		// The transaction id is the discriminator, so this only catches an
+		// attempt the gateway got far enough to name. An attempt can be
+		// genuinely unresolved and carry none: WC Stripe takes the id from the
+		// charge object, and an off-session renewal refused with
+		// `authentication_required` produces no charge at all, leaving the
+		// order with only `_stripe_intent_id`. Nothing is billed twice there,
+		// because WC Stripe reuses one PaymentIntent per order — but that
+		// protection belongs to the gateway, not to this guard, and a gateway
+		// that mints a fresh intent per attempt would not have it.
+		//
+		// Offline gateways (BACS, cheque) also park orders on-hold and record
+		// no transaction, and an ordinary decline leaves a `failed` order with
 		// none either — for both the remedy is another attempt, so neither may
 		// dead-end here. Settled orders (completed, processing, cancelled,
 		// refunded) never block: an admin-suspended subscription whose last
@@ -1494,21 +1520,24 @@ class Subscribers_Wizard extends Wizard {
 		$registered = $user->user_registered ? strtotime( $user->user_registered . ' UTC' ) : false;
 
 		return [
-			'id'            => $user_id,
-			'name'          => $user->display_name,
-			'email'         => $user->user_email,
+			'id'             => $user_id,
+			'name'           => $user->display_name,
+			'email'          => $user->user_email,
 			// The native user-edit screen (self edits resolve to profile.php). The
 			// in-wizard profile does not yet cover editing the WordPress user, so the
 			// profile keeps this as a header action rather than stranding the admin.
-			'editUrl'       => get_edit_user_link( $user_id ),
-			'status'        => $this->reduced_status( $subscriptions, $groups ),
-			'memberSince'   => $this->local_date( $registered ),
-			'lastPayment'   => $this->last_payment_date( $user_id ),
-			'lastSeen'      => $this->last_seen_date( $user_id ),
-			'subscriptions' => $subscriptions,
-			'groups'        => $groups,
-			'tags'          => $this->reader_tags( $user_id ),
-			'newsletters'   => $this->reader_newsletters( $user_id ),
+			'editUrl'        => get_edit_user_link( $user_id ),
+			'status'         => $this->reduced_status( $subscriptions, $groups ),
+			'memberSince'    => $this->local_date( $registered ),
+			'lastPayment'    => $this->last_payment_date( $user_id ),
+			'lastSeen'       => $this->last_seen_date( $user_id ),
+			'subscriptions'  => $subscriptions,
+			'groups'         => $groups,
+			'tags'           => $this->reader_tags( $user_id ),
+			'newsletters'    => $this->reader_newsletters( $user_id ),
+			// The saved-card list is profile-only: a list row never renders it, and
+			// resolving tokens per row would cost a query on every row of every page.
+			'paymentMethods' => $detailed ? Subscribers_Payments::payment_methods_for_user( $user_id ) : [],
 		];
 	}
 
@@ -1537,15 +1566,17 @@ class Subscribers_Wizard extends Wizard {
 				continue; // Group subscriptions are surfaced via get_group_memberships().
 			}
 			$entry = [
-				'id'      => (int) $subscription->get_id(),
-				'plan'    => $this->individual_plan_name( $subscription ),
-				'status'  => self::map_subscription_status( $subscription->get_status() ),
-				'editUrl' => $this->subscription_edit_url( $subscription ),
+				'id'              => (int) $subscription->get_id(),
+				'plan'            => $this->individual_plan_name( $subscription ),
+				'status'          => self::map_subscription_status( $subscription->get_status() ),
+				'editUrl'         => $this->subscription_edit_url( $subscription ),
+				'isComplimentary' => Complimentary_Access::is_complimentary_order( $subscription ),
 			];
 			$out[] = $detailed
 				? array_merge(
 					$entry,
 					$this->subscription_billing( $subscription ),
+					Subscribers_Payments::subscription_payment_fields( $subscription ),
 					[
 						// Whether a renewal charge could even be attempted, so
 						// the reactivate flow can hide "Charge now" when there
@@ -1601,6 +1632,9 @@ class Subscribers_Wizard extends Wizard {
 			// is ending even while its status still maps to active (still entitled).
 			'endDate'         => $this->subscription_date( $subscription, 'end' ) ?? $this->subscription_date( $subscription, 'cancelled' ),
 			'lastPayment'     => $this->subscription_date( $subscription, 'last_order_date_paid' ),
+			// A complimentary subscription is billed nothing, so the card shows
+			// "Complimentary" in place of its price and payment dates.
+			'isComplimentary' => Complimentary_Access::is_complimentary_order( $subscription ),
 		];
 	}
 
@@ -1648,7 +1682,8 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
-	 * Resolve the display name of an individual subscription's plan (its product name).
+	 * Resolve a subscription's product name: an individual plan's display name, or
+	 * the product behind a group.
 	 *
 	 * @param \WC_Subscription $subscription The subscription.
 	 *
@@ -1776,10 +1811,11 @@ class Subscribers_Wizard extends Wizard {
 				$owner_id     = (int) $subscription->get_user_id();
 				$managers     = array_map( 'intval', Group_Subscription::get_managers( $subscription ) );
 				$entry        = [
-					'id'      => (int) $subscription->get_id(),
-					'plan'    => (string) $group['settings']['name'],
-					'status'  => self::map_subscription_status( $subscription->get_status() ),
-					'editUrl' => $this->subscription_edit_url( $subscription ),
+					'id'              => (int) $subscription->get_id(),
+					'plan'            => (string) $group['settings']['name'],
+					'status'          => self::map_subscription_status( $subscription->get_status() ),
+					'editUrl'         => $this->subscription_edit_url( $subscription ),
+					'isComplimentary' => Complimentary_Access::is_complimentary_order( $subscription ),
 				];
 				foreach ( array_map( 'intval', Group_Subscription::get_all_members( $subscription ) ) as $member_id ) {
 					if ( $member_id === $owner_id ) {
@@ -1810,10 +1846,11 @@ class Subscribers_Wizard extends Wizard {
 	 *   (non-cancelled) subscription; a reader with no subscription at all has
 	 *   no status.
 	 *
-	 * It is re-encoded in three other places, each of which points back here and
-	 * must be changed in step or the endpoint's filter will contradict the badge
-	 * it filters on:
+	 * It is re-encoded in these places, each of which must be changed in step or
+	 * the endpoint's filters will contradict the badge and column they filter on:
 	 *   - customer_ids_for_statuses() below — the endpoint's `status` filter.
+	 *   - customer_ids_for_plans() and customer_ids_for_complimentary() below —
+	 *     the `plan` and `access` filters, which drop a cancelled plan the same way.
 	 *   - displayStatuses() in src/wizards/subscribers/status.js — the row's
 	 *     status badges.
 	 *   - visiblePlanEntries in src/wizards/subscribers/screens/SubscriberList.jsx
@@ -2047,8 +2084,8 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
-	 * Resolve the `include` user-ID set for the active subscription-status / plan
-	 * filters, or null when neither is present.
+	 * Resolve the `include` user-ID set for the active subscription-status, plan
+	 * and access filters, or null when none is present.
 	 *
 	 * Each active filter resolves to a set of customer IDs; the sets are
 	 * intersected so multiple filters narrow (AND) rather than widen. The result
@@ -2064,7 +2101,8 @@ class Subscribers_Wizard extends Wizard {
 	private function resolve_filter_include( $request ) {
 		$status_filter = array_filter( array_map( 'sanitize_text_field', (array) $request->get_param( 'status' ) ) );
 		$plan_filter   = array_filter( array_map( 'sanitize_text_field', (array) $request->get_param( 'plan' ) ) );
-		if ( empty( $status_filter ) && empty( $plan_filter ) ) {
+		$access_filter = array_filter( array_map( 'sanitize_text_field', (array) $request->get_param( 'access' ) ) );
+		if ( empty( $status_filter ) && empty( $plan_filter ) && empty( $access_filter ) ) {
 			return null;
 		}
 
@@ -2074,6 +2112,9 @@ class Subscribers_Wizard extends Wizard {
 		}
 		if ( ! empty( $plan_filter ) ) {
 			$sets[] = $this->customer_ids_for_plans( $plan_filter );
+		}
+		if ( in_array( 'complimentary', $access_filter, true ) ) {
+			$sets[] = $this->customer_ids_for_complimentary();
 		}
 
 		$include = array_shift( $sets );
@@ -2264,6 +2305,67 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
+	 * Customer IDs holding a complimentary subscription, individual or group.
+	 *
+	 * Reduced like customer_ids_for_plans(): a cancelled comp qualifies its holder only
+	 * when nothing live remains, since the Subscription column hides it otherwise. A
+	 * group's members inherit its stamp, as they inherit its status. Walked a chunk at
+	 * a time up to FILTER_INCLUDE_CAP, as in customer_ids_for_raw_statuses().
+	 *
+	 * @return int[]
+	 */
+	private function customer_ids_for_complimentary(): array {
+		$ids           = [];
+		$cancelled_ids = [];
+		$groups        = $this->get_group_subscriptions();
+		foreach ( $groups as $group ) {
+			if ( ! Complimentary_Access::is_complimentary_order( $group['subscription'] ) ) {
+				continue;
+			}
+			$members = array_map( 'intval', Group_Subscription::get_all_members( $group['subscription'] ) );
+			if ( 'cancelled' === self::map_subscription_status( $group['subscription']->get_status() ) ) {
+				$cancelled_ids = array_merge( $cancelled_ids, $members );
+			} else {
+				$ids = array_merge( $ids, $members );
+			}
+		}
+		$can_scan = function_exists( 'wcs_get_subscriptions' );
+		for ( $page = 1; $can_scan && ( $page - 1 ) * self::FILTER_SCAN_CHUNK < self::FILTER_INCLUDE_CAP; $page++ ) {
+			$subs = \wcs_get_subscriptions(
+				[
+					'subscriptions_per_page' => self::FILTER_SCAN_CHUNK,
+					'offset'                 => ( $page - 1 ) * self::FILTER_SCAN_CHUNK,
+					'orderby'                => 'ID',
+					'subscription_status'    => $this->wcs_statuses_for( [ 'active', 'pending', 'on-hold', 'cancelled' ] ),
+					'meta_query'             => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+						[
+							'key'   => Complimentary_Access::META_KEY,
+							'value' => 'yes',
+						],
+					],
+				]
+			);
+			foreach ( $subs as $subscription ) {
+				if ( isset( $groups[ (int) $subscription->get_id() ] ) ) {
+					continue; // Counted with its members above.
+				}
+				if ( 'cancelled' === self::map_subscription_status( $subscription->get_status() ) ) {
+					$cancelled_ids[] = (int) $subscription->get_customer_id();
+				} else {
+					$ids[] = (int) $subscription->get_customer_id();
+				}
+			}
+			if ( count( $subs ) < self::FILTER_SCAN_CHUNK ) {
+				break;
+			}
+		}
+		if ( ! empty( $cancelled_ids ) ) {
+			$ids = array_merge( $ids, array_diff( $cancelled_ids, $this->customer_ids_for_raw_statuses( [ 'active', 'pending', 'on-hold' ] ) ) );
+		}
+		return array_values( array_unique( array_filter( $ids ) ) );
+	}
+
+	/**
 	 * Resolve product IDs whose title exactly matches any of the given names.
 	 *
 	 * @param string[] $names Product names.
@@ -2421,6 +2523,8 @@ class Subscribers_Wizard extends Wizard {
 						'count'      => __( '%1$s %2$s', 'newspack-plugin' ),
 						/* translators: %s: the group label, e.g. "Group". */
 						'role'       => __( '%s role', 'newspack-plugin' ),
+						/* translators: %s: the group label, e.g. "Group". */
+						'name'       => __( '%s name', 'newspack-plugin' ),
 						/* translators: 1: the group label, e.g. "Groups". 2: the error message. */
 						'loadFailed' => __( 'Could not load %1$s: %2$s', 'newspack-plugin' ),
 						/* translators: 1: the group label, e.g. "Group". 2: the group name. */

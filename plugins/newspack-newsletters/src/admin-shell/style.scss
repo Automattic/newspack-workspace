@@ -60,7 +60,7 @@ body.newspack-newsletters-admin-screen--bundled {
 	margin-top: wp-vars.$grid-unit-30;
 
 	body.newspack-newsletters-admin-screen--bundled & {
-		margin-top: wp-vars.$grid-unit-60;
+		margin-top: var(--newspack-page-content-gap, #{wp-vars.$grid-unit-60});
 	}
 }
 
@@ -116,7 +116,7 @@ body.newspack-newsletters-admin-screen--bundled {
 	}
 
 	.dataviews-wrapper {
-		margin-top: -#{wp-vars.$grid-unit-20};
+		margin-top: calc(-1 * var(--newspack-page-dataviews-offset, #{wp-vars.$grid-unit-20}));
 	}
 
 	&__placeholder {

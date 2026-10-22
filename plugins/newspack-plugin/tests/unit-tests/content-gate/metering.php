@@ -1128,6 +1128,86 @@ class Test_Metering extends \WP_UnitTestCase {
 		$this->assertIsArray( $decoded_allowance, 'The printed allowance should survive as parseable JSON' );
 		$this->assertSame( 2, $decoded_allowance['count'], 'The printed allowance should carry the gate\'s free-view count' );
 		$this->assertSame( $post_id, $decoded_allowance['post_id'], 'The printed allowance should carry the post being metered' );
+		$this->assertSame( Metering::get_expiration_time( 'month' ), $decoded_allowance['expiration'], 'The printed allowance should carry the reset the signed-in meter uses' );
+		$this->assertSame( Metering::get_expiration_time( 'month', $decoded_allowance['expiration'] ), $decoded_allowance['next_expiration'], 'The printed allowance should carry the reset after it, for a page served from cache' );
+	}
+
+	/**
+	 * Every meter resets at midnight in the site's time zone, and a weekly meter on the day
+	 * the site's week starts (Settings > General), so signed-in and signed-out readers share
+	 * one boundary a publisher can predict (NPPD-2484).
+	 */
+	public function test_meters_reset_at_midnight_on_the_sites_calendar() {
+		update_option( 'timezone_string', 'America/New_York' );
+		$site_time = function ( $datetime ) {
+			return ( new \DateTimeImmutable( $datetime, wp_timezone() ) )->getTimestamp();
+		};
+		$wednesday_noon = $site_time( '2026-10-21 12:00' );
+
+		update_option( 'start_of_week', 0 );
+		$this->assertSame( $site_time( '2026-10-25 00:00' ), Metering::get_expiration_time( 'week', $wednesday_noon ), 'A week that starts on Sunday should reset at midnight on Sunday' );
+
+		update_option( 'start_of_week', 1 );
+		$this->assertSame( $site_time( '2026-10-26 00:00' ), Metering::get_expiration_time( 'week', $wednesday_noon ), 'A week that starts on Monday should reset at midnight on Monday' );
+		$this->assertSame( $site_time( '2026-11-02 00:00' ), Metering::get_expiration_time( 'week', $site_time( '2026-10-26 00:00' ) ), 'A meter starting on the first day of the week should run to the next one' );
+
+		// Already November 1 in UTC, still October 31 on the site.
+		$halloween_late = $site_time( '2026-10-31 23:30' );
+		$this->assertSame( $site_time( '2026-11-01 00:00' ), Metering::get_expiration_time( 'day', $halloween_late ), 'A daily meter should reset at the site\'s midnight' );
+		$this->assertSame( $site_time( '2026-11-01 00:00' ), Metering::get_expiration_time( 'month', $halloween_late ), 'A monthly meter should reset at the site\'s midnight on the 1st' );
+
+		// Havana's clock skips from 00:00 to 01:00 on 2026-03-08, the day the reset is computed on.
+		update_option( 'timezone_string', 'America/Havana' );
+		$this->assertSame( $site_time( '2026-03-09 00:00' ), Metering::get_expiration_time( 'day', $site_time( '2026-03-08 10:00' ) ), 'A reset computed on a day with no midnight should still land at midnight' );
+	}
+
+	/**
+	 * A signed-in reader's views are cleared only once the reset stored with them has
+	 * passed. A stored reset later than the site's, such as after a change to the week
+	 * start, moves to the site's without clearing the views.
+	 */
+	public function test_logged_in_meter_keeps_views_until_its_stored_reset_passes() {
+		$gate_id = $this->create_gate_with_settings(
+			[
+				'require_verification' => false,
+				'metering_count'       => 2,
+			]
+		);
+		add_filter(
+			'newspack_content_gate_post_id',
+			function () use ( $gate_id ) {
+				return $gate_id;
+			}
+		);
+		$user_id = $this->register_reader( 'reset-boundary@example.test' );
+		wp_set_current_user( $user_id );
+		$user_meta_key = Metering::METERING_META_KEY . '_' . Metering::get_meter_key( $gate_id, true );
+
+		$unread_post_id   = $this->factory->post->create();
+		$this->post_ids[] = $unread_post_id;
+		update_user_meta(
+			$user_id,
+			$user_meta_key,
+			[
+				'content'    => [ 101, 102 ],
+				'expiration' => time() + YEAR_IN_SECONDS,
+			]
+		);
+		$this->assertFalse( Metering::is_logged_in_metering_allowed( $unread_post_id ), 'Views counted before a reset that has not passed should still use up the allowance' );
+		$this->assertSame( Metering::get_expiration_time( 'month' ), get_user_meta( $user_id, $user_meta_key, true )['expiration'], 'A stored reset later than the site\'s should move to the site\'s' );
+
+		$next_unread_post_id = $this->factory->post->create();
+		$this->post_ids[]    = $next_unread_post_id;
+		update_user_meta(
+			$user_id,
+			$user_meta_key,
+			[
+				'content'    => [ 101, 102 ],
+				'expiration' => time() - MINUTE_IN_SECONDS,
+			]
+		);
+		$this->assertTrue( Metering::is_logged_in_metering_allowed( $next_unread_post_id ), 'Views counted before a reset that has passed should be cleared' );
+		$this->assertSame( Metering::get_expiration_time( 'month' ), get_user_meta( $user_id, $user_meta_key, true )['expiration'], 'The meter should move to the site\'s next reset' );
 	}
 
 	/**

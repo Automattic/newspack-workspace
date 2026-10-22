@@ -2,14 +2,14 @@
 # This file is distributed under the GPLv2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Network 2.22.8\n"
+"Project-Id-Version: Newspack Network 2.22.14\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-network\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-22T23:09:46+00:00\n"
+"POT-Creation-Date: 2026-10-20T19:02:20+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-network\n"
@@ -19,7 +19,7 @@ msgstr ""
 #: includes/class-admin.php:124
 #: includes/class-admin.php:125
 #: includes/woocommerce-memberships/class-admin.php:151
-#: includes/woocommerce/class-product-admin.php:70
+#: includes/woocommerce/class-product-admin.php:86
 msgid "Newspack Network"
 msgstr ""
 
@@ -55,7 +55,7 @@ msgstr ""
 msgid "This site acts as the Network Hub"
 msgstr ""
 
-#: includes/class-initializer.php:83
+#: includes/class-initializer.php:84
 msgid "Network Reader"
 msgstr ""
 
@@ -389,7 +389,7 @@ msgid "Partial payload requires an existing post."
 msgstr ""
 
 #: includes/content-distribution/class-incoming-post.php:355
-#: includes/content-distribution/class-outgoing-post.php:42
+#: includes/content-distribution/class-outgoing-post.php:57
 msgid "Invalid post."
 msgstr ""
 
@@ -406,35 +406,35 @@ msgid "Error inserting post."
 msgstr ""
 
 #. translators: unsupported post type for content distribution
-#: includes/content-distribution/class-outgoing-post.php:47
+#: includes/content-distribution/class-outgoing-post.php:62
 #, php-format
 msgid "Post type %s is not supported as a distributed outgoing post."
 msgstr ""
 
-#: includes/content-distribution/class-outgoing-post.php:127
+#: includes/content-distribution/class-outgoing-post.php:175
 msgid "Cannot distribute to own site."
 msgstr ""
 
 #. translators: %s: list of non-networked URLs
-#: includes/content-distribution/class-outgoing-post.php:136
+#: includes/content-distribution/class-outgoing-post.php:184
 #, php-format
 msgid "Non-networked URLs were passed to config: %s"
 msgstr ""
 
-#: includes/content-distribution/class-outgoing-post.php:154
+#: includes/content-distribution/class-outgoing-post.php:202
 msgid "No site URLs provided."
 msgstr ""
 
-#: includes/content-distribution/class-outgoing-post.php:193
-#: includes/content-distribution/class-outgoing-post.php:238
+#: includes/content-distribution/class-outgoing-post.php:241
+#: includes/content-distribution/class-outgoing-post.php:286
 msgid "Failed to update post distribution."
 msgstr ""
 
-#: includes/content-distribution/class-outgoing-post.php:224
+#: includes/content-distribution/class-outgoing-post.php:272
 msgid "Site URL not found in post distribution."
 msgstr ""
 
-#: includes/content-distribution/class-outgoing-post.php:368
+#: includes/content-distribution/class-outgoing-post.php:427
 msgid "Key not found in payload."
 msgstr ""
 
@@ -519,7 +519,7 @@ msgstr ""
 
 #: includes/hub/admin/class-membership-plans-table.php:28
 #: includes/woocommerce-memberships/class-admin.php:168
-#: includes/woocommerce/class-product-admin.php:86
+#: includes/woocommerce/class-product-admin.php:102
 msgid "Network ID"
 msgstr ""
 
@@ -688,7 +688,7 @@ msgstr ""
 #: includes/hub/class-nodes.php:111
 #: includes/hub/class-nodes.php:112
 #: includes/hub/class-nodes.php:114
-#: includes/hub/class-nodes.php:136
+#: includes/hub/class-nodes.php:160
 msgid "Nodes"
 msgstr ""
 
@@ -796,19 +796,25 @@ msgstr ""
 msgid "Filter items list"
 msgstr ""
 
-#: includes/hub/class-nodes.php:137
+#: includes/hub/class-nodes.php:161
 msgid "Newspack Nodes"
 msgstr ""
 
-#: includes/hub/class-nodes.php:180
+#: includes/hub/class-nodes.php:205
 msgid "All Nodes"
 msgstr ""
 
-#: includes/hub/class-nodes.php:186
+#: includes/hub/class-nodes.php:211
 msgid "Hub (this site)"
 msgstr ""
 
-#: includes/hub/class-nodes.php:221
+#. translators: %s: the date the node was linked to the Hub
+#: includes/hub/class-nodes.php:243
+#, php-format
+msgid "Linked on %s."
+msgstr ""
+
+#: includes/hub/class-nodes.php:261
 msgid "Link the site"
 msgstr ""
 
@@ -992,8 +998,20 @@ msgstr ""
 msgid "Event triggered by %1$s on %2$s"
 msgstr ""
 
+#. translators: 1: member email, 2: Subscription ID, 3: seat status, 4: site url
+#: includes/hub/stores/event-log-items/class-group-seat-changed.php:26
+#, php-format
+msgid "Seat for %1$s on group subscription #%2$d is now %3$s on %4$s"
+msgstr ""
+
 #: includes/hub/stores/event-log-items/class-nodes-synced.php:23
 msgid "Node data synced"
+msgstr ""
+
+#. translators: 1: Order ID, 2: order status, 3: site url
+#: includes/hub/stores/event-log-items/class-one-time-purchase-changed.php:26
+#, php-format
+msgid "One-time purchase order #%1$d is now %2$s on %3$s"
 msgstr ""
 
 #. translators: 1: Order ID 2: Previous status, 3: New status, 4: site url
@@ -1269,8 +1287,8 @@ msgstr ""
 msgid "Manage"
 msgstr ""
 
-#: includes/woocommerce/class-product-admin.php:88
-msgid "If set, this product will be linked to products with the same Network ID on other sites in the network. Users with an active subscription to any linked product will be granted access across all sites."
+#: includes/woocommerce/class-product-admin.php:104
+msgid "If set, this product will be linked to products with the same Network ID on other sites in the network. Users with an active subscription to, or a paid one-time purchase of, any linked product will be granted access across all sites."
 msgstr ""
 
 #. translators: %s is the number of network sites selected.

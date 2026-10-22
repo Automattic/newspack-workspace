@@ -1,9 +1,10 @@
 /**
  * Click-through targets shared by the subscriber and group lists.
  *
- * The rule both tabs follow: a person's name goes to that person, a plan name
- * goes to that plan. Names are the DataViews title cell, so their target is the
- * list's `onClickItem`; plan names are ordinary cells and carry their own link.
+ * The rule both tabs follow: a row's own name goes to that row — the person on
+ * the subscriber list, the group on the group list — and a plan name goes to that
+ * plan. Row names are the DataViews title cell, so their target is the list's
+ * `onClickItem`; plan names are ordinary cells and carry their own link.
  */
 
 /**
@@ -17,14 +18,14 @@
  * leave an invisible link with no accessible name.
  *
  * The click is stopped from bubbling: both lists delegate row clicks to the
- * person, and a plan name must not resolve to two destinations at once.
+ * row's own target, and a plan name must not resolve to two destinations at once.
  *
  * Keydown needs no equivalent guard, but only because of where this is used:
  * always an ordinary cell, never the DataViews title cell. That cell's
  * ItemClickWrapper fires its onClickItem on Enter/Space without checking that
  * the key originated on the wrapper itself, so a link nested there would
  * navigate to the row's target as well as its own. Keep it out of title cells —
- * see the owner field in GroupList.
+ * see the name field in GroupList.
  *
  * @param {Object} props          Component props.
  * @param {string} props.href     The subscription edit URL, if any.

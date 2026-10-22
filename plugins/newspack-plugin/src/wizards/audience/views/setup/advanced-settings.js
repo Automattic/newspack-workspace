@@ -1,16 +1,16 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { createPortal, useEffect, useState } from '@wordpress/element';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { Notice, Snackbar } from '@wordpress/components';
+import { Notice, Snackbar, ToggleControl } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import { Button, withWizardScreen, useUnsavedChangesDialog } from '../../../../../packages/components/src';
+import { Button, Grid, SectionHeader, withWizardScreen, useUnsavedChangesDialog } from '../../../../../packages/components/src';
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import WizardsTab from '../../../wizards-tab';
@@ -20,29 +20,33 @@ const DATA_STORE_KEY = 'newspack-audience/group-labels';
 
 const AdvancedSettingsScreen = withWizardScreen( ( { children } ) => <>{ children }</> );
 
-const toLabels = settings => ( {
+const toSettings = settings => ( {
 	label_singular: settings.label_singular ?? '',
 	label_plural: settings.label_plural ?? '',
+	name_from_billing: !! settings.name_from_billing,
 } );
+
+// The server trims labels and deletes an override saved as empty, so a label only counts as changed once trimmed.
+const isChanged = ( value, savedValue ) => ( 'string' === typeof value ? value.trim() : value ) !== savedValue;
 
 export default function AdvancedSettings( props ) {
 	const settings = useWizardData( DATA_STORE_KEY );
 	const isLoading = useSelect( select => select( WIZARD_STORE_NAMESPACE ).isLoading(), [] );
 	const { wizardApiFetch, setAPIDataForWizard } = useDispatch( WIZARD_STORE_NAMESPACE );
 
-	const [ labels, setLabels ] = useState( toLabels( settings ) );
+	const [ values, setValues ] = useState( toSettings( settings ) );
 	const [ inFlight, setInFlight ] = useState( false );
 	const [ saveError, setSaveError ] = useState( null );
 	// The legacy audience wizard has no store snackbar outlet.
 	const [ savedCount, setSavedCount ] = useState( 0 );
 
 	useEffect( () => {
-		setLabels( toLabels( settings ) );
-	}, [ settings.label_singular, settings.label_plural ] );
+		setValues( toSettings( settings ) );
+	}, [ settings.label_singular, settings.label_plural, settings.name_from_billing ] );
 
-	const saved = toLabels( settings );
-	// The server trims labels and deletes an override saved as empty, so untouched fields must not be sent.
-	const changes = Object.fromEntries( Object.entries( labels ).filter( ( [ key, value ] ) => value.trim() !== saved[ key ] ) );
+	const saved = toSettings( settings );
+	// Send only edited fields, so a stale value for an untouched field never overwrites a newer saved one.
+	const changes = Object.fromEntries( Object.entries( values ).filter( ( [ key, value ] ) => isChanged( value, saved[ key ] ) ) );
 	const isDirty = Object.keys( changes ).length > 0;
 
 	const save = () => {
@@ -57,7 +61,7 @@ export default function AdvancedSettings( props ) {
 		} )
 			.then( data => {
 				setAPIDataForWizard( { slug: DATA_STORE_KEY, data } );
-				setLabels( toLabels( data ) );
+				setValues( toSettings( data ) );
 				setSavedCount( count => count + 1 );
 			} )
 			.catch( setSaveError )
@@ -83,12 +87,40 @@ export default function AdvancedSettings( props ) {
 						</Notice>
 					) }
 					<GroupLabels
-						labels={ labels }
+						labels={ values }
 						singularDefault={ settings.label_singular_default }
 						pluralDefault={ settings.label_plural_default }
-						onChange={ ( key, value ) => setLabels( current => ( { ...current, [ key ]: value } ) ) }
+						onChange={ ( key, value ) => setValues( current => ( { ...current, [ key ]: value } ) ) }
 						disabled={ isLoading || inFlight }
 					/>
+					<Grid columns={ 2 } gutter={ 32 } noMargin>
+						<SectionHeader
+							heading={ 2 }
+							title={ __( 'Group Names', 'newspack-plugin' ) }
+							description={ __( 'Choose how a group bought at checkout is named.', 'newspack-plugin' ) }
+							noMargin
+						/>
+						<ToggleControl
+							__nextHasNoMarginBottom
+							label={ __( "Name new groups after the buyer's company or name", 'newspack-plugin' ) }
+							help={ sprintf(
+								/* translators: %s: example group name built from a buyer's name and the singular label, e.g. "Jane Doe's Group". */
+								__(
+									'Uses the billing company, or a name like "%s" when there is none. Groups that already have a name keep it. When off, new groups show the product name.',
+									'newspack-plugin'
+								),
+								sprintf(
+									/* translators: 1: buyer's full name, 2: group label, e.g. "Group". */
+									__( "%1$s's %2$s", 'newspack-plugin' ),
+									'Jane Doe',
+									values.label_singular.trim() || settings.label_singular_default || __( 'Group', 'newspack-plugin' )
+								)
+							) }
+							checked={ values.name_from_billing }
+							onChange={ value => setValues( current => ( { ...current, name_from_billing: value } ) ) }
+							disabled={ isLoading || inFlight }
+						/>
+					</Grid>
 				</Stack>
 			</WizardsTab>
 			{ savedCount > 0 &&

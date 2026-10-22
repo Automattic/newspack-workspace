@@ -94,7 +94,8 @@ export default function PricingRulesList() {
 
 	useEffect( () => {
 		setHeaderData( {
-			actions: ! isReady || isEmpty ? [] : [ { type: 'primary', label: __( 'Add Rule', 'newspack-plugin' ), href: '#/new' } ],
+			actions:
+				! isReady || isEmpty ? [] : [ { type: 'primary', label: __( 'Add Rule', 'newspack-plugin' ), mobileIcon: 'plus', href: '#/new' } ],
 		} );
 	}, [ setHeaderData, isReady, isEmpty ] );
 

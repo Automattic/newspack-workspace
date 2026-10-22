@@ -43,6 +43,8 @@ Each plugin/theme directory is standalone and can be zipped and installed on its
 
 **Not in this monorepo** (separate repos): `newspack-manager-admin` (hub UI on newspack.com) and `newspack-manager` (companion plugin on each managed site).
 
+**"Reader Activation" (RAS) in code is "Audience Management" in the product.** They are the same feature. Public identifiers keep the code name, because sites, custom code and other plugins depend on them: `Newspack\Reader_Activation`, the `newspack_reader_activation_*` options and hooks, `window.newspackReaderActivation`, and the `reader-activation` paths. Use "Audience Management" in anything a publisher or reader sees. Code above the feature, such as the Audience wizard, may use the product name. Do not rename an identifier inside `Reader_Activation`, because that mixes the two names in one place. The wp-admin "Audience" menu is wider than the feature: it also holds Campaigns, Donations and Subscriptions.
+
 Most cross-plugin coupling runs through `newspack-plugin`. Before changing something there, find its consumers — `grep -rn "Data_Events" plugins/` and similar. Read the class you intend to call rather than trusting a remembered signature; these APIs move.
 
 ## Conventions
@@ -78,7 +80,7 @@ A husky hook runs `lint-staged` on every `git commit` (installed by `pnpm instal
 
 - **Auto-fix** with the package's own script for JS and SCSS: `pnpm --filter <package> run fix:js` / `format:scss`. For PHP use `composer phpcbf -- <path>` from the root instead; the packages' `fix:php` scripts can rewrite files across the whole monorepo (see above).
 - **Bypass** with `git commit --no-verify`, or `HUSKY=0` for one command or a whole shell. CI re-lints every PR, so skipping locally never lands unlinted code.
-- **Shell scope** is staged `*.sh`, gated at `error` to match CI. ShellCheck is a system package rather than something `pnpm install` provides, so a checkout without it **skips** this check with a notice instead of failing — the only linter here that does. CI runs the same gate on every PR and additionally sweeps tracked extensionless shell scripts (`n`, `bin/newspack-manage-host`, the `.hooks/pre-push` files), which `lint-staged` cannot glob without matching every file in the repo — its config keys are micromatch patterns, so a path can be matched, but a shebang cannot. Config lives in `.shellcheckrc`, which leaves the local severity at `style` so editors still surface the warning-level findings the gate defers.
+- **Shell scope** is staged `*.sh`, gated at `error` to match CI. ShellCheck is a system package rather than something `pnpm install` provides, so a checkout without it **skips** this check with a notice instead of failing — the only linter here that does. CI runs the same gate on every PR and additionally sweeps tracked extensionless shell scripts (`n`, `bin/newspack-manage-host`), which `lint-staged` cannot glob without matching every file in the repo — its config keys are micromatch patterns, so a path can be matched, but a shebang cannot. Config lives in `.shellcheckrc`, which leaves the local severity at `style` so editors still surface the warning-level findings the gate defers.
 - **PHP scope** comes from `phpcs.xml`'s `<file>` elements, for both the hook and CI, so the hook never blocks a commit over a file CI would not lint. `bin/` is deliberately excluded: it is dev tooling, and the VIP standard's assumptions don't hold for CLI scripts.
 - **Skipped during a merge.** Completing a merge stages the entire base integration, which no author wrote, so linting it would judge the merge against the base branch's lint debt. Rebase, cherry-pick and revert are not exempt.
 - **Personal hooks** go in `.husky/pre-commit.local` — gitignored and per-checkout, so each worktree needs its own. Runs after the lint as a POSIX-`sh` snippet; exit non-zero to block.
@@ -91,7 +93,7 @@ Direct pushes to `main` are blocked.
 Everything goes through the `n` script at the repository root. It is context-aware: run it from inside `plugins/<project>/`, `themes/<project>/`, `additional-sites-html/<site>/` or `manager-html/` and it targets that project or site, otherwise the main site. It works in interactive and non-interactive (CI, agent) contexts. `ncd <name>` jumps between projects (install with `n cd-install`).
 
 ```bash
-n start [8.2]                 # Start containers (default PHP 8.3)
+n start                       # Start containers
 n stop | n restart
 
 n build [name]                # Build current project, or a named one ('newspack-' optional)
@@ -110,13 +112,13 @@ n sites-add|sites-list|sites-drop <name>   # Extra sites at <name>.test, sharing
 
 Run any command with `--help` for its full options.
 
-**Of the build/test family, only `build`, `ci-build` and `watch` take a project name.** `test-php`, `test-js` and `composer` resolve the project from your cwd, so `cd` into it first. Passing a name does not error usefully: `n composer <project> install` makes the name a bogus composer subcommand, `n test-php <project>` forwards it to PHPUnit as a positional path (`Cannot open file "..."`), and `n test-js <project>` silently ignores it. (`bin/composer.sh`'s own usage example is stale on this point.) `n npm` resolves from cwd the same way. Other commands such as `env` and `worktree` do take names.
+**Of the build/test family, only `build`, `ci-build`, `watch` and `test-js` take a project name.** `test-php` and `composer` resolve the project from your cwd, so `cd` into it first. Passing a name does not error usefully: `n composer <project> install` makes the name a bogus composer subcommand, and `n test-php <project>` forwards it to PHPUnit as a positional path (`Cannot open file "..."`). (`bin/composer.sh`'s own usage example is stale on this point.) `n npm` resolves from cwd the same way. Other commands such as `env` and `worktree` do take names.
 
 **First-time setup**
 
 ```bash
 cp default.env .env
-./build-image.sh              # or ./build-image-82.sh for PHP 8.2
+./build-image.sh              # add --no-cache to pick up a PHP patch release
 n start && n install
 n ci-build all
 n setup --yes                 # Bootstrap site with content and plugins
@@ -140,7 +142,7 @@ The main container is `newspack_dev`; an isolated env is `newspack_env_<name>`, 
 
 ## Local environment
 
-**Services** — `wordpress` (`newspack_dev`, Apache + PHP), `db` (MariaDB 11.8.6), `mailhog` (http://localhost:8025), `adminer` (http://localhost:8088). Memcached object cache and Batcache page cache are enabled. Xdebug is on port 9003 with IDE key `DOCKERDEBUG`, mapping `/newspack-plugins/<project>` to `plugins/<project>`.
+**Services** — `wordpress` (`newspack_dev`, Apache + PHP), `db` (MariaDB 11.8.6), `mailpit` (http://localhost:8025), `adminer` (http://localhost:8088). Memcached object cache and Batcache page cache are enabled. Xdebug is on port 9003 with IDE key `DOCKERDEBUG`, mapping `/newspack-plugins/<project>` to `plugins/<project>`.
 
 **`custom-redirects.php`**: when present in a site's root it runs before WordPress on every request, as in production. The env wires this via PHP's `auto_prepend_file` (`config/php.ini` → `bin/auto-prepend.php`) for `html/`, additional sites and each env's `html/`, for web requests and for `wp` run from the site root. Baked into the image, so it takes effect after `./build-image.sh`.
 

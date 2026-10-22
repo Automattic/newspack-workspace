@@ -13,7 +13,7 @@ import { Wizard, withWizard } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { SettingsSection } from './settings-section';
 import { ConfigureView } from './configure-view';
-import { LogsView } from './logs-view';
+import { LogsView, getLogsTabs } from './logs-view';
 
 const API_PATH = '/newspack/v1/wizard/newspack-audience-integrations/settings';
 
@@ -278,12 +278,13 @@ const AudienceIntegrations = ( props, ref ) => {
 					),
 				},
 				{
-					path: '/settings/:integrationId/logs',
+					path: '/settings/:integrationId/logs/:tab?',
 					render: LogsView,
 					props: sharedProps,
 					isHidden: true,
 					fullWidth: true,
 					breadcrumbs: INTEGRATIONS_BREADCRUMBS,
+					tabbedNavigation: getLogsTabs,
 				},
 				{
 					path: '/settings/:integrationId',

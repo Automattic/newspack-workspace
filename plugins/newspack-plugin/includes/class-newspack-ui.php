@@ -126,7 +126,7 @@ class Newspack_UI {
 			return;
 		}
 		?>
-		<div class="newspack-ui">
+		<div id="newspack-ui__notices" class="newspack-ui">
 			<div class="newspack-ui__snackbar">
 				<?php foreach ( self::$notices as $notice ) : ?>
 					<div
@@ -256,12 +256,12 @@ class Newspack_UI {
 			]
 		);
 		?>
-		<div id="newspack-my-account__<?php echo esc_attr( $args['id'] ); ?>" class="newspack-ui__modal-container" data-state="<?php echo esc_attr( $args['state'] ); ?>">
+		<dialog id="newspack-my-account__<?php echo esc_attr( $args['id'] ); ?>" class="newspack-ui__modal-container" data-state="<?php echo esc_attr( $args['state'] ); ?>">
 			<div class="newspack-ui__modal-container__overlay"></div>
 			<div class="newspack-ui__modal newspack-ui__modal--<?php echo esc_attr( $args['size'] ); ?>">
 				<header class="newspack-ui__modal__header">
 					<?php if ( ! empty( $args['title'] ) ) : ?>
-						<h2 class="newspack-ui__font--l"><?php echo wp_kses_post( $args['title'] ); ?></h2>
+						<h2><?php echo wp_kses_post( $args['title'] ); ?></h2>
 					<?php endif; ?>
 					<button class="newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__modal__close">
 						<span class="screen-reader-text"><?php esc_html_e( 'Close', 'newspack-plugin' ); ?></span>
@@ -364,7 +364,7 @@ class Newspack_UI {
 				</footer>
 				<?php endif; ?>
 			</div><!-- .newspack-ui__modal__small -->
-		</div> <!-- .newspack-ui__modal-container -->
+		</dialog>
 		<?php
 	}
 
@@ -562,7 +562,6 @@ class Newspack_UI {
 			</template>
 			<script>
 				( function() {
-					const snackbar = document.querySelector( '.newspack-ui__snackbar' );
 					document.getElementById( 'show-snackbar-example' ).addEventListener( 'click', function() {
 						newspackUI.notices.createNotice( 'This is a snackbar message' );
 					} );
@@ -572,6 +571,7 @@ class Newspack_UI {
 					const template = document.getElementById( 'snackbar-persistent-template' );
 					document.getElementById( 'show-snackbar-persistent' ).addEventListener( 'click', function() {
 						const item = template.content.firstElementChild.cloneNode( true );
+						const snackbar = document.querySelector( '#newspack-ui__notices .newspack-ui__snackbar' ) || document.querySelector( '.newspack-ui__snackbar' );
 						snackbar.appendChild( item );
 						item.querySelectorAll( 'a, button' ).forEach( function( el ) {
 							el.addEventListener( 'click', function() {
@@ -773,6 +773,12 @@ class Newspack_UI {
 			<span class="newspack-ui__badge newspack-ui__badge--error">Badge</span><br>
 			<span class="newspack-ui__badge newspack-ui__badge--warning">Badge</span><br>
 
+			<h3>With a dot</h3>
+			<p>Add <code>newspack-ui__badge--dot</code> for a status dot, and <code>newspack-ui__badge--pulse</code> to animate it.</p>
+			<span class="newspack-ui__badge newspack-ui__badge--success newspack-ui__badge--dot newspack-ui__badge--pulse">Live</span><br>
+			<span class="newspack-ui__badge newspack-ui__badge--secondary newspack-ui__badge--dot">Paused</span><br>
+			<span class="newspack-ui__badge newspack-ui__badge--error newspack-ui__badge--dot">Ended</span><br>
+			<span class="newspack-ui__badge newspack-ui__badge--warning newspack-ui__badge--dot">Delayed</span><br>
 
 			<hr>
 
@@ -893,19 +899,19 @@ class Newspack_UI {
 
 			<div class="newspack-ui__segmented-control">
 				<div class="newspack-ui__segmented-control__tabs">
-					<button class="newspack-ui__button newspack-ui__button--small selected">Tab One</button>
-					<button class="newspack-ui__button newspack-ui__button--small">Tab Two</button>
-					<button class="newspack-ui__button newspack-ui__button--small">Tab Three</button>
-					<button class="newspack-ui__button newspack-ui__button--small">Tab Four</button>
-					<button class="newspack-ui__button newspack-ui__button--small">Tab Five</button>
+					<button class="newspack-ui__button newspack-ui__button--small selected" aria-pressed="true">Tab One</button>
+					<button class="newspack-ui__button newspack-ui__button--small" aria-pressed="false">Tab Two</button>
+					<button class="newspack-ui__button newspack-ui__button--small" aria-pressed="false">Tab Three</button>
+					<button class="newspack-ui__button newspack-ui__button--small" aria-pressed="false">Tab Four</button>
+					<button class="newspack-ui__button newspack-ui__button--small" aria-pressed="false">Tab Five</button>
 				</div>
 			</div>
 
 			<div class="newspack-ui__segmented-control__form-control newspack-ui__spacing-top--6">
 				<label>Segmented Control (Form) <abbr class="newspack-ui__required" title="required">*</abbr></label>
 				<div class="newspack-ui__segmented-control__tabs">
-					<button class="newspack-ui__button newspack-ui__button--small selected">True</button>
-					<button class="newspack-ui__button newspack-ui__button--small">False</button>
+					<button class="newspack-ui__button newspack-ui__button--small selected" aria-pressed="true">True</button>
+					<button class="newspack-ui__button newspack-ui__button--small" aria-pressed="false">False</button>
 				</div>
 			</div>
 
@@ -1429,7 +1435,7 @@ class Newspack_UI {
 			</div><!-- .newspack-ui__box -->
 
 			<button id="open-modal-example" class="newspack-ui__button newspack-ui__button--primary">Open Modal</button>
-			<div id="newspack-modal-example" class="newspack-ui__modal-container">
+			<dialog id="newspack-modal-example" class="newspack-ui__modal-container">
 				<div class="newspack-ui__modal-container__overlay"></div>
 				<div class="newspack-ui__modal newspack-ui__modal--small">
 						<header class="newspack-ui__modal__header">
@@ -1467,7 +1473,7 @@ class Newspack_UI {
 							<p>This is the modal footer.</p>
 						</footer>
 					</div><!-- .newspack-ui__modal__small -->
-			</div> <!-- .newspack-ui__modal-container -->
+			</dialog>
 			<script>
 				( function() {
 					var newspackModal = document.getElementById( 'newspack-modal-example' );

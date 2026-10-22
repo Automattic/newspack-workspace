@@ -298,7 +298,7 @@ case $1 in
 services:
   env-${env_name}:
     container_name: ${container_name}
-    platform: linux/arm64
+    platform: \${NEWSPACK_DOCKER_PLATFORM:-linux/arm64}
     depends_on:
       - db
     image: newspack-dev:latest
@@ -493,6 +493,14 @@ MIGRATE
         if ! grep -q 'WP_ENVIRONMENT_TYPE=' "$compose_file"; then
             awk '{ print } /^      - APACHE_RUN_USER=/ { print "      - WP_ENVIRONMENT_TYPE=local" }' "$compose_file" > "${compose_file}.tmp" && mv "${compose_file}.tmp" "$compose_file"
             grep -q 'WP_ENVIRONMENT_TYPE=' "$compose_file" && echo "Migrated $env_name: added WP_ENVIRONMENT_TYPE=local" || echo "Warning: could not add WP_ENVIRONMENT_TYPE to $compose_file. Recreate the env to pick it up." >&2
+        fi
+        # --- Migration: read the platform from NEWSPACK_DOCKER_PLATFORM (same reason as above) ---
+        # Older envs pin linux/arm64, which no longer matches an image rebuilt for
+        # another platform. Only the exact generated line is rewritten, so a
+        # hand-edited platform is left alone.
+        if grep -qx '    platform: linux/arm64' "$compose_file"; then
+            awk '{ if ($0 == "    platform: linux/arm64") print "    platform: ${NEWSPACK_DOCKER_PLATFORM:-linux/arm64}"; else print }' "$compose_file" > "${compose_file}.tmp" && mv "${compose_file}.tmp" "$compose_file"
+            echo "Migrated $env_name: platform now follows NEWSPACK_DOCKER_PLATFORM"
         fi
         # Re-read domain after potential migration.
         domain=$(domain_for_env "$compose_file")

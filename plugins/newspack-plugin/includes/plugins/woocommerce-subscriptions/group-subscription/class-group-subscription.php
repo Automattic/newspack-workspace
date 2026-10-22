@@ -43,14 +43,12 @@ class Group_Subscription {
 	const MIGRATED_TEAM_ID_META_KEY = '_newspack_migrated_team_id';
 
 	/**
-	 * Roles that are eligible to be group-subscription members by default, in addition to readers.
-	 *
-	 * Authors and Contributors can create content but are neither editors/administrators (who bypass
-	 * the content gate outright) nor readers (who satisfy access rules on their own). Without this they
-	 * fall through with no path to restricted content. Administrators/editors are intentionally absent:
-	 * they already have full access and do not need a group grant.
+	 * Subscription meta key holding the group's slug: a stable identifier that
+	 * downstream systems (ESP fields, CRM, segments) key readers on, so a rename
+	 * never moves a group's readers to a new identifier. Like a post slug, a
+	 * non-Latin name yields a percent-encoded slug. Read it through get_slug().
 	 */
-	const DEFAULT_ELIGIBLE_MEMBER_ROLES = [ 'author', 'contributor' ];
+	const SLUG_META_KEY = '_newspack_group_subscription_slug';
 
 	/**
 	 * Build the per-subscription joined-at user_meta key.
@@ -148,6 +146,111 @@ class Group_Subscription {
 		// Auto-join trusts the same verified flag as email-domain gate rules, so it fires on
 		// verification, not registration. Paid checkout verifies without an inbox round trip.
 		\add_action( 'newspack_reader_verified', [ __CLASS__, 'auto_join_by_email_domain' ] );
+		// The first settings save fixes the slug, so a rename before anything reads it can't move it.
+		\add_action( 'newspack_group_subscription_settings_updated', [ __CLASS__, 'ensure_slug' ], 10, 1 );
+	}
+
+	/**
+	 * Give a group subscription its slug if it has none yet.
+	 *
+	 * @param \WC_Subscription $subscription The group subscription.
+	 */
+	public static function ensure_slug( $subscription ): void {
+		self::get_slug( $subscription );
+	}
+
+	/**
+	 * Get a group subscription's slug, creating it from the group name if it has none.
+	 *
+	 * A stored slug is never changed here. migrate-teams seeds it with the source
+	 * team's slug; otherwise the first settings save creates it, and a group never
+	 * saved through the settings (enabled by its product alone) gets one on first
+	 * read, which writes the subscription's meta. A name another group's slug
+	 * already uses gets a numeric suffix, so two groups' readers are never merged
+	 * downstream. Two groups with the same name created at the same moment can
+	 * still race to the same slug; that is rare enough to accept rather than lock.
+	 *
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 *
+	 * @return string The slug, or '' when the subscription has none and is not a group. A group
+	 *                that is later disabled keeps its slug, so it is unchanged if re-enabled.
+	 */
+	public static function get_slug( \WC_Subscription|int $subscription ): string {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		if ( ! $subscription ) {
+			return '';
+		}
+		$slug = (string) $subscription->get_meta( self::SLUG_META_KEY, true );
+		if ( '' !== $slug ) {
+			return $slug;
+		}
+		$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
+		if ( empty( $settings['enabled'] ) ) {
+			return '';
+		}
+		$base = \sanitize_title( html_entity_decode( (string) $settings['name'], ENT_QUOTES | ENT_HTML5, 'UTF-8' ) );
+		if ( '' === $base ) {
+			$base = 'group-' . $subscription->get_id();
+		}
+		// Groups on one product share its name, so collisions are common: read every
+		// slug containing the base once rather than probing one suffix at a time.
+		$taken  = self::get_slugs_containing( $base, $subscription->get_id() );
+		$slug   = $base;
+		$suffix = 2;
+		while ( in_array( $slug, $taken, true ) ) {
+			$slug = $base . '-' . $suffix;
+			++$suffix;
+		}
+		// Persists the object's pending meta, not its props, which a caller may still be editing.
+		$subscription->update_meta_data( self::SLUG_META_KEY, $slug );
+		$subscription->save_meta_data();
+		return $slug;
+	}
+
+	/**
+	 * Whether a subscription other than the given one already holds a slug.
+	 *
+	 * @param string $slug            The slug.
+	 * @param int    $subscription_id The subscription asking, which never collides with itself.
+	 *
+	 * @return bool
+	 */
+	public static function is_slug_taken( string $slug, int $subscription_id ): bool {
+		return in_array( $slug, self::get_slugs_containing( $slug, $subscription_id ), true );
+	}
+
+	/**
+	 * The slugs of subscriptions, other than the given one, whose slug contains a string.
+	 *
+	 * @param string $needle          The string to look for.
+	 * @param int    $subscription_id The subscription to leave out.
+	 *
+	 * @return string[]
+	 */
+	private static function get_slugs_containing( string $needle, int $subscription_id ): array {
+		if ( ! function_exists( 'wcs_get_subscriptions' ) ) {
+			return [];
+		}
+		$holders = \wcs_get_subscriptions(
+			[
+				'subscriptions_per_page' => -1,
+				'subscription_status'    => 'any',
+				'meta_query'             => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					[
+						'key'     => self::SLUG_META_KEY,
+						'value'   => $needle,
+						'compare' => 'LIKE',
+					],
+				],
+			]
+		);
+		unset( $holders[ $subscription_id ] );
+		return array_map(
+			function ( $holder ) {
+				return (string) $holder->get_meta( self::SLUG_META_KEY, true );
+			},
+			array_values( $holders )
+		);
 	}
 
 	/**
@@ -307,7 +410,7 @@ class Group_Subscription {
 			if ( $subscription ) {
 				$stored = \get_users(
 					[
-						'fields'      => [ 'ID' ],
+						'fields'      => 'ID',
 						'count_total' => false,
 						'meta_query'  => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 							[
@@ -317,8 +420,8 @@ class Group_Subscription {
 						],
 					]
 				);
-				foreach ( $stored as $user ) {
-					$managers[] = (int) $user->ID;
+				foreach ( $stored as $user_id ) {
+					$managers[] = (int) $user_id;
 				}
 				$managers = array_values( array_unique( $managers ) );
 			}
@@ -583,13 +686,14 @@ class Group_Subscription {
 		if ( isset( self::$members_cache[ $subscription_id ] ) ) {
 			$members = self::$members_cache[ $subscription_id ];
 		} else {
+			// Query plain IDs, as Newspack Network's seat sync does for this meta key.
+			// WordPress caches user queries by their SQL alone, and `fields => [ 'ID' ]` builds
+			// the same SQL but returns objects, so mixed shapes read each other's cached results.
 			$members = array_map(
-				function( $user ) {
-					return $user->ID;
-				},
+				'intval',
 				\get_users(
 					[
-						'fields'      => [ 'ID' ],
+						'fields'      => 'ID',
 						'count_total' => false,
 						'meta_query'  => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 							[
@@ -745,6 +849,11 @@ class Group_Subscription {
 			}
 		}
 
+		// Announced before the limit check below, which can reject the additions after these removals are saved.
+		foreach ( array_keys( $members_removed ) as $member_id ) {
+			self::announce_memberships_changed( $member_id, [], [ $subscription->get_id() ] );
+		}
+
 		// Narrow the additions to the IDs that would genuinely become members: ineligible users and
 		// users who already hold this subscription's member meta are no-ops. Filtering them here rather
 		// than in the add loop below keeps the limit projection honest -- counting a no-op ID would
@@ -854,6 +963,10 @@ class Group_Subscription {
 			}
 		}
 
+		foreach ( array_keys( $members_added ) as $member_id ) {
+			self::announce_memberships_changed( $member_id, [ $subscription->get_id() ], [] );
+		}
+
 		return [
 			'members_added'     => $members_added,
 			'members_removed'   => $members_removed,
@@ -865,12 +978,37 @@ class Group_Subscription {
 	}
 
 	/**
+	 * Announce that a reader joined or left group subscriptions. Every write of the
+	 * membership user meta calls this, so integrations listen here instead of
+	 * watching the meta.
+	 *
+	 * @param int   $user_id     The reader.
+	 * @param int[] $added_ids   Subscription IDs of the groups they joined.
+	 * @param int[] $removed_ids Subscription IDs of the groups they left.
+	 */
+	public static function announce_memberships_changed( int $user_id, array $added_ids, array $removed_ids ): void {
+		/**
+		 * Fires after a reader joins or leaves group subscriptions.
+		 *
+		 * @param int   $user_id     The reader.
+		 * @param int[] $added_ids   Subscription IDs of the groups they joined.
+		 * @param int[] $removed_ids Subscription IDs of the groups they left.
+		 */
+		\do_action( 'newspack_group_subscription_memberships_changed', $user_id, $added_ids, $removed_ids );
+	}
+
+	/**
 	 * Whether a user may be a member of a group subscription.
 	 *
 	 * This gates new membership grants (adding a member, accepting an invite) and the read path
-	 * (resolving a user's group subscriptions for access). Readers are always eligible; Author and
-	 * Contributor users are eligible by default. Publishers can opt other users in or out via the
-	 * `newspack_group_subscription_member_eligible` filter.
+	 * (resolving a user's group subscriptions for access). Every user is eligible except an account
+	 * Access Control never restricts ({@see Content_Gate::should_skip_access_checks()}), by default
+	 * staff, whatever other roles they hold. The content gate lets those accounts read everything,
+	 * so they do not need a seat, while everyone else can be restricted by the gate and needs a
+	 * path to access through a group. A reader is eligible whatever their capabilities: reader
+	 * status is authoritative, and
+	 * `Reader_Activation::is_user_reader()` already excludes administrators and editors.
+	 * Publishers can opt users in or out via the `newspack_group_subscription_member_eligible` filter.
 	 *
 	 * It does not gate removal. `update_members()` removes a member by ID regardless of current
 	 * eligibility, so a member who loses eligibility after being added (e.g. a role change) can
@@ -887,19 +1025,7 @@ class Group_Subscription {
 			return false;
 		}
 
-		// Readers keep their existing eligibility.
-		$eligible = Reader_Activation::is_user_reader( $user );
-
-		// Author/Contributor users are eligible by default -- but not a user who also holds
-		// a privileged role (editor, administrator, or any custom role with the same
-		// capability). Staff are meant to be excluded from default eligibility even when
-		// they also carry an Author/Contributor role; without this guard, a multi-role
-		// staff user would slip in through the Author/Contributor fallback. The
-		// newspack_group_subscription_member_eligible filter below still runs regardless,
-		// so a publisher can explicitly opt such a user in.
-		if ( ! $eligible && ! \user_can( $user, 'edit_others_posts' ) ) {
-			$eligible = (bool) array_intersect( (array) $user->roles, self::DEFAULT_ELIGIBLE_MEMBER_ROLES );
-		}
+		$eligible = Reader_Activation::is_user_reader( $user ) || ! Content_Gate::should_skip_access_checks( $user );
 
 		/**
 		 * Filters whether a user is eligible to be a member of a group subscription.

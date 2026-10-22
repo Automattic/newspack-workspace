@@ -111,6 +111,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 	 * Test specific ESP integration checks.
 	 */
 	public function test_esp_integration_checks() {
+		\update_option( 'newspack_newsletters_service_provider', 'mailchimp' );
 		$esp_integration = new Integrations\ESP();
 		$errors = $esp_integration->can_sync( true );
 		$this->assertInstanceOf( 'WP_Error', $errors );
@@ -155,6 +156,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 	 * on transient ESP failures, which the AS retry system is meant to survive.
 	 */
 	public function test_esp_is_set_up_reads_stored_state() {
+		\update_option( 'newspack_newsletters_service_provider', 'mailchimp' );
 		$esp = new Integrations\ESP();
 
 		// Master list ID not stored → setup is incomplete.

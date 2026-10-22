@@ -6,7 +6,8 @@
  * WordPress dependencies.
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { __experimentalVStack as VStack, CardDivider } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { CardDivider } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 import { useDispatch } from '@wordpress/data';
 import { createInterpolateElement, useCallback, useEffect, useRef, useState } from '@wordpress/element';
 import { commentAuthorAvatar, currencyDollar, envelope, pencil, postList, settings } from '@wordpress/icons';
@@ -72,6 +73,25 @@ const getContentTypeFromRules = ( rules: GateContentRule[] ): 'all' | 'custom' |
 	return 'all';
 };
 
+/**
+ * Title Case heading for the gate editor's breadcrumb and section title.
+ *
+ * @param kind         Which heading.
+ * @param isNewsletter Whether the gate is a premium newsletter.
+ */
+const getGateHeading = ( kind: 'add' | 'edit' | 'untitled', isNewsletter: boolean ) =>
+	( isNewsletter
+		? {
+				add: __( 'Add Premium Newsletter', 'newspack-plugin' ),
+				edit: __( 'Edit Premium Newsletter', 'newspack-plugin' ),
+				untitled: __( 'Untitled Premium Newsletter', 'newspack-plugin' ),
+		  }
+		: {
+				add: __( 'Add Content Gate', 'newspack-plugin' ),
+				edit: __( 'Edit Content Gate', 'newspack-plugin' ),
+				untitled: __( 'Untitled Content Gate', 'newspack-plugin' ),
+		  } )[ kind ];
+
 const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SLUG, isNewsletter = false }: ContentGateEditProps ) => {
 	const [ defaultGateStatus, setDefaultGateStatus ] = useState< GateStatus >( window.newspackAudienceContentGates?.default_gate_status || 'draft' );
 	const DEFAULT_GATE: Gate = {
@@ -81,7 +101,13 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		status: defaultGateStatus,
 		content_rules: isNewsletter ? [ { slug: 'newsletters', value: [] } ] : [ { slug: 'post_types', value: [ 'post' ] } ],
 		content_rules_match: 'all',
-		registration: { active: false, metering: { enabled: false, count: 1, period: 'month' }, require_verification: false, gate_layout_id: 0 },
+		registration: {
+			active: false,
+			metering: { enabled: false, count: 1, period: 'month' },
+			require_verification: false,
+			gate_layout_id: 0,
+			access_rules: [],
+		},
 		custom_access: {
 			active: false,
 			metering: { enabled: false, count: 1, period: 'month' },
@@ -120,6 +146,8 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 	const isSaving = useRef( false );
 	const gatesRef = useRef< Gate[] >( gates ?? [] );
 	const savedCustomRules = useRef< GateContentRule[] >( gate.content_rules );
+	// The stored gate as last copied into the form, serialized for comparison.
+	const syncedGate = useRef< string | null >( null );
 
 	useEffect( () => {
 		if ( Array.isArray( gates ) ) {
@@ -297,7 +325,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		}
 	};
 
-	const updateStatus = useRef< ( _status: GateStatus ) => void >();
+	const updateStatus = useRef< ( _status: GateStatus ) => void >( undefined );
 	const handleStatusChange = ( _status: GateStatus ) => {
 		if ( isFetching ) {
 			return;
@@ -380,9 +408,10 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		}
 		setHeaderData( {
 			backNav: '#/content-gates',
-			sectionName: isNew ? __( 'Add new', 'newspack-plugin' ) : __( 'Edit', 'newspack-plugin' ),
+			sectionName: getGateHeading( isNew ? 'add' : 'edit', isNewsletter ),
 		} );
 		if ( isNew ) {
+			syncedGate.current = null;
 			return;
 		}
 		const matchedGate = gates ? gates.find( g => g.id === id ) : null;
@@ -407,6 +436,14 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 			history.push( `/edit/new/all` );
 			return;
 		}
+		// Copy the stored gate only when it changed. A refused save, a failed status change or
+		// delete, and writes to other wizard data in the store all re-run this with the gate as
+		// it was, and copying it then would discard the operator's edits.
+		const serializedGate = JSON.stringify( matchedGate );
+		if ( serializedGate === syncedGate.current ) {
+			return;
+		}
+		syncedGate.current = serializedGate;
 		setGate( matchedGate );
 		setTitle( matchedGate.title );
 		setContentRules( matchedGate.content_rules );
@@ -473,18 +510,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		setHeaderData( {
 			actions,
 			badges: isNew ? [] : [ { label: getGateStatus( gate.status ), intent: getGateStatusBadgeIntent( gate.status ) } ],
-			sectionTitle: isNew
-				? sprintf(
-						// translators: %s is the type of content to restrict.
-						__( 'Add new %s', 'newspack-plugin' ),
-						isNewsletter ? __( 'premium newsletter', 'newspack-plugin' ) : __( 'gate', 'newspack-plugin' )
-				  )
-				: title ||
-				  sprintf(
-						// translators: %s is the type of content to restrict.
-						__( 'Untitled %s', 'newspack-plugin' ),
-						isNewsletter ? __( 'premium newsletter', 'newspack-plugin' ) : __( 'gate', 'newspack-plugin' )
-				  ),
+			sectionTitle: isNew ? getGateHeading( 'add', isNewsletter ) : title || getGateHeading( 'untitled', isNewsletter ),
 		} );
 	}, [
 		contentRules.length,
@@ -609,7 +635,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 						isNewsletter ? __( 'lists', 'newspack-plugin' ) : __( 'content', 'newspack-plugin' )
 					) }
 				/>
-				<VStack spacing={ 4 }>
+				<Stack direction="column" gap="lg">
 					<CardSettingsGroup
 						title={ sprintf(
 							// translators: %s is the type of content to restrict.
@@ -650,7 +676,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 							onChange={ setContentRulesMatch }
 						/>
 					</CardSettingsGroup>
-				</VStack>
+				</Stack>
 			</Grid>
 			<Divider alignment="full-width" variant="tertiary" />
 			<Grid columns={ 2 } gutter={ 32 } noMargin>
@@ -673,7 +699,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 							  )
 					) }
 				/>
-				<VStack spacing={ 4 }>
+				<Stack direction="column" gap="lg">
 					{ ! isNewsletter && (
 						<CardSettingsGroup
 							actionType="toggle"
@@ -731,7 +757,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 							governsSignedOut={ ! registration.active }
 						/>
 					</CardSettingsGroup>
-				</VStack>
+				</Stack>
 			</Grid>
 		</div>
 	);
