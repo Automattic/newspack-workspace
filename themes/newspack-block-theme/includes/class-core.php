@@ -129,7 +129,7 @@ final class Core {
 		if ( $metadata['name'] == 'core/search' ) {
 			$metadata['attributes']['buttonPosition']['default'] = 'button-inside';
 			$metadata['attributes']['buttonUseIcon']['default']  = true;
-			$metadata['attributes']['placeholder']['default']    = esc_html__( 'Search posts, categories, authors, ...', 'newspack-block-theme' );
+			$metadata['attributes']['placeholder']['default']    = esc_html__( 'Search posts, categories, authors…', 'newspack-block-theme' );
 			$metadata['attributes']['showLabel']['default']      = false;
 		}
 		if ( $metadata['name'] == 'core/navigation' ) {

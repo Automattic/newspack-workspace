@@ -206,7 +206,7 @@ export const SelfServeListingsEditor = ( { attributes, clientId, setAttributes }
 									type="text"
 									id={ `listing-title-single-${ clientId }` }
 									name="listing-title-single"
-									placeholder={ __( 'My Listing Title' ) }
+									placeholder={ __( 'My listing title', 'newspack-listings' ) }
 									readOnly
 								/>
 								<label htmlFor={ `listing-type-${ clientId }` }>
@@ -279,7 +279,7 @@ export const SelfServeListingsEditor = ( { attributes, clientId, setAttributes }
 									type="text"
 									id={ `listing-title-subscription${ clientId }` }
 									name="listing-title-subscription"
-									placeholder={ __( 'My Listing Title' ) }
+									placeholder={ __( 'My listing title', 'newspack-listings' ) }
 									readOnly
 								/>
 								<input
