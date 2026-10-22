@@ -8,7 +8,7 @@ import './checkout.scss';
  * Internal dependencies
  */
 import { manageCheckoutAttempt, manageCheckoutSuccess, manageLoaded, managePagination } from './analytics';
-import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
+import { domReady, getTabbableElements, isPaymentChallengeShown, isSameDocumentRedirect, onCheckoutPlaceOrderProcessing } from './utils';
 
 ( $ => {
 	domReady( () => {
@@ -25,6 +25,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 		const cancelEvent = new CustomEvent( 'checkout-cancel' );
 		const placeOrderStartEvent = new CustomEvent( 'checkout-place-order-start' );
 		const placeOrderSuccessEvent = new CustomEvent( 'checkout-place-order-success' );
+		const placeOrderGatewayActionEvent = new CustomEvent( 'checkout-place-order-gateway-action' );
 		const placeOrderErrorEvent = new CustomEvent( 'checkout-place-order-error' );
 		const placeOrderCriticalErrorEvent = new CustomEvent( 'checkout-place-order-critical-error' );
 
@@ -44,6 +45,12 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 			$(
 				`.woocommerce-NoticeGroup-checkout, .${ CLASS_PREFIX }__inline-error, .woocommerce-error, .woocommerce-message, .wc-block-components-notice-banner`
 			).remove();
+			$(
+				'[aria-describedby="modal-checkout-coupon-result"], [aria-describedby="modal-checkout-nyp-result"], [aria-describedby="modal-checkout-quantity-result"]'
+			).removeAttr( 'aria-invalid aria-describedby' );
+			$(
+				'form.modal_checkout_coupon h3, form.modal_checkout_coupon input[name="coupon_code"], form.modal_checkout_nyp h3, form.modal_checkout_nyp input[name="price"], form.modal_checkout_quantity h3, form.modal_checkout_quantity input[name="quantity"]'
+			).removeClass( 'newspack-ui__field-error' );
 		}
 
 		/**
@@ -114,15 +121,48 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 				handlePaymentMethodSelect();
 
 				/**
+				 * Tell the modal when a payment challenge, like 3D Secure, shows or goes while
+				 * an order is being placed, so its processing screen doesn't cover it.
+				 */
+				let challengeShown = false;
+				let challengeFrame = null;
+				const syncPaymentChallenge = () => {
+					challengeFrame = null;
+					const shown = isPaymentChallengeShown( document );
+					if ( shown !== challengeShown ) {
+						challengeShown = shown;
+						container.dispatchEvent( new CustomEvent( 'checkout-payment-challenge', { detail: { shown } } ) );
+					}
+				};
+				const challengeObserver = new MutationObserver( () => {
+					if ( ! challengeFrame ) {
+						challengeFrame = window.requestAnimationFrame( syncPaymentChallenge );
+					}
+				} );
+				container.addEventListener( 'checkout-place-order-error', () => {
+					challengeObserver.disconnect();
+					challengeShown = false;
+				} );
+
+				/**
 				 * Bubble up checkout place order event.
 				 */
 				let placedOrder = false;
+				// Set while the gateway shows its own step in place after the order is placed (e.g. a 3D Secure challenge).
+				let awaitingGatewayAction = false;
 				$form.on( 'checkout_place_order', function () {
 					if ( placedOrder ) {
 						return;
 					}
 					placedOrder = true;
+					awaitingGatewayAction = false;
 					container.dispatchEvent( placeOrderStartEvent );
+					challengeObserver.observe( document.body, {
+						childList: true,
+						subtree: true,
+						attributes: true,
+						attributeFilter: [ 'style', 'class' ],
+					} );
 				} );
 				onCheckoutPlaceOrderProcessing( container, function () {
 					if ( ! placedOrder ) {
@@ -134,16 +174,22 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						container.dispatchEvent( placeOrderErrorEvent );
 					}
 				} );
-				$form.on( 'checkout_place_order_success', function () {
+				$form.on( 'checkout_place_order_success', function ( event, result ) {
 					placedOrder = false;
 					container.dispatchEvent( placeOrderSuccessEvent );
+					if ( isSameDocumentRedirect( result?.redirect, window.location.href ) ) {
+						awaitingGatewayAction = true;
+						container.dispatchEvent( placeOrderGatewayActionEvent );
+					}
 				} );
 
 				$( document.body ).on( 'checkout_error', function ( event, errors ) {
-					if ( ! placedOrder ) {
+					// A gateway step that fails or is canceled reports its error here, after the order was placed.
+					if ( ! placedOrder && ! awaitingGatewayAction ) {
 						return;
 					}
 					placedOrder = false;
+					awaitingGatewayAction = false;
 					if ( errors && errors.indexOf( newspackBlocksModalCheckout.labels.critical_error ) >= 0 ) {
 						container.dispatchEvent( placeOrderCriticalErrorEvent );
 						return;
@@ -375,6 +421,21 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 				}
 
 				/**
+				 * Mark a field invalid and point it at its result message, or clear both.
+				 *
+				 * @param {jQuery}  $input    The field.
+				 * @param {string}  resultId  The id of the field's result message.
+				 * @param {boolean} isInvalid Whether the field holds an error.
+				 */
+				function setFieldInvalid( $input, resultId, isInvalid ) {
+					if ( isInvalid ) {
+						$input.attr( { 'aria-invalid': 'true', 'aria-describedby': resultId } );
+					} else {
+						$input.removeAttr( 'aria-invalid aria-describedby' );
+					}
+				}
+
+				/**
 				 * Handle coupon form submit.
 				 *
 				 * @param {Event} ev
@@ -401,7 +462,9 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 							if ( code ) {
 								const isError = code.includes( 'error' );
 								$coupon.append(
-									`<p class="result ${ CLASS_PREFIX }__helper-text ${ isError ? CLASS_PREFIX + '__inline-error' : '' }">` +
+									`<p id="modal-checkout-coupon-result" class="result ${ CLASS_PREFIX }__helper-text ${
+										isError ? CLASS_PREFIX + '__inline-error' : ''
+									}">` +
 										$( code ).text() +
 										'</p>'
 								);
@@ -412,6 +475,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 									$coupon.find( 'input[name="coupon_code"]' ).focus();
 									$coupon.find( 'h3, input[name="coupon_code"]' ).removeClass( 'newspack-ui__field-error' );
 								}
+								setFieldInvalid( $coupon.find( 'input[name="coupon_code"]' ), 'modal-checkout-coupon-result', isError );
 								$( document.body ).trigger( 'applied_coupon_in_checkout', [ data.coupon_code ] );
 								$( document.body ).trigger( 'update_checkout', { update_shipping_method: false } );
 							}
@@ -426,6 +490,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 					$( document.body ).on( 'removed_coupon_in_checkout', () => {
 						clearNotices();
 						$coupon.find( '.result' ).remove();
+						setFieldInvalid( $coupon.find( 'input[name="coupon_code"]' ), 'modal-checkout-coupon-result', false );
 						$coupon.find( 'input[name="coupon_code"]' ).val( '' ).focus();
 					} );
 				}
@@ -442,7 +507,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						return false;
 					}
 					const input = $nyp.find( 'input[name="price"]' );
-					input.attr( 'disabled', true );
+					input.prop( 'readOnly', true );
 					const data = {
 						_ajax_nonce: newspackBlocksModalCheckout.nyp_nonce,
 						action: 'process_name_your_price_request',
@@ -454,12 +519,15 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						type: 'POST',
 						url: newspackBlocksModalCheckout.ajax_url,
 						data,
-						success: ( { success, data: res } ) => {
+						success: response => {
+							const success = Boolean( response?.success );
 							clearNotices();
 							$nyp.find( '.result' ).remove();
 							$nyp.append(
-								`<p class="result ${ CLASS_PREFIX }__helper-text ${ ! success ? CLASS_PREFIX + '__inline-error' : '' }">` +
-									res.message +
+								`<p id="modal-checkout-nyp-result" class="result ${ CLASS_PREFIX }__helper-text ${
+									! success ? CLASS_PREFIX + '__inline-error' : ''
+								}">` +
+									( response?.data?.message || newspackBlocksModalCheckout.quantity_error ) +
 									'</p>'
 							);
 							if ( success ) {
@@ -468,11 +536,12 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 								$nyp.find( 'input[name="price"]' ).focus();
 								$nyp.find( 'h3, input[name="price"]' ).addClass( 'newspack-ui__field-error' );
 							}
+							setFieldInvalid( $nyp.find( 'input[name="price"]' ), 'modal-checkout-nyp-result', ! success );
 							$( document.body ).trigger( 'update_checkout', { update_shipping_method: false } );
 						},
 						complete: () => {
 							unblockForm( $nyp );
-							input.attr( 'disabled', false );
+							input.prop( 'readOnly', false );
 							input.focus();
 						},
 					} );
@@ -491,9 +560,14 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 				function showQuantityResult( success, message ) {
 					$quantity.find( '.result' ).remove();
 					$quantity.append(
-						`<p class="result ${ CLASS_PREFIX }__helper-text ${ ! success ? CLASS_PREFIX + '__inline-error' : '' }">` + message + '</p>'
+						`<p id="modal-checkout-quantity-result" class="result ${ CLASS_PREFIX }__helper-text ${
+							! success ? CLASS_PREFIX + '__inline-error' : ''
+						}">` +
+							message +
+							'</p>'
 					);
 					$quantity.find( 'h3, input[name="quantity"]' ).toggleClass( 'newspack-ui__field-error', ! success );
+					setFieldInvalid( $quantity.find( 'input[name="quantity"]' ), 'modal-checkout-quantity-result', ! success );
 				}
 
 				/**
@@ -516,7 +590,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						return false;
 					}
 					const input = $quantity.find( 'input[name="quantity"]' );
-					input.attr( 'disabled', true );
+					input.prop( 'readOnly', true );
 					const data = {
 						_ajax_nonce: newspackBlocksModalCheckout.quantity_nonce,
 						action: 'process_quantity_request',
@@ -556,7 +630,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						error: () => showQuantityResult( false, newspackBlocksModalCheckout.quantity_error ),
 						complete: () => {
 							unblockForm( $quantity );
-							input.attr( 'disabled', false );
+							input.prop( 'readOnly', false );
 							input.focus();
 						},
 					} );
@@ -573,6 +647,9 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 				function handleFormSubmit( ev ) {
 					ev.preventDefault();
 					ev.stopImmediatePropagation();
+					if ( $form.is( '.modal-processing' ) ) {
+						return;
+					}
 					validateForm();
 					managePagination( 'continue' ); // TODOGA4: this is firing whether or not the form validates.
 				}
@@ -835,6 +912,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 							cb( result );
 						},
 						error: ( jqXHR, textStatus, errorThrown ) => {
+							unblockForm( $form );
 							let messages = '';
 							if ( ! silent ) {
 								messages = '<div class="woocommerce-error">' + ( errorThrown || wc_checkout_params.i18n_checkout_error ) + '</div>';
@@ -863,7 +941,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 					}
 					const buttons = form.find( 'button[type=submit]' );
 					buttons.each( ( i, el ) => {
-						$( el ).attr( 'disabled', true );
+						$( el ).attr( 'aria-disabled', 'true' ).attr( 'aria-busy', 'true' ).addClass( `${ CLASS_PREFIX }__button--loading` );
 					} );
 					form.addClass( 'modal-processing' );
 					return true;
@@ -882,7 +960,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 					}
 					const buttons = form.find( 'button[type=submit]' );
 					buttons.each( ( i, el ) => {
-						$( el ).attr( 'disabled', false );
+						$( el ).removeAttr( 'aria-disabled' ).removeAttr( 'aria-busy' ).removeClass( `${ CLASS_PREFIX }__button--loading` );
 					} );
 					form.removeClass( 'modal-processing' );
 					return true;
@@ -1015,10 +1093,34 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 			setReady( false );
 		} );
 
-		// Close modal when 'Esc' key is pressed and focus is inside of the iframe.
+		// The checkout dialog can't see keys pressed in here. Escape reaches it as the
+		// dialog's own cancel, so a payment in progress keeps it open, and Tab from the
+		// last control wraps to the dialog's first.
 		document.addEventListener( 'keydown', function ( ev ) {
+			const dialog = window.frameElement?.closest( 'dialog' );
 			if ( ev.key === 'Escape' ) {
-				parent.newspackCloseModalCheckout();
+				// An open dropdown, like the country field's, closes on its own Escape.
+				if ( ev.defaultPrevented || ev.target.closest?.( '.select2-dropdown, .select2-container--open' ) ) {
+					return;
+				}
+				if ( dialog ) {
+					dialog.dispatchEvent( new Event( 'cancel', { cancelable: true } ) );
+				} else {
+					parent.newspackCloseModalCheckout();
+				}
+				return;
+			}
+			if ( ev.key !== 'Tab' || ev.shiftKey || ev.defaultPrevented || ! dialog ) {
+				return;
+			}
+			const tabbable = getTabbableElements( document.body );
+			if ( ev.target !== tabbable[ tabbable.length - 1 ] ) {
+				return;
+			}
+			const first = getTabbableElements( dialog )[ 0 ];
+			if ( first && first !== window.frameElement ) {
+				ev.preventDefault();
+				first.focus();
 			}
 		} );
 

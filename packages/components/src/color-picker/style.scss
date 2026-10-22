@@ -26,7 +26,7 @@
 
 	&__main {
 		background: var(--wpds-color-background-surface-neutral-strong, #{wp-colors.$white});
-		box-shadow: var(--wpds-elevation-sm, #{wp-vars.$elevation-small});
+		box-shadow: wp-vars.$elevation-small;
 		margin: var(--wpds-dimension-gap-sm, #{wp-vars.$grid-unit-10}) 0 0;
 		position: absolute;
 		z-index: 3;

@@ -1,3 +1,50 @@
+## newspack-network [2.22.14](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.13...newspack-network@2.22.14) (2026-10-20)
+
+
+### Bug Fixes
+
+* **network:** require manage_options to manage nodes ([#1212](https://github.com/Automattic/newspack-workspace/issues/1212)) ([a48ccf6](https://github.com/Automattic/newspack-workspace/commit/a48ccf6056966c77a00e5ab83d450c7a0c5ccaa6))
+
+## newspack-network [2.22.13](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.12...newspack-network@2.22.13) (2026-10-12)
+
+
+### Bug Fixes
+
+* **network:** name the reader by account email and drop guest orders ([#1255](https://github.com/Automattic/newspack-workspace/issues/1255)) ([02e05da](https://github.com/Automattic/newspack-workspace/commit/02e05da14d85b04342048a27f562035bd0de51e1))
+
+## newspack-network [2.22.12](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.11...newspack-network@2.22.12) (2026-10-12)
+
+
+### Bug Fixes
+
+* **cli:** consolidate overlapping plan rule sets and preserve OR semantics in migrate-membership-gates (NPPD-2064, [#642](https://github.com/Automattic/newspack-workspace/issues/642)) ([0344d2e](https://github.com/Automattic/newspack-workspace/commit/0344d2e5e5b4a9e5ce320766e48b08c9123f4caf))
+* **network:** grant access from group seats and one-time purchases ([#1222](https://github.com/Automattic/newspack-workspace/issues/1222)) ([3044b17](https://github.com/Automattic/newspack-workspace/commit/3044b1707f4c47c36dbc4153543adbf33458cd8b))
+* **network:** keep subscription and order backfills within memory ([12ab7a5](https://github.com/Automattic/newspack-workspace/commit/12ab7a5f931af774b03653a112732471637a3e4e))
+* **network:** warn only when a backfill spans more than one batch ([a46f586](https://github.com/Automattic/newspack-workspace/commit/a46f586488bd96c8f2fef6351bfa202ee07dc251))
+* **network:** warn when a backfill can't free cached items ([f875346](https://github.com/Automattic/newspack-workspace/commit/f875346a5d9c966a31e73c3267d3a810278d7f6a))
+* **phpcs:** point constant ignores at the documenting file ([#1130](https://github.com/Automattic/newspack-workspace/issues/1130)) ([9468c79](https://github.com/Automattic/newspack-workspace/commit/9468c79ef60ae098237278bbdd774574b95caa0e))
+* **webhooks:** clean up finished requests and bound queries ([#1168](https://github.com/Automattic/newspack-workspace/issues/1168)) ([7d3b8fc](https://github.com/Automattic/newspack-workspace/commit/7d3b8fc2ab7a79e5135630420c29e80d6d0062b4))
+
+
+### Dependencies
+
+* **newspack-icons:** upgraded to 1.2.0
+* **newspack-scripts:** upgraded to 5.12.0
+
+## newspack-network [2.22.11](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.10...newspack-network@2.22.11) (2026-09-28)
+
+
+### Dependencies
+
+* **newspack-icons:** upgraded to 1.1.3
+
+## newspack-network [2.22.10](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.9...newspack-network@2.22.10) (2026-09-28)
+
+
+### Bug Fixes
+
+* **network:** describe the images the receiving site actually stores ([#981](https://github.com/Automattic/newspack-workspace/issues/981)) ([055ad63](https://github.com/Automattic/newspack-workspace/commit/055ad63653c0ed8bae773d1fccb36f7006132473))
+
 ## newspack-network [2.22.9](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.8...newspack-network@2.22.9) (2026-09-22)
 
 

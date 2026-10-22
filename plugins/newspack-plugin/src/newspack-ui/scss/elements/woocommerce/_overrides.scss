@@ -72,24 +72,38 @@
 		&.is-info,
 		&.is-error,
 		&.is-success {
-			background: var(--newspack-ui-color-warning-0);
-			border: none;
-			border-left: 3px solid var(--newspack-ui-color-warning-30);
+			border-style: solid;
+			border-width: 1px;
 			font-family: var(--newspack-ui-font-family);
+			padding-inline-start: calc(var(--newspack-ui-spacer-2) + var(--newspack-ui-spacer-5) + var(--newspack-ui-spacer-1)) !important;
 
 			> svg {
 				display: none;
 			}
+
+			&::before {
+				content: "";
+				height: var(--newspack-ui-spacer-5);
+				inset-inline-start: var(--newspack-ui-spacer-2);
+				mask-position: center;
+				mask-repeat: no-repeat;
+				mask-size: contain;
+				position: absolute;
+				top: var(--newspack-ui-spacer-2);
+				width: var(--newspack-ui-spacer-5);
+			}
+		}
+
+		&.is-info {
+			@extend .newspack-ui__notice--warning;
 		}
 
 		&.is-error {
-			background: var(--newspack-ui-color-error-0);
-			border-left-color: var(--newspack-ui-color-error-50);
+			@extend .newspack-ui__notice--error;
 		}
 
 		&.is-success {
-			background: var(--newspack-ui-color-success-0);
-			border-left-color: var(--newspack-ui-color-success-50);
+			@extend .newspack-ui__notice--success;
 		}
 	}
 	.woocommerce-NoticeGroup {

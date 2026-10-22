@@ -8,6 +8,7 @@
 namespace Newspack_Network\Woocommerce;
 
 use Newspack\Data_Events;
+use Newspack_Network\Content_Gate\Access;
 use Newspack_Network\Woocommerce_Memberships\Admin as Memberships_Admin;
 use Newspack_Network\Woocommerce\Product_Admin;
 
@@ -37,6 +38,7 @@ class Events {
 
 		Data_Events::register_listener( 'woocommerce_order_status_changed', 'newspack_node_order_changed', [ __CLASS__, 'item_changed' ] );
 		Data_Events::register_listener( 'woocommerce_subscription_status_changed', 'newspack_node_subscription_changed', [ __CLASS__, 'subscription_changed' ] );
+		Data_Events::register_listener( 'woocommerce_order_status_changed', 'newspack_node_one_time_purchase_changed', [ __CLASS__, 'one_time_purchase_changed' ] );
 		Data_Events::register_listener( 'newspack_network_save_product', 'newspack_network_product_updated', [ __CLASS__, 'product_updated' ] );
 	}
 
@@ -95,7 +97,7 @@ class Events {
 			'id'                        => $item_id,
 			'user_id'                   => $item->get_customer_id(),
 			'user_name'                 => '',
-			'email'                     => $item->get_billing_email(),
+			'email'                     => self::get_reader_email( $item ),
 			'status_before'             => $status_from,
 			'status_after'              => $status_to,
 			'formatted_total'           => wp_strip_all_tags( $item->get_formatted_order_total() ),
@@ -112,6 +114,112 @@ class Events {
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Callback for the one-time purchase listener.
+	 *
+	 * Only orders holding a one-time product with a Network ID are reported: those
+	 * are the ones that can grant access on another site, and every site would
+	 * otherwise receive every renewal and untagged order in the network. The
+	 * reading site's gate decides how long after the purchase access lasts, so the
+	 * event carries the purchase time and nothing about duration. An order with no
+	 * creation date reports 0, which fails every finite rule instead of looking new.
+	 *
+	 * A variable product's line item is the variation, so the event lists the parent
+	 * as well: other sites only know the parent's Network ID.
+	 *
+	 * A paid order with no customer account is not reported: the one-time rule on the
+	 * selling site counts only orders that belong to a reader's account (#1244), so a
+	 * guest order grants nothing anywhere until WooCommerce links it to the account,
+	 * and the next status change or backfill then sends it. Its unpaid statuses still
+	 * go out, under the billing email, so a record an earlier build wrote elsewhere is
+	 * revoked rather than left granting.
+	 *
+	 * @param int       $item_id     The Order ID.
+	 * @param string    $status_from The status before the change.
+	 * @param string    $status_to   The status after the change.
+	 * @param \WC_Order $order       The Order object.
+	 * @return array|null Null when the order is a paid one with no customer account, or holds no such product.
+	 */
+	public static function one_time_purchase_changed( $item_id, $status_from, $status_to, $order ) {
+		if ( ! self::get_customer( $order ) && in_array( $status_to, Access::get_paid_statuses(), true ) ) {
+			return null;
+		}
+		$products = [];
+		foreach ( $order->get_items() as $item ) {
+			$product = $item->get_product();
+			// A subscription variation also answers to 'variation', so a renewal of a tagged
+			// variable subscription would pass the type check below and be sent as a purchase.
+			if ( ! $product || self::is_subscription_product( $product ) || ! $product->is_type( [ 'simple', 'variable', 'variation' ] ) ) {
+				continue;
+			}
+			if ( '' === (string) Product_Admin::get_network_id( $product->get_id() ) ) {
+				continue;
+			}
+			$entry                          = [
+				'id'   => $product->get_id(),
+				'name' => $product->get_name(),
+				'slug' => $product->get_slug(),
+			];
+			$products[ $product->get_id() ] = $entry;
+			$parent_id = (int) $product->get_parent_id();
+			if ( $parent_id ) {
+				$products[ $parent_id ] = array_merge( $entry, [ 'id' => $parent_id ] );
+			}
+		}
+		if ( empty( $products ) ) {
+			return null;
+		}
+		$date_created = $order->get_date_created();
+		return [
+			'id'           => $item_id,
+			'user_id'      => $order->get_customer_id(),
+			'email'        => self::get_reader_email( $order ),
+			'status_after' => $status_to,
+			'purchased_at' => $date_created ? $date_created->getTimestamp() : 0,
+			'products'     => $products,
+		];
+	}
+
+	/**
+	 * The customer account behind an order or subscription, if one still exists.
+	 *
+	 * @param object $item The Subscription or Order object.
+	 * @return \WP_User|false
+	 */
+	private static function get_customer( $item ) {
+		$customer_id = (int) $item->get_customer_id();
+		return $customer_id ? get_userdata( $customer_id ) : false;
+	}
+
+	/**
+	 * The email that names the reader on the other sites: the customer account's,
+	 * since that is the identity every site matches and creates accounts by, and the
+	 * billing email only when no account can be named (a guest order, a customer since
+	 * deleted, an account with no email). A reader who checks out with a billing
+	 * address other than their login would otherwise be recorded, and have an account
+	 * created, under an address they can't log in with.
+	 *
+	 * @param object $item The Subscription or Order object.
+	 * @return string
+	 */
+	private static function get_reader_email( $item ) {
+		$customer = self::get_customer( $item );
+		return $customer && $customer->user_email ? $customer->user_email : $item->get_billing_email();
+	}
+
+	/**
+	 * Whether a product is a subscription product, including a variation of one.
+	 *
+	 * @param \WC_Product $product Product.
+	 * @return bool
+	 */
+	private static function is_subscription_product( $product ) {
+		if ( class_exists( '\WC_Subscriptions_Product' ) ) {
+			return \WC_Subscriptions_Product::is_subscription( $product );
+		}
+		return $product->is_type( [ 'subscription', 'variable-subscription', 'subscription_variation' ] );
 	}
 
 	/**
@@ -132,18 +240,32 @@ class Events {
 		$result['next_payment_date'] = $item->get_date( 'next_payment_date' );
 		$result['last_payment_date'] = $item->get_date( 'last_order_date_created' );
 		$result['end_date'] = $item->get_date( 'end_date' );
-		$result['products'] = [];
+		$result['products'] = self::get_subscription_products( $item );
 
-		$items = $item->get_items();
-		foreach ( $items as $item ) {
+		return $result;
+	}
+
+	/**
+	 * A subscription's products, keyed by ID.
+	 *
+	 * Line items whose product was deleted are left out rather than failing the event.
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 * @return array[] Each with id, name and slug.
+	 */
+	public static function get_subscription_products( $subscription ) {
+		$products = [];
+		foreach ( $subscription->get_items() as $item ) {
 			$product = $item->get_product();
-			$result['products'][ $product->get_id() ] = [
+			if ( ! $product ) {
+				continue;
+			}
+			$products[ $product->get_id() ] = [
 				'id'   => $product->get_id(),
 				'name' => $product->get_name(),
 				'slug' => $product->get_slug(),
 			];
 		}
-
-		return $result;
+		return $products;
 	}
 }

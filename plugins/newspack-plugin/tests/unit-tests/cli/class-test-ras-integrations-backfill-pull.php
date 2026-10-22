@@ -32,6 +32,9 @@ class Test_RAS_Integrations_Backfill_Pull extends WP_UnitTestCase {
 		parent::set_up();
 		global $subscriptions_database;
 		$subscriptions_database = [];
+		// The push leg of a --direction=both run makes the live-run configuration
+		// check, which refuses this non-production host unless syncing is allowed.
+		add_filter( 'newspack_reader_activation_is_syncing_allowed', '__return_true' );
 		Integrations::disable( 'esp' );
 		Failing_Sample_Integration::reset();
 		Integrations::register( new Failing_Sample_Integration( 'pull_cli_mock', 'Pull CLI Mock' ) );
@@ -43,6 +46,7 @@ class Test_RAS_Integrations_Backfill_Pull extends WP_UnitTestCase {
 	public function tear_down() {
 		global $subscriptions_database;
 		$subscriptions_database = [];
+		remove_filter( 'newspack_reader_activation_is_syncing_allowed', '__return_true' );
 		foreach ( [ 'pull_cli_mock', 'pull_cli_other' ] as $integration_id ) {
 			self::delete_integration_options( $integration_id );
 		}
@@ -346,6 +350,10 @@ class Test_RAS_Integrations_Backfill_Pull extends WP_UnitTestCase {
 	/**
 	 * `--direction=both` through the public command entry point runs push then
 	 * pull and joins both summaries into one success line (NPPD-2076).
+	 *
+	 * `--create-missing` keeps the push preview from reading contacts, so the
+	 * joined summary does not depend on an existence check at the test
+	 * integration.
 	 */
 	public function test_cli_backfill_direction_both_runs_push_then_pull() {
 		WP_CLI::reset();
@@ -354,9 +362,10 @@ class Test_RAS_Integrations_Backfill_Pull extends WP_UnitTestCase {
 		RAS_Contact_Sync::cli_backfill(
 			[],
 			[
-				'direction' => 'both',
-				'dry-run'   => true,
-				'user-ids'  => (string) $user_id,
+				'direction'      => 'both',
+				'dry-run'        => true,
+				'create-missing' => true,
+				'user-ids'       => (string) $user_id,
 			]
 		);
 

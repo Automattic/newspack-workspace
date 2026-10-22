@@ -1,6 +1,6 @@
 /**
- * Caution shown under a picker holding stored values no option describes, so the reading
- * the token invites — stale entry, safe to delete — does not go unchallenged.
+ * Caution shown under a picker holding stored values no option describes, or products
+ * marked with an ineligible status, so the reading the token invites — stale entry, safe to delete — does not go unchallenged.
  *
  * Core's `FormTokenField` points its input's `aria-describedby` at its own "how to"
  * element and takes no second description, so this cannot be associated with the field

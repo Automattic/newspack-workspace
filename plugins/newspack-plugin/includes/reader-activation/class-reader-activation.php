@@ -16,6 +16,13 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Reader Activation Class.
+ *
+ * "Reader Activation" (RAS) is the code name for the product feature called
+ * "Audience Management". The two mean the same thing. Public identifiers keep the
+ * code name because sites and other plugins depend on them: this class, the
+ * `newspack_reader_activation_*` options and hooks, and the
+ * `window.newspackReaderActivation` JS API. The wp-admin "Audience" menu is
+ * wider than this feature: it also holds Campaigns, Donations and Subscriptions.
  */
 final class Reader_Activation {
 
@@ -358,18 +365,18 @@ final class Reader_Activation {
 			*/
 			$filtered_labels = apply_filters( 'newspack_reader_activation_auth_labels', $default_labels );
 
-			foreach ( $default_labels as $key => $label ) {
-				if ( isset( $filtered_labels[ $key ] ) ) {
-					if ( is_array( $label ) && is_array( $filtered_labels[ $key ] ) ) {
-						self::$reader_activation_labels[ $key ] = array_merge( $label, $filtered_labels[ $key ] );
-					} elseif ( is_string( $label ) && is_string( $filtered_labels[ $key ] ) ) {
-						self::$reader_activation_labels[ $key ] = $filtered_labels[ $key ];
+			foreach ( $default_labels as $label_key => $label ) {
+				if ( isset( $filtered_labels[ $label_key ] ) ) {
+					if ( is_array( $label ) && is_array( $filtered_labels[ $label_key ] ) ) {
+						self::$reader_activation_labels[ $label_key ] = array_merge( $label, $filtered_labels[ $label_key ] );
+					} elseif ( is_string( $label ) && is_string( $filtered_labels[ $label_key ] ) ) {
+						self::$reader_activation_labels[ $label_key ] = $filtered_labels[ $label_key ];
 					} else {
 						// If filtered label type doesn't match, fallback to default.
-						self::$reader_activation_labels[ $key ] = $label;
+						self::$reader_activation_labels[ $label_key ] = $label;
 					}
 				} else {
-					self::$reader_activation_labels[ $key ] = $label;
+					self::$reader_activation_labels[ $label_key ] = $label;
 				}
 			}
 		}
@@ -569,7 +576,7 @@ final class Reader_Activation {
 	 */
 	public static function activate() {
 		if ( ! method_exists( 'Newspack_Popups_Presets', 'activate_ras_presets' ) ) {
-			return new \WP_Error( 'newspack_reader_activation_missing_dependencies', __( 'Newspack Campaigns plugin is required to activate Reader Activation features.', 'newspack-plugin' ) );
+			return new \WP_Error( 'newspack_reader_activation_missing_dependencies', __( 'Newspack Campaigns plugin is required to activate Audience Management features.', 'newspack-plugin' ) );
 		}
 
 		return \Newspack_Popups_Presets::activate_ras_presets();
@@ -770,7 +777,7 @@ final class Reader_Activation {
 
 	/**
 	 * Get an array of required plugins for satisfying Reader Revenue prerequisites.
-	 * WooCommerce and Woo Subscriptions are required for Newspack, but not for NRH.
+	 * WooCommerce and Woo Subscriptions are required for Newspack, but not for RevEngine.
 	 */
 	public static function get_reader_revenue_required_plugins() {
 		$required_plugins = [
@@ -1476,12 +1483,19 @@ final class Reader_Activation {
 				}
 				$auth_callback_url = add_query_arg( $params, \wc_get_page_permalink( 'myaccount' ) );
 			} elseif ( function_exists( 'wc_get_page_permalink' ) && function_exists( 'is_account_page' ) && \is_account_page() ) {
-				// If we are already on the my account page, set the my account URL so the page reloads on submit.
+				// The signed-out My Account page renders this form in place of the
+				// requested endpoint (a group, a subscription), so return the reader
+				// there. The lost-password form is no use to a signed-in reader.
 				$auth_callback_url = \wc_get_page_permalink( 'myaccount' );
+				$endpoint          = \WC()->query->get_current_endpoint();
+				if ( $endpoint && 'lost-password' !== $endpoint ) {
+					$auth_callback_url = \wc_get_endpoint_url( $endpoint, \get_query_var( $endpoint ), $auth_callback_url );
+				}
 			} elseif ( class_exists( 'Newspack\My_Account' ) && My_Account::is_account_page() ) {
-				// Native (WooCommerce-less) account page: reload it on submit so the
-				// signed-in reader lands on their account.
-				$auth_callback_url = My_Account::get_endpoint_url();
+				// Native (WooCommerce-less) account page: likewise return the
+				// signed-in reader to the endpoint they asked for.
+				$endpoint          = My_Account::get_current_endpoint();
+				$auth_callback_url = My_Account::get_endpoint_url( $endpoint, (string) \get_query_var( $endpoint ) );
 			}
 		}
 		?>
@@ -1587,9 +1601,9 @@ final class Reader_Activation {
 		$terms = self::get_auth_footer();
 		$label = self::get_reader_activation_labels( 'title' );
 		?>
-		<div class="newspack-ui newspack-ui__modal-container newspack-reader-auth-modal">
+		<dialog class="newspack-ui newspack-ui__modal-container newspack-reader-auth-modal" aria-labelledby="newspack-reader-auth-modal-label">
 			<div class="newspack-ui__modal-container__overlay"></div>
-			<div class="newspack-ui__modal newspack-ui__modal--small" role="dialog" aria-modal="true" aria-labelledby="newspack-reader-auth-modal-label">
+			<div class="newspack-ui__modal newspack-ui__modal--small">
 				<div class="newspack-ui__modal__header">
 					<h2 id="newspack-reader-auth-modal-label"><?php echo \esc_html( $label ); ?></h2>
 					<button class="newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__modal__close">
@@ -1608,7 +1622,7 @@ final class Reader_Activation {
 					</footer>
 				<?php endif; ?>
 			</div>
-		</div>
+		</dialog>
 		<?php
 	}
 
@@ -1830,7 +1844,7 @@ final class Reader_Activation {
 		}
 		$newsletter_list_initial_size = self::get_newsletters_list_initial_size();
 		?>
-		<div class="newspack-ui newspack-ui__modal-container newspack-newsletters-signup-modal">
+		<dialog class="newspack-ui newspack-ui__modal-container newspack-newsletters-signup-modal">
 			<div class="newspack-ui__modal-container__overlay"></div>
 			<div class="newspack-ui__modal newspack-ui__modal--small">
 				<div class="newspack-ui__modal__header">
@@ -1855,7 +1869,7 @@ final class Reader_Activation {
 					<?php self::render_newsletters_signup_form( $email_address, $newsletters_lists, $newsletter_list_initial_size ); ?>
 				</div>
 			</div>
-		</div>
+		</dialog>
 		<?php
 	}
 
