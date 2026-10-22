@@ -62,6 +62,7 @@ import { billingText, fmtDate, orDash, paymentRows } from '../format';
 import { GROUP_LABEL, GROUP_LABEL_PLURAL, groupViewLabel } from '../labels';
 import { groupDetailHref, isInternalHashPath } from '../links';
 import { STATUS_LABELS, STATUS_BADGE_INTENT, statusRank, displayStatuses } from '../status';
+import { isNetworkSubscription, shouldShowPaymentMethods, networkReaderBadge } from '../network';
 
 const { useParams, useLocation } = Router;
 
@@ -120,6 +121,22 @@ const seatsSubline = group => {
  * @return {Array} Badge descriptors for SubscriptionCard.
  */
 const statusBadges = status => ( STATUS_LABELS[ status ] ? [ { label: STATUS_LABELS[ status ], intent: STATUS_BADGE_INTENT[ status ] } ] : [] );
+
+/**
+ * The "View subscription" item that leads a card's "more" menu: a link to the
+ * subscription's own edit screen, for the admin who wants the order behind a card.
+ *
+ * @param {string} name The subscription or group name, to qualify the link.
+ * @param {string} href The subscription's edit URL.
+ * @return {Object} An action descriptor for SubscriptionCard.
+ */
+const viewSubscriptionAction = ( name, href ) => ( {
+	key: 'view',
+	label: __( 'View subscription', 'newspack-plugin' ),
+	// translators: %s is a subscription/plan name.
+	ariaLabel: sprintf( __( 'View subscription: %s', 'newspack-plugin' ), name ),
+	href,
+} );
 
 export default function PersonProfile() {
 	const { id } = useParams();
@@ -220,7 +237,10 @@ export default function PersonProfile() {
 				{ label: subscriber.name },
 			],
 			sectionTitle: subscriber.name,
-			badges: headlineStatuses.map( status => ( { label: STATUS_LABELS[ status ], intent: STATUS_BADGE_INTENT[ status ] } ) ),
+			badges: [
+				...headlineStatuses.map( status => ( { label: STATUS_LABELS[ status ], intent: STATUS_BADGE_INTENT[ status ] } ) ),
+				...( subscriber.isNetworkReader ? [ networkReaderBadge ] : [] ),
+			],
 			// A newline-joined string, not markup: SectionHeader renders a
 			// description inside a `<p>`, so a stack of divs would be invalid
 			// nesting. The wizard stylesheet sets `white-space: pre-line` on that
@@ -289,6 +309,42 @@ export default function PersonProfile() {
 
 		const individualCards = ( subscriber.subscriptions || [] ).map( subscription => {
 			const name = subscription.plan || __( '(Subscription)', 'newspack-plugin' );
+
+			// A subscription another network site manages is read-only here, and this
+			// branch returns before any local menu or flow is built. Its ID belongs to
+			// the other site; the write endpoints resolve an ID against this site's own
+			// subscriptions, so a remote ID must never reach `setModal` or a request.
+			// Nothing below runs for it. The key carries the site as well as the ID:
+			// an ID is unique within a site, so a local #500 and a remote #500 coexist.
+			if ( isNetworkSubscription( subscription ) ) {
+				const { editUrl, managedOn } = subscription;
+				const cardKey = `subscription-${ managedOn.url }-${ subscription.id }`;
+				return {
+					key: cardKey,
+					status: subscription.status,
+					node: (
+						<SubscriptionCard
+							key={ cardKey }
+							title={ name }
+							titleHref={ editUrl || undefined }
+							// translators: %s is a subscription/plan name.
+							titleLabel={ editUrl ? sprintf( __( 'View subscription: %s', 'newspack-plugin' ), name ) : undefined }
+							badges={ statusBadges( subscription.status ) }
+							rows={ [
+								{
+									label: __( 'Managed on', 'newspack-plugin' ),
+									value: editUrl ? <a href={ editUrl }>{ managedOn.name }</a> : managedOn.name,
+								},
+							] }
+							// A link out, so with no URL there is nothing to put in the menu.
+							actions={ editUrl ? [ viewSubscriptionAction( name, editUrl ) ] : [] }
+							// translators: %s is a subscription/plan name.
+							actionsLabel={ sprintf( __( 'Subscription actions: %s', 'newspack-plugin' ), name ) }
+						/>
+					),
+				};
+			}
+
 			const isActive = 'active' === subscription.status;
 			const isLive = isActive || 'on-hold' === subscription.status;
 			const menuActions = [];
@@ -482,16 +538,22 @@ export default function PersonProfile() {
 				</VStack>
 			</Row>
 
-			<Row
-				title={ __( 'Payment methods', 'newspack-plugin' ) }
-				description={ __(
-					'The cards on file for this subscriber. Each subscription charges the card set on it; the default applies to new purchases.',
-					'newspack-plugin'
-				) }
-				showDivider={ false }
-			>
-				<PaymentMethodsList paymentMethods={ subscriber.paymentMethods || [] } onMakeDefault={ makeDefault } focusCardId={ promotedCardId } />
-			</Row>
+			{ shouldShowPaymentMethods( subscriber ) && (
+				<Row
+					title={ __( 'Payment methods', 'newspack-plugin' ) }
+					description={ __(
+						'The cards on file for this subscriber. Each subscription charges the card set on it; the default applies to new purchases.',
+						'newspack-plugin'
+					) }
+					showDivider={ false }
+				>
+					<PaymentMethodsList
+						paymentMethods={ subscriber.paymentMethods || [] }
+						onMakeDefault={ makeDefault }
+						focusCardId={ promotedCardId }
+					/>
+				</Row>
+			) }
 
 			{ 'payment' === modal?.kind && (
 				<ChangePaymentMethodFlow
