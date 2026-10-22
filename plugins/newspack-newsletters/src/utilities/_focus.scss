@@ -1,0 +1,15 @@
+$focus-color: var(--newspack-ui-color-focus, #1e1e1e);
+$focus-halo-width: var(--newspack-ui-focus-halo-width, 3px);
+
+@mixin focus-edge( $color: $focus-color ) {
+	border-color: $color;
+	box-shadow: 0 0 0 $focus-halo-width color-mix(in srgb, #{$color} var(--newspack-ui-focus-halo-mix, 20%), transparent);
+	outline: 2px solid transparent;
+	outline-offset: 0;
+}
+
+@mixin focus-line( $color: $focus-color, $inner: null ) {
+	box-shadow: $inner, 0 0 0 1px $color, 0 0 0 calc(1px + #{$focus-halo-width}) color-mix(in srgb, #{$color} var(--newspack-ui-focus-halo-mix, 20%), transparent);
+	outline: 2px solid transparent;
+	outline-offset: 0;
+}
