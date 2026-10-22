@@ -1,6 +1,7 @@
 /** Some general overrides for WooCommerce styles. */
 
 @use "../notices";
+@use "../../mixins";
 
 .newspack-ui {
 	label .optional {
@@ -35,6 +36,10 @@
 		grid-auto-rows: minmax(var(--newspack-ui-spacer-8), auto);
 		margin-bottom: var(--newspack-ui-spacer-6);
 		width: 100%;
+
+		> .newspack-ui__notice {
+			margin: 0;
+		}
 	}
 	.newspack-wc-message,
 	.woocommerce-message,
@@ -57,12 +62,24 @@
 			padding-bottom: 0;
 		}
 	}
+	.woocommerce-message,
+	.woocommerce-info {
+		&:has(> svg) {
+			display: flex;
+			flex-wrap: nowrap;
+		}
+	}
+	.woocommerce-error li:has(> svg) {
+		display: flex;
+		gap: var(--newspack-ui-spacer-2);
+
+		> svg {
+			@extend %newspack-ui-notice-icon;
+		}
+	}
 	.newspack-wc-message,
 	.woocommerce-message {
 		@extend .newspack-ui__notice--success;
-	}
-	.woocommerce-info {
-		@extend .newspack-ui__notice--warning;
 	}
 	.newspack-wc-message--error,
 	.woocommerce-error {
@@ -70,31 +87,23 @@
 	}
 	.wc-block-components-notice-banner {
 		&.is-info,
+		&.is-warning,
 		&.is-error,
 		&.is-success {
 			border-style: solid;
 			border-width: 1px;
+			display: flex;
 			font-family: var(--newspack-ui-font-family);
-			padding-inline-start: calc(var(--newspack-ui-spacer-2) + var(--newspack-ui-spacer-5) + var(--newspack-ui-spacer-1)) !important;
 
-			> svg {
-				display: none;
-			}
-
-			&::before {
-				content: "";
-				height: var(--newspack-ui-spacer-5);
-				inset-inline-start: var(--newspack-ui-spacer-2);
-				mask-position: center;
-				mask-repeat: no-repeat;
-				mask-size: contain;
-				position: absolute;
-				top: var(--newspack-ui-spacer-2);
-				width: var(--newspack-ui-spacer-5);
+			> svg[class*="newspack-ui__svg-icon--"] {
+				background: none;
+				border-radius: 0;
+				padding: 0;
+				transform: none;
 			}
 		}
 
-		&.is-info {
+		&.is-warning {
 			@extend .newspack-ui__notice--warning;
 		}
 
@@ -105,13 +114,31 @@
 		&.is-success {
 			@extend .newspack-ui__notice--success;
 		}
+
+		> .wc-block-components-notice-banner__content {
+			.wc-block-components-notice-banner__summary {
+				margin: 0;
+			}
+
+			ul,
+			ol {
+				margin: var(--newspack-ui-spacer-half) 0 0;
+				padding-inline-start: var(--newspack-ui-spacer-5);
+			}
+
+			li {
+				line-height: inherit;
+			}
+		}
 	}
 	.woocommerce-NoticeGroup {
 		.newspack-wc-message,
 		.woocommerce-message,
 		.woocommerce-info,
 		.woocommerce-error {
-			border: none !important;
+			&:not(.newspack-ui__notice) {
+				border: none !important;
+			}
 		}
 	}
 
@@ -132,6 +159,7 @@
 	}
 
 	.wc_payment_methods {
+		list-style: none;
 		padding-left: 0;
 	}
 
@@ -186,7 +214,7 @@
 			cursor: pointer;
 		}
 
-		input.input-radio[name="payment_method"] {
+		> input.input-radio[name="payment_method"] {
 			display: none;
 
 			+ label {
@@ -215,6 +243,51 @@
 		}
 	}
 
+	.wc_payment_method > .newspack-ui__input-card {
+		@include mixins.choice-layout( "> input:disabled" );
+		@include mixins.input-card;
+
+		color: var(--newspack-ui-label-color);
+		font-family: var(--newspack-ui-font-family);
+		font-size: var(--newspack-ui-font-size-body);
+		line-height: var(--newspack-ui-line-height-body);
+		position: relative;
+
+		&:has(> input:checked) {
+			cursor: auto;
+		}
+
+		> label {
+			align-items: flex-start;
+			display: flex;
+			font-weight: var(--newspack-ui-font-weight-strong);
+			gap: var(--newspack-ui-spacer-1);
+			margin: 0;
+
+			img {
+				align-self: center;
+				float: none;
+				margin-inline-start: auto;
+			}
+		}
+
+		> input.input-radio {
+			display: inline-grid;
+			position: relative;
+			z-index: 1;
+
+			+ label::before {
+				content: none;
+			}
+		}
+
+		> input:not(:checked) + label::after {
+			content: "";
+			inset: 0;
+			position: absolute;
+		}
+	}
+
 	.woocommerce-terms-and-conditions-wrapper {
 		font-size: var(--newspack-ui-font-size-small);
 		line-height: var(--newspack-ui-line-height-small);
@@ -223,16 +296,6 @@
 		input[type="checkbox"] {
 			margin-right: 0.5rem;
 		}
-	}
-
-	.select2-container .select2-selection--single {
-		height: 48px;
-	}
-	.select2-container .select2-selection--single .select2-selection__rendered {
-		line-height: 48px;
-	}
-	.select2-container--default .select2-selection--single .select2-selection__arrow {
-		height: 46px;
 	}
 
 	/* stylelint-disable-next-line selector-id-pattern */

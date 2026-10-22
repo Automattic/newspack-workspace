@@ -4,9 +4,9 @@
 	.newspack-ui {
 		&__box {
 			background: var(--newspack-ui-color-surface-subtle);
-			border-radius: var(--newspack-ui-border-radius-m);
+			border-radius: var(--newspack-ui-radius-surface);
 			margin-bottom: var(--newspack-ui-spacer-5);
-			padding: var(--newspack-ui-spacer-5);
+			padding: var(--newspack-ui-spacer-4);
 			position: relative;
 
 			// Backgrounds & Borders
@@ -109,12 +109,18 @@
 		}
 	}
 	a.newspack-ui__box--border {
+		color: inherit;
 		text-decoration: none;
-		transition: background 125ms ease-in-out, border-color 125ms ease-in-out;
+		transition: border-color var(--newspack-ui-duration-color) ease;
 
-		&:hover {
-			background: var(--newspack-ui-color-surface-subtle);
-			border-color: var(--newspack-ui-color-border-hover);
+		@media ( hover: hover ) and ( pointer: fine ) {
+			&:hover {
+				border-color: var(--newspack-ui-color-border-hover);
+			}
+		}
+
+		&:focus-visible {
+			@include mixins.focus-edge;
 		}
 	}
 }

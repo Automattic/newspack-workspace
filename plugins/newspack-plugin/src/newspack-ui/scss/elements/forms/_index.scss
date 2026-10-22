@@ -5,6 +5,7 @@
 @use "select";
 @use "spinner";
 @use "text-inputs";
+@use "../../mixins";
 
 // TODO: Find a better home for this stuff.
 .newspack-ui {
@@ -31,11 +32,14 @@
 	// Form inline text - helper and error.
 	& &__helper-text,
 	& &__inline-error {
+		--newspack-ui-field-message-icon-size: var(--newspack-ui-spacer-3);
+		--newspack-ui-field-message-icon-gap: calc(var(--newspack-ui-spacer-1) * 0.75);
+
 		color: var(--newspack-ui-color-text-muted);
 		display: block;
-		font-size: var(--newspack-ui-font-size-xs);
+		font-size: var(--newspack-ui-font-size-small);
 		font-weight: var(--newspack-ui-font-weight-regular);
-		line-height: var(--newspack-ui-line-height-xs);
+		line-height: var(--newspack-ui-line-height-small);
 		margin: var(--newspack-ui-spacer-1) 0 0;
 		a {
 			text-decoration: underline;
@@ -52,18 +56,19 @@
 
 	& &__inline-error {
 		color: var(--newspack-ui-color-error-text);
-		padding-inline-start: calc(var(--newspack-ui-spacer-4) + var(--newspack-ui-spacer-1) / 2);
-		position: relative;
 
-		&::before {
-			background: currentcolor;
-			content: "";
-			height: var(--newspack-ui-spacer-4);
+		&:has(> svg) {
+			padding-inline-start: calc(var(--newspack-ui-field-message-icon-size) + var(--newspack-ui-field-message-icon-gap));
+			position: relative;
+		}
+
+		> svg {
+			fill: currentcolor;
+			height: var(--newspack-ui-field-message-icon-size);
 			inset-inline-start: 0;
-			mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill-rule='evenodd' d='M12.218 5.377a.25.25 0 0 0-.436 0l-7.29 12.96a.25.25 0 0 0 .218.373h14.58a.25.25 0 0 0 .218-.372l-7.29-12.96Zm-1.743-.735c.669-1.19 2.381-1.19 3.05 0l7.29 12.96a1.75 1.75 0 0 1-1.525 2.608H4.71a1.75 1.75 0 0 1-1.525-2.608l7.29-12.96ZM12.75 17.46h-1.5v-1.5h1.5v1.5Zm-1.5-3h1.5v-5h-1.5v5Z'/%3E%3C/svg%3E") center / contain no-repeat;
 			position: absolute;
-			top: 0;
-			width: var(--newspack-ui-spacer-4);
+			top: calc(( 1lh - var(--newspack-ui-field-message-icon-size) ) / 2);
+			width: var(--newspack-ui-field-message-icon-size);
 		}
 	}
 
@@ -75,10 +80,18 @@
 		--newspack-ui-color-input-border-hover: var(--newspack-ui-color-error);
 
 		&:is(input, select, textarea),
-		input:not([type="hidden"], [type="submit"], [type="button"], [type="reset"]),
+		input:not([type="hidden"], [type="submit"], [type="button"], [type="reset"], [type="checkbox"], [type="radio"]),
 		select,
 		textarea {
-			box-shadow: inset 0 0 0 1px var(--newspack-ui-color-input-border);
+			border-color: var(--newspack-ui-color-error);
+			box-shadow: inset 0 0 0 1px var(--newspack-ui-color-error);
+
+			&:focus,
+			&:focus-visible {
+				border-color: var(--newspack-ui-color-error);
+
+				@include mixins.focus-line( $inner: inset 0 0 0 1px var(--newspack-ui-color-error) );
+			}
 		}
 	}
 }

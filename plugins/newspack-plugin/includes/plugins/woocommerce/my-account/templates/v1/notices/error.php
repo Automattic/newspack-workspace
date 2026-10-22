@@ -1,6 +1,6 @@
 <?php
 /**
- * Show error messages as snackbar components.
+ * Show error messages as inline error notices.
  *
  * @author   Newspack
  * @category WooCommerce Subscriptions/Templates
@@ -15,13 +15,10 @@ if ( ! $notices ) {
 	return;
 }
 foreach ( $notices as $notice ) {
-	Newspack_UI::add_notice(
-		$notice['notice'],
-		[
-			'id'             => uniqid( 'newspack-myaccount-error-' ),
-			'type'           => 'error',
-			'autohide'       => ! apply_filters( 'newspack_ui_notice_is_urgent', false, $notice['notice'] ),
-			'active_on_load' => true,
-		]
-	);
+	?>
+	<div class="newspack-ui__notice newspack-ui__notice--error"<?php echo wc_get_notice_data_attr( $notice ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?> role="alert">
+		<?php Newspack_UI::print_notice_icon( 'error' ); ?>
+		<p class="newspack-ui__spacing-top--0 newspack-ui__spacing-bottom--0"><?php echo wc_kses_notice( $notice['notice'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></p>
+	</div>
+	<?php
 }

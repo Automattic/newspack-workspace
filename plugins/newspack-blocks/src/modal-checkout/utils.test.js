@@ -4,14 +4,17 @@
 
 import {
 	afterDeferredScripts,
+	afterModalExit,
 	getCheckoutData,
 	getInitialFocus,
+	getPaymentFocus,
 	hasFrameProcessingScreen,
 	isPaymentChallengeShown,
 	isSameDocumentRedirect,
 	mountFrameProcessingScreen,
 	preventDisabledCloseClicks,
 	removeFrameProcessingScreen,
+	restorePaymentFocus,
 } from './utils';
 
 afterEach( () => {
@@ -310,5 +313,175 @@ describe( 'preventDisabledCloseClicks()', () => {
 		button.click();
 
 		expect( otherCloseHandler ).toHaveBeenCalledTimes( 1 );
+	} );
+} );
+
+describe( 'payment focus across a checkout refresh', () => {
+	const renderPayment = ( { checked = 'stripe', coverFees = true } = {} ) => {
+		document.body.innerHTML = `
+			<input id="billing_email" type="email" />
+			<div id="payment" class="woocommerce-checkout-payment">
+				<ul>
+					<li><input id="payment_method_stripe" type="radio" name="payment_method" value="stripe" ${ 'stripe' === checked ? 'checked' : '' } /></li>
+					<li><input id="payment_method_ppcp" type="radio" name="payment_method" value="ppcp" ${ 'ppcp' === checked ? 'checked' : '' } /></li>
+				</ul>
+				${ coverFees ? '<input id="newspack-wc-pay-fees_stripe" type="checkbox" name="newspack-wc-pay-fees" />' : '' }
+			</div>`;
+	};
+
+	const refresh = options => {
+		document.activeElement?.blur();
+		renderPayment( options );
+	};
+
+	it( 'notes nothing when focus is outside the payment section', () => {
+		renderPayment();
+		document.getElementById( 'billing_email' ).focus();
+
+		expect( getPaymentFocus( document ) ).toBeNull();
+	} );
+
+	it( 'returns focus to the checked payment method after arrowing to it', () => {
+		renderPayment();
+		document.getElementById( 'payment_method_ppcp' ).focus();
+		const focused = getPaymentFocus( document );
+		expect( focused ).toEqual( { id: 'payment_method_ppcp', name: 'payment_method' } );
+
+		refresh( { checked: 'ppcp' } );
+		restorePaymentFocus( document, focused );
+
+		expect( document.activeElement.id ).toBe( 'payment_method_ppcp' );
+	} );
+
+	it( 'returns focus to a toggled checkbox by its id', () => {
+		renderPayment();
+		document.getElementById( 'newspack-wc-pay-fees_stripe' ).focus();
+		const focused = getPaymentFocus( document );
+		expect( focused ).toEqual( { id: 'newspack-wc-pay-fees_stripe', name: '' } );
+
+		refresh();
+		restorePaymentFocus( document, focused );
+
+		expect( document.activeElement.id ).toBe( 'newspack-wc-pay-fees_stripe' );
+	} );
+
+	it( 'falls back to the checked payment method when the control is gone', () => {
+		renderPayment();
+		document.getElementById( 'newspack-wc-pay-fees_stripe' ).focus();
+		const focused = getPaymentFocus( document );
+
+		refresh( { coverFees: false } );
+		restorePaymentFocus( document, focused );
+
+		expect( document.activeElement.id ).toBe( 'payment_method_stripe' );
+	} );
+
+	it( 'leaves focus alone when it has already moved off the body', () => {
+		renderPayment();
+		document.getElementById( 'newspack-wc-pay-fees_stripe' ).focus();
+		const focused = getPaymentFocus( document );
+
+		refresh();
+		document.getElementById( 'billing_email' ).focus();
+
+		expect( restorePaymentFocus( document, focused ) ).toBeNull();
+		expect( document.activeElement.id ).toBe( 'billing_email' );
+	} );
+} );
+
+describe( 'afterModalExit()', () => {
+	/**
+	 * A transition whose end the test decides.
+	 *
+	 * @param {number} endTime When it ends, in milliseconds.
+	 * @return {Object} The transition, and a function that ends it.
+	 */
+	const createTransition = ( endTime = 400 ) => {
+		let end;
+		const finished = new Promise( resolve => {
+			end = resolve;
+		} );
+		return { effect: { getComputedTiming: () => ( { endTime } ) }, finished, end };
+	};
+
+	const flushPromises = () => new Promise( resolve => setTimeout( resolve, 0 ) );
+
+	afterEach( () => {
+		jest.useRealTimers();
+	} );
+
+	it( 'runs straight away when nothing is transitioning', () => {
+		const modal = document.createElement( 'div' );
+		modal.getAnimations = () => [];
+		const callback = jest.fn();
+
+		afterModalExit( modal, callback );
+
+		expect( callback ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'runs straight away without animation support', () => {
+		const callback = jest.fn();
+
+		afterModalExit( document.createElement( 'div' ), callback );
+
+		expect( callback ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'waits for every transition to finish', async () => {
+		const overlay = createTransition( 250 );
+		const visibility = createTransition( 400 );
+		const modal = document.createElement( 'div' );
+		modal.getAnimations = () => [ overlay, visibility ];
+		const callback = jest.fn();
+
+		afterModalExit( modal, callback );
+		overlay.end();
+		await flushPromises();
+		expect( callback ).not.toHaveBeenCalled();
+
+		visibility.end();
+		await flushPromises();
+		expect( callback ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'does not wait for a looping animation', () => {
+		const modal = document.createElement( 'div' );
+		modal.getAnimations = () => [ createTransition( Infinity ) ];
+		const callback = jest.fn();
+
+		afterModalExit( modal, callback );
+
+		expect( callback ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'runs once the transitions should have ended, even without hearing they did', () => {
+		jest.useFakeTimers();
+		const modal = document.createElement( 'div' );
+		modal.getAnimations = () => [ createTransition( 400 ) ];
+		const callback = jest.fn();
+
+		afterModalExit( modal, callback );
+		jest.advanceTimersByTime( 400 );
+		expect( callback ).not.toHaveBeenCalled();
+
+		jest.advanceTimersByTime( 100 );
+		expect( callback ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'runs early when asked, and only once', async () => {
+		const transition = createTransition( 400 );
+		const modal = document.createElement( 'div' );
+		modal.getAnimations = () => [ transition ];
+		const callback = jest.fn();
+
+		const finish = afterModalExit( modal, callback );
+		finish();
+		expect( callback ).toHaveBeenCalledTimes( 1 );
+
+		transition.end();
+		await flushPromises();
+		finish();
+		expect( callback ).toHaveBeenCalledTimes( 1 );
 	} );
 } );

@@ -16,6 +16,13 @@ use Newspack\Newspack_UI_Icons;
  */
 class Newspack_UI {
 	/**
+	 * The WooCommerce notice template being buffered, if any.
+	 *
+	 * @var string|null
+	 */
+	private static ?string $buffered_notice_template = null;
+
+	/**
 	 * Array of notices to display.
 	 *
 	 * @var array
@@ -36,6 +43,9 @@ class Newspack_UI {
 			\add_action( 'admin_enqueue_scripts', [ __CLASS__, 'colors_css_wrap' ] );
 		}
 		add_action( 'wp_footer', [ __CLASS__, 'print_notices' ], 100 );
+		add_action( 'woocommerce_before_template_part', [ __CLASS__, 'start_woocommerce_notice' ] );
+		add_action( 'woocommerce_after_template_part', [ __CLASS__, 'add_woocommerce_notice_icons' ] );
+		add_filter( 'woocommerce_kses_notice_allowed_tags', [ __CLASS__, 'allow_woocommerce_notice_icons' ], 20 );
 
 		add_action( 'wp_ajax_newspack_ui_notice_dismissed', [ __CLASS__, 'ajax_notice_dismissed' ] );
 		add_action( 'wp_ajax_nopriv_newspack_ui_notice_dismissed', [ __CLASS__, 'ajax_notice_dismissed' ] );
@@ -65,30 +75,202 @@ class Newspack_UI {
 			wp_script_add_data( 'newspack-ui', 'strategy', 'defer' );
 		}
 
-		$icons = [];
-		foreach ( self::get_type_icons() as $type => $icon_name ) {
-			$icons[ $type ] = wp_kses( Newspack_UI_Icons::get_svg( $icon_name ), Newspack_UI_Icons::sanitize_svgs() );
+		$notice_icons = [];
+		foreach ( self::get_notice_icons() as $type => $icon_name ) {
+			$notice_icons[ $type ] = wp_kses( Newspack_UI_Icons::get_svg( $icon_name ), Newspack_UI_Icons::sanitize_svgs() );
 		}
 		wp_localize_script(
 			'newspack-ui',
 			'newspackUIData',
 			[
-				'icons' => $icons,
+				'noticeIcons' => $notice_icons,
 			]
 		);
 	}
 
 	/**
-	 * Map of notice types to their Newspack UI icon name. Types absent from the
+	 * Icons for the snackbar notice types that carry one. Types absent from the
 	 * map render no icon.
 	 *
 	 * @return array<string, string> Notice type => icon name.
 	 */
-	private static function get_type_icons() {
+	private static function get_type_icons(): array {
+		return array_intersect_key( self::get_notice_icons(), array_flip( [ 'info', 'error', 'warning' ] ) );
+	}
+
+	/**
+	 * Map of notice types to the Newspack UI icon each notice prints, for
+	 * inline notices and field errors.
+	 *
+	 * @return array<string, string> Notice type => icon name.
+	 */
+	public static function get_notice_icons(): array {
 		return [
-			'error'   => 'error',
-			'warning' => 'caution',
+			'info'    => 'info',
+			'success' => 'published',
+			'warning' => 'error',
+			'error'   => 'caution',
 		];
+	}
+
+	/**
+	 * WooCommerce notice templates mapped to their notice type, for the classic
+	 * notices newspack-ui styles.
+	 *
+	 * @return array<string, string> Template name => notice type.
+	 */
+	private static function get_woocommerce_notice_templates(): array {
+		return [
+			'notices/success.php' => 'success',
+			'notices/notice.php'  => 'info',
+			'notices/error.php'   => 'error',
+		];
+	}
+
+	/**
+	 * Whether WooCommerce's classic notices render inside newspack-ui: the v1 My Account
+	 * a signed-in reader sees, and the modal checkout.
+	 *
+	 * @return bool
+	 */
+	private static function woocommerce_notices_use_newspack_ui(): bool {
+		$is_newspack_ui_account = function_exists( 'is_account_page' ) && \did_action( 'wp' ) && \is_account_page()
+			&& \is_user_logged_in()
+			&& Reader_Activation::is_enabled()
+			&& version_compare( WooCommerce_My_Account::get_version(), '1.0.0', '>=' );
+		$uses_newspack_ui       = $is_newspack_ui_account
+			|| ( method_exists( 'Newspack_Blocks\Modal_Checkout', 'is_modal_checkout' ) && \Newspack_Blocks\Modal_Checkout::is_modal_checkout() );
+		/**
+		 * Filters whether WooCommerce's classic notices get newspack-ui notice icons.
+		 *
+		 * @param bool $uses_newspack_ui Whether the notices render inside newspack-ui.
+		 */
+		return (bool) \apply_filters( 'newspack_ui_woocommerce_notice_icons', $uses_newspack_ui );
+	}
+
+	/**
+	 * Buffer a WooCommerce notice template so its notices can get an icon.
+	 *
+	 * @param string $template_name Template name.
+	 */
+	public static function start_woocommerce_notice( string $template_name ): void {
+		if ( isset( self::get_woocommerce_notice_templates()[ $template_name ] ) && self::woocommerce_notices_use_newspack_ui() ) {
+			ob_start();
+			self::$buffered_notice_template = $template_name;
+		}
+	}
+
+	/**
+	 * Print a buffered WooCommerce notice template with the notice icon at the
+	 * start of each notice: inside each classic success or info box, inside each
+	 * item of a classic error list, and in place of the block notice banner's own icon.
+	 *
+	 * @param string $template_name Template name.
+	 */
+	public static function add_woocommerce_notice_icons( string $template_name ): void {
+		if ( $template_name !== self::$buffered_notice_template ) {
+			return;
+		}
+		self::$buffered_notice_template = null;
+		$html = (string) ob_get_clean();
+		$type = self::get_woocommerce_notice_templates()[ $template_name ];
+		ob_start();
+		self::print_notice_icon( $type );
+		$icon = (string) ob_get_clean();
+
+		if ( str_contains( $html, 'wc-block-components-notice-banner' ) ) {
+			$html = preg_replace_callback(
+				'#(<div\b[^>]*\bclass="wc-block-components-notice-banner\b[^"]*"[^>]*>\s*)<svg\b.*?</svg>(\s*<div\b[^>]*wc-block-components-notice-banner__content[^>]*>.*?</div>)#s',
+				function ( $banner ) use ( $type, $icon ) {
+					if ( 'info' !== $type || ! self::is_urgent_notice( $banner[2] ) ) {
+						return $banner[1] . $icon . $banner[2];
+					}
+					ob_start();
+					self::print_notice_icon( 'warning' );
+					$warning_icon = (string) ob_get_clean();
+					return str_replace( 'is-info', 'is-warning', $banner[1] ) . $warning_icon . $banner[2];
+				},
+				$html
+			);
+		} elseif ( 'error' === $type ) {
+			$list_depth  = 0;
+			$error_depth = null;
+			$html        = preg_replace_callback(
+				'#<(/?)(?:ul|ol)\b[^>]*>|<li\b[^>]*>#i',
+				function ( $tag ) use ( &$list_depth, &$error_depth, $icon ) {
+					if ( str_starts_with( strtolower( $tag[0] ), '<li' ) ) {
+						return $error_depth === $list_depth ? $tag[0] . $icon : $tag[0];
+					}
+					if ( '/' === $tag[1] ) {
+						if ( $error_depth === $list_depth ) {
+							$error_depth = null;
+						}
+						--$list_depth;
+					} else {
+						++$list_depth;
+						if ( null === $error_depth && preg_match( '#\bclass="woocommerce-error"#', $tag[0] ) ) {
+							$error_depth = $list_depth;
+						}
+					}
+					return $tag[0];
+				},
+				$html
+			);
+		} else {
+			$html = preg_replace_callback(
+				'#<div\b[^>]*\bclass="woocommerce-(message|info)"[^>]*>(.*?)</div>#s',
+				function ( $box ) use ( $type, $icon ) {
+					if ( 'info' !== $type || ! self::is_urgent_notice( $box[2] ) ) {
+						return substr( $box[0], 0, strpos( $box[0], '>' ) + 1 ) . $icon . $box[2] . '</div>';
+					}
+					ob_start();
+					self::print_notice_icon( 'warning' );
+					$warning_icon = (string) ob_get_clean();
+					$open         = str_replace( 'class="woocommerce-info"', 'class="woocommerce-info newspack-ui__notice--warning"', substr( $box[0], 0, strpos( $box[0], '>' ) + 1 ) );
+					return $open . $warning_icon . $box[2] . '</div>';
+				},
+				$html
+			);
+		}
+		echo $html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+	}
+
+	/**
+	 * Whether a printed WooCommerce notice is urgent, so it needs the warning type.
+	 *
+	 * @param string $notice_html The printed notice markup.
+	 * @return bool
+	 */
+	private static function is_urgent_notice( string $notice_html ): bool {
+		return (bool) \apply_filters( 'newspack_ui_notice_is_urgent', false, trim( \wp_strip_all_tags( $notice_html ) ) );
+	}
+
+	/**
+	 * Let the notice icons through WooCommerce's notice sanitizing, which runs
+	 * after the icons are added and would otherwise strip their attributes. Runs
+	 * after WooCommerce Blocks, which replaces the `svg` and `path` rules.
+	 *
+	 * @param array[]|string $allowed_tags Allowed HTML elements and attributes, or a context name.
+	 *
+	 * @return array[]|string
+	 */
+	public static function allow_woocommerce_notice_icons( array|string $allowed_tags ): array|string {
+		if ( ! is_array( $allowed_tags ) || ! self::woocommerce_notices_use_newspack_ui() ) {
+			return $allowed_tags;
+		}
+		return array_replace_recursive( $allowed_tags, Newspack_UI_Icons::sanitize_svgs() );
+	}
+
+	/**
+	 * Print the icon for a notice type.
+	 *
+	 * @param string $type Notice type: info, success, warning or error.
+	 */
+	public static function print_notice_icon( string $type ): void {
+		$icons = self::get_notice_icons();
+		if ( isset( $icons[ $type ] ) ) {
+			Newspack_UI_Icons::print_svg( $icons[ $type ] );
+		}
 	}
 
 	/**
@@ -495,52 +677,56 @@ class Newspack_UI {
 			<h2 id="notices">Notices</h2>
 
 			<div class="newspack-ui__notice" role="status">
+				<?php self::print_notice_icon( 'info' ); ?>
 				<div>
 					<p>Default notice style</p>
 				</div>
 			</div>
 
 			<div class="newspack-ui__notice newspack-ui__notice--success" role="status">
+				<?php self::print_notice_icon( 'success' ); ?>
 				<div>
 					<p>"Success" notice style</p>
 				</div>
 			</div>
 
 			<div class="newspack-ui__notice newspack-ui__notice--warning" role="status">
+				<?php self::print_notice_icon( 'warning' ); ?>
 				<div>
 					<p>"Warning" notice style</p>
 				</div>
 			</div>
 
 			<div class="newspack-ui__notice newspack-ui__notice--error" role="alert">
+				<?php self::print_notice_icon( 'error' ); ?>
 				<div>
 					<p>"Error" notice style</p>
 				</div>
 			</div>
 
 			<div class="newspack-ui__notice" role="status">
-				<?php Newspack_UI_Icons::print_svg( 'info' ); ?>
+				<?php self::print_notice_icon( 'info' ); ?>
 				<div>
 					<p>Default notice with icon style</p>
 				</div>
 			</div>
 
 			<div class="newspack-ui__notice newspack-ui__notice--success" role="status">
-				<?php Newspack_UI_Icons::print_svg( 'check' ); ?>
+				<?php self::print_notice_icon( 'success' ); ?>
 				<div>
 					<p>"Success" notice with icon style</p>
 				</div>
 			</div>
 
 			<div class="newspack-ui__notice newspack-ui__notice--warning" role="status">
-				<?php Newspack_UI_Icons::print_svg( 'info' ); ?>
+				<?php self::print_notice_icon( 'warning' ); ?>
 				<div>
 					<p>"Warning" notice with icon style</p>
 				</div>
 			</div>
 
 			<div class="newspack-ui__notice newspack-ui__notice--error" role="alert">
-				<?php Newspack_UI_Icons::print_svg( 'error' ); ?>
+				<?php self::print_notice_icon( 'error' ); ?>
 				<div>
 					<p>"Error" notice with icon style</p>
 				</div>
@@ -553,7 +739,7 @@ class Newspack_UI {
 			<div class="newspack-ui__snackbar"></div>
 			<template id="snackbar-persistent-template">
 				<div class="newspack-ui__snackbar__item" data-type="error" data-autohide="false">
-					<span class="newspack-ui__snackbar__icon"><?php Newspack_UI_Icons::print_svg( 'error' ); ?></span>
+					<span class="newspack-ui__snackbar__icon"><?php self::print_notice_icon( 'error' ); ?></span>
 					<div class="newspack-ui__snackbar__content">This snackbar stays until dismissed. Please <a href="#">take action</a>.</div>
 					<button class="newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost-dark newspack-ui__snackbar__close" aria-label="<?php esc_attr_e( 'Close', 'newspack-plugin' ); ?>" title="<?php esc_attr_e( 'Close', 'newspack-plugin' ); ?>">
 						<?php Newspack_UI_Icons::print_svg( 'closeSmall' ); ?>
@@ -616,7 +802,7 @@ class Newspack_UI {
 					<label for="text-input-demo" class="newspack-ui__field-error">Text input <span class="newspack-ui__label-optional">(additional text)</span></label>
 					<input type="text" placeholder="Regular text" class="newspack-ui__field-error">
 					<span class="newspack-ui__helper-text">Some helper text.</span>
-					<span class="newspack-ui__helper-text newspack-ui__inline-error">An error message.</span>
+					<span class="newspack-ui__helper-text newspack-ui__inline-error"><?php self::print_notice_icon( 'error' ); ?>An error message.</span>
 				</p>
 
 				<p>
@@ -639,7 +825,7 @@ class Newspack_UI {
 						<input type="radio" name="radio-control-demo">
 						This is a radio input.
 						<span class="newspack-ui__helper-text">Some helper text.</span>
-						<span class="newspack-ui__helper-text newspack-ui__inline-error">An error message.</span>
+						<span class="newspack-ui__helper-text newspack-ui__inline-error"><?php self::print_notice_icon( 'error' ); ?>An error message.</span>
 					</label>
 				</p>
 
@@ -971,11 +1157,11 @@ class Newspack_UI {
 				<div class="newspack-ui__tabs__list" role="tablist">
 					<button type="button" role="tab" class="newspack-ui__button newspack-ui__button--ghost selected">
 						<?php esc_html_e( 'Members', 'newspack-plugin' ); ?>
-						<span class="newspack-ui__badge newspack-ui__badge--outline">12</span>
+						<span class="newspack-ui__badge newspack-ui__badge--secondary">12</span>
 					</button>
 					<button type="button" role="tab" class="newspack-ui__button newspack-ui__button--ghost">
 						<?php esc_html_e( 'Invitations', 'newspack-plugin' ); ?>
-						<span class="newspack-ui__badge newspack-ui__badge--outline">3</span>
+						<span class="newspack-ui__badge newspack-ui__badge--secondary">3</span>
 					</button>
 				</div>
 			</div>

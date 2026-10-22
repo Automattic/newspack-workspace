@@ -895,6 +895,70 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * Hooks that carry the wallet button params.
+	 *
+	 * @return array<string,array{0:string}>
+	 */
+	public function express_checkout_hook_provider() {
+		return [
+			'Stripe'      => [ 'wc_stripe_express_checkout_params' ],
+			'WooPayments'      => [ 'wcpay_express_checkout_js_params' ],
+		];
+	}
+
+	/**
+	 * Wallet buttons take the Newspack UI button radius on modal checkout requests.
+	 *
+	 * @dataProvider express_checkout_hook_provider
+	 *
+	 * @param string $hook Filter name.
+	 */
+	public function test_express_checkout_button_radius_on_modal_checkout( $hook ) {
+		$_REQUEST['modal_checkout'] = '1';
+		$params                     = apply_filters( $hook, [ 'button' => [ 'radius' => '4', 'height' => '48' ] ] );
+
+		$this->assertSame( 8, $params['button']['radius'] );
+		$this->assertSame( '48', $params['button']['height'] );
+	}
+
+	/**
+	 * A missing or non-array button param still receives the radius.
+	 *
+	 * @dataProvider express_checkout_hook_provider
+	 *
+	 * @param string $hook Filter name.
+	 */
+	public function test_express_checkout_button_radius_handles_odd_shapes( $hook ) {
+		$_REQUEST['modal_checkout'] = '1';
+		$missing                    = apply_filters( $hook, [ 'foo' => 'bar' ] );
+		$odd                        = apply_filters( $hook, [ 'button' => 'x' ] );
+
+		$this->assertSame( 8, $missing['button']['radius'] );
+		$this->assertSame( 'bar', $missing['foo'] );
+		$this->assertSame( 8, $odd['button']['radius'] );
+	}
+
+	/**
+	 * Non-array params are returned untouched. Called directly: the hooks always pass arrays.
+	 */
+	public function test_express_checkout_button_radius_returns_non_array_untouched() {
+		$_REQUEST['modal_checkout'] = '1';
+		$this->assertNull( \Newspack_Blocks\Modal_Checkout::set_express_checkout_button_radius( null ) );
+	}
+
+	/**
+	 * Regular checkout pages keep the gateway's radius.
+	 *
+	 * @dataProvider express_checkout_hook_provider
+	 *
+	 * @param string $hook Filter name.
+	 */
+	public function test_express_checkout_button_radius_noop_outside_modal_checkout( $hook ) {
+		$params = [ 'button' => [ 'radius' => '4' ] ];
+		$this->assertSame( $params, apply_filters( $hook, $params ) );
+	}
+
+	/**
 	 * Standard (non-modal) Woo checkouts keep the stock field set, by design:
 	 * publisher flows that predate Audience Management must not change.
 	 */

@@ -104,9 +104,11 @@ $types         = \wc_get_account_payment_methods_types();
 										<?php
 									endif;
 									ksort( $method['actions'] );
+									$destructive_actions = array_intersect_key( $method['actions'], array_flip( [ 'delete', 'wcs_deletion_error' ] ) );
+									$method['actions']   = array_diff_key( $method['actions'], $destructive_actions ) + $destructive_actions;
 									?>
 									<div class="newspack-ui__dropdown">
-										<button class="newspack-ui__dropdown__toggle newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__button--small">
+										<button class="newspack-ui__dropdown__toggle newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__button--small" aria-expanded="false">
 											<?php Newspack_UI_Icons::print_svg( 'more' ); ?>
 											<span class="screen-reader-text"><?php \esc_html_e( 'More', 'newspack-plugin' ); ?></span>
 										</button>
@@ -224,7 +226,7 @@ $types         = \wc_get_account_payment_methods_types();
 							<span class="newspack-ui__badge newspack-ui__badge--secondary"><?php echo \esc_html( $address_data['label'] ); ?></span>
 						</div>
 						<div class="newspack-ui__dropdown">
-							<button class="newspack-ui__dropdown__toggle newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__button--small">
+							<button class="newspack-ui__dropdown__toggle newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__button--small" aria-expanded="false">
 								<?php Newspack_UI_Icons::print_svg( 'more' ); ?>
 								<span class="screen-reader-text"><?php \esc_html_e( 'More', 'newspack-plugin' ); ?></span>
 							</button>

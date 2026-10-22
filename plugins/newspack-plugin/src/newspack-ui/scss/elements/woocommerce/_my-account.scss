@@ -172,14 +172,6 @@
 		margin-bottom: var(--newspack-ui-spacer-2);
 		padding: 0;
 	}
-	.select2-container .select2-selection--single {
-		border-color: var(--newspack-ui-color-input-border);
-		height: auto;
-		padding: calc(var(--newspack-ui-spacer-2) - 3px);
-		.select2-selection__arrow {
-			height: 100%;
-		}
-	}
 	.woocommerce form .form-row label,
 	.woocommerce-page form .form-row label {
 		display: inline-flex;

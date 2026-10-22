@@ -1,3 +1,5 @@
+@use "../../utilities/focus";
+
 .wp-block-newspack-newsletters-subscribe {
 	// Modern is the default look: a block gets it unless it picks Legacy. That
 	// covers a block with no style class and one that carries `is-style-default`,
@@ -79,8 +81,11 @@
 					}
 
 					&:focus-visible {
-						outline: 2px solid var(--newspack-ui-color-input-border-focus, #1e1e1e);
-						outline-offset: 2px;
+						@include focus.focus-edge;
+
+						&:checked {
+							@include focus.focus-line( $inner: inset 0 0 0 1px var(--newspack-ui-color-surface, #fff) );
+						}
 					}
 
 					&:checked {
@@ -151,19 +156,18 @@
 			font-weight: inherit;
 			line-height: inherit;
 			padding: calc(var(--newspack-ui-spacer-2, 12px) - 1px);
-			transition: border 125ms ease-in-out, outline 125ms ease-in-out;
+			transition: border-color 125ms ease-in-out, box-shadow 125ms ease-in-out;
 
 			&::placeholder {
 				color: var(--newspack-ui-color-neutral-60, #6c6c6c);
 			}
 
-			&:hover:not(:disabled) {
+			&:hover:not(:disabled, :focus) {
 				border-color: var(--newspack-ui-color-input-border-hover, #5d5d5d);
 			}
 
 			&:focus {
-				outline: 2px solid var(--newspack-ui-color-input-border-focus, #1e1e1e);
-				outline-offset: -1px;
+				@include focus.focus-edge( var(--newspack-ui-color-input-border-focus, #1e1e1e) );
 			}
 
 			&:disabled {
@@ -193,8 +197,11 @@
 			}
 
 			&:focus {
-				outline: 2px solid var(--newspack-ui-color-neutral-90, #1e1e1e);
-				outline-offset: 1px;
+				outline: none;
+			}
+
+			&:focus-visible {
+				@include focus.focus-line( var(--newspack-newsletters-subscribe-button-bg, #d33), inset 0 0 0 1px currentcolor );
 			}
 		}
 
@@ -275,6 +282,12 @@
 			--newspack-ui-color-input-border-hover: var(--newspack-ui-color-error, #b32d2e);
 
 			box-shadow: inset 0 0 0 1px var(--newspack-ui-color-input-border);
+
+			&:focus {
+				border-color: var(--newspack-ui-color-error, #b32d2e);
+
+				@include focus.focus-line( $inner: inset 0 0 0 1px var(--newspack-ui-color-error, #b32d2e) );
+			}
 		}
 	}
 
