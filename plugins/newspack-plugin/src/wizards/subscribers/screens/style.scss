@@ -56,6 +56,9 @@
 
 // Whole-row click affordance for the subscriber list.
 .newspack-subscribers__clickable-rows {
+	// Anchors the loading overlay.
+	position: relative;
+
 	.dataviews-view-table tbody tr.dataviews-view-table__row {
 		cursor: pointer;
 
@@ -63,6 +66,18 @@
 			background: rgba( wp-colors.$gray-100, 0.5 );
 		}
 	}
+}
+
+// Covers the subscriber list while a refetch is in flight with rows showing.
+// Stacks above DataViews' sticky header (z-index 1) and footer (z-index 2).
+.newspack-subscribers__loading-overlay {
+	align-items: center;
+	background: rgba( wp-colors.$white, 0.6 );
+	display: flex;
+	inset: 0;
+	justify-content: center;
+	position: absolute;
+	z-index: 3;
 }
 
 .newspack-subscribers__avatar {

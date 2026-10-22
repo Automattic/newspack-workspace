@@ -457,9 +457,14 @@ export default function SubscriberList() {
 		);
 	}
 
+	// A refetch with rows showing covers them with a spinner: DataViews' own one
+	// renders below the table, out of sight on a long page. With no rows to cover,
+	// DataViews' spinner stands in for the empty state, so it keeps that case.
+	const isRefreshing = subscribersLoading && items.length > 0;
+
 	return (
 		// eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
-		<div className="newspack-subscribers__clickable-rows" onClick={ onRowClick }>
+		<div className="newspack-subscribers__clickable-rows" onClick={ onRowClick } aria-busy={ isRefreshing || undefined }>
 			{ /* The two reads fail independently, so a failed /plans is otherwise
 			     silent: DataViews drops a filter whose `elements` is empty, so the
 			     Subscription filter is simply absent and reads as a site that sells
@@ -479,13 +484,18 @@ export default function SubscriberList() {
 				fields={ fields }
 				view={ view }
 				onChangeView={ setView }
-				isLoading={ subscribersLoading }
+				isLoading={ subscribersLoading && ! isRefreshing }
 				paginationInfo={ { totalItems: total, totalPages: pages } }
 				defaultLayouts={ { table: {} } }
 				getItemId={ item => item.id }
 				onClickItem={ openSubscriber }
 				search
 			/>
+			{ isRefreshing && (
+				<div className="newspack-subscribers__loading-overlay">
+					<Waiting />
+				</div>
+			) }
 		</div>
 	);
 }

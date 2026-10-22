@@ -244,6 +244,65 @@ describe( 'the SubscriberList retry affordance', () => {
 } );
 
 /**
+ * A refetch with rows already showing veils the list with a spinner overlay.
+ * DataViews' own spinner sits below the table there, where it's easy to miss, so
+ * it's kept only for a refetch with no rows to cover.
+ */
+describe( 'the subscriber list loading overlay', () => {
+	beforeEach( () => {
+		headerCalls = [];
+		mockDataViewsProps = null;
+		apiFetch.mockReset();
+	} );
+
+	const overlayIn = container => container.querySelector( '.newspack-subscribers__loading-overlay' );
+	const listIn = container => container.querySelector( '.newspack-subscribers__clickable-rows' );
+
+	/** Mount once `rows` subscribers have landed. */
+	const mountWith = async rows => {
+		apiFetch.mockResolvedValue( page( rows ) );
+		let container;
+		await act( async () => {
+			( { container } = render( <SubscriberList /> ) );
+		} );
+		return container;
+	};
+
+	/** Mount, then start a refetch that never lands. */
+	const mountThenRefetch = async rows => {
+		const container = await mountWith( rows );
+		apiFetch.mockReturnValue( new Promise( () => {} ) );
+		await act( async () => {
+			mockDataViewsProps.onChangeView( { ...mockDataViewsProps.view, page: 2 } );
+		} );
+		return container;
+	};
+
+	it( 'covers the rows while a refetch is in flight', async () => {
+		const container = await mountThenRefetch( 2 );
+
+		expect( overlayIn( container ) ).not.toBeNull();
+		expect( listIn( container ) ).toHaveAttribute( 'aria-busy', 'true' );
+		expect( mockDataViewsProps.isLoading ).toBe( false );
+	} );
+
+	it( "leaves a refetch with no rows to DataViews' own spinner", async () => {
+		const container = await mountThenRefetch( 0 );
+
+		expect( overlayIn( container ) ).toBeNull();
+		expect( mockDataViewsProps.isLoading ).toBe( true );
+	} );
+
+	it( 'shows no overlay once the rows land', async () => {
+		const container = await mountWith( 2 );
+
+		expect( overlayIn( container ) ).toBeNull();
+		expect( listIn( container ) ).not.toHaveAttribute( 'aria-busy' );
+		expect( mockDataViewsProps.isLoading ).toBe( false );
+	} );
+} );
+
+/**
  * The Newsletters column shows what the site records a reader as subscribed to.
  * The endpoint sends `{ id, title }` per list and reports an unresolved one — a
  * list the site holds no definition for, routinely an ESP's own ID — as a null
