@@ -175,73 +175,45 @@ class WidgetTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The page layout carries its destination in a data attribute that widget.js reads on
-	 * click.
+	 * A quote in the request path stays inside the Page button's data attribute.
 	 */
-	public function test_page_layout_button_uses_data_attribute() {
-		global $post, $wp_query;
-		$post                        = $this->test_post;
-		$wp_query->is_single         = true;
-		$wp_query->queried_object    = $this->test_post;
-		$wp_query->queried_object_id = $this->test_post->ID;
+	public function test_page_layout_quoted_request_path_stays_in_data_attribute() {
+		$_SERVER['REQUEST_URI'] = '/2026/09/sample-story/?ref=o\'brien';
 
-		$args = array(
-			'before_widget' => '<div class="widget">',
-			'after_widget'  => '</div>',
-			'before_title'  => '<h2>',
-			'after_title'   => '</h2>',
-		);
-
-		ob_start();
-		$this->widget->widget(
-			$args,
-			array(
-				'layout' => 'page',
-				'title'  => 'Republish This Story',
-				'text'   => 'Test widget text',
-			)
-		);
-		$output = ob_get_clean();
+		$output = $this->render_page_layout_widget();
 
 		$this->assertStringContainsString( 'republication-tracker-tool-button page', $output );
-		$this->assertStringContainsString( 'data-republish-url=', $output );
+		$this->assertMatchesRegularExpression( '/data-republish-url="[^"]*o&#039;brien[^"]*"/', $output );
 		$this->assertStringNotContainsString( 'onclick', $output );
+		$this->assertStringNotContainsString( 'window.location.href', $output );
 	}
 
 	/**
-	 * The request path is escaped into the button's data attribute.
+	 * Render the widget's Page layout on a single post and return its markup.
+	 *
+	 * @return string
 	 */
-	public function test_page_layout_button_encodes_request_path_in_attribute() {
+	private function render_page_layout_widget() {
 		global $post, $wp_query;
 		$post                        = $this->test_post;
 		$wp_query->is_single         = true;
 		$wp_query->queried_object    = $this->test_post;
 		$wp_query->queried_object_id = $this->test_post->ID;
 
-		$args = array(
-			'before_widget' => '<div class="widget">',
-			'after_widget'  => '</div>',
-			'before_title'  => '<h2>',
-			'after_title'   => '</h2>',
-		);
-
-		$_SERVER['REQUEST_URI'] = '/2026/09/sample-story/?ref=o\'brien';
-
 		ob_start();
 		$this->widget->widget(
-			$args,
+			array(
+				'before_widget' => '<div class="widget">',
+				'after_widget'  => '</div>',
+				'before_title'  => '<h2>',
+				'after_title'   => '</h2>',
+			),
 			array(
 				'layout' => 'page',
 				'title'  => 'Republish This Story',
 				'text'   => 'Test widget text',
 			)
 		);
-		$output = ob_get_clean();
-
-
-		// The path comes back encoded in the data attribute...
-		$this->assertMatchesRegularExpression( '/data-republish-url="[^"]*o&#039;brien[^"]*"/', $output );
-		// ...and the markup does not set window.location.href itself.
-		$this->assertStringNotContainsString( 'window.location.href', $output );
+		return ob_get_clean();
 	}
 }
