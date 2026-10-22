@@ -60,7 +60,9 @@ class Subscriber_Only_Products {
 	 * A restriction naming no subscription names no way in, which would make
 	 * its products unbuyable by everyone. That is far more likely to be a
 	 * half-finished rule than an intent to withdraw the products from sale, so
-	 * it is skipped — the same fail-open reading the content gate takes.
+	 * it is skipped — the same fail-open reading the content gate takes. A rule
+	 * set to "all subscriptions" names its audience through the mode, so an
+	 * empty list there is the rule working as written.
 	 *
 	 * @return array[] The active, enforceable restrictions.
 	 */
@@ -69,7 +71,7 @@ class Subscriber_Only_Products {
 			array_filter(
 				self::get_rules(),
 				function ( $rule ) {
-					return ! empty( $rule['active'] ) && ! empty( $rule['subscription_product_ids'] );
+					return ! empty( $rule['active'] ) && Subscriber_Commerce::has_audience( $rule );
 				}
 			)
 		);

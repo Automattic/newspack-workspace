@@ -1294,7 +1294,7 @@ class Premium_Newsletters_Verify {
 			return 'WooCommerce Memberships is still active, so every restricted list reads as unrestricted and this comparison would be meaningless. Run this after deactivating it.';
 		}
 		if ( ! $gating_active ) {
-			return 'Content gating is inactive, so no gate enforces anything and there is no expected state to compare against. Enable Audience Management and Reader Activation first.';
+			return 'Content gating is inactive, so no gate enforces anything and there is no expected state to compare against. Enable the content gates feature (NEWSPACK_CONTENT_GATES) and Audience Management first.';
 		}
 		if ( ! $subscriptions_available ) {
 			return 'WooCommerce Subscriptions is not active, so the command cannot enumerate who holds a gate\'s products and would silently check nobody. Activate it and run this again.';
@@ -1482,10 +1482,10 @@ class Premium_Newsletters_Verify {
 	 * this command already applies to any lookup it cannot trust.
 	 *
 	 * The same provider knowledge is kept as an exact-match allowlist in
-	 * Newspack\Reader_Activation\Integrations\ESP::pull_contact_data()
-	 * (includes/reader-activation/integrations/class-esp.php), which normalizes a miss
-	 * to the framework's canonical code for its batch drivers. Adding a fourth
-	 * provider means adding it there too.
+	 * Newspack\Reader_Activation\Integrations\ESP::is_provider_not_found_error()
+	 * (includes/reader-activation/integrations/class-esp.php), which the ESP's pull,
+	 * existence check and hard delete use to tell a miss from a failure. Adding a
+	 * fourth provider means adding it there too.
 	 *
 	 * @param \WP_Error $error The error get_contact_data() returned.
 	 *
@@ -1700,12 +1700,13 @@ class Premium_Newsletters_Verify {
 						continue;
 					}
 
-					// is_post_restricted() answers for the list post, consulting every
-					// gate that matches it rather than only the gate being walked. Two
-					// gates naming the same list would otherwise check the same reader
-					// twice, spend the ESP calls twice, and count the same leak twice —
-					// so the printed leak count could exceed the readers actually
-					// leaking, and disagree with the deduped coverage count beside it.
+					// is_post_restricted() answers for the list post, where the first
+					// gate matching it decides, whether or not that is the gate being
+					// walked. Two gates naming the same list would otherwise check the
+					// same reader twice, spend the ESP calls twice, and count the same
+					// leak twice — so the printed leak count could exceed the readers
+					// actually leaking, and disagree with the deduped coverage count
+					// beside it.
 					// Nested integer keys rather than one interned "user_list" string per
 					// pair: this map is deliberately run-wide and nothing releases it, and
 					// on the large sites this command is for it would otherwise be the

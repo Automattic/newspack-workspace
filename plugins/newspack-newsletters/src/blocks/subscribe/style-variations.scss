@@ -1,6 +1,8 @@
 .wp-block-newspack-newsletters-subscribe {
-	&.is-style-modern,
-	&.is-style-modern--grid {
+	// Modern is the default look: a block gets it unless it picks Legacy. That
+	// covers a block with no style class and one that carries `is-style-default`,
+	// which the style picker wrote before Legacy existed.
+	&:not(.is-style-legacy) {
 		font-family: var(--newspack-ui-font-family, system-ui, sans-serif);
 		font-size: var(--newspack-ui-font-size-s, 16px);
 		font-weight: 400;
@@ -20,6 +22,14 @@
 
 			label {
 				cursor: pointer;
+			}
+
+			.is-gated label {
+				cursor: default;
+			}
+
+			label,
+			.list-label {
 				font-size: var(--newspack-ui-font-size-s, 16px);
 				font-weight: 400;
 				line-height: var(--newspack-ui-line-height-s, 1.5);
@@ -30,33 +40,20 @@
 				display: grid;
 				gap: var(--newspack-ui-spacer-2, 12px);
 
-				&:not(:has(.list-description)) {
+				// Each list is its own card, with or without a description. Only the
+				// Legacy style puts the lists in one box.
+				li {
 					background: var(--newspack-ui-color-neutral-0, #fff);
 					border: 1px solid var(--newspack-ui-color-border, #ddd);
 					border-radius: var(--newspack-ui-border-radius-m, 6px);
-					gap: var(--newspack-ui-spacer-3, 16px);
-					padding: var(--newspack-ui-spacer-3, 16px);
-
-					.list-title {
-						font-weight: 400;
-					}
-				}
-
-				li {
 					margin: 0;
 					min-width: 100%;
+					padding: var(--newspack-ui-spacer-3, 16px);
+					transition: background 125ms ease-in-out, border 125ms ease-in-out;
 
-					&:has(.list-description) {
-						background: var(--newspack-ui-color-neutral-0, #fff);
-						border: 1px solid var(--newspack-ui-color-border, #ddd);
-						border-radius: var(--newspack-ui-border-radius-m, 6px);
-						padding: var(--newspack-ui-spacer-3, 16px);
-						transition: background 125ms ease-in-out, border 125ms ease-in-out;
-
-						&:has(input[type="checkbox"]:checked) {
-							background: var(--newspack-ui-color-neutral-5, #f7f7f7);
-							border-color: var(--newspack-ui-color-neutral-90, #1e1e1e);
-						}
+					&:has(input[type="checkbox"]:checked) {
+						background: var(--newspack-ui-color-neutral-5, #f7f7f7);
+						border-color: var(--newspack-ui-color-neutral-90, #1e1e1e);
 					}
 				}
 			}
@@ -66,18 +63,41 @@
 				margin-right: var(--newspack-ui-spacer-3, 16px);
 
 				input[type="checkbox"] {
+					border-color: var(--newspack-ui-color-input-border, #949494);
+					border-radius: var(--newspack-ui-border-radius-2xs, 2px);
+					height: var(--newspack-ui-control-size, 20px) !important;
+					margin: 0;
+					transition: background-color 125ms ease-in-out, border-color 125ms ease-in-out;
+					width: var(--newspack-ui-control-size, 20px) !important;
+
+					&:hover:not(:checked, :disabled) {
+						border-color: var(--newspack-ui-color-input-border-hover, #5d5d5d);
+					}
+
 					&:focus {
 						outline: none;
 					}
 
 					&:focus-visible {
-						outline: 2px solid var(--newspack-ui-color-neutral-90, #1e1e1e);
-						outline-offset: 1px;
+						outline: 2px solid var(--newspack-ui-color-input-border-focus, #1e1e1e);
+						outline-offset: 2px;
 					}
 
 					&:checked {
 						background: var(--newspack-ui-color-neutral-90, #1e1e1e);
+						border-color: transparent;
 						color: var(--newspack-ui-color-neutral-0, #fff);
+					}
+
+					&:disabled {
+						background: var(--newspack-ui-color-input-bg-disabled, #f0f0f0);
+						border-color: var(--newspack-ui-color-input-border-disabled, #ddd);
+						opacity: 1;
+					}
+
+					&:checked:disabled {
+						background: var(--newspack-ui-color-neutral-60, #6c6c6c);
+						border-color: var(--newspack-ui-color-neutral-60, #6c6c6c);
 					}
 				}
 			}
@@ -123,7 +143,7 @@
 		input[type="email"],
 		input[type="text"] {
 			background: var(--newspack-ui-color-neutral-0, #fff);
-			border: 1px solid var(--newspack-ui-color-input-border, #ccc);
+			border: 1px solid var(--newspack-ui-color-input-border, #949494);
 			border-radius: var(--newspack-ui-border-radius-m, 6px);
 			color: var(--newspack-ui-color-neutral-90, #1e1e1e);
 			font-family: inherit;
@@ -137,10 +157,22 @@
 				color: var(--newspack-ui-color-neutral-60, #6c6c6c);
 			}
 
+			&:hover:not(:disabled) {
+				border-color: var(--newspack-ui-color-input-border-hover, #5d5d5d);
+			}
+
 			&:focus {
-				border-color: var(--newspack-ui-color-input-border-focus, #1e1e1e);
-				outline: 1px solid var(--newspack-ui-color-input-border-focus, #1e1e1e);
-				outline-offset: 0;
+				outline: 2px solid var(--newspack-ui-color-input-border-focus, #1e1e1e);
+				outline-offset: -1px;
+			}
+
+			&:disabled {
+				-webkit-text-fill-color: currentcolor;
+				background: var(--newspack-ui-color-input-bg-disabled, #f0f0f0);
+				border-color: var(--newspack-ui-color-input-border-disabled, #ddd);
+				color: var(--newspack-ui-color-neutral-60, #6c6c6c);
+				cursor: not-allowed;
+				opacity: 1;
 			}
 		}
 
@@ -204,37 +236,45 @@
 		}
 
 		form:has(input[value*="invalid_email"]),
-		&[data-status="400"] {
+		&[data-status="400"],
+		&[data-status="500"] {
 			+ .newspack-newsletters-subscribe__response,
 			.newspack-newsletters-subscribe__response {
 				background: none;
 				border-radius: 0;
 				display: block;
+				justify-items: start;
 				margin-top: var(--newspack-ui-spacer-base, 8px);
 
 				p {
-					color: var(--newspack-ui-color-error-50, #d63638);
+					color: var(--newspack-ui-color-error-text, #b32d2e);
 					font-size: var(--newspack-ui-font-size-xs, 14px);
 					font-weight: 400;
 					line-height: var(--newspack-ui-line-height-xs, 1.4286);
-					text-align: initial;
-				}
-			}
+					padding-inline-start: calc(var(--newspack-ui-spacer-4, 20px) + var(--newspack-ui-spacer-1, 8px) / 2);
+					position: relative;
+					text-align: start;
 
-			.newspack-newsletters-email-input {
-				label {
-					color: var(--newspack-ui-color-error-50, #d63638);
-				}
-
-				input[type="email"] {
-					border-color: var(--newspack-ui-color-error-50, #d63638);
-
-					&:focus {
-						border-color: var(--newspack-ui-color-error-50, #d63638);
-						outline-color: var(--newspack-ui-color-error-50, #d63638);
+					&::before {
+						background: currentcolor;
+						content: "";
+						height: var(--newspack-ui-spacer-4, 20px);
+						inset-inline-start: 0;
+						mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill-rule='evenodd' d='M12.218 5.377a.25.25 0 0 0-.436 0l-7.29 12.96a.25.25 0 0 0 .218.373h14.58a.25.25 0 0 0 .218-.372l-7.29-12.96Zm-1.743-.735c.669-1.19 2.381-1.19 3.05 0l7.29 12.96a1.75 1.75 0 0 1-1.525 2.608H4.71a1.75 1.75 0 0 1-1.525-2.608l7.29-12.96ZM12.75 17.46h-1.5v-1.5h1.5v1.5Zm-1.5-3h1.5v-5h-1.5v5Z'/%3E%3C/svg%3E") center / contain no-repeat;
+						position: absolute;
+						top: 0;
+						width: var(--newspack-ui-spacer-4, 20px);
 					}
 				}
 			}
+		}
+
+		form:has(input[value*="invalid_email"]) .newspack-newsletters-email-input input[type="email"],
+		.newspack-newsletters-email-input input[type="email"][aria-invalid="true"] {
+			--newspack-ui-color-input-border: var(--newspack-ui-color-error-60, #b32d2e);
+			--newspack-ui-color-input-border-hover: var(--newspack-ui-color-error-60, #b32d2e);
+
+			box-shadow: inset 0 0 0 1px var(--newspack-ui-color-input-border);
 		}
 	}
 
@@ -246,8 +286,6 @@
 		}
 
 		.newspack-newsletters-lists {
-			order: 2;
-
 			ul,
 			&__container {
 				display: grid;
@@ -276,7 +314,6 @@
 			}
 
 			ul li,
-			ul li:has(.list-description),
 			&__list {
 				background: var(--newspack-ui-color-neutral-0, #fff);
 				border: 1px solid var(--newspack-ui-color-border, #ddd);
@@ -317,6 +354,22 @@
 				input[type="checkbox"] {
 					margin: 0;
 				}
+			}
+
+			.list-checkbox {
+				.newspack-ui__badge {
+					display: inline-grid;
+					margin-inline-end: auto;
+				}
+			}
+
+			.list-title .newspack-ui__badge {
+				clip-path: inset(50%);
+				height: 1px;
+				overflow: hidden;
+				position: absolute;
+				white-space: nowrap;
+				width: 1px;
 			}
 		}
 	}

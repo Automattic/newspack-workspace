@@ -75,9 +75,11 @@ class Block_Visibility {
 		// REST requests are deliberately NOT exempt: a context check is not a permission
 		// check, and access has to be evaluated per requester. Authoring contexts that
 		// arrive over REST (block renderer, preview, query-loop rendering inside the
-		// editor) are covered by the `edit_post` check further down, which needs a post
-		// in scope — where none is set up, it fails closed. Re-adding a blanket REST
-		// exemption here would widen what is readable; the REST cases in
+		// editor) are covered further down, by the `edit_post` check, which needs a
+		// post in scope, and by Content_Gate::should_skip_access_checks(), which does
+		// not. With no post in scope, only an account that skips access checks gets
+		// through; everyone else fails closed. Re-adding a blanket REST exemption
+		// here would widen what is readable; the REST cases in
 		// Newspack_Test_Block_Visibility pin the behaviour.
 		//
 		// An editor warming a listing teaser gets no bypass either: the string they
@@ -230,8 +232,9 @@ class Block_Visibility {
 			}
 		}
 
-		// Don't restrict content for users who can edit the post it's in.
-		if ( ! empty( $post_id ) && user_can( $user_id, 'edit_post', $post_id ) ) {
+		// Don't restrict content for users who can edit the post it's in, nor any
+		// content for an account Access Control never restricts.
+		if ( ( ! empty( $post_id ) && user_can( $user_id, 'edit_post', $post_id ) ) || Content_Gate::should_skip_access_checks( (int) $user_id ) ) {
 			return false;
 		}
 
@@ -675,20 +678,12 @@ class Block_Visibility {
 	 * @return bool
 	 */
 	private static function compute_rules_match( $rules, $user_id ) {
-		$registration  = $rules['registration'] ?? [];
-		$custom_access = $rules['custom_access'] ?? [];
-
-		$registration_passes = true;
-		if ( ! empty( $registration['active'] ) ) {
-			if ( ! $user_id ) {
-				$registration_passes = false;
-			} elseif ( ! empty( $registration['require_verification'] ) ) {
-				$registration_passes = (bool) get_user_meta( $user_id, Reader_Activation::EMAIL_VERIFIED, true );
-			}
-		}
+		$registration     = $rules['registration'] ?? [];
+		$custom_access    = $rules['custom_access'] ?? [];
+		$has_access_rules = ! empty( $custom_access['active'] ) && ! empty( $custom_access['access_rules'] );
 
 		$access_passes = true;
-		if ( ! empty( $custom_access['active'] ) && ! empty( $custom_access['access_rules'] ) ) {
+		if ( $has_access_rules ) {
 			// Gate-derived rules carry the gate's stored setting; rules parsed from
 			// block attributes never contain the key, so block-attribute visibility
 			// is deliberately always grace-ON — the block editor exposes no
@@ -701,6 +696,27 @@ class Block_Visibility {
 			// the same reason the withholding decision does. The article page still
 			// honours the grant.
 			$access_passes = Access_Rules::evaluate_rules_for_visitor( $custom_access['access_rules'], $user_id, $rule_context );
+		}
+
+		$registration_passes = true;
+		if ( ! empty( $registration['active'] ) ) {
+			if ( ! $user_id ) {
+				// A signed-out visitor who passes paid access doesn't need to register
+				// first, as on the gate's own page ({@see Content_Restriction_Control::is_post_restricted()}),
+				// so once paid access is on with rules, its answer decides both walls.
+				// Without this, an on-campus visitor reads the post but not the blocks set
+				// to its gate. A block's own rules answer the same way, so a block and a
+				// gate holding the same rules never disagree.
+				//
+				// With no paid rules, registered access's own rules can count the visitor
+				// as registered (NPPD-2310). The block editor never writes registration
+				// rules into block attributes.
+				$registration_passes = $has_access_rules
+					? $access_passes
+					: Access_Rules::evaluate_anonymous_rules( $registration['access_rules'] ?? [] );
+			} elseif ( ! empty( $registration['require_verification'] ) ) {
+				$registration_passes = Content_Gate::is_email_verification_met( (int) $user_id );
+			}
 		}
 
 		// AND logic: both must pass when both are configured.

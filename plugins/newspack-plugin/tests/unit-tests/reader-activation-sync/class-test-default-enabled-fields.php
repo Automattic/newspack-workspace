@@ -72,6 +72,7 @@ class Test_Default_Enabled_Fields extends WP_UnitTestCase {
 	 * dynamic legacy defaults, not sitting on a fresh install.
 	 */
 	public function test_configured_esp_defaults_to_v1() {
+		update_option( 'newspack_newsletters_service_provider', 'mailchimp' );
 		$esp = new Integrations\ESP();
 		$esp->update_settings_field_value( 'mailchimp_audience_id', '123' );
 		$this->assertTrue( $esp->is_set_up(), 'Fixture must produce a set-up ESP.' );
@@ -100,6 +101,7 @@ class Test_Default_Enabled_Fields extends WP_UnitTestCase {
 	 */
 	public function test_stored_origin_wins_over_later_evidence() {
 		update_option( Metadata::SCHEMA_ORIGIN_OPTION, 'v2' );
+		update_option( 'newspack_newsletters_service_provider', 'mailchimp' );
 		$esp = new Integrations\ESP();
 		$esp->update_settings_field_value( 'mailchimp_audience_id', '123' );
 		$this->assertTrue( $esp->is_set_up(), 'Fixture must produce a set-up ESP.' );

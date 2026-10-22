@@ -36,12 +36,15 @@ class Initializer {
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-institutions-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/trait-one-time-purchase-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-membership-gates-migration.php';
+		include_once NEWSPACK_ABSPATH . 'includes/cli/class-membership-segments-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-memberships-audit.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-discounts-migration.php';
+		include_once NEWSPACK_ABSPATH . 'includes/cli/class-product-restrictions-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-premium-newsletters-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-premium-newsletters-verify.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-fix-memberships.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-convert-subscription-variation.php';
+		include_once NEWSPACK_ABSPATH . 'includes/cli/class-complimentary-access-cli.php';
 	}
 
 	/**
@@ -102,6 +105,7 @@ class Initializer {
 		WP_CLI::add_command( 'newspack ga4-dimensions', 'Newspack\CLI\GA4_Dimensions' );
 		WP_CLI::add_command( 'newspack export-subscriptions', [ 'Newspack\CLI\Export', 'export_subscriptions' ] );
 		WP_CLI::add_command( 'newspack export-users', [ 'Newspack\CLI\Export', 'export_users' ] );
+		WP_CLI::add_command( 'newspack complimentary-access pre-mark', [ 'Newspack\CLI\Complimentary_Access_CLI', 'pre_mark' ] );
 
 		// Registered whether or not WooCommerce Memberships is active, unlike the
 		// migrate-* commands below: it reads `_wc_memberships_force_public`, ordinary
@@ -113,6 +117,10 @@ class Initializer {
 		// feed options, which survive deactivation, and a site that has already been
 		// flipped without them is the one serving feeds it never configured.
 		WP_CLI::add_command( 'newspack migrate-feed-settings', [ 'Newspack\CLI\Membership_Gates_Migration', 'migrate_feed_settings' ] );
+
+		// Outside the Memberships guard too: plans and segments both survive
+		// deactivation, and segments on the membership criteria stop changing then.
+		WP_CLI::add_command( 'newspack migrate-membership-segments', [ 'Newspack\CLI\Membership_Segments_Migration', 'migrate_membership_segments' ] );
 
 		// Only register the Teams for Memberships diagnostics command on sites where the
 		// SkyVerge plugin is active. No reason to surface it in `wp help` otherwise.
@@ -131,6 +139,7 @@ class Initializer {
 			WP_CLI::add_command( 'newspack migrate-team-products', [ 'Newspack\CLI\Teams_Migration', 'migrate_team_products' ] );
 			WP_CLI::add_command( 'newspack migrate-manual-members', [ 'Newspack\CLI\Teams_Migration', 'migrate_manual_members' ] );
 			WP_CLI::add_command( 'newspack migrate-discounts', [ 'Newspack\CLI\Discounts_Migration', 'migrate_discounts' ] );
+			WP_CLI::add_command( 'newspack migrate-product-restrictions', [ 'Newspack\CLI\Product_Restrictions_Migration', 'migrate_product_restrictions' ] );
 			WP_CLI::add_command( 'newspack backfill-team-managers', [ 'Newspack\CLI\Teams_Migration', 'backfill_team_managers' ] );
 			WP_CLI::add_command( 'newspack audit-membership-subscriptions', [ 'Newspack\CLI\Memberships_Audit', 'audit_membership_subscriptions' ] );
 			WP_CLI::add_command( 'newspack migrate-institutions', [ 'Newspack\CLI\Institutions_Migration', 'migrate_institutions' ] );

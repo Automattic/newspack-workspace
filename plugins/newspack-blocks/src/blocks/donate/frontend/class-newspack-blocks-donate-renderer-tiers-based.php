@@ -152,6 +152,7 @@ class Newspack_Blocks_Donate_Renderer_Tiers_Based extends Newspack_Blocks_Donate
 										data-frequency-slug="<?php echo esc_attr( $frequency_slug ); ?>"
 										data-frequency-label="<?php echo esc_attr( self::get_frequency_label( $frequency_slug ) ); ?>"
 										class="wpbnbd__button <?php echo $intial_selected_frequency === $frequency_slug ? 'wpbnbd__button--active' : ''; ?>"
+										aria-pressed="<?php echo $intial_selected_frequency === $frequency_slug ? 'true' : 'false'; ?>"
 									><?php echo esc_html( $frequency_name ); ?></button>
 								<?php endforeach; ?>
 							</div>

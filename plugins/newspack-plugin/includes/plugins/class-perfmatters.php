@@ -74,13 +74,9 @@ class Perfmatters {
 			'adsbygoogle.js',
 			'ai_insert_code',
 			'doubleclick.net',
+			// Kept out of the delay queue while reader activation is enabled; see get_defaults().
+			'newspack-plugin',
 		];
-
-		// Only delay newspack-plugin if reader activation is not enabled. Because there
-		// are buttons that do things, and they should do those things on the first click.
-		if ( ! Reader_Activation::is_enabled() ) {
-			$scripts_to_delay[] = 'newspack-plugin';
-		}
 
 		return $scripts_to_delay;
 	}
@@ -146,6 +142,7 @@ class Perfmatters {
 	 */
 	private static function unused_css_excluded_stylesheets() {
 		return [
+			'plugins/newspack-ads', // Newspack Ads; the sticky footer ad never renders if this loads late.
 			'plugins/newspack-blocks', // Newspack Blocks.
 			'plugins/newspack-newsletters', // Newspack Newsletters.
 			'plugins/newspack-plugin', // Newspack main plugin.
@@ -254,6 +251,13 @@ class Perfmatters {
 		// scripts and merging alone would put them straight back (NPPM-2934).
 		if ( $reveal_above_header ) {
 			$delay_js_inclusions = array_diff( $delay_js_inclusions, self::above_header_reveal_scripts() );
+		}
+		// With reader activation enabled, newspack-plugin drives the sign-in button and the
+		// `#signin_modal` links, which must work on the first click. Subtracted from the merged
+		// list for the same reason as above: a list saved while reader activation was off
+		// still holds it.
+		if ( Reader_Activation::is_enabled() ) {
+			$delay_js_inclusions = array_diff( $delay_js_inclusions, [ 'newspack-plugin' ] );
 		}
 		$options['assets']['delay_js_inclusions'] = array_values( array_unique( $delay_js_inclusions ) );
 		$options['assets']['delay_timeout'] = true;
@@ -450,6 +454,16 @@ class Perfmatters {
 	public static function should_delay_js( $delay_js ) {
 		// Don't delay JS on lite site requests.
 		if ( Lite_Site::is_lite_site_request() ) {
+			return false;
+		}
+		// The IP-access landing page auto-redirects with no user interaction, so
+		// delayed analytics would never execute and the visit would go unrecorded.
+		// Like the lite-site veto above, this holds even under
+		// NEWSPACK_IGNORE_PERFMATTERS_DEFAULTS: it is a functional requirement of
+		// the page, not a configuration default.
+		// No autoload: the class self-initializes on load, and it is only ever
+		// loaded deliberately, when content gates are enabled.
+		if ( class_exists( 'Newspack\Content_Gate\IP_Access_Rule', false ) && Content_Gate\IP_Access_Rule::is_landing_page_request() ) {
 			return false;
 		}
 		return $delay_js;

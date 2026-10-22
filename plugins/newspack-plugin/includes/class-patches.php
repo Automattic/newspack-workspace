@@ -35,6 +35,7 @@ class Patches {
 		add_filter( 'ajax_query_attachments_args', [ __CLASS__, 'restrict_media_library_access_ajax' ] );
 		add_filter( 'script_loader_tag', [ __CLASS__, 'add_async_defer_support' ], 10, 2 );
 		add_filter( 'script_loader_tag', [ __CLASS__, 'add_amp_plus_attr_support' ], 10, 2 );
+		add_filter( 'get_feed_build_date', [ __CLASS__, 'include_publish_dates_in_feed_build_date' ], 10, 2 );
 
 		// Disable WooCommerce image regeneration to prevent regenerating thousands of images.
 		add_filter( 'woocommerce_background_image_regeneration', '__return_false' );
@@ -618,6 +619,62 @@ class Patches {
 			esc_url( $url ),
 			esc_html( $count )
 		);
+	}
+
+	/**
+	 * Keep a feed's build date in step with its newest item.
+	 *
+	 * Core derives RSS `lastBuildDate` and the Atom channel `<updated>` from
+	 * `post_modified_gmt` alone, and `wp_publish_post()` leaves `post_modified`
+	 * untouched when cron publishes a scheduled post. An article written days
+	 * before its slot therefore goes live carrying an old modified date, the
+	 * feed advertises a build date older than its own newest item, and an
+	 * aggregator that checks that date before reading items skips the article.
+	 *
+	 * Taking the later of each item's publish and modified date corrects both.
+	 * The value is rebuilt from the query rather than adjusted, over a superset
+	 * of the dates core considers, so it can only move forward relative to
+	 * core's own.
+	 *
+	 * @param string|false $max_modified_time The build date so far, in UTC. False on failure.
+	 * @param string       $format            The requested date format.
+	 * @return string|false Build date in the requested format, or core's value.
+	 */
+	public static function include_publish_dates_in_feed_build_date( $max_modified_time, $format ) {
+		global $wp_query;
+
+		// Without posts core falls back to get_lastpostmodified(), which already
+		// accounts for publish dates. Read the posts directly rather than through
+		// have_posts(), which is not a free read: it fires loop_no_results on an
+		// empty query and rewinds the loop at the end of one, and core has already
+		// called it once before this filter runs.
+		if ( empty( $wp_query ) || empty( $wp_query->posts ) ) {
+			return $max_modified_time;
+		}
+
+		$dates = array_merge(
+			wp_list_pluck( $wp_query->posts, 'post_modified_gmt' ),
+			wp_list_pluck( $wp_query->posts, 'post_date_gmt' )
+		);
+
+		if ( $wp_query->is_comment_feed() && $wp_query->comment_count ) {
+			$dates = array_merge( $dates, wp_list_pluck( $wp_query->comments, 'comment_date_gmt' ) );
+		}
+
+		$dates = array_filter(
+			$dates,
+			function ( $date ) {
+				return ! empty( $date ) && '0000-00-00 00:00:00' !== $date;
+			}
+		);
+
+		if ( empty( $dates ) ) {
+			return $max_modified_time;
+		}
+
+		$datetime = date_create_immutable_from_format( 'Y-m-d H:i:s', max( $dates ), new \DateTimeZone( 'UTC' ) );
+
+		return false === $datetime ? $max_modified_time : $datetime->format( $format );
 	}
 }
 Patches::init();

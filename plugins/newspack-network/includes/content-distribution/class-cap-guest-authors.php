@@ -34,7 +34,7 @@ class Cap_Guest_Authors {
 			return;
 		}
 
-		if ( ! defined( 'NEWSPACK_ENABLE_CAP_GUEST_AUTHORS' ) || empty( NEWSPACK_ENABLE_CAP_GUEST_AUTHORS ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Undocumented flag, pending a docblock.
+		if ( ! defined( 'NEWSPACK_ENABLE_CAP_GUEST_AUTHORS' ) || empty( NEWSPACK_ENABLE_CAP_GUEST_AUTHORS ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Documented in plugins/newspack-network/includes/content-distribution/class-cap-authors.php.
 			return;
 		}
 

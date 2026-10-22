@@ -90,7 +90,15 @@ class Contact_Sync_Connector {
 			return;
 		}
 
-		Contact_Sync::sync_contact( $data['user_id'], 'RAS Reader registration' );
+		/**
+		 * Filters the context of the contact sync a new reader's registration
+		 * triggers, which Sync Activity shows as the push's trigger.
+		 *
+		 * @param string $context The context of the sync.
+		 * @param array  $data    The event data: `user_id`, `email` and `metadata`.
+		 */
+		$context = \apply_filters( 'newspack_reader_registered_sync_context', 'RAS Reader registration', $data );
+		Contact_Sync::sync_contact( $data['user_id'], $context );
 	}
 
 	/**

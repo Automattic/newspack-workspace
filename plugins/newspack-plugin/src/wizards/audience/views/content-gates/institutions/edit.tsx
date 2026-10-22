@@ -6,9 +6,10 @@
  * WordPress dependencies
  */
 import { __, _n, sprintf } from '@wordpress/i18n';
-import { __experimentalVStack as VStack, TextareaControl, CardBody, Spinner } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { TextareaControl, CardBody, Spinner } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { useState, useEffect, useCallback } from '@wordpress/element';
+import { Stack } from '@wordpress/ui';
 import { envelope, globe, customPostType } from '@wordpress/icons';
 import apiFetch from '@wordpress/api-fetch';
 
@@ -350,13 +351,20 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 		message: __( 'This will permanently delete this institution. This action cannot be undone.', 'newspack-plugin' ),
 	} );
 
-	// Set header navigation and actions.
 	useEffect( () => {
 		setHeaderData( {
 			backNav: '#/institutions',
 			sectionName: isNew ? __( 'Add Institution', 'newspack-plugin' ) : __( 'Edit Institution', 'newspack-plugin' ),
 		} );
 	}, [ isNew, setHeaderData ] );
+
+	useEffect( () => {
+		setHeaderData( {
+			sectionTitle: isNew
+				? __( 'Add Institution', 'newspack-plugin' )
+				: institution.title.raw || __( 'Untitled Institution', 'newspack-plugin' ),
+		} );
+	}, [ isNew, institution.title.raw, setHeaderData ] );
 
 	// Set header save/delete actions once handlers are ready.
 	useEffect( () => {
@@ -404,13 +412,13 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 			{ /* Section 1: Name and description */ }
 			<Grid columns={ 2 } gutter={ 32 }>
 				<SectionHeader
-					title={ __( 'Name and description', 'newspack-plugin' ) }
+					title={ __( 'Name and Description', 'newspack-plugin' ) }
 					description={ __(
 						'Identify this institution. The name and image are shown on the access verification page.',
 						'newspack-plugin'
 					) }
 				/>
-				<VStack spacing={ 4 }>
+				<Stack direction="column" gap="xl" className="newspack-content-gates__stack">
 					<TextControl
 						label={ __( 'Name', 'newspack-plugin' ) }
 						value={ name }
@@ -418,6 +426,7 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 						withMargin={ false }
 					/>
 					<TextareaControl
+						__nextHasNoMarginBottom
 						label={ __( 'Description', 'newspack-plugin' ) }
 						value={ description }
 						onChange={ ( val: string ) => updateField( 'excerpt', val ) }
@@ -435,7 +444,7 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 							} }
 						/>
 					) }
-				</VStack>
+				</Stack>
 			</Grid>
 
 			<Divider alignment="full-width" variant="tertiary" />
@@ -443,15 +452,15 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 			{ /* Section 2: Access Rules */ }
 			<Grid columns={ 2 } gutter={ 32 } noMargin>
 				<SectionHeader
-					title={ __( 'Access rules', 'newspack-plugin' ) }
+					title={ __( 'Access Rules', 'newspack-plugin' ) }
 					description={ __(
 						'Define how readers from this institution are identified. Rules use OR logic — matching any rule grants access.',
 						'newspack-plugin'
 					) }
 				/>
-				<VStack spacing={ 4 }>
+				<Stack direction="column" gap="lg">
 					<CardSettingsGroup
-						title={ __( 'Email domain', 'newspack-plugin' ) }
+						title={ __( 'Email Domain', 'newspack-plugin' ) }
 						description={ __( 'Match readers by verified email domain', 'newspack-plugin' ) }
 						icon={ envelope }
 						actionType="toggle"
@@ -461,6 +470,7 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 						<CardBody size="small">
 							<TextControl
 								label={ __( 'Domains (comma-separated)', 'newspack-plugin' ) }
+								withMargin={ false }
 								value={ emailDomain }
 								onChange={ ( val: string ) => updateMeta( 'np_institution_email_domain', val ) }
 								placeholder="university.edu, school.org"
@@ -469,7 +479,7 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 					</CardSettingsGroup>
 
 					<CardSettingsGroup
-						title={ __( 'IP range', 'newspack-plugin' ) }
+						title={ __( 'IP Range', 'newspack-plugin' ) }
 						description={ __( 'Match visitors by IP address, CIDR block, or IP range', 'newspack-plugin' ) }
 						icon={ globe }
 						actionType="toggle"
@@ -479,6 +489,7 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 						<CardBody size="small">
 							<TextControl
 								label={ __( 'IPs, CIDR blocks, or IP ranges (comma-separated)', 'newspack-plugin' ) }
+								withMargin={ false }
 								value={ ipRange }
 								onChange={ updateIpRange }
 								onBlur={ ( event: React.FocusEvent< HTMLInputElement > ) =>
@@ -489,16 +500,22 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 								aria-invalid={ ipRangeAnalysis.invalid.length > 0 }
 							/>
 							{ /* Always rendered so it is an established live region by the time a warning appears. */ }
-							<div id={ IP_RANGE_MESSAGES_ID } role="status">
+							<Stack
+								id={ IP_RANGE_MESSAGES_ID }
+								role="status"
+								direction="column"
+								gap="sm"
+								className="newspack-content-gates__stack newspack-content-gates__rule-messages"
+							>
 								{ ipRangeWarnings.map( warning => (
 									<Notice key={ warning } isWarning noticeText={ warning } />
 								) ) }
-							</div>
+							</Stack>
 						</CardBody>
 					</CardSettingsGroup>
 
 					<CardSettingsGroup
-						title={ __( 'Reader data', 'newspack-plugin' ) }
+						title={ __( 'Reader Data', 'newspack-plugin' ) }
 						description={ __( 'Match readers by custom metadata', 'newspack-plugin' ) }
 						icon={ customPostType }
 						actionType="toggle"
@@ -508,13 +525,14 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 						<CardBody size="small">
 							<TextControl
 								label={ __( 'Key=value pairs (semicolon-delimited)', 'newspack-plugin' ) }
+								withMargin={ false }
 								value={ readerData }
 								onChange={ ( val: string ) => updateMeta( 'np_institution_reader_data', val ) }
 								placeholder="org=university;role=staff"
 							/>
 						</CardBody>
 					</CardSettingsGroup>
-				</VStack>
+				</Stack>
 			</Grid>
 		</div>
 	);

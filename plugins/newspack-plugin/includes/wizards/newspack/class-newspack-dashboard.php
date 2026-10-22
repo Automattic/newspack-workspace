@@ -146,7 +146,7 @@ class Newspack_Dashboard extends Wizard {
 		];
 
 		// Newspack Listings Plugin.
-		if ( defined( 'NEWSPACK_LISTINGS_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Presence check for another Newspack plugin, not a configurable constant.
+		if ( defined( 'NEWSPACK_LISTINGS_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Documented in plugins/newspack-plugin/includes/wizards/class-listings-wizard.php.
 			$dashboard['listings'] = [
 				'title'        => __( 'Listings', 'newspack-plugin' ),
 				'desc'         => __( 'Build databases of reusable or user-generated content to use on your site.', 'newspack-plugin' ),
@@ -264,12 +264,7 @@ class Newspack_Dashboard extends Wizard {
 	 * @return []
 	 */
 	public function get_local_data() {
-		$site_name = get_bloginfo( 'name' );
 		$local_data = [
-			'settings'     => [
-				'siteName'      => $site_name,
-				'headerBgColor' => get_theme_mod( 'primary_color_hex', '#f0f0f0' ),
-			],
 			'sections'     => $this->get_dashboard(),
 			'plugins'      => get_plugins(),
 			'siteStatuses' => [

@@ -79,6 +79,19 @@ class Content_Gate_API {
 						],
 					],
 				],
+				'access_rules'         => [
+					'type'  => 'array',
+					'items' => [
+						'type'  => 'array',
+						'items' => [
+							'type'       => 'object',
+							'properties' => [
+								'slug'  => [ 'type' => 'string' ],
+								'value' => [ 'type' => [ 'string', 'array', 'object' ] ],
+							],
+						],
+					],
+				],
 			],
 		],
 		'custom_access'       => [
@@ -145,7 +158,7 @@ class Content_Gate_API {
 	 * Sanitize the gate.
 	 *
 	 * TODO: Handle errors from the remaining sanitization methods (content rules,
-	 * registration, metering) the way custom access errors already propagate.
+	 * metering) the way custom access errors already propagate.
 	 *
 	 * @param array            $gate    The gate.
 	 * @param \WP_REST_Request $request Optional. The request being sanitized, as WP passes it
@@ -177,7 +190,16 @@ class Content_Gate_API {
 			$sanitized['content_rules'] = self::sanitize_rules( $gate['content_rules'], 'content' );
 		}
 		if ( isset( $gate['registration'] ) ) {
-			$sanitized['registration'] = self::sanitize_registration( $gate['registration'] );
+			$sanitized_registration = self::sanitize_registration( $gate['registration'], self::registration_wall_is_live( $gate['registration'], $sanitized, $gate_id ) );
+			if ( is_wp_error( $sanitized_registration ) ) {
+				// Told only to a caller who could act on it, as with custom access below.
+				if ( self::caller_can_manage_gates() ) {
+					return $sanitized_registration;
+				}
+				unset( $gate['registration']['access_rules'] );
+				$sanitized_registration = self::sanitize_registration( $gate['registration'] );
+			}
+			$sanitized['registration'] = $sanitized_registration;
 		}
 		if ( isset( $gate['custom_access'] ) ) {
 			$sanitized_custom_access = self::sanitize_custom_access( $gate['custom_access'] );
@@ -313,11 +335,12 @@ class Content_Gate_API {
 	/**
 	 * Whether a rule holds the empty value for its shape.
 	 *
-	 * Both shapes a rule can take carry the same meaning when empty: an
+	 * Every shape a rule can take carries the same meaning when empty: an
 	 * options-backed rule selects nothing with `[]`, a free-text one with `''`,
-	 * and a stored rule can be missing its value altogether. All three say the
-	 * rule names no condition. Which way it then evaluates is the rule's own
-	 * business, and `empty_grants_access` is where each rule states it.
+	 * a range sets no bound with `[]`, and a stored rule can be missing its
+	 * value altogether. Each says the rule names no condition. Which way it then
+	 * evaluates is the rule's own business, and `empty_grants_access` is where
+	 * each rule states it.
 	 *
 	 * @param mixed $value The rule's value.
 	 *
@@ -335,8 +358,9 @@ class Content_Gate_API {
 	 * match everybody. Reporting the wrong one sends the operator looking for the
 	 * wrong symptom on the front end.
 	 *
-	 * No rule the plugin registers reaches the free-text "matches no reader"
-	 * string today; it is kept for rules other plugins register through
+	 * No rule the plugin registers reaches the free-text or range "matches no
+	 * reader" strings today (every promoted range field grants on an empty value);
+	 * they are kept for rules other plugins register through
 	 * Access_Rules::register_rule().
 	 *
 	 * @param array $rule The registered rule.
@@ -345,7 +369,15 @@ class Content_Gate_API {
 	 */
 	private static function empty_access_rule_value_error( $rule ) {
 		$grants_access = ! empty( $rule['empty_grants_access'] );
-		if ( empty( $rule['has_options'] ) ) {
+		if ( ! empty( $rule['is_range'] ) ) {
+			// Narrower than "everyone": a range with no bounds still turns away readers
+			// who hold no number in the field.
+			$message = $grants_access
+				/* translators: %s: the access rule's name, e.g. a promoted number field. */
+				? __( 'Enter a minimum, a maximum, or both for the “%s” access rule, or turn the rule off. Left empty, it grants access to every reader with a number in that field.', 'newspack-plugin' )
+				/* translators: %s: the access rule's name. */
+				: __( 'Enter a minimum, a maximum, or both for the “%s” access rule, or turn the rule off. Left empty, it matches no reader.', 'newspack-plugin' );
+		} elseif ( empty( $rule['has_options'] ) ) {
 			$message = $grants_access
 				/* translators: %s: the access rule's name, e.g. "Whitelisted email domain". */
 				? __( 'Enter a value for the “%s” access rule, or turn the rule off. Left empty, it grants access to everyone.', 'newspack-plugin' )
@@ -365,6 +397,7 @@ class Content_Gate_API {
 				'status'              => 400,
 				'rule_name'           => $rule['name'],
 				'empty_grants_access' => $grants_access,
+				'is_range'            => ! empty( $rule['is_range'] ),
 			]
 		);
 	}
@@ -386,20 +419,31 @@ class Content_Gate_API {
 		if ( ! $leaves_rules_unenforced || 'empty_access_rule_value' !== $error->get_error_code() ) {
 			return $error;
 		}
-		$error_data = $error->get_error_data();
-		$rule_name  = $error_data['rule_name'] ?? '';
-		$message    = empty( $error_data['empty_grants_access'] )
-			/* translators: %s: the access rule's name, e.g. "Institutional access". */
-			? __( 'The “%s” access rule is empty, so it matches no reader. Give it a value or remove it before this gate is active again.', 'newspack-plugin' )
-			/* translators: %s: the access rule's name, e.g. "Whitelisted email domain". */
-			: __( 'The “%s” access rule is empty, so it grants access to everyone. Give it a value or remove it before this gate is active again.', 'newspack-plugin' );
+		$error_data    = $error->get_error_data();
+		$rule_name     = $error_data['rule_name'] ?? '';
+		$grants_access = ! empty( $error_data['empty_grants_access'] );
+		$is_range      = ! empty( $error_data['is_range'] );
+		if ( $is_range ) {
+			$message = $grants_access
+				/* translators: %s: the access rule's name, e.g. a promoted number field. */
+				? __( 'The “%s” access rule has no minimum or maximum, so it grants access to every reader with a number in that field. Set a minimum, a maximum, or both, or remove it before this gate is active again.', 'newspack-plugin' )
+				/* translators: %s: the access rule's name. */
+				: __( 'The “%s” access rule has no minimum or maximum, so it matches no reader. Set a minimum, a maximum, or both, or remove it before this gate is active again.', 'newspack-plugin' );
+		} else {
+			$message = $grants_access
+				/* translators: %s: the access rule's name, e.g. "Whitelisted email domain". */
+				? __( 'The “%s” access rule is empty, so it grants access to everyone. Give it a value or remove it before this gate is active again.', 'newspack-plugin' )
+				/* translators: %s: the access rule's name, e.g. "Institutional access". */
+				: __( 'The “%s” access rule is empty, so it matches no reader. Give it a value or remove it before this gate is active again.', 'newspack-plugin' );
+		}
 		return new \WP_Error(
 			'empty_access_rule_value',
 			sprintf( $message, $rule_name ),
 			[
 				'status'              => 400,
 				'rule_name'           => $rule_name,
-				'empty_grants_access' => ! empty( $error_data['empty_grants_access'] ),
+				'empty_grants_access' => $grants_access,
+				'is_range'            => $is_range,
 			]
 		);
 	}
@@ -456,22 +500,57 @@ class Content_Gate_API {
 		if ( isset( $gate['custom_access']['active'] ) && ! boolval( $gate['custom_access']['active'] ) ) {
 			return true;
 		}
-		// A save that omits `status` leaves the stored one in place. Guarded like the
-		// other stored reads in this class, since sanitization runs ahead of the route's
-		// `permission_callback`; an unreadable status counts as a draft, which leaves the
-		// request to fail on permissions as it would have anyway.
+		return self::save_leaves_gate_unpublished( $sanitized_gate, $gate_id );
+	}
+
+	/**
+	 * Whether the gate is unpublished once the save lands.
+	 *
+	 * A save that omits `status` leaves the stored one in place. Guarded like the
+	 * other stored reads in this class, since sanitization runs ahead of the route's
+	 * `permission_callback`; an unreadable status counts as a draft, which leaves the
+	 * request to fail on permissions as it would have anyway.
+	 *
+	 * @param array $sanitized_gate The gate sanitized so far, `status` included.
+	 * @param int   $gate_id        The gate's ID, or 0 when it is being created.
+	 *
+	 * @return bool
+	 */
+	private static function save_leaves_gate_unpublished( $sanitized_gate, $gate_id ) {
 		$status = $sanitized_gate['status'] ?? ( self::caller_can_save_gate( $gate_id ) ? get_post_status( $gate_id ) : 'draft' );
 		return 'publish' !== $status;
 	}
 
 	/**
+	 * Whether the gate's registration wall is live once the save lands.
+	 *
+	 * A save that omits `active` keeps the stored value, which is read under the
+	 * same guard save_leaves_gate_unpublished() uses for the stored status.
+	 *
+	 * @param array $registration   The registration settings the save carries.
+	 * @param array $sanitized_gate The gate sanitized so far, `status` included.
+	 * @param int   $gate_id        The gate's ID, or 0 when it is being created.
+	 *
+	 * @return bool
+	 */
+	private static function registration_wall_is_live( $registration, $sanitized_gate, $gate_id ) {
+		if ( self::save_leaves_gate_unpublished( $sanitized_gate, $gate_id ) ) {
+			return false;
+		}
+		if ( isset( $registration['active'] ) ) {
+			return (bool) $registration['active'];
+		}
+		return self::caller_can_save_gate( $gate_id ) && ! empty( Content_Gate::get_registration_settings( $gate_id )['active'] );
+	}
+
+	/**
 	 * Whether a request's access rules are the ones the gate already stores.
 	 *
-	 * Both sides are cast through the same conversions the sanitizer applies to a
-	 * rule value before comparing them as JSON, because the client round-trips the
-	 * rules it read and an integer option value can come back as a string. A
-	 * loose comparison would go further than that and read `'0'` as equal to
-	 * `false`, silently dropping an operator's edit.
+	 * Both sides go through one shared cast before comparing them as JSON,
+	 * because the client round-trips the rules it read and an integer option
+	 * value can come back as a string. A loose comparison would go further than
+	 * that and read `'0'` as equal to `false`, silently dropping an operator's
+	 * edit.
 	 *
 	 * @param array $gate    The gate as it arrived in the request.
 	 * @param int   $gate_id The gate ID from the route.
@@ -493,8 +572,14 @@ class Content_Gate_API {
 	}
 
 	/**
-	 * A comparable rendering of a rule set, with each value cast the way
-	 * `sanitize_access_rule()` casts it.
+	 * A comparable rendering of a rule set: numbers as floats, other scalars as
+	 * sanitized text, the same cast on both sides.
+	 *
+	 * Numbers compare as floats so an option ID sent back as a string still
+	 * matches the stored integer, and range bounds that differ only after the
+	 * decimal point stay distinct, rather than reading as unchanged and being
+	 * dropped. `-0` folds into `0`, as it does when the browser sends it back, and
+	 * a number too large for a float stays text so it can't break the encoding.
 	 *
 	 * @param array $rules The access rules, flat or grouped.
 	 *
@@ -508,7 +593,10 @@ class Content_Gate_API {
 			if ( ! is_scalar( $value ) ) {
 				return $value;
 			}
-			return is_numeric( $value ) ? intval( $value ) : sanitize_text_field( $value );
+			if ( is_numeric( $value ) && is_finite( (float) $value ) ) {
+				return (float) $value + 0.0;
+			}
+			return sanitize_text_field( (string) $value );
 		};
 		return (string) wp_json_encode( $cast( Access_Rules::normalize_rules( $rules ) ) );
 	}
@@ -517,11 +605,20 @@ class Content_Gate_API {
 	 * Sanitize registration settings.
 	 *
 	 * @param array $registration The registration settings.
+	 * @param bool  $is_enforced  Whether the registration wall is live once the save lands.
 	 *
-	 * @return array The sanitized registration.
+	 * @return array|\WP_Error The sanitized registration, or an error when its
+	 *                         access rules can't do what the setting promises.
 	 */
-	public static function sanitize_registration( $registration ) {
+	public static function sanitize_registration( $registration, $is_enforced = false ) {
 		$sanitized = [];
+		if ( isset( $registration['access_rules'] ) ) {
+			$access_rules = self::sanitize_registration_access_rules( $registration['access_rules'], $is_enforced );
+			if ( is_wp_error( $access_rules ) ) {
+				return $access_rules;
+			}
+			$sanitized['access_rules'] = $access_rules;
+		}
 		if ( isset( $registration['active'] ) ) {
 			$sanitized['active'] = boolval( $registration['active'] );
 		}
@@ -535,6 +632,66 @@ class Content_Gate_API {
 			$sanitized['gate_layout_id'] = absint( $registration['gate_layout_id'] );
 		}
 		return $sanitized;
+	}
+
+	/**
+	 * Sanitize the rules that let a visitor count as registered without an account.
+	 *
+	 * Every rule here is judged for a signed-out visitor, so a rule that needs a
+	 * signed-in reader could never match anyone the registration wall is shown to.
+	 * Those are refused rather than stored doing nothing.
+	 *
+	 * @param array $access_rules The access rules, flat or grouped.
+	 * @param bool  $is_enforced  Whether the registration wall is live once the save
+	 *                            lands. Only then is a rule with nothing selected
+	 *                            refused; a gate being set up may hold one.
+	 *
+	 * @return array|\WP_Error The grouped rules, or an error naming the rule at fault.
+	 */
+	private static function sanitize_registration_access_rules( $access_rules, $is_enforced ) {
+		$access_rules = self::sanitize_rules( $access_rules, 'access' );
+		// Paid access refuses a set emptied by dropping unregistered rules, because an
+		// empty set there admits everyone. Here it admits nobody past the wall, so the
+		// emptied set is saved instead.
+		if ( is_wp_error( $access_rules ) && 'invalid_access_rules' === $access_rules->get_error_code() ) {
+			return [];
+		}
+		if ( is_wp_error( $access_rules ) ) {
+			return $access_rules;
+		}
+		foreach ( $access_rules as $group ) {
+			foreach ( $group as $rule ) {
+				$registered = Access_Rules::get_rule( $rule['slug'] );
+				if ( empty( $registered['supports_anonymous'] ) ) {
+					return new \WP_Error(
+						'invalid_registration_access_rule',
+						sprintf(
+							/* translators: %s: the access rule's name, e.g. "Whitelisted email domain". */
+							__( 'The “%s” access rule needs a signed-in reader, so it can’t let visitors skip registration. Use it under Paid Access instead.', 'newspack-plugin' ),
+							$registered['name'] ?? $rule['slug']
+						),
+						[ 'status' => 400 ]
+					);
+				}
+				if ( $is_enforced && ! empty( $registered['requires_value'] ) && self::rule_value_is_empty( $rule['value'] ?? null ) ) {
+					// The same rule can sit under Paid Access too, so the refusal names the card.
+					return new \WP_Error(
+						'empty_access_rule_value',
+						sprintf(
+							/* translators: %s: the access rule's name, e.g. "Institutional access". */
+							__( 'Registered Access has “%s” turned on with nothing selected, so no visitor can use it to skip registration. Select at least one option, or turn it off.', 'newspack-plugin' ),
+							$registered['name']
+						),
+						[
+							'status'              => 400,
+							'rule_name'           => $registered['name'],
+							'empty_grants_access' => false,
+						]
+					);
+				}
+			}
+		}
+		return $access_rules;
 	}
 
 	/**
@@ -742,9 +899,15 @@ class Content_Gate_API {
 		$rule  = $rules[ $slug ];
 		// Rules with a composite value shape sanitize it themselves.
 		if ( ! empty( $rule['sanitize_callback'] ) && is_callable( $rule['sanitize_callback'] ) ) {
+			$value = call_user_func( $rule['sanitize_callback'], $access_rule['value'] ?? null );
+			// Re-coded rather than passed through: the group sanitizer fails the save only
+			// on this code, and drops the rule on any other, which would loosen its group.
+			if ( is_wp_error( $value ) ) {
+				return self::invalid_access_rule_value_error( $rule );
+			}
 			return [
 				'slug'  => $slug,
-				'value' => call_user_func( $rule['sanitize_callback'], $access_rule['value'] ?? null ),
+				'value' => $value,
 			];
 		}
 		if ( $rule['is_boolean'] ) {

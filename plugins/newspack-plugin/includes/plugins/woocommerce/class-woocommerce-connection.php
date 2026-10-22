@@ -39,10 +39,12 @@ class WooCommerce_Connection {
 		include_once __DIR__ . '/class-woocommerce-order-utm.php';
 		include_once __DIR__ . '/class-woocommerce-products.php';
 		include_once __DIR__ . '/class-woocommerce-checkout.php';
+		include_once __DIR__ . '/class-woocommerce-store-api-free-products.php';
 		include_once __DIR__ . '/class-woocommerce-product-validator.php';
 		include_once __DIR__ . '/class-woocommerce-duplicate-orders.php';
 		include_once __DIR__ . '/class-woocommerce-update-payment-notice.php';
 		include_once __DIR__ . '/class-woocommerce-custom-currency-symbol.php';
+		include_once __DIR__ . '/class-woocommerce-cart-session.php';
 
 		\add_action( 'admin_init', [ __CLASS__, 'disable_woocommerce_setup' ] );
 		// Newspack configures WooCommerce itself; suppress WC's first-run setup-wizard

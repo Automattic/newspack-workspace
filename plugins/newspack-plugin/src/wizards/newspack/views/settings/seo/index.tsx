@@ -47,7 +47,7 @@ const EMPTY_DATA: SeoData = {
 
 function Seo() {
 	const { wizardApiFetch, isFetching, errorMessage, resetError } = useWizardApiFetch( 'newspack-settings/seo' );
-	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
+	const { setHeaderData, addNotice, removeNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
 
 	const [ data, setData ] = useState< SeoData >( EMPTY_DATA );
 	const [ savedData, setSavedData ] = useState< SeoData >( EMPTY_DATA );
@@ -136,6 +136,12 @@ function Seo() {
 				onSuccess: res => {
 					setData( res );
 					setSavedData( res );
+					removeNotice( 'seo-saved' );
+					addNotice( {
+						id: 'seo-saved',
+						type: 'success',
+						message: __( 'Settings saved.', 'newspack-plugin' ),
+					} );
 				},
 			}
 		);

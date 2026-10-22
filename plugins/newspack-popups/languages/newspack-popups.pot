@@ -2,14 +2,14 @@
 # This file is distributed under the same license as the Newspack Campaigns plugin.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Campaigns 3.18.1\n"
+"Project-Id-Version: Newspack Campaigns 3.20.2\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-popups\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-18T15:37:24+00:00\n"
+"POT-Creation-Date: 2026-10-12T22:41:12+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-popups\n"
@@ -43,25 +43,25 @@ msgstr ""
 msgid "Contextual Prompts is not enabled for this site."
 msgstr ""
 
-#: includes/class-newspack-popups-contextual-prompt-pattern.php:105
+#: includes/class-newspack-popups-contextual-prompt-pattern.php:133
 msgid "A new pattern cannot contain the Contextual Prompt."
 msgstr ""
 
-#: includes/class-newspack-popups-contextual-prompt-pattern.php:418
+#: includes/class-newspack-popups-contextual-prompt-pattern.php:446
 #: dist/documentSettings.js:12
 #: src/document-settings/contextual-prompt-panel.js:225
 msgid "Contextual Prompt"
 msgstr ""
 
-#: includes/class-newspack-popups-contextual-prompt-pattern.php:439
+#: includes/class-newspack-popups-contextual-prompt-pattern.php:467
 msgid "The Contextual Prompt design used across the site. Changes here apply to every story; the copy itself is written in each story."
 msgstr ""
 
-#: includes/class-newspack-popups-contextual-prompt-pattern.php:1147
+#: includes/class-newspack-popups-contextual-prompt-pattern.php:1303
 msgid "Reporting like this takes time and costs money. If you value it, consider supporting our newsroom."
 msgstr ""
 
-#: includes/class-newspack-popups-contextual-prompt-pattern.php:1358
+#: includes/class-newspack-popups-contextual-prompt-pattern.php:1513
 msgid "Donate"
 msgstr ""
 
@@ -1108,7 +1108,7 @@ msgstr ""
 #: dist/documentSettings.js:10
 #: dist/documentSettings.js:14
 #: src/blocks/contextual-prompt/candidates.js:99
-#: src/blocks/contextual-prompt/instance.js:263
+#: src/blocks/contextual-prompt/instance.js:269
 #: src/document-settings/contextual-prompt-panel.js:175
 msgid "Could not generate suggestions."
 msgstr ""
@@ -1118,22 +1118,22 @@ msgstr ""
 #: dist/documentSettings.js:10
 #: dist/documentSettings.js:12
 #: dist/documentSettings.js:14
-#: src/blocks/contextual-prompt/instance.js:316
-#: src/blocks/contextual-prompt/instance.js:334
+#: src/blocks/contextual-prompt/instance.js:322
+#: src/blocks/contextual-prompt/instance.js:340
 #: src/document-settings/contextual-prompt-panel.js:169
 msgid "No suggestions were returned. Try generating again."
 msgstr ""
 
 #: dist/blocks.js:40
 #: dist/documentSettings.js:10
-#: src/blocks/contextual-prompt/instance.js:360
+#: src/blocks/contextual-prompt/instance.js:366
 msgid "Prompt Copy"
 msgstr ""
 
 #. translators: %1$s: the edited content's post type label. %2$s: the prompt's position.
 #: dist/blocks.js:41
 #: dist/documentSettings.js:11
-#: src/blocks/contextual-prompt/instance.js:372
+#: src/blocks/contextual-prompt/instance.js:378
 #, js-format
 msgid "Copy is generated from this %1$s, framed for its position (%2$s). Review a suggestion and apply it to replace the current copy."
 msgstr ""
@@ -1141,7 +1141,7 @@ msgstr ""
 #. translators: %s: the edited content's post type label.
 #: dist/blocks.js:42
 #: dist/documentSettings.js:12
-#: src/blocks/contextual-prompt/instance.js:381
+#: src/blocks/contextual-prompt/instance.js:387
 #, js-format
 msgid "Copy is generated from this %s. Review a suggestion and apply it to replace the current copy."
 msgstr ""
@@ -1149,63 +1149,80 @@ msgstr ""
 #: dist/blocks.js:42
 #: dist/documentSettings.js:12
 #: dist/documentSettings.js:14
-#: src/blocks/contextual-prompt/instance.js:390
+#: src/blocks/contextual-prompt/instance.js:396
 #: src/document-settings/contextual-prompt-panel.js:254
 msgid "The Contextual Prompt pattern has no editable copy field, so generated copy cannot be applied."
 msgstr ""
 
 #: dist/blocks.js:42
 #: dist/documentSettings.js:12
-#: src/blocks/contextual-prompt/instance.js:407
+#: src/blocks/contextual-prompt/instance.js:413
 #: src/document-settings/contextual-prompt-panel.js:221
 msgid "Regenerate Suggestions"
 msgstr ""
 
 #: dist/blocks.js:42
-#: src/blocks/contextual-prompt/card-guard.js:151
+#: src/blocks/contextual-prompt/card-guard.js:198
 msgid "Only one Contextual Prompt can be added per post."
 msgstr ""
 
 #: dist/blocks.js:42
+#: src/blocks/contextual-prompt/button-link.js:65
+msgid "Link"
+msgstr ""
+
+#: dist/blocks.js:42
+#: src/blocks/contextual-prompt/button-link.js:69
+msgid "Button link"
+msgstr ""
+
+#. translators: %s: an example on-page link.
+#: dist/blocks.js:43
+#: src/blocks/contextual-prompt/button-link.js:72
+#, js-format
+msgid "Also accepts on-page links that the toolbar rejects, such as %s"
+msgstr ""
+
+#: dist/blocks.js:43
 #: src/blocks/custom-placement/index.js:33
 #: src/blocks/single-prompt/index.js:33
 msgid "newspack"
 msgstr ""
 
-#: dist/blocks.js:42
+#: dist/blocks.js:43
 #: src/blocks/custom-placement/index.js:34
 #: src/blocks/single-prompt/index.js:34
 msgid "campaigns"
 msgstr ""
 
-#: dist/blocks.js:42
+#: dist/blocks.js:43
 #: src/blocks/custom-placement/index.js:35
 #: src/blocks/single-prompt/index.js:35
 msgid "campaign"
 msgstr ""
 
-#: dist/blocks.js:42
+#: dist/blocks.js:43
 #: src/blocks/custom-placement/index.js:36
 #: src/blocks/single-prompt/index.js:37
 msgid "prompt"
 msgstr ""
 
-#: dist/blocks.js:42
+#: dist/blocks.js:43
 #: src/blocks/custom-placement/index.js:37
 msgid "custom"
 msgstr ""
 
-#: dist/blocks.js:42
+#: dist/blocks.js:43
 #: src/blocks/custom-placement/index.js:38
 msgid "placement"
 msgstr ""
 
-#: dist/blocks.js:42
+#: dist/blocks.js:43
 #: src/blocks/single-prompt/index.js:26
 msgid "Campaigns: Single Prompt"
 msgstr ""
 
-#: dist/blocks.js:42
+#: dist/blocks.js:43
 #: src/blocks/single-prompt/index.js:36
 msgid "single"
 msgstr ""

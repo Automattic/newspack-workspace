@@ -1,5 +1,9 @@
 @use "mixins";
 
+:where(.newspack-ui__modal-container) {
+	color: inherit;
+}
+
 .newspack-ui {
 	&__modal-container {
 		position: fixed;
@@ -11,6 +15,17 @@
 		justify-content: center;
 		visibility: hidden;
 		pointer-events: none;
+		width: 100%;
+		max-width: none;
+		height: 100%;
+		max-height: none;
+		margin: 0;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		&::backdrop {
+			background: transparent;
+		}
 		&__overlay {
 			position: absolute;
 			z-index: 1;
@@ -78,12 +93,23 @@
 				font-size: var(--newspack-ui-font-size-s);
 				line-height: var(--newspack-ui-line-height-s);
 				margin: 0;
+
+				&[tabindex="-1"]:focus {
+					outline: none;
+				}
 			}
 		}
 
 		&__close {
 			.newspack-ui__modal__header & {
 				margin: -6px -6px -6px 0 !important; // Accounts for the header padding. TODO: Can this be improved to work w/variables?
+				position: relative;
+
+				&::after {
+					content: "";
+					inset: calc(var(--newspack-ui-spacer-base) / -2);
+					position: absolute;
+				}
 			}
 		}
 

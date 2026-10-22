@@ -1,9 +1,5 @@
 @use "~@wordpress/base-styles/colors" as wp-colors;
 
-.newspack-content-gates__gate .newspack-card:not(.newspack-settings__no-border) .newspack-action-card__region-children > .newspack-grid.newspack-ras-campaign__grid {
-	margin-top: 0 !important;
-}
-
 span.is-skipped {
 	color: wp-colors.$gray-700;
 }

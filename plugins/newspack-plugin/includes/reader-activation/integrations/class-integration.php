@@ -73,7 +73,8 @@ abstract class Integration {
 	 * WP_Error code pull_contact_data() should return when the provider has no
 	 * contact for the reader. Not a failure: no re-run can make an absent
 	 * contact appear, so batch drivers count these readers as skipped rather
-	 * than errored.
+	 * than errored. The sync framework returns the same code for an update-only
+	 * push that every integration declined, for the same reason.
 	 *
 	 * @var string
 	 */
@@ -268,6 +269,22 @@ abstract class Integration {
 	}
 
 	/**
+	 * How-to steps the Integrations UI shows as a guide, one step per page,
+	 * from the How it works item in the integration card's menu.
+	 *
+	 * Child classes override this when the way in is a workflow elsewhere in
+	 * the admin, such as a setting on a block, so the admin has to say where
+	 * to look. Each step carries a `title` and a `description`, and can carry
+	 * a `link` to documentation, with a `label` and a `url`. The default is no
+	 * guide.
+	 *
+	 * @return array List of associative arrays with keys `title`, `description`, and an optional `link`.
+	 */
+	public function get_guide(): array {
+		return [];
+	}
+
+	/**
 	 * Whether this integration supports frontend reader registration.
 	 *
 	 * Integrations that return true will have their key output to the page
@@ -381,6 +398,12 @@ abstract class Integration {
 	 * this method to perform additional checks on the request (e.g. verifying
 	 * custom headers, validating metadata, or enforcing integration-specific rules).
 	 *
+	 * Runs for every request that reaches the key gate, including one from an
+	 * already-authenticated caller: the endpoint's logged-in branch sits behind
+	 * this check, so rejecting here also suppresses
+	 * handle_logged_in_user_registration(). Fields like `npe` are
+	 * caller-supplied on that path too — validating them is not a session check.
+	 *
 	 * @param string           $key     The submitted key to validate.
 	 * @param \WP_REST_Request $request The full registration request.
 	 * @return bool Whether the registration request is valid.
@@ -434,10 +457,10 @@ abstract class Integration {
 	 * permanent for the pageview — so without this the submission is lost
 	 * rather than retried. This matters in production today: the ESP
 	 * integration emits the legacy key on released sites and validates through
-	 * this method. (newspack-manager's Fundraise Up handler emits it too, but
-	 * replaces validate_registration_request() wholesale — it authenticates on
-	 * verified supporter identifiers rather than the key — so it never reaches
-	 * this branch and the allowance does nothing for it.)
+	 * this method. (newspack-manager's Fundraise Up handler emits it too.
+	 * Handler versions that call this method before their own supporter check
+	 * get the allowance; older ones replace the method and never reach this
+	 * branch.)
 	 *
 	 * @todo Remove this method and its branch in validate_registration_request()
 	 *       once the seeded key has been in production for a release cycle
@@ -589,7 +612,7 @@ abstract class Integration {
 	 * @param array|null $existing_contact Optional. Existing contact data if available.
 	 * @param array      $options          Optional. Sync options, passed through to push_contact_data().
 	 *
-	 * @return true|\WP_Error The push_contact_data() result, unchanged.
+	 * @return true|array|\WP_Error The push_contact_data() result, unchanged.
 	 */
 	final public function push_contact( $contact, $context = '', $existing_contact = null, $options = [] ) {
 		
@@ -634,9 +657,57 @@ abstract class Integration {
 	 * @param string     $context Optional. The context of the sync.
 	 * @param array|null $existing_contact Optional. Existing contact data if available.
 	 *
-	 * @return true|\WP_Error True on success or WP_Error on failure.
+	 * @return true|array|\WP_Error True on success or WP_Error on failure. A success that left
+	 *                              fields out can return an array listing their names under
+	 *                              `unsynced_fields`, so the push log records the push as incomplete.
 	 */
 	abstract public function push_contact_data( $contact, $context = '', $existing_contact = null );
+
+	/**
+	 * Whether pushing this contact would update a live record the integration holds.
+	 *
+	 * Consulted by the sync framework only on an update-only push (the
+	 * `existing_only` sync option, which the backfill CLI sets unless
+	 * `--create-missing` is passed), before `push_contact_data()`: `false` makes the
+	 * framework skip this integration for the reader (tallied as skipped, not
+	 * failed), a `WP_Error` is treated as a failed push, and `true` lets the
+	 * push proceed. Answer by what the push would do: `true` only when it would
+	 * update a live record, `false` when it would create one or restore an
+	 * archived or deleted one. Any answer other than a boolean or a `WP_Error`
+	 * is treated as a failed check. Override it where the external system can be
+	 * asked; the override is what makes `supports_contact_lookup()` true. An
+	 * integration that cannot ask is refused on an update-only push rather than
+	 * pushed, because a push there is an upsert that would create the contact.
+	 *
+	 * @param string $email The contact's email address.
+	 *
+	 * @return bool|\WP_Error True if the push would update a live record, false if it would create or restore one, WP_Error if the lookup failed or is unsupported.
+	 */
+	public function contact_exists( string $email ) {
+		return new \WP_Error(
+			'newspack_integration_contact_lookup_unsupported',
+			sprintf(
+				// Translators: %s is the integration id.
+				__( 'Integration "%s" cannot check whether a contact exists.', 'newspack-plugin' ),
+				$this->get_id()
+			)
+		);
+	}
+
+	/**
+	 * Whether the integration can answer `contact_exists()`.
+	 *
+	 * Implementing `contact_exists()` is the opt-in: this is true as soon as a
+	 * subclass overrides it, so an integration written before the lookup
+	 * existed reports false rather than "yes". On an update-only push the sync
+	 * withholds the push from an integration that reports false: an unknown
+	 * must resolve to "do not create", or update-only guarantees nothing.
+	 *
+	 * @return bool
+	 */
+	public function supports_contact_lookup(): bool {
+		return ( new \ReflectionMethod( $this, 'contact_exists' ) )->getDeclaringClass()->getName() !== self::class;
+	}
 
 	/**
 	 * Whether this integration can hard-delete a contact from its external system.
@@ -659,7 +730,9 @@ abstract class Integration {
 	 *
 	 * Integrations that support hard deletion should override this AND
 	 * `supports_hard_delete()`. The default returns a "not implemented" WP_Error
-	 * so the dispatcher can log and skip.
+	 * so the dispatcher can log and skip. When the system holds no contact for
+	 * the email, answer with a WP_Error whose only code is
+	 * CONTACT_NOT_FOUND_ERROR_CODE: the deletion then ends without a retry.
 	 *
 	 * @param string $email Email address of the contact to delete.
 	 * @return true|\WP_Error True on success, WP_Error otherwise.
@@ -693,6 +766,13 @@ abstract class Integration {
 	 * Integrations can override this method to update user data or perform other actions when an existing user attempts to register again via the frontend registration flow. For example, an integration might want to link the existing user account to the integration, record a new donation for a returning donor, or log this event for analytics purposes.
 	 *
 	 * The default implementation is a no-op.
+	 *
+	 * Runs only for requests that passed the gates ahead of the logged-in
+	 * branch in \Newspack\Reader_Registration::api_frontend_register_reader(),
+	 * this integration's own validate_registration_request() included when
+	 * supports_frontend_registration() returns true. None of those gates ties
+	 * `$request` to `$user`: `npe` and `metadata` are whatever the caller sent,
+	 * so check that anything stored on `$user` belongs to that account.
 	 *
 	 * @param \WP_User         $user    The currently logged-in user attempting to register again.
 	 * @param \WP_REST_Request $request The original registration request.
@@ -758,14 +838,21 @@ abstract class Integration {
 	}
 
 	/**
-	 * Declare a WooCommerce My Account menu item for this integration.
+	 * Declare a My Account menu item for this integration.
 	 *
 	 * Return null (default) to opt out. Otherwise return:
 	 *   [
 	 *     'slug'     => 'rewards',              // endpoint slug, unique across integrations.
 	 *     'label'    => __( 'Rewards', 'newspack-plugin' ),
-	 *     'position' => 25,                     // optional, menu sort order.
+	 *     'position' => 2,                      // optional, zero-based index into WooCommerce's menu.
 	 *   ]
+	 *
+	 * The index applies to WooCommerce's menu as it stands before Newspack's
+	 * own My Account filters drop and reorder tabs. Without a position, the item
+	 * is appended before Log out. A position at or past the end lands after Log
+	 * out on WooCommerce's own account page; Newspack's default account UI moves
+	 * Log out to its footer, so there the item is last. Newspack's My Account
+	 * page without WooCommerce ignores the position and appends the item.
 	 *
 	 * The slug must not collide with a core My Account endpoint or one owned by
 	 * another plugin's My Account bridge — `newsletters` is reserved by

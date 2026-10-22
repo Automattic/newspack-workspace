@@ -22,6 +22,14 @@ Built packages are available in two places:
 
 Download the `.zip` file for the plugin or theme you want, then install it on your WordPress site via the WordPress admin interface (Plugins → Add New → Upload Plugin, or Appearance → Themes → Add New → Upload Theme).
 
+## Reporting Security Issues
+
+To disclose a security issue to our team, [please submit a report via HackerOne here](https://hackerone.com/automattic/).
+
+### Content gating
+
+Newspack's content gate controls access to content behind a login or paywall, not confidential content, so we don't treat it as a security boundary. Reports of gated content being accessed without meeting the gate's requirements, including through third-party plugins, are configuration or product issues rather than security issues.
+
 ## Getting started
 
 ### Clone this repository
@@ -52,7 +60,9 @@ You only need to run this the first time you set up your env.
 ./build-image.sh
 ```
 
-The default builds using PHP 8.3. You can also call `./build-image-82.sh` to build an image with PHP 8.2. It's a good idea to have both.
+`build-image.sh` sets the PHP minor version. The patch version is whatever `ppa:ondrej/php` offers at build time. To pick up a PHP patch release, rebuild with `./build-image.sh --no-cache`; a plain rebuild reuses the cached PHP layer and keeps the old patch.
+
+The image is built for Apple Silicon (`linux/arm64`) by default. On an Intel Mac or an x86 Linux machine, add `NEWSPACK_DOCKER_PLATFORM=linux/amd64` to your `.env` file before building.
 
 ### Launch the container and install WordPress
 
@@ -63,11 +73,9 @@ Now we are going to use the `n` script. (Tip: Create an alias in your `.bashrc` 
 n start
 ```
 
-(`n start 8.2` will start the image with php 8.2 if you built it)
-
 When you are done, you can stop the containers with `n stop`.
 
-You can also stop and start in one command with `n restart` (or `n restart 8.2`).
+You can also stop and start in one command with `n restart`.
 
 At this point you should be able to see your site in `https://localhost`.
 
@@ -114,7 +122,7 @@ n test-js # Runs js tests on the project you are currently in
 Run composer commands inside one of the projects
 
 ```BASH
-n composer dump-autoload # Runs `composer dump-autload` inside the current repo
+n composer dump-autoload # Runs `composer dump-autoload` inside the current repo
 n composer update # Runs `composer update` inside the current repo
 ```
 
@@ -140,11 +148,11 @@ n rsh # as root
 Other commands:
 
 * `n db`: Launches the MySQL interactive shell
-* `n wp`: runs any arbitraty WP CLI command. e.g. `n wp option get blogname`
+* `n wp`: runs any arbitrary WP CLI command. e.g. `n wp option get blogname`
 * `n tail`: Tails the apache error log file
 * `n uninstall`: Uninstalls WordPress
 * `jncp`, `jninit` & `secrets`: See Jurassic Ninja section below.
-* `n secrets-import`: Import all your secrets from a `secrets.json` file (see details on the Jurassic Ninha section below)
+* `n secrets-import`: Import all your secrets from a `secrets.json` file (see details on the Jurassic Ninja section below)
 * `n snapshot $name`: Creates a snapshot of the current site and gives it a name
 * `n snapshot-load $name`: Drops the current site and override it with the data from a snapshot
 * `n reset-site`: Drops the current site and creates a new one from scratch
@@ -207,9 +215,9 @@ This command will allow you to copy one or many plugins from your local env to t
 
 This is useful if you want to replace the plugin in the site with the custom branch you have checked out, or if you want to upload any other plugin you have.
 
-## Mailhog
+## Mailpit
 
-Mailhog is running by default so you can see all the emails that are sent from your WordPress site.
+Mailpit is running by default so you can see all the emails that are sent from your WordPress site.
 
 Visit http://localhost:8025 to see it.
 
@@ -473,7 +481,7 @@ If you need to run a couple of additional sites, we got you covered.
 
 You can have a number of additional sites running under `you-name-it.test`. They will live in their own local domain, such as `site1.test` and `another-site.test`.
 
-`n sites-add $site_name` will launch a new site. The site will come with Newpack already initialized and all the plugins linked. Your secrets will also be copied. It's basically the same result as running `n reset-site` for your main site.
+`n sites-add $site_name` will launch a new site. The site will come with Newspack already initialized and all the plugins linked. Your secrets will also be copied. It's basically the same result as running `n reset-site` for your main site.
 
 * `n sites-list` - Lists the current existing sites
 * `n sites-drop $sitename` - Will completely erase the site and its database
