@@ -109,7 +109,9 @@ export default function SubscriberList() {
 	// Opening a profile unmounts the list; the saved view brings the reader back
 	// to the filters, search, sort and page they left.
 	const [ view, setView ] = useState( () => getSavedListView() || DEFAULT_VIEW );
-	useEffect( () => saveListView( view ), [ view ] );
+	useEffect( () => {
+		saveListView( view );
+	}, [ view ] );
 	const history = useHistory();
 	const location = useLocation();
 
@@ -122,9 +124,24 @@ export default function SubscriberList() {
 	// endpoint honors status and plan here); sorting is name / member-since.
 	const { items, total, pages, loading: subscribersLoading, settled, error, reload } = useSubscribers( view );
 
+	// A restored page sits past the end if the list shrank while the reader was on
+	// a profile; step back to the last page rather than show "No results".
+	useEffect( () => {
+		const lastPage = Math.max( pages, 1 );
+		if ( ! subscribersLoading && ! error && view.page > lastPage ) {
+			setView( current => ( { ...current, page: lastPage } ) );
+		}
+	}, [ subscribersLoading, error, pages, view.page ] );
+
 	// Filter options for the Subscription column: every plan on the site, not just
-	// the ones on this page.
-	const planElements = useMemo( () => plans.map( name => ( { value: name, label: name } ) ), [ plans ] );
+	// the ones on this page. Plans the view already filters by stay options even if
+	// the plan list fails to load: DataViews drops a filter with no options, which
+	// would leave a restored filter applied with no chip to clear it.
+	const selectedPlans = view.filters?.find( f => 'plans' === f.field )?.value;
+	const planElements = useMemo(
+		() => [ ...new Set( [ ...plans, ...( selectedPlans || [] ) ] ) ].map( name => ( { value: name, label: name } ) ),
+		[ plans, selectedPlans ]
+	);
 
 	// Resolve avatar URLs for the current page, keyed by subscriber id. The table
 	// renders immediately with the avatar placeholder and each avatar fills in as

@@ -323,24 +323,30 @@ describe( 'the subscriber list view across profile visits', () => {
 		headerCalls = [];
 		mockDataViewsProps = null;
 		apiFetch.mockReset();
-		apiFetch.mockResolvedValue( page( 2 ) );
+		// Enough pages that a restored page 3 is still inside the list.
+		apiFetch.mockResolvedValue( { ...page( 2 ), pages: 5 } );
 	} );
 
-	it( 'restores the view the reader left when the list remounts', async () => {
+	/** Change the list's view, then unmount it, as opening a profile does. */
+	const leaveWith = async changes => {
 		let unmount;
 		await act( async () => {
 			( { unmount } = render( <SubscriberList /> ) );
 		} );
-		const changedView = {
-			...mockDataViewsProps.view,
-			page: 3,
-			search: 'reader',
-			filters: [ { field: 'status', operator: 'isAny', value: [ 'active' ] } ],
-		};
+		const changedView = { ...mockDataViewsProps.view, ...changes };
 		await act( async () => {
 			mockDataViewsProps.onChangeView( changedView );
 		} );
 		unmount();
+		return changedView;
+	};
+
+	it( 'restores the view the reader left when the list remounts', async () => {
+		const changedView = await leaveWith( {
+			page: 3,
+			search: 'reader',
+			filters: [ { field: 'status', operator: 'isAny', value: [ 'active' ] } ],
+		} );
 
 		apiFetch.mockClear();
 		await act( async () => {
@@ -358,6 +364,37 @@ describe( 'the subscriber list view across profile visits', () => {
 		expect( requestedPath ).toContain( 'page=3' );
 		expect( requestedPath ).toContain( 'search=reader' );
 		expect( requestedPath ).toContain( 'status[0]=active' );
+	} );
+
+	// DataViews drops a filter whose field has no options, so with the plan list
+	// unavailable a restored Subscription filter would narrow the list with no chip
+	// to show it or clear it.
+	it( 'keeps a restored Subscription filter visible when the plan list fails to load', async () => {
+		await leaveWith( { filters: [ { field: 'plans', operator: 'isAny', value: [ 'Gold' ] } ] } );
+
+		apiFetch.mockImplementation( ( { path } ) =>
+			path.includes( '/plans' ) ? Promise.reject( new Error( 'nope' ) ) : Promise.resolve( page( 2 ) )
+		);
+		await act( async () => {
+			render( <SubscriberList /> );
+		} );
+
+		const plansField = mockDataViewsProps.fields.find( field => 'plans' === field.id );
+		expect( plansField.elements ).toEqual( [ { value: 'Gold', label: 'Gold' } ] );
+	} );
+
+	it( 'moves a restored page back inside the list when the list has shrunk', async () => {
+		await leaveWith( { page: 3 } );
+
+		// The list now has two pages, so page 3 comes back empty.
+		apiFetch.mockImplementation( ( { path } ) =>
+			Promise.resolve( /[?&]page=3(&|$)/.test( path ) ? { items: [], total: 30, pages: 2 } : { ...page( 2 ), total: 30, pages: 2 } )
+		);
+		await act( async () => {
+			render( <SubscriberList /> );
+		} );
+
+		expect( mockDataViewsProps.view.page ).toBe( 2 );
 	} );
 } );
 
