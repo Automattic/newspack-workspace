@@ -58,6 +58,18 @@ export default function ReactivateFlow( { subscription, email, payerName, action
 	const planName = subscription.plan || __( '(Subscription)', 'newspack-plugin' );
 	const price = fmtCurrency( subscription.amount, subscription.currency );
 
+	// A gift's payment link is the buyer's to pay, so its help text names them.
+	const modeDetails = {
+		...MODE_DETAILS,
+		...( payerName && {
+			link: sprintf(
+				// translators: %s is the gift buyer's name.
+				__( 'Email %s a link to pay. The subscription stays on hold until they pay.', 'newspack-plugin' ),
+				payerName
+			),
+		} ),
+	};
+
 	const modeOptions = [
 		...( canCharge ? [ { label: __( 'Charge the customer now', 'newspack-plugin' ), value: 'charge' } ] : [] ),
 		{ label: __( 'Send a payment link', 'newspack-plugin' ), value: 'link' },
@@ -74,7 +86,7 @@ export default function ReactivateFlow( { subscription, email, payerName, action
 				// UI. When it couldn't send one, the admin gets the link itself to
 				// pass along instead of a false "sent" confirmation.
 				if ( result?.emailSent ) {
-					// translators: %s is the subscriber's email address.
+					// translators: %s is the email address the payment link went to: the buyer's billing email on a gift.
 					onDone( sprintf( __( 'Payment link sent to %s.', 'newspack-plugin' ), email ) );
 				} else {
 					setError(
@@ -138,7 +150,7 @@ export default function ReactivateFlow( { subscription, email, payerName, action
 					'newspack-plugin'
 			  );
 	} else if ( 'link' === mode ) {
-		// translators: %s is the subscriber's email address.
+		// translators: %s is the email address the payment link goes to: the buyer's billing email on a gift.
 		detail = sprintf( __( 'A payment link will be emailed to %s. The subscription reactivates once they pay.', 'newspack-plugin' ), email );
 	} else {
 		detail = __(
@@ -174,7 +186,7 @@ export default function ReactivateFlow( { subscription, email, payerName, action
 							selected={ mode }
 							options={ modeOptions }
 							onChange={ setMode }
-							help={ MODE_DETAILS[ mode ] }
+							help={ modeDetails[ mode ] }
 						/>
 						<StepButtons
 							leftLabel={ __( 'Cancel', 'newspack-plugin' ) }

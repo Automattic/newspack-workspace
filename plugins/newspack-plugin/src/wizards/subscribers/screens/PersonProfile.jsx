@@ -74,6 +74,15 @@ const { useParams, useLocation } = Router;
 const HIDE_CANCELLED_WHEN_LIVE = true;
 
 /**
+ * The name of whoever bought a gift, or undefined when the subscription isn't one.
+ * A buyer with no name on file reads "Unknown".
+ *
+ * @param {Object} subscription The profile subscription entry.
+ * @return {string|undefined} The buyer's name.
+ */
+const giftPayerName = subscription => ( subscription.giftedBy ? subscription.giftedBy.name || __( 'Unknown', 'newspack-plugin' ) : undefined );
+
+/**
  * Row of a two-column section: header on the left, content on the right.
  *
  * @param {Object}  props               Component props.
@@ -308,7 +317,7 @@ export default function PersonProfile() {
 			const name = subscription.plan || __( '(Subscription)', 'newspack-plugin' );
 			const isActive = 'active' === subscription.status;
 			const isLive = isActive || 'on-hold' === subscription.status;
-			const giftedByName = subscription.giftedBy?.name || __( 'Unknown', 'newspack-plugin' );
+			const giftedByName = giftPayerName( subscription );
 			const menuActions = [];
 			if ( subscription.editUrl ) {
 				menuActions.push( viewSubscriptionAction( name, subscription.editUrl ) );
@@ -552,7 +561,7 @@ export default function PersonProfile() {
 					subscriberName={ subscriber.name }
 					// A gift's refund goes back to whoever bought it, not to the reader;
 					// passing a payer switches RefundFlow to the gift wording.
-					payerName={ modal.subscription.giftedBy ? modal.subscription.giftedBy.name || __( 'Unknown', 'newspack-plugin' ) : undefined }
+					payerName={ giftPayerName( modal.subscription ) }
 					actions={ paymentActions }
 					onClose={ () => setModal( null ) }
 					onDone={ completeFlow }
@@ -565,7 +574,7 @@ export default function PersonProfile() {
 					// for a gift is the purchaser's, not the reader's.
 					email={ modal.subscription.billingEmail || subscriber.email }
 					// The same buyer RefundFlow names: a gift's payment link is theirs.
-					payerName={ modal.subscription.giftedBy ? modal.subscription.giftedBy.name || __( 'Unknown', 'newspack-plugin' ) : undefined }
+					payerName={ giftPayerName( modal.subscription ) }
 					actions={ subscriptionActions }
 					onClose={ () => setModal( null ) }
 					onDone={ completeFlow }

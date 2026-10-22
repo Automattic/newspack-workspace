@@ -186,7 +186,7 @@ describe( 'a gifted subscription on the profile', () => {
 		apiFetch.mockReset();
 	} );
 
-	it( 'renders a Gifted by row linking to the giver', async () => {
+	it( 'renders a Gifted by row on the gift only, linking to the giver', async () => {
 		const own = subscription( { id: 32, plan: 'Annual supporter' } );
 		await renderCards( profile( { subscriptions: [ subscription( { giftedBy: giver } ), own ] } ) );
 
@@ -307,6 +307,21 @@ describe( 'the money flows on a gifted subscription', () => {
 			screen.getByText( /The gateway does not refund automatically, so the payment must be returned to Gale Giver manually\./ )
 		).toBeInTheDocument();
 		expect( screen.queryByText( /returned to the subscriber manually/ ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'names the giver in the help text of the payment-link option', async () => {
+		await renderCards( profile( { subscriptions: [ onHold() ] } ) );
+		await chooseCardAction( 'Weekly digest', 'Reactivate' );
+
+		expect( screen.getByText( 'Email Gale Giver a link to pay. The subscription stays on hold until they pay.' ) ).toBeInTheDocument();
+		expect( screen.queryByText( /Email the subscriber a link to pay/ ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'keeps the subscriber wording in the payment-link option when the subscription is not a gift', async () => {
+		await renderCards( profile( { subscriptions: [ subscription( { status: 'on-hold', canReactivate: true } ) ] } ) );
+		await chooseCardAction( 'Weekly digest', 'Reactivate' );
+
+		expect( screen.getByText( 'Email the subscriber a link to pay. Stays on hold until they pay.' ) ).toBeInTheDocument();
 	} );
 
 	it( 'names the giver when the payment link email could not be sent', async () => {
