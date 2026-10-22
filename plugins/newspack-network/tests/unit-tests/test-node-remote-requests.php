@@ -24,21 +24,44 @@ class TestNodeRemoteRequests extends WP_UnitTestCase {
 	private $requests = [];
 
 	/**
-	 * Intercept outgoing requests so nothing leaves the test run.
+	 * Entries reported through the newspack_log action, as [ code, data ].
+	 *
+	 * @var array
+	 */
+	private $logged = [];
+
+	/**
+	 * Intercept outgoing requests so nothing leaves the test run, and record what is logged.
 	 */
 	public function set_up() {
 		parent::set_up();
-		$this->requests           = [];
-		\Newspack\Logger::$entries = [];
+		$this->requests = [];
+		$this->logged   = [];
 		add_filter( 'pre_http_request', [ $this, 'intercept' ], 10, 3 );
+		add_action( 'newspack_log', [ $this, 'record_log' ], 10, 3 );
 	}
 
 	/**
-	 * Remove the intercept.
+	 * Remove the intercept and the log recorder.
 	 */
 	public function tear_down() {
 		remove_filter( 'pre_http_request', [ $this, 'intercept' ], 10 );
+		remove_action( 'newspack_log', [ $this, 'record_log' ], 10 );
 		parent::tear_down();
+	}
+
+	/**
+	 * Record an entry reported through the newspack_log action.
+	 *
+	 * @param string $code    Log code.
+	 * @param string $message Message.
+	 * @param array  $params  Type, data and the other fields the Logger adds.
+	 */
+	public function record_log( $code, $message, $params ) {
+		$this->logged[] = [
+			'code' => $code,
+			'data' => $params['data'] ?? null,
+		];
 	}
 
 	/**
@@ -147,7 +170,7 @@ class TestNodeRemoteRequests extends WP_UnitTestCase {
 	private function only_refusal_logged() {
 		$refusals = array_values(
 			array_filter(
-				\Newspack\Logger::$entries,
+				$this->logged,
 				function ( $entry ) {
 					return 'newspack_network_peer_request' === $entry['code'];
 				}
