@@ -75,6 +75,7 @@ class Subscribers_Dashboard {
 						'number'       => self::INDEX_PAGE_SIZE,
 						'paged'        => $page,
 						'orderby'      => 'ID',
+						'count_total'  => false,
 					]
 				)
 			);
