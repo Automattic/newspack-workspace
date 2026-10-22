@@ -1135,7 +1135,8 @@ final class Reader_Activation {
 	 *
 	 * @param \WP_User|int $user_or_user_id    User object.
 	 * @param bool         $revoke_credentials Whether to revoke passwords set before verification. Pass false
-	 *                                         when the verification doesn't prove who controls the address.
+	 *                                         when the verification doesn't prove who controls the address,
+	 *                                         or when nobody could have set credentials on the account yet.
 	 *
 	 * @return bool Whether the email address was verified.
 	 */
@@ -1155,9 +1156,9 @@ final class Reader_Activation {
 			return false;
 		}
 
-		// A stored "unverified" flag means the account came from a registration,
-		// which signs the registrant in before anyone proves the address. Accounts
-		// created any other way keep their passwords.
+		// Accounts created as readers, by registration or at checkout, carry a stored
+		// "unverified" flag, and whoever created one may have set its password before
+		// anyone proved the address. Accounts created any other way keep their passwords.
 		if ( $revoke_credentials && \metadata_exists( 'user', $user->ID, self::EMAIL_VERIFIED ) ) {
 			self::revoke_pre_verification_credentials( $user );
 		}
@@ -1214,9 +1215,11 @@ final class Reader_Activation {
 		\WP_Application_Passwords::delete_all_application_passwords( $user->ID );
 
 		// Changing the password invalidates every auth cookie issued before it,
-		// including the one that signed the reader in to verify.
+		// including the one that signed the reader in to verify. Core's reset form
+		// verifies mid-page, where a cookie can no longer be sent; its submission
+		// signs the reader out anyway.
 		$session_token = \wp_get_session_token();
-		if ( \get_current_user_id() === $user->ID && $session_token ) {
+		if ( \get_current_user_id() === $user->ID && $session_token && ! \doing_action( 'resetpass_form' ) ) {
 			self::set_auth_cookie( $user->ID, $session_token );
 		}
 	}
