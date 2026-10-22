@@ -2,10 +2,11 @@
 /**
  * Mock of newspack-plugin's Logger.
  *
- * Newspack-plugin is not loaded in this test env, so the always-on audit path
- * would otherwise fall through to the error log and be unobservable. Captures
- * `newspack_log()` calls; the level-gated methods are no-ops, since the other
- * callers only reach them behind NEWSPACK_LOG_LEVEL, which tests never set.
+ * Newspack-plugin is not loaded in this test env, and this plugin skips
+ * `newspack_log()` when the Logger is missing, so nothing would be recorded.
+ * Captures `newspack_log()` calls for tests to assert on. `log()` and `error()`
+ * are no-ops: the real ones write only when NEWSPACK_LOG_LEVEL is set, which
+ * tests never do.
  *
  * @package Newspack_Network_Hub
  */

@@ -92,8 +92,9 @@ class TestNodeRemoteRequests extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A redirect core refuses on its own is still logged as a refusal. Core leaves only
-	 * its generic message on the error, so this relies on core keeping that string.
+	 * A redirect core refuses on its own is still logged as a refusal. Production matches
+	 * core's generic message, and this test builds its error from the same string, so it
+	 * cannot catch core rewording it.
 	 */
 	public function test_redirect_refused_by_core_is_logged() {
 		$refuse = function () {
