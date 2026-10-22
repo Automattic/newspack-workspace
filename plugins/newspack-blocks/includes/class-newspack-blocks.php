@@ -114,7 +114,9 @@ class Newspack_Blocks {
 
 		$found[ $post->ID ] = null;
 		foreach ( parse_blocks( $post->post_content ) as $block ) {
-			if ( 'newspack-blocks/iframe' === $block['blockName'] && ! empty( $block['attrs']['isFullScreen'] ) ) {
+			// A block with no usable source renders nothing, so it must not take over the page.
+			if ( 'newspack-blocks/iframe' === $block['blockName'] && ! empty( $block['attrs']['isFullScreen'] )
+				&& '' !== newspack_blocks_get_iframe_src( $block['attrs']['src'] ?? '' ) ) {
 				$found[ $post->ID ] = $block;
 				break;
 			}
