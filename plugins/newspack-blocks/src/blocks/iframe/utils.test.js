@@ -10,6 +10,9 @@ describe( 'getEmbeddableSrc', () => {
 		[ 'vbscript scheme', 'vbscript:msgbox(1)' ],
 		[ 'empty', '' ],
 		[ 'whitespace only', '   ' ],
+		[ 'no scheme, colon in the path', 'example.test/a:b' ],
+		[ 'query with a colon', '?a=1:2' ],
+		[ 'fragment with a colon', '#x:y' ],
 	] )( 'loads nothing for a source outside http(s): %s', ( _label, src ) => {
 		expect( getEmbeddableSrc( src ) ).toBe( '' );
 	} );

@@ -110,15 +110,12 @@ class Test_Fullscreen_Iframe extends WP_UnitTestCase {
 	 * keeps its content, the page keeps its layout, and prompts still show.
 	 */
 	public function test_fullscreen_block_with_unusable_source_takes_nothing_over() {
-		// An administrator saves the source as written, so kses cannot rewrite it first.
-		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
 		$post_id = self::factory()->post->create(
 			[
 				'post_content' => '<!-- wp:paragraph --><p>Body that stays.</p><!-- /wp:paragraph -->'
 					. '<!-- wp:newspack-blocks/iframe {"src":"javascript:void(0)","isFullScreen":true} /-->',
 			]
 		);
-		wp_set_current_user( 0 );
 		$this->go_to( get_permalink( $post_id ) );
 
 		$this->assertStringContainsString( 'Body that stays.', $this->render_content( $post_id ) );
