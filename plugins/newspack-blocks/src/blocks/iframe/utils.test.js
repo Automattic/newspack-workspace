@@ -1,6 +1,6 @@
-import { isEmbeddableSrc } from './utils';
+import { getEmbeddableSrc } from './utils';
 
-describe( 'isEmbeddableSrc', () => {
+describe( 'getEmbeddableSrc', () => {
 	it.each( [
 		[ 'script scheme', 'javascript:void(0)' ],
 		[ 'mixed-case scheme', 'JavaScript:void(0)' ],
@@ -10,15 +10,16 @@ describe( 'isEmbeddableSrc', () => {
 		[ 'vbscript scheme', 'vbscript:msgbox(1)' ],
 		[ 'empty', '' ],
 		[ 'whitespace only', '   ' ],
-	] )( 'does not load a source outside http(s): %s', ( _label, src ) => {
-		expect( isEmbeddableSrc( src ) ).toBe( false );
+	] )( 'loads nothing for a source outside http(s): %s', ( _label, src ) => {
+		expect( getEmbeddableSrc( src ) ).toBe( '' );
 	} );
 
 	it.each( [
-		[ 'https', 'https://example.test/embed?id=1' ],
-		[ 'http', 'http://example.test/embed' ],
-		[ 'uploads-relative', '/wp-content/uploads/iframe/demo/index.html' ],
-	] )( 'loads a supported source: %s', ( _label, src ) => {
-		expect( isEmbeddableSrc( src ) ).toBe( true );
+		[ 'https', 'https://example.test/embed?id=1', 'https://example.test/embed?id=1' ],
+		[ 'http', 'http://example.test/embed', 'http://example.test/embed' ],
+		[ 'uploads-relative', '/wp-content/uploads/iframe/demo/index.html', `${ window.location.origin }/wp-content/uploads/iframe/demo/index.html` ],
+		[ 'no scheme, as the front end completes it', 'example.test/page', 'https://example.test/page' ],
+	] )( 'loads a supported source: %s', ( _label, src, expected ) => {
+		expect( getEmbeddableSrc( src ) ).toBe( expected );
 	} );
 } );
