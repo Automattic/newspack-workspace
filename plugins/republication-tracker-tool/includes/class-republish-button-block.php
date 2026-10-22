@@ -159,15 +159,10 @@ final class Republication_Tracker_Tool_Republish_Button_Block {
 		if ( ! Republication_Tracker_Tool::$modal_rendered ) {
 			Republication_Tracker_Tool::$modal_rendered = true;
 
-			$is_amp             = false; // Used by shareable-content.php; block themes do not support AMP.
-			$modal_content_path = REPUBLICATION_TRACKER_TOOL_PATH . 'includes/shareable-content.php';
+			$is_amp = false; // Used by shareable-content.php; block themes do not support AMP.
 
 			ob_start();
-			?>
-			<div id="republication-tracker-tool-modal" style="display:none;" data-postid="<?php echo esc_attr( $post->ID ); ?>" data-pluginsdir="<?php echo esc_attr( plugins_url() ); ?>" role="dialog" aria-modal="true" aria-labelledby="republish-modal-label">
-				<?php include $modal_content_path; ?>
-			</div>
-			<?php
+			include REPUBLICATION_TRACKER_TOOL_PATH . 'includes/shareable-content.php';
 			$html .= ob_get_clean();
 		}
 
@@ -202,13 +197,7 @@ final class Republication_Tracker_Tool_Republish_Button_Block {
 	 * Enqueue modal-specific assets.
 	 */
 	private static function enqueue_modal_assets(): void {
-		// Modal styles (same handle as widget for deduplication).
-		wp_enqueue_style(
-			'republication-tracker-tool-css',
-			REPUBLICATION_TRACKER_TOOL_URL . 'assets/widget.css',
-			[],
-			REPUBLICATION_TRACKER_TOOL_VERSION
-		);
+		Republication_Tracker_Tool::enqueue_modal_style();
 
 		// Clipboard utilities (shared with widget).
 		wp_enqueue_script(
@@ -234,7 +223,7 @@ final class Republication_Tracker_Tool_Republish_Button_Block {
 		wp_enqueue_script(
 			'republication-tracker-tool-republish-button-view',
 			REPUBLICATION_TRACKER_TOOL_URL . 'dist/republish-button-view.js',
-			array_merge( $asset['dependencies'], [ 'republication-tracker-tool-clipboard-utils' ] ),
+			array_merge( $asset['dependencies'], [ 'republication-tracker-tool-clipboard-utils' ], Republication_Tracker_Tool::use_newspack_ui() ? [ 'newspack-ui' ] : [] ),
 			$asset['version'],
 			[
 				'in_footer' => true,

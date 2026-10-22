@@ -1,0 +1,23 @@
+#republication-tracker-tool-modal .article-info h1 {
+	font-size: var(--newspack-ui-font-size-s);
+	line-height: var(--newspack-ui-line-height-s);
+}
+
+#republication-tracker-tool-modal textarea,
+#republication-tracker-tool-modal input {
+	font-family: monospace;
+	font-size: var(--newspack-ui-font-size-xs);
+	line-height: var(--newspack-ui-line-height-xs);
+}
+
+amp-lightbox#republication-tracker-tool-modal {
+	background: var(--newspack-ui-color-overlay-70);
+}
+
+amp-lightbox #republication-tracker-tool-modal-content {
+	height: fit-content;
+	inset: 0;
+	margin: auto;
+	position: absolute;
+	width: 100%;
+}
