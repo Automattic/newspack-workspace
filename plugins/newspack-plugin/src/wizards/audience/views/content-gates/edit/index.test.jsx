@@ -180,10 +180,12 @@ describe( 'Content gate editor', () => {
 } );
 
 describe( 'Premium newsletter list settings', () => {
-	it( 'shows the Subscriptions section, naming the site setting', async () => {
+	it( 'shows both settings in the Paid Access card, naming the site setting', async () => {
 		await renderNewsletterEdit();
 
-		expect( screen.getByRole( 'heading', { name: 'Subscriptions' } ) ).toBeInTheDocument();
+		const paidAccessCard = screen.getByRole( 'heading', { name: 'Paid Access' } ).closest( '.newspack-card--core' );
+		expect( paidAccessCard ).toContainElement( screen.getByRole( 'combobox', { name: 'Auto-signup' } ) );
+		expect( paidAccessCard ).toContainElement( screen.getByRole( 'checkbox', { name: 'Hide from readers' } ) );
 		expect( screen.getByRole( 'option', { name: 'Use site setting (on)' } ) ).toBeInTheDocument();
 	} );
 
@@ -232,10 +234,11 @@ describe( 'Premium newsletter list settings', () => {
 		expect( savedGate() ).toEqual( expect.objectContaining( { title: 'Edited title', auto_signup: 'on', hide_lists: true } ) );
 	} );
 
-	it( 'leaves the Subscriptions section and both keys out of a content gate', async () => {
+	it( 'leaves both settings and both keys out of a content gate', async () => {
 		await renderEdit();
 
-		expect( screen.queryByRole( 'heading', { name: 'Subscriptions' } ) ).not.toBeInTheDocument();
+		expect( screen.queryByRole( 'combobox', { name: 'Auto-signup' } ) ).not.toBeInTheDocument();
+		expect( screen.queryByRole( 'checkbox', { name: 'Hide from readers' } ) ).not.toBeInTheDocument();
 
 		await runHeaderAction( 'Rename' );
 		fireEvent.change( screen.getByRole( 'textbox', { name: /gate name/i } ), { target: { value: 'Edited title' } } );

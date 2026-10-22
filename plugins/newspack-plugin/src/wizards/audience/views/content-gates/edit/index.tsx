@@ -701,7 +701,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 				</Stack>
 			</Grid>
 			<Divider alignment="full-width" variant="tertiary" />
-			<Grid columns={ 2 } gutter={ 32 } noMargin={ ! isNewsletter }>
+			<Grid columns={ 2 } gutter={ 32 } noMargin>
 				<SectionHeader
 					heading={ 2 }
 					title={ sprintf(
@@ -778,34 +778,24 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 							siteMeter={ siteMeter }
 							governsSignedOut={ ! registration.active }
 						/>
+						{ isNewsletter && (
+							<NewsletterSettings
+								autoSignup={ autoSignup }
+								hideLists={ hideLists }
+								siteAutoSignup={ siteAutoSignup }
+								onChange={ ( { auto_signup, hide_lists } ) => {
+									if ( auto_signup !== undefined ) {
+										setAutoSignup( auto_signup );
+									}
+									if ( hide_lists !== undefined ) {
+										setHideLists( hide_lists );
+									}
+								} }
+							/>
+						) }
 					</CardSettingsGroup>
 				</Stack>
 			</Grid>
-			{ isNewsletter && (
-				<>
-					<Divider alignment="full-width" variant="tertiary" />
-					<Grid columns={ 2 } gutter={ 32 } noMargin>
-						<SectionHeader
-							heading={ 2 }
-							title={ __( 'Subscriptions', 'newspack-plugin' ) }
-							description={ __( 'Choose how readers join these lists, and whether readers can see them.', 'newspack-plugin' ) }
-						/>
-						<NewsletterSettings
-							autoSignup={ autoSignup }
-							hideLists={ hideLists }
-							siteAutoSignup={ siteAutoSignup }
-							onChange={ ( { auto_signup, hide_lists } ) => {
-								if ( auto_signup !== undefined ) {
-									setAutoSignup( auto_signup );
-								}
-								if ( hide_lists !== undefined ) {
-									setHideLists( hide_lists );
-								}
-							} }
-						/>
-					</Grid>
-				</>
-			) }
 		</div>
 	);
 };
