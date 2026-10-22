@@ -338,6 +338,20 @@ class Test_Private_Tags_Integrations extends WP_UnitTestCase {
 		$this->assertSame( 'Beastie (private)', $out->name );
 	}
 
+	/**
+	 * Strip private label from rest keeps the name when the private tag differs only by a backslash.
+	 *
+	 * The name lookup strips slashes, so "AC\DC" finds a private "ACDC", but wp_insert_term()
+	 * compares the unslashed name and would create a new public "AC\DC" tag.
+	 */
+	public function test_strip_private_label_from_rest_keeps_name_when_only_backslash_differs() {
+		$this->make_private_tag( 'ACDC' );
+
+		$prepared = (object) [ 'name' => 'AC\DC (private)' ];
+		$out      = Private_Tags::strip_private_label_from_rest( $prepared, new WP_REST_Request( 'POST', '/wp/v2/tags' ) );
+		$this->assertSame( 'AC\DC (private)', $out->name );
+	}
+
 	// -----------------------------------------------------------------
 	// Admin column.
 	// -----------------------------------------------------------------
