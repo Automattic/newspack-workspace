@@ -1602,7 +1602,7 @@ class Subscribers_Wizard extends Wizard {
 	 * @return array|null { id, name, editUrl }, or null when the reader bought it
 	 *                    themselves or the purchaser's account no longer exists.
 	 */
-	private function gifted_by( $subscription, $user_id ) {
+	private function gifted_by( $subscription, $user_id ): ?array {
 		if ( WooCommerce_Subscriptions_Gifting::get_recipient_id( $subscription ) !== $user_id ) {
 			return null;
 		}

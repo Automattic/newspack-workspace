@@ -41,10 +41,11 @@ class WooCommerce_Subscriptions_Gifting {
 	 *
 	 * @param \WC_Subscription $subscription Subscription.
 	 *
-	 * @return int The recipient's user ID, or 0 if the subscription isn't a gift
-	 *             or its recipient account no longer exists.
+	 * @return int The recipient's user ID, or 0 if the subscription isn't a gift,
+	 *             the gift has no recipient account yet (email-only), or the
+	 *             recipient's account no longer exists.
 	 */
-	public static function get_recipient_id( $subscription ) {
+	public static function get_recipient_id( $subscription ): int {
 		if ( ! class_exists( 'WCS_Gifting' ) || ! \WCS_Gifting::is_gifted_subscription( $subscription ) ) {
 			return 0;
 		}
@@ -56,11 +57,15 @@ class WooCommerce_Subscriptions_Gifting {
 	 * Get the user who holds a subscription: the recipient of a gift, otherwise
 	 * the customer who purchased it.
 	 *
+	 * A gift with no recipient account (email-only, or the account is gone) falls
+	 * back to the buyer here. Content-gate access differs: it grants such a gift
+	 * to nobody.
+	 *
 	 * @param \WC_Subscription $subscription Subscription.
 	 *
 	 * @return int User ID.
 	 */
-	public static function get_holder_id( $subscription ) {
+	public static function get_holder_id( $subscription ): int {
 		$recipient_id = self::get_recipient_id( $subscription );
 		return $recipient_id ? $recipient_id : (int) $subscription->get_customer_id();
 	}
