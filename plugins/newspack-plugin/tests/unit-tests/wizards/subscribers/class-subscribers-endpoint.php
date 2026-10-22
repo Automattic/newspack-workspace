@@ -42,11 +42,19 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	private $group_product_ids = [];
 
 	/**
+	 * Callbacks hooked to wcs_get_users_subscriptions by create_gifted_subscription().
+	 *
+	 * @var callable[]
+	 */
+	private $gift_filters = [];
+
+	/**
 	 * Include the WC mocks before the class boots.
 	 */
 	public static function set_up_before_class() {
 		parent::set_up_before_class();
 		require_once dirname( __DIR__, 3 ) . '/mocks/wc-mocks.php';
+		require_once dirname( __DIR__, 3 ) . '/mocks/wcs-gifting-mock.php';
 		// Stands in for the Newsletters plugin's list registry, which the endpoint
 		// resolves subscribed list IDs against for the Newsletters column.
 		require_once dirname( __DIR__, 3 ) . '/mocks/newsletters-namespaced-mocks.php';
@@ -70,6 +78,9 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		$orders_database        = [];
 		$this->user_ids         = [];
 		$this->group_product_ids = [];
+		$this->gift_filters     = [];
+		// The gifting stub's recipient map is static and shared with other test files.
+		\WCS_Gifting::$recipients = [];
 		$this->scope_token      = 'scope' . wp_generate_password( 8, false );
 		Group_Subscription::reset_cache();
 		Group_Subscription_Settings::clear_group_subscription_ids_cache();
@@ -84,6 +95,11 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		$subscriptions_database = [];
 		$products_database      = [];
 		$orders_database        = [];
+		foreach ( $this->gift_filters as $gift_filter ) {
+			remove_filter( 'wcs_get_users_subscriptions', $gift_filter, 10 );
+		}
+		$this->gift_filters       = [];
+		\WCS_Gifting::$recipients = [];
 		foreach ( $this->user_ids as $user_id ) {
 			wp_delete_user( $user_id );
 		}
@@ -198,6 +214,46 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 			$data['items']    = self::line_items_for( $product_id );
 		}
 		return wcs_create_subscription( $data );
+	}
+
+	/**
+	 * Create an active subscription bought by one reader as a gift for another.
+	 *
+	 * Mirrors WCS Gifting in production: the subscription stays owned by the
+	 * purchaser, and the recipient sees it in wcs_get_users_subscriptions().
+	 *
+	 * @param int    $purchaser_id Purchaser user ID.
+	 * @param int    $recipient_id Recipient user ID.
+	 * @param string $status       Subscription status.
+	 * @param int    $product_id   Optional product ID to link.
+	 * @param array  $dates        Optional subscription dates, keyed by WCS date type.
+	 *
+	 * @return WC_Subscription
+	 */
+	private function create_gifted_subscription( int $purchaser_id, int $recipient_id, string $status = 'active', int $product_id = 0, array $dates = [] ): WC_Subscription {
+		$data = [
+			'customer_id'    => $purchaser_id,
+			'status'         => $status,
+			'billing_period' => 'month',
+			'dates'          => $dates,
+		];
+		if ( $product_id ) {
+			$data['products'] = [ $product_id ];
+			$data['items']    = self::line_items_for( $product_id );
+		}
+		$subscription = wcs_create_subscription( $data );
+		\WCS_Gifting::$recipients[ $subscription->get_id() ] = $recipient_id;
+
+		$gift_filter = function ( $subscriptions, $user_id ) use ( $subscription, $recipient_id ) {
+			if ( (int) $user_id === $recipient_id ) {
+				$subscriptions[ $subscription->get_id() ] = $subscription;
+			}
+			return $subscriptions;
+		};
+		add_filter( 'wcs_get_users_subscriptions', $gift_filter, 10, 2 );
+		$this->gift_filters[] = $gift_filter;
+
+		return $subscription;
 	}
 
 	/**
@@ -610,6 +666,106 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 
 		$ids = array_column( $this->dispatch( [ 'plan' => [ 'Digital Monthly' ] ] )->get_data()['items'], 'id' );
 		$this->assertSame( [ $digital_id ], $ids, 'Only the reader on the named product matches the plan filter.' );
+	}
+
+	/**
+	 * A gifted subscription belongs to the recipient: it shows on their row with its
+	 * status, and the purchaser — who holds nothing else — has no subscription and
+	 * no status.
+	 */
+	public function test_gift_lists_under_recipient_not_purchaser() {
+		$this->login_admin();
+		$purchaser_id = $this->create_reader( 'Purchaser' );
+		$recipient_id = $this->create_reader( 'Recipient' );
+		$gift         = $this->create_gifted_subscription( $purchaser_id, $recipient_id );
+
+		$by_id = array_column( $this->dispatch()->get_data()['items'], null, 'id' );
+
+		$this->assertSame( [ $gift->get_id() ], array_column( $by_id[ $recipient_id ]['subscriptions'], 'id' ) );
+		$this->assertSame( 'active', $by_id[ $recipient_id ]['status'] );
+		$this->assertSame( [], $by_id[ $purchaser_id ]['subscriptions'], 'A purchaser does not hold the gift they bought.' );
+		$this->assertSame( '', $by_id[ $purchaser_id ]['status'], 'A purchaser with nothing else is not Active.' );
+	}
+
+	/**
+	 * A purchaser with their own subscription keeps it, and stays Active on the
+	 * strength of it — the gift they bought neither joins nor replaces it.
+	 */
+	public function test_purchaser_with_own_subscription_stays_active() {
+		$this->login_admin();
+		$purchaser_id = $this->create_reader( 'Purchaser' );
+		$recipient_id = $this->create_reader( 'Recipient' );
+		$own          = $this->create_individual_subscription( $purchaser_id, 'active' );
+		$this->create_gifted_subscription( $purchaser_id, $recipient_id );
+
+		$by_id = array_column( $this->dispatch()->get_data()['items'], null, 'id' );
+
+		$this->assertSame( [ $own->get_id() ], array_column( $by_id[ $purchaser_id ]['subscriptions'], 'id' ) );
+		$this->assertSame( 'active', $by_id[ $purchaser_id ]['status'] );
+	}
+
+	/**
+	 * The status and plan filters follow the recipient, matching the row the
+	 * recipient sees: they include the recipient and leave out a purchaser who has
+	 * nothing else.
+	 */
+	public function test_status_and_plan_filters_follow_recipient() {
+		$this->login_admin();
+		$product_id   = self::factory()->post->create(
+			[
+				'post_type'   => 'product',
+				'post_title'  => 'Gift Digital',
+				'post_status' => 'publish',
+			]
+		);
+		$purchaser_id = $this->create_reader( 'Purchaser' );
+		$recipient_id = $this->create_reader( 'Recipient' );
+		$this->create_gifted_subscription( $purchaser_id, $recipient_id, 'active', $product_id );
+
+		$status_ids = array_column( $this->dispatch( [ 'status' => [ 'active' ] ] )->get_data()['items'], 'id' );
+		$this->assertSame( [ $recipient_id ], $status_ids, 'The status filter matches the recipient, not the purchaser.' );
+
+		$plan_ids = array_column( $this->dispatch( [ 'plan' => [ 'Gift Digital' ] ] )->get_data()['items'], 'id' );
+		$this->assertSame( [ $recipient_id ], $plan_ids, 'The plan filter matches the recipient, not the purchaser.' );
+	}
+
+	/**
+	 * A recipient's last payment includes the gift's last paid order, since the
+	 * gift is theirs but the order sits on the purchaser's account.
+	 */
+	public function test_recipient_last_payment_reflects_gift() {
+		$this->login_admin();
+		$purchaser_id = $this->create_reader( 'Purchaser' );
+		$recipient_id = $this->create_reader( 'Recipient' );
+		$this->create_gifted_subscription( $purchaser_id, $recipient_id, 'active', 0, [ 'last_order_date_paid' => '2026-07-01 09:00:00' ] );
+
+		$by_id = array_column( $this->dispatch()->get_data()['items'], null, 'id' );
+
+		$this->assertSame( '2026-07-01', $by_id[ $recipient_id ]['lastPayment'] );
+		$this->assertNull( $by_id[ $purchaser_id ]['lastPayment'], 'The purchaser has no paid order of their own here.' );
+	}
+
+	/**
+	 * A recipient who also paid for something themselves shows whichever payment is
+	 * more recent, not the gift's by default.
+	 */
+	public function test_recipient_last_payment_is_the_latest_of_own_order_and_gift() {
+		$this->login_admin();
+		$purchaser_id = $this->create_reader( 'Purchaser' );
+		$recipient_id = $this->create_reader( 'Recipient' );
+		$this->create_gifted_subscription( $purchaser_id, $recipient_id, 'active', 0, [ 'last_order_date_paid' => '2026-07-01 09:00:00' ] );
+		wc_create_order(
+			[
+				'customer_id' => $recipient_id,
+				'status'      => 'completed',
+				'total'       => 12.5,
+				'date_paid'   => '2026-08-15 09:00:00',
+			]
+		);
+
+		$by_id = array_column( $this->dispatch()->get_data()['items'], null, 'id' );
+
+		$this->assertSame( '2026-08-15', $by_id[ $recipient_id ]['lastPayment'] );
 	}
 
 	/**
