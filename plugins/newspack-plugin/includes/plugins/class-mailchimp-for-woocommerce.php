@@ -127,10 +127,11 @@ class Mailchimp_For_WooCommerce {
 	 *
 	 * Mailchimp writes each part of the address MC4WC sends with an order into the contact's
 	 * address. When the result lacks a street, city, or postcode, Mailchimp ignores every later
-	 * update to the contact, while still reporting success. Checkouts for digital products often collect only a
-	 * postcode and country. A missing street and city come from the reader's earlier order when it
-	 * was at the same postcode, so a returning reader keeps their real address, and become "-"
-	 * otherwise, which Mailchimp accepts as complete. An address without a postcode is not sent.
+	 * update to the contact, while still reporting success. Checkouts for digital products often
+	 * collect only a postcode and country. A missing street and city come from the reader's earlier
+	 * order at the same postcode and country, so a returning reader keeps their real address, and
+	 * become "-" otherwise, which Mailchimp accepts as complete. An address without a postcode is
+	 * not sent.
 	 *
 	 * @param \MailChimp_WooCommerce_Order $order    The order MC4WC is about to send.
 	 * @param \WC_Order|null               $wc_order The WooCommerce order it was built from.
@@ -187,20 +188,20 @@ class Mailchimp_For_WooCommerce {
 		if ( ! $user instanceof \WP_User || ! $wc_order instanceof \WC_Order || ! function_exists( 'wc_get_orders' ) ) {
 			return null;
 		}
-		$order_date     = $wc_order->get_date_created();
-		$earlier_orders = wc_get_orders(
-			[
-				'customer_id' => $user->ID,
-				'type'        => 'shop_order',
-				'orderby'     => 'date',
-				'order'       => 'DESC',
-				'limit'       => 50,
-			]
-		);
-		$normalize      = fn( $value ) => strtoupper( preg_replace( '/\s+/', '', (string) $value ) );
-		foreach ( $earlier_orders as $earlier_order ) {
-			$earlier_date = $earlier_order->get_date_created();
-			if ( $earlier_order->get_id() === $wc_order->get_id() || ( $order_date && $earlier_date && $earlier_date >= $order_date ) ) {
+		$query      = [
+			'customer_id' => $user->ID,
+			'type'        => 'shop_order',
+			'orderby'     => 'date',
+			'order'       => 'DESC',
+			'limit'       => 50,
+		];
+		$order_date = $wc_order->get_date_created();
+		if ( $order_date ) {
+			$query['date_created'] = '<' . $order_date->getTimestamp();
+		}
+		$normalize = fn( $value ) => strtoupper( preg_replace( '/\s+/', '', (string) $value ) );
+		foreach ( wc_get_orders( $query ) as $earlier_order ) {
+			if ( $earlier_order->get_id() === $wc_order->get_id() ) {
 				continue;
 			}
 			if ( ! $earlier_order->get_billing_address_1() || ! $earlier_order->get_billing_city() ) {

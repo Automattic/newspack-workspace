@@ -309,7 +309,7 @@ class Newspack_Test_Mailchimp_For_WooCommerce extends WP_UnitTestCase {
 						'status'       => 'processing',
 						'date_created' => '2026-01-01 00:00:00',
 					]
-				) 
+				)
 			);
 		}
 		$wc_order      = wc_create_order(
@@ -326,6 +326,62 @@ class Newspack_Test_Mailchimp_For_WooCommerce extends WP_UnitTestCase {
 		$order = apply_filters( 'mailchimp_filter_ecommerce_order', new MailChimp_WooCommerce_Order( $customer ), $wc_order );
 
 		$this->assertSame( array_merge( $empty_address, $sent_address ), $order->getCustomer()->getAddress()->fields );
+	}
+
+	/**
+	 * The street comes from the most recent order before this one that has a street, passing over
+	 * renewals that carry only a postcode and ignoring orders placed after it.
+	 */
+	public function test_order_takes_the_street_from_the_latest_earlier_order_with_one() {
+		global $orders_database;
+		$orders_database = [];
+		$reader          = $this->create_customer( 'reader@example.test', 'subscribed' );
+		$order_at        = function ( $date, $billing = [] ) use ( $reader ) {
+			return wc_create_order(
+				array_merge(
+					[
+						'customer_id'      => $reader->ID,
+						'status'           => 'processing',
+						'date_created'     => $date,
+						'billing_postcode' => 'SW1A1AA',
+						'billing_country'  => 'GB',
+					],
+					$billing
+				)
+			);
+		};
+		$order_at(
+			'2025-01-01 00:00:00',
+			[
+				'billing_address_1' => '9 Old Rd',
+				'billing_city'      => 'Leeds',
+				'billing_postcode'  => 'LS1 1AA',
+			]
+		);
+		$order_at(
+			'2025-06-01 00:00:00',
+			[
+				'billing_address_1' => '1 Main St',
+				'billing_city'      => 'London',
+			]
+		);
+		$order_at( '2026-01-01 00:00:00' );
+		$wc_order = $order_at( '2026-02-01 00:00:00' );
+		$order_at(
+			'2026-03-01 00:00:00',
+			[
+				'billing_address_1' => '5 New Rd',
+				'billing_city'      => 'Bristol',
+				'billing_postcode'  => 'BS1 1AA',
+			]
+		);
+		$customer = new MailChimp_WooCommerce_Customer( $reader, $reader->user_email );
+		$customer->getAddress()->setPostalCode( 'SW1A1AA' )->setCountry( 'GB' );
+
+		$order = apply_filters( 'mailchimp_filter_ecommerce_order', new MailChimp_WooCommerce_Order( $customer ), $wc_order );
+
+		$address = $order->getCustomer()->getAddress();
+		$this->assertSame( [ '1 Main St', 'London' ], [ $address->getAddress1(), $address->getCity() ] );
 	}
 
 	/**
