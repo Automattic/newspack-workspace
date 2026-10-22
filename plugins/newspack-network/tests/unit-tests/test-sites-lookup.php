@@ -65,6 +65,25 @@ class Test_Sites_Lookup extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A site with no name shows as its bare domain, not as a blank.
+	 */
+	public function test_unnamed_site_falls_back_to_bare_domain() {
+		update_option(
+			Hub_Node::HUB_NODES_SYNCED_OPTION,
+			[
+				[
+					'id'    => 3,
+					'title' => '',
+					'url'   => 'https://node-c.example.test/',
+				],
+			]
+		);
+		Sites::reset_cache();
+
+		$this->assertSame( 'node-c.example.test', Sites::get_site_name( 'https://node-c.example.test' ) );
+	}
+
+	/**
 	 * URLs normalize to lowercase host plus path, without scheme or trailing slash.
 	 */
 	public function test_normalize_url() {

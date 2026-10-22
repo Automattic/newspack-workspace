@@ -66,12 +66,16 @@ class Sites {
 	 *
 	 * @param string $url The site URL.
 	 *
-	 * @return string The site's name, or its bare domain if the site isn't in the network list.
+	 * @return string The site's name, or its bare domain if the site isn't in the network list or has no name.
 	 */
 	public static function get_site_name( $url ) {
 		if ( null === self::$site_names ) {
 			self::$site_names = [];
 			foreach ( self::get_all_sites() as $site ) {
+				// A site with no name isn't recorded, so its lookup falls back to the domain.
+				if ( '' === trim( (string) $site['name'] ) ) {
+					continue;
+				}
 				$key = self::normalize_url( $site['url'] );
 				// The first site listed for a URL wins.
 				if ( ! isset( self::$site_names[ $key ] ) ) {
