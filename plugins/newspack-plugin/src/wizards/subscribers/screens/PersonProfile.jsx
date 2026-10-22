@@ -121,6 +121,22 @@ const seatsSubline = group => {
  */
 const statusBadges = status => ( STATUS_LABELS[ status ] ? [ { label: STATUS_LABELS[ status ], intent: STATUS_BADGE_INTENT[ status ] } ] : [] );
 
+/**
+ * The "View subscription" item that leads a card's "more" menu: a link to the
+ * subscription's own edit screen, for the admin who wants the order behind a card.
+ *
+ * @param {string} name The subscription or group name, to qualify the link.
+ * @param {string} href The subscription's edit URL.
+ * @return {Object} An action descriptor for SubscriptionCard.
+ */
+const viewSubscriptionAction = ( name, href ) => ( {
+	key: 'view',
+	label: __( 'View subscription', 'newspack-plugin' ),
+	// translators: %s is a subscription/plan name.
+	ariaLabel: sprintf( __( 'View subscription: %s', 'newspack-plugin' ), name ),
+	href,
+} );
+
 export default function PersonProfile() {
 	const { id } = useParams();
 	const location = useLocation();
@@ -279,10 +295,11 @@ export default function PersonProfile() {
 						badges={ statusBadges( group.status ) }
 						subline={ seatsSubline( group ) }
 						rows={ rows }
-						// No per-status "more" menu yet: the group card's title already
-						// links to the group, and the money/management actions that would
-						// fill this menu are Workstreams D/E/F. A menu whose only item
-						// duplicates the title link would just add a redundant tab stop.
+						// The title opens the group; this menu item opens the underlying
+						// subscription, which the title no longer reaches.
+						actions={ group.editUrl ? [ viewSubscriptionAction( group.plan, group.editUrl ) ] : [] }
+						// translators: %s is a group's plan name.
+						actionsLabel={ sprintf( __( 'Subscription actions: %s', 'newspack-plugin' ), group.plan ) }
 					/>
 				),
 			};
@@ -293,6 +310,9 @@ export default function PersonProfile() {
 			const isActive = 'active' === subscription.status;
 			const isLive = isActive || 'on-hold' === subscription.status;
 			const menuActions = [];
+			if ( subscription.editUrl ) {
+				menuActions.push( viewSubscriptionAction( name, subscription.editUrl ) );
+			}
 			// Reactivate is offered when the server says so. `canReactivate`
 			// reflects the write endpoint's own raw-status rule — the mapped status
 			// can't be trusted here, because unknown WCS statuses map into the
@@ -320,8 +340,10 @@ export default function PersonProfile() {
 				} );
 			}
 			// Offered only when the subscription charges a resolvable saved card
-			// and there is another usable card to switch to.
-			if ( isLive && canChangePaymentMethod( subscription, subscriber.paymentMethods ) ) {
+			// and there is another usable card to switch to. Never on a gift: the
+			// saved cards listed here are the recipient's, but the card the gift
+			// charges belongs to the person who bought it.
+			if ( isLive && ! subscription.giftedBy && canChangePaymentMethod( subscription, subscriber.paymentMethods ) ) {
 				menuActions.push( {
 					key: 'payment',
 					label: __( 'Change payment method', 'newspack-plugin' ),
@@ -364,6 +386,18 @@ export default function PersonProfile() {
 							{ label: __( 'Billing', 'newspack-plugin' ), value: billingText( subscription ) },
 							{ label: __( 'Last payment', 'newspack-plugin' ), value: orDash( fmtDate( subscription.lastPayment ) ) },
 							scheduleRow( subscription ),
+							...( subscription.giftedBy
+								? [
+										{
+											label: __( 'Gifted by', 'newspack-plugin' ),
+											value: subscription.giftedBy.editUrl ? (
+												<a href={ subscription.giftedBy.editUrl }>{ subscription.giftedBy.name }</a>
+											) : (
+												subscription.giftedBy.name
+											),
+										},
+								  ]
+								: [] ),
 						] }
 						actions={ menuActions }
 						// translators: %s is a subscription/plan name.
