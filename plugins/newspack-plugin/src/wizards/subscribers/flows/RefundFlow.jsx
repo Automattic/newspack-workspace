@@ -82,7 +82,16 @@ export default function RefundFlow( { subscription, subscriberName, payerName, a
 			if ( willRefund && ! result.gatewayRefund ) {
 				message +=
 					' ' +
-					__( 'The gateway does not refund automatically, so the payment must be returned to the subscriber manually.', 'newspack-plugin' );
+					( isGift
+						? sprintf(
+								// translators: %s is the gift buyer's name.
+								__( 'The gateway does not refund automatically, so the payment must be returned to %s manually.', 'newspack-plugin' ),
+								payerName
+						  )
+						: __(
+								'The gateway does not refund automatically, so the payment must be returned to the subscriber manually.',
+								'newspack-plugin'
+						  ) );
 			}
 			onDone( message );
 		} catch ( e ) {

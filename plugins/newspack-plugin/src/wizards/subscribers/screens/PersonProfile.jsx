@@ -564,6 +564,8 @@ export default function PersonProfile() {
 					// The payment link goes to the subscription's billing email, which
 					// for a gift is the purchaser's, not the reader's.
 					email={ modal.subscription.billingEmail || subscriber.email }
+					// The same buyer RefundFlow names: a gift's payment link is theirs.
+					payerName={ modal.subscription.giftedBy ? modal.subscription.giftedBy.name || __( 'Unknown', 'newspack-plugin' ) : undefined }
 					actions={ subscriptionActions }
 					onClose={ () => setModal( null ) }
 					onDone={ completeFlow }

@@ -298,6 +298,42 @@ describe( 'the money flows on a gifted subscription', () => {
 		expect( screen.getByText( 'Payment link sent to gale-billing@example.com.' ) ).toBeInTheDocument();
 	} );
 
+	it( 'names the giver in the manual-return note when the gateway cannot refund on its own', async () => {
+		apiFetch.mockImplementation( ( { method } ) =>
+			Promise.resolve( 'POST' === method ? { refunded: 10, cancelled: false, gatewayRefund: false } : profile( { subscriptions: [ gift() ] } ) )
+		);
+		await renderProfile();
+		await chooseCardAction( 'Weekly digest', 'Refund or cancel' );
+
+		await act( async () => {
+			fireEvent.click( screen.getByRole( 'button', { name: 'Confirm' } ) );
+		} );
+		expect(
+			screen.getByText( /The gateway does not refund automatically, so the payment must be returned to Gale Giver manually\./ )
+		).toBeInTheDocument();
+		expect( screen.queryByText( /returned to the subscriber manually/ ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'names the giver when the payment link email could not be sent', async () => {
+		apiFetch.mockImplementation( ( { method } ) =>
+			Promise.resolve(
+				'POST' === method ? { emailSent: false, paymentUrl: 'https://example.test/pay/31' } : profile( { subscriptions: [ onHold() ] } )
+			)
+		);
+		await renderProfile();
+		await chooseCardAction( 'Weekly digest', 'Reactivate' );
+
+		await act( async () => {
+			fireEvent.click( screen.getByRole( 'button', { name: 'Continue' } ) );
+		} );
+		await act( async () => {
+			fireEvent.click( screen.getByRole( 'button', { name: 'Confirm' } ) );
+		} );
+		expect(
+			screen.getByText( 'The email could not be sent. Share this payment link with Gale Giver directly: https://example.test/pay/31' )
+		).toBeInTheDocument();
+	} );
+
 	it( "falls back to the reader's email when the subscription reports no billing email", async () => {
 		await renderCards( profile( { subscriptions: [ subscription( { status: 'on-hold', canReactivate: true, billingEmail: '' } ) ] } ) );
 		await chooseCardAction( 'Weekly digest', 'Reactivate' );

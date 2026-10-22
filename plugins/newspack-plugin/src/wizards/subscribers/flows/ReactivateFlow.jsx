@@ -39,7 +39,16 @@ const MODE_DETAILS = {
 	free: __( 'Reactivate now without taking a payment. Billing resumes on the regular schedule.', 'newspack-plugin' ),
 };
 
-export default function ReactivateFlow( { subscription, email, actions, onClose, onDone } ) {
+/**
+ * @param {Object}   props              Component props.
+ * @param {Object}   props.subscription The profile subscription entry.
+ * @param {string}   props.email        Where the payment link is emailed.
+ * @param {string}   [props.payerName]  The gift buyer's name, passed only for a gift: the payment link is theirs to pay, not the subscriber's.
+ * @param {Object}   props.actions      The subscription write calls (useSubscriptionActions).
+ * @param {Function} props.onClose      Close without acting.
+ * @param {Function} props.onDone       Called with a success message afterwards.
+ */
+export default function ReactivateFlow( { subscription, email, payerName, actions, onClose, onDone } ) {
 	const canCharge = !! subscription.canCharge;
 	const step = useTwoStep();
 	const [ mode, setMode ] = useState( canCharge ? 'charge' : 'link' );
@@ -69,11 +78,18 @@ export default function ReactivateFlow( { subscription, email, actions, onClose,
 					onDone( sprintf( __( 'Payment link sent to %s.', 'newspack-plugin' ), email ) );
 				} else {
 					setError(
-						sprintf(
-							// translators: %s is a checkout payment URL.
-							__( 'The email could not be sent. Share this payment link with the subscriber directly: %s', 'newspack-plugin' ),
-							result?.paymentUrl || ''
-						)
+						payerName
+							? sprintf(
+									// translators: 1: the gift buyer's name, 2: a checkout payment URL.
+									__( 'The email could not be sent. Share this payment link with %1$s directly: %2$s', 'newspack-plugin' ),
+									payerName,
+									result?.paymentUrl || ''
+							  )
+							: sprintf(
+									// translators: %s is a checkout payment URL.
+									__( 'The email could not be sent. Share this payment link with the subscriber directly: %s', 'newspack-plugin' ),
+									result?.paymentUrl || ''
+							  )
 					);
 					setBusy( false );
 				}
