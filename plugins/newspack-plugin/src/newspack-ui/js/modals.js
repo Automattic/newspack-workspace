@@ -8,6 +8,7 @@ import { getFocusableElements, getInitialFocus, isProgrammaticFocus, isVisible }
 import { getNoticeIcon } from './icons';
 import { resetSteps, showStep } from './modal-steps';
 import { observeScrollEdges } from './scroll-edges';
+import { setupSheetDrag } from './sheet-drag';
 
 window.newspackRAS = window.newspackRAS || [];
 
@@ -454,6 +455,7 @@ domReady( function () {
 
 		// Set up mutation observer for automatic overlay management
 		setupModalObserver( modal );
+		setupSheetDrag( modal );
 
 		modal.querySelectorAll( '.newspack-ui__modal, .newspack-ui__modal__steps' ).forEach( scroller => observeScrollEdges( scroller, 'y' ) );
 
