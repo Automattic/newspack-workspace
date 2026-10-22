@@ -5,7 +5,7 @@
 # root node_modules and pnpm path filters resolve against the workspace.
 #
 
-# pnpm is provided by Node 20's bundled corepack. Enable on first use; the
+# pnpm is provided by Node's bundled corepack. Enable on first use; the
 # version is pinned via the `packageManager` field in package.json.
 if ! command -v pnpm >/dev/null 2>&1; then
     corepack enable pnpm >/dev/null
