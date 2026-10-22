@@ -1511,15 +1511,21 @@ class Subscribers_Wizard extends Wizard {
 		// Resolve the user's own subscriptions once and reuse them, so hydration
 		// doesn't fetch the same list twice per row.
 		$owned_subscriptions = function_exists( 'wcs_get_users_subscriptions' ) ? \wcs_get_users_subscriptions( $user_id ) : [];
-		$subscriptions       = $this->get_individual_subscriptions( $user_id, $owned_subscriptions, $detailed );
-		$groups              = $this->get_group_memberships( $user_id, $detailed );
+		// Subscriptions managed on other network sites follow the local ones, so the
+		// status badge, the Subscription column and the profile cards all see them
+		// through the one array.
+		$subscriptions = array_merge(
+			$this->get_individual_subscriptions( $user_id, $owned_subscriptions, $detailed ),
+			$this->get_network_subscriptions( $user_id )
+		);
+		$groups        = $this->get_group_memberships( $user_id, $detailed );
 
 		// user_registered is stored in GMT, so anchor the parse to UTC before it is
 		// localized. It can also be a zero date ('0000-00-00 …'), which is truthy but
 		// unparseable; guard on the parsed timestamp so it degrades to null, not 1970.
 		$registered = $user->user_registered ? strtotime( $user->user_registered . ' UTC' ) : false;
 
-		return [
+		$subscriber = [
 			'id'             => $user_id,
 			'name'           => $user->display_name,
 			'email'          => $user->user_email,
@@ -1539,6 +1545,21 @@ class Subscribers_Wizard extends Wizard {
 			// resolving tokens per row would cost a query on every row of every page.
 			'paymentMethods' => $detailed ? Subscribers_Payments::payment_methods_for_user( $user_id ) : [],
 		];
+
+		/**
+		 * Whether a reader belongs to the Newspack Network, which is the case when
+		 * they first registered on another site. The key is added only for those
+		 * readers, so a site without the network plugin returns the same shape as
+		 * before.
+		 *
+		 * @param bool $is_network_reader Whether the reader is a network reader so far.
+		 * @param int  $user_id           The reader's user ID.
+		 */
+		if ( true === apply_filters( 'newspack_subscribers_is_network_reader', false, $user_id ) ) {
+			$subscriber['isNetworkReader'] = true;
+		}
+
+		return $subscriber;
 	}
 
 	/**
@@ -1591,6 +1612,98 @@ class Subscribers_Wizard extends Wizard {
 					]
 				)
 				: $entry;
+		}
+		return $out;
+	}
+
+	/**
+	 * The label a subscription managed on another network site goes by: its plan
+	 * and the site it lives on, such as "Fan Membership (Node Daily)".
+	 *
+	 * A subscription with no product names falls back to its ID so the label is
+	 * never just a site name in brackets.
+	 *
+	 * @param string $plan      The plan name, or an empty string when the subscription has no products.
+	 * @param int    $id        The subscription's ID on its own site.
+	 * @param string $site_name The name of the site that manages the subscription.
+	 *
+	 * @return string
+	 */
+	public static function network_plan_label( string $plan, int $id, string $site_name ): string {
+		return sprintf(
+			/* translators: 1: plan name, 2: site name */
+			__( '%1$s (%2$s)', 'newspack-plugin' ),
+			'' !== $plan
+				? $plan
+				// translators: %d: the subscription's ID on the site that manages it.
+				: sprintf( __( 'Subscription #%d', 'newspack-plugin' ), $id ),
+			$site_name
+		);
+	}
+
+	/**
+	 * A reader's subscriptions that other network sites manage, shaped like the
+	 * local ones plus the site they are managed on.
+	 *
+	 * The records come from the `newspack_subscribers_network_subscriptions` filter,
+	 * which the network plugin answers when it is active. This class knows nothing
+	 * about the network beyond that record shape. Anything that does not fit the
+	 * shape is dropped rather than shown half-formed.
+	 *
+	 * Only network items carry `managedOn`; the client tells the two apart by its
+	 * presence, because a subscription ID is unique within a site, not across the
+	 * network.
+	 *
+	 * @param int $user_id The reader user ID.
+	 *
+	 * @return array<int,array>
+	 */
+	private function get_network_subscriptions( $user_id ) {
+		/**
+		 * Subscriptions this reader holds on other sites of the Newspack Network.
+		 *
+		 * @param array[] $records Records so far. Each is an array with an integer `id`,
+		 *                         `site_url`, `site_name`, the raw WooCommerce Subscriptions
+		 *                         `status`, `plan` and `edit_url`.
+		 * @param int     $user_id The reader's user ID.
+		 */
+		$records = apply_filters( 'newspack_subscribers_network_subscriptions', [], $user_id );
+		if ( ! is_array( $records ) ) {
+			return [];
+		}
+
+		$out = [];
+		foreach ( $records as $record ) {
+			if ( ! is_array( $record ) ) {
+				continue;
+			}
+			$id = $record['id'] ?? null;
+			if ( ! is_numeric( $id ) || (int) $id <= 0 ) {
+				continue;
+			}
+			$site_name = isset( $record['site_name'] ) && is_string( $record['site_name'] ) ? trim( $record['site_name'] ) : '';
+			if ( '' === $site_name ) {
+				continue;
+			}
+			$status = $record['status'] ?? null;
+			if ( ! is_string( $status ) || '' === $status ) {
+				continue;
+			}
+			$plan     = isset( $record['plan'] ) && is_string( $record['plan'] ) ? $record['plan'] : '';
+			$site_url = isset( $record['site_url'] ) && is_string( $record['site_url'] ) ? $record['site_url'] : '';
+			$edit_url = isset( $record['edit_url'] ) && is_string( $record['edit_url'] ) ? $record['edit_url'] : '';
+
+			$out[] = [
+				'id'              => (int) $id,
+				'plan'            => self::network_plan_label( $plan, (int) $id, $site_name ),
+				'status'          => self::map_subscription_status( $status ),
+				'editUrl'         => esc_url_raw( $edit_url ),
+				'isComplimentary' => false,
+				'managedOn'       => [
+					'name' => $site_name,
+					'url'  => esc_url_raw( $site_url ),
+				],
+			];
 		}
 		return $out;
 	}

@@ -42,6 +42,14 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	private $group_product_ids = [];
 
 	/**
+	 * Callbacks this test attached to the network filters, as [ hook, callback ]
+	 * pairs, so tear_down() detaches exactly what the test added.
+	 *
+	 * @var array[]
+	 */
+	private $network_callbacks = [];
+
+	/**
 	 * Include the WC mocks before the class boots.
 	 */
 	public static function set_up_before_class() {
@@ -70,6 +78,7 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		$orders_database        = [];
 		$this->user_ids         = [];
 		$this->group_product_ids = [];
+		$this->network_callbacks = [];
 		$this->scope_token      = 'scope' . wp_generate_password( 8, false );
 		Group_Subscription::reset_cache();
 		Group_Subscription_Settings::clear_group_subscription_ids_cache();
@@ -88,6 +97,10 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 			wp_delete_user( $user_id );
 		}
 		$this->user_ids = [];
+		foreach ( $this->network_callbacks as list( $hook, $callback ) ) {
+			remove_filter( $hook, $callback );
+		}
+		$this->network_callbacks = [];
 		Group_Subscription_Settings::clear_group_subscription_ids_cache();
 		parent::tear_down();
 	}
@@ -529,6 +542,39 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'editUrl', $item['subscriptions'][0] );
 		$this->assertIsString( $item['subscriptions'][0]['editUrl'] );
 		$this->assertEmpty( $item['groups'] );
+	}
+
+	/**
+	 * A subscription managed on another network site reaches the list row too: it
+	 * sets the row's status and shows under the plan name with its site in
+	 * brackets, so a reader with nothing local no longer looks like a non-subscriber.
+	 */
+	public function test_list_row_includes_a_subscription_managed_on_another_network_site() {
+		$this->login_admin();
+		$reader_id = $this->create_reader( 'Across' );
+		// Stands in for newspack-network, which this suite does not load.
+		$records  = [
+			[
+				'id'        => 500,
+				'site_url'  => 'https://node-b.example.test',
+				'site_name' => 'Node Daily',
+				'status'    => 'active',
+				'plan'      => 'Fan Membership',
+				'edit_url'  => 'https://node-b.example.test/wp-admin/post.php?post=500&action=edit',
+			],
+		];
+		$for_user = fn( $existing, $user_id ) => (int) $user_id === $reader_id ? $records : $existing;
+		add_filter( 'newspack_subscribers_network_subscriptions', $for_user, 10, 2 );
+		$this->network_callbacks[] = [ 'newspack_subscribers_network_subscriptions', $for_user ];
+
+		$items = $this->dispatch()->get_data()['items'];
+
+		$this->assertCount( 1, $items );
+		$this->assertSame( $reader_id, $items[0]['id'] );
+		$this->assertSame( 'active', $items[0]['status'] );
+		$this->assertCount( 1, $items[0]['subscriptions'] );
+		$this->assertSame( 'Fan Membership (Node Daily)', $items[0]['subscriptions'][0]['plan'] );
+		$this->assertSame( 'Node Daily', $items[0]['subscriptions'][0]['managedOn']['name'] );
 	}
 
 	/**

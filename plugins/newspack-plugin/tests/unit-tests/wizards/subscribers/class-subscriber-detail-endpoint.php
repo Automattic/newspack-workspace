@@ -41,6 +41,14 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 	private $original_timezone = null;
 
 	/**
+	 * Callbacks this test attached to the network filters, as [ hook, callback ]
+	 * pairs, so tear_down() detaches exactly what the test added.
+	 *
+	 * @var array[]
+	 */
+	private $network_callbacks = [];
+
+	/**
 	 * Include the WC mocks before the class boots.
 	 */
 	public static function set_up_before_class() {
@@ -63,6 +71,7 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 		$orders_database        = [];
 		$this->user_ids          = [];
 		$this->original_timezone = null;
+		$this->network_callbacks = [];
 		Group_Subscription::reset_cache();
 		Group_Subscription_Settings::clear_group_subscription_ids_cache();
 		do_action( 'rest_api_init' );
@@ -81,6 +90,7 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 		}
 		$this->user_ids = [];
 		$this->restore_site_timezone();
+		$this->detach_network_callbacks();
 		Group_Subscription_Settings::clear_group_subscription_ids_cache();
 		parent::tear_down();
 	}
@@ -152,6 +162,61 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 		$this->user_ids[] = $admin_id;
 		wp_set_current_user( $admin_id );
 		return $admin_id;
+	}
+
+	/**
+	 * Stand in for newspack-network, which this suite does not load: attach
+	 * callbacks to the two filters it answers.
+	 *
+	 * Passing null for a filter leaves it unattached, which is the state of a site
+	 * without the network plugin.
+	 *
+	 * @param array|null $records Records the subscriptions filter returns, or null to leave it unattached.
+	 * @param bool|null  $is_reader Value the network-reader filter returns, or null to leave it unattached.
+	 */
+	private function stub_network( ?array $records, ?bool $is_reader ) {
+		if ( null !== $records ) {
+			$callback = fn() => $records;
+			add_filter( 'newspack_subscribers_network_subscriptions', $callback );
+			$this->network_callbacks[] = [ 'newspack_subscribers_network_subscriptions', $callback ];
+		}
+		if ( null !== $is_reader ) {
+			$callback = fn() => $is_reader;
+			add_filter( 'newspack_subscribers_is_network_reader', $callback );
+			$this->network_callbacks[] = [ 'newspack_subscribers_is_network_reader', $callback ];
+		}
+	}
+
+	/**
+	 * Detach whatever stub_network() attached.
+	 */
+	private function detach_network_callbacks() {
+		foreach ( $this->network_callbacks as list( $hook, $callback ) ) {
+			remove_filter( $hook, $callback );
+		}
+		$this->network_callbacks = [];
+	}
+
+	/**
+	 * A subscription record as the network plugin supplies it, from the invented
+	 * "Node Daily" site unless overridden.
+	 *
+	 * @param array $overrides Fields to replace.
+	 *
+	 * @return array
+	 */
+	private function network_record( array $overrides = [] ): array {
+		return array_merge(
+			[
+				'id'        => 500,
+				'site_url'  => 'https://node-b.example.test',
+				'site_name' => 'Node Daily',
+				'status'    => 'active',
+				'plan'      => 'Fan Membership',
+				'edit_url'  => 'https://node-b.example.test/wp-admin/post.php?post=500&action=edit',
+			],
+			$overrides
+		);
 	}
 
 	/**
@@ -674,6 +739,238 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 		$groups = $this->dispatch( $manager_id )->get_data()['groups'];
 		$this->assertCount( 1, $groups );
 		$this->assertSame( 'manager', $groups[0]['role'] );
+	}
+
+	/**
+	 * A subscription managed on another network site joins the reader's own: it
+	 * counts toward the headline status, names its site in the plan label, links
+	 * to the remote edit screen, and carries the site it is managed on. The
+	 * reader flag appears because the network says this reader belongs to it.
+	 */
+	public function test_detail_includes_a_subscription_managed_on_another_network_site() {
+		$this->login_admin();
+		$reader_id = $this->create_reader( 'Network Reader' );
+		$this->stub_network( [ $this->network_record() ], true );
+
+		$subscriber = $this->dispatch( $reader_id )->get_data();
+
+		$this->assertSame( 'active', $subscriber['status'] );
+		$this->assertTrue( $subscriber['isNetworkReader'] );
+		$this->assertCount( 1, $subscriber['subscriptions'] );
+		$this->assertSame(
+			[
+				'id'              => 500,
+				'plan'            => 'Fan Membership (Node Daily)',
+				'status'          => 'active',
+				'editUrl'         => 'https://node-b.example.test/wp-admin/post.php?post=500&action=edit',
+				'isComplimentary' => false,
+				'managedOn'       => [
+					'name' => 'Node Daily',
+					'url'  => 'https://node-b.example.test',
+				],
+			],
+			$subscriber['subscriptions'][0]
+		);
+	}
+
+	/**
+	 * Subscription IDs are only unique within a site, so a remote subscription may
+	 * share its ID with a local one. Both stay, and only the remote one is marked
+	 * as managed elsewhere, which is how the client tells them apart.
+	 */
+	public function test_detail_keeps_a_local_and_a_remote_subscription_that_share_an_id() {
+		$this->login_admin();
+		$reader_id = $this->create_reader( 'Clash' );
+		$local     = $this->create_individual_subscription( $reader_id, 'active' );
+		$this->stub_network( [ $this->network_record( [ 'id' => $local->get_id() ] ) ], false );
+
+		$subscriptions = $this->dispatch( $reader_id )->get_data()['subscriptions'];
+
+		$this->assertCount( 2, $subscriptions );
+		$this->assertSame( $local->get_id(), $subscriptions[0]['id'] );
+		$this->assertArrayNotHasKey( 'managedOn', $subscriptions[0], 'A local subscription is never marked as managed elsewhere.' );
+		$this->assertSame( $local->get_id(), $subscriptions[1]['id'] );
+		$this->assertSame( 'Node Daily', $subscriptions[1]['managedOn']['name'] );
+	}
+
+	/**
+	 * A remote subscription with no product names still gets a readable plan, built
+	 * from its ID, rather than a bare " (Node Daily)".
+	 */
+	public function test_detail_labels_a_remote_subscription_that_has_no_products() {
+		$this->login_admin();
+		$reader_id = $this->create_reader( 'No Products' );
+		$this->stub_network(
+			[
+				$this->network_record(
+					[
+						'id'   => 501,
+						'plan' => '',
+					]
+				),
+			],
+			null
+		);
+
+		$subscriptions = $this->dispatch( $reader_id )->get_data()['subscriptions'];
+
+		$this->assertSame( 'Subscription #501 (Node Daily)', $subscriptions[0]['plan'] );
+	}
+
+	/**
+	 * A record with no plan key at all reads the same as an empty plan.
+	 */
+	public function test_detail_labels_a_remote_subscription_with_a_missing_plan_key() {
+		$this->login_admin();
+		$reader_id = $this->create_reader( 'No Plan Key' );
+		$record    = $this->network_record( [ 'id' => 502 ] );
+		unset( $record['plan'] );
+		$this->stub_network( [ $record ], null );
+
+		$subscriptions = $this->dispatch( $reader_id )->get_data()['subscriptions'];
+
+		$this->assertSame( 'Subscription #502 (Node Daily)', $subscriptions[0]['plan'] );
+	}
+
+	/**
+	 * The network's raw WooCommerce Subscriptions statuses go through the same
+	 * mapping local subscriptions use, so a status the UI has no label for never
+	 * reaches it.
+	 */
+	public function test_detail_maps_remote_statuses_like_local_ones() {
+		$this->login_admin();
+		$reader_id = $this->create_reader( 'Statuses' );
+		$this->stub_network(
+			[
+				$this->network_record(
+					[
+						'id'     => 1,
+						'status' => 'pending-cancel',
+					]
+				),
+				$this->network_record(
+					[
+						'id'     => 2,
+						'status' => 'expired',
+					]
+				),
+				$this->network_record(
+					[
+						'id'     => 3,
+						'status' => 'on-hold',
+					]
+				),
+				$this->network_record(
+					[
+						'id'     => 4,
+						'status' => 'pending',
+					]
+				),
+				$this->network_record(
+					[
+						'id'     => 5,
+						'status' => 'something-new',
+					]
+				),
+			],
+			null
+		);
+
+		$subscriber = $this->dispatch( $reader_id )->get_data();
+
+		$this->assertSame(
+			[
+				1 => 'active',
+				2 => 'cancelled',
+				3 => 'on-hold',
+				4 => 'pending',
+				5 => 'on-hold',
+			],
+			array_column( $subscriber['subscriptions'], 'status', 'id' )
+		);
+	}
+
+	/**
+	 * The filters are an open door, so whatever comes through is checked: records
+	 * that are not arrays, have no usable ID, name no site or carry no status are
+	 * dropped, and the sound record beside them survives.
+	 */
+	public function test_detail_drops_malformed_network_records() {
+		$this->login_admin();
+		$reader_id = $this->create_reader( 'Malformed' );
+		$this->stub_network(
+			[
+				'not a record',
+				$this->network_record( [ 'id' => 0 ] ),
+				$this->network_record( [ 'id' => -4 ] ),
+				$this->network_record( [ 'id' => 'abc' ] ),
+				$this->network_record(
+					[
+						'id'        => 600,
+						'site_name' => '',
+					]
+				),
+				$this->network_record(
+					[
+						'id'        => 601,
+						'site_name' => '   ',
+					]
+				),
+				$this->network_record(
+					[
+						'id'     => 602,
+						'status' => '',
+					]
+				),
+				$this->network_record(
+					[
+						'id'     => 603,
+						'status' => null,
+					]
+				),
+				$this->network_record( [ 'id' => 700 ] ),
+			],
+			null
+		);
+
+		$subscriptions = $this->dispatch( $reader_id )->get_data()['subscriptions'];
+
+		$this->assertSame( [ 700 ], array_column( $subscriptions, 'id' ) );
+	}
+
+	/**
+	 * A reader whom the network does not claim carries no flag at all, rather than
+	 * a false one, so the client reads presence as "this is a network reader".
+	 */
+	public function test_detail_omits_the_network_reader_flag_when_the_filter_says_no() {
+		$this->login_admin();
+		$reader_id = $this->create_reader( 'Local Only Flag' );
+		$this->stub_network( [], false );
+
+		$this->assertArrayNotHasKey( 'isNetworkReader', $this->dispatch( $reader_id )->get_data() );
+	}
+
+	/**
+	 * A reader with only local subscriptions must come back exactly as before the
+	 * network existed: no flag, no managedOn. Then, with both filters attached but
+	 * answering "nothing", the response must not change by a byte.
+	 */
+	public function test_detail_of_a_local_only_reader_is_unchanged_by_empty_network_filters() {
+		$this->login_admin();
+		$reader_id = $this->create_reader( 'Local Only' );
+		$this->create_individual_subscription( $reader_id, 'active' );
+		$this->create_individual_subscription( $reader_id, 'cancelled' );
+
+		$without_callbacks = $this->dispatch( $reader_id )->get_data();
+
+		$this->assertArrayNotHasKey( 'isNetworkReader', $without_callbacks );
+		$this->assertCount( 2, $without_callbacks['subscriptions'] );
+		foreach ( $without_callbacks['subscriptions'] as $subscription ) {
+			$this->assertArrayNotHasKey( 'managedOn', $subscription );
+		}
+
+		$this->stub_network( [], false );
+		$this->assertSame( $without_callbacks, $this->dispatch( $reader_id )->get_data() );
 	}
 
 	/**
