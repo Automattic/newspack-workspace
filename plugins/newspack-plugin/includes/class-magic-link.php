@@ -1007,7 +1007,7 @@ final class Magic_Link {
 				return self::send_otp_request_response( __( "You've reached the maximum attempts for this code, try again.", 'newspack-plugin' ), false, [ 'expired' => true ] );
 			}
 			if ( 'invalid_otp' === $authenticated->get_error_code() ) {
-				return self::send_otp_request_response( __( 'Code not recognized, try again.', 'newspack-plugin' ), false );
+				return self::send_otp_request_response( __( "That code isn't right.", 'newspack-plugin' ), false, [ 'invalid_code' => true ] );
 			}
 		}
 

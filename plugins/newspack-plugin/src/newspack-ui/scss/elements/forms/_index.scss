@@ -20,12 +20,29 @@
 		margin-bottom: 0;
 	}
 
-	// Container for displaying grid of inputs.
 	& &__code-input {
-		display: flex;
-		gap: var(--newspack-ui-spacer-1);
+		display: block;
+
 		input {
-			text-align: center;
+			--newspack-ui-otp-digit: 0.6445em;
+			--newspack-ui-otp-advance: calc((var(--newspack-ui-otp-field, 12em) + var(--newspack-ui-otp-digit)) / (var(--newspack-ui-otp-length, 6) + 1));
+			--newspack-ui-otp-gap: calc(var(--newspack-ui-otp-advance) - var(--newspack-ui-otp-digit));
+			--newspack-ui-otp-tick-inset: calc(var(--newspack-ui-spacer-1) * 1.25);
+
+			background:
+				repeating-linear-gradient(to right, var(--newspack-ui-color-length-tick) 0 var(--newspack-ui-otp-digit), transparent var(--newspack-ui-otp-digit) var(--newspack-ui-otp-advance))
+				calc(var(--newspack-ui-otp-gap) + var(--newspack-ui-otp-typed, 0) * var(--newspack-ui-otp-advance)) calc(100% - var(--newspack-ui-otp-tick-inset)) / calc((var(--newspack-ui-otp-length, 6) - var(--newspack-ui-otp-typed, 0)) * var(--newspack-ui-otp-advance)) 2px no-repeat,
+				var(--newspack-ui-color-input-bg);
+			background-origin: padding-box;
+			direction: ltr;
+			font-size: var(--newspack-ui-font-size-title-m);
+			font-variant-numeric: tabular-nums;
+			font-weight: var(--newspack-ui-font-weight-medium);
+			height: var(--newspack-ui-spacer-9);
+			letter-spacing: var(--newspack-ui-otp-gap);
+			line-height: 1;
+			padding: 0 0 0 var(--newspack-ui-otp-gap);
+			text-align: start;
 		}
 	}
 
@@ -52,10 +69,6 @@
 		label & {
 			margin: 0;
 		}
-	}
-
-	& &__inline-error {
-		color: var(--newspack-ui-color-error-text);
 
 		&:has(> svg) {
 			padding-inline-start: calc(var(--newspack-ui-field-message-icon-size) + var(--newspack-ui-field-message-icon-gap));
@@ -72,9 +85,18 @@
 		}
 	}
 
+	& &__helper-text--success > svg {
+		fill: var(--newspack-ui-color-success);
+	}
+
+	& &__inline-error {
+		color: var(--newspack-ui-color-error-text);
+	}
+
 	// Error class to apply to specific fields.
 	& &__field-error,
-	[data-form-status="400"] {
+	[data-form-status="400"],
+	:is(input:not([type="checkbox"], [type="radio"]), select, textarea)[aria-invalid="true"] {
 		// Attribute added to sign-up modal form on failure.
 		--newspack-ui-color-input-border: var(--newspack-ui-color-error);
 		--newspack-ui-color-input-border-hover: var(--newspack-ui-color-error);

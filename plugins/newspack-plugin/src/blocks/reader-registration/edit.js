@@ -295,19 +295,6 @@ export default function ReaderRegistrationEdit( {
 									</>
 								) : null }
 								<div className="newspack-registration__main">
-									{ newspack_blocks.has_google_oauth && ! hideOauth && (
-										<div className="newspack-ui">
-											<button className="newspack-ui__button newspack-ui__button--wide newspack-ui__button--secondary newspack-ui__button--google-oauth">
-												<span
-													dangerouslySetInnerHTML={ {
-														__html: newspack_blocks.google_logo_svg,
-													} }
-												/>
-												{ __( 'Continue with Google', 'newspack-plugin' ) }
-											</button>
-											<div className="newspack-ui__word-divider">{ __( 'Or', 'newspack-plugin' ) }</div>
-										</div>
-									) }
 									<div>
 										<div className="newspack-registration__inputs">
 											<input type="email" placeholder={ placeholder } />
@@ -322,6 +309,21 @@ export default function ReaderRegistrationEdit( {
 											</button>
 										</div>
 										<div className="newspack-registration__response" />
+										{ newspack_blocks.has_google_oauth && ! hideOauth && (
+											<div className="newspack-ui newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-3">
+												<div className="newspack-ui__word-divider newspack-ui__spacing-top--3 newspack-ui__spacing-bottom--0">
+													{ __( 'Or', 'newspack-plugin' ) }
+												</div>
+												<button className="newspack-ui__button newspack-ui__button--wide newspack-ui__button--outline newspack-ui__button--google-oauth">
+													<span
+														dangerouslySetInnerHTML={ {
+															__html: newspack_blocks.google_logo_svg,
+														} }
+													/>
+													{ __( 'Continue with Google', 'newspack-plugin' ) }
+												</button>
+											</div>
+										) }
 									</div>
 								</div>
 							</div>

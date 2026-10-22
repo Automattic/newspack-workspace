@@ -1,7 +1,7 @@
 /**
  * Get the icon for a notice type, as printed by PHP, for notices and field errors built in JS.
  *
- * @param {string} type Notice type: 'info', 'success', 'warning' or 'error'.
+ * @param {string} type Notice type: 'info', 'success', 'warning', 'error' or 'check'.
  * @return {SVGElement|null} A fresh copy of the icon, or null when the type has none.
  */
 export function getNoticeIcon( type ) {
