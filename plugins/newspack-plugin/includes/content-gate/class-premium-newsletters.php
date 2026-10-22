@@ -74,12 +74,13 @@ class Premium_Newsletters {
 	 * Queue-entry source tags. Each access-check queue entry records which event
 	 * enqueued it so that downstream logic (e.g. consulting the renewal snapshot)
 	 * can be scoped to the originating event instead of leaking into unrelated
-	 * flows that happen to dequeue the same user. Plan-switch and
-	 * one-time-purchase-ended entries are remove-only: check_access() never adds
-	 * lists for them, and they never replace another entry for the same user.
-	 * A one-time purchase that ends can't grant access, so adding lists there
-	 * would only re-add lists the reader had left; maybe_enqueue_access_check()
-	 * covers the plan-switch case.
+	 * flows that happen to dequeue the same user. Plan-switch,
+	 * one-time-purchase-ended and gift-removed entries are remove-only:
+	 * check_access() never adds lists for them, and they never replace another
+	 * entry for the same user. A one-time purchase that ends, or a gift handed to
+	 * someone else, can't grant access, so adding lists there would only re-add
+	 * lists the reader had left; maybe_enqueue_access_check() covers the
+	 * plan-switch case.
 	 */
 	const SOURCE_RENEWAL                 = 'renewal';
 	const SOURCE_SUBSCRIPTION_CHANGED    = 'subscription_changed';
@@ -89,6 +90,8 @@ class Premium_Newsletters {
 	const SOURCE_PLAN_SWITCH             = 'plan_switch';
 	const SOURCE_ONE_TIME_PURCHASE       = 'one_time_purchase';
 	const SOURCE_ONE_TIME_PURCHASE_ENDED = 'one_time_purchase_ended';
+	const SOURCE_GIFT_RECEIVED           = 'gift_received';
+	const SOURCE_GIFT_REMOVED            = 'gift_removed';
 
 	/**
 	 * WP option key for how far the one-time purchase lapse sweep has checked.
@@ -152,6 +155,10 @@ class Premium_Newsletters {
 		// naming them, so the membership write itself has to trigger their check.
 		add_action( 'added_user_meta', [ __CLASS__, 'maybe_enqueue_group_membership_check' ], 10, 3 );
 		add_action( 'deleted_user_meta', [ __CLASS__, 'maybe_enqueue_group_membership_check' ], 10, 3 );
+
+		// Handing a gift to another reader fires no subscription event, so the hook
+		// WCS Gifting fires on the change is the only trigger for both readers.
+		add_action( 'woocommerce_subscriptions_gifting_recipient_changed', [ __CLASS__, 'handle_gift_recipient_changed' ], 10, 3 );
 
 		// Clean up the queue option on plugin deactivation.
 		add_action( 'newspack_deactivation', [ __CLASS__, 'unschedule_access_check_event' ] );
@@ -496,7 +503,7 @@ class Premium_Newsletters {
 	 * @return bool
 	 */
 	private static function is_remove_only_source( string $source ): bool {
-		return in_array( $source, [ self::SOURCE_PLAN_SWITCH, self::SOURCE_ONE_TIME_PURCHASE_ENDED ], true );
+		return in_array( $source, [ self::SOURCE_PLAN_SWITCH, self::SOURCE_ONE_TIME_PURCHASE_ENDED, self::SOURCE_GIFT_REMOVED ], true );
 	}
 
 	/**
@@ -1250,6 +1257,28 @@ class Premium_Newsletters {
 		}
 		$recipient_id = WooCommerce_Subscriptions_Gifting::get_recipient_id( $subscription );
 		return $recipient_id === (int) ( $data['user_id'] ?? 0 ) ? 0 : $recipient_id;
+	}
+
+	/**
+	 * Queue access checks for both readers when a gifted subscription changes
+	 * recipient, because no subscription event fires when an admin reassigns a gift.
+	 *
+	 * @param \WC_Subscription $subscription     The gifted subscription.
+	 * @param int              $new_recipient_id The new recipient's user ID, or 0 if none.
+	 * @param int              $old_recipient_id The previous recipient's user ID, or 0 if none.
+	 *
+	 * @return void
+	 */
+	public static function handle_gift_recipient_changed( $subscription, $new_recipient_id, $old_recipient_id ): void {
+		$new_recipient_id = (int) $new_recipient_id;
+		$old_recipient_id = (int) $old_recipient_id;
+		if ( $new_recipient_id > 0 ) {
+			self::add_user_to_queue( $new_recipient_id, self::SOURCE_GIFT_RECEIVED );
+		}
+		// The old recipient only loses lists: a remove-only check can't re-add one they left.
+		if ( $old_recipient_id > 0 && $old_recipient_id !== $new_recipient_id ) {
+			self::add_user_to_queue( $old_recipient_id, self::SOURCE_GIFT_REMOVED );
+		}
 	}
 
 	/**

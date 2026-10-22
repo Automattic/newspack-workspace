@@ -1672,6 +1672,39 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Hand a gifted subscription to a different recipient, as an admin does by
+	 * editing the subscription. Updates the stub's recipient and the filter that
+	 * lists the gift under its holder, then fires the hook WCS Gifting fires.
+	 *
+	 * @param \WC_Subscription $subscription     The gifted subscription.
+	 * @param int              $new_recipient_id The new recipient's user ID.
+	 * @param bool             $fire_hook        Whether to fire the recipient-changed hook.
+	 *
+	 * @return void
+	 */
+	private function reassign_gifted_subscription( $subscription, int $new_recipient_id, bool $fire_hook = true ): void {
+		$old_recipient_id = (int) \WCS_Gifting::$recipients[ $subscription->get_id() ];
+		foreach ( $this->gift_filters as $gift_filter ) {
+			remove_filter( 'wcs_get_users_subscriptions', $gift_filter, 10 );
+		}
+		$this->gift_filters = [];
+		\WCS_Gifting::$recipients[ $subscription->get_id() ] = $new_recipient_id;
+
+		$gift_filter = function ( $subscriptions, $user_id ) use ( $subscription, $new_recipient_id ) {
+			if ( (int) $user_id === $new_recipient_id ) {
+				$subscriptions[ $subscription->get_id() ] = $subscription;
+			}
+			return $subscriptions;
+		};
+		add_filter( 'wcs_get_users_subscriptions', $gift_filter, 10, 2 );
+		$this->gift_filters[] = $gift_filter;
+
+		if ( $fire_hook ) {
+			do_action( 'woocommerce_subscriptions_gifting_recipient_changed', $subscription, $new_recipient_id, $old_recipient_id );
+		}
+	}
+
+	/**
 	 * A subscription event carries the purchaser of a gift, who doesn't hold the
 	 * subscription. The recipient does, so they must be queued too.
 	 */
@@ -1869,6 +1902,103 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		$this->assertCount( 1, $calls, 'The recipient of a lapsed gift must be removed from its premium lists.' );
 		$this->assertContains( 'newspack-' . $list_post_id, $calls[0]['lists_to_remove'] );
 		$this->assertEmpty( $calls[0]['lists_to_add'] );
+	}
+
+	/**
+	 * Reassigning a gift fires no subscription event, so the hook WCS Gifting fires
+	 * queues both readers: the new recipient to gain the lists, the old one to lose them.
+	 */
+	public function test_gift_recipient_change_queues_both_recipients() {
+		$purchaser_id     = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$old_recipient_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$new_recipient_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$this->create_newsletter_gate( [ 100 ], [ $this->create_premium_list() ] );
+		$subscription = $this->create_gifted_subscription( $purchaser_id, $old_recipient_id, [ 100 ] );
+
+		do_action( 'woocommerce_subscriptions_gifting_recipient_changed', $subscription, $new_recipient_id, $old_recipient_id );
+
+		$this->assertSame( Premium_Newsletters::SOURCE_GIFT_RECEIVED, $this->get_queued_source( $new_recipient_id ), 'The new recipient is checked for lists to add.' );
+		$this->assertSame( Premium_Newsletters::SOURCE_GIFT_REMOVED, $this->get_queued_source( $old_recipient_id ), 'The old recipient is checked for lists to remove only.' );
+		$this->assertNotContains( $purchaser_id, $this->get_queued_user_ids(), 'The purchaser is not affected by a change of recipient.' );
+	}
+
+	/**
+	 * A gift with no previous recipient (or none now) queues only the reader who
+	 * exists, and a gift handed back to the same reader queues them once.
+	 */
+	public function test_gift_recipient_change_skips_missing_recipients() {
+		$purchaser_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$recipient_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$this->create_newsletter_gate( [ 100 ], [ $this->create_premium_list() ] );
+		$subscription = $this->create_gifted_subscription( $purchaser_id, $recipient_id, [ 100 ] );
+
+		do_action( 'woocommerce_subscriptions_gifting_recipient_changed', $subscription, $recipient_id, 0 );
+		$this->assertSame( [ $recipient_id ], $this->get_queued_user_ids(), 'A first recipient is queued alone.' );
+
+		delete_option( Premium_Newsletters::QUEUE_OPTION );
+		do_action( 'woocommerce_subscriptions_gifting_recipient_changed', $subscription, 0, $recipient_id );
+		$this->assertSame( [ $recipient_id ], $this->get_queued_user_ids(), 'A removed recipient is queued alone.' );
+		$this->assertSame( Premium_Newsletters::SOURCE_GIFT_REMOVED, $this->get_queued_source( $recipient_id ) );
+
+		delete_option( Premium_Newsletters::QUEUE_OPTION );
+		do_action( 'woocommerce_subscriptions_gifting_recipient_changed', $subscription, $recipient_id, $recipient_id );
+		$this->assertSame( [ $recipient_id ], $this->get_queued_user_ids(), 'An unchanged recipient is queued once.' );
+		$this->assertSame( Premium_Newsletters::SOURCE_GIFT_RECEIVED, $this->get_queued_source( $recipient_id ), 'The gain wins when old and new are the same reader.' );
+	}
+
+	/**
+	 * End to end: after a gift is reassigned, the new recipient gains the gated
+	 * list and the old one loses it, with auto-signup on.
+	 */
+	public function test_reassigned_gift_moves_lists_to_new_recipient() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+
+		$purchaser_id        = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$old_recipient_id    = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$new_recipient_id    = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$old_recipient_email = get_userdata( $old_recipient_id )->user_email;
+		$new_recipient_email = get_userdata( $new_recipient_id )->user_email;
+
+		$list_post_id = $this->create_premium_list();
+		$this->create_newsletter_gate( [ 100 ], [ $list_post_id ] );
+		$subscription = $this->create_gifted_subscription( $purchaser_id, $old_recipient_id, [ 100 ] );
+		\Newspack_Newsletters_Subscription::$contact_lists[ $old_recipient_email ] = [ 'newspack-' . $list_post_id ];
+
+		$this->reassign_gifted_subscription( $subscription, $new_recipient_id );
+		Premium_Newsletters::process_access_check_queue();
+
+		$new_calls = $this->get_list_calls_for( $new_recipient_email );
+		$this->assertCount( 1, $new_calls, 'The new recipient gets one list update.' );
+		$this->assertContains( 'newspack-' . $list_post_id, $new_calls[0]['lists_to_add'] );
+		$this->assertEmpty( $new_calls[0]['lists_to_remove'] );
+
+		$old_calls = $this->get_list_calls_for( $old_recipient_email );
+		$this->assertCount( 1, $old_calls, 'The old recipient gets one list update.' );
+		$this->assertContains( 'newspack-' . $list_post_id, $old_calls[0]['lists_to_remove'] );
+		$this->assertEmpty( $old_calls[0]['lists_to_add'], 'Losing a gift must not add lists.' );
+	}
+
+	/**
+	 * Losing a gift only takes lists away: a reader who still has access some other
+	 * way, and who had left the list, isn't re-added by auto-signup.
+	 */
+	public function test_reassigned_gift_does_not_readd_lists_the_old_recipient_left() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+
+		$purchaser_id        = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$old_recipient_id    = $this->create_reader( true );
+		$new_recipient_id    = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$old_recipient_email = get_userdata( $old_recipient_id )->user_email;
+
+		$list_post_id = $this->create_premium_list();
+		$this->create_newsletter_gate( [ 100 ], [ $list_post_id ] );
+		$subscription = $this->create_gifted_subscription( $purchaser_id, $old_recipient_id, [ 100 ] );
+		\Newspack_Newsletters_Subscription::$contact_lists[ $old_recipient_email ] = [];
+
+		$this->reassign_gifted_subscription( $subscription, $new_recipient_id );
+		Premium_Newsletters::process_access_check_queue();
+
+		$this->assertEmpty( $this->get_list_calls_for( $old_recipient_email ), 'A reader who left the list must not be re-added when a gift moves away.' );
 	}
 
 	// =========================================================================
