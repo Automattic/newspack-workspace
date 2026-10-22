@@ -46,6 +46,13 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	private $post_ids = [];
 
 	/**
+	 * Callbacks hooked to wcs_get_users_subscriptions by create_gifted_subscription().
+	 *
+	 * @var callable[]
+	 */
+	private $gift_filters = [];
+
+	/**
 	 * Set up before all tests.
 	 */
 	public static function set_up_before_class() {
@@ -60,6 +67,7 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		require_once dirname( __DIR__, 2 ) . '/mocks/newsletters-mocks.php';
 		require_once dirname( __DIR__, 2 ) . '/mocks/newsletters-namespaced-mocks.php';
 		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
+		require_once dirname( __DIR__, 2 ) . '/mocks/wcs-gifting-mock.php';
 		if ( ! post_type_exists( \Newspack\Newsletters\Subscription_Lists::CPT ) ) {
 			register_post_type( \Newspack\Newsletters\Subscription_Lists::CPT );
 		}
@@ -74,6 +82,8 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		// gate lookup cached for the same ID by an earlier case would otherwise be
 		// served here — reporting "no gates" for a post that has one.
 		$this->reset_restriction_cache();
+		// The gifting stub's recipient map is static and shared with other test files.
+		\WCS_Gifting::$recipients = [];
 		global $orders_database;
 		$orders_database = [];
 		\Newspack_Newsletters_Contacts::reset_calls();
@@ -115,6 +125,11 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 			wp_delete_post( $id, true );
 		}
 		$this->post_ids = [];
+		foreach ( $this->gift_filters as $gift_filter ) {
+			remove_filter( 'wcs_get_users_subscriptions', $gift_filter, 10 );
+		}
+		$this->gift_filters       = [];
+		\WCS_Gifting::$recipients = [];
 		global $subscriptions_database, $orders_database;
 		$subscriptions_database = [];
 		$orders_database        = [];
@@ -1616,6 +1631,208 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		Premium_Newsletters::process_access_check_queue();
 
 		$this->assertEmpty( $this->get_list_calls_for( $member_email ), 'A member who unsubscribed must not be re-added on renewal.' );
+	}
+
+	// =========================================================================
+	// Gifted subscriptions
+	// =========================================================================
+
+	/**
+	 * Create an active subscription bought by one reader as a gift for another.
+	 *
+	 * Mirrors WCS Gifting in production: the subscription stays owned by the
+	 * purchaser, and the recipient sees it in wcs_get_users_subscriptions().
+	 *
+	 * @param int   $purchaser_id Purchaser user ID.
+	 * @param int   $recipient_id Recipient user ID.
+	 * @param array $product_ids  Product IDs the subscription covers.
+	 *
+	 * @return \WC_Subscription
+	 */
+	private function create_gifted_subscription( int $purchaser_id, int $recipient_id, array $product_ids ) {
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id' => $purchaser_id,
+				'status'      => 'active',
+				'products'    => $product_ids,
+			]
+		);
+		\WCS_Gifting::$recipients[ $subscription->get_id() ] = $recipient_id;
+
+		$gift_filter = function ( $subscriptions, $user_id ) use ( $subscription, $recipient_id ) {
+			if ( (int) $user_id === $recipient_id ) {
+				$subscriptions[ $subscription->get_id() ] = $subscription;
+			}
+			return $subscriptions;
+		};
+		add_filter( 'wcs_get_users_subscriptions', $gift_filter, 10, 2 );
+		$this->gift_filters[] = $gift_filter;
+
+		return $subscription;
+	}
+
+	/**
+	 * A subscription event carries the purchaser of a gift, who doesn't hold the
+	 * subscription. The recipient does, so they must be queued too.
+	 */
+	public function test_gift_subscription_change_queues_recipient() {
+		$purchaser_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$recipient_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$this->create_newsletter_gate( [ 100 ], [ $this->create_premium_list() ] );
+		$subscription = $this->create_gifted_subscription( $purchaser_id, $recipient_id, [ 100 ] );
+
+		Premium_Newsletters::maybe_enqueue_access_check(
+			time(),
+			[
+				'user_id'         => $purchaser_id,
+				'subscription_id' => $subscription->get_id(),
+				'status_before'   => 'pending',
+				'status_after'    => 'active',
+			],
+			0,
+			Premium_Newsletters::SOURCE_SUBSCRIPTION_CHANGED
+		);
+
+		$queued = $this->get_queued_user_ids();
+		$this->assertContains( $purchaser_id, $queued, 'The purchaser is still checked: they may lose lists.' );
+		$this->assertContains( $recipient_id, $queued, 'The gift recipient must be checked.' );
+		$this->assertSame( Premium_Newsletters::SOURCE_SUBSCRIPTION_CHANGED, $this->get_queued_source( $recipient_id ), 'The recipient is queued with the purchaser\'s source.' );
+	}
+
+	/**
+	 * A gift's recipient is queued on every event, including a move between the
+	 * statuses that both grant access, which an owner's group members skip.
+	 */
+	public function test_gift_status_change_that_keeps_access_still_queues_recipient() {
+		$purchaser_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$recipient_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$this->create_newsletter_gate( [ 100 ], [ $this->create_premium_list() ] );
+		$subscription = $this->create_gifted_subscription( $purchaser_id, $recipient_id, [ 100 ] );
+
+		Premium_Newsletters::maybe_enqueue_access_check(
+			time(),
+			[
+				'user_id'         => $purchaser_id,
+				'subscription_id' => $subscription->get_id(),
+				'status_before'   => 'active',
+				'status_after'    => 'pending-cancel',
+			],
+			0,
+			Premium_Newsletters::SOURCE_SUBSCRIPTION_CHANGED
+		);
+
+		$this->assertContains( $recipient_id, $this->get_queued_user_ids() );
+	}
+
+	/**
+	 * The recipient gets the premium lists a gifted subscription covers. The
+	 * purchaser doesn't, because content gates grant a gift only to its recipient.
+	 */
+	public function test_gift_recipient_gets_lists_and_purchaser_does_not() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+
+		$purchaser_id    = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$recipient_id    = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$purchaser_email = get_userdata( $purchaser_id )->user_email;
+		$recipient_email = get_userdata( $recipient_id )->user_email;
+
+		$list_post_id = $this->create_premium_list();
+		$this->create_newsletter_gate( [ 100 ], [ $list_post_id ] );
+		$subscription = $this->create_gifted_subscription( $purchaser_id, $recipient_id, [ 100 ] );
+
+		Premium_Newsletters::maybe_enqueue_access_check(
+			time(),
+			[
+				'user_id'         => $purchaser_id,
+				'subscription_id' => $subscription->get_id(),
+				'status_before'   => 'pending',
+				'status_after'    => 'active',
+			],
+			0,
+			Premium_Newsletters::SOURCE_SUBSCRIPTION_CHANGED
+		);
+		Premium_Newsletters::process_access_check_queue();
+
+		$recipient_calls = $this->get_list_calls_for( $recipient_email );
+		$this->assertCount( 1, $recipient_calls, 'The recipient gets one list update.' );
+		$this->assertContains( 'newspack-' . $list_post_id, $recipient_calls[0]['lists_to_add'] );
+
+		foreach ( $this->get_list_calls_for( $purchaser_email ) as $call ) {
+			$this->assertNotContains( 'newspack-' . $list_post_id, $call['lists_to_add'], 'The purchaser must not gain lists from a subscription they gave away.' );
+		}
+	}
+
+	/**
+	 * A purchaser who also holds a subscription of their own keeps its lists, and
+	 * the recipient still gains the gift's.
+	 */
+	public function test_purchaser_with_own_subscription_keeps_lists() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+
+		$purchaser_id    = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$recipient_id    = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$purchaser_email = get_userdata( $purchaser_id )->user_email;
+		$recipient_email = get_userdata( $recipient_id )->user_email;
+
+		$list_post_id = $this->create_premium_list();
+		$this->create_newsletter_gate( [ 100 ], [ $list_post_id ] );
+		wcs_create_subscription(
+			[
+				'customer_id' => $purchaser_id,
+				'status'      => 'active',
+				'products'    => [ 100 ],
+			]
+		);
+		$gift = $this->create_gifted_subscription( $purchaser_id, $recipient_id, [ 100 ] );
+
+		Premium_Newsletters::maybe_enqueue_access_check(
+			time(),
+			[
+				'user_id'         => $purchaser_id,
+				'subscription_id' => $gift->get_id(),
+				'status_before'   => 'pending',
+				'status_after'    => 'active',
+			],
+			0,
+			Premium_Newsletters::SOURCE_SUBSCRIPTION_CHANGED
+		);
+		Premium_Newsletters::process_access_check_queue();
+
+		foreach ( [ $purchaser_email, $recipient_email ] as $email ) {
+			$calls = $this->get_list_calls_for( $email );
+			$this->assertCount( 1, $calls, 'Both readers get one list update.' );
+			$this->assertContains( 'newspack-' . $list_post_id, $calls[0]['lists_to_add'] );
+			$this->assertEmpty( $calls[0]['lists_to_remove'] );
+		}
+	}
+
+	/**
+	 * A renewal snapshots the gift recipient's lists as it does the purchaser's, so
+	 * a recipient who left a premium list isn't re-added by auto-signup.
+	 */
+	public function test_gift_renewal_attempt_snapshots_recipient() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+
+		$purchaser_id    = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$recipient_id    = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$recipient_email = get_userdata( $recipient_id )->user_email;
+
+		$this->create_newsletter_gate( [ 100 ], [ $this->create_premium_list() ] );
+		$subscription = $this->create_gifted_subscription( $purchaser_id, $recipient_id, [ 100 ] );
+
+		\Newspack_Newsletters_Subscription::$contact_lists[ $recipient_email ] = [ 'public-list' ];
+
+		Premium_Newsletters::set_subscribed_lists(
+			time(),
+			[
+				'user_id'         => $purchaser_id,
+				'subscription_id' => $subscription->get_id(),
+			],
+			0
+		);
+
+		$this->assertSame( [ 'public-list' ], get_user_meta( $recipient_id, Premium_Newsletters::SUBSCRIBED_LISTS_META_KEY, true ), "A renewal must snapshot the recipient's lists." );
+		$this->assertSame( Premium_Newsletters::SOURCE_RENEWAL, $this->get_queued_source( $recipient_id ), 'A renewal must queue the recipient with the renewal source.' );
 	}
 
 	// =========================================================================

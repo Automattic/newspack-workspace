@@ -1138,6 +1138,7 @@ class Premium_Newsletters {
 
 	/**
 	 * Set the user's subscribed lists so they can be checked before auto-signup.
+	 * The recipient of a gifted subscription and a group's members are snapshotted too.
 	 *
 	 * @param int   $timestamp Timestamp of the event.
 	 * @param array $data      Data associated with the event.
@@ -1159,6 +1160,15 @@ class Premium_Newsletters {
 		}
 
 		self::snapshot_lists_and_enqueue_renewal_check( $user );
+
+		// A gift's renewal events name the purchaser, but the recipient holds the
+		// subscription, so they need the same snapshot to keep auto-signup from
+		// re-adding a premium list they left.
+		$recipient_id = self::get_gift_recipient_id( $data );
+		$recipient    = $recipient_id ? get_user_by( 'id', $recipient_id ) : false;
+		if ( $recipient ) {
+			self::snapshot_lists_and_enqueue_renewal_check( $recipient );
+		}
 
 		// A group's renewal moves it through On hold and back to Active, which
 		// re-checks every member. Members get the same snapshot as the owner, so
@@ -1219,6 +1229,30 @@ class Premium_Newsletters {
 	}
 
 	/**
+	 * Get the recipient of the gifted subscription a Data Event concerns.
+	 *
+	 * Subscription events name the purchaser, but content gates grant a gift only
+	 * to its recipient. Without this, the recipient never gains the premium lists
+	 * the gift covers, and keeps them after it lapses.
+	 *
+	 * @param array $data Data associated with the event.
+	 *
+	 * @return int The recipient's user ID, or 0 when the event names no gifted
+	 *             subscription or its recipient is the user the event names.
+	 */
+	private static function get_gift_recipient_id( array $data ): int {
+		if ( empty( $data['subscription_id'] ) || ! function_exists( 'wcs_get_subscription' ) ) {
+			return 0;
+		}
+		$subscription = wcs_get_subscription( (int) $data['subscription_id'] );
+		if ( ! $subscription ) {
+			return 0;
+		}
+		$recipient_id = WooCommerce_Subscriptions_Gifting::get_recipient_id( $subscription );
+		return $recipient_id === (int) ( $data['user_id'] ?? 0 ) ? 0 : $recipient_id;
+	}
+
+	/**
 	 * Queue an access check for a reader who just joined or left a group subscription.
 	 *
 	 * @param int|int[] $meta_ids ID(s) of the affected meta row(s).
@@ -1234,8 +1268,8 @@ class Premium_Newsletters {
 
 	/**
 	 * Maybe add or remove the user from restricted lists based on their access status.
-	 * When the event names a group subscription and can change its access, the
-	 * members are queued too.
+	 * The recipient of a gifted subscription is queued too, and so are a group
+	 * subscription's members when the event can change their access.
 	 *
 	 * @param int    $timestamp Timestamp of the event.
 	 * @param array  $data      Data associated with the event.
@@ -1250,6 +1284,13 @@ class Premium_Newsletters {
 			return;
 		}
 		self::add_user_to_queue( (int) $data['user_id'], $source );
+		// A gift's status decides its recipient's access, so the recipient is checked
+		// on every event like the owner, not skipped like a group member when the
+		// status keeps access.
+		$recipient_id = self::get_gift_recipient_id( $data );
+		if ( $recipient_id ) {
+			self::add_user_to_queue( $recipient_id, $source );
+		}
 		if ( ! self::event_changes_group_access( $data ) ) {
 			return;
 		}
