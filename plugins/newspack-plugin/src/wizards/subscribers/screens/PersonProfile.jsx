@@ -295,8 +295,7 @@ export default function PersonProfile() {
 						badges={ statusBadges( group.status ) }
 						subline={ seatsSubline( group ) }
 						rows={ rows }
-						// The title opens the group; this menu item opens the underlying
-						// subscription, which the title no longer reaches.
+						// The title opens the group; this item opens its subscription.
 						actions={ group.editUrl ? [ viewSubscriptionAction( group.plan, group.editUrl ) ] : [] }
 						// translators: %s is a group's plan name.
 						actionsLabel={ sprintf( __( 'Subscription actions: %s', 'newspack-plugin' ), group.plan ) }
@@ -309,6 +308,7 @@ export default function PersonProfile() {
 			const name = subscription.plan || __( '(Subscription)', 'newspack-plugin' );
 			const isActive = 'active' === subscription.status;
 			const isLive = isActive || 'on-hold' === subscription.status;
+			const giftedByName = subscription.giftedBy?.name || __( 'Unknown', 'newspack-plugin' );
 			const menuActions = [];
 			if ( subscription.editUrl ) {
 				menuActions.push( viewSubscriptionAction( name, subscription.editUrl ) );
@@ -391,9 +391,9 @@ export default function PersonProfile() {
 										{
 											label: __( 'Gifted by', 'newspack-plugin' ),
 											value: subscription.giftedBy.editUrl ? (
-												<a href={ subscription.giftedBy.editUrl }>{ subscription.giftedBy.name }</a>
+												<a href={ subscription.giftedBy.editUrl }>{ giftedByName }</a>
 											) : (
-												subscription.giftedBy.name
+												giftedByName
 											),
 										},
 								  ]
@@ -550,6 +550,8 @@ export default function PersonProfile() {
 				<RefundFlow
 					subscription={ modal.subscription }
 					subscriberName={ subscriber.name }
+					// A gift's refund goes back to whoever bought it, not to the reader.
+					payerName={ modal.subscription.giftedBy?.name || subscriber.name }
 					actions={ paymentActions }
 					onClose={ () => setModal( null ) }
 					onDone={ completeFlow }
@@ -558,7 +560,9 @@ export default function PersonProfile() {
 			{ 'reactivate' === modal?.kind && (
 				<ReactivateFlow
 					subscription={ modal.subscription }
-					email={ subscriber.email }
+					// The payment link goes to the subscription's billing email, which
+					// for a gift is the purchaser's, not the reader's.
+					email={ modal.subscription.billingEmail || subscriber.email }
 					actions={ subscriptionActions }
 					onClose={ () => setModal( null ) }
 					onDone={ completeFlow }

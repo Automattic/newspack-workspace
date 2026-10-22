@@ -579,6 +579,28 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 	}
 
 	/**
+	 * Each subscription reports the billing email its payment link goes to. For a
+	 * gift that is the purchaser's, who still pays, not the recipient's account
+	 * email; the profile's reactivate confirmation shows it so the admin knows who
+	 * gets the email.
+	 */
+	public function test_subscription_carries_the_billing_email_the_payment_link_goes_to() {
+		$this->login_admin();
+		$purchaser_id = $this->create_reader( 'Gift Buyer' );
+		$recipient_id = $this->create_reader( 'Gift Receiver' );
+		$gift         = $this->create_gifted_subscription( $purchaser_id, $recipient_id );
+		$own          = $this->create_individual_subscription( $recipient_id, 'active' );
+
+		$gift->data['billing_email'] = 'gift-buyer-billing@example.com';
+		$own->data['billing_email']  = 'receiver-billing@example.com';
+
+		$by_id = array_column( $this->dispatch( $recipient_id )->get_data()['subscriptions'], null, 'id' );
+
+		$this->assertSame( 'gift-buyer-billing@example.com', $by_id[ $gift->get_id() ]['billingEmail'], 'A gift\'s payment link goes to the purchaser\'s billing email.' );
+		$this->assertSame( 'receiver-billing@example.com', $by_id[ $own->get_id() ]['billingEmail'], 'A subscription the reader bought reports its own billing email.' );
+	}
+
+	/**
 	 * A purchaser whose account was deleted cannot be named or linked to, so the
 	 * gift still shows on the recipient's profile but without a "Gifted by".
 	 */

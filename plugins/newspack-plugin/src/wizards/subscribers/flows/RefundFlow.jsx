@@ -26,11 +26,12 @@ import { fmtCurrency } from '../format';
  * @param {Object}   props                Component props.
  * @param {Object}   props.subscription   The profile subscription entry.
  * @param {string}   props.subscriberName The subscriber's display name.
+ * @param {string}   [props.payerName]    Who the refund goes back to, when that is not the subscriber (the purchaser of a gift). Defaults to the subscriber.
  * @param {Object}   props.actions        The payment write calls (usePaymentActions).
  * @param {Function} props.onClose        Close without acting.
  * @param {Function} props.onDone         Called with a success message afterwards.
  */
-export default function RefundFlow( { subscription, subscriberName, actions, onClose, onDone } ) {
+export default function RefundFlow( { subscription, subscriberName, payerName, actions, onClose, onDone } ) {
 	const [ choice, setChoice ] = useState( 'refund-only' );
 	const [ busy, setBusy ] = useState( false );
 	const [ error, setError ] = useState( '' );
@@ -47,6 +48,9 @@ export default function RefundFlow( { subscription, subscriberName, actions, onC
 	const refundCurrency = subscription.refundableCurrency || subscription.currency;
 	const amount = fmtCurrency( subscription.refundableAmount, refundCurrency );
 	const name = subscriberName || __( 'The subscriber', 'newspack-plugin' );
+	// A gift is paid for by someone other than the reader holding it, so the
+	// refund names the payer while any line about access still names the reader.
+	const payer = payerName || name;
 
 	const submit = async () => {
 		const { willRefund, willCancel } = refundIntent( choice, cancelOnly );
@@ -124,25 +128,25 @@ export default function RefundFlow( { subscription, subscriberName, actions, onC
 		// copy must not promise a renewal — and a full refund may end it at once.
 		confirmDetail = subscription.isPendingCancel
 			? sprintf(
-					// translators: 1: the subscriber's name, 2: the refund amount.
+					// translators: 1: the name of whoever is refunded, 2: the refund amount.
 					__(
 						'%1$s will be refunded %2$s. Their subscription is already ending; a full refund may cancel it immediately.',
 						'newspack-plugin'
 					),
-					name,
+					payer,
 					amount
 			  )
 			: sprintf(
-					// translators: 1: the subscriber's name, 2: the refund amount.
+					// translators: 1: the name of whoever is refunded, 2: the refund amount.
 					__( '%1$s will be refunded %2$s. Their access continues and they’ll renew normally.', 'newspack-plugin' ),
-					name,
+					payer,
 					amount
 			  );
 	} else {
 		confirmDetail = sprintf(
-			// translators: 1: the subscriber's name, 2: the refund amount.
+			// translators: 1: the name of whoever is refunded, 2: the refund amount.
 			__( '%1$s will be refunded %2$s and their access ends immediately.', 'newspack-plugin' ),
-			name,
+			payer,
 			amount
 		);
 	}

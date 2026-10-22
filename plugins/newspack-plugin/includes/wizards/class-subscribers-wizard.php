@@ -1582,6 +1582,10 @@ class Subscribers_Wizard extends Wizard {
 						// Who bought this subscription for the reader, when they
 						// were given it rather than paying for it themselves.
 						'giftedBy'      => $this->gifted_by( $subscription, $user_id ),
+						// Where the payment link goes. For a gift this is the
+						// purchaser's billing email, not the reader's, so the
+						// reactivate confirmation can name who gets the email.
+						'billingEmail'  => (string) $subscription->get_billing_email(),
 					]
 				)
 				: $entry;

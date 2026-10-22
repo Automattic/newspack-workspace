@@ -3,7 +3,9 @@
  * who does not exist, a request that errored, and one that came back empty.
  *
  * When the read succeeds, the cards carry what a gifted subscription needs: who
- * gave it, a way to open it, and no offer to touch the giver's saved cards.
+ * gave it, a way to open it, and no offer to touch the giver's saved cards. The
+ * refund and payment-link confirmations name the giver, who still pays, rather
+ * than the reader holding the gift.
  */
 
 /**
@@ -34,12 +36,15 @@ jest.mock( '../../../../packages/components/src/wizard/store', () => ( { WIZARD_
 jest.mock( '../../../../packages/components/src', () => ( {
 	Button: require( 'react' ).forwardRef( ( { children, label, ...props }, ref ) => {
 		// Component-only props that a DOM button would warn about.
-		[ 'icon', 'size', 'showTooltip' ].forEach( key => delete props[ key ] );
+		[ 'icon', 'size', 'showTooltip', 'isBusy', 'isDestructive' ].forEach( key => delete props[ key ] );
 		return require( 'react' ).createElement( 'button', { ...props, 'aria-label': label || props[ 'aria-label' ], ref }, children );
 	} ),
 	Card: ( { children, __experimentalCoreProps } ) => require( 'react' ).createElement( 'div', null, __experimentalCoreProps?.header, children ),
 	Divider: () => null,
 	Grid: ( { children } ) => require( 'react' ).createElement( 'div', null, children ),
+	// The money flows open in a modal; this one renders inline so its copy is queryable.
+	Modal: ( { title, children } ) => require( 'react' ).createElement( 'div', { role: 'dialog', 'aria-label': title }, children ),
+	Notice: ( { noticeText } ) => require( 'react' ).createElement( 'div', { role: 'alert' }, noticeText ),
 	SectionHeader: () => null,
 	Waiting: () => null,
 	Router: { useParams: () => ( { id: '1' } ), useLocation: () => ( { search: '', pathname: '/subscribers/1' } ) },
@@ -214,6 +219,82 @@ describe( 'a gifted subscription on the profile', () => {
 
 		const labels = ( await openCardMenu( 'Subscription actions: Weekly digest' ) ).map( item => item.textContent );
 		expect( labels ).toEqual( [ 'View subscription', 'Change payment method', 'Refund or cancel' ] );
+	} );
+} );
+
+/** Open a card's "more" menu and choose the item with the given label. */
+const chooseCardAction = async ( card, label ) => {
+	const items = await openCardMenu( `Subscription actions: ${ card }` );
+	await act( async () => {
+		fireEvent.click( items.find( item => item.textContent === label ) );
+	} );
+};
+
+describe( 'the money flows on a gifted subscription', () => {
+	const gift = overrides => subscription( { giftedBy: giver, billingEmail: 'gale-billing@example.com', ...overrides } );
+	const onHold = overrides => gift( { status: 'on-hold', canReactivate: true, canCharge: false, ...overrides } );
+
+	beforeEach( () => {
+		apiFetch.mockReset();
+	} );
+
+	it( 'says the refund goes to the giver, not to the reader holding the gift', async () => {
+		await renderCards( profile( { subscriptions: [ gift() ] } ) );
+		await chooseCardAction( 'Weekly digest', 'Refund or cancel' );
+
+		expect( screen.getByText( /^Gale Giver will be refunded .* Their access continues/ ) ).toBeInTheDocument();
+		expect( screen.queryByText( /Rae Reader will be refunded/ ) ).not.toBeInTheDocument();
+
+		await act( async () => {
+			fireEvent.click( screen.getByRole( 'radio', { name: 'Refund and cancel subscription' } ) );
+		} );
+		expect( screen.getByText( /^Gale Giver will be refunded .* their access ends immediately\./ ) ).toBeInTheDocument();
+	} );
+
+	it( 'still names the reader where the line is about their access ending', async () => {
+		await renderCards( profile( { subscriptions: [ gift() ] } ) );
+		await chooseCardAction( 'Weekly digest', 'Refund or cancel' );
+
+		await act( async () => {
+			fireEvent.click( screen.getByRole( 'radio', { name: 'Cancel only (no refund)' } ) );
+		} );
+		expect( screen.getByText( 'Rae Reader’s access ends immediately. No refund is issued.' ) ).toBeInTheDocument();
+	} );
+
+	it( 'names the reader as refunded when they paid for the subscription themselves', async () => {
+		await renderCards( profile() );
+		await chooseCardAction( 'Weekly digest', 'Refund or cancel' );
+
+		expect( screen.getByText( /^Rae Reader will be refunded .* Their access continues/ ) ).toBeInTheDocument();
+	} );
+
+	it( "shows the giver's billing email as where the payment link goes, and confirms it", async () => {
+		apiFetch.mockImplementation( ( { method } ) =>
+			Promise.resolve( 'POST' === method ? { emailSent: true } : profile( { subscriptions: [ onHold() ] } ) )
+		);
+		await renderProfile();
+		await chooseCardAction( 'Weekly digest', 'Reactivate' );
+
+		await act( async () => {
+			fireEvent.click( screen.getByRole( 'button', { name: 'Continue' } ) );
+		} );
+		expect( screen.getByText( /A payment link will be emailed to gale-billing@example\.com\./ ) ).toBeInTheDocument();
+		expect( screen.queryByText( /rae@example\.com/ ) ).not.toBeInTheDocument();
+
+		await act( async () => {
+			fireEvent.click( screen.getByRole( 'button', { name: 'Confirm' } ) );
+		} );
+		expect( screen.getByText( 'Payment link sent to gale-billing@example.com.' ) ).toBeInTheDocument();
+	} );
+
+	it( "falls back to the reader's email when the subscription reports no billing email", async () => {
+		await renderCards( profile( { subscriptions: [ subscription( { status: 'on-hold', canReactivate: true, billingEmail: '' } ) ] } ) );
+		await chooseCardAction( 'Weekly digest', 'Reactivate' );
+
+		await act( async () => {
+			fireEvent.click( screen.getByRole( 'button', { name: 'Continue' } ) );
+		} );
+		expect( screen.getByText( /A payment link will be emailed to rae@example\.com\./ ) ).toBeInTheDocument();
 	} );
 } );
 
