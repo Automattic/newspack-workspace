@@ -313,6 +313,20 @@ class Test_Private_Tags_Integrations extends WP_UnitTestCase {
 		$this->assertSame( 'Beastie (private)', $out->name );
 	}
 
+	/**
+	 * Strip private label from rest keeps the name when the private tag differs only by accents.
+	 *
+	 * The DB collation matches "Beastie" to "Beastié", but wp_insert_term() would not,
+	 * so stripping here would create a new public "Beastie" tag.
+	 */
+	public function test_strip_private_label_from_rest_keeps_name_when_only_accents_match() {
+		$this->make_private_tag( 'Beastié' );
+
+		$prepared = (object) [ 'name' => 'Beastie (private)' ];
+		$out      = Private_Tags::strip_private_label_from_rest( $prepared, new WP_REST_Request( 'POST', '/wp/v2/tags' ) );
+		$this->assertSame( 'Beastie (private)', $out->name );
+	}
+
 	// -----------------------------------------------------------------
 	// Admin column.
 	// -----------------------------------------------------------------
