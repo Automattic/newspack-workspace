@@ -23,12 +23,91 @@ use Newspack_Network\Node\Settings as Node_Settings;
 class Sites {
 
 	/**
+	 * Remembered result of get_all_sites(), so the hub's Node posts are queried once per request.
+	 *
+	 * @var array|null
+	 */
+	private static $all_sites = null;
+
+	/**
 	 * Get all sites
 	 *
 	 * @return array Array of arrays with name and url properties.
 	 */
 	public static function get_all_sites() {
-		return array_merge( [ self::get_hub() ], self::get_nodes() );
+		if ( null === self::$all_sites ) {
+			self::$all_sites = array_merge( [ self::get_hub() ], self::get_nodes() );
+		}
+		return self::$all_sites;
+	}
+
+	/**
+	 * Forget the remembered site list.
+	 *
+	 * @return void
+	 */
+	public static function reset_cache() {
+		self::$all_sites = null;
+	}
+
+	/**
+	 * Reduce a site URL to lowercase host plus path, with no scheme and no trailing slash.
+	 *
+	 * This lets the same site match whether a URL has http or https, different letter case, or a trailing slash.
+	 *
+	 * @param string $url The site URL.
+	 *
+	 * @return string The normalized URL.
+	 */
+	public static function normalize_url( $url ) {
+		$url = preg_replace( '#^[a-z][a-z0-9+.-]*://#i', '', trim( (string) $url ) );
+		return strtolower( untrailingslashit( $url ) );
+	}
+
+	/**
+	 * Get the name of a network site from its URL.
+	 *
+	 * @param string $url The site URL.
+	 *
+	 * @return string The site's name, or its bare domain if the site isn't in the network list.
+	 */
+	public static function get_site_name( $url ) {
+		$normalized_url = self::normalize_url( $url );
+		foreach ( self::get_all_sites() as $site ) {
+			if ( self::normalize_url( $site['url'] ) === $normalized_url ) {
+				return $site['name'];
+			}
+		}
+		return $normalized_url;
+	}
+
+	/**
+	 * Whether a URL belongs to the site this code is running on.
+	 *
+	 * @param string $url The site URL.
+	 *
+	 * @return bool
+	 */
+	public static function is_current_site( $url ) {
+		return self::normalize_url( $url ) === self::normalize_url( get_bloginfo( 'url' ) );
+	}
+
+	/**
+	 * Get the link to a subscription's edit screen on a network site.
+	 *
+	 * @param string $site_url The site URL.
+	 * @param int    $id       The subscription's post ID on that site.
+	 *
+	 * @return string
+	 */
+	public static function get_subscription_edit_url( $site_url, $id ) {
+		return add_query_arg(
+			[
+				'post'   => $id,
+				'action' => 'edit',
+			],
+			trailingslashit( $site_url ) . 'wp-admin/post.php'
+		);
 	}
 
 	/**
