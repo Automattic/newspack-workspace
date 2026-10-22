@@ -436,9 +436,10 @@ class API {
 	public static function get_stories( $request ) {
 		// The app sends this back as `since` on its next refresh. Story changes are
 		// stamped with the server clock, so a browser clock running ahead would skip
-		// other users' changes. Taken before the query so a story saved while it runs
-		// is still returned by the next refresh.
-		$timestamp = time();
+		// other users' changes. Taken before the query and two seconds early, so a
+		// change written after its story was stamped, as a status change is, still
+		// comes back on the next refresh.
+		$timestamp = time() - 2;
 
 		$query_args = [
 			'posts_per_page' => $request->get_param( 'limit' ) ?? self::DEFAULT_LIMIT,

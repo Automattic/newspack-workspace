@@ -160,28 +160,24 @@ class Test_API extends \WP_UnitTestCase {
 			update_post_meta( $post_id, Abstract_Field::FIELD_PREFIX . '_modified', $past_time );
 		}
 
-		$before   = time();
+		// Stamped in the second before the request, as a status change is stamped before its term is written.
+		$stamped_story = self::$stories[0];
+		update_post_meta( $stamped_story, Abstract_Field::FIELD_PREFIX . '_modified', time() - 1 );
+
 		$request  = new \WP_REST_Request( 'GET', sprintf( '%s/stories', API::NAMESPACE ) );
 		$response = API::get_stories( $request );
-		$after    = time();
 
 		$data = $response->get_data();
 		$this->assertArrayHasKey( 'timestamp', $data, 'Should return the server time.' );
-		$this->assertIsInt( $data['timestamp'] );
-		$this->assertGreaterThanOrEqual( $before, $data['timestamp'] );
-		$this->assertLessThanOrEqual( $after, $data['timestamp'] );
-
-		// A story changed after the response must come back when its timestamp is sent as `since`.
-		$changed_story = self::$stories[0];
-		Fields::update_modified( $changed_story );
+		$this->assertEqualsWithDelta( time(), $data['timestamp'], 5, 'Should come from the server clock.' );
 
 		$request = new \WP_REST_Request( 'GET', sprintf( '%s/stories', API::NAMESPACE ) );
 		$request->set_param( 'since', $data['timestamp'] );
 		$response = API::get_stories( $request );
 
 		$data = $response->get_data();
-		$this->assertCount( 1, $data['stories'], 'Should only get the changed story.' );
-		$this->assertEquals( $changed_story, $data['stories'][0]['id'] );
+		$this->assertCount( 1, $data['stories'], 'The next refresh should still return the story stamped just before the request.' );
+		$this->assertEquals( $stamped_story, $data['stories'][0]['id'] );
 	}
 
 	/**
