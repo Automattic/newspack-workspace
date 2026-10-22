@@ -23,20 +23,25 @@ class WooCommerce_Products {
 	 * counts: sites moving from Woo Memberships keep readers on legacy products they have
 	 * hidden from the storefront, and those products still have to be selectable by name.
 	 * `get_product_label_with_status()` marks every status but published in picker labels,
-	 * and marks the statuses outside this list as invalid.
+	 * and marks the statuses outside this list by their status alone.
 	 */
 	const ELIGIBLE_PRODUCT_STATUSES = [ 'publish', 'private' ];
 
 	/**
 	 * Label a product for a picker, marking any status other than published. An eligible
-	 * status reads "All Access [status: Private]"; any other reads "All Access [invalid
-	 * status: Draft]". The status reads as WordPress admin names it ("Scheduled" rather than
-	 * `future`), in the viewer's admin language.
+	 * status reads "All Access [status: Private]"; any other reads "All Access [draft]". The
+	 * status reads as WordPress admin names it ("scheduled" rather than `future`), in the
+	 * viewer's admin language.
+	 *
+	 * The unpublished markers are this plugin's own strings rather than core's status labels,
+	 * so a translator decides their case: a language that capitalizes nouns needs a
+	 * capitalized marker. A status without its own marker falls back to core's label as it is.
 	 *
 	 * The private marker tells a hidden legacy tier apart from a current product of the same
-	 * name. The invalid marker keeps a saved product's name visible after it is drafted,
+	 * name. The unpublished marker keeps a saved product's name visible after it is drafted,
 	 * scheduled or trashed, rather than falling back to a generic "deleted" or "not listed"
-	 * stand-in.
+	 * stand-in. It names the status without calling it an error: subscriptions to an
+	 * unpublished product still grant access.
 	 *
 	 * @param string $name   The product name.
 	 * @param string $status The product's post status.
@@ -57,11 +62,21 @@ class WooCommerce_Products {
 				$status_label
 			);
 		}
+		$unpublished_markers = [
+			/* translators: Marks a product saved as a draft in a product picker, e.g. "All Access [draft]". The Access Control picker notice quotes it; keep the two in step. */
+			'draft'   => _x( 'draft', 'product status marker', 'newspack-plugin' ),
+			/* translators: Marks a product pending review in a product picker, e.g. "All Access [pending]". The Access Control picker notice quotes it; keep the two in step. */
+			'pending' => _x( 'pending', 'product status marker', 'newspack-plugin' ),
+			/* translators: Marks a product scheduled to publish in a product picker, e.g. "All Access [scheduled]". The Access Control picker notice quotes it; keep the two in step. */
+			'future'  => _x( 'scheduled', 'product status marker', 'newspack-plugin' ),
+			/* translators: Marks a trashed product in a product picker, e.g. "All Access [trash]". The Access Control picker notice quotes it; keep the two in step. */
+			'trash'   => _x( 'trash', 'product status marker', 'newspack-plugin' ),
+		];
 		return sprintf(
-			/* translators: 1: product name, 2: post status label, e.g. "Draft" or "Trash". Keep "invalid status" in step with the Access Control picker notice that quotes it. */
-			__( '%1$s [invalid status: %2$s]', 'newspack-plugin' ),
+			/* translators: 1: product name, 2: product status marker, e.g. "draft" or "trash". */
+			_x( '%1$s [%2$s]', 'product label with status marker', 'newspack-plugin' ),
 			$name,
-			$status_label
+			$unpublished_markers[ $status ] ?? $status_label
 		);
 	}
 
