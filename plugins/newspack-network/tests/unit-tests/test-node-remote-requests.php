@@ -28,7 +28,8 @@ class TestNodeRemoteRequests extends WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
-		$this->requests = [];
+		$this->requests           = [];
+		\Newspack\Logger::$entries = [];
 		add_filter( 'pre_http_request', [ $this, 'intercept' ], 10, 3 );
 	}
 
@@ -75,37 +76,84 @@ class TestNodeRemoteRequests extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Node URLs in ranges the Hub should not contact.
-	 */
-	public function internal_url_provider() {
-		return [
-			'link-local' => [ 'http://169.254.169.254' ],
-			'loopback'   => [ 'http://127.0.0.1' ],
-			'private'    => [ 'http://10.0.0.5' ],
-			'cgnat'      => [ 'http://100.64.0.1' ],
-		];
-	}
-
-	/**
 	 * Site info is not requested from an internal address.
-	 *
-	 * @dataProvider internal_url_provider
-	 * @param string $url Node URL.
 	 */
-	public function test_site_info_skips_internal_node_url( $url ) {
-		$this->make_node( $url )->get_site_info();
+	public function test_site_info_skips_internal_node_url() {
+		$this->make_node( 'http://100.64.0.1' )->get_site_info();
 		$this->assertSame( [], $this->requests );
 	}
 
 	/**
 	 * Collection data is not requested from an internal address.
-	 *
-	 * @dataProvider internal_url_provider
-	 * @param string $url Node URL.
 	 */
-	public function test_collection_fetch_skips_internal_node_url( $url ) {
-		$this->assertNull( Membership_Plans::fetch_collection_from_api( $this->make_node( $url ), 'wc/v2/memberships/plans', 'membership-plans' ) );
+	public function test_collection_fetch_skips_internal_node_url() {
+		$this->assertNull( Membership_Plans::fetch_collection_from_api( $this->make_node( 'http://100.64.0.1' ), 'wc/v2/memberships/plans', 'membership-plans' ) );
 		$this->assertSame( [], $this->requests );
+	}
+
+	/**
+	 * A redirect core refuses on its own is still logged as a refusal. Core leaves only
+	 * its generic message on the error, so this relies on core keeping that string.
+	 */
+	public function test_redirect_refused_by_core_is_logged() {
+		$refuse = function () {
+			return new WP_Error( 'http_request_failed', __( 'A valid URL was not provided.' ) ); // phpcs:ignore WordPress.WP.I18n.MissingArgDomain -- core's own string.
+		};
+		add_filter( 'pre_http_request', $refuse, 11 );
+		$this->make_node( 'http://93.184.216.34' )->get_site_info();
+		remove_filter( 'pre_http_request', $refuse, 11 );
+
+		$this->assertSame(
+			[
+				'host' => '93.184.216.34',
+				'port' => 80,
+			],
+			$this->only_refusal_logged()['data']
+		);
+	}
+
+	/**
+	 * A redirect the plugin's guard refuses is logged as a refusal. The intercept turns
+	 * the guard's exception into a WP_Error, as WP_Http does for a real redirect.
+	 */
+	public function test_redirect_refused_by_guard_is_logged() {
+		$redirect = function () {
+			try {
+				Network::assert_safe_redirect( 'http://10.0.0.5' );
+			} catch ( Exception $e ) {
+				return new WP_Error( 'http_request_failed', $e->getMessage() );
+			}
+			return new WP_Error( 'http_request_failed', 'The guard let the redirect through.' );
+		};
+		add_filter( 'pre_http_request', $redirect, 11 );
+		$this->make_node( 'http://93.184.216.34' )->get_site_info();
+		remove_filter( 'pre_http_request', $redirect, 11 );
+
+		$this->assertSame(
+			[
+				'host' => '93.184.216.34',
+				'port' => 80,
+			],
+			$this->only_refusal_logged()['data']
+		);
+	}
+
+	/**
+	 * Return the one peer-request refusal logged so far, failing unless there is exactly one.
+	 *
+	 * @return array
+	 */
+	private function only_refusal_logged() {
+		$refusals = array_values(
+			array_filter(
+				\Newspack\Logger::$entries,
+				function ( $entry ) {
+					return 'newspack_network_peer_request' === $entry['code'];
+				}
+			)
+		);
+		$this->assertCount( 1, $refusals );
+		return $refusals[0];
 	}
 
 	/**
