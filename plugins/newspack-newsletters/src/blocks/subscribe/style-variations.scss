@@ -271,8 +271,8 @@
 
 		form:has(input[value*="invalid_email"]) .newspack-newsletters-email-input input[type="email"],
 		.newspack-newsletters-email-input input[type="email"][aria-invalid="true"] {
-			--newspack-ui-color-input-border: var(--newspack-ui-color-error-60, #b32d2e);
-			--newspack-ui-color-input-border-hover: var(--newspack-ui-color-error-60, #b32d2e);
+			--newspack-ui-color-input-border: var(--newspack-ui-color-error, #b32d2e);
+			--newspack-ui-color-input-border-hover: var(--newspack-ui-color-error, #b32d2e);
 
 			box-shadow: inset 0 0 0 1px var(--newspack-ui-color-input-border);
 		}

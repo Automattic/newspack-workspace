@@ -31,7 +31,7 @@
 	// Form inline text - helper and error.
 	& &__helper-text,
 	& &__inline-error {
-		color: var(--newspack-ui-color-neutral-60);
+		color: var(--newspack-ui-color-text-muted);
 		display: block;
 		font-size: var(--newspack-ui-font-size-xs);
 		font-weight: normal;
@@ -71,8 +71,8 @@
 	& &__field-error,
 	[data-form-status="400"] {
 		// Attribute added to sign-up modal form on failure.
-		--newspack-ui-color-input-border: var(--newspack-ui-color-error-60);
-		--newspack-ui-color-input-border-hover: var(--newspack-ui-color-error-60);
+		--newspack-ui-color-input-border: var(--newspack-ui-color-error);
+		--newspack-ui-color-input-border-hover: var(--newspack-ui-color-error);
 
 		&:is(input, select, textarea),
 		input:not([type="hidden"], [type="submit"], [type="button"], [type="reset"]),

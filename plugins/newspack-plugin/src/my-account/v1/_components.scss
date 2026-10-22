@@ -15,7 +15,7 @@
 		a {
 			align-items: center;
 			border: 1px solid var(--newspack-ui-color-border);
-			border-radius: 5px;
+			border-radius: var(--newspack-ui-radius-surface);
 			display: flex;
 			gap: 0.8em;
 			padding: 0.8em;
@@ -27,12 +27,12 @@
 				display: block;
 				flex: 0 0 24px;
 				height: 24px;
-				transition: all 125ms ease-in-out;
+				transition: transform var(--newspack-ui-duration-indicator) var(--newspack-ui-ease-out);
 				width: 24px;
 			}
 
 			&:hover {
-				border-color: var(--newspack-ui-color-border);
+				border-color: var(--newspack-ui-color-border-hover);
 
 				&::after {
 					transform: translateX(0.4em);
@@ -53,20 +53,20 @@
 		}
 
 		&__title {
-			color: var(--newspack-theme-color-text-main);
+			color: var(--newspack-ui-color-text);
 			font-size: 1em;
 			line-height: 1.6;
 			margin: 0;
 		}
 
 		&__description {
-			color: var(--newspack-theme-color-text-light);
+			color: var(--newspack-ui-color-text-muted);
 			font-size: 0.8em;
 			line-height: 1.2;
 		}
 
 		.is-destructive .woocommerce-card__title {
-			color: var(--newspack-ui-color-error-50);
+			color: var(--newspack-ui-color-error-text);
 		}
 
 		& + .woocommerce-card {

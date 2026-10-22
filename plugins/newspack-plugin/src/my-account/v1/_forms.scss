@@ -6,7 +6,7 @@
 	p.woocommerce-form-row,
 	.woocommerce-form-row p,
 	p.form-row {
-		color: var(--newspack-ui-color-neutral-60);
+		color: var(--newspack-ui-color-text-muted);
 		font-size: var(--newspack-ui-font-size-xs);
 		line-height: var(--newspack-ui-line-height-xs);
 		.select2 .selection {
@@ -72,13 +72,13 @@
 		}
 		&.short,
 		&.bad {
-			color: var(--newspack-ui-color-error-50);
+			color: var(--newspack-ui-color-error-text);
 		}
 		&.good {
-			color: var(--newspack-ui-color-warning-40);
+			color: var(--newspack-ui-color-warning-text);
 		}
 		&.strong {
-			color: var(--newspack-ui-color-success-50);
+			color: var(--newspack-ui-color-success-text);
 		}
 	}
 

@@ -4,7 +4,7 @@
 
 .newspack-ui {
 	label .optional {
-		color: var(--newspack-ui-color-neutral-60);
+		color: var(--newspack-ui-color-text-muted);
 		font-weight: 400;
 	}
 
@@ -140,7 +140,7 @@
 
 		.payment_box {
 			padding: 1rem;
-			background: var(--newspack-theme-color-bg-pre, var(--newspack-ui-color-neutral-20));
+			background: var(--newspack-theme-color-bg-pre, var(--newspack-ui-color-surface-sunken));
 			font-size: var(--newspack-theme-font-size-sm, var(--newspack-ui-font-size-s));
 
 			ul,
@@ -194,10 +194,10 @@
 					display: inline-block;
 					width: 16px;
 					height: 16px;
-					border: 2px solid white;
-					box-shadow: 0 0 0 2px black;
+					border: 2px solid var(--newspack-ui-color-surface);
+					box-shadow: 0 0 0 2px var(--newspack-ui-color-input-border);
 					box-sizing: border-box;
-					background: white;
+					background: var(--newspack-ui-color-surface);
 					margin-left: 4px;
 					margin-right: 0.5rem;
 					border-radius: 100%;
@@ -207,7 +207,8 @@
 
 			&:checked + label {
 				&::before {
-					background: black;
+					background: var(--newspack-ui-color-selected);
+					box-shadow: 0 0 0 2px var(--newspack-ui-color-selected);
 				}
 			}
 		}

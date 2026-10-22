@@ -58,7 +58,7 @@
 							&.delete,
 							&.wcs_deletion_error,
 							&--destructive {
-								color: var(--newspack-ui-color-error-50) !important;
+								color: var(--newspack-ui-color-error-text) !important;
 							}
 
 							&:focus-visible {

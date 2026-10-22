@@ -126,14 +126,14 @@ Weight modifiers:
 
 | Scale | Steps available |
 |-------|----------------|
-| `neutral` | 0, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100 |
+| `neutral` | 0, 5, 10, 20, 30, 40, 50, 55, 60, 70, 75, 80, 90, 100 |
 | `primary` | 0, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100 |
 | `success` | 0, 5, 50, 60 |
-| `error` | 0, 5, 50, 60 |
-| `warning` | 0, 5, 30, 40 |
+| `error` | 0, 5, 50, 60, 70, 80 |
+| `warning` | 0, 5, 30, 40, 50, 60 |
 
 ```html
-<p class="newspack-ui__color--neutral-60">Muted text</p>
+<p class="newspack-ui__color--neutral-75">Muted text</p>
 ```
 
 ---
