@@ -202,6 +202,16 @@ class Content_Gate_Excerpt {
 					return self::build_free_excerpt_text( $post, $teaser );
 				}
 			);
+		} catch ( \Throwable $e ) {
+			// A post whose excerpt can't be built would otherwise fail every page
+			// that lists it. The teaser's own text is free to show, captions and
+			// all. Not cached, so the next request tries again.
+			Logger::log( 'Could not build the excerpt for post ' . $post->ID . ': ' . $e->getMessage(), 'CONTENT-GATE-EXCERPT' );
+			$words = self::split_words( $teaser );
+			if ( self::has_overlay_ellipsis( $teaser ) ) {
+				array_pop( $words );
+			}
+			return implode( ' ', $words );
 		} finally {
 			unset( self::$building[ $post->ID ] );
 		}

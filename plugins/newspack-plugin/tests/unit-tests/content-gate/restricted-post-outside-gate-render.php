@@ -498,6 +498,24 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A post whose excerpt cannot be built falls back to the teaser's text rather
+	 * than failing every page that lists it.
+	 */
+	public function test_a_failed_excerpt_build_falls_back_to_the_teaser() {
+		$fail_the_build = static function () {
+			throw new \RuntimeException( 'Simulated excerpt build failure.' );
+		};
+		add_filter( 'excerpt_allowed_wrapper_blocks', $fail_the_build );
+		try {
+			$excerpt = get_the_excerpt( $this->create_restricted_post() );
+		} finally {
+			remove_filter( 'excerpt_allowed_wrapper_blocks', $fail_the_build );
+		}
+
+		$this->assertSame( self::FREE_MARKER . ' opening line. Second free line.', $excerpt );
+	}
+
+	/**
 	 * Homepage Posts builds its excerpt from a listing post's `post_content`, so
 	 * that carries the excerpt's teaser, while the card's content render keeps the
 	 * image.
