@@ -157,7 +157,8 @@ class Premium_Newsletters {
 		add_action( 'deleted_user_meta', [ __CLASS__, 'maybe_enqueue_group_membership_check' ], 10, 3 );
 
 		// Handing a gift to another reader fires no subscription event, so the hook
-		// WCS Gifting fires on the change is the only trigger for both readers.
+		// WCS Gifting fires is the only trigger for both readers. It fires whenever
+		// WCS sets a gift's recipient, not only on a hand-off: see the handler.
 		add_action( 'woocommerce_subscriptions_gifting_recipient_changed', [ __CLASS__, 'handle_gift_recipient_changed' ], 10, 3 );
 
 		// Clean up the queue option on plugin deactivation.
@@ -1263,8 +1264,16 @@ class Premium_Newsletters {
 	 * Queue access checks for both readers when a gifted subscription changes
 	 * recipient, because no subscription event fires when an admin reassigns a gift.
 	 *
+	 * WCS fires this hook whenever it sets a gift's recipient. That includes every
+	 * gift purchase and order completion as well as an admin reassignment, so the
+	 * new and old recipients are often the same reader. An unchanged recipient is
+	 * skipped: a recheck could let auto-signup re-add a list they left.
+	 *
+	 * Clearing a recipient fires no hook, so a removal isn't covered here. WCS
+	 * re-attaches the original recipient on the gift's next parent or switch order.
+	 *
 	 * @param \WC_Subscription $subscription     The gifted subscription.
-	 * @param int              $new_recipient_id The new recipient's user ID, or 0 if none.
+	 * @param int              $new_recipient_id The new recipient's user ID.
 	 * @param int              $old_recipient_id The previous recipient's user ID, or 0 if none.
 	 *
 	 * @return void
@@ -1272,11 +1281,14 @@ class Premium_Newsletters {
 	public static function handle_gift_recipient_changed( $subscription, $new_recipient_id, $old_recipient_id ): void {
 		$new_recipient_id = (int) $new_recipient_id;
 		$old_recipient_id = (int) $old_recipient_id;
+		if ( $new_recipient_id === $old_recipient_id ) {
+			return;
+		}
 		if ( $new_recipient_id > 0 ) {
 			self::add_user_to_queue( $new_recipient_id, self::SOURCE_GIFT_RECEIVED );
 		}
 		// The old recipient only loses lists: a remove-only check can't re-add one they left.
-		if ( $old_recipient_id > 0 && $old_recipient_id !== $new_recipient_id ) {
+		if ( $old_recipient_id > 0 ) {
 			self::add_user_to_queue( $old_recipient_id, self::SOURCE_GIFT_REMOVED );
 		}
 	}

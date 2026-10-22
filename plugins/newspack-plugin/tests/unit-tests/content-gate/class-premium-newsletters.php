@@ -1676,13 +1676,15 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	 * editing the subscription. Updates the stub's recipient and the filter that
 	 * lists the gift under its holder, then fires the hook WCS Gifting fires.
 	 *
+	 * Assumes the test's only gift is the one being reassigned: it removes every
+	 * filter in $this->gift_filters, not just this subscription's.
+	 *
 	 * @param \WC_Subscription $subscription     The gifted subscription.
 	 * @param int              $new_recipient_id The new recipient's user ID.
-	 * @param bool             $fire_hook        Whether to fire the recipient-changed hook.
 	 *
 	 * @return void
 	 */
-	private function reassign_gifted_subscription( $subscription, int $new_recipient_id, bool $fire_hook = true ): void {
+	private function reassign_gifted_subscription( $subscription, int $new_recipient_id ): void {
 		$old_recipient_id = (int) \WCS_Gifting::$recipients[ $subscription->get_id() ];
 		foreach ( $this->gift_filters as $gift_filter ) {
 			remove_filter( 'wcs_get_users_subscriptions', $gift_filter, 10 );
@@ -1699,9 +1701,7 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		add_filter( 'wcs_get_users_subscriptions', $gift_filter, 10, 2 );
 		$this->gift_filters[] = $gift_filter;
 
-		if ( $fire_hook ) {
-			do_action( 'woocommerce_subscriptions_gifting_recipient_changed', $subscription, $new_recipient_id, $old_recipient_id );
-		}
+		do_action( 'woocommerce_subscriptions_gifting_recipient_changed', $subscription, $new_recipient_id, $old_recipient_id );
 	}
 
 	/**
@@ -1923,8 +1923,9 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A gift with no previous recipient (or none now) queues only the reader who
-	 * exists, and a gift handed back to the same reader queues them once.
+	 * A gift with no previous recipient queues only the new reader, and a gift set
+	 * again to the same reader queues no one: WCS fires the hook on every order
+	 * completion, and a recheck then could re-add a list the reader left.
 	 */
 	public function test_gift_recipient_change_skips_missing_recipients() {
 		$purchaser_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
@@ -1936,14 +1937,8 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		$this->assertSame( [ $recipient_id ], $this->get_queued_user_ids(), 'A first recipient is queued alone.' );
 
 		delete_option( Premium_Newsletters::QUEUE_OPTION );
-		do_action( 'woocommerce_subscriptions_gifting_recipient_changed', $subscription, 0, $recipient_id );
-		$this->assertSame( [ $recipient_id ], $this->get_queued_user_ids(), 'A removed recipient is queued alone.' );
-		$this->assertSame( Premium_Newsletters::SOURCE_GIFT_REMOVED, $this->get_queued_source( $recipient_id ) );
-
-		delete_option( Premium_Newsletters::QUEUE_OPTION );
 		do_action( 'woocommerce_subscriptions_gifting_recipient_changed', $subscription, $recipient_id, $recipient_id );
-		$this->assertSame( [ $recipient_id ], $this->get_queued_user_ids(), 'An unchanged recipient is queued once.' );
-		$this->assertSame( Premium_Newsletters::SOURCE_GIFT_RECEIVED, $this->get_queued_source( $recipient_id ), 'The gain wins when old and new are the same reader.' );
+		$this->assertSame( [], $this->get_queued_user_ids(), 'An unchanged recipient queues no one.' );
 	}
 
 	/**
@@ -1996,6 +1991,7 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		\Newspack_Newsletters_Subscription::$contact_lists[ $old_recipient_email ] = [];
 
 		$this->reassign_gifted_subscription( $subscription, $new_recipient_id );
+		$this->assertSame( Premium_Newsletters::SOURCE_GIFT_REMOVED, $this->get_queued_source( $old_recipient_id ), 'The handler must queue the old recipient for a remove-only check.' );
 		Premium_Newsletters::process_access_check_queue();
 
 		$this->assertEmpty( $this->get_list_calls_for( $old_recipient_email ), 'A reader who left the list must not be re-added when a gift moves away.' );
