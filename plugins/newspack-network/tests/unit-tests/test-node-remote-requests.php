@@ -99,11 +99,18 @@ class TestNodeRemoteRequests extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Site info is not requested from an internal address.
+	 * Site info is not requested from an internal address, and the refusal is logged.
 	 */
 	public function test_site_info_skips_internal_node_url() {
 		$this->make_node( 'http://100.64.0.1' )->get_site_info();
 		$this->assertSame( [], $this->requests );
+		$this->assertSame(
+			[
+				'host' => '100.64.0.1',
+				'port' => 80,
+			],
+			$this->only_refusal_logged()['data']
+		);
 	}
 
 	/**
