@@ -2233,6 +2233,11 @@ class Subscribers_Wizard extends Wizard {
 						'subscription_status'    => $wcs_statuses,
 					]
 				);
+				// The holder lookup checks each gift recipient's account exists: prime the cache, not one query pair per gift.
+				$recipient_ids = array_filter( array_map( fn( $subscription ) => (int) $subscription->get_meta( '_recipient_user' ), $subs ) );
+				if ( ! empty( $recipient_ids ) ) {
+					cache_users( array_values( array_unique( $recipient_ids ) ) );
+				}
 				foreach ( $subs as $subscription ) {
 					$ids[] = WooCommerce_Subscriptions_Gifting::get_holder_id( $subscription );
 				}
