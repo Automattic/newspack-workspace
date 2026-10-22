@@ -22,7 +22,7 @@ add_filter('woocommerce_subscriptions_is_duplicate_site', '__return_false');
 
 /**
  * Newspack's Guest Contributor mail guard suppresses outbound mail to generated
- * placeholder addresses. On dev containers mail terminates in MailHog, so keep
+ * placeholder addresses. On dev containers mail terminates in Mailpit, so keep
  * the guard off and let developers inspect that mail.
  */
 add_filter('newspack_guest_author_mail_guard_active', '__return_false');

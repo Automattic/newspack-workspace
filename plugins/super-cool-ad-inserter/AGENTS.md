@@ -56,6 +56,6 @@ The integration is entirely one-way: this plugin contains **zero** references to
 
 `.distignore`, `release.config.js` and the `release:archive` script are load-bearing for the live wp.org deploy. The workspace-root `.github/workflows/_release-wporg.yml` calls `release:archive` **without** `--if-present`, so removing it breaks the release rather than no-opping.
 
-Genuinely dead: the `start`, `release` and `semantic-release` scripts in `package.json` (`start` runs `npm ci`, which is actively harmful in a pnpm workspace), and stale `github.com/Automattic/super-cool-ad-inserter-plugin` URLs across eight files, pointing at the retired standalone repo. Two of those are user-facing: the Settings → Ad Inserter page (`inc/scaip-settings.php:137`) and the block placeholder's documentation link (`blocks/scaip-sidebar/block.js:141`).
+Genuinely dead: the `start`, `release` and `semantic-release` scripts in `package.json` (`start` runs `npm ci`, which is actively harmful in a pnpm workspace). Links to the retired standalone repo have been repointed at this monorepo; the `.pot` and `CHANGELOG.md` still carry old URLs because both are generated, and the `@link` in `inc/scaip-shortcode-inserter.php` is a historical issue reference.
 
 Unlike other absorbed plugins, `Automattic/super-cool-ad-inserter-plugin` is **frozen and removed from the legacy-sync mapping**. All work belongs in this copy; old PRs there are not being synced in.
