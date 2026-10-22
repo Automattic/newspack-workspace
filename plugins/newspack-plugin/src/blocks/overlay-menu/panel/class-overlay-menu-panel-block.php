@@ -85,6 +85,10 @@ final class Overlay_Menu_Panel_Block {
 			if ( '' !== $safe_color ) {
 				$panel_styles[] = $safe_color;
 			}
+			$safe_focus_color = safecss_filter_attr( '--wp--custom--focus--color: ' . $panel_text_color );
+			if ( '' !== $safe_focus_color ) {
+				$panel_styles[] = $safe_focus_color;
+			}
 		}
 		$extra_attributes = [
 			'id'                 => 'newspack-overlay-panel-' . $instance_id,

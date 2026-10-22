@@ -1,3 +1,18 @@
+@use "../mixins";
+
+.wp-element-button,
+.wp-block-button__link {
+	&:where(:not(.newspack-ui__button, .newspack-ui .button, .newspack-ui .woocommerce-Button)) {
+		&:focus-visible {
+			@include mixins.focus-line-filled;
+		}
+
+		&.has-background-transparent:not([class*="-background-color"]):focus-visible {
+			@include mixins.focus-line;
+		}
+	}
+}
+
 .wp-block-buttons,
 .wp-block-button {
 	&[class*="-font-size"] {
@@ -15,17 +30,8 @@
 			border-color 125ms ease-in-out,
 			color 125ms ease-in-out,
 			opacity 125ms ease-in-out,
-			outline 125ms ease-in-out;
+			box-shadow 125ms ease-in-out;
 		word-break: normal;
-
-		&:focus {
-			outline: 2px solid var(--wp--preset--color--accent);
-			outline-offset: 1px;
-
-			&.has-background {
-				outline-color: var(--wp--preset--color--contrast);
-			}
-		}
 
 		&.has-background:not(.has-accent-2-background-color) {
 			&:hover {
@@ -77,8 +83,8 @@
 				}
 			}
 
-			&:focus {
-				outline-color: var(--wp--preset--color--contrast);
+			&:focus-visible {
+				@include mixins.focus-line;
 			}
 		}
 	}

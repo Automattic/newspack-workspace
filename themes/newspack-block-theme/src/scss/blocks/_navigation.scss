@@ -1,3 +1,4 @@
+@use "../mixins";
 @use "../sass-utils";
 
 .wp-block-navigation {
@@ -81,7 +82,7 @@
 				position: absolute;
 				transition:
 					background 125ms ease-in-out,
-					outline 125ms ease-in-out;
+					box-shadow 125ms ease-in-out;
 				width: var(--wp--custom--spacing--55);
 				z-index: -1;
 			}
@@ -92,10 +93,11 @@
 				}
 			}
 
-			&:focus {
+			&:focus-visible {
+				outline: none;
+
 				&::before {
-					outline: 2px solid currentcolor;
-					outline-offset: 1px;
+					@include mixins.focus-line;
 				}
 			}
 		}
@@ -182,11 +184,25 @@
 	}
 
 	a {
-		transition: color 125ms ease-in-out;
+		transition:
+			color 125ms ease-in-out,
+			box-shadow 125ms ease-in-out;
 
 		&:not(.wp-element-button):focus-visible {
-			outline: 2px solid;
-			outline-offset: 1px;
+			@include mixins.focus-line;
+			border-radius: var(--wp--custom--border--radius-small);
 		}
+	}
+
+	.wp-block-navigation-submenu__toggle,
+	&__responsive-container-open {
+		&:focus-visible {
+			@include mixins.focus-line;
+			border-radius: var(--wp--custom--border--radius-small);
+		}
+	}
+
+	& &__submenu-container a:not(.wp-element-button):focus-visible {
+		@include mixins.focus-line-inset;
 	}
 }
