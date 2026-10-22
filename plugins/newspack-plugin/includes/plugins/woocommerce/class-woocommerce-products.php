@@ -23,20 +23,21 @@ class WooCommerce_Products {
 	 * counts: sites moving from Woo Memberships keep readers on legacy products they have
 	 * hidden from the storefront, and those products still have to be selectable by name.
 	 * `get_product_label_with_status()` marks every status but published in picker labels,
-	 * and marks the statuses outside this list as invalid.
+	 * and marks the statuses outside this list by their status alone.
 	 */
 	const ELIGIBLE_PRODUCT_STATUSES = [ 'publish', 'private' ];
 
 	/**
 	 * Label a product for a picker, marking any status other than published. An eligible
-	 * status reads "All Access [status: Private]"; any other reads "All Access [invalid
-	 * status: Draft]". The status reads as WordPress admin names it ("Scheduled" rather than
-	 * `future`), in the viewer's admin language.
+	 * status reads "All Access [status: Private]"; any other reads "All Access [draft]". The
+	 * status reads as WordPress admin names it ("scheduled" rather than `future`), in the
+	 * viewer's admin language.
 	 *
 	 * The private marker tells a hidden legacy tier apart from a current product of the same
-	 * name. The invalid marker keeps a saved product's name visible after it is drafted,
+	 * name. The unpublished marker keeps a saved product's name visible after it is drafted,
 	 * scheduled or trashed, rather than falling back to a generic "deleted" or "not listed"
-	 * stand-in.
+	 * stand-in. It names the status without calling it an error: subscriptions to an
+	 * unpublished product still grant access.
 	 *
 	 * @param string $name   The product name.
 	 * @param string $status The product's post status.
@@ -58,10 +59,10 @@ class WooCommerce_Products {
 			);
 		}
 		return sprintf(
-			/* translators: 1: product name, 2: post status label, e.g. "Draft" or "Trash". Keep "invalid status" in step with the Access Control picker notice that quotes it. */
-			__( '%1$s [invalid status: %2$s]', 'newspack-plugin' ),
+			/* translators: 1: product name, 2: lowercase post status label, e.g. "draft" or "trash". The Access Control picker notice quotes this marker; keep the two in step. */
+			__( '%1$s [%2$s]', 'newspack-plugin' ),
 			$name,
-			$status_label
+			function_exists( 'mb_strtolower' ) ? mb_strtolower( $status_label ) : strtolower( $status_label )
 		);
 	}
 

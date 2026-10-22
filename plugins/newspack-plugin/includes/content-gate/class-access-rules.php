@@ -656,7 +656,7 @@ class Access_Rules {
 	 * produces for a variation, and nothing can have been bought in it.
 	 *
 	 * Draft and pending products keep granting access, but their labels carry a status
-	 * marker ("[invalid status: Draft]") so a publisher can tell them from the products
+	 * marker ("[draft]") so a publisher can tell them from the products
 	 * they currently sell. Private products and variations are marked too ("[status:
 	 * Private]"), so a hidden legacy tier reads apart from a current one of the same name.
 	 *
