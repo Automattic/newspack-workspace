@@ -146,9 +146,18 @@ function page_button_actions(){
 	var $ = jQuery;
 	$( '.republication-tracker-tool-button.page' ).on( 'click', function() {
 		var url = $( this ).attr( 'data-republish-url' );
-		// Only follow a root-relative path: a leading '/' that is not '//'.
-		if ( url && '/' === url.charAt( 0 ) && '/' !== url.charAt( 1 ) ) {
-			window.location.href = url;
+		if ( ! url ) {
+			return;
+		}
+		// Compare origins rather than the string's prefix: browsers read some
+		// prefixes, such as '/\', as '//', which points at another host.
+		try {
+			url = new URL( url, window.location.href );
+		} catch ( e ) {
+			return;
+		}
+		if ( url.origin === window.location.origin ) {
+			window.location.href = url.href;
 		}
 	} );
 }
