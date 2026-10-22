@@ -265,9 +265,9 @@ describe( 'the subscriber list loading overlay', () => {
 	const overlayIn = container => container.querySelector( '.newspack-subscribers__loading-overlay' );
 	const listIn = container => container.querySelector( '.newspack-subscribers__clickable-rows' );
 
-	/** Mount once `rows` subscribers have landed, on the first of two pages. */
+	/** Mount once `rows` subscribers have landed. */
 	const mountWith = async rows => {
-		apiFetch.mockResolvedValue( { ...page( rows ), pages: 2 } );
+		apiFetch.mockResolvedValue( page( rows ) );
 		let container;
 		await act( async () => {
 			( { container } = render( <SubscriberList /> ) );
@@ -285,7 +285,7 @@ describe( 'the subscriber list loading overlay', () => {
 			} )
 		);
 		await act( async () => {
-			mockDataViewsProps.onChangeView( { ...mockDataViewsProps.view, page: 2 } );
+			mockDataViewsProps.onChangeView( { ...mockDataViewsProps.view, search: 'reader' } );
 		} );
 		return { container, land };
 	};
@@ -298,7 +298,7 @@ describe( 'the subscriber list loading overlay', () => {
 		expect( mockDataViewsProps.isLoading ).toBe( false );
 
 		await act( async () => {
-			land( { ...page( 2 ), pages: 2 } );
+			land( page( 2 ) );
 		} );
 
 		expect( overlayIn( container ) ).toBeNull();

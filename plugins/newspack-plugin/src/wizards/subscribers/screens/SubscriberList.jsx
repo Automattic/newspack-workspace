@@ -126,8 +126,10 @@ export default function SubscriberList() {
 
 	// A restored page sits past the end if the list shrank while the reader was on
 	// a profile; step back to the last page rather than show "No results". Only an
-	// empty response counts: right after a view change, `pages` still describes the
-	// previous view. Before paint, so the empty page never flashes.
+	// empty response counts: right after a view change the new read hasn't started,
+	// so `loading` and `pages` both still describe the previous view, and DataViews
+	// offers no page change from an empty list. Before paint, so the past-the-end
+	// page itself never shows.
 	useLayoutEffect( () => {
 		const lastPage = Math.max( pages, 1 );
 		if ( ! subscribersLoading && ! error && items.length === 0 && view.page > lastPage ) {
