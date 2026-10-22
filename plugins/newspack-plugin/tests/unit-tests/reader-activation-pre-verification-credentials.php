@@ -172,6 +172,20 @@ class Newspack_Test_RA_Pre_Verification_Credentials extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Core renders the reset form after output has started, so verifying there
+	 * must not try to send a cookie, even when the reader is signed in.
+	 */
+	public function test_opening_the_reset_form_signed_in_sends_no_cookie() {
+		$user_id        = self::register_as_registrant();
+		$cookies_before = did_action( 'set_logged_in_cookie' );
+
+		do_action( 'resetpass_form', get_userdata( $user_id ) );
+
+		self::assertTrue( Reader_Activation::is_reader_verified( get_userdata( $user_id ) ) );
+		self::assertSame( $cookies_before, did_action( 'set_logged_in_cookie' ) );
+	}
+
+	/**
 	 * Verifying on a WooCommerce reset, which fires only password_reset, keeps the new password.
 	 */
 	public function test_verifying_on_password_reset_submit_keeps_the_new_password() {
