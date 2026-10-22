@@ -33,10 +33,9 @@ class WooCommerce_Products {
 	 * status reads as WordPress admin names it ("scheduled" rather than `future`), in the
 	 * viewer's admin language.
 	 *
-	 * The unpublished markers are this plugin's own strings rather than core's status labels
-	 * lowercased in code, so a translator decides their case: lowercasing is wrong in a
-	 * language that capitalizes nouns. A status without its own marker falls back to core's
-	 * label as it is.
+	 * The unpublished markers are this plugin's own strings rather than core's status labels,
+	 * so a translator decides their case: a language that capitalizes nouns needs a
+	 * capitalized marker. A status without its own marker falls back to core's label as it is.
 	 *
 	 * The private marker tells a hidden legacy tier apart from a current product of the same
 	 * name. The unpublished marker keeps a saved product's name visible after it is drafted,
