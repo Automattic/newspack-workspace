@@ -42,7 +42,7 @@ class Subscribers_Wizard extends Wizard {
 	protected $parent_slug = 'newspack-audience';
 
 	/**
-	 * Upper bound on the number of customer IDs a subscription-status/plan filter
+	 * Upper bound on the number of holder IDs a subscription-status/plan filter
 	 * resolves to. Keeps both the subscription scan and the WP_User_Query IN()
 	 * clause bounded on very large stores. See resolve_filter_include().
 	 */
@@ -57,7 +57,7 @@ class Subscribers_Wizard extends Wizard {
 	/**
 	 * How many subscriptions the filter scan hydrates at a time. The scan itself
 	 * is bounded by FILTER_INCLUDE_CAP, but WooCommerce returns fully hydrated
-	 * WC_Subscription objects and only their customer ID is needed here — walking
+	 * WC_Subscription objects and only their holder ID is needed here — walking
 	 * the set a page at a time keeps peak memory at one chunk rather than the
 	 * whole cap. See customer_ids_for_raw_statuses().
 	 */
@@ -83,7 +83,7 @@ class Subscribers_Wizard extends Wizard {
 	private $group_membership_index = null;
 
 	/**
-	 * Per-request memo of customer IDs keyed by the sorted status set they were
+	 * Per-request memo of holder IDs keyed by the sorted status set they were
 	 * resolved for. See customer_ids_for_raw_statuses().
 	 *
 	 * @var array<string,int[]>
@@ -916,7 +916,7 @@ class Subscribers_Wizard extends Wizard {
 	 *
 	 * Subscription-status and plan filters can't be expressed as user-table
 	 * columns, so they run inverted: an HPOS-safe subscription query resolves the
-	 * matching customer IDs, which are then intersected into the user query's
+	 * matching holder IDs, which are then intersected into the user query's
 	 * `include` set. See resolve_filter_include().
 	 *
 	 * @param \WP_REST_Request $request The request.
@@ -1480,9 +1480,9 @@ class Subscribers_Wizard extends Wizard {
 	 * (get_group_membership_index), but two lookups here are inherently per-row —
 	 * wcs_get_users_subscriptions() and last_payment_date()'s wc_get_orders() —
 	 * so a page costs ~2 × `per_page` (≤100) WooCommerce queries. Both are
-	 * "newest/owned rows for one customer" lookups that WooCommerce can't answer
-	 * per-customer in a single batched query: batching last_payment_date() over
-	 * the page's customer IDs would need either an unbounded `limit => -1` (worse
+	 * "newest/owned rows for one subscriber" lookups that WooCommerce can't answer
+	 * per-subscriber in a single batched query: batching last_payment_date() over
+	 * the page's subscriber IDs would need either an unbounded `limit => -1` (worse
 	 * peak memory than the bounded per-row queries) or a truncated scan that
 	 * silently blanks the last payment of a reader whose most recent order falls
 	 * outside it. The bounded per-row shape is the correct trade-off here, and
@@ -2113,7 +2113,7 @@ class Subscribers_Wizard extends Wizard {
 	 * Resolve the `include` user-ID set for the active subscription-status / plan
 	 * filters, or null when neither is present.
 	 *
-	 * Each active filter resolves to a set of customer IDs; the sets are
+	 * Each active filter resolves to a set of holder IDs; the sets are
 	 * intersected so multiple filters narrow (AND) rather than widen. The result
 	 * is capped at FILTER_INCLUDE_CAP to keep the WP_User_Query IN() clause bounded
 	 * on large stores. Above that ceiling the extras are dropped, so the reported
@@ -2122,7 +2122,7 @@ class Subscribers_Wizard extends Wizard {
 	 *
 	 * @param \WP_REST_Request $request The request.
 	 *
-	 * @return int[]|null Customer IDs to include, or null when no filter applies.
+	 * @return int[]|null Holder IDs to include, or null when no filter applies.
 	 */
 	private function resolve_filter_include( $request ) {
 		$status_filter = array_filter( array_map( 'sanitize_text_field', (array) $request->get_param( 'status' ) ) );
@@ -2217,7 +2217,7 @@ class Subscribers_Wizard extends Wizard {
 		// extra args and never reaches the WC_Order_Query — passing it would
 		// re-scan the first chunk on every iteration. `orderby => ID` gives the
 		// walk a deterministic tiebreak; the default start-date sort can shuffle
-		// rows sharing a date across a chunk boundary and skip a customer.
+		// rows sharing a date across a chunk boundary and skip a holder.
 		$wcs_statuses = $this->wcs_statuses_for( $prototype_statuses );
 		if ( ! empty( $wcs_statuses ) && function_exists( 'wcs_get_subscriptions' ) ) {
 			for ( $page = 1; ( $page - 1 ) * self::FILTER_SCAN_CHUNK < self::FILTER_INCLUDE_CAP; $page++ ) {
