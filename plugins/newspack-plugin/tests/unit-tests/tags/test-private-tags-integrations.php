@@ -320,7 +320,18 @@ class Test_Private_Tags_Integrations extends WP_UnitTestCase {
 	 * so stripping here would create a new public "Beastie" tag.
 	 */
 	public function test_strip_private_label_from_rest_keeps_name_when_only_accents_match() {
-		$this->make_private_tag( 'Beastié' );
+		$private = $this->make_private_tag( 'Beastié' );
+
+		// Without an accent-insensitive collation the filter returns early and this test proves nothing.
+		$collation_matches = get_terms(
+			[
+				'taxonomy'   => 'post_tag',
+				'name'       => 'Beastie',
+				'hide_empty' => false,
+				'fields'     => 'ids',
+			]
+		);
+		$this->assertContains( $private, $collation_matches );
 
 		$prepared = (object) [ 'name' => 'Beastie (private)' ];
 		$out      = Private_Tags::strip_private_label_from_rest( $prepared, new WP_REST_Request( 'POST', '/wp/v2/tags' ) );
