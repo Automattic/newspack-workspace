@@ -6,6 +6,7 @@ import {
 	afterDeferredScripts,
 	afterModalExit,
 	getCheckoutData,
+	getFirstField,
 	getInitialFocus,
 	getPaymentFocus,
 	hasFrameProcessingScreen,
@@ -162,6 +163,12 @@ describe( 'focus in a checkout screen', () => {
 		document.body.innerHTML = '<p>Processing.</p>';
 
 		expect( getInitialFocus( document.body ) ).toBeNull();
+	} );
+
+	it( 'finds no field to open a dialog on when it only has actions', () => {
+		document.body.innerHTML = '<button id="continue">Continue</button><input type="submit" value="Go" />';
+
+		expect( getFirstField( document.body ) ).toBeNull();
 	} );
 } );
 

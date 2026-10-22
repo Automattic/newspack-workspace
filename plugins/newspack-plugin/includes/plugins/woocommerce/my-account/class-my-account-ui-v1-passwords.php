@@ -184,30 +184,36 @@ class My_Account_UI_V1_Passwords {
 
 		ob_start();
 		?>
-		<p>
+		<div>
 			<label for="password_1"><?php esc_html_e( 'New password', 'newspack-plugin' ); ?>&nbsp;<span class="required" aria-hidden="true">*</span><span class="screen-reader-text"><?php esc_html_e( 'Required', 'newspack-plugin' ); ?></span></label>
-			<input
-				type="password"
-				class="woocommerce-Input woocommerce-Input--text input-text"
-				name="password_1"
-				id="password_1"
-				autocomplete="new-password"
-				required
-				aria-required="true"
-			/>
-		</p>
-		<p>
+			<div class="newspack-ui__password-field">
+				<input
+					type="password"
+					class="woocommerce-Input--text input-text"
+					name="password_1"
+					id="password_1"
+					autocomplete="new-password"
+					required
+					aria-required="true"
+				/>
+				<?php Newspack_UI::print_password_toggle(); ?>
+			</div>
+		</div>
+		<div>
 			<label for="password_2"><?php esc_html_e( 'Re-enter new password', 'newspack-plugin' ); ?>&nbsp;<span class="required" aria-hidden="true">*</span><span class="screen-reader-text"><?php esc_html_e( 'Required', 'newspack-plugin' ); ?></span></label>
-			<input
-				type="password"
-				class="woocommerce-Input woocommerce-Input--text input-text"
-				name="password_2"
-				id="password_2"
-				autocomplete="new-password"
-				required
-				aria-required="true"
-			/>
-		</p>
+			<div class="newspack-ui__password-field">
+				<input
+					type="password"
+					class="woocommerce-Input--text input-text"
+					name="password_2"
+					id="password_2"
+					autocomplete="new-password"
+					required
+					aria-required="true"
+				/>
+				<?php Newspack_UI::print_password_toggle(); ?>
+			</div>
+		</div>
 
 		<?php do_action( 'newspack_woocommerce_resetpassword_form' ); ?>
 
@@ -237,7 +243,7 @@ class My_Account_UI_V1_Passwords {
 					],
 					'cancel'   => [
 						'label'  => __( 'Cancel', 'newspack-plugin' ),
-						'type'   => 'ghost',
+						'type'   => 'outline',
 						'action' => 'close',
 					],
 				],

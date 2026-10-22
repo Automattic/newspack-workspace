@@ -217,8 +217,8 @@ describe( 'auth form with post-registration verification', () => {
 } );
 
 const STEPS_FORM = `
-	<div class="newspack-ui__modal-container newspack-reader-auth-modal" data-state="closed">
-		<h2></h2>
+	<div class="newspack-ui__modal-container newspack-reader-auth-modal" data-state="closed" aria-labelledby="auth-modal-title">
+		<div class="newspack-ui__modal__header"><h2 id="auth-modal-title">Sign in</h2></div>
 		<div class="newspack-reader-auth">
 			<form>
 				<input type="hidden" name="action" />
@@ -246,7 +246,7 @@ const STEPS_FORM = `
 					<button type="button" data-back data-back-target="signin">Use a different email</button>
 				</div>
 				<div data-action="success">
-					<p class="success-title"></p>
+					<h2 id="auth-success-title" class="success-title"></h2>
 					<p class="success-description"></p>
 				</div>
 			</form>
@@ -367,11 +367,26 @@ describe( 'auth form steps', () => {
 		expect( global.fetch ).toHaveBeenCalledTimes( 1 );
 	} );
 
-	it( 'moves focus to Continue on the success step', () => {
-		container.querySelector( 'form' ).endLoginFlow( 'Signed in', 200, { email: 'a@example.test', authenticated: 1 } );
+	it( 'moves focus to the success message, not Continue, on the success step', () => {
+		// jsdom has no layout, so only hidden steps count as invisible.
+		Element.prototype.checkVisibility = function () {
+			return ! this.closest( '[hidden], [style*="display: none"]' );
+		};
+		// The stylesheet hides the header on the success step.
+		document.querySelector( '.newspack-ui__modal__header' ).style.display = 'none';
+		try {
+			container.querySelector( 'form' ).endLoginFlow( 'Signed in', 200, { email: 'a@example.test', authenticated: 1 } );
 
-		expect( container.dataset.formAction ).toBe( 'success' );
-		expect( document.activeElement ).toBe( container.querySelector( '.auth-callback' ) );
+			expect( container.dataset.formAction ).toBe( 'success' );
+			expect( document.activeElement ).toBe( container.querySelector( '.success-title' ) );
+			const modal = container.closest( '.newspack-ui__modal-container' );
+			expect( modal.getAttribute( 'aria-labelledby' ) ).toBe( 'auth-success-title' );
+
+			container.setFormAction( 'signin' );
+			expect( modal.getAttribute( 'aria-labelledby' ) ).toBe( 'auth-modal-title' );
+		} finally {
+			delete Element.prototype.checkVisibility;
+		}
 	} );
 
 	it( 'hides the password again when the reader leaves the password step', () => {

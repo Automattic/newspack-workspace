@@ -38,6 +38,12 @@
 		visibility: hidden;
 		width: 100%;
 		z-index: -1;
+
+		&[tabindex="-1"]:focus,
+		:is(h1, h2, h3, h4, h5, h6)[tabindex="-1"]:focus {
+			outline: none;
+		}
+
 		&::backdrop {
 			background: transparent;
 		}
@@ -144,6 +150,17 @@
 			top: 0;
 			z-index: 10;
 
+			&::after {
+				background: linear-gradient(var(--newspack-ui-color-surface), transparent);
+				content: "";
+				height: var(--newspack-ui-spacer-6);
+				inset-inline: 0;
+				opacity: 0;
+				pointer-events: none;
+				position: absolute;
+				top: 100%;
+			}
+
 			h2 {
 				color: inherit;
 				font-family: var(--newspack-ui-font-family);
@@ -218,8 +235,8 @@
 			--newspack-ui-modal-width: var(--newspack-ui-width-s);
 		}
 
-		h3 {
-			font-size: var(--newspack-ui-font-size-body);
+		&--medium {
+			--newspack-ui-modal-width: var(--newspack-ui-width-m);
 		}
 
 		&__footer,
@@ -243,4 +260,74 @@
 			font-weight: var(--newspack-ui-font-weight-strong);
 		}
 	}
+}
+
+.newspack-ui__modal-container .newspack-ui__modal.newspack-ui__modal--steps {
+	display: block;
+
+	@include mixins.media( mobile ) {
+		@include mixins.newspack-ui-elevation( 3, true );
+
+		background: transparent;
+		border-radius: 0;
+		box-shadow: none;
+		max-height: none;
+		max-width: calc(100% - var(--newspack-ui-spacer-6));
+		overflow: visible;
+		width: auto;
+	}
+}
+
+.newspack-ui__modal-container .newspack-ui__modal__steps {
+	display: grid;
+
+	@include mixins.media( mobile ) {
+		background: var(--newspack-ui-color-surface);
+		clip-path: inset(var(--newspack-ui-modal-inset-y, 0) var(--newspack-ui-modal-inset-x, 0) round var(--newspack-ui-radius-surface));
+		max-height: calc(100dvh - var(--newspack-ui-spacer-9));
+		overflow: auto;
+		overscroll-behavior: contain;
+		transition: clip-path var(--newspack-ui-duration-modal) var(--newspack-ui-ease-in-out);
+
+		@media ( prefers-reduced-motion: reduce ) {
+			transition: none;
+		}
+	}
+}
+
+.newspack-ui__modal-container .newspack-ui__modal__step {
+	display: flex;
+	flex-direction: column;
+	grid-area: 1 / 1;
+	width: var(--newspack-ui-modal-width);
+
+	@include mixins.media( mobile ) {
+		place-self: center;
+		transition:
+			opacity var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out) 100ms,
+			visibility 0s;
+		width: min(var(--newspack-ui-modal-width), calc(100vw - var(--newspack-ui-spacer-6)));
+
+		&[inert] {
+			opacity: 0;
+			transition:
+				opacity 120ms var(--newspack-ui-ease-out),
+				visibility 0s linear 120ms;
+			visibility: hidden;
+		}
+	}
+
+	@include mixins.media-below( mobile ) {
+		&[inert] {
+			display: none;
+		}
+	}
+}
+
+.newspack-ui__modal-container.is-resetting-steps :is(.newspack-ui__modal__steps, .newspack-ui__modal__step) {
+	transition: none !important;
+}
+
+.newspack-ui__modal-container :is(.newspack-ui__modal, .newspack-ui__modal__steps).is-overflowing-start .newspack-ui__modal__header::after {
+	opacity: 1;
 }

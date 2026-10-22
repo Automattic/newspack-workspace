@@ -5,6 +5,7 @@
  * @package Newspack\Tests
  */
 
+use Newspack\My_Account_UI_V1;
 use Newspack\Newspack_UI;
 use Newspack\Reader_Activation;
 
@@ -236,5 +237,47 @@ class Newspack_Test_UI_WooCommerce_Notices extends WP_UnitTestCase {
 		Newspack_UI::print_notices();
 		$snackbar = ob_get_clean();
 		$this->assertStringNotContainsString( 'Current password', $snackbar );
+	}
+
+	/**
+	 * My Account uses the v1 notice templates even where WooCommerce Blocks swaps
+	 * in its own, as it does on block themes; elsewhere the template is left alone.
+	 */
+	public function test_v1_notice_templates_win_over_block_notices() {
+		$block_notices = fn( $template, $template_name ) => str_starts_with( $template_name, 'notices/' ) ? '/wc-blocks/templates/block-' . $template_name : $template;
+		add_filter( 'wc_get_template', $block_notices, 10, 2 );
+		$hooked = has_filter( 'wc_get_template', [ My_Account_UI_V1::class, 'wc_get_notice_template' ] );
+		if ( false === $hooked ) {
+			add_filter( 'wc_get_template', [ My_Account_UI_V1::class, 'wc_get_notice_template' ], 11, 2 );
+		}
+		$wp_did = $GLOBALS['wp_actions']['wp'] ?? null;
+		$GLOBALS['wp_actions']['wp'] = 1;
+
+		$GLOBALS['newspack_test_is_account_page'] = true;
+		$templates = [];
+		foreach ( [ 'error', 'notice', 'success' ] as $type ) {
+			$templates[ $type ] = apply_filters( 'wc_get_template', '/wc/templates/notices/' . $type . '.php', 'notices/' . $type . '.php', [], '', '' );
+		}
+		$other = apply_filters( 'wc_get_template', '/wc/templates/myaccount/orders.php', 'myaccount/orders.php', [], '', '' );
+		$GLOBALS['newspack_test_is_account_page'] = false;
+		$off_account = apply_filters( 'wc_get_template', '/wc/templates/notices/error.php', 'notices/error.php', [], '', '' );
+
+		unset( $GLOBALS['newspack_test_is_account_page'] );
+		if ( null === $wp_did ) {
+			unset( $GLOBALS['wp_actions']['wp'] );
+		} else {
+			$GLOBALS['wp_actions']['wp'] = $wp_did;
+		}
+		remove_filter( 'wc_get_template', $block_notices, 10 );
+		if ( false === $hooked ) {
+			remove_filter( 'wc_get_template', [ My_Account_UI_V1::class, 'wc_get_notice_template' ], 11 );
+		}
+
+		foreach ( $templates as $type => $template ) {
+			$this->assertStringEndsWith( 'my-account/templates/v1/notices/' . $type . '.php', $template, $type );
+			$this->assertFileExists( $template, $type );
+		}
+		$this->assertSame( '/wc/templates/myaccount/orders.php', $other );
+		$this->assertSame( '/wc-blocks/templates/block-notices/error.php', $off_account );
 	}
 }

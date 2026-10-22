@@ -31,7 +31,7 @@ $display_email           = $is_pending_email_change ? $pending_email_change : $u
 ?>
 
 <section id="account-profile">
-	<h4 class="newspack-ui__font--m newspack-ui__spacing-top--0"><?php \esc_html_e( 'Profile', 'newspack-plugin' ); ?></h4>
+	<h2><?php \esc_html_e( 'Profile', 'newspack-plugin' ); ?></h2>
 	<form class="woocommerce-EditAccountForm edit-profile" action="" name="edit_account" method="post" <?php \do_action( 'newspack_woocommerce_edit_account_form_tag' ); ?> >
 
 		<?php \do_action( 'newspack_woocommerce_edit_account_form_start' ); ?>
@@ -173,7 +173,7 @@ $display_email           = $is_pending_email_change ? $pending_email_change : $u
 
 <?php if ( $is_reader ) : ?>
 <section id="account-password">
-	<h4 class="newspack-ui__font--m"><?php \esc_html_e( 'Password', 'newspack-plugin' ); ?></h4>
+	<h2><?php \esc_html_e( 'Password', 'newspack-plugin' ); ?></h2>
 	<?php if ( $without_password || ! empty( filter_input( INPUT_GET, My_Account_UI_V1_Passwords::RESET_PASSWORD_URL_PARAM, FILTER_SANITIZE_FULL_SPECIAL_CHARS ) ) ) : ?>
 	<p>
 		<?php echo \esc_html( $without_password ? __( 'Create a password to secure your account.', 'newspack-plugin' ) : __( 'Reset your account password.', 'newspack-plugin' ) ); ?>
@@ -183,41 +183,53 @@ $display_email           = $is_pending_email_change ? $pending_email_change : $u
 	</a>
 	<?php else : ?>
 	<form method="post" class="woocommerce-ResetPassword lost_reset_password">
-		<p class="woocommerce-form-row woocommerce-form-row--wide form-row form-row-wide">
-			<label for="current_password"><?php esc_html_e( 'Current password', 'newspack-plugin' ); ?>&nbsp;<span class="required" aria-hidden="true">*</span><span class="screen-reader-text"><?php esc_html_e( 'Required', 'newspack-plugin' ); ?></span></label>
-			<input
-				type="password"
-				class="woocommerce-Input woocommerce-Input--text input-text"
-				name="current_password"
-				id="current_password"
-				required
-				aria-required="true"
-			/>
-		</p>
-		<p class="woocommerce-form-row woocommerce-form-row--wide form-row form-row-wide">
+		<div class="woocommerce-form-row woocommerce-form-row--wide form-row form-row-wide">
+			<span class="newspack-ui__label-row newspack-ui__stack newspack-ui__stack--horizontal newspack-ui__stack--justify-between newspack-ui__stack--align-baseline newspack-ui__stack--gap-2 newspack-ui__spacing-bottom--1">
+				<label for="current_password"><?php esc_html_e( 'Current password', 'newspack-plugin' ); ?>&nbsp;<span class="required" aria-hidden="true">*</span><span class="screen-reader-text"><?php esc_html_e( 'Required', 'newspack-plugin' ); ?></span></label>
+				<a id="newspack-my-account__reset-password" class="newspack-ui__link newspack-ui--block-on-interaction" href="<?php echo '?' . \esc_attr( $newspack_reset_password_arg ) . '=' . \esc_attr( \wp_create_nonce( $newspack_reset_password_arg ) ); ?>"><?php \esc_html_e( 'Forgot password', 'newspack-plugin' ); ?></a>
+			</span>
+			<div class="newspack-ui__password-field">
+				<input
+					type="password"
+					class="woocommerce-Input--text input-text"
+					name="current_password"
+					id="current_password"
+					required
+					aria-required="true"
+				/>
+				<?php Newspack_UI::print_password_toggle(); ?>
+			</div>
+		</div>
+		<div class="woocommerce-form-row woocommerce-form-row--wide form-row form-row-wide">
 			<label for="password_1"><?php esc_html_e( 'New password', 'newspack-plugin' ); ?>&nbsp;<span class="required" aria-hidden="true">*</span><span class="screen-reader-text"><?php esc_html_e( 'Required', 'newspack-plugin' ); ?></span></label>
-			<input
-				type="password"
-				class="woocommerce-Input woocommerce-Input--text input-text"
-				name="password_1"
-				id="password_1"
-				autocomplete="new-password"
-				required
-				aria-required="true"
-			/>
-		</p>
-		<p class="woocommerce-form-row woocommerce-form-row--wide form-row form-row-wide">
+			<div class="newspack-ui__password-field">
+				<input
+					type="password"
+					class="woocommerce-Input--text input-text"
+					name="password_1"
+					id="password_1"
+					autocomplete="new-password"
+					required
+					aria-required="true"
+				/>
+				<?php Newspack_UI::print_password_toggle(); ?>
+			</div>
+		</div>
+		<div class="woocommerce-form-row woocommerce-form-row--wide form-row form-row-wide">
 			<label for="password_2"><?php esc_html_e( 'Re-enter new password', 'newspack-plugin' ); ?>&nbsp;<span class="required" aria-hidden="true">*</span><span class="screen-reader-text"><?php esc_html_e( 'Required', 'newspack-plugin' ); ?></span></label>
-			<input
-				type="password"
-				class="woocommerce-Input woocommerce-Input--text input-text"
-				name="password_2"
-				id="password_2"
-				autocomplete="new-password"
-				required
-				aria-required="true"
-			/>
-		</p>
+			<div class="newspack-ui__password-field">
+				<input
+					type="password"
+					class="woocommerce-Input--text input-text"
+					name="password_2"
+					id="password_2"
+					autocomplete="new-password"
+					required
+					aria-required="true"
+				/>
+				<?php Newspack_UI::print_password_toggle(); ?>
+			</div>
+		</div>
 
 		<?php do_action( 'newspack_woocommerce_resetpassword_form' ); ?>
 
@@ -231,9 +243,6 @@ $display_email           = $is_pending_email_change ? $pending_email_change : $u
 			>
 				<?php echo esc_html( $without_password ? __( 'Set password', 'newspack-plugin' ) : __( 'Update password', 'newspack-plugin' ) ); ?>
 			</button>
-			<a id="newspack-my-account__reset-password" class="woocommerce-Button button ghost newspack-ui__button--wide-on-mobile newspack-ui--block-on-interaction" href="<?php echo '?' . \esc_attr( $newspack_reset_password_arg ) . '=' . \esc_attr( \wp_create_nonce( $newspack_reset_password_arg ) ); ?>">
-				<?php \esc_html_e( 'Forgot password', 'newspack-plugin' ); ?>
-			</a>
 		</p>
 
 		<?php wp_nonce_field( 'reset_password', 'woocommerce-reset-password-nonce' ); ?>
@@ -244,13 +253,13 @@ $display_email           = $is_pending_email_change ? $pending_email_change : $u
 
 <section id="delete-account">
 
-	<h4 class="newspack-ui__font--m is-destructive"><?php \esc_html_e( 'Delete account', 'newspack-plugin' ); ?></h4>
-	<p>
+	<h2><?php \esc_html_e( 'Delete account', 'newspack-plugin' ); ?></h2>
+	<p class="newspack-ui__color-text-gray">
 		<?php \esc_html_e( 'Please note, account deletion is final, and there will be no way to restore your account.', 'newspack-plugin' ); ?>
 	</p>
 	<p class="woocommerce-buttons-card">
-		<a class="newspack-ui__button newspack-ui__button--destructive newspack-ui__button--wide-on-mobile" href="<?php echo '?' . \esc_attr( $newspack_delete_account_arg ) . '=' . \esc_attr( WooCommerce_My_Account::get_delete_account_nonce() ); ?>">
-		<?php \esc_html_e( 'Delete Account', 'newspack-plugin' ); ?>
+		<a class="newspack-ui__button newspack-ui__button--destructive newspack-ui__button--outline newspack-ui__button--wide-on-mobile" href="<?php echo '?' . \esc_attr( $newspack_delete_account_arg ) . '=' . \esc_attr( WooCommerce_My_Account::get_delete_account_nonce() ); ?>">
+		<?php \esc_html_e( 'Delete account', 'newspack-plugin' ); ?>
 		</a>
 	</p>
 </section>

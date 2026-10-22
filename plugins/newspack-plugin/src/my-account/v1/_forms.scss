@@ -2,6 +2,8 @@
  * Forms
  */
 
+@use "../../newspack-ui/scss/mixins";
+
 .newspack-my-account {
 	p.woocommerce-form-row,
 	.woocommerce-form-row p,
@@ -20,11 +22,12 @@
 			font-size: inherit;
 		}
 	}
-	.edit-profile {
+	.edit-profile,
+	.lost_reset_password {
 		display: grid;
 		gap: var(--newspack-ui-spacer-5);
 
-		@media ( min-width: 768px ) {
+		@include mixins.media( mobile ) {
 			grid-template-columns: repeat(2, 1fr);
 
 			.form-row-wide {
@@ -49,19 +52,36 @@
 			display: none;
 		}
 	}
-	/* stylelint-disable selector-id-pattern */
-	#billing_city_field,
-	#shipping_city_field,
-	#billing_state_field,
-	#shipping_state_field,
-	#billing_postcode_field,
-	#shipping_postcode_field {
-		width: 30%;
-		&:not(.form-row-last) {
-			margin-right: 5%;
+	.woocommerce-address-fields__field-wrapper {
+		> .form-row {
+			flex: 1 1 100%;
+			float: none;
+			padding: 0;
+			width: auto;
+		}
+		> .form-row-first,
+		> .form-row-last {
+			flex-basis: calc(50% - var(--newspack-ui-spacer-5));
+		}
+		> [id$="_city_field"],
+		> [id$="_state_field"],
+		> [id$="_postcode_field"] {
+			flex-basis: calc(100% / 3 - var(--newspack-ui-spacer-5));
+			min-width: 0;
+		}
+		@include mixins.media-below( mobile ) {
+			> [id$="_city_field"] {
+				flex-basis: 100%;
+			}
+			> [id$="_state_field"],
+			> [id$="_postcode_field"] {
+				flex-basis: calc(50% - var(--newspack-ui-spacer-5));
+			}
+		}
+		> .form-row:has(> .woocommerce-input-wrapper > input[type="hidden"]:only-child) {
+			display: none;
 		}
 	}
-	/* stylelint-enable selector-id-pattern */
 	.woocommerce-password-strength {
 		display: block;
 		font-size: var(--newspack-ui-font-size-small);
@@ -87,6 +107,35 @@
 	#newspack-my-account__add-payment-method {
 		.woocommerce-SavedPaymentMethods-saveNew {
 			display: none;
+		}
+
+		.wc-credit-card-form {
+			display: flex;
+			flex-wrap: wrap;
+			gap: var(--newspack-ui-spacer-5);
+			margin: 0;
+
+			> * {
+				flex: 1 1 100%;
+				float: none;
+				margin: 0;
+				min-width: 0;
+				width: auto;
+			}
+
+			> .form-row-first,
+			> .form-row-last {
+				flex-basis: calc(50% - var(--newspack-ui-spacer-5));
+				min-width: min(100%, 8rem);
+			}
+
+			> .form-row input {
+				width: 100% !important;
+			}
+
+			> :empty {
+				display: none;
+			}
 		}
 	}
 }
