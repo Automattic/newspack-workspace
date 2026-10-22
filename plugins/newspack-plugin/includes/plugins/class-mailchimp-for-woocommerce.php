@@ -37,7 +37,7 @@ class Mailchimp_For_WooCommerce {
 		add_action( 'profile_update', [ __CLASS__, 'skip_profile_update_without_opt_in' ], 99 );
 		add_action( 'profile_update', [ __CLASS__, 'restore_profile_update_handler' ], 101 );
 		add_filter( 'mailchimp_filter_ecommerce_order', [ __CLASS__, 'keep_subscribed_customer_subscribed' ] );
-		add_filter( 'mailchimp_filter_ecommerce_order', [ __CLASS__, 'send_only_complete_address' ] );
+		add_filter( 'mailchimp_filter_ecommerce_order', [ __CLASS__, 'send_only_complete_address' ], 10, 2 );
 	}
 
 	/**
@@ -125,21 +125,22 @@ class Mailchimp_For_WooCommerce {
 	/**
 	 * Stop an order's billing address from blocking Newspack's contact updates.
 	 *
-	 * Mailchimp replaces the contact's address with the one MC4WC sends with an order. When that
-	 * address lacks a street, city, or postcode, Mailchimp ignores every later update to the
-	 * contact, while still reporting success. Checkouts for digital products often collect only a
-	 * postcode and country. A missing street and city come from the reader's saved billing address
-	 * when it has the same postcode, so a returning reader keeps their real address, and become
-	 * "-" otherwise, which Mailchimp accepts as complete. An address without a postcode is not sent.
+	 * Mailchimp writes each part of the address MC4WC sends with an order into the contact's
+	 * address. When the result lacks a street, city, or postcode, Mailchimp ignores every later
+	 * update to the contact, while still reporting success. Checkouts for digital products often collect only a
+	 * postcode and country. A missing street and city come from the reader's earlier order when it
+	 * was at the same postcode, so a returning reader keeps their real address, and become "-"
+	 * otherwise, which Mailchimp accepts as complete. An address without a postcode is not sent.
 	 *
-	 * @param \MailChimp_WooCommerce_Order $order The order MC4WC is about to send.
+	 * @param \MailChimp_WooCommerce_Order $order    The order MC4WC is about to send.
+	 * @param \WC_Order|null               $wc_order The WooCommerce order it was built from.
 	 *
 	 * @return \MailChimp_WooCommerce_Order
 	 */
-	public static function send_only_complete_address( $order ) {
+	public static function send_only_complete_address( $order, $wc_order = null ) {
 		$customer = method_exists( $order, 'getCustomer' ) ? $order->getCustomer() : null;
 		$address  = $customer && method_exists( $customer, 'getAddress' ) ? $customer->getAddress() : null;
-		foreach ( [ 'Address1', 'Address2', 'City', 'PostalCode' ] as $field ) {
+		foreach ( [ 'Address1', 'Address2', 'City', 'PostalCode', 'Country' ] as $field ) {
 			if ( ! $address || ! method_exists( $address, 'get' . $field ) || ! method_exists( $address, 'set' . $field ) ) {
 				return $order;
 			}
@@ -154,48 +155,67 @@ class Mailchimp_For_WooCommerce {
 		if ( $address->getAddress1() && $address->getCity() ) {
 			return $order;
 		}
-		$saved_address = self::get_saved_billing_address( $customer, $address->getPostalCode() );
+		$earlier_address = self::get_earlier_address( $customer, $wc_order, $address->getPostalCode(), $address->getCountry() );
 		if ( ! $address->getAddress1() ) {
-			$address->setAddress1( $saved_address['address_1'] ? $saved_address['address_1'] : '-' );
-			if ( ! $address->getAddress2() ) {
-				$address->setAddress2( $saved_address['address_2'] );
+			$address->setAddress1( $earlier_address ? $earlier_address['address_1'] : '-' );
+			if ( $earlier_address ) {
+				$address->setAddress2( $earlier_address['address_2'] );
 			}
 		}
 		if ( ! $address->getCity() ) {
-			$address->setCity( $saved_address['city'] ? $saved_address['city'] : '-' );
+			$address->setCity( $earlier_address ? $earlier_address['city'] : '-' );
 		}
 		return $order;
 	}
 
 	/**
-	 * Get the street and city the reader saved in WooCommerce for the given postcode.
+	 * Get the street and city from the reader's most recent earlier order that has them, if that
+	 * order was at the given postcode and country.
 	 *
-	 * A checkout that hides the street and city leaves the saved ones in place, so they still hold
-	 * the address from the reader's last order that collected it.
+	 * Orders are read rather than the reader's saved billing address, because checkout saves the
+	 * new postcode while keeping a street the form did not collect.
 	 *
 	 * @param \MailChimp_WooCommerce_Customer $customer The order's customer.
+	 * @param \WC_Order|null                  $wc_order The order being sent.
 	 * @param string                          $postcode The postcode on the order.
+	 * @param string                          $country  The country on the order.
 	 *
-	 * @return array{address_1: string, address_2: string, city: string} Empty values when the reader is a guest or saved another postcode.
+	 * @return array{address_1: string, address_2: string, city: string}|null Null when the reader is a guest, has no earlier street, or has moved since.
 	 */
-	private static function get_saved_billing_address( $customer, $postcode ) {
-		$saved_address = [
-			'address_1' => '',
-			'address_2' => '',
-			'city'      => '',
-		];
-		$user          = method_exists( $customer, 'getWordpressUser' ) ? $customer->getWordpressUser() : null;
-		if ( ! $user instanceof \WP_User ) {
-			return $saved_address;
+	private static function get_earlier_address( $customer, $wc_order, $postcode, $country ) {
+		$user = method_exists( $customer, 'getWordpressUser' ) ? $customer->getWordpressUser() : null;
+		if ( ! $user instanceof \WP_User || ! $wc_order instanceof \WC_Order || ! function_exists( 'wc_get_orders' ) ) {
+			return null;
 		}
-		$normalize = fn( $value ) => strtoupper( preg_replace( '/\s+/', '', (string) $value ) );
-		if ( $normalize( get_user_meta( $user->ID, 'billing_postcode', true ) ) !== $normalize( $postcode ) ) {
-			return $saved_address;
+		$order_date     = $wc_order->get_date_created();
+		$earlier_orders = wc_get_orders(
+			[
+				'customer_id' => $user->ID,
+				'type'        => 'shop_order',
+				'orderby'     => 'date',
+				'order'       => 'DESC',
+				'limit'       => 50,
+			]
+		);
+		$normalize      = fn( $value ) => strtoupper( preg_replace( '/\s+/', '', (string) $value ) );
+		foreach ( $earlier_orders as $earlier_order ) {
+			$earlier_date = $earlier_order->get_date_created();
+			if ( $earlier_order->get_id() === $wc_order->get_id() || ( $order_date && $earlier_date && $earlier_date >= $order_date ) ) {
+				continue;
+			}
+			if ( ! $earlier_order->get_billing_address_1() || ! $earlier_order->get_billing_city() ) {
+				continue;
+			}
+			if ( $normalize( $earlier_order->get_billing_postcode() ) !== $normalize( $postcode ) || $normalize( $earlier_order->get_billing_country() ) !== $normalize( $country ) ) {
+				return null;
+			}
+			return [
+				'address_1' => $earlier_order->get_billing_address_1(),
+				'address_2' => $earlier_order->get_billing_address_2(),
+				'city'      => $earlier_order->get_billing_city(),
+			];
 		}
-		foreach ( array_keys( $saved_address ) as $key ) {
-			$saved_address[ $key ] = (string) get_user_meta( $user->ID, 'billing_' . $key, true );
-		}
-		return $saved_address;
+		return null;
 	}
 
 	/**

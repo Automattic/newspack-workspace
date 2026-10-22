@@ -178,23 +178,24 @@ class Newspack_Test_Mailchimp_For_WooCommerce extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Billing addresses as checkout collects them, the reader's saved WooCommerce billing address,
-	 * and the address the order should carry.
+	 * Billing addresses as checkout collects them, the billing address on the reader's earlier
+	 * order, and the address the order should carry.
 	 */
 	public function partial_address_provider() {
-		$saved_address = [
+		$earlier_order = [
 			'billing_address_1' => '1 Main St',
-			'billing_address_2' => 'Apt 4',
-			'billing_city'      => 'Albany',
-			'billing_postcode'  => '10036',
+			'billing_address_2' => 'Flat 4',
+			'billing_city'      => 'London',
+			'billing_postcode'  => 'SW1A1AA',
+			'billing_country'   => 'GB',
 		];
 		return [
-			'postcode only, nothing saved'          => [
+			'postcode only, no earlier order'         => [
 				[
 					'postal_code' => '10036',
 					'country'     => 'US',
 				],
-				[],
+				null,
 				[
 					'address1'    => '-',
 					'city'        => '-',
@@ -202,34 +203,61 @@ class Newspack_Test_Mailchimp_For_WooCommerce extends WP_UnitTestCase {
 					'country'     => 'US',
 				],
 			],
-			'postcode only, saved at that postcode' => [
+			'postcode only, earlier order there'      => [
 				[
-					'postal_code' => '10 036',
-					'country'     => 'US',
+					'postal_code' => 'sw1a 1aa',
+					'country'     => 'GB',
 				],
-				$saved_address,
+				$earlier_order,
 				[
 					'address1'    => '1 Main St',
-					'address2'    => 'Apt 4',
-					'city'        => 'Albany',
-					'postal_code' => '10 036',
-					'country'     => 'US',
+					'address2'    => 'Flat 4',
+					'city'        => 'London',
+					'postal_code' => 'sw1a 1aa',
+					'country'     => 'GB',
 				],
 			],
-			'postcode only, saved elsewhere'        => [
+			'postcode only, earlier order elsewhere'  => [
 				[
-					'postal_code' => '12207',
-					'country'     => 'US',
+					'postal_code' => 'E1 6AN',
+					'country'     => 'GB',
 				],
-				$saved_address,
+				$earlier_order,
 				[
 					'address1'    => '-',
 					'city'        => '-',
-					'postal_code' => '12207',
+					'postal_code' => 'E1 6AN',
+					'country'     => 'GB',
+				],
+			],
+			'same postcode, another country'          => [
+				[
+					'postal_code' => 'SW1A1AA',
+					'country'     => 'US',
+				],
+				$earlier_order,
+				[
+					'address1'    => '-',
+					'city'        => '-',
+					'postal_code' => 'SW1A1AA',
 					'country'     => 'US',
 				],
 			],
-			'street and city, no postcode'          => [
+			'street but no city, earlier order there' => [
+				[
+					'address1'    => '2 Elm St',
+					'postal_code' => 'SW1A1AA',
+					'country'     => 'GB',
+				],
+				$earlier_order,
+				[
+					'address1'    => '2 Elm St',
+					'city'        => 'London',
+					'postal_code' => 'SW1A1AA',
+					'country'     => 'GB',
+				],
+			],
+			'street and city, no postcode'            => [
 				[
 					'name'     => 'Ann Reader',
 					'phone'    => '5555550100',
@@ -237,47 +265,65 @@ class Newspack_Test_Mailchimp_For_WooCommerce extends WP_UnitTestCase {
 					'city'     => 'Dublin',
 					'country'  => 'IE',
 				],
-				$saved_address,
+				$earlier_order,
 				[],
 			],
-			'complete'                              => [
+			'complete'                                => [
 				[
 					'address1'    => '2 Elm St',
-					'city'        => 'Albany',
-					'postal_code' => '10036',
-					'country'     => 'US',
+					'city'        => 'London',
+					'postal_code' => 'SW1A1AA',
+					'country'     => 'GB',
 				],
-				$saved_address,
+				$earlier_order,
 				[
 					'address1'    => '2 Elm St',
-					'city'        => 'Albany',
-					'postal_code' => '10036',
-					'country'     => 'US',
+					'city'        => 'London',
+					'postal_code' => 'SW1A1AA',
+					'country'     => 'GB',
 				],
 			],
 		];
 	}
 
 	/**
-	 * Mailchimp replaces a contact's address with the one sent with an order, and ignores later
-	 * updates to a contact whose address lacks a street, city, or postcode.
+	 * Mailchimp writes the address parts sent with an order into the contact's address, and
+	 * ignores later updates to a contact whose address lacks a street, city, or postcode.
 	 *
 	 * @dataProvider partial_address_provider
 	 *
-	 * @param array $billing_address The address checkout collected.
-	 * @param array $saved_address   The reader's saved billing address, as user meta.
-	 * @param array $sent_address    The address the order should carry.
+	 * @param array      $billing_address The address checkout collected.
+	 * @param array|null $earlier_billing The billing address on the reader's earlier order, if any.
+	 * @param array      $sent_address    The address the order should carry.
 	 */
-	public function test_order_carries_only_an_address_mailchimp_accepts( $billing_address, $saved_address, $sent_address ) {
-		$reader = $this->create_customer( 'reader@example.test', 'subscribed' );
-		foreach ( $saved_address as $key => $value ) {
-			update_user_meta( $reader->ID, $key, $value );
+	public function test_order_carries_only_an_address_mailchimp_accepts( $billing_address, $earlier_billing, $sent_address ) {
+		global $orders_database;
+		$orders_database = [];
+		$reader          = $this->create_customer( 'reader@example.test', 'subscribed' );
+		if ( $earlier_billing ) {
+			wc_create_order(
+				array_merge(
+					$earlier_billing,
+					[
+						'customer_id'  => $reader->ID,
+						'status'       => 'processing',
+						'date_created' => '2026-01-01 00:00:00',
+					]
+				) 
+			);
 		}
+		$wc_order      = wc_create_order(
+			[
+				'customer_id'  => $reader->ID,
+				'status'       => 'processing',
+				'date_created' => '2026-06-01 00:00:00',
+			]
+		);
 		$empty_address = ( new MailChimp_WooCommerce_Address() )->fields;
 		$customer      = new MailChimp_WooCommerce_Customer( $reader, $reader->user_email );
 		$customer->getAddress()->fields = array_merge( $empty_address, $billing_address );
 
-		$order = $this->filter_order( $customer );
+		$order = apply_filters( 'mailchimp_filter_ecommerce_order', new MailChimp_WooCommerce_Order( $customer ), $wc_order );
 
 		$this->assertSame( array_merge( $empty_address, $sent_address ), $order->getCustomer()->getAddress()->fields );
 	}
