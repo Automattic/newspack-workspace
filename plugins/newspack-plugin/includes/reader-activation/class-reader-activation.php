@@ -1135,7 +1135,7 @@ final class Reader_Activation {
 	 *
 	 * @param \WP_User|int $user_or_user_id    User object.
 	 * @param bool         $revoke_credentials Whether to revoke passwords set before verification. Pass false
-	 *                                         when the verification doesn't prove who controls the address,
+	 *                                         when the verification doesn't prove, or vouch for, who controls the address,
 	 *                                         or when nobody could have set credentials on the account yet.
 	 *
 	 * @return bool Whether the email address was verified.
@@ -1196,7 +1196,7 @@ final class Reader_Activation {
 	 *
 	 * Until the address is proven, whoever registered it may have set a password
 	 * on the account, so the first verification replaces it and marks the reader
-	 * as having no password, which makes the sign-in form offer a code.
+	 * as having no password, which makes the sign-in form offer an emailed link or code.
 	 *
 	 * @param \WP_User $user User being verified.
 	 */
@@ -1216,8 +1216,8 @@ final class Reader_Activation {
 
 		// Changing the password invalidates every auth cookie issued before it,
 		// including the one that signed the reader in to verify. Core's reset form
-		// verifies mid-page, where a cookie can no longer be sent; its submission
-		// signs the reader out anyway.
+		// verifies while the page renders, and submitting it signs the reader out
+		// anyway, so there's no session there to keep.
 		$session_token = \wp_get_session_token();
 		if ( \get_current_user_id() === $user->ID && $session_token && ! \doing_action( 'resetpass_form' ) ) {
 			self::set_auth_cookie( $user->ID, $session_token );
