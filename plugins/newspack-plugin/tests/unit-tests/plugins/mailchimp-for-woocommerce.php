@@ -178,6 +178,85 @@ class Newspack_Test_Mailchimp_For_WooCommerce extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Billing addresses as checkout collects them, and the address the order should carry.
+	 */
+	public function partial_address_provider() {
+		return [
+			'postcode and country'         => [
+				[
+					'postal_code' => '10036',
+					'country'     => 'US',
+				],
+				[
+					'address1'    => '-',
+					'city'        => '-',
+					'postal_code' => '10036',
+					'country'     => 'US',
+				],
+			],
+			'street, postcode, no city'    => [
+				[
+					'address1'    => '1 Main St',
+					'postal_code' => '10036',
+					'country'     => 'US',
+				],
+				[
+					'address1'    => '1 Main St',
+					'city'        => '-',
+					'postal_code' => '10036',
+					'country'     => 'US',
+				],
+			],
+			'street and city, no postcode' => [
+				[
+					'address1' => '1 Main St',
+					'city'     => 'Dublin',
+					'province' => 'D',
+					'country'  => 'IE',
+				],
+				[],
+			],
+			'complete'                     => [
+				[
+					'address1'    => '1 Main St',
+					'city'        => 'New York',
+					'province'    => 'NY',
+					'postal_code' => '10036',
+					'country'     => 'US',
+				],
+				[
+					'address1'    => '1 Main St',
+					'city'        => 'New York',
+					'province'    => 'NY',
+					'postal_code' => '10036',
+					'country'     => 'US',
+				],
+			],
+		];
+	}
+
+	/**
+	 * Mailchimp copies an order's billing address into the contact's address field, and ignores
+	 * later updates to a contact whose address lacks a street, city, or postcode. A digital
+	 * checkout often collects only a postcode and country. Missing street and city become "-",
+	 * which Mailchimp accepts as complete, and an address without a postcode is not sent.
+	 *
+	 * @dataProvider partial_address_provider
+	 *
+	 * @param array $billing_address The address checkout collected.
+	 * @param array $sent_address    The address the order should carry.
+	 */
+	public function test_order_carries_only_an_address_mailchimp_accepts( $billing_address, $sent_address ) {
+		$empty_address = ( new MailChimp_WooCommerce_Address() )->fields;
+		$customer      = new MailChimp_WooCommerce_Customer( null, 'guest@example.test' );
+		$customer->getAddress()->fields = array_merge( $empty_address, $billing_address );
+
+		$order = $this->filter_order( $customer );
+
+		$this->assertSame( array_merge( $empty_address, $sent_address ), $order->getCustomer()->getAddress()->fields );
+	}
+
+	/**
 	 * A plugin version without the customer methods the integration reads gets its orders back
 	 * unchanged, so its order sync keeps running as it would without Newspack.
 	 */

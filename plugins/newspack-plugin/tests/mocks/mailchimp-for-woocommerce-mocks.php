@@ -111,6 +111,13 @@ if ( ! class_exists( 'MailChimp_WooCommerce_Customer' ) ) {
 		private $email_address;
 
 		/**
+		 * The customer's billing address.
+		 *
+		 * @var MailChimp_WooCommerce_Address|null
+		 */
+		private $address = null;
+
+		/**
 		 * Constructor.
 		 *
 		 * @param WP_User|null $wordpress_user WordPress user, or null for a guest.
@@ -168,6 +175,82 @@ if ( ! class_exists( 'MailChimp_WooCommerce_Customer' ) ) {
 		public function getWordpressUser() {
 			return $this->wordpress_user;
 		}
+
+		/**
+		 * Get the billing address, created empty on first use as in the plugin.
+		 */
+		public function getAddress() {
+			if ( ! $this->address ) {
+				$this->address = new MailChimp_WooCommerce_Address();
+			}
+			return $this->address;
+		}
+	}
+}
+
+if ( ! class_exists( 'MailChimp_WooCommerce_Address' ) ) {
+	/**
+	 * A customer's billing address, as Mailchimp for WooCommerce sends it.
+	 */
+	class MailChimp_WooCommerce_Address {
+		/**
+		 * Address fields, keyed by the plugin's property names.
+		 *
+		 * @var array<string, string>
+		 */
+		public $fields = [
+			'address1'    => '',
+			'address2'    => '',
+			'city'        => '',
+			'province'    => '',
+			'postal_code' => '',
+			'country'     => '',
+		];
+
+		// phpcs:disable Squiz.Commenting.FunctionComment.Missing -- Accessors with the plugin's names.
+		public function getAddress1() {
+			return $this->fields['address1'];
+		}
+		public function setAddress1( $value ) {
+			$this->fields['address1'] = $value;
+			return $this;
+		}
+		public function getAddress2() {
+			return $this->fields['address2'];
+		}
+		public function setAddress2( $value ) {
+			$this->fields['address2'] = $value;
+			return $this;
+		}
+		public function getCity() {
+			return $this->fields['city'];
+		}
+		public function setCity( $value ) {
+			$this->fields['city'] = $value;
+			return $this;
+		}
+		public function getProvince() {
+			return $this->fields['province'];
+		}
+		public function setProvince( $value ) {
+			$this->fields['province'] = $value;
+			return $this;
+		}
+		public function getPostalCode() {
+			return $this->fields['postal_code'];
+		}
+		public function setPostalCode( $value ) {
+			$this->fields['postal_code'] = $value;
+			return $this;
+		}
+		public function getCountry() {
+			return $this->fields['country'];
+		}
+		public function setCountry( $value ) {
+			$this->fields['country'] = $value;
+			return $this;
+		}
+		// phpcs:enable Squiz.Commenting.FunctionComment.Missing
 	}
 }
 

@@ -37,6 +37,7 @@ class Mailchimp_For_WooCommerce {
 		add_action( 'profile_update', [ __CLASS__, 'skip_profile_update_without_opt_in' ], 99 );
 		add_action( 'profile_update', [ __CLASS__, 'restore_profile_update_handler' ], 101 );
 		add_filter( 'mailchimp_filter_ecommerce_order', [ __CLASS__, 'keep_subscribed_customer_subscribed' ] );
+		add_filter( 'mailchimp_filter_ecommerce_order', [ __CLASS__, 'send_only_complete_address' ] );
 	}
 
 	/**
@@ -117,6 +118,45 @@ class Mailchimp_For_WooCommerce {
 		if ( 'subscribed' === self::$mailchimp_statuses[ $email ] ) {
 			$customer->setOptInStatus( true );
 			update_user_meta( $customer->getWordpressUser()->ID, 'mailchimp_woocommerce_is_subscribed', '1' );
+		}
+		return $order;
+	}
+
+	/**
+	 * Stop an order's billing address from blocking Newspack's contact updates.
+	 *
+	 * Mailchimp copies the address MC4WC sends with an order into the contact's address field.
+	 * When that address lacks a street, city, or postcode, Mailchimp ignores every later update to
+	 * the contact, while still reporting success. Checkouts for digital products often collect
+	 * only a postcode and country. Missing street and city become "-", which Mailchimp accepts as
+	 * complete, so the postcode and country still reach Mailchimp. An address without a postcode
+	 * is not sent at all.
+	 *
+	 * @param \MailChimp_WooCommerce_Order $order The order MC4WC is about to send.
+	 *
+	 * @return \MailChimp_WooCommerce_Order
+	 */
+	public static function send_only_complete_address( $order ) {
+		$customer = method_exists( $order, 'getCustomer' ) ? $order->getCustomer() : null;
+		$address  = $customer && method_exists( $customer, 'getAddress' ) ? $customer->getAddress() : null;
+		$fields   = [ 'Address1', 'Address2', 'City', 'Province', 'PostalCode', 'Country' ];
+		foreach ( $fields as $field ) {
+			if ( ! $address || ! method_exists( $address, 'get' . $field ) || ! method_exists( $address, 'set' . $field ) ) {
+				return $order;
+			}
+		}
+		if ( ! $address->getPostalCode() ) {
+			// MC4WC leaves empty fields out, so an emptied address is not sent.
+			foreach ( $fields as $field ) {
+				$address->{'set' . $field}( '' );
+			}
+			return $order;
+		}
+		if ( ! $address->getAddress1() ) {
+			$address->setAddress1( '-' );
+		}
+		if ( ! $address->getCity() ) {
+			$address->setCity( '-' );
 		}
 		return $order;
 	}
