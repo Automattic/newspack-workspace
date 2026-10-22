@@ -125,13 +125,15 @@ export default function SubscriberList() {
 	const { items, total, pages, loading: subscribersLoading, settled, error, reload } = useSubscribers( view );
 
 	// A restored page sits past the end if the list shrank while the reader was on
-	// a profile; step back to the last page rather than show "No results".
-	useEffect( () => {
+	// a profile; step back to the last page rather than show "No results". Only an
+	// empty response counts: right after a view change, `pages` still describes the
+	// previous view. Before paint, so the empty page never flashes.
+	useLayoutEffect( () => {
 		const lastPage = Math.max( pages, 1 );
-		if ( ! subscribersLoading && ! error && view.page > lastPage ) {
+		if ( ! subscribersLoading && ! error && items.length === 0 && view.page > lastPage ) {
 			setView( current => ( { ...current, page: lastPage } ) );
 		}
-	}, [ subscribersLoading, error, pages, view.page ] );
+	}, [ subscribersLoading, error, items.length, pages, view.page ] );
 
 	// Filter options for the Subscription column: every plan on the site, not just
 	// the ones on this page. Plans the view already filters by stay options even if
@@ -489,8 +491,9 @@ export default function SubscriberList() {
 		<div className="newspack-subscribers__clickable-rows" onClick={ onRowClick } aria-busy={ isRefreshing || undefined }>
 			{ /* The two reads fail independently, so a failed /plans is otherwise
 			     silent: DataViews drops a filter whose `elements` is empty, so the
-			     Subscription filter is simply absent and reads as a site that sells
-			     no plans. The table itself is unaffected, hence a warning beside it
+			     Subscription filter is simply absent (unless the view already
+			     filters by a plan) and reads as a site that sells no plans. The
+			     table itself is unaffected, hence a warning beside it
 			     rather than the error notice that replaces the screen. */ }
 			{ plansFailed && (
 				<LoadFailureNotice

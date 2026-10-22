@@ -71,10 +71,10 @@
 // Covers the subscriber list while a refetch is in flight with rows showing.
 // Clicks pass through, so search, filters and pagination stay usable mid-refetch.
 //
-// DEPENDS ON DATAVIEWS INTERNAL MARKUP: z-index 2 has to clear DataViews' sticky
-// table header (1) and match its footer (2), which the overlay then wins by
-// coming later in the DOM, while staying under the sticky page header (3).
-// Recheck when bumping @wordpress/dataviews.
+// DEPENDS ON DATAVIEWS INTERNAL MARKUP: z-index 2 keeps the overlay under the
+// sticky page header (3), and above DataViews' sticky table header (1) and footer
+// (2, a tie it wins by coming later in the DOM) even where those share its
+// stacking context. Recheck when bumping @wordpress/dataviews.
 .newspack-subscribers__loading-overlay {
 	align-items: center;
 	background: rgba( wp-colors.$white, 0.6 );

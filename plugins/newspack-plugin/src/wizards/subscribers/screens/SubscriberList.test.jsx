@@ -265,9 +265,9 @@ describe( 'the subscriber list loading overlay', () => {
 	const overlayIn = container => container.querySelector( '.newspack-subscribers__loading-overlay' );
 	const listIn = container => container.querySelector( '.newspack-subscribers__clickable-rows' );
 
-	/** Mount once `rows` subscribers have landed. */
+	/** Mount once `rows` subscribers have landed, on the first of two pages. */
 	const mountWith = async rows => {
-		apiFetch.mockResolvedValue( page( rows ) );
+		apiFetch.mockResolvedValue( { ...page( rows ), pages: 2 } );
 		let container;
 		await act( async () => {
 			( { container } = render( <SubscriberList /> ) );
@@ -392,6 +392,22 @@ describe( 'the subscriber list view across profile visits', () => {
 		);
 		await act( async () => {
 			render( <SubscriberList /> );
+		} );
+
+		expect( mockDataViewsProps.view.page ).toBe( 2 );
+	} );
+
+	// Until the new page's own response lands, the page count on hand is the
+	// previous view's, which says nothing about whether the new page exists.
+	it( 'leaves a newly picked page alone until its own response lands', async () => {
+		apiFetch.mockResolvedValue( { ...page( 2 ), pages: 1 } );
+		await act( async () => {
+			render( <SubscriberList /> );
+		} );
+
+		apiFetch.mockReturnValue( new Promise( () => {} ) );
+		await act( async () => {
+			mockDataViewsProps.onChangeView( { ...mockDataViewsProps.view, page: 2 } );
 		} );
 
 		expect( mockDataViewsProps.view.page ).toBe( 2 );
