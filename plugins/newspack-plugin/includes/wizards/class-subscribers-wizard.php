@@ -91,6 +91,15 @@ class Subscribers_Wizard extends Wizard {
 	private $raw_status_ids_cache = [];
 
 	/**
+	 * Per-request memo of the subscriptions other network sites manage, as
+	 * { user_id, plan_label, status } rows with the status already mapped. Null
+	 * until resolved. See network_subscription_index().
+	 *
+	 * @var array<int,array{user_id:int,plan_label:string,status:string}>|null
+	 */
+	private ?array $network_index_cache = null;
+
+	/**
 	 * Per-request memo of newsletter list public ID → display title, built once
 	 * from the site's own subscription lists. Null once resolved means the site
 	 * has no list registry to read. See get_newsletter_list_titles().
@@ -508,6 +517,11 @@ class Subscribers_Wizard extends Wizard {
 		}
 		foreach ( $this->subscription_product_names() as $product_name ) {
 			$names[] = $product_name;
+		}
+		// Plans readers hold on other network sites go by the label their rows show.
+		// The unique below folds the many holders of one plan into one option.
+		foreach ( $this->network_subscription_index() as $network_row ) {
+			$names[] = $network_row['plan_label'];
 		}
 
 		$names = array_values( array_unique( array_filter( array_map( 'trim', $names ) ) ) );
@@ -1478,6 +1492,7 @@ class Subscribers_Wizard extends Wizard {
 		$this->group_subscriptions_cache       = null;
 		$this->group_membership_index          = null;
 		$this->raw_status_ids_cache            = [];
+		$this->network_index_cache             = null;
 		$this->newsletter_list_titles_cache    = null;
 		$this->newsletter_list_titles_resolved = false;
 	}
@@ -1674,38 +1689,121 @@ class Subscribers_Wizard extends Wizard {
 
 		$out = [];
 		foreach ( $records as $record ) {
-			if ( ! is_array( $record ) ) {
+			$network = self::normalize_network_record( $record );
+			if ( null === $network ) {
 				continue;
 			}
-			$id = $record['id'] ?? null;
-			if ( ! is_numeric( $id ) || (int) $id <= 0 ) {
-				continue;
-			}
-			$site_name = isset( $record['site_name'] ) && is_string( $record['site_name'] ) ? trim( $record['site_name'] ) : '';
-			if ( '' === $site_name ) {
-				continue;
-			}
-			$status = $record['status'] ?? null;
-			if ( ! is_string( $status ) || '' === $status ) {
-				continue;
-			}
-			$plan     = isset( $record['plan'] ) && is_string( $record['plan'] ) ? $record['plan'] : '';
-			$site_url = isset( $record['site_url'] ) && is_string( $record['site_url'] ) ? $record['site_url'] : '';
-			$edit_url = isset( $record['edit_url'] ) && is_string( $record['edit_url'] ) ? $record['edit_url'] : '';
 
 			$out[] = [
-				'id'              => (int) $id,
-				'plan'            => self::network_plan_label( $plan, (int) $id, $site_name ),
-				'status'          => self::map_subscription_status( $status ),
-				'editUrl'         => esc_url_raw( $edit_url ),
+				'id'              => $network['id'],
+				'plan'            => $network['plan_label'],
+				'status'          => self::map_subscription_status( $network['status'] ),
+				'editUrl'         => esc_url_raw( $network['edit_url'] ),
 				'isComplimentary' => false,
 				'managedOn'       => [
-					'name' => $site_name,
-					'url'  => esc_url_raw( $site_url ),
+					'name' => $network['site_name'],
+					'url'  => esc_url_raw( $network['site_url'] ),
 				],
 			];
 		}
 		return $out;
+	}
+
+	/**
+	 * Check one record of a subscription managed on another network site, and settle
+	 * the label it goes by.
+	 *
+	 * The list row (get_network_subscriptions()) and the filter index
+	 * (network_subscription_index()) both read records through this, so they can't
+	 * disagree about whether a record counts or what its plan is called. That is what
+	 * lets a plan label on a row filter back to the reader who holds it.
+	 *
+	 * A record needs a positive numeric `id`, a `site_name` with something in it once
+	 * trimmed, and a non-empty string `status`. A missing `plan` reads as empty.
+	 *
+	 * @param mixed $record One record from the network filters.
+	 *
+	 * @return array{id:int,status:string,plan_label:string,site_name:string,site_url:string,edit_url:string}|null
+	 *         The record with its raw `status`, or null when it does not fit the shape.
+	 */
+	private static function normalize_network_record( $record ): ?array {
+		if ( ! is_array( $record ) ) {
+			return null;
+		}
+		$id = $record['id'] ?? null;
+		if ( ! is_numeric( $id ) || (int) $id <= 0 ) {
+			return null;
+		}
+		$site_name = isset( $record['site_name'] ) && is_string( $record['site_name'] ) ? trim( $record['site_name'] ) : '';
+		if ( '' === $site_name ) {
+			return null;
+		}
+		$status = $record['status'] ?? null;
+		if ( ! is_string( $status ) || '' === $status ) {
+			return null;
+		}
+		$plan = isset( $record['plan'] ) && is_string( $record['plan'] ) ? $record['plan'] : '';
+
+		return [
+			'id'         => (int) $id,
+			'status'     => $status,
+			'plan_label' => self::network_plan_label( $plan, (int) $id, $site_name ),
+			'site_name'  => $site_name,
+			'site_url'   => isset( $record['site_url'] ) && is_string( $record['site_url'] ) ? $record['site_url'] : '',
+			'edit_url'   => isset( $record['edit_url'] ) && is_string( $record['edit_url'] ) ? $record['edit_url'] : '',
+		];
+	}
+
+	/**
+	 * Every subscription other network sites manage, for the readers who hold any,
+	 * reduced to what the list's filters read: whose it is, what it is called and
+	 * how its status displays.
+	 *
+	 * The server-side status and plan filters and the plan options have to see these
+	 * the way the list row does, or a reader whose only subscription is elsewhere
+	 * shows an Active badge and then vanishes under the Active filter. The rows come
+	 * from the `newspack_subscribers_network_subscription_index` filter, which the
+	 * network plugin answers when it is active. Records go through the same checks as
+	 * the row's (normalize_network_record()); a row with no valid `user_id` is dropped
+	 * too. `status` is mapped through map_subscription_status() here, so callers
+	 * compare it with prototype statuses directly.
+	 *
+	 * Read once per request: the memo is cleared with the other request caches.
+	 *
+	 * @return array<int,array{user_id:int,plan_label:string,status:string}>
+	 */
+	private function network_subscription_index(): array {
+		if ( null !== $this->network_index_cache ) {
+			return $this->network_index_cache;
+		}
+
+		/**
+		 * The subscriptions held on other sites of the Newspack Network, for the readers
+		 * who hold any.
+		 *
+		 * @param array[] $rows      Rows so far. Each is a network subscription record, as
+		 *                           `newspack_subscribers_network_subscriptions` supplies, plus
+		 *                           the integer `user_id` of the reader it belongs to.
+		 * @param int     $max_users The most distinct readers to supply rows for.
+		 */
+		$rows = apply_filters( 'newspack_subscribers_network_subscription_index', [], self::FILTER_INCLUDE_CAP );
+
+		$index = [];
+		foreach ( is_array( $rows ) ? $rows : [] as $row ) {
+			$network = self::normalize_network_record( $row );
+			$user_id = is_array( $row ) ? ( $row['user_id'] ?? null ) : null;
+			if ( null === $network || ! is_numeric( $user_id ) || (int) $user_id <= 0 ) {
+				continue;
+			}
+			$index[] = [
+				'user_id'    => (int) $user_id,
+				'plan_label' => $network['plan_label'],
+				'status'     => self::map_subscription_status( $network['status'] ),
+			];
+		}
+
+		$this->network_index_cache = $index;
+		return $index;
 	}
 
 	/**
@@ -1958,6 +2056,8 @@ class Subscribers_Wizard extends Wizard {
 	 *   `cancelled` entirely whenever the reader still holds any live
 	 *   (non-cancelled) subscription; a reader with no subscription at all has
 	 *   no status.
+	 *
+	 * Network subscriptions feed the rule too; customer_ids_for_*() mirror them via the network index.
 	 *
 	 * It is re-encoded in these places, each of which must be changed in step or
 	 * the endpoint's filters will contradict the badge and column they filter on:
@@ -2336,6 +2436,14 @@ class Subscribers_Wizard extends Wizard {
 			}
 		}
 
+		// Subscriptions other network sites manage count like local ones: the row shows
+		// their status, so the filter has to match it. The index holds mapped statuses.
+		foreach ( $this->network_subscription_index() as $network_row ) {
+			if ( in_array( $network_row['status'], $prototype_statuses, true ) ) {
+				$ids[] = $network_row['user_id'];
+			}
+		}
+
 		$this->raw_status_ids_cache[ $cache_key ] = array_values( array_unique( array_filter( $ids ) ) );
 		return $this->raw_status_ids_cache[ $cache_key ];
 	}
@@ -2405,6 +2513,21 @@ class Subscribers_Wizard extends Wizard {
 						$ids[] = $customer_id;
 					}
 				}
+			}
+		}
+
+		// Plans held on other network sites, matched by the label the row shows, such as
+		// "Fan Membership (Node Daily)". Trimmed like the group names above, because
+		// api_get_plans() offers the trimmed label. They join the same cancelled
+		// reduction below.
+		foreach ( $this->network_subscription_index() as $network_row ) {
+			if ( ! in_array( trim( $network_row['plan_label'] ), $plan_names, true ) ) {
+				continue;
+			}
+			if ( 'cancelled' === $network_row['status'] ) {
+				$cancelled_ids[] = $network_row['user_id'];
+			} else {
+				$ids[] = $network_row['user_id'];
 			}
 		}
 
