@@ -1,8 +1,8 @@
 .newspack-ui {
 	color: var(--newspack-ui-color-text);
 	font-family: var(--newspack-ui-font-family);
-	font-size: var(--newspack-ui-font-size-s);
-	line-height: var(--newspack-ui-line-height-s);
+	font-size: var(--newspack-ui-font-size-body);
+	line-height: var(--newspack-ui-line-height-body);
 	-webkit-font-smoothing: antialiased;
 
 	p {
@@ -32,43 +32,50 @@
 		text-transform: unset;
 	}
 
+	&__font--medium {
+		font-weight: var(--newspack-ui-font-weight-medium);
+	}
+
 	strong,
 	&__font--bold {
 		font-weight: var(--newspack-ui-font-weight-strong);
 	}
 
 	&__font--normal {
-		font-weight: normal;
+		font-weight: var(--newspack-ui-font-weight-regular);
 	}
 
 	& &__font--2xs {
-		font-size: var(--newspack-ui-font-size-2xs);
-		line-height: var(--newspack-ui-line-height-2xs);
+		font-size: var(--newspack-ui-font-size-caption);
+		line-height: var(--newspack-ui-line-height-caption);
 	}
 
 	& &__font--xs {
-		font-size: var(--newspack-ui-font-size-xs);
-		line-height: var(--newspack-ui-line-height-xs);
+		font-size: var(--newspack-ui-font-size-small);
+		line-height: var(--newspack-ui-line-height-small);
 	}
 
 	& &__font--s {
-		font-size: var(--newspack-ui-font-size-s);
-		line-height: var(--newspack-ui-line-height-s);
+		font-size: var(--newspack-ui-font-size-body);
+		line-height: var(--newspack-ui-line-height-body);
 	}
 
 	& &__font--m {
-		font-size: var(--newspack-ui-font-size-m);
-		line-height: var(--newspack-ui-line-height-m);
+		font-size: var(--newspack-ui-font-size-title-m);
+		letter-spacing: var(--newspack-ui-letter-spacing-title-m);
+		line-height: var(--newspack-ui-line-height-title-m);
 	}
 
 	& &__font--l {
-		font-size: var(--newspack-ui-font-size-l);
-		line-height: var(--newspack-ui-line-height-l);
+		font-size: var(--newspack-ui-font-size-title-l);
+		letter-spacing: var(--newspack-ui-letter-spacing-title-l);
+		line-height: var(--newspack-ui-line-height-title-l);
 	}
 
 	& &__font--xl {
-		font-size: var(--newspack-ui-font-size-xl);
-		line-height: var(--newspack-ui-line-height-xl);
+		font-size: var(--newspack-ui-font-size-display);
+		letter-spacing: var(--newspack-ui-letter-spacing-display);
+		line-height: var(--newspack-ui-line-height-display);
 	}
 
 	& &__font--2xl {
@@ -118,7 +125,7 @@
 			color: var(--newspack-ui-color-text);
 			display: block;
 
-			font-weight: bold;
+			font-weight: var(--newspack-ui-font-weight-strong);
 			height: auto;
 			left: 5px;
 			line-height: normal;

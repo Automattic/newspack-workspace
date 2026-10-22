@@ -5,7 +5,7 @@
 .newspack-ui {
 	label .optional {
 		color: var(--newspack-ui-color-text-muted);
-		font-weight: 400;
+		font-weight: var(--newspack-ui-font-weight-regular);
 	}
 
 	&__modal--small {
@@ -26,7 +26,7 @@
 
 	.form-row.woocommerce-SavedPaymentMethods-saveNew {
 		label {
-			font-weight: normal;
+			font-weight: var(--newspack-ui-font-weight-regular);
 		}
 	}
 	.woocommerce-notices-wrapper:not(:empty) {
@@ -141,7 +141,8 @@
 		.payment_box {
 			padding: 1rem;
 			background: var(--newspack-theme-color-bg-pre, var(--newspack-ui-color-surface-sunken));
-			font-size: var(--newspack-theme-font-size-sm, var(--newspack-ui-font-size-s));
+			font-size: var(--newspack-ui-font-size-small);
+			line-height: var(--newspack-ui-line-height-small);
 
 			ul,
 			ol {
@@ -215,7 +216,8 @@
 	}
 
 	.woocommerce-terms-and-conditions-wrapper {
-		font-size: var(--newspack-theme-font-size-sm, var(--newspack-ui-font-size-s));
+		font-size: var(--newspack-ui-font-size-small);
+		line-height: var(--newspack-ui-line-height-small);
 		margin-bottom: 2rem;
 
 		input[type="checkbox"] {
@@ -253,12 +255,12 @@
 
 	.newspack-reader-auth__inline-wrapper {
 		h2 {
-			font-size: var(--newspack-ui-font-size-m);
-			font-weight: 600;
+			font-size: var(--newspack-ui-font-size-title-m);
+			font-weight: var(--newspack-ui-font-weight-strong);
 		}
 
 		p {
-			font-size: var(--newspack-ui-font-size-s);
+			font-size: var(--newspack-ui-font-size-body);
 		}
 	}
 	.woocommerce-account-join-team .woocommerce-privacy-policy-text {

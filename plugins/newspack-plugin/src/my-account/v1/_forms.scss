@@ -7,10 +7,10 @@
 	.woocommerce-form-row p,
 	p.form-row {
 		color: var(--newspack-ui-color-text-muted);
-		font-size: var(--newspack-ui-font-size-xs);
-		line-height: var(--newspack-ui-line-height-xs);
+		font-size: var(--newspack-ui-font-size-small);
+		line-height: var(--newspack-ui-line-height-small);
 		.select2 .selection {
-			font-size: var(--newspack-ui-font-size-s);
+			font-size: var(--newspack-ui-font-size-body);
 		}
 		.legend {
 			display: block;
@@ -64,7 +64,7 @@
 	/* stylelint-enable selector-id-pattern */
 	.woocommerce-password-strength {
 		display: block;
-		font-size: var(--newspack-ui-font-size-xs);
+		font-size: var(--newspack-ui-font-size-small);
 		margin: var(--newspack-ui-spacer-1) 0;
 		& + small {
 			display: block;

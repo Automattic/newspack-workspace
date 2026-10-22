@@ -34,7 +34,7 @@
 		color: var(--newspack-ui-color-text-muted);
 		display: block;
 		font-size: var(--newspack-ui-font-size-xs);
-		font-weight: normal;
+		font-weight: var(--newspack-ui-font-weight-regular);
 		line-height: var(--newspack-ui-line-height-xs);
 		margin: var(--newspack-ui-spacer-1) 0 0;
 		a {
