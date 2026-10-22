@@ -25,8 +25,8 @@ If the programmatic insertion doesn't work for a particular post, users can choo
 1. Upload the plugin directory to your `/wp-content/plugins/` directory
 2. Activate the plugin through the 'Plugins' menu in WordPress
 
-For more advanced documentation for developers and advanced users see [the official plugin docs](https://github.com/Automattic/super-cool-ad-inserter-plugin/tree/trunk/docs).
+For more advanced documentation for developers and advanced users see [the official plugin docs](https://github.com/Automattic/newspack-workspace/tree/main/plugins/super-cool-ad-inserter/docs).
 
 == Changelog ==
 
-See https://github.com/Automattic/super-cool-ad-inserter-plugin/blob/trunk/CHANGELOG.md
+See https://github.com/Automattic/newspack-workspace/blob/main/plugins/super-cool-ad-inserter/CHANGELOG.md
