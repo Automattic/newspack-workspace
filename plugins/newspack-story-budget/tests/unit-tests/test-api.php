@@ -152,6 +152,39 @@ class Test_API extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that the response carries the server time for the next refresh's `since`.
+	 */
+	public function test_get_stories_returns_server_timestamp() {
+		$past_time = time() - 100;
+		foreach ( self::$stories as $post_id ) {
+			update_post_meta( $post_id, Abstract_Field::FIELD_PREFIX . '_modified', $past_time );
+		}
+
+		$before   = time();
+		$request  = new \WP_REST_Request( 'GET', sprintf( '%s/stories', API::NAMESPACE ) );
+		$response = API::get_stories( $request );
+		$after    = time();
+
+		$data = $response->get_data();
+		$this->assertArrayHasKey( 'timestamp', $data, 'Should return the server time.' );
+		$this->assertIsInt( $data['timestamp'] );
+		$this->assertGreaterThanOrEqual( $before, $data['timestamp'] );
+		$this->assertLessThanOrEqual( $after, $data['timestamp'] );
+
+		// A story changed after the response must come back when its timestamp is sent as `since`.
+		$changed_story = self::$stories[0];
+		Fields::update_modified( $changed_story );
+
+		$request = new \WP_REST_Request( 'GET', sprintf( '%s/stories', API::NAMESPACE ) );
+		$request->set_param( 'since', $data['timestamp'] );
+		$response = API::get_stories( $request );
+
+		$data = $response->get_data();
+		$this->assertCount( 1, $data['stories'], 'Should only get the changed story.' );
+		$this->assertEquals( $changed_story, $data['stories'][0]['id'] );
+	}
+
+	/**
 	 * Test get stories as author.
 	 */
 	public function test_get_stories_as_author() {
