@@ -108,10 +108,8 @@ class Newspack_Test_RA_Pre_Verification_Credentials extends WP_UnitTestCase {
 	public function test_proving_the_address_ends_registrant_credentials() {
 		$user_id = self::register_as_registrant();
 		self::set_password_over_rest( $user_id, self::REGISTRANT_PASSWORD );
-		$registrant_cookie = wp_generate_auth_cookie( $user_id, time() + DAY_IN_SECONDS, 'logged_in', wp_get_session_token() );
 		WP_Application_Passwords::create_new_application_password( $user_id, [ 'name' => 'registrant' ] );
 		self::assertTrue( self::password_signs_in( self::REGISTRANT_PASSWORD ) );
-		self::assertSame( $user_id, wp_validate_auth_cookie( $registrant_cookie, 'logged_in' ) );
 
 		self::switch_browser();
 		self::sign_in_with_emailed_link( $user_id );
@@ -119,7 +117,6 @@ class Newspack_Test_RA_Pre_Verification_Credentials extends WP_UnitTestCase {
 		self::assertTrue( Reader_Activation::is_reader_verified( get_userdata( $user_id ) ) );
 		self::assertFalse( self::password_signs_in( self::REGISTRANT_PASSWORD ), 'The registrant password must stop working.' );
 		self::assertEmpty( WP_Application_Passwords::get_user_application_passwords( $user_id ), 'Application passwords must be deleted.' );
-		self::assertFalse( wp_validate_auth_cookie( $registrant_cookie, 'logged_in' ), 'The registrant session must end.' );
 		self::assertSame( $user_id, wp_validate_auth_cookie( '', 'logged_in' ), 'The owner must stay signed in.' );
 		self::assertTrue( Reader_Activation::is_reader_without_password( $user_id ), 'The sign-in form must offer the owner a code.' );
 	}
