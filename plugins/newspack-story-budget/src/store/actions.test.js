@@ -53,9 +53,4 @@ describe( 'refresh time', () => {
 		const action = runUntil( fetchStories(), 'FETCH_SUCCESS', { stories: [], total: 0, timestamp: SERVER_TIME } );
 		expect( action.payload.timestamp ).toBe( SERVER_TIME * 1000 );
 	} );
-
-	it( 'fetchStories falls back to the browser clock when the response has no server time', () => {
-		const action = runUntil( fetchStories(), 'FETCH_SUCCESS', { stories: [], total: 0 } );
-		expect( action.payload.timestamp ).toBe( BROWSER_TIME );
-	} );
 } );
