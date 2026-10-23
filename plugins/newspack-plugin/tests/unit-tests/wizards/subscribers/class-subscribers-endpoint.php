@@ -766,6 +766,23 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A network plan whose site name holds a "<" still filters back to its holders.
+	 *
+	 * The filter sanitizes the submitted plan names, which rewrites a "<", so the option
+	 * /plans offers has to be compared in the same sanitized form.
+	 */
+	public function test_a_network_plan_with_markup_in_its_site_name_filters_to_its_holders() {
+		$this->login_admin();
+		$holder = $this->create_reader( 'MarkupSiteHolder' );
+		$this->stub_network_index( [ $this->network_index_row( $holder, 'active', 'Fan Membership', 'I <3 News' ) ] );
+
+		$plans = $this->dispatch_plans()->get_data()['items'];
+
+		$this->assertSame( [ 'Fan Membership (I <3 News)' ], $plans, '/plans offers the label as the row shows it.' );
+		$this->assertSame( [ $holder ], $this->filtered_ids( [ 'plan' => [ $plans[0] ] ] ), 'The option returned by /plans filters to its holder.' );
+	}
+
+	/**
 	 * The index is read by the same rules as the list row's network subscriptions, so
 	 * a plan label can never read one way in the Subscription column and another in
 	 * the filter: a padded site name is trimmed and a subscription with no plan falls
