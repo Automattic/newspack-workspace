@@ -30,6 +30,8 @@ import {
 import { analyzeIpRangeEntries, EMPTY_IP_RANGE_ANALYSIS, OVER_BROAD_RANGE_SIZE } from './utils';
 import type { ConfusableCharacterKey, IpRangeAnalysis } from './utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
+import AccessRuleValueNotice from '../../../../../content-gate/components/access-rule-value-notice';
+import { getUntrustedAccessRuleNotice } from '../../../../../content-gate/utils/access-rule-value';
 import { INSTITUTION_RULE_SLUG, invalidateAccessRuleOptions } from '../../../../../content-gate/access-rule-option-sources';
 
 const { useHistory } = Router;
@@ -402,6 +404,9 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 	const description = institution.excerpt.raw;
 	const meta = institution.meta || EMPTY_INSTITUTION.meta;
 	const { np_institution_email_domain: emailDomain, np_institution_ip_range: ipRange, np_institution_reader_data: readerData } = meta;
+	// Judged against the same registry entry the gate editor reads, so an institution's
+	// reader data and a gate's `reader_data` rule agree on which keys can match.
+	const readerDataNotice = getUntrustedAccessRuleNotice( window.newspackAudienceContentGates?.available_access_rules?.reader_data, readerData );
 	const ipRangeWarnings = getIpRangeWarnings( ipRangeAnalysis );
 
 	return (
@@ -523,13 +528,18 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 						onEnable={ () => toggleRule( 'np_institution_reader_data' ) }
 					>
 						<CardBody size="small">
-							<TextControl
+							<AccessRuleValueNotice
 								label={ __( 'Key=value pairs (semicolon-delimited)', 'newspack-plugin' ) }
-								withMargin={ false }
-								value={ readerData }
-								onChange={ ( val: string ) => updateMeta( 'np_institution_reader_data', val ) }
-								placeholder="org=university;role=staff"
-							/>
+								notice={ readerDataNotice }
+							>
+								<TextControl
+									label={ __( 'Key=value pairs (semicolon-delimited)', 'newspack-plugin' ) }
+									withMargin={ false }
+									value={ readerData }
+									onChange={ ( val: string ) => updateMeta( 'np_institution_reader_data', val ) }
+									placeholder="org=university;role=staff"
+								/>
+							</AccessRuleValueNotice>
 						</CardBody>
 					</CardSettingsGroup>
 				</Stack>

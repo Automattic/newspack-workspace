@@ -237,6 +237,28 @@ function decode( str ) {
 }
 
 /**
+ * Browser-only key recording when this browser last submitted a newsletter
+ * signup form, in seconds since the epoch. It is never synced and is a
+ * segmentation hint, not proof of a subscription; the server-managed
+ * `is_newsletter_subscriber` is the latter. For a logged-in reader, campaigns
+ * read it only for a day. Where the site can check the ESP, the server value
+ * has reached the browser by then, and a reader who later unsubscribes stops
+ * matching. Where it can't, the signup stops counting after the day. A
+ * logged-out reader never receives that value, so for them the hint keeps
+ * counting.
+ *
+ * @type {string}
+ */
+export const NEWSLETTER_SIGNUP_CLIENT_KEY = 'newsletter_signup_client';
+
+/**
+ * Read-only keys already reported by set() or add(), so each warns once per page load.
+ *
+ * @type {Set<string>}
+ */
+const warnedReadOnlyKeys = new Set();
+
+/**
  * Assert that a key is not read-only.
  *
  * @param {string} key Key to check.
@@ -246,6 +268,26 @@ function assertNotReadOnly( key ) {
 	if ( ( newspack_reader_data?.read_only_keys || [] ).includes( key ) ) {
 		throw new Error( `Key '${ key }' is read-only.` );
 	}
+}
+
+/**
+ * Whether a write to the key should be dropped because the key is read-only,
+ * warning the first time. Server-managed keys are ignored rather than thrown on,
+ * so a caller written for a site where the key is writable keeps working.
+ *
+ * @param {string} key Key to check.
+ * @return {boolean} True when the key is read-only and the write must not happen.
+ */
+function dropReadOnlyWrite( key ) {
+	if ( ! ( newspack_reader_data?.read_only_keys || [] ).includes( key ) ) {
+		return false;
+	}
+	if ( ! warnedReadOnlyKeys.has( key ) ) {
+		warnedReadOnlyKeys.add( key );
+		// eslint-disable-next-line no-console
+		console.warn( `Key '${ key }' is read-only and was not written.` );
+	}
+	return true;
 }
 
 /**
@@ -488,7 +530,9 @@ export default function Store() {
 		 * @param {boolean} sync  Whether to sync the value with the server. Default true.
 		 */
 		set: ( key, value, sync = true ) => {
-			assertNotReadOnly( key );
+			if ( dropReadOnlyWrite( key ) ) {
+				return;
+			}
 			_set( key, value, false );
 			if ( sync && ! neverSyncs() ) {
 				setPendingSync( key );
@@ -523,7 +567,9 @@ export default function Store() {
 			if ( ! key ) {
 				throw new Error( 'Key cannot be empty.' );
 			}
-			assertNotReadOnly( key );
+			if ( dropReadOnlyWrite( key ) ) {
+				return;
+			}
 			if ( ! value ) {
 				throw new Error( 'Value cannot be empty.' );
 			}

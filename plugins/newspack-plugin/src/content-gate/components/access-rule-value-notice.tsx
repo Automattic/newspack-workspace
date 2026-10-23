@@ -24,19 +24,22 @@ export default function AccessRuleValueNotice( { label, notice, children }: { la
 	// inspector remounts its panel on every block selection.
 	const noticeId = useInstanceId( AccessRuleValueNotice, 'newspack-access-rule-value-notice' );
 
-	if ( ! notice ) {
-		return <>{ children }</>;
-	}
+	// The wrapper stays mounted whether or not a notice shows. A free-text value can gain
+	// or lose its notice on a keystroke, and swapping the wrapper would remount the
+	// field and drop the editor's focus. It is a group only while a notice shows, so a
+	// field without one doesn't have its name announced twice.
 	return (
 		<>
 			{ /* Named, because a group with no accessible name is not one an assistive
 			     technology enters, and the description hangs off entering it. */ }
-			<div role="group" aria-label={ label } aria-describedby={ noticeId }>
+			<div role={ notice ? 'group' : undefined } aria-label={ notice ? label : undefined } aria-describedby={ notice ? noticeId : undefined }>
 				{ children }
 			</div>
-			<p id={ noticeId } role="note" className="newspack-access-rule-values-notice">
-				{ notice }
-			</p>
+			{ notice && (
+				<p id={ noticeId } role="note" className="newspack-access-rule-values-notice">
+					{ notice }
+				</p>
+			) }
 		</>
 	);
 }

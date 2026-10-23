@@ -2141,6 +2141,46 @@ function wcs_order_contains_renewal( $order ) {
 	}
 	return (int) $order->get_meta( '_subscription_renewal' ) > 0;
 }
+/**
+ * Real WCS accepts a type or a list of types, with 'any' standing for all four.
+ * Renewal, resubscribe and switch orders are linked by the `_subscription_<type>`
+ * meta real WCS stores on them; a parent order is one a subscription names as
+ * its parent. Real WCS defaults to parent, resubscribe and switch.
+ *
+ * @param WC_Order|int $order      Order or order ID.
+ * @param string|array $order_type Relationship type(s).
+ *
+ * @return bool
+ */
+function wcs_order_contains_subscription( $order, $order_type = [ 'parent', 'resubscribe', 'switch' ] ) {
+	global $subscriptions_database;
+	if ( is_int( $order ) ) {
+		$order = wc_get_order( $order );
+	}
+	if ( ! $order instanceof \WC_Order ) {
+		return false;
+	}
+	$order_types = (array) $order_type;
+	$wants       = function( $type ) use ( $order_types ) {
+		return in_array( 'any', $order_types, true ) || in_array( $type, $order_types, true );
+	};
+	if ( $wants( 'renewal' ) && wcs_order_contains_renewal( $order ) ) {
+		return true;
+	}
+	foreach ( [ 'resubscribe', 'switch' ] as $type ) {
+		if ( $wants( $type ) && (int) $order->get_meta( '_subscription_' . $type ) > 0 ) {
+			return true;
+		}
+	}
+	if ( $wants( 'parent' ) ) {
+		foreach ( (array) $subscriptions_database as $subscription ) {
+			if ( (int) $subscription->get_parent_id() === (int) $order->get_id() ) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
 function wcs_get_users_subscriptions( $user_id ) {
 	global $subscriptions_database;
 	$user_subscriptions = [];
