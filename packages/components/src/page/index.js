@@ -26,7 +26,8 @@ import './style.scss';
 // and the like) render into this slot, stacked under the sticky header, instead
 // of the default one, which stacks them over it. Popovers opened from the header
 // keep the default slot. Ariakit-based menus, such as DataViews' row and column
-// menus, portal on their own and don't follow it.
+// menus, and `@wordpress/ui` overlays, such as `InfoButton`, portal on their own
+// and don't follow it.
 const CONTENT_POPOVER_SLOT = 'newspack-page-content';
 
 // Routing by subtree leans on an unstable part of WordPress's own

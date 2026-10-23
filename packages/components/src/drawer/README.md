@@ -447,11 +447,12 @@ peer range is a caret. Check these on a bump:
   `__experimentalHideHeader` are what leave core with no close path of its own.
   Re-enabling any of them — a header for `headerActions`, say — gives core a way
   to close a dirty panel with no confirmation.
-- The slot-name reset is `Popover.__unstableSlotNameProvider`. If it stops
-  overriding the slot a popover renders into, popovers in a drawer opened from
-  `Page` content land outside the drawer. If it stops existing, the Root and
-  `Page` fall back to rendering their children as they are: the drawer keeps its
-  popovers, and `Page` content popovers go back over the sticky header.
+- The slot-name reset is `Popover.__unstableSlotNameProvider`. If a `value` of
+  `undefined` stops clearing the slot name a popover inherits, popovers in a
+  drawer opened from `Page` content land outside the drawer. If it stops
+  existing, the Root and `Page` fall back to rendering their children as they
+  are: the drawer keeps its popovers, and `Page` content popovers go back over
+  the sticky header.
 
 `@wordpress/components` is externalised to the `wp.components` runtime global at
 build time, so the version that actually runs is the one on the publisher's
