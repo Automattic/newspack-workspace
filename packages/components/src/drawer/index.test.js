@@ -134,9 +134,9 @@ describe( 'Drawer popovers', () => {
 		expect( document.querySelector( '.popover-slot' ) ).toBeInTheDocument();
 	} );
 
-	// Page content sends its popovers to a slot of its own, and a drawer opened
-	// from there would otherwise follow it out of the drawer, into a part of the
-	// page the drawer's modal hides.
+	// Page content names its own popover slot. Without a reset, a drawer opened
+	// from there passes that name on to its popovers, which miss the drawer's slot
+	// and render outside it, where the modal hides them.
 	it( 'keeps its popovers inside the drawer when opened from page content', () => {
 		render(
 			<SlotFillProvider>

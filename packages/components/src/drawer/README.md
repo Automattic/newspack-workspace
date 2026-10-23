@@ -420,6 +420,11 @@ That provider starts a fresh registry rather than chaining to a parent one. **A
 `Fill` rendered inside the drawer cannot reach a `Slot` outside it**: it renders
 nothing, silently. Move the `Slot` inside the drawer.
 
+The Root also clears any popover slot name it inherits. `Page` routes popovers
+opened from its content to a slot of its own, and without the reset a drawer
+opened from there would hand that name to its popovers, which would miss the
+drawer's slot and land where the modal hides them.
+
 ## Outside the Root
 
 `Drawer.Title` and `Drawer.CloseIcon` read the Root's private context and throw
@@ -428,8 +433,8 @@ rendered anywhere else.
 
 ## On a `@wordpress/components` upgrade
 
-The panel reaches into core Modal in three places that are internals rather than
-a documented contract, and the peer range is a caret. Check them on a bump:
+The panel reaches into core internals rather than a documented contract, and the
+peer range is a caret. Check these on a bump:
 
 - The Root finds the frame with `.components-modal__frame` inside the node Modal
   forwards its ref to, and uses it for focus return and `inert`. It warns in
@@ -442,6 +447,9 @@ a documented contract, and the peer range is a caret. Check them on a bump:
   `__experimentalHideHeader` are what leave core with no close path of its own.
   Re-enabling any of them — a header for `headerActions`, say — gives core a way
   to close a dirty panel with no confirmation.
+- The slot-name reset is `Popover.__unstableSlotNameProvider`. If it stops
+  existing, or stops overriding the slot a popover renders into, popovers in a
+  drawer opened from `Page` content land outside the drawer again.
 
 Core Modal is externalised to the `wp.components` runtime global at build time,
 so the version that actually runs is the one on the publisher's WordPress, not
