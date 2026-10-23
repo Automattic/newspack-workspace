@@ -57,9 +57,10 @@ final class GA4_Segment_Reach {
 
 	/**
 	 * How long the give-up above holds before the next scheduled run tries
-	 * again. Long enough that a permanently impossible report costs one call a
-	 * week rather than two an hour; short enough that a site knocked out by a
-	 * transient failure recovers on its own.
+	 * again. An attempt costs two calls, one per auth route, so the hold turns
+	 * a permanently impossible report from two an hour into two a week; short
+	 * enough that a site knocked out by a transient failure recovers on its
+	 * own.
 	 */
 	const GIVE_UP_FOR = WEEK_IN_SECONDS;
 
@@ -533,8 +534,9 @@ final class GA4_Segment_Reach {
 		// Site-wide rather than per-segment: reordering changes which segment
 		// wins for a shared set of readers, so a change anywhere in the list
 		// qualifies every row's prompt figure, not just the moved segment's.
-		// Caches written before the timezone was stored fall back to UTC,
-		// which is what their `as_of` was derived in.
+		// Caches written before the timezone was stored fall back to UTC. Their
+		// `as_of` may have come from the property's zone, so a change within a
+		// day of either window edge can read wrong until the next refresh.
 		$timezone         = isset( $cache['timezone'] ) && is_string( $cache['timezone'] ) ? $cache['timezone'] : 'UTC';
 		$priority_changed = self::priority_change_in_window( $as_of, $range_days, $timezone );
 		foreach ( $segments as &$segment ) {
