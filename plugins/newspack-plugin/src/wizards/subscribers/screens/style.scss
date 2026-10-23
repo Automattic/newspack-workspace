@@ -68,19 +68,26 @@
 }
 
 // Covers the whole wizard while a refetch is in flight with rows showing, and
-// blocks input until it settles. Fixed to the screen, beside the admin menu and
+// blocks clicks until it settles. Fixed to the screen, beside the admin menu and
 // under the admin bar, so the spinner stays centred at any scroll position. It
 // stacks above popovers, so an open filter or column menu is covered too.
 .newspack-subscribers__loading-overlay {
 	align-items: center;
 	background: rgba( wp-colors.$white, 0.6 );
 	bottom: 0;
+	cursor: wait;
 	display: flex;
 	justify-content: center;
 	position: fixed;
 	right: 0;
 	top: var(--wp-admin--admin-bar--height, 0);
 	z-index: wp-z.z-index(".components-popover") + 1;
+
+	// At this width the admin bar scrolls away with the page, so its height would
+	// leave an uncovered strip at the top of the screen.
+	@media ( max-width: wp-breakpoints.$break-small ) {
+		top: 0;
+	}
 }
 
 @include wp-mixins.editor-left(".newspack-subscribers__loading-overlay");
