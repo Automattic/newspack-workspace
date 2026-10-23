@@ -55,9 +55,9 @@ class Subscribers_Dashboard {
 	 *
 	 * Nothing here keeps the result, so every call scans again.
 	 *
-	 * The scan covers every user who has this key, not only this site's members. That is harmless: newspack-network
-	 * has no multisite paths, and on a single site extra rows exist only for a user removed without
-	 * wp_delete_user(), which deletes the user's meta.
+	 * The scan covers users with the subscriptions meta key, not only this site's members, until $max_users of them
+	 * have added records. That is harmless: newspack-network has no multisite paths, and on a single site extra rows
+	 * exist only for a user removed without wp_delete_user(), which deletes the user's meta.
 	 *
 	 * @param array $rows      The rows so far.
 	 * @param int   $max_users The most users to add rows for.
