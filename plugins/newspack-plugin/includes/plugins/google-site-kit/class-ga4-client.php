@@ -2,9 +2,8 @@
 /**
  * Shared access to authenticated GA4 API clients.
  *
- * Extracted from the custom-dimension provisioner so read-side consumers
- * (segment reach) reuse the same auth routing: prefer Newspack's own Google
- * OAuth, fall back to Site Kit's authenticated client.
+ * One auth route for every GA4 caller, read or write: prefer Newspack's own
+ * Google OAuth, fall back to Site Kit's authenticated client.
  *
  * @package Newspack
  */
@@ -27,7 +26,7 @@ final class GA4_Client {
 	 *
 	 * @return string|false
 	 */
-	public static function get_property_id() {
+	public static function get_property_id(): string|false {
 		$settings = get_option( 'googlesitekit_analytics-4_settings', [] );
 		if ( empty( $settings['propertyID'] ) ) {
 			return false;
@@ -140,7 +139,7 @@ final class GA4_Client {
 	 * @param array<string,string> $attempts Route name => reason.
 	 * @return string
 	 */
-	private static function describe_auth_failure( array $attempts ) {
+	private static function describe_auth_failure( array $attempts ): string {
 		$parts = [];
 		foreach ( $attempts as $route => $reason ) {
 			$parts[] = "$route – $reason";
