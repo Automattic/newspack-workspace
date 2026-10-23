@@ -1264,13 +1264,16 @@ class Premium_Newsletters {
 	 * Queue access checks for both readers when a gifted subscription changes
 	 * recipient, because no subscription event fires when an admin reassigns a gift.
 	 *
-	 * WCS fires this hook whenever it sets a gift's recipient. That includes every
-	 * gift purchase and order completion as well as an admin reassignment, so the
-	 * new and old recipients are often the same reader. An unchanged recipient is
-	 * skipped: a recheck could let auto-signup re-add a list they left.
+	 * WCS fires this hook every time it saves a gift's recipient, changed or not:
+	 * when the gift's parent order or a switch order is marked processing or
+	 * completed, and when an admin reassigns the gift. Renewal orders never fire
+	 * it. Because one order can fire it more than once with the same reader, an
+	 * unchanged recipient is skipped: a recheck could let auto-signup re-add a
+	 * list they left.
 	 *
-	 * Clearing a recipient fires no hook, so a removal isn't covered here. WCS
-	 * re-attaches the original recipient on the gift's next parent or switch order.
+	 * Clearing a recipient fires no hook, so a removal isn't covered here. After
+	 * an admin clears one, WCS sets the original recipient again the next time
+	 * the parent order or a switch order is marked processing or completed.
 	 *
 	 * @param \WC_Subscription $subscription     The gifted subscription.
 	 * @param int              $new_recipient_id The new recipient's user ID.
