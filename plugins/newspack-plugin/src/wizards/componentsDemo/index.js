@@ -15,6 +15,7 @@ import {
 	CardMedia,
 	CheckboxControl,
 	ExternalLink,
+	SlotFillProvider,
 	ToggleControl,
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -1368,4 +1369,10 @@ class ComponentsDemo extends Component {
 	}
 }
 
-render( <ComponentsDemo />, document.getElementById( 'newspack-components-demo' ) );
+// The provider lets the demo's Page register its content popover slot.
+render(
+	<SlotFillProvider>
+		<ComponentsDemo />
+	</SlotFillProvider>,
+	document.getElementById( 'newspack-components-demo' )
+);
