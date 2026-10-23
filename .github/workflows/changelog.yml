@@ -11,7 +11,17 @@ jobs:
       pull-requests: write
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/labeler@v5
+      # addLabels rather than actions/labeler, which rewrites the PR's whole
+      # label set from a snapshot and drops labels other merge-time workflows
+      # add in the meantime, such as no-peer-review.
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.addLabels( {
+              ...context.repo,
+              issue_number: context.payload.pull_request.number,
+              labels: [ 'needs-changelog' ],
+            } );
 
   comment_pr:
     if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main' && github.event.pull_request.user.login != 'dependabot[bot]'
