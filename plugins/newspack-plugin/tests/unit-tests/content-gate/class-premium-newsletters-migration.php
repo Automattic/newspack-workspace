@@ -1516,13 +1516,13 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	public function test_apply_auto_signup_labels_a_gate_following_the_site_setting_with_its_value() {
 		$gate_id = $this->create_premium_gate( [ $this->list_a ] );
 
-		$this->assertSame( 'use site setting (on)', $this->invoke_private_static( 'apply_auto_signup', [ 'Pending', null, null, false, true ] ) );
-		$this->assertSame( 'use site setting (on)', $this->invoke_private_static( 'apply_auto_signup', [ 'Premium fixture', $gate_id, null, false, false ] ) );
+		$this->assertSame( 'default (on)', $this->invoke_private_static( 'apply_auto_signup', [ 'Pending', null, null, false, true ] ) );
+		$this->assertSame( 'default (on)', $this->invoke_private_static( 'apply_auto_signup', [ 'Premium fixture', $gate_id, null, false, false ] ) );
 
 		update_option( \Newspack\Premium_Newsletters::AUTO_SIGNUP_OPTION, 0 );
 
-		$this->assertSame( 'use site setting (off)', $this->invoke_private_static( 'apply_auto_signup', [ 'Pending', null, null, false, true ] ) );
-		$this->assertSame( 'use site setting (off)', $this->invoke_private_static( 'apply_auto_signup', [ 'Premium fixture', $gate_id, null, false, false ] ) );
+		$this->assertSame( 'default (off)', $this->invoke_private_static( 'apply_auto_signup', [ 'Pending', null, null, false, true ] ) );
+		$this->assertSame( 'default (off)', $this->invoke_private_static( 'apply_auto_signup', [ 'Premium fixture', $gate_id, null, false, false ] ) );
 	}
 
 	/**

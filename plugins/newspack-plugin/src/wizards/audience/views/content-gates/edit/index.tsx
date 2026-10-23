@@ -10,7 +10,7 @@ import { CardDivider } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
 import { useDispatch } from '@wordpress/data';
 import { createInterpolateElement, useCallback, useEffect, useRef, useState } from '@wordpress/element';
-import { commentAuthorAvatar, currencyDollar, envelope, pencil, postList, settings } from '@wordpress/icons';
+import { bell, commentAuthorAvatar, currencyDollar, envelope, pencil, postList, settings } from '@wordpress/icons';
 import apiFetch from '@wordpress/api-fetch';
 
 /**
@@ -34,7 +34,7 @@ import ContentRules from './content-rules';
 import MatchLogicToggle from './match-logic-toggle';
 import Registration from './registration';
 import CustomAccess from './custom-access';
-import { getEditGateLayoutUrl, getGateStatus, getGateStatusBadgeIntent } from '../utils';
+import { getEditGateLayoutUrl, getGatesSubTitle, getGateStatus, getGateStatusBadgeIntent } from '../utils';
 import { getGateSummarySections } from '../gate-summary';
 import { useAccessRuleOptions } from '../use-access-rule-options';
 import SavePanel from './save-panel';
@@ -419,6 +419,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		setHeaderData( {
 			backNav: '#/content-gates',
 			sectionName: getGateHeading( isNew ? 'add' : 'edit', isNewsletter ),
+			subTitle: getGatesSubTitle( isNewsletter ),
 		} );
 		if ( isNew ) {
 			syncedGate.current = null;
@@ -778,24 +779,46 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 							siteMeter={ siteMeter }
 							governsSignedOut={ ! registration.active }
 						/>
-						{ isNewsletter && (
-							<NewsletterSettings
-								autoSignup={ autoSignup }
-								hideLists={ hideLists }
-								siteAutoSignup={ siteAutoSignup }
-								onChange={ ( { auto_signup, hide_lists } ) => {
-									if ( auto_signup !== undefined ) {
-										setAutoSignup( auto_signup );
-									}
-									if ( hide_lists !== undefined ) {
-										setHideLists( hide_lists );
-									}
-								} }
-							/>
-						) }
 					</CardSettingsGroup>
 				</Stack>
 			</Grid>
+			{ isNewsletter && customAccess?.active && (
+				<>
+					<Divider alignment="full-width" variant="tertiary" />
+					<Grid columns={ 2 } gutter={ 32 } noMargin>
+						<SectionHeader
+							heading={ 2 }
+							title={ __( 'How should readers join these lists?', 'newspack-plugin' ) }
+							description={ __(
+								'Choose whether readers are added automatically when they gain access, and whether they can see these lists.',
+								'newspack-plugin'
+							) }
+						/>
+						<Stack direction="column" gap="lg">
+							<CardSettingsGroup
+								title={ __( 'Sign-up and visibility', 'newspack-plugin' ) }
+								description={ __( 'How readers are added to these lists, and where the lists appear.', 'newspack-plugin' ) }
+								icon={ bell }
+								isActive
+							>
+								<NewsletterSettings
+									autoSignup={ autoSignup }
+									hideLists={ hideLists }
+									siteAutoSignup={ siteAutoSignup }
+									onChange={ ( { auto_signup, hide_lists } ) => {
+										if ( auto_signup !== undefined ) {
+											setAutoSignup( auto_signup );
+										}
+										if ( hide_lists !== undefined ) {
+											setHideLists( hide_lists );
+										}
+									} }
+								/>
+							</CardSettingsGroup>
+						</Stack>
+					</Grid>
+				</>
+			) }
 		</div>
 	);
 };

@@ -180,13 +180,25 @@ describe( 'Content gate editor', () => {
 } );
 
 describe( 'Premium newsletter list settings', () => {
-	it( 'shows both settings in the Paid Access card, naming the site setting', async () => {
+	it( 'shows both settings in their own step, outside the Paid Access card', async () => {
 		await renderNewsletterEdit();
 
+		expect( screen.getByRole( 'heading', { name: 'How should readers join these lists?' } ) ).toBeInTheDocument();
+		const signUpCard = screen.getByRole( 'heading', { name: 'Sign-up and visibility' } ).closest( '.newspack-card--core' );
+		expect( signUpCard ).toContainElement( screen.getByRole( 'radio', { name: 'Default (on)' } ) );
+		expect( signUpCard ).toContainElement( screen.getByRole( 'checkbox', { name: 'Hide from readers' } ) );
 		const paidAccessCard = screen.getByRole( 'heading', { name: 'Paid Access' } ).closest( '.newspack-card--core' );
-		expect( paidAccessCard ).toContainElement( screen.getByRole( 'combobox', { name: 'Auto-signup' } ) );
-		expect( paidAccessCard ).toContainElement( screen.getByRole( 'checkbox', { name: 'Hide from readers' } ) );
-		expect( screen.getByRole( 'option', { name: 'Use site setting (on)' } ) ).toBeInTheDocument();
+		expect( paidAccessCard ).not.toContainElement( screen.getByRole( 'checkbox', { name: 'Hide from readers' } ) );
+	} );
+
+	it( 'leaves the step out while paid access is off, since no list is gated without it', async () => {
+		await renderNewsletterEdit();
+		expect( screen.getByRole( 'heading', { name: 'How should readers join these lists?' } ) ).toBeInTheDocument();
+
+		fireEvent.click( screen.getByRole( 'checkbox', { name: /Paid Access/ } ) );
+
+		expect( screen.queryByRole( 'heading', { name: 'How should readers join these lists?' } ) ).not.toBeInTheDocument();
+		expect( screen.queryByRole( 'checkbox', { name: 'Hide from readers' } ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'saves a gate stored without the settings as using the site setting and showing its lists', async () => {
@@ -201,10 +213,20 @@ describe( 'Premium newsletter list settings', () => {
 	it( 'saves the auto-signup mode the editor picks', async () => {
 		await renderNewsletterEdit();
 
-		fireEvent.change( screen.getByRole( 'combobox', { name: 'Auto-signup' } ), { target: { value: 'on' } } );
+		fireEvent.click( screen.getByRole( 'radio', { name: 'On' } ) );
 		await runHeaderAction( 'Save' );
 
 		expect( savedGate() ).toEqual( expect.objectContaining( { auto_signup: 'on', hide_lists: false } ) );
+	} );
+
+	it( 'saves the lists as shown when auto-signup is switched off', async () => {
+		storeNewsletterGate( { ...NEWSLETTER_GATE, auto_signup: 'on', hide_lists: true } );
+		await renderNewsletterEdit();
+
+		fireEvent.click( screen.getByRole( 'radio', { name: 'Off' } ) );
+		await runHeaderAction( 'Save' );
+
+		expect( savedGate() ).toEqual( expect.objectContaining( { auto_signup: 'off', hide_lists: false } ) );
 	} );
 
 	it( 'saves the hiding choice, and counts it as a change that can be saved', async () => {
@@ -223,7 +245,7 @@ describe( 'Premium newsletter list settings', () => {
 		storeNewsletterGate( { ...NEWSLETTER_GATE, auto_signup: 'on', hide_lists: true } );
 		await renderNewsletterEdit();
 
-		expect( screen.getByRole( 'option', { name: 'On' } ).selected ).toBe( true );
+		expect( screen.getByRole( 'radio', { name: 'On' } ) ).toBeChecked();
 		expect( screen.getByRole( 'checkbox', { name: 'Hide from readers' } ) ).toBeChecked();
 
 		await runHeaderAction( 'Rename' );
@@ -237,7 +259,7 @@ describe( 'Premium newsletter list settings', () => {
 	it( 'leaves both settings and both keys out of a content gate', async () => {
 		await renderEdit();
 
-		expect( screen.queryByRole( 'combobox', { name: 'Auto-signup' } ) ).not.toBeInTheDocument();
+		expect( screen.queryByRole( 'heading', { name: 'How should readers join these lists?' } ) ).not.toBeInTheDocument();
 		expect( screen.queryByRole( 'checkbox', { name: 'Hide from readers' } ) ).not.toBeInTheDocument();
 
 		await runHeaderAction( 'Rename' );

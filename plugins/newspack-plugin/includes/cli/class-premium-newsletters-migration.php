@@ -2106,9 +2106,9 @@ class Premium_Newsletters_Migration {
 			}
 			// Said the same way for a gate that exists and one that doesn't yet, so a dry
 			// run and the live run that follows it print the same label. It names the
-			// resolved value because "use site setting" alone doesn't tell the operator
+			// resolved value because "default" alone doesn't tell the operator
 			// whether readers will be signed up.
-			return \Newspack\Premium_Newsletters::is_site_auto_signup_on() ? 'use site setting (on)' : 'use site setting (off)';
+			return \Newspack\Premium_Newsletters::is_site_auto_signup_on() ? 'default (on)' : 'default (off)';
 		}
 
 		if ( 'default' !== $current && $current !== $derived && ! $force ) {

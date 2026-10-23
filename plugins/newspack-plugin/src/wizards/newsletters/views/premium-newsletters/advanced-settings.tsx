@@ -6,7 +6,8 @@
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
-import { ToggleControl, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { ToggleControl } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 import { useDispatch } from '@wordpress/data';
 import { decodeEntities } from '@wordpress/html-entities';
 import { useEffect, useRef, useState } from '@wordpress/element';
@@ -84,9 +85,10 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 	return (
 		showModal && (
 			<Modal onClose={ closeModal } size="medium" title={ __( 'Advanced Settings', 'newspack-plugin' ) } onRequestClose={ closeModal }>
-				<VStack>
+				<Stack direction="column" gap="xl">
 					<ToggleControl
-						label={ __( 'Auto Signup', 'newspack-plugin' ) }
+						__nextHasNoMarginBottom
+						label={ __( 'Auto-Signup', 'newspack-plugin' ) }
 						help={ __(
 							'Automatically sign up readers when they meet access requirements for premium newsletters. Each premium newsletter can override this.',
 							'newspack-plugin'
@@ -94,20 +96,20 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 						checked={ config?.auto_signup }
 						onChange={ value => setConfig( { ...config, auto_signup: value } ) }
 					/>
-				</VStack>
-				<HStack justify="end">
-					<Button variant="tertiary" disabled={ isFetching } onClick={ closeModal }>
-						{ __( 'Cancel', 'newspack-plugin' ) }
-					</Button>
-					<Button
-						variant="primary"
-						disabled={ isFetching || JSON.stringify( wizardData?.config || {} ) === JSON.stringify( config ) }
-						loading={ isFetching }
-						onClick={ () => updateConfig.current?.( config ) }
-					>
-						{ __( 'Save', 'newspack-plugin' ) }
-					</Button>
-				</HStack>
+					<Stack direction="row" gap="sm" justify="end">
+						<Button variant="tertiary" disabled={ isFetching } onClick={ closeModal }>
+							{ __( 'Cancel', 'newspack-plugin' ) }
+						</Button>
+						<Button
+							variant="primary"
+							disabled={ isFetching || JSON.stringify( wizardData?.config || {} ) === JSON.stringify( config ) }
+							loading={ isFetching }
+							onClick={ () => updateConfig.current?.( config ) }
+						>
+							{ __( 'Save', 'newspack-plugin' ) }
+						</Button>
+					</Stack>
+				</Stack>
 			</Modal>
 		)
 	);

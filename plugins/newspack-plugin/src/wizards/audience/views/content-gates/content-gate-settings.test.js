@@ -155,8 +155,14 @@ describe( 'ContentGateSettings per-gate actions', () => {
 	it( 'names the site auto-signup setting on a premium newsletter card', () => {
 		mockConfig = { auto_signup: true };
 		const ContentGateSettings = require( './content-gate-settings' ).default;
-		render( <ContentGateSettings gate={ mockGate } updateGatesData={ () => {} } isNewsletter /> );
+		render(
+			<ContentGateSettings
+				gate={ { ...mockGate, custom_access: { active: true, access_rules: [], metering: { enabled: false, count: 1, period: 'month' } } } }
+				updateGatesData={ () => {} }
+				isNewsletter
+			/>
+		);
 
-		expect( screen.getByText( /Use site setting \(on\)/ ) ).toBeInTheDocument();
+		expect( screen.getByText( /Default \(on\)/ ) ).toBeInTheDocument();
 	} );
 } );

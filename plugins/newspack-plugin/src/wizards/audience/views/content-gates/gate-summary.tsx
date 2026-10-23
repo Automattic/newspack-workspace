@@ -421,7 +421,7 @@ const formatMetering = ( metering: Metering, siteCount?: number, sitePeriod?: Me
 
 /**
  * Build the Content rules / Registered access / Paid access sections for a gate,
- * plus Subscriptions for a premium newsletter gate.
+ * plus Sign-up and visibility for a premium newsletter gate.
  *
  * @param gate           The gate (live edit state or a saved gate).
  * @param isNewsletter   Whether this is a premium-newsletter gate (hides registration).
@@ -432,7 +432,7 @@ const formatMetering = ( metering: Metering, siteCount?: number, sitePeriod?: Me
  *                       deleted in it — and a summary built from it would call an
  *                       institution added a moment ago "not listed".
  * @param siteAutoSignup The site-wide auto-signup setting, which a premium newsletter gate
- *                       set to "Use site setting" follows.
+ *                       set to "Default" follows.
  */
 export const getGateSummarySections = (
 	gate: Gate,
@@ -532,9 +532,10 @@ export const getGateSummarySections = (
 	if ( isNewsletter ) {
 		const autoSignupLabel = getAutoSignupOptions( siteAutoSignup ).find( option => option.value === ( gate.auto_signup ?? 'default' ) )?.label;
 		sections.push( {
-			key: 'subscriptions',
-			label: __( 'Subscriptions', 'newspack-plugin' ),
-			content: (
+			key: 'sign_up_and_visibility',
+			label: __( 'Sign-up and visibility', 'newspack-plugin' ),
+			// Without paid access the editor has no sign-up step, so there's nothing to report.
+			content: gate.custom_access?.active ? (
 				<>
 					<p>
 						<strong>{ __( 'Auto-signup:', 'newspack-plugin' ) }</strong> { autoSignupLabel }
@@ -544,6 +545,10 @@ export const getGateSummarySections = (
 						{ gate.hide_lists ? __( 'Yes', 'newspack-plugin' ) : __( 'No', 'newspack-plugin' ) }
 					</p>
 				</>
+			) : (
+				<p>
+					<strong>{ __( 'N/A', 'newspack-plugin' ) }</strong>
+				</p>
 			),
 		} );
 	}

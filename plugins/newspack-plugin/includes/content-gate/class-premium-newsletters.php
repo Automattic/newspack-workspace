@@ -895,7 +895,7 @@ class Premium_Newsletters {
 	 * Whether the site-wide auto-signup option is on.
 	 *
 	 * An option that was never saved reads as on. Every read of the option goes
-	 * through here, so the access check, the editor's "Use site setting" label and
+	 * through here, so the access check, the editor's "Default" label and
 	 * the migrator's summary can't disagree about a site that never saved it.
 	 *
 	 * @return bool
