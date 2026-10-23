@@ -15,6 +15,11 @@ defined( 'ABSPATH' ) || exit;
 class Woo_Member_Commenting {
 
 	/**
+	 * Error code for a refused comment submission.
+	 */
+	const ERROR_CODE = 'newspack_woo_member_commenting_restricted';
+
+	/**
 	 * Initialize.
 	 *
 	 * @return void
@@ -29,13 +34,17 @@ class Woo_Member_Commenting {
 	 * @return void
 	 */
 	public static function on_init() {
-		if ( ! self::should_load() ) {
+		// Not should_load(): the current user can change after init, so each
+		// callback asks about the user in hand.
+		if ( ! self::is_configured() ) {
 			return;
 		}
 
 		add_filter( 'comment_form_defaults', [ __CLASS__, 'filter_comment_form_defaults' ] );
 		add_filter( 'comment_form_fields', [ __CLASS__, 'filter_comment_form_fields' ] );
 		add_filter( 'comment_form_submit_field', [ __CLASS__, 'filter_comment_form_submit_field' ] );
+		add_filter( 'pre_comment_approved', [ __CLASS__, 'refuse_comment_submission' ], 10, 2 );
+		add_filter( 'rest_preprocess_comment', [ __CLASS__, 'refuse_rest_comment' ], 10, 2 );
 	}
 
 	/**
@@ -101,16 +110,77 @@ class Woo_Member_Commenting {
 	}
 
 	/**
+	 * Refuse a comment submitted through wp-comments-post.php or XML-RPC.
+	 *
+	 * Both reach wp_allow_comment(), which returns this error to the caller.
+	 * Cron and WP-CLI are not reader submissions and pass through.
+	 *
+	 * @param int|string|\WP_Error $approved    Approval status.
+	 * @param array                $commentdata Comment data.
+	 *
+	 * @return int|string|\WP_Error
+	 */
+	public static function refuse_comment_submission( $approved, $commentdata ) {
+		if ( is_wp_error( $approved ) || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) ) {
+			return $approved;
+		}
+		if ( ! self::is_reader_comment_type( $commentdata['comment_type'] ?? '' ) || ! self::require_membership_to_comment_for_user() ) {
+			return $approved;
+		}
+		// wp-comments-post.php reads the error data as the HTTP status.
+		return new \WP_Error( self::ERROR_CODE, __( 'Only Members may post a comment.', 'newspack-plugin' ), 403 );
+	}
+
+	/**
+	 * Refuse a comment created through the REST API.
+	 *
+	 * Refused here, before the controller calls wp_allow_comment(), because REST
+	 * reads the status from an array the submission path above cannot use.
+	 *
+	 * @param array|\WP_Error  $prepared_comment Prepared comment.
+	 * @param \WP_REST_Request $request          Request.
+	 *
+	 * @return array|\WP_Error
+	 */
+	public static function refuse_rest_comment( $prepared_comment, $request ) {
+		// The same filter runs when a comment is updated; only creation is restricted.
+		if ( is_wp_error( $prepared_comment ) || ! empty( $request['id'] ) ) {
+			return $prepared_comment;
+		}
+		if ( ! self::is_reader_comment_type( $prepared_comment['comment_type'] ?? '' ) || ! self::require_membership_to_comment_for_user() ) {
+			return $prepared_comment;
+		}
+		return new \WP_Error( self::ERROR_CODE, __( 'Only Members may post a comment.', 'newspack-plugin' ), [ 'status' => 403 ] );
+	}
+
+	/**
+	 * Whether a comment type is a reader comment, the only kind this restricts.
+	 * Pingbacks, trackbacks and product reviews keep their own rules.
+	 *
+	 * @param string $comment_type Comment type; empty for a plain comment.
+	 *
+	 * @return bool
+	 */
+	private static function is_reader_comment_type( string $comment_type ): bool {
+		return in_array( $comment_type, [ '', 'comment' ], true );
+	}
+
+	/**
+	 * Whether the module is on and has plans to check against, whoever the user is.
+	 *
+	 * @return bool
+	 */
+	private static function is_configured(): bool {
+		return ! empty( self::get_plan_slugs() ) && Optional_Modules::is_optional_module_active( 'woo-member-commenting' ) && function_exists( 'wc_memberships_get_user_memberships' );
+	}
+
+	/**
 	 * Whether class should suppress commenting for non-members.
 	 *
 	 * @return bool True if we should suppress commenting for non-members, false otherwise.
 	 */
 	public static function should_load(): bool {
-		if ( empty( self::get_plan_slugs() ) ) {
-			return false;
-		}
-
-		return Optional_Modules::is_optional_module_active( 'woo-member-commenting' ) && function_exists( 'wc_memberships_get_user_memberships' ) && ! current_user_can( 'edit_posts' );
+		return self::is_configured() && ! current_user_can( 'edit_posts' );
 	}
 
 	/**
@@ -121,28 +191,30 @@ class Woo_Member_Commenting {
 	 * @return bool True if membership is required to comment, false otherwise.
 	 */
 	public static function require_membership_to_comment_for_user( bool $skip_cache = false ): bool {
-		// This gets called a lot – so cache the result.
-		static $require_membership_to_comment;
-		if ( $skip_cache || null !== $require_membership_to_comment ) {
-			return $require_membership_to_comment;
+		// This gets called a lot – so cache the result, per user, since the
+		// current user can change within a request.
+		static $require_membership_to_comment = [];
+		$user_id                              = get_current_user_id();
+		if ( ! $skip_cache && isset( $require_membership_to_comment[ $user_id ] ) ) {
+			return $require_membership_to_comment[ $user_id ];
 		}
 
 		if ( ! self::should_load() ) {
-			$require_membership_to_comment = false;
+			$require_membership_to_comment[ $user_id ] = false;
 		} else {
-			$memberships_required_plans    = array_filter(
+			$memberships_required_plans                = array_filter(
 				wc_memberships_get_user_memberships(
-					get_current_user_id(),
+					$user_id,
 					[
 						'status' => Memberships::$active_statuses,
 					]
 				),
 				fn( $membership ) => in_array( $membership->get_plan()->get_slug(), self::get_plan_slugs() )
 			);
-			$require_membership_to_comment = empty( $memberships_required_plans );
+			$require_membership_to_comment[ $user_id ] = empty( $memberships_required_plans );
 		}
 
-		return $require_membership_to_comment;
+		return $require_membership_to_comment[ $user_id ];
 	}
 
 	/**
