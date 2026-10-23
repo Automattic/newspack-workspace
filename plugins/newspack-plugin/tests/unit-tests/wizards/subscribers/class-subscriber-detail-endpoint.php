@@ -794,23 +794,18 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 	}
 
 	/**
-	 * A remote subscription with no product names still gets a readable plan, built
-	 * from its ID, rather than a bare " (Node Daily)".
+	 * A remote subscription with no product names, whether its plan is empty or
+	 * missing altogether, still gets a readable plan, built from its ID, rather
+	 * than a bare " (Node Daily)".
+	 *
+	 * @dataProvider data_remote_records_without_a_plan
+	 *
+	 * @param array $record The record the network supplies.
 	 */
-	public function test_detail_labels_a_remote_subscription_that_has_no_products() {
+	public function test_detail_labels_a_remote_subscription_that_has_no_plan( array $record ) {
 		$this->login_admin();
-		$reader_id = $this->create_reader( 'No Products' );
-		$this->stub_network(
-			[
-				$this->network_record(
-					[
-						'id'   => 501,
-						'plan' => '',
-					]
-				),
-			],
-			null
-		);
+		$reader_id = $this->create_reader( 'No Plan' );
+		$this->stub_network( [ $record ], null );
 
 		$subscriptions = $this->dispatch( $reader_id )->get_data()['subscriptions'];
 
@@ -818,18 +813,25 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 	}
 
 	/**
-	 * A record with no plan key at all reads the same as an empty plan.
+	 * Remote records with no plan to show: an empty one, and none at all.
+	 *
+	 * @return array[]
 	 */
-	public function test_detail_labels_a_remote_subscription_with_a_missing_plan_key() {
-		$this->login_admin();
-		$reader_id = $this->create_reader( 'No Plan Key' );
-		$record    = $this->network_record( [ 'id' => 502 ] );
-		unset( $record['plan'] );
-		$this->stub_network( [ $record ], null );
+	public function data_remote_records_without_a_plan() {
+		$missing_plan = $this->network_record( [ 'id' => 501 ] );
+		unset( $missing_plan['plan'] );
 
-		$subscriptions = $this->dispatch( $reader_id )->get_data()['subscriptions'];
-
-		$this->assertSame( 'Subscription #502 (Node Daily)', $subscriptions[0]['plan'] );
+		return [
+			'empty plan'   => [
+				$this->network_record(
+					[
+						'id'   => 501,
+						'plan' => '',
+					]
+				),
+			],
+			'missing plan' => [ $missing_plan ],
+		];
 	}
 
 	/**
@@ -939,21 +941,10 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 	}
 
 	/**
-	 * A reader whom the network does not claim carries no flag at all, rather than
-	 * a false one, so the client reads presence as "this is a network reader".
-	 */
-	public function test_detail_omits_the_network_reader_flag_when_the_filter_says_no() {
-		$this->login_admin();
-		$reader_id = $this->create_reader( 'Local Only Flag' );
-		$this->stub_network( [], false );
-
-		$this->assertArrayNotHasKey( 'isNetworkReader', $this->dispatch( $reader_id )->get_data() );
-	}
-
-	/**
-	 * A reader with only local subscriptions must come back exactly as before the
-	 * network existed: no flag, no managedOn. Then, with both filters attached but
-	 * answering "nothing", the response must not change by a byte.
+	 * A reader with only local subscriptions carries no network reader flag and no
+	 * managedOn. The flag is absent, not false, so the client reads its presence
+	 * as "this is a network reader". With both filters attached but answering
+	 * "nothing", the response must not change by a byte.
 	 */
 	public function test_detail_of_a_local_only_reader_is_unchanged_by_empty_network_filters() {
 		$this->login_admin();

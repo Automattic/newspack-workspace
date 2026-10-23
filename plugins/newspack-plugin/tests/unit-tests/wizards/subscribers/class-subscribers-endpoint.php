@@ -598,7 +598,7 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	/**
 	 * A subscription managed on another network site reaches the list row too: it
 	 * sets the row's status and shows under the plan name with its site in
-	 * brackets, so a reader with nothing local no longer looks like a non-subscriber.
+	 * brackets, so a reader with nothing local still shows as a subscriber.
 	 */
 	public function test_list_row_includes_a_subscription_managed_on_another_network_site() {
 		$this->login_admin();
@@ -734,7 +734,7 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	/**
 	 * The plans endpoint offers each network plan once however many readers hold it,
 	 * and every option filters back to its holders: the round trip /plans exists to
-	 * guarantee, now across sites.
+	 * guarantee holds for plans on other sites too.
 	 */
 	public function test_plans_endpoint_lists_a_network_plan_once_and_it_filters_to_its_holders() {
 		$this->login_admin();

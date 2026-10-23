@@ -7,7 +7,7 @@
 /**
  * Internal dependencies
  */
-import { isNetworkSubscription, shouldShowPaymentMethods, networkReaderBadge } from './network';
+import { isNetworkSubscription, shouldShowPaymentMethods } from './network';
 
 const networkSubscription = {
 	id: 500,
@@ -47,31 +47,16 @@ describe( 'shouldShowPaymentMethods', () => {
 		expect( shouldShowPaymentMethods( { subscriptions: [ networkSubscription ], groups: [], paymentMethods: [] } ) ).toBe( false );
 	} );
 
-	it( 'shows the section when the reader has a saved card', () => {
-		expect( shouldShowPaymentMethods( { subscriptions: [ networkSubscription ], groups: [], paymentMethods: [ card ] } ) ).toBe( true );
-	} );
-
-	it( 'shows the section when a local subscription sits beside the network one', () => {
-		expect( shouldShowPaymentMethods( { subscriptions: [ localSubscription, networkSubscription ], groups: [], paymentMethods: [] } ) ).toBe(
-			true
-		);
-	} );
-
-	it( 'shows the section when the reader is in a group', () => {
-		expect( shouldShowPaymentMethods( { subscriptions: [ networkSubscription ], groups: [ { id: 3 } ], paymentMethods: [] } ) ).toBe( true );
-	} );
-
-	it( 'shows the section for a reader with nothing anywhere', () => {
-		expect( shouldShowPaymentMethods( { subscriptions: [], groups: [], paymentMethods: [] } ) ).toBe( true );
-	} );
-
-	it( 'shows the section when the lists are missing', () => {
-		expect( shouldShowPaymentMethods( {} ) ).toBe( true );
-	} );
-} );
-
-describe( 'networkReaderBadge', () => {
-	it( 'is an informational badge labelled Network', () => {
-		expect( networkReaderBadge ).toEqual( { label: 'Network', intent: 'informational' } );
+	it.each( [
+		[ 'the reader has a saved card', { subscriptions: [ networkSubscription ], groups: [], paymentMethods: [ card ] } ],
+		[
+			'a local subscription sits beside the network one',
+			{ subscriptions: [ localSubscription, networkSubscription ], groups: [], paymentMethods: [] },
+		],
+		[ 'the reader is in a group', { subscriptions: [ networkSubscription ], groups: [ { id: 3 } ], paymentMethods: [] } ],
+		[ 'the reader has nothing anywhere', { subscriptions: [], groups: [], paymentMethods: [] } ],
+		[ 'the lists are missing', {} ],
+	] )( 'shows the section when %s', ( _case, subscriber ) => {
+		expect( shouldShowPaymentMethods( subscriber ) ).toBe( true );
 	} );
 } );

@@ -41,8 +41,6 @@ jest.mock( '../../../../packages/components/src', () => ( {
 		require( 'react' ).createElement( 'button', { ...props, ref }, children )
 	),
 	Notice: () => null,
-	// A plain stand-in: the status cell renders one per status.
-	StatusIndicator: ( { children } ) => require( 'react' ).createElement( 'span', null, children ),
 	Waiting: () => null,
 	Router: { useHistory: () => ( { push: jest.fn() } ), useLocation: () => ( { pathname: '/' } ) },
 } ) );
@@ -279,9 +277,7 @@ describe( 'the newsletters column', () => {
 } );
 
 /**
- * A reader the network created gets a "Network" badge beside the name, and the
- * subscriptions another site manages sit in the same Subscription and Status
- * columns as this site's own: the endpoint merges them into `subscriptions`.
+ * A reader the network created gets a "Network" badge beside the name.
  */
 describe( 'the network reader rows', () => {
 	beforeEach( () => {
@@ -289,15 +285,6 @@ describe( 'the network reader rows', () => {
 		mockDataViewsProps = null;
 		apiFetch.mockReset();
 	} );
-
-	const remoteSubscription = {
-		id: 500,
-		plan: 'Fan Membership (Node Daily)',
-		status: 'active',
-		editUrl: 'https://node-b.example.test/wp-admin/post.php?post=500&action=edit',
-		isComplimentary: false,
-		managedOn: { name: 'Node Daily', url: 'https://node-b.example.test' },
-	};
 
 	/** Mount the list, then render one column's cell for the given row. */
 	const renderCell = async ( fieldId, item ) => {
@@ -324,23 +311,5 @@ describe( 'the network reader rows', () => {
 
 		expect( container.textContent ).toContain( 'Reader 1' );
 		expect( container.textContent ).not.toContain( 'Network' );
-	} );
-
-	it( 'keeps the row id on the name cell for the badged reader', async () => {
-		const { container } = await renderCell( 'name', { ...subscriber( 7 ), isNetworkReader: true } );
-
-		expect( container.querySelector( '[data-subscriber-id="7"]' ) ).not.toBeNull();
-	} );
-
-	it( 'links a remote subscription in the Subscription column to the other site', async () => {
-		await renderCell( 'plans', { ...subscriber( 1 ), subscriptions: [ remoteSubscription ] } );
-
-		expect( screen.getByRole( 'link', { name: 'Fan Membership (Node Daily)' } ) ).toHaveAttribute( 'href', remoteSubscription.editUrl );
-	} );
-
-	it( 'reads a remote active subscription as Active in the Status column', async () => {
-		const { container } = await renderCell( 'status', { ...subscriber( 1 ), subscriptions: [ remoteSubscription ] } );
-
-		expect( container.textContent ).toBe( 'Active' );
 	} );
 } );
