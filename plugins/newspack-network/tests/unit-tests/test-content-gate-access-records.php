@@ -262,20 +262,18 @@ class Test_Content_Gate_Access_Records extends WP_UnitTestCase {
 				[
 					'id'        => 500,
 					'site_url'  => self::SITE_ONE,
-					'site_name' => Sites::get_site_name( self::SITE_ONE ),
+					'site_name' => 'Node Daily',
 					'edit_url'  => 'http://site1/wp-admin/post.php?post=500&action=edit',
 				],
 				[
 					'id'        => 900,
 					'site_url'  => self::SITE_TWO,
-					'site_name' => Sites::get_site_name( self::SITE_TWO ),
+					'site_name' => 'Hub Gazette',
 					'edit_url'  => 'http://site2/wp-admin/post.php?post=900&action=edit',
 				],
 			],
 			apply_filters( 'newspack_access_rules_network_subscription_records', [], $this->user_id, [ $this->local_premium ] )
 		);
-		$this->assertSame( 'Node Daily', Sites::get_site_name( self::SITE_ONE ) );
-		$this->assertSame( 'Hub Gazette', Sites::get_site_name( self::SITE_TWO ) );
 	}
 
 	/**
