@@ -98,8 +98,10 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, isLoading } ) =>
 			segments.map( segment => {
 				const criteriaDescription = segmentDescription( segment );
 				const reachLine = segmentReachDescription( segment );
-				// Only meaningful next to numbers it qualifies.
-				const reachCaveat = reachLine ? segmentReachCaveat( segment ) : null;
+				// Only meaningful next to numbers it qualifies: `reachLine` is
+				// also truthy for the no-data string, which the caveat would
+				// then be qualifying nothing on.
+				const reachCaveat = null === segment?.reach?.matched || undefined === segment?.reach?.matched ? null : segmentReachCaveat( segment );
 				return {
 					id: segment.id,
 					title: segment.name,

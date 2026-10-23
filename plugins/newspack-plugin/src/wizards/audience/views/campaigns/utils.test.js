@@ -366,14 +366,6 @@ describe( 'segmentReachDescription', () => {
 		expect( line ).toContain( '28 days to Aug 6' );
 	} );
 
-	it( 'falls back to 7 days for a cache written before the window was reported', () => {
-		const line = segmentReachDescription( {
-			id: '12',
-			reach: { matched: 5, won: 1, total_sessions: 100, as_of: '2026-08-06' },
-		} );
-		expect( line ).toContain( '7 days to Aug 6' );
-	} );
-
 	it.each( [
 		[ 'a negative offset', -5 ],
 		[ 'a positive offset', 13 ],
@@ -384,7 +376,7 @@ describe( 'segmentReachDescription', () => {
 		setSettings( { ...baseDateSettings, timezone: { offset, string: '', abbr: '' } } );
 		const line = segmentReachDescription( {
 			id: '12',
-			reach: { matched: 1, won: 0, total_sessions: 100, as_of: '2026-08-06' },
+			reach: { matched: 1, won: 0, total_sessions: 100, as_of: '2026-08-06', range_days: 7 },
 		} );
 		expect( line ).toContain( '7 days to Aug 6' );
 	} );

@@ -286,11 +286,18 @@ export const segmentDescription = segment => {
  * @return {string} Formatted percentage.
  */
 const reachShare = ( value, total ) => {
-	if ( 0 === value ) {
-		return '0%';
-	}
 	const percent = ( value / total ) * 100;
-	return percent < 1 ? '<1%' : `${ Math.round( percent ) }%`;
+	if ( 0 !== value && percent < 1 ) {
+		// Prose shorthand rather than a number, so it needs a translator: the
+		// sign goes before the figure in Turkish, after a space in French.
+		return __( '<1%', 'newspack-plugin' );
+	}
+	// Pinned to the site locale for the same reason the count below is, and
+	// because the percent sign is not placed the same way in every locale.
+	return new Intl.NumberFormat( document.documentElement.lang || undefined, {
+		style: 'percent',
+		maximumFractionDigits: 0,
+	} ).format( 0 === value ? 0 : Math.round( percent ) / 100 );
 };
 
 /**
@@ -364,8 +371,9 @@ export const segmentReachDescription = segment => {
 		/* Translators: %1$d: number of days the report covers. %2$s: last day of the report, e.g. Aug 6. %3$s: share of the audience that matched, e.g. 34%. %4$s: total session count. %5$s: share that was shown this segment's prompts. */
 		__( '%1$d days to %2$s: matched %3$s of %4$s sessions · prompts reached %5$s', 'newspack-plugin' ),
 		// The window is a server-side constant, passed through so the label
-		// can't drift from the report it describes.
-		Number( reach.range_days ) || 7,
+		// can't drift from the report it describes. decorate_segments() always
+		// emits it, including for a cache written before it existed.
+		Number( reach.range_days ),
 		reachDay( reach.as_of ),
 		reachShare( Number( reach.matched ), total ),
 		reachCount( total ),
@@ -419,7 +427,7 @@ export const segmentReachNotice = segments => {
 			'Figures come from Google Analytics for the %1$d days to %2$s and refresh once a day. They record what already happened: reordering segments changes which prompts readers see from now on, not these numbers.',
 			'newspack-plugin'
 		),
-		Number( reach.range_days ) || 7,
+		Number( reach.range_days ),
 		reachDay( reach.as_of )
 	);
 };
