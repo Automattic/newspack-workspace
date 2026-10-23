@@ -1,6 +1,8 @@
 @use "~@wordpress/base-styles/variables" as wp-vars;
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/breakpoints" as wp-breakpoints;
+@use "~@wordpress/base-styles/mixins" as wp-mixins;
+@use "~@wordpress/base-styles/z-index" as wp-z;
 
 // Section-header descriptions are plain strings (SectionHeader renders them
 // inside a `<p>`, so markup there would be invalid nesting). Honour their line
@@ -56,9 +58,6 @@
 
 // Whole-row click affordance for the subscriber list.
 .newspack-subscribers__clickable-rows {
-	// Anchors the loading overlay.
-	position: relative;
-
 	.dataviews-view-table tbody tr.dataviews-view-table__row {
 		cursor: pointer;
 
@@ -68,23 +67,23 @@
 	}
 }
 
-// Covers the subscriber list while a refetch is in flight with rows showing.
-// Clicks pass through, so search, filters and pagination stay usable mid-refetch.
-//
-// DEPENDS ON DATAVIEWS INTERNAL MARKUP: z-index 2 keeps the overlay under the
-// sticky page header (3), and above DataViews' sticky table header (1) and footer
-// (2, a tie it wins by coming later in the DOM) even where those share its
-// stacking context. Recheck when bumping @wordpress/dataviews.
+// Covers the whole wizard while a refetch is in flight with rows showing, and
+// blocks input until it settles. Fixed to the screen, beside the admin menu and
+// under the admin bar, so the spinner stays centred at any scroll position. It
+// stacks above popovers, so an open filter or column menu is covered too.
 .newspack-subscribers__loading-overlay {
 	align-items: center;
 	background: rgba( wp-colors.$white, 0.6 );
+	bottom: 0;
 	display: flex;
-	inset: 0;
 	justify-content: center;
-	pointer-events: none;
-	position: absolute;
-	z-index: 2;
+	position: fixed;
+	right: 0;
+	top: var(--wp-admin--admin-bar--height, 0);
+	z-index: wp-z.z-index(".components-popover") + 1;
 }
+
+@include wp-mixins.editor-left(".newspack-subscribers__loading-overlay");
 
 .newspack-subscribers__avatar {
 	width: wp-vars.$grid-unit-40;

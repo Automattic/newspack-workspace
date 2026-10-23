@@ -251,9 +251,10 @@ describe( 'the SubscriberList retry affordance', () => {
 } );
 
 /**
- * A refetch with rows already showing veils the list with a spinner overlay.
- * DataViews' own spinner sits below the table there, where it's easy to miss, so
- * it's kept only for a refetch with no rows to cover.
+ * A refetch with rows already showing covers the screen with a spinner overlay
+ * that blocks input until the read settles. DataViews' own spinner sits below the
+ * table there, where it's easy to miss, so it's kept only for a refetch with no
+ * rows to cover.
  */
 describe( 'the subscriber list loading overlay', () => {
 	beforeEach( () => {
@@ -262,7 +263,8 @@ describe( 'the subscriber list loading overlay', () => {
 		apiFetch.mockReset();
 	} );
 
-	const overlayIn = container => container.querySelector( '.newspack-subscribers__loading-overlay' );
+	// The overlay renders outside the list, so look for it in the whole document.
+	const overlay = () => document.querySelector( '.newspack-subscribers__loading-overlay' );
 	const listIn = container => container.querySelector( '.newspack-subscribers__clickable-rows' );
 
 	/** Mount once `rows` subscribers have landed. */
@@ -275,25 +277,26 @@ describe( 'the subscriber list loading overlay', () => {
 		return container;
 	};
 
-	/** Mount, then start a refetch that lands only when `land` is called. */
+	/** Mount, then start a refetch that settles only when `land` or `fail` is called. */
 	const mountThenRefetch = async rows => {
 		const container = await mountWith( rows );
-		let land;
+		let land, fail;
 		apiFetch.mockReturnValue(
-			new Promise( resolve => {
+			new Promise( ( resolve, reject ) => {
 				land = resolve;
+				fail = reject;
 			} )
 		);
 		await act( async () => {
 			mockDataViewsProps.onChangeView( { ...mockDataViewsProps.view, search: 'reader' } );
 		} );
-		return { container, land };
+		return { container, land, fail };
 	};
 
 	it( 'covers the rows while a refetch is in flight, and clears once it lands', async () => {
 		const { container, land } = await mountThenRefetch( 2 );
 
-		expect( overlayIn( container ) ).not.toBeNull();
+		expect( overlay() ).not.toBeNull();
 		expect( listIn( container ) ).toHaveAttribute( 'aria-busy', 'true' );
 		expect( mockDataViewsProps.isLoading ).toBe( false );
 
@@ -301,14 +304,35 @@ describe( 'the subscriber list loading overlay', () => {
 			land( page( 2 ) );
 		} );
 
-		expect( overlayIn( container ) ).toBeNull();
+		expect( overlay() ).toBeNull();
 		expect( listIn( container ) ).not.toHaveAttribute( 'aria-busy' );
 	} );
 
-	it( "leaves a refetch with no rows to DataViews' own spinner", async () => {
-		const { container } = await mountThenRefetch( 0 );
+	// Inside the list, any ancestor that starts its own stacking context or
+	// containing block would keep the overlay under popovers, or pin it to the
+	// list instead of the screen.
+	it( 'renders the overlay at the top level of the document', async () => {
+		await mountThenRefetch( 2 );
 
-		expect( overlayIn( container ) ).toBeNull();
+		expect( overlay().parentElement ).toBe( document.body );
+	} );
+
+	// The overlay blocks input, so a read that fails must never leave it up.
+	it( 'clears the overlay when the refetch fails', async () => {
+		const { fail } = await mountThenRefetch( 2 );
+
+		await act( async () => {
+			fail( new Error( 'nope' ) );
+		} );
+
+		expect( overlay() ).toBeNull();
+		expect( screen.getByRole( 'button', { name: 'Retry' } ) ).toBeInTheDocument();
+	} );
+
+	it( "leaves a refetch with no rows to DataViews' own spinner", async () => {
+		await mountThenRefetch( 0 );
+
+		expect( overlay() ).toBeNull();
 		expect( mockDataViewsProps.isLoading ).toBe( true );
 	} );
 } );

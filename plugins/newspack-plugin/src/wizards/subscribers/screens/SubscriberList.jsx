@@ -16,7 +16,7 @@
 /**
  * WordPress dependencies.
  */
-import { useEffect, useLayoutEffect, useMemo, useState } from '@wordpress/element';
+import { createPortal, useEffect, useLayoutEffect, useMemo, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -483,9 +483,11 @@ export default function SubscriberList() {
 		);
 	}
 
-	// A refetch with rows showing covers them with a spinner: DataViews' own one
-	// renders below the table, out of sight on a long page. With no rows to cover,
-	// DataViews' spinner stands in for the empty state, so it keeps that case.
+	// A refetch with rows showing covers the screen with a spinner and blocks input
+	// until it settles: DataViews' own one renders below the table, out of sight on
+	// a long page. With no rows to cover, DataViews' spinner stands in for the
+	// empty state, so it keeps that case. A failed read lands on the error notice
+	// above, which never renders the overlay, so a failure can't leave it stuck.
 	const isRefreshing = subscribersLoading && items.length > 0;
 
 	return (
@@ -518,11 +520,15 @@ export default function SubscriberList() {
 				onClickItem={ openSubscriber }
 				search
 			/>
-			{ isRefreshing && (
-				<div className="newspack-subscribers__loading-overlay">
-					<Waiting />
-				</div>
-			) }
+			{ /* In the document body, so no ancestor of the list can pin the fixed
+			     overlay to itself or stack popovers above it. */ }
+			{ isRefreshing &&
+				createPortal(
+					<div className="newspack-subscribers__loading-overlay">
+						<Waiting />
+					</div>,
+					document.body
+				) }
 		</div>
 	);
 }
