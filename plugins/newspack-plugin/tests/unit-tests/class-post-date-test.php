@@ -88,6 +88,28 @@ class Test_Post_Date extends \WP_UnitTestCase {
 		return $post_id;
 	}
 
+	/**
+	 * Helper: report a different modified date for a post through
+	 * `get_the_modified_date`, as a plugin does when a post changes without
+	 * being saved.
+	 *
+	 * @param int $post_id   Post ID.
+	 * @param int $timestamp Modified date to report.
+	 */
+	private function filter_modified_date( $post_id, $timestamp ) {
+		add_filter(
+			'get_the_modified_date',
+			function ( $the_time, $format, $post ) use ( $post_id, $timestamp ) {
+				if ( ! $post instanceof \WP_Post || $post->ID !== $post_id ) {
+					return $the_time;
+				}
+				return wp_date( '' === $format ? get_option( 'date_format' ) : $format, $timestamp );
+			},
+			10,
+			3
+		);
+	}
+
 	// ─── Time Ago: convert_to_time_ago() ───
 
 	/**
@@ -438,6 +460,170 @@ class Test_Post_Date extends \WP_UnitTestCase {
 		);
 	}
 
+	/**
+	 * Test the threshold counts a modified date a plugin reports, not only the stored one.
+	 */
+	public function test_modified_date_threshold_uses_filtered_modified_date() {
+		set_theme_mod( 'post_updated_date', true );
+		set_theme_mod( 'post_updated_date_threshold', 24 );
+
+		// Saved one hour after publishing, within the threshold.
+		$post_id = $this->create_post_with_modified_date(
+			gmdate( 'Y-m-d H:i:s', time() - 7 * DAY_IN_SECONDS ),
+			gmdate( 'Y-m-d H:i:s', time() - 7 * DAY_IN_SECONDS + HOUR_IN_SECONDS )
+		);
+		$this->filter_modified_date( $post_id, time() - 2 * DAY_IN_SECONDS );
+
+		$this->assertTrue(
+			Post_Date::should_display_updated_date( $post_id ),
+			'The threshold should count the modified date reported through get_the_modified_date.'
+		);
+	}
+
+	/**
+	 * Test the override filter shows the updated date when the sitewide setting is off.
+	 */
+	public function test_override_shows_updated_date_when_sitewide_off() {
+		set_theme_mod( 'post_updated_date', false );
+
+		$post_id = $this->create_post_with_modified_date(
+			gmdate( 'Y-m-d H:i:s', time() - 2 * HOUR_IN_SECONDS ),
+			gmdate( 'Y-m-d H:i:s', time() - 1 * HOUR_IN_SECONDS )
+		);
+		add_filter( 'newspack_updated_date_override', '__return_true' );
+
+		$this->assertTrue(
+			Post_Date::should_display_updated_date( $post_id ),
+			'The override should show the updated date even when the sitewide setting is off.'
+		);
+	}
+
+	/**
+	 * Test the override filter shows the updated date within the threshold.
+	 */
+	public function test_override_bypasses_threshold() {
+		set_theme_mod( 'post_updated_date', true );
+		set_theme_mod( 'post_updated_date_threshold', 24 );
+
+		$post_id = $this->create_post_with_modified_date(
+			gmdate( 'Y-m-d H:i:s', time() - 2 * HOUR_IN_SECONDS ),
+			gmdate( 'Y-m-d H:i:s', time() - 1 * HOUR_IN_SECONDS )
+		);
+		add_filter( 'newspack_updated_date_override', '__return_true' );
+
+		$this->assertTrue(
+			Post_Date::should_display_updated_date( $post_id ),
+			'The override should show the updated date within the threshold.'
+		);
+	}
+
+	/**
+	 * Test the override filter can hide an updated date the settings would show.
+	 */
+	public function test_override_can_hide_updated_date() {
+		set_theme_mod( 'post_updated_date', true );
+		set_theme_mod( 'post_updated_date_threshold', 24 );
+
+		$post_id = $this->create_post_with_modified_date(
+			gmdate( 'Y-m-d H:i:s', time() - 7 * DAY_IN_SECONDS ),
+			gmdate( 'Y-m-d H:i:s', time() - 3 * DAY_IN_SECONDS )
+		);
+		add_filter( 'newspack_updated_date_override', '__return_false' );
+
+		$this->assertFalse(
+			Post_Date::should_display_updated_date( $post_id ),
+			'The override should be able to hide the updated date.'
+		);
+	}
+
+	/**
+	 * Test the override filter receives the post.
+	 */
+	public function test_override_receives_the_post() {
+		$post_id  = $this->create_post_with_modified_date(
+			gmdate( 'Y-m-d H:i:s', time() - 2 * HOUR_IN_SECONDS ),
+			gmdate( 'Y-m-d H:i:s', time() - 1 * HOUR_IN_SECONDS )
+		);
+		$received = null;
+		add_filter(
+			'newspack_updated_date_override',
+			function ( $override, $post ) use ( &$received ) {
+				$received = $post;
+				return $override;
+			},
+			10,
+			2
+		);
+
+		Post_Date::should_display_updated_date( $post_id );
+
+		$this->assertInstanceOf( \WP_Post::class, $received, 'The override filter should receive the post.' );
+		$this->assertSame( $post_id, $received->ID, 'The override filter should receive the post being checked.' );
+	}
+
+	/**
+	 * Test an editor hiding the updated date on a post wins over the override filter.
+	 */
+	public function test_per_post_hide_wins_over_override() {
+		set_theme_mod( 'post_updated_date', true );
+		set_theme_mod( 'post_updated_date_threshold', 24 );
+
+		$post_id = $this->create_post_with_modified_date(
+			gmdate( 'Y-m-d H:i:s', time() - 7 * DAY_IN_SECONDS ),
+			gmdate( 'Y-m-d H:i:s', time() - 3 * DAY_IN_SECONDS )
+		);
+		update_post_meta( $post_id, 'newspack_hide_updated_date', true );
+		add_filter( 'newspack_updated_date_override', '__return_true' );
+
+		$this->assertFalse(
+			Post_Date::should_display_updated_date( $post_id ),
+			'An editor hiding the updated date on the post should win over the override.'
+		);
+	}
+
+	/**
+	 * Test the override filter does not apply to unsupported post types.
+	 */
+	public function test_override_skips_unsupported_post_types() {
+		$page_id = static::factory()->post->create( [ 'post_type' => 'page' ] );
+		add_filter( 'newspack_updated_date_override', '__return_true' );
+
+		$this->assertFalse(
+			Post_Date::should_display_updated_date( $page_id ),
+			'The override should not apply to post types without the updated date feature.'
+		);
+	}
+
+	// ─── Modified Date: classic theme ───
+
+	/**
+	 * Test the classic theme's updated date words "time ago" from the modified
+	 * date a plugin reports, not only the stored one.
+	 */
+	public function test_classic_updated_date_time_ago_uses_filtered_modified_date() {
+		set_theme_mod( 'post_time_ago', true );
+		set_theme_mod( 'post_updated_date', true );
+		set_theme_mod( 'post_updated_date_threshold', 24 );
+
+		// Stored modified date is beyond the one-day time-ago cutoff.
+		$post_id = $this->create_post_with_modified_date(
+			gmdate( 'Y-m-d H:i:s', time() - 7 * DAY_IN_SECONDS ),
+			gmdate( 'Y-m-d H:i:s', time() - 3 * DAY_IN_SECONDS )
+		);
+		$this->filter_modified_date( $post_id, time() - 2 * HOUR_IN_SECONDS );
+
+		$this->go_to( get_permalink( $post_id ) );
+		global $post;
+		$post = get_post( $post_id );
+
+		$this->assertFalse( wp_is_block_theme(), 'This test needs a classic theme.' );
+
+		ob_start();
+		Post_Date::render_updated_date_classic();
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( '2 hours ago', $output, 'The classic updated date should read "time ago" from the reported modified date.' );
+	}
 	// ─── Modified Date: render_block filter ───
 
 	/**
@@ -614,6 +800,77 @@ class Test_Post_Date extends \WP_UnitTestCase {
 
 		$result = Post_Date::filter_blocks_formatted_date( 'March 17, 2026', get_post( $post_id ) );
 		$this->assertEquals( 'March 17, 2026', $result, 'Blocks formatted date should be unchanged when disabled.' );
+	}
+
+	/**
+	 * Test Homepage Posts' updated date reads "time ago" from the modified date
+	 * a plugin reports, not the stored one.
+	 */
+	public function test_blocks_formatted_updated_date_uses_filtered_modified_date() {
+		set_theme_mod( 'post_time_ago', true );
+		set_theme_mod( 'post_time_ago_cut_off', 14 );
+
+		$post_id = $this->create_post_with_modified_date(
+			gmdate( 'Y-m-d H:i:s', time() - 30 * DAY_IN_SECONDS ),
+			gmdate( 'Y-m-d H:i:s', time() - 30 * DAY_IN_SECONDS )
+		);
+		$this->filter_modified_date( $post_id, time() - 2 * HOUR_IN_SECONDS );
+
+		$result = apply_filters( 'newspack_blocks_formatted_displayed_updated_date', 'March 17, 2026', get_post( $post_id ) );
+		$this->assertEquals( '2 hours ago', $result, 'Homepage Posts updated date should read "time ago" from the reported modified date.' );
+	}
+
+	/**
+	 * Test a Homepage Posts card shows the updated date another plugin asks for
+	 * when the post's updated date may be shown.
+	 */
+	public function test_blocks_card_keeps_requested_updated_date() {
+		$post_id = $this->create_post_with_modified_date(
+			gmdate( 'Y-m-d H:i:s', time() - 2 * HOUR_IN_SECONDS ),
+			gmdate( 'Y-m-d H:i:s', time() - 1 * HOUR_IN_SECONDS )
+		);
+		add_filter( 'newspack_blocks_display_updated_date', '__return_true' );
+		add_filter( 'newspack_updated_date_override', '__return_true' );
+
+		$this->assertTrue(
+			apply_filters( 'newspack_blocks_display_updated_date', false, get_post( $post_id ) ),
+			'The card should show the updated date when the post may show it.'
+		);
+	}
+
+	/**
+	 * Test an editor hiding the updated date on a post hides it on its
+	 * Homepage Posts card too, whatever other plugins ask for.
+	 */
+	public function test_blocks_card_updated_date_follows_per_post_hide() {
+		set_theme_mod( 'post_updated_date', true );
+
+		$post_id = $this->create_post_with_modified_date(
+			gmdate( 'Y-m-d H:i:s', time() - 7 * DAY_IN_SECONDS ),
+			gmdate( 'Y-m-d H:i:s', time() - 3 * DAY_IN_SECONDS )
+		);
+		update_post_meta( $post_id, 'newspack_hide_updated_date', true );
+		add_filter( 'newspack_blocks_display_updated_date', '__return_true' );
+
+		$this->assertFalse(
+			apply_filters( 'newspack_blocks_display_updated_date', false, get_post( $post_id ) ),
+			'The card should not show an updated date the editor hid.'
+		);
+	}
+
+	/**
+	 * Test Homepage Posts' updated date is left alone when time-ago is off.
+	 */
+	public function test_blocks_formatted_updated_date_disabled() {
+		set_theme_mod( 'post_time_ago', false );
+
+		$post_id = $this->create_post_with_modified_date(
+			gmdate( 'Y-m-d H:i:s', time() - 2 * HOUR_IN_SECONDS ),
+			gmdate( 'Y-m-d H:i:s', time() - 1 * HOUR_IN_SECONDS )
+		);
+
+		$result = apply_filters( 'newspack_blocks_formatted_displayed_updated_date', 'March 17, 2026', get_post( $post_id ) );
+		$this->assertEquals( 'March 17, 2026', $result, 'Homepage Posts updated date should be unchanged when time-ago is off.' );
 	}
 
 	// ─── Theme Switch Migration ───
