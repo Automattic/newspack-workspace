@@ -1848,6 +1848,10 @@ class Newspack_Blocks {
 		 * Filters whether a post's card shows when the post was last updated
 		 * instead of when it was published.
 		 *
+		 * With the Newspack plugin active, a card shows it only where the
+		 * post's byline would too, so a plugin turning it on for a post may
+		 * also need `newspack_updated_date_override`.
+		 *
 		 * @param bool    $display Whether to show the updated date. Default false.
 		 * @param WP_Post $post    Post object.
 		 */
