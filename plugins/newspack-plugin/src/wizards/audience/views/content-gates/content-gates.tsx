@@ -19,6 +19,7 @@ import ContentGatesOnboarding from './content-gates-onboarding';
 import ContentGatesPriority from './content-gates-priority';
 import ContentGateSettings from './content-gate-settings';
 import AdvancedSettings from './advanced-settings';
+import { getGatesSubTitle } from './utils';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from './consts';
 import './style.scss';
 
@@ -31,7 +32,7 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 	const gateCount = gates.length;
 
 	useEffect( () => {
-		const subTitle = __( 'Choose which content to restrict and how readers get access to it.', 'newspack-plugin' );
+		const subTitle = getGatesSubTitle();
 		if ( ! gateCount ) {
 			setHeaderData( { actions: [], subTitle } );
 			return;

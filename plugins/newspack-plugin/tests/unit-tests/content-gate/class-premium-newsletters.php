@@ -206,6 +206,18 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Store the list settings on a newsletter gate.
+	 *
+	 * @param int   $gate_id  Gate post ID.
+	 * @param array $settings Settings to store, e.g. [ 'auto_signup' => 'on' ].
+	 *
+	 * @return void
+	 */
+	private function set_gate_list_settings( int $gate_id, array $settings ): void {
+		Content_Gate::update_newsletter_gate_settings( $gate_id, $settings );
+	}
+
+	/**
 	 * Create a reader, optionally with a subscription that satisfies the gates
 	 * create_gated_list() makes.
 	 *
@@ -413,6 +425,176 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		// Production code calls get_contact_lists(), finds the list already present,
 		// and exits early before calling add_and_remove_lists.
 		$this->assertEmpty( \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls );
+	}
+
+	// =========================================================================
+	// Per-gate auto-signup — maybe_enqueue_access_check()
+	// =========================================================================
+
+	/**
+	 * Queue and run an access check for a reader, as a subscription change would.
+	 *
+	 * @param int $user_id Reader to check.
+	 *
+	 * @return void
+	 */
+	private function run_access_check( int $user_id ): void {
+		Premium_Newsletters::maybe_enqueue_access_check( time(), [ 'user_id' => $user_id ], null );
+		Premium_Newsletters::process_access_check_queue();
+	}
+
+	/**
+	 * A gate set to "on" signs the reader up even when the site setting is off.
+	 */
+	public function test_gate_set_to_on_adds_lists_when_site_auto_signup_is_off() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
+
+		$list_id = $this->create_premium_list();
+		$gate_id = $this->create_newsletter_gate( [ 100 ], [ $list_id ] );
+		$this->set_gate_list_settings( $gate_id, [ 'auto_signup' => 'on' ] );
+		$user_id = $this->create_reader( true );
+
+		$this->run_access_check( $user_id );
+
+		$calls = \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls;
+		$this->assertCount( 1, $calls );
+		$this->assertContains( 'newspack-' . $list_id, $calls[0]['lists_to_add'] );
+	}
+
+	/**
+	 * A gate set to "off" leaves the reader unsubscribed even when the site setting is on.
+	 */
+	public function test_gate_set_to_off_does_not_add_lists_when_site_auto_signup_is_on() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+
+		$list_id = $this->create_premium_list();
+		$gate_id = $this->create_newsletter_gate( [ 100 ], [ $list_id ] );
+		$this->set_gate_list_settings( $gate_id, [ 'auto_signup' => 'off' ] );
+		$user_id = $this->create_reader( true );
+
+		$this->run_access_check( $user_id );
+
+		$this->assertEmpty( \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls );
+	}
+
+	/**
+	 * When several gates cover a list, only a gate that admits the reader gets a say.
+	 *
+	 * Gate A admits any registered reader and is set to "off". Gate B admits paying
+	 * readers and is set to "on". A reader who only registered got in through A, so
+	 * the list stays unsubscribed. A reader who also pays gets in through B as well,
+	 * so the list is added.
+	 */
+	public function test_reader_admitted_only_by_a_gate_set_to_off_is_not_auto_subscribed() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
+
+		$list_id = $this->create_premium_list();
+
+		// Created first, so it ranks above gate B and admits the reader before B is asked.
+		$gate_a = Content_Gate::create_gate( [ 'title' => 'Registration Newsletter Gate' ], Content_Gate::GATE_CPT, true );
+		$this->gate_ids[] = $gate_a;
+		Content_Gate::update_registration_settings( $gate_a, [ 'active' => true ] );
+		Content_Rules::update_gate_content_rules(
+			$gate_a,
+			[
+				[
+					'slug'  => 'newsletters',
+					'value' => [ $list_id ],
+				],
+			]
+		);
+		$this->set_gate_list_settings( $gate_a, [ 'auto_signup' => 'off' ] );
+
+		$gate_b = $this->create_newsletter_gate( [ 100 ], [ $list_id ] );
+		$this->set_gate_list_settings( $gate_b, [ 'auto_signup' => 'on' ] );
+
+		$registered_only = $this->create_reader( false );
+		$this->run_access_check( $registered_only );
+		$this->assertEmpty( \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls, 'A reader admitted only by the "off" gate must not be signed up.' );
+
+		$paying = $this->create_reader( true );
+		$this->run_access_check( $paying );
+		$calls = \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls;
+		$this->assertCount( 1, $calls, 'A reader the "on" gate also admits is signed up.' );
+		$this->assertContains( 'newspack-' . $list_id, $calls[0]['lists_to_add'] );
+	}
+
+	/**
+	 * The renewal snapshot is taken, and honored, when only a gate turns auto-signup on.
+	 */
+	public function test_renewal_snapshot_is_taken_and_honored_when_only_a_gate_is_on() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
+
+		$list_id = $this->create_premium_list();
+		$gate_id = $this->create_newsletter_gate( [ 100 ], [ $list_id ] );
+		$this->set_gate_list_settings( $gate_id, [ 'auto_signup' => 'on' ] );
+		$user_id = $this->create_reader( true );
+		$email   = get_userdata( $user_id )->user_email;
+
+		// The reader has left the list since they signed up.
+		\Newspack_Newsletters_Subscription::$contact_lists[ $email ] = [];
+
+		Premium_Newsletters::set_subscribed_lists( time(), [ 'user_id' => $user_id ], null );
+
+		$this->assertIsArray(
+			get_user_meta( $user_id, Premium_Newsletters::SUBSCRIBED_LISTS_META_KEY, true ),
+			'A gate set to "on" needs the snapshot even though the site setting is off.'
+		);
+
+		Premium_Newsletters::process_access_check_queue();
+
+		$this->assertEmpty(
+			\Newspack_Newsletters_Contacts::$add_and_remove_lists_calls,
+			'A reader who left the list must not be re-added on renewal.'
+		);
+	}
+
+	/**
+	 * A reader no gate admits by its own rules, yet who is not restricted, is judged
+	 * by the gates that cover the list.
+	 *
+	 * An administrator skips every access check, so the gate's paid rule never admits
+	 * them. The list's gate decides whether they are signed up.
+	 */
+	public function test_reader_no_gate_admits_falls_back_to_the_lists_gates() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
+
+		$list_id = $this->create_premium_list();
+		$gate_id = $this->create_newsletter_gate( [ 100 ], [ $list_id ] );
+		$this->set_gate_list_settings( $gate_id, [ 'auto_signup' => 'on' ] );
+		$admin_id = $this->factory->user->create( [ 'role' => 'administrator' ] );
+
+		$this->run_access_check( $admin_id );
+
+		$calls = \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls;
+		$this->assertCount( 1, $calls );
+		$this->assertContains( 'newspack-' . $list_id, $calls[0]['lists_to_add'] );
+	}
+
+	/**
+	 * With no gate setting its own auto-signup, every gate follows the site setting,
+	 * so the lookup answers with that setting and judges the reader against no gate.
+	 */
+	public function test_auto_signup_lookup_judges_no_gate_when_every_gate_follows_the_site_setting() {
+		$list_id     = $this->create_gated_list();
+		$user_id     = $this->create_reader( true );
+		$evaluations = 0;
+		// The fixture gate's only rule is a subscription rule, so each call is one judgment against a gate.
+		add_filter(
+			'newspack_access_rules_has_active_subscription',
+			function ( $has_subscription ) use ( &$evaluations ) {
+				++$evaluations;
+				return $has_subscription;
+			}
+		);
+
+		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
+		$this->assertFalse( Premium_Newsletters::is_auto_signup_list( $list_id, $user_id ) );
+
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+		$this->assertTrue( Premium_Newsletters::is_auto_signup_list( $list_id, $user_id ) );
+
+		$this->assertSame( 0, $evaluations );
 	}
 
 	// =========================================================================
@@ -2406,6 +2588,256 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	 */
 	public function test_filter_list_gates_is_hooked() {
 		$this->assertSame( 10, has_filter( 'newspack_newsletters_subscription_list_gates', [ Premium_Newsletters::class, 'filter_list_gates' ] ) );
+	}
+
+	// =========================================================================
+	// Per-gate list hiding — is_list_hidden()
+	// =========================================================================
+
+	/**
+	 * Create a premium newsletter list behind a gate that hides its lists.
+	 *
+	 * @param bool $hide Whether the gate hides its lists from readers.
+	 *
+	 * @return int[] The list post ID, then the gate post ID.
+	 */
+	private function create_list_behind_gate( bool $hide ): array {
+		$list_id = $this->create_premium_list();
+		$gate_id = $this->create_newsletter_gate( [ 100 ], [ $list_id ] );
+		$this->set_gate_list_settings( $gate_id, [ 'hide_lists' => $hide ] );
+		return [ $list_id, $gate_id ];
+	}
+
+	/**
+	 * A reader who has access still doesn't get a hidden list in the lists shown to
+	 * them, while the lists of other gates stay.
+	 */
+	public function test_filter_subscription_lists_drops_a_hidden_list_the_reader_can_access() {
+		list( $hidden_id )  = $this->create_list_behind_gate( true );
+		list( $visible_id ) = $this->create_list_behind_gate( false );
+		wp_set_current_user( $this->create_reader( true ) );
+
+		$result = Premium_Newsletters::filter_subscription_lists(
+			[
+				new \Newspack\Newsletters\Subscription_List( $hidden_id ),
+				new \Newspack\Newsletters\Subscription_List( $visible_id ),
+			]
+		);
+
+		// Had the reader lacked access, the visible list would be gone too.
+		$this->assertCount( 1, $result );
+		$this->assertSame( $visible_id, $result[0]->get_id() );
+	}
+
+	/**
+	 * An admin-ajax request isn't an admin screen. Background jobs run there as well
+	 * as under WP-Cron, so it leaves a hidden list out as the front end does, and a
+	 * job under either runner that rewrites a reader's lists from this set can't drop
+	 * that list. It keeps a restricted list, as every admin request does.
+	 */
+	public function test_filter_subscription_lists_drops_hidden_lists_in_admin_ajax() {
+		list( $hidden_id )     = $this->create_list_behind_gate( true );
+		list( $restricted_id ) = $this->create_list_behind_gate( false );
+		wp_set_current_user( $this->create_reader( false ) );
+		set_current_screen( 'dashboard' );
+		add_filter( 'wp_doing_ajax', '__return_true' );
+
+		$result = Premium_Newsletters::filter_subscription_lists(
+			[
+				new \Newspack\Newsletters\Subscription_List( $hidden_id ),
+				new \Newspack\Newsletters\Subscription_List( $restricted_id ),
+			]
+		);
+
+		$this->assertSame(
+			[ $restricted_id ],
+			array_map(
+				function ( $list ) {
+					return $list->get_id();
+				},
+				$result
+			)
+		);
+	}
+
+	/**
+	 * One gate that hides a list is enough, even when another gate covering the
+	 * same list shows it.
+	 */
+	public function test_list_is_hidden_when_any_gate_hides_it() {
+		list( $list_id )  = $this->create_list_behind_gate( true );
+		$shown_gate_id    = $this->create_newsletter_gate( [ 200 ], [ $list_id ] );
+		$this->set_gate_list_settings( $shown_gate_id, [ 'hide_lists' => false ] );
+		list( $other_id ) = $this->create_list_behind_gate( false );
+
+		$this->assertTrue( Premium_Newsletters::is_list_hidden( $list_id ) );
+		$this->assertFalse( Premium_Newsletters::is_list_hidden( $other_id ), 'A list no gate hides is shown.' );
+	}
+
+	/**
+	 * A draft gate restricts nothing, so it hides nothing either.
+	 */
+	public function test_draft_gate_does_not_hide_its_lists() {
+		list( $list_id, $gate_id ) = $this->create_list_behind_gate( true );
+		wp_update_post(
+			[
+				'ID'          => $gate_id,
+				'post_status' => 'draft',
+			]
+		);
+
+		$this->assertFalse( Premium_Newsletters::is_list_hidden( $list_id ) );
+	}
+
+	/**
+	 * A list marked exempt is open to everyone and Access Control does not govern it,
+	 * so a gate that also covers it can't hide it.
+	 */
+	public function test_exempt_list_is_not_hidden() {
+		list( $exempt_id )  = $this->create_list_behind_gate( true );
+		list( $visible_id ) = $this->create_list_behind_gate( false );
+		update_post_meta( $exempt_id, Content_Restriction_Control::IS_EXEMPT_META_KEY, true );
+		wp_set_current_user( $this->create_reader( true ) );
+
+		$this->assertFalse( Premium_Newsletters::is_list_hidden( $exempt_id ) );
+
+		$result = Premium_Newsletters::filter_subscription_lists(
+			[
+				new \Newspack\Newsletters\Subscription_List( $exempt_id ),
+				new \Newspack\Newsletters\Subscription_List( $visible_id ),
+			]
+		);
+		$this->assertSame(
+			[ $exempt_id, $visible_id ],
+			array_map(
+				function ( $list ) {
+					return $list->get_id();
+				},
+				$result
+			)
+		);
+	}
+
+	/**
+	 * A published gate with neither registration nor paid access on restricts
+	 * nothing, so it hides nothing either.
+	 */
+	public function test_gate_without_an_access_mode_does_not_hide_its_lists() {
+		list( $list_id, $gate_id ) = $this->create_list_behind_gate( true );
+		Content_Gate::update_custom_access_settings( $gate_id, [ 'active' => false ] );
+
+		$this->assertFalse( Premium_Newsletters::is_list_hidden( $list_id ) );
+	}
+
+	/**
+	 * With Audience Management off, gates restrict nothing, so nothing is hidden.
+	 */
+	public function test_hidden_lists_are_not_hidden_when_gating_is_inactive() {
+		list( $list_id ) = $this->create_list_behind_gate( true );
+
+		add_filter( 'newspack_reader_activation_enabled', '__return_false' );
+		$hidden = Premium_Newsletters::is_list_hidden( $list_id );
+		remove_filter( 'newspack_reader_activation_enabled', '__return_false' );
+
+		$this->assertFalse( $hidden );
+	}
+
+	/**
+	 * While Woo Memberships is active it still decides who can join a list, so no
+	 * list is hidden by a gate.
+	 *
+	 * Runs isolated because WC_Memberships, once declared, would make
+	 * Memberships::is_active() true for every later test in this process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_hidden_lists_are_not_hidden_while_memberships_is_active() {
+		require dirname( __DIR__, 2 ) . '/mocks/wc-memberships-active-mock.php';
+
+		list( $list_id ) = $this->create_list_behind_gate( true );
+
+		$this->assertFalse( Premium_Newsletters::is_list_hidden( $list_id ) );
+	}
+
+	/**
+	 * The Subscribe block's "show premium lists" mode renders every list that has a
+	 * gate but is missing from the shown lists, so a hidden list must carry no gate
+	 * on the front end.
+	 */
+	public function test_filter_list_gates_omits_hidden_lists_on_the_front_end() {
+		list( $hidden_id )  = $this->create_list_behind_gate( true );
+		list( $visible_id ) = $this->create_list_behind_gate( false );
+
+		$result = Premium_Newsletters::filter_list_gates( [] );
+
+		$this->assertSame( [ 'newspack-' . $visible_id ], array_keys( $result ) );
+		$this->assertArrayNotHasKey( 'newspack-' . $hidden_id, $result );
+	}
+
+	/**
+	 * The block editor reads the same map from an admin request, and keeps a hidden
+	 * list's gate so the editor can still name it.
+	 */
+	public function test_filter_list_gates_keeps_hidden_lists_in_admin() {
+		list( $hidden_id ) = $this->create_list_behind_gate( true );
+		set_current_screen( 'dashboard' );
+
+		$result = Premium_Newsletters::filter_list_gates( [] );
+
+		$this->assertArrayHasKey( 'newspack-' . $hidden_id, $result );
+	}
+
+	/**
+	 * An admin-ajax request isn't an admin screen, so a hidden list carries no gate
+	 * there either, matching the lists filter_subscription_lists() leaves out.
+	 */
+	public function test_filter_list_gates_omits_hidden_lists_in_admin_ajax() {
+		list( $hidden_id )  = $this->create_list_behind_gate( true );
+		list( $visible_id ) = $this->create_list_behind_gate( false );
+		set_current_screen( 'dashboard' );
+		add_filter( 'wp_doing_ajax', '__return_true' );
+
+		$result = Premium_Newsletters::filter_list_gates( [] );
+
+		$this->assertSame( [ 'newspack-' . $visible_id ], array_keys( $result ) );
+		$this->assertArrayNotHasKey( 'newspack-' . $hidden_id, $result );
+	}
+
+	/**
+	 * Hiding is only about what readers see. A hidden list still gains a reader who
+	 * has access, and still loses one whose access ends.
+	 */
+	public function test_access_check_still_adds_and_removes_a_hidden_list() {
+		list( $list_id, $gate_id ) = $this->create_list_behind_gate( true );
+		$this->set_gate_list_settings( $gate_id, [ 'auto_signup' => 'on' ] );
+
+		$user_id      = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$email        = get_userdata( $user_id )->user_email;
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id' => $user_id,
+				'status'      => 'active',
+				'products'    => [ 100 ],
+			]
+		);
+
+		$this->run_access_check( $user_id );
+
+		$calls = \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls;
+		$this->assertCount( 1, $calls, 'A reader with access is added to a hidden list.' );
+		$this->assertContains( 'newspack-' . $list_id, $calls[0]['lists_to_add'] );
+
+		\Newspack_Newsletters_Contacts::reset_calls();
+		\Newspack_Newsletters_Subscription::$contact_lists[ $email ] = [ 'newspack-' . $list_id ];
+		$subscription->set_status( 'cancelled' );
+
+		$this->run_access_check( $user_id );
+
+		$calls = \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls;
+		$this->assertCount( 1, $calls, 'A reader whose subscription lapses is removed from a hidden list.' );
+		$this->assertContains( 'newspack-' . $list_id, $calls[0]['lists_to_remove'] );
+		$this->assertEmpty( $calls[0]['lists_to_add'] );
 	}
 
 	// =========================================================================
