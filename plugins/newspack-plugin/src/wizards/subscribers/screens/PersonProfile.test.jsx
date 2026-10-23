@@ -224,11 +224,13 @@ describe( 'a subscription managed on another network site', () => {
 		expect( screen.queryByRole( 'menuitem', { name: /refund|cancel|change|reactivate/i } ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'names the site that manages it, linked to the same subscription', async () => {
+	it( 'names the site that manages it, linked to the same subscription and named for what it opens', async () => {
 		await renderProfileFor( reader( { subscriptions: [ networkSubscription ] } ) );
 
 		expect( screen.getByText( 'Managed on' ) ).toBeInTheDocument();
-		expect( screen.getByRole( 'link', { name: 'Node Daily' } ) ).toHaveAttribute( 'href', REMOTE_EDIT_URL );
+		const siteLink = screen.getByRole( 'link', { name: 'View subscription: Fan Membership (Node Daily)' } );
+		expect( siteLink ).toHaveTextContent( 'Node Daily' );
+		expect( siteLink ).toHaveAttribute( 'href', REMOTE_EDIT_URL );
 	} );
 
 	it( 'shows no billing rows it has no data for', async () => {
@@ -254,6 +256,27 @@ describe( 'a subscription managed on another network site', () => {
 
 			expect( screen.getByRole( 'button', { name: 'View subscription: Fan Membership' } ) ).toBeInTheDocument();
 			expect( screen.getByRole( 'button', { name: 'View subscription: Fan Membership (Node Daily)' } ) ).toBeInTheDocument();
+			const keyWarnings = consoleError.mock.calls.filter( ( [ message ] ) => /same key/.test( String( message ) ) );
+			expect( keyWarnings ).toHaveLength( 0 );
+		} finally {
+			consoleError.mockRestore();
+		}
+	} );
+
+	it( 'keys cards from two sites apart by site name when neither carries a site URL', async () => {
+		const consoleError = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
+		try {
+			await renderProfileFor(
+				reader( {
+					subscriptions: [
+						{ ...networkSubscription, managedOn: { name: 'Node Daily', url: '' } },
+						{ ...networkSubscription, plan: 'Fan Membership (Hub Gazette)', managedOn: { name: 'Hub Gazette', url: '' } },
+					],
+				} )
+			);
+
+			expect( screen.getByRole( 'button', { name: 'View subscription: Fan Membership (Node Daily)' } ) ).toBeInTheDocument();
+			expect( screen.getByRole( 'button', { name: 'View subscription: Fan Membership (Hub Gazette)' } ) ).toBeInTheDocument();
 			const keyWarnings = consoleError.mock.calls.filter( ( [ message ] ) => /same key/.test( String( message ) ) );
 			expect( keyWarnings ).toHaveLength( 0 );
 		} finally {
@@ -292,7 +315,7 @@ describe( 'a subscription managed on another network site', () => {
 		await renderProfileFor( reader( { subscriptions: [ { ...networkSubscription, editUrl: '' } ] } ) );
 
 		expect( screen.queryByRole( 'button', { name: 'Subscription actions: Fan Membership (Node Daily)' } ) ).not.toBeInTheDocument();
-		expect( screen.queryByRole( 'link', { name: 'Node Daily' } ) ).not.toBeInTheDocument();
+		expect( screen.queryByRole( 'link', { name: 'View subscription: Fan Membership (Node Daily)' } ) ).not.toBeInTheDocument();
 		expect( screen.getByText( 'Node Daily' ) ).toBeInTheDocument();
 	} );
 } );

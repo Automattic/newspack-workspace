@@ -318,7 +318,7 @@ export default function PersonProfile() {
 			// an ID is unique within a site, so a local #500 and a remote #500 coexist.
 			if ( isNetworkSubscription( subscription ) ) {
 				const { editUrl, managedOn } = subscription;
-				const cardKey = `subscription-${ managedOn.url }-${ subscription.id }`;
+				const cardKey = `subscription-${ managedOn.url || managedOn.name }-${ subscription.id }`;
 				return {
 					key: cardKey,
 					status: subscription.status,
@@ -333,7 +333,17 @@ export default function PersonProfile() {
 							rows={ [
 								{
 									label: __( 'Managed on', 'newspack-plugin' ),
-									value: editUrl ? <a href={ editUrl }>{ managedOn.name }</a> : managedOn.name,
+									value: editUrl ? (
+										<a
+											href={ editUrl }
+											// translators: %s is a subscription/plan name.
+											aria-label={ sprintf( __( 'View subscription: %s', 'newspack-plugin' ), name ) }
+										>
+											{ managedOn.name }
+										</a>
+									) : (
+										managedOn.name
+									),
 								},
 							] }
 							// A link out, so with no URL there is nothing to put in the menu.
