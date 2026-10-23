@@ -313,10 +313,12 @@ class Promoted_Fields {
 		$raw_value = Reader_Data::get_data( $user_id, $field->get_key() );
 		$value     = self::decode_value( $raw_value );
 
-		// Boolean fields: an access rule stores `true` and asks only for
-		// truthiness. 'yes'/'no' is what a segment saves for these fields;
-		// segments match in the browser, so the string branch below is the
-		// reading the `boolean` matcher in newspack-popups has to agree with.
+		// Boolean fields: an access rule asks only for truthiness. A gate's rule
+		// stores `true` and a block's the rule default `''`, and both end at the
+		// truthiness return below, so a string other than 'yes'/'no' has to stay
+		// on that path. 'yes'/'no' is what a segment saves; segments match in the
+		// browser, so the string branch is the reading the `boolean` matcher in
+		// newspack-popups has to agree with.
 		if ( 'boolean' === $field->get_value_type() ) {
 			$is_truthy = ! empty( $value );
 
@@ -331,7 +333,7 @@ class Promoted_Fields {
 				}
 			}
 
-			// Access rule with is_boolean or non-string args: just check truthiness.
+			// Access rules, gate and block alike.
 			return $is_truthy;
 		}
 
