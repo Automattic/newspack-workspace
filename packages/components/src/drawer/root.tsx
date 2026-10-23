@@ -314,10 +314,14 @@ const Root = forwardRef< HTMLDivElement, DrawerRootProps >( function Root(
 				onRequestClose={ dismiss }
 				onKeyDown={ onKeyDown }
 			>
-				{ /* Without a slot inside, a popover lands in an aria-hidden container. */ }
+				{ /* Without a slot inside, a popover lands in an aria-hidden container.
+				     Clearing the slot name keeps popovers in this slot even when the
+				     drawer opens from page content, which names its own. */ }
 				<SlotFillProvider>
-					{ grouped }
-					{ ! requestConfirm && confirmDialog }
+					<Popover.__unstableSlotNameProvider value={ undefined }>
+						{ grouped }
+						{ ! requestConfirm && confirmDialog }
+					</Popover.__unstableSlotNameProvider>
 					<Popover.Slot />
 				</SlotFillProvider>
 			</Modal>

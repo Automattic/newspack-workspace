@@ -2,7 +2,7 @@
  * WordPress dependencies.
  */
 import { NavigableRegion } from '@wordpress/admin-ui';
-import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { __experimentalHStack as HStack, Popover } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { useViewportMatch } from '@wordpress/compose';
 import { cloneElement, isValidElement, useState } from '@wordpress/element';
 import { Icon } from '@wordpress/icons';
@@ -21,6 +21,13 @@ import Breadcrumbs from '../breadcrumbs';
 import HeaderActions, { isActionList } from './header-actions';
 import useScrollEdges from './use-scroll-edges';
 import './style.scss';
+
+// Popovers opened from the page content render into this slot, under the sticky
+// header, instead of at the end of the document, where they float over it.
+// Popovers opened from the header keep the default slot. Routing by subtree
+// leans on `Popover.__unstableSlotNameProvider`, so recheck it when bumping
+// @wordpress/components.
+const CONTENT_POPOVER_SLOT = 'newspack-page-content';
 
 /**
  * Newspack page region: a sticky header block (breadcrumbs, actions, optional
@@ -103,7 +110,10 @@ const Page = ( { breadcrumbItems = [], badges, subTitle, actions, tabbedNavigati
 				</Stack>
 				{ tabBar }
 			</Stack>
-			{ content }
+			<Popover.__unstableSlotNameProvider value={ CONTENT_POPOVER_SLOT }>{ content }</Popover.__unstableSlotNameProvider>
+			<div className="newspack-page__content-popovers">
+				<Popover.Slot name={ CONTENT_POPOVER_SLOT } />
+			</div>
 		</>
 	);
 

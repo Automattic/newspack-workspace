@@ -63,6 +63,13 @@ $dataviews-compact-max-width: 430px;
 	}
 }
 
+// Holds the popovers opened from the page content. Its stacking context keeps
+// them below the sticky header above, so they scroll under it, not over it.
+.newspack-page__content-popovers {
+	position: relative;
+	z-index: 2;
+}
+
 .newspack-page__header {
 	background: var(--wpds-color-background-surface-neutral-strong);
 	border-block-end: var(--wpds-border-width-xs) solid var(--wpds-color-stroke-surface-neutral-weak);

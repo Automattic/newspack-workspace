@@ -7,6 +7,7 @@ import { HashRouter } from 'react-router-dom';
 /**
  * WordPress dependencies.
  */
+import { Popover, SlotFillProvider } from '@wordpress/components';
 import { useViewportMatch } from '@wordpress/compose';
 
 /**
@@ -75,5 +76,38 @@ describe( 'Page subtitle', () => {
 			</Page>
 		);
 		expect( screen.getByText( 'Manage how Newspack syncs reader data.' ) ).not.toHaveClass( 'screen-reader-text' );
+	} );
+} );
+
+/**
+ * The sticky header stacks above the page content, so a popover opened from the
+ * content has to render inside the page to scroll under the header instead of
+ * over it. A popover opened from the header still renders at the document level,
+ * where it stays above the header it belongs to.
+ */
+describe( 'Page popovers', () => {
+	const renderWithPopovers = () =>
+		render(
+			<SlotFillProvider>
+				<HashRouter>
+					<Page breadcrumbItems={ [ { label: 'Subscribers' } ] } actions={ <Popover>Header popover</Popover> }>
+						<Popover>Content popover</Popover>
+					</Page>
+				</HashRouter>
+			</SlotFillProvider>
+		);
+
+	const contentSlotHolding = text => screen.getByText( text ).closest( '.newspack-page__content-popovers' );
+
+	it( 'renders popovers opened from the content inside the page', () => {
+		renderWithPopovers();
+
+		expect( contentSlotHolding( 'Content popover' ) ).not.toBeNull();
+	} );
+
+	it( 'keeps popovers opened from the header out of the content slot', () => {
+		renderWithPopovers();
+
+		expect( contentSlotHolding( 'Header popover' ) ).toBeNull();
 	} );
 } );
