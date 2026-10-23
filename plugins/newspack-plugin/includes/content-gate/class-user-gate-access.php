@@ -314,31 +314,44 @@ class User_Gate_Access {
 	 *
 	 * @return array[] Records with an integer `id`, a `site_name` and an `edit_url`
 	 *                 (empty when the other site has no screen to link to). Anything
-	 *                 without an ID or a site name is dropped, since it can't be labelled.
+	 *                 without a positive numeric ID or a non-blank site name is
+	 *                 dropped, since it can't be labelled. A malformed rule value
+	 *                 grants nothing, so no records are asked for it.
 	 */
 	private static function get_network_subscription_records( $user_id, $value ) {
+		if ( Access_Rules::is_malformed_options_backed_value( $value ) ) {
+			return [];
+		}
+
 		/**
 		 * Filters the subscription records that satisfy a subscription rule on
 		 * other sites in the user's network.
 		 *
+		 * Not applied when the rule value is malformed.
+		 *
 		 * @param array[] $records     Records, each with `id` (int), `site_url`,
 		 *                             `site_name` and `edit_url` (strings).
 		 * @param int     $user_id     User ID.
-		 * @param array   $product_ids Product IDs from the rule value.
+		 * @param array   $product_ids Product IDs from the rule value; empty for a
+		 *                             rule that accepts any subscription.
 		 */
-		$records = apply_filters( 'newspack_access_rules_network_subscription_records', [], $user_id, (array) $value );
+		$records = apply_filters( 'newspack_access_rules_network_subscription_records', [], $user_id, is_array( $value ) ? $value : [] );
 		if ( ! is_array( $records ) ) {
 			return [];
 		}
 
 		$valid = [];
 		foreach ( $records as $record ) {
-			if ( ! is_array( $record ) || empty( $record['id'] ) || empty( $record['site_name'] ) || ! is_scalar( $record['site_name'] ) ) {
+			if ( ! is_array( $record ) || ! isset( $record['id'] ) || ! is_numeric( $record['id'] ) || (int) $record['id'] <= 0 ) {
+				continue;
+			}
+			$site_name = isset( $record['site_name'] ) && is_scalar( $record['site_name'] ) ? trim( (string) $record['site_name'] ) : '';
+			if ( '' === $site_name ) {
 				continue;
 			}
 			$valid[] = [
 				'id'        => (int) $record['id'],
-				'site_name' => (string) $record['site_name'],
+				'site_name' => $site_name,
 				'edit_url'  => isset( $record['edit_url'] ) && is_string( $record['edit_url'] ) ? $record['edit_url'] : '',
 			];
 		}

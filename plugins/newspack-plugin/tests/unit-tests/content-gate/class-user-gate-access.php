@@ -681,28 +681,58 @@ class Newspack_Test_User_Gate_Access extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A record without an ID or a site name can't be labelled, so it's dropped;
-	 * the site name is escaped like any other text printed in the report.
+	 * A record without a positive numeric ID or a non-blank site name can't be
+	 * labelled, so it's dropped; the site name is trimmed, and escaped like any
+	 * other text printed in the report.
 	 */
 	public function test_malformed_network_records_are_dropped_and_names_escaped() {
 		$this->stub_network_records(
 			[
 				$this->network_record( 0 ),
+				$this->network_record( 'abc' ),
 				$this->network_record( 555, '' ),
+				$this->network_record( 558, '   ' ),
 				'not a record',
 				[
 					'id'       => 556,
 					'edit_url' => 'https://node-b.example.test/wp-admin/post.php?post=556&action=edit',
 				],
 				$this->network_record( 557, '<b>Node</b> Daily' ),
+				$this->network_record( 559, '  Hub Gazette ' ),
 			]
 		);
 
 		$links = User_Gate_Access::get_granting_entity_links( 'subscription', [ 101 ], self::$user_id );
 
-		$this->assertCount( 1, $links );
+		$this->assertCount( 2, $links );
 		$this->assertStringContainsString( '#557 on &lt;b&gt;Node&lt;/b&gt; Daily', $links[0] );
 		$this->assertStringNotContainsString( '<b>', $links[0] );
+		$this->assertStringContainsString( '>#559 on Hub Gazette<', $links[1] );
+	}
+
+	/**
+	 * An "any subscription" rule stores an empty string; newspack-network gets
+	 * it as no products, not as one blank product.
+	 */
+	public function test_any_subscription_rule_asks_network_with_no_products() {
+		$spy = $this->stub_network_records( [] );
+
+		User_Gate_Access::get_granting_entity_links( 'subscription', '', self::$user_id );
+
+		$this->assertSame( [ [ self::$user_id, [] ] ], $spy['calls'] );
+	}
+
+	/**
+	 * A malformed rule value grants nothing, so newspack-network is never asked
+	 * and none of its records are listed.
+	 */
+	public function test_malformed_subscription_value_never_asks_network() {
+		$spy = $this->stub_network_records( [ $this->network_record() ] );
+
+		$links = User_Gate_Access::get_granting_entity_links( 'subscription', 'gold', self::$user_id );
+
+		$this->assertSame( [], $spy['calls'] );
+		$this->assertSame( [], $links );
 	}
 
 	/**
