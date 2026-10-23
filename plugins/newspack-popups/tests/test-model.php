@@ -208,6 +208,45 @@ class ModelTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Placements covering the inline and overlay templates.
+	 */
+	public function container_placement_provider() {
+		return [
+			'inline'  => [ 'inline', 'newspack-inline-popup' ],
+			'overlay' => [ 'center', 'newspack-lightbox' ],
+		];
+	}
+
+	/**
+	 * The prompt container is not a keyboard stop of its own, so keyboard and
+	 * screen reader users land on the prompt's content instead of a blank button.
+	 *
+	 * @dataProvider container_placement_provider
+	 *
+	 * @param string $placement       Prompt placement.
+	 * @param string $container_class Class that identifies the container.
+	 */
+	public function test_container_is_not_focusable( $placement, $container_class ) {
+		$popup_object = Newspack_Popups_Model::create_popup_object(
+			get_post( self::$popup_id ),
+			false,
+			[
+				'placement'    => $placement,
+				'trigger_type' => 'time',
+			]
+		);
+
+		$dom = new DomDocument();
+		@$dom->loadHTML( Newspack_Popups_Model::generate_popup( $popup_object ) ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		$xpath = new DOMXpath( $dom );
+
+		$container = $xpath->query( '//*[contains(concat(" ", normalize-space(@class), " "), " ' . $container_class . ' ")]' )->item( 0 );
+		self::assertNotNull( $container, 'The prompt container is present.' );
+		self::assertFalse( $container->hasAttribute( 'role' ), 'The prompt container has no role.' );
+		self::assertFalse( $container->hasAttribute( 'tabindex' ), 'The prompt container is not in the tab order.' );
+	}
+
+	/**
 	 * Tests retrieve_popup_by_id
 	 */
 	public function test_retrieve_popup_by_id() {

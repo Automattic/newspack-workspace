@@ -1189,8 +1189,6 @@ final class Newspack_Popups_Model {
 			<div
 				<?php echo self::get_data_status_preview_attrs( $popup ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 				class="<?php echo esc_attr( implode( ' ', $classes ) ); ?>"
-				role="button"
-				tabindex="0"
 				style="<?php echo esc_attr( self::container_style( $popup ) ); ?>"
 				id="<?php echo esc_attr( $element_id ); ?>"
 				data-segments="<?php echo esc_attr( $assigned_segments ); ?>"
@@ -1355,8 +1353,6 @@ final class Newspack_Popups_Model {
 		<div
 			<?php echo self::get_data_status_preview_attrs( $popup ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 			class="<?php echo esc_attr( implode( ' ', $classes ) ); ?>"
-			role="button"
-			tabindex="0"
 			id="<?php echo esc_attr( $element_id ); ?>"
 			data-segments="<?php echo esc_attr( $assigned_segments ); ?>"
 			data-frequency="<?php echo esc_attr( $frequency_config ); ?>"
