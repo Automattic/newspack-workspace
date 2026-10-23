@@ -215,11 +215,14 @@ export default {
 	 * for it. Truthiness decides, as PHP's empty() reads it, so a reader holding
 	 * no value counts as 'no'. Mirrors the boolean branch of the server's
 	 * `Promoted_Fields::evaluate_field()` (newspack-plugin), so a checkbox field
-	 * reads the same in a segment as in an access rule.
+	 * reads the same in a segment as in an access rule. One departure is on
+	 * purpose: a segment value other than 'yes' or 'no' matches nobody, where the
+	 * server falls back to truthiness, so a criterion this can't read never
+	 * widens the segment.
 	 */
 	boolean: ( criteria, config ) => {
 		const value = criteria.value;
-		const isTruthy = !! value && '0' !== value && ! ( Array.isArray( value ) && ! value.length );
+		const isTruthy = !! value && '0' !== value && ! ( typeof value === 'object' && ! Object.keys( value ).length );
 		switch ( String( config.value ).toLowerCase() ) {
 			case 'yes':
 				return isTruthy;

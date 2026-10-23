@@ -195,6 +195,9 @@ describe( 'boolean matching function', () => {
 		expect( boolean( { value: '0' }, { value: 'no' } ) ).toBe( true );
 		expect( boolean( { value: 0 }, { value: 'no' } ) ).toBe( true );
 		expect( boolean( { value: '' }, { value: 'no' } ) ).toBe( true );
+		// PHP decodes both of these to an empty array.
+		expect( boolean( { value: [] }, { value: 'no' } ) ).toBe( true );
+		expect( boolean( { value: {} }, { value: 'no' } ) ).toBe( true );
 		expect( boolean( { value: 1 }, { value: 'yes' } ) ).toBe( true );
 	} );
 
