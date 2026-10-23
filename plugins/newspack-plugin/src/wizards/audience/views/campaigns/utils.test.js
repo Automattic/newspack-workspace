@@ -267,6 +267,7 @@ describe( 'segmentReachDescription', () => {
 	let segmentReachCaveat;
 	let segmentReachNotice;
 	let baseDateSettings;
+	let baseLang;
 
 	beforeAll( async () => {
 		window.newspackAudienceCampaigns = window.newspackAudienceCampaigns || {
@@ -274,11 +275,13 @@ describe( 'segmentReachDescription', () => {
 			criteria: CRITERIA,
 		};
 		baseDateSettings = getSettings();
+		baseLang = document.documentElement.lang;
 		( { segmentReachDescription, segmentReachCaveat, segmentReachNotice } = await import( './utils' ) );
 	} );
 
 	afterEach( () => {
 		setSettings( baseDateSettings );
+		document.documentElement.lang = baseLang;
 	} );
 
 	it( 'returns null when reach reporting is inactive', () => {
@@ -286,11 +289,36 @@ describe( 'segmentReachDescription', () => {
 	} );
 
 	it( 'renders both shares against the audience, with the sample size', () => {
+		document.documentElement.lang = 'en-US';
 		const line = segmentReachDescription( {
 			id: '12',
 			reach: { matched: 1240, won: 320, total_sessions: 3620, as_of: '2026-08-06', range_days: 7 },
 		} );
-		expect( line ).toBe( `7 days to Aug 6: matched 34% of ${ ( 3620 ).toLocaleString() } sessions · prompts reached 9%` );
+		// Asserted as a literal. Formatting the expectation with the same
+		// toLocaleString() call the code uses made this pass in every locale,
+		// which is how a browser-locale separator reached the screen.
+		expect( line ).toBe( '7 days to Aug 6: matched 34% of 3,620 sessions · prompts reached 9%' );
+	} );
+
+	it( 'groups the count by the site locale, not the browser or OS one', () => {
+		// A bare toLocaleString() resolves through the whole navigator.languages
+		// chain and the OS regional format, so an English admin on a machine set
+		// to pt-BR rendered "3.620" — which an English reader takes for 3.62.
+		document.documentElement.lang = 'pt-BR';
+		expect(
+			segmentReachDescription( {
+				id: '12',
+				reach: { matched: 1240, won: 320, total_sessions: 3620, as_of: '2026-08-06', range_days: 7 },
+			} )
+		).toContain( 'of 3.620 sessions' );
+
+		document.documentElement.lang = 'en-US';
+		expect(
+			segmentReachDescription( {
+				id: '12',
+				reach: { matched: 1240, won: 320, total_sessions: 3620, as_of: '2026-08-06', range_days: 7 },
+			} )
+		).toContain( 'of 3,620 sessions' );
 	} );
 
 	it( 'reads as a record of past sessions, not a live capability', () => {

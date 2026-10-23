@@ -294,6 +294,22 @@ const reachShare = ( value, total ) => {
 };
 
 /**
+ * Format a session count.
+ *
+ * Pinned to the site's locale rather than left to the browser's. A bare
+ * `toLocaleString()` resolves through the whole `navigator.languages` chain and
+ * the OS regional format, not `navigator.language`, so an English admin on a
+ * machine set to pt-BR renders 3,620 as "3.620" — which an English reader takes
+ * for 3.62. The count is on the line precisely so the sample size behind the
+ * percentages is legible, so a misread magnitude defeats the point of showing
+ * it.
+ *
+ * @param {number} count Sessions.
+ * @return {string} Formatted count.
+ */
+const reachCount = count => count.toLocaleString( document.documentElement.lang || undefined );
+
+/**
  * Format a `Y-m-d` day from the reach payload.
  *
  * These label calendar days rather than marking moments, so they must read the
@@ -352,7 +368,7 @@ export const segmentReachDescription = segment => {
 		Number( reach.range_days ) || 7,
 		reachDay( reach.as_of ),
 		reachShare( Number( reach.matched ), total ),
-		total.toLocaleString(),
+		reachCount( total ),
 		reachShare( Number( reach.won ), total )
 	);
 };
