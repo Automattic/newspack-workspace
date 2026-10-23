@@ -438,6 +438,7 @@ class Newspack_Test_GA4_Segment_Reach extends WP_UnitTestCase {
 				'property_id' => 'PROP-REACH',
 				'count'       => GA4_Segment_Reach::MAX_FAILURES,
 				'last_error'  => 'Field customEvent:segment_id is not a valid dimension.',
+				'last_failed' => time(),
 			],
 			false
 		);
@@ -465,6 +466,7 @@ class Newspack_Test_GA4_Segment_Reach extends WP_UnitTestCase {
 				'property_id' => 'PROP-OLD',
 				'count'       => GA4_Segment_Reach::MAX_FAILURES,
 				'last_error'  => 'boom',
+				'last_failed' => time(),
 			],
 			false
 		);
