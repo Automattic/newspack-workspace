@@ -20,6 +20,8 @@ use Newspack\Content_Gate;
 use Newspack\Group_Subscription;
 use Newspack\Group_Subscription_Settings;
 
+require_once NEWSPACK_ABSPATH . 'tests/mocks/wcs-gifting-mock.php';
+
 /**
  * Test migrate-manual-members' member-selection logic for comp/legacy parity
  * residuals on purchase plans.
@@ -120,6 +122,9 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		}
 		foreach ( self::MEMBERSHIP_STATUSES as $status ) {
 			\_unregister_post_status( $status );
+		}
+		if ( class_exists( 'WCS_Gifting' ) && property_exists( 'WCS_Gifting', 'recipients' ) ) {
+			WCS_Gifting::$recipients = [];
 		}
 		parent::tear_down();
 	}
@@ -1607,45 +1612,5 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		}
 		$this->assertEmpty( $this->get_migration_subscription_ids_for_user( $member_user_ids_by_status['wcm-expired'] ), 'An expired member has no access today and must be untouched.' );
 		$this->assertStringContainsString( (string) $member_user_ids_by_status['wcm-expired'], $output, 'The expired member must be reported as not found among active members.' );
-	}
-}
-
-/**
- * Minimal WCS_Gifting stub mirroring the surface
- * WooCommerce_Connection/Teams_Migration consult. A subscription is "gifted"
- * when an entry exists in $recipients; the store is reset per test.
- */
-if ( ! class_exists( 'WCS_Gifting' ) ) {
-	// phpcs:disable WordPress.Files.FileName.InvalidClassFileName, Generic.Files.OneObjectStructurePerFile.MultipleFound
-	/**
-	 * Recording WCS_Gifting stub: gifted iff an entry exists in $recipients.
-	 */
-	class WCS_Gifting {
-		/**
-		 * Map of subscription ID => recipient user ID.
-		 *
-		 * @var array
-		 */
-		public static $recipients = [];
-
-		/**
-		 * Whether the subscription was purchased as a gift.
-		 *
-		 * @param object $subscription Subscription object.
-		 * @return bool
-		 */
-		public static function is_gifted_subscription( $subscription ) {
-			return isset( self::$recipients[ $subscription->get_id() ] );
-		}
-
-		/**
-		 * The recipient user ID for a gifted subscription.
-		 *
-		 * @param object $subscription Subscription object.
-		 * @return int
-		 */
-		public static function get_recipient_user( $subscription ) {
-			return (int) ( self::$recipients[ $subscription->get_id() ] ?? 0 );
-		}
 	}
 }

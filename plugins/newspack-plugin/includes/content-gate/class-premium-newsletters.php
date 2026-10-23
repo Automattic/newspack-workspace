@@ -74,12 +74,13 @@ class Premium_Newsletters {
 	 * Queue-entry source tags. Each access-check queue entry records which event
 	 * enqueued it so that downstream logic (e.g. consulting the renewal snapshot)
 	 * can be scoped to the originating event instead of leaking into unrelated
-	 * flows that happen to dequeue the same user. Plan-switch and
-	 * one-time-purchase-ended entries are remove-only: check_access() never adds
-	 * lists for them, and they never replace another entry for the same user.
-	 * A one-time purchase that ends can't grant access, so adding lists there
-	 * would only re-add lists the reader had left; maybe_enqueue_access_check()
-	 * covers the plan-switch case.
+	 * flows that happen to dequeue the same user. Plan-switch,
+	 * one-time-purchase-ended and gift-removed entries are remove-only:
+	 * check_access() never adds lists for them, and they never replace another
+	 * entry for the same user. A one-time purchase that ends, or a gift handed to
+	 * someone else, can't grant access, so adding lists there would only re-add
+	 * lists the reader had left; maybe_enqueue_access_check() covers the
+	 * plan-switch case.
 	 */
 	const SOURCE_RENEWAL                 = 'renewal';
 	const SOURCE_SUBSCRIPTION_CHANGED    = 'subscription_changed';
@@ -89,6 +90,8 @@ class Premium_Newsletters {
 	const SOURCE_PLAN_SWITCH             = 'plan_switch';
 	const SOURCE_ONE_TIME_PURCHASE       = 'one_time_purchase';
 	const SOURCE_ONE_TIME_PURCHASE_ENDED = 'one_time_purchase_ended';
+	const SOURCE_GIFT_RECEIVED           = 'gift_received';
+	const SOURCE_GIFT_REMOVED            = 'gift_removed';
 
 	/**
 	 * WP option key for how far the one-time purchase lapse sweep has checked.
@@ -152,6 +155,11 @@ class Premium_Newsletters {
 		// naming them, so the membership write itself has to trigger their check.
 		add_action( 'added_user_meta', [ __CLASS__, 'maybe_enqueue_group_membership_check' ], 10, 3 );
 		add_action( 'deleted_user_meta', [ __CLASS__, 'maybe_enqueue_group_membership_check' ], 10, 3 );
+
+		// Handing a gift to another reader fires no subscription event, so the hook
+		// WCS Gifting fires is the only trigger for both readers. It fires whenever
+		// WCS sets a gift's recipient, not only on a hand-off: see the handler.
+		add_action( 'woocommerce_subscriptions_gifting_recipient_changed', [ __CLASS__, 'handle_gift_recipient_changed' ], 10, 3 );
 
 		// Clean up the queue option on plugin deactivation.
 		add_action( 'newspack_deactivation', [ __CLASS__, 'unschedule_access_check_event' ] );
@@ -496,7 +504,7 @@ class Premium_Newsletters {
 	 * @return bool
 	 */
 	private static function is_remove_only_source( string $source ): bool {
-		return in_array( $source, [ self::SOURCE_PLAN_SWITCH, self::SOURCE_ONE_TIME_PURCHASE_ENDED ], true );
+		return in_array( $source, [ self::SOURCE_PLAN_SWITCH, self::SOURCE_ONE_TIME_PURCHASE_ENDED, self::SOURCE_GIFT_REMOVED ], true );
 	}
 
 	/**
@@ -1138,6 +1146,7 @@ class Premium_Newsletters {
 
 	/**
 	 * Set the user's subscribed lists so they can be checked before auto-signup.
+	 * The recipient of a gifted subscription and a group's members are snapshotted too.
 	 *
 	 * @param int   $timestamp Timestamp of the event.
 	 * @param array $data      Data associated with the event.
@@ -1159,6 +1168,15 @@ class Premium_Newsletters {
 		}
 
 		self::snapshot_lists_and_enqueue_renewal_check( $user );
+
+		// A gift's renewal events name the purchaser, but the recipient holds the
+		// subscription, so they need the same snapshot to keep auto-signup from
+		// re-adding a premium list they left.
+		$recipient_id = self::get_gift_recipient_id( $data );
+		$recipient    = $recipient_id ? get_user_by( 'id', $recipient_id ) : false;
+		if ( $recipient ) {
+			self::snapshot_lists_and_enqueue_renewal_check( $recipient );
+		}
 
 		// A group's renewal moves it through On hold and back to Active, which
 		// re-checks every member. Members get the same snapshot as the owner, so
@@ -1219,6 +1237,70 @@ class Premium_Newsletters {
 	}
 
 	/**
+	 * Get the recipient of the gifted subscription a Data Event concerns.
+	 *
+	 * Subscription events name the purchaser, but content gates grant a gift only
+	 * to its recipient. Without this, the recipient never gains the premium lists
+	 * the gift covers, and keeps them after it lapses.
+	 *
+	 * @param array $data Data associated with the event.
+	 *
+	 * @return int The recipient's user ID, or 0 when the event names no gifted
+	 *             subscription or its recipient is the user the event names.
+	 */
+	private static function get_gift_recipient_id( array $data ): int {
+		if ( empty( $data['subscription_id'] ) || ! function_exists( 'wcs_get_subscription' ) ) {
+			return 0;
+		}
+		$subscription = wcs_get_subscription( (int) $data['subscription_id'] );
+		if ( ! $subscription ) {
+			return 0;
+		}
+		$recipient_id = WooCommerce_Subscriptions_Gifting::get_recipient_id( $subscription );
+		return $recipient_id === (int) ( $data['user_id'] ?? 0 ) ? 0 : $recipient_id;
+	}
+
+	/**
+	 * Queue access checks for both readers when a gifted subscription changes
+	 * recipient, because no subscription event fires when an admin reassigns a gift.
+	 *
+	 * WCS fires this hook every time it saves a gift's recipient, changed or not:
+	 * when the gift's parent order or a switch order is marked processing or
+	 * completed, and when an admin reassigns the gift. Renewal orders never fire
+	 * it. Because one order can fire it more than once with the same reader, an
+	 * unchanged recipient is skipped: a recheck could let auto-signup re-add a
+	 * list they left.
+	 *
+	 * Clearing a recipient fires no hook, so a removal isn't covered here. After
+	 * an admin clears one, WCS sets the original recipient again the next time
+	 * the parent order or a switch order is marked processing or completed.
+	 *
+	 * @param \WC_Subscription $subscription     The gifted subscription.
+	 * @param int              $new_recipient_id The new recipient's user ID.
+	 * @param int              $old_recipient_id The previous recipient's user ID, or 0 if none.
+	 *
+	 * @return void
+	 */
+	public static function handle_gift_recipient_changed( $subscription, $new_recipient_id, $old_recipient_id ): void {
+		$new_recipient_id = (int) $new_recipient_id;
+		$old_recipient_id = (int) $old_recipient_id;
+		if ( $new_recipient_id === $old_recipient_id ) {
+			return;
+		}
+		if ( $new_recipient_id > 0 ) {
+			self::add_user_to_queue( $new_recipient_id, self::SOURCE_GIFT_RECEIVED );
+		}
+		// The reader who held the subscription until now only loses lists: a
+		// remove-only check can't re-add one they left. With no previous recipient
+		// that's the buyer, who loses access when an admin first gives their own
+		// subscription a recipient.
+		$previous_holder_id = $old_recipient_id > 0 ? $old_recipient_id : (int) $subscription->get_customer_id();
+		if ( $previous_holder_id > 0 ) {
+			self::add_user_to_queue( $previous_holder_id, self::SOURCE_GIFT_REMOVED );
+		}
+	}
+
+	/**
 	 * Queue an access check for a reader who just joined or left a group subscription.
 	 *
 	 * @param int|int[] $meta_ids ID(s) of the affected meta row(s).
@@ -1234,8 +1316,8 @@ class Premium_Newsletters {
 
 	/**
 	 * Maybe add or remove the user from restricted lists based on their access status.
-	 * When the event names a group subscription and can change its access, the
-	 * members are queued too.
+	 * The recipient of a gifted subscription is queued too, and so are a group
+	 * subscription's members when the event can change their access.
 	 *
 	 * @param int    $timestamp Timestamp of the event.
 	 * @param array  $data      Data associated with the event.
@@ -1250,6 +1332,13 @@ class Premium_Newsletters {
 			return;
 		}
 		self::add_user_to_queue( (int) $data['user_id'], $source );
+		// A gift's status decides its recipient's access, so the recipient is checked
+		// on every event like the owner, not skipped like a group member when the
+		// status keeps access.
+		$recipient_id = self::get_gift_recipient_id( $data );
+		if ( $recipient_id ) {
+			self::add_user_to_queue( $recipient_id, $source );
+		}
 		if ( ! self::event_changes_group_access( $data ) ) {
 			return;
 		}
