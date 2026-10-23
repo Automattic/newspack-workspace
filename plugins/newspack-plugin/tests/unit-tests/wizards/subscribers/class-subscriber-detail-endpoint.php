@@ -601,8 +601,9 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 	}
 
 	/**
-	 * A purchaser whose account was deleted cannot be named or linked to, so the
-	 * gift still shows on the recipient's profile but without a "Gifted by".
+	 * A gift whose purchaser's account is gone has no "Gifted by" to show. WCS
+	 * removes a gift's recipient when it deletes the purchaser, so this guards a
+	 * deletion WCS didn't handle.
 	 */
 	public function test_gifted_by_null_when_purchaser_deleted() {
 		$this->login_admin();
