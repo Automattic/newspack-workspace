@@ -9,8 +9,9 @@
  * Minimal WCS_Gifting stub mirroring the two static methods the plugin's
  * gift-aware code calls: is_gifted_subscription() and get_recipient_user(). A
  * subscription is "gifted" when an entry exists in $recipients. The stub has no
- * reset. The store is static and shared across test classes, so reset
- * WCS_Gifting::$recipients in set_up().
+ * reset method, and the store is static and shared across test classes: reset
+ * WCS_Gifting::$recipients in set_up(), and in tear_down() so a later class
+ * that never touches the stub doesn't inherit a gift.
  */
 if ( ! class_exists( 'WCS_Gifting' ) ) {
 	/**

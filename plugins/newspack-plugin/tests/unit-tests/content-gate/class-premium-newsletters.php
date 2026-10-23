@@ -1924,10 +1924,11 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 
 	/**
 	 * A gift with no previous recipient queues only the new reader, and a gift set
-	 * again to the same reader queues no one: WCS fires the hook on every order
-	 * completion, and a recheck then could re-add a list the reader left.
+	 * again to the same reader queues no one: WCS saves the same recipient again
+	 * when a parent or switch order moves from processing to completed, and a
+	 * recheck then could re-add a list the reader left.
 	 */
-	public function test_gift_recipient_change_skips_missing_recipients() {
+	public function test_gift_recipient_change_queues_only_a_reader_whose_gift_changed() {
 		$purchaser_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
 		$recipient_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
 		$this->create_newsletter_gate( [ 100 ], [ $this->create_premium_list() ] );

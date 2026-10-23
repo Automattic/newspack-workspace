@@ -123,6 +123,9 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		foreach ( self::MEMBERSHIP_STATUSES as $status ) {
 			\_unregister_post_status( $status );
 		}
+		if ( class_exists( 'WCS_Gifting' ) && property_exists( 'WCS_Gifting', 'recipients' ) ) {
+			WCS_Gifting::$recipients = [];
+		}
 		parent::tear_down();
 	}
 
