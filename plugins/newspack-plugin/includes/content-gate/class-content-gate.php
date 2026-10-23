@@ -23,6 +23,12 @@ class Content_Gate {
 	const GATE_LAYOUT_CPT = 'np_gate_layout';
 
 	/**
+	 * Values a premium newsletter gate's `auto_signup` setting can take: follow the
+	 * site-wide newsletter sign-up setting, or override it to on or off for this gate.
+	 */
+	const AUTO_SIGNUP_MODES = [ 'default', 'on', 'off' ];
+
+	/**
 	 * Whether the gate has been rendered in this execution.
 	 *
 	 * @var boolean
@@ -2296,6 +2302,11 @@ class Content_Gate {
 			Content_Rules::update_gate_content_rules_match( $gate_id, $gate['content_rules_match'] );
 		}
 
+		// Update the premium newsletter list settings.
+		if ( $is_newsletter ) {
+			self::update_newsletter_gate_settings( $gate_id, $gate );
+		}
+
 		// Create default layouts for registration and custom_access modes.
 		$layout_titles = self::get_gate_mode_layout_titles();
 
@@ -3048,6 +3059,58 @@ class Content_Gate {
 	}
 
 	/**
+	 * Get the list settings of a premium newsletter gate.
+	 *
+	 * A gate saved before these settings existed has neither stored, and reads as
+	 * following the site's sign-up setting with its lists shown, which is how it
+	 * behaved then. A stored value outside the known modes reads the same way.
+	 *
+	 * @param int $id Gate ID.
+	 *
+	 * @return array {
+	 *     @type string $auto_signup Whether readers are signed up automatically: one of
+	 *                               self::AUTO_SIGNUP_MODES.
+	 *     @type bool   $hide_lists  Whether the gate's lists are hidden from readers.
+	 * }
+	 */
+	public static function get_newsletter_gate_settings( $id ) {
+		$auto_signup = get_post_meta( $id, 'auto_signup', true );
+
+		return [
+			'auto_signup' => in_array( $auto_signup, self::AUTO_SIGNUP_MODES, true ) ? $auto_signup : 'default',
+			'hide_lists'  => (bool) get_post_meta( $id, 'hide_lists', true ),
+		];
+	}
+
+	/**
+	 * Update the list settings of a premium newsletter gate.
+	 *
+	 * Only premium newsletter gates carry these settings, so a content gate is left
+	 * untouched even when its payload names them. Like the other gate settings, a
+	 * key the payload leaves out keeps its stored value, and an `auto_signup` outside
+	 * self::AUTO_SIGNUP_MODES is ignored rather than stored, so a bad payload cannot
+	 * leave the gate in a mode nothing reads.
+	 *
+	 * @param int   $id       Gate ID.
+	 * @param array $settings Gate settings; only `auto_signup` and `hide_lists` are read.
+	 *
+	 * @return void
+	 */
+	public static function update_newsletter_gate_settings( $id, $settings ) {
+		if ( ! get_post_meta( $id, 'is_newsletter', true ) ) {
+			return;
+		}
+
+		if ( isset( $settings['auto_signup'] ) && in_array( $settings['auto_signup'], self::AUTO_SIGNUP_MODES, true ) ) {
+			\update_post_meta( $id, 'auto_signup', $settings['auto_signup'] );
+		}
+
+		if ( isset( $settings['hide_lists'] ) ) {
+			\update_post_meta( $id, 'hide_lists', (bool) $settings['hide_lists'] );
+		}
+	}
+
+	/**
 	 * Get gate.
 	 *
 	 * @param int $id Gate ID.
@@ -3060,7 +3123,7 @@ class Content_Gate {
 			return new \WP_Error( 'newspack_content_gate_not_found', __( 'Gate not found.', 'newspack-plugin' ) );
 		}
 
-		return [
+		$gate = [
 			'id'                  => $post->ID,
 			'status'              => $post->post_status,
 			'title'               => $post->post_title,
@@ -3070,6 +3133,13 @@ class Content_Gate {
 			'registration'        => self::get_registration_settings( $post->ID ),
 			'custom_access'       => self::get_custom_access_settings( $post->ID ),
 		];
+
+		// The list settings mean nothing on a content gate, so they are left off its payload.
+		if ( get_post_meta( $post->ID, 'is_newsletter', true ) ) {
+			$gate = array_merge( $gate, self::get_newsletter_gate_settings( $post->ID ) );
+		}
+
+		return $gate;
 	}
 
 	/**
@@ -3174,6 +3244,9 @@ class Content_Gate {
 		if ( isset( $gate['custom_access'] ) ) {
 			self::update_custom_access_settings( $id, $gate['custom_access'] );
 		}
+
+		// Update the premium newsletter list settings.
+		self::update_newsletter_gate_settings( $id, $gate );
 
 		return self::get_gate( $id );
 	}

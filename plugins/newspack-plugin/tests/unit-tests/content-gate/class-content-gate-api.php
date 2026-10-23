@@ -1073,4 +1073,40 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 		$this->assertNotWPError( $sanitized_gate );
 		$this->assertArrayNotHasKey( 'access_rules', $sanitized_gate['registration'] );
 	}
+
+	/**
+	 * The list settings pass through the sanitizer when they are valid, with the
+	 * checkbox value coerced to a real boolean.
+	 */
+	public function test_sanitize_gate_keeps_valid_list_settings() {
+		$sanitized = Content_Gate_API::sanitize_gate(
+			[
+				'auto_signup' => 'off',
+				'hide_lists'  => '1',
+			]
+		);
+
+		$this->assertSame( 'off', $sanitized['auto_signup'] );
+		$this->assertTrue( $sanitized['hide_lists'] );
+	}
+
+	/**
+	 * A sign-up mode outside the three known ones is dropped, so the stored value stays.
+	 */
+	public function test_sanitize_gate_drops_an_invalid_auto_signup() {
+		$sanitized = Content_Gate_API::sanitize_gate( [ 'auto_signup' => 'yes' ] );
+
+		$this->assertArrayNotHasKey( 'auto_signup', $sanitized );
+	}
+
+	/**
+	 * A save that does not name the list settings must not carry them, or it would
+	 * overwrite the stored values with defaults.
+	 */
+	public function test_sanitize_gate_omits_absent_list_settings() {
+		$sanitized = Content_Gate_API::sanitize_gate( [ 'title' => 'T' ] );
+
+		$this->assertArrayNotHasKey( 'auto_signup', $sanitized );
+		$this->assertArrayNotHasKey( 'hide_lists', $sanitized );
+	}
 }

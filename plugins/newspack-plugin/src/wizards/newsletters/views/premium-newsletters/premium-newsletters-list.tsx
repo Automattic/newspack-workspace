@@ -18,6 +18,7 @@ import { useWizardApiFetch } from '../../../hooks/use-wizard-api-fetch';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import ContentGateOnboarding from '../../../audience/views/content-gates/content-gates-onboarding';
 import ContentGateSettings from '../../../audience/views/content-gates/content-gate-settings';
+import { getGatesSubTitle } from '../../../audience/views/content-gates/utils';
 import AdvancedSettings from './advanced-settings';
 import { PREMIUM_NEWSLETTERS_WIZARD_SLUG } from './consts';
 import '../../../audience/views/content-gates/style.scss';
@@ -25,18 +26,20 @@ import '../../../audience/views/content-gates/style.scss';
 const PremiumNewslettersList = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] ) => void } ) => {
 	const wizardData = useWizardData( PREMIUM_NEWSLETTERS_WIZARD_SLUG ) as WizardData;
 	const { isFetching } = useWizardApiFetch( PREMIUM_NEWSLETTERS_WIZARD_SLUG );
-	const { resetHeaderData, setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
+	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ showAdvancedSettings, setShowAdvancedSettings ] = useState( false );
 
 	const ref = useRef( null );
 	const gates = ( wizardData?.gates || [] ) as Gate[];
+	const gateCount = gates.length;
 
 	useEffect( () => {
 		if ( isFetching ) {
 			return;
 		}
-		if ( ! gates?.length ) {
-			resetHeaderData();
+		const subTitle = getGatesSubTitle( true );
+		if ( ! gateCount ) {
+			setHeaderData( { actions: [], subTitle } );
 			return;
 		}
 		setHeaderData( {
@@ -47,17 +50,15 @@ const PremiumNewslettersList = ( { updateGatesData }: { updateGatesData: ( gates
 					mobileIcon: 'plus',
 					href: '#/edit/new/all',
 				},
-			],
-			sectionTitle: __( 'Premium Newsletters', 'newspack-plugin' ),
-			sectionDescription: __( 'Set up premium newsletters to control access to your lists.', 'newspack-plugin' ),
-			sectionMenu: [
 				{
+					type: 'more',
 					label: __( 'Advanced Settings', 'newspack-plugin' ),
 					action: () => setShowAdvancedSettings( true ),
 				},
 			],
+			subTitle,
 		} );
-	}, [ isFetching, gates ] );
+	}, [ isFetching, gateCount ] );
 
 	if ( ! gates?.length ) {
 		return <ContentGateOnboarding isNewsletter />;
