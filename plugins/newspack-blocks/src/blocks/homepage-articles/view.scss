@@ -251,6 +251,11 @@
 				display: block;
 			}
 		}
+
+		// Shown in place of the publish date; outranks themes hiding `.updated`.
+		.updated-date .updated {
+			display: inline;
+		}
 	}
 
 	.avatar {
