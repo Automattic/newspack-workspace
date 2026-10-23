@@ -223,11 +223,15 @@ class Promoted_Fields {
 			if ( ! $field->is_segment_criteria() ) {
 				continue;
 			}
-			$options = $field->get_options();
+			$options           = $field->get_options();
+			$matching_function = $field->get_matching_function();
 
-			// Boolean fields get Yes/No options for segmentation.
+			// Boolean fields get Yes/No options for segmentation. The reader holds
+			// a real true or false, which exact matching never equates with 'yes'
+			// or 'no', so these options take the matcher that reads them.
 			if ( 'boolean' === $field->get_value_type() && empty( $options ) ) {
-				$options = [
+				$matching_function = 'boolean';
+				$options           = [
 					[
 						'value' => 'yes',
 						'label' => __( 'Yes', 'newspack-plugin' ),
@@ -255,7 +259,7 @@ class Promoted_Fields {
 				[
 					'name'               => self::get_display_name( $field, $integration ),
 					'category'           => 'integrations',
-					'matching_function'  => self::supported_matching_function( $field->get_matching_function() ),
+					'matching_function'  => self::supported_matching_function( $matching_function ),
 					'matching_attribute' => $field->get_key(),
 					'options'            => $options,
 					'description'        => $field->get_description(),
@@ -310,7 +314,8 @@ class Promoted_Fields {
 		$value     = self::decode_value( $raw_value );
 
 		// Boolean fields: access rules pass no args (just check truthiness),
-		// segmentation passes 'yes'/'no'.
+		// segmentation passes 'yes'/'no'. Segments match in the browser, through
+		// the `boolean` matcher in newspack-popups, which mirrors this branch.
 		if ( 'boolean' === $field->get_value_type() ) {
 			$is_truthy = ! empty( $value );
 
