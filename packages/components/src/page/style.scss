@@ -64,11 +64,17 @@ $dataviews-compact-max-width: 430px;
 }
 
 // Holds the popovers opened from the page content, at the end of the document.
-// Its stacking context keeps them below the sticky header's z-index 3, so they
-// scroll under the header, not over it.
+// Where the header is sticky, this stacking context keeps them below its
+// z-index 3, so they scroll under it, not over it. That holds only while no
+// ancestor of the page starts a stacking context of its own, which would put
+// the whole page, header included, under this container. Narrower screens have
+// no sticky header, and popovers there that expand to fill the screen must stay
+// above the admin bar, so they keep their own z-index.
 .newspack-page__content-popovers {
-	position: relative;
-	z-index: 2;
+	@include wp-mixins.break-medium {
+		position: relative;
+		z-index: 2;
+	}
 }
 
 .newspack-page__header {
