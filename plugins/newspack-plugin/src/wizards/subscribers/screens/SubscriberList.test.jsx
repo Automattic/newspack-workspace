@@ -252,9 +252,9 @@ describe( 'the SubscriberList retry affordance', () => {
 
 /**
  * A refetch with rows already showing covers the screen with a spinner overlay
- * that blocks input until the read settles. DataViews' own spinner sits below the
- * table there, where it's easy to miss, so it's kept only for a refetch with no
- * rows to cover.
+ * that blocks clicks until the read settles. DataViews' own spinner sits below
+ * the table there, where it's easy to miss, so it's kept only for a refetch with
+ * no rows to cover.
  */
 describe( 'the subscriber list loading overlay', () => {
 	beforeEach( () => {
@@ -317,7 +317,16 @@ describe( 'the subscriber list loading overlay', () => {
 		expect( overlay().parentElement ).toBe( document.body );
 	} );
 
-	// The overlay blocks input, so a read that fails must never leave it up.
+	// A press that moved focus would close an open filter popover, and take the
+	// search box away from a reader still typing in it.
+	it( 'keeps focus where it is when the overlay is pressed', async () => {
+		await mountThenRefetch( 2 );
+
+		// fireEvent returns false when a handler prevented the default action.
+		expect( fireEvent.mouseDown( overlay() ) ).toBe( false );
+	} );
+
+	// The overlay blocks clicks, so a read that fails must never leave it up.
 	it( 'clears the overlay when the refetch fails', async () => {
 		const { fail } = await mountThenRefetch( 2 );
 
@@ -326,7 +335,6 @@ describe( 'the subscriber list loading overlay', () => {
 		} );
 
 		expect( overlay() ).toBeNull();
-		expect( screen.getByRole( 'button', { name: 'Retry' } ) ).toBeInTheDocument();
 	} );
 
 	it( "leaves a refetch with no rows to DataViews' own spinner", async () => {

@@ -483,9 +483,10 @@ export default function SubscriberList() {
 		);
 	}
 
-	// A refetch with rows showing covers the screen with a spinner and blocks input
+	// A refetch with rows showing covers the screen with a spinner and blocks clicks
 	// until it settles: DataViews' own one renders below the table, out of sight on
-	// a long page. With no rows to cover, DataViews' spinner stands in for the
+	// a long page. Keys still reach the controls underneath on purpose, so a reader
+	// can keep typing in the search box. With no rows to cover, DataViews' spinner stands in for the
 	// empty state, so it keeps that case. A failed read lands on the error notice
 	// above, which never renders the overlay, so a failure can't leave it stuck.
 	const isRefreshing = subscribersLoading && items.length > 0;
@@ -521,10 +522,13 @@ export default function SubscriberList() {
 				search
 			/>
 			{ /* In the document body, so no ancestor of the list can pin the fixed
-			     overlay to itself or stack popovers above it. */ }
+			     overlay to itself or stack popovers above it. Cancelling the press
+			     keeps focus where it was: moving it would close an open filter
+			     popover and pull focus out of the search box. */ }
 			{ isRefreshing &&
 				createPortal(
-					<div className="newspack-subscribers__loading-overlay">
+					// eslint-disable-next-line jsx-a11y/no-static-element-interactions
+					<div className="newspack-subscribers__loading-overlay" onMouseDown={ event => event.preventDefault() }>
 						<Waiting />
 					</div>,
 					document.body
