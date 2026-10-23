@@ -275,3 +275,41 @@ describe( 'the newsletters column', () => {
 		expect( cell ).toBe( 'Daily Brief, Unknown list (abc123def)' );
 	} );
 } );
+
+/**
+ * A reader the network created gets a "Network" badge beside the name.
+ */
+describe( 'the network reader rows', () => {
+	beforeEach( () => {
+		headerCalls = [];
+		mockDataViewsProps = null;
+		apiFetch.mockReset();
+	} );
+
+	/** Mount the list, then render one column's cell for the given row. */
+	const renderCell = async ( fieldId, item ) => {
+		apiFetch.mockResolvedValue( { items: [ item ], total: 1, pages: 1 } );
+		await act( async () => {
+			render( <SubscriberList /> );
+		} );
+		const column = mockDataViewsProps.fields.find( field => fieldId === field.id );
+		return render( column.render( { item } ) );
+	};
+
+	it( 'badges a reader the network created, beside the name', async () => {
+		const { container } = await renderCell( 'name', { ...subscriber( 1 ), isNetworkReader: true } );
+
+		expect( container.textContent ).toContain( 'Reader 1' );
+		expect( container.textContent ).toContain( 'Network' );
+		expect( container.textContent.indexOf( 'Reader 1' ) ).toBeLessThan( container.textContent.indexOf( 'Network' ) );
+		// The badge shares a line with the name, not the email.
+		expect( container.querySelector( '.newspack-subscribers__email' ).textContent ).toBe( 'reader1@example.com' );
+	} );
+
+	it( 'leaves a reader this site created without the badge', async () => {
+		const { container } = await renderCell( 'name', subscriber( 1 ) );
+
+		expect( container.textContent ).toContain( 'Reader 1' );
+		expect( container.textContent ).not.toContain( 'Network' );
+	} );
+} );

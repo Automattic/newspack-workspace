@@ -37,6 +37,7 @@ import { useSubscribers } from '../data/use-subscribers';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
 import { GROUP_LABEL, ROLE_LABELS, groupRoleLabel } from '../labels';
 import { SubscriptionLink } from '../links';
+import { networkReaderBadge } from '../network';
 import { STATUS_INDICATORS, STATUS_LABELS, displayStatuses, statusRank } from '../status';
 
 // A subscriber's group memberships, in the shape the column helpers expect
@@ -157,7 +158,14 @@ export default function SubscriberList() {
 				render: ( { item } ) => {
 					const details = (
 						<div>
-							<div>{ item.name }</div>
+							{ item.isNetworkReader ? (
+								<Stack direction="row" align="center" gap="sm" wrap="wrap">
+									<span>{ item.name }</span>
+									<Badge intent={ networkReaderBadge.intent }>{ networkReaderBadge.label }</Badge>
+								</Stack>
+							) : (
+								<div>{ item.name }</div>
+							) }
 							<div className="newspack-subscribers__email">{ item.email }</div>
 						</div>
 					);
