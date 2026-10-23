@@ -1,3 +1,37 @@
+@use "sass:math";
+
+@mixin pulse-ring( $dot, $gap, $dot-offset: null ) {
+	$dot-size: calc(var(--newspack-ui-spacer-1) * #{$dot});
+
+	@media ( prefers-reduced-motion: no-preference ) {
+		&::after {
+			align-self: center;
+			animation: newspack-ui-badge-pulse 2s ease-out infinite;
+			background: var(--newspack-ui-badge-dot-color, var(--newspack-ui-status-color, var(--newspack-ui-color-text-subtle)));
+			border-radius: 50%;
+			content: "";
+			flex-shrink: 0;
+			height: calc(#{$dot-size} + var(--newspack-ui-spacer-1));
+			margin-block: calc(var(--newspack-ui-spacer-half) * -1);
+			margin-inline: calc(var(--newspack-ui-spacer-half) * -1) calc((#{$dot-size} + var(--newspack-ui-spacer-half) + #{$gap}) * -1);
+			opacity: 0.6;
+			order: -1;
+			transform: scale(math.div($dot, $dot + 1));
+			width: calc(#{$dot-size} + var(--newspack-ui-spacer-1));
+
+			@if $dot-offset {
+				inset-inline-start: $dot-offset;
+				position: relative;
+			}
+
+			@media ( forced-colors: active ) {
+				background: CanvasText;
+				forced-color-adjust: none;
+			}
+		}
+	}
+}
+
 .newspack-ui__badge {
 	align-items: center;
 	background: var(--newspack-ui-color-surface-sunken);
@@ -119,6 +153,8 @@
 		--newspack-ui-status-color: var(--newspack-ui-color-success);
 
 		font-weight: var(--newspack-ui-font-weight-medium);
+
+		@include pulse-ring( 1, var(--newspack-ui-spacer-half), calc((1.25em - var(--newspack-ui-spacer-1)) / 2 - 1.25em / 6) );
 	}
 }
 
@@ -140,21 +176,19 @@
 
 .newspack-ui__status--live::before,
 .newspack-ui__badge--dot.newspack-ui__badge--pulse::before {
-	animation: newspack-ui-badge-pulse 2s ease-out infinite;
-
 	@media ( prefers-reduced-motion: reduce ) {
-		animation: none;
 		box-shadow: 0 0 0 var(--newspack-ui-spacer-half) color-mix(in srgb, var(--newspack-ui-badge-dot-color, var(--newspack-ui-status-color, var(--newspack-ui-color-text-subtle))) 22%, transparent);
 	}
 }
 
-@keyframes newspack-ui-badge-pulse {
-	0% {
-		box-shadow: 0 0 0 0 color-mix(in srgb, var(--newspack-ui-badge-dot-color, var(--newspack-ui-status-color, var(--newspack-ui-color-text-subtle))) 60%, transparent);
-	}
+.newspack-ui__badge--dot.newspack-ui__badge--pulse {
+	@include pulse-ring( 0.75, calc(var(--newspack-ui-spacer-1) * 0.75) );
+}
 
+@keyframes newspack-ui-badge-pulse {
 	70%,
 	100% {
-		box-shadow: 0 0 0 var(--newspack-ui-spacer-half) transparent;
+		opacity: 0;
+		transform: scale(1);
 	}
 }
