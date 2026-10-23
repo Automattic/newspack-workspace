@@ -2233,11 +2233,7 @@ class Subscribers_Wizard extends Wizard {
 						'subscription_status'    => $wcs_statuses,
 					]
 				);
-				// The holder lookup checks each gift recipient's account exists: prime the cache, not one query pair per gift.
-				$recipient_ids = array_filter( array_map( fn( $subscription ) => (int) $subscription->get_meta( '_recipient_user' ), $subs ) );
-				if ( ! empty( $recipient_ids ) ) {
-					cache_users( array_values( array_unique( $recipient_ids ) ) );
-				}
+				self::prime_gift_recipients( $subs );
 				foreach ( $subs as $subscription ) {
 					$ids[] = WooCommerce_Subscriptions_Gifting::get_holder_id( $subscription );
 				}
@@ -2256,6 +2252,21 @@ class Subscribers_Wizard extends Wizard {
 
 		$this->raw_status_ids_cache[ $cache_key ] = array_values( array_unique( array_filter( $ids ) ) );
 		return $this->raw_status_ids_cache[ $cache_key ];
+	}
+
+	/**
+	 * Load every gift recipient in a batch of subscriptions into the user cache.
+	 *
+	 * The holder lookup checks that each gift recipient's account still exists,
+	 * which would otherwise cost a query pair per gift inside the filter scans.
+	 *
+	 * @param \WC_Subscription[] $subscriptions The subscriptions about to be resolved to holders.
+	 */
+	private static function prime_gift_recipients( array $subscriptions ): void {
+		$recipient_ids = array_filter( array_map( fn( $subscription ) => (int) $subscription->get_meta( '_recipient_user' ), $subscriptions ) );
+		if ( ! empty( $recipient_ids ) ) {
+			cache_users( array_values( array_unique( $recipient_ids ) ) );
+		}
 	}
 
 	/**
@@ -2311,16 +2322,17 @@ class Subscribers_Wizard extends Wizard {
 		if ( ! empty( $product_ids ) && function_exists( 'wcs_get_subscriptions_for_product' ) && function_exists( 'wcs_get_subscription' ) ) {
 			$per_product = max( 1, intdiv( self::FILTER_INCLUDE_CAP, count( $product_ids ) ) );
 			foreach ( $product_ids as $product_id ) {
-				foreach ( \wcs_get_subscriptions_for_product( $product_id, 'ids', [ 'limit' => $per_product ] ) as $subscription_id ) {
-					$subscription = \wcs_get_subscription( $subscription_id );
-					if ( ! $subscription ) {
-						continue;
-					}
-					$holder_id = WooCommerce_Subscriptions_Gifting::get_holder_id( $subscription );
-					if ( 'cancelled' === self::map_subscription_status( $subscription->get_status() ) ) {
-						$cancelled_ids[] = $holder_id;
-					} else {
-						$ids[] = $holder_id;
+				$subscription_ids = \wcs_get_subscriptions_for_product( $product_id, 'ids', [ 'limit' => $per_product ] );
+				foreach ( array_chunk( $subscription_ids, self::FILTER_SCAN_CHUNK ) as $chunk ) {
+					$subscriptions = array_filter( array_map( 'wcs_get_subscription', $chunk ) );
+					self::prime_gift_recipients( $subscriptions );
+					foreach ( $subscriptions as $subscription ) {
+						$holder_id = WooCommerce_Subscriptions_Gifting::get_holder_id( $subscription );
+						if ( 'cancelled' === self::map_subscription_status( $subscription->get_status() ) ) {
+							$cancelled_ids[] = $holder_id;
+						} else {
+							$ids[] = $holder_id;
+						}
 					}
 				}
 			}
