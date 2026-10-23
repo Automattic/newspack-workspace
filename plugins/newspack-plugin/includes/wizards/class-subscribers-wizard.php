@@ -2549,5 +2549,6 @@ class Subscribers_Wizard extends Wizard {
 			[ 'wp-components' ],
 			NEWSPACK_PLUGIN_VERSION
 		);
+		wp_style_add_data( 'newspack-subscribers', 'rtl', 'replace' );
 	}
 }
