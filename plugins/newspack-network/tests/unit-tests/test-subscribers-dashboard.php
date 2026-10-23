@@ -287,7 +287,8 @@ class Test_Subscribers_Dashboard extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The index reads only the subscriptions key: a user's other meta, even meta shaped like it, adds nothing.
+	 * The index reads only the subscriptions key: a user's other meta, even meta shaped like it, adds nothing,
+	 * and the scan leaves the user meta cache empty for the readers it passes.
 	 */
 	public function test_index_reads_only_the_subscriptions_key() {
 		$user_id = $this->factory()->user->create();
@@ -317,10 +318,14 @@ class Test_Subscribers_Dashboard extends WP_UnitTestCase {
 			]
 		);
 
+		// Adding meta fires listeners that may fill the cache, so clear it right before the scan.
+		wp_cache_delete( $user_id, 'user_meta' );
+
 		$rows = apply_filters( 'newspack_subscribers_network_subscription_index', [], 10 );
 
 		$this->assertSame( [ 500 ], wp_list_pluck( $rows, 'id' ) );
 		$this->assertSame( [ $user_id ], wp_list_pluck( $rows, 'user_id' ) );
+		$this->assertFalse( wp_cache_get( $user_id, 'user_meta' ), 'The scan must not load the reader\'s meta into the object cache.' );
 	}
 
 	/**
