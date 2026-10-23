@@ -1,3 +1,51 @@
+@use "sass:math";
+
+$badge-dot: 0.75;
+$badge-dot-size: calc(var(--newspack-ui-spacer-1) * #{$badge-dot});
+$badge-dot-gap: calc(var(--newspack-ui-spacer-1) * 0.75);
+$status-dot: 1;
+$status-dot-size: calc(var(--newspack-ui-spacer-1) * #{$status-dot});
+$status-dot-gap: var(--newspack-ui-spacer-half);
+$status-dot-margin-end: calc((1.25em - #{$status-dot-size}) / 2);
+
+@mixin pulse-ring( $dot, $gap, $dot-margin-end: null ) {
+	$dot-size: calc(var(--newspack-ui-spacer-1) * #{$dot});
+	$dot-extent: $dot-size;
+	$ring-end: calc(var(--newspack-ui-spacer-1) * -0.5);
+
+	@if $dot-margin-end {
+		$dot-extent: calc(#{$dot-size} + #{$dot-margin-end});
+		$ring-end: calc(#{$dot-margin-end} - var(--newspack-ui-spacer-1) * 0.5);
+	}
+
+	@media ( prefers-reduced-motion: no-preference ) {
+		&::before {
+			order: -1;
+		}
+
+		&::after {
+			align-self: center;
+			animation: newspack-ui-badge-pulse 2s ease-out infinite;
+			background: var(--newspack-ui-badge-dot-color, var(--newspack-ui-status-color, var(--newspack-ui-color-text-subtle)));
+			border-radius: 50%;
+			content: "";
+			flex-shrink: 0;
+			height: calc(#{$dot-size} + var(--newspack-ui-spacer-1));
+			margin-block: calc(var(--newspack-ui-spacer-1) * -0.5);
+			margin-inline: calc((#{$dot-extent} + #{$gap} + var(--newspack-ui-spacer-1) * 0.5) * -1) $ring-end;
+			opacity: 0.6;
+			order: -1;
+			transform: scale(math.div($dot, $dot + 1));
+			width: calc(#{$dot-size} + var(--newspack-ui-spacer-1));
+
+			@media ( forced-colors: active ) {
+				background: CanvasText;
+				forced-color-adjust: none;
+			}
+		}
+	}
+}
+
 .newspack-ui__badge {
 	align-items: center;
 	background: var(--newspack-ui-color-surface-sunken);
@@ -53,7 +101,7 @@
 	}
 
 	&--dot {
-		gap: calc(var(--newspack-ui-spacer-1) * 0.75);
+		gap: $badge-dot-gap;
 
 		&::before {
 			align-self: center;
@@ -61,8 +109,8 @@
 			border-radius: 50%;
 			content: "";
 			flex-shrink: 0;
-			height: calc(var(--newspack-ui-spacer-1) * 0.75);
-			width: calc(var(--newspack-ui-spacer-1) * 0.75);
+			height: $badge-dot-size;
+			width: $badge-dot-size;
 
 			@media ( forced-colors: active ) {
 				background: CanvasText;
@@ -85,7 +133,7 @@
 	font-family: var(--newspack-ui-font-family);
 	font-size: inherit;
 	font-weight: var(--newspack-ui-font-weight-regular);
-	gap: var(--newspack-ui-spacer-half);
+	gap: $status-dot-gap;
 	line-height: inherit;
 	white-space: nowrap;
 
@@ -119,18 +167,20 @@
 		--newspack-ui-status-color: var(--newspack-ui-color-success);
 
 		font-weight: var(--newspack-ui-font-weight-medium);
+
+		@include pulse-ring( $status-dot, $status-dot-gap, $status-dot-margin-end );
 	}
 }
 
 .newspack-ui__status--live::before {
 	align-self: center;
-	margin-inline: calc((1.25em - var(--newspack-ui-spacer-1)) / 2 - 1.25em / 6) calc((1.25em - var(--newspack-ui-spacer-1)) / 2);
+	margin-inline: calc(#{$status-dot-margin-end} - 1.25em / 6) $status-dot-margin-end;
 	background: var(--newspack-ui-badge-dot-color, var(--newspack-ui-status-color, var(--newspack-ui-color-text-subtle)));
 	border-radius: 50%;
 	content: "";
 	flex-shrink: 0;
-	height: var(--newspack-ui-spacer-1);
-	width: var(--newspack-ui-spacer-1);
+	height: $status-dot-size;
+	width: $status-dot-size;
 
 	@media ( forced-colors: active ) {
 		background: CanvasText;
@@ -140,21 +190,23 @@
 
 .newspack-ui__status--live::before,
 .newspack-ui__badge--dot.newspack-ui__badge--pulse::before {
-	animation: newspack-ui-badge-pulse 2s ease-out infinite;
-
 	@media ( prefers-reduced-motion: reduce ) {
-		animation: none;
 		box-shadow: 0 0 0 var(--newspack-ui-spacer-half) color-mix(in srgb, var(--newspack-ui-badge-dot-color, var(--newspack-ui-status-color, var(--newspack-ui-color-text-subtle))) 22%, transparent);
+
+		@media ( forced-colors: active ) {
+			box-shadow: 0 0 0 var(--newspack-ui-spacer-half) color-mix(in srgb, CanvasText 22%, transparent);
+		}
 	}
 }
 
-@keyframes newspack-ui-badge-pulse {
-	0% {
-		box-shadow: 0 0 0 0 color-mix(in srgb, var(--newspack-ui-badge-dot-color, var(--newspack-ui-status-color, var(--newspack-ui-color-text-subtle))) 60%, transparent);
-	}
+.newspack-ui__badge--dot.newspack-ui__badge--pulse {
+	@include pulse-ring( $badge-dot, $badge-dot-gap );
+}
 
+@keyframes newspack-ui-badge-pulse {
 	70%,
 	100% {
-		box-shadow: 0 0 0 var(--newspack-ui-spacer-half) transparent;
+		opacity: 0;
+		transform: scale(1);
 	}
 }
