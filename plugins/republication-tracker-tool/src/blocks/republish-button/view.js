@@ -75,7 +75,7 @@ function initTabSwitching( modal ) {
 		copyActiveBtn.addEventListener( 'click', e => {
 			e.preventDefault();
 			if ( window.ClipboardUtils ) {
-				ClipboardUtils.copyFromElement( getActiveTextarea(), copyActiveBtn );
+				ClipboardUtils.copyHandoutFromElement( getActiveTextarea(), copyActiveBtn );
 			}
 		} );
 	}
