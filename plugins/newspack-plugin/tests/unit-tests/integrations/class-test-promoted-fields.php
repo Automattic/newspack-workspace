@@ -60,6 +60,7 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 		Integrations::register_integrations();
 		delete_option( 'newspack_integration_incoming_fields_promoted-test' );
 		delete_option( 'newspack_integration_incoming_fields_range-test' );
+		delete_option( 'newspack_integration_incoming_fields_boolean-test' );
 		delete_option( Integrations::OPTION_NAME );
 		parent::tear_down();
 	}
@@ -1021,8 +1022,6 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 		$criterion = reset( $registered );
 		$this->assertSame( 'boolean', $criterion['matching_function'] );
 		$this->assertSame( [ '', 'yes', 'no' ], wp_list_pluck( $criterion['options'], 'value' ) );
-
-		delete_option( 'newspack_integration_incoming_fields_boolean-test' );
 	}
 
 	/**
