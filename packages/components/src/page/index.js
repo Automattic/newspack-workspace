@@ -2,9 +2,9 @@
  * WordPress dependencies.
  */
 import { NavigableRegion } from '@wordpress/admin-ui';
-import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { __experimentalHStack as HStack, Popover } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { useViewportMatch } from '@wordpress/compose';
-import { cloneElement, isValidElement, useState } from '@wordpress/element';
+import { cloneElement, createPortal, isValidElement, useState } from '@wordpress/element';
 import { Icon } from '@wordpress/icons';
 import { Stack, Text } from '@wordpress/ui';
 
@@ -21,6 +21,20 @@ import Breadcrumbs from '../breadcrumbs';
 import HeaderActions, { isActionList } from './header-actions';
 import useScrollEdges from './use-scroll-edges';
 import './style.scss';
+
+// WordPress `Popover`s opened from the page content (`Dropdown`, `DropdownMenu`
+// and the like) render into this slot, stacked under the sticky header, instead
+// of the default one, which stacks them over it. Popovers opened from the header
+// keep the default slot. Ariakit-based menus, such as DataViews' row and column
+// menus, and overlays built on `@wordpress/ui`'s `Popover`, such as `InfoButton`,
+// portal on their own and don't follow it.
+const CONTENT_POPOVER_SLOT = 'newspack-page-content';
+
+// Routing by subtree leans on an unstable part of WordPress's own
+// `wp.components`. If a release drops it, the page renders its content as is and
+// content popovers fall back to the default slot, rather than the page failing to
+// render. Recheck it on WordPress upgrades.
+const SlotNameProvider = Popover.__unstableSlotNameProvider ?? ( ( { children } ) => <>{ children }</> );
 
 /**
  * Newspack page region: a sticky header block (breadcrumbs, actions, optional
@@ -103,7 +117,18 @@ const Page = ( { breadcrumbItems = [], badges, subTitle, actions, tabbedNavigati
 				</Stack>
 				{ tabBar }
 			</Stack>
-			{ content }
+			<SlotNameProvider value={ CONTENT_POPOVER_SLOT }>{ content }</SlotNameProvider>
+			{ /* At the end of the document, like WordPress's own popover container, so
+			     no ancestor of the page clips the popovers or bounds their placement.
+			     A page with no content of its own (the PHP-page header) registers no
+			     slot, since it often has no SlotFillProvider to register one with. */ }
+			{ children &&
+				createPortal(
+					<div className="newspack-page__content-popovers">
+						<Popover.Slot name={ CONTENT_POPOVER_SLOT } />
+					</div>,
+					document.body
+				) }
 		</>
 	);
 

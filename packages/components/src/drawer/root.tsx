@@ -33,6 +33,12 @@ const sizeClassMap = {
 
 const captureOptions = { capture: true };
 
+// The slot-name reset leans on an unstable part of WordPress's `wp.components`.
+// If a release drops it, the drawer still renders, and its popovers use the
+// default slot name, which is what the reset sets anyway.
+const SlotNameProvider =
+	Popover.__unstableSlotNameProvider ?? ( ( { children }: { value?: string; children?: React.ReactNode } ) => <>{ children }</> );
+
 const Root = forwardRef< HTMLDivElement, DrawerRootProps >( function Root(
 	{
 		isOpen = false,
@@ -314,10 +320,14 @@ const Root = forwardRef< HTMLDivElement, DrawerRootProps >( function Root(
 				onRequestClose={ dismiss }
 				onKeyDown={ onKeyDown }
 			>
-				{ /* Without a slot inside, a popover lands in an aria-hidden container. */ }
+				{ /* Without a slot inside, a popover lands in an aria-hidden container.
+				     Clearing the slot name keeps popovers in this slot even when the
+				     drawer opens from page content, which names its own. */ }
 				<SlotFillProvider>
-					{ grouped }
-					{ ! requestConfirm && confirmDialog }
+					<SlotNameProvider value={ undefined }>
+						{ grouped }
+						{ ! requestConfirm && confirmDialog }
+					</SlotNameProvider>
 					<Popover.Slot />
 				</SlotFillProvider>
 			</Modal>

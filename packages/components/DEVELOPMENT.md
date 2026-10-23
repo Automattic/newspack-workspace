@@ -90,7 +90,7 @@ Their class names are hashed CSS modules, so never target them from our styleshe
 
 ### Layout Components
 
-- **`Page`** – Admin page shell: header with breadcrumbs, badges, actions and an optional tab bar. `Wizard` and `withWizardScreen` render it for you unless `hideHeader` is set, but neither passes `badges`, so a header with badges uses `Page` directly. The last breadcrumb is the page's only `h1`.
+- **`Page`** – Admin page shell: header with breadcrumbs, badges, actions and an optional tab bar. `Wizard` and `withWizardScreen` render it for you unless `hideHeader` is set, but neither passes `badges`, so a header with badges uses `Page` directly. The last breadcrumb is the page's only `h1`. WordPress component popovers (e.g. `Dropdown`, `DropdownMenu`) opened from its content open under the sticky header only when a `SlotFillProvider` sits above the `Page`; `Wizard` and `withWizard` bring one, and without one they open over the header. Popovers that portal on their own, such as `InfoButton` and DataViews' row and column menus, open over the header either way.
 - **`Breadcrumbs`** – The trail `Page` renders; the last item is the current page and is not a link.
 - **`Card`** – Legacy container for a logical block of content (class component). Prefer `Card` from `@wordpress/ui` in new code. Default vertical margin is 32px so cards stack with consistent rhythm. Use `noBorder` when cards sit inside another card (e.g. ActionCard children).
 - **`Divider`** – Use between logical sections (e.g. between ActionCards) to separate content without another card. Margins are 32px (48px at larger breakpoints) so spacing stays consistent with the rest of the layout.

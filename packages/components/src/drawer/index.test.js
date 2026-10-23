@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies
  */
-import { Modal } from '@wordpress/components';
+import { Modal, Popover, SlotFillProvider } from '@wordpress/components';
 import { useReducedMotion } from '@wordpress/compose';
 import { useLayoutEffect, useRef } from '@wordpress/element';
 
@@ -29,6 +29,7 @@ import { MemoryRouter } from 'react-router-dom';
  */
 import Drawer from '.';
 import useConfirmDialog from '../hooks/use-confirm-dialog';
+import Page from '../page';
 
 const noop = () => {};
 
@@ -131,6 +132,23 @@ describe( 'Drawer popovers', () => {
 	it( 'gives its children a popover slot', () => {
 		renderDrawer();
 		expect( document.querySelector( '.popover-slot' ) ).toBeInTheDocument();
+	} );
+
+	// Page content names its own popover slot. Without a reset, a drawer opened
+	// from there passes that name on to its popovers, which miss the drawer's slot
+	// and render outside it, where the modal hides them.
+	it( 'keeps its popovers inside the drawer when opened from page content', () => {
+		render(
+			<SlotFillProvider>
+				<MemoryRouter>
+					<Page breadcrumbItems={ [ { label: 'Subscribers' } ] }>
+						{ drawerTree( { contents: [ <Popover key="popover">Drawer popover</Popover> ] } ) }
+					</Page>
+				</MemoryRouter>
+			</SlotFillProvider>
+		);
+
+		expect( screen.getByText( 'Drawer popover' ).closest( '.newspack-drawer' ) ).not.toBeNull();
 	} );
 } );
 
