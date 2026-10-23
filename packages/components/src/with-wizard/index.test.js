@@ -24,11 +24,11 @@ describe( 'withWizard', () => {
 	// popovers would go back over the sticky header.
 	it( 'gives a screen that renders a Page without a Wizard its content popover slot', () => {
 		const Screen = withWizardScreen( () => <Popover>Content popover</Popover> );
-		const Wizard = withWizard( () => <Screen headerText="Brands" /> );
+		const WrappedScreen = withWizard( () => <Screen headerText="Brands" /> );
 
 		render(
 			<HashRouter>
-				<Wizard />
+				<WrappedScreen />
 			</HashRouter>
 		);
 
