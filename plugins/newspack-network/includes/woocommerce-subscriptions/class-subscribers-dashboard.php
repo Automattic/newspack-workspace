@@ -55,8 +55,9 @@ class Subscribers_Dashboard {
 	 *
 	 * Nothing here keeps the result, so every call scans again.
 	 *
-	 * The scan reads the whole user meta table, not only this site's members: newspack-network has no multisite
-	 * paths, and meta left behind by deleted users is read too.
+	 * The scan covers every user who has this key, not only this site's members. That is harmless: newspack-network
+	 * has no multisite paths, and on a single site extra rows exist only for a user removed without
+	 * wp_delete_user(), which deletes the user's meta.
 	 *
 	 * @param array $rows      The rows so far.
 	 * @param int   $max_users The most users to add rows for.
