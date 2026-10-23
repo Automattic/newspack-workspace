@@ -1895,6 +1895,49 @@ class Newspack_Blocks {
 	}
 
 	/**
+	 * Whether a post's card shows when the post was last updated instead of
+	 * when it was published.
+	 *
+	 * @param WP_Post $post Post object.
+	 * @return bool
+	 */
+	public static function should_display_updated_date( $post = null ) {
+		$post = get_post( $post );
+		if ( ! $post ) {
+			return false;
+		}
+		/**
+		 * Filters whether a post's card shows when the post was last updated
+		 * instead of when it was published.
+		 *
+		 * With the Newspack plugin active, a card shows it only where the
+		 * post's byline would too, so a plugin turning it on for a post may
+		 * also need `newspack_updated_date_override`.
+		 *
+		 * @param bool    $display Whether to show the updated date. Default false.
+		 * @param WP_Post $post    Post object.
+		 */
+		return (bool) apply_filters( 'newspack_blocks_display_updated_date', false, $post );
+	}
+
+	/**
+	 * Get the post's updated date to be displayed, formatted.
+	 *
+	 * @param WP_Post $post Post object.
+	 * @return string Formatted date.
+	 */
+	public static function get_formatted_displayed_updated_date( $post = null ) {
+		$post = get_post( $post );
+		/**
+		 * Filters the formatted date a post's card shows as its updated date.
+		 *
+		 * @param string  $date_formatted Formatted date.
+		 * @param WP_Post $post           Post object.
+		 */
+		return apply_filters( 'newspack_blocks_formatted_displayed_updated_date', get_the_modified_date( '', $post ), $post );
+	}
+
+	/**
 	 * Get article meta footer.
 	 *
 	 * @param WP_Post $post Post object.
