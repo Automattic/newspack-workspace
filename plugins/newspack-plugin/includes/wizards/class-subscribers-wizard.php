@@ -2521,12 +2521,11 @@ class Subscribers_Wizard extends Wizard {
 		}
 
 		// Plans held on other network sites, matched by the label the row shows, such as
-		// "Fan Membership (Node Daily)". Trimmed like the group names above, because
-		// api_get_plans() offers the trimmed label, and sanitized like the submitted
-		// names, which resolve_filter_include() runs through sanitize_text_field() (it
-		// rewrites a "<" in a site name). They join the same cancelled reduction below.
+		// "Fan Membership (Node Daily)". The labels are sanitized like the submitted
+		// names in resolve_filter_include(), so every network option /plans offers
+		// matches its holders. They join the same cancelled reduction below.
 		foreach ( $this->network_subscription_index() as $network_row ) {
-			if ( ! in_array( sanitize_text_field( trim( $network_row['plan_label'] ) ), $plan_names, true ) ) {
+			if ( ! in_array( sanitize_text_field( $network_row['plan_label'] ), $plan_names, true ) ) {
 				continue;
 			}
 			if ( 'cancelled' === $network_row['status'] ) {
