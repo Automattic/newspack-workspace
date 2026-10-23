@@ -45,8 +45,8 @@ if ( ! class_exists( 'Newspack_Popups_Criteria' ) ) {
 		}
 
 		/**
-		 * Keep the registered config, so code that follows a successful probe
-		 * with a registration call doesn't fatal against the stub.
+		 * Record the config, so a test can read back what a promoted field
+		 * registered.
 		 *
 		 * @param string $id     The criteria ID.
 		 * @param array  $config The criteria config.

@@ -313,13 +313,14 @@ class Promoted_Fields {
 		$raw_value = Reader_Data::get_data( $user_id, $field->get_key() );
 		$value     = self::decode_value( $raw_value );
 
-		// Boolean fields: access rules pass no args (just check truthiness),
-		// segmentation passes 'yes'/'no'. Segments match in the browser, through
-		// the `boolean` matcher in newspack-popups, which mirrors this branch.
+		// Boolean fields: an access rule stores `true` and asks only for
+		// truthiness. 'yes'/'no' is what a segment saves for these fields;
+		// segments match in the browser, so the string branch below is the
+		// reading the `boolean` matcher in newspack-popups has to agree with.
 		if ( 'boolean' === $field->get_value_type() ) {
 			$is_truthy = ! empty( $value );
 
-			// Segmentation: expects 'yes'/'no' (case-insensitive) as string arguments.
+			// A segment's 'yes'/'no', case-insensitive.
 			if ( is_string( $args ) ) {
 				$normalized = strtolower( $args );
 				if ( 'yes' === $normalized ) {
