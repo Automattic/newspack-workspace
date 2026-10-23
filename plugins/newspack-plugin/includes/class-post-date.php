@@ -114,14 +114,17 @@ class Post_Date {
 			return true;
 		}
 
-		if ( $hide_meta ) {
+		// The editor offers this flag only while the sitewide setting is on, so
+		// a flag saved before the setting was turned off can't hide anything.
+		if ( $sitewide && $hide_meta ) {
 			return false;
 		}
 
 		/**
 		 * Filters whether a post shows its updated date, before the sitewide
-		 * setting and its threshold decide. An editor's choice on the post
-		 * still wins.
+		 * setting and its threshold decide. The per-post toggle the editor
+		 * offers still wins: "Show last updated date" while the setting is
+		 * off, "Hide last updated date" while it is on.
 		 *
 		 * @param bool|null $override True to show the updated date, false to hide it, or null to leave it to the site's settings.
 		 * @param \WP_Post  $post     Post.
@@ -139,6 +142,10 @@ class Post_Date {
 		$threshold = (int) get_theme_mod( 'post_updated_date_threshold', 24 );
 		$published = self::get_timestamp( $post, 'date' );
 		$modified  = self::get_timestamp( $post, 'modified' );
+
+		if ( false === $published || false === $modified ) {
+			return false;
+		}
 
 		if ( ( $modified - $published ) < $threshold * HOUR_IN_SECONDS ) {
 			return false;
@@ -334,8 +341,10 @@ class Post_Date {
 	}
 
 	/**
-	 * Keep a Homepage Posts card from showing an updated date the post may not
-	 * show, such as one an editor hid on the post.
+	 * Lets a Homepage Posts card show the post's updated date only where its
+	 * byline would (should_display_updated_date()), so the sitewide setting,
+	 * the editor's per-post toggle and `newspack_updated_date_override` decide
+	 * cards the same way they decide bylines.
 	 *
 	 * @param bool     $display Whether the card shows the post's updated date.
 	 * @param \WP_Post $post    Post object.
