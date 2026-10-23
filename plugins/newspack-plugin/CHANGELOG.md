@@ -1,3 +1,24 @@
+## newspack [6.55.8](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.7...newspack@6.55.8) (2026-10-23)
+
+
+### Bug Fixes
+
+* treat gift recipients as the subscriber, not the buyer ([#1398](https://github.com/Automattic/newspack-workspace/issues/1398)) ([b0997ba](https://github.com/Automattic/newspack-workspace/commit/b0997ba05bbf54c9a29361d8f6b0fdfb7cd0caf1))
+
+## newspack [6.55.7](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.6...newspack@6.55.7) (2026-10-22)
+
+
+### Bug Fixes
+
+* keep Mailchimp contacts updatable after MC4WC orders (NPPD-2491, [#1375](https://github.com/Automattic/newspack-workspace/issues/1375)) ([3978ee2](https://github.com/Automattic/newspack-workspace/commit/3978ee23d8c7273fc8b1780cd4dae1c1d04c1c32))
+
+## newspack [6.55.6](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.5...newspack@6.55.6) (2026-10-21)
+
+
+### Bug Fixes
+
+* **reader-activation:** register the corrected address after a cancel ([#1304](https://github.com/Automattic/newspack-workspace/issues/1304)) ([b8af2d4](https://github.com/Automattic/newspack-workspace/commit/b8af2d47e382ae78c60fc7fe019c9c402813a7b4))
+
 ## newspack [6.55.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.4...newspack@6.55.5) (2026-10-21)
 
 

@@ -178,6 +178,213 @@ class Newspack_Test_Mailchimp_For_WooCommerce extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Billing addresses as checkout collects them, the billing address on the reader's earlier
+	 * order, and the address the order should carry.
+	 */
+	public function partial_address_provider() {
+		$earlier_order = [
+			'billing_address_1' => '1 Main St',
+			'billing_address_2' => 'Flat 4',
+			'billing_city'      => 'London',
+			'billing_postcode'  => 'SW1A1AA',
+			'billing_country'   => 'GB',
+		];
+		return [
+			'postcode only, no earlier order'         => [
+				[
+					'postal_code' => '10036',
+					'country'     => 'US',
+				],
+				null,
+				[
+					'address1'    => '-',
+					'city'        => '-',
+					'postal_code' => '10036',
+					'country'     => 'US',
+				],
+			],
+			'postcode only, earlier order there'      => [
+				[
+					'postal_code' => 'sw1a 1aa',
+					'country'     => 'GB',
+				],
+				$earlier_order,
+				[
+					'address1'    => '1 Main St',
+					'address2'    => 'Flat 4',
+					'city'        => 'London',
+					'postal_code' => 'sw1a 1aa',
+					'country'     => 'GB',
+				],
+			],
+			'postcode only, earlier order elsewhere'  => [
+				[
+					'postal_code' => 'E1 6AN',
+					'country'     => 'GB',
+				],
+				$earlier_order,
+				[
+					'address1'    => '-',
+					'city'        => '-',
+					'postal_code' => 'E1 6AN',
+					'country'     => 'GB',
+				],
+			],
+			'same postcode, another country'          => [
+				[
+					'postal_code' => 'SW1A1AA',
+					'country'     => 'US',
+				],
+				$earlier_order,
+				[
+					'address1'    => '-',
+					'city'        => '-',
+					'postal_code' => 'SW1A1AA',
+					'country'     => 'US',
+				],
+			],
+			'street but no city, earlier order there' => [
+				[
+					'address1'    => '2 Elm St',
+					'postal_code' => 'SW1A1AA',
+					'country'     => 'GB',
+				],
+				$earlier_order,
+				[
+					'address1'    => '2 Elm St',
+					'city'        => 'London',
+					'postal_code' => 'SW1A1AA',
+					'country'     => 'GB',
+				],
+			],
+			'street and city, no postcode'            => [
+				[
+					'name'     => 'Ann Reader',
+					'phone'    => '5555550100',
+					'address1' => '1 Main St',
+					'city'     => 'Dublin',
+					'country'  => 'IE',
+				],
+				$earlier_order,
+				[],
+			],
+			'complete'                                => [
+				[
+					'address1'    => '2 Elm St',
+					'city'        => 'London',
+					'postal_code' => 'SW1A1AA',
+					'country'     => 'GB',
+				],
+				$earlier_order,
+				[
+					'address1'    => '2 Elm St',
+					'city'        => 'London',
+					'postal_code' => 'SW1A1AA',
+					'country'     => 'GB',
+				],
+			],
+		];
+	}
+
+	/**
+	 * Mailchimp writes the address parts sent with an order into the contact's address, and
+	 * ignores later updates to a contact whose address lacks a street, city, or postcode.
+	 *
+	 * @dataProvider partial_address_provider
+	 *
+	 * @param array      $billing_address The address checkout collected.
+	 * @param array|null $earlier_billing The billing address on the reader's earlier order, if any.
+	 * @param array      $sent_address    The address the order should carry.
+	 */
+	public function test_order_carries_only_an_address_mailchimp_accepts( $billing_address, $earlier_billing, $sent_address ) {
+		global $orders_database;
+		$orders_database = [];
+		$reader          = $this->create_customer( 'reader@example.test', 'subscribed' );
+		if ( $earlier_billing ) {
+			wc_create_order(
+				array_merge(
+					$earlier_billing,
+					[
+						'customer_id'  => $reader->ID,
+						'status'       => 'processing',
+						'date_created' => '2026-01-01 00:00:00',
+					]
+				)
+			);
+		}
+		$wc_order      = wc_create_order(
+			[
+				'customer_id'  => $reader->ID,
+				'status'       => 'processing',
+				'date_created' => '2026-06-01 00:00:00',
+			]
+		);
+		$empty_address = ( new MailChimp_WooCommerce_Address() )->fields;
+		$customer      = new MailChimp_WooCommerce_Customer( $reader, $reader->user_email );
+		$customer->getAddress()->fields = array_merge( $empty_address, $billing_address );
+
+		$order = apply_filters( 'mailchimp_filter_ecommerce_order', new MailChimp_WooCommerce_Order( $customer ), $wc_order );
+
+		$this->assertSame( array_merge( $empty_address, $sent_address ), $order->getCustomer()->getAddress()->fields );
+	}
+
+	/**
+	 * The street comes from the most recent order before this one that has a street, passing over
+	 * renewals that carry only a postcode and ignoring orders placed after it.
+	 */
+	public function test_order_takes_the_street_from_the_latest_earlier_order_with_one() {
+		global $orders_database;
+		$orders_database = [];
+		$reader          = $this->create_customer( 'reader@example.test', 'subscribed' );
+		$order_at        = function ( $date, $billing = [] ) use ( $reader ) {
+			return wc_create_order(
+				array_merge(
+					[
+						'customer_id'      => $reader->ID,
+						'status'           => 'processing',
+						'date_created'     => $date,
+						'billing_postcode' => 'SW1A1AA',
+						'billing_country'  => 'GB',
+					],
+					$billing
+				)
+			);
+		};
+		$order_at(
+			'2025-01-01 00:00:00',
+			[
+				'billing_address_1' => '9 Old Rd',
+				'billing_city'      => 'Leeds',
+				'billing_postcode'  => 'LS1 1AA',
+			]
+		);
+		$order_at(
+			'2025-06-01 00:00:00',
+			[
+				'billing_address_1' => '1 Main St',
+				'billing_city'      => 'London',
+			]
+		);
+		$order_at( '2026-01-01 00:00:00' );
+		$wc_order = $order_at( '2026-02-01 00:00:00' );
+		$order_at(
+			'2026-03-01 00:00:00',
+			[
+				'billing_address_1' => '5 New Rd',
+				'billing_city'      => 'Bristol',
+				'billing_postcode'  => 'BS1 1AA',
+			]
+		);
+		$customer = new MailChimp_WooCommerce_Customer( $reader, $reader->user_email );
+		$customer->getAddress()->setPostalCode( 'SW1A1AA' )->setCountry( 'GB' );
+
+		$order = apply_filters( 'mailchimp_filter_ecommerce_order', new MailChimp_WooCommerce_Order( $customer ), $wc_order );
+
+		$address = $order->getCustomer()->getAddress();
+		$this->assertSame( [ '1 Main St', 'London' ], [ $address->getAddress1(), $address->getCity() ] );
+	}
+
+	/**
 	 * A plugin version without the customer methods the integration reads gets its orders back
 	 * unchanged, so its order sync keeps running as it would without Newspack.
 	 */

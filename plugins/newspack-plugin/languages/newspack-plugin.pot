@@ -2,14 +2,14 @@
 # This file is distributed under the GPL2.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack 6.55.5\n"
+"Project-Id-Version: Newspack 6.55.8\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-plugin\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-14T15:49:00+00:00\n"
+"POT-Creation-Date: 2026-10-23T22:27:25+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-plugin\n"
@@ -384,7 +384,7 @@ msgstr ""
 #: dist/audience-wizards.55cbbe433c3cda500952.js:257
 #: dist/blocks.js:6
 #: dist/commons.js:122
-#: dist/subscribers.js:121
+#: dist/subscribers.js:142
 #: packages/components/dist/cjs/drawer/close-icon.js:36
 #: packages/components/dist/cjs/reorder-modal/index.js:322
 #: packages/components/dist/esm/drawer/close-icon.js:28
@@ -430,7 +430,7 @@ msgstr ""
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:104
 #: dist/audience-wizards.55cbbe433c3cda500952.js:260
 #: dist/subscribers.js:17
-#: dist/subscribers.js:130
+#: dist/subscribers.js:151
 #: src/wizards/subscribers/screens/GroupDetail.jsx:451
 #: src/wizards/subscribers/screens/GroupList.jsx:179
 msgid "Members"
@@ -438,7 +438,7 @@ msgstr ""
 
 #: includes/class-newspack-ui.php:977
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:116
-#: dist/subscribers.js:130
+#: dist/subscribers.js:151
 #: src/wizards/subscribers/screens/GroupDetail.jsx:535
 msgid "Invitations"
 msgstr ""
@@ -529,11 +529,11 @@ msgstr ""
 #: dist/audience-wizards.55cbbe433c3cda500952.js:249
 #: dist/audience-wizards.55cbbe433c3cda500952.js:252
 #: dist/blocks.js:4
-#: dist/subscribers.js:66
+#: dist/subscribers.js:82
 #: src/blocks/reader-registration/edit.js:315
 #: src/wizards/audience/components/platform-selection/index.js:139
 #: src/wizards/audience/views/setup/campaign.js:66
-#: src/wizards/subscribers/flows/ReactivateFlow.jsx:166
+#: src/wizards/subscribers/flows/ReactivateFlow.jsx:202
 msgid "Continue"
 msgstr ""
 
@@ -778,7 +778,7 @@ msgstr ""
 #: includes/class-plugin-manager.php:255
 #: includes/class-plugin-manager.php:264
 #: includes/class-plugin-manager.php:280
-#: dist/subscribers.js:121
+#: dist/subscribers.js:142
 #: src/wizards/subscribers/flows/SubscriptionDetailsDrawer.jsx:88
 msgid "WooCommerce"
 msgstr ""
@@ -2104,7 +2104,7 @@ msgstr ""
 #: includes/content-gate/block-patterns/pay-wall-two-tiers.php:50
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:155
 #: dist/subscribers.js:12
-#: dist/subscribers.js:127
+#: dist/subscribers.js:148
 #: src/wizards/subscribers/labels.js:114
 #: src/wizards/subscribers/screens/GroupDetail.jsx:225
 msgid "Member"
@@ -2825,11 +2825,11 @@ msgstr ""
 msgid "month"
 msgstr ""
 
-#: includes/content-gate/class-premium-newsletters.php:637
+#: includes/content-gate/class-premium-newsletters.php:645
 msgid "Sign in with this email address to subscribe to premium newsletters."
 msgstr ""
 
-#: includes/content-gate/class-premium-newsletters.php:640
+#: includes/content-gate/class-premium-newsletters.php:648
 msgid "This account doesn't include access to premium newsletters."
 msgstr ""
 
@@ -3837,13 +3837,13 @@ msgstr ""
 #: dist/other-scripts/corrections-modal.js:7
 #: dist/subscribers.js:33
 #: dist/subscribers.js:45
-#: dist/subscribers.js:57
 #: dist/subscribers.js:66
-#: dist/subscribers.js:83
-#: dist/subscribers.js:99
-#: dist/subscribers.js:106
-#: dist/subscribers.js:108
-#: dist/subscribers.js:110
+#: dist/subscribers.js:82
+#: dist/subscribers.js:104
+#: dist/subscribers.js:120
+#: dist/subscribers.js:127
+#: dist/subscribers.js:129
+#: dist/subscribers.js:131
 #: packages/components/dist/cjs/reorder-modal/index.js:354
 #: packages/components/dist/cjs/reorder-modal/index.js:481
 #: packages/components/dist/cjs/with-wizard/index.js:277
@@ -3875,9 +3875,9 @@ msgstr ""
 #: src/wizards/subscribers/flows/ConfirmFlow.jsx:58
 #: src/wizards/subscribers/flows/InviteMemberFlow.jsx:137
 #: src/wizards/subscribers/flows/PlanChangeFlow.jsx:146
-#: src/wizards/subscribers/flows/ReactivateFlow.jsx:164
-#: src/wizards/subscribers/flows/RefundFlow.jsx:186
-#: src/wizards/subscribers/screens/PersonProfile.jsx:340
+#: src/wizards/subscribers/flows/ReactivateFlow.jsx:200
+#: src/wizards/subscribers/flows/RefundFlow.jsx:225
+#: src/wizards/subscribers/screens/PersonProfile.jsx:371
 msgid "Cancel"
 msgstr ""
 
@@ -3974,8 +3974,8 @@ msgstr ""
 #: dist/newspack-wizards.a6e7a5fc12e64278f260.js:26
 #: dist/subscribers.js:12
 #: dist/subscribers.js:17
-#: dist/subscribers.js:121
-#: dist/subscribers.js:129
+#: dist/subscribers.js:142
+#: dist/subscribers.js:150
 #: src/wizards/audience/views/integrations/scheduled-actions.js:131
 #: src/wizards/audience/views/integrations/sync-activity.js:155
 #: src/wizards/subscribers/flows/SubscriptionDetailsDrawer.jsx:69
@@ -5253,9 +5253,9 @@ msgstr ""
 #: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:990
 #: includes/plugins/woocommerce/my-account/templates/v1/subscription-header.php:125
 #: dist/subscribers.js:36
-#: dist/subscribers.js:79
+#: dist/subscribers.js:100
 #: src/wizards/subscribers/flows/PlanChangeFlow.jsx:84
-#: src/wizards/subscribers/screens/PersonProfile.jsx:316
+#: src/wizards/subscribers/screens/PersonProfile.jsx:345
 msgid "Change subscription"
 msgstr ""
 
@@ -5401,7 +5401,7 @@ msgstr ""
 #: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription.php:353
 #: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription.php:383
 #: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription.php:715
-#: includes/wizards/subscribers/class-subscribers-payments.php:941
+#: includes/wizards/subscribers/class-subscribers-payments.php:945
 msgid "Subscription not found."
 msgstr ""
 
@@ -5670,7 +5670,7 @@ msgstr ""
 #. translators: %s: member display name.
 #. translators: %s: name of the member promoted to manager.
 #: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-myaccount.php:791
-#: dist/subscribers.js:128
+#: dist/subscribers.js:149
 #: src/wizards/subscribers/screens/GroupDetail.jsx:294
 #, php-format,js-format
 msgid "%s is now a manager."
@@ -5679,7 +5679,7 @@ msgstr ""
 #. translators: %s: member display name.
 #. translators: %s: name of the manager demoted to member.
 #: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-myaccount.php:794
-#: dist/subscribers.js:129
+#: dist/subscribers.js:150
 #: src/wizards/subscribers/screens/GroupDetail.jsx:303
 #, php-format,js-format
 msgid "%s is no longer a manager."
@@ -6319,14 +6319,14 @@ msgstr ""
 #: dist/subscribers.js:16
 #: dist/subscribers.js:36
 #: dist/subscribers.js:48
-#: dist/subscribers.js:59
 #: dist/subscribers.js:71
-#: dist/subscribers.js:73
-#: dist/subscribers.js:98
-#: dist/subscribers.js:101
-#: dist/subscribers.js:108
-#: dist/subscribers.js:111
-#: dist/subscribers.js:124
+#: dist/subscribers.js:90
+#: dist/subscribers.js:94
+#: dist/subscribers.js:119
+#: dist/subscribers.js:122
+#: dist/subscribers.js:129
+#: dist/subscribers.js:132
+#: dist/subscribers.js:145
 #: src/wizards/audience/components/active-campaign.js:31
 #: src/wizards/audience/components/mailchimp.js:31
 #: src/wizards/audience/components/settings.js:42
@@ -6349,10 +6349,10 @@ msgstr ""
 #: src/wizards/subscribers/flows/InviteMemberFlow.jsx:78
 #: src/wizards/subscribers/flows/PlanChangeFlow.jsx:54
 #: src/wizards/subscribers/flows/PlanChangeFlow.jsx:78
-#: src/wizards/subscribers/flows/ReactivateFlow.jsx:97
-#: src/wizards/subscribers/flows/RefundFlow.jsx:84
+#: src/wizards/subscribers/flows/ReactivateFlow.jsx:125
+#: src/wizards/subscribers/flows/RefundFlow.jsx:99
 #: src/wizards/subscribers/screens/GroupDetail.jsx:150
-#: src/wizards/subscribers/screens/PersonProfile.jsx:179
+#: src/wizards/subscribers/screens/PersonProfile.jsx:204
 msgid "Something went wrong."
 msgstr ""
 
@@ -6417,9 +6417,9 @@ msgstr ""
 
 #: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:116
 #: dist/subscribers.js:27
-#: dist/subscribers.js:81
+#: dist/subscribers.js:102
 #: src/wizards/subscribers/flows/ChangePaymentMethodFlow.jsx:81
-#: src/wizards/subscribers/screens/PersonProfile.jsx:327
+#: src/wizards/subscribers/screens/PersonProfile.jsx:358
 msgid "Change payment method"
 msgstr ""
 
@@ -6488,8 +6488,8 @@ msgstr ""
 #: dist/audience-wizards.55cbbe433c3cda500952.js:263
 #: dist/audience-wizards.55cbbe433c3cda500952.js:267
 #: dist/audience-wizards.55cbbe433c3cda500952.js:277
-#: dist/subscribers.js:90
-#: src/wizards/subscribers/screens/PersonProfile.jsx:443
+#: dist/subscribers.js:111
+#: src/wizards/subscribers/screens/PersonProfile.jsx:486
 msgid "Subscriptions"
 msgstr ""
 
@@ -6587,16 +6587,16 @@ msgstr ""
 #: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:637
 #: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:641
 #: includes/plugins/woocommerce/my-account/templates/v1/subscription-header.php:30
-#: dist/subscribers.js:57
-#: dist/subscribers.js:62
-#: src/wizards/subscribers/flows/RefundFlow.jsx:152
-#: src/wizards/subscribers/flows/RefundFlow.jsx:196
+#: dist/subscribers.js:66
+#: dist/subscribers.js:74
+#: src/wizards/subscribers/flows/RefundFlow.jsx:191
+#: src/wizards/subscribers/flows/RefundFlow.jsx:235
 msgid "Cancel subscription"
 msgstr ""
 
 #: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:646
-#: dist/subscribers.js:57
-#: src/wizards/subscribers/flows/RefundFlow.jsx:186
+#: dist/subscribers.js:66
+#: src/wizards/subscribers/flows/RefundFlow.jsx:225
 msgid "Keep subscription"
 msgstr ""
 
@@ -6633,12 +6633,12 @@ msgstr ""
 #: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:952
 #: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:1008
 #: includes/plugins/woocommerce/my-account/templates/v1/payment-information.php:176
-#: dist/subscribers.js:76
-#: dist/subscribers.js:89
-#: dist/subscribers.js:121
+#: dist/subscribers.js:97
+#: dist/subscribers.js:110
+#: dist/subscribers.js:142
 #: src/wizards/subscribers/flows/SubscriptionDetailsDrawer.jsx:84
-#: src/wizards/subscribers/screens/PersonProfile.jsx:256
-#: src/wizards/subscribers/screens/PersonProfile.jsx:364
+#: src/wizards/subscribers/screens/PersonProfile.jsx:281
+#: src/wizards/subscribers/screens/PersonProfile.jsx:395
 msgid "Billing"
 msgstr ""
 
@@ -6939,8 +6939,8 @@ msgstr ""
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:84
 #: includes/plugins/woocommerce/my-account/templates/v1/group.php:117
 #: includes/plugins/woocommerce/my-account/templates/v1/group.php:142
-#: dist/subscribers.js:109
 #: dist/subscribers.js:130
+#: dist/subscribers.js:151
 #: src/wizards/subscribers/flows/InviteMemberFlow.jsx:114
 #: src/wizards/subscribers/screens/GroupDetail.jsx:483
 msgid "Invite by email"
@@ -6955,7 +6955,7 @@ msgstr ""
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:85
 #: includes/plugins/woocommerce/my-account/templates/v1/group.php:120
 #: includes/plugins/woocommerce/my-account/templates/v1/group.php:143
-#: dist/subscribers.js:130
+#: dist/subscribers.js:151
 #: src/wizards/subscribers/screens/GroupDetail.jsx:491
 msgid "Copy invite link"
 msgstr ""
@@ -6964,8 +6964,8 @@ msgstr ""
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:358
 #: includes/plugins/woocommerce/my-account/templates/v1/group.php:123
 #: includes/plugins/woocommerce/my-account/templates/v1/group.php:144
-#: dist/subscribers.js:115
-#: dist/subscribers.js:130
+#: dist/subscribers.js:136
+#: dist/subscribers.js:151
 #: src/wizards/subscribers/flows/RegenerateLinkFlow.jsx:46
 #: src/wizards/subscribers/screens/GroupDetail.jsx:500
 msgid "Regenerate invite link"
@@ -6975,8 +6975,8 @@ msgstr ""
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:431
 #: includes/plugins/woocommerce/my-account/templates/v1/group.php:126
 #: includes/plugins/woocommerce/my-account/templates/v1/group.php:145
-#: dist/subscribers.js:109
 #: dist/subscribers.js:130
+#: dist/subscribers.js:151
 #: src/wizards/subscribers/flows/DisableLinkFlow.jsx:28
 #: src/wizards/subscribers/screens/GroupDetail.jsx:511
 msgid "Disable invite link"
@@ -7001,7 +7001,7 @@ msgstr ""
 
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:137
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:168
-#: dist/subscribers.js:127
+#: dist/subscribers.js:148
 #: src/wizards/subscribers/screens/GroupDetail.jsx:253
 msgid "Role"
 msgstr ""
@@ -7015,12 +7015,12 @@ msgstr ""
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:157
 #: dist/subscribers.js:12
 #: dist/subscribers.js:17
-#: dist/subscribers.js:76
-#: dist/subscribers.js:121
+#: dist/subscribers.js:97
+#: dist/subscribers.js:142
 #: src/wizards/subscribers/flows/SubscriptionDetailsDrawer.jsx:72
 #: src/wizards/subscribers/labels.js:112
 #: src/wizards/subscribers/screens/GroupList.jsx:135
-#: src/wizards/subscribers/screens/PersonProfile.jsx:263
+#: src/wizards/subscribers/screens/PersonProfile.jsx:288
 msgid "Owner"
 msgstr ""
 
@@ -7029,21 +7029,21 @@ msgid " (you)"
 msgstr ""
 
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:193
-#: dist/subscribers.js:128
+#: dist/subscribers.js:149
 #: src/wizards/subscribers/screens/GroupDetail.jsx:298
 msgid "Remove manager"
 msgstr ""
 
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:193
-#: dist/subscribers.js:127
+#: dist/subscribers.js:148
 #: src/wizards/subscribers/screens/GroupDetail.jsx:289
 msgid "Make manager"
 msgstr ""
 
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:205
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:417
-#: dist/subscribers.js:115
-#: dist/subscribers.js:129
+#: dist/subscribers.js:136
+#: dist/subscribers.js:150
 #: src/wizards/subscribers/flows/RemoveMemberFlow.jsx:70
 #: src/wizards/subscribers/flows/RemoveMemberFlow.jsx:71
 #: src/wizards/subscribers/screens/GroupDetail.jsx:307
@@ -7058,7 +7058,7 @@ msgstr ""
 
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:233
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:243
-#: dist/subscribers.js:129
+#: dist/subscribers.js:150
 #: src/wizards/subscribers/screens/GroupDetail.jsx:329
 msgid "Sent to"
 msgstr ""
@@ -7066,7 +7066,7 @@ msgstr ""
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:244
 #: includes/plugins/woocommerce/my-account/templates/v1/payment-information.php:98
 #: dist/subscribers.js:18
-#: dist/subscribers.js:129
+#: dist/subscribers.js:150
 #: src/wizards/subscribers/components/PaymentMethodsList.jsx:155
 #: src/wizards/subscribers/screens/GroupDetail.jsx:340
 msgid "Expired"
@@ -7077,7 +7077,7 @@ msgstr ""
 #: dist/audience-wizards.55cbbe433c3cda500952.js:236
 #: dist/audience-wizards.55cbbe433c3cda500952.js:246
 #: dist/subscribers.js:12
-#: dist/subscribers.js:129
+#: dist/subscribers.js:150
 #: src/wizards/audience/views/integrations/constants.js:27
 #: src/wizards/subscribers/screens/GroupDetail.jsx:342
 #: src/wizards/subscribers/status.js:12
@@ -7085,13 +7085,13 @@ msgid "Pending"
 msgstr ""
 
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:260
-#: dist/subscribers.js:129
+#: dist/subscribers.js:150
 #: src/wizards/subscribers/screens/GroupDetail.jsx:361
 msgid "Resend invite"
 msgstr ""
 
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:270
-#: dist/subscribers.js:129
+#: dist/subscribers.js:150
 #: src/wizards/subscribers/screens/GroupDetail.jsx:369
 msgid "Cancel invite"
 msgstr ""
@@ -7127,7 +7127,7 @@ msgid "Could not regenerate. Please try again."
 msgstr ""
 
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:371
-#: dist/subscribers.js:115
+#: dist/subscribers.js:136
 #: src/wizards/subscribers/flows/RegenerateLinkFlow.jsx:47
 msgid "Regenerate link"
 msgstr ""
@@ -7153,7 +7153,7 @@ msgid "Could not disable. Please try again."
 msgstr ""
 
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:445
-#: dist/subscribers.js:109
+#: dist/subscribers.js:130
 #: src/wizards/subscribers/flows/DisableLinkFlow.jsx:29
 msgid "Disable link"
 msgstr ""
@@ -7172,8 +7172,10 @@ msgstr ""
 
 #: includes/plugins/woocommerce/my-account/templates/v1/group.php:107
 #: includes/plugins/woocommerce/my-account/templates/v1/group.php:136
-#: dist/subscribers.js:127
+#: dist/subscribers.js:92
+#: dist/subscribers.js:148
 #: src/wizards/subscribers/screens/GroupDetail.jsx:216
+#: src/wizards/subscribers/screens/PersonProfile.jsx:143
 msgid "View subscription"
 msgstr ""
 
@@ -7190,7 +7192,7 @@ msgstr ""
 #. translators: %s: the group label, e.g. "Group".
 #. translators: %s is the type of content to restrict.
 #: includes/plugins/woocommerce/my-account/templates/v1/group.php:185
-#: includes/wizards/class-subscribers-wizard.php:2447
+#: includes/wizards/class-subscribers-wizard.php:2513
 #: dist/audience-wizards.55cbbe433c3cda500952.js:104
 #: dist/newsletters-wizards.8ab44f7ddc96a762ad33.js:76
 #: dist/subscribers.js:17
@@ -7298,8 +7300,8 @@ msgstr ""
 
 #: includes/plugins/woocommerce/my-account/templates/v1/payment-information.php:22
 #: includes/plugins/woocommerce/my-account/templates/v1/payment-information.php:159
-#: dist/subscribers.js:96
-#: src/wizards/subscribers/screens/PersonProfile.jsx:488
+#: dist/subscribers.js:117
+#: src/wizards/subscribers/screens/PersonProfile.jsx:531
 msgid "Payment methods"
 msgstr ""
 
@@ -7464,7 +7466,7 @@ msgstr ""
 
 #: includes/plugins/woocommerce/my-account/templates/v1/subscription-details.php:105
 #: dist/subscribers.js:13
-#: dist/subscribers.js:127
+#: dist/subscribers.js:148
 #: src/wizards/subscribers/screens/GroupDetail.jsx:267
 #: src/wizards/subscribers/screens/SubscriberList.jsx:259
 msgid "Member since"
@@ -9904,7 +9906,7 @@ msgid "Varies"
 msgstr ""
 
 #: includes/wizards/audience/class-audience-subscription-products.php:1299
-#: dist/subscribers.js:98
+#: dist/subscribers.js:119
 #: src/wizards/subscribers/flows/capacity.js:57
 msgid "Unlimited"
 msgstr ""
@@ -10161,10 +10163,10 @@ msgstr ""
 #: includes/wizards/class-subscribers-wizard.php:171
 #: dist/audience-wizards.55cbbe433c3cda500952.js:267
 #: dist/subscribers.js:14
-#: dist/subscribers.js:73
-#: dist/subscribers.js:130
+#: dist/subscribers.js:94
+#: dist/subscribers.js:151
 #: src/wizards/subscribers/index.js:43
-#: src/wizards/subscribers/screens/PersonProfile.jsx:219
+#: src/wizards/subscribers/screens/PersonProfile.jsx:244
 #: src/wizards/subscribers/screens/SubscriberList.jsx:388
 msgid "Subscribers"
 msgstr ""
@@ -10242,7 +10244,7 @@ msgstr ""
 #. translators: 1: number of groups. 2: the group label, e.g. "Groups". Word order only; the noun already carries number.
 #. translators: %1$s is subscribe message, %2$s is sign in link
 #. translators: 1: number of groups. 2: the group label, e.g. "Groups".
-#: includes/wizards/class-subscribers-wizard.php:2443
+#: includes/wizards/class-subscribers-wizard.php:2509
 #: dist/commons.js:137
 #: dist/subscribers.js:12
 #: src/blocks/content-gate/countdown-box/edit.jsx:111
@@ -10252,7 +10254,7 @@ msgid "%1$s %2$s"
 msgstr ""
 
 #. translators: %s: the group label, e.g. "Group".
-#: includes/wizards/class-subscribers-wizard.php:2445
+#: includes/wizards/class-subscribers-wizard.php:2511
 #: dist/subscribers.js:13
 #: src/wizards/subscribers/labels.js:60
 #, php-format,js-format
@@ -10260,7 +10262,7 @@ msgid "%s role"
 msgstr ""
 
 #. translators: 1: the group label, e.g. "Groups". 2: the error message.
-#: includes/wizards/class-subscribers-wizard.php:2449
+#: includes/wizards/class-subscribers-wizard.php:2515
 #: dist/subscribers.js:18
 #: src/wizards/subscribers/labels.js:87
 #, php-format,js-format
@@ -10268,8 +10270,8 @@ msgid "Could not load %1$s: %2$s"
 msgstr ""
 
 #. translators: 1: the group label, e.g. "Group". 2: the group name.
-#: includes/wizards/class-subscribers-wizard.php:2451
-#: dist/subscribers.js:77
+#: includes/wizards/class-subscribers-wizard.php:2517
+#: dist/subscribers.js:98
 #: src/wizards/subscribers/labels.js:102
 #, php-format,js-format
 msgid "View %1$s: %2$s"
@@ -10419,7 +10421,7 @@ msgstr ""
 #: dist/audience-wizards.55cbbe433c3cda500952.js:255
 #: dist/audience-wizards.55cbbe433c3cda500952.js:263
 #: dist/audience-wizards.55cbbe433c3cda500952.js:277
-#: dist/subscribers.js:130
+#: dist/subscribers.js:151
 #: src/wizards/audience/components/platform-selection/index.js:150
 #: src/wizards/audience/views/campaigns/index.js:34
 #: src/wizards/audience/views/content-gates/index.js:28
@@ -10673,123 +10675,123 @@ msgid "This subscription renews manually, so it does not charge a saved card."
 msgstr ""
 
 #: includes/wizards/subscribers/class-subscribers-payments.php:447
-#: includes/wizards/subscribers/class-subscribers-payments.php:886
+#: includes/wizards/subscribers/class-subscribers-payments.php:887
 msgid "That saved payment method could not be found."
 msgstr ""
 
-#: includes/wizards/subscribers/class-subscribers-payments.php:454
+#: includes/wizards/subscribers/class-subscribers-payments.php:455
 msgid "That card belongs to a different customer."
 msgstr ""
 
-#: includes/wizards/subscribers/class-subscribers-payments.php:461
+#: includes/wizards/subscribers/class-subscribers-payments.php:462
 msgid "That card is saved on a different payment gateway than this subscription uses."
 msgstr ""
 
-#: includes/wizards/subscribers/class-subscribers-payments.php:468
+#: includes/wizards/subscribers/class-subscribers-payments.php:469
 msgid "An expired card cannot be charged."
 msgstr ""
 
-#: includes/wizards/subscribers/class-subscribers-payments.php:476
+#: includes/wizards/subscribers/class-subscribers-payments.php:477
 msgid "This is already the card the subscription charges."
 msgstr ""
 
-#: includes/wizards/subscribers/class-subscribers-payments.php:486
+#: includes/wizards/subscribers/class-subscribers-payments.php:487
 msgid "The subscription’s current payment method does not match a saved card, so it cannot be changed here. Use the subscription edit screen instead."
 msgstr ""
 
-#: includes/wizards/subscribers/class-subscribers-payments.php:496
+#: includes/wizards/subscribers/class-subscribers-payments.php:497
 msgid "The payment method could not be updated."
 msgstr ""
 
 #. translators: 1: old card label, 2: new card label.
-#: includes/wizards/subscribers/class-subscribers-payments.php:503
+#: includes/wizards/subscribers/class-subscribers-payments.php:504
 #, php-format
 msgid "Payment method changed from %1$s to %2$s via the Subscribers wizard."
 msgstr ""
 
-#: includes/wizards/subscribers/class-subscribers-payments.php:539
+#: includes/wizards/subscribers/class-subscribers-payments.php:540
 msgid "Nothing to do: choose a refund, a cancellation, or both."
 msgstr ""
 
-#: includes/wizards/subscribers/class-subscribers-payments.php:550
+#: includes/wizards/subscribers/class-subscribers-payments.php:551
 msgid "This subscription cannot be cancelled in its current state."
 msgstr ""
 
-#: includes/wizards/subscribers/class-subscribers-payments.php:566
+#: includes/wizards/subscribers/class-subscribers-payments.php:567
 msgid "Only an active subscription can be refunded from here."
 msgstr ""
 
-#: includes/wizards/subscribers/class-subscribers-payments.php:576
+#: includes/wizards/subscribers/class-subscribers-payments.php:577
 msgid "There is no paid order left to refund on this subscription."
 msgstr ""
 
-#: includes/wizards/subscribers/class-subscribers-payments.php:589
+#: includes/wizards/subscribers/class-subscribers-payments.php:590
 msgid "A refund must state the amount it expects to move. Reload the profile and try again."
 msgstr ""
 
-#: includes/wizards/subscribers/class-subscribers-payments.php:596
+#: includes/wizards/subscribers/class-subscribers-payments.php:597
 msgid "The refundable amount has changed since this page was loaded. Reload the profile and try again."
 msgstr ""
 
-#: includes/wizards/subscribers/class-subscribers-payments.php:606
+#: includes/wizards/subscribers/class-subscribers-payments.php:607
 msgid "Refunded from the Subscribers wizard."
 msgstr ""
 
 #. translators: 1: refunded amount with currency, 2: order ID.
-#: includes/wizards/subscribers/class-subscribers-payments.php:618
+#: includes/wizards/subscribers/class-subscribers-payments.php:619
 #, php-format
 msgid "Refunded %1$s against order #%2$d via the Subscribers wizard."
 msgstr ""
 
-#: includes/wizards/subscribers/class-subscribers-payments.php:653
+#: includes/wizards/subscribers/class-subscribers-payments.php:654
 msgid "Cancelled via the Subscribers wizard."
 msgstr ""
 
-#: includes/wizards/subscribers/class-subscribers-payments.php:713
+#: includes/wizards/subscribers/class-subscribers-payments.php:714
 msgid "Only an active subscription can change plans."
 msgstr ""
 
-#: includes/wizards/subscribers/class-subscribers-payments.php:726
+#: includes/wizards/subscribers/class-subscribers-payments.php:727
 msgid "Group subscriptions are managed from the group screen and cannot change plans here."
 msgstr ""
 
-#: includes/wizards/subscribers/class-subscribers-payments.php:738
+#: includes/wizards/subscribers/class-subscribers-payments.php:739
 msgid "Recurring donations cannot be moved onto a plan here. Use the subscription edit screen instead."
 msgstr ""
 
-#: includes/wizards/subscribers/class-subscribers-payments.php:750
+#: includes/wizards/subscribers/class-subscribers-payments.php:751
 msgid "This subscription has coupons, fees or shipping attached, so its plan cannot be changed here. Use the subscription edit screen instead."
 msgstr ""
 
-#: includes/wizards/subscribers/class-subscribers-payments.php:757
+#: includes/wizards/subscribers/class-subscribers-payments.php:758
 msgid "This subscription is not a single standard plan, so its plan cannot be changed here. Use the subscription edit screen instead."
 msgstr ""
 
-#: includes/wizards/subscribers/class-subscribers-payments.php:765
+#: includes/wizards/subscribers/class-subscribers-payments.php:766
 msgid "That product is not an individual subscription plan."
 msgstr ""
 
-#: includes/wizards/subscribers/class-subscribers-payments.php:773
+#: includes/wizards/subscribers/class-subscribers-payments.php:774
 msgid "The subscription is already on that plan."
 msgstr ""
 
 #. translators: %s: the scheduling error from WooCommerce Subscriptions.
-#: includes/wizards/subscribers/class-subscribers-payments.php:792
+#: includes/wizards/subscribers/class-subscribers-payments.php:793
 #, php-format
 msgid "That plan’s fixed term cannot be applied to this subscription: %s"
 msgstr ""
 
 #. translators: 1: old plan name(s), 2: new plan name.
-#: includes/wizards/subscribers/class-subscribers-payments.php:811
+#: includes/wizards/subscribers/class-subscribers-payments.php:812
 #, php-format
 msgid "Plan changed from %1$s to %2$s via the Subscribers wizard. The new price applies from the next renewal."
 msgstr ""
 
-#: includes/wizards/subscribers/class-subscribers-payments.php:897
+#: includes/wizards/subscribers/class-subscribers-payments.php:898
 msgid "An expired card cannot be the default payment method."
 msgstr ""
 
-#: includes/wizards/subscribers/class-subscribers-payments.php:922
+#: includes/wizards/subscribers/class-subscribers-payments.php:926
 msgid "The target does not belong to the subscriber being viewed. Reload the profile and try again."
 msgstr ""
 
@@ -12186,13 +12188,13 @@ msgstr ""
 #: dist/audience-wizards.55cbbe433c3cda500952.js:260
 #: dist/subscribers.js:16
 #: dist/subscribers.js:18
-#: dist/subscribers.js:90
-#: dist/subscribers.js:130
+#: dist/subscribers.js:111
+#: dist/subscribers.js:151
 #: src/wizards/audience/views/campaigns/contextual-prompts/index.js:260
 #: src/wizards/audience/views/integrations/sync-activity-details.js:239
 #: src/wizards/subscribers/screens/GroupDetail.jsx:402
 #: src/wizards/subscribers/screens/GroupList.jsx:293
-#: src/wizards/subscribers/screens/PersonProfile.jsx:426
+#: src/wizards/subscribers/screens/PersonProfile.jsx:469
 #: src/wizards/subscribers/screens/SubscriberList.jsx:429
 msgid "Retry"
 msgstr ""
@@ -15720,10 +15722,10 @@ msgstr ""
 
 #: dist/audience-wizards.55cbbe433c3cda500952.js:249
 #: dist/newspack-wizards.a6e7a5fc12e64278f260.js:23
-#: dist/subscribers.js:66
+#: dist/subscribers.js:82
 #: src/wizards/audience/views/setup/campaign.js:69
 #: src/wizards/audience/views/setup/complete.js:139
-#: src/wizards/subscribers/flows/ReactivateFlow.jsx:174
+#: src/wizards/subscribers/flows/ReactivateFlow.jsx:210
 msgid "Back"
 msgstr ""
 
@@ -21928,12 +21930,12 @@ msgstr ""
 #: dist/newspack-wizards.a6e7a5fc12e64278f260.js:38
 #: dist/subscribers.js:36
 #: dist/subscribers.js:48
-#: dist/subscribers.js:62
-#: dist/subscribers.js:66
+#: dist/subscribers.js:74
+#: dist/subscribers.js:82
 #: src/wizards/subscribers/flows/ChangePaymentMethodFlow.jsx:116
 #: src/wizards/subscribers/flows/PlanChangeFlow.jsx:149
-#: src/wizards/subscribers/flows/ReactivateFlow.jsx:176
-#: src/wizards/subscribers/flows/RefundFlow.jsx:196
+#: src/wizards/subscribers/flows/ReactivateFlow.jsx:212
+#: src/wizards/subscribers/flows/RefundFlow.jsx:235
 msgid "Confirm"
 msgstr ""
 
@@ -23425,12 +23427,12 @@ msgid "Subscriber"
 msgstr ""
 
 #: dist/subscribers.js:13
-#: dist/subscribers.js:76
-#: dist/subscribers.js:89
-#: dist/subscribers.js:121
+#: dist/subscribers.js:97
+#: dist/subscribers.js:110
+#: dist/subscribers.js:142
 #: src/wizards/subscribers/flows/SubscriptionDetailsDrawer.jsx:85
-#: src/wizards/subscribers/screens/PersonProfile.jsx:257
-#: src/wizards/subscribers/screens/PersonProfile.jsx:365
+#: src/wizards/subscribers/screens/PersonProfile.jsx:282
+#: src/wizards/subscribers/screens/PersonProfile.jsx:396
 #: src/wizards/subscribers/screens/SubscriberList.jsx:252
 msgid "Last payment"
 msgstr ""
@@ -23479,11 +23481,11 @@ msgid "Seat increase requested"
 msgstr ""
 
 #: dist/subscribers.js:17
-#: dist/subscribers.js:62
-#: dist/subscribers.js:77
-#: src/wizards/subscribers/flows/ReactivateFlow.jsx:49
+#: dist/subscribers.js:74
+#: dist/subscribers.js:98
+#: src/wizards/subscribers/flows/ReactivateFlow.jsx:58
 #: src/wizards/subscribers/screens/GroupList.jsx:173
-#: src/wizards/subscribers/screens/PersonProfile.jsx:292
+#: src/wizards/subscribers/screens/PersonProfile.jsx:317
 msgid "(Subscription)"
 msgstr ""
 
@@ -23495,10 +23497,13 @@ msgid "%s / Unlimited"
 msgstr ""
 
 #. translators: %s is a subscription/plan name.
+#. translators: %s is a group's plan name.
 #: dist/subscribers.js:18
-#: dist/subscribers.js:89
+#: dist/subscribers.js:98
+#: dist/subscribers.js:110
 #: src/wizards/subscribers/components/SubscriptionCard.jsx:234
-#: src/wizards/subscribers/screens/PersonProfile.jsx:370
+#: src/wizards/subscribers/screens/PersonProfile.jsx:310
+#: src/wizards/subscribers/screens/PersonProfile.jsx:413
 #, js-format
 msgid "Subscription actions: %s"
 msgstr ""
@@ -23683,395 +23688,451 @@ msgid "Subscription changed to %s. The new price applies from the next renewal."
 msgstr ""
 
 #: dist/subscribers.js:48
-#: src/wizards/subscribers/flows/RefundFlow.jsx:49
+#: src/wizards/subscribers/flows/RefundFlow.jsx:50
 msgid "The subscriber"
 msgstr ""
 
 #: dist/subscribers.js:48
-#: src/wizards/subscribers/flows/RefundFlow.jsx:109
+#: src/wizards/subscribers/flows/RefundFlow.jsx:124
 msgid "This subscription is not active, so there is no payment to refund. Cancelling it ends access immediately."
 msgstr ""
 
 #: dist/subscribers.js:48
-#: src/wizards/subscribers/flows/RefundFlow.jsx:114
+#: src/wizards/subscribers/flows/RefundFlow.jsx:129
 msgid "There is no refundable payment left on this subscription. Cancelling it ends access immediately."
 msgstr ""
 
 #: dist/subscribers.js:48
-#: src/wizards/subscribers/flows/RefundFlow.jsx:104
+#: src/wizards/subscribers/flows/RefundFlow.jsx:119
 msgid "This subscription is free, so there is no payment to refund. Cancelling it ends access immediately."
 msgstr ""
 
 #. translators: %s is the subscriber's name.
 #: dist/subscribers.js:48
-#: src/wizards/subscribers/flows/RefundFlow.jsx:121
+#: src/wizards/subscribers/flows/RefundFlow.jsx:136
 #, js-format
 msgid "%s’s access ends immediately. No refund is issued."
 msgstr ""
 
-#. translators: 1: the subscriber's name, 2: the refund amount.
+#. translators: 1: the gift buyer's name, 2: the refund amount, 3: the gift recipient's name.
 #: dist/subscribers.js:51
-#: src/wizards/subscribers/flows/RefundFlow.jsx:128
+#: src/wizards/subscribers/flows/RefundFlow.jsx:141
+#, js-format
+msgid "%1$s will be refunded %2$s. %3$s’s gift is already ending; a full refund may cancel it immediately."
+msgstr ""
+
+#. translators: 1: the gift buyer's name, 2: the refund amount, 3: the gift recipient's name.
+#: dist/subscribers.js:54
+#: src/wizards/subscribers/flows/RefundFlow.jsx:148
+#, js-format
+msgid "%1$s will be refunded %2$s. %3$s’s access continues and the gift renews normally."
+msgstr ""
+
+#. translators: 1: the subscriber's name, 2: the refund amount.
+#: dist/subscribers.js:57
+#: src/wizards/subscribers/flows/RefundFlow.jsx:159
 #, js-format
 msgid "%1$s will be refunded %2$s. Their subscription is already ending; a full refund may cancel it immediately."
 msgstr ""
 
 #. translators: 1: the subscriber's name, 2: the refund amount.
-#: dist/subscribers.js:54
-#: src/wizards/subscribers/flows/RefundFlow.jsx:137
+#: dist/subscribers.js:60
+#: src/wizards/subscribers/flows/RefundFlow.jsx:168
 #, js-format
 msgid "%1$s will be refunded %2$s. Their access continues and they’ll renew normally."
 msgstr ""
 
+#. translators: 1: the gift buyer's name, 2: the refund amount, 3: the gift recipient's name.
+#: dist/subscribers.js:63
+#: src/wizards/subscribers/flows/RefundFlow.jsx:175
+#, js-format
+msgid "%1$s will be refunded %2$s and %3$s’s access ends immediately."
+msgstr ""
+
 #. translators: 1: the subscriber's name, 2: the refund amount.
-#: dist/subscribers.js:57
-#: src/wizards/subscribers/flows/RefundFlow.jsx:144
+#: dist/subscribers.js:66
+#: src/wizards/subscribers/flows/RefundFlow.jsx:183
 #, js-format
 msgid "%1$s will be refunded %2$s and their access ends immediately."
 msgstr ""
 
-#: dist/subscribers.js:57
-#: dist/subscribers.js:83
-#: src/wizards/subscribers/flows/RefundFlow.jsx:152
-#: src/wizards/subscribers/screens/PersonProfile.jsx:340
+#: dist/subscribers.js:66
+#: dist/subscribers.js:104
+#: src/wizards/subscribers/flows/RefundFlow.jsx:191
+#: src/wizards/subscribers/screens/PersonProfile.jsx:371
 msgid "Refund or cancel"
 msgstr ""
 
-#: dist/subscribers.js:57
-#: src/wizards/subscribers/flows/RefundFlow.jsx:172
+#: dist/subscribers.js:66
+#: src/wizards/subscribers/flows/RefundFlow.jsx:211
 msgid "What would you like to do?"
 msgstr ""
 
-#: dist/subscribers.js:57
-#: src/wizards/subscribers/flows/RefundFlow.jsx:175
+#: dist/subscribers.js:66
+#: src/wizards/subscribers/flows/RefundFlow.jsx:214
 msgid "Refund only (keep subscription active)"
 msgstr ""
 
-#: dist/subscribers.js:57
-#: src/wizards/subscribers/flows/RefundFlow.jsx:176
+#: dist/subscribers.js:66
+#: src/wizards/subscribers/flows/RefundFlow.jsx:215
 msgid "Cancel only (no refund)"
 msgstr ""
 
-#: dist/subscribers.js:57
-#: src/wizards/subscribers/flows/RefundFlow.jsx:177
+#: dist/subscribers.js:66
+#: src/wizards/subscribers/flows/RefundFlow.jsx:216
 msgid "Refund and cancel subscription"
 msgstr ""
 
 #. translators: %s is the refunded amount.
-#: dist/subscribers.js:59
-#: src/wizards/subscribers/flows/RefundFlow.jsx:68
+#: dist/subscribers.js:68
+#: src/wizards/subscribers/flows/RefundFlow.jsx:74
 #, js-format
 msgid "Refund of %s processed and subscription cancelled."
 msgstr ""
 
 #. translators: %s is the refunded amount.
-#: dist/subscribers.js:59
-#: src/wizards/subscribers/flows/RefundFlow.jsx:71
+#: dist/subscribers.js:68
+#: src/wizards/subscribers/flows/RefundFlow.jsx:77
 #, js-format
 msgid "Refund of %s processed."
 msgstr ""
 
 #. translators: %s is the subscription plan name.
-#: dist/subscribers.js:59
-#: src/wizards/subscribers/flows/RefundFlow.jsx:74
+#: dist/subscribers.js:68
+#: src/wizards/subscribers/flows/RefundFlow.jsx:80
 #, js-format
 msgid "%s cancelled."
 msgstr ""
 
-#: dist/subscribers.js:59
-#: src/wizards/subscribers/flows/RefundFlow.jsx:79
+#. translators: %s is the gift buyer's name.
+#: dist/subscribers.js:71
+#: src/wizards/subscribers/flows/RefundFlow.jsx:88
+#, js-format
+msgid "The gateway does not refund automatically, so the payment must be returned to %s manually."
+msgstr ""
+
+#: dist/subscribers.js:71
+#: src/wizards/subscribers/flows/RefundFlow.jsx:91
 msgid "The gateway does not refund automatically, so the payment must be returned to the subscriber manually."
 msgstr ""
 
 #. translators: 1: the refunded amount, 2: the server's error message.
-#: dist/subscribers.js:62
-#: src/wizards/subscribers/flows/RefundFlow.jsx:90
+#: dist/subscribers.js:74
+#: src/wizards/subscribers/flows/RefundFlow.jsx:105
 #, js-format
 msgid "A refund of %1$s was processed, but the cancellation failed: %2$s Use “Cancel only” to finish."
 msgstr ""
 
-#: dist/subscribers.js:62
+#: dist/subscribers.js:74
 #: src/wizards/subscribers/flows/ReactivateFlow.jsx:37
 msgid "Charge the payment method on file now. Reactivates immediately once the payment succeeds."
 msgstr ""
 
-#: dist/subscribers.js:62
+#: dist/subscribers.js:74
 #: src/wizards/subscribers/flows/ReactivateFlow.jsx:38
 msgid "Email the subscriber a link to pay. Stays on hold until they pay."
 msgstr ""
 
-#: dist/subscribers.js:62
+#: dist/subscribers.js:74
 #: src/wizards/subscribers/flows/ReactivateFlow.jsx:39
 msgid "Reactivate now without taking a payment. Billing resumes on the regular schedule."
 msgstr ""
 
-#: dist/subscribers.js:62
-#: src/wizards/subscribers/flows/ReactivateFlow.jsx:53
+#. translators: %s is the gift buyer's name.
+#: dist/subscribers.js:77
+#: src/wizards/subscribers/flows/ReactivateFlow.jsx:67
+#, js-format
+msgid "Email %s a link to pay. The subscription stays on hold until they pay."
+msgstr ""
+
+#: dist/subscribers.js:77
+#: src/wizards/subscribers/flows/ReactivateFlow.jsx:74
 msgid "Charge the customer now"
 msgstr ""
 
-#: dist/subscribers.js:62
-#: src/wizards/subscribers/flows/ReactivateFlow.jsx:54
+#: dist/subscribers.js:77
+#: src/wizards/subscribers/flows/ReactivateFlow.jsx:75
 msgid "Send a payment link"
 msgstr ""
 
-#: dist/subscribers.js:62
-#: src/wizards/subscribers/flows/ReactivateFlow.jsx:55
+#: dist/subscribers.js:77
+#: src/wizards/subscribers/flows/ReactivateFlow.jsx:76
 msgid "Reactivate for free"
 msgstr ""
 
-#: dist/subscribers.js:62
-#: src/wizards/subscribers/flows/ReactivateFlow.jsx:107
+#: dist/subscribers.js:77
+#: src/wizards/subscribers/flows/ReactivateFlow.jsx:135
 msgid "Choose how to reactivate."
 msgstr ""
 
-#: dist/subscribers.js:62
-#: src/wizards/subscribers/flows/ReactivateFlow.jsx:107
+#: dist/subscribers.js:77
+#: src/wizards/subscribers/flows/ReactivateFlow.jsx:135
 msgid "Confirm the reactivation details."
 msgstr ""
 
 #. translators: %s is a formatted price.
-#: dist/subscribers.js:64
-#: src/wizards/subscribers/flows/ReactivateFlow.jsx:114
+#: dist/subscribers.js:79
+#: src/wizards/subscribers/flows/ReactivateFlow.jsx:142
 #, js-format
 msgid "The payment method on file will be charged %s now. If the payment succeeds, the subscription reactivates immediately and the renewal receipt is emailed per the store's email settings."
 msgstr ""
 
-#: dist/subscribers.js:64
-#: src/wizards/subscribers/flows/ReactivateFlow.jsx:120
+#: dist/subscribers.js:79
+#: src/wizards/subscribers/flows/ReactivateFlow.jsx:148
 msgid "The payment method on file will be charged now. If the payment succeeds, the subscription reactivates immediately."
 msgstr ""
 
-#. translators: %s is the subscriber's email address.
-#: dist/subscribers.js:66
-#: src/wizards/subscribers/flows/ReactivateFlow.jsx:126
+#. translators: %s is the email address the payment link goes to: the buyer's billing email on a gift.
+#: dist/subscribers.js:82
+#: src/wizards/subscribers/flows/ReactivateFlow.jsx:156
 #, js-format
 msgid "A payment link will be emailed to %s. The subscription reactivates once they pay."
 msgstr ""
 
-#: dist/subscribers.js:66
-#: src/wizards/subscribers/flows/ReactivateFlow.jsx:128
+#: dist/subscribers.js:82
+#: src/wizards/subscribers/flows/ReactivateFlow.jsx:159
+msgid "No billing email is on file, so you'll get a payment link to share instead. The subscription reactivates once it's paid."
+msgstr ""
+
+#: dist/subscribers.js:82
+#: src/wizards/subscribers/flows/ReactivateFlow.jsx:164
 msgid "The subscription reactivates now without taking a payment. Billing resumes on the regular schedule at the next renewal."
 msgstr ""
 
-#: dist/subscribers.js:66
-#: src/wizards/subscribers/flows/ReactivateFlow.jsx:136
+#: dist/subscribers.js:82
+#: src/wizards/subscribers/flows/ReactivateFlow.jsx:172
 msgid "Reactivate subscription"
 msgstr ""
 
-#: dist/subscribers.js:66
-#: src/wizards/subscribers/flows/ReactivateFlow.jsx:157
+#: dist/subscribers.js:82
+#: src/wizards/subscribers/flows/ReactivateFlow.jsx:193
 msgid "How would you like to reactivate?"
 msgstr ""
 
-#. translators: %s is the subscriber's email address.
-#: dist/subscribers.js:68
-#: src/wizards/subscribers/flows/ReactivateFlow.jsx:69
+#. translators: %s is the email address the payment link went to: the buyer's billing email on a gift.
+#: dist/subscribers.js:84
+#: src/wizards/subscribers/flows/ReactivateFlow.jsx:90
 #, js-format
 msgid "Payment link sent to %s."
 msgstr ""
 
+#. translators: 1: the gift buyer's name, 2: a checkout payment URL.
+#: dist/subscribers.js:87
+#: src/wizards/subscribers/flows/ReactivateFlow.jsx:96
+#, js-format
+msgid "The email could not be sent. Share this payment link with %1$s directly: %2$s"
+msgstr ""
+
 #. translators: %s is a checkout payment URL.
-#: dist/subscribers.js:71
-#: src/wizards/subscribers/flows/ReactivateFlow.jsx:74
+#: dist/subscribers.js:90
+#: src/wizards/subscribers/flows/ReactivateFlow.jsx:102
 #, js-format
 msgid "The email could not be sent. Share this payment link with the subscriber directly: %s"
 msgstr ""
 
-#: dist/subscribers.js:71
-#: src/wizards/subscribers/flows/ReactivateFlow.jsx:88
+#: dist/subscribers.js:90
+#: src/wizards/subscribers/flows/ReactivateFlow.jsx:116
 msgid "Payment submitted — check the subscription's renewal order to confirm the outcome."
 msgstr ""
 
 #. translators: %s is the plan name.
-#: dist/subscribers.js:71
-#: src/wizards/subscribers/flows/ReactivateFlow.jsx:91
+#: dist/subscribers.js:90
+#: src/wizards/subscribers/flows/ReactivateFlow.jsx:119
 #, js-format
 msgid "%s reactivated."
 msgstr ""
 
+#: dist/subscribers.js:90
+#: dist/subscribers.js:97
+#: dist/subscribers.js:142
+#: src/wizards/subscribers/flows/SubscriptionDetailsDrawer.jsx:78
+#: src/wizards/subscribers/screens/PersonProfile.jsx:83
+#: src/wizards/subscribers/screens/PersonProfile.jsx:289
+msgid "Unknown"
+msgstr ""
+
 #. translators: 1: seats in use, 2: the group's seat limit.
-#: dist/subscribers.js:71
-#: src/wizards/subscribers/screens/PersonProfile.jsx:110
+#: dist/subscribers.js:90
+#: src/wizards/subscribers/screens/PersonProfile.jsx:119
 #, js-format
 msgid "%1$d of %2$d seats"
 msgstr ""
 
 #. translators: %d is the number of seats in use in an uncapped group.
-#: dist/subscribers.js:71
-#: src/wizards/subscribers/screens/PersonProfile.jsx:113
+#: dist/subscribers.js:90
+#: src/wizards/subscribers/screens/PersonProfile.jsx:122
 #, js-format
 msgid "%d of unlimited seats"
 msgid_plural "%d of unlimited seats"
 msgstr[0] ""
 msgstr[1] ""
 
+#. translators: %s is a subscription/plan name.
+#: dist/subscribers.js:94
+#: dist/subscribers.js:110
+#: src/wizards/subscribers/screens/PersonProfile.jsx:145
+#: src/wizards/subscribers/screens/PersonProfile.jsx:391
+#, js-format
+msgid "View subscription: %s"
+msgstr ""
+
 #. translators: %s is a date.
-#: dist/subscribers.js:76
-#: src/wizards/subscribers/screens/PersonProfile.jsx:232
+#: dist/subscribers.js:97
+#: src/wizards/subscribers/screens/PersonProfile.jsx:257
 #, js-format
 msgid "Subscriber since %s"
 msgstr ""
 
-#: dist/subscribers.js:76
-#: src/wizards/subscribers/screens/PersonProfile.jsx:240
+#: dist/subscribers.js:97
+#: src/wizards/subscribers/screens/PersonProfile.jsx:265
 msgid "Edit WordPress user"
 msgstr ""
 
-#: dist/subscribers.js:76
-#: dist/subscribers.js:89
-#: dist/subscribers.js:121
+#: dist/subscribers.js:97
+#: dist/subscribers.js:110
+#: dist/subscribers.js:142
 #: src/wizards/subscribers/flows/SubscriptionDetailsDrawer.jsx:83
-#: src/wizards/subscribers/screens/PersonProfile.jsx:255
-#: src/wizards/subscribers/screens/PersonProfile.jsx:363
+#: src/wizards/subscribers/screens/PersonProfile.jsx:280
+#: src/wizards/subscribers/screens/PersonProfile.jsx:394
 msgid "First subscribed"
 msgstr ""
 
-#: dist/subscribers.js:76
-#: src/wizards/subscribers/screens/PersonProfile.jsx:261
+#: dist/subscribers.js:97
+#: src/wizards/subscribers/screens/PersonProfile.jsx:286
 msgid "Joined"
 msgstr ""
 
-#: dist/subscribers.js:76
-#: dist/subscribers.js:121
-#: src/wizards/subscribers/flows/SubscriptionDetailsDrawer.jsx:78
-#: src/wizards/subscribers/screens/PersonProfile.jsx:264
-msgid "Unknown"
-msgstr ""
-
-#: dist/subscribers.js:77
-#: src/wizards/subscribers/screens/PersonProfile.jsx:303
+#: dist/subscribers.js:98
+#: src/wizards/subscribers/screens/PersonProfile.jsx:332
 msgid "Reactivate"
 msgstr ""
 
 #. translators: %s is a subscription/plan name.
-#: dist/subscribers.js:79
-#: src/wizards/subscribers/screens/PersonProfile.jsx:305
+#: dist/subscribers.js:100
+#: src/wizards/subscribers/screens/PersonProfile.jsx:334
 #, js-format
 msgid "Reactivate: %s"
 msgstr ""
 
 #. translators: %s is a subscription/plan name.
-#: dist/subscribers.js:81
-#: src/wizards/subscribers/screens/PersonProfile.jsx:318
+#: dist/subscribers.js:102
+#: src/wizards/subscribers/screens/PersonProfile.jsx:347
 #, js-format
 msgid "Change subscription: %s"
 msgstr ""
 
 #. translators: %s is a subscription/plan name.
-#: dist/subscribers.js:83
-#: src/wizards/subscribers/screens/PersonProfile.jsx:329
+#: dist/subscribers.js:104
+#: src/wizards/subscribers/screens/PersonProfile.jsx:360
 #, js-format
 msgid "Change payment method: %s"
 msgstr ""
 
 #. translators: %s is a subscription/plan name.
-#: dist/subscribers.js:86
-#: src/wizards/subscribers/screens/PersonProfile.jsx:343
+#: dist/subscribers.js:107
+#: src/wizards/subscribers/screens/PersonProfile.jsx:374
 #, js-format
 msgid "Refund or cancel: %s"
 msgstr ""
 
 #. translators: %s is a subscription/plan name.
-#: dist/subscribers.js:89
-#: src/wizards/subscribers/screens/PersonProfile.jsx:345
+#: dist/subscribers.js:110
+#: src/wizards/subscribers/screens/PersonProfile.jsx:376
 #, js-format
 msgid "Cancel: %s"
 msgstr ""
 
-#. translators: %s is a subscription/plan name.
-#: dist/subscribers.js:89
-#: src/wizards/subscribers/screens/PersonProfile.jsx:360
-#, js-format
-msgid "View subscription: %s"
+#: dist/subscribers.js:110
+#: src/wizards/subscribers/screens/PersonProfile.jsx:401
+msgid "Gifted by"
 msgstr ""
 
-#: dist/subscribers.js:89
-#: src/wizards/subscribers/screens/PersonProfile.jsx:397
+#: dist/subscribers.js:110
+#: src/wizards/subscribers/screens/PersonProfile.jsx:440
 msgid "This subscriber could not be found. They may have been deleted."
 msgstr ""
 
-#: dist/subscribers.js:89
-#: src/wizards/subscribers/screens/PersonProfile.jsx:403
+#: dist/subscribers.js:110
+#: src/wizards/subscribers/screens/PersonProfile.jsx:446
 msgid "Back to the list"
 msgstr ""
 
-#: dist/subscribers.js:89
-#: src/wizards/subscribers/screens/PersonProfile.jsx:413
+#: dist/subscribers.js:110
+#: src/wizards/subscribers/screens/PersonProfile.jsx:456
 msgid "This subscriber could not be loaded."
 msgstr ""
 
 #. translators: %s is an error message.
-#: dist/subscribers.js:90
-#: src/wizards/subscribers/screens/PersonProfile.jsx:417
+#: dist/subscribers.js:111
+#: src/wizards/subscribers/screens/PersonProfile.jsx:460
 #, js-format
 msgid "Could not load this subscriber: %s"
 msgstr ""
 
-#: dist/subscribers.js:90
-#: src/wizards/subscribers/screens/PersonProfile.jsx:447
+#: dist/subscribers.js:111
+#: src/wizards/subscribers/screens/PersonProfile.jsx:490
 msgid "No subscriptions on file."
 msgstr ""
 
 #. translators: %d is the number of hidden cancelled subscriptions.
-#: dist/subscribers.js:93
-#: src/wizards/subscribers/screens/PersonProfile.jsx:467
+#: dist/subscribers.js:114
+#: src/wizards/subscribers/screens/PersonProfile.jsx:510
 #, js-format
 msgid "View %d more cancelled subscription"
 msgid_plural "View %d more cancelled subscriptions"
 msgstr[0] ""
 msgstr[1] ""
 
-#: dist/subscribers.js:93
-#: src/wizards/subscribers/screens/PersonProfile.jsx:478
+#: dist/subscribers.js:114
+#: src/wizards/subscribers/screens/PersonProfile.jsx:521
 msgid "View less"
 msgstr ""
 
 #. translators: %d is the number of hidden cancelled subscriptions.
-#: dist/subscribers.js:96
-#: src/wizards/subscribers/screens/PersonProfile.jsx:480
+#: dist/subscribers.js:117
+#: src/wizards/subscribers/screens/PersonProfile.jsx:523
 #, js-format
 msgid "View %d more"
 msgstr ""
 
-#: dist/subscribers.js:96
-#: src/wizards/subscribers/screens/PersonProfile.jsx:489
+#: dist/subscribers.js:117
+#: src/wizards/subscribers/screens/PersonProfile.jsx:532
 msgid "The cards on file for this subscriber. Each subscription charges the card set on it; the default applies to new purchases."
 msgstr ""
 
 #. translators: %s is a card label (e.g. "Visa ending in 4242").
-#: dist/subscribers.js:98
-#: src/wizards/subscribers/screens/PersonProfile.jsx:177
+#: dist/subscribers.js:119
+#: src/wizards/subscribers/screens/PersonProfile.jsx:202
 #, js-format
 msgid "%s is now the default payment method."
 msgstr ""
 
-#: dist/subscribers.js:98
-#: dist/subscribers.js:104
-#: dist/subscribers.js:130
+#: dist/subscribers.js:119
+#: dist/subscribers.js:125
+#: dist/subscribers.js:151
 #: src/wizards/subscribers/flows/AddMembersFlow.jsx:158
 #: src/wizards/subscribers/flows/AddMembersFlow.jsx:199
 #: src/wizards/subscribers/screens/GroupDetail.jsx:462
 msgid "Add members"
 msgstr ""
 
-#: dist/subscribers.js:98
+#: dist/subscribers.js:119
 #: src/wizards/subscribers/flows/AddMembersFlow.jsx:163
 msgid "No seats are available. Remove a member, cancel a pending invite, or raise the seat limit before adding."
 msgstr ""
 
-#: dist/subscribers.js:98
+#: dist/subscribers.js:119
 #: src/wizards/subscribers/flows/AddMembersFlow.jsx:167
 msgid "People who already have an account are added right away. Anyone who does not is sent an invitation instead."
 msgstr ""
 
-#: dist/subscribers.js:98
+#: dist/subscribers.js:119
 #: src/wizards/subscribers/flows/AddMembersFlow.jsx:173
 msgid "Add by email"
 msgstr ""
 
 #. translators: %d: number of people that fit in the remaining seats.
-#: dist/subscribers.js:99
+#: dist/subscribers.js:120
 #: src/wizards/subscribers/flows/AddMembersFlow.jsx:184
 #, js-format
 msgid "Only %d person will be added, to match the available seats."
@@ -24080,7 +24141,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %d: number of addresses that were skipped.
-#: dist/subscribers.js:100
+#: dist/subscribers.js:121
 #: src/wizards/subscribers/flows/AddMembersFlow.jsx:77
 #, js-format
 msgid "%d address was already a member, or is not a reader account, and was skipped."
@@ -24089,8 +24150,8 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %s: email address the invitation was addressed to.
-#: dist/subscribers.js:101
-#: dist/subscribers.js:111
+#: dist/subscribers.js:122
+#: dist/subscribers.js:132
 #: src/wizards/subscribers/flows/AddMembersFlow.jsx:104
 #: src/wizards/subscribers/flows/InviteMemberFlow.jsx:69
 #, js-format
@@ -24098,7 +24159,7 @@ msgid "%s: the invitation was created but the email could not be sent. It holds 
 msgstr ""
 
 #. translators: %d: number of members added to the group.
-#: dist/subscribers.js:103
+#: dist/subscribers.js:124
 #: src/wizards/subscribers/flows/AddMembersFlow.jsx:125
 #, js-format
 msgid "%d member added."
@@ -24107,7 +24168,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %d: number of invitations sent.
-#: dist/subscribers.js:104
+#: dist/subscribers.js:125
 #: src/wizards/subscribers/flows/AddMembersFlow.jsx:131
 #, js-format
 msgid "%d invitation sent — no account on this site yet."
@@ -24115,120 +24176,120 @@ msgid_plural "%d invitations sent — no accounts on this site yet."
 msgstr[0] ""
 msgstr[1] ""
 
-#: dist/subscribers.js:104
+#: dist/subscribers.js:125
 #: src/wizards/subscribers/flows/AddMembersFlow.jsx:154
 msgid "Nothing to add."
 msgstr ""
 
-#: dist/subscribers.js:104
+#: dist/subscribers.js:125
 #: src/wizards/subscribers/flows/AdjustSeatsFlow.jsx:67
 msgid "Adjust seat limit"
 msgstr ""
 
-#: dist/subscribers.js:104
+#: dist/subscribers.js:125
 #: src/wizards/subscribers/flows/AdjustSeatsFlow.jsx:71
 msgid "Unlimited seats"
 msgstr ""
 
 #. translators: %s: lowercase singular group label (e.g. "group", "team").
-#: dist/subscribers.js:105
+#: dist/subscribers.js:126
 #: src/wizards/subscribers/flows/AdjustSeatsFlow.jsx:74
 #, js-format
 msgid "Anyone invited can join this %s, with no cap."
 msgstr ""
 
-#: dist/subscribers.js:105
+#: dist/subscribers.js:126
 #: src/wizards/subscribers/flows/AdjustSeatsFlow.jsx:84
 msgid "Seat limit"
 msgstr ""
 
 #. translators: %d: number of seats held by members and pending invitations.
-#: dist/subscribers.js:106
+#: dist/subscribers.js:127
 #: src/wizards/subscribers/flows/AdjustSeatsFlow.jsx:91
 #, js-format
 msgid "%d seats are committed to members and pending invitations. The limit cannot be set below this."
 msgstr ""
 
-#: dist/subscribers.js:106
+#: dist/subscribers.js:127
 #: src/wizards/subscribers/flows/AdjustSeatsFlow.jsx:99
 msgid "This changes how many people the group can hold. It does not charge anything or change what the group is billed."
 msgstr ""
 
 #. translators: %s: lowercase singular group label (e.g. "group", "team").
-#: dist/subscribers.js:107
+#: dist/subscribers.js:128
 #: src/wizards/subscribers/flows/AdjustSeatsFlow.jsx:56
 #, js-format
 msgid "Seat limit removed — this %s is now unlimited."
 msgstr ""
 
 #. translators: %d: the new seat limit.
-#: dist/subscribers.js:108
+#: dist/subscribers.js:129
 #: src/wizards/subscribers/flows/AdjustSeatsFlow.jsx:58
 #, js-format
 msgid "Seat limit updated to %d."
 msgstr ""
 
-#: dist/subscribers.js:108
+#: dist/subscribers.js:129
 #: src/wizards/subscribers/flows/AdjustSeatsFlow.jsx:109
 msgid "Save seat limit"
 msgstr ""
 
-#: dist/subscribers.js:108
-#: dist/subscribers.js:120
+#: dist/subscribers.js:129
+#: dist/subscribers.js:141
 #: src/wizards/subscribers/flows/CancelInviteFlow.jsx:21
 #: src/wizards/subscribers/flows/ResendInviteFlow.jsx:21
 msgid "this recipient"
 msgstr ""
 
-#: dist/subscribers.js:108
+#: dist/subscribers.js:129
 #: src/wizards/subscribers/flows/CancelInviteFlow.jsx:30
 #: src/wizards/subscribers/flows/CancelInviteFlow.jsx:32
 msgid "Cancel invitation"
 msgstr ""
 
-#: dist/subscribers.js:108
+#: dist/subscribers.js:129
 #: src/wizards/subscribers/flows/CancelInviteFlow.jsx:31
 msgid "Keep invitation"
 msgstr ""
 
-#: dist/subscribers.js:108
+#: dist/subscribers.js:129
 #: src/wizards/subscribers/flows/CancelInviteFlow.jsx:25
 msgid "Invitation cancelled."
 msgstr ""
 
 #. translators: <email/> is replaced with the recipient's email address.
-#: dist/subscribers.js:109
+#: dist/subscribers.js:130
 #: src/wizards/subscribers/flows/CancelInviteFlow.jsx:39
 msgid "Cancel the invitation to <email/>? The link in their email stops working and they can't join unless you invite them again."
 msgstr ""
 
-#: dist/subscribers.js:109
+#: dist/subscribers.js:130
 #: src/wizards/subscribers/flows/DisableLinkFlow.jsx:23
 msgid "Invite link disabled."
 msgstr ""
 
-#: dist/subscribers.js:109
+#: dist/subscribers.js:130
 #: src/wizards/subscribers/flows/DisableLinkFlow.jsx:34
 msgid "This disables the invite link shown above, including any copy already sent out. Nobody can join through it, whoever shared it. You can create a new link at any time."
 msgstr ""
 
-#: dist/subscribers.js:109
+#: dist/subscribers.js:130
 #: src/wizards/subscribers/flows/InviteMemberFlow.jsx:102
 msgid "Invite members"
 msgstr ""
 
-#: dist/subscribers.js:109
+#: dist/subscribers.js:130
 #: src/wizards/subscribers/flows/InviteMemberFlow.jsx:107
 msgid "No seats are available. Remove a member, cancel a pending invite, or raise the seat limit before inviting."
 msgstr ""
 
-#: dist/subscribers.js:109
+#: dist/subscribers.js:130
 #: src/wizards/subscribers/flows/InviteMemberFlow.jsx:111
 msgid "Each address gets an email with a link to join."
 msgstr ""
 
 #. translators: %d: number of invites that fit in the remaining seats.
-#: dist/subscribers.js:110
+#: dist/subscribers.js:131
 #: src/wizards/subscribers/flows/InviteMemberFlow.jsx:125
 #, js-format
 msgid "Only %d invite will be sent, to match the available seats."
@@ -24237,8 +24298,8 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %d: number of invitations sent.
-#: dist/subscribers.js:113
-#: dist/subscribers.js:115
+#: dist/subscribers.js:134
+#: dist/subscribers.js:136
 #: src/wizards/subscribers/flows/InviteMemberFlow.jsx:92
 #: src/wizards/subscribers/flows/InviteMemberFlow.jsx:98
 #, js-format
@@ -24247,39 +24308,39 @@ msgid_plural "%d invitations sent."
 msgstr[0] ""
 msgstr[1] ""
 
-#: dist/subscribers.js:115
+#: dist/subscribers.js:136
 #: src/wizards/subscribers/flows/InviteMemberFlow.jsx:140
 msgid "Send invites"
 msgstr ""
 
-#: dist/subscribers.js:115
+#: dist/subscribers.js:136
 #: src/wizards/subscribers/flows/RegenerateLinkFlow.jsx:40
 msgid "New invite link created and copied to clipboard."
 msgstr ""
 
-#: dist/subscribers.js:115
+#: dist/subscribers.js:136
 #: src/wizards/subscribers/flows/RegenerateLinkFlow.jsx:40
 msgid "New invite link created."
 msgstr ""
 
-#: dist/subscribers.js:115
+#: dist/subscribers.js:136
 #: src/wizards/subscribers/flows/RegenerateLinkFlow.jsx:51
 msgid "This replaces the invite link shown above, including any copy already sent out. That link stops working, whoever shared it, and you'll get the new one on your clipboard to share."
 msgstr ""
 
-#: dist/subscribers.js:115
+#: dist/subscribers.js:136
 #: src/wizards/subscribers/flows/RemoveMemberFlow.jsx:27
 msgid "this member"
 msgstr ""
 
-#: dist/subscribers.js:115
+#: dist/subscribers.js:136
 #: src/wizards/subscribers/flows/RemoveMemberFlow.jsx:70
 #: src/wizards/subscribers/flows/RemoveMemberFlow.jsx:71
 msgid "Remove members"
 msgstr ""
 
 #. translators: %s: lowercase singular group label (e.g. "group", "team").
-#: dist/subscribers.js:116
+#: dist/subscribers.js:137
 #: src/wizards/subscribers/flows/RemoveMemberFlow.jsx:45
 #, js-format
 msgid "Nobody was removed — that person is no longer a member of this %s."
@@ -24288,14 +24349,14 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: 1: member name. 2: lowercase singular group label (e.g. "group", "team").
-#: dist/subscribers.js:117
+#: dist/subscribers.js:138
 #: src/wizards/subscribers/flows/RemoveMemberFlow.jsx:58
 #, js-format
 msgid "%1$s removed from the %2$s."
 msgstr ""
 
 #. translators: 1: number of members removed. 2: lowercase singular group label (e.g. "group", "team").
-#: dist/subscribers.js:118
+#: dist/subscribers.js:139
 #: src/wizards/subscribers/flows/RemoveMemberFlow.jsx:61
 #, js-format
 msgid "%1$d member removed from the %2$s."
@@ -24304,14 +24365,14 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %s: lowercase singular group label (e.g. "group", "team").
-#: dist/subscribers.js:119
+#: dist/subscribers.js:140
 #: src/wizards/subscribers/flows/RemoveMemberFlow.jsx:83
 #, js-format
 msgid "Are you sure you want to remove <name/> from this %s? This frees up a seat and the member loses access."
 msgstr ""
 
 #. translators: 1: number of members. 2: lowercase singular group label (e.g. "group", "team").
-#: dist/subscribers.js:120
+#: dist/subscribers.js:141
 #: src/wizards/subscribers/flows/RemoveMemberFlow.jsx:93
 #, js-format
 msgid "Are you sure you want to remove %1$d member from this %2$s? This frees up a seat and they lose access."
@@ -24319,94 +24380,94 @@ msgid_plural "Are you sure you want to remove %1$d members from this %2$s? This 
 msgstr[0] ""
 msgstr[1] ""
 
-#: dist/subscribers.js:120
+#: dist/subscribers.js:141
 #: src/wizards/subscribers/flows/ResendInviteFlow.jsx:30
 #: src/wizards/subscribers/flows/ResendInviteFlow.jsx:31
 msgid "Resend invitation"
 msgstr ""
 
-#: dist/subscribers.js:120
+#: dist/subscribers.js:141
 #: src/wizards/subscribers/flows/ResendInviteFlow.jsx:25
 msgid "Invitation resent."
 msgstr ""
 
 #. translators: <email/> is replaced with the recipient's email address.
-#: dist/subscribers.js:121
+#: dist/subscribers.js:142
 #: src/wizards/subscribers/flows/ResendInviteFlow.jsx:37
 msgid "Send the invitation email to <email/> again? They get a fresh link and the expiry resets."
 msgstr ""
 
-#: dist/subscribers.js:121
+#: dist/subscribers.js:142
 #: src/wizards/subscribers/flows/SubscriptionDetailsDrawer.jsx:81
 msgid "Seats"
 msgstr ""
 
 #. translators: %d is a subscription ID.
-#: dist/subscribers.js:124
+#: dist/subscribers.js:145
 #: src/wizards/subscribers/flows/SubscriptionDetailsDrawer.jsx:92
 #, js-format
 msgid "Open subscription #%d"
 msgstr ""
 
 #. translators: %s: name of the group owner.
-#: dist/subscribers.js:124
+#: dist/subscribers.js:145
 #: src/wizards/subscribers/screens/GroupDetail.jsx:176
 #, js-format
 msgid "Owned by %s"
 msgstr ""
 
 #. translators: 1: group name, 2: name of the group owner.
-#: dist/subscribers.js:127
+#: dist/subscribers.js:148
 #: src/wizards/subscribers/screens/GroupDetail.jsx:203
 #, js-format
 msgctxt "group name and owner"
 msgid "%1$s (%2$s)"
 msgstr ""
 
-#: dist/subscribers.js:127
+#: dist/subscribers.js:148
 #: src/wizards/subscribers/screens/GroupDetail.jsx:281
 msgid "View profile"
 msgstr ""
 
-#: dist/subscribers.js:129
+#: dist/subscribers.js:150
 #: src/wizards/subscribers/screens/GroupDetail.jsx:348
 msgid "Sent"
 msgstr ""
 
 #. translators: %s: singular group label (e.g. "Group", "Team").
-#: dist/subscribers.js:130
+#: dist/subscribers.js:151
 #: src/wizards/subscribers/screens/GroupDetail.jsx:399
 #, js-format
 msgid "%s not found."
 msgstr ""
 
-#: dist/subscribers.js:130
+#: dist/subscribers.js:151
 #: src/wizards/subscribers/screens/GroupDetail.jsx:456
 msgid "Adjust seats"
 msgstr ""
 
-#: dist/subscribers.js:130
+#: dist/subscribers.js:151
 #: src/wizards/subscribers/screens/GroupDetail.jsx:474
 msgid "Add directly"
 msgstr ""
 
-#: dist/subscribers.js:130
+#: dist/subscribers.js:151
 #: src/wizards/subscribers/screens/GroupDetail.jsx:419
 #: src/wizards/subscribers/screens/GroupDetail.jsx:423
 msgid "Could not create the invite link."
 msgstr ""
 
-#: dist/subscribers.js:130
+#: dist/subscribers.js:151
 #: src/wizards/subscribers/screens/GroupDetail.jsx:441
 msgid "Invite link copied to clipboard."
 msgstr ""
 
-#: dist/subscribers.js:130
+#: dist/subscribers.js:151
 #: src/wizards/subscribers/screens/GroupDetail.jsx:442
 msgid "Invite link ready, but it could not be copied to your clipboard."
 msgstr ""
 
-#: dist/subscribers.js:130
+#: dist/subscribers.js:151
 #: src/wizards/subscribers/screens/GroupDetail.jsx:491
 msgid "Create invite link"
 msgstr ""
