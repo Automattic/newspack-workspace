@@ -288,9 +288,9 @@ class Test_Subscribers_Dashboard extends WP_UnitTestCase {
 
 	/**
 	 * The index reads only the subscriptions key: a user's other meta, even meta shaped like it, adds nothing,
-	 * and the scan leaves the user meta cache empty for the readers it passes.
+	 * and the scan leaves the user meta cache empty for the readers it scans.
 	 */
-	public function test_index_reads_only_the_subscriptions_key() {
+	public function test_index_reads_only_the_subscriptions_key_without_priming_the_meta_cache() {
 		$user_id = $this->factory()->user->create();
 		update_user_meta(
 			$user_id,
