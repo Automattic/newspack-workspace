@@ -1705,10 +1705,29 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A subscription event carries the purchaser of a gift, who doesn't hold the
-	 * subscription. The recipient does, so they must be queued too.
+	 * Status changes for a gifted subscription: one that grants access, and one
+	 * between two statuses that both grant it.
+	 *
+	 * @return array[]
 	 */
-	public function test_gift_subscription_change_queues_recipient() {
+	public function data_gift_status_changes() {
+		return [
+			'access granted' => [ 'pending', 'active' ],
+			'access kept'    => [ 'active', 'pending-cancel' ],
+		];
+	}
+
+	/**
+	 * A subscription event carries the purchaser of a gift, who doesn't hold the
+	 * subscription. The recipient does, so they're queued too on every event,
+	 * including a change that keeps access, which an owner's group members skip.
+	 *
+	 * @dataProvider data_gift_status_changes
+	 *
+	 * @param string $status_before Status before the event.
+	 * @param string $status_after  Status after the event.
+	 */
+	public function test_gift_subscription_change_queues_recipient( $status_before, $status_after ) {
 		$purchaser_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
 		$recipient_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
 		$this->create_newsletter_gate( [ 100 ], [ $this->create_premium_list() ] );
@@ -1719,8 +1738,8 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 			[
 				'user_id'         => $purchaser_id,
 				'subscription_id' => $subscription->get_id(),
-				'status_before'   => 'pending',
-				'status_after'    => 'active',
+				'status_before'   => $status_before,
+				'status_after'    => $status_after,
 			],
 			0,
 			Premium_Newsletters::SOURCE_SUBSCRIPTION_CHANGED
@@ -1730,31 +1749,6 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		$this->assertContains( $purchaser_id, $queued, 'The purchaser is still checked: they may lose lists.' );
 		$this->assertContains( $recipient_id, $queued, 'The gift recipient must be checked.' );
 		$this->assertSame( Premium_Newsletters::SOURCE_SUBSCRIPTION_CHANGED, $this->get_queued_source( $recipient_id ), 'The recipient is queued with the purchaser\'s source.' );
-	}
-
-	/**
-	 * A gift's recipient is queued on every event, including a move between the
-	 * statuses that both grant access, which an owner's group members skip.
-	 */
-	public function test_gift_status_change_that_keeps_access_still_queues_recipient() {
-		$purchaser_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
-		$recipient_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
-		$this->create_newsletter_gate( [ 100 ], [ $this->create_premium_list() ] );
-		$subscription = $this->create_gifted_subscription( $purchaser_id, $recipient_id, [ 100 ] );
-
-		Premium_Newsletters::maybe_enqueue_access_check(
-			time(),
-			[
-				'user_id'         => $purchaser_id,
-				'subscription_id' => $subscription->get_id(),
-				'status_before'   => 'active',
-				'status_after'    => 'pending-cancel',
-			],
-			0,
-			Premium_Newsletters::SOURCE_SUBSCRIPTION_CHANGED
-		);
-
-		$this->assertContains( $recipient_id, $this->get_queued_user_ids() );
 	}
 
 	/**
@@ -1923,22 +1917,35 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A gift with no previous recipient queues only the new reader, and a gift set
-	 * again to the same reader queues no one: WCS saves the same recipient again
-	 * when a parent or switch order moves from processing to completed, and a
-	 * recheck then could re-add a list the reader left.
+	 * A first recipient takes the subscription over from its buyer, so the buyer
+	 * gets a remove-only check: when an admin gives a buyer's own subscription a
+	 * recipient, no other event tells the buyer they lost access.
 	 */
-	public function test_gift_recipient_change_queues_only_a_reader_whose_gift_changed() {
+	public function test_first_gift_recipient_queues_the_buyer_for_removal_only() {
 		$purchaser_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
 		$recipient_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
 		$this->create_newsletter_gate( [ 100 ], [ $this->create_premium_list() ] );
 		$subscription = $this->create_gifted_subscription( $purchaser_id, $recipient_id, [ 100 ] );
 
 		do_action( 'woocommerce_subscriptions_gifting_recipient_changed', $subscription, $recipient_id, 0 );
-		$this->assertSame( [ $recipient_id ], $this->get_queued_user_ids(), 'A first recipient is queued alone.' );
 
-		delete_option( Premium_Newsletters::QUEUE_OPTION );
+		$this->assertSame( Premium_Newsletters::SOURCE_GIFT_RECEIVED, $this->get_queued_source( $recipient_id ), 'The first recipient is checked for lists to add.' );
+		$this->assertSame( Premium_Newsletters::SOURCE_GIFT_REMOVED, $this->get_queued_source( $purchaser_id ), 'The buyer is checked for lists to remove only.' );
+	}
+
+	/**
+	 * WCS saves the same recipient again when a parent or switch order moves from
+	 * processing to completed, and a recheck then could re-add a list the reader
+	 * left, so an unchanged recipient queues no one.
+	 */
+	public function test_unchanged_gift_recipient_queues_no_one() {
+		$purchaser_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$recipient_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$this->create_newsletter_gate( [ 100 ], [ $this->create_premium_list() ] );
+		$subscription = $this->create_gifted_subscription( $purchaser_id, $recipient_id, [ 100 ] );
+
 		do_action( 'woocommerce_subscriptions_gifting_recipient_changed', $subscription, $recipient_id, $recipient_id );
+
 		$this->assertSame( [], $this->get_queued_user_ids(), 'An unchanged recipient queues no one.' );
 	}
 

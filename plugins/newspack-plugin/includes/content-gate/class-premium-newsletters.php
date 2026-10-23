@@ -1290,9 +1290,13 @@ class Premium_Newsletters {
 		if ( $new_recipient_id > 0 ) {
 			self::add_user_to_queue( $new_recipient_id, self::SOURCE_GIFT_RECEIVED );
 		}
-		// The old recipient only loses lists: a remove-only check can't re-add one they left.
-		if ( $old_recipient_id > 0 ) {
-			self::add_user_to_queue( $old_recipient_id, self::SOURCE_GIFT_REMOVED );
+		// The reader who held the subscription until now only loses lists: a
+		// remove-only check can't re-add one they left. With no previous recipient
+		// that's the buyer, who loses access when an admin first gives their own
+		// subscription a recipient.
+		$previous_holder_id = $old_recipient_id > 0 ? $old_recipient_id : (int) $subscription->get_customer_id();
+		if ( $previous_holder_id > 0 ) {
+			self::add_user_to_queue( $previous_holder_id, self::SOURCE_GIFT_REMOVED );
 		}
 	}
 
