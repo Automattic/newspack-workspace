@@ -63,8 +63,9 @@ $dataviews-compact-max-width: 430px;
 	}
 }
 
-// Holds the popovers opened from the page content. Its stacking context keeps
-// them below the sticky header above, so they scroll under it, not over it.
+// Holds the popovers opened from the page content, at the end of the document.
+// Its stacking context keeps them below the sticky header's z-index 3, so they
+// scroll under the header, not over it.
 .newspack-page__content-popovers {
 	position: relative;
 	z-index: 2;
