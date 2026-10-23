@@ -19,7 +19,7 @@ use Newspack_Network\Utils\Users;
 class Subscribers_Dashboard {
 
 	/**
-	 * How many users to load per page when building the index.
+	 * How many meta rows to read per query when building the index.
 	 *
 	 * @var int
 	 */
@@ -53,38 +53,44 @@ class Subscribers_Dashboard {
 	 *
 	 * Each row is a subscription record plus the ID of the user it belongs to.
 	 *
+	 * Nothing here keeps the result, so every call scans again. The scan reads only the subscriptions meta key,
+	 * straight from the user meta table in user ID order, one page of rows per query, and stops once $max_users
+	 * users have added rows. It skips the object cache, so it never fills the cache with every network reader's meta.
+	 *
 	 * @param array $rows      The rows so far.
 	 * @param int   $max_users The most users to add rows for.
 	 *
 	 * @return array The rows, with the network subscriptions added.
 	 */
 	public static function filter_index( $rows, $max_users ) {
-		$rows      = is_array( $rows ) ? $rows : [];
-		$max_users = (int) $max_users;
-		$indexed   = 0;
-		$page      = 1;
+		global $wpdb;
+
+		$rows         = is_array( $rows ) ? $rows : [];
+		$max_users    = (int) $max_users;
+		$indexed      = 0;
+		$last_user_id = 0;
 
 		while ( $indexed < $max_users ) {
-			$user_ids = array_map(
-				'intval',
-				get_users(
-					[
-						'meta_key'     => Subscription_Changed::USER_SUBSCRIPTIONS_META_KEY, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
-						'meta_compare' => 'EXISTS',
-						'fields'       => 'ID',
-						'number'       => self::INDEX_PAGE_SIZE,
-						'paged'        => $page,
-						'orderby'      => 'ID',
-						'count_total'  => false,
-					]
+			// A bounded, admin-only scan of one meta key, which must not fill the object cache.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+			$meta_rows = (array) $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT user_id, meta_value FROM {$wpdb->usermeta} WHERE meta_key = %s AND user_id > %d ORDER BY user_id ASC, umeta_id ASC LIMIT %d",
+					Subscription_Changed::USER_SUBSCRIPTIONS_META_KEY,
+					$last_user_id,
+					self::INDEX_PAGE_SIZE
 				)
 			);
 
-			// Load every user's meta in one query, so reading it per user below costs nothing.
-			update_meta_cache( 'user', $user_ids );
+			foreach ( $meta_rows as $meta_row ) {
+				$user_id = (int) $meta_row->user_id;
+				// Rows come in user order, so a user's extra rows for the key follow their first one and are skipped.
+				if ( $user_id === $last_user_id ) {
+					continue;
+				}
+				$last_user_id = $user_id;
 
-			foreach ( $user_ids as $user_id ) {
-				$records = self::get_records_for_user( $user_id );
+				$records = self::records_from_meta( maybe_unserialize( $meta_row->meta_value ) );
 				if ( empty( $records ) ) {
 					continue;
 				}
@@ -98,10 +104,9 @@ class Subscribers_Dashboard {
 			}
 
 			// A short page is the last page.
-			if ( count( $user_ids ) < self::INDEX_PAGE_SIZE ) {
+			if ( count( $meta_rows ) < self::INDEX_PAGE_SIZE ) {
 				break;
 			}
-			$page++;
 		}
 
 		return $rows;
@@ -130,7 +135,17 @@ class Subscribers_Dashboard {
 	 * @return array[] Records with id, site_url, site_name, status, plan and edit_url.
 	 */
 	public static function get_records_for_user( $user_id ) {
-		$meta = get_user_meta( $user_id, Subscription_Changed::USER_SUBSCRIPTIONS_META_KEY, true );
+		return self::records_from_meta( get_user_meta( $user_id, Subscription_Changed::USER_SUBSCRIPTIONS_META_KEY, true ) );
+	}
+
+	/**
+	 * Turn a reader's subscriptions meta, already unserialized, into records, with the checks get_records_for_user() describes.
+	 *
+	 * @param mixed $meta The meta value, keyed by site URL.
+	 *
+	 * @return array[] Records with id, site_url, site_name, status, plan and edit_url.
+	 */
+	private static function records_from_meta( $meta ) {
 		if ( ! is_array( $meta ) ) {
 			return [];
 		}

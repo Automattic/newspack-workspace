@@ -287,6 +287,43 @@ class Test_Subscribers_Dashboard extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The index reads only the subscriptions key: a user's other meta, even meta shaped like it, adds nothing.
+	 */
+	public function test_index_reads_only_the_subscriptions_key() {
+		$user_id = $this->factory()->user->create();
+		update_user_meta(
+			$user_id,
+			'newspack_network_test_unrelated',
+			[
+				self::NODE_URL => [
+					900 => [
+						'id'     => 900,
+						'status' => 'active',
+					],
+				],
+			]
+		);
+		update_user_meta(
+			$user_id,
+			Subscription_Changed::USER_SUBSCRIPTIONS_META_KEY,
+			[
+				self::NODE_URL => [
+					500 => [
+						'id'       => 500,
+						'status'   => 'active',
+						'products' => [],
+					],
+				],
+			]
+		);
+
+		$rows = apply_filters( 'newspack_subscribers_network_subscription_index', [], 10 );
+
+		$this->assertSame( [ 500 ], wp_list_pluck( $rows, 'id' ) );
+		$this->assertSame( [ $user_id ], wp_list_pluck( $rows, 'user_id' ) );
+	}
+
+	/**
 	 * A user with only this site's entries doesn't use up a place under the cap.
 	 */
 	public function test_index_cap_counts_only_users_with_records() {
