@@ -84,6 +84,16 @@ class Test_Sites_Lookup extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A site title stored HTML-encoded, as WordPress saves it, resolves to plain text.
+	 */
+	public function test_encoded_site_name_is_decoded() {
+		update_option( 'newspack_network_hub_name', sanitize_option( 'blogname', "Reader's News & Co" ) );
+		Sites::reset_cache();
+
+		$this->assertSame( "Reader's News & Co", Sites::get_site_name( 'https://hub.example.test' ) );
+	}
+
+	/**
 	 * URLs normalize to lowercase host plus path, without scheme or trailing slash.
 	 */
 	public function test_normalize_url() {

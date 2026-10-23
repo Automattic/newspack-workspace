@@ -72,14 +72,16 @@ class Sites {
 		if ( null === self::$site_names ) {
 			self::$site_names = [];
 			foreach ( self::get_all_sites() as $site ) {
+				// WordPress stores site titles HTML-encoded, and callers show the name as plain text.
+				$name = wp_specialchars_decode( (string) $site['name'], ENT_QUOTES );
 				// A site with no name isn't recorded, so its lookup falls back to the domain.
-				if ( '' === trim( (string) $site['name'] ) ) {
+				if ( '' === trim( $name ) ) {
 					continue;
 				}
 				$key = self::normalize_url( $site['url'] );
 				// The first site listed for a URL wins.
 				if ( ! isset( self::$site_names[ $key ] ) ) {
-					self::$site_names[ $key ] = $site['name'];
+					self::$site_names[ $key ] = $name;
 				}
 			}
 		}

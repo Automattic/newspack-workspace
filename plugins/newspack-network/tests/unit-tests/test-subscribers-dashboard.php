@@ -177,7 +177,7 @@ class Test_Subscribers_Dashboard extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Entries for this site and malformed entries are left out without any warning.
+	 * Entries for this site and malformed entries are left out without any warning, and the valid entries beside them are kept.
 	 */
 	public function test_current_site_and_malformed_entries_skipped() {
 		$user_id = $this->factory()->user->create();
@@ -207,11 +207,22 @@ class Test_Subscribers_Dashboard extends WP_UnitTestCase {
 						'id'     => 703,
 						'status' => [ 'active' ],
 					],
+					704 => [
+						'id'     => 0,
+						'status' => 'active',
+					],
+					705 => [
+						'id'       => 705,
+						'status'   => 'active',
+						'products' => [],
+					],
 				],
 			]
 		);
 
-		$this->assertSame( [], apply_filters( 'newspack_subscribers_network_subscriptions', [], $user_id ) );
+		$records = apply_filters( 'newspack_subscribers_network_subscriptions', [], $user_id );
+
+		$this->assertSame( [ 705 ], wp_list_pluck( $records, 'id' ) );
 	}
 
 	/**

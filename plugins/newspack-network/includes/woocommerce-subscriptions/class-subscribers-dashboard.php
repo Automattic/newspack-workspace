@@ -143,7 +143,7 @@ class Subscribers_Dashboard {
 			}
 
 			foreach ( $subscriptions as $subscription ) {
-				if ( ! is_array( $subscription ) || ! isset( $subscription['id'] ) || ! is_numeric( $subscription['id'] ) || ! isset( $subscription['status'] ) || ! is_string( $subscription['status'] ) ) {
+				if ( ! is_array( $subscription ) || ! isset( $subscription['id'] ) || ! is_numeric( $subscription['id'] ) || (int) $subscription['id'] <= 0 || ! isset( $subscription['status'] ) || ! is_string( $subscription['status'] ) ) {
 					continue;
 				}
 
