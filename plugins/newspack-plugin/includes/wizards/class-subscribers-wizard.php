@@ -497,11 +497,14 @@ class Subscribers_Wizard extends Wizard {
 	 * what excludes a group's own product from the options (see is_group_product())
 	 * and a variable subscription's parent (see subscription_product_names()).
 	 *
-	 * Scope: the plans the site currently offers, plus every configured group name.
-	 * A reader can still hold a plan that isn't listed — one whose product has since
-	 * been unpublished or deleted — because the alternative, deriving the list from
-	 * the subscriptions themselves, means scanning every subscription on the site
-	 * on each load of the list. Tracked as a follow-up rather than solved here.
+	 * Scope: the plans the site currently offers, plus every configured group name,
+	 * plus the plans readers hold on other network sites. Those come from the
+	 * network index (see network_subscription_index()), which every request to
+	 * this endpoint reads again. A reader can still hold a plan that isn't listed —
+	 * one whose product has since been unpublished or deleted — because the
+	 * alternative, deriving the list from the subscriptions themselves, means
+	 * scanning every subscription on the site on each load of the list. Tracked as
+	 * a follow-up rather than solved here.
 	 * Donation products are deliberately not excluded: a recurring donation is a
 	 * subscription and shows in the list's Subscription column, so filtering it out
 	 * here would leave a visible plan unfilterable.
@@ -1564,8 +1567,7 @@ class Subscribers_Wizard extends Wizard {
 		/**
 		 * Whether a reader belongs to the Newspack Network, which is the case when
 		 * they first registered on another site. The key is added only for those
-		 * readers, so a site without the network plugin returns the same shape as
-		 * before.
+		 * readers, so a site without the network plugin never sees the key.
 		 *
 		 * @param bool $is_network_reader Whether the reader is a network reader so far.
 		 * @param int  $user_id           The reader's user ID.
@@ -1644,10 +1646,10 @@ class Subscribers_Wizard extends Wizard {
 	 *
 	 * @return string
 	 */
-	public static function network_plan_label( string $plan, int $id, string $site_name ): string {
+	private static function network_plan_label( string $plan, int $id, string $site_name ): string {
 		return sprintf(
 			/* translators: 1: plan name, 2: site name */
-			__( '%1$s (%2$s)', 'newspack-plugin' ),
+			_x( '%1$s (%2$s)', 'plan name and the network site that manages it', 'newspack-plugin' ),
 			'' !== $plan
 				? $plan
 				// translators: %d: the subscription's ID on the site that manages it.
@@ -2057,8 +2059,6 @@ class Subscribers_Wizard extends Wizard {
 	 *   (non-cancelled) subscription; a reader with no subscription at all has
 	 *   no status.
 	 *
-	 * Network subscriptions feed the rule too; customer_ids_for_*() mirror them via the network index.
-	 *
 	 * It is re-encoded in these places, each of which must be changed in step or
 	 * the endpoint's filters will contradict the badge and column they filter on:
 	 *   - customer_ids_for_statuses() below — the endpoint's `status` filter.
@@ -2068,6 +2068,9 @@ class Subscribers_Wizard extends Wizard {
 	 *     status badges.
 	 *   - visiblePlanEntries in src/wizards/subscribers/screens/SubscriberList.jsx
 	 *     — the Subscription column.
+	 *
+	 * Network subscriptions feed the rule too; customer_ids_for_*() mirror them
+	 * through the network index.
 	 *
 	 * @param array $subscriptions Individual subscription entries.
 	 * @param array $groups        Group membership entries.
@@ -2373,9 +2376,10 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
-	 * Customer IDs holding a subscription (individual or group) in any of the
-	 * given prototype statuses, without the display reduction — a raw status
-	 * match. customer_ids_for_statuses() layers the cancelled reduction on top.
+	 * Customer IDs holding a subscription (individual, group, or managed on another
+	 * network site) in any of the given prototype statuses, without the display
+	 * reduction — a raw status match. customer_ids_for_statuses() layers the
+	 * cancelled reduction on top.
 	 *
 	 * @param string[] $prototype_statuses Prototype statuses (active/pending/on-hold/cancelled).
 	 *
@@ -2449,8 +2453,8 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
-	 * Customer IDs holding a subscription (individual or group) on any of the
-	 * named plans.
+	 * Customer IDs holding a subscription (individual, group, or managed on another
+	 * network site) on any of the named plans.
 	 *
 	 * A cancelled plan qualifies its holder only when nothing live remains, because
 	 * that is what the Subscription column shows: visiblePlanEntries() in
