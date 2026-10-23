@@ -53,9 +53,10 @@ class Subscribers_Dashboard {
 	 *
 	 * Each row is a subscription record plus the ID of the user it belongs to.
 	 *
-	 * Nothing here keeps the result, so every call scans again. The scan reads only the subscriptions meta key,
-	 * straight from the user meta table in user ID order, one page of rows per query, and stops once $max_users
-	 * users have added rows. It skips the object cache, so it never fills the cache with every network reader's meta.
+	 * Nothing here keeps the result, so every call scans again.
+	 *
+	 * The scan reads the whole user meta table, not only this site's members: newspack-network has no multisite
+	 * paths, and meta left behind by deleted users is read too.
 	 *
 	 * @param array $rows      The rows so far.
 	 * @param int   $max_users The most users to add rows for.
@@ -85,6 +86,8 @@ class Subscribers_Dashboard {
 			foreach ( $meta_rows as $meta_row ) {
 				$user_id = (int) $meta_row->user_id;
 				// Rows come in user order, so a user's extra rows for the key follow their first one and are skipped.
+				// The first is kept because it has the lowest umeta_id, the row get_user_meta() returns for a single
+				// value, so the index agrees with get_records_for_user().
 				if ( $user_id === $last_user_id ) {
 					continue;
 				}
