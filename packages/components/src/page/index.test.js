@@ -80,7 +80,7 @@ describe( 'Page subtitle', () => {
 } );
 
 /**
- * The sticky header stacks above the page content, so a popover opened from the
+ * The sticky header stacks above the page content. A popover opened from the
  * content renders into a slot of its own, stacked under the header, so it
  * scrolls under the header instead of over it. A popover opened from the header
  * keeps the default slot, where it stays above the header it belongs to.
