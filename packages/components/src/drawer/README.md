@@ -448,9 +448,11 @@ peer range is a caret. Check these on a bump:
   Re-enabling any of them — a header for `headerActions`, say — gives core a way
   to close a dirty panel with no confirmation.
 - The slot-name reset is `Popover.__unstableSlotNameProvider`. If it stops
-  existing, or stops overriding the slot a popover renders into, popovers in a
-  drawer opened from `Page` content land outside the drawer again.
+  overriding the slot a popover renders into, popovers in a drawer opened from
+  `Page` content land outside the drawer. If it stops existing, the Root and
+  `Page` fall back to rendering their children as they are: the drawer keeps its
+  popovers, and `Page` content popovers go back over the sticky header.
 
-Core Modal is externalised to the `wp.components` runtime global at build time,
-so the version that actually runs is the one on the publisher's WordPress, not
-the one resolved here.
+`@wordpress/components` is externalised to the `wp.components` runtime global at
+build time, so the version that actually runs is the one on the publisher's
+WordPress, not the one resolved here.

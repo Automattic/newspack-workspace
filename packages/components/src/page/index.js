@@ -22,12 +22,18 @@ import HeaderActions, { isActionList } from './header-actions';
 import useScrollEdges from './use-scroll-edges';
 import './style.scss';
 
-// Popovers opened from the page content render into this slot, stacked under the
-// sticky header, instead of the default one, which stacks them over it. Popovers
-// opened from the header keep the default slot. Routing by subtree leans on
-// `Popover.__unstableSlotNameProvider` from WordPress's own `wp.components`, so
-// recheck it on WordPress upgrades.
+// WordPress `Popover`s opened from the page content (`Dropdown`, `DropdownMenu`
+// and the like) render into this slot, stacked under the sticky header, instead
+// of the default one, which stacks them over it. Popovers opened from the header
+// keep the default slot. Ariakit-based menus, such as DataViews' row and column
+// menus, portal on their own and don't follow it.
 const CONTENT_POPOVER_SLOT = 'newspack-page-content';
+
+// Routing by subtree leans on an unstable part of WordPress's own
+// `wp.components`. If a release drops it, the page renders its content as is and
+// content popovers fall back to the default slot, rather than the page failing to
+// render. Recheck it on WordPress upgrades.
+const SlotNameProvider = Popover.__unstableSlotNameProvider ?? ( ( { children } ) => <>{ children }</> );
 
 /**
  * Newspack page region: a sticky header block (breadcrumbs, actions, optional
@@ -110,7 +116,7 @@ const Page = ( { breadcrumbItems = [], badges, subTitle, actions, tabbedNavigati
 				</Stack>
 				{ tabBar }
 			</Stack>
-			<Popover.__unstableSlotNameProvider value={ CONTENT_POPOVER_SLOT }>{ content }</Popover.__unstableSlotNameProvider>
+			<SlotNameProvider value={ CONTENT_POPOVER_SLOT }>{ content }</SlotNameProvider>
 			{ /* At the end of the document, like WordPress's own popover container, so
 			     no ancestor of the page clips the popovers or bounds their placement.
 			     A page with no content of its own (the PHP-page header) registers no
