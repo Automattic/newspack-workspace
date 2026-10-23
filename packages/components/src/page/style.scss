@@ -66,10 +66,11 @@ $dataviews-compact-max-width: 430px;
 // Holds the popovers opened from the page content, at the end of the document.
 // From 783px up, this stacking context keeps them below the sticky header's
 // z-index 3, so they scroll under it, not over it. That holds only while no
-// ancestor of the page starts a stacking context of its own, which would put
-// the whole page, header included, under this container. It also stacks them
-// below the wp-admin side menu, so a popover reaching left past the content
-// edge opens under the menu.
+// ancestor of the page starts a stacking context of its own: the whole page
+// then stacks as one layer against this container, and popovers open either
+// over the header or under the content they came from. It also stacks them
+// below the wp-admin side menu, so a popover reaching past the content edge
+// into the menu opens under its items.
 // Up to 782px, popovers that expand to fill the screen must stay above the
 // admin bar, so they keep their own z-index. At exactly 782px the header is
 // already sticky, so content popovers there open over it.
