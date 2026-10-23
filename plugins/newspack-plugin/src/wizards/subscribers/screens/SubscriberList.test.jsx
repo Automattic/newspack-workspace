@@ -322,7 +322,8 @@ describe( 'the subscriber list loading overlay', () => {
 	it( 'keeps focus where it is when the overlay is pressed', async () => {
 		await mountThenRefetch( 2 );
 
-		// fireEvent returns false when a handler prevented the default action.
+		// jsdom never moves focus on a press, so check the cancelled press that keeps
+		// it in place in a browser: fireEvent returns false when it was cancelled.
 		expect( fireEvent.mouseDown( overlay() ) ).toBe( false );
 	} );
 

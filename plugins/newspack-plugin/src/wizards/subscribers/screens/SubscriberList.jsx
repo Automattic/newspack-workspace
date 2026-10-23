@@ -486,9 +486,10 @@ export default function SubscriberList() {
 	// A refetch with rows showing covers the screen with a spinner and blocks clicks
 	// until it settles: DataViews' own one renders below the table, out of sight on
 	// a long page. Keys still reach the controls underneath on purpose, so a reader
-	// can keep typing in the search box. With no rows to cover, DataViews' spinner stands in for the
-	// empty state, so it keeps that case. A failed read lands on the error notice
-	// above, which never renders the overlay, so a failure can't leave it stuck.
+	// can keep typing in the search box. With no rows to cover, DataViews' spinner
+	// stands in for the empty state, so it keeps that case. A failed read lands on
+	// the error notice above, which never renders the overlay, so a failure can't
+	// leave it stuck.
 	const isRefreshing = subscribersLoading && items.length > 0;
 
 	return (

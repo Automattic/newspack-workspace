@@ -84,7 +84,8 @@
 	z-index: wp-z.z-index(".components-popover") + 1;
 
 	// At this width the admin bar scrolls away with the page, so its height would
-	// leave an uncovered strip at the top of the screen.
+	// leave an uncovered strip at the top of the screen. Start at the top edge
+	// instead, covering the bar while it's in view.
 	@media ( max-width: wp-breakpoints.$break-small ) {
 		top: 0;
 	}
