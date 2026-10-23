@@ -9,7 +9,7 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies.
  */
 import { Card, CardSortableList, Notice, Router } from '../../../../../../packages/components/src';
-import { segmentDescription, segmentReachCaveat, segmentReachDescription, segmentReachNotice } from '../utils';
+import { hasReachFigures, segmentDescription, segmentReachCaveat, segmentReachDescription, segmentReachNotice } from '../utils';
 
 const { useHistory } = Router;
 
@@ -101,7 +101,7 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, isLoading } ) =>
 				// Only meaningful next to numbers it qualifies: `reachLine` is
 				// also truthy for the no-data string, which the caveat would
 				// then be qualifying nothing on.
-				const reachCaveat = null === segment?.reach?.matched || undefined === segment?.reach?.matched ? null : segmentReachCaveat( segment );
+				const reachCaveat = hasReachFigures( segment ) ? segmentReachCaveat( segment ) : null;
 				return {
 					id: segment.id,
 					title: segment.name,

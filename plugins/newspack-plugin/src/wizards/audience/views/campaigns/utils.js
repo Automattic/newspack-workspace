@@ -353,20 +353,39 @@ const reachDay = day => gmdateI18n( 'M j', `${ day }T00:00:00+00:00` );
  * @param {Object} segment Segment, possibly carrying a `reach` object.
  * @return {string|null} The line, or null when reach reporting is inactive.
  */
+/**
+ * Whether a segment has figures to show, as opposed to a reported window it
+ * had no part in.
+ *
+ * Null numbers mean the cache exists but this segment has no rows yet — a
+ * young segment, no traffic, or GA thresholding. All honestly "no data yet";
+ * rendering 0 would overclaim. A missing or zero denominator is the same story
+ * from the other side: a week GA reported nothing for, where every share would
+ * divide by zero.
+ *
+ * Exported because the caveat has to agree with the line it sits under. Both
+ * read this rather than each testing the parts of it they remember.
+ *
+ * @param {Object} segment Segment, possibly carrying a `reach` object.
+ * @return {boolean} True when both shares can be rendered.
+ */
+export const hasReachFigures = segment => {
+	const reach = segment?.reach;
+	if ( ! reach ) {
+		return false;
+	}
+	return null !== reach.matched && undefined !== reach.matched && 0 !== Number( reach.total_sessions );
+};
+
 export const segmentReachDescription = segment => {
 	const reach = segment?.reach;
 	if ( ! reach ) {
 		return null;
 	}
-	const total = Number( reach.total_sessions );
-	// Null numbers mean the cache exists but this segment has no rows yet — a
-	// young segment, no traffic, or GA thresholding. All honestly "no data
-	// yet"; rendering 0 would overclaim. A missing or zero denominator is the
-	// same story from the other side: a week GA reported nothing for, where
-	// every share would divide by zero.
-	if ( null === reach.matched || undefined === reach.matched || ! total ) {
+	if ( ! hasReachFigures( segment ) ) {
 		return __( 'No reach data yet', 'newspack-plugin' );
 	}
+	const total = Number( reach.total_sessions );
 	return sprintf(
 		/* Translators: %1$d: number of days the report covers. %2$s: last day of the report, e.g. Aug 6. %3$s: share of the audience that matched, e.g. 34%. %4$s: total session count. %5$s: share that was shown this segment's prompts. */
 		__( '%1$d days to %2$s: matched %3$s of %4$s sessions · prompts reached %5$s', 'newspack-plugin' ),
