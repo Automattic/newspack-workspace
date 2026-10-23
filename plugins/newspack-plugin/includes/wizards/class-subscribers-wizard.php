@@ -1479,7 +1479,8 @@ class Subscribers_Wizard extends Wizard {
 	 * Cost note: group memberships are indexed once per request
 	 * (get_group_membership_index), but two lookups here are inherently per-row —
 	 * wcs_get_users_subscriptions() and last_payment_date()'s wc_get_orders() —
-	 * so a page costs ~2 × `per_page` (≤100) WooCommerce queries. Both are
+	 * so a page costs ~2 × `per_page` (≤100) WooCommerce queries, plus one order
+	 * lookup per gift a reader holds. Both are
 	 * "newest/owned rows for one subscriber" lookups that WooCommerce can't answer
 	 * per-subscriber in a single batched query: batching last_payment_date() over
 	 * the page's subscriber IDs would need either an unbounded `limit => -1` (worse
@@ -1597,7 +1598,7 @@ class Subscribers_Wizard extends Wizard {
 	 * The purchaser of a subscription the reader received as a gift.
 	 *
 	 * @param \WC_Subscription $subscription The subscription.
-	 * @param int              $user_id      The reader viewing it.
+	 * @param int              $user_id      The reader whose profile lists it.
 	 *
 	 * @return array|null { id, name, editUrl }, or null when the reader bought it
 	 *                    themselves or the purchaser's account no longer exists.
@@ -2263,7 +2264,10 @@ class Subscribers_Wizard extends Wizard {
 	 * @param \WC_Subscription[] $subscriptions The subscriptions about to be resolved to holders.
 	 */
 	private static function prime_gift_recipients( array $subscriptions ): void {
-		$recipient_ids = array_filter( array_map( fn( $subscription ) => (int) $subscription->get_meta( '_recipient_user' ), $subscriptions ) );
+		if ( ! class_exists( 'WCS_Gifting' ) ) {
+			return;
+		}
+		$recipient_ids = array_filter( array_map( fn( $subscription ) => (int) \WCS_Gifting::get_recipient_user( $subscription ), $subscriptions ) );
 		if ( ! empty( $recipient_ids ) ) {
 			cache_users( array_values( array_unique( $recipient_ids ) ) );
 		}
