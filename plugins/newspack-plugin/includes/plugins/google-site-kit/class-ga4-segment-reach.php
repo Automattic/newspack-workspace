@@ -200,7 +200,7 @@ final class GA4_Segment_Reach {
 	 * one, so connecting a different property starts from zero.
 	 *
 	 * @param string $property_id Connected property.
-	 * @return array `count` (int) and `last_error` (string).
+	 * @return array `count` (int), `last_error` (string) and `last_failed` (int).
 	 */
 	private static function get_failures( string $property_id ): array {
 		$record = get_option( self::FAILURE_OPTION, false );
