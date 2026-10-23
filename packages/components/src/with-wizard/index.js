@@ -1,10 +1,10 @@
 /**
  * WordPress dependencies.
  */
-import { Component, createRef, Fragment } from '@wordpress/element';
+import { Component, createRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
-import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { __experimentalHStack as HStack, SlotFillProvider } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies.
@@ -295,8 +295,10 @@ export default function withWizard( WrappedComponent, requiredPlugins ) {
 			if ( quietLoading ) {
 				loadingClasses.push( 'newspack-wizard__is-loading-quiet' );
 			}
+			// The provider lets the page shell register its content popover slot on
+			// screens that render a Page without a Wizard (which brings its own).
 			return (
-				<Fragment>
+				<SlotFillProvider>
 					{ this.getError() }
 					{ this.getModal() }
 					<div className={ loadingClasses.join( ' ' ) }>
@@ -316,7 +318,7 @@ export default function withWizard( WrappedComponent, requiredPlugins ) {
 						/>
 					</div>
 					{ ! loading && <Footer simple={ simpleFooter } /> }
-				</Fragment>
+				</SlotFillProvider>
 			);
 		}
 	};
