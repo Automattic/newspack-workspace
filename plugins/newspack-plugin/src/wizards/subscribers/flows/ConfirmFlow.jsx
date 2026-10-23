@@ -23,16 +23,17 @@ import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '
 import { Button, Modal, Notice } from '../../../../packages/components/src';
 
 /**
- * @param {Object}   props                 Component props.
- * @param {string}   props.title           Modal title.
- * @param {*}        props.children        Body copy.
- * @param {string}   [props.cancelLabel]   Label for the dismiss button.
- * @param {string}   props.confirmLabel    Label for the confirm button.
- * @param {boolean}  [props.isDestructive] Render the confirm button destructively.
- * @param {Function} props.onCancel        Close without acting.
- * @param {Function} props.onConfirm       Returns a promise; resolves to close, rejects to show the error.
+ * @param {Object}   props                  Component props.
+ * @param {string}   props.title            Modal title.
+ * @param {*}        props.children         Body copy.
+ * @param {string}   [props.cancelLabel]    Label for the dismiss button.
+ * @param {string}   props.confirmLabel     Label for the confirm button.
+ * @param {boolean}  [props.isDestructive]  Render the confirm button destructively.
+ * @param {Function} props.onCancel         Dismiss without acting, from the cancel button.
+ * @param {Function} [props.onRequestClose] Dismiss from the close button or Escape; defaults to onCancel.
+ * @param {Function} props.onConfirm        Returns a promise; resolves to close, rejects to show the error.
  */
-export default function ConfirmFlow( { title, children, cancelLabel, confirmLabel, isDestructive = false, onCancel, onConfirm } ) {
+export default function ConfirmFlow( { title, children, cancelLabel, confirmLabel, isDestructive = false, onCancel, onRequestClose, onConfirm } ) {
 	const [ busy, setBusy ] = useState( false );
 	const [ error, setError ] = useState( '' );
 
@@ -49,7 +50,7 @@ export default function ConfirmFlow( { title, children, cancelLabel, confirmLabe
 	};
 
 	return (
-		<Modal title={ title } onRequestClose={ busy ? () => {} : onCancel } size="small">
+		<Modal title={ title } onRequestClose={ busy ? () => {} : onRequestClose || onCancel } size="small">
 			<VStack spacing={ 4 }>
 				{ error && <Notice isError noticeText={ error } /> }
 				<p className="newspack-subscribers__modal-text">{ children }</p>
