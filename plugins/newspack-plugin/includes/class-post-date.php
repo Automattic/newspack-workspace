@@ -341,10 +341,10 @@ class Post_Date {
 	}
 
 	/**
-	 * Lets a Homepage Posts card show the post's updated date only where its
-	 * byline would (should_display_updated_date()), so the sitewide setting,
-	 * the editor's per-post toggle and `newspack_updated_date_override` decide
-	 * cards the same way they decide bylines.
+	 * Keeps a Homepage Posts card from showing an updated date its byline
+	 * wouldn't (should_display_updated_date()), such as one the editor hid.
+	 * Only a `newspack_blocks_display_updated_date` callback turns it on; the
+	 * sitewide setting alone leaves cards on their publish date.
 	 *
 	 * @param bool     $display Whether the card shows the post's updated date.
 	 * @param \WP_Post $post    Post object.
