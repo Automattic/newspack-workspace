@@ -73,6 +73,14 @@ class Newspack_Test_GA4_Segment_Reach extends WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		remove_filter( 'pre_http_request', [ $this, 'mock_http' ], 10 );
+		// Unconditional: WP_UnitTestCase restores $wp_filter but not the
+		// taxonomy registry, so a failing assertion in a test that registers
+		// one would otherwise leak it into every test after it.
+		foreach ( [ 'popup_segment', 'unrelated_tax' ] as $taxonomy ) {
+			if ( taxonomy_exists( $taxonomy ) ) {
+				unregister_taxonomy( $taxonomy );
+			}
+		}
 		parent::tear_down();
 	}
 
@@ -656,10 +664,10 @@ class Newspack_Test_GA4_Segment_Reach extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Priority is written as term meta from several paths — the drag-reorder,
-	 * a single-segment save, and the reindex after a deletion — so the record
-	 * watches the meta key rather than any one endpoint. Meta on other
-	 * taxonomies, and other keys, must not trip it.
+	 * `sort_segments()` is the only Campaigns path that rewrites priority, and
+	 * it goes through term meta, so the record watches the meta key rather
+	 * than any one endpoint — a reorder made outside the wizard counts too.
+	 * Meta on other taxonomies, and other keys, must not trip it.
 	 */
 	public function test_priority_change_is_recorded_from_term_meta() {
 		// newspack-popups is not loaded in this suite, so register the
@@ -668,16 +676,20 @@ class Newspack_Test_GA4_Segment_Reach extends WP_UnitTestCase {
 		register_taxonomy( 'unrelated_tax', 'post' );
 		$segment = $this->factory()->term->create( [ 'taxonomy' => 'popup_segment' ] );
 		$other   = $this->factory()->term->create( [ 'taxonomy' => 'unrelated_tax' ] );
+		// Give both terms a priority row, so later writes are updates.
+		add_term_meta( $segment, 'priority', 0 );
+		add_term_meta( $other, 'priority', 0 );
+		delete_option( 'newspack_ga4_segment_reach_priority_changed' );
 
 		// Another key on a segment term is not a priority change.
-		add_term_meta( $segment, 'criteria', 'anything' );
+		update_term_meta( $segment, 'criteria', 'anything' );
 		$this->assertFalse( get_option( 'newspack_ga4_segment_reach_priority_changed' ) );
 
 		// Neither is `priority` on a term Campaigns does not own.
-		add_term_meta( $other, 'priority', 1 );
+		update_term_meta( $other, 'priority', 1 );
 		$this->assertFalse( get_option( 'newspack_ga4_segment_reach_priority_changed' ) );
 
-		add_term_meta( $segment, 'priority', 3 );
+		update_term_meta( $segment, 'priority', 3 );
 		$recorded = get_option( 'newspack_ga4_segment_reach_priority_changed' );
 		$this->assertIsInt( $recorded );
 		$this->assertEqualsWithDelta( time(), $recorded, 60 );
@@ -687,39 +699,105 @@ class Newspack_Test_GA4_Segment_Reach extends WP_UnitTestCase {
 		update_option( 'newspack_ga4_segment_reach_priority_changed', time() - DAY_IN_SECONDS, false );
 		update_term_meta( $segment, 'priority', 1 );
 		$this->assertEqualsWithDelta( time(), get_option( 'newspack_ga4_segment_reach_priority_changed' ), 60 );
-
-		unregister_taxonomy( 'popup_segment' );
-		unregister_taxonomy( 'unrelated_tax' );
 	}
 
 	/**
-	 * Decoration must not leave the returned array's last element aliased to
-	 * the by-reference loop variable: a caller that copies the result and
-	 * writes to that element would otherwise mutate this array too.
+	 * The change day, the window's last day and its first day all resolve in
+	 * the property's reporting timezone. Reading the change in UTC against a
+	 * window in the property's zone named a day the publisher did not act on,
+	 * and moved a change near either edge across the in-window boundary.
 	 */
-	public function test_decorate_segments_does_not_leak_a_reference() {
+	public function test_priority_change_day_follows_the_property_timezone() {
 		$this->connect_property( 'PROP-REACH' );
+		$segments = [ [ 'id' => '12' ] ];
+		// 2026-08-06 01:00 UTC is still 2026-08-05 in Los Angeles.
+		update_option( 'newspack_ga4_segment_reach_priority_changed', strtotime( '2026-08-06 01:00:00 UTC' ), false );
+
+		$cache = [
+			'property_id'    => 'PROP-REACH',
+			'fetched_at'     => time(),
+			'range_days'     => 7,
+			'as_of'          => '2026-08-06',
+			'timezone'       => 'America/Los_Angeles',
+			'total_sessions' => 3620,
+			'rows'           => [
+				'12' => [
+					'matched' => 1240,
+					'won'     => 320,
+				],
+			],
+		];
+		update_option( 'newspack_ga4_segment_reach', $cache, false );
+		$decorated = GA4_Segment_Reach::decorate_segments( $segments );
+		$this->assertSame( '2026-08-05', $decorated[0]['reach']['priority_changed'] );
+
+		// The same instant, on a property that reports in UTC.
+		$cache['timezone'] = 'UTC';
+		update_option( 'newspack_ga4_segment_reach', $cache, false );
+		$decorated = GA4_Segment_Reach::decorate_segments( $segments );
+		$this->assertSame( '2026-08-06', $decorated[0]['reach']['priority_changed'] );
+	}
+
+	/**
+	 * Giving up stops the calls; it must not stop them for good. The ceiling
+	 * cannot tell a missing dimension from an expired token, so a site knocked
+	 * out by a transient failure recovers on its own once the hold expires.
+	 */
+	public function test_give_up_expires_so_a_transient_failure_is_not_terminal() {
+		$this->connect_property( 'PROP-REACH' );
+		$this->configure_newspack_oauth();
+		$this->http_routes[':runReport'] = $this->json_response( 200, $this->report_response() );
+
+		// At the ceiling, failing a moment ago: still held off.
 		update_option(
-			'newspack_ga4_segment_reach',
+			'newspack_ga4_segment_reach_failures',
 			[
 				'property_id' => 'PROP-REACH',
-				'fetched_at'  => time(),
-				'range_days'  => 7,
-				'rows'        => [],
+				'count'       => GA4_Segment_Reach::MAX_FAILURES,
+				'last_error'  => 'boom',
+				'last_failed' => time(),
 			],
 			false
 		);
+		$this->http_log = [];
+		GA4_Segment_Reach::refresh();
+		$this->assertSame( [], $this->http_log, 'A fresh give-up holds.' );
 
-		$decorated = GA4_Segment_Reach::decorate_segments(
+		// The same record, older than the hold: tries again and recovers.
+		update_option(
+			'newspack_ga4_segment_reach_failures',
 			[
-				[ 'id' => '12' ],
-				[ 'id' => '99' ],
-			]
+				'property_id' => 'PROP-REACH',
+				'count'       => GA4_Segment_Reach::MAX_FAILURES,
+				'last_error'  => 'boom',
+				'last_failed' => time() - GA4_Segment_Reach::GIVE_UP_FOR - 1,
+			],
+			false
 		);
-		$copy               = $decorated;
-		$copy[1]['id']      = 'mutated';
+		GA4_Segment_Reach::refresh();
+		$cache = get_option( 'newspack_ga4_segment_reach' );
+		$this->assertSame( 1240, $cache['rows']['12']['matched'] );
+	}
 
-		$this->assertSame( '99', $decorated[1]['id'] );
+	/**
+	 * Creating a segment must not read as a priority change. The first write
+	 * of a term's `priority` arrives as an add, and a new segment is appended
+	 * at the lowest priority, so it changes which segment wins for nobody —
+	 * counting it caveats every row for a week over something that moved no
+	 * reader.
+	 */
+	public function test_creating_a_segment_is_not_a_priority_change() {
+		register_taxonomy( 'popup_segment', 'post' );
+		$segment = $this->factory()->term->create( [ 'taxonomy' => 'popup_segment' ] );
+
+		// What Newspack_Segments_Model::create_segment() does: the term has no
+		// priority row yet, so update_metadata() delegates to add_metadata().
+		update_term_meta( $segment, 'priority', 3 );
+		$this->assertFalse( get_option( 'newspack_ga4_segment_reach_priority_changed' ) );
+
+		// A reorder rewrites an existing row, which does count.
+		update_term_meta( $segment, 'priority', 1 );
+		$this->assertEqualsWithDelta( time(), get_option( 'newspack_ga4_segment_reach_priority_changed' ), 60 );
 	}
 
 	/**

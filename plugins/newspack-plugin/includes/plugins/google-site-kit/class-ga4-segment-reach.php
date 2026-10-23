@@ -32,6 +32,11 @@ final class GA4_Segment_Reach {
 	const PRIORITY_OPTION        = 'newspack_ga4_segment_reach_priority_changed';
 	const REFRESH_ACTION         = 'newspack_ga4_segment_reach_refresh';
 	const GROUP                  = 'newspack';
+	// The immediate first fetch goes in its own group. Sharing GROUP with the
+	// recurring action would make the "is one already queued?" guard below
+	// permanently true once the daily action exists, so the first fetch would
+	// never be enqueued, and unscheduling on disconnect would take a pending
+	// fetch with it.
 	const ASYNC_GROUP            = 'newspack-async';
 	const LAST_ATTEMPT_TRANSIENT = 'newspack_ga4_segment_reach_attempt';
 	const LOGGER_HEADER          = 'NEWSPACK-GA4-REACH';
@@ -51,17 +56,31 @@ final class GA4_Segment_Reach {
 	const MAX_FAILURES = 5;
 
 	/**
+	 * How long the give-up above holds before the next scheduled run tries
+	 * again. Long enough that a permanently impossible report costs one call a
+	 * week rather than two an hour; short enough that a site knocked out by a
+	 * transient failure recovers on its own.
+	 */
+	const GIVE_UP_FOR = WEEK_IN_SECONDS;
+
+	/**
 	 * Register hooks.
 	 */
-	public static function init() {
+	public static function init(): void {
 		add_action( self::REFRESH_ACTION, [ __CLASS__, 'refresh' ] );
 		add_action( 'admin_init', [ __CLASS__, 'maybe_schedule' ] );
-		// Segment priority lives in term meta, and Campaigns writes it from
-		// several paths — the drag-reorder, a single-segment save, and the
-		// reindex that follows a deletion. Watching the meta key catches all
-		// of them, including changes made outside the wizard.
+		// Segment priority lives in term meta, and `sort_segments()` is the
+		// only path that rewrites it — saving or deleting a segment does not.
+		// Watching the meta key catches a reorder made outside the wizard too.
+		//
+		// Updates only, deliberately: creating a segment writes `priority` for
+		// the first time, which arrives as an add, and a new segment is
+		// appended at the lowest priority, so it cannot change which segment
+		// wins for any existing reader. Counting it would caveat every row for
+		// a week over something that moved nobody. A reorder still registers,
+		// because it rewrites every segment's priority and the others already
+		// hold the row.
 		add_action( 'updated_term_meta', [ __CLASS__, 'record_priority_change' ], 10, 3 );
-		add_action( 'added_term_meta', [ __CLASS__, 'record_priority_change' ], 10, 3 );
 	}
 
 	/**
@@ -70,14 +89,13 @@ final class GA4_Segment_Reach {
 	 * Reordering is the moment someone most expects these numbers to move, and
 	 * it is the one thing that cannot move them: the report still covers the
 	 * same days, most of which ran under the previous order. Recording the day
-	 * lets the list say so rather than showing figures that quietly answer a
-	 * different question.
+	 * lets the list say so.
 	 *
 	 * @param int    $meta_id  Meta row ID (unused).
 	 * @param int    $term_id  Term the meta belongs to.
 	 * @param string $meta_key Meta key.
 	 */
-	public static function record_priority_change( $meta_id, $term_id, $meta_key ) {
+	public static function record_priority_change( int $meta_id, int $term_id, string $meta_key ): void {
 		if ( 'priority' !== $meta_key ) {
 			return;
 		}
@@ -109,17 +127,35 @@ final class GA4_Segment_Reach {
 	 * A change *after* the window still counts: the whole report then predates
 	 * the current order, which is the most misleading case of all.
 	 *
+	 * All three dates resolve in the property's reporting timezone, which is
+	 * the frame `as_of` is already in. Mixing frames moved the label off the
+	 * day the publisher acted on: a reorder at 18:00 on the 5th in Los Angeles
+	 * is the 6th in UTC, and the same offset pushes a change near either edge
+	 * across the in-window boundary.
+	 *
 	 * @param string $as_of      Last day the report covers, `Y-m-d`.
 	 * @param int    $range_days Days the report covers.
+	 * @param string $timezone   Property reporting timezone.
 	 * @return string|null `Y-m-d`, or null.
 	 */
-	private static function priority_change_in_window( $as_of, $range_days ) {
+	private static function priority_change_in_window( string $as_of, int $range_days, string $timezone ): ?string {
 		$changed_at = (int) get_option( self::PRIORITY_OPTION, 0 );
 		if ( ! $changed_at ) {
 			return null;
 		}
-		$changed_on   = gmdate( 'Y-m-d', $changed_at );
-		$window_start = gmdate( 'Y-m-d', strtotime( $as_of . ' -' . max( 0, $range_days - 1 ) . ' days' ) );
+		try {
+			$zone         = new \DateTimeZone( $timezone );
+			$changed_on   = ( new \DateTimeImmutable( '@' . $changed_at ) )->setTimezone( $zone )->format( 'Y-m-d' );
+			$window_start = ( new \DateTimeImmutable( $as_of, $zone ) )
+				->modify( '-' . max( 0, $range_days - 1 ) . ' days' )
+				->format( 'Y-m-d' );
+		} catch ( \Exception $e ) {
+			// A malformed timezone or `as_of`. strtotime() would have answered
+			// 1970-01-01 here and reported every change as in-window; saying
+			// nothing is the safer failure.
+			Logger::log( "Could not place the priority change in the report window: {$e->getMessage()}", self::LOGGER_HEADER );
+			return null;
+		}
 		// Both are Y-m-d, which compares correctly as a string.
 		return $changed_on < $window_start ? null : $changed_on;
 	}
@@ -136,7 +172,7 @@ final class GA4_Segment_Reach {
 	 * @param string|false $property_id Connected property, or false to look it up.
 	 * @return array|null Cache payload for the connected property, or null.
 	 */
-	private static function get_valid_cache( $property_id = false ) {
+	private static function get_valid_cache( string|false $property_id = false ): ?array {
 		if ( false === $property_id ) {
 			$property_id = GA4_Client::get_property_id();
 		}
@@ -165,17 +201,19 @@ final class GA4_Segment_Reach {
 	 * @param string $property_id Connected property.
 	 * @return array `count` (int) and `last_error` (string).
 	 */
-	private static function get_failures( $property_id ) {
+	private static function get_failures( string $property_id ): array {
 		$record = get_option( self::FAILURE_OPTION, false );
 		if ( ! is_array( $record ) || ( $record['property_id'] ?? '' ) !== $property_id ) {
 			return [
-				'count'      => 0,
-				'last_error' => '',
+				'count'       => 0,
+				'last_error'  => '',
+				'last_failed' => 0,
 			];
 		}
 		return [
-			'count'      => isset( $record['count'] ) ? (int) $record['count'] : 0,
-			'last_error' => isset( $record['last_error'] ) ? (string) $record['last_error'] : '',
+			'count'       => isset( $record['count'] ) ? (int) $record['count'] : 0,
+			'last_error'  => isset( $record['last_error'] ) ? (string) $record['last_error'] : '',
+			'last_failed' => isset( $record['last_failed'] ) ? (int) $record['last_failed'] : 0,
 		];
 	}
 
@@ -185,8 +223,19 @@ final class GA4_Segment_Reach {
 	 * @param string $property_id Connected property.
 	 * @return bool
 	 */
-	private static function has_given_up( $property_id ) {
-		return self::get_failures( $property_id )['count'] >= self::MAX_FAILURES;
+	private static function has_given_up( string $property_id ): bool {
+		$failures = self::get_failures( $property_id );
+		if ( $failures['count'] < self::MAX_FAILURES ) {
+			return false;
+		}
+		// Expire it. The ceiling exists to stop calling an API that cannot
+		// answer, but it cannot tell a missing dimension from an expired
+		// token or a Google outage, and with the hourly backoff feeding
+		// attempts five in a row is about five hours. Left terminal, a site
+		// that hit it during an outage would stay dark until someone switched
+		// property or provisioned a dimension — neither of which a publisher
+		// who simply reconnected Google would do.
+		return time() - $failures['last_failed'] < self::GIVE_UP_FOR;
 	}
 
 	/**
@@ -197,7 +246,7 @@ final class GA4_Segment_Reach {
 	 * what makes a previously impossible report possible, so it should not
 	 * have to wait for a property switch.
 	 */
-	public static function reset_failures() {
+	public static function reset_failures(): void {
 		delete_option( self::FAILURE_OPTION );
 		delete_transient( self::LAST_ATTEMPT_TRANSIENT );
 	}
@@ -209,7 +258,7 @@ final class GA4_Segment_Reach {
 	 * should see numbers on the next cron tick, not after a day. Idempotent;
 	 * runs on every admin page load.
 	 */
-	public static function maybe_schedule() {
+	public static function maybe_schedule(): void {
 		if ( ! function_exists( 'as_schedule_recurring_action' ) || ! function_exists( 'as_has_scheduled_action' ) ) {
 			return;
 		}
@@ -261,7 +310,7 @@ final class GA4_Segment_Reach {
 	 * One report: sessions per (segment, event) pair. A failure keeps the
 	 * previous cache — the list shows staler numbers, never none.
 	 */
-	public static function refresh() {
+	public static function refresh(): void {
 		$property_id = GA4_Client::get_property_id();
 		if ( ! $property_id ) {
 			return;
@@ -288,15 +337,9 @@ final class GA4_Segment_Reach {
 				[ 'name' => 'customEvent:segment_id' ],
 				[ 'name' => 'eventName' ],
 			],
-			// `sessions`, not `eventCount`. The events are deduplicated per
-			// session by the client, but only on a best effort: a reader whose
-			// localStorage is unwritable falls back to dispatching on every
-			// pageview, and np_segment_won fires once per *segment* per session,
-			// so a session whose priority winner changes — a reader registering
-			// mid-session, say — emits more than one. Counting events would
-			// inflate both figures by however much of that happens. GA4
-			// deduplicates `sessions` itself, so the numbers mean what the UI
-			// says they mean regardless of dispatch volume.
+			// `sessions`, not `eventCount`: the client's per-session dedupe is
+			// best effort, so counting events overstates both figures. See the
+			// file docblock.
 			'metrics'            => [ [ 'name' => 'sessions' ] ],
 			// `sessions` is non-additive, so GA4 computes this total over the
 			// underlying data rather than summing the rows — the deduplicated
@@ -368,6 +411,7 @@ final class GA4_Segment_Reach {
 				'fetched_at'     => time(),
 				'range_days'     => self::RANGE_DAYS,
 				'as_of'          => self::report_end_date( $response ),
+				'timezone'       => self::report_timezone( $response ),
 				'total_sessions' => self::report_total( $response ),
 				'rows'           => $rows,
 			],
@@ -389,7 +433,7 @@ final class GA4_Segment_Reach {
 	 * @param array $response Decoded runReport response.
 	 * @return int Sessions, or 0 when the total is absent.
 	 */
-	private static function report_total( array $response ) {
+	private static function report_total( array $response ): int {
 		return isset( $response['totals'][0]['metricValues'][0]['value'] )
 			? (int) $response['totals'][0]['metricValues'][0]['value']
 			: 0;
@@ -409,17 +453,29 @@ final class GA4_Segment_Reach {
 	 * @param array $response Decoded runReport response.
 	 * @return string `Y-m-d`.
 	 */
-	private static function report_end_date( array $response ) {
-		$timezone = $response['metadata']['timeZone'] ?? '';
-		if ( $timezone ) {
-			try {
-				$yesterday = new \DateTimeImmutable( 'yesterday', new \DateTimeZone( $timezone ) );
-				return $yesterday->format( 'Y-m-d' );
-			} catch ( \Exception $e ) {
-				Logger::log( "Unusable report timezone '$timezone'; falling back to UTC.", self::LOGGER_HEADER );
-			}
+	private static function report_end_date( array $response ): string {
+		try {
+			return ( new \DateTimeImmutable( 'yesterday', new \DateTimeZone( self::report_timezone( $response ) ) ) )->format( 'Y-m-d' );
+		} catch ( \Exception $e ) {
+			Logger::log( "Unusable report timezone; falling back to UTC: {$e->getMessage()}", self::LOGGER_HEADER );
+			return gmdate( 'Y-m-d', time() - DAY_IN_SECONDS );
 		}
-		return gmdate( 'Y-m-d', time() - DAY_IN_SECONDS );
+	}
+
+	/**
+	 * The timezone GA4 resolved the report in.
+	 *
+	 * Every date the list shows is read against this one: the window `as_of`
+	 * ends, the window's first day, and the day priority last changed. They
+	 * have to share a frame or they disagree about which days the report
+	 * covers.
+	 *
+	 * @param array $response Decoded runReport response.
+	 * @return string Timezone name; `UTC` when the response carries none.
+	 */
+	private static function report_timezone( array $response ): string {
+		$timezone = $response['metadata']['timeZone'] ?? '';
+		return is_string( $timezone ) && '' !== $timezone ? $timezone : 'UTC';
 	}
 
 	/**
@@ -428,7 +484,7 @@ final class GA4_Segment_Reach {
 	 * @param string $property_id Connected property.
 	 * @param string $message     Failure reason.
 	 */
-	private static function record_failure( $property_id, $message ) {
+	private static function record_failure( string $property_id, string $message ): void {
 		$count = self::get_failures( $property_id )['count'] + 1;
 		update_option(
 			self::FAILURE_OPTION,
@@ -477,7 +533,10 @@ final class GA4_Segment_Reach {
 		// Site-wide rather than per-segment: reordering changes which segment
 		// wins for a shared set of readers, so a change anywhere in the list
 		// qualifies every row's prompt figure, not just the moved segment's.
-		$priority_changed = self::priority_change_in_window( $as_of, $range_days );
+		// Caches written before the timezone was stored fall back to UTC,
+		// which is what their `as_of` was derived in.
+		$timezone         = isset( $cache['timezone'] ) && is_string( $cache['timezone'] ) ? $cache['timezone'] : 'UTC';
+		$priority_changed = self::priority_change_in_window( $as_of, $range_days, $timezone );
 		foreach ( $segments as &$segment ) {
 			if ( ! is_array( $segment ) || ! isset( $segment['id'] ) ) {
 				continue;
@@ -492,9 +551,9 @@ final class GA4_Segment_Reach {
 				'priority_changed' => $priority_changed,
 			];
 		}
-		// The loop variable stays bound to the last element, so a caller that
-		// copies the result and writes to that element would also mutate this
-		// array. Costs one line to close.
+		// Habit, not a fix: the reference dies with this function, so the
+		// array handed back carries no live alias either way. Kept so a later
+		// edit that adds a second loop over $segments cannot inherit one.
 		unset( $segment );
 		return $segments;
 	}
