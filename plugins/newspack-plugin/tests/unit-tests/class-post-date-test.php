@@ -582,6 +582,54 @@ class Test_Post_Date extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Test a hide flag saved while the sitewide setting was on doesn't veto the
+	 * override once the setting is off, where the editor can't see or clear it.
+	 */
+	public function test_hide_flag_from_sitewide_on_does_not_veto_override_when_off() {
+		set_theme_mod( 'post_updated_date', false );
+
+		$post_id = $this->create_post_with_modified_date(
+			gmdate( 'Y-m-d H:i:s', time() - 2 * HOUR_IN_SECONDS ),
+			gmdate( 'Y-m-d H:i:s', time() - 1 * HOUR_IN_SECONDS )
+		);
+		update_post_meta( $post_id, 'newspack_hide_updated_date', true );
+		add_filter( 'newspack_updated_date_override', '__return_true' );
+
+		$this->assertTrue(
+			Post_Date::should_display_updated_date( $post_id ),
+			'A hide flag the editor cannot see should not veto the override.'
+		);
+	}
+
+	/**
+	 * Test a date a plugin reports in a form that can't be read doesn't count
+	 * as a modification past the threshold.
+	 */
+	public function test_unreadable_date_does_not_pass_the_threshold() {
+		set_theme_mod( 'post_updated_date', true );
+		set_theme_mod( 'post_updated_date_threshold', 24 );
+
+		// Saved one hour after publishing, within the threshold.
+		$post_id = $this->create_post_with_modified_date(
+			gmdate( 'Y-m-d H:i:s', time() - 7 * DAY_IN_SECONDS ),
+			gmdate( 'Y-m-d H:i:s', time() - 7 * DAY_IN_SECONDS + HOUR_IN_SECONDS )
+		);
+		add_filter(
+			'get_the_date',
+			function ( $the_date, $format, $post ) use ( $post_id ) {
+				return $post instanceof \WP_Post && $post->ID === $post_id && DATE_W3C === $format ? 'not a date' : $the_date;
+			},
+			10,
+			3
+		);
+
+		$this->assertFalse(
+			Post_Date::should_display_updated_date( $post_id ),
+			'An unreadable publish date should not count as decades before the modified date.'
+		);
+	}
+
+	/**
 	 * Test the override filter does not apply to unsupported post types.
 	 */
 	public function test_override_skips_unsupported_post_types() {
@@ -835,6 +883,26 @@ class Test_Post_Date extends \WP_UnitTestCase {
 		$this->assertTrue(
 			apply_filters( 'newspack_blocks_display_updated_date', false, get_post( $post_id ) ),
 			'The card should show the updated date when the post may show it.'
+		);
+	}
+
+	/**
+	 * Test a Homepage Posts card keeps its publish date on a site showing
+	 * updated dates in bylines, unless a plugin asks for the updated date.
+	 */
+	public function test_blocks_card_keeps_publish_date_unless_asked() {
+		set_theme_mod( 'post_updated_date', true );
+		set_theme_mod( 'post_updated_date_threshold', 24 );
+
+		$post_id = $this->create_post_with_modified_date(
+			gmdate( 'Y-m-d H:i:s', time() - 7 * DAY_IN_SECONDS ),
+			gmdate( 'Y-m-d H:i:s', time() - 3 * DAY_IN_SECONDS )
+		);
+
+		$this->assertTrue( Post_Date::should_display_updated_date( $post_id ), 'The byline should show the updated date.' );
+		$this->assertFalse(
+			apply_filters( 'newspack_blocks_display_updated_date', false, get_post( $post_id ) ),
+			'The card should keep its publish date when no plugin asks for the updated date.'
 		);
 	}
 
