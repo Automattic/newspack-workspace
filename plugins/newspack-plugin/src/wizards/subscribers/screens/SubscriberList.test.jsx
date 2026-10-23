@@ -377,6 +377,8 @@ describe( 'the subscriber list view across profile visits', () => {
 	it( 'restores the view the reader left when the list remounts', async () => {
 		const changedView = await leaveWith( {
 			page: 3,
+			perPage: 50,
+			sort: { field: 'name', direction: 'asc' },
 			search: 'reader',
 			filters: [ { field: 'status', operator: 'isAny', value: [ 'active' ] } ],
 		} );
@@ -395,6 +397,9 @@ describe( 'the subscriber list view across profile visits', () => {
 		const requestedPath = subscriberReads[ 0 ];
 		expect( subscriberReads ).toHaveLength( 1 );
 		expect( requestedPath ).toContain( 'page=3' );
+		expect( requestedPath ).toContain( 'per_page=50' );
+		expect( requestedPath ).toContain( 'orderby=name' );
+		expect( requestedPath ).toContain( 'order=asc' );
 		expect( requestedPath ).toContain( 'search=reader' );
 		expect( requestedPath ).toContain( 'status[0]=active' );
 	} );
