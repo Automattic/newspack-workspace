@@ -344,14 +344,15 @@ describe( 'the money flows on a gifted subscription', () => {
 		).toBeInTheDocument();
 	} );
 
-	it( "falls back to the reader's email when the subscription reports no billing email", async () => {
+	it( 'names no address when the subscription reports no billing email', async () => {
 		await renderCards( profile( { subscriptions: [ subscription( { status: 'on-hold', canReactivate: true, billingEmail: '' } ) ] } ) );
 		await chooseCardAction( 'Weekly digest', 'Reactivate' );
 
 		await act( async () => {
 			fireEvent.click( screen.getByRole( 'button', { name: 'Continue' } ) );
 		} );
-		expect( screen.getByText( /A payment link will be emailed to rae@example\.com\./ ) ).toBeInTheDocument();
+		expect( screen.getByText( /No billing email is on file, so you'll get a payment link to share instead\./ ) ).toBeInTheDocument();
+		expect( screen.queryByText( /rae@example\.com/ ) ).not.toBeInTheDocument();
 	} );
 } );
 

@@ -571,8 +571,9 @@ export default function PersonProfile() {
 				<ReactivateFlow
 					subscription={ modal.subscription }
 					// The payment link goes to the subscription's billing email, which
-					// for a gift is the purchaser's, not the reader's.
-					email={ modal.subscription.billingEmail || subscriber.email }
+					// for a gift is the purchaser's, not the reader's. With none on
+					// file the server sends nothing, so there's no address to name.
+					email={ modal.subscription.billingEmail }
 					// The same buyer RefundFlow names: a gift's payment link is theirs.
 					payerName={ giftPayerName( modal.subscription ) }
 					actions={ subscriptionActions }

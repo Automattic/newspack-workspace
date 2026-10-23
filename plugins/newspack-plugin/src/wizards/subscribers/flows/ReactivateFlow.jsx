@@ -42,7 +42,7 @@ const MODE_DETAILS = {
 /**
  * @param {Object}   props              Component props.
  * @param {Object}   props.subscription The profile subscription entry.
- * @param {string}   props.email        Where the payment link is emailed.
+ * @param {string}   [props.email]      Where the payment link is emailed; empty when the subscription has no billing email.
  * @param {string}   [props.payerName]  The gift buyer's name, passed only for a gift: the payment link is theirs to pay, not the subscriber's.
  * @param {Object}   props.actions      The subscription write calls (useSubscriptionActions).
  * @param {Function} props.onClose      Close without acting.
@@ -150,8 +150,16 @@ export default function ReactivateFlow( { subscription, email, payerName, action
 					'newspack-plugin'
 			  );
 	} else if ( 'link' === mode ) {
-		// translators: %s is the email address the payment link goes to: the buyer's billing email on a gift.
-		detail = sprintf( __( 'A payment link will be emailed to %s. The subscription reactivates once they pay.', 'newspack-plugin' ), email );
+		detail = email
+			? sprintf(
+					// translators: %s is the email address the payment link goes to: the buyer's billing email on a gift.
+					__( 'A payment link will be emailed to %s. The subscription reactivates once they pay.', 'newspack-plugin' ),
+					email
+			  )
+			: __(
+					"No billing email is on file, so you'll get a payment link to share instead. The subscription reactivates once it's paid.",
+					'newspack-plugin'
+			  );
 	} else {
 		detail = __(
 			'The subscription reactivates now without taking a payment. Billing resumes on the regular schedule at the next renewal.',
