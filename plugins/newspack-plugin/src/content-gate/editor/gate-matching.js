@@ -1,4 +1,9 @@
 /**
+ * Internal dependencies
+ */
+import { PUBLISHED_AGE_RULE, postMatchesPublishedAge } from '../utils/published-age';
+
+/**
  * Check if a gate's content rules match the current post state. Mirrors
  * the PHP `Content_Restriction_Control::get_post_gates()` evaluator.
  *
@@ -8,10 +13,21 @@
  * @param {number} postId       Current post ID, for the specific_posts override.
  * @param {string} matchMode    'all' (AND, default) or 'any' (OR).
  * @param {Object} taxonomyMap  Map of taxonomy slug to REST base.
+ * @param {?Date}  published    When the post was published, or null when it is not published yet.
+ * @param {*}      ageOverride  The post's own time window, from its override meta.
  *
  * @return {boolean} Whether the gate applies to this post.
  */
-export function gateMatchesPost( contentRules, postType, termsByTax, postId, matchMode = 'all', taxonomyMap = {} ) {
+export function gateMatchesPost(
+	contentRules,
+	postType,
+	termsByTax,
+	postId,
+	matchMode = 'all',
+	taxonomyMap = {},
+	published = null,
+	ageOverride = null
+) {
 	// Inclusion override: if this post ID is listed in any specific_posts
 	// rule, the gate applies regardless of other rules.
 	const specificMatch = contentRules.some(
@@ -34,6 +50,9 @@ export function gateMatchesPost( contentRules, postType, termsByTax, postId, mat
 			// Mirrors the PHP matcher: a membership test against the post ID. The
 			// newsletters rule is include-only, so the exclusion flag is never set.
 			return rule.value.map( id => parseInt( id ) ).includes( parseInt( postId ) );
+		}
+		if ( rule.slug === PUBLISHED_AGE_RULE ) {
+			return postMatchesPublishedAge( rule.value, published, ageOverride );
 		}
 		const restBase = taxonomyMap[ rule.slug ];
 		if ( ! restBase ) {

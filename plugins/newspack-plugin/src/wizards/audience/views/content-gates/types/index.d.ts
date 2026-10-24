@@ -47,7 +47,8 @@ type AccessRule = {
 	value: GateAccessRuleValue;
 };
 
-type GateContentRuleValue = string[];
+type PublishedAgeRuleValue = import( '../../../../../content-gate/utils/published-age' ).PublishedAgeValue;
+type GateContentRuleValue = string[] | PublishedAgeRuleValue;
 type ContentRule = {
 	name: string;
 	default: GateContentRuleValue;
