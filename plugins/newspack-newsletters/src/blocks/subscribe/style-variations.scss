@@ -1,3 +1,33 @@
+@use "../../utilities/focus";
+
+@mixin error-notice {
+	background: var(--newspack-ui-color-error-tint, #fcf0f1);
+	border: 1px solid var(--newspack-ui-color-error-border, #facfd2);
+	border-radius: var(--newspack-ui-radius-control, 8px);
+	box-sizing: border-box;
+	color: var(--newspack-ui-color-text, #1e1e1e);
+	display: block;
+	font-size: var(--newspack-ui-font-size-s, 16px);
+	font-weight: 400;
+	line-height: var(--newspack-ui-line-height-s, 1.5);
+	margin: 0;
+	padding: var(--newspack-ui-spacer-2, 12px) var(--newspack-ui-spacer-3, 16px);
+	padding-inline-start: calc(var(--newspack-ui-spacer-3, 16px) + var(--newspack-ui-spacer-5, 24px) - var(--newspack-ui-spacer-half, 4px) + var(--newspack-ui-spacer-2, 12px));
+	position: relative;
+	text-align: start;
+
+	&::before {
+		background: var(--newspack-ui-color-error, #d63638);
+		content: "";
+		height: var(--newspack-ui-spacer-5, 24px);
+		inset-inline-start: calc(var(--newspack-ui-spacer-3, 16px) - var(--newspack-ui-spacer-half, 4px) / 2);
+		mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill-rule='evenodd' d='M12.218 5.377a.25.25 0 0 0-.436 0l-7.29 12.96a.25.25 0 0 0 .218.373h14.58a.25.25 0 0 0 .218-.372l-7.29-12.96Zm-1.743-.735c.669-1.19 2.381-1.19 3.05 0l7.29 12.96a1.75 1.75 0 0 1-1.525 2.608H4.71a1.75 1.75 0 0 1-1.525-2.608l7.29-12.96ZM12.75 17.46h-1.5v-1.5h1.5v1.5Zm-1.5-3h1.5v-5h-1.5v5Z'/%3E%3C/svg%3E") center / contain no-repeat;
+		position: absolute;
+		top: var(--newspack-ui-spacer-2, 12px);
+		width: var(--newspack-ui-spacer-5, 24px);
+	}
+}
+
 .wp-block-newspack-newsletters-subscribe {
 	// Modern is the default look: a block gets it unless it picks Legacy. That
 	// covers a block with no style class and one that carries `is-style-default`,
@@ -24,6 +54,12 @@
 				cursor: pointer;
 			}
 
+			li:not(.is-gated) label:not(.block-editor-block-list__block *)::after {
+				content: "";
+				inset: 0;
+				position: absolute;
+			}
+
 			.is-gated label {
 				cursor: default;
 			}
@@ -45,26 +81,43 @@
 				li {
 					background: var(--newspack-ui-color-neutral-0, #fff);
 					border: 1px solid var(--newspack-ui-color-border, #ddd);
-					border-radius: var(--newspack-ui-border-radius-m, 6px);
+					border-radius: var(--newspack-ui-radius-surface, 12px);
 					margin: 0;
 					min-width: 100%;
 					padding: var(--newspack-ui-spacer-3, 16px);
-					transition: background 125ms ease-in-out, border 125ms ease-in-out;
+					position: relative;
+					transition:
+						border-color var(--newspack-ui-duration-color, 150ms) ease,
+						box-shadow var(--newspack-ui-duration-color, 150ms) ease;
+
+					@media ( hover: hover ) and ( pointer: fine ) {
+						&:hover:not(:has(input[type="checkbox"]:checked, input[type="checkbox"]:disabled, input[type="checkbox"]:focus-visible)) {
+							border-color: var(--newspack-ui-color-border-hover, #555);
+						}
+					}
 
 					&:has(input[type="checkbox"]:checked) {
-						background: var(--newspack-ui-color-neutral-5, #f7f7f7);
-						border-color: var(--newspack-ui-color-neutral-90, #1e1e1e);
+						border-color: var(--newspack-ui-color-selected, #1e1e1e);
+						box-shadow: inset 0 0 0 1px var(--newspack-ui-color-selected, #1e1e1e);
+					}
+
+					&:has(input[type="checkbox"]:focus-visible) {
+						@include focus.focus-edge;
+					}
+
+					&:has(input[type="checkbox"]:checked:focus-visible) {
+						@include focus.focus-line( $inner: inset 0 0 0 1px var(--newspack-ui-color-selected, #1e1e1e) );
 					}
 				}
 			}
 
 			.list-checkbox {
 				height: var(--newspack-ui-spacer-5, 24px);
-				margin-right: var(--newspack-ui-spacer-3, 16px);
+				margin-inline-end: var(--newspack-ui-spacer-2, 12px);
 
 				input[type="checkbox"] {
 					border-color: var(--newspack-ui-color-input-border, #949494);
-					border-radius: var(--newspack-ui-border-radius-2xs, 2px);
+					border-radius: calc(var(--newspack-ui-radius-control, 8px) * 0.5);
 					height: var(--newspack-ui-control-size, 20px) !important;
 					margin: 0;
 					transition: background-color 125ms ease-in-out, border-color 125ms ease-in-out;
@@ -78,9 +131,11 @@
 						outline: none;
 					}
 
-					&:focus-visible {
-						outline: 2px solid var(--newspack-ui-color-input-border-focus, #1e1e1e);
-						outline-offset: 2px;
+					@supports not selector(:has(*)) {
+						&:focus-visible {
+							outline: 2px solid var(--newspack-ui-color-focus, #1e1e1e);
+							outline-offset: 2px;
+						}
 					}
 
 					&:checked {
@@ -110,7 +165,7 @@
 			}
 
 			.list-description {
-				color: var(--newspack-ui-color-neutral-60, #6c6c6c);
+				color: var(--newspack-ui-color-text-muted, #555);
 				font-size: var(--newspack-ui-font-size-xs, 14px);
 				line-height: var(--newspack-ui-line-height-xs, 1.4286);
 			}
@@ -144,26 +199,27 @@
 		input[type="text"] {
 			background: var(--newspack-ui-color-neutral-0, #fff);
 			border: 1px solid var(--newspack-ui-color-input-border, #949494);
-			border-radius: var(--newspack-ui-border-radius-m, 6px);
+			border-radius: var(--newspack-ui-radius-control, 8px);
 			color: var(--newspack-ui-color-neutral-90, #1e1e1e);
 			font-family: inherit;
 			font-size: inherit;
 			font-weight: inherit;
 			line-height: inherit;
 			padding: calc(var(--newspack-ui-spacer-2, 12px) - 1px);
-			transition: border 125ms ease-in-out, outline 125ms ease-in-out;
+			transition: border-color 125ms ease-in-out, box-shadow 125ms ease-in-out;
 
 			&::placeholder {
 				color: var(--newspack-ui-color-neutral-60, #6c6c6c);
 			}
 
-			&:hover:not(:disabled) {
+			&:hover:not(:disabled, :focus) {
 				border-color: var(--newspack-ui-color-input-border-hover, #5d5d5d);
 			}
 
 			&:focus {
-				outline: 2px solid var(--newspack-ui-color-input-border-focus, #1e1e1e);
-				outline-offset: -1px;
+				box-shadow: 0 0 0 1px var(--newspack-ui-color-input-border-focus, #1e1e1e);
+
+				@include focus.focus-edge( var(--newspack-ui-color-input-border-focus, #1e1e1e) );
 			}
 
 			&:disabled {
@@ -178,31 +234,56 @@
 
 		input[type="submit"],
 		.submit-button {
+			align-items: center;
 			border: 0;
-			border-radius: var(--newspack-ui-border-radius-m, 6px);
+			border-radius: var(--newspack-ui-radius-button, 8px);
 			cursor: pointer;
+			display: inline-flex;
 			font-family: inherit;
-			font-size: inherit;
-			font-weight: 600;
-			line-height: inherit;
+			font-size: var(--newspack-ui-font-size-s, 16px);
+			font-weight: var(--newspack-ui-font-weight-strong, 600);
+			justify-content: center;
+			line-height: var(--newspack-ui-line-height-s, 1.5);
 			margin-top: calc(var(--newspack-ui-spacer-2, 12px) - var(--newspack-ui-spacer-base, 8px));
-			padding: var(--newspack-ui-spacer-2, 12px) var(--newspack-ui-spacer-5, 24px);
+			min-height: var(--newspack-ui-spacer-9, 48px);
+			padding: var(--newspack-ui-spacer-2, 12px) var(--newspack-ui-spacer-4, 20px);
 
 			@media ( min-width: 782px ) {
 				margin-top: 0;
 			}
 
 			&:focus {
-				outline: 2px solid var(--newspack-ui-color-neutral-90, #1e1e1e);
-				outline-offset: 1px;
+				outline: none;
+			}
+
+			&:focus-visible {
+				box-shadow: 0 0 0 2px var(--newspack-ui-color-surface, #fff), 0 0 0 4px var(--newspack-newsletters-subscribe-button-bg, #d33);
+
+				@include focus.focus-line( var(--newspack-newsletters-subscribe-button-bg, #d33), inset 0 0 0 1px currentcolor );
 			}
 		}
 
 		.newspack-newsletters-subscribe {
 			&__response {
-				background: var(--newspack-ui-color-success-0, #edfaef);
-				border-radius: var(--newspack-ui-border-radius-m, 6px);
-				gap: var(--newspack-ui-spacer-5, 24px);
+				background: var(--newspack-ui-color-success-tint, #edfaef);
+				border-radius: var(--newspack-ui-radius-surface, 12px);
+				gap: var(--newspack-ui-spacer-2, 12px);
+			}
+
+			&__icon {
+				background: var(--newspack-ui-color-success, #008a20);
+				border-radius: 0;
+				height: var(--newspack-ui-spacer-9, 48px);
+				mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill-rule='evenodd' d='M12 18.5a6.5 6.5 0 1 1 0-13 6.5 6.5 0 0 1 0 13ZM4 12a8 8 0 1 1 16 0 8 8 0 0 1-16 0Zm11.53-1.47-1.06-1.06L11 12.94l-1.47-1.47-1.06 1.06L11 15.06l4.53-4.53Z'/%3E%3C/svg%3E") center / contain no-repeat;
+				width: var(--newspack-ui-spacer-9, 48px);
+
+				&::before {
+					content: none;
+				}
+			}
+
+			&__continue {
+				margin-top: var(--newspack-ui-spacer-2, 12px);
 			}
 
 			&__message {
@@ -243,38 +324,37 @@
 				background: none;
 				border-radius: 0;
 				display: block;
-				justify-items: start;
-				margin-top: var(--newspack-ui-spacer-base, 8px);
+				justify-items: stretch;
+				margin-top: var(--newspack-ui-spacer-2, 12px);
 
 				p {
-					color: var(--newspack-ui-color-error-text, #b32d2e);
-					font-size: var(--newspack-ui-font-size-xs, 14px);
-					font-weight: 400;
-					line-height: var(--newspack-ui-line-height-xs, 1.4286);
-					padding-inline-start: calc(var(--newspack-ui-spacer-4, 20px) + var(--newspack-ui-spacer-1, 8px) / 2);
-					position: relative;
-					text-align: start;
-
-					&::before {
-						background: currentcolor;
-						content: "";
-						height: var(--newspack-ui-spacer-4, 20px);
-						inset-inline-start: 0;
-						mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill-rule='evenodd' d='M12.218 5.377a.25.25 0 0 0-.436 0l-7.29 12.96a.25.25 0 0 0 .218.373h14.58a.25.25 0 0 0 .218-.372l-7.29-12.96Zm-1.743-.735c.669-1.19 2.381-1.19 3.05 0l7.29 12.96a1.75 1.75 0 0 1-1.525 2.608H4.71a1.75 1.75 0 0 1-1.525-2.608l7.29-12.96ZM12.75 17.46h-1.5v-1.5h1.5v1.5Zm-1.5-3h1.5v-5h-1.5v5Z'/%3E%3C/svg%3E") center / contain no-repeat;
-						position: absolute;
-						top: 0;
-						width: var(--newspack-ui-spacer-4, 20px);
-					}
+					@include error-notice;
 				}
+			}
+		}
+
+		.newspack-recaptcha-error {
+			flex: 1 1 100%;
+
+			p {
+				@include error-notice;
 			}
 		}
 
 		form:has(input[value*="invalid_email"]) .newspack-newsletters-email-input input[type="email"],
 		.newspack-newsletters-email-input input[type="email"][aria-invalid="true"] {
-			--newspack-ui-color-input-border: var(--newspack-ui-color-error-60, #b32d2e);
-			--newspack-ui-color-input-border-hover: var(--newspack-ui-color-error-60, #b32d2e);
+			--newspack-ui-color-input-border: var(--newspack-ui-color-error, #d63638);
+			--newspack-ui-color-input-border-hover: var(--newspack-ui-color-error, #d63638);
 
-			box-shadow: inset 0 0 0 1px var(--newspack-ui-color-input-border);
+			border-color: var(--newspack-ui-color-error, #d63638);
+			box-shadow: inset 0 0 0 1px var(--newspack-ui-color-error, #d63638);
+
+			&:focus {
+				border-color: var(--newspack-ui-color-error, #d63638);
+				box-shadow: inset 0 0 0 1px var(--newspack-ui-color-error, #d63638), 0 0 0 2px var(--newspack-ui-color-error, #d63638);
+
+				@include focus.focus-line( $inner: inset 0 0 0 1px var(--newspack-ui-color-error, #d63638) );
+			}
 		}
 	}
 
@@ -317,14 +397,16 @@
 			&__list {
 				background: var(--newspack-ui-color-neutral-0, #fff);
 				border: 1px solid var(--newspack-ui-color-border, #ddd);
-				border-radius: var(--newspack-ui-border-radius-m, 6px);
+				border-radius: var(--newspack-ui-radius-surface, 12px);
 				display: flex;
 				flex-wrap: wrap;
 				gap: 0;
 				justify-content: space-between;
 				margin: 0;
 				padding: var(--newspack-ui-spacer-4, 24px);
-				transition: background 125ms ease-in-out, border 125ms ease-in-out;
+				transition:
+					border-color var(--newspack-ui-duration-color, 150ms) ease,
+					box-shadow var(--newspack-ui-duration-color, 150ms) ease;
 			}
 
 			.list-details {
