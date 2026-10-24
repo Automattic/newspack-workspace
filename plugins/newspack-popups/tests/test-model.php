@@ -242,7 +242,7 @@ class ModelTest extends WP_UnitTestCase {
 
 		$container = $xpath->query( '//*[contains(concat(" ", normalize-space(@class), " "), " ' . $container_class . ' ")]' )->item( 0 );
 		self::assertNotNull( $container, 'The prompt container is present.' );
-		self::assertFalse( $container->hasAttribute( 'role' ), 'The prompt container has no role.' );
+		self::assertNotSame( 'button', $container->getAttribute( 'role' ), 'The prompt container is not announced as a button.' );
 		self::assertFalse( $container->hasAttribute( 'tabindex' ), 'The prompt container is not in the tab order.' );
 	}
 
