@@ -106,14 +106,18 @@ class Newspack_Test_Woo_Member_Commenting extends WP_UnitTestCase {
 	/**
 	 * Create a comment through the REST API.
 	 *
-	 * @param int $user_id User to submit as.
+	 * @param int        $user_id User to submit as.
+	 * @param mixed|null $type    Comment type to send; null to leave it out.
 	 *
 	 * @return int Response status.
 	 */
-	private function rest_create_comment_as( int $user_id ): int {
+	private function rest_create_comment_as( int $user_id, $type = null ): int {
 		wp_set_current_user( $user_id );
 		$request = new WP_REST_Request( 'POST', '/wp/v2/comments' );
 		$request->set_param( 'post', $this->post_id );
+		if ( null !== $type ) {
+			$request->set_param( 'type', $type );
+		}
 		$request->set_param( 'content', 'A comment ' . wp_generate_password( 8, false ) );
 		return rest_get_server()->dispatch( $request )->get_status();
 	}
@@ -183,7 +187,13 @@ class Newspack_Test_Woo_Member_Commenting extends WP_UnitTestCase {
 	 * @preserveGlobalState disabled
 	 */
 	public function test_rest_comment_creation_requires_the_plan() {
-		$this->assertSame( 403, $this->rest_create_comment_as( $this->create_reader( false ) ) );
+		$without_plan = $this->create_reader( false );
+
+		$this->assertSame( 403, $this->rest_create_comment_as( $without_plan ) );
+		$this->assertSame( 403, $this->rest_create_comment_as( $without_plan, 'comment' ) );
+		// Types WordPress stores as a plain comment.
+		$this->assertSame( 403, $this->rest_create_comment_as( $without_plan, '0' ) );
+		$this->assertSame( 403, $this->rest_create_comment_as( $without_plan, 0 ) );
 		$this->assertSame( 201, $this->rest_create_comment_as( $this->create_reader( true ) ) );
 	}
 
@@ -207,6 +217,7 @@ class Newspack_Test_Woo_Member_Commenting extends WP_UnitTestCase {
 		);
 		$page_id = self::factory()->post->create( [ 'post_type' => 'page' ] );
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'test_page_editor' ] ) );
+		$this->assertTrue( Woo_Member_Commenting::require_membership_to_comment_for_user(), 'The role is subject to the requirement.' );
 
 		$request = new WP_REST_Request( 'POST', '/wp/v2/comments' );
 		$request->set_param( 'post', $page_id );

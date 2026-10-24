@@ -162,12 +162,15 @@ class Woo_Member_Commenting {
 	 * Whether a comment type is a reader comment, the only kind this restricts.
 	 * Submitted pingbacks, trackbacks and product reviews are let through.
 	 *
+	 * Any empty value counts, "0" included, because that is how wp_insert_comment()
+	 * decides to store a comment as a plain one.
+	 *
 	 * @param string $comment_type Comment type; empty for a plain comment.
 	 *
 	 * @return bool
 	 */
 	private static function is_reader_comment_type( string $comment_type ): bool {
-		return in_array( $comment_type, [ '', 'comment' ], true );
+		return empty( $comment_type ) || 'comment' === $comment_type;
 	}
 
 	/**
