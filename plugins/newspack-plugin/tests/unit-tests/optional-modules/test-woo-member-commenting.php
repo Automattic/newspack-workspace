@@ -142,6 +142,7 @@ class Newspack_Test_Woo_Member_Commenting extends WP_UnitTestCase {
 	 * @preserveGlobalState disabled
 	 */
 	public function test_requirement_applies_whoever_was_current_at_init() {
+		// set_up() registered these as a logged-out user; drop them so only this on_init() can refuse.
 		remove_filter( 'pre_comment_approved', [ Woo_Member_Commenting::class, 'refuse_comment_submission' ] );
 		remove_filter( 'rest_preprocess_comment', [ Woo_Member_Commenting::class, 'refuse_rest_comment' ] );
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
@@ -184,6 +185,35 @@ class Newspack_Test_Woo_Member_Commenting extends WP_UnitTestCase {
 	public function test_rest_comment_creation_requires_the_plan() {
 		$this->assertSame( 403, $this->rest_create_comment_as( $this->create_reader( false ) ) );
 		$this->assertSame( 201, $this->rest_create_comment_as( $this->create_reader( true ) ) );
+	}
+
+	/**
+	 * A note is left to core's rule that its author can edit the post, which a
+	 * role can meet without edit_posts.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_notes_are_not_refused() {
+		add_role( // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.custom_role_add_role
+			'test_page_editor',
+			'Test page editor',
+			[
+				'read'                 => true,
+				'edit_pages'           => true,
+				'edit_others_pages'    => true,
+				'edit_published_pages' => true,
+			]
+		);
+		$page_id = self::factory()->post->create( [ 'post_type' => 'page' ] );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'test_page_editor' ] ) );
+
+		$request = new WP_REST_Request( 'POST', '/wp/v2/comments' );
+		$request->set_param( 'post', $page_id );
+		$request->set_param( 'type', 'note' );
+		$request->set_param( 'content', 'A note ' . wp_generate_password( 8, false ) );
+
+		$this->assertSame( 201, rest_get_server()->dispatch( $request )->get_status() );
 	}
 
 	/**
