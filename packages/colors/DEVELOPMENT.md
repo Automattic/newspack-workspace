@@ -231,10 +231,12 @@ The primary color scale is used throughout Newspack UI:
 
 Grayscale palette for text, borders, and backgrounds:
 
-- `neutral-000` through `neutral-1000` (full scale)
+- `neutral-000` through `neutral-1000` (full scale), plus two text steps:
+  - `neutral-750` (`#555`): muted text
+  - `neutral-550` (`#767676`): subtle text; meets 4.5:1 on white only, so keep it off tinted or grey fills
 - `000`: Pure white (`#fff`)
 - `1000`: Pure black (`#000`)
-- **Most commonly used:** `neutral-000` (white), `neutral-900` (dark text), `neutral-600` (light text), `neutral-300` (borders)
+- **Most commonly used:** `neutral-000` (white), `neutral-900` (dark text), `neutral-750` (muted text), `neutral-300` (borders)
 - **RGB variants:** All neutral colors have `--rgb` variants (e.g., `neutral-900--rgb`)
 
 ### Semantic Colors (Product Use ✅)
@@ -245,12 +247,12 @@ Grayscale palette for text, borders, and backgrounds:
 - **RGB variants:** All success colors have `--rgb` variants (e.g., `success-500--rgb`)
 
 #### Error Colors
-- `error-000`, `error-050`, `error-500`, `error-600`
+- `error-000`, `error-050`, `error-500`, `error-600`, `error-700`, `error-800`
 - Usage: Error messages, destructive actions
 - **RGB variants:** All error colors have `--rgb` variants (e.g., `error-500--rgb`)
 
 #### Warning Colors
-- `warning-000`, `warning-050`, `warning-300`, `warning-400`
+- `warning-000`, `warning-050`, `warning-300`, `warning-400`, `warning-500`, `warning-600`
 - Usage: Warning messages, caution states
 - **RGB variants:** All warning colors have `--rgb` variants (e.g., `warning-300--rgb`)
 
