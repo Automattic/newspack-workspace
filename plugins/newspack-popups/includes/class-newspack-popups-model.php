@@ -1189,8 +1189,6 @@ final class Newspack_Popups_Model {
 			<div
 				<?php echo self::get_data_status_preview_attrs( $popup ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 				class="<?php echo esc_attr( implode( ' ', $classes ) ); ?>"
-				role="button"
-				tabindex="0"
 				style="<?php echo esc_attr( self::container_style( $popup ) ); ?>"
 				id="<?php echo esc_attr( $element_id ); ?>"
 				data-segments="<?php echo esc_attr( $assigned_segments ); ?>"
@@ -1355,8 +1353,6 @@ final class Newspack_Popups_Model {
 		<div
 			<?php echo self::get_data_status_preview_attrs( $popup ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 			class="<?php echo esc_attr( implode( ' ', $classes ) ); ?>"
-			role="button"
-			tabindex="0"
 			id="<?php echo esc_attr( $element_id ); ?>"
 			data-segments="<?php echo esc_attr( $assigned_segments ); ?>"
 			data-frequency="<?php echo esc_attr( $frequency_config ); ?>"
@@ -1394,7 +1390,7 @@ final class Newspack_Popups_Model {
 			</div>
 			<?php if ( ! $no_overlay_background ) : ?>
 				<?php if ( Newspack_Popups_Settings::enable_dismiss_overlays_on_background_tap() ) : ?>
-					<button style="opacity: <?php echo floatval( $overlay_opacity ); ?>;background-color:<?php echo esc_attr( $overlay_color ); ?>;" class="newspack-lightbox-overlay"></button>
+					<button style="opacity: <?php echo floatval( $overlay_opacity ); ?>;background-color:<?php echo esc_attr( $overlay_color ); ?>;" class="newspack-lightbox-overlay" tabindex="-1" aria-hidden="true"></button>
 				<?php else : ?>
 					<div style="opacity: <?php echo floatval( $overlay_opacity ); ?>;background-color:<?php echo esc_attr( $overlay_color ); ?>;" class="newspack-lightbox-overlay"></div>
 				<?php endif; ?>
