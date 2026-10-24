@@ -137,7 +137,7 @@ class My_Integration extends Integration {
 | --- | --- |
 | `register_settings_fields()` | Return static field declarations (key, type, default at minimum). Called from the constructor. No API calls, no conditional logic based on external state. |
 | `can_sync( $return_errors = false )` | Validate the integration's configuration. Return `bool` or `WP_Error` depending on `$return_errors`. The hourly health check reports its errors, and the backfill CLI refuses a push (or `both`) run scoped to an integration that fails it. `Sync::has_one_syncable_integration()` passes while at least one push-enabled integration passes it; it decides, among other things, whether the reader-activity sync handlers register at all. The framework does not call it before each push or pull: `is_set_up()` decides which integrations those reach, though an implementation may call it itself, as `esp` does. |
-| `push_contact_data( $contact, $context, $existing_contact )` | Send contact data to the external system. Return `true` on success or `WP_Error` on failure. Some failures are retried with backoff (see [Retries](#retries)). The framework reaches it only through the final `push_contact()` wrapper, which records the outcome and passes a fourth `$options` argument (see Push below). |
+| `push_contact_data( $contact, $context, $existing_contact )` | Send contact data to the external system. Return `true` on success or `WP_Error` on failure. A success that left fields out can return an array listing their names under `unsynced_fields` (see [Push Log](#push-log)). Some failures are retried with backoff (see [Retries](#retries)). The framework reaches it only through the final `push_contact()` wrapper, which records the outcome and passes a fourth `$options` argument (see Push below). |
 
 ### Optional overrides
 
@@ -164,7 +164,7 @@ class My_Integration extends Integration {
 | `get_my_account_menu_item()` | Return `[ 'slug' => ..., 'label' => ..., 'position' => ... ]` to add a tab to the My Account page: WooCommerce's, or Newspack's own when WooCommerce is inactive. Default returns `null` (no tab). See [My Account Endpoints](#my-account-endpoints). |
 | `render_my_account_page( $value )` | Echo markup for the integration's My Account page. Under WooCommerce it is called inside the account template with the endpoint value; on Newspack's own page `$value` is `''`. |
 | `supports_hard_delete()` | Return `true` alongside a `delete_contact()` implementation. Only then does the account-deletion setting offer `delete` mode (and default to it). Defaults to `false`. |
-| `delete_contact( $email )` | Remove the contact identified by `$email` from the external system. Default returns a `not_implemented` WP_Error. Required only if `supports_hard_delete()` returns `true`. |
+| `delete_contact( $email )` | Remove the contact identified by `$email` from the external system. Default returns a `not_implemented` WP_Error. Required only if `supports_hard_delete()` returns `true`. When the system has no contact for `$email`, return a `WP_Error` whose only code is `Integration::CONTACT_NOT_FOUND_ERROR_CODE` (`ras_contact_not_found`): the reader is already gone there, so the deletion path ends as a benign `success` with no retry. The built-in ESP integration maps its providers' not-found errors onto this code. |
 | `flag_deletion_cleanup( $email )` | Stop outreach to a deleted reader after the flag-mode deletion push, e.g. by removing the contact from every list. Default is a no-op, and an integration that keeps it gets no flag-mode deletion at all (see [Built-in account-deletion fields](#built-in-account-deletion-fields)). |
 | `contact_exists( $email )` | Whether pushing this contact would update a live record the external system holds. Consulted by `Contact_Sync` only on an update-only push (the backfill CLI's default; `--create-missing` turns it off), before `push_contact_data()`: return `false` to have the reader skipped (tallied as skipped), a `WP_Error` if the lookup failed (handled as a failed push), `true` to let the push proceed. Answer by what the push would do: `true` only when it would update a live record, `false` when it would create one or restore an archived or deleted one. Anything other than a boolean or a `WP_Error` is handled as a failed lookup. The default returns a `WP_Error`, and `supports_contact_lookup()` is false until this method is overridden: on an update-only push the framework withholds the push from an integration that cannot ask (reported as an error, never retried) and the CLI pre-flight refuses the run, rather than let an upsert create the contact. The built-in Mailchimp integration (`esp`) reads the contact once and requires current (not archived) membership of the configured audience. |
 | `supports_contact_lookup()` | Whether `contact_exists()` is implemented. True as soon as a subclass overrides that method, so implementing it is the opt-in; override this only to opt out explicitly. Read by the sync on an update-only push and by the CLI pre-flight. |
@@ -255,9 +255,9 @@ Deletion propagates through the push pipeline, so push-capable integrations also
 
 The dispatcher lives at `Contact_Sync::handle_account_deletion()` and is called from the `reader_delete_sync` data event handler, which is registered while at least one integration can sync (`Contact_Sync::has_one_syncable_integration()`). It walks the enabled, set-up integrations with outbound sync on and `sync_account_deletion` set.
 
-Flag mode is two steps: the metadata push, then the integration's `flag_deletion_cleanup( $email )`, which ends further outreach. The flag push passes `skip_lists` to ask for an upsert that adds the reader to no list. That only holds for an integration whose `push_contact_data()` reads `$options`, so an integration that implements the cleanup, and whose push can add a contact to a list, must honor `skip_lists`. Otherwise the deletion adds the reader back to a list until the cleanup runs, and leaves them there when the cleanup fails. The dispatcher **skips flag mode entirely for an integration that keeps the base no-op cleanup**, because the push alone would leave the deleted reader reachable at the provider. An integration with neither `supports_hard_delete()` nor a cleanup override therefore propagates no deletions, whatever its settings say. The built-in Mailchimp integration overrides the cleanup to clear the contact from every list (`Newspack_Newsletters_Contacts::update_lists()`). The Newspack Newsletters Mailchimp provider rejects an upsert without an audience ("No lists found."), so on Mailchimp the flag push fails and the deletion fields never arrive; only the cleanup takes effect.
+Flag mode is two steps: the metadata push, then the integration's `flag_deletion_cleanup( $email )`, which ends further outreach. The flag push passes `skip_lists` to ask for an upsert that adds the reader to no list. That only holds for an integration whose `push_contact_data()` reads `$options`, so an integration that implements the cleanup, and whose push can add a contact to a list, must honor `skip_lists`. Otherwise the deletion adds the reader back to a list until the cleanup runs, and leaves them there when the cleanup fails. The dispatcher **skips flag mode entirely for an integration that keeps the base no-op cleanup**, because the push alone would leave the deleted reader reachable at the provider. An integration with neither `supports_hard_delete()` nor a cleanup override therefore propagates no deletions, whatever its settings say. The built-in Mailchimp integration overrides the cleanup to remove the contact from every list offered for sign-up (`Newspack_Newsletters_Contacts::update_lists()`), then to unsubscribe it from the audience the integration syncs to, since the subscription lives on the audience member rather than on its groups or tags. Without that step, a reader who joined through a group or tag, or whose audience is no longer offered, would keep receiving campaigns sent to the whole audience. Audiences neither synced nor offered for sign-up are left alone, as the flag push leaves them. Mailchimp keeps every contact in an audience, so that integration honors `skip_lists` by updating only the reader's existing member of the configured audience, leaving the member's status as it is. When the audience has no live member for the reader, it pushes nothing and answers `ras_contact_not_found`. The deletion path treats that code as benign, from any integration, when it is the error's only code: the push log row ends as a `success` with no retry, and the cleanup still runs.
 
-The cleanup runs whether or not the push succeeded, since the reader must stop receiving outreach either way. Its failures fold into `handle_account_deletion()`'s aggregated error, and mark the push log row `flag_cleanup_failed` when the push landed or came back benign (see [Push Log](#push-log)), but are **not** scheduled for retry on their own; that gap mirrors the legacy deletion path this replaced and is tracked separately as hardening work. When a failed flag push is retried and the retry succeeds, the cleanup runs again. A retry that comes back benign does not run it.
+The cleanup runs whether or not the push succeeded, since the reader must stop receiving outreach either way. Its failures fold into `handle_account_deletion()`'s aggregated error, and mark the push log row `flag_cleanup_failed` when the push landed or came back benign (see [Push Log](#push-log)), but are **not** scheduled for retry on their own; that gap mirrors the legacy deletion path this replaced and is tracked separately as hardening work. When a failed flag push is retried, the retry that ends the chain (one that lands, comes back benign, hits a permanent error, or is the last attempt) runs the cleanup again, whatever its own push answered.
 
 ### Conditional fields
 
@@ -354,7 +354,7 @@ The pull pipeline (`Contact_Pull` + `Contact_Cron`) runs on every logged-in page
 
 The batch pull (`Contact_Pull::pull_all()`) schedules per-integration retries with a `30s → 2min → 8min → 30min → 2h` backoff, up to 5 retries after the first attempt. The synchronous loopback pull schedules none itself: its failures re-queue the user for the batch, as above. Retries run under the integration's ActionScheduler group (`newspack-integration-{id}`) using the hook `newspack_contact_pull_retry`.
 
-Every failure is retried except the permanent ones in `Contact_Pull::PERMANENT_PULL_ERRORS`, which no retry can fix: a rejected reader-data write (`reader_data_write_failed`, refused by validation), no selected incoming fields (`no_selected_incoming_fields`), and a payload that is not an array (`invalid_pull_payload`). Permanent failures surface as errors without scheduling a retry, and one surfacing mid-chain fails its action immediately instead of burning the remaining attempts. `ras_contact_not_found` is not on that list, so the batch pull retries it like any other failure; only the backfill CLI tallies it as skipped.
+Every failure is retried except the permanent ones in `Contact_Pull::PERMANENT_PULL_ERRORS`, which no retry can fix: a rejected reader-data write (`reader_data_write_failed`, refused by validation), no selected incoming fields (`no_selected_incoming_fields`), and a payload that is not an array (`invalid_pull_payload`). Permanent failures surface as errors without scheduling a retry, and one surfacing mid-chain fails its action immediately instead of burning the remaining attempts. A provider with no contact for the reader (`ras_contact_not_found`) is not a failure at all: the batch pull skips the reader with no retry and no error, a retry chain that meets it ends, and the loopback pull answers success, so it queues no batch pull. A contact created later is found by the pull the reader's next visit queues.
 
 ### Incoming fields
 
@@ -554,8 +554,9 @@ One reader, one integration, one triggering push. A fan-out to three integration
 - **Retries update the row.** The row ID rides in the retry's ActionScheduler args as `log_id`. `attempts` counts pushes made so far; `max_attempts` is the ceiling when the row was written (`MAX_RETRIES + 1`, or 1 when nothing will retry: a CLI push without `--create-missing` or scoped with `--skip-lists`/`--fields`, or a contact with no account to rebuild from). It is a ceiling, not a promise: a permanent or benign result ends a row on its first attempt. Read `status` to know whether another attempt is coming.
 - **`status` describes the sync, not an action**: `success`, `retrying` or `failed`. An error row is written as `failed` and becomes `retrying` only when a retry is actually scheduled: if Action Scheduler stores nothing, the row stays `failed`. A retry that gives up before pushing ends the row as `failed` with `error_code = retry_aborted`. A benign result is a `success` that keeps `error_class = benign`.
 - **`payload`** is the prepared contact as handed to the integration: as close to the wire as the framework sees. An integration may still reshape it internally. Hard deletes have none. On an email change it also carries `previous_email`, the address the contact was matched on: that is log context, not data sent. Because it is part of the payload, the first routine push after an email change adds a row of its own rather than collapsing, which leaves the email-change row intact as the record of the change.
-- **Identical pushes collapse.** A clean successful first-attempt upsert whose payload matches the reader's latest row for that integration bumps `repeat_count` and `updated_at` (and rewrites `payload`) on that row instead of adding one, so the recurring sync does not grow the table. The latest row must itself be a `success` upsert with no `error_class`. A row that succeeded on a retry keeps the error class of its earlier attempts, so the next identical push starts a new row, and later ones collapse into that. The comparison ignores key order and volatile fields (`Last Active` by default; filter `newspack_integrations_push_log_volatile_fields`, whose names are field names as sent to the integration, without its prefix). Deletion rows never collapse.
-- **Flag-mode deletion is two steps.** When the flag push lands but `flag_deletion_cleanup()` fails, the row ends as `failed` with `error_code = flag_cleanup_failed`: the deleted reader is still on the lists. The same holds when the first push came back benign (the contact was already deleted at the integration): no retry follows a benign result, so the failed cleanup is the only record that a list still holds the reader. When the first push failed transiently, a failed cleanup is not written to the row, because the retry runs the cleanup again. A retry that then comes back benign skips the cleanup and ends the row as a benign `success`, so nothing records that a list may still hold the reader.
+- **Identical pushes collapse.** A clean successful first-attempt upsert whose payload matches the reader's latest row for that integration bumps `repeat_count` and `updated_at` (and rewrites `payload`) on that row instead of adding one, so the recurring sync does not grow the table. The latest row must itself be a `success` upsert with no `error_class`. A first-attempt upsert saved without some fields collapses the same way into a latest row that is the same `fields_not_synced` failure with the same message, so an audience that stays at its field limit keeps one row per reader instead of adding one per push. A row that succeeded on a retry keeps the error class of its earlier attempts, so the next identical push starts a new row, and later ones collapse into that. The comparison ignores key order and volatile fields (`Last Active` by default; filter `newspack_integrations_push_log_volatile_fields`, whose names are field names as sent to the integration, without its prefix). Deletion rows never collapse.
+- **Flag-mode deletion is two steps.** When the flag push lands but `flag_deletion_cleanup()` fails, the row ends as `failed` with `error_code = flag_cleanup_failed`: the deleted reader is still on the lists. The same holds when the first push came back benign (the contact was already deleted at the integration): no retry follows a benign result, so the failed cleanup is the only record that a list still holds the reader. When the first push failed transiently, a failed cleanup is not written to the row, because the retry that ends the chain runs the cleanup again. A failure there is recorded the same way when that retry's push landed or came back benign; when the push failed too, the row keeps the push's error, since a `flag_cleanup_failed` row reads as a push that was delivered.
+- **A push saved without some fields needs attention.** When `push_contact_data()` returns an array with `unsynced_fields`, the row ends as `failed` with `error_class = permanent_config` and `error_code = fields_not_synced`, and `error_message` names the fields. The sync still counts as a success and nothing is retried, because a retry would meet the same limit. The built-in `esp` integration reports this when Newspack Newsletters cannot create a Mailchimp merge field, for example in an audience at Mailchimp's merge field cap.
 - **Error fields are never cleared**, so a row that succeeds on a later attempt still says what the earlier ones hit.
 
 ### Reading the log
@@ -565,7 +566,7 @@ The Logs page of an integration (Audience → Integrations → an integration's 
 - **`Push_Log::query( $args )`** lists one integration's rows by last update, without payloads or error messages: a provider's message can run to thousands of characters, and a list does not show it. `search` takes a full email, which also matches rows of the account that address belongs to and of the accounts its own rows name (a reader who changed address keeps one history, and the address they left still finds the email-change push, which is logged under the new one), or the start of an address. There is no match in the middle of an address: it could not use the `email` index. `needs_attention` keeps `retrying` and `failed` rows with no later `success` for the same reader and integration. An upsert normally sends the full contact, so any later success supersedes a failed or retrying one (a retry that still runs writes its row again, so a new failure puts it back, while a row whose retry is gone is never rewritten); a failed deletion (`flag` or `delete`) is only made up for by a later successful deletion, so a reader who signs up again does not hide an erasure that never reached the provider. "Same reader" means the address or the account, asked as two lookups per open failure rather than one `OR` over both, because a dependent subquery cannot serve an `OR` from either index. It is worked out when reading; nothing is stored.
 - **Every read returns a `WP_Error`** when the table cannot be read (`query()`, `get()`, `get_predecessor()`). Reads run with the database layer's error output suppressed, the account lookup behind a full-email search included, so without it a broken or missing table would read as a log with nothing in it, or as an entry that is not there. The routes answer 500 and the screen reports a failed load instead. The message carries neither the statement nor the database's own text, either of which can quote the reader's address.
 - **`Push_Log::get( $id, $integration_id )`** returns one row with its payload and error message. A row of another integration reads as missing (`null`).
-- **`Push_Log::get_predecessor( $row )`** returns the reader's previous `success` row for that integration, and **`Push_Log::compare_payloads( $row, $predecessor, $prefix )`** compares the two field by field. It compares with the last *successful* push because a failed one never reached the provider; on a failed row the comparison reads as what did not arrive, except a `flag_cleanup_failed` row whose push itself reached the provider (one whose push came back benign still reads as not delivered). The comparison is against what Newspack last sent, so edits made at the provider are invisible to it. Volatile fields are flagged, from the same `newspack_integrations_push_log_volatile_fields` filter the collapse check uses.
+- **`Push_Log::get_predecessor( $row )`** returns the reader's previous `success` row for that integration, and **`Push_Log::compare_payloads( $row, $predecessor, $prefix )`** compares the two field by field. It compares with the last *successful* push because a failed one never reached the provider, and it skips a benign one, which changed nothing there. A `fields_not_synced` row is skipped too, although its push reached the provider: its payload lists fields the provider did not save. On a failed row the comparison reads as what did not arrive, except a `flag_cleanup_failed` or `fields_not_synced` row, whose push itself reached the provider. A row whose push came back benign reads as not delivered whatever its status, for the same reason. The comparison is against what Newspack last sent, so edits made at the provider are invisible to it. Volatile fields are flagged, from the same `newspack_integrations_push_log_volatile_fields` filter the collapse check uses.
 - **An operation other than an upsert is compared on its own fields.** A `flag` row carries the address and a few deletion fields by design, so only the fields that row sent take part: the rest were never cleared at the provider, and listing them as emptied would describe an erasure that did not happen. An upsert normally sends the whole contact, so a field it stopped sending stays on the list. A CLI push scoped with `--fields` is the exception: it sends only the named fields, so the rest are not really dropped. It is logged as an ordinary upsert, which carries further: it becomes the predecessor of the reader's next full push, whose comparison then shows every field the scoped push left out as changed from nothing, and as a later success it takes a failed full update off "needs attention" without having sent what failed. That is why an empty "needs attention" list reads as what the log holds, not as an all-clear. Telling scoped pushes apart needs the write side to record the scoping.
 - **The two questions use different clocks.** The predecessor is the previous row by `id`, while "needs attention" asks which push finished later by `updated_at`. When a retry chain overlaps a newer push for the same reader, a row can be compared with a push that finished after it.
 
@@ -577,11 +578,11 @@ The hourly `newspack_integrations_push_log_cleanup` cron deletes `success` rows 
 
 Rows hold reader emails and pushed field values. A personal-data eraser (`newspack-integrations-push-log`) deletes a reader's rows by email and by account, so rows under a previous address go too. The account comes from the WP user the address resolves to and from the rows stored under that address, so a request that arrives after the account was deleted still reaches them. Guest and deletion rows name no account (`user_id` 0) and are matched by email alone.
 
-Writing the log never breaks a sync: a database failure returns 0 to the caller and is reported once per request as `newspack_integrations_push_log_write_failed`. Statements that carry reader data run with `$wpdb` error output suppressed, because a failed statement would otherwise reach the PHP error log whole, email and payload included; that report is the signal instead. Unlike the read errors above, the report includes the database's own error text (`db_error`), which for some failures can quote a value from the failed statement.
+Writing the log never breaks a sync: a database failure returns 0 to the caller and is reported once per request as `newspack_integrations_push_log_write_failed`. Statements that carry reader data run with `$wpdb` error output suppressed, because a failed statement would otherwise reach the PHP error log whole, email and payload included; that report is the signal instead. It includes the database's own error text (`db_error`) with everything from its first quote to its last replaced by `'…'`. The database quotes what a statement failed on, which can be the reader's address; the words around the quotes still name the kind of failure, though not the column or key it hit. The report also names no user: during a sync, the user whose request hit the table is often the reader.
 
 ### Changing the schema
 
-Edit the `CREATE TABLE` in `Push_Log::maybe_create_table()` and bump `TABLE_VERSION`. The stored version no longer matches, so `dbDelta` runs on the next request and applies the change. The version is recorded only once the table exists, so a failed creation is retried rather than leaving every write to fail. The retry is hourly, not per request, for a host that keeps refusing the table. That check is for the table, not the change: when `dbDelta` fails to alter a table that already exists, the new version is still recorded and the change is not retried, so confirm the change landed after a version bump. `dbDelta` adds columns and indexes and alters column definitions, but never drops or renames anything: a removed or renamed column needs its own `ALTER TABLE` alongside the version bump. A table that disappears after its version was recorded (a restore, a manual drop) is created again: the first failed write finds it gone and forgets the version.
+Edit the `CREATE TABLE` in `Push_Log::maybe_create_table()` and bump `TABLE_VERSION`. The stored version no longer matches, so `dbDelta` runs on the next request and applies the change. The version is recorded only once the table exists and, when `dbDelta` changed something, a dry run of the same definition finds nothing left to apply, so a failed creation or `ALTER` is retried rather than leaving every write to fail. The retry is hourly, not per request, for a host that keeps refusing the change. Write each column the way MariaDB reports it back: integer types with their display width (`bigint(20)`, not `bigint`) and no aliases (`int(10)`, not `integer`). A definition `dbDelta` misreads looks like a pending change on every run, so the version would never be recorded and the change would run every hour. `test_the_table_definition_reads_back_as_applied` checks the read-back on the database it runs on, and the display widths on the definition itself, since `dbDelta` ignores a missing width on MySQL 8.0, which CI runs, but not on MariaDB. `dbDelta` adds columns and indexes and alters column definitions, but never drops or renames anything: a removed or renamed column needs its own `ALTER TABLE` alongside the version bump. A table that disappears after its version was recorded (a restore, a manual drop) is created again: the first failed write finds it gone and forgets the version.
 
 ---
 
@@ -618,7 +619,7 @@ do_action(
 do_action( 'newspack_integration_health_checks_completed', [ 'esp' ] );
 ```
 
-`Newspack\Alert_Manager` consumes all three and keeps one health record per integration in the `newspack_integration_health_state` option. Slack is paged once, on the `Alert_Manager::HEALTH_BROKEN_THRESHOLD`-th consecutive failure, and every other failure reaches the log at warning severity; a gap longer than `Alert_Manager::HEALTH_STREAK_MAX_GAP` between failures restarts a count that has not paged yet. That transition, the pass that ends it, and a run that stops checking a broken integration (disabled, or no longer set up) fire:
+`Newspack\Alert_Manager` consumes all three and keeps one health record per integration in the `newspack_integration_health_state` option. Slack is paged once, on the `Alert_Manager::HEALTH_BROKEN_THRESHOLD`-th consecutive failure, unless an issue tracks the outage (see below), and every other failure reaches the log at warning severity; a gap longer than `Alert_Manager::HEALTH_STREAK_MAX_GAP` between failures restarts a count that has not turned broken yet. That transition, the pass that ends it, and a run that stops checking a broken integration (disabled, or no longer set up) fire:
 
 ```php
 do_action(
@@ -631,11 +632,27 @@ do_action(
         'error'            => '403: API Access has been disabled for this account.',
         'first_failed_at'  => 1790000000,
         'failures'         => 3,
+        'issue_url'        => '', // the issue tracking this outage, if any (see below)
     ]
 );
 ```
 
 One event per outage in each direction, so a consumer can open and close a ticket without deduplicating hourly repeats itself. Staging hosts (`*.newspackstaging.com`) fire it too; only their alerts are capped at Watch, so a consumer that should skip staging has to check the host itself.
+
+Just before the `broken` event, the `newspack_integration_health_issue_url` filter asks whether an issue tracks the outage. A callback that returns an absolute `https` URL with a host takes ownership: the transition reaches the log with the URL instead of paging Slack, and the URL is stored with the record and sent with the outage's `recovered` or `disconnected` event. Any other answer, `''` included, or a callback that throws, leaves the page in place. Newspack Manager uses it to open a Linear issue for a publisher-side break.
+
+Unlike the event, the filter can run more than once for one outage, and an answer can be dropped after a callback acted on it: the outage then pages, and `recovered` carries `''`. Find or reuse an issue by site and `integration_id`, with `first_failed_at` to tell outages apart, not by the `issue_url` a later event carries.
+
+```php
+add_filter(
+    'newspack_integration_health_issue_url',
+    function ( $issue_url, $change ) {
+        return 'publisher' === $change['error_class'] ? open_tracking_issue( $change ) : $issue_url;
+    },
+    10,
+    2
+);
+```
 
 While an integration is broken, its contact-sync failures don't page either: retry exhaustion reaches the log at warning severity, and its failures stay out of the failure log the pattern alerts read. A record whose last failure is older than `Alert_Manager::HEALTH_STREAK_MAX_GAP` no longer counts, so a check that stops running cannot keep an integration muted.
 
@@ -652,7 +669,7 @@ public function get_my_account_menu_item() {
     return [
         'slug'     => 'my-rewards',
         'label'    => __( 'My Rewards', 'my-plugin' ),
-        'position' => 2, // Optional zero-based menu index; appended if omitted.
+        'position' => 2, // Optional zero-based index into WooCommerce's menu; appended if omitted.
     ];
 }
 
@@ -662,7 +679,7 @@ public function render_my_account_page( $value ) {
 }
 ```
 
-With WooCommerce, the registry handles rewrite endpoint registration, query var registration, menu item insertion, and a one-off `flush_rewrite_rules()` whenever the set of declared slugs changes. `position` is a zero-based index into the menu. An item without one is appended before `customer-logout`; a position at or past the end of the menu lands after it. Without WooCommerce, Newspack's own My Account page registers and flushes the endpoints itself, appends the tabs (ignoring `position`), and calls `render_my_account_page( '' )`.
+With WooCommerce, the registry handles rewrite endpoint registration, query var registration, menu item insertion, and a one-off `flush_rewrite_rules()` whenever the set of declared slugs changes. `position` is a zero-based index into WooCommerce's menu as it stands before Newspack's own My Account filters drop and reorder tabs. An item without one is appended before `customer-logout`; a position at or past the end lands after it on WooCommerce's own account page. Newspack's default account UI moves Log out to its footer, so there such an item is last. Without WooCommerce, Newspack's own My Account page registers and flushes the endpoints itself, appends the tabs (ignoring `position`), and calls `render_my_account_page( '' )`.
 
 Slug collisions between integrations resolve to first-wins in the order integrations were enabled; one enabled later silently skips. Pick a slug that no core WooCommerce endpoint or other plugin's My Account tab uses (`newsletters` belongs to Newspack Newsletters): the menu shows a single item, but the integration's page still renders under that endpoint, so two tab bodies show.
 
@@ -685,3 +702,267 @@ A new reader's first contact sync reaches Sync Activity as `RAS Reader registrat
 The built-in JS client (`newspackReaderActivation.register()`) always sends the value returned by `get_registration_key()`. Custom key schemes that diverge from this default need their own client-side code to compute and submit the key.
 
 The built-in `form-capture` integration ([class-form-capture.php](class-form-capture.php) and `src/reader-activation-form-capture/`) is the reference implementation of this section end to end: enabled-gated key emission, a capture script driving `register()`, magic-link suppression for repeat captures, existing-reader sync scheduling, and new-reader sync naming.
+
+### Example: registering readers from a third-party widget
+
+The example below registers a reader when a third-party widget (a donation form, a signup embed) reports a completed action in the browser.
+
+Here's how a Javascript integration that captures user action and registers them look like. The script listens for the widget's completion event and passes the reader's details to `register()`. The second argument is the integration ID, which selects the key the framework emitted for it:
+
+```js
+/* global MyService */
+
+function onComplete( detail ) {
+    const { contact } = detail;
+    if ( ! contact?.email || ! window.newspackReaderActivation?.register ) {
+        return;
+    }
+
+    window.newspackReaderActivation
+        .register( contact.email, 'my_integration', {
+            first_name: contact.firstName || '',
+            last_name: contact.lastName || '',
+            metadata: {
+                my_integration_contact_id: contact.id || '',
+            },
+        } )
+        .catch( error => {
+            // A returning reader already has an account; the endpoint still
+            // records the registration, so this is not a failure.
+            if ( 'reader_already_exists' === error?.code ) {
+                return;
+            }
+            // The widget's own action already succeeded, so don't surface this
+            // to the reader. Log it for error monitoring and QA.
+            // eslint-disable-next-line no-console
+            console.warn( '[My Integration] Reader registration failed.', error );
+        } );
+}
+
+// The widget's library may still be loading, or may be blocked by an ad
+// blocker. Check with `typeof` and retry once on window load.
+function listen() {
+    if ( typeof MyService === 'undefined' ) {
+        return false;
+    }
+    MyService.on( 'complete', onComplete );
+    return true;
+}
+
+if ( ! listen() ) {
+    window.addEventListener( 'load', listen );
+}
+```
+
+On the server side, it's important to implement `validate_registration_request` and `handle_logged_in_user_registration`. In these methods, you need to make sure that the information that comes in the request matches what actually exists in your platform database. The javascript is the triger, but the actual data should not be trusted as is to avoid malicious actors from spamming the registration endpoint.
+
+```php
+namespace Newspack\My_Plugin;
+
+use Newspack\Reader_Activation\Integration;
+use Newspack\Reader_Activation\Integrations;
+
+class My_Integration extends Integration {
+    // Constructor, settings fields, etc. as in "Minimum implementation".
+
+    /**
+     * One switch: when the publisher disables the integration, the page stops
+     * emitting its key and the endpoint stops accepting it.
+     */
+    public function supports_frontend_registration(): bool {
+        return Integrations::is_enabled( $this->get_id() );
+    }
+
+    /**
+     * Extend the default key check rather than replace it, so a client without
+     * the page's key never reaches an API lookup and rotate_registration_key()
+     * still applies.
+     */
+    public function validate_registration_request( string $key, $request ): bool {
+        if ( ! $this->supports_frontend_registration() ) {
+            return false;
+        }
+        if ( ! parent::validate_registration_request( $key, $request ) ) {
+            return false;
+        }
+
+        $metadata = $request->get_param( 'metadata' );
+        $email    = $request->get_param( 'npe' );
+        if ( ! is_array( $metadata ) || empty( $metadata['my_integration_contact_id'] ) || empty( $email ) || ! is_email( $email ) ) {
+            return false;
+        }
+
+        // An ID that exists is not enough: it must belong to this email.
+        return self::contact_belongs_to( $metadata['my_integration_contact_id'], $email );
+    }
+
+    /**
+     * A logged-in reader completed the widget again. Bind against the session's
+     * account, never `npe`: on this path `npe` is caller-supplied.
+     */
+    public function handle_logged_in_user_registration( $user, $request ) {
+        if ( ! $this->supports_frontend_registration() ) {
+            return;
+        }
+
+        $metadata = $request->get_param( 'metadata' );
+        if ( ! is_array( $metadata ) || empty( $metadata['my_integration_contact_id'] ) ) {
+            return;
+        }
+
+        $contact_id = $metadata['my_integration_contact_id'];
+        if ( ! self::contact_belongs_to( $contact_id, $user->user_email ) ) {
+            return;
+        }
+
+        update_user_meta( $user->ID, 'my_integration_contact_id', $contact_id );
+    }
+
+    /**
+     * Fails closed: an API error counts as "does not belong".
+     */
+    private static function contact_belongs_to( string $contact_id, string $email ): bool {
+        $contact = My_Service_API::get_contact( $contact_id );
+        if ( is_wp_error( $contact ) || empty( $contact['email'] ) ) {
+            return false;
+        }
+        return strtolower( $contact['email'] ) === strtolower( $email );
+    }
+}
+```
+
+The client script depends on the `newspack-reader-activation` handle, so `newspackReaderActivation.register()` is available when it runs. Enqueue it only while the integration is enabled:
+
+```php
+add_action(
+    'wp_enqueue_scripts',
+    function () {
+        if ( ! Integrations::is_enabled( 'my_integration' ) ) {
+            return;
+        }
+        wp_enqueue_script(
+            'my-integration-registration',
+            plugins_url( 'dist/registration.js', MY_PLUGIN_FILE ),
+            [ 'newspack-reader-activation' ],
+            MY_PLUGIN_VERSION,
+            [
+                'strategy'  => 'defer',
+                'in_footer' => true,
+            ]
+        );
+    }
+);
+```
+
+To act on readers this integration creates, match its registration method, `integration-registration-<integration ID>`, in the `newspack_registered_reader` action. Fundraise Up uses this to mark new readers as donors:
+
+```php
+add_action(
+    'newspack_registered_reader',
+    function ( $email, $authenticate, $user_id, $existing_user, $metadata ) {
+        if ( 'integration-registration-my_integration' !== ( $metadata['registration_method'] ?? '' ) ) {
+            return;
+        }
+        $target_id = $user_id ? (int) $user_id : ( $existing_user ? (int) $existing_user->ID : 0 );
+        if ( ! $target_id ) {
+            return;
+        }
+        \Newspack\Reader_Data::update_item( $target_id, 'is_donor', true );
+    },
+    10,
+    5
+);
+```
+
+### Alternative: registering readers on a landing page
+
+Some services can send the reader to a page on the site once they finish, with an identifier in the URL. The integration can then register or log in the reader in PHP when that page loads. This path skips the frontend registration endpoint and its JS client, so the integration does not need `supports_frontend_registration()`. It also works when a script blocker stops the widget's browser events.
+
+The URL is the only input, and anyone can copy or forge it. Logging someone in from it is only safe when the server re-checks everything through the service's API and limits how long and how often a URL works. Here are a few best practices:
+
+- **Read identity from the API, never from the URL.** The URL only carries a lookup key. The email, the name and the IDs saved on the reader all come from the service's response.
+- **Expire the link.** Refuse records older than a short window, and treat a missing or unreadable timestamp as expired. A URL found later in browser history or a shared link then logs no one in.
+- **Use each identifier once.** Record each identifier as used before calling the API, so a reload, a second tab or a copied URL can't register or log in twice. The example below leaves this out: put something in place that survives across requests, such as a database row or a persistent object cache entry, and treat a failure to record it as a reason to stop. Let the identifier be used again only when the API call or the registration fails, so the reader can retry by reloading.
+- **Limit lookups per visitor.** Every new identifier in the URL costs one call to the service's API, so a script cycling through made-up values can run up the API quota. Count lookups per IP address, and stop before calling the API once a visitor passes a small limit. As with single use, the example leaves this out.
+- **Never switch sessions.** If someone else is logged in, leave the session alone and log the mismatch.
+- **Log in readers only.** `Reader_Activation::set_current_reader()` checks no credentials, but it refuses any account that isn't a reader, so a URL can't log anyone in as an editor or administrator. Check its return value and stop on an error.
+- **Keep the response out of the page cache.** Call `nocache_headers()` before setting the login cookie.
+
+```php
+namespace Newspack\My_Plugin;
+
+use Newspack\Reader_Activation;
+use Newspack\Reader_Activation\Integrations;
+
+add_action( 'template_redirect', __NAMESPACE__ . '\maybe_register_from_landing_page', 1 );
+
+function maybe_register_from_landing_page() {
+    // This runs on every page view, so bail before any lookup when the request
+    // isn't a landing-page visit.
+    if ( is_admin() || wp_doing_ajax() || wp_doing_cron() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
+        return;
+    }
+    if ( 'GET' !== ( $_SERVER['REQUEST_METHOD'] ?? '' ) || ! is_page() ) {
+        return;
+    }
+    // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Identity comes from the service's API, not from this parameter.
+    $record_id = isset( $_GET['my_service_id'] ) ? sanitize_text_field( wp_unslash( $_GET['my_service_id'] ) ) : '';
+    if ( empty( $record_id ) || ! Integrations::is_enabled( 'my_integration' ) ) {
+        return;
+    }
+
+    $record = My_Service_API::get_record( $record_id );
+    if ( is_wp_error( $record ) ) {
+        return;
+    }
+
+    // Read identity from the API.
+    $email = $record['contact']['email'] ?? '';
+    if ( ! is_email( $email ) ) {
+        return;
+    }
+
+    // Expire the link. A missing timestamp counts as expired.
+    $created = empty( $record['created_at'] ) ? false : strtotime( $record['created_at'] );
+    if ( ! $created || $created < time() - DAY_IN_SECONDS ) {
+        return;
+    }
+
+    nocache_headers();
+
+    $metadata = [
+        // Same method as the frontend endpoint uses, so one
+        // `newspack_registered_reader` handler covers both paths.
+        'registration_method'         => 'integration-registration-my_integration',
+        'current_page_url'            => home_url( remove_query_arg( 'my_service_id' ) ),
+        'my_integration_contact_id' => $record['contact']['id'] ?? '',
+    ];
+
+    // Someone is already logged in: record it only if it's the same person.
+    if ( is_user_logged_in() ) {
+        $current_user = wp_get_current_user();
+        if ( strtolower( $current_user->user_email ) === strtolower( $email ) ) {
+            // do something
+        }
+        return;
+    }
+
+    // A returning reader: log them in. set_current_reader() refuses
+    // non-reader accounts.
+    $user = get_user_by( 'email', $email );
+    if ( $user ) {
+        if ( is_wp_error( Reader_Activation::set_current_reader( $user->ID ) ) ) {
+            return;
+        }
+        // do something.
+        return;
+    }
+
+    // A new reader: register_reader() creates the account, logs them in
+    // (third argument), and passes $metadata to `newspack_registered_reader`.
+    $name    = trim( ( $record['contact']['first_name'] ?? '' ) . ' ' . ( $record['contact']['last_name'] ?? '' ) );
+    Reader_Activation::register_reader( $email, $name, true, $metadata );
+}
+```
+
+The handler runs on `template_redirect`, before any output, so it can still set the login cookie and the page renders for the logged-in reader.

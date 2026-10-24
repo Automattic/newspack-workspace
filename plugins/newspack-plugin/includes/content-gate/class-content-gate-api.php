@@ -35,6 +35,13 @@ class Content_Gate_API {
 			'type' => 'string',
 			'enum' => [ 'all', 'any' ],
 		],
+		// Premium newsletter gates only: whether readers are signed up to the gate's lists
+		// automatically, and whether those lists are hidden from them.
+		'auto_signup'         => [
+			'type' => 'string',
+			'enum' => Content_Gate::AUTO_SIGNUP_MODES,
+		],
+		'hide_lists'          => [ 'type' => 'boolean' ],
 		'metering'            => [
 			'type'       => 'object',
 			'properties' => [
@@ -248,6 +255,13 @@ class Content_Gate_API {
 		}
 		if ( isset( $gate['content_rules_match'] ) ) {
 			$sanitized['content_rules_match'] = in_array( $gate['content_rules_match'], [ 'all', 'any' ], true ) ? $gate['content_rules_match'] : 'all';
+		}
+		// An unknown auto-signup mode is dropped rather than coerced, so the stored mode stays.
+		if ( isset( $gate['auto_signup'] ) && in_array( $gate['auto_signup'], Content_Gate::AUTO_SIGNUP_MODES, true ) ) {
+			$sanitized['auto_signup'] = $gate['auto_signup'];
+		}
+		if ( isset( $gate['hide_lists'] ) ) {
+			$sanitized['hide_lists'] = (bool) $gate['hide_lists'];
 		}
 		return $sanitized;
 	}

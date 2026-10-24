@@ -9,6 +9,7 @@ namespace Newspack_Network\Hub\Stores;
 
 use Newspack_Network\Debugger;
 use Newspack_Network\Incoming_Events\Woo_Item_Changed;
+use Newspack_Network\Utils\Network;
 use WP_REST_Request;
 use WP_REST_Server;
 
@@ -145,7 +146,7 @@ abstract class Woo_Store {
 		$endpoint    = sprintf( '%s/wp-json/wc/v3/%s/%d', $woo_item->get_node()->get_url(), static::get_api_endpoint_prefix(), $woo_item_id );
 		$endpoint_id = 'get-woo-' . static::get_api_endpoint_prefix();
 
-		$response = wp_remote_get( // phpcs:ignore
+		$response = Network::safe_peer_remote_get(
 			$endpoint,
 			[
 				'headers' => $woo_item->get_node()->get_authorization_headers( $endpoint_id ),

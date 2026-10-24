@@ -58,7 +58,7 @@ import { usePaymentActions, canChangePaymentMethod } from '../data/use-payments'
 import { useSubscriptionActions } from '../data/use-subscription-actions';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { useWizardNode } from '../use-portals';
-import { billingText, fmtDate, orDash, scheduleRow } from '../format';
+import { billingText, fmtDate, orDash, paymentRows } from '../format';
 import { GROUP_LABEL, GROUP_LABEL_PLURAL, groupViewLabel } from '../labels';
 import { groupDetailHref, isInternalHashPath } from '../links';
 import { STATUS_LABELS, STATUS_BADGE_INTENT, statusRank, displayStatuses } from '../status';
@@ -254,8 +254,7 @@ export default function PersonProfile() {
 				? [
 						{ label: __( 'First subscribed', 'newspack-plugin' ), value: orDash( fmtDate( group.createdAt ) ) },
 						{ label: __( 'Billing', 'newspack-plugin' ), value: billingText( group ) },
-						{ label: __( 'Last payment', 'newspack-plugin' ), value: orDash( fmtDate( group.lastPayment ) ) },
-						scheduleRow( group ),
+						...paymentRows( group ),
 				  ]
 				: [
 						{ label: __( 'Joined', 'newspack-plugin' ), value: orDash( fmtDate( group.joinedAt ) ) },
@@ -362,8 +361,7 @@ export default function PersonProfile() {
 						rows={ [
 							{ label: __( 'First subscribed', 'newspack-plugin' ), value: orDash( fmtDate( subscription.startDate ) ) },
 							{ label: __( 'Billing', 'newspack-plugin' ), value: billingText( subscription ) },
-							{ label: __( 'Last payment', 'newspack-plugin' ), value: orDash( fmtDate( subscription.lastPayment ) ) },
-							scheduleRow( subscription ),
+							...paymentRows( subscription ),
 						] }
 						actions={ menuActions }
 						// translators: %s is a subscription/plan name.

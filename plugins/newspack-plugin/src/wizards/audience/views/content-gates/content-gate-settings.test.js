@@ -22,6 +22,8 @@ const mockGate = {
 	registration: {},
 	custom_access: {},
 };
+// The wizard's loaded settings; a test sets what it needs.
+let mockConfig = {};
 const mockAddNotice = jest.fn();
 const mockResetNotices = jest.fn();
 const mockResetError = jest.fn();
@@ -78,7 +80,7 @@ jest.mock( '../../../../../packages/components/src', () => {
 } );
 
 jest.mock( '../../../../../packages/components/src/wizard/store/utils', () => ( {
-	useWizardData: () => ( { gates: [ mockGate ] } ),
+	useWizardData: () => ( { gates: [ mockGate ], config: mockConfig } ),
 } ) );
 
 jest.mock( '../../../../../packages/components/src/wizard/store', () => ( {
@@ -88,6 +90,7 @@ jest.mock( '../../../../../packages/components/src/wizard/store', () => ( {
 jest.mock( './edit/content-rule-control', () => ( { __esModule: true, default: () => null } ) );
 
 jest.mock( './utils', () => ( {
+	getAutoSignupOptions: jest.requireActual( './utils' ).getAutoSignupOptions,
 	getEditGateLayoutUrl: () => '#',
 	getGateStatus: () => 'Active',
 	getGateStatusBadgeIntent: () => 'stable',
@@ -97,6 +100,7 @@ jest.mock( './utils', () => ( {
 describe( 'ContentGateSettings per-gate actions', () => {
 	beforeEach( () => {
 		mockAddNotice.mockReset();
+		mockConfig = {};
 		// Read at module load; must exist before the component is required.
 		window.newspackAudienceContentGates = { available_access_rules: {} };
 	} );
@@ -146,5 +150,19 @@ describe( 'ContentGateSettings per-gate actions', () => {
 		[ 'Edit', 'Set to inactive', 'Duplicate', 'Delete' ].forEach( label => {
 			expect( screen.getByRole( 'button', { name: `${ label }: Gate X` } ) ).toBeInTheDocument();
 		} );
+	} );
+
+	it( 'names the site auto-signup setting on a premium newsletter card', () => {
+		mockConfig = { auto_signup: true };
+		const ContentGateSettings = require( './content-gate-settings' ).default;
+		render(
+			<ContentGateSettings
+				gate={ { ...mockGate, custom_access: { active: true, access_rules: [], metering: { enabled: false, count: 1, period: 'month' } } } }
+				updateGatesData={ () => {} }
+				isNewsletter
+			/>
+		);
+
+		expect( screen.getByText( /Default \(on\)/ ) ).toBeInTheDocument();
 	} );
 } );

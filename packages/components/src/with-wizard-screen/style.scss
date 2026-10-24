@@ -118,16 +118,3 @@
 		margin: 0;
 	}
 }
-
-/**
- * Wizard header overflow ("More") menu, rendered by the Wizard component into
- * admin-ui's Page actions slot. Hide the toggle when there are no overflow
- * actions, and hide the duplicated primary items inside the menu on wide
- * viewports.
- */
-@media only screen and ( min-width: 782px ) {
-	.newspack-wizard__actions__more--primary-only,
-	.newspack-wizard__actions__more .newspack-wizard__actions__more__main {
-		display: none;
-	}
-}

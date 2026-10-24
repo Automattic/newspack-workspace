@@ -11,7 +11,7 @@ import { CardBody } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { decodeEntities } from '@wordpress/html-entities';
 import { createInterpolateElement, useMemo, useRef } from '@wordpress/element';
-import { Badge } from '@wordpress/ui';
+import { Badge, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
@@ -43,6 +43,7 @@ export default function ContentGateSettings( {
 	const wizardData = useWizardData( slug ) as ContentGatesWizardData;
 	const gates = ( wizardData?.gates || [] ) as Gate[];
 	const siteMeter = wizardData?.config?.site_meter;
+	const siteAutoSignup = wizardData?.config?.auto_signup;
 	// Premium newsletter gates are left out: their screen has no priority modal to act on a
 	// warning, and they match lists by ID, which the overlap check doesn't model.
 	const priorityWarning = useMemo( () => ( isNewsletter ? undefined : getPriorityWarnings( gates )[ gate.id ] ), [ gates, gate.id, isNewsletter ] );
@@ -252,11 +253,17 @@ export default function ContentGateSettings( {
 					noMargin: true,
 					header: (
 						<>
-							<h3>
-								<a href={ `#/edit/${ gate.id }` }>{ gate.title }</a>
-								<Badge intent={ getGateStatusBadgeIntent( gate.status ) }>{ getGateStatus( gate.status ) }</Badge>
-								{ priorityWarning && <TooltipBadge label={ getPriorityWarningLabel() } tooltip={ priorityWarning } intent="low" /> }
-							</h3>
+							<Stack direction="row" gap="sm" wrap="wrap" align="center">
+								<h3>
+									<a href={ `#/edit/${ gate.id }` }>{ gate.title }</a>
+								</h3>
+								<Stack direction="row" gap="sm" wrap="wrap" align="center">
+									<Badge intent={ getGateStatusBadgeIntent( gate.status ) }>{ getGateStatus( gate.status ) }</Badge>
+									{ priorityWarning && (
+										<TooltipBadge label={ getPriorityWarningLabel() } tooltip={ priorityWarning } intent="low" />
+									) }
+								</Stack>
+							</Stack>
 						</>
 					),
 					actions,
@@ -265,7 +272,7 @@ export default function ContentGateSettings( {
 			>
 				<CardBody>
 					<Grid className="newspack-content-gates__gate__settings" gutter={ 16 } noMargin>
-						{ getGateSummarySections( gate, isNewsletter, siteMeter, accessRuleOptions ).map( section => (
+						{ getGateSummarySections( gate, isNewsletter, siteMeter, accessRuleOptions, siteAutoSignup ).map( section => (
 							<div key={ section.key } className="newspack-content-gates__gate__summary-section">
 								<h4>{ section.label }</h4>
 								{ section.content }

@@ -234,7 +234,7 @@ function render_gated_list_item( $list, $attrs, $checkbox_id ) {
  * @return array|null {
  *     Null when the block has nothing to render.
  *
- *     @type array[]  $config     Lists the reader can sign up for, keyed by public ID.
+ *     @type array[]  $config     The lists config from get_lists_config(), keyed by public ID.
  *     @type string[] $accessible Public IDs of the block's lists the reader can sign up for.
  *     @type array[]  $gated      The block's lists the reader may see but not join, keyed by public ID.
  *     @type string[] $order      Public IDs in the order their rows render.
@@ -251,10 +251,16 @@ function get_block_lists( $attrs ) {
 		return null;
 	}
 	$accessible = array_values( array_intersect( $attrs['lists'], array_keys( $list_config ) ) );
+	$offered    = $accessible;
 
 	if ( ! empty( $list_config ) ) {
 		/**
 		 * Filters the lists that are about to be displayed in the Subscription block
+		 *
+		 * Removing a list here tells the block the reader can't join it. With
+		 * `showPremium` on, a removed list that is gated (see
+		 * `newspack_newsletters_subscription_list_gates`) shows as a premium row the
+		 * reader can see but not join.
 		 *
 		 * @param array $available_lists The lists that are about to be displayed.
 		 * @param array $attrs           Block attributes.
@@ -272,17 +278,27 @@ function get_block_lists( $attrs ) {
 		}
 	}
 
-	// A list the reader is restricted from is missing from the filtered config, so
-	// the gated lists are the premium ones the unfiltered read has and the filtered
-	// one lacks. The filter stays the only judge of access. A list it withholds for
-	// any other reason stays hidden: showing its title here would undo that.
+	// The gated lists are the premium ones the reader can't join. Access Control
+	// withholds those from the filtered config, so they are the premium lists the
+	// unfiltered read has and the filtered one lacks. Woo Memberships leaves them
+	// in the config and removes them from the block's available lists instead,
+	// except when its "Hide completely" mode drops a list a rule names directly
+	// (see Woocommerce_Memberships::filter_list_gates()). With either plugin the
+	// access check stays the only judge. A list no gate reports stays hidden,
+	// whatever removed it: showing its title here would undo that.
 	$gated = [];
 	if ( $show_premium ) {
 		$all_lists = \Newspack_Newsletters_Subscription::get_unfiltered_lists_config();
 		$hidden    = \is_wp_error( $all_lists ) ? [] : array_diff_key( $all_lists, $list_config );
+		$removed   = array_diff( array_map( 'strval', $offered ), array_map( 'strval', $accessible ) );
 		foreach ( $attrs['lists'] as $list_id ) {
-			if ( isset( $hidden[ $list_id ], $premium[ $list_id ] ) ) {
+			if ( ! isset( $premium[ $list_id ] ) ) {
+				continue;
+			}
+			if ( isset( $hidden[ $list_id ] ) ) {
 				$gated[ $list_id ] = $hidden[ $list_id ];
+			} elseif ( in_array( (string) $list_id, $removed, true ) ) {
+				$gated[ $list_id ] = $list_config[ $list_id ];
 			}
 		}
 	}
@@ -680,13 +696,11 @@ function send_form_response( $data ) {
 	$is_error = \is_wp_error( $data );
 	if ( \wp_is_json_request() ) {
 		if ( $is_error ) {
-			// Only the reader-facing message. The WP_Error's own data can carry the
-			// provider's raw response, and view.js reads nothing but `message` and
-			// the HTTP status on this branch. That also drops get_error_code() from
-			// what a caller can see; view.js doesn't read that either, so this is
-			// deliberate, not an oversight.
+			// Only the message and the code: the WP_Error's data can carry the
+			// provider's raw response. The code is already public in the no-JS redirect.
 			$message = $data->get_error_message();
-			\wp_send_json( compact( 'message' ), 400 );
+			$code    = $data->get_error_code();
+			\wp_send_json( compact( 'message', 'code' ), 400 );
 			exit;
 		} else {
 			$data['newspack_newsletters_subscribed'] = 1;

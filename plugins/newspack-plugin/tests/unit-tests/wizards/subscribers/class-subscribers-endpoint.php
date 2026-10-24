@@ -1066,6 +1066,48 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The Complimentary filter keeps comp readers listed and finds them by the stamp,
+	 * reduced like the plan filter: a reader who moved from a comp to a paid plan is
+	 * not returned, one whose only, cancelled, subscription was a comp is. A comp
+	 * group's members inherit its stamp. Each row marks which of its subscriptions is
+	 * the comp, so the Access column agrees with the filter.
+	 */
+	public function test_complimentary_filter_matches_stamped_subscriptions() {
+		$this->login_admin();
+		$stamp = function ( WC_Subscription $subscription ) {
+			$subscription->update_meta_data( \Newspack\Complimentary_Access::META_KEY, 'yes' );
+			return $subscription;
+		};
+
+		$comp = $this->create_reader( 'Comp' );
+		$stamp( $this->create_individual_subscription( $comp ) );
+		$this->create_individual_subscription( $comp );
+
+		$moved_on = $this->create_reader( 'Moved' );
+		$stamp( $this->create_individual_subscription( $moved_on, 'cancelled' ) );
+		$this->create_individual_subscription( $moved_on );
+
+		$churned = $this->create_reader( 'Churned' );
+		$stamp( $this->create_individual_subscription( $churned, 'cancelled' ) );
+
+		$paying = $this->create_reader( 'Paying' );
+		$this->create_individual_subscription( $paying );
+
+		$group_owner  = $this->create_reader( 'CompGroupOwner' );
+		$group_member = $this->create_reader( 'CompGroupMember' );
+		$group        = $stamp( $this->create_group_subscription( $group_owner ) );
+		add_user_meta( $group_member, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $group->get_id() );
+
+		$items = $this->dispatch( [ 'access' => [ 'complimentary' ] ] )->get_data()['items'];
+		$this->assertEqualsCanonicalizing( [ $comp, $churned, $group_owner, $group_member ], array_column( $items, 'id' ) );
+
+		$comp_row = current( wp_list_filter( $items, [ 'id' => $comp ] ) );
+		$this->assertEqualsCanonicalizing( [ true, false ], array_column( $comp_row['subscriptions'], 'isComplimentary' ) );
+		$member_row = current( wp_list_filter( $items, [ 'id' => $group_member ] ) );
+		$this->assertTrue( $member_row['groups'][0]['isComplimentary'] );
+	}
+
+	/**
 	 * A plan name that matches nothing on the site fails closed — an empty page,
 	 * not the unfiltered list. A stale option in a long-open tab (or a hand-typed
 	 * param) must never widen the result set. The guard predates the plan filter's

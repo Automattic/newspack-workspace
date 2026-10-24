@@ -612,7 +612,7 @@ abstract class Integration {
 	 * @param array|null $existing_contact Optional. Existing contact data if available.
 	 * @param array      $options          Optional. Sync options, passed through to push_contact_data().
 	 *
-	 * @return true|\WP_Error The push_contact_data() result, unchanged.
+	 * @return true|array|\WP_Error The push_contact_data() result, unchanged.
 	 */
 	final public function push_contact( $contact, $context = '', $existing_contact = null, $options = [] ) {
 		
@@ -657,7 +657,9 @@ abstract class Integration {
 	 * @param string     $context Optional. The context of the sync.
 	 * @param array|null $existing_contact Optional. Existing contact data if available.
 	 *
-	 * @return true|\WP_Error True on success or WP_Error on failure.
+	 * @return true|array|\WP_Error True on success or WP_Error on failure. A success that left
+	 *                              fields out can return an array listing their names under
+	 *                              `unsynced_fields`, so the push log records the push as incomplete.
 	 */
 	abstract public function push_contact_data( $contact, $context = '', $existing_contact = null );
 
@@ -728,7 +730,9 @@ abstract class Integration {
 	 *
 	 * Integrations that support hard deletion should override this AND
 	 * `supports_hard_delete()`. The default returns a "not implemented" WP_Error
-	 * so the dispatcher can log and skip.
+	 * so the dispatcher can log and skip. When the system holds no contact for
+	 * the email, answer with a WP_Error whose only code is
+	 * CONTACT_NOT_FOUND_ERROR_CODE: the deletion then ends without a retry.
 	 *
 	 * @param string $email Email address of the contact to delete.
 	 * @return true|\WP_Error True on success, WP_Error otherwise.
@@ -834,14 +838,21 @@ abstract class Integration {
 	}
 
 	/**
-	 * Declare a WooCommerce My Account menu item for this integration.
+	 * Declare a My Account menu item for this integration.
 	 *
 	 * Return null (default) to opt out. Otherwise return:
 	 *   [
 	 *     'slug'     => 'rewards',              // endpoint slug, unique across integrations.
 	 *     'label'    => __( 'Rewards', 'newspack-plugin' ),
-	 *     'position' => 25,                     // optional, menu sort order.
+	 *     'position' => 2,                      // optional, zero-based index into WooCommerce's menu.
 	 *   ]
+	 *
+	 * The index applies to WooCommerce's menu as it stands before Newspack's
+	 * own My Account filters drop and reorder tabs. Without a position, the item
+	 * is appended before Log out. A position at or past the end lands after Log
+	 * out on WooCommerce's own account page; Newspack's default account UI moves
+	 * Log out to its footer, so there the item is last. Newspack's My Account
+	 * page without WooCommerce ignores the position and appends the item.
 	 *
 	 * The slug must not collide with a core My Account endpoint or one owned by
 	 * another plugin's My Account bridge — `newsletters` is reserved by

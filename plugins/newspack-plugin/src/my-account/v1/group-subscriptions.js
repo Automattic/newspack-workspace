@@ -4,7 +4,7 @@
  * Initialize functions for the Subscriptions page.
  */
 
-import { domReady } from '../../utils';
+import { domReady, setButtonLoading } from '../../utils';
 import { initGroupMemberSearch } from './group-member-search';
 
 domReady( function () {
@@ -124,12 +124,14 @@ domReady( function () {
 			fileName.textContent = fileInput.files?.[ 0 ]?.name || '';
 			removeFile.classList.toggle( 'hidden', ! fileName.textContent );
 		};
+		const uploadButton = bulkForm.querySelector( '.newspack-my-account__group_subscription__invite-bulk__upload' );
+		uploadButton.addEventListener( 'click', () => fileInput.click() );
 		fileInput.addEventListener( 'change', showFileName );
 		removeFile.addEventListener( 'click', event => {
 			event.preventDefault();
 			fileInput.value = '';
 			showFileName();
-			fileInput.focus();
+			uploadButton.focus();
 		} );
 
 		// Send stays focusable while it can't be used, so a keyboard user can reach it and
@@ -333,18 +335,22 @@ domReady( function () {
 		return elapsed < MIN_LOADING_MS ? new Promise( resolve => setTimeout( resolve, MIN_LOADING_MS - elapsed ) ) : Promise.resolve();
 	};
 
-	// Run an async action while a button shows its loading state (spinner + disabled + aria-busy),
-	// always restoring the button afterwards. The action owns its own waitForMinLoading() timing.
+	// Run an async action while a button shows its loading state, always restoring the
+	// button afterwards. A press while its action is still running does nothing, even
+	// if something else has cleared the button's loading state in the meantime. The
+	// action owns its own waitForMinLoading() timing.
+	const runningButtons = new WeakSet();
 	const withLoadingButton = async ( button, action ) => {
-		button.classList.add( 'newspack-ui__button--loading' );
-		button.setAttribute( 'aria-busy', 'true' );
-		button.setAttribute( 'disabled', '' );
+		if ( runningButtons.has( button ) ) {
+			return;
+		}
+		runningButtons.add( button );
+		setButtonLoading( button, true );
 		try {
 			return await action();
 		} finally {
-			button.classList.remove( 'newspack-ui__button--loading' );
-			button.removeAttribute( 'aria-busy' );
-			button.removeAttribute( 'disabled' );
+			runningButtons.delete( button );
+			setButtonLoading( button, false );
 		}
 	};
 
