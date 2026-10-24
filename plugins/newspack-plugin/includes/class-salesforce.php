@@ -689,6 +689,15 @@ class Salesforce {
 
 		$contacts = self::get_contacts_by_email( $contact['Email'] );
 
+		if ( is_wp_error( $contacts ) ) {
+			return \rest_ensure_response(
+				new \WP_Error(
+					'newspack_salesforce_invalid_salesforce_lookup',
+					$contacts->get_error_message()
+				)
+			);
+		}
+
 		if ( empty( $contacts ) ) {
 			return \rest_ensure_response(
 				new \WP_Error(
@@ -709,7 +718,7 @@ class Salesforce {
 				return \rest_ensure_response(
 					new \WP_Error(
 						'newspack_salesforce_contact_failure',
-						isset( $contact_response->get_error_message ) ? $contact_response->get_error_message() : __( 'Error creating contact.', 'newspack' )
+						is_wp_error( $contact_response ) ? $contact_response->get_error_message() : __( 'Error creating contact.', 'newspack' )
 					)
 				);
 			}

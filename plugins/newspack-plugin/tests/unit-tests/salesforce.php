@@ -240,4 +240,83 @@ class Newspack_Test_Salesforce extends WP_UnitTestCase {
 			'A request whose body differs from the signed body must be rejected.'
 		);
 	}
+
+	/**
+	 * Which Salesforce request fails during a sync.
+	 *
+	 * @return array
+	 */
+	public function failed_salesforce_request_provider() {
+		return [
+			'contact lookup' => [ 'GET' ],
+			'contact create' => [ 'POST' ],
+		];
+	}
+
+	/**
+	 * When a request to Salesforce fails, the order note carries that request's error
+	 * rather than a generic message, so a site that uses Salesforce can see what went wrong.
+	 *
+	 * Isolated because order parsing requires a WooCommerce class, and an alias of one
+	 * cannot be undone; the rest of the suite runs without WooCommerce.
+	 *
+	 * @dataProvider failed_salesforce_request_provider
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 *
+	 * @param string $failing_method HTTP method of the request that fails.
+	 */
+	public function test_sync_failure_note_carries_the_salesforce_error( $failing_method ) {
+		global $orders_database;
+		$orders_database = [];
+		class_alias( WC_Order::class, 'WooCommerce' );
+		$this->connect_salesforce();
+
+		add_filter(
+			'pre_http_request',
+			function( $preempt, $args ) use ( $failing_method ) {
+				if ( $failing_method === $args['method'] ) {
+					return new WP_Error( 'http_request_failed', 'Salesforce did not respond.' );
+				}
+				// The contact lookup finds no one, so the sync goes on to create a contact.
+				return [
+					'headers'  => [],
+					'body'     => wp_json_encode(
+						[
+							'totalSize' => 0,
+							'records'   => [],
+						]
+					),
+					'response' => [ 'code' => 200 ],
+					'cookies'  => [],
+				];
+			},
+			10,
+			2
+		);
+
+		$donation = new WC_Order_Item_Product(
+			[
+				'name'  => 'Donation',
+				'total' => 10,
+			]
+		);
+		$order    = wc_create_order(
+			[
+				'status'        => 'pending',
+				'billing_email' => 'reader@example.test',
+				'items'         => [ $donation ],
+			]
+		);
+		$request = new WP_REST_Request( 'POST', '/newspack/salesforce/v1/sync' );
+		$request->set_param( 'id', $order->get_id() );
+
+		Salesforce::api_sync_salesforce( $request );
+
+		self::assertSame(
+			[ 'Error syncing order to Salesforce. Salesforce did not respond.' ],
+			wc_get_order( $order->get_id() )->data['order_notes'] ?? [],
+			'The order note names the error Salesforce returned.'
+		);
+	}
 }
