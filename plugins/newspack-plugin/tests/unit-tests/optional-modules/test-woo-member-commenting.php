@@ -31,7 +31,7 @@ class Newspack_Test_Woo_Member_Commenting extends WP_UnitTestCase {
 	 *
 	 * @var int
 	 */
-	private $post_id;
+	private int $post_id;
 
 	/**
 	 * Set up.
@@ -91,6 +91,19 @@ class Newspack_Test_Woo_Member_Commenting extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Assert a submission was refused by this module, with the status the
+	 * comment handler sends.
+	 *
+	 * @param WP_Comment|WP_Error $result  Submission result.
+	 * @param string              $message Assertion message.
+	 */
+	private function assert_refused( $result, string $message ): void {
+		$this->assertWPError( $result, $message );
+		$this->assertSame( Woo_Member_Commenting::ERROR_CODE, $result->get_error_code(), $message );
+		$this->assertSame( 403, $result->get_error_data(), $message );
+	}
+
+	/**
 	 * Create a comment through the REST API.
 	 *
 	 * @param int $user_id User to submit as.
@@ -116,9 +129,50 @@ class Newspack_Test_Woo_Member_Commenting extends WP_UnitTestCase {
 		$without_plan = $this->create_reader( false );
 		$with_plan    = $this->create_reader( true );
 
-		$this->assertWPError( $this->submit_comment_as( $without_plan ), 'Reader without the plan.' );
-		$this->assertWPError( $this->submit_comment_as( 0 ), 'Logged-out visitor.' );
+		$this->assert_refused( $this->submit_comment_as( $without_plan ), 'Reader without the plan.' );
+		$this->assert_refused( $this->submit_comment_as( 0 ), 'Logged-out visitor.' );
 		$this->assertInstanceOf( WP_Comment::class, $this->submit_comment_as( $with_plan ) );
+	}
+
+	/**
+	 * The requirement holds when whoever was current at init could have
+	 * commented freely: the hooks depend on the module's settings, not on that user.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_requirement_applies_whoever_was_current_at_init() {
+		remove_filter( 'pre_comment_approved', [ Woo_Member_Commenting::class, 'refuse_comment_submission' ] );
+		remove_filter( 'rest_preprocess_comment', [ Woo_Member_Commenting::class, 'refuse_rest_comment' ] );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+		Woo_Member_Commenting::on_init();
+
+		$this->assert_refused( $this->submit_comment_as( $this->create_reader( false ) ), 'Reader without the plan.' );
+	}
+
+	/**
+	 * Pingbacks, trackbacks and product reviews are not reader comments, so a
+	 * reader without the plan can still leave them.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_non_reader_comment_types_are_not_refused() {
+		wp_set_current_user( $this->create_reader( false ) );
+		foreach ( [ 'pingback', 'trackback', 'review' ] as $comment_type ) {
+			$comment_id = wp_new_comment(
+				[
+					'comment_post_ID'      => $this->post_id,
+					'comment_content'      => 'A ' . $comment_type . ' ' . wp_generate_password( 8, false ),
+					'comment_type'         => $comment_type,
+					'comment_author'       => 'Visitor',
+					'comment_author_email' => 'visitor@example.test',
+					'comment_author_url'   => 'https://example.test/',
+				],
+				true
+			);
+			$this->assertIsInt( $comment_id, $comment_type );
+		}
 	}
 
 	/**
