@@ -1146,6 +1146,27 @@ class WC_Order {
 	public function get_billing_last_name() {
 		return $this->data['billing_last_name'] ?? '';
 	}
+	public function get_billing_phone() {
+		return $this->data['billing_phone'] ?? '';
+	}
+	public function get_billing_address_1() {
+		return $this->data['billing_address_1'] ?? '';
+	}
+	public function get_billing_address_2() {
+		return $this->data['billing_address_2'] ?? '';
+	}
+	public function get_billing_city() {
+		return $this->data['billing_city'] ?? '';
+	}
+	public function get_billing_state() {
+		return $this->data['billing_state'] ?? '';
+	}
+	public function get_billing_postcode() {
+		return $this->data['billing_postcode'] ?? '';
+	}
+	public function get_billing_country() {
+		return $this->data['billing_country'] ?? '';
+	}
 	public function get_formatted_order_total() {
 		return '$' . number_format( (float) $this->get_total(), 2 );
 	}

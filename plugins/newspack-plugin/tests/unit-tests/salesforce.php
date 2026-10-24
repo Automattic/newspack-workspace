@@ -112,9 +112,46 @@ class Newspack_Test_Salesforce extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Save the credentials that make Salesforce count as connected.
+	 */
+	private function connect_salesforce() {
+		update_option( 'newspack_salesforce_client_id', 'test-client-id' );
+		update_option( 'newspack_salesforce_client_secret', 'test-client-secret' );
+		update_option( 'newspack_salesforce_refresh_token', 'test-refresh-token' );
+		update_option( 'newspack_salesforce_access_token', 'test-access-token' );
+		update_option( 'newspack_salesforce_instance_url', 'https://salesforce.example.test' );
+	}
+
+	/**
+	 * A site that never connected Salesforce gets no sync webhook, so its orders
+	 * are never sent to a sync that can only fail.
+	 */
+	public function test_platform_check_creates_no_webhook_until_salesforce_is_connected() {
+		delete_option( 'newspack_salesforce_webhook_id' );
+
+		Salesforce::platform_check();
+
+		self::assertSame( 0, (int) get_option( 'newspack_salesforce_webhook_id' ), 'No webhook ID is stored.' );
+		self::assertSame( [], WC_Webhook::$registry, 'No webhook is created.' );
+	}
+
+	/**
+	 * A webhook created before Salesforce was connected is removed.
+	 */
+	public function test_platform_check_removes_webhook_when_salesforce_is_not_connected() {
+		$webhook = $this->register_sync_webhook();
+
+		Salesforce::platform_check();
+
+		self::assertSame( 0, (int) get_option( 'newspack_salesforce_webhook_id' ), 'The stored webhook ID is cleared.' );
+		self::assertNull( wc_get_webhook( $webhook->get_id() ), 'The webhook itself is deleted.' );
+	}
+
+	/**
 	 * A newly created sync webhook is given a signing secret.
 	 */
 	public function test_platform_check_creates_webhook_with_secret() {
+		$this->connect_salesforce();
 		delete_option( 'newspack_salesforce_webhook_id' );
 
 		// is_platform_wc() defaults to true, so this creates the sync webhook.
@@ -132,6 +169,7 @@ class Newspack_Test_Salesforce extends WP_UnitTestCase {
 	 * An existing webhook without a secret is backfilled with one.
 	 */
 	public function test_platform_check_backfills_missing_secret() {
+		$this->connect_salesforce();
 		$webhook = new WC_Webhook();
 		$webhook->set_status( 'active' );
 		$webhook->save();
@@ -200,6 +238,89 @@ class Newspack_Test_Salesforce extends WP_UnitTestCase {
 		self::assertTrue(
 			is_wp_error( Salesforce::api_validate_webhook( $request ) ),
 			'A request whose body differs from the signed body must be rejected.'
+		);
+	}
+
+	/**
+	 * Which Salesforce request fails during a sync.
+	 *
+	 * @return array
+	 */
+	public function failed_salesforce_request_provider() {
+		return [
+			'contact lookup'     => [ 'GET', 'FROM+Contact' ],
+			'contact create'     => [ 'POST', '/sobjects/Contact/' ],
+			'opportunity create' => [ 'POST', '/sobjects/Opportunity/' ],
+		];
+	}
+
+	/**
+	 * When a request to Salesforce fails, the order note carries that request's error
+	 * rather than a generic message, so a site that uses Salesforce can see what went wrong.
+	 *
+	 * Isolated because order parsing requires a WooCommerce class, and an alias of one
+	 * cannot be undone; the rest of the suite runs without WooCommerce.
+	 *
+	 * @dataProvider failed_salesforce_request_provider
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 *
+	 * @param string $failing_method HTTP method of the request that fails.
+	 * @param string $failing_path   Part of the URL that identifies the request that fails.
+	 */
+	public function test_sync_failure_note_carries_the_salesforce_error( $failing_method, $failing_path ) {
+		global $orders_database;
+		$orders_database = [];
+		class_alias( WC_Order::class, 'WooCommerce' );
+		$this->connect_salesforce();
+
+		add_filter(
+			'pre_http_request',
+			function( $preempt, $args, $url ) use ( $failing_method, $failing_path ) {
+				if ( $failing_method === $args['method'] && false !== strpos( $url, $failing_path ) ) {
+					return new WP_Error( 'http_request_failed', 'Salesforce did not respond.' );
+				}
+				// Lookups and the NPSP describe call find nothing, so the sync goes on to
+				// create a contact and an opportunity; creates succeed, so the sync
+				// reaches the next request.
+				$body = 'POST' === $args['method'] ? [ 'id' => 'created-record' ] : [
+					'totalSize' => 0,
+					'records'   => [],
+					'fields'    => [],
+				];
+				return [
+					'headers'  => [],
+					'body'     => wp_json_encode( $body ),
+					'response' => [ 'code' => 200 ],
+					'cookies'  => [],
+				];
+			},
+			10,
+			3
+		);
+
+		$donation = new WC_Order_Item_Product(
+			[
+				'name'  => 'Donation',
+				'total' => 10,
+			]
+		);
+		$order    = wc_create_order(
+			[
+				'status'        => 'pending',
+				'billing_email' => 'reader@example.test',
+				'items'         => [ $donation ],
+			]
+		);
+		$request = new WP_REST_Request( 'POST', '/newspack/salesforce/v1/sync' );
+		$request->set_param( 'id', $order->get_id() );
+
+		Salesforce::api_sync_salesforce( $request );
+
+		self::assertSame(
+			[ 'Error syncing order to Salesforce. Salesforce did not respond.' ],
+			wc_get_order( $order->get_id() )->data['order_notes'] ?? [],
+			'The order note names the error Salesforce returned.'
 		);
 	}
 }
