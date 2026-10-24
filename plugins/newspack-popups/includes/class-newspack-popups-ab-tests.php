@@ -23,6 +23,8 @@ final class Newspack_Popups_AB_Tests {
 	const META_GOAL          = 'newspack_popups_ab_test_goal';
 	const META_CONTROL_SHARE = 'newspack_popups_ab_control_share';
 
+	const META_KEYS = [ self::META_TEST_ID, self::META_VARIANT, self::META_GOAL, self::META_CONTROL_SHARE ];
+
 	const USER_META_BUCKET_PREFIX = 'newspack_popups_ab_bucket_';
 
 	/**
@@ -51,6 +53,7 @@ final class Newspack_Popups_AB_Tests {
 	 */
 	public static function init() {
 		add_action( 'init', [ __CLASS__, 'register_meta' ] );
+		add_filter( 'rest_pre_insert_' . Newspack_Popups::NEWSPACK_POPUPS_CPT, [ __CLASS__, 'guard_rest_ab_meta' ], 10, 2 );
 
 		// Anything that can add or remove a test invalidates the flag. Scoped to the
 		// prompts CPT and to the test-id meta key: a news site saves posts constantly,
@@ -64,6 +67,41 @@ final class Newspack_Popups_AB_Tests {
 		foreach ( [ 'added_post_meta', 'updated_post_meta', 'deleted_post_meta' ] as $hook ) {
 			add_action( $hook, [ __CLASS__, 'invalidate_has_tests_for_meta' ], 10, 3 );
 		}
+	}
+
+	/**
+	 * Whether A/B testing is enabled on this site.
+	 *
+	 * The flag gates what reads A/B meta, never its registration. With it off,
+	 * stored tests have no effect anywhere, while REST writes keep their sanitizers
+	 * and schema checks, and a site can turn the flag off and on again without
+	 * losing its test setup.
+	 *
+	 * Not cached, unlike the sibling flags: the filter has to stay live so one
+	 * PHPUnit run can cover both states.
+	 *
+	 * @return bool
+	 */
+	public static function is_enabled() {
+		/**
+		 * Enables A/B testing for Campaigns prompts: running two versions of a
+		 * prompt against each other and comparing how they convert.
+		 *
+		 * @constant NEWSPACK_CAMPAIGNS_AB_TESTING
+		 * @type     bool
+		 * @default  A/B testing disabled
+		 * @status   draft
+		 *
+		 * @example define( 'NEWSPACK_CAMPAIGNS_AB_TESTING', true );
+		 */
+		$enabled = defined( 'NEWSPACK_CAMPAIGNS_AB_TESTING' ) && NEWSPACK_CAMPAIGNS_AB_TESTING;
+
+		/**
+		 * Filters whether A/B testing is enabled.
+		 *
+		 * @param bool $enabled Whether the NEWSPACK_CAMPAIGNS_AB_TESTING constant is set.
+		 */
+		return (bool) apply_filters( 'newspack_popups_ab_testing_enabled', $enabled );
 	}
 
 	/**
@@ -106,7 +144,7 @@ final class Newspack_Popups_AB_Tests {
 			'object_subtype' => Newspack_Popups::NEWSPACK_POPUPS_CPT,
 			'show_in_rest'   => true,
 			'single'         => true,
-			'auth_callback'  => '__return_true',
+			'auth_callback'  => [ __CLASS__, 'can_write_meta' ],
 		];
 
 		\register_meta(
@@ -183,6 +221,73 @@ final class Newspack_Popups_AB_Tests {
 	}
 
 	/**
+	 * Whether a user may write A/B meta.
+	 *
+	 * Core still requires edit rights on the prompt; this adds `manage_options` on
+	 * top, because managing tests follows the admin-only Campaigns permission model
+	 * and the prompts CPT itself uses default post capabilities.
+	 *
+	 * @param bool   $allowed   Core's default for the key; ignored.
+	 * @param string $meta_key  Meta key.
+	 * @param int    $object_id Prompt post ID.
+	 * @param int    $user_id   User ID.
+	 * @return bool
+	 */
+	public static function can_write_meta( $allowed, $meta_key, $object_id, $user_id ) {
+		return user_can( $user_id, 'manage_options' );
+	}
+
+	/**
+	 * Keep A/B meta admin-only on prompt saves without breaking saves by other roles.
+	 *
+	 * The block editor sends a prompt's whole meta object on every save, A/B keys
+	 * included, and core runs the write check on any key with no stored row. So a
+	 * non-admin's unchanged A/B values are dropped from the request before core
+	 * sees them, and a changed one refuses the request here, before the post or
+	 * any other meta is written.
+	 *
+	 * Autosaves are the exception: they never store A/B meta, and core's autosave
+	 * route ignores an error from this filter and would record an empty autosave,
+	 * so there the A/B keys are dropped whatever their value.
+	 *
+	 * @param stdClass|WP_Error $prepared_post Post prepared for the database.
+	 * @param WP_REST_Request   $request       Request.
+	 * @return stdClass|WP_Error
+	 */
+	public static function guard_rest_ab_meta( $prepared_post, $request ) {
+		$meta = $request->get_param( 'meta' );
+		if ( is_wp_error( $prepared_post ) || ! is_array( $meta ) || current_user_can( 'manage_options' ) ) {
+			return $prepared_post;
+		}
+
+		$is_autosave = str_ends_with( $request->get_route(), '/autosaves' );
+		$registered  = get_registered_meta_keys( 'post', Newspack_Popups::NEWSPACK_POPUPS_CPT );
+		$post_id     = isset( $prepared_post->ID ) ? (int) $prepared_post->ID : 0;
+		foreach ( self::META_KEYS as $meta_key ) {
+			if ( ! array_key_exists( $meta_key, $meta ) ) {
+				continue;
+			}
+			// get_post_meta() applies the registered default to an unset key, which
+			// is also what the editor read and is sending back.
+			$stored = $post_id ? get_post_meta( $post_id, $meta_key, true ) : ( $registered[ $meta_key ]['default'] ?? '' );
+			if ( ! $is_autosave && (string) $meta[ $meta_key ] !== (string) $stored ) {
+				return new WP_Error(
+					'rest_cannot_update',
+					__( "Only administrators can change A/B test settings. If someone changed this prompt's test while you were editing, reload the editor and try again.", 'newspack-popups' ),
+					[
+						'status' => rest_authorization_required_code(),
+						'key'    => $meta_key,
+					]
+				);
+			}
+			unset( $meta[ $meta_key ] );
+		}
+		$request->set_param( 'meta', $meta );
+
+		return $prepared_post;
+	}
+
+	/**
 	 * Sanitize a variant key.
 	 *
 	 * @param string $value Raw value.
@@ -210,9 +315,13 @@ final class Newspack_Popups_AB_Tests {
 	 *                       valid (published control + at least one published
 	 *                       challenger) — an invalid test must not present itself
 	 *                       as a live experiment in markup or analytics params.
-	 * @return array|null Array with test_id and variant, or null if not part of a test.
+	 * @return array|null Array with test_id and variant, or null if not part of a test
+	 *                    or A/B testing is disabled.
 	 */
 	public static function get_popup_ab_fields( $popup_id, $validate = false ) {
+		if ( ! self::is_enabled() ) {
+			return null;
+		}
 		$test_id = get_post_meta( $popup_id, self::META_TEST_ID, true );
 		$variant = get_post_meta( $popup_id, self::META_VARIANT, true );
 		if ( ! $test_id || ! in_array( $variant, self::VALID_VARIANTS, true ) ) {
@@ -237,6 +346,13 @@ final class Newspack_Popups_AB_Tests {
 	 * @return array Config keyed by test ID: [ 'variants' => [ 'a', 'b' ], 'control_share' => 60 ].
 	 */
 	public static function get_tests_config() {
+		// Ahead of the memo and the has-tests flag, and writing neither: a '0'
+		// recorded while the feature is off would outlive the flag and keep live
+		// tests from running once it is turned back on.
+		if ( ! self::is_enabled() ) {
+			return [];
+		}
+
 		if ( null !== self::$tests_config ) {
 			return self::$tests_config;
 		}
