@@ -1133,11 +1133,14 @@ final class Reader_Activation {
 	/**
 	 * Verify email address of a reader given the user.
 	 *
-	 * @param \WP_User|int $user_or_user_id User object.
+	 * @param \WP_User|int $user_or_user_id    User object.
+	 * @param bool         $revoke_credentials Whether to revoke passwords set before verification. Pass false
+	 *                                         when the verification doesn't prove, or vouch for, who controls the address,
+	 *                                         or when nobody could have set credentials on the account yet.
 	 *
 	 * @return bool Whether the email address was verified.
 	 */
-	public static function set_reader_verified( $user_or_user_id ) {
+	public static function set_reader_verified( $user_or_user_id, $revoke_credentials = true ) {
 		if ( $user_or_user_id instanceof \WP_User ) {
 			$user = $user_or_user_id;
 		} elseif ( absint( $user_or_user_id ) ) {
@@ -1151,6 +1154,13 @@ final class Reader_Activation {
 		/** Should not verify email if user is not a reader. */
 		if ( ! self::is_user_reader( $user ) ) {
 			return false;
+		}
+
+		// Accounts created as readers, by registration or at checkout, carry a stored
+		// "unverified" flag, and whoever created one may have set its password before
+		// anyone proved the address. Accounts created any other way keep their passwords.
+		if ( $revoke_credentials && \metadata_exists( 'user', $user->ID, self::EMAIL_VERIFIED ) ) {
+			self::revoke_pre_verification_credentials( $user );
 		}
 
 		\update_user_meta( $user->ID, self::EMAIL_VERIFIED, true );
@@ -1179,6 +1189,39 @@ final class Reader_Activation {
 		do_action( 'newspack_reader_verified', $user );
 
 		return true;
+	}
+
+	/**
+	 * Revoke the password and application passwords of a reader being verified.
+	 *
+	 * Until the address is proven, whoever registered it may have set a password
+	 * on the account, so the first verification replaces it and marks the reader
+	 * as having no password, which makes the sign-in form offer an emailed link or code.
+	 *
+	 * @param \WP_User $user User being verified.
+	 */
+	private static function revoke_pre_verification_credentials( $user ) {
+		// wp_set_password() clears the reset key, but verification also runs while
+		// core renders the password reset form, which still needs that key to submit.
+		$activation_key = \get_userdata( $user->ID )->user_activation_key;
+
+		\wp_set_password( \wp_generate_password( 24, true, true ), $user->ID );
+		if ( ! empty( $activation_key ) ) {
+			global $wpdb;
+			$wpdb->update( $wpdb->users, [ 'user_activation_key' => $activation_key ], [ 'ID' => $user->ID ] ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPressVIPMinimum.Variables.RestrictedVariables.user_meta__wpdb__users -- The key lives only in the users table, where wp_set_password() writes it too.
+			\clean_user_cache( $user->ID );
+		}
+		\update_user_meta( $user->ID, self::WITHOUT_PASSWORD, true );
+		\WP_Application_Passwords::delete_all_application_passwords( $user->ID );
+
+		// Changing the password invalidates every auth cookie issued before it,
+		// including the one that signed the reader in to verify. Core's reset form
+		// verifies while the page renders, and submitting it signs the reader out
+		// anyway, so there's no session there to keep.
+		$session_token = \wp_get_session_token();
+		if ( \get_current_user_id() === $user->ID && $session_token && ! \doing_action( 'resetpass_form' ) ) {
+			self::set_auth_cookie( $user->ID, $session_token );
+		}
 	}
 
 	/**
@@ -2528,7 +2571,21 @@ final class Reader_Activation {
 
 		\wp_clear_auth_cookie();
 		\wp_set_current_user( $user->ID, $user->user_login );
+		self::set_auth_cookie( $user->ID );
 
+		\do_action( 'wp_login', $user->user_login, $user );
+		Logger::log( 'Logged in user ' . $user->ID );
+
+		return $user;
+	}
+
+	/**
+	 * Issue a reader's auth cookie and keep $_COOKIE in step with it.
+	 *
+	 * @param int    $user_id User ID.
+	 * @param string $token   Session token to issue the cookie for. Default starts a new session.
+	 */
+	private static function set_auth_cookie( $user_id, $token = '' ) {
 		/*
 		 * Keep $_COOKIE in sync with the auth cookie issued below for the
 		 * remainder of this request. wp_set_auth_cookie() only emits Set-Cookie
@@ -2544,13 +2601,8 @@ final class Reader_Activation {
 			$_COOKIE[ LOGGED_IN_COOKIE ] = $logged_in_cookie;
 		};
 		\add_action( 'set_logged_in_cookie', $sync_cookie_superglobal );
-		\wp_set_auth_cookie( $user->ID, true );
+		\wp_set_auth_cookie( $user_id, true, '', $token );
 		\remove_action( 'set_logged_in_cookie', $sync_cookie_superglobal );
-
-		\do_action( 'wp_login', $user->user_login, $user );
-		Logger::log( 'Logged in user ' . $user->ID );
-
-		return $user;
 	}
 
 	/**
@@ -2695,7 +2747,8 @@ final class Reader_Activation {
 		if ( isset( $metadata['registration_method'] ) ) {
 			\update_user_meta( $user_id, self::REGISTRATION_METHOD, $metadata['registration_method'] );
 			if ( in_array( $metadata['registration_method'], self::SSO_REGISTRATION_METHODS, true ) ) {
-				self::set_reader_verified( $user_id );
+				// The account was created in this request, so no one has set a password on it yet.
+				self::set_reader_verified( $user_id, false );
 			}
 		}
 
@@ -3371,7 +3424,10 @@ final class Reader_Activation {
 		}
 		$is_verified = self::is_reader_verified( $customer );
 		if ( false === $is_verified ) {
-			self::set_reader_verified( $customer );
+			// A payment doesn't prove who controls the address: the payer may be
+			// whoever registered it, so revoking here protects no one and can cost
+			// the owner a password they set themselves.
+			self::set_reader_verified( $customer, false );
 		}
 	}
 }
