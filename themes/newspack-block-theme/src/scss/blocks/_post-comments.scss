@@ -156,13 +156,13 @@
 
 .wp-block-comment-author-name {
 	a {
-		border-radius: var(--wp--custom--border--radius-x-small);
+		border-radius: var(--wp--custom--border--radius-small);
 		transition: color 125ms ease-in-out;
 	}
 
 	.bypostauthor & {
 		background: var(--wp--preset--color--base-2);
-		border-radius: var(--wp--custom--border--radius-x-small);
+		border-radius: var(--wp--custom--border--radius-small);
 
 		&:not(:has(a)) {
 			padding: 0 0.375em;

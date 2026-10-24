@@ -61,7 +61,7 @@ button:not([class]),
 input[type="submit"]:not(.newspack-ui__button) {
 	background: var(--wp--preset--color--accent);
 	border: 0;
-	border-radius: var(--newspack-ui-border-radius-m, var(--wp--custom--border--radius-medium));
+	border-radius: var(--newspack-ui-radius-button, var(--wp--custom--border--radius-large));
 	color: var(--wp--preset--color--base);
 	cursor: pointer;
 	font-family: var(--newspack-ui-font-family, var(--wp--preset--font-family--inter, system-ui, sans-serif));
