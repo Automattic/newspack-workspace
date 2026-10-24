@@ -163,15 +163,13 @@ class Woo_Member_Commenting {
 	 * Submitted pingbacks, trackbacks and product reviews are let through.
 	 *
 	 * Any empty value counts, "0" and an empty array included, because that is how
-	 * wp_insert_comment() decides to store a comment as a plain one. The type is
-	 * left loose for the same reason: REST passes the request's value through
-	 * unvalidated.
+	 * wp_insert_comment() decides to store a comment as a plain one.
 	 *
 	 * @param mixed $comment_type Comment type; empty for a plain comment.
 	 *
 	 * @return bool
 	 */
-	private static function is_reader_comment_type( $comment_type ): bool {
+	private static function is_reader_comment_type( mixed $comment_type ): bool {
 		return empty( $comment_type ) || 'comment' === $comment_type;
 	}
 
