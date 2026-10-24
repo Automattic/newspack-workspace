@@ -152,7 +152,7 @@ class Woo_Member_Commenting {
 		if ( is_wp_error( $prepared_comment ) || ! empty( $request['id'] ) ) {
 			return $prepared_comment;
 		}
-		if ( ! self::is_reader_comment_type( (string) ( $request['type'] ?? '' ) ) || ! self::require_membership_to_comment_for_user() ) {
+		if ( ! self::is_reader_comment_type( $request['type'] ?? '' ) || ! self::require_membership_to_comment_for_user() ) {
 			return $prepared_comment;
 		}
 		return new \WP_Error( self::ERROR_CODE, __( 'Only Members may post a comment.', 'newspack-plugin' ), [ 'status' => 403 ] );
@@ -162,14 +162,16 @@ class Woo_Member_Commenting {
 	 * Whether a comment type is a reader comment, the only kind this restricts.
 	 * Submitted pingbacks, trackbacks and product reviews are let through.
 	 *
-	 * Any empty value counts, "0" included, because that is how wp_insert_comment()
-	 * decides to store a comment as a plain one.
+	 * Any empty value counts, "0" and an empty array included, because that is how
+	 * wp_insert_comment() decides to store a comment as a plain one. The type is
+	 * left loose for the same reason: REST passes the request's value through
+	 * unvalidated.
 	 *
-	 * @param string $comment_type Comment type; empty for a plain comment.
+	 * @param mixed $comment_type Comment type; empty for a plain comment.
 	 *
 	 * @return bool
 	 */
-	private static function is_reader_comment_type( string $comment_type ): bool {
+	private static function is_reader_comment_type( $comment_type ): bool {
 		return empty( $comment_type ) || 'comment' === $comment_type;
 	}
 

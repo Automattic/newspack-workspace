@@ -194,6 +194,7 @@ class Newspack_Test_Woo_Member_Commenting extends WP_UnitTestCase {
 		// Types WordPress stores as a plain comment.
 		$this->assertSame( 403, $this->rest_create_comment_as( $without_plan, '0' ) );
 		$this->assertSame( 403, $this->rest_create_comment_as( $without_plan, 0 ) );
+		$this->assertSame( 403, $this->rest_create_comment_as( $without_plan, [] ) );
 		$this->assertSame( 201, $this->rest_create_comment_as( $this->create_reader( true ) ) );
 	}
 
