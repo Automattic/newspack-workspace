@@ -248,8 +248,9 @@ class Newspack_Test_Salesforce extends WP_UnitTestCase {
 	 */
 	public function failed_salesforce_request_provider() {
 		return [
-			'contact lookup' => [ 'GET' ],
-			'contact create' => [ 'POST' ],
+			'contact lookup'     => [ 'GET', '/query?' ],
+			'contact create'     => [ 'POST', '/sobjects/Contact/' ],
+			'opportunity create' => [ 'POST', '/sobjects/Opportunity/' ],
 		];
 	}
 
@@ -265,8 +266,9 @@ class Newspack_Test_Salesforce extends WP_UnitTestCase {
 	 * @preserveGlobalState disabled
 	 *
 	 * @param string $failing_method HTTP method of the request that fails.
+	 * @param string $failing_path   Part of the URL that identifies the request that fails.
 	 */
-	public function test_sync_failure_note_carries_the_salesforce_error( $failing_method ) {
+	public function test_sync_failure_note_carries_the_salesforce_error( $failing_method, $failing_path ) {
 		global $orders_database;
 		$orders_database = [];
 		class_alias( WC_Order::class, 'WooCommerce' );
@@ -274,25 +276,26 @@ class Newspack_Test_Salesforce extends WP_UnitTestCase {
 
 		add_filter(
 			'pre_http_request',
-			function( $preempt, $args ) use ( $failing_method ) {
-				if ( $failing_method === $args['method'] ) {
+			function( $preempt, $args, $url ) use ( $failing_method, $failing_path ) {
+				if ( $failing_method === $args['method'] && false !== strpos( $url, $failing_path ) ) {
 					return new WP_Error( 'http_request_failed', 'Salesforce did not respond.' );
 				}
-				// The contact lookup finds no one, so the sync goes on to create a contact.
+				// Lookups find nothing, so the sync goes on to create a contact and an
+				// opportunity; creates succeed, so the sync reaches the next request.
+				$body = 'POST' === $args['method'] ? [ 'id' => 'created-record' ] : [
+					'totalSize' => 0,
+					'records'   => [],
+					'fields'    => [],
+				];
 				return [
 					'headers'  => [],
-					'body'     => wp_json_encode(
-						[
-							'totalSize' => 0,
-							'records'   => [],
-						]
-					),
+					'body'     => wp_json_encode( $body ),
 					'response' => [ 'code' => 200 ],
 					'cookies'  => [],
 				];
 			},
 			10,
-			2
+			3
 		);
 
 		$donation = new WC_Order_Item_Product(

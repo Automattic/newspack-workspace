@@ -756,7 +756,7 @@ class Salesforce {
 					return \rest_ensure_response(
 						new \WP_Error(
 							'newspack_salesforce_opportunity_failure',
-							isset( $opportunity_response->get_error_message ) ? $opportunity_response->get_error_message() : __( 'Error creating opportunity.', 'newspack' )
+							is_wp_error( $opportunity_response ) ? $opportunity_response->get_error_message() : __( 'Error creating opportunity.', 'newspack' )
 						)
 					);
 				}
@@ -1065,7 +1065,7 @@ class Salesforce {
 	 * Look up existing Contact records by email address.
 	 *
 	 * @param string $email Email address of the contact.
-	 * @return array Array of found records with matching email attributes.
+	 * @return object|array|\WP_Error|null Decoded response, usually with `totalSize` and `records`; WP_Error if the request failed.
 	 */
 	private static function get_contacts_by_email( $email ) {
 		$query    = [
