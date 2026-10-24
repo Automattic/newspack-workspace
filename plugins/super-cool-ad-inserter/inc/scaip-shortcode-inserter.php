@@ -34,9 +34,8 @@ function scaip_insert_shortcode( $content = '' ) {
 			$is_empty         = empty( trim( $block['innerHTML'] ) );
 			if ( $is_classic_block && ! $is_empty ) {
 				$classic_content = force_balance_tags( wpautop( $block['innerHTML'] ) ); // Ensure we have paragraph tags and valid HTML.
-				if ( '' === trim( $classic_content ) ) {
-					// Nothing is left after formatting (e.g. only line breaks), and DOMDocument::loadHTML() rejects an empty string.
-					$blocks[] = $block;
+				if ( '' === $classic_content ) {
+					// Nothing is left after formatting (e.g. only line breaks), and DOMDocument::loadHTML() rejects an empty string. Yield no blocks, as an unparseable fragment does.
 					return $blocks;
 				}
 				$dom = new DomDocument();
@@ -73,7 +72,7 @@ function scaip_insert_shortcode( $content = '' ) {
 		[]
 	);
 
-	if ( $scaip_minimum_blocks > count( $parsed_blocks ) ) {
+	if ( empty( $parsed_blocks ) || $scaip_minimum_blocks > count( $parsed_blocks ) ) {
 		return $content;
 	}
 
