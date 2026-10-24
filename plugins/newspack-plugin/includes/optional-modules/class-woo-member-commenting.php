@@ -33,7 +33,7 @@ class Woo_Member_Commenting {
 	 *
 	 * @return void
 	 */
-	public static function on_init() {
+	public static function on_init(): void {
 		// Not should_load(): the current user can change after init, so each
 		// callback asks about the user in hand.
 		if ( ! self::is_configured() ) {
@@ -134,8 +134,13 @@ class Woo_Member_Commenting {
 	/**
 	 * Refuse a comment created through the REST API.
 	 *
-	 * Refused here, before the controller calls wp_allow_comment(), because REST
-	 * reads the status from an array the submission path above cannot use.
+	 * Refused here, before the controller calls wp_allow_comment(), because the
+	 * controller passes that function's errors through and REST reads the status
+	 * from an array the submission path above cannot use.
+	 *
+	 * Comment type needs no check here: the controller accepts only `comment` and
+	 * `note`, and a note needs edit_post on its post, which places its author
+	 * outside this module (see should_load()).
 	 *
 	 * @param array|\WP_Error  $prepared_comment Prepared comment.
 	 * @param \WP_REST_Request $request          Request.
@@ -147,7 +152,7 @@ class Woo_Member_Commenting {
 		if ( is_wp_error( $prepared_comment ) || ! empty( $request['id'] ) ) {
 			return $prepared_comment;
 		}
-		if ( ! self::is_reader_comment_type( $prepared_comment['comment_type'] ?? '' ) || ! self::require_membership_to_comment_for_user() ) {
+		if ( ! self::require_membership_to_comment_for_user() ) {
 			return $prepared_comment;
 		}
 		return new \WP_Error( self::ERROR_CODE, __( 'Only Members may post a comment.', 'newspack-plugin' ), [ 'status' => 403 ] );
@@ -155,7 +160,7 @@ class Woo_Member_Commenting {
 
 	/**
 	 * Whether a comment type is a reader comment, the only kind this restricts.
-	 * Pingbacks, trackbacks and product reviews keep their own rules.
+	 * Submitted pingbacks, trackbacks and product reviews are let through.
 	 *
 	 * @param string $comment_type Comment type; empty for a plain comment.
 	 *
