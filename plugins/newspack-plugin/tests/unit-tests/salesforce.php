@@ -112,9 +112,46 @@ class Newspack_Test_Salesforce extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Save the credentials that make Salesforce count as connected.
+	 */
+	private function connect_salesforce() {
+		update_option( 'newspack_salesforce_client_id', 'test-client-id' );
+		update_option( 'newspack_salesforce_client_secret', 'test-client-secret' );
+		update_option( 'newspack_salesforce_refresh_token', 'test-refresh-token' );
+		update_option( 'newspack_salesforce_access_token', 'test-access-token' );
+		update_option( 'newspack_salesforce_instance_url', 'https://salesforce.example.test' );
+	}
+
+	/**
+	 * A site that never connected Salesforce gets no sync webhook, so its orders
+	 * are never sent to a sync that can only fail.
+	 */
+	public function test_platform_check_creates_no_webhook_until_salesforce_is_connected() {
+		delete_option( 'newspack_salesforce_webhook_id' );
+
+		Salesforce::platform_check();
+
+		self::assertSame( 0, (int) get_option( 'newspack_salesforce_webhook_id' ), 'No webhook ID is stored.' );
+		self::assertSame( [], WC_Webhook::$registry, 'No webhook is created.' );
+	}
+
+	/**
+	 * A webhook created before Salesforce was connected is removed.
+	 */
+	public function test_platform_check_removes_webhook_when_salesforce_is_not_connected() {
+		$webhook = $this->register_sync_webhook();
+
+		Salesforce::platform_check();
+
+		self::assertSame( 0, (int) get_option( 'newspack_salesforce_webhook_id' ), 'The stored webhook ID is cleared.' );
+		self::assertNull( wc_get_webhook( $webhook->get_id() ), 'The webhook itself is deleted.' );
+	}
+
+	/**
 	 * A newly created sync webhook is given a signing secret.
 	 */
 	public function test_platform_check_creates_webhook_with_secret() {
+		$this->connect_salesforce();
 		delete_option( 'newspack_salesforce_webhook_id' );
 
 		// is_platform_wc() defaults to true, so this creates the sync webhook.
@@ -132,6 +169,7 @@ class Newspack_Test_Salesforce extends WP_UnitTestCase {
 	 * An existing webhook without a secret is backfilled with one.
 	 */
 	public function test_platform_check_backfills_missing_secret() {
+		$this->connect_salesforce();
 		$webhook = new WC_Webhook();
 		$webhook->set_status( 'active' );
 		$webhook->save();

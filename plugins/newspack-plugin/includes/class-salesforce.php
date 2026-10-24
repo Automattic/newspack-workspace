@@ -56,24 +56,27 @@ class Salesforce {
 	}
 
 	/**
-	 * Check if Newspack is the current Reader Revenue platform.
-	 * If not, disable syncing. If so and the required webhook
-	 * doesn't exist, create it.
+	 * Sync orders only while Newspack is the Reader Revenue platform and Salesforce
+	 * is connected. Otherwise remove the webhook: without credentials every
+	 * delivery fails and adds an error note to the order.
 	 */
 	public static function platform_check() {
 		if ( ! function_exists( 'wc_get_webhook' ) ) {
 			return;
 		}
-		$is_newspack = Donations::is_platform_wc();
+		$should_sync = Donations::is_platform_wc() && self::is_connected();
 		$webhook_id  = self::get_webhook();
 
-		if ( ! $is_newspack && $webhook_id ) {
-			self::delete_webhook( $webhook_id );
+		if ( ! $should_sync ) {
+			if ( $webhook_id ) {
+				self::delete_webhook( $webhook_id );
+			}
+			return;
 		}
 
-		if ( $is_newspack && ! $webhook_id ) {
+		if ( ! $webhook_id ) {
 			self::create_webhook();
-		} elseif ( $is_newspack && $webhook_id && ! get_option( self::WEBHOOK_SECRET_BACKFILLED ) ) {
+		} elseif ( ! get_option( self::WEBHOOK_SECRET_BACKFILLED ) ) {
 			self::ensure_webhook_secret( $webhook_id );
 		}
 	}
