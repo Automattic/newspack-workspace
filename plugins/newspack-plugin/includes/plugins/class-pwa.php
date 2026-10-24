@@ -74,28 +74,45 @@ class PWA {
 	 * or /?wp_service_worker=1 on sites without pretty permalinks. Admin worker: admin-ajax.php?action=wp_service_worker.
 	 *
 	 * @param string $request_uri The request URI, with query string.
-	 * @param string $home_path   Path component of the home URL, e.g. '' or '/blog'.
+	 * @param string $home_path   Path component of the home URL, e.g. '' or '/blog'. The front worker lives under it.
+	 * @param string $site_path   Path component of the site URL, e.g. '' or '/wordpress'. wp-admin lives under it. Defaults to the home path.
 	 *
 	 * @return bool
 	 */
-	public static function is_worker_request( $request_uri, $home_path = '' ) {
+	public static function is_worker_request( $request_uri, $home_path = '', $site_path = null ) {
 		$parts = wp_parse_url( $request_uri );
 		$path  = isset( $parts['path'] ) ? $parts['path'] : '';
 		wp_parse_str( isset( $parts['query'] ) ? $parts['query'] : '', $query );
 
-		$home_path = untrailingslashit( $home_path );
-		if ( '' !== $home_path && 0 === strpos( $path, $home_path . '/' ) ) {
-			$path = substr( $path, strlen( $home_path ) );
-		}
-		$path = trim( $path, '/' );
+		$front_path = self::strip_base_path( $path, $home_path );
+		$admin_path = self::strip_base_path( $path, null === $site_path ? $home_path : $site_path );
 
-		if ( 'wp.serviceworker' === $path || 'index.php/wp.serviceworker' === $path ) {
+		if ( 'wp.serviceworker' === $front_path || 'index.php/wp.serviceworker' === $front_path ) {
 			return true;
 		}
-		if ( ( '' === $path || 'index.php' === $path ) && ! empty( $query['wp_service_worker'] ) ) {
+		if ( ( '' === $front_path || 'index.php' === $front_path ) && ! empty( $query['wp_service_worker'] ) ) {
 			return true;
 		}
-		return 'wp-admin/admin-ajax.php' === $path && isset( $query['action'] ) && 'wp_service_worker' === $query['action'];
+		return 'wp-admin/admin-ajax.php' === $admin_path && isset( $query['action'] ) && 'wp_service_worker' === $query['action'];
+	}
+
+	/**
+	 * Remove a base path from the start of a request path, and the leading slash.
+	 *
+	 * @param string $path      Request path.
+	 * @param string $base_path Base path, e.g. '' or '/blog'.
+	 *
+	 * @return string|null The remaining path, or null when the path is not under the base path.
+	 */
+	private static function strip_base_path( $path, $base_path ) {
+		$base_path = untrailingslashit( $base_path );
+		if ( '' !== $base_path ) {
+			if ( $path !== $base_path && 0 !== strpos( $path, $base_path . '/' ) ) {
+				return null;
+			}
+			$path = substr( $path, strlen( $base_path ) );
+		}
+		return ltrim( $path, '/' );
 	}
 
 	/**
@@ -104,18 +121,19 @@ class PWA {
 	 * @param string $request_uri The request URI, with query string.
 	 * @param bool   $pwa_active  Whether the PWA plugin is loaded.
 	 * @param string $home_path   Path component of the home URL.
+	 * @param string $site_path   Path component of the site URL. Defaults to the home path.
 	 *
 	 * @return array|null Headers and body, or null when the request must be left alone.
 	 */
-	public static function get_orphaned_worker_response( $request_uri, $pwa_active, $home_path = '' ) {
-		if ( $pwa_active || ! self::is_worker_request( $request_uri, $home_path ) ) {
+	public static function get_orphaned_worker_response( $request_uri, $pwa_active, $home_path = '', $site_path = null ) {
+		if ( $pwa_active || ! self::is_worker_request( $request_uri, $home_path, $site_path ) ) {
 			return null;
 		}
 		return [
 			'headers' => [
 				'Content-Type'  => 'application/javascript; charset=utf-8',
-				// Short enough that the edge picks up a later change, long enough to absorb the repeat checks.
-				'Cache-Control' => 'public, max-age=3600',
+				// Revalidated on every request: if the PWA plugin is turned back on, neither the edge nor a browser HTTP cache may keep serving this script in place of the real worker. The response is cheap to produce.
+				'Cache-Control' => 'no-cache, max-age=0',
 				'X-Robots-Tag'  => 'noindex, follow',
 			],
 			'body'    => self::ORPHANED_WORKER_SCRIPT,
@@ -142,7 +160,8 @@ class PWA {
 			return;
 		}
 		$home_path = (string) wp_parse_url( home_url(), PHP_URL_PATH );
-		$response  = self::get_orphaned_worker_response( wp_unslash( $_SERVER['REQUEST_URI'] ), false, $home_path ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Only parsed and compared.
+		$site_path = (string) wp_parse_url( site_url(), PHP_URL_PATH );
+		$response  = self::get_orphaned_worker_response( wp_unslash( $_SERVER['REQUEST_URI'] ), false, $home_path, $site_path ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Only parsed and compared.
 		if ( ! $response ) {
 			return;
 		}
