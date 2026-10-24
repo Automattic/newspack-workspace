@@ -288,6 +288,37 @@ describe( 'Wizard section tabs', () => {
 	} );
 } );
 
+describe( 'Wizard hidden tabs', () => {
+	const sections = [
+		{ label: 'First', path: '/', exact: true, render: () => <div>First content</div> },
+		{ label: 'Second', path: '/second', render: () => <div>Second content</div> },
+	];
+
+	beforeEach( () => {
+		apiFetch.mockReset();
+	} );
+
+	afterEach( () => {
+		window.location.hash = '';
+	} );
+
+	it( 'shows a tab per section by default', async () => {
+		window.location.hash = '#/';
+		render( <Wizard headerText="Test wizard" sections={ sections } /> );
+
+		expect( await screen.findByText( 'First content' ) ).toBeInTheDocument();
+		expect( screen.getAllByRole( 'tab' ) ).toHaveLength( 2 );
+	} );
+
+	it( 'still routes to the section in the hash without its tabs', async () => {
+		window.location.hash = '#/second';
+		render( <Wizard headerText="Test wizard" sections={ sections } hideTabs /> );
+
+		expect( await screen.findByText( 'Second content' ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'tab' ) ).toBeNull();
+	} );
+} );
+
 describe( 'Wizard section subtitle', () => {
 	beforeEach( () => {
 		apiFetch.mockReset();

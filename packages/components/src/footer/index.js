@@ -14,7 +14,14 @@ import { ExternalLink } from '@wordpress/components';
 import useConfirmDialog from '../hooks/use-confirm-dialog';
 import './style.scss';
 
-const Footer = ( { simple = undefined } ) => {
+/**
+ * Newspack admin footer links.
+ *
+ * @param {Object}  props
+ * @param {boolean} [props.simple]    Renders no links, only the dialogs.
+ * @param {boolean} [props.hideAbout] Leaves out the About link.
+ */
+const Footer = ( { simple = undefined, hideAbout = false } ) => {
 	const {
 		components_demo: componentsDemo = false,
 		support = false,
@@ -48,11 +55,15 @@ const Footer = ( { simple = undefined } ) => {
 			url: 'https://newspack.com/category/release-notes/',
 			external: true,
 		},
-		{
-			label: __( 'About', 'newspack-plugin' ),
-			url: 'https://newspack.com/',
-			external: true,
-		},
+		...( hideAbout
+			? []
+			: [
+					{
+						label: __( 'About', 'newspack-plugin' ),
+						url: 'https://newspack.com/',
+						external: true,
+					},
+			  ] ),
 		{
 			label: __( 'Documentation', 'newspack-plugin' ),
 			url: support,
