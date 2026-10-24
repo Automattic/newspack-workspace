@@ -10,6 +10,7 @@ import {
 	isPaymentChallengeShown,
 	isSameDocumentRedirect,
 	mountFrameProcessingScreen,
+	placeOrderSummary,
 	preventDisabledCloseClicks,
 	removeFrameProcessingScreen,
 } from './utils';
@@ -190,6 +191,102 @@ describe( 'isPaymentChallengeShown()', () => {
 		document.body.innerHTML = '<div style="position: fixed"><iframe src="https://js.stripe.com/v3/three-ds-2-challenge.html"></iframe></div>';
 
 		expect( isPaymentChallengeShown( document ) ).toBe( true );
+	} );
+} );
+
+describe( 'placeOrderSummary()', () => {
+	const paymentBox = methods =>
+		`<div id="payment" class="woocommerce-checkout-payment">${
+			methods ? '<ul class="wc_payment_methods payment_methods methods"></ul>' : ''
+		}<div class="form-row place-order"></div></div>`;
+	const reviewTable = total =>
+		`<table class="woocommerce-checkout-review-order-table"><tr><td class="order-total">${ total }</td></tr><tr><td><input type="radio" id="shipping_method_0_flat_rate1"></td></tr></table>`;
+	const summaryBox = total => `<div class="order-review-wrapper">${ reviewTable( total ) }</div>`;
+	const summaryTotal = () => document.querySelector( '.order-review-wrapper .order-total' )?.textContent;
+	const replacePaymentBox = ( methods = true ) => {
+		document.getElementById( 'payment' ).outerHTML = paymentBox( methods );
+	};
+
+	/**
+	 * Refresh the checkout the way WooCommerce applies `update_order_review`
+	 * fragments: the review table first, then the whole payment box.
+	 */
+	const refreshCheckout = ( { total, methods = true } ) => {
+		document.querySelector( '.woocommerce-checkout-review-order-table' ).outerHTML = reviewTable( total );
+		replacePaymentBox( methods );
+	};
+
+	describe( 'with the summary rendered before the payment box', () => {
+		let summary;
+
+		beforeEach( () => {
+			document.body.innerHTML = `<div id="after_customer_details">${ summaryBox( '$20.00' ) }${ paymentBox( true ) }</div>`;
+			summary = placeOrderSummary( document, null );
+		} );
+
+		it( 'puts the summary between the payment methods and the place order button', () => {
+			expect( document.querySelector( '.payment_methods' ).nextElementSibling ).toBe( summary );
+			expect( summary.nextElementSibling.classList.contains( 'place-order' ) ).toBe( true );
+		} );
+
+		it( 'keeps the summary, with current totals, when the payment box is replaced', () => {
+			refreshCheckout( { total: '$18.00' } );
+			placeOrderSummary( document, summary );
+
+			expect( document.querySelector( '.payment_methods' ).nextElementSibling ).toBe( summary );
+			expect( summaryTotal() ).toBe( '$18.00' );
+		} );
+
+		it( "brings a detached summary back with the update's review table when WooCommerce missed it", () => {
+			replacePaymentBox();
+			placeOrderSummary( document, summary, reviewTable( '$25.75' ) );
+
+			expect( document.querySelector( '.payment_methods' ).nextElementSibling ).toBe( summary );
+			expect( summaryTotal() ).toBe( '$25.75' );
+		} );
+
+		it.each( [
+			[ 'a paid', true ],
+			[ 'a free', false ],
+		] )( 'leaves a summary already in place untouched on %s order, so focus inside it survives', ( label, methods ) => {
+			if ( ! methods ) {
+				refreshCheckout( { total: '$0.00', methods } );
+				placeOrderSummary( document, summary );
+			}
+			const radio = document.getElementById( 'shipping_method_0_flat_rate1' );
+			radio.focus();
+			placeOrderSummary( document, summary, reviewTable( '$20.00' ) );
+
+			expect( document.activeElement ).toBe( radio );
+		} );
+
+		it( 'keeps the summary above the place order button when the order needs no payment', () => {
+			refreshCheckout( { total: '$0.00', methods: false } );
+			placeOrderSummary( document, summary );
+
+			expect( summary.nextElementSibling.id ).toBe( 'payment' );
+			expect( summaryTotal() ).toBe( '$0.00' );
+		} );
+	} );
+
+	it( "puts the summary above the place order button on a free order's first load in a block theme", () => {
+		document.body.innerHTML = `<div id="after_customer_details">${ paymentBox( false ) }${ summaryBox( '$0.00' ) }</div>`;
+		const summary = placeOrderSummary( document, null );
+
+		expect( summary.nextElementSibling.id ).toBe( 'payment' );
+	} );
+
+	it.each( [
+		[ 'with payment methods', true ],
+		[ 'without payment methods', false ],
+	] )( 'leaves a summary that holds the payment box where it is (%s)', ( label, methods ) => {
+		document.body.innerHTML = `<div id="after_customer_details"><div class="order-review-wrapper"><div id="order_review">${ reviewTable(
+			'$20.00'
+		) }${ paymentBox( methods ) }</div></div></div>`;
+		const wrapper = document.querySelector( '.order-review-wrapper' );
+
+		expect( placeOrderSummary( document, null ) ).toBe( wrapper );
+		expect( wrapper.parentElement.id ).toBe( 'after_customer_details' );
 	} );
 } );
 

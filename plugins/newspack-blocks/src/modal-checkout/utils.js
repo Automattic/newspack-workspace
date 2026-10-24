@@ -117,6 +117,48 @@ export function isPaymentChallengeShown( doc ) {
 }
 
 /**
+ * Put the order summary between the payment methods and the place order button,
+ * or above the payment box when the order needs no payment.
+ *
+ * A checkout update replaces `#payment` whole, taking a summary placed inside it
+ * along. A detached summary goes back with the update's review table, because
+ * WooCommerce only refreshes the table while it is in the document. A summary
+ * already in place, or one that holds `#payment` itself (classic themes other
+ * than Newspack's), is not moved, so focus inside it survives the update.
+ *
+ * @param {Document}     doc           The checkout document.
+ * @param {Element|null} summary       The summary placed last time, if any.
+ * @param {string}       [reviewTable] The update's review table fragment, if any.
+ *
+ * @return {Element|null} The summary, or null when the checkout has none.
+ */
+export function placeOrderSummary( doc, summary, reviewTable ) {
+	const attached = doc.querySelector( '.order-review-wrapper' );
+	const current = attached || summary;
+	if ( ! current ) {
+		return null;
+	}
+	if ( ! attached && reviewTable ) {
+		const table = current.querySelector( '.woocommerce-checkout-review-order-table' );
+		if ( table ) {
+			table.outerHTML = reviewTable;
+		}
+	}
+	const paymentMethods = doc.querySelector( '.payment_methods' );
+	if ( paymentMethods ) {
+		if ( paymentMethods.nextElementSibling !== current && ! current.contains( paymentMethods ) ) {
+			paymentMethods.after( current );
+		}
+		return current;
+	}
+	const payment = doc.querySelector( '#payment' );
+	if ( payment && payment.previousElementSibling !== current && ! current.contains( payment ) ) {
+		payment.before( current );
+	}
+	return current;
+}
+
+/**
  * Create a hidden input field.
  *
  * @param {string} name  The name of the input field.
