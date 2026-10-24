@@ -247,6 +247,33 @@ class ModelTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The tappable overlay backdrop is a pointer target only. Keyboard and
+	 * screen reader users dismiss the overlay with its labeled close button.
+	 */
+	public function test_overlay_backdrop_is_hidden_from_keyboard() {
+		update_option( 'newspack_popups_dismiss_overlays_on_tap', true );
+		$popup_object = Newspack_Popups_Model::create_popup_object(
+			get_post( self::$popup_id ),
+			false,
+			[
+				'placement'    => 'center',
+				'trigger_type' => 'time',
+			]
+		);
+		$markup = Newspack_Popups_Model::generate_popup( $popup_object );
+		delete_option( 'newspack_popups_dismiss_overlays_on_tap' );
+
+		$dom = new DomDocument();
+		@$dom->loadHTML( $markup ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		$xpath = new DOMXpath( $dom );
+
+		$backdrop = $xpath->query( '//button[contains(concat(" ", normalize-space(@class), " "), " newspack-lightbox-overlay ")]' )->item( 0 );
+		self::assertNotNull( $backdrop, 'The tappable backdrop is present.' );
+		self::assertSame( '-1', $backdrop->getAttribute( 'tabindex' ), 'The backdrop is not in the tab order.' );
+		self::assertSame( 'true', $backdrop->getAttribute( 'aria-hidden' ), 'The backdrop is hidden from screen readers.' );
+	}
+
+	/**
 	 * Tests retrieve_popup_by_id
 	 */
 	public function test_retrieve_popup_by_id() {
