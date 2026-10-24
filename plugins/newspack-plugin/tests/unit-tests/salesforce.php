@@ -248,7 +248,7 @@ class Newspack_Test_Salesforce extends WP_UnitTestCase {
 	 */
 	public function failed_salesforce_request_provider() {
 		return [
-			'contact lookup'     => [ 'GET', '/query?' ],
+			'contact lookup'     => [ 'GET', 'FROM+Contact' ],
 			'contact create'     => [ 'POST', '/sobjects/Contact/' ],
 			'opportunity create' => [ 'POST', '/sobjects/Opportunity/' ],
 		];
@@ -280,8 +280,9 @@ class Newspack_Test_Salesforce extends WP_UnitTestCase {
 				if ( $failing_method === $args['method'] && false !== strpos( $url, $failing_path ) ) {
 					return new WP_Error( 'http_request_failed', 'Salesforce did not respond.' );
 				}
-				// Lookups find nothing, so the sync goes on to create a contact and an
-				// opportunity; creates succeed, so the sync reaches the next request.
+				// Lookups and the NPSP describe call find nothing, so the sync goes on to
+				// create a contact and an opportunity; creates succeed, so the sync
+				// reaches the next request.
 				$body = 'POST' === $args['method'] ? [ 'id' => 'created-record' ] : [
 					'totalSize' => 0,
 					'records'   => [],
