@@ -646,7 +646,7 @@
 			font-size: var(--newspack-ui-font-size-s, 16px);
 			line-height: var(--newspack-ui-line-height-s, 1.5);
 			padding: calc(var(--newspack-ui-spacer-2, 12px) - 1px) calc(var(--newspack-ui-spacer-3, 16px) - 1px);
-			transition: border-color 125ms ease-in-out, box-shadow 125ms ease-in-out;
+			transition: border-color var(--newspack-ui-duration-color, 150ms) ease, box-shadow var(--newspack-ui-duration-color, 150ms) ease;
 
 			&:hover {
 				border-color: var(--newspack-ui-color-input-border-hover, np-colors.$neutral-700);

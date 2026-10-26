@@ -372,7 +372,7 @@
 		max-width: 100%;
 		overflow: hidden;
 		right: var(--newspack-ui-spacer-5, 24px);
-		transition: border-color 125ms ease-in-out, box-shadow 125ms ease-in-out;
+		transition: border-color var(--newspack-ui-duration-color, 150ms) ease, box-shadow var(--newspack-ui-duration-color, 150ms) ease;
 
 		&:hover:not(:focus-within) {
 			border-color: var(--newspack-ui-color-input-border-hover, np-colors.$neutral-700);
@@ -485,7 +485,7 @@
 					margin: 0;
 					padding: var(--newspack-ui-spacer-2, 12px) var(--newspack-ui-spacer-5, 24px);
 					text-align: center;
-					transition: background 125ms ease-in-out, color 125ms ease-in-out;
+					transition: background var(--newspack-ui-duration-color, 150ms) ease, color var(--newspack-ui-duration-color, 150ms) ease;
 
 					&:hover {
 						background: var(--newspack-ui-color-neutral-fill-hover, np-colors.$neutral-200);
@@ -537,7 +537,7 @@
 			margin: 0 calc(1px + var(--newspack-ui-spacer-5, 24px)) calc(1px + var(--newspack-ui-spacer-5, 24px));
 			padding: var(--newspack-ui-spacer-2, 12px) var(--newspack-ui-spacer-5, 24px);
 			position: relative;
-			transition: opacity 125ms ease-in-out;
+			transition: opacity var(--newspack-ui-duration-color, 150ms) ease, transform var(--newspack-ui-duration-press, 160ms) var(--newspack-ui-ease-out, cubic-bezier(0.23, 1, 0.32, 1));
 			width: calc(100% - 2 * var(--newspack-ui-spacer-5, 24px) - 2px);
 			z-index: 1;
 
@@ -547,6 +547,14 @@
 
 			&:hover {
 				opacity: 0.8;
+			}
+
+			&:active {
+				transform: scale(0.97);
+
+				@media ( prefers-reduced-motion: reduce ) {
+					transform: none;
+				}
 			}
 
 			&:focus {
@@ -647,10 +655,18 @@
 				line-height: var(--newspack-ui-line-height-body, 1.5);
 				margin: auto 0 0;
 				padding: calc(var(--newspack-ui-spacer-2, 12px) - 1px) calc(var(--newspack-ui-spacer-5, 24px) - 1px);
-				transition: background 125ms ease-in-out, border-color 125ms ease-in-out, opacity 125ms ease-in-out;
+				transition: background var(--newspack-ui-duration-color, 150ms) ease, border-color var(--newspack-ui-duration-color, 150ms) ease, opacity var(--newspack-ui-duration-color, 150ms) ease, transform var(--newspack-ui-duration-press, 160ms) var(--newspack-ui-ease-out, cubic-bezier(0.23, 1, 0.32, 1));
 
 				&:hover {
 					opacity: 0.8;
+				}
+
+				&:active {
+					transform: scale(0.97);
+
+					@media ( prefers-reduced-motion: reduce ) {
+						transform: none;
+					}
 				}
 
 				&:focus {

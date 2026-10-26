@@ -65,8 +65,8 @@
 			opacity: 0;
 			transform: scale(0.9);
 			transition:
-				opacity 120ms var(--newspack-ui-ease-out),
-				transform 120ms var(--newspack-ui-ease-out);
+				opacity var(--newspack-ui-duration-press) var(--newspack-ui-ease-out),
+				transform var(--newspack-ui-duration-press) var(--newspack-ui-ease-out);
 			width: var(--newspack-ui-spacer-4);
 
 			@media ( prefers-reduced-motion: reduce ) {
