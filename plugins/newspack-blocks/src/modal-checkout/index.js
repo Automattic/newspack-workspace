@@ -860,7 +860,7 @@ import { afterDeferredScripts, domReady, isSameDocumentRedirect, onCheckoutPlace
 					manageCheckoutAttempt();
 				} );
 
-				// Express checkout (Apple Pay, Google Pay) submits without that button.
+				// Stripe's express checkout buttons submit without clicking it.
 				afterDeferredScripts( registerExpressCheckoutAttempt );
 
 				/**

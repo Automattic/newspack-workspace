@@ -1,5 +1,5 @@
 /**
- * Tests for the express checkout (Apple Pay / Google Pay) submission attempt.
+ * Tests for the express checkout submission attempt.
  */
 
 import { createHooks } from '@wordpress/hooks';
@@ -51,7 +51,7 @@ afterEach( () => {
 } );
 
 describe( 'registerExpressCheckoutAttempt()', () => {
-	it( 'sends one form_submission when Stripe applies its order filter after a wallet approval', () => {
+	it( 'sends one form_submission when Stripe applies its order filter after an express checkout approval', () => {
 		registerExpressCheckoutAttempt();
 
 		hooks.applyFilters( STRIPE_ORDER_FILTER, {} );

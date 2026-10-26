@@ -18,11 +18,12 @@ export const manageCheckoutAttempt = () => {
 };
 
 /**
- * Filter that WooCommerce Stripe Gateway's express checkout (Apple Pay, Google
- * Pay) applies once per wallet approval, just before it sends the order. The
- * wallet button is drawn in Stripe's own frame and never clicks #place_order, so
- * this is where the modal can see a wallet submission. It exists from gateway
- * 9.2.0; if Stripe renames it, wallet purchases quietly stop sending the event.
+ * Filter that WooCommerce Stripe Gateway's express checkout applies once per
+ * approval, just before it sends the order, whichever of its buttons the reader
+ * used (Apple Pay, Google Pay, Link, Amazon Pay). Those buttons are drawn in
+ * Stripe's own frame and never click #place_order, so this is where the modal
+ * can see the submission. It exists from gateway 9.2.0; if Stripe renames it,
+ * express checkout purchases quietly stop sending the event.
  */
 const EXPRESS_CHECKOUT_ORDER_FILTER = 'wcstripe.express-checkout.cart-place-order-extension-data';
 
@@ -34,6 +35,9 @@ const EXPRESS_CHECKOUT_ORDER_FILTER = 'wcstripe.express-checkout.cart-place-orde
  * one. Stripe builds the order request from the filter's return value, so the
  * handler returns its input untouched even if sending the event fails, and a
  * missing or broken registry never stops the rest of the checkout script.
+ * That is also why the registry is read here at call time: this script
+ * declares no wp-hooks dependency, so importing @wordpress/hooks would turn
+ * into a lookup when the bundle loads, outside this guard.
  */
 export const registerExpressCheckoutAttempt = () => {
 	const hooks = window.wp?.hooks;
