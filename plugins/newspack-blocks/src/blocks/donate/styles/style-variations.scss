@@ -8,9 +8,14 @@
 	.wpbnbd {
 		&__button {
 			padding: 0.38rem 0.76rem;
-			&:focus,
-			&:hover {
+			&:focus {
 				background: np-colors.$neutral-050;
+			}
+
+			@media ( hover: hover ) and ( pointer: fine ) {
+				&:hover {
+					background: np-colors.$neutral-050;
+				}
 			}
 		}
 		&__tiers {
@@ -139,8 +144,10 @@
 					position: absolute;
 					z-index: -1;
 				}
-				&:hover {
-					background: np-colors.$neutral-050;
+				@media ( hover: hover ) and ( pointer: fine ) {
+					&:hover {
+						background: np-colors.$neutral-050;
+					}
 				}
 			}
 		}
@@ -264,8 +271,10 @@
 					width: 20px;
 				}
 
-				&:hover {
-					color: inherit;
+				@media ( hover: hover ) and ( pointer: fine ) {
+					&:hover {
+						color: inherit;
+					}
 				}
 			}
 

@@ -12,9 +12,14 @@
 		text-overflow: ellipsis;
 		text-align: center;
 		&--active,
-		&:focus,
-		&:hover {
+		&:focus {
 			color: np-colors.$neutral-900;
+		}
+
+		@media ( hover: hover ) and ( pointer: fine ) {
+			&:hover {
+				color: np-colors.$neutral-900;
+			}
 		}
 	}
 
