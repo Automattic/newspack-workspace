@@ -204,6 +204,26 @@ describe( 'auth form with post-registration verification', () => {
 		expect( onSuccess ).toHaveBeenCalledWith( 'Registered', expect.objectContaining( { registered: 1 } ) );
 	} );
 
+	it( 'marks the auth modal from the hand-over to verification until the auth modal closes', () => {
+		const { form, verificationModal } = renderAuthModal();
+		const authModal = document.querySelector( '.newspack-reader-auth-modal' );
+		openAuthModal( { onSuccess: jest.fn(), skipSuccess: true, skipNewslettersSignup: true } );
+		expect( authModal.hasAttribute( 'data-verification-handover' ) ).toBe( false );
+
+		form.endLoginFlow( 'Registered', 200, REGISTERED );
+		expect( authModal.hasAttribute( 'data-verification-handover' ) ).toBe( true );
+
+		closeModal( verificationModal );
+		expect( authModal.style.display ).toBe( '' );
+		expect( authModal.hasAttribute( 'data-verification-handover' ) ).toBe( true );
+
+		closeModal( authModal );
+		expect( authModal.hasAttribute( 'data-verification-handover' ) ).toBe( false );
+
+		openAuthModal( { onSuccess: jest.fn(), skipSuccess: true, skipNewslettersSignup: true } );
+		expect( authModal.hasAttribute( 'data-verification-handover' ) ).toBe( false );
+	} );
+
 	it( 'moves a form with no opener to its success step when the reader dismisses the verification step', () => {
 		// The logged-out My Account page prints the form inline, outside the auth modal.
 		const { form, formStep, verificationModal } = renderPage( AUTH_FORM );

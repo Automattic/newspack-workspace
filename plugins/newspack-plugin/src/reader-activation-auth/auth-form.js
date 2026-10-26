@@ -442,6 +442,8 @@ window.newspackRAS.push( function ( readerActivation ) {
 						// Visually hide the auth modal while the verification flow is active.
 						if ( authModal ) {
 							authModal.style.display = 'none';
+							// Kept through the hand-back so the stylesheet can tell it from an inline form opening this modal; close() clears it.
+							authModal.setAttribute( 'data-verification-handover', '' );
 						}
 
 						// startLoginFlow() set the loading state for the in-flight register request. This

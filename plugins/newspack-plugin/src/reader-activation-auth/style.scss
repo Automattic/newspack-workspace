@@ -78,26 +78,27 @@ body.logged-in {
 	}
 }
 
-body:has(.newspack-reader-auth-modal[data-state="open"]:not([style*="display: none"])) .newspack__reader-verification .newspack-ui__modal-container:not([data-state="open"]) {
+body:has(.newspack-reader-auth-modal[data-state="open"]:not([data-verification-handover])) .newspack__reader-verification .newspack-ui__modal-container:not([data-state="open"]) {
+	display: none;
+	transition:
+		visibility 0s linear var(--newspack-ui-duration-sheet),
+		z-index 0s linear var(--newspack-ui-duration-sheet),
+		display 0s linear var(--newspack-ui-duration-sheet) allow-discrete;
+}
+
+body:has(.newspack-reader-auth-modal[data-state="open"][data-verification-handover]) .newspack__reader-verification .newspack-ui__modal-container:not([data-state="open"]) {
 	display: none;
 }
 
-body:has(.newspack-reader-auth-modal[data-state="open"][style*="display: none"]) .newspack__reader-verification .newspack-ui__modal-container[data-state="open"] {
-	.newspack-ui__modal-container__overlay,
-	.newspack-ui__modal {
-		transition: none;
-	}
+body:has(.newspack-reader-auth-modal[data-verification-handover]) .newspack__reader-verification .newspack-ui__modal-container[data-state="open"] .newspack-ui__modal > * {
+	transition: opacity var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out);
 
-	.newspack-ui__modal > * {
-		transition: opacity var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out);
-
-		@starting-style {
-			opacity: 0;
-		}
+	@starting-style {
+		opacity: 0;
 	}
 }
 
-.newspack-reader-auth-modal[data-state="open"] .newspack-ui__modal > :is(.newspack-ui__modal__header, .newspack-ui__modal__content) {
+.newspack-reader-auth-modal[data-state="open"][data-verification-handover] .newspack-ui__modal > :is(.newspack-ui__modal__header, .newspack-ui__modal__content) {
 	transition: opacity var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out);
 
 	@starting-style {

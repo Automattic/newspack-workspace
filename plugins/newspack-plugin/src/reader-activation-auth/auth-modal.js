@@ -89,6 +89,7 @@ export function openAuthModal( config = {} ) {
 
 		container.config = {};
 		modal.setAttribute( 'data-state', 'closed' );
+		modal.removeAttribute( 'data-verification-handover' );
 		document.body.classList.remove( 'newspack-signin' );
 		if ( modal.overlayId && window.newspackReaderActivation?.overlays ) {
 			window.newspackReaderActivation.overlays.remove( modal.overlayId );
