@@ -1,0 +1,114 @@
+- generic [active] [ref=e1]:
+  - link "Skip to content" [ref=e2] [cursor=pointer]:
+    - /url: "#wp--skip-link--target"
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e7]:
+        - button "Click this button! Button!" [ref=e8]:
+          - generic [ref=e9]:
+            - heading "Click this button!" [level=2] [ref=e10]
+            - generic [ref=e11]: Button!
+        - generic [ref=e15]:
+          - generic [ref=e16]:
+            - link [ref=e18] [cursor=pointer]:
+              - /url: https://blocktheme2.local/
+              - img "Block Theme" [ref=e19]
+            - generic [ref=e20]:
+              - generic [ref=e21]: Donate
+              - link "Sign in" [ref=e26] [cursor=pointer]:
+                - /url: "#"
+          - generic [ref=e31]:
+            - navigation "Navigation" [ref=e32]:
+              - list [ref=e33]:
+                - listitem [ref=e34]:
+                  - link "Block test" [ref=e35] [cursor=pointer]:
+                    - /url: https://blocktheme2.local/block-test/
+                - listitem [ref=e36]:
+                  - link "Gallery Block" [ref=e37] [cursor=pointer]:
+                    - /url: https://blocktheme2.local/gallery-block/
+            - button "Search" [ref=e40] [cursor=pointer]
+    - main [ref=e46]:
+      - generic [ref=e47]:
+        - generic [ref=e48]:
+          - link "Uncategorized" [ref=e50] [cursor=pointer]:
+            - /url: https://blocktheme2.local/category/uncategorized/
+          - heading "Comments button width test" [level=1] [ref=e51]
+        - paragraph
+        - time [ref=e56]: October 9, 2026
+      - generic [ref=e58]:
+        - paragraph [ref=e59]: Width tests below.
+        - button "25%" [ref=e63] [cursor=pointer]
+        - button "50% bordered" [ref=e71] [cursor=pointer]
+        - button "75%" [ref=e79] [cursor=pointer]
+        - button "100%" [ref=e87] [cursor=pointer]
+        - button "No width" [ref=e95] [cursor=pointer]
+      - generic [ref=e102]:
+        - generic [ref=e103]:
+          - separator [ref=e104]
+          - separator [ref=e105]
+        - button "Comments" [ref=e109] [cursor=pointer]
+    - contentinfo [ref=e114]:
+      - generic [ref=e119]:
+        - generic [ref=e120]:
+          - paragraph [ref=e121]:
+            - link "Block Theme" [ref=e122] [cursor=pointer]:
+              - /url: https://blocktheme2.local
+          - paragraph [ref=e124]: Our online newspaper delivers the latest news and insightful analysis. Our experienced journalists ensure accurate and impartial reporting. Stay informed with our engaging and informative articles.
+          - list [ref=e125]:
+            - listitem [ref=e126]:
+              - link "Facebook" [ref=e127] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e131]:
+              - link "Instagram" [ref=e132] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e136]:
+              - link "X" [ref=e137] [cursor=pointer]:
+                - /url: "#"
+          - navigation [ref=e141]:
+            - list [ref=e142]:
+              - listitem [ref=e143]:
+                - link "Block test" [ref=e144] [cursor=pointer]:
+                  - /url: https://blocktheme2.local/block-test/
+              - listitem [ref=e145]:
+                - link "Gallery Block" [ref=e146] [cursor=pointer]:
+                  - /url: https://blocktheme2.local/gallery-block/
+        - generic [ref=e147]:
+          - separator [ref=e148]
+          - generic [ref=e149]:
+            - generic [ref=e150]:
+              - generic [ref=e151]: © 2026
+              - heading [level=1] [ref=e152]:
+                - link "Block Theme" [ref=e153] [cursor=pointer]:
+                  - /url: https://blocktheme2.local
+            - paragraph [ref=e154]:
+              - link "Powered by Newspack" [ref=e155] [cursor=pointer]:
+                - /url: https://newspack.com
+      - text: ×
+  - button "An awesome overlay campaign!! Button Close Pop-up" [ref=e156]:
+    - generic [ref=e158]:
+      - generic [ref=e159]:
+        - generic [ref=e160]:
+          - paragraph [ref=e161]: An awesome overlay campaign!!
+          - generic [ref=e162]: Button
+        - paragraph
+      - button "Close Pop-up" [ref=e165] [cursor=pointer]
+  - dialog [aria-hidden] [ref=e169]:
+    - button [ref=e171] [cursor=pointer]:
+      - generic [ref=e175]: Close
+    - navigation [ref=e178]:
+      - list [ref=e179]:
+        - listitem [ref=e180]:
+          - link [ref=e181] [cursor=pointer]:
+            - /url: https://blocktheme2.local/block-test/
+            - text: Block test
+        - listitem [ref=e182]:
+          - link [ref=e183] [cursor=pointer]:
+            - /url: https://blocktheme2.local/gallery-block/
+            - text: Gallery Block
+  - dialog [aria-hidden] [ref=e184]:
+    - button [ref=e186] [cursor=pointer]:
+      - generic [ref=e190]: Close Comments
+  - generic:
+    - status [ref=e192]
+    - alert [ref=e193]
+  - status [ref=e194]

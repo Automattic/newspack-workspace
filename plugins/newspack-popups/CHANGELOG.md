@@ -1,3 +1,10 @@
+## newspack-popups [3.20.3](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.20.2...newspack-popups@3.20.3) (2026-10-26)
+
+
+### Bug Fixes
+
+* **campaigns:** support on-page links on prompt buttons (NPPD-2348) ([#1271](https://github.com/Automattic/newspack-workspace/issues/1271)) ([cad8dbf](https://github.com/Automattic/newspack-workspace/commit/cad8dbf0955b79471bfd0492f4bd28e80d0f89ed))
+
 ## newspack-popups [3.20.2](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.20.1...newspack-popups@3.20.2) (2026-10-14)
 
 
