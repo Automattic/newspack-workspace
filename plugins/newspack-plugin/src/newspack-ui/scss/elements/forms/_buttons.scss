@@ -357,6 +357,7 @@
 		font-size: var(--newspack-ui-font-size-small);
 		font-weight: var(--newspack-ui-font-weight-medium);
 		line-height: var(--newspack-ui-line-height-small);
+		border-radius: calc(var(--newspack-ui-radius-control) * 0.5);
 		position: relative;
 		text-decoration: underline;
 		text-decoration-color: color-mix(in oklab, var(--newspack-ui-color-text) 50%, var(--newspack-ui-color-surface));
@@ -410,7 +411,6 @@
 			appearance: none;
 			background: none;
 			border: 0;
-			border-radius: 0;
 			margin: 0;
 			min-height: 0;
 			padding: 0;
