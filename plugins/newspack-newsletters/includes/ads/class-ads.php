@@ -93,12 +93,14 @@ final class Ads {
 	}
 
 	/**
-	 * Limit reads of ads through the core posts REST routes to users who can edit ads.
+	 * Limit reads of ads, advertisers and ad placements through the core REST routes to
+	 * users who can edit ads.
 	 *
-	 * The post type is in REST for the block editor and the ads list, but an ad's
-	 * price, campaign dates and delivery counts are for the people managing it, and
-	 * nothing reads them from a logged-out request. Refusing the whole response rather
-	 * than each meta key keeps fields added later behind the same check. The match is on
+	 * The post type and its taxonomies are in REST for the block editor and the ads and
+	 * advertisers lists, but an ad's price, campaign dates and delivery counts, and the
+	 * advertiser and placement terms with their counts, are for the people managing them,
+	 * and nothing reads them from a logged-out request. Refusing the whole response rather
+	 * than each field keeps fields added later behind the same check. The match is on
 	 * the controller the request was dispatched to, not the route text, because
 	 * core matches routes case-insensitively.
 	 *
@@ -118,7 +120,18 @@ final class Ads {
 
 		$post_type = get_post_type_object( self::CPT );
 		$callback  = $handler['callback'] ?? null;
-		if ( ! $post_type || ! is_array( $callback ) || $callback[0] !== $post_type->get_rest_controller() ) {
+		if ( ! $post_type || ! is_array( $callback ) ) {
+			return $response;
+		}
+
+		$controllers = [ $post_type->get_rest_controller() ];
+		foreach ( [ self::ADVERTISER_TAX, Ads_Placements::TAXONOMY ] as $taxonomy_name ) {
+			$taxonomy = get_taxonomy( $taxonomy_name );
+			if ( $taxonomy ) {
+				$controllers[] = $taxonomy->get_rest_controller();
+			}
+		}
+		if ( ! in_array( $callback[0], array_filter( $controllers ), true ) ) {
 			return $response;
 		}
 
