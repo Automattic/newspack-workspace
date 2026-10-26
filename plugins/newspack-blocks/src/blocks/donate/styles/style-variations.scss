@@ -374,8 +374,10 @@
 		right: var(--newspack-ui-spacer-5, 24px);
 		transition: border-color var(--newspack-ui-duration-color, 150ms) ease, box-shadow var(--newspack-ui-duration-color, 150ms) ease;
 
-		&:hover:not(:focus-within) {
-			border-color: var(--newspack-ui-color-input-border-hover, np-colors.$neutral-700);
+		@media ( hover: hover ) and ( pointer: fine ) {
+			&:hover:not(:focus-within) {
+				border-color: var(--newspack-ui-color-input-border-hover, np-colors.$neutral-700);
+			}
 		}
 
 		&:focus-within {
@@ -487,9 +489,11 @@
 					text-align: center;
 					transition: background var(--newspack-ui-duration-color, 150ms) ease, color var(--newspack-ui-duration-color, 150ms) ease;
 
-					&:hover {
-						background: var(--newspack-ui-color-neutral-fill-hover, np-colors.$neutral-200);
-						color: var(--newspack-ui-color-text, np-colors.$neutral-900);
+					@media ( hover: hover ) and ( pointer: fine ) {
+						&:hover {
+							background: var(--newspack-ui-color-neutral-fill-hover, np-colors.$neutral-200);
+							color: var(--newspack-ui-color-text, np-colors.$neutral-900);
+						}
 					}
 				}
 
@@ -545,8 +549,10 @@
 				pointer-events: none;
 			}
 
-			&:hover {
-				opacity: 0.8;
+			@media ( hover: hover ) and ( pointer: fine ) {
+				&:hover {
+					opacity: 0.8;
+				}
 			}
 
 			&:active {
@@ -657,8 +663,10 @@
 				padding: calc(var(--newspack-ui-spacer-2, 12px) - 1px) calc(var(--newspack-ui-spacer-5, 24px) - 1px);
 				transition: background var(--newspack-ui-duration-color, 150ms) ease, border-color var(--newspack-ui-duration-color, 150ms) ease, opacity var(--newspack-ui-duration-color, 150ms) ease, transform var(--newspack-ui-duration-press, 160ms) var(--newspack-ui-ease-out, cubic-bezier(0.23, 1, 0.32, 1));
 
-				&:hover {
-					opacity: 0.8;
+				@media ( hover: hover ) and ( pointer: fine ) {
+					&:hover {
+						opacity: 0.8;
+					}
 				}
 
 				&:active {
@@ -681,9 +689,11 @@
 			&__options:has(> .wpbnbd__tiers__tier--recommended) > .wpbnbd__tiers__tier:not(.wpbnbd__tiers__tier--recommended) {
 				button[type="submit"],
 				.submit-button {
-					&:hover {
-						background: var(--newspack-ui-color-surface-subtle, np-colors.$neutral-050) !important;
-						opacity: 1;
+					@media ( hover: hover ) and ( pointer: fine ) {
+						&:hover {
+							background: var(--newspack-ui-color-surface-subtle, np-colors.$neutral-050) !important;
+							opacity: 1;
+						}
 					}
 
 					&:focus-visible {
