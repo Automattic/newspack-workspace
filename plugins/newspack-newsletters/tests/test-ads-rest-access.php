@@ -182,12 +182,62 @@ class Ads_REST_Access_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Terms of other taxonomies stay readable, so the check covers only the ad taxonomies.
+	 * Term searches through the core search route, by subtype.
+	 *
+	 * @param string $subtype Taxonomy name, or 'any'.
+	 */
+	private function search_terms( $subtype ) {
+		$request = new WP_REST_Request( 'GET', '/wp/v2/search' );
+		$request->set_query_params(
+			[
+				'type'    => 'term',
+				'subtype' => $subtype,
+			]
+		);
+		return rest_do_request( $request );
+	}
+
+	/**
+	 * The search route doesn't list advertiser or placement names to readers who
+	 * cannot edit ads, including a search that asks only for those taxonomies.
+	 *
+	 * @dataProvider reader_provider
+	 * @param string|null $role Role, or null for a logged-out request.
+	 */
+	public function test_ad_terms_are_not_searchable_without_edit_access( $role ) {
+		wp_set_current_user( $role ? self::factory()->user->create( [ 'role' => $role ] ) : 0 );
+		foreach ( [ 'any', Ads::ADVERTISER_TAX, Ads_Placements::TAXONOMY ] as $subtype ) {
+			$response = $this->search_terms( $subtype );
+			$this->assertSame( 200, $response->get_status(), $subtype );
+			$this->assertStringNotContainsString( 'Term Name', wp_json_encode( $response->get_data() ), $subtype );
+		}
+		foreach ( [ Ads::ADVERTISER_TAX, Ads_Placements::TAXONOMY ] as $subtype ) {
+			$this->assertSame( [], $this->search_terms( $subtype )->get_data(), $subtype );
+		}
+	}
+
+	/**
+	 * Anyone who can edit posts still finds the terms through search.
+	 *
+	 * @dataProvider editor_provider
+	 * @param string $role Role.
+	 */
+	public function test_users_who_can_edit_posts_can_search_ad_terms( $role ) {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => $role ] ) );
+		$titles = wp_list_pluck( $this->search_terms( 'any' )->get_data(), 'title' );
+		$this->assertContains( 'Advertiser Term Name', $titles );
+		$this->assertContains( 'Placement Term Name', $titles );
+	}
+
+	/**
+	 * Terms of other taxonomies stay readable and searchable, so the check covers only
+	 * the ad taxonomies.
 	 */
 	public function test_other_terms_stay_readable() {
 		wp_set_current_user( 0 );
 		$term_id  = self::factory()->category->create( [ 'name' => 'Ordinary Category' ] );
 		$response = rest_do_request( new WP_REST_Request( 'GET', '/wp/v2/categories/' . $term_id ) );
 		$this->assertSame( 200, $response->get_status() );
+		$this->assertContains( 'Ordinary Category', wp_list_pluck( $this->search_terms( 'any' )->get_data(), 'title' ) );
 	}
 }

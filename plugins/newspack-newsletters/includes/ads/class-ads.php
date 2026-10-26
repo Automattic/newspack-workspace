@@ -53,6 +53,7 @@ final class Ads {
 		add_action( 'save_post_' . self::CPT, [ __CLASS__, 'ad_default_fields' ], 10, 3 );
 		add_action( 'rest_api_init', [ __CLASS__, 'rest_api_init' ] );
 		add_filter( 'rest_request_before_callbacks', [ __CLASS__, 'restrict_rest_reads' ], 10, 3 );
+		add_filter( 'rest_term_search_query', [ __CLASS__, 'restrict_term_search' ] );
 		add_action( 'admin_menu', [ __CLASS__, 'add_ads_page' ] );
 		add_action( 'current_screen', [ __CLASS__, 'prevent_direct_taxonomy_access' ] );
 		add_filter( 'get_post_metadata', [ __CLASS__, 'migrate_diable_ads' ], 10, 4 );
@@ -102,7 +103,8 @@ final class Ads {
 	 * and nothing reads them from a logged-out request. Refusing the whole response rather
 	 * than each field keeps fields added later behind the same check. The match is on
 	 * the controller the request was dispatched to, not the route text, because
-	 * core matches routes case-insensitively.
+	 * core matches routes case-insensitively. The search route lists terms through its
+	 * own controller, so restrict_term_search() covers it.
 	 *
 	 * @param mixed           $response Earlier filter result; passed through if non-null.
 	 * @param array           $handler  Route handler details.
@@ -141,9 +143,36 @@ final class Ads {
 
 		return new \WP_Error(
 			'rest_forbidden',
-			__( 'Sorry, you are not allowed to view newsletter ads.', 'newspack-newsletters' ),
+			__( 'Sorry, you are not allowed to view newsletter ad data.', 'newspack-newsletters' ),
 			[ 'status' => rest_authorization_required_code() ]
 		);
+	}
+
+	/**
+	 * Leave advertisers and ad placements out of core REST term searches by users who
+	 * cannot edit ads.
+	 *
+	 * The search route lists the terms of every public taxonomy to anyone, so without
+	 * this it would return the names restrict_rest_reads() withholds. Other taxonomies
+	 * stay searchable. A search that asked only for these taxonomies matches nothing,
+	 * because an empty taxonomy list would make the term query search every taxonomy.
+	 *
+	 * @param array $query_args Term query arguments.
+	 * @return array
+	 */
+	public static function restrict_term_search( $query_args ) {
+		$post_type = get_post_type_object( self::CPT );
+		if ( ! $post_type || current_user_can( $post_type->cap->edit_posts ) ) {
+			return $query_args;
+		}
+
+		$taxonomies = array_values( array_diff( (array) ( $query_args['taxonomy'] ?? [] ), [ self::ADVERTISER_TAX, Ads_Placements::TAXONOMY ] ) );
+		if ( empty( $taxonomies ) ) {
+			$query_args['include'] = [ 0 ];
+		} else {
+			$query_args['taxonomy'] = $taxonomies;
+		}
+		return $query_args;
 	}
 
 	/**
