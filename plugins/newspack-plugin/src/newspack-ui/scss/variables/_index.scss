@@ -45,6 +45,8 @@
 	--newspack-ui-duration-reveal: 200ms;
 	--newspack-ui-duration-modal: 250ms;
 	--newspack-ui-duration-sheet: 400ms;
+	--newspack-ui-duration-snackbar: 400ms;
+	--newspack-ui-ease-snackbar: ease;
 
 	@media ( pointer: coarse ) {
 		--newspack-ui-target-size: var(--newspack-ui-touch-target);

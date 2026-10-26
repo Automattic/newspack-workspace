@@ -121,17 +121,17 @@
 				position: relative;
 				transform: translateY(var(--newspack-ui-snackbar-slide-from));
 				transition:
-					opacity var(--newspack-ui-duration-sheet) ease,
-					transform var(--newspack-ui-duration-sheet) ease,
-					height var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out) var(--newspack-ui-duration-sheet),
-					margin-top var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out) var(--newspack-ui-duration-sheet);
+					opacity var(--newspack-ui-duration-snackbar) var(--newspack-ui-ease-snackbar),
+					transform var(--newspack-ui-duration-snackbar) var(--newspack-ui-ease-snackbar),
+					height var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out) var(--newspack-ui-duration-snackbar),
+					margin-top var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out) var(--newspack-ui-duration-snackbar);
 				width: 100%;
 				@media ( prefers-reduced-motion: reduce ) {
 					transform: none;
 					transition:
-						opacity var(--newspack-ui-duration-sheet) ease,
-						height 0ms linear var(--newspack-ui-duration-sheet),
-						margin-top 0ms linear var(--newspack-ui-duration-sheet);
+						opacity var(--newspack-ui-duration-snackbar) var(--newspack-ui-ease-snackbar),
+						height 0ms linear var(--newspack-ui-duration-snackbar),
+						margin-top 0ms linear var(--newspack-ui-duration-snackbar);
 				}
 				&.active {
 					height: auto;
@@ -139,8 +139,8 @@
 					pointer-events: auto;
 					transform: translateY(0);
 					transition:
-						opacity var(--newspack-ui-duration-sheet) ease,
-						transform var(--newspack-ui-duration-sheet) ease,
+						opacity var(--newspack-ui-duration-snackbar) var(--newspack-ui-ease-snackbar),
+						transform var(--newspack-ui-duration-snackbar) var(--newspack-ui-ease-snackbar),
 						height 0ms;
 				}
 			}
@@ -151,7 +151,7 @@
 			&__stack {
 				height: calc(var(--newspack-ui-snackbar-front-height, 0px) + var(--newspack-ui-snackbar-peeks, 0) * var(--newspack-ui-snackbar-peek));
 				position: relative;
-				transition: height var(--newspack-ui-duration-sheet) ease;
+				transition: height var(--newspack-ui-duration-snackbar) var(--newspack-ui-ease-snackbar);
 				@media ( prefers-reduced-motion: reduce ) {
 					transition: none;
 				}
@@ -163,7 +163,7 @@
 					transition: none;
 				}
 				&:not(:has(> .active)) + .newspack-ui__snackbar__pinned {
-					transition: margin-top var(--newspack-ui-duration-sheet) ease;
+					transition: margin-top var(--newspack-ui-duration-snackbar) var(--newspack-ui-ease-snackbar);
 					@media ( prefers-reduced-motion: reduce ) {
 						transition: none;
 					}
@@ -180,20 +180,20 @@
 					position: absolute;
 					transform-origin: 50% 0;
 					transition:
-						opacity var(--newspack-ui-duration-sheet) ease,
-						transform var(--newspack-ui-duration-sheet) ease,
-						height var(--newspack-ui-duration-sheet) ease;
+						opacity var(--newspack-ui-duration-snackbar) var(--newspack-ui-ease-snackbar),
+						transform var(--newspack-ui-duration-snackbar) var(--newspack-ui-ease-snackbar),
+						height var(--newspack-ui-duration-snackbar) var(--newspack-ui-ease-snackbar);
 					z-index: calc(var(--newspack-ui-snackbar-count, 1) - var(--newspack-ui-snackbar-index, 0));
 					> * {
-						transition: opacity var(--newspack-ui-duration-sheet) ease;
+						transition: opacity var(--newspack-ui-duration-snackbar) var(--newspack-ui-ease-snackbar);
 					}
 					&.active {
 						height: var(--newspack-ui-snackbar-height, auto);
 						transform: translateY(var(--newspack-ui-snackbar-y)) scale(var(--newspack-ui-snackbar-scale));
 						transition:
-							opacity var(--newspack-ui-duration-sheet) ease,
-							transform var(--newspack-ui-duration-sheet) ease,
-							height var(--newspack-ui-duration-sheet) ease;
+							opacity var(--newspack-ui-duration-snackbar) var(--newspack-ui-ease-snackbar),
+							transform var(--newspack-ui-duration-snackbar) var(--newspack-ui-ease-snackbar),
+							height var(--newspack-ui-duration-snackbar) var(--newspack-ui-ease-snackbar);
 					}
 					&.is-leaving {
 						transform: translateY(calc(var(--newspack-ui-snackbar-y) + var(--newspack-ui-spacer-5))) scale(var(--newspack-ui-snackbar-scale));
@@ -202,7 +202,7 @@
 						&,
 						&.active,
 						> * {
-							transition: opacity var(--newspack-ui-duration-sheet) ease;
+							transition: opacity var(--newspack-ui-duration-snackbar) var(--newspack-ui-ease-snackbar);
 						}
 						&.is-leaving {
 							transform: translateY(var(--newspack-ui-snackbar-y)) scale(var(--newspack-ui-snackbar-scale));
@@ -235,9 +235,9 @@
 			&__pinned {
 				display: flex;
 				flex-direction: column;
-				transition: margin-top var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out) var(--newspack-ui-duration-sheet);
+				transition: margin-top var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out) var(--newspack-ui-duration-snackbar);
 				@media ( prefers-reduced-motion: reduce ) {
-					transition: margin-top 0ms linear var(--newspack-ui-duration-sheet);
+					transition: margin-top 0ms linear var(--newspack-ui-duration-snackbar);
 				}
 				> .newspack-ui__snackbar__item.active:not(:first-child) {
 					margin-top: var(--newspack-ui-snackbar-gap);
