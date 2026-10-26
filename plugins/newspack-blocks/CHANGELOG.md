@@ -1,3 +1,10 @@
+## @automattic/newspack-blocks [4.36.5](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.4...newspack-blocks@4.36.5) (2026-10-26)
+
+
+### Bug Fixes
+
+* **post-date:** let plugins show a post's updated date ([#1416](https://github.com/Automattic/newspack-workspace/issues/1416)) ([9ec64bf](https://github.com/Automattic/newspack-workspace/commit/9ec64bfc6348e608fbacd2c569704219167b3cf4))
+
 ## @automattic/newspack-blocks [4.36.4](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.3...newspack-blocks@4.36.4) (2026-10-26)
 
 

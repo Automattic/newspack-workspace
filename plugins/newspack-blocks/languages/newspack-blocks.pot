@@ -2,14 +2,14 @@
 # This file is distributed under the same license as the Newspack Blocks plugin.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Blocks 4.36.4\n"
+"Project-Id-Version: Newspack Blocks 4.36.5\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-blocks\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-26T16:07:44+00:00\n"
+"POT-Creation-Date: 2026-10-26T22:15:17+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-blocks\n"
@@ -327,17 +327,17 @@ msgid "Scheduled"
 msgstr ""
 
 #. Translators: %s is the %s is the frequency.
-#: includes/class-newspack-blocks.php:1866
+#: includes/class-newspack-blocks.php:1909
 #: dist/editor.js:52
 #, php-format,js-format
 msgid "per %s"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1897
+#: includes/class-newspack-blocks.php:1940
 msgid " once"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1900
+#: includes/class-newspack-blocks.php:1943
 msgid " per "
 msgstr ""
 
@@ -637,6 +637,12 @@ msgstr ""
 #: src/blocks/donate/frontend/class-newspack-blocks-donate-renderer-frequency-based.php:279
 #: dist/editor.js:52
 msgid "Other"
+msgstr ""
+
+#. translators: %s: When the post was last updated.
+#: src/blocks/homepage-articles/templates/article.php:247
+#, php-format
+msgid "Updated %s"
 msgstr ""
 
 #: src/blocks/homepage-articles/view.php:415
