@@ -27,6 +27,30 @@
 
 		&--success {
 			color: var(--newspack-ui-color-success);
+			transition:
+				opacity var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out) var(--newspack-ui-duration-reveal),
+				transform var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out) var(--newspack-ui-duration-reveal);
+
+			@starting-style {
+				opacity: 0;
+				transform: scale(0.9);
+			}
+
+			@media ( prefers-reduced-motion: reduce ) {
+				@starting-style {
+					transform: none;
+				}
+			}
+
+			.newspack-ui__modal__step[inert] & {
+				opacity: 0;
+				transform: scale(0.9);
+				transition: none;
+
+				@media ( prefers-reduced-motion: reduce ) {
+					transform: none;
+				}
+			}
 		}
 
 		&--error {
