@@ -19,6 +19,8 @@ import {
 } from './utils';
 
 ( $ => {
+	const getScrollBehavior = () => ( window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches ? 'auto' : 'smooth' );
+
 	domReady( () => {
 		if ( ! $ ) {
 			console.warn( 'jQuery is not available.' ); // eslint-disable-line no-console
@@ -556,11 +558,11 @@ import {
 						);
 						$form.prepend( $notices );
 						placeCheckoutNotices( $notices );
-						$notices.get( 0 ).scrollIntoView( { behavior: 'smooth' } );
+						$notices.get( 0 ).scrollIntoView( { behavior: getScrollBehavior() } );
 					}
 
 					if ( $fieldToFocus?.length ) {
-						window.scroll( { top: $fieldToFocus.offset().top - 100, left: 0, behavior: 'smooth' } );
+						window.scroll( { top: $fieldToFocus.offset().top - 100, left: 0, behavior: getScrollBehavior() } );
 						$fieldToFocus.find( 'input.input-text, select, input:checkbox' ).trigger( 'focus' );
 					}
 
@@ -854,7 +856,7 @@ import {
 							$form.data( 'newspack-recaptcha', 'newspack_modal_checkout' );
 							const onSuccess = () => {
 								clearNotices();
-								$form.get( 0 ).scrollIntoView( { behavior: 'smooth' } );
+								$form.get( 0 ).scrollIntoView( { behavior: getScrollBehavior() } );
 							};
 							const onError = error => handleFormError( error );
 							newspack_grecaptcha.render( $form.get(), onSuccess, onError );
@@ -886,7 +888,7 @@ import {
 					}
 					$form.triggerHandler( 'editing_details', [ isEditingDetails ] );
 					// Scroll to top.
-					window.scroll( { top: 0, left: 0, behavior: 'smooth' } );
+					window.scroll( { top: 0, left: 0, behavior: getScrollBehavior() } );
 				}
 
 				/**
@@ -1141,7 +1143,7 @@ import {
 
 						$( errorNode ).addClass( `${ CLASS_PREFIX }__notice ${ CLASS_PREFIX }__notice--error` );
 						container.dispatchEvent( placeOrderErrorEvent );
-						errorNode.scrollIntoView( { behavior: 'smooth', block: 'center' } );
+						errorNode.scrollIntoView( { behavior: getScrollBehavior(), block: 'center' } );
 					};
 
 					const isErrorNode = node => {
