@@ -21,9 +21,8 @@ import {
 	__experimentalToggleGroupControl as ToggleGroupControl,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalToggleGroupControlOption as ToggleGroupControlOption,
-	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-	__experimentalVStack as VStack,
 } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
@@ -33,8 +32,8 @@ import { Grid, SectionHeader, SelectControl, TextControl } from '../../../../../
 interface CountdownBannerProps {
 	countdown: MeteringCountdownConfig;
 	onChange: ( countdown: MeteringCountdownConfig ) => void;
-	/** Whether any gate currently meters, so the banner has something to count down. */
-	hasMetering: boolean;
+	/** Whether an active gate meters, so the banner has something to count down. */
+	hasActiveMetering: boolean;
 	/** The allowance the banner counts down, as currently edited. */
 	meterCount: number;
 	/** The reset period the allowance runs on, as currently edited. */
@@ -95,7 +94,7 @@ const getPreviewHelp = ( audience: 'anonymous' | 'registered', otherAudienceMete
 export default function CountdownBanner( {
 	countdown,
 	onChange,
-	hasMetering,
+	hasActiveMetering,
 	meterCount,
 	meterPeriod,
 	meterAudience,
@@ -107,24 +106,24 @@ export default function CountdownBanner( {
 	const isEnabled = !! countdown.enabled;
 
 	return (
-		<VStack spacing={ 6 }>
+		<Stack direction="column" gap="xl">
 			<Grid columns={ 2 } noMargin>
-				<VStack spacing={ 6 } justify="flex-start">
+				<Stack direction="column" gap="xl">
 					<SectionHeader
 						heading={ 2 }
 						title={ __( 'Countdown Banner', 'newspack-plugin' ) }
 						description={ __( 'Tell readers how many free views they have left before a gate applies.', 'newspack-plugin' ) }
 					/>
-					{ isEnabled && ! hasMetering && (
-						<Notice status="warning" isDismissible={ false }>
+					{ isEnabled && ! hasActiveMetering && (
+						<Notice status="warning" isDismissible={ false } spokenMessage="">
 							{ __(
-								'No gate meters yet, so there is nothing to count down and the banner will not appear. Turn on metering for a gate to show it.',
+								'No active gate gives readers free views, so the banner has nothing to count down and will not appear.',
 								'newspack-plugin'
 							) }
 						</Notice>
 					) }
-				</VStack>
-				<VStack spacing={ 6 } justify="flex-start">
+				</Stack>
+				<Stack direction="column" gap="xl">
 					<ToggleGroupControl
 						label={ __( 'Banner', 'newspack-plugin' ) }
 						value={ isEnabled ? 'enabled' : 'disabled' }
@@ -137,7 +136,7 @@ export default function CountdownBanner( {
 					</ToggleGroupControl>
 					<fieldset className="newspack-countdown-banner__fields" disabled={ ! isEnabled }>
 						<legend className="screen-reader-text">{ __( 'Countdown banner settings', 'newspack-plugin' ) }</legend>
-						<VStack spacing={ 6 } justify="flex-start">
+						<Stack direction="column" gap="xl">
 							<TextControl
 								label={ __( 'Message', 'newspack-plugin' ) }
 								help={ __( 'Text displayed in the countdown banner.', 'newspack-plugin' ) }
@@ -202,9 +201,9 @@ export default function CountdownBanner( {
 									__next40pxDefaultSize
 								/>
 							) }
-						</VStack>
+						</Stack>
 					</fieldset>
-				</VStack>
+				</Stack>
 			</Grid>
 			<div
 				className={ classnames( 'newspack-countdown-banner__preview', {
@@ -247,6 +246,6 @@ export default function CountdownBanner( {
 					</div>
 				</BaseControl>
 			</div>
-		</VStack>
+		</Stack>
 	);
 }

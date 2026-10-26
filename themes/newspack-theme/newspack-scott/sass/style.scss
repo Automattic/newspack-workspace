@@ -25,7 +25,7 @@
 
 // Tag labels take the type treatment but not the leading square: that `::before`
 // marks a row of plain-text links, and the labels are chips it would sit apart from.
-.tag-labels {
+.newspack-tag-labels {
 	color: #666;
 	font-size: var(--newspack-theme-font-size-sm);
 }
@@ -42,7 +42,7 @@ div.wpnbha .article-section-title {
 }
 
 .cat-links,
-.tag-labels {
+.newspack-tag-labels {
 	font-family: var(--newspack-theme-font-heading);
 	font-size: var(--newspack-theme-font-size-sm);
 }
@@ -83,7 +83,7 @@ div.wpnbha .article-section-title {
 
 .single {
 	.cat-links,
-	.tag-labels {
+	.newspack-tag-labels {
 		font-size: var(--newspack-theme-font-size-base);
 	}
 
@@ -454,7 +454,7 @@ div.wpnbha .article-section-title {
 	font-size: var(--newspack-theme-font-size-sm);
 
 	+ .cat-links,
-	+ .tag-labels {
+	+ .newspack-tag-labels {
 		font-size: 0.9rem;
 	}
 }

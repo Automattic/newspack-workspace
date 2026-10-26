@@ -16,7 +16,7 @@
 /**
  * WordPress dependencies.
  */
-import { useLayoutEffect, useMemo, useState } from '@wordpress/element';
+import { createPortal, useEffect, useLayoutEffect, useMemo, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -32,6 +32,7 @@ import LoadFailureNotice from '../components/LoadFailureNotice';
 import { useRetryFocus } from '../use-retry-focus';
 import { fmtRelative, fmtDate } from '../format';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
+import { getSavedListView, saveListView } from '../data/list-view-state';
 import { usePlans } from '../data/use-plans';
 import { useSubscribers } from '../data/use-subscribers';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
@@ -41,8 +42,12 @@ import { STATUS_INDICATORS, STATUS_LABELS, displayStatuses, statusRank } from '.
 
 // A subscriber's group memberships, in the shape the column helpers expect
 // ([{ group, role }]). The endpoint embeds them flat on the item as
-// item.groups = [{ id, plan, status, role, editUrl }].
-const groupEntriesOf = item => ( item.groups || [] ).map( g => ( { group: { plan: g.plan, status: g.status, editUrl: g.editUrl }, role: g.role } ) );
+// item.groups = [{ id, plan, status, role, editUrl, isComplimentary }].
+const groupEntriesOf = item =>
+	( item.groups || [] ).map( g => ( {
+		group: { plan: g.plan, status: g.status, editUrl: g.editUrl, isComplimentary: !! g.isComplimentary },
+		role: g.role,
+	} ) );
 
 // Every subscription a subscriber has, group and individual alike: cohorts they
 // own or belong to (tagged by role) plus their own individual subscriptions.
@@ -53,12 +58,14 @@ const planEntries = ( item, groupEntries ) => {
 		plan: group.plan,
 		status: group.status,
 		editUrl: group.editUrl,
+		isComplimentary: group.isComplimentary,
 		role,
 	} ) );
 	const individual = ( item.subscriptions || [] ).map( s => ( {
 		plan: s.plan,
 		status: s.status,
 		editUrl: s.editUrl,
+		isComplimentary: !! s.isComplimentary,
 		role: null,
 	} ) );
 	// Active subscriptions list first, then on-hold, then cancelled.
@@ -99,7 +106,12 @@ const DEFAULT_VIEW = {
 };
 
 export default function SubscriberList() {
-	const [ view, setView ] = useState( DEFAULT_VIEW );
+	// Opening a profile unmounts the list; the saved view brings the reader back
+	// to the filters, search, sort and page they left.
+	const [ view, setView ] = useState( () => getSavedListView() || DEFAULT_VIEW );
+	useEffect( () => {
+		saveListView( view );
+	}, [ view ] );
 	const history = useHistory();
 	const location = useLocation();
 
@@ -112,9 +124,28 @@ export default function SubscriberList() {
 	// endpoint honors status and plan here); sorting is name / member-since.
 	const { items, total, pages, loading: subscribersLoading, settled, error, reload } = useSubscribers( view );
 
+	// A restored page sits past the end if the list shrank while the reader was on
+	// a profile; step back to the last page rather than show "No results". Only an
+	// empty response counts: right after a view change the new read hasn't started,
+	// so `loading` and `pages` both still describe the previous view, and DataViews
+	// never offers a page past `pages`. Before paint, so the past-the-end page
+	// itself never shows.
+	useLayoutEffect( () => {
+		const lastPage = Math.max( pages, 1 );
+		if ( ! subscribersLoading && ! error && items.length === 0 && view.page > lastPage ) {
+			setView( current => ( { ...current, page: lastPage } ) );
+		}
+	}, [ subscribersLoading, error, items.length, pages, view.page ] );
+
 	// Filter options for the Subscription column: every plan on the site, not just
-	// the ones on this page.
-	const planElements = useMemo( () => plans.map( name => ( { value: name, label: name } ) ), [ plans ] );
+	// the ones on this page. Plans the view already filters by stay options even if
+	// the plan list fails to load: DataViews drops a filter with no options, which
+	// would leave a restored filter applied with no chip to clear it.
+	const selectedPlans = view.filters?.find( f => 'plans' === f.field )?.value;
+	const planElements = useMemo(
+		() => [ ...new Set( [ ...plans, ...( selectedPlans || [] ) ] ) ].map( name => ( { value: name, label: name } ) ),
+		[ plans, selectedPlans ]
+	);
 
 	// Resolve avatar URLs for the current page, keyed by subscriber id. The table
 	// renders immediately with the avatar placeholder and each avatar fills in as
@@ -225,6 +256,24 @@ export default function SubscriberList() {
 						</VStack>
 					);
 				},
+			},
+			{
+				id: 'access',
+				label: __( 'Access', 'newspack-plugin' ),
+				// Hidden by default. Filtered server-side, like the plan filter: the
+				// `access` param matches readers whose Subscription column shows a
+				// complimentary subscription.
+				elements: [ { value: 'complimentary', label: __( 'Complimentary', 'newspack-plugin' ) } ],
+				filterBy: { operators: [ 'is' ] },
+				enableSorting: false,
+				getValue: ( { item } ) =>
+					visiblePlanEntries( planEntries( item, groupEntriesOf( item ) ) ).some( e => e.isComplimentary ) ? 'complimentary' : '',
+				render: ( { item } ) =>
+					visiblePlanEntries( planEntries( item, groupEntriesOf( item ) ) ).some( e => e.isComplimentary ) ? (
+						<span>{ __( 'Complimentary', 'newspack-plugin' ) }</span>
+					) : (
+						<span>—</span>
+					),
 			},
 			{
 				id: 'groupRole',
@@ -403,8 +452,9 @@ export default function SubscriberList() {
 	// sorting are server-side, so every filter toggle and every debounced keystroke
 	// is a refetch — unmounting DataViews for those would take the search box's
 	// focus with it and flash the applied filter chips away mid-interaction. Once a
-	// response has settled the loading state is handed to DataViews instead, for the
-	// same reason avatars fill in progressively rather than holding the table back.
+	// response has settled, a refetch keeps DataViews mounted and shows its loading
+	// state in place (see isRefreshing below), for the same reason avatars fill in
+	// progressively rather than holding the table back.
 	if ( subscribersLoading && ! settled ) {
 		return (
 			<div className="newspack-subscribers__loading">
@@ -433,13 +483,23 @@ export default function SubscriberList() {
 		);
 	}
 
+	// A refetch with rows showing covers the screen with a spinner and blocks clicks
+	// until it settles: DataViews' own one renders below the table, out of sight on
+	// a long page. Keys still reach the controls underneath on purpose, so a reader
+	// can keep typing in the search box. With no rows to cover, DataViews' spinner
+	// stands in for the empty state, so it keeps that case. A failed read lands on
+	// the error notice above, which never renders the overlay, so a failure can't
+	// leave it stuck.
+	const isRefreshing = subscribersLoading && items.length > 0;
+
 	return (
 		// eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
-		<div className="newspack-subscribers__clickable-rows" onClick={ onRowClick }>
+		<div className="newspack-subscribers__clickable-rows" onClick={ onRowClick } aria-busy={ isRefreshing || undefined }>
 			{ /* The two reads fail independently, so a failed /plans is otherwise
 			     silent: DataViews drops a filter whose `elements` is empty, so the
-			     Subscription filter is simply absent and reads as a site that sells
-			     no plans. The table itself is unaffected, hence a warning beside it
+			     Subscription filter is simply absent (unless the view already
+			     filters by a plan) and reads as a site that sells no plans. The
+			     table itself is unaffected, hence a warning beside it
 			     rather than the error notice that replaces the screen. */ }
 			{ plansFailed && (
 				<LoadFailureNotice
@@ -455,13 +515,25 @@ export default function SubscriberList() {
 				fields={ fields }
 				view={ view }
 				onChangeView={ setView }
-				isLoading={ subscribersLoading }
+				isLoading={ subscribersLoading && ! isRefreshing }
 				paginationInfo={ { totalItems: total, totalPages: pages } }
 				defaultLayouts={ { table: {} } }
 				getItemId={ item => item.id }
 				onClickItem={ openSubscriber }
 				search
 			/>
+			{ /* In the document body, so no ancestor of the list can pin the fixed
+			     overlay to itself or stack popovers above it. Cancelling the press
+			     keeps focus where it was: moving it would close an open filter
+			     popover and pull focus out of the search box. */ }
+			{ isRefreshing &&
+				createPortal(
+					// eslint-disable-next-line jsx-a11y/no-static-element-interactions
+					<div className="newspack-subscribers__loading-overlay" onMouseDown={ event => event.preventDefault() }>
+						<Waiting />
+					</div>,
+					document.body
+				) }
 		</div>
 	);
 }

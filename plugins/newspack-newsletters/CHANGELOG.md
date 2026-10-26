@@ -1,3 +1,58 @@
+# newspack-newsletters [3.44.0](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.43.1...newspack-newsletters@3.44.0) (2026-10-26)
+
+
+### Bug Fixes
+
+* **content-gate:** treat authors and contributors as readers ([#1302](https://github.com/Automattic/newspack-workspace/issues/1302)) ([b95ea0f](https://github.com/Automattic/newspack-workspace/commit/b95ea0f65fc33ab2f63ee6ff7ce9ccd884429d31))
+* **newsletters:** keep email editor info lines out of debug.log ([#1250](https://github.com/Automattic/newspack-workspace/issues/1250)) ([8ea05d1](https://github.com/Automattic/newspack-workspace/commit/8ea05d1859e7f58d29ce26c27270da9e0c9a27c5))
+* **newsletters:** reveal layout previews on non-English admins ([#1268](https://github.com/Automattic/newspack-workspace/issues/1268)) ([5ec29b4](https://github.com/Automattic/newspack-workspace/commit/5ec29b4f71fe2e06f6d4eea6e26740ea73656331))
+* require PHP 8.1 in the WordPress.org plugins ([#1272](https://github.com/Automattic/newspack-workspace/issues/1272)) ([4a9bea1](https://github.com/Automattic/newspack-workspace/commit/4a9bea142fee228fe8613f5f4df3469e7eb72f13))
+
+
+### Features
+
+* **newsletters:** show Memberships-restricted lists as premium ([#1366](https://github.com/Automattic/newspack-workspace/issues/1366)) ([9e3ff43](https://github.com/Automattic/newspack-workspace/commit/9e3ff43ace36447f1328e55ee42361546b57eb2c))
+* **premium-newsletters:** set auto-signup and hide lists per gate ([#1371](https://github.com/Automattic/newspack-workspace/issues/1371)) ([63cb9cb](https://github.com/Automattic/newspack-workspace/commit/63cb9cb28c421a5357c816b3467ed9281cf2a3de))
+
+## newspack-newsletters [3.43.1](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.43.0...newspack-newsletters@3.43.1) (2026-10-21)
+
+
+### Bug Fixes
+
+* **newsletters:** fatal when classes load without the main plugin file ([#1365](https://github.com/Automattic/newspack-workspace/issues/1365)) ([25dfbbd](https://github.com/Automattic/newspack-workspace/commit/25dfbbd391d96384816fac730cb3c1dec8b33bbf))
+
+# newspack-newsletters [3.43.0](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.42.0...newspack-newsletters@3.43.0) (2026-10-14)
+
+
+### Features
+
+* **newsletters:** show premium lists in the subscription form ([#1291](https://github.com/Automattic/newspack-workspace/issues/1291)) ([456d762](https://github.com/Automattic/newspack-workspace/commit/456d762ba465aafc6e5be08ed47836acafaad1a6))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.11.0
+
+# newspack-newsletters [3.42.0](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.41.5...newspack-newsletters@3.42.0) (2026-10-12)
+
+
+### Bug Fixes
+
+* **newsletters:** persist list appearance and cut load time (NPPM-3140) ([#901](https://github.com/Automattic/newspack-workspace/issues/901)) ([5fd1f4c](https://github.com/Automattic/newspack-workspace/commit/5fd1f4c208ccce0f7b35044f6a519677577680fb)), closes [#931](https://github.com/Automattic/newspack-workspace/issues/931) [#854](https://github.com/Automattic/newspack-workspace/issues/854) [#857](https://github.com/Automattic/newspack-workspace/issues/857) [#846](https://github.com/Automattic/newspack-workspace/issues/846) [#887](https://github.com/Automattic/newspack-workspace/issues/887) [#872](https://github.com/Automattic/newspack-workspace/issues/872)
+* **phpcs:** point constant ignores at the documenting file ([#1130](https://github.com/Automattic/newspack-workspace/issues/1130)) ([9468c79](https://github.com/Automattic/newspack-workspace/commit/9468c79ef60ae098237278bbdd774574b95caa0e))
+
+
+### Features
+
+* add ability to select draft/scheduled/pending posts in newsletter Posts Inserter ([2fd1261](https://github.com/Automattic/newspack-workspace/commit/2fd12617c66e7d50fb664c782d9e415b6e0dac61))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.10.0
+* **newspack-icons:** upgraded to 1.2.0
+* **newspack-scripts:** upgraded to 5.12.0
+
 ## newspack-newsletters [3.41.5](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.41.4...newspack-newsletters@3.41.5) (2026-10-06)
 
 

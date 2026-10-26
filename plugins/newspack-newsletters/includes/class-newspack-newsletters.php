@@ -57,6 +57,13 @@ final class Newspack_Newsletters {
 	protected static $provider = null;
 
 	/**
+	 * Per-request memoization for self::asset_version().
+	 *
+	 * @var array<string, string>
+	 */
+	private static $asset_version_cache = [];
+
+	/**
 	 * Main Newspack Newsletter Author Instance.
 	 * Ensures only one instance of Newspack Author Instance is loaded or can be loaded.
 	 *
@@ -907,7 +914,7 @@ final class Newspack_Newsletters {
 			[
 				'methods'             => \WP_REST_Server::READABLE,
 				'callback'            => [ __CLASS__, 'api_get_layouts' ],
-				'permission_callback' => [ __CLASS__, 'api_edit_posts_permissions_check' ],
+				'permission_callback' => [ __CLASS__, 'api_contributor_permissions_check' ],
 				'args'                => [
 					'defaults_only' => [
 						'type'        => 'boolean',
@@ -946,7 +953,7 @@ final class Newspack_Newsletters {
 			[
 				'methods'             => \WP_REST_Server::EDITABLE,
 				'callback'            => [ __CLASS__, 'api_set_color_palette' ],
-				'permission_callback' => [ __CLASS__, 'api_edit_posts_permissions_check' ],
+				'permission_callback' => [ __CLASS__, 'api_contributor_permissions_check' ],
 			]
 		);
 
@@ -956,7 +963,7 @@ final class Newspack_Newsletters {
 			[
 				'methods'             => \WP_REST_Server::EDITABLE,
 				'callback'            => [ __CLASS__, 'api_get_mjml' ],
-				'permission_callback' => [ __CLASS__, 'api_edit_post_permissions_check' ],
+				'permission_callback' => [ __CLASS__, 'api_target_post_permissions_check' ],
 				'args'                => [
 					'post_id' => [
 						'required'          => true,
@@ -1264,7 +1271,7 @@ final class Newspack_Newsletters {
 	 * @param WP_REST_Request $request API request object.
 	 * @return bool|WP_Error
 	 */
-	public static function api_edit_post_permissions_check( $request ) {
+	public static function api_target_post_permissions_check( $request ) {
 		$post_id = (int) $request->get_param( 'post_id' );
 		if ( $post_id && current_user_can( 'edit_post', $post_id ) ) {
 			return true;
@@ -1279,17 +1286,22 @@ final class Newspack_Newsletters {
 	}
 
 	/**
-	 * Permission check for non-post authoring reads needed to load the
-	 * editor (e.g. the `layouts` list of saved templates). Any user who can
-	 * author posts may use them. These surface editor-support content; the
-	 * one field that carries send/audience configuration (`campaign_defaults`)
-	 * is stripped from the layouts payload for roles below `edit_others_posts`
-	 * in api_get_layouts(), so this relaxed check does not broaden that surface.
+	 * Permission check for the non-post routes the editor calls on load: the
+	 * `layouts` list of saved templates (GET) and `color-palette` (POST). Any
+	 * user who can author posts (`edit_posts`) passes. It does not authorize
+	 * either route's sensitive part on its own: the one layouts field that
+	 * carries send/audience configuration (`campaign_defaults`) is stripped for
+	 * roles below `edit_others_posts` in api_get_layouts(), and the palette
+	 * write is checked separately in api_set_color_palette()
+	 * (`edit_others_posts`, filterable).
+	 *
+	 * The stricter sibling is api_authoring_permissions_check()
+	 * (`edit_others_posts`).
 	 *
 	 * @param WP_REST_Request $request API request object.
 	 * @return bool|WP_Error
 	 */
-	public static function api_edit_posts_permissions_check( $request ) {
+	public static function api_contributor_permissions_check( $request ) {
 		unset( $request );
 		if ( current_user_can( 'edit_posts' ) ) {
 			return true;
@@ -1301,6 +1313,32 @@ final class Newspack_Newsletters {
 				'status' => 403,
 			]
 		);
+	}
+
+	/**
+	 * Permission check for post-scoped authoring routes.
+	 *
+	 * @deprecated 3.44 Use Newspack_Newsletters::api_target_post_permissions_check().
+	 *
+	 * @param WP_REST_Request $request API request object.
+	 * @return bool|WP_Error
+	 */
+	public static function api_edit_post_permissions_check( $request ) {
+		_deprecated_function( __METHOD__, '3.44', 'Newspack_Newsletters::api_target_post_permissions_check' );
+		return self::api_target_post_permissions_check( $request );
+	}
+
+	/**
+	 * Permission check for the non-post routes the editor calls on load.
+	 *
+	 * @deprecated 3.44 Use Newspack_Newsletters::api_contributor_permissions_check().
+	 *
+	 * @param WP_REST_Request $request API request object.
+	 * @return bool|WP_Error
+	 */
+	public static function api_edit_posts_permissions_check( $request ) {
+		_deprecated_function( __METHOD__, '3.44', 'Newspack_Newsletters::api_contributor_permissions_check' );
+		return self::api_contributor_permissions_check( $request );
 	}
 
 	/**
@@ -1409,6 +1447,61 @@ final class Newspack_Newsletters {
 	}
 
 	/**
+	 * Resolve the cache-busting version for a built dist asset.
+	 *
+	 * Reads the content hash the build writes to `dist/<name>.asset.php`, so an
+	 * asset's URL changes when its file changes, and only then. The plugin
+	 * version can't do that: it stays the same when a build is reinstalled
+	 * without a version bump, so browsers keep the cached file. The hash covers
+	 * every file in the entry, so an entry's `.css` can use the same name as
+	 * its `.js`.
+	 *
+	 * A trimmed copy of `Newspack::asset_version()` in newspack-plugin, without
+	 * its cache reset or logging. This plugin must work without newspack-plugin,
+	 * so it can't call that one. newspack-ads, newspack-blocks, newspack-listings
+	 * and newspack-newsletters each carry this copy; a change to the name check
+	 * belongs in all of them and in the original.
+	 *
+	 * @param string $name Asset path relative to `dist/`, without the extension.
+	 *                     Examples: 'admin', 'branding'.
+	 * @return string The content hash, or the plugin version when the
+	 *                `.asset.php` file is missing or malformed.
+	 */
+	public static function asset_version( string $name ): string {
+		if ( isset( self::$asset_version_cache[ $name ] ) ) {
+			return self::$asset_version_cache[ $name ];
+		}
+		$version = '';
+		// Accept only entry-shaped names, so a caller can't include a file
+		// outside dist/. The second pattern rejects `..` segments, which the
+		// first pattern's character set would otherwise let through.
+		if (
+			preg_match( '#^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$#', $name )
+			&& ! preg_match( '#(^|/)\.\.(/|$)#', $name )
+		) {
+			/**
+			 * Filters the directory asset_version() reads `.asset.php` files from.
+			 * Tests point this at a temp dir instead of writing into dist/.
+			 *
+			 * @param string $dir  Absolute path with a trailing slash.
+			 * @param string $name Asset name being resolved.
+			 */
+			$dist_dir = apply_filters( 'newspack_newsletters_asset_dist_dir', NEWSPACK_NEWSLETTERS_PLUGIN_FILE . 'dist/', $name );
+			$path     = $dist_dir . $name . '.asset.php';
+			$asset    = file_exists( $path ) ? include $path : null;
+			if ( is_array( $asset ) && ! empty( $asset['version'] ) && is_string( $asset['version'] ) ) {
+				$version = $asset['version'];
+			}
+		}
+		if ( '' === $version ) {
+			// This plugin defines no version constant, so read its header.
+			$version = get_file_data( NEWSPACK_NEWSLETTERS_PLUGIN_FILE . 'newspack-newsletters.php', [ 'Version' => 'Version' ] )['Version'];
+		}
+		self::$asset_version_cache[ $name ] = $version;
+		return $version;
+	}
+
+	/**
 	 * Enqueue style to handle Newspack branding.
 	 */
 	public static function branding_scripts() {
@@ -1435,14 +1528,14 @@ final class Newspack_Newsletters {
 			$script,
 			plugins_url( '../dist/branding.js', __FILE__ ),
 			[ 'jquery' ],
-			'1.0',
+			self::asset_version( 'branding' ),
 			false
 		);
 		wp_enqueue_style(
 			$script,
 			plugins_url( '../dist/branding.css', __FILE__ ),
 			[],
-			'1.0',
+			self::asset_version( 'branding' ),
 			'screen'
 		);
 	}
@@ -1456,7 +1549,7 @@ final class Newspack_Newsletters {
 			$script,
 			plugins_url( '../dist/admin.js', __FILE__ ),
 			[ 'jquery' ],
-			'1.0',
+			self::asset_version( 'admin' ),
 			false
 		);
 		wp_localize_script(
@@ -1837,4 +1930,7 @@ final class Newspack_Newsletters {
 		return false;
 	}
 }
-Newspack_Newsletters::instance();
+// Boot only when the main plugin file loaded this, not another plugin's autoloader.
+if ( defined( 'NEWSPACK_NEWSLETTERS_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal path constant, set by the main plugin file.
+	Newspack_Newsletters::instance();
+}

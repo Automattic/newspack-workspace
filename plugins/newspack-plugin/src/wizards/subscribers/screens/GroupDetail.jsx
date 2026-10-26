@@ -383,7 +383,10 @@ function GroupDetailView() {
 		[ inviteRows, invitesView, inviteFields ]
 	);
 
-	if ( loading ) {
+	// Only loading a group replaces the screen. A reload of the same group after a write
+	// keeps it, and any open modal, mounted, so a flow that refreshes while staying open
+	// keeps what it is showing.
+	if ( loading && Number( group?.id ) !== Number( id ) ) {
 		return (
 			<div className="newspack-subscribers__loading">
 				<Waiting isCenter />

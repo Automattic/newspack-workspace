@@ -1,11 +1,6 @@
 /* globals newspack_ras_config */
 
 /**
- * Internal dependencies.
- */
-import * as a11y from './accessibility.js';
-
-/**
  * Helpers for the pre-registration confirmation modal rendered in wp_footer by
  * Reader_Activation::render_confirmation_modal().
  *
@@ -53,8 +48,9 @@ function openConfirmationModal( config = {} ) {
 	if ( currentController ) {
 		currentController.abort();
 	}
-	currentController = new AbortController();
-	const { signal } = currentController;
+	const controller = new AbortController();
+	currentController = controller;
+	const { signal } = controller;
 
 	const emailNode = modal.querySelector( '.email-address' );
 	if ( emailNode && config.email ) {
@@ -71,7 +67,7 @@ function openConfirmationModal( config = {} ) {
 	function handleConfirmClick() {
 		confirmed = true;
 		modal.setAttribute( 'data-state', 'closed' );
-		currentController?.abort();
+		controller.abort();
 		releaseController();
 		if ( typeof config.onConfirm === 'function' ) {
 			config.onConfirm();
@@ -82,6 +78,10 @@ function openConfirmationModal( config = {} ) {
 		if ( confirmed ) {
 			return;
 		}
+		// A reader who cancels can fix a typo and submit again, which opens this modal for
+		// the new address. Stop listening now, so Continue on that next step confirms only
+		// the new address.
+		controller.abort();
 		releaseController();
 		if ( typeof config.onCancel === 'function' ) {
 			config.onCancel();
@@ -93,7 +93,6 @@ function openConfirmationModal( config = {} ) {
 	modal.addEventListener( 'closeModal', handleClose, { signal } );
 
 	modal.setAttribute( 'data-state', 'open' );
-	a11y.trapFocus( modal );
 	return true;
 }
 
@@ -102,7 +101,8 @@ function openConfirmationModal( config = {} ) {
  *
  * Behavior:
  *   - Post-registration verification ON (the default): immediately invoke onProceed.
- *     The verification modal will run *after* registration to catch typos.
+ *     The verification modal will run *after* registration to catch typos, unless
+ *     the opener passed `skipVerification`.
  *   - Post-registration verification OFF: preflight the check-email endpoint to see
  *     whether the email already belongs to a registered reader.
  *       - Exists → invoke onProceed (the server will route to the appropriate

@@ -34,6 +34,27 @@ class Premium_Newsletters {
 	private static $restricted_lists = [];
 
 	/**
+	 * Why the sign-up being filtered lost a gated list, if it did. One of
+	 * 'not_own_address', 'no_access', or '' when nothing was refused.
+	 *
+	 * Read when the refusal is turned into a message for the reader.
+	 *
+	 * @var string
+	 */
+	private static $sign_up_refusal = '';
+
+	/**
+	 * The address, lowercased, that $sign_up_refusal was recorded for.
+	 *
+	 * A sign-up that never reaches filter_subscribe_lists() resets nothing, yet its
+	 * error can carry the same code. Keeping the address lets the message callback
+	 * claim only an error raised for the address the refusal was recorded for.
+	 *
+	 * @var string
+	 */
+	private static $sign_up_refusal_email = '';
+
+	/**
 	 * Hook name for the scheduled access check action.
 	 */
 	const SCHEDULED_HOOK = 'newspack_premium_newsletters_access_check';
@@ -45,6 +66,14 @@ class Premium_Newsletters {
 	const QUEUE_OPTION = 'newspack_premium_newsletters_access_check_queue';
 
 	/**
+	 * WP option key for the site-wide auto-signup setting: whether a reader who gains
+	 * access to a restricted list is added to it. A gate set to "default" follows it.
+	 * Stores: bool (1 or 0); absent reads as on, so read it through
+	 * is_site_auto_signup_on().
+	 */
+	const AUTO_SIGNUP_OPTION = 'newspack_premium_newsletters_auto_signup';
+
+	/**
 	 * Log a warning once the queue exceeds this many unique user IDs.
 	 */
 	const MAX_QUEUE_SIZE = 500;
@@ -53,12 +82,13 @@ class Premium_Newsletters {
 	 * Queue-entry source tags. Each access-check queue entry records which event
 	 * enqueued it so that downstream logic (e.g. consulting the renewal snapshot)
 	 * can be scoped to the originating event instead of leaking into unrelated
-	 * flows that happen to dequeue the same user. Plan-switch and
-	 * one-time-purchase-ended entries are remove-only: check_access() never adds
-	 * lists for them, and they never replace another entry for the same user.
-	 * A one-time purchase that ends can't grant access, so adding lists there
-	 * would only re-add lists the reader had left; maybe_enqueue_access_check()
-	 * covers the plan-switch case.
+	 * flows that happen to dequeue the same user. Plan-switch,
+	 * one-time-purchase-ended and gift-removed entries are remove-only:
+	 * check_access() never adds lists for them, and they never replace another
+	 * entry for the same user. A one-time purchase that ends, or a gift handed to
+	 * someone else, can't grant access, so adding lists there would only re-add
+	 * lists the reader had left; maybe_enqueue_access_check() covers the
+	 * plan-switch case.
 	 */
 	const SOURCE_RENEWAL                 = 'renewal';
 	const SOURCE_SUBSCRIPTION_CHANGED    = 'subscription_changed';
@@ -68,6 +98,8 @@ class Premium_Newsletters {
 	const SOURCE_PLAN_SWITCH             = 'plan_switch';
 	const SOURCE_ONE_TIME_PURCHASE       = 'one_time_purchase';
 	const SOURCE_ONE_TIME_PURCHASE_ENDED = 'one_time_purchase_ended';
+	const SOURCE_GIFT_RECEIVED           = 'gift_received';
+	const SOURCE_GIFT_REMOVED            = 'gift_removed';
 
 	/**
 	 * WP option key for how far the one-time purchase lapse sweep has checked.
@@ -111,6 +143,15 @@ class Premium_Newsletters {
 		// Filter the subscription lists.
 		add_filter( 'newspack_newsletters_subscription_lists', [ __CLASS__, 'filter_subscription_lists' ] );
 
+		// Refuse sign-ups to gated lists unless the reader is signing up their own address.
+		add_filter( 'newspack_newsletters_subscribe_lists', [ __CLASS__, 'filter_subscribe_lists' ], 10, 2 );
+
+		// Tell a reader who was refused a premium list what to do about it.
+		add_filter( 'newspack_newsletters_add_contact_reader_error_message', [ __CLASS__, 'filter_sign_up_error_message' ], 20, 3 );
+
+		// Tell the Newsletter Subscription Form block which lists are gated.
+		add_filter( 'newspack_newsletters_subscription_list_gates', [ __CLASS__, 'filter_list_gates' ] );
+
 		// Register Data Events handlers.
 		add_action( 'init', [ __CLASS__, 'register_handlers' ] );
 
@@ -122,6 +163,11 @@ class Premium_Newsletters {
 		// naming them, so the membership write itself has to trigger their check.
 		add_action( 'added_user_meta', [ __CLASS__, 'maybe_enqueue_group_membership_check' ], 10, 3 );
 		add_action( 'deleted_user_meta', [ __CLASS__, 'maybe_enqueue_group_membership_check' ], 10, 3 );
+
+		// Handing a gift to another reader fires no subscription event, so the hook
+		// WCS Gifting fires is the only trigger for both readers. It fires whenever
+		// WCS sets a gift's recipient, not only on a hand-off: see the handler.
+		add_action( 'woocommerce_subscriptions_gifting_recipient_changed', [ __CLASS__, 'handle_gift_recipient_changed' ], 10, 3 );
 
 		// Clean up the queue option on plugin deactivation.
 		add_action( 'newspack_deactivation', [ __CLASS__, 'unschedule_access_check_event' ] );
@@ -139,6 +185,27 @@ class Premium_Newsletters {
 		}
 		self::$gates = Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish', true );
 		return self::$gates;
+	}
+
+	/**
+	 * Whether the site has any premium newsletter gate.
+	 *
+	 * Without one no list can be gated, so callers skip their per-list work. Only
+	 * these gates can restrict a list: Content_Restriction_Control::get_post_gates()
+	 * reads no others for a list post.
+	 *
+	 * Reads Content_Gate directly rather than get_gates(): that one memoizes in a
+	 * static nothing clears outside tests, so a process that outlives a request
+	 * would never see a gate published after its first check. Content_Gate's own
+	 * cache is flushed on every post and meta write. That covers this check only:
+	 * the per-list answer comes from Content_Restriction_Control's memo, another
+	 * static nothing clears, so in such a process a list keeps the answer it got
+	 * the first time it was judged.
+	 *
+	 * @return bool
+	 */
+	private static function has_newsletter_gates(): bool {
+		return ! empty( Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish', true ) );
 	}
 
 	/**
@@ -445,33 +512,39 @@ class Premium_Newsletters {
 	 * @return bool
 	 */
 	private static function is_remove_only_source( string $source ): bool {
-		return in_array( $source, [ self::SOURCE_PLAN_SWITCH, self::SOURCE_ONE_TIME_PURCHASE_ENDED ], true );
+		return in_array( $source, [ self::SOURCE_PLAN_SWITCH, self::SOURCE_ONE_TIME_PURCHASE_ENDED, self::SOURCE_GIFT_REMOVED ], true );
 	}
 
 	/**
-	 * Filter the subscription lists to prevent premium newsletters from being shown when restricted.
+	 * Filter the subscription lists to prevent premium newsletters from being shown when restricted
+	 * or when their gate hides them.
+	 *
+	 * Newsletters builds every reader-facing list surface from the lists this returns: My Account,
+	 * sign-up forms, registration and the post-checkout modal. Dropping a hidden list here is what
+	 * keeps it off all of them. It also keeps a hidden list out of the set My Account removes a
+	 * reader from when they save, so saving that form can never unsubscribe them from it.
+	 *
+	 * Admin screens keep every list, so an editor can still pick any of them. An admin-ajax
+	 * request leaves hidden lists out ({@see leaves_hidden_lists_out()}), and keeps
+	 * restricted lists as every admin request does.
 	 *
 	 * @param array $lists The lists.
 	 *
 	 * @return array The filtered lists.
 	 */
 	public static function filter_subscription_lists( $lists ) {
-		if ( is_admin() ) {
+		if ( ! self::leaves_hidden_lists_out() ) {
 			return $lists;
 		}
 
-		// With no gates at all, no list can be restricted, so skip the per-list
-		// check entirely. Both kinds have to be absent: get_gates()'s $is_newsletter
-		// argument selects between premium newsletter gates and ordinary ones rather
-		// than widening to both — the meta query is EXISTS vs NOT EXISTS — while the
-		// per-list check below runs through Content_Restriction_Control, which
-		// honours any gate whose content rules match the list. Testing only the
-		// newsletter half would skip lists an ordinary gate restricts. In non-test
-		// requests both gate lookups are cached (Content_Gate::get_gates cache is
-		// disabled under PHPUnit), so the fast path stays cheap.
+		// With no gate of either kind, no list can be restricted, so skip the
+		// per-list check entirely.
 		if ( empty( self::get_gates() ) && empty( Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish' ) ) ) {
 			return $lists;
 		}
+
+		// Restricted lists stand down on every admin request, admin-ajax included.
+		$is_admin = is_admin();
 
 		// Goes inert with the rest of gating (NPPD-1846). With Audience Management off
 		// Access Control restricts nothing at all, and that includes premium lists:
@@ -482,12 +555,203 @@ class Premium_Newsletters {
 		$lists = array_values(
 			array_filter(
 				$lists,
-				function( $list ) {
-					return ! Content_Restriction_Control::is_post_restricted( false, $list->get_id() );
+				function( $list ) use ( $is_admin ) {
+					return ( $is_admin || ! Content_Restriction_Control::is_post_restricted( false, $list->get_id() ) )
+						&& ! self::is_list_hidden( $list->get_id() );
 				}
 			)
 		);
 		return $lists;
+	}
+
+	/**
+	 * Whether lists hidden from readers are left out of this request.
+	 *
+	 * Admin screens show them, so an editor can still pick any list. An admin-ajax
+	 * request isn't an admin screen. Background jobs run under admin-ajax (Action
+	 * Scheduler's async runner, Data Events' remote-post dispatch) as well as WP-Cron,
+	 * where is_admin() is false. Treating admin-ajax the same way leaves hidden lists
+	 * out under either runner, so a job that rewrites a reader's lists from this set
+	 * can't drop a hidden one. The access check still adds and removes readers on
+	 * hidden lists ({@see is_list_hidden()}). Restricted lists are unaffected:
+	 * filter_subscription_lists() keeps them on any admin request. No first-party
+	 * reader page renders through admin-ajax.
+	 *
+	 * The lists filter and the list-gates filter both ask this. The Subscribe block's
+	 * "show premium lists" mode only works when they agree.
+	 *
+	 * @return bool
+	 */
+	private static function leaves_hidden_lists_out(): bool {
+		return ! is_admin() || wp_doing_ajax();
+	}
+
+	/**
+	 * Remove lists a reader may not join from a sign-up.
+	 *
+	 * Display is all filter_subscription_lists() decides. Without this, a request
+	 * naming a gated list's ID subscribes the contact anyway, and they stay
+	 * subscribed until a later event queues their access check.
+	 *
+	 * A gated list can be joined only by the logged-in reader signing up their
+	 * own address, and only if their account has access. The submitted address is
+	 * compared with the session reader's own and nothing more: the account behind
+	 * it, if there is one, is never looked up. If the result depended on that
+	 * account, anyone could submit another person's address and learn from it
+	 * whether that person has access.
+	 *
+	 * @param string[] $lists   Public IDs of the lists requested.
+	 * @param array    $contact Contact information, with an `email` key.
+	 *
+	 * @return string[] The lists the sign-up may proceed with.
+	 */
+	public static function filter_subscribe_lists( $lists, $contact = [] ) {
+		// Reset before any early return, so a refusal recorded here is never read for a later sign-up.
+		self::$sign_up_refusal       = '';
+		self::$sign_up_refusal_email = '';
+		if ( ! is_array( $lists ) || empty( $lists ) || ! self::is_access_control_active() ) {
+			return $lists;
+		}
+		if ( ! self::has_newsletter_gates() ) {
+			return $lists;
+		}
+		if ( ! class_exists( 'Newspack\Newsletters\Subscription_Lists' ) || ! method_exists( 'Newspack\Newsletters\Subscription_List', 'from_public_id' ) ) {
+			return $lists;
+		}
+		$session_user   = wp_get_current_user();
+		$email          = is_array( $contact ) && isset( $contact['email'] ) && is_string( $contact['email'] ) ? trim( $contact['email'] ) : '';
+		$is_own_address = $session_user->exists() && '' !== $email && 0 === strcasecmp( $email, $session_user->user_email );
+
+		return array_values(
+			array_filter(
+				$lists,
+				function ( $public_id ) use ( $is_own_address, $session_user, $email ) {
+					$list = Subscription_List::from_public_id( $public_id );
+					// A public ID can name any post, not only a list. Judging those would
+					// turn a sign-up attempt into a way to probe every gate on the site,
+					// so anything that isn't a list passes through unjudged.
+					if ( ! $list || \Newspack\Newsletters\Subscription_Lists::CPT !== get_post_type( $list->get_id() ) ) {
+						return true;
+					}
+					if ( ! Content_Restriction_Control::post_has_restrictions( false, $list->get_id() ) ) {
+						return true;
+					}
+					// The reason comes from the same two facts as the rule: whether this is the
+					// session reader's own address, and whether that reader has access. The
+					// access check stays behind the address check, so it never runs for an
+					// address that isn't theirs.
+					if ( ! $is_own_address ) {
+						self::$sign_up_refusal       = 'not_own_address';
+						self::$sign_up_refusal_email = strtolower( $email );
+						return false;
+					}
+					if ( Content_Restriction_Control::is_post_restricted( false, $list->get_id(), $session_user->ID ) ) {
+						self::$sign_up_refusal       = 'no_access';
+						self::$sign_up_refusal_email = strtolower( $email );
+						return false;
+					}
+					return true;
+				}
+			)
+		);
+	}
+
+	/**
+	 * Replace the generic sign-up error with one that explains a premium list
+	 * refusal.
+	 *
+	 * The generic message tells a refused reader nothing. These two say what
+	 * happened, and neither says anything about another account's access: the
+	 * first goes to every request for an address that is not the session
+	 * reader's, whatever that address's account can read, and the second is
+	 * about the session reader's own account.
+	 *
+	 * They do tell a new address from a registered one. A sign-up form can
+	 * create an account for a new address and sign the visitor in as it before
+	 * the lists are checked, so that visitor gets the second message. The same
+	 * response already says as much: it carries the new reader's login cookie.
+	 *
+	 * @param string $message   The reader-facing message so far.
+	 * @param array  $params    Details of the sign-up request, with an `email` key.
+	 * @param mixed  $raw_error The error the sign-up produced.
+	 *
+	 * @return string
+	 */
+	public static function filter_sign_up_error_message( $message, $params = [], $raw_error = null ) {
+		if ( ! is_wp_error( $raw_error ) || 'newspack_newsletters_lists_not_allowed' !== $raw_error->get_error_code() ) {
+			return $message;
+		}
+		$email = is_array( $params ) && isset( $params['email'] ) && is_string( $params['email'] ) ? strtolower( trim( $params['email'] ) ) : '';
+		if ( '' === self::$sign_up_refusal || $email !== self::$sign_up_refusal_email ) {
+			return $message;
+		}
+		if ( 'not_own_address' === self::$sign_up_refusal ) {
+			return __( 'Sign in with this email address to subscribe to premium newsletters.', 'newspack-plugin' );
+		}
+		if ( 'no_access' === self::$sign_up_refusal ) {
+			return __( 'This account doesn\'t include access to premium newsletters.', 'newspack-plugin' );
+		}
+		return $message;
+	}
+
+	/**
+	 * Report the premium newsletter gates that restrict each subscription list.
+	 *
+	 * Uses the same matcher that decides access, so a gate is listed here exactly
+	 * when it can restrict the list: published, with registration or paid access
+	 * switched on, and content rules that match. The one exception is a request that
+	 * isn't an admin screen ({@see leaves_hidden_lists_out()}), where a list hidden
+	 * from readers is left out of the map, so the Subscribe block's "show premium
+	 * lists" mode never renders it.
+	 *
+	 * @param array[] $list_gates Gates keyed by public list ID.
+	 *
+	 * @return array[] Gates keyed by public list ID. Each gate has `id` and `title`,
+	 *                 plus `edit_url` for users who can open the wizard.
+	 */
+	public static function filter_list_gates( $list_gates ) {
+		$list_gates = is_array( $list_gates ) ? $list_gates : [];
+		if ( ! self::is_access_control_active() || ! class_exists( 'Newspack\Newsletters\Subscription_Lists' ) ) {
+			return $list_gates;
+		}
+		if ( ! self::has_newsletter_gates() ) {
+			return $list_gates;
+		}
+		// The Premium Newsletters wizard's capability and page slug. The link goes
+		// to the wizard's edit route rather than the gate's post editor, which
+		// edits the layout readers see and not the gate's rules.
+		$can_edit = current_user_can( 'manage_options' );
+		foreach ( \Newspack\Newsletters\Subscription_Lists::get_all() as $list ) {
+			// The marker must mean the same thing as the sign-up check, which honors
+			// a list marked exempt. get_post_gates() alone would mark it as gated
+			// while anyone can join it.
+			if ( ! Content_Restriction_Control::post_has_restrictions( false, $list->get_id() ) ) {
+				continue;
+			}
+			// The editor reads this map from an admin request and keeps the gate, so it
+			// can still name a hidden list.
+			if ( self::leaves_hidden_lists_out() && self::is_list_hidden( $list->get_id() ) ) {
+				continue;
+			}
+			$gates = Content_Restriction_Control::get_post_gates( $list->get_id() );
+			if ( empty( $gates ) ) {
+				continue;
+			}
+			$list_gates[ $list->get_public_id() ] = array_map(
+				function ( $gate ) use ( $can_edit ) {
+					$item = [
+						'id'    => (int) $gate['id'],
+						'title' => (string) $gate['title'],
+					];
+					if ( $can_edit ) {
+						$item['edit_url'] = admin_url( 'admin.php?page=newspack-premium-newsletters#/edit/' . (int) $gate['id'] );
+					}
+					return $item;
+				},
+				array_values( $gates )
+			);
+		}
+		return $list_gates;
 	}
 
 	/**
@@ -606,6 +870,179 @@ class Premium_Newsletters {
 	}
 
 	/**
+	 * Whether a gate hides a list from readers.
+	 *
+	 * Asked of the gates that currently restrict the list, so a draft gate, or one with
+	 * neither registration nor paid access on, hides nothing. One gate that hides the
+	 * list is enough, even when another gate covering it shows it. A list marked exempt
+	 * is never hidden: Access Control does not govern it, and the sign-up check and the
+	 * list markers already treat it that way. Hiding only changes what readers see: the
+	 * access check still adds and removes readers on a hidden list.
+	 *
+	 * @param int $list_id List post ID.
+	 *
+	 * @return bool
+	 */
+	public static function is_list_hidden( int $list_id ): bool {
+		// Gates are inert until they take over from Memberships: see is_access_control_active().
+		if ( ! self::is_access_control_active() ) {
+			return false;
+		}
+		if ( ! Content_Restriction_Control::post_has_restrictions( false, $list_id ) ) {
+			return false;
+		}
+		foreach ( Content_Restriction_Control::get_post_gates( $list_id ) as $gate ) {
+			if ( ! empty( $gate['hide_lists'] ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether the site-wide auto-signup option is on.
+	 *
+	 * An option that was never saved reads as on. Every read of the option goes
+	 * through here, so the access check, the editor's "Default" label and
+	 * the migrator's summary can't disagree about a site that never saved it.
+	 *
+	 * @return bool
+	 */
+	public static function is_site_auto_signup_on(): bool {
+		return (bool) get_option( self::AUTO_SIGNUP_OPTION, 1 );
+	}
+
+	/**
+	 * Whether a gate signs readers up to its lists automatically.
+	 *
+	 * A gate set to "on" or "off" decides for itself. Any other value, including a
+	 * gate saved before the setting existed, follows the site-wide option, so a site
+	 * that never touches the per-gate setting behaves as it always has.
+	 *
+	 * @param array $gate Gate data from {@see Content_Gate::get_gate()}.
+	 *
+	 * @return bool
+	 */
+	private static function gate_signs_up_readers( array $gate ): bool {
+		$mode = $gate['auto_signup'] ?? 'default';
+		if ( 'on' === $mode ) {
+			return true;
+		}
+		if ( 'off' === $mode ) {
+			return false;
+		}
+		return self::is_site_auto_signup_on();
+	}
+
+	/**
+	 * Whether a reader who has access to a list is signed up to it automatically.
+	 *
+	 * Callers ask this only after finding the reader unrestricted for the list, and
+	 * a list can sit behind several gates. The gates that admit the reader by their
+	 * own rules decide, so a reader who got in through a gate set to "off" is left
+	 * to opt in themselves even when another gate covering the list is set to "on"
+	 * and does not admit them. One admitting gate set to "on" is enough to sign them up.
+	 *
+	 * When no gate admits the reader by its own rules, they were let in some other way:
+	 * a staff account that skips access checks, a user who can edit the list post, a
+	 * list whose gates have no access mode on, or every gate refusing without a layout
+	 * to show. The lists' own gates decide then, and any of them resolving to "on" signs
+	 * the reader up. With every gate on "default" both paths reduce to the site-wide option,
+	 * so that is returned without judging the reader against any gate.
+	 *
+	 * Callers ask only about a list a published gate names. For any other list the answer
+	 * is the site-wide option while no gate sets its own auto-signup, and false once one does.
+	 *
+	 * @param int $list_id List post ID.
+	 * @param int $user_id Reader to decide for.
+	 *
+	 * @return bool
+	 */
+	public static function is_auto_signup_list( int $list_id, int $user_id ): bool {
+		if ( ! self::has_auto_signup_override() ) {
+			return self::is_site_auto_signup_on();
+		}
+
+		$admitting_gates = array_filter(
+			Content_Restriction_Control::get_post_gates( $list_id ),
+			function ( $gate ) use ( $user_id ) {
+				return ! Content_Restriction_Control::evaluate_gate( $gate, $user_id )['restricted'];
+			}
+		);
+		if ( ! empty( $admitting_gates ) ) {
+			return self::any_gate_signs_up( $admitting_gates );
+		}
+
+		$list_gates = array_filter(
+			Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish', true ),
+			function ( $gate ) use ( $list_id ) {
+				foreach ( $gate['content_rules'] as $content_rule ) {
+					if ( 'newsletters' === $content_rule['slug'] && in_array( $list_id, array_map( 'intval', (array) $content_rule['value'] ), true ) ) {
+						return true;
+					}
+				}
+				return false;
+			}
+		);
+		return self::any_gate_signs_up( $list_gates );
+	}
+
+	/**
+	 * Whether any of the given gates signs readers up automatically.
+	 *
+	 * @param array[] $gates Gate data from {@see Content_Gate::get_gate()}.
+	 *
+	 * @return bool
+	 */
+	private static function any_gate_signs_up( array $gates ): bool {
+		foreach ( $gates as $gate ) {
+			if ( self::gate_signs_up_readers( $gate ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether any published premium newsletter gate sets its own auto-signup.
+	 *
+	 * Reads Content_Gate directly, like can_any_list_auto_signup().
+	 *
+	 * @return bool
+	 */
+	private static function has_auto_signup_override(): bool {
+		foreach ( Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish', true ) as $gate ) {
+			if ( in_array( $gate['auto_signup'] ?? 'default', [ 'on', 'off' ], true ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether auto-signup can apply to any list on the site.
+	 *
+	 * True when the site-wide option is on, or any gate is set to "on". It is the
+	 * cheap test for work that only matters if some list might sign a reader up,
+	 * such as the renewal snapshot and the per-list auto-signup lookup. Reads
+	 * Content_Gate directly: its cache is flushed on every gate write, where
+	 * self::$gates is not.
+	 *
+	 * @return bool
+	 */
+	public static function can_any_list_auto_signup(): bool {
+		if ( self::is_site_auto_signup_on() ) {
+			return true;
+		}
+		foreach ( Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish', true ) as $gate ) {
+			if ( 'on' === ( $gate['auto_signup'] ?? '' ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Check list access for the user.
 	 *
 	 * The renewal snapshot is only consulted when this access check was enqueued
@@ -637,8 +1074,10 @@ class Premium_Newsletters {
 		$subscribed_lists = $is_renewal_check
 			? get_user_meta( $user_id, self::SUBSCRIBED_LISTS_META_KEY, true )
 			: '';
-		// A remove-only check never adds lists; see the SOURCE_* constants.
-		$auto_signup     = ! self::is_remove_only_source( $source ) && (bool) get_option( 'newspack_premium_newsletters_auto_signup', 1 );
+		// A remove-only check never adds lists; see the SOURCE_* constants. Nor does
+		// any check while no list can sign a reader up, and asking that once here
+		// spares judging the reader against every gate on every list.
+		$can_add_lists   = ! self::is_remove_only_source( $source ) && self::can_any_list_auto_signup();
 		$lists_to_add    = [];
 		$lists_to_remove = [];
 
@@ -661,7 +1100,7 @@ class Premium_Newsletters {
 		foreach ( $restricted_lists as $list_id ) {
 			if ( Content_Restriction_Control::is_post_restricted( false, $list_id, $user_id ) ) {
 				$lists_to_remove[] = $list_id;
-			} elseif ( $auto_signup ) {
+			} elseif ( $can_add_lists && self::is_auto_signup_list( (int) $list_id, (int) $user_id ) ) {
 				if ( ! is_array( $subscribed_lists ) ) {
 					$lists_to_add[] = $list_id;
 				} elseif (
@@ -934,6 +1373,7 @@ class Premium_Newsletters {
 
 	/**
 	 * Set the user's subscribed lists so they can be checked before auto-signup.
+	 * The recipient of a gifted subscription and a group's members are snapshotted too.
 	 *
 	 * @param int   $timestamp Timestamp of the event.
 	 * @param array $data      Data associated with the event.
@@ -956,6 +1396,15 @@ class Premium_Newsletters {
 
 		self::snapshot_lists_and_enqueue_renewal_check( $user );
 
+		// A gift's renewal events name the purchaser, but the recipient holds the
+		// subscription, so they need the same snapshot to keep auto-signup from
+		// re-adding a premium list they left.
+		$recipient_id = self::get_gift_recipient_id( $data );
+		$recipient    = $recipient_id ? get_user_by( 'id', $recipient_id ) : false;
+		if ( $recipient ) {
+			self::snapshot_lists_and_enqueue_renewal_check( $recipient );
+		}
+
 		// A group's renewal moves it through On hold and back to Active, which
 		// re-checks every member. Members get the same snapshot as the owner, so
 		// auto-signup can't re-add a premium list a member left on their own.
@@ -973,11 +1422,10 @@ class Premium_Newsletters {
 	 * @param \WP_User $user The reader whose access the renewal decides.
 	 */
 	private static function snapshot_lists_and_enqueue_renewal_check( $user ) {
-		// Capture the renewal-time snapshot when auto-signup is enabled. Without
-		// auto-signup the snapshot has no effect (check_access only consults it
+		// Capture the renewal-time snapshot when auto-signup can apply to any list.
+		// Without it the snapshot has no effect (check_access only consults it
 		// inside the auto-signup branch), so skip the ESP fetch in that case.
-		$auto_signup = (bool) get_option( 'newspack_premium_newsletters_auto_signup', 1 );
-		if ( $auto_signup && class_exists( 'Newspack_Newsletters_Subscription' ) ) {
+		if ( self::can_any_list_auto_signup() && class_exists( 'Newspack_Newsletters_Subscription' ) ) {
 			$email         = $user->user_email;
 			$current_lists = Newspack_Newsletters_Subscription::get_contact_lists( $email );
 			if ( is_array( $current_lists ) ) {
@@ -1015,6 +1463,70 @@ class Premium_Newsletters {
 	}
 
 	/**
+	 * Get the recipient of the gifted subscription a Data Event concerns.
+	 *
+	 * Subscription events name the purchaser, but content gates grant a gift only
+	 * to its recipient. Without this, the recipient never gains the premium lists
+	 * the gift covers, and keeps them after it lapses.
+	 *
+	 * @param array $data Data associated with the event.
+	 *
+	 * @return int The recipient's user ID, or 0 when the event names no gifted
+	 *             subscription or its recipient is the user the event names.
+	 */
+	private static function get_gift_recipient_id( array $data ): int {
+		if ( empty( $data['subscription_id'] ) || ! function_exists( 'wcs_get_subscription' ) ) {
+			return 0;
+		}
+		$subscription = wcs_get_subscription( (int) $data['subscription_id'] );
+		if ( ! $subscription ) {
+			return 0;
+		}
+		$recipient_id = WooCommerce_Subscriptions_Gifting::get_recipient_id( $subscription );
+		return $recipient_id === (int) ( $data['user_id'] ?? 0 ) ? 0 : $recipient_id;
+	}
+
+	/**
+	 * Queue access checks for both readers when a gifted subscription changes
+	 * recipient, because no subscription event fires when an admin reassigns a gift.
+	 *
+	 * WCS fires this hook every time it saves a gift's recipient, changed or not:
+	 * when the gift's parent order or a switch order is marked processing or
+	 * completed, and when an admin reassigns the gift. Renewal orders never fire
+	 * it. Because one order can fire it more than once with the same reader, an
+	 * unchanged recipient is skipped: a recheck could let auto-signup re-add a
+	 * list they left.
+	 *
+	 * Clearing a recipient fires no hook, so a removal isn't covered here. After
+	 * an admin clears one, WCS sets the original recipient again the next time
+	 * the parent order or a switch order is marked processing or completed.
+	 *
+	 * @param \WC_Subscription $subscription     The gifted subscription.
+	 * @param int              $new_recipient_id The new recipient's user ID.
+	 * @param int              $old_recipient_id The previous recipient's user ID, or 0 if none.
+	 *
+	 * @return void
+	 */
+	public static function handle_gift_recipient_changed( $subscription, $new_recipient_id, $old_recipient_id ): void {
+		$new_recipient_id = (int) $new_recipient_id;
+		$old_recipient_id = (int) $old_recipient_id;
+		if ( $new_recipient_id === $old_recipient_id ) {
+			return;
+		}
+		if ( $new_recipient_id > 0 ) {
+			self::add_user_to_queue( $new_recipient_id, self::SOURCE_GIFT_RECEIVED );
+		}
+		// The reader who held the subscription until now only loses lists: a
+		// remove-only check can't re-add one they left. With no previous recipient
+		// that's the buyer, who loses access when an admin first gives their own
+		// subscription a recipient.
+		$previous_holder_id = $old_recipient_id > 0 ? $old_recipient_id : (int) $subscription->get_customer_id();
+		if ( $previous_holder_id > 0 ) {
+			self::add_user_to_queue( $previous_holder_id, self::SOURCE_GIFT_REMOVED );
+		}
+	}
+
+	/**
 	 * Queue an access check for a reader who just joined or left a group subscription.
 	 *
 	 * @param int|int[] $meta_ids ID(s) of the affected meta row(s).
@@ -1030,8 +1542,8 @@ class Premium_Newsletters {
 
 	/**
 	 * Maybe add or remove the user from restricted lists based on their access status.
-	 * When the event names a group subscription and can change its access, the
-	 * members are queued too.
+	 * The recipient of a gifted subscription is queued too, and so are a group
+	 * subscription's members when the event can change their access.
 	 *
 	 * @param int    $timestamp Timestamp of the event.
 	 * @param array  $data      Data associated with the event.
@@ -1046,6 +1558,13 @@ class Premium_Newsletters {
 			return;
 		}
 		self::add_user_to_queue( (int) $data['user_id'], $source );
+		// A gift's status decides its recipient's access, so the recipient is checked
+		// on every event like the owner, not skipped like a group member when the
+		// status keeps access.
+		$recipient_id = self::get_gift_recipient_id( $data );
+		if ( $recipient_id ) {
+			self::add_user_to_queue( $recipient_id, $source );
+		}
 		if ( ! self::event_changes_group_access( $data ) ) {
 			return;
 		}

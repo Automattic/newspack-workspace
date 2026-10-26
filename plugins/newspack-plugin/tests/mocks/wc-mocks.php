@@ -1087,6 +1087,15 @@ class WC_Order {
 		$this->save_calls++;
 		return true;
 	}
+	/**
+	 * Counts calls like save(), for code that persists meta alone.
+	 *
+	 * @var int
+	 */
+	public $save_meta_data_calls = 0;
+	public function save_meta_data() {
+		$this->save_meta_data_calls++;
+	}
 	public function get_billing_email() {
 		return $this->data['billing_email'] ?? '';
 	}
@@ -1136,6 +1145,21 @@ class WC_Order {
 	}
 	public function get_billing_last_name() {
 		return $this->data['billing_last_name'] ?? '';
+	}
+	public function get_billing_address_1() {
+		return $this->data['billing_address_1'] ?? '';
+	}
+	public function get_billing_address_2() {
+		return $this->data['billing_address_2'] ?? '';
+	}
+	public function get_billing_city() {
+		return $this->data['billing_city'] ?? '';
+	}
+	public function get_billing_postcode() {
+		return $this->data['billing_postcode'] ?? '';
+	}
+	public function get_billing_country() {
+		return $this->data['billing_country'] ?? '';
 	}
 	public function get_formatted_order_total() {
 		return '$' . number_format( (float) $this->get_total(), 2 );
@@ -1658,6 +1682,15 @@ class WC_Subscription {
 		];
 		return true;
 	}
+	/**
+	 * Counts calls, matching WC_Order's above.
+	 *
+	 * @var int
+	 */
+	public $save_meta_data_calls = 0;
+	public function save_meta_data() {
+		$this->save_meta_data_calls++;
+	}
 }
 
 class WC_Subscriptions {
@@ -2014,11 +2047,28 @@ function wcs_get_subscriptions_for_order( $order, $args = [] ) {
 	if ( ! $order instanceof \WC_Order ) {
 		return [];
 	}
-	$subscription_id = (int) $order->get_meta( '_subscription_renewal' );
-	if ( $subscription_id <= 0 || ! isset( $subscriptions_database[ $subscription_id ] ) ) {
-		return [];
+	// Real WCS returns the union of the relationships `order_type` asks for. A renewal
+	// match is the subscription the order's `_subscription_renewal` meta points at; a
+	// parent match is one whose parent ID is this order. Renewal comes first so callers
+	// reading the first result keep getting it. With no `order_type` the mock answers
+	// renewals only, unlike real WCS, whose default is parent and switch orders.
+	$order_types = (array) ( $args['order_type'] ?? [] );
+	$wants_any   = in_array( 'any', $order_types, true );
+	$matches     = [];
+	if ( empty( $order_types ) || $wants_any || in_array( 'renewal', $order_types, true ) ) {
+		$subscription_id = (int) $order->get_meta( '_subscription_renewal' );
+		if ( $subscription_id > 0 && isset( $subscriptions_database[ $subscription_id ] ) ) {
+			$matches[ $subscription_id ] = $subscriptions_database[ $subscription_id ];
+		}
 	}
-	return [ $subscriptions_database[ $subscription_id ] ];
+	if ( $wants_any || in_array( 'parent', $order_types, true ) ) {
+		foreach ( (array) $subscriptions_database as $id => $subscription ) {
+			if ( (int) $subscription->get_parent_id() === (int) $order->get_id() ) {
+				$matches[ $id ] = $subscription;
+			}
+		}
+	}
+	return array_values( $matches );
 }
 
 /**
@@ -2124,7 +2174,9 @@ function wcs_get_subscriptions( $args = [] ) {
 	// Minimal mock: implements the `customer_id`, `order_id` and `subscription_status` filters
 	// plus `subscriptions_per_page`/`offset` paging — the args the code under test
 	// passes. `subscription_status` accepts a single status or an array; 'any' (or
-	// unset) means no status filter. `meta_query` and `orderby` are still ignored —
+	// unset) means no status filter. `meta_query` clauses comparing with `=` (the
+	// default) or `LIKE` (a substring match, as WP_Meta_Query wraps the value in
+	// wildcards) are honored; other compares and `orderby` are still ignored —
 	// extend here rather than relying on this returning the full set if a test
 	// needs them.
 	//
@@ -2161,6 +2213,17 @@ function wcs_get_subscriptions( $args = [] ) {
 		}
 		if ( null !== $statuses && ! $subscription->has_status( $statuses ) ) {
 			continue;
+		}
+		foreach ( $args['meta_query'] ?? [] as $clause ) {
+			if ( ! is_array( $clause ) || ! isset( $clause['key'], $clause['value'] ) ) {
+				continue;
+			}
+			$meta_value = (string) $subscription->get_meta( $clause['key'], true );
+			$compare    = $clause['compare'] ?? '=';
+			if ( ( '=' === $compare && $meta_value !== (string) $clause['value'] )
+				|| ( 'LIKE' === $compare && ( '' === $meta_value || false === strpos( $meta_value, (string) $clause['value'] ) ) ) ) {
+				continue 2;
+			}
 		}
 		$matches[ $id ] = $subscription;
 	}
@@ -2389,6 +2452,17 @@ function wc_get_orders( $args ) {
 			function( $order ) use ( $cutoff ) {
 				$date_created = $order->get_date_created();
 				return $date_created && $date_created->getTimestamp() > $cutoff;
+			}
+		);
+	}
+	if ( isset( $args['date_created'] ) && is_string( $args['date_created'] ) && str_starts_with( $args['date_created'], '<' ) ) {
+		// Support the '<{timestamp}' comparison form.
+		$cutoff = (int) substr( $args['date_created'], 1 );
+		$orders = array_filter(
+			$orders,
+			function( $order ) use ( $cutoff ) {
+				$date_created = $order->get_date_created();
+				return $date_created && $date_created->getTimestamp() < $cutoff;
 			}
 		);
 	}

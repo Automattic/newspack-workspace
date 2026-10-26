@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies.
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _x, sprintf } from '@wordpress/i18n';
 import { addQueryArgs } from '@wordpress/url';
 
 /**
@@ -64,6 +64,17 @@ export const isGateMetered = ( gate: Gate, siteMeter?: SiteMeterConfig ) => {
 	const signedOutPath = gate.registration?.active ? gate.registration : gate.custom_access;
 	return meters( signedOutPath, siteMeter?.anonymous_count ) || meters( gate.custom_access, siteMeter?.registered_count );
 };
+
+/**
+ * Whether a gate switches metering on, whether or not it grants any free views.
+ *
+ * Unlike `isGateMetered()`, a 0/0 allowance still counts, so the Metering form stays
+ * reachable to raise it again.
+ *
+ * @param gate The gate.
+ */
+export const switchesMeteringOn = ( gate: Gate ) =>
+	[ gate.registration, gate.custom_access ].some( section => Boolean( section?.active && section.metering?.enabled ) );
 
 /**
  * Whether any of a gate's audience paths keeps its own allowance.
@@ -254,6 +265,11 @@ const sharesContent = ( a: ContentScope, b: ContentScope ) => {
 };
 
 /**
+ * Short label for the badge that carries a priority warning.
+ */
+export const getPriorityWarningLabel = () => __( 'Overrides paid access', 'newspack-plugin' );
+
+/**
  * Warnings for gates ranked where they let readers skip a paid gate below them.
  *
  * The first gate matching a post decides access alone (NPPD-2289). A gate that asks for no paid
@@ -285,7 +301,7 @@ export const getPriorityWarnings = ( gates: Gate[] ): Record< number, string > =
 };
 
 /**
- * Describe the shared allowance, for the Metering card and the Metering page header.
+ * Describe the shared allowance, for the Metering page subtitle.
  *
  * @param siteMeter The site meter, once the wizard has loaded it.
  */
@@ -304,3 +320,39 @@ export const getMeteringDescription = ( siteMeter?: SiteMeterConfig ) => {
 		siteMeter.period === 'week' ? __( 'weekly', 'newspack-plugin' ) : __( 'monthly', 'newspack-plugin' )
 	);
 };
+
+/**
+ * The auto-signup choices for a premium newsletter gate. The first names the site-wide
+ * setting's current value, so a publisher sees what "Default" means without opening
+ * Advanced Settings.
+ *
+ * @param siteAutoSignup Whether the site-wide auto-signup setting is on. Undefined until the
+ *                       wizard data has loaded, when the first choice names no value rather
+ *                       than guess one.
+ */
+export const getAutoSignupOptions = ( siteAutoSignup?: boolean ): Array< { label: string; value: AutoSignupMode } > => {
+	let siteSettingLabel: string = _x( 'Default', 'auto-signup mode that follows the site setting', 'newspack-plugin' );
+	if ( typeof siteAutoSignup === 'boolean' ) {
+		siteSettingLabel = siteAutoSignup
+			? _x( 'Default (on)', 'auto-signup mode that follows the site setting', 'newspack-plugin' )
+			: _x( 'Default (off)', 'auto-signup mode that follows the site setting', 'newspack-plugin' );
+	}
+	return [
+		{ value: 'default', label: siteSettingLabel },
+		{ value: 'on', label: _x( 'On', 'auto-signup mode', 'newspack-plugin' ) },
+		{ value: 'off', label: _x( 'Off', 'auto-signup mode', 'newspack-plugin' ) },
+	];
+};
+
+/**
+ * The header subtitle for a gates screen, shared by the list and the editor so the header keeps its height between them.
+ *
+ * @param isNewsletter Whether the screen manages premium newsletter gates.
+ */
+export const getGatesSubTitle = ( isNewsletter = false ) =>
+	isNewsletter
+		? __(
+				'Choose which newsletter lists to restrict, how readers get access to them, and whether they’re signed up automatically.',
+				'newspack-plugin'
+		  )
+		: __( 'Choose which content to restrict and how readers get access to it.', 'newspack-plugin' );

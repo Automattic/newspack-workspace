@@ -6,6 +6,7 @@ import { registerSinglePromptBlock } from './single-prompt';
 import { registerContextualPromptInstance } from './contextual-prompt/instance';
 import { registerContextualPromptEditorLocks } from './contextual-prompt/editor-locks';
 import { registerContextualPromptCardGuard } from './contextual-prompt/card-guard';
+import { registerPromptButtonLink } from './contextual-prompt/button-link';
 import './contextual-prompt/editor.scss';
 import './prompt-editor-canvas.scss';
 
@@ -18,4 +19,5 @@ if ( Boolean( window.newspack_popups_blocks_data?.contextual_prompts_enabled ) )
 	registerContextualPromptInstance();
 	registerContextualPromptEditorLocks();
 	registerContextualPromptCardGuard();
+	registerPromptButtonLink();
 }

@@ -4,13 +4,17 @@ declare module '@wordpress/block-editor';
 // module and strip every type below of its global scope. Use inline
 // import() types instead.
 type HeaderAction = {
-	type: 'primary' | 'secondary' | 'more';
+	type: 'primary' | 'secondary' | 'tertiary' | 'more';
 	label: string;
+	id?: string;
 	ariaLabel?: string;
 	icon?: import('@wordpress/icons').Icon | string;
+	mobileIcon?: import('@wordpress/icons').Icon | string;
 	disabled?: boolean;
 	destructive?: boolean;
+	isBusy?: boolean;
 	action?: () => void;
+	onClick?: () => void;
 	href?: string;
 	separator?: boolean;
 };
@@ -20,15 +24,19 @@ type HeaderAction = {
 // or an `href` carries the behaviour.
 type SectionMenuItem = Omit< HeaderAction, 'type' >;
 
-// Single source of truth for the composite value shape lives with the control.
+// Single source of truth for each composite value shape: one-time purchase lives
+// with its control, range bounds with the verdicts that read them.
 type OneTimePurchaseRuleValue = import( '../../../../../content-gate/components/one-time-purchase-rule-control' ).OneTimePurchaseValue;
-type GateAccessRuleValue = string | string[] | boolean | OneTimePurchaseRuleValue;
+type RangeRuleValue = import( '../../../../../content-gate/utils/access-rule-value' ).RangeValue;
+type GateAccessRuleValue = string | string[] | boolean | OneTimePurchaseRuleValue | RangeRuleValue;
 type AccessRule = {
 	name: string;
 	default: GateAccessRuleValue;
 	description?: string;
 	id?: string;
 	is_boolean?: boolean;
+	// Whether the value is `{ min, max }` bounds on a number, rendered as a min/max control.
+	is_range?: boolean;
 	options?: { value: string; label: string }[];
 	has_options: boolean;
 	empty_grants_access?: boolean;
@@ -117,6 +125,10 @@ type GateContentRule = {
 
 type GateStatus = 'publish' | 'draft' | 'pending' | 'future' | 'private' | 'trash';
 
+// How a premium newsletter gate decides whether to add readers to its lists:
+// follow the site-wide setting, or force it on or off for this gate.
+type AutoSignupMode = 'default' | 'on' | 'off';
+
 type Gate = {
 	id: number;
 	title: string;
@@ -128,6 +140,9 @@ type Gate = {
 	content_rules_match: 'all' | 'any';
 	registration: Registration;
 	custom_access: CustomAccess;
+	// Premium newsletter gates only. Absence means 'default' and false.
+	auto_signup?: AutoSignupMode;
+	hide_lists?: boolean;
 };
 
 type Registration = {
@@ -204,6 +219,8 @@ type GateSettings = {
 	has_institutions?: boolean;
 	// Capability flags the gates endpoint returns alongside the stored settings.
 	has_newsletters?: boolean;
+	// The Premium Newsletters wizard's site-wide auto-signup setting.
+	auto_signup?: boolean;
 };
 
 type GateConfig = {

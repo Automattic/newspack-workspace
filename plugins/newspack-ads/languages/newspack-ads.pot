@@ -2,14 +2,14 @@
 # This file is distributed under the GPL2.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Ads 3.15.3\n"
+"Project-Id-Version: Newspack Ads 3.15.6\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-ads\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-31T17:53:20+00:00\n"
+"POT-Creation-Date: 2026-10-26T16:07:28+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-ads\n"
@@ -1131,15 +1131,15 @@ msgstr ""
 msgid "Unable to synchronize with GAM"
 msgstr ""
 
-#: includes/providers/gam/class-gam-model.php:1123
+#: includes/providers/gam/class-gam-model.php:1140
 msgid "Invalid credentials configuration."
 msgstr ""
 
-#: includes/providers/gam/class-gam-model.php:1130
+#: includes/providers/gam/class-gam-model.php:1147
 msgid "Unable to update GAM credentials"
 msgstr ""
 
-#: includes/providers/gam/class-gam-model.php:1144
+#: includes/providers/gam/class-gam-model.php:1161
 msgid "Unable to remove GAM credentials"
 msgstr ""
 

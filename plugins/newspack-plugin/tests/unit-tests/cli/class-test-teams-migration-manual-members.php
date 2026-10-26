@@ -20,6 +20,8 @@ use Newspack\Content_Gate;
 use Newspack\Group_Subscription;
 use Newspack\Group_Subscription_Settings;
 
+require_once NEWSPACK_ABSPATH . 'tests/mocks/wcs-gifting-mock.php';
+
 /**
  * Test migrate-manual-members' member-selection logic for comp/legacy parity
  * residuals on purchase plans.
@@ -120,6 +122,9 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		}
 		foreach ( self::MEMBERSHIP_STATUSES as $status ) {
 			\_unregister_post_status( $status );
+		}
+		if ( class_exists( 'WCS_Gifting' ) && property_exists( 'WCS_Gifting', 'recipients' ) ) {
+			WCS_Gifting::$recipients = [];
 		}
 		parent::tear_down();
 	}
@@ -1231,8 +1236,8 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 	/**
 	 * INDIVIDUAL mode regression guard: an editor (who has edit_others_posts and
 	 * so already bypasses the content gate) must still be skipped — no personal
-	 * subscription created. This is the edit_others_posts-only predicate, not
-	 * group eligibility.
+	 * subscription created. This is the shared access check
+	 * (Content_Gate::should_skip_access_checks()), not group eligibility.
 	 */
 	public function test_individual_mode_skips_an_editor() {
 		$plan_id   = $this->create_plan( 'manual-only' );
@@ -1247,6 +1252,30 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		);
 
 		$this->assertEmpty( $this->get_migration_subscription_ids_for_user( $editor_id ), 'An editor must not receive a personal subscription — they already bypass the content gate.' );
+	}
+
+	/**
+	 * INDIVIDUAL mode skips an account Access Control never restricts, so the
+	 * helper's filter moves the line here too.
+	 */
+	public function test_individual_mode_follows_the_skip_filter() {
+		$plan_id = $this->create_plan( 'manual-only' );
+		$user_id = $this->create_reader_user();
+		$this->create_membership( $plan_id, $user_id );
+		$skip = function ( $skips, $filtered_user_id ) use ( $user_id ) {
+			return $filtered_user_id === $user_id ? true : $skips;
+		};
+		add_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10, 2 );
+		$output = $this->run_migrate_manual_members(
+			[
+				'plan-ids' => (string) $plan_id,
+				'live'     => true,
+			]
+		);
+		remove_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10 );
+
+		$this->assertEmpty( $this->get_migration_subscription_ids_for_user( $user_id ), 'An account that is never restricted needs no personal subscription.' );
+		$this->assertStringContainsString( 'skipped — Access Control never restricts this account', $output );
 	}
 
 	/**
@@ -1534,45 +1563,5 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		}
 		$this->assertEmpty( $this->get_migration_subscription_ids_for_user( $member_user_ids_by_status['wcm-expired'] ), 'An expired member has no access today and must be untouched.' );
 		$this->assertStringContainsString( (string) $member_user_ids_by_status['wcm-expired'], $output, 'The expired member must be reported as not found among active members.' );
-	}
-}
-
-/**
- * Minimal WCS_Gifting stub mirroring the surface
- * WooCommerce_Connection/Teams_Migration consult. A subscription is "gifted"
- * when an entry exists in $recipients; the store is reset per test.
- */
-if ( ! class_exists( 'WCS_Gifting' ) ) {
-	// phpcs:disable WordPress.Files.FileName.InvalidClassFileName, Generic.Files.OneObjectStructurePerFile.MultipleFound
-	/**
-	 * Recording WCS_Gifting stub: gifted iff an entry exists in $recipients.
-	 */
-	class WCS_Gifting {
-		/**
-		 * Map of subscription ID => recipient user ID.
-		 *
-		 * @var array
-		 */
-		public static $recipients = [];
-
-		/**
-		 * Whether the subscription was purchased as a gift.
-		 *
-		 * @param object $subscription Subscription object.
-		 * @return bool
-		 */
-		public static function is_gifted_subscription( $subscription ) {
-			return isset( self::$recipients[ $subscription->get_id() ] );
-		}
-
-		/**
-		 * The recipient user ID for a gifted subscription.
-		 *
-		 * @param object $subscription Subscription object.
-		 * @return int
-		 */
-		public static function get_recipient_user( $subscription ) {
-			return (int) ( self::$recipients[ $subscription->get_id() ] ?? 0 );
-		}
 	}
 }

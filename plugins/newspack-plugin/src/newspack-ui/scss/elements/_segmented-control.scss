@@ -46,7 +46,7 @@
 				background: transparent;
 				border: 1px solid transparent;
 				border-radius: var(--newspack-ui-border-radius-s);
-				color: var(--newspack-ui-color-neutral-60);
+				color: var(--newspack-ui-color-neutral-70);
 				cursor: pointer;
 				padding:
 					calc(var(--newspack-ui-spacer-2) - 1px)
@@ -74,7 +74,7 @@
 
 				&:focus-visible {
 					outline: 2px solid var(--newspack-ui-color-button-bg);
-					outline-offset: 1px;
+					outline-offset: 2px;
 				}
 
 				&:not(:last-child) {
@@ -83,7 +83,7 @@
 
 				&.selected {
 					background: var(--newspack-ui-color-neutral-0);
-					border-color: var(--newspack-ui-color-neutral-30);
+					border-color: currentcolor;
 					color: var(--newspack-ui-color-neutral-90);
 				}
 			}

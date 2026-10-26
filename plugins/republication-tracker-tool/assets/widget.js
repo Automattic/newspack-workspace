@@ -48,7 +48,9 @@ function modal_actions(){
 	var doc = parser.parseFromString(html, "text/html");
 	$(doc).find('.wp-caption').remove();
 	var captionless = $(doc).find('body').html();
-	$shareable.html(captionless);
+	// .val(), not .html(): .html() would decode the copy one more level, and when the copy holds a
+	// script tag, jQuery inserts it into this page and runs it.
+	$shareable.val(captionless);
 
 	// Responsive modal
 	var $modal = $('#republication-tracker-tool-modal');
@@ -141,6 +143,27 @@ function close_modal( $modal, $btn ) {
 	$btn.focus();
 }
 
+// Navigate the page-layout button via its data attribute.
+function page_button_actions(){
+	var $ = jQuery;
+	$( '.republication-tracker-tool-button.page' ).on( 'click', function() {
+		var url = $( this ).attr( 'data-republish-url' );
+		if ( ! url ) {
+			return;
+		}
+		// Compare origins rather than the string's prefix: browsers read some
+		// prefixes, such as '/\', as '//', which points at another host.
+		try {
+			url = new URL( url, window.location.href );
+		} catch ( e ) {
+			return;
+		}
+		if ( url.origin === window.location.origin ) {
+			window.location.href = url.href;
+		}
+	} );
+}
+
 jQuery(document).ready(function(){
 	var $ = jQuery,
 		postId = $( '#republication-tracker-tool-modal' ).attr( 'data-postid' ),
@@ -150,5 +173,6 @@ jQuery(document).ready(function(){
 		$('body').append($('#republication-tracker-tool-modal'));
 
 		modal_actions();
+		page_button_actions();
 
 });
