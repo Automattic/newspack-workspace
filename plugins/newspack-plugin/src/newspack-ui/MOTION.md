@@ -56,7 +56,7 @@ Larger surfaces get longer durations. No single transition runs longer than 300m
 
 ### Interaction
 
-- **Hover effects only apply to devices that can hover.** Wrap them in `@media ( hover: hover ) and ( pointer: fine )`, so a tap on a phone doesn't leave a sticky hover state.
+- **Hover effects only apply to devices that can hover.** Wrap them in `@media ( hover: hover ) and ( pointer: fine )`, so a tap on a phone doesn't leave a sticky hover state. A rule that only keeps an element at its resting style on hover, to cancel a theme's hover style, is not an effect and stays outside the query.
 - **Focus rings appear at once.** Keyboard users need to see where focus is the moment it moves, so the focus mixins set `transition: none`. That removes every transition on the element while it has focus, not just the ring's, so restate any that must keep running. The ring fades out when focus leaves only if the element's resting state transitions the properties the ring uses: `box-shadow`, plus `border-color` for `focus-edge`. List them there.
 - **Fills still fade under focus.** If a control's fill changes while it has focus, like a checkbox toggled with Space, restate the transition for the property that draws the fill after the focus mixin, as the checkbox does with `background-color`. A radio draws its dot with the same `box-shadow` as its ring, so its dot changes at once under keyboard focus.
 - **Press feedback scales a button to `0.97`** over `--newspack-ui-duration-press`. Buttons that pick one of a set, like tabs, segmented controls and dropdown items, set `transform: none` and don't scale.
