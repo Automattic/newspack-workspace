@@ -1025,4 +1025,118 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 
 		unregister_post_meta( 'post', 'newspack_post_subtitle' );
 	}
+
+	/**
+	 * Create a published post that a plugin reports as updated later than its
+	 * stored modified date, the way a live blog's newest update dates its page.
+	 *
+	 * @param int $published Publish timestamp.
+	 * @param int $updated   Modified timestamp to report.
+	 * @return int Post ID.
+	 */
+	private function create_post_updated_at( $published, $updated ) {
+		$post_id = self::factory()->post->create(
+			[
+				'post_status'   => 'publish',
+				'post_date'     => get_date_from_gmt( gmdate( 'Y-m-d H:i:s', $published ) ),
+				'post_date_gmt' => gmdate( 'Y-m-d H:i:s', $published ),
+			]
+		);
+		foreach ( [ 'get_the_modified_date' => 'date_format', 'get_the_modified_time' => 'time_format' ] as $hook => $default_format ) {
+			add_filter(
+				$hook,
+				function ( $the_time, $format, $post ) use ( $post_id, $updated, $default_format ) {
+					if ( ! $post instanceof WP_Post || $post->ID !== $post_id ) {
+						return $the_time;
+					}
+					return wp_date( '' === $format ? get_option( $default_format ) : $format, $updated );
+				},
+				10,
+				3
+			);
+		}
+		return $post_id;
+	}
+
+	/**
+	 * Render a Homepage Posts block showing only the given post.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return string Block HTML.
+	 */
+	private function render_card( $post_id ) {
+		return render_block(
+			[
+				'blockName'    => 'newspack-blocks/homepage-articles',
+				'attrs'        => [
+					'specificMode'  => true,
+					'specificPosts' => [ $post_id ],
+					'showDate'      => true,
+				],
+				'innerBlocks'  => [],
+				'innerHTML'    => '',
+				'innerContent' => [],
+			]
+		);
+	}
+
+	/**
+	 * A card whose post is set to show its updated date reports when the post
+	 * was last updated instead of when it was published, so a post that keeps
+	 * changing doesn't look old on the homepage.
+	 */
+	public function test_card_shows_updated_date_instead_of_publish_date() {
+		$published = time() - 3 * HOUR_IN_SECONDS;
+		$updated   = time() - 5 * MINUTE_IN_SECONDS;
+		$post_id   = $this->create_post_updated_at( $published, $updated );
+		add_filter(
+			'newspack_blocks_display_updated_date',
+			function ( $display, $post ) use ( $post_id ) {
+				return $post->ID === $post_id ? true : $display;
+			},
+			10,
+			2
+		);
+
+		$html = $this->render_card( $post_id );
+
+		self::assertStringContainsString(
+			'<span class="updated-date">Updated <time class="entry-date updated" datetime="' . wp_date( DATE_W3C, $updated ) . '">' . wp_date( get_option( 'date_format' ), $updated ) . '</time></span>',
+			$html,
+			'The card shows the updated date with its label.'
+		);
+		self::assertStringNotContainsString( wp_date( DATE_W3C, $published ), $html, 'The card leaves out the publish date.' );
+	}
+
+	/**
+	 * The card's updated date goes through its own formatting filter, which is
+	 * where a "time ago" setting rewrites it.
+	 */
+	public function test_card_updated_date_text_is_filterable() {
+		$post_id = $this->create_post_updated_at( time() - 3 * HOUR_IN_SECONDS, time() - 5 * MINUTE_IN_SECONDS );
+		add_filter( 'newspack_blocks_display_updated_date', '__return_true' );
+		add_filter(
+			'newspack_blocks_formatted_displayed_updated_date',
+			function ( $date, $post ) use ( $post_id ) {
+				return $post->ID === $post_id ? '5 minutes ago' : $date;
+			},
+			10,
+			2
+		);
+
+		self::assertStringContainsString( '">5 minutes ago</time>', $this->render_card( $post_id ), 'The card shows the filtered updated date text.' );
+	}
+
+	/**
+	 * Cards show the publish date unless a plugin asks for the updated date.
+	 */
+	public function test_card_shows_publish_date_by_default() {
+		$published = time() - 3 * HOUR_IN_SECONDS;
+		$post_id   = $this->create_post_updated_at( $published, time() - 5 * MINUTE_IN_SECONDS );
+
+		$html = $this->render_card( $post_id );
+
+		self::assertStringContainsString( 'class="entry-date published" datetime="' . wp_date( DATE_W3C, $published ) . '"', $html, 'The card shows the publish date.' );
+		self::assertStringNotContainsString( 'updated-date', $html, 'The card has no updated date.' );
+	}
 }
