@@ -86,8 +86,9 @@ describe( 'Republish Button modal copy', () => {
 			global.Blob = OriginalBlob;
 		} );
 
-		// The button is what hands block editors the wrapped tracking. Pointed back at
-		// copyFromElement, it would copy plain text only and every other test would pass.
+		// The button is what hands block editors the wrapped tracking. Calling
+		// copyFromElement, as the plain-text field buttons do, it would copy plain text
+		// only, and every other test would still pass.
 		it( 'copies the caption-stripped handout, with the tracking wrapped for the block editor', () => {
 			const { value } = openModal();
 			document.querySelector( '[data-copy-active]' ).click();
