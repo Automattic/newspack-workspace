@@ -74,6 +74,15 @@ const { useParams, useLocation } = Router;
 const HIDE_CANCELLED_WHEN_LIVE = true;
 
 /**
+ * The name of whoever bought a gift, or undefined when the subscription isn't one.
+ * A buyer with no name on file reads "Unknown".
+ *
+ * @param {Object} subscription The profile subscription entry.
+ * @return {string|undefined} The buyer's name.
+ */
+const giftPayerName = subscription => ( subscription.giftedBy ? subscription.giftedBy.name || __( 'Unknown', 'newspack-plugin' ) : undefined );
+
+/**
  * Row of a two-column section: header on the left, content on the right.
  *
  * @param {Object}  props               Component props.
@@ -120,6 +129,22 @@ const seatsSubline = group => {
  * @return {Array} Badge descriptors for SubscriptionCard.
  */
 const statusBadges = status => ( STATUS_LABELS[ status ] ? [ { label: STATUS_LABELS[ status ], intent: STATUS_BADGE_INTENT[ status ] } ] : [] );
+
+/**
+ * The "View subscription" item that leads a card's "more" menu: a link to the
+ * subscription's own edit screen, for the admin who wants the order behind a card.
+ *
+ * @param {string} name The subscription or group name, to qualify the link.
+ * @param {string} href The subscription's edit URL.
+ * @return {Object} An action descriptor for SubscriptionCard.
+ */
+const viewSubscriptionAction = ( name, href ) => ( {
+	key: 'view',
+	label: __( 'View subscription', 'newspack-plugin' ),
+	// translators: %s is a subscription/plan name.
+	ariaLabel: sprintf( __( 'View subscription: %s', 'newspack-plugin' ), name ),
+	href,
+} );
 
 export default function PersonProfile() {
 	const { id } = useParams();
@@ -279,10 +304,10 @@ export default function PersonProfile() {
 						badges={ statusBadges( group.status ) }
 						subline={ seatsSubline( group ) }
 						rows={ rows }
-						// No per-status "more" menu yet: the group card's title already
-						// links to the group, and the money/management actions that would
-						// fill this menu are Workstreams D/E/F. A menu whose only item
-						// duplicates the title link would just add a redundant tab stop.
+						// The title opens the group; this item opens its subscription.
+						actions={ group.editUrl ? [ viewSubscriptionAction( group.plan, group.editUrl ) ] : [] }
+						// translators: %s is a group's plan name.
+						actionsLabel={ sprintf( __( 'Subscription actions: %s', 'newspack-plugin' ), group.plan ) }
 					/>
 				),
 			};
@@ -292,7 +317,11 @@ export default function PersonProfile() {
 			const name = subscription.plan || __( '(Subscription)', 'newspack-plugin' );
 			const isActive = 'active' === subscription.status;
 			const isLive = isActive || 'on-hold' === subscription.status;
+			const giftedByName = giftPayerName( subscription );
 			const menuActions = [];
+			if ( subscription.editUrl ) {
+				menuActions.push( viewSubscriptionAction( name, subscription.editUrl ) );
+			}
 			// Reactivate is offered when the server says so. `canReactivate`
 			// reflects the write endpoint's own raw-status rule — the mapped status
 			// can't be trusted here, because unknown WCS statuses map into the
@@ -320,8 +349,10 @@ export default function PersonProfile() {
 				} );
 			}
 			// Offered only when the subscription charges a resolvable saved card
-			// and there is another usable card to switch to.
-			if ( isLive && canChangePaymentMethod( subscription, subscriber.paymentMethods ) ) {
+			// and there is another usable card to switch to. Never on a gift: the
+			// saved cards listed here are the recipient's, but the card the gift
+			// charges belongs to the person who bought it.
+			if ( isLive && ! subscription.giftedBy && canChangePaymentMethod( subscription, subscriber.paymentMethods ) ) {
 				menuActions.push( {
 					key: 'payment',
 					label: __( 'Change payment method', 'newspack-plugin' ),
@@ -364,6 +395,18 @@ export default function PersonProfile() {
 							{ label: __( 'Billing', 'newspack-plugin' ), value: billingText( subscription ) },
 							{ label: __( 'Last payment', 'newspack-plugin' ), value: orDash( fmtDate( subscription.lastPayment ) ) },
 							scheduleRow( subscription ),
+							...( subscription.giftedBy
+								? [
+										{
+											label: __( 'Gifted by', 'newspack-plugin' ),
+											value: subscription.giftedBy.editUrl ? (
+												<a href={ subscription.giftedBy.editUrl }>{ giftedByName }</a>
+											) : (
+												giftedByName
+											),
+										},
+								  ]
+								: [] ),
 						] }
 						actions={ menuActions }
 						// translators: %s is a subscription/plan name.
@@ -516,6 +559,9 @@ export default function PersonProfile() {
 				<RefundFlow
 					subscription={ modal.subscription }
 					subscriberName={ subscriber.name }
+					// A gift's refund goes back to whoever bought it, not to the reader;
+					// passing a payer switches RefundFlow to the gift wording.
+					payerName={ giftPayerName( modal.subscription ) }
 					actions={ paymentActions }
 					onClose={ () => setModal( null ) }
 					onDone={ completeFlow }
@@ -524,7 +570,12 @@ export default function PersonProfile() {
 			{ 'reactivate' === modal?.kind && (
 				<ReactivateFlow
 					subscription={ modal.subscription }
-					email={ subscriber.email }
+					// The payment link goes to the subscription's billing email, which
+					// for a gift is the purchaser's, not the reader's. With none on
+					// file the server sends nothing, so there's no address to name.
+					email={ modal.subscription.billingEmail }
+					// The same buyer RefundFlow names: a gift's payment link is theirs.
+					payerName={ giftPayerName( modal.subscription ) }
 					actions={ subscriptionActions }
 					onClose={ () => setModal( null ) }
 					onDone={ completeFlow }

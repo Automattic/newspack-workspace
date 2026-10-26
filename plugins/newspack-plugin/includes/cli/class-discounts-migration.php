@@ -4,13 +4,16 @@
  *
  * Ported shape: a Memberships purchasing-discount rule discounts products for
  * members of one plan; a subscriber discount discounts the same products for
- * holders of the subscription products that granted that plan.
+ * holders of the subscription products that made a reader a member of that
+ * plan: the plan's own products, plus the comp and group products its migrated
+ * gate accepts.
  *
  * @package Newspack
  */
 
 namespace Newspack\CLI;
 
+use Newspack\Gate_Access_Reader_Data;
 use Newspack\Product_Targeting;
 use Newspack\Subscriber_Discounts;
 use WP_CLI;
@@ -86,7 +89,12 @@ class Discounts_Migration {
 			return;
 		}
 
-		$mapped = self::map_rules( $memberships_rules, [ __CLASS__, 'get_plan_subscription_product_ids' ], self::get_globally_excluded_product_ids() );
+		$plan_audiences = self::resolve_plan_audiences( $memberships_rules );
+		$mapped         = self::map_rules(
+			$memberships_rules,
+			fn( int $plan_id ): array => $plan_audiences[ $plan_id ] ?? [],
+			self::get_globally_excluded_product_ids()
+		);
 
 		$summary = [];
 		foreach ( $mapped['rules'] as $rule ) {
@@ -457,7 +465,7 @@ class Discounts_Migration {
 	 * without WordPress or WP-CLI.
 	 *
 	 * @param array    $memberships_rules    Raw `wc_memberships_rules` option value.
-	 * @param callable $plan_products_getter Given a plan id, returns the subscription product ids that grant it.
+	 * @param callable $plan_products_getter Given a plan id, returns the subscription product ids whose holders get the plan's discount.
 	 * @param int[]    $excluded_product_ids Products flagged in Memberships as never discounted.
 	 * @return array {
 	 *     @type array[] $rules   Rules ready for the discount store.
@@ -603,6 +611,203 @@ class Discounts_Migration {
 	public static function get_plan_subscription_product_ids( $plan_id ) {
 		$product_ids = get_post_meta( $plan_id, '_product_ids', true );
 		return array_values( array_filter( array_map( 'absint', (array) $product_ids ) ) );
+	}
+
+	/**
+	 * The subscription products whose holders get each plan's discount.
+	 *
+	 * Under Memberships a comp holder or a group member is a member of the plan
+	 * and gets its discount, though neither holds a product the plan lists. The
+	 * plan's migrated gate admits them through extra subscription products, so
+	 * those join the audience next to the plan's own products.
+	 *
+	 * A plan's gate is a paid gate that one of the plan's products passes alone.
+	 * `migrate-membership-gates` puts several plans on one gate when it merges or
+	 * carves out their content, and an extra product on such a gate cannot be
+	 * traced to one plan. It is added only when every plan on the gate carries
+	 * the same active discounts, so its holders get the discount they had under
+	 * whichever plan they held; otherwise it is reported for the operator. A
+	 * product that passes a gate only together with another one adds nothing,
+	 * since a discount audience admits each product on its own.
+	 *
+	 * @param array $memberships_rules Raw `wc_memberships_rules` option value.
+	 * @return array<int, int[]> Audience product ids keyed by plan id.
+	 */
+	private static function resolve_plan_audiences( array $memberships_rules ): array {
+		$plan_ids = [];
+		foreach ( $memberships_rules as $memberships_rule ) {
+			if ( is_array( $memberships_rule ) && 'purchasing_discount' === ( $memberships_rule['rule_type'] ?? '' ) ) {
+				$plan_ids[] = (int) ( $memberships_rule['membership_plan_id'] ?? 0 );
+			}
+		}
+		$discounts_by_plan = self::discount_signatures_by_plan( $memberships_rules );
+
+		$products_by_plan = self::get_products_by_plan();
+
+		// Per paid gate: the products that pass it alone, and the plans those grant.
+		$gates = [];
+		foreach ( Gate_Access_Reader_Data::get_paid_gates() as $gate ) {
+			$standalone_product_ids   = [];
+			$subscription_product_ids = [];
+			foreach ( Gate_Access_Reader_Data::get_product_rule_groups( $gate ) as $group ) {
+				if ( 1 !== count( $group ) ) {
+					continue;
+				}
+				$rule        = array_values( $group )[0];
+				$product_ids = array_filter( Gate_Access_Reader_Data::get_rule_product_ids( $rule ), fn( $product_id ) => $product_id > 0 );
+
+				$standalone_product_ids = array_merge( $standalone_product_ids, $product_ids );
+				if ( 'subscription' === ( $rule['slug'] ?? '' ) ) {
+					$subscription_product_ids = array_merge( $subscription_product_ids, $product_ids );
+				}
+			}
+			$gates[ (int) $gate['id'] ] = [
+				'product_ids'              => array_values( array_unique( $standalone_product_ids ) ),
+				'plan_ids'                 => array_keys( array_filter( $products_by_plan, fn( $product_ids ) => (bool) array_intersect( $product_ids, $standalone_product_ids ) ) ),
+				'subscription_product_ids' => array_values( array_unique( $subscription_product_ids ) ),
+			];
+		}
+
+		$audiences = [];
+		foreach ( array_unique( array_filter( $plan_ids ) ) as $plan_id ) {
+			$plan_product_ids = self::get_plan_subscription_product_ids( $plan_id );
+			// A plan with no product is skipped by map_rules(), and no gate can name it.
+			if ( empty( $plan_product_ids ) ) {
+				$audiences[ $plan_id ] = [];
+				continue;
+			}
+
+			$plan_gates = array_filter( $gates, fn( $gate ) => (bool) array_intersect( $plan_product_ids, $gate['product_ids'] ) );
+			if ( empty( $plan_gates ) ) {
+				WP_CLI::warning(
+					sprintf(
+						'No paid gate names a product of plan %1$d ("%2$s") in a rule of its own, so its discount goes only to holders of product(s) %3$s. That is expected before `wp newspack migrate-membership-gates` runs, or when it gives this plan no paid gate. If comp holders or group members should keep the discount, add their products to the rule by hand.',
+						$plan_id,
+						get_the_title( $plan_id ),
+						implode( ', ', $plan_product_ids )
+					)
+				);
+				$audiences[ $plan_id ] = $plan_product_ids;
+				continue;
+			}
+
+			$added_product_ids = [];
+			foreach ( $plan_gates as $gate_id => $gate ) {
+				$extra_product_ids = array_diff( $gate['subscription_product_ids'], $plan_product_ids );
+				if ( empty( $extra_product_ids ) ) {
+					continue;
+				}
+				$sharing_plan_ids = array_diff( $gate['plan_ids'], [ $plan_id ] );
+				if ( empty( $sharing_plan_ids ) ) {
+					$added_product_ids = array_merge( $added_product_ids, $extra_product_ids );
+					continue;
+				}
+				$untraced_product_ids = array_diff( $extra_product_ids, ...array_map( fn( $sharing_plan_id ) => $products_by_plan[ $sharing_plan_id ], $sharing_plan_ids ) );
+				if ( empty( $untraced_product_ids ) ) {
+					continue;
+				}
+				$own_discounts        = $discounts_by_plan[ $plan_id ] ?? '';
+				$plans_discount_alike = ! array_filter( $sharing_plan_ids, fn( $sharing_plan_id ) => ( $discounts_by_plan[ $sharing_plan_id ] ?? '' ) !== $own_discounts );
+				if ( $plans_discount_alike ) {
+					$added_product_ids = array_merge( $added_product_ids, $untraced_product_ids );
+					continue;
+				}
+				WP_CLI::warning(
+					sprintf(
+						'Plan %1$d: gate %2$d also admits plan(s) %3$s, whose discounts differ from this plan\'s, so %4$s cannot be traced to one plan and stay out of this discount. Add the ones that belong to this plan to the rule by hand.',
+						$plan_id,
+						$gate_id,
+						implode( ', ', $sharing_plan_ids ),
+						self::describe_products( $untraced_product_ids )
+					)
+				);
+			}
+
+			$added_product_ids     = array_values( array_unique( $added_product_ids ) );
+			$audiences[ $plan_id ] = array_merge( $plan_product_ids, $added_product_ids );
+			if ( ! empty( $added_product_ids ) ) {
+				WP_CLI::line(
+					sprintf(
+						'Plan %1$d: discount audience adds %2$s from gate(s) %3$s. These should be the comp and group products; remove any other from the rule by hand.',
+						$plan_id,
+						self::describe_products( $added_product_ids ),
+						implode( ', ', array_keys( $plan_gates ) )
+					)
+				);
+			}
+		}
+
+		return $audiences;
+	}
+
+	/**
+	 * Each plan's active purchasing discounts, as a comparable string.
+	 *
+	 * Two plans with equal strings discount the same products by the same
+	 * amount, so a reader gets the same price under either.
+	 *
+	 * @param array $memberships_rules Raw `wc_memberships_rules` option value.
+	 * @return array<int, string> Keyed by plan id; a plan with no active discount is absent.
+	 */
+	private static function discount_signatures_by_plan( array $memberships_rules ): array {
+		$discounts_by_plan = [];
+		foreach ( $memberships_rules as $memberships_rule ) {
+			if ( ! is_array( $memberships_rule ) || 'purchasing_discount' !== ( $memberships_rule['rule_type'] ?? '' ) || 'yes' !== ( $memberships_rule['active'] ?? '' ) ) {
+				continue;
+			}
+			$object_ids = array_map( 'absint', (array) ( $memberships_rule['object_ids'] ?? [] ) );
+			sort( $object_ids );
+			$discounts_by_plan[ (int) ( $memberships_rule['membership_plan_id'] ?? 0 ) ][] = [
+				(string) ( $memberships_rule['content_type'] ?? '' ),
+				(string) ( $memberships_rule['content_type_name'] ?? '' ),
+				$object_ids,
+				(string) ( $memberships_rule['discount_type'] ?? '' ),
+				(float) ( $memberships_rule['discount_amount'] ?? 0 ),
+			];
+		}
+		return array_map(
+			function ( $discounts ) {
+				sort( $discounts );
+				return (string) wp_json_encode( $discounts );
+			},
+			$discounts_by_plan
+		);
+	}
+
+	/**
+	 * Product ids with their names, for the operator to recognise.
+	 *
+	 * @param int[] $product_ids Product ids.
+	 * @return string
+	 */
+	private static function describe_products( array $product_ids ): string {
+		return implode( ', ', array_map( fn( $product_id ) => sprintf( '%d "%s"', $product_id, get_the_title( $product_id ) ), $product_ids ) );
+	}
+
+	/**
+	 * Every published Memberships plan's granting products, keyed by plan id.
+	 *
+	 * Only published plans grant memberships, so a draft left over from setup
+	 * never makes a gate count as shared.
+	 *
+	 * @return array<int, int[]>
+	 */
+	private static function get_products_by_plan(): array {
+		$plan_ids = get_posts(
+			[
+				'post_type'      => 'wc_membership_plan',
+				'post_status'    => 'publish',
+				// phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page -- one-shot CLI lookup; sites carry a handful of plans, far below the cap.
+				'posts_per_page' => 500,
+				'fields'         => 'ids',
+			]
+		);
+
+		$products_by_plan = [];
+		foreach ( $plan_ids as $plan_id ) {
+			$products_by_plan[ (int) $plan_id ] = self::get_plan_subscription_product_ids( $plan_id );
+		}
+		return $products_by_plan;
 	}
 
 	/**

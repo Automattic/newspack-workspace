@@ -1,3 +1,45 @@
+## newspack [6.55.8](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.7...newspack@6.55.8) (2026-10-23)
+
+
+### Bug Fixes
+
+* treat gift recipients as the subscriber, not the buyer ([#1398](https://github.com/Automattic/newspack-workspace/issues/1398)) ([b0997ba](https://github.com/Automattic/newspack-workspace/commit/b0997ba05bbf54c9a29361d8f6b0fdfb7cd0caf1))
+
+## newspack [6.55.7](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.6...newspack@6.55.7) (2026-10-22)
+
+
+### Bug Fixes
+
+* keep Mailchimp contacts updatable after MC4WC orders (NPPD-2491, [#1375](https://github.com/Automattic/newspack-workspace/issues/1375)) ([3978ee2](https://github.com/Automattic/newspack-workspace/commit/3978ee23d8c7273fc8b1780cd4dae1c1d04c1c32))
+
+## newspack [6.55.6](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.5...newspack@6.55.6) (2026-10-21)
+
+
+### Bug Fixes
+
+* **reader-activation:** register the corrected address after a cancel ([#1304](https://github.com/Automattic/newspack-workspace/issues/1304)) ([b8af2d4](https://github.com/Automattic/newspack-workspace/commit/b8af2d47e382ae78c60fc7fe019c9c402813a7b4))
+
+## newspack [6.55.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.4...newspack@6.55.5) (2026-10-21)
+
+
+### Bug Fixes
+
+* stop Mailchimp for WooCommerce unsubscribing subscribed readers (NPPD-2490, [#1339](https://github.com/Automattic/newspack-workspace/issues/1339)) ([5e7a222](https://github.com/Automattic/newspack-workspace/commit/5e7a222665867578df79cb678d23c9df8682ae61))
+
+## newspack [6.55.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.3...newspack@6.55.4) (2026-10-20)
+
+
+### Bug Fixes
+
+* **tag-labels:** stop tags named "Labels" from restyling posts ([#1267](https://github.com/Automattic/newspack-workspace/issues/1267)) ([0e9cb8a](https://github.com/Automattic/newspack-workspace/commit/0e9cb8a0cd2d10fe30f3c59fc423ee0b2338788b))
+
+## newspack [6.55.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.2...newspack@6.55.3) (2026-10-19)
+
+
+### Bug Fixes
+
+* **revisions:** remove revisions control ([#1216](https://github.com/Automattic/newspack-workspace/issues/1216)) ([01cdad4](https://github.com/Automattic/newspack-workspace/commit/01cdad4a030d6f4555a977b037692c7e7720fc16))
+
 ## newspack [6.55.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.1...newspack@6.55.2) (2026-10-15)
 
 

@@ -1,3 +1,10 @@
+## super-cool-ad-inserter [0.7.8](https://github.com/Automattic/newspack-workspace/compare/super-cool-ad-inserter@0.7.7...super-cool-ad-inserter@0.7.8) (2026-10-26)
+
+
+### Bug Fixes
+
+* require PHP 8.1 in the WordPress.org plugins ([#1272](https://github.com/Automattic/newspack-workspace/issues/1272)) ([4a9bea1](https://github.com/Automattic/newspack-workspace/commit/4a9bea142fee228fe8613f5f4df3469e7eb72f13))
+
 ## super-cool-ad-inserter [0.7.7](https://github.com/Automattic/newspack-workspace/compare/super-cool-ad-inserter@0.7.6...super-cool-ad-inserter@0.7.7) (2026-10-12)
 
 

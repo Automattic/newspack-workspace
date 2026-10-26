@@ -1,3 +1,33 @@
+## @automattic/newspack-blocks [4.36.4](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.3...newspack-blocks@4.36.4) (2026-10-26)
+
+
+### Bug Fixes
+
+* **blocks:** scope the fullscreen Iframe takeover to its own page ([#1204](https://github.com/Automattic/newspack-workspace/issues/1204)) ([bd46bed](https://github.com/Automattic/newspack-workspace/commit/bd46bed7f88024811c4c712a0f77b841c78927ac))
+* **content-loop:** keep editor preview links from navigating away ([#1016](https://github.com/Automattic/newspack-workspace/issues/1016)) ([3b38d5a](https://github.com/Automattic/newspack-workspace/commit/3b38d5ae522467048e43a70e476174edbb105bd1))
+* **newspack-blocks:** add check for Jetpack paywall when building excerpts ([#1266](https://github.com/Automattic/newspack-workspace/issues/1266)) ([30f7dbc](https://github.com/Automattic/newspack-workspace/commit/30f7dbceb074f1aa1d650f230f77c30861bfb67a))
+* **reader-revenue:** rename News Revenue Hub to RevEngine ([#1260](https://github.com/Automattic/newspack-workspace/issues/1260)) ([d53ada0](https://github.com/Automattic/newspack-workspace/commit/d53ada020f26889e253d553a053283f98bd62a3b))
+
+
+### Dependencies
+
+* **newspack-icons:** upgraded to 1.3.0
+* **newspack-components:** upgraded to 4.12.0
+
+## @automattic/newspack-blocks [4.36.3](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.2...newspack-blocks@4.36.3) (2026-10-20)
+
+
+### Bug Fixes
+
+* **tag-labels:** stop tags named "Labels" from restyling posts ([#1267](https://github.com/Automattic/newspack-workspace/issues/1267)) ([0e9cb8a](https://github.com/Automattic/newspack-workspace/commit/0e9cb8a0cd2d10fe30f3c59fc423ee0b2338788b))
+
+## @automattic/newspack-blocks [4.36.2](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.1...newspack-blocks@4.36.2) (2026-10-15)
+
+
+### Bug Fixes
+
+* **modal-checkout:** keep the 3D Secure step visible during processing ([#1289](https://github.com/Automattic/newspack-workspace/issues/1289)) ([e92052b](https://github.com/Automattic/newspack-workspace/commit/e92052b6ed8d1d91231b3fe48c38658e75718d25))
+
 ## @automattic/newspack-blocks [4.36.1](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.0...newspack-blocks@4.36.1) (2026-10-14)
 
 

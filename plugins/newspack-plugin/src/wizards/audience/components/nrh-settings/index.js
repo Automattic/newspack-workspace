@@ -41,8 +41,8 @@ const NRHSettings = () => {
 
 	return (
 		<WizardsSection
-			title={ __( 'News Revenue Hub Settings', 'newspack-plugin' ) }
-			description={ __( 'Configure your site’s connection to News Revenue Hub.', 'newspack-plugin' ) }
+			title={ __( 'RevEngine Settings', 'newspack-plugin' ) }
+			description={ __( 'Configure your site’s connection to RevEngine.', 'newspack-plugin' ) }
 		>
 			<div>
 				<Grid columns={ 3 }>

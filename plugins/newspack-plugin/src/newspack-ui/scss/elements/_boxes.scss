@@ -53,7 +53,7 @@
 			}
 
 			// Some style resets.
-			h2:not([class*="font-size"]) {
+			h2:not([class*="font-size"]):not(#{mixins.$font-size-classes}) {
 				font-size: 1em;
 			}
 

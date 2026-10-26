@@ -1,3 +1,4 @@
+@use "scss/mixins";
 @use "scss/variables";
 @use "scss/elements";
 @use "scss/modals";
@@ -9,8 +10,8 @@
 	}
 
 	// Overrides for theme styles -- to move to theme?
-	h2:not([class*="font-size"]),
-	h3:not([class*="font-size"]) {
+	h2:not([class*="font-size"]):not(#{mixins.$font-size-classes}),
+	h3:not([class*="font-size"]):not(#{mixins.$font-size-classes}) {
 		font-size: var(--newspack-ui-font-size-s);
 		line-height: var(--newspack-ui-line-height-s);
 	}
