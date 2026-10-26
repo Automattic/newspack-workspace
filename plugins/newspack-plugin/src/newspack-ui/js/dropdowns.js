@@ -74,7 +74,8 @@ document.addEventListener( 'click', e => {
 			}
 		} );
 		const open = ! dropdown.classList.contains( 'active' );
-		if ( open ) {
+		// Reopening mid-close keeps the current position, so the close can reverse instead of restarting.
+		if ( open && 'hidden' === window.getComputedStyle( content ).visibility ) {
 			positionContent( content );
 		}
 		setOpen( dropdown, open );
