@@ -25,7 +25,9 @@ const positionContent = content => {
 	if ( rect.bottom > window.innerHeight ) {
 		content.style.top = 'auto';
 		content.style.bottom = 'calc(100% + var(--newspack-ui-spacer-half))';
+		content.classList.add( 'newspack-ui__dropdown__content--above' );
 	} else {
+		content.classList.remove( 'newspack-ui__dropdown__content--above' );
 		content.style.removeProperty( 'top' );
 		content.style.removeProperty( 'bottom' );
 		if ( content.style.length === 0 ) {
@@ -72,10 +74,11 @@ document.addEventListener( 'click', e => {
 				setOpen( other, false );
 			}
 		} );
-		setOpen( dropdown, ! dropdown.classList.contains( 'active' ) );
-		if ( dropdown.classList.contains( 'active' ) ) {
+		const open = ! dropdown.classList.contains( 'active' );
+		if ( open ) {
 			positionContent( content );
 		}
+		setOpen( dropdown, open );
 		return;
 	}
 

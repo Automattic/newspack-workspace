@@ -45,6 +45,10 @@
 				visibility: hidden;
 				z-index: 1;
 
+				&--above {
+					transform: translateY(4px);
+				}
+
 				@media ( prefers-reduced-motion: reduce ) {
 					transform: none;
 				}
