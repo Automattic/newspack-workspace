@@ -11,7 +11,11 @@
 		line-height: variables.$font__line-height-body;
 		text-overflow: ellipsis;
 		text-align: center;
+		&:hover {
+			color: np-colors.$neutral-600;
+		}
 		&--active,
+		&--active:hover,
 		&:focus {
 			color: np-colors.$neutral-900;
 		}
