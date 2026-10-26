@@ -232,4 +232,16 @@ describe( 'newspack-ui notices', () => {
 
 		expect( document.activeElement ).toBe( second );
 	} );
+
+	it( 'pauses a pinned error while it is hovered', () => {
+		const error = notices.createNotice( 'Could not save.', 'error' );
+
+		error.dispatchEvent( new Event( 'pointerenter' ) );
+		jest.advanceTimersByTime( 20000 );
+		expect( error.classList.contains( 'active' ) ).toBe( true );
+
+		error.dispatchEvent( new Event( 'pointerleave' ) );
+		jest.advanceTimersByTime( 8000 );
+		expect( error.classList.contains( 'active' ) ).toBe( false );
+	} );
 } );

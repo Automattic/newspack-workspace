@@ -390,16 +390,38 @@ function scheduleAutohide( element, remove ) {
 }
 
 /**
- * Where focus goes when the notice holding it closes: the next open notice with a control,
- * else back into the dialog the notices sit in, so keyboard readers don't lose their place.
+ * Whether focus on an element came from the keyboard, where a click that focuses a button
+ * in Chrome doesn't count.
+ *
+ * @param {HTMLElement} element The focused element.
+ * @return {boolean} Whether it's keyboard focus.
+ */
+const hasKeyboardFocus = element => {
+	try {
+		return element.matches( ':focus-visible' );
+	} catch {
+		return true;
+	}
+};
+
+/**
+ * Where focus goes when the notice holding it closes: a neighboring open notice with a
+ * control, else back into the dialog the notices sit in, so keyboard readers don't lose
+ * their place.
  *
  * @param {HTMLElement} element The closing notice.
  * @return {HTMLElement|null} The element to focus, if any.
  */
 function getFocusAfterClose( element ) {
+	const isOpen = item => item !== element && item.classList.contains( 'active' );
+	const siblings = [ ...( element.parentElement?.children || [] ) ];
+	const index = siblings.indexOf( element );
+	const neighbors = [ ...siblings.slice( index + 1 ), ...siblings.slice( 0, index ).reverse() ].filter( isOpen );
 	const snackbar = element.closest( '.newspack-ui__snackbar' );
-	const others = snackbar ? [ ...snackbar.querySelectorAll( '.newspack-ui__snackbar__item.active' ) ].filter( item => item !== element ) : [];
-	const next = others.map( item => item.querySelector( '.newspack-ui__snackbar__close, a, button' ) ).find( Boolean );
+	const others = snackbar
+		? [ ...snackbar.querySelectorAll( '.newspack-ui__snackbar__item.active' ) ].filter( item => item !== element && ! neighbors.includes( item ) )
+		: [];
+	const next = [ ...neighbors, ...others ].map( item => item.querySelector( '.newspack-ui__snackbar__close, a, button' ) ).find( Boolean );
 	if ( next ) {
 		return next;
 	}
@@ -417,7 +439,8 @@ function closeNotice( element, remove = true ) {
 	timers.get( element )?.stop();
 	timers.delete( element );
 	const stack = isStack( element.parentElement ) ? element.parentElement : null;
-	if ( element.contains( element.ownerDocument.activeElement ) ) {
+	const focused = element.ownerDocument.activeElement;
+	if ( element.contains( focused ) && hasKeyboardFocus( focused ) ) {
 		getFocusAfterClose( element )?.focus();
 	}
 	element.classList.remove( 'active' );
@@ -485,7 +508,9 @@ function createNotice( message, type = 'success' ) {
 
 	if ( isError ) {
 		const showing = [
-			...snackbar.querySelectorAll( '.newspack-ui__snackbar__pinned > .newspack-ui__snackbar__item.active[data-type="error"]' ),
+			...snackbar.querySelectorAll(
+				'.newspack-ui__snackbar__pinned > .newspack-ui__snackbar__item.active[data-type="error"]:not([data-autohide="false"])'
+			),
 		].find( item => item.querySelector( '.newspack-ui__snackbar__content' )?.textContent === message );
 		if ( showing ) {
 			announce( message, true );
