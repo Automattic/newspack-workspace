@@ -110,8 +110,6 @@
 
 		&:focus-visible {
 			@include mixins.focus-line( var(--newspack-ui-button-focus), inset 0 0 0 1px var(--newspack-ui-button-focus-inner) );
-
-			transition: none;
 		}
 
 		&__row {

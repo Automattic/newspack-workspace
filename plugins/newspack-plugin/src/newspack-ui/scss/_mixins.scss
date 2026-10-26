@@ -44,6 +44,8 @@ $font-size-classes: ".newspack-ui__font--2xs, .newspack-ui__font--xs, .newspack-
 		border-color: $color;
 		box-shadow: 0 0 0 var(--newspack-ui-focus-halo-width) $halo;
 	}
+
+	transition: none;
 }
 
 @mixin focus-line( $color: var(--newspack-ui-color-focus), $inner: null, $inset: false, $radius: null ) {
@@ -59,6 +61,7 @@ $font-size-classes: ".newspack-ui__font--2xs, .newspack-ui__font--xs, .newspack-
 	box-shadow: $inner, $position 0 0 0 1px $color, $position 0 0 0 calc(1px + var(--newspack-ui-focus-halo-width)) $halo;
 	outline: 2px solid transparent;
 	outline-offset: $offset;
+	transition: none;
 
 	@if $radius {
 		border-radius: $radius;
