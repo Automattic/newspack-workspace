@@ -18,6 +18,10 @@ import { getApiNonce, hydrateSession } from './session.js';
 /**
  * Reader Activation Library.
  *
+ * "Reader Activation" is the code name for the product feature called
+ * "Audience Management". window.newspackReaderActivation keeps the code name
+ * because themes and site code call it.
+ *
  * Store() returns [ publicStore, internalClear ]. Only `store` (the public
  * object) is exported and assigned to window.newspackReaderActivation.store;
  * `clearReaderStore` is kept module-private so the destructive namespace wipe

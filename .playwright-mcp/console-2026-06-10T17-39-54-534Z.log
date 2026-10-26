@@ -1,0 +1,59 @@
+[     397ms] [LOG] JQMIGRATE: Migrate is installed, version 3.4.1 @ http://pr-204-responsive-container.test/wp-admin/load-scripts.php?c=0&load%5Bchunk_0%5D=jquery-core,jquery-migrate,utils,moxiejs,plupload&ver=7.0:4
+[     598ms] TypeError: t[e] is not a function
+    at a (http://pr-204-responsive-container.test/wp-content/plugins/newspack-plugin/dist/contribution-meter-block.js?ver=7f0f6ab793bb3374b6d9:5:3880)
+    at 19475 (http://pr-204-responsive-container.test/wp-content/plugins/newspack-plugin/dist/contribution-meter-block.js?ver=7f0f6ab793bb3374b6d9:1:1146)
+    at a (http://pr-204-responsive-container.test/wp-content/plugins/newspack-plugin/dist/contribution-meter-block.js?ver=7f0f6ab793bb3374b6d9:5:3880)
+    at http://pr-204-responsive-container.test/wp-content/plugins/newspack-plugin/dist/contribution-meter-block.js?ver=7f0f6ab793bb3374b6d9:5:5597
+    at a.O (http://pr-204-responsive-container.test/wp-content/plugins/newspack-plugin/dist/contribution-meter-block.js?ver=7f0f6ab793bb3374b6d9:5:4146)
+    at t (http://pr-204-responsive-container.test/wp-content/plugins/newspack-plugin/dist/contribution-meter-block.js?ver=7f0f6ab793bb3374b6d9:5:5428)
+    at http://pr-204-responsive-container.test/wp-content/plugins/newspack-plugin/dist/commons.js?ver=6.42.4:1:71
+[     601ms] TypeError: t[e] is not a function
+    at s (http://pr-204-responsive-container.test/wp-content/plugins/newspack-plugin/dist/blocks.js?ver=6.42.4:6:54224)
+    at 21510 (http://pr-204-responsive-container.test/wp-content/plugins/newspack-plugin/dist/blocks.js?ver=6.42.4:1:7578)
+    at s (http://pr-204-responsive-container.test/wp-content/plugins/newspack-plugin/dist/blocks.js?ver=6.42.4:6:54224)
+    at http://pr-204-responsive-container.test/wp-content/plugins/newspack-plugin/dist/blocks.js?ver=6.42.4:6:55969
+    at s.O (http://pr-204-responsive-container.test/wp-content/plugins/newspack-plugin/dist/blocks.js?ver=6.42.4:6:54490)
+    at http://pr-204-responsive-container.test/wp-content/plugins/newspack-plugin/dist/blocks.js?ver=6.42.4:6:55983
+    at http://pr-204-responsive-container.test/wp-content/plugins/newspack-plugin/dist/blocks.js?ver=6.42.4:6:55989
+[     605ms] [WARNING] Declaring non-string block descriptions is deprecated since version 6.2. @ http://pr-204-responsive-container.test/wp-includes/js/dist/deprecated.min.js?ver=990e85f234fee8f7d446:0
+[     606ms] [ERROR] Store "newspack/wizards" is already registered. @ http://pr-204-responsive-container.test/wp-includes/js/dist/data.min.js?ver=1756b6a2676c1b3369ab:0
+[     606ms] [LOG] modules that can be used by either editor or front-end JS @ http://pr-204-responsive-container.test/wp-content/themes/newspack-block-theme/dist/editor.js?ver=1.28.1:0
+[     931ms] [LOG] JQMIGRATE: Migrate is installed, version 3.4.1 @ http://pr-204-responsive-container.test/wp-admin/load-scripts.php?c=0&load%5Bchunk_0%5D=jquery-core,jquery-migrate&ver=7.0:4
+[     988ms] [WARNING] Declaring non-string block descriptions is deprecated since version 6.2. @ http://pr-204-responsive-container.test/wp-includes/js/dist/deprecated.min.js?ver=990e85f234fee8f7d446:0
+[     990ms] [ERROR] Store "newspack/wizards" is already registered. @ http://pr-204-responsive-container.test/wp-includes/js/dist/data.min.js?ver=1756b6a2676c1b3369ab:0
+[    1031ms] [WARNING] newspack-commons-css was added to the iframe incorrectly. Please use block.json or enqueue_block_assets to add styles to the iframe. JSHandle@node @ http://pr-204-responsive-container.test/wp-includes/js/dist/block-editor.min.js?ver=93c3566b7f24c15b7e17:75
+[    1031ms] [WARNING] newspack-blocks-css was added to the iframe incorrectly. Please use block.json or enqueue_block_assets to add styles to the iframe. JSHandle@node @ http://pr-204-responsive-container.test/wp-includes/js/dist/block-editor.min.js?ver=93c3566b7f24c15b7e17:75
+[    1031ms] [WARNING] newspack-content_gate-block-patterns-css was added to the iframe incorrectly. Please use block.json or enqueue_block_assets to add styles to the iframe. JSHandle@node @ http://pr-204-responsive-container.test/wp-includes/js/dist/block-editor.min.js?ver=93c3566b7f24c15b7e17:75
+[    1449ms] [LOG] JQMIGRATE: Migrate is installed, version 3.4.1 @ http://pr-204-responsive-container.test/wp-admin/load-scripts.php?c=0&load%5Bchunk_0%5D=jquery-core,jquery-migrate&ver=7.0:4
+[    1489ms] [WARNING] Declaring non-string block descriptions is deprecated since version 6.2. @ http://pr-204-responsive-container.test/wp-includes/js/dist/deprecated.min.js?ver=990e85f234fee8f7d446:0
+[    1489ms] [ERROR] Store "newspack/wizards" is already registered. @ http://pr-204-responsive-container.test/wp-includes/js/dist/data.min.js?ver=1756b6a2676c1b3369ab:0
+[    1507ms] [LOG] JQMIGRATE: Migrate is installed, version 3.4.1 @ http://pr-204-responsive-container.test/wp-admin/load-scripts.php?c=0&load%5Bchunk_0%5D=jquery-core,jquery-migrate&ver=7.0:4
+[    1541ms] [WARNING] Declaring non-string block descriptions is deprecated since version 6.2. @ http://pr-204-responsive-container.test/wp-includes/js/dist/deprecated.min.js?ver=990e85f234fee8f7d446:0
+[    1542ms] [ERROR] Store "newspack/wizards" is already registered. @ http://pr-204-responsive-container.test/wp-includes/js/dist/data.min.js?ver=1756b6a2676c1b3369ab:0
+[    1551ms] [LOG] JQMIGRATE: Migrate is installed, version 3.4.1 @ http://pr-204-responsive-container.test/wp-admin/load-scripts.php?c=0&load%5Bchunk_0%5D=jquery-core,jquery-migrate&ver=7.0:4
+[    1583ms] [WARNING] Declaring non-string block descriptions is deprecated since version 6.2. @ http://pr-204-responsive-container.test/wp-includes/js/dist/deprecated.min.js?ver=990e85f234fee8f7d446:0
+[    1584ms] [ERROR] Store "newspack/wizards" is already registered. @ http://pr-204-responsive-container.test/wp-includes/js/dist/data.min.js?ver=1756b6a2676c1b3369ab:0
+[    1590ms] [LOG] JQMIGRATE: Migrate is installed, version 3.4.1 @ http://pr-204-responsive-container.test/wp-admin/load-scripts.php?c=0&load%5Bchunk_0%5D=jquery-core,jquery-migrate&ver=7.0:4
+[    1622ms] [WARNING] Declaring non-string block descriptions is deprecated since version 6.2. @ http://pr-204-responsive-container.test/wp-includes/js/dist/deprecated.min.js?ver=990e85f234fee8f7d446:0
+[    1622ms] [ERROR] Store "newspack/wizards" is already registered. @ http://pr-204-responsive-container.test/wp-includes/js/dist/data.min.js?ver=1756b6a2676c1b3369ab:0
+[    1626ms] [LOG] JQMIGRATE: Migrate is installed, version 3.4.1 @ http://pr-204-responsive-container.test/wp-admin/load-scripts.php?c=0&load%5Bchunk_0%5D=jquery-core,jquery-migrate&ver=7.0:4
+[    1659ms] [WARNING] Declaring non-string block descriptions is deprecated since version 6.2. @ http://pr-204-responsive-container.test/wp-includes/js/dist/deprecated.min.js?ver=990e85f234fee8f7d446:0
+[    1660ms] [ERROR] Store "newspack/wizards" is already registered. @ http://pr-204-responsive-container.test/wp-includes/js/dist/data.min.js?ver=1756b6a2676c1b3369ab:0
+[    1669ms] [LOG] JQMIGRATE: Migrate is installed, version 3.4.1 @ http://pr-204-responsive-container.test/wp-admin/load-scripts.php?c=0&load%5Bchunk_0%5D=jquery-core,jquery-migrate&ver=7.0:4
+[    1704ms] [WARNING] Declaring non-string block descriptions is deprecated since version 6.2. @ http://pr-204-responsive-container.test/wp-includes/js/dist/deprecated.min.js?ver=990e85f234fee8f7d446:0
+[    1704ms] [ERROR] Store "newspack/wizards" is already registered. @ http://pr-204-responsive-container.test/wp-includes/js/dist/data.min.js?ver=1756b6a2676c1b3369ab:0
+[    1708ms] [LOG] JQMIGRATE: Migrate is installed, version 3.4.1 @ http://pr-204-responsive-container.test/wp-admin/load-scripts.php?c=0&load%5Bchunk_0%5D=jquery-core,jquery-migrate&ver=7.0:4
+[    1740ms] [WARNING] Declaring non-string block descriptions is deprecated since version 6.2. @ http://pr-204-responsive-container.test/wp-includes/js/dist/deprecated.min.js?ver=990e85f234fee8f7d446:0
+[    1741ms] [ERROR] Store "newspack/wizards" is already registered. @ http://pr-204-responsive-container.test/wp-includes/js/dist/data.min.js?ver=1756b6a2676c1b3369ab:0
+[    1815ms] [LOG] JQMIGRATE: Migrate is installed, version 3.4.1 @ http://pr-204-responsive-container.test/wp-admin/load-scripts.php?c=0&load%5Bchunk_0%5D=jquery-core,jquery-migrate&ver=7.0:4
+[    1847ms] [WARNING] Declaring non-string block descriptions is deprecated since version 6.2. @ http://pr-204-responsive-container.test/wp-includes/js/dist/deprecated.min.js?ver=990e85f234fee8f7d446:0
+[    1848ms] [ERROR] Store "newspack/wizards" is already registered. @ http://pr-204-responsive-container.test/wp-includes/js/dist/data.min.js?ver=1756b6a2676c1b3369ab:0
+[    1852ms] [LOG] JQMIGRATE: Migrate is installed, version 3.4.1 @ http://pr-204-responsive-container.test/wp-admin/load-scripts.php?c=0&load%5Bchunk_0%5D=jquery-core,jquery-migrate&ver=7.0:4
+[    1887ms] [WARNING] Declaring non-string block descriptions is deprecated since version 6.2. @ http://pr-204-responsive-container.test/wp-includes/js/dist/deprecated.min.js?ver=990e85f234fee8f7d446:0
+[    1888ms] [ERROR] Store "newspack/wizards" is already registered. @ http://pr-204-responsive-container.test/wp-includes/js/dist/data.min.js?ver=1756b6a2676c1b3369ab:0
+[    1892ms] [LOG] JQMIGRATE: Migrate is installed, version 3.4.1 @ http://pr-204-responsive-container.test/wp-admin/load-scripts.php?c=0&load%5Bchunk_0%5D=jquery-core,jquery-migrate&ver=7.0:4
+[    1925ms] [WARNING] Declaring non-string block descriptions is deprecated since version 6.2. @ http://pr-204-responsive-container.test/wp-includes/js/dist/deprecated.min.js?ver=990e85f234fee8f7d446:0
+[    1926ms] [ERROR] Store "newspack/wizards" is already registered. @ http://pr-204-responsive-container.test/wp-includes/js/dist/data.min.js?ver=1756b6a2676c1b3369ab:0
+[    1936ms] [LOG] JQMIGRATE: Migrate is installed, version 3.4.1 @ http://pr-204-responsive-container.test/wp-admin/load-scripts.php?c=0&load%5Bchunk_0%5D=jquery-core,jquery-migrate&ver=7.0:4
+[    1973ms] [WARNING] Declaring non-string block descriptions is deprecated since version 6.2. @ http://pr-204-responsive-container.test/wp-includes/js/dist/deprecated.min.js?ver=990e85f234fee8f7d446:0
+[    1974ms] [ERROR] Store "newspack/wizards" is already registered. @ http://pr-204-responsive-container.test/wp-includes/js/dist/data.min.js?ver=1756b6a2676c1b3369ab:0

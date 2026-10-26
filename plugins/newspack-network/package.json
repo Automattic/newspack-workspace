@@ -44,6 +44,7 @@
 		"*.php": "npm run lint:php:staged"
 	},
 	"dependencies": {
+		"@wordpress/ui": "^0.23.0",
 		"newspack-icons": "workspace:*"
 	},
 	"devDependencies": {

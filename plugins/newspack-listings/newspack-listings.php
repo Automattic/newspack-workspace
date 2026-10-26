@@ -8,6 +8,7 @@
  * Text Domain:     newspack-listings
  * Domain Path:     /languages
  * Version:         3.7.10
+ * Requires PHP:    8.1
  *
  * @package         Newspack_Listings
  */

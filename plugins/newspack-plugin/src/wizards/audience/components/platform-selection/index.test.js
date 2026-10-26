@@ -5,7 +5,7 @@ describe( 'PlatformSelection mapping', () => {
 		expect( OPTIONS.map( o => o.value ) ).toEqual( [ 'wc', 'nrh', 'other' ] );
 	} );
 
-	it( 'relabels the NRH platform as RevEngine', () => {
+	it( 'labels the nrh platform as RevEngine', () => {
 		expect( OPTIONS.find( o => o.value === 'nrh' ).title ).toBe( 'RevEngine' );
 	} );
 

@@ -59,6 +59,7 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 		$this->reset_integrations();
 		Integrations::register_integrations();
 		delete_option( 'newspack_integration_incoming_fields_promoted-test' );
+		delete_option( 'newspack_integration_incoming_fields_range-test' );
 		delete_option( Integrations::OPTION_NAME );
 		parent::tear_down();
 	}
@@ -318,11 +319,11 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Range matching casts both the stored value and the min/max bounds to float, so a
-	 * decimal amount (e.g. a Mailchimp `number` merge field) matches correctly. Absent
-	 * bounds default to 0..PHP_INT_MAX and a non-numeric value coerces to 0.0, so a
-	 * blank-bounds range rule grants access broadly — pinned here so that fail-open
-	 * default stays intentional.
+	 * Range matching compares the stored value and the min/max bounds as numbers, so a
+	 * decimal amount (e.g. a Mailchimp `number` merge field) matches correctly. An
+	 * absent bound leaves that side open, and a rule with no bounds admits every
+	 * reader holding a number. A reader holding no number never matches: it is not
+	 * read as 0.
 	 */
 	public function test_evaluate_range_matching() {
 		$user_id = $this->factory->user->create();
@@ -365,14 +366,360 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'min' => 50 ] ) );
 		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'max' => 10 ] ) );
 
-		// Absent bounds default to 0..PHP_INT_MAX: any non-negative amount matches.
+		// No bounds: every reader holding a number matches.
 		$this->assertTrue( $method->invoke( null, $field, $user_id, [] ) );
 
-		// A non-numeric stored value coerces to 0.0: blank bounds still match (fail-open),
-		// but a positive min excludes the coerced-to-zero value.
+		// Bounds stored as numeric strings compare as numbers.
+		$this->assertTrue( $method->invoke( null, $field, $user_id, [ 'min' => '10' ] ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'min' => '50' ] ) );
+
+		// A bound that isn't a number can't be honored, so the rule matches nobody;
+		// neither can one too large for a float, which would read as no limit.
+		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'min' => 'fifty' ] ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'max' => '1e400' ] ) );
+
+		// 0 is a real bound, not "no bound".
+		\Newspack\Reader_Data::update_item( $user_id, 'amount', wp_json_encode( -5 ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'min' => 0 ] ) );
+		$this->assertTrue( $method->invoke( null, $field, $user_id, [ 'max' => 0 ] ) );
+
+		// A non-numeric stored value matches nothing, with or without bounds.
 		\Newspack\Reader_Data::update_item( $user_id, 'amount', wp_json_encode( 'not-a-number' ) );
-		$this->assertTrue( $method->invoke( null, $field, $user_id, [] ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, [] ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'max' => 100 ] ) );
+
+		// Nor one too large for a float, which reads as infinite and would pass
+		// any minimum.
+		\Newspack\Reader_Data::update_item( $user_id, 'amount', wp_json_encode( '1e400' ) );
 		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'min' => 1 ] ) );
+
+		// Neither does a reader the field was never stored for.
+		$no_value_user_id = $this->factory->user->create();
+		$this->assertFalse( $method->invoke( null, $field, $no_value_user_id, [] ) );
+		$this->assertFalse( $method->invoke( null, $field, $no_value_user_id, [ 'max' => 100 ] ) );
+	}
+
+	/**
+	 * Before range rules had a min/max control, the gate editor saved whatever was
+	 * typed into a text box, and the range comparison read both bounds off that
+	 * string as missing, so every signed-in reader passed. A stored value that isn't
+	 * a set of bounds matches nobody.
+	 */
+	public function test_evaluate_range_fails_closed_on_a_value_that_is_not_bounds() {
+		$user_id = $this->factory->user->create();
+		\Newspack\Reader_Data::update_item( $user_id, 'amount', wp_json_encode( 10 ) );
+
+		$method = new \ReflectionMethod( Promoted_Fields::class, 'evaluate_field' );
+		$method->setAccessible( true );
+
+		$field = ( new Incoming_Field( 'amount' ) )
+			->set_value_type( 'number' )
+			->set_matching_function( 'range' );
+
+		$this->assertFalse( $method->invoke( null, $field, $user_id, '50' ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, '10' ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, '10,100' ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, 10 ) );
+		// A list has no `min` or `max` key either, and would otherwise read as no bounds.
+		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 50, 100 ] ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'minimum' => 5 ] ) );
+		// The empty values are the unconfigured rule, which reads as no bounds.
+		$this->assertTrue( $method->invoke( null, $field, $user_id, '' ) );
+		$this->assertTrue( $method->invoke( null, $field, $user_id, null ) );
+	}
+
+	/**
+	 * Register a promoted `number` field with range matching as an access rule.
+	 *
+	 * @return string The access rule slug.
+	 */
+	private function register_range_rule() {
+		$integration = new class( 'range-test', 'Test ESP' ) extends Sample_Integration {
+			/**
+			 * Promote a number field with range matching.
+			 *
+			 * @param \Newspack\Reader_Activation\Integrations\Incoming_Field $field The field.
+			 * @return \Newspack\Reader_Activation\Integrations\Incoming_Field
+			 */
+			protected function configure_incoming_field( $field ) {
+				if ( 'donation_total' === $field->get_key() ) {
+					// Options a provider lists for a number field don't make a range
+					// rule options-backed.
+					$field->set_name( 'Donation total' )
+						->set_value_type( 'number' )
+						->set_matching_function( 'range' )
+						->set_options(
+							[
+								[
+									'value' => '100',
+									'label' => 'Sponsor',
+								],
+							]
+						)
+						->set_is_access_rule( true );
+				}
+				return $field;
+			}
+		};
+
+		$this->reset_integrations();
+		Integrations::register( $integration );
+		Integrations::enable( 'range-test' );
+		$integration->update_enabled_incoming_fields( [ 'donation_total' ] );
+		Promoted_Fields::reset_cache();
+		Promoted_Fields::register();
+
+		return 'range-test__donation_total';
+	}
+
+	/**
+	 * A range field registers as a rule whose value is a set of bounds, so the
+	 * editors render a min/max control and the save path accepts that shape.
+	 */
+	public function test_a_range_field_registers_a_range_rule() {
+		$rule = Access_Rules::get_rule( $this->register_range_rule() );
+
+		$this->assertTrue( $rule['is_range'] );
+		$this->assertFalse( $rule['has_options'] );
+		$this->assertSame( [], $rule['default'] );
+	}
+
+	/**
+	 * The save path keeps numeric bounds as numbers, drops blank ones, and refuses
+	 * anything it can't read as a range rather than storing it.
+	 */
+	public function test_range_rule_values_sanitize_to_bounds() {
+		$slug = $this->register_range_rule();
+
+		$sanitize = fn( $value ) => \Newspack\Content_Gate_API::sanitize_access_rule(
+			[
+				'slug'  => $slug,
+				'value' => $value,
+			]
+		);
+
+		$this->assertSame(
+			[
+				'min' => 50.0,
+				'max' => 100.5,
+			],
+			$sanitize(
+				[
+					'min' => 50,
+					'max' => '100.5',
+				]
+			)['value']
+		);
+		$this->assertSame( [ 'min' => 0.0 ], $sanitize( [ 'min' => '0' ] )['value'] );
+		$this->assertSame( [ 'max' => 10.0 ], $sanitize( [ 'max' => 10 ] )['value'] );
+		$this->assertSame(
+			[
+				'min' => 5.0,
+				'max' => 5.0,
+			],
+			$sanitize(
+				[
+					'min' => 5,
+					'max' => 5,
+				]
+			)['value']
+		);
+
+		// Blank bounds leave the rule unconfigured, which an active gate refuses.
+		$this->assertSame(
+			[],
+			$sanitize(
+				[
+					'min' => '',
+					'max' => null,
+				]
+			)['value']
+		);
+		$this->assertSame( [], $sanitize( [] )['value'] );
+		$this->assertSame( [], $sanitize( '' )['value'] );
+		$this->assertSame( [], $sanitize( null )['value'] );
+
+		// Text typed before the min/max control existed, a bound that isn't a number,
+		// and an inverted range are all refused.
+		foreach ( [
+			'50',
+			'10,100',
+			[ 50, 100 ],
+			[ 'min' => 'fifty' ],
+			[ 'max' => [ 10 ] ],
+			[
+				'min' => 100,
+				'max' => 50,
+			],
+		] as $invalid ) {
+			$sanitized = $sanitize( $invalid );
+			$this->assertWPError( $sanitized, wp_json_encode( $invalid ) );
+			$this->assertSame( 'invalid_access_rule_value', $sanitized->get_error_code() );
+		}
+	}
+
+	/**
+	 * An unset range still turns away readers who hold no number, so refusing it
+	 * must not say it grants access to everyone, nor ask for "a value" when the
+	 * control offers a minimum and a maximum. Both refusals are covered: the one for
+	 * a gate going live, and the one for a save that leaves it unpublished.
+	 *
+	 * @dataProvider data_unset_range_refusals
+	 *
+	 * @param array  $gate_settings Settings the save carries beside the rules.
+	 * @param string $asks_for      What the refusal must ask the operator to do.
+	 */
+	public function test_an_unset_range_is_refused_in_range_terms( $gate_settings, $asks_for ) {
+		// The refusal is reported only to a caller who can manage gates.
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+		$slug    = $this->register_range_rule();
+		$refused = \Newspack\Content_Gate_API::sanitize_gate(
+			array_merge(
+				$gate_settings,
+				[
+					'custom_access' => [
+						'active'       => true,
+						'access_rules' => [
+							[
+								[
+									'slug'  => $slug,
+									'value' => [],
+								],
+							],
+						],
+					],
+				]
+			)
+		);
+
+		$this->assertWPError( $refused );
+		$this->assertSame( 'empty_access_rule_value', $refused->get_error_code() );
+		$message = $refused->get_error_message();
+		$this->assertStringContainsString( $asks_for, $message );
+		$this->assertStringContainsString( 'every reader with a number in that field', $message );
+		$this->assertStringNotContainsString( 'everyone', $message );
+		$this->assertStringNotContainsString( 'a value', $message );
+	}
+
+	/**
+	 * The two saves that refuse an unset range, and the wording each must use.
+	 *
+	 * @return array
+	 */
+	public function data_unset_range_refusals() {
+		return [
+			'gate going live'       => [ [ 'status' => 'publish' ], 'Enter a minimum, a maximum, or both' ],
+			'gate left unpublished' => [ [], 'Set a minimum, a maximum, or both' ],
+		];
+	}
+
+	/**
+	 * A save that leaves the rules unenforced keeps the stored ones when the
+	 * submitted rules match them. Any edit to a bound is a different rule —
+	 * one after the decimal point, or one beside a value too large for a float —
+	 * or the edit would be dropped while the save reports success. Values the
+	 * client only sends back in another form still match.
+	 */
+	public function test_rule_fingerprint_tells_edited_bounds_apart() {
+		$slug                     = $this->register_range_rule();
+		$access_rules_fingerprint = new \ReflectionMethod( \Newspack\Content_Gate_API::class, 'access_rules_fingerprint' );
+		$access_rules_fingerprint->setAccessible( true );
+		$fingerprint = fn( $value ) => $access_rules_fingerprint->invoke(
+			null,
+			[
+				[
+					[
+						'slug'  => $slug,
+						'value' => $value,
+					],
+				],
+			]
+		);
+
+		$this->assertNotSame( $fingerprint( [ 'min' => 50.2 ] ), $fingerprint( [ 'min' => '50.7' ] ) );
+		$this->assertSame( $fingerprint( [ 'min' => 50.0 ] ), $fingerprint( [ 'min' => '50' ] ) );
+		// Option IDs submitted as strings still match the stored integers.
+		$this->assertSame( $fingerprint( [ 12 ] ), $fingerprint( [ '12' ] ) );
+		// The browser sends a stored -0 back as 0.
+		$this->assertSame( $fingerprint( [ 'min' => -0.0 ] ), $fingerprint( [ 'min' => 0 ] ) );
+		// A number too large for a float must not blank the whole rendering.
+		$stored = [
+			'min' => 50,
+			'max' => '1e400',
+		];
+		$edited = [
+			'min' => 60,
+			'max' => '1e400',
+		];
+		$this->assertNotSame( $fingerprint( $stored ), $fingerprint( $edited ) );
+	}
+
+	/**
+	 * The user-profile gate panel reads a range back as the gate summary does, rather
+	 * than as a bare list of its bounds.
+	 */
+	public function test_the_user_gate_panel_reads_range_bounds_in_words() {
+		$slug                = $this->register_range_rule();
+		$format_rule_value   = new \ReflectionMethod( \Newspack\User_Gate_Access::class, 'format_rule_value' );
+		$format_rule_value->setAccessible( true );
+
+		$this->assertSame(
+			'50 to 100',
+			$format_rule_value->invoke(
+				null,
+				$slug,
+				[
+					'min' => 50.0,
+					'max' => 100.0,
+				]
+			)
+		);
+		$this->assertSame( 'At most 100', $format_rule_value->invoke( null, $slug, [ 'max' => 100.0 ] ) );
+		// Each stored value reads as the rule evaluates it: blank values set no bounds,
+		// and anything the rule can't read as bounds grants no access.
+		$this->assertSame( '(any number)', $format_rule_value->invoke( null, $slug, [] ) );
+		$this->assertSame( '(any number)', $format_rule_value->invoke( null, $slug, '' ) );
+		foreach ( [
+			'50',
+			[
+				'min' => 50,
+				'x'   => 1,
+			],
+			[ 'min' => 'fifty' ],
+			[ 'max' => [ 10 ] ],
+		] as $unreadable ) {
+			$this->assertSame( '(invalid range, grants no access)', $format_rule_value->invoke( null, $slug, $unreadable ), wp_json_encode( $unreadable ) );
+		}
+	}
+
+	/**
+	 * End to end: a range saved through the gate API admits only readers whose
+	 * value falls inside it.
+	 */
+	public function test_a_saved_range_rule_admits_only_readers_inside_it() {
+		$slug  = $this->register_range_rule();
+		$saved = \Newspack\Content_Gate_API::sanitize_access_rules_grouped(
+			[
+				[
+					[
+						'slug'  => $slug,
+						'value' => [ 'min' => 50 ],
+					],
+				],
+			]
+		);
+
+		$this->assertNotWPError( $saved );
+
+		$below = $this->factory->user->create();
+		\Newspack\Reader_Data::update_item( $below, 'donation_total', wp_json_encode( 10 ) );
+		$inside = $this->factory->user->create();
+		\Newspack\Reader_Data::update_item( $inside, 'donation_total', wp_json_encode( 75 ) );
+		$no_value = $this->factory->user->create();
+
+		$this->assertFalse( Access_Rules::evaluate_rules( $saved, $below ) );
+		$this->assertTrue( Access_Rules::evaluate_rules( $saved, $inside ) );
+		$this->assertFalse( Access_Rules::evaluate_rules( $saved, $no_value ) );
 	}
 
 	/**

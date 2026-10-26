@@ -12,6 +12,7 @@ namespace Newspack\Newsletters\Email_Renderers;
 
 use Automattic\WooCommerce\EmailEditor\Bootstrap;
 use Automattic\WooCommerce\EmailEditor\Email_Editor_Container;
+use Automattic\WooCommerce\EmailEditor\Engine\Logger\Email_Editor_Logger;
 use Automattic\WooCommerce\EmailEditor\Engine\Templates\Template;
 use Automattic\WooCommerce\EmailEditor\Engine\Templates\Templates_Registry;
 
@@ -59,7 +60,12 @@ class Editor_Bootstrap {
 		}
 		$did_init = true;
 
-		Email_Editor_Container::container()->get( Bootstrap::class )->init();
+		// Loaded here rather than from the main plugin file because it extends a package class.
+		require_once __DIR__ . '/class-editor-logger.php';
+
+		$container = Email_Editor_Container::container();
+		$container->get( Email_Editor_Logger::class )->set_logger( new Editor_Logger() );
+		$container->get( Bootstrap::class )->init();
 
 		add_filter( 'woocommerce_email_editor_post_types', [ __CLASS__, 'add_post_type' ] );
 		add_filter( 'woocommerce_email_editor_register_templates', [ __CLASS__, 'register_template' ] );
