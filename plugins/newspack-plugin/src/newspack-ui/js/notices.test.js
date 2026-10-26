@@ -193,16 +193,43 @@ describe( 'newspack-ui notices', () => {
 		expect( item.dataset.stackPosition ).toBe( 'front' );
 	} );
 
-	it( 'keeps errors in view with a close button until the reader closes them', () => {
+	it( 'shows errors in full below the stack, with a localized close button', () => {
+		window.newspackUIData = { closeLabel: 'Fermer', closeIcon: '<svg aria-hidden="true"><path d="M0 0"/></svg>' };
 		notices.createNotice( "Couldn't copy the invite link.", 'error' );
 		notices.createNotice( 'Invite sent.' );
 		const error = [ ...document.querySelectorAll( '.newspack-ui__snackbar__item' ) ].find( item => 'error' === item.dataset.type );
+		const close = error.querySelector( '.newspack-ui__snackbar__close' );
 
 		expect( error.closest( '.newspack-ui__snackbar__pinned' ) ).not.toBeNull();
-		jest.advanceTimersByTime( 60000 );
-		expect( error.classList.contains( 'active' ) ).toBe( true );
+		expect( close.getAttribute( 'aria-label' ) ).toBe( 'Fermer' );
+		expect( close.querySelector( 'svg' ) ).not.toBeNull();
 
-		error.querySelector( '.newspack-ui__snackbar__close' ).click();
+		close.click();
 		expect( error.classList.contains( 'active' ) ).toBe( false );
+		delete window.newspackUIData;
+	} );
+
+	it( 'refreshes an error raised again instead of adding another', () => {
+		notices.createNotice( 'Could not distribute.', 'error' );
+		jest.advanceTimersByTime( 7000 );
+		notices.createNotice( 'Could not distribute.', 'error' );
+
+		const errors = document.querySelectorAll( '.newspack-ui__snackbar__item[data-type="error"]' );
+		expect( errors ).toHaveLength( 1 );
+		jest.advanceTimersByTime( 7000 );
+		expect( errors[ 0 ].classList.contains( 'active' ) ).toBe( true );
+		jest.advanceTimersByTime( 1000 );
+		expect( errors[ 0 ].classList.contains( 'active' ) ).toBe( false );
+	} );
+
+	it( 'moves focus to the next notice when the focused one closes', () => {
+		notices.createNotice( 'First error.', 'error' );
+		notices.createNotice( 'Second error.', 'error' );
+		const [ first, second ] = document.querySelectorAll( '.newspack-ui__snackbar__close' );
+
+		first.focus();
+		first.click();
+
+		expect( document.activeElement ).toBe( second );
 	} );
 } );

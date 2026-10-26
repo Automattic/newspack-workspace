@@ -5,7 +5,25 @@
  * @return {SVGElement|null} A fresh copy of the icon, or null when the type has none.
  */
 export function getNoticeIcon( type ) {
-	const markup = window.newspackUIData?.noticeIcons?.[ type ];
+	return parseIcon( window.newspackUIData?.noticeIcons?.[ type ] );
+}
+
+/**
+ * Get the close icon, as printed by PHP, for close buttons built in JS.
+ *
+ * @return {SVGElement|null} A fresh copy of the icon, or null when it's unavailable.
+ */
+export function getCloseIcon() {
+	return parseIcon( window.newspackUIData?.closeIcon );
+}
+
+/**
+ * Turn icon markup localized from PHP into an element.
+ *
+ * @param {string|undefined} markup The icon's SVG markup.
+ * @return {SVGElement|null} The icon, or null when there's no markup.
+ */
+function parseIcon( markup ) {
 	if ( ! markup ) {
 		return null;
 	}

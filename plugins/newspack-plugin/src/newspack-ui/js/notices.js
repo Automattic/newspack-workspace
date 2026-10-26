@@ -1,13 +1,16 @@
 import { domReady, getTransitionTime } from './utils';
-import { getNoticeIcon } from './icons';
+import { getCloseIcon, getNoticeIcon } from './icons';
+import { getInitialFocus } from './focus';
 import { announce, getLiveRegion, getWrapper } from './announce';
 
 const AUTOHIDE_DELAY = 8000;
 const VISIBLE_IN_STACK = 3;
 
 const timers = new WeakMap();
+const removals = new WeakMap();
 const heights = new WeakMap();
 const contentSizes = new WeakMap();
+const hoverWatched = new WeakSet();
 let openCount = 0;
 let resizeObserver = null;
 
@@ -57,7 +60,8 @@ function getSnackbar() {
 
 /**
  * Get (or create) one of the snackbar's two groups: the stack, for notices that hide on their
- * own, and the pinned list below it, for notices that stay until the reader closes them.
+ * own, and the pinned list below it, for errors and notices that stay until the reader closes
+ * them, which are always shown in full.
  *
  * @param {HTMLElement} snackbar The snackbar container.
  * @param {string}      name     Group name, 'stack' or 'pinned'.
@@ -122,6 +126,15 @@ function measure( items ) {
 }
 
 /**
+ * Whether two sizes differ by more than rounding.
+ *
+ * @param {Object} a A size, as `{ width, height }`.
+ * @param {Object} b Another size.
+ * @return {boolean} Whether they differ.
+ */
+const sizeChanged = ( a, b ) => Math.abs( a.width - b.width ) > 0.5 || Math.abs( a.height - b.height ) > 0.5;
+
+/**
  * Re-measure a stack whenever a notice's text reflows, as when a web font loads late or the
  * stack moves into a dialog of a different width.
  *
@@ -135,15 +148,13 @@ function watchSize( item ) {
 	if ( ! resizeObserver ) {
 		resizeObserver = new window.ResizeObserver( entries => {
 			const stacks = new Set();
-			entries.forEach( ( { target, contentRect } ) => {
+			entries.forEach( ( { target, borderBoxSize, contentRect } ) => {
+				const box = borderBoxSize?.[ 0 ];
+				const size = box ? { width: box.inlineSize, height: box.blockSize } : { width: contentRect.width, height: contentRect.height };
 				const previous = contentSizes.get( target );
-				contentSizes.set( target, { width: contentRect.width, height: contentRect.height } );
+				contentSizes.set( target, size );
 				const notice = target.closest( '.newspack-ui__snackbar__item' );
-				if (
-					previous &&
-					( previous.width !== contentRect.width || previous.height !== contentRect.height ) &&
-					isStack( notice?.parentElement )
-				) {
+				if ( previous && sizeChanged( previous, size ) && isStack( notice?.parentElement ) ) {
 					stacks.add( notice.parentElement );
 				}
 			} );
@@ -153,7 +164,9 @@ function watchSize( item ) {
 			} );
 		} );
 	}
-	resizeObserver.observe( content );
+	const { width, height } = content.getBoundingClientRect();
+	contentSizes.set( content, { width, height } );
+	resizeObserver.observe( content, { box: 'border-box' } );
 }
 
 /**
@@ -265,10 +278,34 @@ function bindStack( stack ) {
 }
 
 /**
+ * Pause a pinned notice's timer while the reader points at it or has focus inside it.
+ *
+ * @param {HTMLElement} element A pinned notice.
+ */
+function watchHover( element ) {
+	if ( hoverWatched.has( element ) ) {
+		return;
+	}
+	hoverWatched.add( element );
+	element.addEventListener( 'pointerenter', () => timers.get( element )?.pause() );
+	element.addEventListener( 'focusin', () => timers.get( element )?.pause() );
+	element.addEventListener( 'pointerleave', () => {
+		if ( ! element.contains( element.ownerDocument.activeElement ) ) {
+			timers.get( element )?.run();
+		}
+	} );
+	element.addEventListener( 'focusout', event => {
+		if ( ! element.contains( event.relatedTarget ) && ! element.matches( ':hover' ) ) {
+			timers.get( element )?.run();
+		}
+	} );
+}
+
+/**
  * Open a notice.
  *
- * Notices that hide on their own join the stack; notices that stay until closed join the
- * pinned list below it, so they're always shown in full.
+ * Notices that hide on their own join the stack. Errors and notices that stay until closed
+ * join the pinned list below it, so a newer notice never covers them.
  *
  * @param {Element} element - The notice element.
  * @param {boolean} remove  - Whether to remove the notice element on close.
@@ -276,12 +313,15 @@ function bindStack( stack ) {
 function openNotice( element, remove = true ) {
 	const snackbar = element.closest( '.newspack-ui__snackbar' ) || getSnackbar();
 	const autohide = element.dataset.autohide !== 'false';
-	const group = getGroup( snackbar, autohide ? 'stack' : 'pinned' );
+	const stacked = autohide && element.dataset.type !== 'error';
+	const group = getGroup( snackbar, stacked ? 'stack' : 'pinned' );
+	clearTimeout( removals.get( element ) );
+	removals.delete( element );
 	if ( element.parentElement !== group ) {
 		group.appendChild( element );
 	}
 	element.classList.remove( 'is-leaving' );
-	if ( autohide ) {
+	if ( stacked ) {
 		element.dataset.stackOrder = String( ++openCount );
 		element.dataset.stackPosition = 'front';
 		measure( [ element ] );
@@ -293,15 +333,20 @@ function openNotice( element, remove = true ) {
 	element.classList.add( 'active' );
 	const content = element.querySelector( '.newspack-ui__snackbar__content' );
 	announce( content ? content.textContent.trim() : '', element.dataset.type === 'error' );
-	if ( autohide ) {
+	if ( stacked ) {
 		layoutStack( group );
+	} else if ( autohide ) {
+		watchHover( element );
+	}
+	if ( autohide ) {
 		scheduleAutohide( element, remove );
 	}
 }
 
 /**
  * Hide a snackbar after 8 seconds of being visible. The timer pauses while the stack is
- * expanded, so an action such as Undo stays reachable.
+ * expanded, or while a pinned notice is hovered or focused, so an action such as Undo stays
+ * reachable.
  *
  * @param {HTMLElement} element Snackbar item.
  * @param {boolean}     remove  Whether to remove the item once hidden.
@@ -336,9 +381,30 @@ function scheduleAutohide( element, remove ) {
 	};
 	timers.get( element )?.stop();
 	timers.set( element, timer );
-	if ( 'true' !== element.parentElement?.dataset.expanded ) {
+	const engaged = isStack( element.parentElement )
+		? 'true' === element.parentElement.dataset.expanded
+		: element.matches( ':hover' ) || element.contains( element.ownerDocument.activeElement );
+	if ( ! engaged ) {
 		timer.run();
 	}
+}
+
+/**
+ * Where focus goes when the notice holding it closes: the next open notice with a control,
+ * else back into the dialog the notices sit in, so keyboard readers don't lose their place.
+ *
+ * @param {HTMLElement} element The closing notice.
+ * @return {HTMLElement|null} The element to focus, if any.
+ */
+function getFocusAfterClose( element ) {
+	const snackbar = element.closest( '.newspack-ui__snackbar' );
+	const others = snackbar ? [ ...snackbar.querySelectorAll( '.newspack-ui__snackbar__item.active' ) ].filter( item => item !== element ) : [];
+	const next = others.map( item => item.querySelector( '.newspack-ui__snackbar__close, a, button' ) ).find( Boolean );
+	if ( next ) {
+		return next;
+	}
+	const dialog = element.closest( '.newspack-ui__modal-container' );
+	return dialog ? getInitialFocus( dialog ) : null;
 }
 
 /**
@@ -351,16 +417,19 @@ function closeNotice( element, remove = true ) {
 	timers.get( element )?.stop();
 	timers.delete( element );
 	const stack = isStack( element.parentElement ) ? element.parentElement : null;
+	if ( element.contains( element.ownerDocument.activeElement ) ) {
+		getFocusAfterClose( element )?.focus();
+	}
 	element.classList.remove( 'active' );
 	if ( stack ) {
 		element.classList.add( 'is-leaving' );
 		layoutStack( stack );
 	}
+	clearTimeout( removals.get( element ) );
+	removals.delete( element );
 	if ( remove ) {
-		setTimeout( () => {
-			if ( element.classList.contains( 'active' ) ) {
-				return;
-			}
+		const removal = setTimeout( () => {
+			removals.delete( element );
 			unwatchSize( element );
 			element.remove();
 			// A removed element doesn't report focus leaving, so check whether the stack is still in use.
@@ -368,6 +437,7 @@ function closeNotice( element, remove = true ) {
 				setExpanded( stack, isEngaged( stack ) );
 			}
 		}, getTransitionTime( element ) );
+		removals.set( element, removal );
 	}
 	if ( element.dataset.noticeId ) {
 		wp.ajax.send( 'newspack_ui_notice_dismissed', {
@@ -392,32 +462,42 @@ function createCloseButton( item ) {
 	button.className = 'newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost-dark newspack-ui__snackbar__close';
 	button.setAttribute( 'aria-label', label );
 	button.title = label;
-	if ( window.newspackUIData?.closeIcon ) {
-		const template = document.createElement( 'template' );
-		template.innerHTML = window.newspackUIData.closeIcon.trim();
-		if ( template.content.firstElementChild ) {
-			button.appendChild( template.content.firstElementChild );
-		}
+	const icon = getCloseIcon();
+	if ( icon ) {
+		button.appendChild( icon );
 	}
 	button.addEventListener( 'click', () => closeNotice( item ) );
 	return button;
 }
 
 /**
- * Dynamically create and show a snackbar notice. Errors stay until the reader closes them,
- * like the errors printed by the server, so a newer notice can never cover one.
+ * Dynamically create and show a snackbar notice. Errors get a close button and join the
+ * pinned list, so a newer notice can never cover one; the same error raised again refreshes
+ * the one already showing instead of adding another.
  *
  * @param {string} message Message text to show.
  * @param {string} type    Severity; drives the ARIA announcement and the type icon ('info', 'error' and 'warning').
+ * @return {HTMLElement} The notice.
  */
 function createNotice( message, type = 'success' ) {
 	const snackbar = getSnackbar();
-	const autohide = 'error' !== type;
+	const isError = 'error' === type;
+
+	if ( isError ) {
+		const showing = [
+			...snackbar.querySelectorAll( '.newspack-ui__snackbar__pinned > .newspack-ui__snackbar__item.active[data-type="error"]' ),
+		].find( item => item.querySelector( '.newspack-ui__snackbar__content' )?.textContent === message );
+		if ( showing ) {
+			announce( message, true );
+			scheduleAutohide( showing, true );
+			return showing;
+		}
+	}
 
 	const item = document.createElement( 'div' );
 	item.classList.add( 'newspack-ui__snackbar__item' );
 	item.dataset.type = type;
-	item.setAttribute( 'data-autohide', autohide ? 'true' : 'false' );
+	item.setAttribute( 'data-autohide', 'true' );
 
 	const typeIcon = [ 'info', 'error', 'warning' ].includes( type ) ? getNoticeIcon( type ) : null;
 	if ( typeIcon ) {
@@ -432,11 +512,12 @@ function createNotice( message, type = 'success' ) {
 	content.textContent = message;
 
 	item.appendChild( content );
-	if ( ! autohide ) {
+	if ( isError ) {
 		item.appendChild( createCloseButton( item ) );
 	}
 	snackbar.appendChild( item );
 	openNotice( item, true );
+	return item;
 }
 
 // Expose notice functions to the global API.
