@@ -18,6 +18,16 @@ defined( 'ABSPATH' ) || exit;
 class PWA {
 
 	/**
+	 * Script that removes a service worker registration.
+	 *
+	 * Browsers keep a registered service worker after the plugin that registered it is gone, and re-fetch its
+	 * script on navigations. A response that is not a valid script (404, 429, redirect) leaves the registration
+	 * in place, so every such browser keeps requesting the URL. A changed script installs, activates and
+	 * unregisters itself, after which the browser stops asking. It does not claim or reload clients.
+	 */
+	const ORPHANED_WORKER_SCRIPT = "self.addEventListener( 'install', () => self.skipWaiting() );\nself.addEventListener( 'activate', ( event ) => event.waitUntil( self.registration.unregister() ) );\n";
+
+	/**
 	 * Add hooks.
 	 */
 	public static function init() {
@@ -41,29 +51,16 @@ class PWA {
 		// Add web app manifest filter.
 		add_filter( 'web_app_manifest', [ __CLASS__, 'filter_web_app_manifest' ] );
 
-		// Runs once all plugins are loaded, so the PWA plugin's presence is known, and before WordPress parses the request.
+		// Runs once all plugins are loaded, so the PWA plugin's presence is known, and before WordPress parses the request or admin-ajax.php dispatches.
 		add_action( 'plugins_loaded', [ __CLASS__, 'maybe_serve_orphaned_worker_cleanup' ], 0 );
-		// The PWA plugin's wp-admin worker is served through admin-ajax.php.
-		add_action( 'wp_ajax_wp_service_worker', [ __CLASS__, 'maybe_serve_orphaned_worker_cleanup' ] );
-		add_action( 'wp_ajax_nopriv_wp_service_worker', [ __CLASS__, 'maybe_serve_orphaned_worker_cleanup' ] );
 	}
-
-	/**
-	 * Script that removes a service worker registration.
-	 *
-	 * Browsers keep a registered service worker after the plugin that registered it is gone, and re-fetch its
-	 * script on navigations. A response that is not a valid script (404, 429, redirect) leaves the registration
-	 * in place, so every such browser keeps requesting the URL. A changed script installs, activates and
-	 * unregisters itself, after which the browser stops asking. It does not claim or reload clients.
-	 */
-	const ORPHANED_WORKER_SCRIPT = "self.addEventListener( 'install', () => self.skipWaiting() );\nself.addEventListener( 'activate', ( event ) => event.waitUntil( self.registration.unregister() ) );\n";
 
 	/**
 	 * Whether the PWA plugin is loaded.
 	 *
 	 * @return bool
 	 */
-	public static function is_pwa_plugin_active() {
+	public static function is_pwa_plugin_active(): bool {
 		return defined( 'PWA_VERSION' ) || function_exists( 'wp_service_workers' );
 	}
 
@@ -73,13 +70,13 @@ class PWA {
 	 * Front worker: /wp.serviceworker (also without rewrite rules via /index.php/wp.serviceworker),
 	 * or /?wp_service_worker=1 on sites without pretty permalinks. Admin worker: admin-ajax.php?action=wp_service_worker.
 	 *
-	 * @param string $request_uri The request URI, with query string.
-	 * @param string $home_path   Path component of the home URL, e.g. '' or '/blog'. The front worker lives under it.
-	 * @param string $site_path   Path component of the site URL, e.g. '' or '/wordpress'. wp-admin lives under it. Defaults to the home path.
+	 * @param string      $request_uri The request URI, with query string.
+	 * @param string      $home_path   Path component of the home URL, e.g. '' or '/blog'. The front worker lives under it.
+	 * @param string|null $site_path   Path component of the site URL, e.g. '' or '/wordpress'. wp-admin lives under it. Defaults to the home path.
 	 *
 	 * @return bool
 	 */
-	public static function is_worker_request( $request_uri, $home_path = '', $site_path = null ) {
+	public static function is_worker_request( string $request_uri, string $home_path = '', ?string $site_path = null ): bool {
 		$parts = wp_parse_url( $request_uri );
 		$path  = isset( $parts['path'] ) ? $parts['path'] : '';
 		wp_parse_str( isset( $parts['query'] ) ? $parts['query'] : '', $query );
@@ -104,7 +101,7 @@ class PWA {
 	 *
 	 * @return string|null The remaining path, or null when the path is not under the base path.
 	 */
-	private static function strip_base_path( $path, $base_path ) {
+	private static function strip_base_path( string $path, string $base_path ): ?string {
 		$base_path = untrailingslashit( $base_path );
 		if ( '' !== $base_path ) {
 			if ( $path !== $base_path && 0 !== strpos( $path, $base_path . '/' ) ) {
@@ -118,14 +115,14 @@ class PWA {
 	/**
 	 * Response that clears the registration of an orphaned PWA service worker.
 	 *
-	 * @param string $request_uri The request URI, with query string.
-	 * @param bool   $pwa_active  Whether the PWA plugin is loaded.
-	 * @param string $home_path   Path component of the home URL.
-	 * @param string $site_path   Path component of the site URL. Defaults to the home path.
+	 * @param string      $request_uri The request URI, with query string.
+	 * @param bool        $pwa_active  Whether the PWA plugin is loaded.
+	 * @param string      $home_path   Path component of the home URL.
+	 * @param string|null $site_path   Path component of the site URL. Defaults to the home path.
 	 *
 	 * @return array|null Headers and body, or null when the request must be left alone.
 	 */
-	public static function get_orphaned_worker_response( $request_uri, $pwa_active, $home_path = '', $site_path = null ) {
+	public static function get_orphaned_worker_response( string $request_uri, bool $pwa_active, string $home_path = '', ?string $site_path = null ): ?array {
 		if ( $pwa_active || ! self::is_worker_request( $request_uri, $home_path, $site_path ) ) {
 			return null;
 		}
@@ -145,10 +142,17 @@ class PWA {
 	 *
 	 * Without this, WordPress renders a full 404 page for every navigation of every browser that registered the
 	 * worker while the plugin was on. Left in place indefinitely because a browser can return at any time.
-	 * Return false from `newspack_pwa_serve_orphaned_worker_cleanup` to opt out.
+	 * Return false from `newspack_pwa_serve_orphaned_worker_cleanup` to opt out. It is applied on `plugins_loaded`
+	 * at priority 0, so the callback must be added from a plugin or mu-plugin file, not from a theme or a later hook.
 	 */
-	public static function maybe_serve_orphaned_worker_cleanup() {
-		if ( self::is_pwa_plugin_active() || ! isset( $_SERVER['REQUEST_URI'] ) ) {
+	public static function maybe_serve_orphaned_worker_cleanup(): void {
+		if ( ! isset( $_SERVER['REQUEST_URI'] ) ) {
+			return;
+		}
+		$home_path = (string) wp_parse_url( home_url(), PHP_URL_PATH );
+		$site_path = (string) wp_parse_url( site_url(), PHP_URL_PATH );
+		$response  = self::get_orphaned_worker_response( wp_unslash( $_SERVER['REQUEST_URI'] ), self::is_pwa_plugin_active(), $home_path, $site_path ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Only parsed and compared.
+		if ( ! $response ) {
 			return;
 		}
 		/**
@@ -157,12 +161,6 @@ class PWA {
 		 * @param bool $serve Whether to serve it. Default true.
 		 */
 		if ( ! apply_filters( 'newspack_pwa_serve_orphaned_worker_cleanup', true ) ) {
-			return;
-		}
-		$home_path = (string) wp_parse_url( home_url(), PHP_URL_PATH );
-		$site_path = (string) wp_parse_url( site_url(), PHP_URL_PATH );
-		$response  = self::get_orphaned_worker_response( wp_unslash( $_SERVER['REQUEST_URI'] ), false, $home_path, $site_path ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Only parsed and compared.
-		if ( ! $response ) {
 			return;
 		}
 		status_header( 200 );

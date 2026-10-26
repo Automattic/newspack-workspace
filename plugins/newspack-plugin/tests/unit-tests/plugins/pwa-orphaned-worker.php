@@ -17,7 +17,8 @@ use Newspack\PWA;
 class Test_PWA_Orphaned_Worker extends \WP_UnitTestCase {
 
 	/**
-	 * With the PWA plugin off, every URL it served the worker from gets a 200 script that unregisters the worker.
+	 * With the PWA plugin off, every URL it served the worker from gets a 200 script that unregisters the worker,
+	 * revalidated on every request so that turning the plugin back on is not masked by an edge or browser copy.
 	 */
 	public function test_inactive_plugin_serves_unregistering_worker_on_every_worker_url() {
 		$worker_urls = [
@@ -31,19 +32,9 @@ class Test_PWA_Orphaned_Worker extends \WP_UnitTestCase {
 			$response = PWA::get_orphaned_worker_response( $worker_url, false );
 			$this->assertNotNull( $response, $worker_url );
 			$this->assertStringStartsWith( 'application/javascript', $response['headers']['Content-Type'], $worker_url );
+			$this->assertSame( 'no-cache, max-age=0', $response['headers']['Cache-Control'], $worker_url );
 			$this->assertStringContainsString( 'registration.unregister()', $response['body'], $worker_url );
-			$this->assertStringNotContainsString( 'clients.claim', $response['body'], $worker_url );
 		}
-	}
-
-	/**
-	 * Pages and other admin-ajax actions are not answered, and a site in a subdirectory is matched under its path.
-	 */
-	public function test_other_requests_are_left_alone() {
-		foreach ( [ '/', '/sample-page/', '/wp.serviceworker.js', '/wp-admin/admin-ajax.php?action=heartbeat', '/news/wp.serviceworker' ] as $other_url ) {
-			$this->assertNull( PWA::get_orphaned_worker_response( $other_url, false ), $other_url );
-		}
-		$this->assertNotNull( PWA::get_orphaned_worker_response( '/news/wp.serviceworker', false, '/news' ) );
 	}
 
 	/**
@@ -54,27 +45,22 @@ class Test_PWA_Orphaned_Worker extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The script is revalidated every time, so turning the PWA plugin back on is not masked by an edge or browser copy.
+	 * The script never claims, navigates or reloads a client, which would loop when the page registers the worker again.
 	 */
-	public function test_response_is_never_served_from_a_cache_without_revalidation() {
-		$response = PWA::get_orphaned_worker_response( '/wp.serviceworker', false );
-		$this->assertSame( 'no-cache, max-age=0', $response['headers']['Cache-Control'] );
-	}
-
-	/**
-	 * The script never navigates or reloads a client, which would loop when the page registers the worker again.
-	 */
-	public function test_script_does_not_navigate_or_reload_clients() {
+	public function test_script_does_not_touch_clients() {
 		$body = PWA::get_orphaned_worker_response( '/wp.serviceworker', false )['body'];
-		foreach ( [ 'navigate', 'reload', 'location', 'postMessage' ] as $forbidden ) {
+		foreach ( [ 'clients.claim', 'navigate', 'reload', 'location', 'postMessage' ] as $forbidden ) {
 			$this->assertStringNotContainsString( $forbidden, $body );
 		}
 	}
 
 	/**
-	 * WordPress in /wordpress with the home at / serves the admin worker under the site path and the front worker under the home path.
+	 * The front worker is matched under the home path and the admin worker under the site path, e.g. a site in /news,
+	 * or WordPress in /wordpress with the home at /.
 	 */
-	public function test_admin_worker_is_matched_under_a_site_path_that_differs_from_the_home_path() {
+	public function test_worker_urls_are_matched_under_the_home_and_site_paths() {
+		$this->assertNotNull( PWA::get_orphaned_worker_response( '/news/wp.serviceworker', false, '/news' ) );
+
 		$admin_worker = '/wordpress/wp-admin/admin-ajax.php?action=wp_service_worker';
 		$this->assertNotNull( PWA::get_orphaned_worker_response( $admin_worker, false, '', '/wordpress' ) );
 		$this->assertNotNull( PWA::get_orphaned_worker_response( '/wp.serviceworker', false, '', '/wordpress' ) );
@@ -83,10 +69,13 @@ class Test_PWA_Orphaned_Worker extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Only the exact worker URL shapes are answered: content that merely mentions the name, other plugins' workers and other actions are not.
+	 * Only the exact worker URL shapes are answered: pages, content that merely mentions the name, other plugins' workers and other actions are not.
 	 */
-	public function test_lookalike_urls_are_left_alone() {
-		$lookalikes = [
+	public function test_other_urls_are_left_alone() {
+		$other_urls = [
+			'/',
+			'/sample-page/',
+			'/wp.serviceworker.js',
 			'/wp.serviceworker/',
 			'/blog/wp.serviceworker',
 			'/wp.serviceworker-news/',
@@ -98,26 +87,35 @@ class Test_PWA_Orphaned_Worker extends \WP_UnitTestCase {
 			'/sw.js',
 			'/newspack-sw.js',
 			'/OneSignalSDKWorker.js',
+			'/wp-admin/admin-ajax.php?action=heartbeat',
 			'/wp-admin/admin-ajax.php?action=wp_service_worker_other',
 			'/wp-admin/admin-ajax.php?ref=wp_service_worker',
 			'/wp-admin/admin-post.php?action=wp_service_worker',
 			'/wp-admin/post.php?action=wp_service_worker',
 			'/wp-json/wp.serviceworker',
 		];
-		foreach ( $lookalikes as $lookalike ) {
-			$this->assertNull( PWA::get_orphaned_worker_response( $lookalike, false ), $lookalike );
+		foreach ( $other_urls as $other_url ) {
+			$this->assertNull( PWA::get_orphaned_worker_response( $other_url, false ), $other_url );
 		}
 	}
 
 	/**
-	 * Logged-in users and wp-admin requests run the hook too; it answers only the exact worker URLs.
+	 * The hook runs on every request, including wp-admin; it answers only the exact worker URLs.
 	 */
-	public function test_hook_does_nothing_for_admin_requests_other_than_the_worker() {
-		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
-		$_SERVER['REQUEST_URI'] = '/wp-admin/admin-ajax.php?action=heartbeat';
-		PWA::maybe_serve_orphaned_worker_cleanup();
-		$_SERVER['REQUEST_URI'] = '/wp-admin/options-general.php';
-		PWA::maybe_serve_orphaned_worker_cleanup();
-		$this->assertTrue( true, 'Reaching this line means the hook did not exit the request.' );
+	public function test_hook_does_nothing_for_requests_other_than_the_worker() {
+		$this->expectNotToPerformAssertions();
+		$original_request_uri = isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		try {
+			foreach ( [ '/wp-admin/admin-ajax.php?action=heartbeat', '/wp-admin/options-general.php' ] as $request_uri ) {
+				$_SERVER['REQUEST_URI'] = $request_uri;
+				PWA::maybe_serve_orphaned_worker_cleanup();
+			}
+		} finally {
+			if ( null === $original_request_uri ) {
+				unset( $_SERVER['REQUEST_URI'] );
+			} else {
+				$_SERVER['REQUEST_URI'] = $original_request_uri;
+			}
+		}
 	}
 }
