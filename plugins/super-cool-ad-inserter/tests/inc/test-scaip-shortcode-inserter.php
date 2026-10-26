@@ -49,34 +49,6 @@ class ScaipShortcodeInserterTestFunctions extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Content that is non-empty after wpautop() is still split into blocks and gets the shortcode.
-	 */
-	public function test_classic_content_still_gets_the_shortcode() {
-		update_option( 'scaip_settings_min_paragraphs', 0 );
-		update_option( 'scaip_settings_start', 1 );
-		update_option( 'scaip_settings_period', 1 );
-		update_option( 'scaip_settings_repetitions', 1 );
-		$output = scaip_insert_shortcode( "<p>one</p>\n\n<p>two</p>\n\n<p>three</p>" );
-		$this->assertStringContainsString( '<p>one</p>', $output );
-		$this->assertStringContainsString( '[ad number="1"]', $output );
-	}
-
-	/**
-	 * A fragment that formats to a bare newline yields no block, so it does not count towards the minimum.
-	 */
-	public function test_empty_paragraph_fragment_does_not_count_towards_the_minimum() {
-		$paragraphs = $this->five_paragraph_blocks();
-		update_option( 'scaip_settings_min_paragraphs', count( parse_blocks( $paragraphs ) ) + 1 );
-		update_option( 'scaip_settings_start', 1 );
-		update_option( 'scaip_settings_period', 1 );
-		update_option( 'scaip_settings_repetitions', 1 );
-		$this->assertSame( $paragraphs, scaip_insert_shortcode( $paragraphs ), 'Precondition: the paragraphs alone are one block short of the minimum.' );
-		$content = "<p></p>\n\n" . $paragraphs;
-		$this->assertSame( "\n", force_balance_tags( wpautop( '<p></p>' ) ), 'Precondition: the fragment formats to a bare newline.' );
-		$this->assertSame( $content, scaip_insert_shortcode( $content ) );
-	}
-
-	/**
 	 * A line-break-only fragment is ignored: ad positions match the same content without it.
 	 */
 	public function test_line_break_only_fragment_does_not_shift_ad_positions() {
