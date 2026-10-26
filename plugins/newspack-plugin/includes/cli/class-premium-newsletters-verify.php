@@ -355,8 +355,6 @@ class Premium_Newsletters_Verify {
 			);
 		}
 
-		$auto_signup = (bool) \get_option( 'newspack_premium_newsletters_auto_signup', 1 );
-
 		if ( empty( $partitioned['verifiable'] ) ) {
 			// Reached with an incomplete coverage record whenever an unenumerable
 			// gate was named above, in which case this run fails without having
@@ -368,7 +366,7 @@ class Premium_Newsletters_Verify {
 			// narrative off STDOUT. An archiving script must not have to tell this
 			// path apart from a run that walked a population and found nothing.
 			$summary = self::new_summary();
-			self::report( [], $summary, $coverage, $auto_signup, false, $format );
+			self::report( [], $summary, $coverage, false, $format );
 			if ( self::verification_failed( $summary, $coverage ) ) {
 				WP_CLI::error( self::describe_failure( $summary, $coverage ) );
 			}
@@ -385,10 +383,10 @@ class Premium_Newsletters_Verify {
 		$seen_pairs = [];
 		$esp        = self::default_esp_gateway();
 		foreach ( $partitioned['verifiable'] as $gate ) {
-			$rows = array_merge( $rows, self::verify_gate( $gate, $auto_signup, $live, $batch_size, $max_batches, $batches, $coverage, $summary, $seen_pairs, $esp ) );
+			$rows = array_merge( $rows, self::verify_gate( $gate, $live, $batch_size, $max_batches, $batches, $coverage, $summary, $seen_pairs, $esp ) );
 		}
 
-		self::report( $rows, $summary, $coverage, $auto_signup, $live, $format );
+		self::report( $rows, $summary, $coverage, $live, $format );
 
 		if ( self::verification_failed( $summary, $coverage ) ) {
 			WP_CLI::error( self::describe_failure( $summary, $coverage ) );
@@ -630,13 +628,13 @@ class Premium_Newsletters_Verify {
 	 *
 	 * The asymmetry is deliberate. A restricted reader who is subscribed is always
 	 * wrong: they are receiving paid content without entitlement. An entitled
-	 * reader who is not subscribed is only wrong when auto-signup is on, because
-	 * with it off the site never promised to subscribe them — they opt in
-	 * themselves, and reporting that as a defect would fail every such site.
+	 * reader who is not subscribed is only wrong when auto-signup is on for the
+	 * list, because with it off the site never promised to subscribe them — they
+	 * opt in themselves, and reporting that as a defect would fail every such site.
 	 *
 	 * @param bool $is_restricted Whether the gate restricts this list for this reader.
 	 * @param bool $is_subscribed Whether the ESP has the reader on the list.
-	 * @param bool $auto_signup   Whether the site auto-subscribes entitled readers.
+	 * @param bool $auto_signup   Whether the list's gates auto-subscribe this entitled reader.
 	 *
 	 * @return string One of 'leak', 'gap', 'ok', 'not_asserted'.
 	 */
@@ -1047,6 +1045,39 @@ class Premium_Newsletters_Verify {
 	}
 
 	/**
+	 * Whether a rule denies every reader as written.
+	 *
+	 * Only the two rules that fail closed on a missing value are detectable here,
+	 * and only from the value's emptiness:
+	 *
+	 * - `institution` names no institution, so Institution::evaluate() matches nobody.
+	 * - `one_time_purchase` names no product, so has_one_time_purchase() never reaches
+	 *   a lookup. Its value is composite, so the emptiness that matters is
+	 *   `product_ids` rather than the value as a whole.
+	 *
+	 * A populated but unsatisfiable value — an institution ID that no longer
+	 * resolves, a product that was deleted — denies every reader just the same and
+	 * reads as configured from here. Detecting it would mean resolving each value
+	 * against the store, which this command does not do; a gate in that state is
+	 * reported as enumerable and its population overstated.
+	 *
+	 * @param array $rule One access rule.
+	 *
+	 * @return bool
+	 */
+	private static function rule_admits_nobody( array $rule ): bool {
+		$slug = (string) ( $rule['slug'] ?? '' );
+		if ( 'institution' === $slug ) {
+			return empty( $rule['value'] ?? null );
+		}
+		if ( 'one_time_purchase' === $slug ) {
+			$value = \Newspack\Access_Rules::sanitize_one_time_purchase_value( $rule['value'] ?? [] );
+			return empty( $value['product_ids'] );
+		}
+		return false;
+	}
+
+	/**
 	 * The slugs of a gate's access rules that paywall it but whose population this
 	 * command cannot enumerate.
 	 *
@@ -1073,12 +1104,14 @@ class Premium_Newsletters_Verify {
 	 *   subscribed while entitled are indistinguishable from the whole reader base.
 	 *
 	 * An unconfigured rule is skipped, because it paywalls nothing:
-	 * is_email_domain_whitelisted(), has_reader_data() and Institution::evaluate()
-	 * each return true on an empty value. Two rules are exceptions, both verified
-	 * against their evaluators:
+	 * is_email_domain_whitelisted() and has_reader_data() both return true on an
+	 * empty value. Three rules are exceptions, all verified against their
+	 * evaluators:
 	 *
 	 * - `one_time_purchase` counts whatever its value: has_one_time_purchase() fails
 	 *   closed on an empty product list, so an unconfigured one restricts everyone.
+	 * - `institution` counts whatever its value, for the same reason:
+	 *   Institution::evaluate() matches nobody when it names no institution.
 	 * - `subscription` counts when it names no product: has_active_subscription()
 	 *   then passes an empty product filter to
 	 *   WooCommerce_Connection::get_active_subscriptions_for_user(), which grants on
@@ -1104,13 +1137,26 @@ class Premium_Newsletters_Verify {
 			// group, so the question is asked per group, not per rule. A group holding
 			// a subscription rule that names products admits nobody who does not also
 			// hold one of those products — whatever else it ANDs on top only narrows
-			// that set further, and the walk already covers it. Asking per rule instead
+			// that set further, down to and including nobody at all. Asking per rule
 			// reports a gate with a single `subscription + institution` group as only
 			// partly checked, and fails a run that in fact checked everyone who could
 			// get in.
+			// A rule that admits nobody makes the whole group admit nobody, whatever
+			// the subscription rule names. Letting the product bound stand for the
+			// group would describe its population as "holders of those products" —
+			// readers this gate in fact denies, and whom check_access() removes from
+			// the list while the run reports them clean.
+			$group_admits_nobody = false;
+			foreach ( $group as $rule ) {
+				if ( self::rule_admits_nobody( (array) $rule ) ) {
+					$group_admits_nobody = true;
+					break;
+				}
+			}
+
 			$group_widens = true;
 			foreach ( $group as $rule ) {
-				if ( 'subscription' !== (string) ( $rule['slug'] ?? '' ) ) {
+				if ( $group_admits_nobody || 'subscription' !== (string) ( $rule['slug'] ?? '' ) ) {
 					continue;
 				}
 				if ( ! empty( array_filter( array_map( 'intval', (array) ( $rule['value'] ?? null ) ) ) ) ) {
@@ -1128,7 +1174,9 @@ class Premium_Newsletters_Verify {
 				if ( '' === $slug ) {
 					continue;
 				}
-				if ( 'one_time_purchase' !== $slug && 'subscription' !== $slug && empty( $value ) ) {
+				// The three rules named in the docblock restrict whatever value they
+				// carry; every other rule with no value paywalls nobody.
+				if ( empty( $value ) && ! in_array( $slug, [ 'one_time_purchase', 'subscription', 'institution' ], true ) ) {
 					continue;
 				}
 				$slugs[] = $slug;
@@ -1244,7 +1292,7 @@ class Premium_Newsletters_Verify {
 			return 'WooCommerce Memberships is still active, so every restricted list reads as unrestricted and this comparison would be meaningless. Run this after deactivating it.';
 		}
 		if ( ! $gating_active ) {
-			return 'Content gating is inactive, so no gate enforces anything and there is no expected state to compare against. Enable Audience Management and Reader Activation first.';
+			return 'Content gating is inactive, so no gate enforces anything and there is no expected state to compare against. Enable the content gates feature (NEWSPACK_CONTENT_GATES) and Audience Management first.';
 		}
 		if ( ! $subscriptions_available ) {
 			return 'WooCommerce Subscriptions is not active, so the command cannot enumerate who holds a gate\'s products and would silently check nobody. Activate it and run this again.';
@@ -1432,10 +1480,10 @@ class Premium_Newsletters_Verify {
 	 * this command already applies to any lookup it cannot trust.
 	 *
 	 * The same provider knowledge is kept as an exact-match allowlist in
-	 * Newspack\Reader_Activation\Integrations\ESP::pull_contact_data()
-	 * (includes/reader-activation/integrations/class-esp.php), which normalizes a miss
-	 * to the framework's canonical code for its batch drivers. Adding a fourth
-	 * provider means adding it there too.
+	 * Newspack\Reader_Activation\Integrations\ESP::is_provider_not_found_error()
+	 * (includes/reader-activation/integrations/class-esp.php), which the ESP's pull and
+	 * existence check use to tell a miss from a failure. Adding a fourth provider
+	 * means adding it there too.
 	 *
 	 * @param \WP_Error $error The error get_contact_data() returned.
 	 *
@@ -1511,7 +1559,6 @@ class Premium_Newsletters_Verify {
 	 * Check one gate's population against the ESP.
 	 *
 	 * @param array $gate        Gate array carrying 'product_ids'.
-	 * @param bool  $auto_signup Whether the site auto-subscribes entitled readers.
 	 * @param bool  $live        Whether to remove readers from lists they are not entitled to.
 	 * @param int   $batch_size  Readers to check between pauses.
 	 * @param int   $max_batches Stop after this many batches, across the whole run; 0 for no limit.
@@ -1533,7 +1580,7 @@ class Premium_Newsletters_Verify {
 	 *
 	 * @return array[] The rows needing attention, per status_needs_attention().
 	 */
-	private static function verify_gate( array $gate, bool $auto_signup, bool $live, int $batch_size, int $max_batches, int &$batches, array &$coverage, array &$summary, array &$seen_pairs, array $esp ): array {
+	private static function verify_gate( array $gate, bool $live, int $batch_size, int $max_batches, int &$batches, array &$coverage, array &$summary, array &$seen_pairs, array $esp ): array {
 		$list_ids = self::restricted_list_ids_for_gate( $gate );
 		if ( empty( $list_ids ) ) {
 			self::narrate( self::describe_gate_without_lists( $gate ) );
@@ -1589,6 +1636,10 @@ class Premium_Newsletters_Verify {
 		foreach ( $list_ids as $list_id ) {
 			$public_ids[ $list_id ] = self::public_id_for_list( $list_id );
 		}
+
+		// Also once per gate: whether any list can sign a reader up doesn't vary by
+		// reader, and when none can, the per-list lookup below is skipped for all.
+		$can_auto_signup = \Newspack\Premium_Newsletters::can_any_list_auto_signup();
 
 		$rows         = [];
 		$in_batch     = 0;
@@ -1650,12 +1701,13 @@ class Premium_Newsletters_Verify {
 						continue;
 					}
 
-					// is_post_restricted() answers for the list post, consulting every
-					// gate that matches it rather than only the gate being walked. Two
-					// gates naming the same list would otherwise check the same reader
-					// twice, spend the ESP calls twice, and count the same leak twice —
-					// so the printed leak count could exceed the readers actually
-					// leaking, and disagree with the deduped coverage count beside it.
+					// is_post_restricted() answers for the list post, where the first
+					// gate matching it decides, whether or not that is the gate being
+					// walked. Two gates naming the same list would otherwise check the
+					// same reader twice, spend the ESP calls twice, and count the same
+					// leak twice — so the printed leak count could exceed the readers
+					// actually leaking, and disagree with the deduped coverage count
+					// beside it.
 					// Nested integer keys rather than one interned "user_list" string per
 					// pair: this map is deliberately run-wide and nothing releases it, and
 					// on the large sites this command is for it would otherwise be the
@@ -1664,7 +1716,12 @@ class Premium_Newsletters_Verify {
 
 					$is_restricted = \Newspack\Content_Restriction_Control::is_post_restricted( false, $list_id, $user_id );
 					$is_subscribed = self::is_subscribed_to_list( $public_id, $contact_lists );
-					$status        = self::classify_reader( $is_restricted, $is_subscribed, $auto_signup );
+					// Auto-signup is decided per list and reader, not per site: a list's
+					// gates can differ, and only the ones that admit this reader count.
+					// Only an entitled, unsubscribed reader's status depends on it, so the
+					// lookup is skipped for everyone else.
+					$auto_signup = $can_auto_signup && ! $is_restricted && ! $is_subscribed && \Newspack\Premium_Newsletters::is_auto_signup_list( (int) $list_id, (int) $user_id );
+					$status      = self::classify_reader( $is_restricted, $is_subscribed, $auto_signup );
 
 					if ( 'leak' === $status && $live ) {
 						$removed = $esp['remove']( $user->user_email, $public_id );
@@ -1838,13 +1895,12 @@ class Premium_Newsletters_Verify {
 	 *                                       in $summary and not kept, so this is not every row.
 	 * @param array<string,int> $summary     Counts from new_summary(), added up by with_status_counted().
 	 * @param array             $coverage    Coverage record.
-	 * @param bool              $auto_signup Whether auto-signup is on.
 	 * @param bool              $live        Whether removals were written.
 	 * @param string            $format      Format for the rows table, per WP-CLI's --format.
 	 *
 	 * @return void
 	 */
-	private static function report( array $rows, array $summary, array $coverage, bool $auto_signup, bool $live, string $format = 'table' ): void {
+	private static function report( array $rows, array $summary, array $coverage, bool $live, string $format = 'table' ): void {
 		// Under a machine format, STDOUT carries the rows and nothing else: the point
 		// of archiving a --live run's rows is that a parser can read them back, and a
 		// header line and an ASCII summary in the same stream defeat that. The
@@ -1920,8 +1976,8 @@ class Premium_Newsletters_Verify {
 		if ( 0 < $summary['removed'] ) {
 			$narrate( sprintf( '%d subscription(s) were removed at the ESP and confirmed gone. They are listed above, were logged as they landed, and each one also went to the `newspack_esp_sync` log through add_and_remove_lists().', $summary['removed'] ) );
 		}
-		if ( ! $auto_signup ) {
-			$narrate( 'Auto-signup is off, so an entitled reader who is not subscribed is counted as "not asserted" rather than a gap: they opt in themselves.' );
+		if ( 0 < $summary['not_asserted'] ) {
+			$narrate( 'An entitled reader missing from a list whose auto-signup is off is counted as "not asserted" rather than a gap: they opt in themselves.' );
 		}
 		if ( 0 < $summary['gap'] ) {
 			$narrate( 'Gaps are reported but never written. An on-demand run cannot tell a reader who never subscribed from one who unsubscribed on purpose, so additions are left to the auto-signup flow, where the renewal snapshot protects an opt-out.' );

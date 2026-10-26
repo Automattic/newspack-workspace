@@ -1,0 +1,7 @@
+- generic [ref=e2]:
+  - text:          
+  - generic:
+    - main:
+      - generic [ref=e5]:
+        - region "Navigation" [ref=e6]
+        - progressbar "Loading …" [ref=e14]

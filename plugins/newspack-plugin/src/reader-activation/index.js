@@ -18,6 +18,10 @@ import { getApiNonce, hydrateSession } from './session.js';
 /**
  * Reader Activation Library.
  *
+ * "Reader Activation" is the code name for the product feature called
+ * "Audience Management". window.newspackReaderActivation keeps the code name
+ * because themes and site code call it.
+ *
  * Store() returns [ publicStore, internalClear ]. Only `store` (the public
  * object) is exported and assigned to window.newspackReaderActivation.store;
  * `clearReaderStore` is kept module-private so the destructive namespace wipe
@@ -152,6 +156,15 @@ const authStrategies = [ 'pwd', 'link' ];
 /**
  * Start the authentication modal with an optional custom callback.
  *
+ * Pass `skipAuthenticatedCheck` to open the modal for a reader who is already
+ * logged in — the content gate's verification prompt needs it, since an
+ * unverified reader is authenticated but still has to enter an OTP.
+ *
+ * Pass `skipVerification` when the flow that follows verifies a new reader by
+ * itself, so they are not asked to verify their email first. Modal checkout does:
+ * a payment that completes at checkout marks the reader verified. The reader is
+ * then never shown the address they registered with before the flow carries on.
+ *
  * @param {Object} config Config.
  */
 export function openAuthModal( config = {} ) {
@@ -161,7 +174,9 @@ export function openAuthModal( config = {} ) {
 		onError: null,
 		initialState: null,
 		skipSuccess: false,
+		skipAuthenticatedCheck: false,
 		skipNewslettersSignup: false,
+		skipVerification: false,
 		labels: {
 			signin: {
 				title: window.newspack_reader_activation_labels.signin.title,
@@ -176,7 +191,7 @@ export function openAuthModal( config = {} ) {
 		...config,
 	};
 
-	if ( newspack_ras_config.is_logged_in ) {
+	if ( ! config.skipAuthenticatedCheck && newspack_ras_config.is_logged_in ) {
 		if ( config.onSuccess && typeof config.onSuccess === 'function' ) {
 			config.onSuccess();
 		}
@@ -667,11 +682,11 @@ const readerActivation = {
 	refreshAuthentication,
 	getReader,
 	openNewslettersSignupModal,
-	// openVerificationModal and maybeConfirmRegistration are attached at runtime by
-	// the reader-activation-auth bundle (see reader-activation-auth/index.js). They
-	// aren't included in this literal because they depend on auth-modal markup that
-	// only ships when the auth modal is rendered. Cross-plugin consumers gate access
-	// with `typeof ras?.openVerificationModal === 'function'`.
+	// openVerificationModal is attached at runtime by the reader-activation-auth
+	// bundle (see reader-activation-auth/index.js). It isn't included in this
+	// literal because it depends on auth-modal markup that only ships when the auth
+	// modal is rendered. Cross-plugin consumers gate access with
+	// `typeof ras?.openVerificationModal === 'function'`.
 	hasAuthLink,
 	getOTPHash,
 	setOTPTimer,

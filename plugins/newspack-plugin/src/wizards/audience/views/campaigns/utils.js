@@ -327,16 +327,18 @@ const getItems = memoize( async path => {
 			label: item.title || item.name,
 		} ) );
 	} catch ( e ) {
-		return [];
+		return null;
 	}
 } );
 
 const ItemNames = ( { label, ids, path, deletedItemLabel } ) => {
-	const [ items, setItems ] = useState( [] );
+	// `null` until the lookup resolves, and after a failed one. An empty list is a real
+	// answer: none of the saved items exist any more, so each reads as deleted.
+	const [ items, setItems ] = useState( null );
 	useEffect( () => {
 		getItems( path ).then( setItems );
 	}, [ ids ] );
-	if ( ! items.length ) {
+	if ( ! items ) {
 		return null;
 	}
 	const labels = ids.map( id => {
@@ -364,7 +366,8 @@ addFilter(
 						config.id === 'subscribed_lists' ? __( 'Subscribed to:', 'newspack-plugin' ) : __( 'Not subscribed to:', 'newspack-plugin' )
 					}
 					ids={ item.value }
-					path="/newspack-newsletters/v1/lists_config"
+					// `context=edit`: see the list picker in the segment editor.
+					path="/newspack-newsletters/v1/lists_config?context=edit"
 					deletedItemLabel={ __( 'Deleted list', 'newspack-plugin' ) }
 				/>
 			);
@@ -386,7 +389,7 @@ addFilter( 'newspack.wizards.campaigns.segmentDescription.criteriaMessage', 'new
 						: __( 'Does not have active subscription(s):', 'newspack-plugin' )
 				}
 				ids={ item.value }
-				path={ `${ newspackAudienceCampaigns.api }/subscription-products` }
+				path={ addQueryArgs( `${ newspackAudienceCampaigns.api }/subscription-products`, { include: item.value } ) }
 				deletedItemLabel={ __( 'Deleted subscription', 'newspack-plugin' ) }
 			/>
 		);
@@ -411,6 +414,20 @@ addFilter( 'newspack.wizards.campaigns.segmentDescription.criteriaMessage', 'new
 				deletedItemLabel={ __( 'Deleted membership', 'newspack-plugin' ) }
 			/>
 		);
+	}
+	return message;
+} );
+
+addFilter( 'newspack.wizards.campaigns.segmentDescription.criteriaMessage', 'newspack.gateAccess', ( message, value, config, item ) => {
+	if ( [ 'can_access_gates', 'cannot_access_gates' ].includes( config.id ) ) {
+		if ( ! Array.isArray( item.value ) || ! item.value.length ) {
+			return null;
+		}
+		const labels = item.value.map(
+			id => config.options?.find( option => option.value === String( id ) )?.label || __( 'Unavailable gate', 'newspack-plugin' )
+		);
+		/* translators: 1: criterion name, 2: comma-separated content gate names. */
+		return sprintf( __( '%1$s: %2$s', 'newspack-plugin' ), config.name, labels.join( ', ' ) );
 	}
 	return message;
 } );

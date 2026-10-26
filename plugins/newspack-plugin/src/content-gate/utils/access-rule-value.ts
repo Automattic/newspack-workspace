@@ -19,10 +19,12 @@
  */
 import { __, sprintf } from '@wordpress/i18n';
 
-type AccessRuleShape = {
+export type AccessRuleShape = {
 	has_options?: boolean;
 	is_boolean?: boolean;
+	is_range?: boolean;
 	empty_grants_access?: boolean;
+	requires_value?: boolean;
 	options?: unknown[];
 };
 
@@ -45,19 +47,102 @@ export const isEmptyAccessRuleValue = ( value: unknown ) =>
 	null === value || undefined === value || '' === value || ( Array.isArray( value ) && 0 === value.length );
 
 /**
+ * A range rule's value: the bounds a reader's number has to fall between. Either
+ * side may be absent, which leaves it open.
+ */
+export type RangeValue = { min?: number | string; max?: number | string };
+
+const isPlainObject = ( value: unknown ): value is Record< string, unknown > =>
+	null !== value && 'object' === typeof value && ! Array.isArray( value );
+
+/**
+ * Whether a value has the shape of range bounds: an object keyed by nothing but `min`
+ * and `max`, each unset or a string or number, as `Promoted_Fields` reads it. Anything
+ * else on a range rule denies every reader there, so it must not read as unset here.
+ */
+const isRangeShape = ( value: unknown ): value is Record< string, unknown > =>
+	isPlainObject( value ) &&
+	Object.entries( value ).every(
+		( [ key, bound ] ) =>
+			( 'min' === key || 'max' === key ) && ( undefined === bound || null === bound || 'string' === typeof bound || 'number' === typeof bound )
+	);
+
+const isRangeBoundSet = ( bound: unknown ): bound is number | string => ( 'number' === typeof bound || 'string' === typeof bound ) && '' !== bound;
+
+/**
+ * Whether a bound is a number as PHP's `is_numeric()` reads one: decimal only, so the
+ * hex, binary and octal forms `Number()` would accept are refused here too.
+ */
+const DECIMAL_NUMBER = /^\s*[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?\s*$/;
+const isNumericBound = ( bound: number | string ) => DECIMAL_NUMBER.test( String( bound ) ) && Number.isFinite( Number( bound ) );
+
+/**
+ * What keeps stored range bounds from being compared, if anything: a side that isn't a
+ * number, or a minimum above the maximum. `Promoted_Fields::is_in_range()` matches no
+ * reader on either, and the gate save refuses both. One answer serves the control's
+ * notice and the summary's flag, so the two can't drift apart.
+ *
+ * @param value The rule's stored value.
+ */
+const getRangeBoundsProblem = ( value: unknown ): 'not-numeric' | 'inverted' | null => {
+	const { min, max } = normalizeRangeValue( value );
+	if ( ( undefined !== min && ! isNumericBound( min ) ) || ( undefined !== max && ! isNumericBound( max ) ) ) {
+		return 'not-numeric';
+	}
+	return undefined !== min && undefined !== max && Number( min ) > Number( max ) ? 'inverted' : null;
+};
+
+/**
+ * Whether stored range bounds can't be compared, so the rule matches no reader.
+ *
+ * @param value The rule's stored value.
+ */
+export const hasUnusableRangeBounds = ( value: unknown ) => null !== getRangeBoundsProblem( value );
+
+/**
+ * The bounds a stored range value sets, without anything else it holds. A value that
+ * isn't a set of bounds sets none.
+ *
+ * @param value The stored rule value.
+ */
+export const normalizeRangeValue = ( value: unknown ): RangeValue => {
+	const range: RangeValue = {};
+	if ( ! isPlainObject( value ) ) {
+		return range;
+	}
+	if ( isRangeBoundSet( value.min ) ) {
+		range.min = value.min;
+	}
+	if ( isRangeBoundSet( value.max ) ) {
+		range.max = value.max;
+	}
+	return range;
+};
+
+/**
+ * Whether a rule holds the empty value for its shape. A range rule is also empty
+ * when it holds bounds with neither side set, which is what clearing both inputs
+ * leaves behind and what `Promoted_Fields::sanitize_range_value()` saves as `[]`.
+ */
+const isEmptyValueForRule = ( config: AccessRuleShape | undefined, value: unknown ) =>
+	isEmptyAccessRuleValue( value ) ||
+	( Boolean( config?.is_range ) && isRangeShape( value ) && 0 === Object.keys( normalizeRangeValue( value ) ).length );
+
+/**
  * Whether a stored access rule value is in a shape the rule can't use: free text
- * on an options-backed rule, or a list on a free-text one. Such a value denies
- * every reader, since `Newspack\Access_Rules::evaluate_rule()` fails closed on
- * it, so a control has to label it rather than render it as a live condition.
+ * on an options-backed rule, a list or object on a free-text one, or anything but
+ * min/max bounds on a range rule. Such a value denies every reader, since
+ * `Newspack\Access_Rules::evaluate_rule()` fails closed on it, so a control has to
+ * label it rather than render it as a live condition.
  *
  * An unset value is not one of those. `Newspack\Access_Rules::is_malformed_options_backed_value()`
  * reads `''` and `null` on an options-backed rule as "not configured", and the
  * rule then grants access to every reader — the opposite verdict, which
  * `isUnconstrainedAccessRuleValue()` covers.
  *
- * Rules with a composite value shape (one-time purchase) own their formatting and
- * their control, both of which run before this, so only the list/text split is
- * decided here.
+ * One-time purchase owns its formatting and its control, both of which run before
+ * this. Range bounds are the one composite shape judged here, so that the summary,
+ * both editors, and `Promoted_Fields::is_in_range()` agree on which values deny.
  */
 export const isMalformedAccessRuleValue = ( config: AccessRuleShape | undefined, value: unknown ) => {
 	// Only the rule's own declaration exempts a value from the shape test. A boolean
@@ -68,19 +153,39 @@ export const isMalformedAccessRuleValue = ( config: AccessRuleShape | undefined,
 	if ( ! config || config.is_boolean ) {
 		return false;
 	}
+	// Text saved before range rules had a min/max control, or a list left from an
+	// options-backed field. The rule's callback fails closed on either.
+	if ( config.is_range ) {
+		return ! isEmptyAccessRuleValue( value ) && ! isRangeShape( value );
+	}
 	if ( takesOptionValues( config ) ) {
 		return ! Array.isArray( value ) && ! isEmptyAccessRuleValue( value );
 	}
-	return Array.isArray( value );
+	// A list, or bounds left on a field whose operator moved from Number to Text.
+	return null !== value && 'object' === typeof value;
 };
 
 /**
  * Whether a rule imposes no constraint as stored, and so grants access to every
  * reader. Only rules that declare `empty_grants_access` read their empty value
- * that way — `subscription` naming no product still requires an active one.
+ * that way — `subscription` naming no product still requires an active one, and
+ * `institution` naming none matches nobody.
  */
 export const isUnconstrainedAccessRuleValue = ( config: AccessRuleShape | undefined, value: unknown ) =>
-	Boolean( config?.empty_grants_access ) && isEmptyAccessRuleValue( value );
+	Boolean( config?.empty_grants_access ) && isEmptyValueForRule( config, value );
+
+/**
+ * Whether a rule that needs a value has none, so it states no condition at all.
+ *
+ * The superset of the state above, and the one the editor and the save-time
+ * refusal both act on. Every rule granting access on an empty value also
+ * declares `requires_value`; `institution` declares only `requires_value`,
+ * because it matches nobody instead — a different symptom, equally far from
+ * what the operator configured. Only the wording of the caution depends on
+ * which of the two it is.
+ */
+export const isUnconfiguredAccessRuleValue = ( config: AccessRuleShape | undefined, value: unknown ) =>
+	Boolean( config?.requires_value ) && isEmptyValueForRule( config, value );
 
 /**
  * The caution to show under a rule's picker, or undefined where the stored value
@@ -115,17 +220,28 @@ export const getAccessRuleValueNotice = ( config: AccessRuleShape | undefined, v
 					'newspack-plugin'
 			  );
 	}
-	if ( ! isUnconstrainedAccessRuleValue( config, value ) ) {
+	if ( ! isUnconfiguredAccessRuleValue( config, value ) ) {
 		return undefined;
 	}
-	// Nothing to pick and nothing picked: every answer the picker can express is the
-	// one that lets every reader through, so say where the items come from.
+	// What an empty value does is the rule's own business, and the two answers are
+	// opposites. Naming the wrong one sends an editor looking for the wrong symptom
+	// on the front end: an open paywall reads nothing like a walled-off one.
+	if ( isUnconstrainedAccessRuleValue( config, value ) ) {
+		// Nothing to pick and nothing picked: every answer the picker can express is
+		// the one that lets every reader through, so say where the items come from.
+		return hasOptions
+			? __(
+					'Nothing is selected, so this rule grants access to everyone. Select at least one option, or turn the rule off.',
+					'newspack-plugin'
+			  )
+			: __(
+					'This rule has nothing to select yet, so it grants access to everyone. Add the items it selects, or turn the rule off.',
+					'newspack-plugin'
+			  );
+	}
 	return hasOptions
-		? __( 'Nothing is selected, so this rule grants access to everyone. Select at least one option, or turn the rule off.', 'newspack-plugin' )
-		: __(
-				'This rule has nothing to select yet, so it grants access to everyone. Add the items it selects, or turn the rule off.',
-				'newspack-plugin'
-		  );
+		? __( 'Nothing is selected, so this rule matches no reader. Select at least one option, or turn the rule off.', 'newspack-plugin' )
+		: __( 'This rule has nothing to select yet, so it matches no reader. Add the items it selects, or turn the rule off.', 'newspack-plugin' );
 };
 
 /**
@@ -141,4 +257,49 @@ export const getAccessRuleValueNotice = ( config: AccessRuleShape | undefined, v
  * @param hasOptions Whether the picker has anything to offer.
  */
 export const isAccessRulePickerInert = ( config: AccessRuleShape | undefined, value: unknown, hasOptions: boolean ) =>
-	! hasOptions && isUnconstrainedAccessRuleValue( config, value );
+	! hasOptions && isUnconfiguredAccessRuleValue( config, value );
+
+/**
+ * The caution to show under a range rule's inputs, or undefined where the stored
+ * value needs none. Each state names what the rule does with the value, which the
+ * inputs alone would not show.
+ *
+ * @param config The rule's registry entry.
+ * @param value  The rule's stored value.
+ */
+export const getRangeRuleValueNotice = ( config: AccessRuleShape | undefined, value: unknown ): string | undefined => {
+	if ( isMalformedAccessRuleValue( config, value ) ) {
+		return 'string' === typeof value
+			? sprintf(
+					// translators: %s: the stored value.
+					__(
+						'The saved value “%s” is not a minimum or maximum, so this rule grants no access. Enter a minimum, a maximum, or both to replace it.',
+						'newspack-plugin'
+					),
+					value
+			  )
+			: __(
+					'The saved value is not a minimum or maximum, so this rule grants no access. Enter a minimum, a maximum, or both to replace it.',
+					'newspack-plugin'
+			  );
+	}
+	if ( isEmptyValueForRule( config, value ) ) {
+		return isUnconstrainedAccessRuleValue( config, value )
+			? __(
+					'No minimum or maximum is set, so this rule grants access to every reader with a number in this field. Enter a minimum, a maximum, or both, or turn the rule off.',
+					'newspack-plugin'
+			  )
+			: __(
+					'No minimum or maximum is set, so this rule matches no reader. Enter a minimum, a maximum, or both, or turn the rule off.',
+					'newspack-plugin'
+			  );
+	}
+	const problem = getRangeBoundsProblem( value );
+	if ( 'not-numeric' === problem ) {
+		return __( 'The minimum and maximum must be numbers. Until they are, this rule grants no access.', 'newspack-plugin' );
+	}
+	if ( 'inverted' === problem ) {
+		return __( 'The minimum is above the maximum, so this rule matches no reader.', 'newspack-plugin' );
+	}
+	return undefined;
+};

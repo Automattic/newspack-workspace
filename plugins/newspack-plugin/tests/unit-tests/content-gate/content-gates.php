@@ -2078,11 +2078,10 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Blocker: an institution rule saved with no institutions selected
-	 * (`value => []`) must not silently grant anonymous access. Without a
-	 * value, the rule is "not configured" — Institution::evaluate(0, [])
-	 * returns true as the rule's own no-constraint semantics, but for the
-	 * registration bypass we require a populated rule that actually matches.
+	 * An institution rule saved with no institutions selected (`value => []`)
+	 * must not grant anonymous access. The rule names no condition, so
+	 * Institution::evaluate() satisfies nobody with it, and the registration
+	 * bypass requires a populated rule that actually matches.
 	 */
 	public function test_anonymous_with_unpopulated_institution_rule_is_restricted() {
 		$this->configure_published_gate(
@@ -2322,6 +2321,276 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		wp_delete_user( $matching_user );
 		wp_delete_user( $other_user );
 		$this->reset_visitor_state();
+	}
+
+	// =========================================================================
+	// Institutions on registered access (NPPD-2310)
+	//
+	// A registration wall can name institutions whose visitors count as
+	// registered. Unlike institutions in paid access, which count as paying and
+	// so skip both walls, these skip registration only: a gate that also has
+	// paid access still asks the visitor to pay.
+	// =========================================================================
+
+	/**
+	 * Create an institution matching the 10.0.0.0/8 range.
+	 *
+	 * @return int Institution ID.
+	 */
+	private function create_ip_institution() {
+		$inst_id          = Institution::create( 'University', '', [ 'ip_range' => '10.0.0.0/8' ] );
+		$this->post_ids[] = $inst_id;
+		delete_transient( Institution::TRANSIENT_KEY );
+		return $inst_id;
+	}
+
+	/**
+	 * Access rules naming one institution, in grouped format.
+	 *
+	 * @param int $inst_id Institution ID.
+	 *
+	 * @return array
+	 */
+	private function institution_rules( $inst_id ) {
+		return [
+			[
+				[
+					'slug'  => 'institution',
+					'value' => [ $inst_id ],
+				],
+			],
+		];
+	}
+
+	/**
+	 * The case the setting exists for: a registration wall with no paid access
+	 * lets an on-campus visitor read without an account.
+	 */
+	public function test_registration_institutions_admit_a_matching_anonymous_visitor() {
+		$inst_id = $this->create_ip_institution();
+		$this->configure_published_gate(
+			[
+				'active'       => true,
+				'access_rules' => $this->institution_rules( $inst_id ),
+			],
+			[ 'active' => false ]
+		);
+
+		wp_set_current_user( 0 );
+		$this->set_visitor_ip( '10.1.2.3' );
+		$this->reset_restriction_cache();
+
+		$this->assertFalse( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
+
+		$this->reset_visitor_state();
+	}
+
+	/**
+	 * Any other anonymous visitor still meets the registration wall.
+	 */
+	public function test_registration_institutions_show_other_anonymous_visitors_the_registration_layout() {
+		$inst_id = $this->create_ip_institution();
+		$layouts = $this->configure_published_gate(
+			[
+				'active'       => true,
+				'access_rules' => $this->institution_rules( $inst_id ),
+			],
+			[ 'active' => false ]
+		);
+
+		wp_set_current_user( 0 );
+		$this->set_visitor_ip( '192.168.1.1' );
+		$this->reset_restriction_cache();
+
+		$this->assertTrue( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
+		$this->assertSame( $layouts['registration_layout_id'], Content_Restriction_Control::get_gate_layout_id( $this->post_ids[0] ) );
+
+		$this->reset_visitor_state();
+	}
+
+	/**
+	 * Institutions add a way past the wall and take nothing from readers who
+	 * registered. Under Paid Access, institutions wall these readers (NPPD-2310);
+	 * this pins that Registered Access doesn't.
+	 */
+	public function test_registration_institutions_never_narrow_access_for_logged_in_readers() {
+		$inst_id = $this->create_ip_institution();
+		$this->configure_published_gate(
+			[
+				'active'       => true,
+				'access_rules' => $this->institution_rules( $inst_id ),
+			],
+			[ 'active' => false ]
+		);
+
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'subscriber' ] ) );
+		$this->set_visitor_ip( '192.168.1.1' );
+		$this->reset_restriction_cache();
+
+		$this->assertFalse( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
+
+		$this->reset_visitor_state();
+	}
+
+	/**
+	 * Counting as registered is not counting as paying. The visitor gets past
+	 * the registration wall and meets paid access, like a registered reader
+	 * without a subscription would.
+	 */
+	public function test_registration_institutions_do_not_skip_paid_access() {
+		$inst_id = $this->create_ip_institution();
+		$layouts = $this->configure_published_gate(
+			[
+				'active'       => true,
+				'access_rules' => $this->institution_rules( $inst_id ),
+			],
+			[
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'email_domain',
+							'value' => 'paid.example',
+						],
+					],
+				],
+			]
+		);
+
+		wp_set_current_user( 0 );
+		$this->set_visitor_ip( '10.1.2.3' );
+		$this->reset_restriction_cache();
+
+		$this->assertTrue( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
+		$this->assertSame(
+			$layouts['custom_access_layout_id'],
+			Content_Restriction_Control::get_gate_layout_id( $this->post_ids[0] ),
+			'The visitor got past registration, so the wall they meet is the paid one.'
+		);
+
+		$this->reset_visitor_state();
+	}
+
+	/**
+	 * Institutions in paid access keep skipping both walls when registered
+	 * access names institutions of its own.
+	 */
+	public function test_paid_access_institutions_still_skip_both_walls() {
+		$paid_inst_id         = $this->create_ip_institution();
+		$registration_inst_id = Institution::create( 'Library', '', [ 'ip_range' => '172.16.0.0/12' ] );
+		$this->post_ids[]     = $registration_inst_id;
+		delete_transient( Institution::TRANSIENT_KEY );
+		$this->configure_published_gate(
+			[
+				'active'       => true,
+				'access_rules' => $this->institution_rules( $registration_inst_id ),
+			],
+			[
+				'active'       => true,
+				'access_rules' => $this->institution_rules( $paid_inst_id ),
+			]
+		);
+
+		wp_set_current_user( 0 );
+		$this->set_visitor_ip( '10.1.2.3' );
+		$this->reset_restriction_cache();
+
+		$this->assertFalse( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
+
+		$this->reset_visitor_state();
+	}
+
+	/**
+	 * A reader who signed in but hasn't verified still has to verify. The
+	 * institutions stand in for an account, not for verifying one.
+	 */
+	public function test_registration_institutions_do_not_skip_email_verification() {
+		$inst_id = $this->create_ip_institution();
+		$this->configure_published_gate(
+			[
+				'active'               => true,
+				'require_verification' => true,
+				'access_rules'         => $this->institution_rules( $inst_id ),
+			],
+			[ 'active' => false ]
+		);
+
+		$user_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		wp_set_current_user( $user_id );
+		$this->set_visitor_ip( '10.1.2.3' );
+		$this->reset_restriction_cache();
+
+		$this->assertTrue( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
+
+		wp_delete_user( $user_id );
+		$this->reset_visitor_state();
+	}
+
+	/**
+	 * The institutions belong to the registration wall, so a gate with
+	 * registered access off doesn't apply them.
+	 */
+	public function test_registration_institutions_do_nothing_while_registered_access_is_off() {
+		$inst_id = $this->create_ip_institution();
+		$layouts = $this->configure_published_gate(
+			[
+				'active'       => false,
+				'access_rules' => $this->institution_rules( $inst_id ),
+			],
+			[
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'email_domain',
+							'value' => 'paid.example',
+						],
+					],
+				],
+			]
+		);
+
+		wp_set_current_user( 0 );
+		$this->set_visitor_ip( '10.1.2.3' );
+		$this->reset_restriction_cache();
+
+		$this->assertTrue( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
+		$this->assertSame( $layouts['custom_access_layout_id'], Content_Restriction_Control::get_gate_layout_id( $this->post_ids[0] ) );
+
+		$this->reset_visitor_state();
+	}
+
+	/**
+	 * The stored rules come back in grouped format, and a gate saved before
+	 * the setting existed reads as naming none.
+	 */
+	public function test_registration_settings_carry_access_rules() {
+		$gate_id = $this->gate_ids[2];
+		$this->assertSame( [], Content_Gate::get_registration_settings( $gate_id )['access_rules'] );
+
+		Content_Gate::update_registration_settings(
+			$gate_id,
+			[
+				'access_rules' => [
+					[
+						'slug'  => 'institution',
+						'value' => [ 12 ],
+					],
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					[
+						'slug'  => 'institution',
+						'value' => [ 12 ],
+					],
+				],
+			],
+			Content_Gate::get_registration_settings( $gate_id )['access_rules']
+		);
 	}
 
 	/**
@@ -3600,5 +3869,139 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 
 		$this->assertStringContainsString( 'Unrelated post body', $rendered, 'An unrestricted post should render its own content' );
 		$this->assertStringNotContainsString( 'newspack-content-gate__inline-gate', $rendered, 'An unrestricted post must not be gated by what an aborted pass left behind' );
+	}
+
+	/**
+	 * A premium newsletter gate that has never had its list settings saved follows the
+	 * site's own sign-up setting and keeps the lists visible, which is how every gate
+	 * behaved before the settings existed.
+	 */
+	public function test_newsletter_gate_defaults_to_following_site_auto_signup() {
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'N' ], Content_Gate::GATE_CPT, true );
+		$this->assertNotWPError( $gate_id );
+
+		$gate = Content_Gate::get_gate( $gate_id );
+
+		$this->assertSame( 'default', $gate['auto_signup'] );
+		$this->assertFalse( $gate['hide_lists'] );
+	}
+
+	/**
+	 * Creating a newsletter gate with list settings stores them.
+	 */
+	public function test_create_newsletter_gate_persists_list_settings() {
+		$gate_id = Content_Gate::create_gate(
+			[
+				'title'       => 'N',
+				'auto_signup' => 'on',
+				'hide_lists'  => true,
+			],
+			Content_Gate::GATE_CPT,
+			true
+		);
+		$this->assertNotWPError( $gate_id );
+
+		$gate = Content_Gate::get_gate( $gate_id );
+
+		$this->assertSame( 'on', $gate['auto_signup'] );
+		$this->assertTrue( $gate['hide_lists'] );
+	}
+
+	/**
+	 * A save that does not name the list settings leaves them as they were, so renaming a
+	 * gate cannot quietly switch its sign-up behavior back to the default.
+	 */
+	public function test_update_newsletter_gate_without_list_settings_preserves_them() {
+		$gate_id = Content_Gate::create_gate(
+			[
+				'title'       => 'N',
+				'auto_signup' => 'on',
+				'hide_lists'  => true,
+			],
+			Content_Gate::GATE_CPT,
+			true
+		);
+
+		Content_Gate::update_gate_settings( $gate_id, [ 'title' => 'X' ] );
+		$gate = Content_Gate::get_gate( $gate_id );
+
+		$this->assertSame( 'X', $gate['title'] );
+		$this->assertSame( 'on', $gate['auto_signup'] );
+		$this->assertTrue( $gate['hide_lists'] );
+	}
+
+	/**
+	 * A value outside the three modes is ignored rather than stored, so a bad payload
+	 * cannot leave a gate in a mode nothing knows how to read.
+	 */
+	public function test_update_newsletter_gate_ignores_an_invalid_auto_signup() {
+		$gate_id = Content_Gate::create_gate(
+			[
+				'title'       => 'N',
+				'auto_signup' => 'off',
+			],
+			Content_Gate::GATE_CPT,
+			true
+		);
+
+		Content_Gate::update_gate_settings( $gate_id, [ 'auto_signup' => 'yes' ] );
+
+		$this->assertSame( 'off', Content_Gate::get_gate( $gate_id )['auto_signup'] );
+	}
+
+	/**
+	 * The list settings belong to premium newsletter gates only. A content gate neither
+	 * reports them nor stores them, even when a payload carries them.
+	 */
+	public function test_content_gate_ignores_list_settings() {
+		$gate_id = Content_Gate::create_gate(
+			[
+				'title'       => 'C',
+				'auto_signup' => 'on',
+				'hide_lists'  => true,
+			]
+		);
+		$this->assertNotWPError( $gate_id );
+
+		$gate = Content_Gate::get_gate( $gate_id );
+
+		$this->assertArrayNotHasKey( 'auto_signup', $gate );
+		$this->assertArrayNotHasKey( 'hide_lists', $gate );
+		$this->assertSame( '', get_post_meta( $gate_id, 'auto_signup', true ) );
+		$this->assertSame( '', get_post_meta( $gate_id, 'hide_lists', true ) );
+
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'auto_signup' => 'off',
+				'hide_lists'  => true,
+			]
+		);
+
+		$this->assertSame( '', get_post_meta( $gate_id, 'auto_signup', true ), 'An update does not store the settings on a content gate either' );
+		$this->assertSame( '', get_post_meta( $gate_id, 'hide_lists', true ) );
+	}
+
+	/**
+	 * A duplicated newsletter gate behaves like its source for sign-up and list visibility.
+	 */
+	public function test_duplicate_newsletter_gate_copies_list_settings() {
+		$source_id = Content_Gate::create_gate(
+			[
+				'title'       => 'N',
+				'auto_signup' => 'off',
+				'hide_lists'  => true,
+			],
+			Content_Gate::GATE_CPT,
+			true
+		);
+		$this->assertNotWPError( $source_id );
+
+		$copy_id = Content_Gate::duplicate_gate( $source_id );
+		$this->assertNotWPError( $copy_id );
+		$copy = Content_Gate::get_gate( $copy_id );
+
+		$this->assertSame( 'off', $copy['auto_signup'] );
+		$this->assertTrue( $copy['hide_lists'] );
 	}
 }

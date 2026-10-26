@@ -76,7 +76,7 @@ final class Reader_Data {
 
 		// is_donor is only read-only when the platform has a secure server-side
 		// mechanism to manage donor status. Currently only WooCommerce has this
-		// via the donation_new data event. Non-Woo platforms (NRH, other) rely
+		// via the donation_new data event. Non-Woo platforms (RevEngine, other) rely
 		// on client-side writes from the donor landing page.
 		//
 		// Note: when is_donor is NOT read-only, any authenticated reader can
@@ -119,9 +119,11 @@ final class Reader_Data {
 	}
 
 	/**
-	 * Add config to the data script.
+	 * The browser store's configuration.
+	 *
+	 * @return array
 	 */
-	public static function config_script() {
+	public static function get_config(): array {
 		/**
 		 * Filters the localStorage store item prefix.
 		 *
@@ -132,19 +134,24 @@ final class Reader_Data {
 			sprintf( 'np_reader_%d_', \get_current_blog_id() )
 		);
 
+		$is_switched_session = self::is_switched_session();
+
 		/**
 		 * Allows for "temporary" reader data for things like previews.
-		 * If true, the store will use sessionStorage instead of localStorage.
+		 * If true, the store will use sessionStorage instead of localStorage and
+		 * skip hydration, which is why a switched session has its own flag: it
+		 * must still hydrate the reader's stored data.
 		 */
 		$is_temporary = apply_filters( 'newspack_reader_data_store_is_temp_session', false );
 
 		$config = [
-			'store_prefix'    => $store_prefix,
-			'is_temporary'    => $is_temporary,
-			'reader_activity' => self::$reader_activity,
-			'read_only_keys'  => self::get_read_only_keys(),
-			'api_url'         => \get_rest_url( null, NEWSPACK_API_NAMESPACE . '/reader-data' ),
-			'session_url'     => \get_rest_url( null, NEWSPACK_API_NAMESPACE . '/reader/session' ),
+			'store_prefix'        => $store_prefix,
+			'is_temporary'        => (bool) $is_temporary,
+			'is_switched_session' => $is_switched_session,
+			'reader_activity'     => self::$reader_activity,
+			'read_only_keys'      => self::get_read_only_keys(),
+			'api_url'             => \get_rest_url( null, NEWSPACK_API_NAMESPACE . '/reader-data' ),
+			'session_url'         => \get_rest_url( null, NEWSPACK_API_NAMESPACE . '/reader/session' ),
 		];
 
 		if ( \is_user_logged_in() ) {
@@ -152,7 +159,14 @@ final class Reader_Data {
 			$config['items'] = self::get_data( \get_current_user_id() );
 		}
 
-		wp_localize_script( Reader_Activation::SCRIPT_HANDLE, 'newspack_reader_data', $config );
+		return $config;
+	}
+
+	/**
+	 * Add config to the data script.
+	 */
+	public static function config_script() {
+		wp_localize_script( Reader_Activation::SCRIPT_HANDLE, 'newspack_reader_data', self::get_config() );
 	}
 
 	/**
@@ -193,10 +207,34 @@ final class Reader_Data {
 	}
 
 	/**
-	 * Whether the current user can access the API.
+	 * Whether an admin is browsing as this reader through the User Switching
+	 * plugin. Such a session reads the reader's stored data but must never write
+	 * it: the browser it runs in carries the admin's own history and device, so
+	 * anything it computes describes the admin, not the reader.
+	 *
+	 * @return bool
 	 */
-	public static function permission_callback() {
-		return \is_user_logged_in();
+	public static function is_switched_session(): bool {
+		return function_exists( 'current_user_switched' ) && (bool) \current_user_switched();
+	}
+
+	/**
+	 * Whether the current user can write reader data through the API.
+	 *
+	 * @return bool|WP_Error
+	 */
+	public static function permission_callback(): bool|\WP_Error {
+		if ( ! \is_user_logged_in() ) {
+			return false;
+		}
+		if ( self::is_switched_session() ) {
+			return new \WP_Error(
+				'newspack_reader_data_switched_session',
+				__( 'Reader data cannot be changed while switched into this account.', 'newspack-plugin' ),
+				[ 'status' => 403 ]
+			);
+		}
+		return true;
 	}
 
 	/**
@@ -235,6 +273,23 @@ final class Reader_Data {
 		}
 
 		return $data;
+	}
+
+	/**
+	 * Whether the reader's boolean data item is true.
+	 *
+	 * Booleans are stored JSON-encoded, so a false comes back from get_data() as
+	 * the string "false", which PHP treats as true. This decodes it the way the
+	 * browser store does, so a flag reads the same on both sides.
+	 *
+	 * @param int    $user_id User ID.
+	 * @param string $key     Key.
+	 *
+	 * @return bool Whether the stored value decodes to a truthy value. False when the item was never set.
+	 */
+	public static function get_bool( int $user_id, string $key ): bool {
+		$value = self::get_data( $user_id, $key );
+		return is_string( $value ) && (bool) json_decode( $value );
 	}
 
 	/**
@@ -286,6 +341,20 @@ final class Reader_Data {
 			return null;
 		}
 		return array_values( array_map( 'strval', array_filter( $ids, 'is_scalar' ) ) );
+	}
+
+	/**
+	 * The product IDs of the reader's active non-donation subscriptions, or [].
+	 *
+	 * The list is stored JSON-encoded, so once the reader's last subscription
+	 * ends, get_data() returns the string "[]", which PHP treats as non-empty.
+	 *
+	 * @param int $user_id User ID.
+	 *
+	 * @return array Product IDs. Empty when the reader has none, or the item was never set.
+	 */
+	public static function get_active_subscriptions( int $user_id ): array {
+		return self::decode_item_list( self::get_data( $user_id, 'active_subscriptions' ) );
 	}
 
 	/**

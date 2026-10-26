@@ -22,6 +22,14 @@ Built packages are available in two places:
 
 Download the `.zip` file for the plugin or theme you want, then install it on your WordPress site via the WordPress admin interface (Plugins → Add New → Upload Plugin, or Appearance → Themes → Add New → Upload Theme).
 
+## Reporting Security Issues
+
+To disclose a security issue to our team, [please submit a report via HackerOne here](https://hackerone.com/automattic/).
+
+### Content gating
+
+Newspack's content gate controls access to content behind a login or paywall, not confidential content, so we don't treat it as a security boundary. Reports of gated content being accessed without meeting the gate's requirements, including through third-party plugins, are configuration or product issues rather than security issues.
+
 ## Getting started
 
 ### Clone this repository
@@ -53,6 +61,8 @@ You only need to run this the first time you set up your env.
 ```
 
 The default builds using PHP 8.3. You can also call `./build-image-82.sh` to build an image with PHP 8.2. It's a good idea to have both.
+
+The image is built for Apple Silicon (`linux/arm64`) by default. On an Intel Mac or an x86 Linux machine, add `NEWSPACK_DOCKER_PLATFORM=linux/amd64` to your `.env` file before building.
 
 ### Launch the container and install WordPress
 
@@ -114,7 +124,7 @@ n test-js # Runs js tests on the project you are currently in
 Run composer commands inside one of the projects
 
 ```BASH
-n composer dump-autoload # Runs `composer dump-autload` inside the current repo
+n composer dump-autoload # Runs `composer dump-autoload` inside the current repo
 n composer update # Runs `composer update` inside the current repo
 ```
 
@@ -140,11 +150,11 @@ n rsh # as root
 Other commands:
 
 * `n db`: Launches the MySQL interactive shell
-* `n wp`: runs any arbitraty WP CLI command. e.g. `n wp option get blogname`
+* `n wp`: runs any arbitrary WP CLI command. e.g. `n wp option get blogname`
 * `n tail`: Tails the apache error log file
 * `n uninstall`: Uninstalls WordPress
 * `jncp`, `jninit` & `secrets`: See Jurassic Ninja section below.
-* `n secrets-import`: Import all your secrets from a `secrets.json` file (see details on the Jurassic Ninha section below)
+* `n secrets-import`: Import all your secrets from a `secrets.json` file (see details on the Jurassic Ninja section below)
 * `n snapshot $name`: Creates a snapshot of the current site and gives it a name
 * `n snapshot-load $name`: Drops the current site and override it with the data from a snapshot
 * `n reset-site`: Drops the current site and creates a new one from scratch
@@ -473,7 +483,7 @@ If you need to run a couple of additional sites, we got you covered.
 
 You can have a number of additional sites running under `you-name-it.test`. They will live in their own local domain, such as `site1.test` and `another-site.test`.
 
-`n sites-add $site_name` will launch a new site. The site will come with Newpack already initialized and all the plugins linked. Your secrets will also be copied. It's basically the same result as running `n reset-site` for your main site.
+`n sites-add $site_name` will launch a new site. The site will come with Newspack already initialized and all the plugins linked. Your secrets will also be copied. It's basically the same result as running `n reset-site` for your main site.
 
 * `n sites-list` - Lists the current existing sites
 * `n sites-drop $sitename` - Will completely erase the site and its database

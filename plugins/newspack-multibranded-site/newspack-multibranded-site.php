@@ -2,7 +2,8 @@
 /**
  * Plugin Name: Newspack Multibranded Site
  * Description: Brand different content and sections of your site with unique colors and navigation.
- * Version: 2.4.6
+ * Version: 2.4.10
+ * Requires PHP: 8.1
  * Author: Automattic
  * Author URI: https://newspack.com/
  * License: GPLv2 or later
@@ -16,12 +17,12 @@
 defined( 'ABSPATH' ) || exit;
 
 // Define NEWSPACK_MULTIBRANDED_SITE_PLUGIN_DIR.
-if ( ! defined( 'NEWSPACK_MULTIBRANDED_SITE_PLUGIN_DIR' ) ) {
+if ( ! defined( 'NEWSPACK_MULTIBRANDED_SITE_PLUGIN_DIR' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal path constant, defined immediately below.
 	define( 'NEWSPACK_MULTIBRANDED_SITE_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 }
 
 // Define NEWSPACK_MULTIBRANDED_SITE_PLUGIN_FILE.
-if ( ! defined( 'NEWSPACK_MULTIBRANDED_SITE_PLUGIN_FILE' ) ) {
+if ( ! defined( 'NEWSPACK_MULTIBRANDED_SITE_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal path constant, defined immediately below.
 	define( 'NEWSPACK_MULTIBRANDED_SITE_PLUGIN_FILE', __FILE__ );
 }
 

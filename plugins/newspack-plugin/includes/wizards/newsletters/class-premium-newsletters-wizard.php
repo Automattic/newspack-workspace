@@ -57,7 +57,7 @@ class Premium_Newsletters_Wizard extends Wizard {
 	 * Constructor.
 	 */
 	public function __construct() {
-		if ( ! defined( 'NEWSPACK_NEWSLETTERS_PLUGIN_FILE' ) ) {
+		if ( ! defined( 'NEWSPACK_NEWSLETTERS_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Presence check for another Newspack plugin, not a configurable constant.
 			return;
 		}
 
@@ -322,8 +322,8 @@ class Premium_Newsletters_Wizard extends Wizard {
 		$config = [
 			'gates'  => Content_Gate::get_gates( Content_Gate::GATE_CPT, null, true ),
 			'config' => [
-				// Auto signup for restricted lists as soon as a user meets the access requirements. Defaults to true.
-				'auto_signup' => boolval( get_option( 'newspack_premium_newsletters_auto_signup', 1 ) ),
+				// Auto signup for restricted lists as soon as a user meets the access requirements.
+				'auto_signup' => Premium_Newsletters::is_site_auto_signup_on(),
 			],
 		];
 		return rest_ensure_response( $config );
@@ -338,7 +338,7 @@ class Premium_Newsletters_Wizard extends Wizard {
 	 */
 	public function update_config( $request ) {
 		$config = $request->get_param( 'config' );
-		$updated = update_option( 'newspack_premium_newsletters_auto_signup', ( (bool) $config['auto_signup'] ? 1 : 0 ), false );
+		$updated = update_option( Premium_Newsletters::AUTO_SIGNUP_OPTION, ( (bool) $config['auto_signup'] ? 1 : 0 ), false );
 		return rest_ensure_response( $updated );
 	}
 

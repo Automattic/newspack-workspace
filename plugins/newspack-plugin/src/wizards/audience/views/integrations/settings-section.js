@@ -14,26 +14,31 @@ import colors from '../../../../../packages/colors/colors.module.scss';
 import WizardsTab from '../../../wizards-tab';
 import WizardSection from '../../../wizards-section';
 import { EnableModal, getMissingRequiredFields } from './enable-modal';
+import { IntegrationGuide } from './guide';
+import { hasSettingsToShow } from './settings-field';
 
 /**
- * Icon configuration per integration ID.
- * Only ESP exists today. When new integrations are added (DSGNEWS-157),
- * this moves to the PHP API response.
+ * Fallback for integrations with no brand mark or icon of their own.
  */
-const INTEGRATION_ICONS = {
-	esp: {
-		node: <Icon icon={ envelope } />,
-		fill: colors[ 'primary-600' ],
-		backgroundColor: colors[ 'primary-000' ],
-		radius: 'full',
-	},
-};
-
 const DEFAULT_ICON = {
 	node: <Icon icon={ envelope } />,
 	fill: colors[ 'neutral-600' ],
 	backgroundColor: colors[ 'neutral-100' ],
 };
+
+const BRANDED_INTEGRATION_IDS = [ 'beehiiv', 'fundraiseup', 'salesforce' ];
+
+/**
+ * Integration IDs ordered by display name, so the grid reads alphabetically
+ * whatever order the integrations were registered in.
+ *
+ * @param {Record<string, {name?: string}>} integrations Integrations keyed by ID.
+ * @return {string[]} Sorted integration IDs.
+ */
+export const sortIntegrationIds = integrations =>
+	Object.keys( integrations ).sort( ( a, b ) =>
+		( integrations[ a ].name || a ).localeCompare( integrations[ b ].name || b, undefined, { sensitivity: 'base' } )
+	);
 
 const getMissingPlugins = integration => ( integration.required_plugins || [] ).filter( plugin => ! plugin.is_active );
 
@@ -47,18 +52,12 @@ export const SettingsSection = ( {
 	onSetupAndEnable,
 	history,
 } ) => {
-	const integrationIds = Object.keys( integrations );
+	const integrationIds = sortIntegrationIds( integrations );
 	const [ enablingId, setEnablingId ] = useState( null );
+	const [ guideId, setGuideId ] = useState( null );
 
 	return (
-		<WizardsTab
-			className="newspack-audience-integrations"
-			title={ __( 'Integrations', 'newspack-plugin' ) }
-			description={ __(
-				'Manage how Newspack syncs reader data with your tools. Connect an integration to start syncing reader activity across your stack.',
-				'newspack-plugin'
-			) }
-		>
+		<WizardsTab className="newspack-audience-integrations">
 			<WizardSection>
 				{ loading && <p>{ __( 'Loading…', 'newspack-plugin' ) }</p> }
 				{ ! loading && integrationIds.length === 0 && (
@@ -68,7 +67,7 @@ export const SettingsSection = ( {
 				) }
 				{ ! loading && integrationIds.length > 0 && (
 					<>
-						<Grid columns={ 2 }>
+						<Grid columns={ 2 } noMargin>
 							{ integrationIds.map( id => {
 								const integration = integrations[ id ];
 								const {
@@ -81,12 +80,19 @@ export const SettingsSection = ( {
 									name,
 									description,
 								} = integration;
-								const cardIcon =
-									provider && espProviderOrder.includes( provider ) ? (
-										<IntegrationIcon provider={ provider } />
-									) : (
-										INTEGRATION_ICONS[ id ] || DEFAULT_ICON
-									);
+								// The esp integration is Mailchimp-only, so its card always
+								// carries the Mailchimp mark — a stray provider value must not
+								// rebrand it.
+								let cardIcon = DEFAULT_ICON;
+								if ( id === 'esp' ) {
+									cardIcon = <IntegrationIcon provider="mailchimp" />;
+								} else if ( BRANDED_INTEGRATION_IDS.includes( id ) ) {
+									cardIcon = <IntegrationIcon provider={ id } />;
+								} else if ( id === 'gravity-forms' ) {
+									cardIcon = <IntegrationIcon provider="gravity_forms" />;
+								} else if ( provider && espProviderOrder.includes( provider ) ) {
+									cardIcon = <IntegrationIcon provider={ provider } />;
+								}
 								const missingPlugins = getMissingPlugins( integration );
 								const requiresInstallPlugins = missingPlugins.filter( plugin => ! plugin.is_installed );
 								// Only offer Activate when every missing plugin is at least installed;
@@ -135,7 +141,13 @@ export const SettingsSection = ( {
 											window.location.href = setup_url;
 										} );
 								};
-								const goToConfigure = () => history?.push( `/settings/${ id }` );
+								let onConfigure;
+								if ( needsConnection ) {
+									onConfigure = goToSetup;
+								} else if ( hasSettingsToShow( integration.settings ) ) {
+									onConfigure = () => history?.push( `/settings/${ id }` );
+								}
+								const hasGuide = Array.isArray( integration.guide ) && integration.guide.length > 0;
 								let enableLabel = __( 'Enable', 'newspack-plugin' );
 								let onEnable = () => {
 									if ( getMissingRequiredFields( integration ).length ) {
@@ -159,7 +171,7 @@ export const SettingsSection = ( {
 								}
 								return (
 									<CardFeature
-										headingLevel={ 3 }
+										headingLevel={ 2 }
 										key={ id }
 										title={ name }
 										description={ description }
@@ -170,10 +182,18 @@ export const SettingsSection = ( {
 										enableLabel={ enableLabel }
 										busy={ isActivating || !! toggling[ id ] }
 										onEnable={ onEnable }
-										onConfigure={ needsConnection ? goToSetup : goToConfigure }
+										onConfigure={ onConfigure }
 										moreControls={
 											isEnabled
 												? [
+														...( hasGuide
+															? [
+																	{
+																		title: __( 'How it works', 'newspack-plugin' ),
+																		onClick: () => setGuideId( id ),
+																	},
+															  ]
+															: [] ),
 														{
 															title: __( 'Logs', 'newspack-plugin' ),
 															onClick: () => history?.push( `/settings/${ id }/logs` ),
@@ -199,6 +219,9 @@ export const SettingsSection = ( {
 									history?.push( `/settings/${ enablingId }` );
 								} }
 							/>
+						) }
+						{ guideId && integrations[ guideId ] && (
+							<IntegrationGuide integration={ integrations[ guideId ] } onClose={ () => setGuideId( null ) } />
 						) }
 					</>
 				) }

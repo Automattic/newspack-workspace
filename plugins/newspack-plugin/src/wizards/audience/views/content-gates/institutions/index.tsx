@@ -6,7 +6,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { useState, useEffect, useCallback, useMemo, useRef } from '@wordpress/element';
+import { useState, useEffect, useCallback, useMemo } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
@@ -18,9 +18,9 @@ import { Button, Spinner } from '@wordpress/components';
  */
 import { DataViews, Router } from '../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
-import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from '../consts';
 import { INSTITUTION_RULE_SLUG, invalidateAccessRuleOptions } from '../../../../../content-gate/access-rule-option-sources';
 import InstitutionsOnboarding from './onboarding';
+import InstitutionsAdvancedSettings from './advanced-settings';
 
 const { useHistory } = Router;
 
@@ -47,32 +47,32 @@ const DEFAULT_VIEW: View = {
 
 export default function Institutions() {
 	const history = useHistory();
-	const { setHeaderData, addNotice, updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
+	const { setHeaderData, addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ data, setData ] = useState< Institution[] >( [] );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
-	// The last has_institutions value pushed to the gates screen, so a fetch
-	// that does not change it does not clone the whole wizard payload.
-	const lastHasInstitutions = useRef< boolean | undefined >( undefined );
+	const [ showAdvancedSettings, setShowAdvancedSettings ] = useState( false );
 
 	useEffect( () => {
-		const actions: HeaderAction[] = [
-			{
-				type: 'secondary',
-				label: __( 'Back to Access Control', 'newspack-plugin' ),
-				icon: 'chevronLeft',
-				href: '#/content-gates',
-			},
-		];
+		const actions: HeaderAction[] = [];
 		if ( data.length !== 0 ) {
 			actions.push( {
 				type: 'primary',
 				label: __( 'Add Institution', 'newspack-plugin' ),
 				href: '#/institutions/new',
 			} );
+			actions.push( {
+				type: 'more',
+				label: __( 'Advanced Settings', 'newspack-plugin' ),
+				action: () => setShowAdvancedSettings( true ),
+			} );
 		}
 		setHeaderData( {
 			actions,
+			subTitle: __(
+				'Give members of universities, libraries, and other organizations access by email domain, IP range, or reader data.',
+				'newspack-plugin'
+			),
 		} );
 	}, [ setHeaderData, data, isLoading ] );
 
@@ -87,20 +87,6 @@ export default function Institutions() {
 		apiFetch< Institution[] >( { path: `${ API_PATH }?per_page=-1&context=edit&_embed=wp:featuredmedia` } )
 			.then( institutions => {
 				setData( institutions );
-				// Keep the gates screen header in sync: it promotes the
-				// Institutions entry point out of the kebab menu when the site
-				// has at least one institution. Only write when the derived
-				// value actually changes, since UPDATE_WIZARD_SETTINGS clones
-				// the whole wizard payload and this runs on every list fetch.
-				const hasInstitutions = institutions.length > 0;
-				if ( hasInstitutions !== lastHasInstitutions.current ) {
-					lastHasInstitutions.current = hasInstitutions;
-					updateWizardSettings( {
-						slug: AUDIENCE_CONTENT_GATES_WIZARD_SLUG,
-						path: [ 'config', 'has_institutions' ],
-						value: hasInstitutions,
-					} );
-				}
 			} )
 			.catch( () => {
 				addNotice( {
@@ -110,7 +96,7 @@ export default function Institutions() {
 				} );
 			} )
 			.finally( () => setIsLoading( false ) );
-	}, [ addNotice, updateWizardSettings ] );
+	}, [ addNotice ] );
 
 	useEffect( () => {
 		fetchData();
@@ -292,18 +278,21 @@ export default function Institutions() {
 	}
 
 	return (
-		<DataViews
-			className="newspack-institutions"
-			data={ processedData }
-			fields={ fields }
-			view={ view }
-			onChangeView={ setView }
-			actions={ actions }
-			paginationInfo={ paginationInfo }
-			defaultLayouts={ { table: {}, grid: {} } }
-			isLoading={ isLoading }
-			getItemId={ ( item: Institution ) => String( item.id ) }
-			search
-		/>
+		<>
+			<DataViews
+				className="newspack-institutions"
+				data={ processedData }
+				fields={ fields }
+				view={ view }
+				onChangeView={ setView }
+				actions={ actions }
+				paginationInfo={ paginationInfo }
+				defaultLayouts={ { table: {}, grid: {} } }
+				isLoading={ isLoading }
+				getItemId={ ( item: Institution ) => String( item.id ) }
+				search
+			/>
+			{ showAdvancedSettings && <InstitutionsAdvancedSettings closeModal={ () => setShowAdvancedSettings( false ) } /> }
+		</>
 	);
 }

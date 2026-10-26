@@ -126,7 +126,7 @@ class Newspack_UI {
 			return;
 		}
 		?>
-		<div class="newspack-ui">
+		<div id="newspack-ui__notices" class="newspack-ui">
 			<div class="newspack-ui__snackbar">
 				<?php foreach ( self::$notices as $notice ) : ?>
 					<div
@@ -261,7 +261,7 @@ class Newspack_UI {
 			<div class="newspack-ui__modal newspack-ui__modal--<?php echo esc_attr( $args['size'] ); ?>">
 				<header class="newspack-ui__modal__header">
 					<?php if ( ! empty( $args['title'] ) ) : ?>
-						<h2 class="newspack-ui__font--l"><?php echo wp_kses_post( $args['title'] ); ?></h2>
+						<h2><?php echo wp_kses_post( $args['title'] ); ?></h2>
 					<?php endif; ?>
 					<button class="newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__modal__close">
 						<span class="screen-reader-text"><?php esc_html_e( 'Close', 'newspack-plugin' ); ?></span>
@@ -562,7 +562,6 @@ class Newspack_UI {
 			</template>
 			<script>
 				( function() {
-					const snackbar = document.querySelector( '.newspack-ui__snackbar' );
 					document.getElementById( 'show-snackbar-example' ).addEventListener( 'click', function() {
 						newspackUI.notices.createNotice( 'This is a snackbar message' );
 					} );
@@ -572,6 +571,7 @@ class Newspack_UI {
 					const template = document.getElementById( 'snackbar-persistent-template' );
 					document.getElementById( 'show-snackbar-persistent' ).addEventListener( 'click', function() {
 						const item = template.content.firstElementChild.cloneNode( true );
+						const snackbar = document.querySelector( '#newspack-ui__notices .newspack-ui__snackbar' ) || document.querySelector( '.newspack-ui__snackbar' );
 						snackbar.appendChild( item );
 						item.querySelectorAll( 'a, button' ).forEach( function( el ) {
 							el.addEventListener( 'click', function() {
@@ -773,6 +773,12 @@ class Newspack_UI {
 			<span class="newspack-ui__badge newspack-ui__badge--error">Badge</span><br>
 			<span class="newspack-ui__badge newspack-ui__badge--warning">Badge</span><br>
 
+			<h3>With a dot</h3>
+			<p>Add <code>newspack-ui__badge--dot</code> for a status dot, and <code>newspack-ui__badge--pulse</code> to animate it.</p>
+			<span class="newspack-ui__badge newspack-ui__badge--success newspack-ui__badge--dot newspack-ui__badge--pulse">Live</span><br>
+			<span class="newspack-ui__badge newspack-ui__badge--secondary newspack-ui__badge--dot">Paused</span><br>
+			<span class="newspack-ui__badge newspack-ui__badge--error newspack-ui__badge--dot">Ended</span><br>
+			<span class="newspack-ui__badge newspack-ui__badge--warning newspack-ui__badge--dot">Delayed</span><br>
 
 			<hr>
 

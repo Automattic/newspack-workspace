@@ -8,8 +8,8 @@
 import { __ } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { decodeEntities } from '@wordpress/html-entities';
-import { useMemo, useRef, useState } from '@wordpress/element';
-import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
+import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
@@ -18,7 +18,7 @@ import { Button, CardSortableList, Modal } from '../../../../../packages/compone
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { useWizardApiFetch } from '../../../hooks/use-wizard-api-fetch';
-import { getGateStatus, getGateStatusBadgeIntent } from './utils';
+import { getGateStatus, getGateStatusBadgeIntent, getPriorityWarningLabel, getPriorityWarnings } from './utils';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from './consts';
 
 const ContentGatesPriority = ( {
@@ -34,17 +34,27 @@ const ContentGatesPriority = ( {
 	const { wizardApiFetch, isFetching, resetError } = useWizardApiFetch( AUDIENCE_CONTENT_GATES_WIZARD_SLUG );
 	const { addNotice, resetNotices } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ sortedGates, setSortedGates ] = useState< Gate[] >( gates );
-	const gateItems = useMemo(
-		() =>
-			sortedGates.map( gate => ( {
-				id: gate.id,
-				title: gate.title,
-				badge: { label: getGateStatus( gate.status ), intent: getGateStatusBadgeIntent( gate.status ) },
-			} ) ),
-		[ sortedGates ]
-	);
+	// The modal stays mounted while closed, and card actions change gates in place, so
+	// each opening starts from the latest gates rather than the ones first rendered.
+	useEffect( () => {
+		if ( showModal ) {
+			setSortedGates( gates );
+		}
+	}, [ showModal ] ); // eslint-disable-line react-hooks/exhaustive-deps -- `gates` falls back to a fresh `[]` each render, which would re-seed in a loop.
+	const gateItems = useMemo( () => {
+		// Recomputed from the unsaved order, so a warning follows each drag.
+		const priorityWarnings = getPriorityWarnings( sortedGates );
+		return sortedGates.map( gate => ( {
+			id: gate.id,
+			title: gate.title,
+			secondaryBadge: priorityWarnings[ gate.id ]
+				? { label: getPriorityWarningLabel(), intent: 'low' as const, tooltip: priorityWarnings[ gate.id ] }
+				: undefined,
+			badge: { label: getGateStatus( gate.status ), intent: getGateStatusBadgeIntent( gate.status ) },
+		} ) );
+	}, [ sortedGates ] );
 
-	const updatePriorities = useRef< ( updates: Gate[] ) => void >();
+	const updatePriorities = useRef< ( updates: Gate[] ) => void >( undefined );
 	const handleUpdateGatePriorities = ( updates: Gate[] ) => {
 		if ( isFetching ) {
 			return;
@@ -108,16 +118,16 @@ const ContentGatesPriority = ( {
 
 	return (
 		showModal && (
-			<Modal title={ __( 'Gate Priority', 'newspack-plugin' ) } onRequestClose={ closeModal }>
-				<VStack spacing={ 6 }>
+			<Modal title={ __( 'Gate Priority', 'newspack-plugin' ) } size="large" onRequestClose={ closeModal }>
+				<Stack direction="column" gap="xl">
 					<span>
 						{ __(
-							'Gates are checked in this order. If content matches more than one gate, only the first matching gate will apply.',
+							'Gates are checked in this order. When content matches more than one gate, only the first matching gate decides who can read it.',
 							'newspack-plugin'
 						) }
 					</span>
 					<CardSortableList disabled={ isFetching } items={ gateItems } onDragCallback={ sortGates } />
-					<HStack justify="end">
+					<Stack direction="row" gap="sm" justify="end">
 						<Button variant="tertiary" disabled={ isFetching } onClick={ closeModal }>
 							{ __( 'Cancel', 'newspack-plugin' ) }
 						</Button>
@@ -129,8 +139,8 @@ const ContentGatesPriority = ( {
 						>
 							{ __( 'Save', 'newspack-plugin' ) }
 						</Button>
-					</HStack>
-				</VStack>
+					</Stack>
+				</Stack>
 			</Modal>
 		)
 	);

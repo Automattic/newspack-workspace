@@ -1,0 +1,114 @@
+- generic [active] [ref=f6e1]:
+  - link "Skip to content" [ref=f6e2] [cursor=pointer]:
+    - /url: "#wp--skip-link--target"
+  - generic [ref=f6e3]:
+    - banner [ref=f6e4]:
+      - generic [ref=f6e7]:
+        - button "Click this button! Button!" [ref=f6e8]:
+          - generic [ref=f6e9]:
+            - heading "Click this button!" [level=2] [ref=f6e10]
+            - generic [ref=f6e11]: Button!
+        - generic [ref=f6e15]:
+          - generic [ref=f6e16]:
+            - link [ref=f6e18] [cursor=pointer]:
+              - /url: https://blocktheme2.local/
+              - img "Block Theme" [ref=f6e19]
+            - generic [ref=f6e20]:
+              - generic [ref=f6e21]: Donate
+              - link "Sign in" [ref=f6e26] [cursor=pointer]:
+                - /url: "#"
+          - generic [ref=f6e31]:
+            - navigation "Navigation" [ref=f6e32]:
+              - list [ref=f6e33]:
+                - listitem [ref=f6e34]:
+                  - link "Block test" [ref=f6e35] [cursor=pointer]:
+                    - /url: https://blocktheme2.local/block-test/
+                - listitem [ref=f6e36]:
+                  - link "Gallery Block" [ref=f6e37] [cursor=pointer]:
+                    - /url: https://blocktheme2.local/gallery-block/
+            - button "Search" [ref=f6e40] [cursor=pointer]
+    - main [ref=f6e46]:
+      - generic [ref=f6e47]:
+        - generic [ref=f6e48]:
+          - link "Uncategorized" [ref=f6e50] [cursor=pointer]:
+            - /url: https://blocktheme2.local/category/uncategorized/
+          - heading "Comments button width test" [level=1] [ref=f6e51]
+        - paragraph
+        - time [ref=f6e56]: October 9, 2026
+      - generic [ref=f6e58]:
+        - paragraph [ref=f6e59]: Width tests below.
+        - button "25%" [ref=f6e63] [cursor=pointer]
+        - button "50% bordered" [ref=f6e71] [cursor=pointer]
+        - button "75%" [ref=f6e79] [cursor=pointer]
+        - button "100%" [ref=f6e87] [cursor=pointer]
+        - button "No width" [ref=f6e95] [cursor=pointer]
+      - generic [ref=f6e102]:
+        - generic [ref=f6e103]:
+          - separator [ref=f6e104]
+          - separator [ref=f6e105]
+        - button "Comments" [ref=f6e109] [cursor=pointer]
+    - contentinfo [ref=f6e114]:
+      - generic [ref=f6e119]:
+        - generic [ref=f6e120]:
+          - paragraph [ref=f6e121]:
+            - link "Block Theme" [ref=f6e122] [cursor=pointer]:
+              - /url: https://blocktheme2.local
+          - paragraph [ref=f6e124]: Our online newspaper delivers the latest news and insightful analysis. Our experienced journalists ensure accurate and impartial reporting. Stay informed with our engaging and informative articles.
+          - list [ref=f6e125]:
+            - listitem [ref=f6e126]:
+              - link "Facebook" [ref=f6e127] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=f6e131]:
+              - link "Instagram" [ref=f6e132] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=f6e136]:
+              - link "X" [ref=f6e137] [cursor=pointer]:
+                - /url: "#"
+          - navigation [ref=f6e141]:
+            - list [ref=f6e142]:
+              - listitem [ref=f6e143]:
+                - link "Block test" [ref=f6e144] [cursor=pointer]:
+                  - /url: https://blocktheme2.local/block-test/
+              - listitem [ref=f6e145]:
+                - link "Gallery Block" [ref=f6e146] [cursor=pointer]:
+                  - /url: https://blocktheme2.local/gallery-block/
+        - generic [ref=f6e147]:
+          - separator [ref=f6e148]
+          - generic [ref=f6e149]:
+            - generic [ref=f6e150]:
+              - generic [ref=f6e151]: © 2026
+              - heading [level=1] [ref=f6e152]:
+                - link "Block Theme" [ref=f6e153] [cursor=pointer]:
+                  - /url: https://blocktheme2.local
+            - paragraph [ref=f6e154]:
+              - link "Powered by Newspack" [ref=f6e155] [cursor=pointer]:
+                - /url: https://newspack.com
+      - text: ×
+  - button "An awesome overlay campaign!! Button Close Pop-up" [ref=f6e156]:
+    - generic [ref=f6e158]:
+      - generic [ref=f6e159]:
+        - generic [ref=f6e160]:
+          - paragraph [ref=f6e161]: An awesome overlay campaign!!
+          - generic [ref=f6e162]: Button
+        - paragraph
+      - button "Close Pop-up" [ref=f6e165] [cursor=pointer]
+  - dialog [aria-hidden] [ref=f6e169]:
+    - button [ref=f6e171] [cursor=pointer]:
+      - generic [ref=f6e175]: Close
+    - navigation [ref=f6e178]:
+      - list [ref=f6e179]:
+        - listitem [ref=f6e180]:
+          - link [ref=f6e181] [cursor=pointer]:
+            - /url: https://blocktheme2.local/block-test/
+            - text: Block test
+        - listitem [ref=f6e182]:
+          - link [ref=f6e183] [cursor=pointer]:
+            - /url: https://blocktheme2.local/gallery-block/
+            - text: Gallery Block
+  - dialog [aria-hidden] [ref=f6e184]:
+    - button [ref=f6e186] [cursor=pointer]:
+      - generic [ref=f6e190]: Close Comments
+  - generic:
+    - status [ref=f6e192]
+    - alert [ref=f6e193]
+  - status [ref=f6e194]

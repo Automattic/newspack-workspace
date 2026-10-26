@@ -130,9 +130,21 @@ class Content_Distribution {
 				continue;
 			}
 			if ( is_array( $post_data_keys ) ) {
-				self::distribute_post_partial( $post, array_unique( $post_data_keys ) );
+				$result = self::distribute_post_partial( $post, array_unique( $post_data_keys ) );
 			} else {
-				self::distribute_post( $post );
+				$result = self::distribute_post( $post );
+			}
+
+			// A cancelled dispatch retries on the post's next save, since no payload
+			// hash was stored. Nothing else reports it, so leave a trace here.
+			if ( is_wp_error( $result ) ) {
+				Outgoing_Post::log(
+					'Distribution was not dispatched: ' . $result->get_error_message(),
+					[
+						'post_id' => $post->ID,
+						'code'    => $result->get_error_code(),
+					]
+				);
 			}
 		}
 		self::$queued_distributions = [];
@@ -491,7 +503,7 @@ class Content_Distribution {
 	 * @param WP_Post|Outgoing_Post|int $post              The post object or ID.
 	 * @param string                    $status_on_publish The post status on publish. Default is draft.
 	 *
-	 * @return void
+	 * @return void|WP_Error The error if the dispatch failed.
 	 */
 	public static function distribute_post( $post, $status_on_publish = 'draft' ) {
 		if ( ! class_exists( 'Newspack\Data_Events' ) ) {
@@ -510,7 +522,16 @@ class Content_Distribution {
 			if ( get_post_meta( $post->ID, self::PAYLOAD_HASH_META, true ) === $payload_hash ) {
 				return;
 			}
-			Data_Events::dispatch( 'network_post_updated', $payload );
+			$dispatched = Data_Events::dispatch( 'network_post_updated', $payload );
+
+			// The stored hash is the record of what the receiving site has, so it can
+			// only be written once the update is actually on its way. Storing it after
+			// a failed dispatch marks the post as delivered and every later save then
+			// short-circuits on the matching hash, leaving the post silently stale.
+			if ( is_wp_error( $dispatched ) ) {
+				return $dispatched;
+			}
+
 			// Store payload hash to prevent unnecessary updates.
 			update_post_meta( $post->ID, self::PAYLOAD_HASH_META, $payload_hash );
 		}
@@ -522,7 +543,7 @@ class Content_Distribution {
 	 * @param WP_Post|Outgoing_Post|int $post           The post object or ID.
 	 * @param string[]                  $post_data_keys The post data keys to update.
 	 *
-	 * @return void|WP_Error The error if the payload is invalid.
+	 * @return void|WP_Error The error if the payload is invalid or the dispatch failed.
 	 */
 	public static function distribute_post_partial( $post, $post_data_keys ) {
 		if ( ! class_exists( 'Newspack\Data_Events' ) ) {
@@ -537,17 +558,27 @@ class Content_Distribution {
 			$distributed_post = self::get_distributed_post( $post );
 		}
 		if ( $distributed_post ) {
-			$payload_hash = $distributed_post->get_payload_hash();
+			// The hash covers the whole payload, and the partial is a slice of that
+			// same payload, so build it once and use it for both.
+			$full_payload = $distributed_post->get_payload();
+			$payload_hash = $distributed_post->get_payload_hash( $full_payload );
 			$post         = $distributed_post->get_post();
 			// Skip if the payload hash is the same.
 			if ( get_post_meta( $post->ID, self::PAYLOAD_HASH_META, true ) === $payload_hash ) {
 				return;
 			}
-			$payload = $distributed_post->get_partial_payload( $post_data_keys );
+			$payload = $distributed_post->get_partial_payload( $post_data_keys, $full_payload );
 			if ( is_wp_error( $payload ) ) {
 				return $payload;
 			}
-			Data_Events::dispatch( 'network_post_updated', $payload );
+			$dispatched = Data_Events::dispatch( 'network_post_updated', $payload );
+
+			// See distribute_post(): the hash records what was delivered, so a failed
+			// dispatch must leave it alone.
+			if ( is_wp_error( $dispatched ) ) {
+				return $dispatched;
+			}
+
 			// Store payload hash to prevent unnecessary updates.
 			update_post_meta( $post->ID, self::PAYLOAD_HASH_META, $payload_hash );
 		}

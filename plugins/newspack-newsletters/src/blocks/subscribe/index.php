@@ -155,39 +155,231 @@ function render_honeypot_field( $placeholder = '' ) {
 }
 
 /**
+ * Whether the block uses the Legacy style.
+ *
+ * @param array $attrs Block attributes.
+ *
+ * @return bool
+ */
+function is_legacy_style( $attrs ) {
+	return ! empty( $attrs['className'] ) && (bool) preg_match( '/(^|\s)is-style-legacy(\s|$)/', (string) $attrs['className'] );
+}
+
+/**
+ * Print the marker that labels a list as premium.
+ *
+ * Every premium list gets it, for readers with and without access, so the two
+ * kinds of list can be told apart. An empty label hides it. Each premium row
+ * prints it twice, by the title and by the checkbox: Modern Grid shows the
+ * second copy and the other styles show the first. Legacy, whose type comes from
+ * the theme, gets the label as plain text after the title instead.
+ *
+ * @param array $attrs      Block attributes.
+ * @param bool  $decorative Whether this copy repeats a badge screen readers already announce.
+ */
+function render_premium_badge( $attrs, $decorative = false ) {
+	$label = isset( $attrs['showPremiumLabel'] ) ? trim( (string) $attrs['showPremiumLabel'] ) : '';
+	if ( '' === $label ) {
+		return;
+	}
+	if ( is_legacy_style( $attrs ) ) {
+		if ( ! $decorative ) {
+			/* translators: %s: label marking a premium list, such as "Premium". */
+			echo ' <span class="list-premium-label">' . \esc_html( sprintf( __( '(%s)', 'newspack-newsletters' ), $label ) ) . '</span>';
+		}
+		return;
+	}
+	?>
+	<span class="newspack-ui__badge newspack-ui__badge--secondary"<?php echo $decorative ? ' aria-hidden="true"' : ''; ?>><?php echo \esc_html( $label ); ?></span>
+	<?php
+}
+
+/**
+ * Render a list the reader can see but can't sign up for.
+ *
+ * The row's checkbox is disabled and has no name or value, so nothing in the
+ * markup can be submitted and the list's ID is never printed.
+ *
+ * @param array  $list        List configuration, as in the lists config.
+ * @param array  $attrs       Block attributes.
+ * @param string $checkbox_id ID for the row's checkbox. Must not contain the list's ID.
+ */
+function render_gated_list_item( $list, $attrs, $checkbox_id ) {
+	?>
+	<li class="is-gated">
+		<span class="list-checkbox">
+			<?php render_premium_badge( $attrs, true ); ?>
+			<input type="checkbox" id="<?php echo \esc_attr( $checkbox_id ); ?>" disabled />
+		</span>
+		<span class="list-details">
+			<label class="list-label" for="<?php echo \esc_attr( $checkbox_id ); ?>">
+				<span class="list-title">
+					<?php echo \esc_html( $list['title'] ); ?>
+					<?php render_premium_badge( $attrs ); ?>
+				</span>
+				<?php if ( $attrs['displayDescription'] ) : ?>
+					<span class="list-description"><?php echo nl2br( \esc_html( $list['description'] ) ); ?></span>
+				<?php endif; ?>
+			</label>
+		</span>
+	</li>
+	<?php
+}
+
+/**
+ * Work out which of the block's lists to render for the current reader.
+ *
+ * @param array $attrs Block attributes.
+ *
+ * @return array|null {
+ *     Null when the block has nothing to render.
+ *
+ *     @type array[]  $config     The lists config from get_lists_config(), keyed by public ID.
+ *     @type string[] $accessible Public IDs of the block's lists the reader can sign up for.
+ *     @type array[]  $gated      The block's lists the reader may see but not join, keyed by public ID.
+ *     @type string[] $order      Public IDs in the order their rows render.
+ *     @type bool[]   $premium    True for each list an access gate restricts, whether or not this reader gets past it, keyed by public ID.
+ * }
+ */
+function get_block_lists( $attrs ) {
+	$list_config = \Newspack_Newsletters_Subscription::get_lists_config();
+	if ( \is_wp_error( $list_config ) ) {
+		return null;
+	}
+	$show_premium = ! empty( $attrs['showPremium'] );
+	if ( empty( $list_config ) && ! $show_premium ) {
+		return null;
+	}
+	$accessible = array_values( array_intersect( $attrs['lists'], array_keys( $list_config ) ) );
+	$offered    = $accessible;
+
+	if ( ! empty( $list_config ) ) {
+		/**
+		 * Filters the lists that are about to be displayed in the Subscription block
+		 *
+		 * Removing a list here tells the block the reader can't join it. With
+		 * `showPremium` on, a removed list that is gated (see
+		 * `newspack_newsletters_subscription_list_gates`) shows as a premium row the
+		 * reader can see but not join.
+		 *
+		 * @param array $available_lists The lists that are about to be displayed.
+		 * @param array $attrs           Block attributes.
+		 */
+		$accessible = apply_filters( 'newspack_newsletters_subscription_block_available_lists', $accessible, $attrs );
+	}
+
+	// A list is premium when an access gate restricts it, whether or not this
+	// reader gets past the gate. The gate map says which lists those are, and an
+	// entry counts only when it holds at least one gate, as in the editor.
+	$premium = [];
+	foreach ( \Newspack_Newsletters_Blocks::get_list_gates() as $premium_id => $list_gates ) {
+		if ( is_array( $list_gates ) && ! empty( $list_gates ) ) {
+			$premium[ $premium_id ] = true;
+		}
+	}
+
+	// The gated lists are the premium ones the reader can't join. Access Control
+	// withholds those from the filtered config, so they are the premium lists the
+	// unfiltered read has and the filtered one lacks. Woo Memberships leaves them
+	// in the config and removes them from the block's available lists instead,
+	// except when its "Hide completely" mode drops a list a rule names directly
+	// (see Woocommerce_Memberships::filter_list_gates()). With either plugin the
+	// access check stays the only judge. A list no gate reports stays hidden,
+	// whatever removed it: showing its title here would undo that.
+	$gated = [];
+	if ( $show_premium ) {
+		$all_lists = \Newspack_Newsletters_Subscription::get_unfiltered_lists_config();
+		$hidden    = \is_wp_error( $all_lists ) ? [] : array_diff_key( $all_lists, $list_config );
+		$removed   = array_diff( array_map( 'strval', $offered ), array_map( 'strval', $accessible ) );
+		foreach ( $attrs['lists'] as $list_id ) {
+			if ( ! isset( $premium[ $list_id ] ) ) {
+				continue;
+			}
+			if ( isset( $hidden[ $list_id ] ) ) {
+				$gated[ $list_id ] = $hidden[ $list_id ];
+			} elseif ( in_array( (string) $list_id, $removed, true ) ) {
+				$gated[ $list_id ] = $list_config[ $list_id ];
+			}
+		}
+	}
+
+	if ( empty( $accessible ) && empty( $gated ) ) {
+		return null;
+	}
+
+	$order = $accessible;
+	if ( ! empty( $gated ) ) {
+		$accessible_ids = array_map( 'strval', $accessible );
+		$order          = array_values(
+			array_filter(
+				$attrs['lists'],
+				function ( $list_id ) use ( $accessible_ids, $gated ) {
+					return in_array( (string) $list_id, $accessible_ids, true ) || isset( $gated[ $list_id ] );
+				}
+			)
+		);
+		// A callback on the filter above can add a list the attribute doesn't name.
+		// The rows follow the attribute, so without this that list would render with
+		// showPremium off and vanish with it on.
+		$ordered_ids = array_map( 'strval', $order );
+		foreach ( $accessible as $list_id ) {
+			if ( ! in_array( (string) $list_id, $ordered_ids, true ) ) {
+				$order[]       = $list_id;
+				$ordered_ids[] = (string) $list_id;
+			}
+		}
+	}
+
+	return [
+		'config'     => $list_config,
+		'accessible' => $accessible,
+		'gated'      => $gated,
+		'order'      => $order,
+		'premium'    => $premium,
+	];
+}
+
+/**
  * Render Registration Block.
  *
  * @param array[] $attrs Block attributes.
  */
 function render_block( $attrs ) {
-	$list_config = \Newspack_Newsletters_Subscription::get_lists_config();
-	if ( empty( $list_config ) || \is_wp_error( $list_config ) ) {
+	$lists = get_block_lists( $attrs );
+	if ( null === $lists ) {
 		return;
 	}
+
+	// Enqueue scripts.
+	enqueue_scripts();
+
+	return render_form( $attrs, $lists );
+}
+
+/**
+ * Render the block's markup.
+ *
+ * Separate from render_block() so the markup can be tested without the built
+ * assets that enqueue_scripts() reads.
+ *
+ * @param array $attrs Block attributes.
+ * @param array $lists The block's lists, from get_block_lists().
+ *
+ * @return string
+ */
+function render_form( $attrs, $lists ) {
+	$list_config     = $lists['config'];
+	$available_lists = $lists['accessible'];
 	$block_id        = \wp_rand( 0, 99999 );
 	$subscribed      = false;
 	$message         = '';
 	$email           = '';
-	$lists           = array_keys( $list_config );
-	$list_map        = array_flip( $lists );
-	$available_lists = array_values( array_intersect( $attrs['lists'], $lists ) );
-
-	/**
-	 * Filters the lists that are about to be displayed in the Subscription block
-	 *
-	 * @param array $available_lists The lists that are about to be displayed.
-	 * @param array $attrs           Block attributes.
-	 */
-	$available_lists = apply_filters( 'newspack_newsletters_subscription_block_available_lists', $available_lists, $attrs );
-
-	if ( empty( $available_lists ) ) {
-		return;
-	}
+	$list_map        = array_flip( array_keys( $list_config ) );
+	$gated_lists     = $lists['gated'];
+	$premium_lists   = $lists['premium'] ?? [];
+	$show_list_ui    = 1 < count( $available_lists ) || ! empty( $gated_lists );
 
 	$provider = \Newspack_Newsletters::get_service_provider();
-
-	// Enqueue scripts.
-	enqueue_scripts();
 
 	if ( \is_user_logged_in() ) {
 		$email = \wp_get_current_user()->user_email;
@@ -248,7 +440,19 @@ function render_block( $attrs ) {
 		<?php endif; ?>
 		<?php echo $subscribed ? 'data-status="200"' : ''; ?>
 	>
-		<?php if ( ! $subscribed ) : ?>
+		<?php if ( ! $subscribed && empty( $available_lists ) ) : ?>
+			<?php // Nothing here can be signed up for, so there is no form. view.js skips a block without one. ?>
+			<div class="newspack-newsletters-lists">
+				<ul>
+					<?php
+					$gated_index = 0;
+					foreach ( $gated_lists as $gated_list ) {
+						render_gated_list_item( $gated_list, $attrs, sprintf( 'newspack-newsletters-%s-gated-list-%d', $block_id, $gated_index++ ) );
+					}
+					?>
+				</ul>
+			</div>
+		<?php elseif ( ! $subscribed ) : ?>
 			<form id="<?php echo esc_attr( get_form_id() ); ?>" data-newspack-recaptcha="newspack_newsletter_signup">
 				<input type="hidden" name="<?php echo esc_attr( FORM_ACTION ); ?>" value="1" />
 				<?php
@@ -259,11 +463,16 @@ function render_block( $attrs ) {
 				 */
 				do_action( 'newspack_newsletters_subscribe_block_before_form_fields', $attrs );
 				?>
-				<?php if ( 1 < count( $available_lists ) ) : ?>
+				<?php if ( $show_list_ui ) : ?>
 					<div class="newspack-newsletters-lists">
 						<ul>
 						<?php
-						foreach ( $available_lists as $list_id ) :
+						$gated_index = 0;
+						foreach ( $lists['order'] as $list_id ) :
+							if ( isset( $gated_lists[ $list_id ] ) ) {
+								render_gated_list_item( $gated_lists[ $list_id ], $attrs, sprintf( 'newspack-newsletters-%s-gated-list-%d', $block_id, $gated_index++ ) );
+								continue;
+							}
 							if ( ! isset( $list_config[ $list_id ] ) ) {
 								continue;
 							}
@@ -272,6 +481,11 @@ function render_block( $attrs ) {
 							?>
 							<li>
 								<span class="list-checkbox">
+									<?php
+									if ( isset( $premium_lists[ $list_id ] ) ) {
+										render_premium_badge( $attrs, true );
+									}
+									?>
 									<input
 										type="checkbox"
 										name="lists[]"
@@ -284,7 +498,14 @@ function render_block( $attrs ) {
 								</span>
 								<span class="list-details">
 									<label for="<?php echo \esc_attr( $checkbox_id ); ?>">
-										<span class="list-title"><?php echo \esc_html( $list['title'] ); ?></span>
+										<span class="list-title">
+											<?php echo \esc_html( $list['title'] ); ?>
+											<?php
+											if ( isset( $premium_lists[ $list_id ] ) ) {
+												render_premium_badge( $attrs );
+											}
+											?>
+										</span>
 										<?php if ( $attrs['displayDescription'] ) : ?>
 											<span class="list-description"><?php echo nl2br( \esc_html( $list['description'] ) ); ?></span>
 										<?php endif; ?>
@@ -377,6 +598,10 @@ function get_block_classes( $attrs = [] ) {
 	}
 	if ( 1 < count( $attrs['lists'] ) ) {
 		$classes[] = 'multiple-lists';
+	}
+	// The lists sit before the email field unless the block asks otherwise.
+	if ( 'after' === ( $attrs['listsPosition'] ?? 'before' ) ) {
+		$classes[] = 'has-lists-after';
 	}
 	return implode( ' ', $classes );
 }

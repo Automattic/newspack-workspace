@@ -3,8 +3,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { CheckboxControl, ExternalLink, RangeControl } from '@wordpress/components';
-import apiFetch from '@wordpress/api-fetch';
+import { ExternalLink, RangeControl } from '@wordpress/components';
 import { useEffect, useState } from '@wordpress/element';
 
 /**
@@ -25,8 +24,6 @@ import {
 } from '../../../../../packages/components/src';
 import WizardsTab from '../../../wizards-tab';
 import Prerequisite from '../../components/prerequisite';
-import Settings from '../../components/settings';
-import MetadataFields from '../../components/metadata-fields';
 import { HANDOFF_KEY } from '../../../../../packages/components/src/consts';
 import SortableNewsletterListControl from '../../../../../packages/components/src/sortable-newsletter-list-control';
 import Salesforce from '../../components/salesforce';
@@ -40,7 +37,6 @@ export default withWizardScreen(
 		saveConfig,
 		prerequisites,
 		requiredPlugins,
-		espSyncErrors,
 		error,
 		inFlight,
 		platform,
@@ -49,7 +45,6 @@ export default withWizardScreen(
 	} ) => {
 		const [ allReady, setAllReady ] = useState( false );
 		const [ missingPlugins, setMissingPlugins ] = useState( [] );
-		const [ esp, setEsp ] = useState( '' );
 
 		// Verification gets force-enabled (toggle disabled, value pinned ON) when any
 		// published content gate uses Registered Access + Require Verification. The
@@ -61,17 +56,6 @@ export default withWizardScreen(
 			window.scrollTo( 0, 0 );
 			// Clear the handoff when the component mounts.
 			window.localStorage.removeItem( HANDOFF_KEY );
-		}, [] );
-
-		useEffect( () => {
-			apiFetch( {
-				path: '/newspack/v1/wizard/newspack-newsletters/settings',
-			} )
-				.then( data => {
-					setEsp( data?.settings?.newspack_newsletters_service_provider?.value ?? '' );
-				} )
-				// Newspack Newsletters may not be installed, in which case the endpoint 404s.
-				.catch( () => setEsp( '' ) );
 		}, [] );
 
 		useEffect( () => {
@@ -260,110 +244,12 @@ export default withWizardScreen(
 									help={ __( 'The text to display while subscribing to newsletters from the sign-in modal.', 'newspack-plugin' ) }
 									{ ...getSharedProps( 'newsletters_label', 'text' ) }
 								/>
-								{ ! newspackAudience.integrations_settings_enabled && (
-									<ActionCard
-										description={ __( 'Configure options for syncing reader data to the connected ESP.', 'newspack-plugin' ) }
-										hasGreyHeader={ config.sync_esp }
-										isMedium
-										title={ __( 'Sync contacts to ESP', 'newspack-plugin' ) }
-										toggleChecked={ config.sync_esp }
-										toggleOnChange={ value => updateConfig( 'sync_esp', value ) }
-									>
-										{ config.sync_esp && (
-											<>
-												{ 0 < Object.keys( espSyncErrors ).length && (
-													<Notice noticeText={ Object.values( espSyncErrors ).join( ' ' ) } isError />
-												) }
-												{ esp === 'mailchimp' && (
-													<Settings
-														title={ 'Mailchimp' }
-														value={ {
-															audienceId: config.mailchimp_audience_id,
-															readerDefaultStatus: config.mailchimp_reader_default_status,
-														} }
-														onChange={ ( key, value ) => {
-															if ( key === 'audienceId' ) {
-																updateConfig( 'mailchimp_audience_id', value );
-															}
-															if ( key === 'readerDefaultStatus' ) {
-																updateConfig( 'mailchimp_reader_default_status', value );
-															}
-														} }
-													/>
-												) }
-												{ esp === 'active_campaign' && (
-													<Settings
-														title={ 'ActiveCampaign' }
-														value={ {
-															masterList: config.active_campaign_master_list,
-														} }
-														onChange={ ( key, value ) => {
-															if ( key === 'masterList' ) {
-																updateConfig( 'active_campaign_master_list', value );
-															}
-														} }
-													/>
-												) }
-												{ esp === 'constant_contact' && (
-													<Settings
-														title={ 'Constant Contact' }
-														value={ { masterList: config.constant_contact_list_id } }
-														onChange={ ( key, value ) => {
-															if ( key === 'masterList' ) {
-																updateConfig( 'constant_contact_list_id', value );
-															}
-														} }
-													/>
-												) }
-
-												<SectionHeader
-													title={ __( 'Sync user account deletion', 'newspack-plugin' ) }
-													description={ __(
-														'If enabled, the contact will be deleted from the ESP when a user account is deleted. If disabled, the contact will be unsubscribed from all lists, but not deleted.',
-														'newspack-plugin'
-													) }
-												/>
-												<CheckboxControl
-													label={ __( 'Sync user account deletion', 'newspack-plugin' ) }
-													checked={ config.sync_esp_delete }
-													onChange={ value => updateConfig( 'sync_esp_delete', value ) }
-												/>
-												<MetadataFields
-													availableFields={ newspackAudience.esp_metadata_fields || [] }
-													selectedFields={ config.metadata_fields }
-													updateConfig={ updateConfig }
-													getSharedProps={ getSharedProps }
-												/>
-											</>
-										) }
-									</ActionCard>
-								) }
 							</>
 						) }
 						<div className="newspack-buttons-card">
 							<Button
 								isPrimary
 								onClick={ () => {
-									// When the Integrations settings area is enabled, ESP sync configuration
-									// lives there — skip the validation here so users can't get stuck on an
-									// alert for a section they can no longer see.
-									if ( ! newspackAudience.integrations_settings_enabled && config.sync_esp ) {
-										if ( esp === 'mailchimp' && config.mailchimp_audience_id === '' ) {
-											// eslint-disable-next-line no-alert
-											alert( __( 'Please select a Mailchimp Audience ID.', 'newspack-plugin' ) );
-											return;
-										}
-										if ( esp === 'active_campaign' && config.active_campaign_master_list === '' ) {
-											// eslint-disable-next-line no-alert
-											alert( __( 'Please select an ActiveCampaign Master List.', 'newspack-plugin' ) );
-											return;
-										}
-										if ( esp === 'constant_contact' && config.constant_contact_list_id === '' ) {
-											// eslint-disable-next-line no-alert
-											alert( __( 'Please select a Constant Contact Master List.', 'newspack-plugin' ) );
-											return;
-										}
-									}
 									saveConfig( {
 										newsletters_label: config.newsletters_label, // TODO: Deprecate this in favor of user input via the prompt copy wizard.
 										mailchimp_audience_id: config.mailchimp_audience_id,

@@ -173,6 +173,11 @@ class WP_REST_Newspack_Author_List_Controller extends WP_REST_Newspack_Authors_C
 		];
 		$options         = wp_parse_args( $options, $default_options );
 		$fields          = $options['fields'];
+
+		// Only the component's own author roles can be listed. A caller-chosen role outside them
+		// is dropped, and when nothing usable remains the user query is skipped below rather than
+		// run without a role filter, which would match every user on the site.
+		$options['author_roles'] = array_values( array_intersect( (array) $options['author_roles'], Newspack_Blocks\get_authors_roles_slugs() ) );
 		$current_page    = 1;
 
 		// Array to store all authors.
@@ -219,7 +224,7 @@ class WP_REST_Newspack_Author_List_Controller extends WP_REST_Newspack_Authors_C
 			}
 		}
 
-		if ( in_array( $options['author_type'], [ 'all', 'users' ], true ) ) {
+		if ( ! empty( $options['author_roles'] ) && in_array( $options['author_type'], [ 'all', 'users' ], true ) ) {
 			// Reset current page for new query.
 			$current_page         = 1;
 			$exclude_empty        = $options['exclude_empty'] ? true : false;

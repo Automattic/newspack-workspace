@@ -20,7 +20,7 @@ class CoAuthors_Guest_Authors { // phpcs:ignore
 			case 'id':
 				$authors = get_posts(
 					[
-						'post_type'   => 'author',
+						'post_type'   => [ 'author', 'guest-author' ],
 						'numberposts' => 1,
 						'include'     => [ $value ],
 					]
@@ -28,6 +28,7 @@ class CoAuthors_Guest_Authors { // phpcs:ignore
 				if ( ! empty( $authors ) ) {
 					$author                = $authors[0];
 					$author->user_nicename = $author->post_title;
+					$author->display_name  = $author->post_title;
 				}
 				break;
 		}

@@ -8,6 +8,7 @@ import { useEffect, useState, Fragment } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import find from 'lodash/find';
 import { applyFilters, addFilter } from '@wordpress/hooks';
+import { addQueryArgs } from '@wordpress/url';
 
 /**
  * Internal dependencies.
@@ -358,7 +359,9 @@ addFilter( 'newspack.criteria.input', 'newspack.newsletterSubscribedLists', func
 		return (
 			<ListsControl
 				placeholder={ __( 'Start typing to search for lists…', 'newspack-plugin' ) }
-				path="/newspack-newsletters/v1/lists_config"
+				// `context=edit` skips the reader-facing filter that drops hidden lists,
+				// so a segment can still target (and name) a list a gate hides.
+				path="/newspack-newsletters/v1/lists_config?context=edit"
 				value={ value }
 				onChange={ update }
 				deletedItemLabel={ __( 'Deleted list', 'newspack-plugin' ) }
@@ -377,6 +380,8 @@ addFilter( 'newspack.criteria.input', 'newspack.activeSubscriptions', function (
 			<ListsControl
 				placeholder={ __( 'Start typing to search for products…', 'newspack-plugin' ) }
 				path={ `${ newspackAudienceCampaigns.api }/subscription-products` }
+				savedInfoPath={ ids => addQueryArgs( `${ newspackAudienceCampaigns.api }/subscription-products`, { include: ids } ) }
+				labelWithId
 				value={ value }
 				onChange={ update }
 				deletedItemLabel={ __( 'Deleted subscription', 'newspack-plugin' ) }

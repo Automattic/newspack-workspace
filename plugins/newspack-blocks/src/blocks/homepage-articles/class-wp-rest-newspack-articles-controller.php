@@ -80,6 +80,53 @@ class WP_REST_Newspack_Articles_Controller extends WP_REST_Controller {
 			]
 		);
 
+		// Endpoint to get articles for every block on a page in one request, in document order.
+		register_rest_route(
+			$this->namespace,
+			'/newspack-blocks-posts-batch',
+			[
+				'methods'             => \WP_REST_Server::CREATABLE,
+				'callback'            => [ 'Newspack_Blocks_API', 'posts_batch_endpoint' ],
+				'args'                => [
+					'queries' => [
+						'type'     => 'array',
+						'required' => true,
+						'maxItems' => Newspack_Blocks_API::POSTS_BATCH_MAX_QUERIES,
+						// Core fills defaults for top-level args only, so the handler supplies its
+						// own for these two rather than relying on the schema.
+						'items'    => [
+							'type'       => 'object',
+							'properties' => [
+								'clientId'    => [
+									'type'     => 'string',
+									'required' => true,
+								],
+								'postsQuery'  => [
+									'type' => 'object',
+								],
+								'deduplicate' => [
+									'type' => 'boolean',
+								],
+							],
+						],
+					],
+					'exclude' => [ // phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.PostNotIn_exclude
+						'type'     => 'array',
+						'items'    => [
+							'type' => 'integer',
+						],
+						// Every deduplicating query carries this list plus everything the batch has
+						// matched so far, so an unbounded list here is work every query pays for.
+						'maxItems' => Newspack_Blocks_API::POSTS_BATCH_MAX_EXCLUDE,
+						'default'  => [],
+					],
+				],
+				'permission_callback' => function() {
+					return current_user_can( 'edit_posts' );
+				},
+			]
+		);
+
 		// Endpoint to get articles in the editor, in specific posts mode.
 		register_rest_route(
 			$this->namespace,
@@ -116,7 +163,7 @@ class WP_REST_Newspack_Articles_Controller extends WP_REST_Controller {
 	 * @return WP_REST_Response
 	 */
 	public function get_items( $request ) {
-		$page        = (int) $request->get_param( 'page' ) ?? 1;
+		$page        = max( 1, (int) $request->get_param( 'page' ) );
 		$exclude_ids = $request->get_param( 'exclude_ids' ) ?? [];
 		$next_page   = $page + 1;
 		$attributes  = wp_parse_args(
@@ -181,8 +228,9 @@ class WP_REST_Newspack_Articles_Controller extends WP_REST_Controller {
 
 		Newspack_Blocks::remove_excerpt_filter();
 
-		// Provide next URL if there are more pages.
-		$show_next_button = ! empty( $exclude_ids ) ? $article_query->max_num_pages > 1 : $article_query->max_num_pages > $next_page;
+		// Provide next URL if posts remain after this response. With exclude_ids the query holds only
+		// unseen posts, so a second page means more remain; otherwise this response is page $page.
+		$show_next_button = ! empty( $exclude_ids ) ? $article_query->max_num_pages > 1 : $article_query->max_num_pages > $page;
 		if ( $show_next_button ) {
 			$next_url = add_query_arg(
 				array_merge(
