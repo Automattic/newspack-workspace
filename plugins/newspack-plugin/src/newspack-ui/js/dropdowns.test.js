@@ -73,6 +73,10 @@ describe( 'newspack-ui dropdowns', () => {
 			};
 		} );
 
+		afterEach( () => {
+			document.getElementById( 'mid-close' )?.remove();
+		} );
+
 		const toggleOpen = () => document.querySelector( '.newspack-ui__dropdown__toggle' ).click();
 
 		it( 'opens above its trigger every time there is no room below', () => {
@@ -100,14 +104,16 @@ describe( 'newspack-ui dropdowns', () => {
 		it( 'keeps its position when reopened before the close has finished', () => {
 			const content = document.querySelector( '.newspack-ui__dropdown__content' );
 			toggleOpen();
-			document.head.insertAdjacentHTML( 'beforeend', '<style id="mid-close">.newspack-ui__dropdown__content { visibility: visible; }</style>' );
+			document.head.insertAdjacentHTML(
+				'beforeend',
+				'<style id="mid-close">.newspack-ui__dropdown .newspack-ui__dropdown__content { visibility: visible; }</style>'
+			);
 			toggleOpen();
 			fits = true;
 			toggleOpen();
 
 			expect( content.classList.contains( 'newspack-ui__dropdown__content--above' ) ).toBe( true );
 			expect( content.style.top ).toBe( 'auto' );
-			document.getElementById( 'mid-close' ).remove();
 		} );
 	} );
 } );
