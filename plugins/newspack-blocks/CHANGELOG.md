@@ -8,12 +8,6 @@
 * **newspack-blocks:** add check for Jetpack paywall when building excerpts ([#1266](https://github.com/Automattic/newspack-workspace/issues/1266)) ([30f7dbc](https://github.com/Automattic/newspack-workspace/commit/30f7dbceb074f1aa1d650f230f77c30861bfb67a))
 * **reader-revenue:** rename News Revenue Hub to RevEngine ([#1260](https://github.com/Automattic/newspack-workspace/issues/1260)) ([d53ada0](https://github.com/Automattic/newspack-workspace/commit/d53ada020f26889e253d553a053283f98bd62a3b))
 
-
-### Dependencies
-
-* **newspack-icons:** upgraded to 1.3.0
-* **newspack-components:** upgraded to 4.12.0
-
 ## @automattic/newspack-blocks [4.36.3](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.2...newspack-blocks@4.36.3) (2026-10-20)
 
 
