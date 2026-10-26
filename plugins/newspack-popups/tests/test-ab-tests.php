@@ -433,10 +433,50 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * An Editor can save a prompt's other settings whether or not it is in a test:
-	 * A/B values sent back unchanged never need manage_options.
+	 * Narrow test management to administrators, as a site or a later capability
+	 * model might, so the guard's refusal path has someone to refuse.
 	 */
-	public function test_editor_can_save_a_prompt_without_changing_its_test() {
+	private function restrict_tests_to_admins() {
+		add_filter(
+			'newspack_popups_ab_can_manage_tests',
+			function ( $allowed, $user_id ) {
+				return user_can( $user_id, 'manage_options' );
+			},
+			10,
+			2
+		);
+	}
+
+	/**
+	 * By default, anyone who can edit a prompt can change its test, and anyone
+	 * who can't edit it can't.
+	 */
+	public function test_prompt_editors_manage_tests_by_default() {
+		$prompt_id = $this->createPopup();
+
+		$response = $this->save_prompt_as( $prompt_id, 'editor', [ 'meta' => [ Newspack_Popups_AB_Tests::META_TEST_ID => 'editor-made-test' ] ] );
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		self::assertSame( 'editor-made-test', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+
+		$subscriber_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		self::assertFalse( Newspack_Popups_AB_Tests::can_manage_tests( $subscriber_id, $prompt_id ) );
+		self::assertFalse( Newspack_Popups_AB_Tests::can_manage_tests( $subscriber_id, 0 ) );
+
+		$editor_id = self::factory()->user->create( [ 'role' => 'editor' ] );
+		self::assertTrue( Newspack_Popups_AB_Tests::can_manage_tests( $editor_id, 0 ), 'Anyone who can create prompts can set up a test on a new one.' );
+
+		// A Contributor can edit prompts in general, but not someone else's published one.
+		$contributor_id = self::factory()->user->create( [ 'role' => 'contributor' ] );
+		self::assertTrue( Newspack_Popups_AB_Tests::can_manage_tests( $contributor_id, 0 ) );
+		self::assertFalse( Newspack_Popups_AB_Tests::can_manage_tests( $contributor_id, $prompt_id ) );
+	}
+
+	/**
+	 * A user who may edit a prompt but not its test can still save its other
+	 * settings: A/B values sent back unchanged never need test permission.
+	 */
+	public function test_restricted_editor_can_save_a_prompt_without_changing_its_test() {
+		$this->restrict_tests_to_admins();
 		$plain_prompt  = $this->createPopup();
 		$tested_prompt = $this->create_test_variant( 'editor-save-test', 'a', null, [], 60 );
 
@@ -450,10 +490,11 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * An Editor's request that changes a test is refused before anything saves,
-	 * so the editor never reports a failure over a half-applied change.
+	 * A restricted user's request that changes a test is refused before anything
+	 * saves, so the editor never reports a failure over a half-applied change.
 	 */
-	public function test_editor_cannot_change_a_test_and_nothing_saves() {
+	public function test_restricted_editor_cannot_change_a_test_and_nothing_saves() {
+		$this->restrict_tests_to_admins();
 		$prompt_id     = $this->createPopup();
 		$title_before  = get_the_title( $prompt_id );
 		$delay_before  = get_post_meta( $prompt_id, 'trigger_delay', true );
@@ -477,12 +518,28 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * On the autosave route the guard drops a non-admin's A/B keys instead of
+	 * A non-scalar A/B value from a restricted user is refused without being cast
+	 * to a string, which would raise an "Array to string conversion" warning. The
+	 * 403 alone doesn't pin this: a cast array never matches a stored value either.
+	 */
+	public function test_restricted_editor_non_scalar_ab_value_is_refused_without_a_warning() {
+		$this->restrict_tests_to_admins();
+		$prompt_id = $this->createPopup();
+
+		$response = $this->save_prompt_as( $prompt_id, 'editor', [ 'meta' => [ Newspack_Popups_AB_Tests::META_TEST_ID => [ 'x' ] ] ] );
+
+		self::assertSame( 403, $response->get_status() );
+		self::assertSame( '', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+	}
+
+	/**
+	 * On the autosave route the guard drops a restricted user's A/B keys instead of
 	 * refusing: core's autosave controller ignores a refusal and would record an
 	 * empty autosave in place of the editor's changes. Called directly, because
 	 * the controller defines DOING_AUTOSAVE for the rest of the test run.
 	 */
 	public function test_guard_drops_ab_meta_on_autosaves_instead_of_refusing() {
+		$this->restrict_tests_to_admins();
 		$prompt_id = $this->createPopup();
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
 		$request = new WP_REST_Request( 'POST', '/wp/v2/' . Newspack_Popups::NEWSPACK_POPUPS_CPT . '/' . $prompt_id . '/autosaves' );
@@ -501,9 +558,11 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * Administrators can create and change tests through REST.
+	 * Administrators can create and change tests through REST, including when
+	 * test management is narrowed to them.
 	 */
 	public function test_administrator_can_write_ab_meta() {
+		$this->restrict_tests_to_admins();
 		$prompt_id = $this->createPopup();
 
 		$response = $this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ Newspack_Popups_AB_Tests::META_TEST_ID => 'admin-made-test' ] ] );

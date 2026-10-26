@@ -221,11 +221,41 @@ final class Newspack_Popups_AB_Tests {
 	}
 
 	/**
-	 * Whether a user may write A/B meta.
+	 * Whether a user may change a prompt's A/B test settings.
 	 *
-	 * Core still requires edit rights on the prompt; this adds `manage_options` on
-	 * top, because managing tests follows the admin-only Campaigns permission model
-	 * and the prompts CPT itself uses default post capabilities.
+	 * By default, anyone who can edit the prompt, the same rule as for the rest of
+	 * its settings. Saves through the prompt's REST endpoint check here, both in the
+	 * meta auth callback and in the save guard, so a narrower capability can
+	 * replace the default in one place.
+	 *
+	 * @param int $user_id User ID.
+	 * @param int $post_id Prompt post ID, or 0 for a prompt not yet created.
+	 * @return bool
+	 */
+	public static function can_manage_tests( $user_id, $post_id ) {
+		if ( $post_id ) {
+			$allowed = user_can( $user_id, 'edit_post', $post_id );
+		} else {
+			$post_type = get_post_type_object( Newspack_Popups::NEWSPACK_POPUPS_CPT );
+			$allowed   = $post_type && user_can( $user_id, $post_type->cap->edit_posts );
+		}
+
+		/**
+		 * Filters whether a user may change a prompt's A/B test settings.
+		 *
+		 * A REST create asks twice: once with post ID 0 before the prompt exists,
+		 * then with its new ID when the meta is written. Give the same answer both
+		 * times, or the prompt is created and its A/B settings are refused.
+		 *
+		 * @param bool $allowed Whether the user may change them.
+		 * @param int  $user_id User ID.
+		 * @param int  $post_id Prompt post ID, or 0 for a prompt not yet created.
+		 */
+		return (bool) apply_filters( 'newspack_popups_ab_can_manage_tests', $allowed, $user_id, $post_id );
+	}
+
+	/**
+	 * Meta auth callback for A/B keys.
 	 *
 	 * @param bool   $allowed   Core's default for the key; ignored.
 	 * @param string $meta_key  Meta key.
@@ -234,17 +264,17 @@ final class Newspack_Popups_AB_Tests {
 	 * @return bool
 	 */
 	public static function can_write_meta( $allowed, $meta_key, $object_id, $user_id ) {
-		return user_can( $user_id, 'manage_options' );
+		return self::can_manage_tests( (int) $user_id, (int) $object_id );
 	}
 
 	/**
-	 * Keep A/B meta admin-only on prompt saves without breaking saves by other roles.
+	 * Hold A/B meta to can_manage_tests() on prompt saves without breaking other saves.
 	 *
 	 * The block editor sends a prompt's whole meta object on every save, A/B keys
-	 * included, and core runs the write check on any key with no stored row. So a
-	 * non-admin's unchanged A/B values are dropped from the request before core
-	 * sees them, and a changed one refuses the request here, before the post or
-	 * any other meta is written.
+	 * included, and core runs the write check on any key with no stored row. So for
+	 * a user who may edit the prompt but not its test, unchanged A/B values are
+	 * dropped from the request before core sees them, and a changed one refuses the
+	 * request here, before the post or any other meta is written.
 	 *
 	 * Autosaves are the exception: they never store A/B meta, and core's autosave
 	 * route ignores an error from this filter and would record an empty autosave,
@@ -256,13 +286,17 @@ final class Newspack_Popups_AB_Tests {
 	 */
 	public static function guard_rest_ab_meta( $prepared_post, $request ) {
 		$meta = $request->get_param( 'meta' );
-		if ( is_wp_error( $prepared_post ) || ! is_array( $meta ) || current_user_can( 'manage_options' ) ) {
+		if ( is_wp_error( $prepared_post ) || ! is_array( $meta ) ) {
+			return $prepared_post;
+		}
+
+		$post_id = isset( $prepared_post->ID ) ? (int) $prepared_post->ID : 0;
+		if ( self::can_manage_tests( get_current_user_id(), $post_id ) ) {
 			return $prepared_post;
 		}
 
 		$is_autosave = str_ends_with( $request->get_route(), '/autosaves' );
 		$registered  = get_registered_meta_keys( 'post', Newspack_Popups::NEWSPACK_POPUPS_CPT );
-		$post_id     = isset( $prepared_post->ID ) ? (int) $prepared_post->ID : 0;
 		foreach ( self::META_KEYS as $meta_key ) {
 			if ( ! array_key_exists( $meta_key, $meta ) ) {
 				continue;
@@ -270,10 +304,12 @@ final class Newspack_Popups_AB_Tests {
 			// get_post_meta() applies the registered default to an unset key, which
 			// is also what the editor read and is sending back.
 			$stored = $post_id ? get_post_meta( $post_id, $meta_key, true ) : ( $registered[ $meta_key ]['default'] ?? '' );
-			if ( ! $is_autosave && (string) $meta[ $meta_key ] !== (string) $stored ) {
+			// A null asks core to delete the key, which resets it to its registered default.
+			$value = $meta[ $meta_key ] ?? ( $registered[ $meta_key ]['default'] ?? '' );
+			if ( ! $is_autosave && ( ! is_scalar( $value ) || (string) $value !== (string) $stored ) ) {
 				return new WP_Error(
 					'rest_cannot_update',
-					__( "Only administrators can change A/B test settings. If someone changed this prompt's test while you were editing, reload the editor and try again.", 'newspack-popups' ),
+					__( "You don't have permission to change this prompt's A/B test settings. If someone changed its test while you were editing, reload the editor and try again.", 'newspack-popups' ),
 					[
 						'status' => rest_authorization_required_code(),
 						'key'    => $meta_key,
