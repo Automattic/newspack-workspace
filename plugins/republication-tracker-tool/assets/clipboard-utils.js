@@ -38,8 +38,10 @@ window.ClipboardUtils = {
 	 * The block editor strips scripts from pasted HTML, but keeps pasted
 	 * block markup as it is. Any block markup in a paste sends the whole paste
 	 * through the block parser, though, so the story lands in one Classic block
-	 * that Convert to blocks turns into ordinary blocks. A pixel with nothing
-	 * after it survives an ordinary paste, so it isn't worth that cost.
+	 * that Convert to blocks turns into ordinary blocks, and a paste into an
+	 * empty post title leaves the headline in that block instead of the title.
+	 * A pixel with nothing after it survives an ordinary paste, so it isn't
+	 * worth those costs.
 	 *
 	 * @param {string} text - Handout as shown in the Republish textarea
 	 * @returns {string|null} - Wrapped handout, or null when there is no pixel or nothing after it
