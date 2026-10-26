@@ -30,7 +30,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 					item.classList.remove( 'hidden' );
 					item.removeAttribute( 'inert' );
 				} );
-				newsletterContainer.style.maxHeight = 'none';
+				newsletterContainer.style.maxHeight = 'max-content';
 				if ( divider ) {
 					divider.classList.add( 'hidden' );
 				}

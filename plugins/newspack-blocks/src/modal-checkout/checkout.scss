@@ -298,15 +298,31 @@
 		}
 
 		&--gift-email {
-			max-height: 0;
+			height: 0;
+			interpolate-size: allow-keywords;
 			overflow: hidden;
-			transition: max-height 0.25s ease-in-out;
+			transition:
+				height var(--newspack-ui-duration-reveal, 200ms) var(--newspack-ui-ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
+				margin-top var(--newspack-ui-duration-reveal, 200ms) var(--newspack-ui-ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
+				visibility 0s linear var(--newspack-ui-duration-reveal, 200ms);
 			visibility: hidden;
 
+			@media ( prefers-reduced-motion: reduce ) {
+				transition: none;
+			}
+
 			&.visible {
+				height: auto;
 				margin: var(--newspack-ui-spacer-5, 24px) 0 0;
-				max-height: initial;
+				transition:
+					height var(--newspack-ui-duration-reveal, 200ms) var(--newspack-ui-ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
+					margin-top var(--newspack-ui-duration-reveal, 200ms) var(--newspack-ui-ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
+					visibility 0s;
 				visibility: visible;
+
+				@media ( prefers-reduced-motion: reduce ) {
+					transition: none;
+				}
 			}
 		}
 	}
