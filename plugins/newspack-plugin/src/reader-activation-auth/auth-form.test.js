@@ -175,6 +175,7 @@ describe( 'auth form with post-registration verification', () => {
 
 		expect( onSuccess ).toHaveBeenCalledTimes( 1 );
 		expect( onSuccess ).toHaveBeenCalledWith( 'Registered', expect.objectContaining( { registered: 1 } ) );
+		expect( document.querySelector( '.newspack-reader-auth-modal' ).hasAttribute( 'data-verification-handover' ) ).toBe( false );
 	} );
 
 	it( 'does not report success again when every modal on the page is closed later', () => {

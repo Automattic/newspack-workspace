@@ -78,19 +78,21 @@ body.logged-in {
 	}
 }
 
-body:has(.newspack-reader-auth-modal[data-state="open"]:not([data-verification-handover])) .newspack__reader-verification .newspack-ui__modal-container:not([data-state="open"]) {
-	display: none;
-	transition:
-		visibility 0s linear var(--newspack-ui-duration-sheet),
-		z-index 0s linear var(--newspack-ui-duration-sheet),
-		display 0s linear var(--newspack-ui-duration-sheet) allow-discrete;
+@supports (transition-behavior: allow-discrete) {
+	body:has(.newspack-reader-auth-modal[data-state="open"]:not([data-verification-handover])) .newspack__reader-verification .newspack-ui__modal-container:not([data-state="open"]) {
+		display: none;
+		transition:
+			visibility 0s linear var(--newspack-ui-duration-sheet),
+			z-index 0s linear var(--newspack-ui-duration-sheet),
+			display 0s linear var(--newspack-ui-duration-sheet) allow-discrete;
+	}
 }
 
 body:has(.newspack-reader-auth-modal[data-state="open"][data-verification-handover]) .newspack__reader-verification .newspack-ui__modal-container:not([data-state="open"]) {
 	display: none;
 }
 
-body:has(.newspack-reader-auth-modal[data-verification-handover]) .newspack__reader-verification .newspack-ui__modal-container[data-state="open"] .newspack-ui__modal > * {
+body:has(.newspack-reader-auth-modal[data-state="open"][data-verification-handover]) .newspack__reader-verification .newspack-ui__modal-container[data-state="open"] .newspack-ui__modal > * {
 	transition: opacity var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out);
 
 	@starting-style {

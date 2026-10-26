@@ -442,7 +442,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 						// Visually hide the auth modal while the verification flow is active.
 						if ( authModal ) {
 							authModal.style.display = 'none';
-							// Kept through the hand-back so the stylesheet can tell it from an inline form opening this modal; close() clears it.
+							// Kept through the hand-back so the stylesheet can tell it from an inline form opening the verification modal; close() clears it.
 							authModal.setAttribute( 'data-verification-handover', '' );
 						}
 
