@@ -26,10 +26,12 @@
 		}
 
 		&--success {
+			--newspack-ui-icon-delay: calc(var(--newspack-ui-modal-step-delay, 0ms) + var(--newspack-ui-duration-reveal) / 2);
+
 			color: var(--newspack-ui-color-success);
 			transition:
-				opacity var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out) var(--newspack-ui-duration-reveal),
-				transform var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out) var(--newspack-ui-duration-reveal);
+				opacity var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out) var(--newspack-ui-icon-delay),
+				transform var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out) var(--newspack-ui-icon-delay);
 
 			@starting-style {
 				opacity: 0;

@@ -316,15 +316,19 @@
 }
 
 .newspack-ui__modal-container .newspack-ui__modal__step {
+	--newspack-ui-modal-step-delay: 0ms;
+
 	display: flex;
 	flex-direction: column;
 	grid-area: 1 / 1;
 	width: var(--newspack-ui-modal-width);
 
 	@include mixins.media( mobile ) {
+		--newspack-ui-modal-step-delay: 100ms;
+
 		place-self: center;
 		transition:
-			opacity var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out) 100ms,
+			opacity var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out) var(--newspack-ui-modal-step-delay),
 			visibility 0s;
 		width: min(var(--newspack-ui-modal-width), calc(100vw - var(--newspack-ui-spacer-6)));
 
