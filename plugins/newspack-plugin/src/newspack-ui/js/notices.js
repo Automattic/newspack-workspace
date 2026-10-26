@@ -321,6 +321,9 @@ function openNotice( element, remove = true ) {
 		group.appendChild( element );
 	}
 	element.classList.remove( 'is-leaving' );
+	if ( ! stacked ) {
+		element.style.removeProperty( 'height' );
+	}
 	if ( stacked ) {
 		element.dataset.stackOrder = String( ++openCount );
 		element.dataset.stackPosition = 'front';
@@ -443,10 +446,18 @@ function closeNotice( element, remove = true ) {
 	if ( element.contains( focused ) && hasKeyboardFocus( focused ) ) {
 		getFocusAfterClose( element )?.focus();
 	}
+	// Collapse from a measured height: `auto` only animates where `interpolate-size` is supported.
+	const collapse = ! stack && element.classList.contains( 'active' );
+	if ( collapse ) {
+		element.style.height = `${ element.getBoundingClientRect().height }px`;
+		void element.offsetHeight;
+	}
 	element.classList.remove( 'active' );
 	if ( stack ) {
 		element.classList.add( 'is-leaving' );
 		layoutStack( stack );
+	} else if ( collapse ) {
+		element.style.height = '0px';
 	}
 	clearTimeout( removals.get( element ) );
 	removals.delete( element );

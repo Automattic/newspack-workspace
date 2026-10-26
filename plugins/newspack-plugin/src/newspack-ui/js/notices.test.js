@@ -277,4 +277,14 @@ describe( 'newspack-ui notices', () => {
 		jest.advanceTimersByTime( 9000 );
 		expect( persistent.classList.contains( 'active' ) ).toBe( true );
 	} );
+
+	it( 'collapses a closing pinned notice from its measured height', () => {
+		const error = notices.createNotice( 'Could not save.', 'error' );
+
+		notices.closeNotice( error, false );
+		expect( error.style.height ).toBe( '0px' );
+
+		notices.openNotice( error, false );
+		expect( error.style.height ).toBe( '' );
+	} );
 } );

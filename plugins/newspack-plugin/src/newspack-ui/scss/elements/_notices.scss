@@ -1,10 +1,5 @@
 @use "../mixins";
 
-:root {
-	/* stylelint-disable-next-line property-no-unknown */
-	interpolate-size: allow-keywords;
-}
-
 %newspack-ui-notice-icon {
 	fill: var(--newspack-ui-notice-icon-color);
 	flex: none;

@@ -59,6 +59,12 @@ describe( 'getTransitionTime', () => {
 		expect( getTransitionTime( document.body.firstElementChild ) ).toBe( 600 );
 	} );
 
+	it( 'repeats the shorter list the way CSS does', () => {
+		document.body.innerHTML =
+			'<div style="transition-property: opacity, height; transition-duration: 0.001ms; transition-delay: 0s, 400ms"></div>';
+		expect( getTransitionTime( document.body.firstElementChild ) ).toBe( 400.001 );
+	} );
+
 	it( 'returns 0 when nothing transitions', () => {
 		document.body.innerHTML = '<div></div>';
 		expect( getTransitionTime( document.body.firstElementChild ) ).toBe( 0 );
