@@ -304,8 +304,8 @@ final class Newspack_Popups_AB_Tests {
 			// get_post_meta() applies the registered default to an unset key, which
 			// is also what the editor read and is sending back.
 			$stored = $post_id ? get_post_meta( $post_id, $meta_key, true ) : ( $registered[ $meta_key ]['default'] ?? '' );
-			// A null asks core to delete the key, which changes nothing on an empty one.
-			$value = $meta[ $meta_key ] ?? '';
+			// A null asks core to delete the key, which resets it to its registered default.
+			$value = $meta[ $meta_key ] ?? ( $registered[ $meta_key ]['default'] ?? '' );
 			if ( ! $is_autosave && ( ! is_scalar( $value ) || (string) $value !== (string) $stored ) ) {
 				return new WP_Error(
 					'rest_cannot_update',
