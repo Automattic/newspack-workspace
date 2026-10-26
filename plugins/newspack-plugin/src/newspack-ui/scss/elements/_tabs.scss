@@ -35,7 +35,8 @@
 				transform: none;
 				transition:
 					color var(--newspack-ui-duration-color) ease,
-					box-shadow var(--newspack-ui-duration-color) ease;
+					box-shadow var(--newspack-ui-duration-color) ease,
+					border-radius var(--newspack-ui-duration-color) ease;
 				white-space: nowrap;
 
 				@media ( hover: hover ) and ( pointer: fine ) {

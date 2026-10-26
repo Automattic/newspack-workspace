@@ -96,5 +96,18 @@ describe( 'newspack-ui dropdowns', () => {
 			expect( content.style.top ).toBeUndefined();
 			expect( content.style.transition ).toBeUndefined();
 		} );
+
+		it( 'keeps its position when reopened before the close has finished', () => {
+			const content = document.querySelector( '.newspack-ui__dropdown__content' );
+			toggleOpen();
+			document.head.insertAdjacentHTML( 'beforeend', '<style id="mid-close">.newspack-ui__dropdown__content { visibility: visible; }</style>' );
+			toggleOpen();
+			fits = true;
+			toggleOpen();
+
+			expect( content.classList.contains( 'newspack-ui__dropdown__content--above' ) ).toBe( true );
+			expect( content.style.top ).toBe( 'auto' );
+			document.getElementById( 'mid-close' ).remove();
+		} );
 	} );
 } );
