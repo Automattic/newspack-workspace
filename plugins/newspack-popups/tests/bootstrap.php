@@ -38,6 +38,10 @@ define( 'IS_TEST_ENV', 1 );
 // Keep the Contextual Prompts feature enabled so its suites exercise the real code paths.
 define( 'NEWSPACK_CONTEXTUAL_PROMPTS', true );
 
+// Same for A/B testing. Its suites cover the disabled state through the
+// newspack_popups_ab_testing_enabled filter.
+define( 'NEWSPACK_CAMPAIGNS_AB_TESTING', true );
+
 // Load the composer autoloader.
 require_once __DIR__ . '/../vendor/autoload.php';
 
