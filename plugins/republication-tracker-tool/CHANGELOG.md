@@ -1,3 +1,18 @@
+## republication-tracker-tool [2.9.5](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.4...republication-tracker-tool@2.9.5) (2026-10-26)
+
+
+### Bug Fixes
+
+* require PHP 8.1 in the WordPress.org plugins ([#1272](https://github.com/Automattic/newspack-workspace/issues/1272)) ([4a9bea1](https://github.com/Automattic/newspack-workspace/commit/4a9bea142fee228fe8613f5f4df3469e7eb72f13))
+* **rtt:** decode only the footer in the republish modal copy (NPPM-3573) ([#1314](https://github.com/Automattic/newspack-workspace/issues/1314)) ([4b63f6d](https://github.com/Automattic/newspack-workspace/commit/4b63f6d77f8cb94ab1f11c42dd81bf8e5fc4a076))
+
+## republication-tracker-tool [2.9.4](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.3...republication-tracker-tool@2.9.4) (2026-10-12)
+
+
+### Dependencies
+
+* **newspack-scripts:** upgraded to 5.12.0
+
 ## republication-tracker-tool [2.9.3](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.2...republication-tracker-tool@2.9.3) (2026-09-28)
 
 

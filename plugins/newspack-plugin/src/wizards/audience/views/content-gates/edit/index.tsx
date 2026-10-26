@@ -6,10 +6,11 @@
  * WordPress dependencies.
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { __experimentalVStack as VStack, CardDivider } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { CardDivider } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 import { useDispatch } from '@wordpress/data';
 import { createInterpolateElement, useCallback, useEffect, useRef, useState } from '@wordpress/element';
-import { commentAuthorAvatar, currencyDollar, envelope, pencil, postList, settings } from '@wordpress/icons';
+import { bell, commentAuthorAvatar, currencyDollar, envelope, pencil, postList, settings } from '@wordpress/icons';
 import apiFetch from '@wordpress/api-fetch';
 
 /**
@@ -33,11 +34,12 @@ import ContentRules from './content-rules';
 import MatchLogicToggle from './match-logic-toggle';
 import Registration from './registration';
 import CustomAccess from './custom-access';
-import { getEditGateLayoutUrl, getGateStatus, getGateStatusBadgeIntent } from '../utils';
+import { getEditGateLayoutUrl, getGatesSubTitle, getGateStatus, getGateStatusBadgeIntent } from '../utils';
 import { getGateSummarySections } from '../gate-summary';
 import { useAccessRuleOptions } from '../use-access-rule-options';
 import SavePanel from './save-panel';
 import PreferencesModal from './preferences-modal';
+import NewsletterSettings from './newsletter-settings';
 
 const { useHistory } = Router;
 
@@ -72,6 +74,25 @@ const getContentTypeFromRules = ( rules: GateContentRule[] ): 'all' | 'custom' |
 	return 'all';
 };
 
+/**
+ * Title Case heading for the gate editor's breadcrumb and section title.
+ *
+ * @param kind         Which heading.
+ * @param isNewsletter Whether the gate is a premium newsletter.
+ */
+const getGateHeading = ( kind: 'add' | 'edit' | 'untitled', isNewsletter: boolean ) =>
+	( isNewsletter
+		? {
+				add: __( 'Add Premium Newsletter', 'newspack-plugin' ),
+				edit: __( 'Edit Premium Newsletter', 'newspack-plugin' ),
+				untitled: __( 'Untitled Premium Newsletter', 'newspack-plugin' ),
+		  }
+		: {
+				add: __( 'Add Content Gate', 'newspack-plugin' ),
+				edit: __( 'Edit Content Gate', 'newspack-plugin' ),
+				untitled: __( 'Untitled Content Gate', 'newspack-plugin' ),
+		  } )[ kind ];
+
 const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SLUG, isNewsletter = false }: ContentGateEditProps ) => {
 	const [ defaultGateStatus, setDefaultGateStatus ] = useState< GateStatus >( window.newspackAudienceContentGates?.default_gate_status || 'draft' );
 	const DEFAULT_GATE: Gate = {
@@ -81,6 +102,8 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		status: defaultGateStatus,
 		content_rules: isNewsletter ? [ { slug: 'newsletters', value: [] } ] : [ { slug: 'post_types', value: [ 'post' ] } ],
 		content_rules_match: 'all',
+		// Only premium newsletter gates carry these settings.
+		...( isNewsletter ? { auto_signup: 'default' as const, hide_lists: false } : {} ),
 		registration: {
 			active: false,
 			metering: { enabled: false, count: 1, period: 'month' },
@@ -104,6 +127,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 	// Undefined until the wizard store resolves the gates request.
 	const { gates, config } = useWizardData( slug ) as ContentGatesWizardData;
 	const siteMeter = config?.site_meter;
+	const siteAutoSignup = config?.auto_signup;
 	const { wizardApiFetch, isFetching, errorMessage, resetError } = useWizardApiFetch( slug );
 	const { addNotice, resetNotices, setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ gate, setGate ] = useState< Gate >( ( gates && gates.find( g => g.id === id ) ) || DEFAULT_GATE ); // eslint-disable-line @typescript-eslint/no-unused-vars
@@ -112,6 +136,8 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 	const [ isDeleting, setIsDeleting ] = useState< boolean >( false );
 	const [ contentRules, setContentRules ] = useState< GateContentRule[] >( gate.content_rules );
 	const [ contentRulesMatch, setContentRulesMatch ] = useState< 'all' | 'any' >( gate.content_rules_match || 'all' );
+	const [ autoSignup, setAutoSignup ] = useState< AutoSignupMode >( gate.auto_signup ?? 'default' );
+	const [ hideLists, setHideLists ] = useState< boolean >( gate.hide_lists ?? false );
 	const [ registration, setRegistration ] = useState< Registration >( gate.registration );
 	const [ customAccess, setCustomAccess ] = useState< CustomAccess >( gate.custom_access );
 	const [ contentType, setContentType ] = useState< 'all' | 'custom' | undefined >( type as 'all' | 'custom' | undefined );
@@ -126,6 +152,8 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 	const isSaving = useRef( false );
 	const gatesRef = useRef< Gate[] >( gates ?? [] );
 	const savedCustomRules = useRef< GateContentRule[] >( gate.content_rules );
+	// The stored gate as last copied into the form, serialized for comparison.
+	const syncedGate = useRef< string | null >( null );
 
 	useEffect( () => {
 		if ( Array.isArray( gates ) ) {
@@ -138,6 +166,8 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		title !== gate.title ||
 		JSON.stringify( contentRules ) !== JSON.stringify( gate.content_rules ) ||
 		contentRulesMatch !== ( gate.content_rules_match || 'all' ) ||
+		autoSignup !== ( gate.auto_signup ?? 'default' ) ||
+		hideLists !== ( gate.hide_lists ?? false ) ||
 		JSON.stringify( registration ) !== JSON.stringify( gate.registration ) ||
 		JSON.stringify( customAccess ) !== JSON.stringify( gate.custom_access );
 
@@ -172,6 +202,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 				title,
 				content_rules: contentRules,
 				content_rules_match: contentRulesMatch,
+				...( isNewsletter ? { auto_signup: autoSignup, hide_lists: hideLists } : {} ),
 				registration,
 				custom_access: customAccess,
 				status: statusOverride ?? status,
@@ -204,7 +235,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 				}
 			);
 		},
-		[ gate, contentRules, contentRulesMatch, registration, customAccess, status, title ]
+		[ gate, contentRules, contentRulesMatch, autoSignup, hideLists, registration, customAccess, status, title ]
 	);
 
 	const handleSave = useCallback(
@@ -222,6 +253,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 				title,
 				content_rules: contentRules,
 				content_rules_match: contentRulesMatch,
+				...( isNewsletter ? { auto_signup: autoSignup, hide_lists: hideLists } : {} ),
 				registration,
 				custom_access: customAccess,
 				status: statusOverride ?? status,
@@ -252,7 +284,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 				}
 			);
 		},
-		[ gate, contentRules, contentRulesMatch, registration, customAccess, status, title ]
+		[ gate, contentRules, contentRulesMatch, autoSignup, hideLists, registration, customAccess, status, title ]
 	);
 
 	const handleSaveButtonClick = useCallback( () => {
@@ -386,9 +418,11 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		}
 		setHeaderData( {
 			backNav: '#/content-gates',
-			sectionName: isNew ? __( 'Add new', 'newspack-plugin' ) : __( 'Edit', 'newspack-plugin' ),
+			sectionName: getGateHeading( isNew ? 'add' : 'edit', isNewsletter ),
+			subTitle: getGatesSubTitle( isNewsletter ),
 		} );
 		if ( isNew ) {
+			syncedGate.current = null;
 			return;
 		}
 		const matchedGate = gates ? gates.find( g => g.id === id ) : null;
@@ -406,6 +440,8 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 			setTitle( '' );
 			setContentRules( DEFAULT_GATE.content_rules );
 			setContentRulesMatch( 'all' );
+			setAutoSignup( 'default' );
+			setHideLists( false );
 			setRegistration( DEFAULT_GATE.registration );
 			setCustomAccess( DEFAULT_GATE.custom_access );
 			setStatus( defaultGateStatus );
@@ -413,10 +449,20 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 			history.push( `/edit/new/all` );
 			return;
 		}
+		// Copy the stored gate only when it changed. A refused save, a failed status change or
+		// delete, and writes to other wizard data in the store all re-run this with the gate as
+		// it was, and copying it then would discard the operator's edits.
+		const serializedGate = JSON.stringify( matchedGate );
+		if ( serializedGate === syncedGate.current ) {
+			return;
+		}
+		syncedGate.current = serializedGate;
 		setGate( matchedGate );
 		setTitle( matchedGate.title );
 		setContentRules( matchedGate.content_rules );
 		setContentRulesMatch( matchedGate.content_rules_match || 'all' );
+		setAutoSignup( matchedGate.auto_signup ?? 'default' );
+		setHideLists( matchedGate.hide_lists ?? false );
 		savedCustomRules.current = matchedGate.content_rules;
 		setRegistration( matchedGate.registration );
 		setCustomAccess( matchedGate.custom_access );
@@ -479,18 +525,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		setHeaderData( {
 			actions,
 			badges: isNew ? [] : [ { label: getGateStatus( gate.status ), intent: getGateStatusBadgeIntent( gate.status ) } ],
-			sectionTitle: isNew
-				? sprintf(
-						// translators: %s is the type of content to restrict.
-						__( 'Add new %s', 'newspack-plugin' ),
-						isNewsletter ? __( 'premium newsletter', 'newspack-plugin' ) : __( 'gate', 'newspack-plugin' )
-				  )
-				: title ||
-				  sprintf(
-						// translators: %s is the type of content to restrict.
-						__( 'Untitled %s', 'newspack-plugin' ),
-						isNewsletter ? __( 'premium newsletter', 'newspack-plugin' ) : __( 'gate', 'newspack-plugin' )
-				  ),
+			sectionTitle: isNew ? getGateHeading( 'add', isNewsletter ) : title || getGateHeading( 'untitled', isNewsletter ),
 		} );
 	}, [
 		contentRules.length,
@@ -540,10 +575,18 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 					presaveChecksEnabled={ presaveChecksEnabled }
 					isSaving={ isFetching }
 					summary={ getGateSummarySections(
-						{ ...gate, content_rules: contentRules, registration, custom_access: customAccess },
+						{
+							...gate,
+							content_rules: contentRules,
+							auto_signup: autoSignup,
+							hide_lists: hideLists,
+							registration,
+							custom_access: customAccess,
+						},
 						isNewsletter,
 						siteMeter,
-						accessRuleOptions
+						accessRuleOptions,
+						siteAutoSignup
 					) }
 					onCancel={ () => setShowSavePanel( false ) }
 					onConfirm={ handleSaveConfirm }
@@ -615,7 +658,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 						isNewsletter ? __( 'lists', 'newspack-plugin' ) : __( 'content', 'newspack-plugin' )
 					) }
 				/>
-				<VStack spacing={ 4 }>
+				<Stack direction="column" gap="lg">
 					<CardSettingsGroup
 						title={ sprintf(
 							// translators: %s is the type of content to restrict.
@@ -656,7 +699,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 							onChange={ setContentRulesMatch }
 						/>
 					</CardSettingsGroup>
-				</VStack>
+				</Stack>
 			</Grid>
 			<Divider alignment="full-width" variant="tertiary" />
 			<Grid columns={ 2 } gutter={ 32 } noMargin>
@@ -679,7 +722,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 							  )
 					) }
 				/>
-				<VStack spacing={ 4 }>
+				<Stack direction="column" gap="lg">
 					{ ! isNewsletter && (
 						<CardSettingsGroup
 							actionType="toggle"
@@ -737,8 +780,45 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 							governsSignedOut={ ! registration.active }
 						/>
 					</CardSettingsGroup>
-				</VStack>
+				</Stack>
 			</Grid>
+			{ isNewsletter && customAccess?.active && (
+				<>
+					<Divider alignment="full-width" variant="tertiary" />
+					<Grid columns={ 2 } gutter={ 32 } noMargin>
+						<SectionHeader
+							heading={ 2 }
+							title={ __( 'How should readers join these lists?', 'newspack-plugin' ) }
+							description={ __(
+								'Choose whether readers are added automatically when they gain access, and whether they can see these lists.',
+								'newspack-plugin'
+							) }
+						/>
+						<Stack direction="column" gap="lg">
+							<CardSettingsGroup
+								title={ __( 'Sign-up and visibility', 'newspack-plugin' ) }
+								description={ __( 'How readers are added to these lists, and where the lists appear.', 'newspack-plugin' ) }
+								icon={ bell }
+								isActive
+							>
+								<NewsletterSettings
+									autoSignup={ autoSignup }
+									hideLists={ hideLists }
+									siteAutoSignup={ siteAutoSignup }
+									onChange={ ( { auto_signup, hide_lists } ) => {
+										if ( auto_signup !== undefined ) {
+											setAutoSignup( auto_signup );
+										}
+										if ( hide_lists !== undefined ) {
+											setHideLists( hide_lists );
+										}
+									} }
+								/>
+							</CardSettingsGroup>
+						</Stack>
+					</Grid>
+				</>
+			) }
 		</div>
 	);
 };

@@ -42,7 +42,7 @@ class Subscribers_Wizard extends Wizard {
 	protected $parent_slug = 'newspack-audience';
 
 	/**
-	 * Upper bound on the number of customer IDs a subscription-status/plan filter
+	 * Upper bound on the number of holder IDs a subscription-status/plan filter
 	 * resolves to. Keeps both the subscription scan and the WP_User_Query IN()
 	 * clause bounded on very large stores. See resolve_filter_include().
 	 */
@@ -57,7 +57,7 @@ class Subscribers_Wizard extends Wizard {
 	/**
 	 * How many subscriptions the filter scan hydrates at a time. The scan itself
 	 * is bounded by FILTER_INCLUDE_CAP, but WooCommerce returns fully hydrated
-	 * WC_Subscription objects and only their customer ID is needed here — walking
+	 * WC_Subscription objects and only their holder ID is needed here — walking
 	 * the set a page at a time keeps peak memory at one chunk rather than the
 	 * whole cap. See customer_ids_for_raw_statuses().
 	 */
@@ -83,7 +83,7 @@ class Subscribers_Wizard extends Wizard {
 	private $group_membership_index = null;
 
 	/**
-	 * Per-request memo of customer IDs keyed by the sorted status set they were
+	 * Per-request memo of holder IDs keyed by the sorted status set they were
 	 * resolved for. See customer_ids_for_raw_statuses().
 	 *
 	 * @var array<string,int[]>
@@ -295,6 +295,15 @@ class Subscribers_Wizard extends Wizard {
 						'items'             => [
 							'type' => 'string',
 							'enum' => [ 'active', 'pending', 'on-hold', 'cancelled' ],
+						],
+						'sanitize_callback' => 'rest_sanitize_request_arg',
+						'validate_callback' => 'rest_validate_request_arg',
+					],
+					'access'   => [
+						'type'              => 'array',
+						'items'             => [
+							'type' => 'string',
+							'enum' => [ 'complimentary' ],
 						],
 						'sanitize_callback' => 'rest_sanitize_request_arg',
 						'validate_callback' => 'rest_validate_request_arg',
@@ -916,7 +925,7 @@ class Subscribers_Wizard extends Wizard {
 	 *
 	 * Subscription-status and plan filters can't be expressed as user-table
 	 * columns, so they run inverted: an HPOS-safe subscription query resolves the
-	 * matching customer IDs, which are then intersected into the user query's
+	 * matching holder IDs, which are then intersected into the user query's
 	 * `include` set. See resolve_filter_include().
 	 *
 	 * @param \WP_REST_Request $request The request.
@@ -1479,10 +1488,11 @@ class Subscribers_Wizard extends Wizard {
 	 * Cost note: group memberships are indexed once per request
 	 * (get_group_membership_index), but two lookups here are inherently per-row —
 	 * wcs_get_users_subscriptions() and last_payment_date()'s wc_get_orders() —
-	 * so a page costs ~2 × `per_page` (≤100) WooCommerce queries. Both are
-	 * "newest/owned rows for one customer" lookups that WooCommerce can't answer
-	 * per-customer in a single batched query: batching last_payment_date() over
-	 * the page's customer IDs would need either an unbounded `limit => -1` (worse
+	 * so a page costs ~2 × `per_page` (≤100) WooCommerce queries, plus one order
+	 * lookup per gift a reader holds. Both are
+	 * "newest/owned rows for one subscriber" lookups that WooCommerce can't answer
+	 * per-subscriber in a single batched query: batching last_payment_date() over
+	 * the page's subscriber IDs would need either an unbounded `limit => -1` (worse
 	 * peak memory than the bounded per-row queries) or a truncated scan that
 	 * silently blanks the last payment of a reader whose most recent order falls
 	 * outside it. The bounded per-row shape is the correct trade-off here, and
@@ -1520,7 +1530,7 @@ class Subscribers_Wizard extends Wizard {
 			'editUrl'        => get_edit_user_link( $user_id ),
 			'status'         => $this->reduced_status( $subscriptions, $groups ),
 			'memberSince'    => $this->local_date( $registered ),
-			'lastPayment'    => $this->last_payment_date( $user_id ),
+			'lastPayment'    => $this->last_payment_date( $user_id, $owned_subscriptions ),
 			'lastSeen'       => $this->last_seen_date( $user_id ),
 			'subscriptions'  => $subscriptions,
 			'groups'         => $groups,
@@ -1537,8 +1547,9 @@ class Subscribers_Wizard extends Wizard {
 	 *
 	 * The wcs_get_users_subscriptions() list is filtered to also surface subs the
 	 * user is only a member of; those are excluded here (they belong to
-	 * get_group_memberships()) by keeping only subs the user actually owns and
-	 * that are not group-enabled.
+	 * get_group_memberships()) by keeping only subs the user actually holds and
+	 * that are not group-enabled. A gift is held by its recipient, not the
+	 * purchaser who paid for it.
 	 *
 	 * @param int                $user_id             The reader user ID.
 	 * @param \WC_Subscription[] $owned_subscriptions The user's subscriptions, already fetched by the caller.
@@ -1549,7 +1560,7 @@ class Subscribers_Wizard extends Wizard {
 	private function get_individual_subscriptions( $user_id, $owned_subscriptions, $detailed = false ) {
 		$out = [];
 		foreach ( $owned_subscriptions as $subscription ) {
-			if ( ! $subscription instanceof \WC_Subscription || (int) $subscription->get_customer_id() !== $user_id ) {
+			if ( ! $subscription instanceof \WC_Subscription || WooCommerce_Subscriptions_Gifting::get_holder_id( $subscription ) !== $user_id ) {
 				continue;
 			}
 			$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
@@ -1557,10 +1568,11 @@ class Subscribers_Wizard extends Wizard {
 				continue; // Group subscriptions are surfaced via get_group_memberships().
 			}
 			$entry = [
-				'id'      => (int) $subscription->get_id(),
-				'plan'    => $this->individual_plan_name( $subscription ),
-				'status'  => self::map_subscription_status( $subscription->get_status() ),
-				'editUrl' => $this->subscription_edit_url( $subscription ),
+				'id'              => (int) $subscription->get_id(),
+				'plan'            => $this->individual_plan_name( $subscription ),
+				'status'          => self::map_subscription_status( $subscription->get_status() ),
+				'editUrl'         => $this->subscription_edit_url( $subscription ),
+				'isComplimentary' => Complimentary_Access::is_complimentary_order( $subscription ),
 			];
 			$out[] = $detailed
 				? array_merge(
@@ -1578,11 +1590,43 @@ class Subscribers_Wizard extends Wizard {
 						// statuses, and offering an action the server will refuse
 						// with a 409 is worse than not offering it.
 						'canReactivate' => 'on-hold' === $subscription->get_status(),
+						// Who bought this subscription for the reader, when they
+						// were given it rather than paying for it themselves.
+						'giftedBy'      => $this->gifted_by( $subscription, $user_id ),
+						// Where the payment link goes. For a gift this is the
+						// purchaser's billing email, not the reader's, so the
+						// reactivate confirmation can name who gets the email.
+						'billingEmail'  => (string) $subscription->get_billing_email(),
 					]
 				)
 				: $entry;
 		}
 		return $out;
+	}
+
+	/**
+	 * The purchaser of a subscription the reader received as a gift.
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 * @param int              $user_id      The reader whose profile lists it.
+	 *
+	 * @return array|null { id, name, editUrl }, or null when the reader bought it
+	 *                    themselves or the purchaser's account no longer exists.
+	 */
+	private function gifted_by( $subscription, $user_id ): ?array {
+		if ( WooCommerce_Subscriptions_Gifting::get_recipient_id( $subscription ) !== $user_id ) {
+			return null;
+		}
+		$purchaser_id = (int) $subscription->get_customer_id();
+		$purchaser    = $purchaser_id ? \get_userdata( $purchaser_id ) : false;
+		if ( ! $purchaser ) {
+			return null;
+		}
+		return [
+			'id'      => $purchaser_id,
+			'name'    => $purchaser->display_name,
+			'editUrl' => (string) \get_edit_user_link( $purchaser_id ),
+		];
 	}
 
 	/**
@@ -1622,6 +1666,9 @@ class Subscribers_Wizard extends Wizard {
 			// is ending even while its status still maps to active (still entitled).
 			'endDate'         => $this->subscription_date( $subscription, 'end' ) ?? $this->subscription_date( $subscription, 'cancelled' ),
 			'lastPayment'     => $this->subscription_date( $subscription, 'last_order_date_paid' ),
+			// A complimentary subscription is billed nothing, so the card shows
+			// "Complimentary" in place of its price and payment dates.
+			'isComplimentary' => Complimentary_Access::is_complimentary_order( $subscription ),
 		];
 	}
 
@@ -1798,10 +1845,11 @@ class Subscribers_Wizard extends Wizard {
 				$owner_id     = (int) $subscription->get_user_id();
 				$managers     = array_map( 'intval', Group_Subscription::get_managers( $subscription ) );
 				$entry        = [
-					'id'      => (int) $subscription->get_id(),
-					'plan'    => (string) $group['settings']['name'],
-					'status'  => self::map_subscription_status( $subscription->get_status() ),
-					'editUrl' => $this->subscription_edit_url( $subscription ),
+					'id'              => (int) $subscription->get_id(),
+					'plan'            => (string) $group['settings']['name'],
+					'status'          => self::map_subscription_status( $subscription->get_status() ),
+					'editUrl'         => $this->subscription_edit_url( $subscription ),
+					'isComplimentary' => Complimentary_Access::is_complimentary_order( $subscription ),
 				];
 				foreach ( array_map( 'intval', Group_Subscription::get_all_members( $subscription ) ) as $member_id ) {
 					if ( $member_id === $owner_id ) {
@@ -1832,10 +1880,11 @@ class Subscribers_Wizard extends Wizard {
 	 *   (non-cancelled) subscription; a reader with no subscription at all has
 	 *   no status.
 	 *
-	 * It is re-encoded in three other places, each of which points back here and
-	 * must be changed in step or the endpoint's filter will contradict the badge
-	 * it filters on:
+	 * It is re-encoded in these places, each of which must be changed in step or
+	 * the endpoint's filters will contradict the badge and column they filter on:
 	 *   - customer_ids_for_statuses() below — the endpoint's `status` filter.
+	 *   - customer_ids_for_plans() and customer_ids_for_complimentary() below —
+	 *     the `plan` and `access` filters, which drop a cancelled plan the same way.
 	 *   - displayStatuses() in src/wizards/subscribers/status.js — the row's
 	 *     status badges.
 	 *   - visiblePlanEntries in src/wizards/subscribers/screens/SubscriberList.jsx
@@ -1875,30 +1924,42 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
-	 * The date of a reader's most recent completed/processing order, or null.
+	 * The date of a reader's most recent payment, or null.
 	 *
-	 * @param int $user_id The reader user ID.
+	 * That is the later of their own most recent completed/processing order and the
+	 * last paid order of each subscription they were gifted. A gift's orders belong
+	 * to the purchaser's account, so the order query alone never sees them.
+	 *
+	 * @param int                $user_id             The reader user ID.
+	 * @param \WC_Subscription[] $owned_subscriptions The reader's subscriptions, already fetched by the caller.
 	 *
 	 * @return string|null 'YYYY-MM-DD', or null when they have no paid order.
 	 */
-	private function last_payment_date( $user_id ) {
-		if ( ! function_exists( 'wc_get_orders' ) ) {
-			return null;
+	private function last_payment_date( $user_id, $owned_subscriptions ) {
+		$dates = [];
+		if ( function_exists( 'wc_get_orders' ) ) {
+			$orders = \wc_get_orders(
+				[
+					'customer_id' => $user_id,
+					'status'      => [ 'wc-completed', 'wc-processing' ],
+					'limit'       => 1,
+					'orderby'     => 'date',
+					'order'       => 'DESC',
+				]
+			);
+			if ( ! empty( $orders ) ) {
+				$paid    = $orders[0]->get_date_paid();
+				$dates[] = $this->local_date( $paid ? $paid->getTimestamp() : null );
+			}
 		}
-		$orders = \wc_get_orders(
-			[
-				'customer_id' => $user_id,
-				'status'      => [ 'wc-completed', 'wc-processing' ],
-				'limit'       => 1,
-				'orderby'     => 'date',
-				'order'       => 'DESC',
-			]
-		);
-		if ( empty( $orders ) ) {
-			return null;
+		foreach ( $owned_subscriptions as $subscription ) {
+			if ( $subscription instanceof \WC_Subscription && WooCommerce_Subscriptions_Gifting::get_recipient_id( $subscription ) === $user_id ) {
+				$dates[] = $this->subscription_date( $subscription, 'last_order_date_paid' );
+			}
 		}
-		$paid = $orders[0]->get_date_paid();
-		return $this->local_date( $paid ? $paid->getTimestamp() : null );
+		// 'Y-m-d' strings sort chronologically, so the latest is the largest.
+		$dates = array_filter( $dates );
+		return empty( $dates ) ? null : max( $dates );
 	}
 
 	/**
@@ -2069,10 +2130,10 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
-	 * Resolve the `include` user-ID set for the active subscription-status / plan
-	 * filters, or null when neither is present.
+	 * Resolve the `include` user-ID set for the active subscription-status, plan
+	 * and access filters, or null when none is present.
 	 *
-	 * Each active filter resolves to a set of customer IDs; the sets are
+	 * Each active filter resolves to a set of holder IDs; the sets are
 	 * intersected so multiple filters narrow (AND) rather than widen. The result
 	 * is capped at FILTER_INCLUDE_CAP to keep the WP_User_Query IN() clause bounded
 	 * on large stores. Above that ceiling the extras are dropped, so the reported
@@ -2081,12 +2142,13 @@ class Subscribers_Wizard extends Wizard {
 	 *
 	 * @param \WP_REST_Request $request The request.
 	 *
-	 * @return int[]|null Customer IDs to include, or null when no filter applies.
+	 * @return int[]|null Holder IDs to include, or null when no filter applies.
 	 */
 	private function resolve_filter_include( $request ) {
 		$status_filter = array_filter( array_map( 'sanitize_text_field', (array) $request->get_param( 'status' ) ) );
 		$plan_filter   = array_filter( array_map( 'sanitize_text_field', (array) $request->get_param( 'plan' ) ) );
-		if ( empty( $status_filter ) && empty( $plan_filter ) ) {
+		$access_filter = array_filter( array_map( 'sanitize_text_field', (array) $request->get_param( 'access' ) ) );
+		if ( empty( $status_filter ) && empty( $plan_filter ) && empty( $access_filter ) ) {
 			return null;
 		}
 
@@ -2096,6 +2158,9 @@ class Subscribers_Wizard extends Wizard {
 		}
 		if ( ! empty( $plan_filter ) ) {
 			$sets[] = $this->customer_ids_for_plans( $plan_filter );
+		}
+		if ( in_array( 'complimentary', $access_filter, true ) ) {
+			$sets[] = $this->customer_ids_for_complimentary();
 		}
 
 		$include = array_shift( $sets );
@@ -2107,7 +2172,7 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
-	 * Customer IDs whose displayed status matches any of the given prototype
+	 * Holder IDs whose displayed status matches any of the given prototype
 	 * statuses, mirroring the list's badge reduction (reduced_status() above is
 	 * the documented source of truth for that rule): a live status always
 	 * qualifies, but `cancelled` matches
@@ -2141,7 +2206,7 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
-	 * Customer IDs holding a subscription (individual or group) in any of the
+	 * Holder IDs of subscriptions (individual or group) in any of the
 	 * given prototype statuses, without the display reduction — a raw status
 	 * match. customer_ids_for_statuses() layers the cancelled reduction on top.
 	 *
@@ -2168,7 +2233,7 @@ class Subscribers_Wizard extends Wizard {
 		// Bounded to the same ceiling the include set is capped at, so the filter
 		// path can't load an unbounded number of subscription objects on a large
 		// store, and walked a chunk at a time: WooCommerce hands back fully
-		// hydrated WC_Subscription objects and only the customer ID is read here,
+		// hydrated WC_Subscription objects and only the holder ID is read here,
 		// so paging keeps peak memory at one chunk instead of the whole cap.
 		//
 		// The walk pages with `offset`, not `paged`: wcs_get_subscriptions()
@@ -2176,7 +2241,7 @@ class Subscribers_Wizard extends Wizard {
 		// extra args and never reaches the WC_Order_Query — passing it would
 		// re-scan the first chunk on every iteration. `orderby => ID` gives the
 		// walk a deterministic tiebreak; the default start-date sort can shuffle
-		// rows sharing a date across a chunk boundary and skip a customer.
+		// rows sharing a date across a chunk boundary and skip a holder.
 		$wcs_statuses = $this->wcs_statuses_for( $prototype_statuses );
 		if ( ! empty( $wcs_statuses ) && function_exists( 'wcs_get_subscriptions' ) ) {
 			for ( $page = 1; ( $page - 1 ) * self::FILTER_SCAN_CHUNK < self::FILTER_INCLUDE_CAP; $page++ ) {
@@ -2188,8 +2253,9 @@ class Subscribers_Wizard extends Wizard {
 						'subscription_status'    => $wcs_statuses,
 					]
 				);
+				self::prime_gift_recipients( $subs );
 				foreach ( $subs as $subscription ) {
-					$ids[] = (int) $subscription->get_customer_id();
+					$ids[] = WooCommerce_Subscriptions_Gifting::get_holder_id( $subscription );
 				}
 				if ( count( $subs ) < self::FILTER_SCAN_CHUNK ) {
 					break;
@@ -2209,7 +2275,25 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
-	 * Customer IDs holding a subscription (individual or group) on any of the
+	 * Load every gift recipient in a batch of subscriptions into the user cache.
+	 *
+	 * The holder lookup checks that each gift recipient's account still exists,
+	 * which would otherwise cost a query pair per gift inside the filter scans.
+	 *
+	 * @param \WC_Subscription[] $subscriptions The subscriptions about to be resolved to holders.
+	 */
+	private static function prime_gift_recipients( array $subscriptions ): void {
+		if ( ! class_exists( 'WCS_Gifting' ) ) {
+			return;
+		}
+		$recipient_ids = array_filter( array_map( fn( $subscription ) => (int) \WCS_Gifting::get_recipient_user( $subscription ), $subscriptions ) );
+		if ( ! empty( $recipient_ids ) ) {
+			cache_users( array_values( array_unique( $recipient_ids ) ) );
+		}
+	}
+
+	/**
+	 * Holder IDs of subscriptions (individual or group) on any of the
 	 * named plans.
 	 *
 	 * A cancelled plan qualifies its holder only when nothing live remains, because
@@ -2261,16 +2345,17 @@ class Subscribers_Wizard extends Wizard {
 		if ( ! empty( $product_ids ) && function_exists( 'wcs_get_subscriptions_for_product' ) && function_exists( 'wcs_get_subscription' ) ) {
 			$per_product = max( 1, intdiv( self::FILTER_INCLUDE_CAP, count( $product_ids ) ) );
 			foreach ( $product_ids as $product_id ) {
-				foreach ( \wcs_get_subscriptions_for_product( $product_id, 'ids', [ 'limit' => $per_product ] ) as $subscription_id ) {
-					$subscription = \wcs_get_subscription( $subscription_id );
-					if ( ! $subscription ) {
-						continue;
-					}
-					$customer_id = (int) $subscription->get_customer_id();
-					if ( 'cancelled' === self::map_subscription_status( $subscription->get_status() ) ) {
-						$cancelled_ids[] = $customer_id;
-					} else {
-						$ids[] = $customer_id;
+				$subscription_ids = \wcs_get_subscriptions_for_product( $product_id, 'ids', [ 'limit' => $per_product ] );
+				foreach ( array_chunk( $subscription_ids, self::FILTER_SCAN_CHUNK ) as $chunk ) {
+					$subscriptions = array_filter( array_map( 'wcs_get_subscription', $chunk ) );
+					self::prime_gift_recipients( $subscriptions );
+					foreach ( $subscriptions as $subscription ) {
+						$holder_id = WooCommerce_Subscriptions_Gifting::get_holder_id( $subscription );
+						if ( 'cancelled' === self::map_subscription_status( $subscription->get_status() ) ) {
+							$cancelled_ids[] = $holder_id;
+						} else {
+							$ids[] = $holder_id;
+						}
 					}
 				}
 			}
@@ -2282,6 +2367,67 @@ class Subscribers_Wizard extends Wizard {
 			$ids = array_merge( $ids, array_diff( $cancelled_ids, $this->customer_ids_for_raw_statuses( [ 'active', 'pending', 'on-hold' ] ) ) );
 		}
 
+		return array_values( array_unique( array_filter( $ids ) ) );
+	}
+
+	/**
+	 * Customer IDs holding a complimentary subscription, individual or group.
+	 *
+	 * Reduced like customer_ids_for_plans(): a cancelled comp qualifies its holder only
+	 * when nothing live remains, since the Subscription column hides it otherwise. A
+	 * group's members inherit its stamp, as they inherit its status. Walked a chunk at
+	 * a time up to FILTER_INCLUDE_CAP, as in customer_ids_for_raw_statuses().
+	 *
+	 * @return int[]
+	 */
+	private function customer_ids_for_complimentary(): array {
+		$ids           = [];
+		$cancelled_ids = [];
+		$groups        = $this->get_group_subscriptions();
+		foreach ( $groups as $group ) {
+			if ( ! Complimentary_Access::is_complimentary_order( $group['subscription'] ) ) {
+				continue;
+			}
+			$members = array_map( 'intval', Group_Subscription::get_all_members( $group['subscription'] ) );
+			if ( 'cancelled' === self::map_subscription_status( $group['subscription']->get_status() ) ) {
+				$cancelled_ids = array_merge( $cancelled_ids, $members );
+			} else {
+				$ids = array_merge( $ids, $members );
+			}
+		}
+		$can_scan = function_exists( 'wcs_get_subscriptions' );
+		for ( $page = 1; $can_scan && ( $page - 1 ) * self::FILTER_SCAN_CHUNK < self::FILTER_INCLUDE_CAP; $page++ ) {
+			$subs = \wcs_get_subscriptions(
+				[
+					'subscriptions_per_page' => self::FILTER_SCAN_CHUNK,
+					'offset'                 => ( $page - 1 ) * self::FILTER_SCAN_CHUNK,
+					'orderby'                => 'ID',
+					'subscription_status'    => $this->wcs_statuses_for( [ 'active', 'pending', 'on-hold', 'cancelled' ] ),
+					'meta_query'             => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+						[
+							'key'   => Complimentary_Access::META_KEY,
+							'value' => 'yes',
+						],
+					],
+				]
+			);
+			foreach ( $subs as $subscription ) {
+				if ( isset( $groups[ (int) $subscription->get_id() ] ) ) {
+					continue; // Counted with its members above.
+				}
+				if ( 'cancelled' === self::map_subscription_status( $subscription->get_status() ) ) {
+					$cancelled_ids[] = (int) $subscription->get_customer_id();
+				} else {
+					$ids[] = (int) $subscription->get_customer_id();
+				}
+			}
+			if ( count( $subs ) < self::FILTER_SCAN_CHUNK ) {
+				break;
+			}
+		}
+		if ( ! empty( $cancelled_ids ) ) {
+			$ids = array_merge( $ids, array_diff( $cancelled_ids, $this->customer_ids_for_raw_statuses( [ 'active', 'pending', 'on-hold' ] ) ) );
+		}
 		return array_values( array_unique( array_filter( $ids ) ) );
 	}
 
@@ -2467,7 +2613,8 @@ class Subscribers_Wizard extends Wizard {
 			'newspack-subscribers',
 			Newspack::plugin_url() . '/dist/subscribers.css',
 			[ 'wp-components' ],
-			NEWSPACK_PLUGIN_VERSION
+			Newspack::asset_version( 'subscribers' )
 		);
+		wp_style_add_data( 'newspack-subscribers', 'rtl', 'replace' );
 	}
 }

@@ -7,7 +7,8 @@
  * Author URI:      https://newspack.com/
  * Text Domain:     newspack-blocks
  * Domain Path:     /languages
- * Version:         4.34.3
+ * Version:         4.36.5
+ * Requires PHP:    8.1
  *
  * @package         Newspack_Blocks
  */
@@ -15,7 +16,7 @@
 define( 'NEWSPACK_BLOCKS__PLUGIN_FILE', __FILE__ );
 define( 'NEWSPACK_BLOCKS__BLOCKS_DIRECTORY', 'dist/' );
 define( 'NEWSPACK_BLOCKS__PLUGIN_DIR', plugin_dir_path( NEWSPACK_BLOCKS__PLUGIN_FILE ) );
-define( 'NEWSPACK_BLOCKS__VERSION', '4.34.3' );
+define( 'NEWSPACK_BLOCKS__VERSION', '4.36.5' );
 
 require_once NEWSPACK_BLOCKS__PLUGIN_DIR . 'includes/class-newspack-blocks.php';
 require_once NEWSPACK_BLOCKS__PLUGIN_DIR . 'includes/class-newspack-blocks-api.php';

@@ -1,3 +1,25 @@
+## newspack-story-budget [1.3.8](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.3.7...newspack-story-budget@1.3.8) (2026-10-22)
+
+
+### Bug Fixes
+
+* **story-budget:** show other users' changes on refresh ([#1396](https://github.com/Automattic/newspack-workspace/issues/1396)) ([7d2b0cb](https://github.com/Automattic/newspack-workspace/commit/7d2b0cbf03b74b25947eff9a456bb8c04a53d080))
+
+## newspack-story-budget [1.3.7](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.3.6...newspack-story-budget@1.3.7) (2026-10-14)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.11.0
+
+## newspack-story-budget [1.3.6](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.3.5...newspack-story-budget@1.3.6) (2026-10-12)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.10.0
+* **newspack-scripts:** upgraded to 5.12.0
+
 ## newspack-story-budget [1.3.5](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.3.4...newspack-story-budget@1.3.5) (2026-10-05)
 
 

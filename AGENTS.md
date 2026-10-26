@@ -43,6 +43,8 @@ Each plugin/theme directory is standalone and can be zipped and installed on its
 
 **Not in this monorepo** (separate repos): `newspack-manager-admin` (hub UI on newspack.com) and `newspack-manager` (companion plugin on each managed site).
 
+**"Reader Activation" (RAS) in code is "Audience Management" in the product.** They are the same feature. Public identifiers keep the code name, because sites, custom code and other plugins depend on them: `Newspack\Reader_Activation`, the `newspack_reader_activation_*` options and hooks, `window.newspackReaderActivation`, and the `reader-activation` paths. Use "Audience Management" in anything a publisher or reader sees. Code above the feature, such as the Audience wizard, may use the product name. Do not rename an identifier inside `Reader_Activation`, because that mixes the two names in one place. The wp-admin "Audience" menu is wider than the feature: it also holds Campaigns, Donations and Subscriptions.
+
 Most cross-plugin coupling runs through `newspack-plugin`. Before changing something there, find its consumers — `grep -rn "Data_Events" plugins/` and similar. Read the class you intend to call rather than trusting a remembered signature; these APIs move.
 
 ## Conventions
@@ -91,7 +93,7 @@ Direct pushes to `main` are blocked.
 Everything goes through the `n` script at the repository root. It is context-aware: run it from inside `plugins/<project>/`, `themes/<project>/`, `additional-sites-html/<site>/` or `manager-html/` and it targets that project or site, otherwise the main site. It works in interactive and non-interactive (CI, agent) contexts. `ncd <name>` jumps between projects (install with `n cd-install`).
 
 ```bash
-n start [8.2]                 # Start containers (default PHP 8.3)
+n start                       # Start containers
 n stop | n restart
 
 n build [name]                # Build current project, or a named one ('newspack-' optional)
@@ -116,7 +118,7 @@ Run any command with `--help` for its full options.
 
 ```bash
 cp default.env .env
-./build-image.sh              # or ./build-image-82.sh for PHP 8.2
+./build-image.sh              # add --no-cache to pick up a PHP patch release
 n start && n install
 n ci-build all
 n setup --yes                 # Bootstrap site with content and plugins
@@ -140,7 +142,7 @@ The main container is `newspack_dev`; an isolated env is `newspack_env_<name>`, 
 
 ## Local environment
 
-**Services** — `wordpress` (`newspack_dev`, Apache + PHP), `db` (MariaDB 11.8.6), `mailhog` (http://localhost:8025), `adminer` (http://localhost:8088). Memcached object cache and Batcache page cache are enabled. Xdebug is on port 9003 with IDE key `DOCKERDEBUG`, mapping `/newspack-plugins/<project>` to `plugins/<project>`.
+**Services** — `wordpress` (`newspack_dev`, Apache + PHP), `db` (MariaDB 11.8.6), `mailpit` (http://localhost:8025), `adminer` (http://localhost:8088). Memcached object cache and Batcache page cache are enabled. Xdebug is on port 9003 with IDE key `DOCKERDEBUG`, mapping `/newspack-plugins/<project>` to `plugins/<project>`.
 
 **`custom-redirects.php`**: when present in a site's root it runs before WordPress on every request, as in production. The env wires this via PHP's `auto_prepend_file` (`config/php.ini` → `bin/auto-prepend.php`) for `html/`, additional sites and each env's `html/`, for web requests and for `wp` run from the site root. Baked into the image, so it takes effect after `./build-image.sh`.
 

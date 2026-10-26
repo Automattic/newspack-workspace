@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Newspack Blocks 1.0.0-alpha.25\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-blocks\n"
-"POT-Creation-Date: 2026-09-28T17:15:16+00:00\n"
+"POT-Creation-Date: 2026-10-26T22:15:17+00:00\n"
 "PO-Revision-Date: 2024-08-30 08:46-0700\n"
 "Last-Translator: \n"
 "Language-Team: \n"
@@ -78,8 +78,7 @@ msgid "Updated."
 msgstr ""
 
 #: includes/class-modal-checkout.php:1303
-#: includes/class-modal-checkout.php:1386 dist/editor.js:26
-#: src/components/reorder-modal.js:254
+#: includes/class-modal-checkout.php:1386
 msgid "Close"
 msgstr ""
 
@@ -167,10 +166,8 @@ msgstr ""
 
 #. translators: 1: Checkout button confirmation text. 2: Order total.
 #. translators: 1 is the name of the item. 2 is the price of the item.
-#. translators: keep %1$s first: it repeats the button's visible label, which speech input matches on. 1: the control's visible label. 2: title of the content being moved.
 #: includes/class-modal-checkout.php:2982
-#: includes/modal-checkout/class-checkout-data.php:72 dist/editor.js:24
-#: src/components/reorder-modal.js:57
+#: includes/modal-checkout/class-checkout-data.php:72
 #, php-format
 msgid "%1$s: %2$s"
 msgstr ""
@@ -232,10 +229,9 @@ msgstr ""
 msgid "Edit billing information"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3470 dist/editor.js:26 dist/editor.js:40
-#: dist/editor.js:43 src/blocks/checkout-button/coupon-control.js:145
-#: src/blocks/checkout-button/edit.js:198 src/components/reorder-modal.js:272
-#: src/components/reorder-modal.js:351
+#: includes/class-modal-checkout.php:3470 dist/editor.js:40 dist/editor.js:43
+#: src/blocks/checkout-button/coupon-control.js:145
+#: src/blocks/checkout-button/edit.js:198
 msgid "Cancel"
 msgstr ""
 
@@ -273,6 +269,11 @@ msgid ""
 "Thank you for supporting %s. Your transaction was completed successfully."
 msgstr ""
 
+#: includes/class-newspack-blocks-api.php:283 dist/editor.js:26
+#: src/blocks/homepage-articles/store.js:182
+msgid "The posts for this block could not be loaded."
+msgstr ""
+
 #: includes/class-newspack-blocks-patterns.php:130
 msgid "Support our publication"
 msgstr ""
@@ -304,45 +305,45 @@ msgstr ""
 msgid "Newspack Subscribe"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1132
+#: includes/class-newspack-blocks.php:1182
 msgid "Common"
 msgstr ""
 
 #. translators: separates last two sponsor names; needs a space on either side.
-#: includes/class-newspack-blocks.php:1233
+#: includes/class-newspack-blocks.php:1283
 msgid " and "
 msgstr " e "
 
 #. translators: separates all but the last two sponsor names; needs a space at the end.
-#: includes/class-newspack-blocks.php:1236
+#: includes/class-newspack-blocks.php:1286
 msgid ", "
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1571
+#: includes/class-newspack-blocks.php:1634
 msgid "Jetpack donations is disabled in favour of Newspack donations."
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1604 dist/editor.js:30
-#: src/shared/js/utils.js:54
+#: includes/class-newspack-blocks.php:1667 dist/editor.js:30
+#: src/shared/js/utils.js:49
 msgid "Draft"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1605 dist/editor.js:30
-#: src/shared/js/utils.js:54
+#: includes/class-newspack-blocks.php:1668 dist/editor.js:30
+#: src/shared/js/utils.js:49
 msgid "Scheduled"
 msgstr ""
 
 #. Translators: %s is the %s is the frequency.
-#: includes/class-newspack-blocks.php:1803 dist/editor.js:52
+#: includes/class-newspack-blocks.php:1909 dist/editor.js:52
 #, php-format
 msgid "per %s"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1834
+#: includes/class-newspack-blocks.php:1940
 msgid " once"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1837
+#: includes/class-newspack-blocks.php:1943
 msgid " per "
 msgstr ""
 
@@ -523,9 +524,9 @@ msgstr ""
 msgid "Subscribe Pattern 7"
 msgstr ""
 
-#. translators: %s: the drawer's title.
-#: src/blocks/author-profile/view.php:25 dist/editor.js:16 dist/editor.js:19
-#: dist/editor.js:20 dist/editor.js:40 src/blocks/author-profile/edit.js:64
+#. translators: 1: title of the moved item. 2: its new position. 3: total number of items.
+#: src/blocks/author-profile/view.php:25 dist/editor.js:19 dist/editor.js:22
+#: dist/editor.js:23 dist/editor.js:40 src/blocks/author-profile/edit.js:64
 #: src/blocks/author-profile/edit.js:616 src/blocks/author-profile/edit.js:670
 #: src/blocks/author-profile/edit.js:691 src/blocks/author-profile/edit.js:737
 #: src/blocks/author-profile/edit.js:793 src/blocks/author-profile/edit.js:884
@@ -535,7 +536,7 @@ msgstr ""
 
 #. translators: %s: author name
 #. translators: %s: author name.
-#: src/blocks/author-profile/view.php:62 dist/editor.js:17 dist/editor.js:21
+#: src/blocks/author-profile/view.php:62 dist/editor.js:20 dist/editor.js:24
 #: dist/editor.js:40 src/blocks/author-profile/edit.js:90
 #: src/blocks/author-profile/single-author.js:79
 #: src/blocks/author-profile/templates.js:126
@@ -628,6 +629,12 @@ msgstr "Valor da Doação"
 #: dist/editor.js:52
 msgid "Other"
 msgstr "Outro"
+
+#. translators: %s: When the post was last updated.
+#: src/blocks/homepage-articles/templates/article.php:247
+#, php-format
+msgid "Updated %s"
+msgstr ""
 
 #: src/blocks/homepage-articles/view.php:415 dist/editor.js:64
 msgid "Load more posts"
@@ -744,29 +751,29 @@ msgid " <a href=\"%1$s\">More by %2$s</a>"
 msgstr ""
 
 #. translators: %s: indicates which slide the slider is on.
-#: dist/carousel/view.js:2 dist/editor.js:22
+#: dist/carousel/view.js:2 dist/editor.js:25
 #: src/blocks/carousel/create-swiper.js:104
 msgid "Slide %s"
 msgstr ""
 
 #. translators: %1$s: current slide number, %2$s: total number of slides
-#: dist/carousel/view.js:3 dist/editor.js:23
+#: dist/carousel/view.js:3 dist/editor.js:26
 #: src/blocks/carousel/create-swiper.js:156
 msgid "Slide %1$s of %2$s"
 msgstr ""
 
 #. translators: %s: the title of the image.
-#: dist/carousel/view.js:3 dist/editor.js:23
+#: dist/carousel/view.js:3 dist/editor.js:26
 #: src/blocks/carousel/create-swiper.js:164
 msgid "Image: %s,"
 msgstr ""
 
-#: dist/carousel/view.js:3 dist/editor.js:23
+#: dist/carousel/view.js:3 dist/editor.js:26
 #: src/blocks/carousel/create-swiper.js:213
 msgid "Playing"
 msgstr ""
 
-#: dist/carousel/view.js:3 dist/editor.js:23
+#: dist/carousel/view.js:3 dist/editor.js:26
 #: src/blocks/carousel/create-swiper.js:218
 msgid "Paused"
 msgstr ""
@@ -774,7 +781,7 @@ msgstr ""
 #. translators: label for small text size option
 #. translators: label for small avatar size option
 #. translators: label for small size option
-#: dist/editor.js:17 dist/editor.js:58 src/blocks/author-profile/edit.js:141
+#: dist/editor.js:20 dist/editor.js:58 src/blocks/author-profile/edit.js:141
 #: src/blocks/author-profile/edit.js:165
 msgid "Small"
 msgstr "Pequeno"
@@ -782,7 +789,7 @@ msgstr "Pequeno"
 #. translators: abbreviation for small text size option
 #. translators: abbreviation for small avatar size option
 #. translators: abbreviation for small size
-#: dist/editor.js:17 dist/editor.js:58 src/blocks/author-profile/edit.js:142
+#: dist/editor.js:20 dist/editor.js:58 src/blocks/author-profile/edit.js:142
 #: src/blocks/author-profile/edit.js:166
 msgid "S"
 msgstr "S"
@@ -790,7 +797,7 @@ msgstr "S"
 #. translators: label for medium text size option
 #. translators: label for medium avatar size option
 #. translators: label for medium size option
-#: dist/editor.js:17 dist/editor.js:58 src/blocks/author-profile/edit.js:146
+#: dist/editor.js:20 dist/editor.js:58 src/blocks/author-profile/edit.js:146
 #: src/blocks/author-profile/edit.js:170
 msgid "Medium"
 msgstr "Médio"
@@ -798,7 +805,7 @@ msgstr "Médio"
 #. translators: abbreviation for medium text size option
 #. translators: abbreviation for medium avatar size option
 #. translators: abbreviation for medium size
-#: dist/editor.js:17 dist/editor.js:58 src/blocks/author-profile/edit.js:147
+#: dist/editor.js:20 dist/editor.js:58 src/blocks/author-profile/edit.js:147
 #: src/blocks/author-profile/edit.js:171
 msgid "M"
 msgstr "M"
@@ -806,7 +813,7 @@ msgstr "M"
 #. translators: label for small text size option
 #. translators: label for large avatar size option
 #. translators: label for large size option
-#: dist/editor.js:17 dist/editor.js:58 src/blocks/author-profile/edit.js:151
+#: dist/editor.js:20 dist/editor.js:58 src/blocks/author-profile/edit.js:151
 #: src/blocks/author-profile/edit.js:175
 msgid "Large"
 msgstr "Amplo"
@@ -814,509 +821,460 @@ msgstr "Amplo"
 #. translators: abbreviation for large text size option
 #. translators: abbreviation for large avatar size option
 #. translators: abbreviation for large size
-#: dist/editor.js:17 dist/editor.js:58 src/blocks/author-profile/edit.js:152
+#: dist/editor.js:20 dist/editor.js:58 src/blocks/author-profile/edit.js:152
 #: src/blocks/author-profile/edit.js:176
 msgid "L"
 msgstr "L"
 
 #. translators: label for extra-large text size option
 #. translators: label for extra large size option
-#: dist/editor.js:17 dist/editor.js:58 src/blocks/author-profile/edit.js:156
+#: dist/editor.js:20 dist/editor.js:58 src/blocks/author-profile/edit.js:156
 msgid "Extra Large"
 msgstr "Extra grande"
 
 #. translators: abbreviation for small text size option
 #. translators: abbreviation for extra-large avatar size option
 #. translators: abbreviation for extra large size
-#: dist/editor.js:17 dist/editor.js:58 src/blocks/author-profile/edit.js:157
+#: dist/editor.js:20 dist/editor.js:58 src/blocks/author-profile/edit.js:157
 #: src/blocks/author-profile/edit.js:181
 msgid "XL"
 msgstr "XL"
 
 #. translators: label for extra-large avatar size option
-#: dist/editor.js:17 src/blocks/author-profile/edit.js:180
+#: dist/editor.js:20 src/blocks/author-profile/edit.js:180
 msgid "Extra-large"
 msgstr "Extra grande"
 
-#: dist/editor.js:17 src/blocks/author-profile/edit.js:210
+#: dist/editor.js:20 src/blocks/author-profile/edit.js:210
 msgid "Select a layout to start with:"
 msgstr ""
 
 #. translators: %s: error text for when no authors are found.
-#: dist/editor.js:18 dist/editor.js:19 src/blocks/author-profile/edit.js:417
+#: dist/editor.js:21 dist/editor.js:22 src/blocks/author-profile/edit.js:417
 #: src/blocks/author-profile/edit.js:428
 msgid "No authors or guest authors found for ID %s."
 msgstr ""
 
-#: dist/editor.js:19 src/blocks/author-profile/edit.js:461
+#: dist/editor.js:22 src/blocks/author-profile/edit.js:461
 msgid "Error fetching authors for this post."
 msgstr ""
 
-#: dist/editor.js:19 src/blocks/author-profile/edit.js:487
+#: dist/editor.js:22 src/blocks/author-profile/edit.js:487
 msgid "Error fetching byline authors."
 msgstr ""
 
-#: dist/editor.js:19 dist/editor.js:23 dist/editor.js:58
-#: src/blocks/author-profile/edit.js:538 src/blocks/carousel/edit.js:237
+#: dist/editor.js:22 dist/editor.js:26 dist/editor.js:58
+#: src/blocks/author-profile/edit.js:538 src/blocks/carousel/edit.js:245
 msgid "Display"
 msgstr ""
 
-#: dist/editor.js:19 src/blocks/author-profile/edit.js:540
+#: dist/editor.js:22 src/blocks/author-profile/edit.js:540
 msgid "Show authors without bio"
 msgstr ""
 
-#: dist/editor.js:19 src/blocks/author-profile/edit.js:541
+#: dist/editor.js:22 src/blocks/author-profile/edit.js:541
 msgid "Display author profiles even if their bio is empty."
 msgstr ""
 
-#: dist/editor.js:19 dist/editor.js:23 dist/editor.js:43 dist/editor.js:58
+#: dist/editor.js:22 dist/editor.js:26 dist/editor.js:43 dist/editor.js:58
 #: dist/editor.js:70 src/blocks/author-profile/edit.js:549
-#: src/blocks/carousel/edit.js:209 src/blocks/checkout-button/edit.js:324
+#: src/blocks/carousel/edit.js:217 src/blocks/checkout-button/edit.js:324
 #: src/blocks/video-playlist/edit.js:191
 msgid "Settings"
 msgstr ""
 
-#: dist/editor.js:19 src/blocks/author-profile/edit.js:551
+#: dist/editor.js:22 src/blocks/author-profile/edit.js:551
 msgid "Text size"
 msgstr ""
 
-#: dist/editor.js:19 dist/editor.js:39 src/blocks/author-list/edit.js:277
+#: dist/editor.js:22 dist/editor.js:39 src/blocks/author-list/edit.js:277
 #: src/blocks/author-profile/edit.js:566
 msgid "Avatar"
 msgstr ""
 
-#: dist/editor.js:19 dist/editor.js:39 src/blocks/author-list/edit.js:279
+#: dist/editor.js:22 dist/editor.js:39 src/blocks/author-list/edit.js:279
 #: src/blocks/author-profile/edit.js:568
 msgid "Display avatar"
 msgstr ""
 
-#: dist/editor.js:19 dist/editor.js:39 src/blocks/author-list/edit.js:285
+#: dist/editor.js:22 dist/editor.js:39 src/blocks/author-list/edit.js:285
 #: src/blocks/author-profile/edit.js:575
 msgid "Hide default avatar"
 msgstr ""
 
-#: dist/editor.js:19 dist/editor.js:39 dist/editor.js:64
+#: dist/editor.js:22 dist/editor.js:39 dist/editor.js:64
 #: src/blocks/author-list/edit.js:292 src/blocks/author-profile/edit.js:583
 msgid "Size"
 msgstr ""
 
-#: dist/editor.js:19 dist/editor.js:39 src/blocks/author-list/edit.js:293
+#: dist/editor.js:22 dist/editor.js:39 src/blocks/author-list/edit.js:293
 #: src/blocks/author-profile/edit.js:584
 msgid "Avatar size"
 msgstr ""
 
-#: dist/editor.js:19 dist/editor.js:39 src/blocks/author-list/edit.js:306
+#: dist/editor.js:22 dist/editor.js:39 src/blocks/author-list/edit.js:306
 #: src/blocks/author-profile/edit.js:597
 msgid "Border radius"
 msgstr ""
 
-#: dist/editor.js:19 dist/editor.js:39 src/blocks/author-list/edit.js:307
+#: dist/editor.js:22 dist/editor.js:39 src/blocks/author-list/edit.js:307
 #: src/blocks/author-profile/edit.js:598
 msgid "Avatar border radius"
 msgstr ""
 
-#: dist/editor.js:19 dist/editor.js:20 dist/editor.js:39
+#: dist/editor.js:22 dist/editor.js:23 dist/editor.js:39
 #: src/blocks/author-list/edit.js:446 src/blocks/author-profile/edit.js:619
 #: src/blocks/author-profile/edit.js:927
 msgid "Fetching authors…"
 msgstr ""
 
-#: dist/editor.js:19 dist/editor.js:39 src/blocks/author-list/edit.js:345
+#: dist/editor.js:22 dist/editor.js:39 src/blocks/author-list/edit.js:345
 #: src/blocks/author-profile/edit.js:633
 msgid "Show avatar on left"
 msgstr ""
 
-#: dist/editor.js:19 dist/editor.js:39 src/blocks/author-list/edit.js:351
+#: dist/editor.js:22 dist/editor.js:39 src/blocks/author-list/edit.js:351
 #: src/blocks/author-profile/edit.js:639
 msgid "Show avatar on right"
 msgstr ""
 
-#: dist/editor.js:19 dist/editor.js:39 src/blocks/author-list/edit.js:362
+#: dist/editor.js:22 dist/editor.js:39 src/blocks/author-list/edit.js:362
 #: src/blocks/author-profile/edit.js:651
 msgid "Edit selection"
 msgstr ""
 
-#: dist/editor.js:19 src/blocks/author-profile/edit.js:671
+#: dist/editor.js:22 src/blocks/author-profile/edit.js:671
 msgid "Select a type:"
 msgstr ""
 
-#: dist/editor.js:19 src/blocks/author-profile/edit.js:674
+#: dist/editor.js:22 src/blocks/author-profile/edit.js:674
 msgid "Contextual"
 msgstr ""
 
-#: dist/editor.js:19 src/blocks/author-profile/edit.js:677
+#: dist/editor.js:22 src/blocks/author-profile/edit.js:677
 msgid "Specific"
 msgstr ""
 
-#: dist/editor.js:19 src/blocks/author-profile/edit.js:693
+#: dist/editor.js:22 src/blocks/author-profile/edit.js:693
 msgid ""
 "This block was created with a block theme and is not supported in the "
 "current theme. It will render using the classic layout on the frontend."
 msgstr ""
 
-#: dist/editor.js:19 dist/editor.js:20 src/blocks/author-profile/edit.js:725
+#: dist/editor.js:22 dist/editor.js:23 src/blocks/author-profile/edit.js:725
 #: src/blocks/author-profile/edit.js:872
 msgid "Author bio is hidden because Custom Byline is active on this post."
 msgstr ""
 
-#: dist/editor.js:19 dist/editor.js:20 src/blocks/author-profile/edit.js:744
+#: dist/editor.js:22 dist/editor.js:23 src/blocks/author-profile/edit.js:744
 #: src/blocks/author-profile/edit.js:932
 msgid "Search for an author to display"
 msgstr ""
 
-#: dist/editor.js:19 dist/editor.js:20 src/blocks/author-profile/edit.js:745
+#: dist/editor.js:22 dist/editor.js:23 src/blocks/author-profile/edit.js:745
 #: src/blocks/author-profile/edit.js:933
 msgid "Begin typing name, click autocomplete result to select."
 msgstr ""
 
-#: dist/editor.js:19 dist/editor.js:20 dist/editor.js:27 dist/editor.js:39
+#: dist/editor.js:22 dist/editor.js:23 dist/editor.js:27 dist/editor.js:39
 #: src/blocks/author-list/edit.js:249 src/blocks/author-profile/edit.js:757
 #: src/blocks/author-profile/edit.js:952 src/components/query-controls.js:104
 #: src/components/query-controls.js:119
 msgid "(no name)"
 msgstr "(sem nome)"
 
-#: dist/editor.js:19 dist/editor.js:20 dist/editor.js:30 dist/editor.js:39
+#: dist/editor.js:22 dist/editor.js:23 dist/editor.js:30 dist/editor.js:39
 #: dist/editor.js:40 src/blocks/author-list/edit.js:256
 #: src/blocks/author-list/index.js:48 src/blocks/author-profile/edit.js:779
 #: src/blocks/author-profile/edit.js:979 src/blocks/author-profile/index.js:50
 msgid "author"
 msgstr ""
 
-#: dist/editor.js:19 dist/editor.js:20 dist/editor.js:39
+#: dist/editor.js:22 dist/editor.js:23 dist/editor.js:39
 #: src/blocks/author-list/edit.js:257 src/blocks/author-profile/edit.js:780
 #: src/blocks/author-profile/edit.js:980
 msgid "authors"
 msgstr ""
 
-#: dist/editor.js:19 dist/editor.js:20 src/blocks/author-profile/edit.js:794
+#: dist/editor.js:22 dist/editor.js:23 src/blocks/author-profile/edit.js:794
 #: src/blocks/author-profile/edit.js:885
 msgid "No authors found for this post."
 msgstr ""
 
-#: dist/editor.js:19 src/blocks/author-profile/edit.js:823
+#: dist/editor.js:22 src/blocks/author-profile/edit.js:823
 msgid "Preview author"
 msgstr ""
 
 #. translators: %d: number of authors
-#: dist/editor.js:20 src/blocks/author-profile/edit.js:832
+#: dist/editor.js:23 src/blocks/author-profile/edit.js:832
 msgid "Previewing 1 of %d authors. All authors display on frontend."
 msgstr ""
 
 #. translators: label for square aspect ratio option
-#: dist/editor.js:23 src/blocks/carousel/edit.js:181
+#: dist/editor.js:26 src/blocks/carousel/edit.js:189
 msgid "Square"
 msgstr ""
 
 #. translators: abbreviation for 1:1 aspect ratio
-#: dist/editor.js:23 src/blocks/carousel/edit.js:182
+#: dist/editor.js:26 src/blocks/carousel/edit.js:190
 msgid "1:1"
 msgstr ""
 
 #. translators: label for 4:3 aspect ratio option
 #. translators: abbreviation for 4:3 aspect ratio
-#: dist/editor.js:23 src/blocks/carousel/edit.js:186
-#: src/blocks/carousel/edit.js:187
+#: dist/editor.js:26 src/blocks/carousel/edit.js:194
+#: src/blocks/carousel/edit.js:195
 msgid "4:3"
 msgstr ""
 
 #. translators: label for 16:9 aspect ratio option
 #. translators: abbreviation for 16:9 aspect ratio
-#: dist/editor.js:23 src/blocks/carousel/edit.js:191
-#: src/blocks/carousel/edit.js:192
+#: dist/editor.js:26 src/blocks/carousel/edit.js:199
+#: src/blocks/carousel/edit.js:200
 msgid "16:9"
 msgstr ""
 
 #. translators: label for 3:4 aspect ratio option
 #. translators: abbreviation for 3:4 aspect ratio
-#: dist/editor.js:23 src/blocks/carousel/edit.js:196
-#: src/blocks/carousel/edit.js:197
+#: dist/editor.js:26 src/blocks/carousel/edit.js:204
+#: src/blocks/carousel/edit.js:205
 msgid "3:4"
 msgstr ""
 
 #. translators: label for 9:16 aspect ratio option
 #. translators: abbreviation for 9:16 aspect ratio
-#: dist/editor.js:23 src/blocks/carousel/edit.js:201
-#: src/blocks/carousel/edit.js:202
+#: dist/editor.js:26 src/blocks/carousel/edit.js:209
+#: src/blocks/carousel/edit.js:210
 msgid "9:16"
 msgstr ""
 
-#: dist/editor.js:23 src/blocks/carousel/edit.js:239
+#: dist/editor.js:26 src/blocks/carousel/edit.js:247
 msgid "Hide Controls"
 msgstr ""
 
-#: dist/editor.js:23 src/blocks/carousel/edit.js:240
+#: dist/editor.js:26 src/blocks/carousel/edit.js:248
 msgid "Remove navigation indicators from view."
 msgstr ""
 
-#: dist/editor.js:23 src/blocks/carousel/edit.js:247
+#: dist/editor.js:26 src/blocks/carousel/edit.js:255
 msgid "Autoplay"
 msgstr ""
 
-#: dist/editor.js:23 src/blocks/carousel/edit.js:248
+#: dist/editor.js:26 src/blocks/carousel/edit.js:256
 msgid "Automatically advance through slides."
 msgstr ""
 
-#: dist/editor.js:23 src/blocks/carousel/edit.js:256
+#: dist/editor.js:26 src/blocks/carousel/edit.js:264
 msgid "Transition delay"
 msgstr ""
 
-#: dist/editor.js:23 src/blocks/carousel/edit.js:263
+#: dist/editor.js:26 src/blocks/carousel/edit.js:271
 msgid "Set the waiting time between automatic slide transitions in seconds."
 msgstr ""
 
-#: dist/editor.js:23 src/blocks/carousel/edit.js:269
+#: dist/editor.js:26 src/blocks/carousel/edit.js:277
 msgid "Slides per view"
 msgstr ""
 
-#: dist/editor.js:23 src/blocks/carousel/edit.js:278
+#: dist/editor.js:26 src/blocks/carousel/edit.js:286
 msgid "Choose how many slides appear on screen simultaneously."
 msgstr ""
 
-#: dist/editor.js:23 dist/editor.js:64 src/blocks/carousel/edit.js:283
+#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/edit.js:291
 msgid "Featured Image"
 msgstr ""
 
-#: dist/editor.js:23 src/blocks/carousel/edit.js:285
+#: dist/editor.js:26 src/blocks/carousel/edit.js:293
 msgid "Aspect ratio"
 msgstr ""
 
-#: dist/editor.js:23 src/blocks/carousel/edit.js:286
+#: dist/editor.js:26 src/blocks/carousel/edit.js:294
 msgid "All slides will share the same aspect ratio, for consistency."
 msgstr ""
 
-#: dist/editor.js:23 src/blocks/carousel/edit.js:297
+#: dist/editor.js:26 src/blocks/carousel/edit.js:305
 msgid "Fit"
 msgstr ""
 
-#: dist/editor.js:23 src/blocks/carousel/edit.js:300
+#: dist/editor.js:26 src/blocks/carousel/edit.js:308
 msgid "The image will fill the entire slide and will be cropped if necessary."
 msgstr ""
 
-#: dist/editor.js:23 src/blocks/carousel/edit.js:301
+#: dist/editor.js:26 src/blocks/carousel/edit.js:309
 msgid ""
 "The image will be resized to fit inside the slide without being cropped."
 msgstr ""
 
-#: dist/editor.js:23 src/blocks/carousel/edit.js:308
+#: dist/editor.js:26 src/blocks/carousel/edit.js:316
 msgid "Cover"
 msgstr ""
 
-#: dist/editor.js:23 src/blocks/carousel/edit.js:309
+#: dist/editor.js:26 src/blocks/carousel/edit.js:317
 msgid "Contain"
 msgstr ""
 
-#: dist/editor.js:23 dist/editor.js:64 src/blocks/carousel/edit.js:312
+#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/edit.js:320
 msgid "Show caption"
 msgstr ""
 
-#: dist/editor.js:23 dist/editor.js:64 src/blocks/carousel/edit.js:317
+#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/edit.js:325
 msgid "Show credit"
 msgstr ""
 
-#: dist/editor.js:23 dist/editor.js:64 src/blocks/carousel/edit.js:322
+#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/edit.js:330
 msgid "Post Meta"
 msgstr ""
 
-#: dist/editor.js:23 src/blocks/carousel/edit.js:324
+#: dist/editor.js:26 src/blocks/carousel/edit.js:332
 msgid "Show title"
 msgstr ""
 
-#: dist/editor.js:23 dist/editor.js:64 src/blocks/carousel/edit.js:329
+#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/edit.js:337
 msgid "Show date"
 msgstr ""
 
-#: dist/editor.js:23 dist/editor.js:64 src/blocks/carousel/edit.js:334
+#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/edit.js:342
 msgid "Show category"
 msgstr ""
 
-#: dist/editor.js:23 dist/editor.js:64 src/blocks/carousel/edit.js:339
+#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/edit.js:347
 msgid "Show tag labels"
 msgstr ""
 
-#: dist/editor.js:23 dist/editor.js:64 src/blocks/carousel/edit.js:344
+#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/edit.js:352
 msgid "Show author"
 msgstr ""
 
-#: dist/editor.js:23 dist/editor.js:64 src/blocks/carousel/edit.js:349
+#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/edit.js:357
 msgid "Show avatar"
 msgstr ""
 
-#: dist/editor.js:23 src/blocks/carousel/index.js:28
+#: dist/editor.js:26 src/blocks/carousel/index.js:28
 msgid "Content Carousel"
 msgstr ""
 
-#: dist/editor.js:23 dist/editor.js:64 src/blocks/carousel/index.js:40
+#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/index.js:40
 #: src/blocks/homepage-articles/index.js:42
 msgid "posts"
 msgstr ""
 
-#: dist/editor.js:23 dist/editor.js:64 src/blocks/carousel/index.js:41
+#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/index.js:41
 #: src/blocks/homepage-articles/index.js:43
 msgid "articles"
 msgstr "artigos"
 
-#: dist/editor.js:23 dist/editor.js:64 src/blocks/carousel/index.js:42
+#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/index.js:42
 #: src/blocks/homepage-articles/index.js:44
 msgid "latest"
 msgstr "mais recente"
 
-#: dist/editor.js:23 dist/editor.js:64 src/blocks/carousel/index.js:43
+#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/index.js:43
 #: src/blocks/homepage-articles/index.js:46
 msgid "query"
 msgstr ""
 
-#: dist/editor.js:23 src/blocks/carousel/index.js:45
+#: dist/editor.js:26 src/blocks/carousel/index.js:45
 msgid ""
 "An advanced block that displays content in a carousel format with "
 "customizable parameters and visual configurations."
 msgstr ""
 
-#: dist/editor.js:23
+#: dist/editor.js:26
 msgid "The post content."
 msgstr ""
 
-#: dist/editor.js:23
+#: dist/editor.js:26
 msgid "The post excerpt."
 msgstr ""
 
-#: dist/editor.js:23
+#: dist/editor.js:26
 msgid "Full post content."
 msgstr ""
 
-#: dist/editor.js:23
+#: dist/editor.js:26
 msgid "Post Subtitle"
 msgstr ""
 
-#: dist/editor.js:23
+#: dist/editor.js:26
 msgid "Post Title"
 msgstr ""
 
-#: dist/editor.js:23
+#: dist/editor.js:26
 msgid "by"
 msgstr ""
 
-#: dist/editor.js:23 dist/editor.js:27 src/components/query-controls.js:346
+#: dist/editor.js:26 dist/editor.js:27 src/components/query-controls.js:346
 msgid "Category"
 msgstr ""
 
-#: dist/editor.js:23
+#: dist/editor.js:26
 msgid "Featured image caption"
 msgstr ""
 
-#: dist/editor.js:23 src/blocks/shared/author.js:14
+#: dist/editor.js:26 src/blocks/shared/author.js:14
 msgid "Biographical info"
 msgstr ""
 
-#: dist/editor.js:23 src/blocks/shared/author.js:18
+#: dist/editor.js:26 src/blocks/shared/author.js:18
 msgid "Social links"
 msgstr ""
 
-#: dist/editor.js:23 src/blocks/shared/author.js:22
+#: dist/editor.js:26 src/blocks/shared/author.js:22
 msgid "Email address"
 msgstr ""
 
-#: dist/editor.js:23 src/blocks/shared/author.js:26
+#: dist/editor.js:26 src/blocks/shared/author.js:26
 msgid "Link to author archive"
 msgstr ""
 
-#: dist/editor.js:23 src/blocks/shared/author.js:33
+#: dist/editor.js:26 src/blocks/shared/author.js:33
 msgid "Display the following fields:"
 msgstr ""
 
-#: dist/editor.js:23 src/components/editor-panels.js:44
+#: dist/editor.js:26 src/components/editor-panels.js:44
 msgid "Listings"
 msgstr ""
 
-#: dist/editor.js:23 src/components/editor-panels.js:63
+#: dist/editor.js:26 src/components/editor-panels.js:63
 msgid "Post Types"
 msgstr ""
 
-#: dist/editor.js:23 src/components/editor-panels.js:76
+#: dist/editor.js:26 src/components/editor-panels.js:76
 msgid "Additional Post Statuses"
 msgstr ""
 
-#: dist/editor.js:23 src/components/editor-panels.js:78
+#: dist/editor.js:26 src/components/editor-panels.js:78
 msgid ""
 "Selection here has effect only for editors, regular users will only see "
 "published posts."
 msgstr ""
 
-#: dist/editor.js:24 src/components/reorder-modal.js:63
-msgid "Move Up"
-msgstr ""
-
-#: dist/editor.js:24 src/components/reorder-modal.js:64
-msgid "Move Down"
-msgstr ""
-
-#: dist/editor.js:24 dist/editor.js:26 dist/editor.js:27 dist/editor.js:67
-#: src/blocks/video-playlist/edit.js:137 src/blocks/video-playlist/edit.js:158
-#: src/components/query-controls.js:27 src/components/query-controls.js:29
-#: src/components/query-controls.js:46 src/components/query-controls.js:70
-#: src/components/query-controls.js:164 src/components/query-controls.js:191
-#: src/components/query-controls.js:205 src/components/query-controls.js:260
-#: src/components/reorder-modal.js:88
-msgid "(no title)"
-msgstr "(sem título)"
-
-#. translators: %d: number of items in the list.
-#: dist/editor.js:25 src/components/reorder-modal.js:104
-msgid "%d item ready to reorder."
-msgid_plural "%d items ready to reorder."
-msgstr[0] ""
-msgstr[1] ""
-
-#. translators: 1: title of the moved item. 2: its new position. 3: total number of items.
-#: dist/editor.js:26 src/components/reorder-modal.js:155
-msgid "%1$s moved to position %2$d of %3$d."
-msgstr ""
-
-#: dist/editor.js:26 src/components/reorder-modal.js:262
-msgid "Loading content…"
-msgstr ""
-
-#: dist/editor.js:26 src/components/reorder-modal.js:268
-msgid "The content could not be loaded, so the order cannot be saved."
-msgstr ""
-
-#: dist/editor.js:26 src/components/reorder-modal.js:359
-msgid "Save"
-msgstr ""
-
-#: dist/editor.js:26 src/components/reorder-modal.js:369
-msgid "Discard the new order?"
-msgstr ""
-
-#: dist/editor.js:26 src/components/reorder-modal.js:370
-msgid "Discard"
-msgstr ""
-
-#: dist/editor.js:26 src/components/reorder-modal.js:371
-msgid "Keep editing"
-msgstr ""
-
-#: dist/editor.js:26 src/components/reorder-modal.js:375
-msgid "The order you set will be lost."
-msgstr ""
-
-#: dist/editor.js:26 src/components/specific-posts-control.js:23
+#: dist/editor.js:26 src/components/specific-posts-control.js:29
 msgid "Reorder Content"
 msgstr ""
 
-#: dist/editor.js:26 src/components/specific-posts-control.js:55
+#: dist/editor.js:26 src/components/specific-posts-control.js:61
 msgid "Content"
 msgstr ""
 
-#: dist/editor.js:26 src/components/specific-posts-control.js:56
+#: dist/editor.js:26 src/components/specific-posts-control.js:62
 msgid ""
 "Begin typing any word in a title. Click on an autocomplete result to select "
 "it."
 msgstr ""
 
-#: dist/editor.js:26 src/components/specific-posts-control.js:69
+#: dist/editor.js:26 src/components/specific-posts-control.js:75
 msgid "Pick at least two items to reorder them."
 msgstr ""
+
+#: dist/editor.js:26 dist/editor.js:27 dist/editor.js:67
+#: src/blocks/video-playlist/edit.js:137 src/blocks/video-playlist/edit.js:158
+#: src/components/query-controls.js:27 src/components/query-controls.js:29
+#: src/components/query-controls.js:46 src/components/query-controls.js:70
+#: src/components/query-controls.js:164 src/components/query-controls.js:191
+#: src/components/query-controls.js:205 src/components/query-controls.js:260
+msgid "(no title)"
+msgstr "(sem título)"
 
 #. translators: %d: numeric ID of content that could not be found.
 #: dist/editor.js:27 src/components/query-controls.js:83
@@ -1426,7 +1384,7 @@ msgstr ""
 msgid "https://example.com"
 msgstr ""
 
-#: dist/editor.js:30 src/shared/js/utils.js:45
+#: dist/editor.js:30 src/shared/js/utils.js:40
 msgctxt "post author"
 msgid "and"
 msgstr ""
@@ -1874,7 +1832,7 @@ msgid "Button Color"
 msgstr ""
 
 #: dist/editor.js:55
-msgid "News Revenue Hub Settings"
+msgid "RevEngine Settings"
 msgstr ""
 
 #: dist/editor.js:55

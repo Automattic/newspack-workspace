@@ -1,3 +1,74 @@
+## @automattic/newspack-blocks [4.36.5](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.4...newspack-blocks@4.36.5) (2026-10-26)
+
+
+### Bug Fixes
+
+* **post-date:** let plugins show a post's updated date ([#1416](https://github.com/Automattic/newspack-workspace/issues/1416)) ([9ec64bf](https://github.com/Automattic/newspack-workspace/commit/9ec64bfc6348e608fbacd2c569704219167b3cf4))
+
+## @automattic/newspack-blocks [4.36.4](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.3...newspack-blocks@4.36.4) (2026-10-26)
+
+
+### Bug Fixes
+
+* **blocks:** scope the fullscreen Iframe takeover to its own page ([#1204](https://github.com/Automattic/newspack-workspace/issues/1204)) ([bd46bed](https://github.com/Automattic/newspack-workspace/commit/bd46bed7f88024811c4c712a0f77b841c78927ac))
+* **content-loop:** keep editor preview links from navigating away ([#1016](https://github.com/Automattic/newspack-workspace/issues/1016)) ([3b38d5a](https://github.com/Automattic/newspack-workspace/commit/3b38d5ae522467048e43a70e476174edbb105bd1))
+* **newspack-blocks:** add check for Jetpack paywall when building excerpts ([#1266](https://github.com/Automattic/newspack-workspace/issues/1266)) ([30f7dbc](https://github.com/Automattic/newspack-workspace/commit/30f7dbceb074f1aa1d650f230f77c30861bfb67a))
+* **reader-revenue:** rename News Revenue Hub to RevEngine ([#1260](https://github.com/Automattic/newspack-workspace/issues/1260)) ([d53ada0](https://github.com/Automattic/newspack-workspace/commit/d53ada020f26889e253d553a053283f98bd62a3b))
+
+## @automattic/newspack-blocks [4.36.3](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.2...newspack-blocks@4.36.3) (2026-10-20)
+
+
+### Bug Fixes
+
+* **tag-labels:** stop tags named "Labels" from restyling posts ([#1267](https://github.com/Automattic/newspack-workspace/issues/1267)) ([0e9cb8a](https://github.com/Automattic/newspack-workspace/commit/0e9cb8a0cd2d10fe30f3c59fc423ee0b2338788b))
+
+## @automattic/newspack-blocks [4.36.2](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.1...newspack-blocks@4.36.2) (2026-10-15)
+
+
+### Bug Fixes
+
+* **modal-checkout:** keep the 3D Secure step visible during processing ([#1289](https://github.com/Automattic/newspack-workspace/issues/1289)) ([e92052b](https://github.com/Automattic/newspack-workspace/commit/e92052b6ed8d1d91231b3fe48c38658e75718d25))
+
+## @automattic/newspack-blocks [4.36.1](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.0...newspack-blocks@4.36.1) (2026-10-14)
+
+
+### Bug Fixes
+
+* **reader-activation:** stop repeat checkout after verifying (NPPM-3540) ([#1299](https://github.com/Automattic/newspack-workspace/issues/1299)) ([582450f](https://github.com/Automattic/newspack-workspace/commit/582450f3f4800d576974d54d7238a253e66cbbc7))
+
+# @automattic/newspack-blocks [4.36.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.35.0...newspack-blocks@4.36.0) (2026-10-14)
+
+
+### Features
+
+* **newsletters:** show premium lists in the subscription form ([#1291](https://github.com/Automattic/newspack-workspace/issues/1291)) ([456d762](https://github.com/Automattic/newspack-workspace/commit/456d762ba465aafc6e5be08ed47836acafaad1a6))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.11.0
+
+# @automattic/newspack-blocks [4.35.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.34.3...newspack-blocks@4.35.0) (2026-10-12)
+
+
+### Bug Fixes
+
+* **blocks:** load multiple Content Loop blocks in one editor request ([#1110](https://github.com/Automattic/newspack-workspace/issues/1110)) ([e2cde5c](https://github.com/Automattic/newspack-workspace/commit/e2cde5ce77ba7a3caff86f55172db76815fa5934))
+* **phpcs:** point constant ignores at the documenting file ([#1130](https://github.com/Automattic/newspack-workspace/issues/1130)) ([9468c79](https://github.com/Automattic/newspack-workspace/commit/9468c79ef60ae098237278bbdd774574b95caa0e))
+
+
+### Features
+
+* **components:** update @wordpress/ui and match its card borders ([#1195](https://github.com/Automattic/newspack-workspace/issues/1195)) ([9b62fe7](https://github.com/Automattic/newspack-workspace/commit/9b62fe7b69d824616ca931069c3a32738517d365))
+
+
+### Dependencies
+
+* **newspack-colors:** upgraded to 1.1.5
+* **newspack-icons:** upgraded to 1.2.0
+* **newspack-components:** upgraded to 4.10.0
+* **newspack-scripts:** upgraded to 5.12.0
+
 ## @automattic/newspack-blocks [4.34.3](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.34.2...newspack-blocks@4.34.3) (2026-10-06)
 
 

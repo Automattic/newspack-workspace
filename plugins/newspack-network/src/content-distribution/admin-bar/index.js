@@ -57,8 +57,6 @@ const getDistributedMessage = count => {
 
 const REQUEST_TIMEOUT = 30000;
 
-const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
 /**
  * Show a Newspack UI snackbar; no-op if the API is unavailable.
  *
@@ -96,7 +94,6 @@ const init = () => {
 	}
 
 	// Genuinely optional, so these stay null-checked at their use sites.
-	const dialog = modal.querySelector( '.newspack-ui__modal' );
 	const overlay = modal.querySelector( '.newspack-ui__modal-container__overlay' );
 	const selectAll = modal.querySelector( '.newspack-network-distribute-all-toggle' );
 
@@ -105,11 +102,6 @@ const init = () => {
 	const selected = () => selectable().filter( box => box.checked );
 
 	let returnFocus = null;
-
-	// Only what can take focus right now: the panel that isn't showing has a null
-	// offsetParent, and disabled controls are out of the tab ring.
-	const focusableItems = () =>
-		Array.from( modal.querySelectorAll( FOCUSABLE ) ).filter( el => ! el.matches( ':disabled' ) && null !== el.offsetParent );
 
 	const refresh = () => {
 		const selectableBoxes = selectable();
@@ -145,29 +137,6 @@ const init = () => {
 		modal.setAttribute( 'data-state', 'closed' );
 	};
 
-	const onKeydown = event => {
-		if ( 'Escape' === event.key ) {
-			close();
-			return;
-		}
-		if ( 'Tab' !== event.key ) {
-			return;
-		}
-		const focusable = focusableItems();
-		if ( ! focusable.length ) {
-			return;
-		}
-		const first = focusable[ 0 ];
-		const last = focusable[ focusable.length - 1 ];
-		if ( event.shiftKey && modal.ownerDocument.activeElement === first ) {
-			event.preventDefault();
-			last.focus();
-		} else if ( ! event.shiftKey && modal.ownerDocument.activeElement === last ) {
-			event.preventDefault();
-			first.focus();
-		}
-	};
-
 	const open = () => {
 		if ( 'open' === modal.getAttribute( 'data-state' ) ) {
 			return;
@@ -175,19 +144,13 @@ const init = () => {
 		returnFocus = modal.ownerDocument.activeElement;
 		modal.setAttribute( 'data-state', 'open' );
 		trigger.setAttribute( 'aria-expanded', 'true' );
-		document.addEventListener( 'keydown', onKeydown );
 		refresh();
-		const focusable = focusableItems();
-		if ( focusable.length ) {
-			focusable[ 0 ].focus();
-		}
 	};
 
 	// newspack-ui.js dispatches closeModal when data-state flips to closed
 	// (its close button, or our close()). Do all teardown here so every close
 	// path converges.
 	modal.addEventListener( 'closeModal', () => {
-		document.removeEventListener( 'keydown', onKeydown );
 		trigger.setAttribute( 'aria-expanded', 'false' );
 		// Discard any in-progress (non-distributed) selection so a reopen starts fresh.
 		selectable().forEach( box => {
@@ -242,24 +205,21 @@ const init = () => {
 	} );
 
 	confirmSubmit.addEventListener( 'click', () => {
+		if ( 'true' === confirmSubmit.getAttribute( 'aria-busy' ) ) {
+			return;
+		}
 		const boxes = selected();
 		if ( ! boxes.length ) {
 			return;
 		}
 		const urls = boxes.map( box => box.value );
 
-		confirmSubmit.disabled = true;
+		// The button stays focusable while the request runs, so its busy state is
+		// announced and focus stays inside the modal.
 		backButton.disabled = true;
 		confirmSubmit.classList.add( 'newspack-ui__button--loading' );
-		if ( dialog ) {
-			dialog.setAttribute( 'aria-busy', 'true' );
-		}
-		// Disabling the focused button blurs it, which would drop focus to <body>
-		// and let Tab escape the modal for the length of the request.
-		const stillFocusable = focusableItems();
-		if ( stillFocusable.length ) {
-			stillFocusable[ 0 ].focus();
-		}
+		confirmSubmit.setAttribute( 'aria-disabled', 'true' );
+		confirmSubmit.setAttribute( 'aria-busy', 'true' );
 
 		const controller = new AbortController();
 		const deadline = setTimeout( () => controller.abort(), REQUEST_TIMEOUT );
@@ -314,11 +274,9 @@ const init = () => {
 			.finally( () => {
 				clearTimeout( deadline );
 				confirmSubmit.classList.remove( 'newspack-ui__button--loading' );
-				confirmSubmit.disabled = false;
+				confirmSubmit.removeAttribute( 'aria-disabled' );
+				confirmSubmit.removeAttribute( 'aria-busy' );
 				backButton.disabled = false;
-				if ( dialog ) {
-					dialog.removeAttribute( 'aria-busy' );
-				}
 				refresh();
 			} );
 	} );

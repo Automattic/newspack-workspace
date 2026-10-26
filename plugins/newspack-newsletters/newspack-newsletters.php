@@ -8,7 +8,8 @@
  * License: GPL2
  * Text Domain:     newspack-newsletters
  * Domain Path:     /languages
- * Version:         3.41.5
+ * Version:         3.44.0
+ * Requires PHP:    8.1
  *
  * @package         Newspack_Newsletters
  */

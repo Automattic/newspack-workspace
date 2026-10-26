@@ -25,6 +25,7 @@ import apiFetch from '@wordpress/api-fetch';
  * Internal dependencies
  */
 import IframePlaceholder from './iframe-placeholder';
+import { getEmbeddableSrc } from './utils';
 
 const IframeEdit = ( { attributes, setAttributes } ) => {
 	const blockProps = useBlockProps();
@@ -146,6 +147,8 @@ const IframeEdit = ( { attributes, setAttributes } ) => {
 		}
 	};
 
+	const previewSrc = getEmbeddableSrc( src );
+
 	const iframeControls = [
 		{
 			icon: seen,
@@ -158,7 +161,7 @@ const IframeEdit = ( { attributes, setAttributes } ) => {
 	return (
 		<Fragment>
 			<BlockControls>
-				<Toolbar controls={ src && iframeControls } />
+				<Toolbar controls={ previewSrc && iframeControls } />
 			</BlockControls>
 
 			<InspectorControls>
@@ -197,11 +200,15 @@ const IframeEdit = ( { attributes, setAttributes } ) => {
 						{ __( 'This block will take over the page content.', 'newspack-blocks' ) }
 					</Notice>
 				) }
-				{ src && showPreview ? (
+				{ previewSrc && showPreview ? (
 					<div className="iframe-container">
 						<FocusableIframe
 							title={ __( 'Newspack embedded iframe', 'newspack-blocks' ) }
-							src={ 'document' === mode ? `https://docs.google.com/gview?embedded=true&url=${ encodeURIComponent( src ) }` : src }
+							src={
+								'document' === mode
+									? `https://docs.google.com/gview?embedded=true&url=${ encodeURIComponent( previewSrc ) }`
+									: previewSrc
+							}
 							style={ {
 								width: isFullScreen ? '100vw' : width,
 								height: isFullScreen ? '100vh' : height,

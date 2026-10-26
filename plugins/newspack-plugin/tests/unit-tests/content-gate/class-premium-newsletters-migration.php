@@ -1045,11 +1045,11 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Auto-signup is one site-wide setting but the pre-Access-Control behavior was
-	 * per-list, so a site splitting its lists across the modal cannot be expressed.
-	 * The derivation returns no value rather than picking a side: guessing on
-	 * subscribes readers who opted out, guessing off drops readers who expected the
-	 * list.
+	 * A gate's auto-signup covers all its lists, but the pre-Access-Control behavior
+	 * was per-list, so lists on both sides of the modal have no single value. The
+	 * derivation returns none rather than picking a side, and hands back both sides
+	 * so the caller can split the gate: guessing on subscribes readers who opted out,
+	 * guessing off drops readers who expected the list.
 	 */
 	public function test_derive_auto_signup_is_undecided_when_lists_disagree() {
 		$this->set_signup_modal_lists( [ $this->list_a ] );
@@ -1267,97 +1267,422 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A dry run must never touch the site-wide option, even when the derived value
-	 * disagrees with what is currently stored.
+	 * Build the payload a one-plan group restricting the given lists would write.
+	 *
+	 * A purchase plan named "Premium", so the payload carries paid access rules: a
+	 * split must hand those to both gates unchanged.
+	 *
+	 * @param int[] $list_ids The lists the plan restricts.
+	 *
+	 * @return array The gate payload.
 	 */
-	public function test_report_auto_signup_dry_run_never_writes_option() {
-		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
-		$this->set_signup_modal_lists( [] ); // Neither list is in the modal, so auto-signup derives to on.
-
-		$this->invoke_private_static( 'report_auto_signup', [ [ $this->list_a, $this->list_b ], true ] );
-
-		$this->assertFalse( (bool) get_option( 'newspack_premium_newsletters_auto_signup' ) );
-	}
-
-	/**
-	 * A live run writes the derived value over a stored one when the operator asks
-	 * for it with --set-auto-signup. Without the flag the stored value is left alone
-	 * ({@see test_report_auto_signup_live_leaves_a_stored_setting_alone()}), so this
-	 * is the only path on which the write still has to work.
-	 */
-	public function test_report_auto_signup_live_writes_derived_value_when_it_differs() {
-		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
-		$this->set_signup_modal_lists( [] ); // Derives to on.
-
-		$this->invoke_private_static( 'report_auto_signup', [ [ $this->list_a, $this->list_b ], false, false, 0, true ] );
-
-		$this->assertTrue( (bool) get_option( 'newspack_premium_newsletters_auto_signup' ) );
-	}
-
-	/**
-	 * A stored setting is a choice someone made, and a stored "on" reads exactly like
-	 * the default. Overwriting it would silently undo a publisher who turned
-	 * auto-signup off — which, once the access check is live, subscribes their readers
-	 * to lists at the provider.
-	 */
-	public function test_report_auto_signup_live_leaves_a_stored_setting_alone() {
-		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
-		$this->set_signup_modal_lists( [] ); // Derives to on, differing from the stored value.
-
-		$this->invoke_private_static( 'report_auto_signup', [ [ $this->list_a, $this->list_b ], false ] );
-
-		$this->assertFalse( (bool) get_option( 'newspack_premium_newsletters_auto_signup' ) );
-	}
-
-	/**
-	 * A site that never set the option has no choice to override, so the migration
-	 * writes it without ceremony — which is the zero-touch case the command exists for.
-	 */
-	public function test_report_auto_signup_live_writes_when_the_option_was_never_set() {
-		delete_option( 'newspack_premium_newsletters_auto_signup' );
-		$this->set_signup_modal_lists( [ $this->list_a, $this->list_b ] ); // Derives to off.
-
-		$this->invoke_private_static( 'report_auto_signup', [ [ $this->list_a, $this->list_b ], false ] );
-
-		$this->assertSame( '0', (string) get_option( 'newspack_premium_newsletters_auto_signup' ) );
-	}
-
-	/**
-	 * A live run that already matches the stored value takes the "leave it alone"
-	 * branch rather than the write branch — pinned via the distinct message each
-	 * branch emits, since WordPress's own update_option() no-ops an equal-value
-	 * write regardless of which branch called it.
-	 */
-	public function test_report_auto_signup_live_leaves_matching_option_unchanged() {
-		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
-		$this->set_signup_modal_lists( [] ); // Derives to on, same as current.
-
-		$this->invoke_private_static( 'report_auto_signup', [ [ $this->list_a, $this->list_b ], false ] );
-
-		$this->assertTrue( (bool) get_option( 'newspack_premium_newsletters_auto_signup' ) );
-		$this->assertContains( 'Auto-signup is already on; leaving it unchanged.', \WP_CLI::$output );
-	}
-
-	/**
-	 * A live run against a split list set — some lists in the post-checkout signup
-	 * modal, some not — cannot express the per-list distinction in one site-wide
-	 * flag. It must write nothing and warn, naming the conflicting lists.
-	 */
-	public function test_report_auto_signup_split_lists_warns_and_writes_nothing_live() {
-		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
-		$this->set_signup_modal_lists( [ $this->list_a ] ); // list_a in the modal, list_b is not.
-
-		$this->invoke_private_static( 'report_auto_signup', [ [ $this->list_a, $this->list_b ], false ] );
-
-		$this->assertTrue( (bool) get_option( 'newspack_premium_newsletters_auto_signup' ) );
-		$matching_warnings = array_filter(
-			\WP_CLI::$warnings,
-			fn( $warning ) => str_contains( $warning, 'disagree' )
+	private function make_gate_payload( array $list_ids ): array {
+		return $this->invoke_private_static(
+			'build_gate_payload',
+			[ [ $this->make_payload_plan( 'purchase', [ $this->product ], $list_ids, 'Premium' ) ] ]
 		);
-		$this->assertNotEmpty( $matching_warnings, 'Expected a warning about disagreeing lists.' );
-		$warning = reset( $matching_warnings );
-		$this->assertStringContainsString( (string) $this->list_a, $warning );
-		$this->assertStringContainsString( (string) $this->list_b, $warning );
+	}
+
+	/**
+	 * Lists shown in the post-checkout signup modal were left to reader opt-in, so a
+	 * gate holding only those lists signs nobody up.
+	 */
+	public function test_split_payload_sets_off_when_every_list_is_in_the_signup_modal() {
+		$this->set_signup_modal_lists( [ $this->list_a, $this->list_b ] );
+		$payload = $this->make_gate_payload( [ $this->list_a, $this->list_b ] );
+
+		$split = $this->invoke_private_static( 'split_payload_by_auto_signup', [ $payload, [ 'premium' ] ] );
+
+		$this->assertNull( $split['instructions'] );
+		$this->assertCount( 1, $split['payloads'] );
+		$this->assertSame( 'off', $split['payloads'][0]['auto_signup'] );
+		$this->assertSame( 'Premium', $split['payloads'][0]['title'] );
+		$this->assertSame( [ $this->list_a, $this->list_b ], $split['payloads'][0]['list_ids'] );
+	}
+
+	/**
+	 * WooCommerce Memberships added members to every restricted list outside the
+	 * modal, so a gate holding only those lists signs readers up.
+	 */
+	public function test_split_payload_sets_on_when_no_list_is_in_the_signup_modal() {
+		$this->set_signup_modal_lists( [] );
+		$payload = $this->make_gate_payload( [ $this->list_a, $this->list_b ] );
+
+		$split = $this->invoke_private_static( 'split_payload_by_auto_signup', [ $payload, [ 'premium' ] ] );
+
+		$this->assertNull( $split['instructions'] );
+		$this->assertCount( 1, $split['payloads'] );
+		$this->assertSame( 'on', $split['payloads'][0]['auto_signup'] );
+	}
+
+	/**
+	 * A gate's auto-signup covers all its lists, so a group whose lists sit on both
+	 * sides of the modal becomes two gates. Each must restrict exactly its own lists
+	 * and admit exactly the readers the group admitted: everything but the title, the
+	 * lists and the setting is carried over unchanged.
+	 */
+	public function test_split_payload_splits_a_mixed_group() {
+		$this->set_signup_modal_lists( [ $this->list_a ] );
+		$payload = $this->make_gate_payload( [ $this->list_a, $this->list_b ] );
+
+		$split = $this->invoke_private_static( 'split_payload_by_auto_signup', [ $payload, [ 'premium' ] ] );
+
+		$this->assertNull( $split['instructions'] );
+		// The sibling comes first, so a failed sibling is known before the group's gate
+		// is written, and that gate is then written whole.
+		$this->assertSame( [ 'Premium (auto-signup)', 'Premium' ], array_column( $split['payloads'], 'title' ) );
+		[ $auto_signup, $opt_in ] = $split['payloads'];
+
+		$this->assertSame( [ $this->list_a ], $opt_in['list_ids'] );
+		$this->assertSame( 'off', $opt_in['auto_signup'] );
+		$this->assertSame(
+			[
+				[
+					'slug'  => 'newsletters',
+					'value' => [ (string) $this->list_a ],
+				],
+			],
+			$opt_in['content_rules']
+		);
+
+		$this->assertSame( [ $this->list_b ], $auto_signup['list_ids'] );
+		$this->assertSame( 'on', $auto_signup['auto_signup'] );
+		$this->assertSame( 'Premium', $auto_signup['split_from'] );
+		$this->assertSame(
+			[
+				[
+					'slug'  => 'newsletters',
+					'value' => [ (string) $this->list_b ],
+				],
+			],
+			$auto_signup['content_rules']
+		);
+
+		// What the gate is written with if the sibling can't be created: the group's
+		// payload whole, its auto-signup left alone.
+		$this->assertSame( $payload + [ 'auto_signup' => null ], $opt_in['unsplit'] );
+
+		$narrowed_keys = array_flip( [ 'title', 'list_ids', 'content_rules', 'auto_signup', 'split_from', 'unsplit' ] );
+		foreach ( $split['payloads'] as $narrowed ) {
+			$this->assertSame( array_diff_key( $payload, $narrowed_keys ), array_diff_key( $narrowed, $narrowed_keys ) );
+		}
+	}
+
+	/**
+	 * Gate identity is the title, so a sibling titled like another group's gate would
+	 * overwrite that gate's lists. The group is left whole and the operator is told
+	 * how to split it by hand.
+	 */
+	public function test_split_payload_leaves_a_mixed_group_whole_when_the_sibling_title_is_taken() {
+		$this->set_signup_modal_lists( [ $this->list_a ] );
+		$payload = $this->make_gate_payload( [ $this->list_a, $this->list_b ] );
+
+		$split = $this->invoke_private_static( 'split_payload_by_auto_signup', [ $payload, [ 'premium', 'premium (auto-signup)' ] ] );
+
+		$this->assertCount( 1, $split['payloads'] );
+		$this->assertNull( $split['payloads'][0]['auto_signup'] );
+		$this->assertSame( [ $this->list_a, $this->list_b ], $split['payloads'][0]['list_ids'] );
+		$this->assertStringContainsString( '"Premium (auto-signup)"', $split['instructions'] );
+		// Splitting by hand is undone by the next run, which writes the gates from the
+		// plans again, so the fix named is the one that survives a re-run.
+		$this->assertStringContainsString( 'Rename the plan behind "Premium (auto-signup)" and re-run to split it.', $split['instructions'] );
+		$this->assertStringNotContainsString( 'duplicate', $split['instructions'] );
+	}
+
+	/**
+	 * A --plan run writes only that plan's gates, but another plan's gate keeps its
+	 * title whatever the run's scope, so its title is taken all the same.
+	 */
+	public function test_taken_gate_titles_count_another_groups_title_on_a_plan_run() {
+		$plan_groups      = [ 'scoped' => [ $this->make_named_plan( 'Premium' ) ] ];
+		$site_plan_groups = $plan_groups + [ 'other' => [ $this->make_named_plan( 'Premium (auto-signup)' ) ] ];
+
+		$taken_titles = $this->invoke_private_static( 'taken_gate_titles', [ $plan_groups, $site_plan_groups ] );
+
+		$this->assertContains( 'premium (auto-signup)', $taken_titles );
+	}
+
+	/**
+	 * An earlier --plan run titles its gate after its one plan, even when that plan
+	 * shares its lists with another and a full run groups them. A plan named like
+	 * another group's sibling may therefore hold that title already.
+	 */
+	public function test_taken_gate_titles_count_a_plan_named_like_another_groups_sibling() {
+		$plan_groups = [
+			'mixed'  => [ $this->make_named_plan( 'Premium' ) ],
+			'shared' => [ $this->make_named_plan( 'Premium (auto-signup)' ), $this->make_named_plan( 'Other' ) ],
+		];
+
+		$taken_titles = $this->invoke_private_static( 'taken_gate_titles', [ $plan_groups, $plan_groups ] );
+
+		$this->assertContains( 'premium (auto-signup)', $taken_titles );
+	}
+
+	/**
+	 * A group's own sibling title is the run's to write, on a full run and on a
+	 * --plan run for a plan that shares its lists. Counting it as taken would leave
+	 * every such group unsplit.
+	 */
+	public function test_taken_gate_titles_leave_a_groups_own_sibling_title_free() {
+		$alone  = [ 'alone' => [ $this->make_named_plan( 'Premium' ) ] ];
+		$shared = [ 'shared' => [ $this->make_named_plan( 'Premium' ), $this->make_named_plan( 'Other' ) ] ];
+
+		$this->assertNotContains( 'premium (auto-signup)', $this->invoke_private_static( 'taken_gate_titles', [ $alone, $alone ] ) );
+		$this->assertNotContains( 'premium (auto-signup)', $this->invoke_private_static( 'taken_gate_titles', [ $alone, $shared ] ) );
+	}
+
+	/**
+	 * A list with no ESP list can't be matched against the modal, so the run can't
+	 * tell which side it was on. Counting it as auto-signup would sign readers up to
+	 * a list they may have declined, so the gate's setting is left alone instead.
+	 */
+	public function test_split_payload_leaves_a_group_with_an_unresolvable_list_alone() {
+		$this->set_signup_modal_lists( [] ); // Every resolvable list derives to on.
+		$not_a_list = self::factory()->post->create();
+		$payload    = $this->make_gate_payload( [ $this->list_a, $not_a_list ] );
+
+		$split = $this->invoke_private_static( 'split_payload_by_auto_signup', [ $payload, [ 'premium' ] ] );
+
+		$this->assertCount( 1, $split['payloads'] );
+		$this->assertNull( $split['payloads'][0]['auto_signup'] );
+		$this->assertStringContainsString( (string) $not_a_list, $split['instructions'] );
+	}
+
+	/**
+	 * A gate following the site setting has no choice to override, so the derived
+	 * value is written.
+	 */
+	public function test_apply_auto_signup_writes_a_new_gates_setting() {
+		$gate_id = $this->create_premium_gate( [ $this->list_a ] );
+
+		$label = $this->invoke_private_static( 'apply_auto_signup', [ 'Premium fixture', $gate_id, 'on', false, false ] );
+
+		$this->assertSame( 'on', \Newspack\Content_Gate::get_newsletter_gate_settings( $gate_id )['auto_signup'] );
+		$this->assertSame( 'on', $label );
+	}
+
+	/**
+	 * An explicit On or Off is a choice someone made, which the run can't tell from
+	 * one it inherited. It stays unless the operator passes --set-auto-signup.
+	 */
+	public function test_apply_auto_signup_keeps_a_setting_chosen_by_hand() {
+		$gate_id = $this->create_premium_gate( [ $this->list_a ] );
+		\Newspack\Content_Gate::update_newsletter_gate_settings( $gate_id, [ 'auto_signup' => 'off' ] );
+
+		$label = $this->invoke_private_static( 'apply_auto_signup', [ 'Premium fixture', $gate_id, 'on', false, false ] );
+
+		$this->assertSame( 'off', \Newspack\Content_Gate::get_newsletter_gate_settings( $gate_id )['auto_signup'] );
+		$this->assertSame( 'kept off', $label );
+		$this->assertStringContainsString( '--set-auto-signup', implode( "\n", \WP_CLI::$warnings ) );
+
+		$label = $this->invoke_private_static( 'apply_auto_signup', [ 'Premium fixture', $gate_id, 'on', true, false ] );
+
+		$this->assertSame( 'on', \Newspack\Content_Gate::get_newsletter_gate_settings( $gate_id )['auto_signup'] );
+		$this->assertSame( 'on', $label );
+	}
+
+	/**
+	 * A dry run predicts the write and makes none.
+	 */
+	public function test_apply_auto_signup_dry_run_writes_nothing() {
+		$gate_id = $this->create_premium_gate( [ $this->list_a ] );
+
+		$label = $this->invoke_private_static( 'apply_auto_signup', [ 'Premium fixture', $gate_id, 'on', false, true ] );
+
+		$this->assertSame( 'default', \Newspack\Content_Gate::get_newsletter_gate_settings( $gate_id )['auto_signup'] );
+		$this->assertSame( 'on (dry-run)', $label );
+		$this->assertSame( 'on (dry-run)', $this->invoke_private_static( 'apply_auto_signup', [ 'Pending', null, 'on', false, true ] ) );
+	}
+
+	/**
+	 * With nothing derived there is nothing to write, even with --set-auto-signup: the
+	 * label reports what the gate will do instead.
+	 */
+	public function test_apply_auto_signup_writes_nothing_without_a_derived_value() {
+		$gate_id = $this->create_premium_gate( [ $this->list_a ] );
+		\Newspack\Content_Gate::update_newsletter_gate_settings( $gate_id, [ 'auto_signup' => 'off' ] );
+
+		$label = $this->invoke_private_static( 'apply_auto_signup', [ 'Premium fixture', $gate_id, null, true, false ] );
+
+		$this->assertSame( 'off', \Newspack\Content_Gate::get_newsletter_gate_settings( $gate_id )['auto_signup'] );
+		$this->assertSame( 'off', $label );
+	}
+
+	/**
+	 * A gate following the site setting is labelled with the value it resolves to, so
+	 * the operator reads whether readers will be signed up rather than having to look
+	 * the option up. The site-wide option defaults to on.
+	 */
+	public function test_apply_auto_signup_labels_a_gate_following_the_site_setting_with_its_value() {
+		$gate_id = $this->create_premium_gate( [ $this->list_a ] );
+
+		$this->assertSame( 'default (on)', $this->invoke_private_static( 'apply_auto_signup', [ 'Pending', null, null, false, true ] ) );
+		$this->assertSame( 'default (on)', $this->invoke_private_static( 'apply_auto_signup', [ 'Premium fixture', $gate_id, null, false, false ] ) );
+
+		update_option( \Newspack\Premium_Newsletters::AUTO_SIGNUP_OPTION, 0 );
+
+		$this->assertSame( 'default (off)', $this->invoke_private_static( 'apply_auto_signup', [ 'Pending', null, null, false, true ] ) );
+		$this->assertSame( 'default (off)', $this->invoke_private_static( 'apply_auto_signup', [ 'Premium fixture', $gate_id, null, false, false ] ) );
+	}
+
+	/**
+	 * Whether --set-auto-signup was passed, and what a new sibling's auto-signup and
+	 * summary label should then be when the gate it splits from is set to Off.
+	 *
+	 * @return array[]
+	 */
+	public function data_new_sibling_auto_signup() {
+		return [
+			'kept without --set-auto-signup'  => [ false, 'off', 'kept off' ],
+			'replaced with --set-auto-signup' => [ true, 'on', 'on' ],
+		];
+	}
+
+	/**
+	 * A sibling this run creates takes lists from a gate that already exists, and the
+	 * choices made on that gate were made for those lists too. Hiding them carries
+	 * over, and an auto-signup set by hand is kept the way it would be on the gate
+	 * itself: only --set-auto-signup replaces it.
+	 *
+	 * @dataProvider data_new_sibling_auto_signup
+	 *
+	 * @param bool   $force                Whether --set-auto-signup was passed.
+	 * @param string $expected_auto_signup The sibling's stored auto-signup.
+	 * @param string $expected_label       The sibling's summary label.
+	 */
+	public function test_write_gate_payloads_carries_the_split_gates_choices_to_a_new_sibling( bool $force, string $expected_auto_signup, string $expected_label ) {
+		$this->set_signup_modal_lists( [ $this->list_a ] );
+		$original_id = $this->create_premium_gate( [ $this->list_a, $this->list_b ], false, 'Premium' );
+		\Newspack\Content_Gate::update_newsletter_gate_settings(
+			$original_id,
+			[
+				'auto_signup' => 'off',
+				'hide_lists'  => true,
+			]
+		);
+		// A registration-only plan: creating a gate with paid access builds its layout
+		// from product data the WooCommerce mocks don't carry.
+		$payload = $this->invoke_private_static( 'build_gate_payload', [ [ $this->make_payload_plan( 'signup', [], [ $this->list_a, $this->list_b ], 'Premium' ) ] ] );
+		$split   = $this->invoke_private_static( 'split_payload_by_auto_signup', [ $payload, [ 'premium' ] ] );
+
+		$rows = $this->invoke_private_static( 'write_gate_payloads', [ $split['payloads'], [ 'premium' => $original_id ], false, $force ] );
+
+		$this->assertSame( 'created', $rows[0]['action'] );
+		$this->assertSame(
+			[
+				'auto_signup' => $expected_auto_signup,
+				'hide_lists'  => true,
+			],
+			\Newspack\Content_Gate::get_newsletter_gate_settings( $rows[0]['gate_id'] )
+		);
+		$this->assertSame( $expected_label, $rows[0]['auto_signup'] );
+	}
+
+	/**
+	 * Make creating the auto-signup sibling of the "Premium" group fail, while every
+	 * other post insert goes through.
+	 */
+	private function fail_premium_sibling_create() {
+		add_filter(
+			'wp_insert_post_empty_content',
+			fn( $maybe_empty, $postarr ) => 'Premium (auto-signup)' === ( $postarr['post_title'] ?? '' ) ? true : $maybe_empty,
+			10,
+			2
+		);
+	}
+
+	/**
+	 * When the sibling can't be created on a first run, the group's gate is created
+	 * with every list of the group. Created with only its own share, it would leave
+	 * the sibling's lists behind no gate, open to every reader.
+	 */
+	public function test_write_gate_payloads_creates_the_group_whole_when_its_sibling_fails() {
+		$this->set_signup_modal_lists( [ $this->list_a ] );
+		// A registration-only plan: creating a gate with paid access builds its layout
+		// from product data the WooCommerce mocks don't carry.
+		$payload = $this->invoke_private_static( 'build_gate_payload', [ [ $this->make_payload_plan( 'signup', [], [ $this->list_a, $this->list_b ], 'Premium' ) ] ] );
+		$split   = $this->invoke_private_static( 'split_payload_by_auto_signup', [ $payload, [ 'premium' ] ] );
+		$this->fail_premium_sibling_create();
+
+		$rows = $this->invoke_private_static( 'write_gate_payloads', [ $split['payloads'], [], false, false ] );
+
+		$this->assertStringStartsWith( 'ERROR', $rows[0]['action'] );
+		$this->assertSame( 'created', $rows[1]['action'] );
+		$this->assertSame( $payload['content_rules'], \Newspack\Content_Rules::get_gate_content_rules( $rows[1]['gate_id'] ) );
+		// The run couldn't apply the split, so it writes no setting derived from it.
+		$this->assertSame( 'default', \Newspack\Content_Gate::get_newsletter_gate_settings( $rows[1]['gate_id'] )['auto_signup'] );
+		$warnings = implode( "\n", \WP_CLI::$warnings );
+		$this->assertStringContainsString( '"Premium" is written with all the group\'s lists', $warnings );
+		$this->assertStringContainsString( 'because "Premium (auto-signup)"', $warnings );
+		$this->assertStringContainsString( 'Re-run to split it', $warnings );
+	}
+
+	/**
+	 * The fallback warning says the group's gate was written, so it waits for that
+	 * write to succeed. When the group's own create fails too, the operator sees both
+	 * failures and no claim that a gate exists.
+	 */
+	public function test_write_gate_payloads_skips_the_fallback_warning_when_the_group_fails_too() {
+		$this->set_signup_modal_lists( [ $this->list_a ] );
+		$payload = $this->invoke_private_static( 'build_gate_payload', [ [ $this->make_payload_plan( 'signup', [], [ $this->list_a, $this->list_b ], 'Premium' ) ] ] );
+		$split   = $this->invoke_private_static( 'split_payload_by_auto_signup', [ $payload, [ 'premium' ] ] );
+		$this->fail_premium_sibling_create();
+		add_filter(
+			'wp_insert_post_empty_content',
+			fn( $maybe_empty, $postarr ) => 'Premium' === ( $postarr['post_title'] ?? '' ) ? true : $maybe_empty,
+			10,
+			2
+		);
+
+		$rows = $this->invoke_private_static( 'write_gate_payloads', [ $split['payloads'], [], false, false ] );
+
+		$this->assertStringStartsWith( 'ERROR', $rows[0]['action'] );
+		$this->assertStringStartsWith( 'ERROR', $rows[1]['action'] );
+		$warnings = implode( "\n", \WP_CLI::$warnings );
+		$this->assertStringContainsString( 'Failed to create gate "Premium"', $warnings );
+		$this->assertStringNotContainsString( 'is written with all the group', $warnings );
+	}
+
+	/**
+	 * When the sibling can't be created, a gate already titled like the group gets
+	 * every list of the group back, whatever an earlier run left on it.
+	 */
+	public function test_write_gate_payloads_writes_the_group_whole_to_an_existing_gate_when_its_sibling_fails() {
+		$this->set_signup_modal_lists( [ $this->list_a ] );
+		$original_id = $this->create_premium_gate( [ $this->list_a ], true, 'Premium' );
+		$payload     = $this->make_gate_payload( [ $this->list_a, $this->list_b ] );
+		$split       = $this->invoke_private_static( 'split_payload_by_auto_signup', [ $payload, [ 'premium' ] ] );
+		$this->fail_premium_sibling_create();
+
+		$rows = $this->invoke_private_static( 'write_gate_payloads', [ $split['payloads'], [ 'premium' => $original_id ], false, false ] );
+
+		$this->assertStringStartsWith( 'ERROR', $rows[0]['action'] );
+		$this->assertSame( 'updated', $rows[1]['action'] );
+		$this->assertSame( $payload['content_rules'], \Newspack\Content_Rules::get_gate_content_rules( $original_id ) );
+		$this->assertSame( 'default', \Newspack\Content_Gate::get_newsletter_gate_settings( $original_id )['auto_signup'] );
+	}
+
+	/**
+	 * A sibling is a gate this run writes, so it must not be named as untouched: that
+	 * would tell the operator to retire a gate the migration depends on.
+	 */
+	public function test_gate_payloads_to_write_count_a_split_groups_sibling_as_written() {
+		$this->set_signup_modal_lists( [ $this->list_a ] );
+
+		$to_write = $this->invoke_private_static(
+			'gate_payloads_to_write',
+			[ [ $this->make_gate_payload( [ $this->list_a, $this->list_b ] ) ], [ 'premium' ] ]
+		);
+		$written_keys = $to_write['written_keys'];
+		ksort( $written_keys );
+
+		$this->assertSame(
+			[
+				'premium'               => true,
+				'premium (auto-signup)' => true,
+			],
+			$written_keys
+		);
 	}
 
 	/**
@@ -1461,8 +1786,8 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A --plan run writes at most one title, so every other gate on the site comes back
-	 * as untouched. It cannot compute staleness, and listing gates nobody should retire
+	 * A --plan run writes only that plan's gate(s), so every other gate on the site comes
+	 * back as untouched. It cannot compute staleness, and listing gates nobody should retire
 	 * trains an operator to skim the warning that matters on a full run.
 	 */
 	public function test_report_stale_gates_is_skipped_under_plan_scope() {
@@ -1478,8 +1803,7 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The counterpart: on a full run the same gate is reported, and the return value
-	 * is what puts the auto-signup write on the report-only path.
+	 * The counterpart: on a full run the same gate is reported.
 	 */
 	public function test_report_stale_gates_reports_an_untouched_gate_on_a_full_run() {
 		$this->create_premium_gate( [ $this->list_a ], false, 'Untouched fixture' );
@@ -1489,39 +1813,6 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 
 		$this->assertTrue( $reported );
 		$this->assertNotEmpty( \WP_CLI::$warnings );
-	}
-
-	/**
-	 * The option governs every published gate's lists, while the derivation sees only
-	 * the lists this run migrated. A gate this run did not write contributes to the
-	 * first and not the second, which is the partial view that can turn a genuine
-	 * disagreement into a determinate write.
-	 */
-	public function test_report_auto_signup_leaves_the_option_alone_when_gates_went_untouched() {
-		delete_option( 'newspack_premium_newsletters_auto_signup' );
-		$this->set_signup_modal_lists( [ $this->list_a ] ); // Derives to off.
-
-		$this->invoke_private_static( 'report_auto_signup', [ [ $this->list_a ], false, false, 0, false, true ] );
-
-		$this->assertFalse( get_option( 'newspack_premium_newsletters_auto_signup' ) );
-	}
-
-	/**
-	 * A list whose public (ESP) ID cannot be resolved is called out in its own
-	 * warning, separate from the derived-value reporting.
-	 */
-	public function test_report_auto_signup_warns_for_unresolvable_lists() {
-		$not_a_list = self::factory()->post->create();
-		$this->set_signup_modal_lists( [] );
-
-		$this->invoke_private_static( 'report_auto_signup', [ [ $not_a_list ], true ] );
-
-		$matching_warnings = array_filter(
-			\WP_CLI::$warnings,
-			fn( $warning ) => str_contains( $warning, 'Could not resolve an ESP list' )
-		);
-		$this->assertNotEmpty( $matching_warnings, 'Expected an unresolved-list warning.' );
-		$this->assertStringContainsString( (string) $not_a_list, reset( $matching_warnings ) );
 	}
 
 	/**
@@ -1655,56 +1946,6 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A --plan run is a testing path over one plan's lists, but the option it would
-	 * write is site-wide. It must report the derivation and write nothing, even under
-	 * --live: the site's other lists may sit on the other side of the modal split,
-	 * and flipping the option from that partial view auto-subscribes readers to
-	 * newsletters they declined at checkout.
-	 */
-	public function test_report_auto_signup_plan_scoped_live_writes_nothing() {
-		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
-		$this->set_signup_modal_lists( [] ); // Neither list is in the modal, so auto-signup derives to on.
-
-		$this->invoke_private_static( 'report_auto_signup', [ [ $this->list_a, $this->list_b ], false, true ] );
-
-		$this->assertFalse( (bool) get_option( 'newspack_premium_newsletters_auto_signup' ) );
-	}
-
-	/**
-	 * An operator who passed --live has every reason to expect a write, so the reason
-	 * nothing happened must name --plan rather than read as an ordinary dry run.
-	 */
-	public function test_report_auto_signup_plan_scoped_says_why_it_wrote_nothing() {
-		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
-		$this->set_signup_modal_lists( [] );
-
-		$this->invoke_private_static( 'report_auto_signup', [ [ $this->list_a ], false, true ] );
-
-		$matching_lines = array_filter(
-			\WP_CLI::$output,
-			fn( $line ) => str_contains( $line, 'a --plan run never writes it' )
-		);
-		$this->assertNotEmpty( $matching_lines, 'Expected the --plan run to explain why it wrote nothing.' );
-	}
-
-	/**
-	 * A full run still writes: the --plan guard must not have disabled the setting's
-	 * migration altogether.
-	 */
-	public function test_report_auto_signup_full_live_run_still_writes() {
-		// Deleted rather than set to a differing value: a stored value is left alone on
-		// its own account, which would pass this test for the wrong reason. Deriving to
-		// OFF then gives the run something to do — an absent option already reads as on,
-		// so deriving to on would take the "already on" branch and write nothing.
-		delete_option( 'newspack_premium_newsletters_auto_signup' );
-		$this->set_signup_modal_lists( [ $this->list_a ] );
-
-		$this->invoke_private_static( 'report_auto_signup', [ [ $this->list_a ], false, false ] );
-
-		$this->assertSame( '0', (string) get_option( 'newspack_premium_newsletters_auto_signup' ) );
-	}
-
-	/**
 	 * Build a plan-group descriptor carrying just the name find_superseded_gates()
 	 * inspects.
 	 *
@@ -1745,6 +1986,48 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 			],
 			$superseded
 		);
+	}
+
+	/**
+	 * A plan an earlier run split by auto-signup left two gates, its own and its
+	 * "(auto-signup)" sibling. Merging the plan into a bigger group supersedes both,
+	 * and the sibling is named under its title as written.
+	 */
+	public function test_find_superseded_gates_names_an_earlier_sibling() {
+		$group          = [ $this->make_named_plan( 'Gold' ), $this->make_named_plan( 'Silver' ) ];
+		$existing_gates = [
+			'gold'               => 11,
+			'gold (auto-signup)' => 12,
+			'silver'             => 22,
+		];
+
+		$superseded = $this->invoke_private_static( 'find_superseded_gates', [ $group, 'gold | silver', $existing_gates ] );
+
+		$this->assertSame(
+			[
+				'Gold'               => 11,
+				'Gold (auto-signup)' => 12,
+				'Silver'             => 22,
+			],
+			$superseded
+		);
+	}
+
+	/**
+	 * Only a sibling of a merged plan is superseded: a sibling that sits alone, with no
+	 * plain gate for its plan, is still named, and one belonging to a plan outside
+	 * the group is not.
+	 */
+	public function test_find_superseded_gates_names_a_lone_sibling_and_ignores_other_plans_siblings() {
+		$group          = [ $this->make_named_plan( 'Gold' ), $this->make_named_plan( 'Silver' ) ];
+		$existing_gates = [
+			'gold (auto-signup)'   => 12,
+			'bronze (auto-signup)' => 33,
+		];
+
+		$superseded = $this->invoke_private_static( 'find_superseded_gates', [ $group, 'gold | silver', $existing_gates ] );
+
+		$this->assertSame( [ 'Gold (auto-signup)' => 12 ], $superseded );
 	}
 
 	/**
@@ -1992,8 +2275,7 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 
 	/**
 	 * The guard has to be wired into the command, not merely available: a bare --plan
-	 * with --live would otherwise migrate every plan on the site and write the
-	 * site-wide auto-signup setting.
+	 * with --live would otherwise migrate every plan on the site.
 	 */
 	public function test_migrate_premium_newsletters_aborts_on_a_bare_plan_flag() {
 		$_SERVER['argv'] = [ 'wp', 'newspack', 'migrate-premium-newsletters', '--plan', '--live' ];
@@ -2111,146 +2393,6 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	 */
 	public function test_describe_inactive_gating_is_silent_when_gating_is_active() {
 		$this->assertNull( $this->invoke_private_static( 'describe_inactive_gating', [ true, true ] ) );
-	}
-
-	/**
-	 * A summary row for a group whose gate failed to write.
-	 *
-	 * @param string $action The row's action text.
-	 *
-	 * @return array A summary row.
-	 */
-	private function make_summary_row( string $action ): array {
-		return [
-			'plan_name'   => 'Fixture',
-			'action'      => $action,
-			'gate_id'     => 1,
-			'lists'       => 1,
-			'access_type' => 'signup',
-		];
-	}
-
-	/**
-	 * A group whose gate failed to write migrated no lists, so it must be kept out of
-	 * the site-wide auto-signup derivation.
-	 */
-	public function test_count_incomplete_groups_counts_a_failed_write() {
-		$summary = [
-			$this->make_summary_row( 'created' ),
-			$this->make_summary_row( 'ERROR: could not insert post' ),
-		];
-
-		$this->assertSame( 1, $this->invoke_private_static( 'count_incomplete_groups', [ $summary ] ) );
-	}
-
-	/**
-	 * A WARN row counts too: $migrated_lists is appended before verify_migrated_gate()
-	 * runs, so a gate the evaluator cannot enforce feeds the derivation unless this
-	 * catches it.
-	 */
-	public function test_count_incomplete_groups_counts_a_warn_row() {
-		$summary = [
-			$this->make_summary_row( 'updated' ),
-			$this->make_summary_row( 'WARN: it has no content rules' ),
-		];
-
-		$this->assertSame( 1, $this->invoke_private_static( 'count_incomplete_groups', [ $summary ] ) );
-	}
-
-	/**
-	 * A clean run counts nothing, so the ordinary path still writes the setting.
-	 */
-	public function test_count_incomplete_groups_ignores_clean_rows() {
-		$summary = [
-			$this->make_summary_row( 'created' ),
-			$this->make_summary_row( 'updated (dry-run)' ),
-		];
-
-		$this->assertSame( 0, $this->invoke_private_static( 'count_incomplete_groups', [ $summary ] ) );
-	}
-
-	/**
-	 * The derivation is over the lists this run migrated, so a group that failed
-	 * leaves its lists out of it — and dropping lists can turn a genuine modal /
-	 * non-modal disagreement into a determinate value. The option must be left alone
-	 * even under --live.
-	 */
-	public function test_report_auto_signup_writes_nothing_when_a_group_is_incomplete() {
-		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
-		$this->set_signup_modal_lists( [] ); // Derives to on, which differs from the stored value.
-
-		$this->invoke_private_static( 'report_auto_signup', [ [ $this->list_a ], false, false, 1 ] );
-
-		$this->assertFalse( (bool) get_option( 'newspack_premium_newsletters_auto_signup' ) );
-	}
-
-	/**
-	 * And says so: an operator who passed --live and saw a derivation printed needs to
-	 * be told why it was not written, and that a re-run settles it.
-	 */
-	public function test_report_auto_signup_says_why_an_incomplete_run_wrote_nothing() {
-		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
-		$this->set_signup_modal_lists( [] );
-
-		$this->invoke_private_static( 'report_auto_signup', [ [ $this->list_a ], false, false, 2 ] );
-
-		$matching_lines = array_filter(
-			\WP_CLI::$output,
-			fn( $line ) => str_contains( $line, 'failed to write or will not enforce' )
-		);
-		$this->assertNotEmpty( $matching_lines, 'Expected the incomplete run to explain why it wrote nothing.' );
-		$this->assertStringContainsString( '2 gate(s)', reset( $matching_lines ) );
-	}
-
-	/**
-	 * A dry run predicts the same suppression rather than promising a write that the
-	 * live run would not make.
-	 */
-	public function test_report_auto_signup_dry_run_predicts_the_suppression() {
-		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
-		$this->set_signup_modal_lists( [] );
-
-		$this->invoke_private_static( 'report_auto_signup', [ [ $this->list_a ], true, false, 1 ] );
-
-		$this->assertEmpty(
-			array_filter( \WP_CLI::$output, fn( $line ) => str_contains( $line, 'would be set to' ) ),
-			'A dry run over an incomplete set must not promise a write.'
-		);
-	}
-
-	/**
-	 * A run where every group failed derives from no lists at all. That used to print
-	 * nothing — indistinguishable from a run with nothing to change — so it must say
-	 * something.
-	 */
-	public function test_report_auto_signup_reports_a_run_that_migrated_no_lists() {
-		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
-
-		$this->invoke_private_static( 'report_auto_signup', [ [], false, false, 3 ] );
-
-		$matching_warnings = array_filter(
-			\WP_CLI::$warnings,
-			fn( $warning ) => str_contains( $warning, 'Auto-signup was not derived' )
-		);
-		$this->assertNotEmpty( $matching_warnings, 'Expected an auto-signup line for a run that migrated nothing.' );
-		$this->assertStringContainsString( 'all 3 gate(s)', reset( $matching_warnings ) );
-	}
-
-	/**
-	 * The same line covers an empty run with no failures, without claiming a failure
-	 * that did not happen.
-	 */
-	public function test_report_auto_signup_reports_an_empty_run_without_blaming_failures() {
-		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
-
-		$this->invoke_private_static( 'report_auto_signup', [ [], false, false, 0 ] );
-
-		$matching_warnings = array_filter(
-			\WP_CLI::$warnings,
-			fn( $warning ) => str_contains( $warning, 'Auto-signup was not derived' )
-		);
-		$this->assertNotEmpty( $matching_warnings );
-		$this->assertStringNotContainsString( 'failed to write', reset( $matching_warnings ) );
 	}
 
 	/**

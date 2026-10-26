@@ -359,7 +359,9 @@ addFilter( 'newspack.criteria.input', 'newspack.newsletterSubscribedLists', func
 		return (
 			<ListsControl
 				placeholder={ __( 'Start typing to search for lists…', 'newspack-plugin' ) }
-				path="/newspack-newsletters/v1/lists_config"
+				// `context=edit` skips the reader-facing filter that drops hidden lists,
+				// so a segment can still target (and name) a list a gate hides.
+				path="/newspack-newsletters/v1/lists_config?context=edit"
 				value={ value }
 				onChange={ update }
 				deletedItemLabel={ __( 'Deleted list', 'newspack-plugin' ) }
