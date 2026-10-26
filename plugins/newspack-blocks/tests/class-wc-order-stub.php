@@ -1,15 +1,16 @@
 <?php // phpcs:ignore WordPress.Files.FileName.InvalidClassFileName
 /**
- * Test stub for WooCommerce's WC_Order.
+ * Test stubs for WooCommerce's WC_Order and WooCommerce Subscriptions'
+ * WC_Subscription.
  *
  * The newspack-blocks test suite runs without WooCommerce loaded, so the real
  * WC_Order class is absent. This stub carries the accessors the modal checkout
  * return-URL, tracking and cart-data paths read, and satisfies both the
  * is_a( $order, 'WC_Order' ) and instanceof checks those paths use.
  *
- * It is the suite's only definition of the class, loaded from bootstrap.php so
+ * It is the suite's only definition of each class, loaded from bootstrap.php so
  * it is in place before any test file runs. A second, partial definition in a
- * test file would not merely duplicate this one: both guard on class_exists(),
+ * test file would not merely duplicate one here: both guard on class_exists(),
  * so whichever the suite happened to load first would win and silently take the
  * other's methods away from every test.
  *
@@ -49,6 +50,13 @@ if ( ! class_exists( 'WC_Order' ) ) {
 		 * @var array
 		 */
 		protected $meta = [];
+
+		/**
+		 * Order status, without the wc- prefix.
+		 *
+		 * @var string
+		 */
+		protected $status = 'pending';
 
 		/**
 		 * Constructor.
@@ -101,6 +109,72 @@ if ( ! class_exists( 'WC_Order' ) ) {
 		 */
 		public function get_meta( $key ) {
 			return $this->meta[ $key ] ?? '';
+		}
+
+		/**
+		 * Set an order meta value.
+		 *
+		 * @param string $key   Meta key.
+		 * @param mixed  $value Meta value.
+		 */
+		public function update_meta_data( $key, $value ) {
+			$this->meta[ $key ] = $value;
+		}
+
+		/**
+		 * Persist meta. A no-op: the stub keeps meta in memory only.
+		 */
+		public function save_meta_data() {}
+
+		/**
+		 * Set the order status.
+		 *
+		 * @param string $status Status, without the wc- prefix.
+		 */
+		public function set_status( $status ) {
+			$this->status = $status;
+		}
+
+		/**
+		 * Whether the order has a paid status, using WooCommerce's default
+		 * paid statuses.
+		 *
+		 * @return bool
+		 */
+		public function is_paid() {
+			return in_array( $this->status, [ 'processing', 'completed' ], true );
+		}
+	}
+}
+
+if ( ! class_exists( 'WC_Subscription' ) ) {
+	/**
+	 * Minimal stub of WooCommerce Subscriptions' WC_Subscription, which extends
+	 * WC_Order. A subscription created by hand in wp-admin has no parent order,
+	 * so get_parent() returns false for it.
+	 */
+	class WC_Subscription extends WC_Order { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound
+		/**
+		 * Parent order, or false when there is none.
+		 *
+		 * @var WC_Order|false
+		 */
+		private $parent;
+
+		/**
+		 * Constructor.
+		 *
+		 * @param array          $items  Line items.
+		 * @param WC_Order|false $parent Parent order, or false.
+		 * @param int            $id     Subscription ID.
+		 */
+		public function __construct( $items = [], $parent = false, $id = 901 ) {
+			parent::__construct( $id, '', $items );
+			$this->parent = $parent;
+		}
+
+		public function get_parent() {
+			return $this->parent;
 		}
 	}
 }
