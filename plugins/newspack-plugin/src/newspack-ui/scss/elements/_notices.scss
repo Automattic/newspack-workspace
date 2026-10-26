@@ -237,6 +237,20 @@
 				> .newspack-ui__snackbar__item.active:not(:first-child) {
 					margin-top: var(--newspack-ui-snackbar-gap);
 				}
+				> .newspack-ui__snackbar__item:first-child:not(.active) + .newspack-ui__snackbar__item.active {
+					margin-top: 0;
+					transition:
+						opacity var(--newspack-ui-duration-snackbar) var(--newspack-ui-ease-snackbar),
+						transform var(--newspack-ui-duration-snackbar) var(--newspack-ui-ease-snackbar),
+						height 0ms,
+						margin-top var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out) var(--newspack-ui-duration-snackbar);
+					@media ( prefers-reduced-motion: reduce ) {
+						transition:
+							opacity var(--newspack-ui-duration-snackbar) var(--newspack-ui-ease-snackbar),
+							height 0ms,
+							margin-top 0ms linear var(--newspack-ui-duration-snackbar);
+					}
+				}
 			}
 			&__icon {
 				align-self: start;
