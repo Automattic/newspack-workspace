@@ -317,6 +317,7 @@
 
 .newspack-ui__modal-container .newspack-ui__modal__step {
 	--newspack-ui-modal-step-delay: 0ms;
+	--newspack-ui-follow-on-delay: calc(var(--newspack-ui-modal-step-delay) + var(--newspack-ui-duration-reveal) / 2);
 
 	display: flex;
 	flex-direction: column;

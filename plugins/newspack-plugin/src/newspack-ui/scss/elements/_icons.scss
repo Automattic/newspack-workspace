@@ -26,7 +26,7 @@
 		}
 
 		&--success {
-			--newspack-ui-icon-delay: calc(var(--newspack-ui-modal-step-delay, 0ms) + var(--newspack-ui-duration-reveal) / 2);
+			--newspack-ui-icon-delay: var(--newspack-ui-follow-on-delay, 0ms);
 
 			color: var(--newspack-ui-color-success);
 			transition:
