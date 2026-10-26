@@ -33,6 +33,7 @@
 			gap: var(--newspack-ui-spacer-half);
 			justify-content: center;
 			padding: var(--newspack-ui-spacer-half);
+			position: relative;
 
 			.newspack-ui__button {
 				--newspack-ui-button-bg: transparent;
@@ -76,6 +77,52 @@
 							outline: 1px solid Highlight;
 							outline-offset: -1px;
 						}
+					}
+				}
+			}
+
+			&.has-thumb {
+				&::before {
+					background: var(--newspack-ui-color-surface);
+					border-radius: var(--newspack-ui-radius-button);
+					box-shadow: inset 0 0 0 1px var(--newspack-ui-color-border-outline);
+					content: "";
+					height: var(--newspack-ui-segmented-thumb-height, 0);
+					left: 0;
+					pointer-events: none;
+					position: absolute;
+					top: 0;
+					transform: translate(var(--newspack-ui-segmented-thumb-x, 0), var(--newspack-ui-segmented-thumb-y, 0));
+					transition:
+						transform var(--newspack-ui-duration-indicator) var(--newspack-ui-ease-out),
+						width var(--newspack-ui-duration-indicator) var(--newspack-ui-ease-out),
+						height var(--newspack-ui-duration-indicator) var(--newspack-ui-ease-out);
+					width: var(--newspack-ui-segmented-thumb-width, 0);
+
+					@media ( prefers-reduced-motion: reduce ) {
+						transition: none;
+					}
+
+					@media ( forced-colors: active ) {
+						display: none;
+					}
+				}
+
+				&.is-measuring::before {
+					transition: none;
+				}
+
+				.newspack-ui__button {
+					position: relative;
+					z-index: 1;
+
+					&.selected,
+					&[aria-selected="true"],
+					&[aria-pressed="true"] {
+						--newspack-ui-button-bg: transparent;
+						--newspack-ui-button-bg-hover: transparent;
+						--newspack-ui-button-bg-pressed: transparent;
+						--newspack-ui-button-border: transparent;
 					}
 				}
 			}
