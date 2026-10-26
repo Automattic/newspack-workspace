@@ -15,7 +15,7 @@
 			color: np-colors.$neutral-600;
 		}
 		&--active,
-		&--active:hover,
+		&.wpbnbd__button--active:hover,
 		&:focus {
 			color: np-colors.$neutral-900;
 		}
