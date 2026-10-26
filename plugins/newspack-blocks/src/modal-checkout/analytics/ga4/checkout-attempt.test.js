@@ -86,6 +86,7 @@ describe( 'registerExpressCheckoutAttempt()', () => {
 		registerExpressCheckoutAttempt();
 
 		expect( hooks.applyFilters( STRIPE_ORDER_FILTER, extensions ) ).toBe( extensions );
+		expect( window.gtag ).toHaveBeenCalledTimes( 1 );
 	} );
 
 	it( 'returns the extension data when sending the event throws', () => {
@@ -96,6 +97,7 @@ describe( 'registerExpressCheckoutAttempt()', () => {
 		registerExpressCheckoutAttempt();
 
 		expect( hooks.applyFilters( STRIPE_ORDER_FILTER, extensions ) ).toBe( extensions );
+		expect( window.gtag ).toHaveBeenCalledTimes( 1 );
 	} );
 
 	it.each( [
