@@ -461,6 +461,14 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		$subscriber_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
 		self::assertFalse( Newspack_Popups_AB_Tests::can_manage_tests( $subscriber_id, $prompt_id ) );
 		self::assertFalse( Newspack_Popups_AB_Tests::can_manage_tests( $subscriber_id, 0 ) );
+
+		$editor_id = self::factory()->user->create( [ 'role' => 'editor' ] );
+		self::assertTrue( Newspack_Popups_AB_Tests::can_manage_tests( $editor_id, 0 ), 'Anyone who can create prompts can set up a test on a new one.' );
+
+		// A Contributor can edit prompts in general, but not someone else's published one.
+		$contributor_id = self::factory()->user->create( [ 'role' => 'contributor' ] );
+		self::assertTrue( Newspack_Popups_AB_Tests::can_manage_tests( $contributor_id, 0 ) );
+		self::assertFalse( Newspack_Popups_AB_Tests::can_manage_tests( $contributor_id, $prompt_id ) );
 	}
 
 	/**
@@ -507,6 +515,20 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		self::assertSame( '', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
 		self::assertSame( $delay_before, get_post_meta( $prompt_id, 'trigger_delay', true ) );
 		self::assertSame( $title_before, get_the_title( $prompt_id ) );
+	}
+
+	/**
+	 * A non-scalar A/B value from a restricted user counts as a change and is
+	 * refused, rather than cast to a string first.
+	 */
+	public function test_restricted_editor_non_scalar_ab_value_is_refused() {
+		$this->restrict_tests_to_admins();
+		$prompt_id = $this->createPopup();
+
+		$response = $this->save_prompt_as( $prompt_id, 'editor', [ 'meta' => [ Newspack_Popups_AB_Tests::META_TEST_ID => [ 'x' ] ] ] );
+
+		self::assertSame( 403, $response->get_status() );
+		self::assertSame( '', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
 	}
 
 	/**

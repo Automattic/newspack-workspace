@@ -224,8 +224,9 @@ final class Newspack_Popups_AB_Tests {
 	 * Whether a user may change a prompt's A/B test settings.
 	 *
 	 * By default, anyone who can edit the prompt, the same rule as for the rest of
-	 * its settings. Every A/B write check goes through here, so a narrower
-	 * capability can replace the default in one place.
+	 * its settings. Saves through the prompt's REST endpoint check here, both in the
+	 * meta auth callback and in the save guard, so a narrower capability can
+	 * replace the default in one place.
 	 *
 	 * @param int $user_id User ID.
 	 * @param int $post_id Prompt post ID, or 0 for a prompt not yet created.
@@ -241,6 +242,10 @@ final class Newspack_Popups_AB_Tests {
 
 		/**
 		 * Filters whether a user may change a prompt's A/B test settings.
+		 *
+		 * A REST create asks twice: once with post ID 0 before the prompt exists,
+		 * then with its new ID when the meta is written. Give the same answer both
+		 * times, or the prompt is created and its A/B settings are refused.
 		 *
 		 * @param bool $allowed Whether the user may change them.
 		 * @param int  $user_id User ID.
@@ -299,7 +304,8 @@ final class Newspack_Popups_AB_Tests {
 			// get_post_meta() applies the registered default to an unset key, which
 			// is also what the editor read and is sending back.
 			$stored = $post_id ? get_post_meta( $post_id, $meta_key, true ) : ( $registered[ $meta_key ]['default'] ?? '' );
-			if ( ! $is_autosave && (string) $meta[ $meta_key ] !== (string) $stored ) {
+			$value = $meta[ $meta_key ];
+			if ( ! $is_autosave && ( ! is_scalar( $value ) || (string) $value !== (string) $stored ) ) {
 				return new WP_Error(
 					'rest_cannot_update',
 					__( "You don't have permission to change this prompt's A/B test settings. If someone changed its test while you were editing, reload the editor and try again.", 'newspack-popups' ),
