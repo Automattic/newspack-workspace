@@ -338,6 +338,12 @@
 	}
 
 	@include mixins.media-below( mobile ) {
+		transition: opacity var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out);
+
+		@starting-style {
+			opacity: 0;
+		}
+
 		&[inert] {
 			display: none;
 		}
