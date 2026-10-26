@@ -7,11 +7,7 @@
  * Author URI:      https://newspack.com/
  * Text Domain:     newspack-blocks
  * Domain Path:     /languages
-<<<<<<< HEAD
- * Version:         4.36.3
-=======
  * Version:         4.36.4
->>>>>>> release
  * Requires PHP:    8.1
  *
  * @package         Newspack_Blocks
