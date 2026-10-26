@@ -244,4 +244,37 @@ describe( 'newspack-ui notices', () => {
 		jest.advanceTimersByTime( 8000 );
 		expect( error.classList.contains( 'active' ) ).toBe( false );
 	} );
+
+	it( 'leaves focus alone when a notice is closed with the mouse', () => {
+		notices.createNotice( 'First error.', 'error' );
+		notices.createNotice( 'Second error.', 'error' );
+		const [ first ] = document.querySelectorAll( '.newspack-ui__snackbar__close' );
+		const matches = Element.prototype.matches;
+		const spy = jest.spyOn( Element.prototype, 'matches' ).mockImplementation( function ( selector ) {
+			return ':focus-visible' === selector ? false : matches.call( this, selector );
+		} );
+
+		first.focus();
+		first.click();
+
+		expect( document.activeElement ).toBe( first );
+		spy.mockRestore();
+	} );
+
+	it( 'leaves an error that stays until closed alone when the same error is raised again', () => {
+		document.body.insertAdjacentHTML(
+			'beforeend',
+			`<div id="newspack-ui__notices" class="newspack-ui"><div class="newspack-ui__snackbar">
+				<div class="newspack-ui__snackbar__item" data-type="error" data-autohide="false"><div class="newspack-ui__snackbar__content">Payment failed.</div></div>
+			</div></div>`
+		);
+		const persistent = document.querySelector( '.newspack-ui__snackbar__item' );
+		notices.openNotice( persistent );
+
+		notices.createNotice( 'Payment failed.', 'error' );
+		expect( document.querySelectorAll( '.newspack-ui__snackbar__item[data-type="error"]' ) ).toHaveLength( 2 );
+
+		jest.advanceTimersByTime( 9000 );
+		expect( persistent.classList.contains( 'active' ) ).toBe( true );
+	} );
 } );
