@@ -33,6 +33,7 @@ describe( 'segmented control thumb', () => {
 		const { tabs } = render();
 		setupThumb( tabs );
 		expect( tabs.classList.contains( 'has-thumb' ) ).toBe( true );
+		expect( tabs.classList.contains( 'is-measuring' ) ).toBe( false );
 		expect( tabs.style.getPropertyValue( '--newspack-ui-segmented-thumb-x' ) ).toBe( '4px' );
 		expect( tabs.style.getPropertyValue( '--newspack-ui-segmented-thumb-y' ) ).toBe( '4px' );
 		expect( tabs.style.getPropertyValue( '--newspack-ui-segmented-thumb-width' ) ).toBe( '60px' );

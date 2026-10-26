@@ -182,6 +182,8 @@
 		&:focus-visible:where(:not(.newspack-ui__input-card > *)) {
 			@include mixins.focus-line( $inner: inset 0 0 0 1px var(--newspack-ui-color-error) );
 
+			transition: background-color var(--newspack-ui-duration-color) ease;
+
 			&[type="radio"]:checked {
 				@include mixins.focus-line( $inner: (inset 0 0 0 1px var(--newspack-ui-color-error), inset 0 0 0 5px var(--newspack-ui-color-selected)) );
 			}
