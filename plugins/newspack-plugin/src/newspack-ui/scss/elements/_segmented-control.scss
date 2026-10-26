@@ -82,6 +82,8 @@
 			}
 
 			&.has-thumb {
+				isolation: isolate;
+
 				&::before {
 					background: var(--newspack-ui-color-surface);
 					border-radius: var(--newspack-ui-radius-button);

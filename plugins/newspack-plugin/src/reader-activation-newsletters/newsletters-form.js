@@ -36,6 +36,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 				}
 				seeAllButton.classList.add( 'hidden' );
 				firstRevealed?.querySelector( 'input' )?.focus();
+				newsletterContainer.scrollTop = 0;
 			} );
 
 			if ( peekItem ) {
