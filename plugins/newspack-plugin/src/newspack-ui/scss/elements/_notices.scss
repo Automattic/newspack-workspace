@@ -130,7 +130,8 @@
 					transform: none;
 					transition:
 						opacity var(--newspack-ui-duration-sheet) ease,
-						height 0ms linear var(--newspack-ui-duration-sheet);
+						height 0ms linear var(--newspack-ui-duration-sheet),
+						margin-top 0ms linear var(--newspack-ui-duration-sheet);
 				}
 				&.active {
 					height: auto;
@@ -159,6 +160,13 @@
 				}
 				&:has(> .active) + .newspack-ui__snackbar__pinned:has(> .active) {
 					margin-top: var(--newspack-ui-snackbar-gap);
+					transition: none;
+				}
+				&:not(:has(> .active)) + .newspack-ui__snackbar__pinned {
+					transition: margin-top var(--newspack-ui-duration-sheet) ease;
+					@media ( prefers-reduced-motion: reduce ) {
+						transition: none;
+					}
 				}
 				&[data-expanded="true"] {
 					height: calc(var(--newspack-ui-snackbar-total-height, 0px) + max(var(--newspack-ui-snackbar-count, 1) - 1, 0) * var(--newspack-ui-snackbar-gap));
@@ -227,7 +235,10 @@
 			&__pinned {
 				display: flex;
 				flex-direction: column;
-				transition: margin-top var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out);
+				transition: margin-top var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out) var(--newspack-ui-duration-sheet);
+				@media ( prefers-reduced-motion: reduce ) {
+					transition: margin-top 0ms linear var(--newspack-ui-duration-sheet);
+				}
 				> .newspack-ui__snackbar__item.active:not(:first-child) {
 					margin-top: var(--newspack-ui-snackbar-gap);
 				}
