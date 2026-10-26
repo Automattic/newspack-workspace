@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Newspack Blocks 1.0.0-alpha.25\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-blocks\n"
-"POT-Creation-Date: 2026-10-14T15:47:31+00:00\n"
+"POT-Creation-Date: 2026-10-26T16:07:44+00:00\n"
 "PO-Revision-Date: 2024-08-30 08:46-0700\n"
 "Last-Translator: \n"
 "Language-Team: \n"
@@ -271,7 +271,7 @@ msgid ""
 "Thank you for supporting %s. Your transaction was completed successfully."
 msgstr ""
 
-#: includes/class-newspack-blocks-api.php:290 dist/editor.js:26
+#: includes/class-newspack-blocks-api.php:283 dist/editor.js:26
 #: src/blocks/homepage-articles/store.js:182
 msgid "The posts for this block could not be loaded."
 msgstr ""
@@ -307,45 +307,45 @@ msgstr ""
 msgid "Newspack Subscribe"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1134
+#: includes/class-newspack-blocks.php:1182
 msgid "Common"
 msgstr ""
 
 #. translators: separates last two sponsor names; needs a space on either side.
-#: includes/class-newspack-blocks.php:1235
+#: includes/class-newspack-blocks.php:1283
 msgid " and "
 msgstr " et "
 
 #. translators: separates all but the last two sponsor names; needs a space at the end.
-#: includes/class-newspack-blocks.php:1238
+#: includes/class-newspack-blocks.php:1286
 msgid ", "
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1573
+#: includes/class-newspack-blocks.php:1634
 msgid "Jetpack donations is disabled in favour of Newspack donations."
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1606 dist/editor.js:30
-#: src/shared/js/utils.js:54
+#: includes/class-newspack-blocks.php:1667 dist/editor.js:30
+#: src/shared/js/utils.js:49
 msgid "Draft"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1607 dist/editor.js:30
-#: src/shared/js/utils.js:54
+#: includes/class-newspack-blocks.php:1668 dist/editor.js:30
+#: src/shared/js/utils.js:49
 msgid "Scheduled"
 msgstr ""
 
 #. Translators: %s is the %s is the frequency.
-#: includes/class-newspack-blocks.php:1805 dist/editor.js:52
+#: includes/class-newspack-blocks.php:1866 dist/editor.js:52
 #, php-format
 msgid "per %s"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1836
+#: includes/class-newspack-blocks.php:1897
 msgid " once"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1839
+#: includes/class-newspack-blocks.php:1900
 msgid " per "
 msgstr ""
 
@@ -861,7 +861,7 @@ msgid "Error fetching byline authors."
 msgstr ""
 
 #: dist/editor.js:22 dist/editor.js:26 dist/editor.js:58
-#: src/blocks/author-profile/edit.js:538 src/blocks/carousel/edit.js:237
+#: src/blocks/author-profile/edit.js:538 src/blocks/carousel/edit.js:245
 msgid "Display"
 msgstr ""
 
@@ -875,7 +875,7 @@ msgstr ""
 
 #: dist/editor.js:22 dist/editor.js:26 dist/editor.js:43 dist/editor.js:58
 #: dist/editor.js:70 src/blocks/author-profile/edit.js:549
-#: src/blocks/carousel/edit.js:209 src/blocks/checkout-button/edit.js:324
+#: src/blocks/carousel/edit.js:217 src/blocks/checkout-button/edit.js:324
 #: src/blocks/video-playlist/edit.js:191
 msgid "Settings"
 msgstr ""
@@ -1008,141 +1008,141 @@ msgid "Previewing 1 of %d authors. All authors display on frontend."
 msgstr ""
 
 #. translators: label for square aspect ratio option
-#: dist/editor.js:26 src/blocks/carousel/edit.js:181
+#: dist/editor.js:26 src/blocks/carousel/edit.js:189
 msgid "Square"
 msgstr ""
 
 #. translators: abbreviation for 1:1 aspect ratio
-#: dist/editor.js:26 src/blocks/carousel/edit.js:182
+#: dist/editor.js:26 src/blocks/carousel/edit.js:190
 msgid "1:1"
 msgstr ""
 
 #. translators: label for 4:3 aspect ratio option
 #. translators: abbreviation for 4:3 aspect ratio
-#: dist/editor.js:26 src/blocks/carousel/edit.js:186
-#: src/blocks/carousel/edit.js:187
+#: dist/editor.js:26 src/blocks/carousel/edit.js:194
+#: src/blocks/carousel/edit.js:195
 msgid "4:3"
 msgstr ""
 
 #. translators: label for 16:9 aspect ratio option
 #. translators: abbreviation for 16:9 aspect ratio
-#: dist/editor.js:26 src/blocks/carousel/edit.js:191
-#: src/blocks/carousel/edit.js:192
+#: dist/editor.js:26 src/blocks/carousel/edit.js:199
+#: src/blocks/carousel/edit.js:200
 msgid "16:9"
 msgstr ""
 
 #. translators: label for 3:4 aspect ratio option
 #. translators: abbreviation for 3:4 aspect ratio
-#: dist/editor.js:26 src/blocks/carousel/edit.js:196
-#: src/blocks/carousel/edit.js:197
+#: dist/editor.js:26 src/blocks/carousel/edit.js:204
+#: src/blocks/carousel/edit.js:205
 msgid "3:4"
 msgstr ""
 
 #. translators: label for 9:16 aspect ratio option
 #. translators: abbreviation for 9:16 aspect ratio
-#: dist/editor.js:26 src/blocks/carousel/edit.js:201
-#: src/blocks/carousel/edit.js:202
+#: dist/editor.js:26 src/blocks/carousel/edit.js:209
+#: src/blocks/carousel/edit.js:210
 msgid "9:16"
 msgstr ""
 
-#: dist/editor.js:26 src/blocks/carousel/edit.js:239
+#: dist/editor.js:26 src/blocks/carousel/edit.js:247
 msgid "Hide Controls"
 msgstr ""
 
-#: dist/editor.js:26 src/blocks/carousel/edit.js:240
+#: dist/editor.js:26 src/blocks/carousel/edit.js:248
 msgid "Remove navigation indicators from view."
 msgstr ""
 
-#: dist/editor.js:26 src/blocks/carousel/edit.js:247
+#: dist/editor.js:26 src/blocks/carousel/edit.js:255
 msgid "Autoplay"
 msgstr ""
 
-#: dist/editor.js:26 src/blocks/carousel/edit.js:248
+#: dist/editor.js:26 src/blocks/carousel/edit.js:256
 msgid "Automatically advance through slides."
 msgstr ""
 
-#: dist/editor.js:26 src/blocks/carousel/edit.js:256
+#: dist/editor.js:26 src/blocks/carousel/edit.js:264
 msgid "Transition delay"
 msgstr ""
 
-#: dist/editor.js:26 src/blocks/carousel/edit.js:263
+#: dist/editor.js:26 src/blocks/carousel/edit.js:271
 msgid "Set the waiting time between automatic slide transitions in seconds."
 msgstr ""
 
-#: dist/editor.js:26 src/blocks/carousel/edit.js:269
+#: dist/editor.js:26 src/blocks/carousel/edit.js:277
 msgid "Slides per view"
 msgstr ""
 
-#: dist/editor.js:26 src/blocks/carousel/edit.js:278
+#: dist/editor.js:26 src/blocks/carousel/edit.js:286
 msgid "Choose how many slides appear on screen simultaneously."
 msgstr ""
 
-#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/edit.js:283
+#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/edit.js:291
 msgid "Featured Image"
 msgstr ""
 
-#: dist/editor.js:26 src/blocks/carousel/edit.js:285
+#: dist/editor.js:26 src/blocks/carousel/edit.js:293
 msgid "Aspect ratio"
 msgstr ""
 
-#: dist/editor.js:26 src/blocks/carousel/edit.js:286
+#: dist/editor.js:26 src/blocks/carousel/edit.js:294
 msgid "All slides will share the same aspect ratio, for consistency."
 msgstr ""
 
-#: dist/editor.js:26 src/blocks/carousel/edit.js:297
+#: dist/editor.js:26 src/blocks/carousel/edit.js:305
 msgid "Fit"
 msgstr ""
 
-#: dist/editor.js:26 src/blocks/carousel/edit.js:300
+#: dist/editor.js:26 src/blocks/carousel/edit.js:308
 msgid "The image will fill the entire slide and will be cropped if necessary."
 msgstr ""
 
-#: dist/editor.js:26 src/blocks/carousel/edit.js:301
+#: dist/editor.js:26 src/blocks/carousel/edit.js:309
 msgid ""
 "The image will be resized to fit inside the slide without being cropped."
 msgstr ""
 
-#: dist/editor.js:26 src/blocks/carousel/edit.js:308
+#: dist/editor.js:26 src/blocks/carousel/edit.js:316
 msgid "Cover"
 msgstr ""
 
-#: dist/editor.js:26 src/blocks/carousel/edit.js:309
+#: dist/editor.js:26 src/blocks/carousel/edit.js:317
 msgid "Contain"
 msgstr ""
 
-#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/edit.js:312
+#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/edit.js:320
 msgid "Show caption"
 msgstr ""
 
-#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/edit.js:317
+#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/edit.js:325
 msgid "Show credit"
 msgstr ""
 
-#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/edit.js:322
+#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/edit.js:330
 msgid "Post Meta"
 msgstr ""
 
-#: dist/editor.js:26 src/blocks/carousel/edit.js:324
+#: dist/editor.js:26 src/blocks/carousel/edit.js:332
 msgid "Show title"
 msgstr ""
 
-#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/edit.js:329
+#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/edit.js:337
 msgid "Show date"
 msgstr ""
 
-#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/edit.js:334
+#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/edit.js:342
 msgid "Show category"
 msgstr ""
 
-#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/edit.js:339
+#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/edit.js:347
 msgid "Show tag labels"
 msgstr ""
 
-#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/edit.js:344
+#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/edit.js:352
 msgid "Show author"
 msgstr ""
 
-#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/edit.js:349
+#: dist/editor.js:26 dist/editor.js:64 src/blocks/carousel/edit.js:357
 msgid "Show avatar"
 msgstr ""
 
@@ -1381,7 +1381,7 @@ msgstr ""
 msgid "https://example.com"
 msgstr ""
 
-#: dist/editor.js:30 src/shared/js/utils.js:45
+#: dist/editor.js:30 src/shared/js/utils.js:40
 msgctxt "post author"
 msgid "and"
 msgstr ""
@@ -1828,7 +1828,7 @@ msgid "Button Color"
 msgstr ""
 
 #: dist/editor.js:55
-msgid "News Revenue Hub Settings"
+msgid "RevEngine Settings"
 msgstr ""
 
 #: dist/editor.js:55
