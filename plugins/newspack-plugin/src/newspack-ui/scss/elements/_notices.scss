@@ -235,7 +235,6 @@
 			&__icon {
 				align-self: start;
 				display: flex;
-				margin-block: -2px;
 				order: 1;
 				padding: var(--newspack-ui-spacer-2);
 				padding-inline-end: 0;
@@ -260,8 +259,10 @@
 				}
 			}
 			&__close {
-				align-self: center;
+				align-self: start;
+				flex: none;
 				margin: 0;
+				margin-block-start: var(--newspack-ui-spacer-half);
 				margin-inline-end: var(--newspack-ui-spacer-half);
 				order: 3;
 			}
