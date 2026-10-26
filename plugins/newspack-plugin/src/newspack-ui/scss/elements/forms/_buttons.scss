@@ -363,7 +363,8 @@
 		text-underline-offset: 3px;
 		transition:
 			text-decoration-color var(--newspack-ui-duration-color) ease,
-			color var(--newspack-ui-duration-color) ease;
+			color var(--newspack-ui-duration-color) ease,
+			box-shadow var(--newspack-ui-duration-color) ease;
 
 		@media ( pointer: coarse ) {
 			--newspack-ui-link-hit-block: calc(( var(--newspack-ui-touch-target) - 1lh ) / 2);

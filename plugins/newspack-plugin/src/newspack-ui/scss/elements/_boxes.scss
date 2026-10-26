@@ -111,7 +111,9 @@
 	a.newspack-ui__box--border {
 		color: inherit;
 		text-decoration: none;
-		transition: border-color var(--newspack-ui-duration-color) ease;
+		transition:
+			border-color var(--newspack-ui-duration-color) ease,
+			box-shadow var(--newspack-ui-duration-color) ease;
 
 		@media ( hover: hover ) and ( pointer: fine ) {
 			&:hover {
