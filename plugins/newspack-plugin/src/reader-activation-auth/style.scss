@@ -77,3 +77,30 @@ body.logged-in {
 		display: none;
 	}
 }
+
+body:has(.newspack-reader-auth-modal[data-state="open"]:not([style*="display: none"])) .newspack__reader-verification .newspack-ui__modal-container:not([data-state="open"]) {
+	display: none;
+}
+
+body:has(.newspack-reader-auth-modal[data-state="open"][style*="display: none"]) .newspack__reader-verification .newspack-ui__modal-container[data-state="open"] {
+	.newspack-ui__modal-container__overlay,
+	.newspack-ui__modal {
+		transition: none;
+	}
+
+	.newspack-ui__modal > * {
+		transition: opacity var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out);
+
+		@starting-style {
+			opacity: 0;
+		}
+	}
+}
+
+.newspack-reader-auth-modal[data-state="open"] .newspack-ui__modal > :is(.newspack-ui__modal__header, .newspack-ui__modal__content) {
+	transition: opacity var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out);
+
+	@starting-style {
+		opacity: 0;
+	}
+}
