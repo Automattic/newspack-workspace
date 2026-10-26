@@ -518,10 +518,11 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * A non-scalar A/B value from a restricted user counts as a change and is
-	 * refused, rather than cast to a string first.
+	 * A non-scalar A/B value from a restricted user is refused without being cast
+	 * to a string, which would raise an "Array to string conversion" warning. The
+	 * 403 alone doesn't pin this: a cast array never matches a stored value either.
 	 */
-	public function test_restricted_editor_non_scalar_ab_value_is_refused() {
+	public function test_restricted_editor_non_scalar_ab_value_is_refused_without_a_warning() {
 		$this->restrict_tests_to_admins();
 		$prompt_id = $this->createPopup();
 
