@@ -1,8 +1,6 @@
 @use "../mixins";
 
 :root {
-	// Enables the snackbar height 0<->auto collapse to animate. Chromium 129+ only; elsewhere the
-	// stacked reflow snaps instantly on dismiss while the slide-out still animates everywhere.
 	/* stylelint-disable-next-line property-no-unknown */
 	interpolate-size: allow-keywords;
 }
@@ -198,9 +196,13 @@
 						> * {
 							transition: opacity var(--newspack-ui-duration-sheet) ease;
 						}
+						&.is-leaving {
+							transform: translateY(var(--newspack-ui-snackbar-y)) scale(var(--newspack-ui-snackbar-scale));
+						}
 					}
 					&.is-measuring {
 						height: auto;
+						transform: none;
 					}
 					&.is-measuring,
 					&.is-settling {

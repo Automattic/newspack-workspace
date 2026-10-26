@@ -100,6 +100,8 @@ class Newspack_UI {
 			'newspackUIData',
 			[
 				'noticeIcons' => $notice_icons,
+				'closeIcon'   => wp_kses( Newspack_UI_Icons::get_svg( 'closeSmall' ), Newspack_UI_Icons::sanitize_svgs() ),
+				'closeLabel'  => __( 'Close', 'newspack-plugin' ),
 			]
 		);
 	}

@@ -152,4 +152,57 @@ describe( 'newspack-ui notices', () => {
 		touch( 'pointerdown', document.body );
 		expect( stack.dataset.expanded ).toBe( 'false' );
 	} );
+
+	it( 'collapses an expanded stack once its last notice closes', () => {
+		notices.createNotice( 'Saved' );
+		const stack = document.querySelector( '.newspack-ui__snackbar__stack' );
+		stack.dispatchEvent( new Event( 'pointerenter' ) );
+
+		notices.closeNotice( stack.querySelector( '.newspack-ui__snackbar__item' ) );
+
+		expect( stack.dataset.expanded ).toBe( 'false' );
+	} );
+
+	it( 'resumes the timers when a focused notice closes and takes focus with it', () => {
+		notices.createNotice( 'Older' );
+		notices.createNotice( 'Newer' );
+		const stack = document.querySelector( '.newspack-ui__snackbar__stack' );
+		const [ older, newer ] = stack.children;
+		newer.insertAdjacentHTML( 'beforeend', '<button>Undo</button>' );
+		newer.querySelector( 'button' ).dispatchEvent( new FocusEvent( 'focusin', { bubbles: true } ) );
+		jest.advanceTimersByTime( 20000 );
+
+		notices.closeNotice( newer );
+		jest.advanceTimersByTime( 0 );
+
+		expect( newer.isConnected ).toBe( false );
+		expect( stack.dataset.expanded ).toBe( 'false' );
+		jest.advanceTimersByTime( 8000 );
+		expect( older.classList.contains( 'active' ) ).toBe( false );
+	} );
+
+	it( 'keeps a notice reopened before its removal fires', () => {
+		notices.createNotice( 'Unsubscribed.' );
+		const item = document.querySelector( '.newspack-ui__snackbar__item' );
+
+		notices.closeNotice( item );
+		notices.openNotice( item, false );
+		jest.advanceTimersByTime( 0 );
+
+		expect( item.isConnected ).toBe( true );
+		expect( item.dataset.stackPosition ).toBe( 'front' );
+	} );
+
+	it( 'keeps errors in view with a close button until the reader closes them', () => {
+		notices.createNotice( "Couldn't copy the invite link.", 'error' );
+		notices.createNotice( 'Invite sent.' );
+		const error = [ ...document.querySelectorAll( '.newspack-ui__snackbar__item' ) ].find( item => 'error' === item.dataset.type );
+
+		expect( error.closest( '.newspack-ui__snackbar__pinned' ) ).not.toBeNull();
+		jest.advanceTimersByTime( 60000 );
+		expect( error.classList.contains( 'active' ) ).toBe( true );
+
+		error.querySelector( '.newspack-ui__snackbar__close' ).click();
+		expect( error.classList.contains( 'active' ) ).toBe( false );
+	} );
 } );

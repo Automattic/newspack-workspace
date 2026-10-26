@@ -7,8 +7,9 @@ const VISIBLE_IN_STACK = 3;
 
 const timers = new WeakMap();
 const heights = new WeakMap();
+const contentSizes = new WeakMap();
 let openCount = 0;
-let resizeFrame = null;
+let resizeObserver = null;
 
 domReady( function () {
 	// Create the live regions up front so they are registered before any message is injected.
@@ -36,19 +37,6 @@ domReady( function () {
 			} );
 		} )
 	);
-
-	window.addEventListener( 'resize', () => {
-		if ( resizeFrame ) {
-			return;
-		}
-		resizeFrame = requestAnimationFrame( () => {
-			resizeFrame = null;
-			document.querySelectorAll( '.newspack-ui__snackbar__stack' ).forEach( stack => {
-				measure( getStackItems( stack ) );
-				layoutStack( stack );
-			} );
-		} );
-	} );
 } );
 
 /**
@@ -130,7 +118,55 @@ function measure( items ) {
 	} );
 	// Settle at the measured height before transitions come back, so measuring never animates.
 	void items[ 0 ]?.offsetHeight;
-	requestAnimationFrame( () => items.forEach( item => item.classList.remove( 'is-settling' ) ) );
+	items.forEach( item => item.classList.remove( 'is-settling' ) );
+}
+
+/**
+ * Re-measure a stack whenever a notice's text reflows, as when a web font loads late or the
+ * stack moves into a dialog of a different width.
+ *
+ * @param {HTMLElement} item A notice in a stack.
+ */
+function watchSize( item ) {
+	const content = item.querySelector( '.newspack-ui__snackbar__content' );
+	if ( ! content || typeof window.ResizeObserver !== 'function' ) {
+		return;
+	}
+	if ( ! resizeObserver ) {
+		resizeObserver = new window.ResizeObserver( entries => {
+			const stacks = new Set();
+			entries.forEach( ( { target, contentRect } ) => {
+				const previous = contentSizes.get( target );
+				contentSizes.set( target, { width: contentRect.width, height: contentRect.height } );
+				const notice = target.closest( '.newspack-ui__snackbar__item' );
+				if (
+					previous &&
+					( previous.width !== contentRect.width || previous.height !== contentRect.height ) &&
+					isStack( notice?.parentElement )
+				) {
+					stacks.add( notice.parentElement );
+				}
+			} );
+			stacks.forEach( stack => {
+				measure( getStackItems( stack ) );
+				layoutStack( stack );
+			} );
+		} );
+	}
+	resizeObserver.observe( content );
+}
+
+/**
+ * Stop watching a notice's size.
+ *
+ * @param {HTMLElement} item A notice.
+ */
+function unwatchSize( item ) {
+	const content = item.querySelector( '.newspack-ui__snackbar__content' );
+	if ( resizeObserver && content ) {
+		resizeObserver.unobserve( content );
+		contentSizes.delete( content );
+	}
 }
 
 /**
@@ -249,6 +285,7 @@ function openNotice( element, remove = true ) {
 		element.dataset.stackOrder = String( ++openCount );
 		element.dataset.stackPosition = 'front';
 		measure( [ element ] );
+		watchSize( element );
 	}
 	// Force a reflow so the off-screen start state is painted before `.active`
 	// is added, otherwise the enter transition is skipped.
@@ -321,6 +358,10 @@ function closeNotice( element, remove = true ) {
 	}
 	if ( remove ) {
 		setTimeout( () => {
+			if ( element.classList.contains( 'active' ) ) {
+				return;
+			}
+			unwatchSize( element );
 			element.remove();
 			// A removed element doesn't report focus leaving, so check whether the stack is still in use.
 			if ( stack && 'true' === stack.dataset.expanded ) {
@@ -339,18 +380,44 @@ function closeNotice( element, remove = true ) {
 }
 
 /**
- * Dynamically create and show a snackbar notice.
+ * Build a snackbar's close button.
+ *
+ * @param {HTMLElement} item The snackbar item it closes.
+ * @return {HTMLButtonElement} The button.
+ */
+function createCloseButton( item ) {
+	const label = window.newspackUIData?.closeLabel || 'Close';
+	const button = document.createElement( 'button' );
+	button.type = 'button';
+	button.className = 'newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost-dark newspack-ui__snackbar__close';
+	button.setAttribute( 'aria-label', label );
+	button.title = label;
+	if ( window.newspackUIData?.closeIcon ) {
+		const template = document.createElement( 'template' );
+		template.innerHTML = window.newspackUIData.closeIcon.trim();
+		if ( template.content.firstElementChild ) {
+			button.appendChild( template.content.firstElementChild );
+		}
+	}
+	button.addEventListener( 'click', () => closeNotice( item ) );
+	return button;
+}
+
+/**
+ * Dynamically create and show a snackbar notice. Errors stay until the reader closes them,
+ * like the errors printed by the server, so a newer notice can never cover one.
  *
  * @param {string} message Message text to show.
  * @param {string} type    Severity; drives the ARIA announcement and the type icon ('info', 'error' and 'warning').
  */
 function createNotice( message, type = 'success' ) {
 	const snackbar = getSnackbar();
+	const autohide = 'error' !== type;
 
 	const item = document.createElement( 'div' );
 	item.classList.add( 'newspack-ui__snackbar__item' );
 	item.dataset.type = type;
-	item.setAttribute( 'data-autohide', 'true' );
+	item.setAttribute( 'data-autohide', autohide ? 'true' : 'false' );
 
 	const typeIcon = [ 'info', 'error', 'warning' ].includes( type ) ? getNoticeIcon( type ) : null;
 	if ( typeIcon ) {
@@ -365,6 +432,9 @@ function createNotice( message, type = 'success' ) {
 	content.textContent = message;
 
 	item.appendChild( content );
+	if ( ! autohide ) {
+		item.appendChild( createCloseButton( item ) );
+	}
 	snackbar.appendChild( item );
 	openNotice( item, true );
 }
