@@ -237,7 +237,7 @@
 				> .newspack-ui__snackbar__item.active:not(:first-child) {
 					margin-top: var(--newspack-ui-snackbar-gap);
 				}
-				> .newspack-ui__snackbar__item:first-child:not(.active) + .newspack-ui__snackbar__item.active {
+				> .newspack-ui__snackbar__item.active:not(:first-child):not(.newspack-ui__snackbar__item.active ~ *) {
 					margin-top: 0;
 					transition:
 						opacity var(--newspack-ui-duration-snackbar) var(--newspack-ui-ease-snackbar),
