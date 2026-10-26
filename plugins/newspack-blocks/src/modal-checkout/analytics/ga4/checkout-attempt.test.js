@@ -86,6 +86,8 @@ describe( 'registerExpressCheckoutAttempt()', () => {
 		registerExpressCheckoutAttempt();
 
 		expect( hooks.applyFilters( STRIPE_ORDER_FILTER, extensions ) ).toBe( extensions );
+		// applyFilters() returns its input when nothing is registered, so the call
+		// count is what shows the handler is the one that returned it.
 		expect( window.gtag ).toHaveBeenCalledTimes( 1 );
 	} );
 
