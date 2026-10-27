@@ -33,7 +33,11 @@ class Newspack_UI_Icons {
 	 * @param string $icon Name of the icon to render.
 	 */
 	public static function print_svg( $icon ) {
-		echo wp_kses( self::get_svg( $icon ), self::sanitize_svgs() );
+		$svg = self::get_svg( $icon );
+		if ( null === $svg ) {
+			return;
+		}
+		echo wp_kses( $svg, self::sanitize_svgs() );
 	}
 
 	/**

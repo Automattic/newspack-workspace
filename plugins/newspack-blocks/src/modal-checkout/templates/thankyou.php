@@ -70,7 +70,7 @@ $after_success_label    = $after_success_params['after_success_button_label'] ??
 <div class="woocommerce-order">
 <?php if ( $is_success ) : ?>
 	<div class="modal-checkout-thankyou newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--align-center newspack-ui__stack--gap-half newspack-ui__spacing-bottom--5">
-		<?php if ( method_exists( '\Newspack\Newspack_UI_Icons', 'print_svg' ) ) : ?>
+		<?php if ( method_exists( '\Newspack\Newspack_UI_Icons', 'get_svg' ) && \Newspack\Newspack_UI_Icons::get_svg( 'published' ) ) : ?>
 			<span class="newspack-ui__icon newspack-ui__icon--large newspack-ui__icon--success">
 				<?php \Newspack\Newspack_UI_Icons::print_svg( 'published' ); ?>
 			</span>
