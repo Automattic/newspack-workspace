@@ -1,3 +1,10 @@
+## republication-tracker-tool [2.9.6](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.5...republication-tracker-tool@2.9.6) (2026-10-27)
+
+
+### Bug Fixes
+
+* **republication-tracker-tool:** add Custom Byline support to modal ([#1128](https://github.com/Automattic/newspack-workspace/issues/1128)) ([36dbf0d](https://github.com/Automattic/newspack-workspace/commit/36dbf0d3852720bd128a25178f242de6caff249d))
+
 ## republication-tracker-tool [2.9.5](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.4...republication-tracker-tool@2.9.5) (2026-10-26)
 
 
