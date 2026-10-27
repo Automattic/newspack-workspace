@@ -130,6 +130,15 @@ if ( ! class_exists( 'WC_Order' ) ) {
 		}
 
 		/**
+		 * Remove an order meta value.
+		 *
+		 * @param string $key Meta key.
+		 */
+		public function delete_meta_data( $key ) {
+			unset( $this->meta[ $key ] );
+		}
+
+		/**
 		 * Persist meta to the saved store, where a later request would load it.
 		 */
 		public function save_meta_data() {

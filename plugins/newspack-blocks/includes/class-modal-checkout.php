@@ -367,6 +367,11 @@ final class Modal_Checkout {
 	 * modal checkouts whose cart was filled without the stamp. WooCommerce saves
 	 * the order after its line items, so the meta is only set here.
 	 *
+	 * The decision covers the whole cart, and an order with nothing modal left
+	 * loses its marker: the Store API reuses a draft order from an earlier
+	 * submission and rebuilds its line items from the current cart, which may
+	 * no longer hold anything from the modal.
+	 *
 	 * WooCommerce Subscriptions builds a new subscription's line items through
 	 * the same hook and from the same cart. The subscription is left unmarked:
 	 * the marker records a purchase, and renewal and resubscribe orders take
@@ -381,10 +386,28 @@ final class Modal_Checkout {
 		if ( ! is_a( $order, 'WC_Order' ) || is_a( $order, 'WC_Subscription' ) ) {
 			return;
 		}
-		if ( empty( $values['newspack_modal_checkout_url'] ) && ! self::is_modal_checkout_origin() ) {
-			return;
+		if ( ! empty( $values['newspack_modal_checkout_url'] ) || self::is_modal_checkout_origin() || self::cart_has_modal_checkout_stamp() ) {
+			$order->update_meta_data( self::ORDER_META_KEY, 1 );
+		} else {
+			$order->delete_meta_data( self::ORDER_META_KEY );
 		}
-		$order->update_meta_data( self::ORDER_META_KEY, 1 );
+	}
+
+	/**
+	 * Whether any item in the current cart carries the modal stamp.
+	 *
+	 * @return bool
+	 */
+	private static function cart_has_modal_checkout_stamp() {
+		if ( ! function_exists( 'WC' ) || ! \WC()->cart ) {
+			return false;
+		}
+		foreach ( \WC()->cart->get_cart() as $cart_item ) {
+			if ( ! empty( $cart_item['newspack_modal_checkout_url'] ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**

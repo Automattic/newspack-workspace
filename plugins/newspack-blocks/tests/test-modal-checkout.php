@@ -2240,6 +2240,81 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * Set WC()->cart to a cart double holding the given items.
+	 *
+	 * @param array $items Cart items, keyed by cart item key.
+	 */
+	private function set_cart_items( $items ) {
+		WC()->cart = new class( $items ) {
+			/**
+			 * Cart items.
+			 *
+			 * @var array
+			 */
+			private $items;
+
+			/**
+			 * Constructor.
+			 *
+			 * @param array $items Cart items.
+			 */
+			public function __construct( $items ) {
+				$this->items = $items;
+			}
+
+			/**
+			 * Get the cart items.
+			 *
+			 * @return array
+			 */
+			public function get_cart() {
+				return $this->items;
+			}
+		};
+	}
+
+	/**
+	 * A Store API draft order is reused with a different cart, and its line
+	 * items are rebuilt from that cart. When nothing in the new cart came from
+	 * the modal, and the request is not modal, the old marker is cleared, so
+	 * the purchase is not reported as a modal one.
+	 */
+	public function test_mark_order_clears_marker_when_rebuilt_from_a_non_modal_cart() {
+		$_SERVER['HTTP_REFERER'] = 'https://example.com/checkout/';
+		$this->set_cart_items( [ 'key' => [ 'product_id' => 34 ] ] );
+		$order = new WC_Order( 123, 'wc_order_testkey', [], [ \Newspack_Blocks\Modal_Checkout::ORDER_META_KEY => 1 ] );
+
+		\Newspack_Blocks\Modal_Checkout::mark_order( null, 'key', [ 'product_id' => 34 ], $order );
+
+		$this->assertFalse( \Newspack_Blocks\Modal_Checkout::is_modal_checkout_order( $order ) );
+	}
+
+	/**
+	 * The marker reflects the whole cart, not the line item being built: an
+	 * unstamped item built after a stamped one leaves the order marked.
+	 */
+	public function test_mark_order_keeps_marker_when_any_cart_item_is_stamped() {
+		$_SERVER['HTTP_REFERER'] = 'https://example.com/checkout/';
+		$stamped                 = [
+			'product_id'                  => 34,
+			'newspack_modal_checkout_url' => 'https://example.com/checkout/?modal_checkout=1',
+		];
+		$unstamped               = [ 'product_id' => 35 ];
+		$this->set_cart_items(
+			[
+				'stamped'   => $stamped,
+				'unstamped' => $unstamped,
+			]
+		);
+		$order = new WC_Order( 123 );
+
+		\Newspack_Blocks\Modal_Checkout::mark_order( null, 'stamped', $stamped, $order );
+		\Newspack_Blocks\Modal_Checkout::mark_order( null, 'unstamped', $unstamped, $order );
+
+		$this->assertTrue( \Newspack_Blocks\Modal_Checkout::is_modal_checkout_order( $order ) );
+	}
+
+	/**
 	 * A subscription bought in the modal is not marked, though WooCommerce
 	 * Subscriptions builds its line items from the same stamped cart through
 	 * the same hook: the marker records a purchase, and renewal and resubscribe
