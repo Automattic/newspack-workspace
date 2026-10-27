@@ -656,4 +656,28 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
 		self::assertSame( 'manual', get_post_meta( $prompt_id, 'placement', true ) );
 	}
+
+	/**
+	 * What the prompt editor is told: the flag and the permission decide whether
+	 * the panel shows and whether its fields are writable.
+	 */
+	public function test_editor_data_reflects_the_flag_and_the_permission() {
+		$prompt_id = $this->createPopup();
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+
+		$data = Newspack_Popups_AB_Tests::get_editor_data( $prompt_id );
+		self::assertTrue( $data['enabled'] );
+		self::assertTrue( $data['can_manage_tests'] );
+		self::assertSame( [ 'form_submission', 'link_click', 'donation', 'subscription' ], array_keys( $data['goals'] ) );
+		self::assertContains( 'manual', $data['ineligible_placements'] );
+		self::assertContains( 'custom1', $data['ineligible_placements'] );
+		self::assertSame( [ 'a', 'b' ], array_keys( $data['variants'] ) );
+
+		$this->restrict_tests_to_admins();
+		self::assertFalse( Newspack_Popups_AB_Tests::get_editor_data( $prompt_id )['can_manage_tests'] );
+		self::assertFalse( Newspack_Popups_AB_Tests::get_editor_data( 0 )['can_manage_tests'], 'A new prompt asks with post ID 0.' );
+
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
+		self::assertFalse( Newspack_Popups_AB_Tests::get_editor_data( $prompt_id )['enabled'] );
+	}
 }

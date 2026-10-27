@@ -1006,6 +1006,7 @@ final class Newspack_Popups {
 				),
 				'preview_query_keys'           => self::PREVIEW_QUERY_KEYS,
 				'segmentation_enabled'         => self::$segmentation_enabled,
+				'ab_testing'                   => Newspack_Popups_AB_Tests::get_editor_data( get_the_ID() ? (int) get_the_ID() : 0 ),
 			]
 		);
 		$editor_style_path = dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/editor.css';

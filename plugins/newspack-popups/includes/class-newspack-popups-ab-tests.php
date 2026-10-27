@@ -352,6 +352,28 @@ final class Newspack_Popups_AB_Tests {
 	}
 
 	/**
+	 * What the prompt editor needs to show the A/B test panel: whether the
+	 * feature is on, whether this user may change the fields, and the vocabulary
+	 * the fields offer. Variants stop at B because the editor supports two-arm
+	 * tests; the server keeps accepting c and d so stored ones are not lost.
+	 *
+	 * @param int $post_id Prompt post ID, or 0 for a prompt not yet created.
+	 * @return array
+	 */
+	public static function get_editor_data( $post_id ) {
+		return [
+			'enabled'               => self::is_enabled(),
+			'can_manage_tests'      => self::can_manage_tests( get_current_user_id(), (int) $post_id ),
+			'goals'                 => self::get_goal_labels(),
+			'ineligible_placements' => self::get_ineligible_placements(),
+			'variants'              => [
+				'a' => __( 'A (control)', 'newspack-popups' ),
+				'b' => __( 'B (challenger)', 'newspack-popups' ),
+			],
+		];
+	}
+
+	/**
 	 * Placements a tested prompt can't have. Manual and custom placements render
 	 * wherever a block or shortcode puts them, so there is no slot to split
 	 * between variants.
