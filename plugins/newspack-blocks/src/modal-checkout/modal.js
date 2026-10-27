@@ -626,6 +626,13 @@ domReady( () => {
 					inCheckoutIntent = false;
 					document.getElementById( 'newspack_modal_checkout' ).removeAttribute( 'data-checkout' );
 				},
+				onClose: () => {
+					// On the redirect path the dialog stays open through the
+					// post-sign-in wait, so closing it then abandons the checkout.
+					// On the modal path it closes before onSuccess starts the
+					// attempt, so this bump supersedes nothing.
+					signInCheckoutAttempt++;
+				},
 				skipSuccess: true,
 				skipNewslettersSignup: true,
 				// A payment that completes at checkout verifies the reader, so don't hold a new
