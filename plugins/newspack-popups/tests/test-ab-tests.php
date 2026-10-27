@@ -690,6 +690,38 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * A Test ID the request sends back unchanged is left out of the write. The
+	 * editor sends the whole meta object on every save and core re-sanitizes a
+	 * submitted value before comparing it with the stored one, so without this a
+	 * frequency edit would rewrite an ID stored under the earlier, looser
+	 * sanitizer (which kept underscores) on one variant only, splitting its test.
+	 */
+	public function test_an_unchanged_test_id_is_not_rewritten_by_an_unrelated_save() {
+		global $wpdb;
+		$prompt_id = $this->create_test_variant( 'footer-test', 'a' );
+		// A value the earlier sanitizer stored; the current one can't write it.
+		$wpdb->update( // phpcs:ignore WordPress.DB
+			$wpdb->postmeta,
+			[ 'meta_value' => 'footer_test' ], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			[
+				'post_id'  => $prompt_id,
+				'meta_key' => Newspack_Popups_AB_Tests::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+			]
+		);
+		wp_cache_delete( $prompt_id, 'post_meta' );
+		self::assertSame( 'footer_test', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+
+		$response = $this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ 'frequency' => 'once' ] ] );
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		self::assertSame( 'once', get_post_meta( $prompt_id, 'frequency', true ) );
+		self::assertSame( 'footer_test', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+
+		// A deliberate edit still stores the normalized form.
+		$this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ Newspack_Popups_AB_Tests::META_TEST_ID => 'Footer_Test 2' ] ] );
+		self::assertSame( 'footer-test-2', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+	}
+
+	/**
 	 * What the prompt editor is told: the flag and the permission decide whether
 	 * the panel shows and whether its fields are writable.
 	 */

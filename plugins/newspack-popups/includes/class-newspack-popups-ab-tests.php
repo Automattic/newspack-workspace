@@ -343,6 +343,15 @@ final class Newspack_Popups_AB_Tests {
 			);
 		}
 
+		// A Test ID sent back unchanged is left out of the write. Core re-sanitizes
+		// a submitted value before comparing it with the stored one, so an ID stored
+		// under an earlier, looser sanitizer would otherwise be rewritten on one
+		// variant by any save and split its test; only a deliberate edit normalizes it.
+		if ( array_key_exists( self::META_TEST_ID, $meta ) && is_scalar( $meta[ self::META_TEST_ID ] ) && ! $changes( self::META_TEST_ID ) ) {
+			unset( $meta[ self::META_TEST_ID ] );
+			$request->set_param( 'meta', $meta );
+		}
+
 		if ( self::can_manage_tests( get_current_user_id(), $post_id ) ) {
 			return $prepared_post;
 		}
