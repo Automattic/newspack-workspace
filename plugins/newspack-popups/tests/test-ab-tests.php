@@ -658,6 +658,38 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * The rule refuses the save that creates a violation, not every later edit of
+	 * a prompt already in one. A tested prompt can reach a manual placement past
+	 * the guard (the Campaigns wizard writes placement directly; a save while the
+	 * flag is off is not checked), and the editor sends the whole meta object on
+	 * every save, so without this a frequency edit on such a prompt would fail
+	 * with an error about a field the editor may have disabled for that user.
+	 */
+	public function test_a_prompt_already_breaking_the_placement_rule_keeps_taking_other_edits() {
+		$prompt_id = $this->create_test_variant( 'stuck-test', 'a', [ 'placement' => 'inline' ] );
+		update_post_meta( $prompt_id, 'placement', 'manual' );
+
+		$response = $this->save_prompt_as(
+			$prompt_id,
+			'administrator',
+			[
+				'meta' => [
+					'placement'                            => 'manual',
+					Newspack_Popups_AB_Tests::META_TEST_ID => 'stuck-test',
+					'frequency'                            => 'once',
+				],
+			]
+		);
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		self::assertSame( 'once', get_post_meta( $prompt_id, 'frequency', true ) );
+
+		// Changing the Test ID is a new violation and is still refused.
+		$response = $this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ Newspack_Popups_AB_Tests::META_TEST_ID => 'other-test' ] ] );
+		self::assertSame( 400, $response->get_status() );
+		self::assertSame( 'stuck-test', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+	}
+
+	/**
 	 * What the prompt editor is told: the flag and the permission decide whether
 	 * the panel shows and whether its fields are writable.
 	 */

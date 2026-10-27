@@ -308,14 +308,34 @@ final class Newspack_Popups_AB_Tests {
 		// and applies to administrators too. It reads the values the save would
 		// leave in place: a key the request omits keeps its stored value. A
 		// non-scalar reads as empty here; the meta schema refuses it on its own.
-		$effective = function ( $meta_key ) use ( $meta, $post_id ) {
-			$value = array_key_exists( $meta_key, $meta ) ? $meta[ $meta_key ] : ( $post_id ? get_post_meta( $post_id, $meta_key, true ) : '' );
-			return is_scalar( $value ) ? (string) $value : '';
+		$stored    = function ( $meta_key ) use ( $post_id ) {
+			return $post_id ? (string) get_post_meta( $post_id, $meta_key, true ) : '';
 		};
+		$effective = function ( $meta_key ) use ( $meta, $stored ) {
+			if ( ! array_key_exists( $meta_key, $meta ) ) {
+				return $stored( $meta_key );
+			}
+			return is_scalar( $meta[ $meta_key ] ) ? (string) $meta[ $meta_key ] : '';
+		};
+		$changes   = function ( $meta_key ) use ( $effective, $stored ) {
+			return $effective( $meta_key ) !== $stored( $meta_key );
+		};
+		// The rule refuses the save that creates a violation, not every later save
+		// of a prompt already in one. A tested prompt can reach a manual placement
+		// past this guard (the Campaigns wizard writes placement directly, and a
+		// save while the flag is off is not checked), and the editor sends the
+		// whole meta object on every save, so checking the stored state too would
+		// refuse a frequency edit with an error about a field the editor may have
+		// disabled for that user. The editor's notice asks for the fix instead.
 		// Only while the flag is on: with it off a stored test has no effect, and
-		// the panel that could clear the Test ID is not registered, so refusing
-		// here would leave a tested prompt on a manual placement unsaveable.
-		if ( self::is_enabled() && ! $is_autosave && '' !== $effective( self::META_TEST_ID ) && ! self::is_eligible_placement( $effective( 'placement' ) ) ) {
+		// the panel that could clear the Test ID is not registered.
+		if (
+			self::is_enabled()
+			&& ! $is_autosave
+			&& ( $changes( self::META_TEST_ID ) || $changes( 'placement' ) )
+			&& '' !== $effective( self::META_TEST_ID )
+			&& ! self::is_eligible_placement( $effective( 'placement' ) )
+		) {
 			return new WP_Error(
 				'newspack_popups_ab_ineligible_placement',
 				__( "Prompts with a manual or custom placement can't be part of an A/B test. Clear the Test ID or change the placement.", 'newspack-popups' ),
