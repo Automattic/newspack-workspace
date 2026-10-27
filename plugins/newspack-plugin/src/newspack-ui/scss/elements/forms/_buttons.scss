@@ -164,6 +164,12 @@
 			--newspack-ui-button-bg-hover: var(--newspack-ui-color-btn-hover);
 			--newspack-ui-button-bg-pressed: var(--newspack-ui-color-btn-pressed);
 			--newspack-ui-button-ink: var(--newspack-ui-color-btn-ink);
+
+			@media ( hover: hover ) and ( pointer: fine ) {
+				&:not(.newspack-ui__button--destructive):hover {
+					color: var(--newspack-ui-color-button-text-hover);
+				}
+			}
 		}
 
 		&--accent,
