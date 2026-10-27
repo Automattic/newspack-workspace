@@ -186,3 +186,17 @@
 .components-datetime__date h3 {
 	margin: 0;
 }
+
+// The A/B Test panel is a Stack, so its gap is the only rhythm; the sidebar
+// leaves the UA margins on a bare paragraph and list, which would stack on it.
+.newspack-popups-ab-test {
+	&__note,
+	&__prompts p,
+	&__prompts ul {
+		margin: 0;
+	}
+
+	&__prompts p {
+		margin-bottom: 8px;
+	}
+}

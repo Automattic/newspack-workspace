@@ -122,7 +122,11 @@ const ABTestPanel = ( {
 	// none is announced on mount (the panel re-mounts them on every expand).
 	return (
 		<Stack direction="column" gap="lg">
-			{ ! canManage && <p>{ __( "Your role can view this prompt's A/B test settings but not change them.", 'newspack-popups' ) }</p> }
+			{ ! canManage && (
+				<p className="newspack-popups-ab-test__note">
+					{ __( "Your role can view this prompt's A/B test settings but not change them.", 'newspack-popups' ) }
+				</p>
+			) }
 			{ ! eligible && (
 				<Notice status={ testId ? 'error' : 'warning' } spokenMessage="" isDismissible={ false }>
 					{ __( "Prompts with a manual or custom placement can't be part of an A/B test.", 'newspack-popups' ) }
@@ -184,7 +188,7 @@ const ABTestPanel = ( {
 						</Notice>
 					) }
 					{ others.length > 0 && (
-						<div>
+						<div className="newspack-popups-ab-test__prompts">
 							<p id="newspack-popups-ab-test-others">
 								<strong>{ __( 'Other prompts in this test', 'newspack-popups' ) }</strong>
 							</p>
