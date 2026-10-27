@@ -577,10 +577,14 @@ domReady( () => {
 			cartReq.then( url => {
 				window.newspackReaderActivation?.setPendingCheckout?.( url );
 			} );
+			// Set by this dialog's own sign-in. A dialog opened over this one
+			// cannot set it, so its close is told apart from this dialog's.
+			let signedIn = false;
 			// Initialize auth flow if reader is not authenticated.
 			window.newspackReaderActivation.openAuthModal( {
 				title: newspackBlocksModal.labels.auth_modal_title,
 				onSuccess: ( message, authData ) => {
+					signedIn = true;
 					const attempt = ++signInCheckoutAttempt;
 					// The reader was anonymous when this page evaluated their
 					// segments. Let the session hydrate and the snapshot reach the
@@ -638,17 +642,21 @@ domReady( () => {
 					// path the dialog outlives the sign-in: any close then abandons
 					// the checkout, whichever dialog config reports it (an earlier
 					// config's onDismiss may already have cleared the intent), and
-					// the bookkeeping closeCheckout() does for the modal path runs
-					// once. The newsletters step would replace this callback, so
-					// the config above skips it.
+					// the dismissal bookkeeping runs once. A dialog that signed the
+					// reader in also drops the pending checkout; one dismissed
+					// before signing in keeps it, so a magic link sent from it can
+					// still resume the checkout. The newsletters step would replace
+					// this callback; `skipNewslettersSignup` below keeps it.
 					if ( isModalCheckout ) {
 						return;
 					}
 					signInCheckoutAttempt++;
+					if ( signedIn ) {
+						window.newspackReaderActivation?.setPendingCheckout?.();
+					}
 					if ( ! inCheckoutIntent ) {
 						return;
 					}
-					window.newspackReaderActivation?.setPendingCheckout?.();
 					manageDismissed( checkoutData );
 					inCheckoutIntent = false;
 					document.getElementById( 'newspack_modal_checkout' ).removeAttribute( 'data-checkout' );
