@@ -6,7 +6,7 @@
  *
  * Starting content for new header template parts; see Patterns::template_part_starter_content().
  * Both views start with a logo and menu so neither is published empty, and the layout blocks are unlocked so
- * it can be rebuilt freely.
+ * the layout can be rebuilt freely.
  *
  * @package Newspack_Block_Theme
  */
