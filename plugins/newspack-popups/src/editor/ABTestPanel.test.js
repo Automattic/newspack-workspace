@@ -189,6 +189,18 @@ describe( 'ABTestPanel', () => {
 		expect( screen.queryByText( MISSING_BLOCK ) ).toBeNull();
 	} );
 
+	it( 'does not show a stored test with no variant as the control', async () => {
+		apiFetch.mockResolvedValue( [ { id: 1, variant: '', title: 'Other', status: 'draft', edit_link: 'http://example.test/post.php?post=1' } ] );
+
+		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: '' } );
+
+		const option = screen.getByRole( 'option', { name: 'Select a variant' } );
+		expect( option.disabled ).toBe( true );
+		expect( screen.getByLabelText( 'Variant' ).value ).toBe( '' );
+		expect( await screen.findByText( 'Other — no variant (draft)' ) ).toBeTruthy();
+		expect( onMetaFieldChange ).not.toHaveBeenCalled();
+	} );
+
 	it( 'lists the other prompts in the test and warns about a duplicate variant', async () => {
 		apiFetch.mockResolvedValue( [
 			{ id: 1, variant: 'a', title: 'Control', status: 'publish', edit_link: 'http://example.test/post.php?post=1' },

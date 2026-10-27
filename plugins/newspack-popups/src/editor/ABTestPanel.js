@@ -94,13 +94,17 @@ const ABTestPanel = ( {
 	};
 
 	const variantOptions = Object.entries( variants ).map( ( [ value, label ] ) => ( { value, label } ) );
-	if ( variant && ! variants[ variant ] ) {
-		// A variant the server stores but this editor doesn't offer (c, d): show
-		// it, and don't rewrite it.
+	if ( ! variants[ variant ] ) {
+		// A stored value this editor doesn't offer: a variant from another source
+		// (c, d), or none at all, which leaves the prompt out of the test. Show the
+		// stored state rather than letting the select fall back to "A (control)",
+		// and don't rewrite it.
 		variantOptions.unshift( {
 			value: variant,
-			// Translators: %s is the variant letter.
-			label: sprintf( __( 'Unsupported variant (%s)', 'newspack-popups' ), variant.toUpperCase() ),
+			label: variant
+				? // Translators: %s is the variant letter.
+				  sprintf( __( 'Unsupported variant (%s)', 'newspack-popups' ), variant.toUpperCase() )
+				: __( 'Select a variant', 'newspack-popups' ),
 			disabled: true,
 		} );
 	}
@@ -177,7 +181,8 @@ const ABTestPanel = ( {
 										// Translators: %1$s is the prompt title, %2$s its variant, %3$s its post status.
 										__( '%1$s — %2$s (%3$s)', 'newspack-popups' ),
 										prompt.title,
-										variants[ prompt.variant ] || String( prompt.variant ).toUpperCase(),
+										variants[ prompt.variant ] ||
+											( prompt.variant ? String( prompt.variant ).toUpperCase() : __( 'no variant', 'newspack-popups' ) ),
 										prompt.status
 									);
 									return (
