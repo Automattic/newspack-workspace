@@ -29,7 +29,7 @@ ob_start();
 	readonly
 	rows="5"
 	aria-label="<?php esc_attr_e( 'Republish this article (HTML format)', 'republication-tracker-tool' ); ?>"
-><?php echo esc_html( $article_info ); ?><?php echo wp_kses_post( $content ); ?><?php echo wp_kses_post( htmlspecialchars( $content_footer, ENT_QUOTES, 'UTF-8' ) ); ?></textarea>
+><?php echo esc_html( $article_info ); ?><?php echo wp_kses_post( $content ); ?><?php echo wp_kses_post( $escaped_footer ); ?></textarea>
 <?php if ( ! $is_amp ) : ?>
 	<button type="button" data-copy-active class="newspack-ui__button newspack-ui__button--primary"><?php esc_html_e( 'Copy to Clipboard', 'republication-tracker-tool' ); ?></button>
 <?php endif; ?>

@@ -17,8 +17,32 @@ final class Republication_Tracker_Tool_Republish_Button_Block {
 	 * Initialize the block.
 	 */
 	public static function init(): void {
+		add_filter( 'block_type_metadata', [ __CLASS__, 'set_block_version' ] );
 		add_action( 'init', [ __CLASS__, 'register_block' ] );
 		add_action( 'enqueue_block_editor_assets', [ __CLASS__, 'enqueue_editor_data' ] );
+	}
+
+	/**
+	 * Version the block's stylesheet by the build's content hash.
+	 *
+	 * WordPress versions a block.json stylesheet by the block's `version`
+	 * field, or by the WordPress version when there is none (the file's mtime
+	 * only under SCRIPT_DEBUG). Without a version, an updated stylesheet keeps
+	 * its URL until WordPress itself updates, so browsers keep the cached copy.
+	 *
+	 * @param array $metadata Block metadata read from block.json.
+	 * @return array Metadata with `version` set for this block.
+	 */
+	public static function set_block_version( $metadata ) {
+		if ( ! is_array( $metadata ) || 'republication-tracker-tool/republish-button' !== ( $metadata['name'] ?? '' ) || ! empty( $metadata['version'] ) ) {
+			return $metadata;
+		}
+		$asset_file          = REPUBLICATION_TRACKER_TOOL_PATH . 'dist/republish-button.asset.php';
+		$asset               = file_exists( $asset_file ) ? include $asset_file : [];
+		$metadata['version'] = is_array( $asset ) && ! empty( $asset['version'] ) && is_string( $asset['version'] )
+			? $asset['version']
+			: REPUBLICATION_TRACKER_TOOL_VERSION;
+		return $metadata;
 	}
 
 	/**
@@ -204,7 +228,7 @@ final class Republication_Tracker_Tool_Republish_Button_Block {
 			'republication-tracker-tool-clipboard-utils',
 			REPUBLICATION_TRACKER_TOOL_URL . 'assets/clipboard-utils.js',
 			[],
-			REPUBLICATION_TRACKER_TOOL_VERSION,
+			filemtime( REPUBLICATION_TRACKER_TOOL_PATH . 'assets/clipboard-utils.js' ),
 			[
 				'in_footer' => true,
 				'strategy'  => 'defer',

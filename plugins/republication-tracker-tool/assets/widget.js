@@ -104,7 +104,8 @@
 		doc.querySelectorAll( '.wp-caption' ).forEach( function ( el ) {
 			el.remove();
 		} );
-		shareable.innerHTML = doc.body.innerHTML;
+		// .value, not .innerHTML: .innerHTML would decode the copy one more level.
+		shareable.value = doc.body.innerHTML;
 	}
 
 	function containFocus( modal, e ) {
@@ -214,7 +215,31 @@
 		} );
 	}
 
+	function initPageButtons() {
+		document.querySelectorAll( '.republication-tracker-tool-button.page' ).forEach( function ( button ) {
+			button.addEventListener( 'click', function () {
+				const target = button.getAttribute( 'data-republish-url' );
+				if ( ! target ) {
+					return;
+				}
+				// Compare origins rather than the string's prefix: browsers read some
+				// prefixes, such as '/\', as '//', which points at another host.
+				let url;
+				try {
+					url = new URL( target, window.location.href );
+				} catch ( e ) {
+					return;
+				}
+				if ( url.origin === window.location.origin ) {
+					window.location.href = url.href;
+				}
+			} );
+		} );
+	}
+
 	jQuery( document ).ready( function () {
+		initPageButtons();
+
 		const modal = document.getElementById( 'republication-tracker-tool-modal' );
 		if ( ! modal ) {
 			return;

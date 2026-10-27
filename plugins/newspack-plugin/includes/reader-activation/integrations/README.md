@@ -702,3 +702,267 @@ A new reader's first contact sync reaches Sync Activity as `RAS Reader registrat
 The built-in JS client (`newspackReaderActivation.register()`) always sends the value returned by `get_registration_key()`. Custom key schemes that diverge from this default need their own client-side code to compute and submit the key.
 
 The built-in `form-capture` integration ([class-form-capture.php](class-form-capture.php) and `src/reader-activation-form-capture/`) is the reference implementation of this section end to end: enabled-gated key emission, a capture script driving `register()`, magic-link suppression for repeat captures, existing-reader sync scheduling, and new-reader sync naming.
+
+### Example: registering readers from a third-party widget
+
+The example below registers a reader when a third-party widget (a donation form, a signup embed) reports a completed action in the browser.
+
+Here's how a Javascript integration that captures user action and registers them look like. The script listens for the widget's completion event and passes the reader's details to `register()`. The second argument is the integration ID, which selects the key the framework emitted for it:
+
+```js
+/* global MyService */
+
+function onComplete( detail ) {
+    const { contact } = detail;
+    if ( ! contact?.email || ! window.newspackReaderActivation?.register ) {
+        return;
+    }
+
+    window.newspackReaderActivation
+        .register( contact.email, 'my_integration', {
+            first_name: contact.firstName || '',
+            last_name: contact.lastName || '',
+            metadata: {
+                my_integration_contact_id: contact.id || '',
+            },
+        } )
+        .catch( error => {
+            // A returning reader already has an account; the endpoint still
+            // records the registration, so this is not a failure.
+            if ( 'reader_already_exists' === error?.code ) {
+                return;
+            }
+            // The widget's own action already succeeded, so don't surface this
+            // to the reader. Log it for error monitoring and QA.
+            // eslint-disable-next-line no-console
+            console.warn( '[My Integration] Reader registration failed.', error );
+        } );
+}
+
+// The widget's library may still be loading, or may be blocked by an ad
+// blocker. Check with `typeof` and retry once on window load.
+function listen() {
+    if ( typeof MyService === 'undefined' ) {
+        return false;
+    }
+    MyService.on( 'complete', onComplete );
+    return true;
+}
+
+if ( ! listen() ) {
+    window.addEventListener( 'load', listen );
+}
+```
+
+On the server side, it's important to implement `validate_registration_request` and `handle_logged_in_user_registration`. In these methods, you need to make sure that the information that comes in the request matches what actually exists in your platform database. The javascript is the triger, but the actual data should not be trusted as is to avoid malicious actors from spamming the registration endpoint.
+
+```php
+namespace Newspack\My_Plugin;
+
+use Newspack\Reader_Activation\Integration;
+use Newspack\Reader_Activation\Integrations;
+
+class My_Integration extends Integration {
+    // Constructor, settings fields, etc. as in "Minimum implementation".
+
+    /**
+     * One switch: when the publisher disables the integration, the page stops
+     * emitting its key and the endpoint stops accepting it.
+     */
+    public function supports_frontend_registration(): bool {
+        return Integrations::is_enabled( $this->get_id() );
+    }
+
+    /**
+     * Extend the default key check rather than replace it, so a client without
+     * the page's key never reaches an API lookup and rotate_registration_key()
+     * still applies.
+     */
+    public function validate_registration_request( string $key, $request ): bool {
+        if ( ! $this->supports_frontend_registration() ) {
+            return false;
+        }
+        if ( ! parent::validate_registration_request( $key, $request ) ) {
+            return false;
+        }
+
+        $metadata = $request->get_param( 'metadata' );
+        $email    = $request->get_param( 'npe' );
+        if ( ! is_array( $metadata ) || empty( $metadata['my_integration_contact_id'] ) || empty( $email ) || ! is_email( $email ) ) {
+            return false;
+        }
+
+        // An ID that exists is not enough: it must belong to this email.
+        return self::contact_belongs_to( $metadata['my_integration_contact_id'], $email );
+    }
+
+    /**
+     * A logged-in reader completed the widget again. Bind against the session's
+     * account, never `npe`: on this path `npe` is caller-supplied.
+     */
+    public function handle_logged_in_user_registration( $user, $request ) {
+        if ( ! $this->supports_frontend_registration() ) {
+            return;
+        }
+
+        $metadata = $request->get_param( 'metadata' );
+        if ( ! is_array( $metadata ) || empty( $metadata['my_integration_contact_id'] ) ) {
+            return;
+        }
+
+        $contact_id = $metadata['my_integration_contact_id'];
+        if ( ! self::contact_belongs_to( $contact_id, $user->user_email ) ) {
+            return;
+        }
+
+        update_user_meta( $user->ID, 'my_integration_contact_id', $contact_id );
+    }
+
+    /**
+     * Fails closed: an API error counts as "does not belong".
+     */
+    private static function contact_belongs_to( string $contact_id, string $email ): bool {
+        $contact = My_Service_API::get_contact( $contact_id );
+        if ( is_wp_error( $contact ) || empty( $contact['email'] ) ) {
+            return false;
+        }
+        return strtolower( $contact['email'] ) === strtolower( $email );
+    }
+}
+```
+
+The client script depends on the `newspack-reader-activation` handle, so `newspackReaderActivation.register()` is available when it runs. Enqueue it only while the integration is enabled:
+
+```php
+add_action(
+    'wp_enqueue_scripts',
+    function () {
+        if ( ! Integrations::is_enabled( 'my_integration' ) ) {
+            return;
+        }
+        wp_enqueue_script(
+            'my-integration-registration',
+            plugins_url( 'dist/registration.js', MY_PLUGIN_FILE ),
+            [ 'newspack-reader-activation' ],
+            MY_PLUGIN_VERSION,
+            [
+                'strategy'  => 'defer',
+                'in_footer' => true,
+            ]
+        );
+    }
+);
+```
+
+To act on readers this integration creates, match its registration method, `integration-registration-<integration ID>`, in the `newspack_registered_reader` action. Fundraise Up uses this to mark new readers as donors:
+
+```php
+add_action(
+    'newspack_registered_reader',
+    function ( $email, $authenticate, $user_id, $existing_user, $metadata ) {
+        if ( 'integration-registration-my_integration' !== ( $metadata['registration_method'] ?? '' ) ) {
+            return;
+        }
+        $target_id = $user_id ? (int) $user_id : ( $existing_user ? (int) $existing_user->ID : 0 );
+        if ( ! $target_id ) {
+            return;
+        }
+        \Newspack\Reader_Data::update_item( $target_id, 'is_donor', true );
+    },
+    10,
+    5
+);
+```
+
+### Alternative: registering readers on a landing page
+
+Some services can send the reader to a page on the site once they finish, with an identifier in the URL. The integration can then register or log in the reader in PHP when that page loads. This path skips the frontend registration endpoint and its JS client, so the integration does not need `supports_frontend_registration()`. It also works when a script blocker stops the widget's browser events.
+
+The URL is the only input, and anyone can copy or forge it. Logging someone in from it is only safe when the server re-checks everything through the service's API and limits how long and how often a URL works. Here are a few best practices:
+
+- **Read identity from the API, never from the URL.** The URL only carries a lookup key. The email, the name and the IDs saved on the reader all come from the service's response.
+- **Expire the link.** Refuse records older than a short window, and treat a missing or unreadable timestamp as expired. A URL found later in browser history or a shared link then logs no one in.
+- **Use each identifier once.** Record each identifier as used before calling the API, so a reload, a second tab or a copied URL can't register or log in twice. The example below leaves this out: put something in place that survives across requests, such as a database row or a persistent object cache entry, and treat a failure to record it as a reason to stop. Let the identifier be used again only when the API call or the registration fails, so the reader can retry by reloading.
+- **Limit lookups per visitor.** Every new identifier in the URL costs one call to the service's API, so a script cycling through made-up values can run up the API quota. Count lookups per IP address, and stop before calling the API once a visitor passes a small limit. As with single use, the example leaves this out.
+- **Never switch sessions.** If someone else is logged in, leave the session alone and log the mismatch.
+- **Log in readers only.** `Reader_Activation::set_current_reader()` checks no credentials, but it refuses any account that isn't a reader, so a URL can't log anyone in as an editor or administrator. Check its return value and stop on an error.
+- **Keep the response out of the page cache.** Call `nocache_headers()` before setting the login cookie.
+
+```php
+namespace Newspack\My_Plugin;
+
+use Newspack\Reader_Activation;
+use Newspack\Reader_Activation\Integrations;
+
+add_action( 'template_redirect', __NAMESPACE__ . '\maybe_register_from_landing_page', 1 );
+
+function maybe_register_from_landing_page() {
+    // This runs on every page view, so bail before any lookup when the request
+    // isn't a landing-page visit.
+    if ( is_admin() || wp_doing_ajax() || wp_doing_cron() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
+        return;
+    }
+    if ( 'GET' !== ( $_SERVER['REQUEST_METHOD'] ?? '' ) || ! is_page() ) {
+        return;
+    }
+    // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Identity comes from the service's API, not from this parameter.
+    $record_id = isset( $_GET['my_service_id'] ) ? sanitize_text_field( wp_unslash( $_GET['my_service_id'] ) ) : '';
+    if ( empty( $record_id ) || ! Integrations::is_enabled( 'my_integration' ) ) {
+        return;
+    }
+
+    $record = My_Service_API::get_record( $record_id );
+    if ( is_wp_error( $record ) ) {
+        return;
+    }
+
+    // Read identity from the API.
+    $email = $record['contact']['email'] ?? '';
+    if ( ! is_email( $email ) ) {
+        return;
+    }
+
+    // Expire the link. A missing timestamp counts as expired.
+    $created = empty( $record['created_at'] ) ? false : strtotime( $record['created_at'] );
+    if ( ! $created || $created < time() - DAY_IN_SECONDS ) {
+        return;
+    }
+
+    nocache_headers();
+
+    $metadata = [
+        // Same method as the frontend endpoint uses, so one
+        // `newspack_registered_reader` handler covers both paths.
+        'registration_method'         => 'integration-registration-my_integration',
+        'current_page_url'            => home_url( remove_query_arg( 'my_service_id' ) ),
+        'my_integration_contact_id' => $record['contact']['id'] ?? '',
+    ];
+
+    // Someone is already logged in: record it only if it's the same person.
+    if ( is_user_logged_in() ) {
+        $current_user = wp_get_current_user();
+        if ( strtolower( $current_user->user_email ) === strtolower( $email ) ) {
+            // do something
+        }
+        return;
+    }
+
+    // A returning reader: log them in. set_current_reader() refuses
+    // non-reader accounts.
+    $user = get_user_by( 'email', $email );
+    if ( $user ) {
+        if ( is_wp_error( Reader_Activation::set_current_reader( $user->ID ) ) ) {
+            return;
+        }
+        // do something.
+        return;
+    }
+
+    // A new reader: register_reader() creates the account, logs them in
+    // (third argument), and passes $metadata to `newspack_registered_reader`.
+    $name    = trim( ( $record['contact']['first_name'] ?? '' ) . ' ' . ( $record['contact']['last_name'] ?? '' ) );
+    Reader_Activation::register_reader( $email, $name, true, $metadata );
+}
+```
+
+The handler runs on `template_redirect`, before any output, so it can still set the login cookie and the page renders for the logged-in reader.

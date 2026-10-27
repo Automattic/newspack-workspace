@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Newspack
  * Description: An advanced open-source publishing and revenue-generating platform for news organizations.
- * Version: 6.55.5
+ * Version: 6.56.2
  * Requires PHP: 8.1
  * Author: Automattic
  * Author URI: https://newspack.com/
@@ -15,7 +15,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'NEWSPACK_PLUGIN_VERSION', '6.55.5' );
+define( 'NEWSPACK_PLUGIN_VERSION', '6.56.2' );
 
 // Path to the main Newspack plugin file.
 if ( ! defined( 'NEWSPACK_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal path constant, defined immediately below.

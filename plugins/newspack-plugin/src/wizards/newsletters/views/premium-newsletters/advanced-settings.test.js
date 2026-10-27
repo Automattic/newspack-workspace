@@ -44,12 +44,11 @@ jest.mock( '@wordpress/data', () => ( {
 	useSelect: () => ( {} ),
 } ) );
 
-// Stub @wordpress/components — the modal imports ToggleControl and the
-// experimental HStack/VStack. Real-module load needs broader setup in
-// jsdom, so provide minimal passthroughs (same approach as settings-modal).
+// Stub @wordpress/components — the modal imports ToggleControl. Real-module
+// load needs broader setup in jsdom, so provide a minimal stand-in (same
+// approach as settings-modal).
 jest.mock( '@wordpress/components', () => {
 	const React = require( 'react' );
-	const Passthrough = ( { children } ) => React.createElement( 'div', null, children );
 	const ToggleControl = ( { label, checked, onChange } ) =>
 		React.createElement( 'input', {
 			type: 'checkbox',
@@ -59,8 +58,6 @@ jest.mock( '@wordpress/components', () => {
 		} );
 	return {
 		ToggleControl,
-		__experimentalHStack: Passthrough,
-		__experimentalVStack: Passthrough,
 	};
 } );
 

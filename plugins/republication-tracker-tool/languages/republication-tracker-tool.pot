@@ -2,14 +2,14 @@
 # This file is distributed under the same license as the Republication Tracker Tool plugin.
 msgid ""
 msgstr ""
-"Project-Id-Version: Republication Tracker Tool 2.9.4\n"
+"Project-Id-Version: Republication Tracker Tool 2.9.5\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/republication-tracker-tool\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-28T19:00:22+00:00\n"
+"POT-Creation-Date: 2026-10-26T18:24:02+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: republication-tracker-tool\n"
@@ -225,135 +225,135 @@ msgid "Page"
 msgstr ""
 
 #. translators: %1$s is the post title, %2$s is the byline, %3$s is the site name, %4$s is the date in the format F j, Y.
-#: includes/shareable-content.php:36
+#: includes/shareable-content.php:41
 #, php-format
 msgid "<h1>%1$s</h1><p class=\"byline\">by %2$s, %3$s <br />%4$s</p>"
 msgstr ""
 
-#: includes/shareable-content.php:85
+#: includes/shareable-content.php:90
 msgid "Close window"
 msgstr ""
 
-#: includes/shareable-content.php:86
+#: includes/shareable-content.php:91
 #: templates/republish-template.php:179
 msgid "Republish this article"
 msgstr ""
 
 #. translators: %1$s is the URL to the particular Creative Commons license.
 #. translators: %1$s is the URL to the particular Creative Commons license, %2$s is the license description.
-#: includes/shareable-content.php:97
+#: includes/shareable-content.php:102
 #: templates/republish-template.php:193
 #, php-format
 msgid "This work is licensed under a <a rel=\"noreferrer license\" target=\"_blank\" href=\"%1$s\">%2$s</a>."
 msgstr ""
 
-#: includes/shareable-content.php:118
+#: includes/shareable-content.php:123
 #: templates/republish-template.php:212
 msgid "HTML format"
 msgstr ""
 
-#: includes/shareable-content.php:119
+#: includes/shareable-content.php:124
 #: templates/republish-template.php:213
 msgid "HTML"
 msgstr ""
 
-#: includes/shareable-content.php:121
+#: includes/shareable-content.php:126
 #: templates/republish-template.php:215
 msgid "Plain text format"
 msgstr ""
 
-#: includes/shareable-content.php:122
+#: includes/shareable-content.php:127
 #: templates/republish-template.php:216
 msgid "Plain Text"
 msgstr ""
 
-#: includes/shareable-content.php:134
+#: includes/shareable-content.php:139
 #: templates/republish-template.php:229
 msgid "Republish this article (HTML format)"
 msgstr ""
 
-#: includes/shareable-content.php:141
+#: includes/shareable-content.php:146
 #: templates/republish-template.php:236
 msgid "Canonical Tag:"
 msgstr ""
 
-#: includes/shareable-content.php:149
+#: includes/shareable-content.php:154
 msgid "Canonical tag for this article"
 msgstr ""
 
-#: includes/shareable-content.php:151
+#: includes/shareable-content.php:156
 #: templates/republish-template.php:246
 msgid "Copy canonical URL"
 msgstr ""
 
-#: includes/shareable-content.php:152
+#: includes/shareable-content.php:157
 #: templates/republish-template.php:247
 msgid "Copy Tag"
 msgstr ""
 
-#: includes/shareable-content.php:158
+#: includes/shareable-content.php:163
 #: templates/republish-template.php:253
 msgid "Article Content:"
 msgstr ""
 
-#: includes/shareable-content.php:165
+#: includes/shareable-content.php:170
 #: templates/republish-template.php:260
 msgid "Plain text article content"
 msgstr ""
 
-#: includes/shareable-content.php:167
+#: includes/shareable-content.php:172
 #: templates/republish-template.php:262
 msgid "Copy article content"
 msgstr ""
 
-#: includes/shareable-content.php:168
+#: includes/shareable-content.php:173
 #: templates/republish-template.php:263
 msgid "Copy Content"
 msgstr ""
 
-#: includes/shareable-content.php:174
+#: includes/shareable-content.php:179
 msgid "Tracking snippet:"
 msgstr ""
 
-#: includes/shareable-content.php:181
+#: includes/shareable-content.php:186
 #: templates/republish-template.php:276
 msgid "Tracking snippet"
 msgstr ""
 
-#: includes/shareable-content.php:184
+#: includes/shareable-content.php:189
 #: templates/republish-template.php:279
 msgid "Copy tracking snippet"
 msgstr ""
 
-#: includes/shareable-content.php:185
+#: includes/shareable-content.php:190
 #: templates/republish-template.php:280
 msgid "Copy Snippet"
 msgstr ""
 
-#: includes/shareable-content.php:195
+#: includes/shareable-content.php:200
 msgid "Copy to Clipboard"
 msgstr ""
 
 #. translators: %1$s is the site title, %2$s is the license description.
-#: republication-tracker-tool.php:377
+#: republication-tracker-tool.php:378
 #, php-format
 msgid "This article first appeared on %1$s and is republished here under a %2$s."
 msgstr ""
 
 #. translators: %1$s is a URL, %2$s is the site home URL, %3$s is the site title. %4$s is the license URL, %5$s is the license description.
-#: republication-tracker-tool.php:385
+#: republication-tracker-tool.php:386
 #, php-format
 msgid "This <a target=\"_blank\" href=\"%1$s\">article</a> first appeared on <a target=\"_blank\" href=\"%2$s\">%3$s</a> and is republished here under a <a target=\"_blank\" href=\"%4$s\">%5$s</a>."
 msgstr ""
 
 #. translators: %s is the site title.
-#: republication-tracker-tool.php:398
+#: republication-tracker-tool.php:399
 #, php-format
 msgid "This article first appeared on %s."
 msgstr ""
 
 #. translators: %1$s is a URL, %2$s is the site home URL, %3$s is the site title.
-#: republication-tracker-tool.php:406
+#: republication-tracker-tool.php:407
 #, php-format
 msgid "This <a target=\"_blank\" href=\"%1$s\">article</a> first appeared on <a target=\"_blank\" href=\"%2$s\">%3$s</a>."
 msgstr ""

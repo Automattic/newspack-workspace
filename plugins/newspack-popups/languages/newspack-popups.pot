@@ -2,14 +2,14 @@
 # This file is distributed under the same license as the Newspack Campaigns plugin.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Campaigns 3.20.2\n"
+"Project-Id-Version: Newspack Campaigns 3.20.3\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-popups\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-12T22:41:12+00:00\n"
+"POT-Creation-Date: 2026-10-26T18:23:16+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-popups\n"
@@ -329,7 +329,7 @@ msgstr ""
 #: includes/class-newspack-popups-settings.php:519
 #: dist/editor.js:62
 #: dist/settings.js:16
-#: src/editor/index.js:80
+#: src/editor/index.js:81
 #: src/settings/index.js:103
 msgid "Settings"
 msgstr ""
@@ -1367,65 +1367,65 @@ msgstr ""
 
 #: dist/editor.js:40
 #: dist/editor.js:43
-#: src/editor/Duplicate.js:38
-#: src/editor/Duplicate.js:131
+#: src/editor/Duplicate.js:39
+#: src/editor/Duplicate.js:132
 msgid "copy"
 msgstr ""
 
 #: dist/editor.js:40
 #: dist/editor.js:43
-#: src/editor/Duplicate.js:66
-#: src/editor/Duplicate.js:135
+#: src/editor/Duplicate.js:67
+#: src/editor/Duplicate.js:136
 msgid "Duplicate"
 msgstr ""
 
 #. translators: %s: title of the duplicated popup.
 #: dist/editor.js:40
-#: src/editor/Duplicate.js:72
+#: src/editor/Duplicate.js:73
 #, js-format
 msgid "Duplicate “%s”"
 msgstr ""
 
 #. translators: %s: title of the duplicated popup.
 #: dist/editor.js:43
-#: src/editor/Duplicate.js:85
+#: src/editor/Duplicate.js:86
 #, js-format
 msgid "Duplicate of “%s” created as a draft."
 msgstr ""
 
 #: dist/editor.js:43
-#: src/editor/Duplicate.js:91
+#: src/editor/Duplicate.js:92
 msgid "This prompt is currently not assigned to any campaign."
 msgstr ""
 
 #: dist/editor.js:43
-#: src/editor/Duplicate.js:96
+#: src/editor/Duplicate.js:97
 msgid "Close"
 msgstr ""
 
 #: dist/editor.js:43
-#: src/editor/Duplicate.js:99
+#: src/editor/Duplicate.js:100
 msgid "Edit"
 msgstr ""
 
 #: dist/editor.js:43
-#: src/editor/Duplicate.js:107
+#: src/editor/Duplicate.js:108
 msgid "This prompt will not be assigned to any campaign."
 msgstr ""
 
 #: dist/editor.js:43
-#: src/editor/Duplicate.js:112
+#: src/editor/Duplicate.js:113
 msgid "Title"
 msgstr ""
 
 #: dist/editor.js:43
-#: src/editor/Duplicate.js:124
+#: src/editor/Duplicate.js:125
 msgid "Cancel"
 msgstr ""
 
 #: dist/editor.js:43
-#: src/editor/Duplicate.js:53
-#: src/editor/Duplicate.js:59
+#: src/editor/Duplicate.js:54
+#: src/editor/Duplicate.js:60
 msgid "Error duplicating prompt."
 msgstr ""
 
@@ -1790,57 +1790,57 @@ msgid "The prompt will not be shown on posts that have any these tags."
 msgstr ""
 
 #: dist/editor.js:62
-#: src/editor/index.js:71
+#: src/editor/index.js:72
 msgid "Styles"
 msgstr ""
 
 #: dist/editor.js:62
-#: src/editor/index.js:90
+#: src/editor/index.js:91
 msgid "Frequency"
 msgstr ""
 
 #: dist/editor.js:62
-#: src/editor/index.js:100
+#: src/editor/index.js:101
 msgid "Color"
 msgstr ""
 
 #: dist/editor.js:62
-#: src/editor/index.js:109
+#: src/editor/index.js:110
 msgid "Post Types"
 msgstr ""
 
 #: dist/editor.js:62
-#: src/editor/index.js:118
+#: src/editor/index.js:119
 msgid "Expiration"
 msgstr ""
 
 #: dist/editor.js:62
-#: src/editor/index.js:142
+#: src/editor/index.js:143
 msgid "Advanced Settings"
 msgstr ""
 
 #: dist/editor.js:62
-#: src/editor/index.js:164
+#: src/editor/index.js:165
 msgid "Above-header prompts appear at the very top of the page and push the rest of the content down as they load, which can lower your Cumulative Layout Shift (CLS) score. To reduce the impact, keep the prompt short, or use an overlay placement instead."
 msgstr ""
 
 #: dist/editor.js:62
-#: src/editor/index.js:241
+#: src/editor/index.js:242
 msgid "The prompt will be shown to all readers."
 msgstr ""
 
 #: dist/editor.js:62
-#: src/editor/index.js:243
+#: src/editor/index.js:244
 msgid "The prompt will be shown only to readers who match the selected segment."
 msgstr ""
 
 #: dist/editor.js:62
-#: src/editor/index.js:246
+#: src/editor/index.js:247
 msgid "The prompt will be shown only to readers who match the selected segments."
 msgstr ""
 
 #: dist/editor.js:62
-#: src/editor/index.js:251
+#: src/editor/index.js:252
 msgid "Manage segments"
 msgstr ""
 

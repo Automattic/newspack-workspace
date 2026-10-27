@@ -64,7 +64,7 @@ class Republication_Tracker_Tool_Widget extends WP_Widget {
 				'republication-tracker-tool-clipboard-utils',
 				plugins_url( 'assets/clipboard-utils.js', __DIR__ ),
 				array(),
-				REPUBLICATION_TRACKER_TOOL_VERSION,
+				filemtime( REPUBLICATION_TRACKER_TOOL_PATH . 'assets/clipboard-utils.js' ),
 				array(
 					'in_footer' => false,
 					'strategy'  => 'defer',
@@ -74,7 +74,7 @@ class Republication_Tracker_Tool_Widget extends WP_Widget {
 				'republication-tracker-tool-js',
 				plugins_url( 'assets/widget.js', __DIR__ ),
 				$use_newspack_ui ? array( 'jquery', 'republication-tracker-tool-clipboard-utils', 'newspack-ui' ) : array( 'jquery', 'republication-tracker-tool-clipboard-utils' ),
-				REPUBLICATION_TRACKER_TOOL_VERSION,
+				filemtime( REPUBLICATION_TRACKER_TOOL_PATH . 'assets/widget.js' ),
 				array(
 					'in_footer' => false,
 					'strategy'  => 'defer',
@@ -101,8 +101,9 @@ class Republication_Tracker_Tool_Widget extends WP_Widget {
 		}
 
 		if ( ! empty( $instance['layout'] ) && 'page' === $instance['layout'] ) {
+			// widget.js reads this attribute on click and navigates.
 			printf(
-				'<p%3$s><button name="%1$s" id="cc-btn" class="republication-tracker-tool-button page%4$s" onclick="window.location.href=\'%2$s\'" role="link">%1$s</button></p>',
+				'<p%3$s><button name="%1$s" id="cc-btn" class="republication-tracker-tool-button page%4$s" data-republish-url="%2$s" role="link">%1$s</button></p>',
 				esc_html__( 'Republish This Story', 'republication-tracker-tool' ),
 				esc_url( '/republish' . ( isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '' ) ),
 				$use_newspack_ui ? ' class="newspack-ui"' : '',

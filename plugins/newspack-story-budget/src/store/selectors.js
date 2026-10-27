@@ -67,7 +67,7 @@ export const getTotalBudgetsCount = state => {
 
 export const getBudgetsView = state => state.budgetsView;
 
-export const getLastRefresh = state => state.meta.lastRefresh;
+export const getLastRefresh = state => state.meta.lastRefreshServerTime;
 
 export const getAllStories = state => Object.values( state.stories );
 

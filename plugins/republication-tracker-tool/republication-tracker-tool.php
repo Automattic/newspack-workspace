@@ -6,7 +6,7 @@
  * Author URI:      https://labs.inn.org
  * Text Domain:     republication-tracker-tool
  * Domain Path:     /languages
- * Version:         2.9.4
+ * Version:         2.9.5
  * Requires PHP:    8.1
  *
  * @package         Republication_Tracker_Tool
@@ -295,10 +295,10 @@ final class Republication_Tracker_Tool {
 	 */
 	public static function enqueue_modal_style(): void {
 		if ( self::use_newspack_ui() ) {
-			wp_enqueue_style( 'republication-tracker-tool-css', REPUBLICATION_TRACKER_TOOL_URL . 'assets/newspack-ui.css', [ 'newspack-ui' ], REPUBLICATION_TRACKER_TOOL_VERSION );
+			wp_enqueue_style( 'republication-tracker-tool-css', REPUBLICATION_TRACKER_TOOL_URL . 'assets/newspack-ui.css', [ 'newspack-ui' ], filemtime( REPUBLICATION_TRACKER_TOOL_PATH . 'assets/newspack-ui.css' ) );
 			return;
 		}
-		wp_enqueue_style( 'republication-tracker-tool-css', REPUBLICATION_TRACKER_TOOL_URL . 'assets/widget.css', [], REPUBLICATION_TRACKER_TOOL_VERSION );
+		wp_enqueue_style( 'republication-tracker-tool-css', REPUBLICATION_TRACKER_TOOL_URL . 'assets/widget.css', [], filemtime( REPUBLICATION_TRACKER_TOOL_PATH . 'assets/widget.css' ) );
 	}
 
 	/**
