@@ -394,7 +394,7 @@ describe( 'Store', () => {
 		afterEach( () => {
 			sessionStorage.clear();
 		} );
-		it( 'hydrates the server items into sessionStorage and never syncs', async () => {
+		it( 'hydrates the server items into sessionStorage and never syncs', () => {
 			window.newspack_reader_data = {
 				is_switched_session: true,
 				api_url: 'http://test/api',
@@ -413,7 +413,6 @@ describe( 'Store', () => {
 			expect( localStorage.getItem( 'np_reader_matched_segments' ) ).toBeNull();
 			store.set( 'pageviews', { day: { count: 1 } } );
 			jest.advanceTimersByTime( 2500 );
-			await store.flush( 'pageviews' );
 			expect( openSpy ).not.toHaveBeenCalled();
 			openSpy.mockRestore();
 		} );
@@ -449,16 +448,32 @@ describe( 'Store', () => {
 			FakeRequest.opened[ 0 ].settle( 200 );
 			await expect( flushed ).resolves.toBe( true );
 			expect( pending() ).not.toContain( 'matched_segments' );
-			// The interval must not send the same write a second time.
-			jest.advanceTimersByTime( 2500 );
-			expect( FakeRequest.opened ).toHaveLength( 1 );
+			// The flushed key no longer holds a tick: the interval must not send
+			// it again, and the next key goes out on the very first tick.
+			store.set( 'pageviews', { day: { count: 1 } } );
+			jest.advanceTimersByTime( 1000 );
+			expect( FakeRequest.opened ).toHaveLength( 2 );
+			expect( JSON.parse( FakeRequest.opened[ 1 ].body ).key ).toBe( 'pageviews' );
+			// Writes in flight are tracked per key across Store() instances, so
+			// leave none behind for the next case.
+			FakeRequest.opened[ 1 ].settle( 200 );
+			await Promise.resolve();
 		} );
-		it( 'resolves true without a request in a temporary session', async () => {
-			window.newspack_reader_data.is_temporary = true;
+		it.each( [
+			[ 'temporary', { is_temporary: true } ],
+			[ 'switched', { is_switched_session: true } ],
+		] )( 'resolves true without a request in a %s session, even for a key left pending', async ( _, session ) => {
+			Object.assign( window.newspack_reader_data, session );
+			// set() marks nothing pending in these sessions, so a key a previous
+			// page left unsynced, with a value the server does not hold, is the
+			// one way the guard in flush() is what stops the request.
+			localStorage.setItem( 'np_reader__unsynced', '["matched_segments"]' );
+			localStorage.setItem( 'np_reader_matched_segments', '["3"]' );
 			const [ store ] = Store();
-			store.set( 'matched_segments', [ '3' ] );
-			await expect( store.flush( 'matched_segments' ) ).resolves.toBe( true );
+			expect( pending() ).toContain( 'matched_segments' );
+			const flushed = store.flush( 'matched_segments' );
 			expect( FakeRequest.opened ).toHaveLength( 0 );
+			await expect( flushed ).resolves.toBe( true );
 		} );
 		it( 'resolves false when the request fails and leaves the key pending for a later retry', async () => {
 			const [ store ] = Store();
