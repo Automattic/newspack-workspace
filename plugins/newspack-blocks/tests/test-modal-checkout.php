@@ -2144,6 +2144,21 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * A request on the checkout route that has not reached its pre-payment
+	 * hook, such as the Store API's read of the draft order, leaves a marked
+	 * order's URL alone: the route alone does not make it a submission.
+	 */
+	public function test_return_url_untouched_for_marked_order_on_checkout_route_before_its_hook() {
+		$GLOBALS['wp']->query_vars['rest_route'] = '/wc/store/v1/checkout';
+		$order                                   = new WC_Order( 123, 'wc_order_testkey', [], [ \Newspack_Blocks\Modal_Checkout::ORDER_META_KEY => 1 ] );
+
+		$this->assertSame(
+			'https://example.com/checkout/order-received/123/',
+			\Newspack_Blocks\Modal_Checkout::woocommerce_get_return_url( 'https://example.com/checkout/order-received/123/', $order )
+		);
+	}
+
+	/**
 	 * Paying for a marked order on the standalone order-pay page keeps the
 	 * standard thank-you page, as classic order-pay does: that page is not
 	 * inside the modal.
@@ -2251,10 +2266,15 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 
 	/**
 	 * The marker is written while WooCommerce builds the order's line items,
-	 * which both the classic and the Store API checkout do.
+	 * which both the classic and the Store API checkout do, and the hook hands
+	 * mark_order() all four of the arguments it needs.
 	 */
 	public function test_mark_order_is_hooked_on_line_item_creation() {
-		$this->assertSame( 10, has_action( 'woocommerce_checkout_create_order_line_item', [ \Newspack_Blocks\Modal_Checkout::class, 'mark_order' ] ) );
+		$order = new WC_Order( 123 );
+
+		do_action( 'woocommerce_checkout_create_order_line_item', null, 'key', [ 'newspack_modal_checkout_url' => 'https://example.com/checkout/?modal_checkout=1' ], $order );
+
+		$this->assertTrue( \Newspack_Blocks\Modal_Checkout::is_modal_checkout_order( $order ) );
 	}
 
 	/**
