@@ -5,8 +5,8 @@
  * Inserter: no
  *
  * Starting content for new header template parts; see Patterns::template_part_starter_content().
- * Both views start with a logo and menu so neither is published empty, and nothing is locked so
- * the layout can be rebuilt freely.
+ * Both views start with a logo and menu so neither is published empty, and the layout blocks are unlocked so
+ * it can be rebuilt freely.
  *
  * @package Newspack_Block_Theme
  */
@@ -37,7 +37,7 @@
 <div class="wp-block-newspack-responsive-container-breakpoint newspack-responsive-container-breakpoint--mobile"><!-- wp:group {"metadata":{"name":"<?php esc_html_e( 'Header (Mobile)', 'newspack-block-theme' ); ?>"},"style":{"spacing":{"padding":{"top":"var:preset|spacing|30","bottom":"var:preset|spacing|30","left":"var:preset|spacing|30","right":"var:preset|spacing|30"},"margin":{"bottom":"var:preset|spacing|50"}}},"backgroundColor":"base","layout":{"type":"constrained"}} -->
 <div class="wp-block-group has-base-background-color has-background" style="margin-bottom:var(--wp--preset--spacing--50);padding-top:var(--wp--preset--spacing--30);padding-right:var(--wp--preset--spacing--30);padding-bottom:var(--wp--preset--spacing--30);padding-left:var(--wp--preset--spacing--30)"><!-- wp:group {"align":"wide","style":{"spacing":{"blockGap":"var:preset|spacing|30"}},"layout":{"type":"flex","flexWrap":"nowrap","justifyContent":"space-between"}} -->
 <div class="wp-block-group alignwide"><!-- wp:group {"style":{"spacing":{"blockGap":"var:preset|spacing|30"}},"layout":{"type":"flex","flexWrap":"nowrap"}} -->
-<div class="wp-block-group"><!-- wp:newspack/overlay-menu -->
+<div class="wp-block-group"><!-- wp:newspack/overlay-menu {"instanceId":"5f3a9c2e7b1d"} -->
 <div class="wp-block-newspack-overlay-menu"><!-- wp:newspack/overlay-menu-trigger {"className":"is-style-icon-only has-background-transparent","style":{"elements":{"link":{"color":{"text":"var:preset|color|contrast"}}},"spacing":{"padding":{"right":"0","left":"0"}}},"textColor":"contrast"} /-->
 
 <!-- wp:newspack/overlay-menu-panel -->

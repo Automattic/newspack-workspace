@@ -5,8 +5,8 @@
  * Inserter: no
  *
  * Starting content for new footer template parts; see Patterns::template_part_starter_content().
- * Both views start with a copyright line so neither is published empty, and nothing is locked so
- * the layout can be rebuilt freely.
+ * Both views start with a copyright line so neither is published empty, and the layout blocks are unlocked so
+ * it can be rebuilt freely.
  *
  * @package Newspack_Block_Theme
  */
