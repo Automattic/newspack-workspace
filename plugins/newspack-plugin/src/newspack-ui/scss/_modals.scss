@@ -203,7 +203,8 @@
 				border-radius: var(--newspack-ui-radius-pill);
 				flex: none;
 				height: var(--newspack-ui-modal-close-size, var(--newspack-ui-spacer-8));
-				margin: var(--newspack-ui-modal-close-block-margin) calc(( var(--newspack-ui-modal-close-size, var(--newspack-ui-spacer-8)) - var(--newspack-ui-spacer-4) ) / -2) var(--newspack-ui-modal-close-block-margin) auto !important;
+				margin-block: var(--newspack-ui-modal-close-block-margin) !important;
+				margin-inline: auto calc(( var(--newspack-ui-modal-close-size, var(--newspack-ui-spacer-8)) - var(--newspack-ui-spacer-4) ) / -2) !important;
 				position: relative;
 				width: var(--newspack-ui-modal-close-size, var(--newspack-ui-spacer-8));
 				z-index: 1;
