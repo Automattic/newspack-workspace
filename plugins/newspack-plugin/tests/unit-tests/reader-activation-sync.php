@@ -680,11 +680,17 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 			'Please enter a number Your merge fields were invalid.' => 'permanent_contact',
 			'Please provide a valid email address.' => 'permanent_contact',
 			'Contact Email Address is not valid.'   => 'permanent_contact',
+			'ActiveCampaign REST returned status 422 for /api/3/contacts/1234: Email address already exists in the system.' => 'permanent_contact',
+			"Invalid Resource: The value you selected is not a valid choice. The resource submitted could not be validated. For field-specific details, see the 'errors' array." => 'permanent_contact',
 			'API Access has been disabled for this account.' => 'permanent_config',
 			'Payment Required'                      => 'permanent_config',
+			'ActiveCampaign REST returned status 402 for /api/3/contact/sync.' => 'permanent_config',
+			'403: Forbidden'                        => 'permanent_config',
 			'cindy@example.com is already a list member. Use PUT to insert or update.' => 'benign',
 			'Member Exists'                         => 'benign',
 			'garcia@example.com has signed up to a lot of lists very recently' => 'transient',
+			'ActiveCampaign REST returned status 503 for /api/3/contact/sync.' => 'transient',
+			"cURL error 7: Failed to connect to example.test port 443 after 402 ms: Couldn't connect to server" => 'transient',
 			'Some unknown transient network error'  => 'transient',
 		];
 
@@ -693,6 +699,31 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 				$expected,
 				$reflection->invoke( null, new \WP_Error( 'esp_error', $message ) ),
 				sprintf( 'Message "%s" should classify as %s.', $message, $expected )
+			);
+		}
+	}
+
+	/**
+	 * Test that classify_error reads an auth or payment status kept outside
+	 * the message, as the error code or as `status` in the error data, where
+	 * the ActiveCampaign client keeps it beside a translatable message.
+	 */
+	public function test_classify_error_reads_status_outside_the_message() {
+		$reflection = new \ReflectionMethod( Contact_Sync::class, 'classify_error' );
+		$reflection->setAccessible( true );
+
+		$cases = [
+			'status 402 in the error data' => [ new \WP_Error( 'activecampaign_http_error', 'ActiveCampaign REST a renvoyé le statut 402.', [ 'status' => 402 ] ), 'permanent_config' ],
+			'status 403 as the error code' => [ new \WP_Error( 403, 'Forbidden' ), 'permanent_config' ],
+			'status 503 in the error data' => [ new \WP_Error( 'activecampaign_http_error', 'ActiveCampaign REST a renvoyé le statut 503.', [ 'status' => 503 ] ), 'transient' ],
+			'status 429 as the error code' => [ new \WP_Error( 429, 'Too Many Requests' ), 'transient' ],
+		];
+
+		foreach ( $cases as $label => list( $error, $expected ) ) {
+			$this->assertEquals(
+				$expected,
+				$reflection->invoke( null, $error ),
+				sprintf( 'An error with %s should classify as %s.', $label, $expected )
 			);
 		}
 	}
@@ -730,7 +761,10 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 			'cindy@example.com is already a list member. Use PUT to insert or update.' => 'transient',
 			'neil@example.com was permanently deleted and cannot be re-imported.' => 'benign',
 			'asdf@example.com looks fake or invalid, please enter a real email address.' => 'permanent_contact',
+			'ActiveCampaign REST returned status 422 for /api/3/contacts/1234: Email address already exists in the system.' => 'permanent_contact',
+			'Invalid Resource: The value you selected is not a valid choice.' => 'permanent_contact',
 			'API Access has been disabled for this account.' => 'permanent_config',
+			'ActiveCampaign REST returned status 402 for /api/3/contact/sync.' => 'permanent_config',
 		];
 
 		foreach ( $cases as $message => $expected ) {
