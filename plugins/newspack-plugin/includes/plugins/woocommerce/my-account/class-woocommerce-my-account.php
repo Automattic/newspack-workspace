@@ -62,7 +62,7 @@ class WooCommerce_My_Account {
 
 		// Reader Activation mods.
 		if ( Reader_Activation::is_enabled() ) {
-			\add_action( 'wp_footer', [ __CLASS__, 'handle_messages' ] );
+			\add_action( 'template_redirect', [ __CLASS__, 'handle_messages' ] );
 			\add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_scripts' ] );
 			\add_action( 'template_redirect', [ __CLASS__, 'handle_password_reset_request' ] );
 			\add_action( 'template_redirect', [ __CLASS__, 'handle_delete_account' ] );
@@ -163,7 +163,6 @@ class WooCommerce_My_Account {
 		$is_error   = filter_input( INPUT_GET, 'is_error', FILTER_VALIDATE_BOOLEAN ) ?? false;
 		if ( $message ) {
 			\wc_add_notice( $message, $is_success ? 'success' : ( $is_error ? 'error' : 'notice' ) );
-			\wc_print_notices();
 		}
 	}
 
