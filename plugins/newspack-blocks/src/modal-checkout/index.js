@@ -7,8 +7,15 @@ import './checkout.scss';
 /**
  * Internal dependencies
  */
-import { manageCheckoutAttempt, manageCheckoutSuccess, manageLoaded, managePagination } from './analytics';
-import { domReady, getTabbableElements, isPaymentChallengeShown, isSameDocumentRedirect, onCheckoutPlaceOrderProcessing } from './utils';
+import { manageCheckoutAttempt, manageCheckoutSuccess, manageLoaded, managePagination, registerExpressCheckoutAttempt } from './analytics';
+import {
+	afterDeferredScripts,
+	domReady,
+	getTabbableElements,
+	isPaymentChallengeShown,
+	isSameDocumentRedirect,
+	onCheckoutPlaceOrderProcessing,
+} from './utils';
 
 ( $ => {
 	domReady( () => {
@@ -927,6 +934,9 @@ import { domReady, getTabbableElements, isPaymentChallengeShown, isSameDocumentR
 				$form.on( 'click', '#place_order', function () {
 					manageCheckoutAttempt();
 				} );
+
+				// Stripe's express checkout buttons submit without clicking it.
+				afterDeferredScripts( registerExpressCheckoutAttempt );
 
 				/**
 				 * Blocks provided form.
