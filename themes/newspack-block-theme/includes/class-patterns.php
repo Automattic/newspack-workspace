@@ -90,6 +90,13 @@ final class Patterns {
 					}
 				}
 
+				// Parse as a boolean, as core does for top-level patterns; the editor treats any string as visible.
+				if ( ! empty( $pattern['inserter'] ) ) {
+					$pattern['inserter'] = in_array( strtolower( $pattern['inserter'] ), [ 'yes', 'true' ], true );
+				} else {
+					unset( $pattern['inserter'] );
+				}
+
 				$pattern['filePath'] = $file;
 				register_block_pattern( $pattern['slug'], $pattern );
 			}
