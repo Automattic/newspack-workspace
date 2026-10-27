@@ -528,6 +528,10 @@ domReady( () => {
 
 		// Populate cart and redirect to checkout if there is an unsupported payment gateway.
 		if ( ! isModalCheckout && ! shouldPromptRegistration() ) {
+			// Nothing opens on this path, so a content gate could reload the page
+			// while the cart request runs and cancel the navigation; the hold
+			// keeps the gate waiting, as it does after a completed checkout.
+			holdOverlay();
 			generateCart( checkoutData )
 				.then( url => {
 					// Remove modal checkout query string and trailing question mark (if any).
