@@ -226,6 +226,19 @@ class InsertionTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * Where a popup's container starts in the last rendered page. Fails when it is not rendered,
+	 * so an order assertion cannot pass on a missing popup.
+	 *
+	 * @param int $popup_id Popup ID.
+	 * @return int Offset in the rendered markup.
+	 */
+	private static function rendered_position( $popup_id ) {
+		$position = strpos( self::$post_content, 'id="' . Newspack_Popups_Model::canonize_popup_id( $popup_id ) . '"' );
+		self::assertNotFalse( $position, 'Popup ' . $popup_id . ' is rendered.' );
+		return $position;
+	}
+
+	/**
 	 * A manual-only overlay appears only where the Single Prompt block places it,
 	 * and keeps its pop-up behavior there: the lightbox is portaled to the footer,
 	 * ahead of site-wide overlays so it wins the single overlay slot, and the
@@ -259,9 +272,23 @@ class InsertionTest extends WP_UnitTestCase_PageWithPopups {
 		self::assertStringContainsString( 'newspack-lightbox', $lightbox->item( 0 )->getAttribute( 'class' ), 'Rendered as an overlay.' );
 		self::assertEquals( 0, self::$dom_xpath->query( '//aside//*[@id="' . $element_id . '"]' )->length, 'Portaled to the footer, not rendered in place.' );
 		self::assertLessThan(
-			strpos( self::$post_content, 'id="' . Newspack_Popups_Model::canonize_popup_id( $site_wide_overlay_id ) . '"' ),
-			strpos( self::$post_content, 'id="' . $element_id . '"' ),
+			self::rendered_position( $site_wide_overlay_id ),
+			self::rendered_position( self::$popup_id ),
 			'Printed ahead of the site-wide overlay, which would otherwise take the single overlay slot.'
+		);
+
+		$second_overlay_id = self::createPopup(
+			'Second placed overlay.',
+			[
+				'placement'   => 'center',
+				'manual_only' => true,
+			]
+		);
+		self::renderPost( '', $prompt_block . '<!-- wp:newspack-popups/single-prompt {"promptId":' . $second_overlay_id . '} /-->' );
+		self::assertLessThan(
+			self::rendered_position( $second_overlay_id ),
+			self::rendered_position( self::$popup_id ),
+			'Placed overlays keep their order on the page, so the first one placed takes the slot.'
 		);
 		self::assertEquals(
 			1,

@@ -38,10 +38,10 @@ const Sidebar = props => {
 	const updatePlacement = value => {
 		onMetaFieldChange( { placement: value } );
 	};
-	// A prompt placed by hand stays placed by hand when its type changes, so it never starts appearing site-wide.
+	// Switching type keeps a prompt manual-only or automatic as it was, so a hand-placed prompt never starts appearing site-wide.
 	const updatePromptType = value => {
-		if ( 'center' === value && 'manual' === placement ) {
-			onMetaFieldChange( { placement: value, manual_only: true } );
+		if ( 'center' === value ) {
+			onMetaFieldChange( { placement: value, manual_only: 'manual' === placement } );
 		} else if ( 'inline' === value && isOverlay && manual_only ) {
 			onMetaFieldChange( { placement: 'manual' } );
 		} else {
