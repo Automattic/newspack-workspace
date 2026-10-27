@@ -894,9 +894,11 @@ class Contact_Sync extends Sync {
 	 * provider's own error, so reading only the first message would miss a
 	 * real signature exactly when a site is misconfigured. On the deletion path,
 	 * an error whose only code is Integration::CONTACT_NOT_FOUND_ERROR_CODE is
-	 * benign whatever its message. An error no signature matches is a config
-	 * failure when it carries a 401, 402 or 403 status: only the ESP account
-	 * answers those, for every contact alike.
+	 * benign whatever its message. On the push path, an error no signature
+	 * matches is a config failure when it carries a 401, 402 or 403 status:
+	 * only the ESP account answers those, for every contact alike. A deletion
+	 * keeps retrying it instead, since no later event re-sends a deletion and a
+	 * rotated key or a short billing lapse must not drop it.
 	 *
 	 * @param string|\WP_Error $error     The error from a failed push.
 	 * @param string           $direction The sync direction: 'push' (default) or 'deletion'.
@@ -926,7 +928,7 @@ class Contact_Sync extends Sync {
 			}
 		}
 
-		if ( self::has_account_status( $error ) ) {
+		if ( 'deletion' !== $direction && self::has_account_status( $error ) ) {
 			return 'permanent_config';
 		}
 

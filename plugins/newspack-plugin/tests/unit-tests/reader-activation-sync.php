@@ -751,6 +751,9 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 	 * Test that the deletion direction uses its own signature map: "member
 	 * exists" phrases must retry (the ESP contact still exists without the
 	 * deletion flags) and "was permanently deleted" is the benign end-state.
+	 * An auth or payment status that no signature explains retries too: no
+	 * later event re-sends a deletion, so a short credential or billing outage
+	 * must not drop it.
 	 */
 	public function test_classify_error_deletion_direction() {
 		$reflection = new \ReflectionMethod( Contact_Sync::class, 'classify_error' );
@@ -764,7 +767,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 			'ActiveCampaign REST returned status 422 for /api/3/contacts/1234: Email address already exists in the system.' => 'permanent_contact',
 			'Invalid Resource: The value you selected is not a valid choice.' => 'permanent_contact',
 			'API Access has been disabled for this account.' => 'permanent_config',
-			'ActiveCampaign REST returned status 402 for /api/3/contact/sync.' => 'permanent_config',
+			'ActiveCampaign REST returned status 402 for /api/3/contact/sync.' => 'transient',
 		];
 
 		foreach ( $cases as $message => $expected ) {
@@ -774,6 +777,12 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 				sprintf( 'Deletion-direction message "%s" should classify as %s.', $message, $expected )
 			);
 		}
+
+		$this->assertEquals(
+			'transient',
+			$reflection->invoke( null, new \WP_Error( 'activecampaign_http_error', 'ActiveCampaign REST a renvoyé le statut 403.', [ 'status' => 403 ] ), 'deletion' ),
+			'A deletion refused with only a status in the error data should keep retrying.'
+		);
 	}
 
 	/**
