@@ -93,7 +93,8 @@ export const testPromptWarnings = ( { postId, variant, prompts } ) => {
 		warnings.push(
 			'a' === variant
 				? __( 'Another prompt is already the control of this test.', 'newspack-popups' )
-				: __( 'Another prompt is already variant B of this test.', 'newspack-popups' )
+				: // Translators: %s is the variant letter.
+				  sprintf( __( 'Another prompt is already variant %s of this test.', 'newspack-popups' ), String( variant ).toUpperCase() )
 		);
 	}
 	return warnings;

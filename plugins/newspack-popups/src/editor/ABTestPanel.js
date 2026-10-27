@@ -8,6 +8,7 @@
  */
 import { __, sprintf } from '@wordpress/i18n';
 import { TextControl, SelectControl, RangeControl, Notice, ExternalLink } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 import { useSelect } from '@wordpress/data';
 import { useEffect, useRef, useState, useCallback } from '@wordpress/element';
 import { useDebounce } from '@wordpress/compose';
@@ -117,11 +118,14 @@ const ABTestPanel = ( {
 	const others = prompts.filter( prompt => prompt.id !== postId );
 	const warnings = testPromptWarnings( { postId, variant, prompts } );
 
+	// The notices describe standing state rather than the result of an action, so
+	// none is announced on mount (the panel re-mounts them on every expand), and
+	// the error variant, shown on arrival rather than after a save, stays polite.
 	return (
-		<>
+		<Stack direction="column" gap="lg">
 			{ ! canManage && <p>{ __( "Your role can view this prompt's A/B test settings but not change them.", 'newspack-popups' ) }</p> }
 			{ ! eligible && (
-				<Notice status={ testId ? 'error' : 'warning' } isDismissible={ false }>
+				<Notice status={ testId ? 'error' : 'warning' } politeness="polite" spokenMessage="" isDismissible={ false }>
 					{ __( "Prompts with a manual or custom placement can't be part of an A/B test.", 'newspack-popups' ) }
 					{ testId ? ' ' + __( 'Clear the Test ID or change the placement before saving.', 'newspack-popups' ) : '' }
 				</Notice>
@@ -134,7 +138,12 @@ const ABTestPanel = ( {
 				// On an ineligible placement a new test can't start, but a stored Test
 				// ID stays editable so it can be cleared, which the notice asks for.
 				disabled={ ! canManage || ( ! eligible && ! testId ) }
-				help={ __( 'Prompts sharing a Test ID form one test. Use the same ID on the control and the challenger.', 'newspack-popups' ) }
+				help={ __(
+					'Prompts sharing a Test ID form one test. Use the same ID on the control and the challenger. Lowercase letters, numbers and hyphens; spaces become hyphens and other characters are dropped.',
+					'newspack-popups'
+				) }
+				__nextHasNoMarginBottom
+				__next40pxDefaultSize
 			/>
 			{ testId && (
 				<>
@@ -144,6 +153,8 @@ const ABTestPanel = ( {
 						options={ variantOptions }
 						onChange={ value => onMetaFieldChange( { [ META_VARIANT ]: value } ) }
 						disabled={ ! canManage }
+						__nextHasNoMarginBottom
+						__next40pxDefaultSize
 					/>
 					{ 'a' === variant && (
 						<RangeControl
@@ -155,6 +166,8 @@ const ABTestPanel = ( {
 							onChange={ value => onMetaFieldChange( { [ META_CONTROL_SHARE ]: value } ) }
 							disabled={ ! canManage }
 							help={ splitSummary( controlShare ) }
+							__nextHasNoMarginBottom
+							__next40pxDefaultSize
 						/>
 					) }
 					<SelectControl
@@ -163,19 +176,20 @@ const ABTestPanel = ( {
 						options={ goalOptions }
 						onChange={ value => onMetaFieldChange( { [ META_GOAL ]: value } ) }
 						disabled={ ! canManage }
-						help={ __( 'Conversions count only when the block for this goal is inside the prompt.', 'newspack-popups' ) }
+						__nextHasNoMarginBottom
+						__next40pxDefaultSize
 					/>
 					{ promptLacksGoalBlock( goal, blockNames ) && (
-						<Notice status="warning" isDismissible={ false }>
+						<Notice status="warning" spokenMessage="" isDismissible={ false }>
 							{ __( 'This prompt has no block that records this goal. Add one, or choose another goal.', 'newspack-popups' ) }
 						</Notice>
 					) }
 					{ others.length > 0 && (
-						<>
-							<p>
+						<div>
+							<p id="newspack-popups-ab-test-others">
 								<strong>{ __( 'Other prompts in this test', 'newspack-popups' ) }</strong>
 							</p>
-							<ul>
+							<ul aria-labelledby="newspack-popups-ab-test-others">
 								{ others.map( prompt => {
 									const label = sprintf(
 										// Translators: %1$s is the prompt title, %2$s its variant, %3$s its post status.
@@ -192,16 +206,16 @@ const ABTestPanel = ( {
 									);
 								} ) }
 							</ul>
-						</>
+						</div>
 					) }
 					{ warnings.map( warning => (
-						<Notice key={ warning } status="warning" isDismissible={ false }>
+						<Notice key={ warning } status="warning" spokenMessage="" isDismissible={ false }>
 							{ warning }
 						</Notice>
 					) ) }
 				</>
 			) }
-		</>
+		</Stack>
 	);
 };
 

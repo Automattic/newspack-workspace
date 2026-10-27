@@ -15,11 +15,13 @@ import apiFetch from '@wordpress/api-fetch';
 jest.mock( '@wordpress/data', () => ( { useSelect: jest.fn() } ) );
 jest.mock( '@wordpress/compose', () => ( { useDebounce: fn => fn } ) );
 jest.mock( '@wordpress/api-fetch' );
+// Provided by WordPress at runtime, not installed here.
+jest.mock( '@wordpress/ui', () => ( { Stack: ( { children } ) => <div>{ children }</div> } ), { virtual: true } );
 
 jest.mock( '@wordpress/components', () => ( {
-	TextControl: ( { label, value, onChange, disabled, help } ) => (
+	TextControl: ( { label, value, onChange, onBlur, disabled, help } ) => (
 		<div>
-			<input aria-label={ label } value={ value } onChange={ e => onChange( e.target.value ) } disabled={ disabled } />
+			<input aria-label={ label } value={ value } onChange={ e => onChange( e.target.value ) } onBlur={ onBlur } disabled={ disabled } />
 			{ help && <p>{ help }</p> }
 		</div>
 	),
@@ -41,8 +43,8 @@ jest.mock( '@wordpress/components', () => ( {
 			{ help && <p>{ help }</p> }
 		</div>
 	),
-	Notice: ( { status, children } ) => (
-		<div role="note" data-status={ status }>
+	Notice: ( { status, children, spokenMessage, politeness } ) => (
+		<div role="note" data-status={ status } data-spoken={ spokenMessage } data-politeness={ politeness }>
 			{ children }
 		</div>
 	),
@@ -69,19 +71,19 @@ const MISSING_BLOCK = 'This prompt has no block that records this goal. Add one,
 
 let onMetaFieldChange;
 
-const renderPanel = props =>
-	render(
-		<ABTestPanel
-			newspack_popups_ab_test_id=""
-			newspack_popups_ab_variant=""
-			newspack_popups_ab_test_goal=""
-			newspack_popups_ab_control_share={ 50 }
-			placement="center"
-			postId={ 2 }
-			onMetaFieldChange={ onMetaFieldChange }
-			{ ...props }
-		/>
-	);
+const panelElement = props => (
+	<ABTestPanel
+		newspack_popups_ab_test_id=""
+		newspack_popups_ab_variant=""
+		newspack_popups_ab_test_goal=""
+		newspack_popups_ab_control_share={ 50 }
+		placement="center"
+		postId={ 2 }
+		onMetaFieldChange={ onMetaFieldChange }
+		{ ...props }
+	/>
+);
+const renderPanel = props => render( panelElement( props ) );
 
 const allInputs = () => [ ...screen.getAllByRole( 'textbox' ), ...screen.getAllByRole( 'combobox' ), ...screen.getAllByRole( 'slider' ) ];
 
@@ -101,8 +103,23 @@ describe( 'ABTestPanel', () => {
 		renderPanel();
 
 		expect( screen.getByLabelText( 'Test ID' ) ).toBeTruthy();
+		expect( screen.getByText( /spaces become hyphens/ ) ).toBeTruthy();
 		expect( screen.queryByLabelText( 'Variant' ) ).toBeNull();
 		expect( screen.queryByLabelText( 'Conversion goal' ) ).toBeNull();
+	} );
+
+	it( 'keeps what was typed in the field until focus leaves it, and writes the slug', () => {
+		const { rerender } = renderPanel();
+		const field = () => screen.getByLabelText( 'Test ID' );
+
+		fireEvent.change( field(), { target: { value: 'spring-' } } );
+		expect( field().value ).toBe( 'spring-' );
+		expect( onMetaFieldChange ).toHaveBeenLastCalledWith( { newspack_popups_ab_test_id: 'spring', newspack_popups_ab_variant: 'a' } );
+
+		rerender( panelElement( { newspack_popups_ab_test_id: 'spring', newspack_popups_ab_variant: 'a' } ) );
+		expect( field().value ).toBe( 'spring-' );
+		fireEvent.blur( field() );
+		expect( field().value ).toBe( 'spring' );
 	} );
 
 	it( 'slugs a typed Test ID and makes the prompt the control', () => {
@@ -151,12 +168,15 @@ describe( 'ABTestPanel', () => {
 		const { unmount } = renderPanel( { placement: 'manual' } );
 		expect( screen.getByRole( 'note' ).textContent ).toBe( INELIGIBLE );
 		expect( screen.getByRole( 'note' ).dataset.status ).toBe( 'warning' );
+		// Standing state, not the result of an action: nothing to announce on mount.
+		expect( screen.getByRole( 'note' ).dataset.spoken ).toBe( '' );
 		expect( screen.getByLabelText( 'Test ID' ).disabled ).toBe( true );
 		unmount();
 
 		renderPanel( { placement: 'manual', newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'a' } );
 		const note = screen.getAllByRole( 'note' )[ 0 ];
 		expect( note.dataset.status ).toBe( 'error' );
+		expect( note.dataset.politeness ).toBe( 'polite' );
 		expect( note.textContent ).toContain( 'Clear the Test ID or change the placement before saving.' );
 	} );
 
@@ -177,6 +197,7 @@ describe( 'ABTestPanel', () => {
 			newspack_popups_ab_test_goal: 'donation',
 		} );
 		expect( screen.getByText( MISSING_BLOCK ) ).toBeTruthy();
+		expect( screen.getByRole( 'note' ).dataset.spoken ).toBe( '' );
 		unmount();
 
 		useSelect.mockReturnValue( [ 'core/paragraph', 'newspack-blocks/donate' ] );
@@ -212,6 +233,7 @@ describe( 'ABTestPanel', () => {
 		const link = await screen.findByText( 'Control — A (control) (publish)' );
 		expect( link.getAttribute( 'href' ) ).toBe( 'http://example.test/post.php?post=1' );
 		expect( screen.queryByText( /^Me — / ) ).toBeNull();
+		expect( screen.getByRole( 'list', { name: 'Other prompts in this test' } ) ).toBeTruthy();
 		expect( screen.getByText( 'Another prompt is already the control of this test.' ) ).toBeTruthy();
 		expect( apiFetch ).toHaveBeenCalledWith( { path: '/newspack-popups/v1/ab-tests/x' } );
 	} );
