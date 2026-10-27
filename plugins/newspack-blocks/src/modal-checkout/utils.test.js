@@ -165,16 +165,28 @@ describe( 'whenSignedInReaderDataSynced()', () => {
 	} );
 
 	it( 'flushes the key only after the session has hydrated', async () => {
+		jest.useFakeTimers();
 		let hydrated;
 		const hydrateSession = jest.fn( () => new Promise( resolve => ( hydrated = resolve ) ) );
 		const flush = jest.fn( () => Promise.resolve( true ) );
 		window.newspackReaderActivation = { hydrateSession, store: { flush } };
+		const settle = async () => {
+			for ( let i = 0; i < 5; i++ ) {
+				await Promise.resolve();
+			}
+		};
 		let result;
 		const waited = whenSignedInReaderDataSynced( 'matched_segments' ).then( synced => ( result = synced ) );
-		await Promise.resolve();
+		await settle();
 		expect( hydrateSession ).toHaveBeenCalledTimes( 1 );
+		// The flush is a task away once issued, so a flush issued alongside the
+		// hydration would show up here, not only one issued after it.
+		jest.advanceTimersByTime( 0 );
+		await settle();
 		expect( flush ).not.toHaveBeenCalled();
 		hydrated( 'nonce' );
+		await settle();
+		jest.advanceTimersByTime( 0 );
 		await waited;
 		expect( flush ).toHaveBeenCalledWith( 'matched_segments' );
 		expect( result ).toBe( true );
