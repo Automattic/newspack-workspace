@@ -372,11 +372,14 @@ class Alert_Manager {
 	 * Both classes forward at 'warning' severity, which reaches the log but
 	 * not Slack, apart from the fallback described for `permanent_config`:
 	 *
-	 * - `permanent_config` (disabled or unpaid ESP account) is site-level, so
-	 *   it is reported at most once an hour per integration; the push log
-	 *   keeps the per-contact history. The hourly health check observes the
-	 *   same account state within the hour and owns the escalation through
-	 *   handle_health_check_failed(). Where the check isn't running, because
+	 * - `permanent_config` (an ESP account that is disabled, unpaid or rejects
+	 *   the site's credentials) is site-level, so it is reported at most once
+	 *   an hour per integration; the push log keeps the per-contact history.
+	 *   The hourly health check observes the same account state within the
+	 *   hour through its own request, and owns the escalation through
+	 *   handle_health_check_failed(). An account that refuses writes but
+	 *   still answers the check's request passes it, so those failures reach
+	 *   the log alone. Where the check isn't running, because
 	 *   it is switched off or its cron has stalled, this path is the only one
 	 *   that sees the account state, so its hourly report pages instead.
 	 * - `permanent_contact` (fired by the deletion path only, where a skipped

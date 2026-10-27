@@ -1005,10 +1005,11 @@ class Contact_Sync extends Sync {
 			if ( 'permanent_config' === $error_class ) {
 				/**
 				 * Fires when a contact sync fails with a permanent config-level
-				 * error (disabled/unpaid ESP account) that can never succeed on
-				 * retry. Permanent contact-data errors are skipped silently on
-				 * this path — the contact re-syncs on the reader's next event;
-				 * only actionable config failures are surfaced. (The deletion
+				 * error (an ESP account that is disabled, unpaid or rejects the
+				 * site's credentials), which no retry can fix. Permanent
+				 * contact-data errors are skipped silently on this path — the
+				 * contact re-syncs on the reader's next event; only actionable
+				 * config failures are surfaced. (The deletion
 				 * path also fires this hook for permanent contact-data errors —
 				 * see schedule_deletion_retry().)
 				 *
