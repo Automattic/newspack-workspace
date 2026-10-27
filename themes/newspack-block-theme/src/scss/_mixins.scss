@@ -7,7 +7,7 @@
 	box-sizing: border-box;
 	background-color: var(--wp--preset--color--base);
 	border: 1px solid var(--wp--preset--color--base-4);
-	border-radius: var(--wp--custom--border--radius-medium);
+	border-radius: var(--wp--custom--border--radius-large);
 	font-family: var(--wp--preset--font-family--inter);
 	font-size: var(--wp--preset--font-size--small);
 	line-height: var(--wp--custom--line-height--small);
@@ -104,7 +104,7 @@
  * Checkbox Styles
  */
 @mixin checkbox {
-	border-radius: var(--wp--custom--border--radius-xx-small);
+	border-radius: var(--wp--custom--border--radius-small);
 
 	&::before {
 		background:
@@ -146,7 +146,7 @@
  */
 @mixin button-icon {
 	background: transparent;
-	border-radius: var(--wp--custom--border--radius-small);
+	border-radius: var(--wp--custom--border--radius-large);
 	display: grid;
 	height: var(--wp--custom--spacing--55);
 	margin: 0;
@@ -183,8 +183,10 @@
 	}
 
 	background-color: var(--np--notice--color--background);
-	border-left: 3px solid var(--np--notice--color--border);
-	border-radius: var(--wp--custom--border--radius-x-small);
+	border-inline-start: 3px solid var(--np--notice--color--border);
+	border-radius: var(--wp--custom--border--radius-large);
+	border-end-start-radius: 0;
+	border-start-start-radius: 0;
 	color: var(--wp--custom--color--neutral-90);
 	font-family: var(--wp--preset--font-family--inter);
 	font-size: var(--wp--preset--font-size--x-small);

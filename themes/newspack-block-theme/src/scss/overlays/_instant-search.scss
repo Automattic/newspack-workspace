@@ -63,7 +63,7 @@ body .jetpack-instant-search {
 		font-family: inherit;
 
 		&#jetpack-instant-search__overlay-focus-anchor { /* stylelint-disable-line selector-id-pattern */
-			border-radius: var(--wp--custom--border--radius-medium);
+			border-radius: var(--wp--custom--border--radius-large);
 			border: 1px solid var(--jp--color--border);
 			color: var(--jp--color--text);
 			font-size: var(--newspack-ui-font-size-xs, 14px);
@@ -110,7 +110,7 @@ body .jetpack-instant-search {
 
 			&::before {
 				background: var(--jp--color--background);
-				border-radius: var(--newspack-ui-border-radius-m, 6px);
+				border-radius: var(--newspack-ui-radius-control, var(--wp--custom--border--radius-large));
 				content: "";
 				display: block;
 				height: var(--wp--custom--spacing--55);
@@ -159,7 +159,7 @@ body .jetpack-instant-search {
 			transition: outline 125ms ease-in-out;
 
 			&:focus-within {
-				border-radius: var(--newspack-ui-border-radius-m, 6px);
+				border-radius: var(--newspack-ui-radius-control, var(--wp--custom--border--radius-large));
 				outline: 2px solid var(--jp--color--text);
 				outline-offset: -4px;
 			}
@@ -199,7 +199,7 @@ body .jetpack-instant-search {
 		background: var(--jp--color--background);
 
 		&-wrapper {
-			border-radius: var(--wp--custom--border--radius-medium);
+			border-radius: var(--wp--custom--border--radius-xx-large);
 			max-width: calc(var(--wp--preset--spacing--80) + var(--wp--style--global--content-size) + var(--wp--preset--spacing--80));
 
 			@include sass-utils.media("992px") {
@@ -210,7 +210,7 @@ body .jetpack-instant-search {
 		}
 
 		&-filter-button {
-			border-radius: var(--wp--custom--border--radius-medium);
+			border-radius: var(--wp--custom--border--radius-large);
 			border: 1px solid var(--jp--color--border);
 			color: var(--jp--color--text);
 			font-size: var(--newspack-ui-font-size-xs, 14px);
@@ -297,7 +297,7 @@ body .jetpack-instant-search {
 
 			button {
 				background: var(--jp--color--text) !important;
-				border-radius: var(--wp--custom--border--radius-medium) !important;
+				border-radius: var(--wp--custom--border--radius-large) !important;
 				color: var(--jp--color--background) !important;
 				padding:
 					var(--newspack-ui-spacer-2, var(--wp--custom--spacing--25))
@@ -498,7 +498,7 @@ body .jetpack-instant-search {
 
 	&__search-sort-select {
 		border-color: var(--jp--color--border);
-		border-radius: var(--newspack-ui-border-radius-m, 6px);
+		border-radius: var(--newspack-ui-radius-control, var(--wp--custom--border--radius-large));
 		color: inherit;
 		min-height: var(--wp--preset--spacing--50);
 		padding: calc(var(--newspack-ui-spacer-base, var(--wp--preset--spacing--20)) / 2);
