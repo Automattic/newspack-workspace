@@ -73,23 +73,30 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	const TEST_SEND_REQUEST_TIMEOUT = 15;
 
 	/**
-	 * Option holding the site-wide default for whether new campaigns are
-	 * public, which is what ActiveCampaign requires for a campaign to appear
-	 * in its campaign archive. Off by default, so campaigns stay private
-	 * unless the publisher opts in.
+	 * Option holding the site-wide default for whether campaigns are public in
+	 * ActiveCampaign, which is what puts them in its campaign archive. One of
+	 * the ARCHIVE_VISIBILITY_* values. The default, "inherit", follows each
+	 * newsletter's own visibility, which is how campaigns were created before
+	 * this option existed.
 	 *
 	 * @var string
 	 */
-	const PUBLIC_CAMPAIGNS_OPTION = 'newspack_newsletters_active_campaign_public_campaigns';
+	const ARCHIVE_VISIBILITY_OPTION = 'newspack_newsletters_active_campaign_archive_visibility';
 
 	/**
-	 * Post meta holding a newsletter's own choice, overriding
-	 * PUBLIC_CAMPAIGNS_OPTION. ActiveCampaign can't change a campaign's
-	 * visibility once it has been sent, so this only matters before sending.
+	 * Post meta holding a newsletter's own choice, overriding the site-wide
+	 * default: "public", "private", or empty to follow the default. Empty is a
+	 * real value rather than an unset row because the editor saves every meta
+	 * field on each save. ActiveCampaign can't change a campaign's visibility
+	 * once it has been sent, so this only matters before sending.
 	 *
 	 * @var string
 	 */
-	const PUBLIC_CAMPAIGN_META = 'ac_public_campaign';
+	const ARCHIVE_VISIBILITY_META = 'ac_archive_visibility';
+
+	const ARCHIVE_VISIBILITY_INHERIT = 'inherit';
+	const ARCHIVE_VISIBILITY_PUBLIC  = 'public';
+	const ARCHIVE_VISIBILITY_PRIVATE = 'private';
 
 	/**
 	 * Dispatch states for a stored campaign, returned by
@@ -1719,25 +1726,52 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	}
 
 	/**
+	 * Sanitize the site-wide archive visibility, falling back to "inherit" so
+	 * an unexpected value can never make campaigns public.
+	 *
+	 * @param mixed $value Raw option value.
+	 *
+	 * @return string One of the ARCHIVE_VISIBILITY_* values.
+	 */
+	public static function sanitize_archive_visibility( $value ): string {
+		$allowed = [ self::ARCHIVE_VISIBILITY_INHERIT, self::ARCHIVE_VISIBILITY_PUBLIC, self::ARCHIVE_VISIBILITY_PRIVATE ];
+		return in_array( $value, $allowed, true ) ? $value : self::ARCHIVE_VISIBILITY_INHERIT;
+	}
+
+	/**
+	 * The site-wide archive visibility default.
+	 *
+	 * @return string One of the ARCHIVE_VISIBILITY_* values.
+	 */
+	public static function get_archive_visibility_default(): string {
+		return self::sanitize_archive_visibility( get_option( self::ARCHIVE_VISIBILITY_OPTION, self::ARCHIVE_VISIBILITY_INHERIT ) );
+	}
+
+	/**
 	 * Whether the newsletter's campaign should be public in ActiveCampaign,
 	 * which places it in the ActiveCampaign campaign archive.
 	 *
-	 * A newsletter published on the web ("Email and web") is always public,
-	 * as it was before the archive setting existed. Otherwise the newsletter's
-	 * own choice applies, falling back to the site-wide default.
+	 * The newsletter's own choice wins. Without one, the site-wide default
+	 * applies, and its "inherit" value follows the newsletter's visibility:
+	 * "Email and web" is public, "Email only" is private.
 	 *
 	 * @param int $post_id Newsletter post ID.
 	 *
 	 * @return bool
 	 */
 	public static function is_public_campaign( int $post_id ): bool {
-		if ( (bool) get_post_meta( $post_id, 'is_public', true ) ) {
+		$choice = get_post_meta( $post_id, self::ARCHIVE_VISIBILITY_META, true );
+		if ( self::ARCHIVE_VISIBILITY_PUBLIC === $choice ) {
 			return true;
 		}
-		if ( metadata_exists( 'post', $post_id, self::PUBLIC_CAMPAIGN_META ) ) {
-			return (bool) get_post_meta( $post_id, self::PUBLIC_CAMPAIGN_META, true );
+		if ( self::ARCHIVE_VISIBILITY_PRIVATE === $choice ) {
+			return false;
 		}
-		return (bool) get_option( self::PUBLIC_CAMPAIGNS_OPTION, false );
+		$default = self::get_archive_visibility_default();
+		if ( self::ARCHIVE_VISIBILITY_INHERIT === $default ) {
+			return (bool) get_post_meta( $post_id, 'is_public', true );
+		}
+		return self::ARCHIVE_VISIBILITY_PUBLIC === $default;
 	}
 
 	/**

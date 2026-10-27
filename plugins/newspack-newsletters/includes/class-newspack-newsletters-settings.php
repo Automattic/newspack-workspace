@@ -149,13 +149,27 @@ class Newspack_Newsletters_Settings {
 				'onboarding'  => true,
 			),
 			array(
-				'description'       => esc_html__( 'Include email-only newsletters in the ActiveCampaign campaign archive by default', 'newspack-newsletters' ),
-				'key'               => Newspack_Newsletters_Active_Campaign::PUBLIC_CAMPAIGNS_OPTION,
-				'type'              => 'checkbox',
-				'default'           => false,
+				'description'       => esc_html__( 'ActiveCampaign campaign archive', 'newspack-newsletters' ),
+				'key'               => Newspack_Newsletters_Active_Campaign::ARCHIVE_VISIBILITY_OPTION,
+				'type'              => 'select',
+				'options'           => [
+					[
+						'name'  => esc_html__( 'Same as newsletter visibility', 'newspack-newsletters' ),
+						'value' => Newspack_Newsletters_Active_Campaign::ARCHIVE_VISIBILITY_INHERIT,
+					],
+					[
+						'name'  => esc_html__( 'Always public', 'newspack-newsletters' ),
+						'value' => Newspack_Newsletters_Active_Campaign::ARCHIVE_VISIBILITY_PUBLIC,
+					],
+					[
+						'name'  => esc_html__( 'Always private', 'newspack-newsletters' ),
+						'value' => Newspack_Newsletters_Active_Campaign::ARCHIVE_VISIBILITY_PRIVATE,
+					],
+				],
+				'default'           => Newspack_Newsletters_Active_Campaign::ARCHIVE_VISIBILITY_INHERIT,
 				'provider'          => 'active_campaign',
-				'help'              => esc_html__( 'Makes campaigns for email-only newsletters public in ActiveCampaign, which is required for the campaign archive. Newsletters published on the web are always public. Each newsletter can override this before it is sent; ActiveCampaign does not allow changing it afterwards.', 'newspack-newsletters' ),
-				'sanitize_callback' => 'boolval',
+				'help'              => esc_html__( 'Public campaigns appear in the ActiveCampaign campaign archive. “Same as newsletter visibility” makes “Email and web” newsletters public and “Email only” newsletters private. Each newsletter can override this before it is sent; ActiveCampaign does not allow changing it afterwards.', 'newspack-newsletters' ),
+				'sanitize_callback' => [ 'Newspack_Newsletters_Active_Campaign', 'sanitize_archive_visibility' ],
 				'onboarding'        => false,
 			),
 			array(
@@ -223,7 +237,7 @@ class Newspack_Newsletters_Settings {
 				if ( ! empty( $item['provider'] ) && ! in_array( $item['provider'], $supported_providers, true ) ) {
 					return $acc;
 				}
-				if ( 'select' === $item['type'] && ! empty( $item['options'] ) ) {
+				if ( 'newspack_newsletters_service_provider' === $item['key'] && ! empty( $item['options'] ) ) {
 					$item['options'] = array_values(
 						array_filter(
 							$item['options'],

@@ -4,6 +4,7 @@ import {
 	CardBody,
 	CardHeader,
 	CheckboxControl,
+	SelectControl,
 	TextControl,
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
@@ -34,13 +35,27 @@ export default function OptionsSection( { title, options, schema, activeProvider
 							return null;
 						}
 						const value = resolveValue( field.key );
+						if ( field.type === 'select' ) {
+							return (
+								<SelectControl
+									key={ field.key }
+									label={ field.label }
+									value={ value ?? field.default ?? '' }
+									options={ ( field.options || [] ).map( option => ( { label: option.name, value: option.value } ) ) }
+									help={ field.help || '' }
+									onChange={ next => onChange( field.key, next ) }
+									disabled={ disabled }
+									__nextHasNoMarginBottom
+									__next40pxDefaultSize
+								/>
+							);
+						}
 						if ( field.type === 'checkbox' ) {
 							return (
 								<CheckboxControl
 									key={ field.key }
 									label={ field.label }
 									checked={ !! value }
-									help={ field.help || '' }
 									onChange={ next => onChange( field.key, next ) }
 									disabled={ disabled }
 									__nextHasNoMarginBottom

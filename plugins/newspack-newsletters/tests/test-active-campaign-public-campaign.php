@@ -4,7 +4,8 @@
  *
  * ActiveCampaign only lists public campaigns in its campaign archive, and a
  * campaign's visibility can't change once it is sent. These tests pin how the
- * site-wide default, the per-newsletter choice and web publishing combine.
+ * site-wide default, the per-newsletter choice and the newsletter's own
+ * visibility combine.
  *
  * @package Newspack_Newsletters
  */
@@ -27,7 +28,7 @@ class ActiveCampaignPublicCampaignTest extends WP_UnitTestCase {
 	public function set_up() {
 		parent::set_up();
 		$this->campaign_create_body = null;
-		delete_option( Newspack_Newsletters_Active_Campaign::PUBLIC_CAMPAIGNS_OPTION );
+		delete_option( Newspack_Newsletters_Active_Campaign::ARCHIVE_VISIBILITY_OPTION );
 		Newspack_Newsletters_Active_Campaign::instance()->set_api_credentials(
 			[
 				'url' => 'https://example.api-us1.com',
@@ -42,7 +43,7 @@ class ActiveCampaignPublicCampaignTest extends WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		remove_filter( 'pre_http_request', [ $this, 'mock_http' ], 10 );
-		delete_option( Newspack_Newsletters_Active_Campaign::PUBLIC_CAMPAIGNS_OPTION );
+		delete_option( Newspack_Newsletters_Active_Campaign::ARCHIVE_VISIBILITY_OPTION );
 		parent::tear_down();
 	}
 
@@ -144,43 +145,50 @@ class ActiveCampaignPublicCampaignTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Without any setting, an email-only newsletter's campaign stays private.
+	 * Each combination of site default, newsletter visibility and newsletter
+	 * choice, with the campaign visibility it must produce.
+	 *
+	 * @return array
 	 */
-	public function test_campaign_is_private_by_default() {
-		$post_id = $this->create_newsletter();
-		$this->assertFalse( Newspack_Newsletters_Active_Campaign::is_public_campaign( $post_id ) );
-		$this->assertSame( 0, $this->create_campaign_public_flag( $post_id ) );
+	public function archive_visibility_cases() {
+		return [
+			// Unset site default behaves as before the setting existed.
+			'no setting, email only'           => [ null, false, '', 0 ],
+			'no setting, email and web'        => [ null, true, '', 1 ],
+			'inherit, email only'              => [ 'inherit', false, '', 0 ],
+			'inherit, email and web'           => [ 'inherit', true, '', 1 ],
+			'always public, email only'        => [ 'public', false, '', 1 ],
+			'always private, email and web'    => [ 'private', true, '', 0 ],
+			'unknown setting falls to inherit' => [ 'everyone', false, '', 0 ],
+			// A newsletter's own choice wins over the default, both ways.
+			'opt in, email only'               => [ 'inherit', false, 'public', 1 ],
+			'opt out, email and web'           => [ 'inherit', true, 'private', 0 ],
+			'opt in over always private'       => [ 'private', false, 'public', 1 ],
+			'opt out over always public'       => [ 'public', true, 'private', 0 ],
+		];
 	}
 
 	/**
-	 * The site-wide setting applies to newsletters that made no choice.
+	 * The campaign's visibility follows the newsletter's choice, else the site
+	 * default, whose "inherit" value follows the newsletter's visibility.
+	 *
+	 * @dataProvider archive_visibility_cases
+	 *
+	 * @param string|null $site_default    Site-wide option value, or null for unset.
+	 * @param bool        $is_public_on_web Whether the newsletter is "Email and web".
+	 * @param string      $choice          The newsletter's own choice.
+	 * @param int         $expected_public The `public` value sent to ActiveCampaign.
 	 */
-	public function test_site_default_makes_campaign_public() {
-		update_option( Newspack_Newsletters_Active_Campaign::PUBLIC_CAMPAIGNS_OPTION, true );
+	public function test_campaign_visibility( $site_default, $is_public_on_web, $choice, $expected_public ) {
+		if ( null !== $site_default ) {
+			update_option( Newspack_Newsletters_Active_Campaign::ARCHIVE_VISIBILITY_OPTION, $site_default );
+		}
 		$post_id = $this->create_newsletter();
-		$this->assertTrue( Newspack_Newsletters_Active_Campaign::is_public_campaign( $post_id ) );
-		$this->assertSame( 1, $this->create_campaign_public_flag( $post_id ) );
-	}
+		update_post_meta( $post_id, 'is_public', $is_public_on_web );
+		update_post_meta( $post_id, Newspack_Newsletters_Active_Campaign::ARCHIVE_VISIBILITY_META, $choice );
 
-	/**
-	 * A newsletter can opt in while the site-wide default is off.
-	 */
-	public function test_newsletter_can_opt_in() {
-		$post_id = $this->create_newsletter();
-		update_post_meta( $post_id, Newspack_Newsletters_Active_Campaign::PUBLIC_CAMPAIGN_META, true );
-		$this->assertTrue( Newspack_Newsletters_Active_Campaign::is_public_campaign( $post_id ) );
-		$this->assertSame( 1, $this->create_campaign_public_flag( $post_id ) );
-	}
-
-	/**
-	 * A newsletter can opt out while the site-wide default is on.
-	 */
-	public function test_newsletter_can_opt_out() {
-		update_option( Newspack_Newsletters_Active_Campaign::PUBLIC_CAMPAIGNS_OPTION, true );
-		$post_id = $this->create_newsletter();
-		update_post_meta( $post_id, Newspack_Newsletters_Active_Campaign::PUBLIC_CAMPAIGN_META, false );
-		$this->assertFalse( Newspack_Newsletters_Active_Campaign::is_public_campaign( $post_id ) );
-		$this->assertSame( 0, $this->create_campaign_public_flag( $post_id ) );
+		$this->assertSame( (bool) $expected_public, Newspack_Newsletters_Active_Campaign::is_public_campaign( $post_id ) );
+		$this->assertSame( $expected_public, $this->create_campaign_public_flag( $post_id ) );
 	}
 
 	/**
@@ -206,21 +214,9 @@ class ActiveCampaignPublicCampaignTest extends WP_UnitTestCase {
 		$post_id = $this->create_newsletter();
 
 		$request = new WP_REST_Request( 'POST', '/wp/v2/' . Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT . '/' . $post_id );
-		$request->set_body_params( [ 'meta' => [ Newspack_Newsletters_Active_Campaign::PUBLIC_CAMPAIGN_META => true ] ] );
+		$request->set_body_params( [ 'meta' => [ Newspack_Newsletters_Active_Campaign::ARCHIVE_VISIBILITY_META => 'public' ] ] );
 		$this->assertSame( 200, rest_do_request( $request )->get_status() );
 
 		$this->assertTrue( Newspack_Newsletters_Active_Campaign::is_public_campaign( $post_id ) );
-	}
-
-	/**
-	 * Newsletters published on the web stay public in ActiveCampaign, as they
-	 * were before the archive setting existed, whatever the newsletter's choice.
-	 */
-	public function test_web_published_newsletter_is_always_public() {
-		$post_id = $this->create_newsletter();
-		update_post_meta( $post_id, 'is_public', true );
-		update_post_meta( $post_id, Newspack_Newsletters_Active_Campaign::PUBLIC_CAMPAIGN_META, false );
-		$this->assertTrue( Newspack_Newsletters_Active_Campaign::is_public_campaign( $post_id ) );
-		$this->assertSame( 1, $this->create_campaign_public_flag( $post_id ) );
 	}
 }

@@ -27,22 +27,25 @@ class Newspack_Newsletters_Active_Campaign_Controller extends Newspack_Newslette
 	 * Register custom fields.
 	 */
 	public static function register_meta() {
-		// The default mirrors the site-wide setting, so a new newsletter
-		// starts from it in the editor until someone changes it.
 		\register_meta(
 			'post',
-			Newspack_Newsletters_Active_Campaign::PUBLIC_CAMPAIGN_META,
+			Newspack_Newsletters_Active_Campaign::ARCHIVE_VISIBILITY_META,
 			[
 				'object_subtype' => Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
 				'show_in_rest'   => [
 					'schema' => [
 						'context' => [ 'edit' ],
+						'enum'    => [
+							'',
+							Newspack_Newsletters_Active_Campaign::ARCHIVE_VISIBILITY_PUBLIC,
+							Newspack_Newsletters_Active_Campaign::ARCHIVE_VISIBILITY_PRIVATE,
+						],
 					],
 				],
-				'type'           => 'boolean',
+				'type'           => 'string',
 				'single'         => true,
 				'auth_callback'  => '__return_true',
-				'default'        => (bool) get_option( Newspack_Newsletters_Active_Campaign::PUBLIC_CAMPAIGNS_OPTION, false ),
+				'default'        => '',
 			]
 		);
 		\register_meta(

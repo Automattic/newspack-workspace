@@ -250,7 +250,7 @@ export const Settings = ( {
 				);
 			}
 			case 'select':
-				return <SelectControl key={ setting.key } { ...getSettingProps( setting.key ) } />;
+				return <SelectControl key={ setting.key } { ...getSettingProps( setting.key ) } help={ config.settings[ setting.key ]?.help } />;
 			case 'checkbox': {
 				const props = getSettingProps( setting.key );
 				return (
@@ -258,7 +258,6 @@ export const Settings = ( {
 						key={ setting.key }
 						label={ props.label }
 						checked={ props.checked }
-						help={ config.settings[ setting.key ]?.help }
 						onChange={ props.onChange }
 						disabled={ props.disabled }
 						__nextHasNoMarginBottom
