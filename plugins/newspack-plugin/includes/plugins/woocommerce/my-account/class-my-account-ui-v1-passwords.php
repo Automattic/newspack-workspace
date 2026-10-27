@@ -30,6 +30,27 @@ class My_Account_UI_V1_Passwords {
 		\add_filter( 'validate_password_reset', [ __CLASS__, 'validate_password_reset' ], 10, 2 );
 		\add_action( 'wp_loaded', [ __CLASS__, 'maybe_password_reset_success' ] );
 		\add_action( 'newspack_woocommerce_after_edit_account_form', [ __CLASS__, 'add_reset_password_modal' ] );
+		\add_filter( 'woocommerce_lost_password_message', [ __CLASS__, 'lost_password_message' ] );
+	}
+
+	/**
+	 * Put the second sentence of WooCommerce's lost password instructions on its own line.
+	 * A customized message, and WooCommerce's translation on a site whose language does not have these
+	 * strings translated yet, are left as they are.
+	 *
+	 * @param string $message The message, already escaped.
+	 *
+	 * @return string
+	 */
+	public static function lost_password_message( $message ) {
+		if ( \esc_html__( 'Lost your password? Please enter your username or email address. You will receive a link to create a new password via email.', 'woocommerce' ) !== $message ) {
+			return $message;
+		}
+		$first = \esc_html__( 'Lost your password? Please enter your username or email address.', 'newspack-plugin' );
+		if ( ! str_starts_with( \determine_locale(), 'en' ) && 'Lost your password? Please enter your username or email address.' === $first ) {
+			return $message;
+		}
+		return $first . '<br />' . \esc_html__( 'You will receive a link to create a new password via email.', 'newspack-plugin' );
 	}
 
 	/**
