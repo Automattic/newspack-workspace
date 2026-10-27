@@ -368,9 +368,11 @@ final class Modal_Checkout {
 	 * the order after its line items, so the meta is only set here.
 	 *
 	 * The decision covers the whole cart, and an order with nothing modal left
-	 * loses its marker: the Store API reuses a draft order from an earlier
-	 * submission and rebuilds its line items from the current cart, which may
-	 * no longer hold anything from the modal.
+	 * loses its marker. The Store API reuses a draft order from an earlier
+	 * submission (`DraftOrderTrait::is_valid_draft_order()`) and, when the cart
+	 * has changed since, rebuilds its line items from the current cart
+	 * (`OrderController::update_line_items_from_cart()`), which may no longer
+	 * hold anything from the modal.
 	 *
 	 * WooCommerce Subscriptions builds a new subscription's line items through
 	 * the same hook and from the same cart. The subscription is left unmarked:
