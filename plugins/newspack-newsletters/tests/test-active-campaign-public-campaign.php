@@ -184,6 +184,35 @@ class ActiveCampaignPublicCampaignTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The provider, and with it the controller, is built during `init` at the
+	 * default priority. A callback added at that same priority while it runs is
+	 * skipped, so the meta would never be registered and the editor's checkbox
+	 * would save nothing.
+	 */
+	public function test_meta_is_registered_after_the_provider_is_built() {
+		Newspack_Newsletters_Active_Campaign::instance();
+		$priority = has_action( 'init', [ Newspack_Newsletters_Active_Campaign_Controller::class, 'register_meta' ] );
+		$this->assertIsInt( $priority );
+		$this->assertGreaterThan( 10, $priority );
+	}
+
+	/**
+	 * The editor saves the choice through the REST API, which only writes
+	 * registered meta.
+	 */
+	public function test_choice_saved_through_rest_api_applies() {
+		Newspack_Newsletters_Active_Campaign_Controller::register_meta();
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		$post_id = $this->create_newsletter();
+
+		$request = new WP_REST_Request( 'POST', '/wp/v2/' . Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT . '/' . $post_id );
+		$request->set_body_params( [ 'meta' => [ Newspack_Newsletters_Active_Campaign::PUBLIC_CAMPAIGN_META => true ] ] );
+		$this->assertSame( 200, rest_do_request( $request )->get_status() );
+
+		$this->assertTrue( Newspack_Newsletters_Active_Campaign::is_public_campaign( $post_id ) );
+	}
+
+	/**
 	 * Newsletters published on the web stay public in ActiveCampaign, as they
 	 * were before the archive setting existed, whatever the newsletter's choice.
 	 */
