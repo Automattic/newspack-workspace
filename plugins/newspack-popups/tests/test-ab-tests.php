@@ -700,11 +700,8 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * A Test ID the request sends back unchanged is left out of the write. The
-	 * editor sends the whole meta object on every save and core re-sanitizes a
-	 * submitted value before comparing it with the stored one, so without this a
-	 * frequency edit would rewrite an ID stored under the earlier, looser
-	 * sanitizer (which kept underscores) on one variant only, splitting its test.
+	 * A Test ID the request sends back unchanged is left out of the write, so an
+	 * unrelated save cannot rewrite one the earlier sanitizer stored.
 	 */
 	public function test_an_unchanged_test_id_is_not_rewritten_by_an_unrelated_save() {
 		global $wpdb;
