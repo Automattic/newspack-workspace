@@ -897,8 +897,9 @@ class Contact_Sync extends Sync {
 	 * benign whatever its message. On the push path, an error no signature
 	 * matches is a config failure when it carries a 401, 402 or 403 status:
 	 * only the ESP account answers those, for every contact alike. A deletion
-	 * keeps retrying it instead, since no later event re-sends a deletion and a
-	 * rotated key or a short billing lapse must not drop it.
+	 * keeps retrying such an error through the backoff instead, since no later
+	 * event re-sends a deletion. A deletion whose message names an account
+	 * problem, such as "payment required", still ends on its first attempt.
 	 *
 	 * @param string|\WP_Error $error     The error from a failed push.
 	 * @param string           $direction The sync direction: 'push' (default) or 'deletion'.

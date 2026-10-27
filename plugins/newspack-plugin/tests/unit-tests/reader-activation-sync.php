@@ -751,9 +751,9 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 	 * Test that the deletion direction uses its own signature map: "member
 	 * exists" phrases must retry (the ESP contact still exists without the
 	 * deletion flags) and "was permanently deleted" is the benign end-state.
-	 * An auth or payment status that no signature explains retries too: no
-	 * later event re-sends a deletion, so a short credential or billing outage
-	 * must not drop it.
+	 * An auth or payment status that no signature explains retries too, since
+	 * no later event re-sends a deletion; a message naming an account problem
+	 * still ends it.
 	 */
 	public function test_classify_error_deletion_direction() {
 		$reflection = new \ReflectionMethod( Contact_Sync::class, 'classify_error' );
