@@ -15,6 +15,7 @@ import {
 	isPaymentChallengeShown,
 	isSameDocumentRedirect,
 	onCheckoutPlaceOrderProcessing,
+	placeOrderSummary,
 	restorePaymentFocus,
 } from './utils';
 
@@ -367,12 +368,16 @@ import {
 				/**
 				 * Handle order review table appearance.
 				 */
-				$( document ).on( 'updated_checkout', function () {
-					const $wrapper = $( '.order-review-wrapper' );
-					if ( ! $wrapper.length ) {
+				let orderSummary = null;
+				$( document ).on( 'updated_checkout', function ( event, data ) {
+					orderSummary = placeOrderSummary( document, orderSummary, data?.fragments?.[ '.woocommerce-checkout-review-order-table' ] );
+					if ( ! orderSummary ) {
 						return;
 					}
+					// WooCommerce Subscriptions runs this on body before this handler, when a replaced summary may still be detached.
+					window.hide_non_applicable_coupons?.();
 
+					const $wrapper = $( orderSummary );
 					const $table = $wrapper.find( 'table' );
 
 					// Toggle visibility according to table content.
@@ -380,19 +385,8 @@ import {
 						$wrapper.addClass( 'hidden' );
 					} else {
 						// WooCommerce blocks the order review table while updating.
-						// We need to make sure the cloned table is always unblocked.
-						// Without fading: the table is cloned below, and a clone taken
-						// mid-fade keeps a half-opaque overlay over the table for good.
-						$table.unblock( { fadeOut: 0 } );
+						$table.unblock();
 						$wrapper.removeClass( 'hidden' );
-					}
-
-					// Move new order review table to the payment methods.
-					const $payment_methods = $( '.payment_methods' );
-					if ( $payment_methods.length ) {
-						const $el = $wrapper.clone();
-						$( '.order-review-wrapper' ).remove();
-						$payment_methods.after( $el );
 					}
 				} );
 
@@ -409,7 +403,7 @@ import {
 				 * Get updated cart total to update the "Place Order" button.
 				 */
 				function getOrderReviewCartTotal() {
-					return $( '.order-review-wrapper tr.order-total:not(.recurring-total) .amount' ).first().text().replace( /\s+/g, ' ' ).trim();
+					return $( orderSummary ).find( 'tr.order-total:not(.recurring-total) .amount' ).first().text().replace( /\s+/g, ' ' ).trim();
 				}
 				let cartTotalRequest = false;
 				function requestUpdatedCartTotal( cb ) {
