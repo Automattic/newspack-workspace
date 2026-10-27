@@ -555,6 +555,14 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 
 		self::assertSame( $prepared_post, Newspack_Popups_AB_Tests::guard_rest_ab_meta( $prepared_post, $request ) );
 		self::assertSame( [ 'trigger_delay' => 7 ], $request->get_param( 'meta' ) );
+
+		// The placement rule is skipped on autosaves too: a draft mid-edit is not
+		// a save, and refusing it would make the editor flash an error while typing.
+		$tested_id = $this->create_test_variant( 'autosave-placement', 'a', [ 'placement' => 'inline' ] );
+		$request   = new WP_REST_Request( 'POST', '/wp/v2/' . Newspack_Popups::NEWSPACK_POPUPS_CPT . '/' . $tested_id . '/autosaves' );
+		$request->set_body_params( [ 'meta' => [ 'placement' => 'manual' ] ] );
+		$prepared_post = (object) [ 'ID' => $tested_id ];
+		self::assertSame( $prepared_post, Newspack_Popups_AB_Tests::guard_rest_ab_meta( $prepared_post, $request ) );
 	}
 
 	/**
@@ -606,5 +614,46 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		self::assertSame( 200, $response->get_status() );
 		self::assertSame( [ 'form_submission', 'link_click', 'donation', 'subscription' ], array_keys( Newspack_Popups_AB_Tests::get_goal_labels() ) );
 		self::assertSame( '', Newspack_Popups_AB_Tests::sanitize_goal( 'Donation' ) );
+	}
+
+	/**
+	 * Manual and custom placements render through a block or a shortcode, so the
+	 * bucketing has nothing to split. A Test ID on one is refused, for every user.
+	 */
+	public function test_a_test_id_is_refused_on_manual_and_custom_placements() {
+		foreach ( [ 'manual', 'custom1' ] as $placement ) {
+			$prompt_id = $this->createPopup( null, [ 'placement' => $placement ] );
+			$response  = $this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ Newspack_Popups_AB_Tests::META_TEST_ID => 'placement-test' ] ] );
+			self::assertSame( 400, $response->get_status(), $placement );
+			self::assertSame( 'newspack_popups_ab_ineligible_placement', $response->get_data()['code'] );
+			self::assertSame( '', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+		}
+		self::assertFalse( Newspack_Popups_AB_Tests::is_eligible_placement( 'custom2' ) );
+		self::assertTrue( Newspack_Popups_AB_Tests::is_eligible_placement( 'inline' ) );
+		self::assertTrue( Newspack_Popups_AB_Tests::is_eligible_placement( 'center' ) );
+	}
+
+	/**
+	 * The rule reads the placement the save would leave, not only the one it sends,
+	 * so moving a tested prompt to an ineligible placement is refused as well.
+	 */
+	public function test_moving_a_tested_prompt_to_an_ineligible_placement_is_refused() {
+		$prompt_id = $this->create_test_variant( 'placement-move', 'a', [ 'placement' => 'inline' ] );
+		$response  = $this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ 'placement' => 'manual' ] ] );
+		self::assertSame( 400, $response->get_status() );
+		self::assertSame( 'inline', get_post_meta( $prompt_id, 'placement', true ) );
+		// Clearing the test in the same save is the way out.
+		$response = $this->save_prompt_as(
+			$prompt_id,
+			'administrator',
+			[
+				'meta' => [
+					'placement'                            => 'manual',
+					Newspack_Popups_AB_Tests::META_TEST_ID => '',
+				],
+			]
+		);
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		self::assertSame( 'manual', get_post_meta( $prompt_id, 'placement', true ) );
 	}
 }

@@ -301,13 +301,30 @@ final class Newspack_Popups_AB_Tests {
 			return $prepared_post;
 		}
 
-		$post_id = isset( $prepared_post->ID ) ? (int) $prepared_post->ID : 0;
+		$post_id     = isset( $prepared_post->ID ) ? (int) $prepared_post->ID : 0;
+		$is_autosave = str_ends_with( $request->get_route(), '/autosaves' );
+
+		// A validity rule, not a permission, so it runs before the permission branch
+		// and applies to administrators too. It reads the values the save would
+		// leave in place: a key the request omits keeps its stored value. A
+		// non-scalar reads as empty here; the meta schema refuses it on its own.
+		$effective = function ( $meta_key ) use ( $meta, $post_id ) {
+			$value = array_key_exists( $meta_key, $meta ) ? $meta[ $meta_key ] : ( $post_id ? get_post_meta( $post_id, $meta_key, true ) : '' );
+			return is_scalar( $value ) ? (string) $value : '';
+		};
+		if ( ! $is_autosave && '' !== $effective( self::META_TEST_ID ) && ! self::is_eligible_placement( $effective( 'placement' ) ) ) {
+			return new WP_Error(
+				'newspack_popups_ab_ineligible_placement',
+				__( "Prompts with a manual or custom placement can't be part of an A/B test. Clear the Test ID or change the placement.", 'newspack-popups' ),
+				[ 'status' => 400 ]
+			);
+		}
+
 		if ( self::can_manage_tests( get_current_user_id(), $post_id ) ) {
 			return $prepared_post;
 		}
 
-		$is_autosave = str_ends_with( $request->get_route(), '/autosaves' );
-		$registered  = get_registered_meta_keys( 'post', Newspack_Popups::NEWSPACK_POPUPS_CPT );
+		$registered = get_registered_meta_keys( 'post', Newspack_Popups::NEWSPACK_POPUPS_CPT );
 		foreach ( self::META_KEYS as $meta_key ) {
 			if ( ! array_key_exists( $meta_key, $meta ) ) {
 				continue;
@@ -332,6 +349,27 @@ final class Newspack_Popups_AB_Tests {
 		$request->set_param( 'meta', $meta );
 
 		return $prepared_post;
+	}
+
+	/**
+	 * Placements a tested prompt can't have. Manual and custom placements render
+	 * wherever a block or shortcode puts them, so there is no slot to split
+	 * between variants.
+	 *
+	 * @return string[] Placement values.
+	 */
+	public static function get_ineligible_placements() {
+		return array_merge( [ 'manual' ], Newspack_Popups_Custom_Placements::get_custom_placement_values() );
+	}
+
+	/**
+	 * Whether a prompt with this placement can be part of a test.
+	 *
+	 * @param string $placement Placement value.
+	 * @return bool
+	 */
+	public static function is_eligible_placement( $placement ) {
+		return ! in_array( (string) $placement, self::get_ineligible_placements(), true );
 	}
 
 	/**
