@@ -31,8 +31,8 @@ final class Patterns {
 		\add_action( 'init', [ __CLASS__, 'block_pattern_categories' ] );
 		\add_action( 'init', [ __CLASS__, 'register_nested_patterns' ] );
 
-		// Give new header and footer template parts starting content.
-		\add_filter( 'rest_pre_insert_wp_template_part', [ __CLASS__, 'template_part_starter_content' ], 10, 2 );
+		// Give new header and footer template parts starting content. Priority 9 so core's block hooks pass, at 10, sees it.
+		\add_filter( 'rest_pre_insert_wp_template_part', [ __CLASS__, 'template_part_starter_content' ], 9, 2 );
 
 		// Clean up any remaining unwanted patterns.
 		\add_filter( 'rest_dispatch_request', [ __CLASS__, 'restrict_patterns' ], 12, 3 );
