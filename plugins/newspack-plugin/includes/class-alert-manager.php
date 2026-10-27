@@ -1029,24 +1029,10 @@ class Alert_Manager {
 				return 'publisher';
 			}
 		}
-		// A bare auth or payment status with no recognisable text, in the two
-		// forms providers print one: "401: …" opening a message, or
-		// "status 401". A number anywhere else is not a status, such as the
-		// connect duration in cURL's "Failed to connect … after 402 ms".
-		foreach ( $error->get_error_messages() as $error_message ) {
-			if ( preg_match( '/^40[123]:|\bstatus 40[123]\b/i', trim( (string) $error_message ) ) ) {
-				return 'publisher';
-			}
-		}
-		// A status kept outside the message: as the error code, or as `status`
-		// in the error data. Integrations that report one in the data print it
-		// in a translatable message too, which the patterns above can't rely on.
-		foreach ( $error->get_error_codes() as $code ) {
-			$data   = $error->get_error_data( $code );
-			$status = is_numeric( $code ) ? $code : ( is_array( $data ) ? ( $data['status'] ?? null ) : null );
-			if ( is_numeric( $status ) && in_array( (int) $status, [ 401, 402, 403 ], true ) ) {
-				return 'publisher';
-			}
+		// A bare auth or payment status with no recognisable text. Contact sync
+		// reads it the same way, through the same helper.
+		if ( Reader_Activation\Integration::has_account_status( $error ) ) {
+			return 'publisher';
 		}
 		return 'other';
 	}

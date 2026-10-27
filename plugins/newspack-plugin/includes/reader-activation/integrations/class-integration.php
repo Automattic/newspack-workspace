@@ -825,6 +825,38 @@ abstract class Integration {
 	}
 
 	/**
+	 * Whether an integration error carries a 401, 402 or 403 status, which
+	 * only the provider account can cause. Contact sync and the health check
+	 * both decide by it, and must agree: while the check runs, contact sync
+	 * leaves paging about the account to it. An integration that knows the
+	 * HTTP status should keep it as `status` in the error data, since its
+	 * message may be translated.
+	 *
+	 * Read where providers put it: opening a message ("401: …"), inside one
+	 * ("status 401"), as the error code, or as `status` in the error data. A
+	 * number anywhere else is not a status, such as the connect duration in
+	 * cURL's "Failed to connect … after 402 ms".
+	 *
+	 * @param \WP_Error $error The integration's error.
+	 * @return bool
+	 */
+	final public static function has_account_status( \WP_Error $error ): bool {
+		foreach ( $error->get_error_messages() as $message ) {
+			if ( preg_match( '/^40[123]:|\bstatus 40[123]\b/i', trim( (string) $message ) ) ) {
+				return true;
+			}
+		}
+		foreach ( $error->get_error_codes() as $code ) {
+			$data   = $error->get_error_data( $code );
+			$status = is_numeric( $code ) ? $code : ( is_array( $data ) ? ( $data['status'] ?? null ) : null );
+			if ( is_numeric( $status ) && in_array( (int) $status, [ 401, 402, 403 ], true ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Pull contact data from the integration for a given user.
 	 *
 	 * Integrations that support pulling contact data should implement this method.
