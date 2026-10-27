@@ -119,13 +119,12 @@ const ABTestPanel = ( {
 	const warnings = testPromptWarnings( { postId, variant, prompts } );
 
 	// The notices describe standing state rather than the result of an action, so
-	// none is announced on mount (the panel re-mounts them on every expand), and
-	// the error variant, shown on arrival rather than after a save, stays polite.
+	// none is announced on mount (the panel re-mounts them on every expand).
 	return (
 		<Stack direction="column" gap="lg">
 			{ ! canManage && <p>{ __( "Your role can view this prompt's A/B test settings but not change them.", 'newspack-popups' ) }</p> }
 			{ ! eligible && (
-				<Notice status={ testId ? 'error' : 'warning' } politeness="polite" spokenMessage="" isDismissible={ false }>
+				<Notice status={ testId ? 'error' : 'warning' } spokenMessage="" isDismissible={ false }>
 					{ __( "Prompts with a manual or custom placement can't be part of an A/B test.", 'newspack-popups' ) }
 					{ testId ? ' ' + __( 'Clear the Test ID or change the placement before saving.', 'newspack-popups' ) : '' }
 				</Notice>

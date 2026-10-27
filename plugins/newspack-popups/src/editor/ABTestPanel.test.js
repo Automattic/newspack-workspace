@@ -43,8 +43,8 @@ jest.mock( '@wordpress/components', () => ( {
 			{ help && <p>{ help }</p> }
 		</div>
 	),
-	Notice: ( { status, children, spokenMessage, politeness } ) => (
-		<div role="note" data-status={ status } data-spoken={ spokenMessage } data-politeness={ politeness }>
+	Notice: ( { status, children, spokenMessage } ) => (
+		<div role="note" data-status={ status } data-spoken={ spokenMessage }>
 			{ children }
 		</div>
 	),
@@ -176,7 +176,6 @@ describe( 'ABTestPanel', () => {
 		renderPanel( { placement: 'manual', newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'a' } );
 		const note = screen.getAllByRole( 'note' )[ 0 ];
 		expect( note.dataset.status ).toBe( 'error' );
-		expect( note.dataset.politeness ).toBe( 'polite' );
 		expect( note.textContent ).toContain( 'Clear the Test ID or change the placement before saving.' );
 	} );
 
