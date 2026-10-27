@@ -732,6 +732,37 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * The placement rule reads "unchanged" the way the write guard does: a legacy
+	 * Test ID sent back as stored is not a new violation, so a stuck prompt that
+	 * carries one still takes other edits.
+	 */
+	public function test_a_stuck_prompt_with_a_legacy_test_id_keeps_taking_other_edits() {
+		global $wpdb;
+		$prompt_id = $this->create_test_variant( 'footer-test', 'a', [ 'placement' => 'inline' ] );
+		$wpdb->update( // phpcs:ignore WordPress.DB
+			$wpdb->postmeta,
+			[ 'meta_value' => 'footer_test' ], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			[
+				'post_id'  => $prompt_id,
+				'meta_key' => Newspack_Popups_AB_Tests::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+			]
+		);
+		wp_cache_delete( $prompt_id, 'post_meta' );
+		update_post_meta( $prompt_id, 'placement', 'manual' );
+
+		$response = $this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ 'frequency' => 'once' ] ] );
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		self::assertSame( 'once', get_post_meta( $prompt_id, 'frequency', true ) );
+		self::assertSame( 'footer_test', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+
+		// Retyping it as its own slug would be written, so on a stuck prompt it is
+		// still refused, like any other change of Test ID.
+		$response = $this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ Newspack_Popups_AB_Tests::META_TEST_ID => 'footer-test' ] ] );
+		self::assertSame( 400, $response->get_status() );
+		self::assertSame( 'footer_test', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+	}
+
+	/**
 	 * What the prompt editor is told: the flag and the permission decide whether
 	 * the panel shows and whether its fields are writable.
 	 */

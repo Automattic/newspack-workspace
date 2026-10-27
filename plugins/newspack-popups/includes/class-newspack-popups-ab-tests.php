@@ -330,12 +330,14 @@ final class Newspack_Popups_AB_Tests {
 		// whole meta object on every save, so checking the stored state too would
 		// refuse a frequency edit with an error about a field the editor may have
 		// disabled for that user. The editor's notice asks for the fix instead.
+		// An ID sent back as stored is unchanged here as it is for the write below,
+		// even where the current sanitizer would spell it differently.
 		// Only while the flag is on: with it off a stored test has no effect, and
 		// the panel that could clear the Test ID is not registered.
 		if (
 			self::is_enabled()
 			&& ! $is_autosave
-			&& ( $test_id !== $stored( self::META_TEST_ID ) || $changes( 'placement' ) )
+			&& ( ( $changes( self::META_TEST_ID ) && $test_id !== $stored( self::META_TEST_ID ) ) || $changes( 'placement' ) )
 			&& '' !== $test_id
 			&& ! self::is_eligible_placement( $effective( 'placement' ) )
 		) {
