@@ -23,6 +23,7 @@ class TrackingDataEventsTest extends WP_UnitTestCase_Blocks {
 		parent::set_up();
 		\Newspack\Data_Events::$registered_listeners          = [];
 		\Newspack\Data_Events\Utils::$order_data_fixtures     = [];
+		WC_Order::$saved_meta                                 = [];
 	}
 
 	/**
@@ -31,6 +32,7 @@ class TrackingDataEventsTest extends WP_UnitTestCase_Blocks {
 	public function tear_down() {
 		\Newspack\Data_Events::$registered_listeners      = [];
 		\Newspack\Data_Events\Utils::$order_data_fixtures = [];
+		WC_Order::$saved_meta                             = [];
 		unset( $_POST['express_payment_type'], $_REQUEST['modal_checkout'], $_REQUEST['post_data'], $_POST['post_data'], $_SERVER['HTTP_REFERER'] );
 		parent::tear_down();
 	}
@@ -140,17 +142,20 @@ class TrackingDataEventsTest extends WP_UnitTestCase_Blocks {
 	/**
 	 * An order dispatches once, even when it returns to a paid status from an
 	 * unpaid one: a payment review or dispute puts it on hold, and clearing it
-	 * restores the earlier paid status.
+	 * restores the earlier paid status in a later request, on the order loaded
+	 * again from what was saved.
 	 */
 	public function test_order_dispatches_once() {
 		\Newspack\Data_Events\Utils::$order_data_fixtures = [ 123 => $this->get_order_data_fixture( 123 ) ];
-		$order = $this->get_modal_order( 'processing' );
+		// The marker as checkout saved it, so only the flag decides the reload.
+		WC_Order::$saved_meta[123] = [ \Newspack_Blocks\Modal_Checkout::ORDER_META_KEY => 1 ];
+		$order                     = $this->get_modal_order( 'processing' );
 
 		$this->assertIsArray( \Newspack_Blocks\Tracking\Data_Events::order_status_changed( 123, 'pending', 'processing', $order ) );
 
-		$order->set_status( 'on-hold' );
-		$order->set_status( 'processing' );
-		$this->assertEmpty( \Newspack_Blocks\Tracking\Data_Events::order_status_changed( 123, 'on-hold', 'processing', $order ) );
+		$reloaded_order = new WC_Order( 123, 'wc_order_testkey', [], WC_Order::$saved_meta[123] );
+		$reloaded_order->set_status( 'processing' );
+		$this->assertEmpty( \Newspack_Blocks\Tracking\Data_Events::order_status_changed( 123, 'on-hold', 'processing', $reloaded_order ) );
 	}
 
 	/**

@@ -59,6 +59,14 @@ if ( ! class_exists( 'WC_Order' ) ) {
 		protected $status = 'pending';
 
 		/**
+		 * Meta each order last saved, keyed by order ID: what a later request
+		 * would load. Tests that read it reset it.
+		 *
+		 * @var array
+		 */
+		public static $saved_meta = [];
+
+		/**
 		 * Constructor.
 		 *
 		 * @param int    $id        Order ID.
@@ -122,9 +130,11 @@ if ( ! class_exists( 'WC_Order' ) ) {
 		}
 
 		/**
-		 * Persist meta. A no-op: the stub keeps meta in memory only.
+		 * Persist meta to the saved store, where a later request would load it.
 		 */
-		public function save_meta_data() {}
+		public function save_meta_data() {
+			self::$saved_meta[ $this->id ] = $this->meta;
+		}
 
 		/**
 		 * Set the order status.
