@@ -139,7 +139,7 @@ const ABTestPanel = ( {
 				// ID stays editable so it can be cleared, which the notice asks for.
 				disabled={ ! canManage || ( ! eligible && ! testId ) }
 				help={ __(
-					'Prompts sharing a Test ID form one test. Use the same ID on the control and the challenger. Lowercase letters, numbers and hyphens; spaces become hyphens and other characters are dropped.',
+					'Prompts sharing a Test ID form one test. Use the same ID on the control and the challenger. Lowercase letters, numbers and hyphens. Capitals are lowercased; spaces, underscores, periods and slashes become hyphens; anything else is dropped.',
 					'newspack-popups'
 				) }
 				__nextHasNoMarginBottom

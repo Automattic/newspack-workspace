@@ -29,6 +29,9 @@ export const GOAL_BLOCKS = {
 /**
  * Normalize a typed Test ID the way the server's sanitize_test_id() stores it, so
  * two prompts typed "Spring Drive 2026" and "spring-drive-2026" share one test.
+ * Periods and slashes become hyphens because core's sanitize_title() turns them
+ * into hyphens before stripping; non-ASCII letters are the known divergence
+ * (the server transliterates them, this drops them).
  *
  * @param {string} value Typed value.
  * @return {string} Slug.
@@ -37,7 +40,7 @@ export const slugifyTestId = value =>
 	String( value ?? '' )
 		.toLowerCase()
 		.trim()
-		.replace( /[\s_]+/g, '-' )
+		.replace( /[\s_./]+/g, '-' )
 		.replace( /[^a-z0-9-]/g, '' )
 		.replace( /-+/g, '-' )
 		.replace( /^-|-$/g, '' );

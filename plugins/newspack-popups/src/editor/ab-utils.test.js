@@ -12,6 +12,9 @@ describe( 'slugifyTestId', () => {
 		[ '  footer_test  ', 'footer-test' ],
 		[ 'Test--ID!!', 'test-id' ],
 		[ 'already-a-slug', 'already-a-slug' ],
+		// The PHP test's own input: the server turns periods and slashes into hyphens.
+		[ 'Footer_Test v1.2', 'footer-test-v1-2' ],
+		[ 'a/b', 'a-b' ],
 	] )( 'turns %p into %p', ( input, expected ) => expect( slugifyTestId( input ) ).toBe( expected ) );
 } );
 

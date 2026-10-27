@@ -103,7 +103,7 @@ describe( 'ABTestPanel', () => {
 		renderPanel();
 
 		expect( screen.getByLabelText( 'Test ID' ) ).toBeTruthy();
-		expect( screen.getByText( /spaces become hyphens/ ) ).toBeTruthy();
+		expect( screen.getByText( /periods and slashes become hyphens; anything else is dropped/ ) ).toBeTruthy();
 		expect( screen.queryByLabelText( 'Variant' ) ).toBeNull();
 		expect( screen.queryByLabelText( 'Conversion goal' ) ).toBeNull();
 	} );
