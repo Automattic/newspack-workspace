@@ -171,10 +171,6 @@
 		a {
 			display: block;
 			padding: 0 0.375em;
-
-			&:focus {
-				outline-offset: -3px;
-			}
 		}
 	}
 }

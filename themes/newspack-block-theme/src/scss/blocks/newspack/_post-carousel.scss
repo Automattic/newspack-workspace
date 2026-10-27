@@ -180,14 +180,13 @@
 			top: var(--wp--custom--spacing--10);
 		}
 
-		&:focus {
+		&:focus:not(:focus-visible) {
 			box-shadow: none;
 			outline: none;
 		}
 
 		&:focus-visible {
-			outline: 2px solid;
-			outline-offset: 1px;
+			@include mixins.focus-line;
 		}
 	}
 
@@ -207,14 +206,13 @@
 			width: var(--wp--preset--spacing--50);
 		}
 
-		&:focus {
+		&:focus:not(:focus-visible) {
 			box-shadow: none;
 			outline: none;
 		}
 
 		&:focus-visible {
-			outline: 2px solid;
-			outline-offset: 1px;
+			@include mixins.focus-line;
 		}
 
 		.has-text-color:not(.has-contrast-color) &:not(.swiper-pagination-bullet-active) {

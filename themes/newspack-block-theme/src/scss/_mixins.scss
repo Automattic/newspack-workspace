@@ -1,5 +1,42 @@
 @use "sass:math";
 
+$focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast));
+
+@mixin focus-edge($color: var(--wp--preset--color--contrast), $important: null, $halo: $color) {
+	border-color: $color $important;
+	box-shadow: 0 0 0 var(--wp--custom--focus--halo-width) color-mix(in srgb, #{$halo} var(--wp--custom--focus--halo-mix), transparent) $important;
+	outline: 2px solid transparent $important;
+
+	@media (prefers-contrast: more) {
+		box-shadow:
+			0 0 0 1px $halo,
+			0 0 0 calc(1px + var(--wp--custom--focus--halo-width)) color-mix(in srgb, #{$halo} var(--wp--custom--focus--halo-mix), transparent) $important;
+	}
+}
+
+@mixin focus-line($color: currentcolor, $important: null) {
+	box-shadow:
+		0 0 0 1px $color,
+		0 0 0 calc(1px + var(--wp--custom--focus--halo-width)) color-mix(in srgb, #{$color} var(--wp--custom--focus--halo-mix), transparent) $important;
+	outline: 2px solid transparent $important;
+}
+
+@mixin focus-line-inset($color: currentcolor, $important: null) {
+	box-shadow:
+		inset 0 0 0 1px $color,
+		inset 0 0 0 calc(1px + var(--wp--custom--focus--halo-width)) color-mix(in srgb, #{$color} var(--wp--custom--focus--halo-mix), transparent) $important;
+	outline: 2px solid transparent $important;
+	outline-offset: -2px $important;
+}
+
+@mixin focus-line-filled($color: var(--wp--custom--focus--fill), $gap: var(--wp--preset--color--base), $important: null) {
+	box-shadow:
+		inset 0 0 0 1px $gap,
+		0 0 0 1px $color,
+		0 0 0 calc(1px + var(--wp--custom--focus--halo-width)) color-mix(in srgb, #{$color} var(--wp--custom--focus--halo-mix), transparent) $important;
+	outline: 2px solid transparent $important;
+}
+
 /*
  * Input Styles
  */
@@ -15,16 +52,14 @@
 	transition:
 		background-color 125ms ease-in-out,
 		border-color 125ms ease-in-out,
-		outline 125ms ease-in-out;
+		box-shadow 125ms ease-in-out;
 
 	@media (prefers-contrast: more) {
 		border-color: var(--wp--preset--color--contrast-3);
 	}
 
-	&:focus {
-		border-color: var(--wp--preset--color--contrast);
-		outline: 2px solid var(--wp--preset--color--contrast);
-		outline-offset: -1px;
+	&:focus-visible:where(:not(.newspack-ui *)) {
+		@include focus-edge;
 	}
 
 	&:disabled {
@@ -41,7 +76,7 @@
 /*
  * Checkbox and Radio Styles
  */
-@mixin checkbox-radio {
+@mixin checkbox-radio($important: null) {
 	appearance: none;
 	background: white 50% 50% no-repeat;
 	border: 1px solid var(--wp--preset--color--base-4);
@@ -56,7 +91,7 @@
 	transition:
 		background 125ms ease-in-out,
 		border-color 125ms ease-in-out,
-		outline 125ms ease-in-out;
+		box-shadow 125ms ease-in-out;
 	width: var(--wp--custom--spacing--35) !important;
 
 	@media (prefers-contrast: more) {
@@ -78,19 +113,27 @@
 		}
 	}
 
-	&:focus {
-		border-color: var(--wp--preset--color--base-4);
-		box-shadow: none !important;
-		outline: unset !important;
-	}
+	&:where(:not(.newspack-ui *)) {
+		&:focus:not(:focus-visible) {
+			box-shadow: none $important;
+			outline: none $important;
+		}
 
-	&:focus-visible {
-		outline: 2px solid var(--wp--preset--color--contrast) !important;
-		outline-offset: 1px;
+		&:focus-visible {
+			&:not(:checked) {
+				@include focus-line($focus-color, $important);
+				border-color: var(--wp--custom--color--neutral-90) $important;
+			}
 
-		&:not(:checked) {
-			border: 0;
-			outline-offset: -1px;
+			&:checked {
+				@include focus-line-filled($focus-color, $important: $important);
+			}
+
+			@media (forced-colors: active) {
+				&:checked {
+					outline-color: CanvasText $important;
+				}
+			}
 		}
 	}
 
@@ -160,8 +203,8 @@
 		background-color: color-mix(in srgb, var(--wp--preset--color--contrast) 3.5%, transparent);
 	}
 
-	&:focus {
-		outline-color: var(--wp--preset--color--contrast) !important;
+	&:focus-visible {
+		@include focus-line;
 	}
 }
 
