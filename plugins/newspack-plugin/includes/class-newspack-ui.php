@@ -1365,7 +1365,7 @@ class Newspack_UI {
 	 *
 	 * @return bool
 	 */
-	private static function is_demo_request() {
+	private static function is_demo_request(): bool {
 		return isset( $_REQUEST['ui-demo'] ) && current_user_can( 'manage_options' ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 	}
 
