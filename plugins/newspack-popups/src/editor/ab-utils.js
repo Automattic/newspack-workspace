@@ -27,7 +27,7 @@ export const GOAL_BLOCKS = {
 };
 
 /**
- * Normalize a typed Test ID to what WordPress's sanitize_title() would store, so
+ * Normalize a typed Test ID the way the server's sanitize_test_id() stores it, so
  * two prompts typed "Spring Drive 2026" and "spring-drive-2026" share one test.
  *
  * @param {string} value Typed value.

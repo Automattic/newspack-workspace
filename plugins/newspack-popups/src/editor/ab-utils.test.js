@@ -5,8 +5,8 @@
 import { slugifyTestId, isEligiblePlacement, splitSummary, promptLacksGoalBlock, testPromptWarnings } from './ab-utils';
 
 describe( 'slugifyTestId', () => {
-	// Expected values are what WordPress sanitize_title() produces for the same input,
-	// so a Test ID typed in the editor matches the one the server stores.
+	// Expected values are what the server's sanitize_test_id() stores for the same
+	// input, so a Test ID typed in the editor matches the stored one.
 	it.each( [
 		[ 'Spring Drive 2026', 'spring-drive-2026' ],
 		[ '  footer_test  ', 'footer-test' ],

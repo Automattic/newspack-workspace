@@ -388,7 +388,7 @@ final class Newspack_Popups_AB_Tests {
 	 * @return array[] Each `[ 'id', 'title', 'variant', 'status', 'edit_link' ]`; `edit_link` is null when the current user can't edit that prompt.
 	 */
 	public static function get_test_prompts( $test_id ) {
-		$test_id = sanitize_key( $test_id );
+		$test_id = self::sanitize_test_id( $test_id );
 		if ( '' === $test_id ) {
 			return [];
 		}
@@ -441,17 +441,25 @@ final class Newspack_Popups_AB_Tests {
 	}
 
 	/**
-	 * Sanitize a Test ID to a slug.
+	 * Sanitize a Test ID to a slug of lowercase letters, digits and hyphens.
 	 *
-	 * Not sanitize_title() directly: register_meta() passes the meta key as the
-	 * second argument, which sanitize_title() reads as the fallback title, so an
-	 * empty value would be stored as the key name instead of clearing the test.
+	 * Not sanitize_title() directly, for two reasons. register_meta() passes the
+	 * meta key as the second argument, which sanitize_title() reads as the fallback
+	 * title, so an empty value would be stored as the key name instead of clearing
+	 * the test. And sanitize_title() keeps underscores and percent-encodes what it
+	 * can't transliterate, while the editor's slug and the lookup route accept
+	 * neither, so an ID stored with either could never be looked up.
 	 *
 	 * @param mixed $value Raw value.
 	 * @return string Slug, or empty string.
 	 */
 	public static function sanitize_test_id( $value ) {
-		return is_scalar( $value ) ? sanitize_title( (string) $value ) : '';
+		if ( ! is_scalar( $value ) ) {
+			return '';
+		}
+		$slug = preg_replace( '/%[0-9a-f]{2}/', '', sanitize_title( (string) $value ) );
+		$slug = preg_replace( '/[^a-z0-9-]+/', '-', $slug );
+		return trim( preg_replace( '/-+/', '-', $slug ), '-' );
 	}
 
 	/**

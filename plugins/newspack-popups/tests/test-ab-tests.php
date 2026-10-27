@@ -750,6 +750,23 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * A stored Test ID uses the characters the editor's slug and the lookup route
+	 * allow: lowercase letters, digits and hyphens. sanitize_title() alone keeps
+	 * underscores and percent-encodes what it can't transliterate, and an ID with
+	 * either could be stored through REST and never looked up.
+	 */
+	public function test_test_id_is_normalized_to_the_editor_charset() {
+		$prompt_id = $this->createPopup();
+
+		$response = $this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ Newspack_Popups_AB_Tests::META_TEST_ID => '  Footer_Test v1.2  ' ] ] );
+
+		self::assertSame( 200, $response->get_status() );
+		self::assertSame( 'footer-test-v1-2', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+		self::assertSame( '', Newspack_Popups_AB_Tests::sanitize_test_id( 'тест' ) );
+		self::assertSame( [ $prompt_id ], wp_list_pluck( Newspack_Popups_AB_Tests::get_test_prompts( 'footer_test v1.2' ), 'id' ) );
+	}
+
+	/**
 	 * Clearing a Test ID through REST leaves an empty string, not a phantom test.
 	 *
 	 * WordPress calls a meta sanitize callback with the meta key as its second
