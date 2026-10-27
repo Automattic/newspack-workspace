@@ -110,8 +110,9 @@ const inFlight = new Map();
 
 /**
  * Send a key's current value, after any write of the same key still in flight.
- * Both the sync tick and flush() go through here, so a flush can reuse a write
- * the tick started instead of racing it. Runs at once when nothing is in flight.
+ * Both the sync tick and flush() go through here, so a flush waits for a write
+ * the tick started and then sends what is current, instead of racing it. Runs
+ * at once when nothing is in flight.
  *
  * @param {string} key Key to send.
  *
@@ -624,7 +625,7 @@ export default function Store() {
 		 *                            write failed and the key stays pending.
 		 */
 		flush: key => {
-			if ( ! key || newspack_reader_data?.is_temporary || isSwitchedSession() ) {
+			if ( ! key || neverSyncs() ) {
 				return Promise.resolve( true );
 			}
 			const queued = syncQueue.indexOf( key );
