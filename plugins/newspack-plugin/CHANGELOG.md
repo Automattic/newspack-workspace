@@ -1,3 +1,18 @@
+## newspack [6.56.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.1...newspack@6.56.2) (2026-10-27)
+
+
+### Bug Fixes
+
+* **complianz:** keep Complianz post types out of Yoast indexables ([2bed8d2](https://github.com/Automattic/newspack-workspace/commit/2bed8d2bbea5b7da5c7ff4f716b99d16c130a5df))
+* **pwa:** unregister the orphaned service worker after the PWA plugin is turned off ([0b806fd](https://github.com/Automattic/newspack-workspace/commit/0b806fdcee58ca42fbcdf0569573388c6b9bcd1b))
+
+## newspack [6.56.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.0...newspack@6.56.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* **post-date:** let plugins show a post's updated date ([#1416](https://github.com/Automattic/newspack-workspace/issues/1416)) ([9ec64bf](https://github.com/Automattic/newspack-workspace/commit/9ec64bfc6348e608fbacd2c569704219167b3cf4))
+
 # newspack [6.56.0](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.8...newspack@6.56.0) (2026-10-26)
 
 
