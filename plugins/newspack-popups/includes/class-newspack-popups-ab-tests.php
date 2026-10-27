@@ -374,6 +374,48 @@ final class Newspack_Popups_AB_Tests {
 	}
 
 	/**
+	 * The prompts carrying a Test ID, for the editor's list of the other prompts in
+	 * the test. Drafts and pending prompts are included, since an author sets up the
+	 * challenger before publishing it; trashed ones are not.
+	 *
+	 * @param string $test_id Test ID.
+	 * @return array[] Each `[ 'id', 'title', 'variant', 'status', 'edit_link' ]`; `edit_link` is null when the current user can't edit that prompt.
+	 */
+	public static function get_test_prompts( $test_id ) {
+		$test_id = sanitize_key( $test_id );
+		if ( '' === $test_id ) {
+			return [];
+		}
+		$prompts = get_posts(
+			[
+				'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+				'post_status'    => 'any',
+				// Same reasoning as get_tests_config(): a bound would silently drop
+				// prompts from the list.
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Prompts CPT; config-scale.
+				'orderby'        => 'ID',
+				'order'          => 'ASC',
+				'meta_key'       => self::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'meta_value'     => $test_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			]
+		);
+		$list    = [];
+		foreach ( $prompts as $prompt ) {
+			if ( in_array( $prompt->post_status, [ 'trash', 'auto-draft' ], true ) ) {
+				continue;
+			}
+			$list[] = [
+				'id'        => (int) $prompt->ID,
+				'title'     => $prompt->post_title,
+				'variant'   => (string) get_post_meta( $prompt->ID, self::META_VARIANT, true ),
+				'status'    => $prompt->post_status,
+				'edit_link' => get_edit_post_link( $prompt->ID, 'raw' ),
+			];
+		}
+		return $list;
+	}
+
+	/**
 	 * Placements a tested prompt can't have. Manual and custom placements render
 	 * wherever a block or shortcode puts them, so there is no slot to split
 	 * between variants.

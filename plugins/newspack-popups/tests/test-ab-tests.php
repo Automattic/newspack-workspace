@@ -680,4 +680,33 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
 		self::assertFalse( Newspack_Popups_AB_Tests::get_editor_data( $prompt_id )['enabled'] );
 	}
+
+	/**
+	 * The editor's "other prompts in this test" list reads this route: every
+	 * prompt carrying the Test ID except trashed ones, in ID order, for anyone
+	 * who can edit prompts.
+	 */
+	public function test_test_prompts_route_lists_every_prompt_in_the_test() {
+		$control    = $this->create_test_variant( 'lookup-test', 'a' );
+		$challenger = $this->create_test_variant( 'lookup-test', 'b', null, [ 'post_status' => 'draft' ] );
+		$this->create_test_variant( 'lookup-test', 'b', null, [ 'post_status' => 'trash' ] );
+		$this->create_test_variant( 'other-test', 'a' );
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+		global $wp_rest_server;
+		$wp_rest_server = new WP_REST_Server(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		do_action( 'rest_api_init' );
+
+		$response = rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/lookup-test' ) );
+		self::assertSame( 200, $response->get_status() );
+		self::assertSame( [ $control, $challenger ], wp_list_pluck( $response->get_data(), 'id' ) );
+		self::assertSame( [ 'a', 'b' ], wp_list_pluck( $response->get_data(), 'variant' ) );
+		self::assertStringContainsString( 'post=' . $control, $response->get_data()[0]['edit_link'] );
+
+		self::assertSame( [], rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/no-such-test' ) )->get_data() );
+		self::assertSame( 404, rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/Not%20A%20Slug' ) )->get_status() );
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'subscriber' ] ) );
+		self::assertSame( 403, rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/lookup-test' ) )->get_status() );
+	}
 }
