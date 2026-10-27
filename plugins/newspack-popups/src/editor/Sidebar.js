@@ -25,6 +25,7 @@ const Sidebar = props => {
 		onMetaFieldChange,
 		placement,
 		overlay_size,
+		manual_only,
 		trigger_type,
 		trigger_delay,
 		trigger_scroll_progress,
@@ -92,6 +93,12 @@ const Sidebar = props => {
 						value={ placement }
 						onChange={ updatePlacement }
 						size={ overlay_size }
+					/>
+					<ToggleControl
+						label={ __( 'Manual only', 'newspack-popups' ) }
+						help={ __( 'The prompt will appear only where inserted using the Single Prompt block or a shortcode.', 'newspack-popups' ) }
+						checked={ !! manual_only }
+						onChange={ value => onMetaFieldChange( { manual_only: value } ) }
 					/>
 				</>
 			) : (

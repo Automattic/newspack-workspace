@@ -1231,10 +1231,17 @@ final class Newspack_Popups_Inserter {
 		if (
 			// Bail if it should not be displayed.
 			! self::should_display( $found_popup ) ||
-			// Only inline or manual-only popups can be inserted via the shortcode.
+			// Only inline or manual-only popups (including manual-only overlays) can be inserted via the shortcode.
 			( ! Newspack_Popups_Model::is_inline( $found_popup ) && ! Newspack_Popups_Model::is_manual_only( $found_popup ) )
 		) {
 			return;
+		}
+
+		// A manual-only overlay keeps its pop-up behavior: the lightbox is printed in the footer like
+		// any other overlay, and only the scroll trigger's position marker stays where the block is.
+		if ( Newspack_Popups_Model::is_overlay( $found_popup ) ) {
+			self::queue_overlay( $found_popup );
+			return self::emit_position_marker_inline( $found_popup );
 		}
 
 		$class_names = '';

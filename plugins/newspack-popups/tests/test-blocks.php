@@ -117,6 +117,18 @@ class BlocksTest extends WP_UnitTestCase {
 			'Overlay prompt not rendered by the Single Prompt block.'
 		);
 
+		$manual_only_overlay_id = self::create_popup(
+			[
+				'placement'   => 'center',
+				'manual_only' => true,
+			]
+		);
+		self::assertEquals(
+			'<!-- wp:shortcode -->[newspack-popup id="' . $manual_only_overlay_id . '"]<!-- /wp:shortcode -->',
+			Newspack_Popups\Prompt_Block\render_block( [ 'promptId' => $manual_only_overlay_id ] ),
+			'Manual-only overlay is rendered by the Single Prompt block.'
+		);
+
 		$inline_block_content = Newspack_Popups\Prompt_Block\render_block(
 			[
 				'promptId'  => $inline_popup_id,
@@ -128,6 +140,29 @@ class BlocksTest extends WP_UnitTestCase {
 			$inline_block_content,
 			'<!-- wp:shortcode -->[newspack-popup id="' . $inline_popup_id . '" class="custom-class"]<!-- /wp:shortcode -->',
 			'Includes inline popup shortcode.'
+		);
+	}
+
+	/**
+	 * The Single Prompt block's prompt search offers manual-only overlays, but not
+	 * overlays that are inserted automatically.
+	 */
+	public function test_prompt_block_search_includes_manual_only_overlays() {
+		$inline_popup_id        = self::create_popup( [ 'placement' => 'inline' ] );
+		$manual_popup_id        = self::create_popup( [ 'placement' => 'manual' ] );
+		$manual_only_overlay_id = self::create_popup(
+			[
+				'placement'   => 'bottom_right',
+				'manual_only' => true,
+			]
+		);
+		self::create_popup( [ 'placement' => 'center' ] );
+
+		$search_results = Newspack_Popups_API::get_inline_and_manual_prompts( new WP_REST_Request( 'GET' ) )->get_data();
+
+		self::assertEqualsCanonicalizing(
+			[ $inline_popup_id, $manual_popup_id, $manual_only_overlay_id ],
+			array_column( $search_results, 'id' )
 		);
 	}
 
@@ -196,6 +231,20 @@ class BlocksTest extends WP_UnitTestCase {
 		self::assertStringContainsString( 'newspack-popup-container', $inline_block_content, 'Includes popup container markup.' );
 		self::assertStringNotContainsString( '<!-- wp:shortcode -->', $inline_block_content, 'Does not return a shortcode block in block themes.' );
 		self::assertEquals( '', $overlay_block_content, 'Overlay prompt not rendered by the Single Prompt block.' );
+
+		// A manual-only overlay is queued for the footer, like every overlay, rather than rendered in place.
+		$manual_only_overlay_id = self::create_popup(
+			[
+				'placement'   => 'center',
+				'manual_only' => true,
+			]
+		);
+		$manual_only_overlay_block_content = Newspack_Popups\Prompt_Block\render_block( [ 'promptId' => $manual_only_overlay_id ] );
+		ob_start();
+		Newspack_Popups_Inserter::print_queued_overlays();
+		$footer_output = ob_get_clean();
+		self::assertStringNotContainsString( 'newspack-lightbox', $manual_only_overlay_block_content, 'Overlay markup is not rendered in place.' );
+		self::assertStringContainsString( Newspack_Popups_Model::canonize_popup_id( $manual_only_overlay_id ), $footer_output, 'Overlay markup is printed in the footer.' );
 
 		$inline_block_content = Newspack_Popups\Prompt_Block\render_block(
 			[

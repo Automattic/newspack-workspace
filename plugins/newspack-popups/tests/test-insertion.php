@@ -226,6 +226,43 @@ class InsertionTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * A manual-only overlay appears only where the Single Prompt block places it,
+	 * and keeps its pop-up behavior there: the lightbox is portaled to the footer
+	 * and the scroll trigger's position marker stays in the content.
+	 */
+	public function test_manual_only_overlay() {
+		Newspack_Popups_Model::set_popup_options(
+			self::$popup_id,
+			[
+				'placement'               => 'center',
+				'manual_only'             => true,
+				'trigger_type'            => 'scroll',
+				'trigger_scroll_progress' => 40,
+			]
+		);
+		$prompt_block = '<!-- wp:newspack-popups/single-prompt {"promptId":' . self::$popup_id . '} /-->';
+
+		self::renderPost();
+		self::assertStringNotContainsString( self::$popup_content, self::$post_content, 'Not inserted automatically.' );
+		self::assertNotContains(
+			self::$popup_id,
+			array_column( Newspack_Popups_Inserter::popups_for_post(), 'id' ),
+			'Not offered to any automatic insertion path (content, above header, archives).'
+		);
+
+		self::renderPost( '', $prompt_block );
+		$element_id = Newspack_Popups_Model::canonize_popup_id( self::$popup_id );
+		$lightbox   = self::$dom_xpath->query( '//*[@id="' . $element_id . '"]' );
+		self::assertEquals( 1, $lightbox->length, 'Rendered once.' );
+		self::assertStringContainsString( 'newspack-lightbox', $lightbox->item( 0 )->getAttribute( 'class' ), 'Rendered as an overlay.' );
+		self::assertEquals(
+			1,
+			self::$dom_xpath->query( '//*[@id="page-position-marker_' . $element_id . '"]' )->length,
+			'Emits the scroll-trigger position marker.'
+		);
+	}
+
+	/**
 	 * Category criterion.
 	 */
 	public function test_criterion_category() {
