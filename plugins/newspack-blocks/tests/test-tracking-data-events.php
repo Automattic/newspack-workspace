@@ -138,8 +138,9 @@ class TrackingDataEventsTest extends WP_UnitTestCase_Blocks {
 	}
 
 	/**
-	 * An order dispatches once: a later paid transition, such as processing to
-	 * completed or a refunded order completed again, does not dispatch again.
+	 * An order dispatches once, even when it returns to a paid status from an
+	 * unpaid one: a payment review or dispute puts it on hold, and clearing it
+	 * restores the earlier paid status.
 	 */
 	public function test_order_dispatches_once() {
 		\Newspack\Data_Events\Utils::$order_data_fixtures = [ 123 => $this->get_order_data_fixture( 123 ) ];
@@ -147,8 +148,9 @@ class TrackingDataEventsTest extends WP_UnitTestCase_Blocks {
 
 		$this->assertIsArray( \Newspack_Blocks\Tracking\Data_Events::order_status_changed( 123, 'pending', 'processing', $order ) );
 
-		$order->set_status( 'completed' );
-		$this->assertEmpty( \Newspack_Blocks\Tracking\Data_Events::order_status_changed( 123, 'processing', 'completed', $order ) );
+		$order->set_status( 'on-hold' );
+		$order->set_status( 'processing' );
+		$this->assertEmpty( \Newspack_Blocks\Tracking\Data_Events::order_status_changed( 123, 'on-hold', 'processing', $order ) );
 	}
 
 	/**

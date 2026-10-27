@@ -27,9 +27,9 @@ final class Data_Events {
 
 	/**
 	 * Order meta key recording that the order's modal checkout interaction was
-	 * dispatched. An order can reach a paid status more than once (processing
-	 * then completed, or completed again after a refund), and each purchase
-	 * must be reported once.
+	 * dispatched. An order can return to a paid status from an unpaid one (a
+	 * payment review or dispute that puts it on hold, a refunded order
+	 * completed again), and each purchase must be reported once.
 	 */
 	const INTERACTION_DISPATCHED_META_KEY = '_newspack_modal_checkout_interaction_dispatched';
 
