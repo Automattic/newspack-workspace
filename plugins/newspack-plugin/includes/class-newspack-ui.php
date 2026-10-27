@@ -270,11 +270,11 @@ class Newspack_UI {
 	 * after the icons are added and would otherwise strip their attributes. Runs
 	 * after WooCommerce Blocks, which replaces the `svg` and `path` rules.
 	 *
-	 * @param array[]|string $allowed_tags Allowed HTML elements and attributes, or a context name.
+	 * @param mixed $allowed_tags Allowed HTML elements and attributes, or a context name.
 	 *
-	 * @return array[]|string
+	 * @return mixed
 	 */
-	public static function allow_woocommerce_notice_icons( array|string $allowed_tags ): array|string {
+	public static function allow_woocommerce_notice_icons( mixed $allowed_tags ): mixed {
 		if ( ! is_array( $allowed_tags ) || ! self::woocommerce_notices_use_newspack_ui() ) {
 			return $allowed_tags;
 		}
