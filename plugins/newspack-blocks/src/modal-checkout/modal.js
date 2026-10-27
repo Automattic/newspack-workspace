@@ -632,16 +632,22 @@ domReady( () => {
 					document.getElementById( 'newspack_modal_checkout' ).removeAttribute( 'data-checkout' );
 				},
 				onClose: () => {
-					// On the redirect path the dialog stays open through the
-					// post-sign-in wait, so closing it then abandons the checkout,
-					// with the bookkeeping closeCheckout() does for the modal path.
 					// On the modal path the dialog closes before onSuccess starts
 					// the attempt, and a dialog opened over this one closes later
-					// still, so nothing here may touch the attempt.
-					if ( isModalCheckout || ! inCheckoutIntent ) {
+					// still, so nothing here may touch the attempt. On the redirect
+					// path the dialog outlives the sign-in: any close then abandons
+					// the checkout, whichever dialog config reports it (an earlier
+					// config's onDismiss may already have cleared the intent), and
+					// the bookkeeping closeCheckout() does for the modal path runs
+					// once. The newsletters step would replace this callback, so
+					// the config above skips it.
+					if ( isModalCheckout ) {
 						return;
 					}
 					signInCheckoutAttempt++;
+					if ( ! inCheckoutIntent ) {
+						return;
+					}
 					window.newspackReaderActivation?.setPendingCheckout?.();
 					manageDismissed( checkoutData );
 					inCheckoutIntent = false;
