@@ -80,9 +80,10 @@ final class Data_Events {
 		 * The purchase is reported when the order first reaches a paid status,
 		 * not when it is created: both checkout pipelines create the order, fire
 		 * their order-processed hooks, and only then try the payment, on every
-		 * submission. A paid status also arrives from places with no modal
-		 * signal in the request (a 3D Secure return, a gateway webhook, an
-		 * admin marking a cheque paid), so modal origin is read from the order.
+		 * submission (see woocommerce/woocommerce#68757). A paid status also
+		 * arrives from places with no modal signal in the request (a 3D Secure
+		 * return, a gateway webhook, an admin marking a cheque paid), so modal
+		 * origin is read from the order.
 		 */
 		\Newspack\Data_Events::register_listener(
 			'woocommerce_order_status_changed',

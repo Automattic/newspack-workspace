@@ -411,6 +411,9 @@ final class Modal_Checkout {
 	/**
 	 * Whether an order was placed through the modal checkout.
 	 *
+	 * The marker can be set from a client-controlled referer, so this gates
+	 * analytics and presentation decisions only — never authorization.
+	 *
 	 * @param mixed $order Order object; anything else is not a modal order.
 	 *
 	 * @return bool
