@@ -2097,6 +2097,39 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * A referer cut back to the site's origin, as a strict-origin policy sends
+	 * it, still falls back to the order's modal marker.
+	 */
+	public function test_return_url_decorated_for_marked_order_in_store_api_checkout_with_origin_only_referer() {
+		$_SERVER['HTTP_REFERER'] = 'https://example.com/';
+		$order                   = new WC_Order( 123, 'wc_order_testkey', [], [ \Newspack_Blocks\Modal_Checkout::ORDER_META_KEY => 1 ] );
+		$this->set_store_api_checkout_request( '/wc/store/v1/checkout', $order );
+
+		$url = \Newspack_Blocks\Modal_Checkout::woocommerce_get_return_url( 'https://example.com/checkout/order-received/123/', $order );
+
+		$query = [];
+		wp_parse_str( (string) wp_parse_url( $url, PHP_URL_QUERY ), $query );
+		$this->assertSame( '1', $query['modal_checkout'] ?? null );
+	}
+
+	/**
+	 * A Store API checkout made from another page keeps the standard thank-you
+	 * page, though the order is marked: a reader who left the modal without
+	 * closing it still has the modal stamp in the cart. A referer that kept its
+	 * path is one no query-stripping policy produced.
+	 */
+	public function test_return_url_untouched_for_marked_order_in_store_api_checkout_from_another_page() {
+		$_SERVER['HTTP_REFERER'] = 'https://example.com/checkout/';
+		$order                   = new WC_Order( 123, 'wc_order_testkey', [], [ \Newspack_Blocks\Modal_Checkout::ORDER_META_KEY => 1 ] );
+		$this->set_store_api_checkout_request( '/wc/store/v1/checkout', $order );
+
+		$this->assertSame(
+			'https://example.com/checkout/order-received/123/',
+			\Newspack_Blocks\Modal_Checkout::woocommerce_get_return_url( 'https://example.com/checkout/order-received/123/', $order )
+		);
+	}
+
+	/**
 	 * Outside a Store API checkout submission, a marked order's URL is left
 	 * alone: WooCommerce builds the same URL for the order-received page
 	 * itself, emails and classic order-pay, none of which are inside the modal.

@@ -2241,14 +2241,40 @@ final class Modal_Checkout {
 	}
 
 	/**
+	 * Whether the request's referer names a page, rather than being absent or
+	 * cut back to the site's origin.
+	 *
+	 * A Referrer-Policy that strips the modal's query (strict-origin, origin,
+	 * no-referrer) leaves the origin at most. A referer that kept a path or a
+	 * query, and that is_modal_checkout_origin() did not read as modal, came
+	 * from a page outside the modal, such as the regular checkout page paid
+	 * with a cart the modal stamped earlier. A browser set to trim referers to
+	 * their path is the exception: it sends the modal's own path.
+	 *
+	 * @return bool
+	 */
+	private static function has_page_referer() {
+		$referer = isset( $_SERVER['HTTP_REFERER'] ) ? esc_url_raw( wp_unslash( $_SERVER['HTTP_REFERER'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		if ( ! $referer ) {
+			return false;
+		}
+
+		$path  = (string) \wp_parse_url( $referer, PHP_URL_PATH );
+		$query = (string) \wp_parse_url( $referer, PHP_URL_QUERY );
+
+		return ( '' !== $path && '/' !== $path ) || '' !== $query;
+	}
+
+	/**
 	 * Return URL for modal checkout "thank you" page.
 	 *
 	 * Origin detection covers the referer so that express-wallet (Apple Pay /
 	 * Google Pay) Store API submissions — JSON bodies with no request params —
 	 * get a decorated return URL and land on the modal thank-you, where the
 	 * front-end GA4 purchase event fires. A Referrer-Policy can strip that
-	 * referer's query, so a Store API checkout also falls back to the order's
-	 * modal marker.
+	 * referer's query, so a Store API checkout whose referer names no page
+	 * also falls back to the order's modal marker.
 	 *
 	 * @param string   $url The URL to redirect to.
 	 * @param WC_Order $order The order related to the transaction.
@@ -2256,7 +2282,7 @@ final class Modal_Checkout {
 	 * @return string
 	 */
 	public static function woocommerce_get_return_url( $url, $order ) {
-		$is_modal_checkout = self::is_modal_checkout_origin() || ( self::is_store_api_checkout_submission() && self::is_modal_checkout_order( $order ) );
+		$is_modal_checkout = self::is_modal_checkout_origin() || ( self::is_store_api_checkout_submission() && self::is_modal_checkout_order( $order ) && ! self::has_page_referer() );
 		if ( ! $is_modal_checkout || self::has_unsupported_payment_gateway() ) {
 			return $url;
 		}
