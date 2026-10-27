@@ -48,7 +48,9 @@ function modal_actions(){
 	var doc = parser.parseFromString(html, "text/html");
 	$(doc).find('.wp-caption').remove();
 	var captionless = $(doc).find('body').html();
-	$shareable.html(captionless);
+	// .val(), not .html(): .html() would decode the copy one more level, and when the copy holds a
+	// script tag, jQuery inserts it into this page and runs it.
+	$shareable.val(captionless);
 
 	// Responsive modal
 	var $modal = $('#republication-tracker-tool-modal');

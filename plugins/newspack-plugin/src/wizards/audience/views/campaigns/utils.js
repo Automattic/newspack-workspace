@@ -366,7 +366,8 @@ addFilter(
 						config.id === 'subscribed_lists' ? __( 'Subscribed to:', 'newspack-plugin' ) : __( 'Not subscribed to:', 'newspack-plugin' )
 					}
 					ids={ item.value }
-					path="/newspack-newsletters/v1/lists_config"
+					// `context=edit`: see the list picker in the segment editor.
+					path="/newspack-newsletters/v1/lists_config?context=edit"
 					deletedItemLabel={ __( 'Deleted list', 'newspack-plugin' ) }
 				/>
 			);

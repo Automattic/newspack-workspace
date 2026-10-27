@@ -1,0 +1,200 @@
+- generic [active] [ref=e1]:
+  - link "Skip to content" [ref=e2] [cursor=pointer]:
+    - /url: "#wp--skip-link--target"
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e8]:
+        - generic [ref=e10]:
+          - generic [ref=e13] [cursor=pointer]: Donate
+          - link "Sign in" [ref=e16] [cursor=pointer]:
+            - /url: "#"
+            - img [ref=e18]
+            - generic [ref=e20]: Sign in
+        - generic [ref=e21]:
+          - navigation [ref=e22]:
+            - list [ref=e23]:
+              - list [ref=e24]:
+                - listitem [ref=e25]:
+                  - link "Homepage" [ref=e26] [cursor=pointer]:
+                    - /url: http://localhost:80/
+          - button "Search" [ref=e29] [cursor=pointer]:
+            - img [ref=e31]
+            - generic [ref=e33]: Search
+    - main [ref=e34]:
+      - generic [ref=e35]:
+        - generic [ref=e36]:
+          - generic [ref=e39]:
+            - heading "Sports" [level=2] [ref=e40]
+            - article [ref=e41]:
+              - figure [ref=e42]:
+                - link [ref=e43] [cursor=pointer]:
+                  - /url: https://localhost:80/2026/06/10/laudantium-consectetur-laborum-voluptas-accusamus-ad-consequatur-excepteur-neque-deserunt-ipsum-commodi-ea/
+                  - img [ref=e44]
+              - generic [ref=e45]:
+                - heading "Laudantium consectetur laborum voluptas accusamus ad consequatur excepteur neque deserunt ipsum commodi ea" [level=3] [ref=e46]:
+                  - link "Laudantium consectetur laborum voluptas accusamus ad consequatur excepteur neque deserunt ipsum commodi ea" [ref=e47] [cursor=pointer]:
+                    - /url: https://localhost:80/2026/06/10/laudantium-consectetur-laborum-voluptas-accusamus-ad-consequatur-excepteur-neque-deserunt-ipsum-commodi-ea/
+                - paragraph [ref=e48]: Nulla tempora exercitationem minima iure elit magna illum aspernatur aspernatur ab nostrum est quasi cupidatat duis consequatur ut elit consequatur laboriosam sed doloremque.
+                - generic [ref=e49]:
+                  - link [ref=e50] [cursor=pointer]:
+                    - /url: https://localhost:80/author/
+                  - generic [ref=e51]:
+                    - text: by
+                    - generic:
+                      - link:
+                        - /url: https://localhost:80/author/
+                  - time [ref=e52]: June 10, 2026
+          - generic [ref=e53]:
+            - generic [ref=e55]:
+              - heading "Entertainment" [level=2] [ref=e56]
+              - article [ref=e57]:
+                - figure [ref=e58]:
+                  - link [ref=e59] [cursor=pointer]:
+                    - /url: https://localhost:80/2026/06/10/tempora-magna-in-eu-ea-aperiam-minima-ad-sit-fugiat-illum-vel/
+                    - img [ref=e60]
+                - generic [ref=e61]:
+                  - heading "Tempora magna in eu ea aperiam minima ad sit fugiat illum vel" [level=3] [ref=e62]:
+                    - link "Tempora magna in eu ea aperiam minima ad sit fugiat illum vel" [ref=e63] [cursor=pointer]:
+                      - /url: https://localhost:80/2026/06/10/tempora-magna-in-eu-ea-aperiam-minima-ad-sit-fugiat-illum-vel/
+                  - generic [ref=e64]:
+                    - generic [ref=e65]:
+                      - text: by
+                      - generic:
+                        - link:
+                          - /url: https://localhost:80/author/
+                    - time [ref=e66]: June 10, 2026
+            - separator [ref=e67]
+            - generic [ref=e69]:
+              - heading "Opinion" [level=2] [ref=e70]
+              - article [ref=e71]:
+                - figure [ref=e72]:
+                  - link [ref=e73] [cursor=pointer]:
+                    - /url: https://localhost:80/2026/06/10/magnam-pariatur-eius-ipsum-sint-ea-etiam-veniam-deserunt-porro-dolore/
+                    - img [ref=e74]
+                - generic [ref=e75]:
+                  - heading "Magnam pariatur eius ipsum sint ea etiam veniam deserunt porro dolore" [level=3] [ref=e76]:
+                    - link "Magnam pariatur eius ipsum sint ea etiam veniam deserunt porro dolore" [ref=e77] [cursor=pointer]:
+                      - /url: https://localhost:80/2026/06/10/magnam-pariatur-eius-ipsum-sint-ea-etiam-veniam-deserunt-porro-dolore/
+                  - generic [ref=e78]:
+                    - link [ref=e79] [cursor=pointer]:
+                      - /url: https://localhost:80/author/
+                    - generic [ref=e80]:
+                      - text: by
+                      - generic:
+                        - link:
+                          - /url: https://localhost:80/author/
+                    - time [ref=e81]: June 10, 2026
+        - separator [ref=e82]
+        - generic [ref=e83]:
+          - generic [ref=e84]:
+            - generic [ref=e86]:
+              - heading "News" [level=2] [ref=e87]
+              - article [ref=e88]:
+                - figure [ref=e89]:
+                  - link [ref=e90] [cursor=pointer]:
+                    - /url: https://localhost:80/2026/06/10/laudantium-ut-voluptas-adipisci-et-exercitation-etiam-cupidatat-porro-sed-quisquam-veritatis-accusantium-aperiam/
+                    - img [ref=e91]
+                - generic [ref=e92]:
+                  - heading "Laudantium ut voluptas adipisci et exercitation etiam cupidatat porro sed quisquam veritatis accusantium aperiam" [level=3] [ref=e93]:
+                    - link "Laudantium ut voluptas adipisci et exercitation etiam cupidatat porro sed quisquam veritatis accusantium aperiam" [ref=e94] [cursor=pointer]:
+                      - /url: https://localhost:80/2026/06/10/laudantium-ut-voluptas-adipisci-et-exercitation-etiam-cupidatat-porro-sed-quisquam-veritatis-accusantium-aperiam/
+                  - time [ref=e96]: June 10, 2026
+            - article [ref=e99]:
+              - figure [ref=e100]:
+                - link [ref=e101] [cursor=pointer]:
+                  - /url: https://localhost:80/2026/06/10/anim-ut-corporis-explicabo-aut-quasi-aperiam-iure-proident-voluptate/
+                  - img [ref=e102]
+              - generic [ref=e103]:
+                - heading "Anim ut corporis explicabo aut quasi aperiam iure proident voluptate" [level=2] [ref=e104]:
+                  - link "Anim ut corporis explicabo aut quasi aperiam iure proident voluptate" [ref=e105] [cursor=pointer]:
+                    - /url: https://localhost:80/2026/06/10/anim-ut-corporis-explicabo-aut-quasi-aperiam-iure-proident-voluptate/
+                - time [ref=e107]: June 10, 2026
+          - generic [ref=e108]:
+            - generic [ref=e110]:
+              - heading "Longform" [level=2] [ref=e111]
+              - article [ref=e112]:
+                - figure [ref=e113]:
+                  - link [ref=e114] [cursor=pointer]:
+                    - /url: https://localhost:80/2026/06/10/ullamco-proident-fugiat-esse-enim-veniam-id-ipsam-laborum-numquam/
+                    - img [ref=e115]
+                - generic [ref=e116]:
+                  - heading "Ullamco proident fugiat esse enim veniam id ipsam laborum numquam" [level=3] [ref=e117]:
+                    - link "Ullamco proident fugiat esse enim veniam id ipsam laborum numquam" [ref=e118] [cursor=pointer]:
+                      - /url: https://localhost:80/2026/06/10/ullamco-proident-fugiat-esse-enim-veniam-id-ipsam-laborum-numquam/
+                  - time [ref=e120]: June 10, 2026
+            - article [ref=e123]:
+              - figure [ref=e124]:
+                - link [ref=e125] [cursor=pointer]:
+                  - /url: https://localhost:80/2026/06/10/minima-sequi-quasi-anim-laboris-odit-aliqua-velit-eaque/
+                  - img [ref=e126]
+              - generic [ref=e127]:
+                - heading "Minima sequi quasi anim laboris odit aliqua velit eaque" [level=2] [ref=e128]:
+                  - link "Minima sequi quasi anim laboris odit aliqua velit eaque" [ref=e129] [cursor=pointer]:
+                    - /url: https://localhost:80/2026/06/10/minima-sequi-quasi-anim-laboris-odit-aliqua-velit-eaque/
+                - time [ref=e131]: June 10, 2026
+          - generic [ref=e132]:
+            - generic [ref=e134]:
+              - heading "Politics" [level=2] [ref=e135]
+              - article [ref=e136]:
+                - generic [ref=e137]:
+                  - heading "Rem id officia incididunt incididunt consequat ipsum rem eos cupidatat tempora incididunt voluptas ab" [level=3] [ref=e138]:
+                    - link "Rem id officia incididunt incididunt consequat ipsum rem eos cupidatat tempora incididunt voluptas ab" [ref=e139] [cursor=pointer]:
+                      - /url: https://localhost:80/2026/06/10/rem-id-officia-incididunt-incididunt-consequat-ipsum-rem-eos-cupidatat-tempora-incididunt-voluptas-ab/
+                  - time [ref=e141]: June 10, 2026
+            - article [ref=e144]:
+              - generic [ref=e145]:
+                - heading "Illo fugiat voluptas corporis excepteur laboris consectetur voluptate" [level=2] [ref=e146]:
+                  - link "Illo fugiat voluptas corporis excepteur laboris consectetur voluptate" [ref=e147] [cursor=pointer]:
+                    - /url: https://localhost:80/2026/06/10/illo-fugiat-voluptas-corporis-excepteur-laboris-consectetur-voluptate/
+                - time [ref=e149]: June 10, 2026
+    - contentinfo [ref=e150]:
+      - generic [ref=e155]:
+        - generic [ref=e156]:
+          - paragraph [ref=e157]:
+            - link "Newspack Site" [ref=e158] [cursor=pointer]:
+              - /url: http://localhost:80
+          - paragraph [ref=e160]: Our online newspaper delivers the latest news and insightful analysis. Our experienced journalists ensure accurate and impartial reporting. Stay informed with our engaging and informative articles.
+          - list [ref=e161]:
+            - listitem [ref=e162]:
+              - link "Facebook" [ref=e163] [cursor=pointer]:
+                - /url: "#"
+                - img [ref=e164]
+                - generic [ref=e166]: Facebook
+            - listitem [ref=e167]:
+              - link "Instagram" [ref=e168] [cursor=pointer]:
+                - /url: "#"
+                - img [ref=e169]
+                - generic [ref=e171]: Instagram
+            - listitem [ref=e172]:
+              - link "X" [ref=e173] [cursor=pointer]:
+                - /url: "#"
+                - img [ref=e174]
+                - generic [ref=e176]: X
+          - navigation "3" [ref=e177]:
+            - list [ref=e178]:
+              - list [ref=e179]:
+                - listitem [ref=e180]:
+                  - link "Homepage" [ref=e181] [cursor=pointer]:
+                    - /url: http://localhost:80/
+        - generic [ref=e182]:
+          - separator [ref=e183]
+          - generic [ref=e184]:
+            - generic [ref=e185]:
+              - generic [ref=e186]: © 2026
+              - heading "Newspack Site" [level=1] [ref=e187]:
+                - link "Newspack Site" [ref=e188] [cursor=pointer]:
+                  - /url: http://localhost:80
+            - paragraph [ref=e189]:
+              - link "Powered by Newspack" [ref=e190] [cursor=pointer]:
+                - /url: https://newspack.com
+  - dialog [ref=e191]:
+    - button [ref=e193] [cursor=pointer]:
+      - img [ref=e195]
+      - generic [ref=e197]: Close
+    - navigation [ref=e200]:
+      - list [ref=e201]:
+        - list [ref=e202]:
+          - listitem [ref=e203]:
+            - link [ref=e204] [cursor=pointer]:
+              - /url: http://localhost:80/
+              - text: Homepage

@@ -1619,4 +1619,7 @@ class Newspack_Newsletters_Subscription {
 		}
 	}
 }
-Newspack_Newsletters_Subscription::init();
+// Boot only when the main plugin file loaded this, not another plugin's autoloader.
+if ( defined( 'NEWSPACK_NEWSLETTERS_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal path constant, set by the main plugin file.
+	Newspack_Newsletters_Subscription::init();
+}

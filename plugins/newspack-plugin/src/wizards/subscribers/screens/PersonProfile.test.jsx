@@ -2,6 +2,11 @@
  * A profile read fails three ways, and each has to say which one it was: a person
  * who does not exist, a request that errored, and one that came back empty.
  *
+ * When the read succeeds, the cards carry what a gifted subscription needs: who
+ * gave it, a way to open it, and no offer to touch the giver's saved cards. The
+ * refund and payment-link confirmations name the giver, who still pays, rather
+ * than the reader holding the gift.
+ *
  * A reader can also hold subscriptions that other sites of the network manage.
  * Those render as read-only cards, and nothing on them may reach a write flow:
  * the write endpoints resolve a subscription ID against this site's own
@@ -30,25 +35,26 @@ jest.mock( '@wordpress/a11y', () => ( { speak: jest.fn() } ) );
 
 jest.mock( '../../../../packages/components/src/wizard/store', () => ( { WIZARD_STORE_NAMESPACE: 'test/person-profile' } ) );
 
-// The shared Button is real enough to take a ref and name itself from `label`.
-// Card, Grid and SectionHeader render just their content, so the cards and the
-// section headings the profile lays out can be read.
-jest.mock( '../../../../packages/components/src', () => {
-	const { createElement, forwardRef } = require( 'react' );
-	return {
-		Button: forwardRef( ( { children, label, ...props }, ref ) => {
-			// Props a DOM button would warn about.
-			[ 'icon', 'size', 'showTooltip' ].forEach( key => delete props[ key ] );
-			return createElement( 'button', { ...props, 'aria-label': props[ 'aria-label' ] || label, ref }, children );
-		} ),
-		Card: ( { children, __experimentalCoreProps } ) => createElement( 'div', null, __experimentalCoreProps?.header, children ),
-		Divider: () => null,
-		Grid: ( { children } ) => createElement( 'div', null, children ),
-		SectionHeader: ( { title } ) => createElement( 'h2', null, title ),
-		Waiting: () => null,
-		Router: { useParams: () => ( { id: '1' } ), useLocation: () => ( { search: '', pathname: '/subscribers/1' } ) },
-	};
-} );
+// Button is real enough to take a ref and to name the card's "more" toggle. Card
+// and Grid pass their content through so the real SubscriptionCard, with its real
+// "more" menu, renders inside the profile. SectionHeader renders its title as a
+// heading, so the sections the profile lays out can be found.
+jest.mock( '../../../../packages/components/src', () => ( {
+	Button: require( 'react' ).forwardRef( ( { children, label, ...props }, ref ) => {
+		// Component-only props that a DOM button would warn about.
+		[ 'icon', 'size', 'showTooltip', 'isBusy', 'isDestructive' ].forEach( key => delete props[ key ] );
+		return require( 'react' ).createElement( 'button', { ...props, 'aria-label': label || props[ 'aria-label' ], ref }, children );
+	} ),
+	Card: ( { children, __experimentalCoreProps } ) => require( 'react' ).createElement( 'div', null, __experimentalCoreProps?.header, children ),
+	Divider: () => null,
+	Grid: ( { children } ) => require( 'react' ).createElement( 'div', null, children ),
+	// The money flows open in a modal; this one renders inline so its copy is queryable.
+	Modal: ( { title, children } ) => require( 'react' ).createElement( 'div', { role: 'dialog', 'aria-label': title }, children ),
+	Notice: ( { noticeText } ) => require( 'react' ).createElement( 'div', { role: 'alert' }, noticeText ),
+	SectionHeader: ( { title } ) => require( 'react' ).createElement( 'h2', null, title ),
+	Waiting: () => null,
+	Router: { useParams: () => ( { id: '1' } ), useLocation: () => ( { search: '', pathname: '/subscribers/1' } ) },
+} ) );
 
 jest.mock( '../data/use-avatars', () => ( { SHOW_AVATARS: false, useAvatars: () => ( { avatars: {}, loading: false } ) } ) );
 jest.mock( '../use-portals', () => ( { useWizardNode: () => null } ) );
@@ -132,6 +138,281 @@ describe( 'the person profile failure states', () => {
 	} );
 } );
 
+// An active, refundable plan whose data would normally allow a payment-method
+// change: it charges a saved card and the reader holds a second usable one.
+const subscription = overrides => ( {
+	id: 31,
+	plan: 'Weekly digest',
+	status: 'active',
+	startDate: '2026-01-05',
+	lastPayment: '2026-02-05',
+	nextBillingDate: '2026-03-05',
+	amount: 10,
+	currency: 'USD',
+	billingPeriod: 'month',
+	billingInterval: 1,
+	refundableAmount: 10,
+	paymentTokenId: 11,
+	paymentGatewayId: 'stripe',
+	isManual: false,
+	editUrl: '/wp-admin/post.php?post=31&action=edit',
+	giftedBy: null,
+	...overrides,
+} );
+
+const profile = overrides => ( {
+	id: 1,
+	name: 'Rae Reader',
+	email: 'rae@example.com',
+	status: 'active',
+	groups: [],
+	subscriptions: [ subscription() ],
+	paymentMethods: [
+		{ id: 11, gatewayId: 'stripe', isExpired: false, isDefault: true },
+		{ id: 12, gatewayId: 'stripe', isExpired: false, isDefault: false },
+	],
+	...overrides,
+} );
+
+const giver = { id: 7, name: 'Gale Giver', editUrl: '/wp-admin/user-edit.php?user_id=7' };
+
+const renderCards = async data => {
+	apiFetch.mockResolvedValue( data );
+	await renderProfile();
+};
+
+/** Open a card's "more" menu and return its items. */
+const openCardMenu = async name => {
+	await act( async () => {
+		fireEvent.click( screen.getByRole( 'button', { name } ) );
+	} );
+	return screen.queryAllByRole( 'menuitem' );
+};
+
+describe( 'a gifted subscription on the profile', () => {
+	beforeEach( () => {
+		apiFetch.mockReset();
+	} );
+
+	it( 'renders a Gifted by row on the gift only, linking to the giver', async () => {
+		const own = subscription( { id: 32, plan: 'Annual supporter' } );
+		await renderCards( profile( { subscriptions: [ subscription( { giftedBy: giver } ), own ] } ) );
+
+		expect( screen.getByText( 'Annual supporter' ) ).toBeInTheDocument();
+		expect( screen.getAllByText( 'Gifted by' ) ).toHaveLength( 1 );
+		expect( screen.getByRole( 'link', { name: 'Gale Giver' } ) ).toHaveAttribute( 'href', giver.editUrl );
+	} );
+
+	it( 'names the giver without a link when their edit page is unknown', async () => {
+		await renderCards( profile( { subscriptions: [ subscription( { giftedBy: { ...giver, editUrl: '' } } ) ] } ) );
+
+		expect( screen.getByText( 'Gale Giver' ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'link', { name: 'Gale Giver' } ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'never offers to change the payment method, since the saved cards are the giver’s', async () => {
+		await renderCards( profile( { subscriptions: [ subscription( { giftedBy: giver } ) ] } ) );
+
+		const labels = ( await openCardMenu( 'Subscription actions: Weekly digest' ) ).map( item => item.textContent );
+		expect( labels ).toEqual( [ 'View subscription', 'Refund or cancel' ] );
+	} );
+
+	it( 'still offers the change on the same data when the subscription is not a gift', async () => {
+		await renderCards( profile() );
+
+		const labels = ( await openCardMenu( 'Subscription actions: Weekly digest' ) ).map( item => item.textContent );
+		expect( labels ).toEqual( [ 'View subscription', 'Change payment method', 'Refund or cancel' ] );
+	} );
+} );
+
+/** Open a card's "more" menu and choose the item with the given label. */
+const chooseCardAction = async ( card, label ) => {
+	const items = await openCardMenu( `Subscription actions: ${ card }` );
+	await act( async () => {
+		fireEvent.click( items.find( item => item.textContent === label ) );
+	} );
+};
+
+describe( 'the money flows on a gifted subscription', () => {
+	const gift = overrides => subscription( { giftedBy: giver, billingEmail: 'gale-billing@example.com', ...overrides } );
+	const onHold = overrides => gift( { status: 'on-hold', canReactivate: true, canCharge: false, ...overrides } );
+
+	beforeEach( () => {
+		apiFetch.mockReset();
+	} );
+
+	it( 'says the refund goes to the giver, not to the reader holding the gift', async () => {
+		await renderCards( profile( { subscriptions: [ gift() ] } ) );
+		await chooseCardAction( 'Weekly digest', 'Refund or cancel' );
+
+		expect(
+			screen.getByText( /^Gale Giver will be refunded .*\. Rae Reader’s access continues and the gift renews normally\.$/ )
+		).toBeInTheDocument();
+		expect( screen.queryByText( /Rae Reader will be refunded/ ) ).not.toBeInTheDocument();
+
+		await act( async () => {
+			fireEvent.click( screen.getByRole( 'radio', { name: 'Refund and cancel subscription' } ) );
+		} );
+		expect( screen.getByText( /^Gale Giver will be refunded .* and Rae Reader’s access ends immediately\.$/ ) ).toBeInTheDocument();
+	} );
+
+	it( 'names the reader whose gift is already ending when it is set to cancel', async () => {
+		await renderCards( profile( { subscriptions: [ gift( { isPendingCancel: true } ) ] } ) );
+		await chooseCardAction( 'Weekly digest', 'Refund or cancel' );
+
+		expect(
+			screen.getByText( /^Gale Giver will be refunded .*\. Rae Reader’s gift is already ending; a full refund may cancel it immediately\.$/ )
+		).toBeInTheDocument();
+	} );
+
+	it( 'still names the reader where the line is about their access ending', async () => {
+		await renderCards( profile( { subscriptions: [ gift() ] } ) );
+		await chooseCardAction( 'Weekly digest', 'Refund or cancel' );
+
+		await act( async () => {
+			fireEvent.click( screen.getByRole( 'radio', { name: 'Cancel only (no refund)' } ) );
+		} );
+		expect( screen.getByText( 'Rae Reader’s access ends immediately. No refund is issued.' ) ).toBeInTheDocument();
+	} );
+
+	it( 'names the reader as refunded when they paid for the subscription themselves', async () => {
+		await renderCards( profile() );
+		await chooseCardAction( 'Weekly digest', 'Refund or cancel' );
+
+		expect( screen.getByText( /^Rae Reader will be refunded .* Their access continues/ ) ).toBeInTheDocument();
+	} );
+
+	it( "shows the giver's billing email as where the payment link goes, and confirms it", async () => {
+		apiFetch.mockImplementation( ( { method } ) =>
+			Promise.resolve( 'POST' === method ? { emailSent: true } : profile( { subscriptions: [ onHold() ] } ) )
+		);
+		await renderProfile();
+		await chooseCardAction( 'Weekly digest', 'Reactivate' );
+
+		await act( async () => {
+			fireEvent.click( screen.getByRole( 'button', { name: 'Continue' } ) );
+		} );
+		expect( screen.getByText( /A payment link will be emailed to gale-billing@example\.com\./ ) ).toBeInTheDocument();
+		expect( screen.queryByText( /rae@example\.com/ ) ).not.toBeInTheDocument();
+
+		await act( async () => {
+			fireEvent.click( screen.getByRole( 'button', { name: 'Confirm' } ) );
+		} );
+		expect( screen.getByText( 'Payment link sent to gale-billing@example.com.' ) ).toBeInTheDocument();
+	} );
+
+	it( 'names the giver in the manual-return note when the gateway cannot refund on its own', async () => {
+		apiFetch.mockImplementation( ( { method } ) =>
+			Promise.resolve( 'POST' === method ? { refunded: 10, cancelled: false, gatewayRefund: false } : profile( { subscriptions: [ gift() ] } ) )
+		);
+		await renderProfile();
+		await chooseCardAction( 'Weekly digest', 'Refund or cancel' );
+
+		await act( async () => {
+			fireEvent.click( screen.getByRole( 'button', { name: 'Confirm' } ) );
+		} );
+		expect(
+			screen.getByText( /The gateway does not refund automatically, so the payment must be returned to Gale Giver manually\./ )
+		).toBeInTheDocument();
+		expect( screen.queryByText( /returned to the subscriber manually/ ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'names the giver in the help text of the payment-link option', async () => {
+		await renderCards( profile( { subscriptions: [ onHold() ] } ) );
+		await chooseCardAction( 'Weekly digest', 'Reactivate' );
+
+		expect( screen.getByText( 'Email Gale Giver a link to pay. The subscription stays on hold until they pay.' ) ).toBeInTheDocument();
+		expect( screen.queryByText( /Email the subscriber a link to pay/ ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'keeps the subscriber wording in the payment-link option when the subscription is not a gift', async () => {
+		await renderCards( profile( { subscriptions: [ subscription( { status: 'on-hold', canReactivate: true } ) ] } ) );
+		await chooseCardAction( 'Weekly digest', 'Reactivate' );
+
+		expect( screen.getByText( 'Email the subscriber a link to pay. Stays on hold until they pay.' ) ).toBeInTheDocument();
+	} );
+
+	it( 'names the giver when the payment link email could not be sent', async () => {
+		apiFetch.mockImplementation( ( { method } ) =>
+			Promise.resolve(
+				'POST' === method ? { emailSent: false, paymentUrl: 'https://example.test/pay/31' } : profile( { subscriptions: [ onHold() ] } )
+			)
+		);
+		await renderProfile();
+		await chooseCardAction( 'Weekly digest', 'Reactivate' );
+
+		await act( async () => {
+			fireEvent.click( screen.getByRole( 'button', { name: 'Continue' } ) );
+		} );
+		await act( async () => {
+			fireEvent.click( screen.getByRole( 'button', { name: 'Confirm' } ) );
+		} );
+		expect(
+			screen.getByText( 'The email could not be sent. Share this payment link with Gale Giver directly: https://example.test/pay/31' )
+		).toBeInTheDocument();
+	} );
+
+	it( 'names no address when the subscription reports no billing email', async () => {
+		await renderCards( profile( { subscriptions: [ subscription( { status: 'on-hold', canReactivate: true, billingEmail: '' } ) ] } ) );
+		await chooseCardAction( 'Weekly digest', 'Reactivate' );
+
+		await act( async () => {
+			fireEvent.click( screen.getByRole( 'button', { name: 'Continue' } ) );
+		} );
+		expect( screen.getByText( /No billing email is on file, so you'll get a payment link to share instead\./ ) ).toBeInTheDocument();
+		expect( screen.queryByText( /rae@example\.com/ ) ).not.toBeInTheDocument();
+	} );
+} );
+
+describe( 'the View subscription menu item', () => {
+	beforeEach( () => {
+		apiFetch.mockReset();
+	} );
+
+	it( 'leads the card menu as a link to the subscription', async () => {
+		const sub = subscription();
+		await renderCards( profile( { subscriptions: [ sub ] } ) );
+
+		const [ first, ...rest ] = await openCardMenu( 'Subscription actions: Weekly digest' );
+		expect( first ).toHaveTextContent( 'View subscription' );
+		expect( first ).toHaveAttribute( 'href', sub.editUrl );
+		expect( rest[ rest.length - 1 ] ).toHaveTextContent( 'Refund or cancel' );
+	} );
+
+	it( 'is left out when the subscription has no edit screen', async () => {
+		await renderCards( profile( { subscriptions: [ subscription( { editUrl: '' } ) ] } ) );
+
+		const labels = ( await openCardMenu( 'Subscription actions: Weekly digest' ) ).map( item => item.textContent );
+		expect( labels ).not.toContain( 'View subscription' );
+	} );
+
+	it( 'is the one item on a group card that has an editUrl', async () => {
+		const group = {
+			id: 5,
+			plan: 'Team plan',
+			status: 'active',
+			role: 'owner',
+			members: 2,
+			seatLimit: 5,
+			createdAt: '2026-01-01',
+			editUrl: '/wp-admin/post.php?post=5&action=edit',
+		};
+		await renderCards( profile( { groups: [ group ], subscriptions: [] } ) );
+
+		const items = await openCardMenu( 'Subscription actions: Team plan' );
+		expect( items ).toHaveLength( 1 );
+		expect( items[ 0 ] ).toHaveTextContent( 'View subscription' );
+		expect( items[ 0 ] ).toHaveAttribute( 'href', group.editUrl );
+	} );
+
+	it( 'gives a group card without an editUrl no menu at all', async () => {
+		const group = { id: 5, plan: 'Team plan', status: 'active', role: 'owner', members: 2, seatLimit: 5, createdAt: '2026-01-01' };
+		await renderCards( profile( { groups: [ group ], subscriptions: [] } ) );
+
+		expect( screen.queryByRole( 'button', { name: 'Subscription actions: Team plan' } ) ).not.toBeInTheDocument();
+	} );
+} );
+
 const REMOTE_EDIT_URL = 'https://node-b.example.test/wp-admin/post.php?post=500&action=edit';
 
 // A subscription another site of the network manages, as the profile endpoint
@@ -174,18 +455,6 @@ const reader = overrides => ( {
 	...overrides,
 } );
 
-const renderProfileFor = async subscriber => {
-	apiFetch.mockResolvedValue( subscriber );
-	await renderProfile();
-};
-
-const openCardMenu = async planName => {
-	await act( async () => {
-		fireEvent.click( screen.getByRole( 'button', { name: `Subscription actions: ${ planName }` } ) );
-	} );
-	return screen.queryAllByRole( 'menuitem' );
-};
-
 describe( 'a subscription managed on another network site', () => {
 	beforeEach( () => {
 		apiFetch.mockReset();
@@ -193,30 +462,30 @@ describe( 'a subscription managed on another network site', () => {
 	} );
 
 	it( 'badges a reader the network created, in the header', async () => {
-		await renderProfileFor( reader( { isNetworkReader: true, subscriptions: [ networkSubscription ] } ) );
+		await renderCards( reader( { isNetworkReader: true, subscriptions: [ networkSubscription ] } ) );
 
 		const { badges } = setHeaderData.mock.calls.at( -1 )[ 0 ];
 		expect( badges ).toContainEqual( { label: 'Network', intent: 'informational' } );
 	} );
 
 	it( 'leaves the Network badge off a reader the network did not create', async () => {
-		await renderProfileFor( reader( { subscriptions: [ localSubscription ] } ) );
+		await renderCards( reader( { subscriptions: [ localSubscription ] } ) );
 
 		const { badges } = setHeaderData.mock.calls.at( -1 )[ 0 ];
 		expect( badges.map( badge => badge.label ) ).not.toContain( 'Network' );
 	} );
 
 	it( 'links the card title to the subscription on the site that manages it', async () => {
-		await renderProfileFor( reader( { subscriptions: [ networkSubscription ] } ) );
+		await renderCards( reader( { subscriptions: [ networkSubscription ] } ) );
 
 		const title = screen.getByRole( 'button', { name: 'View subscription: Fan Membership (Node Daily)' } );
 		expect( title ).toHaveAttribute( 'href', REMOTE_EDIT_URL );
 	} );
 
 	it( 'offers one menu item, a link to the remote subscription, and no write action', async () => {
-		await renderProfileFor( reader( { subscriptions: [ networkSubscription ] } ) );
+		await renderCards( reader( { subscriptions: [ networkSubscription ] } ) );
 
-		const items = await openCardMenu( 'Fan Membership (Node Daily)' );
+		const items = await openCardMenu( 'Subscription actions: Fan Membership (Node Daily)' );
 
 		expect( items ).toHaveLength( 1 );
 		expect( items[ 0 ] ).toHaveTextContent( 'View subscription' );
@@ -225,7 +494,7 @@ describe( 'a subscription managed on another network site', () => {
 	} );
 
 	it( 'names the site that manages it, linked to the same subscription and named for what it opens', async () => {
-		await renderProfileFor( reader( { subscriptions: [ networkSubscription ] } ) );
+		await renderCards( reader( { subscriptions: [ networkSubscription ] } ) );
 
 		expect( screen.getByText( 'Managed on' ) ).toBeInTheDocument();
 		const siteLink = screen.getByRole( 'link', { name: 'View subscription: Fan Membership (Node Daily)' } );
@@ -234,7 +503,7 @@ describe( 'a subscription managed on another network site', () => {
 	} );
 
 	it( 'shows no billing rows it has no data for', async () => {
-		await renderProfileFor( reader( { subscriptions: [ networkSubscription ] } ) );
+		await renderCards( reader( { subscriptions: [ networkSubscription ] } ) );
 
 		expect( screen.queryByText( 'Billing' ) ).not.toBeInTheDocument();
 		expect( screen.queryByText( 'First subscribed' ) ).not.toBeInTheDocument();
@@ -242,7 +511,7 @@ describe( 'a subscription managed on another network site', () => {
 	} );
 
 	it( 'drops the Payment methods section for a reader with only network subscriptions and no card', async () => {
-		await renderProfileFor( reader( { subscriptions: [ networkSubscription ] } ) );
+		await renderCards( reader( { subscriptions: [ networkSubscription ] } ) );
 
 		// The section headings render, so the absence below is not just a blank mock.
 		expect( screen.getByRole( 'heading', { name: 'Subscriptions' } ) ).toBeInTheDocument();
@@ -252,7 +521,7 @@ describe( 'a subscription managed on another network site', () => {
 	it( 'renders a local and a network subscription with the same number as two cards without a duplicate key', async () => {
 		const consoleError = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
 		try {
-			await renderProfileFor( reader( { subscriptions: [ localSubscription, networkSubscription ] } ) );
+			await renderCards( reader( { subscriptions: [ localSubscription, networkSubscription ] } ) );
 
 			expect( screen.getByRole( 'button', { name: 'View subscription: Fan Membership' } ) ).toBeInTheDocument();
 			expect( screen.getByRole( 'button', { name: 'View subscription: Fan Membership (Node Daily)' } ) ).toBeInTheDocument();
@@ -266,7 +535,7 @@ describe( 'a subscription managed on another network site', () => {
 	it( 'keys cards from two sites apart by site name when neither carries a site URL', async () => {
 		const consoleError = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
 		try {
-			await renderProfileFor(
+			await renderCards(
 				reader( {
 					subscriptions: [
 						{ ...networkSubscription, managedOn: { name: 'Node Daily', url: '' } },
@@ -301,9 +570,9 @@ describe( 'a subscription managed on another network site', () => {
 			{ id: 'pm_1', gatewayId: 'stripe', brand: 'visa', last4: '4242', isDefault: true },
 			{ id: 'pm_2', gatewayId: 'stripe', brand: 'visa', last4: '1881' },
 		];
-		await renderProfileFor( reader( { subscriptions: [ flagged ], paymentMethods } ) );
+		await renderCards( reader( { subscriptions: [ flagged ], paymentMethods } ) );
 
-		const items = await openCardMenu( 'Fan Membership (Node Daily)' );
+		const items = await openCardMenu( 'Subscription actions: Fan Membership (Node Daily)' );
 
 		expect( items.map( item => item.textContent ) ).toEqual( [ 'View subscription' ] );
 		// Only the profile read went out; no write was sent.
@@ -312,7 +581,7 @@ describe( 'a subscription managed on another network site', () => {
 	} );
 
 	it( 'leaves a dead link off the card when the other site gave no subscription URL', async () => {
-		await renderProfileFor( reader( { subscriptions: [ { ...networkSubscription, editUrl: '' } ] } ) );
+		await renderCards( reader( { subscriptions: [ { ...networkSubscription, editUrl: '' } ] } ) );
 
 		expect( screen.queryByRole( 'button', { name: 'Subscription actions: Fan Membership (Node Daily)' } ) ).not.toBeInTheDocument();
 		expect( screen.queryByRole( 'link', { name: 'View subscription: Fan Membership (Node Daily)' } ) ).not.toBeInTheDocument();
@@ -327,16 +596,16 @@ describe( 'a subscription on this site', () => {
 	} );
 
 	it( 'keeps its own actions, and no link out to another site', async () => {
-		await renderProfileFor( reader( { subscriptions: [ localSubscription ] } ) );
+		await renderCards( reader( { subscriptions: [ localSubscription ] } ) );
 
-		const items = await openCardMenu( 'Fan Membership' );
+		const items = await openCardMenu( 'Subscription actions: Fan Membership' );
 
-		expect( items.map( item => item.textContent ) ).toEqual( [ 'Change subscription', 'Refund or cancel' ] );
+		expect( items.map( item => item.textContent ) ).toEqual( [ 'View subscription', 'Change subscription', 'Refund or cancel' ] );
 		expect( screen.queryByText( 'Managed on' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'keeps the Payment methods section', async () => {
-		await renderProfileFor( reader( { subscriptions: [ localSubscription ] } ) );
+		await renderCards( reader( { subscriptions: [ localSubscription ] } ) );
 
 		expect( screen.getByRole( 'heading', { name: 'Payment methods' } ) ).toBeInTheDocument();
 	} );

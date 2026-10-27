@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies.
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _x, sprintf } from '@wordpress/i18n';
 import { addQueryArgs } from '@wordpress/url';
 
 /**
@@ -320,3 +320,39 @@ export const getMeteringDescription = ( siteMeter?: SiteMeterConfig ) => {
 		siteMeter.period === 'week' ? __( 'weekly', 'newspack-plugin' ) : __( 'monthly', 'newspack-plugin' )
 	);
 };
+
+/**
+ * The auto-signup choices for a premium newsletter gate. The first names the site-wide
+ * setting's current value, so a publisher sees what "Default" means without opening
+ * Advanced Settings.
+ *
+ * @param siteAutoSignup Whether the site-wide auto-signup setting is on. Undefined until the
+ *                       wizard data has loaded, when the first choice names no value rather
+ *                       than guess one.
+ */
+export const getAutoSignupOptions = ( siteAutoSignup?: boolean ): Array< { label: string; value: AutoSignupMode } > => {
+	let siteSettingLabel: string = _x( 'Default', 'auto-signup mode that follows the site setting', 'newspack-plugin' );
+	if ( typeof siteAutoSignup === 'boolean' ) {
+		siteSettingLabel = siteAutoSignup
+			? _x( 'Default (on)', 'auto-signup mode that follows the site setting', 'newspack-plugin' )
+			: _x( 'Default (off)', 'auto-signup mode that follows the site setting', 'newspack-plugin' );
+	}
+	return [
+		{ value: 'default', label: siteSettingLabel },
+		{ value: 'on', label: _x( 'On', 'auto-signup mode', 'newspack-plugin' ) },
+		{ value: 'off', label: _x( 'Off', 'auto-signup mode', 'newspack-plugin' ) },
+	];
+};
+
+/**
+ * The header subtitle for a gates screen, shared by the list and the editor so the header keeps its height between them.
+ *
+ * @param isNewsletter Whether the screen manages premium newsletter gates.
+ */
+export const getGatesSubTitle = ( isNewsletter = false ) =>
+	isNewsletter
+		? __(
+				'Choose which newsletter lists to restrict, how readers get access to them, and whether they’re signed up automatically.',
+				'newspack-plugin'
+		  )
+		: __( 'Choose which content to restrict and how readers get access to it.', 'newspack-plugin' );

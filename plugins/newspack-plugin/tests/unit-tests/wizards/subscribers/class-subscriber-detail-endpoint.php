@@ -49,11 +49,19 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 	private $network_callbacks = [];
 
 	/**
+	 * Callbacks hooked to wcs_get_users_subscriptions by create_gifted_subscription().
+	 *
+	 * @var callable[]
+	 */
+	private $gift_filters = [];
+
+	/**
 	 * Include the WC mocks before the class boots.
 	 */
 	public static function set_up_before_class() {
 		parent::set_up_before_class();
 		require_once dirname( __DIR__, 3 ) . '/mocks/wc-mocks.php';
+		require_once dirname( __DIR__, 3 ) . '/mocks/wcs-gifting-mock.php';
 		// The wizard rides the Access Control feature flag; enable it so its routes register.
 		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
 			define( 'NEWSPACK_CONTENT_GATES', true );
@@ -72,6 +80,9 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 		$this->user_ids          = [];
 		$this->original_timezone = null;
 		$this->network_callbacks = [];
+		$this->gift_filters      = [];
+		// The gifting stub's recipient map is static and shared with other test files.
+		\WCS_Gifting::$recipients = [];
 		Group_Subscription::reset_cache();
 		Group_Subscription_Settings::clear_group_subscription_ids_cache();
 		do_action( 'rest_api_init' );
@@ -85,6 +96,11 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 		$subscriptions_database = [];
 		$products_database      = [];
 		$orders_database        = [];
+		foreach ( $this->gift_filters as $gift_filter ) {
+			remove_filter( 'wcs_get_users_subscriptions', $gift_filter, 10 );
+		}
+		$this->gift_filters       = [];
+		\WCS_Gifting::$recipients = [];
 		foreach ( $this->user_ids as $user_id ) {
 			wp_delete_user( $user_id );
 		}
@@ -253,6 +269,33 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 	 */
 	private function create_individual_subscription( int $owner_id, string $status = 'active' ): WC_Subscription {
 		return wcs_create_subscription( array_merge( [ 'customer_id' => $owner_id ], $this->billing_fixture( $status ) ) );
+	}
+
+	/**
+	 * Create an active subscription bought by one reader as a gift for another.
+	 *
+	 * Mirrors WCS Gifting in production: the subscription stays owned by the
+	 * purchaser, and the recipient sees it in wcs_get_users_subscriptions().
+	 *
+	 * @param int $purchaser_id Purchaser user ID.
+	 * @param int $recipient_id Recipient user ID.
+	 *
+	 * @return WC_Subscription
+	 */
+	private function create_gifted_subscription( int $purchaser_id, int $recipient_id ): WC_Subscription {
+		$subscription = $this->create_individual_subscription( $purchaser_id, 'active' );
+		\WCS_Gifting::$recipients[ $subscription->get_id() ] = $recipient_id;
+
+		$gift_filter = function ( $subscriptions, $user_id ) use ( $subscription, $recipient_id ) {
+			if ( (int) $user_id === $recipient_id ) {
+				$subscriptions[ $subscription->get_id() ] = $subscription;
+			}
+			return $subscriptions;
+		};
+		add_filter( 'wcs_get_users_subscriptions', $gift_filter, 10, 2 );
+		$this->gift_filters[] = $gift_filter;
+
+		return $subscription;
 	}
 
 	/**
@@ -571,6 +614,75 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 		foreach ( [ 'amount', 'currency', 'billingPeriod', 'nextBillingDate', 'joinedAt', 'owner', 'seatLimit', 'members' ] as $key ) {
 			$this->assertArrayHasKey( $key, $subscriber['groups'][0], "Detail group entry is missing $key." );
 		}
+	}
+
+	/**
+	 * A gift on the recipient's profile names who bought it, so the admin can tell a
+	 * subscription the reader paid for from one they were given. The reader's own
+	 * subscription alongside it carries no purchaser.
+	 */
+	public function test_gifted_subscription_carries_gifted_by() {
+		$this->login_admin();
+		$purchaser_id = $this->create_reader( 'Gift Buyer' );
+		$recipient_id = $this->create_reader( 'Gift Receiver' );
+		$gift         = $this->create_gifted_subscription( $purchaser_id, $recipient_id );
+		$own          = $this->create_individual_subscription( $recipient_id, 'active' );
+
+		$by_id = array_column( $this->dispatch( $recipient_id )->get_data()['subscriptions'], null, 'id' );
+
+		$this->assertSame(
+			[
+				'id'      => $purchaser_id,
+				'name'    => 'Gift Buyer',
+				'editUrl' => get_edit_user_link( $purchaser_id ),
+			],
+			$by_id[ $gift->get_id() ]['giftedBy']
+		);
+		$this->assertArrayHasKey( 'giftedBy', $by_id[ $own->get_id() ] );
+		$this->assertNull( $by_id[ $own->get_id() ]['giftedBy'], 'A subscription the reader bought has no purchaser to name.' );
+		$this->assertSame( [], $this->dispatch( $purchaser_id )->get_data()['subscriptions'], 'The purchaser\'s profile does not carry the gift.' );
+	}
+
+	/**
+	 * Each subscription reports the billing email its payment link goes to. For a
+	 * gift that is the purchaser's, who still pays, not the recipient's account
+	 * email; the profile's reactivate confirmation shows it so the admin knows who
+	 * gets the email.
+	 */
+	public function test_subscription_carries_the_billing_email_the_payment_link_goes_to() {
+		$this->login_admin();
+		$purchaser_id = $this->create_reader( 'Gift Buyer' );
+		$recipient_id = $this->create_reader( 'Gift Receiver' );
+		$gift         = $this->create_gifted_subscription( $purchaser_id, $recipient_id );
+		$own          = $this->create_individual_subscription( $recipient_id, 'active' );
+
+		$gift->data['billing_email'] = 'gift-buyer-billing@example.com';
+		$own->data['billing_email']  = 'receiver-billing@example.com';
+
+		$by_id = array_column( $this->dispatch( $recipient_id )->get_data()['subscriptions'], null, 'id' );
+
+		$this->assertSame( 'gift-buyer-billing@example.com', $by_id[ $gift->get_id() ]['billingEmail'], 'A gift\'s payment link goes to the purchaser\'s billing email.' );
+		$this->assertSame( 'receiver-billing@example.com', $by_id[ $own->get_id() ]['billingEmail'], 'A subscription the reader bought reports its own billing email.' );
+	}
+
+	/**
+	 * A gift whose purchaser's account is gone has no "Gifted by" to show. WCS
+	 * removes a gift's recipient when it deletes the purchaser, so this guards a
+	 * deletion WCS didn't handle.
+	 */
+	public function test_gifted_by_null_when_purchaser_deleted() {
+		$this->login_admin();
+		$purchaser_id = $this->create_reader( 'Gone Buyer' );
+		$recipient_id = $this->create_reader( 'Gift Receiver' );
+		$gift         = $this->create_gifted_subscription( $purchaser_id, $recipient_id );
+		wp_delete_user( $purchaser_id );
+
+		$response = $this->dispatch( $recipient_id );
+		$this->assertSame( 200, $response->get_status() );
+		$by_id = array_column( $response->get_data()['subscriptions'], null, 'id' );
+
+		$this->assertArrayHasKey( $gift->get_id(), $by_id, 'The gift is still on the recipient\'s profile.' );
+		$this->assertNull( $by_id[ $gift->get_id() ]['giftedBy'] );
 	}
 
 	/**

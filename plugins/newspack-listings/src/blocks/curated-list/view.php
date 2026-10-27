@@ -181,6 +181,16 @@ function render_block( $attributes, $inner_content ) {
 	// Load AMP script if a.) we're in an AMP page, and b.) we have either more pages or a sort UI.
 	$amp_script = Utils\is_amp() && ( $attributes['showSortUi'] || $has_more_pages );
 
+	// The amp-script sandbox runs in a worker with its own `document`, scoped
+	// to this block's own container - it can't see the real page's <head>, so
+	// there's no REST-discovery <link> to read there, and `window.location`
+	// reflects the worker's own origin, which an AMP cache serving this page
+	// replaces with the cache's origin rather than this site's. This site's
+	// real REST root is embedded as a server-rendered element inside the
+	// container instead, trustworthy for the same reason the real data-next
+	// attribute already is.
+	$rest_root_url = $amp_script ? rest_url( '/' ) : null;
+
 	// Begin front-end output.
 	ob_start();
 
@@ -192,6 +202,9 @@ function render_block( $attributes, $inner_content ) {
 		class="<?php echo esc_attr( implode( ' ', $classes ) ); ?>"
 		style="<?php echo esc_attr( implode( ';', $styles ) ); ?>"
 	>
+		<?php if ( $amp_script ) : ?>
+			<span class="newspack-listings__rest-root" data-rest-root="<?php echo esc_url( $rest_root_url ); ?>" style="display:none" aria-hidden="true"></span>
+		<?php endif; ?>
 		<?php echo wp_kses( $inner_content, $allowed_elements ); ?>
 		<?php if ( $attributes['queryMode'] && $has_more_pages ) : ?>
 			<button class="newspack-listings__load-more-button" type="button" data-next="<?php echo esc_url( $next_url ); ?>">

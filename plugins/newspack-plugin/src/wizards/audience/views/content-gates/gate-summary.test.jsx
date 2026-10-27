@@ -96,3 +96,56 @@ describe( 'gate summary metering copy', () => {
 		expect( summarise( gate, 'custom_access' ) ).toContain( '1 free view per week before content is restricted (this gate only)' );
 	} );
 } );
+
+describe( 'gate summary sign-up and visibility', () => {
+	beforeEach( () => {
+		window.newspackAudienceContentGates = { available_access_rules: {} };
+	} );
+
+	const paidGate = () => buildGate( { custom_access: { active: true } } );
+
+	const signUpAndVisibilityText = ( gate, { isNewsletter = true, siteAutoSignup = false } = {} ) => {
+		const { getGateSummarySections } = require( './gate-summary' );
+		const section = getGateSummarySections( gate, isNewsletter, SPLIT_METER, {}, siteAutoSignup ).find(
+			entry => entry.key === 'sign_up_and_visibility'
+		);
+		return section ? render( <>{ section.content }</> ).container.textContent : null;
+	};
+
+	it( 'names the site setting a premium newsletter inherits, and that its lists are hidden', () => {
+		const gate = { ...paidGate(), auto_signup: 'default', hide_lists: true };
+
+		const text = signUpAndVisibilityText( gate, { siteAutoSignup: false } );
+
+		expect( text ).toContain( 'Auto-signup: Default (off)' );
+		expect( text ).toContain( 'Hidden from readers: Yes' );
+	} );
+
+	it( 'names the chosen mode when the gate overrides the site setting', () => {
+		const gate = { ...paidGate(), auto_signup: 'on', hide_lists: false };
+
+		const text = signUpAndVisibilityText( gate, { siteAutoSignup: false } );
+
+		expect( text ).toContain( 'Auto-signup: On' );
+		expect( text ).toContain( 'Hidden from readers: No' );
+	} );
+
+	it( 'treats a gate stored without the settings as using the site setting and showing its lists', () => {
+		const text = signUpAndVisibilityText( paidGate(), { siteAutoSignup: true } );
+
+		expect( text ).toContain( 'Auto-signup: Default (on)' );
+		expect( text ).toContain( 'Hidden from readers: No' );
+	} );
+
+	it( 'shows N/A while paid access is off, as the editor has no sign-up step then', () => {
+		const gate = { ...buildGate(), auto_signup: 'on', hide_lists: true };
+
+		expect( signUpAndVisibilityText( gate ) ).toBe( 'N/A' );
+	} );
+
+	it( 'leaves the section out of a content gate', () => {
+		const gate = { ...paidGate(), auto_signup: 'on', hide_lists: true };
+
+		expect( signUpAndVisibilityText( gate, { isNewsletter: false } ) ).toBeNull();
+	} );
+} );
