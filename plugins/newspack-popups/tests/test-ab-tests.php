@@ -580,10 +580,10 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * Pins a decision rather than this change: the flag gates what reads A/B meta,
-	 * never its registration, so REST writes keep their sanitizers and schema
-	 * checks while the feature is off. A gate added where the class hooks in at
-	 * load would not show here, since the suite runs with the flag on.
+	 * The flag gates what reads A/B meta, never its registration, so REST writes
+	 * keep their sanitizers and schema checks while the feature is off. A gate
+	 * added where the class hooks in at load would not show here, since the suite
+	 * runs with the flag on.
 	 */
 	public function test_flag_off_keeps_meta_registered() {
 		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
@@ -799,12 +799,10 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * Clearing a Test ID through REST leaves an empty string, not a phantom test.
-	 *
-	 * WordPress calls a meta sanitize callback with the meta key as its second
-	 * argument, and sanitize_title() reads a second argument as the fallback title
-	 * for an empty value, so wiring it directly stored the key name as the Test ID
-	 * and every cleared prompt joined a test named after the meta key.
+	 * Clearing a Test ID through REST leaves an empty string, not a phantom test:
+	 * an empty value must never fall back to the meta key's name. WordPress calls
+	 * a meta sanitize callback with the meta key as its second argument, which is
+	 * the fallback a sanitizer built on sanitize_title() would otherwise store.
 	 */
 	public function test_clearing_the_test_id_stores_an_empty_string() {
 		$prompt_id = $this->create_test_variant( 'clear-me', 'a' );
