@@ -226,6 +226,83 @@ class InsertionTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * Where a popup's container starts in the last rendered page. Fails when it is not rendered,
+	 * so an order assertion cannot pass on a missing popup.
+	 *
+	 * @param int $popup_id Popup ID.
+	 * @return int Offset in the rendered markup.
+	 */
+	private static function rendered_position( $popup_id ) {
+		$position = strpos( self::$post_content, 'id="' . Newspack_Popups_Model::canonize_popup_id( $popup_id ) . '"' );
+		self::assertNotFalse( $position, 'Popup ' . $popup_id . ' is rendered.' );
+		return $position;
+	}
+
+	/**
+	 * A manual-only overlay appears only where the Single Prompt block places it,
+	 * and keeps its pop-up behavior there: the lightbox is portaled to the footer,
+	 * ahead of site-wide overlays so it wins the single overlay slot, and the
+	 * scroll trigger's position marker stays in the content.
+	 */
+	public function test_manual_only_overlay() {
+		Newspack_Popups_Model::set_popup_options(
+			self::$popup_id,
+			[
+				'placement'               => 'center',
+				'manual_only'             => true,
+				'trigger_type'            => 'scroll',
+				'trigger_scroll_progress' => 40,
+			]
+		);
+		$site_wide_overlay_id = self::createPopup( 'Site-wide overlay.', [ 'placement' => 'center' ] );
+		$prompt_block         = '<!-- wp:newspack-popups/single-prompt {"promptId":' . self::$popup_id . '} /-->';
+
+		self::renderPost();
+		self::assertStringNotContainsString( self::$popup_content, self::$post_content, 'Not inserted automatically.' );
+		self::assertNotContains(
+			self::$popup_id,
+			array_column( Newspack_Popups_Inserter::popups_for_post(), 'id' ),
+			'Not offered to any automatic insertion path (content, above header, archives).'
+		);
+
+		self::renderPost( '', $prompt_block );
+		$element_id = Newspack_Popups_Model::canonize_popup_id( self::$popup_id );
+		$lightbox   = self::$dom_xpath->query( '//*[@id="' . $element_id . '"]' );
+		self::assertEquals( 1, $lightbox->length, 'Rendered once.' );
+		self::assertStringContainsString( 'newspack-lightbox', $lightbox->item( 0 )->getAttribute( 'class' ), 'Rendered as an overlay.' );
+		self::assertEquals( 0, self::$dom_xpath->query( '//aside//*[@id="' . $element_id . '"]' )->length, 'Portaled to the footer, not rendered in place.' );
+		self::assertLessThan(
+			self::rendered_position( $site_wide_overlay_id ),
+			self::rendered_position( self::$popup_id ),
+			'Printed ahead of the site-wide overlay, which would otherwise take the single overlay slot.'
+		);
+		self::assertEquals(
+			1,
+			self::$dom_xpath->query( '//*[@id="page-position-marker_' . $element_id . '"]' )->length,
+			'Emits the scroll-trigger position marker.'
+		);
+
+		$second_overlay_id = self::createPopup(
+			'Second placed overlay.',
+			[
+				'placement'   => 'center',
+				'manual_only' => true,
+			]
+		);
+		self::renderPost( '', $prompt_block . '<!-- wp:newspack-popups/single-prompt {"promptId":' . $second_overlay_id . '} /-->' );
+		self::assertLessThan(
+			self::rendered_position( $second_overlay_id ),
+			self::rendered_position( self::$popup_id ),
+			'Placed overlays keep their order on the page, so the first one placed takes the slot.'
+		);
+		self::assertLessThan(
+			self::rendered_position( $site_wide_overlay_id ),
+			self::rendered_position( self::$popup_id ),
+			'Still ahead of the site-wide overlay on a later page render.'
+		);
+	}
+
+	/**
 	 * Category criterion.
 	 */
 	public function test_criterion_category() {

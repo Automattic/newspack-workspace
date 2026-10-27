@@ -530,6 +530,20 @@ final class Newspack_Popups {
 
 		\register_meta(
 			'post',
+			// Applies only to overlays. Inline prompts use the "manual" placement instead.
+			'manual_only',
+			[
+				'object_subtype' => self::NEWSPACK_POPUPS_CPT,
+				'show_in_rest'   => true,
+				'type'           => 'boolean',
+				'default'        => false,
+				'single'         => true,
+				'auth_callback'  => '__return_true',
+			]
+		);
+
+		\register_meta(
+			'post',
 			'hide_border',
 			[
 				'object_subtype' => self::NEWSPACK_POPUPS_CPT,
