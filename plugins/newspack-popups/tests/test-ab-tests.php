@@ -659,11 +659,7 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 
 	/**
 	 * The rule refuses the save that creates a violation, not every later edit of
-	 * a prompt already in one. A tested prompt can reach a manual placement past
-	 * the guard (the Campaigns wizard writes placement directly; a save while the
-	 * flag is off is not checked), and the editor sends the whole meta object on
-	 * every save, so without this a frequency edit on such a prompt would fail
-	 * with an error about a field the editor may have disabled for that user.
+	 * a prompt already in one; the guard's own comment says why that matters.
 	 */
 	public function test_a_prompt_already_breaking_the_placement_rule_keeps_taking_other_edits() {
 		$prompt_id = $this->create_test_variant( 'stuck-test', 'a', [ 'placement' => 'inline' ] );
