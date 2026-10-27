@@ -711,6 +711,45 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * Another author's private prompt is listed to administrators and hidden from
+	 * a user without read_private_posts, which is the rule the Prompts list and
+	 * core's REST endpoint already apply. Drafts stay listed to everyone who can
+	 * edit prompts, since a challenger's author needs to see the control.
+	 */
+	public function test_test_prompts_route_hides_other_authors_private_prompts() {
+		$admin_id = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		$this->create_test_variant(
+			'private-test',
+			'a',
+			null,
+			[
+				'post_status' => 'private',
+				'post_author' => $admin_id,
+			]
+		);
+		$this->create_test_variant(
+			'private-test',
+			'b',
+			null,
+			[
+				'post_status' => 'draft',
+				'post_author' => $admin_id,
+			]
+		);
+
+		global $wp_rest_server;
+		$wp_rest_server = new WP_REST_Server(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		do_action( 'rest_api_init' );
+		$request = new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/private-test' );
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'contributor' ] ) );
+		self::assertSame( [ 'draft' ], wp_list_pluck( rest_do_request( $request )->get_data(), 'status' ) );
+
+		wp_set_current_user( $admin_id );
+		self::assertSame( [ 'private', 'draft' ], wp_list_pluck( rest_do_request( $request )->get_data(), 'status' ) );
+	}
+
+	/**
 	 * Clearing a Test ID through REST leaves an empty string, not a phantom test.
 	 *
 	 * WordPress calls a meta sanitize callback with the meta key as its second

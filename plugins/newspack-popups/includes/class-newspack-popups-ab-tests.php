@@ -379,7 +379,10 @@ final class Newspack_Popups_AB_Tests {
 	/**
 	 * The prompts carrying a Test ID, for the editor's list of the other prompts in
 	 * the test. Drafts and pending prompts are included, since an author sets up the
-	 * challenger before publishing it; trashed ones are not.
+	 * challenger before publishing it; trashed ones are not. Private prompts follow
+	 * the Prompts list's rule: another author's are listed only to a user with
+	 * read_private_posts, which is why the statuses are spelled out. WP_Query
+	 * applies 'readable' to an explicit list and ignores it for 'any'.
 	 *
 	 * @param string $test_id Test ID.
 	 * @return array[] Each `[ 'id', 'title', 'variant', 'status', 'edit_link' ]`; `edit_link` is null when the current user can't edit that prompt.
@@ -392,7 +395,8 @@ final class Newspack_Popups_AB_Tests {
 		$prompts = get_posts(
 			[
 				'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
-				'post_status'    => 'any',
+				'post_status'    => [ 'publish', 'future', 'draft', 'pending', 'private' ],
+				'perm'           => 'readable',
 				// Same reasoning as get_tests_config(): a bound would silently drop
 				// prompts from the list.
 				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Prompts CPT; config-scale.
@@ -402,11 +406,8 @@ final class Newspack_Popups_AB_Tests {
 				'meta_value'     => $test_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
 			]
 		);
-		$list    = [];
+		$list = [];
 		foreach ( $prompts as $prompt ) {
-			if ( in_array( $prompt->post_status, [ 'trash', 'auto-draft' ], true ) ) {
-				continue;
-			}
 			$list[] = [
 				'id'        => (int) $prompt->ID,
 				'title'     => $prompt->post_title,
