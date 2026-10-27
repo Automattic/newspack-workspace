@@ -165,21 +165,39 @@ class TrackingDataEventsTest extends WP_UnitTestCase_Blocks {
 	}
 
 	/**
-	 * A renewal order does not dispatch, though it can carry the marker that
-	 * WooCommerce Subscriptions copied from its subscription.
+	 * A transition out of a paid status never dispatches, even on an order
+	 * object that has not seen the flag. A status change nested inside another,
+	 * such as an auto-complete hooked on processing, runs on a second copy of
+	 * the order: that copy moves processing to completed and saves the flag
+	 * while the first copy's pending to processing is still being reported.
 	 */
-	public function test_renewal_order_does_not_dispatch() {
+	public function test_transition_from_a_paid_status_does_not_dispatch() {
+		\Newspack\Data_Events\Utils::$order_data_fixtures = [ 123 => $this->get_order_data_fixture( 123 ) ];
+		$order = $this->get_modal_order( 'completed' );
+
+		$this->assertEmpty( \Newspack_Blocks\Tracking\Data_Events::order_status_changed( 123, 'processing', 'completed', $order ) );
+		$this->assertEmpty( $order->get_meta( \Newspack_Blocks\Tracking\Data_Events::INTERACTION_DISPATCHED_META_KEY ) );
+	}
+
+	/**
+	 * A renewal checked out through the modal, such as an early renewal, is
+	 * reported like any other modal purchase, and the payload's is_renewal
+	 * tells the two apart.
+	 */
+	public function test_modal_renewal_order_dispatches_with_is_renewal() {
 		\Newspack\Data_Events\Utils::$order_data_fixtures = [ 456 => $this->get_order_data_fixture( 456, [ 55 ], true ) ];
 		$order = $this->get_modal_order( 'processing', 456 );
 
-		$this->assertEmpty( \Newspack_Blocks\Tracking\Data_Events::order_status_changed( 456, 'pending', 'processing', $order ) );
-		$this->assertEmpty( $order->get_meta( \Newspack_Blocks\Tracking\Data_Events::INTERACTION_DISPATCHED_META_KEY ) );
+		$data = \Newspack_Blocks\Tracking\Data_Events::order_status_changed( 456, 'pending', 'processing', $order );
+
+		$this->assertIsArray( $data );
+		$this->assertTrue( $data['is_renewal'] );
 	}
 
 	/**
 	 * WooCommerce Subscriptions copies order meta from the parent order to the
 	 * subscription and on to every renewal and resubscribe order. The marker
-	 * and the flag are dropped from those copies, so a later order is never
+	 * and the flag are dropped from those copies, so a scheduled renewal is not
 	 * reported as a modal checkout purchase, and other meta still copies.
 	 */
 	public function test_subscription_copy_drops_marker_and_flag() {

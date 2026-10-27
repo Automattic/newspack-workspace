@@ -1,7 +1,7 @@
 <?php // phpcs:ignore WordPress.Files.FileName.InvalidClassFileName
 /**
- * Test stubs for WooCommerce's WC_Order and WooCommerce Subscriptions'
- * WC_Subscription.
+ * Test stubs for WooCommerce's WC_Order and wc_get_is_paid_statuses(), and
+ * WooCommerce Subscriptions' WC_Subscription.
  *
  * The newspack-blocks test suite runs without WooCommerce loaded, so the real
  * WC_Order class is absent. This stub carries the accessors the modal checkout
@@ -136,14 +136,25 @@ if ( ! class_exists( 'WC_Order' ) ) {
 		}
 
 		/**
-		 * Whether the order has a paid status, using WooCommerce's default
-		 * paid statuses.
+		 * Whether the order has a paid status.
 		 *
 		 * @return bool
 		 */
 		public function is_paid() {
-			return in_array( $this->status, [ 'processing', 'completed' ], true );
+			return in_array( $this->status, wc_get_is_paid_statuses(), true );
 		}
+	}
+}
+
+if ( ! function_exists( 'wc_get_is_paid_statuses' ) ) {
+	/**
+	 * Stub of WooCommerce's wc_get_is_paid_statuses(), with its default paid
+	 * statuses.
+	 *
+	 * @return string[]
+	 */
+	function wc_get_is_paid_statuses() { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Test stub deliberately impersonates WooCommerce's function.
+		return [ 'processing', 'completed' ];
 	}
 }
 

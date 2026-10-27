@@ -110,6 +110,13 @@ final class Data_Events {
 		if ( ! is_a( $order, 'WC_Order' ) || ! $order->is_paid() ) {
 			return;
 		}
+		// An order leaving a paid status was paid already. The flag alone cannot
+		// say so when this status change is nested inside another one: the inner
+		// change runs on a second copy of the order and saves the flag after this
+		// copy read its meta.
+		if ( in_array( $status_from, wc_get_is_paid_statuses(), true ) ) {
+			return;
+		}
 		if ( ! Modal_Checkout::is_modal_checkout_order( $order ) || $order->get_meta( self::INTERACTION_DISPATCHED_META_KEY ) ) {
 			return;
 		}
@@ -128,6 +135,10 @@ final class Data_Events {
 	/**
 	 * Build the modal checkout interaction payload for an order.
 	 *
+	 * A renewal checked out through the modal is reported like any other modal
+	 * purchase, with is_renewal set in the payload. Scheduled renewals are not
+	 * reported: they never carry the marker.
+	 *
 	 * @param \WC_Order $order Order object.
 	 *
 	 * @return array|void The event payload; void suppresses the dispatch.
@@ -135,9 +146,7 @@ final class Data_Events {
 	private static function get_modal_checkout_interaction_data( $order ) {
 		$data = \Newspack\Data_Events\Utils::get_order_data( $order->get_id() );
 
-		// A renewal is not a modal checkout purchase, though WooCommerce
-		// Subscriptions can copy the order marker onto it from its subscription.
-		if ( empty( $data ) || ! empty( $data['is_renewal'] ) ) {
+		if ( empty( $data ) ) {
 			return;
 		}
 
