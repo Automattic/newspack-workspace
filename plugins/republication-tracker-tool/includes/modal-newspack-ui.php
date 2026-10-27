@@ -9,7 +9,7 @@
  * @var bool        $show_format_tabs          Whether to show the HTML and plain text tabs.
  * @var string      $article_info              Article title and byline markup.
  * @var string      $content                   Article content markup.
- * @var string      $content_footer            Footer markup appended to the HTML copy.
+ * @var string      $escaped_footer            Footer appended to the HTML copy, escaped once for the textarea.
  * @var string      $canonical_tag             Canonical tag for the plain text copy.
  * @var string      $plain_text_content        Plain text article content.
  * @var string      $plain_text_tracking_snippet Tracking snippet for the plain text copy.
