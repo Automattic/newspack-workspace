@@ -1179,6 +1179,7 @@ final class Newspack_Popups_Model {
 		$classes[]            = $no_padding ? 'newspack-lightbox-no-padding' : null;
 		$classes[]            = $is_newsletter_prompt ? 'newspack-newsletter-prompt-inline' : null;
 		$classes[]            = self::is_block_theme() ? 'is-layout-constrained' : null;
+		$classes[]            = self::is_block_theme() ? 'newspack-popup--block-theme' : null;
 		$classes              = array_merge( $classes, explode( ' ', $popup['options']['additional_classes'] ) );
 		$assigned_segments    = Newspack_Segments_Model::get_popup_segments_ids_string( $popup['id'] );
 		$frequency_config     = self::get_frequency_config( $popup );
@@ -1335,6 +1336,7 @@ final class Newspack_Popups_Model {
 		$classes[]                      = $no_overlay_background ? 'newspack-lightbox-no-overlay' : null;
 		$classes[]                      = $has_featured_image ? 'newspack-lightbox-featured-image' : null;
 		$classes[]                      = $enable_close_button_background ? 'newspack-lightbox-close-button-background' : null;
+		$classes[]                      = self::is_block_theme() ? 'newspack-popup--block-theme' : null;
 		$classes                        = array_merge( $classes, explode( ' ', $popup['options']['additional_classes'] ) );
 		$wrapper_classes                = [ 'newspack-popup-wrapper' ];
 		$wrapper_classes[]              = 'publish' !== $popup['status'] ? 'newspack-inactive-popup-status' : null;
