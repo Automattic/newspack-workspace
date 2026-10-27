@@ -211,7 +211,7 @@ class Newspack_UI {
 					return str_replace( 'is-info', 'is-warning', $banner[1] ) . $warning_icon . $banner[2];
 				},
 				$html
-			);
+			) ?? $html;
 		} elseif ( 'error' === $type ) {
 			$list_depth  = 0;
 			$error_depth = null;
@@ -235,7 +235,7 @@ class Newspack_UI {
 					return $tag[0];
 				},
 				$html
-			);
+			) ?? $html;
 		} else {
 			$html = preg_replace_callback(
 				'#<div\b[^>]*\bclass="woocommerce-(message|info)"[^>]*>(.*?)</div>#s',
@@ -250,7 +250,7 @@ class Newspack_UI {
 					return $open . $warning_icon . $box[2] . '</div>';
 				},
 				$html
-			);
+			) ?? $html;
 		}
 		echo $html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 	}
