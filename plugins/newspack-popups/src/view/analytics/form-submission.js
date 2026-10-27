@@ -1,20 +1,40 @@
 import { getEventPayload, getRawId, sendEvent } from '../utils';
 
 /**
- * Send a GA event when a form inside a prompt is submitted.
+ * Forms whose submission counts as a prompt interaction: the four blocks the
+ * data API derives a prompt's `action_type` from, found by the same selectors
+ * the content gate uses. Any other form inside a prompt (a search block, a
+ * third-party embed) is left out, so Insights never counts a submission it
+ * cannot attribute to an intent.
+ */
+const FORM_SELECTORS = [
+	'.newspack-registration form',
+	'.wp-block-newspack-blocks-checkout-button form',
+	'.wp-block-newspack-blocks-donate form',
+	'.newspack-newsletters-subscribe form',
+];
+
+/**
+ * Send a GA event when a Newspack form inside a prompt is submitted.
  *
- * The blocks a prompt can hold (Reader Registration, Newsletter Subscribe,
- * Donate, Checkout Button) each handle their own `submit`, and most cancel the
- * native one. The event still reaches every listener on the form, so this one
- * records the attempt without changing what the block does with it. Insights
- * counts it alongside `seen`, `clicked` and `dismissed`, under the prompt's own
- * `action_type`, the same way the content gate reports its form submissions.
+ * The blocks handle their own `submit`; some cancel the native one with
+ * `preventDefault()`, which does not stop sibling listeners, so this one
+ * records the attempt without changing what the block does with it. reCAPTCHA
+ * v2 is the exception: it holds the first submit and re-submits once the
+ * challenge passes, so an abandoned challenge is not counted.
+ *
+ * The event carries the prompt's own `action_type`, not one derived from the
+ * form as the content gate does. Insights groups each row by its own
+ * `action_type`, and a prompt holding more than one watched block prints
+ * `'undefined'`, so a per-form value would file that prompt's submissions under
+ * an intent whose impressions sit in another row. Like the gate, it counts the
+ * attempt rather than the outcome.
  *
  * @param {Array} prompts Array of prompts loaded in the DOM.
  */
 export const manageFormSubmissions = prompts => {
 	prompts.forEach( prompt => {
-		const forms = [ ...prompt.querySelectorAll( '.newspack-popup-container form' ) ];
+		const forms = [ ...prompt.querySelectorAll( FORM_SELECTORS.join( ', ' ) ) ];
 		const handleEvent = () => {
 			const payload = getEventPayload( 'form_submission', getRawId( prompt.getAttribute( 'id' ) ) );
 			sendEvent( payload );
