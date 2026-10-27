@@ -1730,7 +1730,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	 *
 	 * @return bool
 	 */
-	public static function is_public_campaign( $post_id ) {
+	public static function is_public_campaign( int $post_id ): bool {
 		if ( (bool) get_post_meta( $post_id, 'is_public', true ) ) {
 			return true;
 		}
