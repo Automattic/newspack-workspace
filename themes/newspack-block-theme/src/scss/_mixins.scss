@@ -29,9 +29,10 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 	outline-offset: -2px $important;
 }
 
-@mixin focus-line-filled($color: var(--wp--custom--focus--fill), $gap: var(--wp--preset--color--base), $important: null) {
+@mixin focus-line-filled($color: var(--wp--custom--focus--fill), $gap: var(--wp--preset--color--base), $important: null, $inner: null) {
 	box-shadow:
 		inset 0 0 0 1px $gap,
+		$inner,
 		0 0 0 1px $color,
 		0 0 0 calc(1px + var(--wp--custom--focus--halo-width)) color-mix(in srgb, #{$color} var(--wp--custom--focus--halo-mix), transparent) $important;
 	outline: 2px solid transparent $important;
@@ -41,21 +42,35 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
  * Input Styles
  */
 @mixin input {
-	box-sizing: border-box;
 	background-color: var(--wp--preset--color--base);
-	border: 1px solid var(--wp--preset--color--base-4);
+	border: 1px solid var(--wp--preset--color--base-5);
 	border-radius: var(--wp--custom--border--radius-large);
+	box-shadow: none;
+	box-sizing: border-box;
+	color: var(--wp--preset--color--contrast);
 	font-family: var(--wp--preset--font-family--inter);
 	font-size: var(--wp--preset--font-size--small);
 	line-height: var(--wp--custom--line-height--small);
-	padding: calc(var(--wp--custom--spacing--25) - 1px);
+	min-height: var(--wp--custom--spacing--75);
+	padding: calc(var(--wp--custom--spacing--25) - 1px) calc(var(--wp--custom--spacing--25) + 1px);
 	transition:
-		background-color 125ms ease-in-out,
-		border-color 125ms ease-in-out,
-		box-shadow 125ms ease-in-out;
+		background-color 150ms ease,
+		border-color 150ms ease,
+		box-shadow 150ms ease;
+
+	&::placeholder {
+		color: var(--wp--preset--color--contrast-3);
+		opacity: 1;
+	}
 
 	@media (prefers-contrast: more) {
 		border-color: var(--wp--preset--color--contrast-3);
+	}
+
+	@media (hover: hover) and (pointer: fine) {
+		&:hover:where(:not(:disabled, :focus, [aria-invalid="true"])) {
+			border-color: var(--wp--preset--color--contrast-2);
+		}
 	}
 
 	&:focus-visible:where(:not(.newspack-ui *)) {
@@ -63,12 +78,29 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 	}
 
 	&:disabled {
-		background-color: var(--wp--preset--color--base-2);
-		border-color: var(--wp--preset--color--base-4);
+		-webkit-text-fill-color: currentcolor;
+		background-color: color-mix(in oklab, var(--wp--preset--color--contrast) 7%, var(--wp--preset--color--base));
+		border-color: var(--wp--preset--color--base-3);
+		color: var(--wp--preset--color--contrast-3);
+		cursor: not-allowed;
+		opacity: 1;
 
 		@media (prefers-contrast: more) {
-			background-color: var(--wp--preset--color--base-3);
-			border-color: var(--wp--preset--color--contrast-3);
+			background-color: color-mix(in oklab, var(--wp--preset--color--contrast) 19%, var(--wp--preset--color--base));
+			border-color: var(--wp--preset--color--base-5);
+		}
+	}
+
+	&[aria-invalid="true"] {
+		border-color: var(--wp--custom--color--error-50);
+		box-shadow: inset 0 0 0 1px var(--wp--custom--color--error-50);
+
+		&:focus-visible:where(:not(.newspack-ui *)) {
+			border-color: var(--wp--custom--color--error-50);
+			box-shadow:
+				inset 0 0 0 1px var(--wp--custom--color--error-50),
+				0 0 0 1px var(--wp--preset--color--contrast),
+				0 0 0 calc(1px + var(--wp--custom--focus--halo-width)) color-mix(in srgb, var(--wp--preset--color--contrast) var(--wp--custom--focus--halo-mix), transparent);
 		}
 	}
 }
@@ -78,51 +110,59 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
  */
 @mixin checkbox-radio($important: null) {
 	appearance: none;
-	background: white 50% 50% no-repeat;
-	border: 1px solid var(--wp--preset--color--base-4);
+	background-color: var(--wp--preset--color--base);
+	border: 1px solid var(--wp--preset--color--base-5);
 	box-shadow: none;
-	color: white;
+	color: var(--wp--preset--color--base);
 	cursor: pointer;
 	display: inline-grid;
+	flex-shrink: 0;
 	font: inherit;
 	height: var(--wp--custom--spacing--35) !important;
-	margin: 2px 0 0;
+	margin: 0;
 	place-content: center;
 	transition:
-		background 125ms ease-in-out,
-		border-color 125ms ease-in-out,
-		box-shadow 125ms ease-in-out;
+		background-color 150ms ease,
+		border-color 150ms ease,
+		box-shadow 150ms ease;
+	vertical-align: top;
 	width: var(--wp--custom--spacing--35) !important;
 
 	@media (prefers-contrast: more) {
 		border-color: var(--wp--preset--color--contrast-3);
 	}
 
-	&::before {
-		content: "";
-		display: block;
-		opacity: 0;
-	}
-
-	&:checked {
-		background-color: var(--wp--preset--color--contrast);
-
-		&::before {
-			content: "";
-			opacity: 1;
+	@media (hover: hover) and (pointer: fine) {
+		&:hover:where(:not(:checked, :disabled, [aria-invalid="true"])) {
+			border-color: var(--wp--preset--color--contrast);
 		}
 	}
 
-	&:where(:not(.newspack-ui *)) {
+	&[aria-invalid="true"] {
+		border-color: var(--wp--custom--color--error-50);
+		box-shadow: 0 0 0 1px var(--wp--custom--color--error-50);
+	}
+
+	&:disabled {
+		background-color: color-mix(in oklab, var(--wp--preset--color--contrast) 7%, var(--wp--preset--color--base));
+		border-color: var(--wp--preset--color--base-3);
+		border-style: dashed;
+		cursor: not-allowed;
+	}
+
+	&:where(:not(.newspack-ui *, .wp-block-newspack-newsletters-subscribe:not(.is-style-legacy) .newspack-newsletters-lists *)) {
 		&:focus:not(:focus-visible) {
-			box-shadow: none $important;
 			outline: none $important;
 		}
 
 		&:focus-visible {
 			&:not(:checked) {
-				@include focus-line($focus-color, $important);
-				border-color: var(--wp--custom--color--neutral-90) $important;
+				@include focus-edge(var(--wp--preset--color--contrast), $important, $halo: $focus-color);
+			}
+
+			&[aria-invalid="true"]:not(:checked) {
+				@include focus-line-filled($focus-color, var(--wp--custom--color--error-50), $important);
+				border-color: var(--wp--custom--color--error-50) $important;
 			}
 
 			&:checked {
@@ -137,50 +177,137 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 		}
 	}
 
-	&:disabled {
-		cursor: not-allowed;
-		opacity: 0.75;
+	@media (forced-colors: active) {
+		&:checked {
+			background-color: Canvas;
+			forced-color-adjust: none;
+		}
 	}
 }
 
 /*
  * Checkbox Styles
  */
-@mixin checkbox {
+@mixin checkbox($important: null) {
+	$jetpack-tick: ".contact-form .grunion-field-wrap:not(.is-style-plain) .checkbox-multiple, .contact-form .is-style-list :is(.checkbox, .consent)";
+
 	border-radius: var(--wp--custom--border--radius-small);
 
-	&::before {
-		background:
-			transparent
-			url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='24' height='24'%3E%3Cpath d='M16.7 7.1l-6.3 8.5-3.3-2.5-.9 1.2 4.5 3.4L17.9 8z' fill='white'%3E%3C/path%3E%3C/svg%3E")
-			0 0 no-repeat;
-		height: var(--wp--preset--spacing--40);
-		margin: 0;
-		width: var(--wp--preset--spacing--40);
+	&:where(:not(#{$jetpack-tick}))::before {
+		background-color: currentcolor;
+		content: "";
+		display: block;
+		height: var(--wp--custom--spacing--35);
+		mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M16.7 7.1l-6.3 8.5-3.3-2.5-.9 1.2 4.5 3.4L17.9 8z'/%3E%3C/svg%3E") center / contain no-repeat;
+		opacity: 0;
+		transform: scale(0.9);
+		transition:
+			opacity 120ms cubic-bezier(0.23, 1, 0.32, 1),
+			transform 120ms cubic-bezier(0.23, 1, 0.32, 1);
+		width: var(--wp--custom--spacing--35);
+
+		@media (prefers-reduced-motion: reduce) {
+			transform: none;
+		}
 	}
 
 	&:checked {
-		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='24' height='24'%3E%3Cpath d='M16.7 7.1l-6.3 8.5-3.3-2.5-.9 1.2 4.5 3.4L17.9 8z' fill='white'%3E%3C/path%3E%3C/svg%3E");
-		border-color: transparent;
+		background-color: var(--wp--preset--color--contrast);
+		border-color: var(--wp--preset--color--contrast);
+
+		&:where(:not(#{$jetpack-tick}))::before {
+			opacity: 1;
+			transform: scale(1);
+		}
+	}
+
+	&:checked:disabled {
+		background-color: var(--wp--preset--color--contrast-3);
+		border-color: var(--wp--preset--color--contrast-3);
+		border-style: solid;
+	}
+
+	@media (forced-colors: active) {
+		&:checked {
+			background-color: Highlight;
+			border-color: Highlight;
+
+			&:where(:not(#{$jetpack-tick}))::before {
+				background-color: HighlightText;
+			}
+
+			&:focus-visible {
+				box-shadow: none $important;
+			}
+		}
+
+		&:checked:disabled {
+			background-color: GrayText;
+			border-color: GrayText;
+
+			&:where(:not(#{$jetpack-tick}))::before {
+				background-color: Canvas;
+			}
+		}
 	}
 }
 
 /*
  * Radio Styles
  */
-@mixin radio {
+@mixin radio($important: null) {
 	border-radius: 100%;
 
-	&::before {
-		background: var(--newspack-ui-color-neutral-0);
-		border-radius: 100%;
-		height: var(--wp--preset--spacing--20);
-		width: var(--wp--preset--spacing--20);
+	&:checked {
+		border-color: var(--wp--preset--color--contrast);
+		box-shadow: inset 0 0 0 5px var(--wp--preset--color--contrast);
+
+		&[aria-invalid="true"] {
+			box-shadow:
+				inset 0 0 0 5px var(--wp--preset--color--contrast),
+				0 0 0 1px var(--wp--custom--color--error-50);
+		}
+
+		&:focus-visible:where(:not(.newspack-ui *)) {
+			@include focus-line-filled($focus-color, $important: $important, $inner: inset 0 0 0 5px var(--wp--preset--color--contrast));
+		}
 	}
 
-	&:checked {
-		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='24' height='24'%3E%3Ccircle cx='12' cy='12' r='4' fill='white'/%3E%3C/svg%3E");
-		border-color: var(--wp--preset--color--contrast);
+	&:checked:disabled {
+		background-color: var(--wp--preset--color--base);
+		border-color: var(--wp--preset--color--contrast-3);
+		border-style: solid;
+		box-shadow: inset 0 0 0 5px var(--wp--preset--color--contrast-3);
+	}
+
+	@media (forced-colors: active) {
+		&:checked,
+		&:checked:focus-visible {
+			border-color: Highlight;
+			box-shadow: inset 0 0 0 5px Highlight $important;
+		}
+
+		&:checked:disabled {
+			border-color: GrayText;
+			box-shadow: inset 0 0 0 5px GrayText $important;
+		}
+	}
+}
+
+@mixin choice-layout {
+	display: inline-block;
+	margin-bottom: 0;
+	padding-inline-start: calc(var(--wp--custom--spacing--35) + var(--wp--custom--spacing--25));
+
+	> input:first-child {
+		float: inline-start;
+		margin-inline-start: calc(-1 * (var(--wp--custom--spacing--35) + var(--wp--custom--spacing--25)));
+		margin-top: calc((1lh - var(--wp--custom--spacing--35)) / 2);
+	}
+
+	&:has(input:disabled) {
+		color: var(--wp--preset--color--contrast-3);
+		cursor: not-allowed;
 	}
 }
 
