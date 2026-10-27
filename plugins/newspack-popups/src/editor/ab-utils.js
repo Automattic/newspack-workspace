@@ -9,9 +9,10 @@
 import { __, sprintf } from '@wordpress/i18n';
 
 /**
- * Blocks whose presence means a prompt can meet a goal. The lists mirror what the
- * server counts as a conversion for each goal; a goal with no list (link_click)
- * counts any link, so there is nothing to check.
+ * Blocks through which a reader can meet each goal from inside the prompt. The
+ * panel warns when a prompt's chosen goal has none of these, because a reader
+ * who sees that prompt has no way to complete the goal. link_click has no list:
+ * any link or button will do, so there is nothing to check.
  */
 export const GOAL_BLOCKS = {
 	form_submission: [
