@@ -2,10 +2,12 @@ import { getEventPayload, getRawId, sendEvent } from '../utils';
 
 /**
  * Forms whose submission counts as a prompt interaction: the four blocks the
- * data API derives a prompt's `action_type` from, found by the same selectors
- * the content gate uses. Any other form inside a prompt (a search block, a
- * third-party embed) is left out, so Insights never counts a submission it
- * cannot attribute to an intent.
+ * data API derives a prompt's `action_type` from (`$watched_blocks` in
+ * `Newspack_Popups_Data_Api`), found by the selectors the content gate uses
+ * (`addFormInputs()` in newspack-plugin's `content-gate/gate.js`). The three
+ * lists are kept in step by hand, so a change to one belongs in all of them.
+ * A form unrelated to the prompt's own blocks (a search block, a third-party
+ * embed) is never counted, because it is not a conversion of that intent.
  */
 const FORM_SELECTORS = [
 	'.newspack-registration form',
