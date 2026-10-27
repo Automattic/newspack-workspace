@@ -131,6 +131,12 @@ domReady( () => {
 	// and the checkout document only has styles for a processing screen of its own with newspack-ui.
 	const HAS_NEWSPACK_UI = CLASS_PREFIX === 'newspack-ui';
 	let modalTrigger = document.querySelector( '.newspack-reader__account-link' )?.[ 0 ];
+
+	// A sign-in inside the checkout continues to the checkout only after the
+	// reader's data has synced, and the reader can close the waiting shell or
+	// open another checkout meanwhile. Each continuation is one attempt, and
+	// any open or close of the checkout after it started supersedes it.
+	let signInCheckoutAttempt = 0;
 	// Initialize empty iframe.
 	const initialHeight = '600px'; // Fixed initial height to avoid too much layout shift.
 	const iframe = document.createElement( 'iframe' );
@@ -570,11 +576,13 @@ domReady( () => {
 			window.newspackReaderActivation.openAuthModal( {
 				title: newspackBlocksModal.labels.auth_modal_title,
 				onSuccess: ( message, authData ) => {
+					const attempt = ++signInCheckoutAttempt;
 					// The reader was anonymous when this page evaluated their
 					// segments. Let the session hydrate and the snapshot reach the
-					// server before the checkout reads it for pricing. The auth
-					// modal has already closed, so show the checkout shell and its
-					// spinner meanwhile rather than the page the reader came from.
+					// server before the checkout reads it for pricing. On the modal
+					// path the auth modal has already closed, so show the checkout
+					// shell and its spinner meanwhile rather than the page the
+					// reader came from.
 					if ( isModalCheckout ) {
 						openCheckoutShell();
 					}
@@ -584,6 +592,11 @@ domReady( () => {
 							return cartReq;
 						} )
 						.then( url => {
+							// The reader closed the shell, or opened another checkout,
+							// while this one waited: it is theirs to abandon.
+							if ( attempt !== signInCheckoutAttempt ) {
+								return;
+							}
 							// If registered and in a modal checkout, append the registration flag query param to the url.
 							if ( authData?.registered && isModalCheckout ) {
 								url += `&${ newspackBlocksModal.checkout_registration_flag }=1`;
@@ -599,7 +612,9 @@ domReady( () => {
 						} )
 						.catch( error => {
 							console.warn( 'Unable to generate cart:', error ); // eslint-disable-line no-console
-							closeCheckout();
+							if ( attempt === signInCheckoutAttempt ) {
+								closeCheckout();
+							}
 						} );
 				},
 				onError: () => {
@@ -686,6 +701,7 @@ domReady( () => {
 	} );
 
 	const closeCheckout = () => {
+		signInCheckoutAttempt++;
 		setCloseButtonsDisabled( closeButtons, false );
 		const container = iframe?.contentDocument?.querySelector( `#${ IFRAME_CONTAINER_ID }` );
 		const afterSuccessUrlInput = container?.querySelector( 'input[name="after_success_url"]' );
@@ -812,6 +828,7 @@ domReady( () => {
 	};
 
 	const openCheckout = url => {
+		signInCheckoutAttempt++;
 		if ( url ) {
 			iframe.src = url;
 		}
