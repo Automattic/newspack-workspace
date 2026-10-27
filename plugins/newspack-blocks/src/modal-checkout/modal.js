@@ -644,9 +644,10 @@ domReady( () => {
 					// config's onDismiss may already have cleared the intent), and
 					// the dismissal bookkeeping runs once. A dialog that signed the
 					// reader in also drops the pending checkout; one dismissed
-					// before signing in keeps it, so a magic link sent from it can
-					// still resume the checkout. The newsletters step would replace
-					// this callback; `skipNewslettersSignup` below keeps it.
+					// before signing in keeps it, as a dismissal on the modal path
+					// does, for the next sign-in's redirect to carry. The
+					// newsletters step would replace this callback;
+					// `skipNewslettersSignup` below keeps it.
 					if ( isModalCheckout ) {
 						return;
 					}
