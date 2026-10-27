@@ -92,7 +92,7 @@
 
 					@media ( hover: hover ) and ( pointer: fine ) {
 						&:hover:not(:has(input[type="checkbox"]:checked, input[type="checkbox"]:disabled, input[type="checkbox"]:focus-visible)) {
-							border-color: var(--newspack-ui-color-border-hover, #555);
+							border-color: var(--newspack-ui-color-border-hover, #5d5d5d);
 						}
 					}
 
@@ -165,7 +165,7 @@
 			}
 
 			.list-description {
-				color: var(--newspack-ui-color-text-muted, #555);
+				color: var(--newspack-ui-color-text-muted, #5d5d5d);
 				font-size: var(--newspack-ui-font-size-xs, 14px);
 				line-height: var(--newspack-ui-line-height-xs, 1.4286);
 			}
