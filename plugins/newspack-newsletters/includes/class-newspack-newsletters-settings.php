@@ -149,6 +149,16 @@ class Newspack_Newsletters_Settings {
 				'onboarding'  => true,
 			),
 			array(
+				'description'       => esc_html__( 'Include email-only newsletters in the ActiveCampaign campaign archive by default', 'newspack-newsletters' ),
+				'key'               => Newspack_Newsletters_Active_Campaign::PUBLIC_CAMPAIGNS_OPTION,
+				'type'              => 'checkbox',
+				'default'           => false,
+				'provider'          => 'active_campaign',
+				'help'              => esc_html__( 'Makes campaigns for email-only newsletters public in ActiveCampaign, which is required for the campaign archive. Newsletters published on the web are always public. Each newsletter can override this before it is sent; ActiveCampaign does not allow changing it afterwards.', 'newspack-newsletters' ),
+				'sanitize_callback' => 'boolval',
+				'onboarding'        => false,
+			),
+			array(
 				'default'           => 'newsletter',
 				'description'       => esc_html__( 'Public Newsletter Posts Slug', 'newspack-newsletters' ),
 				'key'               => 'newspack_newsletters_public_posts_slug',

@@ -258,6 +258,7 @@ export const Settings = ( {
 						key={ setting.key }
 						label={ props.label }
 						checked={ props.checked }
+						help={ config.settings[ setting.key ]?.help }
 						onChange={ props.onChange }
 						disabled={ props.disabled }
 						__nextHasNoMarginBottom

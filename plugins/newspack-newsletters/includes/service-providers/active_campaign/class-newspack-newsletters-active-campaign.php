@@ -73,6 +73,25 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	const TEST_SEND_REQUEST_TIMEOUT = 15;
 
 	/**
+	 * Option holding the site-wide default for whether new campaigns are
+	 * public, which is what ActiveCampaign requires for a campaign to appear
+	 * in its campaign archive. Off by default, so campaigns stay private
+	 * unless the publisher opts in.
+	 *
+	 * @var string
+	 */
+	const PUBLIC_CAMPAIGNS_OPTION = 'newspack_newsletters_active_campaign_public_campaigns';
+
+	/**
+	 * Post meta holding a newsletter's own choice, overriding
+	 * PUBLIC_CAMPAIGNS_OPTION. ActiveCampaign can't change a campaign's
+	 * visibility once it has been sent, so this only matters before sending.
+	 *
+	 * @var string
+	 */
+	const PUBLIC_CAMPAIGN_META = 'ac_public_campaign';
+
+	/**
 	 * Dispatch states for a stored campaign, returned by
 	 * get_campaign_dispatch_state(): a confirmed fresh draft that is safe to
 	 * (re)send, a campaign that has already been dispatched and must never be
@@ -1700,6 +1719,28 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	}
 
 	/**
+	 * Whether the newsletter's campaign should be public in ActiveCampaign,
+	 * which places it in the ActiveCampaign campaign archive.
+	 *
+	 * A newsletter published on the web ("Email and web") is always public,
+	 * as it was before the archive setting existed. Otherwise the newsletter's
+	 * own choice applies, falling back to the site-wide default.
+	 *
+	 * @param int $post_id Newsletter post ID.
+	 *
+	 * @return bool
+	 */
+	public static function is_public_campaign( $post_id ) {
+		if ( (bool) get_post_meta( $post_id, 'is_public', true ) ) {
+			return true;
+		}
+		if ( metadata_exists( 'post', $post_id, self::PUBLIC_CAMPAIGN_META ) ) {
+			return (bool) get_post_meta( $post_id, self::PUBLIC_CAMPAIGN_META, true );
+		}
+		return (bool) get_option( self::PUBLIC_CAMPAIGNS_OPTION, false );
+	}
+
+	/**
 	 * Create a campaign for the given post.
 	 *
 	 * @param WP_Post $post          Post to create campaign for.
@@ -1772,14 +1813,13 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			}
 		}
 
-		$is_public = get_post_meta( $post->ID, 'is_public', true );
 		if ( empty( $campaign_name ) ) {
 			$campaign_name = $this->get_campaign_name( $post );
 		}
 		$campaign_data = [
 			'type'                                  => 'single',
 			'status'                                => 0, // 0 = Draft; 1 = Scheduled.
-			'public'                                => (int) $is_public,
+			'public'                                => (int) self::is_public_campaign( $post->ID ),
 			'name'                                  => $campaign_name,
 			'fromname'                              => $from_name,
 			'fromemail'                             => $from_email,

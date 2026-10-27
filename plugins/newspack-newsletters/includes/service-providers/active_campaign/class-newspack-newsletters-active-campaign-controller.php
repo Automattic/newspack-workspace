@@ -18,7 +18,7 @@ class Newspack_Newsletters_Active_Campaign_Controller extends Newspack_Newslette
 	 */
 	public function __construct( $active_campaign ) {
 		$this->service_provider = $active_campaign;
-		add_action( 'init', [ __CLASS__, 'register_meta' ] );
+		add_action( 'init', [ __CLASS__, 'register_meta' ], 99 ); // This class is initialized at init priority 10, so the meta must be registered later than that.
 		add_action( 'rest_api_init', [ $this, 'register_routes' ] );
 		parent::__construct( $active_campaign );
 	}
@@ -27,6 +27,24 @@ class Newspack_Newsletters_Active_Campaign_Controller extends Newspack_Newslette
 	 * Register custom fields.
 	 */
 	public static function register_meta() {
+		// The default mirrors the site-wide setting, so a new newsletter
+		// starts from it in the editor until someone changes it.
+		\register_meta(
+			'post',
+			Newspack_Newsletters_Active_Campaign::PUBLIC_CAMPAIGN_META,
+			[
+				'object_subtype' => Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
+				'show_in_rest'   => [
+					'schema' => [
+						'context' => [ 'edit' ],
+					],
+				],
+				'type'           => 'boolean',
+				'single'         => true,
+				'auth_callback'  => '__return_true',
+				'default'        => (bool) get_option( Newspack_Newsletters_Active_Campaign::PUBLIC_CAMPAIGNS_OPTION, false ),
+			]
+		);
 		\register_meta(
 			'post',
 			'ac_list_id',

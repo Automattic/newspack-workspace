@@ -40,6 +40,7 @@ export default function OptionsSection( { title, options, schema, activeProvider
 									key={ field.key }
 									label={ field.label }
 									checked={ !! value }
+									help={ field.help || '' }
 									onChange={ next => onChange( field.key, next ) }
 									disabled={ disabled }
 									__nextHasNoMarginBottom
