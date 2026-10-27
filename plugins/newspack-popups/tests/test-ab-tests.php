@@ -690,6 +690,20 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * The placement rule judges the Test ID the save would store, not the raw
+	 * request string, so a value the sanitizer empties clears the test rather
+	 * than being refused as a new one.
+	 */
+	public function test_the_placement_rule_reads_the_sanitized_test_id() {
+		$prompt_id = $this->create_test_variant( 'stuck-test', 'a', [ 'placement' => 'inline' ] );
+		update_post_meta( $prompt_id, 'placement', 'manual' );
+
+		$response = $this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ Newspack_Popups_AB_Tests::META_TEST_ID => '   ' ] ] );
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		self::assertSame( '', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+	}
+
+	/**
 	 * A Test ID the request sends back unchanged is left out of the write. The
 	 * editor sends the whole meta object on every save and core re-sanitizes a
 	 * submitted value before comparing it with the stored one, so without this a

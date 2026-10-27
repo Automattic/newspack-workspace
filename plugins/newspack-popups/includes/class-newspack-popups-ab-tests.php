@@ -320,6 +320,9 @@ final class Newspack_Popups_AB_Tests {
 		$changes   = function ( $meta_key ) use ( $effective, $stored ) {
 			return $effective( $meta_key ) !== $stored( $meta_key );
 		};
+		// The ID the save would store, so a value the sanitizer empties reads as
+		// clearing the test rather than as a new one.
+		$test_id = self::sanitize_test_id( $effective( self::META_TEST_ID ) );
 		// The rule refuses the save that creates a violation, not every later save
 		// of a prompt already in one. A tested prompt can reach a manual placement
 		// past this guard (the Campaigns wizard writes placement directly, and a
@@ -332,8 +335,8 @@ final class Newspack_Popups_AB_Tests {
 		if (
 			self::is_enabled()
 			&& ! $is_autosave
-			&& ( $changes( self::META_TEST_ID ) || $changes( 'placement' ) )
-			&& '' !== $effective( self::META_TEST_ID )
+			&& ( $test_id !== $stored( self::META_TEST_ID ) || $changes( 'placement' ) )
+			&& '' !== $test_id
 			&& ! self::is_eligible_placement( $effective( 'placement' ) )
 		) {
 			return new WP_Error(
@@ -363,10 +366,10 @@ final class Newspack_Popups_AB_Tests {
 			}
 			// get_post_meta() applies the registered default to an unset key, which
 			// is also what the editor read and is sending back.
-			$stored = $post_id ? get_post_meta( $post_id, $meta_key, true ) : ( $registered[ $meta_key ]['default'] ?? '' );
+			$stored_value = $post_id ? get_post_meta( $post_id, $meta_key, true ) : ( $registered[ $meta_key ]['default'] ?? '' );
 			// A null asks core to delete the key, which resets it to its registered default.
 			$value = $meta[ $meta_key ] ?? ( $registered[ $meta_key ]['default'] ?? '' );
-			if ( ! $is_autosave && ( ! is_scalar( $value ) || (string) $value !== (string) $stored ) ) {
+			if ( ! $is_autosave && ( ! is_scalar( $value ) || (string) $value !== (string) $stored_value ) ) {
 				return new WP_Error(
 					'rest_cannot_update',
 					__( "You don't have permission to change this prompt's A/B test settings. If someone changed its test while you were editing, reload the editor and try again.", 'newspack-popups' ),
