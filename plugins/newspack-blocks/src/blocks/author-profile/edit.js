@@ -805,13 +805,18 @@ const AuthorProfile = ( { attributes, setAttributes, context, clientId } ) => {
 		// The useEffect handles cleanup when component unmounts.
 		window.__newspackAuthorsByBlock[ clientId ] = previewAuthor;
 
+		// Like the front end, pass avatarHideDefault to inner blocks along with the author.
+		// The Site Editor placeholder author stands in for any author, so it keeps its avatar.
+		const isRealAuthor = previewAuthor && previewAuthor.id !== 'placeholder';
+		const authorContextValue = isRealAuthor ? { ...previewAuthor, avatarHideDefault: !! avatarHideDefault } : previewAuthor;
+
 		const nestedBlockProps = {
 			...blockProps,
 			className: `${ blockProps.className } wp-block-newspack-blocks-author-profile is-nested-mode`,
 		};
 
 		return (
-			<AuthorContext.Provider value={ previewAuthor }>
+			<AuthorContext.Provider value={ authorContextValue }>
 				<div { ...nestedBlockProps }>
 					{ inspectorControls }
 					{ blockControls }
