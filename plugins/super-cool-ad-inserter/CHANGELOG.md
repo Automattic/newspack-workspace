@@ -1,3 +1,10 @@
+## super-cool-ad-inserter [0.7.9](https://github.com/Automattic/newspack-workspace/compare/super-cool-ad-inserter@0.7.8...super-cool-ad-inserter@0.7.9) (2026-10-27)
+
+
+### Bug Fixes
+
+* **scaip:** skip ad insertion when the formatted content is empty ([c77eec8](https://github.com/Automattic/newspack-workspace/commit/c77eec84380995f056be271c2e3b5034551897c0))
+
 ## super-cool-ad-inserter [0.7.8](https://github.com/Automattic/newspack-workspace/compare/super-cool-ad-inserter@0.7.7...super-cool-ad-inserter@0.7.8) (2026-10-26)
 
 

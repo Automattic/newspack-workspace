@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Newspack Blocks 1.0.0-alpha.20\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-blocks\n"
-"POT-Creation-Date: 2026-10-26T16:07:44+00:00\n"
+"POT-Creation-Date: 2026-10-26T22:15:17+00:00\n"
 "PO-Revision-Date: 2024-08-30 08:46-0700\n"
 "Last-Translator: \n"
 "Language-Team: \n"
@@ -335,16 +335,16 @@ msgid "Scheduled"
 msgstr ""
 
 #. Translators: %s is the %s is the frequency.
-#: includes/class-newspack-blocks.php:1866 dist/editor.js:52
+#: includes/class-newspack-blocks.php:1909 dist/editor.js:52
 #, php-format
 msgid "per %s"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1897
+#: includes/class-newspack-blocks.php:1940
 msgid " once"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1900
+#: includes/class-newspack-blocks.php:1943
 msgid " per "
 msgstr ""
 
@@ -630,6 +630,12 @@ msgstr "Mengde donasjon"
 #: dist/editor.js:52
 msgid "Other"
 msgstr "Annet"
+
+#. translators: %s: When the post was last updated.
+#: src/blocks/homepage-articles/templates/article.php:247
+#, php-format
+msgid "Updated %s"
+msgstr ""
 
 #: src/blocks/homepage-articles/view.php:415 dist/editor.js:64
 msgid "Load more posts"
