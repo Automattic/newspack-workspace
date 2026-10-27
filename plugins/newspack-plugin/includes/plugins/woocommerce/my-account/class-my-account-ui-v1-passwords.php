@@ -184,34 +184,36 @@ class My_Account_UI_V1_Passwords {
 
 		ob_start();
 		?>
-		<div>
-			<label for="password_1"><?php esc_html_e( 'New password', 'newspack-plugin' ); ?>&nbsp;<span class="required" aria-hidden="true">*</span><span class="screen-reader-text"><?php esc_html_e( 'Required', 'newspack-plugin' ); ?></span></label>
-			<div class="newspack-ui__password-field">
-				<input
-					type="password"
-					class="woocommerce-Input--text input-text"
-					name="password_1"
-					id="password_1"
-					autocomplete="new-password"
-					required
-					aria-required="true"
-				/>
-				<?php Newspack_UI::print_password_toggle(); ?>
+		<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-5">
+			<div>
+				<label for="password_1"><?php esc_html_e( 'New password', 'newspack-plugin' ); ?>&nbsp;<span class="required" aria-hidden="true">*</span><span class="screen-reader-text"><?php esc_html_e( 'Required', 'newspack-plugin' ); ?></span></label>
+				<div class="newspack-ui__password-field">
+					<input
+						type="password"
+						class="woocommerce-Input--text input-text"
+						name="password_1"
+						id="password_1"
+						autocomplete="new-password"
+						required
+						aria-required="true"
+					/>
+					<?php Newspack_UI::print_password_toggle(); ?>
+				</div>
 			</div>
-		</div>
-		<div>
-			<label for="password_2"><?php esc_html_e( 'Re-enter new password', 'newspack-plugin' ); ?>&nbsp;<span class="required" aria-hidden="true">*</span><span class="screen-reader-text"><?php esc_html_e( 'Required', 'newspack-plugin' ); ?></span></label>
-			<div class="newspack-ui__password-field">
-				<input
-					type="password"
-					class="woocommerce-Input--text input-text"
-					name="password_2"
-					id="password_2"
-					autocomplete="new-password"
-					required
-					aria-required="true"
-				/>
-				<?php Newspack_UI::print_password_toggle(); ?>
+			<div>
+				<label for="password_2"><?php esc_html_e( 'Re-enter new password', 'newspack-plugin' ); ?>&nbsp;<span class="required" aria-hidden="true">*</span><span class="screen-reader-text"><?php esc_html_e( 'Required', 'newspack-plugin' ); ?></span></label>
+				<div class="newspack-ui__password-field">
+					<input
+						type="password"
+						class="woocommerce-Input--text input-text"
+						name="password_2"
+						id="password_2"
+						autocomplete="new-password"
+						required
+						aria-required="true"
+					/>
+					<?php Newspack_UI::print_password_toggle(); ?>
+				</div>
 			</div>
 		</div>
 
