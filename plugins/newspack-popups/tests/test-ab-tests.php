@@ -586,4 +586,25 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		$registered = get_registered_meta_keys( 'post', Newspack_Popups::NEWSPACK_POPUPS_CPT );
 		self::assertArrayHasKey( Newspack_Popups_AB_Tests::META_VARIANT, $registered );
 	}
+
+	/**
+	 * The conversion goal is one of four fixed values. A value outside the list
+	 * is refused with a schema error the editor can show, not coerced to "no goal".
+	 */
+	public function test_goal_meta_accepts_only_the_four_goals() {
+		$prompt_id = $this->createPopup();
+		foreach ( Newspack_Popups_AB_Tests::VALID_GOALS as $goal ) {
+			$response = $this->save_prompt_as( $prompt_id, 'editor', [ 'meta' => [ Newspack_Popups_AB_Tests::META_GOAL => $goal ] ] );
+			self::assertSame( 200, $response->get_status(), $goal . ': ' . wp_json_encode( $response->get_data() ) );
+			self::assertSame( $goal, get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_GOAL, true ) );
+		}
+		$response = $this->save_prompt_as( $prompt_id, 'editor', [ 'meta' => [ Newspack_Popups_AB_Tests::META_GOAL => 'any_interaction' ] ] );
+		self::assertSame( 400, $response->get_status(), 'A goal outside the list is a schema error, not a silent reset.' );
+		self::assertSame( 'subscription', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_GOAL, true ) );
+		// The empty string is the "no goal" state and stays writable.
+		$response = $this->save_prompt_as( $prompt_id, 'editor', [ 'meta' => [ Newspack_Popups_AB_Tests::META_GOAL => '' ] ] );
+		self::assertSame( 200, $response->get_status() );
+		self::assertSame( [ 'form_submission', 'link_click', 'donation', 'subscription' ], array_keys( Newspack_Popups_AB_Tests::get_goal_labels() ) );
+		self::assertSame( '', Newspack_Popups_AB_Tests::sanitize_goal( 'Donation' ) );
+	}
 }

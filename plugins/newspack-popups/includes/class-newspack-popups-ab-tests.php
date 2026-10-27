@@ -39,6 +39,8 @@ final class Newspack_Popups_AB_Tests {
 
 	const VALID_VARIANTS = [ 'a', 'b', 'c', 'd' ];
 
+	const VALID_GOALS = [ 'form_submission', 'link_click', 'donation', 'subscription' ];
+
 	const DEFAULT_CONTROL_SHARE = 50;
 
 	/**
@@ -188,7 +190,16 @@ final class Newspack_Popups_AB_Tests {
 				$base,
 				[
 					'type'              => 'string',
-					'sanitize_callback' => 'sanitize_key',
+					'sanitize_callback' => [ __CLASS__, 'sanitize_goal' ],
+					// Same reason as the variant enum: an unknown goal fails the REST
+					// write with a 400 the editor can show, instead of being coerced to
+					// '' (no goal) on a 200. The empty string stays valid.
+					'show_in_rest'      => [
+						'schema' => [
+							'type' => 'string',
+							'enum' => array_merge( [ '' ], self::VALID_GOALS ),
+						],
+					],
 				]
 			)
 		);
@@ -331,6 +342,30 @@ final class Newspack_Popups_AB_Tests {
 	 */
 	public static function sanitize_variant( $value ) {
 		return in_array( $value, self::VALID_VARIANTS, true ) ? $value : '';
+	}
+
+	/**
+	 * Sanitize a conversion goal.
+	 *
+	 * @param string $value Raw value.
+	 * @return string Valid goal key, or empty string.
+	 */
+	public static function sanitize_goal( $value ) {
+		return in_array( $value, self::VALID_GOALS, true ) ? $value : '';
+	}
+
+	/**
+	 * The conversion goals a test can measure, keyed by stored value.
+	 *
+	 * @return array Goal key => label.
+	 */
+	public static function get_goal_labels() {
+		return [
+			'form_submission' => __( 'Form submission', 'newspack-popups' ),
+			'link_click'      => __( 'Link or button click', 'newspack-popups' ),
+			'donation'        => __( 'Donation', 'newspack-popups' ),
+			'subscription'    => __( 'Subscription', 'newspack-popups' ),
+		];
 	}
 
 	/**
