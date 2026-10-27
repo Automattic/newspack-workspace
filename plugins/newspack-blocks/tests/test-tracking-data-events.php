@@ -170,8 +170,8 @@ class TrackingDataEventsTest extends WP_UnitTestCase_Blocks {
 	 * A transition out of a paid status never dispatches, even on an order
 	 * object that has not seen the flag. A status change nested inside another,
 	 * such as an auto-complete hooked on processing, runs on a second copy of
-	 * the order: that copy moves processing to completed and saves the flag
-	 * while the first copy's pending to processing is still being reported.
+	 * the order: that copy moves processing to completed while the first
+	 * copy's move from pending to processing is still under way.
 	 */
 	public function test_transition_from_a_paid_status_does_not_dispatch() {
 		\Newspack\Data_Events\Utils::$order_data_fixtures = [ 123 => $this->get_order_data_fixture( 123 ) ];

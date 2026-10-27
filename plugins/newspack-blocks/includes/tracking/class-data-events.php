@@ -111,10 +111,12 @@ final class Data_Events {
 		if ( ! is_a( $order, 'WC_Order' ) || ! $order->is_paid() ) {
 			return;
 		}
-		// An order leaving a paid status was paid already. The flag alone cannot
-		// say so when this status change is nested inside another one: the inner
-		// change runs on a second copy of the order and saves the flag after this
-		// copy read its meta.
+		// A move between paid statuses is not a new purchase: the move into the
+		// first paid status reports it. The flag cannot stop a second report when
+		// this move is nested inside that first one (an auto-complete hooked on
+		// processing): the nested change runs on a second copy of the order and
+		// reaches this listener before the outer copy has reported or saved the
+		// flag.
 		if ( in_array( $status_from, wc_get_is_paid_statuses(), true ) ) {
 			return;
 		}
