@@ -147,8 +147,7 @@ class ModalHandoutEncodingTest extends WP_UnitTestCase {
 	/**
 	 * A non-breaking space sets the site icon off from the attribution text.
 	 *
-	 * The paste drops the icon's margin along with its style; the space survives it and
-	 * keeps the icon on the same line as the sentence's last word.
+	 * A margin in the icon's `style` would not survive the paste; the space does.
 	 */
 	public function test_site_icon_is_set_off_by_a_non_breaking_space() {
 		$this->assertStringContainsString( '&nbsp;<img src="https://example.test/icon.png"', $this->textarea_value() );
