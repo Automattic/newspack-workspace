@@ -60,6 +60,12 @@ function initReloadHandler() {
 		let reload = false;
 
 		const refreshPage = function ( ev ) {
+			// The modal checkout holds this overlay while its URL trigger waits to
+			// run, with nothing on screen. Its release is not a dismissal, and a
+			// checkout or sign-in the trigger opened holds an overlay of its own.
+			if ( 'modal-checkout-trigger' === ev?.detail?.removed ) {
+				return;
+			}
 			debugLog( 'log', '[Gate] refreshPage called with event:', ev );
 			debugLog( 'log', '[Gate] Event detail:', ev?.detail );
 			debugLog( 'log', '[Gate] Event detail action:', ev?.detail?.action );

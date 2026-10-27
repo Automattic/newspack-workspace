@@ -171,7 +171,10 @@ export function reserveOverlay() {
 	if ( typeof overlays?.add !== 'function' ) {
 		return () => {};
 	}
-	const id = overlays.add();
+	// Named, so the content gate can tell this release from a dismissed modal:
+	// nothing was on screen, and whatever the trigger opened holds its own
+	// overlay. newspack-plugin's gate script reads the same name.
+	const id = overlays.add( 'modal-checkout-trigger' );
 	return () => overlays.remove( id );
 }
 

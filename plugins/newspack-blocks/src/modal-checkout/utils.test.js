@@ -227,6 +227,9 @@ describe( 'reserveOverlay()', () => {
 		window.newspackReaderActivation = { overlays };
 		const release = reserveOverlay();
 		expect( overlays.add ).toHaveBeenCalledTimes( 1 );
+		// The content gate's script ignores this name, so the release is not
+		// read as a dismissed modal.
+		expect( overlays.add ).toHaveBeenCalledWith( 'modal-checkout-trigger' );
 		expect( overlays.remove ).not.toHaveBeenCalled();
 		release();
 		expect( overlays.remove ).toHaveBeenCalledWith( 'reserved' );
