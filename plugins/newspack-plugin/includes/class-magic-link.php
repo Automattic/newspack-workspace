@@ -296,6 +296,9 @@ final class Magic_Link {
 	 * on the last digit of the first group, which email clients support more widely
 	 * than margins or padding on inline elements.
 	 *
+	 * This is what *MAGIC_LINK_OTP* expands to, so the placeholder belongs in an
+	 * email's text, never inside an attribute.
+	 *
 	 * @param string $code OTP code.
 	 *
 	 * @return string The code as HTML.
