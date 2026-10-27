@@ -41,9 +41,19 @@ export function initOTPInput( input ) {
 	const split = Math.ceil( length / 2 );
 	input.style.setProperty( '--newspack-ui-otp-slots', String( length + 1 ) );
 	input.style.setProperty( '--newspack-ui-otp-split', String( split ) );
-	input.placeholder = '0'.repeat( split ) + SPACER + '0'.repeat( length - split );
-	// Markup cached from before the spacer existed caps the field at the code length, which would refuse the last digit.
+	// Markup cached from before this field existed caps it at the code length, which would refuse the last digit, has no
+	// autofill or keypad hints, and is named only by its placeholder.
 	input.removeAttribute( 'maxlength' );
+	if ( ! input.hasAttribute( 'autocomplete' ) ) {
+		input.setAttribute( 'autocomplete', 'one-time-code' );
+	}
+	if ( ! input.hasAttribute( 'inputmode' ) ) {
+		input.setAttribute( 'inputmode', 'numeric' );
+	}
+	if ( ! input.labels?.length && ! input.hasAttribute( 'aria-label' ) && input.placeholder ) {
+		input.setAttribute( 'aria-label', input.placeholder );
+	}
+	input.placeholder = '0'.repeat( split ) + SPACER + '0'.repeat( length - split );
 
 	const format = digits => ( digits.length > split ? digits.slice( 0, split ) + SPACER + digits.slice( split ) : digits );
 
@@ -67,10 +77,24 @@ export function initOTPInput( input ) {
 		markCaretEnd();
 	};
 
-	// Deleting across the spacer removes the digit beyond it, never just the spacer.
+	// A pasted full code replaces what was typed, instead of joining it. Deleting across the spacer removes the digit
+	// beyond it, never just the spacer.
 	input.addEventListener( 'beforeinput', event => {
+		if ( ! event.cancelable ) {
+			return;
+		}
+		if ( 'insertFromPaste' === event.inputType || 'insertReplacementText' === event.inputType ) {
+			const pasted = ( event.dataTransfer?.getData( 'text' ) ?? event.data ?? '' ).replace( /\D/g, '' );
+			if ( pasted.length === length ) {
+				event.preventDefault();
+				input.value = format( pasted );
+				input.setSelectionRange( input.value.length, input.value.length );
+				input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+			}
+			return;
+		}
 		const at = input.selectionStart;
-		if ( ! event.cancelable || at !== input.selectionEnd ) {
+		if ( at !== input.selectionEnd ) {
 			return;
 		}
 		let from = null;

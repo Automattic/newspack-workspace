@@ -83,6 +83,31 @@ describe( 'OTP input', () => {
 		expect( cached.value ).toBe( `482${ SPACER }917` );
 	} );
 
+	it( 'gives markup cached from before the spacer the autofill and keypad hints, and keeps its name', () => {
+		document.body.innerHTML = '<p><label>Code</label><input name="otp_code" type="text" maxlength="6" placeholder="6-digit code" /></p>';
+		const cached = initOTPInput( document.querySelector( 'input' ) );
+		expect( cached.getAttribute( 'autocomplete' ) ).toBe( 'one-time-code' );
+		expect( cached.getAttribute( 'inputmode' ) ).toBe( 'numeric' );
+		expect( cached.getAttribute( 'aria-label' ) ).toBe( '6-digit code' );
+	} );
+
+	it( 'replaces a partly typed code with a pasted full code', () => {
+		type( input, '12' );
+		input.focus();
+		input.setSelectionRange( 2, 2 );
+		const event = new InputEvent( 'beforeinput', { inputType: 'insertFromPaste', data: '482 917', cancelable: true } );
+		input.dispatchEvent( event );
+		expect( event.defaultPrevented ).toBe( true );
+		expect( input.value ).toBe( `482${ SPACER }917` );
+	} );
+
+	it( 'leaves a paste that is not a full code to the browser', () => {
+		type( input, '12' );
+		const event = new InputEvent( 'beforeinput', { inputType: 'insertFromPaste', data: '48', cancelable: true } );
+		input.dispatchEvent( event );
+		expect( event.defaultPrevented ).toBe( false );
+	} );
+
 	it( 'draws its own caret only when the code is complete and the caret is at the end', () => {
 		input.focus();
 		type( input, '48291' );
