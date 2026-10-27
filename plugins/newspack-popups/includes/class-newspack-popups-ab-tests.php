@@ -156,7 +156,7 @@ final class Newspack_Popups_AB_Tests {
 				$base,
 				[
 					'type'              => 'string',
-					'sanitize_callback' => 'sanitize_title',
+					'sanitize_callback' => [ __CLASS__, 'sanitize_test_id' ],
 				]
 			)
 		);
@@ -434,6 +434,20 @@ final class Newspack_Popups_AB_Tests {
 	 */
 	public static function is_eligible_placement( $placement ) {
 		return ! in_array( (string) $placement, self::get_ineligible_placements(), true );
+	}
+
+	/**
+	 * Sanitize a Test ID to a slug.
+	 *
+	 * Not sanitize_title() directly: register_meta() passes the meta key as the
+	 * second argument, which sanitize_title() reads as the fallback title, so an
+	 * empty value would be stored as the key name instead of clearing the test.
+	 *
+	 * @param mixed $value Raw value.
+	 * @return string Slug, or empty string.
+	 */
+	public static function sanitize_test_id( $value ) {
+		return is_scalar( $value ) ? sanitize_title( (string) $value ) : '';
 	}
 
 	/**

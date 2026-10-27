@@ -709,4 +709,36 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'subscriber' ] ) );
 		self::assertSame( 403, rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/lookup-test' ) )->get_status() );
 	}
+
+	/**
+	 * Clearing a Test ID through REST leaves an empty string, not a phantom test.
+	 *
+	 * WordPress calls a meta sanitize callback with the meta key as its second
+	 * argument, and sanitize_title() reads a second argument as the fallback title
+	 * for an empty value, so wiring it directly stored the key name as the Test ID
+	 * and every cleared prompt joined a test named after the meta key.
+	 */
+	public function test_clearing_the_test_id_stores_an_empty_string() {
+		$prompt_id = $this->create_test_variant( 'clear-me', 'a' );
+		update_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_GOAL, 'donation' );
+
+		$response = $this->save_prompt_as(
+			$prompt_id,
+			'administrator',
+			[
+				'meta' => [
+					Newspack_Popups_AB_Tests::META_TEST_ID => '',
+					Newspack_Popups_AB_Tests::META_VARIANT => '',
+					Newspack_Popups_AB_Tests::META_GOAL    => '',
+				],
+			]
+		);
+
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		self::assertSame( '', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+		self::assertSame( '', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_VARIANT, true ) );
+		self::assertSame( '', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_GOAL, true ) );
+		self::assertSame( '', Newspack_Popups_AB_Tests::sanitize_test_id( [ 'x' ] ) );
+		self::assertSame( 'spring-drive-2026', Newspack_Popups_AB_Tests::sanitize_test_id( 'Spring Drive 2026' ) );
+	}
 }
