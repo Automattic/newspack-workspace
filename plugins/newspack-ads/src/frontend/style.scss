@@ -229,5 +229,23 @@
 		justify-content: center;
 		padding: 8px;
 	}
+	// Collapse the painted placement and Ad Unit block wrappers, and hide the
+	// ad label, while the zone is unfilled (same test as above). Not
+	// display: none, so street.js can still fill the zone (NPPM-3096).
+	.newspack_global_ad:has(.newspack-broadstreet-ad):not(:has(broadstreet-zone div *, a, iframe, img, video)) {
+		padding-bottom: 0;
+		padding-top: 0;
+		> .newspack-broadstreet-ad {
+			margin-bottom: 0;
+			margin-top: 0;
+			&::before {
+				display: none;
+			}
+		}
+	}
+	.wp-block-newspack-blocks-wp-block-newspack-ads-blocks-ad-unit:has(.newspack-broadstreet-ad):not(:has(broadstreet-zone div *, a, iframe, img, video)) {
+		padding-bottom: 0;
+		padding-top: 0;
+	}
 	/* stylelint-enable selector-type-no-unknown */
 }
