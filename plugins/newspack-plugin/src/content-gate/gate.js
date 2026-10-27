@@ -60,12 +60,6 @@ function initReloadHandler() {
 		let reload = false;
 
 		const refreshPage = function ( ev ) {
-			// The modal checkout holds this overlay while its URL trigger waits to
-			// run, with nothing on screen. Its release is not a dismissal, and a
-			// checkout or sign-in the trigger opened holds an overlay of its own.
-			if ( 'modal-checkout-trigger' === ev?.detail?.removed ) {
-				return;
-			}
 			debugLog( 'log', '[Gate] refreshPage called with event:', ev );
 			debugLog( 'log', '[Gate] Event detail:', ev?.detail );
 			debugLog( 'log', '[Gate] Event detail action:', ev?.detail?.action );
@@ -78,7 +72,11 @@ function initReloadHandler() {
 			}
 
 			// When closing an overlay, check if the last activity was a checkout, registration, or login.
-			if ( ev?.detail?.overlays && ev.detail.removed ) {
+			// The modal checkout holds a named overlay while its URL trigger waits to
+			// run, with nothing on screen: its release is not a dismissal, and what the
+			// trigger opened holds an overlay of its own. A reload an activity asked
+			// for during that hold still runs below once the hold is gone.
+			if ( ev?.detail?.overlays && ev.detail.removed && 'modal-checkout-trigger' !== ev.detail.removed ) {
 				const activities = window?.newspackReaderActivation?.getActivities();
 				debugLog( 'log', '[Gate] Overlay removed, activities:', activities );
 				const lastActivity = activities?.[ activities.length - 1 ] || {};
