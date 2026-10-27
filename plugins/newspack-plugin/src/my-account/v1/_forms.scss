@@ -23,7 +23,7 @@
 		}
 	}
 	.edit-profile,
-	.lost_reset_password {
+	.woocommerce-MyAccount-content .lost_reset_password:not(.newspack-ui__modal *) {
 		display: grid;
 		gap: var(--newspack-ui-spacer-5);
 
