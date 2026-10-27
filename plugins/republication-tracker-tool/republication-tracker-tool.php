@@ -366,9 +366,10 @@ final class Republication_Tracker_Tool {
 			// A Visual-mode paste into the block editor drops `style` but keeps `width` and
 			// `height`, so those keep the icon small in a republished story. A non-breaking
 			// space gives the gap, since a margin in `style` would be dropped with it. `style`
-			// still sizes the icon wherever it survives.
+			// still sizes the icon wherever it survives. The `alt` is empty because the
+			// sentence already names the site, so screen readers skip the icon.
 			$site_icon_markup = sprintf(
-				'&nbsp;<img src="%1$s" width="16" height="16" style="width:1em;height:1em;">',
+				'&nbsp;<img src="%1$s" alt="" width="16" height="16" style="width:1em;height:1em;">',
 				esc_attr( $site_icon_url )
 			);
 		}

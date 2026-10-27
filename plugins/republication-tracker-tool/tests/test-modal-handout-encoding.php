@@ -154,6 +154,21 @@ class ModalHandoutEncodingTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The site icon is marked decorative, because the attribution beside it already names the site.
+	 *
+	 * An empty `alt` tells screen readers to skip the icon, and `alt` is one of the
+	 * attributes the block editor paste keeps.
+	 */
+	public function test_site_icon_is_marked_decorative() {
+		$processor = new WP_HTML_Tag_Processor( $this->textarea_value() );
+		while ( $processor->next_tag( 'img' ) && 'https://example.test/icon.png' !== $processor->get_attribute( 'src' ) ) {
+			continue;
+		}
+		$this->assertSame( 'https://example.test/icon.png', $processor->get_attribute( 'src' ), 'The site icon is missing.' );
+		$this->assertSame( '', $processor->get_attribute( 'alt' ), 'The site icon has no empty alt.' );
+	}
+
+	/**
 	 * A literal closing textarea tag in tracking code stays inside the textarea.
 	 */
 	public function test_footer_cannot_close_the_textarea() {
