@@ -276,6 +276,11 @@ class InsertionTest extends WP_UnitTestCase_PageWithPopups {
 			self::rendered_position( self::$popup_id ),
 			'Printed ahead of the site-wide overlay, which would otherwise take the single overlay slot.'
 		);
+		self::assertEquals(
+			1,
+			self::$dom_xpath->query( '//*[@id="page-position-marker_' . $element_id . '"]' )->length,
+			'Emits the scroll-trigger position marker.'
+		);
 
 		$second_overlay_id = self::createPopup(
 			'Second placed overlay.',
@@ -290,10 +295,10 @@ class InsertionTest extends WP_UnitTestCase_PageWithPopups {
 			self::rendered_position( self::$popup_id ),
 			'Placed overlays keep their order on the page, so the first one placed takes the slot.'
 		);
-		self::assertEquals(
-			1,
-			self::$dom_xpath->query( '//*[@id="page-position-marker_' . $element_id . '"]' )->length,
-			'Emits the scroll-trigger position marker.'
+		self::assertLessThan(
+			self::rendered_position( $site_wide_overlay_id ),
+			self::rendered_position( self::$popup_id ),
+			'Still ahead of the site-wide overlay on a later page render.'
 		);
 	}
 
