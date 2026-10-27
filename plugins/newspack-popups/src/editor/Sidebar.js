@@ -38,6 +38,16 @@ const Sidebar = props => {
 	const updatePlacement = value => {
 		onMetaFieldChange( { placement: value } );
 	};
+	// A prompt placed by hand stays placed by hand when its type changes, so it never starts appearing site-wide.
+	const updatePromptType = value => {
+		if ( 'center' === value && 'manual' === placement ) {
+			onMetaFieldChange( { placement: value, manual_only: true } );
+		} else if ( 'inline' === value && isOverlay && manual_only ) {
+			onMetaFieldChange( { placement: 'manual' } );
+		} else {
+			updatePlacement( value );
+		}
+	};
 	const updatePlacementWhenPopupIsFullWidth = () => {
 		switch ( placement ) {
 			case 'top_left':
@@ -76,7 +86,7 @@ const Sidebar = props => {
 					{ label: __( 'Inline', 'newspack-popups' ), value: 'inline' },
 					{ label: __( 'Overlay', 'newspack-popups' ), value: 'center' },
 				] }
-				onChange={ updatePlacement }
+				onChange={ updatePromptType }
 			/>
 			{ isOverlay ? (
 				<>

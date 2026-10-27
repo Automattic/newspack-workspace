@@ -239,11 +239,10 @@ class BlocksTest extends WP_UnitTestCase {
 				'manual_only' => true,
 			]
 		);
-		$manual_only_overlay_block_content = Newspack_Popups\Prompt_Block\render_block( [ 'promptId' => $manual_only_overlay_id ] );
+		Newspack_Popups\Prompt_Block\render_block( [ 'promptId' => $manual_only_overlay_id ] );
 		ob_start();
 		Newspack_Popups_Inserter::print_queued_overlays();
 		$footer_output = ob_get_clean();
-		self::assertStringNotContainsString( 'newspack-lightbox', $manual_only_overlay_block_content, 'Overlay markup is not rendered in place.' );
 		self::assertStringContainsString( Newspack_Popups_Model::canonize_popup_id( $manual_only_overlay_id ), $footer_output, 'Overlay markup is printed in the footer.' );
 
 		$inline_block_content = Newspack_Popups\Prompt_Block\render_block(

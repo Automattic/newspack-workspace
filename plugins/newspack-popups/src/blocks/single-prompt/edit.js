@@ -100,7 +100,7 @@ export const SinglePromptEditor = ( { attributes, setAttributes } ) => {
 							label={ __( 'Search for an inline or manual-only prompt:', 'newspack' ) }
 							help={ __(
 								'Begin typing prompt title, click autocomplete result to select. Overlays appear here when set to "Manual only".',
-								'newspack'
+								'newspack-popups'
 							) }
 							fetchSavedPosts={ async postIDs => {
 								const posts = await apiFetch( {

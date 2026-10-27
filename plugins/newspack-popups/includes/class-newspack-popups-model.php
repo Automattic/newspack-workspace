@@ -212,7 +212,7 @@ final class Newspack_Popups_Model {
 					update_post_meta( $id, $key, $value );
 					break;
 				case 'manual_only':
-					update_post_meta( $id, $key, (bool) $value );
+					update_post_meta( $id, $key, wp_validate_boolean( $value ) );
 					break;
 				case 'post_types':
 				case 'archive_page_types':

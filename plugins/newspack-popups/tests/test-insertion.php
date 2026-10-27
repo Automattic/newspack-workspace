@@ -227,8 +227,9 @@ class InsertionTest extends WP_UnitTestCase_PageWithPopups {
 
 	/**
 	 * A manual-only overlay appears only where the Single Prompt block places it,
-	 * and keeps its pop-up behavior there: the lightbox is portaled to the footer
-	 * and the scroll trigger's position marker stays in the content.
+	 * and keeps its pop-up behavior there: the lightbox is portaled to the footer,
+	 * ahead of site-wide overlays so it wins the single overlay slot, and the
+	 * scroll trigger's position marker stays in the content.
 	 */
 	public function test_manual_only_overlay() {
 		Newspack_Popups_Model::set_popup_options(
@@ -240,7 +241,8 @@ class InsertionTest extends WP_UnitTestCase_PageWithPopups {
 				'trigger_scroll_progress' => 40,
 			]
 		);
-		$prompt_block = '<!-- wp:newspack-popups/single-prompt {"promptId":' . self::$popup_id . '} /-->';
+		$site_wide_overlay_id = self::createPopup( 'Site-wide overlay.', [ 'placement' => 'center' ] );
+		$prompt_block         = '<!-- wp:newspack-popups/single-prompt {"promptId":' . self::$popup_id . '} /-->';
 
 		self::renderPost();
 		self::assertStringNotContainsString( self::$popup_content, self::$post_content, 'Not inserted automatically.' );
@@ -255,6 +257,12 @@ class InsertionTest extends WP_UnitTestCase_PageWithPopups {
 		$lightbox   = self::$dom_xpath->query( '//*[@id="' . $element_id . '"]' );
 		self::assertEquals( 1, $lightbox->length, 'Rendered once.' );
 		self::assertStringContainsString( 'newspack-lightbox', $lightbox->item( 0 )->getAttribute( 'class' ), 'Rendered as an overlay.' );
+		self::assertEquals( 0, self::$dom_xpath->query( '//aside//*[@id="' . $element_id . '"]' )->length, 'Portaled to the footer, not rendered in place.' );
+		self::assertLessThan(
+			strpos( self::$post_content, 'id="' . Newspack_Popups_Model::canonize_popup_id( $site_wide_overlay_id ) . '"' ),
+			strpos( self::$post_content, 'id="' . $element_id . '"' ),
+			'Printed ahead of the site-wide overlay, which would otherwise take the single overlay slot.'
+		);
 		self::assertEquals(
 			1,
 			self::$dom_xpath->query( '//*[@id="page-position-marker_' . $element_id . '"]' )->length,

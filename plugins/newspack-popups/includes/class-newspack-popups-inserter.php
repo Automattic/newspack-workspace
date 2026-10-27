@@ -624,16 +624,22 @@ final class Newspack_Popups_Inserter {
 	 * multiple injection points (singular content + above-header, archive
 	 * header, etc.) only renders once. Insertion order is preserved – callers
 	 * that care about specificity (the most-specific overlay winning the
-	 * single visible slot) must queue most-specific first.
+	 * single visible slot) must queue most-specific first, or pass $first.
 	 *
 	 * @param array<string, mixed> $popup Popup data as returned by Newspack_Popups_Model.
+	 * @param bool                 $first Queue ahead of every overlay already queued.
 	 */
-	private static function queue_overlay( array $popup ): void {
+	private static function queue_overlay( array $popup, bool $first = false ): void {
 		if ( empty( $popup['id'] ) ) {
 			return;
 		}
 		$id = $popup['id'];
-		if ( ! isset( self::$queued_overlays[ $id ] ) ) {
+		if ( isset( self::$queued_overlays[ $id ] ) ) {
+			return;
+		}
+		if ( $first ) {
+			self::$queued_overlays = [ $id => $popup ] + self::$queued_overlays;
+		} else {
 			self::$queued_overlays[ $id ] = $popup;
 		}
 	}
@@ -1238,9 +1244,11 @@ final class Newspack_Popups_Inserter {
 		}
 
 		// A manual-only overlay keeps its pop-up behavior: the lightbox is printed in the footer like
-		// any other overlay, and only the scroll trigger's position marker stays where the block is.
+		// any other overlay, and the scroll trigger's position marker goes into the content, where it
+		// measures progress through the article rather than marking this spot. The overlay was placed
+		// on this page by hand, so it goes ahead of site-wide overlays for the single overlay slot.
 		if ( Newspack_Popups_Model::is_overlay( $found_popup ) ) {
-			self::queue_overlay( $found_popup );
+			self::queue_overlay( $found_popup, true );
 			return self::emit_position_marker_inline( $found_popup );
 		}
 
