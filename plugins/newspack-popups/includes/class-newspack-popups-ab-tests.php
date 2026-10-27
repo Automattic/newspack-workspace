@@ -312,7 +312,10 @@ final class Newspack_Popups_AB_Tests {
 			$value = array_key_exists( $meta_key, $meta ) ? $meta[ $meta_key ] : ( $post_id ? get_post_meta( $post_id, $meta_key, true ) : '' );
 			return is_scalar( $value ) ? (string) $value : '';
 		};
-		if ( ! $is_autosave && '' !== $effective( self::META_TEST_ID ) && ! self::is_eligible_placement( $effective( 'placement' ) ) ) {
+		// Only while the flag is on: with it off a stored test has no effect, and
+		// the panel that could clear the Test ID is not registered, so refusing
+		// here would leave a tested prompt on a manual placement unsaveable.
+		if ( self::is_enabled() && ! $is_autosave && '' !== $effective( self::META_TEST_ID ) && ! self::is_eligible_placement( $effective( 'placement' ) ) ) {
 			return new WP_Error(
 				'newspack_popups_ab_ineligible_placement',
 				__( "Prompts with a manual or custom placement can't be part of an A/B test. Clear the Test ID or change the placement.", 'newspack-popups' ),

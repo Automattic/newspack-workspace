@@ -741,4 +741,22 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		self::assertSame( '', Newspack_Popups_AB_Tests::sanitize_test_id( [ 'x' ] ) );
 		self::assertSame( 'spring-drive-2026', Newspack_Popups_AB_Tests::sanitize_test_id( 'Spring Drive 2026' ) );
 	}
+
+	/**
+	 * With the flag off, stored tests have no effect, the placement rule included.
+	 *
+	 * A site that ran tests and turned the flag off may still hold a tested prompt
+	 * on a manual placement, and the panel that clears the Test ID is gone with
+	 * the flag, so a refusal here would leave that prompt unsaveable.
+	 */
+	public function test_placement_rule_is_off_with_the_flag() {
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
+		$prompt_id = $this->create_test_variant( 'flag-off-move', 'a', [ 'placement' => 'inline' ] );
+
+		$response = $this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ 'placement' => 'manual' ] ] );
+
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		self::assertSame( 'manual', get_post_meta( $prompt_id, 'placement', true ) );
+		self::assertSame( 'flag-off-move', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+	}
 }
