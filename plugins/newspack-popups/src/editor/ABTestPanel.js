@@ -191,12 +191,12 @@ const ABTestPanel = ( {
 							<ul aria-labelledby="newspack-popups-ab-test-others">
 								{ others.map( prompt => {
 									const label = sprintf(
-										// Translators: %1$s is the prompt title, %2$s its variant, %3$s its post status.
+										// Translators: %1$s is the prompt title, %2$s its variant, %3$s its post status label.
 										__( '%1$s — %2$s (%3$s)', 'newspack-popups' ),
 										prompt.title,
 										variants[ prompt.variant ] ||
 											( prompt.variant ? String( prompt.variant ).toUpperCase() : __( 'no variant', 'newspack-popups' ) ),
-										prompt.status
+										prompt.status_label || prompt.status
 									);
 									return (
 										<li key={ prompt.id }>

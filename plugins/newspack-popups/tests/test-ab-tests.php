@@ -778,7 +778,10 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		self::assertSame( [ 'draft' ], wp_list_pluck( rest_do_request( $request )->get_data(), 'status' ) );
 
 		wp_set_current_user( $admin_id );
-		self::assertSame( [ 'private', 'draft' ], wp_list_pluck( rest_do_request( $request )->get_data(), 'status' ) );
+		$prompts = rest_do_request( $request )->get_data();
+		self::assertSame( [ 'private', 'draft' ], wp_list_pluck( $prompts, 'status' ) );
+		// The panel shows the label, not the slug.
+		self::assertSame( [ 'Private', 'Draft' ], wp_list_pluck( $prompts, 'status_label' ) );
 	}
 
 	/**

@@ -405,7 +405,7 @@ final class Newspack_Popups_AB_Tests {
 	 * applies 'readable' to an explicit list and ignores it for 'any'.
 	 *
 	 * @param string $test_id Test ID.
-	 * @return array[] Each `[ 'id', 'title', 'variant', 'status', 'edit_link' ]`; `edit_link` is null when the current user can't edit that prompt.
+	 * @return array[] Each `[ 'id', 'title', 'variant', 'status', 'status_label', 'edit_link' ]`; `edit_link` is null when the current user can't edit that prompt.
 	 */
 	public static function get_test_prompts( $test_id ) {
 		$test_id = self::sanitize_test_id( $test_id );
@@ -428,12 +428,14 @@ final class Newspack_Popups_AB_Tests {
 		);
 		$list = [];
 		foreach ( $prompts as $prompt ) {
+			$status = get_post_status_object( $prompt->post_status );
 			$list[] = [
-				'id'        => (int) $prompt->ID,
-				'title'     => $prompt->post_title,
-				'variant'   => (string) get_post_meta( $prompt->ID, self::META_VARIANT, true ),
-				'status'    => $prompt->post_status,
-				'edit_link' => get_edit_post_link( $prompt->ID, 'raw' ),
+				'id'           => (int) $prompt->ID,
+				'title'        => $prompt->post_title,
+				'variant'      => (string) get_post_meta( $prompt->ID, self::META_VARIANT, true ),
+				'status'       => $prompt->post_status,
+				'status_label' => $status ? $status->label : $prompt->post_status,
+				'edit_link'    => get_edit_post_link( $prompt->ID, 'raw' ),
 			];
 		}
 		return $list;
