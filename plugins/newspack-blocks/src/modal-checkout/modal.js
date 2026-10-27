@@ -539,6 +539,7 @@ domReady( () => {
 				} )
 				.catch( error => {
 					console.warn( 'Unable to generate cart:', error ); // eslint-disable-line no-console
+					releaseHeldOverlays();
 					form.classList.remove( 'modal-processing' );
 					form.querySelectorAll( '.non-modal-checkout-loading' ).forEach( button => {
 						button.classList.remove( 'non-modal-checkout-loading' );
@@ -632,10 +633,19 @@ domReady( () => {
 				},
 				onClose: () => {
 					// On the redirect path the dialog stays open through the
-					// post-sign-in wait, so closing it then abandons the checkout.
-					// On the modal path it closes before onSuccess starts the
-					// attempt, so this bump supersedes nothing.
+					// post-sign-in wait, so closing it then abandons the checkout,
+					// with the bookkeeping closeCheckout() does for the modal path.
+					// On the modal path the dialog closes before onSuccess starts
+					// the attempt, and a dialog opened over this one closes later
+					// still, so nothing here may touch the attempt.
+					if ( isModalCheckout || ! inCheckoutIntent ) {
+						return;
+					}
 					signInCheckoutAttempt++;
+					window.newspackReaderActivation?.setPendingCheckout?.();
+					manageDismissed( checkoutData );
+					inCheckoutIntent = false;
+					document.getElementById( 'newspack_modal_checkout' ).removeAttribute( 'data-checkout' );
 				},
 				skipSuccess: true,
 				skipNewslettersSignup: true,
