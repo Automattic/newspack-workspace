@@ -7,7 +7,7 @@
  * Author URI:      https://newspack.com
  * Text Domain:     newspack-popups
  * Domain Path:     /languages
- * Version:         3.20.3
+ * Version:         3.20.4
  * Requires PHP:    8.1
  *
  * @package         Newspack_Popups
