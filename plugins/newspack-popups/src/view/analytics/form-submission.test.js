@@ -23,9 +23,7 @@ const prompts = () => [ ...document.querySelectorAll( '.newspack-popup-container
 describe( 'prompt form submissions', () => {
 	beforeEach( () => {
 		global.gtag = jest.fn();
-		global.newspackPopupsData = {
-			7: { newspack_popup_id: 7, prompt_title: 'Join us', action_type: 'registration' },
-		};
+		global.newspackPopupsData = { 7: { newspack_popup_id: 7, prompt_title: 'Join us' } };
 	} );
 
 	it.each( Object.entries( BLOCK_WRAPPERS ) )(
@@ -38,7 +36,8 @@ describe( 'prompt form submissions', () => {
 				`${ blockForm( wrapper ) }<form class="wp-block-search"><input name="s" /></form>`
 			) }`;
 			const form = document.querySelector( `#id_7 .${ wrapper } form` );
-			// The blocks submit over fetch or into the checkout modal and cancel the native submit.
+			// Registration and Newsletter Subscribe cancel the native submit to post
+			// over fetch; a cancelled submit still has to count, so every row plays it.
 			form.addEventListener( 'submit', ev => ev.preventDefault() );
 
 			manageFormSubmissions( prompts() );
