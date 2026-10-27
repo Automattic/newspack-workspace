@@ -58,6 +58,7 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 			wp_delete_user( $user_id );
 		}
 		$this->user_ids = [];
+		remove_role( 'test_custom_reader' );
 		parent::tear_down();
 	}
 
@@ -232,6 +233,77 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 		sort( $expected );
 
 		$this->assertSame( $expected, $all, 'get_all_members should return the owner and member IDs.' );
+	}
+
+	/**
+	 * Newspack Network's `Group_Seats::get_member_ids()` query (in its
+	 * woocommerce-subscriptions/class-group-seats.php), copied verbatim so the test doesn't
+	 * need Network loaded; update it if that query changes. WordPress caches user queries by
+	 * their SQL alone, and this one builds the same SQL as get_members(), so the two share a
+	 * cache entry.
+	 *
+	 * @param int $subscription_id Subscription ID.
+	 * @return int[]
+	 */
+	private function network_get_member_ids( int $subscription_id ): array {
+		return array_map(
+			'intval',
+			get_users(
+				[
+					'fields'      => 'ID',
+					'count_total' => false,
+					'meta_query'  => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+						[
+							'key'   => Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY,
+							'value' => absint( $subscription_id ),
+						],
+					],
+				]
+			)
+		);
+	}
+
+	/**
+	 * Data provider: which query runs first in the request.
+	 *
+	 * @return array
+	 */
+	public function data_member_query_order() {
+		return [
+			'Network first'     => [ true ],
+			'get_members first' => [ false ],
+		];
+	}
+
+	/**
+	 * Group_Subscription::get_members() and Network's member query share a user-query
+	 * cache entry, so both must ask for the same result shape to agree on the members.
+	 *
+	 * @dataProvider data_member_query_order
+	 *
+	 * @param bool $network_first Whether Network's query runs before get_members().
+	 */
+	public function test_get_members_and_network_member_query_agree_in_either_order( $network_first ) {
+		$owner_id = $this->create_reader_user();
+		$expected = [ $this->create_reader_user(), $this->create_reader_user() ];
+		$sub      = $this->create_group_subscription( $owner_id );
+		foreach ( $expected as $member_id ) {
+			$this->add_member( $member_id, $sub );
+		}
+		Group_Subscription::reset_cache();
+
+		if ( $network_first ) {
+			$network_ids = $this->network_get_member_ids( $sub->get_id() );
+			$members     = Group_Subscription::get_members( $sub );
+		} else {
+			$members     = Group_Subscription::get_members( $sub );
+			$network_ids = $this->network_get_member_ids( $sub->get_id() );
+		}
+		sort( $members );
+		sort( $network_ids );
+
+		$this->assertSame( $expected, $members, 'get_members() should return the member IDs as ints.' );
+		$this->assertSame( $expected, $network_ids, "Network's query should return the member IDs." );
 	}
 
 	/**
@@ -717,28 +789,34 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Readers, authors and contributors are eligible group members by default;
-	 * administrators and editors are not (they bypass the content gate already).
+	 * Any user without `edit_others_posts` is an eligible group member, whatever their role,
+	 * so a reader on a custom role the gate restricts can reach content through a group.
+	 * Staff hold the capability and bypass the gate already.
 	 */
 	public function test_is_eligible_member_defaults() {
+		add_role( 'test_custom_reader', 'Custom reader', [ 'read_custom_content' => true ] ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.custom_role_add_role
+		$custom_role_id = $this->create_role_user( 'test_custom_reader' );
+		$no_role_id     = $this->create_role_user( '' );
+
+		$this->assertTrue( Group_Subscription::is_eligible_member( $custom_role_id ), 'A user whose only role is a custom role is eligible.' );
+		$this->assertTrue( Group_Subscription::is_eligible_member( $no_role_id ), 'A user with no role is eligible.' );
 		$this->assertTrue( Group_Subscription::is_eligible_member( $this->create_reader_user() ), 'Readers are eligible.' );
-		$this->assertTrue( Group_Subscription::is_eligible_member( $this->create_role_user( 'author' ) ), 'Authors are eligible by default.' );
-		$this->assertTrue( Group_Subscription::is_eligible_member( $this->create_role_user( 'contributor' ) ), 'Contributors are eligible by default.' );
-		$this->assertFalse( Group_Subscription::is_eligible_member( $this->create_role_user( 'editor' ) ), 'Editors are not eligible members.' );
-		$this->assertFalse( Group_Subscription::is_eligible_member( $this->create_role_user( 'administrator' ) ), 'Administrators are not eligible members.' );
+		$this->assertTrue( Group_Subscription::is_eligible_member( $this->create_role_user( 'contributor' ) ), 'Contributors are eligible.' );
+		$this->assertFalse( Group_Subscription::is_eligible_member( $this->create_role_user( 'editor' ) ), 'Editors are not eligible.' );
+		$this->assertFalse( Group_Subscription::is_eligible_member( $this->create_role_user( 'administrator' ) ), 'Administrators are not eligible.' );
 	}
 
 	/**
-	 * A user holding a privileged role (Editor or Administrator) alongside Author must not
-	 * gain default eligibility from the Author/Contributor fallback -- that fallback exists
-	 * for plain content-creator roles, not for staff who happen to also hold one.
+	 * A staff user stays ineligible when they also hold a non-staff role.
 	 */
 	public function test_is_eligible_member_excludes_privileged_multi_role_users() {
-		$editor_author_id = $this->create_multi_role_user( [ 'editor', 'author' ] );
-		$admin_author_id  = $this->create_multi_role_user( [ 'administrator', 'author' ] );
+		$editor_author_id      = $this->create_multi_role_user( [ 'editor', 'author' ] );
+		$admin_author_id       = $this->create_multi_role_user( [ 'administrator', 'author' ] );
+		$contributor_editor_id = $this->create_multi_role_user( [ 'contributor', 'editor' ] );
 
-		$this->assertFalse( Group_Subscription::is_eligible_member( $editor_author_id ), 'Editor+Author must not gain eligibility from the Author role.' );
-		$this->assertFalse( Group_Subscription::is_eligible_member( $admin_author_id ), 'Administrator+Author must not gain eligibility from the Author role.' );
+		$this->assertFalse( Group_Subscription::is_eligible_member( $editor_author_id ), 'Editor+Author is not eligible.' );
+		$this->assertFalse( Group_Subscription::is_eligible_member( $admin_author_id ), 'Administrator+Author is not eligible.' );
+		$this->assertFalse( Group_Subscription::is_eligible_member( $contributor_editor_id ), 'Contributor+Editor is not eligible.' );
 	}
 
 	/**
@@ -761,6 +839,25 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 		add_filter( 'newspack_group_subscription_member_eligible', $allow_editor, 10, 2 );
 		$this->assertTrue( Group_Subscription::is_eligible_member( $editor_id ), 'Filter can opt a user in.' );
 		remove_filter( 'newspack_group_subscription_member_eligible', $allow_editor, 10 );
+	}
+
+	/**
+	 * An account Access Control never restricts needs no seat, so the helper's
+	 * filter moves the line here too. A reader stays eligible either way.
+	 */
+	public function test_is_eligible_member_follows_the_skip_filter() {
+		$author_id = $this->create_role_user( 'author' );
+		$reader_id = $this->create_reader_user();
+		$skip      = function ( $skips, $user_id ) use ( $author_id, $reader_id ) {
+			return in_array( $user_id, [ $author_id, $reader_id ], true ) ? true : $skips;
+		};
+		add_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10, 2 );
+		$author_eligible = Group_Subscription::is_eligible_member( $author_id );
+		$reader_eligible = Group_Subscription::is_eligible_member( $reader_id );
+		remove_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10 );
+
+		$this->assertFalse( $author_eligible, 'An author filtered in is not eligible.' );
+		$this->assertTrue( $reader_eligible, 'Reader status is authoritative.' );
 	}
 
 	/**

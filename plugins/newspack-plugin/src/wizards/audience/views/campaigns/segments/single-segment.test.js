@@ -4,7 +4,14 @@
 import { render, fireEvent, waitFor, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
+/**
+ * WordPress dependencies
+ */
+import apiFetch from '@wordpress/api-fetch';
+
 import SingleSegment, { isMultiSelectCriteria } from './single-segment';
+
+jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
 // Sample criteria for input testing.
 const criteria = [
@@ -566,5 +573,40 @@ describe( 'Date range criteria input for an existing segment stored as a rolling
 				} ),
 			} )
 		);
+	} );
+} );
+
+describe( 'Newsletter list criteria input for an existing segment', () => {
+	const listCriteria = [
+		...criteria,
+		{
+			id: 'subscribed_lists',
+			category: 'newsletter',
+			matching_function: 'list__in',
+			name: 'Subscribed to lists',
+			matching_attribute: 'subscribed_lists',
+		},
+	];
+
+	beforeEach( () => {
+		// Without `context=edit` the REST route drops hidden lists, and the saved list reads "Deleted list".
+		apiFetch.mockReset();
+		apiFetch.mockResolvedValue( [ { id: 'hidden-list', name: 'Members Only' } ] );
+		window.newspackAudienceCampaigns = { criteria: listCriteria };
+		const segment = { ...SEGMENTS[ 0 ], criteria: [ { criteria_id: 'subscribed_lists', value: [ 'hidden-list' ] } ] };
+		render(
+			<MemoryRouter>
+				<SingleSegment
+					segmentId={ segment.id }
+					setSegments={ jest.fn() }
+					wizardApiFetch={ ( { method } = {} ) => Promise.resolve( 'POST' === method ? segment : [ segment ] ) }
+				/>
+			</MemoryRouter>
+		);
+	} );
+
+	it( 'reads lists with context=edit, so a list a gate hides from readers keeps its name', async () => {
+		await waitFor( () => expect( screen.getByText( 'Members Only' ) ).toBeInTheDocument() );
+		expect( apiFetch ).toHaveBeenCalledWith( { path: '/newspack-newsletters/v1/lists_config?context=edit' } );
 	} );
 } );

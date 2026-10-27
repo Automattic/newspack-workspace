@@ -481,33 +481,81 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
-	 * The editor posts endpoint must not expose live author-archive links.
+	 * The editor posts payload never carries an unsafe URL scheme.
 	 *
-	 * The editor canvas renders newspack_post_byline and newspack_post_avatars
-	 * verbatim, so a real href navigates the canvas iframe away from the post
-	 * being edited. Author anchors must be neutralized to href="#", matching
-	 * the category link convention in the same payload.
+	 * post_link resolves from the newspack_sponsor_url / newspack_supporter_url
+	 * meta, which is stored through sanitize_text_field and so can hold any
+	 * string. The editor renders it as an href, and a modified click follows it,
+	 * so the payload applies the same protocol allowlist the front end gets from
+	 * esc_url() in templates/article.php.
 	 */
-	public function test_editor_posts_endpoint_neutralizes_author_archive_links() {
+	public function test_editor_posts_endpoint_strips_unsafe_link_schemes() {
+		$post_id = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+		update_post_meta( $post_id, 'newspack_sponsor_url', 'javascript:alert(1)' );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/newspack-blocks-posts' );
+		$request->set_param( 'postsToShow', 10 );
+		$posts = rest_do_request( $request )->get_data();
+
+		$posts_by_id = array_column( $posts, null, 'id' );
+		self::assertArrayHasKey( $post_id, $posts_by_id, 'The editor posts endpoint returns the post.' );
+		self::assertStringNotContainsString(
+			'javascript:',
+			(string) $posts_by_id[ $post_id ]['post_link'],
+			'The editor payload does not carry a javascript: URL for the preview to render as an href.'
+		);
+	}
+
+	/**
+	 * The editor sponsor payload never carries an unsafe URL scheme.
+	 *
+	 * The preview renders sponsor_url as the href on the sponsor logo and byline,
+	 * choosing a link or plain text by whether the value is truthy, so an unsafe
+	 * scheme has to arrive as an empty string rather than reach the href.
+	 */
+	public function test_editor_sponsor_payload_strips_unsafe_sponsor_url() {
+		$post_id = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+
+		\Newspack_Sponsors\Sponsors_Stub::$stub_sponsors = [
+			[
+				'sponsor_flag'   => 'Sponsored',
+				'sponsor_name'   => 'Example Sponsor',
+				'sponsor_url'    => 'javascript:alert(1)',
+				'sponsor_byline' => 'Sponsored by',
+				'sponsor_id'     => 1001,
+				'sponsor_scope'  => 'native',
+			],
+		];
+		try {
+			$sponsor_info = Newspack_Blocks_API::newspack_blocks_sponsor_info( [ 'id' => $post_id ] );
+		} finally {
+			\Newspack_Sponsors\Sponsors_Stub::$stub_sponsors = null;
+		}
+
+		self::assertSame( '', $sponsor_info[0]['sponsor_url'], 'An unsafe sponsor URL arrives empty, so the preview renders the sponsor unlinked.' );
+	}
+
+	/**
+	 * The editor posts payload carries real author-archive links.
+	 *
+	 * Navigation is prevented at the preview container (see
+	 * shared/js/inert-preview.js), so the payload keeps the same URLs the front
+	 * end renders — which is what lets an editor ctrl/middle-click a previewed
+	 * post open in a new tab.
+	 */
+	public function test_editor_posts_endpoint_carries_live_author_links() {
 		$author_id = self::factory()->user->create(
 			[
 				'role'          => 'author',
-				'display_name'  => 'Jane Example',
-				'user_nicename' => 'jane-example',
+				'display_name'  => 'Nia Fixture',
+				'user_nicename' => 'nia-fixture',
 			]
 		);
 		$authored_post_id = self::factory()->post->create(
 			[
 				'post_status' => 'publish',
 				'post_author' => $author_id,
-			]
-		);
-		// A post whose author no longer exists still renders a byline anchor
-		// ("by" with no name, empty author lookup) and must be neutralized too.
-		$orphan_post_id = self::factory()->post->create(
-			[
-				'post_status' => 'publish',
-				'post_author' => 99999,
 			]
 		);
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
@@ -517,95 +565,29 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		$posts = rest_do_request( $request )->get_data();
 
 		$posts_by_id = array_column( $posts, null, 'id' );
-		self::assertArrayHasKey( $authored_post_id, $posts_by_id, 'The endpoint returns the authored post.' );
-		self::assertArrayHasKey( $orphan_post_id, $posts_by_id, 'The endpoint returns the orphaned-author post.' );
-
+		self::assertArrayHasKey( $authored_post_id, $posts_by_id, 'The editor posts endpoint returns the authored post.' );
 		self::assertStringContainsString(
-			'Jane Example',
+			get_author_posts_url( $author_id, 'nia-fixture' ),
 			$posts_by_id[ $authored_post_id ]['newspack_post_byline'],
-			'The author name still renders in the editor byline.'
+			'The editor byline carries the live author-archive link; the preview container is what prevents navigation.'
 		);
-
-		foreach ( [ $authored_post_id, $orphan_post_id ] as $post_id ) {
-			self::assertStringContainsString(
-				'href="#"',
-				$posts_by_id[ $post_id ]['newspack_post_byline'],
-				'The editor byline anchor is neutralized, not removed.'
-			);
-			self::assertStringNotContainsString(
-				'href="http',
-				$posts_by_id[ $post_id ]['newspack_post_byline'],
-				'The editor byline must not carry a live link.'
-			);
-			self::assertStringContainsString(
-				'href="#"',
-				$posts_by_id[ $post_id ]['newspack_post_avatars'],
-				'The editor avatar anchor is neutralized, not removed.'
-			);
-			self::assertStringNotContainsString(
-				'href="http',
-				$posts_by_id[ $post_id ]['newspack_post_avatars'],
-				'The editor avatar link must not carry a live link.'
-			);
-		}
 	}
 
 	/**
-	 * Byline HTML injected via the newspack_blocks_post_byline filter (the
-	 * newspack-plugin custom-bylines feature hooks it and replaces the byline
-	 * wholesale) must be neutralized too — neutralization runs on the finished
-	 * payload, after the filter.
+	 * The editor byline never carries an unsafe URL scheme from a byline filter.
+	 *
+	 * newspack_blocks_post_byline output reaches the payload as markup the
+	 * preview renders, and a modified click on one of its links reaches the
+	 * browser, so the payload applies the same wp_kses_post() the front end does.
 	 */
-	public function test_editor_posts_endpoint_neutralizes_filtered_byline_links() {
-		self::factory()->post->create( [ 'post_status' => 'publish' ] );
-		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
-
-		$live_link_byline_filter = function () {
-			return '<span class="author vcard"><a class="url fn n" href="https://example.test/author/custom">Custom Byline</a></span>';
-		};
-		add_filter( 'newspack_blocks_post_byline', $live_link_byline_filter );
-
-		$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/newspack-blocks-posts' );
-		$request->set_param( 'postsToShow', 10 );
-		$posts = rest_do_request( $request )->get_data();
-
-		remove_filter( 'newspack_blocks_post_byline', $live_link_byline_filter );
-
-		self::assertNotEmpty( $posts, 'The editor posts endpoint returns the published post.' );
-		foreach ( $posts as $post_data ) {
-			self::assertStringContainsString(
-				'Custom Byline',
-				$post_data['newspack_post_byline'],
-				'The filtered byline content is preserved.'
-			);
-			self::assertStringNotContainsString(
-				'https://example.test/author/custom',
-				$post_data['newspack_post_byline'],
-				'A live link supplied by the byline filter must be neutralized in the editor payload.'
-			);
-			self::assertStringContainsString(
-				'href="#"',
-				$post_data['newspack_post_byline'],
-				'The filtered byline anchor is neutralized, not removed.'
-			);
-		}
-	}
-
-	/**
-	 * Avatar markup whose URL carries an href query parameter must come
-	 * through intact — neutralization touches only real anchor href
-	 * attributes, never "href=" text inside another attribute's value
-	 * (the shape produced by URL-rewriting avatar proxies).
-	 */
-	public function test_editor_posts_endpoint_preserves_avatar_markup() {
-		$author_id = self::factory()->user->create(
+	public function test_editor_byline_strips_unsafe_schemes_from_filtered_byline() {
+		$author_id        = self::factory()->user->create(
 			[
 				'role'          => 'author',
-				'display_name'  => 'Ada Fixture',
-				'user_nicename' => 'ada-fixture',
+				'user_nicename' => 'kai-fixture',
 			]
 		);
-		self::factory()->post->create(
+		$authored_post_id = self::factory()->post->create(
 			[
 				'post_status' => 'publish',
 				'post_author' => $author_id,
@@ -613,44 +595,30 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		);
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
 
-		$proxied_avatar_filter = function () {
-			return '<img src="https://cdn.example.test/proxy?url=a&amp;href=x" srcset="https://cdn.example.test/proxy?url=b&amp;href=y 2x" class="avatar" alt="" width="48" height="48" />';
+		$append_unsafe_link = function ( $byline ) {
+			return $byline . ' <a href="javascript:alert(1)">Filtered link</a>';
 		};
-		add_filter( 'pre_get_avatar', $proxied_avatar_filter );
-
-		$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/newspack-blocks-posts' );
-		$request->set_param( 'postsToShow', 10 );
-		$posts = rest_do_request( $request )->get_data();
-
-		remove_filter( 'pre_get_avatar', $proxied_avatar_filter );
-
-		self::assertNotEmpty( $posts, 'The editor posts endpoint returns the published post.' );
-		foreach ( $posts as $post_data ) {
-			self::assertStringContainsString(
-				'src="https://cdn.example.test/proxy?url=a&amp;href=x"',
-				$post_data['newspack_post_avatars'],
-				'The avatar src survives neutralization byte-identical.'
-			);
-			self::assertStringContainsString(
-				'srcset="https://cdn.example.test/proxy?url=b&amp;href=y 2x"',
-				$post_data['newspack_post_avatars'],
-				'The avatar srcset survives neutralization byte-identical.'
-			);
-			self::assertStringContainsString(
-				'href="#"',
-				$post_data['newspack_post_avatars'],
-				'The avatar anchor is still neutralized.'
-			);
+		add_filter( 'newspack_blocks_post_byline', $append_unsafe_link );
+		try {
+			$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/newspack-blocks-posts' );
+			$request->set_param( 'postsToShow', 10 );
+			$posts = rest_do_request( $request )->get_data();
+		} finally {
+			remove_filter( 'newspack_blocks_post_byline', $append_unsafe_link );
 		}
+
+		$byline = array_column( $posts, null, 'id' )[ $authored_post_id ]['newspack_post_byline'];
+		self::assertStringNotContainsString( 'javascript:', $byline, 'The editor byline does not carry a javascript: URL for the preview to render as an href.' );
+		self::assertStringContainsString( get_author_posts_url( $author_id, 'kai-fixture' ), $byline, 'Safe author links survive.' );
 	}
 
 	/**
 	 * The front-end byline formatter keeps live author-archive links.
 	 *
-	 * The discriminating mirror of the editor tests above: neutralization
-	 * belongs to the editor payload only, and moving it into the shared
-	 * formatter would break every reader-facing author link while the editor
-	 * tests stayed green.
+	 * newspack_blocks_format_byline() is shared by the front end and the editor
+	 * payload, so it must stay free of editor-only concerns. This pins that:
+	 * link rewriting here would break every reader-facing author link, and the
+	 * editor does not need it — the preview container blocks navigation.
 	 */
 	public function test_front_end_byline_formatter_keeps_live_author_links() {
 		$author_id = self::factory()->user->create(
@@ -714,6 +682,36 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		self::assertSame( 'https://example.org/tag/breaking/', $result[0]['link'] );
 
 		\Newspack\Tag_Labels::$stub_labels = null;
+	}
+
+	/**
+	 * The newspack_tag_labels REST field never carries an unsafe URL scheme.
+	 *
+	 * Tag-label links come from get_term_link(), which a term_link filter can
+	 * change. The editor renders them as hrefs and a modified click follows
+	 * them, so the payload applies the protocol allowlist the front end gets
+	 * from esc_url().
+	 */
+	public function test_tag_labels_rest_field_strips_unsafe_link_schemes() {
+		if ( ! property_exists( '\Newspack\Tag_Labels', 'stub_labels' ) ) {
+			$this->markTestSkipped( 'Real \Newspack\Tag_Labels present; stub-based contract test skipped.' );
+		}
+		$post_id = self::factory()->post->create();
+
+		\Newspack\Tag_Labels::$stub_labels = [
+			[
+				'flag' => 'Breaking',
+				'link' => 'javascript:alert(1)',
+			],
+		];
+		try {
+			$result = Newspack_Blocks_API::newspack_blocks_get_tag_labels( [ 'id' => $post_id ] );
+		} finally {
+			\Newspack\Tag_Labels::$stub_labels = null;
+		}
+
+		self::assertSame( '', $result[0]['link'], 'An unsafe tag-label link arrives empty.' );
+		self::assertSame( 'Breaking', $result[0]['flag'], 'The label itself is unchanged.' );
 	}
 
 	/**
@@ -898,6 +896,69 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * Access levels and content shapes for the Jetpack paywall excerpt test.
+	 *
+	 * @return array[] Whether Jetpack's paywall is active, the access level, whether the
+	 *                 post has a Paywall block, and whether the text above and below
+	 *                 that point should reach the excerpt.
+	 */
+	public function jetpack_paywall_excerpt_cases() {
+		return [
+			'gated post with a Paywall block'      => [ true, 'subscribers', true, true, false ],
+			'gated post without a Paywall block'   => [ true, 'subscribers', false, false, false ],
+			'ungated post with a Paywall block'    => [ true, '', true, true, true ],
+			'gated post while paywall is inactive' => [ false, 'subscribers', true, true, true ],
+		];
+	}
+
+	/**
+	 * A Jetpack-gated post's excerpt stops at the Paywall block, since the excerpt
+	 * is built from raw content that Jetpack's the_content paywall never sees.
+	 *
+	 * @dataProvider jetpack_paywall_excerpt_cases
+	 *
+	 * @param bool   $paywall_active    Whether Jetpack's paywall is hooked on the_content.
+	 * @param string $access_level      Value of Jetpack's access-level post meta.
+	 * @param bool   $has_paywall_block Whether the content includes a Paywall block.
+	 * @param bool   $shows_teaser      Whether the text above the Paywall block appears.
+	 * @param bool   $shows_paywalled   Whether the text below the Paywall block appears.
+	 */
+	public function test_excerpt_of_jetpack_gated_post_stops_at_paywall_block( $paywall_active, $access_level, $has_paywall_block, $shows_teaser, $shows_paywalled ) {
+		$content = '<!-- wp:paragraph --><p>TEASERMARK</p><!-- /wp:paragraph -->'
+			. ( $has_paywall_block ? '<!-- wp:jetpack/paywall /-->' : '' )
+			. '<!-- wp:paragraph --><p>PAYWALLEDMARK</p><!-- /wp:paragraph -->';
+		$post_id = self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_content' => $content,
+				'post_excerpt' => '',
+			]
+		);
+		if ( $access_level ) {
+			update_post_meta( $post_id, '_jetpack_newsletter_access', $access_level );
+		}
+
+		$jetpack_paywall_callback = 'Automattic\Jetpack\Extensions\Subscriptions\add_paywall';
+		if ( $paywall_active ) {
+			add_filter( 'the_content', $jetpack_paywall_callback, 8 );
+		}
+		try {
+			$GLOBALS['post'] = get_post( $post_id );
+			setup_postdata( $GLOBALS['post'] );
+			Newspack_Blocks::filter_excerpt( [ 'excerptLength' => 999, 'showExcerpt' => true ] );
+			$excerpt = get_the_excerpt( $post_id );
+		} finally {
+			// Unhook so later tests don't see Jetpack's paywall as active.
+			Newspack_Blocks::remove_excerpt_filter();
+			remove_filter( 'the_content', $jetpack_paywall_callback, 8 );
+			unset( $GLOBALS['post'] );
+		}
+
+		self::assertSame( $shows_teaser, str_contains( $excerpt, 'TEASERMARK' ), 'Text above the Paywall block.' );
+		self::assertSame( $shows_paywalled, str_contains( $excerpt, 'PAYWALLEDMARK' ), 'Text below the Paywall block.' );
+	}
+
+	/**
 	 * The subtitle allowlist keeps the inline formatting an editor may write.
 	 */
 	public function test_sanitize_post_subtitle_keeps_allowed_markup() {
@@ -963,5 +1024,119 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		self::assertStringContainsString( '<em>Kept</em>', $subtitle, 'Allowed formatting still reaches the editor.' );
 
 		unregister_post_meta( 'post', 'newspack_post_subtitle' );
+	}
+
+	/**
+	 * Create a published post that a plugin reports as updated later than its
+	 * stored modified date, the way a live blog's newest update dates its page.
+	 *
+	 * @param int $published Publish timestamp.
+	 * @param int $updated   Modified timestamp to report.
+	 * @return int Post ID.
+	 */
+	private function create_post_updated_at( $published, $updated ) {
+		$post_id = self::factory()->post->create(
+			[
+				'post_status'   => 'publish',
+				'post_date'     => get_date_from_gmt( gmdate( 'Y-m-d H:i:s', $published ) ),
+				'post_date_gmt' => gmdate( 'Y-m-d H:i:s', $published ),
+			]
+		);
+		foreach ( [ 'get_the_modified_date' => 'date_format', 'get_the_modified_time' => 'time_format' ] as $hook => $default_format ) {
+			add_filter(
+				$hook,
+				function ( $the_time, $format, $post ) use ( $post_id, $updated, $default_format ) {
+					if ( ! $post instanceof WP_Post || $post->ID !== $post_id ) {
+						return $the_time;
+					}
+					return wp_date( '' === $format ? get_option( $default_format ) : $format, $updated );
+				},
+				10,
+				3
+			);
+		}
+		return $post_id;
+	}
+
+	/**
+	 * Render a Homepage Posts block showing only the given post.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return string Block HTML.
+	 */
+	private function render_card( $post_id ) {
+		return render_block(
+			[
+				'blockName'    => 'newspack-blocks/homepage-articles',
+				'attrs'        => [
+					'specificMode'  => true,
+					'specificPosts' => [ $post_id ],
+					'showDate'      => true,
+				],
+				'innerBlocks'  => [],
+				'innerHTML'    => '',
+				'innerContent' => [],
+			]
+		);
+	}
+
+	/**
+	 * A card whose post is set to show its updated date reports when the post
+	 * was last updated instead of when it was published, so a post that keeps
+	 * changing doesn't look old on the homepage.
+	 */
+	public function test_card_shows_updated_date_instead_of_publish_date() {
+		$published = time() - 3 * HOUR_IN_SECONDS;
+		$updated   = time() - 5 * MINUTE_IN_SECONDS;
+		$post_id   = $this->create_post_updated_at( $published, $updated );
+		add_filter(
+			'newspack_blocks_display_updated_date',
+			function ( $display, $post ) use ( $post_id ) {
+				return $post->ID === $post_id ? true : $display;
+			},
+			10,
+			2
+		);
+
+		$html = $this->render_card( $post_id );
+
+		self::assertStringContainsString(
+			'<span class="updated-date">Updated <time class="entry-date updated" datetime="' . wp_date( DATE_W3C, $updated ) . '">' . wp_date( get_option( 'date_format' ), $updated ) . '</time></span>',
+			$html,
+			'The card shows the updated date with its label.'
+		);
+		self::assertStringNotContainsString( wp_date( DATE_W3C, $published ), $html, 'The card leaves out the publish date.' );
+	}
+
+	/**
+	 * The card's updated date goes through its own formatting filter, which is
+	 * where a "time ago" setting rewrites it.
+	 */
+	public function test_card_updated_date_text_is_filterable() {
+		$post_id = $this->create_post_updated_at( time() - 3 * HOUR_IN_SECONDS, time() - 5 * MINUTE_IN_SECONDS );
+		add_filter( 'newspack_blocks_display_updated_date', '__return_true' );
+		add_filter(
+			'newspack_blocks_formatted_displayed_updated_date',
+			function ( $date, $post ) use ( $post_id ) {
+				return $post->ID === $post_id ? '5 minutes ago' : $date;
+			},
+			10,
+			2
+		);
+
+		self::assertStringContainsString( '">5 minutes ago</time>', $this->render_card( $post_id ), 'The card shows the filtered updated date text.' );
+	}
+
+	/**
+	 * Cards show the publish date unless a plugin asks for the updated date.
+	 */
+	public function test_card_shows_publish_date_by_default() {
+		$published = time() - 3 * HOUR_IN_SECONDS;
+		$post_id   = $this->create_post_updated_at( $published, time() - 5 * MINUTE_IN_SECONDS );
+
+		$html = $this->render_card( $post_id );
+
+		self::assertStringContainsString( 'class="entry-date published" datetime="' . wp_date( DATE_W3C, $published ) . '"', $html, 'The card shows the publish date.' );
+		self::assertStringNotContainsString( 'updated-date', $html, 'The card has no updated date.' );
 	}
 }

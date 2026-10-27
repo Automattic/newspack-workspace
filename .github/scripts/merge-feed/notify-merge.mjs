@@ -103,6 +103,30 @@ function highestType( subjects ) {
 	return TYPE_LADDER.find( ( [ name ] ) => types.includes( name ) )?.[ 0 ] ?? FALLBACK_TYPE;
 }
 
+// The subject of the commit that landed wins: the merger can retype a PR when
+// squashing, and that subject is what semantic-release reads. The PR title and
+// branch commits decide only when the landed subject has no type.
+async function prType( pr ) {
+	try {
+		const landed = await github( `/commits/${ pr.merge_commit_sha }` );
+		const type = commitType( landed.commit.message.split( '\n' )[ 0 ] );
+		if ( type ) {
+			return type;
+		}
+	} catch ( error ) {
+		warn( `#${ pr.number }: typing from the branch, landed commit unreadable: ${ error.message }` );
+	}
+
+	let subjects = [ pr.title ];
+	try {
+		const commits = await github( `/pulls/${ pr.number }/commits?per_page=100` );
+		subjects = subjects.concat( commits.map( commit => commit.commit.message.split( '\n' )[ 0 ] ) );
+	} catch ( error ) {
+		warn( `#${ pr.number }: typing from the title alone: ${ error.message }` );
+	}
+	return highestType( subjects );
+}
+
 function typeEmoji( type ) {
 	return TYPE_LADDER.find( ( [ name ] ) => name === type )[ 1 ];
 }
@@ -316,14 +340,7 @@ async function main() {
 			continue;
 		}
 
-		let subjects = [ pr.title ];
-		try {
-			const commits = await github( `/pulls/${ pr.number }/commits?per_page=100` );
-			subjects = subjects.concat( commits.map( commit => commit.commit.message.split( '\n' )[ 0 ] ) );
-		} catch ( error ) {
-			warn( `#${ pr.number }: typing from the title alone: ${ error.message }` );
-		}
-		const type = highestType( subjects );
+		const type = await prType( pr );
 
 		let summary;
 		try {

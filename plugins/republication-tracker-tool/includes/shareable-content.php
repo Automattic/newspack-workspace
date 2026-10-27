@@ -28,6 +28,11 @@ $content_footer = Republication_Tracker_Tool::create_content_footer( $post );
 
 $byline_text = Republication_Tracker_Tool::get_byline_text( get_the_author(), $post );
 
+// The copy textarea needs every part escaped exactly once: a browser decodes its source once, and the
+// caption strip (assets/widget.js, the block's view.js) writes the result back without decoding again.
+// create_content_footer() returns the footer entity-encoded, so it is decoded before it is escaped.
+$escaped_footer = htmlspecialchars( html_entity_decode( $content_footer, ENT_QUOTES | ENT_HTML5, 'UTF-8' ), ENT_QUOTES, 'UTF-8' );
+
 /**
  * The article title, byline, source site, and date
  *
@@ -123,7 +128,7 @@ if ( $using_license ) {
 						readonly
 						rows="5"
 						aria-label="<?php esc_attr_e( 'Republish this article (HTML format)', 'republication-tracker-tool' ); ?>"
-					><?php echo esc_html( $article_info ); ?><?php echo wp_kses_post( $content ); ?><?php echo wp_kses_post( htmlspecialchars( $content_footer, ENT_QUOTES, 'UTF-8' ) ); ?></textarea>
+					><?php echo esc_html( $article_info ); ?><?php echo wp_kses_post( $content ); ?><?php echo wp_kses_post( $escaped_footer ); ?></textarea>
 
 					<?php if ( $plain_text_enabled ) : ?>
 						<div class="republish-content" data-tab-content="plain-text">

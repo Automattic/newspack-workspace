@@ -444,6 +444,9 @@ importers:
 
   plugins/newspack-multibranded-site:
     dependencies:
+      '@wordpress/ui':
+        specifier: ^0.23.0
+        version: 0.23.0(@date-fns/tz@1.5.0)(@types/react-dom@19.2.3(@types/react@18.3.31))(@types/react@18.3.31)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(stylelint@16.26.1(typescript@5.9.3))
       react:
         specifier: 18.3.1
         version: 18.3.1
@@ -475,6 +478,9 @@ importers:
 
   plugins/newspack-network:
     dependencies:
+      '@wordpress/ui':
+        specifier: ^0.23.0
+        version: 0.23.0(@date-fns/tz@1.5.0)(@types/react-dom@19.2.3(@types/react@18.3.31))(@types/react@18.3.31)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(stylelint@16.26.1(typescript@5.9.3))
       newspack-icons:
         specifier: workspace:*
         version: link:../../packages/icons
@@ -574,6 +580,9 @@ importers:
 
   plugins/newspack-popups:
     dependencies:
+      '@wordpress/ui':
+        specifier: ^0.23.0
+        version: 0.23.0(@date-fns/tz@1.5.0)(@types/react-dom@19.2.3(@types/react@18.3.31))(@types/react@18.3.31)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(stylelint@16.26.1(typescript@5.9.3))
       classnames:
         specifier: ^2.5.1
         version: 2.5.1

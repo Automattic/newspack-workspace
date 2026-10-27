@@ -119,7 +119,9 @@ export default function SubscribeEdit( {
 	const fetchLists = () => {
 		setInFlight( true );
 		apiFetch( {
-			path: '/newspack-newsletters/v1/lists_config',
+			// The edit context returns every list, including ones the person editing
+			// could not join as a reader; without it, saving would drop them from the block.
+			path: '/newspack-newsletters/v1/lists_config?context=edit',
 		} )
 			.then( setListConfig )
 			.finally( () => {

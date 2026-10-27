@@ -15,8 +15,8 @@ use Newspack\Newspack_UI_Icons;
 defined( 'ABSPATH' ) || exit;
 
 \do_action( 'newspack_woocommerce_before_subscription_header', $subscription, $actions );
-// get_managers() returns ints while get_members() returns string IDs; normalize so the
-// strict in_array() and integer-keyed lookup below don't depend on PHP's key coercion.
+// Both lists pass through public filters, so normalize to ints: the strict in_array()
+// and integer-keyed lookup below shouldn't depend on what a filter returns.
 $members              = array_map( 'intval', Group_Subscription::get_members( $subscription ) );
 $managers             = array_map( 'intval', Group_Subscription::get_managers( $subscription ) );
 // array_unique() guards against a user appearing in both lists (e.g. the owner also carrying
@@ -67,7 +67,7 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 <?php if ( $is_completely_empty ) : ?>
 	<div class="newspack-ui__box newspack-ui__box--border newspack-ui__box--text-center newspack-ui__box--2x-large">
 		<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--align-center newspack-ui__stack--gap-1">
-			<h3 class="newspack-ui__font--l"><?php esc_html_e( "You haven't added anyone yet", 'newspack-plugin' ); ?></h3>
+			<h3 class="newspack-ui__font--m"><?php esc_html_e( "You haven't added anyone yet", 'newspack-plugin' ); ?></h3>
 			<p class="newspack-ui__spacing-top--0 newspack-ui__spacing-bottom--3">
 				<?php
 				echo esc_html(
@@ -395,7 +395,7 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 				</header>
 
 				<form class="newspack-ui__modal__content" method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-					<h2 class="font-size newspack-ui__font--l"><?php esc_html_e( 'Are you sure?', 'newspack-plugin' ); ?></h2>
+					<h2 class="newspack-ui__font--l"><?php esc_html_e( 'Are you sure?', 'newspack-plugin' ); ?></h2>
 					<p>
 						<?php
 						echo wp_kses(
@@ -437,7 +437,7 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 				</header>
 
 				<section class="newspack-ui__modal__content">
-						<h2 class="font-size newspack-ui__font--l"><?php esc_html_e( 'Are you sure?', 'newspack-plugin' ); ?></h2>
+						<h2 class="newspack-ui__font--l"><?php esc_html_e( 'Are you sure?', 'newspack-plugin' ); ?></h2>
 						<p>
 							<?php esc_html_e( 'Any invite link for this group will stop working. Anyone who hasn\'t joined yet will no longer be able to. You can create a new link at any time.', 'newspack-plugin' ); ?>
 						</p>

@@ -7,7 +7,7 @@ then
 fi
 
 docker build \
-    --platform linux/arm64 \
+    --platform "${NEWSPACK_DOCKER_PLATFORM:-linux/arm64}" \
     -t newspack-dev \
     --build-arg PHP_VERSION=8.3 \
     --build-arg COMPOSER_VERSION=2.9.8 \

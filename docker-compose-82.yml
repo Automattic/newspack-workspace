@@ -33,7 +33,7 @@ services:
   ##  - The docker/bin directory for provisioning scripts
   wordpress:
     container_name: newspack_dev
-    platform: linux/arm64
+    platform: ${NEWSPACK_DOCKER_PLATFORM:-linux/arm64}
     depends_on:
       - db
     image: newspack-dev-82:latest

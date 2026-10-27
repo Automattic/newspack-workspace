@@ -1,0 +1,3 @@
+[     445ms] [LOG] JQMIGRATE: Migrate is installed with logging active, version 3.4.1 @ https://comments-panel.test/wp-includes/js/jquery/jquery-migrate.js?ver=3.4.1:103
+[     492ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ https://comments-panel.test/2026/10/07/pariatur-deserunt-eiusmod-vel-est-eu-rem-exercitation-exercitationem-numquam/comment-page-3/:0
+[   20383ms] [ERROR] Failed to load resource: the server responded with a status of 409 (Conflict) @ https://comments-panel.test/wp-comments-post.php:0

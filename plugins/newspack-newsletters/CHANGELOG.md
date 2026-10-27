@@ -1,3 +1,19 @@
+# newspack-newsletters [3.44.0](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.43.1...newspack-newsletters@3.44.0) (2026-10-26)
+
+
+### Bug Fixes
+
+* **content-gate:** treat authors and contributors as readers ([#1302](https://github.com/Automattic/newspack-workspace/issues/1302)) ([b95ea0f](https://github.com/Automattic/newspack-workspace/commit/b95ea0f65fc33ab2f63ee6ff7ce9ccd884429d31))
+* **newsletters:** keep email editor info lines out of debug.log ([#1250](https://github.com/Automattic/newspack-workspace/issues/1250)) ([8ea05d1](https://github.com/Automattic/newspack-workspace/commit/8ea05d1859e7f58d29ce26c27270da9e0c9a27c5))
+* **newsletters:** reveal layout previews on non-English admins ([#1268](https://github.com/Automattic/newspack-workspace/issues/1268)) ([5ec29b4](https://github.com/Automattic/newspack-workspace/commit/5ec29b4f71fe2e06f6d4eea6e26740ea73656331))
+* require PHP 8.1 in the WordPress.org plugins ([#1272](https://github.com/Automattic/newspack-workspace/issues/1272)) ([4a9bea1](https://github.com/Automattic/newspack-workspace/commit/4a9bea142fee228fe8613f5f4df3469e7eb72f13))
+
+
+### Features
+
+* **newsletters:** show Memberships-restricted lists as premium ([#1366](https://github.com/Automattic/newspack-workspace/issues/1366)) ([9e3ff43](https://github.com/Automattic/newspack-workspace/commit/9e3ff43ace36447f1328e55ee42361546b57eb2c))
+* **premium-newsletters:** set auto-signup and hide lists per gate ([#1371](https://github.com/Automattic/newspack-workspace/issues/1371)) ([63cb9cb](https://github.com/Automattic/newspack-workspace/commit/63cb9cb28c421a5357c816b3467ed9281cf2a3de))
+
 ## newspack-newsletters [3.43.1](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.43.0...newspack-newsletters@3.43.1) (2026-10-21)
 
 
