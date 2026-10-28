@@ -432,6 +432,34 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * Swapping which prompt carries a letter must not be served the old arm's counts.
+	 */
+	public function test_changing_an_arm_s_prompt_misses_the_cache() {
+		$this->as_admin();
+		$ids  = $this->create_running_test();
+		$stub = $this->use_provider( $this->counts( 100, 5, 100, 6 ) );
+		$this->stats_request( 't' );
+		wp_update_post(
+			[
+				'ID'          => $ids['b'],
+				'post_status' => 'draft',
+			]
+		);
+		$replacement = $this->create_test_variant(
+			't',
+			'b',
+			[
+				'post_date_gmt' => '2026-10-01 00:00:00',
+				'post_date'     => '2026-10-01 00:00:00',
+			]
+		);
+		$data        = $this->stats_request( 't' )->get_data();
+		$this->assertCount( 2, $stub->calls );
+		$this->assertSame( $replacement, $stub->calls[1]['test']['variants']['b']['id'] );
+		$this->assertFalse( $data['source']['cached'] );
+	}
+
+	/**
 	 * A test younger than fourteen days is flagged; one at fourteen is not.
 	 */
 	public function test_young_test_flag_boundaries() {

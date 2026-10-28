@@ -333,12 +333,18 @@ final class Newspack_Popups_AB_Dashboard {
 	 */
 	private static function cache_key( $test, $slug ) {
 		$window = self::get_window( $test );
+		// The arms are part of the key: swapping which prompt carries a letter
+		// changes what the provider counts, and must not be served the old
+		// prompt's numbers for the rest of the hour.
+		$arms = array_map( fn( $variant ) => (int) $variant['id'], $test['variants'] );
+		ksort( $arms );
 		return 'newspack_popups_ab_stats_' . md5(
 			wp_json_encode(
 				[
 					$test['test_id'],
 					$slug,
 					$test['goal'],
+					$arms,
 					$window['start'] ?? '',
 					$window['end'] ?? '',
 				]
