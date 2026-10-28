@@ -24,8 +24,9 @@ import './style.scss';
 type DataViewsProps< Item > = React.ComponentProps< typeof BaseDataViews< Item > > & {
 	className?: string;
 	/**
-	 * Show every filter as a chip beside the search instead of behind the
-	 * filter toggle.
+	 * Show each field that declares `filterBy` as a filter chip beside the
+	 * search, with no filter toggle. A field left filterable by DataViews'
+	 * defaults (elements but no `filterBy`) stays behind "Add filter".
 	 */
 	inlineFilters?: boolean;
 };

@@ -566,6 +566,18 @@ describe( 'the network subscription rows', () => {
 		expect( field( 'managedOn' ) ).toBeUndefined();
 	} );
 
+	it( 'keeps a restored Managed on filter clearable when the site list comes back empty', async () => {
+		await mount();
+		await act( async () => {
+			mockDataViewsProps.onChangeView( {
+				...mockDataViewsProps.view,
+				filters: [ { field: 'managedOn', operator: 'isAny', value: [ 'this-site' ] } ],
+			} );
+		} );
+
+		expect( field( 'managedOn' ).elements ).toEqual( [ { value: 'this-site', label: 'This site' } ] );
+	} );
+
 	it( "lists where a reader's subscriptions are managed, this site first and without repeats", async () => {
 		await mount( { sites: [ 'Riverbend Daily' ] } );
 		const item = {
@@ -573,7 +585,7 @@ describe( 'the network subscription rows', () => {
 			subscriptions: [ networkSubscription( 12, 'Riverbend Daily' ), localSubscription, networkSubscription( 13, 'Riverbend Daily' ) ],
 		};
 
-		expect( field( 'managedOn' ).getValue( { item } ) ).toEqual( [ 'This site', 'Riverbend Daily' ] );
+		expect( field( 'managedOn' ).getValue( { item } ) ).toEqual( [ 'this-site', 'Riverbend Daily' ] );
 		expect( render( field( 'managedOn' ).render( { item } ) ).container.textContent ).toBe( 'This siteRiverbend Daily' );
 	} );
 
@@ -581,6 +593,6 @@ describe( 'the network subscription rows', () => {
 		await mount( { sites: [ 'Riverbend Daily' ] } );
 		const item = { ...subscriber( 1 ), subscriptions: [ networkSubscription( 12, 'Riverbend Daily', 'cancelled' ), localSubscription ] };
 
-		expect( field( 'managedOn' ).getValue( { item } ) ).toEqual( [ 'This site' ] );
+		expect( field( 'managedOn' ).getValue( { item } ) ).toEqual( [ 'this-site' ] );
 	} );
 } );

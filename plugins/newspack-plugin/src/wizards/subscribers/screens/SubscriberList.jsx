@@ -98,12 +98,12 @@ const subscriberStatuses = ( item, groupEntries ) =>
 const THIS_SITE = 'this-site';
 const THIS_SITE_LABEL = __( 'This site', 'newspack-plugin' );
 
-// Where the subscriptions the Subscription column shows are managed, this site
-// first, without repeats.
-const managedOnLabels = item => {
+// Where the subscriptions the Subscription column shows are managed, as Managed
+// on filter values: this site first, without repeats.
+const managedOnValues = item => {
 	const sites = visiblePlanEntries( planEntries( item, groupEntriesOf( item ) ) ).map( e => e.site );
 	const network = [ ...new Set( sites.filter( Boolean ) ) ];
-	return sites.some( site => ! site ) ? [ THIS_SITE_LABEL, ...network ] : network;
+	return sites.some( site => ! site ) ? [ THIS_SITE, ...network ] : network;
 };
 
 const { useHistory, useLocation } = Router;
@@ -167,7 +167,7 @@ export default function SubscriberList() {
 	const selectedSites = view.filters?.find( f => 'managedOn' === f.field )?.value;
 	const managedOnElements = useMemo( () => {
 		const names = [ ...new Set( [ ...sites, ...( selectedSites || [] ) ] ) ].filter( name => name !== THIS_SITE );
-		if ( names.length === 0 ) {
+		if ( names.length === 0 && ! selectedSites?.length ) {
 			return [];
 		}
 		return [ { value: THIS_SITE, label: THIS_SITE_LABEL }, ...names.map( name => ( { value: name, label: name } ) ) ];
@@ -313,16 +313,16 @@ export default function SubscriberList() {
 							elements: managedOnElements,
 							filterBy: { operators: [ 'isAny' ] },
 							enableSorting: false,
-							getValue: ( { item } ) => managedOnLabels( item ),
+							getValue: ( { item } ) => managedOnValues( item ),
 							render: ( { item } ) => {
-								const labels = managedOnLabels( item );
-								if ( labels.length === 0 ) {
+								const values = managedOnValues( item );
+								if ( values.length === 0 ) {
 									return <span>—</span>;
 								}
 								return (
 									<VStack spacing={ 2 } alignment="left">
-										{ labels.map( label => (
-											<div key={ label }>{ label }</div>
+										{ values.map( value => (
+											<div key={ value }>{ THIS_SITE === value ? THIS_SITE_LABEL : value }</div>
 										) ) }
 									</VStack>
 								);

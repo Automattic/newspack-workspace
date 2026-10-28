@@ -524,6 +524,10 @@ class Subscribers_Wizard extends Wizard {
 	 * subscription and shows in the list's Subscription column, so filtering it out
 	 * here would leave a visible plan unfilterable.
 	 *
+	 * `sites` lists, by name, the network sites that manage a subscription for any
+	 * reader here: the options of the Managed on filter beside this site. It is
+	 * empty off a network, and the list then offers no Managed on filter.
+	 *
 	 * @return \WP_REST_Response
 	 */
 	public function api_get_plans(): \WP_REST_Response {
@@ -1588,13 +1592,14 @@ class Subscribers_Wizard extends Wizard {
 
 		/**
 		 * Whether a reader belongs to the Newspack Network, which is the case when
-		 * they first registered on another site. The key is added only for those
-		 * readers, so a site without the network plugin never sees the key.
+		 * they first registered on another site. Only the profile reads it, so the key
+		 * is added on detailed reads only, and only for those readers: a site without
+		 * the network plugin never sees the key.
 		 *
 		 * @param bool $is_network_reader Whether the reader is a network reader so far.
 		 * @param int  $user_id           The reader's user ID.
 		 */
-		if ( true === apply_filters( 'newspack_subscribers_is_network_reader', false, $user_id ) ) {
+		if ( $detailed && true === apply_filters( 'newspack_subscribers_is_network_reader', false, $user_id ) ) {
 			$subscriber['isNetworkReader'] = true;
 		}
 
@@ -2382,8 +2387,8 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
-	 * Resolve the `include` user-ID set for the active subscription-status, plan
-	 * and access filters, or null when none is present.
+	 * Resolve the `include` user-ID set for the active subscription-status, plan,
+	 * access and Managed on filters, or null when none is present.
 	 *
 	 * Each active filter resolves to a set of holder IDs; the sets are
 	 * intersected so multiple filters narrow (AND) rather than widen. The result
@@ -2472,19 +2477,35 @@ class Subscribers_Wizard extends Wizard {
 	 *
 	 * @return int[]
 	 */
-	private function customer_ids_for_raw_statuses( array $prototype_statuses, bool $include_network = true ) {
+	private function customer_ids_for_raw_statuses( array $prototype_statuses, bool $include_network = true ): array {
 		if ( empty( $prototype_statuses ) ) {
 			return [];
 		}
-		// Memoized per status set: customer_ids_for_statuses() asks for up to three
-		// overlapping sets per request (and a filter like ['active','cancelled']
-		// asks for `active` twice), each of which would otherwise repeat the full
-		// subscription scan below.
+		// Memoized per status set and scope: the status, plan and Managed on filters
+		// ask for overlapping sets in one request, each of which would otherwise
+		// repeat the full subscription scan below.
 		sort( $prototype_statuses );
 		$cache_key = implode( ',', $prototype_statuses ) . ( $include_network ? '' : ':local' );
 		if ( isset( $this->raw_status_ids_cache[ $cache_key ] ) ) {
 			return $this->raw_status_ids_cache[ $cache_key ];
 		}
+
+		// The network-inclusive set is the local one plus the network index, so the
+		// costly scan of this site's subscriptions runs once per status set.
+		if ( $include_network ) {
+			$ids = $this->customer_ids_for_raw_statuses( $prototype_statuses, false );
+			// Subscriptions other network sites manage count like local ones: the row
+			// shows their status, so the filter has to match it. The index holds mapped
+			// statuses.
+			foreach ( $this->network_subscription_index() as $network_row ) {
+				if ( in_array( $network_row['status'], $prototype_statuses, true ) ) {
+					$ids[] = $network_row['user_id'];
+				}
+			}
+			$this->raw_status_ids_cache[ $cache_key ] = array_values( array_unique( array_filter( $ids ) ) );
+			return $this->raw_status_ids_cache[ $cache_key ];
+		}
+
 		$ids = [];
 
 		// Individual + owned subscriptions in a matching WCS status (HPOS-safe).
@@ -2525,14 +2546,6 @@ class Subscribers_Wizard extends Wizard {
 		foreach ( $this->get_group_subscriptions() as $group ) {
 			if ( in_array( self::map_subscription_status( $group['subscription']->get_status() ), $prototype_statuses, true ) ) {
 				$ids = array_merge( $ids, array_map( 'intval', Group_Subscription::get_all_members( $group['subscription'] ) ) );
-			}
-		}
-
-		// Subscriptions other network sites manage count like local ones: the row shows
-		// their status, so the filter has to match it. The index holds mapped statuses.
-		foreach ( $include_network ? $this->network_subscription_index() : [] as $network_row ) {
-			if ( in_array( $network_row['status'], $prototype_statuses, true ) ) {
-				$ids[] = $network_row['user_id'];
 			}
 		}
 

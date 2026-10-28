@@ -873,6 +873,7 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 			[
 				'id'              => 500,
 				'plan'            => 'Fan Membership (Node Daily)',
+				'planName'        => 'Fan Membership',
 				'status'          => 'active',
 				'editUrl'         => 'https://node-b.example.test/wp-admin/post.php?post=500&action=edit',
 				'isComplimentary' => false,

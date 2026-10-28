@@ -20,10 +20,8 @@ const PATH = '/newspack/v1/wizard/newspack-subscribers/plans';
  * screen to tell a failed read from a site that sells no plans.
  *
  * @return {{plans: string[], sites: string[], failed: boolean}} Plan names and the
- *                                                                network sites that manage any
- *                                                                subscription, both alphabetised by
- *                                                                the endpoint, and whether the read
- *                                                                failed.
+ * network sites managing any subscription here, both alphabetized by the endpoint,
+ * and whether the read failed.
  */
 export function usePlans() {
 	const [ plans, setPlans ] = useState( [] );
