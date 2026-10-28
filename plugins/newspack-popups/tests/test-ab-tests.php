@@ -144,6 +144,18 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * A Test ID made of digits stays the string it was saved as, so the route
+	 * that looks a test up by its sanitized ID still finds it.
+	 */
+	public function test_get_tests_keeps_a_numeric_test_id_a_string() {
+		$this->create_test_variant( '123', 'a' );
+		$this->create_test_variant( '123', 'b' );
+		$this->create_test_variant( 'alpha', 'a' );
+		$ids = array_column( Newspack_Popups_AB_Tests::get_tests(), 'test_id' );
+		$this->assertSame( [ '123', 'alpha' ], $ids );
+	}
+
+	/**
 	 * The goal and its label come along; variants carry what the page shows.
 	 */
 	public function test_get_tests_goal_label_and_variants() {

@@ -510,7 +510,7 @@ final class Newspack_Popups_AB_Tests {
 		foreach ( $grouped as $test_id => $letters ) {
 			ksort( $letters );
 			$test = [
-				'test_id'       => $test_id,
+				'test_id'       => (string) $test_id, // An all-digit ID became an integer as an array key.
 				'goal'          => '',
 				'goal_label'    => '',
 				'control_share' => self::DEFAULT_CONTROL_SHARE,

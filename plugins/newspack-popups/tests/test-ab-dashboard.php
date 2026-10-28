@@ -214,6 +214,19 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * A Test ID made of digits reaches the route as the string it was saved as.
+	 */
+	public function test_stats_route_finds_a_numeric_test_id() {
+		$this->as_admin();
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
+		$this->create_running_test( '123' );
+		$response = $this->stats_request( '123' );
+		remove_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( '123', $response->get_data()['test_id'] );
+	}
+
+	/**
 	 * Sign in as an administrator.
 	 */
 	private function as_admin() {
