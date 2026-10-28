@@ -32,7 +32,7 @@ const AllocationBar = ( { controlShare, variants } ) => {
 			role="img"
 			aria-label={ sprintf(
 				// Translators: %1$d is the control's share of readers, %2$d the challengers' share.
-				__( '%1$d%% of readers see the control, %2$d%% see a challenger.', 'newspack-popups' ),
+				__( '%1$d%% of readers see A, %2$d%% see B.', 'newspack-popups' ),
 				controlShare,
 				100 - controlShare
 			) }
