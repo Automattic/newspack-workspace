@@ -70,12 +70,20 @@ final class Newspack_Popups_AB_Dashboard {
 		if ( ! self::$page_hook || $hook_suffix !== self::$page_hook || ! Newspack_Popups_AB_Tests::is_enabled() ) {
 			return;
 		}
-		$dir = dirname( NEWSPACK_POPUPS_PLUGIN_FILE );
+		$dir        = dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/';
+		$asset_path = $dir . 'abTests.asset.php';
+		$paths      = [ $asset_path, $dir . 'abTests.js', $dir . 'abTests.css' ];
+		if ( array_filter( $paths, fn( $path ) => ! file_exists( $path ) ) ) {
+			// A checkout that has not been built: the page renders its root and
+			// nothing mounts, which is better than a fatal on the Tools menu.
+			return;
+		}
+		$asset = require $asset_path;
 		\wp_register_script(
 			self::SCRIPT_HANDLE,
 			plugins_url( '../dist/abTests.js', __FILE__ ),
-			[ 'wp-components', 'wp-api-fetch', 'wp-element', 'wp-i18n' ],
-			filemtime( $dir . '/dist/abTests.js' ),
+			$asset['dependencies'],
+			$asset['version'],
 			true
 		);
 		wp_localize_script( self::SCRIPT_HANDLE, 'newspack_popups_ab_tests', self::get_boot_data() );
@@ -83,8 +91,8 @@ final class Newspack_Popups_AB_Dashboard {
 		\wp_register_style(
 			self::SCRIPT_HANDLE,
 			plugins_url( '../dist/abTests.css', __FILE__ ),
-			null,
-			filemtime( $dir . '/dist/abTests.css' )
+			[ 'wp-components' ],
+			$asset['version']
 		);
 		\wp_style_add_data( self::SCRIPT_HANDLE, 'rtl', 'replace' );
 		\wp_enqueue_style( self::SCRIPT_HANDLE );

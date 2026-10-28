@@ -539,6 +539,27 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * The script's dependencies and version come from the build manifest, so a
+	 * dependency the bundle gains is loaded without anyone editing a PHP list.
+	 */
+	public function test_page_script_is_registered_from_the_build_manifest() {
+		$this->as_admin();
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
+		$this->tools_menu_slugs();
+		$hook = get_plugin_page_hookname( Newspack_Popups_AB_Dashboard::PAGE_SLUG, 'tools.php' );
+		Newspack_Popups_AB_Dashboard::enqueue( $hook );
+		remove_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
+		$asset  = require dirname( __DIR__ ) . '/dist/abTests.asset.php';
+		$script = wp_scripts()->registered[ Newspack_Popups_AB_Dashboard::SCRIPT_HANDLE ] ?? null;
+		$this->assertNotNull( $script );
+		$this->assertSame( $asset['dependencies'], $script->deps );
+		$this->assertSame( $asset['version'], $script->ver );
+		$style = wp_styles()->registered[ Newspack_Popups_AB_Dashboard::SCRIPT_HANDLE ] ?? null;
+		$this->assertNotNull( $style );
+		$this->assertSame( [ 'wp-components' ], $style->deps );
+	}
+
+	/**
 	 * Boot data carries the tests, the provider state, the thresholds and the copy.
 	 */
 	public function test_boot_data_reports_provider_state_and_copy() {
