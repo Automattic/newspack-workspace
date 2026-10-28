@@ -196,78 +196,69 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * A provider that is not available reports its own reason.
+	 * Ways is_available() can say no, with the reason the page should show.
+	 *
+	 * @return array[]
 	 */
-	public function test_unavailable_provider_reports_its_reason() {
+	public function not_available_answers() {
+		return [
+			'error'     => [ new WP_Error( 'x', 'Connect the thing.' ), 'Connect the thing.' ],
+			'false'     => [ false, 'The stats source is not available on this site.' ],
+			'exception' => [ new RuntimeException( 'No client.' ), 'No client.' ],
+		];
+	}
+
+	/**
+	 * A provider that is not available is unavailable on the route and the page,
+	 * with the same reason, and is never asked for counts.
+	 *
+	 * @dataProvider not_available_answers
+	 * @param mixed  $answer What is_available() returns or throws.
+	 * @param string $reason What the page shows.
+	 */
+	public function test_not_available_provider_is_unavailable_everywhere( $answer, $reason ) {
 		$this->as_admin();
 		$this->create_running_test();
-		$stub = $this->use_provider( $this->counts( 1, 1, 1, 1 ), new WP_Error( 'x', 'Connect the thing.' ) );
+		$stub = $this->use_provider( $this->counts( 1, 1, 1, 1 ), $answer );
 		$data = $this->stats_request( 't' )->get_data();
 		$this->assertSame( 'unavailable', $data['source']['state'] );
-		$this->assertSame( 'Connect the thing.', $data['source']['reason'] );
+		$this->assertSame( $reason, $data['source']['reason'] );
 		$this->assertSame( 'stub', $data['source']['provider'] );
 		$this->assertCount( 0, $stub->calls );
-	}
-
-	/**
-	 * A provider error is reported and not cached.
-	 */
-	public function test_provider_error_is_unavailable_and_not_cached() {
-		$this->as_admin();
-		$this->create_running_test();
-		$stub = $this->use_provider( new WP_Error( 'x', 'The source timed out.' ) );
-		$data = $this->stats_request( 't' )->get_data();
-		$this->assertSame( 'unavailable', $data['source']['state'] );
-		$this->assertSame( 'The source timed out.', $data['source']['reason'] );
-		$this->stats_request( 't' );
-		$this->assertCount( 2, $stub->calls );
-	}
-
-	/**
-	 * A provider that throws is reported like one that errors, and never cached.
-	 */
-	public function test_provider_exception_is_unavailable_and_not_cached() {
-		$this->as_admin();
-		$this->create_running_test();
-		$stub = $this->use_provider( new RuntimeException( 'The client blew up.' ) );
-		$data = $this->stats_request( 't' )->get_data();
-		$this->assertSame( 'unavailable', $data['source']['state'] );
-		$this->assertSame( 'The client blew up.', $data['source']['reason'] );
-		$this->stats_request( 't' );
-		$this->assertCount( 2, $stub->calls );
-	}
-
-	/**
-	 * A plain false from is_available() is unavailable on the page and the route,
-	 * with a reason the page can show.
-	 */
-	public function test_is_available_false_is_unavailable_everywhere() {
-		$this->as_admin();
-		$this->create_running_test();
-		$stub = $this->use_provider( $this->counts( 1, 1, 1, 1 ), false );
-		$data = $this->stats_request( 't' )->get_data();
-		$this->assertSame( 'unavailable', $data['source']['state'] );
-		$this->assertNotEmpty( $data['source']['reason'] );
-		$this->assertCount( 0, $stub->calls );
 		$boot = Newspack_Popups_AB_Dashboard::get_boot_data();
 		$this->assertFalse( $boot['provider']['available'] );
-		$this->assertSame( $data['source']['reason'], $boot['provider']['reason'] );
+		$this->assertSame( 'stub', $boot['provider']['slug'] );
+		$this->assertSame( $reason, $boot['provider']['reason'] );
 	}
 
 	/**
-	 * An exception from is_available() must not take the Tools page down with it.
+	 * Ways get_counts() can fail.
+	 *
+	 * @return array[]
 	 */
-	public function test_is_available_exception_is_unavailable_everywhere() {
+	public function count_failures() {
+		return [
+			'error'     => [ new WP_Error( 'x', 'The source timed out.' ), 'The source timed out.' ],
+			'exception' => [ new RuntimeException( 'The client blew up.' ), 'The client blew up.' ],
+		];
+	}
+
+	/**
+	 * A failed count is reported with its reason and never cached.
+	 *
+	 * @dataProvider count_failures
+	 * @param mixed  $failure What get_counts() returns or throws.
+	 * @param string $reason  What the page shows.
+	 */
+	public function test_count_failure_is_unavailable_and_not_cached( $failure, $reason ) {
 		$this->as_admin();
 		$this->create_running_test();
-		$stub = $this->use_provider( $this->counts( 1, 1, 1, 1 ), new RuntimeException( 'No client.' ) );
+		$stub = $this->use_provider( $failure );
 		$data = $this->stats_request( 't' )->get_data();
 		$this->assertSame( 'unavailable', $data['source']['state'] );
-		$this->assertSame( 'No client.', $data['source']['reason'] );
-		$this->assertCount( 0, $stub->calls );
-		$boot = Newspack_Popups_AB_Dashboard::get_boot_data();
-		$this->assertFalse( $boot['provider']['available'] );
-		$this->assertSame( 'No client.', $boot['provider']['reason'] );
+		$this->assertSame( $reason, $data['source']['reason'] );
+		$this->stats_request( 't' );
+		$this->assertCount( 2, $stub->calls );
 	}
 
 	/**
@@ -589,16 +580,5 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 		$this->assertTrue( $data['provider']['available'] );
 		$this->assertSame( 'stub', $data['provider']['slug'] );
 		$this->assertNull( $data['provider']['reason'] );
-	}
-
-	/**
-	 * A provider that is not available gives its reason.
-	 */
-	public function test_boot_data_with_an_unavailable_provider() {
-		$this->use_provider( $this->counts( 1, 1, 1, 1 ), new WP_Error( 'x', 'Connect the thing.' ) );
-		$data = Newspack_Popups_AB_Dashboard::get_boot_data();
-		$this->assertFalse( $data['provider']['available'] );
-		$this->assertSame( 'stub', $data['provider']['slug'] );
-		$this->assertSame( 'Connect the thing.', $data['provider']['reason'] );
 	}
 }
