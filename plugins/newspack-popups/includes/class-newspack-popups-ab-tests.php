@@ -456,6 +456,98 @@ final class Newspack_Popups_AB_Tests {
 	}
 
 	/**
+	 * Every test on the site, for the A/B Tests dashboard.
+	 *
+	 * Tests are discovered from prompts carrying a Test ID, in every non-trashed
+	 * status, so a test still being set up (one arm published, the other a draft)
+	 * is listed with its state rather than hidden until it is valid. A prompt
+	 * whose variant key is outside VALID_VARIANTS is skipped: the schema will not
+	 * save one, so one can only come from a direct meta write.
+	 *
+	 * @return array[] Ordered by Test ID. Each `[ 'test_id', 'goal', 'goal_label',
+	 *                 'control_share', 'started_at', 'variants' ]`. `control_share`
+	 *                 comes from the control prompt, or DEFAULT_CONTROL_SHARE without
+	 *                 one. `started_at` is the earliest publish date among the
+	 *                 test's published prompts, ISO 8601 UTC, or null when none is
+	 *                 published. `variants` maps the letter to
+	 *                 `[ 'id', 'title', 'status', 'status_label', 'edit_link' ]`.
+	 */
+	public static function get_tests() {
+		$prompts = get_posts(
+			[
+				'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+				'post_status'    => [ 'publish', 'future', 'draft', 'pending', 'private' ],
+				'perm'           => 'readable',
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Prompts CPT; config-scale.
+				'orderby'        => 'ID',
+				'order'          => 'ASC',
+				'meta_key'       => self::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'meta_compare'   => '!=',
+				'meta_value'     => '', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			]
+		);
+		$tests = [];
+		foreach ( $prompts as $prompt ) {
+			$test_id = self::sanitize_test_id( get_post_meta( $prompt->ID, self::META_TEST_ID, true ) );
+			$variant = (string) get_post_meta( $prompt->ID, self::META_VARIANT, true );
+			if ( '' === $test_id || ! in_array( $variant, self::VALID_VARIANTS, true ) ) {
+				continue;
+			}
+			if ( ! isset( $tests[ $test_id ] ) ) {
+				$tests[ $test_id ] = [
+					'test_id'       => $test_id,
+					'goal'          => '',
+					'goal_label'    => '',
+					'control_share' => self::DEFAULT_CONTROL_SHARE,
+					'started_at'    => null,
+					'variants'      => [],
+				];
+			}
+			$test   = &$tests[ $test_id ];
+			$status = get_post_status_object( $prompt->post_status );
+
+			$test['variants'][ $variant ] = [
+				'id'           => (int) $prompt->ID,
+				'title'        => $prompt->post_title,
+				'status'       => $prompt->post_status,
+				'status_label' => $status ? $status->label : $prompt->post_status,
+				'edit_link'    => get_edit_post_link( $prompt->ID, 'raw' ),
+			];
+
+			if ( 'a' === $variant ) {
+				$share = get_post_meta( $prompt->ID, self::META_CONTROL_SHARE, true );
+				if ( '' !== $share && null !== $share ) {
+					$test['control_share'] = self::sanitize_control_share( $share );
+				}
+			}
+
+			// The control's goal wins; otherwise the first prompt that has one.
+			$goal = self::sanitize_goal( get_post_meta( $prompt->ID, self::META_GOAL, true ) );
+			if ( '' !== $goal && ( 'a' === $variant || '' === $test['goal'] ) ) {
+				$test['goal'] = $goal;
+			}
+
+			if ( 'publish' === $prompt->post_status && '0000-00-00 00:00:00' !== $prompt->post_date_gmt ) {
+				$published = gmdate( 'Y-m-d\TH:i:s\Z', strtotime( $prompt->post_date_gmt . ' UTC' ) );
+				if ( null === $test['started_at'] || $published < $test['started_at'] ) {
+					$test['started_at'] = $published;
+				}
+			}
+			unset( $test );
+		}
+
+		$labels = self::get_goal_labels();
+		foreach ( $tests as &$test ) {
+			ksort( $test['variants'] );
+			$test['goal_label'] = $labels[ $test['goal'] ] ?? '';
+		}
+		unset( $test );
+		ksort( $tests );
+
+		return array_values( $tests );
+	}
+
+	/**
 	 * Placements a tested prompt can't have. Manual and custom placements render
 	 * wherever a block or shortcode puts them, so there is no slot to split
 	 * between variants.

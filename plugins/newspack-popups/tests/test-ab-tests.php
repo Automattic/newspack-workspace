@@ -38,6 +38,92 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * The dashboard lists drafts and tests missing an arm; trashed prompts are gone.
+	 */
+	public function test_get_tests_lists_drafts_and_incomplete_tests() {
+		$this->create_test_variant( 'draft-test', 'a', null, [ 'post_status' => 'draft' ] );
+		$this->create_test_variant( 'lonely', 'a' );
+		$this->create_test_variant( 'gone', 'a', null, [ 'post_status' => 'trash' ] );
+		$ids = array_column( Newspack_Popups_AB_Tests::get_tests(), 'test_id' );
+		$this->assertSame( [ 'draft-test', 'lonely' ], $ids );
+	}
+
+	/**
+	 * The control share is read from the control; one stored on a challenger is ignored.
+	 */
+	public function test_get_tests_control_share_defaults_to_fifty_even_when_set_on_a_challenger() {
+		$this->create_test_variant( 'cs', 'a' );
+		$this->create_test_variant( 'cs', 'b', null, [], 70 );
+		$this->assertSame( 50, Newspack_Popups_AB_Tests::get_tests()[0]['control_share'] );
+	}
+
+	/**
+	 * The control's stored share is reported.
+	 */
+	public function test_get_tests_reads_control_share_from_the_control() {
+		$this->create_test_variant( 'cs2', 'a', null, [], 60 );
+		$this->assertSame( 60, Newspack_Popups_AB_Tests::get_tests()[0]['control_share'] );
+	}
+
+	/**
+	 * A test starts when its first prompt was published.
+	 */
+	public function test_get_tests_started_at_is_the_earliest_published_date() {
+		$this->create_test_variant(
+			'dates',
+			'a',
+			null,
+			[
+				'post_date_gmt' => '2026-10-05 00:00:00',
+				'post_date'     => '2026-10-05 00:00:00',
+			]
+		);
+		$this->create_test_variant(
+			'dates',
+			'b',
+			null,
+			[
+				'post_date_gmt' => '2026-10-01 00:00:00',
+				'post_date'     => '2026-10-01 00:00:00',
+			]
+		);
+		$this->assertSame( '2026-10-01T00:00:00Z', Newspack_Popups_AB_Tests::get_tests()[0]['started_at'] );
+	}
+
+	/**
+	 * A test with nothing published has not started.
+	 */
+	public function test_get_tests_started_at_is_null_without_a_published_prompt() {
+		$this->create_test_variant( 'unpub', 'a', null, [ 'post_status' => 'draft' ] );
+		$this->assertNull( Newspack_Popups_AB_Tests::get_tests()[0]['started_at'] );
+	}
+
+	/**
+	 * The goal and its label come along; variants carry what the page shows.
+	 */
+	public function test_get_tests_goal_label_and_variants() {
+		$id = $this->create_test_variant( 'goal', 'a' );
+		update_post_meta( $id, Newspack_Popups_AB_Tests::META_GOAL, 'donation' );
+		$test = Newspack_Popups_AB_Tests::get_tests()[0];
+		$this->assertSame( 'donation', $test['goal'] );
+		$this->assertSame( 'Donation', $test['goal_label'] );
+		$this->assertSame( $id, $test['variants']['a']['id'] );
+		$this->assertSame( 'publish', $test['variants']['a']['status'] );
+		$this->assertSame( 'Published', $test['variants']['a']['status_label'] );
+		$this->assertArrayHasKey( 'edit_link', $test['variants']['a'] );
+		$this->assertArrayHasKey( 'title', $test['variants']['a'] );
+	}
+
+	/**
+	 * A prompt whose variant key is not a letter the schema knows is left out.
+	 */
+	public function test_get_tests_skips_prompts_with_an_unknown_variant() {
+		$this->create_test_variant( 'odd', 'a' );
+		$this->create_test_variant( 'odd', 'z' );
+		$this->assertSame( [ 'a' ], array_keys( Newspack_Popups_AB_Tests::get_tests()[0]['variants'] ) );
+	}
+
+	/**
 	 * A site with no tests records the flag, so later requests skip the query.
 	 */
 	public function test_zero_test_site_records_the_has_tests_flag() {
