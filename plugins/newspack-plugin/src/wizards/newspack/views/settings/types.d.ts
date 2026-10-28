@@ -103,6 +103,18 @@ type JetpackSSOSettings = Partial< {
 /** Print */
 type IndesignPlatform = 'win' | 'mac';
 
+type IndesignStyleNameKey =
+	| 'headline'
+	| 'subhead'
+	| 'byline'
+	| 'paragraph'
+	| 'horizontal_rule'
+	| 'pullquote'
+	| 'pullquote_name'
+	| 'blockquote'
+	| 'photo_caption'
+	| 'photo_credit';
+
 type IndesignPostTypeOption = {
 	value: string;
 	label: string;
@@ -117,4 +129,6 @@ type PrintData = {
 	indesign_post_types: string[];
 	available_post_types: IndesignPostTypeOption[];
 	indesign_exclude_captions: boolean;
+	indesign_style_names: Record< IndesignStyleNameKey, string >;
+	indesign_default_style_names: Record< IndesignStyleNameKey, string >;
 };
