@@ -510,8 +510,8 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	/**
 	 * The pair sits last in priority, after every other group and after
 	 * `access_source`: at the property's dimension cap it is the first to lose
-	 * a slot, since a test can be reported from the export without it and a
-	 * gate cannot. Isolated because the gating constant cannot be unset.
+	 * a slot, as the group fewest sites turn on. Isolated because the gating
+	 * constant cannot be unset.
 	 *
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
