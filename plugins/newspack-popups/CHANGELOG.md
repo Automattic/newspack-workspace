@@ -1,3 +1,10 @@
+## newspack-popups [3.20.4](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.20.3...newspack-popups@3.20.4) (2026-10-27)
+
+
+### Bug Fixes
+
+* **popups:** track form submissions inside prompts in GA4 (NPPD-2505) ([#1432](https://github.com/Automattic/newspack-workspace/issues/1432)) ([1ccb4ee](https://github.com/Automattic/newspack-workspace/commit/1ccb4eef3e4682271610499465decd7897b11bba))
+
 ## newspack-popups [3.20.3](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.20.2...newspack-popups@3.20.3) (2026-10-26)
 
 
