@@ -32,32 +32,17 @@ require_once NEWSPACK_BLOCKS__PLUGIN_DIR . 'src/blocks/author-list/class-wp-rest
 // REST Controller for Iframe Block.
 require_once NEWSPACK_BLOCKS__PLUGIN_DIR . 'src/blocks/iframe/class-wp-rest-newspack-iframe-controller.php';
 
-/**
- * Registers Authors block routes.
- */
-function newspack_authors_block_register_rest_routes() { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
-	$authors_controller = new WP_REST_Newspack_Authors_Controller();
-	$authors_controller->register_routes();
-}
-add_action( 'rest_api_init', 'newspack_authors_block_register_rest_routes' );
-
-/**
- * Registers Author List block routes.
- */
-function newspack_author_list_block_register_rest_routes() { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
-	$author_list_controller = new WP_REST_Newspack_Author_List_Controller();
-	$author_list_controller->register_routes();
-}
-add_action( 'rest_api_init', 'newspack_author_list_block_register_rest_routes' );
-
-/**
- * Registers Iframe block routes.
- */
-function newspack_iframe_block_register_rest_routes() { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
-	$iframe_controller = new WP_REST_Newspack_Iframe_Controller();
-	$iframe_controller->register_routes();
-}
-add_action( 'rest_api_init', 'newspack_iframe_block_register_rest_routes' );
+// REST routes for the Author Profile, Author List and Iframe blocks. Closures rather than
+// newspack-blocks' named functions: activating newspack-blocks includes its main file in a
+// request where this copy is loaded, and PHP declares that file's functions before any of it runs.
+add_action(
+	'rest_api_init',
+	function() {
+		( new WP_REST_Newspack_Authors_Controller() )->register_routes();
+		( new WP_REST_Newspack_Author_List_Controller() )->register_routes();
+		( new WP_REST_Newspack_Iframe_Controller() )->register_routes();
+	}
+);
 
 Newspack_Blocks::manage_view_scripts();
 add_action( 'enqueue_block_assets', array( 'Newspack_Blocks', 'enqueue_block_assets' ) );

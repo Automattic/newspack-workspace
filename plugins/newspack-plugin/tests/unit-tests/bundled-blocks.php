@@ -79,6 +79,24 @@ class Newspack_Test_Bundled_Blocks extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Activating newspack-blocks while the bundled copy is loaded doesn't fatal.
+	 *
+	 * WordPress includes a plugin's main file in the request that activates it,
+	 * after the bundled copy has already declared the same functions and classes.
+	 */
+	public function test_activating_legacy_plugin_with_bundled_copy_loaded_does_not_fatal() {
+		$legacy_plugin_file = dirname( NEWSPACK_ABSPATH ) . '/newspack-blocks/newspack-blocks.php';
+		if ( ! file_exists( $legacy_plugin_file ) ) {
+			$this->markTestSkipped( 'The newspack-blocks plugin is not checked out next to this plugin.' );
+		}
+		$this->assertTrue( Bundled_Blocks::is_loaded() );
+
+		include $legacy_plugin_file;
+
+		$this->assertSame( NEWSPACK_ABSPATH . 'includes/newspack-blocks/', NEWSPACK_BLOCKS__PLUGIN_DIR );
+	}
+
+	/**
 	 * Content Loop and Carousel code is not bundled.
 	 */
 	public function test_content_loop_not_bundled() {

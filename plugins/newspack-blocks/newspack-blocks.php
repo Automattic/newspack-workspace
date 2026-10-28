@@ -13,6 +13,14 @@
  * @package         Newspack_Blocks
  */
 
+// newspack-plugin bundles this plugin's code, except the Content Loop and Carousel blocks,
+// and loads it when this plugin is inactive. Activating this plugin includes this file in a
+// request where that copy is already loaded, so stop here; from the next request on, this
+// plugin loads and newspack-plugin's copy doesn't.
+if ( class_exists( 'Newspack\Bundled_Blocks', false ) && Newspack\Bundled_Blocks::is_loaded() ) {
+	return;
+}
+
 define( 'NEWSPACK_BLOCKS__PLUGIN_FILE', __FILE__ );
 define( 'NEWSPACK_BLOCKS__BLOCKS_DIRECTORY', 'dist/' );
 define( 'NEWSPACK_BLOCKS__PLUGIN_DIR', plugin_dir_path( NEWSPACK_BLOCKS__PLUGIN_FILE ) );
