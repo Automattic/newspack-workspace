@@ -29,6 +29,46 @@ class Newspack_Test_Bundled_Blocks extends WP_UnitTestCase {
 	];
 
 	/**
+	 * REST routes the moved blocks use.
+	 *
+	 * @var string[]
+	 */
+	const MOVED_ROUTES = [
+		'/newspack-blocks/v1/author-list',
+		'/newspack-blocks/v1/authors',
+		'/newspack-blocks/v1/newspack-blocks-iframe-archive',
+		'/newspack-blocks/v1/newspack-blocks-iframe-archive-from-media',
+		'/newspack-blocks/v1/newspack-blocks-iframe-mode-from-url',
+		'/newspack-blocks/v1/newspack-blocks-remove-iframe-archive',
+		'/newspack-blocks/v1/video-playlist',
+	];
+
+	/**
+	 * REST routes only Content Loop and Carousel use.
+	 *
+	 * @var string[]
+	 */
+	const CONTENT_LOOP_ROUTES = [
+		'/newspack-blocks/v1/articles',
+		'/newspack-blocks/v1/newspack-blocks-posts',
+		'/newspack-blocks/v1/newspack-blocks-posts-batch',
+		'/newspack-blocks/v1/newspack-blocks-specific-posts',
+	];
+
+	/**
+	 * The moved blocks' REST routes are registered, Content Loop's aren't.
+	 */
+	public function test_moved_routes_registered() {
+		$routes = rest_get_server()->get_routes();
+		foreach ( self::MOVED_ROUTES as $route ) {
+			$this->assertArrayHasKey( $route, $routes, "$route is not registered." );
+		}
+		foreach ( self::CONTENT_LOOP_ROUTES as $route ) {
+			$this->assertArrayNotHasKey( $route, $routes, "$route is registered." );
+		}
+	}
+
+	/**
 	 * Without the newspack-blocks plugin, the bundled copy loads.
 	 */
 	public function test_bundled_copy_loads_without_legacy_plugin() {
@@ -42,7 +82,7 @@ class Newspack_Test_Bundled_Blocks extends WP_UnitTestCase {
 	 * Content Loop and Carousel code is not bundled.
 	 */
 	public function test_content_loop_not_bundled() {
-		$this->assertFalse( class_exists( 'Newspack_Blocks_API' ) );
+		$this->assertFalse( method_exists( 'Newspack_Blocks_API', 'posts_endpoint' ) );
 		$this->assertFalse( class_exists( 'Newspack_Blocks_Caching' ) );
 		$this->assertFalse( class_exists( 'WP_REST_Newspack_Articles_Controller' ) );
 		$this->assertFalse( method_exists( 'Newspack_Blocks', 'build_articles_query' ) );
