@@ -262,6 +262,9 @@ const TestCard = ( { test, data } ) => {
 							) }
 						</p>
 					) }
+					{ hasStats && stats.source.state === 'ok' && stats.source.note && (
+						<p className="newspack-popups-ab-tests__muted">{ stats.source.note }</p>
+					) }
 					{ hasStats && status !== 'incomplete' && stats.flags.young_test && (
 						<Notice status="info" isDismissible={ false } spokenMessage="">
 							{ data.copy.young_test }

@@ -54,7 +54,10 @@ interface Newspack_Popups_AB_Stats_Provider {
 	 *                        source could not count readers. Variants the source
 	 *                        has nothing for may be left out. An empty `variants`
 	 *                        means no data yet; a WP_Error means the source could
-	 *                        not answer, with the reason in its message.
+	 *                        not answer, with the reason in its message. An optional
+	 *                        `note` is one sentence the page shows under the counts,
+	 *                        in words a site administrator can read, such as how
+	 *                        often the source refreshes.
 	 */
 	public function get_counts( array $test, string $goal, string $start, string $end );
 }
