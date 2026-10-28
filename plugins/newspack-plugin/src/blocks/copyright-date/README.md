@@ -1,10 +1,10 @@
-# Copyright Date Block
+# Copyright Block
 
-A Gutenberg block that displays the current year with configurable prefix and suffix text.
+A Gutenberg block that displays a copyright line: the current year with configurable prefix and suffix text. Its block name is `newspack/copyright-date`, from when it was titled Copyright Date; saved content references that name, so it stays.
 
 ## Overview
 
-The Copyright Date block dynamically renders the current year based on the site's timezone setting. It's designed for use in footer templates and patterns, removing the need to manually update the copyright year. The year updates automatically for all visitors based on the site's configured timezone, not the visitor's local time.
+The Copyright block dynamically renders the current year based on the site's timezone setting. It's designed for use in footer templates and patterns, removing the need to manually update the copyright year. The year updates automatically for all visitors based on the site's configured timezone, not the visitor's local time.
 
 ## Block attributes
 
@@ -25,13 +25,13 @@ Both prefix and suffix values are escaped with `esc_html()` in the render output
 
 ## Usage with block theme patterns
 
-All footer patterns in the Newspack Block Theme include this block:
+All footer patterns in the Newspack Block Theme include this block, with the site title as the suffix:
 
-```html
-<!-- wp:newspack/copyright-date /-->
+```php
+<!-- wp:newspack/copyright-date <?php echo serialize_block_attributes( [ 'suffix' => get_bloginfo( 'name' ) ] ); ?> /-->
 ```
 
-The block uses the default © prefix, so no attributes need to be specified in patterns.
+The suffix is plain text rather than a Site Title block, so editing the footer's wording doesn't change the site title. Once a footer is saved, the suffix no longer follows changes to the site title.
 
 ## Styling
 

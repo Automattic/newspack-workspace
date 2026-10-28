@@ -1,9 +1,9 @@
 {
 	"apiVersion": 3,
 	"name": "newspack/copyright-date",
-	"title": "Copyright Date",
+	"title": "Copyright",
 	"category": "newspack",
-	"description": "Display the current year with configurable prefix and suffix text.",
+	"description": "Display a copyright line with the current year, which updates automatically.",
 	"textdomain": "newspack-plugin",
 	"attributes": {
 		"prefix": {
