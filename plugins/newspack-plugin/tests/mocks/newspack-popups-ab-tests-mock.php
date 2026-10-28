@@ -15,11 +15,19 @@
  */
 class Newspack_Test_GA4_Campaigns_AB_Tests_Stub {
 	/**
+	 * What `is_enabled()` reports. Off by default, so a test proves the
+	 * provisioner reads the flag and not merely the class's presence.
+	 *
+	 * @var bool
+	 */
+	public static $enabled = false;
+
+	/**
 	 * The flag, as Campaigns reports it.
 	 *
 	 * @return bool
 	 */
 	public static function is_enabled() {
-		return true;
+		return self::$enabled;
 	}
 }

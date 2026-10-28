@@ -466,6 +466,8 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	/**
 	 * A site that runs no A/B tests must not spend two slots on test parameters:
 	 * Campaigns is active almost everywhere, and the flag is off almost everywhere.
+	 * Guards the gate, not the entries: it passes with the group removed outright,
+	 * and fails only when the entries stay while the gate goes.
 	 */
 	public function test_ab_testing_dimensions_are_omitted_without_ab_testing() {
 		add_filter( 'newspack_ga4_dimensions_ab_testing_enabled', '__return_false' );
@@ -517,6 +519,10 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 		$this->assertFalse( GA4_Custom_Dimensions::is_ab_testing_enabled(), 'Process isolation failed: Campaigns leaked in, so this was never tested.' );
 
 		class_alias( Newspack_Test_GA4_Campaigns_AB_Tests_Stub::class, 'Newspack_Popups_AB_Tests' );
+
+		$this->assertFalse( GA4_Custom_Dimensions::is_ab_testing_enabled(), 'Campaigns being present is not enough: the flag has to be on.' );
+
+		Newspack_Test_GA4_Campaigns_AB_Tests_Stub::$enabled = true;
 
 		$this->assertTrue( GA4_Custom_Dimensions::is_ab_testing_enabled(), 'The Campaigns flag switches the A/B dimensions on, with no filter.' );
 		$this->assertArrayHasKey( 'ab_test_id', GA4_Custom_Dimensions::get_dimensions(), 'The A/B dimensions follow the automatic detection.' );
