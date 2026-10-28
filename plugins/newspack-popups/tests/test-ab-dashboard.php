@@ -415,4 +415,80 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 		$this->use_provider( $counts );
 		$this->assertSame( 'events', $this->stats_request( 't' )->get_data()['source']['unit'] );
 	}
+
+	/**
+	 * Slugs of the Tools submenu after admin_menu runs.
+	 *
+	 * @return string[]
+	 */
+	private function tools_menu_slugs() {
+		$GLOBALS['submenu'] = []; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Resetting the menu between tests.
+		do_action( 'admin_menu' );
+		return array_column( $GLOBALS['submenu']['tools.php'] ?? [], 2 );
+	}
+
+	/**
+	 * With the flag on, Tools gains an A/B Tests page.
+	 */
+	public function test_menu_is_registered_with_the_flag_on() {
+		$this->as_admin();
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
+		$slugs = $this->tools_menu_slugs();
+		remove_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
+		$this->assertContains( Newspack_Popups_AB_Dashboard::PAGE_SLUG, $slugs );
+	}
+
+	/**
+	 * With the flag off the page is not registered.
+	 */
+	public function test_menu_is_absent_with_the_flag_off() {
+		$this->as_admin();
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
+		$slugs = $this->tools_menu_slugs();
+		remove_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
+		$this->assertNotContains( Newspack_Popups_AB_Dashboard::PAGE_SLUG, $slugs );
+	}
+
+	/**
+	 * Boot data carries the tests, the provider state, the thresholds and the copy.
+	 */
+	public function test_boot_data_reports_provider_state_and_copy() {
+		$this->as_admin();
+		$this->create_running_test();
+		$data = Newspack_Popups_AB_Dashboard::get_boot_data();
+		$this->assertSame( 't', $data['tests'][0]['test_id'] );
+		$this->assertFalse( $data['provider']['available'] );
+		$this->assertNull( $data['provider']['slug'] );
+		$this->assertSame( 'No stats source is connected.', $data['provider']['reason'] );
+		$this->assertSame( 80, $data['thresholds']['directional'] );
+		$this->assertSame( 95, $data['thresholds']['reliable'] );
+		$this->assertSame( 30, $data['thresholds']['min_readers'] );
+		$this->assertStringStartsWith( "A large share of your readers aren't logged in.", $data['copy']['high_anonymous'] );
+		$this->assertStringStartsWith( "This test doesn't have enough data yet", $data['copy']['young_test'] );
+		$this->assertSame( 'Collecting', $data['labels']['collecting'] );
+		$this->assertStringContainsString( 'post-new.php?post_type=' . Newspack_Popups::NEWSPACK_POPUPS_CPT, $data['editor_new_prompt_url'] );
+		$this->assertSame( 'newspack-popups/v1', $data['rest_base'] );
+	}
+
+	/**
+	 * An available provider is reported with its slug and no reason.
+	 */
+	public function test_boot_data_with_an_available_provider() {
+		$this->use_provider( $this->counts( 1, 1, 1, 1 ) );
+		$data = Newspack_Popups_AB_Dashboard::get_boot_data();
+		$this->assertTrue( $data['provider']['available'] );
+		$this->assertSame( 'stub', $data['provider']['slug'] );
+		$this->assertNull( $data['provider']['reason'] );
+	}
+
+	/**
+	 * A provider that is not available gives its reason.
+	 */
+	public function test_boot_data_with_an_unavailable_provider() {
+		$this->use_provider( $this->counts( 1, 1, 1, 1 ), new WP_Error( 'x', 'Connect the thing.' ) );
+		$data = Newspack_Popups_AB_Dashboard::get_boot_data();
+		$this->assertFalse( $data['provider']['available'] );
+		$this->assertSame( 'stub', $data['provider']['slug'] );
+		$this->assertSame( 'Connect the thing.', $data['provider']['reason'] );
+	}
 }

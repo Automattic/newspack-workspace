@@ -12,6 +12,122 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Newspack_Popups_AB_Dashboard {
 	/**
+	 * Menu slug of the Tools page.
+	 */
+	const PAGE_SLUG = 'newspack-ab-tests';
+
+	/**
+	 * Script and style handle of the page's app.
+	 */
+	const SCRIPT_HANDLE = 'newspack-popups-ab-tests';
+
+	/**
+	 * Hook suffix WordPress gave the page, once registered.
+	 *
+	 * @var string|false
+	 */
+	private static $page_hook = false;
+
+	/**
+	 * Hook the page in. Both callbacks check the flag themselves, at the time
+	 * the menu and the scripts are built, so a flag set after plugins load
+	 * still counts.
+	 */
+	public static function init() {
+		add_action( 'admin_menu', [ __CLASS__, 'add_menu_page_item' ] );
+		add_action( 'admin_enqueue_scripts', [ __CLASS__, 'enqueue' ] );
+	}
+
+	/**
+	 * Tools → A/B Tests.
+	 */
+	public static function add_menu_page_item() {
+		if ( ! Newspack_Popups_AB_Tests::is_enabled() ) {
+			return;
+		}
+		self::$page_hook = add_management_page(
+			__( 'A/B Tests', 'newspack-popups' ),
+			__( 'A/B Tests', 'newspack-popups' ),
+			'manage_options',
+			self::PAGE_SLUG,
+			[ __CLASS__, 'render_page' ]
+		);
+	}
+
+	/**
+	 * The page's markup: a mount point the app fills.
+	 */
+	public static function render_page() {
+		echo '<div class="wrap"><div id="newspack-popups-ab-tests-root"></div></div>';
+	}
+
+	/**
+	 * Load the app on its own page only.
+	 *
+	 * @param string $hook_suffix Current admin page.
+	 */
+	public static function enqueue( $hook_suffix ) {
+		if ( ! self::$page_hook || $hook_suffix !== self::$page_hook || ! Newspack_Popups_AB_Tests::is_enabled() ) {
+			return;
+		}
+		$dir = dirname( NEWSPACK_POPUPS_PLUGIN_FILE );
+		\wp_register_script(
+			self::SCRIPT_HANDLE,
+			plugins_url( '../dist/abTests.js', __FILE__ ),
+			[ 'wp-components', 'wp-api-fetch', 'wp-element', 'wp-i18n' ],
+			filemtime( $dir . '/dist/abTests.js' ),
+			true
+		);
+		wp_localize_script( self::SCRIPT_HANDLE, 'newspack_popups_ab_tests', self::get_boot_data() );
+		\wp_enqueue_script( self::SCRIPT_HANDLE );
+		\wp_register_style(
+			self::SCRIPT_HANDLE,
+			plugins_url( '../dist/abTests.css', __FILE__ ),
+			null,
+			filemtime( $dir . '/dist/abTests.css' )
+		);
+		\wp_style_add_data( self::SCRIPT_HANDLE, 'rtl', 'replace' );
+		\wp_enqueue_style( self::SCRIPT_HANDLE );
+	}
+
+	/**
+	 * What the app needs before its first request.
+	 *
+	 * @return array
+	 */
+	public static function get_boot_data() {
+		$provider  = self::get_provider();
+		$available = $provider ? $provider->is_available() : null;
+		$reason    = null;
+		if ( null === $provider ) {
+			$reason = __( 'No stats source is connected.', 'newspack-popups' );
+		} elseif ( is_wp_error( $available ) ) {
+			$reason = $available->get_error_message();
+		}
+		return [
+			'tests'                 => Newspack_Popups_AB_Tests::get_tests(),
+			'rest_base'             => 'newspack-popups/v1',
+			'provider'              => [
+				'available' => null !== $provider && true === $available,
+				'slug'      => $provider ? $provider->get_slug() : null,
+				'reason'    => $reason,
+			],
+			'thresholds'            => [
+				'directional' => Newspack_Popups_AB_Stats::THRESHOLD_DIRECTIONAL,
+				'reliable'    => Newspack_Popups_AB_Stats::THRESHOLD_RELIABLE,
+				'min_readers' => Newspack_Popups_AB_Stats::MIN_READERS_PER_ARM,
+			],
+			'copy'                  => self::get_advisory_copy(),
+			'labels'                => [
+				'collecting'  => __( 'Collecting', 'newspack-popups' ),
+				'directional' => __( 'Directional', 'newspack-popups' ),
+				'reliable'    => __( 'Reliable', 'newspack-popups' ),
+			],
+			'editor_new_prompt_url' => admin_url( 'post-new.php?post_type=' . Newspack_Popups::NEWSPACK_POPUPS_CPT ),
+		];
+	}
+
+	/**
 	 * How long a provider's counts are reused before it is asked again.
 	 */
 	const CACHE_TTL = HOUR_IN_SECONDS;
@@ -301,3 +417,5 @@ final class Newspack_Popups_AB_Dashboard {
 		return $provider instanceof Newspack_Popups_AB_Stats_Provider ? $provider : null;
 	}
 }
+
+Newspack_Popups_AB_Dashboard::init();
