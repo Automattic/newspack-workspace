@@ -33,7 +33,7 @@ class Subscribers_Dashboard {
 	public static function init() {
 		add_filter( 'newspack_subscribers_network_subscriptions', [ __CLASS__, 'filter_network_subscriptions' ], 10, 2 );
 		add_filter( 'newspack_subscribers_network_subscription_index', [ __CLASS__, 'filter_index' ], 10, 2 );
-		add_filter( 'newspack_subscribers_is_network_reader', [ __CLASS__, 'filter_is_network_reader' ], 10, 2 );
+		add_filter( 'newspack_subscribers_network_reader_origin', [ __CLASS__, 'filter_network_reader_origin' ], 10, 2 );
 	}
 
 	/**
@@ -117,15 +117,22 @@ class Subscribers_Dashboard {
 	}
 
 	/**
-	 * Whether a reader belongs to the network, which is the case if they first registered on another site.
+	 * The network site a reader first signed up on, when that isn't this one.
 	 *
-	 * @param bool $is      Whether the reader is a network reader so far.
-	 * @param int  $user_id The reader's user ID.
+	 * @param array|null $origin  The origin so far.
+	 * @param int        $user_id The reader's user ID.
 	 *
-	 * @return bool
+	 * @return array|null The site's name and URL, or the origin passed in when the reader signed up here.
 	 */
-	public static function filter_is_network_reader( $is, $user_id ) {
-		return $is || '' !== (string) get_user_meta( $user_id, Users::USER_META_REMOTE_SITE, true );
+	public static function filter_network_reader_origin( $origin, $user_id ) {
+		$site_url = (string) get_user_meta( $user_id, Users::USER_META_REMOTE_SITE, true );
+		if ( '' === $site_url || Sites::is_current_site( $site_url ) ) {
+			return $origin;
+		}
+		return [
+			'name' => Sites::get_site_name( $site_url ),
+			'url'  => $site_url,
+		];
 	}
 
 	/**
@@ -136,20 +143,23 @@ class Subscribers_Dashboard {
 	 *
 	 * @param int $user_id The reader's user ID.
 	 *
-	 * @return array[] Records with id, site_url, site_name, status, plan and edit_url.
+	 * @return array[] Records with id, site_url, site_name, status, plan, edit_url and billing.
 	 */
 	public static function get_records_for_user( $user_id ) {
-		return self::records_from_meta( get_user_meta( $user_id, Subscription_Changed::USER_SUBSCRIPTIONS_META_KEY, true ) );
+		return self::records_from_meta( get_user_meta( $user_id, Subscription_Changed::USER_SUBSCRIPTIONS_META_KEY, true ), true );
 	}
 
 	/**
 	 * Turn a reader's subscriptions meta, already unserialized, into records, with the checks get_records_for_user() describes.
 	 *
-	 * @param mixed $meta The meta value, keyed by site URL.
+	 * The index leaves billing out: its filters never read it, and it would be carried for every reader.
 	 *
-	 * @return array[] Records with id, site_url, site_name, status, plan and edit_url.
+	 * @param mixed $meta         The meta value, keyed by site URL.
+	 * @param bool  $with_billing Whether to include each subscription's billing details.
+	 *
+	 * @return array[] Records with id, site_url, site_name, status, plan and edit_url, plus billing when asked for.
 	 */
-	private static function records_from_meta( $meta ) {
+	private static function records_from_meta( $meta, $with_billing = false ) {
 		if ( ! is_array( $meta ) ) {
 			return [];
 		}
@@ -166,8 +176,8 @@ class Subscribers_Dashboard {
 					continue;
 				}
 
-				$id        = (int) $subscription['id'];
-				$records[] = [
+				$id     = (int) $subscription['id'];
+				$record = [
 					'id'        => $id,
 					'site_url'  => $site_url,
 					'site_name' => Sites::get_site_name( $site_url ),
@@ -175,6 +185,11 @@ class Subscribers_Dashboard {
 					'plan'      => self::get_plan( $subscription ),
 					'edit_url'  => Sites::get_subscription_edit_url( $site_url, $id ),
 				];
+				if ( $with_billing ) {
+					// Subscriptions recorded before billing was stored have none until the next change or a backfill.
+					$record['billing'] = isset( $subscription['billing'] ) && is_array( $subscription['billing'] ) ? $subscription['billing'] : [];
+				}
+				$records[] = $record;
 			}
 		}
 

@@ -107,6 +107,10 @@ class Test_Subscribers_Dashboard extends WP_UnitTestCase {
 						'id'       => 501,
 						'status'   => 'cancelled',
 						'products' => [],
+						'billing'  => [
+							'start_date' => '2026-03-14 12:00:00',
+							'total'      => '12.00',
+						],
 					],
 				],
 			]
@@ -123,11 +127,20 @@ class Test_Subscribers_Dashboard extends WP_UnitTestCase {
 				'status'    => 'active',
 				'plan'      => 'Fan Membership',
 				'edit_url'  => 'http://node-b.example.test/wp-admin/post.php?post=500&action=edit',
+				'billing'   => [],
 			],
-			$records[0]
+			$records[0],
+			'A subscription recorded before billing was stored has none.'
 		);
 		$this->assertSame( '', $records[1]['plan'] );
 		$this->assertSame( 'cancelled', $records[1]['status'] );
+		$this->assertSame(
+			[
+				'start_date' => '2026-03-14 12:00:00',
+				'total'      => '12.00',
+			],
+			$records[1]['billing']
+		);
 	}
 
 	/**
@@ -353,15 +366,20 @@ class Test_Subscribers_Dashboard extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A reader is a network reader when they were created from another site, whatever the filter said before.
+	 * A reader created from another site is named with that site; one who signed up here keeps whatever the filter had.
 	 */
-	public function test_is_network_reader() {
+	public function test_network_reader_origin() {
 		$remote_user = $this->factory()->user->create();
 		update_user_meta( $remote_user, Users::USER_META_REMOTE_SITE, self::NODE_URL );
 		$local_user = $this->factory()->user->create();
 
-		$this->assertTrue( apply_filters( 'newspack_subscribers_is_network_reader', false, $remote_user ) );
-		$this->assertFalse( apply_filters( 'newspack_subscribers_is_network_reader', false, $local_user ) );
-		$this->assertTrue( apply_filters( 'newspack_subscribers_is_network_reader', true, $local_user ) );
+		$this->assertSame(
+			[
+				'name' => 'Node Daily',
+				'url'  => self::NODE_URL,
+			],
+			apply_filters( 'newspack_subscribers_network_reader_origin', null, $remote_user )
+		);
+		$this->assertNull( apply_filters( 'newspack_subscribers_network_reader_origin', null, $local_user ) );
 	}
 }

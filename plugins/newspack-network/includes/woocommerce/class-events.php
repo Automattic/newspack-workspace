@@ -240,6 +240,8 @@ class Events {
 		$result['next_payment_date'] = $item->get_date( 'next_payment_date' );
 		$result['last_payment_date'] = $item->get_date( 'last_order_date_created' );
 		$result['end_date'] = $item->get_date( 'end_date' );
+		$result['billing_period'] = $item->get_billing_period();
+		$result['billing_interval'] = (int) $item->get_billing_interval();
 		$result['products'] = self::get_subscription_products( $item );
 
 		return $result;

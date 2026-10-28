@@ -9,11 +9,6 @@
  */
 
 /**
- * WordPress dependencies.
- */
-import { __ } from '@wordpress/i18n';
-
-/**
  * Whether a subscription is managed on another site of the network.
  *
  * @param {Object} subscription A profile subscription entry.
@@ -41,8 +36,3 @@ export const shouldShowPaymentMethods = subscriber => {
 	const hasPaymentMethod = ( subscriber?.paymentMethods || [] ).length > 0;
 	return ! ( hasNetworkSubscription && ! hasLocalSubscription && ! hasGroup && ! hasPaymentMethod );
 };
-
-// The header badge for a reader whose account the network created. Informational
-// rather than a status colour: it describes where the account came from, not a
-// state that needs attention.
-export const networkReaderBadge = { label: __( 'Network', 'newspack-plugin' ), intent: 'informational' };

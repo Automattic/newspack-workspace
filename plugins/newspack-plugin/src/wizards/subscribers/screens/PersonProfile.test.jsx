@@ -416,11 +416,12 @@ describe( 'the View subscription menu item', () => {
 const REMOTE_EDIT_URL = 'https://node-b.example.test/wp-admin/post.php?post=500&action=edit';
 
 // A subscription another site of the network manages, as the profile endpoint
-// shapes it: no billing fields, no capability flags, and a `managedOn` that the
-// client tells it apart by.
+// shapes it before the network has stored its billing: no billing fields, no
+// capability flags, and a `managedOn` that the client tells it apart by.
 const networkSubscription = {
 	id: 500,
 	plan: 'Fan Membership (Node Daily)',
+	planName: 'Fan Membership',
 	status: 'active',
 	editUrl: REMOTE_EDIT_URL,
 	isComplimentary: false,
@@ -461,45 +462,69 @@ describe( 'a subscription managed on another network site', () => {
 		setHeaderData.mockClear();
 	} );
 
-	it( 'badges a reader the network created, in the header', async () => {
-		await renderCards( reader( { isNetworkReader: true, subscriptions: [ networkSubscription ] } ) );
+	it( 'names the site a reader signed up on in the header, with no badge for it', async () => {
+		await renderCards(
+			reader( { signedUpOn: { name: 'Node Daily', url: 'https://node-b.example.test' }, subscriptions: [ networkSubscription ] } )
+		);
 
-		const { badges } = setHeaderData.mock.calls.at( -1 )[ 0 ];
-		expect( badges ).toContainEqual( { label: 'Network', intent: 'informational' } );
+		const { badges, sectionDescription } = setHeaderData.mock.calls.at( -1 )[ 0 ];
+		expect( sectionDescription.split( '\n' ) ).toContain( 'Signed up on Node Daily' );
+		expect( badges.map( badge => badge.label ) ).toEqual( [ 'Active' ] );
 	} );
 
-	it( 'leaves the Network badge off a reader the network did not create', async () => {
-		await renderCards( reader( { subscriptions: [ localSubscription ] } ) );
+	it( 'leaves the signed-up line off a reader who signed up on this site', async () => {
+		await renderCards( reader( { subscriptions: [ networkSubscription ] } ) );
 
-		const { badges } = setHeaderData.mock.calls.at( -1 )[ 0 ];
-		expect( badges.map( badge => badge.label ) ).not.toContain( 'Network' );
+		const { sectionDescription } = setHeaderData.mock.calls.at( -1 )[ 0 ];
+		expect( sectionDescription ).not.toContain( 'Signed up on' );
 	} );
 
-	it( 'links the card title to the subscription on the site that manages it', async () => {
+	it( 'titles the card with the plan alone, linked to the subscription on the site that manages it', async () => {
 		await renderCards( reader( { subscriptions: [ networkSubscription ] } ) );
 
 		const title = screen.getByRole( 'button', { name: 'View subscription: Fan Membership (Node Daily)' } );
+		expect( title ).toHaveTextContent( /^Fan Membership$/ );
 		expect( title ).toHaveAttribute( 'href', REMOTE_EDIT_URL );
 	} );
 
-	it( 'offers one menu item, a link to the remote subscription, and no write action', async () => {
+	it( 'names the managing site once, as plain text under the title', async () => {
+		await renderCards( reader( { subscriptions: [ networkSubscription ] } ) );
+
+		expect( screen.getByText( 'Managed on Node Daily' ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'link', { name: /Node Daily/ } ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'offers one menu item, a link to the subscription named for its site, and no write action', async () => {
 		await renderCards( reader( { subscriptions: [ networkSubscription ] } ) );
 
 		const items = await openCardMenu( 'Subscription actions: Fan Membership (Node Daily)' );
 
 		expect( items ).toHaveLength( 1 );
-		expect( items[ 0 ] ).toHaveTextContent( 'View subscription' );
+		expect( items[ 0 ] ).toHaveTextContent( 'View on Node Daily' );
 		expect( items[ 0 ] ).toHaveAttribute( 'href', REMOTE_EDIT_URL );
 		expect( screen.queryByRole( 'menuitem', { name: /refund|cancel|change|reactivate/i } ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'names the site that manages it, linked to the same subscription and named for what it opens', async () => {
-		await renderCards( reader( { subscriptions: [ networkSubscription ] } ) );
+	it( 'shows the billing rows a local card shows once the other site has sent them', async () => {
+		await renderCards(
+			reader( {
+				subscriptions: [
+					{
+						...networkSubscription,
+						startDate: '2026-03-14',
+						amount: 12,
+						currency: 'GBP',
+						billingPeriod: 'month',
+						billingInterval: 1,
+						lastPayment: '2026-10-14',
+						nextBillingDate: '2026-11-14',
+					},
+				],
+			} )
+		);
 
-		expect( screen.getByText( 'Managed on' ) ).toBeInTheDocument();
-		const siteLink = screen.getByRole( 'link', { name: 'View subscription: Fan Membership (Node Daily)' } );
-		expect( siteLink ).toHaveTextContent( 'Node Daily' );
-		expect( siteLink ).toHaveAttribute( 'href', REMOTE_EDIT_URL );
+		[ 'First subscribed', 'Billing', 'Last payment', 'Next billing' ].forEach( label => expect( screen.getByText( label ) ).toBeInTheDocument() );
+		expect( screen.getByText( '£12.00 / month' ) ).toBeInTheDocument();
 	} );
 
 	it( 'shows no billing rows it has no data for', async () => {
@@ -574,7 +599,7 @@ describe( 'a subscription managed on another network site', () => {
 
 		const items = await openCardMenu( 'Subscription actions: Fan Membership (Node Daily)' );
 
-		expect( items.map( item => item.textContent ) ).toEqual( [ 'View subscription' ] );
+		expect( items.map( item => item.textContent ) ).toEqual( [ 'View on Node Daily' ] );
 		// Only the profile read went out; no write was sent.
 		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
 		expect( apiFetch.mock.calls[ 0 ][ 0 ] ).not.toHaveProperty( 'method' );
@@ -584,8 +609,8 @@ describe( 'a subscription managed on another network site', () => {
 		await renderCards( reader( { subscriptions: [ { ...networkSubscription, editUrl: '' } ] } ) );
 
 		expect( screen.queryByRole( 'button', { name: 'Subscription actions: Fan Membership (Node Daily)' } ) ).not.toBeInTheDocument();
-		expect( screen.queryByRole( 'link', { name: 'View subscription: Fan Membership (Node Daily)' } ) ).not.toBeInTheDocument();
-		expect( screen.getByText( 'Node Daily' ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'button', { name: 'View subscription: Fan Membership (Node Daily)' } ) ).not.toBeInTheDocument();
+		expect( screen.getByText( 'Managed on Node Daily' ) ).toBeInTheDocument();
 	} );
 } );
 
@@ -601,7 +626,7 @@ describe( 'a subscription on this site', () => {
 		const items = await openCardMenu( 'Subscription actions: Fan Membership' );
 
 		expect( items.map( item => item.textContent ) ).toEqual( [ 'View subscription', 'Change subscription', 'Refund or cancel' ] );
-		expect( screen.queryByText( 'Managed on' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( /Managed on/ ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'keeps the Payment methods section', async () => {

@@ -1590,17 +1590,24 @@ class Subscribers_Wizard extends Wizard {
 			'paymentMethods' => $detailed ? Subscribers_Payments::payment_methods_for_user( $user_id ) : [],
 		];
 
-		/**
-		 * Whether a reader belongs to the Newspack Network, which is the case when
-		 * they first registered on another site. Only the profile reads it, so the key
-		 * is added on detailed reads only, and only for those readers: a site without
-		 * the network plugin never sees the key.
-		 *
-		 * @param bool $is_network_reader Whether the reader is a network reader so far.
-		 * @param int  $user_id           The reader's user ID.
-		 */
-		if ( $detailed && true === apply_filters( 'newspack_subscribers_is_network_reader', false, $user_id ) ) {
-			$subscriber['isNetworkReader'] = true;
+		if ( $detailed ) {
+			/**
+			 * The Newspack Network site a reader first signed up on, when it isn't
+			 * this one. Only the profile shows it, so it is asked for on detailed reads
+			 * only, and the key is added only when a site is named: a site without the
+			 * network plugin never sees it.
+			 *
+			 * @param array|null $origin  The site, with a `name` and a `url`, or null.
+			 * @param int        $user_id The reader's user ID.
+			 */
+			$origin      = apply_filters( 'newspack_subscribers_network_reader_origin', null, $user_id );
+			$origin_name = is_array( $origin ) && isset( $origin['name'] ) && is_scalar( $origin['name'] ) ? trim( (string) $origin['name'] ) : '';
+			if ( '' !== $origin_name ) {
+				$subscriber['signedUpOn'] = [
+					'name' => $origin_name,
+					'url'  => isset( $origin['url'] ) && is_string( $origin['url'] ) ? esc_url_raw( $origin['url'] ) : '',
+				];
+			}
 		}
 
 		return $subscriber;
@@ -1727,7 +1734,10 @@ class Subscribers_Wizard extends Wizard {
 		 *
 		 * @param array[] $records Records so far. Each is an array with an integer `id`,
 		 *                         `site_url`, `site_name`, the raw WooCommerce Subscriptions
-		 *                         `status`, `plan` and `edit_url`.
+		 *                         `status`, `plan` and `edit_url`, and optionally `billing`:
+		 *                         `start_date`, `next_payment_date`, `last_payment_date` and
+		 *                         `end_date` as GMT 'Y-m-d H:i:s' strings, plus `total`,
+		 *                         `currency`, `billing_period` and `billing_interval`.
 		 * @param int     $user_id The reader's user ID.
 		 */
 		$records = apply_filters( 'newspack_subscribers_network_subscriptions', [], $user_id );
@@ -1753,9 +1763,42 @@ class Subscribers_Wizard extends Wizard {
 					'name' => $network['site_name'],
 					'url'  => esc_url_raw( $network['site_url'] ),
 				],
-			];
+			] + $this->network_billing( $record['billing'] ?? [] );
 		}
 		return $out;
+	}
+
+	/**
+	 * A network subscription's billing in the shape subscription_billing() gives a
+	 * local one, so its card shows the same rows.
+	 *
+	 * The dates arrive in GMT and are localized like every other date here. Anything
+	 * missing reads as empty: subscriptions the network recorded before it kept
+	 * billing details have none until they next change or are backfilled.
+	 *
+	 * @param mixed $billing The record's `billing`.
+	 *
+	 * @return array
+	 */
+	private function network_billing( $billing ): array {
+		$billing = is_array( $billing ) ? $billing : [];
+		$date    = function ( string $key ) use ( $billing ) {
+			$value     = isset( $billing[ $key ] ) && is_string( $billing[ $key ] ) ? trim( $billing[ $key ] ) : '';
+			$timestamp = '' !== $value ? strtotime( $value . ' UTC' ) : false;
+			return $this->local_date( $timestamp );
+		};
+		$total = $billing['total'] ?? null;
+
+		return [
+			'amount'          => is_numeric( $total ) ? (float) $total : null,
+			'currency'        => isset( $billing['currency'] ) && is_string( $billing['currency'] ) ? $billing['currency'] : '',
+			'billingPeriod'   => isset( $billing['billing_period'] ) && is_string( $billing['billing_period'] ) ? $billing['billing_period'] : '',
+			'billingInterval' => isset( $billing['billing_interval'] ) && is_numeric( $billing['billing_interval'] ) ? (int) $billing['billing_interval'] : 0,
+			'startDate'       => $date( 'start_date' ),
+			'nextBillingDate' => $date( 'next_payment_date' ),
+			'endDate'         => $date( 'end_date' ),
+			'lastPayment'     => $date( 'last_payment_date' ),
+		];
 	}
 
 	/**

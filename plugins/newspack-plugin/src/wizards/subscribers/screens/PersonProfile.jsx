@@ -62,7 +62,7 @@ import { billingText, fmtDate, orDash, paymentRows } from '../format';
 import { GROUP_LABEL, GROUP_LABEL_PLURAL, groupViewLabel } from '../labels';
 import { groupDetailHref, isInternalHashPath } from '../links';
 import { STATUS_LABELS, STATUS_BADGE_INTENT, statusRank, displayStatuses } from '../status';
-import { isNetworkSubscription, shouldShowPaymentMethods, networkReaderBadge } from '../network';
+import { isNetworkSubscription, shouldShowPaymentMethods } from '../network';
 
 const { useParams, useLocation } = Router;
 
@@ -246,10 +246,7 @@ export default function PersonProfile() {
 				{ label: subscriber.name },
 			],
 			sectionTitle: subscriber.name,
-			badges: [
-				...headlineStatuses.map( status => ( { label: STATUS_LABELS[ status ], intent: STATUS_BADGE_INTENT[ status ] } ) ),
-				...( subscriber.isNetworkReader ? [ networkReaderBadge ] : [] ),
-			],
+			badges: headlineStatuses.map( status => ( { label: STATUS_LABELS[ status ], intent: STATUS_BADGE_INTENT[ status ] } ) ),
 			// A newline-joined string, not markup: SectionHeader renders a
 			// description inside a `<p>`, so a stack of divs would be invalid
 			// nesting. The wizard stylesheet sets `white-space: pre-line` on that
@@ -259,6 +256,10 @@ export default function PersonProfile() {
 				subscriber.memberSince
 					? // translators: %s is a date.
 					  sprintf( __( 'Subscriber since %s', 'newspack-plugin' ), fmtDate( subscriber.memberSince ) )
+					: '',
+				subscriber.signedUpOn?.name
+					? // translators: %s is the name of the network site where the reader created their account.
+					  sprintf( __( 'Signed up on %s', 'newspack-plugin' ), subscriber.signedUpOn.name )
 					: '',
 			]
 				.filter( Boolean )
@@ -328,35 +329,52 @@ export default function PersonProfile() {
 			if ( isNetworkSubscription( subscription ) ) {
 				const { editUrl, managedOn } = subscription;
 				const cardKey = `subscription-${ managedOn.url || managedOn.name }-${ subscription.id }`;
+				// The site is named once, under the title, so the title is the plan alone.
+				const title = subscription.planName || name;
+				// Subscriptions the network recorded before it kept billing details have
+				// none, so their cards say where they are managed and nothing more.
+				const hasBilling = Number.isFinite( subscription.amount ) || Boolean( subscription.startDate );
 				return {
 					key: cardKey,
 					status: subscription.status,
+					date: subscription.startDate,
 					node: (
 						<SubscriptionCard
 							key={ cardKey }
-							title={ name }
+							title={ title }
 							titleHref={ editUrl || undefined }
 							// translators: %s is a subscription/plan name.
 							titleLabel={ editUrl ? sprintf( __( 'View subscription: %s', 'newspack-plugin' ), name ) : undefined }
 							badges={ statusBadges( subscription.status ) }
-							rows={ [
-								{
-									label: __( 'Managed on', 'newspack-plugin' ),
-									value: editUrl ? (
-										<a
-											href={ editUrl }
-											// translators: %s is a subscription/plan name.
-											aria-label={ sprintf( __( 'View subscription: %s', 'newspack-plugin' ), name ) }
-										>
-											{ managedOn.name }
-										</a>
-									) : (
-										managedOn.name
-									),
-								},
-							] }
+							// translators: %s is the name of the network site that manages the subscription.
+							subline={ sprintf( __( 'Managed on %s', 'newspack-plugin' ), managedOn.name ) }
+							rows={
+								hasBilling
+									? [
+											{
+												label: __( 'First subscribed', 'newspack-plugin' ),
+												value: orDash( fmtDate( subscription.startDate ) ),
+											},
+											{ label: __( 'Billing', 'newspack-plugin' ), value: billingText( subscription ) },
+											...paymentRows( subscription ),
+									  ]
+									: []
+							}
 							// A link out, so with no URL there is nothing to put in the menu.
-							actions={ editUrl ? [ viewSubscriptionAction( name, editUrl ) ] : [] }
+							actions={
+								editUrl
+									? [
+											{
+												key: 'view',
+												// translators: %s is the name of the network site that manages the subscription.
+												label: sprintf( __( 'View on %s', 'newspack-plugin' ), managedOn.name ),
+												// translators: 1: the name of the network site that manages the subscription, 2: a subscription/plan name.
+												ariaLabel: sprintf( __( 'View on %1$s: %2$s', 'newspack-plugin' ), managedOn.name, title ),
+												href: editUrl,
+											},
+									  ]
+									: []
+							}
 							// translators: %s is a subscription/plan name.
 							actionsLabel={ sprintf( __( 'Subscription actions: %s', 'newspack-plugin' ), name ) }
 						/>

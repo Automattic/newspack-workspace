@@ -187,19 +187,19 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 	 * Passing null for a filter leaves it unattached, which is the state of a site
 	 * without the network plugin.
 	 *
-	 * @param array|null $records Records the subscriptions filter returns, or null to leave it unattached.
-	 * @param bool|null  $is_reader Value the network-reader filter returns, or null to leave it unattached.
+	 * @param array|null       $records Records the subscriptions filter returns, or null to leave it unattached.
+	 * @param array|false|null $origin  The site the origin filter names, false to attach it naming none, or null to leave it unattached.
 	 */
-	private function stub_network( ?array $records, ?bool $is_reader ) {
+	private function stub_network( ?array $records, $origin ) {
 		if ( null !== $records ) {
 			$callback = fn() => $records;
 			add_filter( 'newspack_subscribers_network_subscriptions', $callback );
 			$this->network_callbacks[] = [ 'newspack_subscribers_network_subscriptions', $callback ];
 		}
-		if ( null !== $is_reader ) {
-			$callback = fn() => $is_reader;
-			add_filter( 'newspack_subscribers_is_network_reader', $callback );
-			$this->network_callbacks[] = [ 'newspack_subscribers_is_network_reader', $callback ];
+		if ( null !== $origin ) {
+			$callback = fn() => false === $origin ? null : $origin;
+			add_filter( 'newspack_subscribers_network_reader_origin', $callback );
+			$this->network_callbacks[] = [ 'newspack_subscribers_network_reader_origin', $callback ];
 		}
 	}
 
@@ -856,18 +856,31 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 	/**
 	 * A subscription managed on another network site joins the reader's own: it
 	 * counts toward the headline status, names its site in the plan label, links
-	 * to the remote edit screen, and carries the site it is managed on. The
-	 * reader flag appears because the network says this reader belongs to it.
+	 * to the remote edit screen, and carries the site it is managed on. With no
+	 * billing recorded, its billing fields are empty rather than missing. The site
+	 * the reader signed up on comes from the origin filter.
 	 */
 	public function test_detail_includes_a_subscription_managed_on_another_network_site() {
 		$this->login_admin();
 		$reader_id = $this->create_reader( 'Network Reader' );
-		$this->stub_network( [ $this->network_record() ], true );
+		$this->stub_network(
+			[ $this->network_record() ],
+			[
+				'name' => 'Node Daily',
+				'url'  => 'https://node-b.example.test',
+			]
+		);
 
 		$subscriber = $this->dispatch( $reader_id )->get_data();
 
 		$this->assertSame( 'active', $subscriber['status'] );
-		$this->assertTrue( $subscriber['isNetworkReader'] );
+		$this->assertSame(
+			[
+				'name' => 'Node Daily',
+				'url'  => 'https://node-b.example.test',
+			],
+			$subscriber['signedUpOn']
+		);
 		$this->assertCount( 1, $subscriber['subscriptions'] );
 		$this->assertSame(
 			[
@@ -881,9 +894,57 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 					'name' => 'Node Daily',
 					'url'  => 'https://node-b.example.test',
 				],
+				'amount'          => null,
+				'currency'        => '',
+				'billingPeriod'   => '',
+				'billingInterval' => 0,
+				'startDate'       => null,
+				'nextBillingDate' => null,
+				'endDate'         => null,
+				'lastPayment'     => null,
 			],
 			$subscriber['subscriptions'][0]
 		);
+	}
+
+	/**
+	 * Billing the network recorded for a subscription reaches its card in the shape a
+	 * local subscription's takes, with the GMT dates localized to the site's day.
+	 */
+	public function test_detail_maps_the_billing_a_network_subscription_carries() {
+		$this->login_admin();
+		$this->set_site_timezone( 'America/New_York', -4 );
+		$reader_id = $this->create_reader( 'Billed Elsewhere' );
+		$this->stub_network(
+			[
+				$this->network_record(
+					[
+						'billing' => [
+							'start_date'        => '2026-03-14 02:00:00',
+							'next_payment_date' => '2026-11-14 12:00:00',
+							'last_payment_date' => '2026-10-14 12:00:00',
+							'end_date'          => 0,
+							'total'             => '12.00',
+							'currency'          => 'GBP',
+							'billing_period'    => 'month',
+							'billing_interval'  => '1',
+						],
+					]
+				),
+			],
+			null
+		);
+
+		$subscription = $this->dispatch( $reader_id )->get_data()['subscriptions'][0];
+
+		$this->assertSame( 12.0, $subscription['amount'] );
+		$this->assertSame( 'GBP', $subscription['currency'] );
+		$this->assertSame( 'month', $subscription['billingPeriod'] );
+		$this->assertSame( 1, $subscription['billingInterval'] );
+		$this->assertSame( '2026-03-13', $subscription['startDate'], 'A GMT date early in the day falls on the previous day in New York.' );
+		$this->assertSame( '2026-11-14', $subscription['nextBillingDate'] );
+		$this->assertSame( '2026-10-14', $subscription['lastPayment'] );
+		$this->assertNull( $subscription['endDate'], 'A subscription with no end date has none.' );
 	}
 
 	/**
@@ -1054,9 +1115,9 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 	}
 
 	/**
-	 * A reader with only local subscriptions carries no network reader flag and no
-	 * managedOn. The flag is absent, not false, so the client reads its presence
-	 * as "this is a network reader". With both filters attached but answering
+	 * A reader with only local subscriptions carries no signed-up site and no
+	 * managedOn. The key is absent, not empty, so the client reads its presence as
+	 * "this reader signed up elsewhere". With both filters attached but answering
 	 * "nothing", the response must not change by a byte.
 	 */
 	public function test_detail_of_a_local_only_reader_is_unchanged_by_empty_network_filters() {
@@ -1067,7 +1128,7 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 
 		$without_callbacks = $this->dispatch( $reader_id )->get_data();
 
-		$this->assertArrayNotHasKey( 'isNetworkReader', $without_callbacks );
+		$this->assertArrayNotHasKey( 'signedUpOn', $without_callbacks );
 		$this->assertCount( 2, $without_callbacks['subscriptions'] );
 		foreach ( $without_callbacks['subscriptions'] as $subscription ) {
 			$this->assertArrayNotHasKey( 'managedOn', $subscription );
