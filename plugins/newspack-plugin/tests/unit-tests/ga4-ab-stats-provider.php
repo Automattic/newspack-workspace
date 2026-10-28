@@ -349,13 +349,74 @@ class Newspack_Test_GA4_AB_Stats_Provider extends WP_UnitTestCase {
 	}
 
 	/**
-	 * When GA4 withholds the event counts as well, the test reads as unavailable rather than as zeros.
+	 * GA4 flags a report as subject to thresholding even when nothing was removed from it,
+	 * so a flagged event-count pass keeps its rows and the note says they may be short.
 	 */
-	public function test_withheld_event_counts_are_an_error_not_zeros() {
-		$provider = new GA4_AB_Stats_Provider( fn() => $this->response( [ [ 12, 3 ] ], true ) );
-		$result   = $provider->get_counts( $this->test_entry(), 'link_click', self::START, self::END );
-		$this->assertWPError( $result );
-		$this->assertSame( 'Google Analytics withheld the counts for this test.', $result->get_error_message() );
+	public function test_flagged_event_counts_keep_their_rows_and_say_so() {
+		$responses = [
+			$this->response( [ [ 12, 3 ] ], true ),
+			$this->response( [ [ 12, 250 ], [ 13, 240 ] ], true ),
+			$this->response( [ [ 12, 'yes', 100 ], [ 13, 'no', 240 ] ], true ),
+			$this->response( [ [ 12, 10 ], [ 13, 12 ] ], true ),
+		];
+		$calls     = 0;
+		$provider  = new GA4_AB_Stats_Provider(
+			function () use ( &$responses, &$calls ) {
+				++$calls;
+				return array_shift( $responses );
+			}
+		);
+		$counts    = $provider->get_counts( $this->test_entry(), 'link_click', self::START, self::END );
+		$this->assertSame( 4, $calls );
+		$this->assertSame( 'events', $counts['unit'] );
+		$this->assertSame( 250, $counts['variants']['a']['readers'] );
+		$this->assertSame( 240, $counts['variants']['b']['readers'] );
+		$this->assertSame( 100, $counts['variants']['a']['logged_in_readers'] );
+		$this->assertSame( 12, $counts['variants']['b']['conversions'] );
+		$this->assertStringContainsString( 'may have left out', $counts['note'] );
+	}
+
+	/**
+	 * An unflagged pass carries only the daily-update note.
+	 */
+	public function test_unflagged_counts_carry_the_plain_note() {
+		$provider = new GA4_AB_Stats_Provider( fn() => $this->response( [ [ 12, 3 ] ] ) );
+		$counts   = $provider->get_counts( $this->test_entry(), 'link_click', self::START, self::END );
+		$this->assertSame( 'Counts update once a day.', $counts['note'] );
+	}
+
+	/**
+	 * Whose token a report runs with: an administrator is lent the owner's.
+	 */
+	public function test_an_administrator_reports_with_the_owner_token() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		$this->assertSame( 7, GA4_AB_Stats_Provider::choose_reporting_user( 7, fn( $id ) => true ) );
+	}
+
+	/**
+	 * With no owner token to lend, an administrator's own token is used.
+	 */
+	public function test_an_administrator_reports_with_their_own_token_when_the_owner_has_none() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		$this->assertSame( 0, GA4_AB_Stats_Provider::choose_reporting_user( 7, fn( $id ) => 0 === $id ) );
+	}
+
+	/**
+	 * A non-administrator gets their own token or nothing, never the owner's.
+	 */
+	public function test_a_non_administrator_is_never_lent_the_owner_token() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'subscriber' ] ) );
+		$this->assertSame( 0, GA4_AB_Stats_Provider::choose_reporting_user( 7, fn( $id ) => true ) );
+		$this->assertSame( -1, GA4_AB_Stats_Provider::choose_reporting_user( 7, fn( $id ) => 7 === $id ) );
+	}
+
+	/**
+	 * The owner uses their own token without needing manage_options.
+	 */
+	public function test_the_owner_reports_with_their_own_token_whatever_their_role() {
+		$owner = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		wp_set_current_user( $owner );
+		$this->assertSame( $owner, GA4_AB_Stats_Provider::choose_reporting_user( $owner, fn( $id ) => $owner === $id ) );
 	}
 
 	/**

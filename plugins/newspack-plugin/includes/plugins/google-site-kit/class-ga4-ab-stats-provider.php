@@ -73,6 +73,15 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 	private ?\Closure $runner;
 
 	/**
+	 * The Site Kit module bound for the current get_counts() call, so one
+	 * test's reports share a client and token reads instead of rebuilding
+	 * Site Kit's authentication graph per report.
+	 *
+	 * @var GoogleSiteKitAnalyticsData|null
+	 */
+	private ?GoogleSiteKitAnalyticsData $module = null;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param callable|null $runner Report runner; tests inject one.
@@ -119,10 +128,14 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 	 *
 	 * GA4 withholds rows from a user-count report when they could identify
 	 * someone, which on a small site can empty a whole report, and a
-	 * conversions report is the smallest. When any report comes back
-	 * thresholded, the whole set is rerun counting events instead and the
-	 * result says so in `unit`; the split runs in both modes, so the
-	 * logged-in share is never a placeholder. At most eight reports per test.
+	 * conversions report is the smallest. When any report comes back flagged
+	 * as subject to thresholding, the whole set is rerun counting events
+	 * instead and the result says so in `unit`; the split runs in both modes,
+	 * so the logged-in share is never a placeholder. At most eight reports
+	 * per test. The flag means rows may have been removed, not that they
+	 * were, so a flagged event-count pass keeps what came back and the note
+	 * says it may be short; an error here would hide complete counts on a
+	 * property that flags every report.
 	 *
 	 * @param array  $test  Test, with `variants` keyed by letter, each carrying a prompt `id`.
 	 * @param string $goal  Conversion goal.
@@ -157,19 +170,19 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 			return $result;
 		}
 
-		$counted = $this->count( $property_id, $letters, $variants, $goal, $start, $end, self::METRIC_READERS );
+		$this->module = null;
+		$counted      = $this->count( $property_id, $letters, $variants, $goal, $start, $end, self::METRIC_READERS, true );
 		if ( null === $counted ) {
 			$result['unit'] = 'events';
-			$counted        = $this->count( $property_id, $letters, $variants, $goal, $start, $end, self::METRIC_EVENTS );
-		}
-		if ( null === $counted ) {
-			// Zeros here would read as a test nobody has seen, and the page would cache them.
-			return new WP_Error( 'newspack_ga4_ab_stats', __( 'Google Analytics withheld the counts for this test.', 'newspack' ) );
+			$counted        = $this->count( $property_id, $letters, $variants, $goal, $start, $end, self::METRIC_EVENTS, false );
 		}
 		if ( is_wp_error( $counted ) ) {
 			return $counted;
 		}
-		$result['variants'] = $counted;
+		if ( $counted['flagged'] ) {
+			$result['note'] = __( 'Counts update once a day. Google Analytics may have left out low-traffic rows for this test.', 'newspack' );
+		}
+		$result['variants'] = $counted['variants'];
 		return $result;
 	}
 
@@ -184,9 +197,11 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 	 * @param string $start       Window start, Y-m-d.
 	 * @param string $end         Window end, Y-m-d.
 	 * @param string $metric      METRIC_READERS or METRIC_EVENTS.
-	 * @return array|WP_Error|null Counts per letter; null when GA4 withheld rows from any report.
+	 * @param bool   $stop        Stop at the first report flagged as thresholded and return null.
+	 * @return array|WP_Error|null `variants` (counts per letter) and `flagged` (any report was subject to thresholding).
 	 */
-	private function count( string $property_id, array $letters, array $variants, string $goal, string $start, string $end, string $metric ): array|WP_Error|null {
+	private function count( string $property_id, array $letters, array $variants, string $goal, string $start, string $end, string $metric, bool $stop ): array|WP_Error|null {
+		$flagged    = false;
 		$prompt_ids = array_keys( $letters );
 		$requests   = [
 			'readers'           => [ self::build_readers_request( $prompt_ids, $start, $end, $metric, false ) ],
@@ -200,7 +215,10 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 					return $response;
 				}
 				if ( self::is_thresholded( $response ) ) {
-					return null;
+					if ( $stop ) {
+						return null;
+					}
+					$flagged = true;
 				}
 				$split = 'logged_in_readers' === $field;
 				foreach ( self::parse_rows( $response, $split ) as $prompt_id => $row ) {
@@ -210,7 +228,10 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 				}
 			}
 		}
-		return $variants;
+		return [
+			'variants' => $variants,
+			'flagged'  => $flagged,
+		];
 	}
 
 	/**
@@ -367,8 +388,8 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 	}
 
 	/**
-	 * Whether the current user, or failing that Site Kit's Analytics owner,
-	 * holds a Site Kit token. Reads stored state only.
+	 * Whether any token can run a report, by reporting_user_id()'s rule.
+	 * Reads stored state only.
 	 *
 	 * @return bool
 	 */
@@ -396,6 +417,14 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 	 * user-options seam rather than by switching the request's current user,
 	 * so nothing else in the request runs as them.
 	 *
+	 * Preferring the owner is deliberate, and it has one cost: an owner who
+	 * has lost access to the property breaks the page for every
+	 * administrator until Site Kit's Analytics owner changes. A stale token
+	 * is not that case; Site Kit refreshes it inside the report and drops it
+	 * when Google refuses, so the next view falls back to the viewer's own.
+	 * The provider assumes a logged-in administrator's request; with no user
+	 * set, as in cron, no token is lent and the error below is the answer.
+	 *
 	 * @param string $property_id GA4 property ID.
 	 * @param array  $request     Report request.
 	 * @return array|WP_Error
@@ -405,11 +434,14 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 			return new WP_Error( 'newspack_ga4_ab_stats', __( 'Site Kit is not installed.', 'newspack' ) );
 		}
 		try {
-			$user_id = self::reporting_user_id();
-			if ( $user_id < 0 ) {
-				return new WP_Error( 'newspack_ga4_ab_stats', __( 'Connect Google Analytics through Site Kit.', 'newspack' ) );
+			if ( null === $this->module ) {
+				$user_id = self::reporting_user_id();
+				if ( $user_id < 0 ) {
+					return new WP_Error( 'newspack_ga4_ab_stats', __( 'Connect Google Analytics through Site Kit.', 'newspack' ) );
+				}
+				$this->module = self::site_kit_module( $user_id );
 			}
-			return self::site_kit_module( $user_id )->run_report( $property_id, $request );
+			return $this->module->run_report( $property_id, $request );
 		} catch ( \Throwable $e ) {
 			Logger::error( 'GA4 report failed: ' . $e->getMessage(), self::LOGGER_HEADER );
 			$reason = self::reason_from( $e );
@@ -450,11 +482,22 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 	 * @return int User ID, 0 for the current user, -1 when no token can be used.
 	 */
 	private static function reporting_user_id(): int {
-		$owner_id = self::owner_id();
-		if ( $owner_id > 0 && self::has_token( $owner_id ) && ( $owner_id === get_current_user_id() || current_user_can( 'manage_options' ) ) ) {
+		return self::choose_reporting_user( self::owner_id(), [ self::class, 'has_token' ] );
+	}
+
+	/**
+	 * The rule behind reporting_user_id(), with its two reads passed in so
+	 * the lending gate can be tested without Site Kit.
+	 *
+	 * @param int      $owner_id  The Analytics owner, zero when none is recorded.
+	 * @param callable $has_token Whether a user ID (zero for the current user) holds a token.
+	 * @return int User ID, 0 for the current user, -1 when no token can be used.
+	 */
+	public static function choose_reporting_user( int $owner_id, callable $has_token ): int {
+		if ( $owner_id > 0 && $has_token( $owner_id ) && ( $owner_id === get_current_user_id() || current_user_can( 'manage_options' ) ) ) {
 			return $owner_id;
 		}
-		return self::has_token( 0 ) ? 0 : -1;
+		return $has_token( 0 ) ? 0 : -1;
 	}
 
 	/**
