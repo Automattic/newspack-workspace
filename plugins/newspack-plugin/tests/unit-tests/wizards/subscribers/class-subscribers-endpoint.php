@@ -681,6 +681,7 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		$this->assertSame( 'active', $items[0]['status'] );
 		$this->assertCount( 1, $items[0]['subscriptions'] );
 		$this->assertSame( 'Fan Membership (Node Daily)', $items[0]['subscriptions'][0]['plan'] );
+		$this->assertSame( 'Fan Membership', $items[0]['subscriptions'][0]['planName'], 'The bare plan name travels too, so the row can name the site outside the plan link.' );
 		$this->assertSame( 'Node Daily', $items[0]['subscriptions'][0]['managedOn']['name'] );
 	}
 
@@ -836,6 +837,70 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 
 		$this->assertSame( [ 'Fan Membership (I <3 News)' ], $plans, '/plans offers the label as the row shows it.' );
 		$this->assertSame( [ $holder ], $this->filtered_ids( [ 'plan' => [ $plans[0] ] ] ), 'The option returned by /plans filters to its holder.' );
+
+		$sites = $this->dispatch_plans()->get_data()['sites'];
+		$this->assertSame( [ 'I <3 News' ], $sites );
+		$this->assertSame( [ $holder ], $this->filtered_ids( [ 'managed_on' => $sites ] ), 'The Managed on option returned by /plans filters to its holder.' );
+	}
+
+	/**
+	 * The Managed on filter returns readers by where their subscriptions are managed:
+	 * this site, or other network sites by name. /plans lists each network site once
+	 * as an option, and any mix of options returns every reader matching one of them.
+	 */
+	public function test_managed_on_filter_matches_readers_by_where_their_subscriptions_are_managed() {
+		$this->login_admin();
+		$local_only = $this->create_reader( 'ManagedLocalOnly' );
+		$node_only  = $this->create_reader( 'ManagedNodeOnly' );
+		$hub_only   = $this->create_reader( 'ManagedHubOnly' );
+		$both       = $this->create_reader( 'ManagedBoth' );
+		$this->create_reader( 'ManagedNowhere' );
+		$this->create_individual_subscription( $local_only, 'active' );
+		$this->create_individual_subscription( $both, 'active' );
+		$this->stub_network_index(
+			[
+				$this->network_index_row( $node_only, 'active', 'Fan Membership' ),
+				$this->network_index_row( $hub_only, 'on-hold', 'Fan Membership', 'Hub Gazette' ),
+				$this->network_index_row( $both, 'active', 'Fan Membership', 'Hub Gazette' ),
+			]
+		);
+
+		$this->assertSame( [ 'Hub Gazette', 'Node Daily' ], $this->dispatch_plans()->get_data()['sites'], 'Each network site is offered once, in natural order.' );
+
+		$expected = [ $local_only, $both ];
+		sort( $expected );
+		$this->assertSame( $expected, $this->filtered_ids( [ 'managed_on' => [ 'this-site' ] ] ), 'This site returns readers holding a local subscription, whatever they hold elsewhere.' );
+
+		$this->assertSame( [ $node_only ], $this->filtered_ids( [ 'managed_on' => [ 'Node Daily' ] ] ) );
+
+		$expected = [ $node_only, $hub_only, $both ];
+		sort( $expected );
+		$this->assertSame( $expected, $this->filtered_ids( [ 'managed_on' => [ 'Node Daily', 'Hub Gazette' ] ] ), 'Several sites return readers managed on any of them.' );
+	}
+
+	/**
+	 * A cancelled subscription counts towards Managed on only when nothing live
+	 * remains, as in the Subscription column, which hides it otherwise.
+	 */
+	public function test_managed_on_filter_skips_a_cancelled_subscription_while_a_live_one_remains() {
+		$this->login_admin();
+		$moved_here  = $this->create_reader( 'MovedHere' );
+		$moved_there = $this->create_reader( 'MovedThere' );
+		$churned     = $this->create_reader( 'ChurnedThere' );
+		$this->create_individual_subscription( $moved_here, 'active' );
+		$this->create_individual_subscription( $moved_there, 'cancelled' );
+		$this->stub_network_index(
+			[
+				$this->network_index_row( $moved_here, 'cancelled', 'Fan Membership' ),
+				$this->network_index_row( $moved_there, 'active', 'Fan Membership' ),
+				$this->network_index_row( $churned, 'cancelled', 'Fan Membership' ),
+			]
+		);
+
+		$expected = [ $moved_there, $churned ];
+		sort( $expected );
+		$this->assertSame( $expected, $this->filtered_ids( [ 'managed_on' => [ 'Node Daily' ] ] ), 'A reader who moved here no longer counts as managed on Node Daily.' );
+		$this->assertSame( [ $moved_here ], $this->filtered_ids( [ 'managed_on' => [ 'this-site' ] ] ), 'A reader who moved away no longer counts as managed here.' );
 	}
 
 	/**

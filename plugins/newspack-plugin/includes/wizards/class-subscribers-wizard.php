@@ -49,6 +49,12 @@ class Subscribers_Wizard extends Wizard {
 	const FILTER_INCLUDE_CAP = 10000;
 
 	/**
+	 * The `managed_on` filter value for subscriptions this site manages, as opposed
+	 * to a network site's name.
+	 */
+	const MANAGED_ON_THIS_SITE = 'this-site';
+
+	/**
 	 * Upper bound on the number of avatars one /avatars request resolves. A single
 	 * list page needs at most `per_page` (≤100); the client batches larger sets.
 	 */
@@ -92,10 +98,10 @@ class Subscribers_Wizard extends Wizard {
 
 	/**
 	 * Per-request memo of the subscriptions other network sites manage, as
-	 * { user_id, plan_label, status } rows with the status already mapped. Null
-	 * until resolved. See network_subscription_index().
+	 * { user_id, plan_label, site_name, status } rows with the status already
+	 * mapped. Null until resolved. See network_subscription_index().
 	 *
-	 * @var array<int,array{user_id:int,plan_label:string,status:string}>|null
+	 * @var array<int,array{user_id:int,plan_label:string,site_name:string,status:string}>|null
 	 */
 	private ?array $network_index_cache = null;
 
@@ -267,14 +273,14 @@ class Subscribers_Wizard extends Wizard {
 				'callback'            => [ $this, 'api_get_subscribers' ],
 				'permission_callback' => [ $this, 'api_permissions_check' ],
 				'args'                => [
-					'page'     => [
+					'page'       => [
 						'type'              => 'integer',
 						'default'           => 1,
 						'minimum'           => 1,
 						'sanitize_callback' => 'absint',
 						'validate_callback' => 'rest_validate_request_arg',
 					],
-					'per_page' => [
+					'per_page'   => [
 						'type'              => 'integer',
 						'default'           => 20,
 						'minimum'           => 1,
@@ -282,24 +288,24 @@ class Subscribers_Wizard extends Wizard {
 						'sanitize_callback' => 'absint',
 						'validate_callback' => 'rest_validate_request_arg',
 					],
-					'search'   => [
+					'search'     => [
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_text_field',
 						'validate_callback' => 'rest_validate_request_arg',
 					],
-					'orderby'  => [
+					'orderby'    => [
 						'type'              => 'string',
 						'enum'              => [ 'name', 'memberSince' ],
 						'default'           => 'memberSince',
 						'validate_callback' => 'rest_validate_request_arg',
 					],
-					'order'    => [
+					'order'      => [
 						'type'              => 'string',
 						'enum'              => [ 'asc', 'desc' ],
 						'default'           => 'desc',
 						'validate_callback' => 'rest_validate_request_arg',
 					],
-					'status'   => [
+					'status'     => [
 						'type'              => 'array',
 						'items'             => [
 							'type' => 'string',
@@ -308,7 +314,7 @@ class Subscribers_Wizard extends Wizard {
 						'sanitize_callback' => 'rest_sanitize_request_arg',
 						'validate_callback' => 'rest_validate_request_arg',
 					],
-					'access'   => [
+					'access'     => [
 						'type'              => 'array',
 						'items'             => [
 							'type' => 'string',
@@ -317,7 +323,7 @@ class Subscribers_Wizard extends Wizard {
 						'sanitize_callback' => 'rest_sanitize_request_arg',
 						'validate_callback' => 'rest_validate_request_arg',
 					],
-					'plan'     => [
+					'plan'       => [
 						'type'              => 'array',
 						'items'             => [ 'type' => 'string' ],
 						// Each name costs an unindexed post_title lookup plus a
@@ -326,6 +332,15 @@ class Subscribers_Wizard extends Wizard {
 						// returns every name uncapped — the two are not a matched
 						// pair, and a site selling more than this many plans would
 						// offer options that a full selection cannot submit.
+						'maxItems'          => 100,
+						'sanitize_callback' => 'rest_sanitize_request_arg',
+						'validate_callback' => 'rest_validate_request_arg',
+					],
+					// Where a reader's subscriptions are managed: this site, or other
+					// network sites by name.
+					'managed_on' => [
+						'type'              => 'array',
+						'items'             => [ 'type' => 'string' ],
 						'maxItems'          => 100,
 						'sanitize_callback' => 'rest_sanitize_request_arg',
 						'validate_callback' => 'rest_validate_request_arg',
@@ -523,8 +538,10 @@ class Subscribers_Wizard extends Wizard {
 		}
 		// Plans readers hold on other network sites go by the label their rows show.
 		// The unique below folds the many holders of one plan into one option.
+		$sites = [];
 		foreach ( $this->network_subscription_index() as $network_row ) {
 			$names[] = $network_row['plan_label'];
+			$sites[] = $network_row['site_name'];
 		}
 
 		$names = array_values( array_unique( array_filter( array_map( 'trim', $names ) ) ) );
@@ -532,9 +549,13 @@ class Subscribers_Wizard extends Wizard {
 		// sort it ("Tier 2" before "Tier 10").
 		sort( $names, SORT_NATURAL | SORT_FLAG_CASE );
 
+		$sites = array_values( array_unique( $sites ) );
+		sort( $sites, SORT_NATURAL | SORT_FLAG_CASE );
+
 		return rest_ensure_response(
 			[
 				'items' => $names,
+				'sites' => $sites,
 				'total' => count( $names ),
 				'pages' => 1,
 			]
@@ -1643,26 +1664,37 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
-	 * The label a subscription managed on another network site goes by: its plan
-	 * and the site it lives on, such as "Fan Membership (Node Daily)".
+	 * The name a subscription managed on another network site goes by on its own.
 	 *
 	 * A subscription with no product names falls back to its ID so the label is
 	 * never just a site name in brackets.
 	 *
-	 * @param string $plan      The plan name, or an empty string when the subscription has no products.
-	 * @param int    $id        The subscription's ID on its own site.
+	 * @param string $plan The plan name, or an empty string when the subscription has no products.
+	 * @param int    $id   The subscription's ID on its own site.
+	 *
+	 * @return string
+	 */
+	private static function network_plan_name( string $plan, int $id ): string {
+		return '' !== $plan
+			? $plan
+			// translators: %d: the subscription's ID on the site that manages it.
+			: sprintf( __( 'Subscription #%d', 'newspack-plugin' ), $id );
+	}
+
+	/**
+	 * The label a subscription managed on another network site goes by: its plan
+	 * and the site it lives on, such as "Fan Membership (Node Daily)".
+	 *
+	 * @param string $plan_name The plan name, from network_plan_name().
 	 * @param string $site_name The name of the site that manages the subscription.
 	 *
 	 * @return string
 	 */
-	private static function network_plan_label( string $plan, int $id, string $site_name ): string {
+	private static function network_plan_label( string $plan_name, string $site_name ): string {
 		return sprintf(
 			/* translators: 1: plan name, 2: site name */
 			_x( '%1$s (%2$s)', 'plan name and the network site that manages it', 'newspack-plugin' ),
-			'' !== $plan
-				? $plan
-				// translators: %d: the subscription's ID on the site that manages it.
-				: sprintf( __( 'Subscription #%d', 'newspack-plugin' ), $id ),
+			$plan_name,
 			$site_name
 		);
 	}
@@ -1708,6 +1740,7 @@ class Subscribers_Wizard extends Wizard {
 			$out[] = [
 				'id'              => $network['id'],
 				'plan'            => $network['plan_label'],
+				'planName'        => $network['plan_name'],
 				'status'          => self::map_subscription_status( $network['status'] ),
 				'editUrl'         => esc_url_raw( $network['edit_url'] ),
 				'isComplimentary' => false,
@@ -1734,7 +1767,7 @@ class Subscribers_Wizard extends Wizard {
 	 *
 	 * @param mixed $record One record from the network filters.
 	 *
-	 * @return array{id:int,status:string,plan_label:string,site_name:string,site_url:string,edit_url:string}|null
+	 * @return array{id:int,status:string,plan_name:string,plan_label:string,site_name:string,site_url:string,edit_url:string}|null
 	 *         The record with its raw `status`, or null when it does not fit the shape.
 	 */
 	private static function normalize_network_record( $record ): ?array {
@@ -1753,12 +1786,14 @@ class Subscribers_Wizard extends Wizard {
 		if ( ! is_string( $status ) || '' === $status ) {
 			return null;
 		}
-		$plan = isset( $record['plan'] ) && is_string( $record['plan'] ) ? $record['plan'] : '';
+		$plan      = isset( $record['plan'] ) && is_string( $record['plan'] ) ? $record['plan'] : '';
+		$plan_name = self::network_plan_name( $plan, (int) $id );
 
 		return [
 			'id'         => (int) $id,
 			'status'     => $status,
-			'plan_label' => self::network_plan_label( $plan, (int) $id, $site_name ),
+			'plan_name'  => $plan_name,
+			'plan_label' => self::network_plan_label( $plan_name, $site_name ),
 			'site_name'  => $site_name,
 			'site_url'   => isset( $record['site_url'] ) && is_string( $record['site_url'] ) ? $record['site_url'] : '',
 			'edit_url'   => isset( $record['edit_url'] ) && is_string( $record['edit_url'] ) ? $record['edit_url'] : '',
@@ -1806,7 +1841,7 @@ class Subscribers_Wizard extends Wizard {
 	 *
 	 * Read once per request: the memo is cleared with the other request caches.
 	 *
-	 * @return array<int,array{user_id:int,plan_label:string,status:string}>
+	 * @return array<int,array{user_id:int,plan_label:string,site_name:string,status:string}>
 	 */
 	private function network_subscription_index(): array {
 		if ( null !== $this->network_index_cache ) {
@@ -1834,6 +1869,7 @@ class Subscribers_Wizard extends Wizard {
 			$index[] = [
 				'user_id'    => (int) $user_id,
 				'plan_label' => $network['plan_label'],
+				'site_name'  => $network['site_name'],
 				'status'     => self::map_subscription_status( $network['status'] ),
 			];
 		}
@@ -2363,8 +2399,9 @@ class Subscribers_Wizard extends Wizard {
 	private function resolve_filter_include( $request ) {
 		$status_filter = array_filter( array_map( 'sanitize_text_field', (array) $request->get_param( 'status' ) ) );
 		$plan_filter   = array_filter( array_map( 'sanitize_text_field', (array) $request->get_param( 'plan' ) ) );
-		$access_filter = array_filter( array_map( 'sanitize_text_field', (array) $request->get_param( 'access' ) ) );
-		if ( empty( $status_filter ) && empty( $plan_filter ) && empty( $access_filter ) ) {
+		$access_filter  = array_filter( array_map( 'sanitize_text_field', (array) $request->get_param( 'access' ) ) );
+		$managed_filter = array_filter( array_map( 'sanitize_text_field', (array) $request->get_param( 'managed_on' ) ) );
+		if ( empty( $status_filter ) && empty( $plan_filter ) && empty( $access_filter ) && empty( $managed_filter ) ) {
 			return null;
 		}
 
@@ -2377,6 +2414,9 @@ class Subscribers_Wizard extends Wizard {
 		}
 		if ( in_array( 'complimentary', $access_filter, true ) ) {
 			$sets[] = $this->customer_ids_for_complimentary();
+		}
+		if ( ! empty( $managed_filter ) ) {
+			$sets[] = $this->customer_ids_for_managed_on( $managed_filter );
 		}
 
 		$include = array_shift( $sets );
@@ -2428,10 +2468,11 @@ class Subscribers_Wizard extends Wizard {
 	 * cancelled reduction on top.
 	 *
 	 * @param string[] $prototype_statuses Prototype statuses (active/pending/on-hold/cancelled).
+	 * @param bool     $include_network    Whether subscriptions other network sites manage count.
 	 *
 	 * @return int[]
 	 */
-	private function customer_ids_for_raw_statuses( array $prototype_statuses ) {
+	private function customer_ids_for_raw_statuses( array $prototype_statuses, bool $include_network = true ) {
 		if ( empty( $prototype_statuses ) ) {
 			return [];
 		}
@@ -2440,7 +2481,7 @@ class Subscribers_Wizard extends Wizard {
 		// asks for `active` twice), each of which would otherwise repeat the full
 		// subscription scan below.
 		sort( $prototype_statuses );
-		$cache_key = implode( ',', $prototype_statuses );
+		$cache_key = implode( ',', $prototype_statuses ) . ( $include_network ? '' : ':local' );
 		if ( isset( $this->raw_status_ids_cache[ $cache_key ] ) ) {
 			return $this->raw_status_ids_cache[ $cache_key ];
 		}
@@ -2489,7 +2530,7 @@ class Subscribers_Wizard extends Wizard {
 
 		// Subscriptions other network sites manage count like local ones: the row shows
 		// their status, so the filter has to match it. The index holds mapped statuses.
-		foreach ( $this->network_subscription_index() as $network_row ) {
+		foreach ( $include_network ? $this->network_subscription_index() : [] as $network_row ) {
 			if ( in_array( $network_row['status'], $prototype_statuses, true ) ) {
 				$ids[] = $network_row['user_id'];
 			}
@@ -2603,6 +2644,45 @@ class Subscribers_Wizard extends Wizard {
 
 		// The live set is the one customer_ids_for_raw_statuses() memoizes for the
 		// status filter, so this costs no extra scan when both filters are active.
+		if ( ! empty( $cancelled_ids ) ) {
+			$ids = array_merge( $ids, array_diff( $cancelled_ids, $this->customer_ids_for_raw_statuses( [ 'active', 'pending', 'on-hold' ] ) ) );
+		}
+
+		return array_values( array_unique( array_filter( $ids ) ) );
+	}
+
+	/**
+	 * Holder IDs of subscriptions managed in any of the given places: this site
+	 * (MANAGED_ON_THIS_SITE) or other network sites, by name.
+	 *
+	 * Reduced like customer_ids_for_plans(): a cancelled subscription qualifies its
+	 * holder only when nothing live remains, since the Subscription column hides it
+	 * otherwise.
+	 *
+	 * @param string[] $places MANAGED_ON_THIS_SITE and/or network site names.
+	 *
+	 * @return int[]
+	 */
+	private function customer_ids_for_managed_on( array $places ): array {
+		$ids           = [];
+		$cancelled_ids = [];
+
+		if ( in_array( self::MANAGED_ON_THIS_SITE, $places, true ) ) {
+			$ids           = $this->customer_ids_for_raw_statuses( [ 'active', 'pending', 'on-hold' ], false );
+			$cancelled_ids = $this->customer_ids_for_raw_statuses( [ 'cancelled' ], false );
+		}
+
+		foreach ( $this->network_subscription_index() as $network_row ) {
+			if ( ! in_array( sanitize_text_field( $network_row['site_name'] ), $places, true ) ) {
+				continue;
+			}
+			if ( 'cancelled' === $network_row['status'] ) {
+				$cancelled_ids[] = $network_row['user_id'];
+			} else {
+				$ids[] = $network_row['user_id'];
+			}
+		}
+
 		if ( ! empty( $cancelled_ids ) ) {
 			$ids = array_merge( $ids, array_diff( $cancelled_ids, $this->customer_ids_for_raw_statuses( [ 'active', 'pending', 'on-hold' ] ) ) );
 		}

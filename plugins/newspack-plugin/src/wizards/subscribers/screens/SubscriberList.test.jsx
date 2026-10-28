@@ -486,39 +486,101 @@ describe( 'the newsletters column', () => {
 } );
 
 /**
- * A reader the network created gets a "Network" badge beside the name.
+ * Subscriptions other network sites manage sit in the list beside the local ones.
+ * The site that manages each one is named after the plan rather than inside its
+ * link, and the Managed on filter narrows the list by it.
  */
-describe( 'the network reader rows', () => {
+describe( 'the network subscription rows', () => {
 	beforeEach( () => {
 		headerCalls = [];
 		mockDataViewsProps = null;
 		apiFetch.mockReset();
 	} );
 
-	/** Mount the list, then render one column's cell for the given row. */
-	const renderCell = async ( fieldId, item ) => {
-		apiFetch.mockResolvedValue( { items: [ item ], total: 1, pages: 1 } );
+	const networkSubscription = ( id, site, status = 'active' ) => ( {
+		id,
+		plan: `All-Access Premium (${ site })`,
+		planName: 'All-Access Premium',
+		status,
+		editUrl: `https://${ id }.example.com/wp-admin/post.php?post=${ id }&action=edit`,
+		isComplimentary: false,
+		managedOn: { name: site, url: `https://${ id }.example.com` },
+	} );
+
+	const localSubscription = { id: 7, plan: 'Digital', status: 'active', editUrl: '/edit/7', isComplimentary: false };
+
+	/** Mount the list with the given network sites and rows. */
+	const mount = async ( { sites = [], items = [ subscriber( 1 ) ] } = {} ) => {
+		apiFetch.mockImplementation( ( { path } ) =>
+			Promise.resolve( path.includes( '/plans' ) ? { items: [], sites } : { items, total: items.length, pages: 1 } )
+		);
 		await act( async () => {
 			render( <SubscriberList /> );
 		} );
-		const column = mockDataViewsProps.fields.find( field => fieldId === field.id );
-		return render( column.render( { item } ) );
 	};
 
-	it( 'badges a reader the network created, beside the name', async () => {
-		const { container } = await renderCell( 'name', { ...subscriber( 1 ), isNetworkReader: true } );
+	const field = id => mockDataViewsProps.fields.find( f => id === f.id );
 
-		expect( container.textContent ).toContain( 'Reader 1' );
-		expect( container.textContent ).toContain( 'Network' );
-		expect( container.textContent.indexOf( 'Reader 1' ) ).toBeLessThan( container.textContent.indexOf( 'Network' ) );
-		// The badge shares a line with the name, not the email.
-		expect( container.querySelector( '.newspack-subscribers__email' ).textContent ).toBe( 'reader1@example.com' );
+	it( 'shows the filters beside the search', async () => {
+		await mount();
+
+		expect( mockDataViewsProps.inlineFilters ).toBe( true );
 	} );
 
-	it( 'leaves a reader this site created without the badge', async () => {
-		const { container } = await renderCell( 'name', subscriber( 1 ) );
+	it( 'shows no badge beside a reader the network created', async () => {
+		await mount();
+		const { container } = render( field( 'name' ).render( { item: { ...subscriber( 1 ), isNetworkReader: true } } ) );
 
-		expect( container.textContent ).toContain( 'Reader 1' );
-		expect( container.textContent ).not.toContain( 'Network' );
+		expect( container.textContent ).toBe( 'Reader 1reader1@example.com' );
+	} );
+
+	it( 'names the managing site after the plan, outside its link', async () => {
+		await mount();
+		const item = { ...subscriber( 1 ), subscriptions: [ networkSubscription( 12, 'Riverbend Daily' ) ] };
+		const { container } = render( field( 'plans' ).render( { item } ) );
+
+		expect( container.querySelector( 'a' ).textContent ).toBe( 'All-Access Premium' );
+		expect( container.textContent ).toBe( 'All-Access Premium\u00a0(Riverbend Daily)' );
+	} );
+
+	it( 'keeps the plan-and-site label as the value the Subscription filter matches', async () => {
+		await mount();
+		const item = { ...subscriber( 1 ), subscriptions: [ networkSubscription( 12, 'Riverbend Daily' ) ] };
+
+		expect( field( 'plans' ).getValue( { item } ) ).toEqual( [ 'All-Access Premium (Riverbend Daily)' ] );
+	} );
+
+	it( 'offers This site, then each network site, as Managed on options', async () => {
+		await mount( { sites: [ "Reader's News & Co", 'Riverbend Daily' ] } );
+
+		expect( field( 'managedOn' ).elements ).toEqual( [
+			{ value: 'this-site', label: 'This site' },
+			{ value: "Reader's News & Co", label: "Reader's News & Co" },
+			{ value: 'Riverbend Daily', label: 'Riverbend Daily' },
+		] );
+	} );
+
+	it( 'leaves Managed on out on a site with no network subscriptions', async () => {
+		await mount();
+
+		expect( field( 'managedOn' ) ).toBeUndefined();
+	} );
+
+	it( "lists where a reader's subscriptions are managed, this site first and without repeats", async () => {
+		await mount( { sites: [ 'Riverbend Daily' ] } );
+		const item = {
+			...subscriber( 1 ),
+			subscriptions: [ networkSubscription( 12, 'Riverbend Daily' ), localSubscription, networkSubscription( 13, 'Riverbend Daily' ) ],
+		};
+
+		expect( field( 'managedOn' ).getValue( { item } ) ).toEqual( [ 'This site', 'Riverbend Daily' ] );
+		expect( render( field( 'managedOn' ).render( { item } ) ).container.textContent ).toBe( 'This siteRiverbend Daily' );
+	} );
+
+	it( 'leaves a cancelled subscription out of Managed on while a live one remains', async () => {
+		await mount( { sites: [ 'Riverbend Daily' ] } );
+		const item = { ...subscriber( 1 ), subscriptions: [ networkSubscription( 12, 'Riverbend Daily', 'cancelled' ), localSubscription ] };
+
+		expect( field( 'managedOn' ).getValue( { item } ) ).toEqual( [ 'This site' ] );
 	} );
 } );
