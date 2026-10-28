@@ -1,14 +1,14 @@
 /**
  * WordPress dependencies
  */
-import { useState } from '@wordpress/element';
+import { useEffect, useState } from '@wordpress/element';
 import { useInstanceId } from '@wordpress/compose';
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { speak } from '@wordpress/a11y';
 import apiFetch from '@wordpress/api-fetch';
 import { decodeEntities } from '@wordpress/html-entities';
 import { dateI18n, getSettings } from '@wordpress/date';
-import { Button, Card, CardBody, CardHeader, Notice } from '@wordpress/components';
+import { Button, Card, CardBody, CardHeader, Notice, Spinner } from '@wordpress/components';
 import { Badge, Stack } from '@wordpress/ui';
 
 /**
@@ -56,6 +56,8 @@ const TestCard = ( { test, data } ) => {
 	const shares = getShares( test.control_share, test.variants );
 	const hasStats = stats && stats.source.state !== 'unavailable';
 
+	const ineligible = letters.filter( letter => false === test.variants[ letter ].eligible );
+
 	const load = refresh => {
 		setLoading( true );
 		setError( null );
@@ -64,11 +66,19 @@ const TestCard = ( { test, data } ) => {
 		} )
 			.then( response => {
 				setStats( response );
-				speak( __( 'Results loaded.', 'newspack-popups' ) );
+				if ( refresh ) {
+					speak( __( 'Results loaded.', 'newspack-popups' ) );
+				}
 			} )
 			.catch( err => setError( err.message || __( 'The results could not be loaded.', 'newspack-popups' ) ) )
 			.finally( () => setLoading( false ) );
 	};
+
+	useEffect( () => {
+		if ( data.provider.available ) {
+			load( false );
+		}
+	}, [] );
 
 	return (
 		<Card className="newspack-popups-ab-tests__test" role="region" aria-labelledby={ headingId }>
@@ -93,12 +103,12 @@ const TestCard = ( { test, data } ) => {
 						<Button
 							variant="secondary"
 							size="compact"
-							onClick={ () => load( Boolean( stats ) ) }
+							onClick={ () => load( true ) }
 							disabled={ loading }
 							accessibleWhenDisabled
 							isBusy={ loading }
 						>
-							{ stats ? __( 'Refresh', 'newspack-popups' ) : __( 'Show results', 'newspack-popups' ) }
+							{ __( 'Refresh', 'newspack-popups' ) }
 						</Button>
 					) }
 				</Stack>
@@ -125,6 +135,20 @@ const TestCard = ( { test, data } ) => {
 									</span>
 								);
 							} ) }
+						</Notice>
+					) }
+					{ ineligible.length > 0 && (
+						<Notice status="warning" isDismissible={ false } spokenMessage="">
+							{ sprintf(
+								// Translators: %s is a list of version letters, such as "A" or "A and B".
+								_n(
+									"Version %s uses a manual or custom placement, so this test can't run. Change its placement in the prompt editor.",
+									"Versions %s use a manual or custom placement, so this test can't run. Change their placement in the prompt editor.",
+									ineligible.length,
+									'newspack-popups'
+								),
+								ineligible.map( letter => letter.toUpperCase() ).join( ' and ' )
+							) }
 						</Notice>
 					) }
 					{ status === 'incomplete' ? (
@@ -205,6 +229,12 @@ const TestCard = ( { test, data } ) => {
 							} ) }
 						</tbody>
 					</table>
+					{ loading && ! stats && (
+						<div className="newspack-popups-ab-tests__loading">
+							<Spinner />
+							<span>{ __( 'Loading results…', 'newspack-popups' ) }</span>
+						</div>
+					) }
 					{ stats && stats.source.reason && (
 						<Notice status={ stats.source.state === 'unavailable' ? 'warning' : 'info' } isDismissible={ false } spokenMessage="">
 							{ stats.source.reason }

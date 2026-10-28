@@ -56,6 +56,13 @@ body.newspack-popups-ab-tests-screen {
 		color: var(--wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700});
 	}
 
+	&__loading {
+		align-items: center;
+		color: var(--wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700});
+		display: flex;
+		gap: wp-vars.$grid-unit-10;
+	}
+
 	&__allocation {
 		display: flex;
 		gap: 2px;

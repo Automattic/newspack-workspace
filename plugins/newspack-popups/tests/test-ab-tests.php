@@ -49,6 +49,19 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * A prompt on a manual or custom placement is reported as ineligible, so the
+	 * page can say why the test can't run.
+	 */
+	public function test_get_tests_reports_variants_on_ineligible_placements() {
+		$this->create_test_variant( 'elig', 'a' );
+		$manual = $this->create_test_variant( 'elig', 'b' );
+		update_post_meta( $manual, 'placement', 'manual' );
+		$test = Newspack_Popups_AB_Tests::get_tests()[0];
+		$this->assertTrue( $test['variants']['a']['eligible'] );
+		$this->assertFalse( $test['variants']['b']['eligible'] );
+	}
+
+	/**
 	 * The control share is read from the control; one stored on a challenger is ignored.
 	 */
 	public function test_get_tests_control_share_defaults_to_fifty_even_when_set_on_a_challenger() {
@@ -940,6 +953,7 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	public function test_test_prompts_route_lists_every_prompt_in_the_test() {
 		$control    = $this->create_test_variant( 'lookup-test', 'a', null, [], 60 );
 		$challenger = $this->create_test_variant( 'lookup-test', 'b', null, [ 'post_status' => 'draft' ] );
+		update_post_meta( $control, Newspack_Popups_AB_Tests::META_GOAL, 'donation' );
 		$this->create_test_variant( 'lookup-test', 'b', null, [ 'post_status' => 'trash' ] );
 		$this->create_test_variant( 'other-test', 'a' );
 
@@ -953,7 +967,8 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		self::assertSame( [ $control, $challenger ], wp_list_pluck( $response->get_data(), 'id' ) );
 		self::assertSame( [ 'a', 'b' ], wp_list_pluck( $response->get_data(), 'variant' ) );
 		self::assertStringContainsString( 'post=' . $control, $response->get_data()[0]['edit_link'] );
-		update_post_meta( $control, Newspack_Popups_AB_Tests::META_GOAL, 'donation' );
+		self::assertSame( [ 'donation', '' ], wp_list_pluck( $response->get_data(), 'goal' ) );
+		self::assertSame( [ 60, 50 ], wp_list_pluck( $response->get_data(), 'control_share' ) );
 
 		self::assertSame( [], rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/no-such-test' ) )->get_data() );
 		self::assertSame( 404, rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/Not%20A%20Slug' ) )->get_status() );
@@ -967,8 +982,6 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	 * a user without read_private_posts, which is the rule the Prompts list and
 	 * core's REST endpoint already apply. Drafts stay listed to everyone who can
 	 * edit prompts, since a challenger's author needs to see the control.
-		self::assertSame( [ 'donation', '' ], wp_list_pluck( $response->get_data(), 'goal' ) );
-		self::assertSame( [ 60, 50 ], wp_list_pluck( $response->get_data(), 'control_share' ) );
 	 */
 	public function test_test_prompts_route_hides_other_authors_private_prompts() {
 		$admin_id = self::factory()->user->create( [ 'role' => 'administrator' ] );

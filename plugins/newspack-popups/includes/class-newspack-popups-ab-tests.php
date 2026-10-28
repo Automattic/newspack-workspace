@@ -476,7 +476,8 @@ final class Newspack_Popups_AB_Tests {
 	 *                 UTC, or null until both are published. Readers see the control
 	 *                 alone before then, so an earlier date would count traffic the
 	 *                 test never split. `variants` maps the letter to
-	 *                 `[ 'id', 'title', 'status', 'status_label', 'edit_link' ]`.
+	 *                 `[ 'id', 'title', 'status', 'status_label', 'edit_link', 'eligible' ]`,
+	 *                 where `eligible` is false for a manual or custom placement.
 	 *                 `duplicates` lists the other prompts carrying a letter, as
 	 *                 `letter` plus those fields. The arm shown is the first
 	 *                 published prompt by ID, or the first by ID when none is
@@ -574,7 +575,7 @@ final class Newspack_Popups_AB_Tests {
 	 * What the page shows for one prompt.
 	 *
 	 * @param WP_Post $prompt Prompt.
-	 * @return array `id`, `title`, `status`, `status_label`, `edit_link`.
+	 * @return array `id`, `title`, `status`, `status_label`, `edit_link`, `eligible`.
 	 */
 	private static function describe_prompt( $prompt ) {
 		$status = get_post_status_object( $prompt->post_status );
@@ -584,6 +585,7 @@ final class Newspack_Popups_AB_Tests {
 			'status'       => $prompt->post_status,
 			'status_label' => $status ? $status->label : $prompt->post_status,
 			'edit_link'    => get_edit_post_link( $prompt->ID, 'raw' ),
+			'eligible'     => self::is_eligible_placement( get_post_meta( $prompt->ID, 'placement', true ) ),
 		];
 	}
 
