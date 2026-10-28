@@ -24,12 +24,16 @@ const STATUS_ORDER = [ 'running', 'draft', 'incomplete' ];
  * @param {Object} props.data Boot data.
  */
 const App = ( { data } ) => {
-	const { tests = [], provider = {}, editor_new_prompt_url: newPromptUrl } = data;
+	const { tests = [], provider = {}, campaigns_url: campaignsUrl, in_audience_menu: inAudienceMenu } = data;
 	return (
 		<Page
 			className="newspack-popups-ab-tests"
-			breadcrumbItems={ [ { label: __( 'Campaigns', 'newspack-popups' ) }, { label: __( 'A/B Tests', 'newspack-popups' ) } ] }
-			subTitle={ __( 'Compare a control prompt with the challengers that share its Test ID.', 'newspack-popups' ) }
+			breadcrumbItems={ [
+				...( inAudienceMenu ? [ { label: __( 'Audience Management', 'newspack-popups' ) } ] : [] ),
+				{ label: __( 'Campaigns', 'newspack-popups' ), url: campaignsUrl },
+				{ label: __( 'A/B Tests', 'newspack-popups' ) },
+			] }
+			subTitle={ __( 'See which version of each prompt gets more readers to act.', 'newspack-popups' ) }
 		>
 			<div className="newspack-popups-ab-tests__content">
 				{ ! provider.available && (
@@ -41,11 +45,11 @@ const App = ( { data } ) => {
 					<EmptyState.Root>
 						<EmptyState.Header
 							title={ __( 'No A/B tests yet', 'newspack-popups' ) }
-							description={ __( 'Give two prompts the same Test ID in the prompt editor to start one.', 'newspack-popups' ) }
+							description={ __( 'Give two prompts the same test name to compare them.', 'newspack-popups' ) }
 						/>
 						<EmptyState.Actions>
-							<Button variant="primary" href={ newPromptUrl }>
-								{ __( 'Create a prompt', 'newspack-popups' ) }
+							<Button variant="primary" href={ campaignsUrl }>
+								{ __( 'Go to prompts', 'newspack-popups' ) }
 							</Button>
 						</EmptyState.Actions>
 					</EmptyState.Root>

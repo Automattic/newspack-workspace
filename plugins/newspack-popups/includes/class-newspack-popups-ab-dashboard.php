@@ -28,6 +28,11 @@ final class Newspack_Popups_AB_Dashboard {
 	const AUDIENCE_MENU_SLUG = 'newspack-audience';
 
 	/**
+	 * Menu slug of the Campaigns screen, which the page sits under.
+	 */
+	const CAMPAIGNS_MENU_SLUG = 'newspack-audience-campaigns';
+
+	/**
 	 * Body class that lets the page fill the admin canvas.
 	 */
 	const BODY_CLASS = 'newspack-popups-ab-tests-screen';
@@ -81,6 +86,28 @@ final class Newspack_Popups_AB_Dashboard {
 			self::PAGE_SLUG,
 			[ __CLASS__, 'render_page' ]
 		);
+		if ( self::AUDIENCE_MENU_SLUG === $parent ) {
+			self::move_menu_item_below_campaigns();
+		}
+	}
+
+	/**
+	 * Put the page's Audience submenu item directly under Campaigns, which
+	 * newspack-plugin registers earlier on the same hook.
+	 */
+	private static function move_menu_item_below_campaigns() {
+		$items     = array_values( $GLOBALS['submenu'][ self::AUDIENCE_MENU_SLUG ] ?? [] );
+		$own       = array_search( self::PAGE_SLUG, array_column( $items, 2 ), true );
+		$campaigns = array_search( self::CAMPAIGNS_MENU_SLUG, array_column( $items, 2 ), true );
+		if ( false === $own || false === $campaigns ) {
+			return;
+		}
+		$item = array_splice( $items, $own, 1 );
+		if ( $own < $campaigns ) {
+			--$campaigns;
+		}
+		array_splice( $items, $campaigns + 1, 0, $item );
+		$GLOBALS['submenu'][ self::AUDIENCE_MENU_SLUG ] = $items; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 	}
 
 	/**
@@ -165,28 +192,33 @@ final class Newspack_Popups_AB_Dashboard {
 	 * @return array
 	 */
 	public static function get_boot_data() {
-		$provider  = self::get_provider();
-		$available = self::availability( $provider );
+		$provider      = self::get_provider();
+		$available     = self::availability( $provider );
+		$in_audience   = self::AUDIENCE_MENU_SLUG === self::get_parent_slug();
+		$campaigns_url = $in_audience
+			? admin_url( 'admin.php?page=' . self::CAMPAIGNS_MENU_SLUG . '#/campaigns' )
+			: admin_url( 'edit.php?post_type=' . Newspack_Popups::NEWSPACK_POPUPS_CPT );
 		return [
-			'tests'                 => Newspack_Popups_AB_Tests::get_tests(),
-			'rest_base'             => 'newspack-popups/v1',
-			'provider'              => [
+			'tests'            => Newspack_Popups_AB_Tests::get_tests(),
+			'rest_base'        => 'newspack-popups/v1',
+			'provider'         => [
 				'available' => true === $available,
 				'slug'      => self::provider_slug( $provider ),
 				'reason'    => is_wp_error( $available ) ? $available->get_error_message() : null,
 			],
-			'thresholds'            => [
+			'thresholds'       => [
 				'directional' => Newspack_Popups_AB_Stats::THRESHOLD_DIRECTIONAL,
 				'reliable'    => Newspack_Popups_AB_Stats::THRESHOLD_RELIABLE,
 				'min_readers' => Newspack_Popups_AB_Stats::MIN_READERS_PER_ARM,
 			],
-			'copy'                  => self::get_advisory_copy(),
-			'labels'                => [
-				'collecting'  => __( 'Collecting', 'newspack-popups' ),
-				'directional' => __( 'Directional', 'newspack-popups' ),
+			'copy'             => self::get_advisory_copy(),
+			'labels'           => [
+				'collecting'  => __( 'Too early', 'newspack-popups' ),
+				'directional' => __( 'Early signal', 'newspack-popups' ),
 				'reliable'    => __( 'Reliable', 'newspack-popups' ),
 			],
-			'editor_new_prompt_url' => admin_url( 'post-new.php?post_type=' . Newspack_Popups::NEWSPACK_POPUPS_CPT ),
+			'in_audience_menu' => $in_audience,
+			'campaigns_url'    => $campaigns_url,
 		];
 	}
 
@@ -212,8 +244,8 @@ final class Newspack_Popups_AB_Dashboard {
 	 */
 	public static function get_advisory_copy() {
 		return [
-			'high_anonymous' => __( "A large share of your readers aren't logged in. Test versions are assigned per browser, so these readers may see a different version across devices. When results are close, treat them with extra caution.", 'newspack-popups' ),
-			'young_test'     => __( "This test doesn't have enough data yet to call a winner reliably. Keep it running until each version has been seen by more readers.", 'newspack-popups' ),
+			'high_anonymous' => __( "Most readers in this test aren't logged in, so some may see both versions on different devices. Treat close results with caution.", 'newspack-popups' ),
+			'young_test'     => __( 'Too early to call a winner. Keep the test running until more readers have seen each version.', 'newspack-popups' ),
 		];
 	}
 
@@ -239,8 +271,12 @@ final class Newspack_Popups_AB_Dashboard {
 		}
 
 		$window    = self::get_window( $test );
-		$provider  = self::get_provider();
-		$available = self::availability( $provider );
+		$provider      = self::get_provider();
+		$available     = self::availability( $provider );
+		$in_audience   = self::AUDIENCE_MENU_SLUG === self::get_parent_slug();
+		$campaigns_url = $in_audience
+			? admin_url( 'admin.php?page=' . self::CAMPAIGNS_MENU_SLUG . '#/campaigns' )
+			: admin_url( 'edit.php?post_type=' . Newspack_Popups::NEWSPACK_POPUPS_CPT );
 		$source    = [
 			'state'      => 'collecting',
 			'provider'   => self::provider_slug( $provider ),
@@ -295,7 +331,7 @@ final class Newspack_Popups_AB_Dashboard {
 	 */
 	private static function availability( $provider ) {
 		if ( null === $provider ) {
-			return new WP_Error( 'newspack_popups_ab_stats_provider', __( 'No stats source is connected.', 'newspack-popups' ) );
+			return new WP_Error( 'newspack_popups_ab_stats_provider', __( 'Results will show here once a stats source is connected.', 'newspack-popups' ) );
 		}
 		try {
 			$available = $provider->is_available();

@@ -232,7 +232,7 @@ const ABTestPanel = ( {
 							</ul>
 						</div>
 					) }
-					{ resultsUrl && <ExternalLink href={ resultsUrl }>{ __( 'View test results', 'newspack-popups' ) }</ExternalLink> }
+					{ resultsUrl && <ExternalLink href={ resultsUrl }>{ __( 'View results', 'newspack-popups' ) }</ExternalLink> }
 				</>
 			) }
 		</Stack>

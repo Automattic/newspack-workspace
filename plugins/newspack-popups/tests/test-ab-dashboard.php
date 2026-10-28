@@ -275,7 +275,7 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 		$this->create_running_test();
 		$data = $this->stats_request( 't' )->get_data();
 		$this->assertSame( 'unavailable', $data['source']['state'] );
-		$this->assertSame( 'No stats source is connected.', $data['source']['reason'] );
+		$this->assertSame( 'Results will show here once a stats source is connected.', $data['source']['reason'] );
 		$this->assertNull( $data['source']['provider'] );
 		$this->assertSame( 'collecting', $data['comparisons']['b']['label'] );
 		$this->assertNull( $data['comparisons']['b']['confidence'] );
@@ -619,6 +619,34 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * Under the Audience menu the page sits directly below Campaigns, and the
+	 * breadcrumb links back to it.
+	 */
+	public function test_menu_sits_below_campaigns_in_the_audience_menu() {
+		$this->as_admin();
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
+		$GLOBALS['admin_page_hooks']['newspack-audience'] = 'audience'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Stands in for newspack-plugin's Audience menu.
+		$register_audience = function () {
+			add_submenu_page( 'newspack-audience', 'Campaigns', 'Campaigns', 'manage_options', 'newspack-audience-campaigns', '__return_null' );
+			add_submenu_page( 'newspack-audience', 'Donations', 'Donations', 'manage_options', 'newspack-audience-donations', '__return_null' );
+		};
+		add_action( 'admin_menu', $register_audience );
+		$GLOBALS['submenu'] = []; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Resetting the menu between tests.
+		do_action( 'admin_menu' );
+		$data = Newspack_Popups_AB_Dashboard::get_boot_data();
+		remove_action( 'admin_menu', $register_audience );
+		remove_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
+		unset( $GLOBALS['admin_page_hooks']['newspack-audience'] );
+
+		$this->assertSame(
+			[ 'newspack-audience-campaigns', Newspack_Popups_AB_Dashboard::PAGE_SLUG, 'newspack-audience-donations' ],
+			array_column( $GLOBALS['submenu']['newspack-audience'], 2 )
+		);
+		$this->assertTrue( $data['in_audience_menu'] );
+		$this->assertStringContainsString( 'page=newspack-audience-campaigns', $data['campaigns_url'] );
+	}
+
+	/**
 	 * The script's dependencies and version come from the build manifest, so a
 	 * dependency the bundle gains is loaded without anyone editing a PHP list.
 	 */
@@ -668,14 +696,15 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 		$this->assertSame( 't', $data['tests'][0]['test_id'] );
 		$this->assertFalse( $data['provider']['available'] );
 		$this->assertNull( $data['provider']['slug'] );
-		$this->assertSame( 'No stats source is connected.', $data['provider']['reason'] );
+		$this->assertSame( 'Results will show here once a stats source is connected.', $data['provider']['reason'] );
 		$this->assertSame( 80, $data['thresholds']['directional'] );
 		$this->assertSame( 95, $data['thresholds']['reliable'] );
 		$this->assertSame( 30, $data['thresholds']['min_readers'] );
-		$this->assertStringStartsWith( "A large share of your readers aren't logged in.", $data['copy']['high_anonymous'] );
-		$this->assertStringStartsWith( "This test doesn't have enough data yet", $data['copy']['young_test'] );
-		$this->assertSame( 'Collecting', $data['labels']['collecting'] );
-		$this->assertStringContainsString( 'post-new.php?post_type=' . Newspack_Popups::NEWSPACK_POPUPS_CPT, $data['editor_new_prompt_url'] );
+		$this->assertStringStartsWith( "Most readers in this test aren't logged in", $data['copy']['high_anonymous'] );
+		$this->assertStringStartsWith( 'Too early to call a winner.', $data['copy']['young_test'] );
+		$this->assertSame( 'Too early', $data['labels']['collecting'] );
+		$this->assertFalse( $data['in_audience_menu'], 'Without the Audience menu the page sits under Tools.' );
+		$this->assertStringContainsString( 'edit.php?post_type=' . Newspack_Popups::NEWSPACK_POPUPS_CPT, $data['campaigns_url'] );
 		$this->assertSame( 'newspack-popups/v1', $data['rest_base'] );
 	}
 

@@ -35,8 +35,8 @@ import {
  */
 const getMissingRoleHint = variants =>
 	variants.a
-		? __( 'Add a challenger: give another prompt this Test ID and set its variant to B.', 'newspack-popups' )
-		: __( 'Add a control: give another prompt this Test ID and set its variant to A.', 'newspack-popups' );
+		? __( 'Add version B: give another prompt this test name.', 'newspack-popups' )
+		: __( 'Add version A: give another prompt this test name.', 'newspack-popups' );
 
 /**
  * One test: its split, its variants and, on request, their numbers.
@@ -64,9 +64,9 @@ const TestCard = ( { test, data } ) => {
 		} )
 			.then( response => {
 				setStats( response );
-				speak( __( 'Stats loaded.', 'newspack-popups' ) );
+				speak( __( 'Results loaded.', 'newspack-popups' ) );
 			} )
-			.catch( err => setError( err.message || __( 'The stats could not be loaded.', 'newspack-popups' ) ) )
+			.catch( err => setError( err.message || __( 'The results could not be loaded.', 'newspack-popups' ) ) )
 			.finally( () => setLoading( false ) );
 	};
 
@@ -98,7 +98,7 @@ const TestCard = ( { test, data } ) => {
 							accessibleWhenDisabled
 							isBusy={ loading }
 						>
-							{ stats ? __( 'Refresh stats', 'newspack-popups' ) : __( 'Load stats', 'newspack-popups' ) }
+							{ stats ? __( 'Refresh', 'newspack-popups' ) : __( 'Show results', 'newspack-popups' ) }
 						</Button>
 					) }
 				</Stack>
@@ -108,7 +108,7 @@ const TestCard = ( { test, data } ) => {
 					{ duplicates.length > 0 && (
 						<Notice status="warning" isDismissible={ false } spokenMessage="">
 							{ __(
-								'More than one published prompt uses the same variant. Readers see all of them, but results only count the first. Clear the Test ID on the extra prompt, or unpublish it:',
+								'More than one published prompt is the same version. Readers see all of them, but results only count the first. Clear the test name on the extra prompt, or unpublish it:',
 								'newspack-popups'
 							) }{ ' ' }
 							{ duplicates.map( ( duplicate, index ) => {
@@ -134,7 +134,7 @@ const TestCard = ( { test, data } ) => {
 								<th scope="col">{ __( 'Variant', 'newspack-popups' ) }</th>
 								<th scope="col">{ __( 'Prompt', 'newspack-popups' ) }</th>
 								<th scope="col" className="is-numeric">
-									{ __( 'Share', 'newspack-popups' ) }
+									{ __( 'Traffic', 'newspack-popups' ) }
 								</th>
 								{ hasStats && (
 									<>
@@ -145,10 +145,10 @@ const TestCard = ( { test, data } ) => {
 											{ __( 'Conversions', 'newspack-popups' ) }
 										</th>
 										<th scope="col" className="is-numeric">
-											{ __( 'Rate', 'newspack-popups' ) }
+											{ __( 'Conversion rate', 'newspack-popups' ) }
 										</th>
 										<th scope="col" className="is-numeric">
-											{ __( 'Lift', 'newspack-popups' ) }
+											{ __( 'Lift vs. A', 'newspack-popups' ) }
 										</th>
 										<th scope="col">{ __( 'Confidence', 'newspack-popups' ) }</th>
 									</>
@@ -233,7 +233,7 @@ const TestCard = ( { test, data } ) => {
 						<p className="newspack-popups-ab-tests__muted">
 							{ sprintf(
 								// Translators: %s is a date and time.
-								__( 'Counts as of %s. Saved counts are reused for an hour.', 'newspack-popups' ),
+								__( 'Updated %s. Results refresh every hour.', 'newspack-popups' ),
 								dateI18n( getSettings().formats.datetime, stats.source.fetched_at )
 							) }
 						</p>
