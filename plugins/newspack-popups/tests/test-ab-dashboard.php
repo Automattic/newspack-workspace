@@ -83,6 +83,12 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 		];
 		foreach ( $fixtures as $name => $contents ) {
 			$path = $dist . '/' . $name;
+			if ( file_exists( $path . '.bak' ) ) {
+				// A run killed between planting and tear_down() leaves the build in
+				// the backup; put it back first, or the fixture would overwrite it.
+				// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_rename -- Restores a stranded backup of the built asset.
+				rename( $path . '.bak', $path );
+			}
 			if ( file_exists( $path ) ) {
 				// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_rename -- Moves the built asset aside for the fixture.
 				rename( $path, $path . '.bak' );
@@ -218,10 +224,8 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 	 */
 	public function test_stats_route_finds_a_numeric_test_id() {
 		$this->as_admin();
-		add_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
 		$this->create_running_test( '123' );
 		$response = $this->stats_request( '123' );
-		remove_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( '123', $response->get_data()['test_id'] );
 	}
@@ -653,7 +657,6 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 		remove_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
 		$this->assertArrayNotHasKey( Newspack_Popups_AB_Dashboard::SCRIPT_HANDLE, wp_scripts()->registered );
 	}
-
 
 	/**
 	 * Boot data carries the tests, the provider state, the thresholds and the copy.
