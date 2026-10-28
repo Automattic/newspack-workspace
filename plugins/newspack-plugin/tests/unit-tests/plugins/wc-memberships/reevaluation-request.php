@@ -170,13 +170,18 @@ class Test_Memberships_Reevaluation_Request extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A store manager naming a subscription the membership isn't linked to changes nothing.
+	 * A store manager naming a subscription the membership isn't linked to changes
+	 * nothing, and still returns to the edit screen without the action arguments.
 	 */
 	public function test_unlinked_subscription_is_ignored() {
 		$this->log_in_store_manager();
 
-		$this->assertNull( $this->run_request( self::OTHER_SUBSCRIPTION_ID, $this->nonce() ) );
+		$location = $this->run_request( self::OTHER_SUBSCRIPTION_ID, $this->nonce() );
+
 		$this->assertSame( [], $this->integration()->updates );
+		$this->assertIsString( $location );
+		$this->assertStringNotContainsString( 'reevaluate=', $location );
+		$this->assertStringNotContainsString( '_wpnonce=', $location );
 	}
 
 	/**
@@ -207,5 +212,14 @@ class Test_Memberships_Reevaluation_Request extends WP_UnitTestCase {
 		$this->assertSame( (string) self::MEMBERSHIP_ID, $query['post'] );
 		$this->assertSame( (string) self::LINKED_SUBSCRIPTION_ID, $query['reevaluate'] );
 		$this->assertNotFalse( wp_verify_nonce( $query['_wpnonce'], Memberships::REEVALUATE_NONCE_ACTION . self::MEMBERSHIP_ID ) );
+	}
+
+	/**
+	 * The meta box offers the action only to users the handler acts for.
+	 */
+	public function test_meta_box_link_requires_store_capability() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+
+		$this->assertArrayNotHasKey( 'reevaluate', Memberships::user_membership_meta_box_actions( [], self::MEMBERSHIP_ID ) );
 	}
 }

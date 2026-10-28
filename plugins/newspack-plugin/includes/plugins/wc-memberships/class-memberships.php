@@ -1040,22 +1040,17 @@ class Memberships {
 		$membership   = \wc_memberships_get_user_membership( $membership_id );
 		$integrations = wc_memberships()->get_integrations_instance();
 		$integration  = $integrations ? $integrations->get_subscriptions_instance() : null;
-		if ( ! $membership || ! $integration ) {
-			return;
-		}
 
 		// Only resync against the subscription this membership is linked to.
-		$subscription = $integration->get_subscription_from_membership( $membership_id );
-		if ( ! $subscription instanceof \WC_Subscription || (int) $subscription->get_id() !== absint( $_GET['reevaluate'] ) ) {
-			return;
-		}
-
-		if ( ! $integration->has_subscription_same_status( $subscription, $membership ) ) {
-			$integration->update_related_membership_status(
-				$subscription,
-				$membership,
-				$subscription->get_status()
-			);
+		$subscription = ( $membership && $integration ) ? $integration->get_subscription_from_membership( $membership_id ) : null;
+		if ( $subscription instanceof \WC_Subscription && (int) $subscription->get_id() === absint( $_GET['reevaluate'] ) ) {
+			if ( ! $integration->has_subscription_same_status( $subscription, $membership ) ) {
+				$integration->update_related_membership_status(
+					$subscription,
+					$membership,
+					$subscription->get_status()
+				);
+			}
 		}
 
 		wp_safe_redirect( remove_query_arg( [ 'reevaluate', '_wpnonce' ] ) );
@@ -1073,7 +1068,7 @@ class Memberships {
 		$integration  = wc_memberships()->get_integrations_instance()->get_subscriptions_instance();
 		$subscription = $integration ? $integration->get_subscription_from_membership( $user_membership_id ) : null;
 
-		if ( $subscription instanceof \WC_Subscription ) {
+		if ( $subscription instanceof \WC_Subscription && current_user_can( 'manage_woocommerce' ) ) {
 				$reevaluate_url = admin_url( 'post.php?post=' . $user_membership_id . '&action=edit&reevaluate=' . $subscription->get_id() );
 				$actions        = array_merge(
 					[
