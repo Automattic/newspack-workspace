@@ -450,7 +450,7 @@ final class Newspack_Popups_AB_Tests {
 				'title'         => $prompt->post_title,
 				'variant'       => (string) get_post_meta( $prompt->ID, self::META_VARIANT, true ),
 				'goal'          => self::sanitize_goal( get_post_meta( $prompt->ID, self::META_GOAL, true ) ),
-				'control_share' => '' !== $share && null !== $share ? self::sanitize_control_share( $share ) : self::DEFAULT_CONTROL_SHARE,
+				'control_share' => $share ? self::sanitize_control_share( $share ) : self::DEFAULT_CONTROL_SHARE,
 				'status'        => $prompt->post_status,
 				'status_label'  => $status ? $status->label : $prompt->post_status,
 				'edit_link'     => get_edit_post_link( $prompt->ID, 'raw' ),
