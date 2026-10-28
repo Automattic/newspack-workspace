@@ -70,9 +70,10 @@ const Edit = ( { attributes, context, setAttributes } ) => {
 		}
 
 		if ( ! avatarUrl ) {
-			// Use the site's default avatar (gravatar silhouette) as fallback.
+			// Use the site's default avatar (gravatar silhouette) as fallback, unless the parent
+			// hides default avatars. The front end renders no avatar then, so show the placeholder.
 			const fallbackAvatar = {
-				src: defaultAvatarUrl || '',
+				src: ( ! authorFromParent.avatarHideDefault && defaultAvatarUrl ) || '',
 				alt: authorFromParent.name || '',
 				minSize: 16,
 				maxSize: 128,
