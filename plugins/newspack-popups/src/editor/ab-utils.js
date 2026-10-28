@@ -83,20 +83,30 @@ export const promptLacksGoalBlock = ( goal, blockNames ) => {
 /**
  * What to tell an author whose prompt has no block for its goal.
  *
- * @param {string} goal Goal key.
+ * @param {string}  goal        Goal key.
+ * @param {boolean} fromControl Whether the goal comes from version A, so it can't be changed on this prompt.
  * @return {string} Message.
  */
-export const missingGoalBlockMessage = goal => {
+export const missingGoalBlockMessage = ( goal, fromControl = false ) => {
 	switch ( goal ) {
 		case 'donation':
-			return __( "Readers can't donate from this prompt. Add a Donate block, or choose another goal.", 'newspack-popups' );
+			return fromControl
+				? __( "Readers can't donate from this prompt. Add a Donate block, or change the goal on version A.", 'newspack-popups' )
+				: __( "Readers can't donate from this prompt. Add a Donate block, or choose another goal.", 'newspack-popups' );
 		case 'subscription':
-			return __( "Readers can't subscribe from this prompt. Add a Checkout Button block, or choose another goal.", 'newspack-popups' );
+			return fromControl
+				? __( "Readers can't subscribe from this prompt. Add a Checkout Button block, or change the goal on version A.", 'newspack-popups' )
+				: __( "Readers can't subscribe from this prompt. Add a Checkout Button block, or choose another goal.", 'newspack-popups' );
 		default:
-			return __(
-				"Readers can't fill in a form from this prompt. Add a sign-up, registration, donate or checkout block, or choose another goal.",
-				'newspack-popups'
-			);
+			return fromControl
+				? __(
+						"Readers can't fill in a form from this prompt. Add a sign-up, registration, donate or checkout block, or change the goal on version A.",
+						'newspack-popups'
+				  )
+				: __(
+						"Readers can't fill in a form from this prompt. Add a sign-up, registration, donate or checkout block, or choose another goal.",
+						'newspack-popups'
+				  );
 	}
 };
 
@@ -116,7 +126,7 @@ export const testPromptWarnings = ( { postId, variant, prompts } ) => {
 		warnings.push(
 			sprintf(
 				// Translators: %s is the version letter.
-				__( 'Another prompt in this test is already version %s. Choose a different version.', 'newspack-popups' ),
+				__( 'Another prompt in this test is already version %s. Clear the test name on one of them, or unpublish it.', 'newspack-popups' ),
 				String( variant ).toUpperCase()
 			)
 		);
