@@ -83,9 +83,25 @@ final class Copyright_Date_Block {
 			esc_html( $year )
 		);
 
-		if ( '' !== $suffix ) {
+		if ( ! empty( $attributes['showSiteTitle'] ) ) {
+			$site_title = esc_html( get_bloginfo( 'name' ) );
+			if ( $attributes['linkSiteTitle'] ?? true ) {
+				// Multibranded Site filters this to the current brand's page.
+				$site_url   = apply_filters( 'newspack_site_title_url', home_url( '/' ) );
+				$site_title = sprintf( '<a href="%s" rel="home">%s</a>', esc_url( $site_url ), $site_title );
+			}
 			$inner .= sprintf(
-				' <span class="%s__suffix">%s</span>',
+				' <span class="%s__site-title">%s</span>',
+				$block_class,
+				$site_title
+			);
+		}
+
+		if ( '' !== $suffix ) {
+			$separator = preg_match( '/^[,.;:!?)]/u', wp_strip_all_tags( $suffix ) ) ? '' : ' ';
+			$inner    .= sprintf(
+				'%s<span class="%s__suffix">%s</span>',
+				$separator,
 				$block_class,
 				wp_kses( $suffix, self::ALLOWED_HTML )
 			);

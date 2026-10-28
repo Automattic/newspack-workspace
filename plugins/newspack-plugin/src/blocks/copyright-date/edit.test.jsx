@@ -11,12 +11,30 @@ import metadata from './block.json';
 import { getBlockDefaultClassName } from '@wordpress/blocks';
 
 jest.mock( '@wordpress/block-editor', () => ( {
+	InspectorControls: ( { children } ) => <div data-testid="inspector">{ children }</div>,
 	useBlockProps: () => ( { 'data-testid': 'block-wrapper' } ),
 	RichText: ( { value, className, placeholder, tagName: Tag = 'span', allowedFormats } ) => (
 		<Tag className={ className } data-placeholder={ placeholder } data-allowed-formats={ JSON.stringify( allowedFormats ) }>
 			{ value }
 		</Tag>
 	),
+} ) );
+
+jest.mock( '@wordpress/components', () => ( {
+	PanelBody: ( { children } ) => <div>{ children }</div>,
+	ToggleControl: ( { label, checked } ) => <input type="checkbox" aria-label={ label } checked={ checked } readOnly />,
+} ) );
+
+jest.mock( '@wordpress/core-data', () => ( {
+	store: 'core',
+} ) );
+
+jest.mock( '@wordpress/data', () => ( {
+	useSelect: selector => selector( () => ( { getEntityRecord: () => ( { name: 'Tom &amp; Jerry' } ) } ) ),
+} ) );
+
+jest.mock( '@wordpress/html-entities', () => ( {
+	decodeEntities: value => value.replace( '&amp;', '&' ),
 } ) );
 
 jest.mock( '@wordpress/blocks', () => ( {
@@ -87,5 +105,26 @@ describe( 'Copyright Date Edit', () => {
 
 		expect( prefix ).toHaveAttribute( 'data-allowed-formats', '["core/link"]' );
 		expect( suffix ).toHaveAttribute( 'data-allowed-formats', '["core/link"]' );
+	} );
+
+	it( 'should not show the site title by default', () => {
+		render( <Edit { ...defaultProps } /> );
+
+		expect( screen.queryByText( 'Tom & Jerry' ) ).not.toBeInTheDocument();
+		expect( screen.queryByLabelText( 'Link to home page' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'should show the site title read-only, linked unless turned off', () => {
+		const { rerender } = render(
+			<Edit { ...{ ...defaultProps, attributes: { prefix: '\u00a9', suffix: '', showSiteTitle: true, linkSiteTitle: true } } } />
+		);
+
+		expect( screen.getByRole( 'link', { name: 'Tom & Jerry' } ) ).toBeInTheDocument();
+		expect( screen.getByLabelText( 'Link to home page' ) ).toBeChecked();
+
+		rerender( <Edit { ...{ ...defaultProps, attributes: { prefix: '\u00a9', suffix: '', showSiteTitle: true, linkSiteTitle: false } } } /> );
+
+		expect( screen.queryByRole( 'link' ) ).not.toBeInTheDocument();
+		expect( screen.getByText( 'Tom & Jerry' ) ).toHaveClass( `${ blockClass }__site-title` );
 	} );
 } );

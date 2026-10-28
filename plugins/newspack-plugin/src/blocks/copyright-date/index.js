@@ -29,6 +29,6 @@ export const settings = {
 		__( 'year', 'newspack-plugin' ),
 		__( 'newspack', 'newspack-plugin' ),
 	],
-	description: __( 'Display a copyright line with the current year, which updates automatically.', 'newspack-plugin' ),
+	description: __( 'Display a copyright line with the current year and, optionally, the site title.', 'newspack-plugin' ),
 	edit: Edit,
 };

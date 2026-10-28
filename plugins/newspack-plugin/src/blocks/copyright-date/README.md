@@ -1,6 +1,6 @@
 # Copyright Block
 
-A Gutenberg block that displays a copyright line: the current year with configurable prefix and suffix text. Its block name is `newspack/copyright-date`, from when it was titled Copyright Date; saved content references that name, so it stays.
+A Gutenberg block that displays a copyright line: the current year, optionally the site title, and configurable prefix and suffix text. Its block name is `newspack/copyright-date`, from when it was titled Copyright Date; saved content references that name, so it stays.
 
 ## Overview
 
@@ -10,28 +10,28 @@ The Copyright block dynamically renders the current year based on the site's tim
 
 | Attribute | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `prefix` | string | `"©"` | Plain text displayed before the year. Edited inline via a RichText field with formatting disabled. |
-| `suffix` | string | `""` | Plain text displayed after the year. Edited inline via a RichText field with formatting disabled. |
+| `prefix` | string | `"©"` | Text displayed before the year. Edited inline; links are the only formatting allowed. |
+| `showSiteTitle` | boolean | `false` | Displays the site title after the year, read at render time. |
+| `linkSiteTitle` | boolean | `true` | Links the site title to the home page, through the `newspack_site_title_url` filter. Only applies when `showSiteTitle` is on. |
+| `suffix` | string | `""` | Text displayed after the year and site title. Edited inline; links are the only formatting allowed. |
 
 ## Editor behavior
 
-The prefix and suffix are edited directly in the block content area using inline RichText fields with formatting disabled. There are no custom sidebar controls. The year is derived from `dateI18n('Y')` (`@wordpress/date`), which respects the site's timezone setting.
+The prefix and suffix are edited directly in the block content area using inline RichText fields that allow links only. The site title is shown read-only, so editing the footer can't rename the site; the **Show site title** and **Link to home page** toggles in the sidebar control it. The year is derived from `dateI18n('Y')` (`@wordpress/date`), which respects the site's timezone setting.
 
 ## Rendering
 
-The block is server-rendered (dynamic block with no `save` function). The PHP render callback uses `wp_date('Y')` for the year, matching the editor's `dateI18n('Y')`. The output consists of up to three `<span>` elements (prefix, year, suffix) separated by spaces, wrapped in a `<div>` with block wrapper attributes.
+The block is server-rendered (dynamic block with no `save` function). The PHP render callback uses `wp_date('Y')` for the year, matching the editor's `dateI18n('Y')`. The output consists of up to four `<span>` elements (prefix, year, site title, suffix), wrapped in a `<div>` with block wrapper attributes. A space separates the year from what follows, except before a suffix that starts with punctuation, so `, a project of Example Media` reads naturally.
 
-Both prefix and suffix values are escaped with `esc_html()` in the render output. Empty prefix or suffix values are omitted from the markup entirely.
+The site title is read with `get_bloginfo( 'name' )` on every render, so it follows site title changes and per-brand names from Newspack Multibranded Site. Prefix and suffix values are filtered with `wp_kses()`, allowing links only. Empty prefix or suffix values are omitted from the markup entirely.
 
 ## Usage with block theme patterns
 
-All footer patterns in the Newspack Block Theme include this block, with the site title as the suffix:
+All footer patterns in the Newspack Block Theme include this block with the site title shown:
 
-```php
-<!-- wp:newspack/copyright-date <?php echo serialize_block_attributes( [ 'suffix' => get_bloginfo( 'name' ) ] ); ?> /-->
+```html
+<!-- wp:newspack/copyright-date {"showSiteTitle":true} /-->
 ```
-
-The suffix is plain text rather than a Site Title block, so editing the footer's wording doesn't change the site title. Once a footer is saved, the suffix no longer follows changes to the site title.
 
 ## Styling
 

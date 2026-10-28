@@ -201,4 +201,58 @@ class Newspack_Test_Copyright_Date_Block extends WP_UnitTestCase {
 		$this->assertStringNotContainsString( $this->block_class . '__prefix', $output, 'Prefix span should be omitted.' );
 		$this->assertStringNotContainsString( $this->block_class . '__suffix', $output, 'Suffix span should be omitted.' );
 	}
+
+	/**
+	 * Test the site title is read at render time, so it follows renames and per-brand filters.
+	 */
+	public function test_render_site_title() {
+		$hidden = $this->render_block();
+		$this->assertStringNotContainsString( $this->block_class . '__site-title', $hidden, 'Site title should be off by default.' );
+
+		update_option( 'blogname', 'Tom & Jerry' );
+		$brand_url = 'https://example.org/brand/one/';
+		$url_filter  = function () use ( $brand_url ) {
+			return $brand_url;
+		};
+		$name_filter = function () {
+			return 'Brand One';
+		};
+		add_filter( 'newspack_site_title_url', $url_filter );
+		add_filter( 'option_blogname', $name_filter );
+
+		$linked = $this->render_block( [ 'showSiteTitle' => true ] );
+		$this->assertStringContainsString(
+			'</span> <span class="' . $this->block_class . '__site-title"><a href="' . $brand_url . '" rel="home">Brand One</a></span>',
+			$linked,
+			'Site title should come from the filtered option at render time and link through newspack_site_title_url.'
+		);
+
+		remove_filter( 'newspack_site_title_url', $url_filter );
+		remove_filter( 'option_blogname', $name_filter );
+
+		$unlinked = $this->render_block(
+			[
+				'showSiteTitle' => true,
+				'linkSiteTitle' => false,
+			]
+		);
+		$this->assertStringContainsString( '<span class="' . $this->block_class . '__site-title">Tom &amp; Jerry</span>', $unlinked, 'Unlinked site title should render as escaped text.' );
+	}
+
+	/**
+	 * Test a suffix starting with punctuation follows the site title without a space.
+	 */
+	public function test_render_suffix_separator() {
+		$comma = $this->render_block(
+			[
+				'showSiteTitle' => true,
+				'linkSiteTitle' => false,
+				'suffix'        => ', a project of Example Media',
+			]
+		);
+		$this->assertStringContainsString( '</span><span class="' . $this->block_class . '__suffix">, a project', $comma, 'No space should precede a suffix that starts with punctuation.' );
+
+		$word = $this->render_block( [ 'suffix' => 'Acme Inc' ] );
+		$this->assertStringContainsString( '</span> <span class="' . $this->block_class . '__suffix">Acme Inc', $word, 'A space should precede a suffix that starts with a word.' );
+	}
 }
