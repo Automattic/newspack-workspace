@@ -73,44 +73,6 @@ class Newspack_Blocks_Patterns {
 				);
 			}
 
-			// Content Loop: pages only.
-			if ( null === $post_type || 'page' === $post_type ) {
-				array_push(
-					$block_patterns,
-					'homepage-posts-1',
-					'homepage-posts-2',
-					'homepage-posts-3',
-					'homepage-posts-4',
-					'homepage-posts-5',
-					'homepage-posts-6',
-					'homepage-posts-7',
-					'homepage-posts-8',
-					'homepage-posts-9',
-					'homepage-posts-10',
-					'homepage-posts-11',
-					'homepage-posts-12',
-					'homepage-posts-13',
-					'homepage-posts-14',
-					'homepage-posts-15',
-					'homepage-posts-16',
-					'homepage-posts-17',
-					'homepage-posts-18',
-					'homepage-posts-19',
-					'homepage-posts-20',
-					'homepage-posts-21',
-					'homepage-posts-22',
-					'homepage-posts-23',
-					'homepage-posts-24',
-					'homepage-posts-25',
-					'homepage-posts-26',
-					'homepage-posts-27',
-					'homepage-posts-28',
-					'homepage-posts-29',
-					'homepage-posts-30',
-					'homepage-posts-31'
-				);
-			}
-
 			// Subscribe: pages, posts, and prompts if Campaigns is active.
 			if ( null === $post_type || in_array( $post_type, $post_types_with_campaigns, true ) ) {
 				array_push(
@@ -152,10 +114,6 @@ class Newspack_Blocks_Patterns {
 			register_block_pattern_category(
 				'newspack-donations',
 				[ 'label' => __( 'Newspack Donations', 'newspack-plugin' ) ]
-			);
-			register_block_pattern_category(
-				'newspack-homepage-posts',
-				[ 'label' => __( 'Newspack Content Loop', 'newspack-plugin' ) ]
 			);
 			register_block_pattern_category(
 				'newspack-subscribe',

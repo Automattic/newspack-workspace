@@ -17,8 +17,6 @@ require_once NEWSPACK_BLOCKS__PLUGIN_DIR . 'includes/modal-checkout/class-checko
 require_once NEWSPACK_BLOCKS__PLUGIN_DIR . 'includes/modal-checkout/class-change-payment-gateway.php';
 require_once NEWSPACK_BLOCKS__PLUGIN_DIR . 'includes/class-modal-checkout.php';
 
-require_once NEWSPACK_BLOCKS__PLUGIN_DIR . 'includes/plugins/class-the-events-calendar.php';
-
 require_once NEWSPACK_BLOCKS__PLUGIN_DIR . 'includes/tracking/class-data-events.php';
 
 // Shared functions for blocks.
