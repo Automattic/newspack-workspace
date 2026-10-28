@@ -68,6 +68,18 @@ final class GA4_Custom_Dimensions {
 	];
 
 	/**
+	 * Parameters Campaigns stamps on a prompt's events while the prompt is in an
+	 * A/B test, named for the test and the reader's variant. Gated on the
+	 * Campaigns A/B flag rather than on the plugin: Campaigns runs on nearly
+	 * every site, and the flag on few, so gating on the plugin would spend two
+	 * of the 50 slots everywhere for events almost no site sends.
+	 */
+	const AB_TESTING_DIMENSIONS = [
+		'ab_test_id',
+		'ab_variant',
+	];
+
+	/**
 	 * Register hooks.
 	 */
 	public static function init() {
@@ -296,6 +308,25 @@ final class GA4_Custom_Dimensions {
 	}
 
 	/**
+	 * Whether this site runs Campaigns A/B tests, read from the Campaigns
+	 * plugin's own flag. The method check keeps a Campaigns release that
+	 * predates the flag from fataling an admin page load here.
+	 *
+	 * @return bool
+	 */
+	public static function is_ab_testing_enabled(): bool {
+		$is_enabled = method_exists( 'Newspack_Popups_AB_Tests', 'is_enabled' ) && \Newspack_Popups_AB_Tests::is_enabled();
+
+		/**
+		 * Filters A/B testing dimension provisioning, for a site the detection
+		 * above reads wrongly.
+		 *
+		 * @param bool $is_enabled Whether the site runs Campaigns A/B tests.
+		 */
+		return (bool) apply_filters( 'newspack_ga4_dimensions_ab_testing_enabled', $is_enabled );
+	}
+
+	/**
 	 * Priority-ordered list of custom dimensions Newspack provisions.
 	 * Each entry: parameter name => display name.
 	 *
@@ -349,6 +380,8 @@ final class GA4_Custom_Dimensions {
 			'categories'                  => 'Categories',
 			'author'                      => 'Author',
 			'segment_id'                  => 'Matched Segment',
+			'ab_test_id'                  => 'A/B Test ID',
+			'ab_variant'                  => 'A/B Variant',
 		];
 
 		// Read once each: an impure filter could otherwise yield a
@@ -356,6 +389,7 @@ final class GA4_Custom_Dimensions {
 		$has_access_control = self::is_access_control_enabled();
 		$has_woocommerce    = self::is_woocommerce_enabled();
 		$has_donations      = self::is_donations_enabled();
+		$has_ab_testing     = self::is_ab_testing_enabled();
 
 		if ( ! $has_access_control ) {
 			$dimensions = array_diff_key( $dimensions, array_flip( self::ACCESS_CONTROL_DIMENSIONS ) );
@@ -367,6 +401,10 @@ final class GA4_Custom_Dimensions {
 
 		if ( ! $has_donations ) {
 			$dimensions = array_diff_key( $dimensions, array_flip( self::DONATION_DIMENSIONS ) );
+		}
+
+		if ( ! $has_ab_testing ) {
+			$dimensions = array_diff_key( $dimensions, array_flip( self::AB_TESTING_DIMENSIONS ) );
 		}
 
 		// Not $has_access_control: Memberships alone renders a gate, but

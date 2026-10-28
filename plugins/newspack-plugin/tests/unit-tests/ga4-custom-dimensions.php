@@ -9,6 +9,8 @@ use Newspack\Donations;
 use Newspack\GA4_Custom_Dimensions;
 use Newspack\Google_OAuth_GA4_Client;
 
+require_once __DIR__ . '/../mocks/newspack-popups-ab-tests-mock.php';
+
 /**
  * GA4 custom dimensions provisioning.
  *
@@ -51,6 +53,14 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 		'gate_has_checkout_button',
 		'gate_has_registration_link',
 		'gate_has_signin_link',
+	];
+
+	/**
+	 * Mirrors the production group, so a change to it must be made here too.
+	 */
+	const AB_TESTING_DIMENSIONS = [
+		'ab_test_id',
+		'ab_variant',
 	];
 
 	/**
@@ -381,6 +391,7 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 		$this->assertSame( self::ACCESS_CONTROL_DIMENSIONS, GA4_Custom_Dimensions::ACCESS_CONTROL_DIMENSIONS, 'The access-control group changed; update the test list deliberately.' );
 		$this->assertSame( self::WOOCOMMERCE_DIMENSIONS, GA4_Custom_Dimensions::WOOCOMMERCE_DIMENSIONS, 'The WooCommerce group changed; update the test list deliberately.' );
 		$this->assertSame( self::DONATION_DIMENSIONS, GA4_Custom_Dimensions::DONATION_DIMENSIONS, 'The donation group changed; update the test list deliberately.' );
+		$this->assertSame( self::AB_TESTING_DIMENSIONS, GA4_Custom_Dimensions::AB_TESTING_DIMENSIONS, 'The A/B testing group changed; update the test list deliberately.' );
 	}
 
 	/**
@@ -415,6 +426,7 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 		$this->assertFalse( GA4_Custom_Dimensions::is_access_control_enabled(), 'No gating constant and no Memberships means no access control.' );
 		$this->assertFalse( GA4_Custom_Dimensions::is_woocommerce_enabled(), 'No WooCommerce means no checkout parameters.' );
 		$this->assertFalse( GA4_Custom_Dimensions::is_donations_enabled(), 'No WooCommerce and the default platform means no donation parameters.' );
+		$this->assertFalse( GA4_Custom_Dimensions::is_ab_testing_enabled(), 'No Campaigns plugin means no A/B testing parameters.' );
 	}
 
 	/**
@@ -449,6 +461,46 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 
 		$this->assertTrue( GA4_Custom_Dimensions::is_access_control_enabled(), 'The gates constant switches the gate dimensions on, with no filter.' );
 		$this->assertArrayHasKey( 'gate_post_id', GA4_Custom_Dimensions::get_dimensions(), 'The gate dimensions follow the automatic detection.' );
+	}
+
+	/**
+	 * A site that runs no A/B tests must not spend two slots on test parameters:
+	 * Campaigns is active almost everywhere, and the flag is off almost everywhere.
+	 */
+	public function test_ab_testing_dimensions_are_omitted_without_ab_testing() {
+		add_filter( 'newspack_ga4_dimensions_ab_testing_enabled', '__return_false' );
+		$dimensions = GA4_Custom_Dimensions::get_dimensions();
+		foreach ( self::AB_TESTING_DIMENSIONS as $parameter_name ) {
+			$this->assertArrayNotHasKey( $parameter_name, $dimensions, "'$parameter_name' must not be provisioned without A/B testing." );
+		}
+	}
+
+	/**
+	 * Once a site turns A/B testing on, both parameters are provisioned, so a
+	 * test's events are queryable by test and variant from its first event.
+	 */
+	public function test_ab_testing_dimensions_are_provisioned_with_ab_testing() {
+		add_filter( 'newspack_ga4_dimensions_ab_testing_enabled', '__return_true' );
+		$dimensions = GA4_Custom_Dimensions::get_dimensions();
+		$this->assertSame( 'A/B Test ID', $dimensions['ab_test_id'] ?? null, "'ab_test_id' must be provisioned on a site running A/B tests." );
+		$this->assertSame( 'A/B Variant', $dimensions['ab_variant'] ?? null, "'ab_variant' must be provisioned on a site running A/B tests." );
+	}
+
+	/**
+	 * The automatic detection reads the Campaigns plugin's own flag, so a site
+	 * that enables A/B testing gets the dimensions with no filter. Isolated
+	 * because an alias cannot be undone.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_ab_testing_predicate_follows_the_campaigns_flag() {
+		$this->assertFalse( GA4_Custom_Dimensions::is_ab_testing_enabled(), 'Process isolation failed: Campaigns leaked in, so this was never tested.' );
+
+		class_alias( Newspack_Test_GA4_Campaigns_AB_Tests_Stub::class, 'Newspack_Popups_AB_Tests' );
+
+		$this->assertTrue( GA4_Custom_Dimensions::is_ab_testing_enabled(), 'The Campaigns flag switches the A/B dimensions on, with no filter.' );
+		$this->assertArrayHasKey( 'ab_test_id', GA4_Custom_Dimensions::get_dimensions(), 'The A/B dimensions follow the automatic detection.' );
 	}
 
 	/**
