@@ -482,8 +482,27 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	public function test_ab_testing_dimensions_are_provisioned_with_ab_testing() {
 		add_filter( 'newspack_ga4_dimensions_ab_testing_enabled', '__return_true' );
 		$dimensions = GA4_Custom_Dimensions::get_dimensions();
-		$this->assertSame( 'A/B Test ID', $dimensions['ab_test_id'] ?? null, "'ab_test_id' must be provisioned on a site running A/B tests." );
-		$this->assertSame( 'A/B Variant', $dimensions['ab_variant'] ?? null, "'ab_variant' must be provisioned on a site running A/B tests." );
+		$this->assertSame( 'AB Test ID', $dimensions['ab_test_id'] ?? null, "'ab_test_id' must be provisioned on a site running A/B tests." );
+		$this->assertSame( 'AB Variant', $dimensions['ab_variant'] ?? null, "'ab_variant' must be provisioned on a site running A/B tests." );
+	}
+
+	/**
+	 * The pair sits last in priority, after every other group and after
+	 * `access_source`: at the property's dimension cap it is the first to lose
+	 * a slot, since a test can be reported from the export without it and a
+	 * gate cannot. Isolated because the gating constant cannot be unset.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_ab_testing_dimensions_come_last_even_on_a_gated_site() {
+		define( 'NEWSPACK_CONTENT_GATES', true );
+		add_filter( 'newspack_ga4_dimensions_ab_testing_enabled', '__return_true' );
+
+		$keys = array_keys( GA4_Custom_Dimensions::get_dimensions() );
+
+		$this->assertContains( 'access_source', $keys, 'Precondition: gating is active, so access_source is in the list.' );
+		$this->assertSame( self::AB_TESTING_DIMENSIONS, array_slice( $keys, -2 ), 'The A/B pair must be the last two dimensions, after access_source.' );
 	}
 
 	/**

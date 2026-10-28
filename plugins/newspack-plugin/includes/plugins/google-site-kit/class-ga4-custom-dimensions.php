@@ -72,7 +72,9 @@ final class GA4_Custom_Dimensions {
 	 * A/B test, named for the test and the reader's variant. Gated on the
 	 * Campaigns A/B flag rather than on the plugin: Campaigns runs on nearly
 	 * every site, and the flag on few, so gating on the plugin would spend two
-	 * of the 50 slots everywhere for events almost no site sends.
+	 * of the 50 slots everywhere for events almost no site sends. Their display
+	 * names carry no slash: the Admin API allows letters, digits, spaces and
+	 * underscores only, and rejects the create otherwise.
 	 */
 	const AB_TESTING_DIMENSIONS = [
 		'ab_test_id',
@@ -380,8 +382,8 @@ final class GA4_Custom_Dimensions {
 			'categories'                  => 'Categories',
 			'author'                      => 'Author',
 			'segment_id'                  => 'Matched Segment',
-			'ab_test_id'                  => 'A/B Test ID',
-			'ab_variant'                  => 'A/B Variant',
+			'ab_test_id'                  => 'AB Test ID',
+			'ab_variant'                  => 'AB Variant',
 		];
 
 		// Read once each: an impure filter could otherwise yield a
@@ -411,6 +413,13 @@ final class GA4_Custom_Dimensions {
 		// GoogleSiteKit sends access_source only under is_gating_active().
 		if ( Content_Gate::is_gating_active() ) {
 			$dimensions['access_source'] = 'Access Source';
+		}
+
+		// Move the A/B pair behind access_source so it is last on every site:
+		// at the cap it is the first to lose a slot.
+		foreach ( array_intersect_key( $dimensions, array_flip( self::AB_TESTING_DIMENSIONS ) ) as $parameter_name => $display_name ) {
+			unset( $dimensions[ $parameter_name ] );
+			$dimensions[ $parameter_name ] = $display_name;
 		}
 
 		return $dimensions;
