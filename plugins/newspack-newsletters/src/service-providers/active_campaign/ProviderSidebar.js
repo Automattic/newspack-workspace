@@ -2,7 +2,14 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { Button, CheckboxControl, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { SelectControl } from '@wordpress/components';
+
+/**
+ * The site-wide archive visibility: "inherit", "public" or "private".
+ *
+ * @return {string} The setting.
+ */
+const getSiteDefault = () => window.newspack_newsletters_data?.active_campaign_archive_visibility || 'inherit';
 
 /**
  * Whether a newsletter with no choice of its own is public in ActiveCampaign.
@@ -12,7 +19,7 @@ import { Button, CheckboxControl, __experimentalVStack as VStack } from '@wordpr
  * @return {boolean} The default.
  */
 const getDefaultArchiveVisibility = isPublicOnWeb => {
-	const siteDefault = window.newspack_newsletters_data?.active_campaign_archive_visibility || 'inherit';
+	const siteDefault = getSiteDefault();
 	if ( 'inherit' === siteDefault ) {
 		return isPublicOnWeb;
 	}
@@ -21,31 +28,50 @@ const getDefaultArchiveVisibility = isPublicOnWeb => {
 
 export const ProviderSidebar = ( { inFlight, meta, updateMeta } ) => {
 	const choice = meta?.ac_archive_visibility || '';
-	const isOverridden = 'public' === choice || 'private' === choice;
-	const isPublic = isOverridden ? 'public' === choice : getDefaultArchiveVisibility( !! meta?.is_public );
+	const defaultIsPublic = getDefaultArchiveVisibility( !! meta?.is_public );
+	const isPublic = 'public' === choice || ( 'private' !== choice && defaultIsPublic );
+
+	// Going against the newsletter's own visibility reads as forcing it. With an
+	// "always" site setting, visibility doesn't drive the default, so nothing is forced.
+	const isForcible = 'inherit' === getSiteDefault();
+	const include = {
+		value: 'include',
+		label:
+			isForcible && ! defaultIsPublic
+				? __( 'Force include in campaign archive', 'newspack-newsletters' )
+				: __( 'Include in campaign archive', 'newspack-newsletters' ),
+	};
+	const exclude = {
+		value: 'exclude',
+		label:
+			isForcible && defaultIsPublic
+				? __( 'Force exclude from campaign archive', 'newspack-newsletters' )
+				: __( 'Exclude from campaign archive', 'newspack-newsletters' ),
+	};
+
+	// Picking the default stores no choice, so the newsletter keeps following it.
+	const onChange = value => {
+		const wantsPublic = 'include' === value;
+		if ( wantsPublic === defaultIsPublic ) {
+			updateMeta( { ac_archive_visibility: '' } );
+		} else {
+			updateMeta( { ac_archive_visibility: wantsPublic ? 'public' : 'private' } );
+		}
+	};
 
 	return (
-		<VStack spacing={ 1 }>
-			<CheckboxControl
-				label={ __( 'Include in campaign archive', 'newspack-newsletters' ) }
-				help={
-					isOverridden
-						? __(
-								'Makes this newsletter public in ActiveCampaign. Overrides the default in Newsletters settings.',
-								'newspack-newsletters'
-						  )
-						: __( 'Makes this newsletter public in ActiveCampaign. Follows the default in Newsletters settings.', 'newspack-newsletters' )
-				}
-				checked={ isPublic }
-				onChange={ value => updateMeta( { ac_archive_visibility: value ? 'public' : 'private' } ) }
-				disabled={ inFlight }
-				__nextHasNoMarginBottom
-			/>
-			{ isOverridden && (
-				<Button variant="link" disabled={ inFlight } onClick={ () => updateMeta( { ac_archive_visibility: '' } ) }>
-					{ __( 'Use default', 'newspack-newsletters' ) }
-				</Button>
+		<SelectControl
+			label={ __( 'ActiveCampaign campaign archive', 'newspack-newsletters' ) }
+			help={ __(
+				'Campaigns in the archive are public in ActiveCampaign. This can’t be changed after the newsletter is sent.',
+				'newspack-newsletters'
 			) }
-		</VStack>
+			value={ isPublic ? 'include' : 'exclude' }
+			options={ defaultIsPublic ? [ include, exclude ] : [ exclude, include ] }
+			onChange={ onChange }
+			disabled={ inFlight }
+			__next40pxDefaultSize
+			__nextHasNoMarginBottom
+		/>
 	);
 };
