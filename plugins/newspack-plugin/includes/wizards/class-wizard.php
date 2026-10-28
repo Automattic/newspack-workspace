@@ -138,86 +138,89 @@ abstract class Wizard {
 	 * Load up common JS/CSS for wizards.
 	 */
 	public function enqueue_scripts_and_styles() {
-		if ( filter_input( INPUT_GET, 'page', FILTER_SANITIZE_FULL_SPECIAL_CHARS ) !== $this->slug ) {
+		if ( filter_input( INPUT_GET, 'page', FILTER_SANITIZE_FULL_SPECIAL_CHARS ) !== $this->slug && ! Admin_App::serves( $this->slug ) ) {
 			return;
 		}
 
 		Newspack::load_common_assets();
 
-		// This script is just used for making newspack data available in JS vars.
-		// It should not actually load a JS file.
-		wp_register_script( 'newspack_data', '', [], '1.0', false );
+		// The new admin frame enqueues two wizards on one page; localize once.
+		if ( ! wp_script_is( 'newspack_data', 'registered' ) ) {
+			// This script is just used for making newspack data available in JS vars.
+			// It should not actually load a JS file.
+			wp_register_script( 'newspack_data', '', [], '1.0', false );
 
-		$plugin_data = get_plugin_data( NEWSPACK_PLUGIN_FILE );
+			$plugin_data = get_plugin_data( NEWSPACK_PLUGIN_FILE );
 
-		/**
-		 * Support email address displayed in the Newspack admin UI.
-		 * Users can contact this email for help.
-		 *
-		 * @constant NEWSPACK_SUPPORT_EMAIL
-		 * @type     string
-		 * @default  No support email shown
-		 * @status   draft
-		 *
-		 * @example define( 'NEWSPACK_SUPPORT_EMAIL', 'support@example.com' );
-		 */
-		$support_email = ( defined( 'NEWSPACK_SUPPORT_EMAIL' ) && NEWSPACK_SUPPORT_EMAIL ) ? NEWSPACK_SUPPORT_EMAIL : false;
+			/**
+			 * Support email address displayed in the Newspack admin UI.
+			 * Users can contact this email for help.
+			 *
+			 * @constant NEWSPACK_SUPPORT_EMAIL
+			 * @type     string
+			 * @default  No support email shown
+			 * @status   draft
+			 *
+			 * @example define( 'NEWSPACK_SUPPORT_EMAIL', 'support@example.com' );
+			 */
+			$support_email = ( defined( 'NEWSPACK_SUPPORT_EMAIL' ) && NEWSPACK_SUPPORT_EMAIL ) ? NEWSPACK_SUPPORT_EMAIL : false;
 
-		$urls = [
-			'dashboard'      => Wizards::get_url( 'newspack-dashboard' ),
-			'public_path'    => Newspack::plugin_url() . '/dist/',
-			'bloginfo'       => [
-				'name' => get_bloginfo( 'name' ),
-			],
-			'plugin_version' => [
-				'label' => $plugin_data['Name'] . ' ' . $plugin_data['Version'],
-			],
-			'homepage'       => get_edit_post_link( get_option( 'page_on_front', false ) ),
-			'site'           => get_site_url(),
-			'support'        => esc_url( 'https://help.newspack.com/' ),
-			'support_email'  => $support_email,
-		];
+			$urls = [
+				'dashboard'      => Wizards::get_url( 'newspack-dashboard' ),
+				'public_path'    => Newspack::plugin_url() . '/dist/',
+				'bloginfo'       => [
+					'name' => get_bloginfo( 'name' ),
+				],
+				'plugin_version' => [
+					'label' => $plugin_data['Name'] . ' ' . $plugin_data['Version'],
+				],
+				'homepage'       => get_edit_post_link( get_option( 'page_on_front', false ) ),
+				'site'           => get_site_url(),
+				'support'        => esc_url( 'https://help.newspack.com/' ),
+				'support_email'  => $support_email,
+			];
 
-		if ( Starter_Content::has_created_starter_content() && current_user_can( 'manage_options' ) ) {
-			$urls['remove_starter_content'] = esc_url(
-				add_query_arg(
-					array(
-						'newspack_reset' => 'starter-content',
-					),
-					Wizards::get_url( 'newspack-dashboard' )
-				)
-			);
+			if ( Starter_Content::has_created_starter_content() && current_user_can( 'manage_options' ) ) {
+				$urls['remove_starter_content'] = esc_url(
+					add_query_arg(
+						array(
+							'newspack_reset' => 'starter-content',
+						),
+						Wizards::get_url( 'newspack-dashboard' )
+					)
+				);
+			}
+
+			if ( Newspack::is_debug_mode() && current_user_can( 'manage_options' ) ) {
+				$urls['components_demo'] = esc_url( admin_url( 'admin.php?page=newspack-components-demo' ) );
+				$urls['setup_wizard']    = esc_url( admin_url( 'admin.php?page=newspack-setup-wizard' ) );
+				$urls['reset_url']       = esc_url(
+					add_query_arg(
+						array(
+							'newspack_reset' => 'reset',
+						),
+						Wizards::get_url( 'newspack-dashboard' )
+					)
+				);
+			}
+
+			$aux_data = [
+				'is_e2e'              => Starter_Content::is_e2e(),
+				'is_debug_mode'       => Newspack::is_debug_mode(),
+				'has_completed_setup' => get_option( NEWSPACK_SETUP_COMPLETE ),
+				'site_title'          => get_option( 'blogname' ),
+				'is_managed'          => method_exists( 'Newspack_Manager', 'is_connected_to_manager' ) && \Newspack_Manager::is_connected_to_manager(),
+				// Access Control configured but not applying. Rendered by the wizard shell as
+				// a Notice below the header and tabs, rather than as the core admin notice
+				// Inert_Gating_Notice prints elsewhere — which this screen would stack above
+				// its own header.
+				'inert_gating'        => Inert_Gating_Notice::get_script_data(),
+			];
+
+			wp_localize_script( 'newspack_data', 'newspack_urls', $urls );
+			wp_localize_script( 'newspack_data', 'newspack_aux_data', $aux_data );
+			wp_enqueue_script( 'newspack_data' );
 		}
-
-		if ( Newspack::is_debug_mode() && current_user_can( 'manage_options' ) ) {
-			$urls['components_demo'] = esc_url( admin_url( 'admin.php?page=newspack-components-demo' ) );
-			$urls['setup_wizard']    = esc_url( admin_url( 'admin.php?page=newspack-setup-wizard' ) );
-			$urls['reset_url']       = esc_url(
-				add_query_arg(
-					array(
-						'newspack_reset' => 'reset',
-					),
-					Wizards::get_url( 'newspack-dashboard' )
-				)
-			);
-		}
-
-		$aux_data = [
-			'is_e2e'              => Starter_Content::is_e2e(),
-			'is_debug_mode'       => Newspack::is_debug_mode(),
-			'has_completed_setup' => get_option( NEWSPACK_SETUP_COMPLETE ),
-			'site_title'          => get_option( 'blogname' ),
-			'is_managed'          => method_exists( 'Newspack_Manager', 'is_connected_to_manager' ) && \Newspack_Manager::is_connected_to_manager(),
-			// Access Control configured but not applying. Rendered by the wizard shell as
-			// a Notice below the header and tabs, rather than as the core admin notice
-			// Inert_Gating_Notice prints elsewhere — which this screen would stack above
-			// its own header.
-			'inert_gating'        => Inert_Gating_Notice::get_script_data(),
-		];
-
-		wp_localize_script( 'newspack_data', 'newspack_urls', $urls );
-		wp_localize_script( 'newspack_data', 'newspack_aux_data', $aux_data );
-		wp_enqueue_script( 'newspack_data' );
 
 		/**
 		 * Register wizards.js with content-hash cache busting.
