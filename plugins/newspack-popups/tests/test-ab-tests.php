@@ -110,6 +110,40 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * Two prompts on one letter: the published one is the arm, whichever was
+	 * saved first, and the other is reported so the page can point at it.
+	 */
+	public function test_get_tests_prefers_the_published_prompt_when_a_letter_is_duplicated() {
+		$this->create_test_variant( 'dup', 'a' );
+		$live  = $this->create_test_variant( 'dup', 'b' );
+		$draft = $this->create_test_variant( 'dup', 'b', null, [ 'post_status' => 'draft' ] );
+		$this->create_test_variant( 'dup2', 'a' );
+		$draft2 = $this->create_test_variant( 'dup2', 'b', null, [ 'post_status' => 'draft' ] );
+		$live2  = $this->create_test_variant( 'dup2', 'b' );
+		$tests  = Newspack_Popups_AB_Tests::get_tests();
+		$this->assertSame( $live, $tests[0]['variants']['b']['id'] );
+		$this->assertSame( [ 'b' ], array_column( $tests[0]['duplicates'], 'letter' ) );
+		$this->assertSame( [ $draft ], array_column( $tests[0]['duplicates'], 'id' ) );
+		$this->assertArrayHasKey( 'edit_link', $tests[0]['duplicates'][0] );
+		$this->assertSame( $live2, $tests[1]['variants']['b']['id'] );
+		$this->assertSame( [ $draft2 ], array_column( $tests[1]['duplicates'], 'id' ) );
+	}
+
+	/**
+	 * A duplicate never supplies the share, the goal or the start date.
+	 */
+	public function test_get_tests_ignores_a_duplicate_control_s_share_and_goal() {
+		$live = $this->create_test_variant( 'dupa', 'a', null, [], 60 );
+		update_post_meta( $live, Newspack_Popups_AB_Tests::META_GOAL, 'donation' );
+		$draft = $this->create_test_variant( 'dupa', 'a', null, [ 'post_status' => 'draft' ], 30 );
+		update_post_meta( $draft, Newspack_Popups_AB_Tests::META_GOAL, 'link_click' );
+		$test = Newspack_Popups_AB_Tests::get_tests()[0];
+		$this->assertSame( 60, $test['control_share'] );
+		$this->assertSame( 'donation', $test['goal'] );
+		$this->assertSame( [], array_diff( [ 'a' ], array_keys( $test['variants'] ) ) );
+	}
+
+	/**
 	 * The goal and its label come along; variants carry what the page shows.
 	 */
 	public function test_get_tests_goal_label_and_variants() {

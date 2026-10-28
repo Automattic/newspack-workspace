@@ -465,7 +465,7 @@ final class Newspack_Popups_AB_Tests {
 	 * save one, so one can only come from a direct meta write.
 	 *
 	 * @return array[] Ordered by Test ID. Each `[ 'test_id', 'goal', 'goal_label',
-	 *                 'control_share', 'started_at', 'variants' ]`. `control_share`
+	 *                 'control_share', 'started_at', 'variants', 'duplicates' ]`. `control_share`
 	 *                 comes from the control prompt, or DEFAULT_CONTROL_SHARE without
 	 *                 one. `started_at` is when the split began: the later of the
 	 *                 control's publish date and the earliest challenger's, ISO 8601
@@ -473,6 +473,8 @@ final class Newspack_Popups_AB_Tests {
 	 *                 alone before then, so an earlier date would count traffic the
 	 *                 test never split. `variants` maps the letter to
 	 *                 `[ 'id', 'title', 'status', 'status_label', 'edit_link' ]`.
+	 *                 `duplicates` lists prompts that share a letter with the arm
+	 *                 shown (the published one wins), as `letter` plus those fields.
 	 */
 	public static function get_tests() {
 		$prompts = get_posts(
@@ -488,65 +490,90 @@ final class Newspack_Popups_AB_Tests {
 				'meta_value'     => '', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
 			]
 		);
-		$tests = [];
+		$grouped = [];
 		foreach ( $prompts as $prompt ) {
 			$test_id = self::sanitize_test_id( get_post_meta( $prompt->ID, self::META_TEST_ID, true ) );
 			$variant = (string) get_post_meta( $prompt->ID, self::META_VARIANT, true );
 			if ( '' === $test_id || ! in_array( $variant, self::VALID_VARIANTS, true ) ) {
 				continue;
 			}
-			if ( ! isset( $tests[ $test_id ] ) ) {
-				$tests[ $test_id ] = [
-					'test_id'       => $test_id,
-					'goal'          => '',
-					'goal_label'    => '',
-					'control_share' => self::DEFAULT_CONTROL_SHARE,
-					'started_at'    => null,
-					'variants'      => [],
-					'published_at'  => [],
-				];
-			}
-			$test   = &$tests[ $test_id ];
-			$status = get_post_status_object( $prompt->post_status );
-
-			$test['variants'][ $variant ] = [
-				'id'           => (int) $prompt->ID,
-				'title'        => $prompt->post_title,
-				'status'       => $prompt->post_status,
-				'status_label' => $status ? $status->label : $prompt->post_status,
-				'edit_link'    => get_edit_post_link( $prompt->ID, 'raw' ),
-			];
-
-			if ( 'a' === $variant ) {
-				$share = get_post_meta( $prompt->ID, self::META_CONTROL_SHARE, true );
-				if ( '' !== $share && null !== $share ) {
-					$test['control_share'] = self::sanitize_control_share( $share );
-				}
-			}
-
-			// The control's goal wins; otherwise the first prompt that has one.
-			$goal = self::sanitize_goal( get_post_meta( $prompt->ID, self::META_GOAL, true ) );
-			if ( '' !== $goal && ( 'a' === $variant || '' === $test['goal'] ) ) {
-				$test['goal'] = $goal;
-			}
-
-			if ( 'publish' === $prompt->post_status && '0000-00-00 00:00:00' !== $prompt->post_date_gmt ) {
-				$test['published_at'][ $variant ] = gmdate( 'Y-m-d\TH:i:s\Z', strtotime( $prompt->post_date_gmt . ' UTC' ) );
-			}
-			unset( $test );
+			$grouped[ $test_id ][ $variant ][] = $prompt;
 		}
+		ksort( $grouped );
 
 		$labels = self::get_goal_labels();
-		foreach ( $tests as &$test ) {
-			ksort( $test['variants'] );
+		$tests  = [];
+		foreach ( $grouped as $test_id => $letters ) {
+			ksort( $letters );
+			$test = [
+				'test_id'       => $test_id,
+				'goal'          => '',
+				'goal_label'    => '',
+				'control_share' => self::DEFAULT_CONTROL_SHARE,
+				'started_at'    => null,
+				'variants'      => [],
+				'duplicates'    => [],
+			];
+			$published_at = [];
+			foreach ( $letters as $variant => $candidates ) {
+				// Two prompts on one letter: the published one is the arm, since it
+				// is what readers are bucketed into; the rest are reported so the
+				// page can point at them instead of silently picking one.
+				$kept = null;
+				foreach ( $candidates as $candidate ) {
+					if ( 'publish' === $candidate->post_status ) {
+						$kept = $candidate;
+						break;
+					}
+				}
+				$kept = $kept ?? $candidates[0];
+				foreach ( $candidates as $candidate ) {
+					if ( $candidate !== $kept ) {
+						$test['duplicates'][] = [ 'letter' => $variant ] + self::describe_prompt( $candidate );
+					}
+				}
+				$test['variants'][ $variant ] = self::describe_prompt( $kept );
+
+				if ( 'a' === $variant ) {
+					$share = get_post_meta( $kept->ID, self::META_CONTROL_SHARE, true );
+					if ( '' !== $share && null !== $share ) {
+						$test['control_share'] = self::sanitize_control_share( $share );
+					}
+				}
+
+				// The control's goal wins; otherwise the first prompt that has one.
+				$goal = self::sanitize_goal( get_post_meta( $kept->ID, self::META_GOAL, true ) );
+				if ( '' !== $goal && ( 'a' === $variant || '' === $test['goal'] ) ) {
+					$test['goal'] = $goal;
+				}
+
+				if ( 'publish' === $kept->post_status && '0000-00-00 00:00:00' !== $kept->post_date_gmt ) {
+					$published_at[ $variant ] = gmdate( 'Y-m-d\TH:i:s\Z', strtotime( $kept->post_date_gmt . ' UTC' ) );
+				}
+			}
 			$test['goal_label'] = $labels[ $test['goal'] ] ?? '';
-			$test['started_at'] = self::get_started_at( $test['published_at'] );
-			unset( $test['published_at'] );
+			$test['started_at'] = self::get_started_at( $published_at );
+			$tests[]            = $test;
 		}
-		unset( $test );
-		ksort( $tests );
 
 		return array_values( $tests );
+	}
+
+	/**
+	 * What the page shows for one prompt.
+	 *
+	 * @param WP_Post $prompt Prompt.
+	 * @return array `id`, `title`, `status`, `status_label`, `edit_link`.
+	 */
+	private static function describe_prompt( $prompt ) {
+		$status = get_post_status_object( $prompt->post_status );
+		return [
+			'id'           => (int) $prompt->ID,
+			'title'        => $prompt->post_title,
+			'status'       => $prompt->post_status,
+			'status_label' => $status ? $status->label : $prompt->post_status,
+			'edit_link'    => get_edit_post_link( $prompt->ID, 'raw' ),
+		];
 	}
 
 	/**
