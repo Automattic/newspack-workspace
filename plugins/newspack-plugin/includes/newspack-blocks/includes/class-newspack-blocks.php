@@ -725,6 +725,5 @@ class Newspack_Blocks {
 
 		return '<span class="wpbnbd__tiers__amount__value">' . $wc_formatted_amount . '</span>';
 	}
-
 }
 Newspack_Blocks::init();

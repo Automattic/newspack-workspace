@@ -49,7 +49,7 @@ final class Bundled_Blocks {
 	 */
 	public static function is_legacy_plugin_active() {
 		if ( null === self::$is_legacy_plugin_active ) {
-			self::$is_legacy_plugin_active = defined( 'NEWSPACK_BLOCKS__VERSION' );
+			self::$is_legacy_plugin_active = defined( 'NEWSPACK_BLOCKS__VERSION' ); // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- newspack-blocks' own constant, not a site setting.
 		}
 		return self::$is_legacy_plugin_active;
 	}
