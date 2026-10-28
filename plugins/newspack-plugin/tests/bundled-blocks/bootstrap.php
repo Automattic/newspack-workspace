@@ -31,6 +31,7 @@ require_once $newspack_bundled_blocks_tests_dir . '/includes/functions.php';
  */
 function newspack_bundled_blocks_manually_load() {
 	$plugin_dir = dirname( __DIR__, 2 ) . '/';
+	define( 'NEWSPACK_PLUGIN_FILE', $plugin_dir . 'newspack.php' ); // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- The plugin's own constant.
 	define( 'NEWSPACK_ABSPATH', $plugin_dir ); // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- The plugin's own constant.
 	define( 'NEWSPACK_PLUGIN_VERSION', '0.0.0-test' ); // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- The plugin's own constant.
 	require $plugin_dir . 'includes/class-bundled-blocks.php';

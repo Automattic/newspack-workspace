@@ -10,11 +10,12 @@ namespace Newspack;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Loads the copy of newspack-blocks in includes/newspack-blocks/, which holds
- * every newspack-blocks feature except the Content Loop and Carousel blocks.
+ * Loads this plugin's copy of newspack-blocks: every newspack-blocks feature
+ * except the Content Loop and Carousel blocks.
  *
- * The copy keeps newspack-blocks' class, function, block, route and hook
- * names, so it only loads when the newspack-blocks plugin is not active.
+ * The copy keeps newspack-blocks' file layout relative to the plugin root, and
+ * its class, function, block, route and hook names, so it only loads when the
+ * newspack-blocks plugin is not active.
  */
 final class Bundled_Blocks {
 	/**
@@ -71,14 +72,49 @@ final class Bundled_Blocks {
 			return;
 		}
 
-		$loader_file = NEWSPACK_ABSPATH . 'includes/newspack-blocks/loader.php';
-		define( 'NEWSPACK_BLOCKS__PLUGIN_FILE', $loader_file ); // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- newspack-blocks' own constant.
+		// newspack-blocks' paths resolve against the plugin root, where the copy keeps its layout.
+		define( 'NEWSPACK_BLOCKS__PLUGIN_FILE', NEWSPACK_PLUGIN_FILE ); // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- newspack-blocks' own constant.
 		define( 'NEWSPACK_BLOCKS__BLOCKS_DIRECTORY', 'dist/' ); // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- newspack-blocks' own constant.
-		define( 'NEWSPACK_BLOCKS__PLUGIN_DIR', plugin_dir_path( $loader_file ) ); // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- newspack-blocks' own constant.
+		define( 'NEWSPACK_BLOCKS__PLUGIN_DIR', NEWSPACK_ABSPATH ); // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- newspack-blocks' own constant.
 		define( 'NEWSPACK_BLOCKS__VERSION', NEWSPACK_PLUGIN_VERSION ); // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- newspack-blocks' own constant.
 
 		self::$is_loaded = true;
-		require_once $loader_file;
+		self::load();
+	}
+
+	/**
+	 * Load the copy. What newspack-blocks.php does, without the Content Loop and
+	 * Carousel code and the text domain loading.
+	 */
+	private static function load() {
+		require_once NEWSPACK_ABSPATH . 'includes/class-newspack-blocks.php';
+		require_once NEWSPACK_ABSPATH . 'includes/class-newspack-blocks-api.php';
+		require_once NEWSPACK_ABSPATH . 'includes/class-newspack-blocks-patterns.php';
+		require_once NEWSPACK_ABSPATH . 'includes/modal-checkout/class-checkout-data.php';
+		require_once NEWSPACK_ABSPATH . 'includes/modal-checkout/class-change-payment-gateway.php';
+		require_once NEWSPACK_ABSPATH . 'includes/class-modal-checkout.php';
+		require_once NEWSPACK_ABSPATH . 'includes/tracking/class-data-events.php';
+		require_once NEWSPACK_ABSPATH . 'src/shared/authors.php';
+		require_once NEWSPACK_ABSPATH . 'src/blocks/author-profile/class-wp-rest-newspack-authors-controller.php';
+		require_once NEWSPACK_ABSPATH . 'src/blocks/author-list/class-wp-rest-newspack-author-list-controller.php';
+		require_once NEWSPACK_ABSPATH . 'src/blocks/iframe/class-wp-rest-newspack-iframe-controller.php';
+
+		// A closure rather than newspack-blocks' named functions: activating newspack-blocks
+		// includes its main file in a request where this copy is loaded, and PHP declares
+		// that file's functions before any of it runs.
+		\add_action(
+			'rest_api_init',
+			function() {
+				( new \WP_REST_Newspack_Authors_Controller() )->register_routes();
+				( new \WP_REST_Newspack_Author_List_Controller() )->register_routes();
+				( new \WP_REST_Newspack_Iframe_Controller() )->register_routes();
+			}
+		);
+
+		\Newspack_Blocks::manage_view_scripts();
+		\add_action( 'enqueue_block_assets', [ 'Newspack_Blocks', 'enqueue_block_assets' ] );
+		\add_action( 'enqueue_block_assets', [ 'Newspack_Blocks', 'enqueue_placeholder_blocks_assets' ], 9999 );
+		\add_action( 'enqueue_block_assets', [ 'Newspack_Blocks', 'enqueue_block_styles_assets' ] );
 	}
 }
 Bundled_Blocks::init();

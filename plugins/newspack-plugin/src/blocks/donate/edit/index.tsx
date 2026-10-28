@@ -366,6 +366,7 @@ const Edit = ( { attributes, setAttributes }: EditProps ) => {
 									type="number"
 									label={ __( 'Minimum donation', 'newspack-plugin' ) }
 									min={ 1 }
+									// @ts-expect-error -- From newspack-blocks, which typed @wordpress/components as any; kept as is to preserve saved attributes.
 									onChange={ ( value: number ) => setAttributes( { minimumDonation: value } ) }
 									value={ attributes.minimumDonation }
 								/>
@@ -433,6 +434,7 @@ const Edit = ( { attributes, setAttributes }: EditProps ) => {
 			</InspectorControls>
 			{ isTierBasedLayoutEnabled && (
 				<BlockControls>
+					{ /* @ts-expect-error -- From newspack-blocks, which typed @wordpress/components as any; Toolbar still accepts controls at runtime. */ }
 					<Toolbar controls={ tiersLayoutControls } />
 				</BlockControls>
 			) }

@@ -13,14 +13,6 @@ const path = require( 'path' );
 const { findSourceFile, resolveSourceFile } = require( 'newspack-scripts/config/resolveSource' );
 const wizardsDir = path.join( __dirname, 'src', 'wizards' );
 
-// The bundled copy of newspack-blocks builds on its own, into includes/newspack-blocks/dist/
-// (see the `build:bundled-blocks` script). Return before this config is built: the base
-// config's nested objects are shared, so changes below would leak into that build.
-if ( process.env.NEWSPACK_BUNDLED_BLOCKS_BUILD ) {
-	module.exports = require( './includes/newspack-blocks/webpack.config.js' );
-	return;
-}
-
 // Entry sources are declared extensionless; the file on disk may be TS or JS.
 const findSource = ( ...segments ) => findSourceFile( path.join( __dirname, ...segments ) );
 const resolveSource = ( ...segments ) => resolveSourceFile( path.join( __dirname, ...segments ) );
@@ -42,6 +34,25 @@ wizardsScripts.forEach( function ( wizard ) {
 		wizardFileName = 'billboard';
 	}
 	wizardsScriptFiles[ wizardFileName ] = resolveSource( 'src', 'wizards', wizard, 'index' );
+} );
+
+// Entries for the blocks and modal checkout from newspack-blocks, under the names
+// newspack-blocks gave them; its PHP enqueues them by those names.
+const BUNDLED_BLOCKS = [ 'author-list', 'author-profile', 'checkout-button', 'donate', 'iframe', 'video-playlist' ];
+const bundledBlocksEntries = {
+	placeholder_blocks: resolveSource( 'src', 'setup', 'placeholder-blocks' ),
+	editor: [ resolveSource( 'src', 'setup', 'editor' ), ...BUNDLED_BLOCKS.map( block => resolveSource( 'src', 'blocks', block, 'editor' ) ) ],
+	block_styles: resolveSource( 'src', 'block-styles', 'view' ),
+	modal: resolveSource( 'src', 'modal-checkout', 'modal' ),
+	modalCheckout: resolveSource( 'src', 'modal-checkout', 'index' ),
+	frequencyBased: resolveSource( 'src', 'blocks', 'donate', 'frequency-based', 'index' ),
+	tiersBased: resolveSource( 'src', 'blocks', 'donate', 'tiers-based', 'index' ),
+};
+BUNDLED_BLOCKS.forEach( block => {
+	const viewScript = findSource( 'src', 'blocks', block, 'view' );
+	if ( viewScript ) {
+		bundledBlocksEntries[ `${ block }/view` ] = viewScript;
+	}
 } );
 
 const entry = {
@@ -88,6 +99,7 @@ const entry = {
 	'collections-frontend': resolveSource( 'src', 'collections', 'frontend', 'index' ),
 	'group-subscription-admin': resolveSource( 'src', 'group-subscription', 'admin' ),
 	'csv-export': resolveSource( 'src', 'csv-export', 'index' ),
+	...bundledBlocksEntries,
 };
 
 // Get files for other scripts.
@@ -117,9 +129,22 @@ if ( miniCssExtractPlugin && miniCssExtractPlugin.options ) {
 // Overwrite default optimisation.
 webpackConfig.optimization.splitChunks.cacheGroups.commons = {
 	name: 'commons',
-	chunks: 'initial',
+	// newspack-blocks' PHP doesn't enqueue commons, so keep its entries self-contained.
+	chunks: chunk => chunk.canBeInitial() && ! Object.hasOwn( bundledBlocksEntries, chunk.name ),
 	minChunks: 2,
 };
+
+// JSX files from newspack-icons, which the bundled blocks import untranspiled.
+webpackConfig.module.rules.push( {
+	test: /\.jsx?$/,
+	include: [ path.dirname( require.resolve( 'newspack-icons/package.json' ) ) ],
+	use: {
+		loader: 'babel-loader',
+		options: {
+			presets: [ '@babel/preset-env', [ '@babel/preset-react', { runtime: 'automatic' } ] ],
+		},
+	},
+} );
 
 // Fonts handling.
 webpackConfig.module.rules.push( {

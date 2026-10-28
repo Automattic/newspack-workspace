@@ -11,6 +11,18 @@
 class Newspack_Blocks {
 
 	/**
+	 * Blocks from newspack-blocks, by their directory in src/blocks/.
+	 */
+	const BLOCKS = [
+		'author-list',
+		'author-profile',
+		'checkout-button',
+		'donate',
+		'iframe',
+		'video-playlist',
+	];
+
+	/**
 	 * Script handles.
 	 */
 	const SCRIPT_HANDLES = [
@@ -327,12 +339,8 @@ class Newspack_Blocks {
 	public static function manage_view_scripts() {
 		$src_directory  = NEWSPACK_BLOCKS__PLUGIN_DIR . 'src/blocks/';
 		$dist_directory = NEWSPACK_BLOCKS__PLUGIN_DIR . 'dist/';
-		$iterator       = new DirectoryIterator( $src_directory );
-		foreach ( $iterator as $block_directory ) {
-			if ( ! $block_directory->isDir() || $block_directory->isDot() ) {
-				continue;
-			}
-			$type = $block_directory->getFilename();
+		// src/blocks/ also holds newspack-plugin's own blocks, so only walk these.
+		foreach ( self::BLOCKS as $type ) {
 
 			/* If view.php is found, include it and use for block rendering. */
 			$view_php_path = $src_directory . $type . '/view.php';

@@ -93,7 +93,7 @@ class Newspack_Test_Bundled_Blocks extends WP_UnitTestCase {
 
 		include $legacy_plugin_file;
 
-		$this->assertSame( NEWSPACK_ABSPATH . 'includes/newspack-blocks/', NEWSPACK_BLOCKS__PLUGIN_DIR );
+		$this->assertSame( NEWSPACK_ABSPATH, NEWSPACK_BLOCKS__PLUGIN_DIR );
 	}
 
 	/**

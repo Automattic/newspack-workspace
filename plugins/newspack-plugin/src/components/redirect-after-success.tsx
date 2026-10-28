@@ -18,6 +18,7 @@ const RedirectAfterSuccess = ( { attributes, setAttributes }: Props ) => (
 		<SelectControl
 			label={ __( 'Post-Checkout Button', 'newspack-plugin' ) }
 			help={ __( 'After a successful purchase, a button will be presented to finish the process.', 'newspack-plugin' ) }
+			// @ts-expect-error -- From newspack-blocks, which typed @wordpress/components as any.
 			value={ attributes.afterSuccessBehavior }
 			options={ [
 				{ label: __( 'Close the modal', 'newspack-plugin' ), value: '' },
