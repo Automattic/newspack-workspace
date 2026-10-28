@@ -76,8 +76,8 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	 * Option holding the site-wide default for whether campaigns are public in
 	 * ActiveCampaign, which is what puts them in its campaign archive. One of
 	 * the ARCHIVE_VISIBILITY_* values. The default, "inherit", follows each
-	 * newsletter's own visibility, which is how campaigns were created before
-	 * this option existed.
+	 * newsletter's own visibility: "Email and web" newsletters are public and
+	 * "Email only" newsletters are private.
 	 *
 	 * @var string
 	 */

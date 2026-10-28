@@ -152,7 +152,7 @@ class ActiveCampaignPublicCampaignTest extends WP_UnitTestCase {
 	 */
 	public function archive_visibility_cases() {
 		return [
-			// Unset site default behaves as before the setting existed.
+			// An unset site default follows the newsletter's visibility.
 			'no setting, email only'           => [ null, false, '', 0 ],
 			'no setting, email and web'        => [ null, true, '', 1 ],
 			'inherit, email only'              => [ 'inherit', false, '', 0 ],
@@ -194,8 +194,8 @@ class ActiveCampaignPublicCampaignTest extends WP_UnitTestCase {
 	/**
 	 * The provider, and with it the controller, is built during `init` at the
 	 * default priority. A callback added at that same priority while it runs is
-	 * skipped, so the meta would never be registered and the editor's checkbox
-	 * would save nothing.
+	 * skipped, so the meta would never be registered and the editor's archive
+	 * choice would save nothing.
 	 */
 	public function test_meta_is_registered_after_the_provider_is_built() {
 		Newspack_Newsletters_Active_Campaign::instance();
