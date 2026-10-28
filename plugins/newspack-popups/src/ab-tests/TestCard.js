@@ -56,15 +56,19 @@ const TestCard = ( { test, data } ) => {
 				{ duplicates.length > 0 && (
 					<Notice status="warning" isDismissible={ false } spokenMessage="">
 						{ __(
-							'More than one prompt carries the same variant letter. The published one counts; these are ignored:',
+							'More than one prompt carries the same variant letter. This page reports the first published one; readers still see every published prompt. Also carrying a letter:',
 							'newspack-popups'
 						) }{ ' ' }
-						{ duplicates.map( ( duplicate, index ) => (
-							<span key={ duplicate.id }>
-								{ index > 0 && ', ' }
-								{ getVariantLabel( duplicate.letter ) } <a href={ duplicate.edit_link }>{ decodeEntities( duplicate.title ) }</a>
-							</span>
-						) ) }
+						{ duplicates.map( ( duplicate, index ) => {
+							const title = decodeEntities( duplicate.title );
+							return (
+								<span key={ duplicate.id }>
+									{ index > 0 && ', ' }
+									{ getVariantLabel( duplicate.letter ) }{ ' ' }
+									{ duplicate.edit_link ? <a href={ duplicate.edit_link }>{ title }</a> : title } ({ duplicate.status_label })
+								</span>
+							);
+						} ) }
 					</Notice>
 				) }
 				<AllocationBar controlShare={ test.control_share } variants={ test.variants } />
