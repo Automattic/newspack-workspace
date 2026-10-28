@@ -180,7 +180,7 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 			return $counted;
 		}
 		if ( $counted['flagged'] ) {
-			$result['note'] = __( 'Counts update once a day. Google Analytics may have left out low-traffic rows for this test.', 'newspack' );
+			$result['note'] = __( 'Counts update once a day and Google Analytics may have left out some low-traffic counts for this test.', 'newspack' );
 		}
 		$result['variants'] = $counted['variants'];
 		return $result;
@@ -421,7 +421,8 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 	 * has lost access to the property breaks the page for every
 	 * administrator until Site Kit's Analytics owner changes. A stale token
 	 * is not that case; Site Kit refreshes it inside the report and drops it
-	 * when Google refuses, so the next view falls back to the viewer's own.
+	 * when Google rejects the refresh token, so the next view falls back to
+	 * the viewer's own.
 	 * The provider assumes a logged-in administrator's request; with no user
 	 * set, as in cron, no token is lent and the error below is the answer.
 	 *
@@ -482,7 +483,7 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 	 * @return int User ID, 0 for the current user, -1 when no token can be used.
 	 */
 	private static function reporting_user_id(): int {
-		return self::choose_reporting_user( self::owner_id(), [ self::class, 'has_token' ] );
+		return self::choose_reporting_user( self::owner_id(), self::has_token( ... ) );
 	}
 
 	/**
