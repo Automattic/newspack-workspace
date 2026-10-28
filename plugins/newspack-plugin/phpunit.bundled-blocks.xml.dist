@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<!--
+	Tests for the bundled copy of newspack-blocks (includes/newspack-blocks/).
+	They run without the rest of this plugin, against stubs, so they need their
+	own bootstrap and process. See tests/bundled-blocks/bootstrap.php.
+-->
+<phpunit
+	bootstrap="tests/bundled-blocks/bootstrap.php"
+	backupGlobals="false"
+	colors="true"
+	convertErrorsToExceptions="true"
+	convertNoticesToExceptions="true"
+	convertWarningsToExceptions="true"
+	>
+	<testsuites>
+		<testsuite name="bundled-blocks">
+			<directory prefix="test-" suffix=".php">./tests/bundled-blocks/</directory>
+		</testsuite>
+	</testsuites>
+</phpunit>
