@@ -288,17 +288,18 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	 * fails the create with a 4xx that the provisioner records as permanent, and
 	 * only the monthly recheck retries it. Every group is switched on so the
 	 * gated entries are checked too; `access_source` needs the gating constant
-	 * and is covered by the gated-site test below.
+	 * and is not checked here.
 	 */
 	public function test_dimension_names_fit_the_admin_api_rules() {
 		foreach ( [ 'access_control', 'woocommerce', 'donations', 'ab_testing' ] as $group ) {
 			add_filter( "newspack_ga4_dimensions_{$group}_enabled", '__return_true' );
 		}
 		$dimensions = GA4_Custom_Dimensions::get_dimensions();
-		$this->assertGreaterThan( count( GA4_Custom_Dimensions::AB_TESTING_DIMENSIONS ), count( $dimensions ), 'Precondition: the gated groups are in the list.' );
+		$gated = array_merge( self::ACCESS_CONTROL_DIMENSIONS, self::WOOCOMMERCE_DIMENSIONS, self::DONATION_DIMENSIONS, self::AB_TESTING_DIMENSIONS );
+		$this->assertSame( [], array_diff( $gated, array_keys( $dimensions ) ), 'Precondition: every gated group is in the list.' );
 		foreach ( $dimensions as $parameter_name => $display_name ) {
-			$this->assertMatchesRegularExpression( '/^[A-Za-z][A-Za-z0-9_]{0,39}$/', $parameter_name, "Parameter name '{$parameter_name}' must be letters, digits and underscores, start with a letter, and run 40 characters at most." );
-			$this->assertMatchesRegularExpression( '/^[A-Za-z][A-Za-z0-9_ ]{0,81}$/', $display_name, "Display name '{$display_name}' must be letters, digits, spaces and underscores, start with a letter, and run 82 characters at most." );
+			$this->assertMatchesRegularExpression( '/^[A-Za-z][A-Za-z0-9_]{0,39}$/D', $parameter_name, "Parameter name '{$parameter_name}' must be letters, digits and underscores, start with a letter, and run 40 characters at most." );
+			$this->assertMatchesRegularExpression( '/^[A-Za-z][A-Za-z0-9_ ]{0,81}$/D', $display_name, "Display name '{$display_name}' must be letters, digits, spaces and underscores, start with a letter, and run 82 characters at most." );
 		}
 	}
 
