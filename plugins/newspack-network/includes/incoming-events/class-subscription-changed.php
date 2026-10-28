@@ -175,6 +175,7 @@ class Subscription_Changed extends Woo_Item_Changed {
 			'start_date'        => $this->get_start_date(),
 			'next_payment_date' => $this->get_next_payment_date(),
 			'last_payment_date' => $this->get_last_payment_date(),
+			'last_paid_date'    => $this->data->last_paid_date ?? null,
 			'end_date'          => $this->get_end_date(),
 			'total'             => $this->data->total ?? null,
 			'currency'          => $this->data->currency ?? null,

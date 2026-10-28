@@ -1735,7 +1735,7 @@ class Subscribers_Wizard extends Wizard {
 		 * @param array[] $records Records so far. Each is an array with an integer `id`,
 		 *                         `site_url`, `site_name`, the raw WooCommerce Subscriptions
 		 *                         `status`, `plan` and `edit_url`, and optionally `billing`:
-		 *                         `start_date`, `next_payment_date`, `last_payment_date` and
+		 *                         `start_date`, `next_payment_date`, `last_paid_date` and
 		 *                         `end_date` as GMT 'Y-m-d H:i:s' strings, plus `total`,
 		 *                         `currency`, `billing_period` and `billing_interval`.
 		 * @param int     $user_id The reader's user ID.
@@ -1797,7 +1797,9 @@ class Subscribers_Wizard extends Wizard {
 			'startDate'       => $date( 'start_date' ),
 			'nextBillingDate' => $date( 'next_payment_date' ),
 			'endDate'         => $date( 'end_date' ),
-			'lastPayment'     => $date( 'last_payment_date' ),
+			// The last order paid, as on a local card. `last_payment_date` is the last
+			// order created, which a failed renewal also sets.
+			'lastPayment'     => $date( 'last_paid_date' ),
 		];
 	}
 

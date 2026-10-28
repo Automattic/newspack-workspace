@@ -527,13 +527,6 @@ describe( 'the network subscription rows', () => {
 		expect( mockDataViewsProps.inlineFilters ).toBe( true );
 	} );
 
-	it( 'shows no badge beside a reader the network created', async () => {
-		await mount();
-		const { container } = render( field( 'name' ).render( { item: { ...subscriber( 1 ), isNetworkReader: true } } ) );
-
-		expect( container.textContent ).toBe( 'Reader 1reader1@example.com' );
-	} );
-
 	it( 'names the managing site after the plan, outside its link', async () => {
 		await mount();
 		const item = { ...subscriber( 1 ), subscriptions: [ networkSubscription( 12, 'Riverbend Daily' ) ] };

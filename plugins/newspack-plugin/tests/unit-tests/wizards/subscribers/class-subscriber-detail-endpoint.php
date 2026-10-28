@@ -922,7 +922,8 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 						'billing' => [
 							'start_date'        => '2026-03-14 02:00:00',
 							'next_payment_date' => '2026-11-14 12:00:00',
-							'last_payment_date' => '2026-10-14 12:00:00',
+							'last_payment_date' => '2026-10-20 12:00:00',
+							'last_paid_date'    => '2026-10-14 12:00:00',
 							'end_date'          => 0,
 							'total'             => '12.00',
 							'currency'          => 'GBP',
@@ -943,7 +944,7 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 		$this->assertSame( 1, $subscription['billingInterval'] );
 		$this->assertSame( '2026-03-13', $subscription['startDate'], 'A GMT date early in the day falls on the previous day in New York.' );
 		$this->assertSame( '2026-11-14', $subscription['nextBillingDate'] );
-		$this->assertSame( '2026-10-14', $subscription['lastPayment'] );
+		$this->assertSame( '2026-10-14', $subscription['lastPayment'], 'Last payment is the last order paid, not the last order created.' );
 		$this->assertNull( $subscription['endDate'], 'A subscription with no end date has none.' );
 	}
 

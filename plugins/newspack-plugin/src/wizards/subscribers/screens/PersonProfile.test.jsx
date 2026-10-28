@@ -45,7 +45,14 @@ jest.mock( '../../../../packages/components/src', () => ( {
 		[ 'icon', 'size', 'showTooltip', 'isBusy', 'isDestructive' ].forEach( key => delete props[ key ] );
 		return require( 'react' ).createElement( 'button', { ...props, 'aria-label': label || props[ 'aria-label' ], ref }, children );
 	} ),
-	Card: ( { children, __experimentalCoreProps } ) => require( 'react' ).createElement( 'div', null, __experimentalCoreProps?.header, children ),
+	// Like the real core Card, the body is drawn only for truthy children.
+	Card: ( { children, __experimentalCoreProps } ) =>
+		require( 'react' ).createElement(
+			'div',
+			null,
+			__experimentalCoreProps?.header,
+			children ? require( 'react' ).createElement( 'div', { 'data-testid': 'card-body' }, children ) : null
+		),
 	Divider: () => null,
 	Grid: ( { children } ) => require( 'react' ).createElement( 'div', null, children ),
 	// The money flows open in a modal; this one renders inline so its copy is queryable.
@@ -527,8 +534,11 @@ describe( 'a subscription managed on another network site', () => {
 		expect( screen.getByText( '£12.00 / month' ) ).toBeInTheDocument();
 	} );
 
-	it( 'shows no billing rows it has no data for', async () => {
+	it( 'shows the card header alone when the other site sent no billing', async () => {
 		await renderCards( reader( { subscriptions: [ networkSubscription ] } ) );
+
+		expect( screen.getByText( 'Managed on Node Daily' ) ).toBeInTheDocument();
+		expect( screen.queryByTestId( 'card-body' ) ).not.toBeInTheDocument();
 
 		expect( screen.queryByText( 'Billing' ) ).not.toBeInTheDocument();
 		expect( screen.queryByText( 'First subscribed' ) ).not.toBeInTheDocument();
