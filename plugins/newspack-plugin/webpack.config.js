@@ -13,6 +13,14 @@ const path = require( 'path' );
 const { findSourceFile, resolveSourceFile } = require( 'newspack-scripts/config/resolveSource' );
 const wizardsDir = path.join( __dirname, 'src', 'wizards' );
 
+// The bundled copy of newspack-blocks builds on its own, into includes/newspack-blocks/dist/
+// (see the `build:bundled-blocks` script). Return before this config is built: the base
+// config's nested objects are shared, so changes below would leak into that build.
+if ( process.env.NEWSPACK_BUNDLED_BLOCKS_BUILD ) {
+	module.exports = require( './includes/newspack-blocks/webpack.config.js' );
+	return;
+}
+
 // Entry sources are declared extensionless; the file on disk may be TS or JS.
 const findSource = ( ...segments ) => findSourceFile( path.join( __dirname, ...segments ) );
 const resolveSource = ( ...segments ) => resolveSourceFile( path.join( __dirname, ...segments ) );
