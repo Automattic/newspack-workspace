@@ -108,9 +108,9 @@ class Contact_Sync extends Sync {
 	 * Mailchimp errors that no retry fixes stay unmatched on purpose, because
 	 * the transient path is what pages for them: a deleted audience or group
 	 * ("Resource Not Found", "Invalid interest ID"), which the hourly health
-	 * check never looks for, and the "could not be validated" detail Mailchimp
-	 * adds to every field error, including a payload problem that fails every
-	 * contact.
+	 * check never looks for, and the generic "could not be validated" detail on
+	 * Mailchimp's field errors, which also covers a payload problem that fails
+	 * every contact.
 	 */
 	private const ERROR_SIGNATURES = [
 		'permanent_contact' => [
