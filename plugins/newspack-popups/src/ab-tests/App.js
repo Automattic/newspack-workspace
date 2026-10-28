@@ -2,7 +2,12 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { Notice } from '@wordpress/components';
+import { Button, Notice } from '@wordpress/components';
+
+/**
+ * External dependencies
+ */
+import { EmptyState, Page } from 'newspack-components';
 
 /**
  * Internal dependencies
@@ -18,28 +23,35 @@ import TestCard from './TestCard';
 const App = ( { data } ) => {
 	const { tests = [], provider = {}, editor_new_prompt_url: newPromptUrl } = data;
 	return (
-		<div className="newspack-popups-ab-tests">
-			<h1>{ __( 'A/B Tests', 'newspack-popups' ) }</h1>
-			<p>
-				{ __(
-					'Each test compares a control prompt with the challengers that share its Test ID. Stats come from the connected stats source and are kept for an hour between refreshes.',
-					'newspack-popups'
-				) }
-			</p>
+		<Page
+			className="newspack-popups-ab-tests"
+			breadcrumbItems={ [ { label: __( 'Prompts', 'newspack-popups' ) }, { label: __( 'A/B Tests', 'newspack-popups' ) } ] }
+			subTitle={ __(
+				'Each test compares a control prompt with the challengers that share its Test ID. Stats come from the connected stats source and are kept for an hour between refreshes.',
+				'newspack-popups'
+			) }
+		>
 			{ ! provider.available && (
-				<Notice status="warning" isDismissible={ false }>
+				<Notice status="warning" isDismissible={ false } spokenMessage="">
 					{ provider.reason }
 				</Notice>
 			) }
 			{ tests.length === 0 ? (
-				<Notice status="info" isDismissible={ false }>
-					{ __( 'No A/B tests yet. Give two prompts the same Test ID in the prompt editor to start one.', 'newspack-popups' ) }{ ' ' }
-					<a href={ newPromptUrl }>{ __( 'Create a prompt', 'newspack-popups' ) }</a>
-				</Notice>
+				<EmptyState.Root>
+					<EmptyState.Header
+						title={ __( 'No A/B tests yet', 'newspack-popups' ) }
+						description={ __( 'Give two prompts the same Test ID in the prompt editor to start one.', 'newspack-popups' ) }
+					/>
+					<EmptyState.Actions>
+						<Button variant="primary" href={ newPromptUrl }>
+							{ __( 'Create a prompt', 'newspack-popups' ) }
+						</Button>
+					</EmptyState.Actions>
+				</EmptyState.Root>
 			) : (
 				tests.map( test => <TestCard key={ test.test_id } test={ test } data={ data } /> )
 			) }
-		</div>
+		</Page>
 	);
 };
 

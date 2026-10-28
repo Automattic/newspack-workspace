@@ -1,4 +1,4 @@
-import { formatConfidence, formatLift, formatRate, getCountLabel, getTestStatus, getVariantLabel } from './utils';
+import { formatConfidence, formatLift, formatRate, getCountLabel, getLabelIntent, getStatusIntent, getTestStatus, getVariantLabel } from './utils';
 
 describe( 'getTestStatus', () => {
 	it( 'is running when control and a challenger are both published', () => {
@@ -44,5 +44,18 @@ describe( 'labels', () => {
 		expect( getVariantLabel( 'a' ) ).toBe( 'A (control)' );
 		expect( getVariantLabel( 'b' ) ).toBe( 'B (challenger)' );
 		expect( getVariantLabel( 'd' ) ).toBe( 'D (challenger)' );
+	} );
+} );
+
+describe( 'badge intents', () => {
+	it( 'maps a test status to a badge intent', () => {
+		expect( getStatusIntent( 'running' ) ).toBe( 'stable' );
+		expect( getStatusIntent( 'draft' ) ).toBe( 'draft' );
+		expect( getStatusIntent( 'incomplete' ) ).toBe( 'high' );
+	} );
+	it( 'maps a confidence label to a badge intent', () => {
+		expect( getLabelIntent( 'reliable' ) ).toBe( 'stable' );
+		expect( getLabelIntent( 'directional' ) ).toBe( 'medium' );
+		expect( getLabelIntent( 'collecting' ) ).toBe( 'low' );
 	} );
 } );

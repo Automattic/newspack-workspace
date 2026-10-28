@@ -80,3 +80,37 @@ export const getVariantLabel = letter =>
 		  sprintf( __( '%s (control)', 'newspack-popups' ), letter.toUpperCase() )
 		: // Translators: %s is the variant letter.
 		  sprintf( __( '%s (challenger)', 'newspack-popups' ), letter.toUpperCase() );
+
+/**
+ * Badge intent for a test status.
+ *
+ * @param {string} status From getTestStatus().
+ * @return {string} A `Badge` intent.
+ */
+export const getStatusIntent = status => {
+	switch ( status ) {
+		case 'running':
+			return 'stable';
+		case 'draft':
+			return 'draft';
+		default:
+			return 'high';
+	}
+};
+
+/**
+ * Badge intent for a confidence label from the stats route.
+ *
+ * @param {string} label 'reliable', 'directional' or 'collecting'.
+ * @return {string} A `Badge` intent.
+ */
+export const getLabelIntent = label => {
+	switch ( label ) {
+		case 'reliable':
+			return 'stable';
+		case 'directional':
+			return 'medium';
+		default:
+			return 'low';
+	}
+};

@@ -2,16 +2,19 @@
  * WordPress dependencies
  */
 import { useState } from '@wordpress/element';
+import { useInstanceId } from '@wordpress/compose';
 import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
-import { Button, Card, CardBody, CardFooter, CardHeader, Notice, Spinner } from '@wordpress/components';
+import { decodeEntities } from '@wordpress/html-entities';
+import { Button, Card, CardBody, CardFooter, CardHeader, Notice } from '@wordpress/components';
+import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
 import AllocationBar from './AllocationBar';
 import StatsCard from './StatsCard';
-import { getStatusLabel, getTestStatus, getVariantLabel } from './utils';
+import { getStatusIntent, getStatusLabel, getTestStatus, getVariantLabel } from './utils';
 
 /**
  * One test: its variants, its split, and its stats on request.
@@ -24,8 +27,10 @@ const TestCard = ( { test, data } ) => {
 	const [ stats, setStats ] = useState( null );
 	const [ loading, setLoading ] = useState( false );
 	const [ error, setError ] = useState( null );
+	const headingId = useInstanceId( TestCard, 'newspack-popups-ab-tests__title' );
 	const status = getTestStatus( test );
 	const letters = Object.keys( test.variants );
+	const duplicates = test.duplicates || [];
 
 	const load = refresh => {
 		setLoading( true );
@@ -39,23 +44,38 @@ const TestCard = ( { test, data } ) => {
 	};
 
 	return (
-		<Card className="newspack-popups-ab-tests__test">
+		<Card className="newspack-popups-ab-tests__test" aria-labelledby={ headingId }>
 			<CardHeader>
-				<div>
+				<h2 id={ headingId } className="newspack-popups-ab-tests__title">
 					<code>{ test.test_id }</code>
 					{ test.goal_label && <span className="newspack-popups-ab-tests__goal">{ test.goal_label }</span> }
-				</div>
-				<span className={ `newspack-popups-ab-tests__badge is-${ status }` }>{ getStatusLabel( status ) }</span>
+				</h2>
+				<Badge intent={ getStatusIntent( status ) }>{ getStatusLabel( status ) }</Badge>
 			</CardHeader>
 			<CardBody>
+				{ duplicates.length > 0 && (
+					<Notice status="warning" isDismissible={ false } spokenMessage="">
+						{ __(
+							'More than one prompt carries the same variant letter. The published one counts; these are ignored:',
+							'newspack-popups'
+						) }{ ' ' }
+						{ duplicates.map( ( duplicate, index ) => (
+							<span key={ duplicate.id }>
+								{ index > 0 && ', ' }
+								{ getVariantLabel( duplicate.letter ) } <a href={ duplicate.edit_link }>{ decodeEntities( duplicate.title ) }</a>
+							</span>
+						) ) }
+					</Notice>
+				) }
 				<AllocationBar controlShare={ test.control_share } variants={ test.variants } />
 				<ul className="newspack-popups-ab-tests__variants">
 					{ letters.map( letter => {
 						const variant = test.variants[ letter ];
+						const title = decodeEntities( variant.title );
 						return (
 							<li key={ letter }>
 								<strong>{ getVariantLabel( letter ) }</strong>{ ' ' }
-								{ variant.edit_link ? <a href={ variant.edit_link }>{ variant.title }</a> : variant.title }{ ' ' }
+								{ variant.edit_link ? <a href={ variant.edit_link }>{ title }</a> : title }{ ' ' }
 								<span className="newspack-popups-ab-tests__status">{ variant.status_label }</span>
 							</li>
 						);
@@ -66,16 +86,14 @@ const TestCard = ( { test, data } ) => {
 						{ error }
 					</Notice>
 				) }
-				{ loading && <Spinner /> }
-				{ stats && ! loading && <StatsCard stats={ stats } data={ data } /> }
+				{ stats && <StatsCard stats={ stats } data={ data } /> }
 			</CardBody>
 			<CardFooter>
 				<Button
 					variant="secondary"
 					onClick={ () => load( Boolean( stats ) ) }
 					disabled={ loading || ! data.provider.available }
-					label={ data.provider.available ? undefined : data.provider.reason }
-					showTooltip={ ! data.provider.available }
+					isBusy={ loading }
 				>
 					{ stats ? __( 'Refresh stats', 'newspack-popups' ) : __( 'Load stats', 'newspack-popups' ) }
 				</Button>

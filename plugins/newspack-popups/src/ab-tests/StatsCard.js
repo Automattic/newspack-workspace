@@ -2,12 +2,14 @@
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
+import { dateI18n, getSettings } from '@wordpress/date';
 import { Notice } from '@wordpress/components';
+import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import { formatConfidence, formatLift, formatRate, getCountLabel, getVariantLabel } from './utils';
+import { formatConfidence, formatLift, formatRate, getCountLabel, getLabelIntent, getVariantLabel } from './utils';
 
 /**
  * A test's numbers: one row per variant, a confidence per challenger, and the
@@ -24,7 +26,7 @@ const StatsCard = ( { stats, data } ) => {
 	return (
 		<div className="newspack-popups-ab-tests__stats">
 			{ source.reason && (
-				<Notice status={ unavailable ? 'warning' : 'info' } isDismissible={ false }>
+				<Notice status={ unavailable ? 'warning' : 'info' } isDismissible={ false } spokenMessage="">
 					{ source.reason }
 				</Notice>
 			) }
@@ -55,9 +57,7 @@ const StatsCard = ( { stats, data } ) => {
 										{ comparison ? (
 											<>
 												{ formatConfidence( comparison.confidence ) }{ ' ' }
-												<span className={ `newspack-popups-ab-tests__badge is-${ comparison.label }` }>
-													{ data.labels[ comparison.label ] }
-												</span>
+												<Badge intent={ getLabelIntent( comparison.label ) }>{ data.labels[ comparison.label ] }</Badge>
 											</>
 										) : (
 											'—'
@@ -78,12 +78,12 @@ const StatsCard = ( { stats, data } ) => {
 				</p>
 			) }
 			{ ! unavailable && flags.young_test && (
-				<Notice status="info" isDismissible={ false }>
+				<Notice status="info" isDismissible={ false } spokenMessage="">
 					{ data.copy.young_test }
 				</Notice>
 			) }
 			{ ! unavailable && flags.high_anonymous && (
-				<Notice status="info" isDismissible={ false }>
+				<Notice status="info" isDismissible={ false } spokenMessage="">
 					{ data.copy.high_anonymous }
 				</Notice>
 			) }
@@ -92,7 +92,7 @@ const StatsCard = ( { stats, data } ) => {
 					{ sprintf(
 						// Translators: %s is a date and time.
 						__( 'Counts as of %s.', 'newspack-popups' ),
-						new Date( source.fetched_at ).toLocaleString()
+						dateI18n( getSettings().formats.datetime, source.fetched_at )
 					) }
 				</p>
 			) }
