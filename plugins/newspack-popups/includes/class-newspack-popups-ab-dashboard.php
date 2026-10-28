@@ -8,11 +8,12 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Tools → A/B Tests, behind the Campaigns A/B flag.
+ * Audience → A/B Tests (Tools → A/B Tests without the Audience menu), behind
+ * the Campaigns A/B flag.
  */
 final class Newspack_Popups_AB_Dashboard {
 	/**
-	 * Menu slug of the Tools page.
+	 * Menu slug of the page.
 	 */
 	const PAGE_SLUG = 'newspack-ab-tests';
 
@@ -20,6 +21,16 @@ final class Newspack_Popups_AB_Dashboard {
 	 * Script and style handle of the page's app.
 	 */
 	const SCRIPT_HANDLE = 'newspack-popups-ab-tests';
+
+	/**
+	 * Parent menu of the Campaigns screens, which newspack-plugin registers.
+	 */
+	const AUDIENCE_MENU_SLUG = 'newspack-audience';
+
+	/**
+	 * Body class that lets the page fill the admin canvas.
+	 */
+	const BODY_CLASS = 'newspack-popups-ab-tests-screen';
 
 	/**
 	 * Hook suffix WordPress gave the page, once registered.
@@ -34,18 +45,36 @@ final class Newspack_Popups_AB_Dashboard {
 	 * still counts.
 	 */
 	public static function init() {
-		add_action( 'admin_menu', [ __CLASS__, 'add_menu_page_item' ] );
+		add_action( 'admin_menu', [ __CLASS__, 'add_menu_page_item' ], 20 );
 		add_action( 'admin_enqueue_scripts', [ __CLASS__, 'enqueue' ] );
+		add_filter( 'admin_body_class', [ __CLASS__, 'add_body_class' ] );
+		foreach ( [ 'admin_notices', 'all_admin_notices', 'network_admin_notices' ] as $hook ) {
+			add_action( $hook, [ __CLASS__, 'remove_admin_notices' ], -PHP_INT_MAX );
+		}
 	}
 
 	/**
-	 * Tools → A/B Tests.
+	 * Other plugins' notices would render above the page header, as on the
+	 * other Newspack screens that drop them.
+	 */
+	public static function remove_admin_notices() {
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( self::$page_hook && $screen && $screen->id === self::$page_hook ) {
+			remove_all_actions( current_action() );
+		}
+	}
+
+	/**
+	 * Audience → A/B Tests, beside Campaigns. Without newspack-plugin there is
+	 * no Audience menu, so the page falls back to Tools.
 	 */
 	public static function add_menu_page_item() {
 		if ( ! Newspack_Popups_AB_Tests::is_enabled() ) {
 			return;
 		}
-		self::$page_hook = add_management_page(
+		$parent          = self::get_parent_slug();
+		self::$page_hook = add_submenu_page(
+			$parent,
 			__( 'A/B Tests', 'newspack-popups' ),
 			__( 'A/B Tests', 'newspack-popups' ),
 			'manage_options',
@@ -55,10 +84,42 @@ final class Newspack_Popups_AB_Dashboard {
 	}
 
 	/**
+	 * The menu the page sits under.
+	 *
+	 * @return string
+	 */
+	public static function get_parent_slug() {
+		return empty( $GLOBALS['admin_page_hooks'][ self::AUDIENCE_MENU_SLUG ] ) ? 'tools.php' : self::AUDIENCE_MENU_SLUG;
+	}
+
+	/**
+	 * URL of the page, for links from the prompt editor.
+	 *
+	 * @return string
+	 */
+	public static function get_page_url() {
+		return admin_url( 'admin.php?page=' . self::PAGE_SLUG );
+	}
+
+	/**
+	 * Mark the page's body so its styles can drop the admin's content padding.
+	 *
+	 * @param string $classes Space-separated body classes.
+	 * @return string
+	 */
+	public static function add_body_class( $classes ) {
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( self::$page_hook && $screen && $screen->id === self::$page_hook ) {
+			$classes .= ' ' . self::BODY_CLASS;
+		}
+		return $classes;
+	}
+
+	/**
 	 * The page's markup: a mount point the app fills.
 	 */
 	public static function render_page() {
-		echo '<div class="wrap"><div id="newspack-popups-ab-tests-root"></div></div>';
+		echo '<div id="newspack-popups-ab-tests-root"></div>';
 	}
 
 	/**

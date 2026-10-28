@@ -3,22 +3,43 @@
  */
 import { useState } from '@wordpress/element';
 import { useInstanceId } from '@wordpress/compose';
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { speak } from '@wordpress/a11y';
 import apiFetch from '@wordpress/api-fetch';
 import { decodeEntities } from '@wordpress/html-entities';
-import { Button, Card, CardBody, CardFooter, CardHeader, Notice } from '@wordpress/components';
-import { Badge } from '@wordpress/ui';
+import { dateI18n, getSettings } from '@wordpress/date';
+import { Button, Card, CardBody, CardHeader, Notice } from '@wordpress/components';
+import { Badge, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import AllocationBar from './AllocationBar';
-import StatsCard from './StatsCard';
-import { getStatusIntent, getStatusLabel, getTestStatus, getVariantLabel } from './utils';
+import AllocationBar, { getShares } from './AllocationBar';
+import {
+	formatConfidence,
+	formatLift,
+	formatRate,
+	getCountLabel,
+	getLabelIntent,
+	getStatusIntent,
+	getStatusLabel,
+	getTestStatus,
+	getVariantLabel,
+} from './utils';
 
 /**
- * One test: its variants, its split, and its stats on request.
+ * What a test without both roles still needs.
+ *
+ * @param {Object} variants Variants keyed by letter.
+ * @return {string} Hint.
+ */
+const getMissingRoleHint = variants =>
+	variants.a
+		? __( 'Add a challenger: give another prompt this Test ID and set its variant to B.', 'newspack-popups' )
+		: __( 'Add a control: give another prompt this Test ID and set its variant to A.', 'newspack-popups' );
+
+/**
+ * One test: its split, its variants and, on request, their numbers.
  *
  * @param {Object} props      Props.
  * @param {Object} props.test A test from the boot data.
@@ -32,6 +53,8 @@ const TestCard = ( { test, data } ) => {
 	const status = getTestStatus( test );
 	const letters = Object.keys( test.variants );
 	const duplicates = test.duplicates || [];
+	const shares = getShares( test.control_share, test.variants );
+	const hasStats = stats && stats.source.state !== 'unavailable';
 
 	const load = refresh => {
 		setLoading( true );
@@ -50,63 +73,173 @@ const TestCard = ( { test, data } ) => {
 	return (
 		<Card className="newspack-popups-ab-tests__test" role="region" aria-labelledby={ headingId }>
 			<CardHeader>
-				<h2 id={ headingId } className="newspack-popups-ab-tests__title">
-					<code>{ test.test_id }</code>
-					{ test.goal_label && <span className="newspack-popups-ab-tests__goal">{ test.goal_label }</span> }
-				</h2>
-				<Badge intent={ getStatusIntent( status ) }>{ getStatusLabel( status ) }</Badge>
+				<Stack direction="column" gap="xs">
+					<h2 id={ headingId } className="newspack-popups-ab-tests__title">
+						{ test.test_id }
+					</h2>
+					<span className="newspack-popups-ab-tests__goal">
+						{ test.goal_label
+							? sprintf(
+									// Translators: %s is the test's conversion goal.
+									__( 'Goal: %s', 'newspack-popups' ),
+									test.goal_label
+							  )
+							: __( 'No goal set', 'newspack-popups' ) }
+					</span>
+				</Stack>
+				<Stack direction="row" gap="md" align="center">
+					<Badge intent={ getStatusIntent( status ) }>{ getStatusLabel( status ) }</Badge>
+					{ data.provider.available && (
+						<Button
+							variant="secondary"
+							size="compact"
+							onClick={ () => load( Boolean( stats ) ) }
+							disabled={ loading }
+							accessibleWhenDisabled
+							isBusy={ loading }
+						>
+							{ stats ? __( 'Refresh stats', 'newspack-popups' ) : __( 'Load stats', 'newspack-popups' ) }
+						</Button>
+					) }
+				</Stack>
 			</CardHeader>
 			<CardBody>
-				{ duplicates.length > 0 && (
-					<Notice status="warning" isDismissible={ false } spokenMessage="">
-						{ __(
-							'Prompts share a variant letter. Readers see every published one, and this page reports only the first (published first, then lowest ID). Take the extra prompt out of the test by clearing its Test ID in the prompt editor, or unpublish it. Also carrying a letter:',
-							'newspack-popups'
-						) }{ ' ' }
-						{ duplicates.map( ( duplicate, index ) => {
-							const title = decodeEntities( duplicate.title );
-							return (
-								<span key={ duplicate.id }>
-									{ index > 0 && ', ' }
-									{ getVariantLabel( duplicate.letter ) }{ ' ' }
-									{ duplicate.edit_link ? <a href={ duplicate.edit_link }>{ title }</a> : title } ({ duplicate.status_label })
-								</span>
-							);
-						} ) }
-					</Notice>
-				) }
-				<AllocationBar controlShare={ test.control_share } variants={ test.variants } />
-				<ul className="newspack-popups-ab-tests__variants">
-					{ letters.map( letter => {
-						const variant = test.variants[ letter ];
-						const title = decodeEntities( variant.title );
-						return (
-							<li key={ letter }>
-								<strong>{ getVariantLabel( letter ) }</strong>{ ' ' }
-								{ variant.edit_link ? <a href={ variant.edit_link }>{ title }</a> : title }{ ' ' }
-								<span className="newspack-popups-ab-tests__status">{ variant.status_label }</span>
-							</li>
-						);
-					} ) }
-				</ul>
-				{ error && (
-					<Notice status="error" isDismissible={ false }>
-						{ error }
-					</Notice>
-				) }
-				{ stats && <StatsCard stats={ stats } data={ data } /> }
+				<Stack direction="column" gap="lg">
+					{ duplicates.length > 0 && (
+						<Notice status="warning" isDismissible={ false } spokenMessage="">
+							{ __(
+								'More than one published prompt uses the same variant. Readers see all of them, but results only count the first. Clear the Test ID on the extra prompt, or unpublish it:',
+								'newspack-popups'
+							) }{ ' ' }
+							{ duplicates.map( ( duplicate, index ) => {
+								const title = decodeEntities( duplicate.title );
+								return (
+									<span key={ duplicate.id }>
+										{ index > 0 && ', ' }
+										{ duplicate.edit_link ? <a href={ duplicate.edit_link }>{ title }</a> : title } (
+										{ getVariantLabel( duplicate.letter ) })
+									</span>
+								);
+							} ) }
+						</Notice>
+					) }
+					{ status === 'incomplete' ? (
+						<p className="newspack-popups-ab-tests__hint">{ getMissingRoleHint( test.variants ) }</p>
+					) : (
+						<AllocationBar controlShare={ test.control_share } variants={ test.variants } />
+					) }
+					<table className="newspack-popups-ab-tests__table">
+						<thead>
+							<tr>
+								<th scope="col">{ __( 'Variant', 'newspack-popups' ) }</th>
+								<th scope="col">{ __( 'Prompt', 'newspack-popups' ) }</th>
+								<th scope="col" className="is-numeric">
+									{ __( 'Share', 'newspack-popups' ) }
+								</th>
+								{ hasStats && (
+									<>
+										<th scope="col" className="is-numeric">
+											{ getCountLabel( stats.source.unit ) }
+										</th>
+										<th scope="col" className="is-numeric">
+											{ __( 'Conversions', 'newspack-popups' ) }
+										</th>
+										<th scope="col" className="is-numeric">
+											{ __( 'Rate', 'newspack-popups' ) }
+										</th>
+										<th scope="col" className="is-numeric">
+											{ __( 'Lift', 'newspack-popups' ) }
+										</th>
+										<th scope="col">{ __( 'Confidence', 'newspack-popups' ) }</th>
+									</>
+								) }
+							</tr>
+						</thead>
+						<tbody>
+							{ letters.map( letter => {
+								const variant = test.variants[ letter ];
+								const title = decodeEntities( variant.title );
+								const row = hasStats ? stats.variants[ letter ] : null;
+								const comparison = hasStats ? stats.comparisons[ letter ] : null;
+								return (
+									<tr key={ letter }>
+										<th scope="row">
+											<span className="newspack-popups-ab-tests__variant">
+												<span className={ `newspack-popups-ab-tests__swatch is-variant-${ letter }` } aria-hidden="true" />
+												{ getVariantLabel( letter ) }
+											</span>
+										</th>
+										<td>
+											<Stack direction="column" gap="xs">
+												{ variant.edit_link ? <a href={ variant.edit_link }>{ title }</a> : title }
+												<span className="newspack-popups-ab-tests__muted">{ variant.status_label }</span>
+											</Stack>
+										</td>
+										<td className="is-numeric">{ status === 'incomplete' ? '—' : `${ Math.round( shares[ letter ] ) }%` }</td>
+										{ hasStats && (
+											<>
+												<td className="is-numeric">{ row ? row.readers : '—' }</td>
+												<td className="is-numeric">{ row ? row.conversions : '—' }</td>
+												<td className="is-numeric">{ row ? formatRate( row.rate ) : '—' }</td>
+												<td className="is-numeric">{ letter === 'a' || ! row ? '—' : formatLift( row.lift ) }</td>
+												<td>
+													{ comparison ? (
+														<Stack direction="row" gap="sm" align="center">
+															<span>{ formatConfidence( comparison.confidence ) }</span>
+															<Badge intent={ getLabelIntent( comparison.label ) }>
+																{ data.labels[ comparison.label ] }
+															</Badge>
+														</Stack>
+													) : (
+														'—'
+													) }
+												</td>
+											</>
+										) }
+									</tr>
+								);
+							} ) }
+						</tbody>
+					</table>
+					{ stats && stats.source.reason && (
+						<Notice status={ stats.source.state === 'unavailable' ? 'warning' : 'info' } isDismissible={ false } spokenMessage="">
+							{ stats.source.reason }
+						</Notice>
+					) }
+					{ hasStats && stats.source.state === 'ok' && stats.source.unit === 'events' && (
+						<p className="newspack-popups-ab-tests__muted">
+							{ __(
+								'Counts are views rather than readers, because the stats source could not count distinct readers for this test.',
+								'newspack-popups'
+							) }
+						</p>
+					) }
+					{ hasStats && status !== 'incomplete' && stats.flags.young_test && (
+						<Notice status="info" isDismissible={ false } spokenMessage="">
+							{ data.copy.young_test }
+						</Notice>
+					) }
+					{ hasStats && status !== 'incomplete' && stats.flags.high_anonymous && (
+						<Notice status="info" isDismissible={ false } spokenMessage="">
+							{ data.copy.high_anonymous }
+						</Notice>
+					) }
+					{ error && (
+						<Notice status="error" isDismissible={ false }>
+							{ error }
+						</Notice>
+					) }
+					{ stats && stats.source.fetched_at && (
+						<p className="newspack-popups-ab-tests__muted">
+							{ sprintf(
+								// Translators: %s is a date and time.
+								__( 'Counts as of %s. Saved counts are reused for an hour.', 'newspack-popups' ),
+								dateI18n( getSettings().formats.datetime, stats.source.fetched_at )
+							) }
+						</p>
+					) }
+				</Stack>
 			</CardBody>
-			<CardFooter>
-				<Button
-					variant="secondary"
-					onClick={ () => load( Boolean( stats ) ) }
-					disabled={ loading || ! data.provider.available }
-					accessibleWhenDisabled
-					isBusy={ loading }
-				>
-					{ stats ? __( 'Refresh stats', 'newspack-popups' ) : __( 'Load stats', 'newspack-popups' ) }
-				</Button>
-			</CardFooter>
 		</Card>
 	);
 };

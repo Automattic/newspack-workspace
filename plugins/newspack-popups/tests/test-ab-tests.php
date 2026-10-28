@@ -917,6 +917,12 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		self::assertContains( 'manual', $data['ineligible_placements'] );
 		self::assertContains( 'custom1', $data['ineligible_placements'] );
 		self::assertSame( [ 'a', 'b' ], array_keys( $data['variants'] ) );
+		self::assertSame( '', $data['results_url'], 'The results page is for administrators only.' );
+
+		$editor_id = get_current_user_id();
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		self::assertStringContainsString( 'page=' . Newspack_Popups_AB_Dashboard::PAGE_SLUG, Newspack_Popups_AB_Tests::get_editor_data( $prompt_id )['results_url'] );
+		wp_set_current_user( $editor_id );
 
 		$this->restrict_tests_to_admins();
 		self::assertFalse( Newspack_Popups_AB_Tests::get_editor_data( $prompt_id )['can_manage_tests'] );

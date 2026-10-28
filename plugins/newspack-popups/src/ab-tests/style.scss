@@ -1,73 +1,143 @@
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/variables" as wp-vars;
+@use "~newspack-colors/colors.module" as np-colors;
+
+body.newspack-popups-ab-tests-screen {
+	background: wp-colors.$white;
+
+	#wpcontent {
+		padding-inline-start: 0;
+	}
+
+	#wpbody-content {
+		padding-bottom: 0;
+	}
+
+	#wpfooter {
+		display: none;
+	}
+}
+
+#newspack-popups-ab-tests-root {
+	display: flex;
+	flex-direction: column;
+	min-height: calc(100vh - var(--wp-admin--admin-bar--height, 32px));
+}
 
 .newspack-popups-ab-tests {
-	&__test {
-		margin-block-start: wp-vars.$grid-unit-20;
+	flex: 1 1 auto;
+
+	&__content {
+		display: flex;
+		flex-direction: column;
+		gap: wp-vars.$grid-unit-30;
+		box-sizing: border-box;
+		width: 100%;
+		max-width: 1200px;
+		margin-inline: auto;
+		padding: var(--newspack-page-content-gap, #{wp-vars.$grid-unit-60}) var(--wpds-dimension-padding-2xl, #{wp-vars.$grid-unit-30});
+	}
+
+	&__content > .components-notice {
+		margin: 0;
 	}
 
 	&__title {
-		display: flex;
-		align-items: center;
-		gap: wp-vars.$grid-unit-15;
 		margin: 0;
-		font-size: inherit;
+		font-size: var(--wpds-typography-font-size-lg, 15px);
 		font-weight: 600;
+		line-height: 1.4;
 	}
 
-	&__goal {
-		color: var( --wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700} );
-		font-weight: normal;
+	&__goal,
+	&__muted,
+	&__hint {
+		margin: 0;
+		color: var(--wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700});
 	}
 
 	&__allocation {
 		display: flex;
-		height: 28px;
-		margin-block-end: wp-vars.$grid-unit-20;
-		border-radius: var( --wpds-border-radius-sm, #{wp-vars.$radius-small} );
+		gap: 2px;
+		height: wp-vars.$grid-unit-10;
 		overflow: hidden;
-		font-size: wp-vars.$font-size-small;
-		color: wp-colors.$white;
+		border-radius: var(--wpds-border-radius-sm, #{wp-vars.$radius-small});
 	}
 
 	&__allocation-segment {
-		display: flex;
+		min-width: wp-vars.$grid-unit-05;
+	}
+
+	&__allocation-segment,
+	&__swatch {
+		&.is-variant-a {
+			background: var(--wpds-color-background-interactive-brand-strong, #{np-colors.$primary-600});
+		}
+
+		&.is-variant-b {
+			background: np-colors.$primary-200;
+		}
+
+		&.is-variant-c {
+			background: np-colors.$primary-050;
+		}
+
+		&.is-variant-d {
+			background: wp-colors.$gray-400;
+		}
+	}
+
+	&__variant {
+		display: inline-flex;
 		align-items: center;
-		justify-content: center;
+		gap: wp-vars.$grid-unit-10;
 		white-space: nowrap;
-
-		&.is-control {
-			background: var( --wp-admin-theme-color, #2271b1 );
-		}
-
-		&.is-challenger {
-			background: wp-colors.$alert-green;
-			/* White on this green is about 2.5:1; dark text clears 4.5:1. */
-			color: wp-colors.$gray-900;
-		}
-
-		& + & {
-			border-inline-start: var( --wpds-border-width-xs, #{wp-vars.$border-width} ) solid wp-colors.$white;
-		}
 	}
 
-	&__variants {
-		margin: 0 0 wp-vars.$grid-unit-20;
-
-		li {
-			margin-block-end: wp-vars.$grid-unit-05;
-		}
-	}
-
-	&__status {
-		color: var( --wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700} );
-	}
-
-	&__stats {
-		margin-block-start: wp-vars.$grid-unit-20;
+	&__swatch {
+		flex-shrink: 0;
+		width: wp-vars.$grid-unit-15;
+		height: wp-vars.$grid-unit-15;
+		border-radius: var(--wpds-border-radius-xs, 2px);
 	}
 
 	&__table {
-		margin-block: wp-vars.$grid-unit-15;
+		width: 100%;
+		border-collapse: collapse;
+		font-variant-numeric: tabular-nums;
+
+		th,
+		td {
+			padding: wp-vars.$grid-unit-15 wp-vars.$grid-unit-20 wp-vars.$grid-unit-15 0;
+			border-bottom: 1px solid var(--wpds-color-stroke-surface-neutral-weak, #{wp-colors.$gray-200});
+			text-align: start;
+			vertical-align: top;
+			font-weight: normal;
+		}
+
+		th:last-child,
+		td:last-child {
+			padding-inline-end: 0;
+		}
+
+		thead th {
+			padding-top: 0;
+			color: var(--wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700});
+			font-size: wp-vars.$helptext-font-size;
+			font-weight: 500;
+		}
+
+		tbody th {
+			font-weight: 500;
+		}
+
+		tbody tr:last-child > * {
+			border-bottom: 0;
+			padding-bottom: 0;
+		}
+
+		.is-numeric {
+			text-align: end;
+		}
 	}
 }

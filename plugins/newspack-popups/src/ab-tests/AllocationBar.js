@@ -4,6 +4,20 @@
 import { __, sprintf } from '@wordpress/i18n';
 
 /**
+ * Each variant's share of readers: the control keeps its share and the
+ * challengers split the rest evenly.
+ *
+ * @param {number} controlShare Percent of readers who see the control.
+ * @param {Object} variants     Variants keyed by letter.
+ * @return {Object} Percent per letter.
+ */
+export const getShares = ( controlShare, variants ) => {
+	const challengers = Object.keys( variants ).filter( letter => letter !== 'a' );
+	const challengerShare = challengers.length ? ( 100 - controlShare ) / challengers.length : 0;
+	return Object.fromEntries( Object.keys( variants ).map( letter => [ letter, letter === 'a' ? controlShare : challengerShare ] ) );
+};
+
+/**
  * The traffic split between the control and the challengers.
  *
  * @param {Object} props              Props.
@@ -11,8 +25,7 @@ import { __, sprintf } from '@wordpress/i18n';
  * @param {Object} props.variants     Variants keyed by letter.
  */
 const AllocationBar = ( { controlShare, variants } ) => {
-	const challengers = Object.keys( variants ).filter( letter => letter !== 'a' );
-	const challengerShare = challengers.length ? ( 100 - controlShare ) / challengers.length : 100 - controlShare;
+	const shares = getShares( controlShare, variants );
 	return (
 		<div
 			className="newspack-popups-ab-tests__allocation"
@@ -24,17 +37,12 @@ const AllocationBar = ( { controlShare, variants } ) => {
 				100 - controlShare
 			) }
 		>
-			<span className="newspack-popups-ab-tests__allocation-segment is-control" style={ { width: `${ controlShare }%` } }>
-				A { controlShare }%
-			</span>
-			{ challengers.map( letter => (
+			{ Object.keys( variants ).map( letter => (
 				<span
 					key={ letter }
-					className="newspack-popups-ab-tests__allocation-segment is-challenger"
-					style={ { width: `${ challengerShare }%` } }
-				>
-					{ letter.toUpperCase() } { Math.round( challengerShare ) }%
-				</span>
+					className={ `newspack-popups-ab-tests__allocation-segment is-variant-${ letter }` }
+					style={ { width: `${ shares[ letter ] }%` } }
+				/>
 			) ) }
 		</div>
 	);
