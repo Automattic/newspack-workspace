@@ -17,7 +17,7 @@ import apiFetch from '@wordpress/api-fetch';
 /**
  * Internal dependencies
  */
-import { slugifyTestId, isEligiblePlacement, splitSummary, promptLacksGoalBlock, testPromptWarnings } from './ab-utils';
+import { slugifyTestId, isEligiblePlacement, splitSummary, promptLacksGoalBlock, missingGoalBlockMessage, testPromptWarnings } from './ab-utils';
 
 const META_TEST_ID = 'newspack_popups_ab_test_id';
 const META_VARIANT = 'newspack_popups_ab_variant';
@@ -104,8 +104,8 @@ const ABTestPanel = ( {
 			value: variant,
 			label: variant
 				? // Translators: %s is the variant letter.
-				  sprintf( __( 'Unsupported variant (%s)', 'newspack-popups' ), variant.toUpperCase() )
-				: __( 'Select a variant', 'newspack-popups' ),
+				  sprintf( __( 'Unsupported version (%s)', 'newspack-popups' ), variant.toUpperCase() )
+				: __( 'Select a version', 'newspack-popups' ),
 			disabled: true,
 		} );
 	}
@@ -124,31 +124,31 @@ const ABTestPanel = ( {
 		<Stack direction="column" gap="lg">
 			{ ! canManage && (
 				<p className="newspack-popups-ab-test__note">
-					{ __( "Your role can view this prompt's A/B test settings but not change them.", 'newspack-popups' ) }
+					{ __( "You can see this test's settings but can't change them.", 'newspack-popups' ) }
 				</p>
 			) }
 			{ ! eligible && (
 				<Notice status={ testId ? 'error' : 'warning' } spokenMessage="" isDismissible={ false }>
-					{ __( "Prompts with a manual or custom placement can't be part of an A/B test.", 'newspack-popups' ) }
-					{ testId ? ' ' + __( 'Clear the Test ID or change the placement before saving.', 'newspack-popups' ) : '' }
+					{ __( 'A/B tests only work on prompts that Newspack places for you.', 'newspack-popups' ) }
+					{ testId ? ' ' + __( 'Clear the test name or choose another placement to save.', 'newspack-popups' ) : '' }
 				</Notice>
 			) }
 			<TextControl
-				label={ __( 'Test ID', 'newspack-popups' ) }
+				label={ __( 'Test name', 'newspack-popups' ) }
 				value={ draft }
 				onChange={ onTestIdChange }
 				onBlur={ () => setDraft( testId ) }
 				// On an ineligible placement a new test can't start, but a stored Test
 				// ID stays editable so it can be cleared, which the notice asks for.
 				disabled={ ! canManage || ( ! eligible && ! testId ) }
-				help={ __( 'Give the control and its challenger the same Test ID. Letters, numbers and hyphens only.', 'newspack-popups' ) }
+				help={ __( 'Prompts with the same test name are compared with each other.', 'newspack-popups' ) }
 				__nextHasNoMarginBottom
 				__next40pxDefaultSize
 			/>
 			{ testId && (
 				<>
 					<SelectControl
-						label={ __( 'Variant', 'newspack-popups' ) }
+						label={ __( 'Version', 'newspack-popups' ) }
 						value={ variant }
 						options={ variantOptions }
 						onChange={ value => onMetaFieldChange( { [ META_VARIANT ]: value } ) }
@@ -163,7 +163,7 @@ const ABTestPanel = ( {
 					) ) }
 					{ 'a' === variant && (
 						<RangeControl
-							label={ __( 'Control share', 'newspack-popups' ) }
+							label={ __( 'Readers who see A', 'newspack-popups' ) }
 							value={ controlShare }
 							min={ 20 }
 							max={ 80 }
@@ -176,7 +176,8 @@ const ABTestPanel = ( {
 						/>
 					) }
 					<SelectControl
-						label={ __( 'Conversion goal', 'newspack-popups' ) }
+						label={ __( 'Goal', 'newspack-popups' ) }
+						help={ __( 'What a reader does that counts as a success.', 'newspack-popups' ) }
 						value={ goal }
 						options={ goalOptions }
 						onChange={ value => onMetaFieldChange( { [ META_GOAL ]: value } ) }
@@ -186,21 +187,21 @@ const ABTestPanel = ( {
 					/>
 					{ promptLacksGoalBlock( goal, blockNames ) && (
 						<Notice status="warning" spokenMessage="" isDismissible={ false }>
-							{ __( 'This prompt has no block that records this goal. Add one, or choose another goal.', 'newspack-popups' ) }
+							{ missingGoalBlockMessage( goal ) }
 						</Notice>
 					) }
 					{ others.length > 0 && (
 						<div className="newspack-popups-ab-test__prompts">
 							<BaseControl.VisualLabel id="newspack-popups-ab-test-others">
-								{ __( 'Other prompts in this test', 'newspack-popups' ) }
+								{ __( 'Other versions in this test', 'newspack-popups' ) }
 							</BaseControl.VisualLabel>
 							<ul aria-labelledby="newspack-popups-ab-test-others">
 								{ others.map( prompt => {
 									const meta = sprintf(
-										// Translators: %1$s is the prompt's variant, %2$s its post status label.
+										// Translators: %1$s is the prompt's version, %2$s its post status label.
 										__( '%1$s · %2$s', 'newspack-popups' ),
 										variants[ prompt.variant ] ||
-											( prompt.variant ? String( prompt.variant ).toUpperCase() : __( 'No variant', 'newspack-popups' ) ),
+											( prompt.variant ? String( prompt.variant ).toUpperCase() : __( 'No version', 'newspack-popups' ) ),
 										prompt.status_label || prompt.status
 									);
 									return (

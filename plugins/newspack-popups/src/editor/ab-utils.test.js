@@ -2,7 +2,7 @@
  * Pure helpers behind the A/B Test panel. The panel's own tests stub the editor
  * stores; these run the logic the panel delegates to with no stubs at all.
  */
-import { slugifyTestId, isEligiblePlacement, splitSummary, promptLacksGoalBlock, testPromptWarnings } from './ab-utils';
+import { slugifyTestId, isEligiblePlacement, splitSummary, promptLacksGoalBlock, missingGoalBlockMessage, testPromptWarnings } from './ab-utils';
 
 describe( 'slugifyTestId', () => {
 	// Expected values are what the server's sanitize_test_id() stores for the same
@@ -25,7 +25,7 @@ it( 'treats manual and custom placements as ineligible', () => {
 } );
 
 it( 'summarizes the split from the control share', () => {
-	expect( splitSummary( 60 ) ).toBe( '60% control, 40% challenger' );
+	expect( splitSummary( 60 ) ).toBe( '60% see A, 40% see B' );
 } );
 
 it( 'flags a missing goal block only for goals with a known block', () => {
@@ -33,6 +33,12 @@ it( 'flags a missing goal block only for goals with a known block', () => {
 	expect( promptLacksGoalBlock( 'donation', [ 'core/paragraph', 'newspack-blocks/donate' ] ) ).toBe( false );
 	expect( promptLacksGoalBlock( 'link_click', [ 'core/paragraph' ] ) ).toBe( false );
 	expect( promptLacksGoalBlock( '', [] ) ).toBe( false );
+} );
+
+it( 'names the block a goal needs', () => {
+	expect( missingGoalBlockMessage( 'donation' ) ).toContain( 'Donate block' );
+	expect( missingGoalBlockMessage( 'subscription' ) ).toContain( 'Checkout Button block' );
+	expect( missingGoalBlockMessage( 'form_submission' ) ).toContain( "can't fill in a form" );
 } );
 
 it( 'warns when another prompt holds the same variant', () => {
@@ -44,6 +50,6 @@ it( 'warns when another prompt holds the same variant', () => {
 	expect( testPromptWarnings( { postId: 2, variant: 'b', prompts } ) ).toHaveLength( 0 );
 	// A variant this editor doesn't offer can still be stored elsewhere; the message names it.
 	expect( testPromptWarnings( { postId: 2, variant: 'c', prompts: [ { id: 3, variant: 'c' } ] } ) ).toEqual( [
-		'Another prompt is already variant C of this test.',
+		'Another prompt in this test is already version C. Choose a different version.',
 	] );
 } );

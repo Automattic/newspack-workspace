@@ -343,7 +343,7 @@ final class Newspack_Popups_AB_Tests {
 		) {
 			return new WP_Error(
 				'newspack_popups_ab_ineligible_placement',
-				__( "Prompts with a manual or custom placement can't be part of an A/B test. Clear the Test ID or change the placement.", 'newspack-popups' ),
+				__( 'A/B tests only work on prompts that Newspack places for you. Clear the test name or choose another placement.', 'newspack-popups' ),
 				[ 'status' => 400 ]
 			);
 		}
@@ -374,7 +374,7 @@ final class Newspack_Popups_AB_Tests {
 			if ( ! $is_autosave && ( ! is_scalar( $value ) || (string) $value !== (string) $stored_value ) ) {
 				return new WP_Error(
 					'rest_cannot_update',
-					__( "You don't have permission to change this prompt's A/B test settings. If someone changed its test while you were editing, reload the editor and try again.", 'newspack-popups' ),
+					__( "You can't change this prompt's test settings. If someone else just edited it, reload and try again.", 'newspack-popups' ),
 					[
 						'status' => rest_authorization_required_code(),
 						'key'    => $meta_key,

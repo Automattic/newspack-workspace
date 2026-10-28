@@ -67,8 +67,8 @@ const AB_TESTING = {
 	ineligible_placements: [ 'manual', 'custom1' ],
 };
 
-const INELIGIBLE = "Prompts with a manual or custom placement can't be part of an A/B test.";
-const MISSING_BLOCK = 'This prompt has no block that records this goal. Add one, or choose another goal.';
+const INELIGIBLE = 'A/B tests only work on prompts that Newspack places for you.';
+const MISSING_BLOCK = "Readers can't donate from this prompt. Add a Donate block, or choose another goal.";
 
 let onMetaFieldChange;
 
@@ -103,15 +103,15 @@ describe( 'ABTestPanel', () => {
 	it( 'shows only the Test ID field until one is set', () => {
 		renderPanel();
 
-		expect( screen.getByLabelText( 'Test ID' ) ).toBeTruthy();
-		expect( screen.getByText( /Give the control and its challenger the same Test ID/ ) ).toBeTruthy();
-		expect( screen.queryByLabelText( 'Variant' ) ).toBeNull();
-		expect( screen.queryByLabelText( 'Conversion goal' ) ).toBeNull();
+		expect( screen.getByLabelText( 'Test name' ) ).toBeTruthy();
+		expect( screen.getByText( /Prompts with the same test name are compared with each other/ ) ).toBeTruthy();
+		expect( screen.queryByLabelText( 'Version' ) ).toBeNull();
+		expect( screen.queryByLabelText( 'Goal' ) ).toBeNull();
 	} );
 
 	it( 'keeps what was typed in the field until focus leaves it, and writes the slug', () => {
 		const { rerender } = renderPanel();
-		const field = () => screen.getByLabelText( 'Test ID' );
+		const field = () => screen.getByLabelText( 'Test name' );
 
 		fireEvent.change( field(), { target: { value: 'spring-' } } );
 		expect( field().value ).toBe( 'spring-' );
@@ -126,7 +126,7 @@ describe( 'ABTestPanel', () => {
 	it( 'slugs a typed Test ID and makes the prompt the control', () => {
 		renderPanel();
 
-		fireEvent.change( screen.getByLabelText( 'Test ID' ), { target: { value: 'Spring Drive' } } );
+		fireEvent.change( screen.getByLabelText( 'Test name' ), { target: { value: 'Spring Drive' } } );
 
 		expect( onMetaFieldChange ).toHaveBeenCalledWith( {
 			newspack_popups_ab_test_id: 'spring-drive',
@@ -137,7 +137,7 @@ describe( 'ABTestPanel', () => {
 	it( 'clearing the Test ID resets the variant and the goal too', () => {
 		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'b', newspack_popups_ab_test_goal: 'donation' } );
 
-		fireEvent.change( screen.getByLabelText( 'Test ID' ), { target: { value: '' } } );
+		fireEvent.change( screen.getByLabelText( 'Test name' ), { target: { value: '' } } );
 
 		expect( onMetaFieldChange ).toHaveBeenCalledWith( {
 			newspack_popups_ab_test_id: '',
@@ -148,20 +148,20 @@ describe( 'ABTestPanel', () => {
 
 	it( 'offers the control share on the control only, with the split spelled out', () => {
 		const { unmount } = renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'a', newspack_popups_ab_control_share: 60 } );
-		expect( screen.getByLabelText( 'Control share' ) ).toBeTruthy();
-		expect( screen.getByText( '60% control, 40% challenger' ) ).toBeTruthy();
+		expect( screen.getByLabelText( 'Readers who see A' ) ).toBeTruthy();
+		expect( screen.getByText( '60% see A, 40% see B' ) ).toBeTruthy();
 		unmount();
 
 		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'b' } );
-		expect( screen.queryByLabelText( 'Control share' ) ).toBeNull();
+		expect( screen.queryByLabelText( 'Readers who see A' ) ).toBeNull();
 	} );
 
 	it( 'shows a stored variant the editor does not offer, and leaves it alone', () => {
 		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'c' } );
 
-		const option = screen.getByRole( 'option', { name: 'Unsupported variant (C)' } );
+		const option = screen.getByRole( 'option', { name: 'Unsupported version (C)' } );
 		expect( option.disabled ).toBe( true );
-		expect( screen.getByLabelText( 'Variant' ).value ).toBe( 'c' );
+		expect( screen.getByLabelText( 'Version' ).value ).toBe( 'c' );
 		expect( onMetaFieldChange ).not.toHaveBeenCalled();
 	} );
 
@@ -171,13 +171,13 @@ describe( 'ABTestPanel', () => {
 		expect( screen.getByRole( 'note' ).dataset.status ).toBe( 'warning' );
 		// Standing state, not the result of an action: nothing to announce on mount.
 		expect( screen.getByRole( 'note' ).dataset.spoken ).toBe( '' );
-		expect( screen.getByLabelText( 'Test ID' ).disabled ).toBe( true );
+		expect( screen.getByLabelText( 'Test name' ).disabled ).toBe( true );
 		unmount();
 
 		renderPanel( { placement: 'manual', newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'a' } );
 		const note = screen.getAllByRole( 'note' )[ 0 ];
 		expect( note.dataset.status ).toBe( 'error' );
-		expect( note.textContent ).toContain( 'Clear the Test ID or change the placement before saving.' );
+		expect( note.textContent ).toContain( 'Clear the test name or choose another placement to save.' );
 	} );
 
 	it( 'renders read-only for a user the site excludes from managing tests', () => {
@@ -185,7 +185,7 @@ describe( 'ABTestPanel', () => {
 
 		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'a', newspack_popups_ab_test_goal: 'donation' } );
 
-		expect( screen.getByText( "Your role can view this prompt's A/B test settings but not change them." ) ).toBeTruthy();
+		expect( screen.getByText( "You can see this test's settings but can't change them." ) ).toBeTruthy();
 		expect( allInputs().length ).toBeGreaterThan( 2 );
 		allInputs().forEach( input => expect( input.disabled ).toBe( true ) );
 	} );
@@ -217,10 +217,10 @@ describe( 'ABTestPanel', () => {
 
 		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: '' } );
 
-		const option = screen.getByRole( 'option', { name: 'Select a variant' } );
+		const option = screen.getByRole( 'option', { name: 'Select a version' } );
 		expect( option.disabled ).toBe( true );
-		expect( screen.getByLabelText( 'Variant' ).value ).toBe( '' );
-		expect( await screen.findByText( 'No variant · Draft' ) ).toBeTruthy();
+		expect( screen.getByLabelText( 'Version' ).value ).toBe( '' );
+		expect( await screen.findByText( 'No version · Draft' ) ).toBeTruthy();
 		expect( onMetaFieldChange ).not.toHaveBeenCalled();
 	} );
 
@@ -236,8 +236,8 @@ describe( 'ABTestPanel', () => {
 		expect( link.getAttribute( 'href' ) ).toBe( 'http://example.test/post.php?post=1' );
 		expect( screen.getByText( 'A (control) · Published' ) ).toBeTruthy();
 		expect( screen.queryByText( 'Me' ) ).toBeNull();
-		expect( screen.getByRole( 'list', { name: 'Other prompts in this test' } ) ).toBeTruthy();
-		expect( screen.getByText( 'Another prompt is already the control of this test.' ) ).toBeTruthy();
+		expect( screen.getByRole( 'list', { name: 'Other versions in this test' } ) ).toBeTruthy();
+		expect( screen.getByText( 'Another prompt in this test is already version A. Choose a different version.' ) ).toBeTruthy();
 		expect( apiFetch ).toHaveBeenCalledWith( { path: '/newspack-popups/v1/ab-tests/x' } );
 	} );
 } );
