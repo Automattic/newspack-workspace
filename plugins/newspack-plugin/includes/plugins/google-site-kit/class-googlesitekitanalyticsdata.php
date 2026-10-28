@@ -43,7 +43,7 @@ class GoogleSiteKitAnalyticsData extends Module {
 	 *
 	 * @return bool
 	 */
-	public function is_authenticated() {
+	public function is_authenticated(): bool {
 		return $this->authentication->is_authenticated();
 	}
 
@@ -54,7 +54,7 @@ class GoogleSiteKitAnalyticsData extends Module {
 	 * @param array  $request     Report request in the Data API's JSON shape.
 	 * @return array The response in the same shape.
 	 */
-	public function run_report( $property_id, array $request ) {
+	public function run_report( string $property_id, array $request ): array {
 		$response = $this->get_service( 'analyticsdata' )->properties->runReport( 'properties/' . $property_id, new RunReportRequest( $request ) );
 		$decoded = json_decode( wp_json_encode( $response->toSimpleObject() ), true );
 		return is_array( $decoded ) ? $decoded : [];

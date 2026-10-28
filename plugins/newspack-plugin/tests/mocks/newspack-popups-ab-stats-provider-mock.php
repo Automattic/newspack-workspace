@@ -1,14 +1,20 @@
 <?php
 /**
- * Newspack_Popups_AB_Stats_Provider stub for tests.
+ * Newspack_Popups_AB_Stats_Provider for tests.
  *
  * Newspack Campaigns declares the interface a stats provider implements. CI
- * runs each plugin's suite alone, so it is never loaded here; this stub
- * mirrors it so `GA4_AB_Stats_Provider` can be declared. Keep the three
- * method signatures identical to the interface in newspack-popups.
+ * runs each plugin's suite alone, so the real file is loaded when the sibling
+ * plugin is checked out beside this one (the monorepo), and mirrored here
+ * otherwise. The mirror has to match the interface's three signatures; a
+ * monorepo run fails on the real declaration the moment they drift.
  *
  * @package Newspack\Tests
  */
+
+$newspack_popups_interface = dirname( __DIR__, 3 ) . '/newspack-popups/includes/interface-newspack-popups-ab-stats-provider.php';
+if ( ! interface_exists( 'Newspack_Popups_AB_Stats_Provider' ) && file_exists( $newspack_popups_interface ) ) {
+	require_once $newspack_popups_interface;
+}
 
 if ( ! interface_exists( 'Newspack_Popups_AB_Stats_Provider' ) ) {
 	/**

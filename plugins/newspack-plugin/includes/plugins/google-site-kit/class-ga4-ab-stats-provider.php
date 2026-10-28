@@ -28,7 +28,6 @@ defined( 'ABSPATH' ) || exit;
 final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider {
 
 	const SLUG                  = 'ga4-site-kit';
-	const MAX_REQUESTS_PER_TEST = 4;
 	const ROW_LIMIT             = 100;
 	const LOGGER_HEADER         = 'NEWSPACK-GA4-AB-STATS';
 
@@ -44,8 +43,9 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 
 	/**
 	 * The dimensions the requests use. All are GA4 custom dimensions that
-	 * `GA4_Custom_Dimensions` registers on every connected property; the
-	 * parameter names are the ones the tracking code sends.
+	 * `GA4_Custom_Dimensions` registers when the feature that sends them is
+	 * on; the parameter names are the ones the tracking code sends. A report
+	 * on a dimension the property lacks fails with the API's own message.
 	 */
 	const DIM_PROMPT       = 'customEvent:newspack_popup_id';
 	const DIM_LOGGED_IN    = 'customEvent:logged_in';
@@ -68,16 +68,9 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 	 * Runs one report: `( string $property_id, array $request )` returning the
 	 * response as an array, or a WP_Error. Null means Site Kit's runner.
 	 *
-	 * @var callable|null
+	 * @var \Closure|null
 	 */
-	private $runner;
-
-	/**
-	 * Reports run for the test in progress, against MAX_REQUESTS_PER_TEST.
-	 *
-	 * @var int
-	 */
-	private $requests_made = 0;
+	private ?\Closure $runner;
 
 	/**
 	 * Constructor.
@@ -85,7 +78,7 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 	 * @param callable|null $runner Report runner; tests inject one.
 	 */
 	public function __construct( ?callable $runner = null ) {
-		$this->runner = $runner;
+		$this->runner = $runner ? \Closure::fromCallable( $runner ) : null;
 	}
 
 	/**
@@ -102,7 +95,7 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 	 *
 	 * @return true|WP_Error
 	 */
-	public function is_available() {
+	public function is_available(): bool|WP_Error {
 		if ( null !== $this->runner ) {
 			return true;
 		}
@@ -125,10 +118,11 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 	 * two reports, so a reader who completed both is counted twice.
 	 *
 	 * GA4 withholds rows from a user-count report when they could identify
-	 * someone, which on a small site can empty the whole report. When the
-	 * readers report comes back thresholded, every report is rerun counting
-	 * events instead, the result says so in `unit`, and the logged-in split
-	 * is skipped to stay within the request budget.
+	 * someone, which on a small site can empty a whole report, and a
+	 * conversions report is the smallest. When any report comes back
+	 * thresholded, the whole set is rerun counting events instead and the
+	 * result says so in `unit`; the split runs in both modes, so the
+	 * logged-in share is never a placeholder. At most eight reports per test.
 	 *
 	 * @param array  $test  Test, with `variants` keyed by letter, each carrying a prompt `id`.
 	 * @param string $goal  Conversion goal.
@@ -159,57 +153,62 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 			'note'     => __( 'Counts update once a day.', 'newspack' ),
 			'variants' => $variants,
 		];
-		$prompt_ids = array_keys( $letters );
-		if ( empty( $prompt_ids ) ) {
+		if ( empty( $letters ) ) {
 			return $result;
 		}
 
-		$this->requests_made = 0;
-		$metric              = self::METRIC_READERS;
-
-		$readers = $this->run( $property_id, self::build_readers_request( $prompt_ids, $start, $end, $metric, false ) );
-		if ( is_wp_error( $readers ) ) {
-			return $readers;
-		}
-		if ( self::is_thresholded( $readers ) ) {
-			$metric         = self::METRIC_EVENTS;
+		$counted = $this->count( $property_id, $letters, $variants, $goal, $start, $end, self::METRIC_READERS );
+		if ( null === $counted ) {
 			$result['unit'] = 'events';
-			$readers        = $this->run( $property_id, self::build_readers_request( $prompt_ids, $start, $end, $metric, false ) );
-			if ( is_wp_error( $readers ) ) {
-				return $readers;
-			}
+			$counted        = $this->count( $property_id, $letters, $variants, $goal, $start, $end, self::METRIC_EVENTS );
 		}
-		foreach ( self::parse_rows( $readers ) as $prompt_id => $row ) {
-			if ( isset( $letters[ $prompt_id ] ) ) {
-				$result['variants'][ $letters[ $prompt_id ] ]['readers'] += $row['count'];
-			}
+		if ( is_wp_error( $counted ) ) {
+			return $counted;
 		}
-
-		if ( self::METRIC_READERS === $metric ) {
-			$split = $this->run( $property_id, self::build_readers_request( $prompt_ids, $start, $end, $metric, true ) );
-			if ( is_wp_error( $split ) ) {
-				return $split;
-			}
-			foreach ( self::parse_rows( $split, true ) as $prompt_id => $row ) {
-				if ( isset( $letters[ $prompt_id ] ) ) {
-					$result['variants'][ $letters[ $prompt_id ] ]['logged_in_readers'] += $row['logged_in'];
-				}
-			}
+		if ( is_array( $counted ) ) {
+			$result['variants'] = $counted;
 		}
-
-		foreach ( self::build_conversion_requests( $goal, $prompt_ids, $start, $end, $metric ) as $request ) {
-			$conversions = $this->run( $property_id, $request );
-			if ( is_wp_error( $conversions ) ) {
-				return $conversions;
-			}
-			foreach ( self::parse_rows( $conversions ) as $prompt_id => $row ) {
-				if ( isset( $letters[ $prompt_id ] ) ) {
-					$result['variants'][ $letters[ $prompt_id ] ]['conversions'] += $row['count'];
-				}
-			}
-		}
-
 		return $result;
+	}
+
+	/**
+	 * One counting pass in one metric: readers, the logged-in split, then the
+	 * goal's conversion reports.
+	 *
+	 * @param string $property_id GA4 property ID.
+	 * @param array  $letters     Prompt ID => variant letter.
+	 * @param array  $variants    Zero-filled counts per letter.
+	 * @param string $goal        Conversion goal.
+	 * @param string $start       Window start, Y-m-d.
+	 * @param string $end         Window end, Y-m-d.
+	 * @param string $metric      METRIC_READERS or METRIC_EVENTS.
+	 * @return array|WP_Error|null Counts per letter; null when GA4 withheld rows from any report.
+	 */
+	private function count( string $property_id, array $letters, array $variants, string $goal, string $start, string $end, string $metric ): array|WP_Error|null {
+		$prompt_ids = array_keys( $letters );
+		$requests   = [
+			'readers'           => [ self::build_readers_request( $prompt_ids, $start, $end, $metric, false ) ],
+			'logged_in_readers' => [ self::build_readers_request( $prompt_ids, $start, $end, $metric, true ) ],
+			'conversions'       => self::build_conversion_requests( $goal, $prompt_ids, $start, $end, $metric ),
+		];
+		foreach ( $requests as $field => $set ) {
+			foreach ( $set as $request ) {
+				$response = $this->run( $property_id, $request );
+				if ( is_wp_error( $response ) ) {
+					return $response;
+				}
+				if ( self::is_thresholded( $response ) ) {
+					return null;
+				}
+				$split = 'logged_in_readers' === $field;
+				foreach ( self::parse_rows( $response, $split ) as $prompt_id => $row ) {
+					if ( isset( $letters[ $prompt_id ] ) ) {
+						$variants[ $letters[ $prompt_id ] ][ $field ] += $split ? $row['logged_in'] : $row['count'];
+					}
+				}
+			}
+		}
+		return $variants;
 	}
 
 	/**
@@ -351,19 +350,14 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 	}
 
 	/**
-	 * Run one report within the per-test budget.
+	 * Run one report through the injected runner, or Site Kit.
 	 *
 	 * @param string $property_id GA4 property ID.
 	 * @param array  $request     Report request.
 	 * @return array|WP_Error
 	 */
-	private function run( string $property_id, array $request ) {
-		if ( $this->requests_made >= self::MAX_REQUESTS_PER_TEST ) {
-			return new WP_Error( 'newspack_ga4_ab_stats_budget', __( 'This test needs more reports than the stats source allows.', 'newspack' ) );
-		}
-		++$this->requests_made;
-		$runner   = $this->runner ?? [ $this, 'run_through_site_kit' ];
-		$response = call_user_func( $runner, $property_id, $request );
+	private function run( string $property_id, array $request ): array|WP_Error {
+		$response = $this->runner ? ( $this->runner )( $property_id, $request ) : $this->run_through_site_kit( $property_id, $request );
 		if ( is_wp_error( $response ) ) {
 			return $response;
 		}
@@ -371,89 +365,117 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 	}
 
 	/**
-	 * Whether the current user or Site Kit's owner holds a Site Kit token.
+	 * Whether the current user, or failing that Site Kit's Analytics owner,
+	 * holds a Site Kit token. Reads stored state only.
 	 *
 	 * @return bool
 	 */
-	private function has_credentials() {
+	private function has_credentials(): bool {
 		if ( ! GoogleSiteKit::is_active() ) {
 			return false;
 		}
 		try {
-			if ( self::site_kit_module()->is_authenticated() ) {
+			if ( self::has_token( 0 ) ) {
 				return true;
 			}
-			return (bool) $this->as_owner( fn() => self::site_kit_module()->is_authenticated() );
+			$owner_id = self::owner_id();
+			return $owner_id > 0 && $owner_id !== get_current_user_id() && self::has_token( $owner_id );
 		} catch ( \Throwable $e ) {
 			return false;
 		}
 	}
 
 	/**
-	 * Site Kit's runner: the report runs as the current user, and when that
-	 * user holds no Site Kit token, as the Analytics module's owner.
+	 * Site Kit's runner: the report runs with the current user's token, or
+	 * with the Analytics module owner's token when the current user has none.
 	 *
-	 * The dashboard's route is admin-only, so the owner's credentials are
-	 * lent only to someone who could already read the same numbers in the
-	 * Site Kit dashboard; the report is read-only and scoped to the
-	 * connected property.
+	 * Lending the owner's token widens nothing: the only callers are the
+	 * administrator-only A/B Tests page and its stats route, an administrator
+	 * can already read the stored token, and the report is read-only and
+	 * scoped to the connected property. The module is bound to the owner
+	 * through Site Kit's own user-options seam rather than by switching the
+	 * request's current user, so nothing else in the request runs as them.
 	 *
 	 * @param string $property_id GA4 property ID.
 	 * @param array  $request     Report request.
 	 * @return array|WP_Error
 	 */
-	private function run_through_site_kit( string $property_id, array $request ) {
+	private function run_through_site_kit( string $property_id, array $request ): array|WP_Error {
 		if ( ! GoogleSiteKit::is_active() ) {
 			return new WP_Error( 'newspack_ga4_ab_stats', __( 'Site Kit is not installed.', 'newspack' ) );
 		}
 		try {
-			$module = self::site_kit_module();
-			if ( ! $module->is_authenticated() ) {
-				$response = $this->as_owner( fn() => self::site_kit_module()->run_report( $property_id, $request ) );
-				if ( null === $response ) {
+			$user_id = 0;
+			if ( ! self::has_token( 0 ) ) {
+				$user_id = self::owner_id();
+				if ( $user_id <= 0 || $user_id === get_current_user_id() || ! self::has_token( $user_id ) ) {
 					return new WP_Error( 'newspack_ga4_ab_stats', __( 'Connect Google Analytics through Site Kit.', 'newspack' ) );
 				}
-				return $response;
 			}
-			return $module->run_report( $property_id, $request );
+			return self::site_kit_module( $user_id )->run_report( $property_id, $request );
 		} catch ( \Throwable $e ) {
-			Logger::log( 'GA4 report failed: ' . $e->getMessage(), self::LOGGER_HEADER );
-			$sentence = trim( strtok( $e->getMessage(), "\n" ) );
-			return new WP_Error( 'newspack_ga4_ab_stats', $sentence ? $sentence : __( 'Google Analytics did not answer.', 'newspack' ) );
+			Logger::error( 'GA4 report failed: ' . $e->getMessage(), self::LOGGER_HEADER );
+			$reason = self::reason_from( $e );
+			return new WP_Error( 'newspack_ga4_ab_stats', '' !== $reason ? $reason : __( 'Google Analytics did not answer.', 'newspack' ) );
 		}
 	}
 
 	/**
-	 * Run a callback as the Analytics module's owner, or return null when no
-	 * owner is recorded or the owner is the current user.
+	 * The sentence a failed report leaves for the page.
 	 *
-	 * @param callable $callback Callback.
-	 * @return mixed|null
+	 * Site Kit's Google client throws the raw HTTP error body as the exception
+	 * message, pretty-printed JSON whose first line is a brace, so the
+	 * `error.message` inside it is what a site administrator can act on. Any
+	 * other exception keeps its first line.
+	 *
+	 * @param \Throwable $e The exception.
+	 * @return string Empty when the message carries no sentence.
 	 */
-	private function as_owner( callable $callback ) {
-		$settings = get_option( self::SITE_KIT_SETTINGS_OPTION, [] );
-		$owner_id = is_array( $settings ) && ! empty( $settings['ownerID'] ) ? (int) $settings['ownerID'] : 0;
-		$previous = get_current_user_id();
-		if ( $owner_id <= 0 || $owner_id === $previous ) {
-			return null;
+	public static function reason_from( \Throwable $e ): string {
+		$message = trim( $e->getMessage() );
+		if ( '' === $message ) {
+			return '';
 		}
-		wp_set_current_user( $owner_id );
-		try {
-			return $callback();
-		} finally {
-			wp_set_current_user( $previous );
+		$decoded = json_decode( $message, true );
+		if ( is_array( $decoded ) ) {
+			$reason = $decoded['error']['message'] ?? '';
+			return is_string( $reason ) ? trim( $reason ) : '';
 		}
+		return trim( strtok( $message, "\n" ) );
 	}
 
 	/**
-	 * A Site Kit module bound to the current user. Built fresh per call
-	 * because the module reads its user at construction.
+	 * The Analytics module's owner, as Site Kit records it.
 	 *
+	 * @return int Zero when none is recorded.
+	 */
+	private static function owner_id(): int {
+		$settings = get_option( self::SITE_KIT_SETTINGS_OPTION, [] );
+		return is_array( $settings ) && ! empty( $settings['ownerID'] ) ? (int) $settings['ownerID'] : 0;
+	}
+
+	/**
+	 * Whether a user holds a Site Kit token, read from their user options.
+	 *
+	 * @param int $user_id User ID; zero for the current user.
+	 * @return bool
+	 */
+	private static function has_token( int $user_id ): bool {
+		$context = new \Google\Site_Kit\Context( GOOGLESITEKIT_PLUGIN_MAIN_FILE );
+		$token   = new \Google\Site_Kit\Core\Authentication\Token( new \Google\Site_Kit\Core\Storage\User_Options( $context, $user_id ) );
+		return (bool) $token->has();
+	}
+
+	/**
+	 * A Site Kit module whose client authenticates as one user.
+	 *
+	 * @param int $user_id User ID; zero for the current user.
 	 * @return GoogleSiteKitAnalyticsData
 	 */
-	private static function site_kit_module() {
+	private static function site_kit_module( int $user_id ): GoogleSiteKitAnalyticsData {
 		require_once NEWSPACK_ABSPATH . 'includes/plugins/google-site-kit/class-googlesitekitanalyticsdata.php';
-		return new GoogleSiteKitAnalyticsData( new \Google\Site_Kit\Context( GOOGLESITEKIT_PLUGIN_MAIN_FILE ) );
+		$context = new \Google\Site_Kit\Context( GOOGLESITEKIT_PLUGIN_MAIN_FILE );
+		return new GoogleSiteKitAnalyticsData( $context, null, new \Google\Site_Kit\Core\Storage\User_Options( $context, $user_id ) );
 	}
 
 	/**

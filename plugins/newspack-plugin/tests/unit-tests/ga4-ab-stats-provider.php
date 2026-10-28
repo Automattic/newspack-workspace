@@ -237,7 +237,7 @@ class Newspack_Test_GA4_AB_Stats_Provider extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A form-submission test needs two conversion reports and still fits the budget.
+	 * A form-submission test needs two conversion reports, so four reports in all when nothing is withheld.
 	 */
 	public function test_get_counts_stays_within_four_requests_for_form_submission() {
 		$calls    = 0;
@@ -266,7 +266,9 @@ class Newspack_Test_GA4_AB_Stats_Provider extends WP_UnitTestCase {
 	 * Without Site Kit there is no runner, and the provider says so without calling out.
 	 */
 	public function test_unavailable_without_site_kit() {
-		$this->assertFalse( defined( 'GOOGLESITEKIT_PLUGIN_MAIN_FILE' ), 'This test is only meaningful with Site Kit absent.' );
+		if ( defined( 'GOOGLESITEKIT_PLUGIN_MAIN_FILE' ) ) {
+			$this->markTestSkipped( 'Only meaningful with Site Kit absent.' );
+		}
 		$provider  = new GA4_AB_Stats_Provider();
 		$available = $provider->is_available();
 		$this->assertWPError( $available );
@@ -275,12 +277,13 @@ class Newspack_Test_GA4_AB_Stats_Provider extends WP_UnitTestCase {
 	}
 
 	/**
-	 * When GA4 withholds reader rows, every report is rerun as event counts and the split is skipped.
+	 * When GA4 withholds reader rows, every report is rerun as event counts, the split included.
 	 */
 	public function test_thresholded_readers_fall_back_to_event_counts() {
 		$responses = [
 			$this->response( [ [ 12, 3 ] ], true ),
 			$this->response( [ [ 12, 250 ], [ 13, 240 ] ] ),
+			$this->response( [ [ 12, 'yes', 100 ], [ 12, 'no', 150 ], [ 13, 'no', 240 ] ] ),
 			$this->response( [ [ 12, 10 ], [ 13, 12 ] ] ),
 		];
 		$metrics   = [];
@@ -291,18 +294,48 @@ class Newspack_Test_GA4_AB_Stats_Provider extends WP_UnitTestCase {
 			}
 		);
 		$counts    = $provider->get_counts( $this->test_entry(), 'link_click', self::START, self::END );
-		$this->assertSame( [ 'totalUsers', 'eventCount', 'eventCount' ], $metrics );
+		$this->assertSame( [ 'totalUsers', 'eventCount', 'eventCount', 'eventCount' ], $metrics );
 		$this->assertSame( 'events', $counts['unit'] );
 		$this->assertSame( 250, $counts['variants']['a']['readers'] );
 		$this->assertSame( 240, $counts['variants']['b']['readers'] );
 		$this->assertSame( 12, $counts['variants']['b']['conversions'] );
-		$this->assertSame( 0, $counts['variants']['a']['logged_in_readers'] );
+		$this->assertSame( 100, $counts['variants']['a']['logged_in_readers'] );
+		$this->assertSame( 0, $counts['variants']['b']['logged_in_readers'] );
 	}
 
 	/**
-	 * The fallback on a form-submission test is the widest case, and still four reports.
+	 * A withheld conversions report also switches the whole test to event counts, so a
+	 * small arm never reads as zero conversions against a counted one.
 	 */
-	public function test_form_submission_with_fallback_stays_within_budget() {
+	public function test_thresholded_conversions_rerun_everything_as_events() {
+		$responses = [
+			$this->response( [ [ 12, 100 ], [ 13, 90 ] ] ),
+			$this->response( [ [ 12, 'yes', 40 ], [ 13, 'yes', 30 ] ] ),
+			$this->response( [ [ 12, 5 ] ], true ),
+			$this->response( [ [ 12, 300 ], [ 13, 280 ] ] ),
+			$this->response( [ [ 12, 'yes', 120 ] ] ),
+			$this->response( [ [ 12, 9 ], [ 13, 7 ] ] ),
+		];
+		$metrics   = [];
+		$provider  = new GA4_AB_Stats_Provider(
+			function ( $property_id, $request ) use ( &$responses, &$metrics ) {
+				$metrics[] = $request['metrics'][0]['name'];
+				return array_shift( $responses );
+			}
+		);
+		$counts    = $provider->get_counts( $this->test_entry(), 'link_click', self::START, self::END );
+		$this->assertSame( [ 'totalUsers', 'totalUsers', 'totalUsers', 'eventCount', 'eventCount', 'eventCount' ], $metrics );
+		$this->assertSame( 'events', $counts['unit'] );
+		$this->assertSame( 280, $counts['variants']['b']['readers'] );
+		$this->assertSame( 7, $counts['variants']['b']['conversions'] );
+		$this->assertSame( 120, $counts['variants']['a']['logged_in_readers'] );
+	}
+
+	/**
+	 * The fallback on a form-submission test is the widest case: the withheld readers report, then
+	 * four event-count reports.
+	 */
+	public function test_form_submission_with_fallback_is_five_reports() {
 		$calls    = 0;
 		$provider = new GA4_AB_Stats_Provider(
 			function () use ( &$calls ) {
@@ -311,8 +344,19 @@ class Newspack_Test_GA4_AB_Stats_Provider extends WP_UnitTestCase {
 			}
 		);
 		$counts   = $provider->get_counts( $this->test_entry(), 'form_submission', self::START, self::END );
-		$this->assertSame( 4, $calls );
+		$this->assertSame( 5, $calls );
 		$this->assertSame( 'events', $counts['unit'] );
+	}
+
+	/**
+	 * A Data API error body is reduced to its message; a plain exception keeps its first line.
+	 */
+	public function test_api_error_body_is_reduced_to_its_message() {
+		$body = "{\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Field customEvent:product_type is not a valid dimension.\",\n    \"status\": \"INVALID_ARGUMENT\"\n  }\n}";
+		$this->assertSame( 'Field customEvent:product_type is not a valid dimension.', GA4_AB_Stats_Provider::reason_from( new \Exception( $body ) ) );
+		$this->assertSame( 'Token has been expired or revoked.', GA4_AB_Stats_Provider::reason_from( new \RuntimeException( "Token has been expired or revoked.\nTrace: here" ) ) );
+		$this->assertSame( '', GA4_AB_Stats_Provider::reason_from( new \Exception( '{"error":{"code":500}}' ) ) );
+		$this->assertSame( '', GA4_AB_Stats_Provider::reason_from( new \Exception( '' ) ) );
 	}
 
 	/**
