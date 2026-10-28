@@ -83,8 +83,8 @@ final class Copyright_Date_Block {
 			esc_html( $year )
 		);
 
-		if ( ! empty( $attributes['showSiteTitle'] ) ) {
-			$site_title = esc_html( get_bloginfo( 'name' ) );
+		$site_title = ! empty( $attributes['showSiteTitle'] ) ? esc_html( get_bloginfo( 'name' ) ) : '';
+		if ( '' !== $site_title ) {
 			if ( $attributes['linkSiteTitle'] ?? true ) {
 				// Multibranded Site filters this to the current brand's page.
 				$site_url   = apply_filters( 'newspack_site_title_url', home_url( '/' ) );

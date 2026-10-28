@@ -60,16 +60,16 @@ export default function Edit( { attributes, setAttributes } ) {
 				allowedFormats={ [ 'core/link' ] }
 			/>
 			<span className={ `${ blockClass }__year` }>{ year }</span>
-			{ showSiteTitle && (
+			{ showSiteTitle && siteTitle && (
 				<>
 					{ ' ' }
 					<span className={ `${ blockClass }__site-title` }>
 						{ linkSiteTitle ? (
 							<a href="#copyright-site-title-pseudo-link" onClick={ event => event.preventDefault() }>
-								{ decodeEntities( siteTitle || '' ) }
+								{ decodeEntities( siteTitle ) }
 							</a>
 						) : (
-							decodeEntities( siteTitle || '' )
+							decodeEntities( siteTitle )
 						) }
 					</span>
 				</>

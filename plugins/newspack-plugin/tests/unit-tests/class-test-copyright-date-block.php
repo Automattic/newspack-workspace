@@ -237,6 +237,10 @@ class Newspack_Test_Copyright_Date_Block extends WP_UnitTestCase {
 			]
 		);
 		$this->assertStringContainsString( '<span class="' . $this->block_class . '__site-title">Tom &amp; Jerry</span>', $unlinked, 'Unlinked site title should render as escaped text.' );
+
+		update_option( 'blogname', '' );
+		$empty = $this->render_block( [ 'showSiteTitle' => true ] );
+		$this->assertStringNotContainsString( $this->block_class . '__site-title', $empty, 'An empty site title should not render an empty home link.' );
 	}
 
 	/**
