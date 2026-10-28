@@ -1,6 +1,6 @@
 {
 	"apiVersion": 3,
-	"name": "newspack/copyright-date",
+	"name": "newspack/copyright",
 	"title": "Copyright",
 	"category": "newspack",
 	"description": "Display a copyright line with the current year and, optionally, the site title.",

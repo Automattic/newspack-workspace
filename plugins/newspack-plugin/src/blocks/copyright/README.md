@@ -1,6 +1,6 @@
 # Copyright Block
 
-A Gutenberg block that displays a copyright line: the current year, optionally the site title, and configurable prefix and suffix text. Its block name is `newspack/copyright-date`, from when it was titled Copyright Date; saved content references that name, so it stays.
+A Gutenberg block that displays a copyright line: the current year, optionally the site title, and configurable prefix and suffix text.
 
 ## Overview
 
@@ -30,7 +30,7 @@ The site title is read with `get_bloginfo( 'name' )` on every render, so it foll
 All footer patterns in the Newspack Block Theme include this block with the site title shown:
 
 ```html
-<!-- wp:newspack/copyright-date {"showSiteTitle":true} /-->
+<!-- wp:newspack/copyright {"showSiteTitle":true} /-->
 ```
 
 ## Styling

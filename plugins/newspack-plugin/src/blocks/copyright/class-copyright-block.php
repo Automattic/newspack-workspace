@@ -1,23 +1,23 @@
 <?php
 /**
- * Copyright Date Block.
+ * Copyright block.
  *
  * @package Newspack
  */
 
-namespace Newspack\Blocks\CopyrightDate;
+namespace Newspack\Blocks\Copyright;
 
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Copyright_Date_Block Class
+ * Copyright_Block Class
  */
-final class Copyright_Date_Block {
+final class Copyright_Block {
 
 	/**
 	 * Block name.
 	 */
-	public const BLOCK_NAME = 'newspack/copyright-date';
+	public const BLOCK_NAME = 'newspack/copyright';
 
 	/**
 	 * Initializes the block.
@@ -29,7 +29,7 @@ final class Copyright_Date_Block {
 	}
 
 	/**
-	 * Register the copyright date block.
+	 * Register the Copyright block.
 	 *
 	 * @return void
 	 */
@@ -117,4 +117,4 @@ final class Copyright_Date_Block {
 	}
 }
 
-Copyright_Date_Block::init();
+Copyright_Block::init();

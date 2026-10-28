@@ -56,7 +56,7 @@ const defaultProps = {
 	setAttributes: jest.fn(),
 };
 
-describe( 'Copyright Date Edit', () => {
+describe( 'Copyright Edit', () => {
 	beforeEach( () => {
 		jest.clearAllMocks();
 	} );

@@ -984,7 +984,7 @@
 					"lineHeight": "var( --wp--custom--line-height--x-small )"
 				}
 			},
-			"newspack/copyright-date": {
+			"newspack/copyright": {
 				"elements": {
 					"link": {
 						":hover": {

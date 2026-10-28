@@ -1,19 +1,19 @@
 <?php
 /**
- * Tests for Copyright Date block.
+ * Tests for the Copyright block.
  *
  * @package Newspack\Tests
- * @covers \Newspack\Blocks\CopyrightDate\Copyright_Date_Block
+ * @covers \Newspack\Blocks\Copyright\Copyright_Block
  */
 
-use Newspack\Blocks\CopyrightDate\Copyright_Date_Block;
+use Newspack\Blocks\Copyright\Copyright_Block;
 
 /**
- * Test class for the Copyright Date Block.
+ * Test class for the Copyright block.
  *
- * @group copyright-date-block
+ * @group copyright-block
  */
-class Newspack_Test_Copyright_Date_Block extends WP_UnitTestCase {
+class Newspack_Test_Copyright_Block extends WP_UnitTestCase {
 
 	/**
 	 * Block CSS class derived from block name.
@@ -28,11 +28,11 @@ class Newspack_Test_Copyright_Date_Block extends WP_UnitTestCase {
 	public function set_up(): void {
 		parent::set_up();
 
-		require_once NEWSPACK_ABSPATH . 'src/blocks/copyright-date/class-copyright-date-block.php';
-		$this->block_class = wp_get_block_default_classname( Copyright_Date_Block::BLOCK_NAME );
+		require_once NEWSPACK_ABSPATH . 'src/blocks/copyright/class-copyright-block.php';
+		$this->block_class = wp_get_block_default_classname( Copyright_Block::BLOCK_NAME );
 
-		if ( ! \WP_Block_Type_Registry::get_instance()->is_registered( Copyright_Date_Block::BLOCK_NAME ) ) {
-			Copyright_Date_Block::register_block();
+		if ( ! \WP_Block_Type_Registry::get_instance()->is_registered( Copyright_Block::BLOCK_NAME ) ) {
+			Copyright_Block::register_block();
 		}
 	}
 
@@ -40,8 +40,8 @@ class Newspack_Test_Copyright_Date_Block extends WP_UnitTestCase {
 	 * Tear down.
 	 */
 	public function tear_down(): void {
-		if ( \WP_Block_Type_Registry::get_instance()->is_registered( Copyright_Date_Block::BLOCK_NAME ) ) {
-			unregister_block_type( Copyright_Date_Block::BLOCK_NAME );
+		if ( \WP_Block_Type_Registry::get_instance()->is_registered( Copyright_Block::BLOCK_NAME ) ) {
+			unregister_block_type( Copyright_Block::BLOCK_NAME );
 		}
 
 		parent::tear_down();
@@ -55,7 +55,7 @@ class Newspack_Test_Copyright_Date_Block extends WP_UnitTestCase {
 	 */
 	private function render_block( array $attributes = [] ) {
 		$attrs = $attributes ? ' ' . wp_json_encode( $attributes ) : '';
-		return do_blocks( '<!-- wp:' . Copyright_Date_Block::BLOCK_NAME . $attrs . ' /-->' );
+		return do_blocks( '<!-- wp:' . Copyright_Block::BLOCK_NAME . $attrs . ' /-->' );
 	}
 
 	/**

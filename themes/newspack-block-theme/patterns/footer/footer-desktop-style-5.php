@@ -78,7 +78,7 @@
 
 			<!-- wp:group {"lock":{"move":false,"remove":true},"style":{"spacing":{"blockGap":"var:preset|spacing|20","padding":{"bottom":"var:preset|spacing|50"}}},"fontSize":"x-small","layout":{"type":"flex","flexWrap":"wrap","justifyContent":"space-between"}} -->
 			<div class="wp-block-group has-x-small-font-size" style="padding-bottom:var(--wp--preset--spacing--50)">
-				<!-- wp:newspack/copyright-date {"lock":{"move":false,"remove":true},"showSiteTitle":true} /-->
+				<!-- wp:newspack/copyright {"lock":{"move":false,"remove":true},"showSiteTitle":true} /-->
 
 				<!-- wp:paragraph {"lock":{"move":true,"remove":true},"metadata":{"name":"<?php esc_html_e( 'Powered By', 'newspack-block-theme' ); ?>"},"className":"powered-by"} -->
 				<p class="powered-by"><a href="https://newspack.com"><?php esc_html_e( 'Powered by Newspack', 'newspack-block-theme' ); ?></a></p>

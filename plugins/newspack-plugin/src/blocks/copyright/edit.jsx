@@ -18,7 +18,7 @@ import metadata from './block.json';
 const blockClass = getBlockDefaultClassName( metadata.name );
 
 /**
- * Edit component for the copyright date block.
+ * Edit component for the Copyright block.
  *
  * @param {Object}   props               Component props.
  * @param {Object}   props.attributes    Block attributes.
