@@ -226,10 +226,10 @@ final class Newspack_Popups_AB_Dashboard {
 	}
 
 	/**
-	 * The reporting window: the test's first publish date through today, UTC.
+	 * The reporting window: the day the split began through today, UTC.
 	 *
 	 * @param array $test One entry of Newspack_Popups_AB_Tests::get_tests().
-	 * @return array|null `[ 'start', 'end' ]` as Y-m-d, or null before anything is published.
+	 * @return array|null `[ 'start', 'end' ]` as Y-m-d, or null until both arms are published.
 	 */
 	public static function get_window( $test ) {
 		if ( empty( $test['started_at'] ) ) {

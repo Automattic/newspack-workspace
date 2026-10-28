@@ -66,9 +66,10 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * A test starts when its first prompt was published.
+	 * A test starts when the split does: once both the control and a challenger
+	 * are published, which is the later of the two dates.
 	 */
-	public function test_get_tests_started_at_is_the_earliest_published_date() {
+	public function test_get_tests_started_at_is_when_both_arms_were_published() {
 		$this->create_test_variant(
 			'dates',
 			'a',
@@ -87,7 +88,17 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 				'post_date'     => '2026-10-01 00:00:00',
 			]
 		);
-		$this->assertSame( '2026-10-01T00:00:00Z', Newspack_Popups_AB_Tests::get_tests()[0]['started_at'] );
+		$this->assertSame( '2026-10-05T00:00:00Z', Newspack_Popups_AB_Tests::get_tests()[0]['started_at'] );
+	}
+
+	/**
+	 * A published control with only a draft challenger has not started: readers
+	 * still see the control alone.
+	 */
+	public function test_get_tests_started_at_is_null_until_a_challenger_is_published() {
+		$this->create_test_variant( 'solo', 'a' );
+		$this->create_test_variant( 'solo', 'b', null, [ 'post_status' => 'draft' ] );
+		$this->assertNull( Newspack_Popups_AB_Tests::get_tests()[0]['started_at'] );
 	}
 
 	/**

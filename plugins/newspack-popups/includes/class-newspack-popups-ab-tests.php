@@ -467,9 +467,11 @@ final class Newspack_Popups_AB_Tests {
 	 * @return array[] Ordered by Test ID. Each `[ 'test_id', 'goal', 'goal_label',
 	 *                 'control_share', 'started_at', 'variants' ]`. `control_share`
 	 *                 comes from the control prompt, or DEFAULT_CONTROL_SHARE without
-	 *                 one. `started_at` is the earliest publish date among the
-	 *                 test's published prompts, ISO 8601 UTC, or null when none is
-	 *                 published. `variants` maps the letter to
+	 *                 one. `started_at` is when the split began: the later of the
+	 *                 control's publish date and the earliest challenger's, ISO 8601
+	 *                 UTC, or null until both are published. Readers see the control
+	 *                 alone before then, so an earlier date would count traffic the
+	 *                 test never split. `variants` maps the letter to
 	 *                 `[ 'id', 'title', 'status', 'status_label', 'edit_link' ]`.
 	 */
 	public static function get_tests() {
@@ -501,6 +503,7 @@ final class Newspack_Popups_AB_Tests {
 					'control_share' => self::DEFAULT_CONTROL_SHARE,
 					'started_at'    => null,
 					'variants'      => [],
+					'published_at'  => [],
 				];
 			}
 			$test   = &$tests[ $test_id ];
@@ -528,10 +531,7 @@ final class Newspack_Popups_AB_Tests {
 			}
 
 			if ( 'publish' === $prompt->post_status && '0000-00-00 00:00:00' !== $prompt->post_date_gmt ) {
-				$published = gmdate( 'Y-m-d\TH:i:s\Z', strtotime( $prompt->post_date_gmt . ' UTC' ) );
-				if ( null === $test['started_at'] || $published < $test['started_at'] ) {
-					$test['started_at'] = $published;
-				}
+				$test['published_at'][ $variant ] = gmdate( 'Y-m-d\TH:i:s\Z', strtotime( $prompt->post_date_gmt . ' UTC' ) );
 			}
 			unset( $test );
 		}
@@ -540,11 +540,33 @@ final class Newspack_Popups_AB_Tests {
 		foreach ( $tests as &$test ) {
 			ksort( $test['variants'] );
 			$test['goal_label'] = $labels[ $test['goal'] ] ?? '';
+			$test['started_at'] = self::get_started_at( $test['published_at'] );
+			unset( $test['published_at'] );
 		}
 		unset( $test );
 		ksort( $tests );
 
 		return array_values( $tests );
+	}
+
+	/**
+	 * When a test's split began: the moment both a control and a challenger
+	 * were published. Before that, readers see the control alone.
+	 *
+	 * @param string[] $published_at Publish dates keyed by variant letter, ISO 8601 UTC.
+	 * @return string|null The later of the control's date and the earliest
+	 *                     challenger's, or null until both exist.
+	 */
+	private static function get_started_at( $published_at ) {
+		if ( empty( $published_at['a'] ) ) {
+			return null;
+		}
+		$challengers = $published_at;
+		unset( $challengers['a'] );
+		if ( empty( $challengers ) ) {
+			return null;
+		}
+		return max( $published_at['a'], min( $challengers ) );
 	}
 
 	/**
