@@ -327,7 +327,8 @@ final class Newspack_Popups_AB_Dashboard {
 	 * @return array Per letter: `readers`, `conversions`, `logged_in_readers`, `rate`, `lift`.
 	 */
 	private static function merge_counts( $discovered, $reported ) {
-		$variants = [];
+		$variants  = [];
+		$raw_rates = [];
 		foreach ( array_keys( $discovered ) as $letter ) {
 			$row                 = is_array( $reported[ $letter ] ?? null ) ? $reported[ $letter ] : [];
 			$readers             = max( 0, (int) ( $row['readers'] ?? 0 ) );
@@ -339,11 +340,14 @@ final class Newspack_Popups_AB_Dashboard {
 				'rate'              => Newspack_Popups_AB_Stats::rate( $readers, $conversions ),
 				'lift'              => null,
 			];
+			// Lift is taken from the unrounded rate: two arms that both display
+			// as 0.01% can still differ by a third.
+			$raw_rates[ $letter ] = $readers > 0 ? 100 * $conversions / $readers : null;
 		}
-		$control_rate = $variants['a']['rate'] ?? null;
+		$control_rate = $raw_rates['a'] ?? null;
 		foreach ( $variants as $letter => &$variant ) {
 			if ( 'a' !== $letter ) {
-				$variant['lift'] = Newspack_Popups_AB_Stats::lift( $control_rate, $variant['rate'] );
+				$variant['lift'] = Newspack_Popups_AB_Stats::lift( $control_rate, $raw_rates[ $letter ] );
 			}
 		}
 		unset( $variant );

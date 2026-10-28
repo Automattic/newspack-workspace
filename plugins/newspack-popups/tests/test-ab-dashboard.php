@@ -254,11 +254,25 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 		$this->assertSame( 'readers', $data['source']['unit'] );
 		$this->assertSame( 3.0, $data['variants']['a']['rate'] );
 		$this->assertSame( 4.07, $data['variants']['b']['rate'] );
-		$this->assertSame( 35.7, $data['variants']['b']['lift'] );
+		$this->assertSame( 35.6, $data['variants']['b']['lift'] );
 		$this->assertNull( $data['variants']['a']['lift'] );
 		$this->assertIsFloat( $data['comparisons']['b']['confidence'] );
 		$this->assertContains( $data['comparisons']['b']['label'], [ 'directional', 'reliable' ] );
 		$this->assertArrayNotHasKey( 'a', $data['comparisons'] );
+	}
+
+	/**
+	 * Lift comes from the raw counts: two rates that display the same can still
+	 * differ by a third.
+	 */
+	public function test_lift_is_computed_before_the_rates_are_rounded() {
+		$this->as_admin();
+		$this->create_running_test();
+		$this->use_provider( $this->counts( 1000000, 100, 1500000, 200 ) );
+		$data = $this->stats_request( 't' )->get_data();
+		$this->assertSame( 0.01, $data['variants']['a']['rate'] );
+		$this->assertSame( 0.01, $data['variants']['b']['rate'] );
+		$this->assertSame( 33.3, $data['variants']['b']['lift'] );
 	}
 
 	/**
