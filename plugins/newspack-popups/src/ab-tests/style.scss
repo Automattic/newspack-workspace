@@ -1,0 +1,87 @@
+.newspack-popups-ab-tests {
+	max-width: 960px;
+
+	&__test {
+		margin-top: 16px;
+	}
+
+	&__goal {
+		margin-left: 12px;
+		color: #757575;
+	}
+
+	&__badge {
+		display: inline-block;
+		padding: 2px 8px;
+		border-radius: 2px;
+		font-size: 12px;
+		line-height: 1.5;
+		background: #f0f0f0;
+		color: #1e1e1e;
+
+		&.is-running,
+		&.is-reliable {
+			background: #00a32a;
+			color: #fff;
+		}
+
+		&.is-directional {
+			background: #dba617;
+			color: #1e1e1e;
+		}
+
+		&.is-incomplete {
+			background: #d63638;
+			color: #fff;
+		}
+	}
+
+	&__allocation {
+		display: flex;
+		height: 28px;
+		margin-bottom: 16px;
+		border-radius: 2px;
+		overflow: hidden;
+		font-size: 12px;
+		color: #fff;
+	}
+
+	&__allocation-segment {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		white-space: nowrap;
+
+		&.is-control {
+			background: #2271b1;
+		}
+
+		&.is-challenger {
+			background: #00a32a;
+		}
+
+		& + & {
+			border-left: 1px solid #fff;
+		}
+	}
+
+	&__variants {
+		margin: 0 0 16px;
+
+		li {
+			margin-bottom: 4px;
+		}
+	}
+
+	&__status {
+		color: #757575;
+	}
+
+	&__stats {
+		margin-top: 16px;
+	}
+
+	&__table {
+		margin: 12px 0;
+	}
+}
