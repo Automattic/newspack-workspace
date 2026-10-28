@@ -4,6 +4,7 @@
 import { useState } from '@wordpress/element';
 import { useInstanceId } from '@wordpress/compose';
 import { __ } from '@wordpress/i18n';
+import { speak } from '@wordpress/a11y';
 import apiFetch from '@wordpress/api-fetch';
 import { decodeEntities } from '@wordpress/html-entities';
 import { Button, Card, CardBody, CardFooter, CardHeader, Notice } from '@wordpress/components';
@@ -38,13 +39,16 @@ const TestCard = ( { test, data } ) => {
 		apiFetch( {
 			path: `/${ data.rest_base }/ab-tests/${ test.test_id }/stats${ refresh ? '?refresh=1' : '' }`,
 		} )
-			.then( setStats )
+			.then( response => {
+				setStats( response );
+				speak( __( 'Stats loaded.', 'newspack-popups' ) );
+			} )
 			.catch( err => setError( err.message || __( 'The stats could not be loaded.', 'newspack-popups' ) ) )
 			.finally( () => setLoading( false ) );
 	};
 
 	return (
-		<Card className="newspack-popups-ab-tests__test" aria-labelledby={ headingId }>
+		<Card className="newspack-popups-ab-tests__test" role="region" aria-labelledby={ headingId }>
 			<CardHeader>
 				<h2 id={ headingId } className="newspack-popups-ab-tests__title">
 					<code>{ test.test_id }</code>
@@ -97,6 +101,7 @@ const TestCard = ( { test, data } ) => {
 					variant="secondary"
 					onClick={ () => load( Boolean( stats ) ) }
 					disabled={ loading || ! data.provider.available }
+					accessibleWhenDisabled
 					isBusy={ loading }
 				>
 					{ stats ? __( 'Refresh stats', 'newspack-popups' ) : __( 'Load stats', 'newspack-popups' ) }
