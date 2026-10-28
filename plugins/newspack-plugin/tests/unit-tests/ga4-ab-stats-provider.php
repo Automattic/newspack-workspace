@@ -56,7 +56,7 @@ class Newspack_Test_GA4_AB_Stats_Provider extends WP_UnitTestCase {
 	/**
 	 * A two-arm test as the dashboard passes it.
 	 */
-	private function test_entry() {
+	private function fixture_test() {
 		return [
 			'test_id'  => 't',
 			'goal'     => 'link_click',
@@ -108,7 +108,7 @@ class Newspack_Test_GA4_AB_Stats_Provider extends WP_UnitTestCase {
 					'endDate'   => self::END,
 				],
 			],
-			$request['dateRanges'] 
+			$request['dateRanges']
 		);
 		$this->assertSame( 100, $request['limit'] );
 		$this->assertSame(
@@ -189,7 +189,7 @@ class Newspack_Test_GA4_AB_Stats_Provider extends WP_UnitTestCase {
 					'logged_in' => 0,
 				],
 			],
-			GA4_AB_Stats_Provider::parse_rows( $this->response( [ [ 12, 100 ] ] ) ) 
+			GA4_AB_Stats_Provider::parse_rows( $this->response( [ [ 12, 100 ] ] ) )
 		);
 		$this->assertSame( [], GA4_AB_Stats_Provider::parse_rows( [] ) );
 		$this->assertFalse( GA4_AB_Stats_Provider::is_thresholded( $this->response( [] ) ) );
@@ -215,7 +215,7 @@ class Newspack_Test_GA4_AB_Stats_Provider extends WP_UnitTestCase {
 		$this->assertSame( 'ga4-site-kit', $provider->get_slug() );
 		$this->assertTrue( $provider->is_available() );
 
-		$counts = $provider->get_counts( $this->test_entry(), 'link_click', self::START, self::END );
+		$counts = $provider->get_counts( $this->fixture_test(), 'link_click', self::START, self::END );
 		$this->assertSame( 'readers', $counts['unit'] );
 		$this->assertSame(
 			[
@@ -247,7 +247,7 @@ class Newspack_Test_GA4_AB_Stats_Provider extends WP_UnitTestCase {
 				return $this->response( [] );
 			}
 		);
-		$counts   = $provider->get_counts( $this->test_entry(), 'form_submission', self::START, self::END );
+		$counts   = $provider->get_counts( $this->fixture_test(), 'form_submission', self::START, self::END );
 		$this->assertSame( 4, $calls );
 		$this->assertSame( 0, $counts['variants']['a']['readers'] );
 	}
@@ -257,7 +257,7 @@ class Newspack_Test_GA4_AB_Stats_Provider extends WP_UnitTestCase {
 	 */
 	public function test_runner_error_is_returned_as_wp_error() {
 		$provider = new GA4_AB_Stats_Provider( fn() => new WP_Error( 'ga4', 'Quota exceeded.' ) );
-		$result   = $provider->get_counts( $this->test_entry(), 'link_click', self::START, self::END );
+		$result   = $provider->get_counts( $this->fixture_test(), 'link_click', self::START, self::END );
 		$this->assertWPError( $result );
 		$this->assertSame( 'Quota exceeded.', $result->get_error_message() );
 	}
@@ -273,7 +273,7 @@ class Newspack_Test_GA4_AB_Stats_Provider extends WP_UnitTestCase {
 		$available = $provider->is_available();
 		$this->assertWPError( $available );
 		$this->assertSame( 'Site Kit is not installed.', $available->get_error_message() );
-		$this->assertWPError( $provider->get_counts( $this->test_entry(), 'link_click', self::START, self::END ) );
+		$this->assertWPError( $provider->get_counts( $this->fixture_test(), 'link_click', self::START, self::END ) );
 	}
 
 	/**
@@ -293,7 +293,7 @@ class Newspack_Test_GA4_AB_Stats_Provider extends WP_UnitTestCase {
 				return array_shift( $responses );
 			}
 		);
-		$counts    = $provider->get_counts( $this->test_entry(), 'link_click', self::START, self::END );
+		$counts    = $provider->get_counts( $this->fixture_test(), 'link_click', self::START, self::END );
 		$this->assertSame( [ 'totalUsers', 'eventCount', 'eventCount', 'eventCount' ], $metrics );
 		$this->assertSame( 'events', $counts['unit'] );
 		$this->assertSame( 250, $counts['variants']['a']['readers'] );
@@ -323,7 +323,7 @@ class Newspack_Test_GA4_AB_Stats_Provider extends WP_UnitTestCase {
 				return array_shift( $responses );
 			}
 		);
-		$counts    = $provider->get_counts( $this->test_entry(), 'link_click', self::START, self::END );
+		$counts    = $provider->get_counts( $this->fixture_test(), 'link_click', self::START, self::END );
 		$this->assertSame( [ 'totalUsers', 'totalUsers', 'totalUsers', 'eventCount', 'eventCount', 'eventCount' ], $metrics );
 		$this->assertSame( 'events', $counts['unit'] );
 		$this->assertSame( 280, $counts['variants']['b']['readers'] );
@@ -343,7 +343,7 @@ class Newspack_Test_GA4_AB_Stats_Provider extends WP_UnitTestCase {
 				return $this->response( [], 4 === $calls );
 			}
 		);
-		$counts   = $provider->get_counts( $this->test_entry(), 'form_submission', self::START, self::END );
+		$counts   = $provider->get_counts( $this->fixture_test(), 'form_submission', self::START, self::END );
 		$this->assertSame( 8, $calls );
 		$this->assertSame( 'events', $counts['unit'] );
 	}
@@ -366,7 +366,7 @@ class Newspack_Test_GA4_AB_Stats_Provider extends WP_UnitTestCase {
 				return array_shift( $responses );
 			}
 		);
-		$counts    = $provider->get_counts( $this->test_entry(), 'link_click', self::START, self::END );
+		$counts    = $provider->get_counts( $this->fixture_test(), 'link_click', self::START, self::END );
 		$this->assertSame( 4, $calls );
 		$this->assertSame( 'events', $counts['unit'] );
 		$this->assertSame( 250, $counts['variants']['a']['readers'] );
@@ -381,7 +381,7 @@ class Newspack_Test_GA4_AB_Stats_Provider extends WP_UnitTestCase {
 	 */
 	public function test_unflagged_counts_carry_the_plain_note() {
 		$provider = new GA4_AB_Stats_Provider( fn() => $this->response( [ [ 12, 3 ] ] ) );
-		$counts   = $provider->get_counts( $this->test_entry(), 'link_click', self::START, self::END );
+		$counts   = $provider->get_counts( $this->fixture_test(), 'link_click', self::START, self::END );
 		$this->assertSame( 'Counts update once a day.', $counts['note'] );
 	}
 
@@ -446,6 +446,6 @@ class Newspack_Test_GA4_AB_Stats_Provider extends WP_UnitTestCase {
 	public function test_missing_property_is_an_error() {
 		delete_option( 'googlesitekit_analytics-4_settings' );
 		$provider = new GA4_AB_Stats_Provider( fn() => $this->response( [] ) );
-		$this->assertWPError( $provider->get_counts( $this->test_entry(), '', self::START, self::END ) );
+		$this->assertWPError( $provider->get_counts( $this->fixture_test(), '', self::START, self::END ) );
 	}
 }

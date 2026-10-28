@@ -143,7 +143,7 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 	 * @param string $end   Window end, Y-m-d.
 	 * @return array|WP_Error
 	 */
-	public function get_counts( array $test, string $goal, string $start, string $end ) {
+	public function get_counts( array $test, string $goal, string $start, string $end ): array|WP_Error {
 		$property_id = self::get_property_id();
 		if ( ! $property_id ) {
 			return new WP_Error( 'newspack_ga4_ab_stats', __( 'Connect Google Analytics through Site Kit.', 'newspack' ) );
