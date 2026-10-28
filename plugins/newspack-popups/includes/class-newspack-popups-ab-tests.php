@@ -419,7 +419,7 @@ final class Newspack_Popups_AB_Tests {
 	 * applies 'readable' to an explicit list and ignores it for 'any'.
 	 *
 	 * @param string $test_id Test ID.
-	 * @return array[] Each `[ 'id', 'title', 'variant', 'status', 'status_label', 'edit_link' ]`; `edit_link` is null when the current user can't edit that prompt.
+	 * @return array[] Each `[ 'id', 'title', 'variant', 'goal', 'control_share', 'status', 'status_label', 'edit_link' ]`; `edit_link` is null when the current user can't edit that prompt. `goal` and `control_share` are the stored values, which only the control's count.
 	 */
 	public static function get_test_prompts( $test_id ) {
 		$test_id = self::sanitize_test_id( $test_id );
@@ -443,13 +443,16 @@ final class Newspack_Popups_AB_Tests {
 		$list = [];
 		foreach ( $prompts as $prompt ) {
 			$status = get_post_status_object( $prompt->post_status );
+			$share  = get_post_meta( $prompt->ID, self::META_CONTROL_SHARE, true );
 			$list[] = [
-				'id'           => (int) $prompt->ID,
-				'title'        => $prompt->post_title,
-				'variant'      => (string) get_post_meta( $prompt->ID, self::META_VARIANT, true ),
-				'status'       => $prompt->post_status,
-				'status_label' => $status ? $status->label : $prompt->post_status,
-				'edit_link'    => get_edit_post_link( $prompt->ID, 'raw' ),
+				'id'            => (int) $prompt->ID,
+				'title'         => $prompt->post_title,
+				'variant'       => (string) get_post_meta( $prompt->ID, self::META_VARIANT, true ),
+				'goal'          => self::sanitize_goal( get_post_meta( $prompt->ID, self::META_GOAL, true ) ),
+				'control_share' => '' !== $share && null !== $share ? self::sanitize_control_share( $share ) : self::DEFAULT_CONTROL_SHARE,
+				'status'        => $prompt->post_status,
+				'status_label'  => $status ? $status->label : $prompt->post_status,
+				'edit_link'     => get_edit_post_link( $prompt->ID, 'raw' ),
 			];
 		}
 		return $list;

@@ -789,7 +789,7 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	 * who can edit prompts.
 	 */
 	public function test_test_prompts_route_lists_every_prompt_in_the_test() {
-		$control    = $this->create_test_variant( 'lookup-test', 'a' );
+		$control    = $this->create_test_variant( 'lookup-test', 'a', null, [], 60 );
 		$challenger = $this->create_test_variant( 'lookup-test', 'b', null, [ 'post_status' => 'draft' ] );
 		$this->create_test_variant( 'lookup-test', 'b', null, [ 'post_status' => 'trash' ] );
 		$this->create_test_variant( 'other-test', 'a' );
@@ -804,6 +804,7 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		self::assertSame( [ $control, $challenger ], wp_list_pluck( $response->get_data(), 'id' ) );
 		self::assertSame( [ 'a', 'b' ], wp_list_pluck( $response->get_data(), 'variant' ) );
 		self::assertStringContainsString( 'post=' . $control, $response->get_data()[0]['edit_link'] );
+		update_post_meta( $control, Newspack_Popups_AB_Tests::META_GOAL, 'donation' );
 
 		self::assertSame( [], rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/no-such-test' ) )->get_data() );
 		self::assertSame( 404, rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/Not%20A%20Slug' ) )->get_status() );
@@ -817,6 +818,8 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	 * a user without read_private_posts, which is the rule the Prompts list and
 	 * core's REST endpoint already apply. Drafts stay listed to everyone who can
 	 * edit prompts, since a challenger's author needs to see the control.
+		self::assertSame( [ 'donation', '' ], wp_list_pluck( $response->get_data(), 'goal' ) );
+		self::assertSame( [ 60, 50 ], wp_list_pluck( $response->get_data(), 'control_share' ) );
 	 */
 	public function test_test_prompts_route_hides_other_authors_private_prompts() {
 		$admin_id = self::factory()->user->create( [ 'role' => 'administrator' ] );

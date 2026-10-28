@@ -116,6 +116,8 @@ const ABTestPanel = ( {
 	];
 
 	const others = prompts.filter( prompt => prompt.id !== postId );
+	const control = 'a' !== variant ? others.find( prompt => 'a' === prompt.variant ) : null;
+	const effectiveGoal = control ? control.goal || '' : goal;
 	const warnings = testPromptWarnings( { postId, variant, prompts } );
 
 	// The notices describe standing state rather than the result of an action, so
@@ -175,19 +177,30 @@ const ABTestPanel = ( {
 							__next40pxDefaultSize
 						/>
 					) }
-					<SelectControl
-						label={ __( 'Goal', 'newspack-popups' ) }
-						help={ __( 'What a reader does that counts as a success.', 'newspack-popups' ) }
-						value={ goal }
-						options={ goalOptions }
-						onChange={ value => onMetaFieldChange( { [ META_GOAL ]: value } ) }
-						disabled={ ! canManage }
-						__nextHasNoMarginBottom
-						__next40pxDefaultSize
-					/>
-					{ promptLacksGoalBlock( goal, blockNames ) && (
+					{ control ? (
+						<p className="newspack-popups-ab-test__note">
+							{ sprintf(
+								// Translators: %1$s is the test's goal, %2$s the traffic split, such as "60% see A, 40% see B".
+								__( 'Goal: %1$s. %2$s. Set on version A.', 'newspack-popups' ),
+								goals[ effectiveGoal ] || __( 'none', 'newspack-popups' ),
+								splitSummary( control.control_share ?? 50 )
+							) }
+						</p>
+					) : (
+						<SelectControl
+							label={ __( 'Goal', 'newspack-popups' ) }
+							help={ __( 'What a reader does that counts as a success.', 'newspack-popups' ) }
+							value={ goal }
+							options={ goalOptions }
+							onChange={ value => onMetaFieldChange( { [ META_GOAL ]: value } ) }
+							disabled={ ! canManage }
+							__nextHasNoMarginBottom
+							__next40pxDefaultSize
+						/>
+					) }
+					{ promptLacksGoalBlock( effectiveGoal, blockNames ) && (
 						<Notice status="warning" spokenMessage="" isDismissible={ false }>
-							{ missingGoalBlockMessage( goal ) }
+							{ missingGoalBlockMessage( effectiveGoal ) }
 						</Notice>
 					) }
 					{ others.length > 0 && (

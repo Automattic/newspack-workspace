@@ -210,6 +210,50 @@ describe( 'ABTestPanel', () => {
 		expect( screen.queryByText( MISSING_BLOCK ) ).toBeNull();
 	} );
 
+	it( 'sets the goal and split on version A only, so a challenger sees a read-only summary', async () => {
+		apiFetch.mockResolvedValue( [
+			{
+				id: 1,
+				variant: 'a',
+				title: 'Control',
+				goal: 'donation',
+				control_share: 60,
+				status: 'publish',
+				status_label: 'Published',
+				edit_link: null,
+			},
+		] );
+
+		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'b' } );
+
+		expect( await screen.findByText( 'Goal: Donation. 60% see A, 40% see B. Set on version A.' ) ).toBeTruthy();
+		expect( screen.queryByLabelText( 'Goal' ) ).toBeNull();
+		expect( screen.queryByLabelText( 'Readers who see A' ) ).toBeNull();
+		expect( screen.getByText( MISSING_BLOCK ) ).toBeTruthy();
+	} );
+
+	it( 'keeps the Goal select on a challenger while the test has no control', async () => {
+		apiFetch.mockResolvedValue( [
+			{ id: 3, variant: 'b', title: 'Other', goal: '', control_share: 50, status: 'draft', status_label: 'Draft', edit_link: null },
+		] );
+
+		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'b' } );
+
+		expect( await screen.findByText( 'B (challenger) · Draft' ) ).toBeTruthy();
+		expect( screen.getByLabelText( 'Goal' ) ).toBeTruthy();
+	} );
+
+	it( 'keeps the Goal select on the control', async () => {
+		apiFetch.mockResolvedValue( [
+			{ id: 1, variant: 'b', title: 'Other', goal: '', control_share: 50, status: 'draft', status_label: 'Draft', edit_link: null },
+		] );
+
+		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'a' } );
+
+		expect( await screen.findByText( 'B (challenger) · Draft' ) ).toBeTruthy();
+		expect( screen.getByLabelText( 'Goal' ) ).toBeTruthy();
+	} );
+
 	it( 'does not show a stored test with no variant as the control', async () => {
 		apiFetch.mockResolvedValue( [
 			{ id: 1, variant: '', title: 'Other', status: 'draft', status_label: 'Draft', edit_link: 'http://example.test/post.php?post=1' },
