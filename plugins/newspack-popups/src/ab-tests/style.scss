@@ -16,7 +16,7 @@
 	}
 
 	&__goal {
-		color: wp-colors.$gray-700;
+		color: var( --wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700} );
 		font-weight: normal;
 	}
 
@@ -26,7 +26,7 @@
 		margin-block-end: wp-vars.$grid-unit-20;
 		border-radius: wp-vars.$radius-small;
 		overflow: hidden;
-		font-size: 12px;
+		font-size: wp-vars.$font-size-small;
 		color: wp-colors.$white;
 	}
 
@@ -42,6 +42,8 @@
 
 		&.is-challenger {
 			background: wp-colors.$alert-green;
+			/* White on this green is about 2.5:1; dark text clears 4.5:1. */
+			color: wp-colors.$gray-900;
 		}
 
 		& + & {
@@ -58,7 +60,7 @@
 	}
 
 	&__status {
-		color: wp-colors.$gray-700;
+		color: var( --wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700} );
 	}
 
 	&__stats {
