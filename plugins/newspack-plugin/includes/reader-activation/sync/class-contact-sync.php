@@ -101,6 +101,10 @@ class Contact_Sync extends Sync {
 	 *   - permanent_config:  site-level ESP account problem; actionable.
 	 *   - benign:            the contact already exists; no retry needed.
 	 *
+	 * The classes are checked in this order, and the order matters: Mailchimp's
+	 * compliance-state refusal also says "already a list member", so it has to
+	 * meet 'compliance state' before the benign signatures.
+	 *
 	 * Anything not matched here is treated as 'transient' and retried.
 	 */
 	private const ERROR_SIGNATURES = [
@@ -112,10 +116,19 @@ class Contact_Sync extends Sync {
 			'contact email address is not valid',
 			'email address already exists',
 			'not a valid choice',
+			'compliance state',
+			'invalid email address and cannot be imported',
+			'could not be validated',
 		],
 		'permanent_config'  => [
 			'api access has been disabled',
 			'payment required',
+			'api key invalid',
+			'invalid mailchimp api key',
+			'user disabled',
+			'authorization failure',
+			'invalid interest id',
+			'requested resource could not be found',
 		],
 		'benign'            => [
 			'member exists',
@@ -133,6 +146,9 @@ class Contact_Sync extends Sync {
 	 *     (they fall through to 'transient') rather than skipped as benign.
 	 *   - 'was permanently deleted' is benign here: the contact is already gone
 	 *     from the ESP, which is the deletion end-state for both modes.
+	 *   - 'requested resource could not be found' is left out: the text does not
+	 *     say whether the audience or the contact is missing, and no later event
+	 *     re-sends a deletion that ends early, so it keeps retrying.
 	 */
 	private const DELETION_ERROR_SIGNATURES = [
 		'permanent_contact' => [
@@ -142,10 +158,18 @@ class Contact_Sync extends Sync {
 			'contact email address is not valid',
 			'email address already exists',
 			'not a valid choice',
+			'compliance state',
+			'invalid email address and cannot be imported',
+			'could not be validated',
 		],
 		'permanent_config'  => [
 			'api access has been disabled',
 			'payment required',
+			'api key invalid',
+			'invalid mailchimp api key',
+			'user disabled',
+			'authorization failure',
+			'invalid interest id',
 		],
 		'benign'            => [
 			'was permanently deleted',
