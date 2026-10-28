@@ -102,6 +102,18 @@ describe( 'TestCard', () => {
 		await waitFor( () => expect( screen.getByText( 'Counts update once a day.' ) ).not.toBeNull() );
 	} );
 
+	it( 'shows the note while the test is still collecting', async () => {
+		apiFetch.mockResolvedValue( {
+			...stats( { state: 'collecting', note: 'Counts update once a day.' } ),
+			variants: {
+				a: { readers: 0, conversions: 0, rate: null, lift: null },
+				b: { readers: 0, conversions: 0, rate: null, lift: null },
+			},
+		} );
+		render( <TestCard test={ test } data={ data } /> );
+		await waitFor( () => expect( screen.getByText( 'Counts update once a day.' ) ).not.toBeNull() );
+	} );
+
 	it( 'leaves the note out when the source is unavailable', async () => {
 		apiFetch.mockResolvedValue( stats( { state: 'unavailable', reason: 'No source.', note: 'Counts update once a day.' } ) );
 		render( <TestCard test={ test } data={ data } /> );
