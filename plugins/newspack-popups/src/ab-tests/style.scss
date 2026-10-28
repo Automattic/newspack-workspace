@@ -24,7 +24,7 @@
 		display: flex;
 		height: 28px;
 		margin-block-end: wp-vars.$grid-unit-20;
-		border-radius: wp-vars.$radius-small;
+		border-radius: var( --wpds-border-radius-sm, #{wp-vars.$radius-small} );
 		overflow: hidden;
 		font-size: wp-vars.$font-size-small;
 		color: wp-colors.$white;
@@ -47,7 +47,7 @@
 		}
 
 		& + & {
-			border-inline-start: 1px solid wp-colors.$white;
+			border-inline-start: var( --wpds-border-width-xs, #{wp-vars.$border-width} ) solid wp-colors.$white;
 		}
 	}
 
