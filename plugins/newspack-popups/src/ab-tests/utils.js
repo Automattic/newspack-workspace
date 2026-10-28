@@ -9,7 +9,7 @@ const DASH = '—';
  * A test's state from its variants' post statuses.
  *
  * @param {Object} test A test from the boot data.
- * @return {string} 'running', 'draft' or 'incomplete'.
+ * @return {string} 'running', 'needs-attention', 'draft' or 'incomplete'.
  */
 export const getTestStatus = test => {
 	const variants = ( test && test.variants ) || {};
@@ -17,6 +17,9 @@ export const getTestStatus = test => {
 	const challengers = letters.filter( letter => letter !== 'a' );
 	if ( ! variants.a || challengers.length === 0 ) {
 		return 'incomplete';
+	}
+	if ( letters.some( letter => false === variants[ letter ].eligible ) ) {
+		return 'needs-attention';
 	}
 	return letters.every( letter => variants[ letter ].status === 'publish' ) ? 'running' : 'draft';
 };
@@ -31,6 +34,8 @@ export const getStatusLabel = status => {
 	switch ( status ) {
 		case 'running':
 			return __( 'Running', 'newspack-popups' );
+		case 'needs-attention':
+			return __( 'Needs attention', 'newspack-popups' );
 		case 'draft':
 			return __( 'Draft', 'newspack-popups' );
 		default:
@@ -97,6 +102,17 @@ export const getStatusIntent = status => {
 			return 'high';
 	}
 };
+
+/**
+ * A list of version letters in the page's language, such as "A and B".
+ *
+ * @param {string[]} letters Uppercase letters.
+ * @return {string} Joined list.
+ */
+export const formatLetterList = letters =>
+	typeof Intl !== 'undefined' && Intl.ListFormat
+		? new Intl.ListFormat( document.documentElement.lang || 'en', { type: 'conjunction' } ).format( letters )
+		: letters.join( ', ' );
 
 /**
  * Badge intent for a confidence label from the stats route.

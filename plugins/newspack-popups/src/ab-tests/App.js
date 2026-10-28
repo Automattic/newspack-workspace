@@ -15,7 +15,7 @@ import { EmptyState, Page } from 'newspack-components';
 import TestCard from './TestCard';
 import { getTestStatus } from './utils';
 
-const STATUS_ORDER = [ 'running', 'draft', 'incomplete' ];
+const STATUS_ORDER = [ 'running', 'needs-attention', 'draft', 'incomplete' ];
 
 /**
  * The A/B Tests page.
@@ -28,11 +28,15 @@ const App = ( { data } ) => {
 	return (
 		<Page
 			className="newspack-popups-ab-tests"
-			breadcrumbItems={ [
-				...( inAudienceMenu ? [ { label: __( 'Audience Management', 'newspack-popups' ) } ] : [] ),
-				{ label: __( 'Campaigns', 'newspack-popups' ), url: campaignsUrl },
-				{ label: __( 'A/B Tests', 'newspack-popups' ) },
-			] }
+			breadcrumbItems={
+				inAudienceMenu
+					? [
+							{ label: __( 'Audience Management', 'newspack-popups' ) },
+							{ label: __( 'Campaigns', 'newspack-popups' ), url: campaignsUrl },
+							{ label: __( 'A/B Tests', 'newspack-popups' ) },
+					  ]
+					: [ { label: __( 'Campaigns', 'newspack-popups' ) }, { label: __( 'A/B Tests', 'newspack-popups' ) } ]
+			}
 			subTitle={ __( 'See which version of each prompt gets more readers to act.', 'newspack-popups' ) }
 		>
 			<div className="newspack-popups-ab-tests__content">

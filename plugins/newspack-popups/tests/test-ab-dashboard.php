@@ -644,6 +644,24 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 		);
 		$this->assertTrue( $data['in_audience_menu'] );
 		$this->assertStringContainsString( 'page=newspack-audience-campaigns', $data['campaigns_url'] );
+
+		$this->plant_asset_fixtures( [ 'wp-element' ], 'audience-fixture' );
+		$hook_property = new ReflectionProperty( Newspack_Popups_AB_Dashboard::class, 'page_hook' );
+		$page_hook     = $hook_property->getValue();
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
+		Newspack_Popups_AB_Dashboard::enqueue( $page_hook );
+		$GLOBALS['hook_suffix'] = $page_hook; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- WordPress sets it per admin request.
+		$with_page              = Newspack_Popups_AB_Dashboard::add_body_class( 'wp-admin' );
+		$GLOBALS['hook_suffix'] = 'toplevel_page_other'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		$elsewhere              = Newspack_Popups_AB_Dashboard::add_body_class( 'wp-admin' );
+		unset( $GLOBALS['hook_suffix'] );
+		remove_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
+		$hook_property->setValue( null, false );
+
+		$this->assertNotEmpty( $page_hook );
+		$this->assertArrayHasKey( Newspack_Popups_AB_Dashboard::SCRIPT_HANDLE, wp_scripts()->registered );
+		$this->assertStringContainsString( Newspack_Popups_AB_Dashboard::BODY_CLASS, $with_page );
+		$this->assertSame( 'wp-admin', $elsewhere );
 	}
 
 	/**

@@ -59,12 +59,22 @@ final class Newspack_Popups_AB_Dashboard {
 	}
 
 	/**
+	 * Whether the current admin request is for this page. The hook suffix is
+	 * compared rather than the screen ID, which sanitize_key() mangles when the
+	 * parent menu's title is not Latin.
+	 *
+	 * @return bool
+	 */
+	private static function is_page_screen() {
+		return self::$page_hook && ( $GLOBALS['hook_suffix'] ?? '' ) === self::$page_hook;
+	}
+
+	/**
 	 * Other plugins' notices would render above the page header, as on the
 	 * other Newspack screens that drop them.
 	 */
 	public static function remove_admin_notices() {
-		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
-		if ( self::$page_hook && $screen && $screen->id === self::$page_hook ) {
+		if ( self::is_page_screen() ) {
 			remove_all_actions( current_action() );
 		}
 	}
@@ -135,8 +145,7 @@ final class Newspack_Popups_AB_Dashboard {
 	 * @return string
 	 */
 	public static function add_body_class( $classes ) {
-		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
-		if ( self::$page_hook && $screen && $screen->id === self::$page_hook ) {
+		if ( self::is_page_screen() ) {
 			$classes .= ' ' . self::BODY_CLASS;
 		}
 		return $classes;
@@ -271,12 +280,8 @@ final class Newspack_Popups_AB_Dashboard {
 		}
 
 		$window    = self::get_window( $test );
-		$provider      = self::get_provider();
-		$available     = self::availability( $provider );
-		$in_audience   = self::AUDIENCE_MENU_SLUG === self::get_parent_slug();
-		$campaigns_url = $in_audience
-			? admin_url( 'admin.php?page=' . self::CAMPAIGNS_MENU_SLUG . '#/campaigns' )
-			: admin_url( 'edit.php?post_type=' . Newspack_Popups::NEWSPACK_POPUPS_CPT );
+		$provider  = self::get_provider();
+		$available = self::availability( $provider );
 		$source    = [
 			'state'      => 'collecting',
 			'provider'   => self::provider_slug( $provider ),

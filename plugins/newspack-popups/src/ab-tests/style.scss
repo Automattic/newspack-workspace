@@ -108,6 +108,15 @@ body.newspack-popups-ab-tests-screen {
 		border-radius: var(--wpds-border-radius-xs, 2px);
 	}
 
+	&__table-scroll {
+		overflow-x: auto;
+
+		&:focus-visible {
+			outline: 2px solid var(--wpds-color-stroke-focus, #{wp-colors.$gray-900});
+			outline-offset: 2px;
+		}
+	}
+
 	&__table {
 		width: 100%;
 		border-collapse: collapse;

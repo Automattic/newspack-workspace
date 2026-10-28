@@ -19,6 +19,7 @@ import {
 	formatConfidence,
 	formatLift,
 	formatRate,
+	formatLetterList,
 	getCountLabel,
 	getLabelIntent,
 	getStatusIntent,
@@ -39,7 +40,7 @@ const getMissingRoleHint = variants =>
 		: __( 'Add version A: give another prompt this test name.', 'newspack-popups' );
 
 /**
- * One test: its split, its variants and, on request, their numbers.
+ * One test: its split, its variants and their results, loaded when the card opens.
  *
  * @param {Object} props      Props.
  * @param {Object} props.test A test from the boot data.
@@ -54,7 +55,8 @@ const TestCard = ( { test, data } ) => {
 	const letters = Object.keys( test.variants );
 	const duplicates = test.duplicates || [];
 	const shares = getShares( test.control_share, test.variants );
-	const hasStats = stats && stats.source.state !== 'unavailable';
+	const hasStarted = !! test.started_at;
+	const hasStats = hasStarted && stats && stats.source.state !== 'unavailable';
 
 	const ineligible = letters.filter( letter => false === test.variants[ letter ].eligible );
 
@@ -75,7 +77,7 @@ const TestCard = ( { test, data } ) => {
 	};
 
 	useEffect( () => {
-		if ( data.provider.available ) {
+		if ( data.provider.available && hasStarted ) {
 			load( false );
 		}
 	}, [] );
@@ -99,7 +101,7 @@ const TestCard = ( { test, data } ) => {
 				</Stack>
 				<Stack direction="row" gap="md" align="center">
 					<Badge intent={ getStatusIntent( status ) }>{ getStatusLabel( status ) }</Badge>
-					{ data.provider.available && (
+					{ data.provider.available && hasStarted && (
 						<Button
 							variant="secondary"
 							size="compact"
@@ -116,9 +118,9 @@ const TestCard = ( { test, data } ) => {
 			<CardBody>
 				<Stack direction="column" gap="lg">
 					{ duplicates.length > 0 && (
-						<Notice status="warning" isDismissible={ false } spokenMessage="">
+						<Notice status="error" isDismissible={ false } spokenMessage="">
 							{ __(
-								'More than one published prompt is the same version. Readers see all of them, but results only count the first. Clear the test name on the extra prompt, or unpublish it:',
+								'More than one prompt in this test is the same version, and results only count the first. Clear the test name on the extra prompt, or unpublish it:',
 								'newspack-popups'
 							) }{ ' ' }
 							{ duplicates.map( ( duplicate, index ) => {
@@ -142,12 +144,12 @@ const TestCard = ( { test, data } ) => {
 							{ sprintf(
 								// Translators: %s is a list of version letters, such as "A" or "A and B".
 								_n(
-									"Version %s uses a manual or custom placement, so this test can't run. Change its placement in the prompt editor.",
-									"Versions %s use a manual or custom placement, so this test can't run. Change their placement in the prompt editor.",
+									"Version %s uses a manual or custom placement, which A/B tests don't support, so its results aren't reliable. Change its placement in the prompt editor.",
+									"Versions %s use a manual or custom placement, which A/B tests don't support, so their results aren't reliable. Change their placement in the prompt editor.",
 									ineligible.length,
 									'newspack-popups'
 								),
-								ineligible.map( letter => letter.toUpperCase() ).join( ' and ' )
+								formatLetterList( ineligible.map( letter => letter.toUpperCase() ) )
 							) }
 						</Notice>
 					) }
@@ -156,79 +158,93 @@ const TestCard = ( { test, data } ) => {
 					) : (
 						<AllocationBar controlShare={ test.control_share } variants={ test.variants } />
 					) }
-					<table className="newspack-popups-ab-tests__table">
-						<thead>
-							<tr>
-								<th scope="col">{ __( 'Version', 'newspack-popups' ) }</th>
-								<th scope="col">{ __( 'Prompt', 'newspack-popups' ) }</th>
-								<th scope="col" className="is-numeric">
-									{ __( 'Traffic', 'newspack-popups' ) }
-								</th>
-								{ hasStats && (
-									<>
-										<th scope="col" className="is-numeric">
-											{ getCountLabel( stats.source.unit ) }
-										</th>
-										<th scope="col" className="is-numeric">
-											{ __( 'Conversions', 'newspack-popups' ) }
-										</th>
-										<th scope="col" className="is-numeric">
-											{ __( 'Conversion rate', 'newspack-popups' ) }
-										</th>
-										<th scope="col" className="is-numeric">
-											{ __( 'Lift vs. A', 'newspack-popups' ) }
-										</th>
-										<th scope="col">{ __( 'Confidence', 'newspack-popups' ) }</th>
-									</>
-								) }
-							</tr>
-						</thead>
-						<tbody>
-							{ letters.map( letter => {
-								const variant = test.variants[ letter ];
-								const title = decodeEntities( variant.title );
-								const row = hasStats ? stats.variants[ letter ] : null;
-								const comparison = hasStats ? stats.comparisons[ letter ] : null;
-								return (
-									<tr key={ letter }>
-										<th scope="row">
-											<span className="newspack-popups-ab-tests__variant">
-												<span className={ `newspack-popups-ab-tests__swatch is-variant-${ letter }` } aria-hidden="true" />
-												{ getVariantLabel( letter ) }
-											</span>
-										</th>
-										<td>
-											<Stack direction="column" gap="xs">
-												{ variant.edit_link ? <a href={ variant.edit_link }>{ title }</a> : title }
-												<span className="newspack-popups-ab-tests__muted">{ variant.status_label }</span>
-											</Stack>
-										</td>
-										<td className="is-numeric">{ status === 'incomplete' ? '—' : `${ Math.round( shares[ letter ] ) }%` }</td>
-										{ hasStats && (
-											<>
-												<td className="is-numeric">{ row ? row.readers : '—' }</td>
-												<td className="is-numeric">{ row ? row.conversions : '—' }</td>
-												<td className="is-numeric">{ row ? formatRate( row.rate ) : '—' }</td>
-												<td className="is-numeric">{ letter === 'a' || ! row ? '—' : formatLift( row.lift ) }</td>
-												<td>
-													{ comparison ? (
-														<Stack direction="row" gap="sm" align="center">
-															<span>{ formatConfidence( comparison.confidence ) }</span>
-															<Badge intent={ getLabelIntent( comparison.label ) }>
-																{ data.labels[ comparison.label ] }
-															</Badge>
-														</Stack>
-													) : (
-														'—'
-													) }
-												</td>
-											</>
-										) }
-									</tr>
-								);
-							} ) }
-						</tbody>
-					</table>
+					<div
+						className="newspack-popups-ab-tests__table-scroll"
+						tabIndex={ 0 }
+						role="region"
+						aria-label={ sprintf(
+							// Translators: %s is the test name.
+							__( 'Results for %s', 'newspack-popups' ),
+							test.test_id
+						) }
+					>
+						<table className="newspack-popups-ab-tests__table">
+							<thead>
+								<tr>
+									<th scope="col">{ __( 'Version', 'newspack-popups' ) }</th>
+									<th scope="col">{ __( 'Prompt', 'newspack-popups' ) }</th>
+									<th scope="col" className="is-numeric">
+										{ __( 'Traffic', 'newspack-popups' ) }
+									</th>
+									{ hasStats && (
+										<>
+											<th scope="col" className="is-numeric">
+												{ getCountLabel( stats.source.unit ) }
+											</th>
+											<th scope="col" className="is-numeric">
+												{ __( 'Conversions', 'newspack-popups' ) }
+											</th>
+											<th scope="col" className="is-numeric">
+												{ __( 'Conversion rate', 'newspack-popups' ) }
+											</th>
+											<th scope="col" className="is-numeric">
+												{ __( 'Lift vs. A', 'newspack-popups' ) }
+											</th>
+											<th scope="col">{ __( 'Confidence', 'newspack-popups' ) }</th>
+										</>
+									) }
+								</tr>
+							</thead>
+							<tbody>
+								{ letters.map( letter => {
+									const variant = test.variants[ letter ];
+									const title = decodeEntities( variant.title );
+									const row = hasStats ? stats.variants[ letter ] : null;
+									const comparison = hasStats ? stats.comparisons[ letter ] : null;
+									return (
+										<tr key={ letter }>
+											<th scope="row">
+												<span className="newspack-popups-ab-tests__variant">
+													<span
+														className={ `newspack-popups-ab-tests__swatch is-variant-${ letter }` }
+														aria-hidden="true"
+													/>
+													{ getVariantLabel( letter ) }
+												</span>
+											</th>
+											<td>
+												<Stack direction="column" gap="xs">
+													{ variant.edit_link ? <a href={ variant.edit_link }>{ title }</a> : title }
+													<span className="newspack-popups-ab-tests__muted">{ variant.status_label }</span>
+												</Stack>
+											</td>
+											<td className="is-numeric">{ status === 'incomplete' ? '—' : `${ Math.round( shares[ letter ] ) }%` }</td>
+											{ hasStats && (
+												<>
+													<td className="is-numeric">{ row ? row.readers : '—' }</td>
+													<td className="is-numeric">{ row ? row.conversions : '—' }</td>
+													<td className="is-numeric">{ row ? formatRate( row.rate ) : '—' }</td>
+													<td className="is-numeric">{ letter === 'a' || ! row ? '—' : formatLift( row.lift ) }</td>
+													<td>
+														{ comparison ? (
+															<Stack direction="row" gap="sm" align="center">
+																<span>{ formatConfidence( comparison.confidence ) }</span>
+																<Badge intent={ getLabelIntent( comparison.label ) }>
+																	{ data.labels[ comparison.label ] }
+																</Badge>
+															</Stack>
+														) : (
+															'—'
+														) }
+													</td>
+												</>
+											) }
+										</tr>
+									);
+								} ) }
+							</tbody>
+						</table>
+					</div>
 					{ loading && ! stats && (
 						<div className="newspack-popups-ab-tests__loading">
 							<Spinner />
@@ -259,7 +275,7 @@ const TestCard = ( { test, data } ) => {
 						</Notice>
 					) }
 					{ error && (
-						<Notice status="error" isDismissible={ false }>
+						<Notice status="error" isDismissible={ false } politeness="polite">
 							{ error }
 						</Notice>
 					) }
