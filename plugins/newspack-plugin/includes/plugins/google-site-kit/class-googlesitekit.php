@@ -46,6 +46,7 @@ class GoogleSiteKit {
 		add_filter( 'option_googlesitekit_analytics_settings', [ __CLASS__, 'filter_ga_settings' ] );
 		add_filter( 'option_googlesitekit_analytics-4_settings', [ __CLASS__, 'filter_ga_settings' ] );
 		add_filter( 'googlesitekit_gtag_opt', [ __CLASS__, 'add_ga_custom_parameters' ] );
+		add_filter( 'newspack_popups_ab_stats_provider', [ __CLASS__, 'supply_ab_stats_provider' ] );
 		// Priority 1 so the values are in the dataLayer before Site Kit prints the
 		// Tag Manager container snippet (registered on wp_head at the default priority).
 		add_action( 'wp_head', [ __CLASS__, 'print_data_layer_params' ], 1 );
@@ -94,6 +95,24 @@ class GoogleSiteKit {
 				</script>
 			</amp-analytics>
 		<?php
+	}
+
+	/**
+	 * Supply the GA4 stats provider to Newspack Campaigns' A/B dashboard.
+	 *
+	 * Runs on the filter rather than at load because the provider implements
+	 * an interface Campaigns declares, and plugin load order does not put
+	 * Campaigns first. A provider another plugin registered first wins.
+	 *
+	 * @param \Newspack_Popups_AB_Stats_Provider|null $provider Provider registered so far.
+	 * @return \Newspack_Popups_AB_Stats_Provider|null
+	 */
+	public static function supply_ab_stats_provider( $provider ) {
+		if ( null !== $provider || ! interface_exists( 'Newspack_Popups_AB_Stats_Provider' ) ) {
+			return $provider;
+		}
+		require_once NEWSPACK_ABSPATH . 'includes/plugins/google-site-kit/class-ga4-ab-stats-provider.php';
+		return new GA4_AB_Stats_Provider();
 	}
 
 	/**

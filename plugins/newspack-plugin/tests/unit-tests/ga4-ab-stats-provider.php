@@ -6,6 +6,7 @@
  */
 
 use Newspack\GA4_AB_Stats_Provider;
+use Newspack\GoogleSiteKit;
 
 require_once __DIR__ . '/../mocks/newspack-popups-ab-stats-provider-mock.php';
 require_once dirname( __DIR__, 2 ) . '/includes/plugins/google-site-kit/class-ga4-ab-stats-provider.php';
@@ -259,6 +260,69 @@ class Newspack_Test_GA4_AB_Stats_Provider extends WP_UnitTestCase {
 		$result   = $provider->get_counts( $this->test_entry(), 'link_click', self::START, self::END );
 		$this->assertWPError( $result );
 		$this->assertSame( 'Quota exceeded.', $result->get_error_message() );
+	}
+
+	/**
+	 * Without Site Kit there is no runner, and the provider says so without calling out.
+	 */
+	public function test_unavailable_without_site_kit() {
+		$this->assertFalse( defined( 'GOOGLESITEKIT_PLUGIN_MAIN_FILE' ), 'This test is only meaningful with Site Kit absent.' );
+		$provider  = new GA4_AB_Stats_Provider();
+		$available = $provider->is_available();
+		$this->assertWPError( $available );
+		$this->assertSame( 'Site Kit is not installed.', $available->get_error_message() );
+		$this->assertWPError( $provider->get_counts( $this->test_entry(), 'link_click', self::START, self::END ) );
+	}
+
+	/**
+	 * When GA4 withholds reader rows, every report is rerun as event counts and the split is skipped.
+	 */
+	public function test_thresholded_readers_fall_back_to_event_counts() {
+		$responses = [
+			$this->response( [ [ 12, 3 ] ], true ),
+			$this->response( [ [ 12, 250 ], [ 13, 240 ] ] ),
+			$this->response( [ [ 12, 10 ], [ 13, 12 ] ] ),
+		];
+		$metrics   = [];
+		$provider  = new GA4_AB_Stats_Provider(
+			function ( $property_id, $request ) use ( &$responses, &$metrics ) {
+				$metrics[] = $request['metrics'][0]['name'];
+				return array_shift( $responses );
+			}
+		);
+		$counts    = $provider->get_counts( $this->test_entry(), 'link_click', self::START, self::END );
+		$this->assertSame( [ 'totalUsers', 'eventCount', 'eventCount' ], $metrics );
+		$this->assertSame( 'events', $counts['unit'] );
+		$this->assertSame( 250, $counts['variants']['a']['readers'] );
+		$this->assertSame( 240, $counts['variants']['b']['readers'] );
+		$this->assertSame( 12, $counts['variants']['b']['conversions'] );
+		$this->assertSame( 0, $counts['variants']['a']['logged_in_readers'] );
+	}
+
+	/**
+	 * The fallback on a form-submission test is the widest case, and still four reports.
+	 */
+	public function test_form_submission_with_fallback_stays_within_budget() {
+		$calls    = 0;
+		$provider = new GA4_AB_Stats_Provider(
+			function () use ( &$calls ) {
+				++$calls;
+				return $this->response( [], 1 === $calls );
+			}
+		);
+		$counts   = $provider->get_counts( $this->test_entry(), 'form_submission', self::START, self::END );
+		$this->assertSame( 4, $calls );
+		$this->assertSame( 'events', $counts['unit'] );
+	}
+
+	/**
+	 * The Site Kit integration registers the provider on the Campaigns filter and defers to one already there.
+	 */
+	public function test_filter_supplies_the_provider() {
+		$this->assertNotFalse( has_filter( 'newspack_popups_ab_stats_provider', [ GoogleSiteKit::class, 'supply_ab_stats_provider' ] ) );
+		$this->assertInstanceOf( GA4_AB_Stats_Provider::class, GoogleSiteKit::supply_ab_stats_provider( null ) );
+		$existing = new GA4_AB_Stats_Provider( fn() => [] );
+		$this->assertSame( $existing, GoogleSiteKit::supply_ab_stats_provider( $existing ) );
 	}
 
 	/**

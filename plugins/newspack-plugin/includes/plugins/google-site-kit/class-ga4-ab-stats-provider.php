@@ -109,7 +109,7 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 		if ( ! defined( 'GOOGLESITEKIT_PLUGIN_MAIN_FILE' ) ) {
 			return new WP_Error( 'newspack_ga4_ab_stats', __( 'Site Kit is not installed.', 'newspack' ) );
 		}
-		if ( ! self::get_property_id() ) {
+		if ( ! self::get_property_id() || ! $this->has_credentials() ) {
 			return new WP_Error( 'newspack_ga4_ab_stats', __( 'Connect Google Analytics through Site Kit.', 'newspack' ) );
 		}
 		return true;
@@ -123,6 +123,12 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 	 * `logged_in` dimension. Conversions are distinct users who completed the
 	 * goal's event on one of the prompts; a goal that maps to two events sums
 	 * two reports, so a reader who completed both is counted twice.
+	 *
+	 * GA4 withholds rows from a user-count report when they could identify
+	 * someone, which on a small site can empty the whole report. When the
+	 * readers report comes back thresholded, every report is rerun counting
+	 * events instead, the result says so in `unit`, and the logged-in split
+	 * is skipped to stay within the request budget.
 	 *
 	 * @param array  $test  Test, with `variants` keyed by letter, each carrying a prompt `id`.
 	 * @param string $goal  Conversion goal.
@@ -165,19 +171,29 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 		if ( is_wp_error( $readers ) ) {
 			return $readers;
 		}
+		if ( self::is_thresholded( $readers ) ) {
+			$metric         = self::METRIC_EVENTS;
+			$result['unit'] = 'events';
+			$readers        = $this->run( $property_id, self::build_readers_request( $prompt_ids, $start, $end, $metric, false ) );
+			if ( is_wp_error( $readers ) ) {
+				return $readers;
+			}
+		}
 		foreach ( self::parse_rows( $readers ) as $prompt_id => $row ) {
 			if ( isset( $letters[ $prompt_id ] ) ) {
 				$result['variants'][ $letters[ $prompt_id ] ]['readers'] += $row['count'];
 			}
 		}
 
-		$split = $this->run( $property_id, self::build_readers_request( $prompt_ids, $start, $end, $metric, true ) );
-		if ( is_wp_error( $split ) ) {
-			return $split;
-		}
-		foreach ( self::parse_rows( $split, true ) as $prompt_id => $row ) {
-			if ( isset( $letters[ $prompt_id ] ) ) {
-				$result['variants'][ $letters[ $prompt_id ] ]['logged_in_readers'] += $row['logged_in'];
+		if ( self::METRIC_READERS === $metric ) {
+			$split = $this->run( $property_id, self::build_readers_request( $prompt_ids, $start, $end, $metric, true ) );
+			if ( is_wp_error( $split ) ) {
+				return $split;
+			}
+			foreach ( self::parse_rows( $split, true ) as $prompt_id => $row ) {
+				if ( isset( $letters[ $prompt_id ] ) ) {
+					$result['variants'][ $letters[ $prompt_id ] ]['logged_in_readers'] += $row['logged_in'];
+				}
 			}
 		}
 
@@ -355,14 +371,89 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 	}
 
 	/**
-	 * Site Kit's runner. Set up in a later change; until then every report is an error.
+	 * Whether the current user or Site Kit's owner holds a Site Kit token.
+	 *
+	 * @return bool
+	 */
+	private function has_credentials() {
+		if ( ! GoogleSiteKit::is_active() ) {
+			return false;
+		}
+		try {
+			if ( self::site_kit_module()->is_authenticated() ) {
+				return true;
+			}
+			return (bool) $this->as_owner( fn() => self::site_kit_module()->is_authenticated() );
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+	}
+
+	/**
+	 * Site Kit's runner: the report runs as the current user, and when that
+	 * user holds no Site Kit token, as the Analytics module's owner.
+	 *
+	 * The dashboard's route is admin-only, so the owner's credentials are
+	 * lent only to someone who could already read the same numbers in the
+	 * Site Kit dashboard; the report is read-only and scoped to the
+	 * connected property.
 	 *
 	 * @param string $property_id GA4 property ID.
 	 * @param array  $request     Report request.
 	 * @return array|WP_Error
 	 */
 	private function run_through_site_kit( string $property_id, array $request ) {
-		return new WP_Error( 'newspack_ga4_ab_stats', __( 'Site Kit is not installed.', 'newspack' ) );
+		if ( ! GoogleSiteKit::is_active() ) {
+			return new WP_Error( 'newspack_ga4_ab_stats', __( 'Site Kit is not installed.', 'newspack' ) );
+		}
+		try {
+			$module = self::site_kit_module();
+			if ( ! $module->is_authenticated() ) {
+				$response = $this->as_owner( fn() => self::site_kit_module()->run_report( $property_id, $request ) );
+				if ( null === $response ) {
+					return new WP_Error( 'newspack_ga4_ab_stats', __( 'Connect Google Analytics through Site Kit.', 'newspack' ) );
+				}
+				return $response;
+			}
+			return $module->run_report( $property_id, $request );
+		} catch ( \Throwable $e ) {
+			Logger::log( 'GA4 report failed: ' . $e->getMessage(), self::LOGGER_HEADER );
+			$sentence = trim( strtok( $e->getMessage(), "\n" ) );
+			return new WP_Error( 'newspack_ga4_ab_stats', $sentence ? $sentence : __( 'Google Analytics did not answer.', 'newspack' ) );
+		}
+	}
+
+	/**
+	 * Run a callback as the Analytics module's owner, or return null when no
+	 * owner is recorded or the owner is the current user.
+	 *
+	 * @param callable $callback Callback.
+	 * @return mixed|null
+	 */
+	private function as_owner( callable $callback ) {
+		$settings = get_option( self::SITE_KIT_SETTINGS_OPTION, [] );
+		$owner_id = is_array( $settings ) && ! empty( $settings['ownerID'] ) ? (int) $settings['ownerID'] : 0;
+		$previous = get_current_user_id();
+		if ( $owner_id <= 0 || $owner_id === $previous ) {
+			return null;
+		}
+		wp_set_current_user( $owner_id );
+		try {
+			return $callback();
+		} finally {
+			wp_set_current_user( $previous );
+		}
+	}
+
+	/**
+	 * A Site Kit module bound to the current user. Built fresh per call
+	 * because the module reads its user at construction.
+	 *
+	 * @return GoogleSiteKitAnalyticsData
+	 */
+	private static function site_kit_module() {
+		require_once NEWSPACK_ABSPATH . 'includes/plugins/google-site-kit/class-googlesitekitanalyticsdata.php';
+		return new GoogleSiteKitAnalyticsData( new \Google\Site_Kit\Context( GOOGLESITEKIT_PLUGIN_MAIN_FILE ) );
 	}
 
 	/**
