@@ -72,9 +72,9 @@ final class GA4_Custom_Dimensions {
 	 * A/B test, named for the test and the reader's variant. Gated on the
 	 * Campaigns A/B flag rather than on the plugin: Campaigns runs on nearly
 	 * every site, and the flag on few, so gating on the plugin would spend two
-	 * of the 50 slots everywhere for events almost no site sends. Their display
-	 * names carry no slash: the Admin API allows letters, digits, spaces and
-	 * underscores only, and rejects the create otherwise.
+	 * of the 50 slots everywhere for events almost no site sends. The display
+	 * names read "AB" rather than "A/B" because the Admin API rejects a slash,
+	 * see `get_dimensions()`.
 	 */
 	const AB_TESTING_DIMENSIONS = [
 		'ab_test_id',
@@ -330,7 +330,11 @@ final class GA4_Custom_Dimensions {
 
 	/**
 	 * Priority-ordered list of custom dimensions Newspack provisions.
-	 * Each entry: parameter name => display name.
+	 * Each entry: parameter name => display name. The Admin API rejects a
+	 * create whose names break its rules, and the provisioner records that
+	 * failure as permanent: a parameter name is letters, digits and
+	 * underscores, starting with a letter, 40 characters at most; a display
+	 * name is the same plus spaces, 82 at most.
 	 *
 	 * GA4 caps event-scoped dimensions at 50 per property and never back-fills,
 	 * and publishers have hit that ceiling, so parameters belonging to a feature
