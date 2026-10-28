@@ -475,8 +475,9 @@ final class Newspack_Popups_AB_Tests {
 	 *                 `[ 'id', 'title', 'status', 'status_label', 'edit_link' ]`.
 	 *                 `duplicates` lists the other prompts carrying a letter, as
 	 *                 `letter` plus those fields. The arm shown is the first
-	 *                 published prompt by ID; this page reports that one, but
-	 *                 readers still see every published prompt with the letter.
+	 *                 published prompt by ID, or the first by ID when none is
+	 *                 published; this page reports that one, but readers still
+	 *                 see every published prompt with the letter.
 	 */
 	public static function get_tests() {
 		$prompts = get_posts(
@@ -512,7 +513,7 @@ final class Newspack_Popups_AB_Tests {
 		foreach ( $grouped as $test_id => $letters ) {
 			ksort( $letters );
 			$test = [
-				'test_id'       => (string) $test_id, // An all-digit ID became an integer as an array key.
+				'test_id'       => (string) $test_id, // PHP stores an integer-like key as an int; get_stats() compares the ID strictly.
 				'goal'          => '',
 				'goal_label'    => '',
 				'control_share' => self::DEFAULT_CONTROL_SHARE,
@@ -522,9 +523,9 @@ final class Newspack_Popups_AB_Tests {
 			];
 			$published_at = [];
 			foreach ( $letters as $variant => $candidates ) {
-				// Two prompts on one letter: the published one is the arm, since it
-				// is what readers are bucketed into; the rest are reported so the
-				// page can point at them instead of silently picking one.
+				// Two prompts on one letter: this page reports the first published
+				// one, or the first by ID when none is, and lists the rest so an
+				// editor can split them. Readers still see every published prompt.
 				$kept = null;
 				foreach ( $candidates as $candidate ) {
 					if ( 'publish' === $candidate->post_status ) {

@@ -60,7 +60,7 @@ const TestCard = ( { test, data } ) => {
 				{ duplicates.length > 0 && (
 					<Notice status="warning" isDismissible={ false } spokenMessage="">
 						{ __(
-							'More than one prompt carries the same variant letter. This page reports the first published one; readers still see every published prompt. Also carrying a letter:',
+							'Prompts share a variant letter. Readers see every published one, and this page reports only the first (published first, then lowest ID). Give each prompt its own letter in the prompt editor. Also carrying a letter:',
 							'newspack-popups'
 						) }{ ' ' }
 						{ duplicates.map( ( duplicate, index ) => {
