@@ -62,8 +62,8 @@ export const isEligiblePlacement = ( placement, ineligible ) => ! ( ineligible |
  */
 export const splitSummary = controlShare =>
 	sprintf(
-		// Translators: %1$d is the control's share of readers, %2$d the challenger's.
-		__( '%1$d%% control, %2$d%% challenger', 'newspack-popups' ),
+		// Translators: %1$d is the share of readers who see version A, %2$d the share who see version B.
+		__( '%1$d%% see A, %2$d%% see B', 'newspack-popups' ),
 		controlShare,
 		100 - controlShare
 	);
@@ -81,6 +81,26 @@ export const promptLacksGoalBlock = ( goal, blockNames ) => {
 };
 
 /**
+ * What to tell an author whose prompt has no block for its goal.
+ *
+ * @param {string} goal Goal key.
+ * @return {string} Message.
+ */
+export const missingGoalBlockMessage = goal => {
+	switch ( goal ) {
+		case 'donation':
+			return __( "Readers can't donate from this prompt. Add a Donate block, or choose another goal.", 'newspack-popups' );
+		case 'subscription':
+			return __( "Readers can't subscribe from this prompt. Add a Checkout Button block, or choose another goal.", 'newspack-popups' );
+		default:
+			return __(
+				"Readers can't fill in a form from this prompt. Add a sign-up, registration, donate or checkout block, or choose another goal.",
+				'newspack-popups'
+			);
+	}
+};
+
+/**
  * Warnings about the other prompts in the test, for the panel's list.
  *
  * @param {Object}   args
@@ -94,10 +114,11 @@ export const testPromptWarnings = ( { postId, variant, prompts } ) => {
 	const warnings = [];
 	if ( variant && others.some( prompt => prompt.variant === variant ) ) {
 		warnings.push(
-			'a' === variant
-				? __( 'Another prompt is already the control of this test.', 'newspack-popups' )
-				: // Translators: %s is the variant letter.
-				  sprintf( __( 'Another prompt is already variant %s of this test.', 'newspack-popups' ), String( variant ).toUpperCase() )
+			sprintf(
+				// Translators: %s is the version letter.
+				__( 'Another prompt in this test is already version %s. Choose a different version.', 'newspack-popups' ),
+				String( variant ).toUpperCase()
+			)
 		);
 	}
 	return warnings;
