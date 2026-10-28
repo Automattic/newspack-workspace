@@ -1,0 +1,245 @@
+@use "newspack-colors" as np-colors;
+@use "../../../shared/sass/mixins";
+@use "../../../shared/sass/variables";
+
+.wpbnbd--frequency-based {
+	background: np-colors.$neutral-000;
+	border: 1px solid np-colors.$neutral-300;
+	color: np-colors.$neutral-900;
+	position: relative;
+	width: 100%;
+
+	// Hide some radio buttons absolutely.
+	input[type="radio"] {
+		position: absolute;
+		left: -99999em;
+
+		// And hide the ones being replaced by tabs completely.
+		&[name="donation_frequency"],
+		&[name="donation_frequency"] + label {
+			display: none;
+		}
+	}
+
+	input[readonly] {
+		background-color: np-colors.$neutral-050;
+		color: np-colors.$neutral-600;
+	}
+
+	.freq-label,
+	.tier-label,
+	.input-container {
+		display: block;
+		font-weight: bold;
+		cursor: pointer;
+	}
+
+	.freq-label {
+		box-sizing: border-box;
+		overflow: hidden;
+		white-space: nowrap;
+		width: 100%;
+		z-index: 1;
+	}
+
+	button,
+	.submit-button {
+		margin: 0 0.76rem 0.76rem;
+
+		@include mixins.media( tablet ) {
+			margin: 0 1.5rem 1.5rem;
+		}
+		&:disabled {
+			opacity: 0.5;
+		}
+	}
+	.wpbnbd {
+		&__button {
+			font-size: 16px;
+			text-transform: uppercase;
+		}
+	}
+
+	.thanks {
+		color: np-colors.$neutral-600;
+		font-size: variables.$font__size-sm;
+		margin: 0.38rem 0.76rem 0.76rem;
+		display: none;
+
+		@include mixins.media( mobile ) {
+			display: block;
+		}
+		@include mixins.media( tablet ) {
+			margin-left: 1.5rem;
+			margin-right: 1.5rem;
+		}
+	}
+}
+
+.wpbnbd.tiered {
+	.tiers {
+		margin: 0.38rem;
+		display: none;
+		flex-wrap: wrap;
+		position: relative;
+
+		@include mixins.media( tablet ) {
+			margin: 1.12rem 1.12rem 0.38rem;
+		}
+
+		.tier-label {
+			border: 1px solid np-colors.$neutral-300;
+			border-radius: 5px;
+			margin: 0.38rem;
+			padding: 0.38rem 0.76rem;
+
+			&:hover {
+				background: np-colors.$neutral-050;
+			}
+		}
+
+		input[type="radio"] {
+			&:focus + .tier-label {
+				background: np-colors.$neutral-050;
+				outline: 1px dotted currentcolor;
+				outline-offset: -4px;
+			}
+
+			&:checked + .tier-label {
+				background-color: np-colors.$neutral-600;
+				border-color: transparent;
+				color: np-colors.$neutral-000;
+			}
+		}
+
+		// other-donate-label
+		.odl {
+			font-weight: bold;
+			left: 0.38rem;
+			position: absolute;
+			bottom: calc(1.6em + 1.1rem + 2px);
+		}
+
+		input.other-input {
+			~ .money-input,
+			~ .odl { // other-donate-label
+				display: none;
+			}
+
+			&:checked ~ .money-input {
+				display: flex;
+			}
+
+			&:checked ~ .odl {
+				display: block;
+			}
+
+			&:checked + label {
+				margin-bottom: calc(3.2em + 1.86rem + 2px);
+			}
+		}
+	}
+
+	.money-input {
+		bottom: 0.38rem;
+		left: 0.38rem;
+		position: absolute;
+	}
+}
+
+.wpbnbd.untiered {
+	&.wpbnbd--nyp-disabled .tier-label {
+		border: none;
+		font-size: 1.25rem;
+		padding: 0;
+	}
+	.input-container {
+		margin: 0.76rem;
+		display: none;
+
+		@include mixins.media( tablet ) {
+			margin: 1.5rem 1.5rem 0.76rem;
+		}
+	}
+
+	input[type="radio"]:checked ~ .input-container {
+		display: block;
+	}
+}
+
+.wpbnbd .money-input {
+	display: flex;
+	align-items: center;
+	position: relative;
+	max-width: 200px;
+	background-color: np-colors.$neutral-000;
+	border-radius: 3px;
+	border: 1px solid np-colors.$neutral-300;
+
+	&:focus-within {
+		border-color: np-colors.$neutral-900;
+		outline: thin solid rgba(np-colors.$neutral-900, 0.15);
+		outline-offset: -4px;
+	}
+
+	.currency {
+		cursor: default;
+		font-size: variables.$font__size-sm;
+		padding-left: 0.5em;
+	}
+
+	input[type="number"] {
+		border: none;
+		outline: none;
+		box-shadow: none;
+		background: none;
+		max-width: 174px;
+
+		&:focus {
+			border: none;
+			outline: none;
+			box-shadow: none;
+		}
+	}
+}
+
+.wpbnbd {
+	.frequencies {
+		position: relative;
+		font-size: variables.$font__size-xs;
+		@include mixins.media( mobile ) {
+			font-size: variables.$font__size-sm;
+		}
+	}
+
+	.frequency input[type="radio"]:checked ~ .tiers {
+		display: flex;
+	}
+
+	.tab-container {
+		display: flex;
+		.freq-label {
+			border-radius: 0;
+			margin: 0;
+
+			&.wpbnbd__button--active {
+				color: np-colors.$neutral-900;
+			}
+
+			&:focus {
+				outline: 0;
+				text-decoration: underline;
+				text-decoration-style: dotted;
+				text-decoration-thickness: 1px;
+			}
+		}
+	}
+}
+
+.wp-block-newspack-blocks-donate {
+	&__frequency-label {
+		display: flex;
+		align-items: center;
+		padding-left: 8px;
+	}
+}

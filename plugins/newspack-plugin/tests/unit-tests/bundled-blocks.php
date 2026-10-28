@@ -1,0 +1,62 @@
+<?php
+/**
+ * Tests the copy of newspack-blocks bundled in this plugin.
+ *
+ * @package Newspack\Tests
+ */
+
+use Newspack\Bundled_Blocks;
+
+/**
+ * Test the bundled newspack-blocks code.
+ *
+ * The test bootstrap doesn't load the newspack-blocks plugin, so the bundled
+ * copy is expected to be live.
+ */
+class Newspack_Test_Bundled_Blocks extends WP_UnitTestCase {
+	/**
+	 * Blocks moved from newspack-blocks into this plugin.
+	 *
+	 * @var string[]
+	 */
+	const MOVED_BLOCKS = [
+		'newspack-blocks/author-list',
+		'newspack-blocks/author-profile',
+		'newspack-blocks/checkout-button',
+		'newspack-blocks/donate',
+		'newspack-blocks/youtube-video-playlist',
+		'newspack-blocks/iframe',
+	];
+
+	/**
+	 * Without the newspack-blocks plugin, the bundled copy loads.
+	 */
+	public function test_bundled_copy_loads_without_legacy_plugin() {
+		$this->assertFalse( Bundled_Blocks::is_legacy_plugin_active() );
+		$this->assertTrue( Bundled_Blocks::is_loaded() );
+		$this->assertTrue( class_exists( 'Newspack_Blocks' ) );
+		$this->assertTrue( class_exists( 'Newspack_Blocks\Modal_Checkout' ) );
+	}
+
+	/**
+	 * Content Loop and Carousel code is not bundled.
+	 */
+	public function test_content_loop_not_bundled() {
+		$this->assertFalse( class_exists( 'Newspack_Blocks_API' ) );
+		$this->assertFalse( class_exists( 'Newspack_Blocks_Caching' ) );
+		$this->assertFalse( class_exists( 'WP_REST_Newspack_Articles_Controller' ) );
+		$this->assertFalse( method_exists( 'Newspack_Blocks', 'build_articles_query' ) );
+	}
+
+	/**
+	 * The moved blocks are registered, Content Loop and Carousel aren't.
+	 */
+	public function test_moved_blocks_registered() {
+		$registry = WP_Block_Type_Registry::get_instance();
+		foreach ( self::MOVED_BLOCKS as $block_name ) {
+			$this->assertTrue( $registry->is_registered( $block_name ), "$block_name is not registered." );
+		}
+		$this->assertFalse( $registry->is_registered( 'newspack-blocks/homepage-articles' ) );
+		$this->assertFalse( $registry->is_registered( 'newspack-blocks/carousel' ) );
+	}
+}

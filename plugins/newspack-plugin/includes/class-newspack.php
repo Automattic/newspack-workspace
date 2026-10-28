@@ -137,6 +137,7 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/oauth/class-mailchimp-api.php';
 		include_once NEWSPACK_ABSPATH . 'includes/oauth/class-google-login.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-blocks.php';
+		include_once NEWSPACK_ABSPATH . 'includes/class-bundled-blocks.php';
 		include_once NEWSPACK_ABSPATH . 'includes/tracking/class-pixel.php';
 		include_once NEWSPACK_ABSPATH . 'includes/tracking/class-meta-pixel.php';
 		include_once NEWSPACK_ABSPATH . 'includes/tracking/class-twitter-pixel.php';

@@ -31,6 +31,7 @@ Thumbs.db
 # Built files
 /build
 /dist
+/includes/newspack-blocks/dist
 release
 
 # Tests

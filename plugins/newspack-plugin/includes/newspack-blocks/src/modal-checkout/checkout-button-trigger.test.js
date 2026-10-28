@@ -1,0 +1,585 @@
+/**
+ * Tests for the checkout-button URL trigger resolution helpers.
+ */
+
+import {
+	readCheckoutData,
+	findCheckoutButtonForm,
+	selectPickerForm,
+	resolveCheckoutButtonForm,
+	copyContextFields,
+	applyContextFields,
+	readUtmParams,
+	appendUtmFields,
+	getDroppedLinkContext,
+	PICKER_CONTEXT_FIELDS,
+	SYNTHESIZED_CONTAINER_SELECTOR,
+} from './checkout-button-trigger';
+
+const VARIATION_MODAL_CLASS_PREFIX = 'newspack-blocks__modal-variation';
+const IFRAME_NAME = 'newspack_modal_checkout_iframe';
+
+const PICKER_OPTIONS = {
+	variationModalClassPrefix: VARIATION_MODAL_CLASS_PREFIX,
+	iframeName: IFRAME_NAME,
+};
+
+/**
+ * Build a checkout button block markup string.
+ *
+ * @param {Object|null} checkoutData Object to JSON-encode into data-checkout, or null to omit it.
+ * @param {string}      label        Button label.
+ * @return {string} HTML.
+ */
+const checkoutButton = ( checkoutData, label = 'Buy' ) => {
+	const attr = checkoutData ? ` data-checkout='${ JSON.stringify( checkoutData ) }'` : '';
+	return `<div class="wp-block-newspack-blocks-checkout-button"><form${ attr }><button type="submit">${ label }</button></form></div>`;
+};
+
+/**
+ * Build a variation picker modal, mirroring Subscriptions_Tiers::render_form output:
+ * a single form with `target` set, radio inputs named product_id, and no data-checkout.
+ *
+ * @param {string}   productId Parent product id for the picker container.
+ * @param {string[]} radioIds  Radio values (variation/child ids).
+ * @return {string} HTML.
+ */
+const variationPicker = ( productId, radioIds ) => {
+	const radios = radioIds.map( id => `<input type="radio" name="product_id" value="${ id }">` ).join( '' );
+	return `<div class="${ VARIATION_MODAL_CLASS_PREFIX }" data-product-id="${ productId }"><form target="${ IFRAME_NAME }">${ radios }<button type="submit">Purchase</button></form></div>`;
+};
+
+const render = html => {
+	document.body.innerHTML = html;
+	return document.body;
+};
+
+afterEach( () => {
+	document.body.innerHTML = '';
+} );
+
+describe( 'readCheckoutData', () => {
+	it( 'parses a valid data-checkout attribute', () => {
+		const root = render( checkoutButton( { product_id: '1406', variation_id: '1408' } ) );
+		const form = root.querySelector( 'form' );
+		expect( readCheckoutData( form ) ).toEqual( { product_id: '1406', variation_id: '1408' } );
+	} );
+
+	it( 'returns null without throwing when the attribute is missing', () => {
+		const root = render( variationPicker( '1434', [ '158' ] ) );
+		const form = root.querySelector( 'form' );
+		expect( () => readCheckoutData( form ) ).not.toThrow();
+		expect( readCheckoutData( form ) ).toBeNull();
+	} );
+
+	it( 'returns null without throwing on malformed JSON', () => {
+		const root = render( '<div class="wp-block-newspack-blocks-checkout-button"><form data-checkout="not json">x</form></div>' );
+		const form = root.querySelector( 'form' );
+		expect( () => readCheckoutData( form ) ).not.toThrow();
+		expect( readCheckoutData( form ) ).toBeNull();
+	} );
+
+	it( 'returns null for a null form', () => {
+		expect( readCheckoutData( null ) ).toBeNull();
+	} );
+} );
+
+describe( 'findCheckoutButtonForm', () => {
+	it( 'requires both product_id and variation_id to match when a variation is requested', () => {
+		const root = render( checkoutButton( { product_id: '1406', variation_id: '1408', is_variable: true } ) );
+		const form = root.querySelector( 'form' );
+		expect( findCheckoutButtonForm( root, '1406', '1408' ) ).toBe( form );
+	} );
+
+	it( 'does NOT match a locked button for a different requested variation', () => {
+		const root = render( checkoutButton( { product_id: '1406', variation_id: '1408', is_variable: true } ) );
+		// Request 1407 while only the 1408-locked button exists.
+		expect( findCheckoutButtonForm( root, '1406', '1407' ) ).toBeNull();
+	} );
+
+	// A request without a variation means the reader picks one, so a button locked
+	// to a single variation cannot serve it: submitting that form checks the
+	// reader out on the locked variation instead of opening the picker.
+	it( 'does not match a variation-locked button when no variation is requested', () => {
+		const root = render( checkoutButton( { product_id: '1406', variation_id: '1408', is_variable: true } ) );
+		expect( findCheckoutButtonForm( root, '1406', null ) ).toBeNull();
+	} );
+
+	it( 'matches an unlocked button by product_id when no variation is requested', () => {
+		const root = render( checkoutButton( { product_id: '1406', is_variable: true } ) );
+		const form = root.querySelector( 'form' );
+		expect( findCheckoutButtonForm( root, '1406', null ) ).toBe( form );
+	} );
+
+	it( 'does not match a grouped button (no variation_id) for a variation request', () => {
+		const root = render( checkoutButton( { product_id: '1434' }, 'Buy grouped' ) );
+		expect( findCheckoutButtonForm( root, '1434', '158' ) ).toBeNull();
+	} );
+
+	it( 'skips forms with missing or invalid data-checkout without throwing', () => {
+		const root = render( variationPicker( '1406', [ '1408' ] ) + checkoutButton( { product_id: '1406', variation_id: '1408' } ) );
+		expect( () => findCheckoutButtonForm( root, '1406', '1408' ) ).not.toThrow();
+		expect( findCheckoutButtonForm( root, '1406', '1408' ) ).not.toBeNull();
+	} );
+} );
+
+describe( 'selectPickerForm', () => {
+	it( 'checks the radio matching the variation and returns the picker form', () => {
+		const root = render( variationPicker( '1406', [ '1407', '1408', '1409' ] ) );
+		const form = selectPickerForm( root, '1406', '1407', PICKER_OPTIONS );
+		expect( form ).toBe( root.querySelector( `.${ VARIATION_MODAL_CLASS_PREFIX } form` ) );
+		expect( root.querySelector( 'input[value="1407"]' ).checked ).toBe( true );
+		expect( root.querySelector( 'input[value="1408"]' ).checked ).toBe( false );
+	} );
+
+	it( 'returns null when no picker exists for the product', () => {
+		const root = render( variationPicker( '1434', [ '158' ] ) );
+		expect( selectPickerForm( root, '1406', '1407', PICKER_OPTIONS ) ).toBeNull();
+	} );
+
+	it( 'returns null when no radio matches the variation', () => {
+		const root = render( variationPicker( '1406', [ '1407', '1409' ] ) );
+		expect( selectPickerForm( root, '1406', '1408', PICKER_OPTIONS ) ).toBeNull();
+	} );
+
+	it( 'only selects radio inputs inside the checkout iframe form', () => {
+		const root = render(
+			`<div class="${ VARIATION_MODAL_CLASS_PREFIX }" data-product-id="1406">` +
+				'<form target="other_iframe"><input type="radio" name="product_id" value="1407"></form>' +
+				`<form target="${ IFRAME_NAME }">` +
+				'<input type="hidden" name="product_id" value="1407">' +
+				'<input type="radio" name="product_id" value="1408">' +
+				'</form>' +
+				'</div>'
+		);
+		const checkoutForm = root.querySelector( `form[target="${ IFRAME_NAME }"]` );
+
+		expect( selectPickerForm( root, '1406', '1407', PICKER_OPTIONS ) ).toBeNull();
+		expect( selectPickerForm( root, '1406', '1408', PICKER_OPTIONS ) ).toBe( checkoutForm );
+		expect( checkoutForm.querySelector( 'input[type="radio"][value="1408"]' ).checked ).toBe( true );
+	} );
+} );
+
+describe( 'resolveCheckoutButtonForm', () => {
+	it( 'returns the picker form for a non-locked variation rather than the locked checkout button', () => {
+		const root = render(
+			checkoutButton( { product_id: '1406', variation_id: '1408', is_variable: true }, 'Subscribe' ) +
+				variationPicker( '1406', [ '1407', '1408', '1409' ] )
+		);
+		const pickerForm = root.querySelector( `.${ VARIATION_MODAL_CLASS_PREFIX } form` );
+		const result = resolveCheckoutButtonForm( root, '1406', '1407', PICKER_OPTIONS );
+		expect( result ).toBe( pickerForm );
+		expect( root.querySelector( 'input[value="1407"]' ).checked ).toBe( true );
+	} );
+
+	it( 'returns the exact checkout button form when the requested variation is the locked one', () => {
+		const root = render(
+			checkoutButton( { product_id: '1406', variation_id: '1408', is_variable: true }, 'Subscribe' ) +
+				variationPicker( '1406', [ '1407', '1408', '1409' ] )
+		);
+		const buttonForm = root.querySelector( '.wp-block-newspack-blocks-checkout-button form' );
+		expect( resolveCheckoutButtonForm( root, '1406', '1408', PICKER_OPTIONS ) ).toBe( buttonForm );
+	} );
+
+	it( 'drives the grouped picker without throwing on its data-checkout-less form', () => {
+		const root = render( checkoutButton( { product_id: '1434' }, 'Buy grouped' ) + variationPicker( '1434', [ '158' ] ) );
+		const pickerForm = root.querySelector( `.${ VARIATION_MODAL_CLASS_PREFIX } form` );
+		let result;
+		expect( () => {
+			result = resolveCheckoutButtonForm( root, '1434', '158', PICKER_OPTIONS );
+		} ).not.toThrow();
+		expect( result ).toBe( pickerForm );
+		expect( root.querySelector( 'input[value="158"]' ).checked ).toBe( true );
+	} );
+
+	// Substituting the product-only button would check the reader out on
+	// something other than what the link asked for.
+	it( 'returns null for a variation no button or picker can serve', () => {
+		const root = render( checkoutButton( { product_id: '158' }, 'Checkout' ) );
+		expect( resolveCheckoutButtonForm( root, '158', '160', PICKER_OPTIONS ) ).toBeNull();
+	} );
+
+	it( 'treats a variation_id equal to product_id as a strict variation request', () => {
+		const root = render( checkoutButton( { product_id: '158' }, 'Checkout' ) );
+		expect( resolveCheckoutButtonForm( root, '158', '158', PICKER_OPTIONS ) ).toBeNull();
+	} );
+
+	// A "let the reader choose" link carries the parent id only. A page button
+	// locked to one variation must not catch it, or the reader is checked out on
+	// that variation with no picker.
+	it( 'serves an unlocked page button for a no-variation link even when a locked one precedes it', () => {
+		const locked = checkoutButton( { product_id: '1406', variation_id: '1408', is_variable: true }, 'Annual' );
+		const unlocked = checkoutButton( { product_id: '1406', is_variable: true }, 'Subscribe' );
+		const root = render( locked + unlocked );
+		const unlockedForm = root.querySelectorAll( '.wp-block-newspack-blocks-checkout-button form' )[ 1 ];
+		expect( resolveCheckoutButtonForm( root, '1406', null, PICKER_OPTIONS ) ).toBe( unlockedForm );
+	} );
+
+	it( 'returns null for a no-variation link when the page carries only locked buttons and nothing is synthesized', () => {
+		const root = render( checkoutButton( { product_id: '1406', variation_id: '1408', is_variable: true } ) );
+		expect( resolveCheckoutButtonForm( root, '1406', null, PICKER_OPTIONS ) ).toBeNull();
+	} );
+
+	it( 'returns null without throwing when nothing matches', () => {
+		const root = render( checkoutButton( { product_id: '999' } ) );
+		let result;
+		expect( () => {
+			result = resolveCheckoutButtonForm( root, '1406', '1407', PICKER_OPTIONS );
+		} ).not.toThrow();
+		expect( result ).toBeNull();
+	} );
+
+	it( 'copies block context from the source button into the picker form without submitting the locked button', () => {
+		const button = `<div class="wp-block-newspack-blocks-checkout-button"><form data-checkout='${ JSON.stringify( {
+			product_id: '1406',
+			variation_id: '1408',
+			is_variable: true,
+		} ) }'><input type="hidden" name="after_success_button_label" value="Thanks!"><input type="hidden" name="after_success_url" value="/welcome/"><button type="submit">Subscribe</button></form></div>`;
+		const root = render( button + variationPicker( '1406', [ '1407', '1408', '1409' ] ) );
+		const pickerForm = root.querySelector( `.${ VARIATION_MODAL_CLASS_PREFIX } form` );
+		const buttonForm = root.querySelector( '.wp-block-newspack-blocks-checkout-button form' );
+
+		const result = resolveCheckoutButtonForm( root, '1406', '1407', PICKER_OPTIONS );
+
+		expect( result ).toBe( pickerForm );
+		expect( result ).not.toBe( buttonForm );
+		expect( pickerForm.querySelector( 'input[name="after_success_button_label"]' ).value ).toBe( 'Thanks!' );
+		expect( pickerForm.querySelector( 'input[name="after_success_url"]' ).value ).toBe( '/welcome/' );
+	} );
+
+	// A button locked to one variation was configured for that variation, so its
+	// coupon should not follow the reader to a different one when an unlocked
+	// button for the same product is available to supply the context instead.
+	it( 'prefers an unlocked button over a variation-locked one for the picker context', () => {
+		const locked = `<div class="wp-block-newspack-blocks-checkout-button"><form data-checkout='${ JSON.stringify( {
+			product_id: '1406',
+			variation_id: '1408',
+			is_variable: true,
+		} ) }'><input type="hidden" name="coupon" value="LOCKED20"><button type="submit">Annual</button></form></div>`;
+		const unlocked = `<div class="wp-block-newspack-blocks-checkout-button"><form data-checkout='${ JSON.stringify( {
+			product_id: '1406',
+			is_variable: true,
+		} ) }'><input type="hidden" name="coupon" value="ANYTIER5"><button type="submit">Subscribe</button></form></div>`;
+		const root = render( locked + unlocked + variationPicker( '1406', [ '1407', '1408', '1409' ] ) );
+		const pickerForm = root.querySelector( `.${ VARIATION_MODAL_CLASS_PREFIX } form` );
+
+		const result = resolveCheckoutButtonForm( root, '1406', '1407', PICKER_OPTIONS );
+
+		expect( result ).toBe( pickerForm );
+		expect( pickerForm.querySelector( 'input[name="coupon"]' ).value ).toBe( 'ANYTIER5' );
+	} );
+
+	// With nothing but locked buttons there is no correct donor, so the first in
+	// DOM order supplies the context — the other half of findContextDonorForm.
+	it( 'falls back to the first locked button when no unlocked one exists', () => {
+		const locked = ( variationId, coupon ) =>
+			`<div class="wp-block-newspack-blocks-checkout-button"><form data-checkout='${ JSON.stringify( {
+				product_id: '1406',
+				variation_id: variationId,
+				is_variable: true,
+			} ) }'><input type="hidden" name="coupon" value="${ coupon }"><button type="submit">Buy</button></form></div>`;
+		const root = render( locked( '1408', 'FIRST20' ) + locked( '1409', 'SECOND10' ) + variationPicker( '1406', [ '1407', '1408', '1409' ] ) );
+		const pickerForm = root.querySelector( `.${ VARIATION_MODAL_CLASS_PREFIX } form` );
+
+		const result = resolveCheckoutButtonForm( root, '1406', '1407', PICKER_OPTIONS );
+
+		expect( result ).toBe( pickerForm );
+		expect( pickerForm.querySelector( 'input[name="coupon"]' ).value ).toBe( 'FIRST20' );
+	} );
+} );
+
+describe( 'resolveCheckoutButtonForm — synthesized form demotion', () => {
+	const synthesized = html => `<div class="${ SYNTHESIZED_CONTAINER_SELECTOR.slice( 1 ) }" style="display:none">${ html }</div>`;
+
+	it( 'prefers a page-authored button over an earlier synthesized one', () => {
+		// The synthesized form is rendered first to prove the preference is not
+		// DOM order.
+		const root = render( synthesized( checkoutButton( { product_id: '1406' }, 'Synth' ) ) + checkoutButton( { product_id: '1406' }, 'Page' ) );
+		const pageForm = root.querySelectorAll( '.wp-block-newspack-blocks-checkout-button form' )[ 1 ];
+		expect( resolveCheckoutButtonForm( root, '1406', null, PICKER_OPTIONS ) ).toBe( pageForm );
+	} );
+
+	// The page button is locked to Annual; the link asks for the parent. The
+	// synthesized parent button is the one that opens the picker, so it wins
+	// even though a page-authored button for the product exists.
+	it( 'serves the synthesized parent button for a no-variation link when the page offers only locked buttons', () => {
+		const pageLocked = checkoutButton( { product_id: '1406', variation_id: '1408', is_variable: true }, 'Annual' );
+		const synthParent = synthesized( checkoutButton( { product_id: '1406', is_variable: true }, 'Subscribe' ) );
+		const root = render( pageLocked + synthParent + variationPicker( '1406', [ '1407', '1408' ] ) );
+		const synthForm = root.querySelector( `${ SYNTHESIZED_CONTAINER_SELECTOR } form` );
+		expect( resolveCheckoutButtonForm( root, '1406', null, PICKER_OPTIONS ) ).toBe( synthForm );
+	} );
+
+	// The page block's coupon and after-checkout settings are the editor's, so a
+	// synthesized form locked to the requested variation must not outrank them.
+	it( 'lets the picker with page context outrank a synthesized exact variation match', () => {
+		const pageUnlocked = `<div class="wp-block-newspack-blocks-checkout-button"><form data-checkout='${ JSON.stringify( {
+			product_id: '1406',
+			is_variable: true,
+		} ) }'><input type="hidden" name="coupon" value="PAGE20"><button type="submit">Subscribe</button></form></div>`;
+		const synthLocked = synthesized(
+			`<div class="wp-block-newspack-blocks-checkout-button"><form data-checkout='${ JSON.stringify( {
+				product_id: '1406',
+				variation_id: '1407',
+				is_variable: true,
+			} ) }'><input type="hidden" name="coupon" value="URL5"><button type="submit">Complete</button></form></div>`
+		);
+		const root = render( pageUnlocked + synthLocked + variationPicker( '1406', [ '1407', '1408' ] ) );
+		const pickerForm = root.querySelector( `.${ VARIATION_MODAL_CLASS_PREFIX } form` );
+
+		const result = resolveCheckoutButtonForm( root, '1406', '1407', PICKER_OPTIONS );
+
+		expect( result ).toBe( pickerForm );
+		expect( pickerForm.querySelector( 'input[name="coupon"]' ).value ).toBe( 'PAGE20' );
+	} );
+
+	it( 'serves the synthesized exact match when the page has no button for the product', () => {
+		const synthLocked = synthesized( checkoutButton( { product_id: '1406', variation_id: '1407', is_variable: true } ) );
+		const root = render( synthLocked + variationPicker( '1406', [ '1407', '1408' ] ) );
+		const synthForm = root.querySelector( `${ SYNTHESIZED_CONTAINER_SELECTOR } form` );
+		expect( resolveCheckoutButtonForm( root, '1406', '1407', PICKER_OPTIONS ) ).toBe( synthForm );
+	} );
+} );
+
+describe( 'copyContextFields', () => {
+	it( 'copies present source fields, skips missing ones, and does not overwrite existing target fields', () => {
+		const root = render(
+			`<form id="src"><input type="hidden" name="after_success_url" value="/welcome/"><input type="hidden" name="prompt_title" value="Join"></form>` +
+				`<form id="dst"><input type="hidden" name="prompt_title" value="Existing"></form>`
+		);
+		const source = root.querySelector( '#src' );
+		const target = root.querySelector( '#dst' );
+
+		copyContextFields( source, target );
+
+		// Copied from source.
+		expect( target.querySelector( 'input[name="after_success_url"]' ).value ).toBe( '/welcome/' );
+		// Not overwritten.
+		expect( target.querySelector( 'input[name="prompt_title"]' ).value ).toBe( 'Existing' );
+		// Missing on source -> not added.
+		expect( target.querySelector( 'input[name="gate_post_id"]' ) ).toBeNull();
+	} );
+
+	it( 'copies the last source value when a context field is duplicated', () => {
+		const root = render(
+			'<form id="src">' +
+				'<input type="hidden" name="after_success_url" value="/first/">' +
+				'<input type="hidden" name="after_success_url" value="/last/">' +
+				'</form>' +
+				'<form id="dst"></form>'
+		);
+		const source = root.querySelector( '#src' );
+		const target = root.querySelector( '#dst' );
+
+		copyContextFields( source, target );
+
+		expect( target.querySelector( 'input[name="after_success_url"]' ).value ).toBe( '/last/' );
+	} );
+
+	it( 'does not throw when source or target is null', () => {
+		const root = render( '<form id="dst"></form>' );
+		const target = root.querySelector( '#dst' );
+		expect( () => copyContextFields( null, target ) ).not.toThrow();
+		expect( () => copyContextFields( target, null ) ).not.toThrow();
+	} );
+
+	// The picker form replaces the button's own form, so a coupon attached to the
+	// Checkout Button block is only auto-applied if it is carried across.
+	it( 'copies the auto-applied coupon to the picker form', () => {
+		const root = render( '<form id="src"><input type="hidden" name="coupon" value="MEMBER10"></form><form id="dst"></form>' );
+
+		copyContextFields( root.querySelector( '#src' ), root.querySelector( '#dst' ) );
+
+		expect( root.querySelector( '#dst input[name="coupon"]' ).value ).toBe( 'MEMBER10' );
+	} );
+} );
+
+describe( 'applyContextFields', () => {
+	// The picker is rendered once per parent product and shared by every button
+	// targeting it, and nothing clears it when the modal closes. These two cases
+	// are what the click path gets wrong if the stamp is not authoritative.
+	const picker = () => render( '<form id="picker"></form>' ).querySelector( '#picker' );
+	const couponValue = form => {
+		const input = form.querySelector( 'input[name="coupon"]' );
+		return input ? input.value : null;
+	};
+
+	it( 'replaces a coupon left behind by a previously clicked button', () => {
+		const form = picker();
+
+		applyContextFields( form, { coupon: 'SAVE20' } );
+		applyContextFields( form, { coupon: 'MEMBER10' } );
+
+		expect( couponValue( form ) ).toBe( 'MEMBER10' );
+		expect( form.querySelectorAll( 'input[name="coupon"]' ) ).toHaveLength( 1 );
+	} );
+
+	it( 'clears the coupon when the clicked button has none', () => {
+		const form = picker();
+
+		applyContextFields( form, { coupon: 'SAVE20' } );
+		applyContextFields( form, {} );
+
+		expect( couponValue( form ) ).toBeNull();
+	} );
+
+	it( 'does not leave an empty coupon input that would block a later button', () => {
+		const form = picker();
+
+		applyContextFields( form, {} );
+		applyContextFields( form, { coupon: 'SAVE20' } );
+
+		expect( couponValue( form ) ).toBe( 'SAVE20' );
+	} );
+
+	it( 'stamps the after-success and attribution context', () => {
+		const form = picker();
+
+		applyContextFields( form, { after_success_behavior: 'custom', gate_post_id: 12, prompt_title: '' } );
+
+		expect( form.querySelector( 'input[name="after_success_behavior"]' ).value ).toBe( 'custom' );
+		expect( form.querySelector( 'input[name="gate_post_id"]' ).value ).toBe( '12' );
+		expect( form.querySelector( 'input[name="prompt_title"]' ) ).toBeNull();
+	} );
+
+	it( 'stamps the quantity', () => {
+		const form = picker();
+
+		applyContextFields( form, { quantity: 3 } );
+
+		expect( form.querySelector( 'input[name="quantity"]' ).value ).toBe( '3' );
+	} );
+
+	it( 'leaves the picker’s own seats field in place and does not shadow it', () => {
+		// Per-seat group plans render a visible number input named `quantity`, the
+		// same name the block stamps its own quantity into. Removing it leaves the
+		// reader with no way to choose seats at all.
+		const form = render( '<form id="picker"><input type="number" name="quantity" id="group_seats" min="2" value="2"></form>' ).querySelector(
+			'#picker'
+		);
+
+		applyContextFields( form, { quantity: 3 } );
+
+		const inputs = form.querySelectorAll( 'input[name="quantity"]' );
+		expect( inputs ).toHaveLength( 1 );
+		expect( inputs[ 0 ].id ).toBe( 'group_seats' );
+		expect( inputs[ 0 ].value ).toBe( '2' );
+	} );
+
+	it( 'clears its own stale hidden field without touching a visible one', () => {
+		const form = picker();
+
+		applyContextFields( form, { quantity: 3 } );
+		form.insertAdjacentHTML( 'beforeend', '<input type="number" name="quantity" id="group_seats" value="4">' );
+		applyContextFields( form, { quantity: 5 } );
+
+		const inputs = form.querySelectorAll( 'input[name="quantity"]' );
+		expect( inputs ).toHaveLength( 1 );
+		expect( inputs[ 0 ].id ).toBe( 'group_seats' );
+	} );
+
+	it( 'leaves the picker’s own fields alone', () => {
+		const form = render(
+			'<form id="picker"><input type="hidden" name="newspack_checkout" value="1"><input type="radio" name="product_id" value="9"></form>'
+		).querySelector( '#picker' );
+
+		applyContextFields( form, { coupon: 'SAVE20' } );
+
+		expect( form.querySelector( 'input[name="newspack_checkout"]' ).value ).toBe( '1' );
+		expect( form.querySelector( 'input[name="product_id"]' ).value ).toBe( '9' );
+	} );
+
+	it( 'does not throw on a null form or missing data', () => {
+		const form = picker();
+		expect( () => applyContextFields( null, { coupon: 'X' } ) ).not.toThrow();
+		expect( () => applyContextFields( form, null ) ).not.toThrow();
+	} );
+} );
+
+describe( 'PICKER_CONTEXT_FIELDS', () => {
+	// modal.js reads this same list for the click path, so a field missing here is
+	// dropped by both the URL trigger and the variation picker.
+	it( 'carries the coupon alongside the after-success and attribution context', () => {
+		expect( PICKER_CONTEXT_FIELDS ).toEqual(
+			expect.arrayContaining( [
+				'after_success_behavior',
+				'after_success_url',
+				'after_success_button_label',
+				'gate_post_id',
+				'newspack_popup_id',
+				'prompt_title',
+				'coupon',
+				'quantity',
+			] )
+		);
+	} );
+} );
+
+describe( 'readUtmParams', () => {
+	it( 'keeps utm-prefixed params with values, mirroring the server-side match', () => {
+		expect( readUtmParams( '?utm_source=newsletter&utm_campaign=spring&coupon=NOPE&utm_medium=' ) ).toEqual( {
+			utm_source: 'newsletter',
+			utm_campaign: 'spring',
+		} );
+	} );
+
+	it( 'returns an empty map for an empty query string', () => {
+		expect( readUtmParams( '' ) ).toEqual( {} );
+	} );
+} );
+
+describe( 'appendUtmFields', () => {
+	it( 'appends a hidden field per utm param', () => {
+		const root = render( checkoutButton( { product_id: '1406' } ) );
+		const form = root.querySelector( 'form' );
+		appendUtmFields( form, { utm_source: 'newsletter', utm_campaign: 'spring' } );
+		expect( form.querySelector( 'input[name="utm_source"]' ).value ).toBe( 'newsletter' );
+		expect( form.querySelector( 'input[name="utm_campaign"]' ).value ).toBe( 'spring' );
+	} );
+
+	it( 'never overwrites a field the form already carries', () => {
+		const root = render( checkoutButton( { product_id: '1406' } ) );
+		const form = root.querySelector( 'form' );
+		form.insertAdjacentHTML( 'beforeend', '<input type="hidden" name="utm_source" value="block-value">' );
+		appendUtmFields( form, { utm_source: 'url-value' } );
+		expect( form.querySelectorAll( 'input[name="utm_source"]' ) ).toHaveLength( 1 );
+		expect( form.querySelector( 'input[name="utm_source"]' ).value ).toBe( 'block-value' );
+	} );
+
+	it( 'does not throw on a null form or missing params', () => {
+		expect( () => appendUtmFields( null, { utm_source: 'x' } ) ).not.toThrow();
+		expect( () => appendUtmFields( document.createElement( 'form' ), null ) ).not.toThrow();
+	} );
+
+	// Param names come straight from the landing URL, so one carrying selector
+	// syntax must not break the submission.
+	it( 'tolerates a field name carrying selector syntax', () => {
+		const root = render( checkoutButton( { product_id: '1406' } ) );
+		const form = root.querySelector( 'form' );
+		expect( () => appendUtmFields( form, { 'utm"]': 'x' } ) ).not.toThrow();
+		expect( form.elements.namedItem( 'utm"]' ).value ).toBe( 'x' );
+	} );
+} );
+
+describe( 'getDroppedLinkContext', () => {
+	it( 'names the link params the resolved form has no field for', () => {
+		const root = render( checkoutButton( { product_id: '1406' } ) );
+		const form = root.querySelector( 'form' );
+		expect( getDroppedLinkContext( form, '?checkout=1&coupon=SPRING20&after_success_url=https%3A%2F%2Fsite.test%2Fwelcome' ) ).toEqual( [
+			'coupon',
+			'after_success_url',
+		] );
+	} );
+
+	it( 'is empty when the form carries the fields or the URL names none', () => {
+		const root = render( checkoutButton( { product_id: '1406' } ) );
+		const form = root.querySelector( 'form' );
+		form.insertAdjacentHTML( 'beforeend', '<input type="hidden" name="coupon" value="PAGE20">' );
+		expect( getDroppedLinkContext( form, '?checkout=1&coupon=SPRING20' ) ).toEqual( [] );
+		expect( getDroppedLinkContext( form, '?checkout=1&product_id=1406' ) ).toEqual( [] );
+	} );
+
+	it( 'counts every named param as dropped without a form', () => {
+		expect( getDroppedLinkContext( null, '?coupon=X&after_success_behavior=custom' ) ).toEqual( [ 'coupon', 'after_success_behavior' ] );
+	} );
+} );

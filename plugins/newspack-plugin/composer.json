@@ -29,7 +29,8 @@
 		"exclude-from-classmap": [
 			"includes/export/class-csv-batch-exporter.php",
 			"includes/export/class-subscriptions-csv-exporter.php",
-			"includes/export/class-users-csv-exporter.php"
+			"includes/export/class-users-csv-exporter.php",
+			"includes/newspack-blocks/"
 		]
 	},
 	"extra": {
