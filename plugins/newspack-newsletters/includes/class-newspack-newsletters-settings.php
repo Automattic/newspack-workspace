@@ -168,7 +168,7 @@ class Newspack_Newsletters_Settings {
 				],
 				'default'           => Newspack_Newsletters_Active_Campaign::ARCHIVE_VISIBILITY_INHERIT,
 				'provider'          => 'active_campaign',
-				'help'              => esc_html__( 'Public campaigns appear in the ActiveCampaign campaign archive. “Same as newsletter visibility” makes “Email and web” newsletters public and “Email only” newsletters private. Each newsletter can override this before it is sent; ActiveCampaign does not allow changing it afterwards.', 'newspack-newsletters' ),
+				'help'              => esc_html__( 'Public campaigns appear in the ActiveCampaign campaign archive. “Same as newsletter visibility” makes “Email and web” newsletters public and “Email only” newsletters private. Each newsletter can override this before it is sent; ActiveCampaign does not allow changing it afterwards. Changing this also affects drafts and scheduled newsletters that have no choice of their own.', 'newspack-newsletters' ),
 				'sanitize_callback' => [ 'Newspack_Newsletters_Active_Campaign', 'sanitize_archive_visibility' ],
 				'onboarding'        => false,
 			),
