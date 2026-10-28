@@ -130,7 +130,7 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * A duplicate never supplies the share, the goal or the start date.
+	 * A duplicate never supplies the share or the goal.
 	 */
 	public function test_get_tests_ignores_a_duplicate_control_s_share_and_goal() {
 		$live = $this->create_test_variant( 'dupa', 'a', null, [], 60 );
@@ -140,7 +140,7 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		$test = Newspack_Popups_AB_Tests::get_tests()[0];
 		$this->assertSame( 60, $test['control_share'] );
 		$this->assertSame( 'donation', $test['goal'] );
-		$this->assertSame( [], array_diff( [ 'a' ], array_keys( $test['variants'] ) ) );
+		$this->assertSame( $live, $test['variants']['a']['id'] );
 	}
 
 	/**

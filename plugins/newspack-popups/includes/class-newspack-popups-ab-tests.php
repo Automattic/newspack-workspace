@@ -473,8 +473,10 @@ final class Newspack_Popups_AB_Tests {
 	 *                 alone before then, so an earlier date would count traffic the
 	 *                 test never split. `variants` maps the letter to
 	 *                 `[ 'id', 'title', 'status', 'status_label', 'edit_link' ]`.
-	 *                 `duplicates` lists prompts that share a letter with the arm
-	 *                 shown (the published one wins), as `letter` plus those fields.
+	 *                 `duplicates` lists the other prompts carrying a letter, as
+	 *                 `letter` plus those fields. The arm shown is the first
+	 *                 published prompt by ID; this page reports that one, but
+	 *                 readers still see every published prompt with the letter.
 	 */
 	public static function get_tests() {
 		$prompts = get_posts(

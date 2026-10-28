@@ -445,7 +445,7 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * The window runs from the first publish date to today and reaches the provider.
+	 * The window runs from the day the split began to today and reaches the provider.
 	 */
 	public function test_window_runs_from_started_at_and_is_passed_to_the_provider() {
 		$this->as_admin();
