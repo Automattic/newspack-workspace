@@ -5,8 +5,8 @@
  * Newspack Campaigns declares the interface a stats provider implements. CI
  * runs each plugin's suite alone, so the real file is loaded when the sibling
  * plugin is checked out beside this one (the monorepo), and mirrored here
- * otherwise. The mirror has to match the interface's three signatures; a
- * monorepo run fails on the real declaration the moment they drift.
+ * otherwise. A monorepo run checks the provider against the real interface;
+ * the mirror is never declared there, so it is kept in step by hand.
  *
  * @package Newspack\Tests
  */

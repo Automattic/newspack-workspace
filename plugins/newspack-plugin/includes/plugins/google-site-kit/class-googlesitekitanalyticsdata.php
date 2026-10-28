@@ -39,15 +39,6 @@ class GoogleSiteKitAnalyticsData extends Module {
 	}
 
 	/**
-	 * Whether the current user holds a Site Kit token. Reads stored state only.
-	 *
-	 * @return bool
-	 */
-	public function is_authenticated(): bool {
-		return $this->authentication->is_authenticated();
-	}
-
-	/**
 	 * Run one report against a GA4 property.
 	 *
 	 * @param string $property_id GA4 property ID, digits only.

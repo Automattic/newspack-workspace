@@ -239,7 +239,7 @@ class Newspack_Test_GA4_AB_Stats_Provider extends WP_UnitTestCase {
 	/**
 	 * A form-submission test needs two conversion reports, so four reports in all when nothing is withheld.
 	 */
-	public function test_get_counts_stays_within_four_requests_for_form_submission() {
+	public function test_form_submission_runs_four_reports_when_nothing_is_withheld() {
 		$calls    = 0;
 		$provider = new GA4_AB_Stats_Provider(
 			function () use ( &$calls ) {
@@ -332,20 +332,30 @@ class Newspack_Test_GA4_AB_Stats_Provider extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The fallback on a form-submission test is the widest case: the withheld readers report, then
-	 * four event-count reports.
+	 * The widest case: a form-submission test whose last conversion report is withheld runs
+	 * its four reports, then all four again as event counts.
 	 */
-	public function test_form_submission_with_fallback_is_five_reports() {
+	public function test_form_submission_with_a_late_withheld_report_is_eight_reports() {
 		$calls    = 0;
 		$provider = new GA4_AB_Stats_Provider(
 			function () use ( &$calls ) {
 				++$calls;
-				return $this->response( [], 1 === $calls );
+				return $this->response( [], 4 === $calls );
 			}
 		);
 		$counts   = $provider->get_counts( $this->test_entry(), 'form_submission', self::START, self::END );
-		$this->assertSame( 5, $calls );
+		$this->assertSame( 8, $calls );
 		$this->assertSame( 'events', $counts['unit'] );
+	}
+
+	/**
+	 * When GA4 withholds the event counts as well, the test reads as unavailable rather than as zeros.
+	 */
+	public function test_withheld_event_counts_are_an_error_not_zeros() {
+		$provider = new GA4_AB_Stats_Provider( fn() => $this->response( [ [ 12, 3 ] ], true ) );
+		$result   = $provider->get_counts( $this->test_entry(), 'link_click', self::START, self::END );
+		$this->assertWPError( $result );
+		$this->assertSame( 'Google Analytics withheld the counts for this test.', $result->get_error_message() );
 	}
 
 	/**

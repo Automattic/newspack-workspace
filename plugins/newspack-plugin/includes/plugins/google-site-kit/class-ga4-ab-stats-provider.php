@@ -162,12 +162,14 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 			$result['unit'] = 'events';
 			$counted        = $this->count( $property_id, $letters, $variants, $goal, $start, $end, self::METRIC_EVENTS );
 		}
+		if ( null === $counted ) {
+			// Zeros here would read as a test nobody has seen, and the page would cache them.
+			return new WP_Error( 'newspack_ga4_ab_stats', __( 'Google Analytics withheld the counts for this test.', 'newspack' ) );
+		}
 		if ( is_wp_error( $counted ) ) {
 			return $counted;
 		}
-		if ( is_array( $counted ) ) {
-			$result['variants'] = $counted;
-		}
+		$result['variants'] = $counted;
 		return $result;
 	}
 
@@ -375,26 +377,24 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 			return false;
 		}
 		try {
-			if ( self::has_token( 0 ) ) {
-				return true;
-			}
-			$owner_id = self::owner_id();
-			return $owner_id > 0 && $owner_id !== get_current_user_id() && self::has_token( $owner_id );
+			return self::reporting_user_id() >= 0;
 		} catch ( \Throwable $e ) {
 			return false;
 		}
 	}
 
 	/**
-	 * Site Kit's runner: the report runs with the current user's token, or
-	 * with the Analytics module owner's token when the current user has none.
+	 * Site Kit's runner: the report runs with the Analytics owner's token, so
+	 * every administrator reads the same numbers from the account that
+	 * connected the property, and with the current user's own token only
+	 * when no owner holds one.
 	 *
-	 * Lending the owner's token widens nothing: the only callers are the
-	 * administrator-only A/B Tests page and its stats route, an administrator
-	 * can already read the stored token, and the report is read-only and
-	 * scoped to the connected property. The module is bound to the owner
-	 * through Site Kit's own user-options seam rather than by switching the
-	 * request's current user, so nothing else in the request runs as them.
+	 * Lending the owner's token is limited to administrators here rather than
+	 * left to the callers' own checks: an administrator can already read the
+	 * stored token, and the report is read-only and scoped to the connected
+	 * property. The module is bound to the owner through Site Kit's own
+	 * user-options seam rather than by switching the request's current user,
+	 * so nothing else in the request runs as them.
 	 *
 	 * @param string $property_id GA4 property ID.
 	 * @param array  $request     Report request.
@@ -405,12 +405,9 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 			return new WP_Error( 'newspack_ga4_ab_stats', __( 'Site Kit is not installed.', 'newspack' ) );
 		}
 		try {
-			$user_id = 0;
-			if ( ! self::has_token( 0 ) ) {
-				$user_id = self::owner_id();
-				if ( $user_id <= 0 || $user_id === get_current_user_id() || ! self::has_token( $user_id ) ) {
-					return new WP_Error( 'newspack_ga4_ab_stats', __( 'Connect Google Analytics through Site Kit.', 'newspack' ) );
-				}
+			$user_id = self::reporting_user_id();
+			if ( $user_id < 0 ) {
+				return new WP_Error( 'newspack_ga4_ab_stats', __( 'Connect Google Analytics through Site Kit.', 'newspack' ) );
 			}
 			return self::site_kit_module( $user_id )->run_report( $property_id, $request );
 		} catch ( \Throwable $e ) {
@@ -442,6 +439,22 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 			return is_string( $reason ) ? trim( $reason ) : '';
 		}
 		return trim( strtok( $message, "\n" ) );
+	}
+
+	/**
+	 * Whose token a report runs with: the Analytics owner's when one is
+	 * recorded, holds a token, and the current user is the owner or an
+	 * administrator; else the current user's own (0 is Site Kit's name for
+	 * the current user); else nobody's.
+	 *
+	 * @return int User ID, 0 for the current user, -1 when no token can be used.
+	 */
+	private static function reporting_user_id(): int {
+		$owner_id = self::owner_id();
+		if ( $owner_id > 0 && self::has_token( $owner_id ) && ( $owner_id === get_current_user_id() || current_user_can( 'manage_options' ) ) ) {
+			return $owner_id;
+		}
+		return self::has_token( 0 ) ? 0 : -1;
 	}
 
 	/**
