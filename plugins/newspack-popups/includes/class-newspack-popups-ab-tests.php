@@ -485,9 +485,13 @@ final class Newspack_Popups_AB_Tests {
 				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Prompts CPT; config-scale.
 				'orderby'        => 'ID',
 				'order'          => 'ASC',
-				'meta_key'       => self::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
-				'meta_compare'   => '!=',
-				'meta_value'     => '', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				'meta_query'     => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- The Test ID lives in meta; every prompt in a test carries it.
+					[
+						'key'     => self::META_TEST_ID,
+						'value'   => '',
+						'compare' => '!=',
+					],
+				],
 			]
 		);
 		$grouped = [];
