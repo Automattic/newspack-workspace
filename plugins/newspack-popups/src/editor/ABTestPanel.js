@@ -57,12 +57,14 @@ const ABTestPanel = ( {
 	}, [] );
 
 	const [ prompts, setPrompts ] = useState( [] );
+	const [ lookedUpFor, setLookedUpFor ] = useState( null );
 	const latestTestId = useRef( testId );
 	latestTestId.current = testId;
 	const lookUpPrompts = useDebounce(
 		useCallback( id => {
 			if ( ! id ) {
 				setPrompts( [] );
+				setLookedUpFor( '' );
 				return;
 			}
 			apiFetch( { path: `/newspack-popups/v1/ab-tests/${ id }` } )
@@ -70,13 +72,20 @@ const ABTestPanel = ( {
 					// A reply to an earlier Test ID must not describe the current one.
 					if ( id === latestTestId.current ) {
 						setPrompts( Array.isArray( result ) ? result : [] );
+						setLookedUpFor( id );
 					}
 				} )
-				.catch( () => setPrompts( [] ) );
+				.catch( () => {
+					if ( id === latestTestId.current ) {
+						setPrompts( [] );
+						setLookedUpFor( id );
+					}
+				} );
 		}, [] ),
 		500
 	);
 	useEffect( () => {
+		setPrompts( [] );
 		lookUpPrompts( testId );
 	}, [ testId ] );
 
@@ -119,6 +128,9 @@ const ABTestPanel = ( {
 	const control = 'a' !== variant ? others.find( prompt => 'a' === prompt.variant ) : null;
 	const effectiveGoal = control ? control.goal || '' : goal;
 	const warnings = testPromptWarnings( { postId, variant, prompts } );
+	const lookupPending = !! testId && lookedUpFor !== testId;
+	const holdGoal = lookupPending && 'a' !== variant;
+	const hasChallenger = others.some( prompt => prompt.variant && 'a' !== prompt.variant );
 
 	// The notices describe standing state rather than the result of an action, so
 	// none is announced on mount (the panel re-mounts them on every expand).
@@ -135,18 +147,18 @@ const ABTestPanel = ( {
 					{ testId ? ' ' + __( 'Clear the test name or choose another placement to save.', 'newspack-popups' ) : '' }
 				</Notice>
 			) }
-			<TextControl
-				label={ __( 'Test name', 'newspack-popups' ) }
-				value={ draft }
-				onChange={ onTestIdChange }
-				onBlur={ () => setDraft( testId ) }
-				// On an ineligible placement a new test can't start, but a stored Test
-				// ID stays editable so it can be cleared, which the notice asks for.
-				disabled={ ! canManage || ( ! eligible && ! testId ) }
-				help={ __( 'Prompts with the same test name are compared with each other.', 'newspack-popups' ) }
-				__nextHasNoMarginBottom
-				__next40pxDefaultSize
-			/>
+			{ ( eligible || testId ) && (
+				<TextControl
+					label={ __( 'Test name', 'newspack-popups' ) }
+					value={ draft }
+					onChange={ onTestIdChange }
+					onBlur={ () => setDraft( testId ) }
+					disabled={ ! canManage }
+					help={ __( 'Prompts with the same test name are compared with each other.', 'newspack-popups' ) }
+					__nextHasNoMarginBottom
+					__next40pxDefaultSize
+				/>
+			) }
 			{ testId && (
 				<>
 					<SelectControl
@@ -159,7 +171,7 @@ const ABTestPanel = ( {
 						__next40pxDefaultSize
 					/>
 					{ warnings.map( warning => (
-						<Notice key={ warning } status="warning" spokenMessage="" isDismissible={ false }>
+						<Notice key={ warning } status="error" spokenMessage="" isDismissible={ false }>
 							{ warning }
 						</Notice>
 					) ) }
@@ -172,35 +184,44 @@ const ABTestPanel = ( {
 							step={ 1 }
 							onChange={ value => onMetaFieldChange( { [ META_CONTROL_SHARE ]: value } ) }
 							disabled={ ! canManage }
-							help={ splitSummary( controlShare ) }
+							help={
+								hasChallenger || lookupPending
+									? splitSummary( controlShare )
+									: sprintf(
+											// Translators: %d is the share of readers who will see version A.
+											__( '%d%% will see A once version B is added.', 'newspack-popups' ),
+											controlShare
+									  )
+							}
 							__nextHasNoMarginBottom
 							__next40pxDefaultSize
 						/>
 					) }
-					{ control ? (
-						<p className="newspack-popups-ab-test__note">
-							{ sprintf(
-								// Translators: %1$s is the test's goal, %2$s the traffic split, such as "60% see A, 40% see B".
-								__( 'Goal: %1$s. %2$s. Set on version A.', 'newspack-popups' ),
-								goals[ effectiveGoal ] || __( 'none', 'newspack-popups' ),
-								splitSummary( control.control_share ?? 50 )
-							) }
-						</p>
-					) : (
-						<SelectControl
-							label={ __( 'Goal', 'newspack-popups' ) }
-							help={ __( 'What a reader does that counts as a success.', 'newspack-popups' ) }
-							value={ goal }
-							options={ goalOptions }
-							onChange={ value => onMetaFieldChange( { [ META_GOAL ]: value } ) }
-							disabled={ ! canManage }
-							__nextHasNoMarginBottom
-							__next40pxDefaultSize
-						/>
-					) }
-					{ promptLacksGoalBlock( effectiveGoal, blockNames ) && (
+					{ ! holdGoal &&
+						( control ? (
+							<p className="newspack-popups-ab-test__note">
+								{ sprintf(
+									// Translators: %1$s is the test's goal, %2$s the traffic split, such as "60% see A, 40% see B".
+									__( 'Goal: %1$s. %2$s. Set on version A.', 'newspack-popups' ),
+									goals[ effectiveGoal ] || __( 'none', 'newspack-popups' ),
+									splitSummary( control.control_share ?? 50 )
+								) }
+							</p>
+						) : (
+							<SelectControl
+								label={ __( 'Goal', 'newspack-popups' ) }
+								help={ __( 'What a reader does that counts as a success.', 'newspack-popups' ) }
+								value={ goal }
+								options={ goalOptions }
+								onChange={ value => onMetaFieldChange( { [ META_GOAL ]: value } ) }
+								disabled={ ! canManage }
+								__nextHasNoMarginBottom
+								__next40pxDefaultSize
+							/>
+						) ) }
+					{ ! holdGoal && promptLacksGoalBlock( effectiveGoal, blockNames ) && (
 						<Notice status="warning" spokenMessage="" isDismissible={ false }>
-							{ missingGoalBlockMessage( effectiveGoal ) }
+							{ missingGoalBlockMessage( effectiveGoal, !! control ) }
 						</Notice>
 					) }
 					{ others.length > 0 && (

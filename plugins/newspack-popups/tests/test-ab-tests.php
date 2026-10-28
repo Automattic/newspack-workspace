@@ -806,6 +806,21 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		self::assertStringContainsString( 'post=' . $control, $response->get_data()[0]['edit_link'] );
 		update_post_meta( $control, Newspack_Popups_AB_Tests::META_GOAL, 'donation' );
 
+		global $wpdb;
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery, WordPress.DB.SlowDBQuery
+		$wpdb->update(
+			$wpdb->postmeta,
+			[ 'meta_value' => '0' ],
+			[
+				'post_id'  => $control,
+				'meta_key' => Newspack_Popups_AB_Tests::META_CONTROL_SHARE,
+			]
+		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery, WordPress.DB.SlowDBQuery
+		wp_cache_delete( $control, 'post_meta' );
+		$response = rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/lookup-test' ) );
+		self::assertSame( [ 50, 50 ], wp_list_pluck( $response->get_data(), 'control_share' ) );
+
 		self::assertSame( [], rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/no-such-test' ) )->get_data() );
 		self::assertSame( 404, rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/Not%20A%20Slug' ) )->get_status() );
 

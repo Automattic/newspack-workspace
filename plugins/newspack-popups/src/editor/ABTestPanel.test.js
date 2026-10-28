@@ -69,6 +69,7 @@ const AB_TESTING = {
 
 const INELIGIBLE = 'A/B tests only work on prompts that Newspack places for you.';
 const MISSING_BLOCK = "Readers can't donate from this prompt. Add a Donate block, or choose another goal.";
+const MISSING_BLOCK_FROM_CONTROL = "Readers can't donate from this prompt. Add a Donate block, or change the goal on version A.";
 
 let onMetaFieldChange;
 
@@ -171,13 +172,14 @@ describe( 'ABTestPanel', () => {
 		expect( screen.getByRole( 'note' ).dataset.status ).toBe( 'warning' );
 		// Standing state, not the result of an action: nothing to announce on mount.
 		expect( screen.getByRole( 'note' ).dataset.spoken ).toBe( '' );
-		expect( screen.getByLabelText( 'Test name' ).disabled ).toBe( true );
+		expect( screen.queryByLabelText( 'Test name' ) ).toBeNull();
 		unmount();
 
 		renderPanel( { placement: 'manual', newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'a' } );
 		const note = screen.getAllByRole( 'note' )[ 0 ];
 		expect( note.dataset.status ).toBe( 'error' );
 		expect( note.textContent ).toContain( 'Clear the test name or choose another placement to save.' );
+		expect( screen.getByLabelText( 'Test name' ).disabled ).toBe( false );
 	} );
 
 	it( 'renders read-only for a user the site excludes from managing tests', () => {
@@ -190,13 +192,13 @@ describe( 'ABTestPanel', () => {
 		allInputs().forEach( input => expect( input.disabled ).toBe( true ) );
 	} );
 
-	it( 'warns when the prompt has no block that records the chosen goal', () => {
+	it( 'warns when the prompt has no block that records the chosen goal', async () => {
 		const { unmount } = renderPanel( {
 			newspack_popups_ab_test_id: 'x',
 			newspack_popups_ab_variant: 'b',
 			newspack_popups_ab_test_goal: 'donation',
 		} );
-		expect( screen.getByText( MISSING_BLOCK ) ).toBeTruthy();
+		expect( await screen.findByText( MISSING_BLOCK ) ).toBeTruthy();
 		expect( screen.getByRole( 'note' ).dataset.spoken ).toBe( '' );
 		unmount();
 
@@ -229,7 +231,39 @@ describe( 'ABTestPanel', () => {
 		expect( await screen.findByText( 'Goal: Donation. 60% see A, 40% see B. Set on version A.' ) ).toBeTruthy();
 		expect( screen.queryByLabelText( 'Goal' ) ).toBeNull();
 		expect( screen.queryByLabelText( 'Readers who see A' ) ).toBeNull();
-		expect( screen.getByText( MISSING_BLOCK ) ).toBeTruthy();
+		expect( screen.getByText( MISSING_BLOCK_FROM_CONTROL ) ).toBeTruthy();
+	} );
+
+	it( 'holds the challenger Goal row until the lookup for the current test name resolves', async () => {
+		let resolve;
+		apiFetch.mockReturnValue( new Promise( r => ( resolve = r ) ) );
+
+		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'b', newspack_popups_ab_test_goal: 'donation' } );
+
+		expect( screen.queryByLabelText( 'Goal' ) ).toBeNull();
+		expect( screen.queryByText( MISSING_BLOCK ) ).toBeNull();
+		resolve( [] );
+		expect( await screen.findByLabelText( 'Goal' ) ).toBeTruthy();
+	} );
+
+	it( 'releases the held Goal row when the lookup fails', async () => {
+		apiFetch.mockRejectedValue( new Error( 'offline' ) );
+
+		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'b' } );
+
+		expect( await screen.findByLabelText( 'Goal' ) ).toBeTruthy();
+	} );
+
+	it( 'says the split starts once version B is added, until a challenger exists', async () => {
+		const { unmount } = renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'a', newspack_popups_ab_control_share: 60 } );
+		expect( await screen.findByText( '60% will see A once version B is added.' ) ).toBeTruthy();
+		unmount();
+
+		apiFetch.mockResolvedValue( [
+			{ id: 3, variant: 'b', title: 'Other', goal: '', control_share: 50, status: 'draft', status_label: 'Draft', edit_link: null },
+		] );
+		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'a', newspack_popups_ab_control_share: 60 } );
+		expect( await screen.findByText( '60% see A, 40% see B' ) ).toBeTruthy();
 	} );
 
 	it( 'keeps the Goal select on a challenger while the test has no control', async () => {
@@ -281,7 +315,10 @@ describe( 'ABTestPanel', () => {
 		expect( screen.getByText( 'A (control) · Published' ) ).toBeTruthy();
 		expect( screen.queryByText( 'Me' ) ).toBeNull();
 		expect( screen.getByRole( 'list', { name: 'Other versions in this test' } ) ).toBeTruthy();
-		expect( screen.getByText( 'Another prompt in this test is already version A. Choose a different version.' ) ).toBeTruthy();
+		expect(
+			screen.getByText( 'Another prompt in this test is already version A. Clear the test name on one of them, or unpublish it.' )
+		).toBeTruthy();
+		expect( screen.getByText( /already version A/ ).dataset.status ).toBe( 'error' );
 		expect( apiFetch ).toHaveBeenCalledWith( { path: '/newspack-popups/v1/ab-tests/x' } );
 	} );
 } );
