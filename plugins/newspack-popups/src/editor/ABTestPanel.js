@@ -7,7 +7,7 @@
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { TextControl, SelectControl, RangeControl, Notice, ExternalLink } from '@wordpress/components';
+import { BaseControl, TextControl, SelectControl, RangeControl, Notice, ExternalLink } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
 import { useSelect } from '@wordpress/data';
 import { useEffect, useRef, useState, useCallback } from '@wordpress/element';
@@ -141,10 +141,7 @@ const ABTestPanel = ( {
 				// On an ineligible placement a new test can't start, but a stored Test
 				// ID stays editable so it can be cleared, which the notice asks for.
 				disabled={ ! canManage || ( ! eligible && ! testId ) }
-				help={ __(
-					'Prompts sharing a Test ID form one test. Use the same ID on the control and the challenger. Lowercase letters, numbers and hyphens. Capitals are lowercased; spaces, underscores, periods and slashes become hyphens; anything else is dropped.',
-					'newspack-popups'
-				) }
+				help={ __( 'Give the control and its challenger the same Test ID. Letters, numbers and hyphens only.', 'newspack-popups' ) }
 				__nextHasNoMarginBottom
 				__next40pxDefaultSize
 			/>
@@ -159,6 +156,11 @@ const ABTestPanel = ( {
 						__nextHasNoMarginBottom
 						__next40pxDefaultSize
 					/>
+					{ warnings.map( warning => (
+						<Notice key={ warning } status="warning" spokenMessage="" isDismissible={ false }>
+							{ warning }
+						</Notice>
+					) ) }
 					{ 'a' === variant && (
 						<RangeControl
 							label={ __( 'Control share', 'newspack-popups' ) }
@@ -189,33 +191,32 @@ const ABTestPanel = ( {
 					) }
 					{ others.length > 0 && (
 						<div className="newspack-popups-ab-test__prompts">
-							<p id="newspack-popups-ab-test-others">
-								<strong>{ __( 'Other prompts in this test', 'newspack-popups' ) }</strong>
-							</p>
+							<BaseControl.VisualLabel id="newspack-popups-ab-test-others">
+								{ __( 'Other prompts in this test', 'newspack-popups' ) }
+							</BaseControl.VisualLabel>
 							<ul aria-labelledby="newspack-popups-ab-test-others">
 								{ others.map( prompt => {
-									const label = sprintf(
-										// Translators: %1$s is the prompt title, %2$s its variant, %3$s its post status label.
-										__( '%1$s — %2$s (%3$s)', 'newspack-popups' ),
-										prompt.title,
+									const meta = sprintf(
+										// Translators: %1$s is the prompt's variant, %2$s its post status label.
+										__( '%1$s · %2$s', 'newspack-popups' ),
 										variants[ prompt.variant ] ||
-											( prompt.variant ? String( prompt.variant ).toUpperCase() : __( 'no variant', 'newspack-popups' ) ),
+											( prompt.variant ? String( prompt.variant ).toUpperCase() : __( 'No variant', 'newspack-popups' ) ),
 										prompt.status_label || prompt.status
 									);
 									return (
 										<li key={ prompt.id }>
-											{ prompt.edit_link ? <ExternalLink href={ prompt.edit_link }>{ label }</ExternalLink> : label }
+											{ prompt.edit_link ? (
+												<ExternalLink href={ prompt.edit_link }>{ prompt.title }</ExternalLink>
+											) : (
+												prompt.title
+											) }
+											<span className="newspack-popups-ab-test__prompt-meta">{ meta }</span>
 										</li>
 									);
 								} ) }
 							</ul>
 						</div>
 					) }
-					{ warnings.map( warning => (
-						<Notice key={ warning } status="warning" spokenMessage="" isDismissible={ false }>
-							{ warning }
-						</Notice>
-					) ) }
 				</>
 			) }
 		</Stack>

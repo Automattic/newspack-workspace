@@ -49,6 +49,7 @@ jest.mock( '@wordpress/components', () => ( {
 		</div>
 	),
 	ExternalLink: ( { href, children } ) => <a href={ href }>{ children }</a>,
+	BaseControl: { VisualLabel: ( { id, children } ) => <span id={ id }>{ children }</span> },
 } ) );
 
 import ABTestPanel from './ABTestPanel';
@@ -103,7 +104,7 @@ describe( 'ABTestPanel', () => {
 		renderPanel();
 
 		expect( screen.getByLabelText( 'Test ID' ) ).toBeTruthy();
-		expect( screen.getByText( /periods and slashes become hyphens; anything else is dropped/ ) ).toBeTruthy();
+		expect( screen.getByText( /Give the control and its challenger the same Test ID/ ) ).toBeTruthy();
 		expect( screen.queryByLabelText( 'Variant' ) ).toBeNull();
 		expect( screen.queryByLabelText( 'Conversion goal' ) ).toBeNull();
 	} );
@@ -219,7 +220,7 @@ describe( 'ABTestPanel', () => {
 		const option = screen.getByRole( 'option', { name: 'Select a variant' } );
 		expect( option.disabled ).toBe( true );
 		expect( screen.getByLabelText( 'Variant' ).value ).toBe( '' );
-		expect( await screen.findByText( 'Other — no variant (Draft)' ) ).toBeTruthy();
+		expect( await screen.findByText( 'No variant · Draft' ) ).toBeTruthy();
 		expect( onMetaFieldChange ).not.toHaveBeenCalled();
 	} );
 
@@ -231,9 +232,10 @@ describe( 'ABTestPanel', () => {
 
 		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'a' } );
 
-		const link = await screen.findByText( 'Control — A (control) (Published)' );
+		const link = await screen.findByText( 'Control' );
 		expect( link.getAttribute( 'href' ) ).toBe( 'http://example.test/post.php?post=1' );
-		expect( screen.queryByText( /^Me — / ) ).toBeNull();
+		expect( screen.getByText( 'A (control) · Published' ) ).toBeTruthy();
+		expect( screen.queryByText( 'Me' ) ).toBeNull();
 		expect( screen.getByRole( 'list', { name: 'Other prompts in this test' } ) ).toBeTruthy();
 		expect( screen.getByText( 'Another prompt is already the control of this test.' ) ).toBeTruthy();
 		expect( apiFetch ).toHaveBeenCalledWith( { path: '/newspack-popups/v1/ab-tests/x' } );
