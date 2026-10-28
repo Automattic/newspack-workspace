@@ -13,6 +13,20 @@ require_once __DIR__ . '/mocks/class-ab-stub-provider.php';
  * @group ab-tests
  */
 class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
+	/**
+	 * Built asset files moved aside for a fixture, original => backup.
+	 *
+	 * @var string[]
+	 */
+	private $asset_backups = [];
+
+	/**
+	 * Fixture asset files this test wrote.
+	 *
+	 * @var string[]
+	 */
+	private $asset_fixtures = [];
+
 	public function set_up() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
 		parent::set_up();
 		Newspack_Popups_AB_Tests::reset_config_cache();
@@ -20,6 +34,64 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 		// WP_UnitTestCase keeps one REST server for the whole run, so routes
 		// registered under one test's flag state would outlive it.
 		$GLOBALS['wp_rest_server'] = null;
+	}
+
+	public function tear_down() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
+		foreach ( $this->asset_fixtures as $file ) {
+			if ( file_exists( $file ) ) {
+				// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink -- Removes only the fixture assets this test wrote.
+				unlink( $file );
+			}
+		}
+		foreach ( $this->asset_backups as $file => $backup ) {
+			// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_rename -- Restores the built asset this test moved aside.
+			rename( $backup, $file );
+		}
+		$this->asset_fixtures = [];
+		$this->asset_backups  = [];
+		wp_dequeue_script( Newspack_Popups_AB_Dashboard::SCRIPT_HANDLE );
+		wp_deregister_script( Newspack_Popups_AB_Dashboard::SCRIPT_HANDLE );
+		wp_dequeue_style( Newspack_Popups_AB_Dashboard::SCRIPT_HANDLE );
+		wp_deregister_style( Newspack_Popups_AB_Dashboard::SCRIPT_HANDLE );
+		parent::tear_down();
+	}
+
+	/**
+	 * Replace the dashboard's built assets with fixtures for one test.
+	 *
+	 * The build output is gitignored, so CI's PHPUnit job has none; a test
+	 * that reads it has to supply its own. A built copy, where one exists,
+	 * is moved aside and put back in tear_down().
+	 *
+	 * @param array  $dependencies Dependencies the fixture manifest declares.
+	 * @param string $version      Version the fixture manifest declares.
+	 */
+	private function plant_asset_fixtures( $dependencies, $version ) {
+		$dist = dirname( __DIR__ ) . '/dist';
+		if ( ! is_dir( $dist ) ) {
+			wp_mkdir_p( $dist );
+		}
+		$manifest = sprintf(
+			'<?php return [ \'dependencies\' => %s, \'version\' => %s ];',
+			wp_json_encode( $dependencies ),
+			wp_json_encode( $version )
+		);
+		$fixtures = [
+			'abTests.asset.php' => $manifest,
+			'abTests.js'        => '',
+			'abTests.css'       => '',
+		];
+		foreach ( $fixtures as $name => $contents ) {
+			$path = $dist . '/' . $name;
+			if ( file_exists( $path ) ) {
+				// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_rename -- Moves the built asset aside for the fixture.
+				rename( $path, $path . '.bak' );
+				$this->asset_backups[ $path ] = $path . '.bak';
+			}
+			// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_file_put_contents -- Per-test fixture under the generated dist directory.
+			file_put_contents( $path, $contents );
+			$this->asset_fixtures[] = $path;
+		}
 	}
 
 	/**
@@ -534,21 +606,41 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 	 * dependency the bundle gains is loaded without anyone editing a PHP list.
 	 */
 	public function test_page_script_is_registered_from_the_build_manifest() {
+		$this->plant_asset_fixtures( [ 'wp-element', 'wp-api-fetch' ], 'ab-tests-fixture' );
 		$this->as_admin();
 		add_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
 		$this->tools_menu_slugs();
 		$hook = get_plugin_page_hookname( Newspack_Popups_AB_Dashboard::PAGE_SLUG, 'tools.php' );
 		Newspack_Popups_AB_Dashboard::enqueue( $hook );
 		remove_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
-		$asset  = require dirname( __DIR__ ) . '/dist/abTests.asset.php';
 		$script = wp_scripts()->registered[ Newspack_Popups_AB_Dashboard::SCRIPT_HANDLE ] ?? null;
 		$this->assertNotNull( $script );
-		$this->assertSame( $asset['dependencies'], $script->deps );
-		$this->assertSame( $asset['version'], $script->ver );
+		$this->assertSame( [ 'wp-element', 'wp-api-fetch' ], $script->deps );
+		$this->assertSame( 'ab-tests-fixture', $script->ver );
 		$style = wp_styles()->registered[ Newspack_Popups_AB_Dashboard::SCRIPT_HANDLE ] ?? null;
 		$this->assertNotNull( $style );
 		$this->assertSame( [ 'wp-components' ], $style->deps );
+		$this->assertSame( 'ab-tests-fixture', $style->ver );
 	}
+
+	/**
+	 * Without a build there is nothing to register, and nothing breaks.
+	 */
+	public function test_page_script_is_skipped_without_a_build() {
+		$this->plant_asset_fixtures( [], 'unused' );
+		foreach ( $this->asset_fixtures as $file ) {
+			// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink -- Removes the fixture to stand in for an unbuilt checkout.
+			unlink( $file );
+		}
+		$this->as_admin();
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
+		$this->tools_menu_slugs();
+		$hook = get_plugin_page_hookname( Newspack_Popups_AB_Dashboard::PAGE_SLUG, 'tools.php' );
+		Newspack_Popups_AB_Dashboard::enqueue( $hook );
+		remove_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
+		$this->assertArrayNotHasKey( Newspack_Popups_AB_Dashboard::SCRIPT_HANDLE, wp_scripts()->registered );
+	}
+
 
 	/**
 	 * Boot data carries the tests, the provider state, the thresholds and the copy.
