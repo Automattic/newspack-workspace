@@ -33,9 +33,9 @@ body.newspack-popups-ab-tests-screen {
 		gap: wp-vars.$grid-unit-30;
 		box-sizing: border-box;
 		width: 100%;
-		max-width: 1200px;
+		max-width: calc(var(--newspack-wizard-section-space, #{wp-vars.$grid-unit-30}) * 2 + var(--newspack-wizard-section-width, 1006px));
 		margin-inline: auto;
-		padding: var(--newspack-page-content-gap, #{wp-vars.$grid-unit-60}) var(--wpds-dimension-padding-2xl, #{wp-vars.$grid-unit-30});
+		padding: var(--newspack-page-content-gap, #{wp-vars.$grid-unit-60}) var(--newspack-wizard-section-space, #{wp-vars.$grid-unit-30});
 	}
 
 	&__content > .components-notice {

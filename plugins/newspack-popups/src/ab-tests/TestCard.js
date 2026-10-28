@@ -116,8 +116,12 @@ const TestCard = ( { test, data } ) => {
 								return (
 									<span key={ duplicate.id }>
 										{ index > 0 && ', ' }
-										{ duplicate.edit_link ? <a href={ duplicate.edit_link }>{ title }</a> : title } (
-										{ getVariantLabel( duplicate.letter ) })
+										{ duplicate.edit_link ? <a href={ duplicate.edit_link }>{ title }</a> : title }{ ' ' }
+										{ sprintf(
+											// Translators: %s is the version letter.
+											__( '(version %s)', 'newspack-popups' ),
+											String( duplicate.letter ).toUpperCase()
+										) }
 									</span>
 								);
 							} ) }
@@ -131,7 +135,7 @@ const TestCard = ( { test, data } ) => {
 					<table className="newspack-popups-ab-tests__table">
 						<thead>
 							<tr>
-								<th scope="col">{ __( 'Variant', 'newspack-popups' ) }</th>
+								<th scope="col">{ __( 'Version', 'newspack-popups' ) }</th>
 								<th scope="col">{ __( 'Prompt', 'newspack-popups' ) }</th>
 								<th scope="col" className="is-numeric">
 									{ __( 'Traffic', 'newspack-popups' ) }
