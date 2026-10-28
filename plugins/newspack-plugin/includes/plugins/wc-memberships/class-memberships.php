@@ -24,6 +24,11 @@ class Memberships {
 	const SKIP_RESTRICTION_IN_RSS_OPTION_NAME = 'newspack_skip_content_restriction_in_rss_feeds';
 
 	/**
+	 * Nonce action prefix for the "Reevaluate status" meta box action. The membership ID is appended.
+	 */
+	const REEVALUATE_NONCE_ACTION = 'newspack_reevaluate_membership_';
+
+	/**
 	 * Membership statuses that should grant access to restricted content.
 	 * See: https://woocommerce.com/document/woocommerce-memberships-user-memberships/#section-4
 	 *
@@ -1023,28 +1028,38 @@ class Memberships {
 	 * resync the membership status after relinking the subscription.
 	 */
 	public static function handle_reevaluation_request() {
-		if ( isset( $_GET['reevaluate'] ) && isset( $_GET['post'] ) && function_exists( 'wcs_get_subscription' ) && function_exists( 'wc_memberships_get_user_membership' ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			$subscription = \wcs_get_subscription( absint( $_GET['reevaluate'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			$membership = \wc_memberships_get_user_membership( absint( $_GET['post'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-
-			if ( $subscription instanceof \WC_Subscription && $membership ) {
-				$integrations = wc_memberships()->get_integrations_instance();
-				$integration  = $integrations ? $integrations->get_subscriptions_instance() : null;
-				if ( $integration ) {
-					$has_same_status = $integration->has_subscription_same_status( $subscription, $membership );
-					if ( ! $has_same_status ) {
-						$integration->update_related_membership_status(
-							$subscription,
-							$membership,
-							$subscription->get_status()
-						);
-					}
-				}
-
-				wp_safe_redirect( remove_query_arg( 'reevaluate' ) );
-				exit;
-			}
+		if ( ! isset( $_GET['reevaluate'] ) || ! isset( $_GET['post'] ) || ! function_exists( 'wcs_get_subscription' ) || ! function_exists( 'wc_memberships_get_user_membership' ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return;
 		}
+		if ( ! current_user_can( 'manage_woocommerce' ) ) {
+			return;
+		}
+		$membership_id = absint( $_GET['post'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		check_admin_referer( self::REEVALUATE_NONCE_ACTION . $membership_id );
+
+		$membership   = \wc_memberships_get_user_membership( $membership_id );
+		$integrations = wc_memberships()->get_integrations_instance();
+		$integration  = $integrations ? $integrations->get_subscriptions_instance() : null;
+		if ( ! $membership || ! $integration ) {
+			return;
+		}
+
+		// Only resync against the subscription this membership is linked to.
+		$subscription = $integration->get_subscription_from_membership( $membership_id );
+		if ( ! $subscription instanceof \WC_Subscription || (int) $subscription->get_id() !== absint( $_GET['reevaluate'] ) ) {
+			return;
+		}
+
+		if ( ! $integration->has_subscription_same_status( $subscription, $membership ) ) {
+			$integration->update_related_membership_status(
+				$subscription,
+				$membership,
+				$subscription->get_status()
+			);
+		}
+
+		wp_safe_redirect( remove_query_arg( [ 'reevaluate', '_wpnonce' ] ) );
+		exit;
 	}
 
 	/**
@@ -1059,10 +1074,11 @@ class Memberships {
 		$subscription = $integration ? $integration->get_subscription_from_membership( $user_membership_id ) : null;
 
 		if ( $subscription instanceof \WC_Subscription ) {
-				$actions = array_merge(
+				$reevaluate_url = admin_url( 'post.php?post=' . $user_membership_id . '&action=edit&reevaluate=' . $subscription->get_id() );
+				$actions        = array_merge(
 					[
 						'reevaluate' => [
-							'link'              => admin_url( 'post.php?post=' . $user_membership_id . '&action=edit&reevaluate=' . $subscription->get_id() ),
+							'link'              => add_query_arg( '_wpnonce', wp_create_nonce( self::REEVALUATE_NONCE_ACTION . $user_membership_id ), $reevaluate_url ),
 							'text'              => __( 'Reevaluate status', 'newspack-plugin' ),
 							'custom_attributes' => [
 								'title' => __( 'Reevaluate status based on subscription status.', 'newspack-plugin' ),
