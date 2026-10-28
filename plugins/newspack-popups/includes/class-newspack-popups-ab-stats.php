@@ -15,8 +15,7 @@ defined( 'ABSPATH' ) || exit;
  * variance and the Abramowitz and Stegun polynomial for the normal CDF
  * (formula 26.2.17), as the archived Automattic/newspack-ab-test proof of
  * concept computed it. The 80 and 95 thresholds were chosen against that
- * figure, so a two-sided one would move them. The class makes no
- * WordPress calls so it can be unit-tested on its own.
+ * figure, so a two-sided one would move them.
  */
 final class Newspack_Popups_AB_Stats {
 	/**
@@ -63,7 +62,8 @@ final class Newspack_Popups_AB_Stats {
 	}
 
 	/**
-	 * One-sided confidence that the two arms convert at different rates.
+	 * One-sided confidence that the arm with the higher observed rate is
+	 * really ahead of the other.
 	 *
 	 * @param int $control_readers        Readers who saw the control.
 	 * @param int $control_conversions    Control conversions.

@@ -224,6 +224,53 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * A provider that throws is reported like one that errors, and never cached.
+	 */
+	public function test_provider_exception_is_unavailable_and_not_cached() {
+		$this->as_admin();
+		$this->create_running_test();
+		$stub = $this->use_provider( new RuntimeException( 'The client blew up.' ) );
+		$data = $this->stats_request( 't' )->get_data();
+		$this->assertSame( 'unavailable', $data['source']['state'] );
+		$this->assertSame( 'The client blew up.', $data['source']['reason'] );
+		$this->stats_request( 't' );
+		$this->assertCount( 2, $stub->calls );
+	}
+
+	/**
+	 * A plain false from is_available() is unavailable on the page and the route,
+	 * with a reason the page can show.
+	 */
+	public function test_is_available_false_is_unavailable_everywhere() {
+		$this->as_admin();
+		$this->create_running_test();
+		$stub = $this->use_provider( $this->counts( 1, 1, 1, 1 ), false );
+		$data = $this->stats_request( 't' )->get_data();
+		$this->assertSame( 'unavailable', $data['source']['state'] );
+		$this->assertNotEmpty( $data['source']['reason'] );
+		$this->assertCount( 0, $stub->calls );
+		$boot = Newspack_Popups_AB_Dashboard::get_boot_data();
+		$this->assertFalse( $boot['provider']['available'] );
+		$this->assertSame( $data['source']['reason'], $boot['provider']['reason'] );
+	}
+
+	/**
+	 * An exception from is_available() must not take the Tools page down with it.
+	 */
+	public function test_is_available_exception_is_unavailable_everywhere() {
+		$this->as_admin();
+		$this->create_running_test();
+		$stub = $this->use_provider( $this->counts( 1, 1, 1, 1 ), new RuntimeException( 'No client.' ) );
+		$data = $this->stats_request( 't' )->get_data();
+		$this->assertSame( 'unavailable', $data['source']['state'] );
+		$this->assertSame( 'No client.', $data['source']['reason'] );
+		$this->assertCount( 0, $stub->calls );
+		$boot = Newspack_Popups_AB_Dashboard::get_boot_data();
+		$this->assertFalse( $boot['provider']['available'] );
+		$this->assertSame( 'No client.', $boot['provider']['reason'] );
+	}
+
+	/**
 	 * A provider with nothing yet means the test is collecting.
 	 */
 	public function test_empty_counts_are_collecting() {

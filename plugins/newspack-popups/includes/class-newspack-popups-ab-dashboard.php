@@ -97,20 +97,14 @@ final class Newspack_Popups_AB_Dashboard {
 	 */
 	public static function get_boot_data() {
 		$provider  = self::get_provider();
-		$available = $provider ? $provider->is_available() : null;
-		$reason    = null;
-		if ( null === $provider ) {
-			$reason = __( 'No stats source is connected.', 'newspack-popups' );
-		} elseif ( is_wp_error( $available ) ) {
-			$reason = $available->get_error_message();
-		}
+		$available = self::availability( $provider );
 		return [
 			'tests'                 => Newspack_Popups_AB_Tests::get_tests(),
 			'rest_base'             => 'newspack-popups/v1',
 			'provider'              => [
-				'available' => null !== $provider && true === $available,
-				'slug'      => $provider ? $provider->get_slug() : null,
-				'reason'    => $reason,
+				'available' => true === $available,
+				'slug'      => self::provider_slug( $provider ),
+				'reason'    => is_wp_error( $available ) ? $available->get_error_message() : null,
 			],
 			'thresholds'            => [
 				'directional' => Newspack_Popups_AB_Stats::THRESHOLD_DIRECTIONAL,
@@ -175,37 +169,32 @@ final class Newspack_Popups_AB_Dashboard {
 			return new WP_Error( 'newspack_popups_ab_test_not_found', __( 'No A/B test has that ID.', 'newspack-popups' ), [ 'status' => 404 ] );
 		}
 
-		$window   = self::get_window( $test );
-		$provider = self::get_provider();
-		$source   = [
+		$window    = self::get_window( $test );
+		$provider  = self::get_provider();
+		$available = self::availability( $provider );
+		$source    = [
 			'state'      => 'collecting',
-			'provider'   => $provider ? $provider->get_slug() : null,
+			'provider'   => self::provider_slug( $provider ),
 			'reason'     => null,
 			'fetched_at' => null,
 			'cached'     => false,
 			'unit'       => 'readers',
 		];
-		$counts   = [];
+		$counts    = [];
 
-		if ( null === $provider ) {
+		if ( is_wp_error( $available ) ) {
 			$source['state']  = 'unavailable';
-			$source['reason'] = __( 'No stats source is connected.', 'newspack-popups' );
-		} else {
-			$available = $provider->is_available();
-			if ( is_wp_error( $available ) ) {
+			$source['reason'] = $available->get_error_message();
+		} elseif ( null !== $window ) {
+			$result = self::fetch_counts( $provider, $test, $window, (bool) $refresh );
+			if ( is_wp_error( $result ) ) {
 				$source['state']  = 'unavailable';
-				$source['reason'] = $available->get_error_message();
-			} elseif ( null !== $window ) {
-				$result = self::fetch_counts( $provider, $test, $window, (bool) $refresh );
-				if ( is_wp_error( $result ) ) {
-					$source['state']  = 'unavailable';
-					$source['reason'] = $result->get_error_message();
-				} else {
-					$counts               = $result['counts'];
-					$source['fetched_at'] = $result['fetched_at'];
-					$source['cached']     = $result['cached'];
-					$source['unit']       = in_array( $counts['unit'] ?? '', [ 'readers', 'events' ], true ) ? $counts['unit'] : 'readers';
-				}
+				$source['reason'] = $result->get_error_message();
+			} else {
+				$counts               = $result['counts'];
+				$source['fetched_at'] = $result['fetched_at'];
+				$source['cached']     = $result['cached'];
+				$source['unit']       = in_array( $counts['unit'] ?? '', [ 'readers', 'events' ], true ) ? $counts['unit'] : 'readers';
 			}
 		}
 
@@ -223,6 +212,48 @@ final class Newspack_Popups_AB_Dashboard {
 			'comparisons' => self::compare( $variants ),
 			'flags'       => self::compute_flags( $test, $variants ),
 		];
+	}
+
+	/**
+	 * Whether the provider can answer, as true or a WP_Error that says why not.
+	 *
+	 * The provider is third-party code running inside the Tools page's
+	 * enqueue hook and the stats route, so a false, an unexpected value or an
+	 * exception all become an "unavailable" the page can show, never a fatal.
+	 *
+	 * @param Newspack_Popups_AB_Stats_Provider|null $provider Provider, or null when none is registered.
+	 * @return true|WP_Error
+	 */
+	private static function availability( $provider ) {
+		if ( null === $provider ) {
+			return new WP_Error( 'newspack_popups_ab_stats_provider', __( 'No stats source is connected.', 'newspack-popups' ) );
+		}
+		try {
+			$available = $provider->is_available();
+		} catch ( \Throwable $e ) {
+			$available = new WP_Error( 'newspack_popups_ab_stats_provider', $e->getMessage() );
+		}
+		if ( true === $available || is_wp_error( $available ) ) {
+			return $available;
+		}
+		return new WP_Error( 'newspack_popups_ab_stats_provider', __( 'The stats source is not available on this site.', 'newspack-popups' ) );
+	}
+
+	/**
+	 * The provider's slug, or null when there is no provider or it fails to say.
+	 *
+	 * @param Newspack_Popups_AB_Stats_Provider|null $provider Provider.
+	 * @return string|null
+	 */
+	private static function provider_slug( $provider ) {
+		if ( null === $provider ) {
+			return null;
+		}
+		try {
+			return $provider->get_slug();
+		} catch ( \Throwable $e ) {
+			return null;
+		}
 	}
 
 	/**
@@ -255,7 +286,7 @@ final class Newspack_Popups_AB_Dashboard {
 	 * @return array|WP_Error `[ 'counts', 'fetched_at', 'cached' ]`.
 	 */
 	private static function fetch_counts( $provider, $test, $window, $refresh ) {
-		$key = self::cache_key( $test, $provider->get_slug() );
+		$key = self::cache_key( $test, (string) self::provider_slug( $provider ) );
 		if ( ! $refresh ) {
 			$cached = get_transient( $key );
 			if ( is_array( $cached ) && isset( $cached['counts'], $cached['fetched_at'] ) ) {
@@ -413,7 +444,7 @@ final class Newspack_Popups_AB_Dashboard {
 		 *
 		 * One provider per site. Return an object implementing
 		 * Newspack_Popups_AB_Stats_Provider; anything else counts as no
-		 * provider, and the dashboard shows every test as still collecting.
+		 * provider, and the dashboard reports its stats source as unavailable.
 		 *
 		 * @param Newspack_Popups_AB_Stats_Provider|null $provider The provider; null when none is registered.
 		 */

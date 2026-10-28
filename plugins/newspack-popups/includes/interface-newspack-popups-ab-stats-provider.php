@@ -26,8 +26,13 @@ interface Newspack_Popups_AB_Stats_Provider {
 	/**
 	 * Whether the provider can answer on this site right now.
 	 *
-	 * @return true|WP_Error True, or an error whose message says what is
+	 * Called on every dashboard load and before every stats request, cached
+	 * or not, so it must be cheap: read a setting, never call out. The
+	 * network belongs in get_counts(), whose answer is cached for an hour.
+	 *
+	 * @return bool|WP_Error True, or an error whose message says what is
 	 *                       missing in words a site administrator can act on.
+	 *                       A plain false is reported with a generic reason.
 	 */
 	public function is_available();
 
