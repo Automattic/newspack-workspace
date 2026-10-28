@@ -984,6 +984,20 @@
 					"lineHeight": "var( --wp--custom--line-height--x-small )"
 				}
 			},
+			"newspack/copyright-date": {
+				"elements": {
+					"link": {
+						":hover": {
+							"typography": {
+								"textDecoration": "underline"
+							}
+						},
+						"typography": {
+							"textDecoration": "none"
+						}
+					}
+				}
+			},
 			"newspack/my-account-button": {
 				"variations": {
 					"icon-only": {

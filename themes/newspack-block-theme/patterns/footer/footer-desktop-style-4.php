@@ -8,15 +8,6 @@
  * @package Newspack_Block_Theme
  */
 
-$newspack_copyright_attributes = serialize_block_attributes(
-	[
-		'lock'   => [
-			'move'   => false,
-			'remove' => true,
-		],
-		'suffix' => get_bloginfo( 'name' ),
-	]
-);
 ?>
 <!-- wp:group {"lock":{"move":true,"remove":true},"metadata":{"name":"<?php esc_html_e( 'Footer', 'newspack-block-theme' ); ?>"},"style":{"spacing":{"margin":{"top":"var:preset|spacing|80"}},"elements":{"link":{"color":{"text":"var:preset|color|base"}}}},"backgroundColor":"contrast","textColor":"base","className":"is-footer","layout":{"type":"constrained"}} -->
 <div class="wp-block-group is-footer has-base-color has-contrast-background-color has-text-color has-background has-link-color" style="margin-top:var(--wp--preset--spacing--80)">
@@ -85,7 +76,7 @@ $newspack_copyright_attributes = serialize_block_attributes(
 
 			<!-- wp:group {"lock":{"move":false,"remove":true},"style":{"spacing":{"blockGap":"var:preset|spacing|20","padding":{"bottom":"var:preset|spacing|50"}}},"fontSize":"x-small","layout":{"type":"flex","flexWrap":"wrap","justifyContent":"space-between"}} -->
 			<div class="wp-block-group has-x-small-font-size" style="padding-bottom:var(--wp--preset--spacing--50)">
-				<!-- wp:newspack/copyright-date <?php echo $newspack_copyright_attributes; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?> /-->
+				<!-- wp:newspack/copyright-date {"lock":{"move":false,"remove":true},"showSiteTitle":true} /-->
 
 				<!-- wp:paragraph {"lock":{"move":true,"remove":true},"metadata":{"name":"<?php esc_html_e( 'Powered By', 'newspack-block-theme' ); ?>"},"className":"powered-by"} -->
 				<p class="powered-by"><a href="https://newspack.com"><?php esc_html_e( 'Powered by Newspack', 'newspack-block-theme' ); ?></a></p>
