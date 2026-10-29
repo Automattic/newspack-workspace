@@ -1,3 +1,16 @@
+## newspack-ads [3.15.6](https://github.com/Automattic/newspack-workspace/compare/newspack-ads@3.15.5...newspack-ads@3.15.6) (2026-10-26)
+
+
+### Bug Fixes
+
+* **reader-data:** stop treating former donors as current donors ([#1254](https://github.com/Automattic/newspack-workspace/issues/1254)) ([e6d7e3d](https://github.com/Automattic/newspack-workspace/commit/e6d7e3de83ab5c052bcf2c5a4e3e1d845f23d1dc))
+* **reader-data:** stop treating former subscribers as subscribers ([#1257](https://github.com/Automattic/newspack-workspace/issues/1257)) ([1632c4d](https://github.com/Automattic/newspack-workspace/commit/1632c4de360eba1cccd744a1bf0ccf96c455fdd9))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.12.0
+
 ## newspack-ads [3.15.5](https://github.com/Automattic/newspack-workspace/compare/newspack-ads@3.15.4...newspack-ads@3.15.5) (2026-10-14)
 
 

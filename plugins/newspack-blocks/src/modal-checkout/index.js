@@ -7,8 +7,9 @@ import './checkout.scss';
 /**
  * Internal dependencies
  */
-import { manageCheckoutAttempt, manageCheckoutSuccess, manageLoaded, managePagination } from './analytics';
+import { manageCheckoutAttempt, manageCheckoutSuccess, manageLoaded, managePagination, registerExpressCheckoutAttempt } from './analytics';
 import {
+	afterDeferredScripts,
 	domReady,
 	getPaymentFocus,
 	getTabbableElements,
@@ -1078,6 +1079,9 @@ import {
 				$form.on( 'click', '#place_order', function () {
 					manageCheckoutAttempt();
 				} );
+
+				// Stripe's express checkout buttons submit without clicking it.
+				afterDeferredScripts( registerExpressCheckoutAttempt );
 
 				/**
 				 * Blocks provided form.

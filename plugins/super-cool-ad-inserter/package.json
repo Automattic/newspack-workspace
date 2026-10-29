@@ -1,6 +1,6 @@
 {
 	"name": "super-cool-ad-inserter",
-	"version": "0.7.7",
+	"version": "0.7.9",
 	"author": "Automattic",
 	"scripts": {
 		"start": "npm ci",
@@ -17,7 +17,7 @@
 	},
 	"license": "GPL-2.0-or-later",
 	"bugs": {
-		"url": "https://github.com/Automattic/super-cool-ad-inserter-plugin/issues"
+		"url": "https://github.com/Automattic/newspack-workspace/issues"
 	},
 	"devDependencies": {
 		"newspack-scripts": "workspace:*"

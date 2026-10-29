@@ -1423,7 +1423,7 @@ final class Modal_Checkout {
 			'newspack-blocks-modal-checkout',
 			plugins_url( 'dist/modalCheckout.js', \NEWSPACK_BLOCKS__PLUGIN_FILE ),
 			$dependencies,
-			\NEWSPACK_BLOCKS__VERSION,
+			\Newspack_Blocks::asset_version( 'modalCheckout' ),
 			[
 				'strategy'  => 'async',
 				'in_footer' => true,
@@ -1456,7 +1456,7 @@ final class Modal_Checkout {
 			'newspack-blocks-modal-checkout',
 			plugins_url( 'dist/modalCheckout.css', \NEWSPACK_BLOCKS__PLUGIN_FILE ),
 			[],
-			\NEWSPACK_BLOCKS__VERSION
+			\Newspack_Blocks::asset_version( 'modalCheckout' )
 		);
 	}
 
@@ -1648,7 +1648,7 @@ final class Modal_Checkout {
 			'newspack-blocks-modal',
 			plugins_url( 'dist/modal.js', \NEWSPACK_BLOCKS__PLUGIN_FILE ),
 			[],
-			\NEWSPACK_BLOCKS__VERSION,
+			\Newspack_Blocks::asset_version( 'modal' ),
 			[
 				'strategy'  => 'async',
 				'in_footer' => true,
@@ -1697,7 +1697,7 @@ final class Modal_Checkout {
 			'newspack-blocks-modal',
 			plugins_url( 'dist/modal.css', \NEWSPACK_BLOCKS__PLUGIN_FILE ),
 			[],
-			\NEWSPACK_BLOCKS__VERSION
+			\Newspack_Blocks::asset_version( 'modal' )
 		);
 	}
 

@@ -26,27 +26,23 @@ $content = Republication_Tracker_Tool_Content::get_republishable_content( $post-
 
 $content_footer = Republication_Tracker_Tool::create_content_footer( $post );
 
+$byline_text = Republication_Tracker_Tool::get_byline_text( get_the_author(), $post );
+
+// The copy textarea needs every part escaped exactly once: a browser decodes its source once, and the
+// caption strip (assets/widget.js, the block's view.js) writes the result back without decoding again.
+// create_content_footer() returns the footer entity-encoded, so it is decoded before it is escaped.
+$escaped_footer = htmlspecialchars( html_entity_decode( $content_footer, ENT_QUOTES | ENT_HTML5, 'UTF-8' ), ENT_QUOTES, 'UTF-8' );
+
 /**
  * The article title, byline, source site, and date
  *
  * @var HTML $article_info The article title, etc.
  */
+// Not translatable — layout markup only.
 $article_info = sprintf(
-	// translators: %1$s is the post title, %2$s is the byline, %3$s is the site name, %4$s is the date in the format F j, Y.
-	__( '<h1>%1$s</h1><p class="byline">by %2$s, %3$s <br />%4$s</p>', 'republication-tracker-tool' ),
+	'<h1>%1$s</h1><p class="byline">%2$s <br />%3$s</p>',
 	wp_kses_post( get_the_title( $post ) ),
-	/**
-	 * Allow filtering of the byline that is output in the share dialog and the copyable plaintext.
-	 *
-	 * This is to provide support for plugins that do not implement
-	 * a filter on 'the_author', or in cases where the 'the_author'
-	 * filter returns incomplete information.
-	 *
-	 * @link https://developer.wordpress.org/reference/functions/get_the_author/
-	 * @link https://github.com/INN/republication-tracker-tool/issues/46
-	 */
-	wp_kses_post( apply_filters( 'republication_tracker_tool_byline', get_the_author() ) ),
-	wp_kses_post( get_bloginfo( 'name' ) ),
+	$byline_text,
 	wp_kses_post( gmdate( 'F j, Y', strtotime( $post->post_date ) ) )
 );
 // strip empty tags after automatically applying p tags.
@@ -132,7 +128,7 @@ if ( $using_license ) {
 						readonly
 						rows="5"
 						aria-label="<?php esc_attr_e( 'Republish this article (HTML format)', 'republication-tracker-tool' ); ?>"
-					><?php echo esc_html( $article_info ); ?><?php echo wp_kses_post( $content ); ?><?php echo wp_kses_post( htmlspecialchars( $content_footer, ENT_QUOTES, 'UTF-8' ) ); ?></textarea>
+					><?php echo esc_html( $article_info ); ?><?php echo wp_kses_post( $content ); ?><?php echo wp_kses_post( $escaped_footer ); ?></textarea>
 
 					<?php if ( $plain_text_enabled ) : ?>
 						<div class="republish-content" data-tab-content="plain-text">

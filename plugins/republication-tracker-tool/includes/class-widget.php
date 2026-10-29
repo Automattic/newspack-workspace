@@ -63,7 +63,7 @@ class Republication_Tracker_Tool_Widget extends WP_Widget {
 				'republication-tracker-tool-clipboard-utils',
 				plugins_url( 'assets/clipboard-utils.js', __DIR__ ),
 				array(),
-				REPUBLICATION_TRACKER_TOOL_VERSION,
+				filemtime( REPUBLICATION_TRACKER_TOOL_PATH . 'assets/clipboard-utils.js' ),
 				array(
 					'in_footer' => false,
 					'strategy'  => 'defer',
@@ -73,14 +73,14 @@ class Republication_Tracker_Tool_Widget extends WP_Widget {
 				'republication-tracker-tool-js',
 				plugins_url( 'assets/widget.js', __DIR__ ),
 				array( 'jquery', 'republication-tracker-tool-clipboard-utils' ),
-				REPUBLICATION_TRACKER_TOOL_VERSION,
+				filemtime( REPUBLICATION_TRACKER_TOOL_PATH . 'assets/widget.js' ),
 				array(
 					'in_footer' => false,
 					'strategy'  => 'defer',
 				)
 			);
 		}
-		wp_enqueue_style( 'republication-tracker-tool-css', plugins_url( 'assets/widget.css', __DIR__ ), array(), filemtime( plugin_dir_path( __FILE__ ) ) );
+		wp_enqueue_style( 'republication-tracker-tool-css', plugins_url( 'assets/widget.css', __DIR__ ), array(), filemtime( REPUBLICATION_TRACKER_TOOL_PATH . 'assets/widget.css' ) );
 
 		echo wp_kses_post( $args['before_widget'] );
 
@@ -98,8 +98,9 @@ class Republication_Tracker_Tool_Widget extends WP_Widget {
 		}
 
 		if ( ! empty( $instance['layout'] ) && 'page' === $instance['layout'] ) {
+			// widget.js reads this attribute on click and navigates.
 			printf(
-				'<p><button name="%1$s" id="cc-btn" class="republication-tracker-tool-button page" onclick="window.location.href=\'%2$s\'" role="link">%1$s</button></p>',
+				'<p><button name="%1$s" id="cc-btn" class="republication-tracker-tool-button page" data-republish-url="%2$s" role="link">%1$s</button></p>',
 				esc_html__( 'Republish This Story', 'republication-tracker-tool' ),
 				esc_url( '/republish' . ( isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '' ) )
 			);

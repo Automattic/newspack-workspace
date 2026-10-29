@@ -46,6 +46,13 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	private $post_ids = [];
 
 	/**
+	 * Callbacks hooked to wcs_get_users_subscriptions by create_gifted_subscription().
+	 *
+	 * @var callable[]
+	 */
+	private $gift_filters = [];
+
+	/**
 	 * Set up before all tests.
 	 */
 	public static function set_up_before_class() {
@@ -60,6 +67,7 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		require_once dirname( __DIR__, 2 ) . '/mocks/newsletters-mocks.php';
 		require_once dirname( __DIR__, 2 ) . '/mocks/newsletters-namespaced-mocks.php';
 		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
+		require_once dirname( __DIR__, 2 ) . '/mocks/wcs-gifting-mock.php';
 		if ( ! post_type_exists( \Newspack\Newsletters\Subscription_Lists::CPT ) ) {
 			register_post_type( \Newspack\Newsletters\Subscription_Lists::CPT );
 		}
@@ -74,6 +82,8 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		// gate lookup cached for the same ID by an earlier case would otherwise be
 		// served here — reporting "no gates" for a post that has one.
 		$this->reset_restriction_cache();
+		// The gifting stub's recipient map is static and shared with other test files.
+		\WCS_Gifting::$recipients = [];
 		global $orders_database;
 		$orders_database = [];
 		\Newspack_Newsletters_Contacts::reset_calls();
@@ -115,6 +125,11 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 			wp_delete_post( $id, true );
 		}
 		$this->post_ids = [];
+		foreach ( $this->gift_filters as $gift_filter ) {
+			remove_filter( 'wcs_get_users_subscriptions', $gift_filter, 10 );
+		}
+		$this->gift_filters       = [];
+		\WCS_Gifting::$recipients = [];
 		global $subscriptions_database, $orders_database;
 		$subscriptions_database = [];
 		$orders_database        = [];
@@ -203,6 +218,18 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		);
 
 		return $gate_id;
+	}
+
+	/**
+	 * Store the list settings on a newsletter gate.
+	 *
+	 * @param int   $gate_id  Gate post ID.
+	 * @param array $settings Settings to store, e.g. [ 'auto_signup' => 'on' ].
+	 *
+	 * @return void
+	 */
+	private function set_gate_list_settings( int $gate_id, array $settings ): void {
+		Content_Gate::update_newsletter_gate_settings( $gate_id, $settings );
 	}
 
 	/**
@@ -413,6 +440,176 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		// Production code calls get_contact_lists(), finds the list already present,
 		// and exits early before calling add_and_remove_lists.
 		$this->assertEmpty( \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls );
+	}
+
+	// =========================================================================
+	// Per-gate auto-signup — maybe_enqueue_access_check()
+	// =========================================================================
+
+	/**
+	 * Queue and run an access check for a reader, as a subscription change would.
+	 *
+	 * @param int $user_id Reader to check.
+	 *
+	 * @return void
+	 */
+	private function run_access_check( int $user_id ): void {
+		Premium_Newsletters::maybe_enqueue_access_check( time(), [ 'user_id' => $user_id ], null );
+		Premium_Newsletters::process_access_check_queue();
+	}
+
+	/**
+	 * A gate set to "on" signs the reader up even when the site setting is off.
+	 */
+	public function test_gate_set_to_on_adds_lists_when_site_auto_signup_is_off() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
+
+		$list_id = $this->create_premium_list();
+		$gate_id = $this->create_newsletter_gate( [ 100 ], [ $list_id ] );
+		$this->set_gate_list_settings( $gate_id, [ 'auto_signup' => 'on' ] );
+		$user_id = $this->create_reader( true );
+
+		$this->run_access_check( $user_id );
+
+		$calls = \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls;
+		$this->assertCount( 1, $calls );
+		$this->assertContains( 'newspack-' . $list_id, $calls[0]['lists_to_add'] );
+	}
+
+	/**
+	 * A gate set to "off" leaves the reader unsubscribed even when the site setting is on.
+	 */
+	public function test_gate_set_to_off_does_not_add_lists_when_site_auto_signup_is_on() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+
+		$list_id = $this->create_premium_list();
+		$gate_id = $this->create_newsletter_gate( [ 100 ], [ $list_id ] );
+		$this->set_gate_list_settings( $gate_id, [ 'auto_signup' => 'off' ] );
+		$user_id = $this->create_reader( true );
+
+		$this->run_access_check( $user_id );
+
+		$this->assertEmpty( \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls );
+	}
+
+	/**
+	 * When several gates cover a list, only a gate that admits the reader gets a say.
+	 *
+	 * Gate A admits any registered reader and is set to "off". Gate B admits paying
+	 * readers and is set to "on". A reader who only registered got in through A, so
+	 * the list stays unsubscribed. A reader who also pays gets in through B as well,
+	 * so the list is added.
+	 */
+	public function test_reader_admitted_only_by_a_gate_set_to_off_is_not_auto_subscribed() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
+
+		$list_id = $this->create_premium_list();
+
+		// Created first, so it ranks above gate B and admits the reader before B is asked.
+		$gate_a = Content_Gate::create_gate( [ 'title' => 'Registration Newsletter Gate' ], Content_Gate::GATE_CPT, true );
+		$this->gate_ids[] = $gate_a;
+		Content_Gate::update_registration_settings( $gate_a, [ 'active' => true ] );
+		Content_Rules::update_gate_content_rules(
+			$gate_a,
+			[
+				[
+					'slug'  => 'newsletters',
+					'value' => [ $list_id ],
+				],
+			]
+		);
+		$this->set_gate_list_settings( $gate_a, [ 'auto_signup' => 'off' ] );
+
+		$gate_b = $this->create_newsletter_gate( [ 100 ], [ $list_id ] );
+		$this->set_gate_list_settings( $gate_b, [ 'auto_signup' => 'on' ] );
+
+		$registered_only = $this->create_reader( false );
+		$this->run_access_check( $registered_only );
+		$this->assertEmpty( \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls, 'A reader admitted only by the "off" gate must not be signed up.' );
+
+		$paying = $this->create_reader( true );
+		$this->run_access_check( $paying );
+		$calls = \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls;
+		$this->assertCount( 1, $calls, 'A reader the "on" gate also admits is signed up.' );
+		$this->assertContains( 'newspack-' . $list_id, $calls[0]['lists_to_add'] );
+	}
+
+	/**
+	 * The renewal snapshot is taken, and honored, when only a gate turns auto-signup on.
+	 */
+	public function test_renewal_snapshot_is_taken_and_honored_when_only_a_gate_is_on() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
+
+		$list_id = $this->create_premium_list();
+		$gate_id = $this->create_newsletter_gate( [ 100 ], [ $list_id ] );
+		$this->set_gate_list_settings( $gate_id, [ 'auto_signup' => 'on' ] );
+		$user_id = $this->create_reader( true );
+		$email   = get_userdata( $user_id )->user_email;
+
+		// The reader has left the list since they signed up.
+		\Newspack_Newsletters_Subscription::$contact_lists[ $email ] = [];
+
+		Premium_Newsletters::set_subscribed_lists( time(), [ 'user_id' => $user_id ], null );
+
+		$this->assertIsArray(
+			get_user_meta( $user_id, Premium_Newsletters::SUBSCRIBED_LISTS_META_KEY, true ),
+			'A gate set to "on" needs the snapshot even though the site setting is off.'
+		);
+
+		Premium_Newsletters::process_access_check_queue();
+
+		$this->assertEmpty(
+			\Newspack_Newsletters_Contacts::$add_and_remove_lists_calls,
+			'A reader who left the list must not be re-added on renewal.'
+		);
+	}
+
+	/**
+	 * A reader no gate admits by its own rules, yet who is not restricted, is judged
+	 * by the gates that cover the list.
+	 *
+	 * An administrator skips every access check, so the gate's paid rule never admits
+	 * them. The list's gate decides whether they are signed up.
+	 */
+	public function test_reader_no_gate_admits_falls_back_to_the_lists_gates() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
+
+		$list_id = $this->create_premium_list();
+		$gate_id = $this->create_newsletter_gate( [ 100 ], [ $list_id ] );
+		$this->set_gate_list_settings( $gate_id, [ 'auto_signup' => 'on' ] );
+		$admin_id = $this->factory->user->create( [ 'role' => 'administrator' ] );
+
+		$this->run_access_check( $admin_id );
+
+		$calls = \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls;
+		$this->assertCount( 1, $calls );
+		$this->assertContains( 'newspack-' . $list_id, $calls[0]['lists_to_add'] );
+	}
+
+	/**
+	 * With no gate setting its own auto-signup, every gate follows the site setting,
+	 * so the lookup answers with that setting and judges the reader against no gate.
+	 */
+	public function test_auto_signup_lookup_judges_no_gate_when_every_gate_follows_the_site_setting() {
+		$list_id     = $this->create_gated_list();
+		$user_id     = $this->create_reader( true );
+		$evaluations = 0;
+		// The fixture gate's only rule is a subscription rule, so each call is one judgment against a gate.
+		add_filter(
+			'newspack_access_rules_has_active_subscription',
+			function ( $has_subscription ) use ( &$evaluations ) {
+				++$evaluations;
+				return $has_subscription;
+			}
+		);
+
+		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
+		$this->assertFalse( Premium_Newsletters::is_auto_signup_list( $list_id, $user_id ) );
+
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+		$this->assertTrue( Premium_Newsletters::is_auto_signup_list( $list_id, $user_id ) );
+
+		$this->assertSame( 0, $evaluations );
 	}
 
 	// =========================================================================
@@ -1619,6 +1816,378 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	// =========================================================================
+	// Gifted subscriptions
+	// =========================================================================
+
+	/**
+	 * Create an active subscription bought by one reader as a gift for another.
+	 *
+	 * Mirrors WCS Gifting in production: the subscription stays owned by the
+	 * purchaser, and the recipient sees it in wcs_get_users_subscriptions().
+	 *
+	 * @param int   $purchaser_id Purchaser user ID.
+	 * @param int   $recipient_id Recipient user ID.
+	 * @param array $product_ids  Product IDs the subscription covers.
+	 *
+	 * @return \WC_Subscription
+	 */
+	private function create_gifted_subscription( int $purchaser_id, int $recipient_id, array $product_ids ) {
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id' => $purchaser_id,
+				'status'      => 'active',
+				'products'    => $product_ids,
+			]
+		);
+		\WCS_Gifting::$recipients[ $subscription->get_id() ] = $recipient_id;
+
+		$gift_filter = function ( $subscriptions, $user_id ) use ( $subscription, $recipient_id ) {
+			if ( (int) $user_id === $recipient_id ) {
+				$subscriptions[ $subscription->get_id() ] = $subscription;
+			}
+			return $subscriptions;
+		};
+		add_filter( 'wcs_get_users_subscriptions', $gift_filter, 10, 2 );
+		$this->gift_filters[] = $gift_filter;
+
+		return $subscription;
+	}
+
+	/**
+	 * Hand a gifted subscription to a different recipient, as an admin does by
+	 * editing the subscription. Updates the stub's recipient and the filter that
+	 * lists the gift under its holder, then fires the hook WCS Gifting fires.
+	 *
+	 * Assumes the test's only gift is the one being reassigned: it removes every
+	 * filter in $this->gift_filters, not just this subscription's.
+	 *
+	 * @param \WC_Subscription $subscription     The gifted subscription.
+	 * @param int              $new_recipient_id The new recipient's user ID.
+	 *
+	 * @return void
+	 */
+	private function reassign_gifted_subscription( $subscription, int $new_recipient_id ): void {
+		$old_recipient_id = (int) \WCS_Gifting::$recipients[ $subscription->get_id() ];
+		foreach ( $this->gift_filters as $gift_filter ) {
+			remove_filter( 'wcs_get_users_subscriptions', $gift_filter, 10 );
+		}
+		$this->gift_filters = [];
+		\WCS_Gifting::$recipients[ $subscription->get_id() ] = $new_recipient_id;
+
+		$gift_filter = function ( $subscriptions, $user_id ) use ( $subscription, $new_recipient_id ) {
+			if ( (int) $user_id === $new_recipient_id ) {
+				$subscriptions[ $subscription->get_id() ] = $subscription;
+			}
+			return $subscriptions;
+		};
+		add_filter( 'wcs_get_users_subscriptions', $gift_filter, 10, 2 );
+		$this->gift_filters[] = $gift_filter;
+
+		do_action( 'woocommerce_subscriptions_gifting_recipient_changed', $subscription, $new_recipient_id, $old_recipient_id );
+	}
+
+	/**
+	 * Status changes for a gifted subscription: one that grants access, and one
+	 * between two statuses that both grant it.
+	 *
+	 * @return array[]
+	 */
+	public function data_gift_status_changes() {
+		return [
+			'access granted' => [ 'pending', 'active' ],
+			'access kept'    => [ 'active', 'pending-cancel' ],
+		];
+	}
+
+	/**
+	 * A subscription event carries the purchaser of a gift, who doesn't hold the
+	 * subscription. The recipient does, so they're queued too on every event,
+	 * including a change that keeps access, which an owner's group members skip.
+	 *
+	 * @dataProvider data_gift_status_changes
+	 *
+	 * @param string $status_before Status before the event.
+	 * @param string $status_after  Status after the event.
+	 */
+	public function test_gift_subscription_change_queues_recipient( $status_before, $status_after ) {
+		$purchaser_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$recipient_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$this->create_newsletter_gate( [ 100 ], [ $this->create_premium_list() ] );
+		$subscription = $this->create_gifted_subscription( $purchaser_id, $recipient_id, [ 100 ] );
+
+		Premium_Newsletters::maybe_enqueue_access_check(
+			time(),
+			[
+				'user_id'         => $purchaser_id,
+				'subscription_id' => $subscription->get_id(),
+				'status_before'   => $status_before,
+				'status_after'    => $status_after,
+			],
+			0,
+			Premium_Newsletters::SOURCE_SUBSCRIPTION_CHANGED
+		);
+
+		$queued = $this->get_queued_user_ids();
+		$this->assertContains( $purchaser_id, $queued, 'The purchaser is still checked: they may lose lists.' );
+		$this->assertContains( $recipient_id, $queued, 'The gift recipient must be checked.' );
+		$this->assertSame( Premium_Newsletters::SOURCE_SUBSCRIPTION_CHANGED, $this->get_queued_source( $recipient_id ), 'The recipient is queued with the purchaser\'s source.' );
+	}
+
+	/**
+	 * The recipient gets the premium lists a gifted subscription covers. The
+	 * purchaser doesn't, because content gates grant a gift only to its recipient.
+	 */
+	public function test_gift_recipient_gets_lists_and_purchaser_does_not() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+
+		$purchaser_id    = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$recipient_id    = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$purchaser_email = get_userdata( $purchaser_id )->user_email;
+		$recipient_email = get_userdata( $recipient_id )->user_email;
+
+		$list_post_id = $this->create_premium_list();
+		$this->create_newsletter_gate( [ 100 ], [ $list_post_id ] );
+		$subscription = $this->create_gifted_subscription( $purchaser_id, $recipient_id, [ 100 ] );
+
+		Premium_Newsletters::maybe_enqueue_access_check(
+			time(),
+			[
+				'user_id'         => $purchaser_id,
+				'subscription_id' => $subscription->get_id(),
+				'status_before'   => 'pending',
+				'status_after'    => 'active',
+			],
+			0,
+			Premium_Newsletters::SOURCE_SUBSCRIPTION_CHANGED
+		);
+		Premium_Newsletters::process_access_check_queue();
+
+		$recipient_calls = $this->get_list_calls_for( $recipient_email );
+		$this->assertCount( 1, $recipient_calls, 'The recipient gets one list update.' );
+		$this->assertContains( 'newspack-' . $list_post_id, $recipient_calls[0]['lists_to_add'] );
+
+		foreach ( $this->get_list_calls_for( $purchaser_email ) as $call ) {
+			$this->assertNotContains( 'newspack-' . $list_post_id, $call['lists_to_add'], 'The purchaser must not gain lists from a subscription they gave away.' );
+		}
+	}
+
+	/**
+	 * A purchaser who also holds a subscription of their own keeps its lists, and
+	 * the recipient still gains the gift's.
+	 */
+	public function test_purchaser_with_own_subscription_keeps_lists() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+
+		$purchaser_id    = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$recipient_id    = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$purchaser_email = get_userdata( $purchaser_id )->user_email;
+		$recipient_email = get_userdata( $recipient_id )->user_email;
+
+		$list_post_id = $this->create_premium_list();
+		$this->create_newsletter_gate( [ 100 ], [ $list_post_id ] );
+		wcs_create_subscription(
+			[
+				'customer_id' => $purchaser_id,
+				'status'      => 'active',
+				'products'    => [ 100 ],
+			]
+		);
+		$gift = $this->create_gifted_subscription( $purchaser_id, $recipient_id, [ 100 ] );
+
+		Premium_Newsletters::maybe_enqueue_access_check(
+			time(),
+			[
+				'user_id'         => $purchaser_id,
+				'subscription_id' => $gift->get_id(),
+				'status_before'   => 'pending',
+				'status_after'    => 'active',
+			],
+			0,
+			Premium_Newsletters::SOURCE_SUBSCRIPTION_CHANGED
+		);
+		Premium_Newsletters::process_access_check_queue();
+
+		foreach ( [ $purchaser_email, $recipient_email ] as $email ) {
+			$calls = $this->get_list_calls_for( $email );
+			$this->assertCount( 1, $calls, 'Both readers get one list update.' );
+			$this->assertContains( 'newspack-' . $list_post_id, $calls[0]['lists_to_add'] );
+			$this->assertEmpty( $calls[0]['lists_to_remove'] );
+		}
+	}
+
+	/**
+	 * A renewal snapshots the gift recipient's lists as it does the purchaser's, so
+	 * a recipient who left a premium list isn't re-added by auto-signup.
+	 */
+	public function test_gift_renewal_attempt_snapshots_recipient() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+
+		$purchaser_id    = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$recipient_id    = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$recipient_email = get_userdata( $recipient_id )->user_email;
+
+		$this->create_newsletter_gate( [ 100 ], [ $this->create_premium_list() ] );
+		$subscription = $this->create_gifted_subscription( $purchaser_id, $recipient_id, [ 100 ] );
+
+		\Newspack_Newsletters_Subscription::$contact_lists[ $recipient_email ] = [ 'public-list' ];
+
+		Premium_Newsletters::set_subscribed_lists(
+			time(),
+			[
+				'user_id'         => $purchaser_id,
+				'subscription_id' => $subscription->get_id(),
+			],
+			0
+		);
+
+		$this->assertSame( [ 'public-list' ], get_user_meta( $recipient_id, Premium_Newsletters::SUBSCRIBED_LISTS_META_KEY, true ), "A renewal must snapshot the recipient's lists." );
+		$this->assertSame( Premium_Newsletters::SOURCE_RENEWAL, $this->get_queued_source( $recipient_id ), 'A renewal must queue the recipient with the renewal source.' );
+	}
+
+	/**
+	 * When a gift lapses, its recipient loses the premium lists it paid for. The
+	 * event names the purchaser, but the recipient holds the access.
+	 */
+	public function test_lapsed_gift_removes_recipient_lists() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
+
+		$purchaser_id    = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$recipient_id    = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$recipient_email = get_userdata( $recipient_id )->user_email;
+
+		$list_post_id = $this->create_premium_list();
+		$this->create_newsletter_gate( [ 100 ], [ $list_post_id ] );
+		$subscription = $this->create_gifted_subscription( $purchaser_id, $recipient_id, [ 100 ] );
+
+		\Newspack_Newsletters_Subscription::$contact_lists[ $recipient_email ] = [ 'newspack-' . $list_post_id ];
+		$subscription->set_status( 'cancelled' );
+
+		Premium_Newsletters::handle_product_subscription_changed(
+			time(),
+			[
+				'user_id'         => $purchaser_id,
+				'subscription_id' => $subscription->get_id(),
+				'status_before'   => 'active',
+				'status_after'    => 'cancelled',
+			],
+			null
+		);
+		Premium_Newsletters::process_access_check_queue();
+
+		$calls = $this->get_list_calls_for( $recipient_email );
+		$this->assertCount( 1, $calls, 'The recipient of a lapsed gift must be removed from its premium lists.' );
+		$this->assertContains( 'newspack-' . $list_post_id, $calls[0]['lists_to_remove'] );
+		$this->assertEmpty( $calls[0]['lists_to_add'] );
+	}
+
+	/**
+	 * Reassigning a gift fires no subscription event, so the hook WCS Gifting fires
+	 * queues both readers: the new recipient to gain the lists, the old one to lose them.
+	 */
+	public function test_gift_recipient_change_queues_both_recipients() {
+		$purchaser_id     = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$old_recipient_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$new_recipient_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$this->create_newsletter_gate( [ 100 ], [ $this->create_premium_list() ] );
+		$subscription = $this->create_gifted_subscription( $purchaser_id, $old_recipient_id, [ 100 ] );
+
+		do_action( 'woocommerce_subscriptions_gifting_recipient_changed', $subscription, $new_recipient_id, $old_recipient_id );
+
+		$this->assertSame( Premium_Newsletters::SOURCE_GIFT_RECEIVED, $this->get_queued_source( $new_recipient_id ), 'The new recipient is checked for lists to add.' );
+		$this->assertSame( Premium_Newsletters::SOURCE_GIFT_REMOVED, $this->get_queued_source( $old_recipient_id ), 'The old recipient is checked for lists to remove only.' );
+		$this->assertNotContains( $purchaser_id, $this->get_queued_user_ids(), 'The purchaser is not affected by a change of recipient.' );
+	}
+
+	/**
+	 * A first recipient takes the subscription over from its buyer, so the buyer
+	 * gets a remove-only check: when an admin gives a buyer's own subscription a
+	 * recipient, no other event tells the buyer they lost access.
+	 */
+	public function test_first_gift_recipient_queues_the_buyer_for_removal_only() {
+		$purchaser_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$recipient_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$this->create_newsletter_gate( [ 100 ], [ $this->create_premium_list() ] );
+		$subscription = $this->create_gifted_subscription( $purchaser_id, $recipient_id, [ 100 ] );
+
+		do_action( 'woocommerce_subscriptions_gifting_recipient_changed', $subscription, $recipient_id, 0 );
+
+		$this->assertSame( Premium_Newsletters::SOURCE_GIFT_RECEIVED, $this->get_queued_source( $recipient_id ), 'The first recipient is checked for lists to add.' );
+		$this->assertSame( Premium_Newsletters::SOURCE_GIFT_REMOVED, $this->get_queued_source( $purchaser_id ), 'The buyer is checked for lists to remove only.' );
+	}
+
+	/**
+	 * WCS saves the same recipient again when a parent or switch order moves from
+	 * processing to completed, and a recheck then could re-add a list the reader
+	 * left, so an unchanged recipient queues no one.
+	 */
+	public function test_unchanged_gift_recipient_queues_no_one() {
+		$purchaser_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$recipient_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$this->create_newsletter_gate( [ 100 ], [ $this->create_premium_list() ] );
+		$subscription = $this->create_gifted_subscription( $purchaser_id, $recipient_id, [ 100 ] );
+
+		do_action( 'woocommerce_subscriptions_gifting_recipient_changed', $subscription, $recipient_id, $recipient_id );
+
+		$this->assertSame( [], $this->get_queued_user_ids(), 'An unchanged recipient queues no one.' );
+	}
+
+	/**
+	 * End to end: after a gift is reassigned, the new recipient gains the gated
+	 * list and the old one loses it, with auto-signup on.
+	 */
+	public function test_reassigned_gift_moves_lists_to_new_recipient() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+
+		$purchaser_id        = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$old_recipient_id    = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$new_recipient_id    = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$old_recipient_email = get_userdata( $old_recipient_id )->user_email;
+		$new_recipient_email = get_userdata( $new_recipient_id )->user_email;
+
+		$list_post_id = $this->create_premium_list();
+		$this->create_newsletter_gate( [ 100 ], [ $list_post_id ] );
+		$subscription = $this->create_gifted_subscription( $purchaser_id, $old_recipient_id, [ 100 ] );
+		\Newspack_Newsletters_Subscription::$contact_lists[ $old_recipient_email ] = [ 'newspack-' . $list_post_id ];
+
+		$this->reassign_gifted_subscription( $subscription, $new_recipient_id );
+		Premium_Newsletters::process_access_check_queue();
+
+		$new_calls = $this->get_list_calls_for( $new_recipient_email );
+		$this->assertCount( 1, $new_calls, 'The new recipient gets one list update.' );
+		$this->assertContains( 'newspack-' . $list_post_id, $new_calls[0]['lists_to_add'] );
+		$this->assertEmpty( $new_calls[0]['lists_to_remove'] );
+
+		$old_calls = $this->get_list_calls_for( $old_recipient_email );
+		$this->assertCount( 1, $old_calls, 'The old recipient gets one list update.' );
+		$this->assertContains( 'newspack-' . $list_post_id, $old_calls[0]['lists_to_remove'] );
+		$this->assertEmpty( $old_calls[0]['lists_to_add'], 'Losing a gift must not add lists.' );
+	}
+
+	/**
+	 * Losing a gift only takes lists away: a reader who still has access some other
+	 * way, and who had left the list, isn't re-added by auto-signup.
+	 */
+	public function test_reassigned_gift_does_not_readd_lists_the_old_recipient_left() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+
+		$purchaser_id        = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$old_recipient_id    = $this->create_reader( true );
+		$new_recipient_id    = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$old_recipient_email = get_userdata( $old_recipient_id )->user_email;
+
+		$list_post_id = $this->create_premium_list();
+		$this->create_newsletter_gate( [ 100 ], [ $list_post_id ] );
+		$subscription = $this->create_gifted_subscription( $purchaser_id, $old_recipient_id, [ 100 ] );
+		\Newspack_Newsletters_Subscription::$contact_lists[ $old_recipient_email ] = [];
+
+		$this->reassign_gifted_subscription( $subscription, $new_recipient_id );
+		$this->assertSame( Premium_Newsletters::SOURCE_GIFT_REMOVED, $this->get_queued_source( $old_recipient_id ), 'The handler must queue the old recipient for a remove-only check.' );
+		Premium_Newsletters::process_access_check_queue();
+
+		$this->assertEmpty( $this->get_list_calls_for( $old_recipient_email ), 'A reader who left the list must not be re-added when a gift moves away.' );
+	}
+
+	// =========================================================================
 	// Group I — one-time purchases
 	// =========================================================================
 
@@ -2406,6 +2975,256 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	 */
 	public function test_filter_list_gates_is_hooked() {
 		$this->assertSame( 10, has_filter( 'newspack_newsletters_subscription_list_gates', [ Premium_Newsletters::class, 'filter_list_gates' ] ) );
+	}
+
+	// =========================================================================
+	// Per-gate list hiding — is_list_hidden()
+	// =========================================================================
+
+	/**
+	 * Create a premium newsletter list behind a gate that hides its lists.
+	 *
+	 * @param bool $hide Whether the gate hides its lists from readers.
+	 *
+	 * @return int[] The list post ID, then the gate post ID.
+	 */
+	private function create_list_behind_gate( bool $hide ): array {
+		$list_id = $this->create_premium_list();
+		$gate_id = $this->create_newsletter_gate( [ 100 ], [ $list_id ] );
+		$this->set_gate_list_settings( $gate_id, [ 'hide_lists' => $hide ] );
+		return [ $list_id, $gate_id ];
+	}
+
+	/**
+	 * A reader who has access still doesn't get a hidden list in the lists shown to
+	 * them, while the lists of other gates stay.
+	 */
+	public function test_filter_subscription_lists_drops_a_hidden_list_the_reader_can_access() {
+		list( $hidden_id )  = $this->create_list_behind_gate( true );
+		list( $visible_id ) = $this->create_list_behind_gate( false );
+		wp_set_current_user( $this->create_reader( true ) );
+
+		$result = Premium_Newsletters::filter_subscription_lists(
+			[
+				new \Newspack\Newsletters\Subscription_List( $hidden_id ),
+				new \Newspack\Newsletters\Subscription_List( $visible_id ),
+			]
+		);
+
+		// Had the reader lacked access, the visible list would be gone too.
+		$this->assertCount( 1, $result );
+		$this->assertSame( $visible_id, $result[0]->get_id() );
+	}
+
+	/**
+	 * An admin-ajax request isn't an admin screen. Background jobs run there as well
+	 * as under WP-Cron, so it leaves a hidden list out as the front end does, and a
+	 * job under either runner that rewrites a reader's lists from this set can't drop
+	 * that list. It keeps a restricted list, as every admin request does.
+	 */
+	public function test_filter_subscription_lists_drops_hidden_lists_in_admin_ajax() {
+		list( $hidden_id )     = $this->create_list_behind_gate( true );
+		list( $restricted_id ) = $this->create_list_behind_gate( false );
+		wp_set_current_user( $this->create_reader( false ) );
+		set_current_screen( 'dashboard' );
+		add_filter( 'wp_doing_ajax', '__return_true' );
+
+		$result = Premium_Newsletters::filter_subscription_lists(
+			[
+				new \Newspack\Newsletters\Subscription_List( $hidden_id ),
+				new \Newspack\Newsletters\Subscription_List( $restricted_id ),
+			]
+		);
+
+		$this->assertSame(
+			[ $restricted_id ],
+			array_map(
+				function ( $list ) {
+					return $list->get_id();
+				},
+				$result
+			)
+		);
+	}
+
+	/**
+	 * One gate that hides a list is enough, even when another gate covering the
+	 * same list shows it.
+	 */
+	public function test_list_is_hidden_when_any_gate_hides_it() {
+		list( $list_id )  = $this->create_list_behind_gate( true );
+		$shown_gate_id    = $this->create_newsletter_gate( [ 200 ], [ $list_id ] );
+		$this->set_gate_list_settings( $shown_gate_id, [ 'hide_lists' => false ] );
+		list( $other_id ) = $this->create_list_behind_gate( false );
+
+		$this->assertTrue( Premium_Newsletters::is_list_hidden( $list_id ) );
+		$this->assertFalse( Premium_Newsletters::is_list_hidden( $other_id ), 'A list no gate hides is shown.' );
+	}
+
+	/**
+	 * A draft gate restricts nothing, so it hides nothing either.
+	 */
+	public function test_draft_gate_does_not_hide_its_lists() {
+		list( $list_id, $gate_id ) = $this->create_list_behind_gate( true );
+		wp_update_post(
+			[
+				'ID'          => $gate_id,
+				'post_status' => 'draft',
+			]
+		);
+
+		$this->assertFalse( Premium_Newsletters::is_list_hidden( $list_id ) );
+	}
+
+	/**
+	 * A list marked exempt is open to everyone and Access Control does not govern it,
+	 * so a gate that also covers it can't hide it.
+	 */
+	public function test_exempt_list_is_not_hidden() {
+		list( $exempt_id )  = $this->create_list_behind_gate( true );
+		list( $visible_id ) = $this->create_list_behind_gate( false );
+		update_post_meta( $exempt_id, Content_Restriction_Control::IS_EXEMPT_META_KEY, true );
+		wp_set_current_user( $this->create_reader( true ) );
+
+		$this->assertFalse( Premium_Newsletters::is_list_hidden( $exempt_id ) );
+
+		$result = Premium_Newsletters::filter_subscription_lists(
+			[
+				new \Newspack\Newsletters\Subscription_List( $exempt_id ),
+				new \Newspack\Newsletters\Subscription_List( $visible_id ),
+			]
+		);
+		$this->assertSame(
+			[ $exempt_id, $visible_id ],
+			array_map(
+				function ( $list ) {
+					return $list->get_id();
+				},
+				$result
+			)
+		);
+	}
+
+	/**
+	 * A published gate with neither registration nor paid access on restricts
+	 * nothing, so it hides nothing either.
+	 */
+	public function test_gate_without_an_access_mode_does_not_hide_its_lists() {
+		list( $list_id, $gate_id ) = $this->create_list_behind_gate( true );
+		Content_Gate::update_custom_access_settings( $gate_id, [ 'active' => false ] );
+
+		$this->assertFalse( Premium_Newsletters::is_list_hidden( $list_id ) );
+	}
+
+	/**
+	 * With Audience Management off, gates restrict nothing, so nothing is hidden.
+	 */
+	public function test_hidden_lists_are_not_hidden_when_gating_is_inactive() {
+		list( $list_id ) = $this->create_list_behind_gate( true );
+
+		add_filter( 'newspack_reader_activation_enabled', '__return_false' );
+		$hidden = Premium_Newsletters::is_list_hidden( $list_id );
+		remove_filter( 'newspack_reader_activation_enabled', '__return_false' );
+
+		$this->assertFalse( $hidden );
+	}
+
+	/**
+	 * While Woo Memberships is active it still decides who can join a list, so no
+	 * list is hidden by a gate.
+	 *
+	 * Runs isolated because WC_Memberships, once declared, would make
+	 * Memberships::is_active() true for every later test in this process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_hidden_lists_are_not_hidden_while_memberships_is_active() {
+		require dirname( __DIR__, 2 ) . '/mocks/wc-memberships-active-mock.php';
+
+		list( $list_id ) = $this->create_list_behind_gate( true );
+
+		$this->assertFalse( Premium_Newsletters::is_list_hidden( $list_id ) );
+	}
+
+	/**
+	 * The Subscribe block's "show premium lists" mode renders every list that has a
+	 * gate but is missing from the shown lists, so a hidden list must carry no gate
+	 * on the front end.
+	 */
+	public function test_filter_list_gates_omits_hidden_lists_on_the_front_end() {
+		list( $hidden_id )  = $this->create_list_behind_gate( true );
+		list( $visible_id ) = $this->create_list_behind_gate( false );
+
+		$result = Premium_Newsletters::filter_list_gates( [] );
+
+		$this->assertSame( [ 'newspack-' . $visible_id ], array_keys( $result ) );
+		$this->assertArrayNotHasKey( 'newspack-' . $hidden_id, $result );
+	}
+
+	/**
+	 * The block editor reads the same map from an admin request, and keeps a hidden
+	 * list's gate so the editor can still name it.
+	 */
+	public function test_filter_list_gates_keeps_hidden_lists_in_admin() {
+		list( $hidden_id ) = $this->create_list_behind_gate( true );
+		set_current_screen( 'dashboard' );
+
+		$result = Premium_Newsletters::filter_list_gates( [] );
+
+		$this->assertArrayHasKey( 'newspack-' . $hidden_id, $result );
+	}
+
+	/**
+	 * An admin-ajax request isn't an admin screen, so a hidden list carries no gate
+	 * there either, matching the lists filter_subscription_lists() leaves out.
+	 */
+	public function test_filter_list_gates_omits_hidden_lists_in_admin_ajax() {
+		list( $hidden_id )  = $this->create_list_behind_gate( true );
+		list( $visible_id ) = $this->create_list_behind_gate( false );
+		set_current_screen( 'dashboard' );
+		add_filter( 'wp_doing_ajax', '__return_true' );
+
+		$result = Premium_Newsletters::filter_list_gates( [] );
+
+		$this->assertSame( [ 'newspack-' . $visible_id ], array_keys( $result ) );
+		$this->assertArrayNotHasKey( 'newspack-' . $hidden_id, $result );
+	}
+
+	/**
+	 * Hiding is only about what readers see. A hidden list still gains a reader who
+	 * has access, and still loses one whose access ends.
+	 */
+	public function test_access_check_still_adds_and_removes_a_hidden_list() {
+		list( $list_id, $gate_id ) = $this->create_list_behind_gate( true );
+		$this->set_gate_list_settings( $gate_id, [ 'auto_signup' => 'on' ] );
+
+		$user_id      = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$email        = get_userdata( $user_id )->user_email;
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id' => $user_id,
+				'status'      => 'active',
+				'products'    => [ 100 ],
+			]
+		);
+
+		$this->run_access_check( $user_id );
+
+		$calls = \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls;
+		$this->assertCount( 1, $calls, 'A reader with access is added to a hidden list.' );
+		$this->assertContains( 'newspack-' . $list_id, $calls[0]['lists_to_add'] );
+
+		\Newspack_Newsletters_Contacts::reset_calls();
+		\Newspack_Newsletters_Subscription::$contact_lists[ $email ] = [ 'newspack-' . $list_id ];
+		$subscription->set_status( 'cancelled' );
+
+		$this->run_access_check( $user_id );
+
+		$calls = \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls;
+		$this->assertCount( 1, $calls, 'A reader whose subscription lapses is removed from a hidden list.' );
+		$this->assertContains( 'newspack-' . $list_id, $calls[0]['lists_to_remove'] );
+		$this->assertEmpty( $calls[0]['lists_to_add'] );
 	}
 
 	// =========================================================================

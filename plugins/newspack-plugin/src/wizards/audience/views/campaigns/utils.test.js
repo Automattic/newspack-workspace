@@ -61,7 +61,7 @@ const CRITERIA = [
 
 const PLACEMENT = 'center';
 
-let segmentDescription, promptDescription, warningForPopup, isOverlay;
+let segmentDescription, promptDescription, warningForPopup, isOverlay, placementForPopup;
 
 beforeAll( async () => {
 	window.newspackAudienceCampaigns = {
@@ -70,7 +70,7 @@ beforeAll( async () => {
 		overlay_placements: [ PLACEMENT, 'top', 'bottom' ],
 		custom_placements: {},
 	};
-	( { segmentDescription, promptDescription, warningForPopup, isOverlay } = await import( './utils' ) );
+	( { segmentDescription, promptDescription, warningForPopup, isOverlay, placementForPopup } = await import( './utils' ) );
 } );
 
 describe( 'segmentDescription', () => {
@@ -94,6 +94,8 @@ describe( 'segmentDescription', () => {
 		// Once the list names resolve, it renders the human-readable label.
 		await waitFor( () => expect( container.textContent ).toContain( 'Not subscribed to:' ) );
 		await waitFor( () => expect( container.textContent ).toContain( 'Weekly Digest' ) );
+		// Names come from the unfiltered config, so a list a gate hides from readers keeps its name.
+		expect( apiFetch ).toHaveBeenCalledWith( { path: '/newspack-newsletters/v1/lists_config?context=edit' } );
 	} );
 
 	it( 'names saved subscription products as deleted when none of them exist any more', async () => {
@@ -173,6 +175,14 @@ const realCategory = { term_id: 5, name: 'Sports' };
 const otherCategory = { term_id: 6, name: 'News' };
 
 describe( 'promptDescription', () => {
+	it( 'names the A/B test and the variant when the prompt is in one', () => {
+		expect( promptDescription( overlay( { ab_test_id: 'hero', ab_variant: 'b' } ) ) ).toContain( 'A/B test: hero (variant B)' );
+	} );
+
+	it( 'says nothing about A/B tests when the prompt is in none', () => {
+		expect( promptDescription( overlay() ) ).not.toContain( 'A/B test' );
+	} );
+
 	it( 'renders a description from valid taxonomy arrays', () => {
 		const result = promptDescription(
 			overlay( {
@@ -227,6 +237,45 @@ describe( 'warningForPopup', () => {
 		expect( isOverlay( overlay() ) ).toBe( true );
 	} );
 
+	it( 'reports a published prompt in the same placement with no categories on either', () => {
+		const prompt = overlay( { id: 100 } );
+		const conflict = overlay( { id: 200, title: 'Other prompt' } );
+		const { container } = render( warningForPopup( [ prompt, conflict ], prompt ) );
+		expect( container.textContent ).toContain( 'Other prompt' );
+	} );
+
+	// Two prompts in one A/B test target the same readers in the same placement
+	// on purpose, and the view engine shows each reader one of them. `ab_test_id`
+	// is only on the payload while the test is valid and the feature is on.
+	it( 'does not report the other arm of the same A/B test as a conflict', () => {
+		const prompt = overlay( { id: 100, ab_test_id: 'hero', ab_variant: 'a' } );
+		const pair = overlay( { id: 200, title: 'Variant B', ab_test_id: 'hero', ab_variant: 'b' } );
+		expect( warningForPopup( [ prompt, pair ], prompt ) ).toBeNull();
+	} );
+
+	it( 'reports a prompt on the same arm of the same A/B test', () => {
+		const prompt = overlay( { id: 100, ab_test_id: 'hero', ab_variant: 'b' } );
+		const twin = overlay( { id: 200, title: 'Second B', ab_test_id: 'hero', ab_variant: 'b' } );
+		const { container } = render( warningForPopup( [ prompt, twin ], prompt ) );
+		expect( container.textContent ).toContain( 'Second B' );
+	} );
+
+	it( 'still reports a prompt outside the test', () => {
+		const prompt = overlay( { id: 100, ab_test_id: 'hero', ab_variant: 'a' } );
+		const pair = overlay( { id: 200, title: 'Variant B', ab_test_id: 'hero', ab_variant: 'b' } );
+		const third = overlay( { id: 300, title: 'Unrelated prompt' } );
+		const { container } = render( warningForPopup( [ prompt, pair, third ], prompt ) );
+		expect( container.textContent ).toContain( 'Unrelated prompt' );
+		expect( container.textContent ).not.toContain( 'Variant B' );
+	} );
+
+	it( 'reports a prompt in a different A/B test', () => {
+		const prompt = overlay( { id: 100, ab_test_id: 'hero', ab_variant: 'a' } );
+		const other = overlay( { id: 200, title: 'Other test', ab_test_id: 'footer', ab_variant: 'a' } );
+		const { container } = render( warningForPopup( [ prompt, other ], prompt ) );
+		expect( container.textContent ).toContain( 'Other test' );
+	} );
+
 	it( 'returns null when no conflicting prompts share segments and categories', () => {
 		const prompt = overlay( { categories: [ realCategory ] } );
 		const conflict = overlay( { id: 200, categories: [ otherCategory ] } );
@@ -258,5 +307,12 @@ describe( 'warningForPopup', () => {
 		const prompt = overlay( { categories: [ realCategory ] } );
 		const conflict = overlay( { id: 200, categories: null } );
 		expect( () => warningForPopup( [ prompt, conflict ], prompt ) ).not.toThrow();
+	} );
+} );
+
+describe( 'placementForPopup', () => {
+	it( 'labels a manual-only overlay apart from an overlay inserted automatically', () => {
+		expect( placementForPopup( { options: { placement: 'center', manual_only: false } } ) ).toBe( 'Center Overlay' );
+		expect( placementForPopup( { options: { placement: 'center', manual_only: true } } ) ).toBe( 'Center Overlay (Manual Only)' );
 	} );
 } );

@@ -23,12 +23,100 @@ use Newspack_Network\Node\Settings as Node_Settings;
 class Sites {
 
 	/**
+	 * Remembered site names, keyed by normalized URL, so name lookups query the network sites once per request.
+	 *
+	 * @var array<string, string>|null
+	 */
+	private static $site_names = null;
+
+	/**
 	 * Get all sites
 	 *
 	 * @return array Array of arrays with name and url properties.
 	 */
 	public static function get_all_sites() {
 		return array_merge( [ self::get_hub() ], self::get_nodes() );
+	}
+
+	/**
+	 * Forget the remembered site names.
+	 *
+	 * @return void
+	 */
+	public static function reset_cache() {
+		self::$site_names = null;
+	}
+
+	/**
+	 * Reduce a site URL to lowercase host plus path, with no scheme and no trailing slash.
+	 *
+	 * This lets the same site match whether a URL has http or https, different letter case, or a trailing slash.
+	 *
+	 * @param string $url The site URL.
+	 *
+	 * @return string The normalized URL.
+	 */
+	public static function normalize_url( $url ) {
+		$url = preg_replace( '#^[a-z][a-z0-9+.-]*://#i', '', trim( (string) $url ) );
+		return strtolower( untrailingslashit( $url ) );
+	}
+
+	/**
+	 * Get the name of a network site from its URL.
+	 *
+	 * @param string $url The site URL.
+	 *
+	 * @return string The site's name, or its bare domain if the site isn't in the network list or has no name.
+	 */
+	public static function get_site_name( $url ) {
+		if ( null === self::$site_names ) {
+			self::$site_names = [];
+			foreach ( self::get_all_sites() as $site ) {
+				// WordPress stores site titles HTML-encoded, and callers show the name as plain text.
+				$name = wp_specialchars_decode( (string) $site['name'], ENT_QUOTES );
+				// A site with no name isn't recorded, so its lookup falls back to the domain.
+				if ( '' === trim( $name ) ) {
+					continue;
+				}
+				$key = self::normalize_url( $site['url'] );
+				// The first site listed for a URL wins.
+				if ( ! isset( self::$site_names[ $key ] ) ) {
+					self::$site_names[ $key ] = $name;
+				}
+			}
+		}
+
+		$normalized_url = self::normalize_url( $url );
+		return self::$site_names[ $normalized_url ] ?? $normalized_url;
+	}
+
+	/**
+	 * Whether a URL belongs to the site this code is running on.
+	 *
+	 * @param string $url The site URL.
+	 *
+	 * @return bool
+	 */
+	public static function is_current_site( $url ) {
+		return self::normalize_url( $url ) === self::normalize_url( get_bloginfo( 'url' ) );
+	}
+
+	/**
+	 * Get the link to a subscription's edit screen on a network site.
+	 *
+	 * @param string $site_url The site URL.
+	 * @param int    $id       The subscription's post ID on that site.
+	 *
+	 * @return string
+	 */
+	public static function get_subscription_edit_url( $site_url, $id ) {
+		return add_query_arg(
+			[
+				'post'   => $id,
+				'action' => 'edit',
+			],
+			trailingslashit( $site_url ) . 'wp-admin/post.php'
+		);
 	}
 
 	/**
