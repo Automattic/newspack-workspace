@@ -72,7 +72,11 @@ function initReloadHandler() {
 			}
 
 			// When closing an overlay, check if the last activity was a checkout, registration, or login.
-			if ( ev?.detail?.overlays && ev.detail.removed ) {
+			// The modal checkout holds a named overlay while its URL trigger waits to
+			// run, with nothing on screen: its release is not a dismissal, and what the
+			// trigger opened holds an overlay of its own. A reload an activity asked
+			// for during that hold still runs below once the hold is gone.
+			if ( ev?.detail?.overlays && ev.detail.removed && 'modal-checkout-trigger' !== ev.detail.removed ) {
 				const activities = window?.newspackReaderActivation?.getActivities();
 				debugLog( 'log', '[Gate] Overlay removed, activities:', activities );
 				const lastActivity = activities?.[ activities.length - 1 ] || {};

@@ -309,3 +309,204 @@ describe( 'modal checkout as a dialog', () => {
 		expect( checkout.dataset.state ).toBe( 'closed' );
 	} );
 } );
+
+/**
+ * A sign-in inside the checkout waits for the reader's data to sync before the
+ * checkout opens, and the reader can close what is on screen meanwhile: the
+ * checkout's spinner on the modal path, the sign-in dialog on the redirect path.
+ * That close abandons the checkout. modal.js is driven through a checkout button
+ * on the page and the sign-in dialog's callbacks, with the sync settled by hand.
+ */
+describe( 'modal checkout, closing the sign-in checkout while it waits for the sync', () => {
+	const CART_URL = 'http://localhost/checkout/?cart=1';
+	const PAGE_WITH_BUTTON =
+		PAGE +
+		`<div class="wp-block-newspack-blocks-checkout-button"><form data-checkout='{"product_id":"9"}'>
+			<input type="hidden" name="newspack_checkout" value="1"><input type="hidden" name="product_id" value="9">
+			<button type="submit">Buy</button></form></div>`;
+	const setPendingCheckout = jest.fn();
+	const openAuthModal = jest.fn();
+	let overlayCount;
+	const overlays = { add: jest.fn( () => `overlay-${ ++overlayCount }` ), remove: jest.fn() };
+	let checkout;
+	let form;
+	let reader;
+	let flushes;
+	let cartRequest;
+
+	beforeAll( () => {
+		// The redirect path navigates by assigning location.href, which jsdom cannot do.
+		delete window.location;
+		window.location = {
+			href: 'http://localhost/',
+			origin: 'http://localhost',
+			pathname: '/',
+			search: '',
+			hash: '',
+			protocol: 'http:',
+			host: 'localhost',
+		};
+		jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
+	} );
+
+	afterAll( () => {
+		delete window.fetch;
+		delete window.newspack_ras_config;
+		jest.restoreAllMocks();
+	} );
+
+	/**
+	 * Load the page and modal.js for one case.
+	 *
+	 * @param {Object}  options
+	 * @param {boolean} options.redirect      Whether the gateway forces the redirect checkout.
+	 * @param {boolean} options.authenticated Whether the reader is already signed in.
+	 */
+	function setup( { redirect = false, authenticated = false } = {} ) {
+		overlayCount = 0;
+		flushes = [];
+		cartRequest = null;
+		reader = { authenticated };
+		window.location.href = 'http://localhost/';
+		document.body.innerHTML = PAGE_WITH_BUTTON;
+		window.newspack_ras_config = { is_logged_in: false };
+		window.newspackBlocksModal = {
+			newspack_class_prefix: 'newspack-ui',
+			ajax_url: '/wp-admin/admin-ajax.php',
+			has_unsupported_payment_gateway: redirect,
+			is_registration_required: true,
+			checkout_registration_flag: 'registered',
+			labels: {
+				checkout_modal_title: 'Checkout',
+				thankyou_modal_title: 'Thank you',
+				auth_modal_title: 'Sign in',
+				signin_modal_title: 'Sign in',
+				register_modal_title: 'Register',
+			},
+			processing_payment_messages: [],
+		};
+		window.newspackReaderActivation = {
+			setPendingCheckout,
+			openAuthModal,
+			overlays,
+			getReader: () => reader,
+			hydrateSession: () => Promise.resolve( 'nonce' ),
+			store: { flush: () => new Promise( resolve => flushes.push( resolve ) ) },
+		};
+		window.fetch = jest.fn( ( url, options ) => {
+			if ( options?.method === 'POST' ) {
+				return Promise.resolve( { ok: true } );
+			}
+			return new Promise( ( resolve, reject ) => {
+				cartRequest = { resolve: () => resolve( { ok: true, json: () => Promise.resolve( { url: CART_URL } ) } ), reject };
+			} );
+		} );
+		jest.isolateModules( () => {
+			require( './modal' );
+		} );
+		checkout = document.getElementById( 'newspack_modal_checkout' );
+		form = document.querySelector( '.wp-block-newspack-blocks-checkout-button form' );
+		[ openAuthModal, setPendingCheckout, overlays.add, overlays.remove ].forEach( mock => mock.mockClear() );
+	}
+
+	const settle = () => new Promise( resolve => setTimeout( resolve, 30 ) );
+	const press = () => form.dispatchEvent( new Event( 'submit', { bubbles: true, cancelable: true } ) );
+	const checkoutSubmitted = () => !! document.querySelector( `form[target="newspack_modal_checkout_iframe"][action="${ CART_URL }"]` );
+	const clearedPendingCheckout = () => setPendingCheckout.mock.calls.filter( call => 0 === call.length ).length;
+
+	/**
+	 * Press the button and sign in through the dialog it opened.
+	 *
+	 * @return {Promise<Object>} The dialog config, with its sync still pending.
+	 */
+	async function signIn() {
+		press();
+		cartRequest.resolve();
+		await settle();
+		const config = openAuthModal.mock.calls[ openAuthModal.mock.calls.length - 1 ][ 0 ];
+		reader = { authenticated: true };
+		config.onSuccess( '', {} );
+		await settle();
+		return config;
+	}
+
+	it( 'opens the checkout once the sync ends', async () => {
+		setup();
+		await signIn();
+		expect( checkout.dataset.state ).toBe( 'open' );
+		expect( checkoutSubmitted() ).toBe( false );
+		flushes[ 0 ]( true );
+		await settle();
+		expect( checkoutSubmitted() ).toBe( true );
+	} );
+
+	it( 'does not open the checkout the reader closed while it waited', async () => {
+		setup();
+		await signIn();
+		window.newspackCloseModalCheckout();
+		expect( checkout.dataset.state ).toBe( 'closed' );
+		flushes[ 0 ]( true );
+		await settle();
+		expect( checkout.dataset.state ).toBe( 'closed' );
+		expect( checkoutSubmitted() ).toBe( false );
+	} );
+
+	it( 'navigates to the redirect checkout once the sync ends', async () => {
+		setup( { redirect: true } );
+		await signIn();
+		expect( window.location.href ).toBe( 'http://localhost/' );
+		flushes[ 0 ]( true );
+		await settle();
+		expect( window.location.href ).toBe( CART_URL );
+	} );
+
+	it( 'does not navigate to the redirect checkout the reader closed the dialog on, and forgets it', async () => {
+		setup( { redirect: true } );
+		const config = await signIn();
+		config.onClose();
+		expect( clearedPendingCheckout() ).toBe( 1 );
+		flushes[ 0 ]( true );
+		await settle();
+		expect( window.location.href ).toBe( 'http://localhost/' );
+	} );
+
+	it( 'keeps the pending checkout of a dialog dismissed before signing in, for the magic link sent from it', async () => {
+		setup( { redirect: true } );
+		press();
+		cartRequest.resolve();
+		await settle();
+		const config = openAuthModal.mock.calls[ 0 ][ 0 ];
+		expect( setPendingCheckout ).toHaveBeenLastCalledWith( CART_URL );
+		config.onDismiss();
+		config.onClose();
+		expect( clearedPendingCheckout() ).toBe( 0 );
+	} );
+
+	it( 'abandons the redirect checkout when the dialog a second press re-opened is closed', async () => {
+		setup( { redirect: true } );
+		press();
+		cartRequest.resolve();
+		await settle();
+		const first = openAuthModal.mock.calls[ 0 ][ 0 ];
+		const second = await signIn();
+		expect( openAuthModal ).toHaveBeenCalledTimes( 2 );
+		// The dialog reports its close through both configs, the earlier one first.
+		first.onDismiss();
+		first.onClose();
+		second.onClose();
+		expect( clearedPendingCheckout() ).toBe( 1 );
+		flushes[ 0 ]( true );
+		await settle();
+		expect( window.location.href ).toBe( 'http://localhost/' );
+	} );
+
+	it( 'holds an overlay while the redirect checkout builds its cart, and lets go if that fails', async () => {
+		setup( { redirect: true, authenticated: true } );
+		press();
+		expect( overlays.add ).toHaveBeenCalledTimes( 1 );
+		expect( overlays.remove ).not.toHaveBeenCalled();
+		cartRequest.reject( new Error( 'unreachable' ) );
+		await settle();
+		expect( overlays.remove ).toHaveBeenCalledWith( 'overlay-1' );
+	} );
+} );

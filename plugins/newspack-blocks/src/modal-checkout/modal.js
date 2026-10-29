@@ -12,6 +12,9 @@ import { manageDismissed, manageOpened } from './analytics';
 import {
 	afterDeferredScripts,
 	domReady,
+	reserveOverlay,
+	whenReaderDataSynced,
+	whenSignedInReaderDataSynced,
 	iframeReady,
 	onCheckoutReady,
 	onCheckoutComplete,
@@ -128,6 +131,12 @@ domReady( () => {
 	// and the checkout document only has styles for a processing screen of its own with newspack-ui.
 	const HAS_NEWSPACK_UI = CLASS_PREFIX === 'newspack-ui';
 	let modalTrigger = document.querySelector( '.newspack-reader__account-link' )?.[ 0 ];
+
+	// A sign-in inside the checkout continues to the checkout only after the
+	// reader's data has synced, and the reader can close the waiting shell or
+	// open another checkout meanwhile. Each continuation is one attempt, and
+	// any open or close of the checkout after it started supersedes it.
+	let signInCheckoutAttempt = 0;
 	// Initialize empty iframe.
 	const initialHeight = '600px'; // Fixed initial height to avoid too much layout shift.
 	const iframe = document.createElement( 'iframe' );
@@ -519,6 +528,10 @@ domReady( () => {
 
 		// Populate cart and redirect to checkout if there is an unsupported payment gateway.
 		if ( ! isModalCheckout && ! shouldPromptRegistration() ) {
+			// Nothing opens on this path, so a content gate could reload the page
+			// while the cart request runs and cancel the navigation; the hold
+			// keeps the gate waiting, as it does after a completed checkout.
+			holdOverlay();
 			generateCart( checkoutData )
 				.then( url => {
 					// Remove modal checkout query string and trailing question mark (if any).
@@ -526,6 +539,7 @@ domReady( () => {
 				} )
 				.catch( error => {
 					console.warn( 'Unable to generate cart:', error ); // eslint-disable-line no-console
+					releaseHeldOverlays();
 					form.classList.remove( 'modal-processing' );
 					form.querySelectorAll( '.non-modal-checkout-loading' ).forEach( button => {
 						button.classList.remove( 'non-modal-checkout-loading' );
@@ -563,12 +577,35 @@ domReady( () => {
 			cartReq.then( url => {
 				window.newspackReaderActivation?.setPendingCheckout?.( url );
 			} );
+			// Set by this dialog's own sign-in. A dialog opened over this one
+			// cannot set it, so its close is told apart from this dialog's.
+			let signedIn = false;
 			// Initialize auth flow if reader is not authenticated.
 			window.newspackReaderActivation.openAuthModal( {
 				title: newspackBlocksModal.labels.auth_modal_title,
 				onSuccess: ( message, authData ) => {
-					cartReq
+					signedIn = true;
+					const attempt = ++signInCheckoutAttempt;
+					// The reader was anonymous when this page evaluated their
+					// segments. Let the session hydrate and the snapshot reach the
+					// server before the checkout reads it for pricing. On the modal
+					// path the auth modal has already closed, so show the checkout
+					// shell and its spinner meanwhile rather than the page the
+					// reader came from.
+					if ( isModalCheckout ) {
+						openCheckoutShell();
+					}
+					whenSignedInReaderDataSynced( 'matched_segments' )
+						.then( synced => {
+							warnUnlessSynced( synced );
+							return cartReq;
+						} )
 						.then( url => {
+							// The reader closed the shell, or opened another checkout,
+							// while this one waited: it is theirs to abandon.
+							if ( attempt !== signInCheckoutAttempt ) {
+								return;
+							}
 							// If registered and in a modal checkout, append the registration flag query param to the url.
 							if ( authData?.registered && isModalCheckout ) {
 								url += `&${ newspackBlocksModal.checkout_registration_flag }=1`;
@@ -584,7 +621,9 @@ domReady( () => {
 						} )
 						.catch( error => {
 							console.warn( 'Unable to generate cart:', error ); // eslint-disable-line no-console
-							closeCheckout();
+							if ( attempt === signInCheckoutAttempt ) {
+								closeCheckout();
+							}
 						} );
 				},
 				onError: () => {
@@ -592,6 +631,33 @@ domReady( () => {
 				},
 				onDismiss: () => {
 					// Analytics: Track a dismissal event (modal has been manually closed without completing the checkout).
+					manageDismissed( checkoutData );
+					inCheckoutIntent = false;
+					document.getElementById( 'newspack_modal_checkout' ).removeAttribute( 'data-checkout' );
+				},
+				onClose: () => {
+					// On the modal path the dialog closes before onSuccess starts
+					// the attempt, and a dialog opened over this one closes later
+					// still, so nothing here may touch the attempt. On the redirect
+					// path the dialog outlives the sign-in: any close then abandons
+					// the checkout, whichever dialog config reports it (an earlier
+					// config's onDismiss may already have cleared the intent), and
+					// the dismissal bookkeeping runs once. A dialog that signed the
+					// reader in also drops the pending checkout; one dismissed
+					// before signing in keeps it, as a dismissal on the modal path
+					// does, for the next sign-in's redirect to carry. The
+					// newsletters step would replace this callback;
+					// `skipNewslettersSignup` below keeps it.
+					if ( isModalCheckout ) {
+						return;
+					}
+					signInCheckoutAttempt++;
+					if ( signedIn ) {
+						window.newspackReaderActivation?.setPendingCheckout?.();
+					}
+					if ( ! inCheckoutIntent ) {
+						return;
+					}
 					manageDismissed( checkoutData );
 					inCheckoutIntent = false;
 					document.getElementById( 'newspack_modal_checkout' ).removeAttribute( 'data-checkout' );
@@ -671,6 +737,7 @@ domReady( () => {
 	} );
 
 	const closeCheckout = () => {
+		signInCheckoutAttempt++;
 		setCloseButtonsDisabled( closeButtons, false );
 		const container = iframe?.contentDocument?.querySelector( `#${ IFRAME_CONTAINER_ID }` );
 		const afterSuccessUrlInput = container?.querySelector( 'input[name="after_success_url"]' );
@@ -787,7 +854,17 @@ domReady( () => {
 		}
 	};
 
+	/**
+	 * Show the checkout modal with only its spinner, for a wait that precedes
+	 * the checkout request. openCheckout() then fills it in place.
+	 */
+	const openCheckoutShell = () => {
+		spinner.style.display = 'flex';
+		openModal( modalCheckout );
+	};
+
 	const openCheckout = url => {
+		signInCheckoutAttempt++;
 		if ( url ) {
 			iframe.src = url;
 		}
@@ -819,6 +896,12 @@ domReady( () => {
 	};
 
 	const openModal = el => {
+		// An open modal keeps its overlay: registering a second one would leave
+		// the first behind for good, and prompts would stay held back after the
+		// modal closes.
+		if ( el.getAttribute( 'data-state' ) === 'open' ) {
+			return;
+		}
 		if ( window.newspackReaderActivation?.overlays ) {
 			el.overlayId = window.newspackReaderActivation?.overlays.add();
 		}
@@ -1090,6 +1173,30 @@ domReady( () => {
 	};
 
 	/**
+	 * Whether the page URL asks this bundle to open a checkout.
+	 *
+	 * @return {boolean} Whether a trigger is present.
+	 */
+	const hasCheckoutUrlTrigger = () => new URLSearchParams( window.location.search ).has( 'checkout' );
+
+	/**
+	 * Leave a trace when a checkout opens without the reader's segment snapshot
+	 * confirmed on the server: its pricing may then follow the previous visit's
+	 * snapshot, and nothing else records that this happened.
+	 *
+	 * @param {boolean} synced Whether the snapshot reached the server in time.
+	 */
+	const warnUnlessSynced = synced => {
+		if ( synced ) {
+			return;
+		}
+		// eslint-disable-next-line no-console
+		console.warn(
+			"Newspack modal checkout: the reader's segment snapshot did not reach the server in time; the checkout may price against the previous snapshot."
+		);
+	};
+
+	/**
 	 * Handle modal checkout url param triggers.
 	 */
 	const handleModalCheckoutUrlParams = () => {
@@ -1148,8 +1255,30 @@ domReady( () => {
 	// by DOMContentLoaded, so the trigger waits for that rather than queueing on
 	// newspackRAS: that queue only flushes once newspack-plugin's reader
 	// activation script runs, and the modal needs only WooCommerce, so on a site
-	// without newspack-plugin a queued trigger would never fire.
-	afterDeferredScripts( handleModalCheckoutUrlParams );
+	// without newspack-plugin a queued trigger would never fire. It then waits
+	// for the reader's segment snapshot to reach the server: segmentation writes
+	// it on this same page load, and pricing rules read it when the checkout
+	// loads, so firing first would price against the previous visit's snapshot.
+	// Only a page that carries a trigger waits; any other page that loads this
+	// bundle leaves the store to its own sync schedule. The checkout registers
+	// its overlay only once it opens, so a prompt due during the wait would
+	// show under it and stay: prompts are held back until the trigger has run,
+	// by which point a checkout or sign-in modal it opened holds its own
+	// overlay, and a trigger that failed leaves prompts free.
+	afterDeferredScripts( () => {
+		if ( ! hasCheckoutUrlTrigger() ) {
+			return;
+		}
+		const releaseOverlay = reserveOverlay();
+		whenReaderDataSynced( 'matched_segments' ).then( synced => {
+			warnUnlessSynced( synced );
+			try {
+				handleModalCheckoutUrlParams();
+			} finally {
+				releaseOverlay();
+			}
+		} );
+	} );
 
 	/**
 	 * Open the modal checkout.

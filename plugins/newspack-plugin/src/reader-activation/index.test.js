@@ -1,4 +1,13 @@
-import { store, dispatchActivity, getActivities, getUniqueActivitiesBy, setReaderEmail, setAuthenticated, getReader, register } from './index';
+import readerActivation, {
+	store,
+	dispatchActivity,
+	getActivities,
+	getUniqueActivitiesBy,
+	setReaderEmail,
+	setAuthenticated,
+	getReader,
+	register,
+} from './index';
 import { on, off } from './events';
 
 describe( 'newspackReaderActivation', () => {
@@ -93,6 +102,12 @@ describe( 'newspackReaderActivation', () => {
 		on( 'reader', callback );
 		setReaderEmail( 'test@example.com' );
 		expect( callback ).toHaveBeenCalled();
+	} );
+	it( 'exposes hydrateSession so a consumer can await the post-sign-in session', () => {
+		// A reader who signs in mid-page has no REST nonce and no server items
+		// until the session hydrates; a consumer about to make a request whose
+		// server-side handling reads reader data must be able to wait for that.
+		expect( typeof readerActivation.hydrateSession ).toBe( 'function' );
 	} );
 } );
 
