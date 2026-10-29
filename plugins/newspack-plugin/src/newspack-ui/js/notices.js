@@ -298,6 +298,9 @@ function openNotice( element, remove = true ) {
 	element.classList.remove( 'is-leaving' );
 	if ( ! stacked ) {
 		element.style.removeProperty( 'height' );
+		if ( ! element.querySelector( '.newspack-ui__snackbar__close' ) ) {
+			element.appendChild( createCloseButton( element ) );
+		}
 	}
 	if ( stacked ) {
 		element.dataset.stackOrder = String( ++openCount );
@@ -483,6 +486,7 @@ function createCloseButton( item ) {
 function createNotice( message, type = 'success' ) {
 	const snackbar = getSnackbar();
 	const isError = 'error' === type;
+	message = String( message ).trim();
 
 	if ( isError ) {
 		const showing = [

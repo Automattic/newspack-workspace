@@ -234,7 +234,7 @@ describe( 'newspack-ui notices', () => {
 		expect( error.classList.contains( 'active' ) ).toBe( true );
 	} );
 
-	it( 'keeps a server-printed error marked to hide until the reader closes it', () => {
+	it( 'keeps a server-printed error marked to hide, with a close button, until the reader closes it', () => {
 		document.body.insertAdjacentHTML(
 			'beforeend',
 			`<div id="newspack-ui__notices" class="newspack-ui"><div class="newspack-ui__snackbar">
@@ -247,6 +247,9 @@ describe( 'newspack-ui notices', () => {
 		jest.advanceTimersByTime( 60000 );
 		expect( error.closest( '.newspack-ui__snackbar__pinned' ) ).not.toBeNull();
 		expect( error.classList.contains( 'active' ) ).toBe( true );
+
+		error.querySelector( '.newspack-ui__snackbar__close' ).click();
+		expect( error.classList.contains( 'active' ) ).toBe( false );
 	} );
 
 	it( 'leaves focus alone when a notice is closed with the mouse', () => {

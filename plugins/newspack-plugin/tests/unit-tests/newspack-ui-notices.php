@@ -17,9 +17,8 @@ class Newspack_Test_UI_Notices extends WP_UnitTestCase {
 	/**
 	 * Empty the notice queue.
 	 */
-	public function tear_down() {
+	public function tear_down(): void {
 		$queue = new ReflectionProperty( Newspack_UI::class, 'notices' );
-		$queue->setAccessible( true );
 		$queue->setValue( null, [] );
 		parent::tear_down();
 	}
@@ -38,7 +37,7 @@ class Newspack_Test_UI_Notices extends WP_UnitTestCase {
 	/**
 	 * An error stays until the reader closes it, even when a caller asks for it to hide.
 	 */
-	public function test_errors_stay_until_closed() {
+	public function test_errors_stay_until_closed(): void {
 		Newspack_UI::add_notice(
 			'We couldn\'t update your newsletter preferences.',
 			[
