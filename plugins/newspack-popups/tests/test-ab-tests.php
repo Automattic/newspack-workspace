@@ -412,9 +412,9 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 
 	/**
 	 * Pins the server's half of the PHP-to-JS contract for a live test: the front
-	 * end reads these keys from newspack_popups_view, and a rename here alone would
-	 * stop every test splitting traffic. The JS tests build that object by hand, so
-	 * they would not notice.
+	 * end reads these keys from newspack_popups_view, and renaming `ab_tests` or
+	 * `variants` here alone would stop every test splitting traffic. The JS tests
+	 * build that object by hand, so they would not notice.
 	 */
 	public function test_view_script_ab_data_for_a_live_test() {
 		$this->create_test_variant( 'live-test', 'a', null, [], 60 );
