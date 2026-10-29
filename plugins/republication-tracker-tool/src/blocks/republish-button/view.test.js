@@ -1,11 +1,14 @@
 /**
- * What the Republish Button block's modal leaves in its copy textarea.
+ * What the Republish Button block's modal leaves in its copy textarea, and what
+ * its Copy button puts on the clipboard.
  *
  * The modal strips captions by parsing the textarea's text and writing the
  * result back. Writing back has to keep the text exactly as parsed: code a story
  * shows as text stays text, and the footer stays working markup. The served
  * encoding this starts from is pinned by tests/test-modal-handout-encoding.php.
  */
+
+import '../../../assets/clipboard-utils';
 
 // The textarea's value once the browser has decoded the served source: the
 // story as HTML that shows code as text, a caption to strip, then the footer.
@@ -25,6 +28,7 @@ const openModal = () => {
 			<div id="republication-tracker-tool-modal-content">
 				<button class="republication-tracker-tool-close"></button>
 				<textarea id="republication-tracker-tool-shareable-content"></textarea>
+				<button data-copy-active>Copy to Clipboard</button>
 			</div>
 		</div>`;
 	const textarea = document.getElementById( 'republication-tracker-tool-shareable-content' );
@@ -56,5 +60,45 @@ describe( 'Republish Button modal copy', () => {
 		const { value } = openModal();
 		expect( value ).not.toContain( 'wp-caption' );
 		expect( value ).toContain( '<p>After the caption.</p>' );
+	} );
+
+	describe( 'Copy button', () => {
+		let clipboard;
+		const OriginalBlob = global.Blob;
+
+		beforeEach( () => {
+			clipboard = { write: jest.fn().mockResolvedValue( undefined ), writeText: jest.fn().mockResolvedValue( undefined ) };
+			Object.defineProperty( window.navigator, 'clipboard', { value: clipboard, configurable: true } );
+			global.ClipboardItem = class {
+				constructor( items ) {
+					this.items = items;
+				}
+			};
+			global.Blob = class {
+				constructor( parts ) {
+					this.content = parts.join( '' );
+				}
+			};
+		} );
+
+		afterEach( () => {
+			delete global.ClipboardItem;
+			global.Blob = OriginalBlob;
+		} );
+
+		// The button is what hands block editors the wrapped tracking. Calling
+		// copyFromElement, as the plain-text field buttons do, it would copy plain text
+		// only, and every other test would still pass.
+		it( 'copies the caption-stripped handout, with the tracking wrapped for the block editor', () => {
+			const { value } = openModal();
+			document.querySelector( '[data-copy-active]' ).click();
+
+			expect( clipboard.write ).toHaveBeenCalledTimes( 1 );
+			const [ [ [ item ] ] ] = clipboard.write.mock.calls;
+			const html = item.items[ 'text/html' ].content;
+			expect( item.items[ 'text/plain' ].content ).toBe( value );
+			expect( html ).toContain( '\n<!-- wp:html -->\n<img id="republication-tracker-tool-source"' );
+			expect( html.replace( '\n<!-- wp:html -->\n', '' ).replace( '\n<!-- /wp:html -->\n', '' ) ).toBe( value );
+		} );
 	} );
 } );

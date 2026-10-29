@@ -63,6 +63,8 @@ const planEntries = ( item, groupEntries ) => {
 	} ) );
 	const individual = ( item.subscriptions || [] ).map( s => ( {
 		plan: s.plan,
+		planName: s.planName || s.plan,
+		site: s.managedOn?.name || null,
 		status: s.status,
 		editUrl: s.editUrl,
 		isComplimentary: !! s.isComplimentary,
@@ -91,6 +93,19 @@ const subscriberStatuses = ( item, groupEntries ) =>
 		item.status
 	);
 
+// The `managed_on` filter value for subscriptions this site manages; network
+// sites go by their names. Matches Subscribers_Wizard::MANAGED_ON_THIS_SITE.
+const THIS_SITE = 'this-site';
+const THIS_SITE_LABEL = __( 'This site', 'newspack-plugin' );
+
+// Where the subscriptions the Subscription column shows are managed, as Managed
+// on filter values: this site first, without repeats.
+const managedOnValues = item => {
+	const sites = visiblePlanEntries( planEntries( item, groupEntriesOf( item ) ) ).map( e => e.site );
+	const network = [ ...new Set( sites.filter( Boolean ) ) ];
+	return sites.some( site => ! site ) ? [ THIS_SITE, ...network ] : network;
+};
+
 const { useHistory, useLocation } = Router;
 
 const DEFAULT_VIEW = {
@@ -117,7 +132,7 @@ export default function SubscriberList() {
 
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
-	const { plans, failed: plansFailed } = usePlans();
+	const { plans, sites, failed: plansFailed } = usePlans();
 
 	// The server owns filter/sort/paginate; this page's rows come back already
 	// narrowed. Group-role, tag and newsletter filters arrive in later slices (the
@@ -146,6 +161,17 @@ export default function SubscriberList() {
 		() => [ ...new Set( [ ...plans, ...( selectedPlans || [] ) ] ) ].map( name => ( { value: name, label: name } ) ),
 		[ plans, selectedPlans ]
 	);
+
+	// Only a site on a network has anywhere else to manage a subscription. Sites the
+	// view already filters by stay options, for the same reason as the plans above.
+	const selectedSites = view.filters?.find( f => 'managedOn' === f.field )?.value;
+	const managedOnElements = useMemo( () => {
+		const names = [ ...new Set( [ ...sites, ...( selectedSites || [] ) ] ) ].filter( name => name !== THIS_SITE );
+		if ( names.length === 0 && ! selectedSites?.length ) {
+			return [];
+		}
+		return [ { value: THIS_SITE, label: THIS_SITE_LABEL }, ...names.map( name => ( { value: name, label: name } ) ) ];
+	}, [ sites, selectedSites ] );
 
 	// Resolve avatar URLs for the current page, keyed by subscriber id. The table
 	// renders immediately with the avatar placeholder and each avatar fills in as
@@ -249,8 +275,9 @@ export default function SubscriberList() {
 						<VStack spacing={ 2 } alignment="left">
 							{ entries.map( ( e, i ) => (
 								<div key={ i }>
-									<SubscriptionLink href={ e.editUrl }>{ e.plan }</SubscriptionLink>
+									<SubscriptionLink href={ e.editUrl }>{ e.planName || e.plan }</SubscriptionLink>
 									{ e.role && <>&nbsp;{ `(${ GROUP_LABEL })` }</> }
+									{ e.site && <>&nbsp;{ `(${ e.site })` }</> }
 								</div>
 							) ) }
 						</VStack>
@@ -275,6 +302,34 @@ export default function SubscriberList() {
 						<span>—</span>
 					),
 			},
+			...( managedOnElements.length
+				? [
+						{
+							id: 'managedOn',
+							label: __( 'Managed on', 'newspack-plugin' ),
+							// Hidden by default. Filtered server-side: the `managed_on` param
+							// matches readers by where the subscriptions their Subscription
+							// column shows are managed.
+							elements: managedOnElements,
+							filterBy: { operators: [ 'isAny' ] },
+							enableSorting: false,
+							getValue: ( { item } ) => managedOnValues( item ),
+							render: ( { item } ) => {
+								const values = managedOnValues( item );
+								if ( values.length === 0 ) {
+									return <span>—</span>;
+								}
+								return (
+									<VStack spacing={ 2 } alignment="left">
+										{ values.map( value => (
+											<div key={ value }>{ THIS_SITE === value ? THIS_SITE_LABEL : value }</div>
+										) ) }
+									</VStack>
+								);
+							},
+						},
+				  ]
+				: [] ),
 			{
 				id: 'groupRole',
 				label: groupRoleLabel(),
@@ -395,7 +450,7 @@ export default function SubscriberList() {
 				},
 			},
 		],
-		[ avatars, planElements ]
+		[ avatars, planElements, managedOnElements ]
 	);
 
 	// DataViews only makes the title cell clickable; delegate clicks from the
@@ -521,6 +576,7 @@ export default function SubscriberList() {
 				getItemId={ item => item.id }
 				onClickItem={ openSubscriber }
 				search
+				inlineFilters
 			/>
 			{ /* In the document body, so no ancestor of the list can pin the fixed
 			     overlay to itself or stack popovers above it. Cancelling the press

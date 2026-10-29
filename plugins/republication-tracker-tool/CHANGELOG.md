@@ -1,3 +1,17 @@
+## republication-tracker-tool [2.9.8](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.7...republication-tracker-tool@2.9.8) (2026-10-29)
+
+
+### Bug Fixes
+
+* **rtt:** keep Parse.ly tracking on block-editor paste (NPPM-3409) ([#1256](https://github.com/Automattic/newspack-workspace/issues/1256)) ([ba13bde](https://github.com/Automattic/newspack-workspace/commit/ba13bde43b6de8d51680fec53b814bb637836199))
+
+## republication-tracker-tool [2.9.7](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.6...republication-tracker-tool@2.9.7) (2026-10-28)
+
+
+### Bug Fixes
+
+* **rtt:** keep site icon small after a block editor paste (NPPM-3537) ([#1435](https://github.com/Automattic/newspack-workspace/issues/1435)) ([43e1c33](https://github.com/Automattic/newspack-workspace/commit/43e1c3321b4626679f349f996bef7524203c2833))
+
 ## republication-tracker-tool [2.9.6](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.5...republication-tracker-tool@2.9.6) (2026-10-27)
 
 
