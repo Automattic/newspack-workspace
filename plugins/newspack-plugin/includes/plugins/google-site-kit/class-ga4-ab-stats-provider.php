@@ -163,7 +163,7 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 		}
 		$result = [
 			'unit'     => 'readers',
-			'note'     => __( 'Counts update once a day.', 'newspack' ),
+			'note'     => __( 'Google Analytics updates these counts once a day.', 'newspack' ),
 			'variants' => $variants,
 		];
 		if ( empty( $letters ) ) {
@@ -180,7 +180,7 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 			return $counted;
 		}
 		if ( $counted['flagged'] ) {
-			$result['note'] = __( 'Counts update once a day and Google Analytics may have left out some low-traffic counts for this test.', 'newspack' );
+			$result['note'] = __( 'Google Analytics updates these counts once a day, and may have left out some low-traffic counts for this test.', 'newspack' );
 		}
 		$result['variants'] = $counted['variants'];
 		return $result;

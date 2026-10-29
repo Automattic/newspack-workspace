@@ -382,7 +382,7 @@ class Newspack_Test_GA4_AB_Stats_Provider extends WP_UnitTestCase {
 	public function test_unflagged_counts_carry_the_plain_note() {
 		$provider = new GA4_AB_Stats_Provider( fn() => $this->response( [ [ 12, 3 ] ] ) );
 		$counts   = $provider->get_counts( $this->fixture_test(), 'link_click', self::START, self::END );
-		$this->assertSame( 'Counts update once a day.', $counts['note'] );
+		$this->assertSame( 'Google Analytics updates these counts once a day.', $counts['note'] );
 	}
 
 	/**
