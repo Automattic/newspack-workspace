@@ -3,18 +3,173 @@
 
 $font-size-classes: ".newspack-ui__font--2xs, .newspack-ui__font--xs, .newspack-ui__font--s, .newspack-ui__font--m, .newspack-ui__font--l, .newspack-ui__font--xl, .newspack-ui__font--2xl, .newspack-ui__font--3xl, .newspack-ui__font--4xl, .newspack-ui__font--5xl, .newspack-ui__font--6xl";
 
-@mixin newspack-ui-elevation( $size: 1 ) {
-	@if $size == 1 {
-		box-shadow: 0 1px 10px colors.$overlay-050;
+@mixin newspack-ui-elevation( $size: 1, $drop-shadow: false, $direction: down ) {
+	$y: 1;
+	@if $direction == up {
+		$y: -1;
+	}
+
+	@if $drop-shadow {
+		@if $size == 3 {
+			filter: drop-shadow(0 ($y * 1px) 1px colors.$overlay-050) drop-shadow(0 ($y * 12px) 18px colors.$overlay-200);
+		}
+		@else {
+			@error "newspack-ui-elevation: the drop-shadow form only supports size 3, got #{$size}.";
+		}
+	}
+	@else if $size == 1 {
+		box-shadow: 0 ($y * 1px) 2px colors.$overlay-000, 0 ($y * 8px) 24px -8px colors.$overlay-200;
 	}
 	@else if $size == 2 {
-		box-shadow: 0 2px 20px colors.$overlay-100;
+		box-shadow: 0 ($y * 8px) 24px -8px colors.$overlay-400;
 	}
 	@else if $size == 3 {
-		box-shadow: 0 3px 30px colors.$overlay-200;
+		box-shadow: 0 ($y * 1px) 2px colors.$overlay-050, 0 ($y * 16px) 40px -12px colors.$overlay-300;
 	}
 	@else if $size == 4 {
-		box-shadow: 0 0 20px colors.$overlay-050, 0 25px 30px colors.$overlay-100;
+		box-shadow: 0 0 20px colors.$overlay-050, 0 ($y * 25px) 30px colors.$overlay-100;
+	}
+}
+
+@mixin focus-edge( $color: var(--newspack-ui-color-focus), $inset: false ) {
+	$halo: color-mix(in srgb, #{$color} var(--newspack-ui-focus-halo-mix), transparent);
+
+	outline: 2px solid transparent;
+	outline-offset: 0;
+
+	@if $inset {
+		box-shadow: inset 0 0 0 1px $color, 0 0 0 var(--newspack-ui-focus-halo-width) $halo;
+	}
+	@else {
+		border-color: $color;
+		box-shadow: 0 0 0 var(--newspack-ui-focus-halo-width) $halo;
+	}
+
+	transition: none;
+}
+
+@mixin focus-line( $color: var(--newspack-ui-color-focus), $inner: null, $inset: false, $radius: null ) {
+	$halo: color-mix(in srgb, #{$color} var(--newspack-ui-focus-halo-mix), transparent);
+	$position: null;
+	$offset: 0;
+
+	@if $inset {
+		$position: inset;
+		$offset: -2px;
+	}
+
+	box-shadow: $inner, $position 0 0 0 1px $color, $position 0 0 0 calc(1px + var(--newspack-ui-focus-halo-width)) $halo;
+	outline: 2px solid transparent;
+	outline-offset: $offset;
+	transition: none;
+
+	@if $radius {
+		border-radius: $radius;
+	}
+}
+
+@mixin choice-layout( $disabled: "input:disabled" ) {
+	display: grid !important;
+	font-weight: var(--newspack-ui-font-weight-regular);
+	gap: 0 var(--newspack-ui-spacer-2);
+	grid-template-columns: var(--newspack-ui-control-size) 1fr;
+
+	> *:not(input) {
+		grid-column: 2 / span 1;
+	}
+
+	> input {
+		margin-top: calc((1lh - var(--newspack-ui-control-size)) / 2);
+	}
+
+	&:has(#{$disabled}) {
+		color: var(--newspack-ui-color-text-subtle);
+		cursor: not-allowed;
+	}
+}
+
+@mixin input-card {
+	border: 1px solid var(--newspack-ui-color-border);
+	border-radius: var(--newspack-ui-radius-surface);
+	cursor: pointer;
+	font-weight: var(--newspack-ui-font-weight-regular);
+	gap: 0 var(--newspack-ui-spacer-2);
+	padding: var(--newspack-ui-spacer-3);
+	transition:
+		border-color var(--newspack-ui-duration-color) ease,
+		box-shadow var(--newspack-ui-duration-color) ease;
+
+	@media ( hover: hover ) and ( pointer: fine ) {
+		&:hover:not(:has(> input:checked, > input:disabled, > input:focus-visible)) {
+			border-color: var(--newspack-ui-color-border-hover);
+		}
+	}
+
+	&:has(> input:checked) {
+		border-color: var(--newspack-ui-color-selected);
+		box-shadow: inset 0 0 0 1px var(--newspack-ui-color-selected);
+	}
+
+	&:has(> input:disabled) {
+		border-style: dashed;
+		color: var(--newspack-ui-color-text-subtle);
+	}
+
+	&:has(> input[aria-invalid="true"]),
+	&:where(.newspack-ui__field-error *) {
+		border-color: var(--newspack-ui-color-error);
+		box-shadow: inset 0 0 0 1px var(--newspack-ui-color-error);
+	}
+
+	&:has(> input:focus-visible) {
+		@include focus-edge;
+	}
+
+	&:has(> input:checked:focus-visible) {
+		@include focus-line( $inner: inset 0 0 0 1px var(--newspack-ui-color-selected) );
+	}
+
+	&:has(> input[aria-invalid="true"]:focus-visible),
+	&:where(.newspack-ui__field-error *):has(> input:focus-visible) {
+		border-color: var(--newspack-ui-color-error);
+
+		@include focus-line( $inner: inset 0 0 0 1px var(--newspack-ui-color-error) );
+	}
+}
+
+@mixin visually-hidden {
+	border: 0;
+	clip: rect(1px, 1px, 1px, 1px);
+	clip-path: inset(50%);
+	height: 1px;
+	margin: -1px;
+	overflow: hidden;
+	padding: 0;
+	position: absolute !important;
+	width: 1px;
+	word-wrap: normal !important;
+}
+
+@mixin spinner {
+	animation: spin 900ms infinite linear;
+	border: 2px solid color-mix(in srgb, currentcolor 30%, transparent);
+	border-radius: 50%;
+	border-top-color: currentcolor;
+	height: calc(var(--newspack-ui-spacer-1) * 2.25);
+	width: calc(var(--newspack-ui-spacer-1) * 2.25);
+}
+
+@mixin body-table {
+	font-size: var(--newspack-ui-font-size-body);
+	line-height: var(--newspack-ui-line-height-body);
+	margin: 0;
+
+	th,
+	td {
+		border: 0;
+		font-size: inherit;
+		line-height: inherit;
+		padding-block: calc(var(--newspack-ui-spacer-1) * 1.75);
 	}
 }
 
@@ -33,6 +188,26 @@ $font-size-classes: ".newspack-ui__font--2xs, .newspack-ui__font--xs, .newspack-
 
 	@if desktop == $res {
 		@media only screen and ( min-width: breakpoints.$desktop_width ) {
+			@content;
+		}
+	}
+}
+
+@mixin media-below( $res ) {
+	@if mobile == $res {
+		@media only screen and ( max-width: #{breakpoints.$mobile_width - 1px} ) {
+			@content;
+		}
+	}
+
+	@if tablet == $res {
+		@media only screen and ( max-width: #{breakpoints.$tablet_width - 1px} ) {
+			@content;
+		}
+	}
+
+	@if desktop == $res {
+		@media only screen and ( max-width: #{breakpoints.$desktop_width - 1px} ) {
 			@content;
 		}
 	}

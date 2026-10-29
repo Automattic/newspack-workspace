@@ -3,6 +3,8 @@ import debounce from 'lodash/debounce';
 
 import type { Configuration } from './types';
 
+const getScrollBehavior = (): ScrollBehavior => ( window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches ? 'auto' : 'smooth' );
+
 const findClosestIndex = ( arr: number[], num: number ) => {
 	const closest =
 		arr.reduce( ( acc, val ) => {
@@ -55,7 +57,7 @@ export const setupSlider = ( parentEl: HTMLElement, configuration: Configuration
 		dotEl.addEventListener( 'click', () => {
 			optionsEl.scrollTo( {
 				left: index * optionWidth,
-				behavior: 'smooth',
+				behavior: getScrollBehavior(),
 			} );
 		} );
 	} );

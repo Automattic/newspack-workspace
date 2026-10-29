@@ -22,17 +22,18 @@
 					justify-content: space-between;
 				}
 				> div {
-					transition: max-height 0.4s ease-in-out, opacity 0.4s ease-in-out;
-					max-height: 0;
-					opacity: 0;
-					overflow: hidden;
+					display: none;
+					transition: opacity var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out);
 				}
 				&.active {
-					background-color: var(--newspack-ui-color-neutral-5);
-					border-color: var(--newspack-ui-color-neutral-90);
+					background-color: var(--newspack-ui-color-surface-subtle);
+					border-color: var(--newspack-ui-color-selected);
 					> div {
-						max-height: 1000px;
-						opacity: 1;
+						display: block;
+
+						@starting-style {
+							opacity: 0;
+						}
 					}
 				}
 				&:only-child {
@@ -46,8 +47,7 @@
 						}
 					}
 					> div {
-						max-height: 1000px;
-						opacity: 1;
+						display: block;
 					}
 				}
 			}

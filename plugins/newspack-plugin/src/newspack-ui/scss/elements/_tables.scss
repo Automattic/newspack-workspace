@@ -2,8 +2,8 @@
 	table {
 		border: 0;
 		font-family: var(--newspack-ui-font-family);
-		font-size: var(--newspack-ui-font-size-xs); // Prevent relative font size
-		line-height: var(--newspack-ui-line-height-xs);
+		font-size: var(--newspack-ui-font-size-small); // Prevent relative font size
+		line-height: var(--newspack-ui-line-height-small);
 		margin: calc(var(--newspack-ui-spacer-1) / -2) 0; // Offset cell padding.
 		table-layout: fixed;
 		border-collapse: collapse;
@@ -12,12 +12,12 @@
 			background: transparent;
 			border-color: var(--newspack-ui-color-border);
 			border-width: 0 0 1px;
-			font-size: var(--newspack-ui-font-size-xs); // Prevent relative font size
+			font-size: var(--newspack-ui-font-size-small); // Prevent relative font size
 			padding: calc(var(--newspack-ui-spacer-1) / 2) 0;
 			vertical-align: top;
 		}
 		th {
-			font-weight: 600;
+			font-weight: var(--newspack-ui-font-weight-strong);
 			text-align: left;
 		}
 		tfoot tr:last-child {

@@ -18,8 +18,8 @@
 			border: none;
 			border-bottom-width: calc(var(--newspack-ui-spacer-base, 8px) / 2);
 			border-radius:
-				var(--newspack-ui-border-radius-m, 6px)
-				var(--newspack-ui-border-radius-m, 6px) 0 0;
+				var(--newspack-ui-radius-control, 8px)
+				var(--newspack-ui-radius-control, 8px) 0 0;
 			color: var(--newspack-ui-color-neutral-60, #6c6c6c);
 			padding:
 				var(--newspack-ui-spacer-2, 12px)
@@ -141,6 +141,6 @@
 }
 
 .has-background .wp-block-newspack-tabs {
-	border-radius: var(--newspack-ui-border-radius-m, 6px);
+	border-radius: var(--newspack-ui-radius-surface, 12px);
 	padding: var(--newspack-ui-spacer-5, 24px);
 }

@@ -1,3 +1,5 @@
+@use "../../mixins";
+
 .newspack-ui {
 	// TODO: define some kind of size hierachy for buttons eg. small, medium, large;
 	// not needed for RAS, but likely for My Account.
@@ -20,65 +22,83 @@
 	textarea {
 		background: var(--newspack-ui-color-input-bg);
 		border: 1px solid var(--newspack-ui-color-input-border);
-		border-radius: var(--newspack-ui-border-radius-m);
+		border-radius: var(--newspack-ui-radius-control);
+		box-shadow: none;
+		box-sizing: border-box;
+		color: var(--newspack-ui-color-text);
 		display: block;
 		font-family: var(--newspack-ui-font-family);
-		font-size: var(--newspack-ui-font-size-s);
-		line-height: var(--newspack-ui-line-height-s);
-		padding: calc(var(--newspack-ui-spacer-2) - 1px);
+		font-size: var(--newspack-ui-font-size-body);
+		line-height: var(--newspack-ui-line-height-body);
+		min-height: var(--newspack-ui-spacer-9);
+		padding: calc(var(--newspack-ui-spacer-2) - 1px) var(--newspack-ui-control-padding-inline);
 		transition:
-			background-color 125ms ease-in-out,
-			border-color 125ms ease-in-out,
-			outline 125ms ease-in-out;
+			background-color var(--newspack-ui-duration-color) ease,
+			border-color var(--newspack-ui-duration-color) ease,
+			box-shadow var(--newspack-ui-duration-color) ease;
 		width: 100%;
 
-		&:hover:not(:disabled) {
-			border-color: var(--newspack-ui-color-input-border-hover);
+		&::placeholder {
+			color: var(--newspack-ui-color-text-subtle);
+			opacity: 1;
 		}
 
+		@media ( hover: hover ) and ( pointer: fine ) {
+			&:hover:not(:disabled, :focus) {
+				border-color: var(--newspack-ui-color-input-border-hover);
+			}
+		}
+
+		&:focus,
 		&:focus-visible {
-			outline: 2px solid var(--newspack-ui-color-input-border-focus);
-			outline-offset: -1px;
+			@include mixins.focus-edge( var(--newspack-ui-color-input-border-focus) );
 		}
 
 		&:disabled {
 			-webkit-text-fill-color: currentcolor;
 			background-color: var(--newspack-ui-color-input-bg-disabled);
 			border-color: var(--newspack-ui-color-input-border-disabled);
-			color: var(--newspack-ui-color-neutral-60);
+			color: var(--newspack-ui-color-text-subtle);
 			cursor: not-allowed;
 			opacity: 1;
 		}
 	}
 
+	textarea {
+		min-height: calc(var(--newspack-ui-spacer-9) * 2);
+	}
+
 	&__currency-input {
 		border: 1px solid var(--newspack-ui-color-input-border);
-		border-radius: var(--newspack-ui-border-radius-m);
+		border-radius: var(--newspack-ui-radius-control);
 		display: grid;
 		grid-template-columns: calc(var(--newspack-ui-spacer-9) - 2px) 1fr;
 		overflow: hidden;
-		transition: border-color 125ms ease-in-out;
+		transition: border-color var(--newspack-ui-duration-color) ease, box-shadow var(--newspack-ui-duration-color) ease;
 
-		&:hover:not(:has(input:disabled)) {
-			border-color: var(--newspack-ui-color-input-border-hover);
+		@media ( hover: hover ) and ( pointer: fine ) {
+			&:hover:not(:has(input:disabled), :focus-within) {
+				border-color: var(--newspack-ui-color-input-border-hover);
+			}
 		}
 
 		&:focus-within {
-			outline: 2px solid var(--newspack-ui-color-input-border-focus);
-			outline-offset: -1px;
+			@include mixins.focus-edge( var(--newspack-ui-color-input-border-focus) );
 		}
 
 		&__currency {
-			background: var(--newspack-ui-color-neutral-10);
+			background: var(--newspack-ui-color-surface-subtle);
+			border-inline-end: 1px solid var(--newspack-ui-color-border);
 			display: grid;
-			font-weight: 600;
-			font-size: var(--newspack-ui-font-size-s);
-			line-height: var(--newspack-ui-line-height-s);
+			font-weight: var(--newspack-ui-font-weight-medium);
+			font-size: var(--newspack-ui-font-size-body);
+			line-height: var(--newspack-ui-line-height-body);
 			place-items: center;
 		}
 
 		input {
 			border: 0 !important;
+			box-shadow: none !important;
 			outline: none !important;
 		}
 	}
