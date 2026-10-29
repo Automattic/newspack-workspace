@@ -105,14 +105,17 @@ final class Reader_Data {
 	 * Enumerate browser-only keys.
 	 *
 	 * These keys change on most page views and nothing on the server reads them,
-	 * so sending them would cost a REST request per logged-in page view for no
-	 * reader. The browser store never sends them, and never hydrates them, so a
-	 * copy stored before a key became browser-only can't overwrite the browser's.
-	 * `pageviews` is the Campaigns prompt-frequency counter.
+	 * so sending them would cost a REST request per logged-in page view. The
+	 * browser store never sends them, and never hydrates them, so a copy stored
+	 * before a key became browser-only can't overwrite the browser's.
+	 *
+	 * `pageviews` is the Campaigns prompt-frequency counter, so a logged-in
+	 * reader's prompt frequency counts per device, as an anonymous reader's
+	 * always has.
 	 *
 	 * @return string[] Names of browser-only keys.
 	 */
-	public static function get_local_keys() {
+	public static function get_local_keys(): array {
 		/**
 		 * Filters the list of browser-only reader data keys.
 		 *
@@ -120,7 +123,10 @@ final class Reader_Data {
 		 *
 		 * @param string[] $keys Names of browser-only keys.
 		 */
-		return apply_filters( 'newspack_reader_data_local_keys', [ 'pageviews', 'referrer' ] );
+		$keys = apply_filters( 'newspack_reader_data_local_keys', [ 'pageviews', 'referrer' ] );
+		// Removing a default leaves a gap in the keys, which would reach the
+		// browser as a JSON object instead of a list and break the store.
+		return array_values( (array) $keys );
 	}
 
 	/**
@@ -211,7 +217,11 @@ final class Reader_Data {
 						'type' => 'string',
 					],
 					'items' => [
-						'type' => 'object',
+						'type'          => 'object',
+						// Bounds one request's work. Core rejects a larger batch whole, and
+						// the browser keeps every key of a rejected request pending, so this
+						// must stay well above what one sync tick sends: a handful of keys.
+						'maxProperties' => self::MAX_ITEMS,
 					],
 				],
 			]
@@ -648,7 +658,7 @@ final class Reader_Data {
 	 *
 	 * @return WP_REST_Response|WP_Error
 	 */
-	private static function api_update_items( $items ) {
+	private static function api_update_items( mixed $items ): \WP_REST_Response|\WP_Error {
 		if ( ! is_array( $items ) || empty( $items ) ) {
 			return new \WP_Error( 'invalid_params', __( 'Invalid parameters.', 'newspack' ), [ 'status' => 400 ] );
 		}

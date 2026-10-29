@@ -82,9 +82,11 @@ class Newspack_Test_Reader_Data_Batch extends WP_UnitTestCase {
 	 * A rejected key is reported on its own and doesn't stop the others.
 	 */
 	public function test_rejected_keys_are_reported_without_blocking_the_rest() {
+		Reader_Data::update_item( $this->reader_id, 'is_former_donor', 'true' );
 		$response = $this->batch_request(
 			[
 				'active_subscriptions' => '[1]',
+				'is_former_donor'      => null,
 				'broken'               => 'not json',
 				'articles_read'        => '3',
 			]
@@ -93,13 +95,26 @@ class Newspack_Test_Reader_Data_Batch extends WP_UnitTestCase {
 		self::assertEquals(
 			[
 				'active_subscriptions' => 'read_only_key',
+				'is_former_donor'      => 'read_only_key',
 				'broken'               => 'invalid_value',
 			],
 			(array) $response->get_data()['errors']
 		);
 		self::assertSame( '3', Reader_Data::get_data( $this->reader_id, 'articles_read' ) );
 		self::assertFalse( Reader_Data::get_data( $this->reader_id, 'active_subscriptions' ) );
+		self::assertSame( 'true', Reader_Data::get_data( $this->reader_id, 'is_former_donor' ), 'A batch must not delete a key the server owns.' );
 		self::assertFalse( Reader_Data::get_data( $this->reader_id, 'broken' ) );
+	}
+
+	/**
+	 * A batch of more than MAX_ITEMS keys is refused before any key is applied.
+	 */
+	public function test_oversized_batch_is_refused() {
+		$items = [];
+		for ( $i = 0; $i <= Reader_Data::MAX_ITEMS; $i++ ) {
+			$items[ "key_$i" ] = null;
+		}
+		self::assertSame( 400, $this->batch_request( $items )->get_status() );
 	}
 
 	/**
@@ -109,5 +124,17 @@ class Newspack_Test_Reader_Data_Batch extends WP_UnitTestCase {
 		$config = Reader_Data::get_config();
 		self::assertContains( 'pageviews', $config['local_keys'] );
 		self::assertContains( 'referrer', $config['local_keys'] );
+	}
+
+	/**
+	 * The browser store needs a list. A filter that removes a default leaves a
+	 * gap in the keys, which would reach the browser as an object.
+	 */
+	public function test_local_keys_stay_a_list_when_a_filter_removes_one() {
+		$remove_pageviews = fn( $keys ) => array_diff( $keys, [ 'pageviews' ] );
+		add_filter( 'newspack_reader_data_local_keys', $remove_pageviews );
+		$keys = Reader_Data::get_local_keys();
+		remove_filter( 'newspack_reader_data_local_keys', $remove_pageviews );
+		self::assertSame( [ 'referrer' ], $keys );
 	}
 }
