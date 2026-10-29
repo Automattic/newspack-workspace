@@ -13,7 +13,8 @@ defined( 'ABSPATH' ) || exit;
  * The dashboard asks one provider per site, chosen through the
  * `newspack_popups_ab_stats_provider` filter, for raw counts; it computes
  * rates, lift and confidence itself, so two surfaces never disagree about
- * one test. A provider returns counts and nothing else.
+ * one test. A provider returns counts, and at most one sentence of its own
+ * about them, which the page shows under the results.
  */
 interface Newspack_Popups_AB_Stats_Provider {
 	/**

@@ -393,6 +393,7 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 		$this->assertNull( $this->stats_request( 't' )->get_data()['source']['note'] );
 		$counts         = $this->counts( 1200, 36, 1180, 48 );
 		$counts['note'] = [ 'not', 'a', 'string' ];
+		remove_all_filters( 'newspack_popups_ab_stats_provider' );
 		$this->use_provider( $counts );
 		$this->assertNull( $this->stats_request( 't', [ 'refresh' => '1' ] )->get_data()['source']['note'] );
 	}
