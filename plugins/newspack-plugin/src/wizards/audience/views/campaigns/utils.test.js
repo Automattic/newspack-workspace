@@ -253,6 +253,13 @@ describe( 'warningForPopup', () => {
 		expect( warningForPopup( [ prompt, pair ], prompt ) ).toBeNull();
 	} );
 
+	it( 'reports a prompt on the same arm of the same A/B test', () => {
+		const prompt = overlay( { id: 100, ab_test_id: 'hero', ab_variant: 'b' } );
+		const twin = overlay( { id: 200, title: 'Second B', ab_test_id: 'hero', ab_variant: 'b' } );
+		const { container } = render( warningForPopup( [ prompt, twin ], prompt ) );
+		expect( container.textContent ).toContain( 'Second B' );
+	} );
+
 	it( 'still reports a prompt outside the test', () => {
 		const prompt = overlay( { id: 100, ab_test_id: 'hero', ab_variant: 'a' } );
 		const pair = overlay( { id: 200, title: 'Variant B', ab_test_id: 'hero', ab_variant: 'b' } );

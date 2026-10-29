@@ -488,13 +488,15 @@ export const warningForPopup = ( prompts, prompt ) => {
 				( 0 === promptCategories.length && 0 === conflictCategories.length ) ||
 				promptCategories.some( category => conflictCategories.some( conflictCategory => category.term_id === conflictCategory.term_id ) );
 
-			// The arms of one A/B test overlap on purpose: each reader sees one of them.
-			const isSameAbTest = Boolean( prompt.ab_test_id ) && conflict.ab_test_id === prompt.ab_test_id;
+			// Different arms of one A/B test overlap on purpose: each reader sees one of
+			// them. Two prompts on the same arm reach the same readers, so they still conflict.
+			const isOtherArmOfSameAbTest =
+				Boolean( prompt.ab_test_id ) && conflict.ab_test_id === prompt.ab_test_id && conflict.ab_variant !== prompt.ab_variant;
 
 			return (
 				'publish' === conflict.status &&
 				conflict.id !== prompt.id &&
-				! isSameAbTest &&
+				! isOtherArmOfSameAbTest &&
 				isSameType( prompt, conflict ) &&
 				sharesSegments( prompt.segments, conflict.segments ) &&
 				hasConflictingCategory
