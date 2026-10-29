@@ -272,8 +272,11 @@ const init = () => {
 						? __( 'The request timed out. Please try again.', 'newspack-network' )
 						: /* translators: %s is the error message. */
 						  sprintf( __( 'Could not distribute: %s', 'newspack-network' ), error.message );
-				clearError();
-				errorNotice = notify( message, 'error' );
+				const notice = notify( message, 'error' );
+				if ( notice !== errorNotice ) {
+					clearError();
+				}
+				errorNotice = notice;
 				// Back to the list with the selection intact, so a retry is one click.
 				// Not if the modal was closed while the request was in flight: closeModal
 				// has already reset it, and focus belongs to whatever it returned to.

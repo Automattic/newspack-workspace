@@ -6,10 +6,12 @@
 
 /**
  * Render the group page's rename modal and load both scripts in page order.
+ *
+ * @param {string} content Markup for inside the group content, such as invite link controls.
  */
-function renderRenameModal() {
+function renderRenameModal( content = '' ) {
 	document.body.innerHTML = `
-		<div class="newspack-my-account__group_subscription__content" data-subscription-id="12"></div>
+		<div class="newspack-my-account__group_subscription__content" data-subscription-id="12" data-invite-link="https://example.test/join/abc">${ content }</div>
 		<h2 data-group-name>Newsroom</h2>
 		<div id="newspack-my-account__group_subscription--rename" class="newspack-ui__modal-container" data-state="open">
 			<div class="newspack-ui__modal">
@@ -103,5 +105,23 @@ describe( 'group rename', () => {
 		await waitFor( () => global.newspackUI.notices.closeNotice.mock.calls.length > 0 );
 
 		expect( global.newspackUI.notices.closeNotice ).toHaveBeenCalledWith( errorNotice );
+	} );
+
+	it( "leaves another action's error alone when a save succeeds", async () => {
+		const copyError = document.createElement( 'div' );
+		copyError.classList.add( 'active' );
+		global.newspackUI.notices.createNotice.mockImplementation( ( message, type ) =>
+			'error' === type ? copyError : document.createElement( 'div' )
+		);
+		global.newspackUI.notices.closeNotice = jest.fn();
+		global.fetch.mockResolvedValueOnce( { ok: true, json: () => Promise.resolve( { name: 'Newsroom' } ) } );
+		const { form, button } = renderRenameModal( '<button class="newspack-my-account__group_subscription__invite-link__copy">Copy</button>' );
+
+		document.querySelector( '.newspack-my-account__group_subscription__invite-link__copy' ).click();
+		await waitFor( () => global.newspackUI.notices.createNotice.mock.calls.some( ( [ , type ] ) => 'error' === type ) );
+		form.requestSubmit( button );
+		await waitFor( () => ! button.hasAttribute( 'aria-busy' ) );
+
+		expect( global.newspackUI.notices.closeNotice ).not.toHaveBeenCalled();
 	} );
 } );
