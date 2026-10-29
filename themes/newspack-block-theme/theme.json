@@ -314,6 +314,12 @@
 				"warning-5": "#F5E6AB",
 				"warning-0": "#FCF9E8"
 			},
+			"focus": {
+				"color": "var( --wp--preset--color--contrast )",
+				"fill": "var( --wp--preset--color--accent )",
+				"halo-mix": "20%",
+				"halo-width": "3px"
+			},
 			"line-height": {
 				"xx-small": "1.3333333333",
 				"x-small": "1.4285714286",
@@ -1046,7 +1052,7 @@
 					}
 				},
 				"border": {
-					"radius": "var( --wp--custom--border--radius-medium )"
+					"radius": "var( --wp--custom--border--radius-large )"
 				},
 				"color": {
 					"background": "var( --wp--preset--color--accent )",

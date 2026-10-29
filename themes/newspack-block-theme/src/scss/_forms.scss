@@ -1,67 +1,140 @@
 @use "mixins";
 @use "sass-utils";
 
+$select-caret:
+	linear-gradient(45deg, transparent calc(50% - 0.75px), currentcolor calc(50% - 0.75px) calc(50% + 0.75px), transparent calc(50% + 0.75px)),
+	linear-gradient(135deg, transparent calc(50% - 0.75px), currentcolor calc(50% - 0.75px) calc(50% + 0.75px), transparent calc(50% + 0.75px));
+
 /*
  * Form Styles
  * https://github.com/WordPress/gutenberg/issues/34198
  */
-label {
+label:where(:not(.newspack-ui *)) {
 	color: var(--wp--preset--color--contrast);
 	display: inline-block;
 	font-family: var(--wp--preset--font-family--inter);
 	font-size: var(--wp--preset--font-size--small);
-	font-weight: 600;
+	font-weight: 500;
 	line-height: var(--wp--custom--line-height--small);
 	margin-bottom: var(--wp--preset--spacing--20);
 }
 
-input[type="text"],
-input[type="email"],
-input[type="url"],
-input[type="password"],
-input[type="search"],
-input[type="number"],
-input[type="tel"],
-input[type="range"],
-input[type="date"],
-input[type="month"],
-input[type="week"],
-input[type="time"],
-input[type="datetime"],
-input[type="datetime-local"],
-input[type="zip"],
-input[type="color"],
-textarea {
+:is(
+	input[type="text"],
+	input[type="email"],
+	input[type="url"],
+	input[type="password"],
+	input[type="search"],
+	input[type="number"],
+	input[type="tel"],
+	input[type="range"],
+	input[type="date"],
+	input[type="month"],
+	input[type="week"],
+	input[type="time"],
+	input[type="datetime"],
+	input[type="datetime-local"],
+	input[type="zip"],
+	input[type="color"]
+):where(:not(.newspack-ui *)) {
 	@include mixins.input;
+}
+
+textarea:where(:not(.newspack-ui *, .wc-block-components-textarea)) {
+	@include mixins.input;
+	min-height: calc(var(--wp--custom--spacing--75) * 2);
+}
+
+select:where(:not([multiple], [size], .newspack-ui *)) {
+	@include mixins.input;
+	appearance: none;
+	background-image: $select-caret;
+	background-position:
+		right calc(var(--wp--preset--spacing--20) + 12px) center,
+		right calc(var(--wp--preset--spacing--20) + 8px) center;
+	background-repeat: no-repeat;
+	background-size: 4px 4px;
+	cursor: pointer;
+	padding-inline-end: calc(var(--wp--preset--spacing--40) + var(--wp--preset--spacing--20) + 10px);
+
+	@media (forced-colors: active) {
+		appearance: auto;
+		background-image: none;
+	}
+}
+
+/*! rtl:ignore */
+select:where(:not([multiple], [size], .newspack-ui *)):dir(rtl) {
+	background-image: $select-caret;
+	background-position:
+		left calc(var(--wp--preset--spacing--20) + 8px) center,
+		left calc(var(--wp--preset--spacing--20) + 12px) center;
+
+	@media (forced-colors: active) {
+		background-image: none;
+	}
 }
 
 input[type="search"]::-webkit-search-cancel-button {
 	appearance: none;
-	background-image: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M12 13.0607L15.7123 16.773L16.773 15.7123L13.0607 12L16.773 8.28772L15.7123 7.22706L12 10.9394L8.28769 7.22705L7.22703 8.28771L10.9393 12L7.22704 15.7123L8.2877 16.773L12 13.0607Z' fill='%231E1E1E'/%3E%3C/svg%3E");
-	background-size: var(--wp--preset--spacing--40) var(--wp--preset--spacing--40);
+	background-color: currentcolor;
 	cursor: pointer;
 	height: var(--wp--preset--spacing--40);
+	mask: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M12 13.0607L15.7123 16.773L16.773 15.7123L13.0607 12L16.773 8.28772L15.7123 7.22706L12 10.9394L8.28769 7.22705L7.22703 8.28771L10.9393 12L7.22704 15.7123L8.2877 16.773L12 13.0607Z'/%3E%3C/svg%3E") center / contain no-repeat;
 	width: var(--wp--preset--spacing--40);
+
+	@media (forced-colors: active) {
+		background-color: CanvasText;
+		forced-color-adjust: none;
+	}
 }
 
-input[type="checkbox"],
-input[type="radio"] {
-	@include mixins.checkbox-radio;
+:is(input[type="checkbox"], input[type="radio"]):where(:not(.newspack-ui *, .wc-block-components-checkbox__input, .wc-block-components-radio-control__input)) {
+	@include mixins.checkbox-radio(!important);
+
+	&:has(+ label) {
+		font-size: var(--wp--preset--font-size--small);
+		line-height: var(--wp--custom--line-height--small);
+		margin-top: calc((1lh - var(--wp--custom--spacing--35)) / 2);
+
+		+ label {
+			font-weight: 400;
+			margin-bottom: 0;
+			vertical-align: top;
+		}
+	}
+
+	&:disabled + label {
+		color: var(--wp--preset--color--contrast-3);
+		cursor: not-allowed;
+	}
 }
 
-input[type="checkbox"] {
-	@include mixins.checkbox;
+input[type="checkbox"]:where(:not(.newspack-ui *, .wc-block-components-checkbox__input)) {
+	@include mixins.checkbox(!important);
 }
 
-input[type="radio"] {
-	@include mixins.radio;
+input[type="radio"]:where(:not(.newspack-ui *, .wc-block-components-radio-control__input)) {
+	@include mixins.radio(!important);
+}
+
+label:where(:has(> input:is([type="checkbox"], [type="radio"]))):where(:not(.newspack-ui *)) {
+	font-weight: 400;
+
+	:is(h1, h2, h3, h4, h5, h6) > & {
+		font-weight: inherit;
+	}
+}
+
+label:where(:has(> input:is([type="checkbox"], [type="radio"]):first-child)):where(:not(.newspack-ui *, .woocommerce *, .contact-form *, .wpbnbd *, [class*="wc-block-components"], [class*="wc-block-components"] *)) {
+	@include mixins.choice-layout;
 }
 
 button:not([class]),
 input[type="submit"]:not(.newspack-ui__button) {
 	background: var(--wp--preset--color--accent);
 	border: 0;
-	border-radius: var(--newspack-ui-border-radius-m, var(--wp--custom--border--radius-medium));
+	border-radius: var(--newspack-ui-radius-button, var(--wp--custom--border--radius-large));
 	color: var(--wp--preset--color--base);
 	cursor: pointer;
 	font-family: var(--newspack-ui-font-family, var(--wp--preset--font-family--inter, system-ui, sans-serif));
@@ -74,16 +147,15 @@ input[type="submit"]:not(.newspack-ui__button) {
 	transition:
 		background 125ms ease-in-out,
 		color 125ms ease-in-out,
-		outline 125ms ease-in-out;
+		box-shadow 125ms ease-in-out;
 
 	&:hover {
 		background: color-mix(in srgb, var(--wp--preset--color--accent) 80%, black);
 		color: var(--wp--preset--color--base);
 	}
 
-	&:focus {
-		outline: 2px solid var(--newspack-ui-color-neutral-90, --wp--preset--color--contrast);
-		outline-offset: 1px;
+	&:focus-visible {
+		@include mixins.focus-line-filled;
 	}
 
 	&:disabled {

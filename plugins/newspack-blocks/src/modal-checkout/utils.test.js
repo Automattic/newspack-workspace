@@ -4,14 +4,19 @@
 
 import {
 	afterDeferredScripts,
+	afterModalExit,
 	getCheckoutData,
+	getFirstField,
 	getInitialFocus,
+	getPaymentFocus,
 	hasFrameProcessingScreen,
 	isPaymentChallengeShown,
 	isSameDocumentRedirect,
 	mountFrameProcessingScreen,
+	placeOrderSummary,
 	preventDisabledCloseClicks,
 	removeFrameProcessingScreen,
+	restorePaymentFocus,
 } from './utils';
 
 afterEach( () => {
@@ -160,6 +165,12 @@ describe( 'focus in a checkout screen', () => {
 
 		expect( getInitialFocus( document.body ) ).toBeNull();
 	} );
+
+	it( 'finds no field to open a dialog on when it only has actions', () => {
+		document.body.innerHTML = '<button id="continue">Continue</button><input type="submit" value="Go" />';
+
+		expect( getFirstField( document.body ) ).toBeNull();
+	} );
 } );
 
 describe( 'isPaymentChallengeShown()', () => {
@@ -190,6 +201,102 @@ describe( 'isPaymentChallengeShown()', () => {
 		document.body.innerHTML = '<div style="position: fixed"><iframe src="https://js.stripe.com/v3/three-ds-2-challenge.html"></iframe></div>';
 
 		expect( isPaymentChallengeShown( document ) ).toBe( true );
+	} );
+} );
+
+describe( 'placeOrderSummary()', () => {
+	const paymentBox = methods =>
+		`<div id="payment" class="woocommerce-checkout-payment">${
+			methods ? '<ul class="wc_payment_methods payment_methods methods"></ul>' : ''
+		}<div class="form-row place-order"></div></div>`;
+	const reviewTable = total =>
+		`<table class="woocommerce-checkout-review-order-table"><tr><td class="order-total">${ total }</td></tr><tr><td><input type="radio" id="shipping_method_0_flat_rate1"></td></tr></table>`;
+	const summaryBox = total => `<div class="order-review-wrapper">${ reviewTable( total ) }</div>`;
+	const summaryTotal = () => document.querySelector( '.order-review-wrapper .order-total' )?.textContent;
+	const replacePaymentBox = ( methods = true ) => {
+		document.getElementById( 'payment' ).outerHTML = paymentBox( methods );
+	};
+
+	/**
+	 * Refresh the checkout the way WooCommerce applies `update_order_review`
+	 * fragments: the review table first, then the whole payment box.
+	 */
+	const refreshCheckout = ( { total, methods = true } ) => {
+		document.querySelector( '.woocommerce-checkout-review-order-table' ).outerHTML = reviewTable( total );
+		replacePaymentBox( methods );
+	};
+
+	describe( 'with the summary rendered before the payment box', () => {
+		let summary;
+
+		beforeEach( () => {
+			document.body.innerHTML = `<div id="after_customer_details">${ summaryBox( '$20.00' ) }${ paymentBox( true ) }</div>`;
+			summary = placeOrderSummary( document, null );
+		} );
+
+		it( 'puts the summary between the payment methods and the place order button', () => {
+			expect( document.querySelector( '.payment_methods' ).nextElementSibling ).toBe( summary );
+			expect( summary.nextElementSibling.classList.contains( 'place-order' ) ).toBe( true );
+		} );
+
+		it( 'keeps the summary, with current totals, when the payment box is replaced', () => {
+			refreshCheckout( { total: '$18.00' } );
+			placeOrderSummary( document, summary );
+
+			expect( document.querySelector( '.payment_methods' ).nextElementSibling ).toBe( summary );
+			expect( summaryTotal() ).toBe( '$18.00' );
+		} );
+
+		it( "brings a detached summary back with the update's review table when WooCommerce missed it", () => {
+			replacePaymentBox();
+			placeOrderSummary( document, summary, reviewTable( '$25.75' ) );
+
+			expect( document.querySelector( '.payment_methods' ).nextElementSibling ).toBe( summary );
+			expect( summaryTotal() ).toBe( '$25.75' );
+		} );
+
+		it.each( [
+			[ 'a paid', true ],
+			[ 'a free', false ],
+		] )( 'leaves a summary already in place untouched on %s order, so focus inside it survives', ( label, methods ) => {
+			if ( ! methods ) {
+				refreshCheckout( { total: '$0.00', methods } );
+				placeOrderSummary( document, summary );
+			}
+			const radio = document.getElementById( 'shipping_method_0_flat_rate1' );
+			radio.focus();
+			placeOrderSummary( document, summary, reviewTable( '$20.00' ) );
+
+			expect( document.activeElement ).toBe( radio );
+		} );
+
+		it( 'keeps the summary above the place order button when the order needs no payment', () => {
+			refreshCheckout( { total: '$0.00', methods: false } );
+			placeOrderSummary( document, summary );
+
+			expect( summary.nextElementSibling.id ).toBe( 'payment' );
+			expect( summaryTotal() ).toBe( '$0.00' );
+		} );
+	} );
+
+	it( "puts the summary above the place order button on a free order's first load in a block theme", () => {
+		document.body.innerHTML = `<div id="after_customer_details">${ paymentBox( false ) }${ summaryBox( '$0.00' ) }</div>`;
+		const summary = placeOrderSummary( document, null );
+
+		expect( summary.nextElementSibling.id ).toBe( 'payment' );
+	} );
+
+	it.each( [
+		[ 'with payment methods', true ],
+		[ 'without payment methods', false ],
+	] )( 'leaves a summary that holds the payment box where it is (%s)', ( label, methods ) => {
+		document.body.innerHTML = `<div id="after_customer_details"><div class="order-review-wrapper"><div id="order_review">${ reviewTable(
+			'$20.00'
+		) }${ paymentBox( methods ) }</div></div></div>`;
+		const wrapper = document.querySelector( '.order-review-wrapper' );
+
+		expect( placeOrderSummary( document, null ) ).toBe( wrapper );
+		expect( wrapper.parentElement.id ).toBe( 'after_customer_details' );
 	} );
 } );
 
@@ -310,5 +417,175 @@ describe( 'preventDisabledCloseClicks()', () => {
 		button.click();
 
 		expect( otherCloseHandler ).toHaveBeenCalledTimes( 1 );
+	} );
+} );
+
+describe( 'payment focus across a checkout refresh', () => {
+	const renderPayment = ( { checked = 'stripe', coverFees = true } = {} ) => {
+		document.body.innerHTML = `
+			<input id="billing_email" type="email" />
+			<div id="payment" class="woocommerce-checkout-payment">
+				<ul>
+					<li><input id="payment_method_stripe" type="radio" name="payment_method" value="stripe" ${ 'stripe' === checked ? 'checked' : '' } /></li>
+					<li><input id="payment_method_ppcp" type="radio" name="payment_method" value="ppcp" ${ 'ppcp' === checked ? 'checked' : '' } /></li>
+				</ul>
+				${ coverFees ? '<input id="newspack-wc-pay-fees_stripe" type="checkbox" name="newspack-wc-pay-fees" />' : '' }
+			</div>`;
+	};
+
+	const refresh = options => {
+		document.activeElement?.blur();
+		renderPayment( options );
+	};
+
+	it( 'notes nothing when focus is outside the payment section', () => {
+		renderPayment();
+		document.getElementById( 'billing_email' ).focus();
+
+		expect( getPaymentFocus( document ) ).toBeNull();
+	} );
+
+	it( 'returns focus to the checked payment method after arrowing to it', () => {
+		renderPayment();
+		document.getElementById( 'payment_method_ppcp' ).focus();
+		const focused = getPaymentFocus( document );
+		expect( focused ).toEqual( { id: 'payment_method_ppcp', name: 'payment_method' } );
+
+		refresh( { checked: 'ppcp' } );
+		restorePaymentFocus( document, focused );
+
+		expect( document.activeElement.id ).toBe( 'payment_method_ppcp' );
+	} );
+
+	it( 'returns focus to a toggled checkbox by its id', () => {
+		renderPayment();
+		document.getElementById( 'newspack-wc-pay-fees_stripe' ).focus();
+		const focused = getPaymentFocus( document );
+		expect( focused ).toEqual( { id: 'newspack-wc-pay-fees_stripe', name: '' } );
+
+		refresh();
+		restorePaymentFocus( document, focused );
+
+		expect( document.activeElement.id ).toBe( 'newspack-wc-pay-fees_stripe' );
+	} );
+
+	it( 'falls back to the checked payment method when the control is gone', () => {
+		renderPayment();
+		document.getElementById( 'newspack-wc-pay-fees_stripe' ).focus();
+		const focused = getPaymentFocus( document );
+
+		refresh( { coverFees: false } );
+		restorePaymentFocus( document, focused );
+
+		expect( document.activeElement.id ).toBe( 'payment_method_stripe' );
+	} );
+
+	it( 'leaves focus alone when it has already moved off the body', () => {
+		renderPayment();
+		document.getElementById( 'newspack-wc-pay-fees_stripe' ).focus();
+		const focused = getPaymentFocus( document );
+
+		refresh();
+		document.getElementById( 'billing_email' ).focus();
+
+		expect( restorePaymentFocus( document, focused ) ).toBeNull();
+		expect( document.activeElement.id ).toBe( 'billing_email' );
+	} );
+} );
+
+describe( 'afterModalExit()', () => {
+	/**
+	 * A transition whose end the test decides.
+	 *
+	 * @param {number} endTime When it ends, in milliseconds.
+	 * @return {Object} The transition, and a function that ends it.
+	 */
+	const createTransition = ( endTime = 400 ) => {
+		let end;
+		const finished = new Promise( resolve => {
+			end = resolve;
+		} );
+		return { effect: { getComputedTiming: () => ( { endTime } ) }, finished, end };
+	};
+
+	const flushPromises = () => new Promise( resolve => setTimeout( resolve, 0 ) );
+
+	afterEach( () => {
+		jest.useRealTimers();
+	} );
+
+	it( 'runs straight away when nothing is transitioning', () => {
+		const modal = document.createElement( 'div' );
+		modal.getAnimations = () => [];
+		const callback = jest.fn();
+
+		afterModalExit( modal, callback );
+
+		expect( callback ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'runs straight away without animation support', () => {
+		const callback = jest.fn();
+
+		afterModalExit( document.createElement( 'div' ), callback );
+
+		expect( callback ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'waits for every transition to finish', async () => {
+		const overlay = createTransition( 250 );
+		const visibility = createTransition( 400 );
+		const modal = document.createElement( 'div' );
+		modal.getAnimations = () => [ overlay, visibility ];
+		const callback = jest.fn();
+
+		afterModalExit( modal, callback );
+		overlay.end();
+		await flushPromises();
+		expect( callback ).not.toHaveBeenCalled();
+
+		visibility.end();
+		await flushPromises();
+		expect( callback ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'does not wait for a looping animation', () => {
+		const modal = document.createElement( 'div' );
+		modal.getAnimations = () => [ createTransition( Infinity ) ];
+		const callback = jest.fn();
+
+		afterModalExit( modal, callback );
+
+		expect( callback ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'runs once the transitions should have ended, even without hearing they did', () => {
+		jest.useFakeTimers();
+		const modal = document.createElement( 'div' );
+		modal.getAnimations = () => [ createTransition( 400 ) ];
+		const callback = jest.fn();
+
+		afterModalExit( modal, callback );
+		jest.advanceTimersByTime( 400 );
+		expect( callback ).not.toHaveBeenCalled();
+
+		jest.advanceTimersByTime( 100 );
+		expect( callback ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'runs early when asked, and only once', async () => {
+		const transition = createTransition( 400 );
+		const modal = document.createElement( 'div' );
+		modal.getAnimations = () => [ transition ];
+		const callback = jest.fn();
+
+		const finish = afterModalExit( modal, callback );
+		finish();
+		expect( callback ).toHaveBeenCalledTimes( 1 );
+
+		transition.end();
+		await flushPromises();
+		finish();
+		expect( callback ).toHaveBeenCalledTimes( 1 );
 	} );
 } );

@@ -69,20 +69,24 @@ $after_success_label    = $after_success_params['after_success_button_label'] ??
 ?>
 <div class="woocommerce-order">
 <?php if ( $is_success ) : ?>
-	<div class="newspack-ui__box newspack-ui__box--success newspack-ui__box--text-center">
-		<span class="newspack-ui__icon newspack-ui__icon--success">
-			<?php // TODO: Replace with newspack-ui icons when available. ?>
-			<svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-				<path d="M16.7 7.1l-6.3 8.5-3.3-2.5-.9 1.2 4.5 3.4L17.9 8z"></path>
-			</svg>
-		</span>
-		<p id="modal-checkout-product-details" <?php Checkout_Data::print_data_checkout_attr( $checkout_data ); ?>>
-			<strong>
-				<?php
-					echo esc_html( Modal_Checkout::get_post_checkout_success_text() );
-				?>
-			</strong>
-		</p>
+	<div class="modal-checkout-thankyou newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--align-center newspack-ui__stack--gap-half newspack-ui__spacing-bottom--5">
+		<?php if ( method_exists( '\Newspack\Newspack_UI_Icons', 'get_svg' ) && \Newspack\Newspack_UI_Icons::get_svg( 'published' ) ) : ?>
+			<span class="newspack-ui__icon newspack-ui__icon--large newspack-ui__icon--success">
+				<?php \Newspack\Newspack_UI_Icons::print_svg( 'published' ); ?>
+			</span>
+		<?php else : ?>
+			<span class="newspack-ui__icon newspack-ui__icon--success">
+				<svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+					<path d="M16.7 7.1l-6.3 8.5-3.3-2.5-.9 1.2 4.5 3.4L17.9 8z"></path>
+				</svg>
+			</span>
+		<?php endif; ?>
+		<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-1">
+			<h2 id="modal-checkout-product-details" class="newspack-ui__font--m" tabindex="-1" <?php Checkout_Data::print_data_checkout_attr( $checkout_data ); ?>>
+				<?php echo esc_html( Modal_Checkout::get_modal_checkout_labels( 'checkout_success' ) ); ?>
+			</h2>
+			<p class="newspack-ui__color-text-gray"><?php echo esc_html( Modal_Checkout::get_post_checkout_success_text() ); ?></p>
+		</div>
 	</div>
 	<form>
 		<?php if ( $after_success_behavior ) : ?>
@@ -96,15 +100,26 @@ $after_success_label    = $after_success_params['after_success_button_label'] ??
 		</button>
 	</form>
 <?php else : ?>
-	<div class="newspack-ui__box newspack-ui__box__error newspack-ui__box--text-center">
-		<p>
-			<?php esc_html_e( 'Unfortunately your order cannot be processed. Please attempt your purchase again.', 'newspack-blocks' ); ?>
-		</p>
+	<div class="newspack-ui__notice newspack-ui__notice--error newspack-ui__spacing-top--0 newspack-ui__spacing-bottom--5" role="alert">
+		<?php
+		if ( method_exists( '\Newspack\Newspack_UI', 'print_notice_icon' ) ) {
+			\Newspack\Newspack_UI::print_notice_icon( 'error' );
+		}
+		?>
+		<div>
+			<p>
+				<?php esc_html_e( 'Unfortunately your order cannot be processed. Please attempt your purchase again.', 'newspack-blocks' ); ?>
+			</p>
+		</div>
 	</div>
-	<a href="<?php echo esc_url( $order->get_checkout_payment_url() ); ?>" class="newspack-blocks-ui__button newspack-ui__button--primary newspack-ui__button--wide"><?php esc_html_e( 'Pay', 'newspack-blocks' ); ?></a>
+	<a href="<?php echo esc_url( $order->get_checkout_payment_url() ); ?>" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide"><?php esc_html_e( 'Pay', 'newspack-blocks' ); ?></a>
 	<?php if ( is_user_logged_in() ) : ?>
-		<a href="<?php echo esc_url( wc_get_page_permalink( 'myaccount' ) ); ?>" class="newspack-blocks-ui__button newspack-ui__button--ghost newspack-ui__button--wide"><?php esc_html_e( 'My account', 'newspack-blocks' ); ?></a>
+		<div class="newspack-ui__stack newspack-ui__stack--horizontal newspack-ui__stack--justify-center newspack-ui__spacing-top--3">
+			<a href="<?php echo esc_url( wc_get_page_permalink( 'myaccount' ) ); ?>" class="newspack-ui__link"><?php esc_html_e( 'My account', 'newspack-blocks' ); ?></a>
+		</div>
 	<?php endif; ?>
 	<?php
 endif;
 do_action( 'newpack_blocks_modal_checkout_thankyou' );
+?>
+</div>

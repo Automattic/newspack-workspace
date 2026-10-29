@@ -161,6 +161,18 @@ abstract class Newspack_Blocks_Donate_Renderer_Base {
 	}
 
 	/**
+	 * Whether the block uses the Modern style, which is built from newspack-ui components.
+	 *
+	 * @param array $attributes Block attributes.
+	 *
+	 * @return bool
+	 */
+	protected static function is_modern_style( array $attributes ): bool {
+		$class_names = isset( $attributes['className'] ) ? preg_split( '/\s+/', (string) $attributes['className'] ) : [];
+		return in_array( 'is-style-modern', $class_names, true );
+	}
+
+	/**
 	 * Get style for a button.
 	 *
 	 * @param array $attributes Block attributes.
@@ -171,9 +183,44 @@ abstract class Newspack_Blocks_Donate_Renderer_Base {
 		$button_text_color = Newspack_Blocks::get_color_for_contrast( $button_color );
 		if ( $is_reverse_style ) {
 			return 'border-color: ' . esc_attr( $button_color ) . '; color: ' . esc_attr( $button_color ) . '; background: transparent;';
-		} else {
-			return 'border-color: ' . esc_attr( $button_color ) . '; background-color: ' . esc_attr( $button_color ) . '; color: ' . esc_attr( $button_text_color ) . ';';
 		}
+
+		$style = 'border-color: ' . esc_attr( $button_color ) . '; background-color: ' . esc_attr( $button_color ) . '; color: ' . esc_attr( $button_text_color ) . ';';
+		if ( self::get_contrast_with_white( $button_color ) >= 3 ) {
+			$style .= ' --wpbnbd-button-color: ' . esc_attr( $button_color ) . ';';
+		}
+		return $style;
+	}
+
+	/**
+	 * Get the WCAG contrast ratio of a hex color against white.
+	 *
+	 * Filled buttons draw their focus line in the fill color, which has to reach
+	 * 3:1 against the white surface behind the button to count as an indicator.
+	 *
+	 * @param string $hex Hexadecimal color (#RGB, #RRGGBB or #RRGGBBAA).
+	 *
+	 * @return float Contrast ratio, or 0 when the color can't be parsed.
+	 */
+	private static function get_contrast_with_white( $hex ) {
+		$hex = ltrim( trim( (string) $hex ), '#' );
+		if ( 3 === strlen( $hex ) ) {
+			$hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+		} elseif ( 8 === strlen( $hex ) ) {
+			$hex = substr( $hex, 0, 6 );
+		}
+		if ( 6 !== strlen( $hex ) || ! ctype_xdigit( $hex ) ) {
+			return 0.0;
+		}
+
+		$luminance = 0.0;
+		foreach ( [ 0.2126, 0.7152, 0.0722 ] as $index => $weight ) {
+			$channel    = hexdec( substr( $hex, $index * 2, 2 ) ) / 255;
+			$channel    = $channel <= 0.04045 ? $channel / 12.92 : pow( ( $channel + 0.055 ) / 1.055, 2.4 );
+			$luminance += $weight * $channel;
+		}
+
+		return 1.05 / ( $luminance + 0.05 );
 	}
 
 	/**

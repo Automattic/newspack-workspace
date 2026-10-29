@@ -154,6 +154,27 @@ class ModelTest extends WP_UnitTestCase {
 			'The position marker is set at position passed in options.'
 		);
 
+		Newspack_Popups_Model::set_block_theme_override( false );
+		try {
+			foreach ( [ 'inline', 'center' ] as $placement ) {
+				$popup_object_classic = Newspack_Popups_Model::create_popup_object(
+					get_post( self::$popup_id ),
+					false,
+					[
+						'placement'    => $placement,
+						'trigger_type' => 'time',
+					]
+				);
+				self::assertStringNotContainsString(
+					'newspack-popup--block-theme',
+					Newspack_Popups_Model::generate_popup( $popup_object_classic ),
+					'Classic theme prompts do not get the block theme class.'
+				);
+			}
+		} finally {
+			Newspack_Popups_Model::set_block_theme_override( null );
+		}
+
 		Newspack_Popups_Model::set_block_theme_override( true );
 		try {
 			$popup_object_inline_block_theme = Newspack_Popups_Model::create_popup_object(
@@ -179,6 +200,11 @@ class ModelTest extends WP_UnitTestCase {
 				$inline_container->getAttribute( 'class' ),
 				'Inline popups receive block theme layout class.'
 			);
+			self::assertStringContainsString(
+				'newspack-popup--block-theme',
+				$inline_container->getAttribute( 'class' ),
+				'Inline popups receive the block theme class.'
+			);
 
 			$popup_object_overlay_block_theme = Newspack_Popups_Model::create_popup_object(
 				get_post( self::$popup_id ),
@@ -202,6 +228,13 @@ class ModelTest extends WP_UnitTestCase {
 				'is-layout-flow',
 				$content->getAttribute( 'class' ),
 				'Overlay popup content receives block theme layout class.'
+			);
+
+			$lightbox = $xpath->query( '//*[contains(concat(" ", normalize-space(@class), " "), " newspack-lightbox ")]' )->item( 0 );
+			self::assertStringContainsString(
+				'newspack-popup--block-theme',
+				$lightbox->getAttribute( 'class' ),
+				'Overlay popups receive the block theme class.'
 			);
 		} finally {
 			Newspack_Popups_Model::set_block_theme_override( null );

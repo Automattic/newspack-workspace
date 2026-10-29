@@ -41,14 +41,16 @@
 	}
 
 	.comment-form-cookies-consent {
-		gap: var(--wp--preset--spacing--20);
+		gap: var(--wp--custom--spacing--25);
 
 		input[type="checkbox"] {
-			margin-top: 2px !important;
+			font-size: var(--wp--preset--font-size--small);
+			line-height: var(--wp--custom--line-height--small);
+			margin-top: calc((1lh - var(--wp--custom--spacing--35)) / 2) !important;
 		}
 
 		label {
-			font-weight: normal;
+			font-weight: 400;
 			margin-bottom: 0;
 		}
 	}
@@ -156,13 +158,13 @@
 
 .wp-block-comment-author-name {
 	a {
-		border-radius: var(--wp--custom--border--radius-x-small);
+		border-radius: var(--wp--custom--border--radius-small);
 		transition: color 125ms ease-in-out;
 	}
 
 	.bypostauthor & {
 		background: var(--wp--preset--color--base-2);
-		border-radius: var(--wp--custom--border--radius-x-small);
+		border-radius: var(--wp--custom--border--radius-small);
 
 		&:not(:has(a)) {
 			padding: 0 0.375em;
@@ -171,10 +173,6 @@
 		a {
 			display: block;
 			padding: 0 0.375em;
-
-			&:focus {
-				outline-offset: -3px;
-			}
 		}
 	}
 }

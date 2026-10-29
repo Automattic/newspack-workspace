@@ -10,7 +10,12 @@
 }
 
 .newspack-newsletters-signup .newsletter-list-container {
-	transition: max-height 250ms ease-in-out;
+	interpolate-size: allow-keywords;
+	transition: max-height var(--newspack-ui-duration-reveal, 200ms) var(--newspack-ui-ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+
+	@media ( prefers-reduced-motion: reduce ) {
+		transition: none;
+	}
 
 	.newspack-ui__input-card.hidden {
 		display: none !important;
