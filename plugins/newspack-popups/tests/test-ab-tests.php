@@ -220,17 +220,86 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * The server-side djb2 hash is bit-for-bit identical to the client-side hash.
-	 * The vector is pinned in src/view/utils/ab.test.js too — if either side
-	 * changes, both parity tests fail together.
+	 * Store a raw control share the way an importer or a direct query would,
+	 * skipping the meta sanitize callback that update_post_meta() runs.
+	 *
+	 * @param int    $popup_id Prompt ID.
+	 * @param string $value    Raw stored value.
 	 */
-	public function test_hash_parity_with_client() {
-		self::assertSame( 809016026, Newspack_Popups_AB_Tests::hash_djb2( 'abc|test-x' ) );
-		$parity_config = [
-			'variants'      => [ 'a', 'b' ],
-			'control_share' => 50,
-		];
-		self::assertSame( 'a', Newspack_Popups_AB_Tests::compute_bucket( 'abc', 'test-x', $parity_config ) );
+	private function store_raw_control_share( $popup_id, $value ) {
+		global $wpdb;
+		$wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+			$wpdb->postmeta,
+			[
+				'post_id'    => $popup_id,
+				'meta_key'   => Newspack_Popups_AB_Tests::META_CONTROL_SHARE, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'meta_value' => $value, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			]
+		);
+		wp_cache_delete( $popup_id, 'post_meta' );
+	}
+
+	/**
+	 * An out-of-range share that bypassed the sanitize callback is clamped when the
+	 * config is built, so the client never receives a range it would skew on.
+	 */
+	public function test_tests_config_clamps_unsanitized_control_share() {
+		$high = $this->create_test_variant( 'too-high', 'a' );
+		$this->create_test_variant( 'too-high', 'b' );
+		$this->store_raw_control_share( $high, '95' );
+
+		$low = $this->create_test_variant( 'too-low', 'a' );
+		$this->create_test_variant( 'too-low', 'b' );
+		$this->store_raw_control_share( $low, '5' );
+
+		$config = Newspack_Popups_AB_Tests::get_tests_config();
+		self::assertSame( 80, $config['too-high']['control_share'] );
+		self::assertSame( 20, $config['too-low']['control_share'] );
+	}
+
+	/**
+	 * A stored share of 0 falls back to the default when the config is built. The
+	 * config is the only thing the client receives, so it never sees a 0; the
+	 * shared parity vectors cover what both bucketing functions do if it ever did.
+	 */
+	public function test_tests_config_reads_stored_zero_share_as_default() {
+		$control = $this->create_test_variant( 'zero-share', 'a' );
+		$this->create_test_variant( 'zero-share', 'b' );
+		$this->store_raw_control_share( $control, '0' );
+
+		$config = Newspack_Popups_AB_Tests::get_tests_config();
+		self::assertSame( Newspack_Popups_AB_Tests::DEFAULT_CONTROL_SHARE, $config['zero-share']['control_share'] );
+	}
+
+	/**
+	 * Vectors shared with src/view/utils/ab.test.js, so both implementations are
+	 * checked against one expectation rather than two copies kept in step by hand.
+	 *
+	 * @return array[] Each case: reader, test ID, config, expected hash, expected bucket.
+	 */
+	public function parity_vectors() {
+		$fixture = json_decode( file_get_contents( __DIR__ . '/fixtures/ab-bucket-parity.json' ), true ); // phpcs:ignore WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown
+		$cases   = [];
+		foreach ( $fixture['vectors'] as $vector ) {
+			$cases[ $vector['note'] ] = [ $vector['reader'], $vector['test_id'], $vector['config'], $vector['hash'], $vector['bucket'] ];
+		}
+		return $cases;
+	}
+
+	/**
+	 * The server-side hash and bucket agree with the client's on every shared vector.
+	 *
+	 * @dataProvider parity_vectors
+	 *
+	 * @param string $reader  Reader key.
+	 * @param string $test_id Test ID.
+	 * @param array  $config  Test config.
+	 * @param int    $hash    Expected hash of "reader|test_id".
+	 * @param string $bucket  Expected variant.
+	 */
+	public function test_bucketing_matches_client_vectors( $reader, $test_id, $config, $hash, $bucket ) {
+		self::assertSame( $hash, Newspack_Popups_AB_Tests::hash_djb2( $reader . '|' . $test_id ) );
+		self::assertSame( $bucket, Newspack_Popups_AB_Tests::compute_bucket( $reader, $test_id, $config ) );
 	}
 
 	/**
@@ -326,6 +395,67 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		$expected = Newspack_Popups_AB_Tests::compute_bucket( (string) $user_id, 'fallback-test', $config['fallback-test'] );
 		self::assertSame( $expected, $buckets['fallback-test'], 'With no client ID cookie, the bucket should derive from the user ID.' );
 
+		wp_set_current_user( 0 );
+	}
+
+	/**
+	 * A site with no live test sends the view script none of the A/B keys.
+	 */
+	public function test_view_script_ab_data_is_empty_without_a_live_test() {
+		self::assertSame( [], Newspack_Popups_Inserter::get_view_script_ab_data() );
+
+		// A test with no published challenger is not live either.
+		$this->create_test_variant( 'control-only', 'a' );
+		Newspack_Popups_AB_Tests::reset_config_cache();
+		self::assertSame( [], Newspack_Popups_Inserter::get_view_script_ab_data() );
+	}
+
+	/**
+	 * Pins the PHP-to-JS contract for a live test: the front end reads these keys
+	 * from newspack_popups_view, and renaming either side alone would leave both
+	 * suites green while every test stopped splitting traffic.
+	 */
+	public function test_view_script_ab_data_for_a_live_test() {
+		$this->create_test_variant( 'live-test', 'a', null, [], 60 );
+		$this->create_test_variant( 'live-test', 'b' );
+
+		$data = Newspack_Popups_Inserter::get_view_script_ab_data();
+		self::assertSame(
+			[
+				'live-test' => [
+					'variants'      => [ 'a', 'b' ],
+					'control_share' => 60,
+				],
+			],
+			$data['ab_tests']
+		);
+		self::assertSame( 'newspack-cid', $data['cid_cookie'] );
+		self::assertArrayNotHasKey( 'ab_buckets', $data, 'An anonymous reader is bucketed client-side only.' );
+		self::assertArrayNotHasKey( 'ab_view_as', $data, 'No preview was requested.' );
+
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+		$data = Newspack_Popups_Inserter::get_view_script_ab_data();
+		self::assertArrayHasKey( 'live-test', $data['ab_buckets'], 'A logged-in reader gets the server-persisted bucket.' );
+		wp_set_current_user( 0 );
+	}
+
+	/**
+	 * A variant preview reaches the view script only for an admin, and only for a
+	 * letter a test can have.
+	 */
+	public function test_view_script_ab_data_echoes_admin_variant_preview() {
+		$this->create_test_variant( 'preview-test', 'a' );
+		$this->create_test_variant( 'preview-test', 'b' );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$_GET['view_as'] = 'ab_variant:b';
+		self::assertSame( 'b', Newspack_Popups_Inserter::get_view_script_ab_data()['ab_view_as'] );
+
+		$_GET['view_as'] = 'ab_variant:z';
+		self::assertArrayNotHasKey( 'ab_view_as', Newspack_Popups_Inserter::get_view_script_ab_data() );
+
+		unset( $_GET['view_as'] );
 		wp_set_current_user( 0 );
 	}
 
