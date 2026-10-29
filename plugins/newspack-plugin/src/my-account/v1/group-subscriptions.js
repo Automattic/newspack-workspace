@@ -19,10 +19,22 @@ domReady( function () {
 	const baseUrl = newspackMyAccountV1?.rest?.base_url;
 	const namespace = newspackMyAccountV1?.rest?.namespaces?.group;
 	const nonce = newspackMyAccountV1?.rest?.nonce;
-	const showSnackbar =
-		typeof newspackUI?.notices?.createNotice === 'function'
-			? newspackUI.notices.createNotice
-			: ( msg, type ) => console.warn( '[group-subscriptions]', type, msg ); // eslint-disable-line no-console
+	// Errors stay until closed, so a later success clears them rather than contradicting them.
+	const errorNotices = new Set();
+	const showSnackbar = ( msg, type ) => {
+		const notices = newspackUI?.notices;
+		if ( typeof notices?.createNotice !== 'function' ) {
+			console.warn( '[group-subscriptions]', type, msg ); // eslint-disable-line no-console
+			return;
+		}
+		if ( 'error' === type ) {
+			errorNotices.add( notices.createNotice( msg, type ) );
+			return;
+		}
+		errorNotices.forEach( notice => notice.classList.contains( 'active' ) && notices.closeNotice( notice ) );
+		errorNotices.clear();
+		notices.createNotice( msg, type );
+	};
 
 	// Handle invite modal.
 	const inviteModal = document.getElementById( 'newspack-my-account__group_subscription--invite-member' );

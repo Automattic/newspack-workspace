@@ -82,4 +82,26 @@ describe( 'group rename', () => {
 		expect( button.hasAttribute( 'aria-busy' ) ).toBe( false );
 		expect( button.hasAttribute( 'aria-disabled' ) ).toBe( false );
 	} );
+
+	it( 'clears the error from a failed save once a retry succeeds', async () => {
+		const errorNotice = document.createElement( 'div' );
+		errorNotice.classList.add( 'active' );
+		global.newspackUI.notices.createNotice.mockImplementation( ( message, type ) =>
+			'error' === type ? errorNotice : document.createElement( 'div' )
+		);
+		global.newspackUI.notices.closeNotice = jest.fn();
+		global.fetch
+			.mockResolvedValueOnce( { ok: false, json: () => Promise.resolve( { message: 'Could not rename.' } ) } )
+			.mockResolvedValueOnce( { ok: true, json: () => Promise.resolve( { name: 'Newsroom' } ) } );
+		const { form, button } = renderRenameModal();
+
+		form.requestSubmit( button );
+		await waitFor( () => ! button.hasAttribute( 'aria-busy' ) );
+		expect( global.newspackUI.notices.closeNotice ).not.toHaveBeenCalled();
+
+		form.requestSubmit( button );
+		await waitFor( () => global.newspackUI.notices.closeNotice.mock.calls.length > 0 );
+
+		expect( global.newspackUI.notices.closeNotice ).toHaveBeenCalledWith( errorNotice );
+	} );
 } );
