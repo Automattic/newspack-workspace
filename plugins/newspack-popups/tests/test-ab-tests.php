@@ -38,6 +38,178 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * The dashboard lists drafts and tests missing an arm; trashed prompts are gone.
+	 */
+	public function test_get_tests_lists_drafts_and_incomplete_tests() {
+		$this->create_test_variant( 'draft-test', 'a', null, [ 'post_status' => 'draft' ] );
+		$this->create_test_variant( 'lonely', 'a' );
+		$this->create_test_variant( 'gone', 'a', null, [ 'post_status' => 'trash' ] );
+		$ids = array_column( Newspack_Popups_AB_Tests::get_tests(), 'test_id' );
+		$this->assertSame( [ 'draft-test', 'lonely' ], $ids );
+	}
+
+	/**
+	 * A prompt on a manual or custom placement is reported as ineligible, so the
+	 * page can say why the test can't run.
+	 */
+	public function test_get_tests_reports_variants_on_ineligible_placements() {
+		$this->create_test_variant( 'elig', 'a' );
+		$manual = $this->create_test_variant( 'elig', 'b' );
+		update_post_meta( $manual, 'placement', 'manual' );
+		$test = Newspack_Popups_AB_Tests::get_tests()[0];
+		$this->assertTrue( $test['variants']['a']['eligible'] );
+		$this->assertFalse( $test['variants']['b']['eligible'] );
+	}
+
+	/**
+	 * The control share is read from the control; one stored on a challenger is ignored.
+	 */
+	public function test_get_tests_control_share_defaults_to_fifty_even_when_set_on_a_challenger() {
+		$this->create_test_variant( 'cs', 'a' );
+		$this->create_test_variant( 'cs', 'b', null, [], 70 );
+		$this->assertSame( 50, Newspack_Popups_AB_Tests::get_tests()[0]['control_share'] );
+	}
+
+	/**
+	 * The control's stored share is reported.
+	 */
+	public function test_get_tests_reads_control_share_from_the_control() {
+		$this->create_test_variant( 'cs2', 'a', null, [], 60 );
+		$this->assertSame( 60, Newspack_Popups_AB_Tests::get_tests()[0]['control_share'] );
+	}
+
+	/**
+	 * A test starts when the split does: once both the control and a challenger
+	 * are published, which is the later of the two dates.
+	 */
+	public function test_get_tests_started_at_is_when_both_arms_were_published() {
+		$this->create_test_variant(
+			'dates',
+			'a',
+			null,
+			[
+				'post_date_gmt' => '2026-10-05 00:00:00',
+				'post_date'     => '2026-10-05 00:00:00',
+			]
+		);
+		$this->create_test_variant(
+			'dates',
+			'b',
+			null,
+			[
+				'post_date_gmt' => '2026-10-01 00:00:00',
+				'post_date'     => '2026-10-01 00:00:00',
+			]
+		);
+		$this->assertSame( '2026-10-05T00:00:00Z', Newspack_Popups_AB_Tests::get_tests()[0]['started_at'] );
+	}
+
+	/**
+	 * A published control with only a draft challenger has not started: readers
+	 * still see the control alone.
+	 */
+	public function test_get_tests_started_at_is_null_until_a_challenger_is_published() {
+		$this->create_test_variant( 'solo', 'a' );
+		$this->create_test_variant( 'solo', 'b', null, [ 'post_status' => 'draft' ] );
+		$this->assertNull( Newspack_Popups_AB_Tests::get_tests()[0]['started_at'] );
+	}
+
+	/**
+	 * A test with nothing published has not started.
+	 */
+	public function test_get_tests_started_at_is_null_without_a_published_prompt() {
+		$this->create_test_variant( 'unpub', 'a', null, [ 'post_status' => 'draft' ] );
+		$this->assertNull( Newspack_Popups_AB_Tests::get_tests()[0]['started_at'] );
+	}
+
+	/**
+	 * Two prompts on one letter: the published one is the arm, whichever was
+	 * saved first, and the other is reported so the page can point at it.
+	 */
+	public function test_get_tests_prefers_the_published_prompt_when_a_letter_is_duplicated() {
+		$this->create_test_variant( 'dup', 'a' );
+		$live  = $this->create_test_variant( 'dup', 'b' );
+		$draft = $this->create_test_variant( 'dup', 'b', null, [ 'post_status' => 'draft' ] );
+		$this->create_test_variant( 'dup2', 'a' );
+		$draft2 = $this->create_test_variant( 'dup2', 'b', null, [ 'post_status' => 'draft' ] );
+		$live2  = $this->create_test_variant( 'dup2', 'b' );
+		$tests  = Newspack_Popups_AB_Tests::get_tests();
+		$this->assertSame( $live, $tests[0]['variants']['b']['id'] );
+		$this->assertSame( [ 'b' ], array_column( $tests[0]['duplicates'], 'letter' ) );
+		$this->assertSame( [ $draft ], array_column( $tests[0]['duplicates'], 'id' ) );
+		$this->assertArrayHasKey( 'edit_link', $tests[0]['duplicates'][0] );
+		$this->assertSame( $live2, $tests[1]['variants']['b']['id'] );
+		$this->assertSame( [ $draft2 ], array_column( $tests[1]['duplicates'], 'id' ) );
+	}
+
+	/**
+	 * A duplicate never supplies the share or the goal.
+	 */
+	public function test_get_tests_ignores_a_duplicate_control_s_share_and_goal() {
+		$live = $this->create_test_variant( 'dupa', 'a', null, [], 60 );
+		update_post_meta( $live, Newspack_Popups_AB_Tests::META_GOAL, 'donation' );
+		$draft = $this->create_test_variant( 'dupa', 'a', null, [ 'post_status' => 'draft' ], 30 );
+		update_post_meta( $draft, Newspack_Popups_AB_Tests::META_GOAL, 'link_click' );
+		$test = Newspack_Popups_AB_Tests::get_tests()[0];
+		$this->assertSame( 60, $test['control_share'] );
+		$this->assertSame( 'donation', $test['goal'] );
+		$this->assertSame( $live, $test['variants']['a']['id'] );
+	}
+
+	/**
+	 * The control's goal is the test's goal even when it is empty, because the
+	 * editor sets the goal on version A only; a challenger's stored goal is used
+	 * only while the test has no control.
+	 */
+	public function test_get_tests_takes_the_goal_from_the_control_even_when_empty() {
+		$challenger = $this->create_test_variant( 'goalless', 'b' );
+		update_post_meta( $challenger, Newspack_Popups_AB_Tests::META_GOAL, 'donation' );
+		$this->assertSame( 'donation', Newspack_Popups_AB_Tests::get_tests()[0]['goal'], 'With no control, the challenger\'s goal stands in.' );
+
+		$this->create_test_variant( 'goalless', 'a' );
+		$test = Newspack_Popups_AB_Tests::get_tests()[0];
+		$this->assertSame( '', $test['goal'] );
+		$this->assertSame( '', $test['goal_label'] );
+	}
+
+	/**
+	 * A Test ID made of digits stays the string it was saved as, so the route
+	 * that looks a test up by its sanitized ID still finds it.
+	 */
+	public function test_get_tests_keeps_a_numeric_test_id_a_string() {
+		$this->create_test_variant( '123', 'a' );
+		$this->create_test_variant( '123', 'b' );
+		$this->create_test_variant( 'alpha', 'a' );
+		$ids = array_column( Newspack_Popups_AB_Tests::get_tests(), 'test_id' );
+		$this->assertSame( [ '123', 'alpha' ], $ids );
+	}
+
+	/**
+	 * The goal and its label come along; variants carry what the page shows.
+	 */
+	public function test_get_tests_goal_label_and_variants() {
+		$id = $this->create_test_variant( 'goal', 'a' );
+		update_post_meta( $id, Newspack_Popups_AB_Tests::META_GOAL, 'donation' );
+		$test = Newspack_Popups_AB_Tests::get_tests()[0];
+		$this->assertSame( 'donation', $test['goal'] );
+		$this->assertSame( 'Donation', $test['goal_label'] );
+		$this->assertSame( $id, $test['variants']['a']['id'] );
+		$this->assertSame( 'publish', $test['variants']['a']['status'] );
+		$this->assertSame( 'Published', $test['variants']['a']['status_label'] );
+		$this->assertArrayHasKey( 'edit_link', $test['variants']['a'] );
+		$this->assertArrayHasKey( 'title', $test['variants']['a'] );
+	}
+
+	/**
+	 * A prompt whose variant key is not a letter the schema knows is left out.
+	 */
+	public function test_get_tests_skips_prompts_with_an_unknown_variant() {
+		$this->create_test_variant( 'odd', 'a' );
+		$this->create_test_variant( 'odd', 'z' );
+		$this->assertSame( [ 'a' ], array_keys( Newspack_Popups_AB_Tests::get_tests()[0]['variants'] ) );
+	}
+
+	/**
 	 * A site with no tests records the flag, so later requests skip the query.
 	 */
 	public function test_zero_test_site_records_the_has_tests_flag() {
@@ -774,6 +946,12 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		self::assertContains( 'manual', $data['ineligible_placements'] );
 		self::assertContains( 'custom1', $data['ineligible_placements'] );
 		self::assertSame( [ 'a', 'b' ], array_keys( $data['variants'] ) );
+		self::assertSame( '', $data['results_url'], 'The results page is for administrators only.' );
+
+		$editor_id = get_current_user_id();
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		self::assertStringContainsString( 'page=' . Newspack_Popups_AB_Dashboard::PAGE_SLUG, Newspack_Popups_AB_Tests::get_editor_data( $prompt_id )['results_url'] );
+		wp_set_current_user( $editor_id );
 
 		$this->restrict_tests_to_admins();
 		self::assertFalse( Newspack_Popups_AB_Tests::get_editor_data( $prompt_id )['can_manage_tests'] );

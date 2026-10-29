@@ -403,6 +403,7 @@ final class Newspack_Popups_AB_Tests {
 			'can_manage_tests'      => self::can_manage_tests( get_current_user_id(), (int) $post_id ),
 			'goals'                 => self::get_goal_labels(),
 			'ineligible_placements' => self::get_ineligible_placements(),
+			'results_url'           => current_user_can( 'manage_options' ) && class_exists( 'Newspack_Popups_AB_Dashboard' ) ? Newspack_Popups_AB_Dashboard::get_page_url() : '',
 			'variants'              => [
 				'a' => __( 'A (control)', 'newspack-popups' ),
 				'b' => __( 'B (challenger)', 'newspack-popups' ),
@@ -456,6 +457,164 @@ final class Newspack_Popups_AB_Tests {
 			];
 		}
 		return $list;
+	}
+
+	/**
+	 * Every test on the site, for the A/B Tests dashboard.
+	 *
+	 * Tests are discovered from prompts carrying a Test ID, in every non-trashed
+	 * status, so a test still being set up (one arm published, the other a draft)
+	 * is listed with its state rather than hidden until it is valid. A prompt
+	 * whose variant key is outside VALID_VARIANTS is skipped: the schema will not
+	 * save one, so one can only come from a direct meta write.
+	 *
+	 * @return array[] Ordered by Test ID. Each `[ 'test_id', 'goal', 'goal_label',
+	 *                 'control_share', 'started_at', 'variants', 'duplicates' ]`. `control_share`
+	 *                 comes from the control prompt, or DEFAULT_CONTROL_SHARE without
+	 *                 one. `started_at` is when the split began: the later of the
+	 *                 control's publish date and the earliest challenger's, ISO 8601
+	 *                 UTC, or null until both are published. Readers see the control
+	 *                 alone before then, so an earlier date would count traffic the
+	 *                 test never split. `variants` maps the letter to
+	 *                 `[ 'id', 'title', 'status', 'status_label', 'edit_link', 'eligible' ]`,
+	 *                 where `eligible` is false for a manual or custom placement.
+	 *                 `duplicates` lists the other prompts carrying a letter, as
+	 *                 `letter` plus those fields. The arm shown is the first
+	 *                 published prompt by ID, or the first by ID when none is
+	 *                 published; this page reports that one, but readers still
+	 *                 see every published prompt with the letter.
+	 */
+	public static function get_tests() {
+		$prompts = get_posts(
+			[
+				'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+				'post_status'    => [ 'publish', 'future', 'draft', 'pending', 'private' ],
+				'perm'           => 'readable',
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Prompts CPT; config-scale.
+				'orderby'        => 'ID',
+				'order'          => 'ASC',
+				'meta_query'     => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- The Test ID lives in meta; every prompt in a test carries it.
+					[
+						'key'     => self::META_TEST_ID,
+						'value'   => '',
+						'compare' => '!=',
+					],
+				],
+			]
+		);
+		$grouped = [];
+		foreach ( $prompts as $prompt ) {
+			$test_id = self::sanitize_test_id( get_post_meta( $prompt->ID, self::META_TEST_ID, true ) );
+			$variant = (string) get_post_meta( $prompt->ID, self::META_VARIANT, true );
+			if ( '' === $test_id || ! in_array( $variant, self::VALID_VARIANTS, true ) ) {
+				continue;
+			}
+			$grouped[ $test_id ][ $variant ][] = $prompt;
+		}
+		ksort( $grouped );
+
+		$labels = self::get_goal_labels();
+		$tests  = [];
+		foreach ( $grouped as $test_id => $letters ) {
+			ksort( $letters );
+			$test = [
+				'test_id'       => (string) $test_id, // PHP stores an integer-like key as an int; get_stats() compares the ID strictly.
+				'goal'          => '',
+				'goal_label'    => '',
+				'control_share' => self::DEFAULT_CONTROL_SHARE,
+				'started_at'    => null,
+				'variants'      => [],
+				'duplicates'    => [],
+			];
+			$published_at = [];
+			$control_goal = null;
+			foreach ( $letters as $variant => $candidates ) {
+				// Two prompts on one letter: this page reports the first published
+				// one, or the first by ID when none is, and lists the rest so an
+				// editor can split them. Readers still see every published prompt.
+				$kept = null;
+				foreach ( $candidates as $candidate ) {
+					if ( 'publish' === $candidate->post_status ) {
+						$kept = $candidate;
+						break;
+					}
+				}
+				$kept = $kept ?? $candidates[0];
+				foreach ( $candidates as $candidate ) {
+					if ( $candidate !== $kept ) {
+						$test['duplicates'][] = [ 'letter' => $variant ] + self::describe_prompt( $candidate );
+					}
+				}
+				$test['variants'][ $variant ] = self::describe_prompt( $kept );
+
+				if ( 'a' === $variant ) {
+					$share = get_post_meta( $kept->ID, self::META_CONTROL_SHARE, true );
+					if ( '' !== $share && null !== $share ) {
+						$test['control_share'] = self::sanitize_control_share( $share );
+					}
+				}
+
+				// The control's goal is the test's, an empty one included, since the
+				// editor sets the goal on version A only. A challenger's stored goal
+				// counts only while the test has no control.
+				$goal = self::sanitize_goal( get_post_meta( $kept->ID, self::META_GOAL, true ) );
+				if ( 'a' === $variant ) {
+					$control_goal = $goal;
+				} elseif ( '' !== $goal && '' === $test['goal'] ) {
+					$test['goal'] = $goal;
+				}
+
+				if ( 'publish' === $kept->post_status && '0000-00-00 00:00:00' !== $kept->post_date_gmt ) {
+					$published_at[ $variant ] = gmdate( 'Y-m-d\TH:i:s\Z', strtotime( $kept->post_date_gmt . ' UTC' ) );
+				}
+			}
+			if ( null !== $control_goal ) {
+				$test['goal'] = $control_goal;
+			}
+			$test['goal_label'] = $labels[ $test['goal'] ] ?? '';
+			$test['started_at'] = self::get_started_at( $published_at );
+			$tests[]            = $test;
+		}
+
+		return array_values( $tests );
+	}
+
+	/**
+	 * What the page shows for one prompt.
+	 *
+	 * @param WP_Post $prompt Prompt.
+	 * @return array `id`, `title`, `status`, `status_label`, `edit_link`, `eligible`.
+	 */
+	private static function describe_prompt( $prompt ) {
+		$status = get_post_status_object( $prompt->post_status );
+		return [
+			'id'           => (int) $prompt->ID,
+			'title'        => $prompt->post_title,
+			'status'       => $prompt->post_status,
+			'status_label' => $status ? $status->label : $prompt->post_status,
+			'edit_link'    => get_edit_post_link( $prompt->ID, 'raw' ),
+			'eligible'     => self::is_eligible_placement( get_post_meta( $prompt->ID, 'placement', true ) ),
+		];
+	}
+
+	/**
+	 * When a test's split began: the moment both a control and a challenger
+	 * were published. Before that, readers see the control alone.
+	 *
+	 * @param string[] $published_at Publish dates keyed by variant letter, ISO 8601 UTC.
+	 * @return string|null The later of the control's date and the earliest
+	 *                     challenger's, or null until both exist.
+	 */
+	private static function get_started_at( $published_at ) {
+		if ( empty( $published_at['a'] ) ) {
+			return null;
+		}
+		$challengers = $published_at;
+		unset( $challengers['a'] );
+		if ( empty( $challengers ) ) {
+			return null;
+		}
+		return max( $published_at['a'], min( $challengers ) );
 	}
 
 	/**
