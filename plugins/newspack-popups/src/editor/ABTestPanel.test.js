@@ -15,7 +15,7 @@ import apiFetch from '@wordpress/api-fetch';
 jest.mock( '@wordpress/data', () => ( { useSelect: jest.fn() } ) );
 jest.mock( '@wordpress/compose', () => ( { useDebounce: fn => fn } ) );
 jest.mock( '@wordpress/api-fetch' );
-// Provided by WordPress at runtime, not installed here.
+// Stubbed so the tests read the panel's logic, not its layout.
 jest.mock( '@wordpress/ui', () => ( { Stack: ( { children } ) => <div>{ children }</div> } ), { virtual: true } );
 
 jest.mock( '@wordpress/components', () => ( {
@@ -179,6 +179,8 @@ describe( 'ABTestPanel', () => {
 		const note = screen.getAllByRole( 'note' )[ 0 ];
 		expect( note.dataset.status ).toBe( 'error' );
 		expect( note.textContent ).toContain( 'Clear the test name or choose another placement to save.' );
+		// An error asks the author to act, so it is the one notice the panel speaks.
+		expect( note.dataset.spoken ).toBe( note.textContent );
 		expect( screen.getByLabelText( 'Test name' ).disabled ).toBe( false );
 	} );
 
@@ -242,7 +244,7 @@ describe( 'ABTestPanel', () => {
 
 		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'b' } );
 
-		expect( await screen.findByText( 'No goal set. 60% see A, 40% see B. Set on version A.' ) ).toBeTruthy();
+		expect( await screen.findByText( 'No goal set on version A. 60% see A, 40% see B.' ) ).toBeTruthy();
 	} );
 
 	it( 'holds the challenger Goal row until the lookup for the current test name resolves', async () => {
@@ -332,6 +334,9 @@ describe( 'ABTestPanel', () => {
 			)
 		).toBeTruthy();
 		expect( screen.getByText( /already version A/ ).dataset.status ).toBe( 'error' );
+		expect( screen.getByText( /already version A/ ).dataset.spoken ).toBe(
+			'Another prompt in this test is already version A. Clear the test name on one of them, or give one a different version.'
+		);
 		expect( apiFetch ).toHaveBeenCalledWith( { path: '/newspack-popups/v1/ab-tests/x' } );
 	} );
 } );

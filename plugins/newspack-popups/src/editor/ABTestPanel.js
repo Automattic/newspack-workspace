@@ -135,8 +135,12 @@ const ABTestPanel = ( {
 	const holdGoal = lookupPending && 'a' !== variant;
 	const hasChallenger = others.some( prompt => prompt.variant && 'a' !== prompt.variant );
 
-	// The notices describe standing state rather than the result of an action, so
-	// none is announced on mount (the panel re-mounts them on every expand).
+	// Info and warning notices describe standing state, so they stay silent on mount
+	// (the panel re-mounts them on every expand). An error asks the author to act
+	// before the prompt can save, so it is spoken politely each time it renders.
+	const placementMessage =
+		__( 'A/B tests only work on prompts that Newspack places for you.', 'newspack-popups' ) +
+		( testId ? ' ' + __( 'Clear the test name or choose another placement to save.', 'newspack-popups' ) : '' );
 	return (
 		<Stack direction="column" gap="lg">
 			{ ! canManage && (
@@ -145,9 +149,13 @@ const ABTestPanel = ( {
 				</p>
 			) }
 			{ ! eligible && (
-				<Notice status={ testId ? 'error' : 'warning' } spokenMessage="" isDismissible={ false }>
-					{ __( 'A/B tests only work on prompts that Newspack places for you.', 'newspack-popups' ) }
-					{ testId ? ' ' + __( 'Clear the test name or choose another placement to save.', 'newspack-popups' ) : '' }
+				<Notice
+					status={ testId ? 'error' : 'warning' }
+					spokenMessage={ testId ? placementMessage : '' }
+					politeness="polite"
+					isDismissible={ false }
+				>
+					{ placementMessage }
 				</Notice>
 			) }
 			{ ( eligible || testId ) && (
@@ -212,7 +220,7 @@ const ABTestPanel = ( {
 									  )
 									: sprintf(
 											// Translators: %s is the traffic split, such as "60% see A, 40% see B".
-											__( 'No goal set. %s. Set on version A.', 'newspack-popups' ),
+											__( 'No goal set on version A. %s.', 'newspack-popups' ),
 											splitSummary( control.control_share ?? 50 )
 									  ) }
 							</p>
