@@ -9,8 +9,7 @@
  * fire exactly as it does for a form rendered inside the gate itself.
  *
  * This plugin writes the record when the CTA is clicked (`persistCtaAttribution()`)
- * and replays it into the checkout and donate forms it took over from newspack-blocks
- * (`applyCtaAttribution()`).
+ * and replays it into the checkout and donate forms (`applyCtaAttribution()`).
  *
  * Two cart paths exist, and they apply DIFFERENT filters. Checkout buttons go through
  * `Modal_Checkout::add_to_cart_and_redirect()` -> `newspack_blocks_modal_checkout_cart_item_data`;

@@ -8,7 +8,6 @@ declare global {
 			supports_recaptcha: boolean;
 			has_recaptcha: boolean;
 			recaptcha_url: string;
-			post_subtitle: boolean;
 			can_use_name_your_price: boolean;
 			tier_amounts_template: string;
 			currency: string;
