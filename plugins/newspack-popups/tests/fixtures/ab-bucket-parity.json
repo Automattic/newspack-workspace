@@ -74,17 +74,30 @@
 			"bucket": "c"
 		},
 		{
-			"note": "A config with no control share uses the default.",
-			"reader": "abc",
-			"test_id": "test-x",
+			"note": "With no control share, the default puts this reader just inside the control range.",
+			"reader": "reader-1014697",
+			"test_id": "boundary-test",
 			"config": {
 				"variants": [
 					"a",
 					"b"
 				]
 			},
-			"hash": 809016026,
+			"hash": 2147483534,
 			"bucket": "a"
+		},
+		{
+			"note": "With no control share, the default puts this reader just past the control range.",
+			"reader": "reader-128050",
+			"test_id": "boundary-test",
+			"config": {
+				"variants": [
+					"a",
+					"b"
+				]
+			},
+			"hash": 2147484220,
+			"bucket": "b"
 		},
 		{
 			"note": "A control share of zero is kept, not read as unset, so the control gets no readers.",

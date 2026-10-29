@@ -1049,8 +1049,8 @@ final class Newspack_Popups_Inserter {
 	 *
 	 * Separate from enqueue_scripts(), which returns early in the test suite, so the
 	 * localized keys are assertable: the front end reads `ab_tests`, `cid_cookie`,
-	 * `ab_buckets` and `ab_view_as` from `newspack_popups_view`, and renaming either
-	 * side alone would leave both suites green while every test stopped splitting.
+	 * `ab_buckets` and `ab_view_as` from `newspack_popups_view`. The JS tests build
+	 * that object by hand, so only the PHP side of each key name is pinned.
 	 *
 	 * @return array Empty when no test is live.
 	 */
@@ -1189,8 +1189,8 @@ final class Newspack_Popups_Inserter {
 				$script_data['donor_landing_page'] = $donor_landing_page;
 			}
 
-			// Variant suppression is entirely client-side, and this whole block sits
-			// inside the non-AMP branch, so AMP requests get no A/B config at all.
+			// Variant suppression is entirely client-side, and this call sits inside
+			// the non-AMP branch, so AMP requests get no A/B config at all.
 			// That is correct only because AMP prompt display is currently disabled:
 			// if it is ever restored, every arm of a test would render un-suppressed
 			// unless suppression is reimplemented for that path.

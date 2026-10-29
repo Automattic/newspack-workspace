@@ -411,9 +411,10 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * Pins the PHP-to-JS contract for a live test: the front end reads these keys
-	 * from newspack_popups_view, and renaming either side alone would leave both
-	 * suites green while every test stopped splitting traffic.
+	 * Pins the server's half of the PHP-to-JS contract for a live test: the front
+	 * end reads these keys from newspack_popups_view, and a rename here alone would
+	 * stop every test splitting traffic. The JS tests build that object by hand, so
+	 * they would not notice.
 	 */
 	public function test_view_script_ab_data_for_a_live_test() {
 		$this->create_test_variant( 'live-test', 'a', null, [], 60 );
@@ -453,6 +454,10 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		self::assertSame( 'b', Newspack_Popups_Inserter::get_view_script_ab_data()['ab_view_as'] );
 
 		$_GET['view_as'] = 'ab_variant:z';
+		self::assertArrayNotHasKey( 'ab_view_as', Newspack_Popups_Inserter::get_view_script_ab_data() );
+
+		$_GET['view_as'] = 'ab_variant:b';
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'subscriber' ] ) );
 		self::assertArrayNotHasKey( 'ab_view_as', Newspack_Popups_Inserter::get_view_script_ab_data() );
 
 		unset( $_GET['view_as'] );
