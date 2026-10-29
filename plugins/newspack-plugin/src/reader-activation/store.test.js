@@ -267,18 +267,15 @@ describe( 'Store', () => {
 		} );
 		it( 'should drain the sync queue so deleted keys are not POSTed on the next tick', () => {
 			jest.useFakeTimers();
-			// items has a known stale server value for the key so the bail-on-match
-			// shortcut in syncItem cannot mask a missing drain — a stale dequeue
-			// would resolve to a DELETE XHR.
-			window.newspack_reader_data = {
-				api_url: 'http://test/api',
-				nonce: 'abc',
-				items: { pageviews: '{"day":{"count":99}}' },
-			};
+			window.newspack_reader_data = { api_url: 'http://test/api', nonce: 'abc', items: {} };
 			const openSpy = jest.spyOn( XMLHttpRequest.prototype, 'open' );
 			const [ store, clearStore ] = Store();
-			store.set( 'pageviews', { day: { count: 1 } } );
+			store.set( 'articles_read', 1 );
 			clearStore();
+			// init()'s account-switch path restores the next reader's server items
+			// right after the wipe (NPPM-2899), so a stale dequeue would POST null
+			// and delete that reader's value.
+			window.newspack_reader_data.items = { articles_read: '99' };
 			jest.advanceTimersByTime( 1500 );
 			expect( openSpy ).not.toHaveBeenCalled();
 			openSpy.mockRestore();
@@ -374,14 +371,14 @@ describe( 'Store', () => {
 			expect( store.get( 'matched_segments' ) ).toEqual( [ '3' ] );
 			expect( sessionStorage.getItem( 'np_reader_matched_segments' ) ).toEqual( '["3"]' );
 			expect( localStorage.getItem( 'np_reader_matched_segments' ) ).toBeNull();
-			store.set( 'pageviews', { day: { count: 1 } } );
+			store.set( 'articles_read', 1 );
 			jest.advanceTimersByTime( 2500 );
 			expect( openSpy ).not.toHaveBeenCalled();
 			openSpy.mockRestore();
 		} );
 		it.each( [
-			[ 'written', store => store.set( 'pageviews', { day: { count: 9 } } ) ],
-			[ 'deleted', store => store.delete( 'pageviews' ) ],
+			[ 'written', store => store.set( 'articles_read', 9 ) ],
+			[ 'deleted', store => store.delete( 'articles_read' ) ],
 		] )( 'still hydrates a key the switched tab has %s', ( _, write ) => {
 			window.newspack_reader_data = { is_switched_session: true, items: {} };
 			let store;
@@ -390,8 +387,8 @@ describe( 'Store', () => {
 			} );
 			write( store );
 			// The next page load in the same tab.
-			store.rehydrate( { pageviews: '{"day":{"count":1}}' } );
-			expect( store.get( 'pageviews' ) ).toEqual( { day: { count: 1 } } );
+			store.rehydrate( { articles_read: '1' } );
+			expect( store.get( 'articles_read' ) ).toEqual( 1 );
 		} );
 	} );
 	describe( 'server sync', () => {
@@ -463,16 +460,21 @@ describe( 'Store', () => {
 			beforeEach( () => {
 				window.newspack_reader_data.local_keys = [ 'pageviews' ];
 			} );
-			it( 'are never sent', () => {
+			it.each( [
+				[ 'written', store => store.set( 'pageviews', { day: { count: 1 } } ) ],
+				[ 'deleted', store => store.delete( 'pageviews' ) ],
+			] )( 'are never sent when %s', ( _, write ) => {
+				// The server holds a copy, so a delete would otherwise have something to remove.
+				window.newspack_reader_data.items = { pageviews: '{"day":{"count":9}}' };
 				const [ store ] = Store();
-				store.set( 'pageviews', { day: { count: 1 } } );
-				store.delete( 'pageviews' );
+				write( store );
 				jest.advanceTimersByTime( 1000 );
 				expect( requests ).toHaveLength( 0 );
 				expect( getUnsynced() ).toEqual( [] );
 			} );
 			it( 'are dropped from a queue left by an earlier version', () => {
 				localStorage.setItem( 'np_reader__unsynced', JSON.stringify( [ 'pageviews', 'articles_read' ] ) );
+				localStorage.setItem( 'np_reader_pageviews', '{"day":{"count":1}}' );
 				localStorage.setItem( 'np_reader_articles_read', '3' );
 				Store();
 				jest.advanceTimersByTime( 1000 );

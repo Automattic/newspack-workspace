@@ -470,7 +470,7 @@ export default function Store() {
 			}
 		}
 		drainSyncQueue();
-		// Reset the in-memory server-known-items cache that syncItem reads to
+		// Reset the in-memory server-known-items cache that syncItems reads to
 		// short-circuit no-op writes. window.newspack_reader_data is initialized
 		// at module load (top of this file), so no presence guard is needed.
 		//
