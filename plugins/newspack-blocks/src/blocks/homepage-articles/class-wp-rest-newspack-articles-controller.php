@@ -13,6 +13,14 @@ class WP_REST_Newspack_Articles_Controller extends WP_REST_Controller {
 // phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound
 
 	/**
+	 * Most posts the public articles route renders in one request.
+	 *
+	 * The editor caps a block at 30 posts, but before 2025 it allowed up to 100, so saved
+	 * blocks can ask for that many. Not filterable, so the bound can't be lifted.
+	 */
+	const MAX_POSTS_TO_SHOW = 100;
+
+	/**
 	 * Attribute schema.
 	 *
 	 * @var array
@@ -170,6 +178,13 @@ class WP_REST_Newspack_Articles_Controller extends WP_REST_Controller {
 			$request->get_params() ?? [],
 			wp_list_pluck( $this->get_attribute_schema(), 'default' )
 		);
+
+		// Clamp here rather than bounding the route args: an out-of-range arg is a 400, which
+		// would break Load More for saved blocks, and bounds in block.json reset saved blocks.
+		$attributes['postsToShow'] = min( self::MAX_POSTS_TO_SHOW, max( 1, (int) $attributes['postsToShow'] ) );
+		if ( is_array( $attributes['specificPosts'] ) ) {
+			$attributes['specificPosts'] = array_slice( $attributes['specificPosts'], 0, self::MAX_POSTS_TO_SHOW );
+		}
 
 		$deduplicate = $request->get_param( 'deduplicate' ) ?? 1;
 		if ( ! $deduplicate ) {

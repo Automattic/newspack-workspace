@@ -482,6 +482,167 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * Create published posts with distinct dates, oldest first.
+	 *
+	 * @param int $count Number of posts.
+	 * @return int[] Post IDs.
+	 */
+	private function create_dated_posts( $count ) {
+		$post_ids = [];
+		for ( $i = 0; $i < $count; $i++ ) {
+			$post_ids[] = self::factory()->post->create(
+				[
+					'post_status' => 'publish',
+					'post_date'   => gmdate( 'Y-m-d H:i:s', strtotime( '2026-01-01' ) + $i * HOUR_IN_SECONDS ),
+				]
+			);
+		}
+		return $post_ids;
+	}
+
+	/**
+	 * Dispatch a logged-out request to the public articles route.
+	 *
+	 * @param array $params Query params.
+	 * @return array Response data.
+	 */
+	private static function articles_route_data( $params ) {
+		wp_set_current_user( 0 );
+		$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
+		$request->set_query_params( $params );
+		$response = rest_do_request( $request );
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		return $response->get_data();
+	}
+
+	/**
+	 * A logged-out postsToShow=-1 request returns one post instead of every post.
+	 *
+	 * @group articles-posts-cap
+	 */
+	public function test_articles_endpoint_caps_unbounded_posts_to_show() {
+		$this->create_dated_posts( 105 );
+
+		$data = self::articles_route_data(
+			[
+				'postsToShow' => -1,
+				'page'        => 1,
+				'moreButton'  => 1,
+				'deduplicate' => 0,
+			]
+		);
+
+		self::assertCount( 1, $data['ids'], 'postsToShow=-1 returns one post.' );
+		self::assertNotEmpty( $data['next'], 'The remaining posts are left for a next page.' );
+		wp_parse_str( (string) wp_parse_url( $data['next'], PHP_URL_QUERY ), $next_params );
+		self::assertSame( '1', $next_params['postsToShow'], 'The next URL carries the clamped postsToShow, not -1.' );
+	}
+
+	/**
+	 * Out-of-range postsToShow values are clamped to the 1 to 100 range.
+	 *
+	 * @dataProvider out_of_range_posts_to_show
+	 *
+	 * @param int $posts_to_show Requested postsToShow.
+	 * @param int $expected      Posts returned.
+	 *
+	 * @group articles-posts-cap
+	 */
+	public function test_articles_endpoint_caps_posts_to_show( $posts_to_show, $expected ) {
+		$this->create_dated_posts( 105 );
+		wp_set_current_user( 0 );
+
+		$controller = new WP_REST_Newspack_Articles_Controller();
+		$request    = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
+		$request->set_param( 'postsToShow', $posts_to_show );
+		$ids = $controller->get_items( $request )->get_data()['ids'];
+
+		self::assertCount( $expected, $ids, 'An out-of-range postsToShow is clamped.' );
+	}
+
+	/**
+	 * PostsToShow values outside the range, with the number of posts each returns.
+	 *
+	 * @return array[]
+	 */
+	public function out_of_range_posts_to_show() {
+		return [
+			'large'          => [ 1000, 100 ],
+			'large negative' => [ -500, 1 ],
+		];
+	}
+
+	/**
+	 * A postsToShow of 0 means one post, not the site's posts-per-page setting.
+	 *
+	 * @group articles-posts-cap
+	 */
+	public function test_articles_endpoint_treats_zero_posts_to_show_as_one() {
+		$this->create_dated_posts( 5 );
+
+		$data = self::articles_route_data( [ 'postsToShow' => 0 ] );
+
+		self::assertCount( 1, $data['ids'], 'postsToShow=0 returns one post.' );
+	}
+
+	/**
+	 * Specific-posts mode can't be used to get past the cap.
+	 *
+	 * @group articles-posts-cap
+	 */
+	public function test_articles_endpoint_caps_specific_posts() {
+		$post_ids = $this->create_dated_posts( 105 );
+		wp_set_current_user( 0 );
+
+		$controller = new WP_REST_Newspack_Articles_Controller();
+		$request    = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
+		$request->set_param( 'specificMode', 1 );
+		$request->set_param( 'specificPosts', $post_ids );
+		$ids = $controller->get_items( $request )->get_data()['ids'];
+
+		self::assertCount( 100, $ids, 'Specific-posts mode returns at most 100 posts.' );
+	}
+
+	/**
+	 * The next-page URL carries the clamped postsToShow, not the requested one.
+	 *
+	 * @group articles-posts-cap
+	 */
+	public function test_articles_endpoint_next_url_carries_clamped_posts_to_show() {
+		$this->create_dated_posts( 3 );
+
+		$data = self::articles_route_data(
+			[
+				'postsToShow' => 0,
+				'moreButton'  => 1,
+				'deduplicate' => 0,
+			]
+		);
+
+		self::assertNotEmpty( $data['next'], 'One post of three leaves a next page.' );
+		wp_parse_str( (string) wp_parse_url( $data['next'], PHP_URL_QUERY ), $next_params );
+		self::assertSame( '1', $next_params['postsToShow'], 'The next URL carries the clamped postsToShow.' );
+	}
+
+	/**
+	 * A postsToShow within range is used as given.
+	 */
+	public function test_articles_endpoint_keeps_posts_to_show_in_range() {
+		$this->create_dated_posts( 8 );
+		wp_set_current_user( 0 );
+
+		$controller = new WP_REST_Newspack_Articles_Controller();
+		$request    = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
+		$request->set_param( 'postsToShow', 5 );
+		$request->set_param( 'moreButton', 1 );
+		$data = $controller->get_items( $request )->get_data();
+
+		self::assertCount( 5, $data['ids'], 'postsToShow=5 returns five posts.' );
+		wp_parse_str( (string) wp_parse_url( $data['next'], PHP_URL_QUERY ), $next_params );
+		self::assertSame( '5', $next_params['postsToShow'], 'The next URL keeps postsToShow=5.' );
+	}
+
+	/**
 	 * The editor posts payload never carries an unsafe URL scheme.
 	 *
 	 * post_link resolves from the newspack_sponsor_url / newspack_supporter_url
