@@ -9,6 +9,103 @@ import './listing.scss';
 const fetchRetryCount = 3;
 
 /**
+ * Resolves a candidate URL the same way the browser resolves it when the
+ * value is actually used as a request URL (XMLHttpRequest.open() resolves a
+ * relative string against the current document, not just its origin) -
+ * checking one resolution and fetching another is itself a way for a value
+ * to pass validation while requesting something else.
+ *
+ * @param {string} url candidate URL
+ */
+function resolveUrl( url ) {
+	try {
+		return new URL( url, window.location.href );
+	} catch ( e ) {
+		return null;
+	}
+}
+
+/**
+ * This site's REST API root, read from the link WordPress core renders in
+ * `<head>` on every front-end page. `<head>` is never built from post
+ * content, so - unlike a `data-next` or `data-url` attribute - this value
+ * can't be spoofed by anything kses lets through.
+ */
+function getTrustedRestRoot() {
+	const link = document.querySelector( 'link[rel="https://api.w.org/"]' );
+
+	return link ? resolveUrl( link.getAttribute( 'href' ) ) : null;
+}
+
+/**
+ * A query parameter name this plugin's own server-generated URLs can ever
+ * carry: plain identifier characters, followed by zero or more `[...]`
+ * groups for an array- or object-valued block attribute. `add_query_arg()`
+ * renders every such attribute this way, and this block's own `query[sortBy]`
+ * / `query[order]` sort params add another level. PHP folds characters
+ * outside this set (a dot, a space, a null byte, ...) into a query key in
+ * ways that don't match how `URLSearchParams` reads them, so rather than
+ * mirroring that folding, a key carrying any of them is treated as
+ * untrustworthy on sight, whatever it would normalize to. A bracket-suffixed
+ * `rest_route` is no exception to reject specially: PHP builds it into an
+ * array value, which WordPress's REST router can't use as a route and
+ * always answers with an error.
+ */
+const SAFE_QUERY_KEY = /^[A-Za-z0-9_-]+(\[[A-Za-z0-9_-]*\])*$/;
+
+/**
+ * Checks whether a URL resolves to this site's own listings REST route - not
+ * just whether its path looks right, since a query parameter can make
+ * WordPress route an otherwise-correct-looking URL somewhere else.
+ *
+ * @param {URL|null} parsed a URL already resolved with resolveUrl()
+ */
+function isNextUrlTrusted( parsed ) {
+	if ( ! parsed || parsed.origin !== window.location.origin ) {
+		return false;
+	}
+
+	const keys = Array.from( parsed.searchParams.keys() );
+
+	if ( keys.some( key => ! SAFE_QUERY_KEY.test( key ) ) ) {
+		return false;
+	}
+
+	const route = 'newspack-listings/v1/listings';
+
+	// Anchor to the REST root this site's own <head> advertises: neither a
+	// custom REST prefix, a subdirectory install nor plain permalinks is
+	// derivable from the route string alone. Paths are matched exactly, not
+	// by suffix, since an ordinary page's permalink can also end in it.
+	const restRoot = getTrustedRestRoot();
+
+	if ( ! restRoot ) {
+		// A site that strips the link keeps load-more on WordPress's
+		// default REST root.
+		return ! keys.includes( 'rest_route' ) && parsed.pathname === '/wp-json/' + route;
+	}
+
+	if ( ! restRoot.searchParams.has( 'rest_route' ) ) {
+		// Pretty permalinks.
+		return ! keys.includes( 'rest_route' ) && parsed.pathname === restRoot.pathname + route;
+	}
+
+	// Plain permalinks: everything goes through the REST root's own path,
+	// naming the route via rest_route. Exactly one is accepted. PHP reads a
+	// repeated key's last value, but stops reading the query string at
+	// `max_input_vars`, which a host can set low enough that an earlier
+	// value wins instead. With a single occurrence, and PHP's default `&`
+	// separator, there is nothing else for PHP to fall back to.
+	if ( parsed.pathname !== restRoot.pathname ) {
+		return false;
+	}
+
+	const routeValues = parsed.searchParams.getAll( 'rest_route' );
+
+	return routeValues.length === 1 && routeValues[ 0 ] === '/' + route;
+}
+
+/**
  * Load More Button Handling
  *
  * Calls Array.prototype.forEach for IE11 compatibility.
@@ -27,7 +124,10 @@ Array.prototype.forEach.call( document.querySelectorAll( '.newspack-listings__cu
  * @param {HTMLElement} blockWrapperEl the button that was clicked
  */
 function buildLoadMoreHandler( blockWrapperEl ) {
-	const btnEl = blockWrapperEl.querySelector( '[data-next]' );
+	// Scoped to the wrapper's own direct children, since the button is one of
+	// them in the server-rendered markup. Equivalent to `:scope > [data-next]`;
+	// written as a manual filter instead, matching this function's own style.
+	const btnEl = Array.prototype.filter.call( blockWrapperEl.children, el => el.hasAttribute( 'data-next' ) )[ 0 ];
 	if ( ! btnEl ) {
 		return;
 	}
@@ -53,9 +153,23 @@ function buildLoadMoreHandler( blockWrapperEl ) {
 			btnEl.textContent = loadingText;
 		}
 
-		const requestURL = btnEl.getAttribute( 'data-next' );
+		// The wrapper is matched by CSS class alone, which content elsewhere on
+		// the page can also carry, so the URL has to be checked before it's
+		// fetched - checking which element it came from isn't enough. Resolved
+		// once, the same way the browser resolves it when the request is
+		// actually made, and reused below: checking one string and fetching
+		// another is itself a way to drift past the check.
+		const resolvedNextUrl = resolveUrl( btnEl.getAttribute( 'data-next' ) );
 
-		fetchWithRetry( { url: requestURL, onSuccess, onError }, fetchRetryCount );
+		if ( ! isNextUrlTrusted( resolvedNextUrl ) ) {
+			isFetching = false;
+			blockWrapperEl.classList.remove( 'is-loading' );
+			blockWrapperEl.classList.add( 'is-error' );
+			btnEl.textContent = btnText;
+			return false;
+		}
+
+		fetchWithRetry( { url: resolvedNextUrl.href, onSuccess, onError }, fetchRetryCount );
 
 		/**
 		 * @param {Object} data Post data
@@ -73,13 +187,15 @@ function buildLoadMoreHandler( blockWrapperEl ) {
 				postsContainerEl.insertAdjacentHTML( 'beforeend', postsHTML );
 			}
 
-			if ( next ) {
+			const hasTrustedNext = Boolean( next ) && isNextUrlTrusted( resolveUrl( next ) );
+
+			if ( hasTrustedNext ) {
 				// Save next URL as button's attribute.
 				btnEl.setAttribute( 'data-next', next );
 			}
 
 			// Remove next button if we're done.
-			if ( ! data.length || ! next ) {
+			if ( ! data.length || ! hasTrustedNext ) {
 				blockWrapperEl.classList.remove( 'has-more-button' );
 			}
 
@@ -119,11 +235,19 @@ function buildSortHandler( blockWrapperEl ) {
 		return;
 	}
 
-	const btnEl = blockWrapperEl.querySelector( '[data-next]' );
+	// Same wrapper-is-matched-by-class-alone reasoning as buildLoadMoreHandler:
+	// resolved and checked once, since every request this handler makes is
+	// built from it. An untrusted root means this handler is never wired up.
+	const resolvedRestUrl = resolveUrl( sortUi.getAttribute( 'data-url' ) );
+	if ( ! isNextUrlTrusted( resolvedRestUrl ) ) {
+		return;
+	}
+
+	// Scoped to direct children for the same reason as buildLoadMoreHandler.
+	const btnEl = Array.prototype.filter.call( blockWrapperEl.children, el => el.hasAttribute( 'data-next' ) )[ 0 ];
 	const triggers = Array.prototype.concat.call( Array.prototype.slice.call( sortOrder ), [ sortBy ] );
 
 	const postsContainerEl = blockWrapperEl.querySelector( '.newspack-listings__list-container' );
-	const restURL = sortUi.getAttribute( 'data-url' );
 	const hasMoreButton = blockWrapperEl.classList.contains( 'has-more-button' );
 
 	// Set initial state flags and data.
@@ -155,16 +279,19 @@ function buildSortHandler( blockWrapperEl ) {
 			sortOrderContainer.classList.remove( 'is-hidden' );
 		}
 
-		const requestURL = `${ restURL }&${ encodeURIComponent( 'query[sortBy]' ) }=${ _sortBy }&${ encodeURIComponent(
-			'query[order]'
-		) }=${ _order }`;
+		// Built from the already-trusted REST URL via the URL API rather than
+		// string concatenation, so sortBy/order can only ever land as opaque
+		// query values, never add a new top-level parameter.
+		const requestURL = new URL( resolvedRestUrl.href );
+		requestURL.searchParams.set( 'query[sortBy]', _sortBy );
+		requestURL.searchParams.set( 'query[order]', _order );
 
 		if ( hasMoreButton && btnEl ) {
 			blockWrapperEl.classList.add( 'has-more-button' );
-			btnEl.setAttribute( 'data-next', requestURL );
+			btnEl.setAttribute( 'data-next', requestURL.href );
 		}
 
-		fetchWithRetry( { url: requestURL, onSuccess, onError }, fetchRetryCount );
+		fetchWithRetry( { url: requestURL.href, onSuccess, onError }, fetchRetryCount );
 
 		/**
 		 * @param {Object} data Post data
@@ -185,7 +312,7 @@ function buildSortHandler( blockWrapperEl ) {
 				postsContainerEl.insertAdjacentHTML( 'beforeend', postsHTML );
 			}
 
-			if ( next && btnEl ) {
+			if ( next && btnEl && isNextUrlTrusted( resolveUrl( next ) ) ) {
 				// Save next URL as button's attribute.
 				btnEl.setAttribute( 'data-next', next );
 			}

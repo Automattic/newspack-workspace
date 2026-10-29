@@ -1481,9 +1481,9 @@ class Premium_Newsletters_Verify {
 	 *
 	 * The same provider knowledge is kept as an exact-match allowlist in
 	 * Newspack\Reader_Activation\Integrations\ESP::is_provider_not_found_error()
-	 * (includes/reader-activation/integrations/class-esp.php), which the ESP's pull and
-	 * existence check use to tell a miss from a failure. Adding a fourth provider
-	 * means adding it there too.
+	 * (includes/reader-activation/integrations/class-esp.php), which the ESP's pull,
+	 * existence check and hard delete use to tell a miss from a failure. Adding a
+	 * fourth provider means adding it there too.
 	 *
 	 * @param \WP_Error $error The error get_contact_data() returned.
 	 *

@@ -267,10 +267,12 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-api.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php';
+		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-bulk-invite.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-teams-invite.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-myaccount.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-settings.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-seats.php';
+		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-checkout-prompt.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-woocommerce-gateway-stripe.php';
 		include_once NEWSPACK_ABSPATH . 'includes/export/class-csv-exports.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-teams-for-memberships.php';
@@ -520,6 +522,10 @@ final class Newspack {
 	 * dist/ mid-run can call self::asset_version_reset_cache() to drop
 	 * stale entries.
 	 *
+	 * newspack-ads, newspack-blocks, newspack-listings and newspack-newsletters
+	 * carry trimmed copies of this helper, since each must work without this
+	 * plugin. A change to the name check belongs in those copies too.
+	 *
 	 * @param string $name Asset basename relative to `dist/`, without the
 	 *                     `.asset.php` suffix. Examples: 'wizards',
 	 *                     'other-scripts/relative-time'.
@@ -554,7 +560,8 @@ final class Newspack {
 		 * to avoid writing fixtures into the production-served path.
 		 *
 		 * @param string $dir  Absolute path with trailing slash.
-		 * @param string $name Asset basename being resolved.
+		 * @param string $name Asset basename being resolved, or empty when
+		 *                     resolving the directory itself.
 		 */
 		$dist_dir = apply_filters( 'newspack_asset_dist_dir', NEWSPACK_ABSPATH . 'dist/', $name );
 		$path     = $dist_dir . $name . '.asset.php';

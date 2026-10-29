@@ -47,8 +47,14 @@ const listAccessRuleOptionValues = ( values: Array< string | number >, options: 
 		return option ? formatAccessRuleOptionLabel( option ) : formatMissingAccessRuleOptionLabel( value, getMissingOptionLabel( slug ) );
 	} );
 
+/**
+ * Every rule that lists values grants access on any one of them, so the summary says
+ * "or" — a comma-joined list reads as "needs all of these".
+ */
+const VALUE_SEPARATOR = ` ${ _x( 'or', 'between access rule values, any one of which grants access', 'newspack-plugin' ) } `;
+
 const formatAccessRuleOptionValues = ( values: Array< string | number >, options: AccessRuleOption[] = [], slug: string ) =>
-	listAccessRuleOptionValues( values, options, slug ).join( ', ' );
+	listAccessRuleOptionValues( values, options, slug ).join( VALUE_SEPARATOR );
 
 const MAX_VALUE_LINES = 2;
 
@@ -122,7 +128,7 @@ const CollapsibleValues = ( { values, ruleName }: { values: string[]; ruleName: 
 		let end = 0;
 		let fitting = 0;
 		for ( const [ index, value ] of values.slice( 0, visibleCount ).entries() ) {
-			end += ( index > 0 ? 2 : 0 ) + value.length;
+			end += ( index > 0 ? VALUE_SEPARATOR.length : 0 ) + value.length;
 			range.setStart( text, end - 1 );
 			range.setEnd( text, end );
 			if ( range.getBoundingClientRect().bottom > limit ) {
@@ -143,13 +149,13 @@ const CollapsibleValues = ( { values, ruleName }: { values: string[]; ruleName: 
 	if ( hiddenCount < 1 && ! isExpanded && ! holdToggle ) {
 		return (
 			<span ref={ ref } tabIndex={ -1 }>
-				{ values.join( ', ' ) }
+				{ values.join( VALUE_SEPARATOR ) }
 			</span>
 		);
 	}
 	return (
 		<span ref={ ref } tabIndex={ -1 }>
-			{ ( isExpanded ? values : values.slice( 0, visibleCount ) ).join( ', ' ) }{ ' ' }
+			{ ( isExpanded ? values : values.slice( 0, visibleCount ) ).join( VALUE_SEPARATOR ) }{ ' ' }
 			<Button
 				ref={ toggleRef }
 				variant="link"

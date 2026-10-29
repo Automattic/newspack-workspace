@@ -9,6 +9,10 @@
 			padding: var(--newspack-ui-spacer-5);
 			position: relative;
 
+			&:not(.newspack-ui__box--border) {
+				--newspack-ui-color-input-border: var(--newspack-ui-color-neutral-60);
+			}
+
 			// Backgrounds & Borders
 			&--success {
 				background: var(--newspack-ui-color-success-0);

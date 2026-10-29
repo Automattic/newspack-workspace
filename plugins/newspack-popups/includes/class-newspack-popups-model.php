@@ -211,6 +211,9 @@ final class Newspack_Popups_Model {
 					}
 					update_post_meta( $id, $key, $value );
 					break;
+				case 'manual_only':
+					update_post_meta( $id, $key, wp_validate_boolean( $value ) );
+					break;
 				case 'post_types':
 				case 'archive_page_types':
 				case 'excluded_categories':
@@ -261,7 +264,18 @@ final class Newspack_Popups_Model {
 			$args['tax_query'] = [ $tax_query ]; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
 		}
 
-		return self::retrieve_popups_with_query( new WP_Query( $args ) );
+		$popups = self::retrieve_popups_with_query( new WP_Query( $args ) );
+		if ( is_array( $placements ) ) {
+			return $popups;
+		}
+		return array_values(
+			array_filter(
+				$popups,
+				function( $popup ) {
+					return ! self::is_manual_only( $popup );
+				}
+			)
+		);
 	}
 
 	/**
@@ -468,6 +482,7 @@ final class Newspack_Popups_Model {
 			'overlay_opacity'                => get_post_meta( $id, 'overlay_opacity', true ),
 			'overlay_size'                   => get_post_meta( $id, 'overlay_size', true ),
 			'no_overlay_background'          => get_post_meta( $id, 'no_overlay_background', true ),
+			'manual_only'                    => get_post_meta( $id, 'manual_only', true ),
 			'placement'                      => get_post_meta( $id, 'placement', true ),
 			'trigger_type'                   => get_post_meta( $id, 'trigger_type', true ),
 			'trigger_delay'                  => get_post_meta( $id, 'trigger_delay', true ),
@@ -514,6 +529,7 @@ final class Newspack_Popups_Model {
 				'overlay_opacity'                => 30,
 				'overlay_size'                   => 'medium',
 				'no_overlay_background'          => false,
+				'manual_only'                    => false,
 				'placement'                      => 'inline',
 				'trigger_type'                   => 'time',
 				'trigger_delay'                  => 0,
@@ -810,7 +826,9 @@ final class Newspack_Popups_Model {
 	}
 
 	/**
-	 * Is it a manual-only popup or not.
+	 * Is it a manual-only popup or not: an inline prompt with the "Manual only" placement,
+	 * or an overlay with the "Manual only" toggle on. Either appears only where the
+	 * Single Prompt block or the shortcode places it.
 	 *
 	 * @param object $popup The popup object.
 	 * @return boolean True if it is a manual-only popup.
@@ -820,7 +838,8 @@ final class Newspack_Popups_Model {
 			return false;
 		}
 
-		return 'manual' === $popup['options']['placement'];
+		return 'manual' === $popup['options']['placement']
+			|| ( self::is_overlay( $popup ) && ! empty( $popup['options']['manual_only'] ) );
 	}
 
 	/**

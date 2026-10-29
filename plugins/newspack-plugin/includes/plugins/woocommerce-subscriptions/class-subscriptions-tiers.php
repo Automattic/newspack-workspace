@@ -392,7 +392,7 @@ class Subscriptions_Tiers {
 				continue;
 			}
 
-			if ( $product->get_status() === 'private' ) {
+			if ( $product->get_status() === 'private' || Complimentary_Access::is_complimentary_product( $product ) ) {
 				continue;
 			}
 
@@ -712,7 +712,7 @@ class Subscriptions_Tiers {
 			?>
 			<div class="newspack-ui__segmented-control__tabs">
 				<?php foreach ( $frequencies as $frequency ) : ?>
-					<button type="button" class="newspack-ui__button newspack-ui__button--small <?php echo esc_attr( $frequency === $current_frequency ? 'selected' : '' ); ?>">
+					<button type="button" class="newspack-ui__button newspack-ui__button--small <?php echo esc_attr( $frequency === $current_frequency ? 'selected' : '' ); ?>" aria-pressed="<?php echo esc_attr( $frequency === $current_frequency ? 'true' : 'false' ); ?>">
 						<?php echo esc_html( WooCommerce_Subscriptions::get_frequency_label( $frequency ) ); ?>
 					</button>
 				<?php endforeach; ?>
@@ -957,7 +957,7 @@ class Subscriptions_Tiers {
 	public static function render_modal( $product = null, $title = null, $button_label = null, $switch_data = null, $initial_state = 'closed' ) {
 		$default_title = $switch_data ? __( 'Change Subscription', 'newspack-plugin' ) : __( 'Complete your transaction', 'newspack-plugin' );
 		?>
-		<div class="newspack-ui newspack-ui__modal-container newspack__subscription-tiers" data-state="<?php echo esc_attr( $initial_state ); ?>" data-product-id="<?php echo esc_attr( $product ? $product->get_id() : '' ); ?>" data-subscription-id="<?php echo esc_attr( $switch_data ? $switch_data['subscription']->get_id() : '' ); ?>">
+		<dialog class="newspack-ui newspack-ui__modal-container newspack__subscription-tiers" data-state="<?php echo esc_attr( $initial_state ); ?>" data-product-id="<?php echo esc_attr( $product ? $product->get_id() : '' ); ?>" data-subscription-id="<?php echo esc_attr( $switch_data ? $switch_data['subscription']->get_id() : '' ); ?>">
 			<div class="newspack-ui__modal-container__overlay"></div>
 			<div class="newspack-ui__modal newspack-ui__modal--small">
 				<header class="newspack-ui__modal__header">
@@ -971,7 +971,7 @@ class Subscriptions_Tiers {
 					<?php self::render_form( $product, $title, $button_label, $switch_data ); ?>
 				</div>
 			</div>
-		</div>
+		</dialog>
 		<?php
 	}
 

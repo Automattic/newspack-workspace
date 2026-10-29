@@ -6,17 +6,17 @@ import classnames from 'classnames';
 /**
  * WordPress dependencies.
  */
-import { DropdownMenu, MenuGroup, MenuItem, Notice, SlotFillProvider, createSlotFill } from '@wordpress/components';
+import { Notice, SlotFillProvider, createSlotFill } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { cloneElement, createInterpolateElement, isValidElement, useLayoutEffect, useRef, useState, forwardRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
-import { category, chevronLeft, moreVertical } from '@wordpress/icons';
+import { category, chevronLeft, moreVertical, plus } from '@wordpress/icons';
 
 /**
  * Internal dependencies
  */
-import { Footer, DebugBadge, Button, TabbedNavigation, PluginInstaller, SectionHeader, HandoffMessage, Page, Waiting } from '../';
+import { Footer, DebugBadge, TabbedNavigation, PluginInstaller, SectionHeader, HandoffMessage, Page, Waiting } from '../';
 import { activeBreadcrumbs, activeSection, appendSectionName } from './breadcrumbs-select';
 import Router from '../proxied-imports/router';
 import registerStore, { WIZARD_STORE_NAMESPACE } from './store';
@@ -38,7 +38,7 @@ export { WizardBanner };
  * React elements from @wordpress/icons can't cross webpack entry point boundaries
  * because each bundle has its own copy of the icon primitives.
  */
-const ICON_REGISTRY = { chevronLeft, category, moreVertical };
+const ICON_REGISTRY = { chevronLeft, category, moreVertical, plus };
 const resolveIcon = icon => {
 	if ( typeof icon === 'string' ) {
 		return ICON_REGISTRY[ icon ] || null;
@@ -227,9 +227,6 @@ const Wizard = (
 		subTitle: headerSubTitle,
 	} = headerData;
 
-	const mainActions = actions?.filter( action => action.type === 'primary' || action.type === 'secondary' );
-	const moreActions = actions?.filter( action => action.type === 'more' );
-
 	// Trigger initial data fetch. Some sections might not use the wizard data,
 	// but for consistency, fetching is triggered regardless of the section.
 	useSelect( select => isInitialFetchTriggered && select( WIZARD_STORE_NAMESPACE ).getWizardAPIData( apiSlug ) );
@@ -375,67 +372,14 @@ const Wizard = (
 		</>
 	);
 
-	const headerActions =
-		actions?.length > 0 ? (
-			<>
-				{ mainActions.map( ( action, index ) => (
-					<Button
-						key={ index }
-						aria-label={ action.ariaLabel }
-						className="newspack-wizard__actions__main"
-						href={ action.href }
-						icon={ resolveIcon( action.icon ) }
-						variant={ action.type }
-						onClick={ action.action }
-						disabled={ action.disabled || false }
-						isDestructive={ action.destructive || false }
-					>
-						{ action.label }
-					</Button>
-				) ) }
-				<DropdownMenu
-					className={ moreActions?.length === 0 ? 'newspack-wizard__actions__more--primary-only' : '' }
-					icon={ moreVertical }
-					label={ __( 'More', 'newspack-plugin' ) }
-					popoverProps={ { className: 'newspack-wizard__actions__more' } }
-				>
-					{ () =>
-						// Split actions into groups whenever an action opts in via `separator: true`.
-						// Consecutive MenuGroups render the WordPress-standard divider between them.
-						actions
-							.reduce( ( groups, action ) => {
-								if ( action.separator || groups.length === 0 ) {
-									groups.push( [] );
-								}
-								groups[ groups.length - 1 ].push( action );
-								return groups;
-							}, [] )
-							.map( ( group, groupIndex ) => (
-								<MenuGroup key={ groupIndex }>
-									{ group.map( ( action, index ) => (
-										<MenuItem
-											key={ index }
-											aria-label={ action.ariaLabel }
-											className={
-												action.type === 'primary' || action.type === 'secondary'
-													? 'newspack-wizard__actions__more__main'
-													: 'newspack-wizard__actions__more__more'
-											}
-											icon={ action.icon }
-											href={ action.href }
-											onClick={ action.action }
-											disabled={ action.disabled || false }
-											isDestructive={ action.destructive || false }
-										>
-											{ action.label }
-										</MenuItem>
-									) ) }
-								</MenuGroup>
-							) )
-					}
-				</DropdownMenu>
-			</>
-		) : undefined;
+	const headerActions = actions?.length
+		? actions.map( ( { action, icon, mobileIcon, ...rest } ) => ( {
+				...rest,
+				onClick: action ?? rest.onClick,
+				icon: resolveIcon( icon ),
+				mobileIcon: resolveIcon( mobileIcon ),
+		  } ) )
+		: undefined;
 
 	return (
 		<SlotFillProvider>

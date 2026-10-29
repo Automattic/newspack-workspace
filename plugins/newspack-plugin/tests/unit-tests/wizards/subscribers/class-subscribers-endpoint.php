@@ -42,6 +42,14 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	private $group_product_ids = [];
 
 	/**
+	 * Callbacks this test attached to the network filters, as [ hook, callback ]
+	 * pairs, so tear_down() detaches exactly what the test added.
+	 *
+	 * @var array[]
+	 */
+	private $network_callbacks = [];
+
+	/**
 	 * Callbacks hooked to wcs_get_users_subscriptions by create_gifted_subscription().
 	 *
 	 * @var callable[]
@@ -78,6 +86,7 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		$orders_database        = [];
 		$this->user_ids         = [];
 		$this->group_product_ids = [];
+		$this->network_callbacks = [];
 		$this->gift_filters     = [];
 		// The gifting stub's recipient map is static and shared with other test files.
 		\WCS_Gifting::$recipients = [];
@@ -104,6 +113,10 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 			wp_delete_user( $user_id );
 		}
 		$this->user_ids = [];
+		foreach ( $this->network_callbacks as list( $hook, $callback ) ) {
+			remove_filter( $hook, $callback );
+		}
+		$this->network_callbacks = [];
 		Group_Subscription_Settings::clear_group_subscription_ids_cache();
 		parent::tear_down();
 	}
@@ -341,6 +354,57 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	 */
 	private function dispatch_plans(): WP_REST_Response {
 		return rest_get_server()->dispatch( new WP_REST_Request( 'GET', '/newspack/v1/wizard/newspack-subscribers/plans' ) );
+	}
+
+	/**
+	 * Stand in for newspack-network's subscription index, which this suite does not
+	 * load. The callback is detached in tear_down().
+	 *
+	 * @param array[] $rows Index rows, as network_index_row() shapes them.
+	 *
+	 * @return void
+	 */
+	private function stub_network_index( array $rows ) {
+		$callback = fn( $existing ) => array_merge( is_array( $existing ) ? $existing : [], $rows );
+		add_filter( 'newspack_subscribers_network_subscription_index', $callback );
+		$this->network_callbacks[] = [ 'newspack_subscribers_network_subscription_index', $callback ];
+	}
+
+	/**
+	 * One row of the network subscription index: a subscription record plus the ID of
+	 * the reader it belongs to.
+	 *
+	 * @param int    $user_id   The reader's user ID.
+	 * @param string $status    The raw WooCommerce Subscriptions status.
+	 * @param string $plan      The plan name on the site that manages the subscription.
+	 * @param string $site_name The name of that site.
+	 *
+	 * @return array
+	 */
+	private function network_index_row( int $user_id, string $status, string $plan, string $site_name = 'Node Daily' ): array {
+		static $next_id = 9000;
+		return [
+			'user_id'   => $user_id,
+			'id'        => ++$next_id,
+			'site_url'  => 'https://node-b.example.test',
+			'site_name' => $site_name,
+			'status'    => $status,
+			'plan'      => $plan,
+			'edit_url'  => 'https://node-b.example.test/wp-admin/post.php?action=edit',
+		];
+	}
+
+	/**
+	 * The reader IDs a subscribers request returns, sorted.
+	 *
+	 * @param array $params Query params for the request.
+	 *
+	 * @return int[]
+	 */
+	private function filtered_ids( array $params ): array {
+		$ids = array_column( $this->dispatch( $params )->get_data()['items'], 'id' );
+		sort( $ids );
+		return $ids;
 	}
 
 	/**
@@ -585,6 +649,394 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'editUrl', $item['subscriptions'][0] );
 		$this->assertIsString( $item['subscriptions'][0]['editUrl'] );
 		$this->assertEmpty( $item['groups'] );
+	}
+
+	/**
+	 * A subscription managed on another network site reaches the list row too: it
+	 * sets the row's status and shows under the plan name with its site in
+	 * brackets, so a reader with nothing local still shows as a subscriber.
+	 */
+	public function test_list_row_includes_a_subscription_managed_on_another_network_site() {
+		$this->login_admin();
+		$reader_id = $this->create_reader( 'Across' );
+		// Stands in for newspack-network, which this suite does not load.
+		$records  = [
+			[
+				'id'        => 500,
+				'site_url'  => 'https://node-b.example.test',
+				'site_name' => 'Node Daily',
+				'status'    => 'active',
+				'plan'      => 'Fan Membership',
+				'edit_url'  => 'https://node-b.example.test/wp-admin/post.php?post=500&action=edit',
+			],
+		];
+		$for_user = fn( $existing, $user_id ) => (int) $user_id === $reader_id ? $records : $existing;
+		add_filter( 'newspack_subscribers_network_subscriptions', $for_user, 10, 2 );
+		$this->network_callbacks[] = [ 'newspack_subscribers_network_subscriptions', $for_user ];
+
+		$items = $this->dispatch()->get_data()['items'];
+
+		$this->assertCount( 1, $items );
+		$this->assertSame( $reader_id, $items[0]['id'] );
+		$this->assertSame( 'active', $items[0]['status'] );
+		$this->assertCount( 1, $items[0]['subscriptions'] );
+		$this->assertSame( 'Fan Membership (Node Daily)', $items[0]['subscriptions'][0]['plan'] );
+		$this->assertSame( 'Fan Membership', $items[0]['subscriptions'][0]['planName'], 'The bare plan name travels too, so the row can name the site outside the plan link.' );
+		$this->assertSame( 'Node Daily', $items[0]['subscriptions'][0]['managedOn']['name'] );
+	}
+
+	/**
+	 * The Active filter counts a subscription managed on another network site: a
+	 * reader whose only subscription lives elsewhere shows an Active badge in the
+	 * list, so filtering on Active has to return them, and `total` has to count them.
+	 * The raw status is mapped like any other (pending-cancel is still entitled).
+	 */
+	public function test_status_filter_counts_a_subscription_managed_on_another_network_site() {
+		$this->login_admin();
+		$remote_only    = $this->create_reader( 'RemoteOnly' );
+		$pending_cancel = $this->create_reader( 'RemotePendingCancel' );
+		$remote_wait    = $this->create_reader( 'RemotePending' );
+		$local_only     = $this->create_reader( 'LocalOnly' );
+		$this->create_reader( 'NoSubscription' );
+		$this->create_individual_subscription( $local_only, 'active' );
+		$this->stub_network_index(
+			[
+				$this->network_index_row( $remote_only, 'active', 'Fan Membership' ),
+				$this->network_index_row( $pending_cancel, 'pending-cancel', 'Fan Membership' ),
+				$this->network_index_row( $remote_wait, 'pending', 'Fan Membership' ),
+			]
+		);
+
+		$data     = $this->dispatch( [ 'status' => [ 'active' ] ] )->get_data();
+		$ids      = array_column( $data['items'], 'id' );
+		$expected = [ $remote_only, $pending_cancel, $local_only ];
+		sort( $ids );
+		sort( $expected );
+		$this->assertSame( $expected, $ids, 'Readers whose only live subscription is on another site are in the Active filter.' );
+		$this->assertSame( 3, $data['total'], 'The total counts the readers holding a subscription elsewhere.' );
+
+		$this->assertSame( [ $remote_wait ], $this->filtered_ids( [ 'status' => [ 'pending' ] ] ), 'A pending subscription elsewhere matches the Pending filter, and only that one.' );
+	}
+
+	/**
+	 * The Cancelled filter keeps the badge's reduction across sites: a cancelled plan
+	 * qualifies a reader only when nothing live remains, wherever the live plan sits.
+	 */
+	public function test_cancelled_filter_reduces_across_local_and_network_subscriptions() {
+		$this->login_admin();
+		$remote_cancelled_local_live = $this->create_reader( 'RemoteCancelledLocalLive' );
+		$remote_cancelled_only       = $this->create_reader( 'RemoteCancelledOnly' );
+		$local_cancelled_remote_live = $this->create_reader( 'LocalCancelledRemoteLive' );
+		$remote_expired_only         = $this->create_reader( 'RemoteExpiredOnly' );
+		$this->create_individual_subscription( $remote_cancelled_local_live, 'active' );
+		$this->create_individual_subscription( $local_cancelled_remote_live, 'cancelled' );
+		$this->stub_network_index(
+			[
+				$this->network_index_row( $remote_cancelled_local_live, 'cancelled', 'Fan Membership' ),
+				$this->network_index_row( $remote_cancelled_only, 'cancelled', 'Fan Membership' ),
+				$this->network_index_row( $local_cancelled_remote_live, 'active', 'Fan Membership' ),
+				$this->network_index_row( $remote_expired_only, 'expired', 'Fan Membership' ),
+			]
+		);
+
+		$expected = [ $remote_cancelled_only, $remote_expired_only ];
+		sort( $expected );
+		$this->assertSame( $expected, $this->filtered_ids( [ 'status' => [ 'cancelled' ] ] ), 'Only readers with nothing live left, on any site, are cancelled; an expired subscription elsewhere counts as cancelled.' );
+
+		$expected = [ $remote_cancelled_local_live, $local_cancelled_remote_live ];
+		sort( $expected );
+		$this->assertSame( $expected, $this->filtered_ids( [ 'status' => [ 'active' ] ] ), 'A live subscription on either side keeps the reader in Active.' );
+	}
+
+	/**
+	 * A plan on another site goes by "Plan (Site)", so it never collides with a local
+	 * product of the same name: each filter returns only its own holders.
+	 */
+	public function test_plan_filter_tells_a_network_plan_from_a_local_plan_of_the_same_name() {
+		$this->login_admin();
+		$product_id    = $this->create_subscription_product( 'Fan Membership' );
+		$local_holder  = $this->create_reader( 'LocalHolder' );
+		$remote_holder = $this->create_reader( 'RemoteHolder' );
+		$this->create_individual_subscription( $local_holder, 'active', $product_id );
+		$this->stub_network_index( [ $this->network_index_row( $remote_holder, 'active', 'Fan Membership' ) ] );
+
+		$this->assertSame( [ $remote_holder ], $this->filtered_ids( [ 'plan' => [ 'Fan Membership (Node Daily)' ] ] ), 'The network label returns only the reader holding it elsewhere.' );
+		$this->assertSame( [ $local_holder ], $this->filtered_ids( [ 'plan' => [ 'Fan Membership' ] ] ), 'The bare name returns only the reader holding the local product.' );
+	}
+
+	/**
+	 * A cancelled network plan qualifies its holder only when nothing live remains,
+	 * the rule customer_ids_for_plans() applies to local plans. A live subscription
+	 * counts wherever it sits: on the same site, another one, or this one.
+	 */
+	public function test_a_cancelled_network_plan_matches_only_a_fully_churned_reader() {
+		$this->login_admin();
+		$churned         = $this->create_reader( 'Churned' );
+		$moved_elsewhere = $this->create_reader( 'MovedElsewhere' );
+		$moved_here      = $this->create_reader( 'MovedHere' );
+		$this->create_individual_subscription( $moved_here, 'active' );
+		$this->stub_network_index(
+			[
+				$this->network_index_row( $churned, 'cancelled', 'Fan Membership' ),
+				$this->network_index_row( $moved_elsewhere, 'cancelled', 'Fan Membership' ),
+				$this->network_index_row( $moved_elsewhere, 'active', 'Fan Membership Plus', 'Hub Gazette' ),
+				$this->network_index_row( $moved_here, 'cancelled', 'Fan Membership' ),
+			]
+		);
+
+		$this->assertSame( [ $churned ], $this->filtered_ids( [ 'plan' => [ 'Fan Membership (Node Daily)' ] ] ) );
+		$this->assertSame( [ $moved_elsewhere ], $this->filtered_ids( [ 'plan' => [ 'Fan Membership Plus (Hub Gazette)' ] ] ) );
+	}
+
+	/**
+	 * The plans endpoint offers each network plan once however many readers hold it,
+	 * and every option filters back to its holders: the round trip /plans exists to
+	 * guarantee holds for plans on other sites too.
+	 */
+	public function test_plans_endpoint_lists_a_network_plan_once_and_it_filters_to_its_holders() {
+		$this->login_admin();
+		$this->create_subscription_product( 'Digital Monthly' );
+		$first  = $this->create_reader( 'NetworkHolderOne' );
+		$second = $this->create_reader( 'NetworkHolderTwo' );
+		$third  = $this->create_reader( 'NetworkHolderThree' );
+		$this->stub_network_index(
+			[
+				$this->network_index_row( $first, 'active', 'Fan Membership' ),
+				$this->network_index_row( $second, 'cancelled', 'Fan Membership' ),
+				$this->network_index_row( $third, 'active', 'Fan Membership', 'Hub Gazette' ),
+			]
+		);
+
+		$plans = $this->dispatch_plans()->get_data();
+
+		$this->assertSame(
+			[ 'Digital Monthly', 'Fan Membership (Hub Gazette)', 'Fan Membership (Node Daily)' ],
+			$plans['items'],
+			'Local plans and network plans, each once, in the one natural order.'
+		);
+		$this->assertSame( 3, $plans['total'] );
+
+		$expected = [ $first, $second ];
+		sort( $expected );
+		$this->assertSame( $expected, $this->filtered_ids( [ 'plan' => [ 'Fan Membership (Node Daily)' ] ] ), 'Both holders of the Node Daily plan, whatever their status, are in its filter.' );
+		$this->assertSame( [ $third ], $this->filtered_ids( [ 'plan' => [ 'Fan Membership (Hub Gazette)' ] ] ) );
+	}
+
+	/**
+	 * A network plan whose site name holds a "<" still filters back to its holders.
+	 *
+	 * The filter sanitizes the submitted plan names, which rewrites a "<", so the option
+	 * /plans offers has to be compared in the same sanitized form.
+	 */
+	public function test_a_network_plan_with_markup_in_its_site_name_filters_to_its_holders() {
+		$this->login_admin();
+		$holder = $this->create_reader( 'MarkupSiteHolder' );
+		$this->stub_network_index( [ $this->network_index_row( $holder, 'active', 'Fan Membership', 'I <3 News' ) ] );
+
+		$plans = $this->dispatch_plans()->get_data()['items'];
+
+		$this->assertSame( [ 'Fan Membership (I <3 News)' ], $plans, '/plans offers the label as the row shows it.' );
+		$this->assertSame( [ $holder ], $this->filtered_ids( [ 'plan' => [ $plans[0] ] ] ), 'The option returned by /plans filters to its holder.' );
+
+		$sites = $this->dispatch_plans()->get_data()['sites'];
+		$this->assertSame( [ 'I <3 News' ], $sites );
+		$this->assertSame( [ $holder ], $this->filtered_ids( [ 'managed_on' => $sites ] ), 'The Managed on option returned by /plans filters to its holder.' );
+	}
+
+	/**
+	 * The Managed on filter returns readers by where their subscriptions are managed:
+	 * this site, or other network sites by name. /plans lists each network site once
+	 * as an option, and any mix of options returns every reader matching one of them.
+	 */
+	public function test_managed_on_filter_matches_readers_by_where_their_subscriptions_are_managed() {
+		$this->login_admin();
+		$local_only = $this->create_reader( 'ManagedLocalOnly' );
+		$node_only  = $this->create_reader( 'ManagedNodeOnly' );
+		$hub_only   = $this->create_reader( 'ManagedHubOnly' );
+		$both       = $this->create_reader( 'ManagedBoth' );
+		$this->create_reader( 'ManagedNowhere' );
+		$this->create_individual_subscription( $local_only, 'active' );
+		$this->create_individual_subscription( $both, 'active' );
+		$this->stub_network_index(
+			[
+				$this->network_index_row( $node_only, 'active', 'Fan Membership' ),
+				$this->network_index_row( $hub_only, 'on-hold', 'Fan Membership', 'Hub Gazette' ),
+				$this->network_index_row( $both, 'active', 'Fan Membership', 'Hub Gazette' ),
+			]
+		);
+
+		$this->assertSame( [ 'Hub Gazette', 'Node Daily' ], $this->dispatch_plans()->get_data()['sites'], 'Each network site is offered once, in natural order.' );
+
+		$expected = [ $local_only, $both ];
+		sort( $expected );
+		$this->assertSame( $expected, $this->filtered_ids( [ 'managed_on' => [ 'this-site' ] ] ), 'This site returns readers holding a local subscription, whatever they hold elsewhere.' );
+
+		$this->assertSame( [ $node_only ], $this->filtered_ids( [ 'managed_on' => [ 'Node Daily' ] ] ) );
+
+		$expected = [ $node_only, $hub_only, $both ];
+		sort( $expected );
+		$this->assertSame( $expected, $this->filtered_ids( [ 'managed_on' => [ 'Node Daily', 'Hub Gazette' ] ] ), 'Several sites return readers managed on any of them.' );
+	}
+
+	/**
+	 * A cancelled subscription counts towards Managed on only when nothing live
+	 * remains, as in the Subscription column, which hides it otherwise.
+	 */
+	public function test_managed_on_filter_skips_a_cancelled_subscription_while_a_live_one_remains() {
+		$this->login_admin();
+		$moved_here  = $this->create_reader( 'MovedHere' );
+		$moved_there = $this->create_reader( 'MovedThere' );
+		$churned     = $this->create_reader( 'ChurnedThere' );
+		$this->create_individual_subscription( $moved_here, 'active' );
+		$this->create_individual_subscription( $moved_there, 'cancelled' );
+		$this->stub_network_index(
+			[
+				$this->network_index_row( $moved_here, 'cancelled', 'Fan Membership' ),
+				$this->network_index_row( $moved_there, 'active', 'Fan Membership' ),
+				$this->network_index_row( $churned, 'cancelled', 'Fan Membership' ),
+			]
+		);
+
+		$expected = [ $moved_there, $churned ];
+		sort( $expected );
+		$this->assertSame( $expected, $this->filtered_ids( [ 'managed_on' => [ 'Node Daily' ] ] ), 'A reader who moved here no longer counts as managed on Node Daily.' );
+		$this->assertSame( [ $moved_here ], $this->filtered_ids( [ 'managed_on' => [ 'this-site' ] ] ), 'A reader who moved away no longer counts as managed here.' );
+	}
+
+	/**
+	 * The index is read by the same rules as the list row's network subscriptions, so
+	 * a plan label can never read one way in the Subscription column and another in
+	 * the filter: a padded site name is trimmed and a subscription with no plan falls
+	 * back to its ID, in both. Whatever the row would drop, the index drops too.
+	 */
+	public function test_network_index_follows_the_same_record_rules_as_the_list_row() {
+		$this->login_admin();
+		$reader_id = $this->create_reader( 'Labelled' );
+		$ghost_id  = $this->create_reader( 'Ghost' );
+
+		$record = [
+			'id'        => 42,
+			'site_url'  => 'https://node-b.example.test',
+			'site_name' => '  Node Daily  ',
+			'status'    => 'active',
+			'edit_url'  => 'https://node-b.example.test/wp-admin/post.php?action=edit',
+		];
+		// The same record answers both filters, the way newspack-network does.
+		$for_user = fn( $existing, $user_id ) => (int) $user_id === $reader_id ? [ $record ] : $existing;
+		add_filter( 'newspack_subscribers_network_subscriptions', $for_user, 10, 2 );
+		$this->network_callbacks[] = [ 'newspack_subscribers_network_subscriptions', $for_user ];
+
+		$valid     = array_merge( $record, [ 'user_id' => $reader_id ] );
+		$ghost     = [
+			'user_id'   => $ghost_id,
+			'id'        => 77,
+			'site_url'  => 'https://node-b.example.test',
+			'site_name' => 'Node Daily',
+			'status'    => 'active',
+			'plan'      => 'Ghost',
+			'edit_url'  => '',
+		];
+		$malformed = [
+			'not an array',
+			array_merge( $ghost, [ 'id' => 0 ] ),
+			array_merge( $ghost, [ 'id' => 'abc' ] ),
+			array_merge( $ghost, [ 'site_name' => '   ' ] ),
+			array_merge( $ghost, [ 'site_name' => [ 'Node Daily' ] ] ),
+			array_merge( $ghost, [ 'status' => '' ] ),
+			array_merge( $ghost, [ 'status' => [ 'active' ] ] ),
+			array_merge( $ghost, [ 'user_id' => 0 ] ),
+			array_merge( $ghost, [ 'user_id' => 'abc' ] ),
+			array_diff_key( $ghost, [ 'user_id' => true ] ),
+		];
+		$this->stub_network_index( array_merge( [ $valid ], $malformed ) );
+
+		$row_plan = $this->dispatch( [ 'search' => $this->scope_token . ' Labelled' ] )->get_data()['items'][0]['subscriptions'][0]['plan'];
+		$this->assertSame( 'Subscription #42 (Node Daily)', $row_plan );
+
+		$this->assertSame( [ $row_plan ], $this->dispatch_plans()->get_data()['items'], 'The only option is the valid row\'s, under the label the row shows; nothing from a malformed row leaks in.' );
+		$this->assertSame( [ $reader_id ], $this->filtered_ids( [ 'plan' => [ $row_plan ] ] ), 'The label on the row filters back to the reader.' );
+		$this->assertSame( [ $reader_id ], $this->filtered_ids( [ 'status' => [ 'active' ] ] ), 'A malformed row puts nobody in a status filter.' );
+	}
+
+	/**
+	 * An index that is not a list is ignored rather than fatal.
+	 */
+	public function test_a_network_index_that_is_not_a_list_is_ignored() {
+		$this->login_admin();
+		$this->create_subscription_product( 'Digital Monthly' );
+		$callback = fn() => 'not a list';
+		add_filter( 'newspack_subscribers_network_subscription_index', $callback );
+		$this->network_callbacks[] = [ 'newspack_subscribers_network_subscription_index', $callback ];
+
+		$this->assertSame( [ 'Digital Monthly' ], $this->dispatch_plans()->get_data()['items'] );
+		$this->assertSame( [], $this->filtered_ids( [ 'status' => [ 'active' ] ] ) );
+	}
+
+	/**
+	 * The index is bounded by the filter cap and read once per request, however many
+	 * filters ask for it, and again on the next one: a new request must not reuse a
+	 * stale memo.
+	 */
+	public function test_network_index_is_read_once_per_request_with_the_filter_cap() {
+		$this->login_admin();
+		$reader_id = $this->create_reader( 'Counted' );
+		$calls     = [];
+		$callback  = function ( $existing, $max_users ) use ( &$calls, $reader_id ) {
+			$calls[] = $max_users;
+			return array_merge( $existing, [ $this->network_index_row( $reader_id, 'active', 'Fan Membership' ) ] );
+		};
+		add_filter( 'newspack_subscribers_network_subscription_index', $callback, 10, 2 );
+		$this->network_callbacks[] = [ 'newspack_subscribers_network_subscription_index', $callback ];
+
+		$this->dispatch(
+			[
+				'status' => [ 'active', 'cancelled' ],
+				'plan'   => [ 'Fan Membership (Node Daily)' ],
+			]
+		);
+		$this->assertSame( [ \Newspack\Subscribers_Wizard::FILTER_INCLUDE_CAP ], $calls, 'One read, bounded by the filter cap, for a request with status and plan filters.' );
+
+		$this->dispatch( [ 'status' => [ 'active' ] ] );
+		$this->assertCount( 2, $calls, 'The next request reads the index afresh.' );
+		$this->dispatch_plans();
+		$this->assertCount( 3, $calls, 'So does the plans endpoint.' );
+	}
+
+	/**
+	 * An index with no rows changes nothing, down to the byte: a site on the network
+	 * with nobody subscribed elsewhere answers the plans and the filters exactly as a
+	 * site that is not on it.
+	 */
+	public function test_an_empty_network_index_changes_no_response() {
+		$this->login_admin();
+		$product_id = $this->create_subscription_product( 'Digital Monthly' );
+		$active     = $this->create_reader( 'Active' );
+		$cancelled  = $this->create_reader( 'Cancelled' );
+		$this->create_individual_subscription( $active, 'active', $product_id );
+		$this->create_individual_subscription( $cancelled, 'cancelled', $product_id );
+		$this->create_group_subscription( $this->create_reader( 'GroupOwner' ) );
+
+		$requests = [
+			[ 'status' => [ 'active' ] ],
+			[ 'status' => [ 'cancelled' ] ],
+			[ 'plan' => [ 'Digital Monthly' ] ],
+			[
+				'status' => [ 'active', 'cancelled' ],
+				'plan'   => [ 'Acme Team' ],
+			],
+		];
+
+		$without_plans    = $this->dispatch_plans()->get_data();
+		$without_requests = array_map( fn( $params ) => $this->dispatch( $params )->get_data(), $requests );
+		$this->assertNotEmpty( $without_plans['items'], 'The fixture really offers plans.' );
+		$this->assertSame( 2, $without_requests[0]['total'], 'The fixture really filters: the individual and the group owner are active, the cancelled reader is not.' );
+
+		$this->stub_network_index( [] );
+
+		$this->assertSame( $without_plans, $this->dispatch_plans()->get_data() );
+		foreach ( $requests as $i => $params ) {
+			$this->assertSame( $without_requests[ $i ], $this->dispatch( $params )->get_data() );
+		}
 	}
 
 	/**
@@ -1240,6 +1692,48 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 
 		$this->assertSame( [ $churned ], $matched, 'Only the reader whose row still shows the cancelled plan is returned.' );
 		$this->assertNotContains( $switcher, $matched, 'A reader who moved to a live plan is not returned under the plan they left.' );
+	}
+
+	/**
+	 * The Complimentary filter keeps comp readers listed and finds them by the stamp,
+	 * reduced like the plan filter: a reader who moved from a comp to a paid plan is
+	 * not returned, one whose only, cancelled, subscription was a comp is. A comp
+	 * group's members inherit its stamp. Each row marks which of its subscriptions is
+	 * the comp, so the Access column agrees with the filter.
+	 */
+	public function test_complimentary_filter_matches_stamped_subscriptions() {
+		$this->login_admin();
+		$stamp = function ( WC_Subscription $subscription ) {
+			$subscription->update_meta_data( \Newspack\Complimentary_Access::META_KEY, 'yes' );
+			return $subscription;
+		};
+
+		$comp = $this->create_reader( 'Comp' );
+		$stamp( $this->create_individual_subscription( $comp ) );
+		$this->create_individual_subscription( $comp );
+
+		$moved_on = $this->create_reader( 'Moved' );
+		$stamp( $this->create_individual_subscription( $moved_on, 'cancelled' ) );
+		$this->create_individual_subscription( $moved_on );
+
+		$churned = $this->create_reader( 'Churned' );
+		$stamp( $this->create_individual_subscription( $churned, 'cancelled' ) );
+
+		$paying = $this->create_reader( 'Paying' );
+		$this->create_individual_subscription( $paying );
+
+		$group_owner  = $this->create_reader( 'CompGroupOwner' );
+		$group_member = $this->create_reader( 'CompGroupMember' );
+		$group        = $stamp( $this->create_group_subscription( $group_owner ) );
+		add_user_meta( $group_member, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $group->get_id() );
+
+		$items = $this->dispatch( [ 'access' => [ 'complimentary' ] ] )->get_data()['items'];
+		$this->assertEqualsCanonicalizing( [ $comp, $churned, $group_owner, $group_member ], array_column( $items, 'id' ) );
+
+		$comp_row = current( wp_list_filter( $items, [ 'id' => $comp ] ) );
+		$this->assertEqualsCanonicalizing( [ true, false ], array_column( $comp_row['subscriptions'], 'isComplimentary' ) );
+		$member_row = current( wp_list_filter( $items, [ 'id' => $group_member ] ) );
+		$this->assertTrue( $member_row['groups'][0]['isComplimentary'] );
 	}
 
 	/**
