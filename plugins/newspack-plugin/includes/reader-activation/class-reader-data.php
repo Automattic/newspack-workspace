@@ -102,6 +102,34 @@ final class Reader_Data {
 	}
 
 	/**
+	 * Enumerate browser-only keys.
+	 *
+	 * These keys change on most page views and nothing on the server reads them,
+	 * so sending them would cost a REST request per logged-in page view. The
+	 * browser store never sends them, and never hydrates them, so a copy stored
+	 * before a key became browser-only can't overwrite the browser's.
+	 *
+	 * `pageviews` is the Campaigns prompt-frequency counter, so a logged-in
+	 * reader's prompt frequency counts per device, as an anonymous reader's
+	 * always has.
+	 *
+	 * @return string[] Names of browser-only keys.
+	 */
+	public static function get_local_keys(): array {
+		/**
+		 * Filters the list of browser-only reader data keys.
+		 *
+		 * Only list a key nothing on the server reads: its stored value stops updating.
+		 *
+		 * @param string[] $keys Names of browser-only keys.
+		 */
+		$keys = apply_filters( 'newspack_reader_data_local_keys', [ 'pageviews', 'referrer' ] );
+		// Removing a default leaves a gap in the keys, which would reach the
+		// browser as a JSON object instead of a list and break the store.
+		return array_values( (array) $keys );
+	}
+
+	/**
 	 * Register all data event handlers.
 	 */
 	public static function register_data_event_handlers() {
@@ -150,6 +178,7 @@ final class Reader_Data {
 			'is_switched_session' => $is_switched_session,
 			'reader_activity'     => self::$reader_activity,
 			'read_only_keys'      => self::get_read_only_keys(),
+			'local_keys'          => self::get_local_keys(),
 			'api_url'             => \get_rest_url( null, NEWSPACK_API_NAMESPACE . '/reader-data' ),
 			'session_url'         => \get_rest_url( null, NEWSPACK_API_NAMESPACE . '/reader/session' ),
 		];
@@ -186,6 +215,13 @@ final class Reader_Data {
 					],
 					'value' => [
 						'type' => 'string',
+					],
+					'items' => [
+						'type'          => 'object',
+						// Bounds one request's work. Core rejects a larger batch whole, and
+						// the browser keeps every key of a rejected request pending, so this
+						// must stay well above what one sync tick sends: a handful of keys.
+						'maxProperties' => self::MAX_ITEMS,
 					],
 				],
 			]
@@ -580,13 +616,17 @@ final class Reader_Data {
 	}
 
 	/**
-	 * API callback to update an item.
+	 * API callback to update an item, or a batch of items.
 	 *
 	 * @param WP_REST_Request $request Request object.
 	 *
 	 * @return WP_REST_Response
 	 */
 	public static function api_update_item( $request ) {
+		$items = $request->get_param( 'items' );
+		if ( null !== $items ) {
+			return self::api_update_items( $items );
+		}
 		$key   = $request->get_param( 'key' );
 		$value = $request->get_param( 'value' );
 		if ( ! $key || ! $value ) {
@@ -604,6 +644,50 @@ final class Reader_Data {
 			return $res;
 		}
 		return new \WP_REST_Response( [ 'success' => true ] );
+	}
+
+	/**
+	 * Apply a batch of item writes, as the browser store sends every pending key
+	 * in one request. A null value deletes the key.
+	 *
+	 * Keys are applied independently and rejections are reported per key in a
+	 * successful response. A rejected key stays pending in the browser, so failing
+	 * the whole batch would hold every other key back on each page load.
+	 *
+	 * @param mixed $items Map of keys to stringified JSON values; a null value deletes its key.
+	 *
+	 * @return WP_REST_Response|WP_Error
+	 */
+	private static function api_update_items( mixed $items ): \WP_REST_Response|\WP_Error {
+		if ( ! is_array( $items ) || empty( $items ) ) {
+			return new \WP_Error( 'invalid_params', __( 'Invalid parameters.', 'newspack' ), [ 'status' => 400 ] );
+		}
+		$user_id        = \get_current_user_id();
+		$read_only_keys = self::get_read_only_keys();
+		$errors         = [];
+		foreach ( $items as $key => $value ) {
+			$key = (string) $key;
+			if ( '' === $key ) {
+				$errors[ $key ] = 'invalid_params';
+			} elseif ( in_array( $key, $read_only_keys, true ) ) {
+				$errors[ $key ] = 'read_only_key';
+			} elseif ( null === $value ) {
+				self::delete_item( $user_id, $key );
+			} elseif ( ! is_string( $value ) || null === json_decode( $value ) ) {
+				$errors[ $key ] = 'invalid_value';
+			} else {
+				$result = self::update_item( $user_id, $key, $value );
+				if ( \is_wp_error( $result ) ) {
+					$errors[ $key ] = $result->get_error_code();
+				}
+			}
+		}
+		return new \WP_REST_Response(
+			[
+				'success' => true,
+				'errors'  => (object) $errors,
+			]
+		);
 	}
 
 	/**
