@@ -527,6 +527,7 @@ final class Newspack_Popups_AB_Tests {
 				'duplicates'    => [],
 			];
 			$published_at = [];
+			$control_goal = null;
 			foreach ( $letters as $variant => $candidates ) {
 				// Two prompts on one letter: this page reports the first published
 				// one, or the first by ID when none is, and lists the rest so an
@@ -553,15 +554,22 @@ final class Newspack_Popups_AB_Tests {
 					}
 				}
 
-				// The control's goal wins; otherwise the first prompt that has one.
+				// The control's goal is the test's, an empty one included, since the
+				// editor sets the goal on version A only. A challenger's stored goal
+				// counts only while the test has no control.
 				$goal = self::sanitize_goal( get_post_meta( $kept->ID, self::META_GOAL, true ) );
-				if ( '' !== $goal && ( 'a' === $variant || '' === $test['goal'] ) ) {
+				if ( 'a' === $variant ) {
+					$control_goal = $goal;
+				} elseif ( '' !== $goal && '' === $test['goal'] ) {
 					$test['goal'] = $goal;
 				}
 
 				if ( 'publish' === $kept->post_status && '0000-00-00 00:00:00' !== $kept->post_date_gmt ) {
 					$published_at[ $variant ] = gmdate( 'Y-m-d\TH:i:s\Z', strtotime( $kept->post_date_gmt . ' UTC' ) );
 				}
+			}
+			if ( null !== $control_goal ) {
+				$test['goal'] = $control_goal;
 			}
 			$test['goal_label'] = $labels[ $test['goal'] ] ?? '';
 			$test['started_at'] = self::get_started_at( $published_at );

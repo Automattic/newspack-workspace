@@ -157,6 +157,22 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * The control's goal is the test's goal even when it is empty, because the
+	 * editor sets the goal on version A only; a challenger's stored goal is used
+	 * only while the test has no control.
+	 */
+	public function test_get_tests_takes_the_goal_from_the_control_even_when_empty() {
+		$challenger = $this->create_test_variant( 'goalless', 'b' );
+		update_post_meta( $challenger, Newspack_Popups_AB_Tests::META_GOAL, 'donation' );
+		$this->assertSame( 'donation', Newspack_Popups_AB_Tests::get_tests()[0]['goal'], 'With no control, the challenger\'s goal stands in.' );
+
+		$this->create_test_variant( 'goalless', 'a' );
+		$test = Newspack_Popups_AB_Tests::get_tests()[0];
+		$this->assertSame( '', $test['goal'] );
+		$this->assertSame( '', $test['goal_label'] );
+	}
+
+	/**
 	 * A Test ID made of digits stays the string it was saved as, so the route
 	 * that looks a test up by its sanitized ID still finds it.
 	 */
