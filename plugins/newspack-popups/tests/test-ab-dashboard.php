@@ -694,7 +694,8 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 		remove_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
 		$script = wp_scripts()->registered[ Newspack_Popups_AB_Dashboard::SCRIPT_HANDLE ] ?? null;
 		$this->assertNotNull( $script );
-		$this->assertSame( [ 'wp-element', 'wp-api-fetch' ], $script->deps );
+		// wp_set_script_translations() adds wp-i18n to whatever the manifest listed.
+		$this->assertSame( [ 'wp-element', 'wp-api-fetch', 'wp-i18n' ], $script->deps );
 		$this->assertSame( 'ab-tests-fixture', $script->ver );
 		$style = wp_styles()->registered[ Newspack_Popups_AB_Dashboard::SCRIPT_HANDLE ] ?? null;
 		$this->assertNotNull( $style );
