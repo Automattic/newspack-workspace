@@ -149,6 +149,16 @@ export const promptDescription = prompt => {
 	if ( 'future' === status ) {
 		descriptionMessages.push( __( 'Scheduled', 'newspack-plugin' ) );
 	}
+	if ( prompt.ab_test_id ) {
+		descriptionMessages.push(
+			sprintf(
+				// Translators: %1$s is the A/B test ID, %2$s is the variant letter.
+				__( 'A/B test: %1$s (variant %2$s)', 'newspack-plugin' ),
+				prompt.ab_test_id,
+				String( prompt.ab_variant || '' ).toUpperCase()
+			)
+		);
+	}
 	descriptionMessages.push( __( 'Frequency: ', 'newspack-plugin' ) + frequencyForPopup( prompt ) );
 	return descriptionMessages.length ? descriptionMessages.join( ' | ' ) : null;
 };
@@ -478,9 +488,13 @@ export const warningForPopup = ( prompts, prompt ) => {
 				( 0 === promptCategories.length && 0 === conflictCategories.length ) ||
 				promptCategories.some( category => conflictCategories.some( conflictCategory => category.term_id === conflictCategory.term_id ) );
 
+			// The arms of one A/B test overlap on purpose: each reader sees one of them.
+			const isSameAbTest = Boolean( prompt.ab_test_id ) && conflict.ab_test_id === prompt.ab_test_id;
+
 			return (
 				'publish' === conflict.status &&
 				conflict.id !== prompt.id &&
+				! isSameAbTest &&
 				isSameType( prompt, conflict ) &&
 				sharesSegments( prompt.segments, conflict.segments ) &&
 				hasConflictingCategory

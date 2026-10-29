@@ -175,6 +175,14 @@ const realCategory = { term_id: 5, name: 'Sports' };
 const otherCategory = { term_id: 6, name: 'News' };
 
 describe( 'promptDescription', () => {
+	it( 'names the A/B test and the variant when the prompt is in one', () => {
+		expect( promptDescription( overlay( { ab_test_id: 'hero', ab_variant: 'b' } ) ) ).toContain( 'A/B test: hero (variant B)' );
+	} );
+
+	it( 'says nothing about A/B tests when the prompt is in none', () => {
+		expect( promptDescription( overlay() ) ).not.toContain( 'A/B test' );
+	} );
+
 	it( 'renders a description from valid taxonomy arrays', () => {
 		const result = promptDescription(
 			overlay( {
@@ -227,6 +235,38 @@ describe( 'promptDescription', () => {
 describe( 'warningForPopup', () => {
 	it( 'test fixture is correctly set up as an overlay', () => {
 		expect( isOverlay( overlay() ) ).toBe( true );
+	} );
+
+	it( 'reports a published prompt in the same placement with no categories on either', () => {
+		const prompt = overlay( { id: 100 } );
+		const conflict = overlay( { id: 200, title: 'Other prompt' } );
+		const { container } = render( warningForPopup( [ prompt, conflict ], prompt ) );
+		expect( container.textContent ).toContain( 'Other prompt' );
+	} );
+
+	// Two prompts in one A/B test target the same readers in the same placement
+	// on purpose, and the view engine shows each reader one of them. `ab_test_id`
+	// is only on the payload while the test is valid and the feature is on.
+	it( 'does not report the other arm of the same A/B test as a conflict', () => {
+		const prompt = overlay( { id: 100, ab_test_id: 'hero', ab_variant: 'a' } );
+		const pair = overlay( { id: 200, title: 'Variant B', ab_test_id: 'hero', ab_variant: 'b' } );
+		expect( warningForPopup( [ prompt, pair ], prompt ) ).toBeNull();
+	} );
+
+	it( 'still reports a prompt outside the test', () => {
+		const prompt = overlay( { id: 100, ab_test_id: 'hero', ab_variant: 'a' } );
+		const pair = overlay( { id: 200, title: 'Variant B', ab_test_id: 'hero', ab_variant: 'b' } );
+		const third = overlay( { id: 300, title: 'Unrelated prompt' } );
+		const { container } = render( warningForPopup( [ prompt, pair, third ], prompt ) );
+		expect( container.textContent ).toContain( 'Unrelated prompt' );
+		expect( container.textContent ).not.toContain( 'Variant B' );
+	} );
+
+	it( 'reports a prompt in a different A/B test', () => {
+		const prompt = overlay( { id: 100, ab_test_id: 'hero', ab_variant: 'a' } );
+		const other = overlay( { id: 200, title: 'Other test', ab_test_id: 'footer', ab_variant: 'a' } );
+		const { container } = render( warningForPopup( [ prompt, other ], prompt ) );
+		expect( container.textContent ).toContain( 'Other test' );
 	} );
 
 	it( 'returns null when no conflicting prompts share segments and categories', () => {
