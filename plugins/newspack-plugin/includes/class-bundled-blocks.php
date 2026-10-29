@@ -17,11 +17,13 @@ defined( 'ABSPATH' ) || exit;
  * its class, function, block, route and hook names, so it only loads when the
  * newspack-blocks plugin is not active.
  *
- * It loads while this plugin's files are included, as newspack-blocks did: plugins
- * load alphabetically, so newspack-blocks ran before this plugin and before
- * WooCommerce and its extensions. Waiting for `plugins_loaded` would hook the copy
- * in after all of them, which changes the order of callbacks sharing a priority and
- * lets `class_exists()` checks that were always false in newspack-blocks pass.
+ * It loads while this plugin's files are included, so it still hooks in before this
+ * plugin and before WooCommerce and its extensions, as newspack-blocks did. Waiting
+ * for `plugins_loaded` would hook the copy in after all of them, which changes the
+ * order of callbacks sharing a priority and lets `class_exists()` checks that were
+ * always false in newspack-blocks pass. Plugins whose slugs sort between
+ * newspack-blocks and newspack-plugin (newspack-network, for one) now hook in before
+ * the copy, so they must not rely on running after it at the same priority.
  */
 final class Bundled_Blocks {
 	/**
