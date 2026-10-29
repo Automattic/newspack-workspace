@@ -16,10 +16,16 @@ defined( 'ABSPATH' ) || exit;
  * The copy keeps newspack-blocks' file layout relative to the plugin root, and
  * its class, function, block, route and hook names, so it only loads when the
  * newspack-blocks plugin is not active.
+ *
+ * It loads while this plugin's files are included, as newspack-blocks did: plugins
+ * load alphabetically, so newspack-blocks ran before this plugin and before
+ * WooCommerce and its extensions. Waiting for `plugins_loaded` would hook the copy
+ * in after all of them, which changes the order of callbacks sharing a priority and
+ * lets `class_exists()` checks that were always false in newspack-blocks pass.
  */
 final class Bundled_Blocks {
 	/**
-	 * Whether the newspack-blocks plugin was active when plugins loaded.
+	 * Whether the newspack-blocks plugin is active.
 	 *
 	 * @var bool|null Null until checked.
 	 */
@@ -36,23 +42,44 @@ final class Bundled_Blocks {
 	 * Initialize hooks.
 	 */
 	public static function init() {
-		// Every plugin file is included by now, so newspack-blocks has defined its constants if it's active.
-		\add_action( 'plugins_loaded', [ __CLASS__, 'maybe_load' ], 1 );
+		self::maybe_load();
 	}
 
 	/**
 	 * Whether the newspack-blocks plugin is active.
 	 *
-	 * The answer is cached on the first call, because loading the bundled copy
-	 * defines the same constant.
+	 * True when newspack-blocks has already loaded, or will load later in this
+	 * request. The answer is cached on the first call, because loading the bundled
+	 * copy defines the same constant.
 	 *
 	 * @return bool
 	 */
 	public static function is_legacy_plugin_active() {
 		if ( null === self::$is_legacy_plugin_active ) {
-			self::$is_legacy_plugin_active = defined( 'NEWSPACK_BLOCKS__VERSION' ); // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- newspack-blocks' own constant, not a site setting.
+			self::$is_legacy_plugin_active = defined( 'NEWSPACK_BLOCKS__VERSION' ) || self::will_legacy_plugin_load(); // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- newspack-blocks' own constant, not a site setting.
 		}
 		return self::$is_legacy_plugin_active;
+	}
+
+	/**
+	 * Whether WordPress will load newspack-blocks after this plugin, in this request.
+	 *
+	 * Plugins load alphabetically, so newspack-blocks normally loads first. This
+	 * covers an active plugins list that's out of order.
+	 *
+	 * @return bool
+	 */
+	private static function will_legacy_plugin_load() {
+		$plugins = (array) \get_option( 'active_plugins', [] );
+		if ( \is_multisite() ) {
+			$plugins = array_merge( $plugins, array_keys( (array) \get_site_option( 'active_sitewide_plugins', [] ) ) );
+		}
+		foreach ( $plugins as $plugin ) {
+			if ( 'newspack-blocks.php' === basename( $plugin ) && file_exists( WP_PLUGIN_DIR . '/' . $plugin ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
