@@ -125,7 +125,10 @@ const ABTestPanel = ( {
 	];
 
 	const others = prompts.filter( prompt => prompt.id !== postId );
-	const control = 'a' !== variant ? others.find( prompt => 'a' === prompt.variant ) : null;
+	// Prefer the published control: after an author drafts the old A and publishes
+	// a replacement, the lookup lists both, and the live split is the published one's.
+	const controls = 'a' !== variant ? others.filter( prompt => 'a' === prompt.variant ) : [];
+	const control = controls.find( prompt => 'publish' === prompt.status ) || controls[ 0 ] || null;
 	const effectiveGoal = control ? control.goal || '' : goal;
 	const warnings = testPromptWarnings( { postId, variant, prompts } );
 	const lookupPending = !! testId && lookedUpFor !== testId;
@@ -171,7 +174,7 @@ const ABTestPanel = ( {
 						__next40pxDefaultSize
 					/>
 					{ warnings.map( warning => (
-						<Notice key={ warning } status="error" spokenMessage="" isDismissible={ false }>
+						<Notice key={ warning } status="error" spokenMessage={ warning } politeness="polite" isDismissible={ false }>
 							{ warning }
 						</Notice>
 					) ) }
@@ -200,12 +203,18 @@ const ABTestPanel = ( {
 					{ ! holdGoal &&
 						( control ? (
 							<p className="newspack-popups-ab-test__note">
-								{ sprintf(
-									// Translators: %1$s is the test's goal, %2$s the traffic split, such as "60% see A, 40% see B".
-									__( 'Goal: %1$s. %2$s. Set on version A.', 'newspack-popups' ),
-									goals[ effectiveGoal ] || __( 'none', 'newspack-popups' ),
-									splitSummary( control.control_share ?? 50 )
-								) }
+								{ goals[ effectiveGoal ]
+									? sprintf(
+											// Translators: %1$s is the test's goal, %2$s the traffic split, such as "60% see A, 40% see B".
+											__( 'Goal: %1$s. %2$s. Set on version A.', 'newspack-popups' ),
+											goals[ effectiveGoal ],
+											splitSummary( control.control_share ?? 50 )
+									  )
+									: sprintf(
+											// Translators: %s is the traffic split, such as "60% see A, 40% see B".
+											__( 'No goal set. %s. Set on version A.', 'newspack-popups' ),
+											splitSummary( control.control_share ?? 50 )
+									  ) }
 							</p>
 						) : (
 							<SelectControl
