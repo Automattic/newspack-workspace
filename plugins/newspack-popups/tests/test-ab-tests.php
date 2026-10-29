@@ -791,6 +791,7 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	public function test_test_prompts_route_lists_every_prompt_in_the_test() {
 		$control    = $this->create_test_variant( 'lookup-test', 'a', null, [], 60 );
 		$challenger = $this->create_test_variant( 'lookup-test', 'b', null, [ 'post_status' => 'draft' ] );
+		update_post_meta( $control, Newspack_Popups_AB_Tests::META_GOAL, 'donation' );
 		$this->create_test_variant( 'lookup-test', 'b', null, [ 'post_status' => 'trash' ] );
 		$this->create_test_variant( 'other-test', 'a' );
 
@@ -804,7 +805,8 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		self::assertSame( [ $control, $challenger ], wp_list_pluck( $response->get_data(), 'id' ) );
 		self::assertSame( [ 'a', 'b' ], wp_list_pluck( $response->get_data(), 'variant' ) );
 		self::assertStringContainsString( 'post=' . $control, $response->get_data()[0]['edit_link'] );
-		update_post_meta( $control, Newspack_Popups_AB_Tests::META_GOAL, 'donation' );
+		self::assertSame( [ 'donation', '' ], wp_list_pluck( $response->get_data(), 'goal' ) );
+		self::assertSame( [ 60, 50 ], wp_list_pluck( $response->get_data(), 'control_share' ) );
 
 		global $wpdb;
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery, WordPress.DB.SlowDBQuery
@@ -833,8 +835,6 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	 * a user without read_private_posts, which is the rule the Prompts list and
 	 * core's REST endpoint already apply. Drafts stay listed to everyone who can
 	 * edit prompts, since a challenger's author needs to see the control.
-		self::assertSame( [ 'donation', '' ], wp_list_pluck( $response->get_data(), 'goal' ) );
-		self::assertSame( [ 60, 50 ], wp_list_pluck( $response->get_data(), 'control_share' ) );
 	 */
 	public function test_test_prompts_route_hides_other_authors_private_prompts() {
 		$admin_id = self::factory()->user->create( [ 'role' => 'administrator' ] );
