@@ -172,7 +172,7 @@ final class Newspack_Popups_AB_Dashboard {
 		$paths      = [ $asset_path, $dir . 'abTests.js', $dir . 'abTests.css' ];
 		if ( array_filter( $paths, fn( $path ) => ! file_exists( $path ) ) ) {
 			// A checkout that has not been built: the page renders its root and
-			// nothing mounts, which is better than a fatal on the Tools menu.
+			// nothing mounts, which is better than a fatal on the page.
 			return;
 		}
 		$asset = require $asset_path;
@@ -183,7 +183,14 @@ final class Newspack_Popups_AB_Dashboard {
 			$asset['version'],
 			true
 		);
-		wp_localize_script( self::SCRIPT_HANDLE, 'newspack_popups_ab_tests', self::get_boot_data() );
+		// An inline script keeps the booleans in the boot data; wp_localize_script()
+		// would hand the page "1" and "" instead.
+		\wp_add_inline_script(
+			self::SCRIPT_HANDLE,
+			'var newspack_popups_ab_tests = ' . wp_json_encode( self::get_boot_data() ) . ';',
+			'before'
+		);
+		\wp_set_script_translations( self::SCRIPT_HANDLE, 'newspack-popups' );
 		\wp_enqueue_script( self::SCRIPT_HANDLE );
 		\wp_register_style(
 			self::SCRIPT_HANDLE,
@@ -327,8 +334,8 @@ final class Newspack_Popups_AB_Dashboard {
 	/**
 	 * Whether the provider can answer, as true or a WP_Error that says why not.
 	 *
-	 * The provider is third-party code running inside the Tools page's
-	 * enqueue hook and the stats route, so a false, an unexpected value or an
+	 * The provider is third-party code running inside the page's enqueue
+	 * hook and the stats route, so a false, an unexpected value or an
 	 * exception all become an "unavailable" the page can show, never a fatal.
 	 *
 	 * @param Newspack_Popups_AB_Stats_Provider|null $provider Provider, or null when none is registered.
@@ -415,7 +422,10 @@ final class Newspack_Popups_AB_Dashboard {
 		if ( is_wp_error( $counts ) ) {
 			return $counts;
 		}
-		if ( ! is_array( $counts ) ) {
+		// The interface lets a source leave individual letters out of `variants`,
+		// never the key itself; an answer without it would otherwise be cached for
+		// an hour and read as "collecting" with every arm at zero.
+		if ( ! is_array( $counts ) || ! is_array( $counts['variants'] ?? null ) ) {
 			return new WP_Error( 'newspack_popups_ab_stats_provider', __( 'The stats source returned an unexpected answer.', 'newspack-popups' ) );
 		}
 		$fetched_at = gmdate( 'c' );

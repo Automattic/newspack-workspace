@@ -329,6 +329,7 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 		return [
 			'error'     => [ new WP_Error( 'x', 'The source timed out.' ), 'The source timed out.' ],
 			'exception' => [ new RuntimeException( 'The client blew up.' ), 'The client blew up.' ],
+			'malformed' => [ [ 'error' => 'no variants key' ], 'The stats source returned an unexpected answer.' ],
 		];
 	}
 
@@ -619,8 +620,8 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * Under the Audience menu the page sits directly below Campaigns, and the
-	 * breadcrumb links back to it.
+	 * Under the Audience menu the page sits directly below Campaigns, the
+	 * breadcrumb links back to it, and the script registers under that hook.
 	 */
 	public function test_menu_sits_below_campaigns_in_the_audience_menu() {
 		$this->as_admin();
@@ -650,6 +651,22 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 		$page_hook     = $hook_property->getValue();
 		add_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
 		Newspack_Popups_AB_Dashboard::enqueue( $page_hook );
+		remove_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
+		$hook_property->setValue( null, false );
+
+		$this->assertNotEmpty( $page_hook );
+		$this->assertArrayHasKey( Newspack_Popups_AB_Dashboard::SCRIPT_HANDLE, wp_scripts()->registered );
+	}
+
+	/**
+	 * The body class marks this page and no other admin screen.
+	 */
+	public function test_body_class_only_on_the_page() {
+		$this->as_admin();
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
+		$this->tools_menu_slugs();
+		$hook_property = new ReflectionProperty( Newspack_Popups_AB_Dashboard::class, 'page_hook' );
+		$page_hook     = $hook_property->getValue();
 		$GLOBALS['hook_suffix'] = $page_hook; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- WordPress sets it per admin request.
 		$with_page              = Newspack_Popups_AB_Dashboard::add_body_class( 'wp-admin' );
 		$GLOBALS['hook_suffix'] = 'toplevel_page_other'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
@@ -659,7 +676,6 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 		$hook_property->setValue( null, false );
 
 		$this->assertNotEmpty( $page_hook );
-		$this->assertArrayHasKey( Newspack_Popups_AB_Dashboard::SCRIPT_HANDLE, wp_scripts()->registered );
 		$this->assertStringContainsString( Newspack_Popups_AB_Dashboard::BODY_CLASS, $with_page );
 		$this->assertSame( 'wp-admin', $elsewhere );
 	}
