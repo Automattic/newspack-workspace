@@ -21,7 +21,8 @@ defined( 'ABSPATH' ) || exit;
  * filter to opt specific products / subscriptions out of dynamic pricing:
  *
  *  - Donation products (via Newspack\Donations::is_donation_product).
- *  - Group subscriptions (via Newspack\Group_Subscription::is_group_subscription).
+ *  - Group subscriptions (via Newspack\Group_Subscription::is_group_subscription
+ *    once the subscription exists, and the product's group setting before it does).
  *
  * Also bridges the standalone plugin's reader-facing annotation onto the
  * Newspack Blocks Modal Checkout summary line — the modal's JS does
@@ -118,25 +119,34 @@ final class Dynamic_Pricing_Bridges {
 	/**
 	 * Exclude group subscriptions from dynamic pricing.
 	 *
+	 * Once the subscription exists, its own group setting decides, since it
+	 * can override its product's. Before that (checkout, previews) the
+	 * product's setting decides: priced at checkout, a group subscription
+	 * would be created at the rule's second-cycle price, and the renewal
+	 * exclusion would then freeze it there.
+	 *
 	 * Params are intentionally untyped — see exclude_donations().
 	 *
 	 * @param bool        $excluded Whether the engine has already excluded this context.
 	 * @param \WC_Product $product  Product being priced.
-	 * @param mixed       $target   Optional target (e.g. a WC_Subscription).
+	 * @param mixed       $target   Optional target: a WC_Subscription, or the cart item at checkout.
 	 */
 	public static function exclude_group_subscriptions( $excluded, $product = null, $target = null ): bool {
 		if ( $excluded ) {
 			return true;
 		}
-		if (
-			$target instanceof \WC_Subscription
-			&& class_exists( '\Newspack\Group_Subscription' )
-			&& method_exists( '\Newspack\Group_Subscription', 'is_group_subscription' )
-			&& Group_Subscription::is_group_subscription( $target )
-		) {
-			return true;
+		if ( $target instanceof \WC_Subscription ) {
+			return class_exists( '\Newspack\Group_Subscription' )
+				&& method_exists( '\Newspack\Group_Subscription', 'is_group_subscription' )
+				&& Group_Subscription::is_group_subscription( $target );
 		}
-		return (bool) $excluded;
+		// Read the priced product itself: a variation carries its own group
+		// setting rather than inheriting its parent's, and it is the product
+		// Group_Subscription reads at renewal too.
+		return $product instanceof \WC_Product
+			&& class_exists( '\Newspack\Group_Subscription_Settings' )
+			&& method_exists( '\Newspack\Group_Subscription_Settings', 'get_product_settings' )
+			&& ! empty( Group_Subscription_Settings::get_product_settings( $product )['enabled'] );
 	}
 
 	/**
