@@ -50,6 +50,7 @@ const TestCard = ( { test, data } ) => {
 	const [ stats, setStats ] = useState( null );
 	const [ loading, setLoading ] = useState( false );
 	const [ error, setError ] = useState( null );
+	const [ wasRefresh, setWasRefresh ] = useState( false );
 	const headingId = useInstanceId( TestCard, 'newspack-popups-ab-tests__title' );
 	const status = getTestStatus( test );
 	const letters = Object.keys( test.variants );
@@ -63,6 +64,7 @@ const TestCard = ( { test, data } ) => {
 	const load = refresh => {
 		setLoading( true );
 		setError( null );
+		setWasRefresh( refresh );
 		apiFetch( {
 			path: `/${ data.rest_base }/ab-tests/${ test.test_id }/stats${ refresh ? '?refresh=1' : '' }`,
 		} )
@@ -83,7 +85,7 @@ const TestCard = ( { test, data } ) => {
 	}, [] );
 
 	return (
-		<Card className="newspack-popups-ab-tests__test" role="region" aria-labelledby={ headingId }>
+		<Card className="newspack-popups-ab-tests__test">
 			<CardHeader>
 				<Stack direction="column" gap="xs">
 					<h2 id={ headingId } className="newspack-popups-ab-tests__title">
@@ -120,7 +122,7 @@ const TestCard = ( { test, data } ) => {
 					{ duplicates.length > 0 && (
 						<Notice status="error" isDismissible={ false } spokenMessage="">
 							{ __(
-								'More than one prompt in this test is the same version, and results only count the first. Clear the test name on the extra prompt, or unpublish it:',
+								'More than one prompt in this test is the same version. Readers still see both, and results only count the first. Clear the test name on the extra prompt, or unpublish it:',
 								'newspack-popups'
 							) }{ ' ' }
 							{ duplicates.map( ( duplicate, index ) => {
@@ -246,10 +248,10 @@ const TestCard = ( { test, data } ) => {
 						</table>
 					</div>
 					{ loading && ! stats && (
-						<div className="newspack-popups-ab-tests__loading">
+						<Stack direction="row" gap="sm" align="center" className="newspack-popups-ab-tests__loading">
 							<Spinner />
 							<span>{ __( 'Loading results…', 'newspack-popups' ) }</span>
-						</div>
+						</Stack>
 					) }
 					{ stats && stats.source.reason && (
 						<Notice status={ stats.source.state === 'unavailable' ? 'warning' : 'info' } isDismissible={ false } spokenMessage="">
@@ -275,7 +277,7 @@ const TestCard = ( { test, data } ) => {
 						</Notice>
 					) }
 					{ error && (
-						<Notice status="error" isDismissible={ false } politeness="polite">
+						<Notice status="error" isDismissible={ false } politeness={ wasRefresh ? 'assertive' : 'polite' }>
 							{ error }
 						</Notice>
 					) }
@@ -283,7 +285,7 @@ const TestCard = ( { test, data } ) => {
 						<p className="newspack-popups-ab-tests__muted">
 							{ sprintf(
 								// Translators: %s is a date and time.
-								__( 'Updated %s. Results refresh every hour.', 'newspack-popups' ),
+								__( 'Updated %s. Reload or refresh to check again; counts update at most once an hour.', 'newspack-popups' ),
 								dateI18n( getSettings().formats.datetime, stats.source.fetched_at )
 							) }
 						</p>

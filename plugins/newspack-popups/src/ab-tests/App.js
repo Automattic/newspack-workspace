@@ -3,6 +3,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { Button, Notice } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 
 /**
  * External dependencies
@@ -39,7 +40,7 @@ const App = ( { data } ) => {
 			}
 			subTitle={ __( 'See which version of each prompt gets more readers to act.', 'newspack-popups' ) }
 		>
-			<div className="newspack-popups-ab-tests__content">
+			<Stack direction="column" gap="xl" className="newspack-popups-ab-tests__content">
 				{ ! provider.available && (
 					<Notice status="warning" isDismissible={ false } spokenMessage="">
 						{ provider.reason }
@@ -62,7 +63,7 @@ const App = ( { data } ) => {
 						.sort( ( a, b ) => STATUS_ORDER.indexOf( getTestStatus( a ) ) - STATUS_ORDER.indexOf( getTestStatus( b ) ) )
 						.map( test => <TestCard key={ test.test_id } test={ test } data={ data } /> )
 				) }
-			</div>
+			</Stack>
 		</Page>
 	);
 };

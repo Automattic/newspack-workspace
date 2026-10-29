@@ -28,9 +28,6 @@ body.newspack-popups-ab-tests-screen {
 	flex: 1 1 auto;
 
 	&__content {
-		display: flex;
-		flex-direction: column;
-		gap: wp-vars.$grid-unit-30;
 		box-sizing: border-box;
 		width: 100%;
 		max-width: calc(var(--newspack-wizard-section-space, #{wp-vars.$grid-unit-30}) * 2 + var(--newspack-wizard-section-width, 1006px));
@@ -57,10 +54,7 @@ body.newspack-popups-ab-tests-screen {
 	}
 
 	&__loading {
-		align-items: center;
 		color: var(--wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700});
-		display: flex;
-		gap: wp-vars.$grid-unit-10;
 	}
 
 	&__allocation {
@@ -92,6 +86,14 @@ body.newspack-popups-ab-tests-screen {
 		&.is-variant-d {
 			background: wp-colors.$gray-400;
 		}
+
+		// Forced-colors mode drops backgrounds, which would leave an empty strip
+		// and no swatches; an outline keeps the segments and their proportions.
+		@media (forced-colors: active) {
+			forced-color-adjust: none;
+			outline: 1px solid CanvasText;
+			outline-offset: -1px;
+		}
 	}
 
 	&__variant {
@@ -105,7 +107,7 @@ body.newspack-popups-ab-tests-screen {
 		flex-shrink: 0;
 		width: wp-vars.$grid-unit-15;
 		height: wp-vars.$grid-unit-15;
-		border-radius: var(--wpds-border-radius-xs, 2px);
+		border-radius: var(--wpds-border-radius-xs, 1px);
 	}
 
 	&__table-scroll {
