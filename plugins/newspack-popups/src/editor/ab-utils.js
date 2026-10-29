@@ -100,11 +100,11 @@ export const missingGoalBlockMessage = ( goal, fromControl = false ) => {
 		default:
 			return fromControl
 				? __(
-						"Readers can't fill in a form from this prompt. Add a sign-up, registration, donate or checkout block, or change the goal on version A.",
+						"Readers can't fill in a form from this prompt. Add a Newsletter Subscription Form, Reader Registration, Donate or Checkout Button block, or change the goal on version A.",
 						'newspack-popups'
 				  )
 				: __(
-						"Readers can't fill in a form from this prompt. Add a sign-up, registration, donate or checkout block, or choose another goal.",
+						"Readers can't fill in a form from this prompt. Add a Newsletter Subscription Form, Reader Registration, Donate or Checkout Button block, or choose another goal.",
 						'newspack-popups'
 				  );
 	}
@@ -126,7 +126,10 @@ export const testPromptWarnings = ( { postId, variant, prompts } ) => {
 		warnings.push(
 			sprintf(
 				// Translators: %s is the version letter.
-				__( 'Another prompt in this test is already version %s. Clear the test name on one of them, or unpublish it.', 'newspack-popups' ),
+				__(
+					'Another prompt in this test is already version %s. Clear the test name on one of them, or give one a different version.',
+					'newspack-popups'
+				),
 				String( variant ).toUpperCase()
 			)
 		);

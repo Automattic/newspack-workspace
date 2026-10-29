@@ -52,6 +52,6 @@ it( 'warns when another prompt holds the same variant', () => {
 	expect( testPromptWarnings( { postId: 2, variant: 'b', prompts } ) ).toHaveLength( 0 );
 	// A variant this editor doesn't offer can still be stored elsewhere; the message names it.
 	expect( testPromptWarnings( { postId: 2, variant: 'c', prompts: [ { id: 3, variant: 'c' } ] } ) ).toEqual( [
-		'Another prompt in this test is already version C. Clear the test name on one of them, or unpublish it.',
+		'Another prompt in this test is already version C. Clear the test name on one of them, or give one a different version.',
 	] );
 } );

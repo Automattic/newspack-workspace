@@ -101,7 +101,7 @@ if ( window?.newspack_popups_data?.segmentation_enabled ) {
 if ( window?.newspack_popups_data?.ab_testing?.enabled ) {
 	registerPlugin( 'newspack-popups-ab-test', {
 		render: () => (
-			<PluginDocumentSettingPanel name="ab-test-panel" title={ __( 'A/B Test', 'newspack-popups' ) }>
+			<PluginDocumentSettingPanel name="ab-test-panel" title={ __( 'A/B test', 'newspack-popups' ) }>
 				<ABTestPanelWithData />
 			</PluginDocumentSettingPanel>
 		),
