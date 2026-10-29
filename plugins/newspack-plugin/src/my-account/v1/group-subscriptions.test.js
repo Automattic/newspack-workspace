@@ -119,9 +119,11 @@ describe( 'group rename', () => {
 
 		document.querySelector( '.newspack-my-account__group_subscription__invite-link__copy' ).click();
 		await waitFor( () => global.newspackUI.notices.createNotice.mock.calls.some( ( [ , type ] ) => 'error' === type ) );
+		expect( global.newspackUI.notices.createNotice ).toHaveBeenCalledWith( expect.stringContaining( 'https://example.test/join/abc' ), 'error' );
 		form.requestSubmit( button );
 		await waitFor( () => ! button.hasAttribute( 'aria-busy' ) );
 
+		expect( global.newspackUI.notices.createNotice ).toHaveBeenCalledWith( 'Name updated.', 'success' );
 		expect( global.newspackUI.notices.closeNotice ).not.toHaveBeenCalled();
 	} );
 } );
