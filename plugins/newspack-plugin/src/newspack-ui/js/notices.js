@@ -486,7 +486,7 @@ function createCloseButton( item ) {
 function createNotice( message, type = 'success' ) {
 	const snackbar = getSnackbar();
 	const isError = 'error' === type;
-	message = String( message ).trim();
+	message = String( message ?? '' ).trim();
 
 	if ( isError ) {
 		const showing = [
@@ -516,9 +516,6 @@ function createNotice( message, type = 'success' ) {
 	content.textContent = message;
 
 	item.appendChild( content );
-	if ( isError ) {
-		item.appendChild( createCloseButton( item ) );
-	}
 	snackbar.appendChild( item );
 	openNotice( item, true );
 	return item;

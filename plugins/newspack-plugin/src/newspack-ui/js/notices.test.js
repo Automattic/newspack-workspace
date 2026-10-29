@@ -278,7 +278,7 @@ describe( 'newspack-ui notices', () => {
 		const persistent = document.querySelector( '.newspack-ui__snackbar__item' );
 		notices.openNotice( persistent );
 
-		expect( notices.createNotice( 'Payment failed.', 'error' ) ).toBe( persistent );
+		expect( notices.createNotice( ' Payment failed.\n', 'error' ) ).toBe( persistent );
 		expect( document.querySelectorAll( '.newspack-ui__snackbar__item[data-type="error"]' ) ).toHaveLength( 1 );
 
 		jest.advanceTimersByTime( 9000 );
