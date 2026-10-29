@@ -1,4 +1,5 @@
 import { computeBucket, getAbOverride, getAssignedBucket, getReaderId, hashString } from './index.js';
+import parity from '../../../tests/fixtures/ab-bucket-parity.json';
 
 const makePrompt = ( testId = null, variant = null ) => {
 	const prompt = document.createElement( 'div' );
@@ -21,11 +22,11 @@ describe( 'hashString', () => {
 		expect( hashString( 'reader|test' ) ).toBeGreaterThanOrEqual( 0 );
 		expect( hashString( 'reader-a|test' ) ).not.toBe( hashString( 'reader-b|test' ) );
 	} );
-	it( 'matches the server-side hash bit for bit', () => {
-		// Vector pinned in tests/test-ab-tests.php (Newspack_Popups_AB_Tests::hash_djb2)
-		// — if either implementation changes, both parity tests fail together.
-		expect( hashString( 'abc|test-x' ) ).toBe( 809016026 );
-		expect( computeBucket( 'abc', 'test-x', AB_CONFIG ) ).toBe( 'a' );
+	// The same vectors drive the PHP suite, so a change to either implementation
+	// fails against one expectation rather than two copies kept in step by hand.
+	it.each( parity.vectors )( 'matches the server-side vector: $note', ( { reader, test_id: testId, config, hash, bucket } ) => {
+		expect( hashString( `${ reader }|${ testId }` ) ).toBe( hash );
+		expect( computeBucket( reader, testId, config ) ).toBe( bucket );
 	} );
 } );
 
