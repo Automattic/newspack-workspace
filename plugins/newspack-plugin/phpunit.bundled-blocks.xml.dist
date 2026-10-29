@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <!--
-	Tests for the bundled copy of newspack-blocks (includes/newspack-blocks/).
+	newspack-blocks' own tests, run against this plugin's copy of its code.
 	They run without the rest of this plugin, against stubs, so they need their
 	own bootstrap and process. See tests/bundled-blocks/bootstrap.php.
 -->

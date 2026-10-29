@@ -101,24 +101,30 @@ class Newspack_Test_Bundled_Blocks extends WP_UnitTestCase {
 	}
 
 	/**
-	 * When newspack-blocks is active but loads after this plugin, the copy stays out of its way.
+	 * The newspack-blocks plugin counts as active when it's listed in active_plugins, even if it
+	 * hasn't loaded yet, but not when its file is missing.
 	 */
-	public function test_bundled_copy_defers_to_legacy_plugin_loading_later() {
+	public function test_detects_legacy_plugin_listed_but_not_yet_loaded() {
 		// phpcs:disable WordPress.WP.AlternativeFunctions, WordPressVIPMinimum.Functions.RestrictedFunctions -- A throwaway plugin file in the test install.
-		$legacy_dir = WP_PLUGIN_DIR . '/newspack-blocks-' . wp_generate_password( 6, false );
+		$legacy_dir  = WP_PLUGIN_DIR . '/newspack-blocks-' . wp_generate_password( 6, false );
+		$legacy_file = $legacy_dir . '/newspack-blocks.php';
 		wp_mkdir_p( $legacy_dir );
-		file_put_contents( $legacy_dir . '/newspack-blocks.php', '<?php' );
+		file_put_contents( $legacy_file, '<?php' );
 		update_option( 'active_plugins', [ 'newspack-plugin/newspack.php', basename( $legacy_dir ) . '/newspack-blocks.php' ] );
 
 		$will_load = new ReflectionMethod( Bundled_Blocks::class, 'will_legacy_plugin_load' );
 		$will_load->setAccessible( true );
-		$this->assertTrue( $will_load->invoke( null ) );
-
-		// A listed plugin whose file is gone won't load.
-		unlink( $legacy_dir . '/newspack-blocks.php' );
-		rmdir( $legacy_dir );
+		try {
+			$this->assertTrue( $will_load->invoke( null ) );
+			unlink( $legacy_file );
+			$this->assertFalse( $will_load->invoke( null ) );
+		} finally {
+			if ( file_exists( $legacy_file ) ) {
+				unlink( $legacy_file );
+			}
+			rmdir( $legacy_dir );
+		}
 		// phpcs:enable
-		$this->assertFalse( $will_load->invoke( null ) );
 	}
 
 	/**
