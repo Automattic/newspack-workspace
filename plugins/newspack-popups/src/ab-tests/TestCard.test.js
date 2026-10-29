@@ -1,7 +1,7 @@
 /**
  * The card's own decisions: when results load on open, when Refresh is offered,
- * and how the ineligible-placement notice reads. The stats route is mocked;
- * `@wordpress/ui` is provided by WordPress at runtime, not installed here.
+ * and how the ineligible-placement notice reads. The stats route is mocked, and
+ * `@wordpress/ui` is stubbed so the tests read the card's logic, not its layout.
  */
 
 /**

@@ -36,7 +36,7 @@ const AllocationBar = ( { controlShare, variants } ) => {
 			className="newspack-popups-ab-tests__allocation"
 			role="img"
 			aria-label={ sprintf(
-				// Translators: %s is a list of version letters with their share of readers, such as "A 60%, B 40%".
+				// Translators: %s is a list of version letters with their share of readers, such as "A 60% and B 40%".
 				__( 'Readers who see each version: %s.', 'newspack-popups' ),
 				formatLetterList(
 					Object.keys( variants ).map( letter =>

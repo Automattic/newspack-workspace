@@ -187,10 +187,10 @@ final class Newspack_Popups_AB_Dashboard {
 		// would hand the page "1" and "" instead.
 		\wp_add_inline_script(
 			self::SCRIPT_HANDLE,
-			'var newspack_popups_ab_tests = ' . wp_json_encode( self::get_boot_data() ) . ';',
+			'var newspack_popups_ab_tests = ' . wp_json_encode( self::get_boot_data(), JSON_HEX_TAG | JSON_HEX_AMP ) . ';',
 			'before'
 		);
-		\wp_set_script_translations( self::SCRIPT_HANDLE, 'newspack-popups' );
+		\wp_set_script_translations( self::SCRIPT_HANDLE, 'newspack-popups', dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/languages' );
 		\wp_enqueue_script( self::SCRIPT_HANDLE );
 		\wp_register_style(
 			self::SCRIPT_HANDLE,

@@ -2,7 +2,6 @@
  * WordPress dependencies
  */
 import { useEffect, useState } from '@wordpress/element';
-import { useInstanceId } from '@wordpress/compose';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { speak } from '@wordpress/a11y';
 import apiFetch from '@wordpress/api-fetch';
@@ -51,7 +50,6 @@ const TestCard = ( { test, data } ) => {
 	const [ loading, setLoading ] = useState( false );
 	const [ error, setError ] = useState( null );
 	const [ wasRefresh, setWasRefresh ] = useState( false );
-	const headingId = useInstanceId( TestCard, 'newspack-popups-ab-tests__title' );
 	const status = getTestStatus( test );
 	const letters = Object.keys( test.variants );
 	const duplicates = test.duplicates || [];
@@ -88,9 +86,7 @@ const TestCard = ( { test, data } ) => {
 		<Card className="newspack-popups-ab-tests__test">
 			<CardHeader>
 				<Stack direction="column" gap="xs">
-					<h2 id={ headingId } className="newspack-popups-ab-tests__title">
-						{ test.test_id }
-					</h2>
+					<h2 className="newspack-popups-ab-tests__title">{ test.test_id }</h2>
 					<span className="newspack-popups-ab-tests__goal">
 						{ test.goal_label
 							? sprintf(
@@ -285,7 +281,7 @@ const TestCard = ( { test, data } ) => {
 						<p className="newspack-popups-ab-tests__muted">
 							{ sprintf(
 								// Translators: %s is a date and time.
-								__( 'Updated %s. Reload or refresh to check again; counts update at most once an hour.', 'newspack-popups' ),
+								__( 'Updated %s. Refresh asks the source again; a reload shows counts up to an hour old.', 'newspack-popups' ),
 								dateI18n( getSettings().formats.datetime, stats.source.fetched_at )
 							) }
 						</p>

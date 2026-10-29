@@ -104,9 +104,9 @@ export const getStatusIntent = status => {
 };
 
 /**
- * A list of version letters in the page's language, such as "A and B".
+ * A list in the page's language, such as "A and B" or "A 60% and B 40%".
  *
- * @param {string[]} letters Uppercase letters.
+ * @param {string[]} letters Uppercase letters, each with any text that belongs to it.
  * @return {string} Joined list.
  */
 export const formatLetterList = letters => {
