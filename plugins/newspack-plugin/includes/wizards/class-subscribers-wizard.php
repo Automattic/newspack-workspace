@@ -1950,12 +1950,13 @@ class Subscribers_Wizard extends Wizard {
 	/**
 	 * When a reader was last seen, from the site's own record of their activity.
 	 *
-	 * Reads the `last_active` reader-data item, which reader activation stamps on
-	 * every page view (most-recent-wins) and which the ESP sync already publishes
-	 * as `Last_Active`. Reporting the same value here means this column and the
-	 * publisher's ESP tell one story about the same reader, and it tracks reading
-	 * rather than signing in — a reader on a long-lived auth cookie who visits
-	 * daily is last seen today, and logging out doesn't erase the record.
+	 * Reads the `last_active` reader-data item, which reader activation stamps as
+	 * the reader browses (most-recent-wins, sent at most hourly) and which the ESP
+	 * sync already publishes as `Last_Active`. Reporting the same value here means
+	 * this column and the publisher's ESP tell one story about the same reader, and
+	 * it tracks reading rather than signing in — a reader on a long-lived auth
+	 * cookie who visits daily is last seen today, and logging out doesn't erase the
+	 * record.
 	 *
 	 * The value is client-asserted: `last_active` is not among
 	 * Reader_Data::get_read_only_keys(), so the browser writes it and a determined
