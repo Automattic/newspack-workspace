@@ -19,10 +19,25 @@ domReady( function () {
 	const baseUrl = newspackMyAccountV1?.rest?.base_url;
 	const namespace = newspackMyAccountV1?.rest?.namespaces?.group;
 	const nonce = newspackMyAccountV1?.rest?.nonce;
-	const showSnackbar =
-		typeof newspackUI?.notices?.createNotice === 'function'
-			? newspackUI.notices.createNotice
-			: ( msg, type ) => console.warn( '[group-subscriptions]', type, msg ); // eslint-disable-line no-console
+	// Errors stay until closed, so a later success of the same action clears them rather than
+	// contradicting them. Other actions' errors stay: a failed copy shows the only visible link.
+	const errorNotices = new Map();
+	const showSnackbar = ( msg, type, action ) => {
+		const notices = newspackUI?.notices;
+		if ( typeof notices?.createNotice !== 'function' ) {
+			console.warn( '[group-subscriptions]', type, msg ); // eslint-disable-line no-console
+			return;
+		}
+		const errors = errorNotices.get( action ) || new Set();
+		errorNotices.set( action, errors );
+		if ( 'error' === type ) {
+			errors.add( notices.createNotice( msg, type ) );
+			return;
+		}
+		errors.forEach( notice => notice.classList.contains( 'active' ) && notices.closeNotice( notice ) );
+		errors.clear();
+		notices.createNotice( msg, type );
+	};
 
 	// Handle invite modal.
 	const inviteModal = document.getElementById( 'newspack-my-account__group_subscription--invite-member' );
@@ -372,7 +387,7 @@ domReady( function () {
 				await waitForMinLoading( loadingStart );
 				if ( ! response.ok || ! data || ! data.url ) {
 					const message = ( data && data.message ) || errorText;
-					showSnackbar( message, 'error' );
+					showSnackbar( message, 'error', 'link' );
 					return;
 				}
 				const isRegenerate = !! content.getAttribute( 'data-invite-link' );
@@ -382,13 +397,13 @@ domReady( function () {
 					const message = isRegenerate
 						? newspackMyAccountV1?.labels?.invite_link_regenerated || 'New invite link copied. Any older link no longer works.'
 						: newspackMyAccountV1?.labels?.invite_link_copied || 'Invite link copied.';
-					showSnackbar( message );
+					showSnackbar( message, 'success', 'link' );
 				} else {
-					showSnackbar( copyFailedMessage( data.url ), 'error' );
+					showSnackbar( copyFailedMessage( data.url ), 'error', 'link' );
 				}
 			} catch ( error ) {
 				await waitForMinLoading( loadingStart );
-				showSnackbar( errorText, 'error' );
+				showSnackbar( errorText, 'error', 'link' );
 			}
 		} );
 
@@ -410,15 +425,19 @@ domReady( function () {
 				await waitForMinLoading( loadingStart );
 				if ( ! response.ok ) {
 					const message = ( data && data.message ) || errorText;
-					showSnackbar( message, 'error' );
+					showSnackbar( message, 'error', 'disable' );
 					return;
 				}
-				showSnackbar( newspackMyAccountV1?.labels?.invite_link_disabled || 'Invite link disabled. You can create a new link any time.' );
+				showSnackbar(
+					newspackMyAccountV1?.labels?.invite_link_disabled || 'Invite link disabled. You can create a new link any time.',
+					'success',
+					'disable'
+				);
 				content.removeAttribute( 'data-invite-link' );
 				afterInviteLink( false );
 			} catch ( error ) {
 				await waitForMinLoading( loadingStart );
-				showSnackbar( errorText, 'error' );
+				showSnackbar( errorText, 'error', 'disable' );
 			}
 		} );
 
@@ -428,9 +447,9 @@ domReady( function () {
 			const inviteLink = content.getAttribute( 'data-invite-link' );
 			if ( inviteLink ) {
 				if ( await copyToClipboard( inviteLink ) ) {
-					showSnackbar( newspackMyAccountV1?.labels?.invite_link_copied || 'Invite link copied.' );
+					showSnackbar( newspackMyAccountV1?.labels?.invite_link_copied || 'Invite link copied.', 'success', 'link' );
 				} else {
-					showSnackbar( copyFailedMessage( inviteLink ), 'error' );
+					showSnackbar( copyFailedMessage( inviteLink ), 'error', 'link' );
 				}
 			} else {
 				generateLink( e );
@@ -498,7 +517,7 @@ domReady( function () {
 					const data = await response.json();
 					await waitForMinLoading( loadingStart );
 					if ( ! response.ok || ! data || typeof data.name !== 'string' ) {
-						showSnackbar( ( data && data.message ) || errorText, 'error' );
+						showSnackbar( ( data && data.message ) || errorText, 'error', 'rename' );
 						return;
 					}
 					// Track what the user actually typed (empty when cleared) for the next open,
@@ -508,10 +527,10 @@ domReady( function () {
 						el.textContent = data.name;
 					} );
 					renameModal.setAttribute( 'data-state', 'closed' );
-					showSnackbar( newspackMyAccountV1?.labels?.group_name_updated || 'Name updated.' );
+					showSnackbar( newspackMyAccountV1?.labels?.group_name_updated || 'Name updated.', 'success', 'rename' );
 				} catch ( error ) {
 					await waitForMinLoading( loadingStart );
-					showSnackbar( errorText, 'error' );
+					showSnackbar( errorText, 'error', 'rename' );
 				}
 			} );
 		} );

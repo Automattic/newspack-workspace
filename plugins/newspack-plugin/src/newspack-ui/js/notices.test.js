@@ -209,17 +209,11 @@ describe( 'newspack-ui notices', () => {
 		delete window.newspackUIData;
 	} );
 
-	it( 'refreshes an error raised again instead of adding another', () => {
+	it( 'keeps one copy of an error raised again', () => {
 		notices.createNotice( 'Could not distribute.', 'error' );
-		jest.advanceTimersByTime( 7000 );
 		notices.createNotice( 'Could not distribute.', 'error' );
 
-		const errors = document.querySelectorAll( '.newspack-ui__snackbar__item[data-type="error"]' );
-		expect( errors ).toHaveLength( 1 );
-		jest.advanceTimersByTime( 7000 );
-		expect( errors[ 0 ].classList.contains( 'active' ) ).toBe( true );
-		jest.advanceTimersByTime( 1000 );
-		expect( errors[ 0 ].classList.contains( 'active' ) ).toBe( false );
+		expect( document.querySelectorAll( '.newspack-ui__snackbar__item[data-type="error"]' ) ).toHaveLength( 1 );
 	} );
 
 	it( 'moves focus to the next notice when the focused one closes', () => {
@@ -233,15 +227,28 @@ describe( 'newspack-ui notices', () => {
 		expect( document.activeElement ).toBe( second );
 	} );
 
-	it( 'pauses a pinned error while it is hovered', () => {
+	it( 'keeps an error until the reader closes it', () => {
 		const error = notices.createNotice( 'Could not save.', 'error' );
 
-		error.dispatchEvent( new Event( 'pointerenter' ) );
-		jest.advanceTimersByTime( 20000 );
+		jest.advanceTimersByTime( 60000 );
+		expect( error.classList.contains( 'active' ) ).toBe( true );
+	} );
+
+	it( 'keeps a server-printed error marked to hide, with a close button, until the reader closes it', () => {
+		document.body.insertAdjacentHTML(
+			'beforeend',
+			`<div id="newspack-ui__notices" class="newspack-ui"><div class="newspack-ui__snackbar">
+				<div class="newspack-ui__snackbar__item" data-type="error" data-autohide="true"><div class="newspack-ui__snackbar__content">Could not save.</div></div>
+			</div></div>`
+		);
+		const error = document.querySelector( '.newspack-ui__snackbar__item' );
+		notices.openNotice( error );
+
+		jest.advanceTimersByTime( 60000 );
+		expect( error.closest( '.newspack-ui__snackbar__pinned' ) ).not.toBeNull();
 		expect( error.classList.contains( 'active' ) ).toBe( true );
 
-		error.dispatchEvent( new Event( 'pointerleave' ) );
-		jest.advanceTimersByTime( 8000 );
+		error.querySelector( '.newspack-ui__snackbar__close' ).click();
 		expect( error.classList.contains( 'active' ) ).toBe( false );
 	} );
 
@@ -261,7 +268,7 @@ describe( 'newspack-ui notices', () => {
 		spy.mockRestore();
 	} );
 
-	it( 'leaves an error that stays until closed alone when the same error is raised again', () => {
+	it( 'shows a server-printed error once when the same error is raised again', () => {
 		document.body.insertAdjacentHTML(
 			'beforeend',
 			`<div id="newspack-ui__notices" class="newspack-ui"><div class="newspack-ui__snackbar">
@@ -271,8 +278,8 @@ describe( 'newspack-ui notices', () => {
 		const persistent = document.querySelector( '.newspack-ui__snackbar__item' );
 		notices.openNotice( persistent );
 
-		notices.createNotice( 'Payment failed.', 'error' );
-		expect( document.querySelectorAll( '.newspack-ui__snackbar__item[data-type="error"]' ) ).toHaveLength( 2 );
+		expect( notices.createNotice( ' Payment failed.\n', 'error' ) ).toBe( persistent );
+		expect( document.querySelectorAll( '.newspack-ui__snackbar__item[data-type="error"]' ) ).toHaveLength( 1 );
 
 		jest.advanceTimersByTime( 9000 );
 		expect( persistent.classList.contains( 'active' ) ).toBe( true );

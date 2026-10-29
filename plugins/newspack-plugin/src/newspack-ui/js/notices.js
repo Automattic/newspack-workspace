@@ -10,7 +10,6 @@ const timers = new WeakMap();
 const removals = new WeakMap();
 const heights = new WeakMap();
 const contentSizes = new WeakMap();
-const hoverWatched = new WeakSet();
 let openCount = 0;
 let resizeObserver = null;
 
@@ -278,42 +277,18 @@ function bindStack( stack ) {
 }
 
 /**
- * Pause a pinned notice's timer while the reader points at it or has focus inside it.
- *
- * @param {HTMLElement} element A pinned notice.
- */
-function watchHover( element ) {
-	if ( hoverWatched.has( element ) ) {
-		return;
-	}
-	hoverWatched.add( element );
-	element.addEventListener( 'pointerenter', () => timers.get( element )?.pause() );
-	element.addEventListener( 'focusin', () => timers.get( element )?.pause() );
-	element.addEventListener( 'pointerleave', () => {
-		if ( ! element.contains( element.ownerDocument.activeElement ) ) {
-			timers.get( element )?.run();
-		}
-	} );
-	element.addEventListener( 'focusout', event => {
-		if ( ! element.contains( event.relatedTarget ) && ! element.matches( ':hover' ) ) {
-			timers.get( element )?.run();
-		}
-	} );
-}
-
-/**
  * Open a notice.
  *
- * Notices that hide on their own join the stack. Errors and notices that stay until closed
- * join the pinned list below it, so a newer notice never covers them.
+ * Notices that hide on their own join the stack. Errors, which always stay until the reader
+ * closes them, and other notices that stay until closed join the pinned list below it, so a
+ * newer notice never covers them.
  *
  * @param {Element} element - The notice element.
  * @param {boolean} remove  - Whether to remove the notice element on close.
  */
 function openNotice( element, remove = true ) {
 	const snackbar = element.closest( '.newspack-ui__snackbar' ) || getSnackbar();
-	const autohide = element.dataset.autohide !== 'false';
-	const stacked = autohide && element.dataset.type !== 'error';
+	const stacked = element.dataset.autohide !== 'false' && element.dataset.type !== 'error';
 	const group = getGroup( snackbar, stacked ? 'stack' : 'pinned' );
 	clearTimeout( removals.get( element ) );
 	removals.delete( element );
@@ -323,6 +298,9 @@ function openNotice( element, remove = true ) {
 	element.classList.remove( 'is-leaving' );
 	if ( ! stacked ) {
 		element.style.removeProperty( 'height' );
+		if ( ! element.querySelector( '.newspack-ui__snackbar__close' ) ) {
+			element.appendChild( createCloseButton( element ) );
+		}
 	}
 	if ( stacked ) {
 		element.dataset.stackOrder = String( ++openCount );
@@ -338,18 +316,13 @@ function openNotice( element, remove = true ) {
 	announce( content ? content.textContent.trim() : '', element.dataset.type === 'error' );
 	if ( stacked ) {
 		layoutStack( group );
-	} else if ( autohide ) {
-		watchHover( element );
-	}
-	if ( autohide ) {
 		scheduleAutohide( element, remove );
 	}
 }
 
 /**
  * Hide a snackbar after 8 seconds of being visible. The timer pauses while the stack is
- * expanded, or while a pinned notice is hovered or focused, so an action such as Undo stays
- * reachable.
+ * expanded, so an action such as Undo stays reachable.
  *
  * @param {HTMLElement} element Snackbar item.
  * @param {boolean}     remove  Whether to remove the item once hidden.
@@ -384,10 +357,7 @@ function scheduleAutohide( element, remove ) {
 	};
 	timers.get( element )?.stop();
 	timers.set( element, timer );
-	const engaged = isStack( element.parentElement )
-		? 'true' === element.parentElement.dataset.expanded
-		: element.matches( ':hover' ) || element.contains( element.ownerDocument.activeElement );
-	if ( ! engaged ) {
+	if ( 'true' !== element.parentElement?.dataset.expanded ) {
 		timer.run();
 	}
 }
@@ -505,9 +475,9 @@ function createCloseButton( item ) {
 }
 
 /**
- * Dynamically create and show a snackbar notice. Errors get a close button and join the
- * pinned list, so a newer notice can never cover one; the same error raised again refreshes
- * the one already showing instead of adding another.
+ * Dynamically create and show a snackbar notice. Errors get a close button, stay until the
+ * reader closes them and join the pinned list, so a newer notice can never cover one; the same
+ * error raised again is announced again instead of adding another.
  *
  * @param {string} message Message text to show.
  * @param {string} type    Severity; drives the ARIA announcement and the type icon ('info', 'error' and 'warning').
@@ -516,16 +486,14 @@ function createCloseButton( item ) {
 function createNotice( message, type = 'success' ) {
 	const snackbar = getSnackbar();
 	const isError = 'error' === type;
+	message = String( message ?? '' ).trim();
 
 	if ( isError ) {
 		const showing = [
-			...snackbar.querySelectorAll(
-				'.newspack-ui__snackbar__pinned > .newspack-ui__snackbar__item.active[data-type="error"]:not([data-autohide="false"])'
-			),
-		].find( item => item.querySelector( '.newspack-ui__snackbar__content' )?.textContent === message );
+			...snackbar.querySelectorAll( '.newspack-ui__snackbar__pinned > .newspack-ui__snackbar__item.active[data-type="error"]' ),
+		].find( item => item.querySelector( '.newspack-ui__snackbar__content' )?.textContent.trim() === message );
 		if ( showing ) {
 			announce( message, true );
-			scheduleAutohide( showing, true );
 			return showing;
 		}
 	}
@@ -533,7 +501,7 @@ function createNotice( message, type = 'success' ) {
 	const item = document.createElement( 'div' );
 	item.classList.add( 'newspack-ui__snackbar__item' );
 	item.dataset.type = type;
-	item.setAttribute( 'data-autohide', 'true' );
+	item.setAttribute( 'data-autohide', isError ? 'false' : 'true' );
 
 	const typeIcon = [ 'info', 'error', 'warning' ].includes( type ) ? getNoticeIcon( type ) : null;
 	if ( typeIcon ) {
@@ -548,9 +516,6 @@ function createNotice( message, type = 'success' ) {
 	content.textContent = message;
 
 	item.appendChild( content );
-	if ( isError ) {
-		item.appendChild( createCloseButton( item ) );
-	}
 	snackbar.appendChild( item );
 	openNotice( item, true );
 	return item;

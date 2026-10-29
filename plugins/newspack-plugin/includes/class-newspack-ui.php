@@ -324,10 +324,13 @@ class Newspack_UI {
 				'message'        => $message,
 				'type'           => 'success', // Severity; drives the ARIA announcement politeness ('error' assertive, else polite), the type icon, and the [data-type] styling.
 				'id'             => uniqid(),
-				'autohide'       => true, // If false, the notice will have a close button.
+				'autohide'       => true, // If false, the notice will have a close button. Errors never hide on their own.
 				'active_on_load' => true, // Whether the notice should be visible on page load.
 			]
 		);
+		if ( 'error' === $notice['type'] ) {
+			$notice['autohide'] = false;
+		}
 		self::$notices[ $notice['id'] ] = $notice;
 
 		return $notice['id'];
