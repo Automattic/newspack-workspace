@@ -4,6 +4,11 @@
 import { __, sprintf } from '@wordpress/i18n';
 
 /**
+ * Internal dependencies
+ */
+import { formatLetterList } from './utils';
+
+/**
  * Each variant's share of readers: the control keeps its share and the
  * challengers split the rest evenly.
  *
@@ -31,10 +36,18 @@ const AllocationBar = ( { controlShare, variants } ) => {
 			className="newspack-popups-ab-tests__allocation"
 			role="img"
 			aria-label={ sprintf(
-				// Translators: %1$d is the control's share of readers, %2$d the challengers' share.
-				__( '%1$d%% of readers see A, %2$d%% see B.', 'newspack-popups' ),
-				controlShare,
-				100 - controlShare
+				// Translators: %s is a list of version letters with their share of readers, such as "A 60%, B 40%".
+				__( 'Readers who see each version: %s.', 'newspack-popups' ),
+				formatLetterList(
+					Object.keys( variants ).map( letter =>
+						sprintf(
+							// Translators: %1$s is a version letter, %2$d its share of readers.
+							__( '%1$s %2$d%%', 'newspack-popups' ),
+							letter.toUpperCase(),
+							Math.round( shares[ letter ] )
+						)
+					)
+				)
 			) }
 		>
 			{ Object.keys( variants ).map( letter => (

@@ -109,10 +109,16 @@ export const getStatusIntent = status => {
  * @param {string[]} letters Uppercase letters.
  * @return {string} Joined list.
  */
-export const formatLetterList = letters =>
-	typeof Intl !== 'undefined' && Intl.ListFormat
-		? new Intl.ListFormat( document.documentElement.lang || 'en', { type: 'conjunction' } ).format( letters )
-		: letters.join( ', ' );
+export const formatLetterList = letters => {
+	// The page's lang attribute is not always a tag Intl accepts (WordPress's
+	// pt_PT_ao90 becomes pt-PT-ao90, which throws), and a throw here would unmount
+	// the whole page.
+	try {
+		return new Intl.ListFormat( document.documentElement.lang || 'en', { type: 'conjunction' } ).format( letters );
+	} catch ( e ) {
+		return letters.join( ', ' );
+	}
+};
 
 /**
  * Badge intent for a confidence label from the stats route.
