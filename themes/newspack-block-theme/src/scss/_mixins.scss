@@ -2,16 +2,16 @@
 
 $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast));
 
-@mixin focus-edge($color: var(--wp--preset--color--contrast), $important: null, $halo: $color) {
+@mixin focus-edge($color: var(--wp--preset--color--contrast), $important: null, $halo: $color, $width: 1px) {
 	border-color: $color $important;
 	box-shadow:
-		inset 0 0 0 1px $color,
+		inset 0 0 0 $width $color,
 		0 0 0 var(--wp--custom--focus--halo-width) color-mix(in srgb, #{$halo} var(--wp--custom--focus--halo-mix), transparent) $important;
 	outline: 2px solid transparent $important;
 
 	@media (prefers-contrast: more) {
 		box-shadow:
-			inset 0 0 0 1px $color,
+			inset 0 0 0 $width $color,
 			0 0 0 1px $halo,
 			0 0 0 calc(1px + var(--wp--custom--focus--halo-width)) color-mix(in srgb, #{$halo} var(--wp--custom--focus--halo-mix), transparent) $important;
 	}
@@ -107,7 +107,7 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 		box-shadow: inset 0 0 0 1px var(--wp--custom--color--error-50);
 
 		&:focus-visible:where(:not(.newspack-ui *)) {
-			@include focus-edge(var(--wp--custom--color--error-50), $halo: var(--wp--preset--color--contrast));
+			@include focus-edge(var(--wp--custom--color--error-50), $halo: var(--wp--preset--color--contrast), $width: 2px);
 		}
 	}
 }
@@ -295,7 +295,7 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 		}
 
 		&:checked:disabled {
-			border-color: GrayText;
+			border-color: GrayText $important;
 			box-shadow: inset 0 0 0 5px GrayText $important;
 		}
 	}

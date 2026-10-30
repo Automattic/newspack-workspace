@@ -106,7 +106,7 @@
 					}
 
 					&:has(input[type="checkbox"]:checked:focus-visible) {
-						@include focus.focus-edge( var(--newspack-ui-color-selected, #1e1e1e), $halo: focus.$focus-color );
+						@include focus.focus-edge( var(--newspack-ui-color-selected, #1e1e1e), 2px, focus.$focus-color );
 					}
 				}
 			}
@@ -346,7 +346,7 @@
 			box-shadow: inset 0 0 0 1px var(--newspack-ui-color-error, #d63638);
 
 			&:focus {
-				@include focus.focus-edge( var(--newspack-ui-color-error, #d63638), $halo: focus.$focus-color );
+				@include focus.focus-edge( var(--newspack-ui-color-error, #d63638), 2px, focus.$focus-color );
 			}
 		}
 	}

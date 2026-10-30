@@ -668,7 +668,7 @@
 				box-shadow: inset 0 0 0 1px var(--newspack-ui-color-input-border);
 
 				&.StripeElement--focus {
-					@include mixins.focus-edge( var(--newspack-ui-color-input-border), $halo: mixins.$focus-color, $over-content: true );
+					@include mixins.focus-edge( var(--newspack-ui-color-input-border), 2px, mixins.$focus-color, $over-content: true );
 				}
 			}
 
@@ -886,7 +886,7 @@
 		textarea:focus,
 		.select2-container--default.select2-container--focus .select2-selection--single,
 		.select2-container--default.select2-container--open .select2-selection--single {
-			@include mixins.focus-edge( var(--newspack-ui-color-input-border), $halo: mixins.$focus-color );
+			@include mixins.focus-edge( var(--newspack-ui-color-input-border), 2px, mixins.$focus-color );
 		}
 
 		input[type="radio"]:checked {
@@ -895,7 +895,7 @@
 			box-shadow: inset 0 0 0 1px var(--newspack-ui-color-input-border), $dot;
 
 			&:focus-visible {
-				@include mixins.focus-edge( var(--newspack-ui-color-input-border), $halo: mixins.$focus-color, $inner: $dot );
+				@include mixins.focus-edge( var(--newspack-ui-color-input-border), 2px, mixins.$focus-color, $dot );
 			}
 		}
 

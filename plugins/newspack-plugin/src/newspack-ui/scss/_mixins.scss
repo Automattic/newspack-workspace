@@ -128,12 +128,12 @@ $font-size-classes: ".newspack-ui__font--2xs, .newspack-ui__font--xs, .newspack-
 	}
 
 	&:has(> input:checked:focus-visible) {
-		@include focus-edge( var(--newspack-ui-color-selected), $halo: var(--newspack-ui-color-focus) );
+		@include focus-edge( var(--newspack-ui-color-selected), 2px, var(--newspack-ui-color-focus) );
 	}
 
 	&:has(> input[aria-invalid="true"]:focus-visible),
 	&:where(.newspack-ui__field-error *):has(> input:focus-visible) {
-		@include focus-edge( var(--newspack-ui-color-error), $halo: var(--newspack-ui-color-focus) );
+		@include focus-edge( var(--newspack-ui-color-error), 2px, var(--newspack-ui-color-focus) );
 	}
 }
 

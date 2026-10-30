@@ -93,8 +93,6 @@
 		&:disabled:where(:not(.newspack-ui__button--loading)),
 		&.disabled:where(:not(.newspack-ui__button--loading)),
 		&[aria-disabled="true"]:where(:not(.newspack-ui__button--loading)) {
-			--newspack-ui-button-focus: var(--newspack-ui-button-ink-disabled);
-
 			background: var(--newspack-ui-button-bg-disabled) !important;
 			color: var(--newspack-ui-button-ink-disabled) !important;
 			cursor: default;
@@ -252,6 +250,14 @@
 			&.newspack-ui__button--outline {
 				--newspack-ui-color-border-outline-mix: 70%;
 				--newspack-ui-button-border: var(--newspack-ui-color-border-outline);
+			}
+		}
+
+		&:disabled,
+		&.disabled,
+		&[aria-disabled="true"] {
+			&:where(:not(.newspack-ui__button--loading)) {
+				--newspack-ui-button-focus: var(--newspack-ui-button-ink-disabled);
 			}
 		}
 

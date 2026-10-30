@@ -691,6 +691,8 @@
 				}
 
 				&:focus-visible {
+					border-color: currentcolor !important;
+
 					@include mixins.focus-edge( currentcolor, $halo: mixins.$focus-color );
 				}
 			}
@@ -703,12 +705,6 @@
 							background: var(--newspack-ui-color-surface-subtle, np-colors.$neutral-050) !important;
 							opacity: 1;
 						}
-					}
-
-					&:focus-visible {
-						border-color: currentcolor !important;
-
-						@include mixins.focus-edge( currentcolor, $halo: mixins.$focus-color );
 					}
 				}
 			}
