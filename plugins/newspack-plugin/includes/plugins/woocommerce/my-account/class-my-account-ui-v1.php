@@ -474,8 +474,9 @@ class My_Account_UI_V1 {
 		}
 
 		// Warn about what the reader pays for, not the `active_subscriptions` item, which
-		// lists what they hold. A gift's buyer pays for it but holds nothing, and
-		// deleting their account still trashes the gift. A group member holds a
+		// lists what they hold. A gift's buyer pays for it but holds nothing, so their
+		// item is empty. Deleting their account still changes the gift, because
+		// WooCommerce Subscriptions removes its recipient. A group member holds a
 		// product but pays for none.
 		$pays_for_subscription    = self::pays_for_subscription( $user->ID );
 		$active_donations         = Reader_Data::get_bool( $user->ID, 'is_donor' );

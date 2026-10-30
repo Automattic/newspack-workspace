@@ -162,10 +162,10 @@ class Newspack_Test_My_Account_Delete_Account_Modal extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A reader who bought a gift pays for it, and deleting their account trashes
-	 * it, so they are still warned. The gift belongs to its recipient, which
-	 * leaves the buyer's `active_subscriptions` item empty. The warning has to
-	 * come from what the buyer pays for.
+	 * A reader who bought a gift pays for it but doesn't hold it, which leaves
+	 * their `active_subscriptions` item empty. Deleting their account still
+	 * changes the gift, because WooCommerce Subscriptions removes its recipient,
+	 * so they are warned. The warning has to come from what the buyer pays for.
 	 */
 	public function test_gift_buyer_is_warned_about_recurring_payments() {
 		$recipient_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
