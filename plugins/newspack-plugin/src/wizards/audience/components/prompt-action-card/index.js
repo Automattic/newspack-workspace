@@ -9,7 +9,6 @@
 import apiFetch from '@wordpress/api-fetch';
 import { sprintf, __ } from '@wordpress/i18n';
 import {
-	CardBody,
 	DropdownMenu,
 	MenuGroup,
 	MenuItem,
@@ -19,7 +18,7 @@ import {
 import { flushSync, useEffect, useState, Fragment } from '@wordpress/element';
 import { decodeEntities } from '@wordpress/html-entities';
 import { moreVertical } from '@wordpress/icons';
-import { Badge, Stack } from '@wordpress/ui';
+import { Badge, Card, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
@@ -75,7 +74,7 @@ const PromptActionCard = props => {
 	};
 
 	return (
-		<CardBody className="newspack-campaigns__prompt">
+		<Card.Content className="newspack-campaigns__segment-group__content newspack-campaigns__prompt">
 			<Stack direction="column" gap="md">
 				<Stack direction="row" gap="md" wrap="wrap" align="center" justify="space-between">
 					<Stack direction="column" gap="xs" className="newspack-campaigns__prompt-summary">
@@ -285,7 +284,7 @@ const PromptActionCard = props => {
 					) }
 				</Modal>
 			) }
-		</CardBody>
+		</Card.Content>
 	);
 };
 export default PromptActionCard;

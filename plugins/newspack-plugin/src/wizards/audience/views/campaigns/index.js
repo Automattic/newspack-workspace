@@ -22,14 +22,14 @@ import { stringify } from 'qs';
 /**
  * Internal dependencies.
  */
-import { Button, WebPreview, withWizard } from '../../../../../packages/components/src';
+import { WebPreview, withWizard } from '../../../../../packages/components/src';
 import Router from '../../../../../packages/components/src/proxied-imports/router';
 import { Campaigns, ContextualPrompts, Settings, Segments } from './views';
 import AddCampaignAction from './campaigns/add-campaign-action';
 import CampaignActions from './campaigns/campaign-actions';
 import { CampaignsContext } from '../../contexts';
 
-const { HashRouter, NavLink, Redirect, Route, Switch } = Router;
+const { HashRouter, Redirect, Route, Switch } = Router;
 
 const headerText = __( 'Audience Management / Campaigns', 'newspack-plugin' );
 
@@ -405,13 +405,6 @@ class AudienceCampaigns extends Component {
 															'Group readers by what they do on the site, then target prompts at them.',
 															'newspack-plugin'
 													  )
-											}
-											headerActions={
-												props.match.params.id ? undefined : (
-													<NavLink to="segments/new">
-														<Button variant="primary">{ __( 'Add Segment', 'newspack-plugin' ) }</Button>
-													</NavLink>
-												)
 											}
 										/>
 									) }

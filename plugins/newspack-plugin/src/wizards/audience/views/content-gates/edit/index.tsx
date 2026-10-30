@@ -503,7 +503,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 			} );
 			actions.push( {
 				type: 'more',
-				label: gate.status === 'publish' ? __( 'Set to inactive', 'newspack-plugin' ) : __( 'Set to active', 'newspack-plugin' ),
+				label: gate.status === 'publish' ? __( 'Set to Inactive', 'newspack-plugin' ) : __( 'Set to Active', 'newspack-plugin' ),
 				action: () => updateStatus.current?.( gate.status === 'publish' ? 'draft' : 'publish' ),
 				disabled: isFetching,
 			} );
