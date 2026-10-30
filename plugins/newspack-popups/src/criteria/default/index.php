@@ -15,28 +15,27 @@ $criteria = [
 	 */
 	'articles_read'            => [
 		'name'              => __( 'Articles read', 'newspack-popups' ),
-		'description'       => __( 'Number of articles read in the last 30 day period.', 'newspack-popups' ),
+		'description'       => __( 'Articles read in the last 30 days.', 'newspack-popups' ),
 		'category'          => 'reader_engagement',
 		'matching_function' => 'range',
 	],
 	'articles_read_in_session' => [
 		'name'              => __( 'Articles read in session', 'newspack-popups' ),
-		'description'       => __( 'Number of articles recently read before 30 minutes of inactivity.', 'newspack-popups' ),
+		'description'       => __( 'Articles read in one visit. A visit ends after 30 minutes of inactivity.', 'newspack-popups' ),
 		'category'          => 'reader_engagement',
 		'matching_function' => 'range',
 	],
 	'favorite_categories'      => [
 		'name'               => __( 'Favorite Categories', 'newspack-popups' ),
-		'description'        => __( 'Most read categories of reader.', 'newspack-popups' ),
+		'description'        => __( 'The categories this reader reads most.', 'newspack-popups' ),
 		'category'           => 'reader_engagement',
 		'matching_function'  => 'list__in',
 		'matching_attribute' => 'favorite_categories',
 	],
 	'devices'                  => [
-		'name'        => __( 'Devices', 'newspack-popups' ),
-		'description' => __( 'The device the user is viewing the site on – e.g. mobile, tablet, etc.', 'newspack-popups' ),
-		'category'    => 'reader_engagement',
-		'options'     => [
+		'name'     => __( 'Devices', 'newspack-popups' ),
+		'category' => 'reader_engagement',
+		'options'  => [
 			[
 				'label'  => __( 'Desktop - 1280 px and above', 'newspack-popups' ),
 				'value'  => 'Desktop',
@@ -62,7 +61,7 @@ $criteria = [
 				],
 			],
 			[
-				'label'  => __( 'Mobile (large phones) - between 480 and 786 px wide', 'newspack-popups' ),
+				'label'  => __( 'Mobile (large phones) - between 480 and 768 px wide', 'newspack-popups' ),
 				'value'  => 'Mobile',
 				'params' => [
 					'max_width' => 768,
@@ -106,7 +105,7 @@ $criteria = [
 		'category'    => 'newsletter',
 		'options'     => [
 			[
-				'label' => __( 'Subscribers and non-subscribers', 'newspack-popups' ),
+				'label' => __( 'Any reader', 'newspack-popups' ),
 				'value' => '',
 			],
 			[
@@ -121,14 +120,14 @@ $criteria = [
 	],
 	'subscribed_lists'         => [
 		'name'               => __( 'Subscribed to newsletter lists', 'newspack-popups' ),
-		'description'        => __( 'If the reader is subscribed to any of the selected newsletter lists.', 'newspack-popups' ),
+		'description'        => __( 'Readers subscribed to any of the selected lists.', 'newspack-popups' ),
 		'category'           => 'newsletter',
 		'matching_function'  => 'list__in',
 		'matching_attribute' => 'newsletter_subscribed_lists',
 	],
 	'not_subscribed_lists'     => [
 		'name'               => __( 'Not subscribed to newsletter lists', 'newspack-popups' ),
-		'description'        => __( 'If the reader is NOT subscribed to any of the selected newsletter lists.', 'newspack-popups' ),
+		'description'        => __( 'Readers subscribed to none of the selected lists.', 'newspack-popups' ),
 		'category'           => 'newsletter',
 		'matching_function'  => 'list__not_in',
 		'matching_attribute' => 'newsletter_subscribed_lists',
@@ -139,7 +138,7 @@ $criteria = [
 		'category'    => 'reader_revenue',
 		'options'     => [
 			[
-				'label' => __( 'Donors and non-donors', 'newspack-popups' ),
+				'label' => __( 'Any reader', 'newspack-popups' ),
 				'value' => '',
 			],
 			[
@@ -189,7 +188,7 @@ $criteria = [
 	 */
 	'sources_to_match'         => [
 		'name'               => __( 'Sources to match', 'newspack-popups' ),
-		'description'        => __( 'Segment based on traffic source', 'newspack-popups' ),
+		'description'        => __( 'Readers arriving from these sites.', 'newspack-popups' ),
 		'help'               => __( 'A comma-separated list of domains.', 'newspack-popups' ),
 		'placeholder'        => 'google.com, facebook.com',
 		'category'           => 'referrer_sources',
@@ -198,7 +197,7 @@ $criteria = [
 	],
 	'sources_to_exclude'       => [
 		'name'               => __( 'Sources to exclude', 'newspack-popups' ),
-		'description'        => __( 'Segment based on traffic source - hide campaigns for visitors coming from specific sources.', 'newspack-popups' ),
+		'description'        => __( 'Readers arriving from these sites are left out.', 'newspack-popups' ),
 		'help'               => __( 'A comma-separated list of domains.', 'newspack-popups' ),
 		'placeholder'        => 'twitter.com, instagram.com',
 		'category'           => 'referrer_sources',

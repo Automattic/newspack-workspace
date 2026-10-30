@@ -1,22 +1,18 @@
 /**
- * External dependencies
- */
-import classnames from 'classnames';
-
-/**
  * WordPress dependencies.
  */
 import { __, _x, sprintf } from '@wordpress/i18n';
-import { CardBody } from '@wordpress/components';
-import { useDispatch } from '@wordpress/data';
+import { DropdownMenu, MenuGroup, MenuItem } from '@wordpress/components';
+import { select, useDispatch } from '@wordpress/data';
 import { decodeEntities } from '@wordpress/html-entities';
 import { createInterpolateElement, useMemo, useRef } from '@wordpress/element';
-import { Badge, Stack } from '@wordpress/ui';
+import { moreVertical } from '@wordpress/icons';
+import { Badge, Card, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import { Card, Grid, Router, TooltipBadge, useConfirmDialog } from '../../../../../packages/components/src';
+import { Divider, Router, TooltipBadge, useConfirmDialog } from '../../../../../packages/components/src';
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import { useWizardApiFetch } from '../../../hooks/use-wizard-api-fetch';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
@@ -26,6 +22,8 @@ import { useAccessRuleOptions } from './use-access-rule-options';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from './consts';
 
 const { useHistory } = Router;
+
+const TitleTag = 'h3';
 
 export default function ContentGateSettings( {
 	gate,
@@ -63,17 +61,22 @@ export default function ContentGateSettings( {
 		),
 	} );
 
-	const updateStatus = useRef< ( status: GateStatus ) => void >( undefined );
+	// Undo can outlive this card, once a status filter drops the card from the list. By then the
+	// render's own values are stale (isFetching stays true for good), so this reads what it needs at call time.
+	const getCurrentGates = () => ( select( WIZARD_STORE_NAMESPACE ).getWizardAPIData( slug )?.gates || [] ) as Gate[];
+	const isChangingStatus = useRef( false );
 	const handleStatusChange = ( status: GateStatus ) => {
-		if ( isFetching ) {
+		if ( isChangingStatus.current ) {
 			return;
 		}
+		isChangingStatus.current = true;
+		const currentGate = getCurrentGates().find( g => g.id === gate.id ) ?? gate;
 		resetError();
 		resetNotices();
-		const prevStatus = gate.status;
-		const gateTitle = gate.title;
+		const prevStatus = currentGate.status;
+		const gateTitle = currentGate.title;
 		const _gate = {
-			...gate,
+			...currentGate,
 			status,
 		};
 		wizardApiFetch< Gate >(
@@ -84,7 +87,7 @@ export default function ContentGateSettings( {
 			},
 			{
 				onSuccess( data: Gate ) {
-					updateGatesData( gates.map( g => ( g.id === data.id ? data : g ) ) );
+					updateGatesData( getCurrentGates().map( g => ( g.id === data.id ? data : g ) ) );
 					addNotice( {
 						message: sprintf(
 							// translators: 1: the gate title, or "Content" if we can't determine the gate title. 2: the gate status.
@@ -94,7 +97,7 @@ export default function ContentGateSettings( {
 						),
 						type: 'success',
 						id: 'content-gate-status-changed',
-						actions: [ { label: __( 'Undo', 'newspack-plugin' ), onClick: () => updateStatus.current?.( prevStatus ) } ],
+						actions: [ { label: __( 'Undo', 'newspack-plugin' ), onClick: () => handleStatusChange( prevStatus ) } ],
 					} );
 				},
 				onError( fetchError: WpFetchError ) {
@@ -104,10 +107,12 @@ export default function ContentGateSettings( {
 						id: 'content-gate-status-error',
 					} );
 				},
+				onFinally() {
+					isChangingStatus.current = false;
+				},
 			}
 		);
 	};
-	updateStatus.current = handleStatusChange;
 
 	const handleDelete = () => {
 		resetError();
@@ -180,7 +185,7 @@ export default function ContentGateSettings( {
 					decodeEntities( gate.title )
 			  )
 			: undefined;
-	const statusLabel = gate.status !== 'publish' ? __( 'Set to active', 'newspack-plugin' ) : __( 'Set to inactive', 'newspack-plugin' );
+	const statusLabel = gate.status !== 'publish' ? __( 'Set to Active', 'newspack-plugin' ) : __( 'Set to Inactive', 'newspack-plugin' );
 	const actions: { label: string; ariaLabel?: string; action?: () => void; href?: string; disabled?: boolean; destructive?: boolean }[][] = [
 		[
 			{
@@ -192,7 +197,7 @@ export default function ContentGateSettings( {
 			{
 				label: statusLabel,
 				ariaLabel: withGateTitle( statusLabel ),
-				action: () => updateStatus.current?.( gate.status === 'publish' ? 'draft' : 'publish' ),
+				action: () => handleStatusChange( gate.status === 'publish' ? 'draft' : 'publish' ),
 				disabled: isFetching,
 			},
 			{
@@ -243,44 +248,61 @@ export default function ContentGateSettings( {
 	return (
 		<>
 			{ deleteDialog }
-			<Card
-				className={ classnames( 'newspack-content-gates__gate', { 'newspack-content-gates__gate--inactive': gate.status !== 'publish' } ) }
-				id={ gate.id }
-				key={ gate.id }
-				isSmall
-				__experimentalCoreCard
-				__experimentalCoreProps={ {
-					noMargin: true,
-					header: (
-						<>
-							<Stack direction="row" gap="sm" wrap="wrap" align="center">
-								<h3>
-									<a href={ `#/edit/${ gate.id }` }>{ gate.title }</a>
-								</h3>
-								<Stack direction="row" gap="sm" wrap="wrap" align="center">
-									<Badge intent={ getGateStatusBadgeIntent( gate.status ) }>{ getGateStatus( gate.status ) }</Badge>
-									{ priorityWarning && (
-										<TooltipBadge label={ getPriorityWarningLabel() } tooltip={ priorityWarning } intent="low" />
-									) }
-								</Stack>
-							</Stack>
-						</>
-					),
-					actions,
-					actionsLabel,
-				} }
-			>
-				<CardBody>
-					<Grid className="newspack-content-gates__gate__settings" gutter={ 16 } noMargin>
+			<Card.Root className="newspack-content-gates__gate" id={ String( gate.id ) }>
+				<Card.Header render={ <Stack direction="row" gap="md" align="center" justify="space-between" /> }>
+					<Stack direction="row" gap="sm" wrap="wrap" align="center" className="newspack-content-gates__gate__heading">
+						<Card.Title render={ <TitleTag /> } className="newspack-content-gates__gate__title">
+							<a href={ `#/edit/${ gate.id }` }>{ gate.title }</a>
+						</Card.Title>
+						<Badge intent={ getGateStatusBadgeIntent( gate.status ) }>{ getGateStatus( gate.status ) }</Badge>
+						{ priorityWarning && <TooltipBadge label={ getPriorityWarningLabel() } tooltip={ priorityWarning } intent="low" /> }
+					</Stack>
+					<DropdownMenu
+						className="newspack-content-gates__gate__actions"
+						icon={ moreVertical }
+						label={ actionsLabel || __( 'More actions', 'newspack-plugin' ) }
+					>
+						{ ( { onClose } ) =>
+							actions.map( ( group, groupIndex ) => (
+								<MenuGroup key={ groupIndex }>
+									{ group.map( item => (
+										<MenuItem
+											key={ item.label }
+											aria-label={ item.ariaLabel }
+											{ ...( item.href ? { href: item.href } : {} ) }
+											onClick={
+												item.action
+													? () => {
+															onClose();
+															item.action?.();
+													  }
+													: undefined
+											}
+											disabled={ item.disabled || false }
+											isDestructive={ item.destructive || false }
+										>
+											{ item.label }
+										</MenuItem>
+									) ) }
+								</MenuGroup>
+							) )
+						}
+					</DropdownMenu>
+				</Card.Header>
+				<Card.Content render={ <Stack direction="column" gap="lg" /> }>
+					<Card.FullBleed>
+						<Divider marginTop={ 0 } marginBottom={ 0 } />
+					</Card.FullBleed>
+					<Stack direction="row" gap="lg" wrap="wrap">
 						{ getGateSummarySections( gate, isNewsletter, siteMeter, accessRuleOptions, siteAutoSignup ).map( section => (
 							<div key={ section.key } className="newspack-content-gates__gate__summary-section">
 								<h4>{ section.label }</h4>
 								{ section.content }
 							</div>
 						) ) }
-					</Grid>
-				</CardBody>
-			</Card>
+					</Stack>
+				</Card.Content>
+			</Card.Root>
 		</>
 	);
 }

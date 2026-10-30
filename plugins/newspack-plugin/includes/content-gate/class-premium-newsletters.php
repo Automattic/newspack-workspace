@@ -83,12 +83,13 @@ class Premium_Newsletters {
 	 * enqueued it so that downstream logic (e.g. consulting the renewal snapshot)
 	 * can be scoped to the originating event instead of leaking into unrelated
 	 * flows that happen to dequeue the same user. Plan-switch,
-	 * one-time-purchase-ended and gift-removed entries are remove-only:
-	 * check_access() never adds lists for them, and they never replace another
-	 * entry for the same user. A one-time purchase that ends, or a gift handed to
-	 * someone else, can't grant access, so adding lists there would only re-add
-	 * lists the reader had left; maybe_enqueue_access_check() covers the
-	 * plan-switch case.
+	 * one-time-purchase-ended, gift-removed and access-kept entries are
+	 * remove-only: check_access() never adds lists for them, and they never
+	 * replace another entry for the same user. A one-time purchase that ends, or a
+	 * gift handed to someone else, can't grant access, and a status change between
+	 * two statuses that both grant it leaves access as it was, so adding lists
+	 * there would only re-add lists the reader had left;
+	 * maybe_enqueue_access_check() covers the plan-switch and access-kept cases.
 	 */
 	const SOURCE_RENEWAL                 = 'renewal';
 	const SOURCE_SUBSCRIPTION_CHANGED    = 'subscription_changed';
@@ -100,6 +101,7 @@ class Premium_Newsletters {
 	const SOURCE_ONE_TIME_PURCHASE_ENDED = 'one_time_purchase_ended';
 	const SOURCE_GIFT_RECEIVED           = 'gift_received';
 	const SOURCE_GIFT_REMOVED            = 'gift_removed';
+	const SOURCE_ACCESS_KEPT             = 'access_kept';
 
 	/**
 	 * WP option key for how far the one-time purchase lapse sweep has checked.
@@ -122,6 +124,16 @@ class Premium_Newsletters {
 	 * @var int
 	 */
 	private static $sweep_page_size = 100;
+
+	/**
+	 * Gift recipients read just before WCS saves a subscription's edit screen,
+	 * keyed by subscription ID, 0 for a subscription with no recipient account.
+	 * Lets handle_cleared_gift_recipient() tell which reader lost a gift once WCS
+	 * has removed the recipient.
+	 *
+	 * @var array<int, int>
+	 */
+	private static $gift_recipients_before_save = [];
 
 	/**
 	 * User meta key for the renewal-time snapshot of the contact's full ESP list
@@ -168,6 +180,10 @@ class Premium_Newsletters {
 		// WCS Gifting fires is the only trigger for both readers. It fires whenever
 		// WCS sets a gift's recipient, not only on a hand-off: see the handler.
 		add_action( 'woocommerce_subscriptions_gifting_recipient_changed', [ __CLASS__, 'handle_gift_recipient_changed' ], 10, 3 );
+		// Clearing a recipient on the subscription edit screen fires no hook at all,
+		// so the recipient is read on either side of WCS's own save, at priority 50.
+		add_action( 'woocommerce_process_shop_order_meta', [ __CLASS__, 'remember_gift_recipient_before_save' ], 49 );
+		add_action( 'woocommerce_process_shop_order_meta', [ __CLASS__, 'handle_cleared_gift_recipient' ], 51 );
 
 		// Clean up the queue option on plugin deactivation.
 		add_action( 'newspack_deactivation', [ __CLASS__, 'unschedule_access_check_event' ] );
@@ -512,7 +528,7 @@ class Premium_Newsletters {
 	 * @return bool
 	 */
 	private static function is_remove_only_source( string $source ): bool {
-		return in_array( $source, [ self::SOURCE_PLAN_SWITCH, self::SOURCE_ONE_TIME_PURCHASE_ENDED, self::SOURCE_GIFT_REMOVED ], true );
+		return in_array( $source, [ self::SOURCE_PLAN_SWITCH, self::SOURCE_ONE_TIME_PURCHASE_ENDED, self::SOURCE_GIFT_REMOVED, self::SOURCE_ACCESS_KEPT ], true );
 	}
 
 	/**
@@ -1487,22 +1503,30 @@ class Premium_Newsletters {
 	}
 
 	/**
-	 * Queue access checks for both readers when a gifted subscription changes
-	 * recipient, because no subscription event fires when an admin reassigns a gift.
+	 * Queue access checks for the readers a change of holder affects, because no
+	 * subscription event fires when an admin reassigns a gift.
+	 *
+	 * The holder is the recipient, or the buyer when the subscription isn't a
+	 * gift. The new holder is checked for lists to add. The previous one only loses
+	 * lists: a remove-only check can't re-add one they left. With no previous
+	 * recipient, that check goes to the buyer, since an admin may have just given
+	 * the buyer's subscription a recipient.
+	 *
+	 * A gift bought at checkout keeps its recipient's email address when an admin
+	 * clears the recipient, so WCS still counts it as a gift and content gates give
+	 * it to no one. Only a gift with no address, one an admin created on the edit
+	 * screen, goes back to its buyer.
 	 *
 	 * WCS fires this hook every time it saves a gift's recipient, changed or not:
 	 * when the gift's parent order or a switch order is marked processing or
 	 * completed, and when an admin reassigns the gift. Renewal orders never fire
 	 * it. Because one order can fire it more than once with the same reader, an
-	 * unchanged recipient is skipped: a recheck could let auto-signup re-add a
-	 * list they left.
+	 * unchanged holder is skipped: a recheck could let auto-signup re-add a list
+	 * they left. Clearing a recipient on the edit screen fires no hook;
+	 * handle_cleared_gift_recipient() calls this with no new recipient instead.
 	 *
-	 * Clearing a recipient fires no hook, so a removal isn't covered here. After
-	 * an admin clears one, WCS sets the original recipient again the next time
-	 * the parent order or a switch order is marked processing or completed.
-	 *
-	 * @param \WC_Subscription $subscription     The gifted subscription.
-	 * @param int              $new_recipient_id The new recipient's user ID.
+	 * @param \WC_Subscription $subscription     The subscription.
+	 * @param int              $new_recipient_id The new recipient's user ID, or 0 if none.
 	 * @param int              $old_recipient_id The previous recipient's user ID, or 0 if none.
 	 *
 	 * @return void
@@ -1510,20 +1534,83 @@ class Premium_Newsletters {
 	public static function handle_gift_recipient_changed( $subscription, $new_recipient_id, $old_recipient_id ): void {
 		$new_recipient_id = (int) $new_recipient_id;
 		$old_recipient_id = (int) $old_recipient_id;
-		if ( $new_recipient_id === $old_recipient_id ) {
+		$buyer_id         = (int) $subscription->get_customer_id();
+		if ( $new_recipient_id > 0 ) {
+			$new_holder_id = $new_recipient_id;
+		} elseif ( class_exists( 'WCS_Gifting' ) && \WCS_Gifting::is_gifted_subscription( $subscription ) ) {
+			// Unlike WooCommerce_Subscriptions_Gifting::get_holder_id(), which gives
+			// such a gift to the buyer: content gates give it to no one.
+			$new_holder_id = 0;
+		} else {
+			$new_holder_id = $buyer_id;
+		}
+		$previous_holder_id = $old_recipient_id > 0 ? $old_recipient_id : $buyer_id;
+		if ( $new_holder_id === $previous_holder_id ) {
 			return;
 		}
-		if ( $new_recipient_id > 0 ) {
-			self::add_user_to_queue( $new_recipient_id, self::SOURCE_GIFT_RECEIVED );
+		if ( $new_holder_id > 0 ) {
+			self::add_user_to_queue( $new_holder_id, self::SOURCE_GIFT_RECEIVED );
 		}
-		// The reader who held the subscription until now only loses lists: a
-		// remove-only check can't re-add one they left. With no previous recipient
-		// that's the buyer, who loses access when an admin first gives their own
-		// subscription a recipient.
-		$previous_holder_id = $old_recipient_id > 0 ? $old_recipient_id : (int) $subscription->get_customer_id();
 		if ( $previous_holder_id > 0 ) {
 			self::add_user_to_queue( $previous_holder_id, self::SOURCE_GIFT_REMOVED );
 		}
+	}
+
+	/**
+	 * Remember a gift's recipient before WCS saves the subscription edit screen.
+	 *
+	 * @param int $order_id ID of the order or subscription being saved.
+	 *
+	 * @return void
+	 */
+	public static function remember_gift_recipient_before_save( $order_id ): void {
+		$subscription = self::get_subscription_being_saved( $order_id );
+		if ( $subscription ) {
+			self::$gift_recipients_before_save[ (int) $order_id ] = WooCommerce_Subscriptions_Gifting::get_recipient_id( $subscription );
+		}
+	}
+
+	/**
+	 * Recheck a gift's readers when an admin clears its recipient.
+	 *
+	 * WCS removes the recipient while it saves the edit screen and fires no hook,
+	 * so without this the former recipient would keep the gift's lists and a buyer
+	 * who gets the subscription back would never be checked. A reassignment fires
+	 * the recipient-changed hook from that same save, so a subscription that still
+	 * has a recipient account is left alone.
+	 *
+	 * @param int $order_id ID of the order or subscription being saved.
+	 *
+	 * @return void
+	 */
+	public static function handle_cleared_gift_recipient( $order_id ): void {
+		$order_id         = (int) $order_id;
+		$old_recipient_id = self::$gift_recipients_before_save[ $order_id ] ?? 0;
+		unset( self::$gift_recipients_before_save[ $order_id ] );
+		if ( ! $old_recipient_id ) {
+			return;
+		}
+		$subscription = self::get_subscription_being_saved( $order_id );
+		if ( ! $subscription || WooCommerce_Subscriptions_Gifting::get_recipient_id( $subscription ) ) {
+			return;
+		}
+		self::handle_gift_recipient_changed( $subscription, 0, $old_recipient_id );
+	}
+
+	/**
+	 * The subscription an edit-screen save is for, or null when the save is for
+	 * another kind of order.
+	 *
+	 * @param int $order_id ID of the order or subscription being saved.
+	 *
+	 * @return \WC_Subscription|null
+	 */
+	private static function get_subscription_being_saved( $order_id ) {
+		if ( ! function_exists( 'wcs_is_subscription' ) || ! \wcs_is_subscription( $order_id ) ) {
+			return null;
+		}
+		$subscription = \wcs_get_subscription( $order_id );
+		return $subscription ? $subscription : null;
 	}
 
 	/**
@@ -1543,7 +1630,8 @@ class Premium_Newsletters {
 	/**
 	 * Maybe add or remove the user from restricted lists based on their access status.
 	 * The recipient of a gifted subscription is queued too, and so are a group
-	 * subscription's members when the event can change their access.
+	 * subscription's members when the event can change their access. When it
+	 * can't, the owner and the recipient get a remove-only check.
 	 *
 	 * @param int    $timestamp Timestamp of the event.
 	 * @param array  $data      Data associated with the event.
@@ -1557,15 +1645,22 @@ class Premium_Newsletters {
 		if ( empty( $data['user_id'] ) ) {
 			return;
 		}
-		self::add_user_to_queue( (int) $data['user_id'], $source );
+		// A move between two statuses that both grant access, Active to Pending
+		// cancel or back, leaves access as it was. With auto-signup on, a full check
+		// would re-add every premium list the reader had left, so the owner and the
+		// recipient get a remove-only check, which keeps the usual cleanup of lists
+		// they no longer have access to.
+		$changes_access = self::event_changes_access( $data );
+		$check_source   = $changes_access ? $source : self::SOURCE_ACCESS_KEPT;
+		self::add_user_to_queue( (int) $data['user_id'], $check_source );
 		// A gift's status decides its recipient's access, so the recipient is checked
 		// on every event like the owner, not skipped like a group member when the
 		// status keeps access.
 		$recipient_id = self::get_gift_recipient_id( $data );
 		if ( $recipient_id ) {
-			self::add_user_to_queue( $recipient_id, $source );
+			self::add_user_to_queue( $recipient_id, $check_source );
 		}
-		if ( ! self::event_changes_group_access( $data ) ) {
+		if ( ! $changes_access ) {
 			return;
 		}
 		// A plan switch keeps the same status on both sides, so the event can't tell
@@ -1581,24 +1676,23 @@ class Premium_Newsletters {
 	}
 
 	/**
-	 * Whether a subscription event can change what a group's members are entitled to.
+	 * Whether a subscription event can change what its readers are entitled to.
 	 *
-	 * Members are skipped only when the status moves between the two statuses that
-	 * always grant access, Active and Pending cancel. Checking them then would
-	 * re-add every premium list a member had left whenever auto-signup is on. Any
-	 * other move may change access: On hold still grants it while a payment retry is
-	 * pending, so On hold to Expired, the last step of a lapse after failed
-	 * payments, ends it. A plan switch reports the same status on both sides but
-	 * may change the products, so it counts as a change too.
+	 * Only a move between the two statuses that always grant access, Active and
+	 * Pending cancel, leaves access as it was. Any other move may change it: On
+	 * hold still grants access while a payment retry is pending, so On hold to
+	 * Expired, the last step of a lapse after failed payments, ends it. A plan
+	 * switch reports the same status on both sides but may change the products, so
+	 * it counts as a change too, and so does an event with no status pair.
 	 *
 	 * The status pair can't show payment recovery, so On hold to Active after a
-	 * successful retry still checks members, as it does the owner.
+	 * successful retry still counts as a change.
 	 *
 	 * @param array $data Data associated with the event.
 	 *
 	 * @return bool
 	 */
-	private static function event_changes_group_access( $data ) {
+	private static function event_changes_access( $data ) {
 		$status_before = $data['status_before'] ?? '';
 		$status_after  = $data['status_after'] ?? '';
 		if ( $status_before === $status_after ) {
