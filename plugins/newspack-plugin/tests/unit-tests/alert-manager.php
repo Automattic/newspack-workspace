@@ -1449,26 +1449,67 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	 * A deletion whose retries run out pages even while its integration is
 	 * broken. The outage's own page doesn't cover it: once the deletion stops
 	 * retrying, nothing re-sends it after the account is fixed, so someone
-	 * has to finish it at the provider.
+	 * has to finish it at the provider. One page an hour per integration
+	 * carries the outage; the other readers reach the log.
 	 */
-	public function test_sync_retry_exhausted_for_a_deletion_pages_while_the_integration_is_broken() {
+	public function test_sync_retry_exhausted_for_deletions_pages_once_an_hour_while_the_integration_is_broken() {
 		$this->break_integration( 'esp' );
 		$this->capture_alerts( 'sync_retry_exhausted' );
 
+		foreach ( [ 'first@example.test', 'second@example.test' ] as $email ) {
+			do_action(
+				'newspack_sync_retry_exhausted',
+				[
+					'integration_id' => 'esp',
+					'email'          => $email,
+					'mode'           => 'delete',
+					'context'        => 'Reader deleted',
+					'retry_count'    => 5,
+					'reason'         => 'Payment Required',
+				]
+			);
+		}
+
+		$this->assertCount( 1, $this->captured['sync_retry_exhausted']['error'] );
+		$this->assertSame( 'first@example.test', $this->captured['sync_retry_exhausted']['error'][0]['context']['email'] );
+		$this->assertStringContainsString( 'deletion', $this->captured['sync_retry_exhausted']['error'][0]['message'] );
+		$this->assertCount( 1, $this->captured['sync_retry_exhausted']['warning'], 'The second reader still reaches the log.' );
+	}
+
+	/**
+	 * A deletion flag saved without its fields is reported apart from the
+	 * account failures that share its class: in the same hour, neither holds
+	 * back the other, and the deletion's message says it is one.
+	 */
+	public function test_a_deletion_flag_config_failure_does_not_take_the_account_failure_slot() {
+		$this->capture_alerts( 'sync_permanent_failure' );
+
 		do_action(
-			'newspack_sync_retry_exhausted',
+			'newspack_sync_permanent_failure',
 			[
 				'integration_id' => 'esp',
 				'email'          => 'reader@example.test',
-				'mode'           => 'delete',
+				'mode'           => 'flag',
 				'context'        => 'Reader deleted',
-				'retry_count'    => 5,
+				'reason'         => 'The provider saved the deletion flag without these fields: NP_Account_Deleted.',
+				'error_class'    => 'permanent_config',
+			]
+		);
+		do_action(
+			'newspack_sync_permanent_failure',
+			[
+				'integration_id' => 'esp',
+				'user_id'        => 1,
+				'context'        => 'Reader registered',
 				'reason'         => 'Payment Required',
+				'error_class'    => 'permanent_config',
 			]
 		);
 
-		$this->assertCount( 1, $this->captured['sync_retry_exhausted']['error'] );
-		$this->assertStringContainsString( 'deletion', $this->captured['sync_retry_exhausted']['error'][0]['message'] );
+		$alerts = array_merge( ...array_values( $this->captured['sync_permanent_failure'] ) );
+		$this->assertCount( 2, $alerts );
+		$this->assertStringContainsString( 'account-deletion', $alerts[0]['message'] );
+		$this->assertStringNotContainsString( 'account-deletion', $alerts[1]['message'] );
 	}
 
 	/**

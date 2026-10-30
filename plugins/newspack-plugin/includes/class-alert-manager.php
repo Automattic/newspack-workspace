@@ -331,12 +331,24 @@ class Alert_Manager {
 	 * An account deletion, whose payload carries a `mode`, pages regardless.
 	 * A contact sync runs again on the reader's next event, but nothing
 	 * re-sends a deletion once its retries run out, so someone has to finish
-	 * it at the provider after the outage ends.
+	 * it at the provider after the outage ends. It pages at most once an hour
+	 * per integration: one outage can exhaust many deletions at once, and the
+	 * rest still reach the log, as does each reader's failed push log row.
 	 *
 	 * @param array $payload Alert data from Contact_Sync.
 	 */
 	public static function handle_sync_retry_exhausted( $payload ) {
 		$is_deletion = isset( $payload['mode'] );
+		if ( $is_deletion ) {
+			$dedup_key = 'newspack_alert_dre_' . md5( (string) ( $payload['integration_id'] ?? '' ) );
+			$severity  = get_transient( $dedup_key ) ? 'warning' : 'error';
+			if ( 'error' === $severity ) {
+				// Set before dispatch, as in handle_sync_permanent_failure().
+				set_transient( $dedup_key, time(), HOUR_IN_SECONDS );
+			}
+		} else {
+			$severity = self::is_integration_broken( $payload['integration_id'] ?? '' ) ? 'warning' : 'error';
+		}
 		// The contact email is intentionally left out of the message; it is
 		// forwarded to the log via Logger's structured `user_email` param
 		// (see forward_alert_to_log) and remains available in `context`.
@@ -348,7 +360,6 @@ class Alert_Manager {
 			$payload['integration_id'] ?? 'unknown',
 			$payload['reason'] ?? 'unknown'
 		);
-		$severity = ! $is_deletion && self::is_integration_broken( $payload['integration_id'] ?? '' ) ? 'warning' : 'error';
 
 		/**
 		 * Fires when an alert condition is detected in the sync system.
@@ -385,6 +396,8 @@ class Alert_Manager {
 	 *   the site's credentials, or an audience that saved a deletion flag
 	 *   without its fields) is site-level, so it is reported at most once
 	 *   an hour per integration; the push log keeps the per-contact history.
+	 *   Deletion flags, whose payload carries a `mode`, take their own hourly
+	 *   slot, so a full audience never holds back an account failure.
 	 *   The hourly health check observes the same account state within the
 	 *   hour through its own request, and owns the escalation through
 	 *   handle_health_check_failed(). An account that refuses writes but
@@ -405,9 +418,10 @@ class Alert_Manager {
 	public static function handle_sync_permanent_failure( $payload ) {
 		$integration_id = $payload['integration_id'] ?? 'unknown';
 		$is_config      = 'permanent_contact' !== ( $payload['error_class'] ?? 'permanent_config' );
+		$is_deletion    = isset( $payload['mode'] );
 
 		if ( $is_config ) {
-			$dedup_key = 'newspack_alert_pf_' . md5( (string) $integration_id );
+			$dedup_key = 'newspack_alert_pf_' . md5( (string) $integration_id . ( $is_deletion ? '|deletion' : '' ) );
 			if ( get_transient( $dedup_key ) ) {
 				return;
 			}
@@ -416,17 +430,21 @@ class Alert_Manager {
 			set_transient( $dedup_key, time(), HOUR_IN_SECONDS );
 		}
 
-		$message = $is_config
-			? sprintf(
-				'Permanent config sync failure for integration "%s" (no retry). Last error: %s',
+		if ( $is_config ) {
+			$message = sprintf(
+				$is_deletion
+					? 'Permanent config failure for integration "%s" account-deletion sync; the deletion signal was not fully propagated (no retry). Last error: %s'
+					: 'Permanent config sync failure for integration "%s" (no retry). Last error: %s',
 				$integration_id,
 				$payload['reason'] ?? 'unknown'
-			)
-			: sprintf(
+			);
+		} else {
+			$message = sprintf(
 				'Permanent contact-data failure for integration "%s" account-deletion sync; the deletion signal was not propagated (no retry). Last error: %s',
 				$integration_id,
 				$payload['reason'] ?? 'unknown'
 			);
+		}
 
 		/** This action is documented in includes/class-alert-manager.php */
 		do_action(
