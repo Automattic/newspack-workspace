@@ -168,7 +168,7 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 			}
 
 			&[aria-invalid="true"]:not(:checked) {
-				@include focus-edge(var(--wp--custom--color--error-50), $important, $halo: $focus-color);
+				@include focus-edge(var(--wp--custom--color--error-50), $important, $halo: $focus-color, $width: 2px);
 			}
 
 			&:checked {

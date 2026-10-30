@@ -181,12 +181,12 @@
 		}
 
 		&:focus-visible:where(:not(.newspack-ui__input-card > *)) {
-			@include mixins.focus-edge( var(--newspack-ui-color-error), $halo: var(--newspack-ui-color-focus) );
+			@include mixins.focus-edge( var(--newspack-ui-color-error), 2px, var(--newspack-ui-color-focus) );
 
 			transition: background-color var(--newspack-ui-duration-color) ease;
 
 			&[type="radio"]:checked {
-				@include mixins.focus-edge( var(--newspack-ui-color-error), $halo: var(--newspack-ui-color-focus), $inner: inset 0 0 0 5px var(--newspack-ui-color-selected) );
+				@include mixins.focus-edge( var(--newspack-ui-color-error), 2px, var(--newspack-ui-color-focus), inset 0 0 0 5px var(--newspack-ui-color-selected) );
 			}
 		}
 
