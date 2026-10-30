@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "e1c1d8dbacb22d78fc6e55362fc24a2f",
+    "content-hash": "ff40287ac54c315ea7f316b320cdbccc",
     "packages": [
         {
             "name": "composer/installers",
@@ -1624,20 +1624,20 @@
         },
         {
             "name": "php-stubs/wordpress-tests-stubs",
-            "version": "v6.9.0",
+            "version": "v7.0.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/php-stubs/wordpress-tests-stubs.git",
-                "reference": "1f60fb7b70b7e9e3fe02bf0a3b7d69c10e5e2953"
+                "reference": "205a4e28bbd248a0d24bf45eb073826855b2fa2b"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/php-stubs/wordpress-tests-stubs/zipball/1f60fb7b70b7e9e3fe02bf0a3b7d69c10e5e2953",
-                "reference": "1f60fb7b70b7e9e3fe02bf0a3b7d69c10e5e2953",
+                "url": "https://api.github.com/repos/php-stubs/wordpress-tests-stubs/zipball/205a4e28bbd248a0d24bf45eb073826855b2fa2b",
+                "reference": "205a4e28bbd248a0d24bf45eb073826855b2fa2b",
                 "shasum": ""
             },
             "require-dev": {
-                "php": "^7.3 || ^8.0",
+                "php": "^7.4 || ^8.0",
                 "php-stubs/generator": "^0.8.0"
             },
             "suggest": {
@@ -1658,9 +1658,9 @@
             ],
             "support": {
                 "issues": "https://github.com/php-stubs/wordpress-tests-stubs/issues",
-                "source": "https://github.com/php-stubs/wordpress-tests-stubs/tree/v6.9.0"
+                "source": "https://github.com/php-stubs/wordpress-tests-stubs/tree/v7.0.2"
             },
-            "time": "2025-12-07T09:14:02+00:00"
+            "time": "2026-07-23T13:02:04+00:00"
         },
         {
             "name": "phpcompatibility/php-compatibility",
