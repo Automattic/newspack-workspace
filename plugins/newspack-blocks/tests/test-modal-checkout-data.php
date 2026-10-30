@@ -307,37 +307,6 @@ if ( ! class_exists( 'WC_Subscriptions_Product' ) ) {
 	}
 }
 
-if ( ! class_exists( 'WC_Subscription' ) ) {
-	/**
-	 * Minimal subscription stub. A subscription created by hand in wp-admin has
-	 * no parent order, so get_parent() returning false is the case under test.
-	 */
-	class WC_Subscription extends WC_Order {
-		/**
-		 * Parent order, or false when there is none.
-		 *
-		 * @var WC_Order|false
-		 */
-		private $parent;
-
-		/**
-		 * Constructor.
-		 *
-		 * @param array          $items  Line items.
-		 * @param WC_Order|false $parent Parent order, or false.
-		 * @param int            $id     Subscription ID.
-		 */
-		public function __construct( $items = [], $parent = false, $id = 901 ) {
-			parent::__construct( $id, '', $items );
-			$this->parent = $parent;
-		}
-
-		public function get_parent() {
-			return $this->parent;
-		}
-	}
-}
-
 if ( ! function_exists( 'wc_get_product' ) ) {
 	/**
 	 * Minimal wc_get_product stub.
