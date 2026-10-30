@@ -161,6 +161,20 @@ describe( 'Content Gates toolbar', () => {
 		expect( mockDataViewsProps.className ).not.toContain( 'is-default-view' );
 	} );
 
+	it( 'offers All, which clears the filter', () => {
+		renderGates( [ active, inactive ] );
+		changeView( { filters: [ inactiveFilter ] } );
+
+		const statusField = mockDataViewsProps.fields.find( field => 'status' === field.id );
+		expect( statusField.elements[ 0 ] ).toEqual( { value: 'all', label: 'All' } );
+
+		changeView( { filters: [ { ...inactiveFilter, value: 'all' } ] } );
+
+		expect( screen.getByText( 'Alpha' ) ).toBeInTheDocument();
+		expect( mockDataViewsProps.view.filters ).toEqual( [] );
+		expect( mockDataViewsProps.className ).toContain( 'is-default-view' );
+	} );
+
 	it( 'says so when nothing matches, and announces the count', () => {
 		mockSpeak.mockReset();
 		renderGates( [ active, inactive ] );

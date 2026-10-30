@@ -89,6 +89,15 @@ jest.mock( './utils', () => ( {
 } ) );
 
 describe( 'ContentGateSettings per-gate actions', () => {
+	let ContentGateSettings;
+
+	// The first load pulls in the whole card and can outlast the default per-test timeout.
+	beforeAll( () => {
+		// Read at module load; must exist before the component is required.
+		window.newspackAudienceContentGates = { available_access_rules: {} };
+		ContentGateSettings = require( './content-gate-settings' ).default;
+	}, 60000 );
+
 	beforeEach( () => {
 		mockAddNotice.mockReset();
 		mockCloseMenu.mockReset();
@@ -102,12 +111,9 @@ describe( 'ContentGateSettings per-gate actions', () => {
 			callbacks.onFinally?.();
 		};
 		mockConfig = {};
-		// Read at module load; must exist before the component is required.
-		window.newspackAudienceContentGates = { available_access_rules: {} };
 	} );
 
 	it( 'surfaces a failed status change as an error notice (NPPM-2733)', async () => {
-		const ContentGateSettings = require( './content-gate-settings' ).default;
 		render( <ContentGateSettings gate={ mockGate } updateGatesData={ () => {} } /> );
 
 		// gate.status === 'publish' -> the toggle action is labelled "Set to Inactive".
@@ -126,7 +132,6 @@ describe( 'ContentGateSettings per-gate actions', () => {
 	} );
 
 	it( 'surfaces a failed delete as an error notice (NPPM-2733)', async () => {
-		const ContentGateSettings = require( './content-gate-settings' ).default;
 		render( <ContentGateSettings gate={ mockGate } updateGatesData={ () => {} } /> );
 
 		// The Delete action routes through useConfirmDialog, mocked to fire its
@@ -144,7 +149,6 @@ describe( 'ContentGateSettings per-gate actions', () => {
 	} );
 
 	it( 'names the actions menu and each action after the gate', () => {
-		const ContentGateSettings = require( './content-gate-settings' ).default;
 		render( <ContentGateSettings gate={ mockGate } updateGatesData={ () => {} } /> );
 
 		expect( screen.getByRole( 'button', { name: 'Gate actions: Gate X' } ) ).toBeInTheDocument();
@@ -154,7 +158,6 @@ describe( 'ContentGateSettings per-gate actions', () => {
 	} );
 
 	it( 'closes the menu when an action runs', () => {
-		const ContentGateSettings = require( './content-gate-settings' ).default;
 		render( <ContentGateSettings gate={ mockGate } updateGatesData={ () => {} } /> );
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'Duplicate: Gate X' } ) );
@@ -173,7 +176,6 @@ describe( 'ContentGateSettings per-gate actions', () => {
 			callbacks.onFinally();
 		};
 		const updateGatesData = jest.fn();
-		const ContentGateSettings = require( './content-gate-settings' ).default;
 		const { rerender, unmount } = render( <ContentGateSettings gate={ mockGate } updateGatesData={ updateGatesData } /> );
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'Set to Inactive: Gate X' } ) );
@@ -193,10 +195,14 @@ describe( 'ContentGateSettings per-gate actions', () => {
 			expect.objectContaining( { id: 7, status: 'publish' } ),
 			expect.objectContaining( { id: 8, status: 'draft' } ),
 		] );
+
+		// Undoing the undo goes back to the status it replaced.
+		mockAddNotice.mock.calls.at( -1 )[ 0 ].actions[ 0 ].onClick();
+
+		expect( saves ).toEqual( [ 'draft', 'publish', 'draft' ] );
 	} );
 
 	it( 'links the layout items to the layout editor', () => {
-		const ContentGateSettings = require( './content-gate-settings' ).default;
 		render(
 			<ContentGateSettings
 				gate={ { ...mockGate, registration: { active: true, gate_layout_id: 12, metering: { enabled: false }, access_rules: [] } } }
@@ -209,7 +215,6 @@ describe( 'ContentGateSettings per-gate actions', () => {
 
 	it( 'names the site auto-signup setting on a premium newsletter card', () => {
 		mockConfig = { auto_signup: true };
-		const ContentGateSettings = require( './content-gate-settings' ).default;
 		render(
 			<ContentGateSettings
 				gate={ { ...mockGate, custom_access: { active: true, access_rules: [], metering: { enabled: false, count: 1, period: 'month' } } } }

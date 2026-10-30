@@ -31,6 +31,8 @@ import { filterGates, getGatesSubTitle, getUsefulGateFilterValues } from './util
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from './consts';
 import './style.scss';
 
+const ALL_GATES = 'all';
+
 const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] ) => void } ) => {
 	const wizardData = useWizardData( AUDIENCE_CONTENT_GATES_WIZARD_SLUG ) as WizardData;
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
@@ -80,7 +82,10 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 		const filterField = ( id: string, label: string, values: string[] ) => ( {
 			id,
 			label,
-			elements: values.map( value => ( { value, label: labels[ value ] } ) ),
+			elements: [
+				{ value: ALL_GATES, label: __( 'All', 'newspack-plugin' ) },
+				...values.map( value => ( { value, label: labels[ value ] } ) ),
+			],
 			filterBy: { operators: [ 'is' as const ], isPrimary: true },
 			enableSorting: false,
 		} );
@@ -111,8 +116,12 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 
 	const onChangeView = ( next: { search?: string; filters?: { field: string; value?: string }[] } ) => {
 		setChosenSearch( next.search || '' );
-		setChosenStatus( next.filters?.find( ( { field } ) => 'status' === field )?.value );
-		setChosenAccess( next.filters?.find( ( { field } ) => 'access' === field )?.value );
+		const chosen = ( id: string ) => {
+			const value = next.filters?.find( ( { field } ) => id === field )?.value;
+			return ALL_GATES === value ? undefined : value;
+		};
+		setChosenStatus( chosen( 'status' ) );
+		setChosenAccess( chosen( 'access' ) );
 	};
 
 	useEffect( () => {
