@@ -18,9 +18,24 @@
 		}
 	}
 
-	&__title {
-		.components-base-control__field {
-			margin: 0;
+	&__range {
+		> .components-base-control:first-child {
+			flex: 0 0 wp-vars.$grid-unit-80;
+		}
+
+		> .components-base-control:last-child {
+			flex: 1;
+		}
+	}
+
+	&__fields .newspack-settings__date-range-bound {
+		align-items: flex-end;
+		display: flex;
+		gap: wp-vars.$grid-unit-10;
+		margin: 0;
+
+		.newspack-text-control {
+			flex: 1;
 		}
 	}
 

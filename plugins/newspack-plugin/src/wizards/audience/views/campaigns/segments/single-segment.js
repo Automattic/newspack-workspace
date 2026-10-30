@@ -2,8 +2,7 @@
 /**
  * WordPress dependencies.
  */
-// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-import { Card, CardBody, ToggleControl, CheckboxControl } from '@wordpress/components';
+import { BaseControl, CheckboxControl, Notice, SelectControl, TextControl, ToggleControl } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
 import { useEffect, useState, Fragment } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
@@ -14,23 +13,12 @@ import { addQueryArgs } from '@wordpress/url';
 /**
  * Internal dependencies.
  */
-import {
-	Button,
-	CategoryAutocomplete,
-	Divider,
-	Grid,
-	Notice,
-	Router,
-	SectionHeader,
-	SelectControl,
-	Settings,
-	TextControl,
-	hooks,
-} from '../../../../../../packages/components/src';
+import { CategoryAutocomplete, Divider, Grid, Router, SectionHeader, Settings, hooks } from '../../../../../../packages/components/src';
 import ListsControl from '../../../components/lists-control';
+import SegmentsScreen from './screen';
 
 const { useHistory } = Router;
-const { SettingsSection, MinMaxSetting, DateRangeSetting } = Settings;
+const { DateRangeSetting } = Settings;
 
 /**
  * Whether a criterion should render as a multi-select checkbox group: ESP
@@ -44,7 +32,7 @@ const DEFAULT_CONFIG = {
 	is_disabled: false,
 };
 
-const SingleSegment = ( { segmentId, setSegments, wizardApiFetch } ) => {
+const SingleSegment = ( { segmentId, setSegments, wizardApiFetch, ...screenProps } ) => {
 	const allCriteria = window.newspackAudienceCampaigns?.criteria || [];
 
 	const [ segmentConfig, updateSegmentConfig ] = hooks.useObjectState( DEFAULT_CONFIG );
@@ -148,13 +136,38 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch } ) => {
 		const getInput = () => {
 			if ( criteria.matching_function === 'range' ) {
 				return (
-					<MinMaxSetting
-						data-testid={ `newspack-criteria-${ criteria.id }` }
-						min={ value?.min }
-						max={ value?.max }
-						onChangeMin={ min => update( { min } ) }
-						onChangeMax={ max => update( { max } ) }
-					/>
+					<Stack direction="column" gap="sm" data-testid={ `newspack-criteria-${ criteria.id }` }>
+						{ [
+							{
+								key: 'min',
+								label: __( 'Min', 'newspack-plugin' ),
+								number: value?.min,
+								checked: value?.min > 0,
+								onCheck: isChecked => update( { min: isChecked ? 1 : 0 } ),
+							},
+							{
+								key: 'max',
+								label: __( 'Max', 'newspack-plugin' ),
+								number: value?.max,
+								checked: value?.max > 0,
+								onCheck: isChecked => update( { max: isChecked ? value?.min || 1 : 0 } ),
+							},
+						].map( ( { key, label, number, checked, onCheck } ) => (
+							<Stack key={ key } direction="row" gap="sm" align="center" className="newspack-campaigns-wizard-segments__range">
+								<CheckboxControl label={ label } checked={ checked } onChange={ onCheck } __nextHasNoMarginBottom />
+								<TextControl
+									data-testid={ key }
+									label={ label }
+									hideLabelFromVision
+									type="number"
+									value={ number ?? '' }
+									onChange={ next => update( { [ key ]: next > 0 ? next : 0 } ) }
+									__next40pxDefaultSize
+									__nextHasNoMarginBottom
+								/>
+							</Stack>
+						) ) }
+					</Stack>
 				);
 			}
 			if ( 'date_range' === criteria.matching_function ) {
@@ -183,6 +196,7 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch } ) => {
 								onChange={ isChecked =>
 									update( isChecked ? [ ...selected, option.value ] : selected.filter( v => v !== option.value ) )
 								}
+								__nextHasNoMarginBottom
 							/>
 						) ) }
 					</div>
@@ -192,19 +206,34 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch } ) => {
 				return (
 					<SelectControl
 						data-testid={ `newspack-criteria-${ criteria.id }` }
-						isWide
+						label={ criteria.name }
+						help={ criteria.description }
 						onChange={ update }
 						value={ value }
 						options={ criteria.options }
+						__next40pxDefaultSize
+						__nextHasNoMarginBottom
 					/>
 				);
 			}
 			return (
 				<TextControl
 					data-testid={ `newspack-criteria-${ criteria.id }` }
-					isWide
+					label={ criteria.name }
 					placeholder={ criteria.placeholder }
-					help={ criteria.help }
+					help={
+						criteria.description && criteria.help ? (
+							<>
+								{ criteria.description }
+								<br />
+								{ criteria.help }
+							</>
+						) : (
+							criteria.description || criteria.help
+						)
+					}
+					__next40pxDefaultSize
+					__nextHasNoMarginBottom
 					// A criterion that changed operators may still hold an object value
 					// (a saved { start, end } range after the field moved off Date range).
 					// Rendered raw it becomes "[object Object]", and one keystroke would
@@ -215,7 +244,22 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch } ) => {
 				/>
 			);
 		};
-		return applyFilters( 'newspack.criteria.input', getInput(), criteria, value, update );
+		const input = getInput();
+		const filteredInput = applyFilters( 'newspack.criteria.input', input, criteria, value, update );
+		const labelsItself =
+			filteredInput === input &&
+			'range' !== criteria.matching_function &&
+			'date_range' !== criteria.matching_function &&
+			! isMultiSelectCriteria( criteria );
+		if ( labelsItself ) {
+			return filteredInput;
+		}
+		return (
+			<BaseControl help={ criteria.description } __nextHasNoMarginBottom>
+				<BaseControl.VisualLabel>{ criteria.name }</BaseControl.VisualLabel>
+				{ filteredInput }
+			</BaseControl>
+		);
 	};
 
 	// translators: %s is the segment's numeric ID.
@@ -259,80 +303,95 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch } ) => {
 		},
 	];
 
+	const headerActions = [
+		{
+			type: 'secondary',
+			label: __( 'Cancel', 'newspack-plugin' ),
+			href: '#/segments',
+		},
+		{
+			type: 'primary',
+			label: __( 'Save', 'newspack-plugin' ),
+			onClick: saveSegment,
+			disabled: ! isSegmentValid() || ( ! isNew && ! isDirty ),
+		},
+	];
+
+	const breadcrumbItems = [
+		{ label: __( 'Audience Management', 'newspack-plugin' ) },
+		{ label: __( 'Campaigns', 'newspack-plugin' ), url: '#/campaigns' },
+		{ label: __( 'Segments', 'newspack-plugin' ), url: '#/segments' },
+		{ label: isNew ? __( 'Add Segment', 'newspack-plugin' ) : __( 'Edit Segment', 'newspack-plugin' ) },
+	];
+
 	return (
-		<div className="newspack-campaigns-wizard-segments__form">
-			<Grid columns={ 2 } gutter={ 32 }>
-				<SectionHeader
-					heading={ 2 }
-					title={ __( 'Title', 'newspack-plugin' ) }
-					description={ __( 'Choose a name to help you find this segment later.', 'newspack-plugin' ) }
-				/>
-				<TextControl
-					placeholder={ __( 'Untitled Segment', 'newspack-plugin' ) }
-					value={ name }
-					onChange={ setName }
-					label={ __( 'Title', 'newspack-plugin' ) }
-					hideLabelFromVision
-					className="newspack-campaigns-wizard-segments__title"
-					help={ analyticsIdHelp }
-				/>
-			</Grid>
-			<Divider alignment="full-width" variant="tertiary" />
-			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader
-					heading={ 2 }
-					title={ __( 'Segment Status', 'newspack-plugin' ) }
-					description={ __( 'If not enabled, the segment will be ignored for reader segmentation.', 'newspack-plugin' ) }
-				/>
-				<Card className="newspack-settings__card">
-					<CardBody>
-						<ToggleControl
-							label={ __( 'Segment enabled', 'newspack-plugin' ) }
-							checked={ ! segmentConfig.is_disabled }
-							onChange={ () => updateSegmentConfig( { is_disabled: ! segmentConfig.is_disabled } ) }
-							__nextHasNoMarginBottom
-						/>
-					</CardBody>
-				</Card>
-			</Grid>
-			{ criteriaCategories.map( ( { id, title, description, notification } ) => {
-				const categoryCriteria = allCriteria.filter( criteria => criteria.category === id );
-				if ( 'integrations' === id && ! categoryCriteria.length ) {
-					return null;
-				}
-				return (
-					<Fragment key={ id }>
-						<Divider alignment="full-width" variant="tertiary" />
-						<Grid columns={ 2 } gutter={ 32 } noMargin>
-							<SectionHeader heading={ 2 } title={ title } description={ description } />
-							<Stack direction="column" gap="lg">
-								{ notification && <Notice noticeText={ notification } /> }
-								<Card className="newspack-settings__card">
-									<CardBody>
-										<Stack direction="column" gap="lg">
-											{ categoryCriteria.map( criteria => (
-												<SettingsSection key={ criteria.id } title={ criteria.name } description={ criteria.description }>
-													{ getCriteriaInput( criteria ) }
-												</SettingsSection>
-											) ) }
-										</Stack>
-									</CardBody>
-								</Card>
-							</Stack>
-						</Grid>
-					</Fragment>
-				);
-			} ) }
-			<Divider alignment="full-width" variant="tertiary" />
-			<div className="newspack-buttons-card">
-				<Button disabled={ ! isSegmentValid() || ( ! isNew && ! isDirty ) } isPrimary onClick={ saveSegment }>
-					{ __( 'Save', 'newspack-plugin' ) }
-				</Button>
-				<Button isSecondary href="#/segments">
-					{ __( 'Cancel', 'newspack-plugin' ) }
-				</Button>
+		<SegmentsScreen
+			{ ...screenProps }
+			tabbedNavigation={ undefined }
+			breadcrumbItems={ breadcrumbItems }
+			headerActions={ headerActions }
+			subHeaderText={ __( 'Choose which readers belong to this segment.', 'newspack-plugin' ) }
+		>
+			<div className="newspack-campaigns-wizard-segments__form">
+				<Grid columns={ 2 } gutter={ 32 } noMargin>
+					<SectionHeader
+						heading={ 2 }
+						noMargin
+						title={ __( 'Title', 'newspack-plugin' ) }
+						description={ __( 'Choose a name to help you find this segment later.', 'newspack-plugin' ) }
+					/>
+					<TextControl
+						placeholder={ __( 'Untitled Segment', 'newspack-plugin' ) }
+						value={ name }
+						onChange={ setName }
+						label={ __( 'Title', 'newspack-plugin' ) }
+						hideLabelFromVision
+						help={ analyticsIdHelp }
+						__next40pxDefaultSize
+						__nextHasNoMarginBottom
+					/>
+				</Grid>
+				<Divider alignment="full-width" variant="tertiary" />
+				<Grid columns={ 2 } gutter={ 32 } noMargin>
+					<SectionHeader
+						heading={ 2 }
+						noMargin
+						title={ __( 'Segment Status', 'newspack-plugin' ) }
+						description={ __( 'If not enabled, the segment will be ignored for reader segmentation.', 'newspack-plugin' ) }
+					/>
+					<ToggleControl
+						label={ __( 'Segment enabled', 'newspack-plugin' ) }
+						checked={ ! segmentConfig.is_disabled }
+						onChange={ () => updateSegmentConfig( { is_disabled: ! segmentConfig.is_disabled } ) }
+						__nextHasNoMarginBottom
+					/>
+				</Grid>
+				{ criteriaCategories.map( ( { id, title, description, notification } ) => {
+					const categoryCriteria = allCriteria.filter( criteria => criteria.category === id );
+					if ( 'integrations' === id && ! categoryCriteria.length ) {
+						return null;
+					}
+					return (
+						<Fragment key={ id }>
+							<Divider alignment="full-width" variant="tertiary" />
+							<Grid columns={ 2 } gutter={ 32 } noMargin>
+								<SectionHeader heading={ 2 } noMargin title={ title } description={ description } />
+								<Stack direction="column" gap="xl" className="newspack-settings__card newspack-campaigns-wizard-segments__fields">
+									{ notification && (
+										<Notice status="info" isDismissible={ false } spokenMessage="">
+											{ notification }
+										</Notice>
+									) }
+									{ categoryCriteria.map( criteria => (
+										<Fragment key={ criteria.id }>{ getCriteriaInput( criteria ) }</Fragment>
+									) ) }
+								</Stack>
+							</Grid>
+						</Fragment>
+					);
+				} ) }
 			</div>
-		</div>
+		</SegmentsScreen>
 	);
 };
 
@@ -435,6 +494,7 @@ addFilter( 'newspack.criteria.input', 'newspack.devices', function ( element, cr
 									update( selectedDevices.filter( item => item !== device.value ) );
 								}
 							} }
+							__nextHasNoMarginBottom
 						/>
 					) ) }
 				</Grid>

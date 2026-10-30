@@ -1,7 +1,7 @@
 /**
  * Internal dependencies.
  */
-import { withWizardScreen } from '../../../../../../packages/components/src';
+import SegmentsScreen from './screen';
 import SegmentsList from './segments-list';
 import SingleSegment from './single-segment';
 import './style.scss';
@@ -14,8 +14,10 @@ const PopupSegmentation = ( { wizardApiFetch, match, ...props } ) => {
 	return segmentId ? (
 		<SingleSegment segmentId={ segmentId } wizardApiFetch={ wizardApiFetch } { ...props } />
 	) : (
-		<SegmentsList wizardApiFetch={ wizardApiFetch } { ...props } />
+		<SegmentsScreen { ...props }>
+			<SegmentsList wizardApiFetch={ wizardApiFetch } { ...props } />
+		</SegmentsScreen>
 	);
 };
 
-export default withWizardScreen( PopupSegmentation );
+export default PopupSegmentation;
