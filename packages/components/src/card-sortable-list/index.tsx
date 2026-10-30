@@ -10,14 +10,15 @@ import classNames from 'classnames';
 /**
  * WordPress dependencies.
  */
-import { Disabled, Draggable } from '@wordpress/components';
+import { Disabled, Draggable, DropdownMenu, MenuItem, ToggleControl } from '@wordpress/components';
 import { useEffect, useLayoutEffect, useRef, useState } from '@wordpress/element';
-import { Badge, Stack } from '@wordpress/ui';
+import { __ } from '@wordpress/i18n';
+import { chevronDown, chevronUp, dragHandle, moreVertical } from '@wordpress/icons';
+import { Badge, Card, Icon, IconButton, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import Card from '../card';
 import TooltipBadge from '../tooltip-badge';
 import type { CardBadge } from '../types';
 import './style.scss';
@@ -56,6 +57,8 @@ type DragMeasurements = {
 	itemTops: number[];
 };
 
+const TitleTag = 'h3';
+
 const CardSortableList = ( {
 	disabled = false,
 	items = [],
@@ -82,6 +85,58 @@ const CardSortableList = ( {
 	} | null >( null );
 	const [ buttonMoveId, setButtonMoveId ] = useState( 0 );
 	const documentDragOverRef = useRef< ( ( e: Event ) => void ) | null >( null );
+	const sortedItemsRef = useRef( sortedItems );
+	sortedItemsRef.current = sortedItems;
+	const pendingFocusRef = useRef< { id: DraggableItem[ 'id' ]; direction: number; at: number } | null >( null );
+
+	/**
+	 * Move focus to the matching chevron button on the card at `index`: the
+	 * button in the direction of travel, or the other one when that is disabled.
+	 */
+	const focusMoveButton = ( id: DraggableItem[ 'id' ], direction: number ) => {
+		const index = sortedItemsRef.current.findIndex( item => item.id === id );
+		const moveButtons = itemRefs.current[ index ]?.querySelectorAll< HTMLButtonElement >(
+			'.newspack-card--core--sortable-list__move-buttons button'
+		);
+		if ( ! moveButtons ) {
+			return;
+		}
+		const preferred = direction > 0 ? moveButtons[ 1 ] : moveButtons[ 0 ];
+		const fallback = direction > 0 ? moveButtons[ 0 ] : moveButtons[ 1 ];
+		if ( preferred && ! preferred.disabled ) {
+			preferred.focus();
+		} else if ( fallback && ! fallback.disabled ) {
+			fallback.focus();
+		}
+	};
+
+	// A parent that disables the list while it saves makes the browser drop focus, and the reorder can move the button again; keep giving it back for a moment once the list is enabled.
+	useEffect( () => {
+		const pending = pendingFocusRef.current;
+		const ownerDocument = listRef.current?.ownerDocument;
+		if ( disabled || ! pending || ! ownerDocument ) {
+			return;
+		}
+		pendingFocusRef.current = null;
+		if ( Date.now() - pending.at > 30000 ) {
+			return;
+		}
+		const expires = Date.now() + 1500;
+		let frame = 0;
+		const restore = () => {
+			const active = ownerDocument.activeElement;
+			if ( ! active || active === ownerDocument.body ) {
+				focusMoveButton( pending.id, pending.direction );
+			} else if ( ! listRef.current?.contains( active ) ) {
+				return;
+			}
+			if ( Date.now() < expires ) {
+				frame = requestAnimationFrame( restore );
+			}
+		};
+		restore();
+		return () => cancelAnimationFrame( frame );
+	}, [ disabled ] ); // eslint-disable-line react-hooks/exhaustive-deps
 
 	// Keep sortedItems in sync when the items prop changes externally (e.g. after a save).
 	useEffect( () => {
@@ -178,23 +233,9 @@ const CardSortableList = ( {
 				}
 			} );
 
-			// Move focus to the matching chevron button on the card at toIndex.
-			// Focus before onDragCallback so a parent rerender can't steal focus.
-			const targetEl = itemRefs.current[ toIndex ];
-			if ( targetEl ) {
-				const moveButtons = targetEl.querySelectorAll< HTMLButtonElement >(
-					'.newspack-card--core__header__draggable-controls__move-buttons button'
-				);
-				// direction > 0 = moved down → prefer the down button (index 1).
-				// direction < 0 = moved up   → prefer the up   button (index 0).
-				const preferred = direction > 0 ? moveButtons[ 1 ] : moveButtons[ 0 ];
-				const fallback = direction > 0 ? moveButtons[ 0 ] : moveButtons[ 1 ];
-				if ( preferred && ! preferred.disabled ) {
-					preferred.focus();
-				} else if ( fallback && ! fallback.disabled ) {
-					fallback.focus();
-				}
-			}
+			const movedId = sortedItemsRef.current[ toIndex ]?.id;
+			focusMoveButton( movedId, direction );
+			pendingFocusRef.current = { id: movedId, direction, at: Date.now() };
 
 			onDragCallback( fromIndex, toIndex );
 			buttonMoveTimer.current = null;
@@ -398,55 +439,98 @@ const CardSortableList = ( {
 								appendToOwnerDocument
 							>
 								{ ( { onDraggableStart, onDraggableEnd } ) => (
-									<Card
-										isSmall
+									<Card.Root
+										className="newspack-card--core--sortable-list__card"
 										draggable
 										onDragStart={ onDraggableStart }
 										onDragEnd={ onDraggableEnd }
-										__experimentalCoreCard
-										__experimentalCoreProps={ {
-											header: (
-												<>
-													<h3>
-														{ item.title }
-														{ item.badge?.label && (
-															<Badge intent={ item.badge.intent ?? 'none' }>{ item.badge.label }</Badge>
-														) }
-														{ item.secondaryBadge?.label &&
-															( item.secondaryBadge.tooltip ? (
-																<TooltipBadge
-																	label={ item.secondaryBadge.label }
-																	tooltip={ item.secondaryBadge.tooltip }
-																	intent={ item.secondaryBadge.intent }
-																/>
-															) : (
-																<Badge intent={ item.secondaryBadge.intent ?? 'none' }>
-																	{ item.secondaryBadge.label }
-																</Badge>
-															) ) }
-													</h3>
-													{ item.description && <p>{ item.description }</p> }
-												</>
-											),
-											isDraggable: true,
-											isFirstTarget: index === 0,
-											isLastTarget: index === sortedItems.length - 1,
-											dragIndex: index,
-											onDragCallback: handleButtonMove,
-											...( item.onToggleChange !== undefined && {
-												actionType: 'toggle',
-												isActive: item.toggleChecked,
-												onToggle: item.onToggleChange,
-												// Names the toggle for assistive tech. The card hides this
-												// label, since the header already shows the title.
-												title: item.title,
-											} ),
-											...( item.actions !== undefined && {
-												actions: item.actions,
-												actionsLabel: item.actionsLabel,
-											} ),
-										} }
-									/>
+									>
+										<Card.Header
+											className="newspack-card--core--sortable-list__header"
+											render={ <Stack direction="row" align="center" gap="lg" /> }
+										>
+											<Stack direction="row" align="center" gap="xs" className="newspack-card--core--sortable-list__controls">
+												<Icon icon={ dragHandle } className="newspack-card--core--sortable-list__drag-handle" />
+												<Stack direction="column" gap="xs" className="newspack-card--core--sortable-list__move-buttons">
+													<IconButton
+														variant="minimal"
+														tone="neutral"
+														size="small"
+														icon={ chevronUp }
+														label={ __( 'Move one position up', 'newspack-plugin' ) }
+														disabled={ index === 0 }
+														focusableWhenDisabled={ false }
+														onClick={ () => handleButtonMove( index, index - 1 ) }
+													/>
+													<IconButton
+														variant="minimal"
+														tone="neutral"
+														size="small"
+														icon={ chevronDown }
+														label={ __( 'Move one position down', 'newspack-plugin' ) }
+														disabled={ index === sortedItems.length - 1 }
+														focusableWhenDisabled={ false }
+														onClick={ () => handleButtonMove( index, index + 1 ) }
+													/>
+												</Stack>
+											</Stack>
+											<div className="newspack-card--core--sortable-list__summary">
+												<Card.Title render={ <TitleTag /> } className="newspack-card--core--sortable-list__title">
+													{ item.title }
+													{ item.badge?.label && (
+														<Badge intent={ item.badge.intent ?? 'none' }>{ item.badge.label }</Badge>
+													) }
+													{ item.secondaryBadge?.label &&
+														( item.secondaryBadge.tooltip ? (
+															<TooltipBadge
+																label={ item.secondaryBadge.label }
+																tooltip={ item.secondaryBadge.tooltip }
+																intent={ item.secondaryBadge.intent }
+															/>
+														) : (
+															<Badge intent={ item.secondaryBadge.intent ?? 'none' }>
+																{ item.secondaryBadge.label }
+															</Badge>
+														) ) }
+												</Card.Title>
+												{ item.description && (
+													<p className="newspack-card--core--sortable-list__description">{ item.description }</p>
+												) }
+											</div>
+											{ ( item.onToggleChange !== undefined || item.actions?.length ) && (
+												<Stack direction="row" align="center" gap="sm" className="newspack-card--core--sortable-list__end">
+													{ item.onToggleChange !== undefined && (
+														<ToggleControl
+															className="newspack-card--core--sortable-list__toggle"
+															label={ item.title }
+															checked={ item.toggleChecked }
+															onChange={ item.onToggleChange }
+														/>
+													) }
+													{ item.actions && item.actions.length > 0 && (
+														<DropdownMenu
+															icon={ moreVertical }
+															label={ item.actionsLabel || __( 'More actions', 'newspack-plugin' ) }
+														>
+															{ () =>
+																item.actions?.map( ( action, actionIndex ) => (
+																	<MenuItem
+																		key={ actionIndex }
+																		icon={ action.icon as never }
+																		onClick={ action.action }
+																		disabled={ action.disabled || false }
+																		isDestructive={ action.destructive || false }
+																	>
+																		{ action.label }
+																	</MenuItem>
+																) )
+															}
+														</DropdownMenu>
+													) }
+												</Stack>
+											) }
+										</Card.Header>
+									</Card.Root>
 								) }
 							</Draggable>
 						</div>
