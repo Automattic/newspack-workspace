@@ -39,6 +39,10 @@ export const promptEditorPropsSelector = select => {
 		excluded_categories,
 		excluded_tags,
 		expiration_date,
+		newspack_popups_ab_test_id,
+		newspack_popups_ab_variant,
+		newspack_popups_ab_test_goal,
+		newspack_popups_ab_control_share,
 	} = meta || {};
 
 	const isOverlay = isOverlayPlacement( placement );
@@ -79,6 +83,11 @@ export const promptEditorPropsSelector = select => {
 		excluded_tags,
 		expiration_date,
 		postStatus,
+		newspack_popups_ab_test_id,
+		newspack_popups_ab_variant,
+		newspack_popups_ab_test_goal,
+		newspack_popups_ab_control_share,
+		postId: select( 'core/editor' ).getCurrentPostId(),
 	};
 };
 

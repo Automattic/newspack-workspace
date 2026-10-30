@@ -19,6 +19,10 @@ class WP_UnitTestCase_PageWithPopups extends WP_UnitTestCase {
 	protected static $segments            = []; // phpcs:ignore Squiz.Commenting.VariableComment.Missing
 
 	public function set_up() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
+		// Without this, WordPress's per-test hook backup and restore never runs, so
+		// a filter one test adds stays in place for every test after it.
+		parent::set_up();
+
 		// Reset segments.
 		Newspack_Segments_Model::delete_all_segments();
 		self::$segments = Newspack_Popups_Segmentation::create_segment(

@@ -195,6 +195,39 @@ final class Newspack_Popups_API {
 				]
 			);
 		}
+
+		if ( Newspack_Popups_AB_Tests::is_enabled() ) {
+			register_rest_route(
+				'newspack-popups/v1',
+				'/ab-tests/(?P<test_id>[a-z0-9-]+)',
+				[
+					'methods'             => \WP_REST_Server::READABLE,
+					'callback'            => [ __CLASS__, 'api_get_ab_test_prompts' ],
+					'permission_callback' => [ __CLASS__, 'prompt_editor_permission_callback' ],
+				]
+			);
+		}
+	}
+
+	/**
+	 * The prompts in an A/B test, for the editor's "other prompts in this test" list.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response
+	 */
+	public static function api_get_ab_test_prompts( $request ) {
+		return rest_ensure_response( Newspack_Popups_AB_Tests::get_test_prompts( $request->get_param( 'test_id' ) ) );
+	}
+
+	/**
+	 * Permission for routes the prompt editor calls: anyone who can edit prompts,
+	 * which is wider than `permission_callback()`'s administrators.
+	 *
+	 * @return bool
+	 */
+	public static function prompt_editor_permission_callback() {
+		$post_type = get_post_type_object( Newspack_Popups::NEWSPACK_POPUPS_CPT );
+		return $post_type && current_user_can( $post_type->cap->edit_posts );
 	}
 
 	/**

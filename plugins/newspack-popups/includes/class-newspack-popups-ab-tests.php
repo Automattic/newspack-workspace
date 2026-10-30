@@ -39,6 +39,8 @@ final class Newspack_Popups_AB_Tests {
 
 	const VALID_VARIANTS = [ 'a', 'b', 'c', 'd' ];
 
+	const VALID_GOALS = [ 'form_submission', 'link_click', 'donation', 'subscription' ];
+
 	const DEFAULT_CONTROL_SHARE = 50;
 
 	/**
@@ -154,7 +156,7 @@ final class Newspack_Popups_AB_Tests {
 				$base,
 				[
 					'type'              => 'string',
-					'sanitize_callback' => 'sanitize_title',
+					'sanitize_callback' => [ __CLASS__, 'sanitize_test_id' ],
 				]
 			)
 		);
@@ -188,7 +190,16 @@ final class Newspack_Popups_AB_Tests {
 				$base,
 				[
 					'type'              => 'string',
-					'sanitize_callback' => 'sanitize_key',
+					'sanitize_callback' => [ __CLASS__, 'sanitize_goal' ],
+					// Same reason as the variant enum: an unknown goal fails the REST
+					// write with a 400 the editor can show, instead of being coerced to
+					// '' (no goal) on a 200. The empty string stays valid.
+					'show_in_rest'      => [
+						'schema' => [
+							'type' => 'string',
+							'enum' => array_merge( [ '' ], self::VALID_GOALS ),
+						],
+					],
 				]
 			)
 		);
@@ -290,26 +301,80 @@ final class Newspack_Popups_AB_Tests {
 			return $prepared_post;
 		}
 
-		$post_id = isset( $prepared_post->ID ) ? (int) $prepared_post->ID : 0;
+		$post_id     = isset( $prepared_post->ID ) ? (int) $prepared_post->ID : 0;
+		$is_autosave = str_ends_with( $request->get_route(), '/autosaves' );
+
+		// A validity rule, not a permission, so it runs before the permission branch
+		// and applies to administrators too. It reads the values the save would
+		// leave in place: a key the request omits keeps its stored value. A
+		// non-scalar reads as empty here; the meta schema refuses it on its own.
+		$stored    = function ( $meta_key ) use ( $post_id ) {
+			return $post_id ? (string) get_post_meta( $post_id, $meta_key, true ) : '';
+		};
+		$effective = function ( $meta_key ) use ( $meta, $stored ) {
+			if ( ! array_key_exists( $meta_key, $meta ) ) {
+				return $stored( $meta_key );
+			}
+			return is_scalar( $meta[ $meta_key ] ) ? (string) $meta[ $meta_key ] : '';
+		};
+		$changes   = function ( $meta_key ) use ( $effective, $stored ) {
+			return $effective( $meta_key ) !== $stored( $meta_key );
+		};
+		// The ID the save would store, so a value the sanitizer empties reads as
+		// clearing the test rather than as a new one.
+		$test_id = self::sanitize_test_id( $effective( self::META_TEST_ID ) );
+		// The rule refuses the save that creates a violation, not every later save
+		// of a prompt already in one. A tested prompt can reach a manual placement
+		// past this guard (the Campaigns wizard writes placement directly, and a
+		// save while the flag is off is not checked), and the editor sends the
+		// whole meta object on every save, so checking the stored state too would
+		// refuse a frequency edit with an error about a field the editor may have
+		// disabled for that user. The editor's notice asks for the fix instead.
+		// An ID sent back as stored is unchanged here as it is for the write below,
+		// even where the current sanitizer would spell it differently.
+		// Only while the flag is on: with it off a stored test has no effect, and
+		// the panel that could clear the Test ID is not registered.
+		if (
+			self::is_enabled()
+			&& ! $is_autosave
+			&& ( ( $changes( self::META_TEST_ID ) && $test_id !== $stored( self::META_TEST_ID ) ) || $changes( 'placement' ) )
+			&& '' !== $test_id
+			&& ! self::is_eligible_placement( $effective( 'placement' ) )
+		) {
+			return new WP_Error(
+				'newspack_popups_ab_ineligible_placement',
+				__( 'A/B tests only work on prompts that Newspack places for you. Clear the test name or choose another placement.', 'newspack-popups' ),
+				[ 'status' => 400 ]
+			);
+		}
+
+		// A Test ID sent back unchanged is left out of the write. Core re-sanitizes
+		// a submitted value before comparing it with the stored one, so an ID stored
+		// under an earlier, looser sanitizer would otherwise be rewritten on one
+		// variant by any save and split its test; only a deliberate edit normalizes it.
+		if ( array_key_exists( self::META_TEST_ID, $meta ) && is_scalar( $meta[ self::META_TEST_ID ] ) && ! $changes( self::META_TEST_ID ) ) {
+			unset( $meta[ self::META_TEST_ID ] );
+			$request->set_param( 'meta', $meta );
+		}
+
 		if ( self::can_manage_tests( get_current_user_id(), $post_id ) ) {
 			return $prepared_post;
 		}
 
-		$is_autosave = str_ends_with( $request->get_route(), '/autosaves' );
-		$registered  = get_registered_meta_keys( 'post', Newspack_Popups::NEWSPACK_POPUPS_CPT );
+		$registered = get_registered_meta_keys( 'post', Newspack_Popups::NEWSPACK_POPUPS_CPT );
 		foreach ( self::META_KEYS as $meta_key ) {
 			if ( ! array_key_exists( $meta_key, $meta ) ) {
 				continue;
 			}
 			// get_post_meta() applies the registered default to an unset key, which
 			// is also what the editor read and is sending back.
-			$stored = $post_id ? get_post_meta( $post_id, $meta_key, true ) : ( $registered[ $meta_key ]['default'] ?? '' );
+			$stored_value = $post_id ? get_post_meta( $post_id, $meta_key, true ) : ( $registered[ $meta_key ]['default'] ?? '' );
 			// A null asks core to delete the key, which resets it to its registered default.
 			$value = $meta[ $meta_key ] ?? ( $registered[ $meta_key ]['default'] ?? '' );
-			if ( ! $is_autosave && ( ! is_scalar( $value ) || (string) $value !== (string) $stored ) ) {
+			if ( ! $is_autosave && ( ! is_scalar( $value ) || (string) $value !== (string) $stored_value ) ) {
 				return new WP_Error(
 					'rest_cannot_update',
-					__( "You don't have permission to change this prompt's A/B test settings. If someone changed its test while you were editing, reload the editor and try again.", 'newspack-popups' ),
+					__( "You can't change this prompt's test settings. If someone else just edited it, reload and try again.", 'newspack-popups' ),
 					[
 						'status' => rest_authorization_required_code(),
 						'key'    => $meta_key,
@@ -324,6 +389,119 @@ final class Newspack_Popups_AB_Tests {
 	}
 
 	/**
+	 * What the prompt editor needs to show the A/B test panel: whether the
+	 * feature is on, whether this user may change the fields, and the vocabulary
+	 * the fields offer. Variants stop at B because the editor supports two-arm
+	 * tests; the server keeps accepting c and d so stored ones are not lost.
+	 *
+	 * @param int $post_id Prompt post ID, or 0 for a prompt not yet created.
+	 * @return array
+	 */
+	public static function get_editor_data( $post_id ) {
+		return [
+			'enabled'               => self::is_enabled(),
+			'can_manage_tests'      => self::can_manage_tests( get_current_user_id(), (int) $post_id ),
+			'goals'                 => self::get_goal_labels(),
+			'ineligible_placements' => self::get_ineligible_placements(),
+			'variants'              => [
+				'a' => __( 'A (control)', 'newspack-popups' ),
+				'b' => __( 'B (challenger)', 'newspack-popups' ),
+			],
+		];
+	}
+
+	/**
+	 * The prompts carrying a Test ID, for the editor's list of the other prompts in
+	 * the test. Drafts and pending prompts are included, since an author sets up the
+	 * challenger before publishing it; trashed ones are not. Private prompts follow
+	 * the Prompts list's rule: another author's are listed only to a user with
+	 * read_private_posts, which is why the statuses are spelled out. WP_Query
+	 * applies 'readable' to an explicit list and ignores it for 'any'.
+	 *
+	 * @param string $test_id Test ID.
+	 * @return array[] Each `[ 'id', 'title', 'variant', 'goal', 'control_share', 'status', 'status_label', 'edit_link' ]`; `edit_link` is null when the current user can't edit that prompt. `goal` and `control_share` are each prompt's stored values; only the control's take effect.
+	 */
+	public static function get_test_prompts( $test_id ) {
+		$test_id = self::sanitize_test_id( $test_id );
+		if ( '' === $test_id ) {
+			return [];
+		}
+		$prompts = get_posts(
+			[
+				'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+				'post_status'    => [ 'publish', 'future', 'draft', 'pending', 'private' ],
+				'perm'           => 'readable',
+				// Same reasoning as get_tests_config(): a bound would silently drop
+				// prompts from the list.
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Prompts CPT; config-scale.
+				'orderby'        => 'ID',
+				'order'          => 'ASC',
+				'meta_key'       => self::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'meta_value'     => $test_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			]
+		);
+		$list = [];
+		foreach ( $prompts as $prompt ) {
+			$status = get_post_status_object( $prompt->post_status );
+			$share  = get_post_meta( $prompt->ID, self::META_CONTROL_SHARE, true );
+			$list[] = [
+				'id'            => (int) $prompt->ID,
+				'title'         => $prompt->post_title,
+				'variant'       => (string) get_post_meta( $prompt->ID, self::META_VARIANT, true ),
+				'goal'          => self::sanitize_goal( get_post_meta( $prompt->ID, self::META_GOAL, true ) ),
+				'control_share' => $share ? self::sanitize_control_share( $share ) : self::DEFAULT_CONTROL_SHARE,
+				'status'        => $prompt->post_status,
+				'status_label'  => $status ? $status->label : $prompt->post_status,
+				'edit_link'     => get_edit_post_link( $prompt->ID, 'raw' ),
+			];
+		}
+		return $list;
+	}
+
+	/**
+	 * Placements a tested prompt can't have. Manual and custom placements render
+	 * wherever a block or shortcode puts them, so there is no slot to split
+	 * between variants.
+	 *
+	 * @return string[] Placement values.
+	 */
+	public static function get_ineligible_placements() {
+		return array_merge( [ 'manual' ], Newspack_Popups_Custom_Placements::get_custom_placement_values() );
+	}
+
+	/**
+	 * Whether a prompt with this placement can be part of a test.
+	 *
+	 * @param string $placement Placement value.
+	 * @return bool
+	 */
+	public static function is_eligible_placement( $placement ) {
+		return ! in_array( (string) $placement, self::get_ineligible_placements(), true );
+	}
+
+	/**
+	 * Sanitize a Test ID to a slug of lowercase letters, digits and hyphens.
+	 *
+	 * Not sanitize_title() directly, for two reasons. register_meta() passes the
+	 * meta key as the second argument, which sanitize_title() reads as the fallback
+	 * title, so an empty value would be stored as the key name instead of clearing
+	 * the test. And sanitize_title() keeps underscores and percent-encodes what it
+	 * can't transliterate, while the editor's slug and the lookup route accept
+	 * neither, so an ID stored with either could never be looked up.
+	 *
+	 * @param mixed $value Raw value.
+	 * @return string Slug, or empty string.
+	 */
+	public static function sanitize_test_id( $value ) {
+		if ( ! is_scalar( $value ) ) {
+			return '';
+		}
+		$slug = preg_replace( '/%[0-9a-f]{2}/', '', sanitize_title( (string) $value ) );
+		$slug = preg_replace( '/[^a-z0-9-]+/', '-', $slug );
+		return trim( preg_replace( '/-+/', '-', $slug ), '-' );
+	}
+
+	/**
 	 * Sanitize a variant key.
 	 *
 	 * @param string $value Raw value.
@@ -331,6 +509,30 @@ final class Newspack_Popups_AB_Tests {
 	 */
 	public static function sanitize_variant( $value ) {
 		return in_array( $value, self::VALID_VARIANTS, true ) ? $value : '';
+	}
+
+	/**
+	 * Sanitize a conversion goal.
+	 *
+	 * @param string $value Raw value.
+	 * @return string Valid goal key, or empty string.
+	 */
+	public static function sanitize_goal( $value ) {
+		return in_array( $value, self::VALID_GOALS, true ) ? $value : '';
+	}
+
+	/**
+	 * The conversion goals a test can measure, keyed by stored value.
+	 *
+	 * @return array Goal key => label.
+	 */
+	public static function get_goal_labels() {
+		return [
+			'form_submission' => __( 'Form submission', 'newspack-popups' ),
+			'link_click'      => __( 'Link or button click', 'newspack-popups' ),
+			'donation'        => __( 'Donation', 'newspack-popups' ),
+			'subscription'    => __( 'Subscription', 'newspack-popups' ),
+		];
 	}
 
 	/**

@@ -32,6 +32,7 @@ import Duplicate from './Duplicate';
 import EditorAdditions from './EditorAdditions';
 import PostTypesPanel from './PostTypesPanel';
 import ExpirationPanel from './ExpirationPanel';
+import ABTestPanel from './ABTestPanel';
 import MergeTagsBlockControl from './MergeTagsBlockControl';
 import './style.scss';
 
@@ -65,6 +66,7 @@ const ColorsSidebarWithData = connectData( ColorsSidebar );
 const PostTypesPanelWithData = connectData( PostTypesPanel );
 const ExpirationPanelWithData = connectData( ExpirationPanel );
 const AdvancedSidebarWithData = connectData( AdvancedSidebar );
+const ABTestPanelWithData = connectData( ABTestPanel );
 
 // Register components.
 registerPlugin( 'newspack-popups-styles', {
@@ -90,6 +92,17 @@ if ( window?.newspack_popups_data?.segmentation_enabled ) {
 		render: () => (
 			<PluginDocumentSettingPanel name="-frequency-panel" title={ __( 'Frequency', 'newspack-popups' ) }>
 				<FrequencySidebarWithData />
+			</PluginDocumentSettingPanel>
+		),
+		icon: null,
+	} );
+}
+
+if ( window?.newspack_popups_data?.ab_testing?.enabled ) {
+	registerPlugin( 'newspack-popups-ab-test', {
+		render: () => (
+			<PluginDocumentSettingPanel name="ab-test-panel" title={ __( 'A/B test', 'newspack-popups' ) }>
+				<ABTestPanelWithData />
 			</PluginDocumentSettingPanel>
 		),
 		icon: null,
