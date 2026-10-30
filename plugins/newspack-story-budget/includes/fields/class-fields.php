@@ -49,7 +49,7 @@ class Fields {
 	 *
 	 * Reads before init:10 return nothing and leave the registry unbuilt:
 	 * taxonomies register at init:5 and integrations add their field filters
-	 * during init, and a field built too early would stay disabled or missing
+	 * by init:10, and a field built too early would stay disabled or missing
 	 * for the rest of the request.
 	 */
 	protected static function maybe_register_fields() {
@@ -60,7 +60,7 @@ class Fields {
 		if ( \doing_action( 'init' ) && $wp_filter['init']->current_priority() < 10 ) {
 			return;
 		}
-		// Set first: a field filter that reads the registry must not rebuild it.
+		// Set first: a field filter that reads the registry gets an empty list, not a rebuild.
 		self::$is_registered = true;
 		self::register_fields();
 	}
@@ -68,7 +68,7 @@ class Fields {
 	/**
 	 * Register fields.
 	 */
-	public static function register_fields() {
+	protected static function register_fields() {
 		$default_fields_config  = self::get_default_fields_config();
 		$protected_field_slugs = [ 'id', 'metadata' ];
 

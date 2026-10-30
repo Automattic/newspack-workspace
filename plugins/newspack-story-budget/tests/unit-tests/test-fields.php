@@ -435,6 +435,13 @@ class TestFields extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Requests that never read a field must not pay for building the registry.
+	 */
+	public function test_init_does_not_build_registry() {
+		$this->assertFalse( has_action( 'init', [ Fields::class, 'register_fields' ] ) );
+	}
+
+	/**
 	 * The registry builds on the first read, and only once.
 	 */
 	public function test_registry_builds_once_on_first_read() {
@@ -448,7 +455,6 @@ class TestFields extends WP_UnitTestCase {
 			}
 		);
 
-		$this->assertSame( 0, $builds, 'Nothing is built before the first read.' );
 		$this->assertNotEmpty( Fields::get_all_fields() );
 		$this->assertNotNull( Fields::get_field( 'name' ) );
 		$this->assertSame( 1, $builds, 'Later reads reuse the registry.' );

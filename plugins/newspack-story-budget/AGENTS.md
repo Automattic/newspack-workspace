@@ -24,7 +24,7 @@ There is no surviving Edit Flow legacy here despite the plugin's origins; the fo
 
 - **`Fields` and `CLI` are each simultaneously a class and a namespace.** Sibling files disagree on how to disambiguate: `class-abstract-field.php` imports the class as plain `Fields`, while `class-editable-field.php` and `class-taxonomy-field.php` alias it `Fields_Class`. Copying an import between these files silently changes which symbol resolves. There are also two `class-budget.php` and two `class-story.php` files (`includes/` and `includes/cli/`) defining different classes with identical short names.
 
-- **`Fields::$all_fields` is a static registry that is never reset in production**, and `register_fields()` is idempotent-by-error: a second direct call logs "Field with slug X already exists" and discards that slug's config. A `newspack_story_budget_fields` filter added inside a test method has no effect once an earlier read built the registry; `test-fields.php` resets it by reflection when a test needs a fresh build.
+- **`Fields::$all_fields` is a static registry that is never reset in production**, and `register_fields()` is idempotent-by-error: building twice logs "Field with slug X already exists" and discards that slug's config, which is why it stays `protected` behind the first-read guard. A `newspack_story_budget_fields` filter added inside a test method has no effect once an earlier read built the registry; `test-fields.php` resets it by reflection when a test needs a fresh build.
 
 - **`Budgets::$stories_query` is static mutable state** that every `get_stories()` call overwrites, and the REST layer reads `found_posts` off it afterwards. Any second `get_stories()` in between silently corrupts the reported total.
 
