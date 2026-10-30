@@ -250,7 +250,7 @@ export const Settings = ( {
 				);
 			}
 			case 'select':
-				return <SelectControl key={ setting.key } { ...getSettingProps( setting.key ) } />;
+				return <SelectControl key={ setting.key } { ...getSettingProps( setting.key ) } help={ config.settings[ setting.key ]?.help } />;
 			case 'checkbox': {
 				const props = getSettingProps( setting.key );
 				return (

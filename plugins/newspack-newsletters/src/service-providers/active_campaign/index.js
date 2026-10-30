@@ -5,6 +5,11 @@ import { __ } from '@wordpress/i18n';
 import { Spinner } from '@wordpress/components';
 
 /**
+ * Internal dependencies
+ */
+import { ProviderSidebar } from './ProviderSidebar';
+
+/**
  * Utility to render newsletter campaign info in the pre-send confirmation modal.
  *
  * @param {Object} newsletterData          Data returned from the ESP retrieve method.
@@ -54,6 +59,7 @@ const isCampaignSent = ( newsletterData, postStatus = 'draft' ) => {
 
 export default {
 	displayName: 'ActiveCampaign',
+	ProviderSidebar,
 	renderPreSendInfo,
 	isCampaignSent,
 };
