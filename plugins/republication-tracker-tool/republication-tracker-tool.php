@@ -273,6 +273,36 @@ final class Republication_Tracker_Tool {
 	}
 
 	/**
+	 * Whether the republish modal renders with newspack-ui, the reader-facing
+	 * design system newspack-plugin provides. Without it the modal keeps the
+	 * plugin's own markup and styles.
+	 *
+	 * @return bool
+	 */
+	public static function use_newspack_ui(): bool {
+		/**
+		 * Filters whether the republish modal renders with newspack-ui.
+		 *
+		 * Return false to keep the plugin's own modal markup and styles.
+		 *
+		 * @param bool $use_newspack_ui Whether newspack-ui is used. Defaults to whether newspack-plugin provides it.
+		 */
+		return (bool) apply_filters( 'republication_tracker_tool_use_newspack_ui', class_exists( '\Newspack\Newspack_UI' ) );
+	}
+
+	/**
+	 * Enqueue the republish modal styles: newspack-ui plus the few rules it has
+	 * no component for, or the plugin's own stylesheet.
+	 */
+	public static function enqueue_modal_style(): void {
+		if ( self::use_newspack_ui() ) {
+			wp_enqueue_style( 'republication-tracker-tool-css', REPUBLICATION_TRACKER_TOOL_URL . 'assets/newspack-ui.css', [ 'newspack-ui' ], filemtime( REPUBLICATION_TRACKER_TOOL_PATH . 'assets/newspack-ui.css' ) );
+			return;
+		}
+		wp_enqueue_style( 'republication-tracker-tool-css', REPUBLICATION_TRACKER_TOOL_URL . 'assets/widget.css', [], filemtime( REPUBLICATION_TRACKER_TOOL_PATH . 'assets/widget.css' ) );
+	}
+
+	/**
 	 * Create tracking pixel HTML markup.
 	 *
 	 * @param int $post_id ID of the post to track.
