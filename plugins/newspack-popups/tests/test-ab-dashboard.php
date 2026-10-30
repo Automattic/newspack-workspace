@@ -371,6 +371,34 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * A provider can add one sentence about its counts, and the route passes it through.
+	 */
+	public function test_provider_note_is_passed_through() {
+		$this->as_admin();
+		$this->create_running_test();
+		$counts         = $this->counts( 1200, 36, 1180, 48 );
+		$counts['note'] = 'Counts update once a day.';
+		$this->use_provider( $counts );
+		$data = $this->stats_request( 't' )->get_data();
+		$this->assertSame( 'Counts update once a day.', $data['source']['note'] );
+	}
+
+	/**
+	 * A missing or non-string note reads as none.
+	 */
+	public function test_missing_or_invalid_note_is_null() {
+		$this->as_admin();
+		$this->create_running_test();
+		$this->use_provider( $this->counts( 1200, 36, 1180, 48 ) );
+		$this->assertNull( $this->stats_request( 't' )->get_data()['source']['note'] );
+		$counts         = $this->counts( 1200, 36, 1180, 48 );
+		$counts['note'] = [ 'not', 'a', 'string' ];
+		remove_all_filters( 'newspack_popups_ab_stats_provider' );
+		$this->use_provider( $counts );
+		$this->assertNull( $this->stats_request( 't', [ 'refresh' => '1' ] )->get_data()['source']['note'] );
+	}
+
+	/**
 	 * Counts become rates, lift against control, and a confidence per challenger.
 	 */
 	public function test_counts_become_rates_lift_and_confidence() {

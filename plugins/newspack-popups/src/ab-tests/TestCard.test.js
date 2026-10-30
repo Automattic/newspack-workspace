@@ -1,6 +1,7 @@
 /**
  * The card's own decisions: when results load on open, when Refresh is offered,
- * and how the ineligible-placement notice reads. The stats route is mocked, and
+ * how the ineligible-placement notice reads, and when the source's note shows.
+ * The stats route is mocked, and
  * `@wordpress/ui` is stubbed so the tests read the card's logic, not its layout.
  */
 
@@ -44,20 +45,20 @@ const test = {
 	},
 };
 
-const stats = {
-	source: { state: 'ok', provider: 'stub', reason: null, fetched_at: null, cached: false, unit: 'readers' },
+const stats = ( source = {} ) => ( {
+	source: { state: 'ok', provider: 'stub', reason: null, fetched_at: null, cached: false, unit: 'readers', note: null, ...source },
 	variants: {
 		a: { readers: 10, conversions: 1, rate: 10, lift: null },
 		b: { readers: 10, conversions: 2, rate: 20, lift: 100 },
 	},
 	comparisons: { b: { confidence: null, label: 'collecting' } },
 	flags: { young_test: false, high_anonymous: false },
-};
+} );
 
 describe( 'TestCard', () => {
 	beforeEach( () => {
 		apiFetch.mockReset();
-		apiFetch.mockResolvedValue( stats );
+		apiFetch.mockResolvedValue( stats() );
 	} );
 
 	it( 'loads results on open for a started test with a stats source, and offers Refresh', async () => {
@@ -94,5 +95,30 @@ describe( 'TestCard', () => {
 			/>
 		);
 		expect( screen.getByText( /^Versions A and B use a manual or custom placement/ ) ).toBeTruthy();
+	} );
+
+	it( 'shows the source note under the results', async () => {
+		apiFetch.mockResolvedValue( stats( { note: 'Counts update once a day.' } ) );
+		render( <TestCard test={ test } data={ data } /> );
+		await waitFor( () => expect( screen.getByText( 'Counts update once a day.' ) ).not.toBeNull() );
+	} );
+
+	it( 'shows the note while the test is still collecting', async () => {
+		apiFetch.mockResolvedValue( {
+			...stats( { state: 'collecting', note: 'Counts update once a day.' } ),
+			variants: {
+				a: { readers: 0, conversions: 0, rate: null, lift: null },
+				b: { readers: 0, conversions: 0, rate: null, lift: null },
+			},
+		} );
+		render( <TestCard test={ test } data={ data } /> );
+		await waitFor( () => expect( screen.getByText( 'Counts update once a day.' ) ).not.toBeNull() );
+	} );
+
+	it( 'leaves the note out when the source is unavailable', async () => {
+		apiFetch.mockResolvedValue( stats( { state: 'unavailable', reason: 'No source.', note: 'Counts update once a day.' } ) );
+		render( <TestCard test={ test } data={ data } /> );
+		await waitFor( () => expect( screen.getByText( 'No source.' ) ).not.toBeNull() );
+		expect( screen.queryByText( 'Counts update once a day.' ) ).toBeNull();
 	} );
 } );

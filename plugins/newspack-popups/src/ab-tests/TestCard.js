@@ -277,6 +277,8 @@ const TestCard = ( { test, data } ) => {
 							{ error }
 						</Notice>
 					) }
+					{ /* The source's own note sits with the footer, so its clock and the page's read as one block. */ }
+					{ hasStats && stats.source.note && <p className="newspack-popups-ab-tests__muted">{ stats.source.note }</p> }
 					{ stats && stats.source.fetched_at && (
 						<p className="newspack-popups-ab-tests__muted">
 							{ sprintf(
