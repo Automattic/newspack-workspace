@@ -214,7 +214,7 @@ class Donation extends Subscription {
 			);
 
 			foreach ( $orders as $order ) {
-				if ( Donations::is_donation_order( $order ) ) {
+				if ( $this->is_one_time_donation_order( $order ) ) {
 					$this->one_time_donation_order_cache = $order;
 					return $this->one_time_donation_order_cache;
 				}
@@ -222,6 +222,31 @@ class Donation extends Subscription {
 		} while ( ! empty( $orders ) );
 
 		return null;
+	}
+
+	/**
+	 * Whether the order holds a one-time donation.
+	 *
+	 * Renewal, switch, and other subscription orders carry the recurring donation
+	 * product, so they also count as donation orders. Leaving them out keeps a
+	 * donation edit, whose switch order often totals 0.00, from passing as the
+	 * reader's latest gift.
+	 *
+	 * @param \WC_Order $order Order object.
+	 * @return bool
+	 */
+	private function is_one_time_donation_order( $order ) {
+		foreach ( $order->get_items() as $item ) {
+			$product_id = $item->get_product_id();
+			if ( ! Donations::is_donation_product( $product_id ) ) {
+				continue;
+			}
+			$product = \wc_get_product( $product_id );
+			if ( $product && ! \WC_Subscriptions_Product::is_subscription( $product ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -324,9 +349,9 @@ class Donation extends Subscription {
 	/**
 	 * Get the most recently paid donation order, recurring or one-time.
 	 *
-	 * Compares the current donation subscription's last payment with the latest
-	 * one-time donation, so a lapsed recurring donor who gives once afterwards
-	 * reports the new gift rather than the subscription's final payment.
+	 * Last Donation Amount and Last Donation Date both read this order, so they
+	 * always describe the same payment. A one-time gift paid after the recurring
+	 * donation's last payment wins, whether that donation lapsed or is active.
 	 *
 	 * @return \WC_Order|null
 	 */
