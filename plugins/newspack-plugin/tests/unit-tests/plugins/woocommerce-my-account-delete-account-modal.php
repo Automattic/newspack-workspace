@@ -5,12 +5,16 @@
  * @package Newspack\Tests
  */
 
+use Newspack\Active_Subscriptions_Reader_Data;
+use Newspack\Group_Subscription;
+use Newspack\Group_Subscription_Settings;
 use Newspack\My_Account_UI_V1;
 use Newspack\Reader_Activation;
 use Newspack\Reader_Data;
 
 /**
- * Test what the delete-account modal tells a reader about their donations.
+ * Test what the delete-account modal tells a reader about their donations and
+ * the subscriptions they pay for.
  *
  * @group My_Account_Delete_Account_Modal
  */
@@ -24,19 +28,37 @@ class Newspack_Test_My_Account_Delete_Account_Modal extends WP_UnitTestCase {
 	private $reader_id;
 
 	/**
-	 * Sign in a reader for each test.
+	 * Load the WooCommerce Subscriptions mocks the subscription tests build from.
+	 */
+	public static function set_up_before_class() {
+		parent::set_up_before_class();
+		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
+		require_once dirname( __DIR__, 2 ) . '/mocks/wcs-gifting-mock.php';
+	}
+
+	/**
+	 * Sign in a reader for each test, with no subscriptions in the mock store.
 	 */
 	public function set_up() {
 		parent::set_up();
+		global $subscriptions_database;
+		$subscriptions_database   = [];
+		\WCS_Gifting::$recipients = [];
+		Group_Subscription::reset_cache();
 		$this->reader_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
 		update_user_meta( $this->reader_id, Reader_Activation::READER, true );
 		wp_set_current_user( $this->reader_id );
 	}
 
 	/**
-	 * Sign the reader out.
+	 * Sign the reader out and empty the mock subscription store and the gifting
+	 * stub's recipient map, which is static and shared across test classes.
 	 */
 	public function tear_down() {
+		global $subscriptions_database;
+		$subscriptions_database   = [];
+		\WCS_Gifting::$recipients = [];
+		Group_Subscription::reset_cache();
 		wp_set_current_user( 0 );
 		parent::tear_down();
 	}
@@ -50,6 +72,26 @@ class Newspack_Test_My_Account_Delete_Account_Modal extends WP_UnitTestCase {
 		ob_start();
 		My_Account_UI_V1::delete_account_modal();
 		return ob_get_clean();
+	}
+
+	/**
+	 * Create an active subscription with one line item, because the reader data
+	 * item reads its products from the line items.
+	 *
+	 * @param int    $customer_id Who pays for it.
+	 * @param string $status      Subscription status.
+	 *
+	 * @return \WC_Subscription
+	 */
+	private function create_subscription( int $customer_id, string $status = 'active' ) {
+		return \wcs_create_subscription(
+			[
+				'customer_id' => $customer_id,
+				'status'      => $status,
+				'products'    => [ 101 ],
+				'items'       => [ new \WC_Order_Item_Product( [ 'product_id' => 101 ] ) ],
+			]
+		);
 	}
 
 	/**
@@ -117,5 +159,71 @@ class Newspack_Test_My_Account_Delete_Account_Modal extends WP_UnitTestCase {
 		$request = substr( $modal, 0, strpos( $modal, 'data-step="email-sent"' ) );
 		$this->assertStringContainsString( 'newspack-ui__modal--small" data-step="request"', $modal );
 		$this->assertStringNotContainsString( 'newspack-ui__stack--justify-end', $request );
+	}
+
+	/**
+	 * A reader who bought a gift pays for it, and deleting their account trashes
+	 * it, so they are still warned. The gift belongs to its recipient, which
+	 * leaves the buyer's `active_subscriptions` item empty. The warning has to
+	 * come from what the buyer pays for.
+	 */
+	public function test_gift_buyer_is_warned_about_recurring_payments() {
+		$recipient_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		$gift         = $this->create_subscription( $this->reader_id );
+		\WCS_Gifting::$recipients[ $gift->get_id() ] = $recipient_id;
+		add_filter(
+			'wcs_get_users_subscriptions',
+			function ( $subscriptions, $user_id ) use ( $gift, $recipient_id ) {
+				if ( (int) $user_id === $recipient_id ) {
+					$subscriptions[ $gift->get_id() ] = $gift;
+				}
+				return $subscriptions;
+			},
+			10,
+			2
+		);
+		Active_Subscriptions_Reader_Data::refresh( $this->reader_id );
+		$this->assertSame( [], Reader_Data::get_active_subscriptions( $this->reader_id ), 'The buyer does not hold the gift.' );
+
+		$modal = $this->render_delete_account_modal();
+
+		$this->assertStringContainsString( 'recurring payments will be cancelled', $modal );
+		$this->assertStringContainsString( 'Manage subscriptions', $modal );
+	}
+
+	/**
+	 * A member of a group subscription uses the owner's subscription and pays for
+	 * nothing, so there is no recurring payment to warn about or manage.
+	 */
+	public function test_group_member_is_not_warned_about_recurring_payments() {
+		$owner_id     = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		$subscription = $this->create_subscription( $owner_id );
+		$subscription->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+		add_user_meta( $this->reader_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() );
+		Group_Subscription::reset_cache();
+		Reader_Activation::set_reader_verified( $this->reader_id );
+		Active_Subscriptions_Reader_Data::refresh( $this->reader_id );
+		$this->assertSame( [ 101 ], Reader_Data::get_active_subscriptions( $this->reader_id ), 'The member holds the group product.' );
+
+		$modal = $this->render_delete_account_modal();
+
+		$this->assertStringNotContainsString( 'recurring payments will be cancelled', $modal );
+		$this->assertStringNotContainsString( 'Manage subscriptions', $modal );
+	}
+
+	/**
+	 * A reader with an active subscription of their own is warned, and stops being
+	 * warned once it is cancelled.
+	 */
+	public function test_subscriber_is_warned_until_their_subscription_is_cancelled() {
+		$subscription = $this->create_subscription( $this->reader_id );
+		$modal        = $this->render_delete_account_modal();
+		$this->assertStringContainsString( 'recurring payments will be cancelled', $modal );
+		$this->assertStringContainsString( 'Manage subscriptions', $modal );
+
+		$subscription->update_status( 'cancelled' );
+		$modal = $this->render_delete_account_modal();
+		$this->assertStringNotContainsString( 'recurring payments will be cancelled', $modal );
+		$this->assertStringNotContainsString( 'Manage subscriptions', $modal );
 	}
 }
