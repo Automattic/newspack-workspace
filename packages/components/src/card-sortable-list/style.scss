@@ -55,10 +55,6 @@ $drop-duration: 400ms; /* must match DROP_ANIMATION_DURATION in index.tsx */
 		min-width: 0;
 	}
 
-	/*
-	 * Keep a card's title in the case it was written in. The block editor
-	 * sidebar uppercases every h3 (`.interface-complementary-area h3`).
-	 */
 	.newspack-card--core--sortable-list__title {
 		align-items: center;
 		display: flex;
