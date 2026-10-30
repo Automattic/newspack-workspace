@@ -102,6 +102,15 @@
 	}
 }
 
+.newspack-content-gates__toolbar .dataviews-filters__summary-chip-container .dataviews-filters__summary-chip:has(.dataviews-filters__summary-filter-text-value) {
+	background: rgba(var(--wp-admin-theme-color--rgb), 0.04);
+	color: var(--wp-admin-theme-color);
+
+	&[aria-expanded="true"] {
+		background: rgba(var(--wp-admin-theme-color--rgb), 0.12);
+	}
+}
+
 .newspack-content-gates__toolbar.is-default-view .dataviews-filters__reset-button {
 	display: none;
 }

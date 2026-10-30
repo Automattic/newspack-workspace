@@ -176,6 +176,15 @@ describe( 'Content Gates toolbar', () => {
 		expect( mockDataViewsProps.className ).toContain( 'is-default-view' );
 	} );
 
+	it( 'offers All on Status only, leaving Access unset by default', () => {
+		const paid = { active: true, access_rules: [ [ { slug: 'subscription' } ] ], metering: { enabled: false } };
+		renderGates( [ active, { ...inactive, custom_access: paid } ] );
+
+		const accessField = mockDataViewsProps.fields.find( field => 'access' === field.id );
+		expect( accessField.elements.map( element => element.value ) ).toEqual( [ 'paid' ] );
+		expect( mockDataViewsProps.view.filters ).toEqual( [ allStatuses ] );
+	} );
+
 	it( 'says so when nothing matches, and announces the count', () => {
 		mockSpeak.mockReset();
 		renderGates( [ active, inactive ] );

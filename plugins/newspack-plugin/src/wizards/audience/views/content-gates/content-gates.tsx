@@ -80,11 +80,7 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 		const filterField = ( id: string, label: string, values: string[] ) => ( {
 			id,
 			label,
-			elements: [
-				// No value: DataViews marks this radio selected while the filter is unset, and shows no remove button on the chip.
-				{ value: undefined, label: __( 'All', 'newspack-plugin' ) },
-				...values.map( value => ( { value, label: labels[ value ] } ) ),
-			],
+			elements: values.map( value => ( { value, label: labels[ value ] } ) ),
 			filterBy: { operators: [ 'is' as const ], isPrimary: true },
 			enableSorting: false,
 		} );
@@ -96,7 +92,18 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 				enableSorting: false,
 				getValue: ( { item }: { item: Gate } ) => item.title,
 			},
-			...( statusValues.length ? [ filterField( 'status', __( 'Status', 'newspack-plugin' ), statusValues ) ] : [] ),
+			...( statusValues.length
+				? [
+						{
+							...filterField( 'status', __( 'Status', 'newspack-plugin' ), statusValues ),
+							elements: [
+								// Unset, not 'all': DataViews selects this option while the filter is unset, and a real value would add a reset button to the chip.
+								{ value: undefined, label: __( 'All', 'newspack-plugin' ) },
+								...statusValues.map( value => ( { value, label: labels[ value ] } ) ),
+							],
+						},
+				  ]
+				: [] ),
 			...( accessValues.length ? [ filterField( 'access', __( 'Access', 'newspack-plugin' ), accessValues ) ] : [] ),
 		];
 	}, [ statusValues.join(), accessValues.join() ] ); // eslint-disable-line react-hooks/exhaustive-deps -- both arrays are rebuilt each render.
@@ -108,8 +115,9 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 		perPage: 100,
 		fields: [],
 		filters: [
+			// Status needs an entry even when unset, or its chip reads "Unknown status for Status" instead of "Status is: All".
 			...( statusValues.length ? [ { field: 'status', operator: 'is' as const, value: status } ] : [] ),
-			...( accessValues.length ? [ { field: 'access', operator: 'is' as const, value: access } ] : [] ),
+			...( access ? [ { field: 'access', operator: 'is' as const, value: access } ] : [] ),
 		],
 	};
 
