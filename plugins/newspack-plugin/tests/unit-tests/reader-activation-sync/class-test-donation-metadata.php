@@ -344,6 +344,124 @@ class Test_Donation_Metadata extends WP_UnitTestCase {
 		$this->assertSame( '2025-04-01 10:00:00', $metadata['Last_Donation_Date'] );
 	}
 
+	/**
+	 * Helper to create a completed one-time donation order.
+	 *
+	 * Donations::get_donation_product() returns nothing unless WC() exists, so the
+	 * one-time order would never be found. Defining WC() here is only safe from
+	 * tests annotated `@runInSeparateProcess`: in the main suite process it would
+	 * flip function_exists( 'WC' ) gates for every later test in the run.
+	 *
+	 * @param string $total     Order total.
+	 * @param string $date_paid Date paid (Y-m-d H:i:s).
+	 */
+	private function create_one_time_donation_order( $total, $date_paid ) {
+		if ( ! $this->isInIsolation() ) {
+			$this->fail( 'create_one_time_donation_order() may only be called from @runInSeparateProcess tests.' );
+		}
+		if ( ! function_exists( 'WC' ) ) {
+			function WC() { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.FunctionNameInvalid, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Mock WooCommerce global, isolated to a separate test process.
+				return new stdClass();
+			}
+		}
+		return wc_create_order(
+			[
+				'customer_id' => self::$user_id,
+				'status'      => 'completed',
+				'total'       => $total,
+				'date_paid'   => $date_paid,
+				'items'       => [
+					new WC_Order_Item_Product(
+						[
+							'name'       => 'Donation once',
+							'product_id' => self::$donation_once_product_id,
+						]
+					),
+				],
+			]
+		);
+	}
+
+	/**
+	 * A one-time gift made after a recurring donation lapsed is the last donation.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_last_donation_prefers_newer_one_time_gift_over_lapsed_subscription() {
+		$renewal = wc_create_order(
+			[
+				'customer_id' => self::$user_id,
+				'status'      => 'completed',
+				'total'       => '15.00',
+				'date_paid'   => '2023-09-15 12:00:00',
+			]
+		);
+		$this->create_donation_subscription(
+			[
+				'status' => 'expired',
+				'orders' => [ $renewal ],
+				'dates'  => [
+					'start'        => '2023-08-15 12:00:00',
+					'end'          => '2023-10-15 12:00:00',
+					'next_payment' => 0,
+				],
+			]
+		);
+		$this->create_one_time_donation_order( '50.00', '2026-08-20 10:00:00' );
+
+		$metadata = ( new Donation( self::$user_id ) )->get_metadata();
+		$this->assertSame( '50.00', $metadata['Last_Donation_Amount'] );
+		$this->assertSame( '2026-08-20 10:00:00', $metadata['Last_Donation_Date'] );
+		$this->assertSame( 'Ex-Monthly Donor', $metadata['Donor_Status'] );
+	}
+
+	/**
+	 * A one-time gift made between renewals of an active recurring donation is the last donation.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_last_donation_prefers_one_time_gift_between_renewals() {
+		$renewal = wc_create_order(
+			[
+				'customer_id' => self::$user_id,
+				'status'      => 'completed',
+				'total'       => '10.00',
+				'date_paid'   => '2025-04-01 10:00:00',
+			]
+		);
+		$this->create_donation_subscription( [ 'orders' => [ $renewal ] ] );
+		$this->create_one_time_donation_order( '25.00', '2025-04-10 10:00:00' );
+
+		$metadata = ( new Donation( self::$user_id ) )->get_metadata();
+		$this->assertSame( '25.00', $metadata['Last_Donation_Amount'] );
+		$this->assertSame( '2025-04-10 10:00:00', $metadata['Last_Donation_Date'] );
+	}
+
+	/**
+	 * A renewal paid after an older one-time gift stays the last donation.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_last_donation_keeps_newer_subscription_payment_over_older_one_time_gift() {
+		$this->create_one_time_donation_order( '25.00', '2025-01-05 10:00:00' );
+		$renewal = wc_create_order(
+			[
+				'customer_id' => self::$user_id,
+				'status'      => 'completed',
+				'total'       => '10.00',
+				'date_paid'   => '2025-04-01 10:00:00',
+			]
+		);
+		$this->create_donation_subscription( [ 'orders' => [ $renewal ] ] );
+
+		$metadata = ( new Donation( self::$user_id ) )->get_metadata();
+		$this->assertSame( '10.00', $metadata['Last_Donation_Amount'] );
+		$this->assertSame( '2025-04-01 10:00:00', $metadata['Last_Donation_Date'] );
+	}
+
 	public function test_previous_donation_amount_from_switch() {
 		global $subscriptions_database;
 
