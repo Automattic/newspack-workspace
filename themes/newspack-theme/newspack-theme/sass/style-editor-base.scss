@@ -1607,10 +1607,10 @@ ul.wp-block-list {
 		box-shadow: inset 0 0 0 1px #1e1e1e;
 		content: "";
 		height: 24px;
+		inset-inline-end: 100%;
 		margin-inline-end: 4px;
 		outline: 1px solid transparent;
 		position: absolute;
-		inset-inline-end: 100%;
 		top: -4px;
 		transform: translateY(-100%);
 		width: 24px;
