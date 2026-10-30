@@ -44,6 +44,8 @@ const tabbedNavigation = [
 	{
 		label: __( 'Campaigns', 'newspack-plugin' ),
 		path: '/campaigns',
+		// Selecting a campaign routes to /campaigns/:id, so this tab matches by
+		// prefix rather than exactly — same as the Segments tab below.
 		exact: false,
 		breadcrumbs: [ ...ROOT, { label: __( 'Campaigns', 'newspack-plugin' ) } ],
 	},
