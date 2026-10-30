@@ -142,10 +142,12 @@
 	<exclude-pattern>*/*.asset.php</exclude-pattern>
 	<exclude-pattern>*/tests/fixtures/*</exclude-pattern>
 
-	<!-- These two suites break WordPress runtime rules deliberately: stub
+	<!-- These suites break WordPress runtime rules deliberately: stub
 	     classes, several object structures per file, direct filesystem calls,
 	     assignment to $GLOBALS['post']. Linting them would mean ~50
-	     suppressions asserting "this is a test double" against no real fix. -->
+	     suppressions asserting "this is a test double" against no real fix.
+	     newspack-plugin's tests/bundled-blocks/ is newspack-blocks' suite, moved. -->
 	<exclude-pattern>*/plugins/newspack-blocks/tests/*</exclude-pattern>
+	<exclude-pattern>*/plugins/newspack-plugin/tests/bundled-blocks/*</exclude-pattern>
 	<exclude-pattern>*/themes/newspack-theme/tests/*</exclude-pattern>
 </ruleset>

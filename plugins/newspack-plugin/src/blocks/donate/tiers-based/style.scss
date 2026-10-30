@@ -1,0 +1,185 @@
+@use "newspack-colors" as np-colors;
+@use "../../../shared/sass/variables";
+
+.wpbnbd--tiers-based {
+	.wpbnbd {
+		&__button,
+		.submit-button {
+			border-width: 1px;
+			border-color: transparent;
+			border-radius: 0;
+			background: none;
+			&--active {
+				border-color: np-colors.$neutral-300;
+			}
+		}
+		&__tiers {
+			&__view {
+				&--hidden {
+					display: none;
+				}
+			}
+			&__selection {
+				display: flex;
+				justify-content: center;
+				margin-bottom: 14px;
+				button,
+				.submit-button {
+					font-size: 13px;
+					white-space: nowrap;
+				}
+			}
+			&__options {
+				display: flex;
+				margin-left: -10px;
+				margin-right: -10px;
+
+				// Slider.
+				&__dots {
+					display: none;
+				}
+				@media screen and ( max-width: 600px ) {
+					overflow-x: scroll;
+					scroll-snap-type: x mandatory;
+					scroll-padding: 10%;
+					&__dots {
+						display: flex;
+						justify-content: center;
+						margin-top: 1em;
+						list-style: none;
+						li {
+							height: 8px;
+							width: 36px;
+							border-radius: 50px;
+							background: np-colors.$neutral-300;
+							margin: 0 5px;
+						}
+					}
+				}
+			}
+			&__tier {
+				// Slider.
+				flex: 1;
+				@media screen and ( max-width: 600px ) {
+					width: 80%;
+					flex: 0 0 auto;
+				}
+
+				display: flex;
+				scroll-snap-align: start;
+				flex-direction: column;
+				margin-left: 10px;
+				margin-right: 10px;
+				padding: 19px 14px;
+				background: np-colors.$neutral-000;
+				border: 1px solid np-colors.$neutral-300;
+				border-radius: 5px;
+				&--recommended {
+					border: 2px solid np-colors.$neutral-900;
+				}
+			}
+			&__top {
+				display: flex;
+				justify-content: space-between;
+				margin-bottom: 7px;
+			}
+			&__heading {
+				font-size: 16px;
+				font-weight: bold;
+				margin: 0;
+			}
+			&__recommend-label {
+				height: 17px;
+				padding: 2px 7px;
+				margin: 0;
+				background-color: np-colors.$neutral-600;
+				color: np-colors.$neutral-000;
+				border-radius: 2px;
+				font-size: 11px;
+			}
+			&__amount {
+				margin-bottom: 16px;
+			}
+			button[type="submit"],
+			.submit-button {
+				border-radius: 3px;
+				border: 2px solid;
+				font-size: 14px;
+				line-height: 1;
+				padding: 10px 16px;
+				margin-bottom: 16px;
+			}
+			&__description {
+				flex: 1;
+				line-height: 1.4;
+				font-size: 13px;
+			}
+
+			&__back-button {
+				background: none;
+				padding: 0;
+				margin-bottom: 13px;
+				color: np-colors.$neutral-600;
+				span {
+					text-decoration: underline;
+				}
+				&:hover,
+				&:focus {
+					color: np-colors.$neutral-900;
+					background: none;
+				}
+			}
+			&__tier-tile {
+				display: flex;
+				justify-content: space-between;
+				margin-bottom: 17px;
+				padding: 5px 14px 16px;
+				border: 2px solid np-colors.$neutral-900;
+				border-radius: 4px;
+				h2 {
+					font-size: 0.8em;
+					margin-top: 13px;
+				}
+				h3 {
+					display: inline-block;
+					font-size: 19px;
+					padding-top: 6px;
+					margin: 0 0 7px;
+				}
+				> div {
+					text-align: right;
+				}
+				[data-amount] {
+					font-weight: bold;
+					font-size: 1.4em;
+				}
+				[data-frequency] {
+					font-size: 0.7em;
+				}
+				&__note {
+					font-size: 0.6em;
+				}
+			}
+		}
+	}
+
+	&.wpbnbd--tier-style-list {
+		.wpbnbd__tiers {
+			&__options {
+				display: grid;
+				gap: var(--newspack-ui-spacer-2, 12px);
+				margin: 0 !important;
+				overflow: hidden;
+
+				&__dots {
+					display: none;
+				}
+			}
+
+			&__tier {
+				margin: 0 !important;
+				width: 100%;
+			}
+		}
+	}
+}

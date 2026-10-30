@@ -36,6 +36,25 @@ wizardsScripts.forEach( function ( wizard ) {
 	wizardsScriptFiles[ wizardFileName ] = resolveSource( 'src', 'wizards', wizard, 'index' );
 } );
 
+// Entries for the blocks and modal checkout from newspack-blocks, under the names
+// newspack-blocks gave them; its PHP enqueues them by those names.
+const BUNDLED_BLOCKS = [ 'author-list', 'author-profile', 'checkout-button', 'donate', 'iframe', 'video-playlist' ];
+const bundledBlocksEntries = {
+	placeholder_blocks: resolveSource( 'src', 'setup', 'placeholder-blocks' ),
+	editor: [ resolveSource( 'src', 'setup', 'editor' ), ...BUNDLED_BLOCKS.map( block => resolveSource( 'src', 'blocks', block, 'editor' ) ) ],
+	block_styles: resolveSource( 'src', 'block-styles', 'view' ),
+	modal: resolveSource( 'src', 'modal-checkout', 'modal' ),
+	modalCheckout: resolveSource( 'src', 'modal-checkout', 'index' ),
+	frequencyBased: resolveSource( 'src', 'blocks', 'donate', 'frequency-based', 'index' ),
+	tiersBased: resolveSource( 'src', 'blocks', 'donate', 'tiers-based', 'index' ),
+};
+BUNDLED_BLOCKS.forEach( block => {
+	const viewScript = findSource( 'src', 'blocks', block, 'view' );
+	if ( viewScript ) {
+		bundledBlocksEntries[ `${ block }/view` ] = viewScript;
+	}
+} );
+
 const entry = {
 	'reader-activation': resolveSource( 'src', 'reader-activation', 'index' ),
 	'reader-auth': resolveSource( 'src', 'reader-activation-auth', 'index' ),
@@ -80,6 +99,7 @@ const entry = {
 	'collections-frontend': resolveSource( 'src', 'collections', 'frontend', 'index' ),
 	'group-subscription-admin': resolveSource( 'src', 'group-subscription', 'admin' ),
 	'csv-export': resolveSource( 'src', 'csv-export', 'index' ),
+	...bundledBlocksEntries,
 };
 
 // Get files for other scripts.
@@ -109,9 +129,22 @@ if ( miniCssExtractPlugin && miniCssExtractPlugin.options ) {
 // Overwrite default optimisation.
 webpackConfig.optimization.splitChunks.cacheGroups.commons = {
 	name: 'commons',
-	chunks: 'initial',
+	// newspack-blocks' PHP doesn't enqueue commons, so keep its entries self-contained.
+	chunks: chunk => chunk.canBeInitial() && ! Object.hasOwn( bundledBlocksEntries, chunk.name ),
 	minChunks: 2,
 };
+
+// JSX files from newspack-icons, which the bundled blocks import untranspiled.
+webpackConfig.module.rules.push( {
+	test: /\.jsx?$/,
+	include: [ path.dirname( require.resolve( 'newspack-icons/package.json' ) ) ],
+	use: {
+		loader: 'babel-loader',
+		options: {
+			presets: [ '@babel/preset-env', [ '@babel/preset-react', { runtime: 'automatic' } ] ],
+		},
+	},
+} );
 
 // Fonts handling.
 webpackConfig.module.rules.push( {

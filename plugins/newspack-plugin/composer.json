@@ -29,7 +29,13 @@
 		"exclude-from-classmap": [
 			"includes/export/class-csv-batch-exporter.php",
 			"includes/export/class-subscriptions-csv-exporter.php",
-			"includes/export/class-users-csv-exporter.php"
+			"includes/export/class-users-csv-exporter.php",
+			"includes/class-modal-checkout.php",
+			"includes/class-newspack-blocks-api.php",
+			"includes/class-newspack-blocks-patterns.php",
+			"includes/class-newspack-blocks.php",
+			"includes/modal-checkout/",
+			"includes/tracking/class-data-events.php"
 		]
 	},
 	"extra": {

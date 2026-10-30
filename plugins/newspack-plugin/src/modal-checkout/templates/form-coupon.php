@@ -1,0 +1,31 @@
+<?php
+/**
+ * Checkout coupon form
+ *
+ * @see https://woo.com/document/template-structure/
+ * @package Newspack_Blocks
+ */
+
+defined( 'ABSPATH' ) || exit;
+
+if ( ! wc_coupons_enabled() ) { // @codingStandardsIgnoreLine.
+	return;
+}
+
+// Hide the coupon form when a coupon was auto-applied from a Checkout Button
+// block — the reader didn't enter the code, so don't prompt them for one.
+if (
+	class_exists( '\Newspack_Blocks\Modal_Checkout' )
+	&& \Newspack_Blocks\Modal_Checkout::should_hide_coupon_form()
+) {
+	return;
+}
+
+?>
+<form class="modal_checkout_coupon woocommerce-form-coupon" method="post">
+	<h3><?php esc_html_e( 'Apply a coupon code', 'newspack-plugin' ); ?></h3>
+	<p>
+		<input type="text" name="coupon_code" class="input-text" placeholder="<?php esc_attr_e( 'Coupon code', 'newspack-plugin' ); ?>" id="coupon_code" value="" />
+		<button type="submit" class="<?php echo esc_attr( wc_wp_theme_get_element_class_name( 'button' ) ? wc_wp_theme_get_element_class_name( 'button' ) : '' ); ?> newspack-ui__button newspack-ui__button--outline" name="apply_coupon" value="<?php esc_attr_e( 'Apply coupon', 'newspack-plugin' ); ?>"><?php esc_html_e( 'Apply', 'newspack-plugin' ); ?></button>
+	</p>
+</form>
