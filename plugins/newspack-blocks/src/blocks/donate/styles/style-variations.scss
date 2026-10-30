@@ -390,7 +390,7 @@
 		}
 
 		&:focus-within {
-			@include mixins.focus-edge( var(--newspack-ui-color-input-border-focus, #{np-colors.$neutral-900}) );
+			@include mixins.focus-edge( var(--newspack-ui-color-input-border-focus, #{np-colors.$neutral-900}), $over-content: true );
 		}
 
 		.currency {
@@ -529,7 +529,7 @@
 				}
 
 				input[type="radio"]:focus-visible + .tier-label {
-					@include mixins.focus-line( $inner: inset 0 0 0 1px var(--newspack-ui-color-surface, #{np-colors.$neutral-000}) );
+					@include mixins.focus-edge( currentcolor, 2px, mixins.$focus-color );
 				}
 			}
 
@@ -577,7 +577,7 @@
 			}
 
 			&:focus-visible {
-				@include mixins.focus-line( var(--wpbnbd-button-color, #{mixins.$focus-color}), $inner: inset 0 0 0 1px currentcolor );
+				@include mixins.focus-edge( currentcolor, 2px, mixins.$focus-color );
 			}
 		}
 	}
@@ -691,7 +691,9 @@
 				}
 
 				&:focus-visible {
-					@include mixins.focus-line( var(--wpbnbd-button-color, #{mixins.$focus-color}), $inner: inset 0 0 0 1px currentcolor );
+					border-color: currentcolor !important;
+
+					@include mixins.focus-edge( currentcolor, $halo: mixins.$focus-color );
 				}
 			}
 
@@ -703,12 +705,6 @@
 							background: var(--newspack-ui-color-surface-subtle, np-colors.$neutral-050) !important;
 							opacity: 1;
 						}
-					}
-
-					&:focus-visible {
-						border-color: mixins.$focus-color !important;
-
-						@include mixins.focus-edge;
 					}
 				}
 			}

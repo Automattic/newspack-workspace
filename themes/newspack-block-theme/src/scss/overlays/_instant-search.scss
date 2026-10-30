@@ -317,7 +317,7 @@ body .jetpack-instant-search {
 				}
 
 				&:focus-visible {
-					@include mixins.focus-line-filled(var(--jp--color--text), var(--jp--color--background), !important);
+					@include mixins.focus-fill(var(--jp--color--background), var(--jp--color--text), !important);
 				}
 
 				&:disabled {

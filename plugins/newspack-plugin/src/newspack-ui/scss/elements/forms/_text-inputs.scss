@@ -83,7 +83,7 @@
 		}
 
 		&:focus-within {
-			@include mixins.focus-edge( var(--newspack-ui-color-input-border-focus) );
+			@include mixins.focus-edge( var(--newspack-ui-color-input-border-focus), $over-content: true );
 		}
 
 		&__currency {

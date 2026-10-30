@@ -4,18 +4,22 @@
 $focus-color: var(--newspack-ui-color-focus, #{np-colors.$neutral-900});
 $focus-halo-width: var(--newspack-ui-focus-halo-width, 3px);
 
-@mixin focus-edge( $color: $focus-color ) {
-	border-color: $color;
-	box-shadow: 0 0 0 $focus-halo-width color-mix(in srgb, #{$color} var(--newspack-ui-focus-halo-mix, 20%), transparent);
-	outline: 2px solid transparent;
-	outline-offset: 0;
-	transition: none;
-}
+@mixin focus-edge( $color: $focus-color, $width: 1px, $halo: $color, $inner: null, $over-content: false ) {
+	$halo-shadow: 0 0 0 $focus-halo-width color-mix(in srgb, #{$halo} var(--newspack-ui-focus-halo-mix, 30%), transparent);
 
-@mixin focus-line( $color: $focus-color, $inner: null ) {
-	box-shadow: $inner, 0 0 0 1px $color, 0 0 0 calc(1px + #{$focus-halo-width}) color-mix(in srgb, #{$color} var(--newspack-ui-focus-halo-mix, 20%), transparent);
-	outline: 2px solid transparent;
-	outline-offset: 0;
+	border-color: $color;
+
+	@if $over-content {
+		box-shadow: $halo-shadow;
+		outline: $width solid $color;
+		outline-offset: calc(-1px - #{$width});
+	}
+	@else {
+		box-shadow: inset 0 0 0 $width $color, $inner, $halo-shadow;
+		outline: 2px solid transparent;
+		outline-offset: 0;
+	}
+
 	transition: none;
 }
 

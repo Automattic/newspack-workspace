@@ -23,7 +23,7 @@
 		--newspack-ui-button-bg-disabled: var(--newspack-ui-color-surface-subtle);
 		--newspack-ui-button-ink-disabled: var(--newspack-ui-color-disabled-ink);
 		--newspack-ui-button-focus: var(--newspack-ui-color-focus);
-		--newspack-ui-button-focus-inner: var(--newspack-ui-button-border);
+		--newspack-ui-button-focus-halo: var(--newspack-ui-color-focus);
 
 		align-items: center;
 		background: var(--newspack-ui-button-bg);
@@ -109,7 +109,7 @@
 		}
 
 		&:focus-visible {
-			@include mixins.focus-line( var(--newspack-ui-button-focus), inset 0 0 0 1px var(--newspack-ui-button-focus-inner) );
+			@include mixins.focus-edge( var(--newspack-ui-button-focus), 2px, var(--newspack-ui-button-focus-halo) );
 		}
 
 		&__row {
@@ -155,8 +155,7 @@
 		&--branded,
 		&--primary-light,
 		&--destructive:not(.newspack-ui__button--ghost, .newspack-ui__button--outline) {
-			--newspack-ui-button-focus: var(--newspack-ui-button-bg);
-			--newspack-ui-button-focus-inner: var(--newspack-ui-button-ink);
+			--newspack-ui-button-focus: var(--newspack-ui-button-ink);
 		}
 
 		&--primary {
@@ -167,6 +166,8 @@
 
 			@media ( hover: hover ) and ( pointer: fine ) {
 				&:not(.newspack-ui__button--destructive):hover {
+					--newspack-ui-button-focus: var(--newspack-ui-color-button-text-hover);
+
 					color: var(--newspack-ui-color-button-text-hover);
 				}
 			}
@@ -192,8 +193,6 @@
 			--newspack-ui-button-bg-hover: var(--newspack-ui-color-neutral-fill-hover);
 			--newspack-ui-button-bg-pressed: var(--newspack-ui-color-neutral-fill-pressed);
 			--newspack-ui-button-ink: var(--newspack-ui-color-text);
-			--newspack-ui-button-focus: var(--newspack-ui-color-focus);
-			--newspack-ui-button-focus-inner: var(--newspack-ui-button-border);
 		}
 
 		&--ghost,
@@ -204,17 +203,11 @@
 			--newspack-ui-button-bg-pressed: var(--newspack-ui-color-neutral-fill-hover);
 			--newspack-ui-button-bg-disabled: transparent;
 			--newspack-ui-button-ink: var(--newspack-ui-color-text);
-			--newspack-ui-button-focus: var(--newspack-ui-color-focus);
-			--newspack-ui-button-focus-inner: var(--newspack-ui-button-border);
 		}
 
 		&--outline {
 			--newspack-ui-button-bg-disabled: var(--newspack-ui-color-surface-subtle);
 			--newspack-ui-button-border: var(--newspack-ui-color-border-outline);
-
-			&:focus-visible {
-				@include mixins.focus-edge( var(--newspack-ui-button-focus), $inset: true );
-			}
 
 			@media ( forced-colors: active ) {
 				&.newspack-ui__button:not(:focus-visible) {
@@ -226,6 +219,7 @@
 
 		&--ghost-light {
 			--newspack-ui-button-ink: var(--newspack-ui-color-text-muted);
+			--newspack-ui-button-focus: var(--newspack-ui-button-ink);
 		}
 
 		&--ghost-dark {
@@ -234,6 +228,7 @@
 			--newspack-ui-button-bg-pressed: color-mix(in oklab, var(--newspack-ui-color-inverse-bg) var(--newspack-ui-color-mix-pressed), var(--newspack-ui-color-inverse-ink));
 			--newspack-ui-button-ink: var(--newspack-ui-color-inverse-ink);
 			--newspack-ui-button-focus: var(--newspack-ui-color-inverse-ink);
+			--newspack-ui-button-focus-halo: var(--newspack-ui-color-inverse-ink);
 		}
 
 		&--destructive {
@@ -249,14 +244,17 @@
 				--newspack-ui-button-bg-pressed: var(--newspack-ui-color-error-tint-pressed);
 				--newspack-ui-button-ink: var(--newspack-ui-color-error);
 				--newspack-ui-button-ink-pressed: var(--newspack-ui-color-error-text);
-				--newspack-ui-button-focus: var(--newspack-ui-color-focus);
-				--newspack-ui-button-focus-inner: var(--newspack-ui-button-border);
+				--newspack-ui-button-focus: var(--newspack-ui-button-ink);
 			}
 
 			&.newspack-ui__button--outline {
 				--newspack-ui-color-border-outline-mix: 70%;
 				--newspack-ui-button-border: var(--newspack-ui-color-border-outline);
 			}
+		}
+
+		&:is(:disabled, .disabled, [aria-disabled="true"]):where(:not(.newspack-ui__button--loading)) {
+			--newspack-ui-button-focus: var(--newspack-ui-button-ink-disabled);
 		}
 
 		// Wide
@@ -396,7 +394,7 @@
 		}
 
 		&:focus-visible {
-			@include mixins.focus-line( $radius: calc(var(--newspack-ui-radius-control) * 0.5) );
+			@include mixins.focus-line( $radius: calc(var(--newspack-ui-radius-control) * 0.5), $width: 1px );
 		}
 
 		&.newspack-ui__link--muted,
