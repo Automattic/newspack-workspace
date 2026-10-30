@@ -585,8 +585,6 @@ final class Newspack_Newsletters_Editor {
 		return [
 			'email_html_meta'                => Newspack_Newsletters::EMAIL_HTML_META,
 			'mjml_handling_post_types'       => $mjml_handling_post_types,
-			'newsletter_post_type'           => Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
-			'current_post_type'              => get_post_type(),
 			'conditional_tag_support'        => $conditional_tag_support,
 			'sponsors_flag_hex'              => get_theme_mod( 'sponsored_flag_hex', '#FED850' ),
 			'sponsors_flag_text_color'       => function_exists( 'newspack_get_color_contrast' ) ? newspack_get_color_contrast( \get_theme_mod( 'sponsored_flag_hex', '#FED850' ) ) : 'black',
@@ -1074,4 +1072,7 @@ final class Newspack_Newsletters_Editor {
 		return (object) $featured_media_info;
 	}
 }
-Newspack_Newsletters_Editor::instance();
+// Boot only when the main plugin file loaded this, not another plugin's autoloader.
+if ( defined( 'NEWSPACK_NEWSLETTERS_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal path constant, set by the main plugin file.
+	Newspack_Newsletters_Editor::instance();
+}

@@ -1,6 +1,6 @@
 {
 	"name": "newspack-popups",
-	"version": "3.15.1",
+	"version": "3.20.4",
 	"author": "Automattic",
 	"main": "srsc/view/index.js",
 	"scripts": {
@@ -35,8 +35,10 @@
 		"*.php": "npm run lint:php:staged"
 	},
 	"dependencies": {
+		"@wordpress/ui": "^0.23.0",
 		"classnames": "^2.5.1",
 		"js-cookie": "^3.0.8",
+		"newspack-colors": "workspace:*",
 		"newspack-components": "workspace:*"
 	},
 	"devDependencies": {

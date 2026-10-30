@@ -32,6 +32,18 @@ export function getCptSlug() {
 }
 
 /**
+ * Whether the shell is rendering inside newspack-plugin's admin header.
+ *
+ * `wp_localize_script()` string-casts, so PHP's boolean arrives as `'1'` or `''`
+ * rather than `true` or `false`.
+ *
+ * @return {boolean} True when bundled.
+ */
+export function isBundledMode() {
+	return !! getGlobal()?.bundledMode;
+}
+
+/**
  * Resolve the current user's persisted view preferences, keyed by screen.
  *
  * @return {Object} Preferences map (empty when none saved).

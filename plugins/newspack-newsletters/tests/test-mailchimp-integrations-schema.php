@@ -126,8 +126,8 @@ class MailchimpIntegrationsSchemaTest extends WP_UnitTestCase {
 		$cases = [
 			'text'     => [ 'string', 'default' ],
 			'number'   => [ 'number', 'range' ],
-			'date'     => [ 'date', 'default' ],
-			'birthday' => [ 'date', 'default' ],
+			'date'     => [ 'date', 'date_range' ],
+			'birthday' => [ 'string', 'default' ],
 			'dropdown' => [ 'select', 'default' ],
 			'radio'    => [ 'select', 'default' ],
 			'phone'    => [ 'string', 'default' ],
@@ -143,6 +143,98 @@ class MailchimpIntegrationsSchemaTest extends WP_UnitTestCase {
 			$this->assertSame( $expected[0], $mapped['value_type'], "$type value_type" );
 			$this->assertSame( $expected[1], $mapped['matching_function'], "$type matching_function" );
 		}
+	}
+
+	/**
+	 * Mailchimp renders each date merge field per its own date_format, and
+	 * '03/04/2026' is ambiguous between the two settings — so the format has to
+	 * travel with the field for the pull to normalize it correctly.
+	 */
+	public function test_date_format_declared_for_date_fields() {
+		$us = $this->map_field(
+			[
+				'tag'     => 'GIFTDATE',
+				'name'    => 'Gift Date',
+				'type'    => 'date',
+				'options' => [ 'date_format' => 'MM/DD/YYYY' ],
+			]
+		);
+		$this->assertSame( 'm/d/Y', $us['date_format'] );
+		$this->assertSame( 'date_range', $us['matching_function'] );
+
+		$intl = $this->map_field(
+			[
+				'tag'     => 'GIFTDATE',
+				'name'    => 'Gift Date',
+				'type'    => 'date',
+				'options' => [ 'date_format' => 'DD/MM/YYYY' ],
+			]
+		);
+		$this->assertSame( 'd/m/Y', $intl['date_format'] );
+
+		// An unknown or absent format falls back to '' — meaning ISO / Y-m-d.
+		$unknown = $this->map_field(
+			[
+				'tag'     => 'GIFTDATE',
+				'name'    => 'Gift Date',
+				'type'    => 'date',
+				'options' => [ 'date_format' => 'YYYY.MM.DD' ],
+			]
+		);
+		$this->assertSame( '', $unknown['date_format'] );
+
+		$none = $this->map_field(
+			[
+				'tag'  => 'GIFTDATE',
+				'name' => 'Gift Date',
+				'type' => 'date',
+			]
+		);
+		$this->assertSame( '', $none['date_format'] );
+	}
+
+	/**
+	 * The operator originates here and the plugins update independently: on a
+	 * site whose newspack-plugin predates date-range support, date_range would
+	 * reach newspack-popups unvalidated and a stale build crashes on it. The
+	 * mapper probes the consumer and degrades to exact matching. (The stub in
+	 * tests/mocks/class-newspack-plugin-incoming-field-mock.php is what makes
+	 * the probe resolve true for the other tests in this file.)
+	 */
+	public function test_date_fields_degrade_to_exact_match_without_consumer_support() {
+		add_filter( 'newspack_newsletters_integrations_supports_date_range', '__return_false' );
+		$mapped = $this->map_field(
+			[
+				'tag'     => 'GIFTDATE',
+				'name'    => 'Gift Date',
+				'type'    => 'date',
+				'options' => [ 'date_format' => 'MM/DD/YYYY' ],
+			]
+		);
+		remove_filter( 'newspack_newsletters_integrations_supports_date_range', '__return_false' );
+
+		$this->assertSame( 'default', $mapped['matching_function'] );
+		// Only the operator degrades — the field still describes itself fully, so
+		// nothing downstream has to special-case the degraded shape.
+		$this->assertSame( 'date', $mapped['value_type'] );
+		$this->assertSame( 'm/d/Y', $mapped['date_format'] );
+	}
+
+	/**
+	 * A birthday is MM/DD with no year, so it can't sit on an absolute timeline.
+	 * It stays a string rather than offering a date range it cannot honor.
+	 */
+	public function test_birthday_is_not_a_date_type() {
+		$mapped = $this->map_field(
+			[
+				'tag'  => 'BIRTHDAY',
+				'name' => 'Birthday',
+				'type' => 'birthday',
+			]
+		);
+		$this->assertSame( 'string', $mapped['value_type'] );
+		$this->assertSame( 'default', $mapped['matching_function'] );
+		$this->assertSame( '', $mapped['date_format'] );
 	}
 
 	/**
@@ -164,6 +256,7 @@ class MailchimpIntegrationsSchemaTest extends WP_UnitTestCase {
 			'name',
 			'value_type',
 			'matching_function',
+			'date_format',
 			'options',
 			'description',
 			'is_access_rule',

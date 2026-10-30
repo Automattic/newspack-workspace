@@ -1,3 +1,90 @@
+## republication-tracker-tool [2.9.8](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.7...republication-tracker-tool@2.9.8) (2026-10-29)
+
+
+### Bug Fixes
+
+* **rtt:** keep Parse.ly tracking on block-editor paste (NPPM-3409) ([#1256](https://github.com/Automattic/newspack-workspace/issues/1256)) ([ba13bde](https://github.com/Automattic/newspack-workspace/commit/ba13bde43b6de8d51680fec53b814bb637836199))
+
+## republication-tracker-tool [2.9.7](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.6...republication-tracker-tool@2.9.7) (2026-10-28)
+
+
+### Bug Fixes
+
+* **rtt:** keep site icon small after a block editor paste (NPPM-3537) ([#1435](https://github.com/Automattic/newspack-workspace/issues/1435)) ([43e1c33](https://github.com/Automattic/newspack-workspace/commit/43e1c3321b4626679f349f996bef7524203c2833))
+
+## republication-tracker-tool [2.9.6](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.5...republication-tracker-tool@2.9.6) (2026-10-27)
+
+
+### Bug Fixes
+
+* **republication-tracker-tool:** add Custom Byline support to modal ([#1128](https://github.com/Automattic/newspack-workspace/issues/1128)) ([36dbf0d](https://github.com/Automattic/newspack-workspace/commit/36dbf0d3852720bd128a25178f242de6caff249d))
+
+## republication-tracker-tool [2.9.5](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.4...republication-tracker-tool@2.9.5) (2026-10-26)
+
+
+### Bug Fixes
+
+* require PHP 8.1 in the WordPress.org plugins ([#1272](https://github.com/Automattic/newspack-workspace/issues/1272)) ([4a9bea1](https://github.com/Automattic/newspack-workspace/commit/4a9bea142fee228fe8613f5f4df3469e7eb72f13))
+* **rtt:** decode only the footer in the republish modal copy (NPPM-3573) ([#1314](https://github.com/Automattic/newspack-workspace/issues/1314)) ([4b63f6d](https://github.com/Automattic/newspack-workspace/commit/4b63f6d77f8cb94ab1f11c42dd81bf8e5fc4a076))
+
+## republication-tracker-tool [2.9.4](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.3...republication-tracker-tool@2.9.4) (2026-10-12)
+
+
+### Dependencies
+
+* **newspack-scripts:** upgraded to 5.12.0
+
+## republication-tracker-tool [2.9.3](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.2...republication-tracker-tool@2.9.3) (2026-09-28)
+
+
+### Bug Fixes
+
+* **republication:** republish only public posts ([#1068](https://github.com/Automattic/newspack-workspace/issues/1068)) ([1aeee39](https://github.com/Automattic/newspack-workspace/commit/1aeee39e093e23144ab3ee28b2ef99bf680d33d8))
+
+## republication-tracker-tool [2.9.2](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.1...republication-tracker-tool@2.9.2) (2026-09-14)
+
+
+### Performance Improvements
+
+* **rtt:** skip the referrer title fetch when there is no referrer (NPPM-2981) ([#988](https://github.com/Automattic/newspack-workspace/issues/988)) ([3199175](https://github.com/Automattic/newspack-workspace/commit/3199175906bfc7f108e2e12697ab5e652c5f9cba))
+
+## republication-tracker-tool [2.9.1](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.0...republication-tracker-tool@2.9.1) (2026-08-18)
+
+
+### Bug Fixes
+
+* **rtt:** filter bots and dedup repeat views in pixel counter ([#593](https://github.com/Automattic/newspack-workspace/issues/593)) ([2f1af3c](https://github.com/Automattic/newspack-workspace/commit/2f1af3cf7ce5047acec4eaf52fc79fde1d664eb2))
+
+# republication-tracker-tool [2.9.0](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.8.4...republication-tracker-tool@2.9.0) (2026-08-17)
+
+
+### Bug Fixes
+
+* **republication-tracker-tool:** load block from shipped paths ([#720](https://github.com/Automattic/newspack-workspace/issues/720)) ([f73f183](https://github.com/Automattic/newspack-workspace/commit/f73f1838a0b7327766283bec9da8988bd748169c))
+
+
+### Features
+
+* **performance:** defer reader-facing JS assets (NPPM-3037) ([#722](https://github.com/Automattic/newspack-workspace/issues/722)) ([2855574](https://github.com/Automattic/newspack-workspace/commit/2855574099c4f416a984cda8565b269e5a9f0fb0))
+
+
+### Dependencies
+
+* **newspack-scripts:** upgraded to 5.11.0
+
+## republication-tracker-tool [2.8.4](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.8.3...republication-tracker-tool@2.8.4) (2026-08-03)
+
+
+### Bug Fixes
+
+* add project-level .eslintrc.js to align lint setup ([#340](https://github.com/Automattic/newspack-workspace/issues/340)) ([9d05641](https://github.com/Automattic/newspack-workspace/commit/9d056414fe9ec3b9bf9885203ff423b9d884d002))
+* **republication-tracker-tool:** load block from shipped paths ([#720](https://github.com/Automattic/newspack-workspace/issues/720)) ([d850db8](https://github.com/Automattic/newspack-workspace/commit/d850db86de5d43aae9e1e04e450b19ec656f71c5))
+
+
+### Dependencies
+
+* **newspack-scripts:** upgraded to 5.10.0
+
 ## republication-tracker-tool [2.8.3](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.8.2...republication-tracker-tool@2.8.3) (2026-06-01)
 
 

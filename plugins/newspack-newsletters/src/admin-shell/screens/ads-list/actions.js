@@ -7,7 +7,7 @@
 
 import apiFetch from '@wordpress/api-fetch';
 import { __, _n, sprintf } from '@wordpress/i18n';
-import { edit, trash } from '@wordpress/icons';
+import { pencil, trash } from '@wordpress/icons';
 
 import { getAdminUrl } from '../../admin-globals';
 import ConfirmModal from '../../components/confirm-modal';
@@ -50,7 +50,7 @@ export function getActions( { refresh, openQuickEdit } ) {
 		id: 'quick-edit',
 		label: __( 'Quick Edit', 'newspack-newsletters' ),
 		isPrimary: true,
-		icon: edit,
+		icon: pencil,
 		isEligible: item => ! isTrashed( item ),
 		callback: items => {
 			const item = items[ 0 ];

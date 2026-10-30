@@ -40,12 +40,15 @@ const entry = {
 	'reader-activation': resolveSource( 'src', 'reader-activation', 'index' ),
 	'reader-auth': resolveSource( 'src', 'reader-activation-auth', 'index' ),
 	'newsletters-signup': resolveSource( 'src', 'reader-activation-newsletters', 'index' ),
+	'form-capture': resolveSource( 'src', 'reader-activation-form-capture', 'index' ),
+	'form-capture-editor': resolveSource( 'src', 'reader-activation-form-capture', 'editor' ),
 	'reader-registration-block': resolveSource( 'src', 'blocks', 'reader-registration', 'view' ),
 	'correction-box-block': resolveSource( 'src', 'blocks', 'correction-box', 'index' ),
 	'correction-item-block': resolveSource( 'src', 'blocks', 'correction-item', 'index' ),
 	'content-gate-countdown-block': resolveSource( 'src', 'blocks', 'content-gate', 'countdown', 'view' ),
 	'overlay-menu-block': resolveSource( 'src', 'blocks', 'overlay-menu', 'view' ),
 	'overlay-search-block': resolveSource( 'src', 'blocks', 'overlay-search', 'view' ),
+	'comments-panel-block': resolveSource( 'src', 'blocks', 'comments-panel', 'view' ),
 	'content-gate-countdown-box-block': resolveSource( 'src', 'blocks', 'content-gate', 'countdown-box', 'index' ),
 	'contribution-meter-block': resolveSource( 'src', 'blocks', 'contribution-meter', 'index' ),
 	'avatar-block': resolveSource( 'src', 'blocks', 'avatar', 'index' ),
@@ -60,6 +63,7 @@ const entry = {
 
 	// Newspack wizard assets.
 	...wizardsScriptFiles,
+	'handoff-banner-block-editor': resolveSource( 'src', 'wizards', 'handoff-banner', 'block-editor' ),
 	blocks: resolveSource( 'src', 'blocks', 'index' ),
 	'content-gate-editor': resolveSource( 'src', 'content-gate', 'editor', 'editor' ),
 	'content-gate-editor-memberships': resolveSource( 'src', 'content-gate', 'editor', 'memberships' ),
@@ -75,6 +79,7 @@ const entry = {
 	'collections-admin': resolveSource( 'src', 'collections', 'admin', 'index' ),
 	'collections-frontend': resolveSource( 'src', 'collections', 'frontend', 'index' ),
 	'group-subscription-admin': resolveSource( 'src', 'group-subscription', 'admin' ),
+	'csv-export': resolveSource( 'src', 'csv-export', 'index' ),
 };
 
 // Get files for other scripts.

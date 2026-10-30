@@ -18,6 +18,21 @@ class Block_Patterns {
 		add_action( 'admin_init', [ __CLASS__, 'register_block_patterns' ] );
 		add_action( 'enqueue_block_editor_assets', [ __CLASS__, 'enqueue_styles' ] );
 		add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_styles' ] );
+		add_action( 'enqueue_block_assets', [ __CLASS__, 'enqueue_editor_canvas_styles' ] );
+	}
+
+	/**
+	 * Enqueue styles in the editor canvas when editing a gate layout or a memberships gate.
+	 */
+	public static function enqueue_editor_canvas_styles() {
+		if ( ! is_admin() || ! function_exists( 'get_current_screen' ) ) {
+			return;
+		}
+		$screen = get_current_screen();
+		if ( ! $screen || ! in_array( $screen->post_type, [ \Newspack\Content_Gate::GATE_LAYOUT_CPT, \Newspack\Memberships::GATE_CPT ], true ) ) {
+			return;
+		}
+		self::enqueue_styles();
 	}
 
 	/**
@@ -114,14 +129,16 @@ class Block_Patterns {
 	 */
 	public static function get_metering_settings( $pattern_context ) {
 		$count  = 4;
-		$period = __( 'month', 'newspack-plugin' );
+		$period = \Newspack\Metering::get_period_label( 'month' );
 		if ( ! empty( $pattern_context['custom_access_settings']['metering'] ) ) {
-			$metering = $pattern_context['custom_access_settings']['metering'];
+			// Resolved, not stored: a gate on the shared allowance ignores its own count,
+			// and this copy is baked into the layout post.
+			$metering = \Newspack\Metering::resolve_path_settings( $pattern_context['custom_access_settings'], true );
 			if ( ! empty( $metering['count'] ) ) {
 				$count = absint( $metering['count'] );
 			}
 			if ( ! empty( $metering['period'] ) ) {
-				$period = sanitize_text_field( $metering['period'] );
+				$period = \Newspack\Metering::get_period_label( $metering['period'] );
 			}
 		}
 		return [

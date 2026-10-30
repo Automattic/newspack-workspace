@@ -1,0 +1,2152 @@
+<?php
+/**
+ * WP-CLI command to migrate WooCommerce Membership plans that restrict newsletter
+ * lists to Newspack Access Control premium newsletter gates.
+ *
+ * Sibling of the migrate-membership-gates command: same grouping, titling and
+ * verification shape, applied to the premium newsletter gate bucket instead of the
+ * content gate bucket. A premium newsletter gate is an ordinary content gate
+ * carrying `is_newsletter` post meta, which the evaluator uses to decide which
+ * bucket a post is judged against — so migrating one is a matter of writing the
+ * right rules and mode settings, not of authoring layouts.
+ *
+ * The class file is included on every request like the other CLI classes; only the
+ * command registration is gated on WP_CLI.
+ *
+ * @package Newspack
+ */
+
+namespace Newspack\CLI;
+
+use WP_CLI;
+
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * Membership plan → Access Control premium newsletter gate migration CLI command.
+ */
+class Premium_Newsletters_Migration {
+	use One_Time_Purchase_Migration;
+
+
+	/**
+	 * The newsletter list post type, used when Newspack Newsletters is not loaded.
+	 *
+	 * WooCommerce Memberships stores the post type name on the rule, so a rule
+	 * written before the plugin was deactivated still names this CPT.
+	 */
+	const NEWSLETTER_LIST_CPT_FALLBACK = 'newspack_nl_list';
+
+	/**
+	 * Appended to a group's gate title to name the sibling gate that takes the
+	 * group's auto-signup lists when its lists disagree.
+	 *
+	 * The sibling's title is its identity on a re-run, as every gate's title is here,
+	 * so changing this suffix makes the next run create new siblings and report the
+	 * old ones as untouched.
+	 */
+	const AUTO_SIGNUP_SIBLING_SUFFIX = ' (auto-signup)';
+
+	/**
+	 * Create or update Newspack Access Control premium newsletter gates from
+	 * WooCommerce Membership plans.
+	 *
+	 * For each published plan carrying a newsletter-list content restriction rule,
+	 * writes the equivalent premium newsletter gate: the plan's lists as the gate's
+	 * restricted lists, and the plan's products as its paid access rules. Plans
+	 * restricting the same lists are grouped and represented by a single gate whose
+	 * title is all matching plan names joined with " | ".
+	 *
+	 * Registration mode is always activated; paid access mode only when every plan in
+	 * the group requires a purchase (see group_requires_purchase()).
+	 *
+	 * Each gate's auto-signup setting records what WooCommerce Memberships did: it
+	 * added new members to every list their plan restricted, except lists shown in
+	 * the post-checkout signup modal, which readers opted into. A gate whose lists are
+	 * all in the modal is set to Off, and one with none of them there to On. A group
+	 * with lists on both sides is split in two, with the same access rules: the gate
+	 * with the group's title keeps the modal lists and is set to Off, and a sibling
+	 * titled "<title> (auto-signup)" takes the rest and is set to On. When the run
+	 * can't settle it (a list has no ESP list, or another plan or its gate already uses
+	 * the sibling's title) the gate keeps its setting and the run prints what to do. A
+	 * gate already set to On or Off keeps that unless --set-auto-signup is passed. A new
+	 * sibling starts with the hide setting of the gate it splits from. It keeps that
+	 * gate's On or Off unless --set-auto-signup is passed.
+	 *
+	 * Dry-run by default; pass --live to write.
+	 *
+	 * Re-running overwrites a matching gate's content rules and mode settings, but
+	 * never its layouts: this command does not author them, and a publisher may have
+	 * customized one in Newsletters > Premium.
+	 *
+	 * Both modes surface predictable problems as WARN rows. On --live each written
+	 * gate is re-read and checked against the conditions the frontend evaluator
+	 * applies. Migrated gates stay dormant until WooCommerce Memberships is
+	 * deactivated, so without this an unenforceable gate would look migrated for as
+	 * long as it takes someone to notice at cutover.
+	 *
+	 * Every decision that needs an operator is settled before the first write: the
+	 * groups are scanned, the problems are reported, and the one confirmation prompt
+	 * is asked with nothing yet written. The write loop then runs to completion
+	 * unattended, so a run that is interrupted at a prompt is a run that changed
+	 * nothing.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--live]
+	 * : Apply the changes. Without this flag the command runs as a dry-run and writes nothing.
+	 *
+	 * [--plan=<id>]
+	 * : Only process the plan with this post ID. Useful for testing.
+	 *
+	 * [--one-time-duration=<duration>]
+	 * : How long access lasts after a one-time purchase. Accepts "forever", "<n>days" or "<n>months". Each plan's own access length is read by default, so this is only needed for a plan whose access ends on a fixed calendar date, which is not a duration from the purchase. Applies to every such plan in the run.
+	 *
+	 * [--set-auto-signup]
+	 * : Apply the derived auto-signup setting to gates already set to On or Off, and to a new sibling split from one. Without this the command reports the difference and leaves such a gate alone, because its setting is a publisher's choice rather than a migration artefact. A gate that follows the site setting is written either way.
+	 *
+	 * [--yes]
+	 * : Answer yes to the pre-flight confirmation prompt shown when gates would be created alongside gates the same plans were migrated to individually. Required for non-interactive runs (cron, `ssh host "wp ..."`): with no terminal to answer the prompt, the command errors out rather than exiting silently mid-migration.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp newspack migrate-premium-newsletters
+	 *     wp newspack migrate-premium-newsletters --live
+	 *     wp newspack migrate-premium-newsletters --plan=711923
+	 *     wp newspack migrate-premium-newsletters --one-time-duration=12months
+	 *
+	 *     # Also apply the derived auto-signup setting to gates already set to On or Off.
+	 *     wp newspack migrate-premium-newsletters --live --set-auto-signup
+	 *
+	 * @param array $args       Positional args (unused).
+	 * @param array $assoc_args Named args.
+	 *
+	 * @return void
+	 */
+	public function migrate_premium_newsletters( $args, $assoc_args ) {
+		$dry_run = ! (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'live', false );
+
+		// A bare value flag never reaches the validation below: WP-CLI warns and strips
+		// it, so the command sees nothing at all — a bare --plan widens the run to every
+		// plan on the site, and a bare --one-time-duration stops it over a duration the
+		// operator did supply. The raw command line is the only place the mistake is
+		// still visible.
+		$bare_flags = self::get_valueless_value_flags();
+		if ( ! empty( $bare_flags ) ) {
+			WP_CLI::error( sprintf( 'The following flag(s) require a value but arrived without one: %s. WP-CLI strips a bare flag before the command runs, so the run would proceed as though it had never been passed — fix the invocation and re-run.', implode( ', ', $bare_flags ) ) );
+		}
+
+		// A mistyped --plan must never silently widen the run to every plan, so an
+		// unusable value is a hard error rather than a fallback to "no filter".
+		$plan_arg = \WP_CLI\Utils\get_flag_value( $assoc_args, 'plan', null );
+		$plan_id  = 0;
+		if ( null !== $plan_arg ) {
+			if ( ! self::is_valid_plan_arg( $plan_arg ) ) {
+				WP_CLI::error( sprintf( 'Invalid --plan value "%s". Pass a positive membership plan post ID.', $plan_arg ) );
+			}
+			$plan_id = (int) $plan_arg;
+		}
+
+		$duration_arg      = \WP_CLI\Utils\get_flag_value( $assoc_args, 'one-time-duration', null );
+		$duration_override = null;
+		if ( null !== $duration_arg ) {
+			$duration_override = self::parse_one_time_duration( $duration_arg );
+			if ( null === $duration_override ) {
+				WP_CLI::error( sprintf( 'Invalid --one-time-duration value "%s". Pass "forever", or a positive number followed by "days" or "months" — for example 90days or 12months.', $duration_arg ) );
+			}
+		}
+
+		if ( ! class_exists( 'Newspack\Content_Gate' ) ) {
+			WP_CLI::error( 'Newspack\Content_Gate class not found. Is newspack-plugin active? Aborting.' );
+		}
+		if ( ! class_exists( 'Newspack\Content_Rules' ) ) {
+			WP_CLI::error( 'Newspack\Content_Rules class not found. Is newspack-plugin active? Aborting.' );
+		}
+		if ( ! function_exists( 'wc_memberships' ) ) {
+			WP_CLI::error( 'WooCommerce Memberships is not active. Aborting.' );
+		}
+		if ( ! class_exists( 'Newspack\Newsletters\Subscription_Lists' ) ) {
+			WP_CLI::error( 'Newspack Newsletters is not active, so there are no newsletter lists to migrate. Aborting.' );
+		}
+
+		$dormant_gating = self::describe_inactive_gating(
+			\Newspack\Content_Gate::is_newspack_feature_enabled(),
+			\Newspack\Reader_Activation::is_enabled()
+		);
+		if ( null !== $dormant_gating ) {
+			WP_CLI::warning( $dormant_gating );
+		}
+
+		if ( $dry_run ) {
+			WP_CLI::line( '' );
+			WP_CLI::line( '*** DRY RUN MODE — no data will be modified. Pass --live to write. ***' );
+			WP_CLI::line( '' );
+		}
+
+		$plan_ids = self::get_plans( $plan_id );
+		$total    = count( $plan_ids );
+
+		if ( 0 === $total ) {
+			WP_CLI::line( $plan_id ? sprintf( 'No published plan found with ID %d.', $plan_id ) : 'No published membership plans found.' );
+			return;
+		}
+
+		WP_CLI::line( sprintf( 'Found %d membership plan(s). Starting migration…', $total ) );
+		WP_CLI::line( '' );
+
+		// Pre-load existing premium newsletter gates indexed by lower-cased title. Only
+		// published gates are considered: the frontend enforces nothing else, so writing
+		// into a draft or trashed title match would produce a gate that never restricts.
+		$published_gates = \Newspack\Content_Gate::get_gates( \Newspack\Content_Gate::GATE_CPT, 'publish', true );
+		$existing_gates  = [];
+		foreach ( $published_gates as $gate ) {
+			$existing_gates[ trim( strtolower( $gate['title'] ) ) ] = $gate['id'];
+		}
+		$duplicate_titles = self::find_duplicate_gate_titles( $published_gates );
+
+		if ( ! empty( $duplicate_titles ) ) {
+			WP_CLI::error(
+				sprintf(
+					'More than one published premium newsletter gate is titled %s. A gate is identified by its title here, so the run would update one and leave the other restricting the same lists with nothing to show it. Rename or retire the duplicate(s) and re-run. Nothing has been written.',
+					implode( ', ', array_map( fn( $title ) => sprintf( '"%s"', $title ), $duplicate_titles ) )
+				)
+			);
+		}
+
+		$skipped         = [];
+		$all_lists_plans = [];
+
+		$plan_groups = self::group_plans_by_lists( $plan_ids, $skipped, $all_lists_plans );
+
+		// Refused rather than reported: a plan restricting every list has no faithful
+		// gate, and reporting it as skipped reads as "nothing to migrate here" when the
+		// truth is the opposite ({@see restricts_all_lists()}).
+		if ( ! empty( $all_lists_plans ) ) {
+			WP_CLI::error(
+				sprintf(
+					'Plan(s) %s restrict every newsletter list rather than named ones, and WooCommerce Memberships extends such a rule to lists created later. A gate names the lists it covers, so migrating one would under-restrict from the first list added after. Name the lists on those plan(s) and re-run. Nothing has been written.',
+					implode( ', ', array_map( fn( $name ) => sprintf( '"%s"', $name ), $all_lists_plans ) )
+				)
+			);
+		}
+
+		$group_count = count( $plan_groups );
+		if ( $group_count < ( $total - count( $skipped ) ) ) {
+			WP_CLI::line( sprintf( 'Grouped into %d gate(s) after deduplication.', $group_count ) );
+			WP_CLI::line( '' );
+		}
+
+		// Pre-flight. Everything that can stop the run, or needs an answer from the
+		// operator, is settled here — before the first write. Two same-named plan
+		// groups are a hard error, and the one confirmation prompt is asked once for
+		// the whole run. The write loop below therefore runs to completion without
+		// reading STDIN, so it cannot be truncated part-way through by a prompt that
+		// nobody is there to answer.
+		// Payloads are built up front so every warning they carry is printed before the
+		// prompt below, and so the write loop has nothing left to decide. Building one
+		// reads the group and its product posts; it writes nothing.
+		$payloads = array_map( fn( $group ) => self::build_gate_payload( $group, $duration_override ), $plan_groups );
+
+		$collisions = self::find_colliding_gate_titles( $plan_groups );
+		if ( ! empty( $collisions ) ) {
+			WP_CLI::error(
+				sprintf(
+					'Two or more plan groups resolve to the same gate title: %s. A gate is identified by its title, so the second group would replace the first group\'s content rules outright and leave that group\'s lists behind no gate at all. Rename one of the plans and re-run. Nothing has been written.',
+					implode( ', ', array_map( fn( $title ) => sprintf( '"%s"', $title ), $collisions ) )
+				)
+			);
+		}
+
+		$shared_lists = self::find_lists_shared_across_groups( $plan_groups );
+		if ( ! empty( $shared_lists ) ) {
+			$overlaps = [];
+			foreach ( $shared_lists as $list_id => $titles ) {
+				$overlaps[] = sprintf(
+					'"%s" (list %d), restricted by %s',
+					get_the_title( $list_id ),
+					$list_id,
+					implode( ' and ', array_map( fn( $title ) => sprintf( '"%s"', $title ), $titles ) )
+				);
+			}
+			WP_CLI::error(
+				sprintf(
+					'These list(s) would end up behind more than one gate: %s. WooCommerce Memberships grants such a list to a holder of either plan; gates do not, since only the higher-priority gate would decide and readers holding only the other plan would lose the list. Make the overlapping plans restrict the same set of lists, or move the shared list onto one of them, and re-run. Nothing has been written.',
+					implode( '; ', $overlaps )
+				)
+			);
+		}
+
+		$needs_duration = [];
+		foreach ( $payloads as $payload ) {
+			if ( ! empty( $payload['one_time_ids'] ) && null === $payload['one_time_duration'] ) {
+				$needs_duration = array_merge( $needs_duration, $payload['duration_plans'] );
+			}
+		}
+		if ( ! empty( $needs_duration ) ) {
+			WP_CLI::error(
+				sprintf(
+					'Plan(s) %s grant access through a one-time product, but their access ends on a fixed calendar date rather than lasting a set time from the purchase — so there is no duration for the gate to carry. Pass --one-time-duration=forever, --one-time-duration=<n>days or --one-time-duration=<n>months and re-run. Nothing has been written.',
+					implode( ', ', array_map( fn( $name ) => sprintf( '"%s"', $name ), array_values( array_unique( $needs_duration ) ) ) )
+				)
+			);
+		}
+
+		foreach ( $payloads as $payload ) {
+			self::report_product_id_issues( $payload );
+			self::report_duration_conflict( $payload );
+			self::report_dropped_paywall( $payload );
+		}
+
+		// Split by auto-signup here, after the per-group warnings so a split group's
+		// are printed once, and before the prompt so the operator has seen every gate
+		// the run can't settle by the time they answer it. A sibling can't take a title
+		// another gate may hold: any group's title on a full run, or any plan's own
+		// name, which an earlier --plan run gives its gate. So a --plan run groups
+		// every published plan as well, read-only and without warnings.
+		$site_plan_groups = $plan_groups;
+		if ( $plan_id ) {
+			$site_skipped         = [];
+			$site_all_lists_plans = [];
+			$site_plan_groups     = self::group_plans_by_lists( self::get_plans(), $site_skipped, $site_all_lists_plans, true );
+		}
+		$to_write = self::gate_payloads_to_write( $payloads, self::taken_gate_titles( $plan_groups, $site_plan_groups ) );
+		foreach ( $to_write['instructions'] as $instructions ) {
+			WP_CLI::warning( $instructions );
+		}
+
+		// Regrouping can merge plans a previous run migrated separately — most likely
+		// after a --plan run, which writes a gate titled for that one plan. Gate
+		// identity is the title, so the merged title matches no existing gate and this
+		// run would create a new one while the originals stay published.
+		// is_post_restricted() lets the highest-priority matching gate decide, and a
+		// new gate is ranked after every existing one, so a stale gate keeps deciding
+		// over the merged one. Name them, and let the operator stop before anything
+		// is created.
+		$superseding = self::find_superseding_groups( $plan_groups, $existing_gates );
+		foreach ( $superseding as $gate_title => $superseded ) {
+			WP_CLI::warning(
+				sprintf(
+					'"%s" merges plans that were migrated separately before. Creating it leaves these gates in place, still restricting the same lists: %s. Retire them after this run.',
+					$gate_title,
+					implode(
+						', ',
+						array_map(
+							fn( $title, $id ) => sprintf( '"%s" (gate %d)', $title, $id ),
+							array_keys( $superseded ),
+							$superseded
+						)
+					)
+				)
+			);
+		}
+		if ( ! empty( $superseding ) && ! $dry_run ) {
+			self::confirm_or_error(
+				sprintf(
+					'Create %d gate(s) that supersede the gates named above? Answering no stops the run before anything is written.',
+					count( $superseding )
+				),
+				$assoc_args,
+				self::stdin_is_a_tty()
+			);
+		}
+
+		$force_auto_signup = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'set-auto-signup', false );
+
+		// Every gate title is unique: the collision check above errors out over two
+		// groups sharing one, and a sibling is never named like a group. So the writes
+		// can treat a title as naming one gate.
+		$summary = self::write_gate_payloads( $to_write['gate_payloads'], $existing_gates, $dry_run, $force_auto_signup );
+
+		WP_CLI::line( '' );
+
+		WP_CLI::line( $dry_run ? '=== DRY RUN SUMMARY ===' : '=== MIGRATION SUMMARY ===' );
+		WP_CLI::line( '' );
+
+		\WP_CLI\Utils\format_items(
+			'table',
+			array_map(
+				fn( $row ) => [
+					'Plan Name'   => $row['plan_name'],
+					'Action'      => $row['action'],
+					'Gate ID'     => $row['gate_id'],
+					'Lists'       => $row['lists'],
+					'Access Type' => $row['access_type'],
+					// Skipped plans write no gate, so their rows carry no setting.
+					'Auto-signup' => $row['auto_signup'] ?? '—',
+				],
+				array_merge( $summary, $skipped )
+			),
+			[ 'Plan Name', 'Action', 'Gate ID', 'Lists', 'Access Type', 'Auto-signup' ]
+		);
+
+		WP_CLI::line( '' );
+		self::report_stale_gates( $to_write['written_keys'], $dry_run, (bool) $plan_id );
+
+		WP_CLI::line( '' );
+		$failed        = count(
+			array_filter(
+				$summary,
+				fn( $r ) => str_starts_with( $r['action'], 'ERROR' )
+			)
+		);
+		$processed     = count( $summary ) - $failed;
+		$unenforceable = count(
+			array_filter(
+				$summary,
+				fn( $r ) => str_starts_with( $r['action'], 'WARN' )
+			)
+		);
+		WP_CLI::success(
+			sprintf(
+				'Done. %d gate(s) %s.',
+				$processed,
+				$dry_run ? 'would be created/updated' : 'created/updated'
+			)
+		);
+		// Said on every run, not just a warning tail: the operator whose run is clean is
+		// the one most likely to read the summary as "the gates are live now".
+		WP_CLI::line( "These gates do not restrict anything yet, and they do not change anyone's newsletter subscriptions: both the restriction filter and the premium newsletter access check stand down while WooCommerce Memberships is active. They take effect when WooCommerce Memberships is deactivated, so check them before that, not after." );
+		// Written but unenforceable is worse than not written at all — it looks
+		// migrated. Call it out after the success line so it is not lost in the table.
+		// "Of those" refers to the gates the success line counts, so this comes first.
+		if ( $unenforceable ) {
+			WP_CLI::warning(
+				sprintf(
+					'%d of those gate(s) will not restrict as intended (see the WARN rows above). Fix them before deactivating WooCommerce Memberships.',
+					$unenforceable
+				)
+			);
+		}
+		// A gate that failed to write is called out too, since the success line counts
+		// only the gates written.
+		if ( $failed ) {
+			WP_CLI::warning(
+				sprintf(
+					'%d gate(s) failed to write (see the ERROR rows above). Fix the cause and re-run before deactivating WooCommerce Memberships.',
+					$failed
+				)
+			);
+		}
+	}
+
+	/**
+	 * Value-requiring migrate-premium-newsletters flags found bare (no `=value`) on
+	 * the raw command line.
+	 *
+	 * WP-CLI validates flags against the command synopsis before invoking the command:
+	 * a bare `--plan` draws only a warning, then the flag is stripped and the command
+	 * receives the flag's default — so the in-method guard against an unusable --plan
+	 * value can never fire on a real invocation, and a run the operator scoped to one
+	 * plan would silently widen to every plan on the site (and, under --live, write a
+	 * gate for each of them). Reading the raw argv is the only place the mistake is
+	 * still visible.
+	 *
+	 * Shared with Premium_Newsletters_Verify, which passes its own flag list. The flags
+	 * differ per command; the scan is the guard standing between a mistyped flag and a
+	 * --live run, and two copies of it would drift.
+	 *
+	 * @param string[]|null $argv        Raw argument vector; defaults to $_SERVER['argv'].
+	 * @param string[]      $value_flags The value-requiring flags to look for.
+	 *
+	 * @return string[] The value-requiring flags present without a value.
+	 */
+	public static function get_valueless_value_flags( $argv = null, array $value_flags = [ '--plan', '--one-time-duration' ] ): array {
+		if ( null === $argv ) {
+			$argv = isset( $_SERVER['argv'] ) ? (array) $_SERVER['argv'] : []; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		}
+		$bare_flags = [];
+		foreach ( $argv as $token ) {
+			if ( in_array( $token, $value_flags, true ) ) {
+				$bare_flags[] = $token;
+			}
+		}
+		return array_values( array_unique( $bare_flags ) );
+	}
+
+	/**
+	 * Whether a --plan value names a plan post ID.
+	 *
+	 * Uses ctype_digit() rather than is_numeric(): is_numeric() accepts '12.9' and '1e2',
+	 * which cast to 12 and 100 — a run narrowed to a plan the operator never named.
+	 * The value is cast to string first because ctype_digit() reads an integer
+	 * argument between -128 and 255 as a character code, not as digits.
+	 *
+	 * @param mixed $plan_arg The raw --plan value.
+	 *
+	 * @return bool
+	 */
+	private static function is_valid_plan_arg( $plan_arg ): bool {
+		return ctype_digit( (string) $plan_arg ) && (int) $plan_arg > 0;
+	}
+
+	/**
+	 * Why gates written by this run would not enforce, or null when they will.
+	 *
+	 * Enforcement asks Content_Gate::is_gating_active(), which is
+	 * is_newspack_feature_enabled() AND Reader_Activation::is_enabled():
+	 * Content_Restriction_Control::is_post_restricted() returns early without both,
+	 * and Premium_Newsletters::check_access() — the half that adds and removes list
+	 * members at the ESP — bails on the same predicate. The feature constant alone is
+	 * therefore not the question a preflight should ask: a site that defines it with
+	 * Audience Management off gets gates that restrict nobody, and no warning.
+	 *
+	 * Both conditions are taken as arguments rather than read here, so the
+	 * composition can be tested without define()ing a constant for the rest of the
+	 * PHPUnit process.
+	 *
+	 * @param bool $feature_enabled          Whether Content_Gate::is_newspack_feature_enabled().
+	 * @param bool $reader_activation_active Whether Reader_Activation::is_enabled().
+	 *
+	 * @return string|null The warning to print, or null when gating is active.
+	 */
+	private static function describe_inactive_gating( bool $feature_enabled, bool $reader_activation_active ): ?string {
+		$missing = [];
+		if ( ! $feature_enabled ) {
+			$missing[] = 'the content gates feature (NEWSPACK_CONTENT_GATES) is not enabled';
+		}
+		if ( ! $reader_activation_active ) {
+			$missing[] = 'Audience Management (Reader Activation) is not enabled';
+		}
+		if ( empty( $missing ) ) {
+			return null;
+		}
+		return sprintf(
+			'Gates will not enforce on this site: %s. Enforcement asks Content_Gate::is_gating_active(), which needs both — so the gates below will be written but stay dormant, restricting nobody and subscribing nobody, until that is fixed.',
+			implode( ', and ', $missing )
+		);
+	}
+
+	/**
+	 * Whether a confirmation prompt could not be answered on this invocation.
+	 *
+	 * WP_CLI::confirm() reads STDIN with fgets(), which returns false at EOF; that
+	 * trims to '' rather than 'y', so the command exits — with status 0 and no
+	 * message. A run driven from a script or over SSH therefore stops at the prompt
+	 * having already written everything before it, and reports success. Erroring out
+	 * instead is the honest outcome, and --yes is the way to run unattended.
+	 *
+	 * @param array $assoc_args     The command's named args.
+	 * @param bool  $stdin_is_a_tty Whether STDIN is an interactive terminal.
+	 *
+	 * @return bool True when the prompt must not be asked.
+	 */
+	private static function prompt_is_unanswerable( array $assoc_args, bool $stdin_is_a_tty ): bool {
+		if ( \WP_CLI\Utils\get_flag_value( $assoc_args, 'yes', false ) ) {
+			return false;
+		}
+		return ! $stdin_is_a_tty;
+	}
+
+	/**
+	 * Whether STDIN is an interactive terminal.
+	 *
+	 * STDIN is only defined under the CLI SAPI, so the constant is checked before it
+	 * is read.
+	 *
+	 * @return bool
+	 */
+	private static function stdin_is_a_tty(): bool {
+		return defined( 'STDIN' ) && stream_isatty( STDIN );
+	}
+
+	/**
+	 * Ask the operator to confirm, or hard-error when nothing can answer.
+	 *
+	 * The terminal check is passed in rather than read here, so both branches can be
+	 * exercised. STDIN is never a terminal under PHPUnit, which would otherwise leave
+	 * the prompt itself untested.
+	 *
+	 * @param string $question       The yes/no question.
+	 * @param array  $assoc_args     The command's named args, passed through to WP-CLI
+	 *                               so --yes answers the prompt.
+	 * @param bool   $stdin_is_a_tty Whether STDIN is a terminal.
+	 *
+	 * @return void
+	 */
+	private static function confirm_or_error( string $question, array $assoc_args, bool $stdin_is_a_tty ): void {
+		if ( self::prompt_is_unanswerable( $assoc_args, $stdin_is_a_tty ) ) {
+			WP_CLI::error(
+				sprintf(
+					'This run needs an answer to: "%s" — but STDIN is not a terminal, so the prompt would be answered for you and the command would stop without writing a summary. Re-run with --yes to answer yes up front, or run it from an interactive terminal.',
+					$question
+				)
+			);
+		}
+		WP_CLI::confirm( $question, $assoc_args );
+	}
+
+	/**
+	 * The gate title a plan group resolves to.
+	 *
+	 * @param array[] $group Plan descriptors, each carrying a 'name' key.
+	 *
+	 * @return string The group's plan names joined with " | ".
+	 */
+	private static function gate_title( array $group ): string {
+		return implode( ' | ', array_column( $group, 'name' ) );
+	}
+
+	/**
+	 * Gate titles an auto-signup sibling can't take.
+	 *
+	 * Gate identity is the title, so a sibling named like another gate would
+	 * overwrite that gate's lists. That holds on a --plan run too: it writes only the
+	 * one plan's gates, but every other plan's gate keeps its title, so the groups a
+	 * full run would write are counted as well as this run's. Each plan's own name
+	 * is counted too, since an earlier --plan run titles its gate after its one plan
+	 * even when a full run groups that plan with another.
+	 *
+	 * @param array<string,array> $plan_groups      This run's groups, map of fingerprint => plan descriptors.
+	 * @param array<string,array> $site_plan_groups The groups a full run would write, in the same shape.
+	 *
+	 * @return string[] Lower-cased gate titles.
+	 */
+	private static function taken_gate_titles( array $plan_groups, array $site_plan_groups ): array {
+		$titles = [];
+		foreach ( array_merge( array_values( $plan_groups ), array_values( $site_plan_groups ) ) as $group ) {
+			$titles[] = self::gate_title( $group );
+			foreach ( $group as $plan ) {
+				$titles[] = $plan['name'];
+			}
+		}
+		return array_values( array_unique( array_map( fn( $title ) => trim( strtolower( $title ) ), $titles ) ) );
+	}
+
+	/**
+	 * Gate titles that more than one plan group resolves to.
+	 *
+	 * Gate identity is the title, but groups are keyed by list fingerprint — so two
+	 * same-named plans restricting different lists land in different groups and
+	 * resolve to one title. The second group takes the update branch, and
+	 * update_gate_content_rules() replaces rather than merges, so the first group's
+	 * lists end up behind no gate at all while both rows report as processed. The
+	 * collision is computable from the grouping alone, so the caller stops the run
+	 * before anything is written.
+	 *
+	 * @param array<string,array> $plan_groups Map of fingerprint => plan descriptors.
+	 *
+	 * @return string[] The colliding titles, in the casing they were first seen with.
+	 */
+	private static function find_colliding_gate_titles( array $plan_groups ): array {
+		$seen       = [];
+		$collisions = [];
+		foreach ( $plan_groups as $group ) {
+			$title = self::gate_title( $group );
+			$key   = trim( strtolower( $title ) );
+			if ( isset( $seen[ $key ] ) ) {
+				$collisions[ $key ] = $seen[ $key ];
+				continue;
+			}
+			$seen[ $key ] = $title;
+		}
+		return array_values( $collisions );
+	}
+
+	/**
+	 * Titles carried by more than one published gate.
+	 *
+	 * The mirror of {@see find_colliding_gate_titles()}, on the other side of the same
+	 * assumption. Gate identity here is the title, but nothing in Content_Gate enforces
+	 * one title per bucket, and two published gates are easy to name alike by hand in
+	 * the editor. Indexing them by title is last-write-wins, so the run
+	 * would update whichever came back last and leave the other published and still
+	 * restricting the same lists. It is invisible to report_stale_gates() too, since
+	 * its title is one this run wrote.
+	 *
+	 * @param array[] $gates Gate descriptors from Content_Gate::get_gates(), each
+	 *                       carrying 'id' and 'title'.
+	 *
+	 * @return string[] The duplicated titles, in the casing they were first seen with.
+	 */
+	private static function find_duplicate_gate_titles( array $gates ): array {
+		$seen       = [];
+		$duplicates = [];
+		foreach ( $gates as $gate ) {
+			$gate_key = trim( strtolower( $gate['title'] ) );
+			if ( isset( $seen[ $gate_key ] ) ) {
+				$duplicates[ $gate_key ] = $seen[ $gate_key ];
+				continue;
+			}
+			$seen[ $gate_key ] = $gate['title'];
+		}
+		return array_values( $duplicates );
+	}
+
+	/**
+	 * Newsletter lists that more than one plan group restricts.
+	 *
+	 * Groups are keyed on the exact set of lists a plan restricts, so two plans that
+	 * overlap without matching become two gates over a shared list. The two access
+	 * models then disagree about that list: WooCommerce Memberships grants it to a
+	 * holder of either plan, while only the higher-priority gate decides, so readers
+	 * holding only the other plan lose it — and, once the
+	 * access check is live, are unsubscribed at the provider. Grouping is the last
+	 * point at which the two can still be compared with nothing written.
+	 *
+	 * @param array<string,array> $plan_groups Map of fingerprint => plan descriptors.
+	 *
+	 * @return array<int,string[]> Map of list post ID => gate titles restricting it,
+	 *                             for lists reached by more than one group.
+	 */
+	private static function find_lists_shared_across_groups( array $plan_groups ): array {
+		$groups_by_list = [];
+		foreach ( $plan_groups as $group ) {
+			// One entry per group rather than per plan: plans within a group share a
+			// gate by construction, so only a list reached from two groups is ambiguous.
+			foreach ( $group[0]['list_ids'] as $list_id ) {
+				$groups_by_list[ (int) $list_id ][] = self::gate_title( $group );
+			}
+		}
+		return array_filter( $groups_by_list, fn( $titles ) => count( $titles ) > 1 );
+	}
+
+	/**
+	 * The gates each about-to-be-created group would supersede.
+	 *
+	 * Only groups whose title matches no existing gate are considered: a group that
+	 * updates an existing gate supersedes nothing.
+	 *
+	 * @param array<string,array> $plan_groups    Map of fingerprint => plan descriptors.
+	 * @param array               $existing_gates Map of lower-cased gate title => gate ID.
+	 *
+	 * @return array<string,array<string,int>> Map of group gate title => superseded
+	 *                                         gate title => gate ID; empty when no
+	 *                                         group supersedes anything.
+	 */
+	private static function find_superseding_groups( array $plan_groups, array $existing_gates ): array {
+		$superseding = [];
+		foreach ( $plan_groups as $group ) {
+			$gate_title = self::gate_title( $group );
+			$gate_key   = trim( strtolower( $gate_title ) );
+			if ( array_key_exists( $gate_key, $existing_gates ) ) {
+				continue;
+			}
+			$superseded = self::find_superseded_gates( $group, $gate_key, $existing_gates );
+			if ( ! empty( $superseded ) ) {
+				$superseding[ $gate_title ] = $superseded;
+			}
+		}
+		return $superseding;
+	}
+
+	/**
+	 * Build everything a plan group's gate needs, from the group alone.
+	 *
+	 * Reads only the group descriptors group_plans_by_lists() produced and the product
+	 * posts they name, so it runs without WooCommerce Memberships. That is the point of
+	 * the extraction: the three decisions below used to sit inline in a loop that cannot
+	 * run without it, and so could not be unit-tested.
+	 *
+	 * - `content_rules_match` is 'any' because the gate carries exactly one content
+	 *   rule, on which 'any' and 'all' agree. 'any' is the safer of the two to fix
+	 *   here: should a second rule ever join it, 'any' restricts a post on either
+	 *   list, while 'all' would restrict only posts on both and quietly open the rest.
+	 * - Registration mode is always active because every plan this command migrates
+	 *   grants membership to an account — a purchase plan to the purchasing account, a
+	 *   signup plan to the registering one. Manual-only plans, the one shape that can
+	 *   hold a reader who never registered, never reach here: group_plans_by_lists()
+	 *   skips them. So requiring registration never restricts a reader the plan admitted.
+	 * - The paid access mode carries a rule only when the group requires a purchase AND
+	 *   at least one product ID survives, and it carries one rule group per kind of
+	 *   product the plans grant on. An active mode with no rules asks for no purchase at
+	 *   all, so the empty shape is left empty deliberately for verify_migrated_gate() and
+	 *   compute_pre_write_issues() to flag, rather than papered over with a rule that
+	 *   would grant more than the plan did.
+	 * - A one-time rule needs a duration, so a group whose plans cannot supply one gets
+	 *   no rule while its one-time product IDs stay in the payload. That shape never
+	 *   reaches a write because migrate_premium_newsletters() refuses the run over it;
+	 *   a caller that skipped that pre-flight would write a paid gate the plan's
+	 *   one-time buyers cannot satisfy.
+	 *
+	 * @param array[]    $group             Plan descriptors from group_plans_by_lists(),
+	 *                                      each carrying 'pid', 'name', 'access_method',
+	 *                                      'list_ids', 'product_ids' and
+	 *                                      'one_time_duration'.
+	 * @param array|null $duration_override Operator-supplied one-time purchase duration,
+	 *                                      or null to read each plan's own access length.
+	 *
+	 * @return array The gate payload: 'title', 'list_ids', 'has_purchase', 'dropped_paywalls',
+	 *               'access_type',
+	 *               'content_rules', 'content_rules_match', 'registration' and
+	 *               'custom_access' are what the create and update paths write;
+	 *               'product_ids', 'subscription_ids', 'one_time_ids',
+	 *               'one_time_duration', 'duration_plans', 'duration_conflict',
+	 *               'variation_ids' and 'dropped_product_ids' are what the pre-write
+	 *               check and the warnings report on.
+	 */
+	private static function build_gate_payload( array $group, ?array $duration_override = null ): array {
+		$list_ids     = $group[0]['list_ids'] ?? [];
+		$has_purchase = self::group_requires_purchase( $group );
+
+		$products    = self::resolve_product_ids( $group );
+		$product_ids = $products['product_ids'];
+		$duration    = self::resolve_group_duration( $group, $duration_override );
+
+		$content_rules = [
+			[
+				'slug'  => 'newsletters',
+				'value' => array_map( 'strval', $list_ids ),
+			],
+		];
+
+		// Two rule groups rather than one, when a plan grants on both kinds of product.
+		// Groups are OR'd and the rules inside one are AND'd, so a reader satisfies the
+		// gate by holding the subscription or by having bought the one-time product —
+		// which is what the plan granted. Flattening them into a single group would
+		// demand both and admit nobody.
+		$access_rules = [];
+		if ( $has_purchase ) {
+			if ( ! empty( $products['subscription_ids'] ) ) {
+				$access_rules[] = [
+					[
+						'slug'  => 'subscription',
+						'value' => $products['subscription_ids'],
+					],
+				];
+			}
+			if ( ! empty( $products['one_time_ids'] ) && null !== $duration['duration'] ) {
+				$access_rules[] = [
+					[
+						'slug'  => 'one_time_purchase',
+						'value' => array_merge(
+							[ 'product_ids' => $products['one_time_ids'] ],
+							$duration['duration']
+						),
+					],
+				];
+			}
+		}
+
+		return [
+			'title'               => self::gate_title( $group ),
+			'list_ids'            => $list_ids,
+			'has_purchase'        => $has_purchase,
+			'dropped_paywalls'    => $has_purchase
+				? []
+				: array_column( array_filter( $group, fn( $plan ) => 'purchase' === $plan['access_method'] ), 'name' ),
+			'access_type'         => $has_purchase ? 'purchase' : 'signup',
+			'content_rules'       => $content_rules,
+			'content_rules_match' => 'any',
+			'registration'        => [ 'active' => true ],
+			'custom_access'       => [
+				'active'       => $has_purchase,
+				'access_rules' => $access_rules,
+			],
+			'product_ids'         => $product_ids,
+			'subscription_ids'    => $products['subscription_ids'],
+			'one_time_ids'        => $products['one_time_ids'],
+			'one_time_duration'   => $duration['duration'],
+			'duration_plans'      => $duration['plans'],
+			'duration_conflict'   => $duration['conflict'],
+			'variation_ids'       => $products['variations'],
+			'dropped_product_ids' => $products['dropped'],
+		];
+	}
+
+	/**
+	 * Sort a group's raw product IDs into the ones a subscription rule can carry and
+	 * the ones that must never reach it.
+	 *
+	 * Cast with intval rather than absint. Both give the ints the REST write path
+	 * stores (raw `_product_ids` meta can hold strings), but absint() also turns a
+	 * negative ID into a positive one, which would silently point the rule at a
+	 * different, real product.
+	 *
+	 * Non-positive IDs are dropped because a rule value of 0 grants the gate to every
+	 * paying reader: WC_Subscription::has_product() matches a line item when
+	 * `$line_item['variation_id'] == $product_id`, and variation_id is 0 on every
+	 * simple-product line item, so a value of [ 0 ] matches any active subscription.
+	 * Nothing downstream catches that — verify_migrated_gate() sees a non-empty
+	 * access_rules and reports the gate as sound.
+	 *
+	 * IDs that resolve to no product post are dropped too. Those fail safe on their
+	 * own — a rule nothing can satisfy — but they leave the gate stricter than the plan
+	 * was, so the caller warns rather than staying silent.
+	 *
+	 * Variation IDs are kept, unlike in the sibling content gate command.
+	 * WC_Subscription::has_product() matches a line item on either its product_id or
+	 * its variation_id, so the variation ID admits exactly the readers who bought that
+	 * variation — which is what the plan granted. Substituting the parent would also
+	 * admit holders of its sibling variations, and dropping the ID restricts readers
+	 * the plan admitted, who Premium_Newsletters::check_access() then unsubscribes at
+	 * cutover. The gate editor's product picker lists a variable subscription's
+	 * variations alongside its parent, so a migrated variation ID is shown there and
+	 * survives a re-save of that field.
+	 *
+	 * @param array[] $group Plan descriptors, each carrying a 'product_ids' key.
+	 *
+	 * @return array 'product_ids' are the surviving IDs, in the order they appeared;
+	 *               'subscription_ids' and 'one_time_ids' partition them by the gate
+	 *               rule that can carry each; 'variations' is the subset of them that
+	 *               are product variations;
+	 *               'dropped' holds 'invalid' (did not normalize to a positive integer —
+	 *               a non-numeric meta value therefore appears as 0) and 'unresolvable'
+	 *               (no product post with that ID).
+	 */
+	private static function resolve_product_ids( array $group ): array {
+		$raw = array_merge( ...array_values( array_column( $group, 'product_ids' ) ) );
+
+		$product_ids  = [];
+		$invalid      = [];
+		$unresolvable = [];
+		$variations   = [];
+
+		foreach ( array_values( array_unique( array_map( 'intval', $raw ) ) ) as $product_id ) {
+			if ( $product_id <= 0 ) {
+				$invalid[] = $product_id;
+				continue;
+			}
+			$post_type = \get_post_type( $product_id );
+			if ( 'product_variation' === $post_type ) {
+				$variations[] = $product_id;
+			} elseif ( 'product' !== $post_type ) {
+				$unresolvable[] = $product_id;
+				continue;
+			}
+			$product_ids[] = $product_id;
+		}
+
+		$classified = self::classify_product_ids( $product_ids );
+
+		return [
+			'product_ids'      => $product_ids,
+			'subscription_ids' => $classified['subscription'],
+			'one_time_ids'     => $classified['one_time'],
+			'variations'       => $variations,
+			'dropped'          => [
+				'invalid'      => $invalid,
+				'unresolvable' => $unresolvable,
+			],
+		];
+	}
+
+	/**
+	 * Warn about the product IDs the gate payload dropped, and about the variation IDs
+	 * it kept.
+	 *
+	 * Plain warnings rather than WARN rows: none of these stop the gate being written,
+	 * and a group that loses every product is caught separately by
+	 * compute_pre_write_issues() and verify_migrated_gate().
+	 *
+	 * All three describe a paid access rule, so all three are silent for a group that
+	 * writes none. A mixed group still collects product IDs, and saying its gate
+	 * "keeps variation ID(s)" or would have granted access to every subscriber
+	 * describes a rule that was never written. What that group actually lost is
+	 * reported by {@see report_dropped_paywall()} instead.
+	 *
+	 * @param array $payload A build_gate_payload() result.
+	 *
+	 * @return void
+	 */
+	private static function report_product_id_issues( array $payload ): void {
+		if ( empty( $payload['has_purchase'] ) ) {
+			return;
+		}
+		if ( ! empty( $payload['dropped_product_ids']['invalid'] ) ) {
+			WP_CLI::warning(
+				sprintf(
+					'"%s": dropped product ID(s) %s, which are not positive integers. Writing one would grant the gate to every reader with an active subscription, because a subscription line item matches a rule value of 0. Check the plan\'s products.',
+					$payload['title'],
+					implode( ', ', $payload['dropped_product_ids']['invalid'] )
+				)
+			);
+		}
+		if ( ! empty( $payload['dropped_product_ids']['unresolvable'] ) ) {
+			WP_CLI::warning(
+				sprintf(
+					'"%s": dropped product ID(s) %s, which resolve to no product (deleted?). A rule naming them could never be satisfied, so the gate would be stricter than the plan was. Check the plan\'s products.',
+					$payload['title'],
+					implode( ', ', $payload['dropped_product_ids']['unresolvable'] )
+				)
+			);
+		}
+		if ( ! empty( $payload['variation_ids'] ) ) {
+			WP_CLI::warning(
+				sprintf(
+					'"%s": its paid access rule keeps product variation ID(s) %s, which is what the plan granted — narrower than the parent product, which would also admit holders of its sibling variations. The gate editor lists them, so they survive a re-save. Leave them alone unless you mean to change what the gate grants.',
+					$payload['title'],
+					implode( ', ', $payload['variation_ids'] )
+				)
+			);
+		}
+	}
+
+	/**
+	 * Warn when a group keeps the free-signup plan's terms and drops a paid plan's.
+	 *
+	 * Both of the checks that would otherwise catch an unenforced paywall sit behind
+	 * the group requiring a purchase, which a mixed group does not, so this is the
+	 * only place the operator hears about it. Keeping the most permissive requirement
+	 * is still the faithful migration ({@see group_requires_purchase()}) — the point
+	 * is that lists someone was paying for stop being paid-only at cutover, and that
+	 * is a decision to make deliberately.
+	 *
+	 * @param array $payload The gate payload.
+	 *
+	 * @return void
+	 */
+	private static function report_dropped_paywall( array $payload ): void {
+		if ( empty( $payload['dropped_paywalls'] ) ) {
+			return;
+		}
+		WP_CLI::warning(
+			sprintf(
+				'"%s": plan(s) %s require a purchase, but they restrict the same lists as a plan that grants on signup, so this gate asks only for registration. WooCommerce Memberships grants those lists to a holder of either plan, so keeping the purchase requirement would have taken them from the signup plan\'s members — but it does mean these lists stop being paid-only once WooCommerce Memberships is deactivated. Move the plans onto different lists if the paywall matters more.',
+				$payload['title'],
+				implode( ', ', array_map( fn( $name ) => sprintf( '"%s"', $name ), $payload['dropped_paywalls'] ) )
+			)
+		);
+	}
+
+	/**
+	 * Warn when a group's plans granted one-time access for different lengths.
+	 *
+	 * The gate stores one duration, so the command picks the longest and says so.
+	 * Staying silent would leave an operator to discover at cutover that a gate
+	 * grants longer than the plan they are reading it against.
+	 *
+	 * @param array $payload The gate payload.
+	 *
+	 * @return void
+	 */
+	private static function report_duration_conflict( array $payload ): void {
+		if ( empty( $payload['duration_conflict'] ) ) {
+			return;
+		}
+		WP_CLI::warning(
+			sprintf(
+				'"%s": its plans grant one-time access for different lengths — %s. WooCommerce Memberships grants access from any one of them, so the shortest would have taken the list from readers the plans admitted.',
+				$payload['title'],
+				$payload['duration_conflict']
+			)
+		);
+	}
+
+	/**
+	 * The newsletter list post type.
+	 *
+	 * Read from Newspack Newsletters when it is loaded so the two stay in step. The
+	 * literal fallback is unreachable in practice — the command's preflight hard-errors
+	 * when Subscription_Lists is missing — but it keeps the helper correct on its own
+	 * terms for any caller that reaches it outside that flow.
+	 *
+	 * @return string The list post type.
+	 */
+	private static function get_list_cpt(): string {
+		if ( class_exists( 'Newspack\Newsletters\Subscription_Lists' ) ) {
+			$cpt = \Newspack\Newsletters\Subscription_Lists::CPT;
+			if ( $cpt ) {
+				return $cpt;
+			}
+		}
+		return self::NEWSLETTER_LIST_CPT_FALLBACK;
+	}
+
+	/**
+	 * Collect the newsletter list IDs a plan's content restriction rules select.
+	 *
+	 * Non-newsletter rules are ignored: they belong to the content gate the sibling
+	 * command writes, and their object IDs would be read as list IDs here. The
+	 * result feeds the gate's single 'newsletters' content rule, whose values the
+	 * evaluator compares directly against a list post ID — so WooCommerce's object
+	 * IDs carry across without translation.
+	 *
+	 * @param \WC_Memberships_Membership_Plan_Rule[] $wc_rules Array of WC Memberships rules.
+	 *
+	 * @return int[] Deduplicated newsletter list post IDs, in the order WC returned them.
+	 */
+	private static function extract_list_ids( array $wc_rules ): array {
+		$list_cpt = self::get_list_cpt();
+		$list_ids = [];
+		foreach ( $wc_rules as $rule ) {
+			if ( $list_cpt !== $rule->get_content_type_name() ) {
+				continue;
+			}
+			foreach ( $rule->get_object_ids() as $object_id ) {
+				$list_ids[] = (int) $object_id;
+			}
+		}
+		return array_values( array_unique( array_filter( $list_ids ) ) );
+	}
+
+	/**
+	 * Whether a plan restricts every newsletter list rather than named ones.
+	 *
+	 * WooCommerce Memberships spells "all lists" as a newsletter rule carrying no
+	 * object IDs, and applies it to every list of that post type — lists created
+	 * after the plan was written included. A gate names the lists it covers, so
+	 * there is no faithful snapshot of a rule whose membership keeps growing:
+	 * migrating one would quietly under-restrict from the first list added after.
+	 *
+	 * @param \WC_Memberships_Membership_Plan_Rule[] $wc_rules Array of WC Memberships rules.
+	 *
+	 * @return bool
+	 */
+	private static function restricts_all_lists( array $wc_rules ): bool {
+		$list_cpt = self::get_list_cpt();
+		foreach ( $wc_rules as $rule ) {
+			if ( $list_cpt === $rule->get_content_type_name() && ! $rule->has_objects() ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Compute a canonical fingerprint for a set of newsletter list IDs.
+	 *
+	 * Groups plans that restrict the same lists so they share one gate. Sorting
+	 * makes the fingerprint independent of the order WooCommerce returned the rules
+	 * in, so an incidental ordering difference cannot split one gate into two.
+	 *
+	 * @param int[] $list_ids Newsletter list post IDs.
+	 *
+	 * @return string Canonical fingerprint.
+	 */
+	private static function compute_list_fingerprint( array $list_ids ): string {
+		$normalised = array_values( array_unique( array_map( 'intval', $list_ids ) ) );
+		sort( $normalised, SORT_NUMERIC );
+		$fingerprint = \wp_json_encode( $normalised );
+		// The values are integers, so a delimiter-joined string is an adequate
+		// fallback; the fingerprint is an internal grouping key, never decoded.
+		return $fingerprint ? $fingerprint : implode( ',', $normalised );
+	}
+
+	/**
+	 * Whether a plan group should migrate to a purchase-gated gate.
+	 *
+	 * True only when every plan in the group requires a purchase. The two gate modes
+	 * compose with AND for a logged-in reader — registration mode passes them, then
+	 * custom_access restricts them unless they hold a subscription — so activating
+	 * paid access on a group that also holds a signup plan would demand the
+	 * subscription from everyone. WooCommerce Memberships grants access to a holder
+	 * of either plan, so the signup plan's members would silently lose their lists
+	 * at cutover. Keeping the most-permissive plan's requirement is the faithful
+	 * migration.
+	 *
+	 * @param array[] $group Plan descriptors, each carrying an 'access_method' key.
+	 *
+	 * @return bool
+	 */
+	private static function group_requires_purchase( array $group ): bool {
+		return ! array_filter( $group, fn( $g ) => 'purchase' !== $g['access_method'] );
+	}
+
+	/**
+	 * Existing gates this group's plans were migrated to individually.
+	 *
+	 * Gate identity is the gate title, and a group's title is its plan names joined.
+	 * When regrouping merges plans a previous run migrated separately, the merged
+	 * title matches no existing gate — so the run creates a new gate while the
+	 * originals stay published and keep restricting the same lists. Naming them lets
+	 * the operator retire them. A plan whose lists an earlier run split by auto-signup
+	 * left two gates, the plan's own and its AUTO_SIGNUP_SIBLING_SUFFIX sibling, so
+	 * both are named.
+	 *
+	 * @param array[] $group          Plan descriptors, each carrying a 'name' key.
+	 * @param string  $gate_key       The group's own lower-cased gate title.
+	 * @param array   $existing_gates Map of lower-cased gate title => gate ID.
+	 *
+	 * @return array<string,int> Map of gate title => gate ID, excluding the group's own title.
+	 */
+	private static function find_superseded_gates( array $group, string $gate_key, array $existing_gates ): array {
+		$superseded = [];
+		$seen       = [];
+		foreach ( $group as $plan ) {
+			// Matched on the lower-cased title, but returned under the title as written:
+			// the operator is being asked to find these gates in Newsletters > Premium,
+			// where they carry their own casing.
+			$plan_key = trim( strtolower( $plan['name'] ) );
+			if ( $plan_key === $gate_key || isset( $seen[ $plan_key ] ) ) {
+				continue;
+			}
+			if ( isset( $existing_gates[ $plan_key ] ) ) {
+				$seen[ $plan_key ]           = true;
+				$superseded[ $plan['name'] ] = $existing_gates[ $plan_key ];
+			}
+
+			// The sibling an earlier split wrote keeps restricting the plan's lists
+			// just as the plan's own gate does, so it needs retiring too.
+			$sibling_key = $plan_key . strtolower( self::AUTO_SIGNUP_SIBLING_SUFFIX );
+			if ( $sibling_key !== $gate_key && ! isset( $seen[ $sibling_key ] ) && isset( $existing_gates[ $sibling_key ] ) ) {
+				$sibling_title                = $plan['name'] . self::AUTO_SIGNUP_SIBLING_SUFFIX;
+				$seen[ $sibling_key ]         = true;
+				$superseded[ $sibling_title ] = $existing_gates[ $sibling_key ];
+			}
+		}
+		return $superseded;
+	}
+
+	/**
+	 * The gate titles this run writes.
+	 *
+	 * Read from the payloads after the auto-signup split, so a sibling counts as
+	 * written. report_stale_gates() names every published gate missing from this,
+	 * and a sibling named there would be one the operator is told to retire,
+	 * leaving its lists behind no gate.
+	 *
+	 * @param array[] $gate_payloads Payloads from split_payload_by_auto_signup().
+	 *
+	 * @return array<string,bool> Lower-cased gate titles, as keys.
+	 */
+	private static function written_gate_keys( array $gate_payloads ): array {
+		return array_fill_keys( array_map( fn( $payload ) => trim( strtolower( $payload['title'] ) ), $gate_payloads ), true );
+	}
+
+	/**
+	 * Published premium newsletter gates whose titles this run did not write.
+	 *
+	 * @param array[]            $gates        Gate descriptors from Content_Gate::get_gates(),
+	 *                                         each carrying 'id' and 'title'.
+	 * @param array<string,bool> $written_keys Lower-cased gate titles this run wrote, as keys.
+	 *
+	 * @return array[] The untouched gates, each [ 'id' => int, 'title' => string ].
+	 */
+	private static function find_stale_newsletter_gates( array $gates, array $written_keys ): array {
+		$stale = [];
+		foreach ( $gates as $gate ) {
+			$key = trim( strtolower( $gate['title'] ?? '' ) );
+			if ( isset( $written_keys[ $key ] ) ) {
+				continue;
+			}
+			$stale[] = [
+				'id'    => (int) $gate['id'],
+				'title' => (string) ( $gate['title'] ?? '' ),
+			];
+		}
+		return $stale;
+	}
+
+	/**
+	 * Name every published premium newsletter gate this run left untouched.
+	 *
+	 * A gate this run did not write is a gate no current plan accounts for: the plans
+	 * behind it were renamed, regrouped, unpublished or deleted since the gate was
+	 * created. It keeps applying to its lists regardless, and is_post_restricted()
+	 * lets the highest-priority matching gate decide — so a stale gate ranked above
+	 * the gate this run wrote beats it, and Premium_Newsletters::check_access() acts
+	 * on its answer at the ESP. A stricter stale gate unsubscribes readers from a
+	 * newsletter they pay for; a looser one subscribes readers who have not paid,
+	 * when auto-signup is on. Only the operator can tell which of these are wanted,
+	 * so they are named rather than touched.
+	 *
+	 * The gate list is re-read rather than taken from the pre-loop snapshot. Either
+	 * source gives the same answer — every gate this run created carries a title in
+	 * $written_keys and is filtered out — so a warm get_gates() cache cannot change
+	 * the outcome.
+	 *
+	 * A --plan run is skipped rather than reported. It writes only that plan's gate
+	 * (two, when its lists are split by auto-signup), so every other gate on the site
+	 * comes back as stale: the run cannot compute staleness, and a list of gates an
+	 * operator has no reason to retire trains them to skim the warning that matters
+	 * on a full run.
+	 *
+	 * @param array<string,bool> $written_keys Lower-cased gate titles this run wrote, as keys.
+	 * @param bool               $dry_run      Whether this is a dry run.
+	 * @param bool               $plan_scoped  Whether the run was narrowed with --plan.
+	 *
+	 * @return bool Whether any published gate this run did not write is still restricting.
+	 *              False on a --plan run, which cannot tell.
+	 */
+	private static function report_stale_gates( array $written_keys, bool $dry_run, bool $plan_scoped = false ): bool {
+		if ( $plan_scoped ) {
+			WP_CLI::line( 'Skipping the untouched-gate check: a --plan run writes only that plan\'s gate(s), so it cannot tell which of the others no plan accounts for. Re-run without --plan to see them.' );
+			return false;
+		}
+		$stale = self::find_stale_newsletter_gates(
+			\Newspack\Content_Gate::get_gates( \Newspack\Content_Gate::GATE_CPT, 'publish', true ),
+			$written_keys
+		);
+		if ( empty( $stale ) ) {
+			return false;
+		}
+		WP_CLI::warning(
+			sprintf(
+				'%d published premium newsletter gate(s) %s by this run, and still restrict their lists: %s. The highest-priority gate on a list decides, so one of these can override a gate this run wrote: a stricter one unsubscribes readers at the ESP, and a looser one subscribes readers who have not paid when auto-signup is on. Check each one and retire the ones no plan accounts for.',
+				count( $stale ),
+				$dry_run ? 'would not be written' : 'were not written',
+				implode(
+					', ',
+					array_map(
+						fn( $gate ) => sprintf( '"%s" (gate %d)', $gate['title'], $gate['id'] ),
+						$stale
+					)
+				)
+			)
+		);
+		return true;
+	}
+
+	/**
+	 * Resolve a newsletter list's public (ESP) list ID.
+	 *
+	 * The post type is checked first because Subscription_List's constructor does not
+	 * check it: it throws only when the post does not exist, so a live post of any
+	 * other type would construct and hand back a bogus public ID. The guard is what
+	 * makes a stale or mistyped ID return null instead.
+	 *
+	 * @param int $list_id The list post ID.
+	 *
+	 * @return string|null The public list ID, or null when it cannot be resolved.
+	 */
+	private static function get_public_id( int $list_id ): ?string {
+		if ( \get_post_type( $list_id ) !== self::get_list_cpt() ) {
+			return null;
+		}
+		if ( ! class_exists( 'Newspack\Newsletters\Subscription_List' ) ) {
+			return null;
+		}
+		try {
+			$list = new \Newspack\Newsletters\Subscription_List( $list_id );
+		} catch ( \Throwable $e ) {
+			return null;
+		}
+		$public_id = $list->get_public_id();
+		return $public_id ? (string) $public_id : null;
+	}
+
+	/**
+	 * The public list IDs shown in the post-checkout newsletter signup modal.
+	 *
+	 * Mirrors the lookup the pre-Access-Control WooCommerce Memberships integration
+	 * used to decide which lists to leave to reader opt-in.
+	 *
+	 * With custom lists off the set is empty because there is no post-checkout modal
+	 * at all: Reader_Activation::render_newsletters_signup_modal() returns early on
+	 * is_newsletters_signup_available(), which is literally
+	 * `(bool) self::get_setting( 'use_custom_lists' )`. No modal means no list was
+	 * left to reader opt-in, so there is no carve-out. (It is
+	 * get_available_newsletter_lists() that falls back to every list when custom
+	 * lists are off, and that serves the registration form, not this modal — reading
+	 * the saved selection here would carve out lists no reader was offered at
+	 * checkout.)
+	 *
+	 * The stored selection is read raw, without checking it against
+	 * Newspack_Newsletters_Subscription::get_lists_config(), which is what the modal
+	 * actually renders from. A list that has since been unpublished, or otherwise
+	 * dropped from that live set, still counts as a modal list here even though the
+	 * modal would no longer show it. That gap is left in place because of the
+	 * direction it errs in: over-counting a list as modal can only stop this run from
+	 * setting its gate to On, never make it do so — so the operator is left to opt
+	 * readers in deliberately rather than the migration silently auto-enrolling
+	 * someone who was never actually offered that list. (get_lists_config() is not a
+	 * remote call: it reads local Subscription_List CPT posts, and is_active() is a
+	 * plain post_status check; it returns a WP_Error only when no ESP provider is
+	 * configured at all — that is not a failure mode this derivation needs to guard
+	 * against.)
+	 *
+	 * @return string[] Public list IDs.
+	 */
+	private static function get_modal_public_ids(): array {
+		if ( ! method_exists( 'Newspack\Reader_Activation', 'get_settings' ) ) {
+			return [];
+		}
+		$settings = \Newspack\Reader_Activation::get_settings();
+		if ( empty( $settings['use_custom_lists'] ) || empty( $settings['newsletter_lists'] ) ) {
+			return [];
+		}
+		$public_ids = [];
+		foreach ( $settings['newsletter_lists'] as $list ) {
+			if ( isset( $list['id'] ) ) {
+				$public_ids[] = (string) $list['id'];
+			}
+		}
+		return array_values( array_unique( $public_ids ) );
+	}
+
+	/**
+	 * Derive a gate's auto-signup setting from its restricted lists.
+	 *
+	 * Before Access Control, activating a membership auto-subscribed the member to
+	 * every list the plan restricted, except lists shown in the post-checkout signup
+	 * modal, which were left to reader opt-in. A gate's setting covers all of its
+	 * lists, so that per-list distinction only survives when every list falls on the
+	 * same side. A split returns a null value alongside both sides, which is what
+	 * split_payload_by_auto_signup() divides the gate by: one value can't express it,
+	 * and either guess has a victim — on subscribes readers who opted out, off drops
+	 * readers who expected the list.
+	 *
+	 * A list whose public ID cannot be resolved is reported separately and counted as
+	 * non-modal, matching the pre-Access-Control default. The caller doesn't act on
+	 * that default: split_payload_by_auto_signup() leaves such a gate's setting to the
+	 * operator.
+	 *
+	 * @param int[] $list_ids The restricted newsletter list post IDs.
+	 *
+	 * @return array{value: bool|null, modal: int[], non_modal: int[], unresolved: int[]}
+	 */
+	private static function derive_auto_signup( array $list_ids ): array {
+		$modal_public_ids = self::get_modal_public_ids();
+		$modal            = [];
+		$non_modal        = [];
+		$unresolved       = [];
+
+		foreach ( $list_ids as $list_id ) {
+			$list_id   = (int) $list_id;
+			$public_id = self::get_public_id( $list_id );
+			if ( null === $public_id ) {
+				$unresolved[] = $list_id;
+				$non_modal[]  = $list_id;
+				continue;
+			}
+			if ( in_array( $public_id, $modal_public_ids, true ) ) {
+				$modal[] = $list_id;
+			} else {
+				$non_modal[] = $list_id;
+			}
+		}
+
+		if ( empty( $modal ) && empty( $non_modal ) ) {
+			$value = null;
+		} elseif ( empty( $modal ) ) {
+			$value = true;
+		} elseif ( empty( $non_modal ) ) {
+			$value = false;
+		} else {
+			$value = null;
+		}
+
+		return [
+			'value'      => $value,
+			'modal'      => $modal,
+			'non_modal'  => $non_modal,
+			'unresolved' => $unresolved,
+		];
+	}
+
+	/**
+	 * Which of the given IDs are not newsletter list posts.
+	 *
+	 * The evaluator matches a 'newsletters' rule by comparing the list post's own ID
+	 * against the rule values, so an ID belonging to a deleted post or to something
+	 * that is not a list matches nothing and leaves that list open.
+	 *
+	 * @param int[] $list_ids Newsletter list post IDs.
+	 *
+	 * @return int[] The IDs that do not resolve to a newsletter list.
+	 */
+	private static function list_ids_that_do_not_resolve( array $list_ids ): array {
+		$list_cpt = self::get_list_cpt();
+		$missing  = [];
+		foreach ( $list_ids as $list_id ) {
+			if ( \get_post_type( (int) $list_id ) !== $list_cpt ) {
+				$missing[] = (int) $list_id;
+			}
+		}
+		return $missing;
+	}
+
+	/**
+	 * Describe how many of a gate's restricted lists fail to resolve.
+	 *
+	 * Shared by the live and dry-run passes so both report the same wording.
+	 *
+	 * @param int[] $list_ids     The gate's restricted list IDs.
+	 * @param int[] $unresolvable The subset that does not resolve.
+	 *
+	 * @return string|null The problem, or null when every list resolves.
+	 */
+	private static function describe_unresolvable_lists( array $list_ids, array $unresolvable ): ?string {
+		if ( empty( $unresolvable ) ) {
+			return null;
+		}
+		if ( count( $unresolvable ) === count( $list_ids ) ) {
+			return sprintf(
+				'none of its restricted lists (%s) exist as newsletter lists',
+				implode( ', ', $unresolvable )
+			);
+		}
+		return sprintf(
+			'%d of its %d restricted lists (%s) do not exist as newsletter lists, so those lists stay unrestricted',
+			count( $unresolvable ),
+			count( $list_ids ),
+			implode( ', ', $unresolvable )
+		);
+	}
+
+	/**
+	 * Why an active gate mode's layout leaves the gate unable to do its job, or null
+	 * when the mode is inactive or its layout is sound.
+	 *
+	 * A layout ID of 0 is the load-bearing case. Content_Restriction_Control::
+	 * is_post_restricted() passes over a gate that refuses a reader with no layout to
+	 * show them, and both Content_Gate settings getters always return a
+	 * gate_layout_id key defaulting to (int) 0 — so the `?? $gate['id']` fallbacks
+	 * there never fire, and a mode with no layout makes the gate restrict nothing at
+	 * all while looking migrated. create_gate() can leave it 0
+	 * without telling the caller: create_gate_layout() returns a WP_Error when the
+	 * insert fails, the settings are then written without the key, and create_gate()
+	 * returns the gate ID rather than the error.
+	 *
+	 * A layout ID naming no live published post is the milder case: the ID is truthy,
+	 * so the gate does restrict, but the layout is gone from under it and
+	 * get_inline_gate_content_for_post() falls back to a hard-coded default paragraph
+	 * instead of the publisher's layout. The sibling command treats a layout post it
+	 * cannot write to as disqualifying in the same way
+	 * ({@see Membership_Gates_Migration::apply_layout()}).
+	 *
+	 * @param bool   $active    Whether the mode is active.
+	 * @param int    $layout_id The mode's gate_layout_id.
+	 * @param string $label     The mode's name, as it should read in the message.
+	 *
+	 * @return string|null The problem, or null when there is none.
+	 */
+	private static function describe_layout_problem( bool $active, int $layout_id, string $label ): ?string {
+		if ( ! $active ) {
+			return null;
+		}
+		if ( $layout_id <= 0 ) {
+			return sprintf( 'its %s mode is active but points at no gate layout, so the evaluator passes the gate over and it restricts nothing', $label );
+		}
+		$status = \get_post_status( $layout_id );
+		if ( ! $status ) {
+			return sprintf( 'its %s layout (post %d) no longer exists, so readers get a default gate rather than the one the publisher wrote', $label, $layout_id );
+		}
+		if ( 'publish' !== $status ) {
+			return sprintf( 'its %s layout (post %d) is %s rather than published', $label, $layout_id, $status );
+		}
+		return null;
+	}
+
+	/**
+	 * Re-read a freshly written gate and report why it would fail to restrict.
+	 *
+	 * Mirrors the conditions Content_Restriction_Control::get_post_gates() and
+	 * is_post_restricted() apply to a newsletter list post, so a gate that passes
+	 * here is one the evaluator can act on for the readers the source plan
+	 * restricted. Migrated gates stay dormant until WooCommerce Memberships is
+	 * deactivated, so without this an unenforceable gate would look migrated for as
+	 * long as it takes someone to notice at cutover.
+	 *
+	 * Each active mode's layout is checked too. Content_Gate::create_gate() seeds both
+	 * layout posts, but only when their inserts succeed: it drops a WP_Error from
+	 * create_gate_layout(), writes the mode's settings without a gate_layout_id, and
+	 * still returns the gate ID — so a creation that looks successful can leave a gate
+	 * whose layout ID is 0, and a gate with no layout restricts nothing. An existing
+	 * gate can also have lost its layout post since it was written.
+	 * {@see describe_layout_problem()} for both mechanisms.
+	 *
+	 * @param int  $gate_id      The gate post ID.
+	 * @param bool $has_purchase Whether every plan behind this gate requires a purchase.
+	 *
+	 * @return string[] Human-readable problems; empty when the gate is enforceable.
+	 */
+	private static function verify_migrated_gate( int $gate_id, bool $has_purchase = false ): array {
+		$issues = [];
+
+		if ( 'publish' !== \get_post_status( $gate_id ) ) {
+			$issues[] = 'the gate is not published';
+		}
+
+		if ( ! \get_post_meta( $gate_id, 'is_newsletter', true ) ) {
+			$issues[] = 'it is missing the is_newsletter flag, so the evaluator judges list posts against the content gate bucket and this gate never applies';
+		}
+
+		$content_rules = \Newspack\Content_Rules::get_gate_content_rules( $gate_id );
+		$list_ids      = [];
+		foreach ( $content_rules as $content_rule ) {
+			if ( 'newsletters' === ( $content_rule['slug'] ?? '' ) ) {
+				$list_ids = array_merge( $list_ids, array_map( 'intval', (array) ( $content_rule['value'] ?? [] ) ) );
+			}
+		}
+		$list_ids = array_values( array_unique( $list_ids ) );
+
+		if ( empty( $list_ids ) ) {
+			// get_gate_content_rules() drops rules with an empty value, so a gate can be
+			// written with rules and still evaluate as having none — say which it is.
+			$written_rules = \get_post_meta( $gate_id, 'content_rules', true );
+			$issues[]      = empty( $written_rules )
+				? 'it has no content rules'
+				: 'none of its content rules select a newsletter list';
+		} else {
+			$unresolvable = self::describe_unresolvable_lists( $list_ids, self::list_ids_that_do_not_resolve( $list_ids ) );
+			if ( null !== $unresolvable ) {
+				$issues[] = $unresolvable;
+			}
+		}
+
+		$registration  = \Newspack\Content_Gate::get_registration_settings( $gate_id );
+		$custom_access = \Newspack\Content_Gate::get_custom_access_settings( $gate_id );
+		if ( empty( $registration['active'] ) && empty( $custom_access['active'] ) ) {
+			$issues[] = 'neither the registration nor the paid access mode is active';
+		}
+
+		$layout_problems = [
+			self::describe_layout_problem( ! empty( $registration['active'] ), (int) $registration['gate_layout_id'], 'registration' ),
+			self::describe_layout_problem( ! empty( $custom_access['active'] ), (int) $custom_access['gate_layout_id'], 'paid access' ),
+		];
+		$issues          = array_merge( $issues, array_values( array_filter( $layout_problems ) ) );
+
+		// A plan that required a purchase must migrate to a gate that gates on the
+		// purchase. Registration mode alone stops nobody who has an account, so a paid
+		// plan whose paid access mode is missing or unconstrained turns into a premium
+		// list any reader can join by registering a free account.
+		if ( $has_purchase ) {
+			if ( empty( $custom_access['active'] ) ) {
+				$issues[] = 'it migrates a plan that requires a purchase, but its paid access mode is not active — any registered reader would keep the list';
+			} elseif ( empty( $custom_access['access_rules'] ) ) {
+				// No rule at all is the benign shape of this failure. A rule carrying an
+				// EMPTY value would be worse: Access_Rules::has_active_subscription() with an
+				// empty product list falls through to "any active subscription", so it grants
+				// access instead of denying it. build_gate_payload() emits either [] or a rule
+				// with a non-empty value, so that shape cannot occur today — do not relax its
+				// per-kind `! empty()` guards without handling it here.
+				$issues[] = 'its paid access mode is active but has no access rules, so it asks for no purchase — any registered reader would keep the list';
+			}
+		}
+
+		return $issues;
+	}
+
+	/**
+	 * Predict migration issues from group data alone, without writing anything.
+	 *
+	 * The computable subset of verify_migrated_gate(). Called in dry-run mode so the
+	 * planning pass surfaces the same warnings --live would.
+	 *
+	 * Layouts are only computable for a group whose gate already exists: its layout
+	 * IDs can be read now, and the update path leaves them alone (both settings
+	 * updaters merge over the stored meta). A group that would CREATE its gate is not
+	 * predictable — create_gate() makes the layout posts as part of the write, and
+	 * whether those inserts succeed is not knowable until it runs — so the dry run
+	 * says nothing about those rather than guessing. The mode flags mirror
+	 * build_gate_payload(): registration is always activated, paid access only for a
+	 * purchase group.
+	 *
+	 * @param int[]    $list_ids     The group's restricted list IDs.
+	 * @param bool     $has_purchase Whether every plan in the group requires a purchase.
+	 * @param int[]    $product_ids  The product IDs build_gate_payload() kept for the paid access mode.
+	 * @param int|null $gate_id      The existing gate this group would update, or null when it would create one.
+	 *
+	 * @return string[] Human-readable problems; empty when no issues are predicted.
+	 */
+	private static function compute_pre_write_issues( array $list_ids, bool $has_purchase, array $product_ids, ?int $gate_id = null ): array {
+		$issues = [];
+
+		$unresolvable = self::describe_unresolvable_lists( $list_ids, self::list_ids_that_do_not_resolve( $list_ids ) );
+		if ( null !== $unresolvable ) {
+			$issues[] = $unresolvable;
+		}
+
+		if ( $has_purchase && empty( $product_ids ) ) {
+			$issues[] = 'its paid access mode will have no access rules (no usable product IDs remain), so it will ask for no purchase — any registered reader would keep the list';
+		}
+
+		if ( $gate_id ) {
+			$registration    = \Newspack\Content_Gate::get_registration_settings( $gate_id );
+			$custom_access   = \Newspack\Content_Gate::get_custom_access_settings( $gate_id );
+			$layout_problems = [
+				self::describe_layout_problem( true, (int) $registration['gate_layout_id'], 'registration' ),
+				self::describe_layout_problem( $has_purchase, (int) $custom_access['gate_layout_id'], 'paid access' ),
+			];
+			$issues          = array_merge( $issues, array_values( array_filter( $layout_problems ) ) );
+		}
+
+		return $issues;
+	}
+
+	/**
+	 * Get all published WooCommerce Membership plans, optionally filtered by ID.
+	 *
+	 * @param int $plan_id Optional plan ID to filter by.
+	 *
+	 * @return int[] Array of plan post IDs.
+	 */
+	private static function get_plans( int $plan_id = 0 ): array {
+		$args = [
+			'post_type'      => 'wc_membership_plan',
+			'post_status'    => 'publish',
+			'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Operator-run CLI command; unbounded by design.
+			'fields'         => 'ids',
+			'no_found_rows'  => true,
+			'orderby'        => 'ID',
+			'order'          => 'ASC',
+		];
+		if ( $plan_id ) {
+			$args['p'] = $plan_id;
+		}
+		return \get_posts( $args );
+	}
+
+	/**
+	 * The summary row for a manual-only plan, and the warning its restricted lists
+	 * earn.
+	 *
+	 * Manual-only plans are skipped: membership is assigned by hand, so there is no
+	 * purchase or registration for a gate's rules to key on. The lists such a plan
+	 * restricts do not go away with it, though. At cutover they either go open to
+	 * every reader, or — if another plan's gate restricts the same lists — that gate
+	 * judges this plan's members unentitled and Premium_Newsletters::check_access()
+	 * unsubscribes them at the ESP. Which of the two happens cannot be read off the
+	 * table, so the lists are named and the operator decides.
+	 *
+	 * Takes the list IDs as an argument, which forces the caller to extract them
+	 * before deciding to skip: the row used to be built ahead of the extraction and
+	 * reported "—" whether the plan restricted five lists or none.
+	 *
+	 * @param string $plan_name The plan name.
+	 * @param int[]  $list_ids  The newsletter lists the plan restricts.
+	 *
+	 * @return array The skipped-plan summary row.
+	 */
+	private static function report_manual_only_plan( string $plan_name, array $list_ids ): array {
+		if ( ! empty( $list_ids ) ) {
+			WP_CLI::warning(
+				sprintf(
+					'"%s" is manual-only, so it is skipped and nothing migrates the %d newsletter list(s) it restricts: %s. At cutover those lists go open to every reader unless another plan\'s gate restricts them — and if one does, that gate unsubscribes this plan\'s members at the ESP. Decide what should happen to them before deactivating WooCommerce Memberships.',
+					$plan_name,
+					count( $list_ids ),
+					implode( ', ', $list_ids )
+				)
+			);
+		}
+		return [
+			'plan_name'   => $plan_name,
+			'action'      => 'skipped (manual-only)',
+			'gate_id'     => '—',
+			'lists'       => count( $list_ids ),
+			'access_type' => '—',
+		];
+	}
+
+	/**
+	 * Group published plans by the set of newsletter lists they restrict.
+	 *
+	 * Manual-only plans (which have no content gates) and plans that restrict no
+	 * newsletter list are collected into $skipped instead of grouped. Plans
+	 * restricting the same lists share a group, and therefore a single gate.
+	 *
+	 * @param int[] $plan_ids        Plan post IDs.
+	 * @param array $skipped         Skipped-plan summary rows, appended to by reference.
+	 * @param array $all_lists_plans Names of plans restricting every list, appended to by
+	 *                               reference. The caller refuses the run over these.
+	 * @param bool  $quiet           Skip manual-only plans without warning about their
+	 *                               lists, for grouping plans the run won't write.
+	 *
+	 * @return array<string,array> Map of fingerprint => list of plan descriptors, each
+	 *                             [ 'pid', 'name', 'access_method', 'list_ids', 'product_ids',
+	 *                             'one_time_duration' ].
+	 */
+	private static function group_plans_by_lists( array $plan_ids, array &$skipped, array &$all_lists_plans, bool $quiet = false ): array {
+		$plan_groups = [];
+
+		foreach ( $plan_ids as $pid ) {
+			// The factory validates the post and lets WC Memberships integrations
+			// substitute their own plan subclasses, which direct construction bypasses.
+			$plan = \wc_memberships_get_membership_plan( $pid );
+			if ( ! $plan ) {
+				$skipped[] = [
+					'plan_name'   => sprintf( '(plan %d)', $pid ),
+					'action'      => 'skipped (not a valid membership plan)',
+					'gate_id'     => '—',
+					'lists'       => '—',
+					'access_type' => '—',
+				];
+				continue;
+			}
+			$plan_name     = $plan->get_name();
+			$access_method = $plan->get_access_method();
+
+			// Extracted before the manual-only skip rather than after it: a skipped plan's
+			// lists are exactly what the operator has to act on ({@see report_manual_only_plan()}).
+			$rules    = $plan->get_content_restriction_rules();
+			$list_ids = self::extract_list_ids( $rules );
+
+			if ( 'manual-only' === $access_method ) {
+				if ( ! $quiet ) {
+					$skipped[] = self::report_manual_only_plan( $plan_name, $list_ids );
+				}
+				continue;
+			}
+
+			// Checked after the manual-only skip, not before it: those plans write no
+			// gate, so an unbounded rule on one costs nothing.
+			if ( self::restricts_all_lists( $rules ) ) {
+				$all_lists_plans[] = $plan_name;
+				continue;
+			}
+
+			if ( empty( $list_ids ) ) {
+				$skipped[] = [
+					'plan_name'   => $plan_name,
+					'action'      => 'skipped (restricts no newsletter list)',
+					'gate_id'     => '—',
+					'lists'       => '0',
+					'access_type' => $access_method,
+				];
+				continue;
+			}
+
+			$fingerprint                   = self::compute_list_fingerprint( $list_ids );
+			$plan_groups[ $fingerprint ][] = [
+				'pid'               => $pid,
+				'name'              => $plan_name,
+				'access_method'     => $access_method,
+				'list_ids'          => $list_ids,
+				'product_ids'       => 'purchase' === $access_method ? array_values( $plan->get_product_ids() ) : [],
+				'one_time_duration' => 'purchase' === $access_method ? self::derive_one_time_duration( $plan ) : null,
+			];
+		}
+
+		return $plan_groups;
+	}
+
+	/**
+	 * The gate payloads the run writes, from the groups' payloads.
+	 *
+	 * Each group's payload is split by auto-signup, and the written titles are read
+	 * from the split payloads rather than the groups', so a sibling counts as written
+	 * ({@see written_gate_keys()}).
+	 *
+	 * @param array[]  $payloads     Payloads from build_gate_payload(), one per group.
+	 * @param string[] $taken_titles Lower-cased gate titles, from taken_gate_titles().
+	 *
+	 * @return array 'gate_payloads', in write order; 'instructions', the warnings
+	 *               split_payload_by_auto_signup() returned; 'written_keys', from
+	 *               written_gate_keys().
+	 */
+	private static function gate_payloads_to_write( array $payloads, array $taken_titles ): array {
+		$gate_payloads = [];
+		$instructions  = [];
+		foreach ( $payloads as $payload ) {
+			$split = self::split_payload_by_auto_signup( $payload, $taken_titles );
+			if ( null !== $split['instructions'] ) {
+				$instructions[] = $split['instructions'];
+			}
+			$gate_payloads = array_merge( $gate_payloads, $split['payloads'] );
+		}
+		return [
+			'gate_payloads' => $gate_payloads,
+			'instructions'  => $instructions,
+			'written_keys'  => self::written_gate_keys( $gate_payloads ),
+		];
+	}
+
+	/**
+	 * Split a group's gate payload by the auto-signup setting its lists need.
+	 *
+	 * A gate's auto-signup covers every list on it, but WooCommerce Memberships
+	 * decided per list ({@see derive_auto_signup()}). A group whose lists all fall on
+	 * one side keeps one gate set to that side. A group with lists on both sides
+	 * becomes two gates: the group's own title keeps the modal lists, set to Off, so a
+	 * gate an earlier run wrote under that title keeps the lists readers opted into;
+	 * a sibling titled with AUTO_SIGNUP_SIBLING_SUFFIX takes the rest, set to On. The
+	 * two partition the group's lists and carry its access rules unchanged, so every
+	 * reader the group admitted keeps every list.
+	 *
+	 * The sibling comes first, so it is written before the gate under the group's
+	 * title is narrowed: if the sibling can't be written, that gate is written whole
+	 * instead ({@see write_gate_payloads()}).
+	 *
+	 * Two cases are left to the operator, as one gate with no setting to write and
+	 * instructions to print. A list with no ESP list can't be matched against the
+	 * modal, so its side is unknown. A sibling title that another plan or its gate
+	 * already uses ({@see taken_gate_titles()} is the rule) can't be written: gate
+	 * identity is the title, so the sibling would overwrite that gate.
+	 *
+	 * @param array    $payload      A payload from build_gate_payload().
+	 * @param string[] $taken_titles Lower-cased gate titles, from taken_gate_titles().
+	 *
+	 * @return array 'payloads' are the gate payloads to write, each the input with
+	 *               'title', 'list_ids' and the newsletters rule's value narrowed, plus
+	 *               'auto_signup': 'on', 'off', or null to leave the gate's setting
+	 *               alone. A sibling also carries 'split_from', the title of the gate
+	 *               it takes its lists from, and that gate carries 'unsplit', the
+	 *               payload to write in its place if the sibling can't be created.
+	 *               'instructions' is the warning to print, or null.
+	 */
+	private static function split_payload_by_auto_signup( array $payload, array $taken_titles ): array {
+		$title   = $payload['title'];
+		$derived = self::derive_auto_signup( $payload['list_ids'] );
+
+		$narrow = function ( string $gate_title, array $list_ids, ?string $auto_signup ) use ( $payload ): array {
+			$narrowed                = $payload;
+			$narrowed['title']       = $gate_title;
+			$narrowed['list_ids']    = $list_ids;
+			$narrowed['auto_signup'] = $auto_signup;
+			foreach ( $narrowed['content_rules'] as $index => $rule ) {
+				if ( 'newsletters' === $rule['slug'] ) {
+					$narrowed['content_rules'][ $index ]['value'] = array_map( 'strval', $list_ids );
+				}
+			}
+			return $narrowed;
+		};
+
+		// Checked before the value: derive_auto_signup() counts an unresolved list as
+		// non-modal, which would set a gate to On on a guess.
+		if ( ! empty( $derived['unresolved'] ) ) {
+			return [
+				'payloads'     => [ $narrow( $title, $payload['list_ids'], null ) ],
+				'instructions' => sprintf(
+					'"%1$s" keeps its auto-signup setting: list(s) %2$s have no ESP list, so this run can\'t tell whether WooCommerce Memberships added readers to them automatically. Set auto-signup on the gate in Newsletters > Premium.',
+					$title,
+					implode( ', ', $derived['unresolved'] )
+				),
+			];
+		}
+
+		if ( null !== $derived['value'] ) {
+			return [
+				'payloads'     => [ $narrow( $title, $payload['list_ids'], $derived['value'] ? 'on' : 'off' ) ],
+				'instructions' => null,
+			];
+		}
+
+		$sibling_title = $title . self::AUTO_SIGNUP_SIBLING_SUFFIX;
+		if ( in_array( trim( strtolower( $sibling_title ) ), $taken_titles, true ) ) {
+			return [
+				'payloads'     => [ $narrow( $title, $payload['list_ids'], null ) ],
+				'instructions' => sprintf(
+					'"%1$s" mixes lists readers opt into (%2$s) with lists WooCommerce Memberships added readers to automatically (%3$s), but another plan or its gate already uses the title "%4$s", so it isn\'t split. Rename the plan behind "%4$s" and re-run to split it.',
+					$title,
+					implode( ', ', $derived['modal'] ),
+					implode( ', ', $derived['non_modal'] ),
+					$sibling_title
+				),
+			];
+		}
+
+		$sibling               = $narrow( $sibling_title, $derived['non_modal'], 'on' );
+		$sibling['split_from'] = $title;
+		$opt_in                = $narrow( $title, $derived['modal'], 'off' );
+		$opt_in['unsplit']     = $narrow( $title, $payload['list_ids'], null );
+		return [
+			'payloads'     => [ $sibling, $opt_in ],
+			'instructions' => null,
+		];
+	}
+
+	/**
+	 * Write each gate payload, or on a dry run say what writing it would do.
+	 *
+	 * Runs after every pre-flight check and prompt, so it reads no input and
+	 * decides nothing the operator has to answer.
+	 *
+	 * A sibling this run creates takes lists from the gate it splits from, and when
+	 * that gate exists, the choices made on it were made for those lists too: the
+	 * sibling starts with its hide setting, and apply_auto_signup() treats its
+	 * auto-signup as one set by hand. Read when the sibling is written, which is
+	 * before that gate's own payload ({@see split_payload_by_auto_signup()}).
+	 *
+	 * When a sibling can't be created, the gate it splits from is written whole
+	 * instead, whether or not it exists yet: every list of the group, with the
+	 * group's access rules and its auto-signup setting left alone, as for a group
+	 * the run can't split. Narrowed without its sibling, it would leave the
+	 * sibling's lists behind no gate, which opens them to every reader. A re-run
+	 * splits it. The run warns about that fallback only once the whole gate has been
+	 * written, so the warning never says a gate was written when its own write failed.
+	 *
+	 * @param array[] $gate_payloads     Payloads from split_payload_by_auto_signup(), in write order.
+	 * @param array   $existing_gates    Map of lower-cased title => ID of the gates published before the run.
+	 * @param bool    $dry_run           Whether this is a dry run.
+	 * @param bool    $force_auto_signup Whether --set-auto-signup was passed.
+	 *
+	 * @return array[] One summary row per payload.
+	 */
+	private static function write_gate_payloads( array $gate_payloads, array $existing_gates, bool $dry_run, bool $force_auto_signup ): array {
+		$summary = [];
+		// Lower-cased title => title of the sibling that failed, for each gate to write whole.
+		$failed_splits = [];
+		$progress      = \WP_CLI\Utils\make_progress_bar( 'Migrating premium newsletter gates', count( $gate_payloads ) );
+
+		foreach ( $gate_payloads as $payload ) {
+			$progress->tick();
+
+			$gate_key = trim( strtolower( $payload['title'] ) );
+			// Title of the failed sibling when this gate is written whole in its place.
+			$unsplit_because = null;
+			if ( isset( $failed_splits[ $gate_key ], $payload['unsplit'] ) ) {
+				$unsplit_because = $failed_splits[ $gate_key ];
+				$payload         = $payload['unsplit'];
+			}
+
+			$list_ids     = $payload['list_ids'];
+			$gate_title   = $payload['title'];
+			$has_purchase = $payload['has_purchase'];
+			$access_type  = $payload['access_type'];
+
+			// A null gate ID means the gate does not exist yet; the summary prints it as
+			// '(pending)' on a dry run, and the write path below fills it in on --live.
+			$action  = array_key_exists( $gate_key, $existing_gates ) ? 'updated' : 'created';
+			$gate_id = $existing_gates[ $gate_key ] ?? null;
+
+			$split_from = null;
+			$source_key = isset( $payload['split_from'] ) ? trim( strtolower( $payload['split_from'] ) ) : null;
+			if ( null !== $source_key && null === $gate_id && isset( $existing_gates[ $source_key ] ) ) {
+				$split_from = [
+					'id'    => $existing_gates[ $source_key ],
+					'title' => $payload['split_from'],
+				] + \Newspack\Content_Gate::get_newsletter_gate_settings( $existing_gates[ $source_key ] );
+			}
+
+			$write_error = '';
+			if ( ! $dry_run ) {
+				if ( null === $gate_id ) {
+					$gate_args = [
+						'title'               => $payload['title'],
+						'status'              => 'publish',
+						'content_rules'       => $payload['content_rules'],
+						'content_rules_match' => $payload['content_rules_match'],
+						'registration'        => $payload['registration'],
+						'custom_access'       => $payload['custom_access'],
+					];
+					if ( null !== $split_from ) {
+						$gate_args['hide_lists'] = $split_from['hide_lists'];
+					}
+					$result = \Newspack\Content_Gate::create_gate( $gate_args, \Newspack\Content_Gate::GATE_CPT, true );
+					if ( \is_wp_error( $result ) ) {
+						$write_error = $result->get_error_message();
+					} else {
+						$gate_id = $result;
+					}
+				} else {
+					\Newspack\Content_Rules::update_gate_content_rules( $gate_id, $payload['content_rules'] );
+					\Newspack\Content_Rules::update_gate_content_rules_match( $gate_id, $payload['content_rules_match'] );
+					\Newspack\Content_Gate::update_registration_settings( $gate_id, $payload['registration'] );
+					\Newspack\Content_Gate::update_custom_access_settings( $gate_id, $payload['custom_access'] );
+				}
+			}
+
+			if ( '' !== $write_error ) {
+				WP_CLI::warning( sprintf( 'Failed to create gate "%s": %s', $gate_title, $write_error ) );
+				if ( null !== $source_key ) {
+					$failed_splits[ $source_key ] = $gate_title;
+				}
+				$summary[] = [
+					'plan_name'   => $gate_title,
+					'action'      => 'ERROR: ' . $write_error,
+					'gate_id'     => '—',
+					'lists'       => count( $list_ids ),
+					'access_type' => $access_type,
+					'auto_signup' => '—',
+				];
+				continue;
+			}
+
+			// Said once the write has gone through, so it never claims a gate was written when it wasn't.
+			if ( null !== $unsplit_because ) {
+				WP_CLI::warning(
+					sprintf(
+						'"%1$s" is written with all the group\'s lists and its auto-signup left as it is (a new gate follows the site setting), because "%2$s", which takes some of them, could not be created. Re-run to split it before deactivating WooCommerce Memberships.',
+						$gate_title,
+						$unsplit_because
+					)
+				);
+			}
+
+			$auto_signup = self::apply_auto_signup( $gate_title, $gate_id, $payload['auto_signup'], $force_auto_signup, $dry_run, $split_from );
+
+			$verification_issues = [];
+			if ( ! $dry_run && $gate_id ) {
+				$verification_issues = self::verify_migrated_gate( $gate_id, $has_purchase );
+				foreach ( $verification_issues as $issue ) {
+					WP_CLI::warning( sprintf( '"%s" (gate %d) will not restrict as intended: %s', $gate_title, $gate_id, $issue ) );
+				}
+			} elseif ( $dry_run ) {
+				$verification_issues = self::compute_pre_write_issues( $list_ids, $has_purchase, $payload['product_ids'], $gate_id );
+				foreach ( $verification_issues as $issue ) {
+					WP_CLI::warning( sprintf( '"%s" will not migrate correctly: %s', $gate_title, $issue ) );
+				}
+			}
+
+			if ( ! empty( $verification_issues ) ) {
+				$row_action = 'WARN: ' . implode( '; ', $verification_issues );
+			} else {
+				$row_action = $dry_run ? $action . ' (dry-run)' : $action;
+			}
+
+			$summary[] = [
+				'plan_name'   => $gate_title,
+				'action'      => $row_action,
+				'gate_id'     => $gate_id ?? '(pending)',
+				'lists'       => count( $list_ids ),
+				'access_type' => $access_type,
+				'auto_signup' => $auto_signup,
+			];
+		}
+
+		$progress->finish();
+		return $summary;
+	}
+
+	/**
+	 * Write a gate's derived auto-signup setting, and say what the gate will do.
+	 *
+	 * A gate following the site setting has no choice to override, so it is written;
+	 * that includes every gate this run creates. A gate already set to On or Off that
+	 * differs from the derived value is left alone: someone may have chosen it, and
+	 * this run can't tell that from a value an earlier run wrote. Turning one On
+	 * subscribes readers to lists at the ESP once the access check is live, so it
+	 * takes --set-auto-signup to say the operator means it.
+	 *
+	 * A sibling this run creates has no setting of its own yet, but an On or Off on
+	 * the gate it splits from was set for its lists too. One that differs from the
+	 * derived value is kept the same way, by writing it to the sibling.
+	 *
+	 * Checked before the dry-run branch, so a dry run predicts the warning rather
+	 * than promising a write.
+	 *
+	 * @param string      $title      The gate title, for the warning.
+	 * @param int|null    $gate_id    The gate, or null for one a dry run would create.
+	 * @param string|null $derived    'on' or 'off', or null when the run can't tell.
+	 * @param bool        $force      Whether --set-auto-signup was passed.
+	 * @param bool        $dry_run    Whether this is a dry run.
+	 * @param array|null  $split_from For a sibling this run creates from an existing
+	 *                                gate's lists, that gate's 'id', 'title' and
+	 *                                'auto_signup'. Null otherwise.
+	 *
+	 * @return string The Auto-signup label for the summary table.
+	 */
+	private static function apply_auto_signup( string $title, ?int $gate_id, ?string $derived, bool $force, bool $dry_run, ?array $split_from = null ): string {
+		$current = $gate_id ? \Newspack\Content_Gate::get_newsletter_gate_settings( $gate_id )['auto_signup'] : 'default';
+
+		if ( null === $derived ) {
+			if ( 'default' !== $current ) {
+				return $current;
+			}
+			// Said the same way for a gate that exists and one that doesn't yet, so a dry
+			// run and the live run that follows it print the same label. It names the
+			// resolved value because "default" alone doesn't tell the operator
+			// whether readers will be signed up.
+			return \Newspack\Premium_Newsletters::is_site_auto_signup_on() ? 'default (on)' : 'default (off)';
+		}
+
+		if ( 'default' !== $current && $current !== $derived && ! $force ) {
+			WP_CLI::warning(
+				sprintf(
+					'"%1$s" (gate %2$d) has auto-signup set to %3$s, and this run derives %4$s. Leaving it: re-run with --set-auto-signup to apply the derived value.',
+					$title,
+					$gate_id,
+					$current,
+					$derived
+				)
+			);
+			return 'kept ' . $current;
+		}
+
+		$inherited = $split_from['auto_signup'] ?? 'default';
+		if ( 'default' !== $inherited && $inherited !== $derived && ! $force ) {
+			WP_CLI::warning(
+				sprintf(
+					'"%1$s" takes its lists from "%2$s" (gate %3$d), which has auto-signup set to %4$s, and this run derives %5$s. Setting it to %4$s: re-run with --set-auto-signup to apply the derived value.',
+					$title,
+					$split_from['title'],
+					$split_from['id'],
+					$inherited,
+					$derived
+				)
+			);
+			if ( ! $dry_run ) {
+				\Newspack\Content_Gate::update_newsletter_gate_settings( $gate_id, [ 'auto_signup' => $inherited ] );
+			}
+			return 'kept ' . $inherited;
+		}
+
+		if ( $dry_run ) {
+			return $derived . ' (dry-run)';
+		}
+
+		\Newspack\Content_Gate::update_newsletter_gate_settings( $gate_id, [ 'auto_signup' => $derived ] );
+		return $derived;
+	}
+}

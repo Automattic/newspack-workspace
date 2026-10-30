@@ -247,6 +247,100 @@ class WP_REST_Newspack_Iframe_Controller extends WP_REST_Controller {
 	}
 
 	/**
+	 * Reduce a caller-supplied name to a single safe path segment.
+	 *
+	 * Used for names this plugin generates but builds out of caller-supplied parts, such as
+	 * the destination folder derived from an attachment title.
+	 *
+	 * @param string $segment The name to reduce.
+	 *
+	 * @return string|false The safe segment, or false if nothing usable is left.
+	 */
+	private function sanitize_path_segment( $segment ) {
+		$segment = sanitize_file_name( basename( str_replace( '\\', '/', (string) $segment ) ) );
+
+		if ( '' === $segment || '.' === $segment || '..' === $segment ) {
+			return false;
+		}
+
+		return $segment;
+	}
+
+	/**
+	 * Reduce a caller-supplied relative path to safe segments, keeping subdirectories.
+	 *
+	 * Archive entries may legitimately sit in subdirectories and are referenced by name from
+	 * the archive's own markup, so the segments are checked rather than rewritten: renaming
+	 * them would break those references. Anything that could point outside the destination —
+	 * an upward segment, an absolute path, a drive letter or a null byte — is refused
+	 * outright rather than stripped, since stripping is what makes layered payloads such as
+	 * `....//` work.
+	 *
+	 * @param string $path The relative path to reduce.
+	 *
+	 * @return string|false The safe relative path, or false if it is not usable.
+	 */
+	private function sanitize_relative_path( $path ) {
+		$path = str_replace( '\\', '/', (string) $path );
+
+		if ( '' === $path || false !== strpos( $path, "\0" ) ) {
+			return false;
+		}
+
+		// Absolute paths, including Windows drive letters.
+		if ( '/' === $path[0] || preg_match( '#^[a-zA-Z]:#', $path ) ) {
+			return false;
+		}
+
+		$segments = [];
+		foreach ( explode( '/', $path ) as $segment ) {
+			if ( '' === $segment || '.' === $segment ) {
+				continue;
+			}
+			if ( '..' === $segment ) {
+				return false;
+			}
+			$segments[] = $segment;
+		}
+
+		return empty( $segments ) ? false : implode( '/', $segments );
+	}
+
+	/**
+	 * Confirm that a destination resolves inside a directory.
+	 *
+	 * A last check on the resolved paths, so that a symlink or a gap in the checks above
+	 * still cannot place a file outside the directory. The destination itself need not
+	 * exist yet: the deepest part of it that does exist is what gets resolved, which is
+	 * what lets this run before anything is created.
+	 *
+	 * @param string $directory   Absolute path to the directory the write must stay inside.
+	 * @param string $destination Absolute path to the intended destination.
+	 *
+	 * @return boolean
+	 */
+	private function is_inside_directory( $directory, $destination ) {
+		$directory = realpath( $directory );
+
+		if ( ! $directory ) {
+			return false;
+		}
+
+		$existing = dirname( $destination );
+		while ( ! file_exists( $existing ) && dirname( $existing ) !== $existing ) {
+			$existing = dirname( $existing );
+		}
+
+		$resolved = realpath( $existing );
+
+		if ( ! $resolved ) {
+			return false;
+		}
+
+		return 0 === strpos( trailingslashit( $resolved ), trailingslashit( $directory ) );
+	}
+
+	/**
 	 * Receive the iframe content, handle it, and returns the URL and the folder name.
 	 *
 	 * @param WP_REST_Request $request Request object.
@@ -363,7 +457,11 @@ class WP_REST_Newspack_Iframe_Controller extends WP_REST_Controller {
 	 * @return WP_REST_Response
 	 */
 	private function process_iframe_document( $request, $document_filename, $media_source_path ) {
-		if ( ! $this->validate_file_extension( $document_filename, false ) ) {
+		// The filename is built from the source attachment's title, so it is only a name once
+		// it has been reduced to a single segment.
+		$document_filename = $this->sanitize_path_segment( $document_filename );
+
+		if ( ! $document_filename || ! $this->validate_file_extension( $document_filename, false ) ) {
 			return new WP_Error(
 				'newspack_blocks',
 				sprintf(
@@ -391,6 +489,14 @@ class WP_REST_Newspack_Iframe_Controller extends WP_REST_Controller {
 			if ( is_wp_error( $deleted ) ) {
 				return $deleted;
 			}
+		}
+
+		if ( ! $this->is_inside_directory( $iframe_upload_dir, $iframe_path ) ) {
+			return new WP_Error(
+				'newspack_blocks',
+				__( 'Could not upload your document.', 'newspack-blocks' ),
+				[ 'status' => '400' ]
+			);
 		}
 
 		// Copy uploaded document file to destination.
@@ -434,14 +540,25 @@ class WP_REST_Newspack_Iframe_Controller extends WP_REST_Controller {
 		}
 		global $wp_filesystem;
 
+		// The folder is built from the source attachment's title, so it is only a name once it
+		// has been reduced to a single segment.
+		$iframe_folder = $this->sanitize_path_segment( $iframe_folder );
+		if ( ! $iframe_folder ) {
+			return $invalid_file_error;
+		}
+
 		$wp_upload_dir     = wp_upload_dir();
 		$iframe_upload_dir = $wp_upload_dir['path'] . self::IFRAME_UPLOAD_DIR;
 		$iframe_path       = trailingslashit( $iframe_upload_dir . $iframe_folder );
 		$data              = $request->get_body_params();
 
-		// create iframe directory if not existing.
-		if ( ! file_exists( $iframe_upload_dir ) ) {
-			wp_mkdir_p( $iframe_upload_dir );
+		// Create this archive's own directory up front, so each entry's destination can be
+		// resolved against it before anything is written.
+		if ( ! file_exists( $iframe_path ) ) {
+			wp_mkdir_p( $iframe_path );
+		}
+		if ( ! $this->is_inside_directory( $iframe_upload_dir, $iframe_path ) ) {
+			return $invalid_file_error;
 		}
 
 		// Extract files from archive.
@@ -464,10 +581,24 @@ class WP_REST_Newspack_Iframe_Controller extends WP_REST_Controller {
 			}
 			$stat = $zip->statIndex( $file_index );
 			if ( $stat && isset( $stat['name'] ) ) {
-				if ( ! file_exists( dirname( $iframe_path . $stat['name'] ) ) ) {
-					wp_mkdir_p( dirname( $iframe_path . $stat['name'] ) );
+				// An entry names its own destination, so it decides where the write lands.
+				$entry_relative_path = $this->sanitize_relative_path( $stat['name'] );
+				if ( ! $entry_relative_path ) {
+					return $invalid_file_error;
 				}
-				$put = $wp_filesystem->put_contents( $iframe_path . $stat['name'], $contents );
+
+				$destination = $iframe_path . $entry_relative_path;
+
+				// Checked before anything is created, so a destination outside this archive's
+				// own folder never gets a directory made for it.
+				if ( ! $this->is_inside_directory( $iframe_path, $destination ) ) {
+					return $invalid_file_error;
+				}
+				if ( ! file_exists( dirname( $destination ) ) ) {
+					wp_mkdir_p( dirname( $destination ) );
+				}
+
+				$put = $wp_filesystem->put_contents( $destination, $contents );
 				if ( ! $put ) {
 					return $invalid_file_error;
 				}

@@ -38,11 +38,35 @@ if [ ! -d "release/$WP_ORG_PLUGIN_NAME" ]; then
   exit 1
 fi
 
+# The version WordPress.org serves comes from the main plugin file's `Version:`
+# header: these plugins ship `Stable tag: trunk`, so readme.txt carries no
+# version at all and the header is the only marker an update check reads.
+# WP_ORG_PLUGIN_VERSION comes from package.json instead, and the two are
+# written by different halves of the release (semantic-release stamps the
+# header, finalize-package-versions.cjs commits package.json). Assert they
+# agree on the built artifact, so the value that decides what publishes is
+# checked rather than assumed.
+main_file=$( { grep -ilE '^[[:space:]]*\*?[[:space:]]*Plugin Name:' "release/$WP_ORG_PLUGIN_NAME"/*.php || true; } | head -n 1 )
+if [ -z "$main_file" ]; then
+  echo "::error::No plugin header found in release/$WP_ORG_PLUGIN_NAME. Cannot confirm the version WordPress.org would serve."
+  exit 1
+fi
+header_line=$( grep -m1 -iE '^[[:space:]]*\*?[[:space:]]*Version:' "$main_file" || true )
+header_version=$( printf '%s' "$header_line" | sed -E 's/.*[Vv]ersion:[[:space:]]*//; s/[[:space:]].*$//' )
+if [ "$header_version" != "$WP_ORG_PLUGIN_VERSION" ]; then
+  echo "::error::$main_file declares version '${header_version:-none}' but this deploy is publishing $WP_ORG_PLUGIN_VERSION. WordPress.org reads the header, so the artifact would go out mislabelled."
+  exit 1
+fi
+
 mkdir -p "$SVN_REPO_LOCAL_PATH" && cd "$SVN_REPO_LOCAL_PATH"
 
-# Skip if this version is already published.
+# Nothing is published when this version is already tagged on WordPress.org.
+# That is expected when re-running a deploy, and it is also the last guard
+# behind the workflow's version gate -- so it annotates the run rather than
+# passing quietly, because on any other run it means the build carried the
+# wrong version and the release never reached wordpress.org.
 if svn ls "$SVN_REPO_URL/tags/$SVN_TAG" > /dev/null 2>&1; then
-  echo "Tag $SVN_TAG already exists on WordPress.org. No deployment needed."
+  echo "::warning::Tag $SVN_TAG already exists on WordPress.org; nothing deployed. Expected on a re-run -- otherwise check that $SVN_TAG is the version this run released."
   exit 0
 fi
 

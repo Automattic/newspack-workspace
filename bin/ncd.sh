@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 ncd() {
 
 	# If no argument is provided, go to the root of the newspack-workspace folder:

@@ -207,6 +207,33 @@ abstract class Woo {
 	}
 
 	/**
+	 * Echo an anchor with an escaped href and escaped text. Both arguments are
+	 * node-supplied and treated as untrusted.
+	 *
+	 * Lives on the base rather than on one table because Orders and
+	 * Subscriptions render equivalent anchors from the same Woo_Item getters,
+	 * so a helper reachable from only one of them leaves the other to
+	 * hand-roll its escaping.
+	 *
+	 * Woo_Item::get_edit_link() bare-returns null when remote_id or node_url is
+	 * missing, and esc_url() has no string cast before its ltrim(), which is a
+	 * deprecation on PHP 8.3. The cast keeps that latent case quiet.
+	 *
+	 * @param string $url    The href.
+	 * @param string $text   The link text.
+	 * @param string $target The link target attribute.
+	 * @return void
+	 */
+	protected static function print_link( $url, $text, $target = '_blank' ) {
+		printf(
+			'<a href="%s" target="%s">%s</a>',
+			esc_url( (string) $url ),
+			esc_attr( $target ),
+			esc_html( (string) $text )
+		);
+	}
+
+	/**
 	 * Modify columns on post type table
 	 *
 	 * @param array $columns Registered columns.

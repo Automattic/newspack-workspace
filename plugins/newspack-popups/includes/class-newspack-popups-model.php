@@ -211,6 +211,9 @@ final class Newspack_Popups_Model {
 					}
 					update_post_meta( $id, $key, $value );
 					break;
+				case 'manual_only':
+					update_post_meta( $id, $key, wp_validate_boolean( $value ) );
+					break;
 				case 'post_types':
 				case 'archive_page_types':
 				case 'excluded_categories':
@@ -261,7 +264,18 @@ final class Newspack_Popups_Model {
 			$args['tax_query'] = [ $tax_query ]; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
 		}
 
-		return self::retrieve_popups_with_query( new WP_Query( $args ) );
+		$popups = self::retrieve_popups_with_query( new WP_Query( $args ) );
+		if ( is_array( $placements ) ) {
+			return $popups;
+		}
+		return array_values(
+			array_filter(
+				$popups,
+				function( $popup ) {
+					return ! self::is_manual_only( $popup );
+				}
+			)
+		);
 	}
 
 	/**
@@ -316,17 +330,20 @@ final class Newspack_Popups_Model {
 	 *                    the post is not a prompt, or the id does not resolve to a post.
 	 */
 	public static function retrieve_preview_popup( $post_id ) {
-		// Previews render unsaved prompt content, so restrict them to users who can manage
-		// prompts and to the prompts CPT, mirroring the plugin's other preview entry points.
-		if ( ! Newspack_Popups::is_user_admin() ) {
+		if ( ! Newspack_Popups::can_preview_popup( $post_id ) ) {
 			return null;
 		}
-		if ( Newspack_Popups::NEWSPACK_POPUPS_CPT !== get_post_type( $post_id ) ) {
-			return null;
-		}
-		// Up-to-date post data is stored in an autosave.
+		// The editor's autosave only holds the freshest content while there are
+		// unsaved changes. After a full save it can be OLDER than the saved post
+		// (Gutenberg's autosave() no-ops on a clean post), so prefer it only when
+		// it is actually newer than the saved post — otherwise a block removed
+		// before the last save would linger in the preview (NPPM-2940).
+		$saved       = get_post( $post_id );
 		$autosave    = wp_get_post_autosave( $post_id );
-		$post_object = $autosave ? $autosave : get_post( $post_id );
+		$post_object = $saved;
+		if ( $autosave && ( ! $saved || strtotime( $autosave->post_modified_gmt ) > strtotime( $saved->post_modified_gmt ) ) ) {
+			$post_object = $autosave;
+		}
 		if ( ! $post_object ) {
 			return null;
 		}
@@ -465,6 +482,7 @@ final class Newspack_Popups_Model {
 			'overlay_opacity'                => get_post_meta( $id, 'overlay_opacity', true ),
 			'overlay_size'                   => get_post_meta( $id, 'overlay_size', true ),
 			'no_overlay_background'          => get_post_meta( $id, 'no_overlay_background', true ),
+			'manual_only'                    => get_post_meta( $id, 'manual_only', true ),
 			'placement'                      => get_post_meta( $id, 'placement', true ),
 			'trigger_type'                   => get_post_meta( $id, 'trigger_type', true ),
 			'trigger_delay'                  => get_post_meta( $id, 'trigger_delay', true ),
@@ -511,6 +529,7 @@ final class Newspack_Popups_Model {
 				'overlay_opacity'                => 30,
 				'overlay_size'                   => 'medium',
 				'no_overlay_background'          => false,
+				'manual_only'                    => false,
 				'placement'                      => 'inline',
 				'trigger_type'                   => 'time',
 				'trigger_delay'                  => 0,
@@ -730,6 +749,13 @@ final class Newspack_Popups_Model {
 			$popup['duplicate_of'] = $duplicate_of;
 		}
 
+		$ab_fields = Newspack_Popups_AB_Tests::get_popup_ab_fields( $id, true );
+
+		if ( $ab_fields ) {
+			$popup['ab_test_id'] = $ab_fields['test_id'];
+			$popup['ab_variant'] = $ab_fields['variant'];
+		}
+
 		if ( self::is_inline( $popup ) ) {
 			switch ( $popup['options']['trigger_type'] ) {
 				case 'blocks_count':
@@ -800,7 +826,9 @@ final class Newspack_Popups_Model {
 	}
 
 	/**
-	 * Is it a manual-only popup or not.
+	 * Is it a manual-only popup or not: an inline prompt with the "Manual only" placement,
+	 * or an overlay with the "Manual only" toggle on. Either appears only where the
+	 * Single Prompt block or the shortcode places it.
 	 *
 	 * @param object $popup The popup object.
 	 * @return boolean True if it is a manual-only popup.
@@ -810,7 +838,8 @@ final class Newspack_Popups_Model {
 			return false;
 		}
 
-		return 'manual' === $popup['options']['placement'];
+		return 'manual' === $popup['options']['placement']
+			|| ( self::is_overlay( $popup ) && ! empty( $popup['options']['manual_only'] ) );
 	}
 
 	/**
@@ -1169,6 +1198,7 @@ final class Newspack_Popups_Model {
 		$classes[]            = $no_padding ? 'newspack-lightbox-no-padding' : null;
 		$classes[]            = $is_newsletter_prompt ? 'newspack-newsletter-prompt-inline' : null;
 		$classes[]            = self::is_block_theme() ? 'is-layout-constrained' : null;
+		$classes[]            = self::is_block_theme() ? 'newspack-popup--block-theme' : null;
 		$classes              = array_merge( $classes, explode( ' ', $popup['options']['additional_classes'] ) );
 		$assigned_segments    = Newspack_Segments_Model::get_popup_segments_ids_string( $popup['id'] );
 		$frequency_config     = self::get_frequency_config( $popup );
@@ -1187,6 +1217,10 @@ final class Newspack_Popups_Model {
 				data-frequency="<?php echo esc_attr( $frequency_config ); ?>"
 				<?php if ( ! empty( $utm_suppression ) ) : ?>
 					data-suppression="<?php echo esc_attr( $utm_suppression ); ?>"
+				<?php endif; ?>
+				<?php if ( ! empty( $popup['ab_test_id'] ) ) : ?>
+					data-ab-test-id="<?php echo esc_attr( $popup['ab_test_id'] ); ?>"
+					data-ab-variant="<?php echo esc_attr( $popup['ab_variant'] ); ?>"
 				<?php endif; ?>
 			>
 				<?php echo do_shortcode( $body ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
@@ -1278,7 +1312,10 @@ final class Newspack_Popups_Model {
 			}
 		}
 		if ( Newspack_Popups::preset_popup_id() ) {
-			$popup = Newspack_Popups_Presets::retrieve_preset_popup( Newspack_Popups::preset_popup_id() );
+			$preset_popup = Newspack_Popups_Presets::retrieve_preset_popup( Newspack_Popups::preset_popup_id() );
+			if ( $preset_popup ) {
+				$popup = $preset_popup;
+			}
 		}
 
 		self::$current_popup = $popup;
@@ -1318,6 +1355,7 @@ final class Newspack_Popups_Model {
 		$classes[]                      = $no_overlay_background ? 'newspack-lightbox-no-overlay' : null;
 		$classes[]                      = $has_featured_image ? 'newspack-lightbox-featured-image' : null;
 		$classes[]                      = $enable_close_button_background ? 'newspack-lightbox-close-button-background' : null;
+		$classes[]                      = self::is_block_theme() ? 'newspack-popup--block-theme' : null;
 		$classes                        = array_merge( $classes, explode( ' ', $popup['options']['additional_classes'] ) );
 		$wrapper_classes                = [ 'newspack-popup-wrapper' ];
 		$wrapper_classes[]              = 'publish' !== $popup['status'] ? 'newspack-inactive-popup-status' : null;
@@ -1345,6 +1383,10 @@ final class Newspack_Popups_Model {
 			data-frequency="<?php echo esc_attr( $frequency_config ); ?>"
 			<?php if ( ! empty( $utm_suppression ) ) : ?>
 				data-suppression="<?php echo esc_attr( $utm_suppression ); ?>"
+			<?php endif; ?>
+			<?php if ( ! empty( $popup['ab_test_id'] ) ) : ?>
+				data-ab-test-id="<?php echo esc_attr( $popup['ab_test_id'] ); ?>"
+				data-ab-variant="<?php echo esc_attr( $popup['ab_variant'] ); ?>"
 			<?php endif; ?>
 
 			<?php if ( $is_scroll_triggered ) : ?>

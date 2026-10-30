@@ -61,16 +61,6 @@ final class Core {
 
 		// Enqueue theme stylesheet.
 		\wp_enqueue_style( 'newspack_block_theme-style' );
-
-		// Strings for translation.
-		$newspack_l10n = array(
-			'close_menu'       => esc_html__( 'Close Menu', 'newspack-block-theme' ),
-			'comment_too_fast' => esc_html__( 'You are posting comments too quickly. Please wait a moment before trying again.', 'newspack-block-theme' ),
-		);
-
-		// Enqueue front-end JavaScript.
-		wp_enqueue_script( 'newspack-main', get_theme_file_uri( '/dist/main.js' ), array(), wp_get_theme()->get( 'Version' ), true );
-		wp_localize_script( 'newspack-main', 'newspackScreenReaderText', $newspack_l10n );
 	}
 
 	/**
@@ -139,7 +129,7 @@ final class Core {
 		if ( $metadata['name'] == 'core/search' ) {
 			$metadata['attributes']['buttonPosition']['default'] = 'button-inside';
 			$metadata['attributes']['buttonUseIcon']['default']  = true;
-			$metadata['attributes']['placeholder']['default']    = esc_html__( 'Search posts, categories, authors, ...', 'newspack-block-theme' );
+			$metadata['attributes']['placeholder']['default']    = esc_html__( 'Search posts, categories, authors…', 'newspack-block-theme' );
 			$metadata['attributes']['showLabel']['default']      = false;
 		}
 		if ( $metadata['name'] == 'core/navigation' ) {

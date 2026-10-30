@@ -1,8 +1,15 @@
 @use "~@wordpress/base-styles/variables" as wp-vars;
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/breakpoints" as wp-breakpoints;
+@use "~@wordpress/base-styles/mixins" as wp-mixins;
+@use "~@wordpress/base-styles/z-index" as wp-z;
 
-.newspack-wizard__header .newspack-section-header p {
+// Section-header descriptions are plain strings (SectionHeader renders them
+// inside a `<p>`, so markup there would be invalid nesting). Honour their line
+// breaks so a multi-line description — the profile's email + member-since —
+// reads as separate lines instead of running together.
+.newspack-wizard__header .newspack-section-header p,
+.newspack-wizard__section-header p {
 	white-space: pre-line !important;
 }
 
@@ -12,6 +19,12 @@
 	position: fixed;
 	transform: translateX( -50% );
 	z-index: 100000;
+
+	// A refusal must not look like a confirmation: error toasts get the alert
+	// red the components' error notices use.
+	&--error .components-snackbar {
+		background-color: wp-colors.$alert-red;
+	}
 }
 
 .newspack-subscribers__card-icon {
@@ -35,11 +48,6 @@
 	font-weight: normal;
 }
 
-.newspack-subscribers__header-count {
-	color: wp-colors.$gray-700;
-	font-weight: normal;
-}
-
 // Center the loading spinner in the content area while data resolves.
 .newspack-subscribers__loading {
 	align-items: center;
@@ -58,6 +66,32 @@
 		}
 	}
 }
+
+// Covers the whole wizard while a refetch is in flight with rows showing, and
+// blocks clicks until it settles. Fixed to the screen, beside the admin menu and
+// under the admin bar, so the spinner stays centred at any scroll position. It
+// stacks above popovers, so an open filter or column menu is covered too.
+.newspack-subscribers__loading-overlay {
+	align-items: center;
+	background: rgba( wp-colors.$white, 0.6 );
+	bottom: 0;
+	cursor: wait;
+	display: flex;
+	justify-content: center;
+	position: fixed;
+	right: 0;
+	top: var(--wp-admin--admin-bar--height, 0);
+	z-index: wp-z.z-index(".components-popover") + 1;
+
+	// At this width the admin bar scrolls away with the page, so its height would
+	// leave an uncovered strip at the top of the screen. Start at the top edge
+	// instead, covering the bar while it's in view.
+	@media ( max-width: wp-breakpoints.$break-small ) {
+		top: 0;
+	}
+}
+
+@include wp-mixins.editor-left(".newspack-subscribers__loading-overlay");
 
 .newspack-subscribers__avatar {
 	width: wp-vars.$grid-unit-40;
@@ -174,22 +208,22 @@
 	}
 }
 
-.newspack-subscribers__profile {
-	.components-notice__actions {
-		margin-top: wp-vars.$grid-unit-15;
-
-		.components-button {
-			height: wp-vars.$grid-unit-40;
-			line-height: 1;
-			margin-left: 0;
-			margin-right: 0;
-			padding: 0 wp-vars.$grid-unit-15;
-		}
-	}
-
+// The shared subscription card (components/SubscriptionCard.jsx). Scoped to the
+// card's own class rather than to a host screen, so it renders identically on the
+// person profile and inside the group-detail "View subscription" drawer.
+.newspack-subscribers__card {
 	.components-card__header,
 	.newspack-card--core__header {
 		padding: wp-vars.$grid-unit-20;
+	}
+	// The title is an h3 for heading-level order (the hosting section is an h2),
+	// so pin its type rather than inherit the browser's h3 default — the card
+	// heading should read at the card's own scale, not the document's.
+	.newspack-subscribers__card-title {
+		font-size: wp-vars.$default-font-size;
+		font-weight: wp-vars.$font-weight-medium;
+		line-height: wp-vars.$default-line-height;
+		margin: 0;
 	}
 	// The Dropdown wrapper ships as inline-block, whose line box is ~0.2px taller
 	// than the button; flex collapses it to the button's exact height. Pinning the
@@ -211,6 +245,7 @@
 	.newspack-subscribers__card-title-link.components-button.is-link {
 		color: inherit;
 		font: inherit;
+		height: auto;
 		text-decoration: none;
 
 		&:hover,
@@ -419,14 +454,6 @@
 	text-transform: uppercase;
 }
 
-.newspack-subscribers__sub-detail-value {
-	// The Badge ships display: block, so it would stretch to the full row width
-	// here; keep it hugging its label (e.g. the status pill).
-	.newspack-badge {
-		display: inline-block;
-	}
-}
-
 // Pinned action bar at the bottom of the drawer: the same subscription CTAs as
 // the person-profile group card. Mirrors the newspack-newsletters quick-edit
 // footer (white, sticky, no divider, buttons split 50/50).
@@ -445,11 +472,13 @@
 }
 
 // Labeled label/value rows on the subscription and payment-method cards,
-// reusing the quick-edit drawer's label style.
+// reusing the quick-edit drawer's label style. Each row is a one-pair `dl` (see
+// CardRow), so the browser's default list margins are cleared here.
 .newspack-subscribers__card-row {
 	display: flex;
 	flex-direction: column;
 	gap: wp-vars.$grid-unit-05;
+	margin: 0;
 }
 
 .newspack-subscribers__card-label {
@@ -457,4 +486,32 @@
 	font-size: wp-vars.$font-size-x-small;
 	font-weight: wp-vars.$font-weight-medium;
 	text-transform: uppercase;
+}
+
+.newspack-subscribers__card-value {
+	margin: 0;
+}
+
+// WordPress 7.1's Menu fades in with a transition on a wrapper element, which
+// only reaches its visible state once Ariakit stamps `data-enter` on the menu
+// surface inside it. That attribute never arrives here: the surface settles with
+// `data-open` and `data-side` and nothing else, so the wrapper is left at the
+// transition's starting frame — `opacity: 0`, shifted 4px — for as long as the
+// menu is open. The menu is fully mounted and clickable the whole time, which is
+// why it reads as present to everything except a person looking at the screen.
+//
+// Anyone whose browser reports `prefers-reduced-motion: reduce` is unaffected,
+// because the whole transition sits behind `@media not (prefers-reduced-motion)`
+// and they get the final state directly. That is the only reason this is not
+// visible to everyone, and it is why the bug looks intermittent between testers.
+//
+// The row-action menu is the only route to "Make manager", so without this the
+// screen cannot promote a member at all. The menu renders in a portal on `body`,
+// outside any wizard container, so there is no ancestor to scope to and `:has()`
+// is the only way to reach the wrapper from the menu it holds. `!important`
+// overrides the emotion rule, which otherwise wins on specificity. Removing the
+// transition costs the fade; keeping it costs the menu.
+div:has( > [role="menu"][data-open] ) {
+	opacity: 1 !important;
+	transform: none !important;
 }

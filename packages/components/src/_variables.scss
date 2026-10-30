@@ -1,0 +1,12 @@
+/**
+ * SCSS Variables.
+ *
+ * The steps this package needs above the @wordpress/base-styles scale. Please
+ * reach for a base-styles variable first, and only add here when there is no
+ * counterpart and you're pretty sure the value will be reused in many places.
+ * It's purely for UI. Don't add component-specific values, which belong in that
+ * component's own stylesheet.
+ */
+
+$font-size-3x-large: 48px;
+$font-line-height-3x-large: 1.125;

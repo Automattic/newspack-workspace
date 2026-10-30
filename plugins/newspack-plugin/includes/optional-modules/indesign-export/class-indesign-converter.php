@@ -15,6 +15,45 @@ defined( 'ABSPATH' ) || exit;
 class InDesign_Converter {
 
 	/**
+	 * Tagged Text formats the converter can emit, keyed by platform.
+	 *
+	 * Each pairs the start tag written as the first line with the line
+	 * terminator used throughout the file: <ASCII-WIN> declares CRLF endings
+	 * and <ASCII-MAC> a bare CR. They are selected together because what
+	 * NPPM-3098 established is that only internal consistency matters to the
+	 * import — a stray byte pushes the next <pstyle:...> tag off the start of
+	 * its paragraph and InDesign renders the markup as literal text. The
+	 * platform is a site setting because some InDesign installs recognize only
+	 * the Mac form: handed a Windows file, they place the whole thing as plain
+	 * text, header and tags included. ASCII in both cases, because
+	 * get_transformed_text() escapes every code point above 127 to a <0xXXXX>
+	 * tag, leaving the payload 7-bit.
+	 *
+	 * @var array
+	 */
+	public const FORMATS = [
+		'win' => [
+			'start_tag' => '<ASCII-WIN>',
+			'eol'       => "\r\n",
+		],
+		'mac' => [
+			'start_tag' => '<ASCII-MAC>',
+			'eol'       => "\r",
+		],
+	];
+
+	/**
+	 * Platform used when none is configured or a stored value is unknown.
+	 *
+	 * Windows, which places correctly in most InDesign installs — including
+	 * every Mac install in NPPM-3098's reports except the one that motivated
+	 * keeping a choice.
+	 *
+	 * @var string
+	 */
+	public const DEFAULT_PLATFORM = 'win';
+
+	/**
 	 * Block types with no print equivalent, excluded from InDesign export by default.
 	 * Filterable via the newspack_indesign_export_excluded_blocks filter.
 	 *
@@ -52,6 +91,17 @@ class InDesign_Converter {
 	private $styles;
 
 	/**
+	 * Line terminator for the export being built.
+	 *
+	 * Set from the selected format at the top of convert_post() and read by
+	 * every step that emits or normalizes line endings, so the whole file —
+	 * body, quotes, captions — ends lines the way its start tag declares.
+	 *
+	 * @var string
+	 */
+	private $eol = self::FORMATS[ self::DEFAULT_PLATFORM ]['eol'];
+
+	/**
 	 * Constructor.
 	 *
 	 * @param array $styles Optional. Custom InDesign styles configuration.
@@ -69,13 +119,14 @@ class InDesign_Converter {
 	 *
 	 *     @type bool   $include_subtitle Whether to include the post subtitle. Default true.
 	 *     @type bool   $include_byline   Whether to include the byline. Default true.
-	 *     @type bool   $include_captions Whether to append photo captions. Photo credits are
-	 *                                    a separate attribution field and are always exported.
-	 *                                    Default true.
-	 *     @type string $platform         Target platform for the tagged-text header.
-	 *                                    'win' emits <ASCII-WIN>, 'mac' emits <ASCII-MAC>.
-	 *                                    InDesign requires the header to match the host OS,
-	 *                                    otherwise markup is rendered literally. Default 'win'.
+	 *     @type bool   $include_captions Whether to append the photo captions and credits
+	 *                                    section at the end of the export. One flag covers
+	 *                                    both fields (NPPM-3098). Default true.
+	 *     @type string $platform         Tagged Text format to emit: 'win' (<ASCII-WIN>,
+	 *                                    CRLF endings) or 'mac' (<ASCII-MAC>, CR). The
+	 *                                    header and terminator travel together — see
+	 *                                    self::FORMATS. Unknown values fall back to the
+	 *                                    default. Default 'win'.
 	 * }
 	 * @return string|false InDesign Tagged Text content, or false on failure.
 	 */
@@ -89,33 +140,52 @@ class InDesign_Converter {
 			'include_subtitle' => true,
 			'include_byline'   => true,
 			'include_captions' => true,
-			'platform'         => 'win',
+			'platform'         => self::DEFAULT_PLATFORM,
 		];
 		$options = wp_parse_args( $options, $default_options );
 
+		// Unknown values — including 'auto' rows stored by the setting's
+		// earlier User-Agent mode — fall back to the default format.
+		$platform  = is_string( $options['platform'] ) && isset( self::FORMATS[ $options['platform'] ] ) ? $options['platform'] : self::DEFAULT_PLATFORM;
+		$format    = self::FORMATS[ $platform ];
+		$this->eol = $format['eol'];
+
 		$content_parts = [];
 
-		$content_parts[] = 'mac' === $options['platform'] ? '<ASCII-MAC>' : '<ASCII-WIN>';
-		$content_parts[] = $this->styles['headline'] . $this->get_transformed_text( $post->post_title );
+		$content_parts[] = $format['start_tag'];
+		$content_parts[] = $this->styles['headline'] . $this->get_transformed_plain_text( $post->post_title );
 
 		if ( $options['include_subtitle'] ) {
 			$subtitle = $this->get_post_subtitle( $post );
 			if ( $subtitle ) {
-				$content_parts[] = $this->styles['subhead'] . $this->get_transformed_text( $subtitle );
+				$content_parts[] = $this->styles['subhead'] . $this->get_transformed_plain_text( $subtitle );
 			}
 		}
 
 		if ( $options['include_byline'] ) {
 			$byline = $this->get_byline( $post );
 			if ( ! empty( $byline ) ) {
-				$content_parts[] = $this->styles['byline'] . $this->get_transformed_text( $byline );
+				$content_parts[] = $this->styles['byline'] . $this->get_transformed_plain_text( $byline );
 			}
 		}
 
 		$content_parts[] = $this->process_post_content( $post->post_content, $options );
 		$content_parts[] = $this->process_post_images( $post, $options );
 
-		return implode( "\r\n", array_filter( $content_parts ) );
+		$content = implode( $this->eol, array_filter( $content_parts ) );
+
+		// Final guarantee that the file matches what its start tag declares.
+		// Post content reaches the converter with line endings of every flavor
+		// (pasted copy, imported HTML, serialized blocks), and the conversion
+		// steps above introduce their own. A single stray byte makes part of
+		// the file disagree with the declared terminator, and InDesign then
+		// places that stretch as literal markup.
+		$normalized = preg_replace( '/\r\n|\r|\n/', $this->eol, $content );
+
+		// preg_replace() yields null on a PCRE failure. Returning it would break
+		// the documented string|false contract and reach the download headers as
+		// an empty body, so fall back to the un-normalized content.
+		return null === $normalized ? $content : $normalized;
 	}
 
 	/**
@@ -217,7 +287,11 @@ class InDesign_Converter {
 		foreach ( $blocks as $block ) {
 			$tag = $this->get_block_tag( $block );
 			if ( ! empty( $tag ) ) {
-				$content .= $tag . $this->get_transformed_text( preg_replace( '/^<[^>]+>(.*)<\/[^>]+>$/s', '$1', trim( $block['innerHTML'] ) ) );
+				// Left untransformed: process_post_content() transforms the whole
+				// body once the HTML is gone. Decoding entities here would turn a
+				// bracket the author wrote as text into a bare one, which the
+				// HTML-to-tag pass below then reads — and removes — as markup.
+				$content .= $tag . preg_replace( '/^<[^>]+>(.*)<\/[^>]+>$/s', '$1', trim( $block['innerHTML'] ) );
 			} else {
 				$content .= serialize_block( $block );
 			}
@@ -333,7 +407,9 @@ class InDesign_Converter {
 		$content = preg_replace_callback(
 			'/<h([1-6])[^>]*>(.*?)<\/h[1-6]>/is',
 			function ( $matches ) {
-				return sprintf( '<pstyle:h%d>%s', $matches[1], $this->get_transformed_text( $matches[2] ) );
+				// Heading text is transformed with the rest of the body, for the
+				// reason given in process_blocks().
+				return sprintf( '<pstyle:h%d>%s', $matches[1], $matches[2] );
 			},
 			$content
 		);
@@ -366,11 +442,21 @@ class InDesign_Converter {
 			if ( ! empty( $cite_matches ) ) {
 				$cite = $cite_matches[1];
 				if ( ! empty( $cite ) ) {
-					$quote_content .= "\r\n" . $this->styles['pullquote_name'] . wp_strip_all_tags( $cite );
+					$quote_content .= $this->eol . $this->styles['pullquote_name'] . wp_strip_all_tags( $cite );
 				}
 			}
 
-			$content = preg_replace( $pattern, $quote_content, $content, 1 );
+			// Replace via a callback so the quote text is inserted literally: as
+			// a replacement string, author copy like "$1 million" would be read
+			// as a regex backreference and duplicate part of the quote.
+			$content = preg_replace_callback(
+				$pattern,
+				static function () use ( $quote_content ) {
+					return $quote_content;
+				},
+				$content,
+				1
+			);
 		}
 		return $content;
 	}
@@ -415,7 +501,7 @@ class InDesign_Converter {
 			'/<(?:div|ol|ul|a|img|figure)[^>]*>/'  => '',
 
 			// Replace paragraphs and remaining lists end tags with line breaks.
-			'/<\/(?:p|ul|ol)[^>]*>/'               => "\r\n",
+			'/<\/(?:p|ul|ol)[^>]*>/'               => $this->eol,
 
 			// Remove all remaining closing tags.
 			'/<\/[^>]*>/'                          => '',
@@ -433,7 +519,57 @@ class InDesign_Converter {
 	}
 
 	/**
+	 * Convert a plain-text field for InDesign.
+	 *
+	 * Every character in these fields — titles, subtitles, bylines, credits —
+	 * is content, so an angle bracket in one is text rather than a tag
+	 * delimiter. Encoding those brackets routes them through the same escaping
+	 * get_transformed_text() applies to bracket entities in the body.
+	 *
+	 * Use this instead of get_transformed_text() wherever the whole string is
+	 * known to be content. get_transformed_text() also runs over strings that
+	 * already carry the converter's own tags, where a bare bracket is markup;
+	 * fields stored as HTML (image captions) go through
+	 * get_transformed_rich_text() instead.
+	 *
+	 * @param string $text Text to convert.
+	 *
+	 * @return string Converted text.
+	 */
+	private function get_transformed_plain_text( $text ) {
+		return $this->get_transformed_text( str_replace( [ '<', '>' ], [ '&lt;', '&gt;' ], $text ) );
+	}
+
+	/**
+	 * Convert a rich-text field for InDesign.
+	 *
+	 * Image captions are stored as HTML: the caption toolbar offers links,
+	 * bold, and italics, and the editor saves a literal bracket an author
+	 * types as an entity. A bare bracket here is markup, exactly as in body
+	 * content — escaping it would place the tag in InDesign as literal
+	 * printed text — so convert it the way the body is converted (formatting
+	 * to character styles, other tags to their text). Entity-encoded brackets
+	 * are content and still come out escaped.
+	 *
+	 * The conversion runs the full body table, so block-level markup a caption
+	 * rarely carries (a <p>, a list) converts to body paragraph styles
+	 * mid-caption rather than escaping as literal text — the acceptable floor
+	 * for input the caption UI does not produce.
+	 *
+	 * @param string $text Text to convert.
+	 *
+	 * @return string Converted text.
+	 */
+	private function get_transformed_rich_text( $text ) {
+		return trim( $this->get_transformed_text( $this->convert_html_to_indesign( $text ) ) );
+	}
+
+	/**
 	 * Convert text for InDesign, handling special characters and typography.
+	 *
+	 * Angle brackets already present in $text are left alone: this also runs over
+	 * strings carrying the converter's own tags, where they are markup. Brackets
+	 * that arrive encoded are content, and come out backslash-escaped.
 	 *
 	 * @param string $text Text to convert.
 	 *
@@ -458,11 +594,36 @@ class InDesign_Converter {
 		];
 
 		$text = str_replace( array_keys( $conversions ), array_values( $conversions ), $text );
+
+		// Angle brackets written as entities are content, not tag delimiters.
+		// Shield them from the decode below — which would hand InDesign a bare
+		// bracket to read as the start or end of a tag — then resolve them to
+		// escaped literals. Covers the numeric forms and the named forms in both
+		// letter cases that mean a plain bracket: &LT;/&GT; are valid spellings
+		// of the same characters, while &Lt;/&Gt; are much-less/greater-than and
+		// must stay out. The resolutions after the decode also catch a named
+		// form the running PHP version's entity table leaves undecoded.
+		// &nvlt;/&nvgt; (bracket + combining long stroke) are deliberately left
+		// out: escaping them would drop the negation mark's meaning, and no
+		// editorial surface produces them.
+		$text = preg_replace( '/&(lt|LT|gt|GT|#0*6[02]|#[xX]0*3[cCeE]);/', '&amp;$1;', $text );
+
 		$text = html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+
+		// Escape backslashes after the decode, so ones written as entities
+		// (&#92;, &#x5C;) are covered too — a bare backslash is the Tagged Text
+		// escape character and absorbs whatever follows it. This runs before
+		// the resolutions below introduce the converter's own escapes; nothing
+		// upstream emits a backslash, so every one here is content.
+		$text = str_replace( '\\', '\\\\', $text );
+
+		$text = preg_replace( '/&(?:lt|LT|#0*60|#[xX]0*3[cC]);/', '\\\\<', $text );
+		$text = preg_replace( '/&(?:gt|GT|#0*62|#[xX]0*3[eE]);/', '\\\\>', $text );
+
 		// Convert remaining HTML entities.
 		$text = str_replace(
-			[ '&nbsp;', '&amp;', '&lt;', '&gt;' ],
-			[ ' ', '&', '<', '>' ],
+			[ '&nbsp;', '&amp;' ],
+			[ ' ', '&' ],
 			$text
 		);
 
@@ -491,7 +652,11 @@ class InDesign_Converter {
 	 * @return string Cleaned content.
 	 */
 	private function clean_whitespace( $content ) {
-		$content = preg_replace( '/\n{2,}/', "\r\n", $content );
+		// Collapse runs of blank lines into a single terminator. The alternation
+		// consumes CRLF as one unit: matching on \n alone would count the LF of a
+		// CRLF pair as a separate break and rewrite it, stranding the CR in front
+		// as a bare Mac-style terminator (NPPM-2813).
+		$content = preg_replace( '/(?:\r\n|\r|\n){2,}/', $this->eol, $content );
 		$content = trim( $content );
 
 		return $content;
@@ -523,14 +688,22 @@ class InDesign_Converter {
 	 *
 	 * @param \WP_Post $post    Post object.
 	 * @param array    $options Conversion options. Honors 'include_captions' (default
-	 *                          true); credits are always emitted regardless.
+	 *                          true); when false the whole captions-and-credits
+	 *                          section is omitted.
 	 *
 	 * @return string Photo credit and caption tags.
 	 */
 	private function process_post_images( $post, $options = [] ) {
 		$include_captions = ! isset( $options['include_captions'] ) || $options['include_captions'];
-		$images           = [];
-		$inline_captions  = [];
+
+		// One toggle covers the whole section: publishers who exclude captions
+		// want the credits appended with them gone too (NPPM-3098).
+		if ( ! $include_captions ) {
+			return '';
+		}
+
+		$images          = [];
+		$inline_captions = [];
 
 		$featured_image_id = get_post_thumbnail_id( $post->ID );
 		if ( $featured_image_id ) {
@@ -577,19 +750,19 @@ class InDesign_Converter {
 				continue;
 			}
 
-			$caption = $include_captions ? ( $inline_captions[ $image_id ] ?? wp_get_attachment_caption( $image_id ) ) : '';
+			$caption = $inline_captions[ $image_id ] ?? wp_get_attachment_caption( $image_id );
 			$credit  = get_post_meta( $image_id, '_media_credit', true ) ?? '';
 
 			if ( ! $caption && ! $credit ) {
 				continue;
 			}
 
-			$tag_content .= "\r\n";
+			$tag_content .= $this->eol;
 			if ( $caption ) {
-				$tag_content .= '<pstyle:PhotoCaption>' . $this->get_transformed_text( $caption ) . "\r\n";
+				$tag_content .= '<pstyle:PhotoCaption>' . $this->get_transformed_rich_text( $caption ) . $this->eol;
 			}
 			if ( $credit ) {
-				$tag_content .= '<pstyle:PhotoCredit>' . $this->get_transformed_text( $credit ) . "\r\n";
+				$tag_content .= '<pstyle:PhotoCredit>' . $this->get_transformed_plain_text( $credit ) . $this->eol;
 			}
 		}
 
@@ -600,7 +773,7 @@ class InDesign_Converter {
 			return '';
 		}
 
-		return "\r\n" . $tag_content;
+		return $this->eol . $tag_content;
 	}
 
 	/**

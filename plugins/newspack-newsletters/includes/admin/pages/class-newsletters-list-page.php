@@ -73,6 +73,26 @@ class Newsletters_List_Page extends Hidden_React_List_Page {
 	}
 
 	/**
+	 * Post locks are exposed over Heartbeat only (`wp_check_locked_posts()`),
+	 * so the list can flag newsletters someone else is editing.
+	 *
+	 * A sibling enqueue rather than a dependency of the admin-shell bundle.
+	 * The bundle mounts on `domReady`, by which point every footer script has
+	 * run, so a dependency would buy no ordering guarantee, and
+	 * `WP_Dependencies::all_deps()` drops a handle whose dependency is
+	 * unregistered: on a site running any of the plugins that deregister
+	 * `heartbeat`, that would take the whole screen down rather than the
+	 * indicator. Enqueueing it separately keeps the failure local, and the
+	 * hook already no-ops when `wp.heartbeat` is absent.
+	 *
+	 * @param string $handle Admin-shell script handle.
+	 */
+	public function enqueue_extras( string $handle ): void {
+		unset( $handle );
+		wp_enqueue_script( 'heartbeat' );
+	}
+
+	/**
 	 * Explicit admin-header breadcrumb trail.
 	 *
 	 * @return array<array{label: string}>

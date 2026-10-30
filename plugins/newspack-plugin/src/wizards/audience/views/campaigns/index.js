@@ -12,6 +12,7 @@ import { Component } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { addQueryArgs } from '@wordpress/url';
 import { decodeEntities } from '@wordpress/html-entities';
+import { Stack } from '@wordpress/ui';
 
 /**
  * External dependencies.
@@ -23,8 +24,9 @@ import { stringify } from 'qs';
  */
 import { Button, WebPreview, withWizard } from '../../../../../packages/components/src';
 import Router from '../../../../../packages/components/src/proxied-imports/router';
-import { Campaigns, Settings, Segments } from './views';
+import { Campaigns, ContextualPrompts, Settings, Segments } from './views';
 import AddCampaignAction from './campaigns/add-campaign-action';
+import CampaignActions from './campaigns/campaign-actions';
 import { CampaignsContext } from '../../contexts';
 
 const { HashRouter, NavLink, Redirect, Route, Switch } = Router;
@@ -32,6 +34,11 @@ const { HashRouter, NavLink, Redirect, Route, Switch } = Router;
 const headerText = __( 'Audience Management / Campaigns', 'newspack-plugin' );
 
 const ROOT = [ { label: __( 'Audience Management', 'newspack-plugin' ) } ];
+
+// The Campaigns tab as a linked ancestor crumb for its sub-tabs.
+const CAMPAIGNS_CRUMB = { label: __( 'Campaigns', 'newspack-plugin' ), url: '#/campaigns' };
+
+const contextualPromptsEnabled = Boolean( window.newspackAudienceCampaigns?.contextual_prompts_enabled );
 
 const tabbedNavigation = [
 	{
@@ -46,13 +53,23 @@ const tabbedNavigation = [
 		label: __( 'Segments', 'newspack-plugin' ),
 		path: '/segments',
 		exact: false,
-		breadcrumbs: [ ...ROOT, { label: __( 'Segments', 'newspack-plugin' ) } ],
+		breadcrumbs: [ ...ROOT, CAMPAIGNS_CRUMB, { label: __( 'Segments', 'newspack-plugin' ) } ],
 	},
+	...( contextualPromptsEnabled
+		? [
+				{
+					label: __( 'Contextual Prompts', 'newspack-plugin' ),
+					path: '/contextual-prompts',
+					exact: true,
+					breadcrumbs: [ ...ROOT, CAMPAIGNS_CRUMB, { label: __( 'Contextual Prompts', 'newspack-plugin' ) } ],
+				},
+		  ]
+		: [] ),
 	{
 		label: __( 'Settings', 'newspack-plugin' ),
 		path: '/settings',
 		exact: true,
-		breadcrumbs: [ ...ROOT, { label: __( 'Settings', 'newspack-plugin' ) } ],
+		breadcrumbs: [ ...ROOT, CAMPAIGNS_CRUMB, { label: __( 'Settings', 'newspack-plugin' ) } ],
 	},
 ];
 
@@ -93,7 +110,10 @@ class AudienceCampaigns extends Component {
 			quiet: true,
 		} )
 			.then( this.updateAfterAPI )
-			.catch( error => setError( error ) );
+			.catch( error => {
+				this.setState( { inFlight: false } );
+				setError( error );
+			} );
 	};
 
 	/**
@@ -347,14 +367,27 @@ class AudienceCampaigns extends Component {
 											<CampaignsContext.Provider value={ prompts }>
 												<Campaigns
 													{ ...popupManagementSharedProps }
-													archiveCampaignGroup={ archiveCampaignGroup }
 													campaignId={ campaignId }
-													createCampaignGroup={ createCampaignGroup }
-													deleteCampaignGroup={ deleteCampaignGroup }
-													duplicateCampaignGroup={ duplicateCampaignGroup }
-													renameCampaignGroup={ renameCampaignGroup }
 													campaigns={ campaigns }
-													headerActions={ <AddCampaignAction createCampaignGroup={ createCampaignGroup } /> }
+													subHeaderText={ __(
+														'Manage the prompts readers see, grouped by the segment each one targets.',
+														'newspack-plugin'
+													) }
+													headerActions={
+														<Stack direction="row" gap="sm" align="center">
+															<AddCampaignAction createCampaignGroup={ createCampaignGroup } />
+															<CampaignActions
+																archiveCampaignGroup={ archiveCampaignGroup }
+																campaignId={ campaignId }
+																campaigns={ campaigns }
+																deleteCampaignGroup={ deleteCampaignGroup }
+																duplicateCampaignGroup={ duplicateCampaignGroup }
+																manageCampaignGroup={ this.manageCampaignGroup }
+																prompts={ prompts }
+																renameCampaignGroup={ renameCampaignGroup }
+															/>
+														</Stack>
+													}
 												/>
 											</CampaignsContext.Provider>
 										);
@@ -367,6 +400,14 @@ class AudienceCampaigns extends Component {
 											{ ...props }
 											{ ...sharedProps }
 											setSegments={ segmentsList => this.setState( { segments: segmentsList } ) }
+											subHeaderText={
+												props.match.params.id
+													? undefined
+													: __(
+															'Group readers by what they do on the site, then target prompts at them.',
+															'newspack-plugin'
+													  )
+											}
 											headerActions={
 												props.match.params.id ? undefined : (
 													<NavLink to="segments/new">
@@ -377,7 +418,30 @@ class AudienceCampaigns extends Component {
 										/>
 									) }
 								/>
-								<Route path="/settings" render={ () => <Settings { ...sharedProps } /> } />
+								{ contextualPromptsEnabled && (
+									<Route
+										path="/contextual-prompts"
+										exact
+										render={ () => (
+											<ContextualPrompts
+												{ ...sharedProps }
+												subHeaderText={ __(
+													'Let editors generate story-specific donation prompts with AI.',
+													'newspack-plugin'
+												) }
+											/>
+										) }
+									/>
+								) }
+								<Route
+									path="/settings"
+									render={ () => (
+										<Settings
+											{ ...sharedProps }
+											subHeaderText={ __( 'Choose how prompts behave across the site.', 'newspack-plugin' ) }
+										/>
+									) }
+								/>
 								<Redirect to="/campaigns" />
 							</Switch>
 						</HashRouter>

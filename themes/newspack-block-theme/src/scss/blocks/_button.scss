@@ -1,3 +1,14 @@
+@use "../mixins";
+
+.wp-element-button,
+.wp-block-button__link {
+	&:where(:not(.newspack-ui__button, .newspack-ui .button, .newspack-ui .woocommerce-Button)) {
+		&:focus-visible {
+			@include mixins.focus-fill;
+		}
+	}
+}
+
 .wp-block-buttons,
 .wp-block-button {
 	&[class*="-font-size"] {
@@ -15,17 +26,8 @@
 			border-color 125ms ease-in-out,
 			color 125ms ease-in-out,
 			opacity 125ms ease-in-out,
-			outline 125ms ease-in-out;
+			box-shadow 125ms ease-in-out;
 		word-break: normal;
-
-		&:focus {
-			outline: 2px solid var(--wp--preset--color--accent);
-			outline-offset: 1px;
-
-			&.has-background {
-				outline-color: var(--wp--preset--color--contrast);
-			}
-		}
 
 		&.has-background:not(.has-accent-2-background-color) {
 			&:hover {
@@ -77,11 +79,17 @@
 				}
 			}
 
-			&:focus {
-				outline-color: var(--wp--preset--color--contrast);
+			&:focus-visible {
+				@include mixins.focus-edge(currentcolor, $halo: mixins.$focus-color);
 			}
 		}
 	}
+}
+
+// Keep a 1px border from making the button taller than a solid one. Inline custom padding wins over
+// this, but padding set in Global Styles is replaced, so this only works for the theme's default padding.
+.wp-block-button__link:is([style*="border-width:1px"], [style*="border-width: 1px"]) {
+	padding-block: calc(var(--wp--custom--spacing--25) - 1px);
 }
 
 .has-small-size {
@@ -91,6 +99,10 @@
 			display: inline-flex;
 			min-height: var(--wp--custom--spacing--65);
 			padding: var(--wp--preset--spacing--20) var(--wp--preset--spacing--30);
+
+			&:is([style*="border-width:1px"], [style*="border-width: 1px"]) {
+				padding-block: calc(var(--wp--preset--spacing--20) - 1px);
+			}
 		}
 	}
 
@@ -106,10 +118,14 @@
 	.wp-block-button {
 		&__link {
 			align-items: center;
-			border-radius: var(--wp--custom--border--radius-small);
+			border-radius: var(--wp--custom--border--radius-medium);
 			display: inline-flex;
 			min-height: var(--wp--custom--spacing--55);
 			padding: var(--wp--custom--spacing--15) var(--wp--custom--spacing--25);
+
+			&:is([style*="border-width:1px"], [style*="border-width: 1px"]) {
+				padding-block: calc(var(--wp--custom--spacing--15) - 1px);
+			}
 		}
 	}
 

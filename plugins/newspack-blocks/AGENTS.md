@@ -173,6 +173,7 @@ All endpoints use the `newspack-blocks/v1` namespace. Controllers live alongside
 |---|---|---|
 | `GET /articles` | `WP_REST_Newspack_Articles_Controller` | Public |
 | `GET /newspack-blocks-posts` | Same controller | `edit_posts` |
+| `POST /newspack-blocks-posts-batch` | Same controller; runs each query through `/newspack-blocks-posts` in document order, carrying the deduplication list from one query to the next. | `edit_posts` |
 | `GET /newspack-blocks-specific-posts` | Same controller | `edit_posts` |
 | `GET /authors` | `WP_REST_Newspack_Authors_Controller` | `edit_posts` |
 | `GET /author-list` | `WP_REST_Newspack_Author_List_Controller` | `edit_posts` |
@@ -207,7 +208,7 @@ REST controllers are instantiated via wrapper functions hooked to `rest_api_init
 - **Functions**: `newspack_blocks_*` prefix (e.g., `newspack_blocks_render_block_homepage_articles`)
 - **Classes**: `Newspack_Blocks*` or `WP_REST_Newspack_*` for REST controllers
 - **Constants**: `NEWSPACK_BLOCKS__*` (double underscore)
-- **Hooks**: `newspack_blocks_*` prefix; modal-specific use `newspack_modal_checkout_*`
+- **Hooks**: `newspack_blocks_*` prefix; modal-specific use `newspack_blocks_modal_checkout_*`
 - **Text domain**: `newspack-blocks`
 - **Block names**: Short slugs in `block.json`, namespaced as `newspack-blocks/<slug>` in PHP/JS
 
@@ -268,7 +269,7 @@ Partial adoption. Some blocks use `.ts`/`.tsx` (homepage-articles `edit.tsx`, do
 The plugin exposes many hooks. Rather than listing them all here (they change over time), use `grep -r 'apply_filters\|do_action' src/ includes/` to find current hooks. The key hook prefixes are:
 
 - **`newspack_blocks_*`**: General block hooks (query building, deduplication, registration, author data)
-- **`newspack_modal_checkout_*`**: Modal checkout specific hooks (labels, gateways, billing fields, HTML output)
+- **`newspack_blocks_modal_checkout_*`**: Modal checkout specific hooks (labels, gateways, billing fields, HTML output)
 
 ## CI/CD
 

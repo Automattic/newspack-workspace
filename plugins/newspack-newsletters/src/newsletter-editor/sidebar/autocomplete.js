@@ -111,6 +111,10 @@ const Autocomplete = ( { availableItems, label = '', onChange, onFocus, onInputC
 					suggestions={ availableItems.map( item => item.label ) }
 					value={ [] }
 					__experimentalExpandOnFocus={ true }
+					// `help` is WP 7.1+; the `__experimentalShowHowTo` fallback keeps the
+					// built-in how-to suppressed on 6.9/7.0, where it would compete with
+					// the wrapping BaseControl's own help text.
+					help=""
 					__experimentalShowHowTo={ false }
 					__next40pxDefaultSize
 					__nextHasNoMarginBottom

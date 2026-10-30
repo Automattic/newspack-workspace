@@ -1,3 +1,5 @@
+@use "../mixins";
+
 .newspack-ui {
 	&__segmented-control {
 		align-items: center;
@@ -24,67 +26,106 @@
 		}
 
 		&__tabs {
-			background: var(--newspack-ui-color-neutral-10);
-			border-radius: var(--newspack-ui-border-radius-m);
+			background: var(--newspack-ui-color-neutral-fill);
+			border-radius: calc(var(--newspack-ui-radius-button) * 1.5);
 			display: flex;
 			flex-wrap: wrap;
-			gap: var(--newspack-ui-spacer-1);
+			gap: var(--newspack-ui-spacer-half);
 			justify-content: center;
-			padding: var(--newspack-ui-spacer-1);
-
-			&:has([class*="--x-small"]) {
-				gap: calc(var(--newspack-ui-spacer-1) * 0.75);
-				padding: calc(var(--newspack-ui-spacer-1) * 0.75);
-			}
-
-			&:has([class*="--small"]) {
-				gap: calc(var(--newspack-ui-spacer-1) / 2);
-				padding: calc(var(--newspack-ui-spacer-1) / 2);
-			}
+			padding: var(--newspack-ui-spacer-half);
+			position: relative;
 
 			.newspack-ui__button {
-				background: transparent;
-				border: 1px solid transparent;
-				border-radius: var(--newspack-ui-border-radius-s);
-				color: var(--newspack-ui-color-neutral-60);
+				--newspack-ui-button-bg: transparent;
+				--newspack-ui-button-bg-hover: transparent;
+				--newspack-ui-button-bg-pressed: transparent;
+				--newspack-ui-button-bg-disabled: transparent;
+				--newspack-ui-button-ink: var(--newspack-ui-color-text-muted);
+
+				border-radius: var(--newspack-ui-radius-button);
 				cursor: pointer;
-				padding:
-					calc(var(--newspack-ui-spacer-2) - 1px)
-					calc(var(--newspack-ui-spacer-5) - 1px);
+				font-weight: var(--newspack-ui-font-weight-medium);
+				margin: 0;
+				transform: none;
 
-				&[class*="--x-small"] {
-					padding:
-						calc(var(--newspack-ui-spacer-1) * 0.75 - 1px)
-						calc(var(--newspack-ui-spacer-2) - 1px);
+				&:not([class*="--small"]) {
+					--newspack-ui-button-height: var(--newspack-ui-spacer-8);
+					--newspack-ui-button-padding-block: var(--newspack-ui-spacer-1);
+					--newspack-ui-button-padding-inline: calc(var(--newspack-ui-spacer-1) * 2.25);
 				}
 
-				&[class*="--small"] {
-					padding:
-						calc(var(--newspack-ui-spacer-1) - 1px)
-						calc(var(--newspack-ui-spacer-3) - 1px);
+				@media ( hover: hover ) and ( pointer: fine ) {
+					&:hover {
+						color: var(--newspack-ui-color-text);
+					}
 				}
 
-				&:hover {
-					background: transparent;
+				&.selected,
+				&[aria-selected="true"] {
+					--newspack-ui-button-bg: var(--newspack-ui-color-surface);
+					--newspack-ui-button-bg-hover: var(--newspack-ui-color-surface);
+					--newspack-ui-button-bg-pressed: var(--newspack-ui-color-surface);
+					--newspack-ui-button-border: var(--newspack-ui-color-border-outline);
+					--newspack-ui-button-ink: var(--newspack-ui-color-text);
+
+					&:focus-visible {
+						@include mixins.focus-edge( $width: 2px );
+					}
+
+					@media ( forced-colors: active ) {
+						&:not(:focus-visible) {
+							outline: 1px solid Highlight;
+							outline-offset: -1px;
+						}
+					}
+				}
+			}
+
+			&.has-thumb {
+				isolation: isolate;
+
+				&::before {
+					background: var(--newspack-ui-color-surface);
+					border-radius: var(--newspack-ui-radius-button);
+					box-shadow: inset 0 0 0 1px var(--newspack-ui-color-border-outline);
+					content: "";
+					height: var(--newspack-ui-segmented-thumb-height, 0);
+					left: 0;
+					pointer-events: none;
+					position: absolute;
+					top: 0;
+					transform: translate(var(--newspack-ui-segmented-thumb-x, 0), var(--newspack-ui-segmented-thumb-y, 0));
+					transition:
+						transform var(--newspack-ui-duration-indicator) var(--newspack-ui-ease-out),
+						width var(--newspack-ui-duration-indicator) var(--newspack-ui-ease-out),
+						height var(--newspack-ui-duration-indicator) var(--newspack-ui-ease-out);
+					width: var(--newspack-ui-segmented-thumb-width, 0);
+
+					@media ( prefers-reduced-motion: reduce ) {
+						transition: none;
+					}
+
+					@media ( forced-colors: active ) {
+						display: none;
+					}
 				}
 
-				&:focus {
-					outline: none;
+				&.is-measuring::before {
+					transition: none;
 				}
 
-				&:focus-visible {
-					outline: 2px solid var(--newspack-ui-color-button-bg);
-					outline-offset: 1px;
-				}
+				.newspack-ui__button {
+					position: relative;
+					z-index: 1;
 
-				&:not(:last-child) {
-					margin: 0;
-				}
-
-				&.selected {
-					background: var(--newspack-ui-color-neutral-0);
-					border-color: var(--newspack-ui-color-neutral-30);
-					color: var(--newspack-ui-color-neutral-90);
+					&.selected,
+					&[aria-selected="true"],
+					&[aria-pressed="true"] {
+						--newspack-ui-button-bg: transparent;
+						--newspack-ui-button-bg-hover: transparent;
+						--newspack-ui-button-bg-pressed: transparent;
+						--newspack-ui-button-border: transparent;
+					}
 				}
 			}
 		}

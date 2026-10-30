@@ -80,14 +80,17 @@ class Newspack_Newsletters_Quick_Edit {
 		) {
 			return;
 		}
-		update_post_meta(
-			$post_id,
-			'is_public',
-			isset( $_POST['switch_public_page'] ) && sanitize_text_field( $_POST['switch_public_page'] )
-		);
+		$is_public = isset( $_POST['switch_public_page'] ) && sanitize_text_field( $_POST['switch_public_page'] );
+		// Newspack_Newsletters::current_user_can_set_public_status() is the one definition
+		// of who may set this, and it also backs the guard on the write itself.
+		if ( ! \Newspack_Newsletters::current_user_can_set_public_status( $post_id, $is_public ) ) {
+			return;
+		}
+		update_post_meta( $post_id, 'is_public', $is_public );
 	}
 }
 
-if ( is_admin() ) {
+// Boot only when the main plugin file loaded this, not another plugin's autoloader.
+if ( is_admin() && defined( 'NEWSPACK_NEWSLETTERS_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal path constant, set by the main plugin file.
 	Newspack_Newsletters_Quick_Edit::init();
 }

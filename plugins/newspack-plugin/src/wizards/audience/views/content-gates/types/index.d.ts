@@ -1,13 +1,20 @@
 declare module '@wordpress/block-editor';
-import type { Icon } from '@wordpress/icons';
 
+// No top-level imports here: they would turn this declaration file into a
+// module and strip every type below of its global scope. Use inline
+// import() types instead.
 type HeaderAction = {
-	type: 'primary' | 'secondary' | 'more';
+	type: 'primary' | 'secondary' | 'tertiary' | 'more';
 	label: string;
-	icon?: Icon | string;
+	id?: string;
+	ariaLabel?: string;
+	icon?: import('@wordpress/icons').Icon | string;
+	mobileIcon?: import('@wordpress/icons').Icon | string;
 	disabled?: boolean;
 	destructive?: boolean;
+	isBusy?: boolean;
 	action?: () => void;
+	onClick?: () => void;
 	href?: string;
 	separator?: boolean;
 };
@@ -17,14 +24,25 @@ type HeaderAction = {
 // or an `href` carries the behaviour.
 type SectionMenuItem = Omit< HeaderAction, 'type' >;
 
-type GateAccessRuleValue = string | string[] | boolean;
+// Single source of truth for each composite value shape: one-time purchase lives
+// with its control, range bounds with the verdicts that read them.
+type OneTimePurchaseRuleValue = import( '../../../../../content-gate/components/one-time-purchase-rule-control' ).OneTimePurchaseValue;
+type RangeRuleValue = import( '../../../../../content-gate/utils/access-rule-value' ).RangeValue;
+type GateAccessRuleValue = string | string[] | boolean | OneTimePurchaseRuleValue | RangeRuleValue;
 type AccessRule = {
 	name: string;
 	default: GateAccessRuleValue;
 	description?: string;
 	id?: string;
 	is_boolean?: boolean;
+	// Whether the value is `{ min, max }` bounds on a number, rendered as a min/max control.
+	is_range?: boolean;
 	options?: { value: string; label: string }[];
+	has_options: boolean;
+	empty_grants_access?: boolean;
+	requires_value?: boolean;
+	// Whether the rule can judge a signed-out visitor, and so can let one skip registration.
+	supports_anonymous?: boolean;
 	placeholder?: string;
 	value: GateAccessRuleValue;
 };
@@ -40,9 +58,19 @@ type ContentRule = {
 	value: GateContentRuleValue;
 };
 
+type MeteringScope = 'site' | 'gate';
+
 type Metering = {
 	enabled: boolean;
 	count: number;
+	period: 'week' | 'month';
+	// Optional: gates saved before the setting existed lack the key; reads treat absence as the site meter.
+	scope?: MeteringScope;
+};
+
+type SiteMeterConfig = {
+	anonymous_count: number;
+	registered_count: number;
 	period: 'week' | 'month';
 };
 
@@ -97,6 +125,10 @@ type GateContentRule = {
 
 type GateStatus = 'publish' | 'draft' | 'pending' | 'future' | 'private' | 'trash';
 
+// How a premium newsletter gate decides whether to add readers to its lists:
+// follow the site-wide setting, or force it on or off for this gate.
+type AutoSignupMode = 'default' | 'on' | 'off';
+
 type Gate = {
 	id: number;
 	title: string;
@@ -108,13 +140,20 @@ type Gate = {
 	content_rules_match: 'all' | 'any';
 	registration: Registration;
 	custom_access: CustomAccess;
+	// Premium newsletter gates only. Absence means 'default' and false.
+	auto_signup?: AutoSignupMode;
+	hide_lists?: boolean;
 };
 
 type Registration = {
 	active: boolean;
 	metering: Metering;
 	require_verification: boolean;
-	gate_layout_id: number;
+	// Optional: the edit UI rebuilds this object without `gate_layout_id`
+	// (see edit/registration.tsx), and the server falls back to the gate ID.
+	gate_layout_id?: number;
+	// Conditions that count a signed-out visitor as registered.
+	access_rules: GateAccessRuleGroup[];
 };
 
 type GateAccessRuleGroup = GateAccessRule[];
@@ -122,49 +161,88 @@ type GateAccessRuleGroup = GateAccessRule[];
 type CustomAccess = {
 	active: boolean;
 	metering: Metering;
-	gate_layout_id: number;
+	// Optional: the edit UI rebuilds this object without `gate_layout_id`
+	// (see edit/custom-access.tsx), and the server falls back to the gate ID.
+	gate_layout_id?: number;
 	access_rules: GateAccessRuleGroup[];
+	// Optional: gates saved before the setting existed lack the key; reads treat absence as ON.
+	payment_recovery_grace?: boolean;
 };
 
+// All fields are optional: the settings screens build these objects
+// incrementally by spreading a possibly-empty stored config, and every read
+// falls back to a default (e.g. `config?.content_gifting?.limit || 10`).
 type ContentGiftingConfig = {
-	enabled: boolean;
-	limit: number;
-	interval: string;
-	expiration_time: number;
-	expiration_time_unit: string;
-	style: string;
-	cta_label: string;
-	button_label: string;
-	cta_type: string;
-	cta_product_id: number;
-	cta_url: string;
+	enabled?: boolean;
+	limit?: number;
+	interval?: string;
+	expiration_time?: number;
+	expiration_time_unit?: string;
+	style?: string;
+	cta_label?: string;
+	button_label?: string;
+	cta_type?: string;
+	cta_product_id?: number;
+	cta_url?: string;
 };
 
 type MeteringCountdownConfig = {
-	enabled: boolean;
-	style: string;
-	cta_label: string;
-	button_label: string;
-	cta_url: string;
-	cta_type: string;
-	cta_product_id: number;
+	// The REST layer sanitizes this to an int, so reads must not assume a boolean
+	// and writes should stay int-shaped to keep dirty checks honest.
+	enabled?: boolean | number;
+	style?: string;
+	cta_label?: string;
+	button_label?: string;
+	cta_url?: string;
+	cta_type?: string;
+	cta_product_id?: number;
 };
+
+type FeedRestrictionMode = 'truncate' | 'exclude';
 
 type AdvancedSettingsConfig = {
 	restrict_feeds: boolean;
+	feed_restriction_mode: FeedRestrictionMode;
 	newsletter_link_bypass_enabled: boolean;
+	institutional_access_text: string;
+	// 0 leaves commenting to the site's Discussion Settings.
+	comment_restriction_gate_id: number;
+	comment_restriction_message: string;
+	comment_restriction_purchase_url: string;
 };
 
 type GateSettings = {
+	site_meter?: SiteMeterConfig;
 	content_gifting?: ContentGiftingConfig;
 	countdown_banner?: MeteringCountdownConfig;
 	advanced_settings?: AdvancedSettingsConfig;
 	has_institutions?: boolean;
+	// Capability flags the gates endpoint returns alongside the stored settings.
+	has_newsletters?: boolean;
+	// The Premium Newsletters wizard's site-wide auto-signup setting.
+	auto_signup?: boolean;
 };
 
 type GateConfig = {
 	gates: Gate[];
 	config: GateSettings;
+};
+
+/**
+ * Shape of the content-gates wizard store data (`useWizardData`): `gates` and
+ * `config` are written under those keys via `updateWizardSettings`, alongside
+ * the per-path request cache the store also maintains.
+ */
+type ContentGatesWizardData = {
+	gates?: Gate[];
+	config?: GateSettings;
+};
+
+// A product the publisher can attach to a gate CTA. Localized by the Audience
+// wizard on `window.newspackAudience` (see wizards/types/window.d.ts).
+type PurchasableProductOption = {
+	label: string;
+	value: number;
 };
 
 type Institution = {

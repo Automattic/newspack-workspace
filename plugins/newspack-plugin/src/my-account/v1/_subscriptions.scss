@@ -1,160 +1,180 @@
+@use "../../newspack-ui/scss/mixins";
+
 .woocommerce-account.newspack-my-account.newspack-ui {
 	table.shop_table.order_details,
 	table.shop_table.subscription_details {
-		th, td {
-			border-bottom: none;
-			&:first-child {
-				width: 50%;
-			}
-		}
-		thead th,
-		td.product-name,
-		td.total {
-			font-weight: 700;
-		}
-		th.product-total {
-			font-weight: 400;
-		}
-	}
-	table.shop_table.order_details {
-		tr:not(:only-child) {
-			th, td {
-				padding-bottom: 4px;
-				padding-top: 4px;
-			}
-		}
-		thead th {
-			color: var(--newspack-ui-color-neutral-90);
-		}
-		td.product-name {
-			color: var(--newspack-ui-color-neutral-60);
-			font-weight: 600;
-		}
-		& + .subscription_details {
-			margin-top: var(--newspack-ui-spacer-2);
-		}
-	}
-	table.shop_table.subscription_details {
-		margin-bottom: var(--newspack-ui-spacer-5);
-		td:first-child,
-		.subscription-payment-method {
-			font-weight: 700;
-		}
-		tr:only-child {
-			border-bottom: none;
-		}
-	}
-	td.order-actions {
-		text-align: right !important;
-		&::before {
-			display: none;
-		}
-	}
-	@media ( min-width: 768px ) {
+		@include mixins.body-table;
+
 		table-layout: auto;
+
+		tr {
+			border-bottom: 1px solid var(--newspack-ui-color-border);
+		}
+
+		th,
 		td {
-			width: calc( 25% - 12px );
-			&.woocommerce-orders-table__cell-order-actions {
-				width: 48px;
+			color: var(--newspack-ui-color-text);
+			font-weight: var(--newspack-ui-font-weight-medium);
+			padding-inline: 0;
+			text-align: start;
+			vertical-align: top;
+
+			&:first-child {
+				color: var(--newspack-ui-color-text-muted);
+				font-weight: var(--newspack-ui-font-weight-regular);
+				padding-inline-end: var(--newspack-ui-spacer-3);
+				width: calc(var(--newspack-ui-spacer-1) * 25);
 			}
 		}
-	}
-	.newspack-my-account__subscription {
-		&--header {
-			display: flex;
-			flex-direction: column;
-			gap: var(--newspack-ui-spacer-2);
-			justify-content: space-between;
-			margin-bottom: var(--newspack-ui-spacer-6);
-			@media ( min-width: 768px ) {
-				align-items: center;
-				flex-direction: row;
-				margin-bottom: var(--newspack-ui-spacer-8);
-			}
-			.newspack-my-account__subscription--actions-dropdown {
-				display: none;
-				@media ( min-width: 768px ) {
-					display: block;
+
+		.subscription-payment-method {
+			font-weight: inherit;
+		}
+
+		@include mixins.media-below( mobile ) {
+			th,
+			td {
+				&:first-child {
+					width: auto;
+				}
+
+				&:last-child:not(:first-child) {
+					text-align: end;
 				}
 			}
+		}
+	}
+
+	table.shop_table.order_details {
+		border-top: 1px solid var(--newspack-ui-color-border);
+
+		& + .subscription_details {
+			margin-top: 0;
+		}
+	}
+
+	table.shop_table.subscription_details {
+		&:first-child,
+		.newspack-my-account__subscription--header + & {
+			border-top: 1px solid var(--newspack-ui-color-border);
+		}
+	}
+
+	.woocommerce-customer-details {
+		border-top: 0;
+		padding-top: 0;
+
+		.woocommerce-column__title {
+			margin: 0 0 var(--newspack-ui-spacer-4);
+		}
+	}
+
+	.woocommerce-MyAccount-content > header:has(+ #woocommerce-subscriptions-related-orders-table) {
+		margin-top: var(--newspack-ui-spacer-8);
+	}
+
+	.newspack-my-account__subscription {
+		&--header {
+			margin-bottom: var(--newspack-ui-spacer-4);
+
+			@include mixins.media( mobile ) {
+				margin-bottom: var(--newspack-ui-spacer-6);
+
+				> :first-child {
+					flex: 1 1 var(--newspack-ui-width-xs);
+				}
+			}
+
 			a.wcs-switch-link {
 				margin-top: 0;
 			}
 
-			/* Hide the "Subscription totals" header. */
-			& + h2 {
+			&:not(.newspack-my-account__order-header) + h2,
+			&:not(.newspack-my-account__order-header) + .newspack-ui__notice + h2 {
 				display: none;
 			}
 		}
-		&--title {
-			align-items: center;
-			display: flex;
-			gap: var(--newspack-ui-spacer-1);
 
-			h2 {
-				font-size: var(--newspack-ui-font-size-m);
-				line-height: var(--newspack-ui-line-height-m);
+		&--title {
+			min-width: 0;
+			row-gap: var(--newspack-ui-spacer-1);
+
+			h1.newspack-my-account__page-title {
 				margin: 0;
-				overflow-x: hidden;
-				text-overflow: ellipsis;
-				white-space: nowrap;
+				overflow-wrap: anywhere;
+			}
+
+			.newspack-ui__badge {
+				margin-top: var(--newspack-ui-spacer-half);
 			}
 		}
+
 		&--back-link {
+			align-self: flex-start;
 			margin: 0;
 
-			@media ( min-width: 768px ) {
-				margin-left: calc(var(--newspack-ui-spacer-8) * -1 - var(--newspack-ui-spacer-1));
+			@include mixins.media( tablet ) {
+				margin-inline-start: calc(var(--newspack-ui-spacer-8) * -1 - var(--newspack-ui-spacer-1));
 			}
 		}
+
 		&--actions {
-			display: flex;
-			column-gap: var(--newspack-ui-spacer-2);
-			.newspack-ui__button {
+			@include mixins.media-below( mobile ) {
+				align-items: stretch;
 				width: 100%;
-			}
-		}
-		&--actions-container {
-			column-gap: var(--newspack-ui-spacer-2);
-			display: flex;
-			flex-wrap: wrap;
-			row-gap: var(--newspack-ui-spacer-2);
-			width: 100%;
-			// Compact buttons for the subscription header — modal buttons (which always carry --wide) keep the default medium size.
-			.newspack-ui__button:not(.newspack-ui__button--wide) {
-				width: auto;
-				@media ( min-width: 768px ) {
-					font-size: var(--newspack-ui-font-size-xs);
-					line-height: var(--newspack-ui-line-height-xs);
-					min-height: var(--newspack-ui-spacer-8);
-					padding: var(--newspack-ui-spacer-1) var(--newspack-ui-spacer-3);
-					&.newspack-my-account__subscription--action-link {
-						display: none;
-					}
+
+				.newspack-ui__button {
+					width: 100%;
+				}
+
+				.newspack-ui__dropdown {
+					display: flex;
+					width: 100%;
+				}
+
+				.newspack-ui__dropdown__content {
+					min-width: 0;
 				}
 			}
 		}
-		&--order-status-label {
-			background: var(--newspack-ui-color-neutral-60);
-			border-radius: 100%;
-			display: inline-grid;
-			height: var(--newspack-ui-spacer-1);
-			margin-bottom: 1px;
-			margin-right: calc( var(--newspack-ui-spacer-1) - 0.25em);
-			width: var(--newspack-ui-spacer-1);
-			&.completed,
-			&.refunded {
-				background: var(--newspack-ui-color-success-50);
+
+		&--actions .newspack-ui__dropdown__toggle {
+			svg {
+				margin-block: calc(var(--newspack-ui-spacer-half) / -2);
+				transition: transform var(--newspack-ui-duration-indicator) var(--newspack-ui-ease-out);
 			}
-			&.on-hold,
-			&.pending,
-			&.processing {
-				background: var(--newspack-ui-color-warning-50);
-			}
-			&.cancelled,
-			&.failed {
-				background: var(--newspack-ui-color-error-50);
+
+			&[aria-expanded="true"] svg {
+				transform: rotate(180deg);
 			}
 		}
+
+		&--actions-dropdown .newspack-ui__dropdown__content {
+			inset-inline: 0;
+
+			@include mixins.media( mobile ) {
+				inset-inline-start: auto;
+			}
+		}
+	}
+
+	.newspack__subscription-tiers__seats {
+		margin-top: var(--newspack-ui-spacer-4);
+	}
+
+	.newspack-my-account__order-heading {
+		min-width: 0;
+	}
+
+	.newspack-my-account__order-date,
+	.newspack-my-account__order-subscription {
+		color: var(--newspack-ui-color-text-muted);
+	}
+
+	.newspack-my-account__order-subscription .newspack-ui__link {
+		color: inherit;
+		font-size: inherit;
+		font-weight: inherit;
+		line-height: inherit;
 	}
 }

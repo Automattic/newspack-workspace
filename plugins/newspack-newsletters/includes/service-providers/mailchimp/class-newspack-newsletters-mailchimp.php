@@ -598,7 +598,7 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			}
 
 			// Prefetch send list info if we have a selected list and/or sublist.
-			$send_lists = $this->get_send_lists(
+			$send_lists = $this->get_send_lists_with_fallback(
 				[
 					'ids'  => $send_list_id ? [ $send_list_id ] : null, // If we have a selected list, make sure to fetch it.
 					'type' => 'list',
@@ -611,7 +611,7 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			$newsletter_data['lists'] = $send_lists;
 
 			$send_sublists = $send_list_id || $send_sublist_id ? // Prefetch send lists only if we have something selected already.
-				$this->get_send_lists(
+				$this->get_send_lists_with_fallback(
 					[
 						'ids'       => [ $send_sublist_id ], // If we have a selected sublist, make sure to fetch it. Otherwise, we'll populate sublists later.
 						'parent_id' => $send_list_id,
@@ -1358,6 +1358,48 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 	}
 
 	/**
+	 * Get the Mailchimp merge-field tag for a synced field on an audience.
+	 *
+	 * Mailchimp assigns tags itself and they are per-audience, so the tag is
+	 * read from the audience's merge-field list rather than derived from the
+	 * field name — it can be anything, including `MMERGE7`.
+	 *
+	 * @param string      $field_name Field name as synced (e.g. 'NP_Account').
+	 * @param string|null $list_id    Audience ID. Required: tags are per-audience.
+	 *
+	 * @return string Merge-field tag, or '' when unknown.
+	 */
+	public function get_field_merge_tag_name( string $field_name, ?string $list_id = null ): string {
+		$field_name = trim( $field_name );
+		if ( '' === $field_name || empty( $list_id ) ) {
+			return '';
+		}
+
+		try {
+			$merge_fields = Newspack_Newsletters_Mailchimp_Cached_Data::get_merge_fields( $list_id );
+		} catch ( \Throwable $e ) {
+			// A cache miss that needs the API can fail; emitting no param is the
+			// safe outcome, so swallow it rather than break newsletter rendering.
+			return '';
+		}
+
+		if ( ! is_array( $merge_fields ) ) {
+			return '';
+		}
+
+		foreach ( $merge_fields as $field ) {
+			if (
+				! empty( $field['name'] ) && ! empty( $field['tag'] ) &&
+				0 === strcasecmp( trim( $field['name'] ), $field_name )
+			) {
+				return (string) $field['tag'];
+			}
+		}
+
+		return '';
+	}
+
+	/**
 	 * Filter newsletter content prior to converting to MJML.
 	 *
 	 * @param string $content The post content.
@@ -1810,14 +1852,15 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 	 * Given a contact metadata array, build the `merge_fields` array to be sent to Mailchimp
 	 * by sarching for existing merge fields and creating new ones as needed.
 	 *
-	 * @param string $audience_id Audience ID.
-	 * @param array  $contact     The contact.
+	 * @param string   $audience_id Audience ID.
+	 * @param array    $contact     The contact.
+	 * @param string[] $not_created Receives the metadata keys whose merge fields could not be created.
 	 *
 	 * @return array Merge fields.
 	 *
 	 * @throws Exception Error message.
 	 */
-	private function prepare_merge_fields( $audience_id, $contact ) {
+	private function prepare_merge_fields( $audience_id, $contact, &$not_created = [] ) {
 		$mc           = new Mailchimp( $this->api_key() );
 		$merge_fields = [];
 		$data         = $contact['metadata'];
@@ -1919,7 +1962,8 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			];
 			$created_field = $mc->post( "lists/$audience_id/merge-fields", $field_data );
 			if ( empty( $created_field['merge_id'] ) ) {
-				$message = sprintf(
+				$not_created[] = $field_name;
+				$message       = sprintf(
 					// Translators: %1$s is the merge field key, %2$s is the error message.
 					__( 'Failed to create merge field %1$s. Error response: %2$s', 'newspack-newsletters' ),
 					$field_name,
@@ -2013,7 +2057,10 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 	 * @param array  $tags      An array of tag names to be added to the contact. Tags are always appended.
 	 * @param array  $interests An array of interests as expected by the API, where the key is the interest ID and the value is a bool (add or remove).
 	 *
-	 * @return array|WP_Error Contact data if it was added, or error otherwise.
+	 * @return array|WP_Error Contact data if it was added, or error otherwise. When some metadata
+	 *                        could not be saved because its merge field could not be created
+	 *                        (for example at the audience's merge field cap), the contact data
+	 *                        lists those metadata keys under `unsynced_fields`.
 	 *
 	 * @throws Exception Error message.
 	 */
@@ -2044,6 +2091,7 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			}
 		}
 
+		$unsynced_fields = [];
 		try {
 			$mc = new Mailchimp( $this->api_key() );
 
@@ -2053,7 +2101,7 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 				 *
 				 * @param array $merge_fields The merge fields payload to pass to the Mailchimp API.
 				 */
-				$merge_fields = apply_filters( 'newspack_mailchimp_merge_fields', $this->prepare_merge_fields( $list_id, $contact ) );
+				$merge_fields = apply_filters( 'newspack_mailchimp_merge_fields', $this->prepare_merge_fields( $list_id, $contact, $unsynced_fields ) );
 				if ( is_wp_error( $merge_fields ) ) {
 					throw new Exception( $merge_fields->get_error_message() );
 				}
@@ -2097,6 +2145,12 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 				} catch ( \Exception $e ) {
 					Newspack_Newsletters_Logger::log( 'Failed to migrate merge fields: ' . $e->getMessage() );
 				}
+			}
+
+			// Mailchimp rejects the whole upsert when merge_fields is an empty JSON array rather than an object.
+			// It is empty when no field could be matched or created, for example at the audience's merge field cap.
+			if ( empty( $update_payload['merge_fields'] ) ) {
+				unset( $update_payload['merge_fields'] );
 			}
 
 			Newspack_Newsletters_Logger::log( 'Mailchimp add_contact PUT payload: ' . wp_json_encode( $update_payload ) );
@@ -2146,6 +2200,10 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 				'newspack_newsletters_mailchimp_api_error',
 				$e->getMessage()
 			);
+		}
+		// The upsert succeeds without these fields, so only the result can tell the caller they are missing.
+		if ( ! empty( $unsynced_fields ) ) {
+			$result['unsynced_fields'] = $unsynced_fields;
 		}
 		self::$contacts_added[ $cache_key ] = $result;
 		return $result;
@@ -2310,6 +2368,9 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 				'interests'    => [],
 				'merge_fields' => [],
 			];
+			// Collected alongside the loop but only exposed under $return_details,
+			// so a plain lookup keeps its historical keys.
+			$merge_fields_by_list = [];
 			foreach ( $found as $contact ) {
 				foreach ( $keys as $key ) {
 					if ( ! isset( $data[ $key ] ) || empty( $data[ $key ] ) ) {
@@ -2328,9 +2389,39 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 					'status'     => $contact['status'],
 				];
 				if ( isset( $contact['merge_fields'] ) ) {
+					// Flat and last-wins, preserved as-is: existing callers read this
+					// shape. Merge fields are defined per audience, so for a contact in
+					// several audiences it holds whichever came back last — which is why
+					// the per-audience map below exists.
 					$data['merge_fields'] = $contact['merge_fields'];
+
+					// Mailchimp reports every merge field defined on the audience, using
+					// an empty string for ones the contact hasn't filled in — filter
+					// those out so `metadata` keeps the shared meaning of "fields the
+					// contact has a value for".
+					$merge_fields_by_list[ $contact['list_id'] ] = self::filter_set_field_values( $contact['merge_fields'] );
 				}
 			}
+
+			// Expose the merge fields under the provider-neutral `metadata` key that
+			// callers requesting full details read, as ActiveCampaign already does.
+			// Merge fields are keyed by merge tag, which is the same identifier
+			// get_contact_fields_for_integrations() reports as a field's `key`, so
+			// the two line up without remapping. Without this an ESP contact pull
+			// finds no `metadata` and stores nothing while reporting success.
+			//
+			// `metadata_by_list` carries the same values keyed by audience. Merge
+			// fields are per-audience in Mailchimp, and a caller's field schema comes
+			// from one specific audience (get_contact_fields_for_integrations() takes
+			// a list ID), so a caller that knows which audience it configured should
+			// read its entry rather than the flat `metadata` — which, like
+			// `merge_fields`, can only report one audience for a multi-audience
+			// contact.
+			if ( $return_details ) {
+				$data['metadata']         = self::filter_set_field_values( $data['merge_fields'] );
+				$data['metadata_by_list'] = $merge_fields_by_list;
+			}
+
 			return $data;
 		} catch ( \Exception $e ) {
 			return new WP_Error(
@@ -2736,6 +2827,8 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 	 *
 	 * Mailchimp types eligible for access-rule / segmentation defaults: text, number, date, radio, dropdown.
 	 * Other types (phone, url, imageurl, birthday, zip, address) are exposed but not promoted by default.
+	 * `birthday` is deliberately excluded from the `date` value_type as well: it is MM/DD with no
+	 * year, so it cannot be placed on an absolute timeline and stays exact-match text.
 	 *
 	 * @param array $field Raw merge field from the Mailchimp API.
 	 * @return array|null Mapped field, or null if no usable identifier is available.
@@ -2766,10 +2859,18 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 		// range matching. Mirrors the ActiveCampaign mapper for cross-ESP consistency.
 		$value_type        = 'string';
 		$matching_function = 'default';
+		$date_format       = '';
 		if ( in_array( $type, [ 'dropdown', 'radio' ], true ) ) {
 			$value_type = 'select';
-		} elseif ( in_array( $type, [ 'date', 'birthday' ], true ) ) {
+		} elseif ( 'date' === $type ) {
 			$value_type = 'date';
+			// Probed rather than assumed: on an older newspack-plugin the operator
+			// would travel to newspack-popups unvalidated, where a stale build
+			// crashes on it (see integrations_supports_date_range()).
+			$matching_function = self::integrations_supports_date_range() ? 'date_range' : 'default';
+			$date_format       = self::map_mailchimp_date_format(
+				isset( $field['options']['date_format'] ) ? (string) $field['options']['date_format'] : ''
+			);
 		} elseif ( 'number' === $type ) {
 			$value_type        = 'number';
 			$matching_function = 'range';
@@ -2780,10 +2881,29 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			'name'                => ! empty( $field['name'] ) ? $field['name'] : $tag,
 			'value_type'          => $value_type,
 			'matching_function'   => $matching_function,
+			'date_format'         => $date_format,
 			'options'             => $options,
 			'description'         => isset( $field['help_text'] ) ? $field['help_text'] : '',
 			'is_access_rule'      => $is_promoted_by_default,
 			'is_segment_criteria' => $is_promoted_by_default,
 		];
+	}
+
+	/**
+	 * Translate a Mailchimp date_format option into a PHP date format string.
+	 *
+	 * Mailchimp renders a date merge field per this setting, so '03/04/2026' means
+	 * different days under the two options. An unrecognized format returns '',
+	 * which the consumer reads as ISO 8601 / Y-m-d.
+	 *
+	 * @param string $format The Mailchimp date_format option.
+	 * @return string A PHP date format string, or ''.
+	 */
+	private static function map_mailchimp_date_format( $format ) {
+		$formats = [
+			'MM/DD/YYYY' => 'm/d/Y',
+			'DD/MM/YYYY' => 'd/m/Y',
+		];
+		return isset( $formats[ $format ] ) ? $formats[ $format ] : '';
 	}
 }

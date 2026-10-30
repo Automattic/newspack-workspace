@@ -8,14 +8,14 @@ This file covers what is specific to `newspack-plugin`. Shared conventions (Dock
 npm run lint             # JS + SCSS only (see gotchas)
 npm run lint:js          # JavaScript/TypeScript linting
 npm run lint:scss        # SCSS linting
-npm run lint:php         # PHP linting (PHPCS)
 npm run fix:js           # Auto-fix JS issues
-npm run fix:php          # Auto-fix PHP issues (PHPCBF)
 ```
+
+PHP is linted from the workspace root, not from this directory. See the root guide.
 
 ## Common Gotchas
 
-- `npm run lint` runs JS + SCSS only. PHP linting requires a separate `npm run lint:php`.
+- `npm run lint` runs JS + SCSS only. Lint PHP from the workspace root (see the root guide).
 - After adding a new PHP file, run `composer dump-autoload` to update the classmap (Composer uses `classmap`, not PSR-4).
 - Individual JS test files cannot run independently. Always run `npm test` for the full suite.
 - Never import `react-router-dom` directly in source code. Use the proxy: `import Router from '../../packages/components/src/proxied-imports/router'`. Tests may import `react-router-dom` directly.
@@ -130,11 +130,6 @@ All under the `newspack` namespace, defined in `includes/cli/`. Run `wp newspack
 
 ### PHP Testing
 
-```bash
-npm run lint:php         # PHP linting (PHPCS)
-npm run fix:php          # Auto-fix PHP issues (PHPCBF)
-```
-
 - Tests live in `tests/unit-tests/`, extend `WP_UnitTestCase`.
 - Bootstrap: `tests/class-newspack-unit-tests-bootstrap.php`. Mocks in `tests/mocks/`.
 - Available `@group` annotations: `byline-block`, `corrections`, `Access_Rules`, `WooCommerce_Subscriptions_Integration`.
@@ -226,8 +221,28 @@ Blocks in `src/blocks/` with `block.json` metadata. Central registration in `src
 - Design tokens in `packages/colors/colors.module.scss` (primary, secondary, tertiary, quaternary, neutral + semantic colors, each with 000-1000 scale).
 - See `packages/colors/DEVELOPMENT.md` for the color usage decision tree: backend admin uses WordPress colors (with `primary-600` accent override), block icons must use `primary-400`, frontend Newspack UI uses `newspack-colors`, theme elements use the theme palette.
 - BEM-ish naming with `newspack-` prefix (e.g., `.newspack-wizard__header`, `.newspack-card`).
-- No utility-class library. For layout, use `__experimentalHStack`/`__experimentalVStack` from `@wordpress/components`; spacing via the `spacing` prop (4px units).
+- No utility-class library. For layout, use `Stack` from `@wordpress/ui`; spacing via the `gap` prop, which takes the design-token scale (`xs` 4px, `sm` 8px, `md` 12px, `lg` 16px, `xl` 24px, `2xl` 32px, `3xl` 40px) and is typed, so a bad value fails `tsc`. `Stack` sets only `display: flex`, so a child bringing its own margin adds to the gap: reach for the component's own `noMargin` prop where it has one, or scope a `> * { margin: 0 }` reset to the container.
+- `__experimentalHStack`/`__experimentalVStack` from `@wordpress/components` (spacing on a 4px scale) remain throughout older code and are fine to leave in place. Don't mix the two scales inside one component: a `gap="xl"` Stack wrapping an `HStack spacing={ 2 }` puts two different spacing systems in the same tree.
 - Shared mixins in `src/shared/scss/_mixins.scss`.
+
+### Notices and announcements
+
+Use `Notice` from `@wordpress/components`. It announces itself through `speak()` on mount, which `packages/components`' own `Notice` never did.
+
+- **Errors and action results announce.** An error raised by something the user just did stays on the default assertive politeness.
+- **An error that can render on arrival takes `politeness="polite"`.** Anything fed by a mount `GET` qualifies, including a notice that doubles as a save error. `status="error"` maps to assertive, which cuts off the page title on load.
+- **Standing state carries `spokenMessage=""`.** Info and warnings that describe how the site is configured, rather than reporting an action, should be silent on every visit.
+
+Re-announcing an unchanged message needs help, because `useSpokenMessage` only fires when the string changes. Which mechanism depends on where the message comes from:
+
+| The error arrives | Use |
+| --- | --- |
+| From a promise (a failed request) | `resetError()` at the top of the handler, so the string transitions |
+| From synchronous validation | A submit counter as the `Notice`'s `key`; a clear and a set in one handler batch into a single commit, so the string never transitions |
+| From several validators at once | One `speak()` in the handler with the notices silenced; `speak()` empties the live region before each write, so the last to render is the only one heard |
+| On a form whose button sits far below the notice | `useErrorNoticeFocus`, which moves focus to the notice, bringing it into view, and picks between focus and `speak()` depending on whether the reader stayed put |
+
+Moving focus cancels a smooth `scrollTo`, in either order and across a frame's delay, so the two do not combine: `useErrorNoticeFocus` lets focus do the scrolling. A screen that scrolls without moving focus, like the webhook modal, can still animate it.
 
 ### JS Testing
 

@@ -81,7 +81,7 @@ class Renewal {
 	 *
 	 * @param \WP_Query $query Query object.
 	 */
-	public static function maybe_redirect_renewal_endpoint( $query ) {
+	public static function maybe_redirect_renewal_endpoint( $query ) { // phpcs:ignore WordPressVIPMinimum.Hooks.AlwaysReturnInFilter.VoidReturn, WordPressVIPMinimum.Hooks.AlwaysReturnInFilter.MissingReturnStatement, WordPressVIPMinimum.Hooks.AlwaysReturnInFilter.TerminatingInsteadOfReturn -- pre_get_posts is an action, not a filter; the redirect must terminate the request.
 		if (
 			! $query->is_main_query() ||
 			! isset( $query->query_vars[ self::RENEWAL_ENDPOINT ] )

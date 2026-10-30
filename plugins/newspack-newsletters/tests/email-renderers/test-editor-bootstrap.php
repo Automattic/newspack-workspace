@@ -40,14 +40,29 @@ class Test_Editor_Bootstrap extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The newsletter CPT remains public with its canonical labels after the editor bootstraps —
-	 * the package re-registers opted-in CPTs on init and must not clobber Newspack's registration.
+	 * The newsletter CPT remains public with its canonical labels after the package
+	 * re-registers opted-in CPTs with email defaults — the `init:11` re-assertion must
+	 * win over the package's `init:10` clobber.
+	 *
+	 * The re-assertion (and the package's clobber) only run when the flag is on, so force
+	 * it on and drive the sequence directly: without the flag the package registers
+	 * nothing at `init:10`, and this would pass trivially against the untouched Newspack
+	 * registration rather than proving the guard works.
 	 */
 	public function test_canonical_cpt_args_remain_authoritative() {
+		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
+
+		// Simulate the package's init:10 pass clobbering the CPT with email defaults
+		// (public => false), then Newspack's flag-gated init:11 re-assertion restoring it.
+		register_post_type( \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT, [ 'public' => false ] );
+		Editor_Bootstrap::reassert_cpt_when_enabled();
+
 		$post_type = get_post_type_object( \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT );
 		$this->assertNotNull( $post_type, 'Newsletters CPT should be registered.' );
-		$this->assertTrue( (bool) $post_type->public, 'Newsletters CPT should remain public after the editor bootstraps.' );
+		$this->assertTrue( (bool) $post_type->public, 'Newsletters CPT should remain public after the package re-registers it.' );
 		$expected_label = _x( 'Newsletters', 'post type general name', 'newspack-newsletters' );
-		$this->assertSame( $expected_label, $post_type->labels->name, 'Newsletters CPT labels should remain authoritative after the editor bootstraps.' );
+		$this->assertSame( $expected_label, $post_type->labels->name, 'Newsletters CPT labels should remain authoritative after the package re-registers it.' );
+
+		remove_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
 	}
 }

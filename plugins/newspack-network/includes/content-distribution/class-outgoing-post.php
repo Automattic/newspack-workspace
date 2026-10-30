@@ -8,6 +8,7 @@
 namespace Newspack_Network\Content_Distribution;
 
 use Newspack_Network\Content_Distribution as Content_Distribution_Class;
+use Newspack_Network\Debugger;
 use Newspack_Network\User_Update_Watcher;
 use Newspack_Network\Utils\Network;
 use WP_Error;
@@ -28,6 +29,20 @@ class Outgoing_Post {
 	 * @var WP_Post
 	 */
 	protected $post = null;
+
+	/**
+	 * The post content prepared for distribution, built once per payload.
+	 *
+	 * @var string|null
+	 */
+	protected $raw_post_content = null;
+
+	/**
+	 * The distributed content with `the_content` applied, built once per payload.
+	 *
+	 * @var string|null
+	 */
+	protected $processed_post_content = null;
 
 	/**
 	 * Constructor.
@@ -102,6 +117,39 @@ class Outgoing_Post {
 	}
 
 	/**
+	 * Log a message about a post on its way out.
+	 *
+	 * Sends the message to the Newspack plugin's logger, which records without any
+	 * constant set, so a gallery that leaves without its images is visible on a
+	 * publisher site. This mirrors Incoming_Post::log().
+	 *
+	 * The debugger runs as well. Newspack\Logger only fires an action, and the
+	 * plugin that listens for it is not present on a development site, where
+	 * `NEWSPACK_NETWORK_DEBUG` is what someone defines. Debugger::log() is a no-op
+	 * without that constant, so running both costs nothing.
+	 *
+	 * @param string $message The message to log.
+	 * @param array  $context Context for the log entry, such as the post ID.
+	 * @param string $type    The log type. Either 'error' or 'debug'. Default 'error'.
+	 *
+	 * @return void
+	 */
+	public static function log( $message, $context = [], $type = 'error' ) {
+		if ( method_exists( 'Newspack\Logger', 'newspack_log' ) ) {
+			\Newspack\Logger::newspack_log( 'newspack_network_outgoing_post', $message, $context, $type );
+		}
+
+		$prefix = '[Outgoing Post]';
+		if ( ! empty( $context['post_id'] ) ) {
+			$prefix .= ' ' . $context['post_id'];
+			unset( $context['post_id'] );
+		}
+		$suffix = empty( $context ) ? '' : ' ' . wp_json_encode( $context );
+
+		Debugger::log( $prefix . ' ' . $message . $suffix );
+	}
+
+	/**
 	 * Get network post ID.
 	 *
 	 * @return string The network post ID.
@@ -145,7 +193,7 @@ class Outgoing_Post {
 	/**
 	 * Set the distribution configuration for a given post.
 	 *
-	 * @param int[] $site_urls Array of site URLs to distribute the post to.
+	 * @param string[] $site_urls Array of site URLs to distribute the post to.
 	 *
 	 * @return array|WP_Error Config array on success, WP_Error on failure.
 	 */
@@ -164,13 +212,32 @@ class Outgoing_Post {
 			$distribution = [];
 		}
 
-		// If there are urls not already in the config, add them. Note that we don't support
-		// removing urls from the config.
-		$distribution = array_unique( array_merge( $distribution, $site_urls ) );
+		// If there are urls not already in the config, add them. Note that we don't
+		// support removing urls from the config. Entries already stored are left
+		// byte-for-byte as they are: rewriting them to the network's canonical form
+		// reads as a removal to Content_Distribution::maybe_short_circuit_distributed_meta(),
+		// which vetoes the write, so a post holding a slashed url from before this
+		// normalisation could never be distributed again. Only the comparison is
+		// normalised, so slash variants of one site can't produce a second entry.
+		$existing   = array_values( $distribution );
+		$normalized = array_map( 'untrailingslashit', $existing );
+
+		$distribution = $existing;
+		foreach ( $site_urls as $site_url ) {
+			$site_url = untrailingslashit( $site_url );
+			if ( ! in_array( $site_url, $normalized, true ) ) {
+				$distribution[] = $site_url;
+				$normalized[]   = $site_url;
+			}
+		}
+
+		// update_post_meta() returns false both on failure and when the value is
+		// unchanged. Distributing to sites already in the config is a valid no-op.
+		$unchanged = $existing === $distribution;
 
 		$updated = update_post_meta( $this->post->ID, self::DISTRIBUTED_POST_META, $distribution );
 
-		if ( ! $updated ) {
+		if ( ! $updated && ! $unchanged ) {
 			return new WP_Error( 'update_failed', __( 'Failed to update post distribution.', 'newspack-network' ) );
 		}
 
@@ -190,15 +257,28 @@ class Outgoing_Post {
 			$distribution = [];
 		}
 
-		$index = array_search( $site_url, $distribution, true );
+		// Match on the canonical form, so a site is removable by the url an incoming
+		// event carries whichever slash variant happens to be stored.
+		$index    = false;
+		$site_url = untrailingslashit( $site_url );
+		foreach ( $distribution as $key => $url ) {
+			if ( untrailingslashit( $url ) === $site_url ) {
+				$index = $key;
+				break;
+			}
+		}
+
 		if ( false === $index ) {
 			return new WP_Error( 'site_not_found', __( 'Site URL not found in post distribution.', 'newspack-network' ) );
 		}
 
+		// The short circuit validation diffs against the raw stored value, so the
+		// removal intent has to carry that rather than the canonical form.
+		$removing = $distribution[ $index ];
 		unset( $distribution[ $index ] );
 
 		// Add a meta to allow bypassing the short circuit validation.
-		update_post_meta( $this->post->ID, 'newspack_network_remove_distribution', $site_url );
+		update_post_meta( $this->post->ID, 'newspack_network_remove_distribution', $removing );
 
 		$updated = update_post_meta( $this->post->ID, self::DISTRIBUTED_POST_META, array_values( $distribution ) );
 
@@ -273,6 +353,12 @@ class Outgoing_Post {
 	 * @return array|WP_Error The post payload or WP_Error if the post is invalid.
 	 */
 	public function get_payload( $status_on_publish = 'draft' ) {
+		// One payload describes the post at one moment. Preparing the content is the
+		// expensive half and several fields below need it, so it is built once here
+		// and reused, then dropped so the next payload sees the post as it is then.
+		$this->raw_post_content       = null;
+		$this->processed_post_content = null;
+
 		$post_author = self::get_outgoing_wp_user_author( $this->post->post_author );
 
 		$payload = [
@@ -280,7 +366,11 @@ class Outgoing_Post {
 			'post_id'           => $this->post->ID,
 			'post_url'          => get_permalink( $this->post->ID ),
 			'network_post_id'   => $this->get_network_post_id(),
-			'sites'             => $this->get_distribution(),
+			// Stored entries are left raw so the removal guard sees them unchanged,
+			// but the wire format is canonical: Incoming_Post matches this list
+			// against its own url strictly, so a slashed entry would otherwise be
+			// rejected as not_distributed_to_site while the sender reported success.
+			'sites'             => array_map( 'untrailingslashit', $this->get_distribution() ),
 			'status_on_publish' => $status_on_publish,
 			'post_data'         => [
 				'title'          => html_entity_decode( get_the_title( $this->post->ID ), ENT_QUOTES, get_bloginfo( 'charset' ) ),
@@ -316,17 +406,22 @@ class Outgoing_Post {
 	/**
 	 * Get a partial payload for distribution.
 	 *
-	 * @param string[] $post_data_keys Keys in the post_data array to include in
-	 *                                 the partial payload.
+	 * @param string[]   $post_data_keys Keys in the post_data array to include in
+	 *                                   the partial payload.
+	 * @param array|null $payload        A payload already built for this post, to
+	 *                                   take the partial from rather than building
+	 *                                   a second identical one.
 	 *
 	 * @return array|WP_Error The partial payload or WP_Error if any of the keys were not found.
 	 */
-	public function get_partial_payload( $post_data_keys ) {
+	public function get_partial_payload( $post_data_keys, $payload = null ) {
 		if ( is_string( $post_data_keys ) ) {
 			$post_data_keys = [ $post_data_keys ];
 		}
 
-		$payload = $this->get_payload();
+		if ( empty( $payload ) ) {
+			$payload = $this->get_payload();
+		}
 		foreach ( $post_data_keys as $post_data_key ) {
 			if ( ! isset( $payload['post_data'][ $post_data_key ] ) ) {
 				return new WP_Error( 'key_not_found', __( 'Key not found in payload.', 'newspack-network' ) );
@@ -353,40 +448,64 @@ class Outgoing_Post {
 	/**
 	 * Get the raw post content for distribution.
 	 *
+	 * Built once per payload. Several payload fields read it, and a dynamic gallery
+	 * queries the database for its images on each pass, so every field has to see
+	 * the same result.
+	 *
+	 * The payload is the boundary the cache follows: get_payload() drops it on the
+	 * way in, so two payloads from one Outgoing_Post each see the post as it stands
+	 * when they are built, and everything within one payload agrees.
+	 *
 	 * @return string The raw post content.
 	 */
 	protected function get_raw_post_content() {
-		if ( ! use_block_editor_for_post_type( $this->post->post_type ) ) {
-			return $this->post->post_content;
+		if ( null !== $this->raw_post_content ) {
+			return $this->raw_post_content;
 		}
 
-		if ( ! has_blocks( $this->post->post_content ) ) {
-			return $this->post->post_content;
+		if ( ! use_block_editor_for_post_type( $this->post->post_type ) || ! has_blocks( $this->post->post_content ) ) {
+			$this->raw_post_content = $this->post->post_content;
+			return $this->raw_post_content;
 		}
 
-		$blocks = array_map(
-			[ Blocks::class, 'process_outgoing_block' ],
+		$post_id = $this->post->ID;
+		$blocks  = array_map(
+			function ( $block ) use ( $post_id ) {
+				return Blocks::process_outgoing_block( $block, $post_id );
+			},
 			parse_blocks( $this->post->post_content )
 		);
 
-		return serialize_blocks( $blocks );
+		$this->raw_post_content = serialize_blocks( $blocks );
+
+		return $this->raw_post_content;
 	}
 
 	/**
 	 * Get the processed post content for distribution.
 	 *
+	 * Built once per payload, on the same boundary as get_raw_post_content(). A
+	 * classic post reads this for both `content` and `media_data`, and a
+	 * `the_content` filter that is not deterministic, a rotating ad insert say,
+	 * would otherwise give those two fields different images.
+	 *
 	 * @return string The post content.
 	 */
 	protected function get_processed_post_content() {
+		if ( null !== $this->processed_post_content ) {
+			return $this->processed_post_content;
+		}
+
 		global $wp_embed;
 		/**
 		 * Remove autoembed filter so that actual URL will be pushed and not the generated markup.
 		 */
 		remove_filter( 'the_content', [ $wp_embed, 'autoembed' ], 8 );
 		// Filter documented in WordPress core.
-		$post_content = apply_filters( 'the_content', $this->get_raw_post_content() );
+		$this->processed_post_content = apply_filters( 'the_content', $this->get_raw_post_content() );
 		add_filter( 'the_content', [ $wp_embed, 'autoembed' ], 8 );
-		return $post_content;
+
+		return $this->processed_post_content;
 	}
 
 	/**
@@ -461,12 +580,46 @@ class Outgoing_Post {
 	}
 
 	/**
+	 * The content the receiving site will end up storing.
+	 *
+	 * `media_data` describes the images in the post so the receiving site can size
+	 * them, which only works if it describes the images that site actually has. The
+	 * two ends have to agree on which content that is: Incoming_Post::get_post_content()
+	 * keeps the block-processed content when it carries blocks and the filtered
+	 * content otherwise, so this tests the same string it will. The original post
+	 * content is not that string: a block rewritten on its way out, a WordPress 7.1
+	 * dynamic gallery above all, carries no image IDs until distribution resolves it.
+	 *
+	 * This is a best-effort mirror. The receiving site evaluates
+	 * use_block_editor_for_post_type() against its own registrations, which can
+	 * differ from this site's for the same post type.
+	 *
+	 * @return string The content the receiving site will store.
+	 */
+	protected function get_distributed_content() {
+		$raw_content = $this->get_raw_post_content();
+
+		if ( use_block_editor_for_post_type( $this->post->post_type ) && has_blocks( $raw_content ) ) {
+			return $raw_content;
+		}
+
+		return $this->get_processed_post_content();
+	}
+
+	/**
 	 * Get the post attachment data for distribution.
 	 *
 	 * @return array The post attachment data.
 	 */
 	protected function get_post_media_data() {
 		$attachment_data = [];
+
+		// Read the content before the CDN override goes on. For a classic post that
+		// runs `the_content`, and a callback there that installs and removes this
+		// same named filter takes the outer one with it, since WordPress keys hooks
+		// by callback name. The URLs below would then come back rewritten to the
+		// origin's CDN.
+		$content = $this->get_distributed_content();
 
 		add_filter( 'jetpack_photon_override_image_downsize', '__return_true' );
 
@@ -489,7 +642,6 @@ class Outgoing_Post {
 			];
 		}
 
-		$content     = apply_filters( 'the_content', get_the_content( null, false, get_post( $this->post->ID ) ) );
 		$attachments = self::get_content_attachments( $content );
 		foreach ( $attachments as $attachment ) {
 			if ( isset( $attachment_data[ $attachment->ID ] ) ) {

@@ -64,6 +64,7 @@ class Woocommerce_Memberships {
 		add_filter( 'newspack_newsletters_manage_newsletters_available_lists', [ __CLASS__, 'filter_lists_objects' ] );
 		add_filter( 'newspack_post_registration_newsletters_lists', [ __CLASS__, 'filter_lists_objects' ], 10, 2 );
 		add_filter( 'newspack_auth_form_newsletters_lists', [ __CLASS__, 'filter_lists_objects' ] );
+		add_filter( 'newspack_newsletters_subscription_list_gates', [ __CLASS__, 'filter_list_gates' ] );
 		add_action( 'wc_memberships_user_membership_status_changed', [ __CLASS__, 'handle_membership_status_change' ], 10, 3 );
 		add_action( 'wc_memberships_user_membership_saved', [ __CLASS__, 'add_user_to_lists' ], 10, 2 );
 		add_action( 'wc_memberships_user_membership_deleted', [ __CLASS__, 'deleted_membership' ] );
@@ -147,6 +148,87 @@ class Woocommerce_Memberships {
 	}
 
 	/**
+	 * Report the membership plans that restrict each subscription list.
+	 *
+	 * This lets the Newsletter Subscription Form block mark and show premium lists
+	 * while Memberships controls access, so publishers can set the block up before
+	 * moving to Access Control. Access Control's premium newsletter gates report
+	 * through the same filter but stand down while Memberships is active (see
+	 * Premium_Newsletters::is_access_control_active() in newspack-plugin), so only
+	 * one of the two answers at a time.
+	 *
+	 * A list is reported exactly when filter_lists() would check access to it, so
+	 * the premium marker agrees with sign-up, including for a list Memberships
+	 * marks as public.
+	 *
+	 * One exception: in Memberships' "Hide completely" mode, when a plan's rule
+	 * names a list directly, Memberships leaves that list out of the list query for
+	 * a reader without access. The block never sees it, so that reader gets no
+	 * premium row for it. Hiding the list is what that mode is for, so nothing here
+	 * works around it. A rule that covers every list hides no list from
+	 * Subscription_Lists::get_all(): Memberships applies that rule through the
+	 * posts_clauses filter, which get_all() skips by reading with filters
+	 * suppressed. Those lists still show as premium rows when the block asks for
+	 * them, as they do under Access Control.
+	 *
+	 * @param array[] $list_gates Gates keyed by public list ID.
+	 * @return array[] Gates keyed by public list ID. Each gate is a plan with `id`
+	 *                 and `title`, plus `edit_url` when the current user may edit it.
+	 */
+	public static function filter_list_gates( $list_gates ) {
+		$list_gates = is_array( $list_gates ) ? $list_gates : [];
+		if ( ! self::is_enabled() || ! function_exists( 'wc_memberships' ) ) {
+			return $list_gates;
+		}
+		foreach ( Subscription_Lists::get_all() as $list ) {
+			$plans = self::get_restricting_plans( $list->get_id() );
+			if ( empty( $plans ) ) {
+				continue;
+			}
+			$list_gates[ $list->get_public_id() ] = array_map(
+				function ( $plan ) {
+					$item = [
+						'id'    => (int) $plan->get_id(),
+						'title' => (string) $plan->get_name(),
+					];
+					// The link opens the plan's own edit screen, so the plan's
+					// capabilities decide who gets it, not manage_options as for
+					// Access Control's wizard link.
+					if ( current_user_can( 'edit_post', $plan->get_id() ) ) {
+						$edit_url = get_edit_post_link( $plan->get_id(), 'raw' );
+						if ( $edit_url ) {
+							$item['edit_url'] = $edit_url;
+						}
+					}
+					return $item;
+				},
+				$plans
+			);
+		}
+		return $list_gates;
+	}
+
+	/**
+	 * Get the published membership plans whose content rules restrict a list.
+	 *
+	 * @param int $list_post_id The list's post ID.
+	 * @return \WC_Memberships_Membership_Plan[] Empty when nothing restricts the list.
+	 */
+	private static function get_restricting_plans( $list_post_id ) {
+		if ( ! \wc_memberships_is_post_content_restricted( $list_post_id ) ) {
+			return [];
+		}
+		$plans = [];
+		foreach ( \wc_memberships()->get_rules_instance()->get_post_content_restriction_rules( $list_post_id ) as $rule ) {
+			$plan = $rule->get_membership_plan();
+			if ( $plan instanceof \WC_Memberships_Membership_Plan ) {
+				$plans[ $plan->get_id() ] = $plan;
+			}
+		}
+		return array_values( $plans );
+	}
+
+	/**
 	 * Handle membership status updates and remove lists that require a membership plan when the membership is cancelled
 	 *
 	 * @param WC_Memberships_User_Membership $user_membership The User Membership object.
@@ -214,18 +296,22 @@ class Woocommerce_Memberships {
 			}
 		}
 
-		// Bail if there are no lists we need to remove.
-		if ( empty( $lists_to_remove ) ) {
-			return;
-		}
-
 		/**
-		 * Check if the user is already in one of the lists. If they are, store it.
+		 * Snapshot which of this plan's lists the reader is currently subscribed to,
+		 * BEFORE narrowing the removal set below. This snapshot is stored as the
+		 * membership's deactivation history and is what a later reactivation uses to
+		 * resubscribe the reader to exactly the lists they were in.
 		 *
-		 * If they are granted this membership again, we can resubscribe them only to the lists they were in.
+		 * It must be computed from the full plan list, not the post-exclusion removal
+		 * set: if a shared list is excluded from removal (below) and it was the only
+		 * one of this plan's lists the reader was subscribed to, computing this after
+		 * the exclusion would store an empty history — and add_user_to_lists() treats
+		 * an empty history as "no restriction" and re-adds every plan list on
+		 * reactivation, resubscribing the reader to lists they had opted out of.
 		 *
-		 * Also, during a subscription renewal, a membership can be momentarily marked as paused, causing the user to be removed from the lists
-		 * in which case we want to resubscribe them to the lists they were in.
+		 * Also, during a subscription renewal, a membership can be momentarily marked
+		 * as paused, causing the user to be removed from the lists, in which case we
+		 * want to resubscribe them only to the lists they were in. See NPPM-3000.
 		 */
 		$current_user_lists = \Newspack_Newsletters_Subscription::get_contact_lists( $user_email );
 		$existing_lists     = [];
@@ -234,10 +320,82 @@ class Woocommerce_Memberships {
 			$existing_lists = array_values( array_intersect( $current_user_lists, $lists_to_remove ) );
 		}
 
+		// Don't remove lists the reader still has access to via another active
+		// membership. When switching between plans that share a Subscription List
+		// (e.g. monthly and annual premium newsletters that share a "member" list),
+		// deactivating the old plan must not strip a list the new, still-active plan
+		// also grants — otherwise the shared list is lost. See NPPM-3000.
+		//
+		// This makes the switch order-independent when the new plan is already active
+		// at the moment the old one deactivates (so it appears in the active-
+		// memberships scan below) — the order seen in the reported production flow.
+		// If a flow instead deactivates the old plan BEFORE the new one becomes
+		// active, the shared list is removed here and re-added when the new plan
+		// activates via add_user_to_lists(); that re-add covers plan-tied lists but
+		// not lists gated behind the post-checkout signup modal, so a shared list
+		// that is also a signup-modal list could still be dropped in that ordering.
+		$lists_still_granted = self::get_lists_granted_by_other_active_memberships( $user->ID, $user_membership->get_id() );
+		if ( ! empty( $lists_still_granted ) ) {
+			$lists_to_remove = array_values( array_diff( $lists_to_remove, $lists_still_granted ) );
+		}
+
+		// Bail if there are no lists we need to remove.
+		if ( empty( $lists_to_remove ) ) {
+			return;
+		}
+
 		self::update_user_lists_on_deactivation( $user->ID, $user_membership->get_id(), $existing_lists );
 
 		Newspack_Newsletters_Contacts::add_and_remove_lists( $user_email, [], $lists_to_remove, 'Removing user from lists tied to Memberships being marked as inactive' );
 		Newspack_Newsletters_Logger::log( 'Reader ' . $user_email . ' removed from the following lists: ' . implode( ', ', $lists_to_remove ) );
+	}
+
+	/**
+	 * Get the public IDs of all Subscription Lists granted by the user's OTHER
+	 * active memberships (i.e. excluding the membership being deactivated).
+	 *
+	 * Used to avoid removing a reader from a list they still qualify for through a
+	 * different active membership — e.g. when switching between two plans that share
+	 * a list. See NPPM-3000.
+	 *
+	 * @param int $user_id               The user ID.
+	 * @param int $exclude_membership_id The membership ID being deactivated (excluded from the scan).
+	 * @return string[] Public list IDs still granted by the user's other active memberships.
+	 */
+	private static function get_lists_granted_by_other_active_memberships( $user_id, $exclude_membership_id ) {
+		if ( ! function_exists( 'wc_memberships_get_user_active_memberships' ) ) {
+			return [];
+		}
+		$active_memberships = wc_memberships_get_user_active_memberships( $user_id );
+		if ( empty( $active_memberships ) || ! is_array( $active_memberships ) ) {
+			return [];
+		}
+		$lists = [];
+		foreach ( $active_memberships as $membership ) {
+			if ( ! $membership instanceof \WC_Memberships_User_Membership ) {
+				continue;
+			}
+			if ( (int) $membership->get_id() === (int) $exclude_membership_id ) {
+				continue;
+			}
+			$plan = $membership->get_plan();
+			if ( ! $plan instanceof \WC_Memberships_Membership_Plan ) {
+				continue;
+			}
+			foreach ( $plan->get_content_restriction_rules() as $rule ) {
+				if ( Subscription_Lists::CPT !== $rule->get_content_type_name() ) {
+					continue;
+				}
+				foreach ( $rule->get_object_ids() as $object_id ) {
+					try {
+						$lists[] = ( new Subscription_List( $object_id ) )->get_public_id();
+					} catch ( \InvalidArgumentException $e ) {
+						continue;
+					}
+				}
+			}
+		}
+		return array_values( array_unique( $lists ) );
 	}
 
 	/**
@@ -466,4 +624,7 @@ class Woocommerce_Memberships {
 	}
 }
 
-Woocommerce_Memberships::init();
+// Boot only when the main plugin file loaded this, not another plugin's autoloader.
+if ( defined( 'NEWSPACK_NEWSLETTERS_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal path constant, set by the main plugin file.
+	Woocommerce_Memberships::init();
+}

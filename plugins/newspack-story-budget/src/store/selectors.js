@@ -67,7 +67,7 @@ export const getTotalBudgetsCount = state => {
 
 export const getBudgetsView = state => state.budgetsView;
 
-export const getLastRefresh = state => state.meta.lastRefresh;
+export const getLastRefresh = state => state.meta.lastRefreshServerTime;
 
 export const getAllStories = state => Object.values( state.stories );
 
@@ -122,6 +122,8 @@ export const getView = createSelector(
 export const canManage = () => ! utils.sites.isRemoteSite();
 
 export const canEditStory = ( state, id ) => canManage() && ( state.meta.stories.can_edit || state.stories[ id ]?.metadata?.can_edit );
+
+export const canManageBudgets = state => canManage() && !! state.meta.stories?.can_manage_budgets;
 
 export const getStoriesMeta = state => state.meta.stories;
 

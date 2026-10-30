@@ -57,7 +57,7 @@ function newspack_blocks_render_block_author_list( $attributes ) {
 		'author_type'  => $author_type,
 		'author_roles' => $author_roles,
 		'exclude'      => $attributes['exclude'], // phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.PostNotIn_exclude
-		'fields'       => [ 'id', 'name', 'bio', 'email', 'social', 'avatar', 'url' ],
+		'fields'       => WP_REST_Newspack_Author_List_Controller::DEFAULT_FIELDS,
 	];
 
 	if ( $exclude_empty ) {
@@ -78,8 +78,8 @@ function newspack_blocks_render_block_author_list( $attributes ) {
 	}
 
 	// Enqueue required front-end assets.
-	Newspack_Blocks::enqueue_view_assets( 'author-list' );
-	Newspack_Blocks::enqueue_view_assets( 'author-profile' );
+	Newspack_Blocks::enqueue_view_assets( 'author-list', 'defer' );
+	Newspack_Blocks::enqueue_view_assets( 'author-profile', 'defer' );
 
 	// Class names for the list container.
 	$container_classes = [ 'newspack-blocks__author-list-container' ];

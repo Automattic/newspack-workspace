@@ -256,6 +256,12 @@ function newspack_blocks_render_block_homepage_articles( $attributes ) {
 		return;
 	}
 
+	// Skip the query when a revision or autosave is being prepared for the REST
+	// API: the output is never shown, and the query is costly on large sites.
+	if ( Newspack_Blocks::is_rest_revision_or_autosave_render() ) {
+		return '';
+	}
+
 	$block_name = apply_filters( 'newspack_blocks_block_name', 'newspack-blocks/homepage-articles' );
 	$article_query = new WP_Query( Newspack_Blocks::build_articles_query( $attributes, $block_name ) );
 	if ( ! $article_query->have_posts() ) {
@@ -422,7 +428,7 @@ function newspack_blocks_render_block_homepage_articles( $attributes ) {
 	<?php
 
 	$content = ob_get_clean();
-	Newspack_Blocks::enqueue_view_assets( 'homepage-articles' );
+	Newspack_Blocks::enqueue_view_assets( 'homepage-articles', 'defer' );
 
 	return $content;
 }

@@ -36,14 +36,15 @@ describe( 'admin-shell App chrome', () => {
 		expect( screen.getByRole( 'heading', { level: 1, name: 'Newsletters' } ) ).toBeInTheDocument();
 	} );
 
+	// `wp_localize_script()` string-casts: the wire values are `'1'` and `''`.
 	it( 'renders no h1 in bundled mode (newspack-plugin admin-header owns the breadcrumb)', () => {
-		window.newspackNewslettersAdmin = { bundledMode: true };
+		window.newspackNewslettersAdmin = { bundledMode: '1' };
 		const { container } = render( <App label="Newsletters" Screen={ NoopScreen } /> );
 		expect( container.querySelector( 'h1' ) ).toBeNull();
 	} );
 
 	it( 'shows the h1 as a visible page title in standalone mode', () => {
-		window.newspackNewslettersAdmin = { bundledMode: false };
+		window.newspackNewslettersAdmin = { bundledMode: '' };
 		const { container } = render( <App label="Settings" Screen={ NoopScreen } /> );
 		expect( container.querySelector( 'h1.newspack-newsletters-admin__title' ) ).not.toBeNull();
 	} );

@@ -1,11 +1,10 @@
 /* globals newspack_content_gifting */
 import domReady from '@wordpress/dom-ready';
 import { queuePageReload } from '../reader-activation/utils';
+import { getMeteringSettings, getMeteringStoreKey } from './utils/metering-settings';
+import { getNoticeIcon } from '../newspack-ui/js/icons';
 
 import './content-banner.scss';
-
-const settings = window.newspack_metering_settings || {};
-const storeKey = 'metering-' + settings.gate_id || 0;
 
 window.newspackRAS = window.newspackRAS || [];
 
@@ -42,7 +41,8 @@ domReady( () => {
 		if ( ! views || 0 < parseInt( views.textContent ) ) {
 			return;
 		}
-		const data = ras?.store?.get( storeKey ) || {
+		const settings = getMeteringSettings();
+		const data = ( settings && ras?.store?.get( getMeteringStoreKey( settings ) ) ) || {
 			content: [],
 		};
 		const total = parseInt( document.querySelector( '.newspack-countdown-banner__total_views' )?.textContent || 0 );
@@ -73,14 +73,19 @@ domReady( () => {
 
 	const copy = ev => {
 		ev.preventDefault();
+		if ( copyButton.hasAttribute( 'data-copied' ) ) {
+			return;
+		}
 		urlInput.select();
 		document.execCommand( 'copy' );
 		const originalText = copyButton.textContent;
-		copyButton.setAttribute( 'disabled', true );
+		// A data flag rather than disabled or aria-disabled: disabled drops focus out of the modal, and both would style the confirmation as unavailable.
+		copyButton.setAttribute( 'data-copied', '' );
 		copyButton.textContent = newspack_content_gifting.copied_label;
+		copyButton.focus();
 		setTimeout( () => {
 			copyButton.textContent = originalText;
-			copyButton.removeAttribute( 'disabled' );
+			copyButton.removeAttribute( 'data-copied' );
 		}, 5000 );
 	};
 
@@ -90,6 +95,8 @@ domReady( () => {
 	[ ...buttons ].forEach( button => {
 		button.addEventListener( 'click', ev => {
 			ev.preventDefault();
+			linkContainer.style.display = 'none';
+			info.style.display = 'none';
 			modal.setAttribute( 'data-state', 'open' );
 			spinner.style.display = 'flex';
 			fetch( newspack_content_gifting.ajax_url, {
@@ -116,11 +123,21 @@ domReady( () => {
 						urlInput.disabled = false;
 						delete urlInput.style.pointerEvents;
 						copyButton.disabled = false;
+						// The modal opens before its link arrives, so focus moves to Copy link once it's
+						// there, unless the reader has already moved it.
+						const active = modal.ownerDocument.activeElement;
+						if ( 'open' === modal.dataset.state && ( ! modal.contains( active ) || active === modal || active.matches( 'h2' ) ) ) {
+							copyButton.focus();
+						}
 					}
 				} )
 				.catch( err => {
-					errorMessage.innerHTML = err.message || 'An error occurred. Please try again.';
-					errorMessage.style.display = 'block';
+					errorMessage.textContent = err.message || 'An error occurred. Please try again.';
+					const errorIcon = getNoticeIcon( 'error' );
+					if ( errorIcon ) {
+						errorMessage.prepend( errorIcon );
+					}
+					errorMessage.style.display = '';
 					info.style.display = 'none';
 					linkContainer.style.display = 'none';
 				} )

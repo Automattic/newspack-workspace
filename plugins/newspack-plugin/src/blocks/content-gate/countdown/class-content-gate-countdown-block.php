@@ -35,7 +35,10 @@ class Content_Gate_Countdown_Block {
 			\Newspack\Newspack::plugin_url() . '/dist/content-gate-countdown-block.js',
 			[ 'wp-i18n', 'newspack-content-gate-metering' ],
 			Newspack::asset_version( 'content-gate-countdown-block' ),
-			true
+			[
+				'in_footer' => true,
+				'strategy'  => 'defer',
+			]
 		);
 	}
 

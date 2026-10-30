@@ -30,21 +30,27 @@ class Test_RAS_Contact_Sync_Options extends WP_UnitTestCase {
 	/**
 	 * Invoke the private static parse_sync_options() via reflection.
 	 *
-	 * @param array $assoc_args Associative CLI args.
+	 * @param array       $assoc_args     Associative CLI args.
+	 * @param string|null $integration_id Optional integration scope.
 	 * @return array|\WP_Error
 	 */
-	private function parse( array $assoc_args ) {
+	private function parse( array $assoc_args, $integration_id = null ) {
 		$parse_method = new \ReflectionMethod( RAS_Contact_Sync::class, 'parse_sync_options' );
 		$parse_method->setAccessible( true );
-		return $parse_method->invoke( null, $assoc_args );
+		return $parse_method->invoke( null, $assoc_args, $integration_id );
 	}
 
+	/**
+	 * A backfill updates only the contacts an integration already has unless
+	 * the operator asks for the rest to be created.
+	 */
 	public function test_defaults_when_no_options_passed() {
 		$options = $this->parse( [] );
 		$this->assertSame(
 			[
-				'skip_lists' => false,
-				'fields'     => null,
+				'skip_lists'    => false,
+				'fields'        => null,
+				'existing_only' => true,
 			],
 			$options
 		);
@@ -53,6 +59,13 @@ class Test_RAS_Contact_Sync_Options extends WP_UnitTestCase {
 	public function test_skip_lists_flag_sets_true() {
 		$options = $this->parse( [ 'skip-lists' => true ] );
 		$this->assertTrue( $options['skip_lists'] );
+		$this->assertNull( $options['fields'] );
+	}
+
+	public function test_create_missing_flag_turns_existing_only_off() {
+		$options = $this->parse( [ 'create-missing' => true ] );
+		$this->assertFalse( $options['existing_only'] );
+		$this->assertFalse( $options['skip_lists'] );
 		$this->assertNull( $options['fields'] );
 	}
 
@@ -84,6 +97,42 @@ class Test_RAS_Contact_Sync_Options extends WP_UnitTestCase {
 
 		$this->assertIsArray( $options );
 		$this->assertTrue( $options['skip_lists'] );
+	}
+
+	/**
+	 * The Mailchimp guard concerns the ESP integration only. Once --integration
+	 * scopes the run to a non-ESP integration, the site's ESP takes no part in
+	 * it and must not block the run (NPPD-2076 review).
+	 */
+	public function test_skip_lists_guard_skipped_when_scoped_to_non_esp_integration() {
+		Integrations::register( new Failing_Sample_Integration( 'skip_lists_mock', 'Skip Lists Mock' ) );
+		Integrations::enable( 'skip_lists_mock' );
+		update_option( 'newspack_newsletters_service_provider', 'mailchimp' );
+
+		$scoped   = $this->parse( [ 'skip-lists' => true ], 'skip_lists_mock' );
+		$unscoped = $this->parse( [ 'skip-lists' => true ] );
+
+		delete_option( 'newspack_newsletters_service_provider' );
+		Integrations::disable( 'skip_lists_mock' );
+
+		$this->assertIsArray( $scoped, 'A run scoped away from the ESP is unaffected by the ESP guard.' );
+		$this->assertTrue( $scoped['skip_lists'] );
+		$this->assertInstanceOf( \WP_Error::class, $unscoped, 'An unscoped run still includes the ESP, so the guard applies.' );
+		$this->assertSame( 'newspack_esp_sync_skip_lists_mailchimp', $unscoped->get_error_code() );
+	}
+
+	/**
+	 * Scoping explicitly TO the ESP keeps the guard.
+	 */
+	public function test_skip_lists_guard_applies_when_scoped_to_the_esp() {
+		update_option( 'newspack_newsletters_service_provider', 'mailchimp' );
+
+		$result = $this->parse( [ 'skip-lists' => true ], 'esp' );
+
+		delete_option( 'newspack_newsletters_service_provider' );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'newspack_esp_sync_skip_lists_mailchimp', $result->get_error_code() );
 	}
 
 	/**
@@ -126,6 +175,33 @@ class Test_RAS_Contact_Sync_Options extends WP_UnitTestCase {
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'newspack_esp_sync_fields_not_enabled', $result->get_error_code() );
+	}
+
+	/**
+	 * With --integration, the --fields pre-flight must validate against the
+	 * target integration only — another active integration missing the field
+	 * must not fail the run (NPPD-2076).
+	 */
+	public function test_fields_validation_scopes_to_target_integration() {
+		Failing_Sample_Integration::reset();
+		$with_field = new Failing_Sample_Integration( 'scoped_ok', 'Scoped OK' );
+		$without    = new Failing_Sample_Integration( 'scoped_missing', 'Scoped Missing' );
+		Integrations::register( $with_field );
+		Integrations::register( $without );
+		Integrations::enable( 'scoped_ok' );
+		Integrations::enable( 'scoped_missing' );
+		$with_field->update_enabled_outgoing_fields( [ 'Content Access' ] );
+		$without->update_enabled_outgoing_fields( [ 'Account' ] );
+
+		$unscoped = $this->parse( [ 'fields' => 'Content Access' ] );
+		$scoped   = $this->parse( [ 'fields' => 'Content Access' ], 'scoped_ok' );
+
+		Integrations::disable( 'scoped_ok' );
+		Integrations::disable( 'scoped_missing' );
+
+		$this->assertInstanceOf( \WP_Error::class, $unscoped, 'Unscoped: scoped_missing lacks the field, so pre-flight fails.' );
+		$this->assertIsArray( $scoped, 'Scoped to scoped_ok: pre-flight passes.' );
+		$this->assertSame( [ 'Content Access' ], $scoped['fields'] );
 	}
 
 	/**
@@ -176,5 +252,115 @@ class Test_RAS_Contact_Sync_Options extends WP_UnitTestCase {
 
 		$this->assertIsArray( $options, 'A push-incapable integration must not block the pre-flight.' );
 		$this->assertSame( [ 'Content Access' ], $options['fields'] );
+	}
+
+	/**
+	 * An update-only run cannot do its job at an integration that cannot check
+	 * for an existing contact, so the run refuses to start rather than tallying
+	 * every reader there as an error.
+	 */
+	public function test_update_only_preflight_rejects_a_push_integration_without_a_lookup() {
+		require_once dirname( __DIR__ ) . '/integrations/class-lookupless-sample-integration.php';
+		Integrations::register( new Lookupless_Sample_Integration( 'preflight_lookupless', 'Preflight Lookupless' ) );
+		Integrations::enable( 'preflight_lookupless' );
+
+		$options = $this->parse( [] );
+
+		Integrations::disable( 'preflight_lookupless' );
+		$this->assertInstanceOf( \WP_Error::class, $options );
+		$this->assertSame( 'newspack_esp_sync_existing_only_unsupported', $options->get_error_code() );
+		$this->assertStringContainsString( 'preflight_lookupless', $options->get_error_message() );
+		$this->assertStringContainsString( '--create-missing', $options->get_error_message(), 'The refusal names the flag that lets the run proceed.' );
+	}
+
+	/**
+	 * Creating contacts is what an integration without a lookup does anyway,
+	 * so a run that asks for it has nothing to refuse.
+	 */
+	public function test_create_missing_lets_a_run_include_an_integration_without_a_lookup() {
+		require_once dirname( __DIR__ ) . '/integrations/class-lookupless-sample-integration.php';
+		Integrations::register( new Lookupless_Sample_Integration( 'preflight_lookupless', 'Preflight Lookupless' ) );
+		Integrations::enable( 'preflight_lookupless' );
+
+		$options = $this->parse( [ 'create-missing' => true ] );
+
+		Integrations::disable( 'preflight_lookupless' );
+		$this->assertIsArray( $options );
+		$this->assertFalse( $options['existing_only'] );
+	}
+
+	public function test_update_only_preflight_ignores_an_integration_outside_the_scope() {
+		require_once dirname( __DIR__ ) . '/integrations/class-lookupless-sample-integration.php';
+		Integrations::register( new Lookupless_Sample_Integration( 'preflight_lookupless', 'Preflight Lookupless' ) );
+		Integrations::enable( 'preflight_lookupless' );
+
+		$options = $this->parse( [], 'esp' );
+
+		Integrations::disable( 'preflight_lookupless' );
+		$this->assertIsArray( $options, 'A run scoped to a capable integration is not blocked by an incapable one.' );
+		$this->assertTrue( $options['existing_only'] );
+	}
+
+	public function test_update_only_preflight_ignores_a_push_disabled_integration() {
+		require_once dirname( __DIR__ ) . '/integrations/class-lookupless-sample-integration.php';
+		$integration = new Lookupless_Sample_Integration( 'preflight_lookupless_paused', 'Preflight Lookupless Paused' );
+		Integrations::register( $integration );
+		Integrations::enable( 'preflight_lookupless_paused' );
+		$integration->update_settings_field_value( 'outgoing_sync_enabled', false );
+
+		$options = $this->parse( [] );
+
+		Integrations::disable( 'preflight_lookupless_paused' );
+		$this->assertIsArray( $options, 'A paused integration takes no part in the run and must not block the pre-flight.' );
+	}
+
+	/**
+	 * Invoke the private static build_sync_config() via reflection.
+	 *
+	 * @param array $assoc_args Associative CLI args.
+	 * @return array
+	 */
+	private function build_config( array $assoc_args ) {
+		$method = new \ReflectionMethod( RAS_Contact_Sync::class, 'build_sync_config' );
+		$method->setAccessible( true );
+		return $method->invoke( null, $assoc_args );
+	}
+
+	/**
+	 * WP_User_Query treats a non-positive `number` as "no LIMIT", which would
+	 * turn every batch into the entire reader set and make the paging loops
+	 * non-terminating — so invalid input is floored, never passed through
+	 * (NPPD-2076 review).
+	 */
+	public function test_batch_size_floors_non_positive_input_to_one() {
+		$this->assertSame( 1, $this->build_config( [ 'batch-size' => '-5' ] )['batch_size'], 'A negative batch size is floored to 1.' );
+		$this->assertSame( 1, $this->build_config( [ 'batch-size' => 'abc' ] )['batch_size'], 'A non-numeric batch size (intval → 0) is floored to 1.' );
+	}
+
+	public function test_batch_size_default_and_valid_values_are_unchanged() {
+		$this->assertSame( 10, $this->build_config( [] )['batch_size'], 'Absent flag keeps the default.' );
+		$this->assertSame( 10, $this->build_config( [ 'batch-size' => '0' ] )['batch_size'], 'A literal 0 is empty-string-falsy and keeps the default.' );
+		$this->assertSame( 250, $this->build_config( [ 'batch-size' => '250' ] )['batch_size'] );
+	}
+
+	/**
+	 * A negative offset builds an invalid LIMIT clause: the query returns
+	 * nothing and the run reads as a clean "Synced 0 contacts" success over a
+	 * window that was never covered (NPPD-2076 review).
+	 */
+	public function test_offset_floors_negative_input_to_zero() {
+		$this->assertSame( 0, $this->build_config( [ 'offset' => '-3' ] )['offset'], 'A negative offset is floored to 0.' );
+		$this->assertSame( 7, $this->build_config( [ 'offset' => '7' ] )['offset'] );
+	}
+
+	/**
+	 * A negative max-batches is truthy against the batch counter, so it would
+	 * silently stop the run after the first batch — flooring it to 0 keeps it
+	 * meaning "no cap" (NPPD-2076 review).
+	 */
+	public function test_max_batches_floors_negative_input_to_zero() {
+		$this->assertSame( 0, $this->build_config( [ 'max-batches' => '-2' ] )['max_batches'], 'A negative max-batches is floored to 0 (no cap).' );
+		$this->assertSame( 0, $this->build_config( [] )['max_batches'], 'Absent flag keeps the no-cap default.' );
+		$this->assertSame( 3, $this->build_config( [ 'max-batches' => '3' ] )['max_batches'] );
 	}
 }

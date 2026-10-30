@@ -1,0 +1,66 @@
+name: Deploy to WordPress.org (manual)
+
+# Escape hatch for the WP.org deploy, which normally runs only as part of a
+# release (release.yml). Use it when a published release did not reach the SVN
+# repo -- a failed deploy job, or a run whose deploy resolved the wrong version.
+#
+# It publishes whatever version the chosen ref carries in the plugin's
+# package.json. That ref defaults to `release`, and deliberately does NOT
+# follow the branch picker: GitHub pre-selects the repository's default branch
+# there, and `main` runs ahead of `release` at an identical version -- so a
+# default dispatch would otherwise push unreleased code to wordpress.org under
+# the released version number, straight to trunk, on every installed site's
+# next update check.
+#
+# `require-release: false` tells _release-wporg.yml's gate there is no released
+# tag list to check against, leaving the SVN already-published check as the
+# only guard: re-running for a version that is already live is a harmless
+# no-op, but a version that never reached SVN will publish.
+#
+# GitHub only shows the "Run workflow" button for workflows present on the
+# default branch, so this file must be synced to `main` before the button
+# appears. The branch picker still selects which copy of the workflow runs;
+# the `ref` input below is what decides which code is published.
+
+on:
+  workflow_dispatch:
+    inputs:
+      plugin:
+        description: 'Plugin to deploy (its package.json version on the chosen ref).'
+        required: true
+        type: choice
+        options:
+          - newspack-newsletters
+          - super-cool-ad-inserter
+          - republication-tracker-tool
+      ref:
+        description: 'Branch or commit SHA to publish. Leave as `release` unless you know otherwise.'
+        required: true
+        default: 'release'
+        type: string
+      wporg-slug:
+        description: 'WordPress.org slug, only if it differs from the plugin name.'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: WP.org / ${{ inputs.plugin }}
+    # The three wp.org-distributed plugins all live at plugins/<name>, and their
+    # directory name, package name and wp.org slug are identical -- so the path
+    # needs no lookup table, and wporg-slug above is the override for the day
+    # one of them diverges. Revisit if that ever stops being true.
+    uses: ./.github/workflows/_release-wporg.yml
+    with:
+      plugin-name: ${{ inputs.plugin }}
+      plugin-path: plugins/${{ inputs.plugin }}
+      wporg-slug: ${{ inputs.wporg-slug }}
+      ref: ${{ inputs.ref }}
+      require-release: false
+    secrets:
+      WP_ORG_USERNAME: ${{ secrets.WP_ORG_USERNAME }}
+      WP_ORG_PASSWORD: ${{ secrets.WP_ORG_PASSWORD }}

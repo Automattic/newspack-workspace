@@ -1,4 +1,4 @@
-/* eslint-disable jsx-a11y/anchor-is-valid, @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 /**
  * Internal dependencies
@@ -6,6 +6,7 @@
 import QueryControls from '../../components/query-controls';
 import { postsBlockSelector, postsBlockDispatch, isBlogPrivate, shouldReflow } from './utils';
 import { getBylineHTML, formatSponsorLogos, formatSponsorByline, getPostStatusLabel } from '../../shared/js/utils';
+import { preventPreviewNavigation } from '../../shared/js/inert-preview';
 import { PostTypesPanel, PostStatusesPanel } from '../../components/editor-panels';
 
 /**
@@ -84,17 +85,24 @@ class Edit extends Component< HomepageArticlesProps > {
 		);
 
 		const postTitle = this.titleForPost( post );
+		// post_link is empty when the post has no public URL, and the front end
+		// renders the title and thumbnail unlinked in that case
+		// (templates/article.php). Mirror it here rather than emitting an anchor
+		// with no destination.
+		const featuredImage = post.newspack_featured_image_src ? (
+			<Fragment>
+				{ imageShape === 'landscape' && <img src={ post.newspack_featured_image_src.landscape } alt="" /> }
+				{ imageShape === 'portrait' && <img src={ post.newspack_featured_image_src.portrait } alt="" /> }
+				{ imageShape === 'square' && <img src={ post.newspack_featured_image_src.square } alt="" /> }
+				{ imageShape === 'uncropped' && <img src={ post.newspack_featured_image_src.uncropped } alt="" /> }
+			</Fragment>
+		) : null;
 		return (
 			<article className={ postClasses } key={ post.id } style={ styles }>
 				{ getPostStatusLabel( post ) }
 				{ showImage && post.newspack_featured_image_src && (
 					<figure className="post-thumbnail" key="thumbnail">
-						<a href="#">
-							{ imageShape === 'landscape' && <img src={ post.newspack_featured_image_src.landscape } alt="" /> }
-							{ imageShape === 'portrait' && <img src={ post.newspack_featured_image_src.portrait } alt="" /> }
-							{ imageShape === 'square' && <img src={ post.newspack_featured_image_src.square } alt="" /> }
-							{ imageShape === 'uncropped' && <img src={ post.newspack_featured_image_src.uncropped } alt="" /> }
-						</a>
+						{ post.post_link ? <a href={ post.post_link }>{ featuredImage }</a> : featuredImage }
 						{ ( showCaption || showCredit ) && (
 							<div
 								dangerouslySetInnerHTML={ {
@@ -115,14 +123,14 @@ class Edit extends Component< HomepageArticlesProps > {
 						</div>
 					) }{ ' ' }
 					{ showTagLabels && post.newspack_tag_labels && (
-						<div className="cat-links tag-labels">
+						<div className="newspack-tag-labels tag-labels">
 							{ post.newspack_tag_labels.map( ( newspack_tag_label, index ) => {
 								return newspack_tag_label.link ? (
-									<a key={ index } href="#" className="tag-label flag">
+									<a key={ index } href={ newspack_tag_label.link } className="newspack-tag-label tag-label flag">
 										{ newspack_tag_label.flag }
 									</a>
 								) : (
-									<span key={ index } className="tag-label flag">
+									<span key={ index } className="newspack-tag-label tag-label flag">
 										{ newspack_tag_label.flag }
 									</span>
 								);
@@ -131,11 +139,11 @@ class Edit extends Component< HomepageArticlesProps > {
 					) }
 					{ RichText.isEmpty( sectionHeader ) ? (
 						<h2 className="entry-title" key="title">
-							<a href="#">{ postTitle }</a>
+							{ post.post_link ? <a href={ post.post_link }>{ postTitle }</a> : postTitle }
 						</h2>
 					) : (
 						<h3 className="entry-title" key="title">
-							<a href="#">{ postTitle }</a>
+							{ post.post_link ? <a href={ post.post_link }>{ postTitle }</a> : postTitle }
 						</h3>
 					) }
 					{ IS_SUBTITLE_SUPPORTED_IN_THEME && showSubtitle && (
@@ -154,7 +162,7 @@ class Edit extends Component< HomepageArticlesProps > {
 						</RawHTML>
 					) }
 					{ showReadMore && post.post_link && (
-						<a href="#" key="readmore" className="more-link">
+						<a href={ post.post_link } key="readmore" className="more-link">
 							{ readMoreLabel }
 						</a>
 					) }
@@ -694,6 +702,7 @@ class Edit extends Component< HomepageArticlesProps > {
 				<div
 					{ ...blockProps }
 					className={ classes }
+					onClickCapture={ preventPreviewNavigation }
 					style={ {
 						color: textColor.color,
 					} }
@@ -747,6 +756,11 @@ const EditWithBlockProps = ( props: any ) => {
 	return <Edit { ...props } blockProps={ blockProps } />;
 };
 
-export default compose( [ withColors( { textColor: 'color' } ), withSelect( postsBlockSelector ), withDispatch( postsBlockDispatch ) ] as any )(
-	EditWithBlockProps
-);
+// withSelect/withDispatch type their map functions against the registry's own
+// loose signatures; the casts stay at this call site so the exported selector
+// and dispatcher keep their precise parameter types.
+export default compose( [
+	withColors( { textColor: 'color' } ),
+	withSelect( postsBlockSelector as any ),
+	withDispatch( postsBlockDispatch as any ),
+] as any )( EditWithBlockProps );

@@ -65,6 +65,15 @@ final class Newspack_Popups_Inserter {
 	private static $queued_overlays = [];
 
 	/**
+	 * How many overlays at the head of {@see $queued_overlays} were queued with
+	 * `$first`. The next one goes after them, so placed overlays keep their
+	 * order on the page.
+	 *
+	 * @var int
+	 */
+	private static $queued_first_count = 0;
+
+	/**
 	 * Popup IDs whose scroll-trigger page-position marker has already been
 	 * emitted inline this request. Parallel to {@see $queued_overlays} so the
 	 * marker (which lives inside `.entry-content`, separate from the queued
@@ -165,7 +174,7 @@ final class Newspack_Popups_Inserter {
 		}
 		if ( Newspack_Popups::preset_popup_id() ) {
 			$preset_popup = Newspack_Popups_Presets::retrieve_preset_popup( Newspack_Popups::preset_popup_id() );
-			return [ $preset_popup ];
+			return $preset_popup ? [ $preset_popup ] : [];
 		}
 
 		// Popups disabled for this page.
@@ -624,16 +633,25 @@ final class Newspack_Popups_Inserter {
 	 * multiple injection points (singular content + above-header, archive
 	 * header, etc.) only renders once. Insertion order is preserved – callers
 	 * that care about specificity (the most-specific overlay winning the
-	 * single visible slot) must queue most-specific first.
+	 * single visible slot) must queue most-specific first, or pass $first.
 	 *
 	 * @param array<string, mixed> $popup Popup data as returned by Newspack_Popups_Model.
+	 * @param bool                 $first Queue ahead of every overlay not itself queued with $first.
 	 */
-	private static function queue_overlay( array $popup ): void {
+	private static function queue_overlay( array $popup, bool $first = false ): void {
 		if ( empty( $popup['id'] ) ) {
 			return;
 		}
 		$id = $popup['id'];
-		if ( ! isset( self::$queued_overlays[ $id ] ) ) {
+		if ( isset( self::$queued_overlays[ $id ] ) ) {
+			return;
+		}
+		if ( $first ) {
+			self::$queued_overlays = array_slice( self::$queued_overlays, 0, self::$queued_first_count, true )
+				+ [ $id => $popup ]
+				+ array_slice( self::$queued_overlays, self::$queued_first_count, null, true );
+			++self::$queued_first_count;
+		} else {
 			self::$queued_overlays[ $id ] = $popup;
 		}
 	}
@@ -686,8 +704,9 @@ final class Newspack_Popups_Inserter {
 		// overlay queue alone would suppress the marker on the second pass, and
 		// `segmentation.js` would then have no `#page-position-marker_*` to
 		// observe – a scroll-triggered overlay that never reveals.
-		self::$queued_overlays = [];
-		self::$emitted_markers = [];
+		self::$queued_overlays    = [];
+		self::$queued_first_count = 0;
+		self::$emitted_markers    = [];
 	}
 
 	/**
@@ -1005,7 +1024,86 @@ final class Newspack_Popups_Inserter {
 		 *
 		 * @example define( 'NEWSPACK_POPUPS_DEBUG', true );
 		 */
-		return ( defined( 'WP_DEBUG' ) && WP_DEBUG ) || ( defined( 'NEWSPACK_LOG_LEVEL' ) && 1 < NEWSPACK_LOG_LEVEL ) || ( defined( 'NEWSPACK_POPUPS_DEBUG' ) && NEWSPACK_POPUPS_DEBUG );
+		return ( defined( 'WP_DEBUG' ) && WP_DEBUG ) || ( defined( 'NEWSPACK_LOG_LEVEL' ) && 1 < NEWSPACK_LOG_LEVEL ) || ( defined( 'NEWSPACK_POPUPS_DEBUG' ) && NEWSPACK_POPUPS_DEBUG ); // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Documented in plugins/newspack-plugin/includes/class-logger.php.
+	}
+
+	/**
+	 * The preview slice of the view script's localized data.
+	 *
+	 * Separate from preview_param_names() so the localized *key* is assertable, not
+	 * just the list: the front end reads `newspack_popups_view.preview_param_names`,
+	 * and renaming either side alone would leave both suites green while previews
+	 * silently stopped surviving a click. Named for the shape it has — a flat list of
+	 * param names, where newspack_popups_data.preview_query_keys is a
+	 * meta-key => param map.
+	 *
+	 * @return array Empty when this is not a prompt preview.
+	 */
+	public static function get_view_script_preview_data() {
+		$names = self::preview_param_names();
+		return empty( $names ) ? [] : [ 'preview_param_names' => $names ];
+	}
+
+	/**
+	 * The A/B slice of the view script's localized data.
+	 *
+	 * Separate from enqueue_scripts(), which returns early in the test suite, so the
+	 * localized keys are assertable: the front end reads `ab_tests`, `cid_cookie`,
+	 * `ab_buckets` and `ab_view_as` from `newspack_popups_view`. The JS tests build
+	 * that object by hand, so only the PHP side of each key name is pinned.
+	 *
+	 * @return array Empty when no test is live.
+	 */
+	public static function get_view_script_ab_data() {
+		$ab_tests = Newspack_Popups_AB_Tests::get_tests_config();
+		if ( empty( $ab_tests ) ) {
+			return [];
+		}
+		$data = [
+			'ab_tests'   => $ab_tests,
+			'cid_cookie' => defined( 'NEWSPACK_CLIENT_ID_COOKIE_NAME' ) ? NEWSPACK_CLIENT_ID_COOKIE_NAME : 'newspack-cid', // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal constant owned by newspack-plugin, not publisher-configurable.
+		];
+		$ab_buckets = Newspack_Popups_AB_Tests::get_logged_in_buckets( $ab_tests );
+		if ( ! empty( $ab_buckets ) ) {
+			$data['ab_buckets'] = $ab_buckets;
+		}
+		// Variant preview (view_as=ab_variant:x) is echoed server-side via the
+		// admin-gated View_As spec rather than parsed from the URL in JS, so a
+		// non-privileged visitor cannot self-select an arm (and pollute GA).
+		$view_as_spec = Newspack_Popups_View_As::parse_view_as();
+		if ( ! empty( $view_as_spec['ab_variant'] ) && in_array( $view_as_spec['ab_variant'], Newspack_Popups_AB_Tests::VALID_VARIANTS, true ) ) {
+			$data['ab_view_as'] = $view_as_spec['ab_variant'];
+		}
+		return $data;
+	}
+
+	/**
+	 * The preview query param names to hand the previewed document, so it can carry
+	 * them onto same-origin links and keep the preview alive across a click.
+	 *
+	 * Both checks earn their place, because previewed_popup_id() only reports that
+	 * the request carries a `pid` — not that anyone may preview, nor that the id is a
+	 * prompt. `pid` is a common campaign parameter, so without can_preview_popup() a
+	 * reader arriving on `?pid=…` would have it stamped onto every link for the rest
+	 * of their session while seeing no prompts at all, and an editor who follows an
+	 * ad or newsletter link carrying an unrelated `pid` would get the same.
+	 * is_preview_request() is the wrong test here — it also covers preset, view-as
+	 * and customizer previews, which pass their state differently.
+	 *
+	 * The JS half of this contract has its own guard: propagation only runs inside
+	 * the preview frame. See src/view/preview-links.js.
+	 *
+	 * @return array Param names, empty when this is not a prompt preview.
+	 */
+	public static function preview_param_names() {
+		$previewed_popup_id = Newspack_Popups::previewed_popup_id();
+		if ( ! $previewed_popup_id || ! Newspack_Popups::can_preview_popup( $previewed_popup_id ) ) {
+			return [];
+		}
+		return array_merge(
+			[ Newspack_Popups::NEWSPACK_POPUP_PREVIEW_QUERY_PARAM ],
+			array_values( Newspack_Popups::PREVIEW_QUERY_KEYS )
+		);
 	}
 
 	/**
@@ -1064,6 +1162,9 @@ final class Newspack_Popups_Inserter {
 			$script_data = [
 				'debug'                => self::should_log_debug_info(),
 				'has_disabled_prompts' => is_singular() && ! empty( get_post_meta( get_the_ID(), 'newspack_popups_has_disabled_popups', true ) ) && ! Newspack_Popups::is_preview_request(),
+				// Namespaces the view script's browser storage per site, so sites
+				// sharing an origin (subdirectory multisite) cannot mix state.
+				'site_id'              => \get_current_blog_id(),
 			];
 
 			if ( Newspack_Popups::$segmentation_enabled ) {
@@ -1087,6 +1188,15 @@ final class Newspack_Popups_Inserter {
 			if ( ! empty( $donor_landing_page ) ) {
 				$script_data['donor_landing_page'] = $donor_landing_page;
 			}
+
+			// Variant suppression is entirely client-side, and this call sits inside
+			// the non-AMP branch, so AMP requests get no A/B config at all.
+			// That is correct only because AMP prompt display is currently disabled:
+			// if it is ever restored, every arm of a test would render un-suppressed
+			// unless suppression is reimplemented for that path.
+			$script_data = array_merge( $script_data, self::get_view_script_ab_data() );
+
+			$script_data = array_merge( $script_data, self::get_view_script_preview_data() );
 
 			\wp_localize_script( $script_handle, 'newspack_popups_view', $script_data );
 			\wp_enqueue_script( $script_handle );
@@ -1158,10 +1268,19 @@ final class Newspack_Popups_Inserter {
 		if (
 			// Bail if it should not be displayed.
 			! self::should_display( $found_popup ) ||
-			// Only inline or manual-only popups can be inserted via the shortcode.
+			// Only inline or manual-only popups (including manual-only overlays) can be inserted via the shortcode.
 			( ! Newspack_Popups_Model::is_inline( $found_popup ) && ! Newspack_Popups_Model::is_manual_only( $found_popup ) )
 		) {
 			return;
+		}
+
+		// A manual-only overlay keeps its pop-up behavior: the lightbox is printed in the footer like
+		// any other overlay, and the scroll trigger's position marker goes into the content, where it
+		// measures progress through the article rather than marking this spot. An overlay placed with
+		// the block or shortcode goes ahead of automatically inserted overlays for the single overlay slot.
+		if ( Newspack_Popups_Model::is_overlay( $found_popup ) ) {
+			self::queue_overlay( $found_popup, true );
+			return self::emit_position_marker_inline( $found_popup );
 		}
 
 		$class_names = '';

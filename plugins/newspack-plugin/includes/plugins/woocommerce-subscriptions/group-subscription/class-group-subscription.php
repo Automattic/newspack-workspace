@@ -32,6 +32,25 @@ class Group_Subscription {
 	const GROUP_SUBSCRIPTION_MANAGER_USER_META_KEY = '_newspack_group_subscription_manager';
 
 	/**
+	 * Subscription meta key stamping the source WooCommerce Teams team a group
+	 * subscription was migrated from. Written by migrate-teams, which keys reuse on
+	 * it so one owner's several teams each migrate to their own group subscription
+	 * instead of merging into one. Read at runtime by
+	 * Group_Subscription_Teams_Invite, which resolves a surviving team invitation
+	 * back to the group it became. It lives here rather than on the CLI class
+	 * because the CLI is only loaded under WP-CLI.
+	 */
+	const MIGRATED_TEAM_ID_META_KEY = '_newspack_migrated_team_id';
+
+	/**
+	 * Subscription meta key holding the group's slug: a stable identifier that
+	 * downstream systems (ESP fields, CRM, segments) key readers on, so a rename
+	 * never moves a group's readers to a new identifier. Like a post slug, a
+	 * non-Latin name yields a percent-encoded slug. Read it through get_slug().
+	 */
+	const SLUG_META_KEY = '_newspack_group_subscription_slug';
+
+	/**
 	 * Build the per-subscription joined-at user_meta key.
 	 *
 	 * @param int $subscription_id Subscription ID.
@@ -124,6 +143,153 @@ class Group_Subscription {
 		\add_action( 'added_user_meta', [ __CLASS__, 'maybe_reset_cache_on_user_meta' ], 10, 3 );
 		\add_action( 'updated_user_meta', [ __CLASS__, 'maybe_reset_cache_on_user_meta' ], 10, 3 );
 		\add_action( 'deleted_user_meta', [ __CLASS__, 'maybe_reset_cache_on_user_meta' ], 10, 3 );
+		// Auto-join trusts the same verified flag as email-domain gate rules, so it fires on
+		// verification, not registration. Paid checkout verifies without an inbox round trip.
+		\add_action( 'newspack_reader_verified', [ __CLASS__, 'auto_join_by_email_domain' ] );
+		// The first settings save fixes the slug, so a rename before anything reads it can't move it.
+		\add_action( 'newspack_group_subscription_settings_updated', [ __CLASS__, 'ensure_slug' ], 10, 1 );
+	}
+
+	/**
+	 * Give a group subscription its slug if it has none yet.
+	 *
+	 * @param \WC_Subscription $subscription The group subscription.
+	 */
+	public static function ensure_slug( $subscription ): void {
+		self::get_slug( $subscription );
+	}
+
+	/**
+	 * Get a group subscription's slug, creating it from the group name if it has none.
+	 *
+	 * A stored slug is never changed here. migrate-teams seeds it with the source
+	 * team's slug; otherwise the first settings save creates it, and a group never
+	 * saved through the settings (enabled by its product alone) gets one on first
+	 * read, which writes the subscription's meta. A name another group's slug
+	 * already uses gets a numeric suffix, so two groups' readers are never merged
+	 * downstream. Two groups with the same name created at the same moment can
+	 * still race to the same slug; that is rare enough to accept rather than lock.
+	 *
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 *
+	 * @return string The slug, or '' when the subscription has none and is not a group. A group
+	 *                that is later disabled keeps its slug, so it is unchanged if re-enabled.
+	 */
+	public static function get_slug( \WC_Subscription|int $subscription ): string {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		if ( ! $subscription ) {
+			return '';
+		}
+		$slug = (string) $subscription->get_meta( self::SLUG_META_KEY, true );
+		if ( '' !== $slug ) {
+			return $slug;
+		}
+		$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
+		if ( empty( $settings['enabled'] ) ) {
+			return '';
+		}
+		$base = \sanitize_title( html_entity_decode( (string) $settings['name'], ENT_QUOTES | ENT_HTML5, 'UTF-8' ) );
+		if ( '' === $base ) {
+			$base = 'group-' . $subscription->get_id();
+		}
+		// Groups on one product share its name, so collisions are common: read every
+		// slug containing the base once rather than probing one suffix at a time.
+		$taken  = self::get_slugs_containing( $base, $subscription->get_id() );
+		$slug   = $base;
+		$suffix = 2;
+		while ( in_array( $slug, $taken, true ) ) {
+			$slug = $base . '-' . $suffix;
+			++$suffix;
+		}
+		// Persists the object's pending meta, not its props, which a caller may still be editing.
+		$subscription->update_meta_data( self::SLUG_META_KEY, $slug );
+		$subscription->save_meta_data();
+		return $slug;
+	}
+
+	/**
+	 * Whether a subscription other than the given one already holds a slug.
+	 *
+	 * @param string $slug            The slug.
+	 * @param int    $subscription_id The subscription asking, which never collides with itself.
+	 *
+	 * @return bool
+	 */
+	public static function is_slug_taken( string $slug, int $subscription_id ): bool {
+		return in_array( $slug, self::get_slugs_containing( $slug, $subscription_id ), true );
+	}
+
+	/**
+	 * The slugs of subscriptions, other than the given one, whose slug contains a string.
+	 *
+	 * @param string $needle          The string to look for.
+	 * @param int    $subscription_id The subscription to leave out.
+	 *
+	 * @return string[]
+	 */
+	private static function get_slugs_containing( string $needle, int $subscription_id ): array {
+		if ( ! function_exists( 'wcs_get_subscriptions' ) ) {
+			return [];
+		}
+		$holders = \wcs_get_subscriptions(
+			[
+				'subscriptions_per_page' => -1,
+				'subscription_status'    => 'any',
+				'meta_query'             => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					[
+						'key'     => self::SLUG_META_KEY,
+						'value'   => $needle,
+						'compare' => 'LIKE',
+					],
+				],
+			]
+		);
+		unset( $holders[ $subscription_id ] );
+		return array_map(
+			function ( $holder ) {
+				return (string) $holder->get_meta( self::SLUG_META_KEY, true );
+			},
+			array_values( $holders )
+		);
+	}
+
+	/**
+	 * Add a verified reader to every active group subscription that lists their email domain.
+	 *
+	 * A group with no free seat is skipped: update_members() refuses the add, and the
+	 * reader is left out rather than pushing the group over its limit.
+	 *
+	 * @param \WP_User $user The reader who just verified their email address.
+	 */
+	public static function auto_join_by_email_domain( $user ) {
+		if ( ! function_exists( 'wcs_get_subscriptions' ) ) {
+			return;
+		}
+		$subscriptions = \wcs_get_subscriptions(
+			[
+				'subscriptions_per_page' => -1,
+				'subscription_status'    => WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES,
+				'meta_query'             => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					[
+						'key'     => Group_Subscription_Settings::EMAIL_DOMAINS_META_KEY,
+						'value'   => '',
+						'compare' => '!=',
+					],
+				],
+			]
+		);
+		foreach ( $subscriptions as $subscription ) {
+			$domains = $subscription->get_meta( Group_Subscription_Settings::EMAIL_DOMAINS_META_KEY, true );
+			if (
+				(int) $subscription->get_user_id() !== $user->ID
+				// Not is_group_subscription(): it reads false on My Account when WC Memberships is
+				// active, and the verification link lands there.
+				&& ! empty( Group_Subscription_Settings::get_subscription_settings( $subscription )['enabled'] )
+				&& Access_Rules::email_matches_domains( $user->user_email, $domains )
+			) {
+				self::update_members( $subscription, [ $user->ID ] );
+			}
+		}
 	}
 
 	/**
@@ -156,22 +322,58 @@ class Group_Subscription {
 	}
 
 	/**
+	 * Get the option name holding a container-label override.
+	 *
+	 * The one place the key is assembled. Registration and reads both go through it,
+	 * so a rename cannot leave writes pointing at the old key while reads move to the
+	 * new one — a split that surfaces only as a publisher's override silently ceasing
+	 * to take effect.
+	 *
+	 * @param string $variant Either 'singular' or 'plural'. Unknown variants fall back to singular.
+	 *
+	 * @return string The option name.
+	 */
+	public static function get_label_option_key( string $variant = 'singular' ): string {
+		return 'newspack_group_subscription_label_' . ( 'plural' === $variant ? 'plural' : 'singular' );
+	}
+
+	/**
+	 * Get the publisher's raw container-label override.
+	 *
+	 * Callers that need to tell a custom noun from the default — rather than just
+	 * render one — read this instead of get_label().
+	 *
+	 * @param string $variant Either 'singular' or 'plural'. Unknown variants fall back to singular.
+	 *
+	 * @return string The trimmed override, or an empty string when the publisher has set none.
+	 */
+	public static function get_label_override( string $variant = 'singular' ): string {
+		return trim( (string) \get_option( self::get_label_option_key( $variant ), '' ) );
+	}
+
+	/**
+	 * Get the translated default container label.
+	 *
+	 * @param string $variant Either 'singular' or 'plural'. Unknown variants fall back to singular.
+	 *
+	 * @return string The translated default.
+	 */
+	public static function get_default_label( string $variant = 'singular' ): string {
+		return 'plural' === $variant
+			? __( 'Groups', 'newspack-plugin' )
+			: __( 'Group', 'newspack-plugin' );
+	}
+
+	/**
 	 * Get the publisher-configurable container label.
 	 *
 	 * @param string $variant Either 'singular' or 'plural'. Unknown variants fall back to singular.
 	 *
 	 * @return string The override if the publisher has set a non-blank one, otherwise the translated default.
 	 */
-	public static function get_label( $variant = 'singular' ) {
-		$variant    = 'plural' === $variant ? 'plural' : 'singular';
-		$option_key = 'newspack_group_subscription_label_' . $variant;
-		$override   = trim( (string) \get_option( $option_key, '' ) );
-		if ( '' !== $override ) {
-			return $override;
-		}
-		return 'plural' === $variant
-			? __( 'Groups', 'newspack-plugin' )
-			: __( 'Group', 'newspack-plugin' );
+	public static function get_label( string $variant = 'singular' ): string {
+		$override = self::get_label_override( $variant );
+		return '' !== $override ? $override : self::get_default_label( $variant );
 	}
 
 	/**
@@ -200,12 +402,15 @@ class Group_Subscription {
 		if ( isset( self::$managers_cache[ $subscription_id ] ) ) {
 			$managers = self::$managers_cache[ $subscription_id ];
 		} else {
-			// The owner is always a manager: ownership implies management.
-			$managers = [ $subscription ? $subscription->get_user_id() : 0 ];
+			// The owner is always a manager: ownership implies management. A falsy owner id
+			// is WooCommerce's tombstone for a deleted customer rather than an identity, so
+			// it seeds nothing — left in, it matches a caller who is also nobody.
+			$owner_id = $subscription ? (int) $subscription->get_user_id() : 0;
+			$managers = $owner_id ? [ $owner_id ] : [];
 			if ( $subscription ) {
 				$stored = \get_users(
 					[
-						'fields'      => [ 'ID' ],
+						'fields'      => 'ID',
 						'count_total' => false,
 						'meta_query'  => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 							[
@@ -215,8 +420,8 @@ class Group_Subscription {
 						],
 					]
 				);
-				foreach ( $stored as $user ) {
-					$managers[] = (int) $user->ID;
+				foreach ( $stored as $user_id ) {
+					$managers[] = (int) $user_id;
 				}
 				$managers = array_values( array_unique( $managers ) );
 			}
@@ -348,6 +553,44 @@ class Group_Subscription {
 	}
 
 	/**
+	 * Whether an actor may promote or demote managers of a group.
+	 *
+	 * The single server-side authority for role changes — the My Account
+	 * admin-post handler and the REST endpoint both defer to it, so the
+	 * owner-only rule can't be bypassed by forging a request the UI wouldn't
+	 * offer. It is deliberately stricter than can_actor_remove_member(): a
+	 * manager may maintain plain members, but only the owner decides who else
+	 * holds that power, since the owner is the one paying for the group.
+	 *
+	 * - The owner may change roles in their own group.
+	 * - Store admins (`manage_woocommerce`) may act on the owner's behalf.
+	 * - Managers, plain members and outsiders may not — a manager who could
+	 *   promote could manufacture peers and route around the peer-manager guard
+	 *   that can_actor_remove_member() applies to removals.
+	 *
+	 * @param int                  $actor_id     The user attempting the role change.
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 *
+	 * @return bool Whether the role change is permitted.
+	 */
+	public static function user_can_manage_roles( int $actor_id, \WC_Subscription|int $subscription ): bool {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		if ( ! $subscription ) {
+			return false;
+		}
+
+		// A logged-out / unresolved actor decides nothing — guard before the owner
+		// comparison so an actor of 0 never matches an ownerless (owner 0) group.
+		if ( ! $actor_id ) {
+			return false;
+		}
+		if ( $actor_id === (int) $subscription->get_user_id() ) {
+			return true;
+		}
+		return \user_can( $actor_id, 'manage_woocommerce' );
+	}
+
+	/**
 	 * Get the group subscriptions a user manages.
 	 *
 	 * The reverse of `get_managers()`: a user manages a group either by owning
@@ -443,13 +686,14 @@ class Group_Subscription {
 		if ( isset( self::$members_cache[ $subscription_id ] ) ) {
 			$members = self::$members_cache[ $subscription_id ];
 		} else {
+			// Query plain IDs, as Newspack Network's seat sync does for this meta key.
+			// WordPress caches user queries by their SQL alone, and `fields => [ 'ID' ]` builds
+			// the same SQL but returns objects, so mixed shapes read each other's cached results.
 			$members = array_map(
-				function( $user ) {
-					return $user->ID;
-				},
+				'intval',
 				\get_users(
 					[
-						'fields'      => [ 'ID' ],
+						'fields'      => 'ID',
 						'count_total' => false,
 						'meta_query'  => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 							[
@@ -585,31 +829,40 @@ class Group_Subscription {
 		$members_added     = [];
 		$members_removed   = [];
 
-		// Remove members.
+		// Remove members. Eligibility gates additions only -- a member who has since become
+		// ineligible (a role change, or a filter opt-out) must still be removable, or their
+		// meta persists forever: it keeps consuming a seat while the read path hides them.
+		// delete_user_meta() is a harmless no-op for an ID that never held membership.
 		foreach ( $members_to_remove as $member_id ) {
-			if ( ! Reader_Activation::is_user_reader( $member_id ) ) {
-				continue;
-			}
 			if ( \delete_user_meta( $member_id, self::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() ) ) {
 				\delete_user_meta( $member_id, self::get_member_joined_meta_key( $subscription->get_id() ) );
 				// Leaving the group also ends any manager role — no orphaned managers.
 				\delete_user_meta( $member_id, self::GROUP_SUBSCRIPTION_MANAGER_USER_META_KEY, $subscription->get_id() );
+				// The eligibility guard that used to gate removal is gone (see the note above), so an ID
+				// whose user row was deleted out-of-band (orphaned meta) can reach here with no WP_User to
+				// read from. Resolve once and fall back to an empty email rather than dereferencing null.
+				$member_user = \get_userdata( $member_id );
 				$members_removed[ $member_id ] = [
-					'email' => \get_userdata( $member_id )->user_email,
+					'email' => $member_user ? $member_user->user_email : '',
 					'url'   => \get_edit_user_link( $member_id ),
 				];
 			}
 		}
 
-		// Narrow the additions to the IDs that would genuinely become members: non-readers and users
-		// who already hold this subscription's member meta are no-ops. Filtering them here rather
+		// Announced before the limit check below, which can reject the additions after these removals are saved.
+		foreach ( array_keys( $members_removed ) as $member_id ) {
+			self::announce_memberships_changed( $member_id, [], [ $subscription->get_id() ] );
+		}
+
+		// Narrow the additions to the IDs that would genuinely become members: ineligible users and
+		// users who already hold this subscription's member meta are no-ops. Filtering them here rather
 		// than in the add loop below keeps the limit projection honest -- counting a no-op ID would
 		// overstate the post-add total and reject an add that in fact fits.
 		$members_to_add = array_values(
 			array_filter(
 				$members_to_add,
 				function ( $member_id ) use ( $subscription ) {
-					return Reader_Activation::is_user_reader( $member_id )
+					return self::is_eligible_member( $member_id )
 						&& ! in_array( $subscription->get_id(), self::get_group_subscriptions_for_user( $member_id, true ), true );
 				}
 			)
@@ -624,9 +877,9 @@ class Group_Subscription {
 		// the invite path and get_member_capacity (the owner occupies one of the limited seats).
 		// The count and the writes below are not atomic: nothing locks between reading the members
 		// and invites here and adding the member meta, so two adds racing for the last seat (two
-		// admins, or an admin add racing an invite acceptance) can both pass this check and both
-		// land, leaving the group one seat over. That has always been true of this code path; the
-		// exposure is admin-only and low-concurrency, so it is accepted rather than locked against.
+		// admins, an invite acceptance, or an email-domain auto-join) can both pass this check and
+		// both land, leaving the group one seat over. Collisions are rare enough, and one seat over
+		// mild enough, that it is accepted rather than locked against.
 		$seat_limit = self::get_member_seat_limit( $subscription );
 		if ( ! empty( $members_to_add ) && null !== $seat_limit ) {
 			// Pending (non-expired) invites reserve a spot, so count them alongside existing members --
@@ -668,8 +921,8 @@ class Group_Subscription {
 		// below wants to name the affected members without carrying their addresses (see there).
 		$invites_to_cancel = [];
 
-		// Add new members. $members_to_add holds only genuinely-addable readers at this point, so the
-		// reader and duplicate-meta guards live in the filter above rather than here.
+		// Add new members. $members_to_add holds only genuinely-addable eligible members at this point,
+		// so the eligibility and duplicate-meta guards live in the filter above rather than here.
 		foreach ( $members_to_add as $member_id ) {
 			if ( \add_user_meta( $member_id, self::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() ) ) {
 				\update_user_meta( $member_id, self::get_member_joined_meta_key( $subscription->get_id() ), time() );
@@ -710,6 +963,10 @@ class Group_Subscription {
 			}
 		}
 
+		foreach ( array_keys( $members_added ) as $member_id ) {
+			self::announce_memberships_changed( $member_id, [ $subscription->get_id() ], [] );
+		}
+
 		return [
 			'members_added'     => $members_added,
 			'members_removed'   => $members_removed,
@@ -718,6 +975,65 @@ class Group_Subscription {
 			// array_values() drops the member-ID keys, so this serializes as a JSON array for the JS.
 			'invites_cancelled' => array_values( $invites_to_cancel ),
 		];
+	}
+
+	/**
+	 * Announce that a reader joined or left group subscriptions. Every write of the
+	 * membership user meta calls this, so integrations listen here instead of
+	 * watching the meta.
+	 *
+	 * @param int   $user_id     The reader.
+	 * @param int[] $added_ids   Subscription IDs of the groups they joined.
+	 * @param int[] $removed_ids Subscription IDs of the groups they left.
+	 */
+	public static function announce_memberships_changed( int $user_id, array $added_ids, array $removed_ids ): void {
+		/**
+		 * Fires after a reader joins or leaves group subscriptions.
+		 *
+		 * @param int   $user_id     The reader.
+		 * @param int[] $added_ids   Subscription IDs of the groups they joined.
+		 * @param int[] $removed_ids Subscription IDs of the groups they left.
+		 */
+		\do_action( 'newspack_group_subscription_memberships_changed', $user_id, $added_ids, $removed_ids );
+	}
+
+	/**
+	 * Whether a user may be a member of a group subscription.
+	 *
+	 * This gates new membership grants (adding a member, accepting an invite) and the read path
+	 * (resolving a user's group subscriptions for access). Every user is eligible except an account
+	 * Access Control never restricts ({@see Content_Gate::should_skip_access_checks()}), by default
+	 * staff, whatever other roles they hold. The content gate lets those accounts read everything,
+	 * so they do not need a seat, while everyone else can be restricted by the gate and needs a
+	 * path to access through a group. A reader is eligible whatever their capabilities: reader
+	 * status is authoritative, and
+	 * `Reader_Activation::is_user_reader()` already excludes administrators and editors.
+	 * Publishers can opt users in or out via the `newspack_group_subscription_member_eligible` filter.
+	 *
+	 * It does not gate removal. `update_members()` removes a member by ID regardless of current
+	 * eligibility, so a member who loses eligibility after being added (e.g. a role change) can
+	 * still be removed and does not keep an unreleased seat. A caller relying on this method as a
+	 * public contract should not reinstate an eligibility check on the removal path.
+	 *
+	 * @param int|\WP_User $user A user ID or WP_User object.
+	 *
+	 * @return bool Whether the user is an eligible group member.
+	 */
+	public static function is_eligible_member( $user ) {
+		$user = is_a( $user, 'WP_User' ) ? $user : \get_user_by( 'id', (int) $user );
+		if ( ! $user || ! $user->exists() ) {
+			return false;
+		}
+
+		$eligible = Reader_Activation::is_user_reader( $user ) || ! Content_Gate::should_skip_access_checks( $user );
+
+		/**
+		 * Filters whether a user is eligible to be a member of a group subscription.
+		 *
+		 * @param bool $eligible Whether the user is an eligible group member.
+		 * @param int  $user_id  The user ID.
+		 */
+		return (bool) apply_filters( 'newspack_group_subscription_member_eligible', $eligible, $user->ID );
 	}
 
 	/**
@@ -762,7 +1078,11 @@ class Group_Subscription {
 		if ( ! self::is_group_subscription( $subscription ) ) {
 			return null;
 		}
-		$is_manager = in_array( $user_id, self::get_managers( $subscription ), true );
+		// A caller of 0 is "nobody resolved" rather than an identity, so guard before the
+		// comparison: a logged-out request must never match an ownerless group. Same
+		// reasoning as the actor guard in can_actor_remove_member().
+		$user_id    = (int) $user_id;
+		$is_manager = $user_id > 0 && in_array( $user_id, self::get_managers( $subscription ), true );
 
 		/**
 		 * Filter whether a user is a manager of a group subscription.
@@ -788,7 +1108,7 @@ class Group_Subscription {
 		if ( ! function_exists( 'wcs_get_subscription' ) ) {
 			return [];
 		}
-		if ( ! Reader_Activation::is_user_reader( \get_user_by( 'id', $user_id ) ) ) {
+		if ( ! self::is_eligible_member( $user_id ) ) {
 			return [];
 		}
 		$cache_key = $user_id . '|' . ( $ids_only ? '1' : '0' );
@@ -889,9 +1209,11 @@ class Group_Subscription {
 		if ( ! $user_id || ! function_exists( 'wcs_get_subscription' ) ) {
 			return [];
 		}
-		if ( ! Reader_Activation::is_user_reader( \get_user_by( 'id', $user_id ) ) ) {
-			return [];
-		}
+
+		// No blanket eligibility gate here: a user who owns a group subscription sees it
+		// regardless of membership eligibility -- ownership isn't membership. The member
+		// branch below (get_group_subscriptions_for_user()) applies its own is_eligible_member()
+		// gate, so a non-eligible non-owner still contributes nothing from that side.
 
 		// Normalize the filter so [], null, and unsorted/duplicate inputs share a cache key.
 		$normalized_filter = is_array( $product_filter ) && ! empty( $product_filter )

@@ -11,16 +11,13 @@
 		"automattic/vipwpcs": "^3.0.0",
 		"wp-coding-standards/wpcs": "*",
 		"dealerdirect/phpcodesniffer-composer-installer": "*",
-		"phpcompatibility/phpcompatibility-wp": "*"
+		"phpcompatibility/phpcompatibility-wp": "*",
+		"yoast/phpunit-polyfills": "^4.0",
+		"phpunit/phpunit": "^9.5"
 	},
 	"autoload": {
 		"classmap": [
 			"includes"
-		]
-	},
-	"scripts": {
-		"post-update-cmd": [
-			"vendor/bin/cghooks update"
 		]
 	},
 	"extra": {},

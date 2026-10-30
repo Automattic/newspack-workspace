@@ -5,7 +5,8 @@
  * Description:     Ad services integration.
  * Author:          Automattic
  * License:         GPL2
- * Version:         3.13.0
+ * Version:         3.15.6
+ * Requires PHP:    8.1
  *
  * @package         Newspack
  */
@@ -14,10 +15,10 @@ namespace Newspack_Ads;
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'NEWSPACK_ADS_VERSION', '3.13.0' );
+define( 'NEWSPACK_ADS_VERSION', '3.15.6' );
 
 // Define NEWSPACK_ADS_PLUGIN_FILE.
-if ( ! defined( 'NEWSPACK_ADS_PLUGIN_FILE' ) ) {
+if ( ! defined( 'NEWSPACK_ADS_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal path constant, defined immediately below.
 	define( 'NEWSPACK_ADS_PLUGIN_FILE', __FILE__ );
 }
 

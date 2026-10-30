@@ -195,29 +195,38 @@ final class Media_Kit {
 	 * Equeue frontend scripts.
 	 */
 	public static function enqueue_scripts() {
+		// The media kit page (and any page using its patterns) is always a
+		// singular view, so skip the content sniffing everywhere else. The
+		// frontend JS is enqueued from the tabs block render path instead
+		// (see Tabs_Block::render_tab_navigation()).
+		if ( ! is_singular() ) {
+			return;
+		}
 		// Get current page content and check for the special class used in the patterns, or block usage.
 		$page_content = get_the_content();
-		$has_pattern = strpos( $page_content, 'media-kit-page__wrapper' ) >= 0;
-		$has_block = strpos( $page_content, '<!-- wp:newspack/tabs' ) >= 0;
+		$has_pattern = false !== strpos( $page_content, 'media-kit-page__wrapper' );
+		$has_block = false !== strpos( $page_content, '<!-- wp:newspack/tabs' );
 		if ( $has_pattern || $has_block ) {
-			\wp_register_style(
-				'newspack-ads-media-kit-frontend',
-				Core::plugin_url( 'dist/media-kit-frontend.css' ),
-				null,
-				filemtime( dirname( NEWSPACK_ADS_PLUGIN_FILE ) . '/dist/media-kit-frontend.css' )
-			);
-			\wp_style_add_data( 'newspack-ads-media-kit-frontend', 'rtl', 'replace' );
-			\wp_enqueue_style( 'newspack-ads-media-kit-frontend' );
+			self::enqueue_frontend_style();
 		}
-		if ( $has_block ) {
-			\wp_enqueue_script(
-				'newspack-ads-media-kit-frontend',
-				Core::plugin_url( 'dist/media-kit-frontend.js' ),
-				[],
-				NEWSPACK_ADS_VERSION,
-				true
-			);
-		}
+	}
+
+	/**
+	 * Enqueue the media kit frontend stylesheet.
+	 *
+	 * Called both from the content sniffing above (the page wrapper carries styles of
+	 * its own) and from the tabs block render path, which is the only way to catch a
+	 * block nested in a synced pattern.
+	 */
+	public static function enqueue_frontend_style() {
+		\wp_register_style(
+			'newspack-ads-media-kit-frontend',
+			Core::plugin_url( 'dist/media-kit-frontend.css' ),
+			null,
+			filemtime( dirname( NEWSPACK_ADS_PLUGIN_FILE ) . '/dist/media-kit-frontend.css' )
+		);
+		\wp_style_add_data( 'newspack-ads-media-kit-frontend', 'rtl', 'replace' );
+		\wp_enqueue_style( 'newspack-ads-media-kit-frontend' );
 	}
 
 	/**

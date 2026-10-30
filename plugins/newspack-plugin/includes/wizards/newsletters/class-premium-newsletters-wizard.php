@@ -15,6 +15,7 @@ defined( 'ABSPATH' ) || exit;
 class Premium_Newsletters_Wizard extends Wizard {
 
 	use Wizards\Traits\Content_Gate_Preferences;
+	use Wizards\Traits\Audience_Management_Dependency;
 
 	/**
 	 * Admin page slug.
@@ -56,7 +57,7 @@ class Premium_Newsletters_Wizard extends Wizard {
 	 * Constructor.
 	 */
 	public function __construct() {
-		if ( ! defined( 'NEWSPACK_NEWSLETTERS_PLUGIN_FILE' ) ) {
+		if ( ! defined( 'NEWSPACK_NEWSLETTERS_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Presence check for another Newspack plugin, not a configurable constant.
 			return;
 		}
 
@@ -109,7 +110,7 @@ class Premium_Newsletters_Wizard extends Wizard {
 						'properties'        => Content_Gate_API::$gate_properties,
 					],
 				],
-				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'permission_callback' => [ $this, 'api_permissions_check_audience_management' ],
 			]
 		);
 
@@ -146,7 +147,7 @@ class Premium_Newsletters_Wizard extends Wizard {
 			[
 				'methods'             => 'POST',
 				'callback'            => [ $this, 'api_duplicate_gate' ],
-				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'permission_callback' => [ $this, 'api_permissions_check_audience_management' ],
 				'args'                => [
 					'id' => [
 						'type'              => 'integer',
@@ -221,13 +222,16 @@ class Premium_Newsletters_Wizard extends Wizard {
 		\wp_localize_script(
 			'newspack-wizards',
 			'newspackAudienceContentGates',
-			[
-				'api'                     => '/' . NEWSPACK_API_NAMESPACE . '/wizard/' . $this->slug,
-				'available_access_rules'  => Access_Rules::get_access_rules(),
-				'available_content_rules' => Content_Rules::get_premium_newsletter_rules(),
-				'presave_checks_enabled'  => Content_Gate::get_presave_checks_enabled(),
-				'default_gate_status'     => Content_Gate::get_default_new_gate_status(),
-			]
+			array_merge(
+				[
+					'api'                     => '/' . NEWSPACK_API_NAMESPACE . '/wizard/' . $this->slug,
+					'available_access_rules'  => Access_Rules::get_access_rules_for_client(),
+					'available_content_rules' => Content_Rules::get_premium_newsletter_rules(),
+					'presave_checks_enabled'  => Content_Gate::get_presave_checks_enabled(),
+					'default_gate_status'     => Content_Gate::get_default_new_gate_status(),
+				],
+				$this->get_audience_management_script_data()
+			)
 		);
 
 		\wp_localize_script(
@@ -318,8 +322,8 @@ class Premium_Newsletters_Wizard extends Wizard {
 		$config = [
 			'gates'  => Content_Gate::get_gates( Content_Gate::GATE_CPT, null, true ),
 			'config' => [
-				// Auto signup for restricted lists as soon as a user meets the access requirements. Defaults to true.
-				'auto_signup' => boolval( get_option( 'newspack_premium_newsletters_auto_signup', 1 ) ),
+				// Auto signup for restricted lists as soon as a user meets the access requirements.
+				'auto_signup' => Premium_Newsletters::is_site_auto_signup_on(),
 			],
 		];
 		return rest_ensure_response( $config );
@@ -334,7 +338,7 @@ class Premium_Newsletters_Wizard extends Wizard {
 	 */
 	public function update_config( $request ) {
 		$config = $request->get_param( 'config' );
-		$updated = update_option( 'newspack_premium_newsletters_auto_signup', ( (bool) $config['auto_signup'] ? 1 : 0 ), false );
+		$updated = update_option( Premium_Newsletters::AUTO_SIGNUP_OPTION, ( (bool) $config['auto_signup'] ? 1 : 0 ), false );
 		return rest_ensure_response( $updated );
 	}
 
@@ -361,7 +365,7 @@ class Premium_Newsletters_Wizard extends Wizard {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function delete_gate( $request ) {
-		$id   = $request->get_param( 'id' );
+		$id   = Content_Gate_API::get_route_gate_id( $request );
 		$gate = get_post( $id );
 		if ( ! $gate ) {
 			return new \WP_Error( 'invalid_gate_id', __( 'Invalid gate ID.', 'newspack-plugin' ), [ 'status' => 400 ] );
@@ -384,7 +388,7 @@ class Premium_Newsletters_Wizard extends Wizard {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function api_duplicate_gate( $request ) {
-		$id   = $request->get_param( 'id' );
+		$id   = Content_Gate_API::get_route_gate_id( $request );
 		$gate = get_post( $id );
 		if ( ! $gate ) {
 			return new \WP_Error( 'invalid_gate_id', __( 'Invalid gate ID.', 'newspack-plugin' ), [ 'status' => 400 ] );
@@ -412,7 +416,7 @@ class Premium_Newsletters_Wizard extends Wizard {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function update_gate( $request ) {
-		$id   = $request->get_param( 'id' );
+		$id   = Content_Gate_API::get_route_gate_id( $request );
 		$gate = get_post( $id );
 		if ( ! $gate ) {
 			return new \WP_Error( 'invalid_gate_id', __( 'Invalid gate ID.', 'newspack-plugin' ), [ 'status' => 400 ] );

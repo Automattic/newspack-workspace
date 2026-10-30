@@ -3,20 +3,20 @@
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
-@use "../../../colors/colors.module" as colors;
+@use "../../../colors/colors.module" as np-colors;
 
 .newspack-web-preview {
 	// Color
-	--wp-admin-theme-color: #{colors.$primary-600};
-	--wp-admin-theme-color--rgb: #{colors.$primary-600--rgb};
-	--wp-admin-theme-color-darker-10: #{colors.$primary-700};
-	--wp-admin-theme-color-darker-10--rgb: #{colors.$primary-700--rgb};
-	--wp-admin-theme-color-darker-20: #{colors.$primary-800};
-	--wp-admin-theme-color-darker-20--rgb: #{colors.$primary-800--rgb};
-	--wp-admin-theme-color-lighter-10: #{colors.$primary-000};
-	--wp-admin-theme-color-lighter-10--rgb: #{colors.$primary-000--rgb};
+	--wp-admin-theme-color: #{np-colors.$primary-600};
+	--wp-admin-theme-color--rgb: #{np-colors.$primary-600--rgb};
+	--wp-admin-theme-color-darker-10: #{np-colors.$primary-700};
+	--wp-admin-theme-color-darker-10--rgb: #{np-colors.$primary-700--rgb};
+	--wp-admin-theme-color-darker-20: #{np-colors.$primary-800};
+	--wp-admin-theme-color-darker-20--rgb: #{np-colors.$primary-800--rgb};
+	--wp-admin-theme-color-lighter-10: #{np-colors.$primary-000};
+	--wp-admin-theme-color-lighter-10--rgb: #{np-colors.$primary-000--rgb};
 
-	background: color-mix(in srgb, colors.$neutral-1000, transparent 65%);
+	background: color-mix(in srgb, np-colors.$neutral-1000, transparent 65%);
 	box-sizing: border-box;
 	height: 100%;
 	left: 0;

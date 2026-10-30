@@ -149,21 +149,22 @@ require_target_folder() {
 }
 
 start() {
-    file="docker-compose.yml"
-        if [ "$1" == "8.2" ]; then
-            file="docker-compose-82.yml"
-        fi
-        compose_files=(-f "$file")
-        # Honor a developer-local docker-compose.override.yml for the main dev
-        # stack. Passing an explicit -f disables Compose's automatic override
-        # loading, so re-add the file here when it exists (a no-op otherwise,
-        # which preserves the default stack). Isolated env containers
-        # deliberately skip this file -- they layer their own
-        # docker-compose.env-*.yml overrides instead.
-        if [[ -f docker-compose.override.yml ]]; then
-            compose_files+=(-f docker-compose.override.yml)
-        fi
-        docker compose "${compose_files[@]}" up -d
+    if [[ $# -gt 0 ]]; then
+        echo "Warning: start and restart take no arguments (PHP version selection was removed); ignoring them." >&2
+    fi
+    compose_files=(-f docker-compose.yml)
+    # Honor a developer-local docker-compose.override.yml for the main dev
+    # stack. Passing an explicit -f disables Compose's automatic override
+    # loading, so re-add the file here when it exists (a no-op otherwise,
+    # which preserves the default stack). Isolated env containers
+    # deliberately skip this file -- they layer their own
+    # docker-compose.env-*.yml overrides instead.
+    if [[ -f docker-compose.override.yml ]]; then
+        compose_files+=(-f docker-compose.override.yml)
+    fi
+    # Compose never refreshes an image it already has. Offline, the current one is used.
+    docker compose "${compose_files[@]}" pull --quiet --ignore-pull-failures adminer mailpit >/dev/null 2>&1
+    docker compose "${compose_files[@]}" up -d
 
     # Create shared network for inter-container communication.
     # Env containers join this network with their domain as an alias,
@@ -199,6 +200,7 @@ start() {
         done
         if [[ ${#missing_aliases[@]} -gt 0 || ${#missing_hosts[@]} -gt 0 ]]; then
             # Use the wrapper script if installed (passwordless sudo), otherwise fall back to raw sudo.
+            warn_if_manage_host_stale
             if command -v newspack-manage-host >/dev/null 2>&1; then
                 for ip in "${missing_aliases[@]}"; do
                     sudo newspack-manage-host alias-add "$ip"
@@ -392,10 +394,12 @@ case $1 in
 
         ;;
     sites-list)
-        docker exec $DOCKER_IT $TARGET_CONTAINER sh -c "/var/scripts/sites-list.sh ${@:2}"
+        # Arguments go straight into the container command's argv, so no shell
+        # parses them a second time.
+        docker exec $DOCKER_IT $TARGET_CONTAINER /var/scripts/sites-list.sh "${@:2}"
         ;;
     sites-drop)
-        docker exec $DOCKER_IT $TARGET_CONTAINER sh -c "/var/scripts/sites-drop.sh ${@:2}"
+        docker exec $DOCKER_IT $TARGET_CONTAINER /var/scripts/sites-drop.sh "${@:2}"
         ;;
     build)
         if [[ -n "$2" ]]; then
@@ -431,8 +435,14 @@ case $1 in
         docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "$command"
         ;;
     test-js)
+        if [[ -n "$2" ]]; then
+            target_folder=$2
+        fi
         require_target_folder
-        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "/var/scripts/test-js.sh $target_folder"
+        # Run the script directly (no `sh -c`) and quote the folder: it can now
+        # come from the command line, where an unquoted value would word-split
+        # or be read as shell syntax by the container.
+        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER /var/scripts/test-js.sh "$target_folder"
         ;;
     composer)
         require_target_folder
@@ -492,16 +502,13 @@ case $1 in
     root)
         echo "$NABSPATH"
         ;;
-    setup-agents)
-        "$NABSPATH/bin/setup-agents.sh"
-        ;;
     help)
         echo "Available commands:"
         echo ""
         echo "Container Management:"
-        echo "  start [version]              Start the Docker containers. Optionally specify a PHP version (e.g. 8.2)."
+        echo "  start                        Start the Docker containers."
         echo "  stop                         Stop the Docker containers."
-        echo "  restart [version]            Restart the Docker containers. Optionally specify a PHP version (e.g. 8.2)."
+        echo "  restart                      Restart the Docker containers."
         echo "  sh                           Open a bash shell inside the container as the Apache user."
         echo "  rsh                          Open a bash shell inside the container as root."
         echo ""
@@ -546,9 +553,6 @@ case $1 in
         echo "Isolated Environments:"
         echo "  worktree [args]              Manage Git worktrees for repositories (add, list, remove, cleanup)."
         echo "  env [args]                   Manage isolated environments (create, up, down, destroy, list, cleanup)."
-        echo ""
-        echo "AI Agents:"
-        echo "  setup-agents                 Set up AI agent tooling for Newspack development."
         echo ""
         echo "Other:"
         echo "  root                         Print the absolute path to the workspace root directory."

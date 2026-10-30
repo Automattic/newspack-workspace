@@ -205,7 +205,7 @@ const Placements = () => {
 								description={ placement.description }
 								badge={
 									enabled && ! ( isEditing && isEnabling )
-										? { level: 'success', text: __( 'Enabled', 'newspack-plugin' ) }
+										? { intent: 'stable', label: __( 'Enabled', 'newspack-plugin' ) }
 										: undefined
 								}
 								actions={

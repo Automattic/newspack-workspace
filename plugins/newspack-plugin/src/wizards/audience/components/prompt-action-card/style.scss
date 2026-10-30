@@ -1,69 +1,31 @@
-/**
- * Popup Action Card styles
- */
+@use "~@wordpress/base-styles/variables" as wp-vars;
 
-@use "~@wordpress/base-styles/colors" as wp-colors;
+.newspack-campaigns__prompt-summary {
+	flex: 1 1 320px;
+	min-width: 0;
+}
 
-.newspack-audience-campaigns {
-	.newspack-action-card {
-		display: flex;
-		flex-direction: column;
-		justify-content: center;
-		min-height: 40px;
+.newspack-campaigns__prompt-title {
+	font-size: inherit;
+	font-weight: wp-vars.$font-weight-medium;
+	margin: 0;
 
-		.newspack-popover {
-			.components-menu-group + .components-menu-group {
-				border-top: 1px solid wp-colors.$gray-300;
-			}
-		}
+	a {
+		color: inherit;
+		text-decoration: none;
 
-		&__container {
-			align-items: center;
+		&:hover,
+		&:focus {
+			text-decoration: underline;
 		}
 	}
+}
 
-	&__buttons {
-		> .newspack-button + .newspack-button {
-			margin-left: 2px;
-		}
-	}
+.newspack-campaigns__prompt-warning {
+	margin: 0;
 
-	&__analytics-data {
-		&--icon {
-			align-items: center;
-			display: flex;
-			flex: 0 0 auto;
-			height: auto;
-			justify-content: center;
-			margin: 0;
-			margin-right: 2px;
-			min-height: 36px;
-			min-width: 36px;
-			width: auto;
-
-			svg {
-				fill: wp-colors.$gray-900;
-			}
-		}
-
-		&--value {
-			margin: 0 8px;
-			text-align: center;
-
-			&:first-of-type {
-				margin-left: 16px;
-			}
-
-			&:last-of-type {
-				margin-right: 16px;
-			}
-
-			strong {
-				color: wp-colors.$gray-900;
-				display: block;
-				font-size: 17px;
-				line-height: 24px;
-			}
-		}
+	ul,
+	p {
+		margin: 0;
 	}
 }

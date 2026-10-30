@@ -52,6 +52,10 @@ a.button {
 	}
 
 	form .form-row {
+		> label:not(.checkbox, .woocommerce-form__label-for-checkbox, input + label) {
+			margin-bottom: var(--newspack-ui-spacer-1, 8px);
+		}
+
 		.required {
 			color: firebrick;
 			text-decoration: none;
@@ -1887,8 +1891,11 @@ table.woocommerce-table--order-details.shop_table,
 	}
 }
 
-// Membership appearance
-.wc-memberships-member-discount-message {
+// Subscriber discount appearance. Both selectors are carried: sites still on
+// WooCommerce Memberships emit its class names, sites on Access Control emit
+// ours.
+.wc-memberships-member-discount-message,
+.newspack-subscriber-discount-note {
 	margin-top: 1rem;
 
 	a:not(:hover) {
@@ -1896,6 +1903,7 @@ table.woocommerce-table--order-details.shop_table,
 	}
 }
 
-.woocommerce span.onsale.wc-memberships-member-discount {
+.woocommerce span.onsale.wc-memberships-member-discount,
+.woocommerce span.onsale.newspack-subscriber-discount-badge {
 	left: 0;
 }

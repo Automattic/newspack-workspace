@@ -84,10 +84,10 @@ class Membership_Plans_Table extends \WP_List_Table {
 
 		if ( $column_name === 'name' ) {
 			$edit_url = sprintf( '%s/wp-admin/post.php?post=%d&action=edit', $item['site_url'], $item['id'] );
-			return sprintf( '<a href="%s">%s</a>', esc_url( $edit_url ), $item[ $column_name ] . ' (#' . $item['id'] . ')' );
+			return sprintf( '<a href="%s">%s</a>', esc_url( $edit_url ), esc_html( $item[ $column_name ] . ' (#' . $item['id'] . ')' ) );
 		}
 		if ( $column_name === 'network_pass_id' && $item[ $column_name ] ) {
-			return sprintf( '<code>%s</code>', $item[ $column_name ] );
+			return sprintf( '<code>%s</code>', esc_html( $item[ $column_name ] ) );
 		}
 		if ( $column_name === 'network_pass_discrepancies' && isset( $item['network_pass_discrepancies'] ) && $item['network_pass_id'] ) {
 			$discrepancies = $item['network_pass_discrepancies'];
@@ -122,9 +122,9 @@ class Membership_Plans_Table extends \WP_List_Table {
 			return sprintf( '<a href="%s">%s</a>', esc_url( $memberships_list_url_with_emails_url ), esc_html( $message ) );
 		}
 		if ( $column_name === 'active_memberships_count' && isset( $item[ $column_name ] ) ) {
-			return sprintf( '<a href="%s">%s</a>', esc_url( $memberships_list_url ), $item[ $column_name ] );
+			return sprintf( '<a href="%s">%s</a>', esc_url( $memberships_list_url ), esc_html( $item[ $column_name ] ) );
 		}
-		return isset( $item[ $column_name ] ) ? $item[ $column_name ] : '';
+		return isset( $item[ $column_name ] ) && is_scalar( $item[ $column_name ] ) ? esc_html( $item[ $column_name ] ) : '';
 	}
 
 	/**

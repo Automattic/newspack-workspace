@@ -82,6 +82,13 @@ final class Sync_Reader_Data_CLI {
 		$reader_data_user_meta_key = Reader_Data::get_meta_key_name( 'active_memberships' );
 		$potentially_misaliged_members = $wpdb->get_results( $wpdb->prepare( $sql, $reader_data_user_meta_key ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		foreach ( $potentially_misaliged_members as $reader_data ) {
+			// A wc_user_membership post whose author was deleted groups into a
+			// user_id = NULL row: there is no reader to repair, and a write
+			// aimed at user 0 would report success while storing nothing.
+			if ( empty( $reader_data->user_id ) ) {
+				continue;
+			}
+
 			// Rule out false-positives.
 			$actual_membership_plan_ids = explode( ',', $reader_data->actual_membership_plan_ids ?? '' );
 			$stored_membership_plan_ids = explode( ',', $reader_data->stored_membership_plan_ids ?? '' );
@@ -94,8 +101,12 @@ final class Sync_Reader_Data_CLI {
 			}
 
 			if ( $live ) {
-				$update_result = update_user_meta( $reader_data->user_id, $reader_data_user_meta_key, implode( ',', $actual_membership_plan_ids ) );
-				if ( $update_result !== false ) {
+				// Write through update_item() so the value is stored as the JSON
+				// array the data event handlers expect (NPPM-3205).
+				$update_result = Reader_Data::update_item( $reader_data->user_id, 'active_memberships', array_map( 'intval', $actual_membership_plan_ids ) );
+				if ( \is_wp_error( $update_result ) ) {
+					\WP_CLI::warning( sprintf( 'Could not update user #%d reader data: %s', $reader_data->user_id, $update_result->get_error_message() ) );
+				} else {
 					\WP_CLI::success( sprintf( 'Updated user #%d reader data.', $reader_data->user_id ) );
 				}
 			} else {

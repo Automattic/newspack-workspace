@@ -20,9 +20,11 @@ import apiFetch from '@wordpress/api-fetch';
  * @param {Object}   props
  * @param {string}   props.value    Currently selected coupon code.
  * @param {Function} props.onChange Called with the selected coupon code (or '').
+ * @param {boolean}  props.disabled Whether a coupon can be set. A stored code stays
+ *                                  visible and removable so it can't get stranded.
  * @return {JSX.Element} The control.
  */
-export default function CouponControl( { value, onChange } ) {
+export default function CouponControl( { value, onChange, disabled = false } ) {
 	const [ inFlight, setInFlight ] = useState( false );
 	const [ suggestions, setSuggestions ] = useState( [] );
 	const [ selected, setSelected ] = useState( false );
@@ -100,9 +102,13 @@ export default function CouponControl( { value, onChange } ) {
 			<div className="newspack-checkout-button__coupon-field">
 				<BaseControl label={ __( 'Coupon', 'newspack-blocks' ) } id="newspack-checkout-button-coupon">
 					<TextControl value={ selected } __next40pxDefaultSize disabled />
-					<Button variant="link" onClick={ () => setIsChanging( true ) }>
-						{ __( 'Edit', 'newspack-blocks' ) }
-					</Button>{ ' ' }
+					{ ! disabled && (
+						<>
+							<Button variant="link" onClick={ () => setIsChanging( true ) }>
+								{ __( 'Edit', 'newspack-blocks' ) }
+							</Button>{ ' ' }
+						</>
+					) }
 					<Button
 						variant="link"
 						isDestructive
@@ -121,13 +127,16 @@ export default function CouponControl( { value, onChange } ) {
 	return (
 		<div className="newspack-checkout-button__coupon-field">
 			<FormTokenField
-				placeholder={ __( 'Type to search for a coupon…', 'newspack-blocks' ) }
+				placeholder={
+					disabled ? __( 'Coupons are not available', 'newspack-blocks' ) : __( 'Type to search for a coupon…', 'newspack-blocks' )
+				}
 				label={ __( 'Coupon', 'newspack-blocks' ) }
 				maxLength={ 1 }
 				value={ [] }
 				onChange={ onTokenChange }
 				onInputChange={ handleInputChange }
-				suggestions={ suggestions }
+				suggestions={ disabled ? [] : suggestions }
+				disabled={ disabled }
 				__next40pxDefaultSize
 			/>
 			{ inFlight && <Spinner /> }

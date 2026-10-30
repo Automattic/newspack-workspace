@@ -28,17 +28,17 @@ $tag_labels = function_exists( 'newspack_get_tag_labels' ) ? newspack_get_tag_la
 			if ( ! empty( $native_sponsors ) ) {
 				// Get label for native post sponsors.
 				newspack_sponsor_label( $native_sponsors );
-				if ( $tag_labels ) {
-					newspack_display_tag_labels( $tag_labels );
-				}
 				if ( $display_sponsors_and_categories ) {
 					newspack_categories();
 				}
-			} else {
 				if ( $tag_labels ) {
 					newspack_display_tag_labels( $tag_labels );
 				}
+			} else {
 				newspack_categories();
+				if ( $tag_labels ) {
+					newspack_display_tag_labels( $tag_labels );
+				}
 			}
 		}
 		?>

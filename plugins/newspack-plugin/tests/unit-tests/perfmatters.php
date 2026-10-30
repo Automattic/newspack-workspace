@@ -11,10 +11,51 @@ use Newspack\WooCommerce_Content_Detector;
 require_once __DIR__ . '/../mocks/newspack-popups-model-mock.php';
 
 /**
- * Tests the Perfmatters integration: above-header prompt handling and the
- * WooCommerce veto.
+ * Tests for Newspack's default Perfmatters configuration.
+ *
+ * @group perfmatters
  */
 class Newspack_Test_Perfmatters extends WP_UnitTestCase {
+	/**
+	 * Newspack forces RUCSS on, so its defaults must exclude the Complianz
+	 * stylesheets: the consent banner markup is injected client-side, its
+	 * selectors never reach the server-generated used-CSS snapshot, and the
+	 * delayed original stylesheet leaves the banner unstyled until user
+	 * interaction or the delay timeout.
+	 */
+	public function test_complianz_stylesheets_excluded_from_rucss_defaults() {
+		$options = Perfmatters::set_defaults( [] );
+
+		$this->assertTrue( $options['assets']['remove_unused_css'] );
+		$this->assertContains(
+			'plugins/complianz-gdpr',
+			$options['assets']['rucss_excluded_stylesheets'],
+			'Complianz plugin-dir CSS (free + premium, prefix-matched) must be excluded from RUCSS.'
+		);
+		$this->assertContains(
+			'uploads/complianz',
+			$options['assets']['rucss_excluded_stylesheets'],
+			'Complianz generated banner CSS in uploads must be excluded from RUCSS.'
+		);
+	}
+
+	/**
+	 * The backstop filter enforces the same exclusions even when a publisher's
+	 * saved settings override the defaults, and preserves publisher entries.
+	 */
+	public function test_complianz_stylesheets_excluded_via_backstop_filter() {
+		$this->assertNotFalse(
+			has_filter( 'perfmatters_rucss_excluded_stylesheets', [ Perfmatters::class, 'add_rucss_excluded_stylesheets' ] ),
+			'The backstop filter must be registered so exclusions apply even when saved settings override the defaults.'
+		);
+
+		$exclusions = Perfmatters::add_rucss_excluded_stylesheets( [ 'example-publisher-entry' ] );
+
+		$this->assertContains( 'plugins/complianz-gdpr', $exclusions );
+		$this->assertContains( 'uploads/complianz', $exclusions );
+		$this->assertContains( 'example-publisher-entry', $exclusions );
+	}
+
 	/**
 	 * Reset the detector memo before each test.
 	 */
@@ -125,6 +166,32 @@ class Newspack_Test_Perfmatters extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Saving the Perfmatters settings while reader activation is off stores
+	 * `newspack-plugin` in the delay list. Once reader activation is on, the merge
+	 * must not bring it back, or the first click on the sign-in button or a
+	 * `#signin_modal` link does nothing. Without reader activation, Newspack
+	 * delays it by default.
+	 */
+	public function test_newspack_plugin_delayed_only_without_reader_activation() {
+		add_filter( 'newspack_reader_activation_enabled', '__return_true' );
+		$options = Perfmatters::set_defaults(
+			[
+				'assets' => [
+					'delay_js_inclusions' => [ 'newspack-plugin', 'publisher-script' ],
+				],
+			]
+		);
+		$this->assertNotContains( 'newspack-plugin', $options['assets']['delay_js_inclusions'] );
+		$this->assertContains( 'publisher-script', $options['assets']['delay_js_inclusions'] );
+		remove_filter( 'newspack_reader_activation_enabled', '__return_true' );
+
+		add_filter( 'newspack_reader_activation_enabled', '__return_false' );
+		$options = Perfmatters::set_defaults( [] );
+		remove_filter( 'newspack_reader_activation_enabled', '__return_false' );
+		$this->assertContains( 'newspack-plugin', $options['assets']['delay_js_inclusions'] );
+	}
+
+	/**
 	 * When WooCommerce content is present, the callback vetoes the strip
 	 * (returns false) regardless of the incoming value.
 	 */
@@ -164,9 +231,152 @@ class Newspack_Test_Perfmatters extends WP_UnitTestCase {
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
 	 */
-	public function test_ignore_defaults_passes_through() {
+	public function test_ignore_defaults_leaves_backstop_untouched() {
 		define( 'NEWSPACK_IGNORE_PERFMATTERS_DEFAULTS', true );
-		$this->assertTrue( Perfmatters::maybe_keep_woocommerce_assets( true ) );
-		$this->assertFalse( Perfmatters::maybe_keep_woocommerce_assets( false ) );
+
+		$input = [ 'example-publisher-entry' ];
+
+		$this->assertSame( $input, Perfmatters::add_rucss_excluded_stylesheets( $input ) );
+	}
+
+	/**
+	 * Perfmatters "Delay JavaScript" executes scripts on first user interaction,
+	 * and the IP-access landing page auto-redirects with no interaction — a
+	 * delayed gtag never runs there, so no pageview or event is ever sent. The
+	 * delay is vetoed on that request; everywhere else the configured value
+	 * passes through.
+	 */
+	public function test_delay_js_vetoed_on_ip_access_landing_page() {
+		$this->assertTrue( Perfmatters::should_delay_js( true ), 'The configured value passes through on a regular request.' );
+
+		// The landing page is identified by its query var alone — no path involved.
+		set_query_var( \Newspack\Content_Gate\IP_Access_Rule::ENDPOINT, '1' );
+		set_query_var( \Newspack\Content_Gate\IP_Access_Rule::ENDPOINT . '-slug', 'test-university' );
+		$this->assertFalse( Perfmatters::should_delay_js( true ), 'JS delay is vetoed on the landing page request.' );
+
+		set_query_var( \Newspack\Content_Gate\IP_Access_Rule::ENDPOINT, '' );
+		set_query_var( \Newspack\Content_Gate\IP_Access_Rule::ENDPOINT . '-slug', '' );
+	}
+
+	/**
+	 * A saved option that already carries the manually-applied workaround entry
+	 * doesn't end up with duplicates after the defaults merge.
+	 */
+	public function test_no_duplicate_exclusions_after_merge() {
+		$options = Perfmatters::set_defaults(
+			[
+				'assets' => [
+					'rucss_excluded_stylesheets' => [ 'plugins/complianz-gdpr' ],
+				],
+			]
+		);
+
+		$this->assertSame(
+			array_unique( $options['assets']['rucss_excluded_stylesheets'] ),
+			$options['assets']['rucss_excluded_stylesheets']
+		);
+		$this->assertContains( 'plugins/complianz-gdpr', $options['assets']['rucss_excluded_stylesheets'] );
+	}
+
+	/**
+	 * Perfmatters decides whether to delay a stylesheet by substring-matching each
+	 * exclusion entry against the whole `<link>` tag (Perfmatters CSS.php, via
+	 * Utilities::match_in_array/stripos). Asserting an entry is merely *present* in
+	 * the list — as an assertContains check does — cannot tell whether it still
+	 * matches anything Jetpack actually serves: NPPM-3167 sat broken across the
+	 * fleet for four months because `_inc/social-logos` stopped matching when
+	 * Jetpack 15.7 relocated the file to `_inc/build/social-logos/`, and no test
+	 * noticed. These tests replicate that matching, as read in Perfmatters 2.5.7,
+	 * against the tag shapes Jetpack emits, so narrowing or dropping an entry fails
+	 * here rather than on a publisher's homepage. Perfmatters is not a test
+	 * dependency, so the replica does not follow it: if a Perfmatters release
+	 * changes how it matches, these tests keep passing until the replica is updated.
+	 *
+	 * @param string $tag   Full stylesheet link tag as WordPress would emit it.
+	 * @param string $label Human-readable description used in the failure message.
+	 *
+	 * @dataProvider jetpack_share_stylesheet_tags
+	 */
+	public function test_jetpack_share_stylesheets_match_an_exclusion_entry( $tag, $label ) {
+		$this->assert_tag_matches_an_exclusion_entry( $tag, $label );
+	}
+
+	/**
+	 * Both asset URL shapes Jetpack can emit for its share-button styles.
+	 *
+	 * The CDN variants are what Jetpack's Asset CDN ("Speed up static file load
+	 * times") serves, and they drop the `plugins/jetpack/` segment entirely — which
+	 * is why an exclusion entry carrying that prefix silently stops matching
+	 * wherever those assets are CDN-hosted. `c0.wp.com` is the CDN's real host and
+	 * has to stay real for these rows to mean anything; the site host and the version
+	 * numbers are invented.
+	 *
+	 * @return array<string, array{0: string, 1: string}>
+	 */
+	public function jetpack_share_stylesheet_tags() {
+		$tag = function ( $handle, $href ) {
+			return sprintf( "<link rel='stylesheet' id='%s' href='%s' media='all' />", $handle, $href );
+		};
+
+		return [
+			'social logos, served from the plugin directory' => [
+				$tag( 'social-logos-css', 'https://example.test/wp-content/plugins/jetpack/_inc/build/social-logos/social-logos.css?ver=16.2' ),
+				"Jetpack's social logos CSS served from the plugin directory",
+			],
+			'social logos, served from the Jetpack CDN'  => [
+				$tag( 'social-logos-css', 'https://c0.wp.com/p/jetpack/16.2/_inc/build/social-logos/social-logos.css' ),
+				"Jetpack's social logos CSS served from the Jetpack CDN",
+			],
+			'share buttons, served from the plugin directory' => [
+				$tag( 'sharedaddy-css', 'https://example.test/wp-content/plugins/jetpack/modules/sharedaddy/sharing.css?ver=16.2' ),
+				"Jetpack's share button CSS served from the plugin directory",
+			],
+			'share buttons, served from the Jetpack CDN' => [
+				$tag( 'sharedaddy-css', 'https://c0.wp.com/p/jetpack/16.2/modules/sharedaddy/sharing.css' ),
+				"Jetpack's share button CSS served from the Jetpack CDN",
+			],
+		];
+	}
+
+	/**
+	 * The sticky footer ad needs this stylesheet from the first paint. Withheld,
+	 * the slot sits unstyled at the bottom of the page, where GPT's lazy loading
+	 * holds the fetched ad until it scrolls into view. The stylesheet then arrives
+	 * on the reader's first interaction and hides the slot until an ad renders in
+	 * it, which never happens. The URL keeps the `includes/../dist/` shape the
+	 * plugin emits; the host and version are invented.
+	 */
+	public function test_newspack_ads_stylesheet_matches_an_exclusion_entry() {
+		$this->assert_tag_matches_an_exclusion_entry(
+			"<link rel='stylesheet' id='newspack-ads-frontend-css' href='https://example.test/wp-content/plugins/newspack-ads/includes/../dist/frontend.css?ver=3.15.1' media='all' />",
+			"Newspack Ads' front-end CSS"
+		);
+	}
+
+	/**
+	 * Fails unless an entry in Newspack's RUCSS exclusions matches the tag the way
+	 * Perfmatters matches it (see test_jetpack_share_stylesheets_match_an_exclusion_entry).
+	 *
+	 * @param string $tag   Full stylesheet link tag as WordPress would emit it.
+	 * @param string $label Human-readable description used in the failure message.
+	 */
+	private function assert_tag_matches_an_exclusion_entry( $tag, $label ) {
+		$exclusions = Perfmatters::add_rucss_excluded_stylesheets( [] );
+
+		$this->assertNotEmpty( $exclusions, 'The defaults must supply exclusion entries.' );
+
+		foreach ( $exclusions as $entry ) {
+			if ( '' !== $entry && false !== stripos( $tag, $entry ) ) {
+				return;
+			}
+		}
+
+		$this->fail(
+			sprintf(
+				'No RUCSS exclusion entry matches %s, so Perfmatters will delay it until the reader interacts with the page. Tag: %s',
+				$label,
+				$tag
+			)
+		);
 	}
 }

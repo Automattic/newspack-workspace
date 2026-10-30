@@ -109,7 +109,7 @@ class Tag_Labels {
 	 *
 	 * @return string Tag labels as HTML.
 	 */
-	public static function generate_html( $labels = null, $links = true, $outer_classes = array( 'tag-labels' ), $inner_classes = array( 'tag-label', 'flag' ), $outer_element = 'span' ) {
+	public static function generate_html( $labels = null, $links = true, $outer_classes = array( 'newspack-tag-labels', 'tag-labels' ), $inner_classes = array( 'newspack-tag-label', 'tag-label', 'flag' ), $outer_element = 'span' ) {
 		if ( empty( $labels ) ) {
 			return '';
 		}
@@ -125,7 +125,7 @@ class Tag_Labels {
 				$labels_html .= '<span class="' . join( ' ', array_map( 'esc_attr', $inner_classes ) ) . '">' . esc_html( $label['flag'] ) . '</span>';
 			}
 		}
-		$labels_html .= '</' . $outer_element . '><!-- .tag-labels -->';
+		$labels_html .= '</' . $outer_element . '><!-- .newspack-tag-labels -->';
 
 		return $labels_html;
 	}
@@ -144,7 +144,13 @@ class Tag_Labels {
 			return;
 		}
 
-		echo wp_kses_post( self::generate_html( $labels, $links, array( 'tag-labels', 'cat-links' ), array( 'tag-label', 'flag' ), $outer_element ) . ' ' );
+		// No `cat-links` in the wrapper. That class hands an element every
+		// `.cat-links a` rule a publisher has written for categories, and
+		// per-section color overrides are common enough that tag labels would
+		// follow a palette they are not meant to follow. Each caller declares its
+		// own styling; see the `.newspack-tag-labels` rules in newspack-blocks and both
+		// themes.
+		echo wp_kses_post( self::generate_html( $labels, $links, array( 'newspack-tag-labels', 'tag-labels' ), array( 'newspack-tag-label', 'tag-label', 'flag' ), $outer_element ) . ' ' );
 	}
 
 	/**
@@ -171,7 +177,7 @@ class Tag_Labels {
 			'newspack_tag_labels',
 			Newspack::plugin_url() . '/dist/other-scripts/tag-labels.js',
 			[ 'jquery' ],
-			NEWSPACK_PLUGIN_VERSION,
+			Newspack::asset_version( 'other-scripts/tag-labels' ),
 			true
 		);
 	}

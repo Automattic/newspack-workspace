@@ -17,19 +17,32 @@ use Newspack\Configuration_Managers;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * ESP Integration Class.
+ * Mailchimp Integration Class (id `esp`).
  *
- * Generic integration for ESPs using Newspack Newsletters plugin.
+ * Reader-data sync through the Newspack Newsletters Mailchimp provider. This
+ * was the generic ESP integration; the `esp` id — and every option keyed on
+ * it — is retained so no stored settings move. It syncs Mailchimp only: any
+ * other provider needs a dedicated integration, such as the ActiveCampaign
+ * one in newspack-manager.
  */
 class ESP extends Integration {
+
+	/**
+	 * Newspack Newsletters' code for "this provider has no list management".
+	 * Campaign Monitor is the current example.
+	 *
+	 * @var string
+	 */
+	const LIST_MANAGEMENT_UNSUPPORTED_ERROR_CODE = 'newspack_newsletters_not_supported';
+
 	/**
 	 * Constructor.
 	 */
 	public function __construct() {
 		parent::__construct(
 			'esp',
-			__( 'Newsletter ESP', 'newspack-plugin' ),
-			__( 'Syncs reader data with your Newspack Newsletters email service provider.', 'newspack-plugin' )
+			'Mailchimp',
+			__( 'Sync reader data with your Mailchimp audience.', 'newspack-plugin' )
 		);
 	}
 
@@ -50,25 +63,27 @@ class ESP extends Integration {
 	}
 
 	/**
-	 * Why the ESP integration cannot operate with the current provider.
+	 * Why the integration cannot operate with the current provider.
 	 *
-	 * The "manual" provider is valid for authoring newsletters but exposes no
-	 * API for contact syncing: no lists, no master list, no contact upsert.
+	 * This card is Mailchimp-only: any other selected provider (including the
+	 * API-less `manual` one) renders it unavailable. No provider selected is
+	 * the Connect state, not an unsupported one.
 	 *
-	 * @return string|null Reason string when the provider is manual, null otherwise.
+	 * @return string|null Reason string when a non-Mailchimp provider is selected, null otherwise.
 	 */
 	public function get_unsupported_reason() {
-		if ( class_exists( 'Newspack_Newsletters' ) && 'manual' === \Newspack_Newsletters::service_provider() ) {
-			return __( 'Requires an API-based ESP', 'newspack-plugin' );
+		$provider = $this->get_provider_slug();
+		if ( $provider && 'mailchimp' !== $provider ) {
+			return __( 'Requires Mailchimp as the newsletter provider', 'newspack-plugin' );
 		}
 		return null;
 	}
 
 	/**
-	 * The remedy for the manual provider: swap it for an API-based one.
+	 * The remedy for a non-Mailchimp provider: swap it in Newsletters settings.
 	 *
 	 * "Connect" would be wrong here — the site is connected, just to a provider
-	 * that exposes no contact-sync API.
+	 * this card does not serve.
 	 *
 	 * @return string The action label.
 	 */
@@ -90,9 +105,17 @@ class ESP extends Integration {
 	 * state; "is the provider reachable right now?" is `health_check()`'s
 	 * job.
 	 *
+	 * A non-Mailchimp provider is never set up, which keeps this integration
+	 * out of get_active_configured_integrations(): a site on another provider
+	 * gets a clean stop instead of a sync attempt whose provider error would
+	 * be classified transient and retried forever.
+	 *
 	 * @return bool True if a provider is selected and a master list ID is stored.
 	 */
 	public function is_set_up() {
+		if ( 'mailchimp' !== $this->get_provider_slug() ) {
+			return false;
+		}
 		return $this->is_connected() && (bool) $this->get_master_list_id();
 	}
 
@@ -152,7 +175,10 @@ class ESP extends Integration {
 	 *
 	 * Returns ALL possible ESP fields unconditionally as static
 	 * declarations. No provider check, no API calls. Provider options
-	 * are added in get_settings_config().
+	 * are added in get_settings_config(). The settings UI no longer offers the
+	 * ActiveCampaign and Constant Contact declarations; they stay so stored
+	 * values remain readable, e.g. the ActiveCampaign master list that
+	 * newspack-manager's ActiveCampaign integration copies when it takes over.
 	 *
 	 * @return array Array of settings field declarations.
 	 */
@@ -224,36 +250,21 @@ class ESP extends Integration {
 			return [];
 		}
 
-		$enriched     = [];
-		$config       = parent::get_settings_config();
-		$config       = array_combine(
+		$enriched = [];
+		$config   = parent::get_settings_config();
+		$config   = array_combine(
 			array_column( $config, 'key' ),
 			$config
 		);
-		$list_options = [
-			'options' => $this->get_list_options(),
-		];
 
-		switch ( $provider->service ) {
-			case 'mailchimp':
-				$enriched[] = array_merge(
-					$config['mailchimp_audience_id'],
-					$list_options
-				);
-				$enriched[] = $config['mailchimp_reader_default_status'];
-				break;
-			case 'active_campaign':
-				$enriched[] = array_merge(
-					$config['active_campaign_master_list'],
-					$list_options
-				);
-				break;
-			case 'constant_contact':
-				$enriched[] = array_merge(
-					$config['constant_contact_list_id'],
-					$list_options
-				);
-				break;
+		if ( 'mailchimp' === $this->get_provider_slug() ) {
+			// get_list_options() hits the provider API — only fetch when the
+			// audience field is actually offered.
+			$enriched[] = array_merge(
+				$config['mailchimp_audience_id'],
+				[ 'options' => $this->get_list_options() ]
+			);
+			$enriched[] = $config['mailchimp_reader_default_status'];
 		}
 		$auto_keys = array_merge(
 			array_column( $this->get_account_deletion_fields(), 'key' ),
@@ -345,25 +356,34 @@ class ESP extends Integration {
 	/**
 	 * Get the enabled outgoing metadata fields for the ESP integration.
 	 *
-	 * Overrides the parent to provide lazy migration from the legacy global
-	 * option (Metadata::FIELDS_OPTION) to the per-integration option.
+	 * Overrides the parent to lazily migrate the legacy global option
+	 * (Metadata::FIELDS_OPTION) into the per-integration option. Copied
+	 * verbatim, not through update_enabled_outgoing_fields(): validating
+	 * here would permanently drop any currently-unavailable name (e.g.
+	 * payment fields while WooCommerce is inactive) from the publisher's
+	 * selection.
 	 *
 	 * @return string[] List of enabled field names.
 	 */
 	public function get_enabled_outgoing_fields() {
 		$fields = \get_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, null );
 		if ( null !== $fields && is_array( $fields ) ) {
-			return $fields;
+			return array_values( $fields );
 		}
 
 		// Migrate from legacy global option.
 		$legacy = \get_option( Sync\Metadata::FIELDS_OPTION, null );
 		if ( null !== $legacy && is_array( $legacy ) ) {
-			$this->update_enabled_outgoing_fields( $legacy );
-			return $legacy;
+			$migrated_fields = array_values( array_unique( array_map( 'strval', $legacy ) ) );
+			\update_option(
+				self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id,
+				$migrated_fields,
+				false
+			);
+			return $migrated_fields;
 		}
 
-		return Sync\Metadata::get_default_fields();
+		return Sync\Metadata::get_default_enabled_fields();
 	}
 
 	/**
@@ -411,6 +431,13 @@ class ESP extends Integration {
 			);
 		}
 
+		if ( 'mailchimp' !== $this->get_provider_slug() ) {
+			$errors->add(
+				'ras_esp_provider_not_supported',
+				__( 'Sync requires Mailchimp as the newsletter provider.', 'newspack-plugin' )
+			);
+		}
+
 		if ( $return_errors ) {
 			return $errors;
 		}
@@ -429,12 +456,18 @@ class ESP extends Integration {
 	 * @param string     $context          Optional. The context of the sync.
 	 * @param array|null $existing_contact Optional. Existing contact data if available.
 	 * @param array      $options          Optional. Sync options. Recognized keys:
-	 *                                     `skip_lists` (bool) — upsert without a master
-	 *                                     list so an unsubscribed contact is not
-	 *                                     resubscribed (the contact is still created if
-	 *                                     missing, but joins no list).
+	 *                                     `skip_lists` (bool) — update only the reader's
+	 *                                     existing member of the configured audience,
+	 *                                     leaving its status as it is; see
+	 *                                     push_to_existing_member().
+	 *                                     `existing_only` (bool) is honoured by the
+	 *                                     framework, which consults contact_exists()
+	 *                                     before calling this method — by the time it
+	 *                                     runs the contact is known to exist.
 	 *
-	 * @return true|\WP_Error True on success or WP_Error on failure.
+	 * @return array|true|\WP_Error The upsert's contact data on success, naming under
+	 *                              `unsynced_fields` any metadata Mailchimp did not save,
+	 *                              or WP_Error on failure.
 	 */
 	public function push_contact_data( $contact, $context = '', $existing_contact = null, $options = [] ) {
 		$can_sync = $this->can_sync( true );
@@ -442,9 +475,53 @@ class ESP extends Integration {
 			return $can_sync;
 		}
 
-		$master_list_id = ! empty( $options['skip_lists'] ) ? false : $this->get_master_list_id();
+		if ( ! empty( $options['skip_lists'] ) ) {
+			return $this->push_to_existing_member( $contact, $context );
+		}
 
-		return Newspack_Newsletters_Contacts::upsert( $contact, $master_list_id, $context, $existing_contact );
+		return Newspack_Newsletters_Contacts::upsert( $contact, $this->get_master_list_id(), $context, $existing_contact );
+	}
+
+	/**
+	 * Write a contact's fields to its existing member of the configured
+	 * audience without changing the member's subscription status.
+	 *
+	 * Mailchimp keeps every contact in an audience and rejects an upsert
+	 * without one, so this is how a push avoids adding the reader to a list.
+	 * Flag-mode account deletion relies on it: the deleted reader's member
+	 * receives the deletion fields, and a reader with no member gets none.
+	 *
+	 * @param array  $contact The contact data to push.
+	 * @param string $context The context of the sync.
+	 *
+	 * @return array|true|\WP_Error The upsert's answer on success. A WP_Error with
+	 *                              CONTACT_NOT_FOUND_ERROR_CODE when the audience has
+	 *                              no live member for the reader, any other WP_Error
+	 *                              when the lookup or the push failed.
+	 */
+	private function push_to_existing_member( array $contact, string $context ) {
+		$exists = $this->contact_exists( (string) ( $contact['email'] ?? '' ) );
+		if ( \is_wp_error( $exists ) ) {
+			return $exists;
+		}
+		if ( ! $exists ) {
+			return new \WP_Error(
+				self::CONTACT_NOT_FOUND_ERROR_CODE,
+				__( 'The selected Mailchimp audience has no contact for this reader, or only an archived one, so there was nothing to update.', 'newspack-plugin' )
+			);
+		}
+
+		// Mailchimp applies status_if_new only when it creates a member, so the
+		// existing member keeps its status. If the member is removed between the
+		// check above and this push, it is recreated as transactional, which
+		// receives no campaigns.
+		unset( $contact['metadata']['status'] );
+		$contact['metadata']['status_if_new'] = 'transactional';
+
+		// No existing contact on purpose: given one, the upsert sends the member's
+		// own status back, and an unsubscribed member goes back as pending, which
+		// emails the reader a confirmation request.
+		return Newspack_Newsletters_Contacts::upsert( $contact, $this->get_master_list_id(), $context );
 	}
 
 	/**
@@ -459,6 +536,11 @@ class ESP extends Integration {
 	/**
 	 * Delete a contact from the connected ESP.
 	 *
+	 * A provider with no contact for the reader answers with its own not-found
+	 * error. The reader is already gone there and no retry can change that, so
+	 * the answer carries the framework's not-found code, which the deletion
+	 * path treats as done.
+	 *
 	 * @param string $email Email address.
 	 * @return true|\WP_Error
 	 */
@@ -467,7 +549,153 @@ class ESP extends Integration {
 		if ( $can_sync->has_errors() ) {
 			return $can_sync;
 		}
-		return \Newspack_Newsletters_Contacts::delete( $email, 'RAS Reader deleted' );
+		$result = \Newspack_Newsletters_Contacts::delete( $email, 'RAS Reader deleted' );
+		// Only a bare miss: alongside another failure, that failure decides.
+		if ( \is_wp_error( $result ) && 1 === count( $result->get_error_codes() ) && $this->is_provider_not_found_error( $result ) ) {
+			return new \WP_Error( self::CONTACT_NOT_FOUND_ERROR_CODE, $result->get_error_message() );
+		}
+		return $result;
+	}
+
+	/**
+	 * Stop outreach to a deleted reader who is flagged instead of hard-deleted.
+	 *
+	 * For legacy `sync_esp_delete=false` sites, this keeps the contact record
+	 * (carrying the Account_Deleted / Membership_Status flags from the
+	 * flag-mode metadata push) and removes the reader from the lists offered
+	 * for sign-up.
+	 *
+	 * Mailchimp keeps the subscription on the audience member, not on its
+	 * groups or tags, and update_lists() clears only the lists offered for
+	 * sign-up. So on Mailchimp the reader also leaves the audience this
+	 * integration syncs to; otherwise a reader who joined through a group or
+	 * tag, or whose audience is no longer offered, keeps receiving campaigns
+	 * sent to the whole audience. Audiences neither synced nor offered for
+	 * sign-up are left alone, as the flag push leaves them, since one account
+	 * can hold other publications' audiences.
+	 *
+	 * A provider without list management (Campaign Monitor) has no lists to
+	 * clear, so its "not supported" answer is success, not failure — returning
+	 * the error would schedule five retries that can never succeed and alert
+	 * on every reader deletion.
+	 *
+	 * @param string $email Email address of the deleted reader.
+	 *
+	 * @return true|false|\WP_Error True or false on success — update_lists()
+	 *                              returns false when there was nothing to
+	 *                              do — WP_Error on failure. The caller only
+	 *                              checks is_wp_error(), so anything else is
+	 *                              treated as success.
+	 */
+	public function flag_deletion_cleanup( $email ) {
+		if ( ! class_exists( 'Newspack_Newsletters_Contacts' ) ) {
+			return new \WP_Error(
+				'newspack_newsletters_contacts_not_found',
+				__( 'Newspack Newsletters is not available.', 'newspack-plugin' )
+			);
+		}
+		$result = \Newspack_Newsletters_Contacts::update_lists( $email, [], 'Reader account deleted' );
+		if ( \is_wp_error( $result ) ) {
+			return self::LIST_MANAGEMENT_UNSUPPORTED_ERROR_CODE === $result->get_error_code() ? true : $result;
+		}
+		if ( 'mailchimp' !== $this->get_provider_slug() ) {
+			return $result;
+		}
+
+		$contact_data = Newspack_Newsletters_Subscription::get_contact_data( $email );
+		if ( \is_wp_error( $contact_data ) ) {
+			return $this->is_provider_not_found_error( $contact_data ) ? $result : $contact_data;
+		}
+		$audience_id = $this->get_master_list_id();
+		$member      = $contact_data['lists'][ $audience_id ] ?? null;
+		if ( 'subscribed' !== ( $member['status'] ?? '' ) ) {
+			return $result;
+		}
+		return \Newspack_Newsletters_Contacts::add_and_remove_lists( $email, [], [ $audience_id ], 'Reader account deleted' );
+	}
+
+	/**
+	 * Get the metadata prefix for the ESP integration.
+	 *
+	 * Applies the site-wide `newspack_ras_metadata_prefix` filter on top of
+	 * the per-integration option, preserving the pre-unification push
+	 * behavior: the legacy pipeline built every outgoing ESP key through
+	 * Metadata::get_prefix(), which runs this filter, so a site customizing
+	 * its prefix by code snippet (no stored option) must keep pushing under
+	 * the filtered prefix. The CLI duplicates audit resolves through the
+	 * same filter, so audit and push agree on live key names. Scoped to the
+	 * ESP: other integrations' prefixes never passed the filter.
+	 *
+	 * @return string The metadata prefix.
+	 */
+	public function get_metadata_prefix() {
+		/** This filter is documented in includes/reader-activation/sync/class-metadata.php */
+		return \apply_filters( 'newspack_ras_metadata_prefix', parent::get_metadata_prefix() );
+	}
+
+	/**
+	 * Whether the ESP already holds a contact for this email.
+	 *
+	 * One provider read, the same lookup the login refresh uses. A Mailchimp
+	 * contact is a member of one audience, so "exists" means a member of the
+	 * configured audience: an upsert for a reader who is only in another
+	 * audience would create a new member there, and one for an archived member
+	 * would restore it, so neither counts. Any other provider is refused here
+	 * as well as by the sync gate, because `NEWSPACK_FORCE_ALLOW_ESP_SYNC`
+	 * skips that gate: no other provider's contact may read as existing.
+	 *
+	 * @param string $email The contact's email address.
+	 *
+	 * @return bool|\WP_Error True if the configured audience has a live member, false if it has
+	 *                       none (no contact, a member of another audience only, or an
+	 *                       archived member), WP_Error if the provider is not Mailchimp, the
+	 *                       integration cannot sync, or the read failed.
+	 */
+	public function contact_exists( string $email ) {
+		if ( 'mailchimp' !== $this->get_provider_slug() ) {
+			return new \WP_Error(
+				'ras_esp_provider_not_supported',
+				__( 'Sync requires Mailchimp as the newsletter provider.', 'newspack-plugin' )
+			);
+		}
+
+		$can_sync = $this->can_sync( true );
+		if ( $can_sync->has_errors() ) {
+			return $can_sync;
+		}
+
+		$contact_data = Newspack_Newsletters_Subscription::get_contact_data( $email );
+
+		if ( is_wp_error( $contact_data ) ) {
+			return $this->is_provider_not_found_error( $contact_data ) ? false : $contact_data;
+		}
+
+		$member = $contact_data['lists'][ $this->get_master_list_id() ] ?? null;
+		return null !== $member && 'archived' !== ( $member['status'] ?? '' );
+	}
+
+	/**
+	 * Whether a provider error means "no such contact" rather than a failure.
+	 *
+	 * Providers name the miss differently (Mailchimp and Constant Contact have
+	 * dedicated codes, ActiveCampaign a generic one). Matched exactly rather than
+	 * by suffix: this list is what the framework has verified means a miss, and a
+	 * code it has not seen must reach the caller as the error it is.
+	 *
+	 * @param \WP_Error $error The provider error.
+	 *
+	 * @return bool
+	 */
+	private function is_provider_not_found_error( \WP_Error $error ): bool {
+		return in_array(
+			$error->get_error_code(),
+			[
+				'newspack_newsletters_mailchimp_contact_not_found',
+				'newspack_newsletters_constant_contact_contact_not_found',
+				'newspack_newsletters_contact_not_found',
+			],
+			true
+		);
 	}
 
 	/**
@@ -490,10 +718,39 @@ class ESP extends Integration {
 
 		$contact_data = Newspack_Newsletters_Subscription::get_contact_data( $user->user_email, true );
 
+		// The provider may memoize each contact's raw API payload for the life of
+		// the request (ActiveCampaign does); a bulk pull reads each contact once,
+		// so release the entry as soon as it is consumed — the batch loops'
+		// object-cache flush cannot reach provider-internal caches.
+		$provider = \Newspack_Newsletters::get_service_provider();
+		if ( $provider && method_exists( $provider, 'clear_contact_data' ) ) {
+			$provider->clear_contact_data( $user->user_email );
+		}
+
 		if ( is_wp_error( $contact_data ) ) {
+			// Normalize the providers' not-found errors onto the framework's
+			// canonical code so batch drivers can classify the reader as skipped
+			// without provider knowledge.
+			if ( $this->is_provider_not_found_error( $contact_data ) ) {
+				return new \WP_Error( self::CONTACT_NOT_FOUND_ERROR_CODE, $contact_data->get_error_message() );
+			}
 			return $contact_data;
 		}
 
+		// The enabled incoming fields are defined from one specific list — see
+		// get_available_incoming_fields(), which resolves the field schema from
+		// get_master_list_id(). Providers whose fields are per-list (Mailchimp
+		// merge fields belong to an audience) report them keyed by list, so read
+		// the configured list's entry: a reader belonging to several lists would
+		// otherwise get whichever list the provider happened to report last,
+		// storing another list's values or none at all.
+		$master_list_id = $this->get_master_list_id();
+		if ( $master_list_id && isset( $contact_data['metadata_by_list'] ) && is_array( $contact_data['metadata_by_list'] ) ) {
+			return $contact_data['metadata_by_list'][ $master_list_id ] ?? [];
+		}
+
+		// Providers with account-wide fields (ActiveCampaign) report a single flat
+		// map, with no per-list ambiguity to resolve.
 		if ( ! empty( $contact_data['metadata'] ) ) {
 			return $contact_data['metadata'];
 		}
@@ -580,6 +837,9 @@ class ESP extends Integration {
 		}
 		if ( isset( $raw['matching_function'] ) && is_scalar( $raw['matching_function'] ) && '' !== (string) $raw['matching_function'] ) {
 			$field->set_matching_function( (string) $raw['matching_function'] );
+		}
+		if ( isset( $raw['date_format'] ) && is_scalar( $raw['date_format'] ) && '' !== (string) $raw['date_format'] ) {
+			$field->set_date_format( (string) $raw['date_format'] );
 		}
 		if ( isset( $raw['options'] ) && is_array( $raw['options'] ) ) {
 			$field->set_options( $raw['options'] );

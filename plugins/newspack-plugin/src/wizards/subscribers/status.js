@@ -14,11 +14,24 @@ export const STATUS_LABELS = {
 	cancelled: __( 'Cancelled', 'newspack-plugin' ),
 };
 
-export const STATUS_BADGE_LEVEL = {
-	active: 'success',
-	pending: 'info',
-	'on-hold': 'warning',
-	cancelled: 'error',
+/** @type {Record< string, import('../../../packages/components/src/status-indicator').StatusName >} */
+export const STATUS_INDICATORS = {
+	active: 'active',
+	pending: 'pending',
+	// On hold is usually a payment needing attention, not a terminal state.
+	'on-hold': 'attention',
+	cancelled: 'cancelled',
+};
+
+// The profile card and the person header still badge a single status, where an
+// attention marker is what a badge is for.
+/** @type {Record< string, import('../../../packages/components/src/types').BadgeIntent >} */
+export const STATUS_BADGE_INTENT = {
+	active: 'stable',
+	// "Pending" is queued work rather than an idle state, hence low, not informational.
+	pending: 'low',
+	'on-hold': 'medium',
+	cancelled: 'high',
 };
 
 // Active first, then pending, then on-hold, then cancelled.

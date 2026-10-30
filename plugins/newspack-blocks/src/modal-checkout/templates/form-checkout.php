@@ -55,9 +55,10 @@ if ( ! $checkout->is_registration_enabled() && $checkout->is_registration_requir
 				<?php do_action( 'woocommerce_checkout_after_order_review' ); ?>
 			</div>
 			<?php do_action( 'woocommerce_checkout_after_customer_details' ); ?>
-			<button class="newspack-ui__button newspack-ui__button--secondary newspack-ui__button--wide" id="checkout_edit_billing" type="button"><?php echo esc_html( Modal_Checkout::get_modal_checkout_labels( 'checkout_edit_billing' ) ); ?></button>
+			<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--align-center newspack-ui__spacing-top--3">
+				<button class="newspack-ui__link" id="checkout_edit_billing" type="button"><?php echo esc_html( Modal_Checkout::get_modal_checkout_labels( 'checkout_edit_billing' ) ); ?></button>
+			</div>
 		</div>
-		<button class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide" id="checkout_cancel" type="button"><?php echo esc_html( Modal_Checkout::get_modal_checkout_labels( 'checkout_cancel' ) ); ?></button>
 	<?php endif; ?>
 </form>
 

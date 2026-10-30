@@ -9,6 +9,7 @@ namespace Newspack;
 
 use Newspack\Reader_Activation;
 use Newspack\Reader_Activation\Integrations;
+use Newspack\Reader_Activation\Integrations\Push_Log;
 use WP_Error, WP_REST_Request, WP_REST_Response, WP_REST_Server;
 
 defined( 'ABSPATH' ) || exit;
@@ -35,20 +36,8 @@ class Audience_Integrations extends Wizard {
 	 * Constructor.
 	 */
 	public function __construct() {
-		if ( ! self::is_enabled() ) {
-			return;
-		}
 		parent::__construct();
 		add_action( 'rest_api_init', [ $this, 'register_api_endpoints' ] );
-	}
-
-	/**
-	 * Check if the integrations settings feature is enabled.
-	 *
-	 * @return bool
-	 */
-	public static function is_enabled() {
-		return defined( 'NEWSPACK_INTEGRATIONS_SETTINGS_ENABLED' ) && NEWSPACK_INTEGRATIONS_SETTINGS_ENABLED;
 	}
 
 	/**
@@ -86,9 +75,7 @@ class Audience_Integrations extends Wizard {
 
 		wp_enqueue_script( 'newspack-wizards' );
 
-		$localized_data = [
-			'integrations_settings_enabled' => self::is_enabled(),
-		];
+		$localized_data = [];
 
 		if ( class_exists( 'Newspack_Newsletters' ) ) {
 			$localized_data['esp_provider'] = \Newspack_Newsletters::service_provider();
@@ -219,6 +206,75 @@ class Audience_Integrations extends Wizard {
 						'sanitize_callback' => 'sanitize_key',
 					],
 					'action_id'      => [
+						'type'              => 'integer',
+						'sanitize_callback' => 'absint',
+					],
+				],
+			]
+		);
+
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/settings/(?P<integration_id>[a-zA-Z0-9_-]+)/push-log',
+			[
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => [ $this, 'api_get_push_log' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'per_page'        => [
+						'type'              => 'integer',
+						'default'           => 25,
+						'minimum'           => 1,
+						'maximum'           => 100,
+						'sanitize_callback' => 'absint',
+					],
+					'page'            => [
+						'type'              => 'integer',
+						'default'           => 1,
+						'minimum'           => 1,
+						'sanitize_callback' => 'absint',
+					],
+					'order'           => [
+						'type'    => 'string',
+						'default' => 'DESC',
+						'enum'    => [ 'ASC', 'DESC' ],
+					],
+					'search'          => [
+						'type'              => 'string',
+						'default'           => '',
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+					'status'          => [
+						'type'    => 'string',
+						'default' => '',
+						'enum'    => [ '', Push_Log::STATUS_SUCCESS, Push_Log::STATUS_RETRYING, Push_Log::STATUS_FAILED ],
+					],
+					'operation'       => [
+						'type'    => 'string',
+						'default' => '',
+						'enum'    => [ '', Push_Log::OPERATION_UPSERT, Push_Log::OPERATION_FLAG, Push_Log::OPERATION_DELETE ],
+					],
+					'needs_attention' => [
+						'type'    => 'boolean',
+						'default' => false,
+					],
+				],
+			]
+		);
+
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/settings/(?P<integration_id>[a-zA-Z0-9_-]+)/push-log/(?P<id>[0-9]+)',
+			[
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => [ $this, 'api_get_push_log_entry' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'integration_id' => [
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_key',
+					],
+					'id'             => [
 						'type'              => 'integer',
 						'sanitize_callback' => 'absint',
 					],
@@ -383,7 +439,7 @@ class Audience_Integrations extends Wizard {
 				return [
 					'id'        => $action->action_id,
 					'timestamp' => $action->scheduled_date_gmt,
-					'event'     => $hook_labels[ $action->hook ] ?? $action->hook,
+					'event'     => self::get_event_title( $hook_labels[ $action->hook ] ?? $action->hook, $decoded_args[ $action->action_id ] ?? null ),
 					'status'    => $action->status,
 					'email'     => self::extract_email_from_payload( $decoded_args[ $action->action_id ] ?? null ),
 				];
@@ -464,7 +520,7 @@ class Audience_Integrations extends Wizard {
 
 		$hook_labels = Action_Scheduler::get_hook_labels();
 		$hook        = $action->get_hook();
-		$event       = $hook_labels[ $hook ] ?? $hook;
+		$event       = self::get_event_title( $hook_labels[ $hook ] ?? $hook, $args );
 
 		return rest_ensure_response(
 			[
@@ -598,6 +654,184 @@ class Audience_Integrations extends Wizard {
 	}
 
 	/**
+	 * Get the push log of an integration: what was sent for each reader.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function api_get_push_log( WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$integration_id = (string) $request->get_param( 'integration_id' );
+		if ( ! Integrations::get_integration( $integration_id ) ) {
+			return new WP_Error(
+				'newspack_integration_not_found',
+				esc_html__( 'Integration not found.', 'newspack-plugin' ),
+				[ 'status' => 404 ]
+			);
+		}
+
+		$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ) );
+		$page     = max( 1, (int) $request->get_param( 'page' ) );
+		$result   = Push_Log::query(
+			[
+				'integration_id'  => $integration_id,
+				'search'          => (string) $request->get_param( 'search' ),
+				'status'          => (string) $request->get_param( 'status' ),
+				'operation'       => (string) $request->get_param( 'operation' ),
+				'needs_attention' => rest_sanitize_boolean( $request->get_param( 'needs_attention' ) ),
+				'per_page'        => $per_page,
+				'page'            => $page,
+				'order'           => (string) $request->get_param( 'order' ),
+			]
+		);
+
+		if ( is_wp_error( $result ) ) {
+			return self::get_push_log_read_error( $result );
+		}
+
+		return rest_ensure_response(
+			[
+				'items'          => array_map( [ __CLASS__, 'format_push_log_item' ], $result['items'] ),
+				'total'          => $result['total'],
+				'page'           => $page,
+				'per_page'       => $per_page,
+				// The screen names the windows when it finds nothing, and a
+				// site can filter them.
+				'retention_days' => Push_Log::get_retention_days(),
+			]
+		);
+	}
+
+	/**
+	 * Get one push log entry, with its fields compared with the reader's
+	 * previous successful push.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function api_get_push_log_entry( WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$integration_id = (string) $request->get_param( 'integration_id' );
+		$integration    = Integrations::get_integration( $integration_id );
+		if ( ! $integration ) {
+			return new WP_Error(
+				'newspack_integration_not_found',
+				esc_html__( 'Integration not found.', 'newspack-plugin' ),
+				[ 'status' => 404 ]
+			);
+		}
+
+		$row = Push_Log::get( (int) $request->get_param( 'id' ), $integration_id );
+		if ( is_wp_error( $row ) ) {
+			return self::get_push_log_read_error( $row );
+		}
+		if ( ! $row ) {
+			return new WP_Error(
+				'newspack_push_log_entry_not_found',
+				esc_html__( 'Entry not found.', 'newspack-plugin' ),
+				[ 'status' => 404 ]
+			);
+		}
+
+		$predecessor = Push_Log::get_predecessor( $row );
+		if ( is_wp_error( $predecessor ) ) {
+			return self::get_push_log_read_error( $predecessor );
+		}
+
+		return rest_ensure_response(
+			[
+				'entry'       => self::format_push_log_item( $row ),
+				'compared_to' => $predecessor ? [
+					'id'         => $predecessor['id'],
+					'updated_at' => $predecessor['updated_at'],
+				] : null,
+				'fields'      => Push_Log::compare_payloads( $row, $predecessor, (string) $integration->get_metadata_prefix() ),
+			]
+		);
+	}
+
+	/**
+	 * Answer a push log read that failed as a server error.
+	 *
+	 * A table that did not answer is neither an empty log nor a missing
+	 * entry, and the screen reports a failed load for a 500.
+	 *
+	 * @param WP_Error $error The error Push_Log returned.
+	 * @return WP_Error
+	 */
+	private static function get_push_log_read_error( WP_Error $error ): WP_Error {
+		return new WP_Error( $error->get_error_code(), $error->get_error_message(), [ 'status' => 500 ] );
+	}
+
+	/**
+	 * Shape a push log row for the screen.
+	 *
+	 * The payload is left out: the screen reads it as the field comparison.
+	 * The retry's action ID is replaced by its state, so the screen knows
+	 * whether there is still a retry to run.
+	 *
+	 * @param array $row A push log row.
+	 * @return array
+	 */
+	private static function format_push_log_item( array $row ): array {
+		$row['retry'] = Push_Log::STATUS_RETRYING === $row['status']
+			? self::get_retry_state( (int) $row['retry_action_id'], (string) $row['integration_id'] )
+			: null;
+		unset( $row['payload'], $row['retry_action_id'], $row['integration_id'] );
+
+		return $row;
+	}
+
+	/**
+	 * Whether a row's scheduled retry is still there to run, is running now,
+	 * and when it is due.
+	 *
+	 * A row can outlive its action: someone cancelled it, or Action Scheduler
+	 * already ran or pruned it. Then there is nothing to run. While the retry
+	 * runs, the row points at it until the push returns.
+	 *
+	 * @param int    $action_id      The Action Scheduler action.
+	 * @param string $integration_id The integration the row belongs to.
+	 * @return array{action_id:int,is_pending:bool,is_running:bool,scheduled_at:?string}
+	 */
+	private static function get_retry_state( int $action_id, string $integration_id ): array {
+		$state  = [
+			'action_id'    => $action_id,
+			'is_pending'   => false,
+			'is_running'   => false,
+			'scheduled_at' => null,
+		];
+		$action = $action_id > 0 ? Integrations::get_integration_action( $action_id, $integration_id ) : null;
+		if ( ! $action ) {
+			return $state;
+		}
+
+		try {
+			// The action can be pruned between the fetch and the status read;
+			// one row must not take the page down.
+			$status = \ActionScheduler_Store::instance()->get_status( $action_id );
+		} catch ( \Throwable $e ) {
+			return $state;
+		}
+		if ( \ActionScheduler_Store::STATUS_RUNNING === $status ) {
+			$state['is_running'] = true;
+			return $state;
+		}
+		if ( \ActionScheduler_Store::STATUS_PENDING !== $status ) {
+			return $state;
+		}
+
+		$state['is_pending'] = true;
+		$schedule            = $action->get_schedule();
+		$scheduled_at        = $schedule ? $schedule->get_date() : null;
+		if ( $scheduled_at ) {
+			// The date comes back in the server timezone; the screen reads GMT.
+			$scheduled_at->setTimezone( new \DateTimeZone( 'UTC' ) );
+			$state['scheduled_at'] = $scheduled_at->format( 'Y-m-d H:i:s' );
+		}
+
+		return $state;
+	}
+
+	/**
 	 * Decode a scheduled action's args payload into a PHP value.
 	 *
 	 * Prefers extended_args (full JSON) over args, mirroring the detail
@@ -618,6 +852,33 @@ class Audience_Integrations extends Wizard {
 			return null;
 		}
 		return $decoded;
+	}
+
+	/**
+	 * Add the retry number to a scheduled action's title.
+	 *
+	 * The retries of one sync are separate actions with the same hook, so
+	 * without the number they read as identical lines.
+	 *
+	 * @param string $label The hook's label.
+	 * @param mixed  $args  The action's decoded args.
+	 * @return string
+	 */
+	private static function get_event_title( $label, $args ) {
+		$retry_data  = is_array( $args ) && isset( $args[0] ) && is_array( $args[0] ) ? $args[0] : [];
+		$retry_count = isset( $retry_data['retry_count'] ) ? (int) $retry_data['retry_count'] : 0;
+		if ( $retry_count < 1 ) {
+			return $label;
+		}
+
+		$max_retries = isset( $retry_data['max_retries'] ) ? (int) $retry_data['max_retries'] : 0;
+		if ( $max_retries < $retry_count ) {
+			/* translators: 1: scheduled action name, ending in "Retry". 2: which retry this is. */
+			return sprintf( __( '%1$s %2$d', 'newspack-plugin' ), $label, $retry_count );
+		}
+
+		/* translators: 1: scheduled action name, ending in "Retry". 2: which retry this is. 3: how many retries a sync gets. */
+		return sprintf( __( '%1$s %2$d of %3$d', 'newspack-plugin' ), $label, $retry_count, $max_retries );
 	}
 
 	/**

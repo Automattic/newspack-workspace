@@ -177,7 +177,12 @@ export const fetchNewsletterData = async postId => {
 	if ( isRetrieving ) {
 		return;
 	}
-	updateHasRetrievedData( false );
+	// `hasRetrievedData` deliberately is not reset here. It latches on the first
+	// successful retrieve and is cleared only by a failed one. `retrieve` runs
+	// again after every save, so un-settling it per in-flight request re-enabled
+	// Send on exactly the newsletters whose saved list does not resolve. The
+	// in-flight request cannot change that answer in any case: the response is
+	// merged below with the roster this store already holds.
 	updateIsRetrievingData( true );
 	updateNewsletterDataError( null );
 	try {

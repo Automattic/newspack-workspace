@@ -1,0 +1,423 @@
+<?php
+/**
+ * Tests the scheduled-post-checker safety net's post-type coverage.
+ *
+ * @package Newspack
+ */
+
+/**
+ * Test the scheduled-post checker.
+ */
+class Scheduled_Post_Checker_Test extends WP_UnitTestCase {
+
+	/**
+	 * CPT slugs registered during a test, unregistered on tear down.
+	 *
+	 * @var string[]
+	 */
+	private $registered_cpts = [];
+
+	/**
+	 * Filters added during a test, as [ hook, callback ] pairs, removed on tear
+	 * down. Keeping the callback is what makes an anonymous one removable.
+	 *
+	 * @var array[]
+	 */
+	private $added_filters = [];
+
+	/**
+	 * Undo anything a test registered so it can't leak into the next one — test
+	 * order isn't guaranteed.
+	 */
+	public function tear_down() {
+		foreach ( $this->registered_cpts as $cpt ) {
+			if ( post_type_exists( $cpt ) ) {
+				unregister_post_type( $cpt );
+			}
+		}
+		foreach ( $this->added_filters as [ $hook, $callback ] ) {
+			remove_filter( $hook, $callback );
+		}
+		$this->registered_cpts = [];
+		$this->added_filters   = [];
+
+		/*
+		 * Publishing a changeset leaves a WP_Customize_Manager in the global, wired
+		 * to hooks the suite's own restore then strips. Left in place, a later
+		 * changeset test reuses a half-registered manager.
+		 */
+		unset( $GLOBALS['wp_customize'] );
+
+		parent::tear_down();
+	}
+
+	/**
+	 * Add a filter that tear_down() will remove — even an anonymous callback,
+	 * which remove_filter() otherwise can't target once its reference is lost.
+	 *
+	 * @param string   $hook          Filter hook.
+	 * @param callable $callback      Callback.
+	 * @param int      $accepted_args Number of args the callback accepts.
+	 */
+	private function add_cleanup_filter( $hook, $callback, $accepted_args = 1 ) {
+		add_filter( $hook, $callback, 10, $accepted_args );
+		$this->added_filters[] = [ $hook, $callback ];
+	}
+
+	/**
+	 * Register a non-public CPT for the duration of a test.
+	 *
+	 * @param string $slug CPT slug (max 20 chars, per register_post_type()).
+	 * @param array  $args Registration args, merged over a non-public default.
+	 */
+	private function register_test_cpt( $slug, $args = [] ) {
+		register_post_type(
+			$slug,
+			array_merge(
+				[
+					'public'   => false,
+					'supports' => [ 'title' ],
+				],
+				$args
+			)
+		);
+		$this->registered_cpts[] = $slug;
+	}
+
+	/**
+	 * Create a post in the exact state a missed cron slot leaves: `future` status
+	 * with a publish time already in the past.
+	 *
+	 * Written straight to the DB because both wp_insert_post() and wp_update_post()
+	 * coerce a `future` post with a past date to `publish`, so the stuck state
+	 * can't be produced through the normal API.
+	 *
+	 * @param string $post_type Post type.
+	 * @param array  $columns   Extra post columns to write alongside the status.
+	 *                          Goes through $wpdb too, so JSON payloads reach the
+	 *                          column unslashed and unfiltered.
+	 * @param int    $age       How long ago the slot was missed, in seconds.
+	 * @return int Post ID.
+	 */
+	private function create_overdue_future_post( $post_type, $columns = [], $age = HOUR_IN_SECONDS ) {
+		$post_id = self::factory()->post->create(
+			[
+				'post_type'   => $post_type,
+				'post_status' => 'draft',
+			]
+		);
+
+		global $wpdb;
+		$past = gmdate( 'Y-m-d H:i:s', time() - $age );
+		$wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->posts,
+			array_merge(
+				[
+					'post_status'   => 'future',
+					'post_date'     => $past,
+					'post_date_gmt' => $past,
+				],
+				$columns
+			),
+			[ 'ID' => $post_id ]
+		);
+		clean_post_cache( $post_id );
+
+		$this->assertSame( 'future', get_post_status( $post_id ), 'Precondition: scheduled (future) with a past slot.' );
+		return $post_id;
+	}
+
+	/**
+	 * The rescued-type list covers the known non-public editorial CPTs and the
+	 * search-visible types, and is filterable.
+	 */
+	public function test_post_type_list_covers_hidden_editorial_cpts() {
+		// Simulate the popups and sponsors plugins being active.
+		$this->register_test_cpt( 'newspack_popups_cpt' );
+		$this->register_test_cpt( 'newspack_spnsrs_cpt' );
+
+		$post_types = \Newspack\Scheduled_Post_Checker\nspc_get_post_types();
+
+		$this->assertContains( 'newspack_popups_cpt', $post_types, 'Campaign prompts are covered.' );
+		$this->assertContains( 'newspack_spnsrs_cpt', $post_types, 'Sponsors are covered.' );
+		$this->assertContains( 'customize_changeset', $post_types, 'Scheduled Customizer changes are covered.' );
+		$this->assertContains( 'post', $post_types, 'Search-visible types are still covered.' );
+
+		// An unrelated non-public CPT is not swept in by default.
+		$this->register_test_cpt( 'nspc_unrelated' );
+		$this->assertNotContains( 'nspc_unrelated', \Newspack\Scheduled_Post_Checker\nspc_get_post_types(), 'Unlisted hidden types are not rescued by default.' );
+
+		// ...but the filter lets a plugin opt one in.
+		$this->add_cleanup_filter(
+			'newspack_scheduled_post_checker_post_types',
+			function ( $types ) {
+				$types[] = 'nspc_unrelated';
+				return $types;
+			}
+		);
+		$this->assertContains( 'nspc_unrelated', \Newspack\Scheduled_Post_Checker\nspc_get_post_types(), 'The filter can register a schedulable type.' );
+	}
+
+	/**
+	 * A scheduled post in a non-public CPT that missed its slot is republished.
+	 * The bug was that `post_type => 'any'` never saw it.
+	 */
+	public function test_rescues_missed_schedule_in_hidden_cpt() {
+		$this->register_test_cpt( 'nspc_hidden' );
+		$this->add_cleanup_filter(
+			'newspack_scheduled_post_checker_post_types',
+			function ( $types ) {
+				$types[] = 'nspc_hidden';
+				return $types;
+			}
+		);
+
+		$hidden_id = $this->create_overdue_future_post( 'nspc_hidden' );
+		$public_id = $this->create_overdue_future_post( 'post' );
+
+		// The old `post_type => 'any'` query never sees the hidden post — the bug.
+		$seen_by_any = get_posts(
+			[
+				'post_status' => 'future',
+				'post_type'   => 'any',
+				'fields'      => 'ids',
+			]
+		);
+		$this->assertNotContains( $hidden_id, $seen_by_any, 'A non-public CPT is invisible to post_type => any.' );
+
+		\Newspack\Scheduled_Post_Checker\nspc_run_check();
+
+		$this->assertSame( 'publish', get_post_status( $hidden_id ), 'The missed pop-up/sponsor-style post is rescued.' );
+		$this->assertSame( 'publish', get_post_status( $public_id ), 'Search-visible posts are still rescued.' );
+	}
+
+	/**
+	 * A non-public CPT nobody opted in stays scheduled — the fix is scoped, not a
+	 * blanket "publish every future post regardless of type".
+	 */
+	public function test_does_not_rescue_unlisted_hidden_cpt() {
+		$this->register_test_cpt( 'nspc_untracked' );
+		$post_id = $this->create_overdue_future_post( 'nspc_untracked' );
+
+		\Newspack\Scheduled_Post_Checker\nspc_run_check();
+
+		$this->assertSame( 'future', get_post_status( $post_id ), 'An unlisted hidden type is left alone.' );
+	}
+
+	/**
+	 * A scheduled homepage change that missed its slot goes live. This is the case
+	 * the checker covers changesets for, and `show_on_front` / `page_on_front` are
+	 * option-type settings, which take a different route through
+	 * unsanitized_post_values() than theme mods do.
+	 */
+	public function test_rescues_missed_static_front_page_change() {
+		$page_id = self::factory()->post->create(
+			[
+				'post_type'   => 'page',
+				'post_status' => 'publish',
+			]
+		);
+
+		update_option( 'show_on_front', 'posts' );
+
+		$changeset_id = $this->create_overdue_future_post(
+			'customize_changeset',
+			[
+				'post_name'    => wp_generate_uuid4(),
+				'post_content' => wp_json_encode(
+					[
+						'show_on_front' => [ 'value' => 'page' ],
+						'page_on_front' => [ 'value' => $page_id ],
+					]
+				),
+			]
+		);
+
+		\Newspack\Scheduled_Post_Checker\nspc_run_check();
+
+		$this->assertSame( 'page', get_option( 'show_on_front' ), 'The scheduled homepage switch is applied.' );
+		$this->assertSame( $page_id, (int) get_option( 'page_on_front' ), 'The scheduled homepage is the page that was chosen.' );
+		// Not 'publish': customize_changeset doesn't support revisions, so core trashes
+		// the post in the same request it publishes it.
+		$this->assertNotSame( 'future', get_post_status( $changeset_id ), 'The changeset does not stay scheduled.' );
+	}
+
+	/**
+	 * The rescue window, fenced from both sides: a changeset missed two days ago is
+	 * rescued, one missed four days ago is left alone with its values unapplied.
+	 */
+	public function test_changeset_rescue_is_age_limited() {
+		$recent_mod = 'nspc_recent_mod';
+		$stale_mod  = 'nspc_stale_mod';
+
+		// Registered so the value assertions are real — publishing only writes settings
+		// that are registered.
+		$this->add_cleanup_filter(
+			'customize_dynamic_setting_args',
+			function ( $args, $id ) use ( $recent_mod, $stale_mod ) {
+				return in_array( $id, [ $recent_mod, $stale_mod ], true ) ? [ 'type' => 'theme_mod' ] : $args;
+			},
+			2
+		);
+		set_theme_mod( $recent_mod, 'before' );
+		set_theme_mod( $stale_mod, 'before' );
+
+		$recent_id = $this->create_overdue_future_post(
+			'customize_changeset',
+			[
+				'post_name'    => wp_generate_uuid4(),
+				'post_content' => wp_json_encode(
+					[
+						get_stylesheet() . '::' . $recent_mod => [
+							'value' => 'after',
+							'type'  => 'theme_mod',
+						],
+					]
+				),
+			],
+			2 * DAY_IN_SECONDS
+		);
+
+		$stale_id = $this->create_overdue_future_post(
+			'customize_changeset',
+			[
+				'post_name'    => wp_generate_uuid4(),
+				'post_content' => wp_json_encode(
+					[
+						get_stylesheet() . '::' . $stale_mod => [
+							'value' => 'after',
+							'type'  => 'theme_mod',
+						],
+					]
+				),
+			],
+			4 * DAY_IN_SECONDS
+		);
+
+		\Newspack\Scheduled_Post_Checker\nspc_run_check();
+
+		$this->assertNotSame( 'future', get_post_status( $recent_id ), 'A changeset inside the window is rescued.' );
+		$this->assertSame( 'after', get_theme_mod( $recent_mod ), 'A rescued changeset applies its theme-mod value.' );
+		$this->assertSame( 'before', get_theme_mod( $stale_mod ), 'A long-missed changeset does not apply its values.' );
+		$this->assertSame( 'future', get_post_status( $stale_id ), 'And it stays scheduled.' );
+	}
+
+	/**
+	 * A rescued changeset is reported as rescued, even with NEWSPACK_LOG_LEVEL unset:
+	 * core trashes it on publish, so this report is the only record of the rescue.
+	 */
+	public function test_rescued_changeset_is_reported() {
+		$changeset_id = $this->create_overdue_future_post(
+			'customize_changeset',
+			[
+				'post_name'    => wp_generate_uuid4(),
+				'post_content' => wp_json_encode( [] ),
+			]
+		);
+
+		$reports = [];
+		$this->add_cleanup_filter(
+			'newspack_log',
+			function ( $code, $message, $params ) use ( &$reports ) {
+				if ( 0 === strpos( $code, 'newspack_scheduled_post_checker_' ) ) {
+					$reports[] = [ $code, $params['data']['changeset_id'] ];
+				}
+			},
+			3
+		);
+
+		\Newspack\Scheduled_Post_Checker\nspc_run_check();
+
+		$this->assertSame( [ [ 'newspack_scheduled_post_checker_rescued_changeset', $changeset_id ] ], $reports );
+	}
+
+	/**
+	 * The boundary itself, not just comfortably inside/outside it: an hour under the
+	 * 3-day limit is rescued, an hour over is left alone.
+	 */
+	public function test_changeset_rescue_window_boundary() {
+		$just_inside_id = $this->create_overdue_future_post(
+			'customize_changeset',
+			[
+				'post_name'    => wp_generate_uuid4(),
+				'post_content' => wp_json_encode( [] ),
+			],
+			3 * DAY_IN_SECONDS - HOUR_IN_SECONDS
+		);
+
+		$just_outside_id = $this->create_overdue_future_post(
+			'customize_changeset',
+			[
+				'post_name'    => wp_generate_uuid4(),
+				'post_content' => wp_json_encode( [] ),
+			],
+			3 * DAY_IN_SECONDS + HOUR_IN_SECONDS
+		);
+
+		\Newspack\Scheduled_Post_Checker\nspc_run_check();
+
+		$this->assertNotSame( 'future', get_post_status( $just_inside_id ), 'An hour inside the window is still rescued.' );
+		$this->assertSame( 'future', get_post_status( $just_outside_id ), 'An hour outside the window is left alone.' );
+	}
+
+	/**
+	 * A changeset past the window is reported exactly once, even with NEWSPACK_LOG_LEVEL
+	 * unset: the meta flag stops any repeat, so the first report is the only one.
+	 */
+	public function test_stranded_changeset_is_reported_once() {
+		$stranded_id = $this->create_overdue_future_post(
+			'customize_changeset',
+			[
+				'post_name'    => wp_generate_uuid4(),
+				'post_content' => wp_json_encode( [] ),
+			],
+			4 * DAY_IN_SECONDS
+		);
+
+		$reports = [];
+		$this->add_cleanup_filter(
+			'newspack_log',
+			function ( $code, $message, $params ) use ( &$reports ) {
+				if ( 'newspack_scheduled_post_checker_stranded_changeset' === $code ) {
+					$reports[] = $params['data']['changeset_id'];
+				}
+			},
+			3
+		);
+
+		\Newspack\Scheduled_Post_Checker\nspc_run_check();
+		\Newspack\Scheduled_Post_Checker\nspc_run_check();
+
+		$this->assertSame( [ $stranded_id ], $reports, 'Reported on the first run only.' );
+		$this->assertSame( 'future', get_post_status( $stranded_id ), 'And it stays scheduled.' );
+	}
+
+	/**
+	 * The age limit is scoped to changesets — the post backlog stays unbounded, which
+	 * is what a global date bound would break.
+	 */
+	public function test_rescues_long_missed_post() {
+		$post_id = $this->create_overdue_future_post( 'post', [], 4 * DAY_IN_SECONDS );
+
+		\Newspack\Scheduled_Post_Checker\nspc_run_check();
+
+		$this->assertSame( 'publish', get_post_status( $post_id ), 'A long-missed post is still rescued.' );
+	}
+
+	/**
+	 * More than five missed posts are all rescued in a single run — the default
+	 * get_posts() limit of 5 used to strand the rest.
+	 */
+	public function test_rescues_more_than_five_missed_posts() {
+		$ids = [];
+		for ( $i = 0; $i < 6; $i++ ) {
+			$ids[] = $this->create_overdue_future_post( 'post' );
+		}
+
+		\Newspack\Scheduled_Post_Checker\nspc_run_check();
+
+		foreach ( $ids as $id ) {
+			$this->assertSame( 'publish', get_post_status( $id ), 'Every missed post is rescued, not just the first five.' );
+		}
+	}
+}

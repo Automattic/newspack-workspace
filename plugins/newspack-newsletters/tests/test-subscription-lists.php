@@ -24,6 +24,107 @@ class Subscription_Lists_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A newly created active list for the current provider appears in the lists
+	 * config on the next read; the update flow flushes the per-request caches. The
+	 * config memo is disabled under PHPUnit, so this asserts the outcome rather than
+	 * exercising the cache-hit path.
+	 */
+	public function test_new_active_list_appears_in_lists_config() {
+		// set_service_provider() now clears the provider-scoped config memo itself,
+		// so no manual reset_lists_config_cache() is needed here.
+		Newspack_Newsletters::set_service_provider( 'mailchimp' );
+		$before = count( Newspack_Newsletters_Subscription::get_lists_config() );
+
+		// Create and configure a new active Mailchimp list. The meta write does
+		// not fire the CPT save hook, so flush the way the update flow would.
+		$new_id = self::create_post( 'flush' );
+		update_post_meta(
+			$new_id,
+			Subscription_List::META_KEY,
+			[
+				'mailchimp' => [
+					'list'     => 'mc_list',
+					'tag_id'   => 99,
+					'tag_name' => 'Flush Tag',
+				],
+			]
+		);
+		Subscription_Lists::flush_cache();
+
+		$after = count( Newspack_Newsletters_Subscription::get_lists_config() );
+		$this->assertSame( $before + 1, $after, 'New active list should appear once the config cache is flushed.' );
+
+		wp_delete_post( $new_id, true );
+		Subscription_Lists::flush_cache();
+	}
+
+	/**
+	 * The cache-invalidation hooks stay registered. Pins the wiring so a future
+	 * edit that drops a registration is caught, even though the memo read itself is
+	 * disabled under PHPUnit.
+	 */
+	public function test_cache_invalidation_hooks_are_registered() {
+		$this->assertNotFalse(
+			has_action( 'save_post_' . Subscription_Lists::CPT, [ Subscription_Lists::class, 'flush_cache' ] ),
+			'save_post on a list flushes the cache'
+		);
+		foreach ( [ 'deleted_post', 'trashed_post', 'untrashed_post' ] as $hook ) {
+			$this->assertNotFalse(
+				has_action( $hook, [ Subscription_Lists::class, 'maybe_flush_cache_for_post' ] ),
+				"$hook flushes the list cache"
+			);
+		}
+		foreach ( [ 'added_post_meta', 'updated_post_meta', 'deleted_post_meta' ] as $hook ) {
+			$this->assertNotFalse(
+				has_action( $hook, [ Subscription_Lists::class, 'maybe_flush_cache_for_meta' ] ),
+				"$hook flushes the list cache"
+			);
+		}
+	}
+
+	/**
+	 * The flush guards discriminate correctly: a list post, or a list meta key on a
+	 * list post, flushes the memo; a non-list post or an unrelated meta key leaves
+	 * it intact. The memo read is disabled under PHPUnit, so this seeds the static
+	 * directly and asserts on whether flush_cache() cleared it.
+	 */
+	public function test_cache_invalidation_discriminates() {
+		$list_id     = self::$posts['only_mailchimp']; // newspack_nl_list.
+		$non_list_id = self::factory()->post->create(); // Regular post.
+
+		$memo = new \ReflectionProperty( Subscription_Lists::class, 'all_lists' );
+		$memo->setAccessible( true );
+		$seed = function () use ( $memo ) {
+			$memo->setValue( null, [ 'sentinel' ] );
+		};
+
+		// maybe_flush_cache_for_post: a list post flushes, a non-list post does not.
+		$seed();
+		Subscription_Lists::maybe_flush_cache_for_post( $non_list_id );
+		$this->assertSame( [ 'sentinel' ], $memo->getValue(), 'A non-list post must not flush the memo.' );
+
+		$seed();
+		Subscription_Lists::maybe_flush_cache_for_post( $list_id );
+		$this->assertNull( $memo->getValue(), 'A list post must flush the memo.' );
+
+		// maybe_flush_cache_for_meta: only a list meta key on a list post flushes.
+		$seed();
+		Subscription_Lists::maybe_flush_cache_for_meta( 1, $list_id, 'unrelated_key' );
+		$this->assertSame( [ 'sentinel' ], $memo->getValue(), 'An unrelated meta key must not flush the memo.' );
+
+		$seed();
+		Subscription_Lists::maybe_flush_cache_for_meta( 1, $non_list_id, Subscription_List::META_KEY );
+		$this->assertSame( [ 'sentinel' ], $memo->getValue(), 'A list meta key on a non-list post must not flush the memo.' );
+
+		$seed();
+		Subscription_Lists::maybe_flush_cache_for_meta( 1, $list_id, Subscription_List::META_KEY );
+		$this->assertNull( $memo->getValue(), 'A list meta key on a list post must flush the memo.' );
+
+		// Leave the memo cleared for the next test.
+		Subscription_Lists::flush_cache();
+	}
+
+	/**
 	 * Test get_configured_for_provider
 	 */
 	public function test_get_configured_for_provider() {
@@ -67,6 +168,116 @@ class Subscription_Lists_Test extends WP_UnitTestCase {
 			$this->assertTrue( $list->is_configured_for_provider( 'active_campaign' ) );
 			$this->assertNotSame( self::$posts['only_mailchimp'], $list->get_id() );
 		}
+	}
+
+	/**
+	 * The unfiltered config keeps a list that the lists filter removed, so a
+	 * caller can tell a hidden list from one that does not exist.
+	 */
+	public function test_unfiltered_lists_config_ignores_the_lists_filter() {
+		Newspack_Newsletters::set_service_provider( 'mailchimp' );
+		$hidden_id = self::$posts['only_mailchimp'];
+		$hide      = function ( $lists ) use ( $hidden_id ) {
+			return array_values(
+				array_filter(
+					$lists,
+					function ( $list ) use ( $hidden_id ) {
+						return $list->get_id() !== $hidden_id;
+					}
+				)
+			);
+		};
+
+		add_filter( 'newspack_newsletters_subscription_lists', $hide );
+		$filtered   = Newspack_Newsletters_Subscription::get_lists_config();
+		$unfiltered = Newspack_Newsletters_Subscription::get_unfiltered_lists_config();
+		remove_filter( 'newspack_newsletters_subscription_lists', $hide );
+
+		$hidden_public_id = ( new Subscription_List( $hidden_id ) )->get_public_id();
+		$this->assertArrayNotHasKey( $hidden_public_id, $filtered );
+		$this->assertArrayHasKey( $hidden_public_id, $unfiltered );
+		$this->assertSame( [ $hidden_public_id ], array_keys( array_diff_key( $unfiltered, $filtered ) ) );
+	}
+
+	/**
+	 * With no filter callback removing anything, both reads agree.
+	 */
+	public function test_unfiltered_lists_config_matches_filtered_by_default() {
+		Newspack_Newsletters::set_service_provider( 'mailchimp' );
+		$this->assertSame(
+			Newspack_Newsletters_Subscription::get_lists_config(),
+			Newspack_Newsletters_Subscription::get_unfiltered_lists_config()
+		);
+	}
+
+	/**
+	 * Request the lists config over REST.
+	 *
+	 * @param string|null $context Value for the `context` parameter, or null to omit it.
+	 *
+	 * @return WP_REST_Response
+	 */
+	private function request_lists_config( $context = null ) {
+		$request = new WP_REST_Request( 'GET', '/newspack-newsletters/v1/lists_config' );
+		if ( null !== $context ) {
+			$request->set_param( 'context', $context );
+		}
+		return rest_get_server()->dispatch( $request );
+	}
+
+	/**
+	 * Someone editing a post gets every list, including one the lists filter
+	 * hides from them as a reader. Otherwise the block reads it as deleted.
+	 */
+	public function test_edit_context_returns_lists_the_filter_hides() {
+		Newspack_Newsletters::set_service_provider( 'mailchimp' );
+		$hidden_id = self::$posts['only_mailchimp'];
+		$hide      = function ( $lists ) use ( $hidden_id ) {
+			return array_values(
+				array_filter(
+					$lists,
+					function ( $list ) use ( $hidden_id ) {
+						return $list->get_id() !== $hidden_id;
+					}
+				)
+			);
+		};
+		$hidden_public_id = ( new Subscription_List( $hidden_id ) )->get_public_id();
+		add_filter( 'newspack_newsletters_subscription_lists', $hide );
+
+		$results = [];
+		foreach ( [ 'author', 'contributor' ] as $role ) {
+			wp_set_current_user( self::factory()->user->create( [ 'role' => $role ] ) );
+			$results[ $role ] = [
+				'view' => $this->request_lists_config(),
+				'edit' => $this->request_lists_config( 'edit' ),
+			];
+		}
+		remove_filter( 'newspack_newsletters_subscription_lists', $hide );
+		wp_set_current_user( 0 );
+
+		foreach ( $results as $role => $responses ) {
+			$this->assertArrayNotHasKey( $hidden_public_id, $responses['view']->get_data(), "The default response stays filtered for a $role." );
+			$this->assertSame( 200, $responses['edit']->get_status(), "A $role may use the edit context." );
+			$this->assertArrayHasKey( $hidden_public_id, $responses['edit']->get_data(), "The edit context shows a $role every list." );
+		}
+	}
+
+	/**
+	 * The edit context is for people who can edit posts. The default stays public.
+	 */
+	public function test_edit_context_needs_edit_posts() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'subscriber' ] ) );
+		$subscriber_status = $this->request_lists_config( 'edit' )->get_status();
+		wp_set_current_user( 0 );
+		$logged_out_status  = $this->request_lists_config( 'edit' )->get_status();
+		$default_status     = $this->request_lists_config()->get_status();
+		$bad_context_status = $this->request_lists_config( 'bogus' )->get_status();
+
+		$this->assertSame( 403, $subscriber_status, 'A subscriber is refused.' );
+		$this->assertSame( 401, $logged_out_status, 'A logged-out request is refused.' );
+		$this->assertSame( 200, $default_status, 'The default context stays public.' );
+		$this->assertSame( 400, $bad_context_status, 'An unknown context is rejected.' );
 	}
 
 	/**

@@ -16,6 +16,13 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Reader Activation Class.
+ *
+ * "Reader Activation" (RAS) is the code name for the product feature called
+ * "Audience Management". The two mean the same thing. Public identifiers keep the
+ * code name because sites and other plugins depend on them: this class, the
+ * `newspack_reader_activation_*` options and hooks, and the
+ * `window.newspackReaderActivation` JS API. The wp-admin "Audience" menu is
+ * wider than this feature: it also holds Campaigns, Donations and Subscriptions.
  */
 final class Reader_Activation {
 
@@ -289,6 +296,11 @@ final class Reader_Activation {
 	/**
 	 * Get labels for reader activation flows.
 	 *
+	 * The `signin` labels `otp_title` and `go_back` are not rendered. They stay in the
+	 * defaults, and so in the localized `window.newspack_reader_activation_labels`,
+	 * because `newspack_reader_activation_auth_labels` filters and custom scripts may
+	 * set or read them.
+	 *
 	 * @param string|null $key Key of the label to return (optional).
 	 *
 	 * @return mixed[]|string The label string or an array of labels keyed by string.
@@ -311,7 +323,7 @@ final class Reader_Activation {
 					'success_message' => __( 'Login successful!', 'newspack-plugin' ),
 					'continue'        => __( 'Continue', 'newspack-plugin' ),
 					'resend_code'     => __( 'Resend code', 'newspack-plugin' ),
-					'otp'             => __( 'Email me a one-time code instead', 'newspack-plugin' ),
+					'otp'             => __( 'Email me a code instead', 'newspack-plugin' ),
 					'otp_title'       => __( 'Enter the code sent to your email', 'newspack-plugin' ),
 					'forgot_password' => __( 'Forgot password', 'newspack-plugin' ),
 					'create_account'  => __( 'Create an account', 'newspack-plugin' ),
@@ -358,18 +370,18 @@ final class Reader_Activation {
 			*/
 			$filtered_labels = apply_filters( 'newspack_reader_activation_auth_labels', $default_labels );
 
-			foreach ( $default_labels as $key => $label ) {
-				if ( isset( $filtered_labels[ $key ] ) ) {
-					if ( is_array( $label ) && is_array( $filtered_labels[ $key ] ) ) {
-						self::$reader_activation_labels[ $key ] = array_merge( $label, $filtered_labels[ $key ] );
-					} elseif ( is_string( $label ) && is_string( $filtered_labels[ $key ] ) ) {
-						self::$reader_activation_labels[ $key ] = $filtered_labels[ $key ];
+			foreach ( $default_labels as $label_key => $label ) {
+				if ( isset( $filtered_labels[ $label_key ] ) ) {
+					if ( is_array( $label ) && is_array( $filtered_labels[ $label_key ] ) ) {
+						self::$reader_activation_labels[ $label_key ] = array_merge( $label, $filtered_labels[ $label_key ] );
+					} elseif ( is_string( $label ) && is_string( $filtered_labels[ $label_key ] ) ) {
+						self::$reader_activation_labels[ $label_key ] = $filtered_labels[ $label_key ];
 					} else {
 						// If filtered label type doesn't match, fallback to default.
-						self::$reader_activation_labels[ $key ] = $label;
+						self::$reader_activation_labels[ $label_key ] = $label;
 					}
 				} else {
-					self::$reader_activation_labels[ $key ] = $label;
+					self::$reader_activation_labels[ $label_key ] = $label;
 				}
 			}
 		}
@@ -466,9 +478,15 @@ final class Reader_Activation {
 
 		$value = \get_option( self::OPTIONS_PREFIX . $name, $config[ $name ] );
 
-		// Use default value type for casting bool option value.
+		/*
+		 * Cast to the default value's type. Options come back from the database as
+		 * strings, but out of a warm object cache as the type they were written with,
+		 * so a setting's type would otherwise vary with cache state.
+		 */
 		if ( is_bool( $config[ $name ] ) ) {
 			$value = (bool) $value;
+		} elseif ( is_int( $config[ $name ] ) ) {
+			$value = (int) $value;
 		}
 		return apply_filters( 'newspack_reader_activation_setting', $value, $name );
 	}
@@ -563,7 +581,7 @@ final class Reader_Activation {
 	 */
 	public static function activate() {
 		if ( ! method_exists( 'Newspack_Popups_Presets', 'activate_ras_presets' ) ) {
-			return new \WP_Error( 'newspack_reader_activation_missing_dependencies', __( 'Newspack Campaigns plugin is required to activate Reader Activation features.', 'newspack-plugin' ) );
+			return new \WP_Error( 'newspack_reader_activation_missing_dependencies', __( 'Newspack Campaigns plugin is required to activate Audience Management features.', 'newspack-plugin' ) );
 		}
 
 		return \Newspack_Popups_Presets::activate_ras_presets();
@@ -764,7 +782,7 @@ final class Reader_Activation {
 
 	/**
 	 * Get an array of required plugins for satisfying Reader Revenue prerequisites.
-	 * WooCommerce and Woo Subscriptions are required for Newspack, but not for NRH.
+	 * WooCommerce and Woo Subscriptions are required for Newspack, but not for RevEngine.
 	 */
 	public static function get_reader_revenue_required_plugins() {
 		$required_plugins = [
@@ -883,11 +901,16 @@ final class Reader_Activation {
 	 * @return bool True if reader activation is enabled.
 	 */
 	public static function is_enabled() {
-		if ( defined( 'IS_TEST_ENV' ) && IS_TEST_ENV ) {
-			return true;
-		}
-
-		$is_enabled = (bool) \get_option( self::OPTIONS_PREFIX . 'enabled', false );
+		// The test environment defaults to enabled, because the great majority of the
+		// suite assumes reader activation is on and predates this option being
+		// meaningful in tests. The default is applied *before* the filter rather than
+		// instead of it, so a test that needs the disabled path can reach it — without
+		// this, `add_filter( 'newspack_reader_activation_enabled', '__return_false' )`
+		// was silently inert and any behaviour behind "reader activation off" was
+		// untestable.
+		$is_enabled = defined( 'IS_TEST_ENV' ) && IS_TEST_ENV
+			? true
+			: (bool) \get_option( self::OPTIONS_PREFIX . 'enabled', false );
 
 		/**
 		 * Filters whether reader activation is enabled.
@@ -1465,54 +1488,88 @@ final class Reader_Activation {
 				}
 				$auth_callback_url = add_query_arg( $params, \wc_get_page_permalink( 'myaccount' ) );
 			} elseif ( function_exists( 'wc_get_page_permalink' ) && function_exists( 'is_account_page' ) && \is_account_page() ) {
-				// If we are already on the my account page, set the my account URL so the page reloads on submit.
+				// The signed-out My Account page renders this form in place of the
+				// requested endpoint (a group, a subscription), so return the reader
+				// there. The lost-password form is no use to a signed-in reader.
 				$auth_callback_url = \wc_get_page_permalink( 'myaccount' );
+				$endpoint          = \WC()->query->get_current_endpoint();
+				if ( $endpoint && 'lost-password' !== $endpoint ) {
+					$auth_callback_url = \wc_get_endpoint_url( $endpoint, \get_query_var( $endpoint ), $auth_callback_url );
+				}
 			} elseif ( class_exists( 'Newspack\My_Account' ) && My_Account::is_account_page() ) {
-				// Native (WooCommerce-less) account page: reload it on submit so the
-				// signed-in reader lands on their account.
-				$auth_callback_url = My_Account::get_endpoint_url();
+				// Native (WooCommerce-less) account page: likewise return the
+				// signed-in reader to the endpoint they asked for.
+				$endpoint          = My_Account::get_current_endpoint();
+				$auth_callback_url = My_Account::get_endpoint_url( $endpoint, (string) \get_query_var( $endpoint ) );
 			}
 		}
+		$id_prefix   = \wp_unique_id( 'newspack-reader-auth-' );
+		$email_id    = $id_prefix . '-email-input';
+		$password_id = $id_prefix . '-password-input';
+		$otp_lead_id = $id_prefix . '-otp-lead';
+		$pwd_echo_id = $id_prefix . '-pwd-echo';
+		$otp_id      = $id_prefix . '-otp-input';
+		$success_id  = $id_prefix . '-success-title';
 		?>
 		<div class="newspack-ui newspack-reader-auth">
 			<?php if ( ! $in_modal ) { ?>
 				<h2 data-action="signin"><?php echo wp_kses_post( self::get_reader_activation_labels( 'title' ) ); ?></h2>
 			<?php } ?>
-			<div class="newspack-ui__box newspack-ui__box--success newspack-ui__box--text-center" data-action="success">
-				<span class="newspack-ui__icon newspack-ui__icon--success">
-					<?php Newspack_UI_Icons::print_svg( 'check' ); ?>
+			<div class="newspack-ui__auth-success newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--align-center newspack-ui__stack--gap-half newspack-ui__spacing-bottom--5" data-action="success">
+				<span class="newspack-ui__icon newspack-ui__icon--large newspack-ui__icon--success">
+					<?php Newspack_UI_Icons::print_svg( 'published' ); ?>
 				</span>
-				<p>
-					<strong class="success-title"></strong>
-				</p>
-				<p class="newspack-ui__font--xs success-description"></p>
+				<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-1">
+					<h2 id="<?php echo \esc_attr( $success_id ); ?>" class="success-title newspack-ui__font--m"></h2>
+					<p class="success-description newspack-ui__color-text-gray" hidden></p>
+				</div>
 			</div>
 			<form method="post" target="_top" data-newspack-recaptcha="newspack_register">
-				<div data-action="signin">
-					<?php self::render_third_party_auth(); ?>
-				</div>
 				<input type="hidden" name="<?php echo \esc_attr( self::AUTH_FORM_ACTION ); ?>" value="1" />
 				<?php if ( ! empty( $referer['path'] ) ) : ?>
 					<input type="hidden" name="referer" value="<?php echo \esc_url( $referer['path'] ); ?>" />
 				<?php endif; ?>
 				<input type="hidden" name="action" />
-				<p data-action="otp">
-					<label><?php echo esc_html( $labels['otp_title'] ); ?></label>
+				<p id="<?php echo \esc_attr( $otp_lead_id ); ?>" class="newspack-ui__auth-lead newspack-ui__color-text-gray newspack-ui__spacing-bottom--4" data-action="otp">
+					<?php
+					echo wp_kses_post(
+						sprintf(
+							// Translators: %s is the email address.
+							__( 'Enter the code we sent to %s, or tap the link in the email to sign in on any device.', 'newspack-plugin' ),
+							'<strong class="email-address"></strong>'
+						)
+					);
+					?>
+				</p>
+				<p id="<?php echo \esc_attr( $pwd_echo_id ); ?>" class="newspack-ui__auth-lead newspack-ui__color-text-gray newspack-ui__spacing-bottom--5" data-action="pwd">
+					<?php
+					echo wp_kses_post(
+						sprintf(
+							// Translators: %s is the email address.
+							__( 'Signing in as %s', 'newspack-plugin' ),
+							'<strong class="email-address"></strong>'
+						)
+					);
+					?>
 				</p>
 				<div data-action="signin">
-					<p>
-						<label for="newspack-reader-auth-email-input"><?php esc_html_e( 'Email address', 'newspack-plugin' ); ?></label>
-						<input id="newspack-reader-auth-email-input" name="npe" type="email" placeholder="<?php \esc_attr_e( 'Your email address', 'newspack-plugin' ); ?>" />
+					<p class="newspack-ui__spacing-bottom--0">
+						<label for="<?php echo \esc_attr( $email_id ); ?>"><?php esc_html_e( 'Email address', 'newspack-plugin' ); ?></label>
+						<input id="<?php echo \esc_attr( $email_id ); ?>" name="npe" type="email" autocomplete="username" placeholder="<?php \esc_attr_e( 'Your email address', 'newspack-plugin' ); ?>" />
 					</p>
 					<?php self::render_honeypot_field(); ?>
 				</div>
 				<p class="newspack-ui__code-input" data-action="otp">
-					<input name="otp_code" type="text" maxlength="<?php echo \esc_attr( Magic_Link::OTP_LENGTH ); ?>" placeholder="<?php \esc_attr_e( '6-digit code', 'newspack-plugin' ); ?>" />
+					<label for="<?php echo \esc_attr( $otp_id ); ?>"><?php echo \esc_html_x( 'Code', 'one-time sign-in code field label', 'newspack-plugin' ); ?></label>
+					<input id="<?php echo \esc_attr( $otp_id ); ?>" name="otp_code" type="text" inputmode="numeric" autocomplete="one-time-code" aria-describedby="<?php echo \esc_attr( $otp_lead_id ); ?>" data-otp-length="<?php echo \esc_attr( Magic_Link::OTP_LENGTH ); ?>" />
 				</p>
-				<p data-action="pwd">
-					<label for="newspack-reader-auth-password-input"><?php esc_html_e( 'Enter your password', 'newspack-plugin' ); ?></label>
-					<input id="newspack-reader-auth-password-input" name="password" type="password" />
-				</p>
+				<div data-action="pwd">
+					<label for="<?php echo \esc_attr( $password_id ); ?>"><?php esc_html_e( 'Enter your password', 'newspack-plugin' ); ?></label>
+					<div class="newspack-ui__password-field">
+						<input id="<?php echo \esc_attr( $password_id ); ?>" name="password" type="password" autocomplete="current-password" aria-describedby="<?php echo \esc_attr( $pwd_echo_id ); ?>" />
+						<?php Newspack_UI::print_password_toggle(); ?>
+					</div>
+				</div>
 				<div class="response-container">
 					<div class="response">
 						<?php if ( ! empty( $message ) ) : ?>
@@ -1520,23 +1577,20 @@ final class Reader_Activation {
 						<?php endif; ?>
 					</div>
 				</div>
-				<p data-action="otp">
-					<?php
-					echo wp_kses_post(
-						sprintf(
-							// Translators: %s is the email address.
-							__( 'Sign in by entering the code we sent to %s, or clicking the magic link in the email.', 'newspack-plugin' ),
-							'<strong class="email-address"></strong>'
-						)
-					);
-					?>
-				</p>
-				<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-2 newspack-ui__spacing-top--5" data-action="signin pwd otp">
+				<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-1 newspack-ui__spacing-top--5" data-action="signin pwd otp">
 					<button type="submit" class="newspack-ui__button newspack-ui__button--wide newspack-ui__button--primary" data-action="signin pwd otp"><?php echo \esc_html( $labels['continue'] ); ?></button>
-					<button type="button" class="newspack-ui__button newspack-ui__button--wide newspack-ui__button--secondary" data-action="otp" data-resend-code><?php echo \esc_html( $labels['resend_code'] ); ?></button>
-					<button type="button" class="newspack-ui__button newspack-ui__button--wide newspack-ui__button--secondary" data-action="pwd" data-send-code><?php echo \esc_html( $labels['otp'] ); ?></button>
-					<a class="newspack-ui__button newspack-ui__button--wide newspack-ui__button--secondary" data-action="pwd" href="<?php echo \esc_url( \wp_lostpassword_url() ); ?>"><?php echo \esc_html( $labels['forgot_password'] ); ?></a>
-					<button type="button" class="newspack-ui__button newspack-ui__button--wide newspack-ui__button--ghost" data-action="otp pwd" data-back><?php echo \esc_html( $labels['go_back'] ); ?></button>
+					<button type="button" class="newspack-ui__button newspack-ui__button--wide newspack-ui__button--outline" data-action="pwd" data-send-code><?php echo \esc_html( $labels['otp'] ); ?></button>
+				</div>
+				<div class="newspack-ui__auth-links newspack-ui__spacing-top--3" data-action="pwd">
+					<a class="newspack-ui__link" href="<?php echo \esc_url( \wp_lostpassword_url() ); ?>"><?php echo \esc_html( $labels['forgot_password'] ); ?></a>
+					<button type="button" class="newspack-ui__link" data-back data-back-target="signin"><?php esc_html_e( 'Use a different email', 'newspack-plugin' ); ?></button>
+				</div>
+				<div data-action="signin">
+					<?php self::render_third_party_auth( true ); ?>
+				</div>
+				<div class="newspack-ui__auth-links newspack-ui__spacing-top--3" data-action="otp">
+					<button type="button" class="newspack-ui__link" data-resend-code><?php echo \esc_html( $labels['resend_code'] ); ?></button>
+					<button type="button" class="newspack-ui__link" data-back data-back-target="signin"><?php esc_html_e( 'Use a different email', 'newspack-plugin' ); ?></button>
 				</div>
 			</form>
 			<a href="<?php echo \esc_url( $auth_callback_url ); ?>" class="auth-callback newspack-ui__button newspack-ui__button--wide newspack-ui__button--primary" data-action="success"><?php echo \esc_html( $labels['continue'] ); ?></a>
@@ -1550,7 +1604,7 @@ final class Reader_Activation {
 	 *
 	 * @return bool
 	 */
-	private static function should_render_auth_modal() {
+	public static function should_render_auth_modal() {
 		/**
 		 * Filters whether to render reader auth form.
 		 *
@@ -1576,9 +1630,9 @@ final class Reader_Activation {
 		$terms = self::get_auth_footer();
 		$label = self::get_reader_activation_labels( 'title' );
 		?>
-		<div class="newspack-ui newspack-ui__modal-container newspack-reader-auth-modal">
+		<dialog class="newspack-ui newspack-ui__modal-container newspack-reader-auth-modal" aria-labelledby="newspack-reader-auth-modal-label">
 			<div class="newspack-ui__modal-container__overlay"></div>
-			<div class="newspack-ui__modal newspack-ui__modal--small" role="dialog" aria-modal="true" aria-labelledby="newspack-reader-auth-modal-label">
+			<div class="newspack-ui__modal newspack-ui__modal--small">
 				<div class="newspack-ui__modal__header">
 					<h2 id="newspack-reader-auth-modal-label"><?php echo \esc_html( $label ); ?></h2>
 					<button class="newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__modal__close">
@@ -1597,7 +1651,7 @@ final class Reader_Activation {
 					</footer>
 				<?php endif; ?>
 			</div>
-		</div>
+		</dialog>
 		<?php
 	}
 
@@ -1618,11 +1672,8 @@ final class Reader_Activation {
 		}
 		ob_start();
 		?>
-		<div class="newspack-ui__box newspack-ui__box--text-center">
-			<span class="newspack-ui__icon newspack-ui__icon--neutral">
-				<?php Newspack_UI_Icons::print_svg( 'login' ); ?>
-			</span>
-			<p>
+		<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-1 newspack-ui__spacing-bottom--4">
+			<p class="newspack-ui__auth-lead newspack-ui__color-text-gray">
 				<?php
 				printf(
 					// translators: %s is the user's email address.
@@ -1631,13 +1682,19 @@ final class Reader_Activation {
 				);
 				?>
 			</p>
+			<?php // Errors land in their own paragraph, so the line naming the reader's address survives a failed send and still orients them on the retry. ?>
+			<p data-error-target role="status" hidden></p>
 		</div>
-		<button type="button" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide" data-send-otp>
-			<?php esc_html_e( 'Send code', 'newspack-plugin' ); ?>
-		</button>
-		<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-ui__modal__close">
-			<?php esc_html_e( 'Skip for now', 'newspack-plugin' ); ?>
-		</button>
+		<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-3">
+			<button type="button" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide" data-send-otp>
+				<?php esc_html_e( 'Send code', 'newspack-plugin' ); ?>
+			</button>
+			<div class="newspack-ui__stack newspack-ui__stack--horizontal newspack-ui__stack--justify-center">
+				<button type="button" class="newspack-ui__link newspack-ui__modal__close">
+					<?php esc_html_e( 'Skip for now', 'newspack-plugin' ); ?>
+				</button>
+			</div>
+		</div>
 		<?php
 		$content = ob_get_clean();
 		?>
@@ -1674,32 +1731,29 @@ final class Reader_Activation {
 
 		ob_start();
 		?>
-		<div class="newspack-ui__box newspack-ui__box--text-center">
-			<span class="newspack-ui__icon newspack-ui__icon--neutral">
-				<?php Newspack_UI_Icons::print_svg( 'account' ); ?>
-			</span>
-			<p>
-				<?php
-				// The <strong> is rendered empty here; confirmation-modal.js fills it
-				// via textContent right before the modal opens (no untrusted email is
-				// ever interpolated server-side). wp_kses_post allows the <strong class>
-				// fragment and satisfies the escaping requirement without a suppression.
-				echo wp_kses_post(
-					sprintf(
-						// translators: %s is a placeholder that the JS helper replaces with the email the reader is about to register.
-						__( "We'll create a new account for %s.", 'newspack-plugin' ),
-						'<strong class="email-address"></strong>'
-					)
-				);
-				?>
-			</p>
+		<p class="newspack-ui__auth-lead newspack-ui__color-text-gray newspack-ui__spacing-bottom--4">
+			<?php
+			// The <strong> is rendered empty here; confirmation-modal.js fills it
+			// via textContent right before the modal opens (no untrusted email is
+			// ever interpolated server-side). wp_kses_post allows the <strong class>
+			// fragment and satisfies the escaping requirement without a suppression.
+			echo wp_kses_post(
+				sprintf(
+					// translators: %s is a placeholder that the JS helper replaces with the email the reader is about to register.
+					__( "We'll create a new account for %s.", 'newspack-plugin' ),
+					'<strong class="email-address"></strong>'
+				)
+			);
+			?>
+		</p>
+		<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-1">
+			<button type="button" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide" data-confirm-register>
+				<?php esc_html_e( 'Continue', 'newspack-plugin' ); ?>
+			</button>
+			<button type="button" class="newspack-ui__button newspack-ui__button--outline newspack-ui__button--wide newspack-ui__modal__close" data-cancel-register>
+				<?php esc_html_e( 'Cancel', 'newspack-plugin' ); ?>
+			</button>
 		</div>
-		<button type="button" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide" data-confirm-register>
-			<?php esc_html_e( 'Continue', 'newspack-plugin' ); ?>
-		</button>
-		<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-ui__modal__close" data-cancel-register>
-			<?php esc_html_e( 'Cancel', 'newspack-plugin' ); ?>
-		</button>
 		<?php
 		$content = ob_get_clean();
 		?>
@@ -1817,7 +1871,7 @@ final class Reader_Activation {
 		}
 		$newsletter_list_initial_size = self::get_newsletters_list_initial_size();
 		?>
-		<div class="newspack-ui newspack-ui__modal-container newspack-newsletters-signup-modal">
+		<dialog class="newspack-ui newspack-ui__modal-container newspack-newsletters-signup-modal">
 			<div class="newspack-ui__modal-container__overlay"></div>
 			<div class="newspack-ui__modal newspack-ui__modal--small">
 				<div class="newspack-ui__modal__header">
@@ -1842,7 +1896,7 @@ final class Reader_Activation {
 					<?php self::render_newsletters_signup_form( $email_address, $newsletters_lists, $newsletter_list_initial_size ); ?>
 				</div>
 			</div>
-		</div>
+		</dialog>
 		<?php
 	}
 
@@ -2036,20 +2090,42 @@ final class Reader_Activation {
 	 * Render third party auth buttons for an authentication form.
 	 *
 	 * If Google is connected to the site, this can be overridden by setting the `NEWSPACK_DISABLE_GOOGLE_OAUTH` environment constant.
+	 *
+	 * @param bool $divider_first Whether the "Or" divider comes before the buttons, for forms that offer them after their own submit button.
 	 */
-	public static function render_third_party_auth() {
+	public static function render_third_party_auth( bool $divider_first = false ): void {
 		if ( ! Google_OAuth::is_oauth_configured() ) {
 			return;
 		}
 		?>
-		<div class="newspack-ui">
-			<button type="button" class="newspack-ui__button newspack-ui__button--wide newspack-ui__button--secondary newspack-ui__button--google-oauth">
+		<div class="newspack-ui newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-3">
+			<?php
+			if ( $divider_first ) {
+				self::render_word_divider( 'newspack-ui__spacing-top--3 newspack-ui__spacing-bottom--0' );
+			}
+			?>
+			<button type="button" class="newspack-ui__button newspack-ui__button--wide newspack-ui__button--outline newspack-ui__button--google-oauth">
 				<?php Newspack_UI_Icons::print_svg( 'google' ); ?>
 				<?php echo \esc_html__( 'Continue with Google', 'newspack-plugin' ); ?>
 			</button>
-			<div class="newspack-ui__word-divider">
-				<?php echo \esc_html__( 'Or', 'newspack-plugin' ); ?>
-			</div>
+			<?php
+			if ( ! $divider_first ) {
+				self::render_word_divider( 'newspack-ui__spacing-top--0 newspack-ui__spacing-bottom--3' );
+			}
+			?>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Render the "Or" divider between alternative ways to sign in.
+	 *
+	 * @param string $spacing_classes Spacing utility classes for the divider's outer margin.
+	 */
+	private static function render_word_divider( string $spacing_classes ): void {
+		?>
+		<div class="newspack-ui__word-divider <?php echo \esc_attr( $spacing_classes ); ?>">
+			<?php echo \esc_html__( 'Or', 'newspack-plugin' ); ?>
 		</div>
 		<?php
 	}
@@ -2178,21 +2254,23 @@ final class Reader_Activation {
 
 		switch ( $action ) {
 			case 'signin':
-				if ( Magic_Link::has_active_token( $user ) ) {
-					$payload['action'] = 'otp';
+				// A reader who set a password can always sign in with it. Offer the password
+				// step on email submit even when an OTP token is still active — the reader may
+				// have requested a code, then decided to use their password instead (NPPM-3054).
+				if ( ! self::is_reader_without_password( $user ) ) {
+					$payload['action'] = 'pwd';
 					break;
 				}
-				if ( self::is_reader_without_password( $user ) ) {
+				// No password on file: a one-time code is the only way in. Reuse an active
+				// token if one exists; otherwise send a fresh code.
+				if ( ! Magic_Link::has_active_token( $user ) ) {
 					$sent = Magic_Link::send_email( $user, $redirect );
 					if ( true !== $sent ) {
 						return self::send_auth_form_response( new \WP_Error( 'unauthorized', \is_wp_error( $sent ) ? $sent->get_error_message() : __( 'We encountered an error sending an authentication link. Please try again.', 'newspack-plugin' ) ) );
 					}
-					$payload['action'] = 'otp';
-					break;
-				} else {
-					$payload['action'] = 'pwd';
-					break;
 				}
+				$payload['action'] = 'otp';
+				break;
 			case 'pwd':
 				if ( empty( $password ) ) {
 					return self::send_auth_form_response( new \WP_Error( 'invalid_password', __( 'Password not recognized, try again.', 'newspack-plugin' ) ) );
@@ -2284,6 +2362,11 @@ final class Reader_Activation {
 	/**
 	 * Check if current reader has its email verified.
 	 *
+	 * Reports stored state only. A content-gate decision that has to answer "what
+	 * would this reader see if they verified?" must also accept
+	 * `Access_Rules::is_verification_assumed_for( $user->ID )`, or the hypothetical
+	 * reports the reader still walled by the very requirement it is asking about.
+	 *
 	 * @param \WP_User $user User object.
 	 *
 	 * @return bool|null Whether the email address is verified, null if invalid user.
@@ -2298,7 +2381,7 @@ final class Reader_Activation {
 			return null;
 		}
 
-		if ( defined( 'NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION' ) && NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION ) {
+		if ( defined( 'NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION' ) && NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Documented in plugins/newspack-plugin/includes/plugins/woocommerce/my-account/class-woocommerce-my-account.php.
 			return true;
 		}
 
@@ -2581,9 +2664,17 @@ final class Reader_Activation {
 			}
 
 			// Don't send OTP email for newsletter signup, or if the reader has a password set.
-			if ( self::is_reader_without_password( $existing_user ) &&
-				( ! isset( $metadata['registration_method'] ) || false === strpos( $metadata['registration_method'], 'newsletters-subscription' ) )
-			) {
+			$should_send_magic_link = self::is_reader_without_password( $existing_user ) &&
+				( ! isset( $metadata['registration_method'] ) || false === strpos( $metadata['registration_method'], 'newsletters-subscription' ) );
+			/**
+			 * Filters whether to send a magic link to an existing reader attempting to register again.
+			 *
+			 * @param bool     $should_send_magic_link Whether to send the magic link email.
+			 * @param \WP_User $existing_user          The existing reader account.
+			 * @param array    $metadata               Registration metadata.
+			 */
+			$should_send_magic_link = \apply_filters( 'newspack_reader_activation_send_magic_link_on_reregistration', $should_send_magic_link, $existing_user, $metadata );
+			if ( $should_send_magic_link ) {
 				Logger::log( "User with $email already exists. Sending magic link." );
 				$redirect = isset( $metadata['current_page_url'] ) ? $metadata['current_page_url'] : '';
 				Magic_Link::send_email( $existing_user, $redirect );
@@ -2610,13 +2701,19 @@ final class Reader_Activation {
 				}
 
 				/**
-				 * Create WooCommerce Customer if possible.
-				 * Email notification for WooCommerce is handled by the plugin.
+				 * Create a WooCommerce customer if possible. WooCommerce's "New account"
+				 * email never fires for readers (see disable_woocommerce_new_user_email()),
+				 * so registration sends nothing here. Newspack's verification, magic link,
+				 * or OTP emails reach the reader instead.
 				 */
 				$user_id = \wc_create_new_customer( $email, $user_data['user_login'], $user_data['user_pass'], $user_data );
 			} else {
+				/**
+				 * Deliberately no wp_new_user_notification(): readers are passwordless, and
+				 * the WooCommerce path above sends no account email, so this path must not
+				 * either (NPPD-2261).
+				 */
 				$user_id = \wp_insert_user( $user_data );
-				\wp_new_user_notification( $user_id, null, 'user' );
 			}
 			add_filter( 'woocommerce_new_customer_data', [ __CLASS__, 'canonize_user_data' ], 10, 1 );
 
@@ -2864,15 +2961,31 @@ final class Reader_Activation {
 			return true;
 		}
 
-		// If we generated the display name from the user's email address, treat it as generic.
-		if (
-			self::generate_user_nicename( $user->data->user_email ) === $user->data->display_name || // New generated construction (URL-sanitized version of the email address minus domain).
-			self::strip_email_domain( $user->data->user_email ) === $user->data->display_name // Legacy generated construction (just the email address minus domain).
-		) {
-			return true;
-		}
+		return self::is_display_name_derived_from_email( $user->data->display_name, $user->data->user_email );
+	}
 
-		return false;
+	/**
+	 * Whether a display name is one this plugin would have generated from an email address.
+	 *
+	 * The comparison alone, with none of the "should we treat it as generic?"
+	 * short-circuits: callers apply the ones their question needs.
+	 * reader_has_generic_display_name() adds the opt-out constant and the
+	 * reader's own saved-name meta; a caller deciding what to put on the wire
+	 * wants the meta but not the constant.
+	 *
+	 * @param string $display_name Display name to check.
+	 * @param string $email        Email address to compare against.
+	 *
+	 * @return bool True if the display name matches either generated construction.
+	 */
+	public static function is_display_name_derived_from_email( string $display_name, string $email ): bool {
+		// '' rather than empty(): a reader at 0@example.com whose display name
+		// is "0" is derived, and empty() would call it not-derived.
+		if ( '' === $display_name || '' === $email ) {
+			return false;
+		}
+		return self::generate_user_nicename( $email ) === $display_name // Current construction (URL-sanitized version of the email address minus domain).
+			|| self::strip_email_domain( $email ) === $display_name;   // Legacy construction (just the email address minus domain).
 	}
 
 	/**

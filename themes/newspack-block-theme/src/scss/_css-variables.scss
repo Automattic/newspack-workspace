@@ -3,6 +3,37 @@
 	--wp--preset--spacing--00: 0;
 }
 
+$colors: (
+	"primary": var(--wp--preset--color--accent),
+	"primary-variation": color-mix(in srgb, var(--wp--preset--color--accent) 80%, black),
+	"secondary": var(--wp--preset--color--accent-2),
+	"secondary-variation": color-mix(in srgb, var(--wp--preset--color--accent-2) 80%, black),
+	"dark-gray": var(--wp--preset--color--contrast),
+	"medium-gray": var(--wp--preset--color--contrast-3),
+	"light-gray": var(--wp--preset--color--base-2),
+	"white": var(--wp--preset--color--base),
+);
+
+@each $slug in accent, accent-2, accent-3, base, base-2, base-3, base-4, base-5, contrast, contrast-2, contrast-3 {
+	:where(.has-#{$slug}-color:not(.wp-element-button, .wp-block-button__link)) {
+		--wp--custom--focus--color: var(--wp--preset--color--#{$slug});
+	}
+}
+
+@each $name, $value in $colors {
+	:where(.has-#{$name}-color:not(.wp-element-button, .wp-block-button__link)) {
+		--wp--custom--focus--color: #{$value};
+	}
+}
+
+:where(.wp-block-cover, .wp-block-cover-image):where(:not(.has-text-color)) {
+	--wp--custom--focus--color: var(--wp--custom--color--neutral-0);
+}
+
+:where(.wp-block-cover, .wp-block-cover-image):where(.is-light:not(.has-text-color)) {
+	--wp--custom--focus--color: var(--wp--custom--color--neutral-100);
+}
+
 // Apply the custom CSS variables defined in theme.json.
 .has-xx-small-font-size {
 	line-height: var(--wp--custom--line-height--xx-small);
@@ -59,17 +90,6 @@
 }
 
 // Backward compatibility with the Classic Theme
-$colors: (
-	"primary": var(--wp--preset--color--accent),
-	"primary-variation": color-mix(in srgb, var(--wp--preset--color--accent) 80%, black),
-	"secondary": var(--wp--preset--color--accent-2),
-	"secondary-variation": color-mix(in srgb, var(--wp--preset--color--accent-2) 80%, black),
-	"dark-gray": var(--wp--preset--color--contrast),
-	"medium-gray": var(--wp--preset--color--contrast-3),
-	"light-gray": var(--wp--preset--color--base-2),
-	"white": var(--wp--preset--color--base),
-);
-
 @each $name, $var in $colors {
 	//! Custom background colors
 	.has-#{$name}-background-color {

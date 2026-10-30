@@ -158,6 +158,21 @@
         "accountId": "0",
         "containerId": "0",
         "variableId": "10",
+        "name": "DLV - Newspack - access_source",
+        "type": "v",
+        "notes": "Newspack reader param. Present on every page when the Content Gate feature is enabled; non-singular views report no_custom_access_gate. How the reader reached the post: a product name, or one of subscription | one_time_purchase | group | institution | domain | reader_data | metering_eligible | gated | no_custom_access_gate.",
+        "parameter": [
+          { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+          { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+          { "type": "TEMPLATE", "key": "name", "value": "access_source" }
+        ],
+        "fingerprint": "0",
+        "formatValue": {}
+      },
+      {
+        "accountId": "0",
+        "containerId": "0",
+        "variableId": "11",
         "name": "Newspack - GA4 Reader Params (config settings)",
         "type": "gtcs",
         "notes": "Bundles all Newspack reader params as Google-tag configuration parameters. Reference this from your GA4 Google Tag's 'Configuration settings variable' field so the params ride every page_view.",
@@ -227,6 +242,13 @@
                 "map": [
                   { "type": "TEMPLATE", "key": "parameter", "value": "group" },
                   { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DLV - Newspack - group}}" }
+                ]
+              },
+              {
+                "type": "MAP",
+                "map": [
+                  { "type": "TEMPLATE", "key": "parameter", "value": "access_source" },
+                  { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DLV - Newspack - access_source}}" }
                 ]
               }
             ]

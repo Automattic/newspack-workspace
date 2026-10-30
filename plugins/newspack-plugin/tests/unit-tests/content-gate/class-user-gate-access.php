@@ -7,6 +7,9 @@
 
 use Newspack\Access_Rules;
 use Newspack\Content_Gate;
+use Newspack\Group_Subscription;
+use Newspack\Group_Subscription_Settings;
+use Newspack\Institution;
 use Newspack\Reader_Activation;
 use Newspack\User_Gate_Access;
 
@@ -44,6 +47,74 @@ class Newspack_Test_User_Gate_Access extends WP_UnitTestCase {
 		);
 		Reader_Activation::set_reader_verified( self::$user_id );
 		self::$admin_id = $this->factory->user->create( [ 'role' => 'administrator' ] );
+
+		// The mock order and subscription stores are process globals; without a
+		// reset, this file's orders would leak into every later test.
+		global $orders_database, $subscriptions_database, $wc_mocks_get_orders_calls, $wc_mocks_orders_ignore_page;
+		$orders_database             = [];
+		$subscriptions_database      = [];
+		$wc_mocks_get_orders_calls   = 0;
+		$wc_mocks_orders_ignore_page = false;
+		$this->set_paid_orders_page_size( 50 );
+	}
+
+	/**
+	 * Tear down after each test.
+	 */
+	public function tear_down() {
+		// Stand-ins for newspack-network, which the suite doesn't load.
+		remove_all_filters( 'newspack_access_rules_network_subscription_records' );
+		parent::tear_down();
+	}
+
+	/**
+	 * Stand in for newspack-network: answer the network records filter with a
+	 * fixed list, and capture how it was called.
+	 *
+	 * @param array $records Records to return, in newspack-network's shape.
+	 *
+	 * @return ArrayObject Captures a `calls` list of [ $user_id, $product_ids ] pairs.
+	 */
+	private function stub_network_records( $records ) {
+		$spy = new ArrayObject( [ 'calls' => [] ] );
+		add_filter(
+			'newspack_access_rules_network_subscription_records',
+			function ( $existing, $user_id, $product_ids ) use ( $records, $spy ) {
+				$spy['calls'] = array_merge( $spy['calls'], [ [ $user_id, $product_ids ] ] );
+				return array_merge( $existing, $records );
+			},
+			10,
+			3
+		);
+		return $spy;
+	}
+
+	/**
+	 * Build a network record in the shape newspack-network supplies.
+	 *
+	 * @param int    $id        Subscription ID on the other site.
+	 * @param string $site_name Name of the other site.
+	 *
+	 * @return array
+	 */
+	private function network_record( $id = 12345678, $site_name = 'Node Daily' ) {
+		return [
+			'id'        => $id,
+			'site_url'  => 'https://node-b.example.test',
+			'site_name' => $site_name,
+			'edit_url'  => 'https://node-b.example.test/wp-admin/post.php?post=' . $id . '&action=edit',
+		];
+	}
+
+	/**
+	 * Shrink or restore the order walk's page size.
+	 *
+	 * @param int $size Page size.
+	 */
+	private function set_paid_orders_page_size( $size ) {
+		$property = new ReflectionProperty( Access_Rules::class, 'paid_orders_page_size' );
+		$property->setAccessible( true );
+		$property->setValue( null, $size );
 	}
 
 	/**
@@ -187,7 +258,7 @@ class Newspack_Test_User_Gate_Access extends WP_UnitTestCase {
 		User_Gate_Access::render_user_gate_access( $user );
 		$output = ob_get_clean();
 
-		$this->assertStringContainsString( 'Content Gate Access', $output, 'Should render heading for admin users.' );
+		$this->assertStringContainsString( 'Access Control', $output, 'Should render heading for admin users.' );
 	}
 
 	/**
@@ -234,5 +305,704 @@ class Newspack_Test_User_Gate_Access extends WP_UnitTestCase {
 		$this->assertTrue( $result['can_bypass'], 'User should pass when at least one group matches (OR logic).' );
 		$this->assertFalse( $result['groups'][0]['passes'], 'First group should fail.' );
 		$this->assertTrue( $result['groups'][1]['passes'], 'Second group should pass.' );
+	}
+
+	/**
+	 * An unconfigured one_time_purchase rule denies access, so the panel must
+	 * describe it as such rather than falling into the generic "(any)" branch
+	 * that suits rules whose evaluator reads an empty value as no constraint.
+	 */
+	public function test_format_rule_value_describes_unconfigured_one_time_purchase() {
+		$format_rule_value_method = new ReflectionMethod( User_Gate_Access::class, 'format_rule_value' );
+		$format_rule_value_method->setAccessible( true );
+
+		$this->assertSame(
+			'(no products selected) (invalid duration, grants no access)',
+			$format_rule_value_method->invoke( null, 'one_time_purchase', [] ),
+			'An empty one_time_purchase value should read as granting no access, matching how the rule evaluates.'
+		);
+		$this->assertSame(
+			'(any)',
+			$format_rule_value_method->invoke( null, 'email_domain', '' ),
+			'An empty value for a rule that reads it as no constraint should still read "(any)".'
+		);
+	}
+
+	/**
+	 * A passing subscription rule names every subscription that satisfies it —
+	 * owned or via group membership — and only those: a cancelled subscription
+	 * and one for an unrelated product grant nothing and must not be listed.
+	 */
+	public function test_subscription_rule_lists_the_subscriptions_that_grant_access() {
+		\wc_create_mock_product(
+			[
+				'id'   => 101,
+				'name' => 'All Access',
+			]
+		);
+		$owned     = \wcs_create_subscription(
+			[
+				'customer_id'    => self::$user_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'products'       => [ 101 ],
+			]
+		);
+		$cancelled = \wcs_create_subscription(
+			[
+				'customer_id'    => self::$user_id,
+				'status'         => 'cancelled',
+				'billing_period' => 'month',
+				'products'       => [ 101 ],
+			]
+		);
+		$unrelated = \wcs_create_subscription(
+			[
+				'customer_id'    => self::$user_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'products'       => [ 999 ],
+			]
+		);
+		// Group subscriptions owned by someone else, where the reader is a member:
+		// an active one grants access, a cancelled one does not.
+		$manager_id      = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$group           = $this->create_group_subscription( $manager_id, 'active', [ 101 ] );
+		$cancelled_group = $this->create_group_subscription( $manager_id, 'cancelled', [ 101 ] );
+		add_user_meta( self::$user_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $group->get_id() );
+		add_user_meta( self::$user_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $cancelled_group->get_id() );
+
+		$links = User_Gate_Access::get_granting_entity_links( 'subscription', [ 101 ], self::$user_id, [ 'payment_recovery_grace' => true ] );
+
+		$this->assertCount( 2, $links );
+		$this->assertStringContainsString( '#' . $owned->get_id() . '</a>', $links[0] );
+		$this->assertStringContainsString( 'href="' . esc_url( $owned->get_edit_order_url() ) . '"', $links[0], 'The label must link to the subscription edit screen.' );
+		$this->assertStringContainsString( '#' . $group->get_id() . '</a>', $links[1], 'A group subscription the reader is a member of grants access and is listed.' );
+		$joined = implode( '', $links );
+		$this->assertStringNotContainsString( '#' . $cancelled->get_id() . '<', $joined );
+		$this->assertStringNotContainsString( '#' . $unrelated->get_id() . '<', $joined );
+		$this->assertStringNotContainsString( '#' . $cancelled_group->get_id() . '<', $joined );
+	}
+
+	/**
+	 * Create a subscription with group membership enabled.
+	 *
+	 * @param int    $customer_id Owner user ID.
+	 * @param string $status      Subscription status.
+	 * @param int[]  $products    Product IDs on the subscription.
+	 *
+	 * @return \WC_Subscription
+	 */
+	private function create_group_subscription( $customer_id, $status, $products ) {
+		$subscription = \wcs_create_subscription(
+			[
+				'customer_id'    => $customer_id,
+				'status'         => $status,
+				'billing_period' => 'month',
+				'products'       => $products,
+			]
+		);
+		$subscription->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+		// Real WC only persists meta on save(); the group lookup re-loads each
+		// subscription, so an unsaved flag would never be seen outside the mock.
+		$subscription->save();
+		return $subscription;
+	}
+
+	/**
+	 * An "any subscription" rule (empty value) lists every active subscription.
+	 */
+	public function test_subscription_rule_with_no_products_lists_all_active_subscriptions() {
+		$first  = \wcs_create_subscription(
+			[
+				'customer_id'    => self::$user_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'products'       => [ 101 ],
+			]
+		);
+		$second = \wcs_create_subscription(
+			[
+				'customer_id'    => self::$user_id,
+				'status'         => 'active',
+				'billing_period' => 'year',
+				'products'       => [ 102 ],
+			]
+		);
+
+		$links = User_Gate_Access::get_granting_entity_links( 'subscription', '', self::$user_id );
+
+		$this->assertCount( 2, $links );
+		$this->assertStringContainsString( '#' . $first->get_id() . '</a>', $links[0] );
+		$this->assertStringContainsString( '#' . $second->get_id() . '</a>', $links[1] );
+	}
+
+	/**
+	 * A passing one-time purchase rule names the paid orders inside the access
+	 * window and only those: an order older than the window and a refunded
+	 * order grant nothing.
+	 */
+	public function test_one_time_purchase_rule_lists_the_orders_that_grant_access() {
+		\wc_create_mock_product(
+			[
+				'id'   => 201,
+				'name' => 'Day Pass',
+			]
+		);
+		$recent = \wc_create_order(
+			[
+				'customer_id'  => self::$user_id,
+				'status'       => 'completed',
+				'total'        => 10,
+				'date_created' => gmdate( 'Y-m-d H:i:s' ),
+				'items'        => [ new \WC_Order_Item_Product( [ 'product_id' => 201 ] ) ],
+			]
+		);
+		$stale  = \wc_create_order(
+			[
+				'customer_id'  => self::$user_id,
+				'status'       => 'completed',
+				'total'        => 10,
+				'date_created' => gmdate( 'Y-m-d H:i:s', strtotime( '-60 days' ) ),
+				'items'        => [ new \WC_Order_Item_Product( [ 'product_id' => 201 ] ) ],
+			]
+		);
+		$refund = \wc_create_order(
+			[
+				'customer_id'  => self::$user_id,
+				'status'       => 'refunded',
+				'total'        => 10,
+				'date_created' => gmdate( 'Y-m-d H:i:s' ),
+				'items'        => [ new \WC_Order_Item_Product( [ 'product_id' => 201 ] ) ],
+			]
+		);
+		$value  = [
+			'product_ids'    => [ 201 ],
+			'duration_value' => 30,
+			'duration_unit'  => 'days',
+		];
+
+		// A guest checkout under the reader's email is not theirs: the rule
+		// matches orders by customer ID only.
+		$guest = \wc_create_order(
+			[
+				'customer_id'   => 0,
+				'billing_email' => 'reader@example.com',
+				'status'        => 'processing',
+				'total'         => 10,
+				'date_created'  => gmdate( 'Y-m-d H:i:s' ),
+				'items'         => [ new \WC_Order_Item_Product( [ 'product_id' => 201 ] ) ],
+			]
+		);
+
+		$links  = User_Gate_Access::get_granting_entity_links( 'one_time_purchase', $value, self::$user_id );
+		$joined = implode( '', $links );
+
+		$this->assertCount( 1, $links );
+		$this->assertStringContainsString( '#' . $recent->get_id() . '</a>', $joined );
+		$this->assertStringNotContainsString( '#' . $guest->get_id() . '<', $joined, 'A guest order under the reader\'s billing email is not listed.' );
+		$this->assertStringContainsString( 'href="' . esc_url( $recent->get_edit_order_url() ) . '"', $joined, 'The label must link to the order edit screen.' );
+		$this->assertStringNotContainsString( '#' . $stale->get_id() . '<', $joined );
+		$this->assertStringNotContainsString( '#' . $refund->get_id() . '<', $joined );
+
+		// Lifetime access has no window, so the older order counts too.
+		$value['duration_unit'] = 'forever';
+		$links                  = User_Gate_Access::get_granting_entity_links( 'one_time_purchase', $value, self::$user_id );
+		$this->assertCount( 2, $links, 'A forever rule lists every paid order the reader placed for the product.' );
+	}
+
+	/**
+	 * A lifetime rule can match every order a long-standing customer placed;
+	 * the report lists a handful and trails off rather than the whole ledger.
+	 */
+	public function test_one_time_purchase_listing_is_capped() {
+		\wc_create_mock_product(
+			[
+				'id'   => 201,
+				'name' => 'Day Pass',
+			]
+		);
+		for ( $i = 0; $i < User_Gate_Access::GRANTING_ENTITIES_LIMIT + 2; $i++ ) {
+			\wc_create_order(
+				[
+					'customer_id'  => self::$user_id,
+					'status'       => 'completed',
+					'total'        => 10,
+					'date_created' => gmdate( 'Y-m-d H:i:s', strtotime( "-$i days" ) ),
+					'items'        => [ new \WC_Order_Item_Product( [ 'product_id' => 201 ] ) ],
+				]
+			);
+		}
+		$value = [
+			'product_ids'    => [ 201 ],
+			'duration_value' => 0,
+			'duration_unit'  => 'forever',
+		];
+
+		$links = User_Gate_Access::get_granting_entity_links( 'one_time_purchase', $value, self::$user_id );
+
+		$this->assertCount( User_Gate_Access::GRANTING_ENTITIES_LIMIT + 1, $links );
+		$this->assertStringContainsString( 'screen-reader-text">and more</span>', end( $links ), 'The list ends with a labelled truncation marker when more orders qualify.' );
+		$this->assertStringNotContainsString( '<a', end( $links ) );
+	}
+
+	/**
+	 * The subscription list is capped the same way: a reader in many group
+	 * subscriptions gets a handful of examples and a marker, not every ID.
+	 */
+	public function test_subscription_listing_is_capped() {
+		for ( $i = 0; $i < User_Gate_Access::GRANTING_ENTITIES_LIMIT + 2; $i++ ) {
+			\wcs_create_subscription(
+				[
+					'customer_id'    => self::$user_id,
+					'status'         => 'active',
+					'billing_period' => 'month',
+					'products'       => [ 101 ],
+				]
+			);
+		}
+
+		$links = User_Gate_Access::get_granting_entity_links( 'subscription', [ 101 ], self::$user_id );
+
+		$this->assertCount( User_Gate_Access::GRANTING_ENTITIES_LIMIT + 1, $links );
+		$this->assertStringContainsString( 'screen-reader-text">and more</span>', end( $links ) );
+	}
+
+	/**
+	 * A subscription held on another network site is named with its site and
+	 * linked to that site's edit screen, even when the reader has no local
+	 * subscription at all.
+	 */
+	public function test_network_records_listed_when_no_local_records() {
+		$spy = $this->stub_network_records( [ $this->network_record() ] );
+
+		$links = User_Gate_Access::get_granting_entity_links( 'subscription', [ 101 ], self::$user_id, [] );
+
+		$this->assertCount( 1, $links );
+		$this->assertStringContainsString( 'href="' . esc_url( 'https://node-b.example.test/wp-admin/post.php?post=12345678&action=edit' ) . '"', $links[0], 'The label must link to the other site\'s edit screen.' );
+		$this->assertStringContainsString( '#12345678 on Node Daily', $links[0] );
+		$this->assertSame( [ [ self::$user_id, [ 101 ] ] ], $spy['calls'], 'The filter gets the user and the rule\'s products.' );
+	}
+
+	/**
+	 * Local records come first, then the records from other sites.
+	 */
+	public function test_local_and_network_records_listed_together() {
+		\wc_create_mock_product(
+			[
+				'id'   => 101,
+				'name' => 'All Access',
+			]
+		);
+		$local = \wcs_create_subscription(
+			[
+				'customer_id'    => self::$user_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'products'       => [ 101 ],
+			]
+		);
+		$this->stub_network_records( [ $this->network_record() ] );
+
+		$links = User_Gate_Access::get_granting_entity_links( 'subscription', [ 101 ], self::$user_id );
+
+		$this->assertCount( 2, $links );
+		$this->assertStringContainsString( '#' . $local->get_id() . '</a>', $links[0] );
+		$this->assertStringNotContainsString( ' on ', $links[0], 'A local record carries no site name.' );
+		$this->assertStringContainsString( '#12345678 on Node Daily', $links[1] );
+	}
+
+	/**
+	 * The cap covers the combined list: the first LIMIT items show, then the
+	 * "and more" marker stands in for the rest.
+	 */
+	public function test_combined_list_truncates() {
+		$limit = User_Gate_Access::GRANTING_ENTITIES_LIMIT;
+		for ( $i = 0; $i < 3; $i++ ) {
+			\wcs_create_subscription(
+				[
+					'customer_id'    => self::$user_id,
+					'status'         => 'active',
+					'billing_period' => 'month',
+					'products'       => [ 101 ],
+				]
+			);
+		}
+		// 3 local + ( LIMIT - 2 ) network = LIMIT + 1 records in all.
+		$records = [];
+		for ( $i = 1; $i <= $limit - 2; $i++ ) {
+			$records[] = $this->network_record( 7000 + $i );
+		}
+		$this->stub_network_records( $records );
+
+		$links = User_Gate_Access::get_granting_entity_links( 'subscription', [ 101 ], self::$user_id );
+
+		$this->assertCount( $limit + 1, $links, 'LIMIT links plus the marker.' );
+		$this->assertStringContainsString( 'screen-reader-text">and more</span>', end( $links ) );
+		$this->assertStringContainsString( '#' . ( 7000 + $limit - 3 ) . ' on Node Daily', $links[ $limit - 1 ], 'The last network record that fits still shows.' );
+		$this->assertStringNotContainsString( '#' . ( 7000 + $limit - 2 ) . ' on', implode( '', $links ), 'The record past the cap is left to the marker.' );
+	}
+
+	/**
+	 * Exactly LIMIT records in all is not a truncated list.
+	 */
+	public function test_combined_list_at_the_limit_has_no_marker() {
+		$limit = User_Gate_Access::GRANTING_ENTITIES_LIMIT;
+		\wcs_create_subscription(
+			[
+				'customer_id'    => self::$user_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'products'       => [ 101 ],
+			]
+		);
+		$records = [];
+		for ( $i = 1; $i <= $limit - 1; $i++ ) {
+			$records[] = $this->network_record( 7000 + $i );
+		}
+		$this->stub_network_records( $records );
+
+		$links = User_Gate_Access::get_granting_entity_links( 'subscription', [ 101 ], self::$user_id );
+
+		$this->assertCount( $limit, $links );
+		$this->assertStringNotContainsString( 'and more', implode( '', $links ) );
+	}
+
+	/**
+	 * Only the subscription rule asks newspack-network for records.
+	 */
+	public function test_one_time_purchase_slug_never_asks_network() {
+		$spy = $this->stub_network_records( [ $this->network_record() ] );
+
+		$links = User_Gate_Access::get_granting_entity_links( 'one_time_purchase', [ 101 ], self::$user_id );
+
+		$this->assertSame( [], $spy['calls'], 'The subscription filter is never applied for a one-time-purchase rule.' );
+		$this->assertStringNotContainsString( 'Node Daily', implode( '', $links ) );
+	}
+
+	/**
+	 * A record without a positive numeric ID or a non-blank site name can't be
+	 * labelled, so it's dropped; the site name is trimmed, and escaped like any
+	 * other text printed in the report.
+	 */
+	public function test_malformed_network_records_are_dropped_and_names_escaped() {
+		$this->stub_network_records(
+			[
+				$this->network_record( 0 ),
+				$this->network_record( 'abc' ),
+				$this->network_record( 555, '' ),
+				$this->network_record( 558, '   ' ),
+				'not a record',
+				[
+					'id'       => 556,
+					'edit_url' => 'https://node-b.example.test/wp-admin/post.php?post=556&action=edit',
+				],
+				$this->network_record( 557, '<b>Node</b> Daily' ),
+				$this->network_record( 559, '  Hub Gazette ' ),
+			]
+		);
+
+		$links = User_Gate_Access::get_granting_entity_links( 'subscription', [ 101 ], self::$user_id );
+
+		$this->assertCount( 2, $links );
+		$this->assertStringContainsString( '#557 on &lt;b&gt;Node&lt;/b&gt; Daily', $links[0] );
+		$this->assertStringNotContainsString( '<b>', $links[0] );
+		$this->assertStringContainsString( '>#559 on Hub Gazette<', $links[1] );
+	}
+
+	/**
+	 * An "any subscription" rule stores an empty string; newspack-network gets
+	 * it as no products, not as one blank product.
+	 */
+	public function test_any_subscription_rule_asks_network_with_no_products() {
+		$spy = $this->stub_network_records( [] );
+
+		User_Gate_Access::get_granting_entity_links( 'subscription', '', self::$user_id );
+
+		$this->assertSame( [ [ self::$user_id, [] ] ], $spy['calls'] );
+	}
+
+	/**
+	 * A malformed rule value grants nothing, so newspack-network is never asked
+	 * and none of its records are listed.
+	 */
+	public function test_malformed_subscription_value_never_asks_network() {
+		$spy = $this->stub_network_records( [ $this->network_record() ] );
+
+		$links = User_Gate_Access::get_granting_entity_links( 'subscription', 'gold', self::$user_id );
+
+		$this->assertSame( [], $spy['calls'] );
+		$this->assertSame( [], $links );
+	}
+
+	/**
+	 * The order walk pages through the store. A match that sits past the first
+	 * page must still grant access, and a store that ignores paging (as a
+	 * filter pinning `limit` on `woocommerce_order_query_args` would make it)
+	 * must still let the walk return rather than hang a front-end request.
+	 */
+	public function test_order_walk_pages_and_is_bounded() {
+		global $wc_mocks_get_orders_calls, $wc_mocks_orders_ignore_page;
+		$this->set_paid_orders_page_size( 5 );
+		\wc_create_mock_product(
+			[
+				'id'   => 201,
+				'name' => 'Day Pass',
+			]
+		);
+		// Twelve newer orders for another product push the one matching order onto page 3.
+		for ( $i = 0; $i < 12; $i++ ) {
+			$when = gmdate( 'Y-m-d H:i:s', strtotime( "-$i hours" ) );
+			\wc_create_order(
+				[
+					'customer_id'  => self::$user_id,
+					'status'       => 'completed',
+					'total'        => 10,
+					'date_paid'    => $when,
+					'date_created' => $when,
+					'items'        => [ new \WC_Order_Item_Product( [ 'product_id' => 999 ] ) ],
+				]
+			);
+		}
+		$when  = gmdate( 'Y-m-d H:i:s', strtotime( '-2 days' ) );
+		$match = \wc_create_order(
+			[
+				'customer_id'  => self::$user_id,
+				'status'       => 'completed',
+				'total'        => 10,
+				'date_paid'    => $when,
+				'date_created' => $when,
+				'items'        => [ new \WC_Order_Item_Product( [ 'product_id' => 201 ] ) ],
+			]
+		);
+		$value = [
+			'product_ids'    => [ 201 ],
+			'duration_value' => 30,
+			'duration_unit'  => 'days',
+		];
+
+		$this->assertTrue( Access_Rules::has_one_time_purchase( self::$user_id, $value ), 'A matching order on a later page still grants access.' );
+		$this->assertSame( 3, $wc_mocks_get_orders_calls, 'The walk stops on the page that holds the first match.' );
+		$this->assertSame( [ $match->get_id() ], Access_Rules::get_one_time_purchase_order_ids( self::$user_id, $value ) );
+
+		// A store that returns the same rows for every page: the walk must give up.
+		Access_Rules::flush_one_time_purchase_memo();
+		$wc_mocks_orders_ignore_page = true;
+		$wc_mocks_get_orders_calls   = 0;
+		$this->assertFalse( Access_Rules::has_one_time_purchase( self::$user_id, [ 'product_ids' => [ 555 ] ] + $value ), 'No match, so the rule fails.' );
+		$this->assertSame( Access_Rules::PAID_ORDERS_MAX_PAGES, $wc_mocks_get_orders_calls, 'The walk stops at the page ceiling instead of looping.' );
+	}
+
+	/**
+	 * A malformed subscription value fails the listing closed, as it does the
+	 * rule; it must not be read as "any subscription".
+	 */
+	public function test_malformed_subscription_value_lists_nothing() {
+		\wcs_create_subscription(
+			[
+				'customer_id'    => self::$user_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'products'       => [ 101 ],
+			]
+		);
+
+		$this->assertFalse( Access_Rules::has_active_subscription( self::$user_id, 'gold' ) );
+		$this->assertSame( [], Access_Rules::get_active_subscription_ids( self::$user_id, 'gold' ) );
+		$this->assertSame( [], User_Gate_Access::get_granting_entity_links( 'subscription', 'gold', self::$user_id ) );
+	}
+
+	/**
+	 * Rules other than the two ownership rules have no records to point at, and
+	 * neither does access granted by a filter with no local record behind it.
+	 */
+	public function test_non_ownership_rules_and_filter_granted_access_list_nothing() {
+		$this->assertSame( [], User_Gate_Access::get_granting_entity_links( 'email_domain', 'example.com', self::$user_id ) );
+
+		// A cancelled subscription is the only local record; the filter forcing the
+		// rule to pass must not turn it into a granting one.
+		\wcs_create_subscription(
+			[
+				'customer_id'    => self::$user_id,
+				'status'         => 'cancelled',
+				'billing_period' => 'month',
+				'products'       => [ 101 ],
+			]
+		);
+		add_filter( 'newspack_access_rules_has_active_subscription', '__return_true' );
+		$this->assertTrue( Access_Rules::has_active_subscription( self::$user_id, [ 101 ] ), 'The filter grants access.' );
+		$links = User_Gate_Access::get_granting_entity_links( 'subscription', [ 101 ], self::$user_id );
+		remove_filter( 'newspack_access_rules_has_active_subscription', '__return_true' );
+
+		$this->assertSame( [], $links );
+	}
+
+	/**
+	 * The report links each granting subscription next to the rule it satisfies,
+	 * and never lists records for a failing rule.
+	 */
+	public function test_render_links_granting_subscriptions_next_to_a_passing_rule() {
+		wp_set_current_user( self::$admin_id );
+		\wc_create_mock_product(
+			[
+				'id'   => 101,
+				'name' => 'All Access',
+			]
+		);
+		$owned = \wcs_create_subscription(
+			[
+				'customer_id'    => self::$user_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'products'       => [ 101 ],
+			]
+		);
+		$this->create_gate_with_rules(
+			'Members Gate',
+			[
+				[
+					[
+						'slug'  => 'subscription',
+						'value' => [ 101 ],
+					],
+				],
+				[
+					[
+						'slug'  => 'subscription',
+						'value' => [ 999 ],
+					],
+				],
+			]
+		);
+
+		ob_start();
+		User_Gate_Access::render_user_gate_access( get_user_by( 'id', self::$user_id ) );
+		$output = ob_get_clean();
+
+		$this->assertSame( 1, substr_count( $output, '#' . $owned->get_id() . '</a>' ), 'The subscription is listed once, for the rule it satisfies, and not for the failing rule.' );
+	}
+
+	/**
+	 * Titles that reach the report from the database are printed as text, not
+	 * markup: a product named with a tag must not inject it into the page.
+	 */
+	public function test_render_escapes_titles_inside_links() {
+		wp_set_current_user( self::$admin_id );
+		\wc_create_mock_product(
+			[
+				'id'   => 101,
+				'name' => 'Plan <b>Bold</b> & Co',
+			]
+		);
+		$owned = \wcs_create_subscription(
+			[
+				'customer_id'    => self::$user_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'products'       => [ 101 ],
+			]
+		);
+		$this->create_gate_with_rules(
+			'Gate <i>Italic</i>',
+			[
+				[
+					[
+						'slug'  => 'subscription',
+						'value' => [ 101 ],
+					],
+				],
+			]
+		);
+
+		ob_start();
+		User_Gate_Access::render_user_gate_access( get_user_by( 'id', self::$user_id ) );
+		$output = ob_get_clean();
+
+		$this->assertStringNotContainsString( '<b>', $output );
+		$this->assertStringNotContainsString( '<i>', $output );
+		$this->assertStringContainsString( 'Plan &lt;b&gt;Bold&lt;/b&gt; &amp; Co', $output );
+		$this->assertStringContainsString( 'Gate &lt;i&gt;Italic&lt;/i&gt;', $output );
+		// The sink is an allowlist, not strip-everything: the granting link it exists
+		// to let through survives alongside the stripped markup.
+		$this->assertStringContainsString( '#' . $owned->get_id() . '</a>', $output, 'A legitimate link passes the same sink that strips injected tags.' );
+	}
+
+	/**
+	 * Free-text rule values (email domains, reader data) are stored as typed, so
+	 * the report prints them as text: markup in a value must not become markup
+	 * on the page.
+	 */
+	public function test_render_escapes_free_text_rule_values() {
+		wp_set_current_user( self::$admin_id );
+		$this->create_gate_with_rules(
+			'Domain Gate',
+			[
+				[
+					[
+						'slug'  => 'email_domain',
+						'value' => 'example.com<a href="https://evil.example">x</a>',
+					],
+				],
+			]
+		);
+
+		ob_start();
+		User_Gate_Access::render_user_gate_access( get_user_by( 'id', self::$user_id ) );
+		$output = ob_get_clean();
+
+		$this->assertStringNotContainsString( 'href="https://evil.example"', $output );
+		$this->assertStringContainsString( '<code>example.com&lt;a href=&quot;https://evil.example&quot;&gt;x&lt;/a&gt;</code>', $output );
+	}
+
+	/**
+	 * A variation has no edit screen of its own, so its link goes to the parent
+	 * product's editor.
+	 */
+	public function test_variation_links_to_its_parent_product() {
+		wp_set_current_user( self::$admin_id );
+		$parent_id = $this->factory->post->create( [ 'post_title' => 'Membership' ] );
+		\wc_create_mock_product(
+			[
+				'id'        => 102,
+				'name'      => 'Membership - Annual',
+				'parent_id' => $parent_id,
+			]
+		);
+
+		$format_rule_value_method = new ReflectionMethod( User_Gate_Access::class, 'format_rule_value' );
+		$format_rule_value_method->setAccessible( true );
+		$html = $format_rule_value_method->invoke( null, 'subscription', [ 102 ] );
+
+		$this->assertStringContainsString( 'href="' . esc_url( get_edit_post_link( $parent_id ) ) . '"', $html );
+		$this->assertStringContainsString( '>Membership - Annual</a>', $html );
+	}
+
+	/**
+	 * Only a published institution links to its screen; a draft or trashed one
+	 * is named without a link, and a missing one shows its ID.
+	 */
+	public function test_institution_links_only_when_published() {
+		$published = $this->factory->post->create(
+			[
+				'post_type'   => Institution::POST_TYPE,
+				'post_status' => 'publish',
+				'post_title'  => 'State University',
+			]
+		);
+		$trashed   = $this->factory->post->create(
+			[
+				'post_type'   => Institution::POST_TYPE,
+				'post_status' => 'trash',
+				'post_title'  => 'Old College',
+			]
+		);
+
+		$format_rule_value_method = new ReflectionMethod( User_Gate_Access::class, 'format_rule_value' );
+		$format_rule_value_method->setAccessible( true );
+		$html = $format_rule_value_method->invoke( null, 'institution', [ $published, $trashed, 999999 ] );
+
+		$this->assertStringContainsString( '#/institutions/' . $published . '">State University</a>', $html );
+		$this->assertStringContainsString( ', Old College, #999999', $html );
+		$this->assertStringNotContainsString( '#/institutions/' . $trashed, $html );
 	}
 }

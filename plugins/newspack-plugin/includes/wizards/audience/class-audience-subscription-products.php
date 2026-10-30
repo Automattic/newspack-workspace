@@ -142,6 +142,44 @@ class Audience_Subscription_Products extends Wizard {
 				],
 			]
 		);
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/promo-targets',
+			[
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => [ $this, 'api_get_promo_targets' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'type'       => [
+						'required'          => true,
+						'validate_callback' => function ( $value ) {
+							return in_array( $value, [ 'checkout_button', 'donate' ], true );
+						},
+					],
+					'product_id' => [
+						'sanitize_callback' => 'absint',
+					],
+				],
+			]
+		);
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/promo-coupon',
+			[
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => [ $this, 'api_validate_promo_coupon' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'code'       => [
+						'required'          => true,
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+					'product_id' => [
+						'sanitize_callback' => 'absint',
+					],
+				],
+			]
+		);
 	}
 
 	/**
@@ -226,6 +264,122 @@ class Audience_Subscription_Products extends Wizard {
 
 		$response['products'] = array_map( [ $this, 'prepare_product' ], array_values( $products ) );
 		return rest_ensure_response( $response );
+	}
+
+	/**
+	 * GET promo-link context for a plan.
+	 *
+	 * Links work over any page, so this returns the homepage default plus what
+	 * the generator must not offer beyond: which plan children a link may name,
+	 * or the frequency/amount options the Donate block will accept.
+	 *
+	 * @param \WP_REST_Request $request The request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function api_get_promo_targets( $request ) {
+		// page_on_front survives switching Reading settings back to latest posts,
+		// so only trust it when a static front page is actually being served.
+		$front_page_id = 'page' === get_option( 'show_on_front' ) ? (int) get_option( 'page_on_front' ) : 0;
+		$response      = [
+			'homepage' => [
+				'id'    => $front_page_id,
+				'title' => $front_page_id ? get_the_title( $front_page_id ) : __( 'Homepage', 'newspack-plugin' ),
+				'url'   => home_url( '/' ),
+			],
+		];
+		if ( 'donate' === $request->get_param( 'type' ) ) {
+			$response['donate_config'] = Promo_Url_Config::get_donate_config();
+			return rest_ensure_response( $response );
+		}
+		$product_id = absint( $request->get_param( 'product_id' ) );
+		if ( ! $product_id ) {
+			return new \WP_Error(
+				'newspack_promo_targets_missing_product',
+				esc_html__( 'product_id is required for checkout button targets.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
+			);
+		}
+		$family                         = Promo_Url_Config::get_product_family( $product_id );
+		$response['eligible_children']  = Promo_Url_Config::get_eligible_children( $family );
+		$response['offerable_children'] = Promo_Url_Config::get_offerable_children( $family );
+		// Whether a link naming the row product itself yields a working button
+		// (renderer price gate) — the UI refuses parent-naming links otherwise.
+		$parent_product                = function_exists( 'wc_get_product' ) ? wc_get_product( $product_id ) : null;
+		$response['parent_offerable']  = $parent_product ? Promo_Url_Config::is_direct_button_servable( $parent_product ) : false;
+		return rest_ensure_response( $response );
+	}
+
+	/**
+	 * GET coupon validity for the promo URL generator against the promoted plan.
+	 *
+	 * Mirrors the context-free subset of checkout coupon validation (expiry,
+	 * usage limit) plus explicit product-restriction/minimum-spend checks
+	 * against the promoted plan — a bare WC_Discounts with no cart would
+	 * falsely reject coupons restricted to the promoted product, the primary
+	 * promotional-coupon shape. When the promoted product is a child (a
+	 * variation or grouped member), its family is expanded to include the
+	 * parent and the parent's whole family, so a coupon restricted to the
+	 * parent — or to a category, which lives on the parent for variations —
+	 * still validates. See {@see Promo_Url_Config::evaluate_coupon()}.
+	 *
+	 * @param \WP_REST_Request $request The request.
+	 * @return \WP_REST_Response
+	 */
+	public function api_validate_promo_coupon( $request ) {
+		$code = $request->get_param( 'code' );
+		if ( ! function_exists( 'wc_coupons_enabled' ) || ! class_exists( '\WC_Coupon' ) || ! class_exists( '\WC_Discounts' ) ) {
+			return rest_ensure_response(
+				[
+					'valid'  => false,
+					'reason' => __( 'WooCommerce coupons are unavailable.', 'newspack-plugin' ),
+				]
+			);
+		}
+		if ( ! \wc_coupons_enabled() ) {
+			return rest_ensure_response(
+				[
+					'valid'  => false,
+					'reason' => __( 'Coupons are disabled in WooCommerce settings.', 'newspack-plugin' ),
+				]
+			);
+		}
+		try {
+			$coupon = new \WC_Coupon( $code );
+			if ( ! $coupon->get_id() ) {
+				return rest_ensure_response(
+					[
+						'valid'  => false,
+						'reason' => __( 'Coupon not found.', 'newspack-plugin' ),
+					]
+				);
+			}
+			$expires     = $coupon->get_date_expires();
+			$usage_limit = (int) $coupon->get_usage_limit();
+			$coupon_data = [
+				'expired'               => $expires && $expires->getTimestamp() < time(),
+				'usage_exceeded'        => $usage_limit > 0 && (int) $coupon->get_usage_count() >= $usage_limit,
+				'product_ids'           => $coupon->get_product_ids(),
+				'excluded_ids'          => $coupon->get_excluded_product_ids(),
+				'category_ids'          => $coupon->get_product_categories(),
+				'excluded_category_ids' => $coupon->get_excluded_product_categories(),
+				'minimum_amount'        => (float) $coupon->get_minimum_amount(),
+			];
+		} catch ( \Exception $e ) {
+			// The same stale-cache condition the checkout's auto-apply guards
+			// against: a cached code-to-ID mapping can outlive the coupon post,
+			// and WooCommerce's data store throws reading the missing post.
+			// Answer as not-found so the two paths agree on what an unusable
+			// coupon means, instead of surfacing a server error.
+			return rest_ensure_response(
+				[
+					'valid'  => false,
+					'reason' => esc_html__( 'Coupon not found.', 'newspack-plugin' ),
+				]
+			);
+		}
+		$product_id      = absint( $request->get_param( 'product_id' ) );
+		$product_context = $product_id ? Promo_Url_Config::get_coupon_product_context( $product_id ) : [];
+		return rest_ensure_response( Promo_Url_Config::evaluate_coupon( $coupon_data, $product_context ) );
 	}
 
 	/**
@@ -990,9 +1144,27 @@ class Audience_Subscription_Products extends Wizard {
 			'category_ids'          => wp_list_pluck( $categories, 'id' ),
 			'category_label'        => implode( ', ', wp_list_pluck( $categories, 'name' ) ),
 			'active_subscriptions'  => self::get_active_subscription_count( $product ),
+			// Complimentary access: the product, or every one of its variations, is flagged.
+			'is_complimentary'      => self::is_complimentary( $product, $pricing['variations'] ),
 			'edit_url'              => html_entity_decode( (string) get_edit_post_link( $product->get_id(), 'raw' ) ),
 			'policy'                => $policy,
 		];
+	}
+
+	/**
+	 * Whether a product grants only complimentary access: it is flagged itself, or it
+	 * is a variable subscription whose every variation is flagged.
+	 *
+	 * @param \WC_Product $product    The product.
+	 * @param array       $variations The variations get_pricing() read, each with `is_complimentary`.
+	 *
+	 * @return bool
+	 */
+	private static function is_complimentary( $product, $variations ) {
+		if ( $product->is_type( 'variable-subscription' ) ) {
+			return ! empty( $variations ) && ! in_array( false, array_column( $variations, 'is_complimentary' ), true );
+		}
+		return Complimentary_Access::is_complimentary_product( $product );
 	}
 
 	/**
@@ -1220,11 +1392,14 @@ class Audience_Subscription_Products extends Wizard {
 					'active_subscriptions' => count( self::active_subscription_ids_for( (int) $variation_id ) ),
 					// Group-subscription (multi-seat) settings live per variation.
 					'group'                => self::read_group_settings( $variation ),
+					'is_complimentary'     => Complimentary_Access::is_complimentary_product( $variation ),
 				];
 			}
 
 			// Build the range from the actual lowest- and highest-priced variations, each
 			// labeled with its OWN billing period (a tier can span $12/month – $100/year).
+			// A complimentary variation isn't sold, so it stays out of the range while the
+			// product sells anything else.
 			$priced = array_values(
 				array_filter(
 					$pricing['variations'],
@@ -1233,6 +1408,8 @@ class Audience_Subscription_Products extends Wizard {
 					}
 				)
 			);
+			$sold   = array_values( array_filter( $priced, fn( $variation ) => ! $variation['is_complimentary'] ) );
+			$priced = empty( $sold ) ? $priced : $sold;
 			if ( ! empty( $priced ) ) {
 				usort(
 					$priced,
@@ -1818,6 +1995,9 @@ class Audience_Subscription_Products extends Wizard {
 				'manage_products_url'              => admin_url( 'edit.php?post_type=product' ),
 				'policy_source_is_mock'            => Subscription_Policy_Resolver::IS_MOCK,
 				'woocommerce_subscriptions_active' => function_exists( 'wcs_get_subscriptions' ),
+				// The generator's links are served by newspack-blocks' URL trigger, so
+				// the gate is that method rather than the plugin being active.
+				'promo_links_supported'            => method_exists( '\Newspack_Blocks\Modal_Checkout', 'maybe_setup_url_triggered_checkout' ),
 			]
 		);
 	}

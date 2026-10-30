@@ -12,7 +12,20 @@ import './style.scss';
  */
 import classNames from 'classnames';
 
-const Divider = ( { alignment = 'none', className = undefined, marginBottom = 64, marginTop = 64, variant = 'default', ...otherProps } ) => {
+/**
+ * Divider component.
+ *
+ * Every prop beyond the documented ones is forwarded to the `hr` element.
+ *
+ * @param {import('react').ComponentPropsWithoutRef<'hr'> & {
+ *   alignment?: string,
+ *   marginBottom?: number|string,
+ *   marginTop?: number|string,
+ *   variant?: string,
+ * }} props - Component props: the documented options plus any `hr` attribute.
+ * @return {JSX.Element} Divider component.
+ */
+const Divider = ( { alignment = 'none', className = undefined, marginBottom = 48, marginTop = 48, variant = 'default', ...otherProps } ) => {
 	const classes = classNames(
 		'newspack-divider',
 		className,

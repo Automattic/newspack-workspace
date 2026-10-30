@@ -50,6 +50,9 @@ class Post_Date {
 		add_filter( 'render_block_core/post-date', [ __CLASS__, 'filter_post_date_block' ], 10, 2 );
 		add_filter( 'get_the_date', [ __CLASS__, 'filter_get_the_date' ], 10, 3 );
 		add_filter( 'newspack_blocks_formatted_displayed_post_date', [ __CLASS__, 'filter_blocks_formatted_date' ], 10, 2 );
+		add_filter( 'newspack_blocks_formatted_displayed_updated_date', [ __CLASS__, 'filter_blocks_formatted_updated_date' ], 10, 2 );
+		// After other plugins have asked, so these rules have the last word.
+		add_filter( 'newspack_blocks_display_updated_date', [ __CLASS__, 'filter_blocks_display_updated_date' ], 100, 2 );
 		add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_scripts' ] );
 		add_action( 'enqueue_block_editor_assets', [ __CLASS__, 'enqueue_editor_assets' ] );
 		add_action( 'newspack_theme_posted_on', [ __CLASS__, 'render_updated_date_classic' ] );
@@ -111,24 +114,74 @@ class Post_Date {
 			return true;
 		}
 
-		if ( $sitewide ) {
-			if ( $hide_meta ) {
-				return false;
-			}
-		} else {
+		// The editor offers this flag only while the sitewide setting is on, so
+		// a flag saved before the setting was turned off can't hide anything.
+		if ( $sitewide && $hide_meta ) {
+			return false;
+		}
+
+		/**
+		 * Filters whether a post shows its updated date, before the sitewide
+		 * setting and its threshold decide. The per-post toggle the editor
+		 * offers still wins: "Show last updated date" while the setting is
+		 * off, "Hide last updated date" while it is on.
+		 *
+		 * @param bool|null $override True to show the updated date, false to hide it, or null to leave it to the site's settings.
+		 * @param \WP_Post  $post     Post.
+		 */
+		$override = apply_filters( 'newspack_updated_date_override', null, $post );
+		if ( null !== $override ) {
+			return (bool) $override;
+		}
+
+		if ( ! $sitewide ) {
 			return false;
 		}
 
 		// Apply threshold.
 		$threshold = (int) get_theme_mod( 'post_updated_date_threshold', 24 );
-		$published = strtotime( $post->post_date_gmt );
-		$modified  = strtotime( $post->post_modified_gmt );
+		$published = self::get_timestamp( $post, 'date' );
+		$modified  = self::get_timestamp( $post, 'modified' );
+
+		if ( false === $published || false === $modified ) {
+			return false;
+		}
 
 		if ( ( $modified - $published ) < $threshold * HOUR_IN_SECONDS ) {
 			return false;
 		}
 
 		return true;
+	}
+
+	/**
+	 * Get when a post was published or last modified, as plugins report it.
+	 *
+	 * Reads through `get_the_date()` and `get_the_modified_date()` rather than
+	 * the stored columns, so a plugin that dates a post by something saved
+	 * elsewhere (a live blog's newest update, for example) is respected.
+	 *
+	 * @param \WP_Post $post  Post.
+	 * @param string   $field 'date' or 'modified'.
+	 * @return int|false Unix timestamp, or false when the post has no such date.
+	 */
+	private static function get_timestamp( $post, $field ) {
+		$date = 'modified' === $field ? get_the_modified_date( DATE_W3C, $post ) : get_the_date( DATE_W3C, $post );
+		return is_string( $date ) && '' !== $date ? strtotime( $date ) : false;
+	}
+
+	/**
+	 * Convert a post's modified date to "X ago" format if within cutoff.
+	 *
+	 * @param \WP_Post $post Post.
+	 * @return string|null Relative date string or null if beyond cutoff.
+	 */
+	private static function modified_time_ago( $post ) {
+		$modified = self::get_timestamp( $post, 'modified' );
+		if ( false === $modified ) {
+			return null;
+		}
+		return self::convert_to_time_ago( gmdate( 'Y-m-d H:i:s', $modified ), self::get_time_ago_cutoff_days() );
 	}
 
 	/**
@@ -288,6 +341,37 @@ class Post_Date {
 	}
 
 	/**
+	 * Keeps a Homepage Posts card from showing an updated date its byline
+	 * wouldn't (should_display_updated_date()), such as one the editor hid.
+	 * Only a `newspack_blocks_display_updated_date` callback turns it on; the
+	 * sitewide setting alone leaves cards on their publish date.
+	 *
+	 * @param bool     $display Whether the card shows the post's updated date.
+	 * @param \WP_Post $post    Post object.
+	 * @return bool
+	 */
+	public static function filter_blocks_display_updated_date( $display, $post ) {
+		return $display && $post instanceof \WP_Post && self::should_display_updated_date( $post->ID );
+	}
+
+	/**
+	 * Filter formatted updated date for Newspack Blocks Homepage Posts.
+	 *
+	 * @param string   $date Formatted date.
+	 * @param \WP_Post $post Post object.
+	 * @return string
+	 */
+	public static function filter_blocks_formatted_updated_date( $date, $post ) {
+		if ( ! get_theme_mod( 'post_time_ago', false ) || ! $post instanceof \WP_Post ) {
+			return $date;
+		}
+
+		$time_ago = self::modified_time_ago( $post );
+
+		return null !== $time_ago ? $time_ago : $date;
+	}
+
+	/**
 	 * Render updated date for classic (non-block) themes.
 	 * Hooked to `newspack_theme_posted_on` which fires inside `newspack_posted_on()`.
 	 */
@@ -308,7 +392,7 @@ class Post_Date {
 
 		$modified_date = get_the_modified_date( '', $post );
 		if ( get_theme_mod( 'post_time_ago', false ) ) {
-			$time_ago = self::convert_to_time_ago( $post->post_modified_gmt, self::get_time_ago_cutoff_days() );
+			$time_ago = self::modified_time_ago( $post );
 			if ( null !== $time_ago ) {
 				$modified_date = $time_ago;
 			}
@@ -437,7 +521,16 @@ class Post_Date {
 
 		$asset = include NEWSPACK_ABSPATH . 'dist/other-scripts/relative-time.asset.php';
 
-		wp_enqueue_script( $handle, $url, $asset['dependencies'] ?? [], $asset['version'] ?? false, true );
+		wp_enqueue_script(
+			$handle,
+			$url,
+			$asset['dependencies'] ?? [],
+			$asset['version'] ?? false,
+			[
+				'in_footer' => true,
+				'strategy'  => 'defer',
+			]
+		);
 		wp_localize_script(
 			$handle,
 			'newspackRelativeTime',

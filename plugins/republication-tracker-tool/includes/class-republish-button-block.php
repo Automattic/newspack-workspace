@@ -17,8 +17,32 @@ final class Republication_Tracker_Tool_Republish_Button_Block {
 	 * Initialize the block.
 	 */
 	public static function init(): void {
+		add_filter( 'block_type_metadata', [ __CLASS__, 'set_block_version' ] );
 		add_action( 'init', [ __CLASS__, 'register_block' ] );
 		add_action( 'enqueue_block_editor_assets', [ __CLASS__, 'enqueue_editor_data' ] );
+	}
+
+	/**
+	 * Version the block's stylesheet by the build's content hash.
+	 *
+	 * WordPress versions a block.json stylesheet by the block's `version`
+	 * field, or by the WordPress version when there is none (the file's mtime
+	 * only under SCRIPT_DEBUG). Without a version, an updated stylesheet keeps
+	 * its URL until WordPress itself updates, so browsers keep the cached copy.
+	 *
+	 * @param array $metadata Block metadata read from block.json.
+	 * @return array Metadata with `version` set for this block.
+	 */
+	public static function set_block_version( $metadata ) {
+		if ( ! is_array( $metadata ) || 'republication-tracker-tool/republish-button' !== ( $metadata['name'] ?? '' ) || ! empty( $metadata['version'] ) ) {
+			return $metadata;
+		}
+		$asset_file          = REPUBLICATION_TRACKER_TOOL_PATH . 'dist/republish-button.asset.php';
+		$asset               = file_exists( $asset_file ) ? include $asset_file : [];
+		$metadata['version'] = is_array( $asset ) && ! empty( $asset['version'] ) && is_string( $asset['version'] )
+			? $asset['version']
+			: REPUBLICATION_TRACKER_TOOL_VERSION;
+		return $metadata;
 	}
 
 	/**
@@ -99,6 +123,10 @@ final class Republication_Tracker_Tool_Republish_Button_Block {
 			return '';
 		}
 
+		if ( ! Republication_Tracker_Tool::is_post_republishable( $post ) ) {
+			return '';
+		}
+
 		// Guard: check allowed post types.
 		$allowed_post_types = (array) apply_filters( 'republication_tracker_tool_post_types', [ 'post' ] );
 		if ( ! in_array( get_post_type( $post ), $allowed_post_types, true ) ) {
@@ -155,15 +183,10 @@ final class Republication_Tracker_Tool_Republish_Button_Block {
 		if ( ! Republication_Tracker_Tool::$modal_rendered ) {
 			Republication_Tracker_Tool::$modal_rendered = true;
 
-			$is_amp             = false; // Used by shareable-content.php; block themes do not support AMP.
-			$modal_content_path = REPUBLICATION_TRACKER_TOOL_PATH . 'includes/shareable-content.php';
+			$is_amp = false; // Used by shareable-content.php; block themes do not support AMP.
 
 			ob_start();
-			?>
-			<div id="republication-tracker-tool-modal" style="display:none;" data-postid="<?php echo esc_attr( $post->ID ); ?>" data-pluginsdir="<?php echo esc_attr( plugins_url() ); ?>" role="dialog" aria-modal="true" aria-labelledby="republish-modal-label">
-				<?php include $modal_content_path; ?>
-			</div>
-			<?php
+			include REPUBLICATION_TRACKER_TOOL_PATH . 'includes/shareable-content.php';
 			$html .= ob_get_clean();
 		}
 
@@ -198,21 +221,18 @@ final class Republication_Tracker_Tool_Republish_Button_Block {
 	 * Enqueue modal-specific assets.
 	 */
 	private static function enqueue_modal_assets(): void {
-		// Modal styles (same handle as widget for deduplication).
-		wp_enqueue_style(
-			'republication-tracker-tool-css',
-			REPUBLICATION_TRACKER_TOOL_URL . 'assets/widget.css',
-			[],
-			REPUBLICATION_TRACKER_TOOL_VERSION
-		);
+		Republication_Tracker_Tool::enqueue_modal_style();
 
 		// Clipboard utilities (shared with widget).
 		wp_enqueue_script(
 			'republication-tracker-tool-clipboard-utils',
 			REPUBLICATION_TRACKER_TOOL_URL . 'assets/clipboard-utils.js',
 			[],
-			REPUBLICATION_TRACKER_TOOL_VERSION,
-			true
+			filemtime( REPUBLICATION_TRACKER_TOOL_PATH . 'assets/clipboard-utils.js' ),
+			[
+				'in_footer' => true,
+				'strategy'  => 'defer',
+			]
 		);
 
 		// Block frontend script.
@@ -227,9 +247,12 @@ final class Republication_Tracker_Tool_Republish_Button_Block {
 		wp_enqueue_script(
 			'republication-tracker-tool-republish-button-view',
 			REPUBLICATION_TRACKER_TOOL_URL . 'dist/republish-button-view.js',
-			array_merge( $asset['dependencies'], [ 'republication-tracker-tool-clipboard-utils' ] ),
+			array_merge( $asset['dependencies'], [ 'republication-tracker-tool-clipboard-utils' ], Republication_Tracker_Tool::use_newspack_ui() ? [ 'newspack-ui' ] : [] ),
 			$asset['version'],
-			true
+			[
+				'in_footer' => true,
+				'strategy'  => 'defer',
+			]
 		);
 	}
 }

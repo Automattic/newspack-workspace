@@ -177,7 +177,10 @@ class AMP_Polyfills {
 				\Newspack\Newspack::plugin_url() . '/dist/other-scripts/lightbox.js',
 				[],
 				\Newspack\Newspack::asset_version( 'other-scripts/lightbox' ),
-				true
+				[
+					'in_footer' => true,
+					'strategy'  => 'defer',
+				]
 			);
 			\wp_enqueue_style(
 				'newspack-image-lightbox',

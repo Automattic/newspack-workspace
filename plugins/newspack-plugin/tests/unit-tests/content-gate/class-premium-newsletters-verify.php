@@ -1,0 +1,1723 @@
+<?php
+/**
+ * Tests for the verify-premium-newsletters CLI (NPPD-2079).
+ *
+ * The command's two edges — the WooCommerce Subscriptions population query and
+ * the ESP read — are not available in this harness. Everything between them is,
+ * and that is what these tests cover: which gates are verifiable, what each
+ * reader's state means, and whether the run should fail.
+ *
+ * @package Newspack\Tests\Content_Gate
+ */
+
+namespace Newspack\Tests\Content_Gate;
+
+use Newspack\CLI\Premium_Newsletters_Verify;
+
+/**
+ * Tests for the verify-premium-newsletters helpers.
+ */
+class Test_Premium_Newsletters_Verify extends \WP_UnitTestCase {
+
+	/**
+	 * Load the CLI class and the mocks it needs.
+	 *
+	 * Required here rather than at file scope: a file-scope require defines the
+	 * newsletters classes for every test in the run, which changes the branch
+	 * `class_exists()` guards elsewhere in the plugin take.
+	 */
+	public static function set_up_before_class() {
+		parent::set_up_before_class();
+		require_once dirname( __DIR__, 2 ) . '/mocks/wp-cli-mocks.php';
+		require_once dirname( __DIR__, 2 ) . '/mocks/newsletters-namespaced-mocks.php';
+		require_once dirname( __DIR__, 3 ) . '/includes/cli/class-premium-newsletters-verify.php';
+	}
+
+	/**
+	 * The argument vector PHPUnit was invoked with, restored after each test.
+	 *
+	 * @var array|null
+	 */
+	private $original_argv;
+
+	/**
+	 * Save the argument vector so tear_down() can restore it.
+	 */
+	public function set_up() {
+		parent::set_up();
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Raw argv, kept verbatim so tear_down() can restore it.
+		$this->original_argv = $_SERVER['argv'] ?? null;
+	}
+
+	/**
+	 * Put back the argument vector the bare-flag tests overwrite, so this file
+	 * cannot leak $_SERVER['argv'] state into another test class.
+	 */
+	public function tear_down() {
+		if ( null === $this->original_argv ) {
+			unset( $_SERVER['argv'] );
+		} else {
+			$_SERVER['argv'] = $this->original_argv;
+		}
+		parent::tear_down();
+	}
+
+	/**
+	 * Invoke a private static method on the CLI class via reflection.
+	 *
+	 * @param string $method_name The method name.
+	 * @param array  $arguments   Positional arguments.
+	 *
+	 * @return mixed The method return value.
+	 */
+	private function invoke_private_static( string $method_name, array $arguments ) {
+		$reflected_method = new \ReflectionMethod( Premium_Newsletters_Verify::class, $method_name );
+		$reflected_method->setAccessible( true );
+		return $reflected_method->invoke( null, ...$arguments );
+	}
+
+	/**
+	 * A reader the gate restricts, who is on the list anyway, is the case this
+	 * command exists to find: paid content reaching someone with no entitlement.
+	 */
+	public function test_classify_reader_reports_a_restricted_subscriber_as_a_leak() {
+		$this->assertSame( 'leak', $this->invoke_private_static( 'classify_reader', [ true, true, true ] ) );
+		$this->assertSame( 'leak', $this->invoke_private_static( 'classify_reader', [ true, true, false ] ) );
+	}
+
+	/**
+	 * A restricted reader who is not subscribed is the correct outcome, whatever
+	 * auto-signup is set to.
+	 */
+	public function test_classify_reader_accepts_a_restricted_non_subscriber() {
+		$this->assertSame( 'ok', $this->invoke_private_static( 'classify_reader', [ true, false, true ] ) );
+		$this->assertSame( 'ok', $this->invoke_private_static( 'classify_reader', [ true, false, false ] ) );
+	}
+
+	/**
+	 * An entitled reader who is subscribed is correct regardless of auto-signup:
+	 * with it off they opted in themselves, which is equally valid.
+	 */
+	public function test_classify_reader_accepts_an_entitled_subscriber() {
+		$this->assertSame( 'ok', $this->invoke_private_static( 'classify_reader', [ false, true, true ] ) );
+		$this->assertSame( 'ok', $this->invoke_private_static( 'classify_reader', [ false, true, false ] ) );
+	}
+
+	/**
+	 * With auto-signup on, the site promises to subscribe entitled readers, so one
+	 * who is missing is a gap worth reporting.
+	 */
+	public function test_classify_reader_reports_a_missing_entitled_reader_as_a_gap_when_auto_signup_is_on() {
+		$this->assertSame( 'gap', $this->invoke_private_static( 'classify_reader', [ false, false, true ] ) );
+	}
+
+	/**
+	 * With auto-signup off the reader opts in, so an entitled reader who is not
+	 * subscribed has simply not opted in. Calling that a defect would report every
+	 * such site as broken.
+	 */
+	public function test_classify_reader_does_not_assert_a_missing_reader_when_auto_signup_is_off() {
+		$this->assertSame( 'not_asserted', $this->invoke_private_static( 'classify_reader', [ false, false, false ] ) );
+	}
+
+	/**
+	 * The summary counts every bucket, including rows the ESP could not answer for
+	 * and leaks a --live run removed. Counted as each row is produced, because a
+	 * passing row is not kept: 'checked' is what the report prints in place of the
+	 * row count.
+	 */
+	public function test_the_summary_counts_every_bucket() {
+		$summary = $this->summary_of( [ 'leak', 'leak', 'gap', 'ok', 'removed', 'not_asserted', 'unresolved' ] );
+
+		$this->assertSame(
+			[
+				'checked'      => 7,
+				'leak'         => 2,
+				'gap'          => 1,
+				'ok'           => 1,
+				'removed'      => 1,
+				'not_asserted' => 1,
+				'unresolved'   => 1,
+			],
+			$summary
+		);
+	}
+
+	/**
+	 * Only the rows the report lists are kept; the rest are counted and dropped.
+	 * Keeping them all would mean a clean run over a large site holding every
+	 * passing row for the length of the run to print a single number.
+	 */
+	public function test_record_row_keeps_only_the_rows_the_report_lists() {
+		$rows    = [];
+		$summary = $this->invoke_private_static( 'new_summary', [] );
+		foreach ( [ 'ok', 'leak', 'not_asserted', 'gap', 'removed', 'unresolved' ] as $status ) {
+			$this->invoke_record_row( $rows, $summary, [ 'status' => $status ] );
+		}
+
+		$this->assertSame( [ 'leak', 'gap', 'removed', 'unresolved' ], array_column( $rows, 'status' ) );
+		$this->assertSame( 6, $summary['checked'] );
+		$this->assertSame( 1, $summary['ok'] );
+		$this->assertSame( 1, $summary['not_asserted'] );
+	}
+
+	/**
+	 * An empty run counts zero of everything rather than returning a short array,
+	 * so callers can read any bucket without checking it exists first.
+	 */
+	public function test_a_new_summary_carries_every_key_at_zero() {
+		$this->assertSame(
+			[
+				'checked'      => 0,
+				'leak'         => 0,
+				'gap'          => 0,
+				'ok'           => 0,
+				'removed'      => 0,
+				'not_asserted' => 0,
+				'unresolved'   => 0,
+			],
+			$this->invoke_private_static( 'new_summary', [] )
+		);
+	}
+
+	/**
+	 * Counts built from a list of statuses, the way the run builds them.
+	 *
+	 * @param string[] $statuses Row statuses, in the order they were produced.
+	 *
+	 * @return array<string,int>
+	 */
+	private function summary_of( array $statuses ): array {
+		$summary = $this->invoke_private_static( 'new_summary', [] );
+		foreach ( $statuses as $status ) {
+			$summary = $this->invoke_private_static( 'with_status_counted', [ $summary, $status ] );
+		}
+		return $summary;
+	}
+
+	/**
+	 * Call record_row(), whose first two parameters are by reference and so cannot
+	 * go through invoke_private_static().
+	 *
+	 * @param array[]           $rows    Retained rows, by reference.
+	 * @param array<string,int> $summary Counts, by reference.
+	 * @param array             $row     The row to record.
+	 *
+	 * @return void
+	 */
+	private function invoke_record_row( array &$rows, array &$summary, array $row ): void {
+		$reflected_method = new \ReflectionMethod( Premium_Newsletters_Verify::class, 'record_row' );
+		$reflected_method->setAccessible( true );
+		$reflected_method->invokeArgs( null, [ &$rows, &$summary, $row ] );
+	}
+
+	/**
+	 * A coverage record for a run that walked whole populations, built through the
+	 * same helpers the command uses.
+	 *
+	 * @param int[] $gate_ids   Gates walked.
+	 * @param int[] $reader_ids Readers checked.
+	 *
+	 * @return array
+	 */
+	private function complete_coverage( array $gate_ids = [ 1 ], array $reader_ids = [ 101, 102 ] ): array {
+		$coverage = $this->invoke_private_static( 'new_coverage', [] );
+		foreach ( $gate_ids as $gate_id ) {
+			$coverage = $this->invoke_private_static( 'with_gate_walked', [ $coverage, $this->make_gate( $gate_id, true ) ] );
+		}
+		foreach ( $reader_ids as $reader_id ) {
+			$coverage = $this->invoke_private_static( 'with_reader_checked', [ $coverage, $reader_id ] );
+		}
+		return $coverage;
+	}
+
+	/**
+	 * A summary with nothing wrong in it, so a test asserting on coverage is not
+	 * also asserting on findings.
+	 *
+	 * @param array<string,int> $overrides Buckets to set.
+	 *
+	 * @return array<string,int>
+	 */
+	private function clean_summary( array $overrides = [] ): array {
+		return array_merge(
+			[
+				'checked'      => 5,
+				'leak'         => 0,
+				'gap'          => 0,
+				'ok'           => 5,
+				'removed'      => 0,
+				'not_asserted' => 0,
+				'unresolved'   => 0,
+			],
+			$overrides
+		);
+	}
+
+	/**
+	 * A leak fails the run: that is the assertion the command exists to make.
+	 */
+	public function test_verification_fails_on_a_leak() {
+		$summary = $this->clean_summary( [ 'leak' => 1 ] );
+
+		$this->assertTrue( $this->invoke_private_static( 'verification_failed', [ $summary, $this->complete_coverage() ] ) );
+	}
+
+	/**
+	 * A contact the ESP could not answer for fails too. An unread contact is not
+	 * evidence of safety, and treating it as clean would let a provider outage
+	 * report a site as ready to flip.
+	 */
+	public function test_verification_fails_on_an_unresolved_row() {
+		$summary = $this->clean_summary( [ 'unresolved' => 1 ] );
+
+		$this->assertTrue( $this->invoke_private_static( 'verification_failed', [ $summary, $this->complete_coverage() ] ) );
+	}
+
+	/**
+	 * A gap does not fail the run. It means someone entitled is missing a list,
+	 * which is worth reporting but is not paid content leaking, and this command
+	 * deliberately never writes an addition to fix it.
+	 */
+	public function test_verification_passes_with_gaps_but_no_leaks() {
+		$summary = $this->clean_summary(
+			[
+				'gap'          => 3,
+				'not_asserted' => 2,
+			]
+		);
+
+		$this->assertFalse( $this->invoke_private_static( 'verification_failed', [ $summary, $this->complete_coverage() ] ) );
+	}
+
+	/**
+	 * The baseline the whole wave rests on: a run that walked every population and
+	 * found nothing wrong is complete, passes, and exits 0. Without this, a change
+	 * that failed every run would still satisfy every other coverage test here.
+	 */
+	public function test_a_complete_clean_run_passes() {
+		$coverage = $this->complete_coverage();
+
+		$this->assertTrue( $this->invoke_private_static( 'coverage_is_complete', [ $coverage ] ) );
+		$this->assertFalse( $this->invoke_private_static( 'verification_failed', [ $this->clean_summary(), $coverage ] ) );
+	}
+
+	/**
+	 * --max-batches stopping a gate part-way leaves readers unchecked, so a clean
+	 * result is not evidence and the run must fail — whatever it found before it
+	 * stopped. Warning on STDERR is not enough on its own: a cutover script gating
+	 * on $? never sees it.
+	 */
+	public function test_a_truncated_run_fails_whatever_its_findings() {
+		$coverage = $this->invoke_private_static(
+			'with_incomplete_gate',
+			[ $this->complete_coverage(), Premium_Newsletters_Verify::COVERAGE_TRUNCATED, $this->make_gate( 1, true ) ]
+		);
+
+		$this->assertFalse( $this->invoke_private_static( 'coverage_is_complete', [ $coverage ] ) );
+		$this->assertTrue( $this->invoke_private_static( 'verification_failed', [ $this->clean_summary(), $coverage ] ) );
+		$this->assertTrue( $this->invoke_private_static( 'verification_failed', [ $this->clean_summary( [ 'gap' => 4 ] ), $coverage ] ) );
+		$this->assertTrue( $this->invoke_private_static( 'verification_failed', [ $this->clean_summary( [ 'removed' => 4 ] ), $coverage ] ) );
+	}
+
+	/**
+	 * A gate the run never reached at all, because an earlier gate had already
+	 * spent --max-batches, is the same silent pass one step further along: its
+	 * whole population is unchecked and its rows are simply absent from the counts.
+	 */
+	public function test_a_gate_skipped_for_an_exhausted_cap_fails_the_run() {
+		$coverage = $this->invoke_private_static(
+			'with_incomplete_gate',
+			[ $this->complete_coverage(), Premium_Newsletters_Verify::COVERAGE_CAP_EXHAUSTED, $this->make_gate( 2, true ) ]
+		);
+
+		$this->assertTrue( $this->invoke_private_static( 'verification_failed', [ $this->clean_summary(), $coverage ] ) );
+	}
+
+	/**
+	 * A verifiable gate that yields nobody is suspicious, not clean. The migration
+	 * writes non-subscription product IDs into a `subscription` access rule that
+	 * wcs_get_subscriptions() can never match, so a gate really can name products
+	 * no subscription matches — producing an empty population, zero findings, and
+	 * exactly the silent pass this wave exists to kill.
+	 */
+	public function test_an_empty_population_on_a_verifiable_gate_fails_the_run() {
+		$coverage = $this->invoke_private_static(
+			'with_incomplete_gate',
+			[ $this->invoke_private_static( 'new_coverage', [] ), Premium_Newsletters_Verify::COVERAGE_EMPTY_POPULATION, $this->make_gate( 3, true ) ]
+		);
+
+		$this->assertTrue( $this->invoke_private_static( 'verification_failed', [ $this->clean_summary( [ 'ok' => 0 ] ), $coverage ] ) );
+	}
+
+	/**
+	 * The case an operator is actually trying to reach, and the one this wave must
+	 * not break: a --live run that found leaks, removed every one of them and
+	 * confirmed each gone still passes and still exits 0 — with the removals
+	 * visible in the counts rather than folded into OK.
+	 */
+	public function test_a_live_run_that_removed_every_leak_passes_with_the_removals_counted() {
+		$summary = $this->summary_of( [ 'removed', 'removed', 'ok' ] );
+
+		$this->assertSame( 2, $summary['removed'] );
+		$this->assertSame( 0, $summary['leak'] );
+		$this->assertFalse( $this->invoke_private_static( 'verification_failed', [ $summary, $this->complete_coverage() ] ) );
+	}
+
+	/**
+	 * Coverage counts distinct readers, not visits. A reader who holds products for
+	 * two gates is checked under both, and counting them twice would inflate the
+	 * number the success line quotes.
+	 */
+	public function test_coverage_counts_a_reader_once_across_two_gates() {
+		$coverage = $this->complete_coverage( [ 1, 2 ], [ 101, 102, 101 ] );
+
+		$this->assertStringContainsString( '2 reader(s) across 2 gate(s)', $this->invoke_private_static( 'describe_checked_scope', [ $coverage ] ) );
+	}
+
+	/**
+	 * The success line has to name the population it checked. Its old wording —
+	 * "no reader is on a premium list they are not entitled to" — claimed the whole
+	 * site, which the population query cannot see: a reader entitled by a
+	 * non-subscription purchase, one who joined before the list became premium, and
+	 * one granted a membership by hand are all outside it.
+	 */
+	public function test_the_success_line_names_the_population_it_checked() {
+		$message = $this->invoke_private_static( 'describe_success', [ $this->complete_coverage( [ 1, 2 ], [ 101, 102, 103 ] ) ] );
+
+		$this->assertStringContainsString( '3 reader(s) across 2 gate(s)', $message );
+		$this->assertStringNotContainsString( 'no reader is on a premium list', $message );
+	}
+
+	/**
+	 * A run that failed only on coverage must not also report "0 leak(s)", which
+	 * invites the reader to conclude nothing was wrong. Only the reasons that
+	 * apply are named.
+	 */
+	public function test_the_failure_line_names_only_the_reasons_that_apply() {
+		$coverage = $this->invoke_private_static(
+			'with_incomplete_gate',
+			[ $this->complete_coverage(), Premium_Newsletters_Verify::COVERAGE_TRUNCATED, $this->make_gate( 1, true ) ]
+		);
+
+		$message = $this->invoke_private_static( 'describe_failure', [ $this->clean_summary(), $coverage ] );
+
+		$this->assertStringContainsString( '1 gate(s) not fully checked', $message );
+		$this->assertStringNotContainsString( 'leak(s)', $message );
+		$this->assertStringContainsString( '2 reader(s) across 1 gate(s)', $message );
+	}
+
+	/**
+	 * Every incompleteness reason the command can record has a message explaining
+	 * it, and each names the gate. A constant without a message is not finished:
+	 * this is what tells whoever adds the next reason so.
+	 */
+	public function test_every_coverage_reason_renders_a_message_naming_its_gate() {
+		$reasons = [
+			Premium_Newsletters_Verify::COVERAGE_TRUNCATED,
+			Premium_Newsletters_Verify::COVERAGE_CAP_EXHAUSTED,
+			Premium_Newsletters_Verify::COVERAGE_EMPTY_POPULATION,
+			Premium_Newsletters_Verify::COVERAGE_UNENUMERABLE_PAYWALL,
+			Premium_Newsletters_Verify::COVERAGE_PARTIAL_POPULATION,
+			Premium_Newsletters_Verify::COVERAGE_UNENUMERABLE_VERIFICATION,
+		];
+
+		$this->assertSame( $reasons, array_keys( Premium_Newsletters_Verify::COVERAGE_REASON_MESSAGES ) );
+
+		foreach ( $reasons as $reason ) {
+			$coverage = $this->invoke_private_static(
+				'with_incomplete_gate',
+				[ $this->invoke_private_static( 'new_coverage', [] ), $reason, $this->make_gate( 7, true ), 'a one-time purchase rule' ]
+			);
+			$lines    = $this->invoke_private_static( 'describe_coverage_gaps', [ $coverage ] );
+
+			$this->assertCount( 1, $lines );
+			$this->assertStringContainsString( 'Gate 7', $lines[0] );
+			$this->assertStringContainsString( 'gate 7', $lines[0] );
+		}
+	}
+
+	/**
+	 * A gate paywalled by rules this command cannot enumerate fails the run, and
+	 * says which rules put it out of reach. Reported as "nothing to verify" before
+	 * this wave, which was false in every clause: it has a paid rule, non-buyers
+	 * are restricted, and a leak among them went unchecked while the run exited 0.
+	 */
+	public function test_an_unenumerable_paywall_fails_the_run_and_names_its_rules() {
+		$coverage = $this->invoke_private_static(
+			'with_incomplete_gate',
+			[
+				$this->invoke_private_static( 'new_coverage', [] ),
+				Premium_Newsletters_Verify::COVERAGE_UNENUMERABLE_PAYWALL,
+				$this->make_gate( 8, true ),
+				'a one-time purchase rule',
+			]
+		);
+
+		$this->assertTrue( $this->invoke_private_static( 'verification_failed', [ $this->clean_summary( [ 'ok' => 0 ] ), $coverage ] ) );
+
+		$lines = $this->invoke_private_static( 'describe_coverage_gaps', [ $coverage ] );
+		$this->assertStringContainsString( 'a one-time purchase rule', $lines[0] );
+		$this->assertStringNotContainsString( 'nothing to verify', $lines[0] );
+	}
+
+	/**
+	 * One gate can collect two reasons — partly unenumerable, then cut short by
+	 * --max-batches — and the failure line counts gates, not entries. "2 gate(s)
+	 * not fully checked" for a run over one gate would be false.
+	 */
+	public function test_a_gate_with_two_reasons_is_counted_once_in_the_failure_line() {
+		$gate     = $this->make_gate( 9, true );
+		$coverage = $this->invoke_private_static(
+			'with_incomplete_gate',
+			[ $this->complete_coverage( [ 9 ] ), Premium_Newsletters_Verify::COVERAGE_PARTIAL_POPULATION, $gate, 'an institutional access rule' ]
+		);
+		$coverage = $this->invoke_private_static(
+			'with_incomplete_gate',
+			[ $coverage, Premium_Newsletters_Verify::COVERAGE_TRUNCATED, $gate ]
+		);
+
+		$this->assertSame( 1, $this->invoke_private_static( 'count_incomplete_gates', [ $coverage ] ) );
+		$this->assertStringContainsString( '1 gate(s) not fully checked', $this->invoke_private_static( 'describe_failure', [ $this->clean_summary(), $coverage ] ) );
+	}
+
+	/**
+	 * A complete run has nothing to say about coverage gaps.
+	 */
+	public function test_describe_coverage_gaps_is_empty_for_a_complete_run() {
+		$this->assertSame( [], $this->invoke_private_static( 'describe_coverage_gaps', [ $this->complete_coverage() ] ) );
+	}
+
+	/**
+	 * A removal the ESP reports as done, with the list gone from the contact
+	 * afterwards, is the only case that counts as removed.
+	 */
+	public function test_classify_removal_records_a_confirmed_removal() {
+		$this->assertSame(
+			'removed',
+			$this->invoke_private_static( 'classify_removal', [ true, [ '456' ], '123', true ] )
+		);
+	}
+
+	/**
+	 * The blocker this closes: update_contact_lists_handling_local() re-reads the
+	 * contact and, when that read fails for any reason, takes its create-contact
+	 * branch and returns true without removing anything. Treating that as success
+	 * stamps a still-subscribed reader as clean — a real leak turned into a pass,
+	 * on the one path this command writes. So a re-read that still shows the list
+	 * is 'unresolved', which also fails the run.
+	 */
+	public function test_classify_removal_rejects_a_removal_the_esp_did_not_make() {
+		$status = $this->invoke_private_static( 'classify_removal', [ true, [ '123', '456' ], '123', true ] );
+
+		$this->assertSame( 'unresolved', $status );
+		$this->assertTrue(
+			$this->invoke_private_static(
+				'verification_failed',
+				[ $this->clean_summary( [ 'unresolved' => 1 ] ), $this->complete_coverage() ]
+			)
+		);
+	}
+
+	/**
+	 * A removal that errored outright, and one whose confirming re-read failed, are
+	 * both unconfirmed and mean the same thing to an operator: re-run.
+	 */
+	public function test_classify_removal_is_unresolved_when_it_cannot_be_confirmed() {
+		$this->assertSame(
+			'unresolved',
+			$this->invoke_private_static( 'classify_removal', [ new \WP_Error( 'newspack_newsletters_error', 'Nope' ), [], '123', true ] )
+		);
+		$this->assertSame(
+			'unresolved',
+			$this->invoke_private_static( 'classify_removal', [ true, new \WP_Error( 'newspack_newsletters_error', 'Nope' ), '123', true ] )
+		);
+	}
+
+	/**
+	 * Build a gate array shaped like Content_Gate::get_gate() returns.
+	 *
+	 * @param int   $id            Gate ID.
+	 * @param bool  $paid_active   Whether the paid access mode is active.
+	 * @param array $access_rules  Grouped access rules.
+	 *
+	 * @return array
+	 */
+	private function make_gate( int $id, bool $paid_active, array $access_rules = [] ): array {
+		return [
+			'id'            => $id,
+			'title'         => 'Gate ' . $id,
+			'registration'  => [ 'active' => true ],
+			'custom_access' => [
+				'active'       => $paid_active,
+				'access_rules' => $access_rules,
+			],
+		];
+	}
+
+	/**
+	 * Product IDs are read out of the grouped access-rule structure, across groups,
+	 * deduplicated, and cast to int — the value is stored as strings on some paths.
+	 */
+	public function test_product_ids_from_access_rules_reads_across_groups() {
+		$rules = [
+			[
+				[
+					'slug'  => 'subscription',
+					'value' => [ '46', 47 ],
+				],
+			],
+			[
+				[
+					'slug'  => 'subscription',
+					'value' => [ 47, 48 ],
+				],
+			],
+		];
+
+		$this->assertSame( [ 46, 47, 48 ], $this->invoke_private_static( 'product_ids_from_access_rules', [ $rules ] ) );
+	}
+
+	/**
+	 * Only subscription rules name products. Another rule type in the same group
+	 * must not contribute its values, which are not product IDs.
+	 */
+	public function test_product_ids_from_access_rules_ignores_other_rule_types() {
+		$rules = [
+			[
+				[
+					'slug'  => 'institution',
+					'value' => [ 900 ],
+				],
+				[
+					'slug'  => 'subscription',
+					'value' => [ 46 ],
+				],
+			],
+		];
+
+		$this->assertSame( [ 46 ], $this->invoke_private_static( 'product_ids_from_access_rules', [ $rules ] ) );
+	}
+
+	/**
+	 * A gate with an active paid mode and products is what this command can check.
+	 */
+	public function test_partition_gates_selects_paid_gates_as_verifiable() {
+		$gate = $this->make_gate(
+			10,
+			true,
+			[
+				[
+					[
+						'slug'  => 'subscription',
+						'value' => [ 46 ],
+					],
+				],
+			]
+		);
+
+		$partitioned = $this->invoke_private_static( 'partition_gates', [ [ $gate ] ] );
+
+		$this->assertCount( 1, $partitioned['verifiable'] );
+		$this->assertSame( 10, $partitioned['verifiable'][0]['id'] );
+		$this->assertSame( [ 46 ], $partitioned['verifiable'][0]['product_ids'] );
+		$this->assertSame( [], $partitioned['verifiable'][0]['unenumerable_rules'] );
+		$this->assertSame( [], $partitioned['registration_only'] );
+		$this->assertSame( [], $partitioned['unenumerable'] );
+	}
+
+	/**
+	 * A gate paywalled only by a one-time purchase is paywalled all the same: its
+	 * non-buyers are restricted and a leak among them is possible. Filing it with
+	 * the registration-only gates would report it as having "no paid access rules"
+	 * and pass the run on a gate nobody checked. It belongs in neither the
+	 * checkable bucket nor the harmless one.
+	 */
+	public function test_partition_gates_files_a_non_subscription_paywall_on_its_own() {
+		$gate = $this->make_gate(
+			13,
+			true,
+			[
+				[
+					[
+						'slug'  => 'one_time_purchase',
+						'value' => [
+							'product_ids'    => [ 55 ],
+							'duration_value' => 0,
+							'duration_unit'  => 'forever',
+						],
+					],
+				],
+			]
+		);
+
+		$partitioned = $this->invoke_private_static( 'partition_gates', [ [ $gate ] ] );
+
+		$this->assertSame( [], $partitioned['verifiable'] );
+		$this->assertSame( [], $partitioned['registration_only'] );
+		$this->assertCount( 1, $partitioned['unenumerable'] );
+		$this->assertSame( 13, $partitioned['unenumerable'][0]['id'] );
+		$this->assertSame( [ 'one_time_purchase' ], $partitioned['unenumerable'][0]['unenumerable_rules'] );
+	}
+
+	/**
+	 * A gate whose products are walked can still hand access to readers this
+	 * command cannot list — an institution grants it without any purchase. The gate
+	 * is worth checking, so it stays verifiable, but it carries the rules that make
+	 * its population only part of the story.
+	 */
+	public function test_partition_gates_keeps_a_mixed_gate_verifiable_and_flags_it() {
+		$gate = $this->make_gate(
+			14,
+			true,
+			[
+				[
+					[
+						'slug'  => 'subscription',
+						'value' => [ 46 ],
+					],
+				],
+				[
+					[
+						'slug'  => 'institution',
+						'value' => [ 900 ],
+					],
+				],
+			]
+		);
+
+		$partitioned = $this->invoke_private_static( 'partition_gates', [ [ $gate ] ] );
+
+		$this->assertCount( 1, $partitioned['verifiable'] );
+		$this->assertSame( [ 46 ], $partitioned['verifiable'][0]['product_ids'] );
+		$this->assertSame( [ 'institution' ], $partitioned['verifiable'][0]['unenumerable_rules'] );
+		$this->assertSame( [], $partitioned['unenumerable'] );
+	}
+
+	/**
+	 * Whether an empty rule is harmless depends on the rule, so the partition has
+	 * to ask per rule rather than treating "no value" as "nothing to check".
+	 * is_email_domain_whitelisted() and has_reader_data() return true on an empty
+	 * value and paywall nobody; Institution::evaluate() matches nobody and
+	 * paywalls everybody. Reading the second as harmless would report a gate that
+	 * excludes the whole reader base as fully verified.
+	 */
+	public function test_partition_gates_separates_harmless_rules_from_paywalling_ones() {
+		$harmless = $this->make_gate(
+			15,
+			true,
+			[
+				[
+					[
+						'slug'  => 'email_domain',
+						'value' => '',
+					],
+					[
+						'slug'  => 'reader_data',
+						'value' => '',
+					],
+				],
+			]
+		);
+
+		$partitioned = $this->invoke_private_static( 'partition_gates', [ [ $harmless ] ] );
+
+		$this->assertSame( [], $partitioned['verifiable'] );
+		$this->assertSame( [], $partitioned['unenumerable'] );
+		$this->assertCount( 1, $partitioned['registration_only'] );
+		$this->assertFalse( $this->invoke_private_static( 'verification_failed', [ $this->clean_summary(), $this->complete_coverage() ] ) );
+
+		$paywalling = $this->make_gate(
+			16,
+			true,
+			[
+				[
+					[
+						'slug'  => 'institution',
+						'value' => [],
+					],
+				],
+			]
+		);
+
+		$partitioned = $this->invoke_private_static( 'partition_gates', [ [ $paywalling ] ] );
+
+		$this->assertSame( [], $partitioned['verifiable'] );
+		$this->assertCount( 1, $partitioned['unenumerable'] );
+		$this->assertSame( [ 'institution' ], $partitioned['unenumerable'][0]['unenumerable_rules'] );
+	}
+
+	/**
+	 * Three rules restrict even with an empty value, so none may be skipped as
+	 * unconfigured. A subscription rule naming no product grants on any active
+	 * subscription at all — has_active_subscription() passes the empty product
+	 * filter through to WooCommerce_Connection::get_active_subscriptions_for_user(),
+	 * which then accepts any of them — and an empty one-time purchase rule fails
+	 * closed in has_one_time_purchase() rather than granting, so it restricts
+	 * everyone. Institution::evaluate() is the third: it matches nobody when it
+	 * names no institution. All three are the opposite of
+	 * is_email_domain_whitelisted() and has_reader_data(), which return true on an
+	 * empty value.
+	 */
+	public function test_unenumerable_paid_rules_counts_the_three_rules_that_restrict_while_empty() {
+		$rules = [
+			[
+				[
+					'slug'  => 'subscription',
+					'value' => [],
+				],
+				[
+					'slug'  => 'one_time_purchase',
+					'value' => [],
+				],
+				[
+					'slug'  => 'institution',
+					'value' => [],
+				],
+			],
+		];
+
+		$this->assertSame(
+			[ 'subscription', 'one_time_purchase', 'institution' ],
+			$this->invoke_private_static( 'unenumerable_paid_rules', [ $rules ] )
+		);
+	}
+
+	/**
+	 * Test that a product-bound group is not reported as enumerable when another
+	 * rule in it admits nobody.
+	 *
+	 * `subscription [42] AND institution []` denies every reader at runtime. Left
+	 * to the subscription rule alone, the group's population reads as "holders of
+	 * 42" and those readers are reported entitled — while check_access() removes
+	 * them from the list. The gate has to come back as one this command cannot
+	 * enumerate instead.
+	 *
+	 * A one-time purchase rule naming no product denies every reader for the same
+	 * reason, and hides it better: its value is composite, so the rule is non-empty
+	 * while the `product_ids` that decide it are not.
+	 */
+	public function test_unenumerable_paid_rules_does_not_let_a_product_bound_mask_a_rule_admitting_nobody() {
+		$with_institution = [
+			[
+				[
+					'slug'  => 'subscription',
+					'value' => [ 42 ],
+				],
+				[
+					'slug'  => 'institution',
+					'value' => [],
+				],
+			],
+		];
+
+		$this->assertSame(
+			[ 'subscription', 'institution' ],
+			$this->invoke_private_static( 'unenumerable_paid_rules', [ $with_institution ] )
+		);
+
+		$with_one_time_purchase = [
+			[
+				[
+					'slug'  => 'subscription',
+					'value' => [ 42 ],
+				],
+				[
+					'slug'  => 'one_time_purchase',
+					'value' => [
+						'product_ids'    => [],
+						'duration_value' => 30,
+						'duration_unit'  => 'days',
+					],
+				],
+			],
+		];
+
+		$this->assertSame(
+			[ 'subscription', 'one_time_purchase' ],
+			$this->invoke_private_static( 'unenumerable_paid_rules', [ $with_one_time_purchase ] ),
+			'A one-time purchase rule naming no product admits nobody, whatever else the group names.'
+		);
+	}
+
+	/**
+	 * A rule this command has never heard of can restrict anything it likes —
+	 * Access_Rules::register_rule() is open to other plugins — so an unrecognized
+	 * slug carrying a value counts as a paywall rather than being assumed safe, and
+	 * is named as itself rather than mislabelled.
+	 */
+	public function test_unenumerable_paid_rules_counts_an_unrecognized_rule() {
+		$rules = [
+			[
+				[
+					'slug'  => 'partner_perk',
+					'value' => [ 'acme' ],
+				],
+			],
+		];
+
+		$slugs = $this->invoke_private_static( 'unenumerable_paid_rules', [ $rules ] );
+
+		$this->assertSame( [ 'partner_perk' ], $slugs );
+		$this->assertStringContainsString( '"partner_perk"', $this->invoke_private_static( 'describe_rule_slugs', [ $slugs ] ) );
+	}
+
+	/**
+	 * A registration-only gate has no exclusion to test: every registered reader is
+	 * entitled. It is reported rather than dropped, so the operator can see it was
+	 * considered.
+	 */
+	public function test_partition_gates_reports_registration_only_gates_separately() {
+		$gate = $this->make_gate( 11, false );
+
+		$partitioned = $this->invoke_private_static( 'partition_gates', [ [ $gate ] ] );
+
+		$this->assertSame( [], $partitioned['verifiable'] );
+		$this->assertCount( 1, $partitioned['registration_only'] );
+		$this->assertSame( 11, $partitioned['registration_only'][0]['id'] );
+	}
+
+	/**
+	 * A paid mode with no rules at all restricts nobody — Access_Rules::evaluate_rules()
+	 * grants access on an empty rule set — so there is nothing to check and nothing
+	 * to warn about. It belongs with the registration-only gates.
+	 */
+	public function test_partition_gates_treats_a_paid_gate_with_no_rules_as_unverifiable() {
+		$gate = $this->make_gate( 12, true, [] );
+
+		$partitioned = $this->invoke_private_static( 'partition_gates', [ [ $gate ] ] );
+
+		$this->assertSame( [], $partitioned['verifiable'] );
+		$this->assertSame( [], $partitioned['unenumerable'] );
+		$this->assertCount( 1, $partitioned['registration_only'] );
+	}
+
+	/**
+	 * Expected state is meaningless while WooCommerce Memberships is active: the
+	 * evaluator hands the decision back to Memberships and every list reads as
+	 * unrestricted, so a run would report every entitled reader as a gap and every
+	 * leak as clean. The command refuses rather than producing that.
+	 */
+	public function test_preflight_blocks_while_memberships_is_active() {
+		$blocked = $this->invoke_private_static( 'describe_blocking_preflight', [ true, true, true, true ] );
+
+		$this->assertIsString( $blocked );
+		$this->assertStringContainsString( 'WooCommerce Memberships', $blocked );
+	}
+
+	/**
+	 * With gating inactive nothing enforces, so there is no expected state to
+	 * compare against.
+	 */
+	public function test_preflight_blocks_when_gating_is_inactive() {
+		$blocked = $this->invoke_private_static( 'describe_blocking_preflight', [ false, false, true, true ] );
+
+		$this->assertIsString( $blocked );
+		$this->assertStringContainsString( 'gating', $blocked );
+	}
+
+	/**
+	 * Without WooCommerce Subscriptions the command cannot enumerate who holds a
+	 * gate's products, so population_for_gate() would return an empty population for
+	 * every gate and the run would report a false-clean zero-leak result. The
+	 * command refuses instead of silently checking nobody.
+	 */
+	public function test_preflight_blocks_when_woocommerce_subscriptions_is_unavailable() {
+		$blocked = $this->invoke_private_static( 'describe_blocking_preflight', [ false, true, false, true ] );
+
+		$this->assertIsString( $blocked );
+		$this->assertStringContainsString( 'WooCommerce Subscriptions', $blocked );
+	}
+
+	/**
+	 * On a provider that does not support subscription management (Campaign Monitor,
+	 * Letterhead), Newspack_Newsletters_Subscription::get_contact_lists() returns a
+	 * WP_Error for every reader, so an unguarded run would report the whole
+	 * population as unresolved rather than comparing anything. The command refuses
+	 * instead of dumping the entire population into the attention table.
+	 */
+	public function test_preflight_blocks_when_subscription_management_is_unavailable() {
+		$blocked = $this->invoke_private_static( 'describe_blocking_preflight', [ false, true, true, false ] );
+
+		$this->assertIsString( $blocked );
+		$this->assertStringContainsString( 'subscription management', $blocked );
+	}
+
+	/**
+	 * After cutover, with gating live, WooCommerce Subscriptions active and the ESP
+	 * supporting subscription management, the run may proceed.
+	 */
+	public function test_preflight_allows_a_post_cutover_site() {
+		$this->assertNull( $this->invoke_private_static( 'describe_blocking_preflight', [ false, true, true, true ] ) );
+	}
+
+	/**
+	 * Subscription_List's constructor throws only when the post does not exist, not
+	 * when it is the wrong type, so a stale or mistyped list ID pointing at an
+	 * ordinary post must be rejected before it ever reaches the constructor.
+	 * Without the post-type check this returns the mock's public ID for any post.
+	 */
+	public function test_public_id_for_list_rejects_a_post_of_the_wrong_type() {
+		$post_id = self::factory()->post->create( [ 'post_type' => 'post' ] );
+
+		$this->assertNull( $this->invoke_private_static( 'public_id_for_list', [ $post_id ] ) );
+	}
+
+	/**
+	 * A post of the newsletter list type resolves normally.
+	 */
+	public function test_public_id_for_list_resolves_a_list_post() {
+		$post_id = self::factory()->post->create( [ 'post_type' => \Newspack\Newsletters\Subscription_Lists::CPT ] );
+
+		$this->assertSame(
+			\Newspack\Newsletters\Subscription_List::PUBLIC_ID_PREFIX . $post_id,
+			$this->invoke_private_static( 'public_id_for_list', [ $post_id ] )
+		);
+	}
+
+	/**
+	 * Mailchimp's, Active Campaign's and Constant Contact's dedicated not-found
+	 * codes, each paired with the newspack-newsletters file that must still
+	 * contain it verbatim.
+	 *
+	 * Keyed by code rather than listed alongside it in a flat array, so the same
+	 * code can't accidentally appear twice under two different "real" files.
+	 *
+	 * @var array<string,string> Code => path, relative to
+	 *                           newspack-newsletters/includes/service-providers/.
+	 */
+	const REAL_CONTACT_NOT_FOUND_CODES = [
+		'newspack_newsletters_mailchimp_contact_not_found' => 'mailchimp/class-newspack-newsletters-mailchimp.php',
+		'newspack_newsletters_contact_not_found'           => 'active_campaign/class-newspack-newsletters-active-campaign.php',
+		'newspack_newsletters_constant_contact_contact_not_found' => 'constant_contact/class-newspack-newsletters-constant-contact.php',
+	];
+
+	/**
+	 * Real provider error codes that must NOT be read as "contact not found":
+	 * a genuine API failure (Mailchimp's search-members error, Constant
+	 * Contact's SDK-level get_contact() failure) and the generic code the base
+	 * service-provider class raises for unrelated failures.
+	 *
+	 * @var array<string,string> Code => path, relative to
+	 *                           newspack-newsletters/includes/service-providers/.
+	 */
+	const REAL_NON_NOT_FOUND_CODES = [
+		'newspack_newsletters_mailchimp_search_members' => 'mailchimp/class-newspack-newsletters-mailchimp.php',
+		'newspack_newsletter_error_get_contact'         => 'constant_contact/class-newspack-newsletters-constant-contact-sdk.php',
+		'newspack_newsletters_error'                    => 'class-newspack-newsletters-service-provider.php',
+		// An address matching several Constant Contact records is not a miss. Taking
+		// the not-found branch would read that reader as subscribed to nothing and
+		// pass every restricted list they hold.
+		'newspack_newsletters_constant_contact_contact_ambiguous' => 'constant_contact/class-newspack-newsletters-constant-contact-sdk.php',
+	];
+
+	/**
+	 * Assert that $code still appears verbatim, as a WP_Error argument, in a
+	 * real newspack-newsletters provider file.
+	 *
+	 * Without this, a test that only feeds is_contact_not_found_error() a
+	 * string literal the test itself wrote passes or fails on nothing but its
+	 * own fixture — it would still pass if that literal never matched anything
+	 * a provider actually returns. Reading the sibling plugin's source ties the
+	 * assertion to what ships, so a provider renaming its error code, not just
+	 * is_contact_not_found_error() itself, is a change this test can catch.
+	 *
+	 * newspack-newsletters is a monorepo sibling of newspack-plugin, not a
+	 * dependency it declares or loads — plugins/newspack-newsletters is read
+	 * directly by relative path rather than through any autoloader or
+	 * class_exists() check, which is why this only works from a checkout that
+	 * has both, as `n test-php` always does.
+	 *
+	 * @param string $code          The error code to look for.
+	 * @param string $relative_path Path under newspack-newsletters/includes/service-providers/.
+	 *
+	 * @return void
+	 */
+	private function assert_code_is_shipped( string $code, string $relative_path ): void {
+		$file = dirname( __DIR__, 4 ) . '/newspack-newsletters/includes/service-providers/' . $relative_path;
+		$this->assertFileExists( $file, "Expected provider file not found at $relative_path; this test's path needs updating." );
+		$this->assertStringContainsString(
+			"'" . $code . "'",
+			// The path is built from __DIR__, so it is always a local file; the VIP sniff
+			// cannot see that statically and assumes any non-literal argument may be a URL.
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown -- local source file read in a test, never a remote fetch.
+			file_get_contents( $file ),
+			"$relative_path no longer contains '$code'; update it here or is_contact_not_found_error() is no longer being tested against a real code."
+		);
+	}
+
+	/**
+	 * Mailchimp's, Active Campaign's and Constant Contact's dedicated not-found
+	 * codes all end in this suffix, so a genuine miss on any of the three reads
+	 * as "no lists" rather than a failed lookup.
+	 *
+	 * Each code is first confirmed against the real provider source
+	 * (assert_code_is_shipped()) before it is fed to the function under test, so
+	 * this fails both when a provider's real code drifts from what is
+	 * hardcoded here and when is_contact_not_found_error() stops recognising a
+	 * code that is still genuinely shipped.
+	 */
+	public function test_is_contact_not_found_error_matches_the_shared_not_found_suffix() {
+		foreach ( self::REAL_CONTACT_NOT_FOUND_CODES as $code => $relative_path ) {
+			$this->assert_code_is_shipped( $code, $relative_path );
+			$this->assertTrue(
+				$this->invoke_private_static( 'is_contact_not_found_error', [ new \WP_Error( $code, 'Contact not found' ) ] ),
+				"is_contact_not_found_error() should recognise $relative_path's real not-found code ($code)."
+			);
+		}
+	}
+
+	/**
+	 * Any other error code — a genuine API failure such as Mailchimp's
+	 * search-members error, Constant Contact's SDK-level get_contact() failure
+	 * code, or the unrelated generic code the base service-provider class
+	 * raises — must not be read as "no lists", or a provider outage would
+	 * misreport as a clean run.
+	 *
+	 * Each code is confirmed against real provider source the same way the
+	 * not-found codes are, so this is exercising is_contact_not_found_error()
+	 * against failures a provider can actually produce, not three strings this
+	 * test invented to look like them.
+	 */
+	public function test_is_contact_not_found_error_rejects_other_codes() {
+		foreach ( self::REAL_NON_NOT_FOUND_CODES as $code => $relative_path ) {
+			$this->assert_code_is_shipped( $code, $relative_path );
+			$this->assertFalse(
+				$this->invoke_private_static( 'is_contact_not_found_error', [ new \WP_Error( $code, 'Some real failure' ) ] ),
+				"is_contact_not_found_error() should not treat $relative_path's real failure code ($code) as a contact-not-found miss."
+			);
+		}
+	}
+
+	/**
+	 * Only 'newsletters' rules name lists to check. A rule of another type in the
+	 * same gate must not contribute its value, which is not a list ID.
+	 */
+	public function test_restricted_list_ids_for_gate_ignores_non_newsletters_rules() {
+		$gate = [
+			'content_rules' => [
+				[
+					'slug'  => 'category',
+					'value' => [ 5 ],
+				],
+				[
+					'slug'  => 'newsletters',
+					'value' => [ 10 ],
+				],
+			],
+		];
+
+		$this->assertSame( [ 10 ], $this->invoke_private_static( 'restricted_list_ids_for_gate', [ $gate ] ) );
+	}
+
+	/**
+	 * A rule's value can arrive as a single scalar rather than an array on some
+	 * write paths, and must still resolve to a one-element list of IDs.
+	 */
+	public function test_restricted_list_ids_for_gate_casts_a_scalar_value() {
+		$gate = [
+			'content_rules' => [
+				[
+					'slug'  => 'newsletters',
+					'value' => '7',
+				],
+			],
+		];
+
+		$this->assertSame( [ 7 ], $this->invoke_private_static( 'restricted_list_ids_for_gate', [ $gate ] ) );
+	}
+
+	/**
+	 * A duplicate ID (as an int or as the equal string) and a zero/empty value must
+	 * not produce a duplicate or a phantom list to check.
+	 */
+	public function test_restricted_list_ids_for_gate_dedupes_and_drops_zero() {
+		$gate = [
+			'content_rules' => [
+				[
+					'slug'  => 'newsletters',
+					'value' => [ 5, '5', 0, '' ],
+				],
+			],
+		];
+
+		$this->assertSame( [ 5 ], $this->invoke_private_static( 'restricted_list_ids_for_gate', [ $gate ] ) );
+	}
+
+	/**
+	 * WP-CLI strips a bare `--gate` before the command runs, so the command sees no
+	 * gate at all and the run would widen to every gate on the site — and under
+	 * --live, remove readers from ESP lists across the whole site rather than the one
+	 * gate the operator named. The raw argv is the only place the mistake is still
+	 * visible.
+	 */
+	public function test_get_valueless_value_flags_reports_a_bare_gate() {
+		$this->assertSame(
+			[ '--gate' ],
+			$this->invoke_private_static(
+				'get_valueless_value_flags',
+				[ [ 'wp', 'newspack', 'verify-premium-newsletters', '--gate', '--live' ] ]
+			)
+		);
+	}
+
+	/**
+	 * All three value-requiring flags are checked, not just --gate.
+	 */
+	public function test_get_valueless_value_flags_reports_all_three_bare_flags() {
+		$this->assertSame(
+			[ '--gate', '--batch-size', '--max-batches' ],
+			$this->invoke_private_static(
+				'get_valueless_value_flags',
+				[ [ 'wp', 'newspack', 'verify-premium-newsletters', '--gate', '--batch-size', '--max-batches' ] ]
+			)
+		);
+	}
+
+	/**
+	 * A flag that carries its value is the ordinary invocation and must pass.
+	 */
+	public function test_get_valueless_value_flags_ignores_flags_with_values() {
+		$this->assertSame(
+			[],
+			$this->invoke_private_static(
+				'get_valueless_value_flags',
+				[ [ 'wp', 'newspack', 'verify-premium-newsletters', '--gate=90', '--batch-size=50', '--max-batches=3', '--live' ] ]
+			)
+		);
+	}
+
+	/**
+	 * The guard has to be wired into the command, not merely available: a bare
+	 * --gate with --live would otherwise remove readers from ESP lists across every
+	 * gate on the site rather than the one the operator named.
+	 */
+	public function test_verify_premium_newsletters_aborts_on_a_bare_gate_flag() {
+		$_SERVER['argv'] = [ 'wp', 'newspack', 'verify-premium-newsletters', '--gate', '--live' ];
+		$verify           = new Premium_Newsletters_Verify();
+
+		$this->expectException( \WP_CLI_Mock_Exception::class );
+		$this->expectExceptionMessage( 'require a value but arrived without one' );
+
+		$verify->verify_premium_newsletters( [], [ 'live' => true ] );
+	}
+
+	/**
+	 * (int) '-1' is truthy, so an unvalidated negative --max-batches would satisfy
+	 * verify_gate()'s `$max_batches && $batches >= $max_batches` guard on the very
+	 * first gate and skip the whole run without checking a single reader.
+	 */
+	public function test_verify_premium_newsletters_aborts_on_a_negative_max_batches() {
+		$_SERVER['argv'] = [ 'wp', 'newspack', 'verify-premium-newsletters' ];
+		$verify           = new Premium_Newsletters_Verify();
+
+		$this->expectException( \WP_CLI_Mock_Exception::class );
+		$this->expectExceptionMessage( 'Invalid --max-batches value' );
+
+		$verify->verify_premium_newsletters( [], [ 'max-batches' => '-1' ] );
+	}
+
+	/**
+	 * An explicit 0 is rejected too, rather than silently reinterpreted as the same
+	 * "unlimited" meaning as the flag being entirely absent.
+	 */
+	public function test_verify_premium_newsletters_aborts_on_a_zero_max_batches() {
+		$_SERVER['argv'] = [ 'wp', 'newspack', 'verify-premium-newsletters' ];
+		$verify           = new Premium_Newsletters_Verify();
+
+		$this->expectException( \WP_CLI_Mock_Exception::class );
+		$this->expectExceptionMessage( 'Invalid --max-batches value' );
+
+		$verify->verify_premium_newsletters( [], [ 'max-batches' => '0' ] );
+	}
+
+	/**
+	 * A positive --max-batches must pass this guard. What happens next is not this
+	 * test's concern, and is not even stable to assert on: several sibling test
+	 * files require the shared newsletters mock at file scope (not inside their own
+	 * set_up_before_class()), so by the time any test in this suite runs,
+	 * Newspack_Newsletters_Subscription already exists as whatever that shared mock
+	 * currently supports — this file deliberately does not touch it (see the class
+	 * docblock). So this only proves the --max-batches guard itself did not reject a
+	 * value it should accept: any WP_CLI_Mock_Exception it might still hit is
+	 * asserted not to be about --max-batches, and any other failure only proves
+	 * execution got past the guard in the first place. Without this test, the guard
+	 * above could pass by rejecting every value, positive included.
+	 */
+	public function test_verify_premium_newsletters_accepts_a_positive_max_batches() {
+		$_SERVER['argv'] = [ 'wp', 'newspack', 'verify-premium-newsletters' ];
+		$verify           = new Premium_Newsletters_Verify();
+
+		try {
+			$verify->verify_premium_newsletters( [], [ 'max-batches' => '3' ] );
+		} catch ( \WP_CLI_Mock_Exception $exception ) {
+			$this->assertStringNotContainsString( 'Invalid --max-batches', $exception->getMessage() );
+			return;
+		} catch ( \Throwable $throwable ) {
+			// Whatever broke, it broke past the --max-batches guard, which is what
+			// this test exists to prove.
+			$this->assertTrue( true );
+			return;
+		}
+		// No exception at all also means the guard did not reject the value.
+		$this->assertTrue( true );
+	}
+
+	/**
+	 * The subscription's user ID no longer resolves to a WP_User, so there is no
+	 * email to report — only the ID the subscription still carries. The row must
+	 * still be readable and must still be 'unresolved', the same status a failed ESP
+	 * lookup gets, so it counts toward the run's failure condition instead of being
+	 * silently dropped.
+	 */
+	public function test_make_missing_user_row_is_unresolved_and_readable() {
+		$gate = $this->make_gate( 30, true );
+
+		$row = $this->invoke_private_static( 'make_missing_user_row', [ $gate, 10, 456 ] );
+
+		$this->assertSame( 'unresolved', $row['status'] );
+		$this->assertSame( 456, $row['user_id'] );
+		$this->assertSame( 10, $row['list_id'] );
+		$this->assertSame( 30, $row['gate_id'] );
+		$this->assertStringContainsString( '456', $row['email'] );
+	}
+
+	/**
+	 * Mailchimp's get_contact_lists() builds its audience IDs with array_keys() over
+	 * the contact's raw list data, and PHP silently casts an all-digit array key to
+	 * int. public_id_for_list() always returns a string, so an unnormalized strict
+	 * comparison against an int-keyed audience ID would never match — reading a real
+	 * leak as clean. This is the regression this extraction guards.
+	 */
+	public function test_is_subscribed_to_list_matches_an_int_list_id_against_a_string_public_id() {
+		$this->assertTrue(
+			$this->invoke_private_static( 'is_subscribed_to_list', [ '123', [ 123 ] ] )
+		);
+	}
+
+	/**
+	 * A contact-lists array that already carries strings (Active Campaign, Constant
+	 * Contact) must still match: the normalization is a no-op for the common case.
+	 */
+	public function test_is_subscribed_to_list_matches_a_string_list_id() {
+		$this->assertTrue(
+			$this->invoke_private_static( 'is_subscribed_to_list', [ '123', [ '123' ] ] )
+		);
+	}
+
+	/**
+	 * A public ID absent from the contact's lists, in both int and string form, is
+	 * not a match. Proves normalization does not create a false positive.
+	 */
+	public function test_is_subscribed_to_list_rejects_an_absent_public_id() {
+		$this->assertFalse(
+			$this->invoke_private_static( 'is_subscribed_to_list', [ '999', [ 123, '123' ] ] )
+		);
+	}
+
+	/**
+	 * The population walk is paged so it never holds every subscription at once,
+	 * and paging must not change who gets checked: every reader behind the page
+	 * boundary is still reached, each of them once, whichever page they first
+	 * appeared on. Deduplicating by an array key built before any reader is checked
+	 * cannot span pages; the seen-set carried across them is what does.
+	 */
+	public function test_walk_population_yields_each_reader_once_across_pages() {
+		$pages     = [];
+		$resolved  = [
+			[ 501, 502 ],
+			[ 501, 0 ],
+			[ 503, 502 ],
+		];
+		$resolver  = function ( array $chunk ) use ( &$pages, $resolved ) {
+			$pages[] = $chunk;
+			return $resolved[ count( $pages ) - 1 ];
+		};
+		$population = $this->invoke_private_static( 'walk_population', [ [ 11, 12, 13, 14, 15, 16 ], 2, $resolver ] );
+
+		$this->assertSame( [ 501, 502, 503 ], iterator_to_array( $population, false ) );
+		$this->assertSame( [ [ 11, 12 ], [ 13, 14 ], [ 15, 16 ] ], $pages );
+	}
+
+	/**
+	 * The walk is lazy, which is what makes --max-batches a sampling flag rather
+	 * than a promise the population query has already broken. A caller that stops
+	 * after the first reader must leave the rest of the subscriptions unread.
+	 */
+	public function test_walk_population_reads_no_page_it_was_not_asked_for() {
+		$pages    = [];
+		$resolver = function ( array $chunk ) use ( &$pages ) {
+			$pages[] = $chunk;
+			return [ 601, 602 ];
+		};
+
+		$population = $this->invoke_private_static( 'walk_population', [ [ 21, 22, 23, 24 ], 2, $resolver ] );
+		$population->rewind();
+		$first = $population->current();
+
+		$this->assertSame( 601, $first );
+		$this->assertCount( 1, $pages );
+	}
+
+	/**
+	 * No subscriptions means no pages read and nobody yielded — the caller reports
+	 * that as an empty population rather than as a clean gate.
+	 */
+	public function test_walk_population_reads_nothing_for_an_empty_population() {
+		$called   = 0;
+		$resolver = function ( array $chunk ) use ( &$called ) {
+			++$called;
+			return [ 701 ];
+		};
+
+		$population = $this->invoke_private_static( 'walk_population', [ [], 2, $resolver ] );
+
+		$this->assertSame( [], iterator_to_array( $population, false ) );
+		$this->assertSame( 0, $called );
+	}
+
+	/**
+	 * Below the batch size, the loop simply keeps going: no count, no pause.
+	 */
+	public function test_next_batch_action_continues_below_batch_size() {
+		$this->assertSame(
+			'continue',
+			$this->invoke_private_static( 'next_batch_action', [ 3, 10, 0, 0, true ] )
+		);
+	}
+
+	/**
+	 * At the batch boundary, with more readers left to check and no --max-batches
+	 * limit, the run pauses to space out ESP traffic.
+	 */
+	public function test_next_batch_action_pauses_at_the_boundary_with_more_work() {
+		$this->assertSame(
+			'pause',
+			$this->invoke_private_static( 'next_batch_action', [ 10, 10, 0, 0, true ] )
+		);
+	}
+
+	/**
+	 * At the batch boundary, with more readers left, and this boundary's batch would
+	 * meet or exceed --max-batches, the run stops rather than pausing.
+	 */
+	public function test_next_batch_action_stops_when_max_batches_is_reached() {
+		$this->assertSame(
+			'stop',
+			$this->invoke_private_static( 'next_batch_action', [ 10, 10, 2, 3, true ] )
+		);
+	}
+
+	/**
+	 * --max-batches of 0 means unlimited: even with many batches already completed,
+	 * the run never stops on that account.
+	 */
+	public function test_next_batch_action_never_stops_when_max_batches_is_zero() {
+		$this->assertSame(
+			'pause',
+			$this->invoke_private_static( 'next_batch_action', [ 10, 10, 1000, 0, true ] )
+		);
+	}
+
+	/**
+	 * At the batch boundary but with no more work left in this gate's population,
+	 * there is no next batch to space out, so the run does not pause — even when a
+	 * --max-batches limit would otherwise have been reached.
+	 */
+	public function test_next_batch_action_does_not_pause_when_no_work_remains() {
+		$this->assertSame(
+			'continue',
+			$this->invoke_private_static( 'next_batch_action', [ 10, 10, 0, 0, false ] )
+		);
+		$this->assertSame(
+			'continue',
+			$this->invoke_private_static( 'next_batch_action', [ 10, 10, 2, 3, false ] )
+		);
+	}
+
+	/**
+	 * A gate that requires email verification restricts readers on the registration
+	 * branch, whatever its paid mode says. Content_Restriction_Control restricts a
+	 * logged-in reader with no verified-email meta, and Premium_Newsletters then
+	 * removes that reader from the gate's lists — so a run that filed the gate as
+	 * harmless would announce that no reader can be wrongly subscribed to lists the
+	 * runtime is actively unsubscribing people from.
+	 */
+	public function test_partition_gates_marks_a_verification_gate_as_restricting() {
+		$gate = $this->make_gate( 5, false );
+		$gate['registration']['require_verification'] = true;
+
+		$partitioned = $this->invoke_private_static( 'partition_gates', [ [ $gate ] ] );
+
+		$this->assertCount( 1, $partitioned['registration_only'] );
+		$this->assertTrue( $partitioned['registration_only'][0]['requires_verification'] );
+	}
+
+	/**
+	 * Verification is only a restriction when the registration mode is on. A gate
+	 * carrying the flag with registration inactive restricts nobody through it, and
+	 * reporting a coverage gap there would fail runs that are in fact complete.
+	 */
+	public function test_partition_gates_ignores_verification_on_an_inactive_registration_mode() {
+		$gate                                        = $this->make_gate(
+			6,
+			true,
+			[
+				[
+					[
+						'slug'  => 'subscription',
+						'value' => [ 41 ],
+					],
+				],
+			]
+		);
+		$gate['registration']                        = [
+			'active'               => false,
+			'require_verification' => true,
+		];
+
+		$partitioned = $this->invoke_private_static( 'partition_gates', [ [ $gate ] ] );
+
+		$this->assertCount( 1, $partitioned['verifiable'] );
+		$this->assertFalse( $partitioned['verifiable'][0]['requires_verification'] );
+	}
+
+	/**
+	 * Access rules are OR between groups and AND within one, so a group holding a
+	 * subscription rule that names products admits nobody outside that product
+	 * population — whatever else it ANDs on top only narrows it. Reading the rules
+	 * flat reports such a gate as partly checked and fails a run that did check
+	 * everyone who could get in.
+	 */
+	public function test_unenumerable_paid_rules_ignores_a_rule_anded_with_a_product_rule() {
+		$one_group_anding_both = [
+			[
+				[
+					'slug'  => 'subscription',
+					'value' => [ 46 ],
+				],
+				[
+					'slug'  => 'institution',
+					'value' => [ 900 ],
+				],
+			],
+		];
+
+		$this->assertSame( [], $this->invoke_private_static( 'unenumerable_paid_rules', [ $one_group_anding_both ] ) );
+	}
+
+	/**
+	 * The same two rules in separate groups are a genuine second way in: an
+	 * institution holder needs no subscription, and this command cannot list them.
+	 */
+	public function test_unenumerable_paid_rules_reports_a_rule_ored_against_a_product_rule() {
+		$two_groups = [
+			[
+				[
+					'slug'  => 'subscription',
+					'value' => [ 46 ],
+				],
+			],
+			[
+				[
+					'slug'  => 'institution',
+					'value' => [ 900 ],
+				],
+			],
+		];
+
+		$this->assertSame( [ 'institution' ], $this->invoke_private_static( 'unenumerable_paid_rules', [ $two_groups ] ) );
+	}
+
+	/**
+	 * (int) resolves "12abc", "12.9" and " 12" all to 12, so casting a --gate value
+	 * before validating it scopes the run to a gate the operator never named — and
+	 * under --live that is ESP removals against that gate, with nothing local to
+	 * reverse from.
+	 */
+	public function test_parse_gate_id_rejects_anything_but_a_positive_integer() {
+		$this->assertSame( 12, $this->invoke_private_static( 'parse_gate_id', [ '12' ] ) );
+
+		foreach ( [ '12abc', '12.9', '12x', ' 12', '1e3', '0', '-4', '', 'abc' ] as $not_a_gate_id ) {
+			$this->assertNull(
+				$this->invoke_private_static( 'parse_gate_id', [ $not_a_gate_id ] ),
+				sprintf( '"%s" must not resolve to a gate ID.', $not_a_gate_id )
+			);
+		}
+	}
+
+	/**
+	 * --batch-size and --max-batches take the same reading, so a mistyped value on
+	 * either is refused rather than quietly turned into a run of a size nobody
+	 * asked for. An omitted flag keeps its default.
+	 */
+	public function test_parse_positive_int_defaults_only_for_an_omitted_flag() {
+		$this->assertSame( 100, $this->invoke_private_static( 'parse_positive_int', [ null, 100 ] ) );
+		$this->assertSame( 250, $this->invoke_private_static( 'parse_positive_int', [ '250', 100 ] ) );
+		$this->assertNull( $this->invoke_private_static( 'parse_positive_int', [ '0', 100 ] ) );
+		$this->assertNull( $this->invoke_private_static( 'parse_positive_int', [ '-5', 100 ] ) );
+		$this->assertNull( $this->invoke_private_static( 'parse_positive_int', [ 'abc', 100 ] ) );
+	}
+
+	/**
+	 * The confirming re-read goes through the same provider methods as the write,
+	 * and every shipped provider swallows a failed request into an empty array. One
+	 * transient failure therefore makes the write take its create-contact branch,
+	 * removing nothing, while the re-read comes back empty and reads as "the list is
+	 * gone" — stamping a still-subscribed reader as removed in the one place this
+	 * command writes. An empty re-read is only evidence when the contact still
+	 * resolves.
+	 */
+	public function test_classify_removal_refuses_an_empty_reread_it_cannot_corroborate() {
+		$this->assertSame(
+			'unresolved',
+			$this->invoke_private_static( 'classify_removal', [ true, [], 'list-a', false ] )
+		);
+		$this->assertSame(
+			'removed',
+			$this->invoke_private_static( 'classify_removal', [ true, [], 'list-a', true ] )
+		);
+	}
+
+	/**
+	 * A re-read still naming other lists is evidence on its own: the request plainly
+	 * succeeded, so the absent list is absent because it was removed. Only an empty
+	 * array is ambiguous, so corroboration is not demanded here.
+	 */
+	public function test_classify_removal_accepts_a_reread_that_names_other_lists() {
+		$this->assertSame(
+			'removed',
+			$this->invoke_private_static( 'classify_removal', [ true, [ 'list-b' ], 'list-a', false ] )
+		);
+	}
+
+	/**
+	 * An ESP gateway built from canned answers, standing in for the provider.
+	 *
+	 * @param array $contact_returns One return value per `contact` call, in order.
+	 * @param mixed $lists_return    What the `lists` call returns.
+	 *
+	 * @return array{gateway:array,calls:object} The gateway, and a counter the caller
+	 *                                           reads to assert how often it was used.
+	 */
+	private function fake_esp_gateway( array $contact_returns, $lists_return ): array {
+		$calls = new \stdClass();
+		$calls->contact = 0;
+		$calls->lists   = 0;
+		$gateway = [
+			'contact' => function () use ( $contact_returns, $calls ) {
+				$index = $calls->contact;
+				++$calls->contact;
+				return $contact_returns[ $index ] ?? end( $contact_returns );
+			},
+			'lists'   => function () use ( $lists_return, $calls ) {
+				++$calls->lists;
+				return $lists_return;
+			},
+			'remove'  => fn() => true,
+		];
+		return [
+			'gateway' => $gateway,
+			'calls'   => $calls,
+		];
+	}
+
+	/**
+	 * Every shipped provider turns a failed list read into an empty array, so an
+	 * empty list set from a contact that exists means either "on no lists" or "the
+	 * provider stopped answering". Believing it outright classifies a restricted
+	 * reader as ok and lets the run exit 0 over a real leak, so it is only accepted
+	 * once a further contact read shows the provider is still answering.
+	 */
+	public function test_an_empty_list_set_is_unresolved_when_the_provider_stops_answering() {
+		$contact         = [ 'email' => 'reader@example.test' ];
+		$provider_failed = new \WP_Error( 'newspack_newsletters_mailchimp_search_members', 'Gateway timeout' );
+		$fake            = $this->fake_esp_gateway( [ $contact, $provider_failed ], [] );
+
+		[ $lists, $unresolved ] = $this->invoke_private_static( 'read_list_membership', [ $fake['gateway'], 'reader@example.test' ] );
+
+		$this->assertTrue( $unresolved );
+		$this->assertSame( [], $lists );
+		$this->assertSame( 2, $fake['calls']->contact, 'The empty list set should have been corroborated by a second contact read.' );
+	}
+
+	/**
+	 * The same empty list set is the truth when the provider is plainly still
+	 * answering. Treating it as unresolved would fail every site whose readers are
+	 * genuinely on no lists.
+	 */
+	public function test_an_empty_list_set_is_believed_when_the_contact_still_resolves() {
+		$contact = [ 'email' => 'reader@example.test' ];
+		$fake    = $this->fake_esp_gateway( [ $contact, $contact ], [] );
+
+		[ $lists, $unresolved ] = $this->invoke_private_static( 'read_list_membership', [ $fake['gateway'], 'reader@example.test' ] );
+
+		$this->assertFalse( $unresolved );
+		$this->assertSame( [], $lists );
+	}
+
+	/**
+	 * A non-empty list set is evidence on its own — the provider plainly answered —
+	 * so it costs no corroborating call.
+	 */
+	public function test_a_populated_list_set_is_taken_at_face_value() {
+		$fake = $this->fake_esp_gateway( [ [ 'email' => 'reader@example.test' ] ], [ 'list-a' ] );
+
+		[ $lists, $unresolved ] = $this->invoke_private_static( 'read_list_membership', [ $fake['gateway'], 'reader@example.test' ] );
+
+		$this->assertFalse( $unresolved );
+		$this->assertSame( [ 'list-a' ], $lists );
+		$this->assertSame( 1, $fake['calls']->contact );
+	}
+
+	/**
+	 * A reader the ESP has no contact for is on no lists, which is a fact rather than
+	 * a failure. Failing them would fail every run over a site whose paying readers
+	 * are not all in the ESP.
+	 */
+	public function test_a_contact_that_does_not_exist_reads_as_no_lists() {
+		$missing = new \WP_Error( 'newspack_newsletters_mailchimp_contact_not_found', 'Contact not found' );
+		$fake    = $this->fake_esp_gateway( [ $missing ], [ 'list-a' ] );
+
+		[ $lists, $unresolved ] = $this->invoke_private_static( 'read_list_membership', [ $fake['gateway'], 'reader@example.test' ] );
+
+		$this->assertFalse( $unresolved );
+		$this->assertSame( [], $lists );
+		$this->assertSame( 0, $fake['calls']->lists, 'A missing contact has no lists to read.' );
+	}
+
+	/**
+	 * A failed contact read is not a missing contact: nothing is known about this
+	 * reader, and reporting them as on no lists would hide a leak.
+	 */
+	public function test_a_failed_contact_read_is_unresolved() {
+		$provider_failed = new \WP_Error( 'newspack_newsletters_error', 'Service unavailable' );
+		$fake            = $this->fake_esp_gateway( [ $provider_failed ], [ 'list-a' ] );
+
+		[ $lists, $unresolved ] = $this->invoke_private_static( 'read_list_membership', [ $fake['gateway'], 'reader@example.test' ] );
+
+		$this->assertTrue( $unresolved );
+		$this->assertSame( [], $lists );
+		$this->assertSame( 0, $fake['calls']->lists );
+	}
+
+	/**
+	 * The corroborating read is strict where the primary read is forgiving, and the
+	 * asymmetry is the point. Corroboration only runs once the primary read has
+	 * already resolved the contact, so a contact that now reads as missing is a
+	 * contradiction rather than a fact about the reader — and it is the shape a
+	 * flaking provider takes, since Mailchimp returns its not-found code whenever
+	 * exact_matches comes back empty on an HTTP 200. Forgiving it classifies a
+	 * subscribed, restricted reader as ok and passes the run.
+	 */
+	public function test_a_contact_that_vanishes_between_reads_is_unresolved() {
+		$contact      = [ 'email' => 'reader@example.test' ];
+		$vanished     = new \WP_Error( 'newspack_newsletters_mailchimp_contact_not_found', 'Contact not found' );
+		$fake         = $this->fake_esp_gateway( [ $contact, $vanished ], [] );
+
+		[ $lists, $unresolved ] = $this->invoke_private_static( 'read_list_membership', [ $fake['gateway'], 'reader@example.test' ] );
+
+		$this->assertTrue( $unresolved );
+		$this->assertSame( [], $lists );
+	}
+}

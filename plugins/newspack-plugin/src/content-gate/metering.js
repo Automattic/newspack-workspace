@@ -1,53 +1,38 @@
-/* globals newspack_metering_settings */
+import { getMeteringSettings, getMeteringStoreKey } from './utils/metering-settings';
 
-const settings = newspack_metering_settings;
-
-const storeKey = 'metering-' + settings.gate_id || 0;
-
-function getCurrentExpiration() {
-	const date = new Date();
-	// Reset time to 00:00:00:000.
-	date.setHours( 0 );
-	date.setMinutes( 0 );
-	date.setSeconds( 0 );
-	date.setMilliseconds( 0 );
-	switch ( settings.period ) {
-		case 'day':
-			date.setDate( date.getDate() + 1 );
-			break;
-		case 'week':
-			const day = date.getDay();
-			const daysToSaturday = 6 - day;
-			date.setDate( date.getDate() + daysToSaturday );
-			break;
-		case 'month':
-			date.setMonth( date.getMonth() + 1 );
-			date.setDate( 1 );
-			break;
-	}
-	return parseInt( date.getTime() / 1000, 10 );
-}
-
-function getUserData( store ) {
-	const currentExpiration = getCurrentExpiration();
-	const data = store.get( storeKey ) || {
-		content: [],
-		expiration: currentExpiration,
-	};
+/**
+ * The reader's views for this meter, cleared if their period has ended.
+ *
+ * The server sends the next reset as `settings.expiration`, the same timestamp the
+ * signed-in meter uses, and the one after it as `settings.next_expiration` for a page
+ * served from cache after the first has passed. Views clear when the page's reset is
+ * later than the one stored with them, which leaves the decision to the server's
+ * calendar rather than the browser's clock. An earlier reset that is still ahead (a new
+ * week start, a shorter period) is adopted without clearing them.
+ *
+ * @param {Object} store    Reader data store.
+ * @param {Object} settings Metering settings.
+ *
+ * @return {Object} The reader's views and when they reset.
+ */
+function getUserData( store, settings ) {
+	const storeKey = getMeteringStoreKey( settings );
+	const now = Math.floor( Date.now() / 1000 );
+	const expiration = parseInt( settings.expiration, 10 ) || 0;
+	const nextReset = expiration > now ? expiration : parseInt( settings.next_expiration, 10 ) || 0;
+	const data = store.get( storeKey ) || { content: [], expiration: 0 };
 	data.expiration = parseInt( data.expiration, 10 ) || 0;
-	if ( data.expiration !== currentExpiration ) {
-		// Clear content if expired.
-		if ( data.expiration < currentExpiration ) {
-			data.content = [];
-		}
-		// Reset expiration.
-		data.expiration = currentExpiration;
+	if ( nextReset > data.expiration ) {
+		data.content = [];
+		data.expiration = nextReset;
+	} else if ( nextReset < data.expiration && nextReset > now ) {
+		data.expiration = nextReset;
 	}
 	store.set( storeKey, data );
 	return data;
 }
 
-function lockContent( ras ) {
+function lockContent( ras, settings ) {
 	const content = document.querySelector( '.entry-content' );
 	if ( ! content ) {
 		return;
@@ -88,11 +73,17 @@ function lockContent( ras ) {
 }
 
 function meter( ras ) {
-	const data = getUserData( ras.store );
+	const settings = getMeteringSettings();
+	// No settings means the server did not render a meter for this post, so there is
+	// no allowance to spend and nothing for the meter to do.
+	if ( ! settings ) {
+		return;
+	}
+	const data = getUserData( ras.store, settings );
 	let locked = false;
 	// Lock content if reached limit, remove gate content if not.
 	if ( settings.count <= data.content.length && ! data.content.includes( settings.post_id ) ) {
-		lockContent( ras );
+		lockContent( ras, settings );
 		ras.dispatchActivity( 'metering_restricted', { post_id: settings.post_id, metering: data } );
 		locked = true;
 	} else {
@@ -109,7 +100,7 @@ function meter( ras ) {
 		// Add current content to read content.
 		if ( ! data.content.includes( settings.post_id ) ) {
 			data.content.push( settings.post_id );
-			ras.store.set( storeKey, data );
+			ras.store.set( getMeteringStoreKey( settings ), data );
 		}
 	}
 }

@@ -6,6 +6,10 @@
  */
 
 use Newspack_Ads\Providers\GAM_Model;
+use Newspack\Reader_Data;
+
+require_once __DIR__ . '/mocks/class-reader-activation.php';
+require_once __DIR__ . '/mocks/class-reader-data.php';
 
 /**
  * Test ads model functionality.
@@ -114,6 +118,33 @@ class ModelTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A caller-supplied unique id must be escaped where it is built into the
+	 * container div id, so it cannot break out of the id attribute.
+	 */
+	public function test_ad_unit_code_escapes_container_id() {
+		$payload = "a' onmouseover='alert(document.domain)";
+		$code    = GAM_Model::get_ad_unit_code(
+			[
+				'code'  => 'test-ad-code',
+				'sizes' => [],
+			],
+			$payload
+		);
+		// The reflected value must survive (not be silently dropped) but must not
+		// break out of the single-quoted id attribute.
+		self::assertStringContainsString(
+			'alert(document.domain)',
+			$code,
+			'The id value should be preserved, only escaped.'
+		);
+		self::assertStringNotContainsString(
+			"' onmouseover='",
+			$code,
+			'The id must not break out of the attribute: ' . $code
+		);
+	}
+
+	/**
 	 * Ad units getter.
 	 */
 	public function test_ad_units_getter() {
@@ -155,6 +186,56 @@ class ModelTest extends WP_UnitTestCase {
 			[ $category_slug ],
 			'The targeting property contains the category slug'
 		);
+	}
+
+	/**
+	 * Reader status targeting respects JSON-encoded boolean values.
+	 */
+	public function test_reader_status_targets_only_flags_stored_as_true() {
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+
+		try {
+			Reader_Data::$data = [
+				'is_newsletter_subscriber' => 'true',
+				'is_donor'                 => 'false',
+			];
+			$targeting = GAM_Model::get_ad_targeting( self::$mock_gam_ad_units[0] );
+			self::assertContains( 'newsletter_subscriber', $targeting['reader_status'] );
+			self::assertNotContains( 'donor', $targeting['reader_status'] );
+
+			Reader_Data::$data = [
+				'is_newsletter_subscriber' => 'false',
+				'is_donor'                 => 'true',
+			];
+			$targeting = GAM_Model::get_ad_targeting( self::$mock_gam_ad_units[0] );
+			self::assertNotContains( 'newsletter_subscriber', $targeting['reader_status'] );
+			self::assertContains( 'donor', $targeting['reader_status'] );
+		} finally {
+			Reader_Data::$data = [];
+			wp_set_current_user( 0 );
+		}
+	}
+
+	/**
+	 * A reader whose only subscription is cancelled has the stored list "[]",
+	 * and is no longer targeted as a subscriber.
+	 */
+	public function test_former_subscriber_is_not_targeted_as_subscriber() {
+		wp_set_current_user( self::factory()->user->create() );
+
+		try {
+			Reader_Data::$data = [ 'active_subscriptions' => '[123]' ];
+			$targeting         = GAM_Model::get_ad_targeting( self::$mock_gam_ad_units[0] );
+			self::assertContains( 'subscriber', $targeting['reader_status'] );
+
+			Reader_Data::$data = [ 'active_subscriptions' => '[]' ];
+			$targeting         = GAM_Model::get_ad_targeting( self::$mock_gam_ad_units[0] );
+			self::assertNotContains( 'subscriber', $targeting['reader_status'] );
+		} finally {
+			Reader_Data::$data = [];
+			wp_set_current_user( 0 );
+		}
 	}
 
 	/**

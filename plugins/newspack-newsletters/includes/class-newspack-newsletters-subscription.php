@@ -29,9 +29,9 @@ class Newspack_Newsletters_Subscription {
 	const LISTS_CACHE_PREFIX = 'newspack_newsletters_lists_';
 
 	/**
-	 * Memoized lists config.
+	 * Memoized lists config. Null is the cache-miss sentinel (see get_lists_config()).
 	 *
-	 * @var array
+	 * @var array|null
 	 */
 	private static $lists_config;
 
@@ -82,7 +82,14 @@ class Newspack_Newsletters_Subscription {
 			[
 				'methods'             => \WP_REST_Server::READABLE,
 				'callback'            => [ __CLASS__, 'api_get_lists_config' ],
-				'permission_callback' => '__return_true',
+				'permission_callback' => [ __CLASS__, 'api_lists_config_permissions_check' ],
+				'args'                => [
+					'context' => [
+						'type'    => 'string',
+						'enum'    => [ 'view', 'edit' ],
+						'default' => 'view',
+					],
+				],
 			]
 		);
 		register_rest_route(
@@ -236,12 +243,37 @@ class Newspack_Newsletters_Subscription {
 	}
 
 	/**
-	 * API method to retrieve the current lists configuration.
+	 * Who may read the lists config in the requested context.
+	 *
+	 * `view` is public and lists what the requester may sign up for. `edit` is
+	 * for someone editing a post. They need every list, so a block's saved
+	 * selection survives lists they could not join as a reader.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 *
+	 * @return true|WP_Error
+	 */
+	public static function api_lists_config_permissions_check( $request ) {
+		if ( 'edit' !== $request['context'] || current_user_can( 'edit_posts' ) ) {
+			return true;
+		}
+		return new WP_Error(
+			'newspack_newsletters_rest_forbidden_context',
+			__( 'Sorry, you are not allowed to edit posts.', 'newspack-newsletters' ),
+			[ 'status' => rest_authorization_required_code() ]
+		);
+	}
+
+	/**
+	 * API method to retrieve the lists configuration.
+	 *
+	 * @param WP_REST_Request $request Request.
 	 *
 	 * @return WP_REST_Response|WP_Error WP_REST_Response on success, or WP_Error object on failure.
 	 */
-	public static function api_get_lists_config() {
-		return \rest_ensure_response( self::get_lists_config() );
+	public static function api_get_lists_config( $request ) {
+		$lists_config = 'edit' === $request['context'] ? self::get_unfiltered_lists_config() : self::get_lists_config();
+		return \rest_ensure_response( $lists_config );
 	}
 
 	/**
@@ -495,25 +527,37 @@ class Newspack_Newsletters_Subscription {
 			/**
 			 * We loop through the lists returned by the ESP.
 			 * Only remote lists that still exist in the ESP will be returned.
+			 *
+			 * Lists missing a name or an ID are dropped, and the array is then
+			 * reindexed: a sparse array is serialized as a JSON object, and the
+			 * admin screens map over the REST response as an array.
 			 */
-			$return_lists = array_map(
-				function ( $list ) {
-					if ( ! isset( $list['id'], $list['name'] ) || empty( $list['id'] ) || empty( $list['name'] ) ) {
-						return;
-					}
+			$return_lists = array_values(
+				array_filter(
+					array_map(
+						function ( $list ) {
+							// Mirror the validation in Subscription_Lists::get_or_create_remote_list():
+							// it throws on a blank title rather than returning a WP_Error, and the
+							// outer catch would turn that into a WP_Error for the whole payload. It
+							// also accepts a title of "0", which `empty()` would reject.
+							if ( ! isset( $list['id'], $list['name'] ) || empty( $list['id'] ) || ! is_string( $list['name'] ) || '' === trim( $list['name'] ) ) {
+								return;
+							}
 
-					// This is messy, when the ESP returns lists, it's name, when we get it from our UIs, it's title... we need both.
-					$list['title'] = $list['name'];
+							// The ESP calls this field 'name'; our own UIs call it 'title'. We need both.
+							$list['title'] = $list['name'];
 
-					$stored_list = Subscription_Lists::get_or_create_remote_list( $list );
+							$stored_list = Subscription_Lists::get_or_create_remote_list( $list );
 
-					if ( is_wp_error( $stored_list ) ) {
-						return;
-					}
+							if ( is_wp_error( $stored_list ) ) {
+								return;
+							}
 
-					return $stored_list->to_array();
-				},
-				$lists
+							return $stored_list->to_array();
+						},
+						$lists
+					)
+				)
 			);
 
 			/**
@@ -569,29 +613,78 @@ class Newspack_Newsletters_Subscription {
 	/**
 	 * Get the lists configuration for the active provider.
 	 *
+	 * Note: on sites with premium newsletter gates, the result is filtered per the
+	 * current user (via the newspack_newsletters_subscription_lists filter →
+	 * Premium_Newsletters::filter_subscription_lists()). The per-request memo
+	 * therefore bakes in the current user's view; a caller that changes the current
+	 * user mid-request must call reset_lists_config_cache() before re-reading.
+	 *
 	 * @return array[]|WP_Error Associative array with list configuration keyed by list ID or error.
 	 */
 	public static function get_lists_config() {
-		if ( self::$lists_config ) {
+		// Skip the memo under PHPUnit, mirroring Subscription_Lists::get_all():
+		// static memos persist across the DB rollback between tests.
+		$use_cache = ! ( defined( 'IS_TEST_ENV' ) && IS_TEST_ENV );
+		if ( $use_cache && null !== self::$lists_config ) {
 			return self::$lists_config;
 		}
+		$active_lists = self::build_lists_config( true );
+		if ( $use_cache && ! is_wp_error( $active_lists ) ) {
+			self::$lists_config = $active_lists;
+		}
+		return $active_lists;
+	}
+
+	/**
+	 * Get the lists configuration for the active provider, without the
+	 * `newspack_newsletters_subscription_lists` filter.
+	 *
+	 * Note: get_lists_config() drops lists the current reader is restricted from, which
+	 * makes a restricted list indistinguishable from a missing one. Comparing the
+	 * two reads is how a caller finds the lists hidden from this reader. Never use
+	 * this to decide what a reader may sign up for.
+	 * The result is not memoized, so read it once per render.
+	 *
+	 * @return array[]|WP_Error Associative array with list configuration keyed by list ID or error.
+	 */
+	public static function get_unfiltered_lists_config() {
+		return self::build_lists_config( false );
+	}
+
+	/**
+	 * Build the lists configuration for the active provider.
+	 *
+	 * Shared by get_lists_config() and get_unfiltered_lists_config(), which differ
+	 * only in whether the `newspack_newsletters_subscription_lists` filter runs.
+	 *
+	 * @param bool $apply_filters Whether to apply that filter to the lists first.
+	 *
+	 * @return array[]|WP_Error Associative array with list configuration keyed by list ID or error.
+	 */
+	private static function build_lists_config( $apply_filters ) {
 		$provider = Newspack_Newsletters::get_service_provider();
 		if ( empty( $provider ) ) {
 			return new WP_Error( 'newspack_newsletters_invalid_provider', __( 'Provider is not set.', 'newspack-newsletters' ) );
 		}
 
-		$saved_lists  = Subscription_Lists::get_configured_for_current_provider();
 		$active_lists = [];
-
-		foreach ( $saved_lists as $list ) {
+		foreach ( Subscription_Lists::get_configured_for_current_provider( $apply_filters ) as $list ) {
 			if ( ! $list->is_active() ) {
 				continue;
 			}
 			$active_lists[ $list->get_public_id() ] = $list->to_array();
 		}
+		return $active_lists;
+	}
 
-		self::$lists_config = $active_lists;
-		return self::$lists_config;
+	/**
+	 * Reset the memoized lists config so the next get_lists_config() call rebuilds
+	 * it. Called when a subscription list changes within the same request.
+	 *
+	 * @return void
+	 */
+	public static function reset_lists_config_cache() {
+		self::$lists_config = null;
 	}
 
 	/**
@@ -777,6 +870,11 @@ class Newspack_Newsletters_Subscription {
 		if ( ! $intent ) {
 			return false;
 		}
+		// Replaying an intent skips the sign-up lists filter, so nothing but a real
+		// intent may be read as one.
+		if ( ! $intent instanceof \WP_Post || self::SUBSCRIPTION_INTENT_CPT !== $intent->post_type ) {
+			return false;
+		}
 		return [
 			'id'      => $intent->ID,
 			'contact' => get_post_meta( $intent->ID, 'contact', true ),
@@ -852,10 +950,17 @@ class Newspack_Newsletters_Subscription {
 
 			$contact = $intent['contact'];
 			$email   = $contact['email'];
-			$lists   = $intent['lists'];
+			// Stored lists come back from post meta, where "no lists" (false) is saved
+			// as an empty string. The replay skips the sign-up check, so it only ever
+			// passes on an array of lists or false.
+			$lists   = is_array( $intent['lists'] ) ? $intent['lists'] : false;
 			$context = $intent['context'];
 
-			$result = Newspack_Newsletters_Contacts::subscribe( $contact, $lists, false, $context . ' (ASYNC)' );
+			// The lists were filtered when the intent was queued, in the reader's own
+			// request. The replay arrives by a loopback request or from cron, and neither
+			// can be relied on to carry the reader's session, so a check that judges the
+			// session would refuse lists the reader may join.
+			$result = Newspack_Newsletters_Contacts::subscribe( $contact, $lists, false, $context . ' (ASYNC)', true );
 
 			$user = get_user_by( 'email', $email );
 			if ( \is_wp_error( $result ) ) {
@@ -1514,4 +1619,7 @@ class Newspack_Newsletters_Subscription {
 		}
 	}
 }
-Newspack_Newsletters_Subscription::init();
+// Boot only when the main plugin file loaded this, not another plugin's autoloader.
+if ( defined( 'NEWSPACK_NEWSLETTERS_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal path constant, set by the main plugin file.
+	Newspack_Newsletters_Subscription::init();
+}

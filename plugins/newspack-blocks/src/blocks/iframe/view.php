@@ -13,7 +13,7 @@
  * @return string
  */
 function newspack_blocks_render_block_iframe( $attributes ) {
-	Newspack_Blocks::enqueue_view_assets( 'iframe' );
+	Newspack_Blocks::enqueue_view_assets( 'iframe', 'defer' );
 
 	return newspack_blocks_get_iframe( $attributes );
 }
@@ -59,6 +59,21 @@ function newspack_blocks_get_iframe( $args ) {
 }
 
 /**
+ * Get the source an Iframe block may embed.
+ *
+ * Embed only http(s) and relative sources. Any other scheme is treated as no source, as
+ * in the editor preview, which allows the same schemes. Listing https first makes
+ * esc_url_raw() complete a scheme-less source with https:// rather than http://. The
+ * fullscreen takeover checks the same, so a block that renders nothing never takes over.
+ *
+ * @param mixed $src Block source attribute.
+ * @return string The source to embed, or '' if there is none.
+ */
+function newspack_blocks_get_iframe_src( $src ) {
+	return is_string( $src ) ? esc_url_raw( $src, [ 'https', 'http' ] ) : '';
+}
+
+/**
  * Get embed html for embbed iframe.
  *
  * @param string  $mode Embed mode (iframe or document).
@@ -78,8 +93,10 @@ function newspack_blocks_get_iframe_html( $mode, $src, $height, $width, $is_full
 	$iframe_id   = 'newspack-iframe-' . wp_generate_password( 12, false );
 	$classes[]   = 'wp-block-newspack-blocks-iframe';
 
+	$src = newspack_blocks_get_iframe_src( $src );
+
 	if ( empty( $src ) ) {
-		return;
+		return '';
 	}
 
 	if ( ! empty( $align ) ) {
@@ -104,7 +121,7 @@ function newspack_blocks_get_iframe_html( $mode, $src, $height, $width, $is_full
 				layout = '<?php echo esc_attr( $layout ); ?>'
 				height = '100'
 				width = '100'
-				src = '<?php echo esc_attr( $src ); ?>'
+				src = '<?php echo esc_url( $src ); ?>'
 				style = '<?php echo esc_attr( $style ); ?>'
 				frameborder = '0'
 				allowfullscreen

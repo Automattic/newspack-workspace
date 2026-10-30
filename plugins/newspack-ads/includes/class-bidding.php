@@ -186,6 +186,7 @@ final class Bidding {
 		if ( ! self::is_enabled() ) {
 			return;
 		}
+		// Note: tag output is overridden by the script_loader_tag filter below; a script strategy here would have no effect.
 		wp_enqueue_script(
 			self::PREBID_SCRIPT_HANDLE,
 			plugins_url( '../dist/prebid.js', __FILE__ ),

@@ -21,6 +21,34 @@ class Newspack_Blocks {
 	];
 
 	/**
+	 * Nesting depth of `the_content` filter applications. A depth of zero marks
+	 * the start of a top-level render pass, where deduplication state is reset.
+	 *
+	 * @var int
+	 */
+	private static $content_render_depth = 0;
+
+	/**
+	 * Per-request memoization for self::asset_version().
+	 *
+	 * @var array<string, string>
+	 */
+	private static $asset_version_cache = [];
+
+	/**
+	 * Stack of routes for the REST requests currently being served, innermost
+	 * last. Pushed on `rest_request_before_callbacks` and popped on
+	 * `rest_request_after_callbacks`, which bracket the endpoint callback on every
+	 * dispatch path (HTTP, `rest_do_request()`, batch, embeds, preload). Using a
+	 * stack, rather than a single value cleared on `rest_post_dispatch`, keeps an
+	 * in-process request from leaving its route set after it returns, and restores
+	 * the outer route when a nested request completes.
+	 *
+	 * @var string[]
+	 */
+	private static $rest_route_stack = [];
+
+	/**
 	 * Add hooks and filters.
 	 */
 	public static function init() {
@@ -30,8 +58,13 @@ class Newspack_Blocks {
 		add_post_type_support( 'page', 'newspack_blocks' );
 		add_action( 'jetpack_register_gutenberg_extensions', [ __CLASS__, 'disable_jetpack_donate' ], 99 );
 		add_filter( 'the_content', [ __CLASS__, 'hide_post_content_when_iframe_block_is_fullscreen' ] );
+		add_filter( 'newspack_popups_assess_has_disabled_popups', [ __CLASS__, 'disable_prompts_on_fullscreen_iframe_page' ] );
+		add_filter( 'the_content', [ __CLASS__, 'start_content_render_pass' ], PHP_INT_MIN );
+		add_filter( 'the_content', [ __CLASS__, 'end_content_render_pass' ], PHP_INT_MAX );
 		add_filter( 'body_class', [ __CLASS__, 'add_body_classes' ] );
 		add_filter( 'admin_body_class', [ __CLASS__, 'add_body_classes' ] );
+		add_filter( 'rest_request_before_callbacks', [ __CLASS__, 'push_rest_route' ], 10, 3 );
+		add_filter( 'rest_request_after_callbacks', [ __CLASS__, 'pop_rest_route' ], 10, 3 );
 
 		/**
 		 * Disable NextGEN's `C_NextGen_Shortcode_Manager`.
@@ -50,37 +83,82 @@ class Newspack_Blocks {
 	/**
 	 * Hide the post content when it contains an iframe block that is set to fullscreen mode.
 	 *
+	 * Excerpts are left alone: they are built from the same filter, and swapping the text
+	 * for the iframe would leave the excerpt empty.
+	 *
 	 * @param string $content post content from the_content hook.
 	 * @return string the post content.
 	 */
 	public static function hide_post_content_when_iframe_block_is_fullscreen( $content ) {
-		if ( has_block( 'newspack-blocks/iframe' ) ) {
-			$blocks = parse_blocks( get_post()->post_content );
+		if ( doing_filter( 'get_the_excerpt' ) || ! has_block( 'newspack-blocks/iframe' ) ) {
+			return $content;
+		}
 
-			foreach ( $blocks as $block ) {
-				if ( 'newspack-blocks/iframe' === $block['blockName']
-					&& is_array( $block['attrs'] )
-					&& array_key_exists( 'isFullScreen', $block['attrs'] )
-					&& $block['attrs']['isFullScreen']
-					) {
-					// we don't need the post content since the iframe will be fullscreen.
-					$content = render_block( $block );
-
-					add_filter(
-						'body_class',
-						function( $classes ) {
-							$classes[] = 'newspack-post-with-fullscreen-iframe';
-							return $classes;
-						}
-					);
-
-					// we don't need to show Newspack popups since the iframe will take over them.
-					add_filter( 'newspack_popups_assess_has_disabled_popups', '__return_true' );
-				}
-			}
+		$block = self::get_fullscreen_iframe_block( get_post() );
+		if ( $block ) {
+			// we don't need the post content since the iframe will be fullscreen.
+			$content = render_block( $block );
 		}
 
 		return $content;
+	}
+
+	/**
+	 * Get a post's top-level fullscreen Iframe block, if it has one.
+	 *
+	 * @param WP_Post|null $post Post to check.
+	 * @return array|null The block, or null.
+	 */
+	private static function get_fullscreen_iframe_block( $post ) {
+		static $found = [];
+
+		if ( ! $post instanceof WP_Post ) {
+			return null;
+		}
+		if ( array_key_exists( $post->ID, $found ) ) {
+			return $found[ $post->ID ];
+		}
+
+		$found[ $post->ID ] = null;
+		foreach ( parse_blocks( $post->post_content ) as $block ) {
+			// A block with no usable source renders nothing, so it must not take over the page.
+			if ( 'newspack-blocks/iframe' === $block['blockName'] && ! empty( $block['attrs']['isFullScreen'] )
+				&& '' !== newspack_blocks_get_iframe_src( $block['attrs']['src'] ?? '' ) ) {
+				$found[ $post->ID ] = $block;
+				break;
+			}
+		}
+
+		return $found[ $post->ID ];
+	}
+
+	/**
+	 * Whether this request is the page of a post taken over by a fullscreen Iframe block.
+	 *
+	 * Decided from the queried post rather than while its content renders, so the answer is
+	 * the same for the whole request: the body class is printed before the loop runs, and a
+	 * fullscreen post rendered inside another post's page must not affect that page.
+	 *
+	 * This says the post is built to take over the page, not that the iframe is on screen:
+	 * a content gate can swap the block for its teaser, on the server or in the browser once
+	 * a metered reader runs out, and neither is known when the body class prints. The
+	 * stylesheet hides the rest of the page only while the block's iframe is present, which
+	 * is what keeps the gate visible to that reader.
+	 *
+	 * @return bool
+	 */
+	private static function is_fullscreen_iframe_page() {
+		return is_singular() && null !== self::get_fullscreen_iframe_block( get_queried_object() );
+	}
+
+	/**
+	 * Suppress Newspack prompts on the page of a fullscreen Iframe post, which the iframe covers.
+	 *
+	 * @param bool $disabled Whether prompts are already disabled.
+	 * @return bool
+	 */
+	public static function disable_prompts_on_fullscreen_iframe_page( $disabled ) {
+		return $disabled || self::is_fullscreen_iframe_page();
 	}
 
 	/**
@@ -90,6 +168,10 @@ class Newspack_Blocks {
 	 * @return string|array Modified array or string of body class names.
 	 */
 	public static function add_body_classes( $classes ) {
+		if ( is_array( $classes ) && self::is_fullscreen_iframe_page() ) {
+			$classes[] = 'newspack-post-with-fullscreen-iframe';
+		}
+
 		if ( wp_is_block_theme() ) {
 			// Handle string (admin) vs array (frontend) cases.
 			if ( is_string( $classes ) ) {
@@ -126,6 +208,57 @@ class Newspack_Blocks {
 
 		$script_data['script_path'] = plugins_url( $script_path, NEWSPACK_BLOCKS__PLUGIN_FILE );
 		return $script_data;
+	}
+
+	/**
+	 * Resolve the cache-busting version for a built dist asset.
+	 *
+	 * Reads the content hash the build writes to `dist/<name>.asset.php`, so an
+	 * asset's URL changes when its file changes, and only then. The plugin
+	 * version can't do that: it stays the same when a build is reinstalled
+	 * without a version bump, so browsers keep the cached file. The hash covers
+	 * every file in the entry, so an entry's `.css` can use the same name as
+	 * its `.js`.
+	 *
+	 * A trimmed copy of `Newspack::asset_version()` in newspack-plugin, without
+	 * its cache reset or logging. This plugin must work without newspack-plugin,
+	 * so it can't call that one. newspack-ads, newspack-blocks, newspack-listings
+	 * and newspack-newsletters each carry this copy; a change to the name check
+	 * belongs in all of them and in the original.
+	 *
+	 * @param string $name Asset path relative to `dist/`, without the extension.
+	 *                     Examples: 'modal', 'carousel/view'.
+	 * @return string The content hash, or NEWSPACK_BLOCKS__VERSION when the
+	 *                `.asset.php` file is missing or malformed.
+	 */
+	public static function asset_version( string $name ): string {
+		if ( isset( self::$asset_version_cache[ $name ] ) ) {
+			return self::$asset_version_cache[ $name ];
+		}
+		$version = NEWSPACK_BLOCKS__VERSION;
+		// Accept only entry-shaped names, so a caller can't include a file
+		// outside dist/. The second pattern rejects `..` segments, which the
+		// first pattern's character set would otherwise let through.
+		if (
+			preg_match( '#^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$#', $name )
+			&& ! preg_match( '#(^|/)\.\.(/|$)#', $name )
+		) {
+			/**
+			 * Filters the directory asset_version() reads `.asset.php` files from.
+			 * Tests point this at a temp dir instead of writing into dist/.
+			 *
+			 * @param string $dir  Absolute path with a trailing slash.
+			 * @param string $name Asset name being resolved.
+			 */
+			$dist_dir = apply_filters( 'newspack_blocks_asset_dist_dir', NEWSPACK_BLOCKS__PLUGIN_DIR . 'dist/', $name );
+			$path     = $dist_dir . $name . '.asset.php';
+			$asset    = file_exists( $path ) ? include $path : null;
+			if ( is_array( $asset ) && ! empty( $asset['version'] ) && is_string( $asset['version'] ) ) {
+				$version = $asset['version'];
+			}
+		}
+		self::$asset_version_cache[ $name ] = $version;
+		return $version;
 	}
 
 	/**
@@ -202,7 +335,7 @@ class Newspack_Blocks {
 	 * @return bool True if available, false if not.
 	 */
 	public static function can_use_name_your_price() {
-		// If the donation platform is NRH, the Donate block should behave as if Name Your Price is available.
+		// If the donation platform is RevEngine, the Donate block should behave as if Name Your Price is available.
 		if ( method_exists( 'Newspack\Donations', 'is_platform_nrh' ) && \Newspack\Donations::is_platform_nrh() ) {
 			return true;
 		}
@@ -230,6 +363,8 @@ class Newspack_Blocks {
 			$localized_data = [
 				'patterns'                   => self::get_patterns_for_post_type( get_post_type() ),
 				'posts_rest_url'             => rest_url( 'newspack-blocks/v1/newspack-blocks-posts' ),
+				'posts_batch_rest_url'       => rest_url( 'newspack-blocks/v1/newspack-blocks-posts-batch' ),
+				'posts_batch_max_queries'    => Newspack_Blocks_API::POSTS_BATCH_MAX_QUERIES,
 				'specific_posts_rest_url'    => rest_url( 'newspack-blocks/v1/newspack-blocks-specific-posts' ),
 				'authors_rest_url'           => rest_url( 'newspack-blocks/v1/authors' ),
 				'assets_path'                => plugins_url( '/src/assets', NEWSPACK_BLOCKS__PLUGIN_FILE ),
@@ -274,7 +409,7 @@ class Newspack_Blocks {
 			$handle,
 			$editor_style,
 			array(),
-			NEWSPACK_BLOCKS__VERSION
+			self::asset_version( 'editor' )
 		);
 		wp_style_add_data( $handle, 'rtl', 'replace' );
 	}
@@ -332,7 +467,7 @@ class Newspack_Blocks {
 				$handle,
 				plugins_url( $style_path, NEWSPACK_BLOCKS__PLUGIN_FILE ),
 				array(),
-				NEWSPACK_BLOCKS__VERSION
+				self::asset_version( 'block_styles' )
 			);
 			wp_style_add_data( $handle, 'rtl', 'replace' );
 		}
@@ -341,9 +476,13 @@ class Newspack_Blocks {
 	/**
 	 * Enqueue view scripts and styles for a single block.
 	 *
-	 * @param string $type The block's type.
+	 * @param string      $type     The block's type.
+	 * @param string|null $strategy Optional. Script loading strategy to apply to the
+	 *                              view script ('defer' or 'async'). First write wins:
+	 *                              ignored if a strategy is already set on the handle.
+	 *                              Default null (no strategy).
 	 */
-	public static function enqueue_view_assets( $type ) {
+	public static function enqueue_view_assets( $type, $strategy = null ) {
 		$style_path = apply_filters(
 			'newspack_blocks_enqueue_view_assets',
 			NEWSPACK_BLOCKS__BLOCKS_DIRECTORY . $type . '/view.css',
@@ -357,19 +496,23 @@ class Newspack_Blocks {
 				$handle,
 				plugins_url( $style_path, NEWSPACK_BLOCKS__PLUGIN_FILE ),
 				array(),
-				NEWSPACK_BLOCKS__VERSION
+				self::asset_version( $type . '/view' )
 			);
 			wp_style_add_data( $handle, 'rtl', 'replace' );
 		}
 		$script_data = static::script_enqueue_helper( NEWSPACK_BLOCKS__BLOCKS_DIRECTORY . $type . '/view.js' );
 		if ( $script_data ) {
+			$handle = "newspack-blocks-{$type}";
 			wp_enqueue_script(
-				"newspack-blocks-{$type}",
+				$handle,
 				$script_data['script_path'],
 				$script_data['dependencies'],
 				$script_data['version'],
 				true
 			);
+			if ( $strategy && ! wp_scripts()->get_data( $handle, 'strategy' ) ) {
+				wp_script_add_data( $handle, 'strategy', $strategy );
+			}
 		}
 	}
 
@@ -609,6 +752,128 @@ class Newspack_Blocks {
 	}
 
 	/**
+	 * Mark the start of a `the_content` render pass.
+	 *
+	 * Deduplication state accumulates in globals for the life of the request,
+	 * which is right for a front-end page but wrong wherever one request renders
+	 * the same content more than once (a REST save renders it up to three times)
+	 * or renders several posts (a REST collection). There, every top-level pass
+	 * starts from a clean slate so each returns the same posts. Nested passes
+	 * (a Query Loop rendering Post Content, a synced pattern) keep the state of
+	 * the pass they belong to.
+	 *
+	 * @param string $content Post content.
+	 * @return string Unmodified post content.
+	 */
+	public static function start_content_render_pass( $content ) {
+		if ( 0 === self::$content_render_depth && self::should_reset_deduplication_per_render_pass() ) {
+			self::reset_deduplication();
+		}
+		self::$content_render_depth++;
+		return $content;
+	}
+
+	/**
+	 * Mark the end of a `the_content` render pass.
+	 *
+	 * @param string $content Post content.
+	 * @return string Unmodified post content.
+	 */
+	public static function end_content_render_pass( $content ) {
+		self::$content_render_depth = max( 0, self::$content_render_depth - 1 );
+		return $content;
+	}
+
+	/**
+	 * Whether deduplication state should be reset at the start of each top-level
+	 * `the_content` pass.
+	 *
+	 * On the front end the state is kept for the whole request, because a block
+	 * theme can render Content Loop blocks in the template before the post
+	 * content, and those have to be excluded from the blocks inside it.
+	 *
+	 * @return bool
+	 */
+	public static function should_reset_deduplication_per_render_pass() {
+		$is_front_end = ! is_admin()
+			&& ! wp_doing_ajax()
+			&& ! wp_doing_cron()
+			&& ! ( defined( 'REST_REQUEST' ) && REST_REQUEST )
+			&& ! ( defined( 'WP_CLI' ) && WP_CLI );
+
+		return ! $is_front_end;
+	}
+
+	/**
+	 * Remember the route of the REST request whose callback is about to run.
+	 *
+	 * WordPress has no accessor for the request currently in flight, so track it
+	 * around the endpoint callback. `rest_request_before_callbacks` fires on every
+	 * dispatch path, including in-process `rest_do_request()` calls that never
+	 * reach `rest_post_dispatch`, so pairing it with `rest_request_after_callbacks`
+	 * keeps the route from leaking past the request. Passes the value through
+	 * unchanged.
+	 *
+	 * @param mixed           $response Callback result to be replaced, unused here.
+	 * @param array           $handler  Matched route handler, unused here.
+	 * @param WP_REST_Request $request  The request being dispatched.
+	 * @return mixed The unchanged $response.
+	 */
+	public static function push_rest_route( $response, $handler, $request ) {
+		self::$rest_route_stack[] = $request->get_route();
+		return $response;
+	}
+
+	/**
+	 * Forget the route once its callback has run, so it never leaks into later work
+	 * in a long-running process. `rest_request_after_callbacks` fires even when the
+	 * permission check or callback returned an error, so it always balances the
+	 * matching `push_rest_route()`.
+	 *
+	 * @param mixed           $response Callback result to be served, passed through.
+	 * @param array           $handler  Matched route handler, unused here.
+	 * @param WP_REST_Request $request  The request that was dispatched, unused here.
+	 * @return mixed The unchanged $response.
+	 */
+	public static function pop_rest_route( $response, $handler, $request ) {
+		array_pop( self::$rest_route_stack );
+		return $response;
+	}
+
+	/**
+	 * Whether the current render is happening while a revision or autosave is being
+	 * prepared for the REST API.
+	 *
+	 * The revisions and autosaves endpoints render a revision's `content.rendered`
+	 * through `the_content`, which runs every dynamic block's render callback. That
+	 * output is never displayed, so a Content Loop or Carousel block can skip its
+	 * query entirely, which matters on sites where the editor autosaves against a
+	 * large post set. Checks the innermost in-flight route so a nested request is
+	 * judged on its own endpoint, not an outer one.
+	 *
+	 * @return bool
+	 */
+	public static function is_rest_revision_or_autosave_render() {
+		$route = end( self::$rest_route_stack );
+		return ! empty( $route )
+			&& (bool) preg_match( '#/(?:revisions|autosaves)(?:/\d+)?$#', $route );
+	}
+
+	/**
+	 * Forget which posts have been rendered so far, so the next Content Loop or
+	 * Carousel block starts deduplicating from scratch.
+	 *
+	 * The list of posts picked by specific-posts blocks is left alone: it is
+	 * derived from the current post, which `wp_reset_postdata()` cannot restore
+	 * inside a REST request once a block's loop has moved it, so recomputing it
+	 * per pass would give each pass a different exclusion list.
+	 */
+	public static function reset_deduplication() {
+		global $newspack_blocks_post_id;
+		$newspack_blocks_post_id = [];
+	}
+
+	/**
 	 * Whether the block should be included in the deduplication logic.
 	 *
 	 * @param array $attributes Block attributes.
@@ -659,6 +924,50 @@ class Newspack_Blocks {
 	}
 
 	/**
+	 * Restrict a list of post types to those a Homepage Posts or Carousel query may
+	 * read: publicly-viewable types, plus any explicitly allow-listed via the
+	 * `newspack_blocks_articles_allowed_post_types` filter.
+	 *
+	 * Every query those blocks build goes through this, so the front end, the editor
+	 * routes (open to anyone who can edit posts, Contributors included) and the
+	 * public articles route all serve the same post types. Disallowed types are
+	 * dropped; the returned list may be empty when none qualify (the caller then
+	 * returns no results).
+	 *
+	 * An empty request means `post`: blocks saved before the post type picker required
+	 * a selection carry `"postType":[]`. WP_Query's own default widened to every type
+	 * sharing a queried custom taxonomy, which this deliberately does not.
+	 *
+	 * @param array|string $post_types Requested post type(s).
+	 * @return array Allowed post types (may be empty).
+	 */
+	public static function filter_viewable_post_types( $post_types ) {
+		if ( empty( $post_types ) ) {
+			$post_types = [ 'post' ];
+		}
+		/**
+		 * Post types Homepage Posts and Carousel blocks may query in addition to the
+		 * publicly-viewable ones. Each entry is an explicit, per-CPT decision to
+		 * expose that type's published posts to unauthenticated callers, including
+		 * through the public articles REST route — do not add types whose published
+		 * content should stay off it. A non-viewable type that declares `newspack_blocks`
+		 * support but is left off this list can still be picked in the block's post
+		 * type panel, but its blocks render empty.
+		 *
+		 * @param string[] $allowed Post type slugs to allow. Default empty.
+		 */
+		$allowed = (array) apply_filters( 'newspack_blocks_articles_allowed_post_types', [] );
+		return array_values(
+			array_filter(
+				(array) $post_types,
+				function ( $type ) use ( $allowed ) {
+					return is_string( $type ) && ( is_post_type_viewable( $type ) || in_array( $type, $allowed, true ) );
+				}
+			)
+		);
+	}
+
+	/**
 	 * Builds and returns query args based on block attributes.
 	 *
 	 * @param array $attributes An array of block attributes.
@@ -679,10 +988,18 @@ class Newspack_Blocks {
 			$newspack_blocks_all_specific_posts_ids = self::get_specific_posts_from_blocks( $blocks, $block_name );
 		}
 
-		$post_type              = isset( $attributes['postType'] ) ? $attributes['postType'] : [ 'post' ];
+		// Every block render goes through here, including core's block-renderer route and draft
+		// previews, which are open to anyone who can edit posts. So the post type restriction
+		// lives here rather than in each caller.
+		$post_type              = self::filter_viewable_post_types( isset( $attributes['postType'] ) ? $attributes['postType'] : [ 'post' ] );
 		$included_post_statuses = [ 'publish' ];
 		if ( current_user_can( 'edit_others_posts' ) && isset( $attributes['includedPostStatuses'] ) ) {
-			$included_post_statuses = $attributes['includedPostStatuses'];
+			// Only the statuses the editor offers. Anything else (private, or core's request-*
+			// statuses) would let the editor routes read content the block was never meant to show.
+			$included_post_statuses = array_values( array_intersect( (array) $attributes['includedPostStatuses'], [ 'publish', 'draft', 'future' ] ) );
+			if ( empty( $included_post_statuses ) ) {
+				$included_post_statuses = [ 'publish' ];
+			}
 		}
 		$authors                    = isset( $attributes['authors'] ) ? $attributes['authors'] : array();
 		$categories                 = isset( $attributes['categories'] ) ? $attributes['categories'] : array();
@@ -704,6 +1021,8 @@ class Newspack_Blocks {
 			'has_password'        => false,
 			'is_newspack_query'   => true,
 			'tax_query'           => [], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
+			// The total is only needed to decide whether a More button has a next page.
+			'no_found_rows'       => empty( $attributes['moreButton'] ),
 		);
 		if ( $specific_mode && $specific_posts ) {
 			$args['posts_per_page'] = count( $specific_posts );
@@ -832,11 +1151,19 @@ class Newspack_Blocks {
 			}
 		}
 
+		if ( empty( $post_type ) ) {
+			// Every requested post type was disallowed. Match nothing rather than let
+			// WP_Query fall back to its default post type.
+			$args['post__in'] = [ 0 ];
+		}
+
 		/**
 		 * Customize the WP_Query arguments to fetch post articles before the actual query is executed.
 		 *
 		 * The filter is called after the build_articles_query() function is called by a Newspack block to
 		 * build the WP_Query arguments based on the given attributes and block requesting the query.
+		 * When no requested post type is allowed, `post__in` is `[ 0 ]` so the query matches nothing;
+		 * allow a post type through `newspack_blocks_articles_allowed_post_types` rather than here.
 		 *
 		 * @param array     $args       WP_Query arguments as created by build_articles_query()
 		 * @param array     $attributes The attributes initial passed to build_articles_query()
@@ -1235,10 +1562,28 @@ class Newspack_Blocks {
 				// If we don't, built an excerpt but allow no tags.
 				$excerpt      = $post->post_content;
 				$allowed_tags = '';
+
+				// Jetpack's paywall only applies to the_content, which this excerpt skips, so ensure
+				// gated posts get the text above the Paywall block or nothing. Like Access Control,
+				// this applies to every reader, not just those without access, so the block's render
+				// cache stays safe to share.
+				if (
+					has_filter( 'the_content', 'Automattic\Jetpack\Extensions\Subscriptions\add_paywall' )
+					&& method_exists( 'Jetpack_Memberships', 'get_post_access_level' )
+					&& 'everybody' !== \Jetpack_Memberships::get_post_access_level( $post->ID )
+				) {
+					$paywall_block = '<!-- wp:jetpack/paywall /-->';
+					$excerpt       = false !== strpos( $excerpt, $paywall_block ) ? strstr( $excerpt, $paywall_block, true ) : '';
+				}
 			}
 
 			// Recreate logic from wp_trim_excerpt (https://developer.wordpress.org/reference/functions/wp_trim_excerpt/).
 			$excerpt = strip_shortcodes( $excerpt );
+			// Strip blocks the content gate withholds from the public before
+			// excerpt_remove_blocks() flattens the block structure.
+			if ( class_exists( 'Newspack\Block_Visibility' ) && method_exists( 'Newspack\Block_Visibility', 'strip_blocks_hidden_from_public' ) ) {
+				$excerpt = \Newspack\Block_Visibility::strip_blocks_hidden_from_public( $excerpt );
+			}
 			$excerpt = excerpt_remove_blocks( $excerpt );
 			$excerpt = wpautop( $excerpt );
 			$excerpt = str_replace( ']]>', ']]&gt;', $excerpt );
@@ -1608,6 +1953,49 @@ class Newspack_Blocks {
 	}
 
 	/**
+	 * Whether a post's card shows when the post was last updated instead of
+	 * when it was published.
+	 *
+	 * @param WP_Post $post Post object.
+	 * @return bool
+	 */
+	public static function should_display_updated_date( $post = null ) {
+		$post = get_post( $post );
+		if ( ! $post ) {
+			return false;
+		}
+		/**
+		 * Filters whether a post's card shows when the post was last updated
+		 * instead of when it was published.
+		 *
+		 * With the Newspack plugin active, a card shows it only where the
+		 * post's byline would too, so a plugin turning it on for a post may
+		 * also need `newspack_updated_date_override`.
+		 *
+		 * @param bool    $display Whether to show the updated date. Default false.
+		 * @param WP_Post $post    Post object.
+		 */
+		return (bool) apply_filters( 'newspack_blocks_display_updated_date', false, $post );
+	}
+
+	/**
+	 * Get the post's updated date to be displayed, formatted.
+	 *
+	 * @param WP_Post $post Post object.
+	 * @return string Formatted date.
+	 */
+	public static function get_formatted_displayed_updated_date( $post = null ) {
+		$post = get_post( $post );
+		/**
+		 * Filters the formatted date a post's card shows as its updated date.
+		 *
+		 * @param string  $date_formatted Formatted date.
+		 * @param WP_Post $post           Post object.
+		 */
+		return apply_filters( 'newspack_blocks_formatted_displayed_updated_date', get_the_modified_date( '', $post ), $post );
+	}
+
+	/**
 	 * Get article meta footer.
 	 *
 	 * @param WP_Post $post Post object.
@@ -1711,6 +2099,44 @@ class Newspack_Blocks {
 		);
 
 		return $combined_caption;
+	}
+
+	/**
+	 * Inline tags this plugin allows in a post subtitle.
+	 *
+	 * The theme owns the subtitle and sanitizes it on write, but a value stored before
+	 * that was in place is still raw, so the plugin filters it on the way out rather
+	 * than trusting the meta.
+	 *
+	 * @return array Allowed tags in wp_kses() form.
+	 */
+	public static function get_post_subtitle_allowed_tags() {
+		return array(
+			'b'      => true,
+			'strong' => true,
+			'i'      => true,
+			'em'     => true,
+			'mark'   => true,
+			'u'      => true,
+			'small'  => true,
+			'sub'    => true,
+			'sup'    => true,
+			'a'      => array(
+				'href'   => true,
+				'target' => true,
+				'rel'    => true,
+			),
+		);
+	}
+
+	/**
+	 * Limit a post subtitle to the inline tags this plugin renders.
+	 *
+	 * @param string $subtitle Raw subtitle.
+	 * @return string Sanitized subtitle.
+	 */
+	public static function sanitize_post_subtitle( $subtitle ) {
+		return wp_kses( (string) $subtitle, self::get_post_subtitle_allowed_tags() );
 	}
 }
 Newspack_Blocks::init();

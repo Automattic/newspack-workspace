@@ -21,7 +21,7 @@
 		a,
 		.current,
 		.dots {
-			border-radius: var(--wp--custom--border--radius-medium);
+			border-radius: var(--wp--custom--border--radius-large);
 			height: var(--wp--custom--spacing--65);
 			padding: 0;
 			text-decoration: none;
@@ -45,7 +45,7 @@
 		}
 
 		.is-arrow-arrow {
-			border-radius: var(--wp--custom--border--radius-medium);
+			border-radius: var(--wp--custom--border--radius-large);
 			display: grid;
 			height: var(--wp--custom--spacing--65);
 			margin: 0;

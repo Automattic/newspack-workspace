@@ -581,9 +581,15 @@ class Content_Gifting {
 	 * Print the gift modal.
 	 */
 	public static function print_gift_modal() {
+		// Modal checkout renders in an iframe with its own modal. Emitting another
+		// modal's markup inside it puts unrelated content in the reader's checkout
+		// (NPPD-2170), so nothing is printed there.
+		if ( class_exists( '\Newspack_Blocks\Modal_Checkout' ) && \Newspack_Blocks\Modal_Checkout::is_modal_checkout() ) {
+			return;
+		}
 		?>
 		<div class="newspack-ui">
-			<div id="newspack-content-gifting-modal" class="newspack-ui__modal-container" data-state="closed">
+			<dialog id="newspack-content-gifting-modal" class="newspack-ui__modal-container" data-state="closed">
 				<div class="newspack-ui__modal-container__overlay"></div>
 				<div class="newspack-ui__modal newspack-ui__modal--small">
 					<header class="newspack-ui__modal__header">
@@ -608,7 +614,7 @@ class Content_Gifting {
 						<div class="newspack-ui__spinner"><span></span></div>
 					</div>
 				</div>
-			</div>
+			</dialog>
 		</div>
 		<?php
 	}
@@ -629,8 +635,7 @@ class Content_Gifting {
 		}
 
 		$restriction_instance = \wc_memberships()->get_restrictions_instance()->get_posts_restrictions_instance();
-		\remove_action( 'wp', spl_object_hash( $restriction_instance ) . 'handle_restriction_modes', 9 );
-		\remove_action( 'wp', spl_object_hash( $restriction_instance ) . 'handle_restriction_modes' ); // For compatibility with Woo Memberships < 1.27.2.
+		Memberships::remove_posts_restriction_handler( $restriction_instance );
 		\add_filter( 'wc_memberships_restrictable_comment_types', '__return_empty_array' );
 		\add_filter( 'newspack_can_render_overlay_gate', '__return_false' );
 	}
@@ -753,20 +758,15 @@ class Content_Gifting {
 	/**
 	 * Get the timestamp of the current expiration period for the gifting reset interval.
 	 *
+	 * Gift limits share the content-gate meters' calendar, so a reader's gifts and free
+	 * views reset at the same moment.
+	 *
 	 * @return int
 	 */
 	public static function get_current_expiration_timestamp() {
 		$interval = self::get_gifting_reset_interval();
-		switch ( $interval ) {
-			case 'day':
-				return strtotime( 'tomorrow' );
-			case 'week':
-				return strtotime( 'next monday' );
-			case 'month':
-				return mktime( 0, 0, 0, gmdate( 'n' ) + 1, 1 );
-			default:
-				return 0;
-		}
+		// Metering reads an empty period as "the gate's own period", which gifting has none of.
+		return $interval ? Metering::get_expiration_time( $interval ) : 0;
 	}
 
 	/**

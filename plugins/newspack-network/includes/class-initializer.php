@@ -27,6 +27,7 @@ class Initializer {
 			Hub\Event_Listeners::init();
 			Hub\Database\Subscriptions::init();
 			Hub\Database\Orders::init();
+			Hub\Database\Event_Log::init();
 			Hub\Newspack_Ads_GAM::init();
 			Hub\Connect_Node::init();
 		}
@@ -63,6 +64,8 @@ class Initializer {
 		Woocommerce\Events::init();
 		Woocommerce\Product_Admin::init();
 		Woocommerce_Subscriptions\My_Account::init();
+		Woocommerce_Subscriptions\Subscribers_Dashboard::init();
+		Woocommerce_Subscriptions\Group_Seats::init();
 		Woocommerce_Memberships\Admin::init();
 		Woocommerce_Memberships\Events::init();
 		Woocommerce_Memberships\Subscriptions_Integration::init();
@@ -80,5 +83,12 @@ class Initializer {
 	 */
 	public static function activation_hook() {
 		add_role( NEWSPACK_NETWORK_READER_ROLE, __( 'Network Reader', 'newspack-network' ) ); // phpcs:ignore
+		// Create the used-nonce table up front on a site already configured as a Hub.
+		// Everywhere else, Nodes included, it is created lazily on first use — which is
+		// also what installs it on a Hub updated in place, since an update does not fire
+		// this hook.
+		if ( Site_Role::is_hub() ) {
+			Used_Nonces::install();
+		}
 	}
 }

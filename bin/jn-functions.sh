@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 if [ $# -eq 0 ]; then
 	echo "No arguments provided"
     echo "Inform the Jurassic Ninja site user and domain"

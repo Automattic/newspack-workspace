@@ -16,6 +16,7 @@ export const INITIAL_STATE = {
 		storyMetaFetchQueue: {},
 		stories: {
 			can_edit: false,
+			can_manage_budgets: false,
 		},
 		isCreatingStory: false,
 		isCreatingBudget: false,

@@ -55,7 +55,7 @@ class My_Account {
 		$option_name = 'newspack_network_subscriptions_has_flushed_rewrite_rules';
 		if ( ! get_option( $option_name ) ) {
 			flush_rewrite_rules(); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.flush_rewrite_rules_flush_rewrite_rules
-			add_option( $option_name, true );
+			update_option( $option_name, true );
 		}
 	}
 

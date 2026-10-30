@@ -251,6 +251,12 @@
 				display: block;
 			}
 		}
+
+		// Shown in place of the publish date; outranks the `.updated` rule above
+		// and themes that hide `.updated`.
+		.updated-date .updated {
+			display: inline;
+		}
 	}
 
 	.avatar {
@@ -271,6 +277,7 @@
 		.cat-links,
 		.cat-links a,
 		.cat-links a:visited,
+		.newspack-tag-labels,
 		figcaption {
 			color: inherit;
 		}
@@ -429,7 +436,8 @@
 	&.has-text-align-center {
 		.cat-links,
 		.entry-meta,
-		.entry-sponsors {
+		.entry-sponsors,
+		.newspack-tag-labels {
 			justify-content: center;
 		}
 
@@ -444,7 +452,8 @@
 		.cat-links,
 		.entry-meta,
 		.entry-sponsors,
-		.sponsor-logos {
+		.sponsor-logos,
+		.newspack-tag-labels {
 			justify-content: flex-end;
 			text-align: right;
 		}
@@ -463,7 +472,12 @@
 	}
 
 	/* Article meta */
-	.cat-links {
+	// `.newspack-tag-labels` shares this rule rather than repeating it, so an
+	// edit to one cannot silently diverge from the other. The wrapper never carries
+	// `cat-links`, which is what keeps a publisher's per-section `.cat-links a`
+	// rule from reaching a tag label; sharing layout here does not give that back.
+	.cat-links,
+	.newspack-tag-labels {
 		display: flex;
 		flex-wrap: wrap;
 		font-size: variables.$font__size-xxs;
@@ -516,7 +530,8 @@
 			.cat-links,
 			.entry-meta,
 			.entry-sponsors,
-			.sponsor-logos {
+			.sponsor-logos,
+			.newspack-tag-labels {
 				justify-content: flex-start;
 			}
 		}
@@ -525,7 +540,8 @@
 			.cat-links,
 			.entry-meta,
 			.entry-sponsors,
-			.sponsor-logos {
+			.sponsor-logos,
+			.newspack-tag-labels {
 				justify-content: flex-end;
 			}
 		}

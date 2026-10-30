@@ -19,4 +19,36 @@
 	--newspack-ui-border-radius-s: 4px;
 	--newspack-ui-border-radius-xs: 3px;
 	--newspack-ui-border-radius-2xs: 2px;
+
+	--newspack-ui-width-content: 720px;
+	--newspack-ui-width-sidebar: var(--newspack-ui-width-xs);
+
+	--newspack-ui-radius-control: var(--newspack-ui-border-radius-l);
+	--newspack-ui-radius-button: var(--newspack-ui-border-radius-l);
+	--newspack-ui-radius-badge: var(--newspack-ui-border-radius-s);
+	--newspack-ui-radius-surface: var(--newspack-ui-border-radius-2xl);
+	--newspack-ui-radius-sheet: 16px;
+	--newspack-ui-radius-pill: 999px;
+
+	--newspack-ui-touch-target: 44px;
+	--newspack-ui-target-size: var(--newspack-ui-spacer-8);
+
+	--newspack-ui-focus-halo-width: 3px;
+	--newspack-ui-focus-halo-mix: 30%;
+
+	--newspack-ui-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+	--newspack-ui-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+	--newspack-ui-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+	--newspack-ui-duration-color: 150ms;
+	--newspack-ui-duration-press: 160ms;
+	--newspack-ui-duration-indicator: 200ms;
+	--newspack-ui-duration-reveal: 200ms;
+	--newspack-ui-duration-modal: 250ms;
+	--newspack-ui-duration-sheet: 400ms;
+	--newspack-ui-duration-snackbar: 400ms;
+	--newspack-ui-ease-snackbar: ease;
+
+	@media ( pointer: coarse ) {
+		--newspack-ui-target-size: var(--newspack-ui-touch-target);
+	}
 }

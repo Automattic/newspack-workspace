@@ -123,10 +123,15 @@
 				span {
 					text-decoration: underline;
 				}
-				&:hover,
 				&:focus {
 					color: np-colors.$neutral-900;
 					background: none;
+				}
+
+				@media ( hover: hover ) and ( pointer: fine ) {
+					&:hover {
+						color: np-colors.$neutral-900;
+					}
 				}
 			}
 			&__tier-tile {

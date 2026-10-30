@@ -246,7 +246,7 @@ class API {
 			[
 				'methods'             => 'PUT',
 				'callback'            => [ __CLASS__, 'update_budget' ],
-				'permission_callback' => [ __CLASS__, 'permission_callback' ],
+				'permission_callback' => [ __CLASS__, 'manage_budgets_permission_callback' ],
 				'args'                => [
 					'id'       => [
 						'description' => __( 'The ID of the budget to update.', 'newspack-story-budget' ),
@@ -313,7 +313,7 @@ class API {
 			[
 				'methods'             => 'POST',
 				'callback'            => [ __CLASS__, 'set_active_budget_order' ],
-				'permission_callback' => [ __CLASS__, 'permission_callback' ],
+				'permission_callback' => [ __CLASS__, 'manage_budgets_permission_callback' ],
 				'args'                => [
 					'ids' => [
 						'description' => __( 'Array of budget IDs to set as active.', 'newspack-story-budget' ),
@@ -332,7 +332,7 @@ class API {
 			[
 				'methods'             => 'POST',
 				'callback'            => [ __CLASS__, 'create_budget' ],
-				'permission_callback' => [ __CLASS__, 'permission_callback' ],
+				'permission_callback' => [ __CLASS__, 'manage_budgets_permission_callback' ],
 				'args'                => [
 					'name' => [
 						'description' => __( 'Name of the budget.', 'newspack-story-budget' ),
@@ -370,12 +370,28 @@ class API {
 	}
 
 	/**
-	 * Permission callback for non-story entities.
+	 * Permission callback for reading budgets and fields.
+	 *
+	 * The floor is `edit_posts`: anyone who can assign a budget to a story may
+	 * list and search budgets. Routes that alter budgets use
+	 * `manage_budgets_permission_callback()` instead.
 	 *
 	 * @return bool
 	 */
 	public static function permission_callback() {
 		return current_user_can( 'edit_posts' );
+	}
+
+	/**
+	 * Permission callback for the routes that create or alter budgets.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 *
+	 * @return bool
+	 */
+	public static function manage_budgets_permission_callback( $request ) {
+		// Only the route's URL segment names the budget; a body-supplied `id` must not steer the object check.
+		return Budgets::current_user_can_manage( $request->get_url_params()['id'] ?? null );
 	}
 
 	/**
@@ -418,6 +434,13 @@ class API {
 	 * @return \WP_Rest_Response
 	 */
 	public static function get_stories( $request ) {
+		// The app sends this back as `since` on its next refresh. Story changes are
+		// stamped with the server clock, so a browser clock running ahead would skip
+		// other users' changes. Taken before the query and two seconds early, so a
+		// change written after its story was stamped, as a status change is, still
+		// comes back on the next refresh.
+		$timestamp = time() - 2;
+
 		$query_args = [
 			'posts_per_page' => $request->get_param( 'limit' ) ?? self::DEFAULT_LIMIT,
 			'offset'         => $request->get_param( 'offset' ) ?? 0,
@@ -461,14 +484,15 @@ class API {
 
 		return rest_ensure_response(
 			[
-				'stories' => array_map(
+				'stories'   => array_map(
 					function( $story ) use ( $include_metadata ) {
 						// If fetching specific stories by ID or modified since a certain timestamp, include metadata.
 						return $story->to_array( $include_metadata );
 					},
 					$stories
 				),
-				'total'   => Budgets::$stories_query->found_posts,
+				'total'     => Budgets::$stories_query->found_posts,
+				'timestamp' => $timestamp,
 			]
 		);
 	}
@@ -534,7 +558,8 @@ class API {
 	public static function get_stories_meta( $request ) {
 		return rest_ensure_response(
 			[
-				'can_edit' => current_user_can( 'edit_others_posts' ),
+				'can_edit'           => current_user_can( 'edit_others_posts' ),
+				'can_manage_budgets' => Budgets::current_user_can_manage(),
 			]
 		);
 	}
@@ -981,14 +1006,15 @@ class API {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public static function update_budget( $request ) {
-		$budget = new Budget( $request->get_param( 'id' ) );
+		$id     = $request->get_url_params()['id'] ?? null;
+		$budget = new Budget( $id );
 		if ( ! $budget->is_valid() ) {
 			return new \WP_Error(
 				'budget_not_found',
 				sprintf(
 					// translators: %d is the budget ID.
 					__( 'Budget with ID "%d" not found.', 'newspack-story-budget' ),
-					$request->get_param( 'id' )
+					$id
 				),
 				[ 'status' => 404 ]
 			);

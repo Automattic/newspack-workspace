@@ -86,6 +86,20 @@ class Republication_Tracker_Tool_Rewrite_Endpoint {
 			exit;
 		}
 
+		// Resolving a post ID says nothing about whether the post may be served,
+		// so the republish view needs its own check, whatever form the request
+		// took.
+		//
+		// The test is deliberately about the post rather than the requester: this
+		// endpoint hands out a redistributable copy of a public article, so an
+		// editor gets no republish view for their own draft either. Changing that
+		// to a capability check would widen what an unauthenticated-by-design
+		// endpoint serves, and the canonical URL this page emits would point at a
+		// permalink that 404s.
+		if ( ! Republication_Tracker_Tool::is_post_republishable( $post_id ) ) {
+			return $template;
+		}
+
 		// Check if the republish widget is disabled for the post.
 		$is_republish_disabled = get_post_meta( $post_id, 'republication-tracker-tool-hide-widget', true );
 
@@ -158,7 +172,7 @@ class Republication_Tracker_Tool_Rewrite_Endpoint {
 			'republication-tracker-tool-republish-template',
 			REPUBLICATION_TRACKER_TOOL_URL . 'assets/republish-template.css',
 			array(),
-			REPUBLICATION_TRACKER_TOOL_VERSION
+			filemtime( REPUBLICATION_TRACKER_TOOL_PATH . 'assets/republish-template.css' )
 		);
 
 		// Enqueue the clipboard utility first.
@@ -166,8 +180,11 @@ class Republication_Tracker_Tool_Rewrite_Endpoint {
 			'republication-tracker-tool-clipboard-utils',
 			REPUBLICATION_TRACKER_TOOL_URL . 'assets/clipboard-utils.js',
 			array(),
-			REPUBLICATION_TRACKER_TOOL_VERSION,
-			true
+			filemtime( REPUBLICATION_TRACKER_TOOL_PATH . 'assets/clipboard-utils.js' ),
+			array(
+				'in_footer' => true,
+				'strategy'  => 'defer',
+			)
 		);
 
 		// Enqueue the republish page scripts.
@@ -175,8 +192,11 @@ class Republication_Tracker_Tool_Rewrite_Endpoint {
 			'republication-tracker-tool-republish-template',
 			REPUBLICATION_TRACKER_TOOL_URL . 'assets/republish-template.js',
 			array( 'republication-tracker-tool-clipboard-utils' ),
-			REPUBLICATION_TRACKER_TOOL_VERSION,
-			true
+			filemtime( REPUBLICATION_TRACKER_TOOL_PATH . 'assets/republish-template.js' ),
+			array(
+				'in_footer' => true,
+				'strategy'  => 'defer',
+			)
 		);
 	}
 }

@@ -1,0 +1,390 @@
+<?php
+/**
+ * Keep non-public block content out of auto-generated excerpts.
+ *
+ * @package Newspack
+ */
+
+namespace Newspack;
+
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * Content_Gate_Excerpt class.
+ */
+class Content_Gate_Excerpt {
+
+	/**
+	 * Posts whose excerpt text is being built, keyed by ID.
+	 *
+	 * @var true[]
+	 */
+	private static array $building = [];
+
+	/**
+	 * Initialize hooks.
+	 */
+	public static function init() {
+		// Core registers wp_trim_excerpt() here at priority 10. Replace it with a
+		// wrapper that hands core the same work over sanitized content, rather than
+		// reimplementing the trimming: two copies of that logic already exist in this
+		// monorepo and both have drifted from core.
+		$removed = remove_filter( 'get_the_excerpt', 'wp_trim_excerpt', 10 );
+		if ( ! $removed ) {
+			// Not a gate bypass: core's callback would then run first at this same
+			// priority, and the auto branch below ignores whatever $text it produced,
+			// rebuilding from the sanitized clone either way. The cost is a duplicate
+			// trim, so this is a performance signal rather than a correctness one.
+			Logger::log( 'Could not remove core wp_trim_excerpt filter; excerpts are trimmed twice.', 'CONTENT-GATE-EXCERPT' );
+		}
+		add_filter( 'get_the_excerpt', [ __CLASS__, 'filter_get_the_excerpt' ], 10, 2 );
+	}
+
+	/**
+	 * Build the excerpt from content with non-public blocks removed.
+	 *
+	 * @param string   $text The post excerpt, empty when auto-generating.
+	 * @param \WP_Post $post The post.
+	 * @return string
+	 */
+	public static function filter_get_the_excerpt( $text, $post = null ) {
+		$resolved = $post instanceof \WP_Post ? $post : get_post( $post );
+
+		// Handing an unresolvable value to core would not fail -- wp_trim_excerpt()
+		// calls get_the_content( '', false, null ), which falls back to $GLOBALS['post']
+		// and builds an excerpt from whatever the loop has set up, unsanitized. A filter
+		// whose job is withholding content must not answer for a post it was never
+		// asked about, so return $text and let the caller have nothing.
+		if ( ! $resolved instanceof \WP_Post ) {
+			return $text;
+		}
+
+		// A post the gate withholds outside its own article page gets its excerpt
+		// cut from the post's free blocks, ending where the teaser ends. The
+		// staged substitution cannot serve this on its own: it is written when
+		// `the_post` fires, and an excerpt is not always built inside a loop —
+		// core's Latest Posts block walks get_posts() results and asks for each
+		// excerpt by post object.
+		// Two surfaces own their own restriction and must not be answered over.
+		// REST is Content_Gate::filter_rest_response()'s, which evaluates
+		// entitlement per requester and leaves an editor's context=edit payload
+		// whole. Feeds are Content_Gate_Advanced_Settings', which honours a
+		// publisher setting that includes leaving items unrestricted — withholding
+		// here would override that choice with no way to switch it off, and in an
+		// excerpt feed it is this filter, not the feed layer, that produces the
+		// item. Content_Gate::restrict_post() stands down for both for the same
+		// reasons.
+		//
+		// The REST stand-down covers a read, not a render. The posts controller's
+		// shape is a read: it sets each item up with setup_postdata() and serves
+		// it, staging nothing. A route running a real loop — newspack-blocks'
+		// load-more endpoint is one — renders like a page, and
+		// Content_Gate::withhold_post_in_loop(), which restrict_post() hands the
+		// loop's posts to, has already staged the teaser. Answer for that post
+		// rather than leaving its excerpt to the substitution filter further down
+		// the content chain, which a plugin can remove.
+		$rest_read = Content_Gate::is_dispatching_rest() && ! Content_Gate::has_staged_restriction( $resolved->ID );
+		$teaser    = ( is_feed() || $rest_read )
+			? null
+			: Content_Gate::get_teaser_outside_article( $resolved );
+		if ( null !== $teaser ) {
+			// A hand-written excerpt is the author's own words about a post they
+			// chose to gate, and stands, exactly as it does below.
+			if ( '' !== trim( (string) $resolved->post_excerpt ) ) {
+				return wp_trim_excerpt( $resolved->post_excerpt, $resolved );
+			}
+			$text = self::get_free_excerpt_text( $resolved, $teaser );
+
+			/** This filter is documented in wp-includes/formatting.php */
+			$excerpt_length = (int) apply_filters( 'excerpt_length', (int) _x( '55', 'excerpt_length' ) ); // phpcs:ignore WordPress.WP.I18n.MissingArgDomain
+			/** This filter is documented in wp-includes/formatting.php */
+			$excerpt_more = apply_filters( 'excerpt_more', ' [&hellip;]' );
+			$excerpt      = wp_trim_words( $text, $excerpt_length, $excerpt_more );
+
+			// The overlay layout ends its teaser with an ellipsis; the excerpt ends
+			// with the site's own excerpt_more in its place.
+			if ( '' !== $excerpt && self::has_overlay_ellipsis( $teaser ) && ! str_ends_with( $excerpt, $excerpt_more ) ) {
+				$excerpt .= $excerpt_more;
+			}
+
+			/** This filter is documented in wp-includes/formatting.php */
+			return apply_filters( 'wp_trim_excerpt', $excerpt, '' );
+		}
+
+		// Core returns a non-empty $text untouched; the branches below deliberately
+		// do not. Confine that difference to posts that actually use the gate, so on
+		// every other post -- including every post on a site with gates switched off,
+		// where this filter still replaces core's -- an excerpt supplied by a filter
+		// below priority 10 survives exactly as it would without Newspack installed.
+		if ( ! Block_Visibility::has_access_control( (string) $resolved->post_content ) ) {
+			return wp_trim_excerpt( $text, $post );
+		}
+
+		// Core is only ever handed the sanitized clone, in both branches below. Any
+		// path that lets core rebuild from the post reaches post_content, so handing
+		// it the real post anywhere would put gated blocks back in the excerpt.
+		$sanitized               = clone $resolved;
+		$sanitized->post_content = Block_Visibility::strip_blocks_hidden_from_public( $resolved->post_content );
+
+		// wp_trim_excerpt() opens with get_post(), which ends in WP_Post::filter( 'raw' ).
+		// That returns $this only when the property already reads 'raw'; on any other
+		// value it re-reads the row by ID and the clone -- with its sanitized content --
+		// is silently discarded. A display-form post reaching this filter is enough.
+		$sanitized->filter = 'raw';
+
+		// A manually written excerpt is the author's own words; core returns it
+		// untouched and so do we. Pass the post's own excerpt rather than $text: by
+		// the time this runs $text is whatever the filter chain holds, and core
+		// returns a non-empty value verbatim, so an upstream filter deriving $text
+		// from post_content would put gated blocks straight into the teaser. The auto
+		// branch below refuses to trust $text for the same reason; this keeps the two
+		// consistent. The cost is that on a gated post a filter's substitution loses
+		// to the author's excerpt, which is the conservative way to lose.
+		if ( '' !== trim( (string) $resolved->post_excerpt ) ) {
+			return wp_trim_excerpt( $resolved->post_excerpt, $sanitized );
+		}
+
+		// Pass an empty $text so core rebuilds from the sanitized post.
+		// wp_trim_excerpt() returns $text unchanged when it is non-empty, so
+		// forwarding a value another filter already produced would skip the
+		// sanitized content entirely.
+		//
+		// Gated blocks never contribute to a teaser. A post whose readable content is
+		// entirely gated gets a blank excerpt, matching what its article page already
+		// shows a non-member.
+		return wp_trim_excerpt( '', $sanitized );
+	}
+
+	/**
+	 * The excerpt text of a withheld post's free part.
+	 *
+	 * The teaser is rendered HTML, which excerpt_remove_blocks() cannot sort: it
+	 * needs block delimiters to drop captions and the like. So the free part is
+	 * found in the post's own blocks, and core's excerpt steps run over those.
+	 *
+	 * This repeats what core does to excerpts instead of calling
+	 * wp_trim_excerpt(). wp_trim_excerpt() runs the text through 'the_content',
+	 * where the gate would swap the teaser back in. The cost is that plugins hooked to
+	 * 'the_content' don't change a gated excerpt. Turning the gate off for that
+	 * call would include those plugins, but any of those plugins that loads this
+	 * post's content while it runs would get the paid text.
+	 *
+	 * @param \WP_Post $post   The withheld post.
+	 * @param string   $teaser Its teaser, from Content_Gate::get_teaser_outside_article().
+	 * @return string Plain text, untrimmed.
+	 */
+	public static function get_free_excerpt_text( \WP_Post $post, string $teaser ): string {
+		if ( '' === trim( $teaser ) ) {
+			return '';
+		}
+
+		// Cached beside the teaser and for the same reason: this renders the free
+		// blocks, and a listing pays it once per card. The teaser's hash stands in
+		// for the gate layout and settings it was sliced by.
+		$cache_key = md5( wp_json_encode( [ 'excerpt', $post->ID, $post->post_modified_gmt, md5( $teaser ) ] ) );
+		$cached    = wp_cache_get( $cache_key, Content_Gate::WITHHELD_TEASER_CACHE_GROUP );
+		if ( is_string( $cached ) ) {
+			return $cached;
+		}
+
+		// A free block that loops over this post re-fires `the_post` for it while
+		// its blocks render below, and that asks for this excerpt again.
+		if ( isset( self::$building[ $post->ID ] ) ) {
+			return '';
+		}
+		self::$building[ $post->ID ] = true;
+		try {
+			// Cut for the anonymous reader the teaser was built for: the result is
+			// cached for every reader, and a block hidden from the current one
+			// renders empty and would be kept whole, paid text and all.
+			$text = Content_Gate::in_listing_context(
+				function () use ( $post, $teaser ) {
+					return self::build_free_excerpt_text( $post, $teaser );
+				}
+			);
+		} catch ( \Throwable $e ) {
+			// A post whose excerpt can't be built would otherwise fail every page
+			// that lists it. The teaser's own text is free to show, captions and
+			// all. Not cached, so the next request tries again.
+			Logger::log( 'Could not build the excerpt for post ' . $post->ID . ': ' . $e->getMessage(), 'CONTENT-GATE-EXCERPT' );
+			$words = self::split_words( $teaser );
+			if ( self::has_overlay_ellipsis( $teaser ) ) {
+				array_pop( $words );
+			}
+			return implode( ' ', $words );
+		} finally {
+			unset( self::$building[ $post->ID ] );
+		}
+
+		wp_cache_set( $cache_key, $text, Content_Gate::WITHHELD_TEASER_CACHE_GROUP, HOUR_IN_SECONDS );
+		return $text;
+	}
+
+	/**
+	 * Build the text {@see self::get_free_excerpt_text()} caches.
+	 *
+	 * @param \WP_Post $post   The withheld post.
+	 * @param string   $teaser Its teaser.
+	 * @return string
+	 */
+	private static function build_free_excerpt_text( \WP_Post $post, string $teaser ): string {
+		// From the row: in a loop, Content_Gate::withhold_post_in_loop() may already
+		// have replaced this instance's post_content with the excerpt text.
+		$content = Block_Visibility::strip_blocks_hidden_from_public( (string) get_post_field( 'post_content', $post->ID, 'raw' ) );
+		$content = self::get_free_markup( $content, $teaser );
+		$content = strip_shortcodes( $content );
+		// Can run inside `the_post` for a withheld post, so a block added to
+		// `excerpt_allowed_blocks` must not build an excerpt itself; core's own
+		// docs for that filter set the same rule, for the same infinite loop.
+		$content = excerpt_remove_blocks( $content );
+		$content = excerpt_remove_footnotes( $content );
+		$content = convert_smilies( capital_P_dangit( wptexturize( $content ) ) );
+
+		return implode( ' ', self::split_words( $content ) );
+	}
+
+	/**
+	 * The post's own markup for the part its teaser shows.
+	 *
+	 * Whole blocks are taken in order while their rendered text continues the
+	 * teaser's, so the cut holds for both teaser layouts (paragraph count and more
+	 * tag) without asking which one built it. A container the teaser ends inside
+	 * is entered and its inner blocks taken the same way. Any other block the
+	 * teaser does not fully contain ends the free part, so a block that renders
+	 * differently from the teaser shortens the excerpt and never reaches past it.
+	 *
+	 * @param string $content Raw post content.
+	 * @param string $teaser  Teaser HTML.
+	 * @return string Raw markup.
+	 */
+	private static function get_free_markup( string $content, string $teaser ): string {
+		$target = self::comparable_text( $teaser );
+		if ( self::has_overlay_ellipsis( $teaser ) ) {
+			$target = substr( $target, 0, -strlen( self::comparable_text( '[&hellip;]' ) ) );
+		}
+
+		if ( has_blocks( $content ) ) {
+			// A classic chunk in a block post parses as one block of several
+			// paragraphs, and the teaser counts those paragraphs like any others.
+			$blocks = [];
+			foreach ( parse_blocks( $content ) as $block ) {
+				if ( null === $block['blockName'] ) {
+					array_push( $blocks, ...self::paragraph_blocks( $block['innerHTML'] ) );
+				} else {
+					$blocks[] = $block;
+				}
+			}
+		} else {
+			// A classic post is one freeform block. Its paragraphs, as the teaser's
+			// wpautop() pass makes them, stand in for blocks.
+			$blocks = self::paragraph_blocks( wpautop( $content ) );
+		}
+
+		// Core's excerpt renders these one inner block at a time, never the wrapper
+		// itself, so they are compared that way too: a render filter on the wrapper
+		// does not apply there.
+		$wrappers = (array) apply_filters( 'excerpt_allowed_wrapper_blocks', [ 'core/columns', 'core/column', 'core/group' ] );
+
+		$seen = '';
+		$kept = '';
+		self::take_free_blocks( $blocks, $target, $wrappers, $seen, $kept );
+		return $kept;
+	}
+
+	/**
+	 * Freeform blocks for each paragraph of some HTML, split as the teaser splits it.
+	 *
+	 * @param string $html HTML.
+	 * <PERSON_dad35182025b> array Parsed blocks.
+	 */
+	private static function paragraph_blocks( string $html ): array {
+		$blocks = [];
+		foreach ( preg_split( '#(?<=</p>)#', $html, -1, PREG_SPLIT_NO_EMPTY ) as $paragraph ) {
+			$blocks[] = [
+				'blockName'    => null,
+				'attrs'        => [],
+				'innerBlocks'  => [],
+				'innerHTML'    => $paragraph,
+				'innerContent' => [ $paragraph ],
+			];
+		}
+		return $blocks;
+	}
+
+	/**
+	 * Append blocks to $kept while their text continues the teaser's.
+	 *
+	 * @param array  $blocks Parsed blocks.
+	 * @param string $target   The teaser's comparable text.
+	 * @param array  $wrappers Names of the blocks always entered.
+	 * @param string $seen     Comparable text of the blocks kept so far.
+	 * @param string $kept     Markup of the blocks kept so far.
+	 * @return bool Whether the free part has ended.
+	 */
+	private static function take_free_blocks( array $blocks, string $target, array $wrappers, string &$seen, string &$kept ): bool {
+		foreach ( $blocks as $block ) {
+			if ( $seen === $target ) {
+				return true;
+			}
+			if ( in_array( $block['blockName'], $wrappers, true ) ) {
+				if ( self::take_free_blocks( $block['innerBlocks'], $target, $wrappers, $seen, $kept ) ) {
+					return true;
+				}
+				continue;
+			}
+			$markup = serialize_block( $block );
+			// The text steps of the teaser's `newspack_gate_content` pass, called
+			// directly: callbacks on that filter expect a whole body, not one block.
+			$text = self::comparable_text( convert_smilies( do_shortcode( capital_P_dangit( wptexturize( render_block( $block ) ) ) ) ) );
+			// A container that renders no text is entered rather than kept whole:
+			// a render filter can empty it while its inner blocks still hold text.
+			if ( ( '' !== $text || empty( $block['innerBlocks'] ) ) && str_starts_with( $target, $seen . $text ) ) {
+				$seen .= $text;
+				$kept .= $markup;
+				continue;
+			}
+			if ( ! empty( $block['innerBlocks'] ) && ! self::take_free_blocks( $block['innerBlocks'], $target, $wrappers, $seen, $kept ) ) {
+				continue;
+			}
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Rendered HTML's text with tags, entities and whitespace taken out, so a block
+	 * rendered on its own compares with the same block inside the teaser.
+	 *
+	 * @param string $html Rendered HTML.
+	 * @return string
+	 */
+	private static function comparable_text( string $html ): string {
+		// The `u` pattern fails on invalid UTF-8, which a free block can render; the
+		// excerpt keeps the block's own markup, so only this comparison drops it.
+		$html = wp_check_invalid_utf8( $html, true );
+		return preg_replace( '/\s+/u', '', html_entity_decode( wp_strip_all_tags( $html ), ENT_QUOTES | ENT_HTML5, 'UTF-8' ) );
+	}
+
+	/**
+	 * Whether a teaser ends with the ellipsis the overlay layout appends.
+	 *
+	 * @param string $teaser Teaser HTML.
+	 * @return bool
+	 */
+	public static function has_overlay_ellipsis( string $teaser ): bool {
+		return str_ends_with( rtrim( wp_strip_all_tags( $teaser ) ), '[&hellip;]' );
+	}
+
+	/**
+	 * Split rendered HTML into words, as wp_trim_words() does. Block-level closing
+	 * tags count as breaks, so one block's text is not glued to the next.
+	 *
+	 * @param string $html Rendered HTML.
+	 * @return string[]
+	 */
+	private static function split_words( string $html ): array {
+		$html = preg_replace( '#(</(?:p|div|figure|figcaption|li|h[1-6]|blockquote|pre|td|th|summary)>)#i', '$1 ', $html );
+		return preg_split( '/[\n\r\t ]+/', wp_strip_all_tags( $html ), -1, PREG_SPLIT_NO_EMPTY );
+	}
+}
+Content_Gate_Excerpt::init();

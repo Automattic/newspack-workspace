@@ -1,122 +1,263 @@
 @use "mixins";
 
+:where(.newspack-ui__modal-container) {
+	color: inherit;
+}
+
 .newspack-ui {
+	.newspack-ui__modal__header h2:not([class*="font-size"]):not(#{mixins.$font-size-classes}) {
+		font-size: var(--newspack-ui-font-size-title-m);
+		letter-spacing: var(--newspack-ui-letter-spacing-title-m);
+		line-height: var(--newspack-ui-line-height-title-m);
+	}
+
 	&__modal-container {
-		position: fixed;
-		z-index: -1;
-		inset: 0;
-		overflow: hidden;
-		display: flex;
+		--newspack-ui-modal-close-size: var(--newspack-ui-spacer-8);
+		--newspack-ui-modal-max-height: 90%;
+
 		align-items: center;
+		background: transparent;
+		border: 0;
+		bottom: var(--newspack-ui-keyboard-offset, 0);
+		display: flex;
+		height: auto;
+		inset-inline: 0;
 		justify-content: center;
-		visibility: hidden;
+		margin: 0;
+		max-height: none;
+		max-width: none;
+		overflow: hidden;
+		overflow: clip;
+		padding: 0;
 		pointer-events: none;
+		position: fixed;
+		top: 0;
+		transition:
+			visibility 0s linear var(--newspack-ui-duration-sheet),
+			z-index 0s linear var(--newspack-ui-duration-sheet);
+		visibility: hidden;
+		width: 100%;
+		z-index: -1;
+
+		&[tabindex="-1"]:focus,
+		:is(h1, h2, h3, h4, h5, h6)[tabindex="-1"]:focus {
+			outline: none;
+		}
+
+		&::backdrop {
+			background: transparent;
+		}
 		&__overlay {
-			position: absolute;
-			z-index: 1;
+			background: var(--newspack-ui-color-overlay-50);
 			inset: 0;
 			opacity: 0;
-			background: var(--newspack-ui-color-overlay-70);
-			transition: opacity 0.125s linear;
+			position: absolute;
+			transition: opacity var(--newspack-ui-duration-modal) var(--newspack-ui-ease-out);
+			z-index: 1;
 		}
 		.newspack-ui__modal {
-			position: relative;
-			z-index: 2;
-			width: 100%;
-			transform: translateY(50px);
-			opacity: 0;
-			transition: transform 0.125s linear, opacity 0.125s linear;
 			@include mixins.newspack-ui-elevation( 3 );
+
+			opacity: 0;
+			position: relative;
+			transform: scale(0.96);
+			transition:
+				opacity var(--newspack-ui-duration-modal) var(--newspack-ui-ease-out),
+				transform var(--newspack-ui-duration-modal) var(--newspack-ui-ease-out);
+			width: 100%;
+			z-index: 2;
+
+			@media ( prefers-reduced-motion: reduce ) {
+				transform: none;
+			}
 		}
 		&[data-state="open"] {
-			z-index: 99999;
-			visibility: visible;
 			pointer-events: auto;
+			transition: visibility 0s, z-index 0s;
+			visibility: visible;
+			z-index: 99999;
 			.newspack-ui__modal-container__overlay {
 				opacity: 1;
 			}
 			.newspack-ui__modal {
 				opacity: 1;
-				transform: translateY(0);
+				transform: none;
 			}
 			@at-root body:has(&) {
 				overflow: hidden;
 			}
 		}
+
+		@include mixins.media-below( mobile ) {
+			--newspack-ui-width-m: 100%;
+			--newspack-ui-width-s: 100%;
+			--newspack-ui-modal-close-size: var(--newspack-ui-touch-target);
+			--newspack-ui-modal-max-height: calc(100% - var(--newspack-ui-spacer-5));
+
+			align-items: flex-end;
+
+			.newspack-ui__modal {
+				border-radius: var(--newspack-ui-radius-sheet) var(--newspack-ui-radius-sheet) 0 0;
+				box-shadow: 0 var(--newspack-ui-spacer-5) var(--newspack-ui-color-surface);
+				opacity: 1;
+				padding-bottom: env(safe-area-inset-bottom);
+				transform: translateY(100%);
+				transition: transform var(--newspack-ui-duration-sheet) var(--newspack-ui-ease-drawer);
+
+				@media ( prefers-reduced-motion: reduce ) {
+					opacity: 0;
+					transform: none;
+					transition: opacity var(--newspack-ui-duration-modal) ease;
+				}
+			}
+
+			.newspack-ui__modal__header {
+				padding-top: var(--newspack-ui-spacer-6);
+				touch-action: pinch-zoom;
+				user-select: none;
+
+				&::before {
+					background-color: color-mix(in srgb, currentcolor 23%, transparent);
+					border-radius: var(--newspack-ui-radius-pill);
+					content: "";
+					height: var(--newspack-ui-spacer-half);
+					inset-inline: 0;
+					margin-inline: auto;
+					pointer-events: none;
+					position: absolute;
+					top: var(--newspack-ui-spacer-1);
+					width: var(--newspack-ui-spacer-8);
+				}
+			}
+
+			&__overlay {
+				transition-duration: var(--newspack-ui-duration-sheet);
+			}
+
+			&[data-state="open"] .newspack-ui__modal {
+				opacity: 1;
+				transform: none;
+			}
+		}
 	}
 
 	&__modal {
-		// Modal styles
-		background: var(--newspack-ui-color-body-bg);
-		border-radius: var(--newspack-ui-border-radius-l);
+		--newspack-ui-modal-width: var(--newspack-ui-width-m);
+
+		background: var(--newspack-ui-color-surface);
+		border-radius: var(--newspack-ui-radius-surface);
+		color: var(--newspack-ui-color-text);
 		display: flex;
 		flex-direction: column;
-		max-height: 90%;
-		max-width: var(--newspack-ui-width-m);
+		max-height: var(--newspack-ui-modal-max-height, 90%);
+		max-width: var(--newspack-ui-modal-width);
 		overflow: auto;
+		overscroll-behavior: contain;
 
-		// Modal header & footer
 		&__header,
 		&__footer {
-			padding: var(--newspack-ui-spacer-4) var(--newspack-ui-spacer-5);
+			padding: var(--newspack-ui-spacer-4) var(--newspack-ui-spacer-5) 0;
 		}
 
 		&__header {
-			align-items: center;
-			background: var(--newspack-ui-color-body-bg);
-			border-bottom: 1px solid var(--newspack-ui-color-border);
-			color: var(--newspack-ui-color-neutral-90);
+			align-items: flex-start;
+			background: var(--newspack-ui-color-surface);
+			color: var(--newspack-ui-color-text);
 			display: flex;
+			gap: var(--newspack-ui-spacer-3);
 			justify-content: space-between;
 			position: sticky;
 			top: 0;
 			z-index: 10;
 
+			&::after {
+				background: linear-gradient(var(--newspack-ui-color-surface), transparent);
+				content: "";
+				height: var(--newspack-ui-spacer-6);
+				inset-inline: 0;
+				opacity: 0;
+				pointer-events: none;
+				position: absolute;
+				top: 100%;
+			}
+
 			h2 {
 				color: inherit;
 				font-family: var(--newspack-ui-font-family);
-				font-size: var(--newspack-ui-font-size-s);
-				line-height: var(--newspack-ui-line-height-s);
+				font-weight: var(--newspack-ui-font-weight-strong);
 				margin: 0;
+
+				&[tabindex="-1"]:focus {
+					outline: none;
+				}
 			}
 		}
 
 		&__close {
 			.newspack-ui__modal__header & {
-				margin: -6px -6px -6px 0 !important; // Accounts for the header padding. TODO: Can this be improved to work w/variables?
+				--newspack-ui-button-bg: transparent;
+				--newspack-ui-button-bg-hover: var(--newspack-ui-color-neutral-fill);
+				--newspack-ui-button-bg-pressed: var(--newspack-ui-color-neutral-fill-hover);
+				--newspack-ui-modal-close-block-margin: calc(( var(--newspack-ui-font-size-title-m) * var(--newspack-ui-line-height-title-m) - var(--newspack-ui-modal-close-size, var(--newspack-ui-spacer-8)) ) / 2);
+
+				border-radius: var(--newspack-ui-radius-pill);
+				flex: none;
+				height: var(--newspack-ui-modal-close-size, var(--newspack-ui-spacer-8));
+				margin-block: var(--newspack-ui-modal-close-block-margin) !important;
+				margin-inline: auto calc(( var(--newspack-ui-modal-close-size, var(--newspack-ui-spacer-8)) - var(--newspack-ui-spacer-4) ) / -2) !important;
+				position: relative;
+				width: var(--newspack-ui-modal-close-size, var(--newspack-ui-spacer-8));
+				z-index: 1;
+
+				svg {
+					height: var(--newspack-ui-spacer-4);
+					width: var(--newspack-ui-spacer-4);
+				}
 			}
 		}
 
 		&__content {
 			backface-visibility: visible;
-			color: var(--newspack-ui-color-neutral-90);
-			padding: var(--newspack-ui-spacer-5);
+			color: var(--newspack-ui-color-text);
+			padding: var(--newspack-ui-spacer-4) var(--newspack-ui-spacer-5) var(--newspack-ui-spacer-5);
 
-			// Make sure there's enough space above the first button in modals.
-			// Ignore a tag buttons as they will never be first.
-			.newspack-ui__button:not(:first-child, a.newspack-ui__button):first-of-type {
+			.newspack-ui__button:not(:first-child, a.newspack-ui__button, .newspack-ui__button--icon):first-of-type {
 				margin-top: var(--newspack-ui-spacer-5);
 			}
 		}
 
 		&__footer {
-			background: var(--newspack-ui-color-neutral-5);
-			color: var(--newspack-ui-color-neutral-60);
-			font-size: var(--newspack-ui-font-size-xs);
-			line-height: var(--newspack-ui-line-height-xs);
+			color: var(--newspack-ui-color-text-muted);
+			font-size: var(--newspack-ui-font-size-caption);
+			line-height: var(--newspack-ui-line-height-caption);
+			margin-top: calc(var(--newspack-ui-spacer-5) * -1 + var(--newspack-ui-spacer-3));
+			padding-bottom: var(--newspack-ui-spacer-5);
+			padding-top: 0;
+			text-wrap: pretty;
+
 			a {
+				color: inherit;
 				text-decoration: underline;
+				text-underline-offset: 2px;
 			}
 		}
 
-		// Narrow modal
-		&--small {
-			max-width: var(--newspack-ui-width-s);
+		&__header[hidden] {
+			display: none;
 		}
 
-		// Contents
-		h3 {
-			font-size: var(--newspack-ui-font-size-s);
+		&__header[hidden] + &__content {
+			padding-top: var(--newspack-ui-spacer-5);
+			text-align: center;
+			text-wrap: balance;
+		}
+
+		&--small {
+			--newspack-ui-modal-width: var(--newspack-ui-width-s);
+		}
+
+		&--medium {
+			--newspack-ui-modal-width: var(--newspack-ui-width-m);
 		}
 
 		&__footer,
@@ -137,7 +278,88 @@
 		h5,
 		h6,
 		strong {
-			font-weight: 600;
+			font-weight: var(--newspack-ui-font-weight-strong);
 		}
 	}
+}
+
+.newspack-ui__modal-container .newspack-ui__modal.newspack-ui__modal--steps {
+	display: block;
+
+	@include mixins.media( mobile ) {
+		@include mixins.newspack-ui-elevation( 3, true );
+
+		background: transparent;
+		border-radius: 0;
+		box-shadow: none;
+		max-height: none;
+		max-width: calc(100% - var(--newspack-ui-spacer-6));
+		overflow: visible;
+		width: auto;
+	}
+}
+
+.newspack-ui__modal-container .newspack-ui__modal__steps {
+	display: grid;
+
+	@include mixins.media( mobile ) {
+		background: var(--newspack-ui-color-surface);
+		clip-path: inset(var(--newspack-ui-modal-inset-y, 0) var(--newspack-ui-modal-inset-x, 0) round var(--newspack-ui-radius-surface));
+		max-height: calc(100dvh - var(--newspack-ui-spacer-9));
+		overflow: auto;
+		overscroll-behavior: contain;
+		transition: clip-path var(--newspack-ui-duration-modal) var(--newspack-ui-ease-in-out);
+
+		@media ( prefers-reduced-motion: reduce ) {
+			transition: none;
+		}
+	}
+}
+
+.newspack-ui__modal-container .newspack-ui__modal__step {
+	--newspack-ui-modal-step-delay: 0ms;
+	--newspack-ui-follow-on-delay: calc(var(--newspack-ui-modal-step-delay) + var(--newspack-ui-duration-reveal) / 2);
+
+	display: flex;
+	flex-direction: column;
+	grid-area: 1 / 1;
+	width: var(--newspack-ui-modal-width);
+
+	@include mixins.media( mobile ) {
+		--newspack-ui-modal-step-delay: 100ms;
+
+		place-self: center;
+		transition:
+			opacity var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out) var(--newspack-ui-modal-step-delay),
+			visibility 0s;
+		width: min(var(--newspack-ui-modal-width), calc(100vw - var(--newspack-ui-spacer-6)));
+
+		&[inert] {
+			opacity: 0;
+			transition:
+				opacity 120ms var(--newspack-ui-ease-out),
+				visibility 0s linear 120ms;
+			visibility: hidden;
+		}
+	}
+
+	@include mixins.media-below( mobile ) {
+		transition: opacity var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out);
+
+		@starting-style {
+			opacity: 0;
+		}
+
+		&[inert] {
+			display: none;
+		}
+	}
+}
+
+.newspack-ui__modal-container.is-resetting-steps :is(.newspack-ui__modal__steps, .newspack-ui__modal__step) {
+	transition: none !important;
+}
+
+.newspack-ui__modal-container :is(.newspack-ui__modal, .newspack-ui__modal__steps).is-overflowing-start .newspack-ui__modal__header::after {
+	opacity: 1;
 }

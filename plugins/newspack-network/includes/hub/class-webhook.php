@@ -8,6 +8,7 @@
 namespace Newspack_Network\Hub;
 
 use Newspack_Network\Accepted_Actions;
+use Newspack_Network\Used_Nonces;
 use Newspack_Network\Debugger;
 use WP_REST_Response;
 use WP_REST_Request;
@@ -87,6 +88,12 @@ class Webhook {
 			return new WP_REST_Response( array( 'error' => 'INVALID_SIGNATURE' ), 403 );
 		}
 
+		// A delivery the Node could sign shows it holds its key, which also covers
+		// Nodes linked before pairing was recorded or by pasting the key.
+		if ( ! $node->is_paired() ) {
+			$node->mark_paired();
+		}
+
 		$verified_data = json_decode( $verified_data, true );
 
 		if ( empty( $verified_data ) ) {
@@ -97,12 +104,146 @@ class Webhook {
 		Debugger::log( 'Successfully verified data' );
 		Debugger::log( $verified_data );
 
+		// Claim this delivery's nonce before processing. The claim holds the
+		// delivery as pending until processing completes, so each delivery is
+		// handled at most once no matter how many times, or how close together,
+		// its copies arrive.
+		$claim = Used_Nonces::claim( $nonce );
+		if ( Used_Nonces::STATUS_COMPLETED === $claim ) {
+			// Already processed to completion. Acknowledge so the Node stops
+			// retrying, but do not run the event a second time.
+			Debugger::log( 'Webhook nonce already completed; acknowledging without reprocessing.' );
+			return new WP_REST_Response( 'success' );
+		}
+		if ( Used_Nonces::CLAIMED !== $claim ) {
+			// Pending (an attempt to process this delivery is on record with no
+			// outcome yet), or no state could be recorded at all. Either way, ask
+			// the Node to retry rather than process a delivery that may also be
+			// handled elsewhere. The two cases carry distinct errors: the Node
+			// records the error string on its request, so its log tells a held
+			// delivery apart from a store that cannot be written.
+			Debugger::log( 'Webhook delivery not claimable (' . ( $claim ?? 'no recorded state' ) . '); requesting retry.' );
+			$error = Used_Nonces::STATUS_PENDING === $claim ? 'Delivery is already being processed.' : 'Could not record delivery.';
+			return new WP_REST_Response( array( 'error' => $error ), 500 );
+		}
+
 		$incoming_event_class = 'Newspack_Network\\Incoming_Events\\' . $incoming_events[ $action ];
 
-		$incoming_event = new $incoming_event_class( $site, $verified_data, $timestamp );
+		// Read before processing: a delivery can change the author's role, and one
+		// that promotes them must not clear the condition the log reports.
+		$author_was_administrator = self::node_author_is_administrator( $node );
 
-		$incoming_event->process_in_hub();
+		// The claim is held while the event is processed. Processing that fails
+		// with nothing persisted releases it and returns a 5xx, so the Node's
+		// retry can reprocess: a throw is caught below, and a failed Event Log
+		// write is caught by the `false` return. A throw after the event is
+		// persisted holds the claim instead (see the catch). A delivery already
+		// in the Event Log (`null`) is a no-op whose handlers do not re-run — the
+		// pipeline's existing at-most-once behaviour — and is acknowledged as
+		// success.
+		try {
+			$incoming_event = new $incoming_event_class( $site, $verified_data, $timestamp );
+			$persisted      = $incoming_event->process_in_hub();
+		} catch ( \Throwable $e ) {
+			// Release only if nothing was persisted. Once the Event Log row
+			// exists, a retry cannot redo the work that failed — the pipeline
+			// does not re-run handlers for a delivery already on record — so
+			// holding the claim surfaces the failure as a failed request instead
+			// of letting the retry be acknowledged as success.
+			if ( empty( $incoming_event ) || ! $incoming_event->is_persisted ) {
+				if ( Used_Nonces::release( $nonce ) ) {
+					Debugger::log( 'Webhook processing threw; released nonce for retry: ' . $e->getMessage() );
+				} else {
+					Debugger::log( 'Webhook processing threw; the claim could not be released and stays pending: ' . $e->getMessage() );
+				}
+			} else {
+				Debugger::log( 'Webhook processing threw after the event was persisted; holding the claim: ' . $e->getMessage() );
+			}
+			return new WP_REST_Response( array( 'error' => 'Could not process delivery.' ), 500 );
+		}
+
+		if ( false === $persisted ) {
+			if ( Used_Nonces::release( $nonce ) ) {
+				Debugger::log( 'Webhook delivery could not be recorded; released nonce for retry.' );
+			} else {
+				Debugger::log( 'Webhook delivery could not be recorded; the claim could not be released and stays pending.' );
+			}
+			return new WP_REST_Response( array( 'error' => 'Could not record delivery.' ), 500 );
+		}
+
+		// Mark the delivery completed. Best-effort: processing has already
+		// succeeded, so the delivery is acknowledged either way. A claim whose
+		// completion could not be written stays pending, and a later arrival of
+		// the delivery draws a retryable error rather than being reprocessed.
+		if ( ! Used_Nonces::complete( $nonce ) ) {
+			Debugger::log( 'Webhook delivery processed, but marking it completed failed; the claim stays pending.' );
+		}
+
+		self::maybe_log_node_origin( $node, $author_was_administrator );
 
 		return new WP_REST_Response( 'success' );
+	}
+
+	/**
+	 * Whether the Node's author is currently an administrator.
+	 *
+	 * @param Node $node The Node.
+	 * @return bool
+	 */
+	private static function node_author_is_administrator( $node ) {
+		$author_id = (int) get_post_field( 'post_author', $node->get_id() );
+		return $author_id && user_can( $author_id, 'manage_options' );
+	}
+
+	/**
+	 * Logs a line when the sending Node's author was not an administrator when
+	 * the delivery arrived.
+	 *
+	 * Nodes are managed by administrators, so a Node whose author is missing or
+	 * is not one is worth a look. The event is processed either way; the line
+	 * points whoever reads the Newspack log at the Node, about once a day per
+	 * Node: two deliveries handled at the same moment can each log it. It goes
+	 * through newspack_log because Debugger::log() writes only when
+	 * NEWSPACK_NETWORK_DEBUG is defined.
+	 *
+	 * @param Node $node                     The Node the event came from.
+	 * @param bool $author_was_administrator Whether the author was an administrator before the delivery was processed.
+	 * @return void
+	 */
+	private static function maybe_log_node_origin( $node, $author_was_administrator ) {
+		if ( $author_was_administrator ) {
+			return;
+		}
+
+		$throttle_key = 'newspack_network_node_origin_logged_' . $node->get_id();
+		if ( get_transient( $throttle_key ) ) {
+			return;
+		}
+		set_transient( $throttle_key, 1, DAY_IN_SECONDS );
+
+		$message = sprintf(
+			'Network node %d (%s) sent an event while its author was not an administrator; review it under Network > Nodes.',
+			$node->get_id(),
+			$node->get_url()
+		);
+		Debugger::log( $message );
+		if ( ! method_exists( 'Newspack\Logger', 'newspack_log' ) ) {
+			return;
+		}
+		// A newspack_log listener that throws must not change how the delivery is
+		// handled.
+		try {
+			\Newspack\Logger::newspack_log(
+				'newspack_network_node_origin',
+				$message,
+				[
+					'node_id'  => $node->get_id(),
+					'node_url' => $node->get_url(),
+				],
+				'warning'
+			);
+		} catch ( \Throwable $e ) {
+			Debugger::log( 'Could not log the node origin: ' . $e->getMessage() );
+		}
 	}
 }

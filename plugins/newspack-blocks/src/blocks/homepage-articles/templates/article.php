@@ -142,24 +142,7 @@ call_user_func(
 				?>
 				<div class="newspack-post-subtitle newspack-post-subtitle--in-homepage-block">
 					<?php
-					$allowed_tags = array(
-						'b'      => true,
-						'strong' => true,
-						'i'      => true,
-						'em'     => true,
-						'mark'   => true,
-						'u'      => true,
-						'small'  => true,
-						'sub'    => true,
-						'sup'    => true,
-						'a'      => array(
-							'href'   => true,
-							'target' => true,
-							'rel'    => true,
-						),
-					);
-
-					echo wptexturize( wp_kses( $subtitle, $allowed_tags ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+					echo wptexturize( Newspack_Blocks::sanitize_post_subtitle( $subtitle ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 					?>
 				</div>
 			<?php endif; ?>
@@ -255,7 +238,28 @@ call_user_func(
 						</span><!-- .author-name -->
 						<?php
 					endif;
-					if ( $show_date ) :
+					if ( $show_date && Newspack_Blocks::should_display_updated_date() ) :
+						printf(
+							'<span class="updated-date">%s</span>',
+							wp_kses(
+								sprintf(
+									/* translators: %s: When the post was last updated. */
+									__( 'Updated %s', 'newspack-blocks' ),
+									sprintf(
+										'<time class="entry-date updated" datetime="%1$s">%2$s</time>',
+										esc_attr( get_the_modified_date( DATE_W3C ) ),
+										esc_html( Newspack_Blocks::get_formatted_displayed_updated_date() )
+									)
+								),
+								array(
+									'time' => array(
+										'class'    => true,
+										'datetime' => true,
+									),
+								)
+							)
+						);
+					elseif ( $show_date ) :
 						$time_string = '<time class="entry-date published updated" datetime="%1$s">%2$s</time>';
 						if ( get_the_time( 'U' ) < get_the_modified_time( 'U' ) ) :
 							$time_string = '<time class="entry-date published" datetime="%1$s">%2$s</time><time class="updated" datetime="%3$s">%4$s</time>';

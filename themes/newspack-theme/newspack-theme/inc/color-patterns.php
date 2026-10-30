@@ -195,15 +195,31 @@ function newspack_custom_colors_css() {
 
 	// Set ads background color
 	if ( 'default' !== get_theme_mod( 'ads_color', 'default' ) ) {
+		$ads_color_hex = get_theme_mod( 'ads_color_hex', '#ffffff' );
 		$theme_css .= '
 			.site .entry .entry-content .scaip .newspack_global_ad,
 			.site .entry .entry-content .scaip .widget_newspack-ads-widget,
 			.newspack_global_ad,
 			.newspack_global_ad.global_above_header,
 			.widget_newspack-ads-widget,
-			div[class*="newspack-ads-blocks-ad-unit"],
-			broadstreet-zone-container {
-				background-color: ' . esc_attr( get_theme_mod( 'ads_color_hex', '#ffffff' ) ) . ';
+			div[class*="newspack-ads-blocks-ad-unit"] {
+				background-color: ' . esc_attr( $ads_color_hex ) . ';
+			}
+		';
+		// Broadstreet zone containers persist in the DOM even when the zone
+		// serves no creative, and street.js always leaves a
+		// <broadstreet-zone><div> skeleton inside them — so :has(*) cannot
+		// tell filled from empty. A zone is filled when elements exist inside
+		// that div wrapper (or a creative element appears anywhere in the
+		// container); empty zones carry only the empty skeleton and must not
+		// render as a colored gap. Kept as a standalone rule: in browsers
+		// without :has() support an unknown selector invalidates the entire
+		// rule, which must not take the selectors above down with it.
+		// The same filled-zone test is duplicated in newspack-ads
+		// (src/frontend/style.scss) — keep the two selectors in sync (NPPM-2975).
+		$theme_css .= '
+			broadstreet-zone-container:has(broadstreet-zone div *, a, iframe, img, video) {
+				background-color: ' . esc_attr( $ads_color_hex ) . ';
 			}
 		';
 	}

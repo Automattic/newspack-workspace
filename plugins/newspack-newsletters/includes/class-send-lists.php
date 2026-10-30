@@ -170,6 +170,15 @@ class Send_Lists {
 		foreach ( $defaults as $key => $value ) {
 			$args[ $key ] = $request[ $key ] ?? $value;
 		}
-		return \rest_ensure_response( $provider->get_send_lists( $args, true ) );
+		// Providers registered through `newspack_newsletters_registered_providers`
+		// are expected to extend Newspack_Newsletters_Service_Provider, but the
+		// published contract is Newspack_Newsletters_ESP_API_Interface, which
+		// declares only get_send_lists(). Degrade to it rather than fatal on a
+		// provider that implements the interface alone.
+		$send_lists = method_exists( $provider, 'get_send_lists_with_fallback' )
+			? $provider->get_send_lists_with_fallback( $args, true )
+			: $provider->get_send_lists( $args, true );
+
+		return \rest_ensure_response( $send_lists );
 	}
 }

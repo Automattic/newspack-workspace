@@ -5,6 +5,7 @@
 @use "select";
 @use "spinner";
 @use "text-inputs";
+@use "../../mixins";
 
 // TODO: Find a better home for this stuff.
 .newspack-ui {
@@ -19,23 +20,59 @@
 		margin-bottom: 0;
 	}
 
-	// Container for displaying grid of inputs.
 	& &__code-input {
-		display: flex;
-		gap: var(--newspack-ui-spacer-1);
+		display: block;
+
 		input {
-			text-align: center;
+			--newspack-ui-otp-digit: 0.6445em;
+			--newspack-ui-otp-advance: calc((var(--newspack-ui-otp-field, 12em) + var(--newspack-ui-otp-digit)) / (var(--newspack-ui-otp-slots, 7) + 1));
+			--newspack-ui-otp-gap: calc(var(--newspack-ui-otp-advance) - var(--newspack-ui-otp-digit));
+
+			background:
+				linear-gradient(var(--newspack-ui-otp-caret, transparent), var(--newspack-ui-otp-caret, transparent))
+				calc(var(--newspack-ui-otp-gap) + (var(--newspack-ui-otp-slots, 7) - 1) * var(--newspack-ui-otp-advance) + var(--newspack-ui-otp-digit) + 2px) 50% / 1.5px 1.1em no-repeat,
+				linear-gradient(var(--newspack-ui-color-text), var(--newspack-ui-color-text))
+				calc(var(--newspack-ui-otp-gap) + var(--newspack-ui-otp-split, 3) * var(--newspack-ui-otp-advance)) 50% / var(--newspack-ui-otp-digit) 2px no-repeat,
+				var(--newspack-ui-color-input-bg);
+			background-origin: padding-box;
+			direction: ltr;
+			font-size: var(--newspack-ui-font-size-title-m);
+			font-variant-numeric: tabular-nums;
+			font-weight: var(--newspack-ui-font-weight-medium);
+			height: var(--newspack-ui-spacer-9);
+			letter-spacing: var(--newspack-ui-otp-gap);
+			line-height: 1;
+			padding: 0 0 0 var(--newspack-ui-otp-gap);
+			text-align: start;
+
+			&[data-otp-caret-end] {
+				animation: newspack-ui-otp-caret 1.1s step-end infinite;
+				caret-color: transparent;
+
+				@media ( prefers-reduced-motion: reduce ) {
+					--newspack-ui-otp-caret: var(--newspack-ui-color-text);
+
+					animation: none;
+				}
+
+				@media ( forced-colors: active ) {
+					caret-color: auto;
+				}
+			}
 		}
 	}
 
 	// Form inline text - helper and error.
 	& &__helper-text,
 	& &__inline-error {
-		color: var(--newspack-ui-color-neutral-60);
+		--newspack-ui-field-message-icon-size: var(--newspack-ui-spacer-3);
+		--newspack-ui-field-message-icon-gap: calc(var(--newspack-ui-spacer-1) * 0.75);
+
+		color: var(--newspack-ui-color-text-muted);
 		display: block;
-		font-size: var(--newspack-ui-font-size-xs);
-		font-weight: normal;
-		line-height: var(--newspack-ui-line-height-xs);
+		font-size: var(--newspack-ui-font-size-small);
+		font-weight: var(--newspack-ui-font-weight-regular);
+		line-height: var(--newspack-ui-line-height-small);
 		margin: var(--newspack-ui-spacer-1) 0 0;
 		a {
 			text-decoration: underline;
@@ -48,22 +85,65 @@
 		label & {
 			margin: 0;
 		}
+
+		&:has(> svg) {
+			padding-inline-start: calc(var(--newspack-ui-field-message-icon-size) + var(--newspack-ui-field-message-icon-gap));
+			position: relative;
+		}
+
+		> svg {
+			fill: currentcolor;
+			height: var(--newspack-ui-field-message-icon-size);
+			inset-inline-start: 0;
+			position: absolute;
+			top: calc(( 1lh - var(--newspack-ui-field-message-icon-size) ) / 2);
+			width: var(--newspack-ui-field-message-icon-size);
+		}
+	}
+
+	& &__helper-text--success > svg {
+		fill: var(--newspack-ui-color-success);
 	}
 
 	& &__inline-error {
-		color: var(--newspack-ui-color-error-50);
+		color: var(--newspack-ui-color-error-text);
 	}
 
 	// Error class to apply to specific fields.
 	& &__field-error,
-	[data-form-status="400"] {
+	[data-form-status="400"],
+	:is(input:not([type="checkbox"], [type="radio"]), select, textarea)[aria-invalid="true"] {
 		// Attribute added to sign-up modal form on failure.
-		--newspack-ui-color-input-border: var(--newspack-ui-color-error-50);
-		--newspack-ui-color-input-border-focus: var(--newspack-ui-color-error-50);
-		--newspack-ui-label-color: var(--newspack-ui-color-error-50);
+		--newspack-ui-color-input-border: var(--newspack-ui-color-error);
+		--newspack-ui-color-input-border-hover: var(--newspack-ui-color-error);
 
-		.newspack-ui__label-optional {
-			color: inherit;
+		&:is(input, select, textarea),
+		input:not([type="hidden"], [type="submit"], [type="button"], [type="reset"], [type="checkbox"], [type="radio"]),
+		select,
+		textarea {
+			border-color: var(--newspack-ui-color-error);
+			box-shadow: inset 0 0 0 1px var(--newspack-ui-color-error);
+
+			&:focus,
+			&:focus-visible {
+				@include mixins.focus-edge( var(--newspack-ui-color-error), 2px, var(--newspack-ui-color-focus) );
+			}
 		}
+	}
+}
+
+@property --newspack-ui-otp-caret {
+	syntax: "<color>";
+	inherits: false;
+	initial-value: transparent;
+}
+
+@keyframes newspack-ui-otp-caret {
+	0% {
+		--newspack-ui-otp-caret: var(--newspack-ui-color-text);
+	}
+
+	50% {
+		--newspack-ui-otp-caret: transparent;
 	}
 }

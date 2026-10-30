@@ -80,12 +80,17 @@ const match = segmentCriteria => {
 /**
  * Get the reader's highest-priority segment match, or the segment to preview.
  *
+ * Carried segment IDs (see carried-segments.js) count as matched in addition
+ * to local criteria matches. They join this comparison because prompt
+ * targeting is decided against the single winner, not the matched set.
+ *
  * @param {Object}      segments     Segments.
  * @param {string|null} viewAsString Optional, for testing. A query string with viewAs params for previewing a segment.
+ * @param {string[]}    carriedIds   Segment IDs carried in from a newsletter click.
  *
  * @return {string|null} Segment ID, or null.
  */
-export const getBestPrioritySegment = ( segments, viewAsString = null ) => {
+export const getBestPrioritySegment = ( segments, viewAsString = null, carriedIds = [] ) => {
 	// If previewing as a specific segment.
 	const viewAs = parseViewAs( viewAsString );
 	if ( viewAs?.segment ) {
@@ -94,7 +99,7 @@ export const getBestPrioritySegment = ( segments, viewAsString = null ) => {
 
 	const matchingSegments = [];
 	for ( const segmentId in segments ) {
-		if ( match( segments[ segmentId ].criteria ) ) {
+		if ( carriedIds.includes( segmentId ) || match( segments[ segmentId ].criteria ) ) {
 			matchingSegments.push( {
 				id: segmentId,
 				priority: segments[ segmentId ].priority,
@@ -116,6 +121,10 @@ export const getBestPrioritySegment = ( segments, viewAsString = null ) => {
  * serialization (so equal sets compare equal). Unlike getBestPrioritySegment,
  * this returns the full set, not just the highest-priority winner.
  *
+ * Criteria matches only: carried segment IDs are excluded, because this set is
+ * what syncMatchedSegments() persists to reader data and a carried ID is
+ * forgeable, link-supplied input.
+ *
  * @param {Object} segments Segments keyed by ID with { criteria, priority } values.
  *
  * @return {string[]} Sorted array of matching segment IDs.
@@ -131,6 +140,38 @@ export const getMatchingSegmentIds = segments => {
 };
 
 /**
+ * Whether an admin is browsing as this reader through the User Switching
+ * plugin. The reader-activation store hydrates the reader's stored data into a
+ * browser that carries the admin's own history and device, so a live match
+ * here describes the admin; the reader's stored snapshot is the truth.
+ *
+ * @return {boolean} True while switched.
+ */
+export const isSwitchedSession = () => !! window.newspack_reader_data?.is_switched_session;
+
+/**
+ * The reader's highest-priority segment according to their stored snapshot,
+ * for a session that must not recompute one (see isSwitchedSession).
+ *
+ * @param {Object} ras      Reader Activation library object.
+ * @param {Object} segments Segments keyed by ID with { criteria, priority } values.
+ *
+ * @return {string|null} Segment ID, or null when the snapshot names none the page knows.
+ */
+export const getBestPrioritySegmentFromSnapshot = ( ras, segments ) => {
+	// The snapshot is client-asserted JSON: a non-list reads as no snapshot, and
+	// ids are compared as strings downstream, so numbers are normalized here.
+	const stored = ras?.store?.get( 'matched_segments' );
+	const ids = Array.isArray( stored ) ? stored.filter( id => [ 'string', 'number' ].includes( typeof id ) ).map( String ) : [];
+	const known = ids.filter( id => segments[ id ] );
+	if ( ! known.length ) {
+		return null;
+	}
+	known.sort( ( a, b ) => segments[ a ].priority - segments[ b ].priority );
+	return known[ 0 ];
+};
+
+/**
  * Persist the reader's matching segment set to the reader-data store so
  * server-side consumers can read it. Writes only for authenticated readers
  * (anonymous readers have no server-side snapshot) and only when the set
@@ -140,7 +181,7 @@ export const getMatchingSegmentIds = segments => {
  * @param {Object} segments Segments keyed by ID.
  */
 export const syncMatchedSegments = ( ras, segments ) => {
-	if ( ! ras?.store || ! ras.store.get( 'reader' )?.authenticated ) {
+	if ( isSwitchedSession() || ! ras?.store || ! ras.store.get( 'reader' )?.authenticated ) {
 		return;
 	}
 	const ids = getMatchingSegmentIds( segments );

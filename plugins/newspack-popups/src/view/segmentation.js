@@ -3,14 +3,18 @@
 import {
 	debug,
 	closeOverlay,
+	getAbOverride,
 	getBestPrioritySegment,
+	getBestPrioritySegmentFromSnapshot,
 	getIntersectionObserver,
 	getRawId,
 	getOverride,
 	handleSeen,
+	isSwitchedSession,
 	shouldPromptBeDisplayed,
 	syncMatchedSegments,
 } from './utils';
+import { getCarriedSegmentIds } from './utils/carried-segments';
 
 /**
  * Match reader to segments.
@@ -22,7 +26,17 @@ export const handleSegmentation = prompts => {
 			return;
 		}
 		const segments = newspack_popups_view?.segments || {};
-		const matchingSegment = getBestPrioritySegment( segments );
+		// Read once per page; a signed-in reader's live matching wins over any
+		// carried snapshot, which getCarried() applies on every call.
+		const carriedIds = getCarriedSegmentIds( Object.keys( segments ) );
+		// Re-read the authenticated flag on every call: RAS can authenticate a
+		// reader mid-page, and a delayed prompt's unhide() re-check must see it.
+		const getCarried = () => ( ras?.store?.get( 'reader' )?.authenticated ? [] : carriedIds );
+		// An admin switched into the reader's account sees the reader's stored
+		// segment; a match computed here would come from the admin's browser.
+		const resolveMatchingSegment = () =>
+			isSwitchedSession() ? getBestPrioritySegmentFromSnapshot( ras, segments ) : getBestPrioritySegment( segments, null, getCarried() );
+		const matchingSegment = resolveMatchingSegment();
 		debug( 'matchingSegment', matchingSegment );
 
 		// Register segments and set match via RAS if available.
@@ -40,7 +54,11 @@ export const handleSegmentation = prompts => {
 		prompts.forEach( prompt => {
 			const promptId = prompt.getAttribute( 'id' );
 			const isOverlay = prompt.classList.contains( 'newspack-lightbox' );
-			const override = getOverride( getRawId( promptId ), isOverlay, overlayDisplayed );
+			// A/B variant selection composes with the standard override: a test
+			// variant the reader is not assigned to is suppressed before it can
+			// claim the single-overlay slot; the assigned variant goes through
+			// the normal frequency/segmentation checks.
+			const override = getOverride( getRawId( promptId ), isOverlay, overlayDisplayed ) ?? getAbOverride( prompt );
 
 			// Attach event listeners to overlay close buttons.
 			const closeButtons = [ ...prompt.querySelectorAll( '.newspack-lightbox__close, button.newspack-lightbox-overlay' ) ];
@@ -64,8 +82,11 @@ export const handleSegmentation = prompts => {
 				};
 				const unhide = () => {
 					// Conditions may have changed since the prompt was delayed.
-					// Verify whether the prompt can still be displayed.
-					const updatedMatchingSegment = getBestPrioritySegment( segments );
+					// Verify whether the prompt can still be displayed. Resolve the match
+					// again rather than reusing the one computed above: a reader who
+					// authenticates mid-delay must have their live matching win over a
+					// carried snapshot, even for a prompt that was already pending.
+					const updatedMatchingSegment = resolveMatchingSegment();
 					if ( ras?.segments ) {
 						ras.segments.setMatch( updatedMatchingSegment );
 					}

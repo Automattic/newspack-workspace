@@ -18,6 +18,49 @@ require_once __DIR__ . '/integrations/class-failing-sample-integration.php';
  */
 class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 	/**
+	 * Seeds the pre-coexistence global field selection, so the site reads as
+	 * a legacy-schema one and the fields these tests use are the default
+	 * selection rather than the new schema's.
+	 */
+	public function set_up() {
+		parent::set_up();
+		update_option(
+			Sync\Metadata::FIELDS_OPTION,
+			array_values(
+				array_unique(
+					array_merge(
+						array_values( Sync\Contact_Metadata\Legacy_Basic::get_fields() ),
+						array_values( Sync\Contact_Metadata\Legacy_Payment::get_fields() )
+					)
+				)
+			)
+		);
+	}
+
+	/**
+	 * Drop the seeded selection, and the per-integration option the ESP's
+	 * lazy migration copies it into, for whatever runs next.
+	 */
+	public function tear_down() {
+		delete_option( Sync\Metadata::FIELDS_OPTION );
+		delete_option( \Newspack\Reader_Activation\Integration::OUTGOING_FIELDS_OPTION_PREFIX . 'esp' );
+		parent::tear_down();
+	}
+
+	/**
+	 * Run the full outgoing pipeline: raw-key normalization followed by the
+	 * ESP integration's prepare_contact(), which is where outgoing-field
+	 * filtering and prefixing happen.
+	 *
+	 * @param array $contact Contact data.
+	 * @return array Prepared contact data.
+	 */
+	public function normalize_and_prepare( $contact ) {
+		$esp = Integrations::get_integration( 'esp' );
+		return $esp->prepare_contact( Sync\Metadata::normalize_contact_data( $contact ) );
+	}
+
+	/**
 	 * Gets a sample contact for the tests
 	 *
 	 * @return array
@@ -28,7 +71,11 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 			'name'     => 'Test Contact',
 			'metadata' => [],
 		];
-		foreach ( array_keys( Sync\Metadata::get_keys() ) as $key ) {
+		// Built from the fields the ESP actually syncs, not the merged map: the
+		// two schemas coexist in that map, and a contact carrying fields the site
+		// has not enabled would be filtered down by design rather than by the
+		// behavior these tests are about.
+		foreach ( Integrations::get_integration( 'esp' )->get_enabled_outgoing_fields_keys() as $key ) {
 			$contact['metadata'][ Sync\Metadata::get_key( $key ) ] = 'value';
 		}
 		return $contact;
@@ -64,6 +111,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 	 * Test specific ESP integration checks.
 	 */
 	public function test_esp_integration_checks() {
+		\update_option( 'newspack_newsletters_service_provider', 'mailchimp' );
 		$esp_integration = new Integrations\ESP();
 		$errors = $esp_integration->can_sync( true );
 		$this->assertInstanceOf( 'WP_Error', $errors );
@@ -108,6 +156,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 	 * on transient ESP failures, which the AS retry system is meant to survive.
 	 */
 	public function test_esp_is_set_up_reads_stored_state() {
+		\update_option( 'newspack_newsletters_service_provider', 'mailchimp' );
 		$esp = new Integrations\ESP();
 
 		// Master list ID not stored → setup is incomplete.
@@ -176,7 +225,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 
 		$this->assertEquals(
 			$contact_data_with_prefixed_keys,
-			Sync\Metadata::normalize_contact_data( $contact_data_with_raw_keys ),
+			$this->normalize_and_prepare( $contact_data_with_raw_keys ),
 			'Raw metadata keys should be converted to prefixed keys.'
 		);
 
@@ -184,7 +233,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 
 		$this->assertEquals(
 			$contact_data_with_custom_prefix,
-			Sync\Metadata::normalize_contact_data( $contact_data_with_raw_keys ),
+			$this->normalize_and_prepare( $contact_data_with_raw_keys ),
 			'Metadata keys should be prefixed with the custom prefix, if set.'
 		);
 
@@ -193,16 +242,16 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 
 		$contact_data_with_prefixed_keys['metadata']['NP_Invalid_Key'] = 'Invalid data';
 		$this->assertEquals(
-			array_diff( $contact_data_with_prefixed_keys['metadata'], Sync\Metadata::normalize_contact_data( $contact_data_with_prefixed_keys )['metadata'] ),
-			[ 'NP_Invalid_Key' => 'Invalid data' ],
-			'Most keys should be exact.'
+			$contact_data_with_prefixed_keys['metadata'],
+			$this->normalize_and_prepare( $contact_data_with_prefixed_keys )['metadata'],
+			'Prefixed keys unknown to the catalog pass through: explicitly-injected custom fields keep reaching the provider.'
 		);
 
 		unset( $contact_data_with_prefixed_keys['metadata']['NP_Invalid_Key'] );
 		$contact_data_with_prefixed_keys['metadata']['NP_Signup UTM: foo'] = 'bar';
 		$this->assertArrayHasKey(
 			'NP_Signup UTM: foo',
-			Sync\Metadata::normalize_contact_data( $contact_data_with_prefixed_keys )['metadata'],
+			$this->normalize_and_prepare( $contact_data_with_prefixed_keys )['metadata'],
 			'But UTM keys can have arbitrary suffixes.'
 		);
 
@@ -212,17 +261,17 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 		$contact_data_with_prefixed_keys['metadata']['signup_page_utm_'] = 'baz';
 		$this->assertArrayNotHasKey(
 			'NP_Signup UTM: ',
-			Sync\Metadata::normalize_contact_data( $contact_data_with_prefixed_keys )['metadata'],
+			$this->normalize_and_prepare( $contact_data_with_prefixed_keys )['metadata'],
 			'Prefixed UTM keys must have a suffix.'
 		);
 		$this->assertArrayNotHasKey(
 			'signup_page_utm',
-			Sync\Metadata::normalize_contact_data( $contact_data_with_prefixed_keys )['metadata'],
+			$this->normalize_and_prepare( $contact_data_with_prefixed_keys )['metadata'],
 			'Raw UTM keys must have a suffix.'
 		);
 		$this->assertArrayNotHasKey(
 			'NP_Signup UTM: ',
-			Sync\Metadata::normalize_contact_data( $contact_data_with_prefixed_keys )['metadata'],
+			$this->normalize_and_prepare( $contact_data_with_prefixed_keys )['metadata'],
 			'Raw UTM keys must have a suffix.'
 		);
 	}
@@ -232,7 +281,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 	 */
 	public function test_with_default_option() {
 		$contact = $this->get_sample_contact();
-		$normalized = Sync\Metadata::normalize_contact_data( $contact );
+		$normalized = $this->normalize_and_prepare( $contact );
 
 		// Strip unsuffixed UTM keys.
 		unset( $contact['metadata'][ Sync\Metadata::get_key( 'signup_page_utm' ) ] );
@@ -247,7 +296,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 	public function test_with_empty_selected() {
 		$contact = $this->get_sample_contact();
 		$this->set_option( [] );
-		$normalized = Sync\Metadata::normalize_contact_data( $contact );
+		$normalized = $this->normalize_and_prepare( $contact );
 		$this->assertEmpty( $normalized['metadata'] );
 	}
 
@@ -257,7 +306,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 	public function test_with_all_invalid_selected() {
 		$contact = $this->get_sample_contact();
 		$this->set_option( [ 'invalid_1', 'invalid_2' ] );
-		$normalized = Sync\Metadata::normalize_contact_data( $contact );
+		$normalized = $this->normalize_and_prepare( $contact );
 		$this->assertEmpty( $normalized['metadata'] );
 	}
 
@@ -268,7 +317,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 		$contact = $this->get_sample_contact();
 		$defaults = array_keys( Sync\Metadata::get_keys() );
 		$this->set_option( [ Sync\Metadata::get_keys()[ $defaults[0] ], Sync\Metadata::get_keys()[ $defaults[1] ] ] );
-		$normalized = Sync\Metadata::normalize_contact_data( $contact );
+		$normalized = $this->normalize_and_prepare( $contact );
 		$this->assertArrayHasKey( Sync\Metadata::get_key( $defaults[0] ), $normalized['metadata'] );
 		$this->assertArrayHasKey( Sync\Metadata::get_key( $defaults[1] ), $normalized['metadata'] );
 		$this->assertArrayNotHasKey( Sync\Metadata::get_key( $defaults[2] ), $normalized['metadata'] );
@@ -282,7 +331,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 		$contact  = $this->get_sample_contact();
 		$defaults = array_keys( Sync\Metadata::get_keys() );
 		$this->set_option( [ Sync\Metadata::get_keys()[ $defaults[0] ], Sync\Metadata::get_keys()[ $defaults[1] ], 'invalid' ] );
-		$normalized = Sync\Metadata::normalize_contact_data( $contact );
+		$normalized = $this->normalize_and_prepare( $contact );
 		$this->assertArrayHasKey( Sync\Metadata::get_key( $defaults[0] ), $normalized['metadata'] );
 		$this->assertArrayHasKey( Sync\Metadata::get_key( $defaults[1] ), $normalized['metadata'] );
 		$this->assertArrayNotHasKey( Sync\Metadata::get_key( $defaults[2] ), $normalized['metadata'] );
@@ -300,7 +349,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 		$this->set_option( [ Sync\Metadata::get_keys()['signup_page_utm'], Sync\Metadata::get_keys()['payment_page_utm'] ] );
 		$contact['metadata'][ Sync\Metadata::get_key( 'signup_page_utm' ) . 'foo' ] = 'bar';
 		$contact['metadata'][ Sync\Metadata::get_key( 'payment_page_utm' ) . 'yyy' ] = 'zzz';
-		$normalized = Sync\Metadata::normalize_contact_data( $contact );
+		$normalized = $this->normalize_and_prepare( $contact );
 		$this->assertArrayHasKey( Sync\Metadata::get_key( 'signup_page_utm' ) . 'foo', $normalized['metadata'] );
 		$this->assertArrayHasKey( Sync\Metadata::get_key( 'payment_page_utm' ) . 'yyy', $normalized['metadata'] );
 		$this->assertArrayNotHasKey( Sync\Metadata::get_key( $defaults[0] ), $normalized['metadata'] );
@@ -316,7 +365,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 		$this->set_option( [ Sync\Metadata::get_keys()['signup_page_utm'], Sync\Metadata::get_keys()['payment_page_utm'] ] );
 		$contact['metadata']['signup_page_utm_foo'] = 'bar';
 		$contact['metadata']['payment_page_utm_yyy'] = 'zzz';
-		$normalized = Sync\Metadata::normalize_contact_data( $contact );
+		$normalized = $this->normalize_and_prepare( $contact );
 		$this->assertArrayHasKey( Sync\Metadata::get_key( 'signup_page_utm' ) . 'foo', $normalized['metadata'] );
 		$this->assertArrayHasKey( Sync\Metadata::get_key( 'payment_page_utm' ) . 'yyy', $normalized['metadata'] );
 	}
@@ -631,11 +680,17 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 			'Please enter a number Your merge fields were invalid.' => 'permanent_contact',
 			'Please provide a valid email address.' => 'permanent_contact',
 			'Contact Email Address is not valid.'   => 'permanent_contact',
+			'ActiveCampaign REST returned status 422 for /api/3/contacts/1234: Email address already exists in the system.' => 'permanent_contact',
+			"Invalid Resource: The value you selected is not a valid choice. The resource submitted could not be validated. For field-specific details, see the 'errors' array." => 'permanent_contact',
 			'API Access has been disabled for this account.' => 'permanent_config',
 			'Payment Required'                      => 'permanent_config',
+			'ActiveCampaign REST returned status 402 for /api/3/contact/sync.' => 'permanent_config',
+			'403: Forbidden'                        => 'permanent_config',
 			'cindy@example.com is already a list member. Use PUT to insert or update.' => 'benign',
 			'Member Exists'                         => 'benign',
 			'garcia@example.com has signed up to a lot of lists very recently' => 'transient',
+			'ActiveCampaign REST returned status 503 for /api/3/contact/sync.' => 'transient',
+			"cURL error 7: Failed to connect to example.test port 443 after 402 ms: Couldn't connect to server" => 'transient',
 			'Some unknown transient network error'  => 'transient',
 		];
 
@@ -644,6 +699,31 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 				$expected,
 				$reflection->invoke( null, new \WP_Error( 'esp_error', $message ) ),
 				sprintf( 'Message "%s" should classify as %s.', $message, $expected )
+			);
+		}
+	}
+
+	/**
+	 * Test that classify_error reads an auth or payment status kept outside
+	 * the message, as the error code or as `status` in the error data, where
+	 * the ActiveCampaign client keeps it beside a translatable message.
+	 */
+	public function test_classify_error_reads_status_outside_the_message() {
+		$reflection = new \ReflectionMethod( Contact_Sync::class, 'classify_error' );
+		$reflection->setAccessible( true );
+
+		$cases = [
+			'status 402 in the error data' => [ new \WP_Error( 'activecampaign_http_error', 'ActiveCampaign REST a renvoyé le statut 402.', [ 'status' => 402 ] ), 'permanent_config' ],
+			'status 403 as the error code' => [ new \WP_Error( 403, 'Forbidden' ), 'permanent_config' ],
+			'status 503 in the error data' => [ new \WP_Error( 'activecampaign_http_error', 'ActiveCampaign REST a renvoyé le statut 503.', [ 'status' => 503 ] ), 'transient' ],
+			'status 429 as the error code' => [ new \WP_Error( 429, 'Too Many Requests' ), 'transient' ],
+		];
+
+		foreach ( $cases as $label => list( $error, $expected ) ) {
+			$this->assertEquals(
+				$expected,
+				$reflection->invoke( null, $error ),
+				sprintf( 'An error with %s should classify as %s.', $label, $expected )
 			);
 		}
 	}
@@ -671,6 +751,9 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 	 * Test that the deletion direction uses its own signature map: "member
 	 * exists" phrases must retry (the ESP contact still exists without the
 	 * deletion flags) and "was permanently deleted" is the benign end-state.
+	 * An auth or payment status that no signature explains retries too, since
+	 * no later event re-sends a deletion; a message naming an account problem
+	 * still ends it.
 	 */
 	public function test_classify_error_deletion_direction() {
 		$reflection = new \ReflectionMethod( Contact_Sync::class, 'classify_error' );
@@ -681,7 +764,10 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 			'cindy@example.com is already a list member. Use PUT to insert or update.' => 'transient',
 			'neil@example.com was permanently deleted and cannot be re-imported.' => 'benign',
 			'asdf@example.com looks fake or invalid, please enter a real email address.' => 'permanent_contact',
+			'ActiveCampaign REST returned status 422 for /api/3/contacts/1234: Email address already exists in the system.' => 'permanent_contact',
+			'Invalid Resource: The value you selected is not a valid choice.' => 'permanent_contact',
 			'API Access has been disabled for this account.' => 'permanent_config',
+			'ActiveCampaign REST returned status 402 for /api/3/contact/sync.' => 'transient',
 		];
 
 		foreach ( $cases as $message => $expected ) {
@@ -691,6 +777,12 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 				sprintf( 'Deletion-direction message "%s" should classify as %s.', $message, $expected )
 			);
 		}
+
+		$this->assertEquals(
+			'transient',
+			$reflection->invoke( null, new \WP_Error( 'activecampaign_http_error', 'ActiveCampaign REST a renvoyé le statut 403.', [ 'status' => 403 ] ), 'deletion' ),
+			'A deletion refused with only a status in the error data should keep retrying.'
+		);
 	}
 
 	/**

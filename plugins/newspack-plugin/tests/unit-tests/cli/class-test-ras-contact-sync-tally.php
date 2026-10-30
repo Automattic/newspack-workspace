@@ -1,4 +1,4 @@
-<?php // phpcs:disable Squiz.Commenting.FunctionComment.Missing, Squiz.Commenting.ClassComment.Missing, Squiz.Commenting.VariableComment.Missing, Squiz.Commenting.FileComment.Missing, Generic.Files.OneObjectStructurePerFile.MultipleFound
+<?php // phpcs:disable Squiz.Commenting.FunctionComment.Missing, Squiz.Commenting.ClassComment.Missing, Squiz.Commenting.VariableComment.Missing, Squiz.Commenting.FileComment.Missing
 /**
  * Tests the `wp newspack esp sync` results tally (NPPD-1883).
  *
@@ -12,23 +12,15 @@
 
 use Newspack\CLI\RAS_Contact_Sync;
 use Newspack\Reader_Activation;
+use Newspack\Reader_Activation\Contact_Sync;
 use Newspack\Reader_Activation\Integrations;
 
 require_once dirname( __DIR__, 3 ) . '/includes/cli/class-ras-contact-sync.php';
 require_once dirname( __DIR__ ) . '/integrations/class-failing-sample-integration.php';
 
-// Minimal WP_CLI stub: sync_contacts() logs progress via WP_CLI::log(), which is
-// not loaded under PHPUnit. Only the logging surface the sync path touches is stubbed.
-if ( ! class_exists( 'WP_CLI' ) ) {
-	class WP_CLI {
-		public static function log( $message ) {}
-		public static function line( $message = '' ) {}
-		public static function success( $message ) {}
-		public static function error( $message ) {
-			throw new \Exception( esc_html( $message ) );
-		}
-	}
-}
+// Shared WP_CLI mock: sync_contacts() logs progress via WP_CLI::log(), which is
+// not loaded under PHPUnit.
+require_once dirname( __DIR__, 2 ) . '/mocks/wp-cli-mocks.php';
 
 /**
  * Results tally of the batch sync driver.
@@ -125,14 +117,18 @@ class Test_RAS_Contact_Sync_Tally extends WP_UnitTestCase {
 	 * does not extend WC_Order, so building a subscribed reader's full metadata would
 	 * trip an unrelated mock-fidelity error. Scoping skips those classes cleanly.
 	 *
-	 * @param array $config Batch sync configuration.
+	 * @param array $config  Batch sync configuration.
+	 * @param array $options Sync options merged over the field-scoped defaults.
 	 * @return array|\WP_Error
 	 */
-	private function run_sync( array $config ) {
-		$config['options'] = [
-			'skip_lists' => false,
-			'fields'     => [ 'Content Access' ],
-		];
+	private function run_sync( array $config, array $options = [] ) {
+		$config['options'] = array_merge(
+			[
+				'skip_lists' => false,
+				'fields'     => [ 'Content Access' ],
+			],
+			$options
+		);
 		$sync_contacts_method = new \ReflectionMethod( RAS_Contact_Sync::class, 'sync_contacts' );
 		$sync_contacts_method->setAccessible( true );
 		return $sync_contacts_method->invoke( null, $config );
@@ -197,5 +193,241 @@ class Test_RAS_Contact_Sync_Tally extends WP_UnitTestCase {
 			$second,
 			'A second run must not accumulate the first run into its tally.'
 		);
+	}
+
+	/**
+	 * `wp newspack esp sync` is a legacy alias: it must announce itself on
+	 * STDERR (so the alias's STDOUT stays frozen for tooling that pipes or
+	 * parses it) and keep the exact historical summary wording (NPPD-2076).
+	 */
+	public function test_esp_sync_alias_prints_notice_and_frozen_summary() {
+		WP_CLI::reset();
+		Integrations::get_integration( 'tally_mock' )->update_enabled_outgoing_fields( [ 'Content Access' ] );
+
+		RAS_Contact_Sync::cli_sync_contacts(
+			[],
+			[
+				'dry-run'  => true,
+				'user-ids' => (string) $this->active_user_id,
+				'fields'   => 'Content Access',
+			]
+		);
+
+		$this->assertNotEmpty( WP_CLI::$warnings );
+		$this->assertStringContainsString( 'legacy alias of `wp newspack integrations backfill`', WP_CLI::$warnings[0], 'The alias announces itself via warning (STDERR).' );
+		$this->assertSame(
+			[ 'Would sync 1 contacts (0 errors, 0 skipped).' ],
+			WP_CLI::$successes,
+			'The alias summary keeps the exact historical `esp sync` wording.'
+		);
+	}
+
+	/**
+	 * The alias exits 0 whatever the tally, and an update-only or scoped run
+	 * schedules no retries, so a failed push has to be named on STDERR while
+	 * the alias's STDOUT summary stays as it was.
+	 */
+	public function test_esp_sync_alias_warns_when_failures_will_not_be_retried() {
+		WP_CLI::reset();
+		Failing_Sample_Integration::$should_fail = true;
+		Integrations::get_integration( 'tally_mock' )->update_enabled_outgoing_fields( [ 'Content Access' ] );
+
+		RAS_Contact_Sync::cli_sync_contacts(
+			[],
+			[
+				'user-ids' => (string) $this->active_user_id,
+				'fields'   => 'Content Access',
+			]
+		);
+
+		$this->assertStringContainsString( 'will not be retried automatically', implode( "\n", WP_CLI::$warnings ) );
+		$this->assertSame( [ 'Synced 0 contacts (1 errors, 0 skipped).' ], WP_CLI::$successes, 'STDOUT keeps the historical summary.' );
+	}
+
+	/**
+	 * A plain --create-missing run schedules retries for its failures, so it
+	 * has nothing to warn about.
+	 */
+	public function test_esp_sync_alias_does_not_warn_when_failures_are_retried() {
+		WP_CLI::reset();
+		Failing_Sample_Integration::$should_fail = true;
+
+		RAS_Contact_Sync::cli_sync_contacts(
+			[],
+			[
+				'user-ids'       => (string) $this->inactive_user_id,
+				'create-missing' => true,
+			]
+		);
+
+		$this->assertStringNotContainsString( 'will not be retried', implode( "\n", WP_CLI::$warnings ) );
+		$this->assertSame( [ 'Synced 0 contacts (1 errors, 0 skipped).' ], WP_CLI::$successes );
+	}
+
+	/**
+	 * Read the protected static inter-batch pacing counter.
+	 *
+	 * @return int
+	 */
+	private function get_unpaused_contacts() {
+		$prop = new \ReflectionProperty( RAS_Contact_Sync::class, 'unpaused_contacts' );
+		$prop->setAccessible( true );
+		return $prop->getValue();
+	}
+
+	/**
+	 * A dry-run push that may create contacts reads no contacts at the provider,
+	 * so it must not accrue the pacing that exists to space out per-contact requests — previewing
+	 * 100k readers should not cost ~17 minutes of sleep (NPPD-2076 review).
+	 */
+	public function test_dry_run_push_does_not_accrue_pacing() {
+		$this->run_sync(
+			[
+				'user_ids'   => [ $this->active_user_id, $this->inactive_user_id ],
+				'is_dry_run' => true,
+			]
+		);
+
+		$this->assertSame( 0, $this->get_unpaused_contacts(), 'Dry-run push contacts generate no provider traffic to pace.' );
+	}
+
+	public function test_wet_push_accrues_pacing_per_contact() {
+		$this->run_sync( [ 'user_ids' => [ $this->active_user_id, $this->inactive_user_id ] ] );
+
+		$this->assertSame( 2, $this->get_unpaused_contacts(), 'Each wet-pushed contact reached the integrations and counts toward pacing.' );
+	}
+
+	/**
+	 * A reader the integration does not have is the case an update-only push
+	 * exists for: skipped, never failed, so a partially-synced site still exits 0.
+	 */
+	public function test_existing_only_tallies_missing_contacts_as_skipped() {
+		Failing_Sample_Integration::$contact_exists = false;
+		WP_CLI::reset();
+
+		$tally = $this->run_sync( [ 'user_ids' => [ $this->active_user_id ] ], [ 'existing_only' => true ] );
+
+		$this->assertSame(
+			[
+				'processed' => 0,
+				'errors'    => 0,
+				'skipped'   => 1,
+			],
+			$tally
+		);
+		$this->assertSame( 0, Failing_Sample_Integration::$push_count, 'No push reaches an integration that reports the contact missing.' );
+		$this->assertStringNotContainsString( 'Error syncing', implode( "\n", WP_CLI::$logs ), 'A deliberate skip is not logged as a sync error.' );
+	}
+
+	/**
+	 * A read the integration could not complete is an error the operator
+	 * re-runs, not a silent skip that would hide a provider outage.
+	 */
+	public function test_existing_only_tallies_failed_reads_as_errors() {
+		Failing_Sample_Integration::$contact_exists = new \WP_Error( 'mock_read_failed', 'Provider unreachable' );
+
+		$tally = $this->run_sync( [ 'user_ids' => [ $this->active_user_id ] ], [ 'existing_only' => true ] );
+
+		$this->assertSame(
+			[
+				'processed' => 0,
+				'errors'    => 1,
+				'skipped'   => 0,
+			],
+			$tally
+		);
+		$this->assertSame( 0, Failing_Sample_Integration::$push_count, 'A contact whose existence could not be confirmed is not pushed.' );
+	}
+
+	/**
+	 * An update-only dry run reads each contact at the provider — that is what
+	 * previewing the skip means — so it previews the tally and paces like a
+	 * wet run.
+	 */
+	public function test_dry_run_existing_only_previews_skips_and_accrues_pacing() {
+		Failing_Sample_Integration::$contact_exists = false;
+
+		$tally = $this->run_sync(
+			[
+				'user_ids'   => [ $this->active_user_id ],
+				'is_dry_run' => true,
+			],
+			[ 'existing_only' => true ]
+		);
+
+		$this->assertSame(
+			[
+				'processed' => 0,
+				'errors'    => 0,
+				'skipped'   => 1,
+			],
+			$tally,
+			'The dry-run summary previews the skip.'
+		);
+		$this->assertSame( 1, $this->get_unpaused_contacts(), 'The existence read is provider traffic to pace.' );
+	}
+
+	/**
+	 * The summary counts skips; the per-reader line is what lets an operator
+	 * see which readers a run left alone.
+	 */
+	public function test_existing_only_logs_each_skipped_reader() {
+		Failing_Sample_Integration::$contact_exists = false;
+		WP_CLI::reset();
+
+		$this->run_sync( [ 'user_ids' => [ $this->active_user_id ] ], [ 'existing_only' => true ] );
+
+		$log = implode( "\n", WP_CLI::$logs );
+		$this->assertStringContainsString( 'SKIPPED', $log );
+		$this->assertStringContainsString( get_userdata( $this->active_user_id )->user_email, $log, 'The skip line names the reader.' );
+	}
+
+	/**
+	 * A dry run that creates missing contacts reads no contacts at the
+	 * provider, so it still previews where syncing is refused and then reports
+	 * the failed check; an update-only one reads every contact there, so it
+	 * stops before the preview, like the wet run it previews.
+	 */
+	public function test_dry_run_existing_only_is_refused_where_syncing_is_not_allowed() {
+		remove_filter( 'newspack_reader_activation_is_syncing_allowed', '__return_true' );
+
+		$plain   = $this->run_sync(
+			[
+				'user_ids'   => [ $this->active_user_id ],
+				'is_dry_run' => true,
+			]
+		);
+		$flagged = $this->run_sync(
+			[
+				'user_ids'   => [ $this->active_user_id ],
+				'is_dry_run' => true,
+			],
+			[ 'existing_only' => true ]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $plain );
+		$this->assertSame( 'newspack_dry_run_cannot_sync', $plain->get_error_code() );
+		$this->assertStringStartsWith( 'Would sync 1 contacts', $plain->get_error_message(), 'The preview that reads no contacts still runs on a site that cannot sync.' );
+		$this->assertInstanceOf( \WP_Error::class, $flagged );
+		$this->assertContains( 'esp_sync_not_allowed', $flagged->get_error_codes(), 'The update-only preview stops before reading any contact.' );
+	}
+
+	public function test_sync_contact_dry_run_existing_only_is_gated_like_a_wet_run() {
+		remove_filter( 'newspack_reader_activation_is_syncing_allowed', '__return_true' );
+
+		$flagged = Contact_Sync::sync_contact(
+			$this->active_user_id,
+			'test',
+			true,
+			[
+				'fields'        => [ 'Content Access' ],
+				'existing_only' => true,
+			]
+		);
+		$plain   = Contact_Sync::sync_contact( $this->active_user_id, 'test', true, [ 'fields' => [ 'Content Access' ] ] );
+
+		$this->assertInstanceOf( \WP_Error::class, $flagged );
+		$this->assertContains( 'esp_sync_not_allowed', $flagged->get_error_codes() );
+		$this->assertTrue( $plain, 'A plain dry run with options previews without reaching the gate.' );
 	}
 }

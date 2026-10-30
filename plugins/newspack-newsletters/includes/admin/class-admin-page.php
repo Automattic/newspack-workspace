@@ -145,6 +145,11 @@ abstract class Admin_Page {
 	 * Extra CSS deps for the admin-shell bundle — the only way to force
 	 * load order relative to `admin-shell.css`.
 	 *
+	 * Return only handles the page genuinely needs ordered before its own
+	 * stylesheet. `WP_Dependencies::all_deps()` drops a handle whose dep is
+	 * unregistered, so an optional handle listed here costs the whole
+	 * stylesheet; enqueue those in `enqueue_extras()` instead.
+	 *
 	 * @return string[]
 	 */
 	public function get_admin_shell_style_deps(): array {

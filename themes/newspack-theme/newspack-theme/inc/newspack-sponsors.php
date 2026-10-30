@@ -29,7 +29,16 @@ function newspack_sponsors_enqueue_scripts() {
 			'close_info' => esc_html__( 'Close', 'newspack-theme' ),
 		);
 
-		wp_enqueue_script( 'newspack-amp-fallback-sponsors', get_theme_file_uri( '/js/dist/amp-fallback-newspack-sponsors.js' ), array(), wp_get_theme()->get( 'Version' ), true );
+		wp_enqueue_script(
+			'newspack-amp-fallback-sponsors',
+			get_theme_file_uri( '/js/dist/amp-fallback-newspack-sponsors.js' ),
+			array(),
+			wp_get_theme()->get( 'Version' ),
+			array(
+				'in_footer' => true,
+				'strategy'  => 'defer',
+			)
+		);
 		wp_localize_script( 'newspack-amp-fallback-sponsors', 'newspackScreenReaderTextSponsors', $newspack_l10n );
 	}
 }

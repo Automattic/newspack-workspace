@@ -5,15 +5,17 @@
 /**
  * WordPress dependencies
  */
-import { Draggable, ExternalLink, ToggleControl } from '@wordpress/components';
-import { useEffect, useState } from '@wordpress/element';
+import { Draggable, ExternalLink, Notice, ToggleControl } from '@wordpress/components';
+import { RawHTML, useEffect, useState } from '@wordpress/element';
+import { decodeEntities } from '@wordpress/html-entities';
 import { __ } from '@wordpress/i18n';
 import { Icon, check, chevronDown, chevronUp, dragHandle } from '@wordpress/icons';
+import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import { Button, Card, Grid, Handoff, Notice, Waiting } from '../';
+import { Button, Card, Grid, Handoff, Waiting } from '../';
 import { ActionCardProps } from './action-card.d.ts';
 import './style.scss';
 
@@ -22,14 +24,81 @@ import './style.scss';
  */
 import classnames from 'classnames';
 
+const NOTIFICATION_LEVELS = [ 'error', 'info', 'success', 'warning' ];
+
+/**
+ * Collect a notification's text, including text nested inside React elements.
+ *
+ * Segments join with a space so that adjacent elements do not weld together: by the
+ * time speak() sees this string the markup that separated them is already gone.
+ *
+ * @param {*} value Notification content.
+ * @return {string} The collected text.
+ */
+const getNotificationText = value => {
+	if ( typeof value === 'string' ) {
+		return value;
+	}
+	if ( typeof value === 'number' ) {
+		return String( value );
+	}
+	if ( value instanceof Error ) {
+		return value.message;
+	}
+	if ( Array.isArray( value ) ) {
+		return value.map( getNotificationText ).join( ' ' );
+	}
+	return value?.props?.children === undefined ? '' : getNotificationText( value.props.children );
+};
+
+/**
+ * Derive a plain-text announcement from a notification.
+ *
+ * Notice defaults spokenMessage to its children and runs renderToString over them
+ * during render, which corrupts the hook dispatcher when those children are
+ * components. A notification can be any element, so the announcement is always
+ * built from its text instead of letting that default apply. Tags in an HTML
+ * notification stay in, since speak() strips them itself. Entities are decoded so
+ * the announcement matches the text on screen, which getNotificationContent decodes
+ * for the same reason.
+ *
+ * @param {*} notification Notification content.
+ * @return {string} Message to announce.
+ */
+const getSpokenNotification = notification => decodeEntities( getNotificationText( notification ) ).replace( /\s+/g, ' ' ).trim();
+
+/**
+ * Decode a notification's own text for display.
+ *
+ * React does not decode entities in text children, and notification text is often
+ * server-sourced, so a message carrying `&#8217;` would otherwise show the entity
+ * and announce the character. The HTML branch is left alone: there the browser's
+ * parser decodes as it renders.
+ *
+ * @param {*} value Notification content.
+ * @return {*} The content, with its own strings decoded.
+ */
+const getNotificationContent = value => {
+	if ( value instanceof Error ) {
+		return decodeEntities( value.message );
+	}
+	if ( typeof value === 'string' ) {
+		return decodeEntities( value );
+	}
+	if ( Array.isArray( value ) ) {
+		return value.map( getNotificationContent );
+	}
+	return value;
+};
+
 /**
  * ActionCard component
+ *
  * @param {ActionCardProps} props Component props.
  * @return {JSX.Element} ActionCard component.
  */
 const ActionCard = ( {
-	badge,
-	badgeLevel,
+	badges,
 	className,
 	checkbox,
 	children,
@@ -78,6 +147,11 @@ const ActionCard = ( {
 	dragWrapperRef,
 	onDragCallback,
 } ) => {
+	// A badge with no label paints an empty pill, since the library Badge styles its
+	// wrapper rather than its text. Callers derive labels from data that can be absent
+	// (a gateway with no connection status, an unmapped placement), so drop those here
+	// rather than asking every caller to guard its own array.
+	const visibleBadges = ( badges || [] ).filter( badge => badge?.label );
 	const [ expanded, setExpanded ] = useState( Boolean( isExpanded ) );
 	const [ dragging, setDragging ] = useState( false );
 	const [ targetIndex, setTargetIndex ] = useState( null );
@@ -102,6 +176,7 @@ const ActionCard = ( {
 	}, [ collapse ] );
 
 	const hasChildren = notification || children;
+	const notificationContent = getNotificationContent( notification );
 	const classes = classnames(
 		'newspack-action-card',
 		simple && 'newspack-card--is-clickable',
@@ -124,7 +199,6 @@ const ActionCard = ( {
 	const togglePositionClass = togglePosition === 'trailing' ? 'is-toggle-trailing' : 'is-toggle-leading';
 	const hasInternalLink = href && href.indexOf( 'http' ) !== 0;
 	const isDisplayingSecondaryAction = secondaryActionText && onSecondaryActionClick;
-	const badges = ! Array.isArray( badge ) && badge ? [ badge ] : badge;
 	const HeadingTag = `h${ heading }`;
 
 	const cardContent = (
@@ -166,15 +240,11 @@ const ActionCard = ( {
 								) }
 								{ ! titleLink && ! expandable && title }
 							</span>
-							{ badges?.length &&
-								badges.map( ( badgeText, i ) => (
-									<span
-										key={ `badge-${ i }` }
-										className={ `newspack-action-card__badge newspack-action-card__badge-level-${ badgeLevel }` }
-									>
-										{ badgeText }
-									</span>
-								) ) }
+							{ visibleBadges.map( ( { label, intent }, i ) => (
+								<Badge key={ `badge-${ i }` } intent={ intent ?? 'none' }>
+									{ label }
+								</Badge>
+							) ) }
 						</HeadingTag>
 						{ description && (
 							<p>
@@ -243,12 +313,15 @@ const ActionCard = ( {
 					</Button>
 				) }
 			</div>
-			{ notification && (
+			{ notification && NOTIFICATION_LEVELS.includes( notificationLevel ) && (
 				<div className="newspack-action-card__notification newspack-action-card__region-children">
-					{ 'error' === notificationLevel && <Notice noticeText={ notification } isError rawHTML={ notificationHTML } /> }
-					{ 'info' === notificationLevel && <Notice noticeText={ notification } rawHTML={ notificationHTML } /> }
-					{ 'success' === notificationLevel && <Notice noticeText={ notification } isSuccess rawHTML={ notificationHTML } /> }
-					{ 'warning' === notificationLevel && <Notice noticeText={ notification } isWarning rawHTML={ notificationHTML } /> }
+					<Notice status={ notificationLevel } isDismissible={ false } spokenMessage={ getSpokenNotification( notification ) }>
+						{ notificationHTML && typeof notification === 'string' ? (
+							<RawHTML className="newspack-action-card__notification-html">{ notification }</RawHTML>
+						) : (
+							notificationContent
+						) }
+					</Notice>
 				</div>
 			) }
 			{ children && ( ( expandable && expanded ) || ! expandable ) ? (

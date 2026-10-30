@@ -1,9 +1,10 @@
 /**
  * Click-through targets shared by the subscriber and group lists.
  *
- * The rule both tabs follow: a person's name goes to that person, a plan name
- * goes to that plan. Names are the DataViews title cell, so their target is the
- * list's `onClickItem`; plan names are ordinary cells and carry their own link.
+ * The rule both tabs follow: a row's own name goes to that row — the person on
+ * the subscriber list, the group on the group list — and a plan name goes to that
+ * plan. Row names are the DataViews title cell, so their target is the list's
+ * `onClickItem`; plan names are ordinary cells and carry their own link.
  */
 
 /**
@@ -17,14 +18,14 @@
  * leave an invisible link with no accessible name.
  *
  * The click is stopped from bubbling: both lists delegate row clicks to the
- * person, and a plan name must not resolve to two destinations at once.
+ * row's own target, and a plan name must not resolve to two destinations at once.
  *
  * Keydown needs no equivalent guard, but only because of where this is used:
  * always an ordinary cell, never the DataViews title cell. That cell's
  * ItemClickWrapper fires its onClickItem on Enter/Space without checking that
  * the key originated on the wrapper itself, so a link nested there would
  * navigate to the row's target as well as its own. Keep it out of title cells —
- * see the owner field in GroupList.
+ * see the name field in GroupList.
  *
  * @param {Object} props          Component props.
  * @param {string} props.href     The subscription edit URL, if any.
@@ -40,3 +41,32 @@ export const SubscriptionLink = ( { href, children } ) => {
 		</a>
 	);
 };
+
+/**
+ * Where a group's name goes: the in-wizard group detail screen.
+ *
+ * The single switch every group affordance in the wizard follows. `/groups/:id`
+ * is registered in the wizard's sections, so a group with an id resolves to the
+ * detail screen; one without has nothing to open and renders unlinked.
+ *
+ * @param {Object} group A group entry carrying `id`.
+ * @return {string} The href, or '' when there is nothing to open.
+ */
+export const groupDetailHref = group => ( group?.id ? `#/groups/${ group.id }` : '' );
+
+/**
+ * Whether a value is a safe in-wizard hash route (`#/…`).
+ *
+ * Guards the person profile's `?from=` origin, which is read straight from the
+ * URL and placed into anchor `href`s (the back chevron, the breadcrumb, the
+ * not-found button). Without this an attacker-supplied `from=javascript:…` would
+ * render a live `javascript:` URL in an authenticated `manage_options` origin,
+ * and `from=https://evil.example` would be a silent off-site redirect. Only a
+ * value beginning `#/` — the wizard's own HashRouter paths — is accepted, and a
+ * protocol-relative `#//host` (which a browser can treat as off-site) is rejected
+ * by requiring a non-slash immediately after `#/`.
+ *
+ * @param {*} value The candidate hash path.
+ * @return {boolean} Whether it is an internal wizard route.
+ */
+export const isInternalHashPath = value => typeof value === 'string' && /^#\/(?!\/)/.test( value );

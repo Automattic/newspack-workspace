@@ -125,8 +125,16 @@ class Newsletters_Access {
 		// recent campaigns still grant bypass.
 		add_filter( 'newspack_newsletters_process_link', [ __CLASS__, 'append_signature_to_link' ], 20, 3 );
 
-		// Verification + bypass paths only fire when the toggle is on.
-		if ( ! self::is_verification_enabled() ) {
+		// Verification + bypass paths only fire when the toggle is on, and only while
+		// gating can actually restrict something. Without the second check a site with
+		// Audience Management off keeps calling batcache_cancel() and nocache_headers()
+		// on every singular ?utm_medium=email request, and keeps redirecting newsletter
+		// links to set bypass cookies — all to grant a bypass past a restriction that no
+		// longer exists. That is also the one place "Audience Management off is
+		// indistinguishable from the constant being undefined" would otherwise be
+		// measurably false, since a constant-undefined site has this toggle off and pays
+		// nothing.
+		if ( ! self::is_verification_enabled() || ! Content_Gate::is_gating_active() ) {
 			return;
 		}
 		// Priority 2 (matching Click::handle_click) so Data Events and
@@ -354,6 +362,33 @@ class Newsletters_Access {
 	}
 
 	/**
+	 * Whether the inbound handler will act on a signed token on this request:
+	 * it is hooked, verification is enabled, and it doesn't skip the current
+	 * user. When it does, a token that verifies is taken out of the URL; one
+	 * that doesn't stays. Other plugins that read the token from the same link
+	 * strip it themselves when this is false, so it doesn't linger in landing
+	 * URLs readers share.
+	 *
+	 * @return bool
+	 */
+	public static function will_consume_inbound_pass() {
+		return false !== has_action( 'init', [ __CLASS__, 'handle_inbound_request_action' ] )
+			&& self::is_verification_enabled()
+			&& ! self::is_skipped_user();
+	}
+
+	/**
+	 * Whether the inbound handlers skip the current user: an account the gate
+	 * never restricts has nothing to bypass and shouldn't burn a signature on
+	 * every click.
+	 *
+	 * @return bool
+	 */
+	private static function is_skipped_user() {
+		return Content_Gate::should_skip_access_checks();
+	}
+
+	/**
 	 * Action callback for the `init` hook. Thin wrapper around
 	 * process_inbound_request() so the action signature doesn't need to
 	 * accommodate WordPress's empty-string arg padding.
@@ -383,9 +418,7 @@ class Newsletters_Access {
 			return [ 'action' => 'disabled' ];
 		}
 
-		// Don't trigger for logged-in editors/admins — they bypass the gate
-		// via capability checks and shouldn't burn a signature on every click.
-		if ( is_user_logged_in() && current_user_can( 'edit_others_posts' ) ) {
+		if ( self::is_skipped_user() ) {
 			return [ 'action' => 'skipped' ];
 		}
 
@@ -507,7 +540,7 @@ class Newsletters_Access {
 		if ( ! self::is_verification_enabled() ) {
 			return [ 'action' => 'disabled' ];
 		}
-		if ( is_user_logged_in() && current_user_can( 'edit_others_posts' ) ) {
+		if ( self::is_skipped_user() ) {
 			return [ 'action' => 'skipped' ];
 		}
 

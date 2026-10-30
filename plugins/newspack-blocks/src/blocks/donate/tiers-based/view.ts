@@ -1,5 +1,6 @@
 import { setupSlider } from './slider';
 import { parseTiersBasedConfig } from './utils';
+import { TIERS_BASED_READY_EVENT, TIERS_BASED_READY_ATTRIBUTE } from '../../../shared/js/tiers-based-ready';
 
 const BUTTON_ACTIVE_CLASSNAME = 'wpbnbd__button--active';
 
@@ -12,7 +13,7 @@ export default ( parentEl: HTMLElement ) => {
 	if ( ! config ) {
 		return;
 	}
-	const frequencyButtonsEls = parentEl.querySelectorAll( '.wpbnbd__tiers__selection button' );
+	const frequencyButtonsEls = parentEl.querySelectorAll( '.wpbnbd__tiers__selection button, .newspack-ui__segmented-control__tabs button' );
 	const amountsEls: NodeListOf< HTMLElement > = parentEl.querySelectorAll( '.wpbnbd__tiers__amount [data-frequency-slug]' );
 	const frequencyInputEl = parentEl.querySelector( `input[name="${ config.params.frequency }"]` );
 	const initFormEl = parentEl.querySelector( 'form[data-is-init-form]' );
@@ -44,11 +45,9 @@ export default ( parentEl: HTMLElement ) => {
 
 			// Toggle the frequency buttons' active states.
 			frequencyButtonsEls.forEach( el => {
-				if ( selectedFrequency === el.getAttribute( 'data-frequency-slug' ) ) {
-					el.classList.add( BUTTON_ACTIVE_CLASSNAME );
-				} else {
-					el.classList.remove( BUTTON_ACTIVE_CLASSNAME );
-				}
+				const isActive = selectedFrequency === el.getAttribute( 'data-frequency-slug' );
+				el.classList.toggle( el.classList.contains( 'newspack-ui__button' ) ? 'selected' : BUTTON_ACTIVE_CLASSNAME, isActive );
+				el.setAttribute( 'aria-pressed', isActive ? 'true' : 'false' );
 			} );
 
 			// Update the value attributes in the form's submit buttons.
@@ -129,4 +128,11 @@ export default ( parentEl: HTMLElement ) => {
 			backButton.style.display = 'none';
 		}
 	} );
+
+	// Mark the block as ready for programmatic triggering (see
+	// src/modal-checkout/donate-trigger.js): the listeners above are attached,
+	// so a tab click now synchronously updates the tier submit buttons. The
+	// event lets a URL trigger that ran before this init retry immediately.
+	parentEl.setAttribute( TIERS_BASED_READY_ATTRIBUTE, '' );
+	parentEl.dispatchEvent( new CustomEvent( TIERS_BASED_READY_EVENT, { bubbles: true } ) );
 };

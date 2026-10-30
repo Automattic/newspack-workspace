@@ -8,6 +8,9 @@ import { render } from '@testing-library/react';
  * Internal dependencies
  */
 import SegmentGroup from './index';
+import SegmentationPreview from '../segmentation-preview';
+
+jest.mock( '../segmentation-preview', () => jest.fn( () => null ) );
 
 // Mock component props.
 const CAMPAIGN = {
@@ -409,5 +412,25 @@ describe( 'A segment with conflicting prompts', () => {
 		// Notice text has expected shape.
 		expect( notice1.textContent ).toEqual( `${ PROMPTS.overlaysUncategorized[ 1 ].title }: ${ noticeText }` );
 		expect( notice2.textContent ).toEqual( `${ PROMPTS.overlaysUncategorized[ 0 ].title }: ${ noticeText }` );
+	} );
+} );
+
+describe( 'Preview Segment', () => {
+	const previewProps = campaignId => {
+		SegmentationPreview.mockClear();
+		render( <SegmentGroup campaignId={ campaignId } segment={ { ...SEGMENT, prompts: [] } } /> );
+		return SegmentationPreview.mock.calls[ 0 ][ 0 ];
+	};
+
+	it.each( [ 'active', 'all', 'inactive', 'trash' ] )( 'previews published prompts on the %s status', status => {
+		expect( previewProps( status ) ).toMatchObject( { campaign: false, showUnpublished: false } );
+	} );
+
+	it( 'previews every prompt in the selected campaign', () => {
+		expect( previewProps( '12' ) ).toMatchObject( { campaign: 12, showUnpublished: true } );
+	} );
+
+	it( 'previews every unassigned prompt', () => {
+		expect( previewProps( 'unassigned' ) ).toMatchObject( { campaign: -1, showUnpublished: true } );
 	} );
 } );

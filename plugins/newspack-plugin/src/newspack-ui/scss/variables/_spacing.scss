@@ -1,6 +1,7 @@
 :root {
 	// Spacing - not ems because the font size of the element itself caused a cascade
 	--newspack-ui-spacer-base: 8px;
+	--newspack-ui-spacer-half: calc(var(--newspack-ui-spacer-base) * 0.5);
 	--newspack-ui-spacer-1: var(--newspack-ui-spacer-base); // 8px
 	--newspack-ui-spacer-2: calc(var(--newspack-ui-spacer-base) * 1.5); // 12px
 	--newspack-ui-spacer-3: calc(var(--newspack-ui-spacer-base) * 2); // 16px
@@ -13,4 +14,7 @@
 	--newspack-ui-spacer-10: calc(var(--newspack-ui-spacer-base) * 7); // 56px - TODO: clamp?
 	--newspack-ui-spacer-11: calc(var(--newspack-ui-spacer-base) * 8); // 64px - TODO: clamp?
 	--newspack-ui-spacer-12: calc(var(--newspack-ui-spacer-base) * 9); // 72px - TODO: clamp?
+
+	--newspack-ui-control-size: var(--newspack-ui-spacer-4);
+	--newspack-ui-control-padding-inline: calc(var(--newspack-ui-spacer-2) + 1px);
 }

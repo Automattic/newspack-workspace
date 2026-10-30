@@ -234,9 +234,6 @@ class Email_Preview {
 				'*CARD_LAST_4*'           => '4242',
 				'*EXPIRY_DATE*'           => '12/2026',
 				'*RENEWAL_DATE*'          => wp_date( get_option( 'date_format', 'F j, Y' ), strtotime( '+30 days' ) ),
-
-				// OTP code — stable sample value.
-				'*MAGIC_LINK_OTP*'        => '123456',
 			],
 
 			// Tokens used in href/src attributes — escaped with esc_url().
@@ -260,8 +257,11 @@ class Email_Preview {
 
 			// Tokens containing pre-escaped HTML — NOT escaped again.
 			'raw'  => [
-				'*CONTACT_EMAIL*' => sprintf( '<a href="%s">%s</a>', esc_url( 'mailto:' . $reply_to_email ), esc_html( $reply_to_email ) ),
-				'*SITE_CONTACT*'  => $site_contact,
+				'*CONTACT_EMAIL*'  => sprintf( '<a href="%s">%s</a>', esc_url( 'mailto:' . $reply_to_email ), esc_html( $reply_to_email ) ),
+				'*SITE_CONTACT*'   => $site_contact,
+
+				// OTP code — stable sample value.
+				'*MAGIC_LINK_OTP*' => \Newspack\Magic_Link::get_otp_code_html( '123456' ),
 			],
 		];
 	}

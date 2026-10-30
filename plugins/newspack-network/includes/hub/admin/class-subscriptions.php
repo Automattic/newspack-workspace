@@ -81,31 +81,18 @@ class Subscriptions extends Woo {
 				);
 				break;
 			case 'subscription':
-				$output = sprintf(
-					'<a href="%s" target="_blank">%s</a> for %s on <a href="%s" target="_blank">%s</a>',
-					$item->get_edit_link(),
-					$item->get_title(),
-					$item->get_user_name(),
-					$item->get_node_url(),
-					$item->get_node_url()
-				);
-				echo $output; // phpcs:ignore
+				self::print_link( $item->get_edit_link(), $item->get_title() );
+				printf( ' for %s on ', esc_html( $item->get_user_name() ) );
+				self::print_link( $item->get_node_url(), $item->get_node_url() );
 				break;
 			case 'items':
-				$products = $item->get_products();
-				$output     = '';
-				foreach ( $products as $product ) {
-					$output .= sprintf(
-						'<a href="%s" target="_blank">%s</a><br />',
-						sprintf(
-							'%s/wp-admin/post.php?post=%d&action=edit',
-							$item->get_node_url(),
-							$product['id'] ?? ''
-						),
+				foreach ( $item->get_products() as $product ) {
+					self::print_link(
+						sprintf( '%s/wp-admin/post.php?post=%d&action=edit', $item->get_node_url(), $product['id'] ?? '' ),
 						$product['name'] ?? ''
 					);
+					echo '<br />';
 				}
-				echo $output; // phpcs:ignore
 				break;
 			case 'orders':
 				$link = sprintf(
@@ -113,10 +100,14 @@ class Subscriptions extends Woo {
 					$item->get_node_url(),
 					$item->get_remote_id()
 				);
-				printf( '<a href="%s" target="blank">%s</a>', $link, $item->get_payment_count() ); // phpcs:ignore
+				self::print_link( $link, $item->get_payment_count() );
 				break;
 			case 'total':
-				printf( '%s<br/>Via %s', $item->get_formatted_total(), $item->get_payment_method_title() ); // phpcs:ignore
+				printf(
+					'%s<br/>Via %s',
+					esc_html( $item->get_formatted_total() ),
+					esc_html( $item->get_payment_method_title() )
+				);
 				break;
 		}
 	}

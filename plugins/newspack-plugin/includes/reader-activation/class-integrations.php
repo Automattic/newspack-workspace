@@ -87,6 +87,9 @@ class Integrations {
 		require_once __DIR__ . '/integrations/class-integration.php';
 		require_once __DIR__ . '/integrations/class-contact-pull.php';
 		require_once __DIR__ . '/integrations/class-contact-cron.php';
+		require_once __DIR__ . '/integrations/class-form-capture.php';
+		require_once __DIR__ . '/integrations/class-gravity-forms.php';
+		require_once __DIR__ . '/integrations/class-push-log.php';
 
 		add_action( 'init', [ __CLASS__, 'register_integrations' ], 5 );
 		add_action( 'init', [ __CLASS__, 'register_my_account_endpoints' ], 6 );
@@ -106,6 +109,7 @@ class Integrations {
 		add_filter( 'newspack_action_scheduler_group_labels', [ __CLASS__, 'register_group_labels' ] );
 
 		Integrations\Contact_Cron::init();
+		Integrations\Push_Log::init();
 	}
 
 	/**
@@ -279,6 +283,23 @@ class Integrations {
 	public static function register_integrations() {
 		// Native integrations.
 		self::register( new Integrations\ESP() );
+		self::register( new Integrations\Gravity_Forms() );
+		/**
+		 * Registers Form Capture, which registers readers from forms
+		 * built with tools other than Gravity Forms, on sites with the flag and
+		 * on sites that already enabled it, so those keep capturing. Elsewhere
+		 * the integration is absent: no card, no capture.
+		 *
+		 * @constant NEWSPACK_FORM_CAPTURE_ENABLED
+		 * @type     bool
+		 * @default  Integration registered only where already enabled
+		 * @status   draft
+		 *
+		 * @example define( 'NEWSPACK_FORM_CAPTURE_ENABLED', true );
+		 */
+		if ( ( defined( 'NEWSPACK_FORM_CAPTURE_ENABLED' ) && NEWSPACK_FORM_CAPTURE_ENABLED ) || self::is_enabled( Integrations\Form_Capture::ID ) ) {
+			self::register( new Integrations\Form_Capture() );
+		}
 
 		// Hook for other plugins/code to register their integrations.
 		do_action( 'newspack_reader_activation_register_integrations' );
@@ -291,6 +312,12 @@ class Integrations {
 			if ( null === $legacy_sync_esp || rest_sanitize_boolean( $legacy_sync_esp ) ) {
 				self::enable( 'esp' );
 			}
+		}
+
+		// A site upgrading with Form Capture keeps capturing its Gravity Forms forms.
+		$gravity_forms = self::get_integration( Integrations\Gravity_Forms::ID );
+		if ( $gravity_forms instanceof Integrations\Gravity_Forms ) {
+			$gravity_forms->maybe_enable_on_upgrade();
 		}
 
 		// Let each integration register its data event handlers.
@@ -344,6 +371,11 @@ class Integrations {
 		}
 
 		$enabled[] = $integration_id;
+
+		// Put the registration key seed in place before any page can emit the
+		// key, so the write stays off the render path. Integrations enabled
+		// before this existed fall back to seeding on first read.
+		self::$integrations[ $integration_id ]->ensure_registration_key_seed();
 
 		return update_option( self::OPTION_NAME, $enabled );
 	}
@@ -467,15 +499,17 @@ class Integrations {
 	}
 
 	/**
-	 * Get settings config for all integrations that have settings fields.
+	 * Get settings config for the integrations the Integrations screen lists:
+	 * those with settings fields, and those with a how-to guide, whose card
+	 * offers it from its menu even with nothing to configure.
 	 *
 	 * @return array Keyed array of integration settings.
 	 */
 	public static function get_all_integration_settings() {
 		$result = [];
 		foreach ( self::$integrations as $id => $integration ) {
-			$fields = $integration->get_settings_fields();
-			if ( empty( $fields ) ) {
+			$guide = $integration->get_guide();
+			if ( empty( $integration->get_settings_fields() ) && empty( $guide ) ) {
 				continue;
 			}
 			$result[ $id ] = [
@@ -491,6 +525,7 @@ class Integrations {
 				'setup_url'                => $integration->get_setup_url(),
 				'settings'                 => $integration->get_settings_config(),
 				'required_plugins'         => $integration->get_required_plugins(),
+				'guide'                    => $guide,
 			];
 		}
 
@@ -871,7 +906,7 @@ class Integrations {
 	public static function schedule_health_check() {
 		register_deactivation_hook( NEWSPACK_PLUGIN_FILE, [ __CLASS__, 'deactivate_health_check' ] );
 
-		if ( defined( 'NEWSPACK_CRON_DISABLE' ) && is_array( NEWSPACK_CRON_DISABLE ) && in_array( self::HEALTH_CHECK_CRON_HOOK, NEWSPACK_CRON_DISABLE, true ) ) {
+		if ( defined( 'NEWSPACK_CRON_DISABLE' ) && is_array( NEWSPACK_CRON_DISABLE ) && in_array( self::HEALTH_CHECK_CRON_HOOK, NEWSPACK_CRON_DISABLE, true ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Documented in plugins/newspack-plugin/includes/oauth/class-oauth-transients.php.
 			self::deactivate_health_check();
 		} elseif ( ! \wp_next_scheduled( self::HEALTH_CHECK_CRON_HOOK ) ) {
 			\wp_schedule_event( time(), 'hourly', self::HEALTH_CHECK_CRON_HOOK );
@@ -893,11 +928,14 @@ class Integrations {
 	 * runtime incident — surfaces in the integrations UI rather than the
 	 * alerts channel.
 	 *
-	 * Logs failures and fires an action for the Alert Manager.
+	 * Logs failures, fires a failed or passed action for each integration,
+	 * and a completed action for the run.
 	 */
 	public static function run_health_checks() {
+		$checked_ids = [];
 		foreach ( self::get_active_configured_integrations() as $integration ) {
-			$result = $integration->health_check();
+			$checked_ids[] = $integration->get_id();
+			$result        = $integration->health_check();
 			if ( is_wp_error( $result ) ) {
 				Logger::error(
 					sprintf(
@@ -927,8 +965,42 @@ class Integrations {
 						'error'            => $result,
 					]
 				);
+				continue;
 			}
+
+			/**
+			 * Fires when an integration health check passes.
+			 *
+			 * Recovery is only observable through this signal: without it, an
+			 * integration that stopped failing would stay recorded as broken.
+			 *
+			 * @param array $payload {
+			 *     Health check pass data.
+			 *
+			 *     @type string $integration_id   The integration ID.
+			 *     @type string $integration_name The integration display name.
+			 * }
+			 */
+			do_action(
+				'newspack_integration_health_check_passed',
+				[
+					'integration_id'   => $integration->get_id(),
+					'integration_name' => $integration->get_name(),
+				]
+			);
 		}
+
+		/**
+		 * Fires after a health-check run with the IDs of the integrations it
+		 * checked.
+		 *
+		 * An integration that is disabled or no longer set up drops out of the
+		 * run and fires neither a pass nor a failure again, so a consumer that
+		 * keeps state per integration needs this list to let go of the rest.
+		 *
+		 * @param string[] $integration_ids IDs of the integrations this run checked.
+		 */
+		do_action( 'newspack_integration_health_checks_completed', $checked_ids );
 	}
 }
 Integrations::init();

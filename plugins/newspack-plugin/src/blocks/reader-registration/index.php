@@ -82,6 +82,7 @@ function enqueue_scripts() {
 		[
 			'verification_url'   => \admin_url( 'admin-ajax.php' ),
 			'verification_nonce' => \wp_create_nonce( 'newspack_reader_registration_verification' ),
+			'verification_error' => __( 'Something went wrong. Please try again.', 'newspack-plugin' ),
 		]
 	);
 }
@@ -128,6 +129,8 @@ function render_verification_box() {
 				);
 				?>
 			</p>
+			<?php // Errors land in their own paragraph, so the line naming the reader's address survives a failed send and still orients them on the retry. ?>
+			<p data-error-target role="status" hidden></p>
 			<p>
 				<button type="button" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide" data-send-otp>
 					<?php esc_html_e( 'Send code', 'newspack-plugin' ); ?>
@@ -200,6 +203,7 @@ function render_block( $attrs, $content ) {
 	$default_attrs = [
 		'label'           => __( 'Continue', 'newspack-plugin' ),
 		'newsletterLabel' => __( 'Subscribe to our newsletter', 'newspack-plugin' ),
+		'placeholder'     => __( 'Your email address', 'newspack-plugin' ),
 	];
 	$attrs         = \wp_parse_args( $attrs, $default_attrs );
 	foreach ( $default_attrs as $key => $value ) {
@@ -257,6 +261,8 @@ function render_block( $attrs, $content ) {
 		}
 	}
 
+	$form_id = get_form_id();
+
 	ob_start();
 	?>
 	<div class="newspack-registration newspack-ui <?php echo esc_attr( get_block_classes( $attrs ) ); ?>">
@@ -272,7 +278,7 @@ function render_block( $attrs, $content ) {
 				<?php echo $success_registration_markup; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 			</div>
 		<?php else : ?>
-			<form id="<?php echo esc_attr( get_form_id() ); ?>" data-newspack-recaptcha="newspack_register">
+			<form id="<?php echo esc_attr( $form_id ); ?>" data-newspack-recaptcha="newspack_register">
 				<?php if ( ! empty( $attrs['title'] ) ) : ?>
 					<div class="newspack-registration__header">
 						<h3 class="newspack-registration__title"><?php echo \wp_kses_post( $attrs['title'] ); ?></h3>
@@ -320,20 +326,19 @@ function render_block( $attrs, $content ) {
 					?>
 					<div class="newspack-registration__main">
 						<div>
-							<?php if ( empty( $attrs['hideOauth'] ) ) : ?>
-								<?php Reader_Activation::render_third_party_auth(); ?>
-							<?php endif; ?>
 							<div class="newspack-registration__inputs">
-								<input
-								<?php
-								if ( $is_admin_preview ) :
-									?>
-									disabled
-									<?php endif; ?>
-									type="email" name="npe" autocomplete="email"
-									placeholder="<?php echo \esc_attr( $attrs['placeholder'] ); ?>"
-								/>
-								<?php Reader_Activation::render_honeypot_field( $attrs['placeholder'] ); ?>
+								<div class="newspack-registration__email">
+									<input
+									<?php
+									if ( $is_admin_preview ) :
+										?>
+										disabled
+										<?php endif; ?>
+										type="email" name="npe" autocomplete="email"
+										placeholder="<?php echo \esc_attr( $attrs['placeholder'] ); ?>"
+									/>
+									<?php Reader_Activation::render_honeypot_field( $attrs['placeholder'] ); ?>
+								</div>
 								<button
 								<?php
 								if ( $is_admin_preview ) :
@@ -346,11 +351,14 @@ function render_block( $attrs, $content ) {
 									<span class="submit"><?php echo \esc_html( $attrs['label'] ); ?></span>
 								</button>
 							</div>
-							<div class="newspack-registration__response <?php echo ( empty( $message ) ) ? 'newspack-registration--hidden' : null; ?>">
+							<div id="<?php echo esc_attr( $form_id . '-response' ); ?>" class="newspack-registration__response <?php echo ( empty( $message ) ) ? 'newspack-registration--hidden' : null; ?>">
 								<?php if ( ! empty( $message ) ) : ?>
 									<p><?php echo \esc_html( $message ); ?></p>
 								<?php endif; ?>
 							</div>
+							<?php if ( empty( $attrs['hideOauth'] ) ) : ?>
+								<?php Reader_Activation::render_third_party_auth( true ); ?>
+							<?php endif; ?>
 						</div>
 					</div>
 				</div>
@@ -540,6 +548,13 @@ function process_form() {
 		if ( $existing_user && Reader_Activation::is_user_reader( $existing_user ) ) {
 			// Return the action type - frontend will check OTP hash validity and request fresh OTP if needed.
 			$response['action'] = Reader_Activation::is_reader_without_password( $existing_user ) ? 'otp' : 'pwd';
+		} elseif ( $existing_user ) {
+			// The email belongs to an existing non-reader account (e.g. an admin or editor).
+			// register_reader() has already sent the non-reader login reminder; surface the same
+			// generic "Account not found." error the auth modal returns instead of a silent success
+			// response. The message text deliberately does not name the account, though (as with the
+			// auth modal) the error response is distinguishable from the new-account success flow.
+			return send_form_response( new \WP_Error( 'unauthorized', __( 'Account not found.', 'newspack-plugin' ) ) );
 		}
 	}
 

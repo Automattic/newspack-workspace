@@ -1,4 +1,4 @@
-/* eslint-disable @wordpress/i18n-translator-comments, no-bitwise */
+/* eslint-disable no-bitwise */
 /**
  * L0 — Subscriber list (DataViews, full-width).
  *
@@ -7,36 +7,47 @@
  * large reader bases. Each row's group memberships arrive embedded on the item
  * (item.groups), so the Status/Subscription/Group-role columns resolve without a
  * second lookup. Click targets follow the rule both tabs share: the row (and the
- * subscriber name in it) opens that person's user-edit screen, while a plan name
- * in the Subscription column opens that subscription. Both are the native admin
- * screens until the in-wizard person profile lands (NPPD-1753 PR 5).
+ * subscriber name in it) opens that person, while a plan name in the Subscription
+ * column opens that subscription. The person now resolves in-wizard to their
+ * profile; the plan name still opens the native subscription edit screen, since
+ * nothing in the wizard replaces it yet.
  */
 
 /**
  * WordPress dependencies.
  */
-import { useEffect, useMemo, useState } from '@wordpress/element';
-import { __, sprintf } from '@wordpress/i18n';
+import { createPortal, useEffect, useLayoutEffect, useMemo, useState } from '@wordpress/element';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Badge, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
-import { Badge, Button, DataViews, Notice, Waiting } from '../../../../packages/components/src';
+import { Button, DataViews, Router, StatusIndicator, Waiting } from '../../../../packages/components/src';
+import { formatCount } from '../../../../packages/components/src/breadcrumbs/format-count';
 import './style.scss';
+import LoadFailureNotice from '../components/LoadFailureNotice';
+import { useRetryFocus } from '../use-retry-focus';
 import { fmtRelative, fmtDate } from '../format';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
+import { getSavedListView, saveListView } from '../data/list-view-state';
+import { usePlans } from '../data/use-plans';
 import { useSubscribers } from '../data/use-subscribers';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
-import { GROUP_LABEL, ROLE_LABELS } from '../labels';
+import { GROUP_LABEL, ROLE_LABELS, groupRoleLabel } from '../labels';
 import { SubscriptionLink } from '../links';
-import { STATUS_LABELS, STATUS_BADGE_LEVEL, displayStatuses, statusRank } from '../status';
+import { STATUS_INDICATORS, STATUS_LABELS, displayStatuses, statusRank } from '../status';
 
 // A subscriber's group memberships, in the shape the column helpers expect
 // ([{ group, role }]). The endpoint embeds them flat on the item as
-// item.groups = [{ id, plan, status, role, editUrl }].
-const groupEntriesOf = item => ( item.groups || [] ).map( g => ( { group: { plan: g.plan, status: g.status, editUrl: g.editUrl }, role: g.role } ) );
+// item.groups = [{ id, plan, status, role, editUrl, isComplimentary }].
+const groupEntriesOf = item =>
+	( item.groups || [] ).map( g => ( {
+		group: { plan: g.plan, status: g.status, editUrl: g.editUrl, isComplimentary: !! g.isComplimentary },
+		role: g.role,
+	} ) );
 
 // Every subscription a subscriber has, group and individual alike: cohorts they
 // own or belong to (tagged by role) plus their own individual subscriptions.
@@ -47,12 +58,16 @@ const planEntries = ( item, groupEntries ) => {
 		plan: group.plan,
 		status: group.status,
 		editUrl: group.editUrl,
+		isComplimentary: group.isComplimentary,
 		role,
 	} ) );
 	const individual = ( item.subscriptions || [] ).map( s => ( {
 		plan: s.plan,
+		planName: s.planName || s.plan,
+		site: s.managedOn?.name || null,
 		status: s.status,
 		editUrl: s.editUrl,
+		isComplimentary: !! s.isComplimentary,
 		role: null,
 	} ) );
 	// Active subscriptions list first, then on-hold, then cancelled.
@@ -78,6 +93,21 @@ const subscriberStatuses = ( item, groupEntries ) =>
 		item.status
 	);
 
+// The `managed_on` filter value for subscriptions this site manages; network
+// sites go by their names. Matches Subscribers_Wizard::MANAGED_ON_THIS_SITE.
+const THIS_SITE = 'this-site';
+const THIS_SITE_LABEL = __( 'This site', 'newspack-plugin' );
+
+// Where the subscriptions the Subscription column shows are managed, as Managed
+// on filter values: this site first, without repeats.
+const managedOnValues = item => {
+	const sites = visiblePlanEntries( planEntries( item, groupEntriesOf( item ) ) ).map( e => e.site );
+	const network = [ ...new Set( sites.filter( Boolean ) ) ];
+	return sites.some( site => ! site ) ? [ THIS_SITE, ...network ] : network;
+};
+
+const { useHistory, useLocation } = Router;
+
 const DEFAULT_VIEW = {
 	type: 'table',
 	page: 1,
@@ -91,14 +121,57 @@ const DEFAULT_VIEW = {
 };
 
 export default function SubscriberList() {
-	const [ view, setView ] = useState( DEFAULT_VIEW );
+	// Opening a profile unmounts the list; the saved view brings the reader back
+	// to the filters, search, sort and page they left.
+	const [ view, setView ] = useState( () => getSavedListView() || DEFAULT_VIEW );
+	useEffect( () => {
+		saveListView( view );
+	}, [ view ] );
+	const history = useHistory();
+	const location = useLocation();
 
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
+	const { plans, sites, failed: plansFailed } = usePlans();
+
 	// The server owns filter/sort/paginate; this page's rows come back already
-	// narrowed. Group-role, tag, newsletter and plan filters arrive in later
-	// slices (the endpoint honors status here); sorting is name / member-since.
-	const { items, total, pages, loading: subscribersLoading, error, reload } = useSubscribers( view );
+	// narrowed. Group-role, tag and newsletter filters arrive in later slices (the
+	// endpoint honors status and plan here); sorting is name / member-since.
+	const { items, total, pages, loading: subscribersLoading, settled, error, reload } = useSubscribers( view );
+
+	// A restored page sits past the end if the list shrank while the reader was on
+	// a profile; step back to the last page rather than show "No results". Only an
+	// empty response counts: right after a view change the new read hasn't started,
+	// so `loading` and `pages` both still describe the previous view, and DataViews
+	// never offers a page past `pages`. Before paint, so the past-the-end page
+	// itself never shows.
+	useLayoutEffect( () => {
+		const lastPage = Math.max( pages, 1 );
+		if ( ! subscribersLoading && ! error && items.length === 0 && view.page > lastPage ) {
+			setView( current => ( { ...current, page: lastPage } ) );
+		}
+	}, [ subscribersLoading, error, items.length, pages, view.page ] );
+
+	// Filter options for the Subscription column: every plan on the site, not just
+	// the ones on this page. Plans the view already filters by stay options even if
+	// the plan list fails to load: DataViews drops a filter with no options, which
+	// would leave a restored filter applied with no chip to clear it.
+	const selectedPlans = view.filters?.find( f => 'plans' === f.field )?.value;
+	const planElements = useMemo(
+		() => [ ...new Set( [ ...plans, ...( selectedPlans || [] ) ] ) ].map( name => ( { value: name, label: name } ) ),
+		[ plans, selectedPlans ]
+	);
+
+	// Only a site on a network has anywhere else to manage a subscription. Sites the
+	// view already filters by stay options, for the same reason as the plans above.
+	const selectedSites = view.filters?.find( f => 'managedOn' === f.field )?.value;
+	const managedOnElements = useMemo( () => {
+		const names = [ ...new Set( [ ...sites, ...( selectedSites || [] ) ] ) ].filter( name => name !== THIS_SITE );
+		if ( names.length === 0 && ! selectedSites?.length ) {
+			return [];
+		}
+		return [ { value: THIS_SITE, label: THIS_SITE_LABEL }, ...names.map( name => ( { value: name, label: name } ) ) ];
+	}, [ sites, selectedSites ] );
 
 	// Resolve avatar URLs for the current page, keyed by subscriber id. The table
 	// renders immediately with the avatar placeholder and each avatar fills in as
@@ -114,16 +187,15 @@ export default function SubscriberList() {
 		return byId;
 	}, [ items, avatarsByEmail ] );
 
+	// Clicking a person opens their in-wizard profile. The current list route
+	// travels as `from` so the profile's back-nav and breadcrumb return here
+	// rather than guessing: HashRouter drops location.state on reload, so the
+	// origin has to survive in the URL.
 	const openSubscriber = item => {
-		if ( item?.editUrl ) {
-			window.location.href = item.editUrl;
+		if ( item?.id ) {
+			history.push( `/subscribers/${ item.id }?from=${ encodeURIComponent( `#${ location.pathname }` ) }` );
 		}
 	};
-	// A subscriber the current admin can't edit has no edit URL (get_edit_user_link()
-	// returns '' without the `edit_user` capability, which is reachable on
-	// multisite), so their row is not clickable rather than focusable-but-inert.
-	// Mirrors hasOwnerLink in GroupList.
-	const hasSubscriberLink = item => !! item?.editUrl;
 
 	const fields = useMemo(
 		() => [
@@ -165,19 +237,29 @@ export default function SubscriberList() {
 				// against the same reduced display set the badges use, so cancelled is
 				// hidden while any active or on-hold plan remains.
 				getValue: ( { item } ) => subscriberStatuses( item, groupEntriesOf( item ) ),
+				// A subscriber can hold several statuses at once, so they stack rather
+				// than sitting on one line, where two icon-and-label pairs would run
+				// together into one phrase.
 				render: ( { item } ) => (
-					<HStack spacing={ 2 } justify="flex-start" alignment="center" wrap>
+					<Stack direction="column" align="flex-start" gap="sm">
 						{ subscriberStatuses( item, groupEntriesOf( item ) ).map( status => (
-							<Badge key={ status } level={ STATUS_BADGE_LEVEL[ status ] } text={ STATUS_LABELS[ status ] } />
+							<StatusIndicator key={ status } status={ STATUS_INDICATORS[ status ] }>
+								{ STATUS_LABELS[ status ] }
+							</StatusIndicator>
 						) ) }
-					</HStack>
+					</Stack>
 				),
 			},
 			{
 				id: 'plans',
 				label: __( 'Subscription', 'newspack-plugin' ),
-				// Plan filtering waits on the plans endpoint (NPPD-1753 PR 6); this is
-				// a display-only column for now.
+				// Options come from the plans endpoint rather than the loaded rows:
+				// this list is server-paginated, so the plans on the current page are
+				// not the plans on the site. Filtering is server-side too — see
+				// viewToParams, which sends this field's value as the `plan` param.
+				elements: planElements,
+				filterBy: { operators: [ 'isAny' ] },
+				getValue: ( { item } ) => visiblePlanEntries( planEntries( item, groupEntriesOf( item ) ) ).map( e => e.plan ),
 				enableSorting: false,
 				render: ( { item } ) => {
 					const entries = visiblePlanEntries( planEntries( item, groupEntriesOf( item ) ) );
@@ -193,8 +275,9 @@ export default function SubscriberList() {
 						<VStack spacing={ 2 } alignment="left">
 							{ entries.map( ( e, i ) => (
 								<div key={ i }>
-									<SubscriptionLink href={ e.editUrl }>{ e.plan }</SubscriptionLink>
+									<SubscriptionLink href={ e.editUrl }>{ e.planName || e.plan }</SubscriptionLink>
 									{ e.role && <>&nbsp;{ `(${ GROUP_LABEL })` }</> }
+									{ e.site && <>&nbsp;{ `(${ e.site })` }</> }
 								</div>
 							) ) }
 						</VStack>
@@ -202,9 +285,54 @@ export default function SubscriberList() {
 				},
 			},
 			{
+				id: 'access',
+				label: __( 'Access', 'newspack-plugin' ),
+				// Hidden by default. Filtered server-side, like the plan filter: the
+				// `access` param matches readers whose Subscription column shows a
+				// complimentary subscription.
+				elements: [ { value: 'complimentary', label: __( 'Complimentary', 'newspack-plugin' ) } ],
+				filterBy: { operators: [ 'is' ] },
+				enableSorting: false,
+				getValue: ( { item } ) =>
+					visiblePlanEntries( planEntries( item, groupEntriesOf( item ) ) ).some( e => e.isComplimentary ) ? 'complimentary' : '',
+				render: ( { item } ) =>
+					visiblePlanEntries( planEntries( item, groupEntriesOf( item ) ) ).some( e => e.isComplimentary ) ? (
+						<span>{ __( 'Complimentary', 'newspack-plugin' ) }</span>
+					) : (
+						<span>—</span>
+					),
+			},
+			...( managedOnElements.length
+				? [
+						{
+							id: 'managedOn',
+							label: __( 'Managed on', 'newspack-plugin' ),
+							// Hidden by default. Filtered server-side: the `managed_on` param
+							// matches readers by where the subscriptions their Subscription
+							// column shows are managed.
+							elements: managedOnElements,
+							filterBy: { operators: [ 'isAny' ] },
+							enableSorting: false,
+							getValue: ( { item } ) => managedOnValues( item ),
+							render: ( { item } ) => {
+								const values = managedOnValues( item );
+								if ( values.length === 0 ) {
+									return <span>—</span>;
+								}
+								return (
+									<VStack spacing={ 2 } alignment="left">
+										{ values.map( value => (
+											<div key={ value }>{ THIS_SITE === value ? THIS_SITE_LABEL : value }</div>
+										) ) }
+									</VStack>
+								);
+							},
+						},
+				  ]
+				: [] ),
+			{
 				id: 'groupRole',
-				// translators: %s: singular group label (publisher-customisable).
-				label: sprintf( __( '%s role', 'newspack-plugin' ), GROUP_LABEL ),
+				label: groupRoleLabel(),
 				// Hidden by default (not in DEFAULT_VIEW fields). Display-only until
 				// the endpoint gains a group-role filter (NPPD-2111). One line per
 				// group, plan-qualified only when the reader belongs to more than one.
@@ -248,7 +376,10 @@ export default function SubscriberList() {
 			{
 				id: 'lastSeen',
 				label: __( 'Last seen', 'newspack-plugin' ),
-				// Wired to reader activity in a later slice; hidden by default.
+				// The reader's most recent page view, from the activity record the site
+				// keeps for them — reading, not signing in, so a reader on a long-lived
+				// auth cookie who visits daily is last seen today and logging out does
+				// not erase it. Hidden by default; not server-sortable in this slice.
 				enableSorting: false,
 				render: ( { item } ) =>
 					item.lastSeen ? (
@@ -263,25 +394,63 @@ export default function SubscriberList() {
 			{
 				id: 'tags',
 				label: __( 'Tags', 'newspack-plugin' ),
-				// Populated in a later slice (NPPD-1753 PR 7); hidden by default.
+				// The labels stored on the reader here on the site. Hidden by default;
+				// display-only until there is a way to filter on them server-side.
 				enableSorting: false,
-				render: ( { item } ) => (
-					<HStack spacing={ 1 } justify="flex-start" wrap>
-						{ ( item.tags || [] ).map( t => (
-							<Badge key={ t } text={ t } />
-						) ) }
-					</HStack>
-				),
+				// The em-dash empty state matches every other column: an empty cell
+				// reads as a rendering fault rather than as "nothing to show".
+				render: ( { item } ) => {
+					const tags = item.tags || [];
+					if ( tags.length === 0 ) {
+						return <span>—</span>;
+					}
+					return (
+						<HStack spacing={ 1 } justify="flex-start" wrap>
+							{ tags.map( t => (
+								<Badge key={ t } intent="none">
+									{ t }
+								</Badge>
+							) ) }
+						</HStack>
+					);
+				},
 			},
 			{
 				id: 'newsletters',
 				label: __( 'Newsletters', 'newspack-plugin' ),
-				// Populated in a later slice (NPPD-1753 PR 7); hidden by default.
+				// The lists the site records this reader as subscribed to. Each arrives
+				// as `{ id, title }`, with a null title for a list the site holds no
+				// definition for — routinely the ESP's own IDs, which are never
+				// mirrored locally. The unresolved wording is composed here rather
+				// than server-side so the ID stays machine-readable for a future
+				// filter, and so this string sits in the same bundle as the column
+				// heading above it. Showing the bare ID is not an option: `abc123def`
+				// in a publisher-facing column reads as a newsletter name.
+				// Hidden by default; display-only until there is a server-side filter.
 				enableSorting: false,
-				render: ( { item } ) => <div>{ ( item.newsletters || [] ).join( ', ' ) }</div>,
+				render: ( { item } ) => {
+					const newsletters = item.newsletters || [];
+					if ( newsletters.length === 0 ) {
+						return <span>—</span>;
+					}
+					return (
+						<div>
+							{ newsletters
+								.map(
+									list =>
+										// Nullish, not falsy: unresolved is the null the endpoint
+										// sends, not every title JavaScript reads as empty.
+										list.title ??
+										/* translators: %s: the email service provider's identifier for a list the site has no local record of. */
+										sprintf( __( 'Unknown list (%s)', 'newspack-plugin' ), list.id )
+								)
+								.join( ', ' ) }
+						</div>
+					);
+				},
 			},
 		],
-		[ avatars ]
+		[ avatars, planElements, managedOnElements ]
 	);
 
 	// DataViews only makes the title cell clickable; delegate clicks from the
@@ -311,23 +480,37 @@ export default function SubscriberList() {
 	};
 
 	// Surface the subscriber count in the header breadcrumb, e.g. "/ Subscribers (85)".
-	useEffect( () => {
+	// Before paint: this carries the width override, and an error arrives outside a
+	// React event, so a passive effect would paint full-bleed for one frame first.
+	useLayoutEffect( () => {
 		setHeaderData( {
-			sectionName: (
-				<>
-					{ __( 'Subscribers', 'newspack-plugin' ) }{ ' ' }
-					<span
-						className="newspack-subscribers__header-count"
-						aria-label={ sprintf( __( '%s subscribers total', 'newspack-plugin' ), total.toLocaleString() ) }
-					>
-						{ `(${ total.toLocaleString() })` }
-					</span>
-				</>
-			),
+			// Header data is merged, so the explicit `undefined` is what clears a
+			// previous `false`; a retry never changes the route, so nothing else would.
+			fullWidth: error ? false : undefined,
+			sectionName: [
+				{
+					label: __( 'Subscribers', 'newspack-plugin' ),
+					count: subscribersLoading || error ? undefined : total,
+					countLabel: sprintf(
+						/* translators: %s: number of subscribers matching the current view. */
+						_n( '%s subscriber', '%s subscribers', total, 'newspack-plugin' ),
+						formatCount( total )
+					),
+				},
+			],
 		} );
-	}, [ setHeaderData, total ] );
+	}, [ setHeaderData, total, subscribersLoading, error ] );
 
-	if ( subscribersLoading ) {
+	const { retryRef, retry } = useRetryFocus( { settled: ! subscribersLoading, failed: Boolean( error ), reload } );
+
+	// Only the load that has nothing to show blanks the screen. Filtering and
+	// sorting are server-side, so every filter toggle and every debounced keystroke
+	// is a refetch — unmounting DataViews for those would take the search box's
+	// focus with it and flash the applied filter chips away mid-interaction. Once a
+	// response has settled, a refetch keeps DataViews mounted and shows its loading
+	// state in place (see isRefreshing below), for the same reason avatars fill in
+	// progressively rather than holding the table back.
+	if ( subscribersLoading && ! settled ) {
 		return (
 			<div className="newspack-subscribers__loading">
 				<Waiting isCenter />
@@ -338,30 +521,75 @@ export default function SubscriberList() {
 	// A failed read must not read as "this site has no subscribers": say so, and
 	// offer a retry.
 	if ( error ) {
+		const message = sprintf(
+			/* translators: %s: the error message returned by the server. */
+			__( 'Could not load subscribers: %s', 'newspack-plugin' ),
+			error
+		);
 		return (
-			<Notice isError noticeText={ sprintf( __( 'Could not load subscribers: %s', 'newspack-plugin' ), error ) }>
-				<Button variant="link" onClick={ reload }>
-					{ __( 'Retry', 'newspack-plugin' ) }
-				</Button>
-			</Notice>
+			<LoadFailureNotice
+				message={ message }
+				action={
+					<Button variant="link" ref={ retryRef } onClick={ retry }>
+						{ __( 'Retry', 'newspack-plugin' ) }
+					</Button>
+				}
+			/>
 		);
 	}
 
+	// A refetch with rows showing covers the screen with a spinner and blocks clicks
+	// until it settles: DataViews' own one renders below the table, out of sight on
+	// a long page. Keys still reach the controls underneath on purpose, so a reader
+	// can keep typing in the search box. With no rows to cover, DataViews' spinner
+	// stands in for the empty state, so it keeps that case. A failed read lands on
+	// the error notice above, which never renders the overlay, so a failure can't
+	// leave it stuck.
+	const isRefreshing = subscribersLoading && items.length > 0;
+
 	return (
 		// eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
-		<div className="newspack-subscribers__clickable-rows" onClick={ onRowClick }>
+		<div className="newspack-subscribers__clickable-rows" onClick={ onRowClick } aria-busy={ isRefreshing || undefined }>
+			{ /* The two reads fail independently, so a failed /plans is otherwise
+			     silent: DataViews drops a filter whose `elements` is empty, so the
+			     Subscription filter is simply absent (unless the view already
+			     filters by a plan) and reads as a site that sells no plans. The
+			     table itself is unaffected, hence a warning beside it
+			     rather than the error notice that replaces the screen. */ }
+			{ plansFailed && (
+				<LoadFailureNotice
+					status="warning"
+					message={ __(
+						'Could not load the plan list, so the Subscription filter is unavailable. Reload the page to try again.',
+						'newspack-plugin'
+					) }
+				/>
+			) }
 			<DataViews
 				data={ items }
 				fields={ fields }
 				view={ view }
 				onChangeView={ setView }
+				isLoading={ subscribersLoading && ! isRefreshing }
 				paginationInfo={ { totalItems: total, totalPages: pages } }
 				defaultLayouts={ { table: {} } }
 				getItemId={ item => item.id }
 				onClickItem={ openSubscriber }
-				isItemClickable={ hasSubscriberLink }
 				search
+				inlineFilters
 			/>
+			{ /* In the document body, so no ancestor of the list can pin the fixed
+			     overlay to itself or stack popovers above it. Cancelling the press
+			     keeps focus where it was: moving it would close an open filter
+			     popover and pull focus out of the search box. */ }
+			{ isRefreshing &&
+				createPortal(
+					// eslint-disable-next-line jsx-a11y/no-static-element-interactions
+					<div className="newspack-subscribers__loading-overlay" onMouseDown={ event => event.preventDefault() }>
+						<Waiting />
+					</div>,
+					document.body
+				) }
 		</div>
 	);
 }

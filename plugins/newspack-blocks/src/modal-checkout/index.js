@@ -7,10 +7,22 @@ import './checkout.scss';
 /**
  * Internal dependencies
  */
-import { manageCheckoutAttempt, manageCheckoutSuccess, manageLoaded, managePagination } from './analytics';
-import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
+import { manageCheckoutAttempt, manageCheckoutSuccess, manageLoaded, managePagination, registerExpressCheckoutAttempt } from './analytics';
+import {
+	afterDeferredScripts,
+	domReady,
+	getPaymentFocus,
+	getTabbableElements,
+	isPaymentChallengeShown,
+	isSameDocumentRedirect,
+	onCheckoutPlaceOrderProcessing,
+	placeOrderSummary,
+	restorePaymentFocus,
+} from './utils';
 
 ( $ => {
+	const getScrollBehavior = () => ( window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches ? 'auto' : 'smooth' );
+
 	domReady( () => {
 		if ( ! $ ) {
 			console.warn( 'jQuery is not available.' ); // eslint-disable-line no-console
@@ -19,12 +31,27 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 
 		const container = document.querySelector( '#newspack_modal_checkout_container' );
 
+		// The checkout scrolls inside this frame, under the modal's header, so the frame fades its top
+		// edge to show that content continues beneath the header.
+		if ( container ) {
+			const updateScrollEdges = () => {
+				container.classList.toggle( 'is-overflowing-start', document.scrollingElement.scrollTop > 1 );
+			};
+			window.addEventListener( 'scroll', updateScrollEdges, { passive: true } );
+			window.addEventListener( 'resize', updateScrollEdges );
+			if ( window.ResizeObserver ) {
+				new window.ResizeObserver( updateScrollEdges ).observe( container );
+			}
+			updateScrollEdges();
+		}
+
 		const CLASS_PREFIX = newspackBlocksModalCheckout.newspack_class_prefix;
+		const ERROR_ICON = newspackBlocksModalCheckout.error_icon || '';
 		const readyEvent = new CustomEvent( 'checkout-ready' );
 		const completeEvent = new CustomEvent( 'checkout-complete' );
-		const cancelEvent = new CustomEvent( 'checkout-cancel' );
 		const placeOrderStartEvent = new CustomEvent( 'checkout-place-order-start' );
 		const placeOrderSuccessEvent = new CustomEvent( 'checkout-place-order-success' );
+		const placeOrderGatewayActionEvent = new CustomEvent( 'checkout-place-order-gateway-action' );
 		const placeOrderErrorEvent = new CustomEvent( 'checkout-place-order-error' );
 		const placeOrderCriticalErrorEvent = new CustomEvent( 'checkout-place-order-critical-error' );
 
@@ -44,6 +71,12 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 			$(
 				`.woocommerce-NoticeGroup-checkout, .${ CLASS_PREFIX }__inline-error, .woocommerce-error, .woocommerce-message, .wc-block-components-notice-banner`
 			).remove();
+			$(
+				'[aria-describedby="modal-checkout-coupon-result"], [aria-describedby="modal-checkout-nyp-result"], [aria-describedby="modal-checkout-quantity-result"]'
+			).removeAttr( 'aria-invalid aria-describedby' );
+			$(
+				'form.modal_checkout_coupon h3, form.modal_checkout_coupon input[name="coupon_code"], form.modal_checkout_nyp h3, form.modal_checkout_nyp input[name="price"], form.modal_checkout_quantity h3, form.modal_checkout_quantity input[name="quantity"]'
+			).removeClass( 'newspack-ui__field-error' );
 		}
 
 		/**
@@ -79,13 +112,6 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 
 				const $form = $( 'form.checkout' );
 
-				const $checkout_cancel = $( '#checkout_cancel' );
-				if ( $checkout_cancel.length ) {
-					$checkout_cancel.on( 'click', function () {
-						container.dispatchEvent( cancelEvent );
-					} );
-				}
-
 				if ( ! $form.length ) {
 					console.warn( 'Checkout form is not available' ); // eslint-disable-line no-console
 					setReady();
@@ -94,6 +120,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 
 				const $coupon = $( 'form.modal_checkout_coupon' );
 				const $nyp = $( 'form.modal_checkout_nyp' );
+				const $quantity = $( 'form.modal_checkout_quantity' );
 				const $checkout_continue = $( '#checkout_continue' );
 				const $customer_details = $( '#customer_details' );
 				const $after_customer_details = $( '#after_customer_details' );
@@ -113,15 +140,66 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 				handlePaymentMethodSelect();
 
 				/**
+				 * Changing a payment method or option can refresh the checkout, which replaces the
+				 * payment section. Return focus to the same control so keyboard use can continue.
+				 */
+				const { ownerDocument } = $form.get( 0 );
+				let paymentFocus = null;
+				$( document.body ).on( 'update_checkout', function () {
+					paymentFocus = getPaymentFocus( ownerDocument );
+				} );
+				$( document ).on( 'updated_checkout', function () {
+					if ( ! paymentFocus ) {
+						return;
+					}
+					const focused = paymentFocus;
+					paymentFocus = null;
+					restorePaymentFocus( ownerDocument, focused );
+				} );
+
+				/**
+				 * Tell the modal when a payment challenge, like 3D Secure, shows or goes while
+				 * an order is being placed, so its processing screen doesn't cover it.
+				 */
+				let challengeShown = false;
+				let challengeFrame = null;
+				const syncPaymentChallenge = () => {
+					challengeFrame = null;
+					const shown = isPaymentChallengeShown( document );
+					if ( shown !== challengeShown ) {
+						challengeShown = shown;
+						container.dispatchEvent( new CustomEvent( 'checkout-payment-challenge', { detail: { shown } } ) );
+					}
+				};
+				const challengeObserver = new MutationObserver( () => {
+					if ( ! challengeFrame ) {
+						challengeFrame = window.requestAnimationFrame( syncPaymentChallenge );
+					}
+				} );
+				container.addEventListener( 'checkout-place-order-error', () => {
+					challengeObserver.disconnect();
+					challengeShown = false;
+				} );
+
+				/**
 				 * Bubble up checkout place order event.
 				 */
 				let placedOrder = false;
+				// Set while the gateway shows its own step in place after the order is placed (e.g. a 3D Secure challenge).
+				let awaitingGatewayAction = false;
 				$form.on( 'checkout_place_order', function () {
 					if ( placedOrder ) {
 						return;
 					}
 					placedOrder = true;
+					awaitingGatewayAction = false;
 					container.dispatchEvent( placeOrderStartEvent );
+					challengeObserver.observe( document.body, {
+						childList: true,
+						subtree: true,
+						attributes: true,
+						attributeFilter: [ 'style', 'class' ],
+					} );
 				} );
 				onCheckoutPlaceOrderProcessing( container, function () {
 					if ( ! placedOrder ) {
@@ -133,22 +211,138 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						container.dispatchEvent( placeOrderErrorEvent );
 					}
 				} );
-				$form.on( 'checkout_place_order_success', function () {
+				$form.on( 'checkout_place_order_success', function ( event, result ) {
 					placedOrder = false;
 					container.dispatchEvent( placeOrderSuccessEvent );
+					if ( isSameDocumentRedirect( result?.redirect, window.location.href ) ) {
+						awaitingGatewayAction = true;
+						container.dispatchEvent( placeOrderGatewayActionEvent );
+					}
+				} );
+
+				/**
+				 * On the payment step, show checkout errors under the "Payment info" heading, so they sit
+				 * next to the payment fields they are about.
+				 *
+				 * @param {jQuery} $notices The notice groups to place.
+				 *
+				 * @return {boolean} Whether the notices were moved.
+				 */
+				function placeCheckoutNotices( $notices ) {
+					if ( ! $notices.length || ! $after_customer_details.length || ! $customer_details.is( ':hidden' ) ) {
+						return false;
+					}
+					const $heading = $after_customer_details.children( 'h3' ).filter( ':visible' ).first();
+					if ( $heading.length ) {
+						$heading.after( $notices );
+					} else {
+						$after_customer_details.prepend( $notices );
+					}
+					// WooCommerce has already started scrolling to where the notice was.
+					$( 'html, body' ).stop( true );
+					return true;
+				}
+
+				/**
+				 * Start each error in the notices with the error icon, as notices rendered on the server do.
+				 *
+				 * @param {jQuery} $notices The notice groups.
+				 */
+				function addErrorIcons( $notices ) {
+					if ( ! ERROR_ICON ) {
+						return;
+					}
+					$notices
+						.find( '.woocommerce-error > li' )
+						.filter( ( i, item ) => ! $( item ).children( 'svg' ).length )
+						.prepend( ERROR_ICON );
+				}
+
+				/**
+				 * Place the notice groups WooCommerce prepends to the form, after a failed order or a
+				 * failed checkout refresh.
+				 */
+				function placeFormNotices() {
+					// A checkout refresh clears errors by their list, which leaves an emptied group behind.
+					$after_customer_details
+						.children( '.woocommerce-NoticeGroup' )
+						.filter( ( i, group ) => ! group.textContent.trim() )
+						.remove();
+					const $notices = $form.children( '.woocommerce-NoticeGroup-checkout, .woocommerce-NoticeGroup-updateOrderReview' );
+					if ( placeCheckoutNotices( $notices ) ) {
+						const $refreshNotices = $notices.filter( '.woocommerce-NoticeGroup-updateOrderReview' );
+						$refreshNotices.addClass( `${ CLASS_PREFIX }__notice ${ CLASS_PREFIX }__notice--error` );
+						addErrorIcons( $refreshNotices );
+					}
+				}
+
+				/**
+				 * Place errors a gateway shows in the page's notices wrapper, such as Stripe's own card
+				 * errors. Only the contents move: gateways look the wrapper up again for their next error.
+				 */
+				function placeWrapperNotices() {
+					const $errors = $( '.woocommerce-notices-wrapper' ).first().children( '.woocommerce-error' );
+					if ( ! $errors.length || ! $customer_details.is( ':hidden' ) ) {
+						return;
+					}
+					const $group = $( '<div class="woocommerce-NoticeGroup woocommerce-NoticeGroup-checkout" data-wrapper-notice="new" />' );
+					$after_customer_details.children( '.woocommerce-NoticeGroup-checkout' ).remove();
+					if ( placeCheckoutNotices( $group ) ) {
+						$group.append( $errors );
+						addErrorIcons( $group );
+						// Stripe can report an error from its own `updated_checkout` handler, before ours runs.
+						setTimeout( () => $group.attr( 'data-wrapper-notice', 'placed' ) );
+					}
+				}
+
+				/**
+				 * Clear gateway errors on a checkout refresh. Gateways that still have one show it again.
+				 */
+				function clearWrapperNotices() {
+					$after_customer_details.children( '[data-wrapper-notice="placed"]' ).remove();
+				}
+
+				$( document.body ).on( 'checkout_error', function () {
+					placeWrapperNotices();
+					placeFormNotices();
 				} );
 
 				$( document.body ).on( 'checkout_error', function ( event, errors ) {
-					if ( ! placedOrder ) {
+					// A gateway step that fails or is canceled reports its error here, after the order was placed.
+					if ( ! placedOrder && ! awaitingGatewayAction ) {
 						return;
 					}
 					placedOrder = false;
+					awaitingGatewayAction = false;
 					if ( errors && errors.indexOf( newspackBlocksModalCheckout.labels.critical_error ) >= 0 ) {
 						container.dispatchEvent( placeOrderCriticalErrorEvent );
 						return;
 					}
 					container.dispatchEvent( placeOrderErrorEvent );
+					returnFocusToPlaceOrder();
 				} );
+
+				/**
+				 * After a failed order, such as a declined payment, send focus to the place order button
+				 * so the reader can retry, and announce the error. Errors tied to a checkout field keep
+				 * WooCommerce's handling, which leads the reader to the field.
+				 */
+				function returnFocusToPlaceOrder() {
+					const placeOrder = $form.find( '#place_order' ).get( 0 );
+					if ( ! placeOrder ) {
+						return;
+					}
+					const $notice = $form.find( '.woocommerce-NoticeGroup-checkout' ).first();
+					if ( $notice.find( '[data-id]:not([data-id=""])' ).length ) {
+						return;
+					}
+					const announce = window.newspackUI?.announce;
+					if ( $notice.length && announce ) {
+						$notice.find( '[role="alert"]' ).removeAttr( 'role' );
+						announce( $notice.text().replace( /\s+/g, ' ' ).trim(), true );
+					}
+					placeOrder.focus( { preventScroll: true } );
+				}
 				$form.on( 'update_checkout', function () {
 					if ( ! placedOrder ) {
 						return;
@@ -167,16 +361,24 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						$( '#after_customer_details > h3' ).hide();
 					}
 				} );
+				$( document ).on( 'updated_checkout', function () {
+					clearWrapperNotices();
+					placeFormNotices();
+				} );
 
 				/**
 				 * Handle order review table appearance.
 				 */
-				$( document ).on( 'updated_checkout', function () {
-					const $wrapper = $( '.order-review-wrapper' );
-					if ( ! $wrapper.length ) {
+				let orderSummary = null;
+				$( document ).on( 'updated_checkout', function ( event, data ) {
+					orderSummary = placeOrderSummary( document, orderSummary, data?.fragments?.[ '.woocommerce-checkout-review-order-table' ] );
+					if ( ! orderSummary ) {
 						return;
 					}
+					// WooCommerce Subscriptions runs this on body before this handler, when a replaced summary may still be detached.
+					window.hide_non_applicable_coupons?.();
 
+					const $wrapper = $( orderSummary );
 					const $table = $wrapper.find( 'table' );
 
 					// Toggle visibility according to table content.
@@ -184,17 +386,8 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						$wrapper.addClass( 'hidden' );
 					} else {
 						// WooCommerce blocks the order review table while updating.
-						// We need to make sure the cloned table is always unblocked.
 						$table.unblock();
 						$wrapper.removeClass( 'hidden' );
-					}
-
-					// Move new order review table to the payment methods.
-					const $payment_methods = $( '.payment_methods' );
-					if ( $payment_methods.length ) {
-						const $el = $wrapper.clone();
-						$( '.order-review-wrapper' ).remove();
-						$payment_methods.after( $el );
 					}
 				} );
 
@@ -211,7 +404,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 				 * Get updated cart total to update the "Place Order" button.
 				 */
 				function getOrderReviewCartTotal() {
-					return $( '.order-review-wrapper tr.order-total:not(.recurring-total) .amount' ).first().text().replace( /\s+/g, ' ' ).trim();
+					return $( orderSummary ).find( 'tr.order-total:not(.recurring-total) .amount' ).first().text().replace( /\s+/g, ' ' ).trim();
 				}
 				let cartTotalRequest = false;
 				function requestUpdatedCartTotal( cb ) {
@@ -326,7 +519,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 								$existingError.remove();
 							}
 							$field.addClass( 'woocommerce-invalid' ).removeClass( 'woocommerce-valid' );
-							$field.append( `<span class="${ CLASS_PREFIX }__inline-error">` + $error.text() + '</span>' );
+							$field.append( `<span class="${ CLASS_PREFIX }__inline-error">${ ERROR_ICON }` + $error.text() + '</span>' );
 							$error.remove();
 						} else {
 							if ( ! $error.is( 'li' ) ) {
@@ -359,11 +552,12 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 							$( '<ul class="woocommerce-error" role="alert" />' ).append( genericErrors )
 						);
 						$form.prepend( $notices );
-						$notices.get( 0 ).scrollIntoView( { behavior: 'smooth' } );
+						placeCheckoutNotices( $notices );
+						$notices.get( 0 ).scrollIntoView( { behavior: getScrollBehavior() } );
 					}
 
 					if ( $fieldToFocus?.length ) {
-						window.scroll( { top: $fieldToFocus.offset().top - 100, left: 0, behavior: 'smooth' } );
+						window.scroll( { top: $fieldToFocus.offset().top - 100, left: 0, behavior: getScrollBehavior() } );
 						$fieldToFocus.find( 'input.input-text, select, input:checkbox' ).trigger( 'focus' );
 					}
 
@@ -371,6 +565,21 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 
 					$( document.body ).trigger( 'update_checkout' );
 					$( document.body ).trigger( 'checkout_error', [ error_message ] );
+				}
+
+				/**
+				 * Mark a field invalid and point it at its result message, or clear both.
+				 *
+				 * @param {jQuery}  $input    The field.
+				 * @param {string}  resultId  The id of the field's result message.
+				 * @param {boolean} isInvalid Whether the field holds an error.
+				 */
+				function setFieldInvalid( $input, resultId, isInvalid ) {
+					if ( isInvalid ) {
+						$input.attr( { 'aria-invalid': 'true', 'aria-describedby': resultId } );
+					} else {
+						$input.removeAttr( 'aria-invalid aria-describedby' );
+					}
 				}
 
 				/**
@@ -400,7 +609,10 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 							if ( code ) {
 								const isError = code.includes( 'error' );
 								$coupon.append(
-									`<p class="result ${ CLASS_PREFIX }__helper-text ${ isError ? CLASS_PREFIX + '__inline-error' : '' }">` +
+									`<p id="modal-checkout-coupon-result" class="result ${ CLASS_PREFIX }__helper-text ${
+										isError ? CLASS_PREFIX + '__inline-error' : ''
+									}">` +
+										( isError ? ERROR_ICON : '' ) +
 										$( code ).text() +
 										'</p>'
 								);
@@ -411,6 +623,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 									$coupon.find( 'input[name="coupon_code"]' ).focus();
 									$coupon.find( 'h3, input[name="coupon_code"]' ).removeClass( 'newspack-ui__field-error' );
 								}
+								setFieldInvalid( $coupon.find( 'input[name="coupon_code"]' ), 'modal-checkout-coupon-result', isError );
 								$( document.body ).trigger( 'applied_coupon_in_checkout', [ data.coupon_code ] );
 								$( document.body ).trigger( 'update_checkout', { update_shipping_method: false } );
 							}
@@ -425,6 +638,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 					$( document.body ).on( 'removed_coupon_in_checkout', () => {
 						clearNotices();
 						$coupon.find( '.result' ).remove();
+						setFieldInvalid( $coupon.find( 'input[name="coupon_code"]' ), 'modal-checkout-coupon-result', false );
 						$coupon.find( 'input[name="coupon_code"]' ).val( '' ).focus();
 					} );
 				}
@@ -441,7 +655,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						return false;
 					}
 					const input = $nyp.find( 'input[name="price"]' );
-					input.attr( 'disabled', true );
+					input.prop( 'readOnly', true );
 					const data = {
 						_ajax_nonce: newspackBlocksModalCheckout.nyp_nonce,
 						action: 'process_name_your_price_request',
@@ -453,12 +667,16 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						type: 'POST',
 						url: newspackBlocksModalCheckout.ajax_url,
 						data,
-						success: ( { success, data: res } ) => {
+						success: response => {
+							const success = Boolean( response?.success );
 							clearNotices();
 							$nyp.find( '.result' ).remove();
 							$nyp.append(
-								`<p class="result ${ CLASS_PREFIX }__helper-text ${ ! success ? CLASS_PREFIX + '__inline-error' : '' }">` +
-									res.message +
+								`<p id="modal-checkout-nyp-result" class="result ${ CLASS_PREFIX }__helper-text ${
+									! success ? CLASS_PREFIX + '__inline-error' : ''
+								}">` +
+									( success ? '' : ERROR_ICON ) +
+									( response?.data?.message || newspackBlocksModalCheckout.quantity_error ) +
 									'</p>'
 							);
 							if ( success ) {
@@ -467,17 +685,108 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 								$nyp.find( 'input[name="price"]' ).focus();
 								$nyp.find( 'h3, input[name="price"]' ).addClass( 'newspack-ui__field-error' );
 							}
+							setFieldInvalid( $nyp.find( 'input[name="price"]' ), 'modal-checkout-nyp-result', ! success );
 							$( document.body ).trigger( 'update_checkout', { update_shipping_method: false } );
 						},
 						complete: () => {
 							unblockForm( $nyp );
-							input.attr( 'disabled', false );
+							input.prop( 'readOnly', false );
 							input.focus();
 						},
 					} );
 				}
 				if ( $nyp.length ) {
 					$nyp.on( 'submit', handleNYPFormSubmit );
+				}
+
+				/**
+				 * Replace the quantity form's result line, and mark the field when the
+				 * server refused the change.
+				 *
+				 * @param {boolean} success
+				 * @param {string}  message
+				 */
+				function showQuantityResult( success, message ) {
+					$quantity.find( '.result' ).remove();
+					$quantity.append(
+						`<p id="modal-checkout-quantity-result" class="result ${ CLASS_PREFIX }__helper-text ${
+							! success ? CLASS_PREFIX + '__inline-error' : ''
+						}">` +
+							( success ? '' : ERROR_ICON ) +
+							message +
+							'</p>'
+					);
+					$quantity.find( 'h3, input[name="quantity"]' ).toggleClass( 'newspack-ui__field-error', ! success );
+					setFieldInvalid( $quantity.find( 'input[name="quantity"]' ), 'modal-checkout-quantity-result', ! success );
+				}
+
+				/**
+				 * Handle quantity form submission.
+				 *
+				 * On success the order review is refreshed to show the new total, and the
+				 * `#modal-checkout-product-details` data carrier is rewritten from the
+				 * response — `update_checkout` only replaces the review-order table and
+				 * payment box, and the carrier sits outside both.
+				 *
+				 * On failure the server has already put the original line item back, so
+				 * the review still matches the cart and must be left alone.
+				 *
+				 * @param {Event} ev
+				 */
+				function handleQuantityFormSubmit( ev ) {
+					ev.preventDefault();
+					const blocked = blockForm( $quantity );
+					if ( ! blocked ) {
+						return false;
+					}
+					const input = $quantity.find( 'input[name="quantity"]' );
+					input.prop( 'readOnly', true );
+					const data = {
+						_ajax_nonce: newspackBlocksModalCheckout.quantity_nonce,
+						action: 'process_quantity_request',
+						quantity: input.val(),
+						product_id: $quantity.find( 'input[name="product_id"]' ).val(),
+					};
+					$.ajax( {
+						type: 'POST',
+						url: newspackBlocksModalCheckout.ajax_url,
+						data,
+						success: response => {
+							// A malformed request returns bare (`0`), so there is no envelope
+							// to read and nothing the reader could act on.
+							if ( ! response || typeof response.success === 'undefined' ) {
+								showQuantityResult( false, newspackBlocksModalCheckout.quantity_error );
+								return;
+							}
+							const { success, data: res } = response;
+							clearNotices();
+							showQuantityResult( success, res?.message || newspackBlocksModalCheckout.quantity_error );
+							if ( success ) {
+								if ( res.checkout_data ) {
+									$( '#modal-checkout-product-details' ).attr( 'data-checkout', JSON.stringify( res.checkout_data ) );
+									// The server may accept a quantity other than the one asked
+									// for — a product sold in bounds clamps to them. Show the
+									// count the reader is about to pay for, not the one they typed.
+									if ( res.checkout_data.quantity ) {
+										input.val( res.checkout_data.quantity );
+									}
+								}
+								$( document.body ).trigger( 'update_checkout', { update_shipping_method: false } );
+							} else {
+								input.focus();
+							}
+						},
+						// An expired nonce dies with a 403, which never reaches success:.
+						error: () => showQuantityResult( false, newspackBlocksModalCheckout.quantity_error ),
+						complete: () => {
+							unblockForm( $quantity );
+							input.prop( 'readOnly', false );
+							input.focus();
+						},
+					} );
+				}
+				if ( $quantity.length ) {
+					$quantity.on( 'submit', handleQuantityFormSubmit );
 				}
 
 				/**
@@ -488,6 +797,9 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 				function handleFormSubmit( ev ) {
 					ev.preventDefault();
 					ev.stopImmediatePropagation();
+					if ( $form.is( '.modal-processing' ) ) {
+						return;
+					}
 					validateForm();
 					managePagination( 'continue' ); // TODOGA4: this is firing whether or not the form validates.
 				}
@@ -515,6 +827,9 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						if ( $nyp.length ) {
 							$nyp.hide();
 						}
+						if ( $quantity.length ) {
+							$quantity.hide();
+						}
 						$customer_details.show();
 						$after_customer_details.hide();
 						$customer_details.find( 'input' ).first().focus();
@@ -536,7 +851,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 							$form.data( 'newspack-recaptcha', 'newspack_modal_checkout' );
 							const onSuccess = () => {
 								clearNotices();
-								$form.get( 0 ).scrollIntoView( { behavior: 'smooth' } );
+								$form.get( 0 ).scrollIntoView( { behavior: getScrollBehavior() } );
 							};
 							const onError = error => handleFormError( error );
 							newspack_grecaptcha.render( $form.get(), onSuccess, onError );
@@ -549,6 +864,9 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						}
 						if ( $nyp.length ) {
 							$nyp.show();
+						}
+						if ( $quantity.length ) {
+							$quantity.show();
 						}
 						$customer_details.hide();
 						$after_customer_details.show();
@@ -565,7 +883,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 					}
 					$form.triggerHandler( 'editing_details', [ isEditingDetails ] );
 					// Scroll to top.
-					window.scroll( { top: 0, left: 0, behavior: 'smooth' } );
+					window.scroll( { top: 0, left: 0, behavior: getScrollBehavior() } );
 				}
 
 				/**
@@ -737,13 +1055,16 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 									handleFormError( result.messages );
 								} else {
 									handleFormError(
-										`<div class="${ CLASS_PREFIX }__inline-error">` + wc_checkout_params.i18n_checkout_error + '</div>'
+										`<div class="${ CLASS_PREFIX }__inline-error">${ ERROR_ICON }` +
+											wc_checkout_params.i18n_checkout_error +
+											'</div>'
 									);
 								}
 							}
 							cb( result );
 						},
 						error: ( jqXHR, textStatus, errorThrown ) => {
+							unblockForm( $form );
 							let messages = '';
 							if ( ! silent ) {
 								messages = '<div class="woocommerce-error">' + ( errorThrown || wc_checkout_params.i18n_checkout_error ) + '</div>';
@@ -759,6 +1080,9 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 					manageCheckoutAttempt();
 				} );
 
+				// Stripe's express checkout buttons submit without clicking it.
+				afterDeferredScripts( registerExpressCheckoutAttempt );
+
 				/**
 				 * Blocks provided form.
 				 *
@@ -772,7 +1096,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 					}
 					const buttons = form.find( 'button[type=submit]' );
 					buttons.each( ( i, el ) => {
-						$( el ).attr( 'disabled', true );
+						$( el ).attr( 'aria-disabled', 'true' ).attr( 'aria-busy', 'true' ).addClass( `${ CLASS_PREFIX }__button--loading` );
 					} );
 					form.addClass( 'modal-processing' );
 					return true;
@@ -791,7 +1115,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 					}
 					const buttons = form.find( 'button[type=submit]' );
 					buttons.each( ( i, el ) => {
-						$( el ).attr( 'disabled', false );
+						$( el ).removeAttr( 'aria-disabled' ).removeAttr( 'aria-busy' ).removeClass( `${ CLASS_PREFIX }__button--loading` );
 					} );
 					form.removeClass( 'modal-processing' );
 					return true;
@@ -817,7 +1141,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 
 						$( errorNode ).addClass( `${ CLASS_PREFIX }__notice ${ CLASS_PREFIX }__notice--error` );
 						container.dispatchEvent( placeOrderErrorEvent );
-						errorNode.scrollIntoView( { behavior: 'smooth', block: 'center' } );
+						errorNode.scrollIntoView( { behavior: getScrollBehavior(), block: 'center' } );
 					};
 
 					const isErrorNode = node => {
@@ -857,7 +1181,6 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 				if ( expressCheckoutErrorObserver ) {
 					const disconnect = () => expressCheckoutErrorObserver.disconnect();
 					container.addEventListener( 'checkout-complete', disconnect );
-					container.addEventListener( 'checkout-cancel', disconnect );
 					window.addEventListener( 'beforeunload', disconnect );
 				}
 			}
@@ -924,10 +1247,46 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 			setReady( false );
 		} );
 
-		// Close modal when 'Esc' key is pressed and focus is inside of the iframe.
+		// The checkout dialog can't see keys pressed in here. Escape reaches it as the
+		// dialog's own cancel, so a payment in progress keeps it open, and Tab from the
+		// last control wraps to the dialog's first.
 		document.addEventListener( 'keydown', function ( ev ) {
+			const dialog = window.frameElement?.closest( 'dialog' );
 			if ( ev.key === 'Escape' ) {
-				parent.newspackCloseModalCheckout();
+				// An open dropdown, like the country field's, closes on its own Escape.
+				if ( ev.defaultPrevented || ev.target.closest?.( '.select2-dropdown, .select2-container--open' ) ) {
+					return;
+				}
+				if ( dialog ) {
+					dialog.dispatchEvent( new Event( 'cancel', { cancelable: true } ) );
+				} else {
+					parent.newspackCloseModalCheckout();
+				}
+				return;
+			}
+			if ( ev.key !== 'Tab' || ev.defaultPrevented || ! dialog ) {
+				return;
+			}
+			const tabbable = getTabbableElements( document.body );
+			const elements = [ ...document.body.querySelectorAll( '*' ) ];
+			const position = elements.indexOf( ev.target );
+			const first = getTabbableElements( dialog )[ 0 ];
+			// With the title bar hidden, as on the thank-you screen, the frame is all the dialog has, so Tab wraps inside it.
+			const frameOnly = first === window.frameElement;
+			if ( ev.shiftKey ) {
+				if ( frameOnly && tabbable.length && ! tabbable.some( element => elements.indexOf( element ) < position ) ) {
+					ev.preventDefault();
+					tabbable[ tabbable.length - 1 ].focus();
+				}
+				return;
+			}
+			if ( ! first || tabbable.some( element => elements.indexOf( element ) > position ) ) {
+				return;
+			}
+			const next = frameOnly ? tabbable[ 0 ] : first;
+			if ( next ) {
+				ev.preventDefault();
+				next.focus();
 			}
 		} );
 

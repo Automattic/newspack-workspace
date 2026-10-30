@@ -34,6 +34,7 @@
 
 // Now overlay our style-specific variables, so we're only overriding specific variables.
 :root {
+	// Header and Body changes must be mirrored in newspack_font_family_stacks(), newspack-theme/inc/typography.php.
 	--newspack-theme-font-heading: "Montserrat", "Helvetica", sans-serif;
 	--newspack-theme-font-body:
 		-apple-system,

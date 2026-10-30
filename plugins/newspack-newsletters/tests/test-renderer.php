@@ -11,9 +11,22 @@
 class Newsletters_Renderer_Test extends WP_UnitTestCase {
 
 	/**
+	 * Filter registered by register_dimension_presets(), removed on tear down.
+	 *
+	 * @var callable|null
+	 */
+	private $dimension_preset_filter = null;
+
+
+	/**
 	 * Clean up after each test.
 	 */
 	public function tear_down() {
+		if ( null !== $this->dimension_preset_filter ) {
+			remove_filter( 'wp_theme_json_data_theme', $this->dimension_preset_filter );
+			$this->dimension_preset_filter = null;
+			wp_clean_theme_json_cache();
+		}
 		parent::tear_down();
 		// Reset stub RDB to prevent test pollution.
 		\RemoteDataBlocks\Editor\DataBinding\BlockBindings::reset();
@@ -301,6 +314,315 @@ class Newsletters_Renderer_Test extends WP_UnitTestCase {
 			),
 			'<mj-section url="https://www.amazon.com/Learning-PHP-MySQL-JavaScript-Javascript/dp/1491978910" padding="0"><mj-column padding="12px" width="100%"><mj-text padding="0" line-height="1.5" font-size="16px" >Embed</mj-text></mj-column></mj-section>',
 			'Renders invalid rich HTML as link'
+		);
+	}
+
+	/**
+	 * Registers dimension presets at the theme layer, for the current test only.
+	 *
+	 * The preset tests must not depend on what the installed WordPress ships: core
+	 * only gained `dimensionSizes` for `core/button` in 7.1, so asserting against
+	 * its built-in 25/50/75/100 passes locally on an RC and fails on CI, which
+	 * installs the latest stable release. Declaring our own preset keeps the test
+	 * hermetic, and puts it at the theme layer's root — the natural place for a
+	 * theme to declare one, and a node core's own lookup does not read.
+	 *
+	 * @return void
+	 */
+	private function register_dimension_presets() {
+		$this->dimension_preset_filter = function ( $theme_json ) {
+			return $theme_json->update_with(
+				[
+					'version'  => 3,
+					'settings' => [
+						'dimensions' => [
+							'dimensionSizes' => [
+								[
+									'name' => 'QA Half',
+									'slug' => 'qa-half',
+									'size' => '50%',
+								],
+								[
+									'name' => 'QA Camel',
+									'slug' => 'qaCamelQuarter',
+									'size' => '25%',
+								],
+							],
+						],
+					],
+				]
+			);
+		};
+		add_filter( 'wp_theme_json_data_theme', $this->dimension_preset_filter );
+		wp_clean_theme_json_cache();
+	}
+
+	/**
+	 * Build a `core/buttons` block wrapping one `core/button` per set of attributes.
+	 *
+	 * @param array ...$button_attrs One attributes array per button, in order.
+	 * @return array Parsed-block array suitable for render_mjml_component().
+	 */
+	private function buttons_block( ...$button_attrs ) {
+		$inner_html = '<button><a>Test Button</a></button>';
+		$buttons    = [];
+		foreach ( $button_attrs as $attrs ) {
+			$buttons[] = [
+				'blockName'    => 'core/button',
+				'attrs'        => $attrs,
+				'innerBlocks'  => [],
+				'innerContent' => [ $inner_html ],
+				'innerHTML'    => $inner_html,
+			];
+		}
+		return [
+			'blockName'    => 'core/buttons',
+			'attrs'        => [],
+			'innerBlocks'  => $buttons,
+			'innerContent' => [ '<div>', null, '</div>' ],
+			'innerHTML'    => '<div></div>',
+		];
+	}
+
+	/**
+	 * Render a buttons block and return its `mj-column` widths, in order.
+	 *
+	 * @param array ...$button_attrs One attributes array per button.
+	 * @return array Width strings, e.g. `[ '50%', '25%' ]`.
+	 */
+	private function button_column_widths( ...$button_attrs ) {
+		$mjml = Newspack_Newsletters_Renderer::render_mjml_component( $this->buttons_block( ...$button_attrs ) );
+		preg_match_all( '/<mj-column[^>]*width="([^"]*)"/', $mjml, $matches );
+		return $matches[1];
+	}
+
+	/**
+	 * A button width set the pre-WP-7.1 way renders as its own column percentage.
+	 *
+	 * Guards the legacy `{"width":50}` attribute, which is what every newsletter
+	 * authored before WP 7.1 still carries on disk.
+	 */
+	public function test_button_width_legacy_attribute() {
+		$this->assertSame(
+			[ '50%' ],
+			$this->button_column_widths( [ 'width' => 50 ] ),
+			'Expected a button with the legacy width attribute to render a 50% column.'
+		);
+	}
+
+	/**
+	 * A button width set the WP 7.1 way renders the same column percentage.
+	 *
+	 * WP 7.1 moved core/button width from a top-level `width` attribute to the
+	 * `dimensions` block support, so the editor rewrites stored markup the first
+	 * time a newsletter is re-saved. Without this the column silently falls back
+	 * to the shared default and the sent email loses the author's layout
+	 * (NEWS-2852).
+	 */
+	public function test_button_width_dimensions_support() {
+		$this->assertSame(
+			[ '50%' ],
+			$this->button_column_widths( [ 'style' => [ 'dimensions' => [ 'width' => '50%' ] ] ] ),
+			'Expected a button using the WP 7.1 dimensions support to render a 50% column.'
+		);
+	}
+
+	/**
+	 * A `dimensions` width naming a preset resolves to that preset's size.
+	 *
+	 * WordPress stores a chosen preset as `var:preset|dimension|<slug>` rather than
+	 * a size, and on the web an unresolved reference still renders via the
+	 * `--wp--preset--dimension--*` custom property. Email has no custom properties,
+	 * so failing to resolve here loses the width outright.
+	 *
+	 * The preset is declared at the theme layer's root, which is where a theme
+	 * would naturally put one — and which core's own button lookup does not read.
+	 */
+	public function test_button_width_dimensions_preset() {
+		$this->register_dimension_presets();
+		$this->assertSame(
+			[ '50%' ],
+			$this->button_column_widths( [ 'style' => [ 'dimensions' => [ 'width' => 'var:preset|dimension|qa-half' ] ] ] ),
+			'Expected a theme-declared preset reference to resolve to the preset size.'
+		);
+	}
+
+	/**
+	 * A camelCase preset slug resolves from its verbatim reference.
+	 *
+	 * The editor writes the slug into the reference unchanged, so a camelCase slug
+	 * arrives camelCased. Core kebab-cases slugs only when building the CSS
+	 * custom-property name, never the stored value - so an exact comparison is
+	 * both what core does and all that real content needs.
+	 */
+	public function test_button_width_dimensions_preset_camel_case_slug() {
+		$this->register_dimension_presets();
+		$this->assertSame(
+			[ '25%' ],
+			$this->button_column_widths( [ 'style' => [ 'dimensions' => [ 'width' => 'var:preset|dimension|qaCamelQuarter' ] ] ] ),
+			'Expected a camelCase slug to resolve from its verbatim reference.'
+		);
+	}
+
+	/**
+	 * Widths MJML columns can't express fall back to the shared default.
+	 *
+	 * An absolute unit, an unresolvable preset, a kebab-cased reference to a
+	 * camelCase slug, a missing `width` key, or a value outside the usable range
+	 * all mean "no usable column percentage". The button then takes
+	 * the default share, which is what a lone width-less button gets: 100%.
+	 * Emitting the raw value instead would produce columns like `200%` or `-50%`
+	 * and break the whole row, not just that button.
+	 *
+	 * @dataProvider unusable_button_width_provider
+	 *
+	 * @param array  $attrs A core/button block's attributes.
+	 * @param string $case  Human-readable label for the failure message.
+	 */
+	public function test_button_width_unusable_values_fall_back( $attrs, $case ) {
+		// Registered so the kebab-cased row is a real miss against an existing
+		// camelCase preset, rather than passing because nothing was declared.
+		$this->register_dimension_presets();
+		$this->assertSame(
+			[ '100%' ],
+			$this->button_column_widths( $attrs ),
+			sprintf( 'Expected %s to fall back to the default column width.', $case )
+		);
+	}
+
+	/**
+	 * Width values that cannot become an MJML column percentage.
+	 *
+	 * @return array[]
+	 */
+	public function unusable_button_width_provider() {
+		return [
+			'absolute unit'       => [ [ 'style' => [ 'dimensions' => [ 'width' => '200px' ] ] ], 'an absolute unit' ],
+			'unknown preset'      => [ [ 'style' => [ 'dimensions' => [ 'width' => 'var:preset|dimension|nope' ] ] ], 'an unresolvable preset' ],
+			'kebab-cased slug'    => [ [ 'style' => [ 'dimensions' => [ 'width' => 'var:preset|dimension|qa-camel-quarter' ] ] ], 'a kebab-cased reference to a camelCase slug' ],
+			'dimensions no width' => [ [ 'style' => [ 'dimensions' => [] ] ], 'dimensions without a width' ],
+			'legacy zero'         => [ [ 'width' => 0 ], 'a zero legacy width' ],
+			'legacy negative'     => [ [ 'width' => -50 ], 'a negative legacy width' ],
+			'legacy over 100'     => [ [ 'width' => 150 ], 'a legacy width above 100' ],
+		];
+	}
+
+	/**
+	 * An unusable legacy width falls through to the `dimensions` value.
+	 *
+	 * The legacy attribute is preferred, but only when it yields a usable width.
+	 * Choosing the branch on the legacy key's mere presence - and validating only
+	 * afterwards - would discard a perfectly good `dimensions` width and drop the
+	 * button to the default share. Partially-migrated content is exactly where
+	 * both keys coexist, so this is the case the preference order exists to get
+	 * right.
+	 *
+	 * @dataProvider unusable_legacy_falls_through_provider
+	 *
+	 * @param mixed  $legacy The unusable legacy `width` attribute.
+	 * @param string $case   Human-readable label for the failure message.
+	 */
+	public function test_button_width_unusable_legacy_falls_through( $legacy, $case ) {
+		$this->assertSame(
+			[ '40%' ],
+			$this->button_column_widths(
+				[
+					'width' => $legacy,
+					'style' => [ 'dimensions' => [ 'width' => '40%' ] ],
+				]
+			),
+			sprintf( 'Expected %s to fall through to the dimensions width.', $case )
+		);
+	}
+
+	/**
+	 * Unusable legacy widths that should not mask a usable `dimensions` width.
+	 *
+	 * @return array[]
+	 */
+	public function unusable_legacy_falls_through_provider() {
+		return [
+			'zero'        => [ 0, 'a zero legacy width' ],
+			'negative'    => [ -50, 'a negative legacy width' ],
+			'over 100'    => [ 150, 'a legacy width above 100' ],
+			'empty'       => [ '', 'an empty legacy width' ],
+			'non-numeric' => [ 'abc', 'a non-numeric legacy width' ],
+		];
+	}
+
+	/**
+	 * The legacy attribute wins when a block carries both shapes.
+	 *
+	 * WP 7.1's migration deletes the old key as it writes the new one, so the two
+	 * should never coexist — but hand-edited or partially-migrated content can
+	 * carry both, and the read order needs to be deterministic either way.
+	 */
+	public function test_button_width_legacy_wins_over_dimensions() {
+		$this->assertSame(
+			[ '50%' ],
+			$this->button_column_widths(
+				[
+					'width' => 50,
+					'style' => [ 'dimensions' => [ 'width' => '25%' ] ],
+				]
+			),
+			'Expected the legacy width attribute to take precedence.'
+		);
+	}
+
+	/**
+	 * A fractional width keeps its precision.
+	 *
+	 * MJML accepts fractional column widths, so rounding to an integer would make
+	 * three equal thirds sum to 99% and leave the row visibly short.
+	 */
+	public function test_button_width_keeps_fraction() {
+		$this->assertSame(
+			[ '33.9%' ],
+			$this->button_column_widths( [ 'style' => [ 'dimensions' => [ 'width' => '33.9%' ] ] ] ),
+			'Expected a fractional width to survive rather than being truncated.'
+		);
+	}
+
+	/**
+	 * Sibling buttons keep their own widths, whichever form each one uses.
+	 *
+	 * A newsletter can hold both forms at once: re-saving rewrites the buttons the
+	 * editor parsed, while untouched ones keep the legacy attribute. Widths are
+	 * chosen so the two cases can't coincide - if `dimensions` were ignored, the
+	 * 30% button would fall back to the default share.
+	 *
+	 * Note the width-less button here lands on the 25% floor rather than the 20%
+	 * actually left over; see test_button_width_shares_remainder() for a fixture
+	 * that pins the remainder arithmetic itself.
+	 */
+	public function test_button_width_mixed_forms() {
+		$this->assertSame(
+			[ '50%', '30%', '25%' ],
+			$this->button_column_widths(
+				[ 'width' => 50 ],
+				[ 'style' => [ 'dimensions' => [ 'width' => '30%' ] ] ],
+				[]
+			),
+			'Expected each button to keep its own width, with the width-less button taking the remaining share.'
+		);
+	}
+
+	/**
+	 * A width-less button takes what's actually left, not a fixed share.
+	 *
+	 * This is the fixture that pins the accumulation itself: 60% leaves 40%, which
+	 * is above the 25% floor, so the floor can't mask a wrong total. Reading the
+	 * defined width as anything other than 60 gives the width-less button 50%.
+	 */
+	public function test_button_width_shares_remainder() {
+		$this->assertSame(
+			[ '60%', '40%' ],
+			$this->button_column_widths(
+				[ 'style' => [ 'dimensions' => [ 'width' => '60%' ] ] ],
+				[]
+			),
+			'Expected the width-less button to take the exact remainder.'
 		);
 	}
 

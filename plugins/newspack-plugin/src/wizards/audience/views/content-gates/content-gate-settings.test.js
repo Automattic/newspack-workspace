@@ -22,6 +22,8 @@ const mockGate = {
 	registration: {},
 	custom_access: {},
 };
+// The wizard's loaded settings; a test sets what it needs.
+let mockConfig = {};
 const mockAddNotice = jest.fn();
 const mockResetNotices = jest.fn();
 const mockResetError = jest.fn();
@@ -50,7 +52,9 @@ jest.mock( '@wordpress/data', () => ( {
 
 jest.mock( '@wordpress/components', () => {
 	const React = require( 'react' );
-	return { CardBody: ( { children } ) => React.createElement( 'div', null, children ) };
+	return {
+		CardBody: ( { children } ) => React.createElement( 'div', null, children ),
+	};
 } );
 
 // Card renders its action items (nested arrays) as clickable buttons so the
@@ -58,24 +62,25 @@ jest.mock( '@wordpress/components', () => {
 jest.mock( '../../../../../packages/components/src', () => {
 	const React = require( 'react' );
 	return {
-		Badge: ( { text } ) => React.createElement( 'span', null, text ),
 		Grid: ( { children } ) => React.createElement( 'div', null, children ),
 		Card: ( { children, __experimentalCoreProps } ) =>
 			React.createElement(
 				'div',
 				null,
+				React.createElement( 'button', { 'aria-label': __experimentalCoreProps?.actionsLabel } ),
 				( __experimentalCoreProps?.actions || [] )
 					.flat()
-					.map( a => React.createElement( 'button', { key: a.label, onClick: a.action }, a.label ) ),
+					.map( a => React.createElement( 'button', { key: a.label, onClick: a.action, 'aria-label': a.ariaLabel }, a.label ) ),
 				children
 			),
 		Router: { useHistory: () => ( { push: () => {} } ) },
+		TooltipBadge: () => null,
 		useConfirmDialog: () => ( { confirmDialog: null, requestConfirm: cb => cb() } ),
 	};
 } );
 
 jest.mock( '../../../../../packages/components/src/wizard/store/utils', () => ( {
-	useWizardData: () => ( { gates: [ mockGate ] } ),
+	useWizardData: () => ( { gates: [ mockGate ], config: mockConfig } ),
 } ) );
 
 jest.mock( '../../../../../packages/components/src/wizard/store', () => ( {
@@ -85,14 +90,17 @@ jest.mock( '../../../../../packages/components/src/wizard/store', () => ( {
 jest.mock( './edit/content-rule-control', () => ( { __esModule: true, default: () => null } ) );
 
 jest.mock( './utils', () => ( {
+	getAutoSignupOptions: jest.requireActual( './utils' ).getAutoSignupOptions,
 	getEditGateLayoutUrl: () => '#',
 	getGateStatus: () => 'Active',
-	getGateStatusBadgeLevel: () => 'success',
+	getGateStatusBadgeIntent: () => 'stable',
+	getPriorityWarnings: () => ( {} ),
 } ) );
 
 describe( 'ContentGateSettings per-gate actions', () => {
 	beforeEach( () => {
 		mockAddNotice.mockReset();
+		mockConfig = {};
 		// Read at module load; must exist before the component is required.
 		window.newspackAudienceContentGates = { available_access_rules: {} };
 	} );
@@ -102,7 +110,7 @@ describe( 'ContentGateSettings per-gate actions', () => {
 		render( <ContentGateSettings gate={ mockGate } updateGatesData={ () => {} } /> );
 
 		// gate.status === 'publish' -> the toggle action is labelled "Set to inactive".
-		fireEvent.click( screen.getByRole( 'button', { name: 'Set to inactive' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Set to inactive: Gate X' } ) );
 
 		await waitFor( () => {
 			expect( mockAddNotice ).toHaveBeenCalledWith(
@@ -122,7 +130,7 @@ describe( 'ContentGateSettings per-gate actions', () => {
 
 		// The Delete action routes through useConfirmDialog, mocked to fire its
 		// callback immediately -> handleDelete -> failed DELETE -> onError.
-		fireEvent.click( screen.getByRole( 'button', { name: 'Delete' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Delete: Gate X' } ) );
 
 		await waitFor( () => {
 			expect( mockAddNotice ).toHaveBeenCalledWith(
@@ -132,5 +140,29 @@ describe( 'ContentGateSettings per-gate actions', () => {
 				} )
 			);
 		} );
+	} );
+
+	it( 'names the actions menu and each action after the gate', () => {
+		const ContentGateSettings = require( './content-gate-settings' ).default;
+		render( <ContentGateSettings gate={ mockGate } updateGatesData={ () => {} } /> );
+
+		expect( screen.getByRole( 'button', { name: 'Gate actions: Gate X' } ) ).toBeInTheDocument();
+		[ 'Edit', 'Set to inactive', 'Duplicate', 'Delete' ].forEach( label => {
+			expect( screen.getByRole( 'button', { name: `${ label }: Gate X` } ) ).toBeInTheDocument();
+		} );
+	} );
+
+	it( 'names the site auto-signup setting on a premium newsletter card', () => {
+		mockConfig = { auto_signup: true };
+		const ContentGateSettings = require( './content-gate-settings' ).default;
+		render(
+			<ContentGateSettings
+				gate={ { ...mockGate, custom_access: { active: true, access_rules: [], metering: { enabled: false, count: 1, period: 'month' } } } }
+				updateGatesData={ () => {} }
+				isNewsletter
+			/>
+		);
+
+		expect( screen.getByText( /Default \(on\)/ ) ).toBeInTheDocument();
 	} );
 } );

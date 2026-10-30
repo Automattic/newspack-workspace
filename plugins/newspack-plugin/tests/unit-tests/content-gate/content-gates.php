@@ -18,8 +18,12 @@ use Newspack\Institution;
 
 /**
  * Tests for the Content Gates class.
+ *
+ * @group content-gate
  */
 class Test_Content_Gates extends \WP_UnitTestCase {
+
+	use \Newspack\Tests\Content_Gate\Traits\Trait_Restriction_Cache_Test;
 
 	/**
 	 * Post ID
@@ -64,6 +68,10 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
+		// Post IDs are reused across test cases (each case is rolled back), so a
+		// gate lookup cached for the same ID by an earlier case would otherwise be
+		// served here — reporting "no gates" for a post that has one.
+		$this->reset_restriction_cache();
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
 		$this->original_remote_addr = isset( $_SERVER['REMOTE_ADDR'] ) ? $_SERVER['REMOTE_ADDR'] : null;
 		$this->gate_ids[] = Content_Gate::create_gate( [ 'title' => 'Draft Gate' ] );
@@ -1037,16 +1045,16 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Reset the static per-post restriction cache on Content_Restriction_Control.
-	 * This cache is populated by is_post_restricted() and must be cleared between
-	 * tests to prevent cross-test contamination.
+	 * Helper to read a private static property on Content_Gate via reflection.
+	 *
+	 * @param string $property Property name.
+	 *
+	 * @return mixed
 	 */
-	private function reset_restriction_cache() {
-		foreach ( [ 'post_gate_id_map', 'post_gate_layout_id_map', 'post_gates_map', 'term_descendants_map' ] as $prop ) {
-			$reflection = new \ReflectionProperty( Content_Restriction_Control::class, $prop );
-			$reflection->setAccessible( true );
-			$reflection->setValue( null, [] );
-		}
+	private function get_content_gate_property( $property ) {
+		$reflection = new \ReflectionProperty( Content_Gate::class, $property );
+		$reflection->setAccessible( true );
+		return $reflection->getValue();
 	}
 
 	/**
@@ -1058,6 +1066,8 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		$this->set_content_gate_property( 'gate_rendered', false );
 		$this->set_content_gate_property( 'is_gated', false );
 		$this->set_content_gate_property( 'is_content_locked', false );
+		$this->set_content_gate_property( 'restricted_content', [] );
+		$this->set_content_gate_property( 'pending_gates', [] );
 	}
 
 	/**
@@ -1198,6 +1208,88 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		$this->assertFalse( comments_open( $post_id ), 'Gated post must not accept comments' );
 		$this->assertFalse( Content_Gate::filter_comments_open( true, $post_id ), 'Comment filter should report closed on a gated post' );
 		$this->assertSame( 0, Content_Gate::filter_comments_number( 5, $post_id ), 'Comment count should be 0 on a gated post' );
+	}
+
+	/**
+	 * A page configured as excluded from gating (the site's Privacy Policy
+	 * page here) is never gated, even when it matches a published gate's
+	 * content rules.
+	 */
+	public function test_excluded_page_is_never_gated() {
+		$excluded_post_id = $this->post_ids[0];
+		wp_set_current_user( 0 );
+
+		// Precondition: this post matches the published 'post_types' => ['post']
+		// gate from set_up() and would ordinarily be restricted.
+		$this->assertNotFalse(
+			Content_Gate::is_post_restricted( $excluded_post_id ),
+			'Precondition: the post must be restricted before the exclusion is configured.'
+		);
+
+		update_option( 'wp_page_for_privacy_policy', $excluded_post_id );
+
+		$this->assertNull(
+			Content_Gate::get_restriction_for_post( get_post( $excluded_post_id ) ),
+			'The Privacy Policy page must never be gated, regardless of content rules.'
+		);
+
+		// Control: an ordinary post matching the same gate, not configured as
+		// any excluded page, is still gated.
+		$control_post_id  = $this->factory->post->create();
+		$this->post_ids[] = $control_post_id;
+
+		$this->assertIsArray(
+			Content_Gate::get_restriction_for_post( get_post( $control_post_id ) ),
+			'An ordinary post matching the gate must still be restricted.'
+		);
+	}
+
+	/**
+	 * Every exclusion source in is_excluded_from_gating() defaults to a
+	 * non-positive value when unconfigured: get_option( 'wp_page_for_privacy_policy' )
+	 * and Accessibility_Statement_Page::get_page_id() both return 0, and
+	 * wc_get_page_id() returns -1. Confirms a post ID of 0 -- a
+	 * degenerate value a caller with no real post in context could pass --
+	 * cannot spuriously match those unconfigured defaults (the
+	 * `array_filter( …, $id > 0 )` guard this pins), and that a WooCommerce
+	 * page which IS configured is excluded exactly like the Privacy Policy
+	 * page.
+	 */
+	public function test_non_positive_ids_do_not_spuriously_match_unconfigured_pages() {
+		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
+		wp_set_current_user( 0 );
+
+		// is_excluded_from_gating() is private; reach it directly via
+		// reflection so this can assert on its actual output rather than
+		// inferring it from a real post's ID. A real ID is always positive,
+		// and comparing a positive ID against an all-negative/zero excluded
+		// array cannot fail whether or not the array_filter() is there, so a
+		// post-based version of this test would pass either way.
+		$method = new \ReflectionMethod( Content_Gate::class, 'is_excluded_from_gating' );
+		$method->setAccessible( true );
+
+		$this->assertFalse(
+			$method->invoke( null, 0 ),
+			'A post ID of 0 must not spuriously match unconfigured (non-positive) exclusion sources.'
+		);
+
+		// A real post matching the gate is still restricted while every
+		// exclusion source is unconfigured.
+		$this->assertIsArray(
+			Content_Gate::get_restriction_for_post( get_post( $this->post_ids[0] ) ),
+			'An unconfigured WooCommerce page must not exclude a real post from gating.'
+		);
+
+		// Configured: a real myaccount page ID is excluded, same as the
+		// Privacy Policy page.
+		$myaccount_post_id = $this->factory->post->create();
+		$this->post_ids[]  = $myaccount_post_id;
+		update_option( 'woocommerce_myaccount_page_id', $myaccount_post_id );
+
+		$this->assertNull(
+			Content_Gate::get_restriction_for_post( get_post( $myaccount_post_id ) ),
+			'A configured WooCommerce myaccount page must never be gated.'
+		);
 	}
 
 	/**
@@ -1986,11 +2078,10 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Blocker: an institution rule saved with no institutions selected
-	 * (`value => []`) must not silently grant anonymous access. Without a
-	 * value, the rule is "not configured" — Institution::evaluate(0, [])
-	 * returns true as the rule's own no-constraint semantics, but for the
-	 * registration bypass we require a populated rule that actually matches.
+	 * An institution rule saved with no institutions selected (`value => []`)
+	 * must not grant anonymous access. The rule names no condition, so
+	 * Institution::evaluate() satisfies nobody with it, and the registration
+	 * bypass requires a populated rule that actually matches.
 	 */
 	public function test_anonymous_with_unpopulated_institution_rule_is_restricted() {
 		$this->configure_published_gate(
@@ -2230,6 +2321,276 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		wp_delete_user( $matching_user );
 		wp_delete_user( $other_user );
 		$this->reset_visitor_state();
+	}
+
+	// =========================================================================
+	// Institutions on registered access (NPPD-2310)
+	//
+	// A registration wall can name institutions whose visitors count as
+	// registered. Unlike institutions in paid access, which count as paying and
+	// so skip both walls, these skip registration only: a gate that also has
+	// paid access still asks the visitor to pay.
+	// =========================================================================
+
+	/**
+	 * Create an institution matching the 10.0.0.0/8 range.
+	 *
+	 * @return int Institution ID.
+	 */
+	private function create_ip_institution() {
+		$inst_id          = Institution::create( 'University', '', [ 'ip_range' => '10.0.0.0/8' ] );
+		$this->post_ids[] = $inst_id;
+		delete_transient( Institution::TRANSIENT_KEY );
+		return $inst_id;
+	}
+
+	/**
+	 * Access rules naming one institution, in grouped format.
+	 *
+	 * @param int $inst_id Institution ID.
+	 *
+	 * @return array
+	 */
+	private function institution_rules( $inst_id ) {
+		return [
+			[
+				[
+					'slug'  => 'institution',
+					'value' => [ $inst_id ],
+				],
+			],
+		];
+	}
+
+	/**
+	 * The case the setting exists for: a registration wall with no paid access
+	 * lets an on-campus visitor read without an account.
+	 */
+	public function test_registration_institutions_admit_a_matching_anonymous_visitor() {
+		$inst_id = $this->create_ip_institution();
+		$this->configure_published_gate(
+			[
+				'active'       => true,
+				'access_rules' => $this->institution_rules( $inst_id ),
+			],
+			[ 'active' => false ]
+		);
+
+		wp_set_current_user( 0 );
+		$this->set_visitor_ip( '10.1.2.3' );
+		$this->reset_restriction_cache();
+
+		$this->assertFalse( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
+
+		$this->reset_visitor_state();
+	}
+
+	/**
+	 * Any other anonymous visitor still meets the registration wall.
+	 */
+	public function test_registration_institutions_show_other_anonymous_visitors_the_registration_layout() {
+		$inst_id = $this->create_ip_institution();
+		$layouts = $this->configure_published_gate(
+			[
+				'active'       => true,
+				'access_rules' => $this->institution_rules( $inst_id ),
+			],
+			[ 'active' => false ]
+		);
+
+		wp_set_current_user( 0 );
+		$this->set_visitor_ip( '192.168.1.1' );
+		$this->reset_restriction_cache();
+
+		$this->assertTrue( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
+		$this->assertSame( $layouts['registration_layout_id'], Content_Restriction_Control::get_gate_layout_id( $this->post_ids[0] ) );
+
+		$this->reset_visitor_state();
+	}
+
+	/**
+	 * Institutions add a way past the wall and take nothing from readers who
+	 * registered. Under Paid Access, institutions wall these readers (NPPD-2310);
+	 * this pins that Registered Access doesn't.
+	 */
+	public function test_registration_institutions_never_narrow_access_for_logged_in_readers() {
+		$inst_id = $this->create_ip_institution();
+		$this->configure_published_gate(
+			[
+				'active'       => true,
+				'access_rules' => $this->institution_rules( $inst_id ),
+			],
+			[ 'active' => false ]
+		);
+
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'subscriber' ] ) );
+		$this->set_visitor_ip( '192.168.1.1' );
+		$this->reset_restriction_cache();
+
+		$this->assertFalse( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
+
+		$this->reset_visitor_state();
+	}
+
+	/**
+	 * Counting as registered is not counting as paying. The visitor gets past
+	 * the registration wall and meets paid access, like a registered reader
+	 * without a subscription would.
+	 */
+	public function test_registration_institutions_do_not_skip_paid_access() {
+		$inst_id = $this->create_ip_institution();
+		$layouts = $this->configure_published_gate(
+			[
+				'active'       => true,
+				'access_rules' => $this->institution_rules( $inst_id ),
+			],
+			[
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'email_domain',
+							'value' => 'paid.example',
+						],
+					],
+				],
+			]
+		);
+
+		wp_set_current_user( 0 );
+		$this->set_visitor_ip( '10.1.2.3' );
+		$this->reset_restriction_cache();
+
+		$this->assertTrue( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
+		$this->assertSame(
+			$layouts['custom_access_layout_id'],
+			Content_Restriction_Control::get_gate_layout_id( $this->post_ids[0] ),
+			'The visitor got past registration, so the wall they meet is the paid one.'
+		);
+
+		$this->reset_visitor_state();
+	}
+
+	/**
+	 * Institutions in paid access keep skipping both walls when registered
+	 * access names institutions of its own.
+	 */
+	public function test_paid_access_institutions_still_skip_both_walls() {
+		$paid_inst_id         = $this->create_ip_institution();
+		$registration_inst_id = Institution::create( 'Library', '', [ 'ip_range' => '172.16.0.0/12' ] );
+		$this->post_ids[]     = $registration_inst_id;
+		delete_transient( Institution::TRANSIENT_KEY );
+		$this->configure_published_gate(
+			[
+				'active'       => true,
+				'access_rules' => $this->institution_rules( $registration_inst_id ),
+			],
+			[
+				'active'       => true,
+				'access_rules' => $this->institution_rules( $paid_inst_id ),
+			]
+		);
+
+		wp_set_current_user( 0 );
+		$this->set_visitor_ip( '10.1.2.3' );
+		$this->reset_restriction_cache();
+
+		$this->assertFalse( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
+
+		$this->reset_visitor_state();
+	}
+
+	/**
+	 * A reader who signed in but hasn't verified still has to verify. The
+	 * institutions stand in for an account, not for verifying one.
+	 */
+	public function test_registration_institutions_do_not_skip_email_verification() {
+		$inst_id = $this->create_ip_institution();
+		$this->configure_published_gate(
+			[
+				'active'               => true,
+				'require_verification' => true,
+				'access_rules'         => $this->institution_rules( $inst_id ),
+			],
+			[ 'active' => false ]
+		);
+
+		$user_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		wp_set_current_user( $user_id );
+		$this->set_visitor_ip( '10.1.2.3' );
+		$this->reset_restriction_cache();
+
+		$this->assertTrue( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
+
+		wp_delete_user( $user_id );
+		$this->reset_visitor_state();
+	}
+
+	/**
+	 * The institutions belong to the registration wall, so a gate with
+	 * registered access off doesn't apply them.
+	 */
+	public function test_registration_institutions_do_nothing_while_registered_access_is_off() {
+		$inst_id = $this->create_ip_institution();
+		$layouts = $this->configure_published_gate(
+			[
+				'active'       => false,
+				'access_rules' => $this->institution_rules( $inst_id ),
+			],
+			[
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'email_domain',
+							'value' => 'paid.example',
+						],
+					],
+				],
+			]
+		);
+
+		wp_set_current_user( 0 );
+		$this->set_visitor_ip( '10.1.2.3' );
+		$this->reset_restriction_cache();
+
+		$this->assertTrue( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
+		$this->assertSame( $layouts['custom_access_layout_id'], Content_Restriction_Control::get_gate_layout_id( $this->post_ids[0] ) );
+
+		$this->reset_visitor_state();
+	}
+
+	/**
+	 * The stored rules come back in grouped format, and a gate saved before
+	 * the setting existed reads as naming none.
+	 */
+	public function test_registration_settings_carry_access_rules() {
+		$gate_id = $this->gate_ids[2];
+		$this->assertSame( [], Content_Gate::get_registration_settings( $gate_id )['access_rules'] );
+
+		Content_Gate::update_registration_settings(
+			$gate_id,
+			[
+				'access_rules' => [
+					[
+						'slug'  => 'institution',
+						'value' => [ 12 ],
+					],
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					[
+						'slug'  => 'institution',
+						'value' => [ 12 ],
+					],
+				],
+			],
+			Content_Gate::get_registration_settings( $gate_id )['access_rules']
+		);
 	}
 
 	/**
@@ -3163,15 +3524,484 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		$premium_newsletters_wizard = \Newspack\Wizards::get_wizard( 'premium-newsletters' );
 
 		$content_gate_request = new \WP_REST_Request( 'POST', '/' . NEWSPACK_API_NAMESPACE . '/wizard/newspack-premium-newsletters/' . $this->gate_ids[2] . '/duplicate' );
-		$content_gate_request->set_param( 'id', $this->gate_ids[2] );
+		// Where the server puts a route's captures when it dispatches, and where the
+		// handlers read the gate ID from — a body parameter must not name the gate.
+		$content_gate_request->set_url_params( [ 'id' => $this->gate_ids[2] ] );
 		$rejection = $premium_newsletters_wizard->api_duplicate_gate( $content_gate_request );
 		$this->assertWPError( $rejection, 'The premium newsletters wizard rejects content gates' );
 		$this->assertSame( 400, $rejection->get_error_data()['status'] );
 
 		$newsletter_request = new \WP_REST_Request( 'POST', '/' . NEWSPACK_API_NAMESPACE . '/wizard/newspack-premium-newsletters/' . $newsletter_gate_id . '/duplicate' );
-		$newsletter_request->set_param( 'id', $newsletter_gate_id );
+		$newsletter_request->set_url_params( [ 'id' => $newsletter_gate_id ] );
 		$success = $premium_newsletters_wizard->api_duplicate_gate( $newsletter_request );
 		$this->assertNotWPError( $success );
 		$this->assertSame( 'Premium Newsletter Gate copy', $success->get_data()['title'] );
+	}
+
+	/**
+	 * Drive a restricted render of $post_id and return the rendered content.
+	 *
+	 * Mirrors a front-end request: the gate populates its per-post state on
+	 * 'the_post', then the theme runs the post through 'the_content'.
+	 *
+	 * @param int $post_id Post ID.
+	 *
+	 * @return string
+	 */
+	private function render_restricted_post( $post_id ) {
+		$this->reset_restriction_cache();
+		$this->reset_gate_render_state();
+		$this->go_to( get_permalink( $post_id ) );
+
+		global $wp_query;
+		Content_Gate::restrict_post( get_post( $post_id ), $wp_query );
+
+		return apply_filters( 'the_content', get_post( $post_id )->post_content );
+	}
+
+	/**
+	 * Set up a published gate restricting all posts to registered readers, with an
+	 * inline layout, and return a logged-out reader on a post with three paragraphs.
+	 *
+	 * @return int Post ID.
+	 */
+	private function set_up_restricted_post_for_content_filters() {
+		$gate = Content_Gate::get_gate( $this->gate_ids[2] );
+		update_post_meta( $gate['registration']['gate_layout_id'], 'style', 'inline' );
+		update_post_meta( $gate['registration']['gate_layout_id'], 'visible_paragraphs', 2 );
+		update_post_meta( $gate['registration']['gate_layout_id'], 'use_more_tag', false );
+
+		Content_Rules::update_gate_content_rules(
+			$this->gate_ids[2],
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post' ],
+				],
+			]
+		);
+
+		wp_set_current_user( 0 );
+
+		$post_id = $this->factory->post->create(
+			[
+				'post_content' => '<p>Visible paragraph.</p><p>PARTNER_EMBED</p><p>Hidden paragraph.</p>',
+			]
+		);
+		$this->post_ids[] = $post_id;
+
+		return $post_id;
+	}
+
+	/**
+	 * A third-party integration filtering 'the_content' must see the teaser, and its
+	 * changes must survive into the rendered page.
+	 *
+	 * Partner plugins gate their own embeds this way — the Everlit audio player is
+	 * the known case, restricting its iframe at priority 999999 after asking us
+	 * whether the post is restricted. Woo Memberships substituted restricted content
+	 * at priority 999, so those callbacks ran last and their output was rendered.
+	 * Returning the full post to them and then discarding the filtered result would
+	 * leave the partner's embed ungated on exactly the posts that are paywalled.
+	 */
+	public function test_third_party_content_filters_apply_to_restricted_teaser() {
+		$post_id = $this->set_up_restricted_post_for_content_filters();
+
+		// The literal priority the Everlit integration registers at, so that raising
+		// RESTRICTION_PRIORITY past it fails this test instead of silently
+		// reintroducing the bug.
+		$partner_priority = 999999;
+		$partner_filter   = function ( $content ) {
+			return str_replace( 'PARTNER_EMBED', 'PARTNER_EMBED_GATED', $content );
+		};
+		add_filter( 'the_content', $partner_filter, $partner_priority );
+		$rendered = $this->render_restricted_post( $post_id );
+		remove_filter( 'the_content', $partner_filter, $partner_priority );
+
+		$this->assertLessThan( $partner_priority, Content_Gate::RESTRICTION_PRIORITY, 'The teaser must be substituted before partner gating filters run' );
+		$this->assertStringContainsString( 'PARTNER_EMBED_GATED', $rendered, "A later 'the_content' filter should see the teaser and its output should be rendered" );
+		$this->assertStringNotContainsString( '<p>PARTNER_EMBED</p>', $rendered, 'The unfiltered embed should not survive into the page' );
+		$this->assertStringContainsString( 'newspack-content-gate__inline-gate', $rendered, 'The gate should still be appended' );
+		$this->assertStringNotContainsString( 'Hidden paragraph', $rendered, 'Content past the teaser should stay restricted' );
+	}
+
+	/**
+	 * A later filter that runs 'the_content' itself must not consume the outer
+	 * pass's state and leave the outer pass discarding everything downstream of it.
+	 */
+	public function test_nested_content_filtering_still_renders_partner_output() {
+		$post_id = $this->set_up_restricted_post_for_content_filters();
+
+		$nested         = false;
+		$nested_output  = '';
+		$nesting_filter = function ( $content ) use ( &$nested, &$nested_output ) {
+			// A filter that renders some other content through the same chain, as
+			// related-post and summary integrations do. Guarded so it nests once,
+			// the way such a filter guards against re-entering itself.
+			if ( ! $nested ) {
+				$nested        = true;
+				$nested_output = apply_filters( 'the_content', 'UNRELATED' );
+			}
+			return $content;
+		};
+		$partner_filter = function ( $content ) {
+			return str_replace( 'PARTNER_EMBED', 'PARTNER_EMBED_GATED', $content );
+		};
+		add_filter( 'the_content', $nesting_filter, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		add_filter( 'the_content', $partner_filter, 999999 );
+		$rendered = $this->render_restricted_post( $post_id );
+		remove_filter( 'the_content', $nesting_filter, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		remove_filter( 'the_content', $partner_filter, 999999 );
+
+		// Both callbacks key off the post being rendered, not the string in hand, so
+		// a bare string run through 'the_content' while the global post is still the
+		// restricted one comes back as that post's teaser and gate. Swallowing it is
+		// the long-standing behavior, and the point of the assertions below is that
+		// the inner pass resolves on its own terms rather than by borrowing — or
+		// stranding — the outer one's.
+		$this->assertStringNotContainsString( 'UNRELATED', $nested_output, "A nested pass on the restricted post's own render is answered with the teaser" );
+		$this->assertSame( 1, substr_count( $nested_output, 'newspack-content-gate__inline-gate' ), 'The nested pass should close with its own gate' );
+
+		$this->assertStringContainsString( 'PARTNER_EMBED_GATED', $rendered, 'Partner filtering should survive a nested content pass' );
+		$this->assertSame( 1, substr_count( $rendered, 'newspack-content-gate__inline-gate' ), 'The gate should be appended exactly once' );
+		$this->assertStringNotContainsString( 'Hidden paragraph', $rendered, 'Content past the teaser should stay restricted' );
+	}
+
+	/**
+	 * A later filter that renders a *different*, unrestricted post through
+	 * 'the_content' must not consume the restricted post's pending substitution.
+	 *
+	 * That inner pass never substitutes anything, so if it closed the outer one it
+	 * would both stamp this post's gate onto unrelated content and leave the outer
+	 * pass discarding the partner filtering.
+	 */
+	public function test_nested_render_of_another_post_does_not_consume_the_substitution() {
+		$post_id = $this->set_up_restricted_post_for_content_filters();
+
+		$other_id = $this->factory->post->create(
+			[
+				'post_content'  => '<p>Unrelated post body.</p>',
+				'post_category' => [],
+			]
+		);
+		$this->post_ids[] = $other_id;
+
+		$nested_output  = '';
+		$nested         = false;
+		$nesting_filter = function ( $content ) use ( &$nested, &$nested_output, $other_id ) {
+			if ( ! $nested ) {
+				$nested = true;
+				global $post;
+				$outer = $post;
+				$post  = get_post( $other_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+				setup_postdata( $post );
+				$nested_output = apply_filters( 'the_content', get_post( $other_id )->post_content );
+				wp_reset_postdata();
+				$post = $outer; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+			}
+			return $content;
+		};
+		$partner_filter = function ( $content ) {
+			return str_replace( 'PARTNER_EMBED', 'PARTNER_EMBED_GATED', $content );
+		};
+		add_filter( 'the_content', $nesting_filter, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		add_filter( 'the_content', $partner_filter, 999999 );
+		$rendered = $this->render_restricted_post( $post_id );
+		remove_filter( 'the_content', $nesting_filter, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		remove_filter( 'the_content', $partner_filter, 999999 );
+
+		$this->assertStringNotContainsString( 'newspack-content-gate__inline-gate', $nested_output, "The unrestricted post's render should not receive the restricted post's gate" );
+		$this->assertStringContainsString( 'PARTNER_EMBED_GATED', $rendered, 'Partner filtering should survive a nested render of another post' );
+		$this->assertSame( 1, substr_count( $rendered, 'newspack-content-gate__inline-gate' ), 'The gate should be appended exactly once' );
+	}
+
+	/**
+	 * Rendering the same restricted post twice in one request must not accumulate
+	 * gates or leave state behind that changes the second result.
+	 */
+	public function test_repeated_content_filtering_appends_gate_once_each_pass() {
+		$post_id = $this->set_up_restricted_post_for_content_filters();
+
+		$first  = $this->render_restricted_post( $post_id );
+		$second = apply_filters( 'the_content', get_post( $post_id )->post_content );
+
+		$this->assertSame( 1, substr_count( $first, 'newspack-content-gate__inline-gate' ), 'The first pass should append exactly one gate' );
+		$this->assertSame( 1, substr_count( $second, 'newspack-content-gate__inline-gate' ), 'The second pass should append exactly one gate' );
+		$this->assertStringNotContainsString( 'Hidden paragraph', $second, 'Content past the teaser should stay restricted on repeat passes' );
+	}
+
+	/**
+	 * The gate HTML is appended after every other content filter has run, so a
+	 * third-party callback cannot rewrite the gate markup itself.
+	 */
+	public function test_gate_html_is_not_exposed_to_third_party_content_filters() {
+		$post_id = $this->set_up_restricted_post_for_content_filters();
+
+		$seen = '';
+		$spy  = function ( $content ) use ( &$seen ) {
+			$seen = $content;
+			return $content;
+		};
+		add_filter( 'the_content', $spy, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		$rendered = $this->render_restricted_post( $post_id );
+		remove_filter( 'the_content', $spy, Content_Gate::RESTRICTION_PRIORITY + 1 );
+
+		$this->assertStringContainsString( 'Visible paragraph', $seen, 'The teaser should be handed to later content filters' );
+		$this->assertStringNotContainsString( 'newspack-content-gate__inline-gate', $seen, 'The gate markup should not be handed to later content filters' );
+		$this->assertStringContainsString( 'newspack-content-gate__inline-gate', $rendered, 'The gate should still be present in the rendered output' );
+	}
+
+	/**
+	 * If the teaser substitution does not run — another plugin removing the filter
+	 * is the realistic case — the restricted post must not be published anyway.
+	 */
+	public function test_restricted_content_falls_back_when_teaser_substitution_is_removed() {
+		$post_id = $this->set_up_restricted_post_for_content_filters();
+
+		// Stand in for a filter that hands back content of its own once the
+		// substitution is gone. It must not reach the page with a gate stuck on it.
+		$leak_filter = function () {
+			return '<p>MUST_NOT_LEAK Hidden paragraph.</p>';
+		};
+		remove_filter( 'the_content', [ Content_Gate::class, 'replace_restricted_content' ], Content_Gate::RESTRICTION_PRIORITY );
+		add_filter( 'the_content', $leak_filter, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		$rendered = $this->render_restricted_post( $post_id );
+		remove_filter( 'the_content', $leak_filter, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		add_filter( 'the_content', [ Content_Gate::class, 'replace_restricted_content' ], Content_Gate::RESTRICTION_PRIORITY );
+
+		$this->assertStringNotContainsString( 'MUST_NOT_LEAK', $rendered, 'Content in hand must not be published when the substitution did not run' );
+		$this->assertStringNotContainsString( 'Hidden paragraph', $rendered, 'The restricted content must not be rendered' );
+		$this->assertStringContainsString( 'Visible paragraph', $rendered, 'The teaser should still be rendered' );
+		$this->assertSame( 1, substr_count( $rendered, 'newspack-content-gate__inline-gate' ), 'The gate should be rendered exactly once' );
+	}
+
+	/**
+	 * Drive a restricted render that a 'the_content' callback aborts by throwing,
+	 * leaving the substitution's bookkeeping open the way a partner filter blowing
+	 * up mid-pass, with the exception caught upstream, would.
+	 *
+	 * @param int $post_id Post ID.
+	 */
+	private function abort_restricted_render( $post_id ) {
+		// DomainException rather than a RuntimeException: PHPUnit's own failure
+		// exceptions extend RuntimeException, and catching those here would swallow
+		// a failing assertion.
+		$throwing_filter = function () {
+			throw new \DomainException( 'A partner filter blew up mid-render.' );
+		};
+
+		// Core pops the hook off $wp_current_filter only on the way out, so the
+		// exception leaves the stack a level deep. Restore it, both to keep the
+		// dirty stack out of what follows and because the harder case is the one
+		// where later passes run at the same nesting depth the aborted pass did,
+		// and so can actually reach what it left behind.
+		$filter_stack = $GLOBALS['wp_current_filter'];
+		$caught       = null;
+		add_filter( 'the_content', $throwing_filter, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		try {
+			$this->render_restricted_post( $post_id );
+		} catch ( \DomainException $e ) {
+			$caught = $e;
+		}
+		remove_filter( 'the_content', $throwing_filter, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		$GLOBALS['wp_current_filter'] = $filter_stack; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+
+		$this->assertNotNull( $caught, 'The throwing filter should have aborted the pass' );
+	}
+
+	/**
+	 * A 'the_content' callback that throws between the teaser substitution and the
+	 * gate append leaves the substitution's bookkeeping open — core unwinds the
+	 * filter without running the rest of the chain. Nothing left behind may reach a
+	 * later pass, since an entry read by a pass that did not substitute would put
+	 * the gate on the unrestricted body in hand.
+	 */
+	public function test_content_filter_exception_leaves_nothing_that_corrupts_later_renders() {
+		$post_id = $this->set_up_restricted_post_for_content_filters();
+		$this->abort_restricted_render( $post_id );
+
+		// A pass where the substitution did not run holds a body of someone else's
+		// making. Taking the aborted pass's entry for its own would stamp the gate
+		// onto that body and publish it.
+		$leak_filter = function () {
+			return '<p>MUST_NOT_LEAK Hidden paragraph.</p>';
+		};
+		remove_filter( 'the_content', [ Content_Gate::class, 'replace_restricted_content' ], Content_Gate::RESTRICTION_PRIORITY );
+		add_filter( 'the_content', $leak_filter, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		$without_substitution = apply_filters( 'the_content', get_post( $post_id )->post_content );
+		remove_filter( 'the_content', $leak_filter, Content_Gate::RESTRICTION_PRIORITY + 1 );
+		add_filter( 'the_content', [ Content_Gate::class, 'replace_restricted_content' ], Content_Gate::RESTRICTION_PRIORITY );
+
+		$this->assertStringNotContainsString( 'MUST_NOT_LEAK', $without_substitution, 'A pass that did not substitute must not be gated as if it had' );
+		$this->assertStringNotContainsString( 'Hidden paragraph', $without_substitution, 'The restricted content must not be published after an aborted pass' );
+		$this->assertSame( 1, substr_count( $without_substitution, 'newspack-content-gate__inline-gate' ), 'The gate should be rendered exactly once' );
+
+		$rendered = apply_filters( 'the_content', get_post( $post_id )->post_content );
+
+		$this->assertStringContainsString( 'Visible paragraph', $rendered, 'A later render should still produce the teaser' );
+		$this->assertStringNotContainsString( 'Hidden paragraph', $rendered, 'A later render should still restrict the content' );
+		$this->assertSame( 1, substr_count( $rendered, 'newspack-content-gate__inline-gate' ), 'A later render should append exactly one gate' );
+		$this->assertSame( [], $this->get_content_gate_property( 'pending_gates' ), 'A completed pass should leave no substitution open' );
+	}
+
+	/**
+	 * What an aborted pass leaves behind must not reach a post that is not
+	 * restricted at all: the next pass at that nesting depth claims the bookkeeping
+	 * on its way in, before anything can be read as its own.
+	 */
+	public function test_aborted_pass_does_not_gate_a_later_unrestricted_render() {
+		$post_id = $this->set_up_restricted_post_for_content_filters();
+		$this->abort_restricted_render( $post_id );
+
+		$unrestricted_id  = $this->factory->post->create(
+			[
+				'post_content'  => '<p>Unrelated post body.</p>',
+				'post_category' => [],
+			]
+		);
+		$this->post_ids[] = $unrestricted_id;
+
+		global $post;
+		$post = get_post( $unrestricted_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		setup_postdata( $post );
+		$rendered = apply_filters( 'the_content', get_post( $unrestricted_id )->post_content );
+		wp_reset_postdata();
+
+		$this->assertStringContainsString( 'Unrelated post body', $rendered, 'An unrestricted post should render its own content' );
+		$this->assertStringNotContainsString( 'newspack-content-gate__inline-gate', $rendered, 'An unrestricted post must not be gated by what an aborted pass left behind' );
+	}
+
+	/**
+	 * A premium newsletter gate that has never had its list settings saved follows the
+	 * site's own sign-up setting and keeps the lists visible, which is how every gate
+	 * behaved before the settings existed.
+	 */
+	public function test_newsletter_gate_defaults_to_following_site_auto_signup() {
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'N' ], Content_Gate::GATE_CPT, true );
+		$this->assertNotWPError( $gate_id );
+
+		$gate = Content_Gate::get_gate( $gate_id );
+
+		$this->assertSame( 'default', $gate['auto_signup'] );
+		$this->assertFalse( $gate['hide_lists'] );
+	}
+
+	/**
+	 * Creating a newsletter gate with list settings stores them.
+	 */
+	public function test_create_newsletter_gate_persists_list_settings() {
+		$gate_id = Content_Gate::create_gate(
+			[
+				'title'       => 'N',
+				'auto_signup' => 'on',
+				'hide_lists'  => true,
+			],
+			Content_Gate::GATE_CPT,
+			true
+		);
+		$this->assertNotWPError( $gate_id );
+
+		$gate = Content_Gate::get_gate( $gate_id );
+
+		$this->assertSame( 'on', $gate['auto_signup'] );
+		$this->assertTrue( $gate['hide_lists'] );
+	}
+
+	/**
+	 * A save that does not name the list settings leaves them as they were, so renaming a
+	 * gate cannot quietly switch its sign-up behavior back to the default.
+	 */
+	public function test_update_newsletter_gate_without_list_settings_preserves_them() {
+		$gate_id = Content_Gate::create_gate(
+			[
+				'title'       => 'N',
+				'auto_signup' => 'on',
+				'hide_lists'  => true,
+			],
+			Content_Gate::GATE_CPT,
+			true
+		);
+
+		Content_Gate::update_gate_settings( $gate_id, [ 'title' => 'X' ] );
+		$gate = Content_Gate::get_gate( $gate_id );
+
+		$this->assertSame( 'X', $gate['title'] );
+		$this->assertSame( 'on', $gate['auto_signup'] );
+		$this->assertTrue( $gate['hide_lists'] );
+	}
+
+	/**
+	 * A value outside the three modes is ignored rather than stored, so a bad payload
+	 * cannot leave a gate in a mode nothing knows how to read.
+	 */
+	public function test_update_newsletter_gate_ignores_an_invalid_auto_signup() {
+		$gate_id = Content_Gate::create_gate(
+			[
+				'title'       => 'N',
+				'auto_signup' => 'off',
+			],
+			Content_Gate::GATE_CPT,
+			true
+		);
+
+		Content_Gate::update_gate_settings( $gate_id, [ 'auto_signup' => 'yes' ] );
+
+		$this->assertSame( 'off', Content_Gate::get_gate( $gate_id )['auto_signup'] );
+	}
+
+	/**
+	 * The list settings belong to premium newsletter gates only. A content gate neither
+	 * reports them nor stores them, even when a payload carries them.
+	 */
+	public function test_content_gate_ignores_list_settings() {
+		$gate_id = Content_Gate::create_gate(
+			[
+				'title'       => 'C',
+				'auto_signup' => 'on',
+				'hide_lists'  => true,
+			]
+		);
+		$this->assertNotWPError( $gate_id );
+
+		$gate = Content_Gate::get_gate( $gate_id );
+
+		$this->assertArrayNotHasKey( 'auto_signup', $gate );
+		$this->assertArrayNotHasKey( 'hide_lists', $gate );
+		$this->assertSame( '', get_post_meta( $gate_id, 'auto_signup', true ) );
+		$this->assertSame( '', get_post_meta( $gate_id, 'hide_lists', true ) );
+
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'auto_signup' => 'off',
+				'hide_lists'  => true,
+			]
+		);
+
+		$this->assertSame( '', get_post_meta( $gate_id, 'auto_signup', true ), 'An update does not store the settings on a content gate either' );
+		$this->assertSame( '', get_post_meta( $gate_id, 'hide_lists', true ) );
+	}
+
+	/**
+	 * A duplicated newsletter gate behaves like its source for sign-up and list visibility.
+	 */
+	public function test_duplicate_newsletter_gate_copies_list_settings() {
+		$source_id = Content_Gate::create_gate(
+			[
+				'title'       => 'N',
+				'auto_signup' => 'off',
+				'hide_lists'  => true,
+			],
+			Content_Gate::GATE_CPT,
+			true
+		);
+		$this->assertNotWPError( $source_id );
+
+		$copy_id = Content_Gate::duplicate_gate( $source_id );
+		$this->assertNotWPError( $copy_id );
+		$copy = Content_Gate::get_gate( $copy_id );
+
+		$this->assertSame( 'off', $copy['auto_signup'] );
+		$this->assertTrue( $copy['hide_lists'] );
 	}
 }

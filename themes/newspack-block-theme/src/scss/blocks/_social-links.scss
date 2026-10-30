@@ -1,0 +1,12 @@
+@use "../mixins";
+
+.wp-block-social-links .wp-social-link {
+	&:has(> a:focus-visible) {
+		@include mixins.focus-line(mixins.$focus-color);
+	}
+
+	a:focus-visible {
+		box-shadow: none;
+		outline: none;
+	}
+}

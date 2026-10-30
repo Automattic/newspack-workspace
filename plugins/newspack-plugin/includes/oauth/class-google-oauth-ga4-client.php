@@ -163,7 +163,7 @@ final class Google_OAuth_GA4_Client {
 			$message = is_array( $decoded ) && isset( $decoded['error']['message'] )
 				? $decoded['error']['message']
 				: 'HTTP ' . $code;
-			throw new \RuntimeException( esc_html( "Analytics Admin API error ($code): $message" ) );
+			throw new \RuntimeException( esc_html( "Analytics Admin API error ($code): $message" ), (int) $code );
 		}
 		return is_array( $decoded ) ? $decoded : [];
 	}

@@ -1,5 +1,6 @@
 import 'react';
 import icons from '../components/icons';
+import type { Tool } from '../views/settings/experimental-tools/types';
 
 declare module 'react' {
 	interface CSSProperties {
@@ -47,10 +48,6 @@ declare global {
 					}[];
 				};
 			};
-			settings: {
-				siteName: string;
-				headerBgColor: string;
-			};
 		};
 		newspackSettings: {
 			social: WizardTab & {
@@ -68,7 +65,7 @@ declare global {
 			};
 			connections: WizardTab;
 			syndication: WizardTab;
-			'theme-and-brand': WizardTab;
+			'theme-and-brand'?: WizardTab;
 			seo: WizardTab;
 			print: WizardTab;
 			'additional-brands': WizardTab & {
@@ -88,9 +85,12 @@ declare global {
 			'advanced-settings': WizardTab;
 			collections: WizardTab;
 			privacy: WizardTab;
-		};
-		newspack_aux_data: {
-			is_debug_mode: boolean;
+			// Present only when experimental tools are registered; consumers guard with `in` checks and optional chaining.
+			'experimental-tools'?: WizardTab & {
+				sections: {
+					tools: Tool[];
+				};
+			};
 		};
 		newspack_urls: {
 			site: string;

@@ -52,12 +52,16 @@ interface SubscriptionProductVariation {
 	period: string;
 	interval: number;
 	price_label: string;
+	// The billing-period attribute value, used as the plan's display label; empty when unset.
+	plan_label: string;
 	// Each variation resolves its own applied-rule stack + effective price.
 	policy: SubscriptionPolicyResolution;
 	// Active subscribers on this plan; a plan with subscribers can't be removed.
 	active_subscriptions: number;
 	// Group-subscription (multi-seat) settings for this plan.
 	group: { enabled: boolean; limit: number };
+	// Flagged as complimentary access, so it isn't sold.
+	is_complimentary: boolean;
 }
 
 /**
@@ -115,6 +119,8 @@ interface SubscriptionProduct {
 	category_ids: number[];
 	category_label: string;
 	active_subscriptions: number | null;
+	// Grants only complimentary access: the product, or every variation, is flagged.
+	is_complimentary: boolean;
 	edit_url: string;
 	policy: SubscriptionPolicyResolution;
 }
@@ -148,5 +154,6 @@ interface Window {
 		manage_products_url: string;
 		policy_source_is_mock: boolean;
 		woocommerce_subscriptions_active: boolean;
+		promo_links_supported?: boolean;
 	};
 }

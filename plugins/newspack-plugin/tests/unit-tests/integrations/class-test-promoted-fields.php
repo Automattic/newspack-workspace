@@ -7,6 +7,7 @@
 
 namespace Newspack\Tests\Unit\Integrations;
 
+use Newspack\Access_Rules;
 use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Integrations\Incoming_Field;
 use Newspack\Reader_Activation\Promoted_Fields;
@@ -27,12 +28,21 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 	private $integration;
 
 	/**
+	 * Snapshot of the access rule registry, restored after each test — registering
+	 * promoted fields writes into a static registry the whole suite shares.
+	 *
+	 * @var array
+	 */
+	private $registered_rules_snapshot;
+
+	/**
 	 * Set up test environment.
 	 */
 	public function set_up() {
 		parent::set_up();
 		$this->reset_integrations();
 		Promoted_Fields::reset_cache();
+		$this->registered_rules_snapshot = Access_Rules::get_registered_rules();
 
 		$this->integration = new Sample_Integration( 'promoted-test', 'Test ESP' );
 		Integrations::register( $this->integration );
@@ -43,10 +53,14 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 	 * Tear down test environment.
 	 */
 	public function tear_down() {
+		$registry_property = new \ReflectionProperty( Access_Rules::class, 'rules' );
+		$registry_property->setValue( null, $this->registered_rules_snapshot );
 		Promoted_Fields::reset_cache();
 		$this->reset_integrations();
 		Integrations::register_integrations();
 		delete_option( 'newspack_integration_incoming_fields_promoted-test' );
+		delete_option( 'newspack_integration_incoming_fields_range-test' );
+		delete_option( 'newspack_integration_incoming_fields_boolean-test' );
 		delete_option( Integrations::OPTION_NAME );
 		parent::tear_down();
 	}
@@ -184,6 +198,46 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A provider can describe a dropdown whose choices it has not pulled yet, and
+	 * the resolved list is then empty. Registering that field as an access rule
+	 * has to say so, or the rule reads as free text: the wizard renders a text box
+	 * for a value that must be a list of option values, and the value the operator
+	 * types is one `Access_Rules::evaluate_rule()` cannot use.
+	 */
+	public function test_a_provider_dropdown_with_no_choices_registers_as_an_options_backed_rule() {
+		$integration = new class( 'choices-test', 'Test ESP' ) extends Sample_Integration {
+			/**
+			 * Promote a select field the provider has no choices for yet.
+			 *
+			 * @param \Newspack\Reader_Activation\Integrations\Incoming_Field $field The field.
+			 * @return \Newspack\Reader_Activation\Integrations\Incoming_Field
+			 */
+			protected function configure_incoming_field( $field ) {
+				if ( 'membership_tier' === $field->get_key() ) {
+					$field->set_name( 'Membership tier' )
+						->set_value_type( 'select' )
+						->set_options( [] )
+						->set_is_access_rule( true );
+				}
+				return $field;
+			}
+		};
+
+		$this->reset_integrations();
+		Integrations::register( $integration );
+		Integrations::enable( 'choices-test' );
+		$integration->update_enabled_incoming_fields( [ 'membership_tier' ] );
+		Promoted_Fields::reset_cache();
+
+		Promoted_Fields::register();
+
+		$rule = Access_Rules::get_rule( 'choices-test__membership_tier' );
+		$this->assertNotNull( $rule );
+		$this->assertTrue( $rule['has_options'], 'A select field takes option values whether or not any are loaded.' );
+		$this->assertSame( [], $rule['default'], 'The seeded default has to hold the shape the rule takes.' );
+	}
+
+	/**
 	 * Test that evaluate_field works for default matching.
 	 */
 	public function test_evaluate_default_matching() {
@@ -200,6 +254,39 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 
 		$this->assertTrue( $method->invoke( null, $field, $user_id, 'Newspack' ) );
 		$this->assertFalse( $method->invoke( null, $field, $user_id, 'Other' ) );
+	}
+
+	/**
+	 * A select field's rule stores the chosen options as a list, because `has_options`
+	 * makes the sanitizer require one, while the reader holds the single value the
+	 * provider sent. Comparing those two for equality can never match, so the rule walls
+	 * out every reader it was written to admit — and a provider whose options call fails
+	 * mid-edit is enough to reach it.
+	 */
+	public function test_evaluate_default_matching_against_a_selected_option() {
+		$user_id = $this->factory->user->create();
+
+		if ( class_exists( '\Newspack\Reader_Data' ) ) {
+			\Newspack\Reader_Data::update_item( $user_id, 'org', wp_json_encode( 'Newspack' ) );
+		}
+
+		$evaluate_field = new \ReflectionMethod( Promoted_Fields::class, 'evaluate_field' );
+		$evaluate_field->setAccessible( true );
+
+		$select_field = ( new Incoming_Field( 'org' ) )->set_value_type( 'select' );
+
+		$this->assertTrue(
+			$evaluate_field->invoke( null, $select_field, $user_id, [ 'Newspack' ] ),
+			'A reader holding one of the selected options should match.'
+		);
+		$this->assertFalse(
+			$evaluate_field->invoke( null, $select_field, $user_id, [ 'Other' ] ),
+			'A reader holding none of them should not.'
+		);
+		$this->assertTrue(
+			$evaluate_field->invoke( null, $select_field, $user_id, [ 'Other', 'Newspack' ] ),
+			'A multi-option rule should match a reader holding any one of them.'
+		);
 	}
 
 	/**
@@ -233,11 +320,11 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Range matching casts both the stored value and the min/max bounds to float, so a
-	 * decimal amount (e.g. a Mailchimp `number` merge field) matches correctly. Absent
-	 * bounds default to 0..PHP_INT_MAX and a non-numeric value coerces to 0.0, so a
-	 * blank-bounds range rule grants access broadly — pinned here so that fail-open
-	 * default stays intentional.
+	 * Range matching compares the stored value and the min/max bounds as numbers, so a
+	 * decimal amount (e.g. a Mailchimp `number` merge field) matches correctly. An
+	 * absent bound leaves that side open, and a rule with no bounds admits every
+	 * reader holding a number. A reader holding no number never matches: it is not
+	 * read as 0.
 	 */
 	public function test_evaluate_range_matching() {
 		$user_id = $this->factory->user->create();
@@ -280,14 +367,360 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'min' => 50 ] ) );
 		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'max' => 10 ] ) );
 
-		// Absent bounds default to 0..PHP_INT_MAX: any non-negative amount matches.
+		// No bounds: every reader holding a number matches.
 		$this->assertTrue( $method->invoke( null, $field, $user_id, [] ) );
 
-		// A non-numeric stored value coerces to 0.0: blank bounds still match (fail-open),
-		// but a positive min excludes the coerced-to-zero value.
+		// Bounds stored as numeric strings compare as numbers.
+		$this->assertTrue( $method->invoke( null, $field, $user_id, [ 'min' => '10' ] ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'min' => '50' ] ) );
+
+		// A bound that isn't a number can't be honored, so the rule matches nobody;
+		// neither can one too large for a float, which would read as no limit.
+		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'min' => 'fifty' ] ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'max' => '1e400' ] ) );
+
+		// 0 is a real bound, not "no bound".
+		\Newspack\Reader_Data::update_item( $user_id, 'amount', wp_json_encode( -5 ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'min' => 0 ] ) );
+		$this->assertTrue( $method->invoke( null, $field, $user_id, [ 'max' => 0 ] ) );
+
+		// A non-numeric stored value matches nothing, with or without bounds.
 		\Newspack\Reader_Data::update_item( $user_id, 'amount', wp_json_encode( 'not-a-number' ) );
-		$this->assertTrue( $method->invoke( null, $field, $user_id, [] ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, [] ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'max' => 100 ] ) );
+
+		// Nor one too large for a float, which reads as infinite and would pass
+		// any minimum.
+		\Newspack\Reader_Data::update_item( $user_id, 'amount', wp_json_encode( '1e400' ) );
 		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'min' => 1 ] ) );
+
+		// Neither does a reader the field was never stored for.
+		$no_value_user_id = $this->factory->user->create();
+		$this->assertFalse( $method->invoke( null, $field, $no_value_user_id, [] ) );
+		$this->assertFalse( $method->invoke( null, $field, $no_value_user_id, [ 'max' => 100 ] ) );
+	}
+
+	/**
+	 * Before range rules had a min/max control, the gate editor saved whatever was
+	 * typed into a text box, and the range comparison read both bounds off that
+	 * string as missing, so every signed-in reader passed. A stored value that isn't
+	 * a set of bounds matches nobody.
+	 */
+	public function test_evaluate_range_fails_closed_on_a_value_that_is_not_bounds() {
+		$user_id = $this->factory->user->create();
+		\Newspack\Reader_Data::update_item( $user_id, 'amount', wp_json_encode( 10 ) );
+
+		$method = new \ReflectionMethod( Promoted_Fields::class, 'evaluate_field' );
+		$method->setAccessible( true );
+
+		$field = ( new Incoming_Field( 'amount' ) )
+			->set_value_type( 'number' )
+			->set_matching_function( 'range' );
+
+		$this->assertFalse( $method->invoke( null, $field, $user_id, '50' ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, '10' ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, '10,100' ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, 10 ) );
+		// A list has no `min` or `max` key either, and would otherwise read as no bounds.
+		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 50, 100 ] ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'minimum' => 5 ] ) );
+		// The empty values are the unconfigured rule, which reads as no bounds.
+		$this->assertTrue( $method->invoke( null, $field, $user_id, '' ) );
+		$this->assertTrue( $method->invoke( null, $field, $user_id, null ) );
+	}
+
+	/**
+	 * Register a promoted `number` field with range matching as an access rule.
+	 *
+	 * @return string The access rule slug.
+	 */
+	private function register_range_rule() {
+		$integration = new class( 'range-test', 'Test ESP' ) extends Sample_Integration {
+			/**
+			 * Promote a number field with range matching.
+			 *
+			 * @param \Newspack\Reader_Activation\Integrations\Incoming_Field $field The field.
+			 * @return \Newspack\Reader_Activation\Integrations\Incoming_Field
+			 */
+			protected function configure_incoming_field( $field ) {
+				if ( 'donation_total' === $field->get_key() ) {
+					// Options a provider lists for a number field don't make a range
+					// rule options-backed.
+					$field->set_name( 'Donation total' )
+						->set_value_type( 'number' )
+						->set_matching_function( 'range' )
+						->set_options(
+							[
+								[
+									'value' => '100',
+									'label' => 'Sponsor',
+								],
+							]
+						)
+						->set_is_access_rule( true );
+				}
+				return $field;
+			}
+		};
+
+		$this->reset_integrations();
+		Integrations::register( $integration );
+		Integrations::enable( 'range-test' );
+		$integration->update_enabled_incoming_fields( [ 'donation_total' ] );
+		Promoted_Fields::reset_cache();
+		Promoted_Fields::register();
+
+		return 'range-test__donation_total';
+	}
+
+	/**
+	 * A range field registers as a rule whose value is a set of bounds, so the
+	 * editors render a min/max control and the save path accepts that shape.
+	 */
+	public function test_a_range_field_registers_a_range_rule() {
+		$rule = Access_Rules::get_rule( $this->register_range_rule() );
+
+		$this->assertTrue( $rule['is_range'] );
+		$this->assertFalse( $rule['has_options'] );
+		$this->assertSame( [], $rule['default'] );
+	}
+
+	/**
+	 * The save path keeps numeric bounds as numbers, drops blank ones, and refuses
+	 * anything it can't read as a range rather than storing it.
+	 */
+	public function test_range_rule_values_sanitize_to_bounds() {
+		$slug = $this->register_range_rule();
+
+		$sanitize = fn( $value ) => \Newspack\Content_Gate_API::sanitize_access_rule(
+			[
+				'slug'  => $slug,
+				'value' => $value,
+			]
+		);
+
+		$this->assertSame(
+			[
+				'min' => 50.0,
+				'max' => 100.5,
+			],
+			$sanitize(
+				[
+					'min' => 50,
+					'max' => '100.5',
+				]
+			)['value']
+		);
+		$this->assertSame( [ 'min' => 0.0 ], $sanitize( [ 'min' => '0' ] )['value'] );
+		$this->assertSame( [ 'max' => 10.0 ], $sanitize( [ 'max' => 10 ] )['value'] );
+		$this->assertSame(
+			[
+				'min' => 5.0,
+				'max' => 5.0,
+			],
+			$sanitize(
+				[
+					'min' => 5,
+					'max' => 5,
+				]
+			)['value']
+		);
+
+		// Blank bounds leave the rule unconfigured, which an active gate refuses.
+		$this->assertSame(
+			[],
+			$sanitize(
+				[
+					'min' => '',
+					'max' => null,
+				]
+			)['value']
+		);
+		$this->assertSame( [], $sanitize( [] )['value'] );
+		$this->assertSame( [], $sanitize( '' )['value'] );
+		$this->assertSame( [], $sanitize( null )['value'] );
+
+		// Text typed before the min/max control existed, a bound that isn't a number,
+		// and an inverted range are all refused.
+		foreach ( [
+			'50',
+			'10,100',
+			[ 50, 100 ],
+			[ 'min' => 'fifty' ],
+			[ 'max' => [ 10 ] ],
+			[
+				'min' => 100,
+				'max' => 50,
+			],
+		] as $invalid ) {
+			$sanitized = $sanitize( $invalid );
+			$this->assertWPError( $sanitized, wp_json_encode( $invalid ) );
+			$this->assertSame( 'invalid_access_rule_value', $sanitized->get_error_code() );
+		}
+	}
+
+	/**
+	 * An unset range still turns away readers who hold no number, so refusing it
+	 * must not say it grants access to everyone, nor ask for "a value" when the
+	 * control offers a minimum and a maximum. Both refusals are covered: the one for
+	 * a gate going live, and the one for a save that leaves it unpublished.
+	 *
+	 * @dataProvider data_unset_range_refusals
+	 *
+	 * @param array  $gate_settings Settings the save carries beside the rules.
+	 * @param string $asks_for      What the refusal must ask the operator to do.
+	 */
+	public function test_an_unset_range_is_refused_in_range_terms( $gate_settings, $asks_for ) {
+		// The refusal is reported only to a caller who can manage gates.
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+		$slug    = $this->register_range_rule();
+		$refused = \Newspack\Content_Gate_API::sanitize_gate(
+			array_merge(
+				$gate_settings,
+				[
+					'custom_access' => [
+						'active'       => true,
+						'access_rules' => [
+							[
+								[
+									'slug'  => $slug,
+									'value' => [],
+								],
+							],
+						],
+					],
+				]
+			)
+		);
+
+		$this->assertWPError( $refused );
+		$this->assertSame( 'empty_access_rule_value', $refused->get_error_code() );
+		$message = $refused->get_error_message();
+		$this->assertStringContainsString( $asks_for, $message );
+		$this->assertStringContainsString( 'every reader with a number in that field', $message );
+		$this->assertStringNotContainsString( 'everyone', $message );
+		$this->assertStringNotContainsString( 'a value', $message );
+	}
+
+	/**
+	 * The two saves that refuse an unset range, and the wording each must use.
+	 *
+	 * @return array
+	 */
+	public function data_unset_range_refusals() {
+		return [
+			'gate going live'       => [ [ 'status' => 'publish' ], 'Enter a minimum, a maximum, or both' ],
+			'gate left unpublished' => [ [], 'Set a minimum, a maximum, or both' ],
+		];
+	}
+
+	/**
+	 * A save that leaves the rules unenforced keeps the stored ones when the
+	 * submitted rules match them. Any edit to a bound is a different rule —
+	 * one after the decimal point, or one beside a value too large for a float —
+	 * or the edit would be dropped while the save reports success. Values the
+	 * client only sends back in another form still match.
+	 */
+	public function test_rule_fingerprint_tells_edited_bounds_apart() {
+		$slug                     = $this->register_range_rule();
+		$access_rules_fingerprint = new \ReflectionMethod( \Newspack\Content_Gate_API::class, 'access_rules_fingerprint' );
+		$access_rules_fingerprint->setAccessible( true );
+		$fingerprint = fn( $value ) => $access_rules_fingerprint->invoke(
+			null,
+			[
+				[
+					[
+						'slug'  => $slug,
+						'value' => $value,
+					],
+				],
+			]
+		);
+
+		$this->assertNotSame( $fingerprint( [ 'min' => 50.2 ] ), $fingerprint( [ 'min' => '50.7' ] ) );
+		$this->assertSame( $fingerprint( [ 'min' => 50.0 ] ), $fingerprint( [ 'min' => '50' ] ) );
+		// Option IDs submitted as strings still match the stored integers.
+		$this->assertSame( $fingerprint( [ 12 ] ), $fingerprint( [ '12' ] ) );
+		// The browser sends a stored -0 back as 0.
+		$this->assertSame( $fingerprint( [ 'min' => -0.0 ] ), $fingerprint( [ 'min' => 0 ] ) );
+		// A number too large for a float must not blank the whole rendering.
+		$stored = [
+			'min' => 50,
+			'max' => '1e400',
+		];
+		$edited = [
+			'min' => 60,
+			'max' => '1e400',
+		];
+		$this->assertNotSame( $fingerprint( $stored ), $fingerprint( $edited ) );
+	}
+
+	/**
+	 * The user-profile gate panel reads a range back as the gate summary does, rather
+	 * than as a bare list of its bounds.
+	 */
+	public function test_the_user_gate_panel_reads_range_bounds_in_words() {
+		$slug                = $this->register_range_rule();
+		$format_rule_value   = new \ReflectionMethod( \Newspack\User_Gate_Access::class, 'format_rule_value' );
+		$format_rule_value->setAccessible( true );
+
+		$this->assertSame(
+			'50 to 100',
+			$format_rule_value->invoke(
+				null,
+				$slug,
+				[
+					'min' => 50.0,
+					'max' => 100.0,
+				]
+			)
+		);
+		$this->assertSame( 'At most 100', $format_rule_value->invoke( null, $slug, [ 'max' => 100.0 ] ) );
+		// Each stored value reads as the rule evaluates it: blank values set no bounds,
+		// and anything the rule can't read as bounds grants no access.
+		$this->assertSame( '(any number)', $format_rule_value->invoke( null, $slug, [] ) );
+		$this->assertSame( '(any number)', $format_rule_value->invoke( null, $slug, '' ) );
+		foreach ( [
+			'50',
+			[
+				'min' => 50,
+				'x'   => 1,
+			],
+			[ 'min' => 'fifty' ],
+			[ 'max' => [ 10 ] ],
+		] as $unreadable ) {
+			$this->assertSame( '(invalid range, grants no access)', $format_rule_value->invoke( null, $slug, $unreadable ), wp_json_encode( $unreadable ) );
+		}
+	}
+
+	/**
+	 * End to end: a range saved through the gate API admits only readers whose
+	 * value falls inside it.
+	 */
+	public function test_a_saved_range_rule_admits_only_readers_inside_it() {
+		$slug  = $this->register_range_rule();
+		$saved = \Newspack\Content_Gate_API::sanitize_access_rules_grouped(
+			[
+				[
+					[
+						'slug'  => $slug,
+						'value' => [ 'min' => 50 ],
+					],
+				],
+			]
+		);
+
+		$this->assertNotWPError( $saved );
+
+		$below = $this->factory->user->create();
+		\Newspack\Reader_Data::update_item( $below, 'donation_total', wp_json_encode( 10 ) );
+		$inside = $this->factory->user->create();
+		\Newspack\Reader_Data::update_item( $inside, 'donation_total', wp_json_encode( 75 ) );
+		$no_value = $this->factory->user->create();
+
+		$this->assertFalse( Access_Rules::evaluate_rules( $saved, $below ) );
+		$this->assertTrue( Access_Rules::evaluate_rules( $saved, $inside ) );
+		$this->assertFalse( Access_Rules::evaluate_rules( $saved, $no_value ) );
 	}
 
 	/**
@@ -414,5 +847,195 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 		$field = ( new Incoming_Field( 'interests' ) )->set_matching_function( 'list__in' );
 		$this->assertTrue( $method->invoke( null, $field, $user_id, [ 'Politics' ] ) );
 		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'Sports' ] ) );
+	}
+
+	/**
+	 * Access rules pass a scalar argument and have no date-range UI, so a field
+	 * typed as date_range still matches one date exactly. It compares calendar
+	 * dates rather than raw strings: choosing the operator makes the pull rewrite
+	 * stored values to ISO, and a rule written in the provider's own format would
+	 * otherwise silently stop matching a live gate.
+	 */
+	public function test_date_range_field_still_exact_matches_as_access_rule() {
+		$user_id = $this->factory->user->create();
+		if ( ! class_exists( '\Newspack\Reader_Data' ) ) {
+			$this->markTestSkipped( 'Reader_Data not available.' );
+		}
+		\Newspack\Reader_Data::update_item( $user_id, 'LAST_GIFT_DATE', wp_json_encode( '2026-01-15' ) );
+
+		$method = new \ReflectionMethod( Promoted_Fields::class, 'evaluate_field' );
+		$method->setAccessible( true );
+
+		$field = ( new Incoming_Field( 'LAST_GIFT_DATE' ) )
+			->set_value_type( 'date' )
+			->set_matching_function( 'date_range' );
+
+		$this->assertTrue( $method->invoke( null, $field, $user_id, '2026-01-15' ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, '2026-01-16' ) );
+
+		// A rule the publisher wrote in the provider's format keeps matching the
+		// value the pull rewrote to ISO.
+		$mailchimp_field = ( new Incoming_Field( 'LAST_GIFT_DATE' ) )
+			->set_value_type( 'date' )
+			->set_matching_function( 'date_range' )
+			->set_date_format( 'm/d/Y' );
+		$this->assertTrue( $method->invoke( null, $mailchimp_field, $user_id, '01/15/2026' ) );
+		$this->assertFalse( $method->invoke( null, $mailchimp_field, $user_id, '01/16/2026' ) );
+
+		// The stored value passes through the same normalizer as the rule: the
+		// pull only rewrites a reader's value on that reader's next pull, so
+		// between the publisher selecting Date range and that pull the value is
+		// still in the provider's format — the rule must not deny the reader
+		// over that timing.
+		\Newspack\Reader_Data::update_item( $user_id, 'LAST_GIFT_DATE', wp_json_encode( '01/15/2026' ) );
+		$this->assertTrue( $method->invoke( null, $mailchimp_field, $user_id, '01/15/2026' ) );
+		$this->assertTrue( $method->invoke( null, $mailchimp_field, $user_id, '2026-01-15' ) );
+		$this->assertFalse( $method->invoke( null, $mailchimp_field, $user_id, '01/16/2026' ) );
+		\Newspack\Reader_Data::update_item( $user_id, 'LAST_GIFT_DATE', wp_json_encode( '2026-01-15' ) );
+
+		// A datetime value is compared on its date part, as written — the ATOM form
+		// the pull stores can never be typed into a gate rule by hand.
+		\Newspack\Reader_Data::update_item( $user_id, 'LAST_GIFT_DATE', wp_json_encode( '2026-01-15T23:30:00-06:00' ) );
+		$datetime_field = ( new Incoming_Field( 'LAST_GIFT_DATE' ) )
+			->set_value_type( 'datetime' )
+			->set_matching_function( 'date_range' );
+		$this->assertTrue( $method->invoke( null, $datetime_field, $user_id, '2026-01-15' ) );
+		$this->assertFalse( $method->invoke( null, $datetime_field, $user_id, '2026-01-16' ) );
+
+		// A reader with no value never matches, even against an unusable rule.
+		\Newspack\Reader_Data::update_item( $user_id, 'LAST_GIFT_DATE', wp_json_encode( '' ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, '' ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, 'not a date' ) );
+
+		// A day that doesn't exist in its month is what the normalizer stores
+		// untouched precisely because it isn't a date; it must not become one here.
+		\Newspack\Reader_Data::update_item( $user_id, 'LAST_GIFT_DATE', wp_json_encode( '2026-02-30' ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, '2026-02-30' ) );
+
+		// A leap day is a real date and still matches.
+		\Newspack\Reader_Data::update_item( $user_id, 'LAST_GIFT_DATE', wp_json_encode( '2024-02-29' ) );
+		$this->assertTrue( $method->invoke( null, $field, $user_id, '2024-02-29' ) );
+
+		// An ISO-looking prefix with trailing junk must not be admitted as its
+		// first ten characters — the one stored shape that used to fail open.
+		\Newspack\Reader_Data::update_item( $user_id, 'LAST_GIFT_DATE', wp_json_encode( '2026-01-15abc' ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, '2026-01-15' ) );
+		\Newspack\Reader_Data::update_item( $user_id, 'LAST_GIFT_DATE', wp_json_encode( '2026-01-15 TBD' ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, '2026-01-15' ) );
+	}
+
+	/**
+	 * The version-skew guard is what stops an old newspack-popups from being
+	 * handed a matching function it can't resolve — a TypeError that escapes
+	 * segment matching and takes prompt display down sitewide. newspack-popups
+	 * is not loaded in this suite, which is exactly the probe-less environment
+	 * an old build presents (the probe method can't exist), so this pins the
+	 * degradation path; the probe-present path is pinned by the stub-loading
+	 * test below, which must run after this one (the stub, once loaded, exists
+	 * for the rest of the process — PHPUnit runs methods in declaration order).
+	 */
+	public function test_supported_matching_function_degrades_without_the_popups_probe() {
+		if ( class_exists( '\Newspack_Popups_Criteria' ) ) {
+			$this->markTestSkipped( 'newspack-popups is loaded; this test covers the probe-less environment.' );
+		}
+
+		$method = new \ReflectionMethod( Promoted_Fields::class, 'supported_matching_function' );
+		$method->setAccessible( true );
+
+		// Baseline operators predate the capability probe: every newspack-popups
+		// build old enough to lack the probe still resolves all of them, so they
+		// must pass through untouched — degrading them would silently change
+		// matching semantics on sites that are not skewed at all.
+		foreach ( [ 'default', 'range', 'list__in', 'list__not_in' ] as $matching_function ) {
+			$this->assertSame( $matching_function, $method->invoke( null, $matching_function ), $matching_function );
+		}
+
+		// Anything past the baseline cannot be confirmed without the probe, so it
+		// degrades to exact matching — a criterion that matches too narrowly,
+		// rather than one that breaks the page.
+		$this->assertSame( 'default', $method->invoke( null, 'date_range' ) );
+		$this->assertSame( 'default', $method->invoke( null, 'a_future_operator' ) );
+	}
+
+	/**
+	 * The probe's success branch: a newspack-popups that answers the probe keeps
+	 * date_range intact. The stub declares the real class and method names, so
+	 * this fails if the probe's method_exists() arguments are mistyped or its
+	 * ternary is inverted — both of which would otherwise silently degrade every
+	 * date criterion to exact matching with two green suites. When the real
+	 * newspack-popups is loaded (a local combined run), the assertions hold
+	 * against it directly and the stub is skipped.
+	 */
+	public function test_supported_matching_function_passes_a_probed_operator_through() {
+		if ( ! class_exists( '\Newspack_Popups_Criteria' ) ) {
+			require_once dirname( __DIR__, 2 ) . '/mocks/class-newspack-popups-criteria-mock.php';
+		}
+
+		$method = new \ReflectionMethod( Promoted_Fields::class, 'supported_matching_function' );
+		$method->setAccessible( true );
+
+		$this->assertSame( 'date_range', $method->invoke( null, 'date_range' ) );
+		// The probe answers for unknown names too: an operator the installed
+		// build can't resolve still degrades even though the probe exists.
+		$this->assertSame( 'default', $method->invoke( null, 'a_future_operator' ) );
+	}
+
+	/**
+	 * A checkbox field holds a real true or false, while the segment editor saves
+	 * the Yes or No option picked for it. Exact matching compares the two and
+	 * matches no reader, so the criterion is registered with the matcher that
+	 * reads Yes and No against the stored value. Runs after the degrade-path test
+	 * for the same reason as the probe test above: it loads the stub.
+	 */
+	public function test_a_boolean_field_registers_a_yes_no_criterion_with_the_boolean_matcher() {
+		if ( ! class_exists( '\Newspack_Popups_Criteria' ) ) {
+			require_once dirname( __DIR__, 2 ) . '/mocks/class-newspack-popups-criteria-mock.php';
+		}
+
+		$integration = new class( 'boolean-test', 'Test ESP' ) extends Sample_Integration {
+			/**
+			 * Promote a checkbox field as a segment criterion.
+			 *
+			 * @param \Newspack\Reader_Activation\Integrations\Incoming_Field $field The field.
+			 * @return \Newspack\Reader_Activation\Integrations\Incoming_Field
+			 */
+			protected function configure_incoming_field( $field ) {
+				if ( 'is_vip' === $field->get_key() ) {
+					$field->set_name( 'VIP' )
+						->set_value_type( 'boolean' )
+						->set_is_segment_criteria( true );
+				}
+				return $field;
+			}
+		};
+
+		$this->reset_integrations();
+		Integrations::register( $integration );
+		Integrations::enable( 'boolean-test' );
+		$integration->update_enabled_incoming_fields( [ 'is_vip' ] );
+		Promoted_Fields::reset_cache();
+
+		Promoted_Fields::register();
+
+		$registered = wp_list_filter( \Newspack_Popups_Criteria::get_registered_criteria(), [ 'id' => 'boolean-test__is_vip' ] );
+		$this->assertCount( 1, $registered );
+		$criterion = reset( $registered );
+		$this->assertSame( 'boolean', $criterion['matching_function'] );
+		$this->assertSame( [ '', 'yes', 'no' ], wp_list_pluck( $criterion['options'], 'value' ) );
+	}
+
+	/**
+	 * The baseline list is a hand-maintained copy of the operator set that
+	 * predates the popups capability probe. It must never grow: an operator
+	 * added to it skips the probe entirely and would be emitted to builds that
+	 * cannot resolve it — the exact crash the probe exists to prevent.
+	 */
+	public function test_baseline_matching_functions_is_frozen() {
+		$constant = new \ReflectionClassConstant( Promoted_Fields::class, 'BASELINE_MATCHING_FUNCTIONS' );
+		$this->assertSame(
+			[ 'default', 'range', 'list__in', 'list__not_in' ],
+			$constant->getValue(),
+			'BASELINE_MATCHING_FUNCTIONS is the pre-probe operator set; new operators must rely on the probe, not the baseline.'
+		);
 	}
 }
