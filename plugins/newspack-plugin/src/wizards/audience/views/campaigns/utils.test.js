@@ -8,7 +8,7 @@
  * coerce those elements to "[object Object]".
  *
  * Regression coverage for NPPM-2729: the Campaigns admin page rendered blank
- * because a prompt's taxonomy arrays reached `promptDescription` holding a null
+ * because a prompt's taxonomy arrays reached `promptDetails` holding a null
  * entry — a term deleted out from under a stale object cache — and `.map()` threw
  * on `.name`. `warningForPopup` walks the same category arrays and throws the same
  * way. Both must tolerate null entries and a non-array value, since PHP's
@@ -61,7 +61,7 @@ const CRITERIA = [
 
 const PLACEMENT = 'center';
 
-let segmentDescription, promptDescription, warningForPopup, isOverlay, placementForPopup;
+let segmentDescription, splitCriteriaMessage, promptDetails, promptStatus, warningForPopup, isOverlay, placementForPopup;
 
 beforeAll( async () => {
 	window.newspackAudienceCampaigns = {
@@ -70,7 +70,9 @@ beforeAll( async () => {
 		overlay_placements: [ PLACEMENT, 'top', 'bottom' ],
 		custom_placements: {},
 	};
-	( { segmentDescription, promptDescription, warningForPopup, isOverlay, placementForPopup } = await import( './utils' ) );
+	( { segmentDescription, splitCriteriaMessage, promptDetails, promptStatus, warningForPopup, isOverlay, placementForPopup } = await import(
+		'./utils'
+	) );
 } );
 
 describe( 'segmentDescription', () => {
@@ -174,17 +176,47 @@ const realTag = { term_id: 58, name: 'real-tag' };
 const realCategory = { term_id: 5, name: 'Sports' };
 const otherCategory = { term_id: 6, name: 'News' };
 
-describe( 'promptDescription', () => {
+const describePrompt = prompt =>
+	promptDetails( prompt )
+		.map( ( { label, value } ) => `${ label } ${ value }` )
+		.join( ' | ' );
+
+describe( 'splitCriteriaMessage', () => {
+	it( 'splits a plain message at its first separator', () => {
+		expect( splitCriteriaMessage( 'Articles read: min: 5' ) ).toEqual( { label: 'Articles read:', value: 'min: 5' } );
+	} );
+
+	it( 'leaves a message with no label as the value', () => {
+		expect( splitCriteriaMessage( 'Segment disabled' ) ).toEqual( { value: 'Segment disabled' } );
+	} );
+
+	it( 'leaves an element-valued message alone', () => {
+		const element = <span>Subscribed to: Weekly Digest</span>;
+		expect( splitCriteriaMessage( element ) ).toEqual( { value: element } );
+	} );
+} );
+
+describe( 'promptDetails', () => {
 	it( 'names the A/B test and the variant when the prompt is in one', () => {
-		expect( promptDescription( overlay( { ab_test_id: 'hero', ab_variant: 'b' } ) ) ).toContain( 'A/B test: hero (variant B)' );
+		expect( describePrompt( overlay( { ab_test_id: 'hero', ab_variant: 'b' } ) ) ).toContain( 'A/B test: hero (variant B)' );
+	} );
+
+	it( 'leads with the placement and the frequency', () => {
+		expect( promptDetails( overlay() ).map( ( { label } ) => label ) ).toEqual( [ 'Placement:', 'Frequency:' ] );
+	} );
+
+	it( 'names a custom frequency without the editor hint', () => {
+		const prompt = overlay();
+		const details = promptDetails( { ...prompt, options: { ...prompt.options, frequency: 'custom' } } );
+		expect( details.find( ( { label } ) => 'Frequency:' === label ).value ).toBe( 'Custom' );
 	} );
 
 	it( 'says nothing about A/B tests when the prompt is in none', () => {
-		expect( promptDescription( overlay() ) ).not.toContain( 'A/B test' );
+		expect( describePrompt( overlay() ) ).not.toContain( 'A/B test' );
 	} );
 
 	it( 'renders a description from valid taxonomy arrays', () => {
-		const result = promptDescription(
+		const result = describePrompt(
 			overlay( {
 				categories: [ realCategory ],
 				tags: [ realTag ],
@@ -202,33 +234,53 @@ describe( 'promptDescription', () => {
 	// The reported crash: a null entry alongside a real term must not take the
 	// real term's name down with it.
 	it( 'tolerates a null entry in tags', () => {
-		const result = promptDescription( overlay( { tags: [ realTag, null ] } ) );
+		const result = describePrompt( overlay( { tags: [ realTag, null ] } ) );
 		expect( result ).toContain( 'Tags:' );
 		expect( result ).toContain( 'real-tag' );
 	} );
 
 	it( 'tolerates a null entry in categories', () => {
-		const result = promptDescription( overlay( { categories: [ realCategory, null ] } ) );
+		const result = describePrompt( overlay( { categories: [ realCategory, null ] } ) );
 		expect( result ).toContain( 'Categories:' );
 		expect( result ).toContain( 'Sports' );
 	} );
 
 	it( 'tolerates a null entry in campaign_groups', () => {
-		const result = promptDescription( overlay( { campaign_groups: [ { name: 'Group A' }, null ] } ) );
+		const result = describePrompt( overlay( { campaign_groups: [ { name: 'Group A' }, null ] } ) );
 		expect( result ).toContain( 'Campaign:' );
 		expect( result ).toContain( 'Group A' );
 	} );
 
 	it( 'tolerates tags === null', () => {
-		expect( () => promptDescription( overlay( { tags: null } ) ) ).not.toThrow();
+		expect( () => describePrompt( overlay( { tags: null } ) ) ).not.toThrow();
 	} );
 
 	it( 'tolerates categories === null', () => {
-		expect( () => promptDescription( overlay( { categories: null } ) ) ).not.toThrow();
+		expect( () => describePrompt( overlay( { categories: null } ) ) ).not.toThrow();
 	} );
 
 	it( 'tolerates campaign_groups === null', () => {
-		expect( () => promptDescription( overlay( { campaign_groups: null } ) ) ).not.toThrow();
+		expect( () => describePrompt( overlay( { campaign_groups: null } ) ) ).not.toThrow();
+	} );
+} );
+
+describe( 'promptStatus', () => {
+	it.each( [
+		[ 'publish', 'Active', 'stable' ],
+		[ 'draft', 'Inactive', 'draft' ],
+		[ 'pending', 'Pending Review', 'low' ],
+		[ 'future', 'Scheduled', 'informational' ],
+		[ 'trash', 'Trash', 'draft' ],
+	] )( 'labels a %s prompt', ( status, label, intent ) => {
+		expect( promptStatus( { status } ) ).toEqual( { label, intent } );
+	} );
+
+	it( 'says when a published prompt is held back by its segment', () => {
+		expect( promptStatus( { status: 'publish' }, true ).label ).toBe( 'Segment Disabled' );
+	} );
+
+	it( 'keeps the status of an unpublished prompt in a disabled segment', () => {
+		expect( promptStatus( { status: 'draft' }, true ).label ).toBe( 'Inactive' );
 	} );
 } );
 
