@@ -126,6 +126,16 @@ class Premium_Newsletters {
 	private static $sweep_page_size = 100;
 
 	/**
+	 * Gift recipients read just before WCS saves a subscription's edit screen,
+	 * keyed by subscription ID, 0 for a subscription with no recipient account.
+	 * Lets handle_cleared_gift_recipient() tell which reader lost a gift once WCS
+	 * has removed the recipient.
+	 *
+	 * @var array<int, int>
+	 */
+	private static $gift_recipients_before_save = [];
+
+	/**
 	 * User meta key for the renewal-time snapshot of the contact's full ESP list
 	 * membership. Captured by set_subscribed_lists() when a renewal fires; consulted
 	 * by check_access() to suppress auto-signup of any restricted list the contact
@@ -1493,30 +1503,27 @@ class Premium_Newsletters {
 	}
 
 	/**
-	 * Gift recipients read just before WCS saves a subscription's edit screen,
-	 * keyed by subscription ID. Lets handle_cleared_gift_recipient() tell which
-	 * reader lost a gift once WCS has removed the recipient.
-	 *
-	 * @var int[]
-	 */
-	private static $gift_recipients_before_save = [];
-
-	/**
 	 * Queue access checks for both readers when a subscription changes holder,
 	 * because no subscription event fires when an admin reassigns a gift.
 	 *
-	 * The holder is the recipient, or the buyer when there is none, so a first
-	 * recipient takes the subscription over from the buyer and a cleared one hands
-	 * it back. The new holder is checked for lists to add. The previous one only
-	 * loses lists: a remove-only check can't re-add one they left.
+	 * The holder is the recipient, or the buyer when the subscription isn't a
+	 * gift. The new holder is checked for lists to add. The previous one only loses
+	 * lists: a remove-only check can't re-add one they left. With no previous
+	 * recipient, that check goes to the buyer, since an admin may have just given
+	 * their own subscription a recipient.
+	 *
+	 * A gift bought at checkout keeps its recipient's email address when an admin
+	 * clears the recipient, so WCS still counts it as a gift and content gates give
+	 * it to no one. Only a gift with no address, one an admin created on the edit
+	 * screen, goes back to its buyer.
 	 *
 	 * WCS fires this hook every time it saves a gift's recipient, changed or not:
 	 * when the gift's parent order or a switch order is marked processing or
 	 * completed, and when an admin reassigns the gift. Renewal orders never fire
 	 * it. Because one order can fire it more than once with the same reader, an
 	 * unchanged holder is skipped: a recheck could let auto-signup re-add a list
-	 * they left. Clearing a recipient fires no hook; handle_cleared_gift_recipient()
-	 * calls this with no new recipient instead.
+	 * they left. Clearing a recipient on the edit screen fires no hook;
+	 * handle_cleared_gift_recipient() calls this with no new recipient instead.
 	 *
 	 * @param \WC_Subscription $subscription     The subscription.
 	 * @param int              $new_recipient_id The new recipient's user ID, or 0 if none.
@@ -1525,9 +1532,17 @@ class Premium_Newsletters {
 	 * @return void
 	 */
 	public static function handle_gift_recipient_changed( $subscription, $new_recipient_id, $old_recipient_id ): void {
-		$buyer_id           = (int) $subscription->get_customer_id();
-		$new_holder_id      = (int) $new_recipient_id > 0 ? (int) $new_recipient_id : $buyer_id;
-		$previous_holder_id = (int) $old_recipient_id > 0 ? (int) $old_recipient_id : $buyer_id;
+		$new_recipient_id = (int) $new_recipient_id;
+		$old_recipient_id = (int) $old_recipient_id;
+		$buyer_id         = (int) $subscription->get_customer_id();
+		if ( $new_recipient_id > 0 ) {
+			$new_holder_id = $new_recipient_id;
+		} elseif ( class_exists( 'WCS_Gifting' ) && \WCS_Gifting::is_gifted_subscription( $subscription ) ) {
+			$new_holder_id = 0;
+		} else {
+			$new_holder_id = $buyer_id;
+		}
+		$previous_holder_id = $old_recipient_id > 0 ? $old_recipient_id : $buyer_id;
 		if ( $new_holder_id === $previous_holder_id ) {
 			return;
 		}
@@ -1554,12 +1569,13 @@ class Premium_Newsletters {
 	}
 
 	/**
-	 * Hand a gift back to its buyer when an admin clears its recipient.
+	 * Recheck a gift's readers when an admin clears its recipient.
 	 *
 	 * WCS removes the recipient while it saves the edit screen and fires no hook,
-	 * so without this the former recipient would keep the gift's lists and the
-	 * buyer would never be checked. A reassignment fires the recipient-changed hook
-	 * from that same save, so a subscription that is still a gift is left alone.
+	 * so without this the former recipient would keep the gift's lists and a buyer
+	 * who gets the subscription back would never be checked. A reassignment fires
+	 * the recipient-changed hook from that same save, so a subscription that still
+	 * has a recipient account is left alone.
 	 *
 	 * @param int $order_id ID of the order or subscription being saved.
 	 *
@@ -1627,19 +1643,20 @@ class Premium_Newsletters {
 		if ( empty( $data['user_id'] ) ) {
 			return;
 		}
-		// A move between two statuses that both grant access, like cancelling at the
-		// end of the term, leaves access as it was, so the check may only remove
-		// lists: with auto-signup on, a full check would re-add every premium list
-		// the reader had left.
+		// A move between two statuses that both grant access, Active to Pending
+		// cancel or back, leaves access as it was. With auto-signup on, a full check
+		// would re-add every premium list the reader had left, so the owner and the
+		// recipient get a remove-only check, which keeps the usual cleanup of lists
+		// they no longer have access to.
 		$changes_access = self::event_changes_access( $data );
-		$holder_source  = $changes_access ? $source : self::SOURCE_ACCESS_KEPT;
-		self::add_user_to_queue( (int) $data['user_id'], $holder_source );
+		$check_source   = $changes_access ? $source : self::SOURCE_ACCESS_KEPT;
+		self::add_user_to_queue( (int) $data['user_id'], $check_source );
 		// A gift's status decides its recipient's access, so the recipient is checked
 		// on every event like the owner, not skipped like a group member when the
 		// status keeps access.
 		$recipient_id = self::get_gift_recipient_id( $data );
 		if ( $recipient_id ) {
-			self::add_user_to_queue( $recipient_id, $holder_source );
+			self::add_user_to_queue( $recipient_id, $check_source );
 		}
 		if ( ! $changes_access ) {
 			return;
