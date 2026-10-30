@@ -2,10 +2,12 @@
  * Internal dependencies
  */
 import {
+	filterGates,
 	getGateStatusBadgeIntent,
 	getMeteringCount,
 	getMeteringDescription,
 	getPriorityWarnings,
+	getUsefulGateFilterValues,
 	hasOwnMeter,
 	hasSharedMeteredPath,
 	isGateMetered,
@@ -509,5 +511,57 @@ describe( 'getPriorityWarnings', () => {
 		] );
 
 		expect( warnings ).toHaveProperty( '1' );
+	} );
+} );
+
+describe( 'gate toolbar filters', () => {
+	const gate = ( id, overrides = {} ) => ( { id, title: `Gate ${ id }`, status: 'publish', ...overrides } );
+	const ids = gates => gates.map( ( { id } ) => id );
+	const noMeter = { enabled: false };
+	const paid = { active: true, access_rules: [ [ { slug: 'subscription' } ] ], metering: noMeter };
+
+	it( 'returns every gate, in order, with nothing chosen', () => {
+		expect( ids( filterGates( [ gate( 2 ), gate( 1 ) ], {} ) ) ).toEqual( [ 2, 1 ] );
+	} );
+
+	it( 'searches decoded titles, ignoring case and outer spaces', () => {
+		const gates = [ gate( 1, { title: 'Sport &amp; Culture' } ), gate( 2, { title: 'News' } ) ];
+		expect( ids( filterGates( gates, { search: ' sport & ' } ) ) ).toEqual( [ 1 ] );
+	} );
+
+	it( 'treats every unpublished status as inactive', () => {
+		const gates = [ gate( 1 ), gate( 2, { status: 'draft' } ), gate( 3, { status: 'pending' } ) ];
+		expect( ids( filterGates( gates, { status: 'active' } ) ) ).toEqual( [ 1 ] );
+		expect( ids( filterGates( gates, { status: 'inactive' } ) ) ).toEqual( [ 2, 3 ] );
+	} );
+
+	it( 'lists a gate with both access types under each', () => {
+		const gates = [
+			gate( 1, { registration: { active: true }, custom_access: paid } ),
+			gate( 2, { registration: { active: true } } ),
+			gate( 3, { custom_access: paid } ),
+		];
+		expect( ids( filterGates( gates, { access: 'registered' } ) ) ).toEqual( [ 1, 2 ] );
+		expect( ids( filterGates( gates, { access: 'paid' } ) ) ).toEqual( [ 1, 3 ] );
+	} );
+
+	it( 'matches the Paid Access column: a meter counts, an empty switched-on section does not', () => {
+		const gates = [
+			gate( 1, { custom_access: { active: true, access_rules: [], metering: { enabled: true } } } ),
+			gate( 2, { custom_access: { active: true, access_rules: [], metering: noMeter } } ),
+			gate( 3, { custom_access: { active: false, access_rules: [ [ { slug: 'subscription' } ] ], metering: noMeter } } ),
+		];
+		expect( ids( filterGates( gates, { access: 'paid' } ) ) ).toEqual( [ 1 ] );
+	} );
+
+	it( 'offers only values that match some gates but not all', () => {
+		expect( getUsefulGateFilterValues( [ gate( 1 ), gate( 2 ) ], 'status' ) ).toEqual( [] );
+		expect( getUsefulGateFilterValues( [ gate( 1 ), gate( 2, { status: 'draft' } ) ], 'status' ) ).toEqual( [ 'active', 'inactive' ] );
+		expect(
+			getUsefulGateFilterValues(
+				[ gate( 1, { registration: { active: true }, custom_access: paid } ), gate( 2, { registration: { active: true } } ) ],
+				'access'
+			)
+		).toEqual( [ 'paid' ] );
 	} );
 } );

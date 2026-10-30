@@ -5,7 +5,7 @@
 /**
  * External dependencies
  */
-import { render } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 
 /**
  * Internal dependencies
@@ -14,6 +14,7 @@ import ContentGates from './content-gates';
 
 // mock-prefixed so Jest's hoisted jest.mock factories may close over them.
 const mockSetHeaderData = jest.fn();
+let mockDataViewsProps;
 let mockWizardData = {};
 
 jest.mock( '@wordpress/data', () => ( {
@@ -51,6 +52,15 @@ jest.mock( '@wordpress/ui', () => {
 	return failLoudlyMock( '@wordpress/ui', { Stack: Passthrough } );
 } );
 
+jest.mock( '@wordpress/dataviews', () => ( { DataViews: { Search: () => null, Filters: () => null } } ) );
+
+jest.mock( '../../../../../packages/components/src', () => ( {
+	DataViews: props => {
+		mockDataViewsProps = props;
+		return null;
+	},
+} ) );
+
 jest.mock( '../../../../../packages/components/src/wizard/store/utils', () => ( {
 	useWizardData: () => mockWizardData,
 } ) );
@@ -62,7 +72,7 @@ jest.mock( '../../../../../packages/components/src/wizard/store', () => ( {
 // Child views are irrelevant to the header contract under test.
 jest.mock( './content-gates-onboarding', () => () => null );
 jest.mock( './content-gates-priority', () => () => null );
-jest.mock( './content-gate-settings', () => () => null );
+jest.mock( './content-gate-settings', () => ( { gate } ) => <div>{ gate.title }</div> );
 jest.mock( './advanced-settings', () => () => null );
 
 const gatesOfLength = length =>
@@ -113,5 +123,74 @@ describe( 'Content Gates page header', () => {
 		expect( headerData.subTitle ).toEqual( expect.any( String ) );
 		expect( headerData.subTitle ).not.toBe( '' );
 		expect( headerData.sectionDescription ).toBeUndefined();
+	} );
+} );
+
+describe( 'Content Gates toolbar', () => {
+	const active = { id: 1, title: 'Alpha', status: 'publish', priority: 0 };
+	const inactive = { id: 2, title: 'Beta', status: 'draft', priority: 1 };
+	const renderGates = gates => {
+		mockWizardData = { gates, config: {} };
+		mockDataViewsProps = undefined;
+		return render( <ContentGates updateGatesData={ () => {} } /> );
+	};
+	const changeView = next => act( () => mockDataViewsProps.onChangeView( { ...mockDataViewsProps.view, ...next } ) );
+	const filterIds = () => mockDataViewsProps.fields.filter( field => field.filterBy ).map( field => field.id );
+	const inactiveFilter = { field: 'status', operator: 'is', value: 'inactive' };
+
+	it( 'opens on every gate, inactive ones included, and hides Reset', () => {
+		renderGates( [ active, inactive ] );
+
+		expect( screen.getByText( 'Alpha' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Beta' ) ).toBeInTheDocument();
+		expect( mockDataViewsProps.view.filters ).toEqual( [] );
+		expect( mockDataViewsProps.className ).toContain( 'is-default-view' );
+	} );
+
+	it( 'narrows the cards by filter and offers Reset', () => {
+		renderGates( [ active, inactive ] );
+
+		changeView( { filters: [ inactiveFilter ] } );
+
+		expect( screen.queryByText( 'Alpha' ) ).not.toBeInTheDocument();
+		expect( screen.getByText( 'Beta' ) ).toBeInTheDocument();
+		expect( mockDataViewsProps.className ).not.toContain( 'is-default-view' );
+	} );
+
+	it( 'says so when nothing matches', () => {
+		renderGates( [ active, inactive ] );
+
+		changeView( { search: 'gamma' } );
+
+		expect( screen.getByText( 'No content gates match your search.' ) ).toBeInTheDocument();
+	} );
+
+	it( 'hides the Status chip when every gate has the same status', () => {
+		renderGates( [ active, { ...active, id: 3, title: 'Gamma' } ] );
+
+		expect( filterIds() ).not.toContain( 'status' );
+	} );
+
+	it( 'hides the toolbar for a single gate', () => {
+		renderGates( [ active ] );
+
+		expect( mockDataViewsProps ).toBeUndefined();
+	} );
+
+	it( 'clears the filter when its last match goes away, and does not bring it back', () => {
+		const { rerender } = renderGates( [ active, inactive ] );
+		changeView( { filters: [ inactiveFilter ] } );
+
+		mockWizardData = { gates: [ active, { ...inactive, status: 'publish' } ], config: {} };
+		rerender( <ContentGates updateGatesData={ () => {} } /> );
+
+		expect( screen.getByText( 'Alpha' ) ).toBeInTheDocument();
+		expect( filterIds() ).not.toContain( 'status' );
+
+		mockWizardData = { gates: [ active, inactive ], config: {} };
+		rerender( <ContentGates updateGatesData={ () => {} } /> );
+
+		expect( filterIds() ).toContain( 'status' );
+		expect( mockDataViewsProps.view.filters ).toEqual( [] );
 	} );
 } );

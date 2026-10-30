@@ -5,7 +5,7 @@
  * must surface a failed save as their own error notice (addNotice). Before the
  * fix these handlers had no onError, so a failed action went silent once the
  * store error bridge was removed. Mocks mirror the CI-proven modal test pattern;
- * Card is stubbed to render its action items as buttons so they can be clicked.
+ * the menu is stubbed to always render its items so they can be clicked.
  */
 
 /**
@@ -27,6 +27,7 @@ let mockConfig = {};
 const mockAddNotice = jest.fn();
 const mockResetNotices = jest.fn();
 const mockResetError = jest.fn();
+const mockCloseMenu = jest.fn();
 
 // The fetch boundary: any save invokes onError with a parsed error.
 jest.mock( '../../../hooks/use-wizard-api-fetch', () => ( {
@@ -53,31 +54,20 @@ jest.mock( '@wordpress/data', () => ( {
 jest.mock( '@wordpress/components', () => {
 	const React = require( 'react' );
 	return {
-		CardBody: ( { children } ) => React.createElement( 'div', null, children ),
+		DropdownMenu: ( { children, label } ) =>
+			React.createElement( 'div', null, React.createElement( 'button', { 'aria-label': label } ), children( { onClose: mockCloseMenu } ) ),
+		MenuGroup: ( { children } ) => React.createElement( 'div', null, children ),
+		MenuItem: ( { children, onClick, 'aria-label': ariaLabel } ) =>
+			React.createElement( 'button', { onClick, 'aria-label': ariaLabel }, children ),
 	};
 } );
 
-// Card renders its action items (nested arrays) as clickable buttons so the
-// test can trigger the enable/disable action.
-jest.mock( '../../../../../packages/components/src', () => {
-	const React = require( 'react' );
-	return {
-		Grid: ( { children } ) => React.createElement( 'div', null, children ),
-		Card: ( { children, __experimentalCoreProps } ) =>
-			React.createElement(
-				'div',
-				null,
-				React.createElement( 'button', { 'aria-label': __experimentalCoreProps?.actionsLabel } ),
-				( __experimentalCoreProps?.actions || [] )
-					.flat()
-					.map( a => React.createElement( 'button', { key: a.label, onClick: a.action, 'aria-label': a.ariaLabel }, a.label ) ),
-				children
-			),
-		Router: { useHistory: () => ( { push: () => {} } ) },
-		TooltipBadge: () => null,
-		useConfirmDialog: () => ( { confirmDialog: null, requestConfirm: cb => cb() } ),
-	};
-} );
+jest.mock( '../../../../../packages/components/src', () => ( {
+	Divider: () => null,
+	Router: { useHistory: () => ( { push: () => {} } ) },
+	TooltipBadge: () => null,
+	useConfirmDialog: () => ( { confirmDialog: null, requestConfirm: cb => cb() } ),
+} ) );
 
 jest.mock( '../../../../../packages/components/src/wizard/store/utils', () => ( {
 	useWizardData: () => ( { gates: [ mockGate ], config: mockConfig } ),
@@ -100,6 +90,7 @@ jest.mock( './utils', () => ( {
 describe( 'ContentGateSettings per-gate actions', () => {
 	beforeEach( () => {
 		mockAddNotice.mockReset();
+		mockCloseMenu.mockReset();
 		mockConfig = {};
 		// Read at module load; must exist before the component is required.
 		window.newspackAudienceContentGates = { available_access_rules: {} };
@@ -109,8 +100,8 @@ describe( 'ContentGateSettings per-gate actions', () => {
 		const ContentGateSettings = require( './content-gate-settings' ).default;
 		render( <ContentGateSettings gate={ mockGate } updateGatesData={ () => {} } /> );
 
-		// gate.status === 'publish' -> the toggle action is labelled "Set to inactive".
-		fireEvent.click( screen.getByRole( 'button', { name: 'Set to inactive: Gate X' } ) );
+		// gate.status === 'publish' -> the toggle action is labelled "Set to Inactive".
+		fireEvent.click( screen.getByRole( 'button', { name: 'Set to Inactive: Gate X' } ) );
 
 		await waitFor( () => {
 			expect( mockAddNotice ).toHaveBeenCalledWith(
@@ -147,9 +138,18 @@ describe( 'ContentGateSettings per-gate actions', () => {
 		render( <ContentGateSettings gate={ mockGate } updateGatesData={ () => {} } /> );
 
 		expect( screen.getByRole( 'button', { name: 'Gate actions: Gate X' } ) ).toBeInTheDocument();
-		[ 'Edit', 'Set to inactive', 'Duplicate', 'Delete' ].forEach( label => {
+		[ 'Edit', 'Set to Inactive', 'Duplicate', 'Delete' ].forEach( label => {
 			expect( screen.getByRole( 'button', { name: `${ label }: Gate X` } ) ).toBeInTheDocument();
 		} );
+	} );
+
+	it( 'closes the menu when an action runs', () => {
+		const ContentGateSettings = require( './content-gate-settings' ).default;
+		render( <ContentGateSettings gate={ mockGate } updateGatesData={ () => {} } /> );
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Duplicate: Gate X' } ) );
+
+		expect( mockCloseMenu ).toHaveBeenCalled();
 	} );
 
 	it( 'names the site auto-signup setting on a premium newsletter card', () => {

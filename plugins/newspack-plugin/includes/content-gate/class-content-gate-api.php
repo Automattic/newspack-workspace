@@ -500,7 +500,7 @@ class Content_Gate_API {
 	 *
 	 * Only such a save may carry an already-invalid stored value back untouched.
 	 * A save that publishes or activates the gate has to fix the value first,
-	 * otherwise one click on the gates list's "Set to active" would put a gate
+	 * otherwise one click on the gates list's "Set to Active" would put a gate
 	 * that denies every reader live, under a notice reading "gate enabled".
 	 *
 	 * @param array $gate           The gate as it arrived in the request.

@@ -1,6 +1,7 @@
 /**
  * WordPress dependencies.
  */
+import { decodeEntities } from '@wordpress/html-entities';
 import { __, _x, sprintf } from '@wordpress/i18n';
 import { addQueryArgs } from '@wordpress/url';
 
@@ -349,6 +350,53 @@ export const getAutoSignupOptions = ( siteAutoSignup?: boolean ): Array< { label
  *
  * @param isNewsletter Whether the screen manages premium newsletter gates.
  */
+// "paid" uses the same test as the card's Paid Access column, which reads N/A for a
+// gate whose paid access is switched on with no rules and no meter.
+const GATE_FILTERS: Record< 'status' | 'access', Record< string, ( gate: Gate ) => boolean > > = {
+	status: {
+		active: gate => 'publish' === gate.status,
+		inactive: gate => 'publish' !== gate.status,
+	},
+	access: {
+		registered: gate => Boolean( gate.registration?.active ),
+		paid: gate =>
+			Boolean( gate.custom_access?.active && ( gate.custom_access.access_rules?.length > 0 || gate.custom_access.metering?.enabled ) ),
+	},
+};
+
+/**
+ * Narrow the gates list by the toolbar's search and filters.
+ *
+ * @param gates          All gates, in priority order.
+ * @param filters        The toolbar's current choices.
+ * @param filters.search The search term.
+ * @param filters.status The chosen status, if any.
+ * @param filters.access The chosen access type, if any.
+ * @return The matching gates, in the same order.
+ */
+export const filterGates = ( gates: Gate[], { search = '', status, access }: { search?: string; status?: string; access?: string } ) => {
+	const term = search.trim().toLowerCase();
+	return gates.filter(
+		gate =>
+			( ! term || decodeEntities( gate.title ).toLowerCase().includes( term ) ) &&
+			( ! status || GATE_FILTERS.status[ status ]( gate ) ) &&
+			( ! access || GATE_FILTERS.access[ access ]( gate ) )
+	);
+};
+
+/**
+ * The values of a toolbar filter that would change the list: each matches some gates but not all.
+ *
+ * @param gates All gates.
+ * @param field The filter.
+ * @return The values to offer. Empty when the filter can do nothing.
+ */
+export const getUsefulGateFilterValues = ( gates: Gate[], field: 'status' | 'access' ) =>
+	Object.keys( GATE_FILTERS[ field ] ).filter( value => {
+		const matches = gates.filter( GATE_FILTERS[ field ][ value ] ).length;
+		return matches > 0 && matches < gates.length;
+	} );
+
 export const getGatesSubTitle = ( isNewsletter = false ) =>
 	isNewsletter
 		? __(
