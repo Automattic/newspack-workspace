@@ -38,7 +38,11 @@ describe( 'SegmentsPriority', () => {
 	it( 'explains the order and lists titles only', () => {
 		setup( jest.fn() );
 		expect( screen.getByRole( 'dialog', { name: 'Segment Priority' } ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Readers get the first segment they match, so put the most important one first.' ) ).toBeInTheDocument();
+		expect(
+			screen.getByText(
+				'Segments are checked in this order. When a reader matches more than one segment, only the first matching segment decides which targeted prompts they see.'
+			)
+		).toBeInTheDocument();
 		expect( screen.getByRole( 'heading', { name: 'Alpha' } ) ).toBeInTheDocument();
 		expect( screen.queryByRole( 'checkbox' ) ).not.toBeInTheDocument();
 		expect( screen.queryByRole( 'button', { name: 'More actions' } ) ).not.toBeInTheDocument();

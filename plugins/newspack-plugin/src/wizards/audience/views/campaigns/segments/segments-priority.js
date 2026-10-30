@@ -66,7 +66,12 @@ const SegmentsPriority = ( { closeModal, segments, setSegments, wizardApiFetch }
 			} }
 		>
 			<Stack direction="column" gap="xl">
-				<span>{ __( 'Readers get the first segment they match, so put the most important one first.', 'newspack-plugin' ) }</span>
+				<span>
+					{ __(
+						'Segments are checked in this order. When a reader matches more than one segment, only the first matching segment decides which targeted prompts they see.',
+						'newspack-plugin'
+					) }
+				</span>
 				{ error && (
 					<Notice status="error" isDismissible={ false }>
 						{ error }
