@@ -1704,8 +1704,8 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 			WooCommerce_Subscriptions::get_subscription_readers( $subscription )
 		);
 		$this->assertSame(
-			[ $purchaser_id ],
-			WooCommerce_Subscriptions::get_subscription_reader_ids( $subscription->get_id() ),
+			WooCommerce_Subscriptions::get_subscription_readers( $subscription ),
+			WooCommerce_Subscriptions::get_subscription_readers( $subscription->get_id() ),
 			'A subscription ID resolves to the same subscription.'
 		);
 	}
@@ -1728,7 +1728,6 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 			],
 			WooCommerce_Subscriptions::get_subscription_readers( $subscription )
 		);
-		$this->assertSame( [ $purchaser_id, $recipient_id ], WooCommerce_Subscriptions::get_subscription_reader_ids( $subscription ) );
 	}
 
 	/**
@@ -1747,7 +1746,6 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 			],
 			WooCommerce_Subscriptions::get_subscription_readers( $subscription )
 		);
-		$this->assertSame( [ $purchaser_id ], WooCommerce_Subscriptions::get_subscription_reader_ids( $subscription ) );
 	}
 
 	/**
@@ -1773,7 +1771,6 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 		$this->assertSame( 0, $readers['recipient'] );
 		$this->assertEqualsCanonicalizing( [ $member_id, $manager_id ], $readers['members'], 'Members and managers are listed, the purchaser is not.' );
 		$this->assertCount( 2, $readers['members'] );
-		$this->assertEqualsCanonicalizing( [ $purchaser_id, $member_id, $manager_id ], WooCommerce_Subscriptions::get_subscription_reader_ids( $subscription ) );
 	}
 
 	/**
@@ -1797,7 +1794,6 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 		$readers = WooCommerce_Subscriptions::get_subscription_readers( $subscription );
 
 		$this->assertSame( [ $member_id ], $readers['members'] );
-		$this->assertSame( [ $purchaser_id, $recipient_id, $member_id ], WooCommerce_Subscriptions::get_subscription_reader_ids( $subscription ) );
 	}
 
 	/**
@@ -1818,7 +1814,6 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 			],
 			WooCommerce_Subscriptions::get_subscription_readers( $subscription )
 		);
-		$this->assertSame( [ $purchaser_id ], WooCommerce_Subscriptions::get_subscription_reader_ids( $subscription ) );
 	}
 
 	/**
@@ -1833,7 +1828,6 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 			],
 			WooCommerce_Subscriptions::get_subscription_readers( 424242 )
 		);
-		$this->assertSame( [], WooCommerce_Subscriptions::get_subscription_reader_ids( 424242 ) );
 	}
 
 	/**
@@ -1848,18 +1842,5 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 			],
 			WooCommerce_Subscriptions::get_subscription_readers( new \stdClass() )
 		);
-		$this->assertSame( [], WooCommerce_Subscriptions::get_subscription_reader_ids( new \stdClass() ) );
-	}
-
-	/**
-	 * A subscription with no customer (a guest purchase) leaves a zero out of the
-	 * flat list, so callers never look up user 0.
-	 */
-	public function test_get_subscription_reader_ids_drops_missing_purchaser() {
-		$member_id    = $this->factory->user->create();
-		$subscription = $this->create_readers_subscription( 0, true );
-		$this->add_group_member( $member_id, $subscription );
-
-		$this->assertSame( [ $member_id ], WooCommerce_Subscriptions::get_subscription_reader_ids( $subscription ) );
 	}
 }
