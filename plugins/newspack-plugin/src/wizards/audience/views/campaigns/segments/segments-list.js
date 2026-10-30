@@ -156,7 +156,7 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, isLoading } ) =>
 			<EmptyState.Header
 				icon={ people }
 				title={ __( 'No segments yet', 'newspack-plugin' ) }
-				description={ __( 'Create audience segments to target visitors by engagement, activity, and more.', 'newspack-plugin' ) }
+				description={ __( 'Group readers by what they do, then show them the right prompts.', 'newspack-plugin' ) }
 			/>
 			<EmptyState.Actions>
 				<Button variant="primary" href="#/segments/new">

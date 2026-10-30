@@ -310,10 +310,7 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch, ...screenProps
 			id: 'referrer_sources',
 			title: __( 'Referrer Sources', 'newspack-plugin' ),
 			description: __( 'Target readers based on where they’re coming from.', 'newspack-plugin' ),
-			notification: __(
-				'Segments using these options will apply only to the first page visited after coming from an external source.',
-				'newspack-plugin'
-			),
+			notification: __( 'These only apply to the first page a reader sees after arriving from another site.', 'newspack-plugin' ),
 		},
 		{
 			id: 'integrations',
@@ -351,17 +348,17 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch, ...screenProps
 			<div className="newspack-campaigns-wizard-segments__form">
 				<SectionHeader
 					backNav="#/segments"
+					className="newspack-campaigns-wizard-segments__form-header"
 					heading={ 2 }
 					noMargin
 					title={ isNew ? __( 'Add Segment', 'newspack-plugin' ) : __( 'Edit Segment', 'newspack-plugin' ) }
 				/>
-				<Divider alignment="full-width" variant="tertiary" />
 				<Grid columns={ 2 } gutter={ 32 } noMargin>
 					<SectionHeader
 						heading={ 2 }
 						noMargin
 						title={ __( 'Details', 'newspack-plugin' ) }
-						description={ __( 'Name this segment and choose whether it’s used for reader segmentation.', 'newspack-plugin' ) }
+						description={ __( 'Name this segment and choose whether it’s in use.', 'newspack-plugin' ) }
 					/>
 					<Stack direction="column" gap="xl">
 						<TextControl
@@ -375,7 +372,7 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch, ...screenProps
 						/>
 						<ToggleGroupControl
 							label={ __( 'Status', 'newspack-plugin' ) }
-							help={ __( 'If disabled, the segment will be ignored for reader segmentation.', 'newspack-plugin' ) }
+							help={ __( 'A disabled segment doesn’t match any readers.', 'newspack-plugin' ) }
 							value={ segmentConfig.is_disabled ? 'disabled' : 'enabled' }
 							onChange={ value => updateSegmentConfig( { is_disabled: 'disabled' === value } ) }
 							isBlock
