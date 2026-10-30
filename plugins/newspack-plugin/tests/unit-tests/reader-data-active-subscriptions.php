@@ -46,6 +46,7 @@ class Newspack_Test_Reader_Data_Active_Subscriptions extends WP_UnitTestCase {
 	public function tear_down() {
 		\WCS_Gifting::$recipients = [];
 		Group_Subscription::reset_cache();
+		wp_set_current_user( 0 );
 		parent::tear_down();
 	}
 
@@ -86,6 +87,35 @@ class Newspack_Test_Reader_Data_Active_Subscriptions extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Give a subscription to a recipient, or hand it to a different one.
+	 *
+	 * WooCommerce Subscriptions Gifting lists a gift under its recipient, so the
+	 * lookup filter reads the recipient map each time it runs. A reassignment is
+	 * then one write to the map, the way it is one meta write in WCS.
+	 *
+	 * @param \WC_Subscription $subscription Subscription to gift.
+	 * @param int              $recipient_id Recipient.
+	 */
+	private function gift_to( $subscription, int $recipient_id ) {
+		$is_gifted = isset( \WCS_Gifting::$recipients[ $subscription->get_id() ] );
+		\WCS_Gifting::$recipients[ $subscription->get_id() ] = $recipient_id;
+		if ( $is_gifted ) {
+			return;
+		}
+		add_filter(
+			'wcs_get_users_subscriptions',
+			function ( $subscriptions, $user_id ) use ( $subscription ) {
+				if ( (int) $user_id === ( \WCS_Gifting::$recipients[ $subscription->get_id() ] ?? 0 ) ) {
+					$subscriptions[ $subscription->get_id() ] = $subscription;
+				}
+				return $subscriptions;
+			},
+			10,
+			2
+		);
+	}
+
+	/**
 	 * Create a gifted subscription, listed under its recipient the way WooCommerce
 	 * Subscriptions Gifting lists it.
 	 *
@@ -97,18 +127,7 @@ class Newspack_Test_Reader_Data_Active_Subscriptions extends WP_UnitTestCase {
 	 */
 	private function create_gifted_subscription( int $purchaser_id, int $recipient_id, int $product_id = 101 ) {
 		$subscription = $this->create_subscription( $purchaser_id, $product_id );
-		\WCS_Gifting::$recipients[ $subscription->get_id() ] = $recipient_id;
-		add_filter(
-			'wcs_get_users_subscriptions',
-			function ( $subscriptions, $user_id ) use ( $subscription, $recipient_id ) {
-				if ( (int) $user_id === $recipient_id ) {
-					$subscriptions[ $subscription->get_id() ] = $subscription;
-				}
-				return $subscriptions;
-			},
-			10,
-			2
-		);
+		$this->gift_to( $subscription, $recipient_id );
 		return $subscription;
 	}
 
@@ -186,6 +205,19 @@ class Newspack_Test_Reader_Data_Active_Subscriptions extends WP_UnitTestCase {
 		$callback();
 		remove_action( 'newspack_reader_data_updated', $listener, 10 );
 		return $count;
+	}
+
+	/**
+	 * A page view by the reader, which recomputes a missing or stale list. It is a
+	 * new request, so the group lookups' per-request memos start empty: they are
+	 * keyed by reader and not cleared when a group is turned off.
+	 *
+	 * @param int $user_id User ID.
+	 */
+	private function view_page_as( int $user_id ) {
+		Group_Subscription::reset_cache();
+		wp_set_current_user( $user_id );
+		Active_Subscriptions_Reader_Data::maybe_backfill_current_reader();
 	}
 
 	/**
@@ -362,7 +394,9 @@ class Newspack_Test_Reader_Data_Active_Subscriptions extends WP_UnitTestCase {
 	 * until the stamp aged out.
 	 *
 	 * The key cap refuses a write only for a key the reader does not have yet,
-	 * so the reader here holds a product and has no stored item.
+	 * so the reader here holds a product and has no stored item. The refusing
+	 * filter runs at priority 11, after the item's own cap exemption at 10, so it
+	 * still wins.
 	 */
 	public function test_refused_write_leaves_the_stamp_unset() {
 		$owner_id = $this->create_reader();
@@ -384,8 +418,8 @@ class Newspack_Test_Reader_Data_Active_Subscriptions extends WP_UnitTestCase {
 
 	/**
 	 * The stamp is the time of the computation, and a list older than a day is
-	 * stale. That age limit is what catches a payment retry window closing, which
-	 * fires no event.
+	 * stale. That age limit is what catches a change that fires no event, such as
+	 * a subscription edited in the database.
 	 */
 	public function test_stamp_is_a_timestamp_that_goes_stale_after_a_day() {
 		$owner_id = $this->create_reader();
@@ -604,7 +638,9 @@ class Newspack_Test_Reader_Data_Active_Subscriptions extends WP_UnitTestCase {
 	/**
 	 * A subscription deleted before a queued event runs has no readers to look up,
 	 * but the customer is still recomputed, which takes the deleted subscription's
-	 * product off them.
+	 * product off them. The event names a product the stored list does not hold,
+	 * so only a recompute ends at an empty list; patching the list with the event's
+	 * products would leave the stored one in place.
 	 */
 	public function test_handler_still_refreshes_the_user_when_the_subscription_no_longer_loads() {
 		$owner_id = $this->create_reader();
@@ -615,7 +651,7 @@ class Newspack_Test_Reader_Data_Active_Subscriptions extends WP_UnitTestCase {
 			[
 				'user_id'         => $owner_id,
 				'subscription_id' => 9999,
-				'product_ids'     => [ 123 ],
+				'product_ids'     => [ 456 ],
 				'status_after'    => 'cancelled',
 			]
 		);
@@ -674,5 +710,288 @@ class Newspack_Test_Reader_Data_Active_Subscriptions extends WP_UnitTestCase {
 		Reader_Data::check_product_subscriptions( time(), [ 'email' => 'reader@example.com' ] );
 
 		$this->assertSame( [ 123 ], $this->stored_products( $user_id ) );
+	}
+
+	/**
+	 * Joining or leaving a group fires no data event naming the reader, so the
+	 * membership write is what marks their list stale. A reader's first view after
+	 * each change gives them, or takes from them, the group's product.
+	 */
+	public function test_joining_and_leaving_a_group_marks_the_member_stale() {
+		$owner_id  = $this->create_reader();
+		$member_id = $this->create_reader();
+		// The group needs a seated member to exist; the reader under test joins later.
+		$group = $this->create_group_subscription( $owner_id, $this->create_reader() );
+		$this->view_page_as( $member_id );
+		$this->assertFalse( Active_Subscriptions_Reader_Data::is_stale( $member_id ) );
+		$this->assertFalse( $this->stored_products( $member_id ) );
+
+		add_user_meta( $member_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $group->get_id() );
+		$this->assertTrue( Active_Subscriptions_Reader_Data::is_stale( $member_id ), 'Joining marks the reader.' );
+		$this->view_page_as( $member_id );
+		$this->assertSame( [ 101 ], $this->stored_products( $member_id ) );
+
+		delete_user_meta( $member_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $group->get_id() );
+		$this->assertTrue( Active_Subscriptions_Reader_Data::is_stale( $member_id ), 'Leaving marks the reader.' );
+		$this->view_page_as( $member_id );
+		$this->assertSame( [], $this->stored_products( $member_id ) );
+	}
+
+	/**
+	 * Only the group membership key moves the stamp, and only for the reader whose
+	 * meta changed. Every other user meta write on the site passes through the same
+	 * hooks.
+	 */
+	public function test_other_user_meta_and_other_readers_keep_their_stamp() {
+		$member_id    = $this->create_reader();
+		$bystander_id = $this->create_reader();
+		Active_Subscriptions_Reader_Data::refresh( $member_id );
+		Active_Subscriptions_Reader_Data::refresh( $bystander_id );
+
+		add_user_meta( $member_id, 'some_other_key', 'value' );
+		delete_user_meta( $member_id, 'some_other_key' );
+		$this->assertFalse( Active_Subscriptions_Reader_Data::is_stale( $member_id ) );
+
+		add_user_meta( $member_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, 123 );
+		$this->assertTrue( Active_Subscriptions_Reader_Data::is_stale( $member_id ) );
+		$this->assertFalse( Active_Subscriptions_Reader_Data::is_stale( $bystander_id ) );
+	}
+
+	/**
+	 * Handing a gift to someone else fires no subscription event. The new
+	 * recipient gains the product and the old one loses it, on their next view.
+	 * The buyer holds neither before nor after, so they are left alone.
+	 */
+	public function test_reassigning_a_gift_marks_the_new_and_old_recipients_stale() {
+		$buyer_id = $this->create_reader();
+		$old_id   = $this->create_reader();
+		$new_id   = $this->create_reader();
+		$gift     = $this->create_gifted_subscription( $buyer_id, $old_id, 101 );
+		foreach ( [ $buyer_id, $old_id, $new_id ] as $user_id ) {
+			Active_Subscriptions_Reader_Data::refresh( $user_id );
+		}
+		$this->assertSame( [ 101 ], $this->stored_products( $old_id ) );
+
+		$this->gift_to( $gift, $new_id );
+		do_action( 'woocommerce_subscriptions_gifting_recipient_changed', $gift, $new_id, $old_id );
+
+		$this->assertTrue( Active_Subscriptions_Reader_Data::is_stale( $new_id ) );
+		$this->assertTrue( Active_Subscriptions_Reader_Data::is_stale( $old_id ) );
+		$this->assertFalse( Active_Subscriptions_Reader_Data::is_stale( $buyer_id ) );
+
+		$this->view_page_as( $new_id );
+		$this->view_page_as( $old_id );
+		$this->assertSame( [ 101 ], $this->stored_products( $new_id ) );
+		$this->assertSame( [], $this->stored_products( $old_id ) );
+	}
+
+	/**
+	 * A subscription that becomes a gift was the buyer's own until then, so the
+	 * buyer is marked along with the recipient: the hook reports no earlier
+	 * recipient, and the buyer is who held it.
+	 */
+	public function test_gifting_a_subscription_the_buyer_held_marks_the_buyer_stale() {
+		$buyer_id     = $this->create_reader();
+		$recipient_id = $this->create_reader();
+		$subscription = $this->create_subscription( $buyer_id, 101 );
+		Active_Subscriptions_Reader_Data::refresh( $buyer_id );
+		$this->assertSame( [ 101 ], $this->stored_products( $buyer_id ) );
+
+		$this->gift_to( $subscription, $recipient_id );
+		do_action( 'woocommerce_subscriptions_gifting_recipient_changed', $subscription, $recipient_id, 0 );
+
+		$this->assertTrue( Active_Subscriptions_Reader_Data::is_stale( $buyer_id ) );
+		$this->assertTrue( Active_Subscriptions_Reader_Data::is_stale( $recipient_id ) );
+
+		$this->view_page_as( $buyer_id );
+		$this->view_page_as( $recipient_id );
+		$this->assertSame( [], $this->stored_products( $buyer_id ) );
+		$this->assertSame( [ 101 ], $this->stored_products( $recipient_id ) );
+	}
+
+	/**
+	 * Turning a group off or on fires no subscription event either. Its members
+	 * hold the product only while it is on, so each is marked stale and the next
+	 * view settles them. The owner holds their own subscription either way.
+	 */
+	public function test_turning_a_group_off_and_on_marks_its_members_stale() {
+		$owner_id   = $this->create_reader();
+		$member_id  = $this->create_reader();
+		$member2_id = $this->create_reader();
+		$group      = $this->create_group_subscription( $owner_id, $member_id );
+		add_user_meta( $member2_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $group->get_id() );
+		Group_Subscription::reset_cache();
+		foreach ( [ $owner_id, $member_id, $member2_id ] as $user_id ) {
+			Active_Subscriptions_Reader_Data::refresh( $user_id );
+		}
+		$this->assertSame( [ 101 ], $this->stored_products( $member_id ) );
+
+		Group_Subscription_Settings::update_subscription_settings( $group, [ 'enabled' => false ] );
+
+		$this->assertTrue( Active_Subscriptions_Reader_Data::is_stale( $member_id ) );
+		$this->assertTrue( Active_Subscriptions_Reader_Data::is_stale( $member2_id ) );
+		$this->assertFalse( Active_Subscriptions_Reader_Data::is_stale( $owner_id ) );
+		$this->view_page_as( $member_id );
+		$this->assertSame( [], $this->stored_products( $member_id ), 'A member of a group that is off holds nothing.' );
+
+		Group_Subscription_Settings::update_subscription_settings( $group, [ 'enabled' => true ] );
+
+		$this->assertTrue( Active_Subscriptions_Reader_Data::is_stale( $member_id ) );
+		$this->view_page_as( $member_id );
+		$this->assertSame( [ 101 ], $this->stored_products( $member_id ) );
+	}
+
+	/**
+	 * A settings save that leaves the group's on/off state alone does not touch
+	 * its members, however large the group is.
+	 */
+	public function test_changing_another_group_setting_leaves_members_alone() {
+		$owner_id  = $this->create_reader();
+		$member_id = $this->create_reader();
+		$group     = $this->create_group_subscription( $owner_id, $member_id );
+		Active_Subscriptions_Reader_Data::refresh( $member_id );
+
+		Group_Subscription_Settings::update_subscription_settings( $group, [ 'limit' => 5 ] );
+
+		$this->assertFalse( Active_Subscriptions_Reader_Data::is_stale( $member_id ) );
+	}
+
+	/**
+	 * Readers who never trigger an event after the deploy (a remember-me session
+	 * that outlives it) have no stamp. Their first page view computes the list:
+	 * this is how the corrected lists reach existing readers.
+	 */
+	public function test_missing_stamp_is_computed_on_page_view() {
+		$owner_id = $this->create_reader();
+		$this->create_subscription( $owner_id, 101 );
+		$this->assertFalse( $this->stored_products( $owner_id ) );
+
+		$this->view_page_as( $owner_id );
+
+		$this->assertSame( [ 101 ], $this->stored_products( $owner_id ) );
+		$this->assertFalse( Active_Subscriptions_Reader_Data::is_stale( $owner_id ) );
+	}
+
+	/**
+	 * A reader on a cached page gets their list from the hydration response, not a
+	 * page render. The backfill runs ahead of the step that reads the stored items,
+	 * so the response already carries the recomputed list.
+	 */
+	public function test_missing_stamp_is_computed_on_hydration_before_items_are_read() {
+		$owner_id = $this->create_reader();
+		$this->create_subscription( $owner_id, 101 );
+		wp_set_current_user( $owner_id );
+
+		$response = apply_filters( 'newspack_session_hydration_response', [], $owner_id );
+
+		$this->assertSame( [ 101 ], $this->stored_products( $owner_id ) );
+		$this->assertSame( '[101]', $response['reader_data_items']['active_subscriptions'] );
+	}
+
+	/**
+	 * Both backfills run at priority 9, ahead of the steps that hand the stored
+	 * items to the browser at 10, so what the browser receives is already current.
+	 */
+	public function test_backfill_hooks_run_ahead_of_reader_data() {
+		$this->assertSame( 9, has_action( 'wp_enqueue_scripts', [ Active_Subscriptions_Reader_Data::class, 'maybe_backfill_current_reader' ] ) );
+		$this->assertSame( 9, has_filter( 'newspack_session_hydration_response', [ Active_Subscriptions_Reader_Data::class, 'maybe_backfill_hydrated_reader' ] ) );
+		$this->assertSame( 10, has_action( 'wp_enqueue_scripts', [ Reader_Data::class, 'config_script' ] ) );
+		$this->assertSame( 10, has_filter( 'newspack_session_hydration_response', [ Reader_Data::class, 'add_reader_data_to_hydration' ] ) );
+	}
+
+	/**
+	 * A list computed within the last day is trusted, so a page view costs nothing
+	 * for it. A change that fires no event waits for the list to age out.
+	 */
+	public function test_fresh_stamp_is_not_recomputed() {
+		$owner_id     = $this->create_reader();
+		$subscription = $this->create_subscription( $owner_id, 101 );
+		Active_Subscriptions_Reader_Data::refresh( $owner_id );
+
+		$subscription->update_status( 'cancelled' );
+		$this->view_page_as( $owner_id );
+
+		$this->assertSame( [ 101 ], $this->stored_products( $owner_id ) );
+	}
+
+	/**
+	 * A list more than a day old is recomputed on the next view. This is what
+	 * catches a change no hook reports, such as a subscription edited in the
+	 * database or a gift's recipient being cleared.
+	 */
+	public function test_day_old_stamp_is_recomputed_on_page_view() {
+		$owner_id     = $this->create_reader();
+		$subscription = $this->create_subscription( $owner_id, 101 );
+		Active_Subscriptions_Reader_Data::refresh( $owner_id );
+
+		$subscription->update_status( 'cancelled' );
+		update_user_meta( $owner_id, Active_Subscriptions_Reader_Data::STAMP_META_KEY, time() - DAY_IN_SECONDS - 1 );
+		$this->view_page_as( $owner_id );
+
+		$this->assertSame( [], $this->stored_products( $owner_id ) );
+		$this->assertFalse( Active_Subscriptions_Reader_Data::is_stale( $owner_id ) );
+	}
+
+	/**
+	 * A visitor who is not logged in has no list to compute.
+	 */
+	public function test_logged_out_page_view_computes_nothing() {
+		$this->create_subscription( 0, 101 );
+		wp_set_current_user( 0 );
+
+		$updates = $this->count_item_updates(
+			function () {
+				Active_Subscriptions_Reader_Data::maybe_backfill_current_reader();
+				Active_Subscriptions_Reader_Data::maybe_backfill_hydrated_reader( [], 0 );
+			}
+		);
+
+		$this->assertSame( 0, $updates );
+		$this->assertEmpty( get_user_meta( 0, Active_Subscriptions_Reader_Data::STAMP_META_KEY, true ) );
+	}
+
+	/**
+	 * The hydration filter hands back the response it was given, whatever it
+	 * recomputed on the way.
+	 */
+	public function test_hydration_backfill_returns_the_response_unchanged() {
+		$owner_id = $this->create_reader();
+		$data     = [ 'nonce' => 'abc' ];
+
+		$this->assertSame( $data, Active_Subscriptions_Reader_Data::maybe_backfill_hydrated_reader( $data, $owner_id ) );
+	}
+
+	/**
+	 * A reader who already holds the maximum number of reader data keys still gets
+	 * the item. Refused, they would be written off as a non-subscriber on every
+	 * segment and recomputed on every page view, since the stamp is only set once
+	 * the item is stored.
+	 */
+	public function test_item_is_stored_for_a_reader_at_the_key_cap() {
+		$owner_id = $this->create_reader();
+		$this->create_subscription( $owner_id, 101 );
+		for ( $i = count( Reader_Data::get_data( $owner_id ) ); $i < Reader_Data::MAX_ITEMS; $i++ ) {
+			Reader_Data::update_item( $owner_id, "filler_$i", '1' );
+		}
+
+		$this->view_page_as( $owner_id );
+
+		$this->assertSame( [ 101 ], $this->stored_products( $owner_id ) );
+		$this->assertFalse( Active_Subscriptions_Reader_Data::is_stale( $owner_id ) );
+	}
+
+	/**
+	 * The exemption is for this one server-owned key. The cap still bounds every
+	 * key the browser can add.
+	 */
+	public function test_cap_exemption_covers_only_this_item() {
+		$owner_id = $this->create_reader();
+
+		$cap_for = function ( $key ) use ( $owner_id ) {
+			return apply_filters( 'newspack_reader_data_max_items', Reader_Data::MAX_ITEMS, $owner_id, $key, '1' );
+		};
+
+		$this->assertSame( PHP_INT_MAX, $cap_for( Active_Subscriptions_Reader_Data::STORE_KEY ) );
+		$this->assertSame( Reader_Data::MAX_ITEMS, $cap_for( 'some_other_key' ) );
 	}
 }

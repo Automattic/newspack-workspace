@@ -40,7 +40,39 @@ final class Active_Subscriptions_Reader_Data {
 	/**
 	 * Initialize hooks.
 	 */
-	public static function init() {}
+	public static function init() {
+		add_filter( 'newspack_reader_data_max_items', [ __CLASS__, 'exempt_from_item_cap' ], 10, 3 );
+
+		// Joining or leaving a group fires no Data Event naming the member.
+		add_action( 'added_user_meta', [ __CLASS__, 'handle_group_membership_change' ], 10, 3 );
+		add_action( 'deleted_user_meta', [ __CLASS__, 'handle_group_membership_change' ], 10, 3 );
+
+		// Nor does handing a gift to someone else, or turning a group on or off.
+		add_action( 'woocommerce_subscriptions_gifting_recipient_changed', [ __CLASS__, 'handle_gift_recipient_changed' ], 10, 3 );
+		add_action( 'newspack_group_subscription_settings_updated', [ __CLASS__, 'handle_group_settings_updated' ], 10, 2 );
+
+		// Runs before Reader_Data hands the stored items to the browser (priority 10
+		// on both paths).
+		add_action( 'wp_enqueue_scripts', [ __CLASS__, 'maybe_backfill_current_reader' ], 9 );
+		add_filter( 'newspack_session_hydration_response', [ __CLASS__, 'maybe_backfill_hydrated_reader' ], 9, 2 );
+	}
+
+	/**
+	 * Keep the item storable for a reader at the reader data key cap. A missing
+	 * item reads as "holds no subscription", so a refused write would show a
+	 * paying reader the offers meant for non-payers. It would also leave the stamp
+	 * unset, which has every page view recompute their list. The cap bounds keys
+	 * the browser adds; this is one server-owned key.
+	 *
+	 * @param int    $max_items Maximum number of items.
+	 * @param int    $user_id   User ID.
+	 * @param string $key       Key being written.
+	 *
+	 * @return int
+	 */
+	public static function exempt_from_item_cap( $max_items, $user_id, $key ) {
+		return self::STORE_KEY === $key ? PHP_INT_MAX : $max_items;
+	}
 
 	/**
 	 * The IDs of the non-donation products a reader holds a subscription for.
@@ -146,6 +178,97 @@ final class Active_Subscriptions_Reader_Data {
 		foreach ( $readers['members'] as $member_id ) {
 			self::mark_stale( $member_id );
 		}
+	}
+
+	/**
+	 * Mark a reader stale when they join or leave a group subscription. Bulk adds
+	 * in the admin fire this once per member, so it stays a meta delete.
+	 *
+	 * @param int|int[] $meta_ids Meta ID(s).
+	 * @param int       $user_id  User whose meta changed.
+	 * @param string    $meta_key Meta key.
+	 */
+	public static function handle_group_membership_change( $meta_ids, $user_id, $meta_key ): void {
+		if ( Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY === $meta_key ) {
+			self::mark_stale( (int) $user_id );
+		}
+	}
+
+	/**
+	 * Mark stale the readers whose list changes when a gift's recipient does: the
+	 * new recipient gains the product, and whoever held it before loses it. That
+	 * is the earlier recipient, or the buyer when the subscription had none,
+	 * because it was the buyer's own until it became a gift.
+	 *
+	 * Clearing a recipient (`WCS_Gifting::delete_recipient_user()`) fires no hook.
+	 * The buyer who holds the subscription again, and the recipient who lost it,
+	 * are put right by the daily stale window instead.
+	 *
+	 * @param \WC_Subscription $subscription          The gifted subscription.
+	 * @param int              $recipient_id          The new recipient.
+	 * @param int              $previous_recipient_id The earlier recipient, 0 for none.
+	 */
+	public static function handle_gift_recipient_changed( $subscription, $recipient_id, $previous_recipient_id ): void {
+		self::mark_stale( (int) $recipient_id );
+		$previous_holder_id = (int) $previous_recipient_id;
+		if ( $previous_holder_id <= 0 ) {
+			$previous_holder_id = WooCommerce_Subscriptions::get_subscription_readers( $subscription )['purchaser'];
+		}
+		self::mark_stale( $previous_holder_id );
+	}
+
+	/**
+	 * Mark a group's members stale when the group is turned on or off. Members
+	 * hold its products only while it is on, and the change names none of them.
+	 * The owner holds their own subscription either way.
+	 *
+	 * @param \WC_Subscription $subscription The group subscription.
+	 * @param string[]         $changed_keys The settings that changed.
+	 */
+	public static function handle_group_settings_updated( $subscription, $changed_keys ): void {
+		if ( ! in_array( 'enabled', (array) $changed_keys, true ) ) {
+			return;
+		}
+		foreach ( Group_Subscription::get_members( $subscription ) as $member_id ) {
+			self::mark_stale( (int) $member_id );
+		}
+	}
+
+	/**
+	 * Recompute a missing or stale list.
+	 *
+	 * A switched session belongs to an admin browsing as the reader, which
+	 * Reader_Data never lets write the reader's data.
+	 *
+	 * @param int $user_id User ID.
+	 */
+	private static function maybe_backfill( int $user_id ): void {
+		if ( $user_id > 0 && ! Reader_Data::is_switched_session() && self::is_stale( $user_id ) ) {
+			self::refresh( $user_id );
+		}
+	}
+
+	/**
+	 * Backfill the item for the logged-in reader on a page render.
+	 */
+	public static function maybe_backfill_current_reader(): void {
+		self::maybe_backfill( get_current_user_id() );
+	}
+
+	/**
+	 * Backfill the item before the session hydration response reads it, the path
+	 * a reader on a cached page takes. The hydration endpoint carries no CSRF
+	 * nonce; this takes nothing from the request and recomputes from server state
+	 * alone, so a forged request can only make the item correct.
+	 *
+	 * @param array $data    Hydration response data.
+	 * @param int   $user_id The authenticated user's ID.
+	 *
+	 * @return array Unchanged response data.
+	 */
+	public static function maybe_backfill_hydrated_reader( $data, $user_id ) {
+		self::maybe_backfill( (int) $user_id );
+		return $data;
 	}
 
 	/**
