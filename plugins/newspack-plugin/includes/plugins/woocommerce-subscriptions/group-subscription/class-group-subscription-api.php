@@ -742,7 +742,7 @@ class Group_Subscription_API {
 			);
 		}
 		$email  = $request->get_param( 'email' );
-		$invite = Group_Subscription_Invite::generate_invite( $subscription_id, $email );
+		$invite = Group_Subscription_Invite::generate_invite( $subscription_id, $email, true, 'api' );
 		return \rest_ensure_response( $invite );
 	}
 

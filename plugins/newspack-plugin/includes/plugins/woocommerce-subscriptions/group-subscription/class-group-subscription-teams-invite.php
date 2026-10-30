@@ -373,7 +373,7 @@ class Group_Subscription_Teams_Invite {
 			// this address may join at all — reader account, existing membership, the
 			// group's seat limit, and the group still being active — so a full group
 			// fails closed here rather than overfilling.
-			$invite = Group_Subscription_Invite::generate_invite( $subscription, $email, false );
+			$invite = Group_Subscription_Invite::generate_invite( $subscription, $email, false, 'migration' );
 			if ( is_wp_error( $invite ) ) {
 				return 'newspack_group_subscription_invite_existing_user' === $invite->get_error_code()
 					? self::spend_for_existing_member( $subscription, $email, $invitee ? (int) $invitee->ID : 0 )

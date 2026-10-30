@@ -563,6 +563,8 @@ class Group_Subscription_Invite {
 	 *                                         the invite silently, for a caller that is about to
 	 *                                         put the reader in front of the invite itself rather
 	 *                                         than mail it to them.
+	 * @param string               $source     Where the invite came from, passed to the
+	 *                                         `newspack_group_subscription_invite_created` action.
 	 *
 	 * @return array|\WP_Error The invite data, or a WP_Error if the key cannot be generated.
 	 *                         The returned array carries an `email_sent` flag reporting whether
@@ -573,7 +575,7 @@ class Group_Subscription_Invite {
 	 *                         The key is deliberately not returned: api_invite() passes this array
 	 *                         straight to a REST response, and the key is a bearer credential.
 	 */
-	public static function generate_invite( $subscription, $email, $send_email = true ) {
+	public static function generate_invite( $subscription, $email, $send_email = true, $source = 'other' ) {
 		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
 		if ( ! $subscription || ! Group_Subscription::is_group_subscription( $subscription ) ) {
 			return new \WP_Error( 'newspack_group_subscription_invite_invalid_subscription', __( 'Invalid subscription.', 'newspack-plugin' ) );
@@ -588,7 +590,9 @@ class Group_Subscription_Invite {
 				)
 			);
 		}
-		if ( ! $email ) {
+		// The My Account form's FILTER_SANITIZE_EMAIL strips characters but keeps a
+		// malformed address, so the address itself is checked here for every caller.
+		if ( ! $email || ! is_email( $email ) ) {
 			return new \WP_Error( 'newspack_group_subscription_invite_invalid_email', __( 'Invalid email address.', 'newspack-plugin' ) );
 		}
 		$existing_user = get_user_by( 'email', $email );
@@ -643,6 +647,43 @@ class Group_Subscription_Invite {
 		// exists so callers can tell "invite stored and emailed" from "invite stored,
 		// email never went out", which the send path signals by returning false.
 		$new_invite['email_sent'] = $send_email && (bool) self::send_invite_email( $subscription->get_id(), $invite_key, $email );
+
+		/**
+		 * Fires once for each email invitation to a group subscription, after the
+		 * invite is stored and its email was attempted. It fires even when the email
+		 * fails, because the invite is still valid and can be resent; `$email_sent`
+		 * reports which. A resend replaces the earlier invite, so it fires again.
+		 *
+		 * This is the counterpart to WooCommerce Memberships for Teams'
+		 * `wc_memberships_for_teams_invitation_created`, for code that reacted to new
+		 * invitations before a site moved off Teams. It does not fire for the
+		 * shareable invite link, which is not tied to an address.
+		 *
+		 * The invite key is not passed: with the email it is enough to accept the invite.
+		 *
+		 * @param \WC_Subscription $subscription The group subscription.
+		 * @param string           $email        The invited address.
+		 * @param int              $inviter_id   The user who sent the invite, or 0 when no one on
+		 *                                       this site did: a `migration` invite carries over
+		 *                                       a Teams invitation, and whoever follows its link
+		 *                                       is not the sender.
+		 * @param string           $source       Where the invite came from: `single` (the My Account
+		 *                                       invite form, including its resend button), `api`
+		 *                                       (the REST endpoint behind the subscription admin
+		 *                                       screen), `migration` (a Teams invitation link
+		 *                                       followed after the move off Teams), or `other`
+		 *                                       (a caller that doesn't say).
+		 * @param bool             $email_sent   Whether the invitation email went out. Always false
+		 *                                       for `migration`, which isn't emailed.
+		 */
+		do_action(
+			'newspack_group_subscription_invite_created',
+			$subscription,
+			$email,
+			'migration' === $source ? 0 : (int) $new_invite['added_by'],
+			$source,
+			$new_invite['email_sent']
+		);
 
 		return $new_invite;
 	}
