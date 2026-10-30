@@ -830,6 +830,93 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Collect the payloads of `newspack_sync_permanent_failure` fired from now on.
+	 *
+	 * @return \ArrayObject The payloads, filled in as the hook fires.
+	 */
+	private function capture_permanent_failures(): \ArrayObject {
+		$payloads = new \ArrayObject();
+		add_action(
+			'newspack_sync_permanent_failure',
+			function ( $payload ) use ( $payloads ) {
+				$payloads[] = $payload;
+			}
+		);
+		return $payloads;
+	}
+
+	/**
+	 * A flag saved without its deletion fields reports a config failure: it
+	 * is not retried, so the alert is the only thing that names the gap
+	 * once the row ages out. A retry that lands the same way reports it too.
+	 *
+	 * @testWith [false]
+	 *           [true]
+	 *
+	 * @param bool $on_retry Whether the partial save answers a retry rather than the first attempt.
+	 */
+	public function test_a_deletion_flag_saved_without_its_fields_reports_a_config_failure( bool $on_retry ) {
+		$this->require_action_scheduler();
+		$spy              = $this->register_deletion_spy( 'unsynced-alert-spy', 'flag' );
+		$partial_save     = [ 'unsynced_fields' => [ 'NP_Account_Deleted', 'NP_Membership_Status' ] ];
+		$spy->push_result = $on_retry ? new \WP_Error( 'provider_down', 'Provider down' ) : $partial_save;
+		$failures         = $this->capture_permanent_failures();
+
+		$this->delete_sample_reader();
+		if ( $on_retry ) {
+			$retry            = $this->get_pending_retry( Contact_Sync::RETRY_DELETION_HOOK, 'unsynced-alert-spy' );
+			$spy->push_result = $partial_save;
+			Contact_Sync::execute_deletion_retry( $retry['args'] );
+		}
+
+		$this->assertCount( 1, $failures );
+		$this->assertSame( 'unsynced-alert-spy', $failures[0]['integration_id'] );
+		$this->assertSame( 'reader@example.test', $failures[0]['email'] );
+		$this->assertSame( 'flag', $failures[0]['mode'] );
+		$this->assertSame( 'permanent_config', $failures[0]['error_class'] );
+		$this->assertStringContainsString( 'NP_Account_Deleted, NP_Membership_Status', $failures[0]['reason'] );
+	}
+
+	/**
+	 * A flag saved with all its fields reports nothing.
+	 */
+	public function test_a_complete_deletion_flag_reports_no_failure() {
+		$this->register_deletion_spy( 'complete-flag-spy', 'flag' );
+		$failures = $this->capture_permanent_failures();
+
+		$this->delete_sample_reader();
+
+		$this->assertCount( 0, $failures );
+	}
+
+	/**
+	 * A deletion refused because the ESP account is disabled or unpaid
+	 * retries through the backoff, so it reaches the provider once the
+	 * account works again. Nothing re-sends a deletion that ends here.
+	 *
+	 * @testWith ["API Access has been disabled for this account."]
+	 *           ["Payment Required"]
+	 *
+	 * @param string $refusal What the provider answers the first attempt.
+	 */
+	public function test_a_deletion_refused_for_an_account_problem_reaches_the_provider_once_fixed( string $refusal ) {
+		$this->require_action_scheduler();
+		$spy                = $this->register_deletion_spy( 'lapsed-account-spy', 'delete' );
+		$spy->delete_result = new \WP_Error( 'esp_error', $refusal );
+		$failures           = $this->capture_permanent_failures();
+
+		$this->delete_sample_reader();
+		$retry              = $this->get_pending_retry( Contact_Sync::RETRY_DELETION_HOOK, 'lapsed-account-spy' );
+		$spy->delete_result = true;
+		Contact_Sync::execute_deletion_retry( $retry['args'] );
+
+		$row = $this->get_rows_by_integration()['lapsed-account-spy'];
+		$this->assertCount( 0, $failures, 'The refusal is not reported as a permanent failure.' );
+		$this->assertCount( 2, $spy->delete_calls );
+		$this->assertSame( Push_Log::STATUS_SUCCESS, $row['status'] );
+	}
+
+	/**
 	 * A deletion retry that gives up is a reader left undeleted at the
 	 * provider. It has no natural re-trigger, so the row must not stay
 	 * "retrying".

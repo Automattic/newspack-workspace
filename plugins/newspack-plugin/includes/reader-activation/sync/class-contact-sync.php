@@ -133,6 +133,12 @@ class Contact_Sync extends Sync {
 	 *     (they fall through to 'transient') rather than skipped as benign.
 	 *   - 'was permanently deleted' is benign here: the contact is already gone
 	 *     from the ESP, which is the deletion end-state for both modes.
+	 *
+	 * The account problems in `permanent_config` are absent too. A disabled or
+	 * unpaid account is often fixed within hours, and nothing re-sends a
+	 * deletion that stopped, so they fall through to 'transient' and retry
+	 * through the backoff. A longer outage ends in retry exhaustion, which
+	 * Alert_Manager pages for a deletion.
 	 */
 	private const DELETION_ERROR_SIGNATURES = [
 		'permanent_contact' => [
@@ -142,10 +148,6 @@ class Contact_Sync extends Sync {
 			'contact email address is not valid',
 			'email address already exists',
 			'not a valid choice',
-		],
-		'permanent_config'  => [
-			'api access has been disabled',
-			'payment required',
 		],
 		'benign'            => [
 			'was permanently deleted',
@@ -824,12 +826,13 @@ class Contact_Sync extends Sync {
 						);
 					}
 				} else {
-					static::log( sprintf( 'Flag-push succeeded for integration "%s" of %s.', $integration_id, $email ) );
+					$unsynced_fields = self::report_unsynced_flag_fields( $integration_id, $email, $context, $result );
+					$success_message = empty( $unsynced_fields )
+						? sprintf( 'Flag-push succeeded for integration "%s" of %s.', $integration_id, $email )
+						: sprintf( 'Flag-push succeeded for integration "%s" of %s, without these fields: %s.', $integration_id, $email, implode( ', ', $unsynced_fields ) );
+					static::log( $success_message );
 					if ( self::$current_as_action_id ) {
-						\ActionScheduler_Logger::instance()->log(
-							self::$current_as_action_id,
-							sprintf( 'Flag-push succeeded for integration "%s" of %s.', $integration_id, $email )
-						);
+						\ActionScheduler_Logger::instance()->log( self::$current_as_action_id, $success_message );
 					}
 				}
 
@@ -887,6 +890,44 @@ class Contact_Sync extends Sync {
 	}
 
 	/**
+	 * Report a deletion flag the provider saved without some of its fields.
+	 *
+	 * A Mailchimp audience at its merge field cap accepts the flag push but
+	 * leaves out the fields it has no room for, and the deletion fields are
+	 * the likely ones, since they are created on first use. The push log row
+	 * records the gap, but a publisher who processes deletions by that field
+	 * never sees the contact, and a retry would meet the same cap. So it is
+	 * reported as a config failure, the only trace left once the row is
+	 * pruned.
+	 *
+	 * @param string           $integration_id The integration the flag was pushed to.
+	 * @param string           $email          Email of the deleted reader.
+	 * @param string           $context        The sync context.
+	 * @param true|array|mixed $result         The flag push result.
+	 *
+	 * @return string[] The fields the provider left out, empty when it saved them all.
+	 */
+	private static function report_unsynced_flag_fields( $integration_id, $email, $context, $result ) {
+		if ( ! \is_array( $result ) || empty( $result['unsynced_fields'] ) ) {
+			return [];
+		}
+		$unsynced_fields = array_values( (array) $result['unsynced_fields'] );
+		/** This action is documented in schedule_deletion_retry(). */
+		do_action(
+			'newspack_sync_permanent_failure',
+			[
+				'integration_id' => $integration_id,
+				'email'          => $email,
+				'mode'           => 'flag',
+				'context'        => $context,
+				'reason'         => sprintf( 'The provider saved the deletion flag without these fields: %s.', implode( ', ', $unsynced_fields ) ),
+				'error_class'    => 'permanent_config',
+			]
+		);
+		return $unsynced_fields;
+	}
+
+	/**
 	 * Classify an ESP sync error to decide retry behavior.
 	 *
 	 * Matches against every message carried by the error — the ESP layer
@@ -898,8 +939,8 @@ class Contact_Sync extends Sync {
 	 * matches is a config failure when it carries a 401, 402 or 403 status:
 	 * only the ESP account answers those, for every contact alike. A deletion
 	 * keeps retrying such an error through the backoff instead, since no later
-	 * event re-sends a deletion. A deletion whose message names an account
-	 * problem, such as "payment required", still ends on its first attempt.
+	 * event re-sends a deletion, and the same goes for a deletion whose message
+	 * names an account problem, such as "payment required".
 	 *
 	 * @param string|\WP_Error $error     The error from a failed push.
 	 * @param string           $direction The sync direction: 'push' (default) or 'deletion'.
@@ -1364,7 +1405,9 @@ class Contact_Sync extends Sync {
 			 * `user_id`, since the WP user is already gone, and the hook also fires
 			 * for permanent contact-data errors — a skipped deletion retry has no
 			 * natural re-trigger, so the dropped deletion signal must stay
-			 * observable.
+			 * observable. It also fires, as `permanent_config` in flag mode, for
+			 * a flag the provider saved without some of its fields (see
+			 * report_unsynced_flag_fields()).
 			 *
 			 * @param array $alert_data {
 			 *     Alert data.
@@ -1601,13 +1644,15 @@ class Contact_Sync extends Sync {
 				\ActionScheduler_Logger::instance()->log( self::$current_as_action_id, $error_message );
 			}
 		} else {
+			$unsynced_fields = 'flag' === $mode ? self::report_unsynced_flag_fields( $integration_id, $email, $context, $result ) : [];
 			$success_message = sprintf(
-				'Retry %d/%d succeeded for deletion (%s) sync of %s in integration "%s".',
+				'Retry %d/%d succeeded for deletion (%s) sync of %s in integration "%s"%s.',
 				$retry_count,
 				self::MAX_RETRIES,
 				$mode,
 				$email,
-				$integration_id
+				$integration_id,
+				empty( $unsynced_fields ) ? '' : ', without these fields: ' . implode( ', ', $unsynced_fields )
 			);
 			static::log( $success_message );
 			if ( self::$current_as_action_id ) {

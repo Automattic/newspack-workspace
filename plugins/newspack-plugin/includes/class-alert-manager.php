@@ -328,18 +328,27 @@ class Alert_Manager {
 	 * log only: the outage has already been reported, and every contact whose
 	 * retries run out during it would page again for the same cause.
 	 *
+	 * An account deletion, whose payload carries a `mode`, pages regardless.
+	 * A contact sync runs again on the reader's next event, but nothing
+	 * re-sends a deletion once its retries run out, so someone has to finish
+	 * it at the provider after the outage ends.
+	 *
 	 * @param array $payload Alert data from Contact_Sync.
 	 */
 	public static function handle_sync_retry_exhausted( $payload ) {
+		$is_deletion = isset( $payload['mode'] );
 		// The contact email is intentionally left out of the message; it is
 		// forwarded to the log via Logger's structured `user_email` param
 		// (see forward_alert_to_log) and remains available in `context`.
 		$message = sprintf(
-			'Max retries (%d) reached for integration "%s" contact sync. Last error: %s',
+			$is_deletion
+				? 'Max retries (%d) reached for integration "%s" account-deletion sync; the deletion was not propagated. Last error: %s'
+				: 'Max retries (%d) reached for integration "%s" contact sync. Last error: %s',
 			$payload['retry_count'] ?? 0,
 			$payload['integration_id'] ?? 'unknown',
 			$payload['reason'] ?? 'unknown'
 		);
+		$severity = ! $is_deletion && self::is_integration_broken( $payload['integration_id'] ?? '' ) ? 'warning' : 'error';
 
 		/**
 		 * Fires when an alert condition is detected in the sync system.
@@ -358,7 +367,7 @@ class Alert_Manager {
 			'newspack_alert',
 			[
 				'type'      => 'sync_retry_exhausted',
-				'severity'  => self::is_integration_broken( $payload['integration_id'] ?? '' ) ? 'warning' : 'error',
+				'severity'  => $severity,
 				'message'   => $message,
 				'context'   => $payload,
 				'timestamp' => time(),
@@ -373,7 +382,8 @@ class Alert_Manager {
 	 * not Slack, apart from the fallback described for `permanent_config`:
 	 *
 	 * - `permanent_config` (an ESP account that is disabled, unpaid or rejects
-	 *   the site's credentials) is site-level, so it is reported at most once
+	 *   the site's credentials, or an audience that saved a deletion flag
+	 *   without its fields) is site-level, so it is reported at most once
 	 *   an hour per integration; the push log keeps the per-contact history.
 	 *   The hourly health check observes the same account state within the
 	 *   hour through its own request, and owns the escalation through

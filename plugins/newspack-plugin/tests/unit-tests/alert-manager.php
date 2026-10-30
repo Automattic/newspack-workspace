@@ -1446,6 +1446,32 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A deletion whose retries run out pages even while its integration is
+	 * broken. The outage's own page doesn't cover it: once the deletion stops
+	 * retrying, nothing re-sends it after the account is fixed, so someone
+	 * has to finish it at the provider.
+	 */
+	public function test_sync_retry_exhausted_for_a_deletion_pages_while_the_integration_is_broken() {
+		$this->break_integration( 'esp' );
+		$this->capture_alerts( 'sync_retry_exhausted' );
+
+		do_action(
+			'newspack_sync_retry_exhausted',
+			[
+				'integration_id' => 'esp',
+				'email'          => 'reader@example.test',
+				'mode'           => 'delete',
+				'context'        => 'Reader deleted',
+				'retry_count'    => 5,
+				'reason'         => 'Payment Required',
+			]
+		);
+
+		$this->assertCount( 1, $this->captured['sync_retry_exhausted']['error'] );
+		$this->assertStringContainsString( 'deletion', $this->captured['sync_retry_exhausted']['error'][0]['message'] );
+	}
+
+	/**
 	 * A broken integration's contact failures stay out of the failure log, so
 	 * its outage doesn't trip the hourly pattern rules. Another
 	 * integration's failures are still recorded.
