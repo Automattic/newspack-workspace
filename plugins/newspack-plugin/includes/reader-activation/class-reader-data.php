@@ -777,9 +777,11 @@ final class Reader_Data {
 	 *
 	 * Delegates to Active_Subscriptions_Reader_Data, which owns the list. The list
 	 * is recomputed from the subscriptions as they stand now, so the event's
-	 * product IDs and statuses are not used, and an event for a gift updates the
-	 * recipient rather than the buyer. This method stays the registered handler,
-	 * with the same signature, so existing callers keep working.
+	 * product IDs and statuses are not used. A gift is listed under its recipient,
+	 * not its buyer, and the buyer's list loses it too. Group members are marked
+	 * for recompute on their next page view, not recomputed here. This method
+	 * stays the registered handler, with the same signature, so existing callers
+	 * keep working.
 	 *
 	 * @param int   $timestamp Timestamp.
 	 * @param array $data      Data.
@@ -793,9 +795,10 @@ final class Reader_Data {
 	 * login.
 	 *
 	 * The list is recomputed whether or not the reader holds anything now, so a
-	 * subscription that ended without an event (a retry window running out, an
-	 * edit made in the database) stops being listed the next time they sign in.
-	 * A reader who holds nothing gets an empty list only if they already had one.
+	 * subscription that ended without an event (an edit made in the database, or
+	 * a gift's recipient being cleared) stops being listed the next time they
+	 * sign in. A reader who holds nothing gets an empty list only if they already
+	 * had one.
 	 *
 	 * @param int   $timestamp Timestamp.
 	 * @param array $data      Data.
