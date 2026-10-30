@@ -291,7 +291,7 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch, ...screenProps
 			return filteredInput;
 		}
 		const controlId = `newspack-segment-criteria-${ criteria.id }`;
-		const isGroup = 'range' === criteria.matching_function || isMultiSelectCriteria( criteria );
+		const isGroup = 'range' === criteria.matching_function || 'devices' === criteria.id || isMultiSelectCriteria( criteria );
 		return (
 			<BaseControl id={ controlId } help={ criteria.description } __nextHasNoMarginBottom>
 				<BaseControl.VisualLabel id={ `${ controlId }__label` }>{ criteria.name }</BaseControl.VisualLabel>

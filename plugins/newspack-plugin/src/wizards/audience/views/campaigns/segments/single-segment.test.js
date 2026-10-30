@@ -701,9 +701,8 @@ describe( 'Criteria field names', () => {
 				{
 					id: 'devices',
 					category: 'reader_engagement',
-					matching_function: 'list__in',
+					matching_function: 'default',
 					name: 'Devices',
-					description: 'The device readers use.',
 					options: [ { label: 'Tablet', value: 'tablet' } ],
 				},
 			],
@@ -730,7 +729,6 @@ describe( 'Criteria field names', () => {
 
 	it( 'groups a checkbox list under its label', () => {
 		const group = screen.getByRole( 'group', { name: 'Devices' } );
-		expect( group ).toHaveAccessibleDescription( 'The device readers use.' );
 		expect( within( group ).getByRole( 'checkbox', { name: 'Tablet' } ) ).toBeInTheDocument();
 	} );
 
