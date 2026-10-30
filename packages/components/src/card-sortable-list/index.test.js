@@ -82,7 +82,7 @@ describe( 'CardSortableList', () => {
 		expect( container ).not.toHaveTextContent( '0' );
 	} );
 
-	describe( 'a second move during the first move\'s animation', () => {
+	describe( "a second move during the first move's animation", () => {
 		const threeItems = [
 			{ id: 1, title: 'One' },
 			{ id: 2, title: 'Two' },
