@@ -42,6 +42,8 @@ class Newspack_Test_Reader_Data_Switched_Session extends WP_UnitTestCase {
 	 * Tear down.
 	 */
 	public function tear_down() {
+		global $subscriptions_database;
+		$subscriptions_database = [];
 		unset( $GLOBALS['newspack_test_switched_from_user'] );
 		wp_set_current_user( 0 );
 		parent::tear_down();

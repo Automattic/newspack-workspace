@@ -118,8 +118,8 @@ class Newspack_Test_GoogleSiteKit_Reader_Data extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Sign in as a reader, with their `active_subscriptions` item computed from the
-	 * subscriptions as they stand, the way a page view computes it.
+	 * Sign in as a reader and recompute their `active_subscriptions` item with
+	 * `refresh()`, as a stale reader's page view would.
 	 *
 	 * @param int $user_id User ID.
 	 */

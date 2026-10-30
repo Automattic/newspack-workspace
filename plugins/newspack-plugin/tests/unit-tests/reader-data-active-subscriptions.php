@@ -340,7 +340,7 @@ class Newspack_Test_Reader_Data_Active_Subscriptions extends WP_UnitTestCase {
 
 	/**
 	 * Recomputing an unchanged list writes nothing, so listeners of
-	 * `newspack_reader_data_updated` (such as contact sync) stay quiet.
+	 * `newspack_reader_data_updated` stay quiet.
 	 */
 	public function test_refresh_of_an_unchanged_list_fires_no_update() {
 		$owner_id = $this->create_reader();

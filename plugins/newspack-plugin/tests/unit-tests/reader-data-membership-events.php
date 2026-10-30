@@ -208,8 +208,8 @@ class Newspack_Test_Reader_Data_Membership_Events extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The subscriptions handler shares the same decode, so it recovers a bare
-	 * scalar stored value too.
+	 * The subscriptions handler recomputes the list rather than appending to the
+	 * stored value, so the recompute replaces a bare scalar a legacy writer left.
 	 */
 	public function test_subscription_event_recovers_bare_scalar_value() {
 		$user_id = self::factory()->user->create();
