@@ -1192,8 +1192,9 @@ class WooCommerce_Subscriptions {
 		$readers['recipient'] = WooCommerce_Subscriptions_Gifting::get_recipient_id( $subscription );
 
 		// Read the settings rather than ask `Group_Subscription::is_group_subscription()`,
-		// which can answer "no" on a My Account page and would hide members from a
-		// change made while a reader is on that page.
+		// which can answer "no" on a My Account page, but only when WooCommerce
+		// Memberships is active (see its `is_group_subscription()`). That would hide
+		// members from a change made while a reader is on that page.
 		$group_settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
 		if ( ! empty( $group_settings['enabled'] ) ) {
 			$members = array_map( 'intval', (array) Group_Subscription::get_members( $subscription ) );

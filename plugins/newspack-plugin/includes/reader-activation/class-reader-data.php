@@ -344,7 +344,10 @@ final class Reader_Data {
 	}
 
 	/**
-	 * The product IDs of the reader's active non-donation subscriptions, or [].
+	 * The product IDs of the non-donation subscriptions the reader holds, or [].
+	 *
+	 * Holding means owning the subscription, being the recipient of a gift, or
+	 * having a seat in an enabled group subscription.
 	 *
 	 * The list is stored JSON-encoded, so once the reader's last subscription
 	 * ends, get_data() returns the string "[]", which PHP treats as non-empty.

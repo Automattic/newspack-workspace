@@ -311,7 +311,8 @@ class GoogleSiteKit {
 		// If the reader is a donor. Cancelling a recurring donation makes them a former donor instead.
 		$params['is_donor'] = Reader_Data::get_bool( $current_user->ID, 'is_donor' ) ? 'yes' : 'no';
 		// If the reader holds a non-donation subscription: one they own, a gift they received,
-		// or a seat in a group. A gift's buyer holds nothing, so they report "no".
+		// or a seat in an enabled group. Buying a gift for someone else doesn't count, so a buyer
+		// who owns no subscription of their own reports "no".
 		$params['is_subscriber'] = empty( Reader_Data::get_active_subscriptions( $current_user->ID ) ) ? 'no' : 'yes';
 
 		// Content access groups: anonymized identifiers for the user's active group
