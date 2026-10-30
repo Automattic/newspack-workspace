@@ -55,7 +55,7 @@ const CardListRow = ( {
 	item: CardListItem;
 	/** Rendered ahead of the title, e.g. a drag handle. */
 	controls?: React.ReactNode;
-	/** `large` matches the edge, padding and title weight of a settings card, for a row that stands alone on a page. */
+	/** `large` keeps the card's own padding and uses a heavier title, for a row that stands alone on a page. */
 	size?: 'default' | 'large';
 } & Omit< React.ComponentProps< typeof Card.Root >, 'className' > ) => {
 	const hasToggle = item.onToggleChange !== undefined;

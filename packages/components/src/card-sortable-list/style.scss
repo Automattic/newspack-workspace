@@ -33,18 +33,8 @@ $drop-duration: 400ms; /* must match DROP_ANIMATION_DURATION in index.tsx */
 .newspack-card--core--sortable-list__card {
 	background: var( --wpds-color-background-surface-neutral-strong, #{wp-colors.$white} );
 
-	.newspack-card--core--sortable-list__header {
+	&:not(.is-large) .newspack-card--core--sortable-list__header {
 		padding: var( --wpds-dimension-padding-md, #{wp-vars.$grid-unit-15} ) var( --wpds-dimension-padding-lg, #{wp-vars.$grid-unit-20} );
-	}
-
-	&.is-large {
-		border: 0;
-		border-radius: calc(var(--wpds-border-radius-lg, #{wp-vars.$radius-large}) - var(--wpds-border-width-xs, #{wp-vars.$border-width}));
-		box-shadow: 0 0 0 var(--wpds-border-width-xs, #{wp-vars.$border-width}) var(--wpds-color-stroke-surface-neutral, #{wp-colors.$gray-300});
-	}
-
-	&.is-large .newspack-card--core--sortable-list__header {
-		padding: var( --wpds-dimension-padding-lg, #{wp-vars.$grid-unit-20} ) var( --wpds-dimension-padding-2xl, #{wp-vars.$grid-unit-30} );
 	}
 
 	&.is-large .newspack-card--core--sortable-list__title {
