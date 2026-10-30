@@ -36,12 +36,30 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 	private $registered_rules_snapshot;
 
 	/**
+	 * Keys the evaluate_field() tests build fields for directly, without storing
+	 * them as an integration's enabled incoming fields. Rules only read
+	 * server-managed keys, so these are made read-only for the test.
+	 */
+	const DIRECT_FIELD_KEYS = [ 'org', 'is_vip', 'amount', 'institution', 'interests', 'LAST_GIFT_DATE' ];
+
+	/**
+	 * Read-only keys filter.
+	 *
+	 * @var callable
+	 */
+	private $read_only_filter;
+
+	/**
 	 * Set up test environment.
 	 */
 	public function set_up() {
 		parent::set_up();
 		$this->reset_integrations();
 		Promoted_Fields::reset_cache();
+		$this->read_only_filter = function ( $keys ) {
+			return array_merge( $keys, self::DIRECT_FIELD_KEYS );
+		};
+		add_filter( 'newspack_reader_data_read_only_keys', $this->read_only_filter );
 		$this->registered_rules_snapshot = Access_Rules::get_registered_rules();
 
 		$this->integration = new Sample_Integration( 'promoted-test', 'Test ESP' );
@@ -55,6 +73,7 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 	public function tear_down() {
 		$registry_property = new \ReflectionProperty( Access_Rules::class, 'rules' );
 		$registry_property->setValue( null, $this->registered_rules_snapshot );
+		remove_filter( 'newspack_reader_data_read_only_keys', $this->read_only_filter );
 		Promoted_Fields::reset_cache();
 		$this->reset_integrations();
 		Integrations::register_integrations();
@@ -746,6 +765,151 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 		$field->set_matching_function( 'list__not_in' );
 		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'University of Testing' ] ) );
 		$this->assertTrue( $method->invoke( null, $field, $user_id, [ 'Other University' ] ) );
+	}
+
+	/**
+	 * Invoke evaluate_field().
+	 *
+	 * @param Incoming_Field $field   Field.
+	 * @param int            $user_id User ID.
+	 * @param mixed          $args    Rule value.
+	 *
+	 * @return bool
+	 */
+	private function evaluate( $field, $user_id, $args ) {
+		$evaluate_field = new \ReflectionMethod( Promoted_Fields::class, 'evaluate_field' );
+		$evaluate_field->setAccessible( true );
+		return $evaluate_field->invoke( null, $field, $user_id, $args );
+	}
+
+	/**
+	 * A promoted field's rule matches a value the server wrote, and not a value
+	 * written without the server mark.
+	 */
+	public function test_promoted_rule_ignores_unmarked_value() {
+		$this->integration->update_enabled_incoming_fields( [ 'tier' ] );
+		$user_id = $this->factory->user->create();
+		$field   = new Incoming_Field( 'tier' );
+
+		\Newspack\Reader_Data::update_item( $user_id, 'tier', wp_json_encode( 'gold' ), false );
+		$this->assertFalse( $this->evaluate( $field, $user_id, 'gold' ) );
+
+		\Newspack\Reader_Data::update_item( $user_id, 'tier', wp_json_encode( 'gold' ) );
+		$this->assertTrue( $this->evaluate( $field, $user_id, 'gold' ) );
+	}
+
+	/**
+	 * An exclusion rule fails for a reader whose stored value the server did not
+	 * write, even when that value is the excluded one.
+	 */
+	public function test_exclusion_rule_fails_on_unmarked_value() {
+		$this->integration->update_enabled_incoming_fields( [ 'tier' ] );
+		$user_id = $this->factory->user->create();
+		$field   = ( new Incoming_Field( 'tier' ) )->set_matching_function( 'list__not_in' );
+
+		\Newspack\Reader_Data::update_item( $user_id, 'tier', wp_json_encode( 'gold' ), false );
+		$this->assertTrue( \Newspack\Reader_Data_Trust::has_unmarked_value( $user_id, 'tier' ) );
+		$this->assertFalse( $this->evaluate( $field, $user_id, [ 'gold' ] ) );
+		$this->assertFalse( $this->evaluate( $field, $user_id, [ 'silver' ] ) );
+
+		\Newspack\Reader_Data::update_item( $user_id, 'tier', wp_json_encode( 'gold' ) );
+		$this->assertFalse( \Newspack\Reader_Data_Trust::has_unmarked_value( $user_id, 'tier' ) );
+		$this->assertFalse( $this->evaluate( $field, $user_id, [ 'gold' ] ) );
+		$this->assertTrue( $this->evaluate( $field, $user_id, [ 'silver' ] ) );
+	}
+
+	/**
+	 * An exclusion rule still passes a reader with no stored value.
+	 */
+	public function test_exclusion_rule_passes_unset_value() {
+		$this->integration->update_enabled_incoming_fields( [ 'tier' ] );
+		$user_id = $this->factory->user->create();
+		$field   = ( new Incoming_Field( 'tier' ) )->set_matching_function( 'list__not_in' );
+
+		$this->assertFalse( \Newspack\Reader_Data_Trust::has_unmarked_value( $user_id, 'tier' ) );
+		$this->assertTrue( $this->evaluate( $field, $user_id, [ 'gold' ] ) );
+	}
+
+	/**
+	 * A range rule fails for a stored value the server did not write, and matches
+	 * once the server writes the same value.
+	 */
+	public function test_range_rule_fails_on_unmarked_value() {
+		$this->integration->update_enabled_incoming_fields( [ 'amount' ] );
+		$user_id = $this->factory->user->create();
+		$field   = ( new Incoming_Field( 'amount' ) )
+			->set_value_type( 'number' )
+			->set_matching_function( 'range' );
+		$bounds  = [
+			'min' => 10,
+			'max' => 100,
+		];
+
+		\Newspack\Reader_Data::update_item( $user_id, 'amount', wp_json_encode( 50 ), false );
+		$this->assertFalse( $this->evaluate( $field, $user_id, $bounds ) );
+		$this->assertFalse( $this->evaluate( $field, $user_id, [] ) );
+
+		\Newspack\Reader_Data::update_item( $user_id, 'amount', wp_json_encode( 50 ) );
+		$this->assertTrue( $this->evaluate( $field, $user_id, $bounds ) );
+	}
+
+	/**
+	 * A value written without the server mark before the field was enabled does
+	 * not match once the field is enabled.
+	 */
+	public function test_promoted_rule_ignores_value_stored_before_enable() {
+		$user_id = $this->factory->user->create();
+		wp_set_current_user( $user_id );
+		$request = new \WP_REST_Request( 'POST', '/newspack/v1/reader-data' );
+		$request->set_param( 'key', 'tier' );
+		$request->set_param( 'value', wp_json_encode( 'gold' ) );
+		$this->assertNotWPError( \Newspack\Reader_Data::api_update_item( $request ) );
+		wp_set_current_user( 0 );
+
+		$this->integration->update_enabled_incoming_fields( [ 'tier' ] );
+
+		$this->assertSame( '"gold"', \Newspack\Reader_Data::get_data( $user_id, 'tier' ) );
+		$this->assertFalse( $this->evaluate( new Incoming_Field( 'tier' ), $user_id, 'gold' ) );
+	}
+
+	/**
+	 * A field whose key the browser also writes is not server-managed, so even an
+	 * exclusion rule, which passes readers without the value, fails.
+	 */
+	public function test_untrusted_key_fails_exclusion_rule() {
+		$this->integration->update_enabled_incoming_fields( [ 'referrer' ] );
+		$user_id = $this->factory->user->create();
+		$field   = ( new Incoming_Field( 'referrer' ) )->set_matching_function( 'list__not_in' );
+
+		$this->assertFalse( \Newspack\Reader_Data_Trust::is_trusted_key( 'referrer' ) );
+		$this->assertFalse( $this->evaluate( $field, $user_id, [ 'example.test' ] ) );
+	}
+
+	/**
+	 * Registered promoted rules say whether their key is server-managed.
+	 */
+	public function test_promoted_rule_registers_trust() {
+		$integration = new class( 'trust-test', 'Trust Test' ) extends Sample_Integration {
+			/**
+			 * Promote both fields as access rules.
+			 *
+			 * @param \Newspack\Reader_Activation\Integrations\Incoming_Field $field The field.
+			 * @return \Newspack\Reader_Activation\Integrations\Incoming_Field
+			 */
+			protected function configure_incoming_field( $field ) {
+				return $field->set_name( $field->get_key() )->set_is_access_rule( true );
+			}
+		};
+		$this->reset_integrations();
+		Integrations::register( $integration );
+		Integrations::enable( 'trust-test' );
+		$integration->update_enabled_incoming_fields( [ 'tier', 'referrer' ] );
+		Promoted_Fields::reset_cache();
+		Promoted_Fields::register();
+
+		$this->assertFalse( Access_Rules::get_rule( 'trust-test__tier' )['is_untrusted'] );
+		$this->assertTrue( Access_Rules::get_rule( 'trust-test__referrer' )['is_untrusted'] );
+		delete_option( 'newspack_integration_incoming_fields_trust-test' );
 	}
 
 	/**

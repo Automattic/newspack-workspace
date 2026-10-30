@@ -24,15 +24,20 @@ import AccessRuleValueNotice from '../../../../../content-gate/components/access
 import OneTimePurchaseRuleControl from '../../../../../content-gate/components/one-time-purchase-rule-control';
 import RangeRuleControl from '../../../../../content-gate/components/range-rule-control';
 import UnlistedValuesNotice from '../../../../../content-gate/components/unlisted-values-notice';
-import { getAccessRuleValueNotice, isAccessRulePickerInert, isUnconstrainedAccessRuleValue } from '../utils';
+import { getAccessRuleValueNotice, getUntrustedAccessRuleNotice, isAccessRulePickerInert, isUnconstrainedAccessRuleValue } from '../utils';
 import { useAccessRuleOptions } from '../use-access-rule-options';
 
 export default function AccessRuleControl( { slug, value, onChange }: GateRuleControlProps ) {
 	const rule = window.newspackAudienceContentGates.available_access_rules[ slug ];
 	const options = useAccessRuleOptions()[ slug ] ?? [];
 
-	if ( ! rule || rule.is_boolean ) {
+	if ( ! rule ) {
 		return null;
+	}
+	if ( rule.is_boolean ) {
+		// No control to render, but a field the server doesn't manage still needs saying.
+		const untrustedNotice = getUntrustedAccessRuleNotice( rule, value );
+		return untrustedNotice ? <p className="newspack-access-rule-values-notice">{ untrustedNotice }</p> : null;
 	}
 	if ( 'one_time_purchase' === slug ) {
 		return <OneTimePurchaseRuleControl value={ value } onChange={ onChange } options={ options } TokenField={ FormTokenField } />;
@@ -74,18 +79,22 @@ export default function AccessRuleControl( { slug, value, onChange }: GateRuleCo
 			</>
 		);
 	}
+	// Only the untrusted-key verdict applies here; the help text already covers an empty value.
+	const valueNotice = getUntrustedAccessRuleNotice( rule, value );
 	return (
-		<TextControl
-			hideLabelFromVision
-			label={ rule.name }
-			help={
-				isUnconstrainedAccessRuleValue( rule, value )
-					? __( 'Left empty, this rule grants access to everyone. Enter at least one value, or turn the rule off.', 'newspack-plugin' )
-					: __( 'Separate with commas.', 'newspack-plugin' )
-			}
-			value={ 'string' === typeof value ? value : '' }
-			onChange={ onChange }
-			__next40pxDefaultSize
-		/>
+		<AccessRuleValueNotice label={ rule.name } notice={ valueNotice }>
+			<TextControl
+				hideLabelFromVision
+				label={ rule.name }
+				help={
+					isUnconstrainedAccessRuleValue( rule, value )
+						? __( 'Left empty, this rule grants access to everyone. Enter at least one value, or turn the rule off.', 'newspack-plugin' )
+						: __( 'Separate with commas.', 'newspack-plugin' )
+				}
+				value={ 'string' === typeof value ? value : '' }
+				onChange={ onChange }
+				__next40pxDefaultSize
+			/>
+		</AccessRuleValueNotice>
 	);
 }

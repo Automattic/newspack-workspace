@@ -132,6 +132,7 @@ export const sharesTheSiteMeter = ( gate: Gate ) => {
 // editor's visibility panel, which renders the same rules from the same registry.
 export {
 	getAccessRuleValueNotice,
+	getUntrustedAccessRuleNotice,
 	isAccessRulePickerInert,
 	isMalformedAccessRuleValue,
 	isUnconfiguredAccessRuleValue,

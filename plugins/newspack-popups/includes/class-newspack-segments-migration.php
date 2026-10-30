@@ -413,7 +413,7 @@ final class Newspack_Segments_Migration {
 			if ( $existing_value ) {
 				continue;
 			}
-			\Newspack\Reader_Data::update_item( $user_id, $key, wp_json_encode( $value ) );
+			\Newspack\Reader_Data::update_item( $user_id, $key, wp_json_encode( $value ), false );
 		}
 
 		// Clean up migrated client IDs.

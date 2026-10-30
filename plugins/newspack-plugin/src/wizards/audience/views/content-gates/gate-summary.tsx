@@ -29,7 +29,7 @@ import {
 	isUnconstrainedAccessRuleValue,
 } from './utils';
 import { normalizeOneTimePurchaseValue } from '../../../../content-gate/components/one-time-purchase-rule-control';
-import { hasUnusableRangeBounds, normalizeRangeValue } from '../../../../content-gate/utils/access-rule-value';
+import { getUntrustedReaderDataKeys, hasUnusableRangeBounds, normalizeRangeValue } from '../../../../content-gate/utils/access-rule-value';
 
 const availableAccessRules = window.newspackAudienceContentGates.available_access_rules || {};
 
@@ -245,6 +245,30 @@ const formatRangeValue = ( value: unknown ): string =>
  *                      the page for a rule the caller did not supply.
  */
 const formatAccessRuleValue = ( rule: GateAccessRule, optionsBySlug: Record< string, AccessRuleOption[] > ): string | string[] => {
+	const config = availableAccessRules[ rule.slug ];
+	const unmatched = ( shown: string ) =>
+		'' === shown
+			? __( 'Matches no reader', 'newspack-plugin' )
+			: sprintf(
+					// translators: %s: the stored value. Shown when the browser can also set the data the rule reads; the rule then matches no reader.
+					__( '%s (matches no reader)', 'newspack-plugin' ),
+					shown
+			  );
+	// A field the server doesn't manage matches no reader whatever the value is or
+	// looks like. Its own flag for unusable range bounds is dropped so the line carries
+	// one marker, not two.
+	if ( config?.is_untrusted ) {
+		const shown = config.is_range ? formatRangeBounds( rule.value ) : formatKnownAccessRuleValue( rule, optionsBySlug );
+		return unmatched( Array.isArray( shown ) ? shown.join( VALUE_SEPARATOR ) : shown );
+	}
+	const text = formatKnownAccessRuleValue( rule, optionsBySlug );
+	if ( 'string' === typeof text && '' !== text && getUntrustedReaderDataKeys( config, rule.value ).length > 0 ) {
+		return unmatched( text );
+	}
+	return text;
+};
+
+const formatKnownAccessRuleValue = ( rule: GateAccessRule, optionsBySlug: Record< string, AccessRuleOption[] > ): string | string[] => {
 	const config = availableAccessRules[ rule.slug ];
 	const options = optionsBySlug[ rule.slug ] ?? config?.options;
 	if ( 'one_time_purchase' === rule.slug ) {
