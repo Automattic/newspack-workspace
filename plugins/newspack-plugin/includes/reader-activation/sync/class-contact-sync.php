@@ -1407,8 +1407,8 @@ class Contact_Sync extends Sync {
 			 *
 			 * Mirrors `newspack_sync_permanent_failure` on the contact-sync path
 			 * (documented in includes/reader-activation/sync/class-contact-sync.php)
-			 * with two differences: the payload substitutes `email` + `mode` for
-			 * `user_id`, since the WP user is already gone, and the hook also fires
+			 * with two differences: the payload substitutes `mode` for `user_id`,
+			 * since the WP user is already gone, and the hook also fires
 			 * for permanent contact-data errors — a skipped deletion retry has no
 			 * natural re-trigger, so the dropped deletion signal must stay
 			 * observable. It also fires, as `permanent_config` in flag mode, for

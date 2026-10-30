@@ -399,13 +399,13 @@ class Alert_Manager {
 	 *   Deletion flags, whose payload carries a `mode`, take their own hourly
 	 *   slot, so a full audience never holds back an account failure.
 	 *   For account failures, the hourly health check observes the same
-	 *   account state within the hour through its own request, and owns
-	 *   the escalation through
-	 *   handle_health_check_failed(). An account that refuses writes but
-	 *   still answers the check's request passes it, so those failures reach
-	 *   the log alone. Where the check isn't running, because
-	 *   it is switched off or its cron has stalled, this path is the only one
-	 *   that sees the account state, so its hourly report pages instead.
+	 *   account state within the hour through its own request, and owns the
+	 *   escalation through handle_health_check_failed(). An account that
+	 *   refuses writes but still answers the check's request passes it, so
+	 *   those failures reach the log alone. Where the check isn't running,
+	 *   because it is switched off or its cron has stalled, this path is the
+	 *   only one that sees the account state, so its hourly report pages
+	 *   instead.
 	 * - `permanent_contact` (fired by the deletion path only, where a skipped
 	 *   retry has no natural re-trigger and the dropped deletion signal is
 	 *   GDPR-relevant) concerns one contact each and stays observable.
