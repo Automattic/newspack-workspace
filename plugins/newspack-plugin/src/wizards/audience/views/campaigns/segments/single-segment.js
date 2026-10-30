@@ -2,7 +2,15 @@
 /**
  * WordPress dependencies.
  */
-import { BaseControl, CheckboxControl, Notice, SelectControl, TextControl, ToggleControl } from '@wordpress/components';
+import {
+	BaseControl,
+	CheckboxControl,
+	Notice,
+	SelectControl,
+	TextControl,
+	__experimentalToggleGroupControl as ToggleGroupControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+	__experimentalToggleGroupControlOption as ToggleGroupControlOption, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+} from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
 import { useEffect, useState, Fragment } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
@@ -337,34 +345,32 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch, ...screenProps
 					<SectionHeader
 						heading={ 2 }
 						noMargin
-						title={ __( 'Title', 'newspack-plugin' ) }
-						description={ __( 'Choose a name to help you find this segment later.', 'newspack-plugin' ) }
+						title={ __( 'Details', 'newspack-plugin' ) }
+						description={ __( 'Name this segment and choose whether it’s used for reader segmentation.', 'newspack-plugin' ) }
 					/>
-					<TextControl
-						placeholder={ __( 'Untitled Segment', 'newspack-plugin' ) }
-						value={ name }
-						onChange={ setName }
-						label={ __( 'Title', 'newspack-plugin' ) }
-						hideLabelFromVision
-						help={ analyticsIdHelp }
-						__next40pxDefaultSize
-						__nextHasNoMarginBottom
-					/>
-				</Grid>
-				<Divider alignment="full-width" variant="tertiary" />
-				<Grid columns={ 2 } gutter={ 32 } noMargin>
-					<SectionHeader
-						heading={ 2 }
-						noMargin
-						title={ __( 'Segment Status', 'newspack-plugin' ) }
-						description={ __( 'If not enabled, the segment will be ignored for reader segmentation.', 'newspack-plugin' ) }
-					/>
-					<ToggleControl
-						label={ __( 'Segment enabled', 'newspack-plugin' ) }
-						checked={ ! segmentConfig.is_disabled }
-						onChange={ () => updateSegmentConfig( { is_disabled: ! segmentConfig.is_disabled } ) }
-						__nextHasNoMarginBottom
-					/>
+					<Stack direction="column" gap="xl">
+						<TextControl
+							placeholder={ __( 'Untitled Segment', 'newspack-plugin' ) }
+							value={ name }
+							onChange={ setName }
+							label={ __( 'Title', 'newspack-plugin' ) }
+							help={ analyticsIdHelp }
+							__next40pxDefaultSize
+							__nextHasNoMarginBottom
+						/>
+						<ToggleGroupControl
+							label={ __( 'Status', 'newspack-plugin' ) }
+							help={ __( 'If disabled, the segment will be ignored for reader segmentation.', 'newspack-plugin' ) }
+							value={ segmentConfig.is_disabled ? 'disabled' : 'enabled' }
+							onChange={ value => updateSegmentConfig( { is_disabled: 'disabled' === value } ) }
+							isBlock
+							__next40pxDefaultSize
+							__nextHasNoMarginBottom
+						>
+							<ToggleGroupControlOption value="enabled" label={ __( 'Enabled', 'newspack-plugin' ) } />
+							<ToggleGroupControlOption value="disabled" label={ __( 'Disabled', 'newspack-plugin' ) } />
+						</ToggleGroupControl>
+					</Stack>
 				</Grid>
 				{ criteriaCategories.map( ( { id, title, description, notification } ) => {
 					const categoryCriteria = allCriteria.filter( criteria => criteria.category === id );
