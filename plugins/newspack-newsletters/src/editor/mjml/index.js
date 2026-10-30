@@ -8,7 +8,7 @@ import apiFetch from '@wordpress/api-fetch';
 import { addQueryArgs } from '@wordpress/url';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { useEffect } from '@wordpress/element';
-import { isLayoutEditor, usePrevious } from '../../newsletter-editor/utils';
+import { isLayoutEditor, useIsEditingOpenedPost, usePrevious } from '../../newsletter-editor/utils';
 
 /**
  * Internal dependencies
@@ -183,4 +183,9 @@ function MJML() {
 	};
 }
 
-export default MJML;
+// Refresh only after saving the email itself. A synced pattern opened through
+// "Edit original" has no email HTML meta and no REST route at its post type
+// slug, so the refresh 404s and leaves the pattern with a stray unsaved edit.
+const MJMLPlugin = () => ( useIsEditingOpenedPost() ? <MJML /> : null );
+
+export default MJMLPlugin;

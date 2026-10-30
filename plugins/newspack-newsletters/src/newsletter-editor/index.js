@@ -23,7 +23,7 @@ import { PublicSettings } from './public';
 import registerEditorPlugin from './editor/';
 import withApiHandler from '../components/with-api-handler';
 import { registerStore, fetchNewsletterData, useNewsletterDataError } from './store';
-import { isLayoutEditor, isSupportedESP } from './utils';
+import { isLayoutEditor, isSupportedESP, useIsEditingOpenedPost } from './utils';
 import { isManualProvider } from '../utils/service-provider';
 import CampaignLink from './campaign-link';
 import './debug-send';
@@ -52,6 +52,7 @@ function NewsletterEdit( { apiFetchWithErrorHandling, setInFlightForAsync, inFli
 	const [ isConnected, setIsConnected ] = useState( null );
 	const [ oauthUrl, setOauthUrl ] = useState( null );
 	const newsletterDataError = useNewsletterDataError();
+	const isEditingOpenedPost = useIsEditingOpenedPost();
 	const savePost = useDispatch( 'core/editor' ).savePost;
 	const { createNotice, removeNotice } = useDispatch( 'core/notices' );
 	const { name: serviceProviderName, hasOauth } = getServiceProvider();
@@ -99,6 +100,11 @@ function NewsletterEdit( { apiFetchWithErrorHandling, setInFlightForAsync, inFli
 			removeNotice( 'newspack-newsletters-newsletter-data-error' );
 		}
 	}, [ newsletterDataError ] );
+
+	// Nothing here applies to a synced pattern opened through "Edit original".
+	if ( ! isEditingOpenedPost ) {
+		return null;
+	}
 
 	const isLayout = isLayoutEditor();
 	// Layouts work without an ESP (wp_mail preview, provider-agnostic styling).

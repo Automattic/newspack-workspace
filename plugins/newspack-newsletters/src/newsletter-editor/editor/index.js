@@ -21,6 +21,11 @@ import withApiHandler from '../../components/with-api-handler';
 import SendButton from '../../components/send-button';
 import './style.scss';
 import { CAMPAIGN_SENT_NOTICE_ID } from '../../utils/consts';
+import { useIsEditingOpenedPost } from '../utils';
+
+// Set on the body while another post, such as a synced pattern opened with
+// "Edit original", replaces the newsletter in this editor page. See style.scss.
+const EDITING_OTHER_POST_CLASS = 'newspack-newsletters-editing-other-post';
 
 const Editor = compose( [
 	withApiHandler(),
@@ -85,6 +90,9 @@ const Editor = compose( [
 		// Create alternate publish button.
 		const publishButton = document.getElementsByClassName( 'editor-post-publish-button__button' )[ 0 ];
 		publishButton.parentNode.insertBefore( publishEl, publishButton.nextSibling );
+		// The editor unmounts while a synced pattern is open and inserts a new
+		// element on return, so drop this one.
+		return () => publishEl.remove();
 	}, [] );
 
 	// Set color palette option.
@@ -161,7 +169,7 @@ const Editor = compose( [
 	useEffect( () => {
 		const noticeId = 'newspack-newsletters-email-content-too-large';
 		const message = __( 'Email content is too long and may get clipped by email clients.', 'newspack-newsletters' );
-		if ( html.length > 100000 ) {
+		if ( html?.length > 100000 ) {
 			createNotice( 'warning', message, {
 				id: noticeId,
 				isDismissible: false,
@@ -174,8 +182,20 @@ const Editor = compose( [
 	return createPortal( <SendButton />, publishEl );
 } );
 
+// Render the newsletter controls only while the newsletter is the post being
+// edited, not while a synced pattern is open through "Edit original".
+const EditorPlugin = () => {
+	const isEditingNewsletter = useIsEditingOpenedPost();
+
+	useEffect( () => {
+		document.body.classList.toggle( EDITING_OTHER_POST_CLASS, ! isEditingNewsletter );
+	}, [ isEditingNewsletter ] );
+
+	return isEditingNewsletter ? <Editor /> : null;
+};
+
 export default () => {
 	registerPlugin( 'newspack-newsletters-edit', {
-		render: Editor,
+		render: EditorPlugin,
 	} );
 };
