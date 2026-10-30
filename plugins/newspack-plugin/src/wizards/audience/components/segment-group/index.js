@@ -5,10 +5,11 @@
 /**
  * WordPress dependencies.
  */
-import { sprintf, __ } from '@wordpress/i18n';
-import { CardBody, CardDivider } from '@wordpress/components';
+import { __ } from '@wordpress/i18n';
+import { CardBody, CardDivider, DropdownMenu, MenuGroup, MenuItem } from '@wordpress/components';
 import { useState, Fragment } from '@wordpress/element';
-import { blockTable, header, layout, postList } from '@wordpress/icons';
+import { blockTable, header, layout, moreVertical, postList } from '@wordpress/icons';
+import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
@@ -16,7 +17,7 @@ import { blockTable, header, layout, postList } from '@wordpress/icons';
 import { Button, Card, Grid, Modal } from '../../../../../packages/components/src';
 import SegmentationPreview from '../segmentation-preview';
 import PromptActionCard from '../prompt-action-card';
-import { promptDescription, segmentDescription, getCardClassName, warningForPopup } from '../../views/campaigns/utils';
+import { segmentDescriptionItems, splitCriteriaMessage, warningForPopup } from '../../views/campaigns/utils';
 import { overlayBottom, overlayInline, overlayCenter, overlayTop } from '../../../../../packages/icons';
 import './style.scss';
 
@@ -41,11 +42,15 @@ const SegmentGroup = props => {
 	const { label, id, prompts } = segment;
 	const campaignToPreview = 'unassigned' !== campaignId ? parseInt( campaignId ) : -1;
 
+	const description = id ? segmentDescriptionItems( segment ) : [ __( 'All readers, regardless of segment', 'newspack-plugin' ) ];
+
 	let emptySegmentText;
 	if ( 'unassigned' === campaignId ) {
 		emptySegmentText = __( 'No unassigned prompts in this segment.', 'newspack-plugin' );
 	} else if ( campaignData ) {
 		emptySegmentText = __( 'No prompts in this segment for', 'newspack-plugin' ) + ' ' + campaignData.name + '.';
+	} else if ( 'all' === campaignId ) {
+		emptySegmentText = __( 'No prompts in this segment.', 'newspack-plugin' );
 	} else {
 		emptySegmentText = __( 'No active prompts in this segment.', 'newspack-plugin' );
 	}
@@ -54,50 +59,40 @@ const SegmentGroup = props => {
 		<Card
 			__experimentalCoreCard
 			__experimentalCoreProps={ {
-				hasGreyHeader: true,
 				header: (
-					<div className="newspack-campaigns__segment-group__card__segment">
-						<div className="newspack-campaigns__segment-group__card__segment-title">
-							<h3>
+					<Stack direction="row" gap="md" wrap="wrap" align="center" justify="space-between">
+						<Stack direction="column" gap="xs" className="newspack-campaigns__segment-group__heading">
+							<h2 className="newspack-campaigns__segment-group__title">
 								{ id ? (
-									<Button
-										href={ `#/segments/${ id }` }
-										label={ __( 'Edit Segment', 'newspack-plugin' ) }
-										isLink
-										showTooltip
-										tooltipPosition="bottom center"
-									>
-										{
-											/* translators: %s: segment label */
-											sprintf( __( 'Segment: %s', 'newspack-plugin' ), label )
-										}
+									<Button href={ `#/segments/${ id }` } isLink>
+										{ label }
 									</Button>
 								) : (
 									label
 								) }
-							</h3>
-							<span className="newspack-campaigns__segment-group__description">
-								{ id ? segmentDescription( segment ) : __( 'All readers, regardless of segment', 'newspack-plugin' ) }
-							</span>
-						</div>
-						<div className="newspack-campaigns__segment-group__card__segment-actions">
-							<SegmentationPreview
-								campaign={ campaignId ? campaignToPreview : false }
-								segment={ id }
-								showUnpublished={ !! campaignId } // Only if previewing a specific campaign/group.
-								renderButton={ ( { showPreview } ) => (
-									<Button isSmall variant="tertiary" onClick={ () => showPreview() }>
-										{ __( 'Preview Segment', 'newspack-plugin' ) }
-									</Button>
-								) }
-								title={
-									/* translators: %s: segment label */
-									sprintf( __( 'Segment: %s', 'newspack-plugin' ), label )
-								}
-							/>
-							{ 'unassigned' !== campaignId && (
+							</h2>
+							{ description.length > 0 && (
+								<div className="newspack-campaigns__details">
+									{ description.map( ( item, index ) => {
+										const { label: itemLabel, value } = splitCriteriaMessage( item );
+										return (
+											<span key={ index }>
+												{ itemLabel && (
+													<>
+														<span className="newspack-campaigns__details-key">{ itemLabel }</span>{ ' ' }
+													</>
+												) }
+												<span className="newspack-campaigns__details-value">{ value }</span>
+											</span>
+										);
+									} ) }
+								</div>
+							) }
+						</Stack>
+						<Stack direction="row" gap="sm" align="center">
+							{ 'unassigned' !== campaignId && 'trash' !== campaignId && (
 								<Fragment>
-									<Button isSmall variant="secondary" onClick={ () => setModalVisible( ! modalVisible ) }>
+									<Button variant="secondary" onClick={ () => setModalVisible( ! modalVisible ) }>
 										{ __( 'Add Prompt', 'newspack-plugin' ) }
 									</Button>
 									{ modalVisible && (
@@ -252,23 +247,46 @@ const SegmentGroup = props => {
 									) }
 								</Fragment>
 							) }
-						</div>
-					</div>
+							<SegmentationPreview
+								campaign={ campaignId ? campaignToPreview : false }
+								segment={ id }
+								showUnpublished={ !! campaignId } // Only if previewing a specific campaign/group.
+								renderButton={ ( { showPreview } ) => (
+									<DropdownMenu icon={ moreVertical } label={ __( 'Segment actions', 'newspack-plugin' ) }>
+										{ ( { onClose } ) => (
+											<MenuGroup>
+												<MenuItem
+													onClick={ () => {
+														onClose();
+														showPreview();
+													} }
+												>
+													{ __( 'Preview Segment', 'newspack-plugin' ) }
+												</MenuItem>
+												{ id && (
+													<MenuItem href={ `#/segments/${ id }` }>{ __( 'Edit Segment', 'newspack-plugin' ) }</MenuItem>
+												) }
+											</MenuGroup>
+										) }
+									</DropdownMenu>
+								) }
+								title={ label }
+							/>
+						</Stack>
+					</Stack>
 				),
 			} }
-			isSmall
 			className="newspack-campaigns__segment-group__card"
 		>
 			{ prompts.map( ( item, index ) => (
 				<Fragment key={ item.id }>
 					<PromptActionCard
-						className={ getCardClassName( item.status, segment.configuration.is_disabled ) }
-						description={ promptDescription( item ) }
+						segmentDisabled={ segment.configuration.is_disabled }
 						warning={ warningForPopup( prompts, item ) }
 						prompt={ item }
 						{ ...props }
 					/>
-					{ index < prompts.length - 1 && <CardDivider /> }
+					{ index < prompts.length - 1 && <CardDivider className="newspack-campaigns__segment-group__divider" /> }
 				</Fragment>
 			) ) }
 			{ prompts.length < 1 ? (

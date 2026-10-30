@@ -42,7 +42,7 @@ const tabbedNavigation = [
 	{
 		label: __( 'Campaigns', 'newspack-plugin' ),
 		path: '/campaigns',
-		exact: true,
+		exact: false,
 		breadcrumbs: [ ...ROOT, { label: __( 'Campaigns', 'newspack-plugin' ) } ],
 	},
 	{
