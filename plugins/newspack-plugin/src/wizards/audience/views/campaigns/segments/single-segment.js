@@ -3,7 +3,8 @@
  * WordPress dependencies.
  */
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-import { ToggleControl, CheckboxControl } from '@wordpress/components';
+import { Card, CardBody, ToggleControl, CheckboxControl } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 import { useEffect, useState, Fragment } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import find from 'lodash/find';
@@ -13,11 +14,23 @@ import { addQueryArgs } from '@wordpress/url';
 /**
  * Internal dependencies.
  */
-import { Button, CategoryAutocomplete, Router, SelectControl, Settings, TextControl, hooks, Grid } from '../../../../../../packages/components/src';
+import {
+	Button,
+	CategoryAutocomplete,
+	Divider,
+	Grid,
+	Notice,
+	Router,
+	SectionHeader,
+	SelectControl,
+	Settings,
+	TextControl,
+	hooks,
+} from '../../../../../../packages/components/src';
 import ListsControl from '../../../components/lists-control';
 
 const { useHistory } = Router;
-const { SettingsCard, SettingsSection, MinMaxSetting, DateRangeSetting } = Settings;
+const { SettingsSection, MinMaxSetting, DateRangeSetting } = Settings;
 
 /**
  * Whether a criterion should render as a multi-select checkbox group: ESP
@@ -209,117 +222,108 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch } ) => {
 	const analyticsIdText = __( 'Analytics ID: %s — this segment’s identifier in Google Analytics reports.', 'newspack-plugin' );
 	const analyticsIdHelp = isNew ? undefined : sprintf( analyticsIdText, segmentId );
 
+	const criteriaCategories = [
+		{
+			id: 'reader_engagement',
+			title: __( 'Reader Engagement', 'newspack-plugin' ),
+			description: __( 'Target readers based on their browsing behavior.', 'newspack-plugin' ),
+		},
+		{
+			id: 'reader_activity',
+			title: __( 'Registration', 'newspack-plugin' ),
+			description: __( 'Target readers based on their user account registration status.', 'newspack-plugin' ),
+		},
+		{
+			id: 'newsletter',
+			title: __( 'Newsletters', 'newspack-plugin' ),
+			description: __( 'Target readers based on their newsletter subscription status.', 'newspack-plugin' ),
+		},
+		{
+			id: 'reader_revenue',
+			title: __( 'Reader Revenue', 'newspack-plugin' ),
+			description: __( 'Target readers based on their revenue activity.', 'newspack-plugin' ),
+		},
+		{
+			id: 'referrer_sources',
+			title: __( 'Referrer Sources', 'newspack-plugin' ),
+			description: __( 'Target readers based on where they’re coming from.', 'newspack-plugin' ),
+			notification: __(
+				'Segments using these options will apply only to the first page visited after coming from an external source.',
+				'newspack-plugin'
+			),
+		},
+		{
+			id: 'integrations',
+			title: __( 'Integrations', 'newspack-plugin' ),
+			description: __( 'Target readers based on data from connected integrations.', 'newspack-plugin' ),
+		},
+	];
+
 	return (
-		<Fragment>
-			<TextControl
-				placeholder={ __( 'Untitled Segment', 'newspack-plugin' ) }
-				value={ name }
-				onChange={ setName }
-				label={ __( 'Title', 'newspack-plugin' ) }
-				className={ 'newspack-campaigns-wizard-segments__title' }
-				help={ analyticsIdHelp }
-			/>
-
-			<SettingsCard
-				title={ __( 'Segment Status', 'newspack-plugin' ) }
-				description={ __( 'If not enabled, the segment will be ignored for reader segmentation.', 'newspack-plugin' ) }
-				noBorder
-			>
-				<ToggleControl
-					label={ __( 'Segment enabled', 'newspack-plugin' ) }
-					checked={ ! segmentConfig.is_disabled }
-					onChange={ () => updateSegmentConfig( { is_disabled: ! segmentConfig.is_disabled } ) }
+		<div className="newspack-campaigns-wizard-segments__form">
+			<Grid columns={ 2 } gutter={ 32 }>
+				<SectionHeader
+					heading={ 2 }
+					title={ __( 'Title', 'newspack-plugin' ) }
+					description={ __( 'Choose a name to help you find this segment later.', 'newspack-plugin' ) }
 				/>
-			</SettingsCard>
-
-			<SettingsCard
-				title={ __( 'Reader Engagement', 'newspack-plugin' ) }
-				description={ __( 'Target readers based on their browsing behavior.', 'newspack-plugin' ) }
-				noBorder
-			>
-				{ allCriteria
-					.filter( criteria => criteria.category === 'reader_engagement' )
-					.map( criteria => (
-						<SettingsSection key={ criteria.id } title={ criteria.name } description={ criteria.description }>
-							{ getCriteriaInput( criteria ) }
-						</SettingsSection>
-					) ) }
-			</SettingsCard>
-			<SettingsCard
-				title={ __( 'Registration', 'newspack-plugin' ) }
-				description={ __( 'Target readers based on their user account registration status.', 'newspack-plugin' ) }
-				columns={ 3 }
-				noBorder
-			>
-				{ allCriteria
-					.filter( criteria => criteria.category === 'reader_activity' )
-					.map( criteria => (
-						<SettingsSection key={ criteria.id } title={ criteria.name } description={ criteria.description }>
-							{ getCriteriaInput( criteria ) }
-						</SettingsSection>
-					) ) }
-			</SettingsCard>
-			<SettingsCard
-				title={ __( 'Newsletters', 'newspack-plugin' ) }
-				description={ __( 'Target readers based on their newsletter subscription status.', 'newspack-plugin' ) }
-				columns={ 3 }
-				noBorder
-			>
-				{ allCriteria
-					.filter( criteria => criteria.category === 'newsletter' )
-					.map( criteria => (
-						<SettingsSection key={ criteria.id } title={ criteria.name } description={ criteria.description }>
-							{ getCriteriaInput( criteria ) }
-						</SettingsSection>
-					) ) }
-			</SettingsCard>
-			<SettingsCard
-				title={ __( 'Reader Revenue', 'newspack-plugin' ) }
-				description={ __( 'Target readers based on their revenue activity.', 'newspack-plugin' ) }
-				columns={ 3 }
-				noBorder
-			>
-				{ allCriteria
-					.filter( criteria => criteria.category === 'reader_revenue' )
-					.map( criteria => (
-						<SettingsSection key={ criteria.id } title={ criteria.name } description={ criteria.description }>
-							{ getCriteriaInput( criteria ) }
-						</SettingsSection>
-					) ) }
-			</SettingsCard>
-			<SettingsCard
-				title={ __( 'Referrer Sources', 'newspack-plugin' ) }
-				description={ __( 'Target readers based on where they’re coming from.', 'newspack-plugin' ) }
-				notification={ __(
-					'Segments using these options will apply only to the first page visited after coming from an external source.',
-					'newspack-plugin'
-				) }
-				columns={ 2 }
-				noBorder
-			>
-				{ allCriteria
-					.filter( criteria => criteria.category === 'referrer_sources' )
-					.map( criteria => (
-						<SettingsSection key={ criteria.id } title={ criteria.name } description={ criteria.description }>
-							{ getCriteriaInput( criteria ) }
-						</SettingsSection>
-					) ) }
-			</SettingsCard>
-			{ allCriteria.some( criteria => criteria.category === 'integrations' ) && (
-				<SettingsCard
-					title={ __( 'Integrations', 'newspack-plugin' ) }
-					description={ __( 'Target readers based on data from connected integrations.', 'newspack-plugin' ) }
-					noBorder
-				>
-					{ allCriteria
-						.filter( criteria => criteria.category === 'integrations' )
-						.map( criteria => (
-							<SettingsSection key={ criteria.id } title={ criteria.name } description={ criteria.description }>
-								{ getCriteriaInput( criteria ) }
-							</SettingsSection>
-						) ) }
-				</SettingsCard>
-			) }
+				<TextControl
+					placeholder={ __( 'Untitled Segment', 'newspack-plugin' ) }
+					value={ name }
+					onChange={ setName }
+					label={ __( 'Title', 'newspack-plugin' ) }
+					hideLabelFromVision
+					className="newspack-campaigns-wizard-segments__title"
+					help={ analyticsIdHelp }
+				/>
+			</Grid>
+			<Divider alignment="full-width" variant="tertiary" />
+			<Grid columns={ 2 } gutter={ 32 } noMargin>
+				<SectionHeader
+					heading={ 2 }
+					title={ __( 'Segment Status', 'newspack-plugin' ) }
+					description={ __( 'If not enabled, the segment will be ignored for reader segmentation.', 'newspack-plugin' ) }
+				/>
+				<Card className="newspack-settings__card">
+					<CardBody>
+						<ToggleControl
+							label={ __( 'Segment enabled', 'newspack-plugin' ) }
+							checked={ ! segmentConfig.is_disabled }
+							onChange={ () => updateSegmentConfig( { is_disabled: ! segmentConfig.is_disabled } ) }
+							__nextHasNoMarginBottom
+						/>
+					</CardBody>
+				</Card>
+			</Grid>
+			{ criteriaCategories.map( ( { id, title, description, notification } ) => {
+				const categoryCriteria = allCriteria.filter( criteria => criteria.category === id );
+				if ( 'integrations' === id && ! categoryCriteria.length ) {
+					return null;
+				}
+				return (
+					<Fragment key={ id }>
+						<Divider alignment="full-width" variant="tertiary" />
+						<Grid columns={ 2 } gutter={ 32 } noMargin>
+							<SectionHeader heading={ 2 } title={ title } description={ description } />
+							<Stack direction="column" gap="lg">
+								{ notification && <Notice noticeText={ notification } /> }
+								<Card className="newspack-settings__card">
+									<CardBody>
+										<Stack direction="column" gap="lg">
+											{ categoryCriteria.map( criteria => (
+												<SettingsSection key={ criteria.id } title={ criteria.name } description={ criteria.description }>
+													{ getCriteriaInput( criteria ) }
+												</SettingsSection>
+											) ) }
+										</Stack>
+									</CardBody>
+								</Card>
+							</Stack>
+						</Grid>
+					</Fragment>
+				);
+			} ) }
+			<Divider alignment="full-width" variant="tertiary" />
 			<div className="newspack-buttons-card">
 				<Button disabled={ ! isSegmentValid() || ( ! isNew && ! isDirty ) } isPrimary onClick={ saveSegment }>
 					{ __( 'Save', 'newspack-plugin' ) }
@@ -328,7 +332,7 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch } ) => {
 					{ __( 'Cancel', 'newspack-plugin' ) }
 				</Button>
 			</div>
-		</Fragment>
+		</div>
 	);
 };
 

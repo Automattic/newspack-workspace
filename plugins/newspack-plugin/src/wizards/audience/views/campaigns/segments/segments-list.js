@@ -3,13 +3,14 @@
  * WordPress dependencies.
  */
 import { useState, Fragment, useEffect, useCallback, useMemo } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
+import { people } from '@wordpress/icons';
 
 /**
  * Internal dependencies.
  */
-import { Card, CardSortableList, Notice, Router } from '../../../../../../packages/components/src';
-import { segmentDescription } from '../utils';
+import { Button, CardSortableList, EmptyState, Notice, Router } from '../../../../../../packages/components/src';
+import { segmentDescriptionItems, splitCriteriaMessage } from '../utils';
 
 const { useHistory } = Router;
 
@@ -95,25 +96,49 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, isLoading } ) =>
 	};
 	const items = useMemo(
 		() =>
-			segments.map( segment => ( {
-				id: segment.id,
-				title: segment.name,
-				description: segmentDescription( segment ),
-				badge: segment.is_criteria_duplicated ? { label: __( 'Duplicate', 'newspack-plugin' ), intent: 'medium' } : undefined,
-				toggleChecked: ! segment.configuration.is_disabled,
-				onToggleChange: () => toggleSegmentStatus( segment ),
-				actions: [
-					{
-						label: __( 'Edit', 'newspack-plugin' ),
-						action: () => history.push( `/segments/${ segment.id }` ),
-					},
-					{
-						label: __( 'Delete', 'newspack-plugin' ),
-						action: () => deleteSegment( segment ),
-						destructive: true,
-					},
-				],
-			} ) ),
+			segments.map( segment => {
+				const criteria = segmentDescriptionItems( { ...segment, configuration: { ...segment.configuration, is_disabled: false } } );
+				return {
+					id: segment.id,
+					title: segment.name,
+					description: criteria.length > 0 && (
+						<span className="newspack-campaigns__details">
+							{ criteria.map( ( item, index ) => {
+								const { label, value } = splitCriteriaMessage( item );
+								return (
+									<span key={ index }>
+										{ label && (
+											<>
+												<span className="newspack-campaigns__details-key">{ label }</span>{ ' ' }
+											</>
+										) }
+										<span className="newspack-campaigns__details-value">{ value }</span>
+									</span>
+								);
+							} ) }
+						</span>
+					),
+					badge: segment.is_criteria_duplicated ? { label: __( 'Duplicate', 'newspack-plugin' ), intent: 'medium' } : undefined,
+					toggleChecked: ! segment.configuration.is_disabled,
+					onToggleChange: () => toggleSegmentStatus( segment ),
+					actionsLabel: sprintf(
+						// Translators: %s: segment name.
+						__( 'Segment actions: %s', 'newspack-plugin' ),
+						segment.name
+					),
+					actions: [
+						{
+							label: __( 'Edit', 'newspack-plugin' ),
+							action: () => history.push( `/segments/${ segment.id }` ),
+						},
+						{
+							label: __( 'Delete', 'newspack-plugin' ),
+							action: () => deleteSegment( segment ),
+							destructive: true,
+						},
+					],
+				};
+			} ),
 		[ segments, toggleSegmentStatus, deleteSegment, history ]
 	);
 
@@ -124,18 +149,21 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, isLoading } ) =>
 	return segments.length ? (
 		<Fragment>
 			{ error && <Notice noticeText={ error } isError /> }
-			<Card headerActions noBorder>
-				<h2>{ __( 'Audience segments', 'newspack-plugin' ) }</h2>
-			</Card>
 			<CardSortableList disabled={ inFlight || isLoading > 0 } items={ items } onDragCallback={ sortSegments } />
 		</Fragment>
 	) : (
-		<Fragment>
-			<Card headerActions noBorder>
-				<h2>{ __( 'You have no saved audience segments.', 'newspack-plugin' ) }</h2>
-			</Card>
-			<p>{ __( 'Create audience segments to target visitors by engagement, activity, and more.', 'newspack-plugin' ) }</p>
-		</Fragment>
+		<EmptyState.Root>
+			<EmptyState.Header
+				icon={ people }
+				title={ __( 'No segments yet', 'newspack-plugin' ) }
+				description={ __( 'Create audience segments to target visitors by engagement, activity, and more.', 'newspack-plugin' ) }
+			/>
+			<EmptyState.Actions>
+				<Button variant="primary" href="#/segments/new">
+					{ __( 'Add Segment', 'newspack-plugin' ) }
+				</Button>
+			</EmptyState.Actions>
+		</EmptyState.Root>
 	);
 };
 

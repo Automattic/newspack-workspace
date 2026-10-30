@@ -43,6 +43,8 @@ type DraggableItem = {
 	toggleChecked?: boolean;
 	onToggleChange?: () => void;
 	actions?: DraggableItemAction[];
+	/** Accessible name of the actions menu button, e.g. one that names the item. */
+	actionsLabel?: string;
 };
 
 type DragMeasurements = {
@@ -441,6 +443,7 @@ const CardSortableList = ( {
 											} ),
 											...( item.actions !== undefined && {
 												actions: item.actions,
+												actionsLabel: item.actionsLabel,
 											} ),
 										} }
 									/>
