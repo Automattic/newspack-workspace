@@ -15,10 +15,10 @@ class WP_REST_Newspack_Articles_Controller extends WP_REST_Controller {
 	/**
 	 * Most posts the public articles route renders in one request.
 	 *
-	 * The editor caps a block at 30 posts, but before 2025 it allowed up to 100, so saved
-	 * blocks can ask for that many. Not filterable, so request input can't raise it; site
-	 * code still can, since newspack_blocks_build_articles_query runs after the clamp and
-	 * may change posts_per_page.
+	 * In its normal query mode the editor caps a block at 30 posts, but before 2025 it
+	 * allowed up to 100, so saved blocks can ask for that many. The clamp in get_items()
+	 * stops request input from raising the cap; site code still can, since
+	 * newspack_blocks_build_articles_query runs after the clamp and may change posts_per_page.
 	 */
 	const MAX_POSTS_TO_SHOW = 100;
 
