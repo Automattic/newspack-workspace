@@ -101,7 +101,8 @@ final class Active_Subscriptions_Reader_Data {
 		$product_ids      = [];
 		foreach ( $subscription_ids as $subscription_id ) {
 			// get_products_for_order() calls get_items() on whatever wc_get_order()
-			// returns, so an ID that no longer loads would be a fatal error.
+			// returns, so an ID that no longer loads would be a fatal error. This is
+			// defensive against a subscription deleted between the lookup and this call.
 			if ( ! \wcs_get_subscription( $subscription_id ) ) {
 				continue;
 			}
@@ -229,8 +230,12 @@ final class Active_Subscriptions_Reader_Data {
 		if ( ! in_array( 'enabled', (array) $changed_keys, true ) ) {
 			return;
 		}
-		foreach ( Group_Subscription::get_members( $subscription ) as $member_id ) {
-			self::mark_stale( (int) $member_id );
+		// get_members() is filterable, so treat its result as untrusted input.
+		foreach ( (array) Group_Subscription::get_members( $subscription ) as $member_id ) {
+			$member_id = (int) $member_id;
+			if ( $member_id > 0 ) {
+				self::mark_stale( $member_id );
+			}
 		}
 	}
 
