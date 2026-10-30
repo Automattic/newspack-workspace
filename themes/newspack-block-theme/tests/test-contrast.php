@@ -12,7 +12,7 @@ use Newspack_Block_Theme\Contrast;
  */
 class Test_Contrast extends WP_UnitTestCase {
 	/**
-	 * The accent and accent-2 colors set by the current test.
+	 * The palette colors set by the current test.
 	 *
 	 * @var string[]
 	 */
@@ -91,12 +91,10 @@ class Test_Contrast extends WP_UnitTestCase {
 	public function test_accent_gets_contrast_color() {
 		$css = $this->get_css(
 			[
-				'base'     => '#ffffff',
-				'accent'   => '#003da5',
-				'accent-2' => '#2055b0',
+				'accent' => '#003da5',
 			]
 		);
 
-		$this->assertStringContainsString( '--wp--preset--color--accent-contrast', $css );
+		$this->assertStringContainsString( '--wp--preset--color--accent-contrast: #ffffff;', $css );
 	}
 }

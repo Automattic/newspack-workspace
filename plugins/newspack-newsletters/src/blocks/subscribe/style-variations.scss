@@ -217,8 +217,6 @@
 			}
 
 			&:focus {
-				box-shadow: 0 0 0 1px var(--newspack-ui-color-input-border-focus, #1e1e1e);
-
 				@include focus.focus-edge( var(--newspack-ui-color-input-border-focus, #1e1e1e) );
 			}
 
