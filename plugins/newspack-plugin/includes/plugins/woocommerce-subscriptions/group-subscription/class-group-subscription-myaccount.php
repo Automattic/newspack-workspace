@@ -479,7 +479,7 @@ class Group_Subscription_MyAccount {
 		self::verify_active( $subscription_id, $redirect_url, 'invites' );
 
 		$email  = filter_input( INPUT_POST, 'newspack-group-subscription-invite-email', FILTER_SANITIZE_EMAIL ) ?? '';
-		$invite = Group_Subscription_Invite::generate_invite( $subscription_id, $email, true, 'single' );
+		$invite = Group_Subscription_Invite::generate_invite( $subscription_id, $email, true, Group_Subscription_Invite::SOURCE_MY_ACCOUNT );
 
 		self::redirect(
 			$invite,

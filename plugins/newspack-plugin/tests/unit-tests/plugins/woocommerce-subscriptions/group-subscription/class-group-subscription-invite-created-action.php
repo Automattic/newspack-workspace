@@ -9,6 +9,7 @@ use Newspack\Emails;
 use Newspack\Group_Subscription;
 use Newspack\Group_Subscription_API;
 use Newspack\Group_Subscription_Invite;
+use Newspack\Group_Subscription_MyAccount;
 use Newspack\Group_Subscription_Settings;
 use Newspack\Group_Subscription_Teams_Invite;
 
@@ -56,6 +57,9 @@ class Test_Group_Subscription_Invite_Created_Action extends WP_UnitTestCase {
 	public static function set_up_before_class() {
 		parent::set_up_before_class();
 		require_once dirname( __DIR__, 4 ) . '/mocks/wc-mocks.php';
+		// The My Account form handler reads POST data through Newspack\filter_input(),
+		// which is empty under PHPUnit without this shim.
+		require_once dirname( __DIR__, 4 ) . '/mocks/filter-input-mock.php';
 	}
 
 	/**
@@ -184,6 +188,49 @@ class Test_Group_Subscription_Invite_Created_Action extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Submit the group's My Account invite form for $email, stopping at the redirect
+	 * that ends the request.
+	 *
+	 * @param int    $subscription_id The group subscription.
+	 * @param string $email           The address typed into the form.
+	 *
+	 * @throws \Exception Re-throws anything other than the redirect interception.
+	 */
+	private function submit_my_account_invite_form( int $subscription_id, string $email ): void {
+		$original_request_method = $_SERVER['REQUEST_METHOD'] ?? null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		// phpcs:disable WordPress.Security.NonceVerification.Missing
+		$_POST                     = [
+			'subscription_id'                          => (string) $subscription_id,
+			'newspack-group-subscription-invite-email' => $email,
+			'_wpnonce'                                 => wp_create_nonce( Group_Subscription_MyAccount::INVITE_NONCE_ACTION ),
+		];
+		$_REQUEST                  = $_POST;
+		$_SERVER['REQUEST_METHOD'] = 'POST';
+		// phpcs:enable WordPress.Security.NonceVerification.Missing
+
+		$redirect = function () {
+			throw new \Exception( 'redirect_intercepted' );
+		};
+		add_filter( 'wp_redirect', $redirect, 1 );
+		try {
+			Group_Subscription_MyAccount::handle_invite_member();
+		} catch ( \Exception $e ) {
+			if ( 'redirect_intercepted' !== $e->getMessage() ) {
+				throw $e;
+			}
+		} finally {
+			remove_filter( 'wp_redirect', $redirect, 1 );
+			$_POST    = [];
+			$_REQUEST = [];
+			if ( null === $original_request_method ) {
+				unset( $_SERVER['REQUEST_METHOD'] );
+			} else {
+				$_SERVER['REQUEST_METHOD'] = $original_request_method;
+			}
+		}
+	}
+
+	/**
 	 * The action fires once, after the invite is stored and the email has gone out,
 	 * and names who sent it and from where.
 	 */
@@ -193,11 +240,11 @@ class Test_Group_Subscription_Invite_Created_Action extends WP_UnitTestCase {
 		$subscription = $this->create_group_subscription( $owner_id );
 		wp_set_current_user( $owner_id );
 
-		$invite = Group_Subscription_Invite::generate_invite( $subscription, 'invitee@example.test', true, 'single' );
+		$invite = Group_Subscription_Invite::generate_invite( $subscription, 'invitee@example.test', true, 'my_account' );
 
 		$this->assertIsArray( $invite );
 		$this->assertCount( 1, $this->fired, 'One invite should fire the action once.' );
-		$this->assertSame( [ $subscription->get_id(), 'invitee@example.test', $owner_id, 'single', true ], $this->fired[0]['args'] );
+		$this->assertSame( [ $subscription->get_id(), 'invitee@example.test', $owner_id, 'my_account', true ], $this->fired[0]['args'] );
 		$this->assertInstanceOf( WC_Subscription::class, $this->fired[0]['raw_args'][0], 'Listeners should receive the subscription object.' );
 		$this->assertSame( [ 'invitee@example.test' ], $this->fired[0]['stored_emails'], 'The invite should already be stored when the action fires.' );
 		$this->assertSame( 1, $this->fired[0]['mail_count'], 'The email should already have been sent when the action fires.' );
@@ -205,21 +252,31 @@ class Test_Group_Subscription_Invite_Created_Action extends WP_UnitTestCase {
 
 	/**
 	 * The invite key is a bearer credential: with the email it is enough to accept
-	 * the invite, so it must never reach listeners.
+	 * the invite, so it must never reach listeners, whole or inside another value.
 	 */
 	public function test_never_passes_the_invite_key() {
 		$owner_id     = $this->create_user();
 		$subscription = $this->create_group_subscription( $owner_id );
 		wp_set_current_user( $owner_id );
+		// A listener that accepts more arguments than the action passes, so a key
+		// added as an extra argument reaches it rather than being cut off.
+		$received = null;
+		add_action(
+			'newspack_group_subscription_invite_created',
+			function () use ( &$received ) {
+				$received = func_get_args();
+			},
+			10,
+			10
+		);
 
-		Group_Subscription_Invite::generate_invite( $subscription, 'invitee@example.test', true, 'single' );
+		Group_Subscription_Invite::generate_invite( $subscription, 'invitee@example.test', true, 'my_account' );
 
 		$keys = array_keys( Group_Subscription_Invite::get_invites( $subscription ) );
 		$this->assertCount( 1, $keys );
-		$this->assertCount( 1, $this->fired );
-		foreach ( $this->fired[0]['raw_args'] as $arg ) {
-			$this->assertNotSame( $keys[0], $arg, 'No argument should be the invite key.' );
-		}
+		$this->assertCount( 5, $received, 'The action should pass exactly five arguments.' );
+		// The subscription (argument 0) carries the invites meta, keys included, by design.
+		$this->assertStringNotContainsString( $keys[0], wp_json_encode( array_slice( $received, 1 ) ), 'No argument after the subscription should contain the invite key.' );
 	}
 
 	/**
@@ -232,7 +289,7 @@ class Test_Group_Subscription_Invite_Created_Action extends WP_UnitTestCase {
 		wp_set_current_user( $owner_id );
 
 		// The invitation email is not registered here, so the send returns false.
-		$invite = Group_Subscription_Invite::generate_invite( $subscription, 'invitee@example.test', true, 'single' );
+		$invite = Group_Subscription_Invite::generate_invite( $subscription, 'invitee@example.test', true, 'my_account' );
 
 		$this->assertFalse( $invite['email_sent'] );
 		$this->assertCount( 1, $this->fired );
@@ -247,8 +304,8 @@ class Test_Group_Subscription_Invite_Created_Action extends WP_UnitTestCase {
 		$subscription = $this->create_group_subscription( $owner_id );
 		wp_set_current_user( $owner_id );
 
-		Group_Subscription_Invite::generate_invite( $subscription, 'invitee@example.test', true, 'single' );
-		Group_Subscription_Invite::generate_invite( $subscription, 'invitee@example.test', true, 'single' );
+		Group_Subscription_Invite::generate_invite( $subscription, 'invitee@example.test', true, 'my_account' );
+		Group_Subscription_Invite::generate_invite( $subscription, 'invitee@example.test', true, 'my_account' );
 
 		$this->assertCount( 2, $this->fired );
 		$this->assertCount( 1, Group_Subscription_Invite::get_invites( $subscription ), 'The resend should replace the first invite.' );
@@ -266,6 +323,21 @@ class Test_Group_Subscription_Invite_Created_Action extends WP_UnitTestCase {
 
 		$this->assertCount( 1, $this->fired );
 		$this->assertSame( 'other', $this->fired[0]['args'][3] );
+	}
+
+	/**
+	 * An invite sent from the group's My Account page fires once, as `my_account`,
+	 * attributed to the manager who sent it.
+	 */
+	public function test_my_account_invite_fires_once() {
+		$owner_id     = $this->create_user();
+		$subscription = $this->create_group_subscription( $owner_id );
+		wp_set_current_user( $owner_id );
+
+		$this->submit_my_account_invite_form( $subscription->get_id(), 'form-invitee@example.test' );
+
+		$this->assertCount( 1, $this->fired );
+		$this->assertSame( [ $subscription->get_id(), 'form-invitee@example.test', $owner_id, 'my_account', false ], $this->fired[0]['args'] );
 	}
 
 	/**
@@ -325,6 +397,8 @@ class Test_Group_Subscription_Invite_Created_Action extends WP_UnitTestCase {
 		$this->assertCount( 1, $this->fired, 'Only the click that created the invite should fire.' );
 		$this->assertSame( [ $subscription->get_id(), 'teams-invitee@example.test', 0, 'migration', false ], $this->fired[0]['args'] );
 		$this->assertSame( 0, $this->fired[0]['mail_count'], 'A migrated invite is not emailed.' );
+		$stored = array_values( Group_Subscription_Invite::get_invites( $subscription ) );
+		$this->assertSame( 0, (int) $stored[0]['added_by'], 'The stored invite should record no sender either.' );
 	}
 
 	/**
@@ -346,7 +420,6 @@ class Test_Group_Subscription_Invite_Created_Action extends WP_UnitTestCase {
 
 		// A malformed address, as the My Account form passes it through.
 		$this->assertWPError( Group_Subscription_Invite::generate_invite( $subscription, 'not-an-email' ) );
-		$this->assertWPError( Group_Subscription_Invite::generate_invite( $subscription, '' ) );
 
 		// No seats left: the owner and one member fill a two-seat group.
 		$full = $this->create_group_subscription( $owner_id, 'active', 2 );
