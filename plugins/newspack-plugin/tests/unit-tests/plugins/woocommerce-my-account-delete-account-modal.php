@@ -192,6 +192,35 @@ class Newspack_Test_My_Account_Delete_Account_Modal extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A gift's recipient holds its product, so their `active_subscriptions` item is
+	 * not empty, but the buyer pays for it. The recipient has no recurring payment
+	 * to warn about or manage, so the warning can't come from the item.
+	 */
+	public function test_gift_recipient_is_not_warned_about_recurring_payments() {
+		$buyer_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		$gift     = $this->create_subscription( $buyer_id );
+		\WCS_Gifting::$recipients[ $gift->get_id() ] = $this->reader_id;
+		add_filter(
+			'wcs_get_users_subscriptions',
+			function ( $subscriptions, $user_id ) use ( $gift ) {
+				if ( (int) $user_id === $this->reader_id ) {
+					$subscriptions[ $gift->get_id() ] = $gift;
+				}
+				return $subscriptions;
+			},
+			10,
+			2
+		);
+		Active_Subscriptions_Reader_Data::refresh( $this->reader_id );
+		$this->assertSame( [ 101 ], Reader_Data::get_active_subscriptions( $this->reader_id ), 'The recipient holds the gift product.' );
+
+		$modal = $this->render_delete_account_modal();
+
+		$this->assertStringNotContainsString( 'recurring payments will be cancelled', $modal );
+		$this->assertStringNotContainsString( 'Manage subscriptions', $modal );
+	}
+
+	/**
 	 * A member of a group subscription uses the owner's subscription and pays for
 	 * nothing, so there is no recurring payment to warn about or manage.
 	 */
