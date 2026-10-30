@@ -450,7 +450,7 @@ final class Gate_Access_Reader_Data {
 
 		$criteria['can_access_gates']    = [
 			'name'               => __( 'Can access content gate(s)', 'newspack-plugin' ),
-			'description'        => __( 'If the reader has paid access to any of the selected content gates, through a subscription they own, a group subscription they belong to, or a purchase.', 'newspack-plugin' ),
+			'description'        => __( 'Readers with paid access to any selected gate, through a subscription, group subscription, or purchase.', 'newspack-plugin' ),
 			'category'           => 'reader_revenue',
 			'matching_function'  => 'list__in',
 			'matching_attribute' => $attribute,
@@ -458,7 +458,7 @@ final class Gate_Access_Reader_Data {
 		];
 		$criteria['cannot_access_gates'] = [
 			'name'               => __( 'Cannot access content gate(s)', 'newspack-plugin' ),
-			'description'        => __( 'If the reader has paid access to none of the selected content gates.', 'newspack-plugin' ),
+			'description'        => __( 'Readers without paid access to any selected gate.', 'newspack-plugin' ),
 			'category'           => 'reader_revenue',
 			'matching_function'  => $is_enabled ? 'list__not_in' : 'list__in',
 			'matching_attribute' => $attribute,

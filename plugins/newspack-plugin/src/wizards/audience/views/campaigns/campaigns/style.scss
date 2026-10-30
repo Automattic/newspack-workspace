@@ -5,12 +5,13 @@
 	margin-bottom: wp-vars.$grid-unit-20;
 }
 
-.newspack-campaigns__toolbar {
-	margin-bottom: wp-vars.$grid-unit-10;
+.newspack-campaigns__toolbar.is-default-view .dataviews-filters__reset-button,
+.newspack-campaigns__toolbar.is-default-view .dataviews-filters__summary-chip-remove {
+	display: none;
 }
 
-.newspack-campaigns__toolbar.is-default-view .dataviews-filters__reset-button {
-	display: none;
+.newspack-campaigns__toolbar.is-default-view .dataviews-filters__summary-chip.has-reset {
+	padding-inline-end: var(--wpds-dimension-padding-md, #{wp-vars.$grid-unit-15});
 }
 
 .newspack-wizard__content:not(.newspack-wizard__content--full-width) .newspack-campaigns__toolbar:first-child {
