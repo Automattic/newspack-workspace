@@ -8,7 +8,7 @@
  * coerce those elements to "[object Object]".
  *
  * Regression coverage for NPPM-2729: the Campaigns admin page rendered blank
- * because a prompt's taxonomy arrays reached `promptDescription` holding a null
+ * because a prompt's taxonomy arrays reached `promptDetails` holding a null
  * entry — a term deleted out from under a stale object cache — and `.map()` threw
  * on `.name`. `warningForPopup` walks the same category arrays and throws the same
  * way. Both must tolerate null entries and a non-array value, since PHP's

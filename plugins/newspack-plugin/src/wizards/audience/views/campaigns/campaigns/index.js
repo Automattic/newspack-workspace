@@ -3,26 +3,24 @@
  */
 
 /**
- * WordPress dependencies.
- */
-import { DropdownMenu, MenuGroup, MenuItem, Notice, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
-import { DataViews as BaseDataViews } from '@wordpress/dataviews';
-import { decodeEntities } from '@wordpress/html-entities';
-import { useContext, useEffect, useMemo, useState, Fragment } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
-import { ENTER } from '@wordpress/keycodes';
-import { moreVertical } from '@wordpress/icons';
-import { Stack } from '@wordpress/ui';
-
-/**
  * External dependencies
  */
 import classnames from 'classnames';
 
 /**
+ * WordPress dependencies.
+ */
+import { Notice } from '@wordpress/components';
+import { DataViews as BaseDataViews } from '@wordpress/dataviews';
+import { decodeEntities } from '@wordpress/html-entities';
+import { useContext, useEffect, useMemo, useState, Fragment } from '@wordpress/element';
+import { __, sprintf } from '@wordpress/i18n';
+import { Stack } from '@wordpress/ui';
+
+/**
  * Internal dependencies
  */
-import { Button, DataViews, Modal, Router, TextControl, withWizardScreen } from '../../../../../../packages/components/src';
+import { DataViews, Router, withWizardScreen } from '../../../../../../packages/components/src';
 import SegmentGroup from '../../../components/segment-group';
 import { dataForCampaignId, isAboveHeader, placementForPopup } from '../utils';
 import { CampaignsContext } from '../../../contexts';
@@ -30,29 +28,8 @@ import './style.scss';
 
 const { useHistory } = Router;
 
-const MODAL_TYPE_DUPLICATE = 1;
-const MODAL_TYPE_RENAME = 2;
-const MODAL_TYPE_NEW = 3;
 const DEFAULT_CAMPAIGNS_FILTER = 'active';
 const STATUS_FILTERS = [ DEFAULT_CAMPAIGNS_FILTER, 'all', 'inactive', 'trash' ];
-
-const modalTitle = modalType => {
-	if ( MODAL_TYPE_RENAME === modalType ) {
-		return __( 'Rename Campaign', 'newspack-plugin' );
-	} else if ( MODAL_TYPE_DUPLICATE === modalType ) {
-		return __( 'Duplicate Campaign', 'newspack-plugin' );
-	}
-	return __( 'Add Campaign', 'newspack-plugin' );
-};
-
-const modalButton = modalType => {
-	if ( MODAL_TYPE_RENAME === modalType ) {
-		return __( 'Rename', 'newspack-plugin' );
-	} else if ( MODAL_TYPE_DUPLICATE === modalType ) {
-		return __( 'Duplicate', 'newspack-plugin' );
-	}
-	return __( 'Add', 'newspack-plugin' );
-};
 
 const filterByCampaign = ( prompts, campaignId ) => {
 	if ( ! campaignId ) {
@@ -115,67 +92,35 @@ const groupBySegment = ( segments, prompts ) => {
  * Campaign management screen.
  */
 const Campaigns = props => {
-	const {
-		campaignId: routeFilter = DEFAULT_CAMPAIGNS_FILTER,
-		campaigns = [],
-		manageCampaignGroup,
-		segments,
-		createCampaignGroup,
-		duplicateCampaignGroup,
-		deleteCampaignGroup,
-		archiveCampaignGroup,
-		renameCampaignGroup,
-	} = props;
+	const { campaignId: routeFilter = DEFAULT_CAMPAIGNS_FILTER, campaigns = [], segments } = props;
 
 	const isStatusRoute = STATUS_FILTERS.includes( routeFilter );
 	const campaignId = isStatusRoute ? undefined : routeFilter;
 
-	const [ chosenStatus, setChosenStatus ] = useState( isStatusRoute && DEFAULT_CAMPAIGNS_FILTER !== routeFilter ? routeFilter : null );
+	const routeStatus = isStatusRoute && DEFAULT_CAMPAIGNS_FILTER !== routeFilter ? routeFilter : null;
+	const [ chosenStatus, setChosenStatus ] = useState( routeStatus );
 	const [ placement, setPlacement ] = useState();
 	const [ search, setSearch ] = useState( '' );
-	const [ modalVisible, setModalVisible ] = useState();
-	const [ modalType, setModalType ] = useState();
-	const [ campaignName, setCampaignName ] = useState();
 
 	// A campaign opens on everything in it, so its drafts can be activated together.
 	const status = chosenStatus ?? ( campaignId ? 'all' : DEFAULT_CAMPAIGNS_FILTER );
 
 	const allPrompts = useContext( CampaignsContext );
-	const campaignPrompts = filterByStatus( filterByCampaign( allPrompts, campaignId ), 'all' );
-	const prompts = filterBySearch( filterByPlacement( filterByStatus( filterByCampaign( allPrompts, campaignId ), status ), placement ), search );
+	const statusPrompts = filterByStatus( filterByCampaign( allPrompts, campaignId ), status );
+	const prompts = filterBySearch( filterByPlacement( statusPrompts, placement ), search );
 	const placements = [ ...new Set( filterByStatus( allPrompts, 'all' ).map( placementForPopup ) ) ].filter( Boolean ).sort();
 	const hasUnassigned = filterByCampaign( filterByStatus( allPrompts, 'all' ), 'unassigned' ).length;
 	const hasPublishedAboveHeader = allPrompts.some( prompt => 'publish' === prompt.status && isAboveHeader( prompt ) );
 
+	// A new route opens on that route's own status: a campaign created while Trash
+	// is selected must not open on an empty Trash view.
 	useEffect( () => {
-		if ( isStatusRoute ) {
-			setChosenStatus( DEFAULT_CAMPAIGNS_FILTER === routeFilter ? null : routeFilter );
-		}
+		setChosenStatus( routeStatus );
 	}, [ routeFilter ] );
-
-	useEffect( () => {
-		if ( modalVisible ) {
-			document.getElementById( 'newspack-add-campaigns-modal-input' )?.focus();
-		}
-	}, [ modalVisible ] );
 
 	const history = useHistory();
 
-	const submitModal = modalText => {
-		if ( MODAL_TYPE_NEW === modalType ) {
-			setChosenStatus( null );
-			createCampaignGroup( modalText );
-		} else if ( MODAL_TYPE_RENAME === modalType ) {
-			renameCampaignGroup( campaignId, modalText );
-		} else if ( MODAL_TYPE_DUPLICATE === modalType ) {
-			setChosenStatus( null );
-			duplicateCampaignGroup( campaignId, modalText );
-		}
-		setModalVisible( false );
-	};
-
 	const campaignData = dataForCampaignId( campaignId, campaigns );
-	const isArchived = 'archive' === campaignData?.status;
 
 	const fields = useMemo(
 		() => [
@@ -212,7 +157,14 @@ const Campaigns = props => {
 					...( hasUnassigned ? [ { value: 'unassigned', label: __( 'Unassigned', 'newspack-plugin' ) } ] : [] ),
 					...campaigns.map( ( { term_id: id, name, status: groupStatus } ) => ( {
 						value: String( id ),
-						label: 'archive' === groupStatus ? `${ name } ${ __( '(archived)', 'newspack-plugin' ) }` : name,
+						label:
+							'archive' === groupStatus
+								? sprintf(
+										// Translators: %s: campaign name.
+										__( '%s (archived)', 'newspack-plugin' ),
+										name
+								  )
+								: name,
 					} ) ),
 				],
 				filterBy: { operators: [ 'is' ], isPrimary: true },
@@ -240,22 +192,29 @@ const Campaigns = props => {
 		const nextStatus = next.filters?.find( ( { field } ) => 'status' === field )?.value;
 		const nextCampaign = next.filters?.find( ( { field } ) => 'campaign' === field )?.value;
 		setPlacement( next.filters?.find( ( { field } ) => 'placement' === field )?.value );
-		if ( nextStatus !== status ) {
-			setChosenStatus( nextStatus ?? null );
-		}
 		if ( nextCampaign !== ( campaignId ? String( campaignId ) : undefined ) ) {
 			history.push( nextCampaign ? `/campaigns/${ nextCampaign }` : '/campaigns' );
+		} else if ( nextStatus !== status ) {
+			if ( campaignId ) {
+				setChosenStatus( nextStatus ?? null );
+			} else {
+				history.push( nextStatus && DEFAULT_CAMPAIGNS_FILTER !== nextStatus ? `/campaigns/${ nextStatus }` : '/campaigns' );
+			}
 		}
 	};
 
 	const isDefaultView = DEFAULT_CAMPAIGNS_FILTER === status && ! campaignId && ! placement && ! search;
-	const hideEmptySegments = 'trash' === status || 'inactive' === status || !! placement || !! search.trim();
-	const groups = groupBySegment( segments, prompts ).filter( segment => {
-		if ( DEFAULT_CAMPAIGNS_FILTER === status && ! campaignId && segment.configuration.is_disabled ) {
-			return false;
-		}
-		return ! hideEmptySegments || segment.prompts.length > 0;
-	} );
+	const campaignIsEmpty = !! campaignId && ! filterByStatus( filterByCampaign( allPrompts, campaignId ), 'all' ).length;
+	const hideEmptySegments = ! campaignIsEmpty && ( 'trash' === status || 'inactive' === status || !! placement || !! search.trim() );
+	const statusGroups = groupBySegment( segments, statusPrompts );
+	const groups = groupBySegment( segments, prompts )
+		.map( ( segment, index ) => ( { ...segment, statusPrompts: statusGroups[ index ].prompts } ) )
+		.filter( segment => {
+			if ( DEFAULT_CAMPAIGNS_FILTER === status && ! campaignId && segment.configuration.is_disabled ) {
+				return false;
+			}
+			return ! hideEmptySegments || segment.prompts.length > 0;
+		} );
 
 	return (
 		<Fragment>
@@ -282,117 +241,8 @@ const Campaigns = props => {
 						<BaseDataViews.Search label={ __( 'Search prompts', 'newspack-plugin' ) } />
 						<BaseDataViews.Filters />
 					</Stack>
-					{ campaignData && (
-						<Stack direction="row" align="center" className="newspack-dataviews__view-config">
-							<DropdownMenu icon={ moreVertical } label={ __( 'Campaign actions', 'newspack-plugin' ) }>
-								{ ( { onClose } ) => (
-									<>
-										{ campaignPrompts.length > 0 && (
-											<MenuGroup>
-												<MenuItem
-													onClick={ () => {
-														onClose();
-														manageCampaignGroup( campaignPrompts );
-													} }
-												>
-													{ __( 'Activate All Prompts', 'newspack-plugin' ) }
-												</MenuItem>
-												{ campaignPrompts.some( prompt => 'publish' === prompt.status ) && (
-													<MenuItem
-														onClick={ () => {
-															onClose();
-															manageCampaignGroup( campaignPrompts, 'DELETE' );
-														} }
-													>
-														{ __( 'Deactivate All Prompts', 'newspack-plugin' ) }
-													</MenuItem>
-												) }
-											</MenuGroup>
-										) }
-										<MenuGroup>
-											<MenuItem
-												onClick={ () => {
-													onClose();
-													setCampaignName( '' );
-													setModalType( MODAL_TYPE_DUPLICATE );
-													setModalVisible( true );
-												} }
-											>
-												{ __( 'Duplicate', 'newspack-plugin' ) }
-											</MenuItem>
-											<MenuItem
-												onClick={ () => {
-													onClose();
-													setCampaignName( campaignData.name );
-													setModalType( MODAL_TYPE_RENAME );
-													setModalVisible( true );
-												} }
-											>
-												{ __( 'Rename', 'newspack-plugin' ) }
-											</MenuItem>
-											<MenuItem
-												onClick={ () => {
-													onClose();
-													archiveCampaignGroup( campaignId, ! isArchived );
-												} }
-											>
-												{ isArchived ? __( 'Unarchive', 'newspack-plugin' ) : __( 'Archive', 'newspack-plugin' ) }
-											</MenuItem>
-										</MenuGroup>
-										<MenuGroup>
-											<MenuItem
-												isDestructive
-												onClick={ () => {
-													onClose();
-													deleteCampaignGroup( campaignId );
-												} }
-											>
-												{ __( 'Delete', 'newspack-plugin' ) }
-											</MenuItem>
-										</MenuGroup>
-									</>
-								) }
-							</DropdownMenu>
-						</Stack>
-					) }
 				</Stack>
 			</DataViews>
-			{ modalVisible && (
-				<Modal
-					title={ modalTitle( modalType ) }
-					onRequestClose={ () => {
-						setModalVisible( false );
-					} }
-				>
-					<TextControl
-						id="newspack-add-campaigns-modal-input"
-						placeholder={ __( 'Campaign Name', 'newspack-plugin' ) }
-						onChange={ setCampaignName }
-						label={ __( 'Campaign Name', 'newspack-plugin' ) }
-						hideLabelFromVision={ true }
-						value={ campaignName }
-						onKeyDown={ event => {
-							if ( ENTER === event.keyCode && '' !== campaignName ) {
-								event.preventDefault();
-								submitModal( campaignName );
-							}
-						} }
-					/>
-					<HStack justify="flex-end" spacing={ 4 } wrap className="newspack-modal__footer">
-						<Button
-							variant="secondary"
-							onClick={ () => {
-								setModalVisible( false );
-							} }
-						>
-							{ __( 'Cancel', 'newspack-plugin' ) }
-						</Button>
-						<Button variant="primary" disabled={ ! campaignName } onClick={ () => submitModal( campaignName ) }>
-							{ modalButton( modalType ) }
-						</Button>
-					</HStack>
-				</Modal>
-			) }
 			<Stack direction="column" gap="xl">
 				{ groups.map( segment => (
 					<SegmentGroup
@@ -400,6 +250,7 @@ const Campaigns = props => {
 						{ ...props }
 						segment={ segment }
 						campaignId={ campaignId || status }
+						isTrashView={ 'trash' === status }
 						campaignData={ campaignData }
 					/>
 				) ) }

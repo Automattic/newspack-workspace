@@ -16,7 +16,7 @@ import {
 	Notice as CoreNotice,
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
-import { useEffect, useState, Fragment } from '@wordpress/element';
+import { flushSync, useEffect, useState, Fragment } from '@wordpress/element';
 import { decodeEntities } from '@wordpress/html-entities';
 import { moreVertical } from '@wordpress/icons';
 import { Badge, Stack } from '@wordpress/ui';
@@ -95,7 +95,14 @@ const PromptActionCard = props => {
 						</div>
 					</Stack>
 					<Stack direction="row" gap="sm" align="center">
-						<DropdownMenu icon={ moreVertical } label={ __( 'More options', 'newspack-plugin' ) }>
+						<DropdownMenu
+							icon={ moreVertical }
+							label={ sprintf(
+								// Translators: %s: prompt title.
+								__( 'More options: %s', 'newspack-plugin' ),
+								displayTitle
+							) }
+						>
 							{ ( { onClose } ) =>
 								isTrash ? (
 									<MenuGroup
@@ -141,7 +148,9 @@ const PromptActionCard = props => {
 											<MenuItem href={ decodeEntities( editLink ) }>{ __( 'Edit', 'newspack-plugin' ) }</MenuItem>
 											<MenuItem
 												onClick={ () => {
-													onClose();
+													// The drawer records focus as it mounts, to return it on close. Close the
+													// menu first so that focus is on the toggle, not a menu item about to go.
+													flushSync( onClose );
 													setSettingsSession( session => session + 1 );
 													setIsSettingsOpen( true );
 												} }

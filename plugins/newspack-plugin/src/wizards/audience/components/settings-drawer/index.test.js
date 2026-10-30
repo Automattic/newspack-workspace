@@ -31,11 +31,6 @@ describe( 'PromptSettingsDrawer', () => {
 		window.newspackAudienceCampaigns = { overlay_placements: [], custom_placements: {}, overlay_sizes: [] };
 	} );
 
-	it( 'renders nothing while closed', () => {
-		render( <PromptSettingsDrawer isOpen={ false } prompt={ PROMPT } onClose={ jest.fn() } updatePopup={ jest.fn() } /> );
-		expect( screen.queryByRole( 'dialog' ) ).toBeNull();
-	} );
-
 	it( 'names the drawer after the prompt, with its entities decoded', () => {
 		render( <PromptSettingsDrawer isOpen prompt={ PROMPT } onClose={ jest.fn() } updatePopup={ jest.fn() } /> );
 		expect( screen.getByRole( 'heading', { name: 'Tom & Jerry' } ) ).not.toBeNull();

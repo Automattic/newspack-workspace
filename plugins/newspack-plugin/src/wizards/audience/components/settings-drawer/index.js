@@ -31,12 +31,12 @@ const PromptSettingsDrawer = ( { isOpen, prompt, disabled, onClose, updatePopup 
 		<Drawer.Root
 			isOpen={ isOpen }
 			size="large"
-			isDirty={ JSON.stringify( promptConfig ) !== JSON.stringify( prompt ) }
+			isDirty={ isOpen && ( disabled || JSON.stringify( promptConfig ) !== JSON.stringify( prompt ) ) }
 			onRequestClose={ onClose }
 		>
 			<Drawer.Header>
 				<Icon className="newspack-drawer__icon" icon={ megaphone } size={ 24 } />
-				<Drawer.Title>{ decodeEntities( prompt.title ) }</Drawer.Title>
+				<Drawer.Title>{ prompt.title.length ? decodeEntities( prompt.title ) : __( '(no title)', 'newspack-plugin' ) }</Drawer.Title>
 				<Drawer.CloseIcon />
 			</Drawer.Header>
 			<Drawer.Content>
@@ -152,7 +152,7 @@ const PromptSettingsDrawer = ( { isOpen, prompt, disabled, onClose, updatePopup 
 				<Drawer.Action variant="secondary" closes>
 					{ __( 'Cancel', 'newspack-plugin' ) }
 				</Drawer.Action>
-				<Drawer.Action variant="primary" disabled={ disabled } onClick={ handleSave }>
+				<Drawer.Action variant="primary" disabled={ disabled } isBusy={ disabled } onClick={ handleSave }>
 					{ __( 'Save', 'newspack-plugin' ) }
 				</Drawer.Action>
 			</Drawer.Footer>

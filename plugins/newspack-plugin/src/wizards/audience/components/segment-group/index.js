@@ -5,7 +5,7 @@
 /**
  * WordPress dependencies.
  */
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { CardBody, CardDivider, DropdownMenu, MenuGroup, MenuItem } from '@wordpress/components';
 import { useState, Fragment } from '@wordpress/element';
 import { blockTable, header, layout, moreVertical, postList } from '@wordpress/icons';
@@ -37,10 +37,11 @@ const addNewURL = ( placement, campaignId, segmentId ) => {
 };
 
 const SegmentGroup = props => {
-	const { campaignData, campaignId, segment } = props;
+	const { campaignData, campaignId, isTrashView, segment } = props;
 	const [ modalVisible, setModalVisible ] = useState( false );
 	const { label, id, prompts } = segment;
-	const campaignToPreview = 'unassigned' !== campaignId ? parseInt( campaignId ) : -1;
+	const isPreviewingCampaign = 'unassigned' === campaignId || +campaignId > 0;
+	const campaignToPreview = 'unassigned' === campaignId ? -1 : parseInt( campaignId );
 
 	const description = id ? segmentDescriptionItems( segment ) : [ __( 'All readers, regardless of segment', 'newspack-plugin' ) ];
 
@@ -48,7 +49,11 @@ const SegmentGroup = props => {
 	if ( 'unassigned' === campaignId ) {
 		emptySegmentText = __( 'No unassigned prompts in this segment.', 'newspack-plugin' );
 	} else if ( campaignData ) {
-		emptySegmentText = __( 'No prompts in this segment for', 'newspack-plugin' ) + ' ' + campaignData.name + '.';
+		emptySegmentText = sprintf(
+			// Translators: %s: campaign name.
+			__( 'No prompts in this segment for %s.', 'newspack-plugin' ),
+			campaignData.name
+		);
 	} else if ( 'all' === campaignId ) {
 		emptySegmentText = __( 'No prompts in this segment.', 'newspack-plugin' );
 	} else {
@@ -90,7 +95,7 @@ const SegmentGroup = props => {
 							) }
 						</Stack>
 						<Stack direction="row" gap="sm" align="center">
-							{ 'unassigned' !== campaignId && 'trash' !== campaignId && (
+							{ 'unassigned' !== campaignId && ! isTrashView && (
 								<Fragment>
 									<Button variant="secondary" onClick={ () => setModalVisible( ! modalVisible ) }>
 										{ __( 'Add Prompt', 'newspack-plugin' ) }
@@ -248,11 +253,18 @@ const SegmentGroup = props => {
 								</Fragment>
 							) }
 							<SegmentationPreview
-								campaign={ campaignId ? campaignToPreview : false }
+								campaign={ isPreviewingCampaign ? campaignToPreview : false }
 								segment={ id }
-								showUnpublished={ !! campaignId } // Only if previewing a specific campaign/group.
+								showUnpublished={ isPreviewingCampaign } // Only if previewing a specific campaign/group.
 								renderButton={ ( { showPreview } ) => (
-									<DropdownMenu icon={ moreVertical } label={ __( 'Segment actions', 'newspack-plugin' ) }>
+									<DropdownMenu
+										icon={ moreVertical }
+										label={ sprintf(
+											// Translators: %s: segment name.
+											__( 'Segment actions: %s', 'newspack-plugin' ),
+											label
+										) }
+									>
 										{ ( { onClose } ) => (
 											<MenuGroup>
 												<MenuItem
@@ -282,7 +294,7 @@ const SegmentGroup = props => {
 				<Fragment key={ item.id }>
 					<PromptActionCard
 						segmentDisabled={ segment.configuration.is_disabled }
-						warning={ warningForPopup( prompts, item ) }
+						warning={ warningForPopup( segment.statusPrompts || prompts, item ) }
 						prompt={ item }
 						{ ...props }
 					/>

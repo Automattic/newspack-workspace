@@ -148,7 +148,7 @@ export const promptDetails = prompt => {
 	];
 	if ( validCampaigns.length > 0 ) {
 		details.push( {
-			label: validCampaigns.length === 1 ? __( 'Campaign:', 'newspack-plugin' ) : __( 'Campaigns:', 'newspack-plugin' ),
+			label: _n( 'Campaign:', 'Campaigns:', validCampaigns.length, 'newspack-plugin' ),
 			value: names( validCampaigns ),
 		} );
 	}
@@ -203,7 +203,7 @@ const dateBoundLabel = bound => {
  * Render a date-range criterion value.
  *
  * Each bound is itself an object, so the generic `key: value` pass in
- * segmentDescription() would stringify it as "[object Object]".
+ * segmentDescriptionItems() would stringify it as "[object Object]".
  *
  * @param {*} value The criterion value.
  * @return {?string} A human-readable range, or null when the value isn't one.

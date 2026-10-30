@@ -12,6 +12,7 @@ import { Component } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { addQueryArgs } from '@wordpress/url';
 import { decodeEntities } from '@wordpress/html-entities';
+import { Stack } from '@wordpress/ui';
 
 /**
  * External dependencies.
@@ -25,6 +26,7 @@ import { Button, WebPreview, withWizard } from '../../../../../packages/componen
 import Router from '../../../../../packages/components/src/proxied-imports/router';
 import { Campaigns, ContextualPrompts, Settings, Segments } from './views';
 import AddCampaignAction from './campaigns/add-campaign-action';
+import CampaignActions from './campaigns/campaign-actions';
 import { CampaignsContext } from '../../contexts';
 
 const { HashRouter, NavLink, Redirect, Route, Switch } = Router;
@@ -106,7 +108,10 @@ class AudienceCampaigns extends Component {
 			quiet: true,
 		} )
 			.then( this.updateAfterAPI )
-			.catch( error => setError( error ) );
+			.catch( error => {
+				this.setState( { inFlight: false } );
+				setError( error );
+			} );
 	};
 
 	/**
@@ -360,14 +365,27 @@ class AudienceCampaigns extends Component {
 											<CampaignsContext.Provider value={ prompts }>
 												<Campaigns
 													{ ...popupManagementSharedProps }
-													archiveCampaignGroup={ archiveCampaignGroup }
 													campaignId={ campaignId }
-													createCampaignGroup={ createCampaignGroup }
-													deleteCampaignGroup={ deleteCampaignGroup }
-													duplicateCampaignGroup={ duplicateCampaignGroup }
-													renameCampaignGroup={ renameCampaignGroup }
 													campaigns={ campaigns }
-													headerActions={ <AddCampaignAction createCampaignGroup={ createCampaignGroup } /> }
+													subHeaderText={ __(
+														'Manage the prompts readers see, grouped by the segment each one targets.',
+														'newspack-plugin'
+													) }
+													headerActions={
+														<Stack direction="row" gap="sm" align="center">
+															<AddCampaignAction createCampaignGroup={ createCampaignGroup } />
+															<CampaignActions
+																archiveCampaignGroup={ archiveCampaignGroup }
+																campaignId={ campaignId }
+																campaigns={ campaigns }
+																deleteCampaignGroup={ deleteCampaignGroup }
+																duplicateCampaignGroup={ duplicateCampaignGroup }
+																manageCampaignGroup={ this.manageCampaignGroup }
+																prompts={ prompts }
+																renameCampaignGroup={ renameCampaignGroup }
+															/>
+														</Stack>
+													}
 												/>
 											</CampaignsContext.Provider>
 										);
@@ -380,6 +398,14 @@ class AudienceCampaigns extends Component {
 											{ ...props }
 											{ ...sharedProps }
 											setSegments={ segmentsList => this.setState( { segments: segmentsList } ) }
+											subHeaderText={
+												props.match.params.id
+													? undefined
+													: __(
+															'Group readers by what they do on the site, then target prompts at them.',
+															'newspack-plugin'
+													  )
+											}
 											headerActions={
 												props.match.params.id ? undefined : (
 													<NavLink to="segments/new">
@@ -391,9 +417,29 @@ class AudienceCampaigns extends Component {
 									) }
 								/>
 								{ contextualPromptsEnabled && (
-									<Route path="/contextual-prompts" exact render={ () => <ContextualPrompts { ...sharedProps } /> } />
+									<Route
+										path="/contextual-prompts"
+										exact
+										render={ () => (
+											<ContextualPrompts
+												{ ...sharedProps }
+												subHeaderText={ __(
+													'Let editors generate story-specific donation prompts with AI.',
+													'newspack-plugin'
+												) }
+											/>
+										) }
+									/>
 								) }
-								<Route path="/settings" render={ () => <Settings { ...sharedProps } /> } />
+								<Route
+									path="/settings"
+									render={ () => (
+										<Settings
+											{ ...sharedProps }
+											subHeaderText={ __( 'Choose how prompts behave across the site.', 'newspack-plugin' ) }
+										/>
+									) }
+								/>
 								<Redirect to="/campaigns" />
 							</Switch>
 						</HashRouter>
