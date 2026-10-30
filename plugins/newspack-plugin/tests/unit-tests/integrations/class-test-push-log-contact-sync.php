@@ -858,7 +858,8 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 	public function test_a_deletion_flag_saved_without_its_fields_reports_a_config_failure( bool $on_retry ) {
 		$this->require_action_scheduler();
 		$spy              = $this->register_deletion_spy( 'unsynced-alert-spy', 'flag' );
-		$partial_save     = [ 'unsynced_fields' => [ 'NP_Account_Deleted', 'NP_Membership_Status' ] ];
+		$prefix           = $spy->get_metadata_prefix();
+		$partial_save     = [ 'unsynced_fields' => [ $prefix . 'Account_Deleted', $prefix . 'Membership_Status' ] ];
 		$spy->push_result = $on_retry ? new \WP_Error( 'provider_down', 'Provider down' ) : $partial_save;
 		$failures         = $this->capture_permanent_failures();
 
@@ -874,15 +875,27 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 		$this->assertSame( 'reader@example.test', $failures[0]['email'] );
 		$this->assertSame( 'flag', $failures[0]['mode'] );
 		$this->assertSame( 'permanent_config', $failures[0]['error_class'] );
-		$this->assertStringContainsString( 'NP_Account_Deleted, NP_Membership_Status', $failures[0]['reason'] );
+		$this->assertStringContainsString( $prefix . 'Account_Deleted, ' . $prefix . 'Membership_Status', $failures[0]['reason'] );
 	}
 
 	/**
-	 * A flag saved with all its fields reports nothing.
+	 * A flag that saved both deletion fields reports nothing, whatever else
+	 * the provider left out: the deletion reached it, and an unrelated field
+	 * a full audience refuses is not a deletion problem.
+	 *
+	 * @testWith [[]]
+	 *           [["Favorite_Section"]]
+	 *
+	 * @param string[] $other_unsynced Unprefixed names of non-deletion fields the provider left out.
 	 */
-	public function test_a_complete_deletion_flag_reports_no_failure() {
-		$this->register_deletion_spy( 'complete-flag-spy', 'flag' );
-		$failures = $this->capture_permanent_failures();
+	public function test_a_deletion_flag_with_both_deletion_fields_reports_no_failure( array $other_unsynced ) {
+		$spy              = $this->register_deletion_spy( 'complete-flag-spy', 'flag' );
+		$prefix           = $spy->get_metadata_prefix();
+		$spy->push_result = [
+			'email'           => 'reader@example.test',
+			'unsynced_fields' => array_map( fn( $field ) => $prefix . $field, $other_unsynced ),
+		];
+		$failures         = $this->capture_permanent_failures();
 
 		$this->delete_sample_reader();
 
