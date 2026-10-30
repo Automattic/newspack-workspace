@@ -69,7 +69,7 @@
 					--newspack-ui-button-ink: var(--newspack-ui-color-text);
 
 					&:focus-visible {
-						@include mixins.focus-edge( $inset: true );
+						@include mixins.focus-edge( $width: 2px );
 					}
 
 					@media ( forced-colors: active ) {

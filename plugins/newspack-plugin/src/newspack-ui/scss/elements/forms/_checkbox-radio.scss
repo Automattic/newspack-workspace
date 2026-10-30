@@ -37,7 +37,7 @@
 			transition: background-color var(--newspack-ui-duration-color) ease;
 
 			&:checked {
-				@include mixins.focus-line( $inner: inset 0 0 0 1px var(--newspack-ui-color-surface) );
+				@include mixins.focus-edge( var(--newspack-ui-color-surface), $halo: var(--newspack-ui-color-focus) );
 
 				transition: background-color var(--newspack-ui-duration-color) ease;
 			}
@@ -104,7 +104,7 @@
 			box-shadow: inset 0 0 0 5px var(--newspack-ui-color-selected);
 
 			&:focus-visible:where(:not(.newspack-ui__input-card > *)) {
-				@include mixins.focus-line( $inner: (inset 0 0 0 1px var(--newspack-ui-color-surface), inset 0 0 0 5px var(--newspack-ui-color-selected)) );
+				@include mixins.focus-edge( var(--newspack-ui-color-surface), $halo: var(--newspack-ui-color-focus), $inner: inset 0 0 0 5px var(--newspack-ui-color-selected) );
 			}
 		}
 
@@ -162,6 +162,7 @@
 		}
 
 		:is(input[type="checkbox"], input[type="radio"]):checked:focus-visible {
+			border-color: var(--newspack-ui-forced-mark);
 			outline-color: CanvasText;
 		}
 	}
@@ -180,12 +181,12 @@
 		}
 
 		&:focus-visible:where(:not(.newspack-ui__input-card > *)) {
-			@include mixins.focus-line( $inner: inset 0 0 0 1px var(--newspack-ui-color-error) );
+			@include mixins.focus-edge( var(--newspack-ui-color-error), $halo: var(--newspack-ui-color-focus) );
 
 			transition: background-color var(--newspack-ui-duration-color) ease;
 
 			&[type="radio"]:checked {
-				@include mixins.focus-line( $inner: (inset 0 0 0 1px var(--newspack-ui-color-error), inset 0 0 0 5px var(--newspack-ui-color-selected)) );
+				@include mixins.focus-edge( var(--newspack-ui-color-error), $halo: var(--newspack-ui-color-focus), $inner: inset 0 0 0 5px var(--newspack-ui-color-selected) );
 			}
 		}
 
@@ -200,6 +201,7 @@
 			}
 
 			&:checked:focus-visible {
+				border-color: var(--newspack-ui-forced-mark);
 				outline-color: CanvasText;
 			}
 

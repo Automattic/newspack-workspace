@@ -31,24 +31,26 @@ $font-size-classes: ".newspack-ui__font--2xs, .newspack-ui__font--xs, .newspack-
 	}
 }
 
-@mixin focus-edge( $color: var(--newspack-ui-color-focus), $inset: false ) {
-	$halo: color-mix(in srgb, #{$color} var(--newspack-ui-focus-halo-mix), transparent);
+@mixin focus-edge( $color: var(--newspack-ui-color-focus), $width: 1px, $halo: $color, $inner: null, $over-content: false ) {
+	$halo-shadow: 0 0 0 var(--newspack-ui-focus-halo-width) color-mix(in srgb, #{$halo} var(--newspack-ui-focus-halo-mix), transparent);
 
-	outline: 2px solid transparent;
-	outline-offset: 0;
+	border-color: $color;
 
-	@if $inset {
-		box-shadow: inset 0 0 0 1px $color, 0 0 0 var(--newspack-ui-focus-halo-width) $halo;
+	@if $over-content {
+		box-shadow: $halo-shadow;
+		outline: $width solid $color;
+		outline-offset: calc(-1px - #{$width});
 	}
 	@else {
-		border-color: $color;
-		box-shadow: 0 0 0 var(--newspack-ui-focus-halo-width) $halo;
+		box-shadow: inset 0 0 0 $width $color, $inner, $halo-shadow;
+		outline: 2px solid transparent;
+		outline-offset: 0;
 	}
 
 	transition: none;
 }
 
-@mixin focus-line( $color: var(--newspack-ui-color-focus), $inner: null, $inset: false, $radius: null ) {
+@mixin focus-line( $color: var(--newspack-ui-color-focus), $inner: null, $inset: false, $radius: null, $width: 2px ) {
 	$halo: color-mix(in srgb, #{$color} var(--newspack-ui-focus-halo-mix), transparent);
 	$position: null;
 	$offset: 0;
@@ -58,7 +60,7 @@ $font-size-classes: ".newspack-ui__font--2xs, .newspack-ui__font--xs, .newspack-
 		$offset: -2px;
 	}
 
-	box-shadow: $inner, $position 0 0 0 1px $color, $position 0 0 0 calc(1px + var(--newspack-ui-focus-halo-width)) $halo;
+	box-shadow: $inner, $position 0 0 0 $width $color, $position 0 0 0 calc(#{$width} + var(--newspack-ui-focus-halo-width)) $halo;
 	outline: 2px solid transparent;
 	outline-offset: $offset;
 	transition: none;
@@ -126,14 +128,12 @@ $font-size-classes: ".newspack-ui__font--2xs, .newspack-ui__font--xs, .newspack-
 	}
 
 	&:has(> input:checked:focus-visible) {
-		@include focus-line( $inner: inset 0 0 0 1px var(--newspack-ui-color-selected) );
+		@include focus-edge( var(--newspack-ui-color-selected), $halo: var(--newspack-ui-color-focus) );
 	}
 
 	&:has(> input[aria-invalid="true"]:focus-visible),
 	&:where(.newspack-ui__field-error *):has(> input:focus-visible) {
-		border-color: var(--newspack-ui-color-error);
-
-		@include focus-line( $inner: inset 0 0 0 1px var(--newspack-ui-color-error) );
+		@include focus-edge( var(--newspack-ui-color-error), $halo: var(--newspack-ui-color-focus) );
 	}
 }
 

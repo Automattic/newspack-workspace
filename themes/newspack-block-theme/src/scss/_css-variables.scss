@@ -1,4 +1,3 @@
-@use "sass:map";
 @use "mixins";
 
 // Extra variables
@@ -35,28 +34,6 @@ $colors: (
 
 :where(.wp-block-cover, .wp-block-cover-image):where(.is-light:not(.has-text-color)) {
 	--wp--custom--focus--color: var(--wp--custom--color--neutral-100);
-}
-
-:where(.wp-element-button, .wp-block-button__link):where(.has-background:not([class*="-background-color"]), .wp-block-search__button:not([class*="-background-color"])) {
-	--wp--custom--focus--fill: #{mixins.$focus-color};
-}
-
-@each $slug in accent-3, base, base-2, base-3, base-4, base-5, light-gray, white, primary-variation, secondary-variation {
-	:where(.wp-element-button, .wp-block-button__link):where(.has-#{$slug}-background-color) {
-		--wp--custom--focus--fill: #{mixins.$focus-color};
-	}
-}
-
-@each $slug in accent, accent-2, contrast, contrast-2, contrast-3 {
-	:where(.wp-element-button, .wp-block-button__link):where(.has-#{$slug}-background-color) {
-		--wp--custom--focus--fill: var(--wp--preset--color--#{$slug});
-	}
-}
-
-@each $name in primary, secondary, dark-gray, medium-gray {
-	:where(.wp-element-button, .wp-block-button__link):where(.has-#{$name}-background-color) {
-		--wp--custom--focus--fill: #{map.get($colors, $name)};
-	}
 }
 
 // Apply the custom CSS variables defined in theme.json.

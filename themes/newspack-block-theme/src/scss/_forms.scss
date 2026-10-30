@@ -155,7 +155,7 @@ input[type="submit"]:not(.newspack-ui__button) {
 	}
 
 	&:focus-visible {
-		@include mixins.focus-line-filled;
+		@include mixins.focus-fill;
 	}
 
 	&:disabled {

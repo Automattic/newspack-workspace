@@ -126,9 +126,7 @@
 
 			&:focus,
 			&:focus-visible {
-				border-color: var(--newspack-ui-color-error);
-
-				@include mixins.focus-line( $inner: inset 0 0 0 1px var(--newspack-ui-color-error) );
+				@include mixins.focus-edge( var(--newspack-ui-color-error), $halo: var(--newspack-ui-color-focus) );
 			}
 		}
 	}

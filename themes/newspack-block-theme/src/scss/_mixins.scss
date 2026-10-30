@@ -4,11 +4,14 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 
 @mixin focus-edge($color: var(--wp--preset--color--contrast), $important: null, $halo: $color) {
 	border-color: $color $important;
-	box-shadow: 0 0 0 var(--wp--custom--focus--halo-width) color-mix(in srgb, #{$halo} var(--wp--custom--focus--halo-mix), transparent) $important;
+	box-shadow:
+		inset 0 0 0 1px $color,
+		0 0 0 var(--wp--custom--focus--halo-width) color-mix(in srgb, #{$halo} var(--wp--custom--focus--halo-mix), transparent) $important;
 	outline: 2px solid transparent $important;
 
 	@media (prefers-contrast: more) {
 		box-shadow:
+			inset 0 0 0 1px $color,
 			0 0 0 1px $halo,
 			0 0 0 calc(1px + var(--wp--custom--focus--halo-width)) color-mix(in srgb, #{$halo} var(--wp--custom--focus--halo-mix), transparent) $important;
 	}
@@ -29,12 +32,12 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 	outline-offset: -2px $important;
 }
 
-@mixin focus-line-filled($color: var(--wp--custom--focus--fill), $gap: var(--wp--preset--color--base), $important: null, $inner: null) {
+@mixin focus-fill($color: currentcolor, $halo: $focus-color, $important: null, $inner: null) {
+	border-color: $color $important;
 	box-shadow:
-		inset 0 0 0 1px $gap,
+		inset 0 0 0 2px $color,
 		$inner,
-		0 0 0 1px $color,
-		0 0 0 calc(1px + var(--wp--custom--focus--halo-width)) color-mix(in srgb, #{$color} var(--wp--custom--focus--halo-mix), transparent) $important;
+		0 0 0 var(--wp--custom--focus--halo-width) color-mix(in srgb, #{$halo} var(--wp--custom--focus--halo-mix), transparent) $important;
 	outline: 2px solid transparent $important;
 }
 
@@ -96,11 +99,7 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 		box-shadow: inset 0 0 0 1px var(--wp--custom--color--error-50);
 
 		&:focus-visible:where(:not(.newspack-ui *)) {
-			border-color: var(--wp--custom--color--error-50);
-			box-shadow:
-				inset 0 0 0 1px var(--wp--custom--color--error-50),
-				0 0 0 1px var(--wp--preset--color--contrast),
-				0 0 0 calc(1px + var(--wp--custom--focus--halo-width)) color-mix(in srgb, var(--wp--preset--color--contrast) var(--wp--custom--focus--halo-mix), transparent);
+			@include focus-edge(var(--wp--custom--color--error-50), $halo: var(--wp--preset--color--contrast));
 		}
 	}
 }
@@ -161,12 +160,11 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 			}
 
 			&[aria-invalid="true"]:not(:checked) {
-				@include focus-line-filled($focus-color, var(--wp--custom--color--error-50), $important);
-				border-color: var(--wp--custom--color--error-50) $important;
+				@include focus-edge(var(--wp--custom--color--error-50), $important, $halo: $focus-color);
 			}
 
 			&:checked {
-				@include focus-line-filled($focus-color, $important: $important);
+				@include focus-fill(var(--wp--preset--color--base), $important: $important);
 			}
 
 			@media (forced-colors: active) {
@@ -237,6 +235,7 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 			}
 
 			&:focus-visible {
+				border-color: Highlight $important;
 				box-shadow: none $important;
 			}
 		}
@@ -269,7 +268,7 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 		}
 
 		&:focus-visible:where(:not(.newspack-ui *)) {
-			@include focus-line-filled($focus-color, $important: $important, $inner: inset 0 0 0 5px var(--wp--preset--color--contrast));
+			@include focus-fill(var(--wp--preset--color--base), $important: $important, $inner: inset 0 0 0 5px var(--wp--preset--color--contrast));
 		}
 	}
 

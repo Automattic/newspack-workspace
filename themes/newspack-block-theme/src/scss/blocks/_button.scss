@@ -4,11 +4,7 @@
 .wp-block-button__link {
 	&:where(:not(.newspack-ui__button, .newspack-ui .button, .newspack-ui .woocommerce-Button)) {
 		&:focus-visible {
-			@include mixins.focus-line-filled;
-		}
-
-		&.has-background-transparent:not([class*="-background-color"]):focus-visible {
-			@include mixins.focus-line;
+			@include mixins.focus-fill;
 		}
 	}
 }
@@ -84,7 +80,7 @@
 			}
 
 			&:focus-visible {
-				@include mixins.focus-line;
+				@include mixins.focus-edge(currentcolor, $halo: mixins.$focus-color);
 			}
 		}
 	}

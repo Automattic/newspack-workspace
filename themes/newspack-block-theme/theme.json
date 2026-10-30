@@ -316,8 +316,7 @@
 			},
 			"focus": {
 				"color": "var( --wp--preset--color--contrast )",
-				"fill": "var( --wp--preset--color--accent )",
-				"halo-mix": "20%",
+				"halo-mix": "30%",
 				"halo-width": "3px"
 			},
 			"line-height": {
