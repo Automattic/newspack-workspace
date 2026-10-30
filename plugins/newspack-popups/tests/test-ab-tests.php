@@ -609,16 +609,15 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	 * @return int
 	 */
 	private function count_prompts() {
-		return count(
-			get_posts(
-				[
-					'post_type'   => Newspack_Popups::NEWSPACK_POPUPS_CPT,
-					'post_status' => 'any',
-					'fields'      => 'ids',
-					'numberposts' => -1,
-				]
-			)
+		$query = new WP_Query(
+			[
+				'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+				'post_status'    => 'any',
+				'fields'         => 'ids',
+				'posts_per_page' => 1,
+			]
 		);
+		return $query->found_posts;
 	}
 
 	/**
