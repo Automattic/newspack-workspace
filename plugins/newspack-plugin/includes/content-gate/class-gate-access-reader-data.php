@@ -15,8 +15,9 @@ defined( 'ABSPATH' ) || exit;
  *
  * Access here means holding a product a gate's rules require: a subscription
  * the reader owns, a seat in someone else's group subscription, or a one-time
- * purchase. `active_subscriptions` sees only the first, and the membership
- * criteria are unregistered once WooCommerce Memberships is off.
+ * purchase. `active_subscriptions` covers subscriptions, gifts received and
+ * group seats, but not one-time purchases. The membership criteria are
+ * unregistered once WooCommerce Memberships is off.
  *
  * Each reader's list carries a stamp: the gate configuration it was computed
  * against and when. A page view recomputes a list that is missing, was

@@ -778,10 +778,10 @@ final class Reader_Data {
 	 * Delegates to Active_Subscriptions_Reader_Data, which owns the list. The list
 	 * is recomputed from the subscriptions as they stand now, so the event's
 	 * product IDs and statuses are not used. A gift is listed under its recipient,
-	 * not its buyer, and the buyer's list loses it too. Group members are marked
-	 * for recompute on their next page view, not recomputed here. This method
-	 * stays the registered handler, with the same signature, so existing callers
-	 * keep working.
+	 * not its buyer, and the buyer's list is recomputed too, so it never keeps the
+	 * gift. Group members are marked for recompute on their next page view, not
+	 * recomputed here. This method stays the registered handler, with the same
+	 * signature, so existing callers keep working.
 	 *
 	 * @param int   $timestamp Timestamp.
 	 * @param array $data      Data.
