@@ -243,7 +243,7 @@ const Campaigns = props => {
 					</Stack>
 				</Stack>
 			</DataViews>
-			<Stack direction="column" gap="xl">
+			<Stack direction="column" gap="lg">
 				{ groups.map( segment => (
 					<SegmentGroup
 						key={ segment.id || 'everyone' }

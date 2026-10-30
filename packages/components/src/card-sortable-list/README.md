@@ -25,7 +25,7 @@ A drag-and-drop sortable list of cards, built on the `@wordpress/ui` Card. Each 
 
 ## `CardListRow`
 
-The card a sortable row is built from, for a list that isn't sortable. It takes one `DraggableItem` as `item`, without the drag handle and move buttons, and passes other props to the card. `size="large"` keeps the card's own padding and uses a heavier title, for a row that stands alone on a page. Lay the rows out with `Stack`.
+The card a sortable row is built from, for a list that isn't sortable. It takes one `DraggableItem` as `item`, without the drag handle and move buttons, and passes other props to the card. `size="large"` uses even padding, for a row that stands alone on a page. Lay the rows out with `Stack`.
 
 ## Usage
 

@@ -14,6 +14,12 @@ import { useState } from '@wordpress/element';
  */
 import SegmentsList from './segments-list';
 
+// Below the medium breakpoint the page header folds secondary actions into its menu.
+jest.mock( '@wordpress/compose', () => ( {
+	...jest.requireActual( '@wordpress/compose' ),
+	useViewportMatch: jest.fn( () => true ),
+} ) );
+
 const segment = ( id, name, isDisabled = false ) => ( { id, name, configuration: { is_disabled: isDisabled }, criteria: [] } );
 // The live region repeats a spoken notice, and keeps it after the notice has gone.
 const NOTICE = { selector: '.components-notice__content' };
@@ -71,13 +77,13 @@ describe( 'SegmentsList', () => {
 		renderList( { segments: [ SEGMENTS[ 0 ] ] } );
 		const header = document.querySelector( '.newspack-page__header-actions' );
 		expect( within( header ).getByRole( 'link', { name: 'Add Segment' } ) ).toHaveAttribute( 'href', '#/segments/new' );
-		expect( within( header ).queryByRole( 'button', { name: 'More actions' } ) ).not.toBeInTheDocument();
+		expect( within( header ).queryByRole( 'button', { name: 'Segment Priority' } ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'opens the modal from the header menu', async () => {
+	it( 'opens the modal from the header button', async () => {
 		renderList();
-		fireEvent.click( screen.getByRole( 'button', { name: 'More actions' } ) );
-		fireEvent.click( await screen.findByRole( 'menuitem', { name: 'Segment Priority' } ) );
+		const header = document.querySelector( '.newspack-page__header-actions' );
+		fireEvent.click( within( header ).getByRole( 'button', { name: 'Segment Priority' } ) );
 		expect( await screen.findByRole( 'dialog', { name: 'Segment Priority' } ) ).toBeInTheDocument();
 	} );
 

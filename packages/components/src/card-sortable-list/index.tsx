@@ -405,9 +405,9 @@ const CardSortableList = ( {
 										onDragStart={ onDraggableStart }
 										onDragEnd={ onDraggableEnd }
 										controls={
-											<Stack direction="row" align="center" gap="xs" className="newspack-card--core--sortable-list__controls">
+											<Stack direction="row" align="center" className="newspack-card--core--sortable-list__controls">
 												<Icon icon={ dragHandle } className="newspack-card--core--sortable-list__drag-handle" />
-												<Stack direction="column" gap="xs" className="newspack-card--core--sortable-list__move-buttons">
+												<Stack direction="column" className="newspack-card--core--sortable-list__move-buttons">
 													<IconButton
 														variant="minimal"
 														tone="neutral"

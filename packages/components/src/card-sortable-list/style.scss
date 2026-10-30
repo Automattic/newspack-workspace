@@ -33,21 +33,43 @@ $drop-duration: 400ms; /* must match DROP_ANIMATION_DURATION in index.tsx */
 .newspack-card--core--sortable-list__card {
 	background: var( --wpds-color-background-surface-neutral-strong, #{wp-colors.$white} );
 
-	&:not(.is-large) .newspack-card--core--sortable-list__header {
-		padding: var( --wpds-dimension-padding-md, #{wp-vars.$grid-unit-15} ) var( --wpds-dimension-padding-lg, #{wp-vars.$grid-unit-20} );
+	&:not(.is-large) {
+		min-height: wp-vars.$grid-unit-70;
 	}
 
-	&.is-large .newspack-card--core--sortable-list__title {
-		font-weight: var( --wpds-typography-font-weight-emphasis, 600 );
+	&:not(.is-large) .newspack-card--core--sortable-list__header {
+		flex: 1;
+		padding: 0 var( --wpds-dimension-padding-lg, #{wp-vars.$grid-unit-20} );
+	}
+
+	&:not(.is-large) .newspack-card--core--sortable-list__summary {
+		padding-block: var( --wpds-dimension-padding-md, #{wp-vars.$grid-unit-15} );
+	}
+
+	&.is-large {
+		--wp-ui-card-padding: var( --wpds-dimension-padding-lg, #{wp-vars.$grid-unit-20} );
+	}
+
+	.newspack-card--core--sortable-list__controls {
+		align-self: stretch;
+		border-inline-end: var( --wpds-border-width-xs, #{wp-vars.$border-width} ) solid var( --wpds-color-stroke-surface-neutral, #{wp-colors.$gray-300} );
+		flex: none;
+		margin-inline-start: calc( -1 * var( --wpds-dimension-padding-lg, #{wp-vars.$grid-unit-20} ) );
+		padding-inline: var( --wpds-dimension-padding-sm, #{wp-vars.$grid-unit-10} );
 	}
 
 	.newspack-card--core--sortable-list__drag-handle {
-		color: var( --wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700} );
+		color: var( --wpds-color-foreground-content-neutral, #{wp-colors.$gray-900} );
 		flex: none;
 	}
 
 	.newspack-card--core--sortable-list__move-buttons {
 		flex: none;
+
+		button {
+			height: wp-vars.$grid-unit-20;
+			min-height: 0;
+		}
 	}
 
 	.newspack-card--core--sortable-list__summary {
@@ -60,7 +82,7 @@ $drop-duration: 400ms; /* must match DROP_ANIMATION_DURATION in index.tsx */
 		display: flex;
 		flex-wrap: wrap;
 		font-size: var( --wpds-typography-font-size-lg, #{wp-vars.$font-size-large} );
-		font-weight: wp-vars.$font-weight-medium;
+		font-weight: var( --wpds-typography-font-weight-emphasis, 600 );
 		gap: var( --wpds-dimension-gap-sm, #{wp-vars.$grid-unit-10} );
 		margin: 0;
 		text-transform: none;

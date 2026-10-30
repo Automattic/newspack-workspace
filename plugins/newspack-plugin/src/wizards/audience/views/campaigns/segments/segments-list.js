@@ -176,21 +176,21 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, ...screenProps }
 	);
 
 	const headerActions = [
+		...( segments.length > 1
+			? [
+					{
+						type: 'secondary',
+						label: __( 'Segment Priority', 'newspack-plugin' ),
+						onClick: () => setShowPriorityModal( true ),
+					},
+			  ]
+			: [] ),
 		{
 			type: 'primary',
 			label: __( 'Add Segment', 'newspack-plugin' ),
 			mobileIcon: plus,
 			href: '#/segments/new',
 		},
-		...( segments.length > 1
-			? [
-					{
-						type: 'more',
-						label: __( 'Segment Priority', 'newspack-plugin' ),
-						onClick: () => setShowPriorityModal( true ),
-					},
-			  ]
-			: [] ),
 	];
 
 	return (
@@ -227,7 +227,7 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, ...screenProps }
 							</Stack>
 						</Stack>
 					</DataViews>
-					<Stack direction="column" gap="xl" ref={ rowsRef }>
+					<Stack direction="column" gap="lg" ref={ rowsRef }>
 						{ visibleSegments.map( segment => (
 							<Disabled key={ segment.id } isDisabled={ busyIds.includes( segment.id ) }>
 								<CardListRow

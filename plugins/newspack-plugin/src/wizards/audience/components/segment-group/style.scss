@@ -13,7 +13,7 @@
 
 	.newspack-wizard__content &__card &__content {
 		margin-block-start: 0;
-		padding: var(--wpds-dimension-padding-2xl, #{wp-vars.$grid-unit-30});
+		padding: var(--wpds-dimension-padding-lg, #{wp-vars.$grid-unit-20});
 	}
 
 	&__title {
