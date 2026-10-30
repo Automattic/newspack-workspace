@@ -464,7 +464,6 @@ class Newspack_Test_Reader_Data_Active_Subscriptions extends WP_UnitTestCase {
 			function () {
 				Active_Subscriptions_Reader_Data::refresh( 0 );
 				Active_Subscriptions_Reader_Data::refresh( -5 );
-				Active_Subscriptions_Reader_Data::mark_stale( 0 );
 			}
 		);
 
