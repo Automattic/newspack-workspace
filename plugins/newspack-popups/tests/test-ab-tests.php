@@ -561,8 +561,9 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * Create a prompt through REST the way the block editor does, sending every
-	 * registered A/B key at its default unless the test overrides it.
+	 * Create a prompt through REST the way a REST client does, sending every
+	 * registered A/B key at its default unless the test overrides it. The block
+	 * editor never takes this path: it saves an auto-draft by ID.
 	 *
 	 * @param string $role Role of the user creating it.
 	 * @param array  $meta A/B values to send in place of the defaults.
@@ -618,6 +619,16 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 				]
 			)
 		);
+	}
+
+	/**
+	 * Assert the refusal came from the guard. Core's own meta refusals are also
+	 * 403s with the same error code, so only the message tells them apart.
+	 *
+	 * @param WP_REST_Response $response Response to a refused save.
+	 */
+	private function assert_refused_by_guard( $response ) {
+		self::assertStringStartsWith( "You don't have permission to change this prompt's A/B test settings.", $response->get_data()['message'] );
 	}
 
 	/**
@@ -759,7 +770,6 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 
 		self::assertSame( 201, $response->get_status(), wp_json_encode( $response->get_data() ) );
 		self::assertSame( $before + 1, $this->count_prompts() );
-		self::assertSame( '', get_post_meta( $response->get_data()['id'], Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
 	}
 
 	/**
@@ -774,6 +784,7 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		$response = $this->create_prompt_as( 'editor', [ Newspack_Popups_AB_Tests::META_TEST_ID => 'editor-made-test' ] );
 
 		self::assertSame( 403, $response->get_status() );
+		$this->assert_refused_by_guard( $response );
 		self::assertSame( $before, $this->count_prompts() );
 	}
 
@@ -819,6 +830,7 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		);
 
 		self::assertSame( 403, $response->get_status() );
+		$this->assert_refused_by_guard( $response );
 		self::assertSame( '60', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_CONTROL_SHARE, true ) );
 		self::assertSame( $title_before, get_the_title( $prompt_id ) );
 	}
