@@ -141,7 +141,7 @@ describe( 'Content Gates toolbar', () => {
 	const changeView = next => act( () => mockDataViewsProps.onChangeView( { ...mockDataViewsProps.view, ...next } ) );
 	const filterIds = () => mockDataViewsProps.fields.filter( field => field.filterBy ).map( field => field.id );
 	const inactiveFilter = { field: 'status', operator: 'is', value: 'inactive' };
-	const allStatuses = { ...inactiveFilter, value: 'all' };
+	const allStatuses = { field: 'status', operator: 'is', value: undefined };
 
 	it( 'opens on every gate, inactive ones included, and hides Reset', () => {
 		renderGates( [ active, inactive ] );
@@ -167,9 +167,9 @@ describe( 'Content Gates toolbar', () => {
 		changeView( { filters: [ inactiveFilter ] } );
 
 		const statusField = mockDataViewsProps.fields.find( field => 'status' === field.id );
-		expect( statusField.elements[ 0 ] ).toEqual( { value: 'all', label: 'All' } );
+		expect( statusField.elements[ 0 ] ).toEqual( { value: undefined, label: 'All' } );
 
-		changeView( { filters: [ { ...inactiveFilter, value: 'all' } ] } );
+		changeView( { filters: [ { ...inactiveFilter, value: undefined } ] } );
 
 		expect( screen.getByText( 'Alpha' ) ).toBeInTheDocument();
 		expect( mockDataViewsProps.view.filters ).toEqual( [ allStatuses ] );

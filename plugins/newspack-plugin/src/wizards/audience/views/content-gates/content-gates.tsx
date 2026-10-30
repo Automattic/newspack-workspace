@@ -31,8 +31,6 @@ import { filterGates, getGatesSubTitle, getUsefulGateFilterValues } from './util
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from './consts';
 import './style.scss';
 
-const ALL_GATES = 'all';
-
 const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] ) => void } ) => {
 	const wizardData = useWizardData( AUDIENCE_CONTENT_GATES_WIZARD_SLUG ) as WizardData;
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
@@ -83,7 +81,8 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 			id,
 			label,
 			elements: [
-				{ value: ALL_GATES, label: __( 'All', 'newspack-plugin' ) },
+				// No value: DataViews marks this radio selected while the filter is unset, and shows no remove button on the chip.
+				{ value: undefined, label: __( 'All', 'newspack-plugin' ) },
 				...values.map( value => ( { value, label: labels[ value ] } ) ),
 			],
 			filterBy: { operators: [ 'is' as const ], isPrimary: true },
@@ -109,19 +108,15 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 		perPage: 100,
 		fields: [],
 		filters: [
-			...( statusValues.length ? [ { field: 'status', operator: 'is' as const, value: status ?? ALL_GATES } ] : [] ),
-			...( accessValues.length ? [ { field: 'access', operator: 'is' as const, value: access ?? ALL_GATES } ] : [] ),
+			...( statusValues.length ? [ { field: 'status', operator: 'is' as const, value: status } ] : [] ),
+			...( accessValues.length ? [ { field: 'access', operator: 'is' as const, value: access } ] : [] ),
 		],
 	};
 
 	const onChangeView = ( next: { search?: string; filters?: { field: string; value?: string }[] } ) => {
 		setChosenSearch( next.search || '' );
-		const chosen = ( id: string ) => {
-			const value = next.filters?.find( ( { field } ) => id === field )?.value;
-			return ALL_GATES === value ? undefined : value;
-		};
-		setChosenStatus( chosen( 'status' ) );
-		setChosenAccess( chosen( 'access' ) );
+		setChosenStatus( next.filters?.find( ( { field } ) => 'status' === field )?.value );
+		setChosenAccess( next.filters?.find( ( { field } ) => 'access' === field )?.value );
 	};
 
 	useEffect( () => {
