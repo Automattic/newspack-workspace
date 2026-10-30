@@ -50,8 +50,9 @@ final class Active_Subscriptions_Reader_Data {
 
 		// Nor does handing a gift to someone else, or turning a group on or off on
 		// its subscription. Turning group subscriptions on or off for a whole
-		// product fires no hook either, so members of groups that inherit the
-		// product's setting are put right at their next login or within a day.
+		// product fires no `newspack_group_subscription_settings_updated`, so
+		// members of groups that inherit the product's setting are put right at
+		// their next login or within a day.
 		add_action( 'woocommerce_subscriptions_gifting_recipient_changed', [ __CLASS__, 'handle_gift_recipient_changed' ], 10, 3 );
 		add_action( 'newspack_group_subscription_settings_updated', [ __CLASS__, 'handle_group_settings_updated' ], 10, 2 );
 
@@ -202,7 +203,9 @@ final class Active_Subscriptions_Reader_Data {
 	/**
 	 * Mark stale the readers whose list changes when a gift's recipient does: the
 	 * new recipient gains the product, and whoever held it before loses it. That
-	 * is the earlier recipient, or the buyer when the subscription had none.
+	 * is the earlier recipient. With none, the buyer is marked in case they held
+	 * it (an admin can turn a buyer's own subscription into a gift), which costs
+	 * one meta delete when they didn't.
 	 *
 	 * Clearing a recipient (`WCS_Gifting::delete_recipient_user()`) fires no hook.
 	 * The recipient who lost the gift, and whoever holds it afterwards, are put
@@ -228,9 +231,10 @@ final class Active_Subscriptions_Reader_Data {
 	 * The owner holds their own subscription either way.
 	 *
 	 * This covers a setting changed on the subscription. Turning group
-	 * subscriptions on or off for a product fires no hook, so members of groups
-	 * that inherit the product's setting are put right at their next login or
-	 * within a day.
+	 * subscriptions on or off for a product fires no
+	 * `newspack_group_subscription_settings_updated`, so members of groups that
+	 * inherit the product's setting are put right at their next login or within
+	 * a day.
 	 *
 	 * @param \WC_Subscription $subscription The group subscription.
 	 * @param string[]         $changed_keys The settings that changed.

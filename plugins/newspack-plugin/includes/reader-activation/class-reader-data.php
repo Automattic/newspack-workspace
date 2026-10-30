@@ -780,9 +780,9 @@ final class Reader_Data {
 	 * `active_subscriptions` lists the change affects. See
 	 * Active_Subscriptions_Reader_Data::handle_product_subscription_changed().
 	 *
-	 * This method stays the registered handler because Data_Events stores its
-	 * callable in the Action Scheduler args of a failed handler's retry, and drops
-	 * a queued retry whose handler is no longer callable.
+	 * This method stays because Data_Events stores its callable in the Action
+	 * Scheduler args of a failed handler's retry, and drops a queued retry whose
+	 * handler is no longer callable.
 	 *
 	 * @param int   $timestamp Timestamp.
 	 * @param array $data      Data.

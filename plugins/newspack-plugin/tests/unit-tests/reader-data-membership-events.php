@@ -27,7 +27,7 @@ class Newspack_Test_Reader_Data_Membership_Events extends WP_UnitTestCase {
 
 	/**
 	 * Clear the WP_CLI mock's static output buffers, so CLI transcripts don't
-	 * leak between tests.
+	 * leak between tests, and empty the mock subscription store.
 	 */
 	public function set_up() {
 		parent::set_up();
