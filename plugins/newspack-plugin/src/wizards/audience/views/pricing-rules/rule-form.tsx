@@ -7,7 +7,7 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { useState, useEffect, useCallback, useMemo, useRef } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
@@ -557,6 +557,20 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 		.filter( Boolean )
 		.join( ' ' );
 
+	// A saved rule can target a scope the site doesn't register, such as all
+	// subscriptions while WooCommerce Subscriptions is inactive. The form holds and
+	// saves that scope; listing it keeps the select showing what the rule targets
+	// instead of its first option, and lets the publisher pick it again after trying
+	// another.
+	const scopeOptions = vocab.scopes.map( s => ( { label: s.label, value: s.id } ) );
+	if ( rule?.scope_type && ! vocab.scopes.some( s => s.id === rule.scope_type ) ) {
+		scopeOptions.push( {
+			/* translators: %s: name or ID of a product scope, such as all_subscriptions. */
+			label: sprintf( __( '%s (not available on this site)', 'newspack-plugin' ), rule.scope_label || rule.scope_type ),
+			value: rule.scope_type,
+		} );
+	}
+
 	return (
 		<div className="newspack-pricing-rules__form">
 			<div className="newspack-pricing-rules__goal-section">
@@ -606,7 +620,7 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 						label={ __( 'Applies to', 'newspack-plugin' ) }
 						help={ __( 'Which products this rule targets.', 'newspack-plugin' ) }
 						value={ scopeType }
-						options={ vocab.scopes.map( s => ( { label: s.label, value: s.id } ) ) }
+						options={ scopeOptions }
 						onChange={ st => {
 							setScopeType( st );
 							// Category and product ids are different namespaces — clear on switch.
