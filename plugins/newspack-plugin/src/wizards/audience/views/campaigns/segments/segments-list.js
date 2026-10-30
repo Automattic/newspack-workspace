@@ -25,6 +25,8 @@ import SegmentsPriority from './segments-priority';
 
 const { useHistory } = Router;
 
+const DEFAULT_STATUS = 'all';
+
 const renderCriteria = segment => {
 	const criteria = segmentDescriptionItems( { ...segment, configuration: { ...segment.configuration, is_disabled: false } } );
 	if ( ! criteria.length ) {
@@ -53,7 +55,7 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, ...screenProps }
 	const [ busyIds, setBusyIds ] = useState( [] );
 	const [ error, setError ] = useState( null );
 	const [ search, setSearch ] = useState( '' );
-	const [ status, setStatus ] = useState();
+	const [ status, setStatus ] = useState( DEFAULT_STATUS );
 	const [ showPriorityModal, setShowPriorityModal ] = useState( false );
 	const lastRequest = useRef( 0 );
 	const lastAppliedRequest = useRef( 0 );
@@ -120,13 +122,6 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, ...screenProps }
 		sendRowRequest( segment, { method: 'DELETE' }, __( 'There was an error deleting the segment. Please try again.', 'newspack-plugin' ) );
 	};
 
-	const hasDisabledSegment = segments.some( segment => segment.configuration.is_disabled );
-
-	// With the chip gone there would be nothing left to clear the filter with.
-	if ( status && ! hasDisabledSegment ) {
-		setStatus( undefined );
-	}
-
 	const fields = useMemo(
 		() => [
 			{
@@ -136,22 +131,19 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, ...screenProps }
 				enableSorting: false,
 				getValue: ( { item } ) => item.name,
 			},
-			...( hasDisabledSegment
-				? [
-						{
-							id: 'status',
-							label: __( 'Status', 'newspack-plugin' ),
-							elements: [
-								{ value: 'enabled', label: __( 'Enabled', 'newspack-plugin' ) },
-								{ value: 'disabled', label: __( 'Disabled', 'newspack-plugin' ) },
-							],
-							filterBy: { operators: [ 'is' ], isPrimary: true },
-							enableSorting: false,
-						},
-				  ]
-				: [] ),
+			{
+				id: 'status',
+				label: __( 'Status', 'newspack-plugin' ),
+				elements: [
+					{ value: 'all', label: __( 'All', 'newspack-plugin' ) },
+					{ value: 'enabled', label: __( 'Enabled', 'newspack-plugin' ) },
+					{ value: 'disabled', label: __( 'Disabled', 'newspack-plugin' ) },
+				],
+				filterBy: { operators: [ 'is' ], isPrimary: true },
+				enableSorting: false,
+			},
 		],
-		[ hasDisabledSegment ]
+		[]
 	);
 
 	const view = {
@@ -160,19 +152,19 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, ...screenProps }
 		page: 1,
 		perPage: 100,
 		fields: [],
-		filters: status ? [ { field: 'status', operator: 'is', value: status } ] : [],
+		filters: [ { field: 'status', operator: 'is', value: status } ],
 	};
 
 	const onChangeView = next => {
 		setSearch( next.search || '' );
-		setStatus( next.filters?.find( ( { field } ) => 'status' === field )?.value );
+		setStatus( next.filters?.find( ( { field } ) => 'status' === field )?.value ?? DEFAULT_STATUS );
 	};
 
 	const searchTerm = search.trim().toLowerCase();
 	const visibleSegments = segments.filter(
 		segment =>
 			decodeEntities( segment.name ).toLowerCase().includes( searchTerm ) &&
-			( ! status || ( 'disabled' === status ) === Boolean( segment.configuration.is_disabled ) )
+			( DEFAULT_STATUS === status || ( 'disabled' === status ) === Boolean( segment.configuration.is_disabled ) )
 	);
 
 	const headerActions = [
@@ -211,7 +203,7 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, ...screenProps }
 			{ segments.length ? (
 				<>
 					<DataViews
-						className={ classnames( 'newspack-campaigns__toolbar', { 'is-default-view': ! status && ! search } ) }
+						className={ classnames( 'newspack-campaigns__toolbar', { 'is-default-view': DEFAULT_STATUS === status && ! search } ) }
 						view={ view }
 						onChangeView={ onChangeView }
 						fields={ fields }
@@ -234,7 +226,7 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, ...screenProps }
 									size="large"
 									item={ {
 										id: segment.id,
-										title: segment.name,
+										title: decodeEntities( segment.name ),
 										description: renderCriteria( segment ),
 										badge: segment.is_criteria_duplicated
 											? { label: __( 'Duplicate', 'newspack-plugin' ), intent: 'medium' }
@@ -244,7 +236,7 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, ...screenProps }
 										actionsLabel: sprintf(
 											// Translators: %s: segment name.
 											__( 'Segment actions: %s', 'newspack-plugin' ),
-											segment.name
+											decodeEntities( segment.name )
 										),
 										actions: [
 											{
@@ -262,7 +254,7 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, ...screenProps }
 							</Disabled>
 						) ) }
 						{ ! visibleSegments.length && (
-							<p className="newspack-campaigns__no-results">{ __( 'No segments match your search.', 'newspack-plugin' ) }</p>
+							<p className="newspack-campaigns__no-results">{ __( 'No segments match your search or filter.', 'newspack-plugin' ) }</p>
 						) }
 					</Stack>
 				</>

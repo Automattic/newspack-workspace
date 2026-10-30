@@ -5,11 +5,6 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { MemoryRouter } from 'react-router-dom';
 
 /**
- * WordPress dependencies
- */
-import { useState } from '@wordpress/element';
-
-/**
  * Internal dependencies
  */
 import SegmentsList from './segments-list';
@@ -57,6 +52,13 @@ describe( 'SegmentsList', () => {
 		expect( screen.getByRole( 'button', { name: 'Segment actions: Donors' } ) ).toBeInTheDocument();
 	} );
 
+	it( 'decodes the stored segment name for display and accessible names', () => {
+		renderList( { segments: [ segment( 'a', 'News &amp; Views' ) ] } );
+		expect( rowTitles() ).toEqual( [ 'News & Views' ] );
+		expect( screen.getByRole( 'checkbox', { name: 'News & Views' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'button', { name: 'Segment actions: News & Views' } ) ).toBeInTheDocument();
+	} );
+
 	it( 'has no move buttons', () => {
 		renderList();
 		expect( screen.queryByRole( 'button', { name: 'Move one position up' } ) ).not.toBeInTheDocument();
@@ -69,7 +71,7 @@ describe( 'SegmentsList', () => {
 		fireEvent.change( search, { target: { value: 'donor' } } );
 		return waitFor( () => expect( rowTitles() ).toEqual( [ 'Donors' ] ) ).then( () => {
 			fireEvent.change( search, { target: { value: 'nothing like this' } } );
-			return waitFor( () => expect( screen.getByText( 'No segments match your search.' ) ).toBeInTheDocument() );
+			return waitFor( () => expect( screen.getByText( 'No segments match your search or filter.' ) ).toBeInTheDocument() );
 		} );
 	} );
 
@@ -144,41 +146,26 @@ describe( 'SegmentsList', () => {
 	} );
 
 	describe( 'Status filter', () => {
-		const statusChip = () => screen.queryByRole( 'button', { name: /^Status/ } );
+		const statusChip = () => screen.getByRole( 'button', { name: /^Status/ } );
 
-		it( 'is hidden while every segment is enabled, leaving search', () => {
+		it( 'defaults to All, listing every segment, even when none is disabled', () => {
 			renderList( { segments: [ segment( 'a', 'Donors' ), segment( 'c', 'Members' ) ] } );
-			expect( statusChip() ).not.toBeInTheDocument();
-			expect( screen.getByRole( 'searchbox', { name: 'Search segments' } ) ).toBeInTheDocument();
+			expect( statusChip() ).toHaveTextContent( 'All' );
+			expect( rowTitles() ).toEqual( [ 'Donors', 'Members' ] );
 		} );
 
-		it( 'shows when a segment is disabled', () => {
+		it( 'narrows the list to the chosen status', async () => {
 			renderList();
-			expect( statusChip() ).toBeInTheDocument();
-		} );
-
-		it( 'clears itself when the last disabled segment is enabled, so the list is not stuck empty', async () => {
-			const enabled = [ segment( 'a', 'Donors' ), segment( 'b', 'Newsletter readers' ) ];
-			const wizardApiFetch = jest.fn().mockResolvedValue( enabled );
-			const StatefulList = () => {
-				const [ segments, setSegments ] = useState( SEGMENTS );
-				return <SegmentsList segments={ segments } setSegments={ setSegments } wizardApiFetch={ wizardApiFetch } />;
-			};
-			window.newspackAudienceCampaigns = { api: '/api', criteria: [] };
-			render(
-				<MemoryRouter>
-					<StatefulList />
-				</MemoryRouter>
-			);
-
 			fireEvent.click( statusChip() );
 			fireEvent.click( await screen.findByRole( 'option', { name: 'Disabled' } ) );
 			await waitFor( () => expect( rowTitles() ).toEqual( [ 'Newsletter readers' ] ) );
+		} );
 
-			fireEvent.click( screen.getByRole( 'checkbox', { name: 'Newsletter readers' } ) );
-
-			await waitFor( () => expect( rowTitles() ).toEqual( [ 'Donors', 'Newsletter readers' ] ) );
-			expect( statusChip() ).not.toBeInTheDocument();
+		it( 'says so when no segment has the chosen status', async () => {
+			renderList( { segments: [ segment( 'a', 'Donors' ) ] } );
+			fireEvent.click( statusChip() );
+			fireEvent.click( await screen.findByRole( 'option', { name: 'Disabled' } ) );
+			expect( await screen.findByText( 'No segments match your search or filter.' ) ).toBeInTheDocument();
 		} );
 	} );
 } );
