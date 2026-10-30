@@ -63,7 +63,7 @@ h6 {
 h1 {
 	font-size: var(--newspack-theme-font-size-xl);
 
-	@include utilities.media(tablet) {
+	@include utilities.media( tablet ) {
 		font-size: var(--newspack-theme-font-size-xxl);
 	}
 }
@@ -71,7 +71,7 @@ h1 {
 h2 {
 	font-size: var(--newspack-theme-font-size-lg);
 
-	@include utilities.media(tablet) {
+	@include utilities.media( tablet ) {
 		font-size: var(--newspack-theme-font-size-xl);
 	}
 }
@@ -79,7 +79,7 @@ h2 {
 h3 {
 	font-size: calc(1em * 1.3);
 
-	@include utilities.media(tablet) {
+	@include utilities.media( tablet ) {
 		font-size: var(--newspack-theme-font-size-lg);
 	}
 }
@@ -173,7 +173,7 @@ h1.wp-block-post-title {
 	font-weight: 700;
 	line-height: 1.2;
 
-	@include utilities.media(desktop) {
+	@include utilities.media( desktop ) {
 		font-size: var(--newspack-theme-font-size-xxxl);
 	}
 }
@@ -276,7 +276,7 @@ h1.wp-block-post-title {
 		padding-left: 0;
 	}
 
-	@include utilities.media(tablet) {
+	@include utilities.media( tablet ) {
 		padding-left: structure.$size__spacing-unit;
 		padding-right: structure.$size__spacing-unit;
 	}
@@ -288,7 +288,7 @@ h1.wp-block-post-title {
 		min-height: 250px;
 		padding: calc(1.375 * #{structure.$size__spacing-unit});
 
-		@include utilities.media(tablet) {
+		@include utilities.media( tablet ) {
 			max-width: 400px;
 		}
 
@@ -297,7 +297,7 @@ h1.wp-block-post-title {
 			padding-right: 0;
 		}
 
-		@include utilities.media(tablet) {
+		@include utilities.media( tablet ) {
 			padding: calc(2 * #{structure.$size__spacing-unit});
 		}
 
@@ -454,19 +454,19 @@ div[data-align="full"] {
 html :where(.wp-block)[data-align="left"],
 html :where(.wp-block)[data-align="right"] {
 	&:has(.wp-block-group) {
-		@include utilities.media(mobileonly) {
+		@include utilities.media( mobileonly ) {
 			height: auto;
 		}
 	}
 
 	& > .wp-block-group {
-		@include utilities.media(mobileonly) {
+		@include utilities.media( mobileonly ) {
 			float: none !important;
 			margin-left: 0 !important;
 			margin-right: 0 !important;
 		}
 
-		@include utilities.media(mobile) {
+		@include utilities.media( mobile ) {
 			max-width: 50%;
 
 			iframe[style="width: 100%; height: 600px; max-width: 100%; max-height: 100%;"] {
@@ -589,7 +589,7 @@ html :where(.wp-block)[data-align="right"] {
 	p {
 		font-size: var(--newspack-theme-font-size-md);
 
-		@include utilities.media(tablet) {
+		@include utilities.media( tablet ) {
 			font-size: var(--newspack-theme-font-size-lg);
 		}
 	}
@@ -674,7 +674,7 @@ html :where(.wp-block)[data-align="right"] {
 		p {
 			font-size: 1rem;
 
-			@include utilities.media(tablet) {
+			@include utilities.media( tablet ) {
 				font-size: var(--newspack-theme-font-size-md);
 			}
 		}
@@ -761,7 +761,7 @@ html :where(.wp-block)[data-align="right"] {
 	font-family: var(--newspack-theme-font-heading);
 	font-size: var(--newspack-theme-font-size-sm);
 	font-weight: bold;
-	padding: (0.55 * structure.$size__spacing-unit) structure.$size__spacing-unit !important; // !important to override style from Gutenberg.
+	padding: ( 0.55 * structure.$size__spacing-unit ) structure.$size__spacing-unit !important; // !important to override style from Gutenberg.
 
 	svg {
 		height: 32px;
@@ -875,7 +875,7 @@ html :where(.wp-block)[data-align="right"] {
 	}
 
 	li {
-		padding-bottom: (0.75 * structure.$size__spacing-unit);
+		padding-bottom: ( 0.75 * structure.$size__spacing-unit );
 
 		&.menu-item-has-children,
 		&:last-child {
@@ -904,14 +904,14 @@ ul.wp-block-archives,
 
 .wp-block-categories {
 	ul {
-		padding-top: (0.75 * structure.$size__spacing-unit);
+		padding-top: ( 0.75 * structure.$size__spacing-unit );
 		@include mixins-main.nestedSubMenuPadding();
 	}
 
 	li ul {
 		list-style: none;
 		padding-left: 0;
-		margin-bottom: (-0.75 * structure.$size__spacing-unit);
+		margin-bottom: ( -0.75 * structure.$size__spacing-unit );
 	}
 }
 
@@ -935,8 +935,8 @@ ul.wp-block-archives,
 	&.is-grid {
 		li {
 			border-top: 2px solid var(--newspack-theme-color-border);
-			padding-top: (1 * structure.$size__spacing-unit);
-			margin-bottom: (2 * structure.$size__spacing-unit);
+			padding-top: ( 1 * structure.$size__spacing-unit );
+			margin-bottom: ( 2 * structure.$size__spacing-unit );
 			a {
 				&::after {
 					content: "";
@@ -1003,21 +1003,13 @@ ul.wp-block-list {
 
 			&::before {
 				background: currentcolor;
-				clip-path: polygon(
-					69.5833% 29.5834%,
-					43.3333% 65%,
-					29.5833% 54.5834%,
-					25.8333% 59.5834%,
-					44.5833% 73.75%,
-					74.5833% 33.3334%,
-					69.5833% 29.5834%
-				);
+				clip-path: polygon(69.5833% 29.5834%, 43.3333% 65%, 29.5833% 54.5834%, 25.8333% 59.5834%, 44.5833% 73.75%, 74.5833% 33.3334%, 69.5833% 29.5834%);
 				content: "";
 				display: block;
 				height: 24px;
 				left: calc(-24px - 0.25em);
 				position: absolute;
-				top: calc((1em * var(--newspack-theme-font-line-height-body) - 24px) / 2);
+				top: calc(( 1em * var(--newspack-theme-font-line-height-body) - 24px ) / 2);
 				width: 24px;
 			}
 		}
@@ -1218,7 +1210,7 @@ ul.wp-block-list {
 		background: none !important;
 		margin-bottom: 16px;
 
-		@media only screen and (min-width: 768px) {
+		@media only screen and ( min-width: 768px ) {
 			margin-bottom: 0;
 			margin-right: 32px;
 		}
@@ -1291,7 +1283,7 @@ ul.wp-block-list {
 			.block-editor-inner-blocks {
 				flex: 1 1 100%;
 
-				@include utilities.media(mobile) {
+				@include utilities.media( mobile ) {
 					flex: 0 0 auto;
 					margin-left: calc(structure.$size__spacing-unit / 2);
 				}
@@ -1299,7 +1291,7 @@ ul.wp-block-list {
 				.wp-block-button__link {
 					width: 100%;
 
-					@include utilities.media(mobile) {
+					@include utilities.media( mobile ) {
 						width: auto;
 					}
 				}
@@ -1326,14 +1318,14 @@ ul.wp-block-list {
 		.wp-block-media-text {
 			display: block;
 
-			@include utilities.media(tablet) {
+			@include utilities.media( tablet ) {
 				display: grid;
 			}
 
 			&__media {
 				display: none;
 
-				@include utilities.media(tablet) {
+				@include utilities.media( tablet ) {
 					display: block;
 				}
 			}
@@ -1343,7 +1335,7 @@ ul.wp-block-list {
 				gap: 16px;
 				padding: 36px;
 
-				@include utilities.media(tablet) {
+				@include utilities.media( tablet ) {
 					padding: 64px;
 				}
 
@@ -1399,7 +1391,7 @@ ul.wp-block-list {
 			display: none;
 			margin-bottom: 0;
 
-			@include utilities.media(tablet) {
+			@include utilities.media( tablet ) {
 				display: block;
 			}
 
@@ -1430,7 +1422,7 @@ ul.wp-block-list {
 			.wp-block-group__inner-container {
 				padding: 36px;
 
-				@include utilities.media(tablet) {
+				@include utilities.media( tablet ) {
 					padding: 64px;
 				}
 			}
@@ -1455,7 +1447,7 @@ ul.wp-block-list {
 			&:not(.is-not-stacked-on-mobile) > .wp-block-column {
 				margin-bottom: 16px;
 
-				@include utilities.media(mobile) {
+				@include utilities.media( mobile ) {
 					margin-bottom: 0;
 				}
 
@@ -1490,7 +1482,7 @@ ul.wp-block-list {
 	}
 
 	&.subscribe__style-10 {
-		@include mixins-main.jetpack-mailchimp-editor($gap: 0);
+		@include mixins-main.jetpack-mailchimp-editor( $gap: 0 );
 
 		.wp-block-jetpack-mailchimp > p {
 			display: none;
@@ -1571,7 +1563,7 @@ ul.wp-block-list {
 		font-size: var(--newspack-theme-font-size-xs);
 		line-height: var(--newspack-theme-font-line-height-body);
 		margin: 0;
-		padding: (structure.$size__spacing-unit * 0.5);
+		padding: ( structure.$size__spacing-unit * 0.5 );
 		text-align: center;
 		-webkit-margin-start: 0;
 		margin-inline-start: 0;
@@ -1604,7 +1596,7 @@ ul.wp-block-list {
 	}
 }
 
-/** === Custom HTML Block - Flourish embed helper styles === */
+/** === Custom HTML Block - temporary until a fix lands in WP 7.2 === */
 .wp-block-html:not(:has(:not(div, span, script, style, noscript, link))) {
 	&:not(.has-no-output)::before {
 		background:
@@ -1636,6 +1628,7 @@ ul.wp-block-list {
 }
 
 /** === Custom Colors === */
+
 
 $colors: (
 	"accent": var(--newspack-theme-color-primary),
