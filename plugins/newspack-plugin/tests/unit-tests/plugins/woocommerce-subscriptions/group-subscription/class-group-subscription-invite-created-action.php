@@ -359,8 +359,9 @@ class Test_Group_Subscription_Invite_Created_Action extends WP_UnitTestCase {
 
 	/**
 	 * A Teams invitation that predates the migration becomes an invite when its link
-	 * is followed. It fires as `migration`, unemailed and with no inviter, since nobody
-	 * on this site issued it. A second click reuses the stored invite and stays quiet.
+	 * is followed. It fires as `migration`, unemailed and with no inviter, since Teams'
+	 * own hook already reported it with its sender. A second click reuses the stored
+	 * invite and stays quiet.
 	 */
 	public function test_migrated_teams_invitation_fires_once() {
 		$this->make_invite_email_sendable();
