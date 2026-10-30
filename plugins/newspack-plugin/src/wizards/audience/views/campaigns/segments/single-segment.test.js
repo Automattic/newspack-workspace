@@ -2,7 +2,7 @@
  * External dependencies
  */
 import { render, fireEvent, waitFor, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { Link, MemoryRouter } from 'react-router-dom';
 
 /**
  * WordPress dependencies
@@ -608,5 +608,28 @@ describe( 'Newsletter list criteria input for an existing segment', () => {
 	it( 'reads lists with context=edit, so a list a gate hides from readers keeps its name', async () => {
 		await waitFor( () => expect( screen.getByText( 'Members Only' ) ).toBeInTheDocument() );
 		expect( apiFetch ).toHaveBeenCalledWith( { path: '/newspack-newsletters/v1/lists_config?context=edit' } );
+	} );
+} );
+
+describe( 'Leaving a segment with unsaved changes', () => {
+	const renderForm = () =>
+		render(
+			<MemoryRouter initialEntries={ [ '/segments/new' ] }>
+				<SingleSegment segmentId="new" setSegments={ jest.fn() } wizardApiFetch={ jest.fn() } />
+				<Link to="/segments">Leave</Link>
+			</MemoryRouter>
+		);
+
+	it( 'does not ask when nothing has changed', () => {
+		renderForm();
+		fireEvent.click( screen.getByText( 'Leave' ) );
+		expect( screen.queryByText( 'Discard Changes' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'asks in a dialog once something has changed', async () => {
+		renderForm();
+		fireEvent.change( screen.getByLabelText( 'Title' ), { target: { value: 'Donors' } } );
+		fireEvent.click( screen.getByText( 'Leave' ) );
+		await waitFor( () => expect( screen.getByText( 'Discard Changes' ) ).toBeInTheDocument() );
 	} );
 } );

@@ -21,7 +21,16 @@ import { addQueryArgs } from '@wordpress/url';
 /**
  * Internal dependencies.
  */
-import { CategoryAutocomplete, Divider, Grid, Router, SectionHeader, Settings, hooks } from '../../../../../../packages/components/src';
+import {
+	CategoryAutocomplete,
+	Divider,
+	Grid,
+	Router,
+	SectionHeader,
+	Settings,
+	hooks,
+	useUnsavedChangesDialog,
+} from '../../../../../../packages/components/src';
 import ListsControl from '../../../components/lists-control';
 import SegmentsScreen from './screen';
 
@@ -46,11 +55,12 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch, ...screenProps
 	const [ segmentConfig, updateSegmentConfig ] = hooks.useObjectState( DEFAULT_CONFIG );
 	const [ name, setName ] = useState( '' );
 	const [ segmentCriteria, setSegmentCriteria ] = useState( [] );
-	const [ segmentCriteriaInitially, setSegmentCriteriaInitially ] = useState( [] );
+	const [ segmentCriteriaInitially, setSegmentCriteriaInitially ] = useState( '[]' );
 	const [ nameInitially, setNameInitially ] = useState( '' );
 	const history = useHistory();
 
-	const [ segmentInitially, setSegmentInitially ] = useState( '[]' );
+	const [ segmentInitially, setSegmentInitially ] = useState( DEFAULT_CONFIG );
+	const [ isSaving, setIsSaving ] = useState( false );
 
 	const isSegmentValid = () => {
 		const _segmentConfig = { ...segmentConfig };
@@ -65,7 +75,7 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch, ...screenProps
 		nameInitially !== name ||
 		JSON.stringify( segmentInitially.is_disabled ) !== JSON.stringify( segmentConfig.is_disabled );
 
-	const unblock = hooks.usePrompt( isDirty, __( 'There are unsaved changes to this segment. Discard changes?', 'newspack-plugin' ) );
+	const { confirmDialog: unsavedChangesDialog } = useUnsavedChangesDialog( { when: isDirty && ! isSaving } );
 
 	const isNew = segmentId === 'new';
 	useEffect( () => {
@@ -91,7 +101,7 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch, ...screenProps
 	}, [ isNew ] );
 
 	const saveSegment = () => {
-		unblock();
+		setIsSaving( true );
 
 		const path = isNew ? `${ newspackAudienceCampaigns.api }/segmentation` : `${ newspackAudienceCampaigns.api }/segmentation/${ segmentId }`;
 		wizardApiFetch( {
@@ -105,7 +115,8 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch, ...screenProps
 			quiet: true,
 		} )
 			.then( setSegments )
-			.then( history.push( '/segments' ) );
+			.then( () => history.push( '/segments' ) )
+			.catch( () => setIsSaving( false ) );
 	};
 
 	const getCriteriaValue = id => {
@@ -195,7 +206,7 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch, ...screenProps
 				// single-select case; it is meaningless for a multi-select, so drop it.
 				const options = criteria.options.filter( option => '' !== option.value );
 				return (
-					<div data-testid={ `newspack-criteria-${ criteria.id }` }>
+					<Stack direction="column" gap="sm" data-testid={ `newspack-criteria-${ criteria.id }` }>
 						{ options.map( option => (
 							<CheckboxControl
 								key={ option.value }
@@ -207,7 +218,7 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch, ...screenProps
 								__nextHasNoMarginBottom
 							/>
 						) ) }
-					</div>
+					</Stack>
 				);
 			}
 			if ( criteria.options?.length ) {
@@ -313,15 +324,11 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch, ...screenProps
 
 	const headerActions = [
 		{
-			type: 'secondary',
-			label: __( 'Cancel', 'newspack-plugin' ),
-			href: '#/segments',
-		},
-		{
 			type: 'primary',
 			label: __( 'Save', 'newspack-plugin' ),
 			onClick: saveSegment,
-			disabled: ! isSegmentValid() || ( ! isNew && ! isDirty ),
+			disabled: isSaving || ! isSegmentValid() || ( ! isNew && ! isDirty ),
+			isBusy: isSaving,
 		},
 	];
 
@@ -340,7 +347,15 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch, ...screenProps
 			headerActions={ headerActions }
 			subHeaderText={ __( 'Choose which readers belong to this segment.', 'newspack-plugin' ) }
 		>
+			{ unsavedChangesDialog }
 			<div className="newspack-campaigns-wizard-segments__form">
+				<SectionHeader
+					backNav="#/segments"
+					heading={ 2 }
+					noMargin
+					title={ isNew ? __( 'Add Segment', 'newspack-plugin' ) : __( 'Edit Segment', 'newspack-plugin' ) }
+				/>
+				<Divider alignment="full-width" variant="tertiary" />
 				<Grid columns={ 2 } gutter={ 32 } noMargin>
 					<SectionHeader
 						heading={ 2 }
@@ -381,13 +396,15 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch, ...screenProps
 						<Fragment key={ id }>
 							<Divider alignment="full-width" variant="tertiary" />
 							<Grid columns={ 2 } gutter={ 32 } noMargin>
-								<SectionHeader heading={ 2 } noMargin title={ title } description={ description } />
-								<Stack direction="column" gap="xl" className="newspack-settings__card newspack-campaigns-wizard-segments__fields">
+								<Stack direction="column" gap="lg">
+									<SectionHeader heading={ 2 } noMargin title={ title } description={ description } />
 									{ notification && (
 										<Notice status="info" isDismissible={ false } spokenMessage="">
 											{ notification }
 										</Notice>
 									) }
+								</Stack>
+								<Stack direction="column" gap="xl" className="newspack-settings__card newspack-campaigns-wizard-segments__fields">
 									{ categoryCriteria.map( criteria => (
 										<Fragment key={ criteria.id }>{ getCriteriaInput( criteria ) }</Fragment>
 									) ) }
@@ -486,25 +503,23 @@ addFilter( 'newspack.criteria.input', 'newspack.devices', function ( element, cr
 		const selectedDevices = Array.isArray( value ) ? value : [];
 
 		return (
-			<div className="newspack-device-segments">
-				<Grid columns={ 1 } rowGap={ 16 }>
-					{ criteria.options.map( device => (
-						<CheckboxControl
-							key={ device.value }
-							label={ device.label }
-							checked={ selectedDevices.includes( device.value ) }
-							onChange={ isChecked => {
-								if ( isChecked ) {
-									update( [ ...selectedDevices, device.value ] );
-								} else {
-									update( selectedDevices.filter( item => item !== device.value ) );
-								}
-							} }
-							__nextHasNoMarginBottom
-						/>
-					) ) }
-				</Grid>
-			</div>
+			<Stack direction="column" gap="sm" className="newspack-device-segments">
+				{ criteria.options.map( device => (
+					<CheckboxControl
+						key={ device.value }
+						label={ device.label }
+						checked={ selectedDevices.includes( device.value ) }
+						onChange={ isChecked => {
+							if ( isChecked ) {
+								update( [ ...selectedDevices, device.value ] );
+							} else {
+								update( selectedDevices.filter( item => item !== device.value ) );
+							}
+						} }
+						__nextHasNoMarginBottom
+					/>
+				) ) }
+			</Stack>
 		);
 	}
 	return element;
