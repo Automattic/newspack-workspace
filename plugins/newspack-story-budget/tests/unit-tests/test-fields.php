@@ -417,4 +417,100 @@ class TestFields extends WP_UnitTestCase {
 			);
 		}
 	}
+
+	/**
+	 * Empty the static registry so a test can observe it being built.
+	 */
+	private static function reset_registry() {
+		( new ReflectionProperty( Fields::class, 'all_fields' ) )->setValue( null, [] );
+		( new ReflectionProperty( Fields::class, 'is_registered' ) )->setValue( null, false );
+	}
+
+	/**
+	 * Reset the registry after each test, so state from one can't leak into the next.
+	 */
+	public function tear_down() {
+		self::reset_registry();
+		parent::tear_down();
+	}
+
+	/**
+	 * The registry builds on the first read, and only once.
+	 */
+	public function test_registry_builds_once_on_first_read() {
+		self::reset_registry();
+		$builds = 0;
+		add_filter(
+			'newspack_story_budget_fields',
+			function( $fields ) use ( &$builds ) {
+				$builds++;
+				return $fields;
+			}
+		);
+
+		$this->assertSame( 0, $builds, 'Nothing is built before the first read.' );
+		$this->assertNotEmpty( Fields::get_all_fields() );
+		$this->assertNotNull( Fields::get_field( 'name' ) );
+		$this->assertSame( 1, $builds, 'Later reads reuse the registry.' );
+	}
+
+	/**
+	 * A field filter that reads the registry must not trigger a second build.
+	 */
+	public function test_registry_read_inside_field_filter_does_not_rebuild() {
+		self::reset_registry();
+		$builds = 0;
+		add_filter(
+			'newspack_story_budget_fields',
+			function( $fields ) use ( &$builds ) {
+				$builds++;
+				Fields::get_all_fields();
+				return $fields;
+			}
+		);
+
+		$this->assertNotEmpty( Fields::get_all_fields() );
+		$this->assertSame( 1, $builds );
+	}
+
+	/**
+	 * A read before init must not lock in a registry built too early.
+	 */
+	public function test_read_before_init_does_not_build() {
+		global $wp_actions;
+		self::reset_registry();
+		$init_count = $wp_actions['init'];
+		unset( $wp_actions['init'] );
+
+		$this->assertEmpty( Fields::get_all_fields() );
+		$this->assertNull( Fields::get_field( 'name' ) );
+
+		$wp_actions['init'] = $init_count; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		$this->assertNotEmpty( Fields::get_all_fields(), 'The registry builds once init has run.' );
+	}
+
+	/**
+	 * During init, reads only build from priority 10 on, after taxonomies register.
+	 */
+	public function test_read_during_init_waits_for_priority_10() {
+		global $wp_filter;
+		self::reset_registry();
+		$counts       = [];
+		$original     = $wp_filter['init'];
+		$record_count = function( $priority ) use ( &$counts ) {
+			return function() use ( $priority, &$counts ) {
+				$counts[ $priority ] = count( Fields::get_all_fields() );
+			};
+		};
+
+		// Run only the two probes, not every init callback a second time.
+		$wp_filter['init'] = new WP_Hook(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		add_action( 'init', $record_count( 5 ), 5 );
+		add_action( 'init', $record_count( 10 ), 10 );
+		do_action( 'init' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
+		$wp_filter['init'] = $original; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+
+		$this->assertSame( 0, $counts[5], 'A read at init:5 builds nothing.' );
+		$this->assertGreaterThan( 0, $counts[10], 'A read at init:10 builds the registry.' );
+	}
 }

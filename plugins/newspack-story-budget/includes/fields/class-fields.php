@@ -25,16 +25,44 @@ class Fields {
 	protected static $all_fields = [];
 
 	/**
+	 * Whether the registry has been built for this request.
+	 *
+	 * @var bool
+	 */
+	protected static $is_registered = false;
+
+	/**
 	 * Initializes default fields.
 	 */
 	public static function init() {
-		\add_action( 'init', [ __CLASS__, 'register_fields' ] );
 		\add_action( 'set_object_terms', [ __CLASS__, 'on_post_budget_update' ], 10, 2 );
 		\add_action( 'save_post', [ __CLASS__, 'on_post_update' ] );
 
 		// Add custom columns for fields that should be displayed in the admin list table.
 		\add_filter( 'manage_post_posts_columns', [ __CLASS__, 'wp_posts_columns' ] );
 		\add_action( 'manage_post_posts_custom_column', [ __CLASS__, 'wp_posts_columns_values' ], 10, 2 );
+	}
+
+	/**
+	 * Build the registry on first read, so requests that never touch a field
+	 * don't pay for querying budgets, statuses and network sites.
+	 *
+	 * Reads before init:10 return nothing and leave the registry unbuilt:
+	 * taxonomies register at init:5 and integrations add their field filters
+	 * during init, and a field built too early would stay disabled or missing
+	 * for the rest of the request.
+	 */
+	protected static function maybe_register_fields() {
+		global $wp_filter;
+		if ( self::$is_registered || ! \did_action( 'init' ) ) {
+			return;
+		}
+		if ( \doing_action( 'init' ) && $wp_filter['init']->current_priority() < 10 ) {
+			return;
+		}
+		// Set first: a field filter that reads the registry must not rebuild it.
+		self::$is_registered = true;
+		self::register_fields();
 	}
 
 	/**
@@ -299,6 +327,8 @@ class Fields {
 	 * @return \Newspack_Story_Budget\Fields\Abstract_Field|array[] Array of field objects or info.
 	 */
 	public static function get_all_fields( $as_array = false ) {
+		self::maybe_register_fields();
+
 		// Sort fields by default_order.
 		$sorted_fields = array_values( self::$all_fields );
 		uasort(
@@ -328,6 +358,8 @@ class Fields {
 	 * @return \Newspack_Story_Budget\Fields\Abstract_Field|array The field object or info.
 	 */
 	public static function get_field( $slug, $as_array = false ) {
+		self::maybe_register_fields();
+
 		if ( ! isset( self::$all_fields[ $slug ] ) ) {
 			return null;
 		}
