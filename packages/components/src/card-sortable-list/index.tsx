@@ -10,43 +10,20 @@ import classNames from 'classnames';
 /**
  * WordPress dependencies.
  */
-import { Disabled, Draggable, DropdownMenu, MenuItem, ToggleControl } from '@wordpress/components';
+import { Disabled, Draggable } from '@wordpress/components';
 import { useEffect, useLayoutEffect, useRef, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
-import { chevronDown, chevronUp, dragHandle, moreVertical } from '@wordpress/icons';
-import { Badge, Card, Icon, IconButton, Stack } from '@wordpress/ui';
+import { chevronDown, chevronUp, dragHandle } from '@wordpress/icons';
+import { Icon, IconButton, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import TooltipBadge from '../tooltip-badge';
-import type { CardBadge } from '../types';
+import CardListRow, { type CardListItem } from './card-list-row';
 import './style.scss';
 
 const DROP_ANIMATION_DURATION = 400; // ms — must match $drop-duration in style.scss
-const BUTTON_MOVE_DURATION = 200; // ms — must match $shift-duration in style.scss
-
-type DraggableItemAction = {
-	label: string;
-	icon?: unknown;
-	action: () => void;
-	disabled?: boolean;
-	destructive?: boolean;
-};
-
-type DraggableItem = {
-	id: string | number;
-	title: string;
-	description?: React.ReactNode;
-	badge?: CardBadge;
-	/** A second badge, e.g. a warning, whose tooltip explains it. */
-	secondaryBadge?: CardBadge & { tooltip?: string };
-	toggleChecked?: boolean;
-	onToggleChange?: () => void;
-	actions?: DraggableItemAction[];
-	/** Accessible name of the actions menu button, e.g. one that names the item. */
-	actionsLabel?: string;
-};
+const BUTTON_MOVE_DURATION = 200; // ms — set inline on the moved rows, so nothing in style.scss has to match it
 
 type DragMeasurements = {
 	lockedHeight: number;
@@ -57,15 +34,13 @@ type DragMeasurements = {
 	itemTops: number[];
 };
 
-const TitleTag = 'h3';
-
 const CardSortableList = ( {
 	disabled = false,
 	items = [],
 	onDragCallback = () => {},
 }: {
 	disabled?: boolean;
-	items?: DraggableItem[];
+	items?: CardListItem[];
 	onDragCallback?: ( index: number, targetIndex: number ) => void;
 } ) => {
 	const [ sortedItems, setSortedItems ] = useState( items );
@@ -82,18 +57,22 @@ const CardSortableList = ( {
 		toIndex: number;
 		stride: number;
 		direction: number;
+		movedId: CardListItem[ 'id' ];
 	} | null >( null );
 	const [ buttonMoveId, setButtonMoveId ] = useState( 0 );
 	const documentDragOverRef = useRef< ( ( e: Event ) => void ) | null >( null );
 	const sortedItemsRef = useRef( sortedItems );
 	sortedItemsRef.current = sortedItems;
-	const pendingFocusRef = useRef< { id: DraggableItem[ 'id' ]; direction: number; at: number } | null >( null );
+	const dropFrame = useRef< number | null >( null );
+	const pendingMoveRef = useRef< { fromIndex: number; toIndex: number } | null >( null );
+	const onDragCallbackRef = useRef( onDragCallback );
+	onDragCallbackRef.current = onDragCallback;
 
 	/**
-	 * Move focus to the matching chevron button on the card at `index`: the
-	 * button in the direction of travel, or the other one when that is disabled.
+	 * Move focus to a chevron button on the item's card: the button in the
+	 * direction of travel, or the other one when that is disabled.
 	 */
-	const focusMoveButton = ( id: DraggableItem[ 'id' ], direction: number ) => {
+	const focusMoveButton = ( id: CardListItem[ 'id' ], direction: number ) => {
 		const index = sortedItemsRef.current.findIndex( item => item.id === id );
 		const moveButtons = itemRefs.current[ index ]?.querySelectorAll< HTMLButtonElement >(
 			'.newspack-card--core--sortable-list__move-buttons button'
@@ -110,37 +89,12 @@ const CardSortableList = ( {
 		}
 	};
 
-	// A parent that disables the list while it saves makes the browser drop focus, and the reorder can move the button again; keep giving it back for a moment once the list is enabled.
-	useEffect( () => {
-		const pending = pendingFocusRef.current;
-		const ownerDocument = listRef.current?.ownerDocument;
-		if ( disabled || ! pending || ! ownerDocument ) {
-			return;
-		}
-		pendingFocusRef.current = null;
-		if ( Date.now() - pending.at > 30000 ) {
-			return;
-		}
-		const expires = Date.now() + 1500;
-		let frame = 0;
-		const restore = () => {
-			const active = ownerDocument.activeElement;
-			if ( ! active || active === ownerDocument.body ) {
-				focusMoveButton( pending.id, pending.direction );
-			} else if ( ! listRef.current?.contains( active ) ) {
-				return;
-			}
-			if ( Date.now() < expires ) {
-				frame = requestAnimationFrame( restore );
-			}
-		};
-		restore();
-		return () => cancelAnimationFrame( frame );
-	}, [ disabled ] ); // eslint-disable-line react-hooks/exhaustive-deps
-
 	// Keep sortedItems in sync when the items prop changes externally (e.g. after a save).
+	// While a move waits on its animation the parent is a move behind, so its order would undo it.
 	useEffect( () => {
-		setSortedItems( items );
+		if ( ! pendingMoveRef.current ) {
+			setSortedItems( items );
+		}
 	}, [ items ] );
 
 	// Clean up any pending animation timer on unmount.
@@ -152,11 +106,45 @@ const CardSortableList = ( {
 			if ( buttonMoveTimer.current ) {
 				clearTimeout( buttonMoveTimer.current );
 			}
+			if ( dropFrame.current ) {
+				cancelAnimationFrame( dropFrame.current );
+			}
 			if ( documentDragOverRef.current ) {
 				document.removeEventListener( 'dragover', documentDragOverRef.current );
 			}
 		};
 	}, [] );
+
+	/**
+	 * End the current animation and report its move, which waits so that the
+	 * parent's re-render can't fight a live animation. A new move calls this first,
+	 * so each one reaches the parent, in order, against the order it was made in.
+	 */
+	const flushPendingMove = () => {
+		[ dropAnimationTimer, buttonMoveTimer ].forEach( timer => {
+			if ( timer.current ) {
+				clearTimeout( timer.current );
+				timer.current = null;
+			}
+		} );
+		if ( dropFrame.current ) {
+			cancelAnimationFrame( dropFrame.current );
+			dropFrame.current = null;
+		}
+		const pendingMove = pendingMoveRef.current;
+		if ( ! pendingMove ) {
+			return;
+		}
+		pendingMoveRef.current = null;
+		itemRefs.current.forEach( el => {
+			if ( el ) {
+				el.style.transition = '';
+				el.style.transform = '';
+			}
+		} );
+		setDroppedIndex( null );
+		onDragCallbackRef.current( pendingMove.fromIndex, pendingMove.toIndex );
+	};
 
 	/**
 	 * Handle a chevron-button move. Records item positions before the reorder so
@@ -167,6 +155,8 @@ const CardSortableList = ( {
 			return;
 		}
 
+		flushPendingMove();
+
 		const fromEl = itemRefs.current[ fromIndex ];
 		const toEl = itemRefs.current[ toIndex ];
 		if ( ! fromEl || ! toEl ) {
@@ -175,7 +165,8 @@ const CardSortableList = ( {
 
 		const stride = Math.abs( toEl.getBoundingClientRect().top - fromEl.getBoundingClientRect().top );
 		const direction = toIndex > fromIndex ? 1 : -1;
-		buttonFlipRef.current = { fromIndex, toIndex, stride, direction };
+		buttonFlipRef.current = { fromIndex, toIndex, stride, direction, movedId: sortedItems[ fromIndex ].id };
+		pendingMoveRef.current = { fromIndex, toIndex };
 
 		const reordered = [ ...sortedItems ];
 		const [ moved ] = reordered.splice( fromIndex, 1 );
@@ -197,7 +188,10 @@ const CardSortableList = ( {
 		}
 		buttonFlipRef.current = null;
 
-		const { fromIndex, toIndex, stride, direction } = flipData;
+		const { fromIndex, toIndex, stride, direction, movedId } = flipData;
+
+		// Straight away, not when the animation ends: a repeat key press needs the button now.
+		focusMoveButton( movedId, direction );
 
 		const startAnimation = ( el: HTMLDivElement | null, startY: number ) => {
 			if ( ! el ) {
@@ -219,44 +213,14 @@ const CardSortableList = ( {
 		// Displaced item is now at fromIndex: animate it in from its old position.
 		startAnimation( itemRefs.current[ fromIndex ], direction * stride );
 
-		if ( buttonMoveTimer.current ) {
-			clearTimeout( buttonMoveTimer.current );
-		}
-		buttonMoveTimer.current = setTimeout( () => {
-			// Clear inline animation styles before calling the external callback so
-			// the subsequent React re-render doesn't fight a live animation.
-			[ fromIndex, toIndex ].forEach( i => {
-				const el = itemRefs.current[ i ];
-				if ( el ) {
-					el.style.transition = '';
-					el.style.transform = '';
-				}
-			} );
-
-			const movedId = sortedItemsRef.current[ toIndex ]?.id;
-			focusMoveButton( movedId, direction );
-			pendingFocusRef.current = { id: movedId, direction, at: Date.now() };
-
-			onDragCallback( fromIndex, toIndex );
-			buttonMoveTimer.current = null;
-		}, BUTTON_MOVE_DURATION );
+		buttonMoveTimer.current = setTimeout( flushPendingMove, BUTTON_MOVE_DURATION );
 	}, [ buttonMoveId ] ); // eslint-disable-line react-hooks/exhaustive-deps
 
 	const handleDragStart = ( index: number ) => {
-		// Cancel any in-progress button-move animation so no item wrapper keeps
-		// an inline transform. A transformed ancestor breaks position:fixed on
-		// the Draggable clone (CSS spec: fixed positioning is relative to the
-		// nearest ancestor with a transform/filter/perspective).
-		if ( buttonMoveTimer.current ) {
-			clearTimeout( buttonMoveTimer.current );
-			buttonMoveTimer.current = null;
-			itemRefs.current.forEach( el => {
-				if ( el ) {
-					el.style.transition = '';
-					el.style.transform = '';
-				}
-			} );
-		}
+		// Also clears the inline transforms. A transformed ancestor breaks position:fixed on
+		// the Draggable clone (CSS spec: fixed positioning is relative to the nearest
+		// ancestor with a transform/filter/perspective).
+		flushPendingMove();
 
 		const listEl = listRef.current;
 		if ( listEl ) {
@@ -340,19 +304,19 @@ const CardSortableList = ( {
 		const [ moved ] = reordered.splice( sourceIndex, 1 );
 		reordered.splice( insertIndex, 0, moved );
 
+		pendingMoveRef.current = { fromIndex: sourceIndex, toIndex: insertIndex };
+
 		// First render: show items in their new order with no animation.
 		// The dragging CSS classes are already cleared by clearDragState() above,
 		// so no transitions will fire on this paint.
 		setSortedItems( reordered );
 
 		// Next frame: trigger the drop animation on the newly-positioned item,
-		// then call onDragCallback after the animation completes.
-		requestAnimationFrame( () => {
+		// then report the move once the animation completes.
+		dropFrame.current = requestAnimationFrame( () => {
+			dropFrame.current = null;
 			setDroppedIndex( insertIndex );
-			dropAnimationTimer.current = setTimeout( () => {
-				setDroppedIndex( null );
-				onDragCallback( sourceIndex, insertIndex );
-			}, DROP_ANIMATION_DURATION );
+			dropAnimationTimer.current = setTimeout( flushPendingMove, DROP_ANIMATION_DURATION );
 		} );
 	};
 
@@ -407,11 +371,7 @@ const CardSortableList = ( {
 			direction="column"
 			gap="lg"
 			ref={ listRef }
-			className={ classNames(
-				'newspack-card--core--sortable-list',
-				disabled && 'newspack-card--core--sortable-list__is-disabled',
-				isDragging && 'newspack-card--core--sortable-list__is-dragging'
-			) }
+			className="newspack-card--core--sortable-list"
 			style={ measurements ? { height: measurements.lockedHeight } : undefined }
 		>
 			{ sortedItems.map( ( item, index ) => {
@@ -439,16 +399,12 @@ const CardSortableList = ( {
 								appendToOwnerDocument
 							>
 								{ ( { onDraggableStart, onDraggableEnd } ) => (
-									<Card.Root
-										className="newspack-card--core--sortable-list__card"
+									<CardListRow
+										item={ item }
 										draggable
 										onDragStart={ onDraggableStart }
 										onDragEnd={ onDraggableEnd }
-									>
-										<Card.Header
-											className="newspack-card--core--sortable-list__header"
-											render={ <Stack direction="row" align="center" gap="lg" /> }
-										>
+										controls={
 											<Stack direction="row" align="center" gap="xs" className="newspack-card--core--sortable-list__controls">
 												<Icon icon={ dragHandle } className="newspack-card--core--sortable-list__drag-handle" />
 												<Stack direction="column" gap="xs" className="newspack-card--core--sortable-list__move-buttons">
@@ -474,63 +430,8 @@ const CardSortableList = ( {
 													/>
 												</Stack>
 											</Stack>
-											<div className="newspack-card--core--sortable-list__summary">
-												<Card.Title render={ <TitleTag /> } className="newspack-card--core--sortable-list__title">
-													{ item.title }
-													{ item.badge?.label && (
-														<Badge intent={ item.badge.intent ?? 'none' }>{ item.badge.label }</Badge>
-													) }
-													{ item.secondaryBadge?.label &&
-														( item.secondaryBadge.tooltip ? (
-															<TooltipBadge
-																label={ item.secondaryBadge.label }
-																tooltip={ item.secondaryBadge.tooltip }
-																intent={ item.secondaryBadge.intent }
-															/>
-														) : (
-															<Badge intent={ item.secondaryBadge.intent ?? 'none' }>
-																{ item.secondaryBadge.label }
-															</Badge>
-														) ) }
-												</Card.Title>
-												{ item.description && (
-													<p className="newspack-card--core--sortable-list__description">{ item.description }</p>
-												) }
-											</div>
-											{ ( item.onToggleChange !== undefined || item.actions?.length ) && (
-												<Stack direction="row" align="center" gap="sm" className="newspack-card--core--sortable-list__end">
-													{ item.onToggleChange !== undefined && (
-														<ToggleControl
-															className="newspack-card--core--sortable-list__toggle"
-															label={ item.title }
-															checked={ item.toggleChecked }
-															onChange={ item.onToggleChange }
-														/>
-													) }
-													{ item.actions && item.actions.length > 0 && (
-														<DropdownMenu
-															icon={ moreVertical }
-															label={ item.actionsLabel || __( 'More actions', 'newspack-plugin' ) }
-														>
-															{ () =>
-																item.actions?.map( ( action, actionIndex ) => (
-																	<MenuItem
-																		key={ actionIndex }
-																		icon={ action.icon as never }
-																		onClick={ action.action }
-																		disabled={ action.disabled || false }
-																		isDestructive={ action.destructive || false }
-																	>
-																		{ action.label }
-																	</MenuItem>
-																) )
-															}
-														</DropdownMenu>
-													) }
-												</Stack>
-											) }
-										</Card.Header>
-									</Card.Root>
+										}
+									/>
 								) }
 							</Draggable>
 						</div>

@@ -1,7 +1,7 @@
 /**
  * External dependencies
  */
-import { render, fireEvent, waitFor, screen } from '@testing-library/react';
+import { render, fireEvent, waitFor, screen, within } from '@testing-library/react';
 import { Link, MemoryRouter } from 'react-router-dom';
 
 /**
@@ -631,5 +631,112 @@ describe( 'Leaving a segment with unsaved changes', () => {
 		fireEvent.change( screen.getByLabelText( 'Title' ), { target: { value: 'Donors' } } );
 		fireEvent.click( screen.getByText( 'Leave' ) );
 		await waitFor( () => expect( screen.getByText( 'Discard Changes' ) ).toBeInTheDocument() );
+	} );
+} );
+
+describe( 'A failed save', () => {
+	const failingFetch = message => jest.fn( ( { method } = {} ) => ( 'POST' === method ? Promise.reject( { message } ) : Promise.resolve( [] ) ) );
+
+	const renderAndSave = wizardApiFetch => {
+		window.newspackAudienceCampaigns = { criteria };
+		render(
+			<MemoryRouter>
+				<SingleSegment segmentId="new" setSegments={ jest.fn() } wizardApiFetch={ wizardApiFetch } />
+			</MemoryRouter>
+		);
+		fireEvent.change( screen.getByLabelText( 'Title' ), { target: { value: 'Donors' } } );
+		fireEvent.change( screen.getByTestId( 'newspack-criteria-newsletter' ), { target: { value: 'subscribers' } } );
+		fireEvent.click( screen.getByText( 'Save' ) );
+	};
+
+	it( 'shows the error, moves focus to it and keeps the form editable', async () => {
+		renderAndSave( failingFetch( 'The save failed.' ) );
+
+		const notice = await screen.findByText( 'The save failed.' );
+		expect( screen.getByRole( 'group', { name: 'Segment error' } ) ).toContainElement( notice );
+		expect( screen.getByRole( 'group', { name: 'Segment error' } ) ).toHaveFocus();
+		expect( screen.getByLabelText( 'Title' ) ).toHaveValue( 'Donors' );
+		expect( screen.getByLabelText( 'Title' ) ).toBeEnabled();
+		expect( screen.getByTestId( 'newspack-criteria-newsletter' ) ).toHaveValue( 'subscribers' );
+		expect( screen.getByText( 'Save' ) ).toBeEnabled();
+	} );
+
+	it( 'falls back to a generic message and clears it on the next attempt', async () => {
+		let resolveRetry;
+		const wizardApiFetch = jest
+			.fn()
+			.mockRejectedValueOnce( {} )
+			.mockImplementationOnce( () => new Promise( resolve => ( resolveRetry = resolve ) ) );
+		renderAndSave( wizardApiFetch );
+
+		const message = 'There was an error saving the segment. Please try again.';
+		await screen.findByText( message );
+
+		fireEvent.click( screen.getByText( 'Save' ) );
+		expect( screen.queryByText( message ) ).not.toBeInTheDocument();
+		resolveRetry( [] );
+		await waitFor( () => expect( screen.getByText( 'Save' ) ).toBeInTheDocument() );
+	} );
+} );
+
+describe( 'Criteria field names', () => {
+	beforeEach( () => {
+		apiFetch.mockReset();
+		apiFetch.mockResolvedValue( [] );
+		window.newspackAudienceCampaigns = {
+			criteria: [
+				...criteria,
+				{
+					id: 'subscribed_lists',
+					category: 'newsletter',
+					matching_function: 'list__in',
+					name: 'Subscribed to lists',
+				},
+				{
+					id: 'not_subscribed_lists',
+					category: 'newsletter',
+					matching_function: 'list__not_in',
+					name: 'Not subscribed to lists',
+				},
+				{
+					id: 'devices',
+					category: 'reader_engagement',
+					matching_function: 'list__in',
+					name: 'Devices',
+					description: 'The device readers use.',
+					options: [ { label: 'Tablet', value: 'tablet' } ],
+				},
+			],
+		};
+		render(
+			<MemoryRouter>
+				<SingleSegment segmentId="new" setSegments={ jest.fn() } wizardApiFetch={ () => Promise.resolve( [] ) } />
+			</MemoryRouter>
+		);
+	} );
+
+	it( 'names each list filter after its criterion', () => {
+		expect( screen.getByRole( 'combobox', { name: 'Subscribed to lists' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'combobox', { name: 'Not subscribed to lists' } ) ).toBeInTheDocument();
+	} );
+
+	it( 'groups a range under its label, with distinct names for each input', () => {
+		const group = screen.getByRole( 'group', { name: 'Articles read' } );
+		expect( group ).toHaveAccessibleDescription( 'Number of articles read in the last 30 day period.' );
+		expect( within( group ).getByRole( 'checkbox', { name: 'Min' } ) ).toBeInTheDocument();
+		expect( within( group ).getByRole( 'spinbutton', { name: 'Min value' } ) ).toBeInTheDocument();
+		expect( within( group ).getByRole( 'spinbutton', { name: 'Max value' } ) ).toBeInTheDocument();
+	} );
+
+	it( 'groups a checkbox list under its label', () => {
+		const group = screen.getByRole( 'group', { name: 'Devices' } );
+		expect( group ).toHaveAccessibleDescription( 'The device readers use.' );
+		expect( within( group ).getByRole( 'checkbox', { name: 'Tablet' } ) ).toBeInTheDocument();
+	} );
+
+	it( 'keeps section titles below the main title in the outline', () => {
+		expect( screen.getByRole( 'heading', { level: 2, name: 'Add Segment' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'heading', { level: 3, name: 'Details' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'heading', { level: 3, name: 'Newsletters' } ) ).toBeInTheDocument();
 	} );
 } );

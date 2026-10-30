@@ -23,6 +23,10 @@ A drag-and-drop sortable list of cards, built on the `@wordpress/ui` Card. Each 
 | `actionsLabel` | `string` | Accessible name of the overflow menu button. Defaults to "More actions"; pass one that names the row. |
 | `secondaryBadge` | `{ label: string; intent?: BadgeIntent; tooltip?: string }` | A second badge after `badge`, such as a warning. With `tooltip`, it renders as a `TooltipBadge` that explains it. Omit it, or leave `label` empty, to render none. `intent` defaults to `none`. |
 
+## `CardListRow`
+
+The card a sortable row is built from, for a list that isn't sortable. It takes one `DraggableItem` as `item`, without the drag handle and move buttons, and passes other props to the card. `size="large"` gives it the edge, padding and title weight of a settings card, for a row that stands alone on a page. Lay the rows out with `Stack`.
+
 ## Usage
 
 ```jsx

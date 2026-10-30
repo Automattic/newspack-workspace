@@ -17,6 +17,7 @@ import { __, sprintf } from '@wordpress/i18n';
 import find from 'lodash/find';
 import { applyFilters, addFilter } from '@wordpress/hooks';
 import { addQueryArgs } from '@wordpress/url';
+import { decodeEntities } from '@wordpress/html-entities';
 
 /**
  * Internal dependencies.
@@ -32,6 +33,7 @@ import {
 	useUnsavedChangesDialog,
 } from '../../../../../../packages/components/src';
 import ListsControl from '../../../components/lists-control';
+import { useErrorNoticeFocus } from '../../../../hooks/use-error-notice-focus';
 import SegmentsScreen from './screen';
 
 const { useHistory } = Router;
@@ -61,6 +63,12 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch, ...screenProps
 
 	const [ segmentInitially, setSegmentInitially ] = useState( DEFAULT_CONFIG );
 	const [ isSaving, setIsSaving ] = useState( false );
+	const [ saveError, setSaveError ] = useState( null );
+	const {
+		wrapperProps: noticeWrapperProps,
+		registerSubmit,
+		spokenMessage,
+	} = useErrorNoticeFocus( saveError, __( 'Segment error', 'newspack-plugin' ) );
 
 	const isSegmentValid = () => {
 		const _segmentConfig = { ...segmentConfig };
@@ -100,7 +108,9 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch, ...screenProps
 		}
 	}, [ isNew ] );
 
-	const saveSegment = () => {
+	const saveSegment = event => {
+		setSaveError( null );
+		registerSubmit( event );
 		setIsSaving( true );
 
 		const path = isNew ? `${ newspackAudienceCampaigns.api }/segmentation` : `${ newspackAudienceCampaigns.api }/segmentation/${ segmentId }`;
@@ -116,7 +126,12 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch, ...screenProps
 		} )
 			.then( setSegments )
 			.then( () => history.push( '/segments' ) )
-			.catch( () => setIsSaving( false ) );
+			.catch( error => {
+				setSaveError(
+					decodeEntities( error?.message || __( 'There was an error saving the segment. Please try again.', 'newspack-plugin' ) )
+				);
+				setIsSaving( false );
+			} );
 	};
 
 	const getCriteriaValue = id => {
@@ -160,6 +175,7 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch, ...screenProps
 							{
 								key: 'min',
 								label: __( 'Min', 'newspack-plugin' ),
+								inputLabel: __( 'Min value', 'newspack-plugin' ),
 								number: value?.min,
 								checked: value?.min > 0,
 								onCheck: isChecked => update( { min: isChecked ? 1 : 0 } ),
@@ -167,16 +183,17 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch, ...screenProps
 							{
 								key: 'max',
 								label: __( 'Max', 'newspack-plugin' ),
+								inputLabel: __( 'Max value', 'newspack-plugin' ),
 								number: value?.max,
 								checked: value?.max > 0,
 								onCheck: isChecked => update( { max: isChecked ? value?.min || 1 : 0 } ),
 							},
-						].map( ( { key, label, number, checked, onCheck } ) => (
+						].map( ( { key, label, inputLabel, number, checked, onCheck } ) => (
 							<Stack key={ key } direction="row" gap="sm" align="center" className="newspack-campaigns-wizard-segments__range">
 								<CheckboxControl label={ label } checked={ checked } onChange={ onCheck } __nextHasNoMarginBottom />
 								<TextControl
 									data-testid={ key }
-									label={ label }
+									label={ inputLabel }
 									hideLabelFromVision
 									type="number"
 									value={ number ?? '' }
@@ -273,10 +290,22 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch, ...screenProps
 		if ( labelsItself ) {
 			return filteredInput;
 		}
+		const controlId = `newspack-segment-criteria-${ criteria.id }`;
+		const isGroup = 'range' === criteria.matching_function || isMultiSelectCriteria( criteria );
 		return (
-			<BaseControl help={ criteria.description } __nextHasNoMarginBottom>
-				<BaseControl.VisualLabel>{ criteria.name }</BaseControl.VisualLabel>
-				{ filteredInput }
+			<BaseControl id={ controlId } help={ criteria.description } __nextHasNoMarginBottom>
+				<BaseControl.VisualLabel id={ `${ controlId }__label` }>{ criteria.name }</BaseControl.VisualLabel>
+				{ isGroup ? (
+					<div
+						role="group"
+						aria-labelledby={ `${ controlId }__label` }
+						aria-describedby={ criteria.description ? `${ controlId }__help` : undefined }
+					>
+						{ filteredInput }
+					</div>
+				) : (
+					filteredInput
+				) }
 			</BaseControl>
 		);
 	};
@@ -345,6 +374,13 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch, ...screenProps
 			subHeaderText={ __( 'Choose which readers belong to this segment.', 'newspack-plugin' ) }
 		>
 			{ unsavedChangesDialog }
+			{ saveError && (
+				<div { ...noticeWrapperProps } className="newspack-campaigns-wizard-segments__notice">
+					<Notice status="error" isDismissible={ false } spokenMessage={ spokenMessage }>
+						{ saveError }
+					</Notice>
+				</div>
+			) }
 			<div className="newspack-campaigns-wizard-segments__form">
 				<SectionHeader
 					backNav="#/segments"
@@ -355,7 +391,7 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch, ...screenProps
 				/>
 				<Grid columns={ 2 } gutter={ 32 } noMargin>
 					<SectionHeader
-						heading={ 2 }
+						heading={ 3 }
 						noMargin
 						title={ __( 'Details', 'newspack-plugin' ) }
 						description={ __( 'Name this segment and choose whether it’s in use.', 'newspack-plugin' ) }
@@ -394,7 +430,7 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch, ...screenProps
 							<Divider alignment="full-width" variant="tertiary" />
 							<Grid columns={ 2 } gutter={ 32 } noMargin>
 								<Stack direction="column" gap="lg">
-									<SectionHeader heading={ 2 } noMargin title={ title } description={ description } />
+									<SectionHeader heading={ 3 } noMargin title={ title } description={ description } />
 									{ notification && (
 										<Notice status="info" isDismissible={ false } spokenMessage="">
 											{ notification }
@@ -441,6 +477,8 @@ addFilter( 'newspack.criteria.input', 'newspack.newsletterSubscribedLists', func
 	if ( [ 'subscribed_lists', 'not_subscribed_lists' ].includes( criteria.id ) ) {
 		return (
 			<ListsControl
+				label={ criteria.name }
+				hideLabelFromVision
 				placeholder={ __( 'Start typing to search for lists…', 'newspack-plugin' ) }
 				// `context=edit` skips the reader-facing filter that drops hidden lists,
 				// so a segment can still target (and name) a list a gate hides.
@@ -461,6 +499,8 @@ addFilter( 'newspack.criteria.input', 'newspack.activeSubscriptions', function (
 	if ( [ 'active_subscriptions', 'not_active_subscriptions' ].includes( criteria.id ) ) {
 		return (
 			<ListsControl
+				label={ criteria.name }
+				hideLabelFromVision
 				placeholder={ __( 'Start typing to search for products…', 'newspack-plugin' ) }
 				path={ `${ newspackAudienceCampaigns.api }/subscription-products` }
 				savedInfoPath={ ids => addQueryArgs( `${ newspackAudienceCampaigns.api }/subscription-products`, { include: ids } ) }
@@ -481,6 +521,8 @@ addFilter( 'newspack.criteria.input', 'newspack.activeMemberships', function ( e
 	if ( [ 'active_memberships', 'not_active_memberships' ].includes( criteria.id ) ) {
 		return (
 			<ListsControl
+				label={ criteria.name }
+				hideLabelFromVision
 				placeholder={ __( 'Start typing to search for membership plans…', 'newspack-plugin' ) }
 				path="/wc/v3/memberships/plans?per_page=100"
 				value={ value }

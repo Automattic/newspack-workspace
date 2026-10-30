@@ -61,7 +61,7 @@ $criteria = [
 				],
 			],
 			[
-				'label'  => __( 'Mobile (large phones) - between 480 and 786 px wide', 'newspack-popups' ),
+				'label'  => __( 'Mobile (large phones) - between 480 and 768 px wide', 'newspack-popups' ),
 				'value'  => 'Mobile',
 				'params' => [
 					'max_width' => 768,
