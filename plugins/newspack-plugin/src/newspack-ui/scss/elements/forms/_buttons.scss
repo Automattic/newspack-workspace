@@ -253,12 +253,8 @@
 			}
 		}
 
-		&:disabled,
-		&.disabled,
-		&[aria-disabled="true"] {
-			&:where(:not(.newspack-ui__button--loading)) {
-				--newspack-ui-button-focus: var(--newspack-ui-button-ink-disabled);
-			}
+		&:is(:disabled, .disabled, [aria-disabled="true"]):where(:not(.newspack-ui__button--loading)) {
+			--newspack-ui-button-focus: var(--newspack-ui-button-ink-disabled);
 		}
 
 		// Wide
