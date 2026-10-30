@@ -2,7 +2,7 @@
 /**
  * WordPress dependencies.
  */
-import { useState, Fragment, useEffect, useCallback, useMemo } from '@wordpress/element';
+import { useState, Fragment, useEffect, useCallback, useMemo, useRef } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { people } from '@wordpress/icons';
 
@@ -16,6 +16,7 @@ const { useHistory } = Router;
 
 const SegmentsList = ( { wizardApiFetch, segments, setSegments, isLoading } ) => {
 	const [ inFlight, setInFlight ] = useState( false );
+	const latestSortRequest = useRef( 0 );
 	const [ error, setError ] = useState( null );
 	const history = useHistory();
 	useEffect( () => {
@@ -77,7 +78,10 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, isLoading } ) =>
 		sortedSegments.splice( targetIndex, 0, moved );
 		sortedSegments.forEach( ( _segment, _index ) => ( _segment.priority = _index ) );
 
-		setInFlight( true );
+		// The list has already moved, so saving stays out of sight. Only the latest
+		// save may update the list, or an earlier reply would undo a later move.
+		const sortRequest = ++latestSortRequest.current;
+		setSegments( sortedSegments );
 		wizardApiFetch( {
 			path: `${ newspackAudienceCampaigns.api }/segmentation-sort`,
 			method: 'POST',
@@ -85,13 +89,15 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, isLoading } ) =>
 			quiet: true,
 		} )
 			.then( _segments => {
-				setInFlight( false );
-				setSegments( _segments );
+				if ( sortRequest === latestSortRequest.current ) {
+					setSegments( _segments );
+				}
 			} )
 			.catch( e => {
-				setInFlight( false );
-				setError( e.message || __( 'There was an error sorting segments. Please try again.', 'newspack-plugin' ) );
-				setSegments( [ ...segments ] );
+				if ( sortRequest === latestSortRequest.current ) {
+					setError( e.message || __( 'There was an error sorting segments. Please try again.', 'newspack-plugin' ) );
+					setSegments( [ ...segments ] );
+				}
 			} );
 	};
 	const items = useMemo(

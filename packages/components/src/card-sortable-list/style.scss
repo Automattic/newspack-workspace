@@ -90,11 +90,10 @@ $drop-duration: 400ms; /* must match DROP_ANIMATION_DURATION in index.tsx */
 		}
 
 		/*
-		 * Drop landing animation: brief fade-in and scale on the newly placed item.
+		 * Drop landing animation: a brief settle on the newly placed item.
 		 */
 		&.is-dropped {
 			animation: newspack-sortable-drop $drop-duration ease forwards;
-			opacity: 0;
 		}
 
 	}
@@ -102,15 +101,9 @@ $drop-duration: 400ms; /* must match DROP_ANIMATION_DURATION in index.tsx */
 
 @keyframes newspack-sortable-drop {
 	0% {
-		opacity: 0;
-		transform: scale(0.98);
-	}
-	60% {
-		opacity: 1;
-		transform: scale(1.01);
+		transform: scale(0.99);
 	}
 	100% {
-		opacity: 1;
 		transform: scale(1);
 	}
 }
