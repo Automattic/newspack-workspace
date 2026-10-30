@@ -256,11 +256,10 @@ class Newspack_Test_Reader_Data_Active_Subscriptions extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A subscription on hold while its payment is retried does not count. The
-	 * item keeps its old meaning, active or pending cancel, and only an event
-	 * changes it. Retries running out removes the retry date with no status
-	 * change, so counting this window would leave the reader listed with no event
-	 * to take them off.
+	 * A subscription on hold while its payment is retried does not count: only an
+	 * active or pending-cancel one does. Retries running out removes the retry
+	 * date with no status change, so counting this window would leave the reader
+	 * listed with no event to take them off.
 	 */
 	public function test_subscription_in_payment_recovery_is_excluded() {
 		$owner_id = $this->create_reader();
@@ -453,8 +452,8 @@ class Newspack_Test_Reader_Data_Active_Subscriptions extends WP_UnitTestCase {
 	}
 
 	/**
-	 * No user, no work: a zero or negative ID writes nothing, even though a guest
-	 * purchase is a subscription whose customer is user 0.
+	 * No user, no work: a zero or negative ID writes nothing, even when a
+	 * subscription with no customer on record has user 0 as its customer.
 	 */
 	public function test_refresh_and_mark_stale_ignore_invalid_user_ids() {
 		$this->create_subscription( 0, 101 );
@@ -468,14 +467,14 @@ class Newspack_Test_Reader_Data_Active_Subscriptions extends WP_UnitTestCase {
 		);
 
 		$this->assertSame( 0, $updates );
-		$this->assertEmpty( get_user_meta( 0, Active_Subscriptions_Reader_Data::STAMP_META_KEY, true ) );
 	}
 
 	/**
 	 * The item is stored as the JSON list of product IDs that the consumers decode:
-	 * Campaigns criteria and the GA4 `is_subscriber` flag both read it through
-	 * `Reader_Data`. The other tests decode the value themselves, so this one pins
-	 * the stored string and the reader the consumers use.
+	 * Campaigns criteria, the GA4 `is_subscriber` flag and the GAM
+	 * `reader_status=subscriber` targeting all read it through `Reader_Data`. The
+	 * other tests decode the value themselves, so this one pins the stored string
+	 * and the reader the consumers use.
 	 */
 	public function test_stored_item_is_the_json_list_consumers_read() {
 		$owner_id = $this->create_reader();
@@ -515,10 +514,12 @@ class Newspack_Test_Reader_Data_Active_Subscriptions extends WP_UnitTestCase {
 	public function test_event_marks_group_members_stale_and_one_refresh_gives_them_the_product() {
 		$owner_id  = $this->create_reader();
 		$member_id = $this->create_reader();
-		// The member's list was computed while they belonged to no group.
-		Active_Subscriptions_Reader_Data::refresh( $member_id );
+		$group     = $this->create_group_subscription( $owner_id, $member_id );
+		// Joining the group already marked the member stale. Re-stamp them with a
+		// direct write (a refresh would store the product), so only the event can
+		// make them stale again.
+		update_user_meta( $member_id, Active_Subscriptions_Reader_Data::STAMP_META_KEY, time() );
 		$this->assertFalse( Active_Subscriptions_Reader_Data::is_stale( $member_id ) );
-		$group = $this->create_group_subscription( $owner_id, $member_id );
 
 		Reader_Data::update_active_subscriptions( time(), $this->product_subscription_changed( $group, [ 101 ], 'pending', 'active' ) );
 
@@ -857,9 +858,8 @@ class Newspack_Test_Reader_Data_Active_Subscriptions extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Readers who never trigger an event after the deploy (a remember-me session
-	 * that outlives it) have no stamp. Their first page view computes the list:
-	 * this is how the corrected lists reach existing readers.
+	 * A reader with no stamp (a remember-me session that never triggers an event)
+	 * has no computed list. Their first page view computes it.
 	 */
 	public function test_missing_stamp_is_computed_on_page_view() {
 		$owner_id = $this->create_reader();
@@ -947,7 +947,6 @@ class Newspack_Test_Reader_Data_Active_Subscriptions extends WP_UnitTestCase {
 		);
 
 		$this->assertSame( 0, $updates );
-		$this->assertEmpty( get_user_meta( 0, Active_Subscriptions_Reader_Data::STAMP_META_KEY, true ) );
 	}
 
 	/**

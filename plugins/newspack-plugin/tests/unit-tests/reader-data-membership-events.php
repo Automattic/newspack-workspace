@@ -15,6 +15,7 @@ use Newspack\Reader_Data;
 use Newspack\Sync_Reader_Data_CLI;
 
 require_once dirname( __DIR__ ) . '/mocks/wp-cli-mocks.php';
+require_once __DIR__ . '/../mocks/wc-mocks.php';
 
 /**
  * Tests for Reader_Data::update_active_memberships(),
@@ -31,6 +32,39 @@ class Newspack_Test_Reader_Data_Membership_Events extends WP_UnitTestCase {
 	public function set_up() {
 		parent::set_up();
 		WP_CLI::reset();
+		global $subscriptions_database;
+		$subscriptions_database = [];
+	}
+
+	/**
+	 * The mock subscription store is a PHP global, so the transaction rollback
+	 * does not clear it.
+	 */
+	public function tear_down() {
+		global $subscriptions_database;
+		$subscriptions_database = [];
+		parent::tear_down();
+	}
+
+	/**
+	 * Create a mock subscription with one line item, because the product IDs of
+	 * a subscription are read from its line items.
+	 *
+	 * @param int    $user_id    Owner.
+	 * @param int    $product_id Product on the subscription.
+	 * @param string $status     Subscription status.
+	 *
+	 * @return \WC_Subscription
+	 */
+	private static function create_subscription( $user_id, $product_id, $status ) {
+		return \wcs_create_subscription(
+			[
+				'customer_id' => $user_id,
+				'status'      => $status,
+				'products'    => [ $product_id ],
+				'items'       => [ new \WC_Order_Item_Product( [ 'product_id' => $product_id ] ) ],
+			]
+		);
 	}
 
 	/**
@@ -208,22 +242,26 @@ class Newspack_Test_Reader_Data_Membership_Events extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The subscriptions handler recomputes the list rather than appending to the
-	 * stored value, so the recompute replaces a bare scalar a legacy writer left.
+	 * The subscriptions handler recomputes the list from what the reader holds
+	 * rather than patching the stored value, so the recompute replaces a bare
+	 * scalar a legacy writer left. The event cancels 789, which a patch would take
+	 * off the stored list and leave it empty; the reader still holds 456.
 	 */
 	public function test_subscription_event_recovers_bare_scalar_value() {
-		$user_id = self::factory()->user->create();
+		$user_id   = self::factory()->user->create();
+		$cancelled = self::create_subscription( $user_id, 789, 'cancelled' );
+		self::create_subscription( $user_id, 456, 'active' );
 		self::seed_raw_item( $user_id, 'active_subscriptions', '789' );
 		Reader_Data::update_active_subscriptions(
 			time(),
 			[
 				'user_id'         => $user_id,
-				'subscription_id' => 55,
+				'subscription_id' => $cancelled->get_id(),
 				'product_ids'     => [ 789 ],
 				'status_after'    => 'cancelled',
 			]
 		);
-		self::assertSame( '[]', Reader_Data::get_data( $user_id, 'active_subscriptions' ) );
+		self::assertSame( '[456]', Reader_Data::get_data( $user_id, 'active_subscriptions' ) );
 	}
 
 	/**
