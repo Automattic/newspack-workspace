@@ -453,10 +453,12 @@ class Newspack_Test_Reader_Data_Active_Subscriptions extends WP_UnitTestCase {
 
 	/**
 	 * No user, no work: a zero or negative ID writes nothing, even when a
-	 * subscription with no customer on record has user 0 as its customer.
+	 * subscription with no customer on record is stored under customer ID 0.
 	 */
 	public function test_refresh_and_mark_stale_ignore_invalid_user_ids() {
 		$this->create_subscription( 0, 101 );
+		$reader_id = $this->create_reader();
+		Active_Subscriptions_Reader_Data::refresh( $reader_id );
 
 		$updates = $this->count_item_updates(
 			function () {
@@ -467,6 +469,11 @@ class Newspack_Test_Reader_Data_Active_Subscriptions extends WP_UnitTestCase {
 		);
 
 		$this->assertSame( 0, $updates );
+
+		// delete_metadata() takes the absolute value of the ID, so without the
+		// guard a negative ID would clear another reader's stamp.
+		Active_Subscriptions_Reader_Data::mark_stale( -$reader_id );
+		$this->assertFalse( Active_Subscriptions_Reader_Data::is_stale( $reader_id ) );
 	}
 
 	/**
