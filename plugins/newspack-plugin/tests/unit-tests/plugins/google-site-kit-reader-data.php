@@ -26,18 +26,31 @@ class Newspack_Test_GoogleSiteKit_Reader_Data extends WP_UnitTestCase {
 	private $reader_id;
 
 	/**
+	 * Load the WooCommerce Subscriptions mocks, which the subscriber test builds a
+	 * subscription from.
+	 */
+	public static function set_up_before_class() {
+		parent::set_up_before_class();
+		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
+	}
+
+	/**
 	 * Sign in a reader for each test.
 	 */
 	public function set_up() {
 		parent::set_up();
-		$this->reader_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		global $subscriptions_database;
+		$subscriptions_database = [];
+		$this->reader_id        = self::factory()->user->create( [ 'role' => 'subscriber' ] );
 		wp_set_current_user( $this->reader_id );
 	}
 
 	/**
-	 * Sign the reader out.
+	 * Sign the reader out and empty the mock subscription store.
 	 */
 	public function tear_down() {
+		global $subscriptions_database;
+		$subscriptions_database = [];
 		wp_set_current_user( 0 );
 		parent::tear_down();
 	}
@@ -85,17 +98,29 @@ class Newspack_Test_GoogleSiteKit_Reader_Data extends WP_UnitTestCase {
 	public function test_former_subscriber_is_not_reported_as_subscriber() {
 		$this->assertSame( 'no', GoogleSiteKit::get_custom_event_parameters()['is_subscriber'], 'A reader who never subscribed should not be reported as a subscriber.' );
 
-		$subscription = [
+		// The event recomputes the list from the reader's subscriptions, so the
+		// reader needs a real one. A mock subscription fires no hooks on
+		// `update_status()`, so the test sends the event itself.
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id' => $this->reader_id,
+				'status'      => 'active',
+				'products'    => [ 123 ],
+				'items'       => [ new \WC_Order_Item_Product( [ 'product_id' => 123 ] ) ],
+			]
+		);
+		$event        = [
 			'user_id'         => $this->reader_id,
-			'subscription_id' => 1,
+			'subscription_id' => $subscription->get_id(),
 			'product_ids'     => [ 123 ],
 			'status_after'    => 'active',
 		];
-		Reader_Data::update_active_subscriptions( time(), $subscription );
+		Reader_Data::update_active_subscriptions( time(), $event );
 		$this->assertSame( 'yes', GoogleSiteKit::get_custom_event_parameters()['is_subscriber'] );
 
-		$subscription['status_after'] = 'cancelled';
-		Reader_Data::update_active_subscriptions( time(), $subscription );
+		$subscription->update_status( 'cancelled' );
+		$event['status_after'] = 'cancelled';
+		Reader_Data::update_active_subscriptions( time(), $event );
 		$this->assertSame( 'no', GoogleSiteKit::get_custom_event_parameters()['is_subscriber'] );
 	}
 }

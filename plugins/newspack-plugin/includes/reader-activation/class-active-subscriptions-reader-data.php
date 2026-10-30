@@ -15,13 +15,15 @@ defined( 'ABSPATH' ) || exit;
  *
  * Holding a product means what it means to a content gate: a subscription the
  * reader owns, a gift they received (its buyer does not hold it), or a seat in
- * an enabled group subscription. The list uses the same subscription lookup the
- * gates do, so the two cannot disagree about who holds what.
+ * an enabled group subscription. The list uses the same subscription lookup as
+ * the gates, with payment-recovery grace off and Network sibling-site access
+ * left out.
  *
- * Two limits keep the item meaning what it always has. A subscription on hold
- * while its payment is retried does not count: only an active or pending-cancel
- * one does. And a subscription held on a sibling site of a Newspack Network does
- * not count, because the list is built from this site's subscriptions alone.
+ * Those two differences keep the item meaning what it always has. A subscription
+ * on hold while its payment is retried does not count: only an active or
+ * pending-cancel one does. And a subscription held on a sibling site of a
+ * Newspack Network does not count, because the list is built from this site's
+ * subscriptions alone.
  *
  * Each reader's list carries a stamp: when it was computed. A page view
  * recomputes a list that is missing or more than a day old, which is what
@@ -109,6 +111,41 @@ final class Active_Subscriptions_Reader_Data {
 			return;
 		}
 		update_user_meta( $user_id, self::STAMP_META_KEY, time() );
+	}
+
+	/**
+	 * Data event handler for `product_subscription_changed`: bring up to date the
+	 * list of every reader the changed subscription can affect.
+	 *
+	 * Each list is recomputed from the subscriptions as they stand, never patched
+	 * with the event's products and status. A patch would take a product off a
+	 * reader while a second subscription still holds it, miss that a plan switch
+	 * swapped the product out, and list a gift under its buyer, who is the
+	 * subscription's customer but not the reader holding it.
+	 *
+	 * The customer and a gift's recipient are recomputed here. Group members are
+	 * only marked stale: a group can have hundreds, and each recomputes on their
+	 * next page view instead of inside the request that changed the subscription.
+	 *
+	 * Only `user_id` and `subscription_id` are read; the rest of the event
+	 * describes the one change and is ignored.
+	 *
+	 * @param array $data Event data.
+	 */
+	public static function handle_product_subscription_changed( array $data ): void {
+		if ( empty( $data['user_id'] ) || empty( $data['subscription_id'] ) ) {
+			return;
+		}
+		$user_id = (int) $data['user_id'];
+		self::refresh( $user_id );
+
+		$readers = WooCommerce_Subscriptions::get_subscription_readers( $data['subscription_id'] );
+		if ( $readers['recipient'] !== $user_id ) {
+			self::refresh( $readers['recipient'] );
+		}
+		foreach ( $readers['members'] as $member_id ) {
+			self::mark_stale( $member_id );
+		}
 	}
 
 	/**

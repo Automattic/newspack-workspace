@@ -772,31 +772,30 @@ final class Reader_Data {
 	}
 
 	/**
-	 * Data event handler to update a user's list of active non-donation subscriptions.
-	 * The active_subscriptions key stores an array of the user's active non-donation subscriptions.
+	 * Data event handler for `product_subscription_changed`: recompute the
+	 * `active_subscriptions` list of the readers the changed subscription affects.
+	 *
+	 * Delegates to Active_Subscriptions_Reader_Data, which owns the list. The list
+	 * is recomputed from the subscriptions as they stand now, so the event's
+	 * product IDs and statuses are not used, and an event for a gift updates the
+	 * recipient rather than the buyer. This method stays the registered handler,
+	 * with the same signature, so existing callers keep working.
 	 *
 	 * @param int   $timestamp Timestamp.
 	 * @param array $data      Data.
 	 */
 	public static function update_active_subscriptions( $timestamp, $data ) {
-		if ( empty( $data['user_id'] ) || empty( $data['subscription_id'] ) || empty( $data['product_ids'] ) || empty( $data['status_after'] ) ) {
-			return;
-		}
-
-		$active_subscriptions = self::decode_item_list( self::get_data( $data['user_id'], 'active_subscriptions' ) );
-		if ( WooCommerce_Connection::is_subscription_active( $data['status_after'] ) ) {
-			$active_subscriptions = array_merge( $active_subscriptions, $data['product_ids'] );
-		} else {
-			$active_subscriptions = array_values( array_diff( $active_subscriptions, $data['product_ids'] ) );
-		}
-
-		$active_subscriptions = array_values( array_unique( $active_subscriptions ) );
-		self::update_item( $data['user_id'], 'active_subscriptions', $active_subscriptions );
+		Active_Subscriptions_Reader_Data::handle_product_subscription_changed( (array) $data );
 	}
 
 	/**
-	 * Data event handler to check if the user has active subscriptions and
-	 * set the data item on login.
+	 * Data event handler to recompute a user's `active_subscriptions` list on
+	 * login.
+	 *
+	 * The list is recomputed whether or not the reader holds anything now, so a
+	 * subscription that ended without an event (a retry window running out, an
+	 * edit made in the database) stops being listed the next time they sign in.
+	 * A reader who holds nothing gets an empty list only if they already had one.
 	 *
 	 * @param int   $timestamp Timestamp.
 	 * @param array $data      Data.
@@ -806,27 +805,7 @@ final class Reader_Data {
 			return;
 		}
 
-		if ( ! function_exists( 'wcs_get_subscriptions' ) ) {
-			return;
-		}
-
-		$active_subscriptions = \wcs_get_subscriptions(
-			[
-				'customer_id'         => $data['user_id'],
-				'subscription_status' => WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES,
-			]
-		);
-
-		if ( empty( $active_subscriptions ) ) {
-			return;
-		}
-
-		$subscription_products = [];
-		foreach ( $active_subscriptions as $subscription ) {
-			$subscription_products = array_merge( $subscription_products, \Newspack\WooCommerce_Connection::get_products_for_order( $subscription->get_id() ) );
-		}
-		$subscription_products = array_values( array_unique( $subscription_products ) );
-		self::update_item( $data['user_id'], 'active_subscriptions', $subscription_products );
+		Active_Subscriptions_Reader_Data::refresh( (int) $data['user_id'] );
 	}
 
 	/**

@@ -129,6 +129,33 @@ class Newspack_Test_Reader_Data_Active_Subscriptions extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Build a payload shaped like the `product_subscription_changed` event, with the
+	 * keys the listeners in includes/data-events/listeners.php give it. A mock
+	 * subscription fires no hooks on `update_status()`, so a test hands this to the
+	 * handler itself.
+	 *
+	 * @param \WC_Subscription $subscription  Subscription the event is about.
+	 * @param int[]            $product_ids   Non-donation products on it, as the listener reports them.
+	 * @param string           $status_before Status before the change.
+	 * @param string           $status_after  Status after the change. A plan switch reports its current status for both.
+	 *
+	 * @return array
+	 */
+	private function product_subscription_changed( $subscription, array $product_ids, string $status_before, string $status_after ): array {
+		return [
+			'user_id'         => $subscription->get_customer_id(),
+			'email'           => $subscription->get_billing_email(),
+			'subscription_id' => $subscription->get_id(),
+			'product_ids'     => $product_ids,
+			'amount'          => 10.0,
+			'currency'        => 'USD',
+			'recurrence'      => 'month',
+			'status_before'   => $status_before,
+			'status_after'    => $status_after,
+		];
+	}
+
+	/**
 	 * The stored item, decoded.
 	 *
 	 * @param int $user_id User ID.
@@ -408,5 +435,244 @@ class Newspack_Test_Reader_Data_Active_Subscriptions extends WP_UnitTestCase {
 
 		$this->assertSame( 0, $updates );
 		$this->assertEmpty( get_user_meta( 0, Active_Subscriptions_Reader_Data::STAMP_META_KEY, true ) );
+	}
+
+	/**
+	 * The item is stored as the JSON list of product IDs that the consumers decode:
+	 * Campaigns criteria and the GA4 `is_subscriber` flag both read it through
+	 * `Reader_Data`. The other tests decode the value themselves, so this one pins
+	 * the stored string and the reader the consumers use.
+	 */
+	public function test_stored_item_is_the_json_list_consumers_read() {
+		$owner_id = $this->create_reader();
+		$this->create_subscription( $owner_id, 303 );
+		$this->create_subscription( $owner_id, 101 );
+
+		Active_Subscriptions_Reader_Data::refresh( $owner_id );
+
+		$this->assertSame( '[101,303]', Reader_Data::get_data( $owner_id, 'active_subscriptions' ) );
+		$this->assertSame( [ 101, 303 ], Reader_Data::get_active_subscriptions( $owner_id ) );
+	}
+
+	/**
+	 * A gift goes on its recipient's list, not its buyer's. The subscription's
+	 * customer is the buyer, who cannot read what they bought, so an event that
+	 * listed the product under its customer would call the buyer a subscriber and
+	 * miss the recipient.
+	 */
+	public function test_event_for_a_gift_fills_the_recipient_and_empties_the_buyer() {
+		$buyer_id     = $this->create_reader();
+		$recipient_id = $this->create_reader();
+		$gift         = $this->create_gifted_subscription( $buyer_id, $recipient_id, 101 );
+		// The buyer is listed already, the way an earlier event left them.
+		Reader_Data::update_item( $buyer_id, Active_Subscriptions_Reader_Data::STORE_KEY, [ 101 ] );
+
+		Reader_Data::update_active_subscriptions( time(), $this->product_subscription_changed( $gift, [ 101 ], 'pending', 'active' ) );
+
+		$this->assertSame( [ 101 ], $this->stored_products( $recipient_id ) );
+		$this->assertSame( [], $this->stored_products( $buyer_id ) );
+	}
+
+	/**
+	 * A group can have hundreds of members, so the event only marks them stale
+	 * rather than recompute each one in the request that changed the subscription.
+	 * One recompute on their next page view gives them the group's products.
+	 */
+	public function test_event_marks_group_members_stale_and_one_refresh_gives_them_the_product() {
+		$owner_id  = $this->create_reader();
+		$member_id = $this->create_reader();
+		// The member's list was computed while they belonged to no group.
+		Active_Subscriptions_Reader_Data::refresh( $member_id );
+		$this->assertFalse( Active_Subscriptions_Reader_Data::is_stale( $member_id ) );
+		$group = $this->create_group_subscription( $owner_id, $member_id );
+
+		Reader_Data::update_active_subscriptions( time(), $this->product_subscription_changed( $group, [ 101 ], 'pending', 'active' ) );
+
+		$this->assertSame( [ 101 ], $this->stored_products( $owner_id ) );
+		$this->assertTrue( Active_Subscriptions_Reader_Data::is_stale( $member_id ) );
+		$this->assertFalse( $this->stored_products( $member_id ), 'The event does not recompute members.' );
+
+		Active_Subscriptions_Reader_Data::refresh( $member_id );
+
+		$this->assertSame( [ 101 ], $this->stored_products( $member_id ) );
+		$this->assertFalse( Active_Subscriptions_Reader_Data::is_stale( $member_id ) );
+	}
+
+	/**
+	 * A group member loses the product when the group's subscription ends, once
+	 * the recompute the event queued for them runs.
+	 */
+	public function test_cancelled_group_empties_a_member_after_a_refresh() {
+		$owner_id  = $this->create_reader();
+		$member_id = $this->create_reader();
+		$group     = $this->create_group_subscription( $owner_id, $member_id );
+		Active_Subscriptions_Reader_Data::refresh( $owner_id );
+		Active_Subscriptions_Reader_Data::refresh( $member_id );
+		$this->assertSame( [ 101 ], $this->stored_products( $member_id ) );
+
+		$group->update_status( 'cancelled' );
+		Reader_Data::update_active_subscriptions( time(), $this->product_subscription_changed( $group, [ 101 ], 'active', 'cancelled' ) );
+
+		$this->assertSame( [], $this->stored_products( $owner_id ) );
+		$this->assertTrue( Active_Subscriptions_Reader_Data::is_stale( $member_id ) );
+
+		Active_Subscriptions_Reader_Data::refresh( $member_id );
+
+		$this->assertSame( [], $this->stored_products( $member_id ) );
+	}
+
+	/**
+	 * Two subscriptions to one product still hold it after one of them ends.
+	 * Subtracting the cancelled subscription's products from the list would take
+	 * the product off a reader whose other subscription is still active.
+	 */
+	public function test_cancelling_one_of_two_subscriptions_to_a_product_keeps_the_product() {
+		$owner_id = $this->create_reader();
+		$first    = $this->create_subscription( $owner_id, 101 );
+		$second   = $this->create_subscription( $owner_id, 101 );
+		Active_Subscriptions_Reader_Data::refresh( $owner_id );
+		$this->assertSame( [ 101 ], $this->stored_products( $owner_id ) );
+
+		$first->update_status( 'cancelled' );
+		Reader_Data::update_active_subscriptions( time(), $this->product_subscription_changed( $first, [ 101 ], 'active', 'cancelled' ) );
+		$this->assertSame( [ 101 ], $this->stored_products( $owner_id ) );
+
+		$second->update_status( 'cancelled' );
+		Reader_Data::update_active_subscriptions( time(), $this->product_subscription_changed( $second, [ 101 ], 'active', 'cancelled' ) );
+		$this->assertSame( [], $this->stored_products( $owner_id ) );
+	}
+
+	/**
+	 * A plan switch replaces the product on the same subscription and reports the
+	 * subscription's status as both its before and after. An event that only added
+	 * the new product would leave the old one on the list.
+	 */
+	public function test_plan_switch_drops_the_old_product() {
+		$owner_id     = $this->create_reader();
+		$subscription = $this->create_subscription( $owner_id, 101 );
+		Active_Subscriptions_Reader_Data::refresh( $owner_id );
+		$this->assertSame( [ 101 ], $this->stored_products( $owner_id ) );
+
+		$subscription->remove_item( array_key_first( $subscription->get_items() ) );
+		$subscription->add_item( new \WC_Order_Item_Product( [ 'product_id' => 202 ] ) );
+		$subscription->products = [ 202 ];
+		Reader_Data::update_active_subscriptions( time(), $this->product_subscription_changed( $subscription, [ 202 ], 'active', 'active' ) );
+
+		$this->assertSame( [ 202 ], $this->stored_products( $owner_id ) );
+	}
+
+	/**
+	 * The handler works from the user and the subscription alone. The event's
+	 * product IDs and statuses describe one change, and the handler recomputes
+	 * from what the reader holds now.
+	 */
+	public function test_handler_needs_only_a_user_and_a_subscription() {
+		$owner_id     = $this->create_reader();
+		$subscription = $this->create_subscription( $owner_id, 101 );
+		Reader_Data::update_item( $owner_id, Active_Subscriptions_Reader_Data::STORE_KEY, [ 123 ] );
+
+		Active_Subscriptions_Reader_Data::handle_product_subscription_changed(
+			[
+				'user_id'         => $owner_id,
+				'subscription_id' => $subscription->get_id(),
+			]
+		);
+
+		$this->assertSame( [ 101 ], $this->stored_products( $owner_id ) );
+	}
+
+	/**
+	 * Without a user or a subscription there is nobody to recompute.
+	 */
+	public function test_handler_ignores_an_event_missing_its_user_or_subscription() {
+		$owner_id     = $this->create_reader();
+		$subscription = $this->create_subscription( $owner_id, 101 );
+		Reader_Data::update_item( $owner_id, Active_Subscriptions_Reader_Data::STORE_KEY, [ 123 ] );
+
+		$updates = $this->count_item_updates(
+			function () use ( $owner_id, $subscription ) {
+				Active_Subscriptions_Reader_Data::handle_product_subscription_changed( [ 'user_id' => $owner_id ] );
+				Active_Subscriptions_Reader_Data::handle_product_subscription_changed( [ 'subscription_id' => $subscription->get_id() ] );
+				Active_Subscriptions_Reader_Data::handle_product_subscription_changed( [] );
+			}
+		);
+
+		$this->assertSame( 0, $updates );
+		$this->assertSame( [ 123 ], $this->stored_products( $owner_id ) );
+	}
+
+	/**
+	 * A subscription deleted before a queued event runs has no readers to look up,
+	 * but the customer is still recomputed, which takes the deleted subscription's
+	 * product off them.
+	 */
+	public function test_handler_still_refreshes_the_user_when_the_subscription_no_longer_loads() {
+		$owner_id = $this->create_reader();
+		Reader_Data::update_item( $owner_id, Active_Subscriptions_Reader_Data::STORE_KEY, [ 123 ] );
+
+		Reader_Data::update_active_subscriptions(
+			time(),
+			[
+				'user_id'         => $owner_id,
+				'subscription_id' => 9999,
+				'product_ids'     => [ 123 ],
+				'status_after'    => 'cancelled',
+			]
+		);
+
+		$this->assertSame( [], $this->stored_products( $owner_id ) );
+	}
+
+	/**
+	 * Logging in recomputes the list, so a reader whose last subscription ended
+	 * without an event is taken off it. A login handler that gave up when the
+	 * reader held nothing would leave the stale list in place.
+	 */
+	public function test_login_empties_a_stored_list_when_nothing_is_held() {
+		$user_id = $this->create_reader();
+		Reader_Data::update_item( $user_id, Active_Subscriptions_Reader_Data::STORE_KEY, [ 123 ] );
+
+		Reader_Data::check_product_subscriptions(
+			time(),
+			[
+				'user_id' => $user_id,
+				'email'   => 'reader@example.com',
+			]
+		);
+
+		$this->assertSame( [], $this->stored_products( $user_id ) );
+	}
+
+	/**
+	 * Logging in lists what the reader holds, including a gift they received.
+	 */
+	public function test_login_lists_the_products_a_reader_holds() {
+		$buyer_id     = $this->create_reader();
+		$recipient_id = $this->create_reader();
+		$this->create_gifted_subscription( $buyer_id, $recipient_id, 101 );
+		$this->create_subscription( $recipient_id, 303 );
+
+		Reader_Data::check_product_subscriptions(
+			time(),
+			[
+				'user_id' => $recipient_id,
+				'email'   => 'recipient@example.com',
+			]
+		);
+
+		$this->assertSame( [ 101, 303 ], $this->stored_products( $recipient_id ) );
+	}
+
+	/**
+	 * The login handler still needs a user and an email before it does anything.
+	 */
+	public function test_login_without_a_user_or_email_changes_nothing() {
+		$user_id = $this->create_reader();
+		Reader_Data::update_item( $user_id, Active_Subscriptions_Reader_Data::STORE_KEY, [ 123 ] );
+
+		Reader_Data::check_product_subscriptions( time(), [ 'user_id' => $user_id ] );
+		Reader_Data::check_product_subscriptions( time(), [ 'email' => 'reader@example.com' ] );
+
+		$this->assertSame( [ 123 ], $this->stored_products( $user_id ) );
 	}
 }
