@@ -3,7 +3,7 @@
  */
 import { __, _x, sprintf } from '@wordpress/i18n';
 import { DropdownMenu, MenuGroup, MenuItem } from '@wordpress/components';
-import { useDispatch } from '@wordpress/data';
+import { select, useDispatch } from '@wordpress/data';
 import { decodeEntities } from '@wordpress/html-entities';
 import { createInterpolateElement, useMemo, useRef } from '@wordpress/element';
 import { moreVertical } from '@wordpress/icons';
@@ -61,17 +61,22 @@ export default function ContentGateSettings( {
 		),
 	} );
 
-	const updateStatus = useRef< ( status: GateStatus ) => void >( undefined );
+	// Undo can outlive this card, once a status filter drops the card from the list. By then the
+	// render's own values are stale (isFetching stays true for good), so this reads what it needs at call time.
+	const getCurrentGates = () => ( select( WIZARD_STORE_NAMESPACE ).getWizardAPIData( slug )?.gates || [] ) as Gate[];
+	const isChangingStatus = useRef( false );
 	const handleStatusChange = ( status: GateStatus ) => {
-		if ( isFetching ) {
+		if ( isChangingStatus.current ) {
 			return;
 		}
+		isChangingStatus.current = true;
+		const currentGate = getCurrentGates().find( g => g.id === gate.id ) ?? gate;
 		resetError();
 		resetNotices();
-		const prevStatus = gate.status;
-		const gateTitle = gate.title;
+		const prevStatus = currentGate.status;
+		const gateTitle = currentGate.title;
 		const _gate = {
-			...gate,
+			...currentGate,
 			status,
 		};
 		wizardApiFetch< Gate >(
@@ -82,7 +87,7 @@ export default function ContentGateSettings( {
 			},
 			{
 				onSuccess( data: Gate ) {
-					updateGatesData( gates.map( g => ( g.id === data.id ? data : g ) ) );
+					updateGatesData( getCurrentGates().map( g => ( g.id === data.id ? data : g ) ) );
 					addNotice( {
 						message: sprintf(
 							// translators: 1: the gate title, or "Content" if we can't determine the gate title. 2: the gate status.
@@ -92,7 +97,7 @@ export default function ContentGateSettings( {
 						),
 						type: 'success',
 						id: 'content-gate-status-changed',
-						actions: [ { label: __( 'Undo', 'newspack-plugin' ), onClick: () => updateStatus.current?.( prevStatus ) } ],
+						actions: [ { label: __( 'Undo', 'newspack-plugin' ), onClick: () => handleStatusChange( prevStatus ) } ],
 					} );
 				},
 				onError( fetchError: WpFetchError ) {
@@ -102,10 +107,12 @@ export default function ContentGateSettings( {
 						id: 'content-gate-status-error',
 					} );
 				},
+				onFinally() {
+					isChangingStatus.current = false;
+				},
 			}
 		);
 	};
-	updateStatus.current = handleStatusChange;
 
 	const handleDelete = () => {
 		resetError();
@@ -190,7 +197,7 @@ export default function ContentGateSettings( {
 			{
 				label: statusLabel,
 				ariaLabel: withGateTitle( statusLabel ),
-				action: () => updateStatus.current?.( gate.status === 'publish' ? 'draft' : 'publish' ),
+				action: () => handleStatusChange( gate.status === 'publish' ? 'draft' : 'publish' ),
 				disabled: isFetching,
 			},
 			{

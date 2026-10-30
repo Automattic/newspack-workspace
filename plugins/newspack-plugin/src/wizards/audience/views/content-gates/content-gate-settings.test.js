@@ -28,17 +28,15 @@ const mockAddNotice = jest.fn();
 const mockResetNotices = jest.fn();
 const mockResetError = jest.fn();
 const mockCloseMenu = jest.fn();
+let mockStoreGates = [ mockGate ];
+let mockIsFetching = false;
+// The fetch boundary's outcome; by default any save fails with a parsed error.
+let mockFetch;
 
-// The fetch boundary: any save invokes onError with a parsed error.
 jest.mock( '../../../hooks/use-wizard-api-fetch', () => ( {
 	useWizardApiFetch: () => ( {
-		wizardApiFetch: ( _opts, callbacks ) => {
-			// Mirror the hook: onError only fires when the handler provides one.
-			if ( callbacks.onError ) {
-				callbacks.onError( { message: 'Status change failed &amp; rejected' } );
-			}
-		},
-		isFetching: false,
+		wizardApiFetch: ( ...args ) => mockFetch( ...args ),
+		isFetching: mockIsFetching,
 		resetError: ( ...args ) => mockResetError( ...args ),
 	} ),
 } ) );
@@ -49,6 +47,7 @@ jest.mock( '@wordpress/data', () => ( {
 		resetNotices: ( ...args ) => mockResetNotices( ...args ),
 	} ),
 	useSelect: () => ( {} ),
+	select: () => ( { getWizardAPIData: () => ( { gates: mockStoreGates } ) } ),
 } ) );
 
 jest.mock( '@wordpress/components', () => {
@@ -57,8 +56,10 @@ jest.mock( '@wordpress/components', () => {
 		DropdownMenu: ( { children, label } ) =>
 			React.createElement( 'div', null, React.createElement( 'button', { 'aria-label': label } ), children( { onClose: mockCloseMenu } ) ),
 		MenuGroup: ( { children } ) => React.createElement( 'div', null, children ),
-		MenuItem: ( { children, onClick, 'aria-label': ariaLabel } ) =>
-			React.createElement( 'button', { onClick, 'aria-label': ariaLabel }, children ),
+		MenuItem: ( { children, onClick, href, 'aria-label': ariaLabel } ) =>
+			href
+				? React.createElement( 'a', { href, 'aria-label': ariaLabel }, children )
+				: React.createElement( 'button', { onClick, 'aria-label': ariaLabel }, children ),
 	};
 } );
 
@@ -91,6 +92,15 @@ describe( 'ContentGateSettings per-gate actions', () => {
 	beforeEach( () => {
 		mockAddNotice.mockReset();
 		mockCloseMenu.mockReset();
+		mockStoreGates = [ mockGate ];
+		mockIsFetching = false;
+		mockFetch = ( _opts, callbacks ) => {
+			// Mirror the hook: onError only fires when the handler provides one.
+			if ( callbacks.onError ) {
+				callbacks.onError( { message: 'Status change failed &amp; rejected' } );
+			}
+			callbacks.onFinally?.();
+		};
 		mockConfig = {};
 		// Read at module load; must exist before the component is required.
 		window.newspackAudienceContentGates = { available_access_rules: {} };
@@ -150,6 +160,51 @@ describe( 'ContentGateSettings per-gate actions', () => {
 		fireEvent.click( screen.getByRole( 'button', { name: 'Duplicate: Gate X' } ) );
 
 		expect( mockCloseMenu ).toHaveBeenCalled();
+	} );
+
+	it( 'still undoes a status change after a filter has removed the card', () => {
+		const other = { ...mockGate, id: 8, title: 'Gate Y' };
+		const saves = [];
+		mockStoreGates = [ mockGate, other ];
+		mockFetch = ( { data }, callbacks ) => {
+			saves.push( data.gate.status );
+			mockStoreGates = mockStoreGates.map( g => ( g.id === data.gate.id ? data.gate : g ) );
+			callbacks.onSuccess( data.gate );
+			callbacks.onFinally();
+		};
+		const updateGatesData = jest.fn();
+		const ContentGateSettings = require( './content-gate-settings' ).default;
+		const { rerender, unmount } = render( <ContentGateSettings gate={ mockGate } updateGatesData={ updateGatesData } /> );
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Set to Inactive: Gate X' } ) );
+		const undo = mockAddNotice.mock.calls[ 0 ][ 0 ].actions[ 0 ].onClick;
+
+		// The card's last render before it left the list still had the request in flight.
+		mockIsFetching = true;
+		rerender( <ContentGateSettings gate={ mockGate } updateGatesData={ updateGatesData } /> );
+		unmount();
+		// A change to another gate made since the toggle must survive the undo.
+		mockStoreGates = mockStoreGates.map( g => ( g.id === other.id ? { ...g, status: 'draft' } : g ) );
+
+		undo();
+
+		expect( saves ).toEqual( [ 'draft', 'publish' ] );
+		expect( updateGatesData ).toHaveBeenLastCalledWith( [
+			expect.objectContaining( { id: 7, status: 'publish' } ),
+			expect.objectContaining( { id: 8, status: 'draft' } ),
+		] );
+	} );
+
+	it( 'links the layout items to the layout editor', () => {
+		const ContentGateSettings = require( './content-gate-settings' ).default;
+		render(
+			<ContentGateSettings
+				gate={ { ...mockGate, registration: { active: true, gate_layout_id: 12, metering: { enabled: false }, access_rules: [] } } }
+				updateGatesData={ () => {} }
+			/>
+		);
+
+		expect( screen.getByRole( 'link', { name: 'Edit Registered Access Layout: Gate X' } ) ).toHaveAttribute( 'href', '#' );
 	} );
 
 	it( 'names the site auto-signup setting on a premium newsletter card', () => {

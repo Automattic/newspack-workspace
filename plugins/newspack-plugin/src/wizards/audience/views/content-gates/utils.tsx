@@ -345,11 +345,6 @@ export const getAutoSignupOptions = ( siteAutoSignup?: boolean ): Array< { label
 	];
 };
 
-/**
- * The header subtitle for a gates screen, shared by the list and the editor so the header keeps its height between them.
- *
- * @param isNewsletter Whether the screen manages premium newsletter gates.
- */
 // "paid" uses the same test as the card's Paid Access column, which reads N/A for a
 // gate whose paid access is switched on with no rules and no meter.
 const GATE_FILTERS: Record< 'status' | 'access', Record< string, ( gate: Gate ) => boolean > > = {
@@ -397,6 +392,11 @@ export const getUsefulGateFilterValues = ( gates: Gate[], field: 'status' | 'acc
 		return matches > 0 && matches < gates.length;
 	} );
 
+/**
+ * The header subtitle for a gates screen, shared by the list and the editor so the header keeps its height between them.
+ *
+ * @param isNewsletter Whether the screen manages premium newsletter gates.
+ */
 export const getGatesSubTitle = ( isNewsletter = false ) =>
 	isNewsletter
 		? __(

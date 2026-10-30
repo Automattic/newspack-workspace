@@ -15,6 +15,7 @@ import ContentGates from './content-gates';
 // mock-prefixed so Jest's hoisted jest.mock factories may close over them.
 const mockSetHeaderData = jest.fn();
 let mockDataViewsProps;
+const mockSpeak = jest.fn();
 let mockWizardData = {};
 
 jest.mock( '@wordpress/data', () => ( {
@@ -51,6 +52,8 @@ jest.mock( '@wordpress/ui', () => {
 	const Passthrough = ( { children } ) => React.createElement( 'div', null, children );
 	return failLoudlyMock( '@wordpress/ui', { Stack: Passthrough } );
 } );
+
+jest.mock( '@wordpress/a11y', () => ( { speak: ( ...args ) => mockSpeak( ...args ) } ) );
 
 jest.mock( '@wordpress/dataviews', () => ( { DataViews: { Search: () => null, Filters: () => null } } ) );
 
@@ -99,14 +102,15 @@ describe( 'Content Gates page header', () => {
 	} );
 
 	it.each( [
-		{ gateCount: 1, expectedMenu: [ 'Advanced Settings' ] },
-		{ gateCount: 2, expectedMenu: [ 'Gate Priority', 'Advanced Settings' ] },
-	] )( 'lists Gate Priority only with more than one gate ($gateCount)', ( { gateCount, expectedMenu } ) => {
+		{ gateCount: 1, expectedSecondary: [] },
+		{ gateCount: 2, expectedSecondary: [ 'Gate Priority' ] },
+	] )( 'shows Gate Priority as a button only with more than one gate ($gateCount)', ( { gateCount, expectedSecondary } ) => {
 		mockWizardData = { gates: gatesOfLength( gateCount ), config: {} };
 		render( <ContentGates updateGatesData={ () => {} } /> );
 
 		const headerData = lastHeaderData();
-		expect( moreActionLabels( headerData ) ).toEqual( expectedMenu );
+		expect( headerData.actions.filter( action => action.type === 'secondary' ).map( action => action.label ) ).toEqual( expectedSecondary );
+		expect( moreActionLabels( headerData ) ).toEqual( [ 'Advanced Settings' ] );
 		expect( headerData.sectionMenu ).toBeUndefined();
 		expect( headerData.sectionTitle ).toBeUndefined();
 	} );
@@ -157,12 +161,15 @@ describe( 'Content Gates toolbar', () => {
 		expect( mockDataViewsProps.className ).not.toContain( 'is-default-view' );
 	} );
 
-	it( 'says so when nothing matches', () => {
+	it( 'says so when nothing matches, and announces the count', () => {
+		mockSpeak.mockReset();
 		renderGates( [ active, inactive ] );
+		expect( mockSpeak ).not.toHaveBeenCalled();
 
 		changeView( { search: 'gamma' } );
 
 		expect( screen.getByText( 'No content gates match your search.' ) ).toBeInTheDocument();
+		expect( mockSpeak ).toHaveBeenLastCalledWith( '0 content gates found.' );
 	} );
 
 	it( 'hides the Status chip when every gate has the same status', () => {

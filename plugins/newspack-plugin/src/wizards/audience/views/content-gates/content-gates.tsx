@@ -10,7 +10,8 @@ import classnames from 'classnames';
 /**
  * WordPress dependencies.
  */
-import { __ } from '@wordpress/i18n';
+import { speak } from '@wordpress/a11y';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { DataViews as BaseDataViews } from '@wordpress/dataviews';
 import { useEffect, useMemo, useState } from '@wordpress/element';
@@ -48,6 +49,7 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 	const status = chosenStatus && statusValues.includes( chosenStatus ) ? chosenStatus : undefined;
 	const access = chosenAccess && accessValues.includes( chosenAccess ) ? chosenAccess : undefined;
 	const filteredGates = filterGates( gates, { search, status, access } );
+	const isDefaultView = ! search && ! status && ! access;
 
 	// Forget a choice whose filter has gone, or it would come back when a later gate revives the filter.
 	useEffect( () => {
@@ -55,6 +57,18 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 		setChosenStatus( status );
 		setChosenAccess( access );
 	}, [ search, status, access ] );
+
+	useEffect( () => {
+		if ( ! isDefaultView ) {
+			speak(
+				sprintf(
+					// translators: %d: number of content gates matching the search and filters.
+					_n( '%d content gate found.', '%d content gates found.', filteredGates.length, 'newspack-plugin' ),
+					filteredGates.length
+				)
+			);
+		}
+	}, [ filteredGates.length, search, status, access ] ); // eslint-disable-line react-hooks/exhaustive-deps -- isDefaultView derives from these.
 
 	const fields = useMemo( () => {
 		const labels: Record< string, string > = {
@@ -109,21 +123,21 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 		}
 		setHeaderData( {
 			actions: [
+				...( gateCount > 1
+					? [
+							{
+								type: 'secondary',
+								label: __( 'Gate Priority', 'newspack-plugin' ),
+								action: () => setShowPriorityModal( true ),
+							},
+					  ]
+					: [] ),
 				{
 					type: 'primary',
 					label: __( 'Add Content Gate', 'newspack-plugin' ),
 					mobileIcon: 'plus',
 					href: '#/edit/new/all',
 				},
-				...( gateCount > 1
-					? [
-							{
-								type: 'more',
-								label: __( 'Gate Priority', 'newspack-plugin' ),
-								action: () => setShowPriorityModal( true ),
-							},
-					  ]
-					: [] ),
 				{
 					type: 'more',
 					label: __( 'Advanced Settings', 'newspack-plugin' ),
@@ -148,7 +162,7 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 			<AdvancedSettings showModal={ showAdvancedSettings } closeModal={ () => setShowAdvancedSettings( false ) } />
 			{ canSearch && (
 				<DataViews
-					className={ classnames( 'newspack-content-gates__toolbar', { 'is-default-view': ! search && ! status && ! access } ) }
+					className={ classnames( 'newspack-content-gates__toolbar', { 'is-default-view': isDefaultView } ) }
 					view={ view }
 					onChangeView={ onChangeView }
 					fields={ fields }
