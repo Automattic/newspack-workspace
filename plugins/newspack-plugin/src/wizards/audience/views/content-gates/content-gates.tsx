@@ -109,8 +109,8 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 		perPage: 100,
 		fields: [],
 		filters: [
-			...( status ? [ { field: 'status', operator: 'is' as const, value: status } ] : [] ),
-			...( access ? [ { field: 'access', operator: 'is' as const, value: access } ] : [] ),
+			...( statusValues.length ? [ { field: 'status', operator: 'is' as const, value: status ?? ALL_GATES } ] : [] ),
+			...( accessValues.length ? [ { field: 'access', operator: 'is' as const, value: access ?? ALL_GATES } ] : [] ),
 		],
 	};
 

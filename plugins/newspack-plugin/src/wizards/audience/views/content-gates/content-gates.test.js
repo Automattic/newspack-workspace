@@ -141,13 +141,14 @@ describe( 'Content Gates toolbar', () => {
 	const changeView = next => act( () => mockDataViewsProps.onChangeView( { ...mockDataViewsProps.view, ...next } ) );
 	const filterIds = () => mockDataViewsProps.fields.filter( field => field.filterBy ).map( field => field.id );
 	const inactiveFilter = { field: 'status', operator: 'is', value: 'inactive' };
+	const allStatuses = { ...inactiveFilter, value: 'all' };
 
 	it( 'opens on every gate, inactive ones included, and hides Reset', () => {
 		renderGates( [ active, inactive ] );
 
 		expect( screen.getByText( 'Alpha' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Beta' ) ).toBeInTheDocument();
-		expect( mockDataViewsProps.view.filters ).toEqual( [] );
+		expect( mockDataViewsProps.view.filters ).toEqual( [ allStatuses ] );
 		expect( mockDataViewsProps.className ).toContain( 'is-default-view' );
 	} );
 
@@ -171,7 +172,7 @@ describe( 'Content Gates toolbar', () => {
 		changeView( { filters: [ { ...inactiveFilter, value: 'all' } ] } );
 
 		expect( screen.getByText( 'Alpha' ) ).toBeInTheDocument();
-		expect( mockDataViewsProps.view.filters ).toEqual( [] );
+		expect( mockDataViewsProps.view.filters ).toEqual( [ allStatuses ] );
 		expect( mockDataViewsProps.className ).toContain( 'is-default-view' );
 	} );
 
@@ -190,6 +191,7 @@ describe( 'Content Gates toolbar', () => {
 		renderGates( [ active, { ...active, id: 3, title: 'Gamma' } ] );
 
 		expect( filterIds() ).not.toContain( 'status' );
+		expect( mockDataViewsProps.view.filters ).toEqual( [] );
 	} );
 
 	it( 'hides the toolbar for a single gate', () => {
@@ -212,6 +214,6 @@ describe( 'Content Gates toolbar', () => {
 		rerender( <ContentGates updateGatesData={ () => {} } /> );
 
 		expect( filterIds() ).toContain( 'status' );
-		expect( mockDataViewsProps.view.filters ).toEqual( [] );
+		expect( mockDataViewsProps.view.filters ).toEqual( [ allStatuses ] );
 	} );
 } );
