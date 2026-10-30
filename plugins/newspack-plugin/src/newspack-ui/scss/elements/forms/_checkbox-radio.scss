@@ -206,6 +206,7 @@
 			}
 
 			&[type="radio"]:checked:focus-visible {
+				border-color: var(--newspack-ui-forced-mark);
 				box-shadow: inset 0 0 0 5px var(--newspack-ui-forced-mark);
 				outline-color: CanvasText;
 			}

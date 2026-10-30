@@ -32,13 +32,21 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 	outline-offset: -2px $important;
 }
 
-@mixin focus-fill($color: currentcolor, $halo: $focus-color, $important: null, $inner: null) {
+@mixin focus-fill($color: currentcolor, $halo: $focus-color, $important: null, $inner: null, $width: 2px) {
 	border-color: $color $important;
 	box-shadow:
-		inset 0 0 0 2px $color,
+		inset 0 0 0 $width $color,
 		$inner,
 		0 0 0 var(--wp--custom--focus--halo-width) color-mix(in srgb, #{$halo} var(--wp--custom--focus--halo-mix), transparent) $important;
 	outline: 2px solid transparent $important;
+
+	@media (prefers-contrast: more) {
+		box-shadow:
+			inset 0 0 0 $width $color,
+			$inner,
+			0 0 0 1px $halo,
+			0 0 0 calc(1px + var(--wp--custom--focus--halo-width)) color-mix(in srgb, #{$halo} var(--wp--custom--focus--halo-mix), transparent) $important;
+	}
 }
 
 /*
@@ -164,7 +172,7 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 			}
 
 			&:checked {
-				@include focus-fill(var(--wp--preset--color--base), $important: $important);
+				@include focus-fill(var(--wp--preset--color--base), $important: $important, $width: 1px);
 			}
 
 			@media (forced-colors: active) {
@@ -268,7 +276,7 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 		}
 
 		&:focus-visible:where(:not(.newspack-ui *)) {
-			@include focus-fill(var(--wp--preset--color--base), $important: $important, $inner: inset 0 0 0 5px var(--wp--preset--color--contrast));
+			@include focus-fill(var(--wp--preset--color--base), $important: $important, $inner: inset 0 0 0 5px var(--wp--preset--color--contrast), $width: 1px);
 		}
 	}
 
@@ -282,7 +290,7 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 	@media (forced-colors: active) {
 		&:checked,
 		&:checked:focus-visible {
-			border-color: Highlight;
+			border-color: Highlight $important;
 			box-shadow: inset 0 0 0 5px Highlight $important;
 		}
 

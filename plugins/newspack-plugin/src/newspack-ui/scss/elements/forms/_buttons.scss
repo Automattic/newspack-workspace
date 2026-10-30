@@ -93,6 +93,8 @@
 		&:disabled:where(:not(.newspack-ui__button--loading)),
 		&.disabled:where(:not(.newspack-ui__button--loading)),
 		&[aria-disabled="true"]:where(:not(.newspack-ui__button--loading)) {
+			--newspack-ui-button-focus: var(--newspack-ui-button-ink-disabled);
+
 			background: var(--newspack-ui-button-bg-disabled) !important;
 			color: var(--newspack-ui-button-ink-disabled) !important;
 			cursor: default;
@@ -166,6 +168,8 @@
 
 			@media ( hover: hover ) and ( pointer: fine ) {
 				&:not(.newspack-ui__button--destructive):hover {
+					--newspack-ui-button-focus: var(--newspack-ui-color-button-text-hover);
+
 					color: var(--newspack-ui-color-button-text-hover);
 				}
 			}
@@ -217,6 +221,7 @@
 
 		&--ghost-light {
 			--newspack-ui-button-ink: var(--newspack-ui-color-text-muted);
+			--newspack-ui-button-focus: var(--newspack-ui-button-ink);
 		}
 
 		&--ghost-dark {
