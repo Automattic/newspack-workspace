@@ -1,11 +1,12 @@
 .newspack-ui {
 	&__word-divider {
 		align-items: center;
+		color: var(--newspack-ui-color-text-subtle);
 		display: flex;
-		font-size: var(--newspack-ui-font-size-xs);
+		font-size: var(--newspack-ui-font-size-small);
 		gap: var(--newspack-ui-spacer-2);
 		justify-content: space-evenly;
-		margin: var(--newspack-ui-spacer-5) 0;
+		margin: var(--newspack-ui-spacer-3) 0;
 
 		&::before,
 		&::after {
@@ -30,5 +31,6 @@
 		border: 0;
 		height: 1px;
 		margin: var(--newspack-ui-spacer-6) 0;
+		max-width: none;
 	}
 }

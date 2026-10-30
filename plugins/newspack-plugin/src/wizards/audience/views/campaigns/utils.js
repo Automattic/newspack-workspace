@@ -66,10 +66,17 @@ const placementMap = {
 	manual: __( 'Manual Only', 'newspack-plugin' ),
 };
 
-export const placementForPopup = ( { options: { frequency, placement } } ) => {
+export const placementForPopup = ( { options: { frequency, placement, manual_only } } ) => {
 	const customPlacements = window.newspackAudienceCampaigns?.custom_placements || {};
 	if ( 'manual' === frequency || customPlacements.hasOwnProperty( placement ) ) {
 		return __( 'Custom Placement', 'newspack-plugin' );
+	}
+	if ( manual_only && isOverlay( { options: { placement } } ) ) {
+		return sprintf(
+			// translators: %s: overlay placement, e.g. "Center Overlay".
+			__( '%s (Manual Only)', 'newspack-plugin' ),
+			placementMap[ placement ]
+		);
 	}
 	return placementMap[ placement ];
 };
@@ -141,6 +148,16 @@ export const promptDescription = prompt => {
 	}
 	if ( 'future' === status ) {
 		descriptionMessages.push( __( 'Scheduled', 'newspack-plugin' ) );
+	}
+	if ( prompt.ab_test_id ) {
+		descriptionMessages.push(
+			sprintf(
+				// Translators: %1$s is the A/B test ID, %2$s is the variant letter.
+				__( 'A/B test: %1$s (variant %2$s)', 'newspack-plugin' ),
+				prompt.ab_test_id,
+				String( prompt.ab_variant || '' ).toUpperCase()
+			)
+		);
 	}
 	descriptionMessages.push( __( 'Frequency: ', 'newspack-plugin' ) + frequencyForPopup( prompt ) );
 	return descriptionMessages.length ? descriptionMessages.join( ' | ' ) : null;
@@ -471,9 +488,15 @@ export const warningForPopup = ( prompts, prompt ) => {
 				( 0 === promptCategories.length && 0 === conflictCategories.length ) ||
 				promptCategories.some( category => conflictCategories.some( conflictCategory => category.term_id === conflictCategory.term_id ) );
 
+			// Different arms of one A/B test overlap on purpose: each reader sees one of
+			// them. Two prompts on the same arm reach the same readers, so they still conflict.
+			const isOtherArmOfSameAbTest =
+				Boolean( prompt.ab_test_id ) && conflict.ab_test_id === prompt.ab_test_id && conflict.ab_variant !== prompt.ab_variant;
+
 			return (
 				'publish' === conflict.status &&
 				conflict.id !== prompt.id &&
+				! isOtherArmOfSameAbTest &&
 				isSameType( prompt, conflict ) &&
 				sharesSegments( prompt.segments, conflict.segments ) &&
 				hasConflictingCategory

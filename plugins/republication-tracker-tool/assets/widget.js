@@ -89,7 +89,7 @@
 			copyActiveBtn.addEventListener( 'click', function ( e ) {
 				e.preventDefault();
 				if ( window.ClipboardUtils ) {
-					ClipboardUtils.copyFromElement( getActiveTextarea(), copyActiveBtn );
+					ClipboardUtils.copyHandoutFromElement( getActiveTextarea(), copyActiveBtn );
 				}
 			} );
 		}

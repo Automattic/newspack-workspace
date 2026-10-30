@@ -253,6 +253,12 @@ class Prompts extends Schema {
 							'required' => false,
 							'default'  => false,
 						],
+						'manual_only'                    => [
+							'name'     => 'manual_only',
+							'type'     => 'boolean',
+							'required' => false,
+							'default'  => false,
+						],
 						'placement'                      => [
 							'name'     => 'placement',
 							'type'     => 'string',

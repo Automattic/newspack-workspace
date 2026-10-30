@@ -11,24 +11,56 @@
 		margin: 0 auto var(--newspack-ui-spacer-2);
 		width: var(--newspack-ui-spacer-8);
 
+		&--large {
+			height: var(--newspack-ui-spacer-9);
+			width: var(--newspack-ui-spacer-9);
+
+			svg {
+				height: 100%;
+				width: 100%;
+			}
+		}
+
 		&--neutral {
-			background-color: var(--newspack-ui-color-neutral-90);
-			color: var(--newspack-ui-color-body-bg);
+			color: var(--newspack-ui-color-text);
 		}
 
 		&--success {
-			background: var(--newspack-ui-color-success-50);
-			color: var(--newspack-ui-color-body-bg);
+			--newspack-ui-icon-delay: var(--newspack-ui-follow-on-delay, 0ms);
+
+			color: var(--newspack-ui-color-success);
+			transition:
+				opacity var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out) var(--newspack-ui-icon-delay),
+				transform var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out) var(--newspack-ui-icon-delay);
+
+			@starting-style {
+				opacity: 0;
+				transform: scale(0.9);
+			}
+
+			@media ( prefers-reduced-motion: reduce ) {
+				@starting-style {
+					transform: none;
+				}
+			}
+
+			.newspack-ui__modal__step[inert] & {
+				opacity: 0;
+				transform: scale(0.9);
+				transition: none;
+
+				@media ( prefers-reduced-motion: reduce ) {
+					transform: none;
+				}
+			}
 		}
 
 		&--error {
-			background: var(--newspack-ui-color-error-50);
-			color: var(--newspack-ui-color-body-bg);
+			color: var(--newspack-ui-color-error);
 		}
 
 		&--warning {
-			background: var(--newspack-ui-color-warning-30);
-			color: var(--newspack-ui-color-body-bg);
+			color: var(--newspack-ui-color-warning-text);
 		}
 
 		svg {

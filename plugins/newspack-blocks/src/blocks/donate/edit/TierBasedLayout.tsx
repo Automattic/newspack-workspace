@@ -10,7 +10,7 @@ import classNames from 'classnames';
  * Internal dependencies
  */
 import type { ComponentProps, DonateBlockAttributes, TierBasedOptionValue } from '../types';
-import { getColorForContrast, getFrequencyLabelWithAmount } from '../utils';
+import { getColorForContrast, getFrequencyLabelWithAmount, isModernStyle } from '../utils';
 import { FREQUENCIES, DISABLED_IN_TIERS_BASED_LAYOUT_TIER_INDEX } from '../consts';
 
 const TierBasedLayout = ( props: ComponentProps ) => {
@@ -35,10 +35,33 @@ const TierBasedLayout = ( props: ComponentProps ) => {
 	};
 
 	const isAnyRecommended = attributes.tiersBasedOptions.some( tier => Boolean( tier.recommendLabel ) );
+	const isModern = isModernStyle( attributes.className );
 
 	return (
 		<form className="wpbnbd__tiers" onSubmit={ e => e.preventDefault() }>
-			{ availableFrequencies.length > 1 && (
+			{ availableFrequencies.length > 1 && isModern && (
+				<div className="newspack-ui__segmented-control">
+					<div className="newspack-ui newspack-ui__segmented-control__tabs">
+						{ availableFrequencies.map( frequencySlug => {
+							const isActive = currentFrequency === frequencySlug;
+							return (
+								<button
+									key={ frequencySlug }
+									type="button"
+									aria-pressed={ isActive }
+									className={ classNames( 'newspack-ui__button newspack-ui__button--small', {
+										selected: isActive,
+									} ) }
+									onClick={ () => setCurrencyFrequency( frequencySlug ) }
+								>
+									{ FREQUENCIES[ frequencySlug ] }
+								</button>
+							);
+						} ) }
+					</div>
+				</div>
+			) }
+			{ availableFrequencies.length > 1 && ! isModern && (
 				<div className="wpbnbd__tiers__selection">
 					{ availableFrequencies.map( frequencySlug => {
 						const isActive = currentFrequency === frequencySlug;
@@ -75,14 +98,25 @@ const TierBasedLayout = ( props: ComponentProps ) => {
 										tagName="span"
 									/>
 								</h2>
-								<h3 className="wpbnbd__tiers__recommend-label" style={ { opacity: recommendLabel ? 1 : 0.5 } }>
+								{ isModern ? (
 									<RichText
+										className="newspack-ui__badge newspack-ui__badge--secondary"
+										style={ { opacity: recommendLabel ? 1 : 0.5 } }
 										onChange={ handleTierOptionChange( index, 'recommendLabel' ) }
 										placeholder={ __( '…', 'newspack-blocks' ) }
 										value={ recommendLabel }
 										tagName="span"
 									/>
-								</h3>
+								) : (
+									<h3 className="wpbnbd__tiers__recommend-label" style={ { opacity: recommendLabel ? 1 : 0.5 } }>
+										<RichText
+											onChange={ handleTierOptionChange( index, 'recommendLabel' ) }
+											placeholder={ __( '…', 'newspack-blocks' ) }
+											value={ recommendLabel }
+											tagName="span"
+										/>
+									</h3>
+								) }
 							</div>
 							<div className="wpbnbd__tiers__amount">
 								<div

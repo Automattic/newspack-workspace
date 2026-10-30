@@ -89,6 +89,7 @@ export function openAuthModal( config = {} ) {
 
 		container.config = {};
 		modal.setAttribute( 'data-state', 'closed' );
+		modal.removeAttribute( 'data-verification-handover' );
 		document.body.classList.remove( 'newspack-signin' );
 		if ( modal.overlayId && window.newspackReaderActivation?.overlays ) {
 			window.newspackReaderActivation.overlays.remove( modal.overlayId );
@@ -163,7 +164,7 @@ export function openAuthModal( config = {} ) {
 		// A step change hides the control that had focus unless the step focused its own field.
 		const active = modal.ownerDocument.activeElement;
 		if ( 'open' === modal.dataset.state && ( ! modal.contains( active ) || ! isVisible( active ) ) ) {
-			getInitialFocus( modal )?.focus();
+			getInitialFocus( modal ).focus();
 		}
 	};
 

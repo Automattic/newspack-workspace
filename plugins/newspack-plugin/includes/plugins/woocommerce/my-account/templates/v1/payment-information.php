@@ -19,7 +19,7 @@ $types         = \wc_get_account_payment_methods_types();
 
 <section id="payment-methods">
 	<?php if ( $has_methods ) : ?>
-		<h4 class="newspack-ui__font--m newspack-ui__spacing-top--0"><?php \esc_html_e( 'Payment methods', 'newspack-plugin' ); ?></h4>
+		<h2><?php \esc_html_e( 'Payment methods', 'newspack-plugin' ); ?></h2>
 
 		<div class="newspack-my-account__payment-methods newspack-ui__grid">
 		<?php $payment_method_columns = \wc_get_account_payment_methods_columns(); ?>
@@ -104,9 +104,11 @@ $types         = \wc_get_account_payment_methods_types();
 										<?php
 									endif;
 									ksort( $method['actions'] );
+									$destructive_actions = array_intersect_key( $method['actions'], array_flip( [ 'delete', 'wcs_deletion_error' ] ) );
+									$method['actions']   = array_diff_key( $method['actions'], $destructive_actions ) + $destructive_actions;
 									?>
 									<div class="newspack-ui__dropdown">
-										<button class="newspack-ui__dropdown__toggle newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__button--small">
+										<button class="newspack-ui__dropdown__toggle newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__button--small" aria-expanded="false">
 											<?php Newspack_UI_Icons::print_svg( 'more' ); ?>
 											<span class="screen-reader-text"><?php \esc_html_e( 'More', 'newspack-plugin' ); ?></span>
 										</button>
@@ -156,7 +158,7 @@ $types         = \wc_get_account_payment_methods_types();
 
 	<?php else : ?>
 		<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-1">
-			<h4 class="newspack-ui__font--m"><?php \esc_html_e( 'Payment methods', 'newspack-plugin' ); ?></h4>
+			<h2><?php \esc_html_e( 'Payment methods', 'newspack-plugin' ); ?></h2>
 			<p>
 				<?php \esc_html_e( 'You don’t have any payment methods saved yet.', 'newspack-plugin' ); ?>
 			</p>
@@ -195,13 +197,13 @@ $types         = \wc_get_account_payment_methods_types();
 	<?php if ( ! empty( $address_types ) ) : ?>
 		<?php if ( empty( $addresses ) ) : ?>
 			<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-1">
-				<h4 class="newspack-ui__font--m"><?php \esc_html_e( 'Addresses', 'newspack-plugin' ); ?></h4>
+				<h2><?php \esc_html_e( 'Addresses', 'newspack-plugin' ); ?></h2>
 				<p>
 					<?php \esc_html_e( 'You don’t have any addresses saved yet.', 'newspack-plugin' ); ?>
 				</p>
 			</div>
 		<?php else : ?>
-			<h4 class="newspack-ui__font--m"><?php \esc_html_e( 'Addresses', 'newspack-plugin' ); ?></h4>
+			<h2><?php \esc_html_e( 'Addresses', 'newspack-plugin' ); ?></h2>
 			<div class="newspack-my-account__addresses newspack-ui__grid">
 			<?php foreach ( $addresses as $address_type => $address_data ) : ?>
 				<div class="newspack-ui__box newspack-ui__box--border woocommerce-Address">
@@ -224,7 +226,7 @@ $types         = \wc_get_account_payment_methods_types();
 							<span class="newspack-ui__badge newspack-ui__badge--secondary"><?php echo \esc_html( $address_data['label'] ); ?></span>
 						</div>
 						<div class="newspack-ui__dropdown">
-							<button class="newspack-ui__dropdown__toggle newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__button--small">
+							<button class="newspack-ui__dropdown__toggle newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__button--small" aria-expanded="false">
 								<?php Newspack_UI_Icons::print_svg( 'more' ); ?>
 								<span class="screen-reader-text"><?php \esc_html_e( 'More', 'newspack-plugin' ); ?></span>
 							</button>
