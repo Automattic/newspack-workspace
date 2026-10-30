@@ -6,9 +6,11 @@
  * @group reader-data
  */
 
+use Newspack\Active_Subscriptions_Reader_Data;
 use Newspack\Reader_Data;
 
 require_once __DIR__ . '/../mocks/user-switching-mock.php';
+require_once __DIR__ . '/../mocks/wc-mocks.php';
 
 /**
  * A session an admin opened by switching into a reader's account must read the
@@ -30,6 +32,8 @@ class Newspack_Test_Reader_Data_Switched_Session extends WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
+		global $subscriptions_database;
+		$subscriptions_database = [];
 		$this->reader_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
 		wp_set_current_user( $this->reader_id );
 	}
@@ -38,6 +42,8 @@ class Newspack_Test_Reader_Data_Switched_Session extends WP_UnitTestCase {
 	 * Tear down.
 	 */
 	public function tear_down() {
+		global $subscriptions_database;
+		$subscriptions_database = [];
 		unset( $GLOBALS['newspack_test_switched_from_user'] );
 		wp_set_current_user( 0 );
 		parent::tear_down();
@@ -129,5 +135,61 @@ class Newspack_Test_Reader_Data_Switched_Session extends WP_UnitTestCase {
 		$config = Reader_Data::get_config();
 		self::assertFalse( $config['is_temporary'] );
 		self::assertFalse( $config['is_switched_session'] );
+	}
+
+	/**
+	 * Give the reader a subscription, so recomputing their `active_subscriptions`
+	 * list would store a product.
+	 */
+	private function give_reader_a_subscription() {
+		\wcs_create_subscription(
+			[
+				'customer_id' => $this->reader_id,
+				'status'      => 'active',
+				'products'    => [ 101 ],
+				'items'       => [ new \WC_Order_Item_Product( [ 'product_id' => 101 ] ) ],
+			]
+		);
+	}
+
+	/**
+	 * Control: a reader's own page view stores their `active_subscriptions` list.
+	 */
+	public function test_direct_session_backfills_active_subscriptions() {
+		$this->give_reader_a_subscription();
+
+		Active_Subscriptions_Reader_Data::maybe_backfill_current_reader();
+
+		self::assertSame( '[101]', Reader_Data::get_data( $this->reader_id, 'active_subscriptions' ) );
+		self::assertFalse( Active_Subscriptions_Reader_Data::is_stale( $this->reader_id ) );
+	}
+
+	/**
+	 * A switched session recomputes nothing on a page view: it would write into
+	 * the reader's data, which a session an admin borrowed must never do.
+	 */
+	public function test_switched_session_page_view_does_not_backfill_active_subscriptions() {
+		$this->give_reader_a_subscription();
+		$this->switch_from_admin();
+
+		Active_Subscriptions_Reader_Data::maybe_backfill_current_reader();
+
+		self::assertFalse( Reader_Data::get_data( $this->reader_id, 'active_subscriptions' ) );
+		self::assertEmpty( get_user_meta( $this->reader_id, Active_Subscriptions_Reader_Data::STAMP_META_KEY, true ) );
+	}
+
+	/**
+	 * Nor does the hydration response of a switched session, and it still hands
+	 * back what it was given.
+	 */
+	public function test_switched_session_hydration_does_not_backfill_active_subscriptions() {
+		$this->give_reader_a_subscription();
+		$this->switch_from_admin();
+
+		$data = Active_Subscriptions_Reader_Data::maybe_backfill_hydrated_reader( [ 'nonce' => 'abc' ], $this->reader_id );
+
+		self::assertSame( [ 'nonce' => 'abc' ], $data );
+		self::assertFalse( Reader_Data::get_data( $this->reader_id, 'active_subscriptions' ) );
+		self::assertEmpty( get_user_meta( $this->reader_id, Active_Subscriptions_Reader_Data::STAMP_META_KEY, true ) );
 	}
 }

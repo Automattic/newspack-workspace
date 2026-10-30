@@ -185,7 +185,8 @@ final class Session_Hydration {
 		 * trigger it. Callbacks MUST NOT write anything derived from the request.
 		 * The one write allowed is recomputing server-derived data for the
 		 * authenticated user from server state alone, which a forged request can
-		 * only make correct (see Gate_Access_Reader_Data).
+		 * only make correct (see Gate_Access_Reader_Data and
+		 * Active_Subscriptions_Reader_Data).
 		 *
 		 * @param array $data    Response data containing 'nonce'.
 		 * @param int   $user_id The authenticated user's ID.
