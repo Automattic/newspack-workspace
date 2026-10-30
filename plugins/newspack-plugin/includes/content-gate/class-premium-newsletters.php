@@ -1503,14 +1503,14 @@ class Premium_Newsletters {
 	}
 
 	/**
-	 * Queue access checks for both readers when a subscription changes holder,
-	 * because no subscription event fires when an admin reassigns a gift.
+	 * Queue access checks for the readers a change of holder affects, because no
+	 * subscription event fires when an admin reassigns a gift.
 	 *
 	 * The holder is the recipient, or the buyer when the subscription isn't a
 	 * gift. The new holder is checked for lists to add. The previous one only loses
 	 * lists: a remove-only check can't re-add one they left. With no previous
 	 * recipient, that check goes to the buyer, since an admin may have just given
-	 * their own subscription a recipient.
+	 * the buyer's subscription a recipient.
 	 *
 	 * A gift bought at checkout keeps its recipient's email address when an admin
 	 * clears the recipient, so WCS still counts it as a gift and content gates give
@@ -1538,6 +1538,8 @@ class Premium_Newsletters {
 		if ( $new_recipient_id > 0 ) {
 			$new_holder_id = $new_recipient_id;
 		} elseif ( class_exists( 'WCS_Gifting' ) && \WCS_Gifting::is_gifted_subscription( $subscription ) ) {
+			// Unlike WooCommerce_Subscriptions_Gifting::get_holder_id(), which gives
+			// such a gift to the buyer: content gates give it to no one.
 			$new_holder_id = 0;
 		} else {
 			$new_holder_id = $buyer_id;

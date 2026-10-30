@@ -2287,7 +2287,7 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		$this->create_newsletter_gate( [ 100 ], [ $this->create_premium_list() ] );
 		$subscription = $this->create_gifted_subscription( $purchaser_id, $recipient_id, [ 100 ] );
 		if ( $customer_set_to_recipient ) {
-			// WooCommerce saves the customer field before WCS's priority-50 recipient save.
+			// WCS saves the customer field at priority 10, before its priority-50 recipient save.
 			$subscription->data['customer_id'] = $recipient_id;
 		}
 
