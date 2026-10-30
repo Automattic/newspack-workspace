@@ -197,3 +197,8 @@
 		}
 	}
 }
+
+.newspack-section-header--has-back-nav .newspack-section-header:not(.newspack-section-header--small) .newspack-section-header__title {
+	font-size: wp-vars.$grid-unit-30;
+	line-height: var(--wpds-typography-line-height-xl, #{wp-vars.$font-line-height-x-large});
+}

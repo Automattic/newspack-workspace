@@ -1,36 +1,32 @@
-@use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/variables" as wp-vars;
 
 .newspack-campaigns-wizard-segments {
-	&__list {
-		margin: 32px 0;
+	&__notice {
+		margin-bottom: var(--wpds-dimension-gap-lg, #{wp-vars.$grid-unit-20});
+	}
 
-		&.is-loading {
-			pointer-events: none;
+	&__form-header {
+		margin-bottom: var(--wpds-dimension-gap-2xl, #{wp-vars.$grid-unit-40});
+	}
+
+	&__range {
+		> .components-base-control:first-child {
+			flex: 0 0 wp-vars.$grid-unit-80;
 		}
 
-		.newspack-popover {
-			margin-left: -4px;
-		}
-
-		.newspack-action-card {
-			flex-direction: row;
+		> .components-base-control:last-child {
+			flex: 1;
 		}
 	}
 
-	&__title {
-		padding-bottom: 32px;
+	&__fields .newspack-settings__date-range-bound {
+		align-items: flex-end;
+		display: flex;
+		gap: var(--wpds-dimension-gap-sm, #{wp-vars.$grid-unit-10});
+		margin: 0;
 
-		.components-base-control__field {
-			margin: 0;
-		}
-	}
-
-	&__recorded-visitors {
-		margin: -48px 0 0;
-
-		+ .newspack-card {
-			margin-top: wp-vars.$grid-unit-60;
+		.newspack-text-control {
+			flex: 1;
 		}
 	}
 }
