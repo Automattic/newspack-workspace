@@ -11,7 +11,8 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Keeps a list of the products each reader holds a subscription for, which
- * Campaigns criteria and the GA4 `is_subscriber` flag read.
+ * Campaigns criteria, the GA4 `is_subscriber` flag and the GAM
+ * `reader_status=subscriber` targeting in newspack-ads read.
  *
  * Holding a product means what it means to a content gate: a subscription the
  * reader owns, a gift they received (its buyer does not hold it), or a seat in
@@ -19,11 +20,11 @@ defined( 'ABSPATH' ) || exit;
  * the gates, with payment-recovery grace off and Network sibling-site access
  * left out.
  *
- * Those two differences keep the item meaning what it always has. A subscription
- * on hold while its payment is retried does not count: only an active or
- * pending-cancel one does. And a subscription held on a sibling site of a
- * Newspack Network does not count, because the list is built from this site's
- * subscriptions alone.
+ * Grace is off so that only a change of status moves a subscription in or out
+ * of the list: one on hold while its payment is retried does not count, and
+ * only an active or pending-cancel one does. Network access is left out because
+ * it comes from a filter result that carries no subscription ID, so the lookup
+ * cannot list it.
  *
  * Each reader's list carries a stamp: when it was computed. A page view
  * recomputes a list that is missing or more than a day old, which is what
@@ -47,7 +48,10 @@ final class Active_Subscriptions_Reader_Data {
 		add_action( 'added_user_meta', [ __CLASS__, 'handle_group_membership_change' ], 10, 3 );
 		add_action( 'deleted_user_meta', [ __CLASS__, 'handle_group_membership_change' ], 10, 3 );
 
-		// Nor does handing a gift to someone else, or turning a group on or off.
+		// Nor does handing a gift to someone else, or turning a group on or off on
+		// its subscription. Turning group subscriptions on or off for a whole
+		// product fires no hook either, so members of groups that inherit the
+		// product's setting are put right at their next login or within a day.
 		add_action( 'woocommerce_subscriptions_gifting_recipient_changed', [ __CLASS__, 'handle_gift_recipient_changed' ], 10, 3 );
 		add_action( 'newspack_group_subscription_settings_updated', [ __CLASS__, 'handle_group_settings_updated' ], 10, 2 );
 
@@ -60,9 +64,9 @@ final class Active_Subscriptions_Reader_Data {
 	/**
 	 * Keep the item storable for a reader at the reader data key cap. A missing
 	 * item reads as "holds no subscription", so a refused write would show a
-	 * paying reader the offers meant for non-payers. It would also leave the stamp
-	 * unset, which has every page view recompute their list. The cap bounds keys
-	 * the browser adds; this is one server-owned key.
+	 * subscriber the offers meant for non-subscribers. It would also leave the
+	 * stamp unset, which has every page view recompute their list. The cap bounds
+	 * keys the browser adds; this is one server-owned key.
 	 *
 	 * @param int    $max_items Maximum number of items.
 	 * @param int    $user_id   User ID.
@@ -198,12 +202,12 @@ final class Active_Subscriptions_Reader_Data {
 	/**
 	 * Mark stale the readers whose list changes when a gift's recipient does: the
 	 * new recipient gains the product, and whoever held it before loses it. That
-	 * is the earlier recipient, or the buyer when the subscription had none,
-	 * because it was the buyer's own until it became a gift.
+	 * is the earlier recipient, or the buyer when the subscription had none.
 	 *
 	 * Clearing a recipient (`WCS_Gifting::delete_recipient_user()`) fires no hook.
-	 * The buyer who holds the subscription again, and the recipient who lost it,
-	 * are put right by the daily stale window instead.
+	 * The recipient who lost the gift, and whoever holds it afterwards, are put
+	 * right by the daily stale window instead. A gift bought at checkout keeps the
+	 * recipient's email, so nobody holds it then.
 	 *
 	 * @param \WC_Subscription $subscription          The gifted subscription.
 	 * @param int              $recipient_id          The new recipient.
@@ -222,6 +226,11 @@ final class Active_Subscriptions_Reader_Data {
 	 * Mark a group's members stale when the group is turned on or off. Members
 	 * hold its products only while it is on, and the change names none of them.
 	 * The owner holds their own subscription either way.
+	 *
+	 * This covers a setting changed on the subscription. Turning group
+	 * subscriptions on or off for a product fires no hook, so members of groups
+	 * that inherit the product's setting are put right at their next login or
+	 * within a day.
 	 *
 	 * @param \WC_Subscription $subscription The group subscription.
 	 * @param string[]         $changed_keys The settings that changed.

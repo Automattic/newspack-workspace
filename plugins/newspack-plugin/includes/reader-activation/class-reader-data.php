@@ -347,7 +347,8 @@ final class Reader_Data {
 	 * The product IDs of the non-donation subscriptions the reader holds, or [].
 	 *
 	 * Holding means owning the subscription, being the recipient of a gift, or
-	 * having a seat in an enabled group subscription.
+	 * having a seat in an enabled group subscription. A gift's buyer does not hold
+	 * it.
 	 *
 	 * The list is stored JSON-encoded, so once the reader's last subscription
 	 * ends, get_data() returns the string "[]", which PHP treats as non-empty.
@@ -775,16 +776,13 @@ final class Reader_Data {
 	}
 
 	/**
-	 * Data event handler for `product_subscription_changed`: recompute the
-	 * `active_subscriptions` list of the readers the changed subscription affects.
+	 * Data event handler for `product_subscription_changed`: update the
+	 * `active_subscriptions` lists the change affects. See
+	 * Active_Subscriptions_Reader_Data::handle_product_subscription_changed().
 	 *
-	 * Delegates to Active_Subscriptions_Reader_Data, which owns the list. The list
-	 * is recomputed from the subscriptions as they stand now, so the event's
-	 * product IDs and statuses are not used. A gift is listed under its recipient,
-	 * not its buyer, and the buyer's list is recomputed too, so it never keeps the
-	 * gift. Group members are marked for recompute on their next page view, not
-	 * recomputed here. This method stays the registered handler, with the same
-	 * signature, so existing callers keep working.
+	 * This method stays the registered handler because Data_Events stores its
+	 * callable in the Action Scheduler args of a failed handler's retry, and drops
+	 * a queued retry whose handler is no longer callable.
 	 *
 	 * @param int   $timestamp Timestamp.
 	 * @param array $data      Data.
@@ -795,13 +793,9 @@ final class Reader_Data {
 
 	/**
 	 * Data event handler to recompute a user's `active_subscriptions` list on
-	 * login.
-	 *
-	 * The list is recomputed whether or not the reader holds anything now, so a
-	 * subscription that ended without an event (an edit made in the database, or
-	 * a gift's recipient being cleared) stops being listed the next time they
-	 * sign in. A reader who holds nothing gets an empty list only if they already
-	 * had one.
+	 * login, so a subscription that ended without an event (an edit made in the
+	 * database, or a gift's recipient being cleared) stops being listed. See
+	 * Active_Subscriptions_Reader_Data::refresh().
 	 *
 	 * @param int   $timestamp Timestamp.
 	 * @param array $data      Data.
