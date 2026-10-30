@@ -1446,13 +1446,13 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A deletion whose retries run out pages even while its integration is
-	 * broken. The outage's own page doesn't cover it: once the deletion stops
+	 * A deletion whose retries run out pings even while its integration is
+	 * broken. The outage's own ping doesn't cover it: once the deletion stops
 	 * retrying, nothing re-sends it after the account is fixed, so someone
-	 * has to finish it at the provider. One page an hour per integration
+	 * has to finish it at the provider. One ping an hour per integration
 	 * carries the outage; the other readers reach the log.
 	 */
-	public function test_sync_retry_exhausted_for_deletions_pages_once_an_hour_while_the_integration_is_broken() {
+	public function test_sync_retry_exhausted_for_deletions_pings_once_an_hour_while_the_integration_is_broken() {
 		$this->break_integration( 'esp' );
 		$this->capture_alerts( 'sync_retry_exhausted' );
 
@@ -1475,8 +1475,8 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 			);
 		}
 
-		$paged = array_column( array_column( $this->captured['sync_retry_exhausted']['error'], 'context' ), 'email' );
-		$this->assertSame( [ 'first@example.test', 'third@example.test' ], $paged, 'Each integration pages once.' );
+		$pinged = array_column( array_column( $this->captured['sync_retry_exhausted']['error'], 'context' ), 'email' );
+		$this->assertSame( [ 'first@example.test', 'third@example.test' ], $pinged, 'Each integration pings once.' );
 		$this->assertStringContainsString( 'deletion', $this->captured['sync_retry_exhausted']['error'][0]['message'] );
 		$this->assertCount( 1, $this->captured['sync_retry_exhausted']['warning'], 'The second reader still reaches the log.' );
 	}

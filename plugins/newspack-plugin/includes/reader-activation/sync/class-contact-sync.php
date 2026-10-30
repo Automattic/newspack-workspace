@@ -138,7 +138,7 @@ class Contact_Sync extends Sync {
 	 * unpaid account is often fixed within hours, and nothing re-sends a
 	 * deletion that stopped, so they fall through to 'transient' and retry
 	 * through the backoff. A longer outage ends in retry exhaustion, which
-	 * Alert_Manager pages for a deletion.
+	 * Alert_Manager pings for a deletion.
 	 */
 	private const DELETION_ERROR_SIGNATURES = [
 		'permanent_contact' => [

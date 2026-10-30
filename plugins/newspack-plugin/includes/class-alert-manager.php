@@ -328,10 +328,10 @@ class Alert_Manager {
 	 * log only: the outage has already been reported, and every contact whose
 	 * retries run out during it would page again for the same cause.
 	 *
-	 * An account deletion, whose payload carries a `mode`, pages regardless.
+	 * An account deletion, whose payload carries a `mode`, pings regardless.
 	 * A contact sync runs again on the reader's next event, but nothing
 	 * re-sends a deletion once its retries run out, so someone has to finish
-	 * it at the provider after the outage ends. It pages at most once an hour
+	 * it at the provider after the outage ends. It pings at most once an hour
 	 * per integration: one outage can exhaust many deletions at once, and the
 	 * rest still reach the log, as does each reader's failed push log row.
 	 *
@@ -404,7 +404,7 @@ class Alert_Manager {
 	 *   refuses writes but still answers the check's request passes it, so
 	 *   those failures reach the log alone. Where the check isn't running,
 	 *   because it is switched off or its cron has stalled, this path is the
-	 *   only one that sees the account state, so its hourly report pages
+	 *   only one that sees the account state, so its hourly report pings
 	 *   instead.
 	 * - `permanent_contact` (fired by the deletion path only, where a skipped
 	 *   retry has no natural re-trigger and the dropped deletion signal is
