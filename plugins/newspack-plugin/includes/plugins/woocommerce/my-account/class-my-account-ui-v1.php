@@ -442,7 +442,7 @@ class My_Account_UI_V1 {
 	 *
 	 * @return bool
 	 */
-	private static function pays_for_subscription( $user_id ) {
+	private static function pays_for_subscription( int $user_id ): bool {
 		if ( ! function_exists( 'wcs_get_subscriptions' ) ) {
 			return false;
 		}
