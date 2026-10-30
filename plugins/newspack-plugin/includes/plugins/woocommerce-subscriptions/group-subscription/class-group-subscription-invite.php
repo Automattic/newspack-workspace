@@ -576,6 +576,8 @@ class Group_Subscription_Invite {
 	 * @param string               $source     Where the invite came from, one of the SOURCE_*
 	 *                                         constants, passed to the
 	 *                                         `newspack_group_subscription_invite_created` action.
+	 *                                         For SOURCE_MIGRATION the stored invite also records
+	 *                                         no sender.
 	 *
 	 * @return array|\WP_Error The invite data, or a WP_Error if the key cannot be generated.
 	 *                         The returned array carries an `email_sent` flag reporting whether
@@ -644,8 +646,8 @@ class Group_Subscription_Invite {
 		// Add the new invite.
 		$invite_key = wp_generate_password( 32, false );
 		$new_invite = [
-			// A migrated invite records no sender: the Teams sender isn't carried over,
-			// and whoever follows the link isn't it.
+			// A migrated invite records no sender on purpose: Teams already reported the
+			// invitation with its sender, and whoever follows the link isn't it.
 			'added_by'   => self::SOURCE_MIGRATION === $source ? 0 : get_current_user_id(),
 			'email'      => $email,
 			'expiration' => time() + self::get_expiration_time(),
@@ -672,9 +674,9 @@ class Group_Subscription_Invite {
 		 *
 		 * - A resend replaces the earlier invite, so it fires again. Teams' hook does
 		 *   not fire on a resend.
-		 * - A `migration` invite carries over a Teams invitation that Teams already
-		 *   reported when it created it. A listener ported from Teams should usually
-		 *   skip that source, or it counts those invitations twice.
+		 * - A `migration` invite carries over a Teams invitation that Teams' own hook
+		 *   already reported. A listener ported from Teams should usually skip that
+		 *   source, or it counts those invitations twice.
 		 *
 		 * It does not fire for the shareable invite link, which is not tied to an
 		 * address. The invite key is not passed: with the email it is enough to accept
@@ -683,8 +685,8 @@ class Group_Subscription_Invite {
 		 * @param \WC_Subscription $subscription The group subscription.
 		 * @param string           $email        The invited address.
 		 * @param int              $inviter_id   The user who sent the invite, or 0 when unknown.
-		 *                                       Always 0 for `migration`, since the Teams sender
-		 *                                       isn't carried over.
+		 *                                       Always 0 for `migration`: Teams already reported
+		 *                                       that invitation with its sender.
 		 * @param string           $source       Where the invite came from (the SOURCE_* constants):
 		 *                                       `my_account` (the group's My Account page, including
 		 *                                       its resend button), `api` (the REST `/invite` route,
@@ -692,9 +694,10 @@ class Group_Subscription_Invite {
 		 *                                       edit screen, and open to group managers too),
 		 *                                       `migration` (a Teams invitation link followed after
 		 *                                       the move off Teams), or `other` (a caller that
-		 *                                       doesn't say).
-		 * @param bool             $email_sent   Whether the invitation email went out. Always false
-		 *                                       for `migration`, which isn't emailed.
+		 *                                       doesn't say). Treat any other value like `other`.
+		 * @param bool             $email_sent   Whether the invitation email went out. False for
+		 *                                       `migration`, since the Teams link doesn't email
+		 *                                       the invite it creates.
 		 */
 		do_action(
 			'newspack_group_subscription_invite_created',
