@@ -551,6 +551,47 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	 * @return WP_REST_Response
 	 */
 	private function save_prompt_as( $prompt_id, $role, $changes ) {
+		$this->start_rest_as( $role );
+
+		$route   = '/wp/v2/' . Newspack_Popups::NEWSPACK_POPUPS_CPT . '/' . $prompt_id;
+		$stored  = rest_do_request( new WP_REST_Request( 'GET', $route ) )->get_data();
+		$request = new WP_REST_Request( 'POST', $route );
+		$request->set_body_params( array_merge( $changes, [ 'meta' => array_merge( $stored['meta'], $changes['meta'] ?? [] ) ] ) );
+		return rest_do_request( $request );
+	}
+
+	/**
+	 * Create a prompt through REST the way the block editor does, sending every
+	 * registered A/B key at its default unless the test overrides it.
+	 *
+	 * @param string $role Role of the user creating it.
+	 * @param array  $meta A/B values to send in place of the defaults.
+	 * @return WP_REST_Response
+	 */
+	private function create_prompt_as( $role, $meta ) {
+		$this->start_rest_as( $role );
+		$registered = get_registered_meta_keys( 'post', Newspack_Popups::NEWSPACK_POPUPS_CPT );
+		$defaults   = [];
+		foreach ( Newspack_Popups_AB_Tests::META_KEYS as $meta_key ) {
+			$defaults[ $meta_key ] = $registered[ $meta_key ]['default'] ?? '';
+		}
+
+		$request = new WP_REST_Request( 'POST', '/wp/v2/' . Newspack_Popups::NEWSPACK_POPUPS_CPT );
+		$request->set_body_params(
+			[
+				'title' => 'Created by a restricted editor',
+				'meta'  => array_merge( $defaults, $meta ),
+			]
+		);
+		return rest_do_request( $request );
+	}
+
+	/**
+	 * Reset the REST server and act as a new user with the given role.
+	 *
+	 * @param string $role Role of the user.
+	 */
+	private function start_rest_as( $role ) {
 		// Meta registered at boot does not survive into later tests in this suite,
 		// and REST silently ignores an unregistered key.
 		Newspack_Popups::register_meta();
@@ -559,12 +600,24 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		$wp_rest_server = new WP_REST_Server(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		do_action( 'rest_api_init' );
 		wp_set_current_user( self::factory()->user->create( [ 'role' => $role ] ) );
+	}
 
-		$route   = '/wp/v2/' . Newspack_Popups::NEWSPACK_POPUPS_CPT . '/' . $prompt_id;
-		$stored  = rest_do_request( new WP_REST_Request( 'GET', $route ) )->get_data();
-		$request = new WP_REST_Request( 'POST', $route );
-		$request->set_body_params( array_merge( $changes, [ 'meta' => array_merge( $stored['meta'], $changes['meta'] ?? [] ) ] ) );
-		return rest_do_request( $request );
+	/**
+	 * Count prompts in any status.
+	 *
+	 * @return int
+	 */
+	private function count_prompts() {
+		return count(
+			get_posts(
+				[
+					'post_type'   => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+					'post_status' => 'any',
+					'fields'      => 'ids',
+					'numberposts' => -1,
+				]
+			)
+		);
 	}
 
 	/**
@@ -690,6 +743,84 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 
 		self::assertSame( $prepared_post, Newspack_Popups_AB_Tests::guard_rest_ab_meta( $prepared_post, $request ) );
 		self::assertSame( [ 'trigger_delay' => 7 ], $request->get_param( 'meta' ) );
+	}
+
+	/**
+	 * A REST create asks the guard with post ID 0, before the prompt exists. A
+	 * restricted user sending the registered defaults is creating a prompt, not a
+	 * test, so the create goes through. The control share's default is 50, not an
+	 * empty string, which is what this pins.
+	 */
+	public function test_restricted_editor_can_create_a_prompt_with_ab_defaults() {
+		$this->restrict_tests_to_admins();
+		$before = $this->count_prompts();
+
+		$response = $this->create_prompt_as( 'editor', [] );
+
+		self::assertSame( 201, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		self::assertSame( $before + 1, $this->count_prompts() );
+		self::assertSame( '', get_post_meta( $response->get_data()['id'], Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+	}
+
+	/**
+	 * A restricted user's create that sets a test is refused before the prompt is
+	 * created. Without the guard, core would insert the post and only then refuse
+	 * the meta, leaving a prompt behind with the request reported as failed.
+	 */
+	public function test_restricted_editor_cannot_create_a_prompt_with_a_test() {
+		$this->restrict_tests_to_admins();
+		$before = $this->count_prompts();
+
+		$response = $this->create_prompt_as( 'editor', [ Newspack_Popups_AB_Tests::META_TEST_ID => 'editor-made-test' ] );
+
+		self::assertSame( 403, $response->get_status() );
+		self::assertSame( $before, $this->count_prompts() );
+	}
+
+	/**
+	 * A null asks core to delete the key, which leaves an unset control share at
+	 * its default of 50. Nothing changes, so a restricted user's save goes through.
+	 */
+	public function test_restricted_editor_null_control_share_on_an_unset_share_saves() {
+		$this->restrict_tests_to_admins();
+		$prompt_id = $this->createPopup();
+
+		$response = $this->save_prompt_as(
+			$prompt_id,
+			'editor',
+			[
+				'meta' => [
+					Newspack_Popups_AB_Tests::META_CONTROL_SHARE => null,
+					'trigger_delay' => 7,
+				],
+			]
+		);
+
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		self::assertSame( '7', get_post_meta( $prompt_id, 'trigger_delay', true ) );
+	}
+
+	/**
+	 * A null for a stored control share of 60 would reset it to 50, which changes
+	 * the live split, so a restricted user's save is refused before anything saves.
+	 */
+	public function test_restricted_editor_null_control_share_on_a_stored_share_is_refused() {
+		$this->restrict_tests_to_admins();
+		$prompt_id    = $this->create_test_variant( 'null-share-test', 'a', null, [], 60 );
+		$title_before = get_the_title( $prompt_id );
+
+		$response = $this->save_prompt_as(
+			$prompt_id,
+			'editor',
+			[
+				'title' => 'Edited alongside a share reset',
+				'meta'  => [ Newspack_Popups_AB_Tests::META_CONTROL_SHARE => null ],
+			]
+		);
+
+		self::assertSame( 403, $response->get_status() );
+		self::assertSame( '60', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_CONTROL_SHARE, true ) );
+		self::assertSame( $title_before, get_the_title( $prompt_id ) );
 	}
 
 	/**
