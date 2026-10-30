@@ -1456,11 +1456,16 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 		$this->break_integration( 'esp' );
 		$this->capture_alerts( 'sync_retry_exhausted' );
 
-		foreach ( [ 'first@example.test', 'second@example.test' ] as $email ) {
+		$deletions = [
+			[ 'esp', 'first@example.test' ],
+			[ 'esp', 'second@example.test' ],
+			[ 'crm', 'third@example.test' ],
+		];
+		foreach ( $deletions as [ $integration_id, $email ] ) {
 			do_action(
 				'newspack_sync_retry_exhausted',
 				[
-					'integration_id' => 'esp',
+					'integration_id' => $integration_id,
 					'email'          => $email,
 					'mode'           => 'delete',
 					'context'        => 'Reader deleted',
@@ -1470,8 +1475,8 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 			);
 		}
 
-		$this->assertCount( 1, $this->captured['sync_retry_exhausted']['error'] );
-		$this->assertSame( 'first@example.test', $this->captured['sync_retry_exhausted']['error'][0]['context']['email'] );
+		$paged = array_column( array_column( $this->captured['sync_retry_exhausted']['error'], 'context' ), 'email' );
+		$this->assertSame( [ 'first@example.test', 'third@example.test' ], $paged, 'Each integration pages once.' );
 		$this->assertStringContainsString( 'deletion', $this->captured['sync_retry_exhausted']['error'][0]['message'] );
 		$this->assertCount( 1, $this->captured['sync_retry_exhausted']['warning'], 'The second reader still reaches the log.' );
 	}

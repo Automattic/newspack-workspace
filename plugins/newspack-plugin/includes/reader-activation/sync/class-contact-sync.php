@@ -1057,8 +1057,8 @@ class Contact_Sync extends Sync {
 				 * contact-data errors are skipped silently on this path — the
 				 * contact re-syncs on the reader's next event; only actionable
 				 * config failures are surfaced. (The deletion
-				 * path also fires this hook, with an `email` and `mode` in place
-				 * of `user_id` — see schedule_deletion_retry() and
+				 * path also fires this hook, with a `mode` in place of
+				 * `user_id` — see schedule_deletion_retry() and
 				 * report_unsynced_flag_fields().)
 				 *
 				 * @param array $alert_data {
@@ -1412,7 +1412,7 @@ class Contact_Sync extends Sync {
 			 * for permanent contact-data errors — a skipped deletion retry has no
 			 * natural re-trigger, so the dropped deletion signal must stay
 			 * observable. It also fires, as `permanent_config` in flag mode, for
-			 * a flag the provider saved without some of its fields (see
+			 * a flag the provider saved without its deletion fields (see
 			 * report_unsynced_flag_fields()).
 			 *
 			 * @param array $alert_data {

@@ -850,16 +850,22 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 	 * is not retried, so the alert is the only thing that names the gap
 	 * once the row ages out. A retry that lands the same way reports it too.
 	 *
-	 * @testWith [false]
-	 *           [true]
+	 * Either deletion field missing is enough: publisher automations may key
+	 * on `Membership_Status` alone.
 	 *
-	 * @param bool $on_retry Whether the partial save answers a retry rather than the first attempt.
+	 * @testWith [false, ["Account_Deleted", "Membership_Status"]]
+	 *           [true, ["Account_Deleted", "Membership_Status"]]
+	 *           [false, ["Membership_Status"]]
+	 *
+	 * @param bool     $on_retry Whether the partial save answers a retry rather than the first attempt.
+	 * @param string[] $missing  Unprefixed deletion fields the provider left out.
 	 */
-	public function test_a_deletion_flag_saved_without_its_fields_reports_a_config_failure( bool $on_retry ) {
+	public function test_a_deletion_flag_saved_without_its_fields_reports_a_config_failure( bool $on_retry, array $missing ) {
 		$this->require_action_scheduler();
 		$spy              = $this->register_deletion_spy( 'unsynced-alert-spy', 'flag' );
 		$prefix           = $spy->get_metadata_prefix();
-		$partial_save     = [ 'unsynced_fields' => [ $prefix . 'Account_Deleted', $prefix . 'Membership_Status' ] ];
+		$missing_fields   = array_map( fn( $field ) => $prefix . $field, $missing );
+		$partial_save     = [ 'unsynced_fields' => $missing_fields ];
 		$spy->push_result = $on_retry ? new \WP_Error( 'provider_down', 'Provider down' ) : $partial_save;
 		$failures         = $this->capture_permanent_failures();
 
@@ -875,7 +881,7 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 		$this->assertSame( 'reader@example.test', $failures[0]['email'] );
 		$this->assertSame( 'flag', $failures[0]['mode'] );
 		$this->assertSame( 'permanent_config', $failures[0]['error_class'] );
-		$this->assertStringContainsString( $prefix . 'Account_Deleted, ' . $prefix . 'Membership_Status', $failures[0]['reason'] );
+		$this->assertStringContainsString( implode( ', ', $missing_fields ), $failures[0]['reason'] );
 	}
 
 	/**

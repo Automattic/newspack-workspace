@@ -398,8 +398,9 @@ class Alert_Manager {
 	 *   an hour per integration; the push log keeps the per-contact history.
 	 *   Deletion flags, whose payload carries a `mode`, take their own hourly
 	 *   slot, so a full audience never holds back an account failure.
-	 *   The hourly health check observes the same account state within the
-	 *   hour through its own request, and owns the escalation through
+	 *   For account failures, the hourly health check observes the same
+	 *   account state within the hour through its own request, and owns
+	 *   the escalation through
 	 *   handle_health_check_failed(). An account that refuses writes but
 	 *   still answers the check's request passes it, so those failures reach
 	 *   the log alone. Where the check isn't running, because
