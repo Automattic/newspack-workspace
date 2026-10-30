@@ -158,7 +158,8 @@ class Newspack_Test_GA4_AB_Stats_Provider extends WP_UnitTestCase {
 		$this->assertContains( [ 'customEvent:action_type', 'EXACT', 'donation' ], $this->clauses( $build( 'donation' )[0] ) );
 		$subscription = $this->clauses( $build( 'subscription' )[0] );
 		$this->assertContains( [ 'customEvent:action_type', 'EXACT', 'checkout_button' ], $subscription );
-		$this->assertContains( [ 'customEvent:product_type', 'EXACT', 'subscription' ], $subscription );
+		$this->assertContains( [ 'customEvent:recurrence', 'in', [ 'day', 'week', 'month', 'year' ] ], $subscription );
+		$this->assertNotContains( 'customEvent:product_type', array_column( $subscription, 0 ) );
 		foreach ( $build( 'form_submission' ) as $request ) {
 			$this->assertSame( [ [ 'name' => 'customEvent:newspack_popup_id' ] ], $request['dimensions'] );
 		}

@@ -47,11 +47,20 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 	 * on; the parameter names are the ones the tracking code sends. A report
 	 * on a dimension the property lacks fails with the API's own message.
 	 */
-	const DIM_PROMPT       = 'customEvent:newspack_popup_id';
-	const DIM_LOGGED_IN    = 'customEvent:logged_in';
-	const DIM_ACTION       = 'customEvent:action';
-	const DIM_ACTION_TYPE  = 'customEvent:action_type';
-	const DIM_PRODUCT_TYPE = 'customEvent:product_type';
+	const DIM_PROMPT      = 'customEvent:newspack_popup_id';
+	const DIM_LOGGED_IN   = 'customEvent:logged_in';
+	const DIM_ACTION      = 'customEvent:action';
+	const DIM_ACTION_TYPE = 'customEvent:action_type';
+	const DIM_RECURRENCE  = 'customEvent:recurrence';
+
+	/**
+	 * The billing periods a recurring checkout reports as `recurrence`; one-off
+	 * purchases report `once`. The subscription goal matches on these rather than
+	 * `product_type`, which reads `product` for a variable subscription and
+	 * `membership` for one tied to a membership plan. They are listed rather than
+	 * excluding `once` so an event with no recurrence value is not counted.
+	 */
+	const RECURRING_PERIODS = [ 'day', 'week', 'month', 'year' ];
 
 	/**
 	 * `logged_in` is sent as the strings `yes` and `no`, see
@@ -306,7 +315,7 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 						$checkout_success,
 						[
 							self::exact( self::DIM_ACTION_TYPE, 'checkout_button' ),
-							self::exact( self::DIM_PRODUCT_TYPE, 'subscription' ),
+							self::in_list( self::DIM_RECURRENCE, self::RECURRING_PERIODS ),
 						]
 					),
 				];
