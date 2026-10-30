@@ -197,3 +197,7 @@
 		}
 	}
 }
+
+.newspack-section-header--has-back-nav .newspack-section-header:not(.newspack-section-header--small) .newspack-section-header__title {
+	@include wp-mixins.heading-2x-large();
+}
