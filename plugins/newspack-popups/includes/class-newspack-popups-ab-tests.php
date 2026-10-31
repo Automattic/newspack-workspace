@@ -567,11 +567,12 @@ final class Newspack_Popups_AB_Tests {
 	 * control-share edits never re-bucket a reader, and assignment is stable across
 	 * devices once logged in.
 	 *
-	 * A stored variant that leaves the published set stays stored: with three or
-	 * more arms, a variant can be drafted while the test keeps running, and
-	 * overwriting the value would strand its readers on another arm for good. They
-	 * see a computed published arm until theirs is republished, and that display
-	 * fallback is not persisted, so it can differ between devices meanwhile.
+	 * A stored variant stays stored while no published prompt holds it: a variant
+	 * can be drafted while the test keeps running, and overwriting the value would
+	 * strand its readers on another arm for good. They see a computed published arm
+	 * until a published prompt holds that letter again, which may never happen,
+	 * since nothing tells a draft from a retired arm. That fallback is not
+	 * persisted, so a second device or a control-share edit can move it.
 	 *
 	 * @param array $tests_config Config from get_tests_config().
 	 * @return array Buckets keyed by test ID.

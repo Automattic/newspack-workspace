@@ -400,7 +400,6 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 				'post_status' => 'draft',
 			]
 		);
-		Newspack_Popups_AB_Tests::reset_config_cache();
 		$buckets = Newspack_Popups_AB_Tests::get_logged_in_buckets( Newspack_Popups_AB_Tests::get_tests_config() );
 		self::assertContains( $buckets['three-arm-test'], [ 'a', 'b' ], 'An unpublished arm must not be shown.' );
 		self::assertSame( 'c', get_user_meta( $user_id, $meta_key, true ), 'The stored assignment must outlive the unpublish.' );
@@ -411,7 +410,6 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 				'post_status' => 'publish',
 			]
 		);
-		Newspack_Popups_AB_Tests::reset_config_cache();
 		$buckets = Newspack_Popups_AB_Tests::get_logged_in_buckets( Newspack_Popups_AB_Tests::get_tests_config() );
 		self::assertSame( 'c', $buckets['three-arm-test'], 'Republishing must return the reader to their arm.' );
 
