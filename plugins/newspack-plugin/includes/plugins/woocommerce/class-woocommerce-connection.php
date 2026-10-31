@@ -38,7 +38,7 @@ class WooCommerce_Connection {
 	private static $subscriptions_being_erased = [];
 
 	/**
-	 * IDs of subscriptions the customizable cancellation email went to in this request.
+	 * IDs of subscriptions the customizable cancellation email went to for the status change being dispatched.
 	 *
 	 * @var int[]
 	 */
@@ -98,6 +98,7 @@ class WooCommerce_Connection {
 		 */
 		\add_action( 'cancelled_subscription_notification', [ __CLASS__, 'send_customizable_cancellation_email' ], 5 );
 		\add_filter( 'woocommerce_email_enabled_customer_cancelled_subscription', [ __CLASS__, 'disable_duplicate_wcs_cancelled_subscription_email' ], 10, 2 );
+		// Priority 11, after WooCommerce Subscriptions' email at 10 has read the list.
 		\add_action( 'cancelled_subscription_notification', [ __CLASS__, 'forget_cancellation_email_sent' ], 11 );
 		\add_action( 'woocommerce_privacy_before_remove_subscription_personal_data', [ __CLASS__, 'flag_subscription_being_erased' ] );
 		\add_action( 'woocommerce_subscription_status_pending-cancel_to_active', [ __CLASS__, 'clear_cancellation_email_sent_marker' ] );

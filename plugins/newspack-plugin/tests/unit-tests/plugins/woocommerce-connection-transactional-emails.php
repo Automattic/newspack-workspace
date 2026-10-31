@@ -641,13 +641,22 @@ class Newspack_Test_WooCommerce_Connection_Transactional_Emails extends WP_UnitT
 	}
 
 	/**
-	 * The Newspack send has to run before WooCommerce Subscriptions' email
-	 * reads the marker.
+	 * WooCommerce Subscriptions' email triggers at 10. The Newspack send has
+	 * to run before it, and the stand-down has to be cleared only after it.
 	 */
-	public function test_cancellation_email_runs_before_wcs_email() {
+	public function test_cancellation_email_hooks_around_wcs_email() {
 		self::assertSame(
 			5,
 			has_action( 'cancelled_subscription_notification', [ WooCommerce_Connection::class, 'send_customizable_cancellation_email' ] )
+		);
+		self::assertSame(
+			10,
+			has_filter( 'woocommerce_email_enabled_customer_cancelled_subscription', [ WooCommerce_Connection::class, 'disable_duplicate_wcs_cancelled_subscription_email' ] )
+		);
+		self::assertGreaterThan(
+			10,
+			has_action( 'cancelled_subscription_notification', [ WooCommerce_Connection::class, 'forget_cancellation_email_sent' ] ),
+			'The stand-down must last until WooCommerce Subscriptions\' email has read it.'
 		);
 	}
 }
