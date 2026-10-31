@@ -488,4 +488,131 @@ class Newspack_Test_WooCommerce_Connection_Transactional_Emails extends WP_UnitT
 			'A cancelled yearly subscription should be described as yearly.'
 		);
 	}
+
+	/**
+	 * Register the cancellation email config with the given body.
+	 *
+	 * @param string $body Email HTML.
+	 */
+	private function enable_cancellation_email( $body = '<p>Cancelled</p>' ) {
+		add_filter(
+			'newspack_email_configs',
+			function ( $configs ) {
+				$configs[ Reader_Revenue_Emails::EMAIL_TYPES['CANCELLATION'] ] = [
+					'name'        => Reader_Revenue_Emails::EMAIL_TYPES['CANCELLATION'],
+					'label'       => 'Cancellation',
+					'description' => 'Test cancellation email.',
+					'template'    => dirname( NEWSPACK_PLUGIN_FILE ) . '/includes/templates/reader-revenue-emails/cancellation.php',
+					'category'    => 'reader-revenue',
+				];
+				return $configs;
+			}
+		);
+		Emails::reset_email_configs_cache();
+		update_option( 'newspack_email_templates_migrated', 'v1' );
+		$config = Emails::get_email_config_by_type( Reader_Revenue_Emails::EMAIL_TYPES['CANCELLATION'] );
+		update_post_meta( $config['post_id'], \Newspack_Newsletters::EMAIL_HTML_META, $body );
+		Emails::reset_email_configs_cache();
+	}
+
+	/**
+	 * Stage a cancelled subscription in the mock subscriptions database.
+	 *
+	 * @param int   $id   Subscription ID.
+	 * @param array $meta Subscription meta.
+	 *
+	 * @return WC_Subscription
+	 */
+	private function stage_cancelled_subscription( $id, $meta = [] ) {
+		global $subscriptions_database;
+		$this->stage_product( 818, 'Membership: Monthly', 'subscription', 'month' );
+		$subscriptions_database[ $id ] = new WC_Subscription(
+			[
+				'id'            => $id,
+				'status'        => 'cancelled',
+				'customer_id'   => 1,
+				'total'         => 10,
+				'billing_email' => 'reader@tests.com',
+				'meta'          => $meta,
+				'items'         => [
+					new WC_Order_Item_Product(
+						[
+							'name'       => 'Membership: Monthly',
+							'product_id' => 818,
+							'total'      => 10,
+						]
+					),
+				],
+			]
+		);
+		return $subscriptions_database[ $id ];
+	}
+
+	/**
+	 * The status change has already saved the subscription when the email
+	 * goes out, so the sent marker has to be saved on its own. Without it,
+	 * a later status change sent the reader the email again.
+	 */
+	public function test_cancellation_email_marker_is_persisted() {
+		$this->enable_cancellation_email();
+		$subscription = $this->stage_cancelled_subscription( 9018 );
+
+		self::assertTrue( WooCommerce_Connection::send_customizable_cancellation_email( $subscription ) );
+		self::assertNotEmpty( $subscription->get_meta( WooCommerce_Connection::CANCELLATION_EMAIL_SENT_META ) );
+		self::assertSame( 1, $subscription->save_meta_data_calls, 'The sent marker must be saved.' );
+
+		reset_phpmailer_instance();
+		self::assertFalse( WooCommerce_Connection::send_customizable_cancellation_email( $subscription ) );
+		self::assertFalse( tests_retrieve_phpmailer_instance()->get_sent(), 'The reader gets one cancellation email per subscription.' );
+	}
+
+	/**
+	 * A subscription cancelled to erase the reader's personal data sends the
+	 * reader no cancellation email.
+	 */
+	public function test_no_cancellation_email_when_erasing_personal_data() {
+		$this->enable_cancellation_email();
+		$subscription = $this->stage_cancelled_subscription( 9019 );
+
+		do_action( 'woocommerce_privacy_before_remove_subscription_personal_data', $subscription );
+
+		self::assertFalse( WooCommerce_Connection::send_customizable_cancellation_email( $subscription ) );
+		self::assertFalse( tests_retrieve_phpmailer_instance()->get_sent() );
+	}
+
+	/**
+	 * WooCommerce Subscriptions 9.4's own reader email stands down once the
+	 * Newspack email has gone out, read from the stored subscription rather
+	 * than the stale instance WooCommerce hands the filter.
+	 */
+	public function test_wcs_customer_cancelled_email_stands_down_after_newspack_send() {
+		$stored = $this->stage_cancelled_subscription( 9020, [ WooCommerce_Connection::CANCELLATION_EMAIL_SENT_META => true ] );
+		$stale  = new WC_Subscription( [ 'id' => 9020 ] );
+
+		self::assertFalse( WooCommerce_Connection::disable_duplicate_wcs_cancelled_subscription_email( true, $stale ) );
+		self::assertNotEmpty( $stored->get_meta( WooCommerce_Connection::CANCELLATION_EMAIL_SENT_META ) );
+	}
+
+	/**
+	 * Without a Newspack send, WooCommerce's email is the reader's only one,
+	 * and the filter never turns on an email someone else disabled.
+	 */
+	public function test_wcs_customer_cancelled_email_untouched_without_newspack_send() {
+		$subscription = $this->stage_cancelled_subscription( 9021 );
+
+		self::assertTrue( WooCommerce_Connection::disable_duplicate_wcs_cancelled_subscription_email( true, $subscription ) );
+		self::assertFalse( WooCommerce_Connection::disable_duplicate_wcs_cancelled_subscription_email( false, $subscription ) );
+		self::assertTrue( WooCommerce_Connection::disable_duplicate_wcs_cancelled_subscription_email( true, null ) );
+	}
+
+	/**
+	 * The Newspack send has to run before WooCommerce Subscriptions' email
+	 * reads the marker.
+	 */
+	public function test_cancellation_email_runs_before_wcs_email() {
+		self::assertSame(
+			5,
+			has_action( 'cancelled_subscription_notification', [ WooCommerce_Connection::class, 'send_customizable_cancellation_email' ] )
+		);
+	}
 }
