@@ -38,6 +38,13 @@ class WooCommerce_Connection {
 	private static $subscriptions_being_erased = [];
 
 	/**
+	 * IDs of subscriptions the customizable cancellation email went to in this request.
+	 *
+	 * @var int[]
+	 */
+	private static $cancellation_emails_sent = [];
+
+	/**
 	 * Initialize.
 	 *
 	 * @codeCoverageIgnore
@@ -87,11 +94,12 @@ class WooCommerce_Connection {
 		 * Priority 5, ahead of the Customer Cancelled Subscription email that
 		 * WooCommerce Subscriptions 9.4 hooks at 10, for the same reason as the
 		 * receipt above: disable_duplicate_wcs_cancelled_subscription_email()
-		 * reads the sent marker this call writes.
+		 * stands down only for a subscription this call has already emailed.
 		 */
 		\add_action( 'cancelled_subscription_notification', [ __CLASS__, 'send_customizable_cancellation_email' ], 5 );
 		\add_filter( 'woocommerce_email_enabled_customer_cancelled_subscription', [ __CLASS__, 'disable_duplicate_wcs_cancelled_subscription_email' ], 10, 2 );
 		\add_action( 'woocommerce_privacy_before_remove_subscription_personal_data', [ __CLASS__, 'flag_subscription_being_erased' ] );
+		\add_action( 'woocommerce_subscription_status_pending-cancel_to_active', [ __CLASS__, 'clear_cancellation_email_sent_marker' ] );
 
 		// woocommerce-memberships-for-teams plugin.
 		\add_filter( 'wc_memberships_for_teams_product_team_user_input_fields', [ __CLASS__, 'wc_memberships_for_teams_product_team_user_input_fields' ] );
@@ -891,9 +899,10 @@ class WooCommerce_Connection {
 	 *
 	 * WooCommerce Subscriptions 9.4 added this email for the reader, off by
 	 * default. A site that turns it on would otherwise send the reader two
-	 * emails per cancellation. Like disable_duplicate_wc_completed_order_email(),
-	 * the decision reads the sent marker, so a failed Newspack send leaves the
-	 * reader with WooCommerce's email instead of none. The store owner's
+	 * emails per cancellation. Only the status change the Newspack email went
+	 * out for is covered, so a failed Newspack send leaves the reader with
+	 * WooCommerce's email instead of none, and WooCommerce's later notice that
+	 * a pending cancellation ended early still reaches them. The store owner's
 	 * Cancelled Subscription email is a different email and is left alone.
 	 *
 	 * @param bool                  $enabled Whether the email is enabled.
@@ -902,18 +911,25 @@ class WooCommerce_Connection {
 	 * @return bool
 	 */
 	public static function disable_duplicate_wcs_cancelled_subscription_email( $enabled, $object = null ) {
-		if ( ! $enabled || ! is_a( $object, 'WC_Subscription' ) || ! function_exists( 'wcs_get_subscription' ) ) {
+		if ( ! $enabled || ! is_a( $object, 'WC_Subscription' ) ) {
 			return $enabled;
 		}
 
-		// Read the marker from the data store, not from the instance handed in,
-		// which was loaded before the Newspack send wrote it.
-		$subscription = \wcs_get_subscription( $object->get_id() );
-		if ( ! is_a( $subscription, 'WC_Subscription' ) ) {
-			return $enabled;
-		}
+		return ! in_array( $object->get_id(), self::$cancellation_emails_sent, true );
+	}
 
-		return ! $subscription->get_meta( self::CANCELLATION_EMAIL_SENT_META, true );
+	/**
+	 * Let a reactivated subscription's next cancellation send the email again,
+	 * as WooCommerce Subscriptions does for its own sent flag.
+	 *
+	 * @param \WC_Subscription $subscription The reactivated subscription.
+	 */
+	public static function clear_cancellation_email_sent_marker( $subscription ) {
+		if ( ! is_a( $subscription, 'WC_Subscription' ) || ! $subscription->get_meta( self::CANCELLATION_EMAIL_SENT_META, true ) ) {
+			return;
+		}
+		$subscription->delete_meta_data( self::CANCELLATION_EMAIL_SENT_META );
+		$subscription->save_meta_data();
 	}
 
 	/**
@@ -950,7 +966,9 @@ class WooCommerce_Connection {
 		}
 
 		// The subscription is being cancelled to erase the reader's personal data.
-		if ( in_array( $subscription->get_id(), self::$subscriptions_being_erased, true ) ) {
+		$erased = array_search( $subscription->get_id(), self::$subscriptions_being_erased, true );
+		if ( false !== $erased ) {
+			unset( self::$subscriptions_being_erased[ $erased ] );
 			return false;
 		}
 
@@ -1021,10 +1039,11 @@ class WooCommerce_Connection {
 				// Persist the marker: the status change has already saved the
 				// subscription by the time this hook fires.
 				$subscription->save_meta_data();
+				self::$cancellation_emails_sent[] = $subscription->get_id();
 				return true;
 			}
-			return false;
 		}
+		return false;
 	}
 
 	/**

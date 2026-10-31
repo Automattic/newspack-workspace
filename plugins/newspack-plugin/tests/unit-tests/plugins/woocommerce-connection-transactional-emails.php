@@ -558,12 +558,29 @@ class Newspack_Test_WooCommerce_Connection_Transactional_Emails extends WP_UnitT
 		$subscription = $this->stage_cancelled_subscription( 9018 );
 
 		self::assertTrue( WooCommerce_Connection::send_customizable_cancellation_email( $subscription ) );
-		self::assertNotEmpty( $subscription->get_meta( WooCommerce_Connection::CANCELLATION_EMAIL_SENT_META ) );
 		self::assertSame( 1, $subscription->save_meta_data_calls, 'The sent marker must be saved.' );
 
+		// A later status change loads the subscription with what was saved.
 		reset_phpmailer_instance();
-		self::assertFalse( WooCommerce_Connection::send_customizable_cancellation_email( $subscription ) );
-		self::assertFalse( tests_retrieve_phpmailer_instance()->get_sent(), 'The reader gets one cancellation email per subscription.' );
+		$reloaded = $this->stage_cancelled_subscription( 9018, $subscription->meta );
+		self::assertFalse( WooCommerce_Connection::send_customizable_cancellation_email( $reloaded ) );
+		self::assertFalse( tests_retrieve_phpmailer_instance()->get_sent(), 'The reader gets one email per cancellation.' );
+	}
+
+	/**
+	 * A reader who reactivates a pending cancellation and cancels again
+	 * hears about the new cancellation too.
+	 */
+	public function test_cancellation_email_sends_again_after_reactivation() {
+		$this->enable_cancellation_email();
+		$subscription = $this->stage_cancelled_subscription( 9022 );
+		WooCommerce_Connection::send_customizable_cancellation_email( $subscription );
+
+		do_action( 'woocommerce_subscription_status_pending-cancel_to_active', $subscription ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores -- WooCommerce Subscriptions' hook.
+
+		reset_phpmailer_instance();
+		self::assertTrue( WooCommerce_Connection::send_customizable_cancellation_email( $subscription ) );
+		self::assertNotFalse( tests_retrieve_phpmailer_instance()->get_sent() );
 	}
 
 	/**
@@ -581,24 +598,25 @@ class Newspack_Test_WooCommerce_Connection_Transactional_Emails extends WP_UnitT
 	}
 
 	/**
-	 * WooCommerce Subscriptions 9.4's own reader email stands down once the
-	 * Newspack email has gone out, read from the stored subscription rather
-	 * than the stale instance WooCommerce hands the filter.
+	 * WooCommerce Subscriptions 9.4's own reader email stands down for the
+	 * cancellation the Newspack email just covered.
 	 */
 	public function test_wcs_customer_cancelled_email_stands_down_after_newspack_send() {
-		$stored = $this->stage_cancelled_subscription( 9020, [ WooCommerce_Connection::CANCELLATION_EMAIL_SENT_META => true ] );
-		$stale  = new WC_Subscription( [ 'id' => 9020 ] );
+		$this->enable_cancellation_email();
+		$subscription = $this->stage_cancelled_subscription( 9020 );
+		WooCommerce_Connection::send_customizable_cancellation_email( $subscription );
 
-		self::assertFalse( WooCommerce_Connection::disable_duplicate_wcs_cancelled_subscription_email( true, $stale ) );
-		self::assertNotEmpty( $stored->get_meta( WooCommerce_Connection::CANCELLATION_EMAIL_SENT_META ) );
+		self::assertFalse( WooCommerce_Connection::disable_duplicate_wcs_cancelled_subscription_email( true, $subscription ) );
 	}
 
 	/**
-	 * Without a Newspack send, WooCommerce's email is the reader's only one,
-	 * and the filter never turns on an email someone else disabled.
+	 * Without a Newspack send for this status change, WooCommerce's email is
+	 * the reader's only one: a failed send, or a pending cancellation that
+	 * ends early after Newspack's email already went out. The filter never
+	 * turns on an email someone else disabled.
 	 */
 	public function test_wcs_customer_cancelled_email_untouched_without_newspack_send() {
-		$subscription = $this->stage_cancelled_subscription( 9021 );
+		$subscription = $this->stage_cancelled_subscription( 9021, [ WooCommerce_Connection::CANCELLATION_EMAIL_SENT_META => true ] );
 
 		self::assertTrue( WooCommerce_Connection::disable_duplicate_wcs_cancelled_subscription_email( true, $subscription ) );
 		self::assertFalse( WooCommerce_Connection::disable_duplicate_wcs_cancelled_subscription_email( false, $subscription ) );
