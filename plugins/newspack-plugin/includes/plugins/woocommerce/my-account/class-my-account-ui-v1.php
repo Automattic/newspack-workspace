@@ -274,8 +274,9 @@ class My_Account_UI_V1 {
 	 *
 	 * @param string $template      Template path.
 	 * @param string $template_name Template name.
+	 * @param array  $args          Template arguments.
 	 */
-	public static function wc_get_template( $template, $template_name ) {
+	public static function wc_get_template( $template, $template_name, $args = [] ) {
 		switch ( $template_name ) {
 			case 'myaccount/navigation.php':
 				return __DIR__ . '/templates/v1/navigation.php';
@@ -311,10 +312,36 @@ class My_Account_UI_V1 {
 				if ( ! function_exists( 'is_wc_endpoint_url' ) || ! \is_wc_endpoint_url( 'view-order' ) ) {
 					return $template;
 				}
+				if ( self::is_gifted_order_customer_details( $args['order'] ?? null ) ) {
+					return $template;
+				}
 				return __DIR__ . '/templates/v1/order-details-customer.php';
 			default:
 				return $template;
 		}
+	}
+
+	/**
+	 * Whether WooCommerce Subscriptions' gifting templates decide the customer
+	 * details of an order: a gifted subscription, or a renewal whose shipping
+	 * address belongs to the gift recipient and is withheld from the purchaser
+	 * viewing it (WooCommerce Subscriptions 9.4+). Gifting swaps the template
+	 * for these on the same hook and priority, so ours must not replace it,
+	 * or the purchaser sees the recipient's address.
+	 *
+	 * @param \WC_Order|null $order The order being viewed.
+	 * @return bool
+	 */
+	private static function is_gifted_order_customer_details( $order ) {
+		if ( ! is_a( $order, 'WC_Order' ) ) {
+			return false;
+		}
+		if ( class_exists( 'WCS_Gifting' ) && \WCS_Gifting::is_gifted_subscription( $order ) ) {
+			return true;
+		}
+		return class_exists( 'WCSG_Recipient_Addresses' )
+			&& method_exists( 'WCSG_Recipient_Addresses', 'is_shipping_address_withheld' )
+			&& \WCSG_Recipient_Addresses::is_shipping_address_withheld( $order, \get_current_user_id() );
 	}
 
 	/**
