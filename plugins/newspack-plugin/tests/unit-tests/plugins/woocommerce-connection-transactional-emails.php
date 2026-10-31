@@ -22,6 +22,18 @@ require_once __DIR__ . '/../../mocks/wc-mocks.php';
  */
 class Newspack_Test_WooCommerce_Connection_Transactional_Emails extends WP_UnitTestCase {
 	/**
+	 * Clear the cancellation email's per-request state, which outlives a test.
+	 */
+	public function tear_down() {
+		foreach ( [ 'cancellation_emails_sent', 'subscriptions_being_erased' ] as $property ) {
+			$reflection = new ReflectionProperty( WooCommerce_Connection::class, $property );
+			$reflection->setAccessible( true );
+			$reflection->setValue( null, [] );
+		}
+		parent::tear_down();
+	}
+
+	/**
 	 * Reset the mock registries before each test.
 	 */
 	public function set_up() {
@@ -560,7 +572,7 @@ class Newspack_Test_WooCommerce_Connection_Transactional_Emails extends WP_UnitT
 		self::assertTrue( WooCommerce_Connection::send_customizable_cancellation_email( $subscription ) );
 		self::assertSame( 1, $subscription->save_meta_data_calls, 'The sent marker must be saved.' );
 
-		// A later status change loads the subscription with what was saved.
+		// A later status change loads the subscription with its marker.
 		reset_phpmailer_instance();
 		$reloaded = $this->stage_cancelled_subscription( 9018, $subscription->meta );
 		self::assertFalse( WooCommerce_Connection::send_customizable_cancellation_email( $reloaded ) );
@@ -577,6 +589,7 @@ class Newspack_Test_WooCommerce_Connection_Transactional_Emails extends WP_UnitT
 		WooCommerce_Connection::send_customizable_cancellation_email( $subscription );
 
 		do_action( 'woocommerce_subscription_status_pending-cancel_to_active', $subscription ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores -- WooCommerce Subscriptions' hook.
+		self::assertSame( 2, $subscription->save_meta_data_calls, 'The cleared marker must be saved.' );
 
 		reset_phpmailer_instance();
 		self::assertTrue( WooCommerce_Connection::send_customizable_cancellation_email( $subscription ) );
@@ -607,6 +620,10 @@ class Newspack_Test_WooCommerce_Connection_Transactional_Emails extends WP_UnitT
 		WooCommerce_Connection::send_customizable_cancellation_email( $subscription );
 
 		self::assertFalse( WooCommerce_Connection::disable_duplicate_wcs_cancelled_subscription_email( true, $subscription ) );
+
+		// A later status change of the same subscription is WooCommerce's to email about.
+		WooCommerce_Connection::forget_cancellation_email_sent( $subscription );
+		self::assertTrue( WooCommerce_Connection::disable_duplicate_wcs_cancelled_subscription_email( true, $subscription ) );
 	}
 
 	/**

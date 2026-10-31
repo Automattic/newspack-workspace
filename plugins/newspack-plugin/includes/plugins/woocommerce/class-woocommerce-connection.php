@@ -98,6 +98,7 @@ class WooCommerce_Connection {
 		 */
 		\add_action( 'cancelled_subscription_notification', [ __CLASS__, 'send_customizable_cancellation_email' ], 5 );
 		\add_filter( 'woocommerce_email_enabled_customer_cancelled_subscription', [ __CLASS__, 'disable_duplicate_wcs_cancelled_subscription_email' ], 10, 2 );
+		\add_action( 'cancelled_subscription_notification', [ __CLASS__, 'forget_cancellation_email_sent' ], 11 );
 		\add_action( 'woocommerce_privacy_before_remove_subscription_personal_data', [ __CLASS__, 'flag_subscription_being_erased' ] );
 		\add_action( 'woocommerce_subscription_status_pending-cancel_to_active', [ __CLASS__, 'clear_cancellation_email_sent_marker' ] );
 
@@ -919,13 +920,26 @@ class WooCommerce_Connection {
 	}
 
 	/**
+	 * Limit disable_duplicate_wcs_cancelled_subscription_email() to the status
+	 * change the Newspack email went out for, once WooCommerce Subscriptions'
+	 * own email has decided.
+	 *
+	 * @param \WC_Subscription $subscription The subscription whose status changed.
+	 */
+	public static function forget_cancellation_email_sent( $subscription ) {
+		if ( is_a( $subscription, 'WC_Subscription' ) ) {
+			self::$cancellation_emails_sent = array_values( array_diff( self::$cancellation_emails_sent, [ $subscription->get_id() ] ) );
+		}
+	}
+
+	/**
 	 * Let a reactivated subscription's next cancellation send the email again,
 	 * as WooCommerce Subscriptions does for its own sent flag.
 	 *
 	 * @param \WC_Subscription $subscription The reactivated subscription.
 	 */
 	public static function clear_cancellation_email_sent_marker( $subscription ) {
-		if ( ! is_a( $subscription, 'WC_Subscription' ) || ! $subscription->get_meta( self::CANCELLATION_EMAIL_SENT_META, true ) ) {
+		if ( ! is_a( $subscription, 'WC_Subscription' ) ) {
 			return;
 		}
 		$subscription->delete_meta_data( self::CANCELLATION_EMAIL_SENT_META );
