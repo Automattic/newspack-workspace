@@ -512,6 +512,17 @@ describe( 'getPriorityWarnings', () => {
 
 		expect( warnings ).toHaveProperty( '1' );
 	} );
+
+	it( 'stays quiet when the two gates cover posts of ages that never meet', () => {
+		const ageRule = ( comparison, days ) => ( { slug: 'published_age', value: { comparison, duration_value: days, duration_unit: 'days' } } );
+		const freeFirstMonth = registrationGate( 1, [ ...allPosts, ageRule( 'less_than', 30 ) ] );
+
+		expect( getPriorityWarnings( rank( [ freeFirstMonth, paidGate( 2, [ ...allPosts, ageRule( 'more_than', 30 ) ] ) ] ) ) ).toEqual( {} );
+		// From day 7 to day 30, a post falls under both.
+		expect( getPriorityWarnings( rank( [ freeFirstMonth, paidGate( 2, [ ...allPosts, ageRule( 'more_than', 7 ) ] ) ] ) ) ).toEqual( {
+			1: warning,
+		} );
+	} );
 } );
 
 describe( 'gate toolbar filters', () => {
