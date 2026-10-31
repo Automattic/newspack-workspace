@@ -87,8 +87,10 @@ class Subscription_Reactivation {
 		$subscription->delete_date( 'end' );
 		$subscription->delete_date( 'cancelled' );
 
-		// Subscriptions sends the admin's cancellation email once per subscription.
+		// Subscriptions sends the admin's cancellation email once per subscription,
+		// and Newspack sends the reader's once per cancellation.
 		$subscription->set_cancelled_email_sent( 'false' );
+		$subscription->delete_meta_data( WooCommerce_Connection::CANCELLATION_EMAIL_SENT_META );
 
 		// update_status() refuses Active from an ended status, where set_status() doesn't
 		// check. Flagging the change as manual credits the admin in the note it adds.
