@@ -155,6 +155,12 @@ describe( 'ContentGateSettings per-gate actions', () => {
 		expect( screen.getByRole( 'link', { name: 'News & Views' } ) ).toHaveAttribute( 'href', `#/edit/${ mockGate.id }` );
 	} );
 
+	it( 'names the link after the gate ID when the gate has no title', () => {
+		render( <ContentGateSettings gate={ { ...mockGate, title: '' } } updateGatesData={ () => {} } /> );
+
+		expect( screen.getByRole( 'link', { name: `#${ mockGate.id }` } ) ).toBeInTheDocument();
+	} );
+
 	it( 'names the actions menu and each action after the gate', () => {
 		render( <ContentGateSettings gate={ mockGate } updateGatesData={ () => {} } /> );
 

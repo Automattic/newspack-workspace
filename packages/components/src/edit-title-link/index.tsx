@@ -5,8 +5,7 @@
 /**
  * WordPress dependencies.
  */
-import { Icon } from '@wordpress/components';
-import { pencil } from '@wordpress/icons';
+import { Icon, pencil } from '@wordpress/icons';
 
 /**
  * Internal dependencies.
