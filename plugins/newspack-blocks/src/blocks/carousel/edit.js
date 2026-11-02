@@ -5,6 +5,7 @@
  */
 import { isEqual } from 'lodash';
 import classnames from 'classnames';
+import { prefersReducedMotion } from 'newspack-motion';
 
 /**
  * WordPress dependencies
@@ -34,7 +35,6 @@ import { decodeEntities } from '@wordpress/html-entities';
  */
 import QueryControls from '../../components/query-controls';
 import { PostTypesPanel, PostStatusesPanel } from '../../components/editor-panels';
-import { prefersReducedMotion } from 'newspack-motion';
 import createSwiper from './create-swiper';
 import { getBylineHTML, formatSponsorLogos, formatSponsorByline, getPostStatusLabel } from '../../shared/js/utils';
 import { preventPreviewNavigation } from '../../shared/js/inert-preview';

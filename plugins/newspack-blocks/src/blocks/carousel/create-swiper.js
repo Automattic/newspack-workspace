@@ -198,8 +198,8 @@ export default function createSwiper( els, config = {} ) {
 		let resumeAfterHold = false;
 
 		/**
-		 * Stops autoplay while the reader points at or focuses the carousel,
-		 * leaving the play/pause button and announcements untouched.
+		 * Stops autoplay while a mouse is over the carousel or keyboard focus is inside it,
+		 * except on Play and Pause, leaving the play/pause button and announcements untouched.
 		 *
 		 * @param {string} reason Either 'pointer' or 'focus'.
 		 */
@@ -251,15 +251,15 @@ export default function createSwiper( els, config = {} ) {
 		}
 
 		/**
-		 * Holds autoplay while keyboard focus is inside a slide; clicks on the controls never hold.
+		 * Holds autoplay on keyboard focus inside the carousel, except on Play and Pause.
 		 *
 		 * @param {FocusEvent} event Focus event.
 		 */
 		function handleFocusIn( event ) {
-			if ( event.target.closest( '.swiper-slide' ) && event.target.matches( ':focus-visible' ) ) {
-				hold( 'focus' );
-			} else {
+			if ( ! event.target.matches( ':focus-visible' ) || event.target === els.play || event.target === els.pause ) {
 				release( 'focus' );
+			} else {
+				hold( 'focus' );
 			}
 		}
 
@@ -269,6 +269,9 @@ export default function createSwiper( els, config = {} ) {
 		 * @param {FocusEvent} event Focus event.
 		 */
 		function handleFocusOut( event ) {
+			if ( event.target === event.target.ownerDocument.activeElement ) {
+				return;
+			}
 			if ( ! els.block.contains( event.relatedTarget ) ) {
 				release( 'focus' );
 			}

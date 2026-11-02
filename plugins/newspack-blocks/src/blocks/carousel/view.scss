@@ -306,6 +306,14 @@
 	.swiper-button-pause {
 		display: none;
 	}
+	@include motion.reduced-motion {
+		&:not(:has(.swiper-initialized)) .swiper-button-play {
+			display: block;
+		}
+		&:not(:has(.swiper-initialized)) .swiper-button-pause {
+			display: none;
+		}
+	}
 
 	// Make sure Jetpack Content Options don't affect the block.
 	.posted-on,

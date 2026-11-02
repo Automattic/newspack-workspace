@@ -1,3 +1,4 @@
+@use "sass:math";
 @use "newspack-colors" as np-colors;
 @use "newspack-motion" as motion;
 @use "../../shared/sass/variables";
@@ -48,8 +49,8 @@
 
 		&.is-entering {
 			transition:
-				opacity motion.$duration-reveal motion.$ease-out calc(var(--wpnbha-enter-index, 0) * 40ms),
-				transform motion.$duration-reveal motion.$ease-out calc(var(--wpnbha-enter-index, 0) * 40ms);
+				opacity motion.$duration-reveal motion.$ease-out calc(var(--wpnbha-enter-index, 0) * #{math.div(motion.$duration-reveal, 5)}),
+				transform motion.$duration-reveal motion.$ease-out calc(var(--wpnbha-enter-index, 0) * #{math.div(motion.$duration-reveal, 5)});
 
 			@starting-style {
 				opacity: 0;

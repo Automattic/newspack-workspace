@@ -80,16 +80,16 @@ function buildLoadMoreHandler( blockWrapperEl ) {
 			articleEl.classList.remove( 'is-entering' );
 			articleEl.style.removeProperty( '--wpnbha-enter-index' );
 		};
-		articleEl.addEventListener( 'transitionend', event => {
+		const handleEnd = event => {
 			if ( event.target === articleEl && 'opacity' === event.propertyName ) {
 				clear();
 			}
-		} );
+		};
+		articleEl.addEventListener( 'transitionend', handleEnd );
+		articleEl.addEventListener( 'transitioncancel', handleEnd );
 		requestAnimationFrame( () =>
 			requestAnimationFrame( () => {
-				const style = getComputedStyle( articleEl );
-				const total = parseFloat( style.transitionDuration ) + parseFloat( style.transitionDelay );
-				if ( ! total && articleEl.classList.contains( 'is-entering' ) ) {
+				if ( ! articleEl.getAnimations().length && articleEl.classList.contains( 'is-entering' ) ) {
 					clear();
 				}
 			} )
