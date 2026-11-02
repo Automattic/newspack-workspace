@@ -64,6 +64,16 @@ const createFlyoutInstance = wrapper => {
 	// stacking context issues regardless of the wrapper's CSS transforms.
 	document.body.appendChild( panel );
 
+	panel.addEventListener(
+		'pointerenter',
+		e => {
+			if ( e.target.matches( '.wp-block-navigation:not(.is-style-flatten) .has-child.open-on-hover-click' ) ) {
+				e.stopPropagation();
+			}
+		},
+		true
+	);
+
 	const scrim = document.createElement( 'div' );
 	scrim.className = 'overlay-menu__scrim alignfull';
 	scrim.setAttribute( 'aria-hidden', 'true' );
