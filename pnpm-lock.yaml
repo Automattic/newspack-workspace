@@ -674,6 +674,9 @@ importers:
       newspack-components:
         specifier: workspace:*
         version: link:../../packages/components
+      newspack-motion:
+        specifier: workspace:*
+        version: link:../../packages/motion
       newspack-scripts:
         specifier: workspace:*
         version: link:../../packages/scripts
