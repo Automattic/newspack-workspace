@@ -516,10 +516,6 @@ $width__tablet: 782px;
 		display: none;
 	}
 
-	&:focus {
-		outline: none;
-	}
-
 	&.newspack-lightbox-no-border {
 		border: none;
 		padding: 0;
@@ -558,10 +554,6 @@ $width__tablet: 782px;
 .newspack-above-header-popup {
 	display: block;
 	clear: both;
-
-	&:focus {
-		outline: none;
-	}
 
 	&.hidden {
 		display: none;
