@@ -33,12 +33,13 @@ export const DONOR_FILTER_ELEMENTS = [
 // The badge sits beside the subscription statuses, which already use stable, low,
 // medium and high, so a donor badge takes none of those: a shared colour would
 // read as a status. Of the intents left, a reader who still gives (One-time or
-// Recurring) is informational, and Former is draft, a neutral that reads quieter.
+// Recurring) is informational. Former is none, the intent the Badge guidelines
+// give inactive and expired states; draft means work in progress.
 /** @type {Record< string, import('../../../packages/components/src/types').BadgeIntent >} */
 export const DONOR_BADGE_INTENT = {
 	'one-time': 'informational',
 	recurring: 'informational',
-	former: 'draft',
+	former: 'none',
 };
 
 // The kind the endpoint sent for a row, or '' for a reader who isn't a donor, or

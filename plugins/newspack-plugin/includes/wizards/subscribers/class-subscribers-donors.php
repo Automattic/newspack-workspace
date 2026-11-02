@@ -114,18 +114,22 @@ class Subscribers_Donors {
 	 * The `donation_new` event flags the payer, so a payer with no other donations
 	 * reads as One-time. Every caller must resolve the holder the same way.
 	 *
-	 * It is re-encoded in these places, each of which must be changed in step or
-	 * the endpoint's Donor filter will contradict the badge it filters on:
+	 * It is re-encoded on the server in these places, each of which must be changed
+	 * in step or the endpoint's Donor filter will contradict the badge it filters
+	 * on:
 	 *   - Subscribers_Wizard::customer_ids_for_donor_kind() — the endpoint's
 	 *     `donor` filter, which builds each kind's reader set from holders() and
 	 *     flagged_user_ids() instead of calling this per reader.
 	 *   - holders() — which donation subscriptions count, and as live or ended.
 	 *   - Newspack\CLI\Donors::backfill() — the support command that flags donors
 	 *     from before the flag existed, so they land in the kind this returns.
-	 *   - The client, which reads `donor.kind` and never re-derives it:
-	 *     src/wizards/subscribers/donor.js holds the labels, the badge intents
-	 *     and the Donor filter field's '' → 'none' mapping, used by
-	 *     screens/SubscriberList.jsx and screens/PersonProfile.jsx.
+	 *
+	 * The client reads `donor.kind` and never re-derives it, but it has to know
+	 * the kinds: src/wizards/subscribers/donor.js holds the labels, the badge
+	 * intents, donorKind() and the Donor filter's options, including the `none`
+	 * value for a non-donor (DONOR_FILTER_ELEMENTS). The Donor field's getValue
+	 * in screens/SubscriberList.jsx maps a row's '' to that `none`.
+	 * screens/PersonProfile.jsx shows the badge.
 	 *
 	 * It reads nothing but the reader's two flags and the statuses it is given:
 	 * the caller resolves which donation subscriptions the reader holds. Callers
@@ -158,7 +162,9 @@ class Subscribers_Donors {
 	 * at the first donation. Only a completed order counts: a processing one may
 	 * still fail. The query asks for `shop_order` because WooCommerce otherwise
 	 * returns refunds alongside orders. Callers check is_enabled() first and ask
-	 * only for One-time donors, so no other row pays for this query.
+	 * only for One-time donors, so no other row pays for this query. It is one
+	 * query, but wc_get_orders() can load up to ORDER_SCAN_LIMIT orders, and the
+	 * donation check reads each one's line items, before a donation turns up.
 	 *
 	 * @param int $user_id The reader's user ID.
 	 *

@@ -21,8 +21,8 @@ describe( 'donor labels and badge intents', () => {
 		expect( Object.keys( DONOR_BADGE_INTENT ).sort() ).toEqual( Object.keys( DONOR_LABELS ).sort() );
 	} );
 
-	it( 'reads Former quieter than the two kinds who still give', () => {
-		expect( DONOR_BADGE_INTENT.former ).toBe( 'draft' );
+	it( 'shows Former as an inactive state, quieter than the two kinds who still give', () => {
+		expect( DONOR_BADGE_INTENT.former ).toBe( 'none' );
 		expect( DONOR_BADGE_INTENT[ 'one-time' ] ).toBe( 'informational' );
 		expect( DONOR_BADGE_INTENT.recurring ).toBe( 'informational' );
 	} );

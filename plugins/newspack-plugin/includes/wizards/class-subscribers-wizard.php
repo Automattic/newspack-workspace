@@ -1592,7 +1592,9 @@ class Subscribers_Wizard extends Wizard {
 	 *
 	 * A One-time donor's row adds one more bounded order query: the latest donation
 	 * among the reader's newest Subscribers_Donors::ORDER_SCAN_LIMIT completed
-	 * orders. Every other row adds none, Recurring and Former donors included.
+	 * orders. That query can load up to that many orders and read their line items
+	 * before it finds a donation. Every other row adds none, Recurring and Former
+	 * donors included.
 	 *
 	 * @param \WP_User $user     The reader user.
 	 * @param bool     $detailed Whether to hydrate the per-subscription billing
@@ -2694,6 +2696,9 @@ class Subscribers_Wizard extends Wizard {
 	 *
 	 * The holder lookup checks that each gift recipient's account still exists,
 	 * which would otherwise cost a query pair per gift inside the filter scans.
+	 *
+	 * Public only so the donor scan in Subscribers_Donors::holders() can share it;
+	 * it isn't meant as an API for other code.
 	 *
 	 * @param \WC_Subscription[] $subscriptions The subscriptions about to be resolved to holders.
 	 */
