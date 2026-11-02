@@ -2,7 +2,7 @@
 # This file is distributed under the same license as the Republication Tracker Tool plugin.
 msgid ""
 msgstr ""
-"Project-Id-Version: Republication Tracker Tool 2.9.7\n"
+"Project-Id-Version: Republication Tracker Tool 2.9.8\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/republication-tracker-tool\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
