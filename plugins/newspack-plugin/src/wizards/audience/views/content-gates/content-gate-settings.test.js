@@ -65,6 +65,7 @@ jest.mock( '@wordpress/components', () => {
 
 jest.mock( '../../../../../packages/components/src', () => ( {
 	Divider: () => null,
+	EditTitleLink: ( { href, children } ) => <a href={ href }>{ children }</a>,
 	Router: { useHistory: () => ( { push: () => {} } ) },
 	TooltipBadge: () => null,
 	useConfirmDialog: () => ( { confirmDialog: null, requestConfirm: cb => cb() } ),
@@ -146,6 +147,18 @@ describe( 'ContentGateSettings per-gate actions', () => {
 				} )
 			);
 		} );
+	} );
+
+	it( 'links the decoded title to the gate editor', () => {
+		render( <ContentGateSettings gate={ { ...mockGate, title: 'News &amp; Views' } } updateGatesData={ () => {} } /> );
+
+		expect( screen.getByRole( 'link', { name: 'News & Views' } ) ).toHaveAttribute( 'href', `#/edit/${ mockGate.id }` );
+	} );
+
+	it( 'names the link after the gate ID when the gate has no title', () => {
+		render( <ContentGateSettings gate={ { ...mockGate, title: '' } } updateGatesData={ () => {} } /> );
+
+		expect( screen.getByRole( 'link', { name: `#${ mockGate.id }` } ) ).toBeInTheDocument();
 	} );
 
 	it( 'names the actions menu and each action after the gate', () => {

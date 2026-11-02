@@ -16,6 +16,7 @@ A drag-and-drop sortable list of cards, built on the `@wordpress/ui` Card. Each 
 |-------|------|-------------|
 | `id` | `string` \| `number` | Unique identifier for the item. Used as the React `key`. |
 | `title` | `string` | Label rendered in the card header. |
+| `href` | `string` | Links the title, e.g. to the item's edit screen. The link reveals a pencil on hover and keyboard focus (see [`EditTitleLink`](../edit-title-link/README.md)). |
 | `badge` | `{ label: string; intent?: BadgeIntent }` | Status badge for the row. Omit it, or leave `label` empty, to render no badge. `intent` defaults to `none`. See [`BadgeIntent`](../types.ts) for the available intents. |
 | `description` | `ReactNode` | Text under the title. |
 | `toggleChecked`, `onToggleChange` | `boolean`, `() => void` | Shows a toggle before the actions menu. Its label is visually hidden and its accessible name is the item `title`. Omit `onToggleChange` for no toggle. |

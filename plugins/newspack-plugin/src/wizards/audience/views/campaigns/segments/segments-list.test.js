@@ -52,6 +52,11 @@ describe( 'SegmentsList', () => {
 		expect( screen.getByRole( 'button', { name: 'Segment actions: Donors' } ) ).toBeInTheDocument();
 	} );
 
+	it( 'links each segment title to its editor', () => {
+		renderList();
+		expect( screen.getByRole( 'link', { name: 'Donors' } ) ).toHaveAttribute( 'href', '#/segments/a' );
+	} );
+
 	it( 'decodes the stored segment name for display and accessible names', () => {
 		renderList( { segments: [ segment( 'a', 'News &amp; Views' ) ] } );
 		expect( rowTitles() ).toEqual( [ 'News & Views' ] );

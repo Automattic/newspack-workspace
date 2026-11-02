@@ -70,6 +70,11 @@ describe( 'CardSortableList', () => {
 		jest.useRealTimers();
 	} );
 
+	it( 'links the title when the item has an href', () => {
+		render( <CardSortableList items={ [ { id: 1, title: 'Homepage', href: '#/edit/1' } ] } /> );
+		expect( screen.getByRole( 'link', { name: 'Homepage' } ) ).toHaveAttribute( 'href', '#/edit/1' );
+	} );
+
 	it( 'omits the toggle and menu when an item has neither', () => {
 		render( <CardSortableList items={ [ { id: 1, title: 'Homepage' } ] } /> );
 		expect( screen.queryByRole( 'checkbox' ) ).not.toBeInTheDocument();
