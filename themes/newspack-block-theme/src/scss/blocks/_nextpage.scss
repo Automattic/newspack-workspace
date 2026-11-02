@@ -1,3 +1,5 @@
+@use "newspack-motion" as motion;
+
 .post-nav-links {
 	align-items: center;
 	border-top: 1px solid var(--wp--preset--color--base-3);
@@ -18,8 +20,8 @@
 		place-content: center;
 		text-decoration: none;
 		transition:
-			background 125ms ease-in-out,
-			color 125ms ease-in-out;
+			background motion.$duration-color motion.$ease-color,
+			color motion.$duration-color motion.$ease-color;
 		width: var(--wp--custom--spacing--65);
 
 		&.current {

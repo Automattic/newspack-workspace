@@ -1,5 +1,6 @@
 @use "mixins";
 @use "sass-utils";
+@use "newspack-motion" as motion;
 
 $select-caret:
 	linear-gradient(45deg, transparent calc(50% - 0.75px), currentcolor calc(50% - 0.75px) calc(50% + 0.75px), transparent calc(50% + 0.75px)),
@@ -145,9 +146,9 @@ input[type="submit"]:not(.newspack-ui__button) {
 		var(--newspack-ui-spacer-2, var(--wp--custom--spacing--25))
 		var(--newspack-ui-spacer-5, var(--wp--preset--spacing--40));
 	transition:
-		background 125ms ease-in-out,
-		color 125ms ease-in-out,
-		box-shadow 125ms ease-in-out;
+		background motion.$duration-color motion.$ease-color,
+		color motion.$duration-color motion.$ease-color,
+		box-shadow motion.$duration-color motion.$ease-color;
 
 	&:hover {
 		background: color-mix(in srgb, var(--wp--preset--color--accent) 80%, black);

@@ -1,5 +1,6 @@
 @use "../mixins";
 @use "../sass-utils";
+@use "newspack-motion" as motion;
 
 .wp-block-navigation {
 	// Give dropdowns a rounded border, a drop-shadow, and increase the top padding.
@@ -81,8 +82,8 @@
 				height: var(--wp--custom--spacing--55);
 				position: absolute;
 				transition:
-					background 125ms ease-in-out,
-					box-shadow 125ms ease-in-out;
+					background motion.$duration-color motion.$ease-color,
+					box-shadow motion.$duration-color motion.$ease-color;
 				width: var(--wp--custom--spacing--55);
 				z-index: -1;
 			}
@@ -185,8 +186,8 @@
 
 	a {
 		transition:
-			color 125ms ease-in-out,
-			box-shadow 125ms ease-in-out;
+			color motion.$duration-color motion.$ease-color,
+			box-shadow motion.$duration-color motion.$ease-color;
 
 		&:not(.wp-element-button):focus-visible {
 			@include mixins.focus-line;

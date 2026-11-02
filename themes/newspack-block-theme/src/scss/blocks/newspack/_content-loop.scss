@@ -1,5 +1,6 @@
 @use "../../sass-utils";
 @use "../../mixins";
+@use "newspack-motion" as motion;
 
 .wp-block-newspack-blocks-homepage-articles.wpnbha {
 	margin-bottom: auto;
@@ -22,7 +23,7 @@
 		a {
 			color: inherit;
 			text-decoration: none;
-			transition: color 125ms ease-in-out;
+			transition: color motion.$duration-color motion.$ease-color;
 
 			&:hover {
 				color: var(--wp--preset--color--contrast-3);
@@ -277,7 +278,7 @@
 			margin: 0 0 var(--wp--preset--spacing--20);
 
 			a {
-				transition: color 125ms ease-in-out;
+				transition: color motion.$duration-color motion.$ease-color;
 
 				&:hover {
 					color: var(--wp--preset--color--contrast-3);

@@ -1,7 +1,9 @@
+@use "newspack-motion" as motion;
+
 .wp-block-newspack-newsletters-subscribe {
 	&:not(.is-style-legacy):not(.is-style-modern--grid) {
 		.submit-button {
-			transition: opacity 125ms ease-in-out;
+			transition: opacity motion.$duration-color motion.$ease-color;
 
 			&:hover {
 				opacity: 0.8;

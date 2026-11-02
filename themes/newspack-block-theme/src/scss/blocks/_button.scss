@@ -1,4 +1,5 @@
 @use "../mixins";
+@use "newspack-motion" as motion;
 
 .wp-element-button,
 .wp-block-button__link {
@@ -22,11 +23,11 @@
 	form .wp-block-button__link,
 	> .wp-block-button__link {
 		transition:
-			background-color 125ms ease-in-out,
-			border-color 125ms ease-in-out,
-			color 125ms ease-in-out,
-			opacity 125ms ease-in-out,
-			box-shadow 125ms ease-in-out;
+			background-color motion.$duration-color motion.$ease-color,
+			border-color motion.$duration-color motion.$ease-color,
+			color motion.$duration-color motion.$ease-color,
+			opacity motion.$duration-color motion.$ease-color,
+			box-shadow motion.$duration-color motion.$ease-color;
 		word-break: normal;
 
 		&.has-background:not(.has-accent-2-background-color) {

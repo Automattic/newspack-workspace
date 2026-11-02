@@ -1,6 +1,8 @@
+@use "newspack-motion" as motion;
+
 .wp-block-post-title {
 	a {
-		transition: color 125ms ease-in-out;
+		transition: color motion.$duration-color motion.$ease-color;
 
 		.has-link-color &:hover {
 			color: color-mix(in srgb, currentcolor 80%, transparent);
