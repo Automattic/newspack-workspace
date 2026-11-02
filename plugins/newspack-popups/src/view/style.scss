@@ -273,13 +273,13 @@ $width__tablet: 782px;
 
 		@include motion.hover {
 			&:hover {
-				background-color: color-mix(in oklab, var(--newspack-lightbox-close-bg) 85%, currentcolor);
+				background-color: color-mix(in srgb, var(--newspack-lightbox-close-bg) 85%, currentcolor);
 				box-shadow: none;
 			}
 		}
 
 		&:active {
-			background-color: color-mix(in oklab, var(--newspack-lightbox-close-bg) 75%, currentcolor);
+			background-color: color-mix(in srgb, var(--newspack-lightbox-close-bg) 75%, currentcolor);
 			box-shadow: none;
 		}
 	}
@@ -297,13 +297,13 @@ $width__tablet: 782px;
 
 					@include motion.hover {
 						&:hover {
-							background-color: color-mix(in oklab, var(--newspack-lightbox-close-bg) 85%, currentcolor);
+							background-color: color-mix(in srgb, var(--newspack-lightbox-close-bg) 85%, currentcolor);
 							box-shadow: none;
 						}
 					}
 
 					&:active {
-						background-color: color-mix(in oklab, var(--newspack-lightbox-close-bg) 75%, currentcolor);
+						background-color: color-mix(in srgb, var(--newspack-lightbox-close-bg) 75%, currentcolor);
 						box-shadow: none;
 					}
 				}
