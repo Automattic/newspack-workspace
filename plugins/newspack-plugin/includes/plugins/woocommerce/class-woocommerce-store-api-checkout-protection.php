@@ -20,9 +20,12 @@ defined( 'ABSPATH' ) || exit;
  * a protected site. The Checkout block supplies a token through its own script.
  *
  * Express wallets post to this route too, and their buttons offer no moment to fetch
- * a token, so a verified wallet request is exempt. Its signal is not proof: a script
- * can read the nonce from a page that shows the buttons. It does force the request
- * onto a gateway that has to take a payment, and the rate limit still applies.
+ * a token, so a verified wallet request is exempt. Its header and nonce are not proof,
+ * since a script can read the nonce from a page that shows the buttons. For Stripe the
+ * exemption also needs Stripe to confirm the payment method is an accepted wallet.
+ * WooPayments has no such lookup for its confirmation tokens, so there the signal
+ * alone decides. Either way the request must go to a gateway that takes a payment, and
+ * the rate limit still applies.
  */
 class WooCommerce_Store_API_Checkout_Protection {
 	/**
@@ -45,6 +48,21 @@ class WooCommerce_Store_API_Checkout_Protection {
 	 * REST error code for a client over the rate limit.
 	 */
 	const ERROR_RATE_LIMIT = 'newspack_store_api_checkout_rate_limit';
+
+	/**
+	 * Seconds to wait for Stripe to describe a wallet payment.
+	 */
+	const STRIPE_LOOKUP_TIMEOUT = 10;
+
+	/**
+	 * Stripe payment method types exempt on their own.
+	 */
+	const STRIPE_WALLET_TYPES = [ 'link', 'amazon_pay' ];
+
+	/**
+	 * Stripe card wallets that are exempt.
+	 */
+	const STRIPE_CARD_WALLETS = [ 'apple_pay', 'google_pay' ];
 
 	/**
 	 * The wallet clients' request signatures, by gateway id. Each gateway verifies
@@ -133,7 +151,8 @@ class WooCommerce_Store_API_Checkout_Protection {
 	 * Whether a request carries its gateway's wallet signal, and the cart has to be
 	 * paid for. A zero-total order never reaches a gateway, so a forged signal would
 	 * place it outright. Totals are recalculated because this action runs after the
-	 * request's address is applied, and that address can change them.
+	 * request's address is applied, and that address can change them. Stripe is asked
+	 * last, so a request that fails the cheap checks costs no API call.
 	 *
 	 * @param \WP_REST_Request $request Checkout request.
 	 *
@@ -147,28 +166,143 @@ class WooCommerce_Store_API_Checkout_Protection {
 		if ( ! \wp_verify_nonce( (string) $request->get_header( $wallet['nonce_header'] ), $wallet['nonce_action'] ) ) {
 			return false;
 		}
-		if ( ! self::has_payment_details( $request, $wallet['detail_keys'] ) ) {
+		$data = self::get_payment_data( $request );
+		if ( ! self::has_payment_details( $data, $wallet['detail_keys'] ) ) {
 			return false;
 		}
 		\WC()->cart->calculate_totals();
-		return \WC()->cart->needs_payment();
+		if ( ! \WC()->cart->needs_payment() ) {
+			return false;
+		}
+		return 'stripe' !== $request['payment_method'] || self::is_verified_stripe_wallet( $data );
 	}
 
 	/**
-	 * Whether the request has a non-empty value under one of the given payment data keys.
+	 * Get the payment data as WooCommerce hands it to the gateway: keys through
+	 * sanitize_key(), values through wc_clean(), the last of a repeated key winning.
+	 * Reading it any other way would let a key in another case, or a repeat, carry
+	 * something past these checks that the gateway then charges.
 	 *
 	 * @param \WP_REST_Request $request Checkout request.
-	 * @param string[]         $keys    Payment data keys.
+	 *
+	 * @return array
+	 */
+	private static function get_payment_data( $request ): array {
+		$data = [];
+		foreach ( (array) $request['payment_data'] as $item ) {
+			if ( is_array( $item ) && isset( $item['key'] ) && is_scalar( $item['key'] ) ) {
+				$data[ \sanitize_key( (string) $item['key'] ) ] = \wc_clean( $item['value'] ?? '' );
+			}
+		}
+		return $data;
+	}
+
+	/**
+	 * Whether the payment data has a non-empty string under one of the given keys.
+	 *
+	 * @param array    $data Payment data, from get_payment_data().
+	 * @param string[] $keys Payment data keys.
 	 *
 	 * @return bool
 	 */
-	private static function has_payment_details( $request, $keys ): bool {
-		foreach ( (array) $request['payment_data'] as $item ) {
-			if ( in_array( $item['key'] ?? '', $keys, true ) && is_string( $item['value'] ?? null ) && '' !== trim( $item['value'] ) ) {
+	private static function has_payment_details( $data, $keys ): bool {
+		foreach ( $keys as $key ) {
+			if ( is_string( $data[ $key ] ?? null ) && '' !== $data[ $key ] ) {
 				return true;
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Whether Stripe confirms that what the request will be charged with is an accepted
+	 * wallet: Apple Pay or Google Pay, or Link or Amazon Pay. Every payment method and
+	 * confirmation token in the request must qualify.
+	 *
+	 * Stripe charges exactly these only on its deferred-intent path, which its express
+	 * clients always ask for, and only when no saved card is named. The first two
+	 * checks below are Stripe's own tests for those. Any failure to get an answer refuses the exemption, and the
+	 * request then needs a reCAPTCHA token like any other.
+	 *
+	 * @param array $data Payment data, from get_payment_data().
+	 *
+	 * @return bool
+	 */
+	private static function is_verified_stripe_wallet( $data ): bool {
+		if ( empty( $data['wc-stripe-is-deferred-intent'] ) ) {
+			return false;
+		}
+		if ( isset( $data['wc-stripe-payment-token'] ) && 'new' !== $data['wc-stripe-payment-token'] ) {
+			return false;
+		}
+		if ( ! class_exists( 'WC_Stripe_API' ) ) {
+			return false;
+		}
+
+		$lookups = [];
+		foreach ( [
+			'wc-stripe-payment-method'     => 'pm',
+			'wc-stripe-confirmation-token' => 'ctoken',
+		] as $key => $prefix ) {
+			$id = $data[ $key ] ?? '';
+			if ( '' === $id ) {
+				continue;
+			}
+			// The id becomes part of an API path, so it must be the kind its field expects and nothing more.
+			if ( ! is_string( $id ) || 1 !== preg_match( '/^' . $prefix . '_[A-Za-z0-9]+\z/', $id ) ) {
+				return false;
+			}
+			$lookups[ $prefix ] = $id;
+		}
+		if ( ! $lookups ) {
+			return false;
+		}
+
+		$cap_timeout = function ( $args, $url ) {
+			if ( 0 === strpos( (string) $url, 'https://api.stripe.com/' ) ) {
+				$args['timeout'] = min( (float) ( $args['timeout'] ?? self::STRIPE_LOOKUP_TIMEOUT ), self::STRIPE_LOOKUP_TIMEOUT );
+			}
+			return $args;
+		};
+		// Lowers Stripe's own 70 second timeout for this one call; a wallet buyer is waiting on it.
+		\add_filter( 'http_request_args', $cap_timeout, PHP_INT_MAX, 2 ); // phpcs:ignore WordPressVIPMinimum.Hooks.RestrictedHooks.http_request_args
+		try {
+			foreach ( $lookups as $prefix => $id ) {
+				if ( 'pm' === $prefix ) {
+					$object = \WC_Stripe_API::get_payment_method( $id );
+				} else {
+					$token  = \WC_Stripe_API::retrieve( 'confirmation_tokens/' . $id );
+					$object = is_object( $token ) && empty( $token->error ) ? ( $token->payment_method_preview ?? null ) : null;
+				}
+				if ( ! self::is_accepted_stripe_wallet( $object ) ) {
+					return false;
+				}
+			}
+			return true;
+		} catch ( \Throwable $e ) {
+			return false;
+		} finally {
+			\remove_filter( 'http_request_args', $cap_timeout, PHP_INT_MAX );
+		}
+	}
+
+	/**
+	 * Whether a Stripe payment method, or a confirmation token's preview of one, is
+	 * an accepted wallet.
+	 *
+	 * @param mixed $payment_method What Stripe returned.
+	 *
+	 * @return bool
+	 */
+	private static function is_accepted_stripe_wallet( $payment_method ): bool {
+		if ( ! is_object( $payment_method ) || ! empty( $payment_method->error ) ) {
+			return false;
+		}
+		$type = $payment_method->type ?? '';
+		if ( in_array( $type, self::STRIPE_WALLET_TYPES, true ) ) {
+			return true;
+		}
+		return 'card' === $type && in_array( $payment_method->card->wallet->type ?? '', self::STRIPE_CARD_WALLETS, true );
 	}
 
 	/**

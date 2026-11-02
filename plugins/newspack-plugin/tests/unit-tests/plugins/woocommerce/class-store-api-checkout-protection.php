@@ -11,6 +11,7 @@ use Newspack\WooCommerce_Store_API_Checkout_Protection as Protection;
 
 require_once __DIR__ . '/../../../mocks/store-api-mocks.php';
 require_once __DIR__ . '/../../../mocks/store-api-rate-limits-mock.php';
+require_once __DIR__ . '/../../../mocks/wc-clean-mock.php';
 require_once __DIR__ . '/../../../../includes/plugins/woocommerce/class-woocommerce-store-api-checkout-protection.php';
 
 /**
@@ -49,6 +50,9 @@ class Newspack_Test_WooCommerce_Store_API_Checkout_Protection extends WP_UnitTes
 		RateLimits::$remaining       = [];
 		$_SERVER['REMOTE_ADDR']      = '192.0.2.10';
 		unset( $_SERVER['HTTP_X_FORWARDED_FOR'], $_POST['g-recaptcha-response'] );
+		if ( 'test_stripe_client_missing' !== $this->getName( false ) ) {
+			$this->stripe();
+		}
 
 		add_filter(
 			'pre_http_request',
@@ -185,6 +189,65 @@ class Newspack_Test_WooCommerce_Store_API_Checkout_Protection extends WP_UnitTes
 	}
 
 	/**
+	 * Load the Stripe client mock with the objects the tests look up.
+	 */
+	private function stripe() {
+		require_once __DIR__ . '/../../../mocks/stripe-api-mock.php';
+		WC_Stripe_API::$objects  = [
+			'pm_apple'      => $this->card( 'apple_pay' ),
+			'pm_gpay'       => $this->card( 'google_pay' ),
+			'pm_plain'      => $this->card( null ),
+			'pm_samsung'    => $this->card( 'samsung_pay' ),
+			'pm_cardlink'   => $this->card( 'link' ),
+			'pm_link'       => (object) [ 'type' => 'link' ],
+			'pm_amazon'     => (object) [ 'type' => 'amazon_pay' ],
+			'pm_sepa'       => (object) [ 'type' => 'sepa_debit' ],
+			'pm_null'       => null,
+			'ctoken_gpay'   => (object) [ 'payment_method_preview' => $this->card( 'google_pay' ) ],
+			'ctoken_apple'  => (object) [ 'payment_method_preview' => $this->card( 'apple_pay' ) ],
+			'ctoken_amazon' => (object) [ 'payment_method_preview' => (object) [ 'type' => 'amazon_pay' ] ],
+			'ctoken_plain'  => (object) [ 'payment_method_preview' => $this->card( null ) ],
+			'ctoken_empty'  => (object) [ 'object' => 'confirmation_token' ],
+		];
+		WC_Stripe_API::$calls    = [];
+		WC_Stripe_API::$timeouts = [];
+		WC_Stripe_API::$throw    = false;
+	}
+
+	/**
+	 * A Stripe card payment method, as the API returns it.
+	 *
+	 * @param string|null $wallet Wallet type, or null for a plain card.
+	 * @return object
+	 */
+	private function card( $wallet ) {
+		return (object) [
+			'type' => 'card',
+			'card' => (object) [ 'wallet' => $wallet ? (object) [ 'type' => $wallet ] : null ],
+		];
+	}
+
+	/**
+	 * Payment details as the Stripe express clients send them.
+	 *
+	 * @param array $details Details to add or override.
+	 * @return array
+	 */
+	private function stripe_details( $details ) {
+		return array_merge( [ 'wc-stripe-is-deferred-intent' => true ], $details );
+	}
+
+	/**
+	 * A Stripe wallet request carrying the given details.
+	 *
+	 * @param array $details Details, merged over the deferred-intent flag.
+	 * @return WP_REST_Request
+	 */
+	private function stripe_request( $details ) {
+		return $this->request( 'stripe', $this->stripe_headers(), $this->stripe_details( $details ) );
+	}
+
+	/**
 	 * Run the protection and return the error code of any refusal.
 	 *
 	 * @param WP_REST_Request $request Request.
@@ -262,20 +325,19 @@ class Newspack_Test_WooCommerce_Store_API_Checkout_Protection extends WP_UnitTes
 	 * Stripe and WooPayments wallets need no token.
 	 */
 	public function test_wallets_pass() {
-		$this->assertSame( '', $this->code( $this->request( 'stripe', $this->stripe_headers(), [ 'wc-stripe-payment-method' => 'pm_1' ] ) ) );
+		$this->assertSame( '', $this->code( $this->stripe_request( [ 'wc-stripe-payment-method' => 'pm_apple' ] ) ) );
 		$this->assertSame(
 			'',
 			$this->code(
-				$this->request(
-					'stripe',
-					$this->stripe_headers(),
+				$this->stripe_request(
 					[
 						'wc-stripe-payment-method'     => '',
-						'wc-stripe-confirmation-token' => 'ctoken_1',
+						'wc-stripe-confirmation-token' => 'ctoken_gpay',
 					]
 				)
 			)
 		);
+		$this->assertSame( [ 'pm_apple', 'ctoken_gpay' ], WC_Stripe_API::$calls );
 		$this->assertSame( '', $this->code( $this->request( 'woocommerce_payments', $this->woopayments_headers(), [ 'wcpay-payment-method' => 'pm_1' ] ) ) );
 		$this->assertSame( '', $this->code( $this->request( 'woocommerce_payments', $this->woopayments_headers(), [ 'wcpay-confirmation-token' => 'ctoken_1' ] ) ) );
 	}
@@ -285,21 +347,23 @@ class Newspack_Test_WooCommerce_Store_API_Checkout_Protection extends WP_UnitTes
 	 */
 	public function test_wallet_negatives() {
 		add_filter( 'newspack_store_api_checkout_rate_limit', '__return_zero' );
-		$details = [ 'wc-stripe-payment-method' => 'pm_1' ];
+		$details = $this->stripe_details( [ 'wc-stripe-payment-method' => 'pm_apple' ] );
 		$cases   = [
 			'bad nonce'        => [ 'stripe', array_merge( $this->stripe_headers(), [ 'X-WCSTRIPE-EXPRESS-CHECKOUT-NONCE' => 'nope' ] ), $details ],
 			'nonce of another' => [ 'stripe', array_merge( $this->stripe_headers(), [ 'X-WCSTRIPE-EXPRESS-CHECKOUT-NONCE' => wp_create_nonce( 'woopayments_tokenized_cart_nonce' ) ] ), $details ],
 			'header absent'    => [ 'stripe', [ 'X-WCSTRIPE-EXPRESS-CHECKOUT-NONCE' => wp_create_nonce( 'wc_store_api_express_checkout' ) ], $details ],
 			'header false'     => [ 'stripe', array_merge( $this->stripe_headers(), [ 'X-WCSTRIPE-EXPRESS-CHECKOUT' => 'false' ] ), $details ],
-			'no details'       => [ 'stripe', $this->stripe_headers(), [] ],
-			'empty details'    => [ 'stripe', $this->stripe_headers(), [ 'wc-stripe-payment-method' => '' ] ],
-			'boolean detail'   => [ 'stripe', $this->stripe_headers(), [ 'wc-stripe-payment-method' => true ] ],
+			'no details'       => [ 'stripe', $this->stripe_headers(), $this->stripe_details( [] ) ],
+			'empty details'    => [ 'stripe', $this->stripe_headers(), $this->stripe_details( [ 'wc-stripe-payment-method' => '' ] ) ],
+			'boolean detail'   => [ 'stripe', $this->stripe_headers(), $this->stripe_details( [ 'wc-stripe-payment-method' => true ] ) ],
+			'array detail'     => [ 'stripe', $this->stripe_headers(), $this->stripe_details( [ 'wc-stripe-payment-method' => [ 'pm_apple' ] ] ) ],
 			'other gateway'    => [ 'woocommerce_payments', $this->stripe_headers(), [ 'wcpay-payment-method' => 'pm_1' ] ],
 			'offline gateway'  => [ 'cheque', $this->stripe_headers(), $details ],
 		];
 		foreach ( $cases as $name => $case ) {
 			$this->assertSame( Protection::ERROR_CAPTCHA, $this->code( $this->request( ...$case ) ), $name );
 		}
+		$this->assertSame( [], WC_Stripe_API::$calls, 'no lookup before the cheap checks pass' );
 	}
 
 	/**
@@ -307,7 +371,8 @@ class Newspack_Test_WooCommerce_Store_API_Checkout_Protection extends WP_UnitTes
 	 */
 	public function test_zero_total_needs_a_token() {
 		$GLOBALS['newspack_test_wc']->cart = $this->cart( false );
-		$this->assertSame( Protection::ERROR_CAPTCHA, $this->code( $this->request( 'stripe', $this->stripe_headers(), [ 'wc-stripe-payment-method' => 'pm_1' ] ) ) );
+		$this->assertSame( Protection::ERROR_CAPTCHA, $this->code( $this->stripe_request( [ 'wc-stripe-payment-method' => 'pm_apple' ] ) ) );
+		$this->assertSame( [], WC_Stripe_API::$calls );
 	}
 
 	/**
@@ -315,7 +380,8 @@ class Newspack_Test_WooCommerce_Store_API_Checkout_Protection extends WP_UnitTes
 	 */
 	public function test_zero_total_after_the_request_address() {
 		$GLOBALS['newspack_test_wc']->cart = $this->cart( true, false );
-		$this->assertSame( Protection::ERROR_CAPTCHA, $this->code( $this->request( 'stripe', $this->stripe_headers(), [ 'wc-stripe-payment-method' => 'pm_1' ] ) ) );
+		$this->assertSame( Protection::ERROR_CAPTCHA, $this->code( $this->stripe_request( [ 'wc-stripe-payment-method' => 'pm_apple' ] ) ) );
+		$this->assertSame( [], WC_Stripe_API::$calls );
 	}
 
 	/**
@@ -343,7 +409,7 @@ class Newspack_Test_WooCommerce_Store_API_Checkout_Protection extends WP_UnitTes
 	 * Wallet requests count towards the limit.
 	 */
 	public function test_rate_limit_counts_wallets() {
-		$request = $this->request( 'stripe', $this->stripe_headers(), [ 'wc-stripe-payment-method' => 'pm_1' ] );
+		$request = $this->stripe_request( [ 'wc-stripe-payment-method' => 'pm_apple' ] );
 		for ( $i = 1; $i <= Protection::RATE_LIMIT; $i++ ) {
 			$this->assertSame( '', $this->code( $request ) );
 		}
@@ -378,6 +444,175 @@ class Newspack_Test_WooCommerce_Store_API_Checkout_Protection extends WP_UnitTes
 	public function test_rate_limit_options_filter_is_removed() {
 		$this->code( $this->request() );
 		$this->assertFalse( has_filter( 'woocommerce_store_api_rate_limit_options' ) );
+	}
+
+	/**
+	 * Each Stripe wallet the operator accepted passes, after Stripe is asked.
+	 */
+	public function test_stripe_qualifying_wallets() {
+		add_filter( 'newspack_store_api_checkout_rate_limit', '__return_zero' );
+		$cases = [
+			[ 'wc-stripe-payment-method' => 'pm_apple' ],
+			[ 'wc-stripe-payment-method' => 'pm_gpay' ],
+			[ 'wc-stripe-payment-method' => 'pm_link' ],
+			[ 'wc-stripe-payment-method' => 'pm_amazon' ],
+			[ 'wc-stripe-confirmation-token' => 'ctoken_apple' ],
+			[ 'wc-stripe-confirmation-token' => 'ctoken_gpay' ],
+			[ 'wc-stripe-confirmation-token' => 'ctoken_amazon' ],
+		];
+		foreach ( $cases as $details ) {
+			WC_Stripe_API::$calls = [];
+			$this->assertSame( '', $this->code( $this->stripe_request( $details ) ), wp_json_encode( $details ) );
+			$this->assertSame( array_values( $details ), WC_Stripe_API::$calls, wp_json_encode( $details ) );
+		}
+	}
+
+	/**
+	 * Anything Stripe doesn't confirm as an accepted wallet needs a token.
+	 */
+	public function test_stripe_lookup_refusals() {
+		add_filter( 'newspack_store_api_checkout_rate_limit', '__return_zero' );
+		$cases = [
+			'plain card'              => [ 'wc-stripe-payment-method' => 'pm_plain' ],
+			'other wallet'            => [ 'wc-stripe-payment-method' => 'pm_samsung' ],
+			'card wallet link'        => [ 'wc-stripe-payment-method' => 'pm_cardlink' ],
+			'other type'              => [ 'wc-stripe-payment-method' => 'pm_sepa' ],
+			'not found'               => [ 'wc-stripe-payment-method' => 'pm_unknown' ],
+			'null answer'             => [ 'wc-stripe-payment-method' => 'pm_null' ],
+			'plain token'             => [ 'wc-stripe-confirmation-token' => 'ctoken_plain' ],
+			'token without preview'   => [ 'wc-stripe-confirmation-token' => 'ctoken_empty' ],
+			'wallet with plain token' => [
+				'wc-stripe-payment-method'     => 'pm_apple',
+				'wc-stripe-confirmation-token' => 'ctoken_plain',
+			],
+		];
+		foreach ( $cases as $name => $details ) {
+			$this->assertSame( Protection::ERROR_CAPTCHA, $this->code( $this->stripe_request( $details ) ), $name );
+		}
+
+		// Ids of the wrong shape are refused without asking Stripe.
+		$shapes = [
+			'source id'             => [ 'wc-stripe-payment-method' => 'src_apple' ],
+			'path in id'            => [ 'wc-stripe-payment-method' => 'pm_x/../customers' ],
+			'path in token'         => [ 'wc-stripe-confirmation-token' => 'ctoken_x/../customers' ],
+			'token in method field' => [ 'wc-stripe-payment-method' => 'ctoken_gpay' ],
+			'method in token field' => [ 'wc-stripe-confirmation-token' => 'pm_apple' ],
+		];
+		WC_Stripe_API::$calls = [];
+		foreach ( $shapes as $name => $details ) {
+			$this->assertSame( Protection::ERROR_CAPTCHA, $this->code( $this->stripe_request( $details ) ), $name );
+		}
+		$this->assertSame( [], WC_Stripe_API::$calls );
+	}
+
+	/**
+	 * The id is looked up as WooCommerce hands it to Stripe, cleaned.
+	 */
+	public function test_stripe_lookup_uses_cleaned_value() {
+		$this->assertSame( '', $this->code( $this->stripe_request( [ 'wc-stripe-payment-method' => " pm_apple\n" ] ) ) );
+		$this->assertSame( [ 'pm_apple' ], WC_Stripe_API::$calls );
+	}
+
+	/**
+	 * Stripe charges only what was checked: the deferred-intent path, and no saved card.
+	 */
+	public function test_stripe_charge_path() {
+		add_filter( 'newspack_store_api_checkout_rate_limit', '__return_zero' );
+		foreach ( [
+			'missing' => null,
+			'empty'   => '',
+			'zero'    => '0',
+			'false'   => false,
+		] as $name => $flag ) {
+			$details = [
+				'wc-stripe-payment-method'     => 'pm_apple',
+				'wc-stripe-is-deferred-intent' => $flag,
+			];
+			if ( null === $flag ) {
+				unset( $details['wc-stripe-is-deferred-intent'] );
+				$request = $this->request( 'stripe', $this->stripe_headers(), $details );
+			} else {
+				$request = $this->stripe_request( $details );
+			}
+			$this->assertSame( Protection::ERROR_CAPTCHA, $this->code( $request ), "deferred flag $name" );
+		}
+		$saved = [
+			'wc-stripe-payment-method' => 'pm_apple',
+			'wc-stripe-payment-token'  => '1',
+		];
+		$this->assertSame( Protection::ERROR_CAPTCHA, $this->code( $this->stripe_request( $saved ) ), 'saved card' );
+		$saved['wc-stripe-payment-token'] = 'new';
+		WC_Stripe_API::$calls             = [];
+		$this->assertSame( '', $this->code( $this->stripe_request( $saved ) ), 'new card' );
+		$this->assertSame( [ 'pm_apple' ], WC_Stripe_API::$calls );
+	}
+
+	/**
+	 * A key in another case, or a repeated key, is read as the gateway reads it.
+	 */
+	public function test_stripe_keys_read_as_the_gateway_reads_them() {
+		add_filter( 'newspack_store_api_checkout_rate_limit', '__return_zero' );
+		$request = $this->stripe_request(
+			[
+				'wc-stripe-payment-method'     => 'pm_apple',
+				'WC-Stripe-Confirmation-Token' => 'ctoken_plain',
+			]
+		);
+		$this->assertSame( Protection::ERROR_CAPTCHA, $this->code( $request ), 'mixed-case key' );
+
+		$request = $this->stripe_request( [] );
+		$request->set_param(
+			'payment_data',
+			[
+				[
+					'key'   => 'wc-stripe-is-deferred-intent',
+					'value' => true,
+				],
+				[
+					'key'   => 'wc-stripe-payment-method',
+					'value' => 'pm_apple',
+				],
+				[
+					'key'   => 'wc-stripe-payment-method',
+					'value' => 'pm_plain',
+				],
+			]
+		);
+		$this->assertSame( Protection::ERROR_CAPTCHA, $this->code( $request ), 'last duplicate wins' );
+	}
+
+	/**
+	 * A lookup that throws refuses the exemption and leaves no filter behind.
+	 */
+	public function test_stripe_lookup_throws() {
+		WC_Stripe_API::$throw = true;
+		$this->assertSame( Protection::ERROR_CAPTCHA, $this->code( $this->stripe_request( [ 'wc-stripe-payment-method' => 'pm_apple' ] ) ) );
+		$this->assertFalse( has_filter( 'http_request_args' ) );
+	}
+
+	/**
+	 * The lookup waits ten seconds at most, and only for itself.
+	 */
+	public function test_stripe_lookup_timeout() {
+		$this->code( $this->stripe_request( [ 'wc-stripe-payment-method' => 'pm_apple' ] ) );
+		$this->assertSame( [ 10 ], WC_Stripe_API::$timeouts );
+		$this->assertFalse( has_filter( 'http_request_args' ) );
+	}
+
+	/**
+	 * Without the Stripe client there is nothing to ask, so no exemption.
+	 */
+	public function test_stripe_client_missing() {
+		$this->assertFalse( class_exists( 'WC_Stripe_API', false ) );
+		$this->assertSame( Protection::ERROR_CAPTCHA, $this->code( $this->stripe_request( [ 'wc-stripe-payment-method' => 'pm_apple' ] ) ) );
+	}
+
+	/**
+	 * WooPayments reads its keys as the gateway does too, and needs no lookup.
+	 */
+	public function test_woopayments_keys_normalized() {
+		$this->assertSame( '', $this->code( $this->request( 'woocommerce_payments', $this->woopayments_headers(), [ 'WCPAY-Payment-Method' => 'pm_1' ] ) ) );
+		$this->assertSame( [], WC_Stripe_API::$calls );
 	}
 
 	/**
