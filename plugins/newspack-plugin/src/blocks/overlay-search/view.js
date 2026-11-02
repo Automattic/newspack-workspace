@@ -12,6 +12,11 @@
  */
 import domReady from '@wordpress/dom-ready';
 
+/**
+ * Internal dependencies
+ */
+import { lockScrollbarGutter, unlockScrollbarGutter } from '../../shared/js/scrollbar-gutter';
+
 const FOCUSABLE_SELECTOR =
 	'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), ' +
 	'textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), iframe, object, embed, ' +
@@ -96,11 +101,7 @@ const init = trigger => {
 
 	const closeBtn = panel.querySelector( '.newspack-overlay-search__close' );
 
-	// Captured once. Reassigning on every open is unsafe: if a previous close ever
-	// fell through to the `document.body` fallback, the next open would record
-	// `document.body` as "original" and the panel would be stranded there.
-	const originalParent = panel.parentNode;
-	const originalNextSibling = panel.nextSibling;
+	document.body.appendChild( panel );
 
 	let isOpen = false;
 	let lastFocused = null;
@@ -140,8 +141,6 @@ const init = trigger => {
 
 		lastFocused = trigger.ownerDocument.activeElement;
 
-		document.body.appendChild( panel );
-
 		// Recompute on each open so the contrast color tracks any runtime change
 		// to the panel's background (theme switches, overlayColor edits, etc.).
 		if ( closeBtn ) {
@@ -151,6 +150,7 @@ const init = trigger => {
 		trigger.setAttribute( 'aria-expanded', 'true' );
 		panel.setAttribute( 'aria-hidden', 'false' );
 		panel.removeAttribute( 'inert' );
+		lockScrollbarGutter();
 		document.body.classList.add( `menu-open--overlay-search-${ panelId }` );
 
 		focusTrapCleanup = trapFocus();
@@ -167,8 +167,6 @@ const init = trigger => {
 		// guarantee that the panel's `aria-hidden`/`inert` flips and the CSS
 		// transition's first frame have committed before we try to focus —
 		// otherwise the input may still be considered hidden by some browsers.
-		// Survives `prefers-reduced-motion` (transitions collapse to 0s) where a
-		// fixed `setTimeout` would either fire too early or hold focus too long.
 		// The `isOpen` guard prevents the callback from stealing focus back into
 		// the panel if the user closed the overlay before the frame landed.
 		requestAnimationFrame( () => {
@@ -204,24 +202,13 @@ const init = trigger => {
 		panel.setAttribute( 'aria-hidden', 'true' );
 		panel.setAttribute( 'inert', '' );
 		document.body.classList.remove( `menu-open--overlay-search-${ panelId }` );
+		unlockScrollbarGutter();
 
 		// Return focus to the element that had focus when we opened — usually
 		// the trigger, but fall back to it if for some reason that element is
 		// gone.
 		const focusTarget = lastFocused && document.contains( lastFocused ) ? lastFocused : trigger;
 		focusTarget.focus();
-
-		if ( originalParent ) {
-			try {
-				if ( originalNextSibling && originalNextSibling.parentNode === originalParent ) {
-					originalParent.insertBefore( panel, originalNextSibling );
-				} else {
-					originalParent.appendChild( panel );
-				}
-			} catch {
-				document.body.appendChild( panel );
-			}
-		}
 	};
 
 	trigger.addEventListener( 'click', e => {
