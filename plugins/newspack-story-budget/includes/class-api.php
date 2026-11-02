@@ -434,6 +434,13 @@ class API {
 	 * @return \WP_Rest_Response
 	 */
 	public static function get_stories( $request ) {
+		// The app sends this back as `since` on its next refresh. Story changes are
+		// stamped with the server clock, so a browser clock running ahead would skip
+		// other users' changes. Taken before the query and two seconds early, so a
+		// change written after its story was stamped, as a status change is, still
+		// comes back on the next refresh.
+		$timestamp = time() - 2;
+
 		$query_args = [
 			'posts_per_page' => $request->get_param( 'limit' ) ?? self::DEFAULT_LIMIT,
 			'offset'         => $request->get_param( 'offset' ) ?? 0,
@@ -477,14 +484,15 @@ class API {
 
 		return rest_ensure_response(
 			[
-				'stories' => array_map(
+				'stories'   => array_map(
 					function( $story ) use ( $include_metadata ) {
 						// If fetching specific stories by ID or modified since a certain timestamp, include metadata.
 						return $story->to_array( $include_metadata );
 					},
 					$stories
 				),
-				'total'   => Budgets::$stories_query->found_posts,
+				'total'     => Budgets::$stories_query->found_posts,
+				'timestamp' => $timestamp,
 			]
 		);
 	}

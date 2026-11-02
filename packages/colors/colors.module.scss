@@ -208,24 +208,32 @@ $error-000: #fcf0f1;
 $error-050: #facfd2;
 $error-500: #d63638;
 $error-600: #b32d2e;
+$error-700: #8a2424;
+$error-800: #691c1c;
 
 // Error: RGB
 $error-000--rgb: to-rgb($error-000);
 $error-050--rgb: to-rgb($error-050);
 $error-500--rgb: to-rgb($error-500);
 $error-600--rgb: to-rgb($error-600);
+$error-700--rgb: to-rgb($error-700);
+$error-800--rgb: to-rgb($error-800);
 
 // Warning: Hex
 $warning-000: #fcf9e8;
 $warning-050: #f5e6ab;
 $warning-300: #dba617;
 $warning-400: #bd8600;
+$warning-500: #996800;
+$warning-600: #755100;
 
 // Warning: RGB
 $warning-000--rgb: to-rgb($warning-000);
 $warning-050--rgb: to-rgb($warning-050);
 $warning-300--rgb: to-rgb($warning-300);
 $warning-400--rgb: to-rgb($warning-400);
+$warning-500--rgb: to-rgb($warning-500);
+$warning-600--rgb: to-rgb($warning-600);
 
 // Export for JavaScript/CSS Modules consumption
 :export {
@@ -324,10 +332,14 @@ $warning-400--rgb: to-rgb($warning-400);
 	error-050: $error-050;
 	error-500: $error-500;
 	error-600: $error-600;
+	error-700: $error-700;
+	error-800: $error-800;
 
 	// Warning
 	warning-000: $warning-000;
 	warning-050: $warning-050;
 	warning-300: $warning-300;
 	warning-400: $warning-400;
+	warning-500: $warning-500;
+	warning-600: $warning-600;
 }

@@ -62,13 +62,7 @@ final class Contrast {
 		$handle = 'newspack-block-theme-accent-contrast';
 		\wp_register_style( $handle, false, [], \wp_get_theme()->get( 'Version' ) );
 		\wp_enqueue_style( $handle );
-		\wp_add_inline_style(
-			$handle,
-			sprintf(
-				':root, .editor-styles-wrapper { %s }',
-				implode( ' ', $declarations )
-			)
-		);
+		\wp_add_inline_style( $handle, sprintf( ':root, .editor-styles-wrapper { %s }', implode( ' ', $declarations ) ) );
 	}
 
 	/**

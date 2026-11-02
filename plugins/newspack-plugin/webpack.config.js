@@ -63,6 +63,7 @@ const entry = {
 
 	// Newspack wizard assets.
 	...wizardsScriptFiles,
+	'handoff-banner-block-editor': resolveSource( 'src', 'wizards', 'handoff-banner', 'block-editor' ),
 	blocks: resolveSource( 'src', 'blocks', 'index' ),
 	'content-gate-editor': resolveSource( 'src', 'content-gate', 'editor', 'editor' ),
 	'content-gate-editor-memberships': resolveSource( 'src', 'content-gate', 'editor', 'memberships' ),

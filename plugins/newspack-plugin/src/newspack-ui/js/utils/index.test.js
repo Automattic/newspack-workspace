@@ -1,4 +1,4 @@
-import { setupTabController } from './index';
+import { getTransitionTime, setupTabController } from './index';
 
 const classnames = {
 	list: 'newspack-ui__segmented-control__tabs',
@@ -46,5 +46,27 @@ describe( 'setupTabController', () => {
 		expect( annually ).toHaveAttribute( 'aria-selected', 'true' );
 		expect( annually ).not.toHaveAttribute( 'aria-pressed' );
 		expect( monthly ).not.toHaveAttribute( 'aria-pressed' );
+	} );
+} );
+
+describe( 'getTransitionTime', () => {
+	afterEach( () => {
+		document.body.innerHTML = '';
+	} );
+
+	it( 'returns the longest duration plus delay across the transition list', () => {
+		document.body.innerHTML = '<div style="transition-duration: 400ms, 0.2s; transition-delay: 0s, 400ms"></div>';
+		expect( getTransitionTime( document.body.firstElementChild ) ).toBe( 600 );
+	} );
+
+	it( 'repeats the shorter list the way CSS does', () => {
+		document.body.innerHTML =
+			'<div style="transition-property: opacity, height; transition-duration: 0.001ms; transition-delay: 0s, 400ms"></div>';
+		expect( getTransitionTime( document.body.firstElementChild ) ).toBe( 400.001 );
+	} );
+
+	it( 'returns 0 when nothing transitions', () => {
+		document.body.innerHTML = '<div></div>';
+		expect( getTransitionTime( document.body.firstElementChild ) ).toBe( 0 );
 	} );
 } );

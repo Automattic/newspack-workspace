@@ -251,6 +251,12 @@
 				display: block;
 			}
 		}
+
+		// Shown in place of the publish date; outranks the `.updated` rule above
+		// and themes that hide `.updated`.
+		.updated-date .updated {
+			display: inline;
+		}
 	}
 
 	.avatar {

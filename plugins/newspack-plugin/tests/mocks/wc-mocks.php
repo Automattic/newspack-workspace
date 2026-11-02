@@ -1123,6 +1123,9 @@ class WC_Order {
 	public function get_checkout_payment_url() {
 		return 'https://example.test/checkout/order-pay/' . $this->get_id() . '/?pay_for_order=true&key=wc_order_' . $this->get_id();
 	}
+	public function get_order_number() {
+		return (string) $this->get_id();
+	}
 	/**
 	 * Accepts a gateway object or id string, like the real setter.
 	 *
@@ -1145,6 +1148,21 @@ class WC_Order {
 	}
 	public function get_billing_last_name() {
 		return $this->data['billing_last_name'] ?? '';
+	}
+	public function get_billing_address_1() {
+		return $this->data['billing_address_1'] ?? '';
+	}
+	public function get_billing_address_2() {
+		return $this->data['billing_address_2'] ?? '';
+	}
+	public function get_billing_city() {
+		return $this->data['billing_city'] ?? '';
+	}
+	public function get_billing_postcode() {
+		return $this->data['billing_postcode'] ?? '';
+	}
+	public function get_billing_country() {
+		return $this->data['billing_country'] ?? '';
 	}
 	public function get_formatted_order_total() {
 		return '$' . number_format( (float) $this->get_total(), 2 );
@@ -2046,6 +2064,12 @@ function wcs_get_subscriptions_for_order( $order, $args = [] ) {
 			$matches[ $subscription_id ] = $subscriptions_database[ $subscription_id ];
 		}
 	}
+	if ( $wants_any || in_array( 'resubscribe', $order_types, true ) ) {
+		$subscription_id = (int) $order->get_meta( '_subscription_resubscribe' );
+		if ( $subscription_id > 0 && isset( $subscriptions_database[ $subscription_id ] ) ) {
+			$matches[ $subscription_id ] = $subscriptions_database[ $subscription_id ];
+		}
+	}
 	if ( $wants_any || in_array( 'parent', $order_types, true ) ) {
 		foreach ( (array) $subscriptions_database as $id => $subscription ) {
 			if ( (int) $subscription->get_parent_id() === (int) $order->get_id() ) {
@@ -2349,6 +2373,9 @@ function wc_clean( $var ) {
 	}
 	return is_scalar( $var ) ? sanitize_text_field( $var ) : $var;
 }
+function wc_price( $price, $args = [] ) {
+	return '<span class="woocommerce-Price-amount amount"><bdi><span class="woocommerce-Price-currencySymbol">&#36;</span>' . number_format( (float) $price, 2 ) . '</bdi></span>';
+}
 function wc_prices_include_tax() {
 	global $wcs_mock_prices_include_tax;
 	return ! empty( $wcs_mock_prices_include_tax );
@@ -2437,6 +2464,17 @@ function wc_get_orders( $args ) {
 			function( $order ) use ( $cutoff ) {
 				$date_created = $order->get_date_created();
 				return $date_created && $date_created->getTimestamp() > $cutoff;
+			}
+		);
+	}
+	if ( isset( $args['date_created'] ) && is_string( $args['date_created'] ) && str_starts_with( $args['date_created'], '<' ) ) {
+		// Support the '<{timestamp}' comparison form.
+		$cutoff = (int) substr( $args['date_created'], 1 );
+		$orders = array_filter(
+			$orders,
+			function( $order ) use ( $cutoff ) {
+				$date_created = $order->get_date_created();
+				return $date_created && $date_created->getTimestamp() < $cutoff;
 			}
 		);
 	}

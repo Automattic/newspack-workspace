@@ -139,6 +139,37 @@ describe( 'StatCard.Label', () => {
 		expect( screen.getByRole( 'heading', { level: 3 } ) ).not.toHaveClass( 'consumer-label' );
 	} );
 
+	it( 'puts the qualifier on its own line inside the heading', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Label qualifier="(excluding refunds)">Revenue</StatCard.Label>
+			</StatCard.Root>
+		);
+		const heading = screen.getByRole( 'heading', { level: 3 } );
+		expect( heading ).toContainElement( container.querySelector( '.newspack-stat-card__label-qualifier' ) );
+		expect( container.querySelector( '.newspack-stat-card__label-qualifier' ) ).toHaveTextContent( '(excluding refunds)' );
+	} );
+
+	// The line break is visual only, so the name needs a word boundary of its own.
+	it( 'keeps a space between the label and its qualifier in the heading name', () => {
+		render(
+			<StatCard.Root>
+				<StatCard.Label qualifier="(excluding refunds)">Revenue</StatCard.Label>
+			</StatCard.Root>
+		);
+		expect( screen.getByRole( 'heading', { level: 3 } ).textContent ).toBe( 'Revenue (excluding refunds)' );
+	} );
+
+	it( 'adds no qualifier element without a qualifier', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Label>Revenue</StatCard.Label>
+			</StatCard.Root>
+		);
+		expect( container.querySelector( '.newspack-stat-card__label-qualifier' ) ).not.toBeInTheDocument();
+		expect( screen.getByRole( 'heading', { level: 3 } ).textContent ).toBe( 'Revenue' );
+	} );
+
 	it( 'throws outside Root', () => {
 		renderOrphan( <StatCard.Label>Orphan</StatCard.Label> );
 	} );
@@ -339,6 +370,62 @@ describe( 'StatCard.Value', () => {
 			</StatCard.Root>
 		);
 		expect( container.querySelector( '.newspack-stat-card__value' ) ).not.toHaveClass( 'newspack-stat-card__value--text' );
+	} );
+
+	it( 'renders a unit beside the figure, outside the figure itself', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Value value="12" unit="days" />
+			</StatCard.Root>
+		);
+		const row = container.querySelector( '.newspack-stat-card__figure' );
+		expect( row ).toContainElement( container.querySelector( '.newspack-stat-card__unit' ) );
+		expect( container.querySelector( '.newspack-stat-card__unit' ) ).toHaveTextContent( 'days' );
+		expect( container.querySelector( '.newspack-stat-card__value' ) ).toHaveTextContent( /^12$/ );
+	} );
+
+	it( 'puts the unit between the figure and the suffix', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Value value="12" unit="days" suffix={ <StatCard.Delta direction="up">2%</StatCard.Delta> } />
+			</StatCard.Root>
+		);
+		const row = container.querySelector( '.newspack-stat-card__figure' );
+		expect( Array.from( row.children ).map( child => child.className ) ).toEqual( [
+			'newspack-stat-card__value',
+			'newspack-stat-card__unit',
+			'newspack-stat-card__delta',
+		] );
+	} );
+
+	// "— days" would read as a figure of its own.
+	it( 'drops the unit when there is no figure', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Value value={ null } unit="days" />
+			</StatCard.Root>
+		);
+		expect( container.querySelector( '.newspack-stat-card__unit' ) ).not.toBeInTheDocument();
+		expect( container.querySelector( '.newspack-stat-card__figure' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'keeps the suffix when a missing figure drops the unit', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Value value={ null } unit="days" suffix={ <span>extra</span> } />
+			</StatCard.Root>
+		);
+		expect( container.querySelector( '.newspack-stat-card__unit' ) ).not.toBeInTheDocument();
+		expect( container.querySelector( '.newspack-stat-card__figure' ) ).toHaveTextContent( 'extra' );
+	} );
+
+	it( 'renders a zero with its unit', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Value value={ 0 } unit="days" />
+			</StatCard.Root>
+		);
+		expect( container.querySelector( '.newspack-stat-card__unit' ) ).toHaveTextContent( 'days' );
 	} );
 
 	it( 'throws outside Root', () => {
@@ -556,8 +643,84 @@ describe( 'StatCard.Delta', () => {
 		expect( container.querySelector( '.newspack-stat-card__figure' ) ).not.toBeInTheDocument();
 	} );
 
+	// A steady figure still needs a marker, or it reads the same as one with nothing to compare.
+	it( 'shows no arrow for an unchanged delta and says so in text', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Delta direction="unchanged">0%</StatCard.Delta>
+			</StatCard.Root>
+		);
+		expect( container.querySelector( '[aria-hidden="true"]' ) ).not.toBeInTheDocument();
+		expect( screen.getByText( 'Unchanged' ) ).toHaveAttribute( 'data-visually-hidden' );
+		expect( container.querySelector( '.newspack-stat-card__delta' ).textContent ).toBe( 'Unchanged 0%' );
+	} );
+
+	it( 'does not warn for an unchanged delta', () => {
+		const consoleWarn = jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		render(
+			<StatCard.Root>
+				<StatCard.Delta direction="unchanged">0%</StatCard.Delta>
+			</StatCard.Root>
+		);
+		expect( consoleWarn ).not.toHaveBeenCalled();
+		consoleWarn.mockRestore();
+	} );
+
+	it( 'lets label name an unchanged delta and hides the change it restates', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Delta direction="unchanged" label="unchanged vs previous timeframe">
+					0%
+				</StatCard.Delta>
+			</StatCard.Root>
+		);
+		expect( screen.getByText( 'unchanged vs previous timeframe' ) ).toHaveAttribute( 'data-visually-hidden' );
+		expect( container.querySelector( '[aria-hidden="true"]' ) ).toHaveTextContent( /^0%$/ );
+		expect( screen.queryByText( 'Unchanged' ) ).not.toBeInTheDocument();
+	} );
+
 	it( 'throws outside Root', () => {
 		renderOrphan( <StatCard.Delta direction="up">2%</StatCard.Delta> );
+	} );
+} );
+
+describe( 'StatCard.Note', () => {
+	it( 'renders its children in place of a figure', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Body>
+					<StatCard.Note>No donors lapsed in the prior timeframe yet.</StatCard.Note>
+				</StatCard.Body>
+			</StatCard.Root>
+		);
+		const note = container.querySelector( '.newspack-stat-card__note' );
+		expect( note ).toHaveTextContent( 'No donors lapsed in the prior timeframe yet.' );
+		expect( container.querySelector( '.newspack-stat-card__body' ) ).toContainElement( note );
+	} );
+
+	// A note often carries its own icon and text, which a paragraph could not hold as blocks.
+	it( 'renders a div so a consumer can put a paragraph inside', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Note>
+					<p>Not configured for this site.</p>
+				</StatCard.Note>
+			</StatCard.Root>
+		);
+		expect( container.querySelector( '.newspack-stat-card__note' ).tagName ).toBe( 'DIV' );
+	} );
+
+	it( 'merges className onto the note', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Note className="custom-note">Note</StatCard.Note>
+			</StatCard.Root>
+		);
+		expect( container.querySelector( '.newspack-stat-card__note' ) ).toHaveClass( 'custom-note' );
+	} );
+
+	it( 'throws outside Root', () => {
+		renderOrphan( <StatCard.Note>Note</StatCard.Note> );
 	} );
 } );
 
@@ -678,7 +841,7 @@ describe( 'StatCard.Footer', () => {
 		expect( descriptions[ 0 ].querySelector( 'strong' ) ).toBeInTheDocument();
 	} );
 
-	// The documented escape hatch: inline markup would otherwise split into a block per child.
+	// Markup written before StatCard.Description existed must keep rendering as one paragraph.
 	it( 'passes a self-wrapped description through as one paragraph', () => {
 		const { container } = render(
 			<StatCard.Root>
@@ -699,6 +862,49 @@ describe( 'StatCard.Footer', () => {
 	} );
 } );
 
+describe( 'StatCard.Description', () => {
+	it( 'renders a paragraph with the description styling', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Description>Readers who received at least one campaign.</StatCard.Description>
+			</StatCard.Root>
+		);
+		const description = container.querySelector( '.newspack-stat-card__description' );
+		expect( description.tagName ).toBe( 'P' );
+		expect( description ).toHaveTextContent( 'Readers who received at least one campaign.' );
+	} );
+
+	// Insights stacks a caveat, a description and a footnote, each its own sentence.
+	it( 'stacks several descriptions in a footer without wrapping them again', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Footer>
+					<StatCard.Description>No conversions in this timeframe.</StatCard.Description>
+					<StatCard.Description>Revenue from completed orders.</StatCard.Description>
+				</StatCard.Footer>
+			</StatCard.Root>
+		);
+		const descriptions = container.querySelectorAll( '.newspack-stat-card__description' );
+		expect( descriptions ).toHaveLength( 2 );
+		descriptions.forEach( description => {
+			expect( description.parentElement ).toBe( container.querySelector( '.newspack-stat-card__footer' ) );
+		} );
+	} );
+
+	it( 'merges className onto the paragraph', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Description className="custom-description">Note</StatCard.Description>
+			</StatCard.Root>
+		);
+		expect( container.querySelector( '.newspack-stat-card__description' ) ).toHaveClass( 'custom-description' );
+	} );
+
+	it( 'throws outside Root', () => {
+		renderOrphan( <StatCard.Description>Note</StatCard.Description> );
+	} );
+} );
+
 describe( 'StatCard leaf slots', () => {
 	const leaves = [
 		[ 'Label', props => <StatCard.Label { ...props }>Reach</StatCard.Label>, '.newspack-stat-card__label' ],
@@ -713,8 +919,10 @@ describe( 'StatCard leaf slots', () => {
 			),
 			'.newspack-stat-card__delta',
 		],
+		[ 'Note', props => <StatCard.Note { ...props }>Note</StatCard.Note>, '.newspack-stat-card__note' ],
 		[ 'Secondary', props => <StatCard.Secondary { ...props } />, '.newspack-stat-card__secondary' ],
 		[ 'Footer', props => <StatCard.Footer { ...props }>Note</StatCard.Footer>, '.newspack-stat-card__footer' ],
+		[ 'Description', props => <StatCard.Description { ...props }>Note</StatCard.Description>, '.newspack-stat-card__description' ],
 	];
 
 	// Insights hangs a full amount off an abbreviated figure, which has nowhere
@@ -779,13 +987,15 @@ describe( 'StatCard spoken labels', () => {
 
 	it( 'lets Root replace the spoken directions', () => {
 		render(
-			<StatCard.Root labels={ { up: 'En hausse', down: 'En baisse' } }>
+			<StatCard.Root labels={ { up: 'En hausse', down: 'En baisse', unchanged: 'Stable' } }>
 				<StatCard.Delta direction="up">2%</StatCard.Delta>
 				<StatCard.Delta direction="down">4%</StatCard.Delta>
+				<StatCard.Delta direction="unchanged">0%</StatCard.Delta>
 			</StatCard.Root>
 		);
 		expect( screen.getByText( 'En hausse' ) ).toHaveAttribute( 'data-visually-hidden' );
 		expect( screen.getByText( 'En baisse' ) ).toHaveAttribute( 'data-visually-hidden' );
+		expect( screen.getByText( 'Stable' ) ).toHaveAttribute( 'data-visually-hidden' );
 	} );
 
 	// The per-instance props were always the override, and stay it.

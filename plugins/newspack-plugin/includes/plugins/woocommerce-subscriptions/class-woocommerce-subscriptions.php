@@ -1214,10 +1214,10 @@ class WooCommerce_Subscriptions {
 
 		// phpcs:disable WordPress.WP.I18n.MissingTranslatorsComment
 		$multiple_templates = [
-			'day'   => __( '%s Days', 'newspack-plugin' ),
-			'week'  => __( '%s Weeks', 'newspack-plugin' ),
-			'month' => __( '%s Months', 'newspack-plugin' ),
-			'year'  => __( '%s Years', 'newspack-plugin' ),
+			'day'   => __( '%s days', 'newspack-plugin' ),
+			'week'  => __( '%s weeks', 'newspack-plugin' ),
+			'month' => __( '%s months', 'newspack-plugin' ),
+			'year'  => __( '%s years', 'newspack-plugin' ),
 		];
 		// phpcs:enable
 

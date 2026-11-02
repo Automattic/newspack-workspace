@@ -1,3 +1,27 @@
+## @automattic/newspack-blocks [4.36.6](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.5...newspack-blocks@4.36.6) (2026-10-27)
+
+
+### Bug Fixes
+
+* **modal-checkout:** track wallet payment attempts in GA4 (NPPM-3212) ([#1417](https://github.com/Automattic/newspack-workspace/issues/1417)) ([60fba92](https://github.com/Automattic/newspack-workspace/commit/60fba9271e8228e35e54a2ee7a67e260a2f28657))
+
+## @automattic/newspack-blocks [4.36.5](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.4...newspack-blocks@4.36.5) (2026-10-26)
+
+
+### Bug Fixes
+
+* **post-date:** let plugins show a post's updated date ([#1416](https://github.com/Automattic/newspack-workspace/issues/1416)) ([9ec64bf](https://github.com/Automattic/newspack-workspace/commit/9ec64bfc6348e608fbacd2c569704219167b3cf4))
+
+## @automattic/newspack-blocks [4.36.4](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.3...newspack-blocks@4.36.4) (2026-10-26)
+
+
+### Bug Fixes
+
+* **blocks:** scope the fullscreen Iframe takeover to its own page ([#1204](https://github.com/Automattic/newspack-workspace/issues/1204)) ([bd46bed](https://github.com/Automattic/newspack-workspace/commit/bd46bed7f88024811c4c712a0f77b841c78927ac))
+* **content-loop:** keep editor preview links from navigating away ([#1016](https://github.com/Automattic/newspack-workspace/issues/1016)) ([3b38d5a](https://github.com/Automattic/newspack-workspace/commit/3b38d5ae522467048e43a70e476174edbb105bd1))
+* **newspack-blocks:** add check for Jetpack paywall when building excerpts ([#1266](https://github.com/Automattic/newspack-workspace/issues/1266)) ([30f7dbc](https://github.com/Automattic/newspack-workspace/commit/30f7dbceb074f1aa1d650f230f77c30861bfb67a))
+* **reader-revenue:** rename News Revenue Hub to RevEngine ([#1260](https://github.com/Automattic/newspack-workspace/issues/1260)) ([d53ada0](https://github.com/Automattic/newspack-workspace/commit/d53ada020f26889e253d553a053283f98bd62a3b))
+
 ## @automattic/newspack-blocks [4.36.3](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.2...newspack-blocks@4.36.3) (2026-10-20)
 
 

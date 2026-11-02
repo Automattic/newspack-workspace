@@ -1,3 +1,10 @@
+# newspack-icons [1.3.0](https://github.com/Automattic/newspack-workspace/compare/newspack-icons@1.2.0...newspack-icons@1.3.0) (2026-10-26)
+
+
+### Features
+
+* **block-theme:** create comments panel block and add to block theme ([#263](https://github.com/Automattic/newspack-workspace/issues/263)) ([0f934cb](https://github.com/Automattic/newspack-workspace/commit/0f934cb926c9d494f81e7ec1cdb15f18ae1c84ce))
+
 # newspack-icons [1.2.0](https://github.com/Automattic/newspack-workspace/compare/newspack-icons@1.1.3...newspack-icons@1.2.0) (2026-10-12)
 
 

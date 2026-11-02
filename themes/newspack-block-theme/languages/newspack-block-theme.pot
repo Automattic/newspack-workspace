@@ -2,14 +2,14 @@
 # This file is distributed under the GNU General Public License v2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Block Theme 1.32.1\n"
+"Project-Id-Version: Newspack Block Theme 1.33.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/theme/newspack-block-theme\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-11T17:40:52+00:00\n"
+"POT-Creation-Date: 2026-10-26T18:24:03+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-block-theme\n"
@@ -39,31 +39,23 @@ msgstr ""
 msgid "https://newspack.com"
 msgstr ""
 
-#: includes/class-core.php:67
-msgid "Close Menu"
-msgstr ""
-
-#: includes/class-core.php:68
-msgid "You are posting comments too quickly. Please wait a moment before trying again."
-msgstr ""
-
-#: includes/class-core.php:125
+#: includes/class-core.php:106
 msgid "Single Newsletter"
 msgstr ""
 
-#: includes/class-core.php:126
+#: includes/class-core.php:107
 msgid "Displays a single newsletter."
 msgstr ""
 
-#: includes/class-core.php:129
+#: includes/class-core.php:110
 msgid "Newsletter Archive"
 msgstr ""
 
-#: includes/class-core.php:130
+#: includes/class-core.php:111
 msgid "Displays the newsletter archive."
 msgstr ""
 
-#: includes/class-core.php:151
+#: includes/class-core.php:132
 msgid "Search posts, categories, authors, ..."
 msgstr ""
 

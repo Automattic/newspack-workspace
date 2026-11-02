@@ -161,6 +161,18 @@ abstract class Newspack_Blocks_Donate_Renderer_Base {
 	}
 
 	/**
+	 * Whether the block uses the Modern style, which is built from newspack-ui components.
+	 *
+	 * @param array $attributes Block attributes.
+	 *
+	 * @return bool
+	 */
+	protected static function is_modern_style( array $attributes ): bool {
+		$class_names = isset( $attributes['className'] ) ? preg_split( '/\s+/', (string) $attributes['className'] ) : [];
+		return in_array( 'is-style-modern', $class_names, true );
+	}
+
+	/**
 	 * Get style for a button.
 	 *
 	 * @param array $attributes Block attributes.
@@ -171,9 +183,9 @@ abstract class Newspack_Blocks_Donate_Renderer_Base {
 		$button_text_color = Newspack_Blocks::get_color_for_contrast( $button_color );
 		if ( $is_reverse_style ) {
 			return 'border-color: ' . esc_attr( $button_color ) . '; color: ' . esc_attr( $button_color ) . '; background: transparent;';
-		} else {
-			return 'border-color: ' . esc_attr( $button_color ) . '; background-color: ' . esc_attr( $button_color ) . '; color: ' . esc_attr( $button_text_color ) . ';';
 		}
+
+		return 'border-color: ' . esc_attr( $button_color ) . '; background-color: ' . esc_attr( $button_color ) . '; color: ' . esc_attr( $button_text_color ) . ';';
 	}
 
 	/**

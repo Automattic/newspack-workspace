@@ -19,6 +19,30 @@ html {
 	border-radius: 100%;
 }
 
+:where(:is(.wp-site-blocks, body > :is(.comments-panel__panel, .overlay-menu__panel, .newspack-overlay-search__panel)) a:not(.wp-element-button, .newspack-ui__button, .newspack-ui .button, .newspack-ui .woocommerce-Button):focus-visible) {
+	@include mixins.focus-line;
+	-webkit-box-decoration-break: clone;
+	box-decoration-break: clone;
+	border-radius: var(--wp--custom--border--radius-small);
+}
+
+.skip-link.screen-reader-text {
+	&:focus {
+		background-color: var(--wp--preset--color--base);
+		border-radius: var(--wp--custom--border--radius-large);
+		color: var(--wp--preset--color--contrast);
+		font-family: var(--wp--preset--font-family--inter);
+		font-size: var(--wp--preset--font-size--small);
+		font-weight: 600;
+		line-height: var(--wp--custom--line-height--small);
+		padding: var(--wp--custom--spacing--25) var(--wp--preset--spacing--40);
+	}
+
+	&:focus-visible {
+		@include mixins.focus-line;
+	}
+}
+
 // Gutenberg's inline text-color format wraps text in mark.has-inline-color.
 // That mark is a color carrier, not a highlight, so it must not get the
 // browser's default yellow highlight background. Explicitly-set inline

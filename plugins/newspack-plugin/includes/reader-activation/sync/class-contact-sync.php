@@ -89,12 +89,13 @@ class Contact_Sync extends Sync {
 	 * Substring signatures (lowercase) that classify an ESP error message on
 	 * the push/upsert direction.
 	 *
-	 * Matched in order against the lowercased error message. The HTTP status
-	 * code that would identify these cleanly is discarded upstream by the ESP
-	 * layer (only a "{Title}: {detail}" string survives), so classification is
-	 * necessarily string-based. Extend the lists as ESP error copy evolves —
-	 * they are private so they can do so without becoming public API (tests
-	 * reach classify_error() via reflection).
+	 * Matched in order against the lowercased error message. The Newsletters
+	 * ESP layer behind the `esp` integration discards the HTTP status that
+	 * would identify these cleanly (only a "{Title}: {detail}" string
+	 * survives), so its errors classify by text. An auth or payment status
+	 * that does survive classifies on its own; see classify_error(). Extend
+	 * the lists as ESP error copy evolves — they are private so they can do so
+	 * without becoming public API (tests reach classify_error() via reflection).
 	 *
 	 *   - permanent_contact: bad contact data; retrying can never succeed.
 	 *   - permanent_config:  site-level ESP account problem; actionable.
@@ -109,6 +110,8 @@ class Contact_Sync extends Sync {
 			'merge fields were invalid',
 			'please provide a valid email',
 			'contact email address is not valid',
+			'email address already exists',
+			'not a valid choice',
 		],
 		'permanent_config'  => [
 			'api access has been disabled',
@@ -137,6 +140,8 @@ class Contact_Sync extends Sync {
 			'merge fields were invalid',
 			'please provide a valid email',
 			'contact email address is not valid',
+			'email address already exists',
+			'not a valid choice',
 		],
 		'permanent_config'  => [
 			'api access has been disabled',
@@ -889,7 +894,12 @@ class Contact_Sync extends Sync {
 	 * provider's own error, so reading only the first message would miss a
 	 * real signature exactly when a site is misconfigured. On the deletion path,
 	 * an error whose only code is Integration::CONTACT_NOT_FOUND_ERROR_CODE is
-	 * benign whatever its message.
+	 * benign whatever its message. On the push path, an error no signature
+	 * matches is a config failure when it carries a 401, 402 or 403 status:
+	 * only the ESP account answers those, for every contact alike. A deletion
+	 * keeps retrying such an error through the backoff instead, since no later
+	 * event re-sends a deletion. A deletion whose message names an account
+	 * problem, such as "payment required", still ends on its first attempt.
 	 *
 	 * @param string|\WP_Error $error     The error from a failed push.
 	 * @param string           $direction The sync direction: 'push' (default) or 'deletion'.
@@ -917,6 +927,10 @@ class Contact_Sync extends Sync {
 					return $class;
 				}
 			}
+		}
+
+		if ( 'deletion' !== $direction && $error instanceof \WP_Error && Integration::has_account_status( $error ) ) {
+			return 'permanent_config';
 		}
 
 		return 'transient';
@@ -992,10 +1006,11 @@ class Contact_Sync extends Sync {
 			if ( 'permanent_config' === $error_class ) {
 				/**
 				 * Fires when a contact sync fails with a permanent config-level
-				 * error (disabled/unpaid ESP account) that can never succeed on
-				 * retry. Permanent contact-data errors are skipped silently on
-				 * this path — the contact re-syncs on the reader's next event;
-				 * only actionable config failures are surfaced. (The deletion
+				 * error (an ESP account that is disabled, unpaid or rejects the
+				 * site's credentials), which no retry can fix. Permanent
+				 * contact-data errors are skipped silently on this path — the
+				 * contact re-syncs on the reader's next event; only actionable
+				 * config failures are surfaced. (The deletion
 				 * path also fires this hook for permanent contact-data errors —
 				 * see schedule_deletion_retry().)
 				 *

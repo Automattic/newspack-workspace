@@ -234,6 +234,57 @@ class Newspack_Test_Magic_Link extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A code pasted with a separator between its two groups still signs in.
+	 */
+	public function test_otp_code_pasted_with_a_separator_validates() {
+		$token_data = Magic_Link::generate_token( get_user_by( 'id', self::$user_id ) );
+		$otp        = $token_data['otp'];
+		$pasted     = substr( $otp['code'], 0, 3 ) . " \u{2013} " . substr( $otp['code'], 3 );
+		$validation = Magic_Link::validate_otp( self::$user_id, $otp['hash'], $pasted );
+		$this->assertTokenIsValid( $validation );
+	}
+
+	/**
+	 * The code email shows two groups, but its text stays the plain code, so copying it
+	 * and one-time-code autofill on phones read six digits.
+	 */
+	public function test_otp_email_groups_the_code_without_breaking_its_text() {
+		$config_callback = function ( $configs ) {
+			$configs['reader-activation-otp-authentication'] = [
+				'name'        => 'reader-activation-otp-authentication',
+				'category'    => 'reader-activation',
+				'label'       => 'Login one-time password',
+				'description' => 'OTP email.',
+				'template'    => dirname( NEWSPACK_PLUGIN_FILE ) . '/includes/templates/reader-activation-emails/otp.php',
+			];
+			return $configs;
+		};
+		$name_callback   = function () {
+			return 'reader-activation-otp-authentication';
+		};
+		add_filter( 'newspack_email_configs', $config_callback );
+		add_filter( 'newspack_magic_link_email_config', $name_callback );
+		Emails::reset_email_configs_cache();
+		reset_phpmailer_instance();
+
+		try {
+			$sent = Magic_Link::send_email( get_user_by( 'id', self::$user_id ) );
+			$this->assertTrue( $sent, 'The email must dispatch through MockPHPMailer.' );
+			$body = quoted_printable_decode( tests_retrieve_phpmailer_instance()->get_sent()->body );
+		} finally {
+			remove_filter( 'newspack_magic_link_email_config', $name_callback );
+			remove_filter( 'newspack_email_configs', $config_callback );
+			Emails::reset_email_configs_cache();
+		}
+
+		$this->assertMatchesRegularExpression(
+			'/\d{2}<span style="letter-spacing:0\.75em">\d<\/span>\d{3}/',
+			$body,
+			'The code is spaced as two groups, with no character between its digits.'
+		);
+	}
+
+	/**
 	 * Test invalid OTP code.
 	 */
 	public function test_invalid_otp_code() {

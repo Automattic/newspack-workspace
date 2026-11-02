@@ -16,7 +16,7 @@
 /**
  * WordPress dependencies.
  */
-import { useLayoutEffect, useMemo, useState } from '@wordpress/element';
+import { createPortal, useEffect, useLayoutEffect, useMemo, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -32,6 +32,7 @@ import LoadFailureNotice from '../components/LoadFailureNotice';
 import { useRetryFocus } from '../use-retry-focus';
 import { fmtRelative, fmtDate } from '../format';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
+import { getSavedListView, saveListView } from '../data/list-view-state';
 import { usePlans } from '../data/use-plans';
 import { useSubscribers } from '../data/use-subscribers';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
@@ -62,6 +63,8 @@ const planEntries = ( item, groupEntries ) => {
 	} ) );
 	const individual = ( item.subscriptions || [] ).map( s => ( {
 		plan: s.plan,
+		planName: s.planName || s.plan,
+		site: s.managedOn?.name || null,
 		status: s.status,
 		editUrl: s.editUrl,
 		isComplimentary: !! s.isComplimentary,
@@ -90,6 +93,19 @@ const subscriberStatuses = ( item, groupEntries ) =>
 		item.status
 	);
 
+// The `managed_on` filter value for subscriptions this site manages; network
+// sites go by their names. Matches Subscribers_Wizard::MANAGED_ON_THIS_SITE.
+const THIS_SITE = 'this-site';
+const THIS_SITE_LABEL = __( 'This site', 'newspack-plugin' );
+
+// Where the subscriptions the Subscription column shows are managed, as Managed
+// on filter values: this site first, without repeats.
+const managedOnValues = item => {
+	const sites = visiblePlanEntries( planEntries( item, groupEntriesOf( item ) ) ).map( e => e.site );
+	const network = [ ...new Set( sites.filter( Boolean ) ) ];
+	return sites.some( site => ! site ) ? [ THIS_SITE, ...network ] : network;
+};
+
 const { useHistory, useLocation } = Router;
 
 const DEFAULT_VIEW = {
@@ -105,22 +121,57 @@ const DEFAULT_VIEW = {
 };
 
 export default function SubscriberList() {
-	const [ view, setView ] = useState( DEFAULT_VIEW );
+	// Opening a profile unmounts the list; the saved view brings the reader back
+	// to the filters, search, sort and page they left.
+	const [ view, setView ] = useState( () => getSavedListView() || DEFAULT_VIEW );
+	useEffect( () => {
+		saveListView( view );
+	}, [ view ] );
 	const history = useHistory();
 	const location = useLocation();
 
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
-	const { plans, failed: plansFailed } = usePlans();
+	const { plans, sites, failed: plansFailed } = usePlans();
 
 	// The server owns filter/sort/paginate; this page's rows come back already
 	// narrowed. Group-role, tag and newsletter filters arrive in later slices (the
 	// endpoint honors status and plan here); sorting is name / member-since.
 	const { items, total, pages, loading: subscribersLoading, settled, error, reload } = useSubscribers( view );
 
+	// A restored page sits past the end if the list shrank while the reader was on
+	// a profile; step back to the last page rather than show "No results". Only an
+	// empty response counts: right after a view change the new read hasn't started,
+	// so `loading` and `pages` both still describe the previous view, and DataViews
+	// never offers a page past `pages`. Before paint, so the past-the-end page
+	// itself never shows.
+	useLayoutEffect( () => {
+		const lastPage = Math.max( pages, 1 );
+		if ( ! subscribersLoading && ! error && items.length === 0 && view.page > lastPage ) {
+			setView( current => ( { ...current, page: lastPage } ) );
+		}
+	}, [ subscribersLoading, error, items.length, pages, view.page ] );
+
 	// Filter options for the Subscription column: every plan on the site, not just
-	// the ones on this page.
-	const planElements = useMemo( () => plans.map( name => ( { value: name, label: name } ) ), [ plans ] );
+	// the ones on this page. Plans the view already filters by stay options even if
+	// the plan list fails to load: DataViews drops a filter with no options, which
+	// would leave a restored filter applied with no chip to clear it.
+	const selectedPlans = view.filters?.find( f => 'plans' === f.field )?.value;
+	const planElements = useMemo(
+		() => [ ...new Set( [ ...plans, ...( selectedPlans || [] ) ] ) ].map( name => ( { value: name, label: name } ) ),
+		[ plans, selectedPlans ]
+	);
+
+	// Only a site on a network has anywhere else to manage a subscription. Sites the
+	// view already filters by stay options, for the same reason as the plans above.
+	const selectedSites = view.filters?.find( f => 'managedOn' === f.field )?.value;
+	const managedOnElements = useMemo( () => {
+		const names = [ ...new Set( [ ...sites, ...( selectedSites || [] ) ] ) ].filter( name => name !== THIS_SITE );
+		if ( names.length === 0 && ! selectedSites?.length ) {
+			return [];
+		}
+		return [ { value: THIS_SITE, label: THIS_SITE_LABEL }, ...names.map( name => ( { value: name, label: name } ) ) ];
+	}, [ sites, selectedSites ] );
 
 	// Resolve avatar URLs for the current page, keyed by subscriber id. The table
 	// renders immediately with the avatar placeholder and each avatar fills in as
@@ -224,8 +275,9 @@ export default function SubscriberList() {
 						<VStack spacing={ 2 } alignment="left">
 							{ entries.map( ( e, i ) => (
 								<div key={ i }>
-									<SubscriptionLink href={ e.editUrl }>{ e.plan }</SubscriptionLink>
+									<SubscriptionLink href={ e.editUrl }>{ e.planName || e.plan }</SubscriptionLink>
 									{ e.role && <>&nbsp;{ `(${ GROUP_LABEL })` }</> }
+									{ e.site && <>&nbsp;{ `(${ e.site })` }</> }
 								</div>
 							) ) }
 						</VStack>
@@ -250,6 +302,34 @@ export default function SubscriberList() {
 						<span>—</span>
 					),
 			},
+			...( managedOnElements.length
+				? [
+						{
+							id: 'managedOn',
+							label: __( 'Managed on', 'newspack-plugin' ),
+							// Hidden by default. Filtered server-side: the `managed_on` param
+							// matches readers by where the subscriptions their Subscription
+							// column shows are managed.
+							elements: managedOnElements,
+							filterBy: { operators: [ 'isAny' ] },
+							enableSorting: false,
+							getValue: ( { item } ) => managedOnValues( item ),
+							render: ( { item } ) => {
+								const values = managedOnValues( item );
+								if ( values.length === 0 ) {
+									return <span>—</span>;
+								}
+								return (
+									<VStack spacing={ 2 } alignment="left">
+										{ values.map( value => (
+											<div key={ value }>{ THIS_SITE === value ? THIS_SITE_LABEL : value }</div>
+										) ) }
+									</VStack>
+								);
+							},
+						},
+				  ]
+				: [] ),
 			{
 				id: 'groupRole',
 				label: groupRoleLabel(),
@@ -370,7 +450,7 @@ export default function SubscriberList() {
 				},
 			},
 		],
-		[ avatars, planElements ]
+		[ avatars, planElements, managedOnElements ]
 	);
 
 	// DataViews only makes the title cell clickable; delegate clicks from the
@@ -427,8 +507,9 @@ export default function SubscriberList() {
 	// sorting are server-side, so every filter toggle and every debounced keystroke
 	// is a refetch — unmounting DataViews for those would take the search box's
 	// focus with it and flash the applied filter chips away mid-interaction. Once a
-	// response has settled the loading state is handed to DataViews instead, for the
-	// same reason avatars fill in progressively rather than holding the table back.
+	// response has settled, a refetch keeps DataViews mounted and shows its loading
+	// state in place (see isRefreshing below), for the same reason avatars fill in
+	// progressively rather than holding the table back.
 	if ( subscribersLoading && ! settled ) {
 		return (
 			<div className="newspack-subscribers__loading">
@@ -457,13 +538,23 @@ export default function SubscriberList() {
 		);
 	}
 
+	// A refetch with rows showing covers the screen with a spinner and blocks clicks
+	// until it settles: DataViews' own one renders below the table, out of sight on
+	// a long page. Keys still reach the controls underneath on purpose, so a reader
+	// can keep typing in the search box. With no rows to cover, DataViews' spinner
+	// stands in for the empty state, so it keeps that case. A failed read lands on
+	// the error notice above, which never renders the overlay, so a failure can't
+	// leave it stuck.
+	const isRefreshing = subscribersLoading && items.length > 0;
+
 	return (
 		// eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
-		<div className="newspack-subscribers__clickable-rows" onClick={ onRowClick }>
+		<div className="newspack-subscribers__clickable-rows" onClick={ onRowClick } aria-busy={ isRefreshing || undefined }>
 			{ /* The two reads fail independently, so a failed /plans is otherwise
 			     silent: DataViews drops a filter whose `elements` is empty, so the
-			     Subscription filter is simply absent and reads as a site that sells
-			     no plans. The table itself is unaffected, hence a warning beside it
+			     Subscription filter is simply absent (unless the view already
+			     filters by a plan) and reads as a site that sells no plans. The
+			     table itself is unaffected, hence a warning beside it
 			     rather than the error notice that replaces the screen. */ }
 			{ plansFailed && (
 				<LoadFailureNotice
@@ -479,13 +570,26 @@ export default function SubscriberList() {
 				fields={ fields }
 				view={ view }
 				onChangeView={ setView }
-				isLoading={ subscribersLoading }
+				isLoading={ subscribersLoading && ! isRefreshing }
 				paginationInfo={ { totalItems: total, totalPages: pages } }
 				defaultLayouts={ { table: {} } }
 				getItemId={ item => item.id }
 				onClickItem={ openSubscriber }
 				search
+				inlineFilters
 			/>
+			{ /* In the document body, so no ancestor of the list can pin the fixed
+			     overlay to itself or stack popovers above it. Cancelling the press
+			     keeps focus where it was: moving it would close an open filter
+			     popover and pull focus out of the search box. */ }
+			{ isRefreshing &&
+				createPortal(
+					// eslint-disable-next-line jsx-a11y/no-static-element-interactions
+					<div className="newspack-subscribers__loading-overlay" onMouseDown={ event => event.preventDefault() }>
+						<Waiting />
+					</div>,
+					document.body
+				) }
 		</div>
 	);
 }

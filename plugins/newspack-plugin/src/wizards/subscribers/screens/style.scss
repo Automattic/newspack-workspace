@@ -1,6 +1,8 @@
 @use "~@wordpress/base-styles/variables" as wp-vars;
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/breakpoints" as wp-breakpoints;
+@use "~@wordpress/base-styles/mixins" as wp-mixins;
+@use "~@wordpress/base-styles/z-index" as wp-z;
 
 // Section-header descriptions are plain strings (SectionHeader renders them
 // inside a `<p>`, so markup there would be invalid nesting). Honour their line
@@ -64,6 +66,32 @@
 		}
 	}
 }
+
+// Covers the whole wizard while a refetch is in flight with rows showing, and
+// blocks clicks until it settles. Fixed to the screen, beside the admin menu and
+// under the admin bar, so the spinner stays centred at any scroll position. It
+// stacks above popovers, so an open filter or column menu is covered too.
+.newspack-subscribers__loading-overlay {
+	align-items: center;
+	background: rgba( wp-colors.$white, 0.6 );
+	bottom: 0;
+	cursor: wait;
+	display: flex;
+	justify-content: center;
+	position: fixed;
+	right: 0;
+	top: var(--wp-admin--admin-bar--height, 0);
+	z-index: wp-z.z-index(".components-popover") + 1;
+
+	// At this width the admin bar scrolls away with the page, so its height would
+	// leave an uncovered strip at the top of the screen. Start at the top edge
+	// instead, covering the bar while it's in view.
+	@media ( max-width: wp-breakpoints.$break-small ) {
+		top: 0;
+	}
+}
+
+@include wp-mixins.editor-left(".newspack-subscribers__loading-overlay");
 
 .newspack-subscribers__avatar {
 	width: wp-vars.$grid-unit-40;

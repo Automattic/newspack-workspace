@@ -1,3 +1,21 @@
+# newspack-components [4.12.0](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.11.0...newspack-components@4.12.0) (2026-10-26)
+
+
+### Bug Fixes
+
+* **components:** fit the page header and tabs on mobile (DSGNEWS-237, [#1263](https://github.com/Automattic/newspack-workspace/issues/1263)) ([e5b89f7](https://github.com/Automattic/newspack-workspace/commit/e5b89f719b7d22cd2be0aef33f0d1f9773fadb06))
+* **components:** lay out the drawer with Stack and end-align its actions ([#1258](https://github.com/Automattic/newspack-workspace/issues/1258)) ([e8dfd37](https://github.com/Automattic/newspack-workspace/commit/e8dfd3766e8a12ffd584a6be7f5352aff9a53f19))
+
+
+### Features
+
+* **content-gate:** reorganize Access Control into tabs ([#1164](https://github.com/Automattic/newspack-workspace/issues/1164)) ([f0622f2](https://github.com/Automattic/newspack-workspace/commit/f0622f2a59bdfd0a7064b551ddd2a7a2895281d2))
+
+
+### Dependencies
+
+* **newspack-icons:** upgraded to 1.3.0
+
 # newspack-components [4.11.0](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.10.0...newspack-components@4.11.0) (2026-10-14)
 
 

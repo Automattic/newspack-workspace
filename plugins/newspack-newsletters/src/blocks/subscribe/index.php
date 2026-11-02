@@ -147,7 +147,7 @@ function render_honeypot_field( $placeholder = '' ) {
 	}
 
 	if ( empty( $placeholder ) ) {
-		$placeholder = __( 'Enter your email address', 'newspack-plugin' );
+		$placeholder = __( 'Your email address', 'newspack-newsletters' );
 	}
 	?>
 	<input class="nphp" tabindex="-1" aria-hidden="true" name="email" type="email" autocomplete="off" placeholder="<?php echo \esc_attr( $placeholder ); ?>" />
@@ -368,6 +368,20 @@ function render_block( $attrs ) {
  * @return string
  */
 function render_form( $attrs, $lists ) {
+	$default_attrs = [
+		'placeholder'         => __( 'Your email address', 'newspack-newsletters' ),
+		'emailLabel'          => __( 'Email address', 'newspack-newsletters' ),
+		'namePlaceholder'     => __( 'Your name', 'newspack-newsletters' ),
+		'nameLabel'           => __( 'Name', 'newspack-newsletters' ),
+		'lastNamePlaceholder' => __( 'Your last name', 'newspack-newsletters' ),
+		'lastNameLabel'       => __( 'Last name', 'newspack-newsletters' ),
+	];
+	foreach ( $default_attrs as $key => $value ) {
+		if ( empty( $attrs[ $key ] ) ) {
+			$attrs[ $key ] = $value;
+		}
+	}
+
 	$list_config     = $lists['config'];
 	$available_lists = $lists['accessible'];
 	$block_id        = \wp_rand( 0, 99999 );
@@ -678,13 +692,38 @@ function get_block_button_styles( $attrs = [] ) {
 	$style = '';
 
 	if ( ! is_button_text_default( $attrs ) ) {
-		$style .= 'color: ' . $attrs['textColor'] . ';';
+		$text_color = sanitize_button_color( $attrs['textColor'] );
+		if ( $text_color ) {
+			$style .= 'color: ' . $text_color . ';';
+		}
 	}
 
 	if ( ! is_button_background_default( $attrs ) ) {
-		$style .= 'background-color: ' . $attrs['backgroundColor'] . ';';
+		$background_color = sanitize_button_color( $attrs['backgroundColor'] );
+		if ( $background_color ) {
+			$style .= 'background-color: ' . $background_color . ';';
+			$style .= '--newspack-newsletters-subscribe-button-bg: ' . $background_color . ';';
+		}
 	}
 	return $style;
+}
+
+/**
+ * Validate a button color attribute before it is written into an inline style.
+ *
+ * The color picker stores the color value itself (a palette color's value or a
+ * custom one), which can be a hex code, a color function or a CSS variable.
+ *
+ * @param mixed $color Color attribute value.
+ * @return string The color, or an empty string if it is not a plain CSS color.
+ */
+function sanitize_button_color( $color ) {
+	if ( ! is_string( $color ) ) {
+		return '';
+	}
+	$color = trim( $color );
+	$pattern = '/^(#[0-9a-f]{3,8}|(rgba?|hsla?)\([0-9a-z.,%\s\/+-]+\)|var\(--[a-z0-9_-]+\)|[a-z]+)$/i';
+	return preg_match( $pattern, $color ) ? $color : '';
 }
 
 /**

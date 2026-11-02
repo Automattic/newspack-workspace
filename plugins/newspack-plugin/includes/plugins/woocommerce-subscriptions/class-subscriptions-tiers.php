@@ -600,7 +600,7 @@ class Subscriptions_Tiers {
 		?>
 		<label class="newspack-ui__input-card <?php echo $current ? esc_attr( 'current' ) : ''; ?>">
 			<?php if ( $current ) : ?>
-				<span class="newspack-ui__badge newspack-ui__badge--primary"><?php _e( 'Current', 'newspack-plugin' ); ?></span>
+				<span class="newspack-ui__badge newspack-ui__badge--secondary"><?php _e( 'Current', 'newspack-plugin' ); ?></span>
 			<?php endif; ?>
 			<input type="radio" name="product_id" value="<?php echo esc_attr( $product->get_id() ); ?>"<?php echo $seats ? ' data-per-seat="1" data-seats-min="' . esc_attr( $seats['min'] ) . '" data-seats-max="' . esc_attr( $seats['max'] > 0 ? $seats['max'] : '' ) . '"' : ''; ?> <?php echo esc_attr( $selected ? 'checked' : '' ); ?>>
 			<strong><?php echo esc_html( self::get_product_title( $product, $show_variation_attributes ) ); ?></strong>
@@ -664,9 +664,10 @@ class Subscriptions_Tiers {
 	 */
 	public static function render_existing_subscription_info( $product, $subscription, $render_button = true ) {
 		$url = $subscription->get_view_order_url();
-		$label = __( 'View Subscription', 'newspack-plugin' );
+		$label = __( 'View subscription', 'newspack-plugin' );
 		?>
 		<div class="newspack-ui__notice newspack-ui__notice--warning">
+			<?php Newspack_UI::print_notice_icon( 'warning' ); ?>
 			<span class="newspack-ui__notice__content">
 				<?php
 				printf(
@@ -844,8 +845,8 @@ class Subscriptions_Tiers {
 			}
 		}
 
-		$default_title        = $switch_data ? __( 'Change Subscription', 'newspack-plugin' ) : __( 'Complete your transaction', 'newspack-plugin' );
-		$default_button_label = $switch_data ? __( 'Change Subscription', 'newspack-plugin' ) : __( 'Purchase', 'newspack-plugin' );
+		$default_title        = $switch_data ? __( 'Change subscription', 'newspack-plugin' ) : __( 'Complete your transaction', 'newspack-plugin' );
+		$default_button_label = $switch_data ? __( 'Change subscription', 'newspack-plugin' ) : __( 'Purchase', 'newspack-plugin' );
 
 		$title        = $title ?? $default_title;
 		$button_label = $button_label ?? $default_button_label;
@@ -936,7 +937,6 @@ class Subscriptions_Tiers {
 					<?php _e( 'Sign in to an existing account', 'newspack-plugin' ); ?>
 				</button>
 			<?php endif; ?>
-			<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-ui__modal__cancel"><?php _e( 'Cancel', 'newspack-plugin' ); ?></button>
 		</form>
 		<?php
 	}
@@ -955,7 +955,7 @@ class Subscriptions_Tiers {
 	 * @param string           $initial_state Optional initial state.
 	 */
 	public static function render_modal( $product = null, $title = null, $button_label = null, $switch_data = null, $initial_state = 'closed' ) {
-		$default_title = $switch_data ? __( 'Change Subscription', 'newspack-plugin' ) : __( 'Complete your transaction', 'newspack-plugin' );
+		$default_title = $switch_data ? __( 'Change subscription', 'newspack-plugin' ) : __( 'Complete your transaction', 'newspack-plugin' );
 		?>
 		<dialog class="newspack-ui newspack-ui__modal-container newspack__subscription-tiers" data-state="<?php echo esc_attr( $initial_state ); ?>" data-product-id="<?php echo esc_attr( $product ? $product->get_id() : '' ); ?>" data-subscription-id="<?php echo esc_attr( $switch_data ? $switch_data['subscription']->get_id() : '' ); ?>">
 			<div class="newspack-ui__modal-container__overlay"></div>

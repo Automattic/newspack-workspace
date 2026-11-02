@@ -1,3 +1,16 @@
+# newspack-block-theme [1.33.0](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.32.1...newspack-block-theme@1.33.0) (2026-10-26)
+
+
+### Bug Fixes
+
+* match the design system's elevation shadows ([#1231](https://github.com/Automattic/newspack-workspace/issues/1231)) ([606053a](https://github.com/Automattic/newspack-workspace/commit/606053aa3119551ac67b9e875bf3148671b53468))
+
+
+### Features
+
+* **block-theme:** add width, border style options to the Comments Panel block button ([#1277](https://github.com/Automattic/newspack-workspace/issues/1277)) ([dc17a2e](https://github.com/Automattic/newspack-workspace/commit/dc17a2e91e025af9fa9fee74f03ec1a0dc9ceed2))
+* **block-theme:** create comments panel block and add to block theme ([#263](https://github.com/Automattic/newspack-workspace/issues/263)) ([0f934cb](https://github.com/Automattic/newspack-workspace/commit/0f934cb926c9d494f81e7ec1cdb15f18ae1c84ce))
+
 ## newspack-block-theme [1.32.1](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.32.0...newspack-block-theme@1.32.1) (2026-10-20)
 
 

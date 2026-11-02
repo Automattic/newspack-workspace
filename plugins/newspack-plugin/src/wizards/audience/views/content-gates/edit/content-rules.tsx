@@ -31,7 +31,7 @@ export default function ContentRules( { rules, onChange, isNewsletter = false }:
 	);
 
 	const handleChange = useCallback(
-		( slug: string ) => ( v: string[] ) => {
+		( slug: string ) => ( v: GateContentRuleValue ) => {
 			onChange( rules.map( r => ( r.slug === slug ? { ...r, value: v } : r ) ) );
 		},
 		[ onChange, rules ]
