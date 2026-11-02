@@ -2929,29 +2929,22 @@ class Subscribers_Wizard extends Wizard {
 	 *     subscription, live or ended, minus the `is_former_donor` flag. Recurring
 	 *     donors carry `is_donor` too, so this subtraction is what keeps them out.
 	 *
-	 * Each input is bounded: the donation subscription scan shares
-	 * FILTER_INCLUDE_CAP equally across the donation products, as
-	 * customer_ids_for_plans() does, and each flag query returns at most
-	 * FILTER_INCLUDE_CAP readers. Past those ceilings a kind under-counts, as the
-	 * other filters do (see resolve_filter_include()). And because Former and
-	 * One-time subtract the live set, a Recurring donor the scan cut off can land in
-	 * one of them instead.
+	 * Each input is bounded. At most FILTER_INCLUDE_CAP donation subscriptions are
+	 * scanned in total, across every donation product and every status, pending
+	 * and ended ones included (see Subscribers_Donors::holders()). Past that, a
+	 * Recurring donor whose live subscription wasn't scanned is missing from
+	 * Recurring, and because Former, One-time and "Not a donor" are all worked out
+	 * against the live set, they can be listed under one of those while their row
+	 * reads Recurring. Each flag query returns at most FILTER_INCLUDE_CAP readers,
+	 * so past that One-time and Former under-count, as the other filters do (see
+	 * resolve_filter_include()).
 	 *
 	 * @param string $kind One of the Subscribers_Donors::KIND_* values.
 	 *
 	 * @return int[]
 	 */
 	private function customer_ids_for_donor_kind( string $kind ): array {
-		if ( null === $this->donor_holders_cache ) {
-			$product_count             = count( Subscribers_Donors::donation_product_ids() );
-			$this->donor_holders_cache = $product_count
-				? Subscribers_Donors::holders( max( 1, intdiv( self::FILTER_INCLUDE_CAP, $product_count ) ) )
-				: [
-					'live'  => [],
-					'ended' => [],
-				];
-		}
-		$holders = $this->donor_holders_cache;
+		$holders = $this->donor_holders_cache ??= Subscribers_Donors::holders( self::FILTER_INCLUDE_CAP );
 		$flagged = fn( string $key ) => $this->donor_flag_ids_cache[ $key ] ??= Subscribers_Donors::flagged_user_ids( $key, self::FILTER_INCLUDE_CAP );
 
 		$ids = match ( $kind ) {

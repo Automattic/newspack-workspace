@@ -219,41 +219,44 @@ class Subscribers_Donors {
 	 * Subscriptions managed on other network sites carry no product data, so they
 	 * never count, as on the row. A reader can be in both lists.
 	 *
-	 * The product lookup is one SQL query per product, bounded by
-	 * $limit_per_product, and the subscriptions it finds are hydrated
+	 * The lookup is one SQL query across every donation product at once, so
+	 * $limit is a budget for all of them together: a product with few or no
+	 * subscriptions, such as a one-time donation product, leaves the rest to the
+	 * others, whatever order the products come in. The budget counts subscriptions
+	 * of every status, pending and ended ones included. Past it, the subscriptions
+	 * left out count for no one, so a reader whose only live donation subscription
+	 * was left out is missing from `live`. The subscriptions found are hydrated
 	 * Subscribers_Wizard::FILTER_SCAN_CHUNK at a time to keep peak memory at one
 	 * chunk.
 	 *
-	 * @param int $limit_per_product How many subscriptions to read per donation
-	 *                               product, or 0 for all of them.
+	 * @param int $limit The most donation subscriptions to read across all donation
+	 *                   products, or 0 for all of them.
 	 *
 	 * @return array{live:int[],ended:int[]} Holder user IDs.
 	 */
-	public static function holders( int $limit_per_product = 0 ): array {
+	public static function holders( int $limit = 0 ): array {
 		$holders = [
 			'live'  => [],
 			'ended' => [],
 		];
-		if ( ! function_exists( 'wcs_get_subscriptions_for_product' ) || ! function_exists( 'wcs_get_subscription' ) ) {
+		$product_ids = self::donation_product_ids();
+		if ( empty( $product_ids ) || ! function_exists( 'wcs_get_subscriptions_for_product' ) || ! function_exists( 'wcs_get_subscription' ) ) {
 			return $holders;
 		}
-		$args = $limit_per_product > 0 ? [ 'limit' => $limit_per_product ] : [];
-		foreach ( self::donation_product_ids() as $product_id ) {
-			$subscription_ids = \wcs_get_subscriptions_for_product( $product_id, 'ids', $args );
-			foreach ( array_chunk( $subscription_ids, Subscribers_Wizard::FILTER_SCAN_CHUNK ) as $chunk ) {
-				$subscriptions = array_filter( array_map( 'wcs_get_subscription', $chunk ) );
-				Subscribers_Wizard::prime_gift_recipients( $subscriptions );
-				foreach ( $subscriptions as $subscription ) {
-					$bucket = match ( Subscribers_Wizard::map_subscription_status( $subscription->get_status() ) ) {
-						'active', 'on-hold' => 'live',
-						'cancelled'         => 'ended',
-						default             => '',
-					};
-					if ( '' === $bucket || ! empty( Group_Subscription_Settings::get_subscription_settings( $subscription )['enabled'] ) ) {
-						continue;
-					}
-					$holders[ $bucket ][] = WooCommerce_Subscriptions_Gifting::get_holder_id( $subscription );
+		$subscription_ids = \wcs_get_subscriptions_for_product( $product_ids, 'ids', $limit > 0 ? [ 'limit' => $limit ] : [] );
+		foreach ( array_chunk( $subscription_ids, Subscribers_Wizard::FILTER_SCAN_CHUNK ) as $chunk ) {
+			$subscriptions = array_filter( array_map( 'wcs_get_subscription', $chunk ) );
+			Subscribers_Wizard::prime_gift_recipients( $subscriptions );
+			foreach ( $subscriptions as $subscription ) {
+				$bucket = match ( Subscribers_Wizard::map_subscription_status( $subscription->get_status() ) ) {
+					'active', 'on-hold' => 'live',
+					'cancelled'         => 'ended',
+					default             => '',
+				};
+				if ( '' === $bucket || ! empty( Group_Subscription_Settings::get_subscription_settings( $subscription )['enabled'] ) ) {
+					continue;
 				}
+				$holders[ $bucket ][] = WooCommerce_Subscriptions_Gifting::get_holder_id( $subscription );
 			}
 		}
 		return [

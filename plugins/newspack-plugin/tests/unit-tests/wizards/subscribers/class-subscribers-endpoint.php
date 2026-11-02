@@ -2635,6 +2635,62 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The donor scan's budget covers every donation product together, so a product
+	 * with no subscriptions, like a one-time donation product, leaves its share to
+	 * the others, whichever order the products are listed in. Split evenly, a
+	 * budget of three would read one subscription per product here and drop two
+	 * live donors.
+	 *
+	 * @dataProvider data_busy_donation_product_first
+	 *
+	 * @param bool $busy_product_first Whether the product holding the subscriptions is listed first.
+	 */
+	public function test_donor_scan_budget_is_shared_across_donation_products( bool $busy_product_first ) {
+		$busy_product_id  = $this->create_donation_product();
+		$empty_product_id = $this->create_donation_product( 'simple' );
+		// Flagged donation products are listed newest first.
+		$newer_product_id = $busy_product_first ? $busy_product_id : $empty_product_id;
+		$older_product_id = $busy_product_first ? $empty_product_id : $busy_product_id;
+		$product_dates    = [
+			$newer_product_id => '2026-02-01 00:00:00',
+			$older_product_id => '2026-01-01 00:00:00',
+		];
+		foreach ( $product_dates as $product_id => $date ) {
+			wp_update_post(
+				[
+					'ID'            => $product_id,
+					'post_date'     => $date,
+					'post_date_gmt' => $date,
+				]
+			);
+		}
+		$holder_ids = [];
+		foreach ( [ 'First', 'Second', 'Third' ] as $name ) {
+			$reader_id    = $this->create_reader( $name );
+			$holder_ids[] = $reader_id;
+			$this->create_individual_subscription( $reader_id, 'active', $busy_product_id );
+		}
+		$this->assertSame( [ $newer_product_id, $older_product_id ], Subscribers_Donors::donation_product_ids(), 'The products are listed in the order this case is about.' );
+
+		$live_ids = Subscribers_Donors::holders( count( $holder_ids ) )['live'];
+		sort( $live_ids );
+
+		$this->assertSame( $holder_ids, $live_ids );
+	}
+
+	/**
+	 * Both orders for the product holding the subscriptions.
+	 *
+	 * @return array[]
+	 */
+	public function data_busy_donation_product_first() {
+		return [
+			'busy product first'  => [ true ],
+			'empty product first' => [ false ],
+		];
+	}
+
+	/**
 	 * Off WooCommerce there are no donor kinds, so the param narrows nothing.
 	 */
 	public function test_donor_filter_is_ignored_when_donations_are_not_woocommerce() {
