@@ -36,7 +36,7 @@ const JEST_CONFIG = {
 		// like `node_modules/.pnpm/@wordpress+components@30.9.0_.../node_modules/@wordpress/components/...`,
 		// where the leading `.pnpm/` segment would otherwise short-circuit the match
 		// and leave the ES module source un-transformed (jest "unexpected token").
-		'/node_modules/(?!(\\.pnpm/[^/]+/node_modules/)?(newspack-scripts|@wordpress|is-plain-obj|memize|uuid)/)',
+		'/node_modules/(?!(\\.pnpm/[^/]+/node_modules/)?(newspack-scripts|newspack-motion|@wordpress|is-plain-obj|memize|uuid)/)',
 	],
 	moduleNameMapper: {
 		'\\.(scss|css)$': path.resolve( __dirname, 'utils/babelJestTransformer.js' ),

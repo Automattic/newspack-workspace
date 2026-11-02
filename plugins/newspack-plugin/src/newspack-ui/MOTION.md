@@ -21,4 +21,4 @@ Two tokens belong to newspack-ui alone:
 ## Scripts
 
 - `getTransitionTime` in `js/utils` reads an element's computed transition durations and delays, so scripts wait on the transition rather than a timer.
-- The bottom sheet's drag (`js/sheet-drag.js`) takes `REDUCED_MOTION_QUERY` from `newspack-motion`. Under reduced motion the sheet stops following the finger, but a long or quick enough swipe still closes it.
+- The bottom sheet's drag (`js/sheet-drag.js`): under reduced motion the sheet stops following the finger, but a long or quick enough swipe still closes it.

@@ -21,7 +21,7 @@ $duration-travel-max: 450ms;
 @function travel-duration($distance, $base: $duration-modal) {
 	$extra: math.div(math.max(0px, $distance - $travel-base-distance), $travel-px-per-ms * 1px) * 1ms;
 
-	@return math.min($duration-travel-max, math.round($base + $extra));
+	@return math.min($duration-travel-max, math.round(math.div($base + $extra, 1ms)) * 1ms);
 }
 
 @mixin hover {
