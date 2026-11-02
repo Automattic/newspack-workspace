@@ -386,6 +386,27 @@ class Test_Incoming_User_Sync_Role_Boundary extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The guard covers reader-only payloads alone: a staff role sent to an
+	 * account that already holds another one replaces it, demotions included.
+	 */
+	public function test_manual_sync_still_applies_a_staff_demotion() {
+		$user_id = $this->factory->user->create(
+			[
+				'role'         => 'administrator',
+				'user_email'   => 'demoted@example.test',
+				'display_name' => 'Original Name',
+			]
+		);
+
+		$this->manual_sync_event( 'demoted@example.test', [ 'editor' ] )->maybe_sync_user();
+
+		$user = get_user_by( 'id', $user_id );
+		$this->assertSame( [ 'editor' ], array_values( $user->roles ) );
+		$this->assertSame( 'Replacement Name', $user->display_name );
+		$this->assertSame( 'replacement@example.test', $user->user_email );
+	}
+
+	/**
 	 * A reader account still takes the incoming identity fields: the guard
 	 * reaches only accounts holding another role.
 	 */

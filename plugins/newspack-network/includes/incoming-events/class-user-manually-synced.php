@@ -48,7 +48,7 @@ class User_Manually_Synced extends Abstract_Incoming_Event {
 	 * constrained here (sanitize `user_login` via `sanitize_user()`, restrict `role` to a
 	 * safe set).
 	 *
-	 * A payload carrying only synced reader roles never demotes or renames an account
+	 * A payload carrying only synced reader roles (or none) never demotes or renames an account
 	 * holding any other role: its roles, display name and email stay unchanged (see
 	 * below). A payload carrying any other role applies in full, demotions included.
 	 *
@@ -97,7 +97,7 @@ class User_Manually_Synced extends Abstract_Incoming_Event {
 		$add_roles          = array_diff( $user_new_roles, $user_current_roles );
 
 		// A payload carrying only synced reader roles (or none) leaves an account that
-		// holds any other role here exactly as it is: its roles, display name and email.
+		// holds any other role here with its roles, display name and email unchanged.
 		// The account is matched by email alone, so such a payload is what arrives when
 		// an admin syncs a reader whose address matches a staff account on this site,
 		// and nothing in it tells that apart from a deliberate demotion. A demotion to
