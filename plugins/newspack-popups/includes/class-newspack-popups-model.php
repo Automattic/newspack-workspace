@@ -1366,7 +1366,7 @@ final class Newspack_Popups_Model {
 
 		$close_button_styles = 'color: ' . $close_button_color . ';';
 		if ( $enable_close_button_background ) {
-			$close_button_styles .= 'background-color: ' . $close_button_background_color . ';';
+			$close_button_styles .= '--newspack-lightbox-close-bg: ' . $close_button_background_color . ';';
 		}
 
 		$animation_id = 'a_' . $element_id;

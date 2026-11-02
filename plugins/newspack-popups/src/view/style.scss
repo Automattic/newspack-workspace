@@ -266,14 +266,21 @@ $width__tablet: 782px;
 	}
 
 	&.newspack-lightbox-close-button-background .newspack-lightbox__close {
+		background-color: var(--newspack-lightbox-close-bg);
+		transition:
+			background-color motion.$duration-color motion.$ease-color,
+			transform motion.$duration-press motion.$ease-out;
+
 		@include motion.hover {
 			&:hover {
-				box-shadow: inset 0 0 0 100vmax rgba(black, 0.15);
+				background-color: color-mix(in oklab, var(--newspack-lightbox-close-bg) 85%, currentcolor);
+				box-shadow: none;
 			}
 		}
 
 		&:active {
-			box-shadow: inset 0 0 0 100vmax rgba(black, 0.25);
+			background-color: color-mix(in oklab, var(--newspack-lightbox-close-bg) 75%, currentcolor);
+			box-shadow: none;
 		}
 	}
 
@@ -281,8 +288,24 @@ $width__tablet: 782px;
 		@media only screen and ( min-width: $width__tablet ) {
 			&:not(.newspack-lightbox-close-button-background) {
 				.newspack-lightbox__close {
-					background-color: rgba(black, 0.5);
+					--newspack-lightbox-close-bg: #{rgba(black, 0.5)};
+					background-color: var(--newspack-lightbox-close-bg);
 					color: white !important;
+					transition:
+						background-color motion.$duration-color motion.$ease-color,
+						transform motion.$duration-press motion.$ease-out;
+
+					@include motion.hover {
+						&:hover {
+							background-color: color-mix(in oklab, var(--newspack-lightbox-close-bg) 85%, currentcolor);
+							box-shadow: none;
+						}
+					}
+
+					&:active {
+						background-color: color-mix(in oklab, var(--newspack-lightbox-close-bg) 75%, currentcolor);
+						box-shadow: none;
+					}
 				}
 			}
 
@@ -291,16 +314,6 @@ $width__tablet: 782px;
 				height: 48px;
 				margin: 8px;
 				width: 48px;
-
-				@include motion.hover {
-					&:hover {
-						box-shadow: inset 0 0 0 100vmax rgba(black, 0.15);
-					}
-				}
-
-				&:active {
-					box-shadow: inset 0 0 0 100vmax rgba(black, 0.25);
-				}
 			}
 		}
 	}
