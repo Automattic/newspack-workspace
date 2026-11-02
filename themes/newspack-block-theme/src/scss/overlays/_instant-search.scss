@@ -157,7 +157,9 @@ body .jetpack-instant-search {
 		border-color: var(--jp--color--border) !important;
 
 		&-label {
-			transition: box-shadow motion.$duration-color motion.$ease-color;
+			transition:
+				border-radius motion.$duration-color motion.$ease-color,
+				box-shadow motion.$duration-color motion.$ease-color;
 
 			&:focus-within {
 				@include mixins.focus-line-inset(var(--jp--color--text));

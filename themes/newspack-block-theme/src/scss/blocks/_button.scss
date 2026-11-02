@@ -30,6 +30,10 @@
 			box-shadow motion.$duration-color motion.$ease-color;
 		word-break: normal;
 
+		&:focus-visible {
+			transition: none;
+		}
+
 		&.has-background:not(.has-accent-2-background-color) {
 			&:hover {
 				opacity: 0.65;

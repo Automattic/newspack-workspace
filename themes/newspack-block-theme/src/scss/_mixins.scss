@@ -9,6 +9,7 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 		inset 0 0 0 $width $color,
 		0 0 0 var(--wp--custom--focus--halo-width) color-mix(in srgb, #{$halo} var(--wp--custom--focus--halo-mix), transparent) $important;
 	outline: 2px solid transparent $important;
+	transition: none $important;
 
 	@media (prefers-contrast: more) {
 		box-shadow:
@@ -23,6 +24,7 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 		0 0 0 1px $color,
 		0 0 0 calc(1px + var(--wp--custom--focus--halo-width)) color-mix(in srgb, #{$color} var(--wp--custom--focus--halo-mix), transparent) $important;
 	outline: 2px solid transparent $important;
+	transition: none $important;
 }
 
 @mixin focus-line-inset($color: currentcolor, $important: null) {
@@ -31,6 +33,7 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 		inset 0 0 0 calc(1px + var(--wp--custom--focus--halo-width)) color-mix(in srgb, #{$color} var(--wp--custom--focus--halo-mix), transparent) $important;
 	outline: 2px solid transparent $important;
 	outline-offset: -2px $important;
+	transition: none $important;
 }
 
 @mixin focus-fill($color: currentcolor, $halo: $focus-color, $important: null, $inner: null, $width: 2px) {
@@ -40,6 +43,7 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 		$inner,
 		0 0 0 var(--wp--custom--focus--halo-width) color-mix(in srgb, #{$halo} var(--wp--custom--focus--halo-mix), transparent) $important;
 	outline: 2px solid transparent $important;
+	transition: none $important;
 
 	@media (prefers-contrast: more) {
 		box-shadow:
@@ -166,14 +170,20 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 		&:focus-visible {
 			&:not(:checked) {
 				@include focus-edge(var(--wp--preset--color--contrast), $important, $halo: $focus-color);
+
+				transition: background-color motion.$duration-color motion.$ease-color $important;
 			}
 
 			&[aria-invalid="true"]:not(:checked) {
 				@include focus-edge(var(--wp--custom--color--error-50), $important, $halo: $focus-color, $width: 2px);
+
+				transition: background-color motion.$duration-color motion.$ease-color $important;
 			}
 
 			&:checked {
 				@include focus-fill(var(--wp--preset--color--base), $important: $important, $width: 1px);
+
+				transition: background-color motion.$duration-color motion.$ease-color $important;
 			}
 
 			@media (forced-colors: active) {
@@ -330,7 +340,9 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 	margin: 0;
 	padding: 0;
 	place-items: center;
-	transition: background-color motion.$duration-color motion.$ease-color;
+	transition:
+		background-color motion.$duration-color motion.$ease-color,
+		box-shadow motion.$duration-color motion.$ease-color;
 	width: var(--wp--custom--spacing--55);
 
 	&:hover {

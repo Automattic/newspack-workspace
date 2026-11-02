@@ -187,7 +187,8 @@
 	a {
 		transition:
 			color motion.$duration-color motion.$ease-color,
-			box-shadow motion.$duration-color motion.$ease-color;
+			box-shadow motion.$duration-color motion.$ease-color,
+			border-radius motion.$duration-color motion.$ease-color;
 
 		&:not(.wp-element-button):focus-visible {
 			@include mixins.focus-line;
