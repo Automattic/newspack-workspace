@@ -97,9 +97,13 @@ $drop-duration: 400ms; /* must match DROP_ANIMATION_DURATION in index.tsx */
 		align-self: stretch;
 		border-inline-end: var( --wpds-border-width-xs, #{wp-vars.$border-width} ) solid var( --wpds-color-stroke-surface-neutral, #{wp-colors.$gray-300} );
 		flex: none;
-		margin-block: calc( -1 * var( --wp-ui-card-padding, var( --wpds-dimension-padding-lg, #{wp-vars.$grid-unit-20} ) ) );
 		margin-inline-start: calc( -1 * var( --wpds-dimension-padding-lg, #{wp-vars.$grid-unit-20} ) );
-		padding-inline: var( --wpds-dimension-padding-lg, #{wp-vars.$grid-unit-20} );
+		padding-inline: var( --wpds-dimension-padding-sm, #{wp-vars.$grid-unit-10} );
+	}
+
+	&.is-large .newspack-card--core--sortable-list__controls {
+		margin-block: calc( -1 * var( --wp-ui-card-padding ) );
+		padding-inline: var( --wp-ui-card-padding );
 	}
 
 	.newspack-card--core--sortable-list__drag-handle {
