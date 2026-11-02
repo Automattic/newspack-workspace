@@ -74,6 +74,7 @@ Larger surfaces get longer durations. No single transition runs longer than 300m
 - **Bottom sheets slide their full height** on `$ease-drawer` and `$duration-sheet`. A surface that docks to the bottom edge and holds content the reader has to act on, like the bottom content gate, moves the same way. Snackbars slide up on their own tokens, and the slim bottom banners for gifted articles and countdowns only fade. Bottom sheets stay at 400ms rather than following the travel rule.
 - **When one view replaces another, the outgoing view leaves faster.** On screens 600px and wider, a modal step that leaves fades over `$duration-exit` (120ms). The next step fades in over `$duration-reveal` after a 100ms delay, so the two barely overlap. On phones the leaving step is removed at once. A surface that opens and closes, like a modal, sheet, dropdown or snackbar, uses the same duration both ways.
 - **A surface that takes over from another in the same place doesn't make an entrance.** The dim and the surface's position stay as they are, the outgoing surface goes at once, and only the incoming content fades in, over `$duration-reveal` on `$ease-out`. The height jumps to fit the new content. The sign-in modal hands over to email verification this way after a reader registers, and verification hands back the same way when the reader sends the code.
+- **Backdrops only fade.** A backdrop or scrim behind a modal, sheet, drawer or overlay fades on the same timing as its surface; it never slides or scales with it.
 
 ### Sequence
 
