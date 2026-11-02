@@ -342,7 +342,8 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 	place-items: center;
 	transition:
 		background-color motion.$duration-color motion.$ease-color,
-		box-shadow motion.$duration-color motion.$ease-color;
+		box-shadow motion.$duration-color motion.$ease-color,
+		transform motion.$duration-press motion.$ease-out;
 	width: var(--wp--custom--spacing--55);
 
 	&:hover {

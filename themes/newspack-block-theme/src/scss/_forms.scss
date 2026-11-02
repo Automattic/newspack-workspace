@@ -148,11 +148,20 @@ input[type="submit"]:not(.newspack-ui__button) {
 	transition:
 		background motion.$duration-color motion.$ease-color,
 		color motion.$duration-color motion.$ease-color,
-		box-shadow motion.$duration-color motion.$ease-color;
+		box-shadow motion.$duration-color motion.$ease-color,
+		transform motion.$duration-press motion.$ease-out;
 
 	&:hover {
 		background: color-mix(in srgb, var(--wp--preset--color--accent) 80%, black);
 		color: var(--wp--preset--color--base);
+	}
+
+	&:active {
+		transform: scale(motion.$press-scale);
+
+		@include motion.reduced-motion {
+			transform: none;
+		}
 	}
 
 	&:focus-visible {

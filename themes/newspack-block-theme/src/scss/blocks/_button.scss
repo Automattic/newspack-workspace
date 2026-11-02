@@ -4,6 +4,22 @@
 .wp-element-button,
 .wp-block-button__link {
 	&:where(:not(.newspack-ui__button, .newspack-ui .button, .newspack-ui .woocommerce-Button)) {
+		transition:
+			background-color motion.$duration-color motion.$ease-color,
+			border-color motion.$duration-color motion.$ease-color,
+			box-shadow motion.$duration-color motion.$ease-color,
+			color motion.$duration-color motion.$ease-color,
+			opacity motion.$duration-color motion.$ease-color,
+			transform motion.$duration-press motion.$ease-out;
+
+		&:active {
+			transform: scale(motion.$press-scale);
+
+			@include motion.reduced-motion {
+				transform: none;
+			}
+		}
+
 		&:focus-visible {
 			@include mixins.focus-fill;
 		}
@@ -27,7 +43,8 @@
 			border-color motion.$duration-color motion.$ease-color,
 			color motion.$duration-color motion.$ease-color,
 			opacity motion.$duration-color motion.$ease-color,
-			box-shadow motion.$duration-color motion.$ease-color;
+			box-shadow motion.$duration-color motion.$ease-color,
+			transform motion.$duration-press motion.$ease-out;
 		word-break: normal;
 
 		&:focus-visible {
