@@ -466,8 +466,22 @@ class WooCommerce_Connection {
 		if ( ! function_exists( 'wcs_get_users_subscriptions' ) ) {
 			return [];
 		}
+		// WooCommerce Subscriptions Gifting hides a recipient's gifts while the
+		// billing address form is on screen, so the form can't change the
+		// purchaser's billing details. What a reader holds doesn't depend on the
+		// page, so the lookup steps around that filter and puts it back for the
+		// form. Without this, reader data refreshed on that page drops the gifts.
+		$gifting_address_filter = 'WCSG_Recipient_Addresses::get_users_subscriptions';
+		$removed_address_filter = \remove_filter( 'wcs_get_users_subscriptions', $gifting_address_filter, 100 );
+		try {
+			$user_subscriptions = \wcs_get_users_subscriptions( $user_id );
+		} finally {
+			if ( $removed_address_filter ) {
+				\add_filter( 'wcs_get_users_subscriptions', $gifting_address_filter, 100, 2 );
+			}
+		}
 		$subcriptions = array_reduce(
-			array_keys( \wcs_get_users_subscriptions( $user_id ) ),
+			array_keys( $user_subscriptions ),
 			function( $acc, $subscription_id ) use ( $product_ids, $user_id, $include_payment_recovery ) {
 				$subscription = \wcs_get_subscription( $subscription_id );
 				// wcs_get_subscription() returns false when the subscription post is
