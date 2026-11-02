@@ -205,6 +205,7 @@ class Test_Integration_Outbound_Legacy extends WP_UnitTestCase {
 	public function test_esp_registry_miss_on_a_legacy_era_site_keeps_the_payload() {
 		$this->reset_integrations();
 		delete_option( Metadata::FIELDS_OPTION );
+		update_option( 'newspack_newsletters_service_provider', 'mailchimp' );
 		( new Integrations\ESP() )->update_settings_field_value( 'mailchimp_audience_id', '123' );
 
 		$contact  = $this->legacy_contact();

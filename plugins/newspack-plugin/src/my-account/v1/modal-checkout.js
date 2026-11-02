@@ -53,7 +53,7 @@ domReady( () => {
 	/**
 	 * Order again.
 	 */
-	const orderAgain = document.querySelectorAll( 'p.order-again a' );
+	const orderAgain = document.querySelectorAll( 'a.order-again, p.order-again a' );
 	orderAgain.forEach( button => {
 		registerModalCheckoutButton(
 			button,

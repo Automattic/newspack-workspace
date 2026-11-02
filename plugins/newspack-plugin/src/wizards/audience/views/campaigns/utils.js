@@ -66,10 +66,17 @@ const placementMap = {
 	manual: __( 'Manual Only', 'newspack-plugin' ),
 };
 
-export const placementForPopup = ( { options: { frequency, placement } } ) => {
+export const placementForPopup = ( { options: { frequency, placement, manual_only } } ) => {
 	const customPlacements = window.newspackAudienceCampaigns?.custom_placements || {};
 	if ( 'manual' === frequency || customPlacements.hasOwnProperty( placement ) ) {
 		return __( 'Custom Placement', 'newspack-plugin' );
+	}
+	if ( manual_only && isOverlay( { options: { placement } } ) ) {
+		return sprintf(
+			// translators: %s: overlay placement, e.g. "Center Overlay".
+			__( '%s (Manual Only)', 'newspack-plugin' ),
+			placementMap[ placement ]
+		);
 	}
 	return placementMap[ placement ];
 };
@@ -98,7 +105,7 @@ const frequencyMap = {
 	weekly: __( 'Once a week', 'newspack-plugin' ),
 	daily: __( 'Once a day', 'newspack-plugin' ),
 	always: __( 'Every pageview', 'newspack-plugin' ),
-	custom: __( 'Custom frequency (edit prompt to manage)', 'newspack-plugin' ),
+	custom: __( 'Custom', 'newspack-plugin' ),
 };
 
 export const frequenciesForPopup = () => {
@@ -109,41 +116,60 @@ export const overlaySizesForPopups = () => {
 	return window.newspackAudienceCampaigns?.overlay_sizes;
 };
 
-export const getCardClassName = ( status, forceDisabled = false ) => {
-	if ( 'publish' !== status || forceDisabled ) {
-		return 'newspack-card__is-disabled';
-	}
-	return 'newspack-card__is-supported';
-};
-
 const ensureTermArray = terms => ( Array.isArray( terms ) ? terms.filter( Boolean ) : [] );
 
-export const promptDescription = prompt => {
-	const { categories, tags, campaign_groups: campaigns, status } = prompt;
-	const descriptionMessages = [];
+export const promptStatus = ( { status }, segmentDisabled = false ) => {
+	if ( 'publish' === status ) {
+		return segmentDisabled
+			? { label: __( 'Segment Disabled', 'newspack-plugin' ), intent: 'low' }
+			: { label: __( 'Active', 'newspack-plugin' ), intent: 'stable' };
+	}
+	if ( 'pending' === status ) {
+		return { label: __( 'Pending Review', 'newspack-plugin' ), intent: 'low' };
+	}
+	if ( 'future' === status ) {
+		return { label: __( 'Scheduled', 'newspack-plugin' ), intent: 'informational' };
+	}
+	if ( 'trash' === status ) {
+		return { label: __( 'Trash', 'newspack-plugin' ), intent: 'draft' };
+	}
+	return { label: __( 'Inactive', 'newspack-plugin' ), intent: 'draft' };
+};
+
+export const promptDetails = prompt => {
+	const { categories, tags, campaign_groups: campaigns } = prompt;
 	const validCampaigns = ensureTermArray( campaigns );
 	const validCategories = ensureTermArray( categories );
 	const validTags = ensureTermArray( tags );
+	const names = terms => terms.map( ( { name } ) => name ).join( ', ' );
+	const details = [
+		{ label: __( 'Placement:', 'newspack-plugin' ), value: placementForPopup( prompt ) },
+		{ label: __( 'Frequency:', 'newspack-plugin' ), value: frequencyForPopup( prompt ) },
+	];
 	if ( validCampaigns.length > 0 ) {
-		const campaignsList = validCampaigns.map( ( { name } ) => name ).join( ', ' );
-		descriptionMessages.push(
-			( validCampaigns.length === 1 ? __( 'Campaign: ', 'newspack-plugin' ) : __( 'Campaigns: ', 'newspack-plugin' ) ) + campaignsList
-		);
+		details.push( {
+			label: _n( 'Campaign:', 'Campaigns:', validCampaigns.length, 'newspack-plugin' ),
+			value: names( validCampaigns ),
+		} );
 	}
 	if ( validCategories.length > 0 ) {
-		descriptionMessages.push( __( 'Categories: ', 'newspack-plugin' ) + validCategories.map( category => category.name ).join( ', ' ) );
+		details.push( { label: __( 'Categories:', 'newspack-plugin' ), value: names( validCategories ) } );
 	}
 	if ( validTags.length > 0 ) {
-		descriptionMessages.push( __( 'Tags: ', 'newspack-plugin' ) + validTags.map( tag => tag.name ).join( ', ' ) );
+		details.push( { label: __( 'Tags:', 'newspack-plugin' ), value: names( validTags ) } );
 	}
-	if ( 'pending' === status ) {
-		descriptionMessages.push( __( 'Pending review', 'newspack-plugin' ) );
+	if ( prompt.ab_test_id ) {
+		details.push( {
+			label: __( 'A/B test:', 'newspack-plugin' ),
+			value: sprintf(
+				// Translators: %1$s is the A/B test ID, %2$s is the variant letter.
+				__( '%1$s (variant %2$s)', 'newspack-plugin' ),
+				prompt.ab_test_id,
+				String( prompt.ab_variant || '' ).toUpperCase()
+			),
+		} );
 	}
-	if ( 'future' === status ) {
-		descriptionMessages.push( __( 'Scheduled', 'newspack-plugin' ) );
-	}
-	descriptionMessages.push( __( 'Frequency: ', 'newspack-plugin' ) + frequencyForPopup( prompt ) );
-	return descriptionMessages.length ? descriptionMessages.join( ' | ' ) : null;
+	return details;
 };
 
 /**
@@ -177,7 +203,7 @@ const dateBoundLabel = bound => {
  * Render a date-range criterion value.
  *
  * Each bound is itself an object, so the generic `key: value` pass in
- * segmentDescription() would stringify it as "[object Object]".
+ * segmentDescriptionItems() would stringify it as "[object Object]".
  *
  * @param {*} value The criterion value.
  * @return {?string} A human-readable range, or null when the value isn't one.
@@ -204,7 +230,7 @@ const dateRangeLabel = value => {
 	return null;
 };
 
-export const segmentDescription = segment => {
+export const segmentDescriptionItems = segment => {
 	const descriptionMessages = [];
 
 	// If the segment is disabled.
@@ -252,6 +278,26 @@ export const segmentDescription = segment => {
 			}
 		}
 	}
+
+	return descriptionMessages;
+};
+
+/**
+ * Split a plain criteria message at its label, so the label can be styled apart.
+ *
+ * @param {*} message A criteria message: a "Label: value" string, or a React element that handles its own label.
+ * @return {Object} The `label`, when there is one, and the `value`.
+ */
+export const splitCriteriaMessage = message => {
+	const separator = 'string' === typeof message ? message.indexOf( ': ' ) : -1;
+	if ( separator < 1 ) {
+		return { value: message };
+	}
+	return { label: message.slice( 0, separator + 1 ), value: message.slice( separator + 2 ) };
+};
+
+export const segmentDescription = segment => {
+	const descriptionMessages = segmentDescriptionItems( segment );
 
 	if ( ! descriptionMessages.length ) {
 		return null;
@@ -301,7 +347,8 @@ const FavoriteCategoriesNames = ( { ids } ) => {
 	}
 	return (
 		<span>
-			{ __( 'Favorite Categories:', 'newspack-plugin' ) } { favoriteCategoryNames.length ? favoriteCategoryNames.join( ', ' ) : '' }
+			<span className="newspack-campaigns__details-key">{ __( 'Favorite Categories:', 'newspack-plugin' ) }</span>{ ' ' }
+			{ favoriteCategoryNames.length ? favoriteCategoryNames.join( ', ' ) : '' }
 		</span>
 	);
 };
@@ -327,16 +374,18 @@ const getItems = memoize( async path => {
 			label: item.title || item.name,
 		} ) );
 	} catch ( e ) {
-		return [];
+		return null;
 	}
 } );
 
 const ItemNames = ( { label, ids, path, deletedItemLabel } ) => {
-	const [ items, setItems ] = useState( [] );
+	// `null` until the lookup resolves, and after a failed one. An empty list is a real
+	// answer: none of the saved items exist any more, so each reads as deleted.
+	const [ items, setItems ] = useState( null );
 	useEffect( () => {
 		getItems( path ).then( setItems );
 	}, [ ids ] );
-	if ( ! items.length ) {
+	if ( ! items ) {
 		return null;
 	}
 	const labels = ids.map( id => {
@@ -345,7 +394,7 @@ const ItemNames = ( { label, ids, path, deletedItemLabel } ) => {
 	} );
 	return (
 		<span>
-			{ label } { labels.length ? labels.join( ', ' ) : '' }
+			<span className="newspack-campaigns__details-key">{ label }</span> { labels.length ? labels.join( ', ' ) : '' }
 		</span>
 	);
 };
@@ -364,7 +413,8 @@ addFilter(
 						config.id === 'subscribed_lists' ? __( 'Subscribed to:', 'newspack-plugin' ) : __( 'Not subscribed to:', 'newspack-plugin' )
 					}
 					ids={ item.value }
-					path="/newspack-newsletters/v1/lists_config"
+					// `context=edit`: see the list picker in the segment editor.
+					path="/newspack-newsletters/v1/lists_config?context=edit"
 					deletedItemLabel={ __( 'Deleted list', 'newspack-plugin' ) }
 				/>
 			);
@@ -386,7 +436,7 @@ addFilter( 'newspack.wizards.campaigns.segmentDescription.criteriaMessage', 'new
 						: __( 'Does not have active subscription(s):', 'newspack-plugin' )
 				}
 				ids={ item.value }
-				path={ `${ newspackAudienceCampaigns.api }/subscription-products` }
+				path={ addQueryArgs( `${ newspackAudienceCampaigns.api }/subscription-products`, { include: item.value } ) }
 				deletedItemLabel={ __( 'Deleted subscription', 'newspack-plugin' ) }
 			/>
 		);
@@ -411,6 +461,20 @@ addFilter( 'newspack.wizards.campaigns.segmentDescription.criteriaMessage', 'new
 				deletedItemLabel={ __( 'Deleted membership', 'newspack-plugin' ) }
 			/>
 		);
+	}
+	return message;
+} );
+
+addFilter( 'newspack.wizards.campaigns.segmentDescription.criteriaMessage', 'newspack.gateAccess', ( message, value, config, item ) => {
+	if ( [ 'can_access_gates', 'cannot_access_gates' ].includes( config.id ) ) {
+		if ( ! Array.isArray( item.value ) || ! item.value.length ) {
+			return null;
+		}
+		const labels = item.value.map(
+			id => config.options?.find( option => option.value === String( id ) )?.label || __( 'Unavailable gate', 'newspack-plugin' )
+		);
+		/* translators: 1: criterion name, 2: comma-separated content gate names. */
+		return sprintf( __( '%1$s: %2$s', 'newspack-plugin' ), config.name, labels.join( ', ' ) );
 	}
 	return message;
 } );
@@ -454,9 +518,15 @@ export const warningForPopup = ( prompts, prompt ) => {
 				( 0 === promptCategories.length && 0 === conflictCategories.length ) ||
 				promptCategories.some( category => conflictCategories.some( conflictCategory => category.term_id === conflictCategory.term_id ) );
 
+			// Different arms of one A/B test overlap on purpose: each reader sees one of
+			// them. Two prompts on the same arm reach the same readers, so they still conflict.
+			const isOtherArmOfSameAbTest =
+				Boolean( prompt.ab_test_id ) && conflict.ab_test_id === prompt.ab_test_id && conflict.ab_variant !== prompt.ab_variant;
+
 			return (
 				'publish' === conflict.status &&
 				conflict.id !== prompt.id &&
+				! isOtherArmOfSameAbTest &&
 				isSameType( prompt, conflict ) &&
 				sharesSegments( prompt.segments, conflict.segments ) &&
 				hasConflictingCategory

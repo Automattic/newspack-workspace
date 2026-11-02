@@ -264,10 +264,10 @@
 		}
 	}
 	// One source for the carousel's chip styling, shared so the two stay in step.
-	// A tag label carries only `tag-labels`, so a publisher rule written for
-	// `.cat-links a` cannot reach it.
+	// The tag-label wrapper never carries `cat-links`, so a publisher rule written
+	// for `.cat-links a` cannot reach it.
 	.cat-links,
-	.tag-labels {
+	.newspack-tag-labels {
 		color: np-colors.$neutral-000;
 		font-size: 0.6em;
 		font-weight: bold;

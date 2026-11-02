@@ -1,0 +1,117 @@
+{
+	"_comment": "Shared bucketing vectors. tests/test-ab-tests.php and src/view/utils/ab.test.js both read this file, so the server and client implementations are checked against the same expectations.",
+	"vectors": [
+		{
+			"note": "The original pinned vector.",
+			"reader": "abc",
+			"test_id": "test-x",
+			"config": {
+				"variants": [
+					"a",
+					"b"
+				],
+				"control_share": 50
+			},
+			"hash": 809016026,
+			"bucket": "a"
+		},
+		{
+			"note": "Lands just inside the control range of a 50/50 split.",
+			"reader": "reader-1014697",
+			"test_id": "boundary-test",
+			"config": {
+				"variants": [
+					"a",
+					"b"
+				],
+				"control_share": 50
+			},
+			"hash": 2147483534,
+			"bucket": "a"
+		},
+		{
+			"note": "Lands just past the control range of a 50/50 split.",
+			"reader": "reader-128050",
+			"test_id": "boundary-test",
+			"config": {
+				"variants": [
+					"a",
+					"b"
+				],
+				"control_share": 50
+			},
+			"hash": 2147484220,
+			"bucket": "b"
+		},
+		{
+			"note": "Lands just inside B in a three-arm test with a 60% control.",
+			"reader": "reader-865675",
+			"test_id": "three-arm",
+			"config": {
+				"variants": [
+					"a",
+					"b",
+					"c"
+				],
+				"control_share": 60
+			},
+			"hash": 3435972195,
+			"bucket": "b"
+		},
+		{
+			"note": "Lands just inside C in the same three-arm test.",
+			"reader": "reader-149319",
+			"test_id": "three-arm",
+			"config": {
+				"variants": [
+					"a",
+					"b",
+					"c"
+				],
+				"control_share": 60
+			},
+			"hash": 3435977611,
+			"bucket": "c"
+		},
+		{
+			"note": "With no control share, the default puts this reader just inside the control range.",
+			"reader": "reader-1014697",
+			"test_id": "boundary-test",
+			"config": {
+				"variants": [
+					"a",
+					"b"
+				]
+			},
+			"hash": 2147483534,
+			"bucket": "a"
+		},
+		{
+			"note": "With no control share, the default puts this reader just past the control range.",
+			"reader": "reader-128050",
+			"test_id": "boundary-test",
+			"config": {
+				"variants": [
+					"a",
+					"b"
+				]
+			},
+			"hash": 2147484220,
+			"bucket": "b"
+		},
+		{
+			"note": "A control share of zero is kept, not read as unset, so the control gets no readers.",
+			"reader": "abc",
+			"test_id": "test-x",
+			"config": {
+				"variants": [
+					"a",
+					"b"
+				],
+				"control_share": 0
+			},
+			"hash": 809016026,
+			"bucket": "b"
+		}
+	]
+}

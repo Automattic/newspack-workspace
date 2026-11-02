@@ -3,7 +3,8 @@
  */
 import { __ } from '@wordpress/i18n';
 import { PluginSidebar } from '@wordpress/editor';
-import { Flex, Panel, PanelBody } from '@wordpress/components';
+import { Panel, PanelBody } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 import { broadcast } from 'newspack-icons';
 
 /**
@@ -24,9 +25,9 @@ const ContentDistributionPanel = ( { header, body, footer, buttons } ) => {
 				<PanelBody className="content-distribution-panel-body">{ body }</PanelBody>
 				<PanelBody className="content-distribution-panel-footer">{ footer }</PanelBody>
 				<PanelBody className="content-distribution-panel-buttons">
-					<Flex direction="column" className="content-distribution-panel__button-column" gap={ 4 }>
+					<Stack direction="column" className="content-distribution-panel__button-column" gap="lg">
 						{ buttons }
-					</Flex>
+					</Stack>
 				</PanelBody>
 			</Panel>
 		</PluginSidebar>

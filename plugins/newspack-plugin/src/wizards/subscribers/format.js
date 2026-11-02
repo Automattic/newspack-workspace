@@ -128,9 +128,13 @@ const periodLabel = ( period, interval ) => {
  * @param {string}        entry.currency        ISO 4217 currency code.
  * @param {string}        entry.billingPeriod   WooCommerce billing period.
  * @param {number}        entry.billingInterval Billing interval.
- * @return {string} The billing rate, or '—' when there is no amount on file.
+ * @param {boolean}       entry.isComplimentary Whether it is complimentary access.
+ * @return {string} The billing rate, "Complimentary", or '—' when there is no amount on file.
  */
-export const billingText = ( { amount, currency, billingPeriod, billingInterval } = {} ) => {
+export const billingText = ( { amount, currency, billingPeriod, billingInterval, isComplimentary } = {} ) => {
+	if ( isComplimentary ) {
+		return __( 'Complimentary', 'newspack-plugin' );
+	}
 	const price = fmtCurrency( amount, currency );
 	if ( ! price ) {
 		return '—';
@@ -172,4 +176,23 @@ export const scheduleRow = ( { nextBillingDate, endDate } = {} ) => {
 		return { label, value: fmtDate( endDate ) };
 	}
 	return { label: __( 'Next billing', 'newspack-plugin' ), value: '—' };
+};
+
+/**
+ * The rows that follow "Billing" on a subscription card: the last payment, then
+ * the schedule row. A complimentary subscription is never charged, so it keeps
+ * only the date its access ends, when it has one.
+ *
+ * @param {Object}  entry                   A subscription or group entry.
+ * @param {string}  [entry.lastPayment]     The last payment date, if any.
+ * @param {string}  [entry.nextBillingDate] The next-billing date, if any.
+ * @param {string}  [entry.endDate]         The access-end date, if any.
+ * @param {boolean} [entry.isComplimentary] Whether it is complimentary access.
+ * @return {Array<{ label: string, value: string }>} The rows.
+ */
+export const paymentRows = ( entry = {} ) => {
+	if ( entry.isComplimentary ) {
+		return entry.endDate ? [ scheduleRow( { endDate: entry.endDate } ) ] : [];
+	}
+	return [ { label: __( 'Last payment', 'newspack-plugin' ), value: orDash( fmtDate( entry.lastPayment ) ) }, scheduleRow( entry ) ];
 };

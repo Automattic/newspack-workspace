@@ -168,6 +168,16 @@ abstract class CSV_Batch_Exporter extends \WC_CSV_Batch_Exporter {
 	}
 
 	/**
+	 * Whether the data file should hold rows by now, so an empty one means it
+	 * could not be written.
+	 *
+	 * @return bool
+	 */
+	public function expects_written_rows(): bool {
+		return $this->get_total_exported() > 0;
+	}
+
+	/**
 	 * Whether the run ended short of the rows it set out to export, and so
 	 * produced a CSV that may be missing rows that still exist.
 	 *

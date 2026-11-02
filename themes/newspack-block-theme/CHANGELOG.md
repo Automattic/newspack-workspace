@@ -1,3 +1,64 @@
+# newspack-block-theme [1.33.0](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.32.1...newspack-block-theme@1.33.0) (2026-10-26)
+
+
+### Bug Fixes
+
+* match the design system's elevation shadows ([#1231](https://github.com/Automattic/newspack-workspace/issues/1231)) ([606053a](https://github.com/Automattic/newspack-workspace/commit/606053aa3119551ac67b9e875bf3148671b53468))
+
+
+### Features
+
+* **block-theme:** add width, border style options to the Comments Panel block button ([#1277](https://github.com/Automattic/newspack-workspace/issues/1277)) ([dc17a2e](https://github.com/Automattic/newspack-workspace/commit/dc17a2e91e025af9fa9fee74f03ec1a0dc9ceed2))
+* **block-theme:** create comments panel block and add to block theme ([#263](https://github.com/Automattic/newspack-workspace/issues/263)) ([0f934cb](https://github.com/Automattic/newspack-workspace/commit/0f934cb926c9d494f81e7ec1cdb15f18ae1c84ce))
+
+## newspack-block-theme [1.32.1](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.32.0...newspack-block-theme@1.32.1) (2026-10-20)
+
+
+### Bug Fixes
+
+* **tag-labels:** stop tags named "Labels" from restyling posts ([#1267](https://github.com/Automattic/newspack-workspace/issues/1267)) ([0e9cb8a](https://github.com/Automattic/newspack-workspace/commit/0e9cb8a0cd2d10fe30f3c59fc423ee0b2338788b))
+
+# newspack-block-theme [1.32.0](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.31.8...newspack-block-theme@1.32.0) (2026-10-14)
+
+
+### Features
+
+* **newsletters:** show premium lists in the subscription form ([#1291](https://github.com/Automattic/newspack-workspace/issues/1291)) ([456d762](https://github.com/Automattic/newspack-workspace/commit/456d762ba465aafc6e5be08ed47836acafaad1a6))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.11.0
+
+## newspack-block-theme [1.31.8](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.31.7...newspack-block-theme@1.31.8) (2026-10-12)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.10.0
+* **newspack-scripts:** upgraded to 5.12.0
+
+## newspack-block-theme [1.31.7](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.31.6...newspack-block-theme@1.31.7) (2026-09-28)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.9.2
+
+## newspack-block-theme [1.31.6](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.31.5...newspack-block-theme@1.31.6) (2026-09-28)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.9.1
+
+## newspack-block-theme [1.31.5](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.31.4...newspack-block-theme@1.31.5) (2026-09-28)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.9.0
+
 ## newspack-block-theme [1.31.4](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.31.3...newspack-block-theme@1.31.4) (2026-09-14)
 
 

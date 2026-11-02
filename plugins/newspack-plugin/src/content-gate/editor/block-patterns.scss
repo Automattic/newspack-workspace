@@ -83,13 +83,6 @@
 		&__have-account {
 			display: none;
 		}
-		.newspack-reader__lists {
-			font-size: 16px;
-			background: rgb(238, 238, 238);
-			border: 0;
-			padding-left: 1em;
-			padding-right: 1em;
-		}
 	}
 
 	/**
@@ -99,5 +92,37 @@
 		.wp-block-column:empty {
 			display: none;
 		}
+	}
+}
+
+:is(
+	.newspack-content-gate__gate,
+	.post-type-np_gate_layout.editor-styles-wrapper,
+	.post-type-np_gate_layout .editor-styles-wrapper,
+	.post-type-np_memberships_gate.editor-styles-wrapper,
+	.post-type-np_memberships_gate .editor-styles-wrapper
+)
+	.wp-block-group.has-contrast-background-color.has-x-small-font-size:is([style*="text-transform:uppercase"], [style*="text-transform: uppercase"]) {
+	align-items: center;
+	background: var(--newspack-ui-color-neutral-fill) !important;
+	border-radius: var(--newspack-ui-radius-badge) !important;
+	color: var(--newspack-ui-color-text) !important;
+	font-family: var(--newspack-ui-font-family);
+	font-size: var(--newspack-ui-font-size-caption) !important;
+	font-weight: var(--newspack-ui-font-weight-strong) !important;
+	height: var(--newspack-ui-spacer-4);
+	letter-spacing: 0.01em;
+	line-height: 1;
+	padding: 0 calc(var(--newspack-ui-spacer-1) * 0.75) !important;
+	text-transform: none !important;
+
+	p {
+		font: inherit;
+		letter-spacing: inherit;
+		margin: 0;
+	}
+
+	@media ( forced-colors: active ) {
+		border: 1px solid CanvasText;
 	}
 }

@@ -13,9 +13,14 @@ body.toplevel_page_newspack-story-budget {
 }
 
 .wrap {
-	margin: 0 0 0 -20px;
+	margin: 0;
+	margin-inline-start: -10px;
 	position: relative;
 	z-index: 1;
+
+	@media screen and ( min-width: 783px ) {
+		margin-inline-start: -20px;
+	}
 }
 
 /* Fix fullscreen modal content area */
@@ -32,7 +37,7 @@ body.toplevel_page_newspack-story-budget {
 	$parent-selector: &;
 
 	&__content {
-		padding: 32px 0 0;
+		padding: calc(var(--newspack-page-content-gap, #{wp-vars.$grid-unit-60}) - var(--newspack-page-dataviews-offset, #{wp-vars.$grid-unit-20})) 0 0;
 	}
 	&__loading {
 		display: flex;
@@ -314,7 +319,7 @@ body.toplevel_page_newspack-story-budget {
 	}
 
 	&__budgets {
-		padding: 16px 48px;
+		padding: var(--newspack-page-dataviews-offset, #{wp-vars.$grid-unit-20}) wp-vars.$grid-unit-60 wp-vars.$grid-unit-20;
 		&-actions {
 			margin-bottom: 16px;
 

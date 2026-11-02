@@ -13,3 +13,15 @@
 		}
 	}
 }
+
+.wpbnbd {
+	.money-input input[type="number"] {
+		color: var(--wp--custom--color--neutral-90);
+		min-height: 0;
+		padding-inline: calc(var(--wp--custom--spacing--25) - 1px);
+	}
+
+	&.untiered .tier-label {
+		margin-bottom: var(--wp--preset--spacing--20);
+	}
+}

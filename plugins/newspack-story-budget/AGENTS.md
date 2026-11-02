@@ -38,7 +38,6 @@ There is no surviving Edit Flow legacy here despite the plugin's origins; the fo
 
 - **After adding, renaming or moving any PHP class under `includes/`:** run `n composer dump-autoload` from this directory. Autoloading is a Composer classmap with no PSR-4 fallback. `n watch` only runs webpack.
 - **After adding a webpack entry:** register it manually in `webpack.config.js` (no auto-discovery) *and* add a matching enqueue in `includes/class-admin.php`. Build output goes to `dist/`, not the wp-scripts default `build/`.
-- **`composer update` inside this plugin exits 127.** `composer.lock` is out of sync with `composer.json`, `brainmaestro/composer-git-hooks` is orphaned in the lock but absent from `require-dev`, and `post-update-cmd` unconditionally runs `vendor/bin/cghooks`, which the update itself prunes. Use `composer install` (warns but succeeds), or fix `require-dev` first.
 
 ## The @wordpress/data store
 
@@ -67,7 +66,7 @@ The store lives in its own webpack entry (`src/store/index.js` → `story-budget
 
 - **New PHPUnit tests must go in `tests/unit-tests/`.** `phpunit.xml`'s only testsuite directory is that path, so `tests/class-test-search.php` is not collected by the suite and has rotted (it asserts a meta prefix the code stopped using). That is pre-existing, not your regression.
 - `tests/bootstrap.php` requires the plugin's own `vendor/`, so run `n composer install` from this directory on a fresh checkout.
-- **`n test-js` is a real Jest run, but it only covers `src/utils/*` and `src/store/cache/*`.** Nothing exercises the store or any component, so a green run says little about changes there.
+- **`n test-js` is a real Jest run, but its coverage is thin:** `src/utils/*`, `src/store/cache/*`, and the refresh-time handling in `src/store/actions.js` and `src/store/reducers/meta.js`. No component is exercised, so a green run says little about UI changes.
 
 ## Linting quirks
 
@@ -76,6 +75,6 @@ The store lives in its own webpack entry (`src/store/index.js` → `story-budget
 
 ## Dead config
 
-`.travis.yml` (PHP 5.6 to 7.4, `branches: only: trunk`) and `.hooks/pre-push` (blocks pushes to `trunk`; `composer.json` has an empty `extra: {}` so cghooks installs nothing, and the repo sets `core.hooksPath=.husky/_`) are both inert. The `lint-staged` block in `package.json` is also dead, because husky runs the root `.lintstagedrc.json`. The `start` script runs `npm ci`, which fails in this pnpm workspace; use `n watch`.
+`.travis.yml` (PHP 5.6 to 7.4, `branches: only: trunk`) is inert. The `lint-staged` block in `package.json` is also dead, because husky runs the root `.lintstagedrc.json`. The `start` script runs `npm ci`, which fails in this pnpm workspace; use `n watch`.
 
 `bin/install-wp-tests.sh` and `release.config.js` look like standalone-era cruft but are **live**: `n test-php` invokes the former by relative path, and the latter delegates to the monorepo's `config/release.js`.

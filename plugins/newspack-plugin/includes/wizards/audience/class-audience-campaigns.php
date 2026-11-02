@@ -469,8 +469,15 @@ class Audience_Campaigns extends Wizard {
 				'callback'            => [ $this, 'api_get_subscription_products' ],
 				'permission_callback' => [ $this, 'api_permissions_check' ],
 				'args'                => [
-					's' => [
+					's'       => [
 						'sanitize_callback' => 'sanitize_text_field',
+					],
+					// Deliberately untyped items: saved segments can hold a stray empty value,
+					// and one bad entry must not fail the lookup for the rest. The callback
+					// keeps only positive integers.
+					'include' => [
+						'type'    => 'array',
+						'default' => [],
 					],
 				],
 			]
@@ -933,14 +940,21 @@ class Audience_Campaigns extends Wizard {
 	/**
 	 * Get non-donation subscription products.
 	 *
+	 * Without `include`, lists the products a segment can be pointed at: published and
+	 * private. With `include`, looks up those saved IDs whatever their status, so a segment
+	 * keeps naming a product after it's drafted, scheduled or trashed. In both, any status
+	 * but published carries a marker in the name. Segment matching compares product IDs
+	 * only, so the status doesn't change who matches.
+	 *
 	 * @param WP_REST_Request $request Full details about the request.
 	 * @return WP_REST_Response|WP_Error Response object on success, or WP_Error object on failure.
 	 */
 	public function api_get_subscription_products( $request ) {
-		$args = [
+		$include = array_values( array_filter( array_map( 'absint', (array) $request->get_param( 'include' ) ) ) );
+		$args    = [
 			'post_type'      => 'product',
 			'posts_per_page' => 100,
-			'post_status'    => 'publish',
+			'post_status'    => WooCommerce_Products::ELIGIBLE_PRODUCT_STATUSES,
 			'tax_query'      => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
 				[
 					'taxonomy' => 'product_type',
@@ -949,6 +963,11 @@ class Audience_Campaigns extends Wizard {
 				],
 			],
 		];
+		if ( ! empty( $include ) ) {
+			$args['post__in']       = $include;
+			$args['posts_per_page'] = count( $include );
+			$args['post_status']    = [ 'publish', 'private', 'draft', 'pending', 'future', 'trash' ];
+		}
 
 		$posts = array_values(
 			array_filter(
@@ -964,7 +983,7 @@ class Audience_Campaigns extends Wizard {
 				function( $post ) {
 					return [
 						'id'    => $post->ID,
-						'title' => $post->post_title,
+						'title' => WooCommerce_Products::get_product_label_with_status( $post->post_title, $post->post_status ),
 					];
 				},
 				$posts

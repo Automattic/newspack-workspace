@@ -35,7 +35,7 @@
 				position: relative;
 
 				span.submit {
-					visibility: hidden;
+					opacity: 0;
 				}
 
 				span.spinner {
@@ -88,7 +88,8 @@
 	.newspack-newsletters-name-input + .newspack-newsletters-email-input {
 		margin-top: 0.25rem;
 	}
-	label {
+	label,
+	.list-label {
 		font-size: 0.9rem;
 		font-weight: 700;
 		flex: 1 1 100%;
@@ -121,6 +122,17 @@
 	input[disabled] {
 		opacity: 0.5;
 	}
+
+	// The lists come first in the markup. This moves them below the name and
+	// email fields when the block asks for that.
+	&.has-lists-after .newspack-newsletters-lists {
+		order: 2;
+	}
+
+	&.is-style-legacy .newspack-newsletters-lists .list-title {
+		display: block;
+	}
+
 	.newspack-newsletters-lists {
 		background: white;
 		border: 1px solid wp-colors.$gray-200;
@@ -155,10 +167,36 @@
 			flex: 0 0 auto;
 			height: 1.6em;
 			margin: 0 0.5rem 0 0;
+
+			.newspack-ui__badge {
+				display: none;
+			}
 		}
 
-		.list-title {
+		// Fill the row, so the title can push its badge to the far edge. Rows read
+		// from the start edge even inside a centered container: across the full
+		// width, a centered description would drift away from its title.
+		.list-details {
+			text-align: start;
+			width: 100%;
+		}
+
+		// A theme can make a label shrink to its content. Keep it as wide as the
+		// row, or the badge stops at the end of the text.
+		.list-details label,
+		.list-label {
 			display: block;
+		}
+
+		// The badge sits at the far edge of the title's row, or under the title in
+		// a narrow column. A gap rather than a margin, so a wrapped badge starts
+		// flush with the title.
+		.list-title {
+			align-items: center;
+			column-gap: 0.5em;
+			display: flex;
+			flex-wrap: wrap;
+			justify-content: space-between;
 		}
 
 		.list-description {
@@ -218,13 +256,7 @@
 		}
 	}
 
-	// The submit button gets its default background/text color from the
-	// `button[type="submit"]` selector above. The after-success Continue button is
-	// a sibling of the (now-replaced) form and is rendered as `type="button"`, so
-	// it doesn't match that selector — give it the same default appearance here.
-	// The named-palette classes and inline colors copied from the submit button in
-	// view.js are more specific, so a customized button still overrides these.
-	&__continue {
+	& &__continue {
 		background-color: #d33;
 		color: white;
 		cursor: pointer;

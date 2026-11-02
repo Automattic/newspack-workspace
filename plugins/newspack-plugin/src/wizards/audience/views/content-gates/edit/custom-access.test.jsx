@@ -16,6 +16,41 @@ jest.mock( './access-rules', () => ( { onChange } ) => (
 	</>
 ) );
 
+describe( 'CustomAccess institutions-only warning', () => {
+	const WARNING = /signed-in readers who aren’t from a selected institution/i;
+	// The notice also announces itself in a screen-reader region that outlives each test.
+	const IN_NOTICE = { selector: '.components-notice__content' };
+	const withRules = accessRules => ( { active: true, metering: { enabled: false }, access_rules: accessRules } );
+	const institutionOnly = [ [ { slug: 'institution', value: [ 7 ] } ] ];
+
+	it( 'warns when institutions are the only paid condition behind a registration wall', () => {
+		render( <CustomAccess customAccess={ withRules( institutionOnly ) } onChange={ jest.fn() } governsSignedOut={ false } /> );
+
+		expect( screen.getByText( WARNING, IN_NOTICE ) ).toBeInTheDocument();
+	} );
+
+	it( 'stays quiet without a registration wall, or when another paid condition lets readers in', () => {
+		const { unmount } = render( <CustomAccess customAccess={ withRules( institutionOnly ) } onChange={ jest.fn() } governsSignedOut /> );
+		expect( screen.queryByText( WARNING, IN_NOTICE ) ).not.toBeInTheDocument();
+		unmount();
+
+		render(
+			<CustomAccess
+				customAccess={ withRules( [ ...institutionOnly, [ { slug: 'subscription', value: [ 50 ] } ] ] ) }
+				onChange={ jest.fn() }
+				governsSignedOut={ false }
+			/>
+		);
+		expect( screen.queryByText( WARNING, IN_NOTICE ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'stays quiet on a premium newsletter gate, whose editor has no Registered Access card to point to', () => {
+		render( <CustomAccess customAccess={ withRules( institutionOnly ) } onChange={ jest.fn() } governsSignedOut={ false } isNewsletter /> );
+
+		expect( screen.queryByText( WARNING, IN_NOTICE ) ).not.toBeInTheDocument();
+	} );
+} );
+
 describe( 'CustomAccess gate settings', () => {
 	it( 'preserves fields it does not manage (gate_layout_id) when rules change', () => {
 		const onChange = jest.fn();

@@ -32,7 +32,7 @@ const CaretAnchoredPicker = ( { contentRef, value, onSelect, onClose } ) => {
 const MergeTagPicker = ( { anchor, onSelect, onClose } ) => {
 	const [ search, setSearch ] = useState( '' );
 	const items = useMergeTagItems( search );
-	const containerRef = useRef();
+	const containerRef = useRef( undefined );
 	const dialogLabel = sprintf(
 		/* translators: %s: ESP-native singular noun (e.g. "merge tag" or "personalization tag"). */
 		__( 'Insert %s', 'newspack-newsletters' ),

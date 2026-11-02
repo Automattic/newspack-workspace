@@ -32,8 +32,8 @@ class Test_Tag_Labels extends WP_UnitTestCase {
 	 * That class hands an element every `.cat-links a` rule a publisher has
 	 * written for categories, and per-section color overrides are common enough
 	 * that labels would follow a palette they are not meant to follow. Callers
-	 * declare their own `.tag-labels` styling, so re-adding the class here would
-	 * open that path on every caller at once.
+	 * declare their own `.newspack-tag-labels` styling, so re-adding the class
+	 * here would open that path on every caller at once.
 	 */
 	public function test_display_does_not_emit_cat_links() {
 		ob_start();
@@ -42,6 +42,25 @@ class Test_Tag_Labels extends WP_UnitTestCase {
 
 		self::assertStringContainsString( 'tag-labels', $html, 'Wrapper carries the tag-labels class.' );
 		self::assertStringNotContainsString( 'cat-links', $html, 'Wrapper must not carry cat-links.' );
+	}
+
+	/**
+	 * Labels carry the namespaced classes that the stylesheets select.
+	 *
+	 * WordPress gives every post a `tag-{slug}` class, so a tag named "Labels"
+	 * or "Label" puts `tag-labels` or `tag-label` on the whole article. The
+	 * `newspack-` names cannot collide, because a tag-derived class always
+	 * starts with `tag-`. The legacy names stay on the markup so existing
+	 * custom CSS keeps matching.
+	 */
+	public function test_labels_carry_namespaced_and_legacy_classes() {
+		ob_start();
+		Tag_Labels::display( $this->make_labels(), true, 'div' );
+		$html = ob_get_clean();
+
+		self::assertStringContainsString( 'class="newspack-tag-labels tag-labels"', $html, 'Wrapper carries the namespaced class and keeps the legacy one.' );
+		self::assertStringContainsString( 'class="newspack-tag-label tag-label flag"', $html, 'Each label carries the namespaced class and keeps the legacy ones.' );
+		self::assertSame( Tag_Labels::generate_html( $this->make_labels(), true, [ 'newspack-tag-labels', 'tag-labels' ], [ 'newspack-tag-label', 'tag-label', 'flag' ], 'span' ), Tag_Labels::generate_html( $this->make_labels() ), 'generate_html() defaults match what display() emits.' );
 	}
 
 	/**

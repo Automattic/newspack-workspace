@@ -207,13 +207,17 @@ class AutocompleteTokenField extends Component {
 	 * Render.
 	 */
 	render() {
-		const { help, label = '', placeholder = '', maxLength, style, __next40pxDefaultSize } = this.props;
+		const { help, hideLabelFromVision, label = '', placeholder = '', maxLength, style, __next40pxDefaultSize } = this.props;
 		const { suggestions, loading } = this.state;
 
 		const classNames = [ 'newspack-autocomplete-tokenfield__input-container' ];
 
-		if ( label ) {
+		if ( label && ! hideLabelFromVision ) {
 			classNames.push( 'has-label' );
+		}
+
+		if ( hideLabelFromVision ) {
+			classNames.push( 'is-label-hidden' );
 		}
 
 		return (

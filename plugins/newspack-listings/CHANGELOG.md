@@ -1,3 +1,37 @@
+## newspack-listings [3.7.10](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.9...newspack-listings@3.7.10) (2026-10-14)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.11.0
+
+## newspack-listings [3.7.9](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.8...newspack-listings@3.7.9) (2026-10-12)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.10.0
+* **newspack-scripts:** upgraded to 5.12.0
+
+## newspack-listings [3.7.8](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.7...newspack-listings@3.7.8) (2026-09-28)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.9.2
+
+## newspack-listings [3.7.7](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.6...newspack-listings@3.7.7) (2026-09-28)
+
+
+### Bug Fixes
+
+* **content-gate:** withhold restricted bodies outside the article (NPPD-2172, [#913](https://github.com/Automattic/newspack-workspace/issues/913)) ([56a4761](https://github.com/Automattic/newspack-workspace/commit/56a4761ec9a8e9c8edcaf186baee3c77bae3ab18))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.9.0
+
 ## newspack-listings [3.7.6](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.5...newspack-listings@3.7.6) (2026-09-14)
 
 

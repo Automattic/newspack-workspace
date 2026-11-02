@@ -45,9 +45,9 @@ class WC_Memberships_Membership_Plan {
 	// set_content_restriction_rules() is called.
 	private $rules = [];
 
-	public function __construct( $id ) {
+	public function __construct( $id, $name = 'Test Membership' ) {
 		$this->id   = $id;
-		$this->name = 'Test Membership';
+		$this->name = $name;
 	}
 	public function get_content_restriction_rules() {
 		return $this->rules;
@@ -77,6 +77,9 @@ class WC_Memberships_Membership_Plan {
 		return $this->name;
 	}
 	public function set_content_restriction_rules( $rules ) {
+		foreach ( $rules as $rule ) {
+			$rule->set_membership_plan( $this );
+		}
 		$this->rules = $rules;
 	}
 }
@@ -85,6 +88,7 @@ class WC_Memberships_Membership_Plan_Rule {
 	private $id;
 	private $content_type_name;
 	private $object_id_rules;
+	private $membership_plan;
 
 	public function __construct( $data ) {
 		foreach ( $data as $key => $value ) {
@@ -99,6 +103,32 @@ class WC_Memberships_Membership_Plan_Rule {
 	public function get_object_ids() {
 		return $this->object_id_rules;
 	}
+
+	public function get_membership_plan() {
+		return $this->membership_plan;
+	}
+
+	public function set_membership_plan( $plan ) {
+		$this->membership_plan = $plan;
+	}
+}
+
+// The registered test plans' rules that restrict a post, as the rules instance
+// returns them: the rule's post type matches, and its object IDs name the post
+// or name nothing, which covers the whole post type.
+function wc_memberships_test_get_post_rules( $post_id ) {
+	global $test_wc_memberships;
+	$post_type = get_post_type( $post_id );
+	$rules     = [];
+	foreach ( (array) $test_wc_memberships as $plan ) {
+		foreach ( $plan->get_content_restriction_rules() as $rule ) {
+			$object_ids = (array) $rule->get_object_ids();
+			if ( $post_type === $rule->get_content_type_name() && ( empty( $object_ids ) || in_array( (int) $post_id, array_map( 'intval', $object_ids ), true ) ) ) {
+				$rules[] = $rule;
+			}
+		}
+	}
+	return $rules;
 }
 
 function wc_memberships_get_membership_plans() {
@@ -137,6 +167,13 @@ function wc_memberships() {
 			return new class() {
 				public function get_active_access_membership_statuses() {
 					return [ 'active', 'complimentary', 'free_trial', 'pending' ];
+				}
+			};
+		}
+		public function get_rules_instance() {
+			return new class() {
+				public function get_post_content_restriction_rules( $post_id ) {
+					return wc_memberships_test_get_post_rules( $post_id );
 				}
 			};
 		}

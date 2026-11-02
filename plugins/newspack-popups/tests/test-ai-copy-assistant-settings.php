@@ -35,6 +35,7 @@ class AiCopyAssistantSettingsTest extends WP_UnitTestCase {
 		delete_option( Newspack_Popups_Settings::OVERRIDE_CTA_OPTION );
 		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID );
 		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_STAMPED_ACCENT );
+		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_WRITTEN_CTA );
 		delete_option( 'newspack_contextual_prompts_override_body' );
 		delete_option( 'newspack_contextual_prompts_override_label' );
 		delete_option( 'newspack_contextual_prompts_override_url' );

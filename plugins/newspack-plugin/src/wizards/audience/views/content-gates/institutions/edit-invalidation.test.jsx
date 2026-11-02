@@ -36,7 +36,7 @@ jest.mock( '@wordpress/icons', () => ( { envelope: null, globe: null, customPost
 jest.mock( '@wordpress/components', () => {
 	const React = require( 'react' );
 	const Passthrough = ( { children } ) => React.createElement( 'div', null, children );
-	return { __experimentalVStack: Passthrough, CardBody: Passthrough, Spinner: Passthrough, TextareaControl: () => null };
+	return { CardBody: Passthrough, Spinner: Passthrough, TextareaControl: () => null };
 } );
 
 // The form's own fields are irrelevant to the invalidation contract, and the real

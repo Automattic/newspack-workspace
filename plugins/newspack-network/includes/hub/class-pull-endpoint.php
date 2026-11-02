@@ -100,6 +100,13 @@ class Pull_Endpoint {
 		}
 
 		$node = Nodes::get_node_by_url( $site );
+
+		// A pull the Node could sign shows it holds its key. Nodes pull on a
+		// schedule, so this also covers a Node that rarely sends a delivery.
+		if ( ! $node->is_paired() ) {
+			$node->mark_paired();
+		}
+
 		$query_args = [
 			'excluded_node_id' => $node->get_id(),
 			'id_greater_than'  => $last_processed_id,

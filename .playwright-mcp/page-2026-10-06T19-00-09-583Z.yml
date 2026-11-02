@@ -1,0 +1,150 @@
+- generic [active] [ref=f8e1]:
+  - link "Skip to content" [ref=f8e2] [cursor=pointer]:
+    - /url: "#wp--skip-link--target"
+  - generic [ref=f8e3]:
+    - banner [ref=f8e4]:
+      - generic [ref=f8e7]:
+        - button "Click this button! Button!" [ref=f8e8]:
+          - generic [ref=f8e9]:
+            - heading "Click this button!" [level=2] [ref=f8e10]
+            - generic [ref=f8e11]: Button!
+        - generic [ref=f8e15]:
+          - generic [ref=f8e16]:
+            - link [ref=f8e18] [cursor=pointer]:
+              - /url: https://blocktheme2.local/
+              - img "Block Theme" [ref=f8e19]
+            - generic [ref=f8e20]:
+              - generic [ref=f8e21]: Donate
+              - link "Sign in" [ref=f8e26] [cursor=pointer]:
+                - /url: "#"
+          - generic [ref=f8e31]:
+            - navigation "Navigation" [ref=f8e32]:
+              - list [ref=f8e33]:
+                - listitem [ref=f8e34]:
+                  - link "Block test" [ref=f8e35] [cursor=pointer]:
+                    - /url: https://blocktheme2.local/block-test/
+                - listitem [ref=f8e36]:
+                  - link "Gallery Block" [ref=f8e37] [cursor=pointer]:
+                    - /url: https://blocktheme2.local/gallery-block/
+            - button "Search" [ref=f8e40] [cursor=pointer]
+    - main [ref=f8e46]:
+      - generic [ref=f8e47]:
+        - search [ref=f8e48]:
+          - generic [ref=f8e49]: Search
+          - generic [ref=f8e50]:
+            - searchbox "Search" [ref=f8e51]
+            - button "Search" [ref=f8e52] [cursor=pointer]
+        - button "Test" [ref=f8e57] [cursor=pointer]
+        - paragraph [ref=f8e58]: Paragraph with custom font.
+        - generic [ref=f8e59]: Button block
+        - button "Test" [ref=f8e64] [cursor=pointer]
+        - figure [ref=f8e65]:
+          - figure [ref=f8e66]:
+            - button "Enlarge 1 of 3" [ref=f8e67]
+          - figure [ref=f8e70]:
+            - button "Enlarge 2 of 3" [ref=f8e71]
+          - figure [ref=f8e74]:
+            - button "Enlarge 3 of 3" [ref=f8e75]
+        - generic [ref=f8e78]:
+          - generic [ref=f8e81]:
+            - article [ref=f8e82]:
+              - figure [ref=f8e83]:
+                - link [aria-hidden] [ref=f8e84] [cursor=pointer]:
+                  - /url: https://blocktheme2.local/dfdfgdgdfgdg/
+              - generic [ref=f8e86]:
+                - heading [level=2] [ref=f8e87]:
+                  - link "dfdfgdgdfgdg" [ref=f8e88] [cursor=pointer]:
+                    - /url: https://blocktheme2.local/dfdfgdgdfgdg/
+                - time [ref=f8e90]: May 29, 2026
+            - article [ref=f8e91]:
+              - time [ref=f8e94]: May 26, 2026
+            - article [ref=f8e95]:
+              - generic [ref=f8e96]:
+                - heading [level=2] [ref=f8e97]:
+                  - link "Checkout Button test" [ref=f8e98] [cursor=pointer]:
+                    - /url: https://blocktheme2.local/checkout-button-test/
+                - time [ref=f8e100]: May 15, 2026
+          - generic [ref=f8e103]:
+            - article [ref=f8e104]:
+              - generic [ref=f8e105]:
+                - heading [level=2] [ref=f8e106]:
+                  - link "This is A post" [ref=f8e107] [cursor=pointer]:
+                    - /url: https://blocktheme2.local/this-is-a-post/
+                - paragraph [ref=f8e108]: Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris purus urna, vulputate at convallis hendrerit, mattis id mi. Nulla mauris justo, sodales vitae sodales nec, fermentum at elit.…
+                - time [ref=f8e110]: April 14, 2026
+            - article [ref=f8e111]:
+              - generic [ref=f8e112]:
+                - heading [level=2] [ref=f8e113]:
+                  - link "A newly published pos" [ref=f8e114] [cursor=pointer]:
+                    - /url: https://blocktheme2.local/a-newly-published-pos/
+                - paragraph [ref=f8e115]: Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris purus urna, vulputate at convallis hendrerit, mattis id mi. Nulla mauris justo, sodales vitae sodales nec, fermentum at elit.…
+                - time [ref=f8e117]: April 8, 2026
+            - article [ref=f8e118]:
+              - figure [ref=f8e119]:
+                - link [aria-hidden] [ref=f8e120] [cursor=pointer]:
+                  - /url: https://blocktheme2.local/purus-ac-lobortis-vulputate-pellentesque-netus-tristique-facilisis-donec-curae-condimentum-posuere/
+              - generic [ref=f8e122]:
+                - heading [level=2] [ref=f8e123]:
+                  - link "Purus ac lobortis vulputate pellentesque netus tristique facilisis donec curae condimentum posuere" [ref=f8e124] [cursor=pointer]:
+                    - /url: https://blocktheme2.local/purus-ac-lobortis-vulputate-pellentesque-netus-tristique-facilisis-donec-curae-condimentum-posuere/
+                - paragraph [ref=f8e125]: Sociosqu taciti sollicitudin cubilia aliquet velit lectus mauris et nullam rutrum ultricies nisl nec litora erat sagittis leo dapibus facilisi sodales viverra fringilla.
+                - time [ref=f8e127]: March 7, 2026
+    - contentinfo [ref=f8e128]:
+      - generic [ref=f8e133]:
+        - generic [ref=f8e134]:
+          - paragraph [ref=f8e135]:
+            - link "Block Theme" [ref=f8e136] [cursor=pointer]:
+              - /url: https://blocktheme2.local
+          - paragraph [ref=f8e138]: Our online newspaper delivers the latest news and insightful analysis. Our experienced journalists ensure accurate and impartial reporting. Stay informed with our engaging and informative articles.
+          - list [ref=f8e139]:
+            - listitem [ref=f8e140]:
+              - link "Facebook" [ref=f8e141] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=f8e145]:
+              - link "Instagram" [ref=f8e146] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=f8e150]:
+              - link "X" [ref=f8e151] [cursor=pointer]:
+                - /url: "#"
+          - navigation [ref=f8e155]:
+            - list [ref=f8e156]:
+              - listitem [ref=f8e157]:
+                - link "Block test" [ref=f8e158] [cursor=pointer]:
+                  - /url: https://blocktheme2.local/block-test/
+              - listitem [ref=f8e159]:
+                - link "Gallery Block" [ref=f8e160] [cursor=pointer]:
+                  - /url: https://blocktheme2.local/gallery-block/
+        - generic [ref=f8e161]:
+          - separator [ref=f8e162]
+          - generic [ref=f8e163]:
+            - generic [ref=f8e164]:
+              - generic [ref=f8e165]: © 2026
+              - heading [level=1] [ref=f8e166]:
+                - link "Block Theme" [ref=f8e167] [cursor=pointer]:
+                  - /url: https://blocktheme2.local
+            - paragraph [ref=f8e168]:
+              - link "Powered by Newspack" [ref=f8e169] [cursor=pointer]:
+                - /url: https://newspack.com
+      - text: ×
+  - button "An awesome overlay campaign!! Button Close Pop-up" [ref=f8e170]:
+    - generic [ref=f8e172]:
+      - generic [ref=f8e173]:
+        - generic [ref=f8e174]:
+          - paragraph [ref=f8e175]: An awesome overlay campaign!!
+          - generic [ref=f8e176]: Button
+        - paragraph
+      - button "Close Pop-up" [ref=f8e179] [cursor=pointer]
+  - dialog [aria-hidden] [ref=f8e183]:
+    - button [ref=f8e185] [cursor=pointer]:
+      - generic [ref=f8e189]: Close
+    - navigation [ref=f8e192]:
+      - list [ref=f8e193]:
+        - listitem [ref=f8e194]:
+          - link [ref=f8e195] [cursor=pointer]:
+            - /url: https://blocktheme2.local/block-test/
+            - text: Block test
+        - listitem [ref=f8e196]:
+          - link [ref=f8e197] [cursor=pointer]:
+            - /url: https://blocktheme2.local/gallery-block/
+            - text: Gallery Block
+  - status [ref=f8e198]

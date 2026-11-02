@@ -13,7 +13,7 @@ export default ( parentEl: HTMLElement ) => {
 	if ( ! config ) {
 		return;
 	}
-	const frequencyButtonsEls = parentEl.querySelectorAll( '.wpbnbd__tiers__selection button' );
+	const frequencyButtonsEls = parentEl.querySelectorAll( '.wpbnbd__tiers__selection button, .newspack-ui__segmented-control__tabs button' );
 	const amountsEls: NodeListOf< HTMLElement > = parentEl.querySelectorAll( '.wpbnbd__tiers__amount [data-frequency-slug]' );
 	const frequencyInputEl = parentEl.querySelector( `input[name="${ config.params.frequency }"]` );
 	const initFormEl = parentEl.querySelector( 'form[data-is-init-form]' );
@@ -45,11 +45,9 @@ export default ( parentEl: HTMLElement ) => {
 
 			// Toggle the frequency buttons' active states.
 			frequencyButtonsEls.forEach( el => {
-				if ( selectedFrequency === el.getAttribute( 'data-frequency-slug' ) ) {
-					el.classList.add( BUTTON_ACTIVE_CLASSNAME );
-				} else {
-					el.classList.remove( BUTTON_ACTIVE_CLASSNAME );
-				}
+				const isActive = selectedFrequency === el.getAttribute( 'data-frequency-slug' );
+				el.classList.toggle( el.classList.contains( 'newspack-ui__button' ) ? 'selected' : BUTTON_ACTIVE_CLASSNAME, isActive );
+				el.setAttribute( 'aria-pressed', isActive ? 'true' : 'false' );
 			} );
 
 			// Update the value attributes in the form's submit buttons.

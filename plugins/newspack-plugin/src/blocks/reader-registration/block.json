@@ -15,7 +15,7 @@
 		},
 		"placeholder": {
 			"type": "string",
-			"default": "Email Address"
+			"default": ""
 		},
 		"label": {
 			"type": "string",

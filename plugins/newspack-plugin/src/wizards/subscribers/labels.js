@@ -63,6 +63,19 @@ export function groupRoleLabel() {
 }
 
 /**
+ * Column header for a group's own name, e.g. "Group name".
+ *
+ * @return {string} Translated column header.
+ */
+export function groupNameLabel() {
+	return sprintf(
+		/* translators: %s: the group label, e.g. "Group". */
+		phrase( 'name', __( '%s name', 'newspack-plugin' ) ),
+		GROUP_LABEL
+	);
+}
+
+/**
  * Message for a failed groups read, e.g. "Could not load Groups: timed out".
  *
  * @param {string} message The underlying error.

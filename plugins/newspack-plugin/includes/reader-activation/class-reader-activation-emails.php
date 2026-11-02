@@ -13,6 +13,10 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Reader Activation related emails.
+ *
+ * "Reader Activation" is the code name for Audience Management; see
+ * {@see Reader_Activation}. The email type slugs keep the code name because
+ * saved email posts are stored under them.
  */
 class Reader_Activation_Emails {
 	const EMAIL_TYPES = [

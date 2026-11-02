@@ -449,10 +449,10 @@ class Product_Network_Ids {
 				continue;
 			}
 
-			// Access only ever grants from a reader's synced subscriptions, and the product metabox only
-			// writes for these types, so tagging anything else would just bloat every site's synced map.
+			// Access only ever grants from a reader's subscriptions and one-time purchases, and the product
+			// metabox only writes for these types, so tagging anything else would just bloat every site's synced map.
 			if ( ! self::is_taggable_product( $product_id ) ) {
-				WP_CLI::line( sprintf( '  #%d is not a subscription product; a Network ID would grant nothing - left alone.', $product_id ) );
+				WP_CLI::line( sprintf( '  #%d is not a subscription or one-time product; a Network ID would grant nothing - left alone.', $product_id ) );
 				$inapplicable++;
 				continue;
 			}
@@ -643,7 +643,7 @@ class Product_Network_Ids {
 		}
 
 		if ( empty( $local_products ) ) {
-			WP_CLI::error( 'No products to check: no membership plan links a subscription product and no product carries a Network ID. Cross-site paid access will grant nothing here. Run assign-product-network-ids first, or pass --products with the gate\'s products.' );
+			WP_CLI::error( 'No products to check: no membership plan links a subscription or one-time product and no product carries a Network ID. Cross-site paid access will grant nothing here. Run assign-product-network-ids first, or pass --products with the gate\'s products.' );
 		}
 
 		$findings = self::verify_products( $local_products, $network_products, $current_site, $known_sites );
@@ -952,9 +952,10 @@ class Product_Network_Ids {
 	/**
 	 * Whether a Network ID on this product could ever grant cross-site access.
 	 *
-	 * Access resolves grants from a reader's synced subscriptions, and the product metabox only writes
-	 * the meta for subscription products, so tagging any other type would only bloat every site's synced
-	 * product map. With WooCommerce deactivated the type is unknowable, so nothing is filtered out.
+	 * Access resolves grants from a reader's subscriptions and one-time purchases on other sites, and the
+	 * product metabox only writes the meta for those product types ( Product_Admin::is_taggable() ), so
+	 * tagging any other type would only bloat every site's synced product map. With WooCommerce
+	 * deactivated the type is unknowable, so nothing is filtered out.
 	 *
 	 * @param int $product_id The product ID.
 	 * @return bool
@@ -963,8 +964,7 @@ class Product_Network_Ids {
 		if ( ! function_exists( 'wc_get_product' ) ) {
 			return true;
 		}
-		$product = wc_get_product( $product_id );
-		return $product && $product->is_type( [ 'subscription', 'variable-subscription' ] );
+		return Product_Admin::is_taggable( wc_get_product( $product_id ) );
 	}
 
 	/**
@@ -972,7 +972,7 @@ class Product_Network_Ids {
 	 *
 	 * With an explicit list ( e.g. a gate's products ) every ID is returned as passed, including untagged
 	 * ones ( Network ID '' ) so verify can flag them as the failure they are. With null, the set is every
-	 * plan-linked subscription product plus every product that already carries a Network ID -- so products
+	 * plan-linked subscription or one-time product plus every product that already carries a Network ID -- so products
 	 * that assign-product-network-ids could not resolve are checked rather than defined away.
 	 *
 	 * @param array|null $product_ids Explicit product IDs to look up; null builds the default set.

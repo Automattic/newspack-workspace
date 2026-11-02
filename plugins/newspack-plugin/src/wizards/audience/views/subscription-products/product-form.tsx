@@ -20,13 +20,10 @@ import {
 	CheckboxControl,
 	FormTokenField,
 	Notice,
-	Flex,
-	FlexBlock,
-	FlexItem,
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
-import { Badge } from '@wordpress/ui';
+import { Badge, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
@@ -314,8 +311,8 @@ export default function ProductForm( {
 				/>
 				<VStack spacing={ 4 }>
 					<TextControl label={ __( 'Name', 'newspack-plugin' ) } value={ name } onChange={ setName } __next40pxDefaultSize />
-					<HStack alignment="flex-start" spacing={ 4 }>
-						<FlexBlock>
+					<Stack align="flex-start" gap="lg">
+						<div className="newspack-subscription-products__field">
 							<SelectControl
 								label={ __( 'Type', 'newspack-plugin' ) }
 								value={ type }
@@ -333,8 +330,8 @@ export default function ProductForm( {
 								help={ isEdit ? __( 'Type can’t be changed after creation.', 'newspack-plugin' ) : undefined }
 								__next40pxDefaultSize
 							/>
-						</FlexBlock>
-						<FlexBlock>
+						</div>
+						<div className="newspack-subscription-products__field">
 							<SelectControl
 								label={ __( 'Status', 'newspack-plugin' ) }
 								value={ status }
@@ -345,8 +342,8 @@ export default function ProductForm( {
 								onChange={ setStatus }
 								__next40pxDefaultSize
 							/>
-						</FlexBlock>
-					</HStack>
+						</div>
+					</Stack>
 				</VStack>
 			</Grid>
 
@@ -363,8 +360,8 @@ export default function ProductForm( {
 				/>
 				<VStack spacing={ 4 }>
 					{ type === 'subscription' && (
-						<HStack alignment="flex-start" spacing={ 4 }>
-							<FlexBlock>
+						<Stack align="flex-start" gap="lg">
+							<div className="newspack-subscription-products__field">
 								<TextControl
 									label={ __( 'Price', 'newspack-plugin' ) }
 									type="number"
@@ -373,8 +370,8 @@ export default function ProductForm( {
 									onChange={ setPrice }
 									__next40pxDefaultSize
 								/>
-							</FlexBlock>
-							<FlexBlock>
+							</div>
+							<div className="newspack-subscription-products__field">
 								<TextControl
 									label={ __( 'Bill every', 'newspack-plugin' ) }
 									type="number"
@@ -384,8 +381,8 @@ export default function ProductForm( {
 									onChange={ setInterval }
 									__next40pxDefaultSize
 								/>
-							</FlexBlock>
-							<FlexBlock>
+							</div>
+							<div className="newspack-subscription-products__field">
 								<SelectControl
 									label={ __( 'Period', 'newspack-plugin' ) }
 									value={ period }
@@ -393,8 +390,8 @@ export default function ProductForm( {
 									onChange={ setPeriod }
 									__next40pxDefaultSize
 								/>
-							</FlexBlock>
-						</HStack>
+							</div>
+						</Stack>
 					) }
 
 					{ type === 'simple' && (
@@ -412,8 +409,8 @@ export default function ProductForm( {
 						<>
 							{ plans.map( ( plan, index ) => (
 								<VStack key={ plan.id ?? `new-${ index }` } className="newspack-subscription-products__plan" spacing={ 2 }>
-									<Flex align="flex-end" gap={ 2 }>
-										<FlexBlock>
+									<Stack align="flex-end" gap="sm">
+										<div className="newspack-subscription-products__field">
 											<TextControl
 												label={ __( 'Plan label', 'newspack-plugin' ) }
 												value={ plan.label }
@@ -422,20 +419,18 @@ export default function ProductForm( {
 												help={ planLabelHelp( plan ) }
 												__next40pxDefaultSize
 											/>
-										</FlexBlock>
-										<FlexItem>
-											<Button
-												variant="tertiary"
-												isDestructive
-												onClick={ () => removePlan( index ) }
-												disabled={ plans.length <= 1 || plan.activeSubscriptions > 0 }
-											>
-												{ __( 'Remove', 'newspack-plugin' ) }
-											</Button>
-										</FlexItem>
-									</Flex>
-									<HStack alignment="flex-start" spacing={ 2 }>
-										<FlexBlock>
+										</div>
+										<Button
+											variant="tertiary"
+											isDestructive
+											onClick={ () => removePlan( index ) }
+											disabled={ plans.length <= 1 || plan.activeSubscriptions > 0 }
+										>
+											{ __( 'Remove', 'newspack-plugin' ) }
+										</Button>
+									</Stack>
+									<Stack align="flex-start" gap="sm">
+										<div className="newspack-subscription-products__field">
 											<TextControl
 												label={ __( 'Price', 'newspack-plugin' ) }
 												type="number"
@@ -444,8 +439,8 @@ export default function ProductForm( {
 												onChange={ value => updatePlan( index, 'price', value ) }
 												__next40pxDefaultSize
 											/>
-										</FlexBlock>
-										<FlexBlock>
+										</div>
+										<div className="newspack-subscription-products__field">
 											<TextControl
 												label={ __( 'Every', 'newspack-plugin' ) }
 												type="number"
@@ -455,8 +450,8 @@ export default function ProductForm( {
 												onChange={ value => updatePlan( index, 'interval', value ) }
 												__next40pxDefaultSize
 											/>
-										</FlexBlock>
-										<FlexBlock>
+										</div>
+										<div className="newspack-subscription-products__field">
 											<SelectControl
 												label={ __( 'Period', 'newspack-plugin' ) }
 												value={ plan.period }
@@ -464,8 +459,8 @@ export default function ProductForm( {
 												onChange={ value => updatePlan( index, 'period', value ) }
 												__next40pxDefaultSize
 											/>
-										</FlexBlock>
-									</HStack>
+										</div>
+									</Stack>
 								</VStack>
 							) ) }
 							<div>

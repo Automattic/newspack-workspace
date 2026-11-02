@@ -137,6 +137,7 @@ class Newspack_Newsletters_Bulk_Actions {
 	// phpcs:enable WordPress.Security.NonceVerification.Recommended
 }
 
-if ( is_admin() ) {
+// Boot only when the main plugin file loaded this, not another plugin's autoloader.
+if ( is_admin() && defined( 'NEWSPACK_NEWSLETTERS_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal path constant, set by the main plugin file.
 	Newspack_Newsletters_Bulk_Actions::init();
 }
