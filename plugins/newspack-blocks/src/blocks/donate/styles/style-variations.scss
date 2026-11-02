@@ -10,12 +10,12 @@
 		&__button {
 			padding: 0.38rem 0.76rem;
 			&:focus {
-				background: np-colors.$neutral-050;
+				background: var(--newspack-ui-color-neutral-fill, np-colors.$neutral-100);
 			}
 
 			@media ( hover: hover ) and ( pointer: fine ) {
 				&:hover {
-					background: np-colors.$neutral-050;
+					background: var(--newspack-ui-color-neutral-fill, np-colors.$neutral-100);
 				}
 			}
 		}
@@ -147,7 +147,7 @@
 				}
 				@media ( hover: hover ) and ( pointer: fine ) {
 					&:hover {
-						background: np-colors.$neutral-050;
+						background: var(--newspack-ui-color-neutral-fill, np-colors.$neutral-100);
 					}
 				}
 			}
@@ -551,7 +551,7 @@
 			margin: 0 calc(1px + var(--newspack-ui-spacer-5, 24px)) calc(1px + var(--newspack-ui-spacer-5, 24px));
 			padding: var(--newspack-ui-spacer-2, 12px) var(--newspack-ui-spacer-5, 24px);
 			position: relative;
-			transition: opacity motion.$duration-color motion.$ease-color, transform motion.$duration-press motion.$ease-out;
+			transition: box-shadow motion.$duration-color motion.$ease-color, transform motion.$duration-press motion.$ease-out;
 			width: calc(100% - 2 * var(--newspack-ui-spacer-5, 24px) - 2px);
 			z-index: 1;
 
@@ -561,11 +561,12 @@
 
 			@media ( hover: hover ) and ( pointer: fine ) {
 				&:hover {
-					opacity: 0.8;
+					box-shadow: inset 0 0 0 100vmax color-mix(in srgb, black calc(100% - var(--newspack-ui-color-mix-hover, 85%)), transparent);
 				}
 			}
 
 			&:active {
+				box-shadow: inset 0 0 0 100vmax color-mix(in srgb, black calc(100% - var(--newspack-ui-color-mix-pressed, 75%)), transparent);
 				transform: scale(motion.$press-scale);
 
 				@include motion.reduced-motion {
@@ -671,15 +672,16 @@
 				line-height: var(--newspack-ui-line-height-body, 1.5);
 				margin: auto 0 0;
 				padding: calc(var(--newspack-ui-spacer-2, 12px) - 1px) calc(var(--newspack-ui-spacer-5, 24px) - 1px);
-				transition: background motion.$duration-color motion.$ease-color, border-color motion.$duration-color motion.$ease-color, opacity motion.$duration-color motion.$ease-color, transform motion.$duration-press motion.$ease-out;
+				transition: background motion.$duration-color motion.$ease-color, border-color motion.$duration-color motion.$ease-color, box-shadow motion.$duration-color motion.$ease-color, transform motion.$duration-press motion.$ease-out;
 
 				@media ( hover: hover ) and ( pointer: fine ) {
 					&:hover {
-						opacity: 0.8;
+						box-shadow: inset 0 0 0 100vmax color-mix(in srgb, black calc(100% - var(--newspack-ui-color-mix-hover, 85%)), transparent);
 					}
 				}
 
 				&:active {
+					box-shadow: inset 0 0 0 100vmax color-mix(in srgb, black calc(100% - var(--newspack-ui-color-mix-pressed, 75%)), transparent);
 					transform: scale(motion.$press-scale);
 
 					@include motion.reduced-motion {
@@ -703,9 +705,14 @@
 				.submit-button {
 					@media ( hover: hover ) and ( pointer: fine ) {
 						&:hover {
-							background: var(--newspack-ui-color-surface-subtle, np-colors.$neutral-050) !important;
-							opacity: 1;
+							background: var(--newspack-ui-color-neutral-fill, np-colors.$neutral-100) !important;
+							box-shadow: none;
 						}
+					}
+
+					&:active {
+						background: var(--newspack-ui-color-neutral-fill-pressed, np-colors.$neutral-300) !important;
+						box-shadow: none;
 					}
 				}
 			}

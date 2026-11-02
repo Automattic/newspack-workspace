@@ -20,10 +20,14 @@
 		a {
 			color: np-colors.$neutral-000;
 
-			&:active,
-			&:focus,
-			&:hover {
-				color: rgba(np-colors.$neutral-000, 0.75);
+			@include motion.hover {
+				&:hover {
+					color: color-mix(in srgb, np-colors.$neutral-000 var(--newspack-ui-color-mix-hover, 85%), transparent);
+				}
+			}
+
+			&:active {
+				color: color-mix(in srgb, np-colors.$neutral-000 var(--newspack-ui-color-mix-pressed, 75%), transparent);
 			}
 		}
 		.entry-title {
@@ -73,10 +77,14 @@
 				font-weight: bold;
 				text-decoration: none;
 
-				&:active,
-				&:focus,
-				&:hover {
-					color: rgba(np-colors.$neutral-000, 0.75);
+				@include motion.hover {
+					&:hover {
+						color: color-mix(in srgb, np-colors.$neutral-000 var(--newspack-ui-color-mix-hover, 85%), transparent);
+					}
+				}
+
+				&:active {
+					color: color-mix(in srgb, np-colors.$neutral-000 var(--newspack-ui-color-mix-pressed, 75%), transparent);
 				}
 			}
 		}
@@ -141,12 +149,12 @@
 		display: inline-block;
 		height: 12px;
 		margin: 0 4px;
-		opacity: 0.5;
+		opacity: 0.655;
 		padding: 0;
 		transition:
-			box-shadow 250ms,
-			opacity 250ms,
-			width 250ms;
+			box-shadow motion.$duration-color motion.$ease-color,
+			opacity motion.$duration-color motion.$ease-color,
+			width motion.$duration-indicator motion.$ease-out;
 		width: 12px;
 		&:focus {
 			box-shadow:

@@ -100,14 +100,14 @@
 
 			@media ( hover: hover ) and ( pointer: fine ) {
 				&:hover {
-					background: np-colors.$neutral-050;
+					background: var(--newspack-ui-color-neutral-fill, np-colors.$neutral-100);
 				}
 			}
 		}
 
 		input[type="radio"] {
 			&:focus + .tier-label {
-				background: np-colors.$neutral-050;
+				background: var(--newspack-ui-color-neutral-fill, np-colors.$neutral-100);
 				outline: 1px dotted currentcolor;
 				outline-offset: -4px;
 			}
