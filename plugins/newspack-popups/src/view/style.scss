@@ -201,10 +201,6 @@ $width__tablet: 782px;
 				margin: #{0.5 * $overlay__gap};
 				width: #{3 * $overlay__gap};
 			}
-
-			&:focus {
-				outline-offset: 2px;
-			}
 		}
 	}
 
