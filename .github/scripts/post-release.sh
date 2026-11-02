@@ -31,7 +31,7 @@ SECOND_TO_LAST_COMMIT_MSG=$(git log -n 1 --skip 1 --pretty=format:"%s")
 LATEST_VERSION_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "release")
 
 # Restore workspace:* for any internal monorepo dep
-# (newspack-{scripts,components,colors,icons}) in every plugin/theme
+# (newspack-{scripts,components,colors,icons,motion}) in every plugin/theme
 # package.json, then commit if anything changed.
 #
 # Why: @semantic-release/npm's prepare step rewrites "workspace:*" to a concrete
@@ -53,7 +53,7 @@ restore_workspace_deps_and_commit() {
   local branch="$1"
   node -e '
     const fs = require("fs"), path = require("path");
-    const WS_PACKAGES = ["newspack-scripts", "newspack-components", "newspack-colors", "newspack-icons"];
+    const WS_PACKAGES = ["newspack-scripts", "newspack-components", "newspack-colors", "newspack-icons", "newspack-motion"];
     // "packages" belongs here too: msr pins the shared packages the same way
     // it pins plugins and themes, and pnpm-lock.yaml is keyed to workspace:*
     // for all three roots. Leaving packages out is what made every release

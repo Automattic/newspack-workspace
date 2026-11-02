@@ -253,6 +253,12 @@ importers:
         specifier: workspace:*
         version: link:../scripts
 
+  packages/motion:
+    devDependencies:
+      newspack-scripts:
+        specifier: workspace:*
+        version: link:../scripts
+
   packages/scripts:
     dependencies:
       '@commitlint/cli':
