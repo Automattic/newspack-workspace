@@ -61,8 +61,10 @@
 
 		&:has(.is-arrow-arrow):hover {
 			text-decoration: none;
+		}
 
-			.is-arrow-arrow {
+		@include motion.hover {
+			&:has(.is-arrow-arrow):hover .is-arrow-arrow {
 				background: var(--wp--preset--color--base-2);
 			}
 		}

@@ -52,21 +52,27 @@
 		}
 
 		&.has-background:not(.has-accent-2-background-color) {
-			&:hover {
-				opacity: 0.65;
+			@include motion.hover {
+				&:hover {
+					opacity: 0.65;
+				}
 			}
 		}
 
 		&.has-accent-2-background-color {
-			&:hover {
-				background-color: color-mix(in srgb, var(--wp--preset--color--accent-2) 80%, black) !important;
+			@include motion.hover {
+				&:hover {
+					background-color: color-mix(in srgb, var(--wp--preset--color--accent-2) 80%, black) !important;
+				}
 			}
 		}
 
 		&.has-contrast-color.has-base-background-color {
-			&:hover {
-				background-color: color-mix(in srgb, var(--wp--preset--color--contrast) 3.5%, transparent) !important;
-				opacity: 1;
+			@include motion.hover {
+				&:hover {
+					background-color: color-mix(in srgb, var(--wp--preset--color--contrast) 3.5%, transparent) !important;
+					opacity: 1;
+				}
 			}
 		}
 
@@ -90,14 +96,18 @@
 			border: 1px solid currentcolor;
 			color: var(--wp--preset--color--accent);
 
-			&:hover {
-				background: var(--wp--preset--color--base-2);
-				color: var(--wp--preset--color--contrast);
+			@include motion.hover {
+				&:hover {
+					background: var(--wp--preset--color--base-2);
+					color: var(--wp--preset--color--contrast);
+				}
 			}
 
 			&.has-background {
-				&:hover {
-					opacity: 0.65;
+				@include motion.hover {
+					&:hover {
+						opacity: 0.65;
+					}
 				}
 			}
 
@@ -162,7 +172,9 @@
 .has-background-transparent:not([class*="-background-color"]) {
 	background-color: transparent;
 
-	&:hover {
-		background-color: color-mix(in srgb, currentcolor 3.5%, transparent);
+	@include motion.hover {
+		&:hover {
+			background-color: color-mix(in srgb, currentcolor 3.5%, transparent);
+		}
 	}
 }

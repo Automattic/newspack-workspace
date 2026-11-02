@@ -39,7 +39,7 @@
 				border-color: var(--wp--preset--color--contrast-3);
 			}
 
-			@media (hover: hover) and (pointer: fine) {
+			@include motion.hover {
 				&:hover:not(:focus-within) {
 					border-color: var(--wp--preset--color--contrast-2);
 				}

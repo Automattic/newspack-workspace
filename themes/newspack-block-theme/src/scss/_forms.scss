@@ -152,8 +152,13 @@ input[type="submit"]:not(.newspack-ui__button) {
 		transform motion.$duration-press motion.$ease-out;
 
 	&:hover {
-		background: color-mix(in srgb, var(--wp--preset--color--accent) 80%, black);
 		color: var(--wp--preset--color--base);
+	}
+
+	@include motion.hover {
+		&:hover {
+			background: color-mix(in srgb, var(--wp--preset--color--accent) 80%, black);
+		}
 	}
 
 	&:active {

@@ -83,7 +83,7 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 		border-color: var(--wp--preset--color--contrast-3);
 	}
 
-	@media (hover: hover) and (pointer: fine) {
+	@include motion.hover {
 		&:hover:where(:not(:disabled, :focus, [aria-invalid="true"])) {
 			border-color: var(--wp--preset--color--contrast-2);
 		}
@@ -144,7 +144,7 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 		border-color: var(--wp--preset--color--contrast-3);
 	}
 
-	@media (hover: hover) and (pointer: fine) {
+	@include motion.hover {
 		&:hover:where(:not(:checked, :disabled, [aria-invalid="true"])) {
 			border-color: var(--wp--preset--color--contrast);
 		}
@@ -346,9 +346,11 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 		transform motion.$duration-press motion.$ease-out;
 	width: var(--wp--custom--spacing--55);
 
-	&:hover {
-		background-color: var(--wp--preset--color--base-2);
-		background-color: color-mix(in srgb, var(--wp--preset--color--contrast) 3.5%, transparent);
+	@include motion.hover {
+		&:hover {
+			background-color: var(--wp--preset--color--base-2);
+			background-color: color-mix(in srgb, var(--wp--preset--color--contrast) 3.5%, transparent);
+		}
 	}
 
 	&:focus-visible {

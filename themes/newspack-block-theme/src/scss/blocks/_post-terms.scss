@@ -5,8 +5,10 @@
 	a {
 		transition: color motion.$duration-color motion.$ease-color;
 
-		.has-link-color &:hover {
-			color: color-mix(in srgb, currentcolor 80%, transparent);
+		@include motion.hover {
+			.has-link-color &:hover {
+				color: color-mix(in srgb, currentcolor 80%, transparent);
+			}
 		}
 	}
 
@@ -35,8 +37,13 @@
 				box-shadow motion.$duration-color motion.$ease-color;
 
 			&:hover {
-				background: var(--wp--preset--color--base-3);
 				text-decoration: none;
+			}
+
+			@include motion.hover {
+				&:hover {
+					background: var(--wp--preset--color--base-3);
+				}
 			}
 
 			&:focus-visible {
@@ -73,8 +80,10 @@
 				background: color-mix(in srgb, currentcolor 15%, transparent);
 				color: currentcolor;
 
-				&:hover {
-					background: color-mix(in srgb, currentcolor 20%, transparent);
+				@include motion.hover {
+					&:hover {
+						background: color-mix(in srgb, currentcolor 20%, transparent);
+					}
 				}
 			}
 		}

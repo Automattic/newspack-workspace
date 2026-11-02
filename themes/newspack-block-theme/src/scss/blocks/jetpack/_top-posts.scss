@@ -1,3 +1,5 @@
+@use "newspack-motion" as motion;
+
 .wp-block-jetpack-top-posts {
 	&.is-grid-layout {
 		.jetpack-top-posts-wrapper {
@@ -34,8 +36,10 @@
 			color: var(--wp--preset--color--contrast);
 			text-decoration: none;
 
-			&:hover {
-				color: var(--wp--preset--color--contrast-3);
+			@include motion.hover {
+				&:hover {
+					color: var(--wp--preset--color--contrast-3);
+				}
 			}
 		}
 	}

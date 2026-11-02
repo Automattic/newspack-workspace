@@ -19,12 +19,18 @@
 				top: 0;
 
 				svg {
-					transition: transform 125ms ease-in-out;
+					transition: transform motion.$duration-press motion.$ease-out;
 				}
 
-				&:hover {
-					svg {
-						transform: scale(1.1111);
+				@include motion.hover {
+					&:hover {
+						svg {
+							transform: scale(1.1111);
+
+							@include motion.reduced-motion {
+								transform: none;
+							}
+						}
 					}
 				}
 
@@ -49,9 +55,11 @@
 				min-width: var(--wp--preset--spacing--50);
 				padding: calc(var(--wp--custom--spacing--10) - 1px) calc(var(--wp--preset--spacing--20) - 1px);
 
-				&:hover {
-					background: var(--newspack-ui-color-neutral-5, var(--wp--preset--color--base-2));
-					border-color: var(--newspack-ui-color-neutral-40, var(--wp--preset--color--base-4));
+				@include motion.hover {
+					&:hover {
+						background: var(--newspack-ui-color-neutral-5, var(--wp--preset--color--base-2));
+						border-color: var(--newspack-ui-color-neutral-40, var(--wp--preset--color--base-4));
+					}
 				}
 
 				&:focus-visible {
@@ -78,9 +86,15 @@
 		.style-icon {
 			padding: var(--wp--custom--spacing--15);
 
-			&:hover {
-				svg {
-					transform: scale(1.0833);
+			@include motion.hover {
+				&:hover {
+					svg {
+						transform: scale(1.0833);
+
+						@include motion.reduced-motion {
+							transform: none;
+						}
+					}
 				}
 			}
 		}
@@ -106,9 +120,15 @@
 		}
 
 		.style-icon {
-			&:hover {
-				svg {
-					transform: scale(1.125);
+			@include motion.hover {
+				&:hover {
+					svg {
+						transform: scale(1.125);
+
+						@include motion.reduced-motion {
+							transform: none;
+						}
+					}
 				}
 			}
 		}

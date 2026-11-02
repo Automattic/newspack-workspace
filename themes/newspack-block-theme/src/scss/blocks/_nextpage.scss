@@ -33,8 +33,10 @@
 			margin-left: auto;
 		}
 
-		&:hover:not(.current) {
-			background: var(--wp--preset--color--base-2);
+		@include motion.hover {
+			&:hover:not(.current) {
+				background: var(--wp--preset--color--base-2);
+			}
 		}
 	}
 }

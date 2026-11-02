@@ -12,8 +12,10 @@
 	}
 
 	&.has-text-color:not(.has-contrast-color) {
-		a:not(.wp-element-button):hover {
-			color: color-mix(in srgb, currentcolor 80%, transparent) !important;
+		@include motion.hover {
+			a:not(.wp-element-button):hover {
+				color: color-mix(in srgb, currentcolor 80%, transparent) !important;
+			}
 		}
 	}
 
@@ -88,9 +90,11 @@
 				z-index: -1;
 			}
 
-			&:hover {
-				&::before {
-					background: var(--wp--custom--color--neutral-5);
+			@include motion.hover {
+				&:hover {
+					&::before {
+						background: var(--wp--custom--color--neutral-5);
+					}
 				}
 			}
 

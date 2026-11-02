@@ -11,7 +11,13 @@
 			transition: color motion.$duration-color motion.$ease-color;
 
 			&:hover {
-				color: rgba(white, 80%);
+				color: inherit;
+			}
+
+			@include motion.hover {
+				&:hover {
+					color: rgba(white, 80%);
+				}
 			}
 		}
 

@@ -124,9 +124,11 @@ body .jetpack-instant-search {
 				z-index: -1;
 			}
 
-			&:hover {
-				&::before {
-					background: var(--jp--color--background-light);
+			@include motion.hover {
+				&:hover {
+					&::before {
+						background: var(--jp--color--background-light);
+					}
 				}
 			}
 
@@ -225,8 +227,13 @@ body .jetpack-instant-search {
 			transition: background motion.$duration-color motion.$ease-color;
 
 			&:hover {
-				background: var(--jp--color--background-light);
 				text-decoration: none;
+			}
+
+			@include motion.hover {
+				&:hover {
+					background: var(--jp--color--background-light);
+				}
 			}
 		}
 
@@ -310,8 +317,13 @@ body .jetpack-instant-search {
 					box-shadow motion.$duration-color motion.$ease-color;
 
 				&:hover {
-					background: var(--jp--color--text-light) !important;
 					text-decoration: none !important;
+				}
+
+				@include motion.hover {
+					&:hover {
+						background: var(--jp--color--text-light) !important;
+					}
 				}
 
 				&:focus {
