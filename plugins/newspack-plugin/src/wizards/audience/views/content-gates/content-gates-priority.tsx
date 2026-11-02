@@ -46,7 +46,7 @@ const ContentGatesPriority = ( {
 		const priorityWarnings = getPriorityWarnings( sortedGates );
 		return sortedGates.map( gate => ( {
 			id: gate.id,
-			title: gate.title,
+			title: decodeEntities( gate.title ) || `#${ gate.id }`,
 			secondaryBadge: priorityWarnings[ gate.id ]
 				? { label: getPriorityWarningLabel(), intent: 'low' as const, tooltip: priorityWarnings[ gate.id ] }
 				: undefined,
@@ -120,12 +120,7 @@ const ContentGatesPriority = ( {
 		showModal && (
 			<Modal title={ __( 'Gate Priority', 'newspack-plugin' ) } size="large" onRequestClose={ closeModal }>
 				<Stack direction="column" gap="xl">
-					<span>
-						{ __(
-							'Gates are checked in this order. When content matches more than one gate, only the first matching gate decides who can read it.',
-							'newspack-plugin'
-						) }
-					</span>
+					<span>{ __( 'Content in more than one gate follows the highest one.', 'newspack-plugin' ) }</span>
 					<CardSortableList disabled={ isFetching } items={ gateItems } onDragCallback={ sortGates } />
 					<Stack direction="row" gap="sm" justify="end">
 						<Button variant="tertiary" disabled={ isFetching } onClick={ closeModal }>

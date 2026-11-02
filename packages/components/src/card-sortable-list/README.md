@@ -1,6 +1,6 @@
 # CardSortableList
 
-A drag-and-drop sortable list of cards, built on the `@wordpress/ui` Card. Each row shows a drag handle and up/down buttons, then the title with its badges and description, then an optional toggle and actions menu on the right. Items can be reordered by dragging with a pointer or by using the up/down chevron buttons (keyboard accessible). The list locks its height during a drag to prevent layout shifts.
+A drag-and-drop sortable list of cards, built on the `@wordpress/ui` Card. Each row shows a drag handle and up/down buttons, then the title with its badges and description, then an optional toggle and actions menu on the right. Items can be reordered by dragging with a pointer or by using the up/down chevron buttons (keyboard accessible). Each chevron is named after its item ("Move Homepage up"), keeps focus on the moved row, and announces the new position to screen readers. The list locks its height during a drag to prevent layout shifts.
 
 ## Props
 
