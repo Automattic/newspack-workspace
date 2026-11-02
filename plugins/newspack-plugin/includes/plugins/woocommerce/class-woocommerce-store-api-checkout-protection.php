@@ -91,6 +91,38 @@ class WooCommerce_Store_API_Checkout_Protection {
 		// Fires after the cart is validated and before the draft order exists. Priority 1
 		// so a refused request reaches no other listener.
 		add_action( 'woocommerce_store_api_checkout_update_customer_from_request', [ __CLASS__, 'protect_checkout' ], 1, 2 );
+
+		if ( did_action( 'woocommerce_blocks_loaded' ) ) {
+			self::register_token_field();
+		} else {
+			add_action( 'woocommerce_blocks_loaded', [ __CLASS__, 'register_token_field' ] );
+		}
+	}
+
+	/**
+	 * Declare the token the Checkout block sends. The Store API keeps only the
+	 * extension data an endpoint declares and drops the rest before any hook runs,
+	 * so without this the token never reaches get_token().
+	 */
+	public static function register_token_field(): void {
+		if ( ! function_exists( 'woocommerce_store_api_register_endpoint_data' ) ) {
+			return;
+		}
+		\woocommerce_store_api_register_endpoint_data(
+			[
+				'endpoint'        => 'checkout', // CheckoutSchema::IDENTIFIER.
+				'namespace'       => 'newspack',
+				'schema_callback' => function () {
+					return [
+						'recaptcha_token' => [
+							'description' => __( 'reCAPTCHA token for the checkout.', 'newspack-plugin' ),
+							'type'        => [ 'string', 'null' ],
+							'context'     => [],
+						],
+					];
+				},
+			]
+		);
 	}
 
 	/**

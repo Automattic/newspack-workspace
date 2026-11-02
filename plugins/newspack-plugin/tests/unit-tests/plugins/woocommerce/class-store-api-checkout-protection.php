@@ -640,4 +640,33 @@ class Newspack_Test_WooCommerce_Store_API_Checkout_Protection extends WP_UnitTes
 		Protection::init();
 		$this->assertSame( 1, has_action( 'woocommerce_store_api_checkout_update_customer_from_request', [ Protection::class, 'protect_checkout' ] ) );
 	}
+
+	/**
+	 * The Store API drops undeclared extension data, so the token field must be
+	 * declared on the checkout endpoint once WooCommerce Blocks has loaded.
+	 */
+	public function test_token_field_is_declared() {
+		if ( ! function_exists( 'woocommerce_store_api_register_endpoint_data' ) ) {
+			/**
+			 * Mock the Store API's registration helper, recording what it is given.
+			 *
+			 * @param array $args Registration arguments.
+			 */
+			function woocommerce_store_api_register_endpoint_data( $args ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Mock of a WooCommerce function, isolated to a separate test process.
+				$GLOBALS['newspack_test_endpoint_data'][] = $args;
+				return true;
+			}
+		}
+		$GLOBALS['newspack_test_endpoint_data'] = [];
+
+		Protection::init();
+		$this->assertSame( [], $GLOBALS['newspack_test_endpoint_data'] );
+		do_action( 'woocommerce_blocks_loaded' );
+
+		$this->assertCount( 1, $GLOBALS['newspack_test_endpoint_data'] );
+		$args = $GLOBALS['newspack_test_endpoint_data'][0];
+		$this->assertSame( 'checkout', $args['endpoint'] );
+		$this->assertSame( 'newspack', $args['namespace'] );
+		$this->assertArrayHasKey( 'recaptcha_token', call_user_func( $args['schema_callback'] ) );
+	}
 }
