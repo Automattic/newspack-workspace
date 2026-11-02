@@ -157,11 +157,12 @@ input[type="submit"]:not(.newspack-ui__button) {
 
 	@include motion.hover {
 		&:hover {
-			background: color-mix(in srgb, var(--wp--preset--color--accent) 80%, black);
+			background: color-mix(in srgb, var(--wp--preset--color--accent) 85%, black);
 		}
 	}
 
 	&:active {
+		background: color-mix(in srgb, var(--wp--preset--color--accent) 75%, black);
 		transform: scale(motion.$press-scale);
 
 		@include motion.reduced-motion {
@@ -178,7 +179,8 @@ input[type="submit"]:not(.newspack-ui__button) {
 	}
 
 	&:disabled {
-		background: color-mix(in srgb, var(--wp--preset--color--accent) 20%, transparent);
+		background: color-mix(in srgb, var(--wp--preset--color--contrast) 7%, transparent);
+		color: color-mix(in srgb, var(--wp--preset--color--contrast) 45%, transparent);
 		cursor: default;
 	}
 }

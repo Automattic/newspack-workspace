@@ -7,7 +7,7 @@
 
 		@include motion.hover {
 			.has-link-color &:hover {
-				color: color-mix(in srgb, currentcolor 80%, transparent);
+				text-decoration: underline;
 			}
 		}
 	}
@@ -23,7 +23,7 @@
 
 		a,
 		> span:not([class*="wp-block-post-terms__"]) {
-			background: var(--wp--preset--color--base-2);
+			background: color-mix(in srgb, var(--wp--preset--color--contrast) 7%, transparent);
 			border-radius: var(--wp--custom--border--radius-small);
 			color: var(--wp--preset--color--contrast);
 			display: grid;
@@ -42,8 +42,12 @@
 
 			@include motion.hover {
 				&:hover {
-					background: var(--wp--preset--color--base-3);
+					background: color-mix(in srgb, var(--wp--preset--color--contrast) 13%, transparent);
 				}
+			}
+
+			&:active {
+				background: color-mix(in srgb, var(--wp--preset--color--contrast) 19%, transparent);
 			}
 
 			&:focus-visible {
@@ -77,13 +81,17 @@
 		&.has-background {
 			a,
 			> span:not([class*="wp-block-post-terms__"]) {
-				background: color-mix(in srgb, currentcolor 15%, transparent);
+				background: color-mix(in srgb, currentcolor 7%, transparent);
 				color: currentcolor;
 
 				@include motion.hover {
 					&:hover {
-						background: color-mix(in srgb, currentcolor 20%, transparent);
+						background: color-mix(in srgb, currentcolor 13%, transparent);
 					}
+				}
+
+				&:active {
+					background: color-mix(in srgb, currentcolor 19%, transparent);
 				}
 			}
 		}

@@ -6,7 +6,7 @@
 
 		@include motion.hover {
 			.has-link-color &:hover {
-				color: color-mix(in srgb, currentcolor 80%, transparent);
+				text-decoration: underline;
 			}
 		}
 	}

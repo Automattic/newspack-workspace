@@ -13,7 +13,8 @@
 
 	&.has-text-color:not(.has-contrast-color) {
 		a:not(.wp-element-button):hover {
-			color: color-mix(in srgb, currentcolor 80%, transparent) !important;
+			color: currentcolor !important;
+			text-decoration: underline;
 		}
 	}
 
@@ -91,8 +92,14 @@
 			@include motion.hover {
 				&:hover {
 					&::before {
-						background: var(--wp--custom--color--neutral-5);
+						background: color-mix(in srgb, currentcolor 7%, transparent);
 					}
+				}
+			}
+
+			&:active {
+				&::before {
+					background: color-mix(in srgb, currentcolor 13%, transparent);
 				}
 			}
 

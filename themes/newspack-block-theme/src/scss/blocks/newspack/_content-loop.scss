@@ -27,7 +27,7 @@
 
 			@include motion.hover {
 				&:hover {
-					color: var(--wp--preset--color--contrast-3);
+					color: color-mix(in srgb, currentcolor 85%, transparent);
 				}
 			}
 		}
@@ -81,7 +81,7 @@
 		.entry-title {
 			@include motion.hover {
 				a:hover {
-					color: color-mix(in srgb, currentcolor 80%, transparent);
+					color: color-mix(in srgb, currentcolor 85%, transparent);
 				}
 			}
 		}
@@ -288,7 +288,7 @@
 
 				@include motion.hover {
 					&:hover {
-						color: var(--wp--preset--color--contrast-3);
+						color: color-mix(in srgb, currentcolor 85%, transparent);
 					}
 				}
 			}

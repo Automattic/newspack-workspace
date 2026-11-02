@@ -11,8 +11,12 @@
 
 			@include motion.hover {
 				&:hover {
-					opacity: 0.8;
+					background-image: linear-gradient(color-mix(in srgb, black 15%, transparent) 0 0);
 				}
+			}
+
+			&:active {
+				background-image: linear-gradient(color-mix(in srgb, black 25%, transparent) 0 0);
 			}
 		}
 	}

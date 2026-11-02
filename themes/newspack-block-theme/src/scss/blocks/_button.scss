@@ -78,28 +78,40 @@
 				transform motion.$duration-press motion.$ease-out;
 		}
 
-		&.has-background:not(.has-accent-2-background-color) {
+		&.has-background:not(.has-accent-2-background-color, [class*="-gradient-background"]) {
 			@include motion.hover {
 				&:hover {
-					opacity: 0.65;
+					background-image: linear-gradient(color-mix(in srgb, black 15%, transparent) 0 0);
 				}
+			}
+
+			&:active {
+				background-image: linear-gradient(color-mix(in srgb, black 25%, transparent) 0 0);
 			}
 		}
 
 		&.has-accent-2-background-color {
 			@include motion.hover {
 				&:hover {
-					background-color: color-mix(in srgb, var(--wp--preset--color--accent-2) 80%, black) !important;
+					background-color: color-mix(in srgb, var(--wp--preset--color--accent-2) 85%, black) !important;
 				}
+			}
+
+			&:active {
+				background-color: color-mix(in srgb, var(--wp--preset--color--accent-2) 75%, black) !important;
 			}
 		}
 
 		&.has-contrast-color.has-base-background-color {
 			@include motion.hover {
 				&:hover {
-					background-color: color-mix(in srgb, var(--wp--preset--color--contrast) 3.5%, transparent) !important;
+					background-color: color-mix(in srgb, var(--wp--preset--color--contrast) 7%, transparent) !important;
 					opacity: 1;
 				}
+			}
+
+			&:active {
+				background-color: color-mix(in srgb, var(--wp--preset--color--contrast) 13%, transparent) !important;
 			}
 		}
 
@@ -130,11 +142,15 @@
 				}
 			}
 
-			&.has-background {
+			&.has-background:not([class*="-gradient-background"]) {
 				@include motion.hover {
 					&:hover {
-						opacity: 0.65;
+						background-image: linear-gradient(color-mix(in srgb, black 15%, transparent) 0 0);
 					}
+				}
+
+				&:active {
+					background-image: linear-gradient(color-mix(in srgb, black 25%, transparent) 0 0);
 				}
 			}
 
@@ -206,7 +222,11 @@
 
 	@include motion.hover {
 		&:hover {
-			background-color: color-mix(in srgb, currentcolor 3.5%, transparent);
+			background-color: color-mix(in srgb, currentcolor 7%, transparent);
 		}
+	}
+
+	&:active {
+		background-color: color-mix(in srgb, currentcolor 13%, transparent);
 	}
 }

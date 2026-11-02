@@ -38,7 +38,7 @@
 
 			@include motion.hover {
 				&:hover {
-					color: var(--wp--preset--color--contrast-3);
+					color: color-mix(in srgb, var(--wp--preset--color--contrast) 85%, transparent);
 				}
 			}
 		}

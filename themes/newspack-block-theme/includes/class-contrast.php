@@ -72,8 +72,8 @@ final class Contrast {
 	 * text against it. The resolved value is interpreted as follows:
 	 *
 	 * - Absent, or a color-mix over the accent var (the theme default darkens the
-	 *   accent by 20% in srgb): score against the accent darkened per channel by
-	 *   0.8, which is exactly what that color-mix produces.
+	 *   accent by 15% in srgb): score against the accent darkened per channel by
+	 *   0.85, which is exactly what that color-mix produces.
 	 * - A palette reference (var:preset|color|<slug> or var( --wp--preset--color--<slug> )):
 	 *   score against the palette color the slug resolves to.
 	 * - A plain parseable hex: score it directly.
@@ -86,7 +86,7 @@ final class Contrast {
 		$background = self::get_button_hover_background();
 
 		if ( null === $background || self::is_accent_color_mix( $background ) ) {
-			$darkened = self::darken_hex( $accent, 0.8 );
+			$darkened = self::darken_hex( $accent, 0.85 );
 			return null === $darkened ? null : self::get_color_for_contrast( $darkened );
 		}
 
@@ -121,7 +121,7 @@ final class Contrast {
 	/**
 	 * Whether a value is the theme's exact default accent hover mix.
 	 *
-	 * Matches only the theme default: color-mix( in srgb, <accent> 80%, black ),
+	 * Matches only the theme default: color-mix( in srgb, <accent> 85%, black ),
 	 * where <accent> is the accent preset in either the var:preset|color|accent
 	 * internal form or the var( --wp--preset--color--accent ) CSS form. The match is
 	 * whitespace-flexible and case-insensitive, but every component is anchored: any
@@ -138,7 +138,7 @@ final class Contrast {
 		}
 
 		return (bool) preg_match(
-			'/^color-mix\(\s*in\s+srgb\s*,\s*(?:var\(\s*--wp--preset--color--accent(?![\w-])\s*\)|var:preset\|color\|accent(?![\w-]))\s+80%\s*,\s*black\s*\)$/i',
+			'/^color-mix\(\s*in\s+srgb\s*,\s*(?:var\(\s*--wp--preset--color--accent(?![\w-])\s*\)|var:preset\|color\|accent(?![\w-]))\s+85%\s*,\s*black\s*\)$/i',
 			trim( $value )
 		);
 	}
@@ -177,8 +177,8 @@ final class Contrast {
 	/**
 	 * Darken a hex color by multiplying each RGB channel by a factor.
 	 *
-	 * Operates in gamma-encoded srgb, so a 0.8 factor reproduces exactly what
-	 * color-mix( in srgb, <color> 80%, black ) produces.
+	 * Operates in gamma-encoded srgb, so a 0.85 factor reproduces exactly what
+	 * color-mix( in srgb, <color> 85%, black ) produces.
 	 *
 	 * @param string $hex    Hexadecimal color.
 	 * @param float  $factor Multiplier applied to each channel.
