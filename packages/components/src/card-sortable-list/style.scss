@@ -38,37 +38,27 @@ $drop-duration: 400ms; /* must match DROP_ANIMATION_DURATION in index.tsx */
 		color: var( --wpds-color-foreground-interactive-neutral-disabled, #{wp-colors.$gray-600} );
 	}
 
-	&.is-reordering > * &__card {
-		animation: newspack-sortable-wobble var( --wpds-motion-duration-lg, 300ms ) ease-in-out infinite alternate;
+	&.is-reordering &__card {
+		animation: newspack-sortable-wobble var( --wpds-motion-duration-lg, 300ms ) var( --wpds-motion-easing-balanced, cubic-bezier(0.4, 0, 0.2, 1) ) 2;
+		outline: var( --wpds-border-width-xs, #{wp-vars.$border-width} ) dashed var( --wpds-color-stroke-interactive-brand, var( --wp-admin-theme-color, #{colors.$primary-600} ) );
+		outline-offset: calc( -1 * var( --wpds-border-width-xs, #{wp-vars.$border-width} ) );
 	}
 
 	&.is-reordering > :nth-child(even) &__card {
-		animation-direction: alternate-reverse;
+		animation-direction: reverse;
 	}
 
 	&.is-reordering > :nth-child(3n + 2) &__card {
-		animation-delay: -100ms;
+		animation-delay: 40ms;
 	}
 
 	&.is-reordering > :nth-child(3n) &__card {
-		animation-delay: -200ms;
-	}
-
-	&.is-reordering &__card:focus-within {
-		animation: none;
-	}
-
-	@media (hover: hover) and (pointer: fine) {
-		&.is-reordering &__card:hover {
-			animation: none;
-		}
+		animation-delay: 80ms;
 	}
 
 	@media (prefers-reduced-motion: reduce) {
 		&.is-reordering &__card {
 			animation: none;
-			outline: var( --wpds-border-width-xs, #{wp-vars.$border-width} ) dashed var( --wpds-color-stroke-interactive-brand, var( --wp-admin-theme-color, #{colors.$primary-600} ) );
-			outline-offset: calc( -1 * var( --wpds-border-width-xs, #{wp-vars.$border-width} ) );
 		}
 	}
 }
@@ -154,11 +144,15 @@ $drop-duration: 400ms; /* must match DROP_ANIMATION_DURATION in index.tsx */
 }
 
 @keyframes newspack-sortable-wobble {
-	0% {
-		transform: rotate(-0.4deg);
-	}
+	0%,
 	100% {
-		transform: rotate(0.4deg);
+		transform: none;
+	}
+	25% {
+		transform: rotate(-0.2deg);
+	}
+	75% {
+		transform: rotate(0.2deg);
 	}
 }
 

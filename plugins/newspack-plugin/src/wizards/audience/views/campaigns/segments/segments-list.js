@@ -239,10 +239,7 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, ...screenProps }
 						{ isReordering ? (
 							<>
 								<p className="newspack-campaigns-wizard-segments__reorder-help">
-									{ __(
-										'Segments are checked in this order. When a reader matches more than one segment, only the first matching segment decides which targeted prompts they see.',
-										'newspack-plugin'
-									) }
+									{ __( 'Readers in more than one segment see prompts from the highest one.', 'newspack-plugin' ) }
 								</p>
 								<Stack direction="row" gap="sm" className="newspack-campaigns-wizard-segments__toolbar-actions">
 									<Button variant="tertiary" size="compact" disabled={ isSavingOrder } onClick={ cancelReordering }>
