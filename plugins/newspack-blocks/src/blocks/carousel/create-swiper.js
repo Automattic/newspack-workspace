@@ -251,15 +251,15 @@ export default function createSwiper( els, config = {} ) {
 		}
 
 		/**
-		 * Holds autoplay while focus is on a slide, but not on the play/pause controls.
+		 * Holds autoplay while keyboard focus is inside a slide; clicks on the controls never hold.
 		 *
 		 * @param {FocusEvent} event Focus event.
 		 */
 		function handleFocusIn( event ) {
-			if ( event.target === els.play || event.target === els.pause ) {
-				release( 'focus' );
-			} else {
+			if ( event.target.closest( '.swiper-slide' ) && event.target.matches( ':focus-visible' ) ) {
 				hold( 'focus' );
+			} else {
+				release( 'focus' );
 			}
 		}
 

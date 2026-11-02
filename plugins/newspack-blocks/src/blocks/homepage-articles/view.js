@@ -71,6 +71,32 @@ function buildLoadMoreHandler( blockWrapperEl ) {
 	};
 
 	/**
+	 * Removes the entering state once the fade finishes, or at once when no fade runs.
+	 *
+	 * @param {Element} articleEl Article element.
+	 */
+	function settleEntering( articleEl ) {
+		const clear = () => {
+			articleEl.classList.remove( 'is-entering' );
+			articleEl.style.removeProperty( '--wpnbha-enter-index' );
+		};
+		articleEl.addEventListener( 'transitionend', event => {
+			if ( event.target === articleEl && 'opacity' === event.propertyName ) {
+				clear();
+			}
+		} );
+		requestAnimationFrame( () =>
+			requestAnimationFrame( () => {
+				const style = getComputedStyle( articleEl );
+				const total = parseFloat( style.transitionDuration ) + parseFloat( style.transitionDelay );
+				if ( ! total && articleEl.classList.contains( 'is-entering' ) ) {
+					clear();
+				}
+			} )
+		);
+	}
+
+	/**
 	 * @param {Object} data Post data
 	 */
 	function onSuccess( data ) {
@@ -89,6 +115,7 @@ function buildLoadMoreHandler( blockWrapperEl ) {
 				.forEach( ( articleEl, index ) => {
 					articleEl.classList.add( 'is-entering' );
 					articleEl.style.setProperty( '--wpnbha-enter-index', String( Math.min( index, 5 ) ) );
+					settleEntering( articleEl );
 				} );
 			postsContainerEl.append( template.content );
 		}

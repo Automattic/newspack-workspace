@@ -34,6 +34,7 @@ import { decodeEntities } from '@wordpress/html-entities';
  */
 import QueryControls from '../../components/query-controls';
 import { PostTypesPanel, PostStatusesPanel } from '../../components/editor-panels';
+import { prefersReducedMotion } from 'newspack-motion';
 import createSwiper from './create-swiper';
 import { getBylineHTML, formatSponsorLogos, formatSponsorByline, getPostStatusLabel } from '../../shared/js/utils';
 import { preventPreviewNavigation } from '../../shared/js/inert-preview';
@@ -174,7 +175,7 @@ class Edit extends Component {
 			'slides-per-view-' + slidesPerView,
 			'swiper',
 			{
-				'wp-block-newspack-blocks-carousel__autoplay-playing': autoplay,
+				'wp-block-newspack-blocks-carousel__autoplay-playing': autoplay && ! prefersReducedMotion(),
 				'newspack-block--disabled': isUIDisabled,
 				'hide-controls': hideControls,
 			}
