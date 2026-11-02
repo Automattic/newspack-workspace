@@ -4,6 +4,7 @@
 import { speak } from '@wordpress/a11y';
 import { escapeHTML } from '@wordpress/escape-html';
 import { __, sprintf } from '@wordpress/i18n';
+import { prefersReducedMotion } from 'newspack-motion';
 // eslint-disable-next-line import/no-unresolved
 import Swiper from 'swiper/bundle';
 // eslint-disable-next-line import/no-unresolved
@@ -73,6 +74,8 @@ export default function createSwiper( els, config = {} ) {
 		return false;
 	}
 
+	const reduceMotion = prefersReducedMotion();
+
 	const swiper = new Swiper( els.container, {
 		/**
 		 * Remove the messages, as we're announcing the slide content and number.
@@ -80,8 +83,10 @@ export default function createSwiper( els, config = {} ) {
 		 */
 		a11y: false,
 		autoplay: !! config.autoplay && {
+			enabled: ! reduceMotion,
 			delay: config.delay,
 			disableOnInteraction: false,
+			waitForTransition: ! reduceMotion,
 		},
 		effect: 'slide',
 		grabCursor: true,
@@ -112,6 +117,7 @@ export default function createSwiper( els, config = {} ) {
 		setWrapperSize: true,
 		slidesPerView: config.slidesPerView,
 		spaceBetween: 16,
+		speed: reduceMotion ? 0 : 300,
 		touchStartPreventDefault: false,
 		breakpoints: {
 			320: {
@@ -187,10 +193,92 @@ export default function createSwiper( els, config = {} ) {
 	swiper.on( 'resize', setAspectRatio );
 
 	if ( config.autoplay ) {
+		const holds = new Set();
+		let isHolding = false;
+		let resumeAfterHold = false;
+
+		/**
+		 * Stops autoplay while the reader points at or focuses the carousel,
+		 * leaving the play/pause button and announcements untouched.
+		 *
+		 * @param {string} reason Either 'pointer' or 'focus'.
+		 */
+		function hold( reason ) {
+			holds.add( reason );
+			if ( swiper.autoplay.running ) {
+				resumeAfterHold = true;
+				isHolding = true;
+				swiper.autoplay.stop();
+				isHolding = false;
+			}
+		}
+
+		/**
+		 * Restarts autoplay once nothing holds it, if a hold stopped it.
+		 *
+		 * @param {string} reason Either 'pointer' or 'focus'.
+		 */
+		function release( reason ) {
+			holds.delete( reason );
+			if ( ! holds.size && resumeAfterHold ) {
+				resumeAfterHold = false;
+				isHolding = true;
+				swiper.autoplay.start();
+				isHolding = false;
+			}
+		}
+
+		/**
+		 * Holds autoplay while a mouse is over the carousel.
+		 *
+		 * @param {PointerEvent} event Pointer event.
+		 */
+		function handlePointerEnter( event ) {
+			if ( 'mouse' === event.pointerType ) {
+				hold( 'pointer' );
+			}
+		}
+
+		/**
+		 * Releases the mouse hold.
+		 *
+		 * @param {PointerEvent} event Pointer event.
+		 */
+		function handlePointerLeave( event ) {
+			if ( 'mouse' === event.pointerType ) {
+				release( 'pointer' );
+			}
+		}
+
+		/**
+		 * Holds autoplay while focus is on a slide, but not on the play/pause controls.
+		 *
+		 * @param {FocusEvent} event Focus event.
+		 */
+		function handleFocusIn( event ) {
+			if ( event.target === els.play || event.target === els.pause ) {
+				release( 'focus' );
+			} else {
+				hold( 'focus' );
+			}
+		}
+
+		/**
+		 * Releases the focus hold when focus leaves the carousel.
+		 *
+		 * @param {FocusEvent} event Focus event.
+		 */
+		function handleFocusOut( event ) {
+			if ( ! els.block.contains( event.relatedTarget ) ) {
+				release( 'focus' );
+			}
+		}
+
 		/**
 		 * Handles the Pause button click.
 		 */
 		function handlePauseButtonClick() {
+			resumeAfterHold = false;
 			swiper.autoplay.stop();
 			els.play.focus(); // Move focus to the play button.
 		}
@@ -199,6 +287,7 @@ export default function createSwiper( els, config = {} ) {
 		 * Handles the Play button click.
 		 */
 		function handlePlayButtonClick() {
+			resumeAfterHold = false;
 			swiper.autoplay.start();
 			els.pause.focus(); // Move focus to the pause button.
 		}
@@ -206,14 +295,27 @@ export default function createSwiper( els, config = {} ) {
 		swiper.on( 'init', function () {
 			els.play.addEventListener( 'click', handlePlayButtonClick );
 			els.pause.addEventListener( 'click', handlePauseButtonClick );
+			els.block.addEventListener( 'pointerenter', handlePointerEnter );
+			els.block.addEventListener( 'pointerleave', handlePointerLeave );
+			els.block.addEventListener( 'focusin', handleFocusIn );
+			els.block.addEventListener( 'focusout', handleFocusOut );
+			if ( reduceMotion ) {
+				els.block.classList.remove( autoplayClassName );
+			}
 		} );
 
 		swiper.on( 'autoplayStart', function () {
+			if ( isHolding ) {
+				return;
+			}
 			els.block.classList.add( autoplayClassName ); // Hide play & show pause button.
 			speak( __( 'Playing', 'newspack-blocks' ), 'assertive' );
 		} );
 
 		swiper.on( 'autoplayStop', function () {
+			if ( isHolding ) {
+				return;
+			}
 			els.block.classList.remove( autoplayClassName ); // Hide pause & show play button.
 			speak( __( 'Paused', 'newspack-blocks' ), 'assertive' );
 		} );
@@ -221,6 +323,10 @@ export default function createSwiper( els, config = {} ) {
 		swiper.on( 'beforeDestroy', function () {
 			els.play.removeEventListener( 'click', handlePlayButtonClick );
 			els.pause.removeEventListener( 'click', handlePauseButtonClick );
+			els.block.removeEventListener( 'pointerenter', handlePointerEnter );
+			els.block.removeEventListener( 'pointerleave', handlePointerLeave );
+			els.block.removeEventListener( 'focusin', handleFocusIn );
+			els.block.removeEventListener( 'focusout', handleFocusOut );
 		} );
 	}
 

@@ -415,6 +415,9 @@ importers:
       newspack-icons:
         specifier: workspace:*
         version: link:../../packages/icons
+      newspack-motion:
+        specifier: workspace:*
+        version: link:../../packages/motion
       redux:
         specifier: ^5.0.0
         version: 5.0.1
