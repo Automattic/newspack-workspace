@@ -122,6 +122,10 @@ class Subscribers_Donors {
 	 *   - holders() — which donation subscriptions count, and as live or ended.
 	 *   - Newspack\CLI\Donors::backfill() — the support command that flags donors
 	 *     from before the flag existed, so they land in the kind this returns.
+	 *   - The client, which reads `donor.kind` and never re-derives it:
+	 *     src/wizards/subscribers/donor.js holds the labels, the badge intents
+	 *     and the Donor filter field's '' → 'none' mapping, used by
+	 *     screens/SubscriberList.jsx and screens/PersonProfile.jsx.
 	 *
 	 * It reads nothing but the reader's two flags and the statuses it is given:
 	 * the caller resolves which donation subscriptions the reader holds. Callers

@@ -645,3 +645,24 @@ describe( 'a subscription on this site', () => {
 		expect( screen.getByRole( 'heading', { name: 'Payment methods' } ) ).toBeInTheDocument();
 	} );
 } );
+
+describe( 'the donor badge in the profile header', () => {
+	beforeEach( () => {
+		apiFetch.mockReset();
+		setHeaderData.mockClear();
+	} );
+
+	test( 'adds the donor badge after the status badges', async () => {
+		await renderCards( reader( { donor: { kind: 'one-time' } } ) );
+
+		const { badges } = setHeaderData.mock.calls.at( -1 )[ 0 ];
+		expect( badges.map( badge => badge.label ) ).toEqual( [ 'Active', 'One-time donor' ] );
+	} );
+
+	test( 'adds no donor badge without a donor kind', async () => {
+		await renderCards( reader() );
+
+		const { badges } = setHeaderData.mock.calls.at( -1 )[ 0 ];
+		expect( badges.map( badge => badge.label ) ).toEqual( [ 'Active' ] );
+	} );
+} );
