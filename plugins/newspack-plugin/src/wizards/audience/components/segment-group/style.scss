@@ -16,16 +16,6 @@
 		padding: var(--wpds-dimension-padding-lg, #{wp-vars.$grid-unit-20});
 	}
 
-	&__title {
-		.components-button.is-link {
-			color: inherit;
-			font-size: inherit;
-			font-weight: inherit;
-			text-align: start;
-			text-decoration: none;
-		}
-	}
-
 	&__empty-segment-text {
 		color: var(--wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700});
 		margin: 0;
