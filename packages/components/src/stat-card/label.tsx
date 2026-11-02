@@ -54,9 +54,9 @@ const Label = forwardRef< HTMLDivElement, StatCardLabelProps >( function Label( 
 		>
 			<Heading className="newspack-stat-card__label-text">
 				{ children }
+				{ /* The line break is CSS, so the heading's name needs a real space between the two. */ }
 				{ qualifier && (
 					<>
-						{ /* The line break is CSS, so the heading's name needs a real space between the two. */ }
 						{ ' ' }
 						<span className="newspack-stat-card__label-qualifier">{ qualifier }</span>
 					</>

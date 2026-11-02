@@ -14,10 +14,7 @@ import classnames from 'classnames';
 import { useStatCardContext } from './context';
 import type { StatCardDescriptionProps } from './types';
 
-const Description = forwardRef< HTMLParagraphElement, StatCardDescriptionProps >( function Description(
-	{ className, children, ...props },
-	ref
-) {
+const Description = forwardRef< HTMLParagraphElement, StatCardDescriptionProps >( function Description( { className, children, ...props }, ref ) {
 	useStatCardContext();
 
 	return (
