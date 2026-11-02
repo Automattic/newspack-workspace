@@ -43,8 +43,8 @@
 	// Overlay Menu
 	&__responsive-container {
 		&.is-menu-open {
-			animation-duration: 125ms;
-			animation-timing-function: ease-in-out;
+			animation-duration: motion.$duration-reveal;
+			animation-timing-function: motion.$ease-out;
 			padding: var(--wp--custom--spacing--85) var(--wp--preset--spacing--30) var(--wp--preset--spacing--30);
 
 			@include sass-utils.media(medium) {

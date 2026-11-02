@@ -91,6 +91,15 @@ body .jetpack-instant-search {
 		font-size: var(--newspack-ui-font-size-s, 16px);
 		line-height: var(--newspack-ui-line-height-s, 1.5);
 		padding: var(--wp--preset--spacing--30);
+		transition:
+			opacity motion.$duration-modal motion.$ease-out,
+			visibility 0s;
+
+		&.is-hidden {
+			transition:
+				opacity motion.$duration-modal motion.$ease-out,
+				visibility 0s linear motion.$duration-modal;
+		}
 
 		@include sass-utils.media("576px") {
 			padding: var(--wp--preset--spacing--80);
