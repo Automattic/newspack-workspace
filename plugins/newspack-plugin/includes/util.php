@@ -582,6 +582,26 @@ function is_plugin_active( string $plugin_file ) {
 }
 
 /**
+ * Flush rendered pages from the page cache, so a change to site-wide output reaches
+ * readers now rather than when their cached pages expire.
+ *
+ * Batcache stores rendered pages in the object cache's `batcache` group and has no
+ * purge for "every page showing X", so the whole group goes. Without a persistent
+ * object cache there are no rendered pages to strand, and a flush would only discard
+ * the current request's own cache.
+ */
+function flush_page_cache() {
+	if ( ! wp_using_ext_object_cache() ) {
+		return;
+	}
+	if ( function_exists( 'wp_cache_supports' ) && wp_cache_supports( 'flush_group' ) ) {
+		wp_cache_flush_group( 'batcache' );
+	} else {
+		wp_cache_flush();
+	}
+}
+
+/**
  * Pick either white or black, whatever has sufficient contrast with the color being passed to it.
  * (Copied from the Newspack theme: https://github.com/Automattic/newspack-theme/blob/6dc4e89a65c465abdd207d990e313921f2972a9a/newspack-theme/inc/template-functions.php#L547)
  *

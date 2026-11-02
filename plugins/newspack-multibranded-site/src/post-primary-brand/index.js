@@ -1,7 +1,8 @@
 /* global newspackPostPrimaryBrandVars */
 
 import { __ } from '@wordpress/i18n';
-import { Button, Flex, FlexItem, SelectControl } from '@wordpress/components';
+import { Button, SelectControl } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { store as coreStore } from '@wordpress/core-data';
 
@@ -66,7 +67,7 @@ const NewspackPostPrimaryBrand = ( { slug } ) => {
 	const shouldDisplayPrimaryBrand = SHOW_PRIMARY_BRAND_FOR.includes( postType );
 
 	return (
-		<Flex direction="column" gap="4">
+		<Stack direction="column" gap="lg">
 			{ shouldDisplayPrimaryBrand && (
 				<div className="editor-primary-brand-selector" tabIndex="0" role="group" aria-label={ __( 'Brands', 'newspack-multibranded-site' ) }>
 					{ terms.length > 1 && (
@@ -86,12 +87,12 @@ const NewspackPostPrimaryBrand = ( { slug } ) => {
 				</div>
 			) }
 
-			<FlexItem>
+			<div>
 				<Button href={ ADMIN_URL } variant="link" target="blank">
 					{ __( 'Manage Brands', 'newspack-multibranded-site' ) }
 				</Button>
-			</FlexItem>
-		</Flex>
+			</div>
+		</Stack>
 	);
 };
 

@@ -1,0 +1,6 @@
+[     311ms] [LOG] JQMIGRATE: Migrate is installed, version 3.4.1 @ http://localhost/wp-includes/js/jquery/jquery-migrate.min.js?ver=3.4.1:1
+[     344ms] [ERROR] Access to font at 'http://localhost/wp-content/themes/newspack-block-theme/assets/fonts/inter/InterVariable.woff2' from origin 'http://pr-204-responsive-container.test' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://pr-204-responsive-container.test/:822
+[     344ms] [ERROR] Failed to load resource: net::ERR_FAILED @ http://localhost/wp-content/themes/newspack-block-theme/assets/fonts/inter/InterVariable.woff2:0
+[     349ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ http://pr-204-responsive-container.test/:0
+[     372ms] [ERROR] Access to font at 'http://localhost/wp-content/plugins/newspack-plugin/dist/fonts/InterVariable.a0e477f2.woff2' from origin 'http://pr-204-responsive-container.test' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://pr-204-responsive-container.test/:0
+[     372ms] [ERROR] Failed to load resource: net::ERR_FAILED @ http://localhost/wp-content/plugins/newspack-plugin/dist/fonts/InterVariable.a0e477f2.woff2:0

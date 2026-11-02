@@ -28,10 +28,11 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 
 	/**
 	 * Destinations the attribution args must not be appended to: another site,
-	 * and a scheme that isn't the web.
+	 * a scheme that isn't the web, and a same-page link.
 	 */
 	const EXTERNAL_URL = 'https://donations.example.test/give/';
 	const MAILTO_URL   = 'mailto:news@example.test';
+	const ON_PAGE_URL  = '#donate?amount=10&frequency=one_time';
 
 	/**
 	 * The copy an instance carries as its own pattern override, so "the site-wide
@@ -86,6 +87,7 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		delete_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION );
 		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID );
 		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_STAMPED_ACCENT );
+		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_WRITTEN_CTA );
 		delete_option( 'newspack_popups_donor_landing_page' );
 		delete_option( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION );
 		delete_option( Newspack_Popups_Settings::OVERRIDE_CTA_OPTION );
@@ -449,6 +451,153 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A CTA the publisher swapped in from the pattern editor is theirs: on a
+	 * native site, a button in place of the donate form is neither rebuilt for
+	 * readers nor written back over by repair.
+	 */
+	public function test_a_publisher_chosen_button_survives_on_a_native_site() {
+		$this->set_platform( true );
+		$ref = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+
+		$blocks                      = parse_blocks( get_post( $ref )->post_content );
+		$blocks[0]['innerBlocks'][1] = Newspack_Popups_Contextual_Prompt_Pattern::build_buttons_child( self::CUSTOM_URL, 'Give now' );
+		Newspack_Popups_Contextual_Prompt_Pattern::save_pattern_content( $ref, serialize_blocks( $blocks ) );
+
+		// An administrator's render, so repair runs before the instance renders.
+		$html = $this->render_instance();
+
+		$this->assertStringContainsString( self::CUSTOM_URL, $html, 'Readers get the button the publisher chose.' );
+		$this->assertStringNotContainsString( self::DONATE_STUB_CLASS, $html );
+		$this->assertStringContainsString( self::CUSTOM_URL, get_post( $ref )->post_content, 'And repair left the stored choice alone.' );
+	}
+
+	/**
+	 * The record moves with every CTA the plugin writes, so a CTA it swapped for a
+	 * platform change is still its own: a second change swaps it back rather than
+	 * reading it as the publisher's.
+	 */
+	public function test_a_cta_the_plugin_swapped_keeps_following_the_platform() {
+		$this->set_platform( false );
+		$this->set_donor_landing_page();
+		$ref = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+
+		$this->set_platform( true );
+		Newspack_Popups_Contextual_Prompt_Pattern::repair();
+		$this->assertStringContainsString( 'wp:newspack-blocks/donate', get_post( $ref )->post_content );
+
+		$this->set_platform( false );
+		Newspack_Popups_Contextual_Prompt_Pattern::repair();
+		$this->assertStringContainsString( 'wp:buttons', get_post( $ref )->post_content );
+	}
+
+	/**
+	 * A site seeded before the record existed gets one on its first repair, so the
+	 * publisher's next swap reads as theirs rather than as a stale CTA.
+	 */
+	public function test_repair_backfills_the_cta_record_for_an_older_seed() {
+		$this->set_platform( true );
+		Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_WRITTEN_CTA );
+
+		Newspack_Popups_Contextual_Prompt_Pattern::repair();
+
+		$this->assertSame( 'newspack-blocks/donate', get_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_WRITTEN_CTA ) );
+	}
+
+	/**
+	 * A pattern with no CTA record yet, seeded before the record existed, gets one
+	 * as soon as an editor save lands, from the CTA stored before it. So the
+	 * publisher's swap in that very save survives the next repair.
+	 */
+	public function test_a_first_editor_save_keeps_the_publisher_cta_on_a_pattern_with_no_record() {
+		$this->set_platform( true );
+		$ref = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_WRITTEN_CTA );
+
+		$blocks                      = parse_blocks( get_post( $ref )->post_content );
+		$blocks[0]['innerBlocks'][1] = Newspack_Popups_Contextual_Prompt_Pattern::build_buttons_child( self::CUSTOM_URL, 'Give now' );
+		wp_update_post(
+			[
+				'ID'           => $ref,
+				'post_content' => wp_slash( serialize_blocks( $blocks ) ),
+			]
+		);
+
+		Newspack_Popups_Contextual_Prompt_Pattern::repair();
+
+		$this->assertStringContainsString( self::CUSTOM_URL, get_post( $ref )->post_content );
+	}
+
+	/**
+	 * The pre-save record is written once: a later editor save leaves it naming
+	 * the plugin's CTA, so a publisher who saves the pattern again keeps their
+	 * swap.
+	 */
+	public function test_later_editor_saves_leave_the_cta_record_alone() {
+		$this->set_platform( true );
+		$ref = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_WRITTEN_CTA );
+
+		$blocks                      = parse_blocks( get_post( $ref )->post_content );
+		$blocks[0]['innerBlocks'][1] = Newspack_Popups_Contextual_Prompt_Pattern::build_buttons_child( self::CUSTOM_URL, 'Give now' );
+		$swapped                     = [
+			'ID'           => $ref,
+			'post_content' => wp_slash( serialize_blocks( $blocks ) ),
+		];
+		wp_update_post( $swapped );
+		wp_update_post( $swapped );
+
+		Newspack_Popups_Contextual_Prompt_Pattern::repair();
+
+		$this->assertStringContainsString( self::CUSTOM_URL, get_post( $ref )->post_content );
+	}
+
+	/**
+	 * A publisher's CTA is kept on screen only while it can render. With Newspack
+	 * Blocks off, readers get the landing-page button in place of their donate
+	 * block, and the stored pattern keeps the donate block for when it returns.
+	 */
+	public function test_a_publisher_cta_that_cannot_render_falls_back_without_being_overwritten() {
+		$this->set_platform( false );
+		$permalink = $this->set_donor_landing_page();
+		$ref       = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+
+		$blocks                      = parse_blocks( get_post( $ref )->post_content );
+		$blocks[0]['innerBlocks'][1] = Newspack_Popups_Contextual_Prompt_Pattern::build_donate_child( false );
+		Newspack_Popups_Contextual_Prompt_Pattern::save_pattern_content( $ref, serialize_blocks( $blocks ) );
+		unregister_block_type( 'newspack-blocks/donate' );
+
+		// An administrator's render, so repair runs before the instance renders.
+		$html = $this->render_instance();
+
+		$this->assertStringContainsString( 'href="' . esc_url( $permalink ) . '"', $html, 'Readers get the fallback button.' );
+		$this->assertStringContainsString( 'wp:newspack-blocks/donate', get_post( $ref )->post_content, 'The stored pattern keeps the publisher\'s donate block.' );
+	}
+
+	/**
+	 * Reset puts the plugin's own CTA back and records it, so the card follows the
+	 * donation platform again, even when the platform changed while the
+	 * publisher's CTA was in place.
+	 */
+	public function test_reset_hands_the_cta_back_to_the_platform() {
+		$this->set_platform( true );
+		$ref = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+
+		$blocks                      = parse_blocks( get_post( $ref )->post_content );
+		$blocks[0]['innerBlocks'][1] = Newspack_Popups_Contextual_Prompt_Pattern::build_buttons_child( self::CUSTOM_URL, 'Give now' );
+		Newspack_Popups_Contextual_Prompt_Pattern::save_pattern_content( $ref, serialize_blocks( $blocks ) );
+
+		$this->set_platform( false );
+		$this->set_donor_landing_page();
+		Newspack_Popups_Contextual_Prompt_Pattern::reset_pattern();
+
+		$this->set_platform( true );
+		Newspack_Popups_Contextual_Prompt_Pattern::repair();
+
+		$this->assertStringContainsString( 'wp:newspack-blocks/donate', get_post( $ref )->post_content );
+	}
+
+	/**
 	 * Repair rewrites the pattern only when it has something to change.
 	 */
 	public function test_repair_is_a_noop_when_nothing_changed() {
@@ -615,6 +764,9 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		$group = $this->stored_group();
 
 		$group['innerBlocks'][1] = Newspack_Popups_Contextual_Prompt_Pattern::build_buttons_child( self::CUSTOM_URL, 'Donate' );
+		// Stale rather than chosen: the button is the CTA the plugin last wrote,
+		// before the site moved to native donations.
+		update_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_WRITTEN_CTA, 'core/buttons' );
 		$this->set_accent_color( '#ff0000' );
 
 		$result = Newspack_Popups_Contextual_Prompt_Render::normalize_cta( $group );
@@ -1142,6 +1294,7 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		Newspack_Popups_Contextual_Prompt_Pattern::repair();
 
 		$this->assertSame( $saved, get_post( $ref )->post_content, 'The publisher\'s save stands.' );
+		$this->assertSame( 'core/buttons', get_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_WRITTEN_CTA ), 'And the refused write left the CTA record where it was.' );
 	}
 
 	/**
@@ -1717,15 +1870,16 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	 * Attribution query args belong on the site's own destinations. A publisher
 	 * who points the CTA at an external processor or a mailto: address gets that
 	 * link back untouched — the args would be noise there at best, and a mangled
-	 * address at worst.
+	 * address at worst. A same-page link is left alone too: tagging it would turn
+	 * a click meant to open an on-page modal into a reload.
 	 */
-	public function test_only_same_site_button_destinations_are_tagged() {
+	public function test_only_same_site_page_destinations_are_tagged() {
 		$this->set_platform( false );
 		$landing = $this->set_donor_landing_page();
 		$group   = $this->stored_group();
 		$cta     = Newspack_Popups_Contextual_Prompt_Render::find_cta( $group );
 		$buttons = Newspack_Popups_Contextual_Prompt_Pattern::build_buttons_child( $landing, 'Donate' );
-		foreach ( [ self::EXTERNAL_URL, self::MAILTO_URL ] as $href ) {
+		foreach ( [ self::EXTERNAL_URL, self::MAILTO_URL, self::ON_PAGE_URL ] as $href ) {
 			$elsewhere = Newspack_Popups_Contextual_Prompt_Pattern::build_buttons_child( $href, 'Elsewhere' );
 			$buttons   = Newspack_Popups_Contextual_Prompt_Render::append_child( $buttons, $elsewhere['innerBlocks'][0] );
 		}
@@ -1744,19 +1898,22 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		preg_match_all( '/href="([^"]*)"/', $rendered, $matches );
 		$hrefs = $matches[1];
 
-		$this->assertCount( 3, $hrefs );
+		$this->assertCount( 4, $hrefs );
 		$this->assertStringContainsString( 'contextual_prompt_post_id=', $hrefs[0], 'The donor landing page is this site, so it is tagged.' );
 		$this->assertSame( self::EXTERNAL_URL, $hrefs[1] );
 		$this->assertSame( self::MAILTO_URL, $hrefs[2] );
+		$this->assertSame( self::ON_PAGE_URL, $hrefs[3], 'A same-page link renders exactly as stored.' );
 	}
 
 	/**
 	 * The site's own address reached through a `www.` the home URL omits is still
 	 * this site: a publisher who typed `https://www.example.org/donate` on a site
 	 * whose home URL is `https://example.org` gets the button tagged. A genuinely
-	 * external host, and non-web schemes, still pass through untouched.
+	 * external host, non-web schemes and same-page `#` links still pass through
+	 * untouched, while a link to a page that carries a fragment loads that page,
+	 * so it is tagged.
 	 */
-	public function test_taggable_destination_matches_www_and_scheme_variants() {
+	public function test_taggable_destination_matches_www_scheme_and_same_page_variants() {
 		$method = new ReflectionMethod( 'Newspack_Popups_Contextual_Prompt_Render', 'is_taggable_destination' );
 		$method->setAccessible( true );
 		$home_host = wp_parse_url( home_url(), PHP_URL_HOST );
@@ -1767,6 +1924,10 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		$this->assertFalse( $method->invoke( null, self::EXTERNAL_URL ), 'A genuinely external host is left alone.' );
 		$this->assertFalse( $method->invoke( null, self::MAILTO_URL ), 'mailto: is left alone.' );
 		$this->assertFalse( $method->invoke( null, 'tel:+15551234' ), 'tel: is left alone.' );
+		$this->assertFalse( $method->invoke( null, self::ON_PAGE_URL ), 'A same-page link with a query in its fragment is left alone.' );
+		$this->assertFalse( $method->invoke( null, '#donate' ), 'A plain same-page link is left alone.' );
+		$this->assertFalse( $method->invoke( null, '  #donate?amount=10' ), 'Leading whitespace does not hide a same-page link.' );
+		$this->assertTrue( $method->invoke( null, '/donate/#form' ), 'A link to a page with a fragment loads that page, so it is tagged.' );
 	}
 
 	/**

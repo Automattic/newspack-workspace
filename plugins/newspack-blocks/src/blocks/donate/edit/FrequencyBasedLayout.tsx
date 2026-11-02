@@ -14,7 +14,7 @@ import { RichText } from '@wordpress/block-editor';
  * Internal dependencies
  */
 import { AmountValueInput } from './components';
-import { getColorForContrast, getFrequencyLabel, getFormattedAmount, getFrequencyLabelWithAmount } from '../utils';
+import { getColorForContrast, getFrequencyLabel, getFormattedAmount, getFrequencyLabelWithAmount, isModernStyle } from '../utils';
 import { FREQUENCIES } from '../consts';
 import type { ComponentProps, DonationFrequencySlug } from '../types';
 import { updateBlockClassName, getFormData } from '../view';
@@ -26,6 +26,7 @@ const FrequencyBasedLayout = ( props: { canUseNameYourPrice: boolean; isTiered: 
 	const { attributes, settings, amounts, availableFrequencies, setAttributes, canUseNameYourPrice } = props;
 
 	const formRef = useRef< HTMLFormElement >( null );
+	const isModern = isModernStyle( attributes.className );
 
 	// Add event listeners to the form.
 	useEffect( () => {
@@ -78,6 +79,25 @@ const FrequencyBasedLayout = ( props: { canUseNameYourPrice: boolean; isTiered: 
 		</>
 	);
 
+	const renderModernTab = ( frequencySlug: DonationFrequencySlug ) => (
+		<button
+			key={ frequencySlug }
+			type="button"
+			role="tab"
+			aria-selected={ frequencySlug === selectedFrequency }
+			className={ classNames( 'newspack-ui__button newspack-ui__button--small', {
+				selected: frequencySlug === selectedFrequency,
+			} ) }
+			id={ `tab-newspack-donate-${ frequencySlug }-${ uid }` }
+			onClick={ evt => {
+				evt.preventDefault();
+				setSelectedFrequency( frequencySlug );
+			} }
+		>
+			{ FREQUENCIES[ frequencySlug ] }
+		</button>
+	);
+
 	const renderTab = ( frequencySlug: DonationFrequencySlug ) => (
 		<button
 			key={ frequencySlug }
@@ -96,120 +116,141 @@ const FrequencyBasedLayout = ( props: { canUseNameYourPrice: boolean; isTiered: 
 	);
 
 	const renderFormHeader = () => {
-		return ! rendersSingleFrequency && <div className="tab-container">{ availableFrequencies.map( renderTab ) }</div>;
+		if ( rendersSingleFrequency ) {
+			return false;
+		}
+		if ( isModern ) {
+			return (
+				<div role="tablist" className="newspack-ui newspack-ui__segmented-control__tabs">
+					{ availableFrequencies.map( renderModernTab ) }
+				</div>
+			);
+		}
+		return <div className="tab-container">{ availableFrequencies.map( renderTab ) }</div>;
 	};
+	const frequenciesClassName = classNames( 'wp-block-newspack-blocks-donate__frequencies frequencies', {
+		'newspack-ui__segmented-control': isModern,
+	} );
+	const renderPanels = ( panels: JSX.Element[] ) =>
+		isModern ? <div className="newspack-ui__segmented-control__content">{ panels }</div> : panels;
 	const rendersSingleFrequency = availableFrequencies.length === 1;
 
 	const renderUntieredForm = () => (
 		<div className="wp-block-newspack-blocks-donate__options">
-			<div className="wp-block-newspack-blocks-donate__frequencies frequencies">
+			<div className={ frequenciesClassName }>
 				{ renderFormHeader() }
-				{ availableFrequencies.map( frequencySlug => {
-					const untieredAmount = amounts[ frequencySlug ][ 3 ];
-					return (
-						<div className="wp-block-newspack-blocks-donate__frequency frequency" key={ frequencySlug }>
-							{ renderFrequencySelect( frequencySlug ) }
-							<div className="input-container">
-								{ canUseNameYourPrice ? (
-									<>
-										<label className="donate-label" htmlFor={ 'newspack-' + frequencySlug + '-' + uid + '-untiered-input' }>
-											{ __( 'Donation amount', 'newspack-blocks' ) }
-											{ getFrequencyLabel( frequencySlug, true ) }
-										</label>
-										<div className="wp-block-newspack-blocks-donate__money-input money-input">
-											<span className="currency">{ settings.currencySymbol }</span>
-											<AmountValueInput
-												{ ...props }
-												frequencySlug={ frequencySlug }
-												tierIndex={ 3 }
+				{ renderPanels(
+					availableFrequencies.map( frequencySlug => {
+						const untieredAmount = amounts[ frequencySlug ][ 3 ];
+						return (
+							<div className="wp-block-newspack-blocks-donate__frequency frequency" key={ frequencySlug }>
+								{ renderFrequencySelect( frequencySlug ) }
+								<div className="input-container">
+									{ canUseNameYourPrice ? (
+										<>
+											<label className="donate-label" htmlFor={ 'newspack-' + frequencySlug + '-' + uid + '-untiered-input' }>
+												{ __( 'Donation amount', 'newspack-blocks' ) }
+												{ getFrequencyLabel( frequencySlug, true ) }
+											</label>
+											<div className="wp-block-newspack-blocks-donate__money-input money-input">
+												<span className="currency">{ settings.currencySymbol }</span>
+												<AmountValueInput
+													{ ...props }
+													frequencySlug={ frequencySlug }
+													tierIndex={ 3 }
+													id={ `newspack-${ frequencySlug }-${ uid }-untiered-input` }
+												/>
+											</div>
+										</>
+									) : (
+										<>
+											<input
+												type="radio"
+												value={ untieredAmount }
+												className={ 'frequency-input' }
 												id={ `newspack-${ frequencySlug }-${ uid }-untiered-input` }
+												name={ `donation_value_${ frequencySlug }` }
+												defaultChecked={ true }
 											/>
-										</div>
-									</>
-								) : (
-									<>
-										<input
-											type="radio"
-											value={ untieredAmount }
-											className={ 'frequency-input' }
-											id={ `newspack-${ frequencySlug }-${ uid }-untiered-input` }
-											name={ `donation_value_${ frequencySlug }` }
-											defaultChecked={ true }
-										/>
-										{ /* eslint-disable jsx-a11y/label-has-associated-control */ }
-										<label
-											className="tier-select-label tier-label"
-											htmlFor={ `newspack-${ frequencySlug }-${ uid }-untiered-input` }
-										>
-											<div
-												dangerouslySetInnerHTML={ {
-													__html: getFrequencyLabelWithAmount( untieredAmount, frequencySlug ),
-												} }
-											/>
-										</label>
-									</>
-								) }
+											{ /* eslint-disable jsx-a11y/label-has-associated-control */ }
+											<label
+												className="tier-select-label tier-label"
+												htmlFor={ `newspack-${ frequencySlug }-${ uid }-untiered-input` }
+											>
+												<div
+													dangerouslySetInnerHTML={ {
+														__html: getFrequencyLabelWithAmount( untieredAmount, frequencySlug ),
+													} }
+												/>
+											</label>
+										</>
+									) }
+								</div>
 							</div>
-						</div>
-					);
-				} ) }
+						);
+					} )
+				) }
 			</div>
 		</div>
 	);
 
 	const renderTieredForm = () => (
 		<div className="wp-block-newspack-blocks-donate__options">
-			<div className="wp-block-newspack-blocks-donate__frequencies frequencies">
+			<div className={ frequenciesClassName }>
 				{ renderFormHeader() }
-				{ availableFrequencies.map( frequencySlug => (
-					<div className="wp-block-newspack-blocks-donate__frequency frequency" key={ frequencySlug }>
-						{ renderFrequencySelect( frequencySlug ) }
+				{ renderPanels(
+					availableFrequencies.map( frequencySlug => (
+						<div className="wp-block-newspack-blocks-donate__frequency frequency" key={ frequencySlug }>
+							{ renderFrequencySelect( frequencySlug ) }
 
-						<div className="wp-block-newspack-blocks-donate__tiers tiers">
-							{ amounts[ frequencySlug ].map( ( suggestedAmount, index: number ) => {
-								const isOtherTier = index === 3;
-								const id = `newspack-tier-${ frequencySlug }-${ uid }-${ isOtherTier ? 'other' : index }`;
-								const tierLabel = isOtherTier ? __( 'Other', 'newspack-blocks' ) : getFormattedAmount( suggestedAmount, true );
-								return (
-									<div
-										className={ classNames(
-											'wp-block-newspack-blocks-donate__tier',
-											`wp-block-newspack-blocks-donate__tier--${ isOtherTier ? 'other' : 'frequency' }`
-										) }
-										key={ index }
-									>
-										<input
-											type="radio"
-											value={ isOtherTier ? 'other' : suggestedAmount }
-											className={ isOtherTier ? 'other-input' : 'frequency-input' }
-											id={ id }
-											name={ `donation_value_${ frequencySlug }` }
-											defaultChecked={ index === 1 }
-										/>
-										<label className="tier-select-label tier-label" htmlFor={ id }>
-											{ tierLabel }
-										</label>
-										{ isOtherTier ? (
-											<>
-												<label className="odl" htmlFor={ id + '-other-input' }>
-													{ __( 'Donation amount', 'newspack-blocks' ) }
-													{ getFrequencyLabel( frequencySlug, true ) }
-												</label>
-												<div className="wp-block-newspack-blocks-donate__money-input money-input">
-													<span className="currency">{ settings.currencySymbol }</span>
-													<input type="number" readOnly />
-												</div>
-											</>
-										) : null }
+							<div className="wp-block-newspack-blocks-donate__tiers tiers">
+								{ amounts[ frequencySlug ].map( ( suggestedAmount, index: number ) => {
+									const isOtherTier = index === 3;
+									const id = `newspack-tier-${ frequencySlug }-${ uid }-${ isOtherTier ? 'other' : index }`;
+									const tierLabel = isOtherTier ? __( 'Other', 'newspack-blocks' ) : getFormattedAmount( suggestedAmount, true );
+									return (
+										<div
+											className={ classNames(
+												'wp-block-newspack-blocks-donate__tier',
+												`wp-block-newspack-blocks-donate__tier--${ isOtherTier ? 'other' : 'frequency' }`
+											) }
+											key={ index }
+										>
+											<input
+												type="radio"
+												value={ isOtherTier ? 'other' : suggestedAmount }
+												className={ isOtherTier ? 'other-input' : 'frequency-input' }
+												id={ id }
+												name={ `donation_value_${ frequencySlug }` }
+												defaultChecked={ index === 1 }
+											/>
+											<label className="tier-select-label tier-label" htmlFor={ id }>
+												{ tierLabel }
+											</label>
+											{ isOtherTier ? (
+												<>
+													<label className="odl" htmlFor={ id + '-other-input' }>
+														{ __( 'Donation amount', 'newspack-blocks' ) }
+														{ getFrequencyLabel( frequencySlug, true ) }
+													</label>
+													<div className="wp-block-newspack-blocks-donate__money-input money-input">
+														<span className="currency">{ settings.currencySymbol }</span>
+														<input type="number" readOnly />
+													</div>
+												</>
+											) : null }
+										</div>
+									);
+								} ) }
+								{ rendersSingleFrequency ? (
+									<div className="wp-block-newspack-blocks-donate__frequency-label">
+										{ getFrequencyLabel( frequencySlug, true ) }
 									</div>
-								);
-							} ) }
-							{ rendersSingleFrequency ? (
-								<div className="wp-block-newspack-blocks-donate__frequency-label">{ getFrequencyLabel( frequencySlug, true ) }</div>
-							) : null }
+								) : null }
+							</div>
 						</div>
-					</div>
-				) ) }
+					) )
+				) }
 			</div>
 		</div>
 	);

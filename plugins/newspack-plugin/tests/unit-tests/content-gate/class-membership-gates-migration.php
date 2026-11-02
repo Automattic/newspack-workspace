@@ -1556,6 +1556,112 @@ HTML;
 	}
 
 	/**
+	 * A paywall kept in a synced pattern is checked the way the reader sees it.
+	 *
+	 * The extracted layout carries a `core/block` reference unresolved, so the markup
+	 * the check is handed holds no button at all. WordPress renders the pattern in its
+	 * place, chains included, so the check follows the same references and skips the
+	 * ones WordPress would render nothing for.
+	 */
+	public function test_layout_offers_a_purchase_through_a_synced_pattern() {
+		$reference         = fn( int $pattern_id ) => sprintf( '<!-- wp:block {"ref":%d} /-->', $pattern_id );
+		$checkout_pattern  = $this->create_pattern_post( '<!-- wp:newspack-blocks/checkout-button /-->' );
+		$link_pattern      = $this->create_pattern_post( '<p><a href="https://example.com/subscribe">Subscribe</a></p>' );
+		$chained_pattern   = $this->create_pattern_post( '<!-- wp:group --><div>' . $reference( $checkout_pattern ) . '</div><!-- /wp:group -->' );
+		$prose_pattern     = $this->create_pattern_post( '<p>Available only to members.</p>' );
+		$draft_pattern     = $this->create_pattern_post( '<!-- wp:newspack-blocks/checkout-button /-->', 'draft' );
+		$cycle_pattern_a   = $this->create_pattern_post( '' );
+		$cycle_pattern_b   = $this->create_pattern_post( $reference( $cycle_pattern_a ) );
+		\wp_update_post(
+			[
+				'ID'           => $cycle_pattern_a,
+				'post_content' => $reference( $cycle_pattern_b ),
+			]
+		);
+
+		$cases = [
+			[ true, $reference( $checkout_pattern ), 'a pattern holding a checkout button' ],
+			[ true, $reference( $link_pattern ), 'a pattern holding a subscribe link' ],
+			[ true, $reference( $chained_pattern ), 'a checkout button two pattern hops away' ],
+			[ false, $reference( $prose_pattern ), 'a pattern with nothing to click' ],
+			[ false, $reference( $draft_pattern ), 'a draft pattern, which renders nothing' ],
+			[ false, $reference( 999999 ), 'a reference to a pattern that does not exist' ],
+			[ false, $reference( $cycle_pattern_a ), 'two patterns that reference each other' ],
+		];
+		foreach ( $cases as [ $expected, $content, $case ] ) {
+			$this->assertSame( $expected, $this->invoke_private_static( 'layout_offers_a_purchase', [ $content ] ), $case );
+		}
+	}
+
+	/**
+	 * A pre-flight refusal names the gate post and every pattern the check reached.
+	 *
+	 * The operator's fix is in the pattern, not the layout, and a reference that
+	 * renders nothing is the likeliest reason a pattern with a button still fails.
+	 */
+	public function test_describe_paid_layout_sources_names_the_gate_post_and_each_pattern_reached() {
+		$draft_pattern  = $this->create_pattern_post( '<!-- wp:newspack-blocks/checkout-button /-->', 'draft' );
+		$prose_pattern  = $this->create_pattern_post( sprintf( '<p>Members only.</p><!-- wp:block {"ref":%d} /-->', $draft_pattern ) );
+		$layout_content = sprintf( '<!-- wp:block {"ref":%d} /-->', $prose_pattern );
+		$gate_post      = $this->create_gate_post( $layout_content );
+
+		$this->assertSame(
+			sprintf( 'gate post %d; checked synced patterns %d and %d; WordPress does not render %d', $gate_post->ID, $prose_pattern, $draft_pattern, $draft_pattern ),
+			$this->invoke_private_static( 'describe_paid_layout_sources', [ $gate_post, $layout_content ] )
+		);
+		$this->assertSame(
+			sprintf( 'gate post %d', $gate_post->ID ),
+			$this->invoke_private_static( 'describe_paid_layout_sources', [ $gate_post, '<p>No patterns here.</p>' ] ),
+			'A layout with no pattern names the gate post alone.'
+		);
+	}
+
+	/**
+	 * The live-run check follows a written layout's pattern reference too.
+	 *
+	 * The migrated layout keeps the reference, so without this the same paywall that
+	 * passed pre-flight would be reported as having no way to buy after the write.
+	 */
+	public function test_verify_migrated_gate_follows_a_pattern_reference_in_the_paid_layout() {
+		$gate_id          = $this->create_enforceable_gate(
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post' ],
+				],
+			]
+		);
+		$set_paid_layout  = function ( int $pattern_id ) use ( $gate_id ) {
+			\Newspack\Content_Gate::update_custom_access_settings(
+				$gate_id,
+				[
+					'active'         => true,
+					'gate_layout_id' => \Newspack\Content_Gate::create_gate_layout( 'Paid access fixture layout', sprintf( '<!-- wp:block {"ref":%d} /-->', $pattern_id ) ),
+					'access_rules'   => [
+						[
+							[
+								'slug'  => 'subscription',
+								'value' => [ 123 ],
+							],
+						],
+					],
+				]
+			);
+		};
+		$checkout_pattern = $this->create_pattern_post( '<!-- wp:newspack-blocks/checkout-button /-->' );
+		$prose_pattern    = $this->create_pattern_post( '<p>Available only to members.</p>' );
+
+		$set_paid_layout( $checkout_pattern );
+		$this->assertSame( [], $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id, true ] ), 'A pattern holding a checkout button passes.' );
+
+		$set_paid_layout( $prose_pattern );
+		$issues = $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id, true ] );
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'no checkout button and no link', $issues[0] );
+		$this->assertStringContainsString( sprintf( 'checked synced pattern %d', $prose_pattern ), $issues[0], 'The issue names the pattern it checked.' );
+	}
+
+	/**
 	 * The paid path migrated fully — an active paid access mode constrained by the
 	 * plan's products — so nothing is reported.
 	 */

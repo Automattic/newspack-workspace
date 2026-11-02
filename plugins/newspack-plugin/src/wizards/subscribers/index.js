@@ -11,10 +11,10 @@ import '../../shared/js/public-path';
  *
  * Detail routes are declared alongside the tabs rather than nested under them:
  * the wizard maps each section straight onto a react-router `<Route>`, so a
- * detail screen reads its id with the router's `useParams()`. The Subscribers
- * tab claims `/subscribers/:id` via `activeTabPaths`, so the profile renders
- * inside that tab's panel and the tab stays selected while it is open — rather
- * than relying on the wizard's no-tab-owns-this fallback. Both list sections are
+ * detail screen reads its id with the router's `useParams()`. Each list tab
+ * claims its detail path via `activeTabPaths`, so the detail renders inside
+ * that tab's panel and the tab stays selected while it is open — rather than
+ * relying on the wizard's no-tab-owns-this fallback. Both list sections are
  * `exact`, so neither swallows a detail path.
  */
 
@@ -54,6 +54,8 @@ function SubscribersApp() {
 					label: GROUP_LABEL_PLURAL,
 					path: '/groups',
 					exact: true,
+					// As with Subscribers: a group's detail screen keeps this tab selected.
+					activeTabPaths: [ '/groups/*' ],
 					fullWidth: true,
 					render: GroupList,
 				},

@@ -35,10 +35,10 @@ do_action( 'woocommerce_before_edit_account_address_form' ); ?>
 	?>
 	<form method="post" novalidate action="<?php echo esc_url( $edit_address_url ); ?>">
 
-		<div class="woocommerce-address-fields">
+		<div class="woocommerce-address-fields newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-5">
 			<?php do_action( "woocommerce_before_edit_address_form_{$load_address}" ); ?>
 
-			<div class="woocommerce-address-fields__field-wrapper">
+			<div class="woocommerce-address-fields__field-wrapper newspack-ui__stack newspack-ui__stack--horizontal newspack-ui__stack--wrap newspack-ui__stack--gap-5">
 				<?php
 				foreach ( $address as $key => $field ) {
 					woocommerce_form_field( $key, $field, wc_get_post_data_by_key( $key, $field['value'] ) );
@@ -48,11 +48,11 @@ do_action( 'woocommerce_before_edit_account_address_form' ); ?>
 
 			<?php do_action( "woocommerce_after_edit_address_form_{$load_address}" ); ?>
 
-			<p>
-				<button type="submit" class="button newspack-ui__button--wide<?php echo esc_attr( wc_wp_theme_get_element_class_name( 'button' ) ? ' ' . wc_wp_theme_get_element_class_name( 'button' ) : '' ); ?>" name="save_address" value="<?php esc_attr_e( 'Save address', 'woocommerce' ); ?>"><?php echo esc_html( $button_title ); ?></button>
+			<div class="newspack-ui__stack newspack-ui__stack--horizontal newspack-ui__stack--justify-end">
+				<button type="submit" class="button newspack-ui__button--wide-on-mobile<?php echo esc_attr( wc_wp_theme_get_element_class_name( 'button' ) ? ' ' . wc_wp_theme_get_element_class_name( 'button' ) : '' ); ?>" name="save_address" value="<?php esc_attr_e( 'Save address', 'woocommerce' ); ?>"><?php echo esc_html( $button_title ); ?></button>
 				<input type="hidden" id="woocommerce-edit-address-nonce-<?php echo esc_attr( $load_address ); ?>" name="woocommerce-edit-address-nonce" value="<?php echo esc_attr( wp_create_nonce( 'woocommerce-edit_address' ) ); ?>">
 				<input type="hidden" name="action" value="edit_address" />
-			</p>
+			</div>
 		</div>
 
 	</form>

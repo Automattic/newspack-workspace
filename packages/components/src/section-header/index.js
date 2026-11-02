@@ -7,7 +7,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useEffect, useRef } from '@wordpress/element';
-import { DropdownMenu, MenuItem, Tooltip, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { DropdownMenu, MenuItem, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { Icon, chevronLeft, moreVertical } from '@wordpress/icons';
 import { Badge } from '@wordpress/ui';
 
@@ -73,7 +73,7 @@ const SectionHeader = ( {
 	children = null,
 } ) => {
 	// If id is in the URL as a scrollTo param, scroll to it on render.
-	const ref = useRef();
+	const ref = useRef( undefined );
 	useEffect( () => {
 		const params = new Proxy( new URLSearchParams( window.location.search ), {
 			get: ( searchParams, prop ) => searchParams.get( prop ),
@@ -171,9 +171,7 @@ const SectionHeader = ( {
 				{ backNav ? (
 					<HStack alignment="left" style={ { position: 'relative' } }>
 						<div className="newspack-section-header__back-nav">
-							<Tooltip text={ __( 'Go back', 'newspack-plugin' ) }>
-								<Button href={ backNav } icon={ chevronLeft } variant="tertiary" />
-							</Tooltip>
+							<Button href={ backNav } icon={ chevronLeft } label={ __( 'Go back', 'newspack-plugin' ) } variant="tertiary" />
 						</div>
 						{ titleContent }
 					</HStack>

@@ -109,7 +109,9 @@ export default compose( [
 	}, [ layouts, layoutId ] );
 
 	const blockPreview = useMemo( () => {
-		return usedLayout.post_content ? parse( usedLayout.post_content ) : null;
+		// Memoized so the preview gets a stable `blocks` prop; a new array on every
+		// render restarts its load-and-reveal cycle.
+		return usedLayout.post_content ? setPreventDeduplicationForPostsInserter( parse( usedLayout.post_content ) ) : null;
 	}, [ usedLayout ] );
 
 	const [ isSavingLayout, setIsSavingLayout ] = useState( false );
@@ -181,12 +183,7 @@ export default compose( [
 					<div className="newspack-newsletters-layouts">
 						<div className="newspack-newsletters-layouts__item">
 							<div className="newspack-newsletters-layouts__item-preview">
-								<NewsletterPreview
-									layoutId={ layoutId }
-									meta={ usedLayout.meta }
-									blocks={ setPreventDeduplicationForPostsInserter( blockPreview ) }
-									viewportWidth={ 848 }
-								/>
+								<NewsletterPreview layoutId={ layoutId } meta={ usedLayout.meta } blocks={ blockPreview } viewportWidth={ 848 } />
 							</div>
 							<div className="newspack-newsletters-layouts__item-label">
 								<strong>{ usedLayout.post_title }</strong>

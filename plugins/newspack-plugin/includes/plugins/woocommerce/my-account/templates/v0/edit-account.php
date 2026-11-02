@@ -59,7 +59,7 @@ endif;
 			name="account_display_name"
 			id="account_display_name"
 			autocomplete="name"
-			placeholder="<?php esc_attr_e( 'Your Name', 'newspack-plugin' ); ?>"
+			placeholder="<?php esc_attr_e( 'Your display name', 'newspack-plugin' ); ?>"
 			value="<?php echo ! Reader_Activation::reader_has_generic_display_name() ? \esc_attr( $user->display_name ) : ''; ?>"
 		/>
 		<span><em><?php esc_html_e( 'This is how your name is displayed publicly.', 'newspack-plugin' ); ?></em></span>

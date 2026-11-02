@@ -24,7 +24,7 @@ domReady( function () {
 
 		// If the accordion has an --open class, activate the first toggle with a click event.
 		if ( accordion.classList.contains( 'newspack-ui__accordion--open' ) ) {
-			toggles[ 0 ].click();
+			toggles[ 0 ]?.click();
 		}
 	} );
 } );

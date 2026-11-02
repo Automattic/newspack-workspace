@@ -1,9 +1,9 @@
 /**
  * WordPress dependencies.
  */
-import { __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { useEffect, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
+import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
@@ -42,18 +42,17 @@ const Body = ( { children }: DrawerBodyProps ) => {
 	}, [ node ] );
 
 	return (
-		<VStack
+		<Stack
 			ref={ setNode }
+			direction="column"
 			className="newspack-drawer__body"
-			spacing={ 0 }
-			justify="flex-start"
 			// A bare div is role=generic, where ARIA prohibits an author name.
 			role={ isScrollable ? 'group' : undefined }
 			tabIndex={ isScrollable ? 0 : undefined }
 			aria-label={ isScrollable ? __( 'Scrollable section', 'newspack-plugin' ) : undefined }
 		>
 			{ children }
-		</VStack>
+		</Stack>
 	);
 };
 

@@ -141,6 +141,40 @@ class Group_Subscription_API {
 				],
 			]
 		);
+		// Invite a pasted list and/or a CSV at once. Without `confirm` it only reports
+		// what would happen, so the caller can show the list before anything is sent.
+		\register_rest_route(
+			self::NAMESPACE,
+			'/invite-bulk',
+			[
+				'methods'             => \WP_REST_Server::CREATABLE,
+				'callback'            => [ __CLASS__, 'api_invite_bulk' ],
+				'permission_callback' => [ __CLASS__, 'permission_callback' ],
+				'args'                => [
+					'subscription_id' => [
+						'type'              => 'integer',
+						'required'          => true,
+						'sanitize_callback' => 'absint',
+					],
+					'emails'          => [
+						'type'              => 'string',
+						'default'           => '',
+						'sanitize_callback' => [ Group_Subscription_Bulk_Invite::class, 'sanitize_input' ],
+						'validate_callback' => 'rest_validate_request_arg',
+					],
+					'csv'             => [
+						'type'              => 'string',
+						'default'           => '',
+						'sanitize_callback' => [ Group_Subscription_Bulk_Invite::class, 'sanitize_input' ],
+						'validate_callback' => 'rest_validate_request_arg',
+					],
+					'confirm'         => [
+						'type'    => 'boolean',
+						'default' => false,
+					],
+				],
+			]
+		);
 		\register_rest_route(
 			self::NAMESPACE,
 			'/invite',
@@ -536,10 +570,10 @@ class Group_Subscription_API {
 		}
 		// The candidate query is intentionally NOT role-restricted. Group_Subscription::is_eligible_member()
 		// -- which runs the newspack_group_subscription_member_eligible filter -- is the sole authority on
-		// who is an eligible group member, so a publisher can opt a custom-role user in (or a normally
-		// eligible role-holder out) via that filter. A role__in allowlist here would silently exclude an
-		// opted-in user (and could never exclude an opted-out one) before the predicate ever runs, so
-		// results are post-filtered against is_eligible_member() below instead.
+		// who is an eligible group member: any role can be eligible, and a publisher can opt a staff user
+		// in (or an otherwise eligible user out) via that filter. A role__in allowlist here would silently
+		// exclude eligible users before the predicate ever runs, so results are post-filtered against
+		// is_eligible_member() below instead.
 		$exclude   = Group_Subscription::get_members( $subscription );
 		$exclude[] = $subscription->get_user_id();
 		// Each query is capped at SEARCH_USERS_LIMIT candidates ('number' below); results are
@@ -744,6 +778,77 @@ class Group_Subscription_API {
 		$email  = $request->get_param( 'email' );
 		$invite = Group_Subscription_Invite::generate_invite( $subscription_id, $email );
 		return \rest_ensure_response( $invite );
+	}
+
+	/**
+	 * Preview or send invitations for a list of addresses.
+	 *
+	 * A preview returns the classification and, when the list would be refused (more
+	 * new addresses than free seats, or than one send may carry), the refusal message
+	 * as `over_limit`. A confirm re-reads the input rather
+	 * than trusting the preview, so the seat guard holds even if the group changed in
+	 * between.
+	 *
+	 * @param \WP_REST_Request $request The request object.
+	 *
+	 * @return \WP_REST_Response|\WP_Error The preview or outcome, or the refusal.
+	 */
+	public static function api_invite_bulk( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$subscription_id = $request->get_param( 'subscription_id' );
+		if ( ! Group_Subscription_MyAccount::is_subscription_active( $subscription_id ) ) {
+			return \rest_ensure_response(
+				new \WP_Error(
+					'newspack_group_subscription_not_active',
+					sprintf(
+						/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+						__( 'This %s is not active, so new invitations can\'t be issued.', 'newspack-plugin' ),
+						Group_Subscription::get_label_lower( 'singular' )
+					),
+					[ 'status' => 409 ]
+				)
+			);
+		}
+		$emails = (string) $request->get_param( 'emails' );
+		$csv    = (string) $request->get_param( 'csv' );
+		if ( strlen( $emails ) > Group_Subscription_Bulk_Invite::MAX_INPUT_BYTES || strlen( $csv ) > Group_Subscription_Bulk_Invite::MAX_INPUT_BYTES ) {
+			return \rest_ensure_response(
+				new \WP_Error( 'newspack_group_subscription_bulk_invite_too_large', __( 'This list is too large. Split it into smaller lists.', 'newspack-plugin' ), [ 'status' => 400 ] )
+			);
+		}
+		$entries = Group_Subscription_Bulk_Invite::parse( $emails, $csv );
+		if ( empty( $entries ) ) {
+			return \rest_ensure_response(
+				new \WP_Error( 'newspack_group_subscription_bulk_invite_empty', __( 'No email addresses were found.', 'newspack-plugin' ), [ 'status' => 400 ] )
+			);
+		}
+		if ( count( $entries ) > Group_Subscription_Bulk_Invite::MAX_ENTRIES ) {
+			return \rest_ensure_response(
+				new \WP_Error(
+					'newspack_group_subscription_bulk_invite_too_many_entries',
+					sprintf(
+						/* translators: %d: the most entries one list may hold. */
+						__( 'A list can hold up to %d entries. Split it into smaller lists.', 'newspack-plugin' ),
+						Group_Subscription_Bulk_Invite::MAX_ENTRIES
+					),
+					[ 'status' => 400 ]
+				)
+			);
+		}
+		// Only a store admin, who can see every account anyway, is told up front which
+		// addresses belong to accounts the group can't hold.
+		$check_eligibility = current_user_can( 'manage_woocommerce' );
+		if ( $request->get_param( 'confirm' ) ) {
+			$result = Group_Subscription_Bulk_Invite::invite( $subscription_id, $entries, $check_eligibility );
+			if ( ! \is_wp_error( $result ) ) {
+				$result['summary'] = Group_Subscription_Bulk_Invite::describe( $result );
+			}
+			return \rest_ensure_response( $result );
+		}
+		$preview               = Group_Subscription_Bulk_Invite::classify( $subscription_id, $entries, $check_eligibility );
+		$refusal               = Group_Subscription_Bulk_Invite::refusal( $preview );
+		$preview['over_limit'] = $refusal ? $refusal->get_error_message() : null;
+		$preview['summary']    = Group_Subscription_Bulk_Invite::describe( $preview );
+		return \rest_ensure_response( $preview );
 	}
 
 	/**

@@ -120,9 +120,10 @@ domReady( function () {
 	document.querySelectorAll( '.newspack-newsletters-subscribe' ).forEach( container => {
 		const form = container.querySelector( 'form' );
 		if ( ! form ) {
-			// No form means the reader is already subscribed: render_block emits
-			// the block with data-status="200" and no form, so there's nothing to
-			// wire up. By design the Continue button only appears for the reader
+			// No form means there is nothing to wire up. Either the reader is already
+			// subscribed (render_block emits the block with data-status="200" and no
+			// form), or the block shows only premium lists this reader can't join.
+			// By design the Continue button only appears for the reader
 			// who just subscribed in this page view — a returning/already-subscribed
 			// reader (including one who reloads after subscribing) sees the plain
 			// success message, matching the "redirect the reader who just engaged"
@@ -136,17 +137,34 @@ domReady( function () {
 		const submit = container.querySelector( 'button[type="submit"]' );
 		const spinner = document.createElement( 'span' );
 		spinner.classList.add( 'spinner' );
+		const messageId = `${ emailInput.id }-message`;
 
-		form.endFlow = ( message, status = 500, wasSubscribed = false, metadata = {} ) => {
+		const setEmailError = hasError => {
+			if ( hasError ) {
+				emailInput.setAttribute( 'aria-invalid', 'true' );
+				emailInput.setAttribute( 'aria-describedby', messageId );
+			} else {
+				emailInput.removeAttribute( 'aria-invalid' );
+				emailInput.removeAttribute( 'aria-describedby' );
+			}
+		};
+
+		form.endFlow = ( message, status = 500, wasSubscribed = false, metadata = {}, isEmailError = false ) => {
 			container.setAttribute( 'data-status', status );
 			const messageNode = document.createElement( 'p' );
-			emailInput.removeAttribute( 'disabled' );
+			emailInput.readOnly = false;
 			submit.removeChild( spinner );
-			submit.removeAttribute( 'disabled' );
+			submit.removeAttribute( 'aria-disabled' );
+			submit.removeAttribute( 'aria-busy' );
 			form.classList.remove( 'in-progress' );
 			messageNode.innerHTML = wasSubscribed ? container.getAttribute( 'data-success-message' ) : message;
-			messageContainer.appendChild( messageNode );
 			messageNode.className = `message status-${ status }`;
+			if ( status !== 200 ) {
+				messageNode.id = messageId;
+				messageNode.setAttribute( 'role', 'alert' );
+			}
+			messageContainer.appendChild( messageNode );
+			setEmailError( isEmailError );
 			if ( status === 200 ) {
 				container.replaceChild( responseContainer, form );
 				form.dispatchEvent( successEvent );
@@ -180,26 +198,43 @@ domReady( function () {
 				}
 			}
 		};
+		// The button and field stay focusable while the request runs, so the busy state
+		// is announced and focus stays put. A second press does nothing: cancelling the
+		// click also cancels a submit from Enter in the field, before reCAPTCHA sees it.
+		submit.addEventListener(
+			'click',
+			ev => {
+				if ( form.classList.contains( 'in-progress' ) ) {
+					ev.preventDefault();
+					ev.stopImmediatePropagation();
+				}
+			},
+			true
+		);
 		form.addEventListener( 'submit', ev => {
 			ev.preventDefault();
+			if ( form.classList.contains( 'in-progress' ) ) {
+				return;
+			}
 			messageContainer.innerHTML = '';
+			setEmailError( false );
 			form.classList.add( 'in-progress' );
-			submit.disabled = true;
+			submit.setAttribute( 'aria-disabled', 'true' );
+			submit.setAttribute( 'aria-busy', 'true' );
 			submit.appendChild( spinner );
 
 			if ( ! form.npe?.value ) {
-				return form.endFlow( newspack_newsletters_subscribe_block.invalid_email, 400 );
+				return form.endFlow( newspack_newsletters_subscribe_block.invalid_email, 400, false, {}, true );
 			}
 
 			const body = new FormData( form );
 			if ( ! body.has( 'npe' ) || ! body.get( 'npe' ) ) {
-				return form.endFlow( newspack_newsletters_subscribe_block.invalid_email, 400 );
+				return form.endFlow( newspack_newsletters_subscribe_block.invalid_email, 400, false, {}, true );
 			}
 			if ( nonce ) {
 				body.set( 'newspack_newsletters_subscribe', nonce );
 			}
-			emailInput.setAttribute( 'disabled', 'true' );
-			submit.setAttribute( 'disabled', 'true' );
+			emailInput.readOnly = true;
 
 			const submitSubscribe = () => {
 				fetch( form.getAttribute( 'action' ) || window.location.pathname, {
@@ -210,9 +245,9 @@ domReady( function () {
 					body,
 				} ).then( res => {
 					res.json().then( data => {
-						const { message, newspack_newsletters_subscribed: wasSubscribed, newspack_newsletters_subscribe, metadata } = data;
+						const { message, code, newspack_newsletters_subscribed: wasSubscribed, newspack_newsletters_subscribe, metadata } = data;
 						nonce = newspack_newsletters_subscribe;
-						form.endFlow( message, res.status, wasSubscribed, metadata );
+						form.endFlow( message, res.status, wasSubscribed, metadata, 'invalid_email' === code );
 
 						// Post-registration email verification. When newspack-plugin signals that the
 						// freshly registered reader needs to verify, hand off to the verification modal

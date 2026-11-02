@@ -69,6 +69,28 @@ class Newspack_Test_Access_Rules_One_Time_Purchase extends WP_UnitTestCase {
 
 		self::$purchaser_user_id     = $this->factory->user->create( [ 'role' => 'subscriber' ] );
 		self::$non_purchaser_user_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+
+		// The mocks behave like WooCommerce 10.8+; the fallback has its own test.
+		$this->set_customer_bought_product_matches_id_only( true );
+	}
+
+	/**
+	 * Restore the WooCommerce version check.
+	 */
+	public function tear_down() {
+		$this->set_customer_bought_product_matches_id_only( null );
+		parent::tear_down();
+	}
+
+	/**
+	 * Override whether wc_customer_bought_product() is treated as ID-only.
+	 *
+	 * @param bool|null $value Override, or null for the version check.
+	 */
+	private function set_customer_bought_product_matches_id_only( $value ) {
+		$property = new ReflectionProperty( Access_Rules::class, 'customer_bought_product_matches_id_only' );
+		$property->setAccessible( true );
+		$property->setValue( null, $value );
 	}
 
 	/**
@@ -429,10 +451,11 @@ class Newspack_Test_Access_Rules_One_Time_Purchase extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A guest order (customer_id 0) matched by billing email grants access on
-	 * both the finite-duration and forever paths.
+	 * A guest order (customer_id 0) under the reader's email does not grant
+	 * access on either path: the account email is not proof the reader placed
+	 * the order, so purchases are matched by customer ID only.
 	 */
-	public function test_guest_order_grants_access_via_billing_email() {
+	public function test_guest_order_with_reader_email_denies_access() {
 		$purchaser_email = get_userdata( self::$purchaser_user_id )->user_email;
 		$this->create_one_time_order(
 			[
@@ -442,37 +465,98 @@ class Newspack_Test_Access_Rules_One_Time_Purchase extends WP_UnitTestCase {
 			]
 		);
 
-		$this->assertTrue(
+		$this->assertFalse(
 			Access_Rules::has_one_time_purchase( self::$purchaser_user_id, $this->get_rule_value() ),
-			'A guest order matching the reader billing email should grant access within a finite duration.'
+			'A guest order under the reader email should not grant access within a finite duration.'
 		);
-		$this->assertTrue(
+		$this->assertFalse(
 			Access_Rules::has_one_time_purchase( self::$purchaser_user_id, $this->get_rule_value( [ 'duration_unit' => 'forever' ] ) ),
-			'A guest order matching the reader billing email should grant lifetime access.'
+			'A guest order under the reader email should not grant lifetime access.'
 		);
+		$this->assertSame( [], Access_Rules::get_one_time_purchase_order_ids( self::$purchaser_user_id, $this->get_rule_value() ) );
 	}
 
 	/**
-	 * A guest order whose billing email differs only in case still grants access:
-	 * WooCommerce matches the email in SQL, under a case-insensitive collation.
+	 * An order placed by another account with a billing email equal to the
+	 * reader's account email does not grant the reader access. This is the
+	 * case where a reader changes their account email to someone else's.
 	 */
-	public function test_guest_order_matches_billing_email_case_insensitively() {
-		$purchaser_email = get_userdata( self::$purchaser_user_id )->user_email;
+	public function test_other_customers_order_with_reader_email_denies_access() {
 		$this->create_one_time_order(
 			[
-				'customer_id'   => 0,
-				'billing_email' => strtoupper( $purchaser_email ),
+				'customer_id'   => self::$purchaser_user_id,
+				'billing_email' => get_userdata( self::$non_purchaser_user_id )->user_email,
 				'date_created'  => gmdate( 'Y-m-d H:i:s', strtotime( '-10 days' ) ),
 			]
 		);
 
-		$this->assertTrue(
-			Access_Rules::has_one_time_purchase( self::$purchaser_user_id, $this->get_rule_value() ),
-			'A differently-cased billing email should still match within a finite duration.'
+		$this->assertFalse(
+			Access_Rules::has_one_time_purchase( self::$non_purchaser_user_id, $this->get_rule_value() ),
+			'Another customer\'s order should not grant access within a finite duration.'
 		);
+		$this->assertFalse(
+			Access_Rules::has_one_time_purchase( self::$non_purchaser_user_id, $this->get_rule_value( [ 'duration_unit' => 'forever' ] ) ),
+			'Another customer\'s order should not grant lifetime access.'
+		);
+	}
+
+	/**
+	 * The lifetime lookup passes a null email, not ''. WooCommerce caches an ''
+	 * lookup by the customer's order count, which an order status change leaves
+	 * as it is, so a cancelled or refunded purchase would keep granting access.
+	 */
+	public function test_lifetime_lookup_uses_the_cache_that_order_writes_clear() {
+		$this->create_one_time_order();
+		$emails_passed = [];
+		$record_email  = function ( $result, $customer_email ) use ( &$emails_passed ) {
+			$emails_passed[] = $customer_email;
+			return $result;
+		};
+		add_filter( 'woocommerce_pre_customer_bought_product', $record_email, 10, 2 );
+		Access_Rules::has_one_time_purchase( self::$purchaser_user_id, $this->get_rule_value( [ 'duration_unit' => 'forever' ] ) );
+		remove_filter( 'woocommerce_pre_customer_bought_product', $record_email, 10 );
+
+		$this->assertSame( [ null ], $emails_passed );
+	}
+
+	/**
+	 * On a WooCommerce older than 10.8, wc_customer_bought_product() also matches
+	 * the account email, so the lifetime check walks the order store by customer
+	 * ID instead. Purchases still grant access; guest orders still do not.
+	 */
+	public function test_lifetime_fallback_matches_customer_id_only() {
+		$this->set_customer_bought_product_matches_id_only( false );
+		$purchaser_email = get_userdata( self::$purchaser_user_id )->user_email;
+		$this->create_one_time_order(
+			[
+				'customer_id'   => 0,
+				'billing_email' => $purchaser_email,
+				'date_created'  => gmdate( 'Y-m-d H:i:s', strtotime( '-2 years' ) ),
+			]
+		);
+		$forever = $this->get_rule_value( [ 'duration_unit' => 'forever' ] );
+
+		// Answer as WooCommerce before 10.8 does: the account email looked up
+		// from the user ID matches the guest order.
+		$pre_10_8_lookup = function ( $result, $customer_email, $user_id ) use ( $purchaser_email ) {
+			$user = get_userdata( $user_id );
+			return $user && $user->user_email === $purchaser_email ? true : $result;
+		};
+		add_filter( 'woocommerce_pre_customer_bought_product', $pre_10_8_lookup, 10, 3 );
+		$guest_order_grants = Access_Rules::has_one_time_purchase( self::$purchaser_user_id, $forever );
+		remove_filter( 'woocommerce_pre_customer_bought_product', $pre_10_8_lookup, 10 );
+
+		$this->assertFalse(
+			$guest_order_grants,
+			'A guest order under the reader email should not grant lifetime access.'
+		);
+
+		$this->create_one_time_order( [ 'date_created' => gmdate( 'Y-m-d H:i:s', strtotime( '-2 years' ) ) ] );
+		Access_Rules::flush_one_time_purchase_memo();
+
 		$this->assertTrue(
-			Access_Rules::has_one_time_purchase( self::$purchaser_user_id, $this->get_rule_value( [ 'duration_unit' => 'forever' ] ) ),
-			'A differently-cased billing email should still match for lifetime access.'
+			Access_Rules::has_one_time_purchase( self::$purchaser_user_id, $forever ),
+			'The reader\'s own order should grant lifetime access.'
 		);
 	}
 

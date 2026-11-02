@@ -1,3 +1,8 @@
+/**
+ * WordPress dependencies.
+ */
+import type { Stack } from '@wordpress/ui';
+
 export type DrawerSize = 'small' | 'medium' | 'large' | 'x-large' | 'full';
 
 /** `text` is null unless the title's children are a plain string. */
@@ -39,10 +44,10 @@ export type DrawerCloseIconProps = {
 };
 
 export type DrawerContentProps = {
-	/** 4px scale, as VStack's `spacing`. `0` for a flush section. */
+	/** 4px scale: `6` is 24px, `0` a flush section. */
 	padding?: number;
-	/** 4px scale, as VStack's `spacing`. */
-	gap?: number;
+	/** A `Stack` gap token from `@wordpress/ui`. */
+	gap?: React.ComponentProps< typeof Stack >[ 'gap' ];
 	className?: string;
 	children?: React.ReactNode;
 };

@@ -13,11 +13,11 @@
 		},
 		"placeholder": {
 			"type": "string",
-			"default": "Email Address"
+			"default": ""
 		},
 		"emailLabel": {
 			"type": "string",
-			"default": "Email Address"
+			"default": ""
 		},
 		"displayNameField": {
 			"type": "boolean",
@@ -29,19 +29,19 @@
 		},
 		"namePlaceholder": {
 			"type": "string",
-			"default": "Name"
+			"default": ""
 		},
 		"nameLabel": {
 			"type": "string",
-			"default": "Name"
+			"default": ""
 		},
 		"lastNamePlaceholder": {
 			"type": "string",
-			"default": "Last Name"
+			"default": ""
 		},
 		"lastNameLabel": {
 			"type": "string",
-			"default": "Last Name"
+			"default": ""
 		},
 		"label": {
 			"type": "string",
@@ -50,6 +50,19 @@
 		"displayDescription": {
 			"type": "boolean",
 			"default": true
+		},
+		"showPremium": {
+			"type": "boolean",
+			"default": false
+		},
+		"showPremiumLabel": {
+			"type": "string",
+			"default": "Premium"
+		},
+		"listsPosition": {
+			"type": "string",
+			"enum": [ "before", "after" ],
+			"default": "before"
 		},
 		"lists": {
 			"type": "array",
@@ -108,11 +121,16 @@
 	"styles": [
 		{
 			"name": "modern",
-			"label": "Modern"
+			"label": "Modern",
+			"isDefault": true
 		},
 		{
 			"name": "modern--grid",
 			"label": "Modern Grid"
+		},
+		{
+			"name": "legacy",
+			"label": "Legacy"
 		}
 	]
 }

@@ -16,7 +16,7 @@ const ITEMS = [
 	{ value: 22, label: 'Beta' },
 ];
 
-const titles = () => Array.from( document.querySelectorAll( '.newspack-blocks-reorder-modal__title' ) ).map( el => el.textContent );
+const titles = () => Array.from( document.querySelectorAll( '.newspack-reorder-modal__title' ) ).map( el => el.textContent );
 
 describe( 'SpecificPostsControl', () => {
 	it( 'exposes the token field to assistive technology as "Content"', () => {

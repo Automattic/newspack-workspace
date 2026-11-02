@@ -23,6 +23,7 @@ export const resolveStatCardLabels = ( labels?: Partial< StatCardLabels > ): Sta
 	notApplicable: labels?.notApplicable?.trim() || _x( 'Not applicable', 'a statistic with no number to show', 'newspack-plugin' ),
 	up: labels?.up?.trim() || _x( 'Up', 'a statistic that has increased', 'newspack-plugin' ),
 	down: labels?.down?.trim() || _x( 'Down', 'a statistic that has decreased', 'newspack-plugin' ),
+	unchanged: labels?.unchanged?.trim() || _x( 'Unchanged', 'a statistic that has neither increased nor decreased', 'newspack-plugin' ),
 } );
 
 export const StatCardContext = createContext< StatCardContextValue | null >( null );

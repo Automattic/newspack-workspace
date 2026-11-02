@@ -1,8 +1,10 @@
+@use "../mixins";
+
 .newspack-ui {
-	color: var(--newspack-ui-color-neutral-90);
+	color: var(--newspack-ui-color-text);
 	font-family: var(--newspack-ui-font-family);
-	font-size: var(--newspack-ui-font-size-s);
-	line-height: var(--newspack-ui-line-height-s);
+	font-size: var(--newspack-ui-font-size-body);
+	line-height: var(--newspack-ui-line-height-body);
 	-webkit-font-smoothing: antialiased;
 
 	p {
@@ -32,43 +34,50 @@
 		text-transform: unset;
 	}
 
+	&__font--medium {
+		font-weight: var(--newspack-ui-font-weight-medium);
+	}
+
 	strong,
 	&__font--bold {
 		font-weight: var(--newspack-ui-font-weight-strong);
 	}
 
 	&__font--normal {
-		font-weight: normal;
+		font-weight: var(--newspack-ui-font-weight-regular);
 	}
 
 	& &__font--2xs {
-		font-size: var(--newspack-ui-font-size-2xs);
-		line-height: var(--newspack-ui-line-height-2xs);
+		font-size: var(--newspack-ui-font-size-caption);
+		line-height: var(--newspack-ui-line-height-caption);
 	}
 
 	& &__font--xs {
-		font-size: var(--newspack-ui-font-size-xs);
-		line-height: var(--newspack-ui-line-height-xs);
+		font-size: var(--newspack-ui-font-size-small);
+		line-height: var(--newspack-ui-line-height-small);
 	}
 
 	& &__font--s {
-		font-size: var(--newspack-ui-font-size-s);
-		line-height: var(--newspack-ui-line-height-s);
+		font-size: var(--newspack-ui-font-size-body);
+		line-height: var(--newspack-ui-line-height-body);
 	}
 
 	& &__font--m {
-		font-size: var(--newspack-ui-font-size-m);
-		line-height: var(--newspack-ui-line-height-m);
+		font-size: var(--newspack-ui-font-size-title-m);
+		letter-spacing: var(--newspack-ui-letter-spacing-title-m);
+		line-height: var(--newspack-ui-line-height-title-m);
 	}
 
 	& &__font--l {
-		font-size: var(--newspack-ui-font-size-l);
-		line-height: var(--newspack-ui-line-height-l);
+		font-size: var(--newspack-ui-font-size-title-l);
+		letter-spacing: var(--newspack-ui-letter-spacing-title-l);
+		line-height: var(--newspack-ui-line-height-title-l);
 	}
 
 	& &__font--xl {
-		font-size: var(--newspack-ui-font-size-xl);
-		line-height: var(--newspack-ui-line-height-xl);
+		font-size: var(--newspack-ui-font-size-display);
+		letter-spacing: var(--newspack-ui-letter-spacing-display);
+		line-height: var(--newspack-ui-line-height-display);
 	}
 
 	& &__font--2xl {
@@ -98,27 +107,18 @@
 
 	/* Text meant only for screen readers. */
 	.screen-reader-text {
-		border: 0;
-		clip: rect(1px, 1px, 1px, 1px);
-		clip-path: inset(50%);
-		height: 1px;
-		margin: -1px;
-		overflow: hidden;
-		padding: 0;
-		position: absolute !important;
-		width: 1px;
-		word-wrap: normal !important; /* Many screen reader and browser combinations announce broken words as they would appear visually. */
+		@include mixins.visually-hidden;
 
 		&:focus {
-			background-color: var(--newspack-ui-color-neutral-10);
+			background-color: var(--newspack-ui-color-neutral-fill);
 			border-radius: 3px;
 			box-shadow: 0 0 2px 2px rgba(0, 0, 0, 0.6);
 			clip: auto !important;
 			clip-path: none;
-			color: var(--newspack-ui-color-neutral-90);
+			color: var(--newspack-ui-color-text);
 			display: block;
 
-			font-weight: bold;
+			font-weight: var(--newspack-ui-font-weight-strong);
 			height: auto;
 			left: 5px;
 			line-height: normal;

@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies.
  */
-import { CardBody, CardDivider, ToggleControl } from '@wordpress/components';
+import { CardBody, CardDivider, Notice, ToggleControl } from '@wordpress/components';
 import { useCallback } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 
@@ -65,6 +65,15 @@ export default function CustomAccess( { customAccess, onChange, isNewsletter = f
 	// group, and the toggle is load-bearing wherever it sits.
 	const showGraceToggle = hasSubscriptionRule( customAccess.access_rules );
 
+	// Institutions in paid access let signed-out visitors skip both walls, but they
+	// also become the only way past paid access for signed-in readers. Behind a
+	// registration wall that's rarely what's meant (NPPD-2310).
+	const onlyInstitutionsPass =
+		! isNewsletter &&
+		! governsSignedOut &&
+		customAccess.access_rules.length > 0 &&
+		customAccess.access_rules.every( group => group?.length > 0 && group.every( rule => rule?.slug === 'institution' ) );
+
 	return (
 		<>
 			{ ! isNewsletter && (
@@ -80,6 +89,16 @@ export default function CustomAccess( { customAccess, onChange, isNewsletter = f
 					</CardBody>
 					<CardDivider />
 				</>
+			) }
+			{ onlyInstitutionsPass && (
+				<CardBody size="small">
+					<Notice status="warning" isDismissible={ false }>
+						{ __(
+							'Signed-in readers who aren’t from a selected institution will be blocked by Paid Access, even after registering. To let institutions skip registration only, select them under Registered Access and turn Paid Access off.',
+							'newspack-plugin'
+						) }
+					</Notice>
+				</CardBody>
 			) }
 			<AccessRules rules={ currentRules } onChange={ handleRulesChange } />
 			{ showGraceToggle && (

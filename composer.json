@@ -12,8 +12,7 @@
 		"phpcompatibility/phpcompatibility-wp": "^2.1",
 		"dealerdirect/phpcodesniffer-composer-installer": "^1.0",
 		"phpunit/phpunit": "^9.5",
-		"yoast/phpunit-polyfills": "^4.0",
-		"brainmaestro/composer-git-hooks": "^3.0"
+		"yoast/phpunit-polyfills": "^4.0"
 	},
 	"scripts": {
 		"phpcs": "phpcs --standard=phpcs.xml",

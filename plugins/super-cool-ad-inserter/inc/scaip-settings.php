@@ -134,7 +134,7 @@ function scaip_admin_page() {
 				sprintf(
 					// translators: %1$s is the URL to the plugin's documentation on GitHub.
 					__( 'For more information about these settings, and about the Super Cool Ad Inserter Plugin in general, <a href="%1$s">see the plugin\'s documentation on GitHub</a>.', 'scaip' ),
-					'https://github.com/Automattic/super-cool-ad-inserter-plugin/tree/trunk/docs'
+					'https://github.com/Automattic/newspack-workspace/tree/main/plugins/super-cool-ad-inserter/docs'
 				)
 			)
 		);

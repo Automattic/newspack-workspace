@@ -1,0 +1,156 @@
+/**
+ * Editor styles for the Roundup block.
+ */
+
+.wp-block-newspack-manager-roundup {
+	// Placeholder styles
+	.roundup-placeholder {
+		padding: 20px;
+		border: 2px dashed #ddd;
+		border-radius: 4px;
+
+		&__actions {
+			margin-top: 16px;
+			padding-top: 16px;
+			border-top: 1px solid #ddd;
+			display: flex;
+			align-items: center;
+			gap: 12px;
+		}
+
+		&__selected-count {
+			margin: 0;
+			color: #757575;
+			font-size: 14px;
+		}
+
+		.components-notice {
+			margin-bottom: 16px;
+		}
+	}
+
+	// Loading state
+	.roundup-loading {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		min-height: 200px;
+
+		p {
+			margin-top: 16px;
+			color: #757575;
+		}
+	}
+
+	// Content preview (locked state)
+	.roundup-block-preview {
+		position: relative;
+		border: 1px solid #ddd;
+		border-radius: 4px;
+		overflow: hidden;
+
+		&__locked-overlay {
+			position: absolute;
+			top: 0;
+			left: 0;
+			right: 0;
+			bottom: 0;
+			background: rgba(255, 255, 255, 0.95);
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			opacity: 0;
+			transition: opacity 0.2s;
+			pointer-events: none;
+			z-index: 1;
+		}
+
+		&:hover &__locked-overlay {
+			opacity: 1;
+		}
+
+		&__locked-message {
+			background: #fff;
+			padding: 16px 24px;
+			border: 2px solid #2271b1;
+			border-radius: 4px;
+			box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+
+			p {
+				margin: 0;
+				font-size: 14px;
+				font-weight: 500;
+				color: #2271b1;
+			}
+		}
+
+		&__content {
+			padding: 20px;
+			background: #fafafa;
+			user-select: none;
+			cursor: default;
+
+			h2,
+			h3,
+			h4 {
+				margin-top: 1em;
+				margin-bottom: 0.5em;
+
+				&:first-child {
+					margin-top: 0;
+				}
+			}
+
+			p {
+				margin-bottom: 1em;
+
+				&:last-child {
+					margin-bottom: 0;
+				}
+			}
+
+			img {
+				max-width: 100%;
+				height: auto;
+			}
+
+			a {
+				color: #2271b1;
+				text-decoration: underline;
+				cursor: pointer;
+			}
+		}
+	}
+
+	// Inspector controls
+	.roundup-inspector {
+		&__summary {
+			padding: 12px;
+			background: #f5f5f5;
+			border-radius: 4px;
+			margin-bottom: 16px;
+
+			p {
+				margin: 0;
+				font-size: 13px;
+			}
+		}
+
+		&__regenerate,
+		&__detach {
+			width: 100%;
+			justify-content: center;
+		}
+
+		&__regenerate {
+			margin-top: 16px;
+		}
+
+		&__help-text {
+			font-size: 13px;
+			color: #757575;
+			margin-bottom: 12px;
+		}
+	}
+}

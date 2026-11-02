@@ -115,7 +115,12 @@ class Newspack_Blocks_API {
 			return '';
 		}
 
-		$linked_category = '<a href="#">' . $category->name . '</a>';
+		$category_link = get_category_link( $category->term_id );
+		// newspack_blocks_format_categories() links the name only when the term
+		// resolves to a URL; match it so the preview and the front end agree.
+		$linked_category = $category_link
+			? '<a href="' . esc_url( $category_link ) . '">' . $category->name . '</a>'
+			: $category->name;
 
 		return apply_filters( 'newspack_blocks_categories', $linked_category );
 	}
@@ -152,7 +157,7 @@ class Newspack_Blocks_API {
 				$sponsor_info_item = [
 					'flag'          => $sponsor['sponsor_flag'],
 					'sponsor_name'  => $sponsor['sponsor_name'],
-					'sponsor_url'   => $sponsor['sponsor_url'],
+					'sponsor_url'   => sanitize_url( (string) $sponsor['sponsor_url'] ),
 					'byline_prefix' => $sponsor['sponsor_byline'],
 					'id'            => $sponsor['sponsor_id'],
 					'scope'         => $sponsor['sponsor_scope'],
@@ -178,7 +183,18 @@ class Newspack_Blocks_API {
 	 */
 	public static function newspack_blocks_get_tag_labels( $object_info ) {
 		$tag_labels = Newspack_Blocks::get_tag_labels( $object_info['id'] );
-		return ! empty( $tag_labels ) ? array_values( $tag_labels ) : false;
+		if ( empty( $tag_labels ) ) {
+			return false;
+		}
+		return array_map(
+			function ( $label ) {
+				if ( isset( $label['link'] ) ) {
+					$label['link'] = sanitize_url( (string) $label['link'] );
+				}
+				return $label;
+			},
+			array_values( $tag_labels )
+		);
 	}
 
 	/**
@@ -190,29 +206,6 @@ class Newspack_Blocks_API {
 	public static function newspack_blocks_has_custom_excerpt( $object_info ) {
 		$post_has_custom_excerpt = has_excerpt( $object_info['id'] );
 		return $post_has_custom_excerpt;
-	}
-
-	/**
-	 * Point every anchor in a rendered payload fragment at '#'.
-	 *
-	 * The editor canvas renders the byline and avatar fields verbatim, so a
-	 * live URL navigates the canvas iframe away from the post being edited.
-	 * Runs on the finished markup — after the newspack_blocks_post_byline
-	 * filter — so links injected by filters (e.g. custom bylines) are covered
-	 * too, matching the category-link convention used elsewhere in this
-	 * payload. Only real anchor href attributes are rewritten: "href=" text
-	 * inside another attribute's value (avatar proxy URLs), xlink:href sprite
-	 * references, and plain text all pass through untouched.
-	 *
-	 * @param string $html Rendered markup destined for the editor payload.
-	 * @return string Markup with every anchor href pointing at '#'.
-	 */
-	private static function neutralize_editor_links( $html ) {
-		$processor = new \WP_HTML_Tag_Processor( (string) $html );
-		while ( $processor->next_tag( 'A' ) ) {
-			$processor->set_attribute( 'href', '#' );
-		}
-		return $processor->get_updated_html();
 	}
 
 	/**
@@ -332,7 +325,14 @@ class Newspack_Blocks_API {
 	 */
 	public static function posts_endpoint( $request ) {
 		$attributes = $request->get_params();
-		$args       = Newspack_Blocks::build_articles_query( $attributes, apply_filters( 'newspack_blocks_block_name', 'newspack-blocks/homepage-articles' ) );
+
+		// build_articles_query() applies the same restriction, but the `include` handling below
+		// replaces its no-match post__in, so stop here when no requested post type is allowed.
+		if ( empty( Newspack_Blocks::filter_viewable_post_types( $attributes['postType'] ?? [ 'post' ] ) ) ) {
+			return new \WP_REST_Response( [] );
+		}
+
+		$args = Newspack_Blocks::build_articles_query( $attributes, apply_filters( 'newspack_blocks_block_name', 'newspack-blocks/homepage-articles' ) );
 
 		if ( $attributes['exclude'] && count( $attributes['exclude'] ) ) {
 			$args['post__not_in'] = $attributes['exclude']; // phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.PostNotIn_post__not_in
@@ -406,11 +406,11 @@ class Newspack_Blocks_API {
 				'newspack_sponsors_show_author'     => Newspack_Blocks::newspack_display_sponsors_and_authors( $sponsors ),
 				'newspack_sponsors_show_categories' => Newspack_Blocks::newspack_display_sponsors_and_categories( $sponsors ),
 				'newspack_tag_labels'               => self::newspack_blocks_get_tag_labels( $data ),
-				'newspack_post_avatars'             => self::neutralize_editor_links( \newspack_blocks_format_avatars( $author_info ) ),
-				'newspack_post_byline'              => self::neutralize_editor_links( \newspack_blocks_format_byline( $author_info ) ),
+				'newspack_post_avatars'             => \newspack_blocks_format_avatars( $author_info ),
+				'newspack_post_byline'              => wp_kses_post( \newspack_blocks_format_byline( $author_info ) ),
 				'post_status'                       => $post->post_status,
 				'post_type'                         => $post->post_type,
-				'post_link'                         => Newspack_Blocks::get_post_link( $post->ID ),
+				'post_link'                         => sanitize_url( (string) Newspack_Blocks::get_post_link( $post->ID ) ),
 			];
 
 			// Support Newspack Listings hide author/publish date options.
@@ -438,7 +438,6 @@ class Newspack_Blocks_API {
 		if ( empty( $params['search'] ) ) {
 			return new \WP_REST_Response( [] );
 		}
-		add_filter( 'posts_where', [ 'Newspack_Blocks_API', 'add_post_title_wildcard_search' ], 10, 2 );
 
 		$args = [
 			'post_status'           => 'publish',
@@ -447,11 +446,15 @@ class Newspack_Blocks_API {
 		];
 
 		if ( $params['postType'] && count( $params['postType'] ) ) {
-			$args['post_type'] = $params['postType'];
+			$args['post_type'] = Newspack_Blocks::filter_viewable_post_types( $params['postType'] );
+			if ( empty( $args['post_type'] ) ) {
+				return new \WP_REST_Response( [] );
+			}
 		} else {
 			$args['post_type'] = 'post';
 		}
 
+		add_filter( 'posts_where', [ 'Newspack_Blocks_API', 'add_post_title_wildcard_search' ], 10, 2 );
 		$query = new WP_Query( $args );
 		remove_filter( 'posts_where', [ 'Newspack_Blocks_API', 'add_post_title_wildcard_search' ], 10, 2 );
 		return new \WP_REST_Response(

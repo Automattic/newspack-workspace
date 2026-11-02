@@ -166,6 +166,32 @@ class Newspack_Test_Perfmatters extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Saving the Perfmatters settings while reader activation is off stores
+	 * `newspack-plugin` in the delay list. Once reader activation is on, the merge
+	 * must not bring it back, or the first click on the sign-in button or a
+	 * `#signin_modal` link does nothing. Without reader activation, Newspack
+	 * delays it by default.
+	 */
+	public function test_newspack_plugin_delayed_only_without_reader_activation() {
+		add_filter( 'newspack_reader_activation_enabled', '__return_true' );
+		$options = Perfmatters::set_defaults(
+			[
+				'assets' => [
+					'delay_js_inclusions' => [ 'newspack-plugin', 'publisher-script' ],
+				],
+			]
+		);
+		$this->assertNotContains( 'newspack-plugin', $options['assets']['delay_js_inclusions'] );
+		$this->assertContains( 'publisher-script', $options['assets']['delay_js_inclusions'] );
+		remove_filter( 'newspack_reader_activation_enabled', '__return_true' );
+
+		add_filter( 'newspack_reader_activation_enabled', '__return_false' );
+		$options = Perfmatters::set_defaults( [] );
+		remove_filter( 'newspack_reader_activation_enabled', '__return_false' );
+		$this->assertContains( 'newspack-plugin', $options['assets']['delay_js_inclusions'] );
+	}
+
+	/**
 	 * When WooCommerce content is present, the callback vetoes the strip
 	 * (returns false) regardless of the incoming value.
 	 */
@@ -272,23 +298,7 @@ class Newspack_Test_Perfmatters extends WP_UnitTestCase {
 	 * @dataProvider jetpack_share_stylesheet_tags
 	 */
 	public function test_jetpack_share_stylesheets_match_an_exclusion_entry( $tag, $label ) {
-		$exclusions = Perfmatters::add_rucss_excluded_stylesheets( [] );
-
-		$this->assertNotEmpty( $exclusions, 'The defaults must supply exclusion entries.' );
-
-		foreach ( $exclusions as $entry ) {
-			if ( '' !== $entry && false !== stripos( $tag, $entry ) ) {
-				return;
-			}
-		}
-
-		$this->fail(
-			sprintf(
-				'No RUCSS exclusion entry matches %s, so Perfmatters will delay it until the reader interacts with the page. Tag: %s',
-				$label,
-				$tag
-			)
-		);
+		$this->assert_tag_matches_an_exclusion_entry( $tag, $label );
 	}
 
 	/**
@@ -326,5 +336,47 @@ class Newspack_Test_Perfmatters extends WP_UnitTestCase {
 				"Jetpack's share button CSS served from the Jetpack CDN",
 			],
 		];
+	}
+
+	/**
+	 * The sticky footer ad needs this stylesheet from the first paint. Withheld,
+	 * the slot sits unstyled at the bottom of the page, where GPT's lazy loading
+	 * holds the fetched ad until it scrolls into view. The stylesheet then arrives
+	 * on the reader's first interaction and hides the slot until an ad renders in
+	 * it, which never happens. The URL keeps the `includes/../dist/` shape the
+	 * plugin emits; the host and version are invented.
+	 */
+	public function test_newspack_ads_stylesheet_matches_an_exclusion_entry() {
+		$this->assert_tag_matches_an_exclusion_entry(
+			"<link rel='stylesheet' id='newspack-ads-frontend-css' href='https://example.test/wp-content/plugins/newspack-ads/includes/../dist/frontend.css?ver=3.15.1' media='all' />",
+			"Newspack Ads' front-end CSS"
+		);
+	}
+
+	/**
+	 * Fails unless an entry in Newspack's RUCSS exclusions matches the tag the way
+	 * Perfmatters matches it (see test_jetpack_share_stylesheets_match_an_exclusion_entry).
+	 *
+	 * @param string $tag   Full stylesheet link tag as WordPress would emit it.
+	 * @param string $label Human-readable description used in the failure message.
+	 */
+	private function assert_tag_matches_an_exclusion_entry( $tag, $label ) {
+		$exclusions = Perfmatters::add_rucss_excluded_stylesheets( [] );
+
+		$this->assertNotEmpty( $exclusions, 'The defaults must supply exclusion entries.' );
+
+		foreach ( $exclusions as $entry ) {
+			if ( '' !== $entry && false !== stripos( $tag, $entry ) ) {
+				return;
+			}
+		}
+
+		$this->fail(
+			sprintf(
+				'No RUCSS exclusion entry matches %s, so Perfmatters will delay it until the reader interacts with the page. Tag: %s',
+				$label,
+				$tag
+			)
+		);
 	}
 }

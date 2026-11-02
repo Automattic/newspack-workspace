@@ -91,8 +91,8 @@ class Used_Nonces {
 
 	/**
 	 * Creates the table on activation. It is also created lazily on first use
-	 * ({@see self::get_table_name()}), which is what installs it on an existing
-	 * Hub updated in place, where the activation hook does not run.
+	 * ({@see self::get_table_name()}), which is what installs it on a Node and on
+	 * an existing Hub updated in place, where the activation hook does not run.
 	 *
 	 * @return void
 	 */

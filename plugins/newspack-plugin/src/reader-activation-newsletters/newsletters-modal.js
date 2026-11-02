@@ -1,6 +1,12 @@
-import * as a11y from '../reader-activation-auth/accessibility.js';
 import { getApiNonce } from '../reader-activation/session';
 import { EVENTS, on } from '../reader-activation/events';
+
+/**
+ * Listeners of the current open, dropped on close or the next open so they never stack.
+ *
+ * @type {AbortController|null}
+ */
+let currentController = null;
 
 /**
  * Get the newsletters signup modal container.
@@ -88,12 +94,18 @@ export function openNewslettersSignupModal( config = {} ) {
 	}
 	const form = container.querySelector( 'form' );
 
+	currentController?.abort();
+	const controller = new AbortController();
+	currentController = controller;
+	const { signal } = controller;
+
 	/**
 	 * Close the modal.
 	 *
 	 * @param {boolean} dismiss Whether it's a dismiss action.
 	 */
 	const close = ( dismiss = true ) => {
+		controller.abort();
 		container.config = {};
 		modal.setAttribute( 'data-state', 'closed' );
 		if ( modal?.overlayId && window?.newspackReaderActivation?.overlays ) {
@@ -111,12 +123,28 @@ export function openNewslettersSignupModal( config = {} ) {
 	const closeButtons = modal.querySelectorAll( 'button[data-close], .newspack-ui__modal__close' );
 	if ( closeButtons?.length ) {
 		closeButtons.forEach( closeButton => {
-			closeButton.addEventListener( 'click', function ( ev ) {
-				ev.preventDefault();
-				close();
-			} );
+			closeButton.addEventListener(
+				'click',
+				function ( ev ) {
+					ev.preventDefault();
+					close();
+				},
+				{ signal }
+			);
 		} );
 	}
+
+	// Escape dismisses it like the close buttons, once the modal script has let it close or
+	// the browser closes it anyway on a repeated Escape.
+	modal.addEventListener(
+		'cancel',
+		event => {
+			if ( event.target === modal && ( 'closed' === modal.dataset.state || ! event.cancelable ) ) {
+				close();
+			}
+		},
+		{ signal }
+	);
 
 	config.labels = {
 		...config?.labels,
@@ -159,7 +187,6 @@ export function openNewslettersSignupModal( config = {} ) {
 	}
 
 	modal.setAttribute( 'data-state', 'open' );
-	a11y.trapFocus( modal );
 	if ( window?.newspackReaderActivation?.overlays ) {
 		modal.overlayId = window.newspackReaderActivation.overlays.add();
 	}

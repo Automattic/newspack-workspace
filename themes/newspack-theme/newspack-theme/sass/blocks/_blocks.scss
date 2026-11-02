@@ -377,8 +377,7 @@ p.has-background {
 //! Newspack Newlsetter Subscription Block
 .wp-block-newspack-newsletters-subscribe {
 	// Make sure custom colors don't override the color that should be used for the modern style.
-	&.is-style-modern,
-	&.is-style-modern--grid {
+	&:not(.is-style-legacy) {
 		input[type="checkbox"]::before {
 			background:
 				transparent

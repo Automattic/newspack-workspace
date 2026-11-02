@@ -1,14 +1,11 @@
 /**
- * NPPD-1492 — the "Institutions" entry point on the Access Control screen must
- * be plainly visible (header secondary action) when the site has at least one
- * institution, and may stay tucked in the kebab menu only while the publisher
- * is not using institutions.
+ * The Content Gates tab's page header: its actions and subtitle.
  */
 
 /**
  * External dependencies
  */
-import { render } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 
 /**
  * Internal dependencies
@@ -17,16 +14,9 @@ import ContentGates from './content-gates';
 
 // mock-prefixed so Jest's hoisted jest.mock factories may close over them.
 const mockSetHeaderData = jest.fn();
+let mockDataViewsProps;
+const mockSpeak = jest.fn();
 let mockWizardData = {};
-
-jest.mock( '../../../hooks/use-wizard-api-fetch', () => ( {
-	useWizardApiFetch: () => ( {
-		wizardApiFetch: jest.fn(),
-		isFetching: false,
-		errorMessage: null,
-		resetError: jest.fn(),
-	} ),
-} ) );
 
 jest.mock( '@wordpress/data', () => ( {
 	useDispatch: () => ( {
@@ -40,7 +30,7 @@ jest.mock( '@wordpress/data', () => ( {
 } ) );
 
 // Passthrough only the components the view actually uses. The real
-// @wordpress/components cannot be loaded in this jsdom env (its data-store
+// component packages cannot be loaded in this jsdom env (their data-store
 // side effects throw at import), so instead of a plain object — where a newly
 // imported component reads back as undefined and fails deep in React with an
 // opaque "Element type is invalid" — wrap the mock in a Proxy that throws for
@@ -57,18 +47,27 @@ const failLoudlyMock = ( moduleName, exports ) =>
 		},
 	} );
 
-jest.mock( '@wordpress/components', () => {
-	const React = require( 'react' );
-	// forwardRef because the component attaches a ref to VStack.
-	const Passthrough = React.forwardRef( ( { children }, ref ) => React.createElement( 'div', { ref }, children ) );
-	return failLoudlyMock( '@wordpress/components', { __experimentalVStack: Passthrough } );
-} );
-
-jest.mock( '../../../../../packages/components/src', () => {
+jest.mock( '@wordpress/ui', () => {
 	const React = require( 'react' );
 	const Passthrough = ( { children } ) => React.createElement( 'div', null, children );
-	return failLoudlyMock( 'packages/components/src', { Divider: Passthrough, Grid: Passthrough } );
+	return failLoudlyMock( '@wordpress/ui', { Stack: Passthrough } );
 } );
+
+jest.mock( '@wordpress/a11y', () => ( { speak: ( ...args ) => mockSpeak( ...args ) } ) );
+
+jest.mock( '@wordpress/dataviews', () => ( { DataViews: { Search: () => null, Filters: () => null } } ) );
+
+jest.mock( '../../../../../packages/components/src', () => ( {
+	Button: ( { children, onClick } ) => (
+		<button type="button" onClick={ onClick }>
+			{ children }
+		</button>
+	),
+	DataViews: props => {
+		mockDataViewsProps = props;
+		return props.children ?? null;
+	},
+} ) );
 
 jest.mock( '../../../../../packages/components/src/wizard/store/utils', () => ( {
 	useWizardData: () => mockWizardData,
@@ -81,9 +80,8 @@ jest.mock( '../../../../../packages/components/src/wizard/store', () => ( {
 // Child views are irrelevant to the header contract under test.
 jest.mock( './content-gates-onboarding', () => () => null );
 jest.mock( './content-gates-priority', () => () => null );
-jest.mock( './content-gate-settings', () => () => null );
+jest.mock( './content-gate-settings', () => ( { gate } ) => <div>{ gate.title }</div> );
 jest.mock( './advanced-settings', () => () => null );
-jest.mock( './settings-card', () => () => null );
 
 const gatesOfLength = length =>
 	Array.from( { length }, ( _unused, index ) => ( {
@@ -101,63 +99,136 @@ const lastHeaderData = () => {
 	return calls[ calls.length - 1 ][ 0 ];
 };
 
-const menuLabels = headerData => headerData.sectionMenu.map( item => item.label );
+const moreActionLabels = headerData => headerData.actions.filter( action => action.type === 'more' ).map( action => action.label );
 
-describe( 'Content Gates header — Institutions entry point (NPPD-1492)', () => {
+describe( 'Content Gates page header', () => {
 	beforeEach( () => {
 		mockSetHeaderData.mockReset();
 	} );
 
-	// The full gate-count × institutions matrix: Gate Priority appears only
-	// with more than one gate, and Institutions moves between the kebab menu
-	// and the promoted secondary action depending on whether any exist.
 	it.each( [
-		{
-			name: 'one gate, no institutions',
-			gateCount: 1,
-			hasInstitutions: false,
-			expectedMenu: [ 'Institutions', 'Advanced Settings' ],
-			expectSecondary: false,
-		},
-		{
-			name: 'two gates, no institutions',
-			gateCount: 2,
-			hasInstitutions: false,
-			expectedMenu: [ 'Gate Priority', 'Institutions', 'Advanced Settings' ],
-			expectSecondary: false,
-		},
-		{
-			name: 'one gate, institutions present',
-			gateCount: 1,
-			hasInstitutions: true,
-			expectedMenu: [ 'Advanced Settings' ],
-			expectSecondary: true,
-		},
-		{
-			name: 'two gates, institutions present',
-			gateCount: 2,
-			hasInstitutions: true,
-			expectedMenu: [ 'Gate Priority', 'Advanced Settings' ],
-			expectSecondary: true,
-		},
-	] )( 'builds the header menu for $name', ( { gateCount, hasInstitutions, expectedMenu, expectSecondary } ) => {
-		mockWizardData = { gates: gatesOfLength( gateCount ), config: { has_institutions: hasInstitutions } };
+		{ gateCount: 1, hasPriority: false },
+		{ gateCount: 2, hasPriority: true },
+	] )( 'shows Gate Priority in the toolbar only with more than one gate ($gateCount)', ( { gateCount, hasPriority } ) => {
+		mockWizardData = { gates: gatesOfLength( gateCount ), config: {} };
 		render( <ContentGates updateGatesData={ () => {} } /> );
 
 		const headerData = lastHeaderData();
-		// Assert the whole ordered menu, so the chained conditional order is pinned.
-		expect( menuLabels( headerData ) ).toEqual( expectedMenu );
+		expect( headerData.actions.filter( action => action.type === 'secondary' ) ).toEqual( [] );
+		expect( Boolean( screen.queryByRole( 'button', { name: 'Gate Priority' } ) ) ).toBe( hasPriority );
+		expect( moreActionLabels( headerData ) ).toEqual( [ 'Advanced Settings' ] );
+		expect( headerData.sectionMenu ).toBeUndefined();
+		expect( headerData.sectionTitle ).toBeUndefined();
+	} );
 
-		if ( expectSecondary ) {
-			// Pin the href, not just the label: the promotion changed this
-			// entry from an action callback to an href, and a label-only
-			// assertion would still pass on a dead link.
-			expect( headerData.sectionSecondaryAction ).toEqual( expect.objectContaining( { label: 'Institutions', href: '#/institutions' } ) );
-		} else {
-			expect( headerData.sectionSecondaryAction ).toBeUndefined();
-			// The kebab entry must also still navigate, not just carry a label.
-			const institutionsItem = headerData.sectionMenu.find( item => item.label === 'Institutions' );
-			expect( institutionsItem ).toEqual( expect.objectContaining( { href: '#/institutions' } ) );
-		}
+	// The empty state once dropped the subtitle, which made the header jump between tabs.
+	it.each( [
+		{ state: 'the empty state', wizardData: { config: {} } },
+		{ state: 'the gates list', wizardData: { gates: gatesOfLength( 1 ), config: {} } },
+	] )( 'describes the screen in the page subtitle on $state', ( { wizardData } ) => {
+		mockWizardData = wizardData;
+		render( <ContentGates updateGatesData={ () => {} } /> );
+
+		const headerData = lastHeaderData();
+		expect( headerData.subTitle ).toEqual( expect.any( String ) );
+		expect( headerData.subTitle ).not.toBe( '' );
+		expect( headerData.sectionDescription ).toBeUndefined();
+	} );
+} );
+
+describe( 'Content Gates toolbar', () => {
+	const active = { id: 1, title: 'Alpha', status: 'publish', priority: 0 };
+	const inactive = { id: 2, title: 'Beta', status: 'draft', priority: 1 };
+	const renderGates = gates => {
+		mockWizardData = { gates, config: {} };
+		mockDataViewsProps = undefined;
+		return render( <ContentGates updateGatesData={ () => {} } /> );
+	};
+	const changeView = next => act( () => mockDataViewsProps.onChangeView( { ...mockDataViewsProps.view, ...next } ) );
+	const filterIds = () => mockDataViewsProps.fields.filter( field => field.filterBy ).map( field => field.id );
+	const inactiveFilter = { field: 'status', operator: 'is', value: 'inactive' };
+	const allStatuses = { field: 'status', operator: 'is', value: undefined };
+
+	it( 'opens on every gate, inactive ones included, and hides Reset', () => {
+		renderGates( [ active, inactive ] );
+
+		expect( screen.getByText( 'Alpha' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Beta' ) ).toBeInTheDocument();
+		expect( mockDataViewsProps.view.filters ).toEqual( [ allStatuses ] );
+		expect( mockDataViewsProps.className ).toContain( 'is-default-view' );
+	} );
+
+	it( 'narrows the cards by filter and offers Reset', () => {
+		renderGates( [ active, inactive ] );
+
+		changeView( { filters: [ inactiveFilter ] } );
+
+		expect( screen.queryByText( 'Alpha' ) ).not.toBeInTheDocument();
+		expect( screen.getByText( 'Beta' ) ).toBeInTheDocument();
+		expect( mockDataViewsProps.className ).not.toContain( 'is-default-view' );
+	} );
+
+	it( 'offers All, which clears the filter', () => {
+		renderGates( [ active, inactive ] );
+		changeView( { filters: [ inactiveFilter ] } );
+
+		const statusField = mockDataViewsProps.fields.find( field => 'status' === field.id );
+		expect( statusField.elements[ 0 ] ).toEqual( { value: undefined, label: 'All' } );
+
+		changeView( { filters: [ { ...inactiveFilter, value: undefined } ] } );
+
+		expect( screen.getByText( 'Alpha' ) ).toBeInTheDocument();
+		expect( mockDataViewsProps.view.filters ).toEqual( [ allStatuses ] );
+		expect( mockDataViewsProps.className ).toContain( 'is-default-view' );
+	} );
+
+	it( 'offers All on Status only, leaving Access unset by default', () => {
+		const paid = { active: true, access_rules: [ [ { slug: 'subscription' } ] ], metering: { enabled: false } };
+		renderGates( [ active, { ...inactive, custom_access: paid } ] );
+
+		const accessField = mockDataViewsProps.fields.find( field => 'access' === field.id );
+		expect( accessField.elements.map( element => element.value ) ).toEqual( [ 'paid' ] );
+		expect( mockDataViewsProps.view.filters ).toEqual( [ allStatuses ] );
+	} );
+
+	it( 'says so when nothing matches, and announces the count', () => {
+		mockSpeak.mockReset();
+		renderGates( [ active, inactive ] );
+		expect( mockSpeak ).not.toHaveBeenCalled();
+
+		changeView( { search: 'gamma' } );
+
+		expect( screen.getByText( 'No content gates match your search.' ) ).toBeInTheDocument();
+		expect( mockSpeak ).toHaveBeenLastCalledWith( '0 content gates found.' );
+	} );
+
+	it( 'hides the Status chip when every gate has the same status', () => {
+		renderGates( [ active, { ...active, id: 3, title: 'Gamma' } ] );
+
+		expect( filterIds() ).not.toContain( 'status' );
+		expect( mockDataViewsProps.view.filters ).toEqual( [] );
+	} );
+
+	it( 'hides the toolbar for a single gate', () => {
+		renderGates( [ active ] );
+
+		expect( mockDataViewsProps ).toBeUndefined();
+	} );
+
+	it( 'clears the filter when its last match goes away, and does not bring it back', () => {
+		const { rerender } = renderGates( [ active, inactive ] );
+		changeView( { filters: [ inactiveFilter ] } );
+
+		mockWizardData = { gates: [ active, { ...inactive, status: 'publish' } ], config: {} };
+		rerender( <ContentGates updateGatesData={ () => {} } /> );
+
+		expect( screen.getByText( 'Alpha' ) ).toBeInTheDocument();
+		expect( filterIds() ).not.toContain( 'status' );
+
+		mockWizardData = { gates: [ active, inactive ], config: {} };
+		rerender( <ContentGates updateGatesData={ () => {} } /> );
+
+		expect( filterIds() ).toContain( 'status' );
+		expect( mockDataViewsProps.view.filters ).toEqual( [ allStatuses ] );
 	} );
 } );

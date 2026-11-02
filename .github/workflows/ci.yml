@@ -29,6 +29,10 @@ jobs:
   changed-packages:
     name: Detect changed packages
     runs-on: ubuntu-latest
+    # actions: read lets a push run find the last run that was not cancelled.
+    permissions:
+      contents: read
+      actions: read
     outputs:
       js-matrix: ${{ steps.detect.outputs.js-matrix }}
       php-matrix: ${{ steps.detect.outputs.php-matrix }}
@@ -45,10 +49,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
+      - id: push-base
+        name: Find the last tested commit
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.ref_name }}
+          EVENT_BEFORE: ${{ github.event.before }}
+        run: echo "sha=$(./.github/scripts/ci-push-base.sh)" >> "$GITHUB_OUTPUT"
       - id: detect
         name: Compute package matrices
         env:
-          EVENT_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+          EVENT_BASE_REF: ${{ github.event.pull_request.base.sha || steps.push-base.outputs.sha || github.event.before }}
         run: |
           set -euo pipefail
           BASE_REF="$EVENT_BASE_REF"
@@ -624,14 +636,13 @@ jobs:
           "$SHELLCHECK" --version | sed -n '2p'
 
           # Every tracked *.sh, plus tracked extensionless files whose shebang
-          # names a shell: `n`, bin/newspack-manage-host and the per-package
-          # .hooks/pre-push scripts all carry no extension. The interpreter is
-          # matched by name rather than by a trailing "sh", so a shebang like
-          # `#!/usr/bin/env fish` is not swept in. zsh is deliberately absent:
-          # shellcheck refuses to parse it (SC1071) and reports that refusal at
-          # error severity, so including it would fail the gate on a file no
-          # directive can rescue. NUL-delimited throughout so a path containing
-          # whitespace cannot split into two arguments.
+          # names a shell: `n` and bin/newspack-manage-host carry no extension.
+          # The interpreter is matched by name rather than by a trailing "sh",
+          # so a shebang like `#!/usr/bin/env fish` is not swept in. zsh is
+          # deliberately absent: shellcheck refuses to parse it (SC1071) and
+          # reports that refusal at error severity, so including it would fail
+          # the gate on a file no directive can rescue. NUL-delimited throughout
+          # so a path containing whitespace cannot split into two arguments.
           git ls-files -z '*.sh' | sort -zu > shell-globbed.txt
           git ls-files -z | while IFS= read -r -d '' f; do
             case "${f##*/}" in *.*) continue ;; esac

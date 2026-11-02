@@ -72,7 +72,7 @@ body:not(.newspack-ui) {
 figcaption,
 .entry-meta,
 .cat-links,
-.tag-labels,
+.newspack-tag-labels,
 .entry-footer,
 .nav1,
 .secondary-menu,
@@ -103,7 +103,7 @@ input[type="submit"] {
 .wp-block-columns .wp-block-column > .accent-header,
 div.wpnbha .article-section-title,
 .cat-links,
-.tag-labels {
+.newspack-tag-labels {
 	font-size: var(--newspack-theme-font-size-base);
 	margin-bottom: structure.$size__spacing-unit;
 }
@@ -162,7 +162,7 @@ div.wpnbha .article-section-title,
 // row with a trailing `::after` divider drawn across the remaining width; labels
 // take neither, so they stay inline beside a sponsor label and no divider is drawn
 // through a row of chips.
-.single .tag-labels {
+.single .newspack-tag-labels {
 	flex-wrap: wrap;
 	font-size: var(--newspack-theme-font-size-base);
 }
@@ -171,7 +171,7 @@ div.wpnbha .article-section-title,
 // that follow it onto the next line. Same shape the parent handles for `.wpnbha`:
 // restore the sponsor label's own inline display when labels follow it, leaving its
 // flex/gap layout alone.
-.single .cat-links.sponsor-label:has( + .tag-labels ) {
+.single .cat-links.sponsor-label:has( + .newspack-tag-labels ) {
 	display: inline-flex;
 }
 
@@ -219,7 +219,7 @@ div.wpnbha .article-section-title,
 .blog,
 .archive {
 	.cat-links,
-	.tag-labels {
+	.newspack-tag-labels {
 		font-size: var(--newspack-theme-font-size-sm);
 
 		&::before {
@@ -531,13 +531,13 @@ hr {
 	font-size: var(--newspack-theme-font-size-sm);
 
 	.cat-links,
-	.tag-labels {
+	.newspack-tag-labels {
 		font-size: var(--newspack-theme-font-size-sm);
 	}
 
 	@include utilities.media( tabletonly ) {
 		+ .cat-links,
-		+ .tag-labels {
+		+ .newspack-tag-labels {
 			font-size: var(--newspack-theme-font-size-sm);
 		}
 	}

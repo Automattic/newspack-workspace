@@ -1,0 +1,23 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "newspack/comments-panel-content",
+	"title": "Comments Panel Content",
+	"category": "newspack",
+	"description": "The panel containing the post's comments.",
+	"textdomain": "newspack-plugin",
+	"parent": [ "newspack/comments-panel" ],
+	"attributes": {
+		"overlayColor": {
+			"type": "string",
+			"default": ""
+		},
+		"lock": { "type": "object", "default": { "move": true, "remove": true } }
+	},
+	"supports": {
+		"html": false,
+		"lock": false
+	},
+	"editorStyle": "file:../../../../dist/blocks.css",
+	"style": "file:../../../../dist/blocks.css"
+}

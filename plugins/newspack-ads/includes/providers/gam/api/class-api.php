@@ -14,10 +14,10 @@ use Google\Auth\OAuth2;
 use Google\AdsApi\Common\Configuration;
 use Google\AdsApi\AdManager\AdManagerSessionBuilder;
 use Google\AdsApi\AdManager\AdManagerSession;
-use Google\AdsApi\AdManager\v202511\ServiceFactory;
-use Google\AdsApi\AdManager\v202511\Network;
-use Google\AdsApi\AdManager\v202511\User;
-use Google\AdsApi\AdManager\v202511\ApiException;
+use Google\AdsApi\AdManager\v202608\ServiceFactory;
+use Google\AdsApi\AdManager\v202608\Network;
+use Google\AdsApi\AdManager\v202608\User;
+use Google\AdsApi\AdManager\v202608\ApiException;
 
 require_once NEWSPACK_ADS_COMPOSER_ABSPATH . 'autoload.php';
 require_once 'class-api-object.php';
@@ -35,7 +35,7 @@ class Api {
 	// https://developers.google.com/ad-manager/api/soap_xml: An arbitrary string name identifying your application. This will be shown in Google's log files.
 	const APP = 'Newspack';
 
-	const API_VERSION = 'v202511';
+	const API_VERSION = 'v202608';
 
 	/**
 	 * Codes of networks that the user has access to.

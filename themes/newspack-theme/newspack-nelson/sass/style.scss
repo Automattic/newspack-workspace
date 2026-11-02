@@ -260,7 +260,7 @@ h4,
 #secondary .widgettitle,
 div.wpnbha .article-section-title,
 .cat-links,
-.tag-labels {
+.newspack-tag-labels {
 	color: var(--newspack-theme-color-text-light);
 	font-size: var(--newspack-theme-font-size-xs);
 	font-weight: bold;
@@ -283,7 +283,7 @@ div.wpnbha.is-grid .article-section-title {
 }
 
 .single .cat-links,
-.single .tag-labels {
+.single .newspack-tag-labels {
 	margin-bottom: structure.$size__spacing-unit;
 	@include utilities.media( tablet ) {
 		margin-bottom: #{2.5 * structure.$size__spacing-unit};

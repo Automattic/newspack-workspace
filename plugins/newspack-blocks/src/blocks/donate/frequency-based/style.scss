@@ -93,8 +93,10 @@
 			margin: 0.38rem;
 			padding: 0.38rem 0.76rem;
 
-			&:hover {
-				background: np-colors.$neutral-050;
+			@media ( hover: hover ) and ( pointer: fine ) {
+				&:hover {
+					background: np-colors.$neutral-050;
+				}
 			}
 		}
 

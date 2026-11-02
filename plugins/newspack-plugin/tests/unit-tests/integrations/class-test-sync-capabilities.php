@@ -691,4 +691,16 @@ class Test_Sync_Capabilities extends \WP_UnitTestCase {
 
 		remove_filter( 'pre_http_request', $intercept );
 	}
+
+	/**
+	 * Implementing contact_exists() is the opt-in: an integration written before
+	 * the seam existed must read as unable to answer, never as "yes".
+	 */
+	public function test_contact_lookup_is_supported_only_where_contact_exists_is_overridden() {
+		require_once __DIR__ . '/class-lookupless-sample-integration.php';
+		require_once __DIR__ . '/class-failing-sample-integration.php';
+
+		$this->assertFalse( ( new \Lookupless_Sample_Integration( 'lookupless', 'Lookupless' ) )->supports_contact_lookup() );
+		$this->assertTrue( ( new \Failing_Sample_Integration( 'lookup_capable', 'Lookup Capable' ) )->supports_contact_lookup() );
+	}
 }

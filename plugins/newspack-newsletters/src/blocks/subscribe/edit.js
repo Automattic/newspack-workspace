@@ -4,20 +4,37 @@
  * External dependencies.
  */
 import classnames from 'classnames';
+// Imported by path, not from the package root: the root pulls the whole
+// component library and its global `:root` styles into every editor screen.
+import ReorderModal from 'newspack-components/dist/esm/reorder-modal';
 
 /**
  * WordPress dependencies
  */
 import apiFetch from '@wordpress/api-fetch';
 import { __, sprintf } from '@wordpress/i18n';
-import { Fragment, useState, useEffect } from '@wordpress/element';
-import { TextControl, ToggleControl, CheckboxControl, PanelBody, Notice, Spinner, Button, SelectControl } from '@wordpress/components';
+import { Fragment, useState, useEffect, useMemo, useCallback } from '@wordpress/element';
+import {
+	BaseControl,
+	TextControl,
+	ToggleControl,
+	CheckboxControl,
+	PanelBody,
+	Notice,
+	Spinner,
+	Button,
+	SelectControl,
+	__experimentalToggleGroupControl as ToggleGroupControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+	__experimentalToggleGroupControlOption as ToggleGroupControlOption, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+} from '@wordpress/components';
 import { useBlockProps, InspectorControls, RichText, PanelColorSettings, getColorObjectByColorValue } from '@wordpress/block-editor';
 import { select } from '@wordpress/data';
 
 /**
  * Internal dependencies
  */
+import { hasGatedLists, isListGated, listsToKeep, syncListOrder } from './utils';
 import './editor.scss';
 
 const getListCheckboxId = listId => {
@@ -25,6 +42,26 @@ const getListCheckboxId = listId => {
 };
 
 const settingsUrl = newspack_newsletters_blocks.settings_url;
+
+// Access gates per list, keyed by list ID. Empty unless something restricts lists.
+const listGates = newspack_newsletters_blocks.list_gates || {};
+
+/**
+ * A list's description, with its line breaks kept.
+ *
+ * @param {Object} props             Component props.
+ * @param {string} props.description The description.
+ */
+const ListDescription = ( { description } ) => (
+	<span className="list-description">
+		{ ( description || '' ).split( '\n' ).map( ( line, index, arr ) => (
+			<Fragment key={ index }>
+				{ line }
+				{ index < arr.length - 1 && <br /> }
+			</Fragment>
+		) ) }
+	</span>
+);
 
 const editedStateOptions = [
 	{ label: __( 'Initial', 'newspack-newsletters' ), value: 'initial' },
@@ -61,8 +98,12 @@ export default function SubscribeEdit( {
 		afterSuccessButtonLabel,
 		afterSuccessURL,
 		lists,
+		listsPosition,
 		listsCheckboxes,
 		displayDescription,
+		showPremium,
+		showPremiumLabel,
+		className,
 		mailchimpDoubleOptIn,
 		textColor,
 		backgroundColor,
@@ -78,7 +119,9 @@ export default function SubscribeEdit( {
 	const fetchLists = () => {
 		setInFlight( true );
 		apiFetch( {
-			path: '/newspack-newsletters/v1/lists_config',
+			// The edit context returns every list, including ones the person editing
+			// could not join as a reader; without it, saving would drop them from the block.
+			path: '/newspack-newsletters/v1/lists_config?context=edit',
 		} )
 			.then( setListConfig )
 			.finally( () => {
@@ -100,8 +143,11 @@ export default function SubscribeEdit( {
 		if ( lists.length ) {
 			if ( ! hasMissingLists && isConfigMissingList() ) {
 				setHasMissingLists( true );
-				// Remove the missing lists from the selected lists.
-				setAttributes( { lists: lists.filter( listId => listConfig.hasOwnProperty( listId ) ) } );
+				// Remove the missing lists from the selected lists, unless none would be left.
+				const keptLists = listsToKeep( lists, listConfig );
+				if ( keptLists.length !== lists.length ) {
+					setAttributes( { lists: keptLists } );
+				}
 			}
 		} else {
 			setAttributes( { lists: [ Object.keys( listConfig )[ 0 ] ] } );
@@ -133,10 +179,84 @@ export default function SubscribeEdit( {
 		setAttributes( { listsCheckboxes: newListsCheckboxes } );
 	};
 
+	// Every list, in the order the Edit Lists modal shows them. The block only
+	// stores the lists that are on, so where a list that is off sits is kept here,
+	// for this editing session.
+	const [ storedListOrder, setStoredListOrder ] = useState( [] );
+	const allListIds = useMemo( () => Object.keys( listConfig ), [ listConfig ] );
+	const listOrder = useMemo( () => syncListOrder( storedListOrder, lists, allListIds ), [ storedListOrder, lists, allListIds ] );
+
+	const premiumLabel = showPremiumLabel?.trim();
+	const isLegacyStyle = /(^|\s)is-style-legacy(\s|$)/.test( className || '' );
+
+	const [ isEditingLists, setIsEditingLists ] = useState( false );
+	const editListsLabel = __( 'Edit Lists', 'newspack-newsletters' );
+	const badgeLabel = premiumLabel || __( 'Premium', 'newspack-newsletters' );
+	const fetchListItems = useCallback(
+		ids =>
+			Promise.resolve(
+				ids.map( id => ( {
+					value: id,
+					label: listConfig[ id ]?.title,
+					badge: isListGated( listGates, id )
+						? {
+								label: badgeLabel,
+								tooltip: sprintf(
+									// translators: %s: names of the access gates restricting a list, separated by commas.
+									__( 'Gated by %s', 'newspack-newsletters' ),
+									listGates[ id ].map( gate => gate.title ).join( ', ' )
+								),
+						  }
+						: undefined,
+				} ) )
+			),
+		[ listConfig, badgeLabel ]
+	);
+
+	// The front end lists the block's lists when there is more than one, or when
+	// a reader without access would be shown a premium one.
+	const showsPremiumRow = listId => showPremium && isListGated( listGates, listId );
+	const showListUi = lists.length > 1 || lists.some( showsPremiumRow );
+	// A lone list never sits beside the email field: a reader who can join it gets
+	// a hidden input, and one who can't gets no form. So where the lists go only
+	// matters with two or more.
+	const showListPosition = lists.length > 1;
+
 	return (
 		<>
 			<InspectorControls>
-				<PanelBody title={ __( 'Form settings', 'newspack-newsletters' ) }>
+				<PanelBody title={ __( 'Form', 'newspack-newsletters' ) }>
+					{ ( inFlight || ! Object.keys( listConfig ).length || lists.length < 1 ) && (
+						<BaseControl __nextHasNoMarginBottom>
+							<VStack spacing={ 4 }>
+								{ inFlight && <Spinner /> }
+								{ ! inFlight && ! Object.keys( listConfig ).length && (
+									<Notice isDismissible={ false } status="error">
+										{ __( 'You must enable lists for subscription.', 'newspack-newsletters' ) }
+									</Notice>
+								) }
+								{ lists.length < 1 && (
+									<Notice isDismissible={ false } status="error">
+										{ __( 'You must select at least one list.', 'newspack-newsletters' ) }
+									</Notice>
+								) }
+							</VStack>
+						</BaseControl>
+					) }
+					{ showListPosition && (
+						<ToggleGroupControl
+							__next40pxDefaultSize
+							__nextHasNoMarginBottom
+							isBlock
+							label={ __( 'List position', 'newspack-newsletters' ) }
+							help={ __( 'Show lists before or after the email input field.', 'newspack-newsletters' ) }
+							value={ listsPosition }
+							onChange={ value => setAttributes( { listsPosition: value } ) }
+						>
+							<ToggleGroupControlOption value="before" label={ __( 'Before', 'newspack-newsletters' ) } />
+							<ToggleGroupControlOption value="after" label={ __( 'After', 'newspack-newsletters' ) } />
+						</ToggleGroupControl>
+					) }
 					<ToggleControl
 						label={ __( 'Display input labels', 'newspack-newsletters' ) }
 						checked={ displayInputLabels }
@@ -145,6 +265,7 @@ export default function SubscribeEdit( {
 					<TextControl
 						label={ __( 'Email placeholder', 'newspack-newsletters' ) }
 						value={ placeholder }
+						placeholder={ __( 'Your email address', 'newspack-newsletters' ) }
 						onChange={ value => setAttributes( { placeholder: value } ) }
 					/>
 					<ToggleControl
@@ -157,27 +278,78 @@ export default function SubscribeEdit( {
 							<TextControl
 								label={ __( 'Name placeholder', 'newspack-newsletters' ) }
 								value={ namePlaceholder }
+								placeholder={ __( 'Your name', 'newspack-newsletters' ) }
 								onChange={ value => setAttributes( { namePlaceholder: value } ) }
 							/>
 							<ToggleControl
-								label={ __( 'Display "Last Name" field', 'newspack-newsletters' ) }
+								label={ __( 'Display "Last name" field', 'newspack-newsletters' ) }
 								checked={ displayLastNameField }
 								onChange={ value => setAttributes( { displayLastNameField: value } ) }
 							/>
 							{ displayLastNameField && (
 								<TextControl
-									label={ __( '"Last Name" placeholder', 'newspack-newsletters' ) }
+									label={ __( '"Last name" placeholder', 'newspack-newsletters' ) }
 									value={ lastNamePlaceholder }
+									placeholder={ __( 'Your last name', 'newspack-newsletters' ) }
 									onChange={ value => setAttributes( { lastNamePlaceholder: value } ) }
 								/>
 							) }
 						</>
 					) }
-					{ lists.length > 1 && (
+					{ showListUi && (
 						<ToggleControl
 							label={ __( 'Display list description', 'newspack-newsletters' ) }
 							checked={ displayDescription }
 							onChange={ () => setAttributes( { displayDescription: ! displayDescription } ) }
+						/>
+					) }
+					{ hasGatedLists( listGates ) && (
+						<>
+							<ToggleControl
+								label={ __( 'Always show premium lists', 'newspack-newsletters' ) }
+								help={ __( 'Readers without access see premium lists, but can’t sign up for them.', 'newspack-newsletters' ) }
+								checked={ showPremium }
+								onChange={ value => setAttributes( { showPremium: value } ) }
+							/>
+							<TextControl
+								label={ __( 'Premium list label', 'newspack-newsletters' ) }
+								value={ showPremiumLabel }
+								onChange={ value => setAttributes( { showPremiumLabel: value } ) }
+							/>
+						</>
+					) }
+					<BaseControl __nextHasNoMarginBottom>
+						<VStack spacing={ 4 }>
+							{ listOrder.length > 0 && (
+								<Button
+									className="newspack-newsletters-subscribe__edit-lists"
+									variant="secondary"
+									__next40pxDefaultSize
+									onClick={ () => setIsEditingLists( true ) }
+								>
+									{ editListsLabel }
+								</Button>
+							) }
+							<a href={ settingsUrl }>{ __( 'Manage your subscription lists', 'newspack-newsletters' ) }</a>
+						</VStack>
+					</BaseControl>
+					{ isEditingLists && (
+						<ReorderModal
+							title={ editListsLabel }
+							ids={ listOrder }
+							enabledIds={ lists }
+							description={ __(
+								'Turn on the lists readers can sign up for in this form, and put them in the order they appear.',
+								'newspack-newsletters'
+							) }
+							noneOnHelp={ __( 'Turn on at least one list to save.', 'newspack-newsletters' ) }
+							fetchItems={ fetchListItems }
+							onSave={ ( order, enabled ) => {
+								setStoredListOrder( order );
+								setAttributes( { lists: enabled } );
+								setIsEditingLists( false );
+							} }
+							onClose={ () => setIsEditingLists( false ) }
 						/>
 					) }
 				</PanelBody>
@@ -231,40 +403,6 @@ export default function SubscribeEdit( {
 							},
 						] }
 					/>
-				</PanelBody>
-				<PanelBody title={ __( 'Subscription Lists', 'newspack-newsletters' ) }>
-					{ inFlight && <Spinner /> }
-					{ ! inFlight && ! Object.keys( listConfig ).length && (
-						<div style={ { marginBottom: '1.5rem' } }>
-							<Notice isDismissible={ false } status="error">
-								{ __( 'You must enable lists for subscription.', 'newspack-newsletters' ) }
-							</Notice>
-						</div>
-					) }
-					{ lists.length < 1 && (
-						<div style={ { marginBottom: '1.5rem' } }>
-							<Notice isDismissible={ false } status="error">
-								{ __( 'You must select at least one list.', 'newspack-newsletters' ) }
-							</Notice>
-						</div>
-					) }
-					{ Object.keys( listConfig ).map( listId => (
-						<ToggleControl
-							key={ listId }
-							label={ listConfig[ listId ].title }
-							checked={ lists.includes( listId ) }
-							onChange={ () => {
-								if ( ! lists.includes( listId ) ) {
-									setAttributes( { lists: lists.concat( listId ) } );
-								} else {
-									setAttributes( { lists: lists.filter( id => id !== listId ) } );
-								}
-							} }
-						/>
-					) ) }
-					<p>
-						<a href={ settingsUrl }>{ __( 'Manage your subscription lists', 'newspack-newsletters' ) }</a>
-					</p>
 				</PanelBody>
 				{ newspack_newsletters_blocks.provider === 'mailchimp' && (
 					<PanelBody title={ __( 'Mailchimp Settings', 'newspack-newsletters' ) }>
@@ -329,6 +467,7 @@ export default function SubscribeEdit( {
 						className={ classnames( {
 							'newspack-newsletters-subscribe': true,
 							'multiple-lists': lists.length > 1,
+							'has-lists-after': 'after' === listsPosition,
 						} ) }
 						data-status="200"
 					>
@@ -342,12 +481,17 @@ export default function SubscribeEdit( {
 										) }
 									</Notice>
 								) }
-								{ lists.length > 1 && (
+								{ showListUi && (
 									<div className="newspack-newsletters-lists">
 										<ul>
 											{ lists.map( listId => (
 												<li key={ listId }>
 													<span className="list-checkbox">
+														{ premiumLabel && ! isLegacyStyle && isListGated( listGates, listId ) && (
+															<span className="newspack-ui__badge newspack-ui__badge--secondary" aria-hidden="true">
+																{ premiumLabel }
+															</span>
+														) }
 														<input
 															id={ getListCheckboxId( listId ) }
 															type="checkbox"
@@ -357,16 +501,27 @@ export default function SubscribeEdit( {
 													</span>
 													<span className="list-details">
 														<label htmlFor={ getListCheckboxId( listId ) }>
-															<span className="list-title">{ listConfig[ listId ]?.title }</span>
-															{ displayDescription && (
-																<span className="list-description">
-																	{ listConfig[ listId ]?.description?.split( '\n' ).map( ( line, index, arr ) => (
-																		<Fragment key={ index }>
-																			{ line }
-																			{ index < arr.length - 1 && <br /> }
-																		</Fragment>
+															<span className="list-title">
+																{ listConfig[ listId ]?.title }
+																{ premiumLabel &&
+																	isListGated( listGates, listId ) &&
+																	( isLegacyStyle ? (
+																		<span className="list-premium-label">
+																			{ ' ' }
+																			{ sprintf(
+																				/* translators: %s: label marking a premium list, such as "Premium". */
+																				__( '(%s)', 'newspack-newsletters' ),
+																				premiumLabel
+																			) }
+																		</span>
+																	) : (
+																		<span className="newspack-ui__badge newspack-ui__badge--secondary">
+																			{ premiumLabel }
+																		</span>
 																	) ) }
-																</span>
+															</span>
+															{ displayDescription && (
+																<ListDescription description={ listConfig[ listId ]?.description } />
 															) }
 														</label>
 													</span>
@@ -388,7 +543,7 @@ export default function SubscribeEdit( {
 													/>
 												) }
 											</label>
-											<input type="text" placeholder={ namePlaceholder } />
+											<input type="text" placeholder={ namePlaceholder || __( 'Your name', 'newspack-newsletters' ) } />
 										</div>
 										{ displayLastNameField && (
 											<div className="newspack-newsletters-name-input-item">
@@ -396,13 +551,16 @@ export default function SubscribeEdit( {
 													{ displayInputLabels && (
 														<RichText
 															onChange={ value => setAttributes( { lastNameLabel: value } ) }
-															placeholder={ __( 'Last Name', 'newspack-newsletters' ) }
+															placeholder={ __( 'Last name', 'newspack-newsletters' ) }
 															value={ lastNameLabel }
 															tagName="span"
 														/>
 													) }
 												</label>
-												<input type="text" placeholder={ lastNamePlaceholder } />
+												<input
+													type="text"
+													placeholder={ lastNamePlaceholder || __( 'Your last name', 'newspack-newsletters' ) }
+												/>
 											</div>
 										) }
 									</div>
@@ -412,13 +570,13 @@ export default function SubscribeEdit( {
 										{ displayInputLabels && (
 											<RichText
 												onChange={ value => setAttributes( { emailLabel: value } ) }
-												placeholder={ __( 'Email Address', 'newspack-newsletters' ) }
+												placeholder={ __( 'Email address', 'newspack-newsletters' ) }
 												value={ emailLabel }
 												tagName="span"
 											/>
 										) }
 									</label>
-									<input type="email" placeholder={ placeholder } />
+									<input type="email" placeholder={ placeholder || __( 'Your email address', 'newspack-newsletters' ) } />
 									<div className="submit-button" style={ { backgroundColor, color: textColor } }>
 										<RichText
 											onChange={ value => setAttributes( { label: value } ) }

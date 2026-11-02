@@ -14,10 +14,9 @@ import classnames from 'classnames';
  */
 import {
 	BaseControl,
-	FlexBlock,
-	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalInputControl as InputControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 
 interface ReadonlyFieldProps {
 	id: string;
@@ -32,9 +31,9 @@ interface ReadonlyFieldProps {
 export default function ReadonlyField( { id, label, help, value, placeholder, isMonospace, children }: ReadonlyFieldProps ) {
 	return (
 		<BaseControl id={ id } label={ label } help={ help } __nextHasNoMarginBottom>
-			<HStack className={ classnames( 'newspack-pricing-rules__readonly', { 'is-monospace': isMonospace } ) } alignment="center" spacing={ 2 }>
+			<Stack className={ classnames( 'newspack-pricing-rules__readonly', { 'is-monospace': isMonospace } ) } align="center" gap="sm">
 				{ /* The fill goes on the container: the backdrop paints over the value. */ }
-				<FlexBlock className="newspack-pricing-rules__readonly-value">
+				<div className="newspack-pricing-rules__readonly-value">
 					<InputControl
 						id={ id }
 						value={ value }
@@ -43,9 +42,9 @@ export default function ReadonlyField( { id, label, help, value, placeholder, is
 						readOnly
 						__next40pxDefaultSize
 					/>
-				</FlexBlock>
+				</div>
 				{ children }
-			</HStack>
+			</Stack>
 		</BaseControl>
 	);
 }
