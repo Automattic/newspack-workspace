@@ -302,9 +302,9 @@ class Test_Incoming_User_Sync_Role_Boundary extends WP_UnitTestCase {
 
 	/**
 	 * A manual sync carrying only reader roles leaves an account that holds a
-	 * staff role here as it is: no demotion, no new display name or email. A
-	 * staff demotion therefore no longer spreads by manual sync. The URL and
-	 * watched meta still apply, as they do for User_Updated.
+	 * staff role here as it is: no demotion, no new display name or email, so a
+	 * demotion to reader roles has to be made on each site. The URL and watched
+	 * meta still apply, as they do for User_Updated.
 	 */
 	public function test_manual_sync_with_reader_roles_does_not_demote_or_rename_staff_account() {
 		$user_id = $this->factory->user->create(
@@ -340,6 +340,28 @@ class Test_Incoming_User_Sync_Role_Boundary extends WP_UnitTestCase {
 		$this->manual_sync_event( 'byline@example.test', [] )->maybe_sync_user();
 
 		$this->assertSame( [ 'editor' ], get_user_by( 'id', $user_id )->roles );
+	}
+
+	/**
+	 * Holding a reader role alongside a staff role doesn't make an account a
+	 * reader: a reader-only payload still leaves its roles and identity alone.
+	 */
+	public function test_manual_sync_with_reader_roles_leaves_mixed_role_account() {
+		$user_id = $this->factory->user->create(
+			[
+				'role'         => 'editor',
+				'user_email'   => 'mixed@example.test',
+				'display_name' => 'Original Name',
+			]
+		);
+		get_user_by( 'id', $user_id )->add_role( 'subscriber' );
+
+		$this->manual_sync_event( 'mixed@example.test', [ 'subscriber' ] )->maybe_sync_user();
+
+		$user = get_user_by( 'id', $user_id );
+		$this->assertContains( 'editor', $user->roles );
+		$this->assertSame( 'Original Name', $user->display_name );
+		$this->assertSame( 'mixed@example.test', $user->user_email );
 	}
 
 	/**

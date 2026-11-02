@@ -48,8 +48,9 @@ class User_Manually_Synced extends Abstract_Incoming_Event {
 	 * constrained here (sanitize `user_login` via `sanitize_user()`, restrict `role` to a
 	 * safe set).
 	 *
-	 * It does not demote: a payload carrying only synced reader roles leaves the roles,
-	 * display name and email of an account holding any other role unchanged (see below).
+	 * A payload carrying only synced reader roles never demotes or renames an account
+	 * holding any other role: its roles, display name and email stay unchanged (see
+	 * below). A payload carrying any other role applies in full, demotions included.
 	 *
 	 * @return void
 	 */
@@ -99,10 +100,9 @@ class User_Manually_Synced extends Abstract_Incoming_Event {
 		// holds any other role here exactly as it is: its roles, display name and email.
 		// The account is matched by email alone, so such a payload is what arrives when
 		// an admin syncs a reader whose address matches a staff account on this site,
-		// and nothing in it tells that apart from a deliberate demotion. The cost is that
-		// a staff demotion no longer spreads by manual sync; demote on each site instead.
-		// A payload carrying any other role, such as an administrator being propagated,
-		// still applies as before.
+		// and nothing in it tells that apart from a deliberate demotion. A demotion to
+		// reader roles therefore has to be made on each site. A payload carrying any
+		// other role, such as an administrator being propagated, applies in full.
 		$reader_roles_only = empty( array_diff( $user_new_roles, User_Utils::get_synced_user_roles() ) );
 		$keep_identity     = $reader_roles_only && ! User_Utils::is_syncable_account( $user );
 		if ( $keep_identity ) {
