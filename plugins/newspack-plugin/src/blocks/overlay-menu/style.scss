@@ -1,5 +1,6 @@
 @use "../../newspack-ui/scss/variables/breakpoints";
 @use "../../../packages/colors/colors.module" as colors;
+@use "sass:math";
 @use "newspack-motion" as motion;
 
 .wp-block-newspack-overlay-menu {
@@ -149,11 +150,11 @@
 	// Each size adds horizontal padding to the content-size variable so the inner content area matches.
 
 	@mixin panel-width( $var, $fallback ) {
-		--overlay-menu-slide-duration: #{motion.travel-duration($fallback + 32px)};
+		--overlay-menu-slide-duration: #{motion.travel-duration(math.min($fallback + 32px, 704px))};
 		width: calc( var( --wp--preset--spacing--30, 1rem ) + var( #{$var}, #{$fallback} ) + var( --wp--preset--spacing--30, 1rem ) );
 
 		& + .overlay-menu__scrim {
-			--overlay-menu-slide-duration: #{motion.travel-duration($fallback + 32px)};
+			--overlay-menu-slide-duration: #{motion.travel-duration(math.min($fallback + 32px, 704px))};
 		}
 
 		@media ( min-width: breakpoints.$tablet_width ) {
@@ -184,6 +185,7 @@
 	inset: 0;
 	margin: 0 !important;
 	opacity: 0;
+	pointer-events: none;
 	position: fixed;
 	transition:
 		opacity var(--overlay-menu-slide-duration, #{motion.$duration-modal}) motion.$ease-out,
@@ -193,6 +195,7 @@
 
 	&--open {
 		opacity: 1;
+		pointer-events: auto;
 		transition:
 			opacity var(--overlay-menu-slide-duration, #{motion.$duration-modal}) motion.$ease-out,
 			visibility 0s;

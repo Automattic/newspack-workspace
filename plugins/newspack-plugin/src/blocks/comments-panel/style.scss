@@ -35,7 +35,6 @@
 }
 
 // ─── Panel & panel contents ───────────────────────────────────────────────────
-// Root scope because view.js moves the panel to document.body when opened.
 
 .comments-panel__close-wrapper {
 	align-items: center;
@@ -174,7 +173,7 @@
 
 .comments-panel__panel,
 .comments-panel__scrim {
-	--comments-panel-slide-duration: #{motion.travel-duration(712px)};
+	--comments-panel-slide-duration: #{motion.travel-duration(math.min(712px, 704px))};
 
 	@media (min-width: breakpoints.$tablet_width) {
 		--comments-panel-slide-duration: #{motion.travel-duration(728px)};
@@ -187,6 +186,7 @@
 	inset: 0;
 	margin: 0 !important;
 	opacity: 0;
+	pointer-events: none;
 	position: fixed;
 	transition:
 		opacity var(--comments-panel-slide-duration) motion.$ease-out,
@@ -196,6 +196,7 @@
 
 	&--open {
 		opacity: 1;
+		pointer-events: auto;
 		transition:
 			opacity var(--comments-panel-slide-duration) motion.$ease-out,
 			visibility 0s;

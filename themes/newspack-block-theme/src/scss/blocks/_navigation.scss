@@ -274,3 +274,20 @@ $submenu-static: ".is-menu-open *, .open-always *, .is-style-flatten.is-vertical
 		transform: translateX(motion.$enter-offset);
 	}
 }
+
+/*! rtl:begin:ignore */
+@include sass-utils.media(medium) {
+	:where([dir="rtl"]) :where(.wp-block-navigation .has-child .wp-block-navigation__submenu-container) .wp-block-navigation__submenu-container:not(#{$submenu-static}) {
+		transform: translateX(motion.$enter-offset);
+	}
+
+	:where([dir="rtl"]) :where(
+		.wp-block-navigation.items-justified-space-between .wp-block-page-list > .has-child:last-child .wp-block-navigation__submenu-container,
+		.wp-block-navigation.items-justified-space-between > .wp-block-navigation__container > .has-child:last-child .wp-block-navigation__submenu-container,
+		.wp-block-navigation.items-justified-right .wp-block-page-list > .has-child .wp-block-navigation__submenu-container,
+		.wp-block-navigation.items-justified-right .wp-block-navigation__container .has-child .wp-block-navigation__submenu-container
+	) .wp-block-navigation__submenu-container:not(#{$submenu-static}) {
+		transform: translateX(-1 * motion.$enter-offset);
+	}
+}
+/*! rtl:end:ignore */

@@ -15,6 +15,11 @@ import domReady from '@wordpress/dom-ready';
 /**
  * Internal dependencies
  */
+import { lockScrollbarGutter, unlockScrollbarGutter } from '../../shared/js/scrollbar-gutter';
+
+/**
+ * Internal dependencies
+ */
 import { getNoticeIcon } from '../../newspack-ui/js/icons';
 import { getTransitionTime } from '../../newspack-ui/js/utils';
 
@@ -59,7 +64,6 @@ const createCommentsPanel = ( panel, triggers ) => {
 	let lastFocused = null;
 	let focusTrapCleanup = null;
 	let escCleanup = null;
-	let previousScrollbarGutter = '';
 
 	// Move the panel to document.body once so position:fixed works regardless of
 	// ancestor CSS transforms / stacking contexts.
@@ -136,11 +140,7 @@ const createCommentsPanel = ( panel, triggers ) => {
 		triggers.forEach( t => t.setAttribute( 'aria-expanded', 'true' ) );
 		panel.setAttribute( 'aria-hidden', 'false' );
 		panel.removeAttribute( 'inert' );
-		// Reserve the scrollbar's space so the page doesn't shift when the lock hides it.
-		previousScrollbarGutter = document.documentElement.style.scrollbarGutter;
-		if ( window.innerWidth > document.documentElement.clientWidth ) {
-			document.documentElement.style.scrollbarGutter = 'stable';
-		}
+		lockScrollbarGutter();
 		document.body.classList.add( BODY_OPEN_CLASS );
 
 		scrim.classList.add( 'comments-panel__scrim--open' );
@@ -182,7 +182,7 @@ const createCommentsPanel = ( panel, triggers ) => {
 		panel.setAttribute( 'aria-hidden', 'true' );
 		panel.setAttribute( 'inert', '' );
 		document.body.classList.remove( BODY_OPEN_CLASS );
-		document.documentElement.style.scrollbarGutter = previousScrollbarGutter;
+		unlockScrollbarGutter();
 
 		if ( lastFocused && document.contains( lastFocused ) ) {
 			lastFocused.focus();

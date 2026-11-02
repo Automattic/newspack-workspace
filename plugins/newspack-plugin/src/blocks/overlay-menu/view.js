@@ -11,6 +11,11 @@
  */
 import domReady from '@wordpress/dom-ready';
 
+/**
+ * Internal dependencies
+ */
+import { lockScrollbarGutter, unlockScrollbarGutter } from '../../shared/js/scrollbar-gutter';
+
 // Focusable element selector
 const FOCUSABLE_SELECTOR =
 	'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), ' +
@@ -54,7 +59,6 @@ const createFlyoutInstance = wrapper => {
 	let lastFocused = null;
 	let focusTrapCleanup = null;
 	let escCleanup = null;
-	let previousScrollbarGutter = '';
 
 	// Move the panel to document.body once so position:fixed works without
 	// stacking context issues regardless of the wrapper's CSS transforms.
@@ -121,11 +125,7 @@ const createFlyoutInstance = wrapper => {
 		trigger.setAttribute( 'aria-expanded', 'true' );
 		panel.setAttribute( 'aria-hidden', 'false' );
 		panel.removeAttribute( 'inert' );
-		// Reserve the scrollbar's space so the page doesn't shift when the lock hides it.
-		previousScrollbarGutter = document.documentElement.style.scrollbarGutter;
-		if ( window.innerWidth > document.documentElement.clientWidth ) {
-			document.documentElement.style.scrollbarGutter = 'stable';
-		}
+		lockScrollbarGutter();
 		document.body.classList.add( `menu-open--overlay-menu-${ overlayId }` );
 
 		scrim.classList.add( 'overlay-menu__scrim--open' );
@@ -173,7 +173,7 @@ const createFlyoutInstance = wrapper => {
 		panel.setAttribute( 'aria-hidden', 'true' );
 		panel.setAttribute( 'inert', '' );
 		document.body.classList.remove( `menu-open--overlay-menu-${ overlayId }` );
-		document.documentElement.style.scrollbarGutter = previousScrollbarGutter;
+		unlockScrollbarGutter();
 
 		// Return focus immediately so screen readers don't lose context.
 		if ( lastFocused && document.contains( lastFocused ) ) {

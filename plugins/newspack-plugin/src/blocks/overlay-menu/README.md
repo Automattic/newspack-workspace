@@ -74,7 +74,7 @@ All three blocks are dynamic — each has a PHP render callback.
 
 **Frontend script** (`view.js`, webpack entry `overlay-menu-block`): Creates a self-contained controller per instance (`createFlyoutInstance`). It locates each instance by `[data-overlay-id]` on the wrapper element. When the script loads, the panel is moved to `document.body` (to avoid stacking context issues from CSS transforms) and a hidden scrim is inserted after it. On open, ARIA states are updated (`aria-expanded`, `aria-hidden`, `inert` toggled), a focus trap is activated, and the scrim is shown. A `menu-open--overlay-menu-{instanceId}` class is added to `<body>` while open. Escape closes the menu. Focus returns to the trigger on close.
 
-**CSS note**: Panel and overlay styles are written at root scope (not nested inside the block wrapper selector) because the panel moves to `document.body` on open and loses its ancestor context.
+**CSS note**: Panel and overlay styles are written at root scope (not nested inside the block wrapper selector) because the panel moves to `document.body` on load and loses its ancestor context.
 
 ## Availability
 
