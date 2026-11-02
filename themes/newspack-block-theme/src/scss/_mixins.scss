@@ -355,6 +355,9 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 
 	&:focus-visible {
 		@include focus-line;
+		transition:
+			background-color motion.$duration-color motion.$ease-color,
+			transform motion.$duration-press motion.$ease-out;
 	}
 }
 

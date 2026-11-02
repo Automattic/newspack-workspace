@@ -33,6 +33,12 @@
 			width: var(--wp--custom--spacing--65);
 		}
 
+		a:focus-visible {
+			transition:
+				background-color motion.$duration-color motion.$ease-color,
+				color motion.$duration-color motion.$ease-color;
+		}
+
 		.current {
 			background: var(--wp--preset--color--accent);
 			color: var(--wp--preset--color--base);
