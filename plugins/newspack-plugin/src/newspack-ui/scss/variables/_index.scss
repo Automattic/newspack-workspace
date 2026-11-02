@@ -2,6 +2,7 @@
 @use "colors";
 @use "fonts";
 @use "spacing";
+@use "newspack-motion" as motion;
 
 // TODO: Some misc styles that need a home!
 :root {
@@ -36,15 +37,7 @@
 	--newspack-ui-focus-halo-width: 3px;
 	--newspack-ui-focus-halo-mix: 30%;
 
-	--newspack-ui-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-	--newspack-ui-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
-	--newspack-ui-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
-	--newspack-ui-duration-color: 150ms;
-	--newspack-ui-duration-press: 160ms;
-	--newspack-ui-duration-indicator: 200ms;
-	--newspack-ui-duration-reveal: 200ms;
-	--newspack-ui-duration-modal: 250ms;
-	--newspack-ui-duration-sheet: 400ms;
+	@include motion.custom-properties(newspack-ui);
 	--newspack-ui-duration-snackbar: 400ms;
 	--newspack-ui-ease-snackbar: ease;
 

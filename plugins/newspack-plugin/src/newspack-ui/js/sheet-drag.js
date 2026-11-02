@@ -7,10 +7,10 @@
  * `data-newspack-ui-no-drag` attribute.
  */
 
+import { REDUCED_MOTION_QUERY } from 'newspack-motion';
 import { isVisible } from './focus';
 
 const SHEET_QUERY = '(max-width: 599px)';
-const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
 
 const CLOSE_DISTANCE = 0.3;
 
