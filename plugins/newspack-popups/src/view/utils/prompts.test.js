@@ -29,9 +29,11 @@ describe( 'closeOverlay', () => {
 		expect( lightbox.style.display ).toBe( 'none' );
 	} );
 
-	it( 'removes the overlay on the next tick when nothing transitions', () => {
+	it( 'adds the hidden class before removing a non-transitioning overlay on the next tick', () => {
 		const { lightbox, button } = render( '' );
 		button.click();
+		expect( lightbox.classList.contains( 'hidden' ) ).toBe( true );
+		expect( lightbox.style.display ).toBe( '' );
 		jest.advanceTimersByTime( 0 );
 		expect( lightbox.style.display ).toBe( 'none' );
 	} );

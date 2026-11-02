@@ -36,7 +36,7 @@ const getTransitionTime = element => {
 	};
 	const durations = ( style.transitionDuration || '0s' ).split( ',' ).map( toMs );
 	const delays = ( style.transitionDelay || '0s' ).split( ',' ).map( toMs );
-	const count = Math.max( durations.length, delays.length, ( style.transitionProperty || '' ).split( ',' ).length );
+	const count = ( style.transitionProperty || '' ).split( ',' ).length;
 	return Math.max( 0, ...Array.from( { length: count }, ( _, index ) => durations[ index % durations.length ] + delays[ index % delays.length ] ) );
 };
 

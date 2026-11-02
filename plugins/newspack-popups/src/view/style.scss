@@ -44,6 +44,7 @@ $width__tablet: 782px;
 			opacity 0s linear motion.$duration-modal,
 			visibility 0s linear motion.$duration-modal,
 			z-index 0s linear motion.$duration-modal;
+		pointer-events: none;
 		visibility: hidden;
 		z-index: -1;
 
@@ -53,6 +54,7 @@ $width__tablet: 782px;
 
 		.newspack-popup-wrapper {
 			opacity: 0;
+			pointer-events: none;
 			transform: scale(motion.$enter-scale);
 
 			@include motion.reduced-motion {
@@ -503,8 +505,7 @@ $width__tablet: 782px;
 		}
 	}
 
-	&.newspack-lightbox-placement-center_left.hidden .newspack-popup-wrapper,
-	[dir="rtl"] &.newspack-lightbox-placement-center_right.hidden .newspack-popup-wrapper {
+	&.newspack-lightbox-placement-center_left.hidden .newspack-popup-wrapper {
 		transform: translateX(-100%);
 
 		@include motion.reduced-motion {
@@ -512,8 +513,7 @@ $width__tablet: 782px;
 		}
 	}
 
-	&.newspack-lightbox-placement-center_right.hidden .newspack-popup-wrapper,
-	[dir="rtl"] &.newspack-lightbox-placement-center_left.hidden .newspack-popup-wrapper {
+	&.newspack-lightbox-placement-center_right.hidden .newspack-popup-wrapper {
 		transform: translateX(100%);
 
 		@include motion.reduced-motion {
@@ -527,6 +527,10 @@ $width__tablet: 782px;
 
 		.newspack-popup-wrapper {
 			pointer-events: all;
+		}
+
+		&.hidden .newspack-popup-wrapper {
+			pointer-events: none;
 		}
 	}
 
