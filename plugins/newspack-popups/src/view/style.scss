@@ -202,23 +202,7 @@ $width__tablet: 782px;
 				width: #{3 * $overlay__gap};
 			}
 
-			&:active,
 			&:focus {
-				background: #111;
-				color: white;
-				opacity: 1;
-			}
-
-			@include motion.hover {
-				&:hover {
-					background: #111;
-					color: white;
-					opacity: 1;
-				}
-			}
-
-			&:focus {
-				outline: 1.5px solid #111;
 				outline-offset: 2px;
 			}
 		}
@@ -254,7 +238,7 @@ $width__tablet: 782px;
 		right: 0;
 		top: 0;
 		transition:
-			background-color motion.$duration-color motion.$ease-color,
+			box-shadow motion.$duration-color motion.$ease-color,
 			transform motion.$duration-press motion.$ease-out;
 		width: 36px;
 		z-index: 10;
@@ -266,12 +250,12 @@ $width__tablet: 782px;
 
 		@include motion.hover {
 			&:hover {
-				background-color: color-mix(in srgb, currentcolor 7%, transparent);
+				box-shadow: inset 0 0 0 100vmax color-mix(in srgb, currentcolor 7%, transparent);
 			}
 		}
 
 		&:active {
-			background-color: color-mix(in srgb, currentcolor 13%, transparent);
+			box-shadow: inset 0 0 0 100vmax color-mix(in srgb, currentcolor 13%, transparent);
 			transform: scale(motion.$press-scale);
 
 			@include motion.reduced-motion {
@@ -282,6 +266,18 @@ $width__tablet: 782px;
 		&:focus {
 			outline: 1.5px solid;
 			outline-offset: -1px;
+		}
+	}
+
+	&.newspack-lightbox-close-button-background .newspack-lightbox__close {
+		@include motion.hover {
+			&:hover {
+				box-shadow: inset 0 0 0 100vmax rgba(black, 0.15);
+			}
+		}
+
+		&:active {
+			box-shadow: inset 0 0 0 100vmax rgba(black, 0.25);
 		}
 	}
 
@@ -302,16 +298,12 @@ $width__tablet: 782px;
 
 				@include motion.hover {
 					&:hover {
-						background-color: rgba(black, 0.7);
+						box-shadow: inset 0 0 0 100vmax rgba(black, 0.2);
 					}
 				}
 
 				&:active {
-					background-color: rgba(black, 0.7);
-				}
-
-				&:focus {
-					outline-offset: 2px;
+					box-shadow: inset 0 0 0 100vmax rgba(black, 0.35);
 				}
 			}
 		}
