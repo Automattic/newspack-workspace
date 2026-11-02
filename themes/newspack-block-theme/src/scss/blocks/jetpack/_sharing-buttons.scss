@@ -19,14 +19,9 @@
 				padding: calc(var(--wp--preset--spacing--20) * 0.875);
 				top: 0;
 
-				@include motion.hover {
-					&:hover {
-						background-color: color-mix(in srgb, currentcolor 7%, transparent);
-					}
-				}
+				@include mixins.fill-overlay;
 
 				&:active {
-					background-color: color-mix(in srgb, currentcolor 13%, transparent);
 					transform: scale(motion.$press-scale);
 
 					@include motion.reduced-motion {

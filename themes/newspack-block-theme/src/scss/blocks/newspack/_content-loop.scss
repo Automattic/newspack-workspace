@@ -81,7 +81,8 @@
 		.entry-title {
 			@include motion.hover {
 				a:hover {
-					color: color-mix(in srgb, currentcolor 85%, transparent);
+					color: inherit;
+					text-decoration: underline;
 				}
 			}
 		}

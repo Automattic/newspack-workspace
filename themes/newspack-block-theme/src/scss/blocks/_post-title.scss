@@ -3,11 +3,12 @@
 .wp-block-post-title {
 	a {
 		transition: color motion.$duration-color motion.$ease-color;
+	}
 
-		@include motion.hover {
-			.has-link-color &:hover {
-				text-decoration: underline;
-			}
+	@include motion.hover {
+		&.has-link-color a:hover,
+		.has-link-color & a:hover {
+			text-decoration: underline;
 		}
 	}
 }

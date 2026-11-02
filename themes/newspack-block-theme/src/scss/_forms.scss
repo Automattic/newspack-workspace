@@ -136,7 +136,7 @@ input[type="submit"]:not(.newspack-ui__button) {
 	background: var(--wp--preset--color--accent);
 	border: 0;
 	border-radius: var(--newspack-ui-radius-button, var(--wp--custom--border--radius-large));
-	color: var(--wp--preset--color--base);
+	color: var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base));
 	cursor: pointer;
 	font-family: var(--newspack-ui-font-family, var(--wp--preset--font-family--inter, system-ui, sans-serif));
 	font-size: var(--newspack-ui-font-size-s, var(--wp--preset--font-size--small));
@@ -152,17 +152,19 @@ input[type="submit"]:not(.newspack-ui__button) {
 		transform motion.$duration-press motion.$ease-out;
 
 	&:hover {
-		color: var(--wp--preset--color--base);
+		color: var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base));
 	}
 
 	@include motion.hover {
 		&:hover {
 			background: color-mix(in srgb, var(--wp--preset--color--accent) 85%, black);
+			color: var(--wp--preset--color--accent-contrast-hover, var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base)));
 		}
 	}
 
 	&:active {
 		background: color-mix(in srgb, var(--wp--preset--color--accent) 75%, black);
+		color: var(--wp--preset--color--accent-contrast-hover, var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base)));
 		transform: scale(motion.$press-scale);
 
 		@include motion.reduced-motion {

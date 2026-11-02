@@ -28,7 +28,7 @@ final class Contrast {
 	 * Two properties are derived and each is emitted only when it resolves:
 	 * --wp--preset--color--accent-contrast for the button rest state (scored
 	 * against the accent) and --wp--preset--color--accent-contrast-hover for the
-	 * button hover state (scored against the resolved hover background). The values
+	 * button hover and press states (scored against both resolved backgrounds). The values
 	 * are derived, not pickable, so they are intentionally not registered as palette
 	 * presets and never appear in color pickers. enqueue_block_assets runs in both
 	 * the front end and the iframed editor canvas.
@@ -66,50 +66,74 @@ final class Contrast {
 	}
 
 	/**
-	 * Derive the contrast text color for the button hover state.
+	 * Derive the contrast text color for the button hover and press states.
 	 *
-	 * Reads the resolved hover background of the button element and picks readable
-	 * text against it. The resolved value is interpreted as follows:
+	 * Both states share one text color, so it is picked by the worst-case WCAG 2
+	 * ratio across the resolved hover and press backgrounds. Each background is
+	 * read from global styles and interpreted as follows:
 	 *
-	 * - Absent, or a color-mix over the accent var (the theme default darkens the
-	 *   accent by 15% in srgb): score against the accent darkened per channel by
-	 *   0.85, which is exactly what that color-mix produces.
+	 * - Absent, or the theme's default color-mix over the accent var (85% black
+	 *   for hover, 75% for press, in srgb): the accent darkened per channel by the
+	 *   same factor, which is exactly what that color-mix produces. An absent press
+	 *   background is skipped, since press then shows the hover background.
 	 * - A palette reference (var:preset|color|<slug> or var( --wp--preset--color--<slug> )):
-	 *   score against the palette color the slug resolves to.
-	 * - A plain parseable hex: score it directly.
+	 *   the palette color the slug resolves to.
+	 * - A plain parseable hex: that hex.
 	 * - Anything else (arbitrary color-mix, rgb()/hsl(), gradients): not derivable.
+	 *   No hover property is emitted when the hover background is not derivable,
+	 *   and a press background that is not derivable is skipped.
 	 *
 	 * @param string $accent The resolved accent palette color.
 	 * @return string|null '#000000' or '#ffffff', or null when not derivable.
 	 */
 	private static function get_accent_contrast_hover( $accent ) {
-		$background = self::get_button_hover_background();
-
-		if ( null === $background || self::is_accent_color_mix( $background ) ) {
-			$darkened = self::darken_hex( $accent, 0.85 );
-			return null === $darkened ? null : self::get_color_for_contrast( $darkened );
+		$hover_background = self::get_button_state_background( ':hover' );
+		$hover            = self::resolve_state_background( $accent, $hover_background, 0.85 );
+		if ( null === $hover ) {
+			return null;
 		}
 
-		$hex = self::resolve_color_reference( $background );
-		if ( null !== $hex ) {
-			return self::get_color_for_contrast( $hex );
+		$backgrounds      = [ $hover ];
+		$press_background = self::get_button_state_background( ':active' );
+		if ( null !== $press_background ) {
+			$press = self::resolve_state_background( $accent, $press_background, 0.75 );
+			if ( null !== $press ) {
+				$backgrounds[] = $press;
+			}
 		}
 
-		return null;
+		return self::get_wcag_color_for_backgrounds( $backgrounds );
 	}
 
 	/**
-	 * Read the resolved button hover background from global styles.
+	 * Resolve a button state background to a hex color.
 	 *
-	 * The ':hover' pseudo key is a first-class key under the button element node,
-	 * so it is addressable directly in the path. A non-string result (an absent
-	 * leaf makes _wp_array_get fall back to the whole styles array) is treated as
-	 * absent.
+	 * @param string      $accent     The resolved accent palette color.
+	 * @param string|null $background The state background from global styles, or null when absent.
+	 * @param float       $factor     The theme default darkening factor for the state.
+	 * @return string|null The hex color, or null when not derivable.
+	 */
+	private static function resolve_state_background( $accent, $background, $factor ) {
+		if ( null === $background || self::is_accent_color_mix( $background, $factor ) ) {
+			return self::darken_hex( $accent, $factor );
+		}
+
+		return self::resolve_color_reference( $background );
+	}
+
+	/**
+	 * Read a resolved button state background from global styles.
 	 *
+	 * Pseudo keys such as ':hover' and ':active' are first-class keys under the
+	 * button element node, so they are addressable directly in the path. A
+	 * non-string result (an absent leaf makes _wp_array_get fall back to the whole
+	 * styles array) is treated as absent.
+	 *
+	 * @param string $state The pseudo-class key, such as ':hover' or ':active'.
 	 * @return string|null The resolved background value, or null when absent.
 	 */
-	private static function get_button_hover_background() {
-		$value = \wp_get_global_styles( [ 'elements', 'button', ':hover', 'color', 'background' ] );
+	private static function get_button_state_background( $state ) {
+		$value = \wp_get_global_styles( [ 'elements', 'button', $state, 'color', 'background' ] );
 
 		if ( ! is_string( $value ) || '' === $value ) {
 			return null;
@@ -119,26 +143,27 @@ final class Contrast {
 	}
 
 	/**
-	 * Whether a value is the theme's exact default accent hover mix.
+	 * Whether a value is the theme's exact default accent state mix.
 	 *
-	 * Matches only the theme default: color-mix( in srgb, <accent> 85%, black ),
+	 * Matches only the theme default: color-mix( in srgb, <accent> <percent>, black ),
 	 * where <accent> is the accent preset in either the var:preset|color|accent
 	 * internal form or the var( --wp--preset--color--accent ) CSS form. The match is
 	 * whitespace-flexible and case-insensitive, but every component is anchored: any
 	 * other mix ratio, color space, mixed-in color, or accent-prefixed slug (such as
-	 * accent-2 or accent-contrast) falls through to false, so the caller emits no
-	 * hover property rather than scoring the wrong background.
+	 * accent-2 or accent-contrast) falls through to false, so the caller never
+	 * scores the wrong background.
 	 *
-	 * @param string $value The resolved background value.
+	 * @param string $value  The resolved background value.
+	 * @param float  $factor The accent share of the mix, such as 0.85 for 85%.
 	 * @return bool True only when the value is the theme's exact default accent mix.
 	 */
-	private static function is_accent_color_mix( $value ) {
+	private static function is_accent_color_mix( $value, $factor ) {
 		if ( ! is_string( $value ) || false === stripos( $value, 'color-mix' ) ) {
 			return false;
 		}
 
 		return (bool) preg_match(
-			'/^color-mix\(\s*in\s+srgb\s*,\s*(?:var\(\s*--wp--preset--color--accent(?![\w-])\s*\)|var:preset\|color\|accent(?![\w-]))\s+85%\s*,\s*black\s*\)$/i',
+			'/^color-mix\(\s*in\s+srgb\s*,\s*(?:var\(\s*--wp--preset--color--accent(?![\w-])\s*\)|var:preset\|color\|accent(?![\w-]))\s+' . (int) round( $factor * 100 ) . '%\s*,\s*black\s*\)$/i',
 			trim( $value )
 		);
 	}
@@ -178,7 +203,7 @@ final class Contrast {
 	 * Darken a hex color by multiplying each RGB channel by a factor.
 	 *
 	 * Operates in gamma-encoded srgb, so a 0.85 factor reproduces exactly what
-	 * color-mix( in srgb, <color> 85%, black ) produces.
+	 * color-mix( in srgb, <color> 85%, black ) produces, and likewise for 0.75.
 	 *
 	 * @param string $hex    Hexadecimal color.
 	 * @param float  $factor Multiplier applied to each channel.
@@ -255,6 +280,53 @@ final class Contrast {
 		$white_lc = self::get_apca_contrast( $background_y, self::get_apca_luminance( '#ffffff' ) );
 
 		return abs( $white_lc ) > abs( $black_lc ) ? '#ffffff' : '#000000';
+	}
+
+	/**
+	 * Pick black or white text by the best worst-case WCAG 2 ratio across backgrounds.
+	 *
+	 * Ties fall to black.
+	 *
+	 * @param string[] $hexes Hexadecimal background colors.
+	 * @return string|null '#000000' or '#ffffff', or null when a color is not parseable as hex.
+	 */
+	private static function get_wcag_color_for_backgrounds( $hexes ) {
+		$black = INF;
+		$white = INF;
+
+		foreach ( $hexes as $hex ) {
+			$luminance = self::get_wcag_luminance( $hex );
+			if ( null === $luminance ) {
+				return null;
+			}
+			$black = min( $black, ( $luminance + 0.05 ) / 0.05 );
+			$white = min( $white, 1.05 / ( $luminance + 0.05 ) );
+		}
+
+		return $white > $black ? '#ffffff' : '#000000';
+	}
+
+	/**
+	 * Compute the WCAG 2 relative luminance of a hex color.
+	 *
+	 * @param string $hex Hexadecimal color.
+	 * @return float|null Relative luminance in the 0..1 range, or null when unparseable.
+	 */
+	private static function get_wcag_luminance( $hex ) {
+		$channels = self::parse_hex_channels( $hex );
+		if ( null === $channels ) {
+			return null;
+		}
+
+		$linear = array_map(
+			function ( $channel ) {
+				$channel /= 255;
+				return $channel <= 0.04045 ? $channel / 12.92 : pow( ( $channel + 0.055 ) / 1.055, 2.4 );
+			},
+			$channels
+		);
+
+		return 0.2126 * $linear[0] + 0.7152 * $linear[1] + 0.0722 * $linear[2];
 	}
 
 	/**

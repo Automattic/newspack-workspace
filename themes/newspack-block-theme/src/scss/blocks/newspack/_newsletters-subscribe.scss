@@ -1,22 +1,16 @@
+@use "../../mixins";
 @use "newspack-motion" as motion;
 
 .wp-block-newspack-newsletters-subscribe {
 	&:not(.is-style-legacy):not(.is-style-modern--grid) {
 		.submit-button {
 			transition:
-				opacity motion.$duration-color motion.$ease-color,
 				background-color motion.$duration-color motion.$ease-color,
 				color motion.$duration-color motion.$ease-color,
 				transform motion.$duration-press motion.$ease-out;
 
-			@include motion.hover {
-				&:hover {
-					background-image: linear-gradient(color-mix(in srgb, black 15%, transparent) 0 0);
-				}
-			}
-
-			&:active {
-				background-image: linear-gradient(color-mix(in srgb, black 25%, transparent) 0 0);
+			&:not(:disabled) {
+				@include mixins.fill-overlay;
 			}
 		}
 	}

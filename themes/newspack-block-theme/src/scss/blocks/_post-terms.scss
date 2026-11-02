@@ -4,9 +4,12 @@
 .wp-block-post-terms {
 	a {
 		transition: color motion.$duration-color motion.$ease-color;
+	}
 
+	&:not(.is-style-buttons, .is-style-links) {
 		@include motion.hover {
-			.has-link-color &:hover {
+			&.has-link-color a:hover,
+			.has-link-color & a:hover {
 				text-decoration: underline;
 			}
 		}
@@ -23,7 +26,7 @@
 
 		a,
 		> span:not([class*="wp-block-post-terms__"]) {
-			background: color-mix(in srgb, var(--wp--preset--color--contrast) 7%, transparent);
+			background: color-mix(in srgb, var(--wp--preset--color--contrast) 7%, var(--wp--preset--color--base));
 			border-radius: var(--wp--custom--border--radius-small);
 			color: var(--wp--preset--color--contrast);
 			display: grid;
@@ -42,12 +45,12 @@
 
 			@include motion.hover {
 				&:hover {
-					background: color-mix(in srgb, var(--wp--preset--color--contrast) 13%, transparent);
+					background: color-mix(in srgb, var(--wp--preset--color--contrast) 13%, var(--wp--preset--color--base));
 				}
 			}
 
 			&:active {
-				background: color-mix(in srgb, var(--wp--preset--color--contrast) 19%, transparent);
+				background: color-mix(in srgb, var(--wp--preset--color--contrast) 19%, var(--wp--preset--color--base));
 			}
 
 			&:focus-visible {

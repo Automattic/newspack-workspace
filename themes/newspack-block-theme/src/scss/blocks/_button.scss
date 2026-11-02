@@ -78,16 +78,8 @@
 				transform motion.$duration-press motion.$ease-out;
 		}
 
-		&.has-background:not(.has-accent-2-background-color, [class*="-gradient-background"]) {
-			@include motion.hover {
-				&:hover {
-					background-image: linear-gradient(color-mix(in srgb, black 15%, transparent) 0 0);
-				}
-			}
-
-			&:active {
-				background-image: linear-gradient(color-mix(in srgb, black 25%, transparent) 0 0);
-			}
+		&.has-background:not(.has-accent-2-background-color, .has-contrast-color.has-base-background-color, [contenteditable="true"]) {
+			@include mixins.fill-overlay;
 		}
 
 		&.has-accent-2-background-color {
@@ -97,7 +89,7 @@
 				}
 			}
 
-			&:active {
+			&:active:where(:not([contenteditable="true"])) {
 				background-color: color-mix(in srgb, var(--wp--preset--color--accent-2) 75%, black) !important;
 			}
 		}
@@ -105,13 +97,12 @@
 		&.has-contrast-color.has-base-background-color {
 			@include motion.hover {
 				&:hover {
-					background-color: color-mix(in srgb, var(--wp--preset--color--contrast) 7%, transparent) !important;
-					opacity: 1;
+					background-color: color-mix(in srgb, var(--wp--preset--color--contrast) 7%, var(--wp--preset--color--base)) !important;
 				}
 			}
 
-			&:active {
-				background-color: color-mix(in srgb, var(--wp--preset--color--contrast) 13%, transparent) !important;
+			&:active:where(:not([contenteditable="true"])) {
+				background-color: color-mix(in srgb, var(--wp--preset--color--contrast) 13%, var(--wp--preset--color--base)) !important;
 			}
 		}
 
@@ -128,6 +119,15 @@
 		}
 	}
 
+	&:not(.is-style-outline) {
+		form .wp-block-button__link,
+		> .wp-block-button__link {
+			&.has-background:not(.has-text-color):is(:hover, :active) {
+				color: var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base));
+			}
+		}
+	}
+
 	&.is-style-outline {
 		> .wp-block-button__link,
 		form .wp-block-button__link {
@@ -137,21 +137,14 @@
 
 			@include motion.hover {
 				&:hover {
-					background: var(--wp--preset--color--base-2);
+					background: color-mix(in srgb, var(--wp--preset--color--contrast) 7%, var(--wp--preset--color--base));
 					color: var(--wp--preset--color--contrast);
 				}
 			}
 
-			&.has-background:not([class*="-gradient-background"]) {
-				@include motion.hover {
-					&:hover {
-						background-image: linear-gradient(color-mix(in srgb, black 15%, transparent) 0 0);
-					}
-				}
-
-				&:active {
-					background-image: linear-gradient(color-mix(in srgb, black 25%, transparent) 0 0);
-				}
+			&:active:where(:not([contenteditable="true"])) {
+				background: color-mix(in srgb, var(--wp--preset--color--contrast) 13%, var(--wp--preset--color--base));
+				color: var(--wp--preset--color--contrast);
 			}
 
 			&:focus-visible {
