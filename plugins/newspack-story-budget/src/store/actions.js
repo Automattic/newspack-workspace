@@ -58,6 +58,21 @@ function refreshAbortController( controller ) {
 
 let searchAbortController = refreshAbortController();
 
+/**
+ * Get the time the next refresh should request changes since, in milliseconds.
+ *
+ * Story changes are stamped with the server clock, so a browser clock running
+ * ahead would skip other users' changes. The per-budget stories route sends no
+ * timestamp, but refresh isn't offered there.
+ *
+ * @param {Object} result Stories response.
+ *
+ * @return {number} Timestamp in milliseconds.
+ */
+function getRefreshTimestamp( result ) {
+	return result?.timestamp ? result.timestamp * 1000 : Date.now();
+}
+
 export function* search( str ) {
 	if ( ! str ) {
 		return {
@@ -255,10 +270,10 @@ export function* fetchStories() {
 		payload: { progress: 0 }, // Start progress bar.
 	};
 	yield { type: 'FETCH_START' };
-	const timestamp = Date.now(); // eslint-disable-line @wordpress/no-unused-vars-before-return
 	try {
 		const path = isBudgetStories() ? addQueryArgs( `/budgets/${ getCurrentBudget() }/stories` ) : '/stories';
 		const result = yield apiFetch( { path } );
+		const timestamp = getRefreshTimestamp( result );
 		const { stories, total } = result;
 		yield {
 			type: 'FETCH_PROGRESS',
@@ -313,7 +328,6 @@ export function* refreshStories( silent = true ) {
 		return;
 	}
 
-	const timestamp = Date.now(); // eslint-disable-line @wordpress/no-unused-vars-before-return
 	yield { type: 'REFRESH_START', payload: { silent } };
 	try {
 		const params = { metadata: true };
@@ -323,6 +337,7 @@ export function* refreshStories( silent = true ) {
 		const result = yield apiFetch( {
 			path: addQueryArgs( '/stories', params ),
 		} );
+		const timestamp = getRefreshTimestamp( result );
 		const { stories, total } = result;
 		while ( stories.length < total ) {
 			params.offset = stories.length;

@@ -3,7 +3,7 @@
  * Tests the sync options the backfill CLI passes (NPPD-1883, NPPD-2258).
  *
  * Covers three options:
- *   skip_lists    : upsert with $lists === false (create, don't subscribe).
+ *   skip_lists    : update the existing member of the configured audience only.
  *   fields        : compute + push only the requested metadata fields.
  *   existing_only : update only the contacts an integration already has.
  *
@@ -334,20 +334,80 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 		);
 	}
 
-	public function test_skip_lists_passes_false_master_list_to_upsert() {
+	/**
+	 * Mailchimp keeps every contact in an audience, so a push that must not
+	 * touch lists can only update the reader's existing member of the
+	 * configured audience, leaving its subscription status as it is.
+	 */
+	public function test_skip_lists_updates_the_existing_member_without_changing_its_status() {
+		Newspack_Newsletters_Subscription::$contact_data = [
+			'reader@example.com' => [ 'lists' => [ '123' => [ 'status' => 'unsubscribed' ] ] ],
+		];
 		$esp     = Integrations::get_integration( 'esp' );
 		$contact = [
 			'email'    => 'reader@example.com',
-			'metadata' => [ 'NP_Content Access' => 'Yes' ],
+			'metadata' => [
+				'NP_Content Access' => 'Yes',
+				'status'            => 'subscribed',
+				'status_if_new'     => 'subscribed',
+			],
 		];
 
-		$esp->push_contact_data( $contact, 'ctx', null, [ 'skip_lists' => true ] );
+		$result = $esp->push_contact_data( $contact, 'ctx', [ 'email' => 'reader@example.com' ], [ 'skip_lists' => true ] );
 
+		$this->assertTrue( $result );
 		$this->assertCount( 1, Newspack_Newsletters_Contacts::$upsert_calls );
-		$this->assertFalse(
-			Newspack_Newsletters_Contacts::$upsert_calls[0]['master_list_id'],
-			'--skip-lists must upsert with a false master list id.'
+		$call = Newspack_Newsletters_Contacts::$upsert_calls[0];
+		$this->assertSame( '123', $call['master_list_id'], 'The fields go to the configured audience.' );
+		$this->assertSame( 'Yes', $call['contact']['metadata']['NP_Content Access'] );
+		$this->assertArrayNotHasKey( 'status', $call['contact']['metadata'], 'A status would overwrite the member\'s own.' );
+		$this->assertSame( 'transactional', $call['contact']['metadata']['status_if_new'], 'A member that appears after the check is created unable to receive campaigns.' );
+		$this->assertNull( $call['existing_contact'], 'Existing contact data makes the upsert send an unsubscribed member back as pending, which mails a confirmation.' );
+	}
+
+	/**
+	 * A reader with no live member of the configured audience has nothing to
+	 * update, and an upsert would create one.
+	 */
+	public function test_skip_lists_creates_no_member() {
+		// No staged contact data: the subscription mock reports the contact as not found.
+		$result = Integrations::get_integration( 'esp' )->push_contact_data(
+			[
+				'email'    => 'reader@example.com',
+				'metadata' => [ 'NP_Content Access' => 'Yes' ],
+			],
+			'ctx',
+			null,
+			[ 'skip_lists' => true ]
 		);
+
+		$this->assertWPError( $result );
+		$this->assertSame( Integration::CONTACT_NOT_FOUND_ERROR_CODE, $result->get_error_code() );
+		$this->assertEmpty( Newspack_Newsletters_Contacts::$upsert_calls );
+	}
+
+	/**
+	 * A lookup that failed says nothing about the member, so nothing is
+	 * pushed and the caller sees the failure.
+	 */
+	public function test_skip_lists_passes_a_failed_lookup_through() {
+		Newspack_Newsletters_Subscription::$contact_data = [
+			'reader@example.com' => new WP_Error( 'newspack_newsletters_mailchimp_search_members', 'Error reaching to search-members endpoint' ),
+		];
+
+		$result = Integrations::get_integration( 'esp' )->push_contact_data(
+			[
+				'email'    => 'reader@example.com',
+				'metadata' => [ 'NP_Content Access' => 'Yes' ],
+			],
+			'ctx',
+			null,
+			[ 'skip_lists' => true ]
+		);
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'newspack_newsletters_mailchimp_search_members', $result->get_error_code() );
+		$this->assertEmpty( Newspack_Newsletters_Contacts::$upsert_calls );
 	}
 
 	public function test_without_skip_lists_passes_configured_master_list() {
@@ -452,8 +512,11 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 		$this->assertEmpty( Newspack_Newsletters_Contacts::$upsert_calls, 'Dry-run must not push to the ESP.' );
 	}
 
-	public function test_backfill_shape_is_email_plus_three_content_access_fields_listless() {
+	public function test_backfill_shape_is_email_plus_three_content_access_fields() {
 		$this->create_custom_access_gate( $this->passing_email_domain_rules() );
+		Newspack_Newsletters_Subscription::$contact_data = [
+			'reader@example.com' => [ 'lists' => [ '123' => [ 'status' => 'subscribed' ] ] ],
+		];
 		$esp     = Integrations::get_integration( 'esp' );
 		$options = [
 			'skip_lists' => true,
@@ -467,12 +530,12 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 		$this->assertCount( 1, Newspack_Newsletters_Contacts::$upsert_calls );
 		$call = Newspack_Newsletters_Contacts::$upsert_calls[0];
 
-		$this->assertFalse( $call['master_list_id'], 'Backfill must be list-less.' );
+		$this->assertSame( '123', $call['master_list_id'], 'Mailchimp has no list-less push: the existing member of the configured audience is updated.' );
 		$this->assertSame( 'reader@example.com', $call['contact']['email'] );
 		$this->assertArrayNotHasKey( 'name', $call['contact'], 'Reader name must not be rewritten.' );
 		$this->assertEqualsCanonicalizing(
 			[ 'NP_Content Access', 'NP_Content Access Source', 'NP_Content Access Group' ],
-			array_keys( $call['contact']['metadata'] ),
+			array_keys( array_diff_key( $call['contact']['metadata'], array_flip( Metadata::SYNC_CONTROL_KEYS ) ) ),
 			'Only the three prefixed Content Access fields are pushed.'
 		);
 	}

@@ -26,10 +26,10 @@ export const syncListOrder = ( order, lists, allIds ) => {
 /**
  * The saved lists a block keeps once the lists config has loaded.
  *
- * The config holds only the lists the current user can join, and is empty when
- * the request fails. A saved list it lacks is dropped, unless that would leave
- * the block with none: a form with no lists renders for no reader, so the saved
- * ones stay.
+ * The config holds every active list, since the editor asks for the edit
+ * context, and is empty when the request fails. A saved list it lacks is
+ * dropped, unless that would leave the block with none: a form with no lists
+ * renders for no reader, so the saved ones stay.
  *
  * @param {string[]}     saved  List IDs saved on the block.
  * @param {Object|Array} config Lists config keyed by list ID. An empty array when there are no lists.

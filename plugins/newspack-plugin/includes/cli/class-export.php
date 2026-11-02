@@ -41,6 +41,12 @@ class Export {
 	 * [--search=<term>]
 	 * : Search term (same semantics as the admin list search).
 	 *
+	 * [--per-member]
+	 * : Write one row per reader: the owner of each subscription, then each member of a group subscription. Adds reader and group columns ahead of the subscription columns. Rows follow --status: pass --status=active,pending-cancel to list only readers who have access now.
+	 *
+	 * [--include-complimentary]
+	 * : Include complimentary subscriptions, which grant access an admin gave for free. They are left out by default.
+	 *
 	 * [--month=<yyyymm>]
 	 * : Only subscriptions created in this month, e.g. 202605.
 	 *
@@ -60,11 +66,12 @@ class Export {
 	 * : Output file path. Defaults to newspack-subscriptions-export-<date>-<random>.csv in the current directory.
 	 *
 	 * [--per-page=<n>]
-	 * : Rows fetched per batch. Default 50.
+	 * : Subscriptions fetched per batch. Default 50. A per-member batch writes a row for each reader, so it can be longer.
 	 *
 	 * ## EXAMPLES
 	 *
 	 *     wp newspack export-subscriptions --status=active --product=123 --output=/tmp/active-print.csv
+	 *     wp newspack export-subscriptions --status=active --per-member --output=/tmp/readers.csv
 	 *
 	 * @param array $args       Positional args.
 	 * @param array $assoc_args Associative args.
@@ -171,7 +178,9 @@ class Export {
 			$raw['roles']     = self::split_list( $assoc_args['role'] ?? '' );
 		}
 		if ( 'subscriptions' === $type ) {
-			$raw['statuses'] = self::split_list( $assoc_args['status'] ?? '' );
+			$raw['statuses']   = self::split_list( $assoc_args['status'] ?? '' );
+			$raw['per_member']            = \WP_CLI\Utils\get_flag_value( $assoc_args, 'per-member', false );
+			$raw['include_complimentary'] = \WP_CLI\Utils\get_flag_value( $assoc_args, 'include-complimentary', false );
 		}
 
 		// selection_submitted is deliberately not set here. It exists so an
@@ -318,6 +327,9 @@ class Export {
 		$page        = 1;
 		$exported    = 0;
 		$ended_short = false;
+		// Progress is counted in what the cursor pages over: a per-member run
+		// writes several rows for one group subscription.
+		$unit = empty( $config['per_member'] ) ? 'rows' : 'subscriptions';
 		do {
 			$exporter = $make_exporter( $page );
 			$exporter->generate_file();
@@ -337,7 +349,7 @@ class Export {
 			// empty page the parent's counter reports the pinned total, not
 			// what the file holds.
 			$exported = $exporter->get_total_exported();
-			WP_CLI::log( sprintf( '%d rows (%d%%)', $exported, min( 100, $percent ) ) );
+			WP_CLI::log( sprintf( '%d %s (%d%%)', $exported, $unit, min( 100, $percent ) ) );
 			$page++;
 			// The object cache accumulates every loaded subscription/user in a
 			// long-running CLI process; without this, large exports exhaust
@@ -357,9 +369,9 @@ class Export {
 		// The no-progress guard can break the loop before completion, shipping
 		// a partial CSV; say so rather than reporting an unqualified success.
 		if ( ! $ended_short ) {
-			WP_CLI::success( sprintf( 'Exported %d rows to %s.', $exported, $output ) );
+			WP_CLI::success( sprintf( 'Exported %d %s to %s.', $exported, $unit, $output ) );
 		} else {
-			WP_CLI::warning( sprintf( 'Export incomplete: wrote %d rows to %s before stopping early.', $exported, $output ) );
+			WP_CLI::warning( sprintf( 'Export incomplete: wrote %d %s to %s before stopping early.', $exported, $unit, $output ) );
 		}
 	}
 }

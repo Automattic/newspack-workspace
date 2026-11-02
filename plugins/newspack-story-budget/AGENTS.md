@@ -66,7 +66,7 @@ The store lives in its own webpack entry (`src/store/index.js` → `story-budget
 
 - **New PHPUnit tests must go in `tests/unit-tests/`.** `phpunit.xml`'s only testsuite directory is that path, so `tests/class-test-search.php` is not collected by the suite and has rotted (it asserts a meta prefix the code stopped using). That is pre-existing, not your regression.
 - `tests/bootstrap.php` requires the plugin's own `vendor/`, so run `n composer install` from this directory on a fresh checkout.
-- **`n test-js` is a real Jest run, but it only covers `src/utils/*` and `src/store/cache/*`.** Nothing exercises the store or any component, so a green run says little about changes there.
+- **`n test-js` is a real Jest run, but its coverage is thin:** `src/utils/*`, `src/store/cache/*`, and the refresh-time handling in `src/store/actions.js` and `src/store/reducers/meta.js`. No component is exercised, so a green run says little about UI changes.
 
 ## Linting quirks
 

@@ -197,7 +197,7 @@ describe( 'hasUnlistedAccessRuleValues', () => {
 	} );
 
 	it( 'treats a product with an ineligible status as unlisted, since it still grants access', () => {
-		const options = [ ...OPTIONS, { value: 500000, label: 'Retired [invalid status: Draft]', ineligible: true } ];
+		const options = [ ...OPTIONS, { value: 500000, label: 'Retired [draft]', ineligible: true } ];
 		expect( hasUnlistedAccessRuleValues( options, [ 188250, 500000 ] ) ).toBe( true );
 	} );
 } );
@@ -206,10 +206,10 @@ describe( 'getAccessRuleOptionSuggestions', () => {
 	it( 'offers every option except the label-only entries that name stored values', () => {
 		const options = [
 			{ value: 300000, label: 'Monthly' },
-			{ value: 500000, label: 'Retired [invalid status: Draft]', ineligible: true },
-			{ value: 600000, label: 'Gone [invalid status: Trash]', ineligible: true, selectable: false },
+			{ value: 500000, label: 'Retired [draft]', ineligible: true },
+			{ value: 600000, label: 'Gone [trash]', ineligible: true, selectable: false },
 		];
-		expect( getAccessRuleOptionSuggestions( options ) ).toEqual( [ 'Monthly (#300000)', 'Retired [invalid status: Draft] (#500000)' ] );
+		expect( getAccessRuleOptionSuggestions( options ) ).toEqual( [ 'Monthly (#300000)', 'Retired [draft] (#500000)' ] );
 	} );
 } );
 

@@ -277,6 +277,64 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that will_consume_inbound_pass() reports the handler's own decision:
+	 * only while it is hooked with verification enabled, and never for a user
+	 * it skips. Other plugins strip the token themselves when it says no.
+	 */
+	public function test_will_consume_inbound_pass_follows_the_handler() {
+		$callback   = [ Newsletters_Access::class, 'handle_inbound_request_action' ];
+		$was_hooked = has_action( 'init', $callback );
+		if ( false !== $was_hooked ) {
+			remove_action( 'init', $callback, $was_hooked );
+		}
+		update_option( 'newspack_content_gate_newsletter_link_bypass_enabled', 1, false );
+		\Newspack\Content_Gate_Advanced_Settings::reset_cache();
+		try {
+			$this->assertFalse( Newsletters_Access::will_consume_inbound_pass(), 'Not hooked: nothing consumes the token.' );
+
+			add_action( 'init', $callback, 2 );
+			$this->assertTrue( Newsletters_Access::will_consume_inbound_pass(), 'Hooked, for a reader it handles.' );
+
+			update_option( 'newspack_content_gate_newsletter_link_bypass_enabled', 0, false );
+			\Newspack\Content_Gate_Advanced_Settings::reset_cache();
+			$this->assertFalse( Newsletters_Access::will_consume_inbound_pass(), 'Hooked, but verification is off.' );
+
+			update_option( 'newspack_content_gate_newsletter_link_bypass_enabled', 1, false );
+			\Newspack\Content_Gate_Advanced_Settings::reset_cache();
+			wp_set_current_user( $this->factory->user->create( [ 'role' => 'editor' ] ) );
+			$this->assertFalse( Newsletters_Access::will_consume_inbound_pass(), 'Hooked, but it skips editors.' );
+		} finally {
+			wp_set_current_user( 0 );
+			remove_action( 'init', $callback, 2 );
+			if ( false !== $was_hooked ) {
+				add_action( 'init', $callback, $was_hooked );
+			}
+			\Newspack\Content_Gate_Advanced_Settings::reset_cache();
+		}
+	}
+
+	/**
+	 * An account a site filters in skips the signed-link check, as staff do.
+	 */
+	public function test_handle_inbound_skips_for_filtered_in_account() {
+		update_option( 'newspack_content_gate_newsletter_link_bypass_enabled', 1, false );
+		\Newspack\Content_Gate_Advanced_Settings::reset_cache();
+		$author = $this->factory->user->create( [ 'role' => 'author' ] );
+		$skip   = function ( $skips, $user_id ) use ( $author ) {
+			return $user_id === $author ? true : $skips;
+		};
+		add_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10, 2 );
+		wp_set_current_user( $author );
+		$post_id = $this->create_newsletter( time() );
+		$_GET[ Newsletters_Access::QUERY_PARAM ] = Newsletters_Access::sign( $post_id );
+		$result = Newsletters_Access::process_inbound_request( false );
+		unset( $_GET[ Newsletters_Access::QUERY_PARAM ] );
+		remove_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10 );
+		wp_set_current_user( 0 );
+		$this->assertSame( 'skipped', $result['action'] );
+	}
+
+	/**
 	 * Create a sent newsletter for the given list ID containing the given URL in its email HTML.
 	 *
 	 * @param string $list_id Send list ID to store in `send_list_id` meta.
@@ -506,6 +564,37 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		$result = Newsletters_Access::process_utm_fallback_request( false );
 
 		unset( $_GET['utm_medium'], $_GET['utm_source'] );
+		wp_set_current_user( 0 );
+		$this->assertSame( 'skipped', $result['action'] );
+	}
+
+	/**
+	 * An account a site filters in skips the UTM fallback, as staff do.
+	 */
+	public function test_utm_fallback_skips_for_filtered_in_account() {
+		update_option( 'newspack_content_gate_newsletter_link_bypass_enabled', 1, false );
+		$author = $this->factory->user->create( [ 'role' => 'author' ] );
+		$skip   = function ( $skips, $user_id ) use ( $author ) {
+			return $user_id === $author ? true : $skips;
+		};
+		add_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10, 2 );
+		wp_set_current_user( $author );
+
+		$post_id     = $this->factory->post->create( [ 'post_type' => 'post' ] );
+		$request_url = add_query_arg(
+			[
+				'utm_medium' => 'email',
+				'utm_source' => 'list_abc',
+			],
+			get_permalink( $post_id )
+		);
+		$this->create_sent_newsletter_with_link( 'list_abc', get_permalink( $post_id ) );
+		$this->go_to( $request_url );
+
+		$result = Newsletters_Access::process_utm_fallback_request( false );
+
+		unset( $_GET['utm_medium'], $_GET['utm_source'] );
+		remove_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10 );
 		wp_set_current_user( 0 );
 		$this->assertSame( 'skipped', $result['action'] );
 	}

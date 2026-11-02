@@ -23,6 +23,8 @@ final class Newspack_Popups_AB_Tests {
 	const META_GOAL          = 'newspack_popups_ab_test_goal';
 	const META_CONTROL_SHARE = 'newspack_popups_ab_control_share';
 
+	const META_KEYS = [ self::META_TEST_ID, self::META_VARIANT, self::META_GOAL, self::META_CONTROL_SHARE ];
+
 	const USER_META_BUCKET_PREFIX = 'newspack_popups_ab_bucket_';
 
 	/**
@@ -51,6 +53,7 @@ final class Newspack_Popups_AB_Tests {
 	 */
 	public static function init() {
 		add_action( 'init', [ __CLASS__, 'register_meta' ] );
+		add_filter( 'rest_pre_insert_' . Newspack_Popups::NEWSPACK_POPUPS_CPT, [ __CLASS__, 'guard_rest_ab_meta' ], 10, 2 );
 
 		// Anything that can add or remove a test invalidates the flag. Scoped to the
 		// prompts CPT and to the test-id meta key: a news site saves posts constantly,
@@ -64,6 +67,41 @@ final class Newspack_Popups_AB_Tests {
 		foreach ( [ 'added_post_meta', 'updated_post_meta', 'deleted_post_meta' ] as $hook ) {
 			add_action( $hook, [ __CLASS__, 'invalidate_has_tests_for_meta' ], 10, 3 );
 		}
+	}
+
+	/**
+	 * Whether A/B testing is enabled on this site.
+	 *
+	 * The flag gates what reads A/B meta, never its registration. With it off,
+	 * stored tests have no effect anywhere, while REST writes keep their sanitizers
+	 * and schema checks, and a site can turn the flag off and on again without
+	 * losing its test setup.
+	 *
+	 * Not cached, unlike the sibling flags: the filter has to stay live so one
+	 * PHPUnit run can cover both states.
+	 *
+	 * @return bool
+	 */
+	public static function is_enabled() {
+		/**
+		 * Enables A/B testing for Campaigns prompts: running two versions of a
+		 * prompt against each other and comparing how they convert.
+		 *
+		 * @constant NEWSPACK_CAMPAIGNS_AB_TESTING
+		 * @type     bool
+		 * @default  A/B testing disabled
+		 * @status   draft
+		 *
+		 * @example define( 'NEWSPACK_CAMPAIGNS_AB_TESTING', true );
+		 */
+		$enabled = defined( 'NEWSPACK_CAMPAIGNS_AB_TESTING' ) && NEWSPACK_CAMPAIGNS_AB_TESTING;
+
+		/**
+		 * Filters whether A/B testing is enabled.
+		 *
+		 * @param bool $enabled Whether the NEWSPACK_CAMPAIGNS_AB_TESTING constant is set.
+		 */
+		return (bool) apply_filters( 'newspack_popups_ab_testing_enabled', $enabled );
 	}
 
 	/**
@@ -106,7 +144,7 @@ final class Newspack_Popups_AB_Tests {
 			'object_subtype' => Newspack_Popups::NEWSPACK_POPUPS_CPT,
 			'show_in_rest'   => true,
 			'single'         => true,
-			'auth_callback'  => '__return_true',
+			'auth_callback'  => [ __CLASS__, 'can_write_meta' ],
 		];
 
 		\register_meta(
@@ -183,6 +221,109 @@ final class Newspack_Popups_AB_Tests {
 	}
 
 	/**
+	 * Whether a user may change a prompt's A/B test settings.
+	 *
+	 * By default, anyone who can edit the prompt, the same rule as for the rest of
+	 * its settings. Saves through the prompt's REST endpoint check here, both in the
+	 * meta auth callback and in the save guard, so a narrower capability can
+	 * replace the default in one place.
+	 *
+	 * @param int $user_id User ID.
+	 * @param int $post_id Prompt post ID, or 0 for a prompt not yet created.
+	 * @return bool
+	 */
+	public static function can_manage_tests( $user_id, $post_id ) {
+		if ( $post_id ) {
+			$allowed = user_can( $user_id, 'edit_post', $post_id );
+		} else {
+			$post_type = get_post_type_object( Newspack_Popups::NEWSPACK_POPUPS_CPT );
+			$allowed   = $post_type && user_can( $user_id, $post_type->cap->edit_posts );
+		}
+
+		/**
+		 * Filters whether a user may change a prompt's A/B test settings.
+		 *
+		 * A REST create asks twice: once with post ID 0 before the prompt exists,
+		 * then with its new ID when the meta is written. Give the same answer both
+		 * times, or the prompt is created and its A/B settings are refused.
+		 *
+		 * @param bool $allowed Whether the user may change them.
+		 * @param int  $user_id User ID.
+		 * @param int  $post_id Prompt post ID, or 0 for a prompt not yet created.
+		 */
+		return (bool) apply_filters( 'newspack_popups_ab_can_manage_tests', $allowed, $user_id, $post_id );
+	}
+
+	/**
+	 * Meta auth callback for A/B keys.
+	 *
+	 * @param bool   $allowed   Core's default for the key; ignored.
+	 * @param string $meta_key  Meta key.
+	 * @param int    $object_id Prompt post ID.
+	 * @param int    $user_id   User ID.
+	 * @return bool
+	 */
+	public static function can_write_meta( $allowed, $meta_key, $object_id, $user_id ) {
+		return self::can_manage_tests( (int) $user_id, (int) $object_id );
+	}
+
+	/**
+	 * Hold A/B meta to can_manage_tests() on prompt saves without breaking other saves.
+	 *
+	 * The block editor sends a prompt's whole meta object on every save, A/B keys
+	 * included, and core runs the write check on any key with no stored row. So for
+	 * a user who may edit the prompt but not its test, unchanged A/B values are
+	 * dropped from the request before core sees them, and a changed one refuses the
+	 * request here, before the post or any other meta is written.
+	 *
+	 * Autosaves are the exception: they never store A/B meta, and core's autosave
+	 * route ignores an error from this filter and would record an empty autosave,
+	 * so there the A/B keys are dropped whatever their value.
+	 *
+	 * @param stdClass|WP_Error $prepared_post Post prepared for the database.
+	 * @param WP_REST_Request   $request       Request.
+	 * @return stdClass|WP_Error
+	 */
+	public static function guard_rest_ab_meta( $prepared_post, $request ) {
+		$meta = $request->get_param( 'meta' );
+		if ( is_wp_error( $prepared_post ) || ! is_array( $meta ) ) {
+			return $prepared_post;
+		}
+
+		$post_id = isset( $prepared_post->ID ) ? (int) $prepared_post->ID : 0;
+		if ( self::can_manage_tests( get_current_user_id(), $post_id ) ) {
+			return $prepared_post;
+		}
+
+		$is_autosave = str_ends_with( $request->get_route(), '/autosaves' );
+		$registered  = get_registered_meta_keys( 'post', Newspack_Popups::NEWSPACK_POPUPS_CPT );
+		foreach ( self::META_KEYS as $meta_key ) {
+			if ( ! array_key_exists( $meta_key, $meta ) ) {
+				continue;
+			}
+			// get_post_meta() applies the registered default to an unset key, which
+			// is also what the editor read and is sending back.
+			$stored = $post_id ? get_post_meta( $post_id, $meta_key, true ) : ( $registered[ $meta_key ]['default'] ?? '' );
+			// A null asks core to delete the key, which resets it to its registered default.
+			$value = $meta[ $meta_key ] ?? ( $registered[ $meta_key ]['default'] ?? '' );
+			if ( ! $is_autosave && ( ! is_scalar( $value ) || (string) $value !== (string) $stored ) ) {
+				return new WP_Error(
+					'rest_cannot_update',
+					__( "You don't have permission to change this prompt's A/B test settings. If someone changed its test while you were editing, reload the editor and try again.", 'newspack-popups' ),
+					[
+						'status' => rest_authorization_required_code(),
+						'key'    => $meta_key,
+					]
+				);
+			}
+			unset( $meta[ $meta_key ] );
+		}
+		$request->set_param( 'meta', $meta );
+
+		return $prepared_post;
+	}
+
+	/**
 	 * Sanitize a variant key.
 	 *
 	 * @param string $value Raw value.
@@ -210,9 +351,13 @@ final class Newspack_Popups_AB_Tests {
 	 *                       valid (published control + at least one published
 	 *                       challenger) — an invalid test must not present itself
 	 *                       as a live experiment in markup or analytics params.
-	 * @return array|null Array with test_id and variant, or null if not part of a test.
+	 * @return array|null Array with test_id and variant, or null if not part of a test
+	 *                    or A/B testing is disabled.
 	 */
 	public static function get_popup_ab_fields( $popup_id, $validate = false ) {
+		if ( ! self::is_enabled() ) {
+			return null;
+		}
 		$test_id = get_post_meta( $popup_id, self::META_TEST_ID, true );
 		$variant = get_post_meta( $popup_id, self::META_VARIANT, true );
 		if ( ! $test_id || ! in_array( $variant, self::VALID_VARIANTS, true ) ) {
@@ -237,6 +382,13 @@ final class Newspack_Popups_AB_Tests {
 	 * @return array Config keyed by test ID: [ 'variants' => [ 'a', 'b' ], 'control_share' => 60 ].
 	 */
 	public static function get_tests_config() {
+		// Ahead of the memo and the has-tests flag, and writing neither: a '0'
+		// recorded while the feature is off would outlive the flag and keep live
+		// tests from running once it is turned back on.
+		if ( ! self::is_enabled() ) {
+			return [];
+		}
+
 		if ( null !== self::$tests_config ) {
 			return self::$tests_config;
 		}

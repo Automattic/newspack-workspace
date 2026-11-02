@@ -172,7 +172,7 @@ class Republication_Tracker_Tool_Rewrite_Endpoint {
 			'republication-tracker-tool-republish-template',
 			REPUBLICATION_TRACKER_TOOL_URL . 'assets/republish-template.css',
 			array(),
-			REPUBLICATION_TRACKER_TOOL_VERSION
+			filemtime( REPUBLICATION_TRACKER_TOOL_PATH . 'assets/republish-template.css' )
 		);
 
 		// Enqueue the clipboard utility first.
@@ -180,7 +180,7 @@ class Republication_Tracker_Tool_Rewrite_Endpoint {
 			'republication-tracker-tool-clipboard-utils',
 			REPUBLICATION_TRACKER_TOOL_URL . 'assets/clipboard-utils.js',
 			array(),
-			REPUBLICATION_TRACKER_TOOL_VERSION,
+			filemtime( REPUBLICATION_TRACKER_TOOL_PATH . 'assets/clipboard-utils.js' ),
 			array(
 				'in_footer' => true,
 				'strategy'  => 'defer',
@@ -192,7 +192,7 @@ class Republication_Tracker_Tool_Rewrite_Endpoint {
 			'republication-tracker-tool-republish-template',
 			REPUBLICATION_TRACKER_TOOL_URL . 'assets/republish-template.js',
 			array( 'republication-tracker-tool-clipboard-utils' ),
-			REPUBLICATION_TRACKER_TOOL_VERSION,
+			filemtime( REPUBLICATION_TRACKER_TOOL_PATH . 'assets/republish-template.js' ),
 			array(
 				'in_footer' => true,
 				'strategy'  => 'defer',

@@ -44,6 +44,7 @@ class ModelTest extends WP_UnitTestCase {
 				'overlay_opacity'                => '30',
 				'overlay_size'                   => 'medium',
 				'no_overlay_background'          => false,
+				'manual_only'                    => false,
 				'placement'                      => 'inline',
 				'trigger_type'                   => 'scroll',
 				'trigger_delay'                  => '3',
@@ -153,6 +154,27 @@ class ModelTest extends WP_UnitTestCase {
 			'The position marker is set at position passed in options.'
 		);
 
+		Newspack_Popups_Model::set_block_theme_override( false );
+		try {
+			foreach ( [ 'inline', 'center' ] as $placement ) {
+				$popup_object_classic = Newspack_Popups_Model::create_popup_object(
+					get_post( self::$popup_id ),
+					false,
+					[
+						'placement'    => $placement,
+						'trigger_type' => 'time',
+					]
+				);
+				self::assertStringNotContainsString(
+					'newspack-popup--block-theme',
+					Newspack_Popups_Model::generate_popup( $popup_object_classic ),
+					'Classic theme prompts do not get the block theme class.'
+				);
+			}
+		} finally {
+			Newspack_Popups_Model::set_block_theme_override( null );
+		}
+
 		Newspack_Popups_Model::set_block_theme_override( true );
 		try {
 			$popup_object_inline_block_theme = Newspack_Popups_Model::create_popup_object(
@@ -178,6 +200,11 @@ class ModelTest extends WP_UnitTestCase {
 				$inline_container->getAttribute( 'class' ),
 				'Inline popups receive block theme layout class.'
 			);
+			self::assertStringContainsString(
+				'newspack-popup--block-theme',
+				$inline_container->getAttribute( 'class' ),
+				'Inline popups receive the block theme class.'
+			);
 
 			$popup_object_overlay_block_theme = Newspack_Popups_Model::create_popup_object(
 				get_post( self::$popup_id ),
@@ -202,9 +229,82 @@ class ModelTest extends WP_UnitTestCase {
 				$content->getAttribute( 'class' ),
 				'Overlay popup content receives block theme layout class.'
 			);
+
+			$lightbox = $xpath->query( '//*[contains(concat(" ", normalize-space(@class), " "), " newspack-lightbox ")]' )->item( 0 );
+			self::assertStringContainsString(
+				'newspack-popup--block-theme',
+				$lightbox->getAttribute( 'class' ),
+				'Overlay popups receive the block theme class.'
+			);
 		} finally {
 			Newspack_Popups_Model::set_block_theme_override( null );
 		}
+	}
+
+	/**
+	 * Placements covering the inline and overlay templates.
+	 */
+	public function container_placement_provider() {
+		return [
+			'inline'  => [ 'inline', 'newspack-inline-popup' ],
+			'overlay' => [ 'center', 'newspack-lightbox' ],
+		];
+	}
+
+	/**
+	 * The prompt container is not a keyboard stop of its own, so keyboard and
+	 * screen reader users land on the prompt's content instead of a blank button.
+	 *
+	 * @dataProvider container_placement_provider
+	 *
+	 * @param string $placement       Prompt placement.
+	 * @param string $container_class Class that identifies the container.
+	 */
+	public function test_container_is_not_focusable( $placement, $container_class ) {
+		$popup_object = Newspack_Popups_Model::create_popup_object(
+			get_post( self::$popup_id ),
+			false,
+			[
+				'placement'    => $placement,
+				'trigger_type' => 'time',
+			]
+		);
+
+		$dom = new DomDocument();
+		@$dom->loadHTML( Newspack_Popups_Model::generate_popup( $popup_object ) ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		$xpath = new DOMXpath( $dom );
+
+		$container = $xpath->query( '//*[contains(concat(" ", normalize-space(@class), " "), " ' . $container_class . ' ")]' )->item( 0 );
+		self::assertNotNull( $container, 'The prompt container is present.' );
+		self::assertNotSame( 'button', $container->getAttribute( 'role' ), 'The prompt container is not announced as a button.' );
+		self::assertFalse( $container->hasAttribute( 'tabindex' ), 'The prompt container is not in the tab order.' );
+	}
+
+	/**
+	 * The tappable overlay backdrop is a pointer target only. Keyboard and
+	 * screen reader users dismiss the overlay with its labeled close button.
+	 */
+	public function test_overlay_backdrop_is_hidden_from_keyboard() {
+		update_option( 'newspack_popups_dismiss_overlays_on_tap', true );
+		$popup_object = Newspack_Popups_Model::create_popup_object(
+			get_post( self::$popup_id ),
+			false,
+			[
+				'placement'    => 'center',
+				'trigger_type' => 'time',
+			]
+		);
+		$markup = Newspack_Popups_Model::generate_popup( $popup_object );
+		delete_option( 'newspack_popups_dismiss_overlays_on_tap' );
+
+		$dom = new DomDocument();
+		@$dom->loadHTML( $markup ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		$xpath = new DOMXpath( $dom );
+
+		$backdrop = $xpath->query( '//button[contains(concat(" ", normalize-space(@class), " "), " newspack-lightbox-overlay ")]' )->item( 0 );
+		self::assertNotNull( $backdrop, 'The tappable backdrop is present.' );
+		self::assertSame( '-1', $backdrop->getAttribute( 'tabindex' ), 'The backdrop is not in the tab order.' );
+		self::assertSame( 'true', $backdrop->getAttribute( 'aria-hidden' ), 'The backdrop is hidden from screen readers.' );
 	}
 
 	/**

@@ -612,7 +612,7 @@ abstract class Integration {
 	 * @param array|null $existing_contact Optional. Existing contact data if available.
 	 * @param array      $options          Optional. Sync options, passed through to push_contact_data().
 	 *
-	 * @return true|\WP_Error The push_contact_data() result, unchanged.
+	 * @return true|array|\WP_Error The push_contact_data() result, unchanged.
 	 */
 	final public function push_contact( $contact, $context = '', $existing_contact = null, $options = [] ) {
 		
@@ -657,7 +657,9 @@ abstract class Integration {
 	 * @param string     $context Optional. The context of the sync.
 	 * @param array|null $existing_contact Optional. Existing contact data if available.
 	 *
-	 * @return true|\WP_Error True on success or WP_Error on failure.
+	 * @return true|array|\WP_Error True on success or WP_Error on failure. A success that left
+	 *                              fields out can return an array listing their names under
+	 *                              `unsynced_fields`, so the push log records the push as incomplete.
 	 */
 	abstract public function push_contact_data( $contact, $context = '', $existing_contact = null );
 
@@ -728,7 +730,9 @@ abstract class Integration {
 	 *
 	 * Integrations that support hard deletion should override this AND
 	 * `supports_hard_delete()`. The default returns a "not implemented" WP_Error
-	 * so the dispatcher can log and skip.
+	 * so the dispatcher can log and skip. When the system holds no contact for
+	 * the email, answer with a WP_Error whose only code is
+	 * CONTACT_NOT_FOUND_ERROR_CODE: the deletion then ends without a retry.
 	 *
 	 * @param string $email Email address of the contact to delete.
 	 * @return true|\WP_Error True on success, WP_Error otherwise.
@@ -821,6 +825,38 @@ abstract class Integration {
 	}
 
 	/**
+	 * Whether an integration error carries a 401, 402 or 403 status, which
+	 * only the provider account can cause. Contact sync and the health check
+	 * both decide by it, and must agree: while the check runs, contact sync
+	 * leaves paging about the account to it. An integration that knows the
+	 * HTTP status should keep it as `status` in the error data, since its
+	 * message may be translated.
+	 *
+	 * Read where providers put it: opening a message ("401: …"), inside one
+	 * ("status 401"), as the error code, or as `status` in the error data. A
+	 * number anywhere else is not a status, such as the connect duration in
+	 * cURL's "Failed to connect … after 402 ms".
+	 *
+	 * @param \WP_Error $error The integration's error.
+	 * @return bool
+	 */
+	final public static function has_account_status( \WP_Error $error ): bool {
+		foreach ( $error->get_error_messages() as $message ) {
+			if ( preg_match( '/^40[123]:|\bstatus 40[123]\b/i', trim( (string) $message ) ) ) {
+				return true;
+			}
+		}
+		foreach ( $error->get_error_codes() as $code ) {
+			$data   = $error->get_error_data( $code );
+			$status = is_numeric( $code ) ? $code : ( is_array( $data ) ? ( $data['status'] ?? null ) : null );
+			if ( is_numeric( $status ) && in_array( (int) $status, [ 401, 402, 403 ], true ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Pull contact data from the integration for a given user.
 	 *
 	 * Integrations that support pulling contact data should implement this method.
@@ -834,14 +870,21 @@ abstract class Integration {
 	}
 
 	/**
-	 * Declare a WooCommerce My Account menu item for this integration.
+	 * Declare a My Account menu item for this integration.
 	 *
 	 * Return null (default) to opt out. Otherwise return:
 	 *   [
 	 *     'slug'     => 'rewards',              // endpoint slug, unique across integrations.
 	 *     'label'    => __( 'Rewards', 'newspack-plugin' ),
-	 *     'position' => 25,                     // optional, menu sort order.
+	 *     'position' => 2,                      // optional, zero-based index into WooCommerce's menu.
 	 *   ]
+	 *
+	 * The index applies to WooCommerce's menu as it stands before Newspack's
+	 * own My Account filters drop and reorder tabs. Without a position, the item
+	 * is appended before Log out. A position at or past the end lands after Log
+	 * out on WooCommerce's own account page; Newspack's default account UI moves
+	 * Log out to its footer, so there the item is last. Newspack's My Account
+	 * page without WooCommerce ignores the position and appends the item.
 	 *
 	 * The slug must not collide with a core My Account endpoint or one owned by
 	 * another plugin's My Account bridge — `newsletters` is reserved by

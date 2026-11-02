@@ -12,6 +12,11 @@
  */
 import domReady from '@wordpress/dom-ready';
 
+/**
+ * Internal dependencies
+ */
+import { getNoticeIcon } from '../../newspack-ui/js/icons';
+
 const PANEL_ID = 'newspack-comments-panel';
 const BODY_OPEN_CLASS = 'comments-panel-open';
 const SLIDE_FALLBACK_MS = 600;
@@ -325,6 +330,10 @@ const createCommentsPanel = ( panel, triggers ) => {
 			form.prepend( wrapper );
 		}
 		noticeEl.textContent = message;
+		const icon = getNoticeIcon( 'error' );
+		if ( icon ) {
+			noticeEl.prepend( icon );
+		}
 	};
 
 	let isSubmitting = false;

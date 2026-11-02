@@ -5,17 +5,16 @@
 /**
  * WordPress dependencies.
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _x, sprintf } from '@wordpress/i18n';
 import {
 	Notice,
 	SelectControl,
 	TextControl,
 	ToggleControl,
-	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-	__experimentalHStack as HStack,
-	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-	__experimentalVStack as VStack,
+	__experimentalToggleGroupControl as ToggleGroupControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+	__experimentalToggleGroupControlOption as ToggleGroupControlOption, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 import { useDispatch } from '@wordpress/data';
 import { decodeEntities } from '@wordpress/html-entities';
 import { useEffect, useRef, useState } from '@wordpress/element';
@@ -29,12 +28,11 @@ import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/w
 import { useWizardApiFetch } from '../../../hooks/use-wizard-api-fetch';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from './consts';
 
-// Modes and their labels come from PHP, where the same list backs the REST
-// schema's enum and the storage sanitizer.
+// Modes come from PHP, where the same list backs the REST schema's enum and the
+// storage sanitizer. Its labels are a fallback for a mode this screen has no short label for.
 const feedRestrictionModes = window.newspackAudienceContentGates?.feed_restriction_modes || [];
 // Truthy check because wp_localize_script() delivers this as '1'/'' rather than a boolean.
 const governedByMemberships = !! window.newspackAudienceContentGates?.feeds_governed_by_memberships;
-const institutionalAccessDefaultText = window.newspackAudienceContentGates?.institutional_access_default_text || '';
 const commentRestrictionDefaultMessage = window.newspackAudienceContentGates?.comment_restriction_default_message || '';
 
 /**
@@ -63,11 +61,35 @@ const getCommentGateOptions = ( gates: Gate[], selectedGateId: number ) => {
 	return options;
 };
 
+// Not a stored mode: it stands for `restrict_feeds` being off, so one control covers both settings.
+const FEED_MODE_OFF = 'off';
+
+const getFeedModeLabel = ( mode: string ): string | undefined => {
+	const labels: Record< string, string > = {
+		[ FEED_MODE_OFF ]: __( 'Full article', 'newspack-plugin' ),
+		truncate: __( 'Teaser only', 'newspack-plugin' ),
+		exclude: _x( 'Remove', 'what feeds do with restricted articles', 'newspack-plugin' ),
+	};
+	return labels[ mode ] ?? feedRestrictionModes.find( ( option: { value: string; label: string } ) => option.value === mode )?.label;
+};
+
+const getFeedModeHelp = ( mode: string ): string | undefined => {
+	const help: Record< string, string > = {
+		[ FEED_MODE_OFF ]: __( 'Feeds show restricted articles in full, ignoring gate restrictions.', 'newspack-plugin' ),
+		truncate: __( 'Feeds show only the teaser of restricted articles, as the site does.', 'newspack-plugin' ),
+		exclude: __( 'Feeds leave restricted articles out completely, with no teaser.', 'newspack-plugin' ),
+	};
+	return help[ mode ];
+};
+
+// The Institutions tab owns the link text; posting the copy this modal read on open
+// could write a stale value back over a newer one saved there.
+const getOwnSettings = ( settings: Partial< AdvancedSettingsConfig > = {} ): Partial< AdvancedSettingsConfig > =>
+	Object.fromEntries( Object.entries( settings ).filter( ( [ key ] ) => key !== 'institutional_access_text' ) );
+
 const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; showModal: boolean } ) => {
 	const wizardData = useWizardData( AUDIENCE_CONTENT_GATES_WIZARD_SLUG ) as ContentGatesWizardData;
-	const initialConfig = {
-		...( wizardData?.config?.advanced_settings || {} ),
-	};
+	const initialConfig = getOwnSettings( wizardData?.config?.advanced_settings );
 	const { wizardApiFetch, isFetching, resetError } = useWizardApiFetch( AUDIENCE_CONTENT_GATES_WIZARD_SLUG );
 	const { addNotice, resetNotices, updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ config, setConfig ] = useState< Partial< AdvancedSettingsConfig > >( initialConfig );
@@ -124,14 +146,15 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 					closeModal();
 				},
 			}
-		);
+		).catch( () => {} );
 	};
 
 	updateConfig.current = handleUpdateConfig;
+	const feedMode: string = ( config?.restrict_feeds && ( config?.feed_restriction_mode || feedRestrictionModes[ 0 ]?.value ) ) || FEED_MODE_OFF;
 	return (
 		showModal && (
 			<Modal onClose={ closeModal } size="medium" title={ __( 'Advanced Settings', 'newspack-plugin' ) } onRequestClose={ closeModal }>
-				<VStack>
+				<Stack direction="column" gap="xl" className="newspack-content-gates__stack">
 					{ governedByMemberships && (
 						<Notice status="warning" isDismissible={ false } spokenMessage="">
 							{ __(
@@ -140,25 +163,65 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 							) }
 						</Notice>
 					) }
-					<VStack>
-						<ToggleControl
-							label={ __( 'Restrict content in feeds', 'newspack-plugin' ) }
-							help={ __( 'Apply gate restrictions to articles in RSS feeds.', 'newspack-plugin' ) }
-							checked={ config?.restrict_feeds }
-							onChange={ value => setConfig( { ...config, restrict_feeds: value } ) }
-						/>
-						{ config?.restrict_feeds && feedRestrictionModes.length > 0 && (
-							<SelectControl
-								label={ __( 'Restricted articles in feeds', 'newspack-plugin' ) }
-								help={ __( 'The teaser is the same free preview readers see on the site.', 'newspack-plugin' ) }
-								value={ config?.feed_restriction_mode || feedRestrictionModes[ 0 ].value }
-								options={ feedRestrictionModes }
-								onChange={ ( value: string ) => setConfig( { ...config, feed_restriction_mode: value as FeedRestrictionMode } ) }
-							/>
+					{ feedRestrictionModes.length > 0 && (
+						<ToggleGroupControl
+							__next40pxDefaultSize
+							__nextHasNoMarginBottom
+							isBlock
+							label={ __( 'Restricted articles in feeds', 'newspack-plugin' ) }
+							help={ getFeedModeHelp( feedMode ) }
+							value={ feedMode }
+							onChange={ value =>
+								setConfig(
+									FEED_MODE_OFF === value
+										? { ...config, restrict_feeds: false }
+										: { ...config, restrict_feeds: true, feed_restriction_mode: value as FeedRestrictionMode }
+								)
+							}
+						>
+							{ [ FEED_MODE_OFF, ...feedRestrictionModes.map( ( { value }: { value: string } ) => value ) ].map( mode => (
+								<ToggleGroupControlOption key={ mode } value={ mode } label={ getFeedModeLabel( mode ) ?? mode } />
+							) ) }
+						</ToggleGroupControl>
+					) }
+					<SelectControl
+						__next40pxDefaultSize
+						__nextHasNoMarginBottom
+						label={ __( 'Who can comment', 'newspack-plugin' ) }
+						help={ __(
+							'Limit commenting on every post to readers with access through a gate. Everyone else sees the message below instead of the comment form.',
+							'newspack-plugin'
 						) }
-					</VStack>
+						value={ String( config?.comment_restriction_gate_id || 0 ) }
+						options={ getCommentGateOptions( wizardData?.gates || [], config?.comment_restriction_gate_id || 0 ) }
+						onChange={ ( value: string ) => setConfig( { ...config, comment_restriction_gate_id: parseInt( value, 10 ) || 0 } ) }
+					/>
+					{ !! config?.comment_restriction_gate_id && (
+						<>
+							<TextControl
+								__next40pxDefaultSize
+								__nextHasNoMarginBottom
+								label={ __( 'Message for readers who cannot comment', 'newspack-plugin' ) }
+								help={ __( 'Leave empty to use the default.', 'newspack-plugin' ) }
+								placeholder={ commentRestrictionDefaultMessage }
+								maxLength={ 200 }
+								value={ config?.comment_restriction_message || '' }
+								onChange={ ( value: string ) => setConfig( { ...config, comment_restriction_message: value } ) }
+							/>
+							<TextControl
+								__next40pxDefaultSize
+								__nextHasNoMarginBottom
+								label={ __( 'Subscribe link', 'newspack-plugin' ) }
+								help={ __( 'Shown after the message as "Subscribe now". Leave empty to show no link.', 'newspack-plugin' ) }
+								type="url"
+								value={ config?.comment_restriction_purchase_url || '' }
+								onChange={ ( value: string ) => setConfig( { ...config, comment_restriction_purchase_url: value } ) }
+							/>
+						</>
+					) }
 					{ wizardData?.config?.has_newsletters && (
 						<ToggleControl
+							__nextHasNoMarginBottom
 							label={ __( 'Bypass restrictions for newsletter links', 'newspack-plugin' ) }
 							help={ __(
 								'Inbound traffic from newsletters sent via Newspack Newsletters in the past 30 days can bypass Access Control restrictions for one hour.',
@@ -173,64 +236,22 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 							}
 						/>
 					) }
-					{ wizardData?.config?.has_institutions && (
-						<TextControl
-							label={ __( 'Institutional access link text', 'newspack-plugin' ) }
-							help={ __(
-								'Shown to logged-out readers below the gate when an institution with an IP range can unlock it. The link checks whether the reader is on that network. Leave empty to use the default.',
-								'newspack-plugin'
-							) }
-							placeholder={ institutionalAccessDefaultText }
-							maxLength={ 200 }
-							value={ config?.institutional_access_text || '' }
-							onChange={ ( value: string ) => setConfig( { ...config, institutional_access_text: value } ) }
-						/>
-					) }
-					<VStack>
-						<SelectControl
-							label={ __( 'Who can comment', 'newspack-plugin' ) }
-							help={ __(
-								'Limit commenting on every post to readers with access through a gate. Everyone else sees the message below instead of the comment form.',
-								'newspack-plugin'
-							) }
-							value={ String( config?.comment_restriction_gate_id || 0 ) }
-							options={ getCommentGateOptions( wizardData?.gates || [], config?.comment_restriction_gate_id || 0 ) }
-							onChange={ ( value: string ) => setConfig( { ...config, comment_restriction_gate_id: parseInt( value, 10 ) || 0 } ) }
-						/>
-						{ !! config?.comment_restriction_gate_id && (
-							<>
-								<TextControl
-									label={ __( 'Message for readers who cannot comment', 'newspack-plugin' ) }
-									help={ __( 'Leave empty to use the default.', 'newspack-plugin' ) }
-									placeholder={ commentRestrictionDefaultMessage }
-									maxLength={ 200 }
-									value={ config?.comment_restriction_message || '' }
-									onChange={ ( value: string ) => setConfig( { ...config, comment_restriction_message: value } ) }
-								/>
-								<TextControl
-									label={ __( 'Subscribe link', 'newspack-plugin' ) }
-									help={ __( 'Shown after the message as "Subscribe now". Leave empty to show no link.', 'newspack-plugin' ) }
-									type="url"
-									value={ config?.comment_restriction_purchase_url || '' }
-									onChange={ ( value: string ) => setConfig( { ...config, comment_restriction_purchase_url: value } ) }
-								/>
-							</>
-						) }
-					</VStack>
-					<HStack justify="end">
+					<Stack direction="row" gap="sm" justify="end">
 						<Button variant="tertiary" disabled={ isFetching } onClick={ closeModal }>
 							{ __( 'Cancel', 'newspack-plugin' ) }
 						</Button>
 						<Button
 							variant="primary"
-							disabled={ isFetching || JSON.stringify( wizardData?.config?.advanced_settings || {} ) === JSON.stringify( config ) }
+							disabled={
+								isFetching || JSON.stringify( getOwnSettings( wizardData?.config?.advanced_settings ) ) === JSON.stringify( config )
+							}
 							loading={ isFetching }
 							onClick={ () => updateConfig.current?.( config ) }
 						>
 							{ __( 'Save', 'newspack-plugin' ) }
 						</Button>
-					</HStack>
-				</VStack>
+					</Stack>
+				</Stack>
 			</Modal>
 		)
 	);

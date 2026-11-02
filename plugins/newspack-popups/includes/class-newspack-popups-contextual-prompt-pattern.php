@@ -1260,7 +1260,7 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 		$text_color = self::get_text_color_slug();
 		$font_size  = self::get_font_size_slug();
 		$classes    = 'wp-block-group ' . self::MARKER_CLASS . ' has-text-color has-' . $text_color . '-color has-background has-' . $font_size . '-font-size';
-		$wrapper    = '<div class="' . $classes . '" style="border-radius:10px;background-color:#f7f7f7;padding-top:var(--wp--preset--spacing--50);padding-right:var(--wp--preset--spacing--50);padding-bottom:var(--wp--preset--spacing--50);padding-left:var(--wp--preset--spacing--50)">';
+		$wrapper    = '<div class="' . $classes . '" style="border-radius:12px;background-color:#f7f7f7;padding-top:var(--wp--preset--spacing--50);padding-right:var(--wp--preset--spacing--50);padding-bottom:var(--wp--preset--spacing--50);padding-left:var(--wp--preset--spacing--50)">';
 
 		return [
 			'blockName'    => 'core/group',
@@ -1271,7 +1271,7 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 				'textColor' => $text_color,
 				'style'     => [
 					'color'   => [ 'background' => '#f7f7f7' ],
-					'border'  => [ 'radius' => '10px' ],
+					'border'  => [ 'radius' => '12px' ],
 					'spacing' => [
 						'padding'  => [
 							'top'    => 'var:preset|spacing|50',

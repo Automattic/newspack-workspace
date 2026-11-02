@@ -1,8 +1,86 @@
-// Re-adds some modal-like spacing for when the sign up form ends up embedded in a page.
+@use "../../mixins";
+
 .newspack-ui {
-	&.newspack-reader-auth {
-		.newspack-ui__button:not(:first-child, a.newspack-ui__button):first-of-type {
-			margin-top: var(--newspack-ui-spacer-5);
+	&.newspack-reader-auth .response > p {
+		margin: 0;
+	}
+
+	&__auth-lead strong {
+		color: var(--newspack-ui-color-text);
+		font-weight: var(--newspack-ui-font-weight-medium);
+		overflow-wrap: anywhere;
+	}
+
+	&__auth-links {
+		display: grid;
+		gap: var(--newspack-ui-spacer-3);
+		justify-items: center;
+
+		> * {
+			overflow-wrap: anywhere;
+			text-align: center;
+		}
+
+		> [hidden] {
+			display: none;
+		}
+
+		@include mixins.media( mobile ) {
+			column-gap: var(--newspack-ui-spacer-2);
+			grid-auto-columns: minmax( 0, 1fr );
+			grid-auto-flow: column;
 		}
 	}
+
+	&__password-field {
+		display: block;
+		position: relative;
+	}
+
+	& &__password-field input:is([type="password"], [type="text"]) {
+		padding-inline-end: var(--newspack-ui-spacer-9);
+	}
+
+	& &__password-toggle {
+		--newspack-ui-button-ink: var(--newspack-ui-color-text-muted);
+		--newspack-ui-button-bg-hover: transparent;
+		--newspack-ui-button-bg-pressed: transparent;
+
+		inset-inline-end: var(--newspack-ui-spacer-half);
+		margin: 0;
+		position: absolute;
+		top: var(--newspack-ui-spacer-half);
+
+		@media ( hover: hover ) and ( pointer: fine ) {
+			&:hover {
+				color: var(--newspack-ui-color-text);
+			}
+		}
+	}
+
+	&__password-toggle &__svg-icon--unseen,
+	&__password-field:has(input[type="text"]) &__svg-icon--seen {
+		display: none;
+	}
+
+	&__password-field:has(input[type="text"]) &__svg-icon--unseen {
+		display: block;
+	}
+
+	&__auth-success {
+		text-align: center;
+		text-wrap: balance;
+	}
+
+	&__modal:has(.newspack-reader-auth[data-form-action="success"]) &__modal__header {
+		display: none;
+	}
+
+	&__modal:has(.newspack-reader-auth[data-form-action="success"]) &__modal__content {
+		padding-top: var(--newspack-ui-spacer-5);
+	}
+}
+
+div.newspack-reader-auth form > :is(p, div) {
+	margin-block: 0;
 }

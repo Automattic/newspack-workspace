@@ -189,7 +189,8 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 * HPB query from attributes.
 	 */
 	public function test_hpb_build_articles_query() {
-		$cases = [
+		$custom_type = $this->register_viewable_cpt( 'some-type' );
+		$cases       = [
 			[
 				'block_attributes'        => [
 					'postsToShow' => 5,
@@ -210,7 +211,7 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 				],
 				'resulting_query_partial' => [
 					'posts_per_page' => 1,
-					'post_type'      => 'some-type',
+					'post_type'      => [ $custom_type ],
 					'author__in'     => [ 1 ],
 				],
 				'description'             => 'With custom post type and author',
@@ -747,9 +748,9 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		);
 		$html = ob_get_clean();
 
-		self::assertStringContainsString( '<div class="tag-labels">', $html, 'Wrapper is a div carrying exactly the tag-labels class.' );
+		self::assertStringContainsString( '<div class="newspack-tag-labels tag-labels">', $html, 'Wrapper is a div carrying exactly the tag-labels classes.' );
 		self::assertStringNotContainsString( 'cat-links', $html, 'Wrapper must not carry cat-links (NPPM-3049).' );
-		self::assertStringContainsString( 'class="tag-label flag"', $html, 'Inner labels keep the tag-label flag classes.' );
+		self::assertStringContainsString( 'class="newspack-tag-label tag-label flag"', $html, 'Inner labels keep the tag-label flag classes.' );
 	}
 
 	/**
@@ -830,6 +831,219 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		self::assertContains( $published_id, $ids, 'A published post of an allow-listed type is served.' );
 		self::assertNotContains( $draft_id, $ids, 'A draft of an allow-listed type stays hidden from an anonymous caller.' );
 		self::assertNotContains( $private_id, $ids, 'A private post of an allow-listed type stays hidden from an anonymous caller.' );
+	}
+
+	/**
+	 * Request an editor route and return the IDs of the posts it served.
+	 *
+	 * @param string $route  Route under the newspack-blocks/v1 namespace.
+	 * @param array  $params Query params.
+	 * @return int[]
+	 */
+	private static function editor_route_ids( $route, $params ) {
+		$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/' . $route );
+		$request->set_query_params( $params );
+		$response = rest_do_request( $request );
+		self::assertSame( 200, $response->get_status(), "The $route route answers the request." );
+		return array_map( 'intval', wp_list_pluck( $response->get_data(), 'id' ) );
+	}
+
+	/**
+	 * The editor routes are gated on edit_posts, which a Contributor holds, so the gate says
+	 * nothing about which post types the caller may read. They apply the same post type
+	 * restriction as the public route (NPPM-3509).
+	 */
+	public function test_editor_posts_endpoints_exclude_non_viewable_post_types() {
+		$secret    = $this->register_non_viewable_cpt();
+		$secret_id = self::factory()->post->create(
+			[
+				'post_type'   => $secret,
+				'post_status' => 'publish',
+				'post_title'  => 'Secret CPT title',
+			]
+		);
+		$post_id   = self::factory()->post->create(
+			[
+				'post_status' => 'publish',
+				'post_title'  => 'Secret CPT neighbour',
+			]
+		);
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'contributor' ] ) );
+
+		self::assertSame(
+			[],
+			self::editor_route_ids( 'newspack-blocks-posts', [ 'postType' => [ $secret ], 'postsToShow' => 10 ] ),
+			'A request for only a non-viewable post type returns nothing, not substituted posts.'
+		);
+		self::assertSame(
+			[ $post_id ],
+			self::editor_route_ids( 'newspack-blocks-posts', [ 'postType' => [ $secret, 'post' ], 'postsToShow' => 10 ] ),
+			'Mixed input keeps the viewable post type and drops the non-viewable one.'
+		);
+		self::assertSame(
+			[],
+			self::editor_route_ids( 'newspack-blocks-posts', [ 'postType' => [ $secret ], 'include' => [ $secret_id, $post_id ], 'specificMode' => true, 'specificPosts' => [ $secret_id, $post_id ] ] ),
+			'Naming posts by ID gets neither the non-viewable post nor a substituted post of the default type.'
+		);
+		self::assertSame(
+			[],
+			self::editor_route_ids( 'newspack-blocks-specific-posts', [ 'postType' => [ $secret ], 'search' => 'Secret', 'postsToShow' => 10 ] ),
+			'The specific posts search does not list titles of a non-viewable post type.'
+		);
+		self::assertSame(
+			[ $post_id ],
+			self::editor_route_ids( 'newspack-blocks-specific-posts', [ 'postType' => [ $secret, 'post' ], 'search' => 'Secret', 'postsToShow' => 10 ] ),
+			'The specific posts search keeps the viewable post type in mixed input.'
+		);
+	}
+
+	/**
+	 * The batch route answers each block through the single editor route, so it gets the
+	 * same post type restriction.
+	 */
+	public function test_editor_posts_batch_excludes_non_viewable_post_types() {
+		$secret = $this->register_non_viewable_cpt();
+		self::factory()->post->create( [ 'post_type' => $secret, 'post_status' => 'publish' ] );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'contributor' ] ) );
+
+		$request = new WP_REST_Request( 'POST', '/newspack-blocks/v1/newspack-blocks-posts-batch' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body(
+			wp_json_encode(
+				[
+					'queries' => [
+						[
+							'clientId'   => 'a',
+							'postsQuery' => [
+								'postType'    => [ $secret ],
+								'postsToShow' => 10,
+							],
+						],
+					],
+				]
+			)
+		);
+		$data = rest_do_request( $request )->get_data();
+
+		self::assertSame( 'a', $data[0]['clientId'] );
+		self::assertSame( [], $data[0]['posts'], 'The batch serves nothing for a non-viewable post type.' );
+	}
+
+	/**
+	 * Core's block-renderer route is open to anyone with edit_posts, so the block's own
+	 * server render must not list a non-viewable post type either.
+	 */
+	public function test_block_render_excludes_non_viewable_post_types() {
+		$secret = $this->register_non_viewable_cpt();
+		self::factory()->post->create(
+			[
+				'post_type'   => $secret,
+				'post_status' => 'publish',
+				'post_title'  => 'Secret CPT title',
+			]
+		);
+		self::factory()->post->create(
+			[
+				'post_status' => 'publish',
+				'post_title'  => 'Regular post title',
+			]
+		);
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'contributor' ] ) );
+
+		$request = new WP_REST_Request( 'GET', '/wp/v2/block-renderer/newspack-blocks/homepage-articles' );
+		$request->set_query_params(
+			[
+				'context'    => 'edit',
+				'attributes' => [ 'postType' => [ $secret ] ],
+			]
+		);
+		$response = rest_do_request( $request );
+
+		self::assertSame( 200, $response->get_status(), 'The block-renderer route answers the request.' );
+		self::assertStringNotContainsString( 'Secret CPT title', $response->get_data()['rendered'], 'The render does not list a non-viewable post type.' );
+		self::assertStringNotContainsString( 'Regular post title', $response->get_data()['rendered'], 'The render returns nothing rather than substituting the default post type.' );
+
+		$request->set_query_params(
+			[
+				'context'    => 'edit',
+				'attributes' => [ 'postType' => [ 'post' ] ],
+			]
+		);
+		self::assertStringContainsString( 'Regular post title', rest_do_request( $request )->get_data()['rendered'], 'The same request for a viewable post type renders its posts.' );
+	}
+
+	/**
+	 * Blocks saved before the post type picker required a selection carry an empty
+	 * postType. They keep listing posts.
+	 */
+	public function test_empty_post_type_falls_back_to_post() {
+		$post_id = self::factory()->post->create(
+			[
+				'post_status' => 'publish',
+				'post_title'  => 'Regular post title',
+			]
+		);
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'contributor' ] ) );
+
+		// Before the render, which records the post for deduplication.
+		self::assertSame(
+			[ $post_id ],
+			self::editor_route_ids( 'newspack-blocks-posts', [ 'postType' => [], 'postsToShow' => 10 ] ),
+			'The editor route lists posts for an empty postType.'
+		);
+
+		$request = new WP_REST_Request( 'GET', '/wp/v2/block-renderer/newspack-blocks/homepage-articles' );
+		$request->set_query_params(
+			[
+				'context'    => 'edit',
+				'attributes' => [ 'postType' => [] ],
+			]
+		);
+		self::assertStringContainsString( 'Regular post title', rest_do_request( $request )->get_data()['rendered'], 'The render lists posts for an empty postType.' );
+	}
+
+	/**
+	 * The editor routes keep serving a non-viewable post type a plugin opted in, which is
+	 * how the Sponsors CPT stays usable in the block's post type picker.
+	 */
+	public function test_editor_posts_endpoint_allows_filter_allowlisted_post_type() {
+		$allowed    = $this->register_non_viewable_cpt( 'newspack_allowed_cpt' );
+		$allowed_id = self::factory()->post->create( [ 'post_type' => $allowed, 'post_status' => 'publish' ] );
+
+		$filter = function ( $types ) use ( $allowed ) {
+			$types[] = $allowed;
+			return $types;
+		};
+		add_filter( 'newspack_blocks_articles_allowed_post_types', $filter );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'contributor' ] ) );
+
+		self::assertSame(
+			[ $allowed_id ],
+			self::editor_route_ids( 'newspack-blocks-posts', [ 'postType' => [ $allowed ], 'postsToShow' => 10 ] ),
+			'An allow-listed non-viewable post type is served to the editor.'
+		);
+	}
+
+	/**
+	 * An Editor may preview drafts and scheduled posts, the statuses the block offers, but
+	 * not statuses it never offers, such as private.
+	 */
+	public function test_editor_posts_endpoint_limits_statuses_to_those_the_editor_offers() {
+		$published_id = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+		$draft_id     = self::factory()->post->create( [ 'post_status' => 'draft' ] );
+		$private_id   = self::factory()->post->create( [ 'post_status' => 'private' ] );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+
+		$ids = self::editor_route_ids( 'newspack-blocks-posts', [ 'includedPostStatuses' => [ 'publish', 'draft', 'private' ], 'postsToShow' => 10 ] );
+		self::assertContains( $published_id, $ids, 'Published posts are served.' );
+		self::assertContains( $draft_id, $ids, 'Drafts are served to an Editor who asked for them.' );
+		self::assertNotContains( $private_id, $ids, 'A status the block does not offer is dropped.' );
+
+		self::assertSame(
+			[ $published_id ],
+			self::editor_route_ids( 'newspack-blocks-posts', [ 'includedPostStatuses' => [ 'private' ], 'postsToShow' => 10 ] ),
+			'When no requested status is allowed, the route falls back to published posts.'
+		);
 	}
 
 	/**
@@ -1024,5 +1238,119 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		self::assertStringContainsString( '<em>Kept</em>', $subtitle, 'Allowed formatting still reaches the editor.' );
 
 		unregister_post_meta( 'post', 'newspack_post_subtitle' );
+	}
+
+	/**
+	 * Create a published post that a plugin reports as updated later than its
+	 * stored modified date, the way a live blog's newest update dates its page.
+	 *
+	 * @param int $published Publish timestamp.
+	 * @param int $updated   Modified timestamp to report.
+	 * @return int Post ID.
+	 */
+	private function create_post_updated_at( $published, $updated ) {
+		$post_id = self::factory()->post->create(
+			[
+				'post_status'   => 'publish',
+				'post_date'     => get_date_from_gmt( gmdate( 'Y-m-d H:i:s', $published ) ),
+				'post_date_gmt' => gmdate( 'Y-m-d H:i:s', $published ),
+			]
+		);
+		foreach ( [ 'get_the_modified_date' => 'date_format', 'get_the_modified_time' => 'time_format' ] as $hook => $default_format ) {
+			add_filter(
+				$hook,
+				function ( $the_time, $format, $post ) use ( $post_id, $updated, $default_format ) {
+					if ( ! $post instanceof WP_Post || $post->ID !== $post_id ) {
+						return $the_time;
+					}
+					return wp_date( '' === $format ? get_option( $default_format ) : $format, $updated );
+				},
+				10,
+				3
+			);
+		}
+		return $post_id;
+	}
+
+	/**
+	 * Render a Homepage Posts block showing only the given post.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return string Block HTML.
+	 */
+	private function render_card( $post_id ) {
+		return render_block(
+			[
+				'blockName'    => 'newspack-blocks/homepage-articles',
+				'attrs'        => [
+					'specificMode'  => true,
+					'specificPosts' => [ $post_id ],
+					'showDate'      => true,
+				],
+				'innerBlocks'  => [],
+				'innerHTML'    => '',
+				'innerContent' => [],
+			]
+		);
+	}
+
+	/**
+	 * A card whose post is set to show its updated date reports when the post
+	 * was last updated instead of when it was published, so a post that keeps
+	 * changing doesn't look old on the homepage.
+	 */
+	public function test_card_shows_updated_date_instead_of_publish_date() {
+		$published = time() - 3 * HOUR_IN_SECONDS;
+		$updated   = time() - 5 * MINUTE_IN_SECONDS;
+		$post_id   = $this->create_post_updated_at( $published, $updated );
+		add_filter(
+			'newspack_blocks_display_updated_date',
+			function ( $display, $post ) use ( $post_id ) {
+				return $post->ID === $post_id ? true : $display;
+			},
+			10,
+			2
+		);
+
+		$html = $this->render_card( $post_id );
+
+		self::assertStringContainsString(
+			'<span class="updated-date">Updated <time class="entry-date updated" datetime="' . wp_date( DATE_W3C, $updated ) . '">' . wp_date( get_option( 'date_format' ), $updated ) . '</time></span>',
+			$html,
+			'The card shows the updated date with its label.'
+		);
+		self::assertStringNotContainsString( wp_date( DATE_W3C, $published ), $html, 'The card leaves out the publish date.' );
+	}
+
+	/**
+	 * The card's updated date goes through its own formatting filter, which is
+	 * where a "time ago" setting rewrites it.
+	 */
+	public function test_card_updated_date_text_is_filterable() {
+		$post_id = $this->create_post_updated_at( time() - 3 * HOUR_IN_SECONDS, time() - 5 * MINUTE_IN_SECONDS );
+		add_filter( 'newspack_blocks_display_updated_date', '__return_true' );
+		add_filter(
+			'newspack_blocks_formatted_displayed_updated_date',
+			function ( $date, $post ) use ( $post_id ) {
+				return $post->ID === $post_id ? '5 minutes ago' : $date;
+			},
+			10,
+			2
+		);
+
+		self::assertStringContainsString( '">5 minutes ago</time>', $this->render_card( $post_id ), 'The card shows the filtered updated date text.' );
+	}
+
+	/**
+	 * Cards show the publish date unless a plugin asks for the updated date.
+	 */
+	public function test_card_shows_publish_date_by_default() {
+		$published = time() - 3 * HOUR_IN_SECONDS;
+		$post_id   = $this->create_post_updated_at( $published, time() - 5 * MINUTE_IN_SECONDS );
+
+		$html = $this->render_card( $post_id );
+
+		self::assertStringContainsString( 'class="entry-date published" datetime="' . wp_date( DATE_W3C, $published ) . '"', $html, 'The card shows the publish date.' );
+		self::assertStringNotContainsString( 'updated-date', $html, 'The card has no updated date.' );
 	}
 }

@@ -109,6 +109,8 @@ class Connect_Node {
 			return new WP_REST_Response( array( 'error' => 'Invalid link.' ), 403 );
 		}
 
+		$node->mark_paired();
+
 		$response_body = [
 			'secret_key' => $node->get_secret_key(),
 		];

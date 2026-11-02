@@ -62,7 +62,7 @@ class WooCommerce_My_Account {
 
 		// Reader Activation mods.
 		if ( Reader_Activation::is_enabled() ) {
-			\add_action( 'wp_footer', [ __CLASS__, 'handle_messages' ] );
+			\add_action( 'template_redirect', [ __CLASS__, 'handle_messages' ] );
 			\add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_scripts' ] );
 			\add_action( 'template_redirect', [ __CLASS__, 'handle_password_reset_request' ] );
 			\add_action( 'template_redirect', [ __CLASS__, 'handle_delete_account' ] );
@@ -163,7 +163,6 @@ class WooCommerce_My_Account {
 		$is_error   = filter_input( INPUT_GET, 'is_error', FILTER_VALIDATE_BOOLEAN ) ?? false;
 		if ( $message ) {
 			\wc_add_notice( $message, $is_success ? 'success' : ( $is_error ? 'error' : 'notice' ) );
-			\wc_print_notices();
 		}
 	}
 
@@ -338,6 +337,7 @@ class WooCommerce_My_Account {
 				[
 					'labels'                               => [
 						'cancel_subscription_message' => __( 'Are you sure you want to cancel this subscription?', 'newspack-plugin' ),
+						'generic_error'               => __( 'Something went wrong. Please try again.', 'newspack-plugin' ),
 					],
 					'rest_url'                             => get_rest_url(),
 					'should_rate_limit'                    => WooCommerce_Connection::rate_limiting_enabled(),
@@ -645,19 +645,53 @@ class WooCommerce_My_Account {
 	}
 
 	/**
-	 * Check if the user is logged in and verified.
+	 * Check if a user is logged in and verified.
+	 *
+	 * @param int|null $user_id The user to check. Defaults to the current user.
+	 *
+	 * @return bool
 	 */
-	public static function is_user_verified() {
+	public static function is_user_verified( $user_id = null ) {
 		// Don't lock access if Reader Activation features aren't enabled.
 		if ( ! Reader_Activation::is_enabled() ) {
 			return true;
 		}
+		$user = null === $user_id ? \wp_get_current_user() : \get_userdata( (int) $user_id );
+		if ( ! $user || ! $user->exists() ) {
+			return false;
+		}
 		// Don't lock access if the user is not a reader.
-		if ( \is_user_logged_in() && ! Reader_Activation::is_user_reader( \wp_get_current_user(), true ) ) {
+		if ( ! Reader_Activation::is_user_reader( $user, true ) ) {
 			return true;
 		}
 
-		return \is_user_logged_in() && Reader_Activation::is_reader_verified( \wp_get_current_user() );
+		return (bool) Reader_Activation::is_reader_verified( $user );
+	}
+
+	/**
+	 * Whether My Account shows a user only the verification prompt.
+	 *
+	 * @param int $user_id The user to check.
+	 *
+	 * @return bool
+	 */
+	public static function is_account_locked_for_user( int $user_id ): bool {
+		/**
+		 * Allows unverified readers to access My Account content without
+		 * email verification. By default, unverified users see a verification
+		 * prompt instead of their account content.
+		 *
+		 * @constant NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION
+		 * @type     bool
+		 * @default  Unverified users see verification prompt
+		 * @status   draft
+		 *
+		 * @example define( 'NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION', true );
+		 */
+		if ( defined( 'NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION' ) && NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION ) {
+			return false;
+		}
+		return ! self::is_user_verified( $user_id );
 	}
 
 	/**
@@ -853,23 +887,7 @@ class WooCommerce_My_Account {
 	 * Restrict account content for unverified readers.
 	 */
 	public static function restrict_account_content() {
-		/**
-		 * Allows unverified readers to access My Account content without
-		 * email verification. By default, unverified users see a verification
-		 * prompt instead of their account content.
-		 *
-		 * @constant NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION
-		 * @type     bool
-		 * @default  Unverified users see verification prompt
-		 * @status   draft
-		 *
-		 * @example define( 'NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION', true );
-		 */
-		if ( defined( 'NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION' ) && NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION ) {
-			return;
-		}
-
-		if ( \is_user_logged_in() && ! self::is_user_verified() ) {
+		if ( \is_user_logged_in() && self::is_account_locked_for_user( \get_current_user_id() ) ) {
 			\remove_all_actions( 'woocommerce_account_content' );
 			\add_action(
 				'woocommerce_account_content',
@@ -1010,7 +1028,7 @@ class WooCommerce_My_Account {
 		// If there are active memberships without subscriptions, present them in a table.
 		if ( $memberships_without_subs ) {
 			echo '<div class="woocommerce-memberships-without-subs">';
-			echo '<h2>' . esc_html__( 'Active Memberships', 'newspack-plugin' ) . '</h2>';
+			echo '<h2>' . esc_html__( 'Active memberships', 'newspack-plugin' ) . '</h2>';
 			echo '<p>' . esc_html__( 'These memberships are active, but don\'t have an associated subscription. They will need to be manually renewed when they expire.', 'newspack-plugin' ) . '</p>';
 			wc_get_template(
 				'myaccount/my-memberships.php',

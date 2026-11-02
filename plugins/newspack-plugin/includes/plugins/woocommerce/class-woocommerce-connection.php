@@ -44,6 +44,7 @@ class WooCommerce_Connection {
 		include_once __DIR__ . '/class-woocommerce-duplicate-orders.php';
 		include_once __DIR__ . '/class-woocommerce-update-payment-notice.php';
 		include_once __DIR__ . '/class-woocommerce-custom-currency-symbol.php';
+		include_once __DIR__ . '/class-woocommerce-cart-session.php';
 
 		\add_action( 'admin_init', [ __CLASS__, 'disable_woocommerce_setup' ] );
 		// Newspack configures WooCommerce itself; suppress WC's first-run setup-wizard

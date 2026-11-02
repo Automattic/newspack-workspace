@@ -3,145 +3,153 @@
  */
 
 /**
+ * External dependencies
+ */
+import classnames from 'classnames';
+
+/**
  * WordPress dependencies.
  */
-import { __, sprintf } from '@wordpress/i18n';
-import { __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { speak } from '@wordpress/a11y';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
-import { useEffect, useRef, useState } from '@wordpress/element';
+import { DataViews as BaseDataViews } from '@wordpress/dataviews';
+import { useEffect, useMemo, useState } from '@wordpress/element';
+import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import { Divider, Grid } from '../../../../../packages/components/src';
+import { Button, DataViews } from '../../../../../packages/components/src';
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
-import { useWizardApiFetch } from '../../../hooks/use-wizard-api-fetch';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import ContentGatesOnboarding from './content-gates-onboarding';
 import ContentGatesPriority from './content-gates-priority';
 import ContentGateSettings from './content-gate-settings';
 import AdvancedSettings from './advanced-settings';
-import SettingsCard from './settings-card';
+import { filterGates, getGatesSubTitle, getUsefulGateFilterValues } from './utils';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from './consts';
-import { getMeteringDescription, isGateMetered } from './utils';
 import './style.scss';
-
-/**
- * Describe what the site meter is currently doing, for the Metering card badge.
- *
- * @param hasMetering  Whether any gate meters against the site allowance.
- * @param hasCountdown Whether the countdown banner is showing.
- */
-function getMeteringBadge( hasMetering: boolean, hasCountdown: boolean ) {
-	if ( ! hasMetering ) {
-		return __( 'Not in use', 'newspack-plugin' );
-	}
-	return hasCountdown ? __( 'In use, with countdown', 'newspack-plugin' ) : __( 'In use', 'newspack-plugin' );
-}
 
 const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] ) => void } ) => {
 	const wizardData = useWizardData( AUDIENCE_CONTENT_GATES_WIZARD_SLUG ) as WizardData;
-	const { wizardApiFetch, isFetching, errorMessage, resetError } = useWizardApiFetch( AUDIENCE_CONTENT_GATES_WIZARD_SLUG );
-	const { addNotice, resetNotices, resetHeaderData, setHeaderData, updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
+	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ showPriorityModal, setShowPriorityModal ] = useState( false );
 	const [ showAdvancedSettings, setShowAdvancedSettings ] = useState( false );
-	const ref = useRef( null );
 	const gates = ( wizardData?.gates || [] ) as Gate[];
-	const config = ( wizardData?.config || {} ) as GateSettings;
-	const siteMeter = config.site_meter;
-	const hasMetering = gates.some( gate => isGateMetered( gate, siteMeter ) );
-	const hasInstitutions = !! config.has_institutions;
+	const gateCount = gates.length;
+	const [ chosenSearch, setChosenSearch ] = useState( '' );
+	const [ chosenStatus, setChosenStatus ] = useState< string | undefined >();
+	const [ chosenAccess, setChosenAccess ] = useState< string | undefined >();
+
+	const canSearch = gateCount > 1;
+	const statusValues = getUsefulGateFilterValues( gates, 'status' );
+	const accessValues = getUsefulGateFilterValues( gates, 'access' );
+	const search = canSearch ? chosenSearch : '';
+	const status = chosenStatus && statusValues.includes( chosenStatus ) ? chosenStatus : undefined;
+	const access = chosenAccess && accessValues.includes( chosenAccess ) ? chosenAccess : undefined;
+	const filteredGates = filterGates( gates, { search, status, access } );
+	const isDefaultView = ! search && ! status && ! access;
+
+	// Forget a choice whose filter has gone, or it would come back when a later gate revives the filter.
+	useEffect( () => {
+		setChosenSearch( search );
+		setChosenStatus( status );
+		setChosenAccess( access );
+	}, [ search, status, access ] );
 
 	useEffect( () => {
-		if ( isFetching ) {
-			return;
+		if ( ! isDefaultView ) {
+			speak(
+				sprintf(
+					// translators: %d: number of content gates matching the search and filters.
+					_n( '%d content gate found.', '%d content gates found.', filteredGates.length, 'newspack-plugin' ),
+					filteredGates.length
+				)
+			);
 		}
-		if ( ! gates?.length ) {
-			resetHeaderData();
-			return;
-		}
-		const institutionsLink: SectionMenuItem = {
-			label: __( 'Institutions', 'newspack-plugin' ),
-			href: '#/institutions',
+	}, [ filteredGates.length, search, status, access ] ); // eslint-disable-line react-hooks/exhaustive-deps -- isDefaultView derives from these.
+
+	const fields = useMemo( () => {
+		const labels: Record< string, string > = {
+			active: __( 'Active', 'newspack-plugin' ),
+			inactive: __( 'Inactive', 'newspack-plugin' ),
+			registered: __( 'Registered Access', 'newspack-plugin' ),
+			paid: __( 'Paid Access', 'newspack-plugin' ),
 		};
-		const gatePriorityItem: SectionMenuItem = {
-			label: __( 'Gate Priority', 'newspack-plugin' ),
-			action: () => setShowPriorityModal( true ),
-		};
-		const advancedSettingsItem: SectionMenuItem = {
-			label: __( 'Advanced Settings', 'newspack-plugin' ),
-			action: () => setShowAdvancedSettings( true ),
-		};
-		// Built in display order. Gate Priority only appears once there is more
-		// than one gate to order; Institutions is promoted out of the kebab to
-		// a visible entry point beside the title while it is in use, so it stays
-		// in the menu only when it is not.
-		const sectionMenu: SectionMenuItem[] = [
-			...( gates.length > 1 ? [ gatePriorityItem ] : [] ),
-			...( ! hasInstitutions ? [ institutionsLink ] : [] ),
-			advancedSettingsItem,
+		const filterField = ( id: string, label: string, values: string[] ) => ( {
+			id,
+			label,
+			elements: values.map( value => ( { value, label: labels[ value ] } ) ),
+			filterBy: { operators: [ 'is' as const ], isPrimary: true },
+			enableSorting: false,
+		} );
+		return [
+			{
+				id: 'title',
+				label: __( 'Title', 'newspack-plugin' ),
+				enableGlobalSearch: true,
+				enableSorting: false,
+				getValue: ( { item }: { item: Gate } ) => item.title,
+			},
+			...( statusValues.length
+				? [
+						{
+							...filterField( 'status', __( 'Status', 'newspack-plugin' ), statusValues ),
+							elements: [
+								// Unset, not 'all': DataViews selects this option while the filter is unset, and a real value would add a reset button to the chip.
+								{ value: undefined, label: __( 'All', 'newspack-plugin' ) },
+								...statusValues.map( value => ( { value, label: labels[ value ] } ) ),
+							],
+						},
+				  ]
+				: [] ),
+			...( accessValues.length ? [ filterField( 'access', __( 'Access', 'newspack-plugin' ), accessValues ) ] : [] ),
 		];
+	}, [ statusValues.join(), accessValues.join() ] ); // eslint-disable-line react-hooks/exhaustive-deps -- both arrays are rebuilt each render.
+
+	const view = {
+		type: 'table' as const,
+		search,
+		page: 1,
+		perPage: 100,
+		fields: [],
+		filters: [
+			// Status needs an entry even when unset, or its chip reads "Unknown status for Status" instead of "Status is: All".
+			...( statusValues.length ? [ { field: 'status', operator: 'is' as const, value: status } ] : [] ),
+			...( access ? [ { field: 'access', operator: 'is' as const, value: access } ] : [] ),
+		],
+	};
+
+	const onChangeView = ( next: { search?: string; filters?: { field: string; value?: string }[] } ) => {
+		setChosenSearch( next.search || '' );
+		setChosenStatus( next.filters?.find( ( { field } ) => 'status' === field )?.value );
+		setChosenAccess( next.filters?.find( ( { field } ) => 'access' === field )?.value );
+	};
+
+	useEffect( () => {
+		const subTitle = getGatesSubTitle();
+		if ( ! gateCount ) {
+			setHeaderData( { actions: [], subTitle } );
+			return;
+		}
 		setHeaderData( {
 			actions: [
 				{
 					type: 'primary',
 					label: __( 'Add Content Gate', 'newspack-plugin' ),
+					mobileIcon: 'plus',
 					href: '#/edit/new/all',
 				},
-			],
-			sectionTitle: __( 'Access Control', 'newspack-plugin' ),
-			sectionDescription: __(
-				'Set up gates to manage what content readers can access across your site. Start by selecting which content to restrict, then configure access through registered and/or paid options (including metered rules).',
-				'newspack-plugin'
-			),
-			sectionMenu,
-			sectionSecondaryAction: hasInstitutions ? institutionsLink : undefined,
-		} );
-	}, [ isFetching, gates, hasInstitutions ] );
-
-	const toggleContentGifting = useRef< () => void >( undefined );
-	const handleToggleContentGifting = () => {
-		resetError();
-		resetNotices();
-		wizardApiFetch(
-			{
-				path: '/newspack/v1/wizard/newspack-audience-access-control/content-gifting',
-				method: 'POST',
-				quiet: true,
-				data: { enabled: config.content_gifting?.enabled ? 0 : 1 },
-			},
-			{
-				onSuccess( data: ContentGiftingConfig ) {
-					updateWizardSettings( {
-						slug: AUDIENCE_CONTENT_GATES_WIZARD_SLUG,
-						path: [ 'config' ],
-						value: { ...wizardData?.config, content_gifting: data },
-					} );
-					addNotice( {
-						message: sprintf(
-							// translators: %s is the status of the content gifting.
-							__( 'Content gifting %s.', 'newspack-plugin' ),
-							config.content_gifting?.enabled ? __( 'disabled', 'newspack-plugin' ) : __( 'enabled', 'newspack-plugin' )
-						),
-						type: 'success',
-						id: 'content-gifting-config-updated',
-						actions: [ { label: __( 'Undo', 'newspack-plugin' ), onClick: () => toggleContentGifting.current?.() } ],
-					} );
+				{
+					type: 'more',
+					label: __( 'Advanced Settings', 'newspack-plugin' ),
+					action: () => setShowAdvancedSettings( true ),
 				},
-			}
-		);
-	};
-	toggleContentGifting.current = handleToggleContentGifting;
-
-	useEffect( () => {
-		if ( errorMessage ) {
-			addNotice( {
-				message: errorMessage,
-				type: 'error',
-				id: 'content-gate-error',
-			} );
-		}
-	}, [ errorMessage ] );
+			],
+			subTitle,
+		} );
+	}, [ gateCount ] );
 
 	if ( ! gates?.length ) {
 		return <ContentGatesOnboarding />;
@@ -155,32 +163,36 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 				updateGatesData={ updateGatesData }
 			/>
 			<AdvancedSettings showModal={ showAdvancedSettings } closeModal={ () => setShowAdvancedSettings( false ) } />
-			<VStack className="newspack-content-gates__gates" spacing="16px" ref={ ref }>
-				{ gates.map( gate => {
+			{ canSearch && (
+				<DataViews
+					className={ classnames( 'newspack-content-gates__toolbar', { 'is-default-view': isDefaultView } ) }
+					view={ view }
+					onChangeView={ onChangeView }
+					fields={ fields }
+					data={ filteredGates }
+					getItemId={ ( item: Gate ) => String( item.id ) }
+					paginationInfo={ { totalItems: filteredGates.length, totalPages: 1 } }
+					defaultLayouts={ { table: {} } }
+				>
+					<Stack direction="row" justify="space-between" align="flex-start" gap="xs" className="dataviews__view-actions">
+						<Stack direction="row" align="center" gap="sm" wrap="wrap" className="dataviews__search">
+							<BaseDataViews.Search label={ __( 'Search content gates', 'newspack-plugin' ) } />
+							<BaseDataViews.Filters />
+						</Stack>
+						<Button variant="secondary" size="compact" onClick={ () => setShowPriorityModal( true ) }>
+							{ __( 'Gate Priority', 'newspack-plugin' ) }
+						</Button>
+					</Stack>
+				</DataViews>
+			) }
+			<Stack direction="column" gap="lg" className="newspack-content-gates__gates">
+				{ filteredGates.map( gate => {
 					return <ContentGateSettings key={ gate.id } gate={ gate } updateGatesData={ updateGatesData } />;
 				} ) }
-			</VStack>
-			<Divider alignment="full-width" variant="tertiary" />
-			<Grid className="newspack-content-gates__other-settings" columns={ 2 } gutter={ 32 }>
-				<SettingsCard
-					title={ __( 'Metering', 'newspack-plugin' ) }
-					description={ getMeteringDescription( siteMeter ) }
-					// Always on: nothing to enable, so the badge carries whether a gate draws on it.
-					enabled
-					badge={ { label: getMeteringBadge( hasMetering, !! config.countdown_banner?.enabled ), intent: hasMetering ? 'stable' : 'none' } }
-					href={ '/settings/metering' }
-				/>
-				<SettingsCard
-					title={ __( 'Content Gifting', 'newspack-plugin' ) }
-					description={ __(
-						'Let members gift articles to non-subscribers. Recipients can read the full content without needing to subscribe.',
-						'newspack-plugin'
-					) }
-					enabled={ !! config.content_gifting?.enabled }
-					toggleEnabled={ toggleContentGifting.current }
-					href={ '/settings/content-gifting' }
-				/>
-			</Grid>
+				{ ! filteredGates.length && (
+					<p className="newspack-content-gates__no-results">{ __( 'No content gates match your search.', 'newspack-plugin' ) }</p>
+				) }
+			</Stack>
 		</>
 	);
 };

@@ -46,6 +46,24 @@ class Complianz {
 	const SWAP_FAILED_TRANSIENT = 'newspack_complianz_geoip_swap_failed';
 
 	/**
+	 * Complianz Premium post types that Yoast SEO must not index.
+	 *
+	 * Complianz registers these as public only on requests that can manage privacy
+	 * (wp-admin for a privacy manager, cron, WP-CLI), so their visibility differs
+	 * between requests.
+	 *
+	 * @var string[]
+	 */
+	const YOAST_EXCLUDED_POST_TYPES = [ 'cmplz-processing', 'cmplz-dataleak' ];
+
+	/**
+	 * Complianz Premium taxonomies that Yoast SEO must not index. See YOAST_EXCLUDED_POST_TYPES.
+	 *
+	 * @var string[]
+	 */
+	const YOAST_EXCLUDED_TAXONOMIES = [ 'cmplz-region' ];
+
+	/**
 	 * Memoized edge country code for the current request. `null` before it is
 	 * first resolved; afterwards the resolved value (a country code, or '' when
 	 * the edge supplied nothing usable). The edge value is fixed per request, and
@@ -66,6 +84,33 @@ class Complianz {
 		add_filter( 'newspack_pixel_script_markup', [ __CLASS__, 'pixel_handling_for_complianz' ] );
 		// Complianz Premium registers its GeoIP filters on plugins_loaded:9, so swap them afterwards.
 		add_action( 'plugins_loaded', [ __CLASS__, 'maybe_use_edge_geolocation' ], 11 );
+		add_filter( 'wpseo_indexable_excluded_post_types', [ __CLASS__, 'exclude_post_types_from_yoast_indexables' ] );
+		add_filter( 'wpseo_indexable_excluded_taxonomies', [ __CLASS__, 'exclude_taxonomies_from_yoast_indexables' ] );
+	}
+
+	/**
+	 * Keep Complianz's requester-dependent post types out of Yoast SEO's indexables.
+	 *
+	 * Yoast compares the public post types of each wp-admin request with the last
+	 * known set. When the set changes it schedules an indexable cleanup, so types that
+	 * flip between public and not public from one request to the next make the cleanup
+	 * run again and again. Excluded types leave the set on every request.
+	 *
+	 * @param string[] $post_types Post types excluded from Yoast indexables.
+	 * @return string[]
+	 */
+	public static function exclude_post_types_from_yoast_indexables( $post_types ) {
+		return array_merge( (array) $post_types, self::YOAST_EXCLUDED_POST_TYPES );
+	}
+
+	/**
+	 * Keep Complianz's requester-dependent taxonomies out of Yoast SEO's indexables.
+	 *
+	 * @param string[] $taxonomies Taxonomies excluded from Yoast indexables.
+	 * @return string[]
+	 */
+	public static function exclude_taxonomies_from_yoast_indexables( $taxonomies ) {
+		return array_merge( (array) $taxonomies, self::YOAST_EXCLUDED_TAXONOMIES );
 	}
 
 	/**

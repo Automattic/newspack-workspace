@@ -2,10 +2,12 @@
  * Internal dependencies
  */
 import {
+	filterGates,
 	getGateStatusBadgeIntent,
 	getMeteringCount,
 	getMeteringDescription,
 	getPriorityWarnings,
+	getUsefulGateFilterValues,
 	hasOwnMeter,
 	hasSharedMeteredPath,
 	isGateMetered,
@@ -13,6 +15,7 @@ import {
 	isUnconfiguredAccessRuleValue,
 	isUnconstrainedAccessRuleValue,
 	sharesTheSiteMeter,
+	switchesMeteringOn,
 } from './utils';
 
 /**
@@ -102,6 +105,8 @@ describe( 'isMalformedAccessRuleValue', () => {
 
 	it( 'reads a list on a free-text rule as malformed', () => {
 		expect( isMalformedAccessRuleValue( freeText, [ 'example.com' ] ) ).toBe( true );
+		// Bounds left behind when a field's operator moves from Number to Text.
+		expect( isMalformedAccessRuleValue( freeText, { min: 50 } ) ).toBe( true );
 		expect( isMalformedAccessRuleValue( freeText, 'example.com' ) ).toBe( false );
 	} );
 
@@ -116,6 +121,28 @@ describe( 'isMalformedAccessRuleValue', () => {
 
 	it( 'leaves boolean rules alone, which carry no value to judge', () => {
 		expect( isMalformedAccessRuleValue( { name: 'Has donated', is_boolean: true, has_options: false }, true ) ).toBe( false );
+	} );
+} );
+
+describe( 'switchesMeteringOn', () => {
+	it( 'is true for a 0/0 allowance, which isGateMetered rejects', () => {
+		const gate = buildGate( { registration: { active: true, metering: { enabled: true, count: 0, period: 'month', scope: 'gate' } } } );
+
+		expect( switchesMeteringOn( gate ) ).toBe( true );
+		expect( isGateMetered( gate ) ).toBe( false );
+	} );
+
+	it( 'is false when metering is off or its section is inactive', () => {
+		expect(
+			switchesMeteringOn(
+				buildGate( { registration: { active: true, metering: { enabled: false, count: 3, period: 'month', scope: 'gate' } } } )
+			)
+		).toBe( false );
+		expect(
+			switchesMeteringOn(
+				buildGate( { custom_access: { active: false, metering: { enabled: true, count: 3, period: 'month', scope: 'gate' } } } )
+			)
+		).toBe( false );
 	} );
 } );
 
@@ -199,6 +226,28 @@ describe( 'isUnconstrainedAccessRuleValue and isUnconfiguredAccessRuleValue', ()
 		// `subscription` naming no product requires any active subscription.
 		expect( isUnconfiguredAccessRuleValue( subscription, [] ) ).toBe( false );
 		expect( isUnconstrainedAccessRuleValue( subscription, [] ) ).toBe( false );
+	} );
+} );
+
+describe( 'range rule values', () => {
+	const range = { name: 'Donation total', has_options: false, is_range: true, empty_grants_access: true, requires_value: true };
+
+	it( 'reads text saved before the min/max control as malformed, since the rule denies on it', () => {
+		expect( isMalformedAccessRuleValue( range, '50' ) ).toBe( true );
+		expect( isMalformedAccessRuleValue( range, [ 50 ] ) ).toBe( true );
+		expect( isMalformedAccessRuleValue( range, { min: 50 } ) ).toBe( false );
+		expect( isMalformedAccessRuleValue( range, { minimum: 50 } ) ).toBe( true );
+		expect( isMalformedAccessRuleValue( range, { min: true } ) ).toBe( true );
+		expect( isMalformedAccessRuleValue( range, { min: null, max: '' } ) ).toBe( false );
+		expect( isMalformedAccessRuleValue( range, '' ) ).toBe( false );
+	} );
+
+	it( 'reads bounds with neither side set as unconfigured, which grants every reader holding a number', () => {
+		expect( isUnconfiguredAccessRuleValue( range, {} ) ).toBe( true );
+		expect( isUnconfiguredAccessRuleValue( range, { min: '', max: '' } ) ).toBe( true );
+		expect( isUnconstrainedAccessRuleValue( range, {} ) ).toBe( true );
+		expect( isUnconfiguredAccessRuleValue( range, { min: 0 } ) ).toBe( false );
+		expect( isUnconfiguredAccessRuleValue( range, { max: 10 } ) ).toBe( false );
 	} );
 } );
 
@@ -462,5 +511,68 @@ describe( 'getPriorityWarnings', () => {
 		] );
 
 		expect( warnings ).toHaveProperty( '1' );
+	} );
+
+	it( 'stays quiet when the two gates cover posts of ages that never meet', () => {
+		const ageRule = ( comparison, days ) => ( { slug: 'published_age', value: { comparison, duration_value: days, duration_unit: 'days' } } );
+		const freeFirstMonth = registrationGate( 1, [ ...allPosts, ageRule( 'less_than', 30 ) ] );
+
+		expect( getPriorityWarnings( rank( [ freeFirstMonth, paidGate( 2, [ ...allPosts, ageRule( 'more_than', 30 ) ] ) ] ) ) ).toEqual( {} );
+		// From day 7 to day 30, a post falls under both.
+		expect( getPriorityWarnings( rank( [ freeFirstMonth, paidGate( 2, [ ...allPosts, ageRule( 'more_than', 7 ) ] ) ] ) ) ).toEqual( {
+			1: warning,
+		} );
+	} );
+} );
+
+describe( 'gate toolbar filters', () => {
+	const gate = ( id, overrides = {} ) => ( { id, title: `Gate ${ id }`, status: 'publish', ...overrides } );
+	const ids = gates => gates.map( ( { id } ) => id );
+	const noMeter = { enabled: false };
+	const paid = { active: true, access_rules: [ [ { slug: 'subscription' } ] ], metering: noMeter };
+
+	it( 'returns every gate, in order, with nothing chosen', () => {
+		expect( ids( filterGates( [ gate( 2 ), gate( 1 ) ], {} ) ) ).toEqual( [ 2, 1 ] );
+	} );
+
+	it( 'searches decoded titles, ignoring case and outer spaces', () => {
+		const gates = [ gate( 1, { title: 'Sport &amp; Culture' } ), gate( 2, { title: 'News' } ) ];
+		expect( ids( filterGates( gates, { search: ' sport & ' } ) ) ).toEqual( [ 1 ] );
+	} );
+
+	it( 'treats every unpublished status as inactive', () => {
+		const gates = [ gate( 1 ), gate( 2, { status: 'draft' } ), gate( 3, { status: 'pending' } ) ];
+		expect( ids( filterGates( gates, { status: 'active' } ) ) ).toEqual( [ 1 ] );
+		expect( ids( filterGates( gates, { status: 'inactive' } ) ) ).toEqual( [ 2, 3 ] );
+	} );
+
+	it( 'lists a gate with both access types under each', () => {
+		const gates = [
+			gate( 1, { registration: { active: true }, custom_access: paid } ),
+			gate( 2, { registration: { active: true } } ),
+			gate( 3, { custom_access: paid } ),
+		];
+		expect( ids( filterGates( gates, { access: 'registered' } ) ) ).toEqual( [ 1, 2 ] );
+		expect( ids( filterGates( gates, { access: 'paid' } ) ) ).toEqual( [ 1, 3 ] );
+	} );
+
+	it( 'matches the Paid Access column: a meter counts, an empty switched-on section does not', () => {
+		const gates = [
+			gate( 1, { custom_access: { active: true, access_rules: [], metering: { enabled: true } } } ),
+			gate( 2, { custom_access: { active: true, access_rules: [], metering: noMeter } } ),
+			gate( 3, { custom_access: { active: false, access_rules: [ [ { slug: 'subscription' } ] ], metering: noMeter } } ),
+		];
+		expect( ids( filterGates( gates, { access: 'paid' } ) ) ).toEqual( [ 1 ] );
+	} );
+
+	it( 'offers only values that match some gates but not all', () => {
+		expect( getUsefulGateFilterValues( [ gate( 1 ), gate( 2 ) ], 'status' ) ).toEqual( [] );
+		expect( getUsefulGateFilterValues( [ gate( 1 ), gate( 2, { status: 'draft' } ) ], 'status' ) ).toEqual( [ 'active', 'inactive' ] );
+		expect(
+			getUsefulGateFilterValues(
+				[ gate( 1, { registration: { active: true }, custom_access: paid } ), gate( 2, { registration: { active: true } } ) ],
+				'access'
+			)
+		).toEqual( [ 'paid' ] );
 	} );
 } );

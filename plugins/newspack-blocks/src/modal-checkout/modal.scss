@@ -5,11 +5,22 @@
 .newspack-ui {
 	iframe[name="newspack_modal_checkout_iframe"] {
 		border: none;
-		height: calc(100% + var(--newspack-ui-spacer-9, 48px));
-		margin: calc(-1 * var(--newspack-ui-spacer-5, 24px));
+		height: calc(100% + var(--newspack-ui-spacer-4, 20px) + var(--newspack-ui-spacer-5, 24px));
+		margin: calc(-1 * var(--newspack-ui-spacer-4, 20px)) calc(-1 * var(--newspack-ui-spacer-5, 24px)) calc(-1 * var(--newspack-ui-spacer-5, 24px));
 		max-width: unset;
 		width: calc(100% + var(--newspack-ui-spacer-9, 48px));
 	}
+
+	&__modal__header[hidden] + &__modal__content iframe[name="newspack_modal_checkout_iframe"] {
+		margin-top: 0;
+	}
+}
+
+// Close button while a payment is processing (see modal.js).
+// stylelint-disable-next-line selector-id-pattern
+#newspack_modal_checkout [class*="__modal__close"][aria-disabled="true"] {
+	color: var(--newspack-ui-color-neutral-30);
+	pointer-events: none;
 }
 
 // Default modal styles when newspack ui is not present.
@@ -24,6 +35,19 @@
 		justify-content: center;
 		visibility: hidden;
 		pointer-events: none;
+		width: 100%;
+		max-width: none;
+		height: 100%;
+		max-height: none;
+		margin: 0;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		color: inherit;
+
+		&::backdrop {
+			background: transparent;
+		}
 
 		&__overlay {
 			position: absolute;
@@ -73,8 +97,17 @@
 					display: flex;
 					align-items: center;
 					justify-content: space-between;
+
+					&[hidden] {
+						display: none;
+					}
+
 					h2 {
 						font-size: 16px;
+
+						&[tabindex="-1"]:focus {
+							outline: none;
+						}
 					}
 				}
 
@@ -95,9 +128,14 @@
 					background: transparent;
 					color: np-colors.$neutral-900;
 					cursor: pointer;
-					&:focus,
-					&:hover {
+					&:focus {
 						color: np-colors.$neutral-600;
+					}
+
+					@media ( hover: hover ) and ( pointer: fine ) {
+						&:hover {
+							color: np-colors.$neutral-600;
+						}
 					}
 					svg {
 						display: block;
@@ -156,7 +194,7 @@
 
 				&__item {
 					border: 1px solid var(--newspack-ui-color-border, np-colors.$neutral-300);
-					border-radius: var(--newspack-ui-border-radius-m, 6px);
+					border-radius: var(--newspack-ui-radius-surface, 12px);
 					display: flex;
 					flex-direction: column;
 					flex: 1 1 100%;
@@ -227,10 +265,12 @@
 }
 
 .non-modal-checkout-loading {
+	-webkit-text-fill-color: transparent;
+	pointer-events: none;
 	position: relative;
 
 	span {
-		visibility: hidden;
+		opacity: 0;
 	}
 
 	&::before {
@@ -261,5 +301,5 @@
 }
 
 .modal-processing {
-	opacity: 0.5;
+	pointer-events: none;
 }

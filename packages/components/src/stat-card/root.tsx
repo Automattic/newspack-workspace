@@ -20,10 +20,10 @@ import './style.scss';
 const Root = forwardRef< HTMLDivElement, StatCardRootProps >( function Root( { heading = 3, labels, className, children, ...props }, ref ) {
 	// Keyed on the strings rather than the object: a caller writing `labels` inline
 	// hands over a fresh object each render, which would defeat the memo entirely.
-	const { notApplicable, up, down } = labels ?? {};
+	const { notApplicable, up, down, unchanged } = labels ?? {};
 	const context = useMemo(
-		() => ( { heading, labels: resolveStatCardLabels( { notApplicable, up, down } ) } ),
-		[ heading, notApplicable, up, down ]
+		() => ( { heading, labels: resolveStatCardLabels( { notApplicable, up, down, unchanged } ) } ),
+		[ heading, notApplicable, up, down, unchanged ]
 	);
 
 	return (

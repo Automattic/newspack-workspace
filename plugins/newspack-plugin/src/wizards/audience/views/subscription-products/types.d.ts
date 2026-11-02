@@ -60,6 +60,8 @@ interface SubscriptionProductVariation {
 	active_subscriptions: number;
 	// Group-subscription (multi-seat) settings for this plan.
 	group: { enabled: boolean; limit: number };
+	// Flagged as complimentary access, so it isn't sold.
+	is_complimentary: boolean;
 }
 
 /**
@@ -117,6 +119,8 @@ interface SubscriptionProduct {
 	category_ids: number[];
 	category_label: string;
 	active_subscriptions: number | null;
+	// Grants only complimentary access: the product, or every variation, is flagged.
+	is_complimentary: boolean;
 	edit_url: string;
 	policy: SubscriptionPolicyResolution;
 }

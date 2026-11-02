@@ -22,10 +22,11 @@ final class Newspack_Newsletters_Blocks {
 	/**
 	 * Get the access gates that restrict each subscription list.
 	 *
-	 * Newsletters has no notion of gates itself. Whatever restricts lists (Access
-	 * Control in Newspack) reports them here. The subscribe block reads the map in
-	 * the editor, to mark and preview gated lists, and on every front-end render,
-	 * to badge premium lists and to tell which hidden lists it may show.
+	 * Newsletters has no notion of gates itself. Whatever restricts lists reports
+	 * them here: Access Control in Newspack, or the membership plans of Woo
+	 * Memberships while that still controls access. The subscribe block reads the
+	 * map in the editor, to mark and preview gated lists, and on every front-end
+	 * render, to badge premium lists and to tell which hidden lists it may show.
 	 *
 	 * @return array[] Gates keyed by public list ID. Each gate is an array with
 	 *                 `id` and `title`, plus `edit_url` when the current user may edit it.
@@ -36,9 +37,13 @@ final class Newspack_Newsletters_Blocks {
 		 *
 		 * The subscribe block reads this map in the editor and on every front-end
 		 * render. A list counts as gated only when its entry is a non-empty array of
-		 * gates. A list hidden from a reader shows as a premium row only when it is
-		 * gated here, so report every list a gate hides. Each gate holds `id`, `title`
-		 * and, for a user who may edit it, `edit_url`.
+		 * gates. A list left out of the lists a reader is shown appears as a premium row
+		 * only when it is gated here, so report every list a gate restricts. A list
+		 * missing from both the reader's lists and this map renders in neither mode, so
+		 * on a request that renders for readers a callback may also leave out a list
+		 * readers must never see. The editor reads the same map, so keep such a list
+		 * there. Each gate holds `id`, `title` and, for a user who may edit it,
+		 * `edit_url`.
 		 *
 		 * @param array[] $list_gates Gates keyed by public list ID.
 		 */
@@ -85,4 +90,7 @@ final class Newspack_Newsletters_Blocks {
 		);
 	}
 }
-Newspack_Newsletters_Blocks::init();
+// Boot only when the main plugin file loaded this, not another plugin's autoloader.
+if ( defined( 'NEWSPACK_NEWSLETTERS_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal path constant, set by the main plugin file.
+	Newspack_Newsletters_Blocks::init();
+}

@@ -14,20 +14,22 @@ import { API_BASE, PUSH_LOG_OPERATION_LABELS, formatTimestamp } from './constant
 import { getAttemptLabel, getErrorKindLabel, getRetryNote, getStatusDisplay } from './push-log-utils';
 
 // The flag push reached the provider; the list cleanup after it did not, so
-// the fields it sent did arrive. A benign push instead found no contact to
-// change, so cleanup failing the same way left nothing delivered.
-const DELIVERED_ERROR_CODES = [ 'flag_cleanup_failed' ];
+// the fields it sent did arrive. A push saved without some fields delivered
+// the rest; the error names the others.
+const DELIVERED_ERROR_CODES = [ 'flag_cleanup_failed', 'fields_not_synced' ];
 
 /**
  * The heading over the fields. A push that did not reach the provider never
- * changed anything there, so its fields are what did not arrive.
+ * changed anything there, so its fields are what did not arrive. Neither did
+ * a benign push, even on a row that ended in success: the provider answered
+ * that there was nothing for it to change.
  *
  * @param {Object}      entry      The push log entry.
  * @param {Object|null} comparedTo The push it was compared with.
  * @return {string} The heading.
  */
 function getFieldsHeading( entry, comparedTo ) {
-	const delivered = entry.status === 'success' || ( DELIVERED_ERROR_CODES.includes( entry.error_code ) && entry.error_class !== 'benign' );
+	const delivered = entry.error_class !== 'benign' && ( entry.status === 'success' || DELIVERED_ERROR_CODES.includes( entry.error_code ) );
 	if ( ! delivered ) {
 		return __( 'Not delivered', 'newspack-plugin' );
 	}

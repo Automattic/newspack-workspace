@@ -1,0 +1,52 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "newspack-manager/roundup",
+	"title": "Roundup",
+	"category": "widgets",
+	"description": "AI-powered content roundup from selected posts",
+	"keywords": [
+		"newsletter",
+		"roundup",
+		"ai",
+		"summary",
+		"digest"
+	],
+	"textdomain": "newspack-manager",
+	"attributes": {
+		"selectedPosts": {
+			"type": "array",
+			"default": []
+		},
+		"selectedImages": {
+			"type": "array",
+			"default": []
+		},
+		"generatedContent": {
+			"type": "string",
+			"default": ""
+		},
+		"isGenerated": {
+			"type": "boolean",
+			"default": false
+		},
+		"isDetached": {
+			"type": "boolean",
+			"default": false
+		},
+		"tone": {
+			"type": "string",
+			"default": "follow-posts"
+		}
+	},
+	"supports": {
+		"html": false,
+		"customClassName": true,
+		"className": true,
+		"anchor": false,
+		"align": false
+	},
+	"editorScript": "file:./index.js",
+	"editorStyle": "file:./editor.scss",
+	"style": "file:./style.scss"
+}

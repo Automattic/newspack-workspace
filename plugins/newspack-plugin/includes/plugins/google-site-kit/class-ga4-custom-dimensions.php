@@ -68,6 +68,20 @@ final class GA4_Custom_Dimensions {
 	];
 
 	/**
+	 * Parameters Campaigns stamps on a prompt's events while the prompt is in an
+	 * A/B test, named for the test and the reader's variant. Gated on the
+	 * Campaigns A/B flag rather than on the plugin: Campaigns runs on nearly
+	 * every site, and the flag on few, so gating on the plugin would spend two
+	 * of the 50 slots everywhere for events almost no site sends. The display
+	 * names read "AB" rather than "A/B" because the Admin API rejects a slash,
+	 * see `get_dimensions()`.
+	 */
+	const AB_TESTING_DIMENSIONS = [
+		'ab_test_id',
+		'ab_variant',
+	];
+
+	/**
 	 * Register hooks.
 	 */
 	public static function init() {
@@ -296,8 +310,31 @@ final class GA4_Custom_Dimensions {
 	}
 
 	/**
+	 * Whether this site runs Campaigns A/B tests, read from the Campaigns
+	 * plugin's own flag. The method check keeps a Campaigns release that
+	 * predates the flag from fataling an admin page load here.
+	 *
+	 * @return bool
+	 */
+	public static function is_ab_testing_enabled(): bool {
+		$is_enabled = method_exists( 'Newspack_Popups_AB_Tests', 'is_enabled' ) && \Newspack_Popups_AB_Tests::is_enabled();
+
+		/**
+		 * Filters A/B testing dimension provisioning, for a site the detection
+		 * above reads wrongly.
+		 *
+		 * @param bool $is_enabled Whether the site runs Campaigns A/B tests.
+		 */
+		return (bool) apply_filters( 'newspack_ga4_dimensions_ab_testing_enabled', $is_enabled );
+	}
+
+	/**
 	 * Priority-ordered list of custom dimensions Newspack provisions.
-	 * Each entry: parameter name => display name.
+	 * Each entry: parameter name => display name. The Admin API rejects a
+	 * create whose names break its rules, and the provisioner records that
+	 * failure as permanent: a parameter name is letters, digits and
+	 * underscores, starting with a letter, 40 characters at most; a display
+	 * name is the same plus spaces, 82 at most.
 	 *
 	 * GA4 caps event-scoped dimensions at 50 per property and never back-fills,
 	 * and publishers have hit that ceiling, so parameters belonging to a feature
@@ -349,6 +386,8 @@ final class GA4_Custom_Dimensions {
 			'categories'                  => 'Categories',
 			'author'                      => 'Author',
 			'segment_id'                  => 'Matched Segment',
+			'ab_test_id'                  => 'AB Test ID',
+			'ab_variant'                  => 'AB Variant',
 		];
 
 		// Read once each: an impure filter could otherwise yield a
@@ -356,6 +395,7 @@ final class GA4_Custom_Dimensions {
 		$has_access_control = self::is_access_control_enabled();
 		$has_woocommerce    = self::is_woocommerce_enabled();
 		$has_donations      = self::is_donations_enabled();
+		$has_ab_testing     = self::is_ab_testing_enabled();
 
 		if ( ! $has_access_control ) {
 			$dimensions = array_diff_key( $dimensions, array_flip( self::ACCESS_CONTROL_DIMENSIONS ) );
@@ -369,10 +409,21 @@ final class GA4_Custom_Dimensions {
 			$dimensions = array_diff_key( $dimensions, array_flip( self::DONATION_DIMENSIONS ) );
 		}
 
+		if ( ! $has_ab_testing ) {
+			$dimensions = array_diff_key( $dimensions, array_flip( self::AB_TESTING_DIMENSIONS ) );
+		}
+
 		// Not $has_access_control: Memberships alone renders a gate, but
 		// GoogleSiteKit sends access_source only under is_gating_active().
 		if ( Content_Gate::is_gating_active() ) {
 			$dimensions['access_source'] = 'Access Source';
+		}
+
+		// Move the A/B pair behind access_source so it is last on every site:
+		// at the cap it is the first to lose a slot.
+		foreach ( array_intersect_key( $dimensions, array_flip( self::AB_TESTING_DIMENSIONS ) ) as $parameter_name => $display_name ) {
+			unset( $dimensions[ $parameter_name ] );
+			$dimensions[ $parameter_name ] = $display_name;
 		}
 
 		return $dimensions;
