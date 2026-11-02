@@ -107,7 +107,7 @@ const Campaigns = props => {
 		{ value: 'all', label: __( 'All Prompts', 'newspack-plugin' ) },
 		{ value: 'inactive', label: __( 'Inactive Prompts', 'newspack-plugin' ) },
 		{ value: 'trash', label: __( 'Trash', 'newspack-plugin' ) },
-		...( hasUnassigned ? [ { value: 'unassigned', label: __( 'Unassigned Prompts', 'newspack-plugin' ) } ] : [] ),
+		...( hasUnassigned || 'unassigned' === routeFilter ? [ { value: 'unassigned', label: __( 'Unassigned Prompts', 'newspack-plugin' ) } ] : [] ),
 	];
 	const campaignGroups = [
 		{

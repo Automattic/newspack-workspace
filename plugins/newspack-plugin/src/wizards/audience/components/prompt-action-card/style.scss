@@ -18,6 +18,8 @@ $pencil-space: calc(20px + var(--wpds-dimension-gap-xs, #{wp-vars.$grid-unit-05}
 	margin: 0;
 
 	@media (hover: hover) and (pointer: fine) {
+		max-width: calc(100% - #{$pencil-space});
+
 		.newspack-campaigns__edit-title-link svg {
 			margin-inline-end: calc(-1 * #{$pencil-space});
 			pointer-events: none;
