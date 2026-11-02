@@ -81,8 +81,16 @@ function buildLoadMoreHandler( blockWrapperEl ) {
 
 		if ( data.items.length ) {
 			// Render posts' HTML from string.
-			const postsHTML = data.items.map( item => item.html ).join( '' );
-			postsContainerEl.insertAdjacentHTML( 'beforeend', postsHTML );
+			const template = document.createElement( 'template' );
+			template.innerHTML = data.items.map( item => item.html ).join( '' );
+			// Mark new posts before they enter the DOM, so @starting-style applies to their first style.
+			Array.from( template.content.children )
+				.filter( el => el.matches( 'article' ) )
+				.forEach( ( articleEl, index ) => {
+					articleEl.classList.add( 'is-entering' );
+					articleEl.style.setProperty( '--wpnbha-enter-index', String( Math.min( index, 5 ) ) );
+				} );
+			postsContainerEl.append( template.content );
 		}
 
 		if ( data.next ) {

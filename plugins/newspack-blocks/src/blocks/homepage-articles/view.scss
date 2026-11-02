@@ -1,4 +1,5 @@
 @use "newspack-colors" as np-colors;
+@use "newspack-motion" as motion;
 @use "../../shared/sass/variables";
 @use "../../shared/sass/mixins";
 @use "../../shared/sass/preview";
@@ -43,6 +44,29 @@
 
 		&:last-of-type {
 			margin-bottom: 0;
+		}
+
+		&.is-entering {
+			transition:
+				opacity motion.$duration-reveal motion.$ease-out calc(var(--wpnbha-enter-index, 0) * 40ms),
+				transform motion.$duration-reveal motion.$ease-out calc(var(--wpnbha-enter-index, 0) * 40ms);
+
+			@starting-style {
+				opacity: 0;
+				transform: translateY(motion.$enter-offset);
+			}
+
+			&:focus-within {
+				transition: none;
+			}
+
+			@include motion.reduced-motion {
+				transition: opacity motion.$duration-reveal motion.$ease-out;
+
+				@starting-style {
+					transform: none;
+				}
+			}
 		}
 	}
 
