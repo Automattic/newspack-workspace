@@ -470,14 +470,18 @@ class WooCommerce_Connection {
 		// billing address form is on screen, so the form can't change the
 		// purchaser's billing details. What a reader holds doesn't depend on the
 		// page, so the lookup steps around that filter and puts it back for the
-		// form. Without this, reader data refreshed on that page drops the gifts.
-		$gifting_address_filter = 'WCSG_Recipient_Addresses::get_users_subscriptions';
-		$removed_address_filter = \remove_filter( 'wcs_get_users_subscriptions', $gifting_address_filter, 100 );
+		// form. Without this, any check on that page, such as the reader data
+		// refresh, misses the gifts.
+		$gifting_address_filter   = 'WCSG_Recipient_Addresses::get_users_subscriptions';
+		$gifting_address_priority = \has_filter( 'wcs_get_users_subscriptions', $gifting_address_filter );
+		if ( false !== $gifting_address_priority ) {
+			\remove_filter( 'wcs_get_users_subscriptions', $gifting_address_filter, $gifting_address_priority );
+		}
 		try {
 			$user_subscriptions = \wcs_get_users_subscriptions( $user_id );
 		} finally {
-			if ( $removed_address_filter ) {
-				\add_filter( 'wcs_get_users_subscriptions', $gifting_address_filter, 100, 2 );
+			if ( false !== $gifting_address_priority ) {
+				\add_filter( 'wcs_get_users_subscriptions', $gifting_address_filter, $gifting_address_priority, 2 );
 			}
 		}
 		$subcriptions = array_reduce(
