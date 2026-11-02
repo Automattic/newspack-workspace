@@ -157,11 +157,12 @@ const init = trigger => {
 
 		const onEsc = e => {
 			if ( e.key === 'Escape' ) {
+				e.stopPropagation();
 				closeOverlay();
 			}
 		};
-		document.addEventListener( 'keydown', onEsc );
-		escCleanup = () => document.removeEventListener( 'keydown', onEsc );
+		document.addEventListener( 'keydown', onEsc, true );
+		escCleanup = () => document.removeEventListener( 'keydown', onEsc, true );
 
 		// Focus the search input on the next paint. Two `requestAnimationFrame`s
 		// guarantee that the panel's `aria-hidden`/`inert` flips and the CSS
