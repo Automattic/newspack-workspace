@@ -2930,14 +2930,17 @@ class Subscribers_Wizard extends Wizard {
 	 *     donors carry `is_donor` too, so this subtraction is what keeps them out.
 	 *
 	 * Each input is bounded. At most FILTER_INCLUDE_CAP donation subscriptions are
-	 * scanned in total, across every donation product and every status, pending
-	 * and ended ones included (see Subscribers_Donors::holders()). Past that, a
-	 * Recurring donor whose live subscription wasn't scanned is missing from
-	 * Recurring, and because Former, One-time and "Not a donor" are all worked out
-	 * against the live set, they can be listed under one of those while their row
-	 * reads Recurring. Each flag query returns at most FILTER_INCLUDE_CAP readers,
-	 * so past that One-time and Former under-count, as the other filters do (see
-	 * resolve_filter_include()).
+	 * scanned in total, across every donation product, live ones first and ended
+	 * ones with whatever budget is left; pending and trashed ones are never read
+	 * (see Subscribers_Donors::holders()). Up to the cap the live set is exact.
+	 * Past it, ended holders go missing first: a reader whose only ended
+	 * subscription wasn't scanned drops out of Former, or reads One-time if they
+	 * also carry the `is_donor` flag. Only once live donation subscriptions alone
+	 * pass the cap is a Recurring donor missing from Recurring, and because Former,
+	 * One-time and "Not a donor" are all worked out against the live set, they can
+	 * then be listed under one of those while their row reads Recurring. Each flag
+	 * query returns at most FILTER_INCLUDE_CAP readers, so past that One-time and
+	 * Former under-count, as the other filters do (see resolve_filter_include()).
 	 *
 	 * @param string $kind One of the Subscribers_Donors::KIND_* values.
 	 *

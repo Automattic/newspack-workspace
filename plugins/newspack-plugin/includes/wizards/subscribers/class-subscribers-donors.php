@@ -191,9 +191,12 @@ class Subscribers_Donors {
 	 * The products whose subscriptions are donations.
 	 *
 	 * The legacy donation product's children plus every product flagged as a
-	 * donation, the same pair Donations::get_order_donation_product_id() checks. A
-	 * flagged product in the trash is not in the flagged list, so subscriptions
-	 * still running on it are missed here while the row counts them.
+	 * donation, the same pair Donations::get_order_donation_product_id() checks.
+	 * The flagged products are looked up here rather than through
+	 * Donations::get_flagged_donation_product_ids(), which leaves out the trash:
+	 * the row marks a subscription as a donation from the product's flag whatever
+	 * the product's status (Donations::is_donation_product()), so subscriptions
+	 * still running on a trashed donation product have to be scanned too.
 	 *
 	 * @return int[]
 	 */
@@ -201,11 +204,57 @@ class Subscribers_Donors {
 		if ( ! function_exists( 'wc_get_product' ) ) {
 			return [];
 		}
+		$flagged_ids = get_posts(
+			[
+				'post_type'      => 'product',
+				'post_status'    => [ 'any', 'trash' ],
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Donation-flagged products only; small meta-filtered set.
+				'fields'         => 'ids',
+				'meta_query'     => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					[
+						'key'   => WooCommerce_Products::DONATION_FLAG_META_KEY,
+						'value' => wc_bool_to_string( true ),
+					],
+				],
+			]
+		);
 		$ids = array_merge(
 			array_values( Donations::get_donation_product_child_products_ids() ),
-			Donations::get_flagged_donation_product_ids()
+			$flagged_ids
 		);
 		return array_values( array_unique( array_filter( array_map( 'intval', $ids ), fn( $id ) => $id > 0 ) ) );
+	}
+
+	/**
+	 * The subscription statuses the donor scan reads, as live and ended.
+	 *
+	 * Each status WooCommerce Subscriptions registers is placed by its mapped
+	 * status, the way kind() reads it: `active` and `on-hold` are live, `cancelled`
+	 * is ended, and `pending` is neither. Placing by the mapped status, not a fixed
+	 * list of raw ones, keeps a status another plugin registers where the row puts
+	 * it: on hold, so live. Statuses WooCommerce Subscriptions doesn't register,
+	 * such as the trash, are never read. The row never sees a trashed subscription
+	 * either, because WooCommerce Subscriptions leaves it out of a reader's list.
+	 *
+	 * @return array{live:string[],ended:string[]} Statuses without the `wc-` prefix.
+	 */
+	private static function scanned_statuses(): array {
+		$statuses = [
+			'live'  => [],
+			'ended' => [],
+		];
+		foreach ( array_keys( \wcs_get_subscription_statuses() ) as $key ) {
+			$status = str_starts_with( $key, 'wc-' ) ? substr( $key, 3 ) : $key;
+			$bucket = match ( Subscribers_Wizard::map_subscription_status( $status ) ) {
+				'active', 'on-hold' => 'live',
+				'cancelled'         => 'ended',
+				default             => '',
+			};
+			if ( '' !== $bucket ) {
+				$statuses[ $bucket ][] = $status;
+			}
+		}
+		return $statuses;
 	}
 
 	/**
@@ -215,52 +264,72 @@ class Subscribers_Donors {
 	 * Subscribers_Wizard::get_individual_subscriptions()): each donation
 	 * subscription counts for its holder, so a gift counts for its recipient, and a
 	 * group subscription counts for no one, because the row shows it with the
-	 * reader's groups. Each is bucketed by its mapped status the way kind() reads
-	 * it: `active` and `on-hold` are live, `cancelled` is ended, and `pending` is
-	 * neither. Bucketing the mapped status, not a list of raw ones, keeps an
-	 * unrecognized status where the row puts it: on hold, so live.
+	 * reader's groups. Only the statuses scanned_statuses() lists are read, so a
+	 * pending subscription, or one in the trash, counts for no one. Each
+	 * subscription read is still bucketed by its own mapped status the way kind()
+	 * reads it, in case it changed after the query found it: `active` and `on-hold`
+	 * are live, `cancelled` is ended.
 	 *
 	 * Subscriptions managed on other network sites carry no product data, so they
 	 * never count, as on the row. A reader can be in both lists.
 	 *
-	 * The lookup is one SQL query across every donation product at once, so
-	 * $limit is a budget for all of them together: a product with few or no
-	 * subscriptions, such as a one-time donation product, leaves the rest to the
-	 * others, whatever order the products come in. The budget counts subscriptions
-	 * of every status, pending and ended ones included. Past it, the subscriptions
-	 * left out count for no one, so a reader whose only live donation subscription
-	 * was left out is missing from `live`. The subscriptions found are hydrated
-	 * Subscribers_Wizard::FILTER_SCAN_CHUNK at a time to keep peak memory at one
-	 * chunk.
+	 * The live subscriptions are read first, then the ended ones. Each read is one
+	 * SQL query across every donation product at once, so $limit is a budget for
+	 * all of them together: a product with few or no subscriptions, such as a
+	 * one-time donation product, leaves the rest to the others, whatever order the
+	 * products come in. The live read may use the whole budget, and the ended read
+	 * gets what it leaves. So up to the budget the live list is exact; past it,
+	 * ended holders go missing first, and only once there are more live donation
+	 * subscriptions than the budget does a Recurring donor go missing from `live`.
+	 * The subscriptions found are hydrated Subscribers_Wizard::FILTER_SCAN_CHUNK at
+	 * a time to keep peak memory at one chunk.
 	 *
-	 * @param int $limit The most donation subscriptions to read across all donation
-	 *                   products, or 0 for all of them.
+	 * @param int           $limit    The most donation subscriptions to read across
+	 *                                all donation products, or 0 for all of them.
+	 * @param callable|null $on_chunk Called with no arguments after each chunk is
+	 *                                read, so a long-running caller can clear the
+	 *                                object cache between chunks.
 	 *
 	 * @return array{live:int[],ended:int[]} Holder user IDs.
 	 */
-	public static function holders( int $limit = 0 ): array {
+	public static function holders( int $limit = 0, ?callable $on_chunk = null ): array {
 		$holders = [
 			'live'  => [],
 			'ended' => [],
 		];
 		$product_ids = self::donation_product_ids();
-		if ( empty( $product_ids ) || ! function_exists( 'wcs_get_subscriptions_for_product' ) || ! function_exists( 'wcs_get_subscription' ) ) {
+		if ( empty( $product_ids ) || ! function_exists( 'wcs_get_subscriptions_for_product' ) || ! function_exists( 'wcs_get_subscription' ) || ! function_exists( 'wcs_get_subscription_statuses' ) ) {
 			return $holders;
 		}
-		$subscription_ids = \wcs_get_subscriptions_for_product( $product_ids, 'ids', $limit > 0 ? [ 'limit' => $limit ] : [] );
-		foreach ( array_chunk( $subscription_ids, Subscribers_Wizard::FILTER_SCAN_CHUNK ) as $chunk ) {
-			$subscriptions = array_filter( array_map( 'wcs_get_subscription', $chunk ) );
-			Subscribers_Wizard::prime_gift_recipients( $subscriptions );
-			foreach ( $subscriptions as $subscription ) {
-				$bucket = match ( Subscribers_Wizard::map_subscription_status( $subscription->get_status() ) ) {
-					'active', 'on-hold' => 'live',
-					'cancelled'         => 'ended',
-					default             => '',
-				};
-				if ( '' === $bucket || ! empty( Group_Subscription_Settings::get_subscription_settings( $subscription )['enabled'] ) ) {
-					continue;
+		$scanned_statuses = self::scanned_statuses();
+		$budget           = $limit;
+		foreach ( [ 'live', 'ended' ] as $scan ) {
+			if ( empty( $scanned_statuses[ $scan ] ) || ( $limit > 0 && $budget < 1 ) ) {
+				continue;
+			}
+			$args = [ 'subscription_status' => $scanned_statuses[ $scan ] ];
+			if ( $limit > 0 ) {
+				$args['limit'] = $budget;
+			}
+			$subscription_ids = \wcs_get_subscriptions_for_product( $product_ids, 'ids', $args );
+			$budget          -= count( $subscription_ids );
+			foreach ( array_chunk( $subscription_ids, Subscribers_Wizard::FILTER_SCAN_CHUNK ) as $chunk ) {
+				$subscriptions = array_filter( array_map( 'wcs_get_subscription', $chunk ) );
+				Subscribers_Wizard::prime_gift_recipients( $subscriptions );
+				foreach ( $subscriptions as $subscription ) {
+					$bucket = match ( Subscribers_Wizard::map_subscription_status( $subscription->get_status() ) ) {
+						'active', 'on-hold' => 'live',
+						'cancelled'         => 'ended',
+						default             => '',
+					};
+					if ( '' === $bucket || ! empty( Group_Subscription_Settings::get_subscription_settings( $subscription )['enabled'] ) ) {
+						continue;
+					}
+					$holders[ $bucket ][] = WooCommerce_Subscriptions_Gifting::get_holder_id( $subscription );
 				}
-				$holders[ $bucket ][] = WooCommerce_Subscriptions_Gifting::get_holder_id( $subscription );
+				if ( null !== $on_chunk ) {
+					$on_chunk();
+				}
 			}
 		}
 		return [

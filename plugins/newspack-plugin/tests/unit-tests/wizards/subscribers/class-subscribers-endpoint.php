@@ -54,7 +54,8 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	private $network_callbacks = [];
 
 	/**
-	 * Callbacks hooked to wcs_get_users_subscriptions by create_gifted_subscription().
+	 * Callbacks hooked to wcs_get_users_subscriptions by create_gifted_subscription()
+	 * and by tests that reshape a reader's list, detached in tear_down().
 	 *
 	 * @var callable[]
 	 */
@@ -2554,36 +2555,90 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The Donor filter narrows with the Status filter, including "Not a donor",
-	 * which subtracts from the other filters' set instead of adding one.
+	 * The Donor filter narrows with the Status and Plan filters: each pair lists
+	 * only the readers matching both, and "Not a donor" subtracts from the other
+	 * filter's set instead of adding one.
+	 *
+	 * Beyond the donor fixture, a "Digital" plan is held by readers of several
+	 * kinds, and by non-donors who are on hold or cancelled, so neither side of a
+	 * pair already equals the answer on its own.
+	 *
+	 * @dataProvider data_donor_filter_with_another_filter
+	 *
+	 * @param array    $params   The request's filter params.
+	 * @param string[] $expected Labels of the readers both filters match.
 	 */
-	public function test_donor_filter_narrows_with_status() {
+	public function test_donor_filter_narrows_with_another_filter( array $params, array $expected ) {
 		$this->login_admin();
-		$fixture   = $this->create_donor_fixture();
-		$plan_id   = $this->create_subscription_product( 'Digital' );
-		$one_time  = $fixture['one-time']['one_time'];
-		$non_donor = $fixture['none']['non_donor'];
-		$this->create_individual_subscription( $one_time, 'active', $plan_id );
-		$this->create_individual_subscription( $non_donor, 'active', $plan_id );
+		$fixture = $this->create_donor_fixture();
+		$readers = array_merge( ...array_values( $fixture ) );
+		$plan_id = $this->create_subscription_product( 'Digital' );
+		foreach ( [ 'one_time', 'non_donor', 'recurring' ] as $label ) {
+			$this->create_individual_subscription( $readers[ $label ], 'active', $plan_id );
+		}
+		$readers['on_hold_member'] = $this->create_reader( 'On Hold Member' );
+		$this->create_individual_subscription( $readers['on_hold_member'], 'on-hold', $plan_id );
+		$readers['lapsed_member'] = $this->create_reader( 'Lapsed Member' );
+		$this->create_individual_subscription( $readers['lapsed_member'], 'cancelled', $plan_id );
 
-		$this->assertSame(
-			[ $one_time ],
-			$this->filtered_ids(
+		$expected_ids = array_map( fn( $label ) => $readers[ $label ], $expected );
+		sort( $expected_ids );
+
+		$this->assertSame( $expected_ids, $this->filtered_ids( $params ) );
+	}
+
+	/**
+	 * Donor filter values paired with a Status or Plan filter, and the readers
+	 * matching both.
+	 *
+	 * @return array[]
+	 */
+	public function data_donor_filter_with_another_filter() {
+		return [
+			'one-time, active'    => [
 				[
 					'status' => [ 'active' ],
 					'donor'  => [ 'one-time' ],
-				]
-			)
-		);
-		$this->assertSame(
-			[ $non_donor ],
-			$this->filtered_ids(
+				],
+				[ 'one_time' ],
+			],
+			'not a donor, active' => [
 				[
 					'status' => [ 'active' ],
 					'donor'  => [ 'none' ],
-				]
-			)
-		);
+				],
+				[ 'non_donor' ],
+			],
+			'recurring, on hold'  => [
+				[
+					'status' => [ 'on-hold' ],
+					'donor'  => [ 'recurring' ],
+				],
+				[ 'recurring_on_hold' ],
+			],
+			// The flag-only former donor holds no subscription, so has no status.
+			'former, cancelled'   => [
+				[
+					'status' => [ 'cancelled' ],
+					'donor'  => [ 'former' ],
+				],
+				[ 'cancelled', 'expired', 'gave_again' ],
+			],
+			'recurring, plan'     => [
+				[
+					'plan'  => [ 'Digital' ],
+					'donor' => [ 'recurring' ],
+				],
+				[ 'recurring' ],
+			],
+			'not a donor, plan'   => [
+				[
+					'plan'  => [ 'Digital' ],
+					'donor' => [ 'none' ],
+				],
+				[ 'non_donor', 'on_hold_member', 'lapsed_member' ],
+			],
+		];
 	}
 
 	/**
@@ -2688,6 +2743,94 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 			'busy product first'  => [ true ],
 			'empty product first' => [ false ],
 		];
+	}
+
+	/**
+	 * A trashed donation subscription counts toward no kind, in the filter as on
+	 * the row. WooCommerce Subscriptions leaves trashed subscriptions out of a
+	 * reader's list, so the row never sees one, and the filter mustn't read it as
+	 * live (an unregistered status maps to on hold). The reader's earlier payment
+	 * left the donor flag, so both sides read One-time.
+	 */
+	public function test_a_trashed_donation_subscription_counts_toward_no_kind() {
+		$this->login_admin();
+		$reader_id = $this->create_reader( 'Trashed Donation' );
+		$this->create_individual_subscription( $reader_id, 'trash', $this->create_donation_product() );
+		$this->flag_donor( $reader_id );
+		// What wcs_get_users_subscriptions() does in production; the mock returns
+		// every status. tear_down() detaches it with the gift filters.
+		$hide_trashed = fn( $subscriptions ) => array_filter( $subscriptions, fn( $subscription ) => 'trash' !== $subscription->get_status() );
+		add_filter( 'wcs_get_users_subscriptions', $hide_trashed, 10 );
+		$this->gift_filters[] = $hide_trashed;
+
+		$this->assertSame( 'one-time', $this->list_row( $reader_id )['donor']['kind'] );
+		$this->assertSame( [], $this->filtered_ids( [ 'donor' => [ 'recurring' ] ] ) );
+		$this->assertSame( [ $reader_id ], $this->filtered_ids( [ 'donor' => [ 'one-time' ] ] ) );
+	}
+
+	/**
+	 * The donor scan reads live donation subscriptions first, so pending and ended
+	 * ones, however many and however old, can't use up the budget before a live one
+	 * is read. Whatever budget the live ones leave goes to the ended ones, so past
+	 * the cap it is ended holders who go missing first.
+	 */
+	public function test_donor_scan_reads_live_subscriptions_before_the_rest() {
+		$donation_product_id = $this->create_donation_product();
+		$cancelled_ids       = [];
+		// Created first, so a scan that reads in ID order alone meets these first.
+		foreach ( [ 'pending', 'pending', 'cancelled', 'cancelled' ] as $index => $status ) {
+			$reader_id = $this->create_reader( 'Older ' . $index );
+			$this->create_individual_subscription( $reader_id, $status, $donation_product_id );
+			if ( 'cancelled' === $status ) {
+				$cancelled_ids[] = $reader_id;
+			}
+		}
+		$live_id = $this->create_reader( 'Newest Live' );
+		$this->create_individual_subscription( $live_id, 'active', $donation_product_id );
+
+		$holders = Subscribers_Donors::holders( 2 );
+
+		$this->assertSame( [ $live_id ], $holders['live'] );
+		$this->assertSame( [ $cancelled_ids[0] ], $holders['ended'], 'The ended scan gets only the budget the live scan left.' );
+		$this->assertSame( $cancelled_ids, Subscribers_Donors::holders( 0 )['ended'], 'With no limit every ended holder is read.' );
+	}
+
+	/**
+	 * The per-chunk callback runs after each chunk of donation subscriptions is
+	 * read, in the live and the ended scan alike, so a long caller can free memory
+	 * between chunks.
+	 */
+	public function test_donor_scan_calls_back_after_each_chunk() {
+		$donation_product_id = $this->create_donation_product();
+		$this->create_individual_subscription( $this->create_reader( 'Live' ), 'active', $donation_product_id );
+		$this->create_individual_subscription( $this->create_reader( 'Ended' ), 'cancelled', $donation_product_id );
+		$chunks_read = 0;
+
+		Subscribers_Donors::holders(
+			0,
+			function () use ( &$chunks_read ) {
+				++$chunks_read;
+			}
+		);
+
+		$this->assertSame( 2, $chunks_read, 'One chunk of live subscriptions and one of ended ones.' );
+	}
+
+	/**
+	 * A donation product moved to the trash still marks its subscriptions as
+	 * donations on the row, which reads the flag whatever the product's status, so
+	 * the filter has to scan its subscriptions too.
+	 */
+	public function test_a_trashed_donation_product_still_counts() {
+		$this->login_admin();
+		$product_id = $this->create_subscription_product( 'Retired Donation', 'subscription', 0, false, 'trash' );
+		update_post_meta( $product_id, WooCommerce_Products::DONATION_FLAG_META_KEY, wc_bool_to_string( true ) );
+		$reader_id = $this->create_reader( 'Retired Product Donor' );
+		$this->create_individual_subscription( $reader_id, 'active', $product_id );
+
+		$this->assertContains( $product_id, Subscribers_Donors::donation_product_ids() );
+		$this->assertSame( 'recurring', $this->list_row( $reader_id )['donor']['kind'] );
+		$this->assertSame( [ $reader_id ], $this->filtered_ids( [ 'donor' => [ 'recurring' ] ] ) );
 	}
 
 	/**
