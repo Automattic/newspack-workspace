@@ -1,4 +1,5 @@
 @use "newspack-colors" as np-colors;
+@use "newspack-motion" as motion;
 @use "../../../shared/sass/mixins";
 @use "../../../shared/sass/variables";
 
@@ -381,7 +382,7 @@
 		max-width: 100%;
 		overflow: hidden;
 		right: var(--newspack-ui-spacer-5, 24px);
-		transition: border-color var(--newspack-ui-duration-color, 150ms) ease, box-shadow var(--newspack-ui-duration-color, 150ms) ease;
+		transition: border-color motion.$duration-color motion.$ease-color, box-shadow motion.$duration-color motion.$ease-color;
 
 		@media ( hover: hover ) and ( pointer: fine ) {
 			&:hover:not(:focus-within) {
@@ -496,7 +497,7 @@
 					margin: 0;
 					padding: var(--newspack-ui-spacer-2, 12px) var(--newspack-ui-spacer-5, 24px);
 					text-align: center;
-					transition: background var(--newspack-ui-duration-color, 150ms) ease, color var(--newspack-ui-duration-color, 150ms) ease;
+					transition: background motion.$duration-color motion.$ease-color, color motion.$duration-color motion.$ease-color;
 
 					@media ( hover: hover ) and ( pointer: fine ) {
 						&:hover {
@@ -550,7 +551,7 @@
 			margin: 0 calc(1px + var(--newspack-ui-spacer-5, 24px)) calc(1px + var(--newspack-ui-spacer-5, 24px));
 			padding: var(--newspack-ui-spacer-2, 12px) var(--newspack-ui-spacer-5, 24px);
 			position: relative;
-			transition: opacity var(--newspack-ui-duration-color, 150ms) ease, transform var(--newspack-ui-duration-press, 160ms) var(--newspack-ui-ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+			transition: opacity motion.$duration-color motion.$ease-color, transform motion.$duration-press motion.$ease-out;
 			width: calc(100% - 2 * var(--newspack-ui-spacer-5, 24px) - 2px);
 			z-index: 1;
 
@@ -565,9 +566,9 @@
 			}
 
 			&:active {
-				transform: scale(0.97);
+				transform: scale(motion.$press-scale);
 
-				@media ( prefers-reduced-motion: reduce ) {
+				@include motion.reduced-motion {
 					transform: none;
 				}
 			}
@@ -670,7 +671,7 @@
 				line-height: var(--newspack-ui-line-height-body, 1.5);
 				margin: auto 0 0;
 				padding: calc(var(--newspack-ui-spacer-2, 12px) - 1px) calc(var(--newspack-ui-spacer-5, 24px) - 1px);
-				transition: background var(--newspack-ui-duration-color, 150ms) ease, border-color var(--newspack-ui-duration-color, 150ms) ease, opacity var(--newspack-ui-duration-color, 150ms) ease, transform var(--newspack-ui-duration-press, 160ms) var(--newspack-ui-ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+				transition: background motion.$duration-color motion.$ease-color, border-color motion.$duration-color motion.$ease-color, opacity motion.$duration-color motion.$ease-color, transform motion.$duration-press motion.$ease-out;
 
 				@media ( hover: hover ) and ( pointer: fine ) {
 					&:hover {
@@ -679,9 +680,9 @@
 				}
 
 				&:active {
-					transform: scale(0.97);
+					transform: scale(motion.$press-scale);
 
-					@media ( prefers-reduced-motion: reduce ) {
+					@include motion.reduced-motion {
 						transform: none;
 					}
 				}

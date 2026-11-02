@@ -1,9 +1,10 @@
 // eslint-disable-next-line import/no-extraneous-dependencies
 import debounce from 'lodash/debounce';
+import { prefersReducedMotion } from 'newspack-motion';
 
 import type { Configuration } from './types';
 
-const getScrollBehavior = (): ScrollBehavior => ( window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches ? 'auto' : 'smooth' );
+const getScrollBehavior = (): ScrollBehavior => ( prefersReducedMotion() ? 'auto' : 'smooth' );
 
 const findClosestIndex = ( arr: number[], num: number ) => {
 	const closest =
@@ -36,22 +37,33 @@ export const setupSlider = ( parentEl: HTMLElement, configuration: Configuration
 	let optionsOffsets = getOptionsOffsets();
 	const initialScrollOffset = initialOptionIndex * optionWidth;
 
+	let currentIndex = initialOptionIndex;
+	let viewportWidth = window.innerWidth;
+
 	window.addEventListener( 'resize', () => {
+		if ( window.innerWidth === viewportWidth ) {
+			return;
+		}
+		viewportWidth = window.innerWidth;
 		options = getOptions();
 		optionWidth = getOptionWidth();
 		optionsOffsets = getOptionsOffsets();
-		optionsEl.scrollTo( initialScrollOffset, 0 );
+		optionsEl.scrollTo( optionsOffsets[ currentIndex ], 0 );
 	} );
 
 	const optionsDots = Array.from( optionsDotsEl.children ) as HTMLElement[];
 
-	const handleScroll = debounce( () => {
-		const closestIndex = findClosestIndex( optionsOffsets, optionsEl.scrollLeft );
+	const updateDots = () => {
+		currentIndex = findClosestIndex( optionsOffsets, optionsEl.scrollLeft );
 		optionsDots.forEach( ( dotEl, index ) => {
-			dotEl.style.backgroundColor = index === closestIndex ? configuration.buttonColor : '';
+			dotEl.style.backgroundColor = index === currentIndex ? configuration.buttonColor : '';
 		} );
-	}, 100 );
-	optionsEl.addEventListener( 'scroll', handleScroll );
+	};
+	if ( 'onscrollend' in window ) {
+		optionsEl.addEventListener( 'scrollend', updateDots );
+	} else {
+		optionsEl.addEventListener( 'scroll', debounce( updateDots, 100 ) );
+	}
 
 	optionsDots.forEach( ( dotEl, index ) => {
 		dotEl.addEventListener( 'click', () => {
