@@ -2,6 +2,8 @@
 
 Shared motion tokens for Newspack projects: easing curves, durations, scales, and the media queries for hover and reduced motion. [MOTION.md](MOTION.md) holds the rules for using them.
 
+The package covers the front end, meaning reader-facing surfaces. Admin screens follow the motion built into `@wordpress/ui` and `@wordpress/components` and don't use it.
+
 ## Installation
 
 ```bash

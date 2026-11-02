@@ -2,6 +2,8 @@
 
 How Newspack moves, and the rules a new component should follow so it moves the same way. Motion here explains a change of state: where something came from, where it went, and what it belongs to. It is never decoration.
 
+These rules and this package cover the front end: the reader-facing surfaces such as the theme, blocks, prompts and reader UI. Admin screens follow the motion built into `@wordpress/ui` and `@wordpress/components` and don't use this package.
+
 The shared easing and duration values live in this package, `newspack-motion`. Use them rather than literal values, so a timing change in one place reaches every component. Outside newspack-ui, `@use "newspack-motion" as motion;` and use the compiled values, such as `motion.$duration-modal`, and in script import the same values from `newspack-motion`. They compile into your own stylesheet or bundle, so nothing depends on newspack-ui being loaded and no `var()` fallback is needed. Inside newspack-ui, use its `--newspack-ui-*` custom properties, which are generated from this package. A few values belong to one component and live beside it, such as newspack-ui's modal step delay; see `plugins/newspack-plugin/src/newspack-ui/MOTION.md`.
 
 These rules cover newspack-ui and every surface that uses this package. The modal checkout's fallback dialog, used only when newspack-ui is not loaded, doesn't follow them.
