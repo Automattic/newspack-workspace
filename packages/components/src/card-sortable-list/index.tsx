@@ -10,9 +10,10 @@ import classNames from 'classnames';
 /**
  * WordPress dependencies.
  */
+import { speak } from '@wordpress/a11y';
 import { Disabled, Draggable } from '@wordpress/components';
 import { useEffect, useLayoutEffect, useRef, useState } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { chevronDown, chevronUp, dragHandle } from '@wordpress/icons';
 import { Icon, IconButton, Stack } from '@wordpress/ui';
 
@@ -38,10 +39,21 @@ const CardSortableList = ( {
 	disabled = false,
 	items = [],
 	onDragCallback = () => {},
+	sortable = true,
+	reordering = false,
+	size = 'default',
 }: {
 	disabled?: boolean;
-	items?: CardListItem[];
+	items?: ( CardListItem & {
+		/** Makes the row inert, e.g. while a request for it is in flight. */
+		disabled?: boolean;
+	} )[];
 	onDragCallback?: ( index: number, targetIndex: number ) => void;
+	/** `false` shows the move buttons disabled and turns off dragging. */
+	sortable?: boolean;
+	/** Marks a list in a reorder mode: the rows wobble, and their toggles and menus are disabled. */
+	reordering?: boolean;
+	size?: React.ComponentProps< typeof CardListRow >[ 'size' ];
 } ) => {
 	const [ sortedItems, setSortedItems ] = useState( items );
 	const [ draggingIndex, setDraggingIndex ] = useState< number | null >( null );
@@ -173,6 +185,15 @@ const CardSortableList = ( {
 		reordered.splice( toIndex, 0, moved );
 		setSortedItems( reordered );
 		setButtonMoveId( id => id + 1 );
+		speak(
+			sprintf(
+				/* translators: 1: title of the moved item. 2: its new position. 3: total number of items. */
+				__( '%1$s moved to position %2$d of %3$d.', 'newspack-plugin' ),
+				moved.title,
+				toIndex + 1,
+				reordered.length
+			)
+		);
 	};
 
 	/**
@@ -371,13 +392,13 @@ const CardSortableList = ( {
 			direction="column"
 			gap="lg"
 			ref={ listRef }
-			className="newspack-card--core--sortable-list"
+			className={ classNames( 'newspack-card--core--sortable-list', { 'is-locked': ! sortable, 'is-reordering': reordering } ) }
 			style={ measurements ? { height: measurements.lockedHeight } : undefined }
 		>
 			{ sortedItems.map( ( item, index ) => {
 				const translateY = getTranslateY( index );
 				return (
-					<Disabled key={ item.id } isDisabled={ disabled }>
+					<Disabled key={ item.id } isDisabled={ disabled || Boolean( item.disabled ) }>
 						<div
 							ref={ el => {
 								itemRefs.current[ index ] = el;
@@ -401,9 +422,11 @@ const CardSortableList = ( {
 								{ ( { onDraggableStart, onDraggableEnd } ) => (
 									<CardListRow
 										item={ item }
-										draggable
-										onDragStart={ onDraggableStart }
-										onDragEnd={ onDraggableEnd }
+										size={ size }
+										disabled={ reordering }
+										draggable={ sortable }
+										onDragStart={ sortable ? onDraggableStart : undefined }
+										onDragEnd={ sortable ? onDraggableEnd : undefined }
 										controls={
 											<Stack direction="row" align="center" className="newspack-card--core--sortable-list__controls">
 												<Icon icon={ dragHandle } className="newspack-card--core--sortable-list__drag-handle" />
@@ -413,8 +436,12 @@ const CardSortableList = ( {
 														tone="neutral"
 														size="small"
 														icon={ chevronUp }
-														label={ __( 'Move one position up', 'newspack-plugin' ) }
-														disabled={ index === 0 }
+														label={ sprintf(
+															/* translators: %s: title of the item to move. */
+															__( 'Move %s up', 'newspack-plugin' ),
+															item.title
+														) }
+														disabled={ ! sortable || index === 0 }
 														focusableWhenDisabled={ false }
 														onClick={ () => handleButtonMove( index, index - 1 ) }
 													/>
@@ -423,8 +450,12 @@ const CardSortableList = ( {
 														tone="neutral"
 														size="small"
 														icon={ chevronDown }
-														label={ __( 'Move one position down', 'newspack-plugin' ) }
-														disabled={ index === sortedItems.length - 1 }
+														label={ sprintf(
+															/* translators: %s: title of the item to move. */
+															__( 'Move %s down', 'newspack-plugin' ),
+															item.title
+														) }
+														disabled={ ! sortable || index === sortedItems.length - 1 }
 														focusableWhenDisabled={ false }
 														onClick={ () => handleButtonMove( index, index + 1 ) }
 													/>

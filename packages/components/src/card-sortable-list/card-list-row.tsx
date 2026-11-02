@@ -50,9 +50,12 @@ const CardListRow = ( {
 	item,
 	controls,
 	size = 'default',
+	disabled = false,
 	...cardProps
 }: {
 	item: CardListItem;
+	/** Disables the toggle and the actions menu. */
+	disabled?: boolean;
 	/** Rendered ahead of the title, e.g. a drag handle. */
 	controls?: React.ReactNode;
 	/** `large` uses even padding, for a row that stands alone on a page. */
@@ -89,12 +92,17 @@ const CardListRow = ( {
 								className="newspack-card--core--sortable-list__toggle"
 								label={ item.title }
 								checked={ item.toggleChecked }
+								disabled={ disabled }
 								onChange={ item.onToggleChange as () => void }
 								__nextHasNoMarginBottom
 							/>
 						) }
 						{ hasActions && (
-							<DropdownMenu icon={ moreVertical } label={ item.actionsLabel || __( 'More actions', 'newspack-plugin' ) }>
+							<DropdownMenu
+								icon={ moreVertical }
+								label={ item.actionsLabel || __( 'More actions', 'newspack-plugin' ) }
+								toggleProps={ { disabled } }
+							>
 								{ ( { onClose } ) =>
 									item.actions?.map( ( action, actionIndex ) => (
 										<MenuItem

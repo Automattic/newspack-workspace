@@ -1,6 +1,6 @@
 # CardSortableList
 
-A drag-and-drop sortable list of cards, built on the `@wordpress/ui` Card. Each row shows a drag handle and up/down buttons, then the title with its badges and description, then an optional toggle and actions menu on the right. Items can be reordered by dragging with a pointer or by using the up/down chevron buttons (keyboard accessible). The list locks its height during a drag to prevent layout shifts.
+A drag-and-drop sortable list of cards, built on the `@wordpress/ui` Card. Each row shows a drag handle and up/down buttons, then the title with its badges and description, then an optional toggle and actions menu on the right. Items can be reordered by dragging with a pointer or by using the up/down chevron buttons (keyboard accessible). Each chevron is named after its item ("Move Homepage up"), keeps focus on the moved row, and announces the new position to screen readers. The list locks its height during a drag to prevent layout shifts.
 
 ## Props
 
@@ -9,12 +9,16 @@ A drag-and-drop sortable list of cards, built on the `@wordpress/ui` Card. Each 
 | `disabled` | `boolean` | `false` | When `true`, all drag and button controls are disabled via `Disabled`. |
 | `items` | `DraggableItem[]` | `[]` | Array of items to render. See the `DraggableItem` shape below. |
 | `onDragCallback` | `(index: number, targetIndex: number) => void` | `() => {}` | Callback fired after a reorder completes (drag-and-drop or button move). Receives the original index and the new index. |
+| `sortable` | `boolean` | `true` | When `false`, the move buttons show disabled and the rows can't be dragged, for a list that only reorders in a separate mode. |
+| `reordering` | `boolean` | `false` | Marks a list that is in a reorder mode: the rows wobble gently (a static dashed outline with reduced motion), and each row's toggle and actions menu are disabled so only the move controls respond. |
+| `size` | `'default' \| 'large'` | `'default'` | Passed to each `CardListRow`. |
 
 ### `DraggableItem`
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `id` | `string` \| `number` | Unique identifier for the item. Used as the React `key`. |
+| `disabled` | `boolean` | Makes the whole row inert, e.g. while a request for it is in flight. |
 | `title` | `string` | Label rendered in the card header. |
 | `badge` | `{ label: string; intent?: BadgeIntent }` | Status badge for the row. Omit it, or leave `label` empty, to render no badge. `intent` defaults to `none`. See [`BadgeIntent`](../types.ts) for the available intents. |
 | `description` | `ReactNode` | Text under the title. |
@@ -25,7 +29,7 @@ A drag-and-drop sortable list of cards, built on the `@wordpress/ui` Card. Each 
 
 ## `CardListRow`
 
-The card a sortable row is built from, for a list that isn't sortable. It takes one `DraggableItem` as `item`, without the drag handle and move buttons, and passes other props to the card. `size="large"` uses even padding, for a row that stands alone on a page. Lay the rows out with `Stack`.
+The card a sortable row is built from, for a list that isn't sortable. It takes one `DraggableItem` as `item`, without the drag handle and move buttons, and passes other props to the card. `disabled` disables its toggle and actions menu. `size="large"` uses even padding, for a row that stands alone on a page. Lay the rows out with `Stack`.
 
 ## Usage
 
