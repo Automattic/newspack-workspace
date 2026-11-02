@@ -212,6 +212,43 @@
 	}
 }
 
+.overlay-menu__panel .wp-block-navigation:not(.is-style-flatten) .has-child.open-on-click {
+	flex-wrap: wrap;
+
+	> .wp-block-navigation__submenu-container {
+		background: transparent;
+		border: 0;
+		border-radius: 0;
+		box-shadow: none;
+		color: inherit;
+		flex-basis: 100%;
+		padding: 0 0 0 var(--wp--preset--spacing--30, 1rem);
+		position: static;
+		transition:
+			opacity motion.$duration-reveal motion.$ease-out,
+			visibility 0s linear motion.$duration-reveal,
+			width 0s linear motion.$duration-reveal,
+			height 0s linear motion.$duration-reveal,
+			min-width 0s linear motion.$duration-reveal,
+			overflow 0s linear motion.$duration-reveal;
+		transition-behavior: allow-discrete;
+	}
+
+	> .wp-block-navigation-submenu__toggle[aria-expanded="true"] ~ .wp-block-navigation__submenu-container {
+		transition: opacity motion.$duration-reveal motion.$ease-out;
+	}
+
+	> .wp-block-navigation__submenu-icon svg {
+		transition: transform motion.$duration-indicator motion.$ease-out;
+	}
+
+	@include motion.reduced-motion {
+		> .wp-block-navigation__submenu-icon svg {
+			transition: none;
+		}
+	}
+}
+
 // Lock document scrolling while any overlay menu instance is open.
 body:is(
 	[class^="menu-open--overlay-menu-"],
