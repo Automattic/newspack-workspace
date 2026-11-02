@@ -40,6 +40,18 @@ class Subscribers_Donors {
 	public const KIND_FORMER = 'former';
 
 	/**
+	 * How many of a reader's latest completed orders the last-donation lookup reads.
+	 *
+	 * The lookup runs once per One-time donor row, so it can't page through a
+	 * reader's whole history the way the ESP sync's one-off lookup does. A donation
+	 * older than this many completed orders is not found, and the row has nothing to
+	 * link. Raising it makes every One-time donor row on a page read more orders.
+	 *
+	 * @var int
+	 */
+	public const ORDER_SCAN_LIMIT = 50;
+
+	/**
 	 * Whether donor labels apply on this site.
 	 *
 	 * Only WooCommerce donations can be told apart. On the other platforms the
@@ -115,5 +127,41 @@ class Subscribers_Donors {
 			return self::KIND_ONE_TIME;
 		}
 		return '';
+	}
+
+	/**
+	 * A reader's latest completed donation order.
+	 *
+	 * Reads the reader's newest completed orders, up to ORDER_SCAN_LIMIT, and stops
+	 * at the first donation. Only a completed order counts: a processing one may
+	 * still fail. The query asks for `shop_order` because WooCommerce otherwise
+	 * returns refunds alongside orders. Callers check is_enabled() first and ask
+	 * only for One-time donors, so no other row pays for this query.
+	 *
+	 * @param int $user_id The reader's user ID.
+	 *
+	 * @return \WC_Order|null The order, or null when none of the scanned orders is a
+	 *                        donation.
+	 */
+	public static function latest_donation_order( int $user_id ): ?\WC_Order {
+		if ( ! function_exists( 'wc_get_orders' ) ) {
+			return null;
+		}
+		$orders = \wc_get_orders(
+			[
+				'customer_id' => $user_id,
+				'status'      => [ 'wc-completed' ],
+				'type'        => 'shop_order',
+				'limit'       => self::ORDER_SCAN_LIMIT,
+				'orderby'     => 'date',
+				'order'       => 'DESC',
+			]
+		);
+		foreach ( $orders as $order ) {
+			if ( Donations::is_donation_order( $order ) ) {
+				return $order;
+			}
+		}
+		return null;
 	}
 }

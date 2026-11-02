@@ -9,6 +9,7 @@ use Newspack\Donations;
 use Newspack\Group_Subscription;
 use Newspack\Group_Subscription_Settings;
 use Newspack\Reader_Data;
+use Newspack\Subscribers_Donors;
 use Newspack\WooCommerce_Products;
 
 /**
@@ -252,6 +253,21 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 			$data['date_paid'] = $date_paid;
 		}
 		return new WC_Order( $data );
+	}
+
+	/**
+	 * Complete a run of non-donation orders for a reader, all newer than any
+	 * donation order the tests give them.
+	 *
+	 * @param int $customer_id The reader's user ID.
+	 * @param int $product_id  A product that is not a donation.
+	 * @param int $count       How many orders to create.
+	 */
+	private function create_newer_orders( int $customer_id, int $product_id, int $count ) {
+		$first_day = strtotime( '2026-02-01 12:00:00 UTC' );
+		for ( $i = 0; $i < $count; $i++ ) {
+			$this->create_donation_order( $customer_id, $product_id, 'completed', gmdate( 'Y-m-d H:i:s', $first_day + $i * DAY_IN_SECONDS ) );
+		}
 	}
 
 	/**
@@ -2206,6 +2222,123 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		$this->create_individual_subscription( $reader_id, 'active', $this->create_subscription_product( 'Digital' ) );
 
 		$this->assertSame( '', $this->list_row( $reader_id )['donor']['kind'] );
+	}
+
+	/**
+	 * A One-time donor's row links their latest completed donation order. Orders for
+	 * other products, even newer ones, are skipped.
+	 */
+	public function test_last_donation_is_the_latest_completed_donation_order() {
+		$this->login_admin();
+		$donation_product_id = $this->create_donation_product( 'simple' );
+		$other_product_id    = $this->create_subscription_product( 'Digital', 'simple' );
+		$reader_id           = $this->create_reader( 'Giver' );
+		$this->flag_donor( $reader_id );
+		$this->create_donation_order( $reader_id, $donation_product_id, 'completed', '2026-03-01 12:00:00' );
+		$june_order = $this->create_donation_order( $reader_id, $donation_product_id, 'completed', '2026-06-01 12:00:00' );
+		$this->create_donation_order( $reader_id, $other_product_id, 'completed', '2026-07-01 12:00:00' );
+
+		$last_donation = $this->list_row( $reader_id )['donor']['lastDonation'];
+
+		$this->assertNotNull( $last_donation );
+		$this->assertSame( '2026-06-01', $last_donation['date'] );
+		$this->assertSame( $june_order->get_edit_order_url(), $last_donation['editUrl'] );
+	}
+
+	/**
+	 * The flag is enough to read as One-time, but with no order behind it there is
+	 * nothing to link.
+	 */
+	public function test_a_flag_only_one_time_donor_has_no_last_donation() {
+		$this->login_admin();
+		$reader_id = $this->create_reader( 'Flag Only' );
+		$this->flag_donor( $reader_id );
+
+		$donor = $this->list_row( $reader_id )['donor'];
+
+		$this->assertSame( 'one-time', $donor['kind'] );
+		$this->assertNull( $donor['lastDonation'] );
+	}
+
+	/**
+	 * Only a completed order counts as a gift. A processing one may still fail.
+	 */
+	public function test_a_processing_donation_order_is_not_a_last_donation() {
+		$this->login_admin();
+		$reader_id = $this->create_reader( 'Waiting' );
+		$this->flag_donor( $reader_id );
+		$this->create_donation_order( $reader_id, $this->create_donation_product( 'simple' ), 'processing' );
+
+		$this->assertNull( $this->list_row( $reader_id )['donor']['lastDonation'] );
+	}
+
+	/**
+	 * The lookup reads a bounded number of the reader's latest completed orders. A
+	 * donation older than all of them is not found: the row still reads One-time,
+	 * with nothing to link, instead of the page paying for an unbounded scan.
+	 */
+	public function test_last_donation_beyond_the_scan_limit_is_null() {
+		$this->login_admin();
+		$reader_id        = $this->create_reader( 'Long Ago' );
+		$other_product_id = $this->create_subscription_product( 'Digital', 'simple' );
+		$this->flag_donor( $reader_id );
+		$this->create_donation_order( $reader_id, $this->create_donation_product( 'simple' ), 'completed', '2026-01-01 12:00:00' );
+		$this->create_newer_orders( $reader_id, $other_product_id, Subscribers_Donors::ORDER_SCAN_LIMIT );
+
+		$donor = $this->list_row( $reader_id )['donor'];
+
+		$this->assertSame( 'one-time', $donor['kind'] );
+		$this->assertNull( $donor['lastDonation'] );
+	}
+
+	/**
+	 * One order inside the bound is still found, so the limit is not off by one.
+	 */
+	public function test_last_donation_at_the_edge_of_the_scan_limit_is_found() {
+		$this->login_admin();
+		$reader_id        = $this->create_reader( 'Just In Range' );
+		$other_product_id = $this->create_subscription_product( 'Digital', 'simple' );
+		$this->flag_donor( $reader_id );
+		$donation = $this->create_donation_order( $reader_id, $this->create_donation_product( 'simple' ), 'completed', '2026-01-01 12:00:00' );
+		$this->create_newer_orders( $reader_id, $other_product_id, Subscribers_Donors::ORDER_SCAN_LIMIT - 1 );
+
+		$last_donation = $this->list_row( $reader_id )['donor']['lastDonation'];
+
+		$this->assertNotNull( $last_donation );
+		$this->assertSame( $donation->get_edit_order_url(), $last_donation['editUrl'] );
+	}
+
+	/**
+	 * Only a One-time donor's row looks up orders for the donor label. A non-donor,
+	 * a Recurring donor and a Former donor add none, so the page costs the same as
+	 * it does with donor labels off.
+	 */
+	public function test_other_rows_add_no_order_lookups() {
+		global $wc_mocks_get_orders_calls;
+		$this->login_admin();
+		$donation_product_id = $this->create_donation_product();
+		$this->create_reader( 'Plain' );
+		$recurring_id = $this->create_reader( 'Recurring' );
+		$this->create_individual_subscription( $recurring_id, 'active', $donation_product_id );
+		$former_id = $this->create_reader( 'Former' );
+		$this->create_individual_subscription( $former_id, 'cancelled', $donation_product_id );
+
+		$wc_mocks_get_orders_calls = 0;
+		$with_donor_labels         = $this->dispatch()->get_data();
+		$lookups_with_labels       = $wc_mocks_get_orders_calls;
+
+		update_option( Donations::NEWSPACK_READER_REVENUE_PLATFORM, 'nrh' );
+		try {
+			$wc_mocks_get_orders_calls = 0;
+			$this->dispatch();
+			$lookups_without_labels = $wc_mocks_get_orders_calls;
+		} finally {
+			delete_option( Donations::NEWSPACK_READER_REVENUE_PLATFORM );
+		}
+
+		$this->assertCount( 3, $with_donor_labels['items'], 'The measured page is the three readers.' );
+		$this->assertGreaterThan( 0, $lookups_without_labels, 'The row already looks up its last payment, so the comparison has a baseline.' );
+		$this->assertSame( $lookups_without_labels, $lookups_with_labels );
 	}
 
 	/**

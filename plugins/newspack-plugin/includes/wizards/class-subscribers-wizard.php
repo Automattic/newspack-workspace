@@ -1542,6 +1542,10 @@ class Subscribers_Wizard extends Wizard {
 	 * matches the existing convention elsewhere in the plugin
 	 * (Sync\Contact_Metadata\Engagement::get_latest_order).
 	 *
+	 * A One-time donor's row adds one more bounded order query: the latest donation
+	 * among the reader's newest Subscribers_Donors::ORDER_SCAN_LIMIT completed
+	 * orders. Every other row adds none, Recurring and Former donors included.
+	 *
 	 * @param \WP_User $user     The reader user.
 	 * @param bool     $detailed Whether to hydrate the per-subscription billing
 	 *                           detail the person profile renders. Off for the
@@ -1597,10 +1601,24 @@ class Subscribers_Wizard extends Wizard {
 			// holds. Network entries are never marked as donations, so they don't count.
 			$donations = array_filter( $subscriptions, fn( $subscription ) => ! empty( $subscription['isDonation'] ) );
 
+			$donor_kind = Subscribers_Donors::kind( $user_id, array_column( $donations, 'status' ) );
+
+			// Only a One-time donor has a single gift worth linking. The other kinds
+			// already show their donation subscription, and an order lookup for them
+			// would add a query to each of their rows.
+			$last_donation = null;
+			$latest_order  = Subscribers_Donors::KIND_ONE_TIME === $donor_kind ? Subscribers_Donors::latest_donation_order( $user_id ) : null;
+			if ( $latest_order ) {
+				$paid          = $latest_order->get_date_paid();
+				$last_donation = [
+					'date'    => $this->local_date( $paid ? $paid->getTimestamp() : null ),
+					'editUrl' => $latest_order->get_edit_order_url(),
+				];
+			}
+
 			$subscriber['donor'] = [
-				'kind'         => Subscribers_Donors::kind( $user_id, array_column( $donations, 'status' ) ),
-				// Reserved for a One-time donor's latest gift; null for every other kind.
-				'lastDonation' => null,
+				'kind'         => $donor_kind,
+				'lastDonation' => $last_donation,
 			];
 		}
 
