@@ -1590,6 +1590,20 @@ class Subscribers_Wizard extends Wizard {
 			'paymentMethods' => $detailed ? Subscribers_Payments::payment_methods_for_user( $user_id ) : [],
 		];
 
+		// Off WooCommerce the key is absent, not empty, so a site that can't tell
+		// donors apart never shows a half-answer.
+		if ( Subscribers_Donors::is_enabled() ) {
+			// The rules read the mapped status of each donation subscription the reader
+			// holds. Network entries are never marked as donations, so they don't count.
+			$donations = array_filter( $subscriptions, fn( $subscription ) => ! empty( $subscription['isDonation'] ) );
+
+			$subscriber['donor'] = [
+				'kind'         => Subscribers_Donors::kind( $user_id, array_column( $donations, 'status' ) ),
+				// Reserved for a One-time donor's latest gift; null for every other kind.
+				'lastDonation' => null,
+			];
+		}
+
 		if ( $detailed ) {
 			/**
 			 * The Newspack Network site a reader first signed up on, when it isn't
@@ -1644,6 +1658,8 @@ class Subscribers_Wizard extends Wizard {
 				'status'          => self::map_subscription_status( $subscription->get_status() ),
 				'editUrl'         => $this->subscription_edit_url( $subscription ),
 				'isComplimentary' => Complimentary_Access::is_complimentary_order( $subscription ),
+				// Lets the donor badge and the client tell a donation apart from a plan.
+				'isDonation'      => Donations::is_donation_order( $subscription ),
 			];
 			$out[] = $detailed
 				? array_merge(
@@ -1759,6 +1775,8 @@ class Subscribers_Wizard extends Wizard {
 				'status'          => self::map_subscription_status( $network['status'] ),
 				'editUrl'         => esc_url_raw( $network['edit_url'] ),
 				'isComplimentary' => false,
+				// Network records carry no product data, so only this site's donation subscriptions count.
+				'isDonation'      => false,
 				'managedOn'       => [
 					'name' => $network['site_name'],
 					'url'  => esc_url_raw( $network['site_url'] ),
@@ -2982,6 +3000,10 @@ class Subscribers_Wizard extends Wizard {
 					// is published here so there is one authority instead of two
 					// constants that can drift apart silently.
 					'avatarBatchCap'          => self::AVATAR_BATCH_CAP,
+					// Whether the donor badge and filter apply. The server omits the
+					// `donor` key when they don't, so the client keys off this rather
+					// than inferring it from the rows.
+					'donorsEnabled'           => Subscribers_Donors::is_enabled(),
 				]
 			) . ';',
 			'before'

@@ -12,8 +12,11 @@
  * @package Newspack\Tests
  */
 
+use Newspack\Donations;
 use Newspack\Group_Subscription;
 use Newspack\Group_Subscription_Settings;
+use Newspack\Reader_Data;
+use Newspack\WooCommerce_Products;
 
 /**
  * GET /wizard/newspack-subscribers/subscribers/<id>.
@@ -83,6 +86,7 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 		$this->gift_filters      = [];
 		// The gifting stub's recipient map is static and shared with other test files.
 		\WCS_Gifting::$recipients = [];
+		Donations::reset_flagged_donation_product_ids_cache();
 		Group_Subscription::reset_cache();
 		Group_Subscription_Settings::clear_group_subscription_ids_cache();
 		do_action( 'rest_api_init' );
@@ -257,6 +261,59 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 				'cancelled'            => 'cancelled' === $status ? '2026-06-01 09:00:00' : '',
 			],
 		];
+	}
+
+	/**
+	 * Create a donation product: a published product flagged as a donation the way
+	 * the donation settings flag it, with a mock WC product under the same ID.
+	 *
+	 * @param string $type WooCommerce product type, e.g. 'subscription' or 'simple'.
+	 *
+	 * @return int The product ID.
+	 */
+	private function create_donation_product( string $type = 'simple' ): int {
+		$product_id = self::factory()->post->create(
+			[
+				'post_type'   => 'product',
+				'post_title'  => 'Donation',
+				'post_status' => 'publish',
+			]
+		);
+		update_post_meta( $product_id, WooCommerce_Products::DONATION_FLAG_META_KEY, wc_bool_to_string( true ) );
+		wc_create_mock_product(
+			[
+				'id'   => $product_id,
+				'name' => 'Donation',
+				'type' => $type,
+			]
+		);
+		return $product_id;
+	}
+
+	/**
+	 * Create a completed order for a donation product and add it to the mock order database.
+	 *
+	 * @param int $customer_id The donor's user ID.
+	 * @param int $product_id  The donation product ID.
+	 *
+	 * @return WC_Order
+	 */
+	private function create_donation_order( int $customer_id, int $product_id ): WC_Order {
+		return new WC_Order(
+			[
+				'customer_id' => $customer_id,
+				'status'      => 'completed',
+				'total'       => 25,
+				'items'       => [
+					new WC_Order_Item_Product(
+						[
+							'product_id' => $product_id,
+							'quantity'   => 1,
+						]
+					),
+				],
+			]
+		);
 	}
 
 	/**
@@ -584,7 +641,7 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 		$row = $items[0];
 
 		$this->assertSame(
-			[ 'editUrl', 'id', 'isComplimentary', 'plan', 'status' ],
+			[ 'editUrl', 'id', 'isComplimentary', 'isDonation', 'plan', 'status' ],
 			$this->sorted_keys( $row['subscriptions'][0] ),
 			'A list row\'s individual subscription is the lean shape — no billing keys.'
 		);
@@ -890,6 +947,7 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 				'status'          => 'active',
 				'editUrl'         => 'https://node-b.example.test/wp-admin/post.php?post=500&action=edit',
 				'isComplimentary' => false,
+				'isDonation'      => false,
 				'managedOn'       => [
 					'name' => 'Node Daily',
 					'url'  => 'https://node-b.example.test',
@@ -1137,6 +1195,21 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 
 		$this->stub_network( [], false );
 		$this->assertSame( $without_callbacks, $this->dispatch( $reader_id )->get_data() );
+	}
+
+	/**
+	 * The profile header badges the same donor kind the list row does, so the
+	 * single read carries the `donor` key too.
+	 */
+	public function test_detail_read_includes_the_donor_kind() {
+		$this->login_admin();
+		$reader_id = $this->create_reader( 'Giver' );
+		$this->create_donation_order( $reader_id, $this->create_donation_product() );
+		Reader_Data::set_is_donor( time(), [ 'user_id' => $reader_id ] );
+
+		$subscriber = $this->dispatch( $reader_id )->get_data();
+
+		$this->assertSame( 'one-time', $subscriber['donor']['kind'] );
 	}
 
 	/**
