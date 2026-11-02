@@ -1,4 +1,5 @@
 @use "sass:color";
+@use "newspack-motion" as motion;
 
 // Secondary Color
 $color__secondary: #757575;
@@ -27,17 +28,36 @@ $width__tablet: 782px;
 	margin: 0 !important;
 	max-width: 100% !important;
 	opacity: 1;
+	overflow: hidden;
 	position: fixed;
-	transition: opacity 0.5s ease-in-out;
+	transition:
+		opacity 0s,
+		visibility 0s,
+		z-index 0s;
+	visibility: visible;
 	width: 100% !important;
 	z-index: 99999;
 
 	&.hidden {
 		opacity: 0;
+		transition:
+			opacity 0s linear motion.$duration-modal,
+			visibility 0s linear motion.$duration-modal,
+			z-index 0s linear motion.$duration-modal;
+		visibility: hidden;
 		z-index: -1;
 
+		.newspack-lightbox-overlay {
+			opacity: 0 !important;
+		}
+
 		.newspack-popup-wrapper {
-			transform: translateY(5rem);
+			opacity: 0;
+			transform: scale(motion.$enter-scale);
+
+			@include motion.reduced-motion {
+				transform: none;
+			}
 		}
 	}
 
@@ -62,9 +82,14 @@ $width__tablet: 782px;
 		padding: 0;
 		position: absolute;
 		top: 0;
+		transition: opacity motion.$duration-modal motion.$ease-out;
 		user-select: none;
 		width: 100%;
 		z-index: 0;
+
+		@include motion.reduced-motion {
+			transition: opacity motion.$duration-modal motion.$ease-color;
+		}
 	}
 
 	.newspack-popup-wrapper {
@@ -74,8 +99,14 @@ $width__tablet: 782px;
 		overflow: hidden;
 		position: relative;
 		transform: none;
-		transition: transform 0.2s ease-in-out;
+		transition:
+			opacity motion.$duration-modal motion.$ease-out,
+			transform motion.$duration-modal motion.$ease-out;
 		z-index: 1;
+
+		@include motion.reduced-motion {
+			transition: opacity motion.$duration-modal motion.$ease-color;
+		}
 	}
 
 	.newspack-popup {
@@ -170,11 +201,18 @@ $width__tablet: 782px;
 			}
 
 			&:active,
-			&:focus,
-			&:hover {
+			&:focus {
 				background: #111;
 				color: white;
 				opacity: 1;
+			}
+
+			@include motion.hover {
+				&:hover {
+					background: #111;
+					color: white;
+					opacity: 1;
+				}
 			}
 
 			&:focus {
@@ -209,10 +247,14 @@ $width__tablet: 782px;
 		height: 36px;
 		justify-content: center;
 		margin: 0;
+		opacity: 1;
 		padding: 6px;
 		position: absolute;
 		right: 0;
 		top: 0;
+		transition:
+			background-color motion.$duration-color motion.$ease-color,
+			opacity motion.$duration-color motion.$ease-color;
 		width: 36px;
 		z-index: 10;
 
@@ -221,9 +263,14 @@ $width__tablet: 782px;
 			flex: 0 0 24px;
 		}
 
-		&:active,
-		&:hover {
+		&:active {
 			opacity: 0.6;
+		}
+
+		@include motion.hover {
+			&:hover {
+				opacity: 0.6;
+			}
 		}
 
 		&:focus {
@@ -241,10 +288,16 @@ $width__tablet: 782px;
 				width: 48px;
 
 				&:active,
-				&:focus,
-				&:hover {
+				&:focus {
 					background-color: rgba(black, 0.95);
 					opacity: 1;
+				}
+
+				@include motion.hover {
+					&:hover {
+						background-color: rgba(black, 0.95);
+						opacity: 1;
+					}
 				}
 
 				&:focus {
@@ -383,6 +436,89 @@ $width__tablet: 782px;
 
 	&.newspack-lightbox-placement-center_left {
 		justify-content: flex-start;
+	}
+
+	&.newspack-lightbox-placement-top,
+	&.newspack-lightbox-placement-top_left,
+	&.newspack-lightbox-placement-top_right,
+	&.newspack-lightbox-placement-bottom,
+	&.newspack-lightbox-placement-bottom_left,
+	&.newspack-lightbox-placement-bottom_right,
+	&.newspack-lightbox-placement-center_left,
+	&.newspack-lightbox-placement-center_right {
+		&.hidden {
+			transition-delay: motion.$duration-sheet;
+
+			@include motion.reduced-motion {
+				transition-delay: motion.$duration-modal;
+			}
+		}
+
+		.newspack-lightbox-overlay {
+			transition-duration: motion.$duration-sheet;
+
+			@include motion.reduced-motion {
+				transition-duration: motion.$duration-modal;
+			}
+		}
+
+		.newspack-popup-wrapper {
+			transition: transform motion.$duration-sheet motion.$ease-drawer;
+
+			@include motion.reduced-motion {
+				transition: opacity motion.$duration-modal motion.$ease-color;
+			}
+		}
+
+		&.hidden .newspack-popup-wrapper {
+			opacity: 1;
+
+			@include motion.reduced-motion {
+				opacity: 0;
+			}
+		}
+	}
+
+	&.newspack-lightbox-placement-top,
+	&.newspack-lightbox-placement-top_left,
+	&.newspack-lightbox-placement-top_right {
+		&.hidden .newspack-popup-wrapper {
+			transform: translateY(calc(-100% - var(--wp-admin--admin-bar--height, 0px)));
+
+			@include motion.reduced-motion {
+				transform: none;
+			}
+		}
+	}
+
+	&.newspack-lightbox-placement-bottom,
+	&.newspack-lightbox-placement-bottom_left,
+	&.newspack-lightbox-placement-bottom_right {
+		&.hidden .newspack-popup-wrapper {
+			transform: translateY(100%);
+
+			@include motion.reduced-motion {
+				transform: none;
+			}
+		}
+	}
+
+	&.newspack-lightbox-placement-center_left.hidden .newspack-popup-wrapper,
+	[dir="rtl"] &.newspack-lightbox-placement-center_right.hidden .newspack-popup-wrapper {
+		transform: translateX(-100%);
+
+		@include motion.reduced-motion {
+			transform: none;
+		}
+	}
+
+	&.newspack-lightbox-placement-center_right.hidden .newspack-popup-wrapper,
+	[dir="rtl"] &.newspack-lightbox-placement-center_left.hidden .newspack-popup-wrapper {
+		transform: translateX(100%);
+
+		@include motion.reduced-motion {
+			transform: none;
+		}
 	}
 
 	/* Background */
