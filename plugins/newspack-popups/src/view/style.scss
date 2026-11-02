@@ -294,12 +294,12 @@ $width__tablet: 782px;
 
 				@include motion.hover {
 					&:hover {
-						box-shadow: inset 0 0 0 100vmax rgba(black, 0.2);
+						box-shadow: inset 0 0 0 100vmax rgba(black, 0.15);
 					}
 				}
 
 				&:active {
-					box-shadow: inset 0 0 0 100vmax rgba(black, 0.35);
+					box-shadow: inset 0 0 0 100vmax rgba(black, 0.25);
 				}
 			}
 		}
