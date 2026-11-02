@@ -6,13 +6,14 @@
  */
 
 use Newspack_Network\Incoming_Events\Reader_Registered;
+use Newspack_Network\Incoming_Events\User_Manually_Synced;
 use Newspack_Network\Incoming_Events\User_Updated;
 use Newspack_Network\User_Update_Watcher;
 
 require_once __DIR__ . '/mock-reader-activation.php';
 
 /**
- * These two incoming-event handlers resolve the target account by email
+ * These incoming-event handlers resolve the target account by email
  * alone. The tests below pin the boundary that keeps that resolution from
  * reaching an account whose role was set outside the network sync.
  *
@@ -270,5 +271,116 @@ class Test_Incoming_User_Sync_Role_Boundary extends WP_UnitTestCase {
 		$event->maybe_update_user();
 
 		$this->assertSame( 'Updated bio', get_user_meta( $user_id, 'description', true ) );
+	}
+
+	/**
+	 * Builds a manual-sync event for the given email, as a Node sends it.
+	 *
+	 * @param string $email The email the event resolves its target by.
+	 * @param array  $roles The roles the sending site holds for that account.
+	 * @return User_Manually_Synced
+	 */
+	private function manual_sync_event( $email, $roles ) {
+		return new User_Manually_Synced(
+			'https://node.example.test',
+			[
+				'email'   => $email,
+				'user_id' => 42,
+				'role'    => $roles,
+				'prop'    => [
+					'display_name' => 'Replacement Name',
+					'user_email'   => 'replacement@example.test',
+					'user_url'     => 'https://replacement.example.test',
+				],
+				'meta'    => [
+					'description' => 'Replacement bio',
+				],
+			],
+			time()
+		);
+	}
+
+	/**
+	 * A manual sync carrying only reader roles leaves an account that holds a
+	 * staff role here as it is: no demotion, no new display name or email. A
+	 * staff demotion therefore no longer spreads by manual sync. The URL and
+	 * watched meta still apply, as they do for User_Updated.
+	 */
+	public function test_manual_sync_with_reader_roles_does_not_demote_or_rename_staff_account() {
+		$user_id = $this->factory->user->create(
+			[
+				'role'         => 'administrator',
+				'user_email'   => 'owner@example.test',
+				'display_name' => 'Original Name',
+			]
+		);
+
+		$this->manual_sync_event( 'owner@example.test', [ 'subscriber' ] )->maybe_sync_user();
+
+		$user = get_user_by( 'id', $user_id );
+		$this->assertSame( [ 'administrator' ], $user->roles );
+		$this->assertSame( 'Original Name', $user->display_name );
+		$this->assertSame( 'owner@example.test', $user->user_email );
+		$this->assertSame( 'https://replacement.example.test', $user->user_url );
+		$this->assertSame( 'Replacement bio', get_user_meta( $user_id, 'description', true ) );
+	}
+
+	/**
+	 * A payload with no roles at all would otherwise strip every role from the
+	 * target, so it gets the same treatment as a reader-only one.
+	 */
+	public function test_manual_sync_with_no_roles_leaves_staff_account_roles() {
+		$user_id = $this->factory->user->create(
+			[
+				'role'       => 'editor',
+				'user_email' => 'byline@example.test',
+			]
+		);
+
+		$this->manual_sync_event( 'byline@example.test', [] )->maybe_sync_user();
+
+		$this->assertSame( [ 'editor' ], get_user_by( 'id', $user_id )->roles );
+	}
+
+	/**
+	 * Propagating a role outside the reader set is what manual sync is for, and
+	 * still applies in full, identity fields included.
+	 */
+	public function test_manual_sync_still_propagates_a_staff_role() {
+		$user_id = $this->factory->user->create(
+			[
+				'role'         => 'subscriber',
+				'user_email'   => 'promoted@example.test',
+				'display_name' => 'Original Name',
+			]
+		);
+
+		$this->manual_sync_event( 'promoted@example.test', [ 'administrator' ] )->maybe_sync_user();
+
+		$user = get_user_by( 'id', $user_id );
+		$this->assertSame( [ 'administrator' ], $user->roles );
+		$this->assertSame( 'Replacement Name', $user->display_name );
+		$this->assertSame( 'replacement@example.test', $user->user_email );
+	}
+
+	/**
+	 * A reader account still takes the incoming identity fields: the guard
+	 * reaches only accounts holding another role.
+	 */
+	public function test_manual_sync_still_updates_reader_account() {
+		$user_id = $this->factory->user->create(
+			[
+				'role'         => 'subscriber',
+				'user_email'   => 'reader@example.test',
+				'display_name' => 'Original Name',
+			]
+		);
+
+		$this->manual_sync_event( 'reader@example.test', [ 'subscriber' ] )->maybe_sync_user();
+
+		$user = get_user_by( 'id', $user_id );
+		$this->assertSame( [ 'subscriber' ], $user->roles );
+		$this->assertSame( 'Replacement Name', $user->display_name );
+		$this->assertSame( 'replacement@example.test', $user->user_email );
 	}
 }
