@@ -3,7 +3,7 @@
 
 .wp-element-button,
 .wp-block-button__link {
-	&:where(:not(.newspack-ui__button, .newspack-ui .button, .newspack-ui .woocommerce-Button)) {
+	&:where(:not(.newspack-ui__button, .newspack-ui .button, .newspack-ui .woocommerce-Button, [contenteditable="true"])) {
 		transition:
 			background-color motion.$duration-color motion.$ease-color,
 			border-color motion.$duration-color motion.$ease-color,
@@ -22,7 +22,30 @@
 
 		&:focus-visible {
 			@include mixins.focus-fill;
+			transition:
+				background-color motion.$duration-color motion.$ease-color,
+				color motion.$duration-color motion.$ease-color,
+				opacity motion.$duration-color motion.$ease-color,
+				transform motion.$duration-press motion.$ease-out;
 		}
+	}
+}
+
+.wc-block-components-button.wp-element-button:where(:not(.newspack-ui__button, .newspack-ui .button, .newspack-ui .woocommerce-Button, [contenteditable="true"])) {
+	transition:
+		background-color motion.$duration-color motion.$ease-color,
+		border-color motion.$duration-color motion.$ease-color,
+		box-shadow motion.$duration-color motion.$ease-color,
+		color motion.$duration-color motion.$ease-color,
+		opacity motion.$duration-color motion.$ease-color,
+		transform motion.$duration-press motion.$ease-out;
+
+	&:focus-visible {
+		transition:
+			background-color motion.$duration-color motion.$ease-color,
+			color motion.$duration-color motion.$ease-color,
+			opacity motion.$duration-color motion.$ease-color,
+			transform motion.$duration-press motion.$ease-out;
 	}
 }
 
@@ -48,7 +71,11 @@
 		word-break: normal;
 
 		&:focus-visible {
-			transition: none;
+			transition:
+				background-color motion.$duration-color motion.$ease-color,
+				color motion.$duration-color motion.$ease-color,
+				opacity motion.$duration-color motion.$ease-color,
+				transform motion.$duration-press motion.$ease-out;
 		}
 
 		&.has-background:not(.has-accent-2-background-color) {

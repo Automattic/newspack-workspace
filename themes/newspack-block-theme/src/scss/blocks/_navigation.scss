@@ -12,10 +12,8 @@
 	}
 
 	&.has-text-color:not(.has-contrast-color) {
-		@include motion.hover {
-			a:not(.wp-element-button):hover {
-				color: color-mix(in srgb, currentcolor 80%, transparent) !important;
-			}
+		a:not(.wp-element-button):hover {
+			color: color-mix(in srgb, currentcolor 80%, transparent) !important;
 		}
 	}
 
@@ -43,7 +41,7 @@
 	// Overlay Menu
 	&__responsive-container {
 		&.is-menu-open {
-			animation-duration: motion.$duration-reveal;
+			animation-duration: motion.$duration-modal;
 			animation-timing-function: motion.$ease-out;
 			padding: var(--wp--custom--spacing--85) var(--wp--preset--spacing--30) var(--wp--preset--spacing--30);
 

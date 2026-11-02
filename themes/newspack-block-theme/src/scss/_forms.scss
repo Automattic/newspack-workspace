@@ -171,6 +171,10 @@ input[type="submit"]:not(.newspack-ui__button) {
 
 	&:focus-visible {
 		@include mixins.focus-fill;
+		transition:
+			background motion.$duration-color motion.$ease-color,
+			color motion.$duration-color motion.$ease-color,
+			transform motion.$duration-press motion.$ease-out;
 	}
 
 	&:disabled {

@@ -96,6 +96,7 @@ body .jetpack-instant-search {
 			visibility 0s;
 
 		&.is-hidden {
+			pointer-events: none;
 			transition:
 				opacity motion.$duration-modal motion.$ease-out,
 				visibility 0s linear motion.$duration-modal;

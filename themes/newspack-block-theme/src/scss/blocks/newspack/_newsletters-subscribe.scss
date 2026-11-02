@@ -3,7 +3,11 @@
 .wp-block-newspack-newsletters-subscribe {
 	&:not(.is-style-legacy):not(.is-style-modern--grid) {
 		.submit-button {
-			transition: opacity motion.$duration-color motion.$ease-color;
+			transition:
+				opacity motion.$duration-color motion.$ease-color,
+				background-color motion.$duration-color motion.$ease-color,
+				color motion.$duration-color motion.$ease-color,
+				transform motion.$duration-press motion.$ease-out;
 
 			@include motion.hover {
 				&:hover {

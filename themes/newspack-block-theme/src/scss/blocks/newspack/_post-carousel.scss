@@ -229,6 +229,13 @@
 
 		&:focus-visible {
 			@include mixins.focus-line;
+			transition:
+				opacity motion.$duration-indicator motion.$ease-out,
+				width motion.$duration-indicator motion.$ease-out;
+
+			@include motion.reduced-motion {
+				transition: opacity motion.$duration-indicator motion.$ease-out;
+			}
 		}
 
 		.has-text-color:not(.has-contrast-color) &:not(.swiper-pagination-bullet-active) {
