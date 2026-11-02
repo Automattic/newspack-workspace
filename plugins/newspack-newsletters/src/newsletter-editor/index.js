@@ -17,6 +17,7 @@ import InitModal from '../components/init-modal';
 import { getServiceProvider } from '../service-providers';
 import Layout from './layout/';
 import Sidebar from './sidebar/';
+import ApplyCampaignDefaults from './campaign-defaults';
 import Testing from './testing/';
 import { Styling, ApplyStyling } from './styling/';
 import { PublicSettings } from './public';
@@ -122,6 +123,8 @@ function NewsletterEdit( { apiFetchWithErrorHandling, setInFlightForAsync, inFli
 			</PluginSidebarMoreMenuItem>
 
 			{ ! isLayout && <PluginPostStatusInfo>{ isConnected && <PublicSettings /> }</PluginPostStatusInfo> }
+
+			{ ! isLayout && isSupportedESP() && ! isManualProvider() && <ApplyCampaignDefaults /> }
 
 			{ ! isLayout && isSupportedESP() && ! isManualProvider() && (
 				<PluginDocumentSettingPanel name="newsletters-settings-panel" title={ __( 'Newsletter Campaign', 'newspack-newsletters' ) }>
