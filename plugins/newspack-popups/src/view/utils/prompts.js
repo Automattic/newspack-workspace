@@ -48,6 +48,11 @@ const getTransitionTime = element => {
 export const closeOverlay = event => {
 	const parent = event.currentTarget.closest( '.newspack-lightbox' );
 
+	if ( parent?.classList.contains( 'hidden' ) ) {
+		event.preventDefault();
+		return;
+	}
+
 	if ( parent && parent.contains( event.currentTarget ) ) {
 		parent.classList.add( 'hidden' );
 		setTimeout( () => {
