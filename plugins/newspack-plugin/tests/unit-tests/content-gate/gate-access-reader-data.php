@@ -50,7 +50,6 @@ class Newspack_Test_Gate_Access_Reader_Data extends WP_UnitTestCase {
 	public function tear_down() {
 		wp_set_current_user( 0 );
 		\WCS_Gifting::$recipients = [];
-		set_query_var( 'edit-address', '' );
 		parent::tear_down();
 	}
 

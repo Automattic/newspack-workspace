@@ -39,7 +39,6 @@ class Newspack_Test_Subscriptions_Gifting extends WP_UnitTestCase {
 		global $subscriptions_database;
 		$subscriptions_database  = [];
 		WCS_Gifting::$recipients = [];
-		set_query_var( 'edit-address', '' );
 		parent::tear_down();
 	}
 
@@ -51,7 +50,7 @@ class Newspack_Test_Subscriptions_Gifting extends WP_UnitTestCase {
 	 *
 	 * @return array
 	 */
-	public function list_gifts_for_recipient( $subscriptions, $user_id ) {
+	public function list_gifts_for_recipient( $subscriptions, $user_id ): array {
 		foreach ( WCS_Gifting::$recipients as $subscription_id => $recipient_id ) {
 			if ( (int) $recipient_id === (int) $user_id ) {
 				$subscriptions[ $subscription_id ] = wcs_get_subscription( $subscription_id );
@@ -68,7 +67,7 @@ class Newspack_Test_Subscriptions_Gifting extends WP_UnitTestCase {
 	 *
 	 * @return \WC_Subscription
 	 */
-	private function create_gift( int $purchaser_id, int $recipient_id ) {
+	private function create_gift( int $purchaser_id, int $recipient_id ): \WC_Subscription {
 		$subscription = wcs_create_subscription(
 			[
 				'customer_id' => $purchaser_id,
@@ -84,7 +83,7 @@ class Newspack_Test_Subscriptions_Gifting extends WP_UnitTestCase {
 	 * Load the billing edit-address endpoint, where Gifting filters the
 	 * subscription list.
 	 */
-	private function view_billing_address_page() {
+	private function view_billing_address_page(): void {
 		add_filter( 'wcs_get_users_subscriptions', 'WCSG_Recipient_Addresses::get_users_subscriptions', 100, 2 );
 		set_query_var( 'edit-address', 'billing' );
 	}
