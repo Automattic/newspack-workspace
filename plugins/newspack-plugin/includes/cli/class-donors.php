@@ -33,8 +33,10 @@ class Donors {
 	 * badge in Audience > Subscribers. A reader whose donation subscription ended,
 	 * with no live one, gets `is_former_donor`. Any other reader with a completed
 	 * donation order gets `is_donor`. Readers who already have either flag are left
-	 * alone, so a repeat run flags no one new. Donation orders with no customer can't
-	 * be matched to a reader. They are skipped and counted.
+	 * alone, so a repeat run skips everyone it flagged before. A reader whose data is
+	 * full can't take a flag. The run warns about them, doesn't count them, and tries
+	 * them again next time. Donation orders with no customer can't be matched to a
+	 * reader. They are skipped and counted.
 	 *
 	 * Only runs when the donation platform is WooCommerce.
 	 *
@@ -103,8 +105,10 @@ class Donors {
 				++$already;
 				continue;
 			}
-			if ( ! $dry_run ) {
-				Reader_Data::set_is_former_donor( time(), [ 'user_id' => $user_id ] );
+			// A dry run can't know which writes would be refused, so it counts every
+			// reader it would try.
+			if ( ! $dry_run && ! self::write_flag( $user_id, 'is_former_donor' ) ) {
+				continue;
 			}
 			++$former;
 		}
@@ -140,8 +144,8 @@ class Donors {
 					++$already;
 					continue;
 				}
-				if ( ! $dry_run ) {
-					Reader_Data::set_is_donor( time(), [ 'user_id' => $user_id ] );
+				if ( ! $dry_run && ! self::write_flag( $user_id, 'is_donor' ) ) {
+					continue;
 				}
 				++$donors;
 			}
@@ -163,6 +167,34 @@ class Donors {
 				$guests
 			)
 		);
+	}
+
+	/**
+	 * Set a donor flag and confirm it was written.
+	 *
+	 * The Reader_Data setters drop the error update_item() returns when a reader
+	 * already holds the most items it allows, so the only sign of a refused write is
+	 * the flag reading false afterwards. `is_former_donor` can also come back false
+	 * after a half write: the setter stores `is_donor = false` in the last free slot
+	 * and is refused the second key.
+	 *
+	 * @param int    $user_id The reader's user ID.
+	 * @param string $flag    The flag to set: `is_donor` or `is_former_donor`.
+	 *
+	 * @return bool Whether the flag now reads true.
+	 */
+	private static function write_flag( int $user_id, string $flag ): bool {
+		$data = [ 'user_id' => $user_id ];
+		if ( 'is_former_donor' === $flag ) {
+			Reader_Data::set_is_former_donor( time(), $data );
+		} else {
+			Reader_Data::set_is_donor( time(), $data );
+		}
+		if ( Reader_Data::get_bool( $user_id, $flag ) ) {
+			return true;
+		}
+		WP_CLI::warning( sprintf( 'Could not set `%s` for user %d. The reader\'s data is full.', $flag, $user_id ) );
+		return false;
 	}
 
 	/**

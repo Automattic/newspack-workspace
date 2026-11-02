@@ -368,6 +368,93 @@ class Test_Donors_Backfill extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Run the command in a real run with every reader's data capped at $max_items keys.
+	 *
+	 * `update_item()` refuses a new key once a reader holds that many, and the
+	 * Reader_Data setters drop the refusal, so this is how a full reader looks to the
+	 * command.
+	 *
+	 * @param int   $max_items  The per-reader key cap.
+	 * @param array $assoc_args The command's named options.
+	 *
+	 * @return string The success line.
+	 */
+	private function run_backfill_with_item_cap( int $max_items, array $assoc_args = [] ): string {
+		$cap = function () use ( $max_items ) {
+			return $max_items;
+		};
+		add_filter( 'newspack_reader_data_max_items', $cap );
+		try {
+			return $this->run_backfill( $assoc_args );
+		} finally {
+			remove_filter( 'newspack_reader_data_max_items', $cap );
+		}
+	}
+
+	/**
+	 * A reader whose data is full can't take the flag. The run says so and doesn't
+	 * report a flag it didn't write.
+	 */
+	public function test_warns_and_does_not_count_a_donor_whose_flag_cannot_be_written() {
+		$reader_id = $this->create_reader();
+		$this->create_order( $reader_id );
+
+		$message = $this->run_backfill_with_item_cap( 0 );
+
+		$this->assertFalse( Reader_Data::get_bool( $reader_id, 'is_donor' ) );
+		$this->assertCount( 1, WP_CLI::$warnings );
+		$this->assertStringContainsString( (string) $reader_id, WP_CLI::$warnings[0] );
+		$this->assertSame( 'Flagged 0 donor(s) and 0 former donor(s). 0 already flagged; 0 guest order(s) skipped.', $message );
+	}
+
+	/**
+	 * With room for one more key, the setter writes `is_donor = false` and then has
+	 * no room for `is_former_donor = true`. The reader ends with neither flag, so the
+	 * run warns and doesn't count them.
+	 */
+	public function test_warns_and_does_not_count_a_former_donor_whose_flag_is_half_written() {
+		$reader_id = $this->create_reader();
+		$this->create_subscription( $reader_id, 'cancelled' );
+
+		$message = $this->run_backfill_with_item_cap( 1 );
+
+		$this->assertFalse( Reader_Data::get_bool( $reader_id, 'is_former_donor' ) );
+		$this->assertFalse( Reader_Data::get_bool( $reader_id, 'is_donor' ) );
+		$this->assertCount( 1, WP_CLI::$warnings );
+		$this->assertStringContainsString( (string) $reader_id, WP_CLI::$warnings[0] );
+		$this->assertSame( 'Flagged 0 donor(s) and 0 former donor(s). 0 already flagged; 0 guest order(s) skipped.', $message );
+	}
+
+	/**
+	 * The donor flag is what a donor needs. If it is written and only the clearing
+	 * of `is_former_donor` is refused, the reader is flagged and nothing warns.
+	 */
+	public function test_counts_a_donor_whose_flag_was_written_when_only_the_reset_was_refused() {
+		$reader_id = $this->create_reader();
+		$this->create_order( $reader_id );
+
+		$message = $this->run_backfill_with_item_cap( 1 );
+
+		$this->assertTrue( Reader_Data::get_bool( $reader_id, 'is_donor' ) );
+		$this->assertSame( [], WP_CLI::$warnings );
+		$this->assertSame( 'Flagged 1 donor(s) and 0 former donor(s). 0 already flagged; 0 guest order(s) skipped.', $message );
+	}
+
+	/**
+	 * A dry run writes nothing, so it can't know which writes would be refused. It
+	 * reports every reader it would try.
+	 */
+	public function test_a_dry_run_counts_a_reader_whose_data_is_full_without_warning() {
+		$reader_id = $this->create_reader();
+		$this->create_order( $reader_id );
+
+		$message = $this->run_backfill_with_item_cap( 0, [ 'dry-run' => true ] );
+
+		$this->assertSame( [], WP_CLI::$warnings );
+		$this->assertSame( 'Would flag 1 donor(s) and 0 former donor(s). 0 already flagged; 0 guest order(s) skipped.', $message );
+	}
+
+	/**
 	 * Donor labels only apply to WooCommerce donations, so any other platform stops the run.
 	 */
 	public function test_errors_when_donations_are_not_woocommerce() {
