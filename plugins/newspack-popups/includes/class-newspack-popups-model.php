@@ -1344,7 +1344,7 @@ final class Newspack_Popups_Model {
 		$has_featured_image             = has_post_thumbnail( $popup['id'] ) || ! empty( $popup['options']['featured_image_id'] );
 		$enable_close_button_background = $popup['options']['enable_close_button_background'];
 		$close_button_background_color  = $enable_close_button_background ? $popup['options']['close_button_background_color'] : '';
-		$close_button_color             = $enable_close_button_background ? self::foreground_color_for_background( $popup['options']['close_button_background_color'] ) : self::foreground_color_for_background( $popup['options']['background_color'] );
+		$close_button_color             = $enable_close_button_background ? self::close_button_icon_color( $popup['options']['close_button_background_color'], $popup['options']['background_color'] ) : self::foreground_color_for_background( $popup['options']['background_color'] );
 		$hidden_fields                  = self::get_hidden_fields( $popup );
 		$is_newsletter_prompt           = self::has_newsletter_prompt( $popup );
 		$classes                        = [ 'newspack-popup-container', 'newspack-lightbox', 'newspack-popup', 'hidden', 'newspack-lightbox-placement-' . $popup['options']['placement'], 'newspack-lightbox-size-' . $overlay_size ];
@@ -1437,6 +1437,54 @@ final class Newspack_Popups_Model {
 		 * @param string $element_id The popup element ID.
 		 */
 		return apply_filters( 'newspack_popups_popup_content', ob_get_clean(), $popup, $element_id );
+	}
+
+	/**
+	 * Pick black or white for the close button icon, whichever contrasts more with its fill.
+	 *
+	 * The fill may be translucent, so it is composited over the prompt background first.
+	 * Picking the higher contrast keeps the icon at 3:1 or more on hover, where the fill mixes toward the icon.
+	 *
+	 * @param string $fill_color       Hex close button fill, with optional alpha.
+	 * @param string $background_color Hex prompt background.
+	 * @return string Either black or white hexadecimal values.
+	 */
+	public static function close_button_icon_color( $fill_color, $background_color ) {
+		$fill       = self::hex_to_rgba( $fill_color );
+		$background = self::hex_to_rgba( $background_color ) ?? [ 255, 255, 255, 1 ];
+		if ( null === $fill ) {
+			$fill = [ 0, 0, 0, 0 ];
+		}
+
+		$luminance = 0;
+		foreach ( [ 0.2126, 0.7152, 0.0722 ] as $index => $weight ) {
+			$channel    = ( $fill[ $index ] * $fill[3] + $background[ $index ] * ( 1 - $fill[3] ) ) / 255;
+			$linear     = $channel <= 0.04045 ? $channel / 12.92 : pow( ( $channel + 0.055 ) / 1.055, 2.4 );
+			$luminance += $weight * $linear;
+		}
+
+		$contrast_with_black = ( $luminance + 0.05 ) / 0.05;
+		$contrast_with_white = 1.05 / ( $luminance + 0.05 );
+
+		return $contrast_with_black >= $contrast_with_white ? '#000' : '#fff';
+	}
+
+	/**
+	 * Parse a 3, 4, 6 or 8 digit hex color.
+	 *
+	 * @param string $color Hex color.
+	 * @return array|null Red, green and blue from 0 to 255 and alpha from 0 to 1, or null if the color is not valid hex.
+	 */
+	private static function hex_to_rgba( $color ) {
+		$hex = ltrim( trim( (string) $color ), '#' );
+		if ( in_array( strlen( $hex ), [ 3, 4 ], true ) ) {
+			$hex = implode( '', array_map( fn( $digit ) => $digit . $digit, str_split( $hex ) ) );
+		}
+		if ( ! in_array( strlen( $hex ), [ 6, 8 ], true ) || ! ctype_xdigit( $hex ) ) {
+			return null;
+		}
+		$channels = array_map( 'hexdec', str_split( $hex, 2 ) );
+		return [ $channels[0], $channels[1], $channels[2], isset( $channels[3] ) ? $channels[3] / 255 : 1 ];
 	}
 
 	/**
