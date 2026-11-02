@@ -80,6 +80,11 @@ $stat-card-note-line-height: wp-vars.$font-line-height-small;
 	&__note {
 		@include wp-mixins.body-medium();
 		color: wp-colors.$gray-700;
+
+		p {
+			font: inherit;
+			margin: 0;
+		}
 	}
 
 	&__body >&__note:first-child {

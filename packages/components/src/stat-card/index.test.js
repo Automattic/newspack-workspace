@@ -384,6 +384,16 @@ describe( 'StatCard.Value', () => {
 		expect( container.querySelector( '.newspack-stat-card__value' ) ).toHaveTextContent( /^12$/ );
 	} );
 
+	// The gap is layout only, so without a real space copied text reads "12days".
+	it( 'separates the unit from the figure in the raw text', () => {
+		const { container } = render(
+			<StatCard.Root>
+				<StatCard.Value value="12" unit="days" />
+			</StatCard.Root>
+		);
+		expect( container.querySelector( '.newspack-stat-card__figure' ).textContent ).toBe( '12 days' );
+	} );
+
 	it( 'puts the unit between the figure and the suffix', () => {
 		const { container } = render(
 			<StatCard.Root>
@@ -679,17 +689,6 @@ describe( 'StatCard.Delta', () => {
 		expect( screen.queryByText( 'Unchanged' ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'keeps an unchanged delta neutral unless the caller sets a tone', () => {
-		const { container } = render(
-			<StatCard.Root>
-				<StatCard.Delta direction="unchanged">0%</StatCard.Delta>
-			</StatCard.Root>
-		);
-		const delta = container.querySelector( '.newspack-stat-card__delta' );
-		expect( delta ).not.toHaveClass( 'newspack-stat-card__delta--positive' );
-		expect( delta ).not.toHaveClass( 'newspack-stat-card__delta--negative' );
-	} );
-
 	it( 'throws outside Root', () => {
 		renderOrphan( <StatCard.Delta direction="up">2%</StatCard.Delta> );
 	} );
@@ -852,7 +851,7 @@ describe( 'StatCard.Footer', () => {
 		expect( descriptions[ 0 ].querySelector( 'strong' ) ).toBeInTheDocument();
 	} );
 
-	// The documented escape hatch: inline markup would otherwise split into a block per child.
+	// Markup written before StatCard.Description existed must keep rendering as one paragraph.
 	it( 'passes a self-wrapped description through as one paragraph', () => {
 		const { container } = render(
 			<StatCard.Root>

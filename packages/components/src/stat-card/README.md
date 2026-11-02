@@ -149,10 +149,10 @@ consumer is registered under:
 ```jsx
 <StatCard.Root
 	labels={ {
-		notApplicable: __( 'Not applicable', 'newspack-manager' ),
-		up: __( 'Up', 'newspack-manager' ),
-		down: __( 'Down', 'newspack-manager' ),
-		unchanged: __( 'Unchanged', 'newspack-manager' ),
+		notApplicable: _x( 'Not applicable', 'a statistic with no number to show', 'newspack-manager' ),
+		up: _x( 'Up', 'a statistic that has increased', 'newspack-manager' ),
+		down: _x( 'Down', 'a statistic that has decreased', 'newspack-manager' ),
+		unchanged: _x( 'Unchanged', 'a statistic that has neither increased nor decreased', 'newspack-manager' ),
 	} }
 >
 ```
@@ -272,6 +272,9 @@ row and drops that card's figure below the rest.
 the label itself stays one line across a row of cards. It sits inside the
 heading, so the heading's name is the whole thing, "Revenue (excluding refunds)",
 with a real space between the two rather than one the line break implies.
+
+That extra line grows the label row, so within a row of cards give every card a
+qualifier or none, or the qualified cards' figures sit a line below the rest.
 
 ```jsx
 <StatCard.Label qualifier={ __( '(excluding refunds)', 'newspack-plugin' ) }>
@@ -402,7 +405,7 @@ chose those words.
 
 A short line of body text that stands in for the figure, for a card that has an
 explanation to give rather than a number. It renders a `<div>`, so it can hold
-an icon beside its text, or a paragraph.
+an icon beside its text, or a paragraph, whose margin it resets.
 
 Put it first in `Body`, where `Value` would go:
 
@@ -412,13 +415,11 @@ Put it first in `Body`, where `Value` would go:
 </StatCard.Body>
 ```
 
-Cards in a row align their bodies by the top of the box, which works while every
-body is a figure and fails when one is 13px text beside a 20px to 48px number:
-the text's first line rides well above the figure's. So a
-note first in `Body` is pushed down by half the difference between the figure's
-line and its own, and its first line centres on the line a figure would occupy at
-the same card width. Because that sum uses the figure's own `cqi` size, the note
-stays level as the cards narrow, without a margin tuned for one width.
+First in `Body`, a note's first line lines up with the figures in the
+neighbouring cards at any card width, so a row mixing figures and notes reads
+level without a margin tuned by hand. Without that, 13px text beside a 20px to
+48px figure would sit well above it, because cards align their bodies by the top
+of the box.
 
 A note after something else in `Body` gets no such offset, since it is no longer
 standing in for the figure.
