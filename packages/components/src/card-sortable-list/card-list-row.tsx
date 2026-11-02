@@ -18,6 +18,7 @@ import { Badge, Card, Stack } from '@wordpress/ui';
 /**
  * Internal dependencies
  */
+import EditTitleLink from '../edit-title-link';
 import TooltipBadge from '../tooltip-badge';
 import type { CardBadge } from '../types';
 import './style.scss';
@@ -33,6 +34,8 @@ type CardListItemAction = {
 export type CardListItem = {
 	id: string | number;
 	title: string;
+	/** Links the title, e.g. to the item's edit screen. */
+	href?: string;
 	description?: React.ReactNode;
 	badge?: CardBadge;
 	/** A second badge, e.g. a warning, whose tooltip explains it. */
@@ -67,7 +70,7 @@ const CardListRow = ( {
 				{ controls }
 				<div className="newspack-card--core--sortable-list__summary">
 					<Card.Title render={ <TitleTag /> } className="newspack-card--core--sortable-list__title">
-						{ item.title }
+						{ item.href ? <EditTitleLink href={ item.href }>{ item.title }</EditTitleLink> : item.title }
 						{ item.badge?.label && <Badge intent={ item.badge.intent ?? 'none' }>{ item.badge.label }</Badge> }
 						{ item.secondaryBadge?.label &&
 							( item.secondaryBadge.tooltip ? (

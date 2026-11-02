@@ -23,8 +23,7 @@ import { Badge, Card, Stack } from '@wordpress/ui';
 /**
  * Internal dependencies.
  */
-import { Button, Modal, Notice, TextControl } from '../../../../../packages/components/src';
-import EditTitleLink from '../edit-title-link';
+import { Button, EditTitleLink, Modal, Notice, TextControl } from '../../../../../packages/components/src';
 import PromptSettingsDrawer from '../settings-drawer';
 import { promptDetails, promptStatus } from '../../views/campaigns/utils';
 import './style.scss';
@@ -79,7 +78,7 @@ const PromptActionCard = props => {
 			<Stack direction="column" gap="md">
 				<Stack direction="row" gap="md" wrap="wrap" align="center" justify="space-between">
 					<Stack direction="column" gap="xs" className="newspack-campaigns__prompt-summary">
-						<Stack direction="row" gap="sm" wrap="wrap" align="center">
+						<Stack direction="row" gap="sm" wrap="wrap" align="center" className="newspack-edit-title-link-row">
 							<h3 className="newspack-campaigns__prompt-title">
 								{ isTrash ? displayTitle : <EditTitleLink href={ decodeEntities( editLink ) }>{ displayTitle }</EditTitleLink> }
 							</h3>

@@ -197,6 +197,7 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, ...screenProps }
 									item={ {
 										id: segment.id,
 										title: decodeEntities( segment.name ),
+										href: `#/segments/${ segment.id }`,
 										description: renderCriteria( segment ),
 										badge: segment.is_criteria_duplicated
 											? { label: __( 'Duplicate', 'newspack-plugin' ), intent: 'medium' }

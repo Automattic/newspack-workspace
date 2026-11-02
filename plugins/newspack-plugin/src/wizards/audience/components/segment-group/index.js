@@ -13,8 +13,7 @@ import { Card as WPCard, Stack } from '@wordpress/ui';
 /**
  * Internal dependencies
  */
-import { Button, Card, Grid, Modal } from '../../../../../packages/components/src';
-import EditTitleLink from '../edit-title-link';
+import { Button, Card, EditTitleLink, Grid, Modal } from '../../../../../packages/components/src';
 import SegmentationPreview from '../segmentation-preview';
 import PromptActionCard from '../prompt-action-card';
 import { segmentDescriptionItems, splitCriteriaMessage, warningForPopup } from '../../views/campaigns/utils';
