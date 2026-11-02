@@ -72,14 +72,16 @@ final class Contrast {
 	 * ratio across the resolved hover and press backgrounds. Each background is
 	 * read from global styles and interpreted as follows:
 	 *
-	 * - Absent, or the theme's default color-mix over the accent var (85% black
-	 *   for hover, 75% for press, in srgb): the accent darkened per channel by the
-	 *   same factor, which is exactly what that color-mix produces. An absent press
-	 *   background is skipped, since press then shows the hover background.
+	 * - Absent: the theme default, the accent darkened per channel by 0.85 for
+	 *   hover. An absent press background is skipped, since press then shows the
+	 *   hover background.
+	 * - A color-mix of the accent var with black in srgb (the theme default is 85%
+	 *   for hover and 75% for press): the accent darkened per channel by that
+	 *   share, which is exactly what the color-mix produces.
 	 * - A palette reference (var:preset|color|<slug> or var( --wp--preset--color--<slug> )):
 	 *   the palette color the slug resolves to.
 	 * - A plain parseable hex: that hex.
-	 * - Anything else (arbitrary color-mix, rgb()/hsl(), gradients): not derivable.
+	 * - Anything else (other color-mix forms, rgb()/hsl(), gradients): not derivable.
 	 *   No hover property is emitted when the hover background is not derivable,
 	 *   and a press background that is not derivable is skipped.
 	 *
@@ -113,9 +115,14 @@ final class Contrast {
 	 * @param float       $factor     The theme default darkening factor for the state.
 	 * @return string|null The hex color, or null when not derivable.
 	 */
-	private static function resolve_state_background( $accent, $background, $factor ) {
-		if ( null === $background || self::is_accent_color_mix( $background, $factor ) ) {
+	private static function resolve_state_background( string $accent, ?string $background, float $factor ): ?string {
+		if ( null === $background ) {
 			return self::darken_hex( $accent, $factor );
+		}
+
+		$mix_factor = self::get_accent_black_mix_factor( $background );
+		if ( null !== $mix_factor ) {
+			return self::darken_hex( $accent, $mix_factor );
 		}
 
 		return self::resolve_color_reference( $background );
@@ -132,7 +139,7 @@ final class Contrast {
 	 * @param string $state The pseudo-class key, such as ':hover' or ':active'.
 	 * @return string|null The resolved background value, or null when absent.
 	 */
-	private static function get_button_state_background( $state ) {
+	private static function get_button_state_background( string $state ): ?string {
 		$value = \wp_get_global_styles( [ 'elements', 'button', $state, 'color', 'background' ] );
 
 		if ( ! is_string( $value ) || '' === $value ) {
@@ -143,29 +150,33 @@ final class Contrast {
 	}
 
 	/**
-	 * Whether a value is the theme's exact default accent state mix.
+	 * Read the accent share of a color-mix of the accent with black.
 	 *
-	 * Matches only the theme default: color-mix( in srgb, <accent> <percent>, black ),
-	 * where <accent> is the accent preset in either the var:preset|color|accent
-	 * internal form or the var( --wp--preset--color--accent ) CSS form. The match is
-	 * whitespace-flexible and case-insensitive, but every component is anchored: any
-	 * other mix ratio, color space, mixed-in color, or accent-prefixed slug (such as
-	 * accent-2 or accent-contrast) falls through to false, so the caller never
-	 * scores the wrong background.
+	 * Matches color-mix( in srgb, <accent> <percent>, black ), where <accent> is the
+	 * accent preset in either the var:preset|color|accent internal form or the
+	 * var( --wp--preset--color--accent ) CSS form. The match is whitespace-flexible
+	 * and case-insensitive, but every component is anchored: any other color space,
+	 * mixed-in color, or accent-prefixed slug (such as accent-2 or accent-contrast)
+	 * falls through to null, so the caller never scores the wrong background.
 	 *
-	 * @param string $value  The resolved background value.
-	 * @param float  $factor The accent share of the mix, such as 0.85 for 85%.
-	 * @return bool True only when the value is the theme's exact default accent mix.
+	 * @param string $value The resolved background value.
+	 * @return float|null The accent share, such as 0.85 for 85%, or null when the value is not such a mix.
 	 */
-	private static function is_accent_color_mix( $value, $factor ) {
-		if ( ! is_string( $value ) || false === stripos( $value, 'color-mix' ) ) {
-			return false;
+	private static function get_accent_black_mix_factor( string $value ): ?float {
+		if ( false === stripos( $value, 'color-mix' ) ) {
+			return null;
 		}
 
-		return (bool) preg_match(
-			'/^color-mix\(\s*in\s+srgb\s*,\s*(?:var\(\s*--wp--preset--color--accent(?![\w-])\s*\)|var:preset\|color\|accent(?![\w-]))\s+' . (int) round( $factor * 100 ) . '%\s*,\s*black\s*\)$/i',
-			trim( $value )
-		);
+		if ( ! preg_match(
+			'/^color-mix\(\s*in\s+srgb\s*,\s*(?:var\(\s*--wp--preset--color--accent(?![\w-])\s*\)|var:preset\|color\|accent(?![\w-]))\s+(\d{1,3}(?:\.\d+)?)%\s*,\s*black\s*\)$/i',
+			trim( $value ),
+			$matches
+		) ) {
+			return null;
+		}
+
+		$percent = (float) $matches[1];
+		return $percent <= 100 ? $percent / 100 : null;
 	}
 
 	/**
@@ -290,7 +301,7 @@ final class Contrast {
 	 * @param string[] $hexes Hexadecimal background colors.
 	 * @return string|null '#000000' or '#ffffff', or null when a color is not parseable as hex.
 	 */
-	private static function get_wcag_color_for_backgrounds( $hexes ) {
+	private static function get_wcag_color_for_backgrounds( array $hexes ): ?string {
 		$black = INF;
 		$white = INF;
 
@@ -312,16 +323,16 @@ final class Contrast {
 	 * @param string $hex Hexadecimal color.
 	 * @return float|null Relative luminance in the 0..1 range, or null when unparseable.
 	 */
-	private static function get_wcag_luminance( $hex ) {
+	private static function get_wcag_luminance( string $hex ): ?float {
 		$channels = self::parse_hex_channels( $hex );
 		if ( null === $channels ) {
 			return null;
 		}
 
 		$linear = array_map(
-			function ( $channel ) {
-				$channel /= 255;
-				return $channel <= 0.04045 ? $channel / 12.92 : pow( ( $channel + 0.055 ) / 1.055, 2.4 );
+			function ( int $channel ): float {
+				$value = $channel / 255;
+				return $value <= 0.04045 ? $value / 12.92 : pow( ( $value + 0.055 ) / 1.055, 2.4 );
 			},
 			$channels
 		);

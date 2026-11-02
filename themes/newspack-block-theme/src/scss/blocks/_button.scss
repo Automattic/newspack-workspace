@@ -122,7 +122,7 @@
 	&:not(.is-style-outline) {
 		form .wp-block-button__link,
 		> .wp-block-button__link {
-			&.has-background:not(.has-text-color):is(:hover, :active) {
+			&.has-background:not(.has-text-color, .has-accent-background-color):is(:hover, :active) {
 				color: var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base));
 			}
 		}
@@ -138,12 +138,18 @@
 			@include motion.hover {
 				&:hover {
 					background: color-mix(in srgb, var(--wp--preset--color--contrast) 7%, var(--wp--preset--color--base));
+				}
+
+				&:where(:not(.has-background)):hover {
 					color: var(--wp--preset--color--contrast);
 				}
 			}
 
 			&:active:where(:not([contenteditable="true"])) {
 				background: color-mix(in srgb, var(--wp--preset--color--contrast) 13%, var(--wp--preset--color--base));
+			}
+
+			&:active:where(:not([contenteditable="true"], .has-background)) {
 				color: var(--wp--preset--color--contrast);
 			}
 
@@ -219,7 +225,7 @@
 		}
 	}
 
-	&:active {
+	&:active:where(:not([contenteditable="true"])) {
 		background-color: color-mix(in srgb, currentcolor 13%, transparent);
 	}
 }

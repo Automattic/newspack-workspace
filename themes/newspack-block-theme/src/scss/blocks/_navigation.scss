@@ -12,9 +12,12 @@
 	}
 
 	&.has-text-color:not(.has-contrast-color) {
+		a:not(.wp-element-button):hover {
+			color: currentcolor !important;
+		}
+
 		@include motion.hover {
 			a:not(.wp-element-button):hover {
-				color: currentcolor !important;
 				text-decoration: underline;
 			}
 		}

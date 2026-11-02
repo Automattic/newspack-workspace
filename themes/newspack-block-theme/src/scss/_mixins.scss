@@ -352,7 +352,7 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 		}
 	}
 
-	&:active {
+	&:active:where(:not([contenteditable="true"])) {
 		background-color: color-mix(in srgb, currentcolor 13%, transparent);
 	}
 
@@ -388,6 +388,10 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 
 	&:active::before {
 		opacity: 0.25;
+	}
+
+	&:focus-visible::before {
+		inset: 2px;
 	}
 
 	@media (forced-colors: active) {
