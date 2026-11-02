@@ -46,7 +46,7 @@ const ContentGatesPriority = ( {
 		const priorityWarnings = getPriorityWarnings( sortedGates );
 		return sortedGates.map( gate => ( {
 			id: gate.id,
-			title: gate.title,
+			title: decodeEntities( gate.title ) || `#${ gate.id }`,
 			secondaryBadge: priorityWarnings[ gate.id ]
 				? { label: getPriorityWarningLabel(), intent: 'low' as const, tooltip: priorityWarnings[ gate.id ] }
 				: undefined,

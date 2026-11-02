@@ -9,7 +9,7 @@ import { MemoryRouter } from 'react-router-dom';
  */
 import SegmentsList from './segments-list';
 
-// Below the medium breakpoint the page header folds secondary actions into its menu.
+// The header assertions read the desktop layout, where actions show their text labels.
 jest.mock( '@wordpress/compose', () => ( {
 	...jest.requireActual( '@wordpress/compose' ),
 	useViewportMatch: jest.fn( () => true ),
