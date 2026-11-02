@@ -1,4 +1,3 @@
-@use "../../../colors/colors.module" as colors;
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/variables" as wp-vars;
 
@@ -29,48 +28,6 @@ $drop-duration: 400ms; /* must match DROP_ANIMATION_DURATION in index.tsx */
 			animation: newspack-sortable-drop $drop-duration ease forwards;
 		}
 	}
-
-	&.is-locked &__item {
-		cursor: auto;
-	}
-
-	&.is-locked &__drag-handle {
-		color: var( --wpds-color-foreground-interactive-neutral-disabled, #{wp-colors.$gray-600} );
-	}
-
-	&.is-reordering &__card {
-		animation: newspack-sortable-wobble var( --wpds-motion-duration-xl, 400ms ) var( --wpds-motion-easing-balanced, cubic-bezier(0.4, 0, 0.2, 1) ) infinite alternate;
-	}
-
-	&.is-reordering > :nth-child(even) &__card {
-		animation-direction: alternate-reverse;
-	}
-
-	&.is-reordering > :nth-child(3n + 2) &__card {
-		animation-delay: -130ms;
-	}
-
-	&.is-reordering > :nth-child(3n) &__card {
-		animation-delay: -270ms;
-	}
-
-	&.is-reordering &__card:focus-within {
-		animation: none;
-	}
-
-	@media (hover: hover) and (pointer: fine) {
-		&.is-reordering &__card:hover {
-			animation: none;
-		}
-	}
-
-	@media (prefers-reduced-motion: reduce) {
-		&.is-reordering &__card {
-			animation: none;
-			outline: var( --wpds-border-width-xs, #{wp-vars.$border-width} ) dashed var( --wpds-color-stroke-interactive-brand, var( --wp-admin-theme-color, #{colors.$primary-600} ) );
-			outline-offset: calc( -1 * var( --wpds-border-width-xs, #{wp-vars.$border-width} ) );
-		}
-	}
 }
 
 .newspack-card--core--sortable-list__card {
@@ -99,11 +56,6 @@ $drop-duration: 400ms; /* must match DROP_ANIMATION_DURATION in index.tsx */
 		flex: none;
 		margin-inline-start: calc( -1 * var( --wpds-dimension-padding-lg, #{wp-vars.$grid-unit-20} ) );
 		padding-inline: var( --wpds-dimension-padding-sm, #{wp-vars.$grid-unit-10} );
-	}
-
-	&.is-large .newspack-card--core--sortable-list__controls {
-		margin-block: calc( -1 * var( --wp-ui-card-padding ) );
-		padding-inline: var( --wp-ui-card-padding );
 	}
 
 	.newspack-card--core--sortable-list__drag-handle {
@@ -159,15 +111,6 @@ $drop-duration: 400ms; /* must match DROP_ANIMATION_DURATION in index.tsx */
 		position: absolute;
 		white-space: nowrap;
 		width: 1px;
-	}
-}
-
-@keyframes newspack-sortable-wobble {
-	0% {
-		transform: rotate(-0.15deg);
-	}
-	100% {
-		transform: rotate(0.15deg);
 	}
 }
 

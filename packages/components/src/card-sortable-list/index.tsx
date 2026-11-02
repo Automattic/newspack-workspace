@@ -39,21 +39,10 @@ const CardSortableList = ( {
 	disabled = false,
 	items = [],
 	onDragCallback = () => {},
-	sortable = true,
-	reordering = false,
-	size = 'default',
 }: {
 	disabled?: boolean;
-	items?: ( CardListItem & {
-		/** Makes the row inert, e.g. while a request for it is in flight. */
-		disabled?: boolean;
-	} )[];
+	items?: CardListItem[];
 	onDragCallback?: ( index: number, targetIndex: number ) => void;
-	/** `false` shows the move buttons disabled and turns off dragging. */
-	sortable?: boolean;
-	/** Marks a list in a reorder mode: the rows wobble, and their toggles and menus are disabled. */
-	reordering?: boolean;
-	size?: React.ComponentProps< typeof CardListRow >[ 'size' ];
 } ) => {
 	const [ sortedItems, setSortedItems ] = useState( items );
 	const [ draggingIndex, setDraggingIndex ] = useState< number | null >( null );
@@ -392,13 +381,13 @@ const CardSortableList = ( {
 			direction="column"
 			gap="lg"
 			ref={ listRef }
-			className={ classNames( 'newspack-card--core--sortable-list', { 'is-locked': ! sortable, 'is-reordering': reordering } ) }
+			className="newspack-card--core--sortable-list"
 			style={ measurements ? { height: measurements.lockedHeight } : undefined }
 		>
 			{ sortedItems.map( ( item, index ) => {
 				const translateY = getTranslateY( index );
 				return (
-					<Disabled key={ item.id } isDisabled={ disabled || Boolean( item.disabled ) }>
+					<Disabled key={ item.id } isDisabled={ disabled }>
 						<div
 							ref={ el => {
 								itemRefs.current[ index ] = el;
@@ -422,11 +411,9 @@ const CardSortableList = ( {
 								{ ( { onDraggableStart, onDraggableEnd } ) => (
 									<CardListRow
 										item={ item }
-										size={ size }
-										disabled={ reordering }
-										draggable={ sortable }
-										onDragStart={ sortable ? onDraggableStart : undefined }
-										onDragEnd={ sortable ? onDraggableEnd : undefined }
+										draggable
+										onDragStart={ onDraggableStart }
+										onDragEnd={ onDraggableEnd }
 										controls={
 											<Stack direction="row" align="center" className="newspack-card--core--sortable-list__controls">
 												<Icon icon={ dragHandle } className="newspack-card--core--sortable-list__drag-handle" />
@@ -441,7 +428,7 @@ const CardSortableList = ( {
 															__( 'Move %s up', 'newspack-plugin' ),
 															item.title
 														) }
-														disabled={ ! sortable || index === 0 }
+														disabled={ index === 0 }
 														focusableWhenDisabled={ false }
 														onClick={ () => handleButtonMove( index, index - 1 ) }
 													/>
@@ -455,7 +442,7 @@ const CardSortableList = ( {
 															__( 'Move %s down', 'newspack-plugin' ),
 															item.title
 														) }
-														disabled={ ! sortable || index === sortedItems.length - 1 }
+														disabled={ index === sortedItems.length - 1 }
 														focusableWhenDisabled={ false }
 														onClick={ () => handleButtonMove( index, index + 1 ) }
 													/>

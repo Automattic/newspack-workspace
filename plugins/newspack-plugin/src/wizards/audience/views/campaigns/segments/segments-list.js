@@ -2,7 +2,8 @@
 /**
  * WordPress dependencies.
  */
-import { Notice, SearchControl } from '@wordpress/components';
+import { Disabled, Notice } from '@wordpress/components';
+import { DataViews as BaseDataViews } from '@wordpress/dataviews';
 import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { decodeEntities } from '@wordpress/html-entities';
 import { __, sprintf } from '@wordpress/i18n';
@@ -12,13 +13,12 @@ import { Stack } from '@wordpress/ui';
 /**
  * Internal dependencies.
  */
-import { Button, CardSortableList, EmptyState, Router } from '../../../../../../packages/components/src';
+import { Button, CardListRow, DataViews, EmptyState, Router } from '../../../../../../packages/components/src';
 import { segmentDescriptionItems, splitCriteriaMessage } from '../utils';
 import SegmentsScreen from './screen';
+import SegmentsPriority from './segments-priority';
 
 const { useHistory } = Router;
-
-const idsOf = segments => segments.map( ( { id } ) => id );
 
 const renderCriteria = segment => {
 	const criteria = segmentDescriptionItems( { ...segment, configuration: { ...segment.configuration, is_disabled: false } } );
@@ -48,16 +48,12 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, ...screenProps }
 	const [ busyIds, setBusyIds ] = useState( [] );
 	const [ error, setError ] = useState( null );
 	const [ search, setSearch ] = useState( '' );
-	const [ order, setOrder ] = useState( null );
-	const [ isSavingOrder, setIsSavingOrder ] = useState( false );
+	const [ showPriorityModal, setShowPriorityModal ] = useState( false );
 	const lastRequest = useRef( 0 );
 	const lastAppliedRequest = useRef( 0 );
 	const toggleToRefocus = useRef( null );
 	const rowsRef = useRef( null );
-	const priorityButtonRef = useRef( null );
-	const focusAfterModeChange = useRef( false );
 	const history = useHistory();
-	const isReordering = null !== order;
 
 	useEffect( () => {
 		window.scrollTo( 0, 0 );
@@ -74,19 +70,6 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, ...screenProps }
 			toggle.focus();
 		}
 	}, [ busyIds ] );
-
-	// The button that switched the mode is gone, so focus moves to where the new mode starts.
-	useEffect( () => {
-		if ( ! focusAfterModeChange.current ) {
-			return;
-		}
-		focusAfterModeChange.current = false;
-		if ( isReordering ) {
-			rowsRef.current?.querySelector( '.newspack-card--core--sortable-list__move-buttons button:not(:disabled)' )?.focus();
-		} else {
-			priorityButtonRef.current?.focus();
-		}
-	}, [ isReordering ] );
 
 	const sendRowRequest = ( segment, request, fallbackError ) => {
 		setError( null );
@@ -131,90 +114,33 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, ...screenProps }
 		sendRowRequest( segment, { method: 'DELETE' }, __( 'There was an error deleting the segment. Please try again.', 'newspack-plugin' ) );
 	};
 
-	const listedSegments = useMemo( () => {
-		if ( isReordering ) {
-			// Built from the ids so a reply that lands meanwhile still shows, and the list is never a search result.
-			const byId = new Map( segments.map( segment => [ segment.id, segment ] ) );
-			const ordered = order.map( id => byId.get( id ) ).filter( Boolean );
-			return [ ...ordered, ...segments.filter( segment => ! order.includes( segment.id ) ) ];
-		}
-		const searchTerm = search.trim().toLowerCase();
-		return segments.filter( segment => decodeEntities( segment.name ).toLowerCase().includes( searchTerm ) );
-	}, [ isReordering, order, search, segments ] );
-
-	const items = useMemo(
-		() =>
-			listedSegments.map( segment => ( {
-				id: segment.id,
-				title: decodeEntities( segment.name ),
-				description: renderCriteria( segment ),
-				badge: segment.is_criteria_duplicated ? { label: __( 'Duplicate', 'newspack-plugin' ), intent: 'medium' } : undefined,
-				disabled: busyIds.includes( segment.id ),
-				toggleChecked: ! segment.configuration.is_disabled,
-				onToggleChange: () => toggleSegmentStatus( segment ),
-				actionsLabel: sprintf(
-					// Translators: %s: segment name.
-					__( 'Segment actions: %s', 'newspack-plugin' ),
-					decodeEntities( segment.name )
-				),
-				actions: [
-					{
-						label: __( 'Edit', 'newspack-plugin' ),
-						action: () => history.push( `/segments/${ segment.id }` ),
-					},
-					{
-						label: __( 'Delete', 'newspack-plugin' ),
-						action: () => deleteSegment( segment ),
-						destructive: true,
-					},
-				],
-			} ) ),
-		[ listedSegments, busyIds, history, wizardApiFetch, setSegments ] // eslint-disable-line react-hooks/exhaustive-deps
+	const fields = useMemo(
+		() => [
+			{
+				id: 'name',
+				label: __( 'Name', 'newspack-plugin' ),
+				enableGlobalSearch: true,
+				enableSorting: false,
+				getValue: ( { item } ) => item.name,
+			},
+		],
+		[]
 	);
 
-	const startReordering = () => {
-		setError( null );
-		focusAfterModeChange.current = true;
-		setOrder( idsOf( segments ) );
+	const view = {
+		type: 'table',
+		search,
+		page: 1,
+		perPage: 100,
+		fields: [],
 	};
 
-	const stopReordering = () => {
-		focusAfterModeChange.current = true;
-		setOrder( null );
+	const onChangeView = next => {
+		setSearch( next.search || '' );
 	};
 
-	const cancelReordering = () => {
-		setError( null );
-		stopReordering();
-	};
-
-	const moveSegment = ( index, targetIndex ) => {
-		const reordered = idsOf( listedSegments );
-		const [ moved ] = reordered.splice( index, 1 );
-		reordered.splice( targetIndex, 0, moved );
-		setOrder( reordered );
-	};
-
-	const saveOrder = () => {
-		setError( null );
-		setIsSavingOrder( true );
-		wizardApiFetch( {
-			path: `${ newspackAudienceCampaigns.api }/segmentation-sort`,
-			method: 'POST',
-			data: { segmentIds: idsOf( listedSegments ) },
-			quiet: true,
-		} )
-			.then( _segments => {
-				setSegments( _segments );
-				stopReordering();
-			} )
-			.catch( e =>
-				setError( decodeEntities( e?.message || __( 'There was an error sorting segments. Please try again.', 'newspack-plugin' ) ) )
-			)
-			.finally( () => setIsSavingOrder( false ) );
-	};
-
-	const hasOrderChanged = isReordering && idsOf( listedSegments ).join() !== idsOf( segments ).join();
+	const searchTerm = search.trim().toLowerCase();
+	const visibleSegments = segments.filter( segment => decodeEntities( segment.name ).toLowerCase().includes( searchTerm ) );
 
 	const headerActions = [
 		{
@@ -222,7 +148,6 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, ...screenProps }
 			label: __( 'Add Segment', 'newspack-plugin' ),
 			mobileIcon: plus,
 			href: '#/segments/new',
-			disabled: isReordering,
 		},
 	];
 
@@ -233,71 +158,75 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, ...screenProps }
 					{ error }
 				</Notice>
 			) }
+			{ showPriorityModal && (
+				<SegmentsPriority
+					closeModal={ () => setShowPriorityModal( false ) }
+					segments={ segments }
+					setSegments={ setSegments }
+					wizardApiFetch={ wizardApiFetch }
+				/>
+			) }
 			{ segments.length ? (
 				<>
-					<Stack direction="row" justify="space-between" align="center" gap="lg" className="newspack-campaigns-wizard-segments__toolbar">
-						{ isReordering ? (
-							<>
-								<p className="newspack-campaigns-wizard-segments__reorder-help">
-									{ __( 'Readers in more than one segment see prompts from the highest one.', 'newspack-plugin' ) }
-								</p>
-								<Stack direction="row" gap="sm" className="newspack-campaigns-wizard-segments__toolbar-actions">
-									<Button variant="tertiary" size="compact" disabled={ isSavingOrder } onClick={ cancelReordering }>
-										{ __( 'Cancel', 'newspack-plugin' ) }
-									</Button>
-									<Button
-										variant="primary"
-										size="compact"
-										disabled={ isSavingOrder || ! hasOrderChanged }
-										accessibleWhenDisabled
-										isBusy={ isSavingOrder }
-										onClick={ saveOrder }
-									>
-										{ __( 'Save', 'newspack-plugin' ) }
-									</Button>
-								</Stack>
-							</>
-						) : (
-							<>
-								<SearchControl
-									className="newspack-campaigns-wizard-segments__search"
-									label={ __( 'Search segments', 'newspack-plugin' ) }
-									placeholder={ __( 'Search segments', 'newspack-plugin' ) }
-									value={ search }
-									onChange={ setSearch }
-									size="compact"
-									__nextHasNoMarginBottom
+					<DataViews
+						className="newspack-campaigns__toolbar"
+						view={ view }
+						onChangeView={ onChangeView }
+						fields={ fields }
+						data={ visibleSegments }
+						getItemId={ item => String( item.id ) }
+						paginationInfo={ { totalItems: visibleSegments.length, totalPages: 1 } }
+						defaultLayouts={ { table: {} } }
+					>
+						<Stack direction="row" justify="space-between" align="flex-start" gap="xs" className="dataviews__view-actions">
+							<Stack direction="row" align="center" gap="sm" wrap="wrap" className="dataviews__search">
+								<BaseDataViews.Search label={ __( 'Search segments', 'newspack-plugin' ) } />
+							</Stack>
+							{ segments.length > 1 && (
+								<Button variant="secondary" size="compact" onClick={ () => setShowPriorityModal( true ) }>
+									{ __( 'Segment Priority', 'newspack-plugin' ) }
+								</Button>
+							) }
+						</Stack>
+					</DataViews>
+					<Stack direction="column" gap="lg" ref={ rowsRef }>
+						{ visibleSegments.map( segment => (
+							<Disabled key={ segment.id } isDisabled={ busyIds.includes( segment.id ) }>
+								<CardListRow
+									size="large"
+									item={ {
+										id: segment.id,
+										title: decodeEntities( segment.name ),
+										description: renderCriteria( segment ),
+										badge: segment.is_criteria_duplicated
+											? { label: __( 'Duplicate', 'newspack-plugin' ), intent: 'medium' }
+											: undefined,
+										toggleChecked: ! segment.configuration.is_disabled,
+										onToggleChange: () => toggleSegmentStatus( segment ),
+										actionsLabel: sprintf(
+											// Translators: %s: segment name.
+											__( 'Segment actions: %s', 'newspack-plugin' ),
+											decodeEntities( segment.name )
+										),
+										actions: [
+											{
+												label: __( 'Edit', 'newspack-plugin' ),
+												action: () => history.push( `/segments/${ segment.id }` ),
+											},
+											{
+												label: __( 'Delete', 'newspack-plugin' ),
+												action: () => deleteSegment( segment ),
+												destructive: true,
+											},
+										],
+									} }
 								/>
-								{ segments.length > 1 && (
-									<Button
-										ref={ priorityButtonRef }
-										variant="secondary"
-										size="compact"
-										className="newspack-campaigns-wizard-segments__toolbar-actions"
-										onClick={ startReordering }
-									>
-										{ __( 'Segment Priority', 'newspack-plugin' ) }
-									</Button>
-								) }
-							</>
-						) }
-					</Stack>
-					<div ref={ rowsRef }>
-						{ items.length ? (
-							<CardSortableList
-								// A fresh list per mode starts from the right rows, and drops a move still animating when Cancel is pressed.
-								key={ isReordering ? 'reordering' : 'listing' }
-								size="large"
-								items={ items }
-								sortable={ isReordering && ! isSavingOrder }
-								reordering={ isReordering }
-								disabled={ isSavingOrder }
-								onDragCallback={ moveSegment }
-							/>
-						) : (
+							</Disabled>
+						) ) }
+						{ ! visibleSegments.length && (
 							<p className="newspack-campaigns__no-results">{ __( 'No segments match your search.', 'newspack-plugin' ) }</p>
 						) }
-					</div>
+					</Stack>
 				</>
 			) : (
 				<EmptyState.Root>

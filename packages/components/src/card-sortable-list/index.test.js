@@ -70,30 +70,6 @@ describe( 'CardSortableList', () => {
 		jest.useRealTimers();
 	} );
 
-	it( 'shows every move button disabled and turns off dragging when not sortable', () => {
-		const { container } = render( <CardSortableList items={ items } sortable={ false } /> );
-		expect( screen.getByRole( 'button', { name: 'Move Homepage down' } ) ).toBeDisabled();
-		expect( screen.getByRole( 'button', { name: 'Move About up' } ) ).toBeDisabled();
-		expect( container.querySelector( '[draggable="true"]' ) ).not.toBeInTheDocument();
-	} );
-
-	it( 'disables toggles and menus while reordering, leaving the move buttons usable', () => {
-		render(
-			<CardSortableList
-				reordering
-				items={ items.map( item => ( {
-					...item,
-					toggleChecked: true,
-					onToggleChange: () => {},
-					actions: [ { label: 'Edit', action: () => {} } ],
-				} ) ) }
-			/>
-		);
-		expect( screen.getByRole( 'checkbox', { name: 'Homepage' } ) ).toBeDisabled();
-		expect( screen.getAllByRole( 'button', { name: 'More actions' } )[ 0 ] ).toBeDisabled();
-		expect( screen.getByRole( 'button', { name: 'Move Homepage down' } ) ).toBeEnabled();
-	} );
-
 	it( 'omits the toggle and menu when an item has neither', () => {
 		render( <CardSortableList items={ [ { id: 1, title: 'Homepage' } ] } /> );
 		expect( screen.queryByRole( 'checkbox' ) ).not.toBeInTheDocument();
