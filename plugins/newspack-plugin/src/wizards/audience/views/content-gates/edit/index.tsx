@@ -40,6 +40,7 @@ import { useAccessRuleOptions } from '../use-access-rule-options';
 import SavePanel from './save-panel';
 import PreferencesModal from './preferences-modal';
 import NewsletterSettings from './newsletter-settings';
+import { PUBLISHED_AGE_RULE, isUsableAgeDuration, normalizeAgeDuration } from '../../../../../content-gate/utils/published-age';
 
 const { useHistory } = Router;
 
@@ -471,6 +472,10 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		resetError();
 	}, [ gates, id, isDeleting, isFetching, isSaving, isNew ] );
 
+	const hasUnusableAgeRule = contentRules.some(
+		rule => PUBLISHED_AGE_RULE === rule.slug && ! isUsableAgeDuration( normalizeAgeDuration( rule.value ) )
+	);
+
 	// Set header actions.
 	useEffect( () => {
 		const actions: HeaderAction[] = [
@@ -483,6 +488,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 					! isDirty ||
 					! title ||
 					! contentRules.length ||
+					hasUnusableAgeRule ||
 					( ! registration.active && ! customAccess.active ) ||
 					( ! registration.active &&
 						! customAccess.access_rules.some( ruleGroup =>
@@ -535,6 +541,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		handleCreate,
 		handleSave,
 		handleSaveButtonClick,
+		hasUnusableAgeRule,
 		isDirty,
 		isFetching,
 		isNew,
@@ -738,6 +745,8 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 											label: __( 'Edit layout', 'newspack-plugin' ),
 											href: ! isNew ? getEditGateLayoutUrl( gate.id, 'registration' ) : undefined,
 											onClick: isNew ? () => handleCreate( 'registration' ) : undefined,
+											// On a new gate this saves first, so it waits for a usable age rule like Save does.
+											disabled: isNew && hasUnusableAgeRule,
 											icon: pencil,
 									  }
 									: undefined
@@ -764,6 +773,8 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 										label: __( 'Edit layout', 'newspack-plugin' ),
 										href: ! isNew ? getEditGateLayoutUrl( gate.id, 'custom_access' ) : undefined,
 										onClick: isNew ? () => handleCreate( 'custom_access' ) : undefined,
+										// On a new gate this saves first, so it waits for a usable age rule like Save does.
+										disabled: isNew && hasUnusableAgeRule,
 										icon: pencil,
 								  }
 								: undefined
