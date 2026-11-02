@@ -262,6 +262,7 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, ...screenProps }
 								<SearchControl
 									className="newspack-campaigns-wizard-segments__search"
 									label={ __( 'Search segments', 'newspack-plugin' ) }
+									placeholder={ __( 'Search segments', 'newspack-plugin' ) }
 									value={ search }
 									onChange={ setSearch }
 									size="compact"
