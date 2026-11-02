@@ -2378,6 +2378,283 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Readers of every donor kind, including the cases where the rules compete, so
+	 * the Donor filter can be checked against what each row says.
+	 *
+	 * Recurring donors carry the `is_donor` flag too, as they do in production
+	 * (their first payment fires `donation_new`), so the One-time set is only right
+	 * if it leaves them out.
+	 *
+	 * @return array<string,array<string,int>> Reader IDs by label, grouped by the
+	 *                                         Donor filter value their row matches
+	 *                                         ('none' for a non-donor).
+	 */
+	private function create_donor_fixture(): array {
+		$donation_product_id = $this->create_donation_product();
+
+		$one_time = $this->create_reader( 'One Time' );
+		$this->create_donation_order( $one_time, $this->create_donation_product( 'simple' ) );
+		$this->flag_donor( $one_time );
+		$one_time_with_pending = $this->create_reader( 'One Time With Pending' );
+		$this->create_individual_subscription( $one_time_with_pending, 'pending', $donation_product_id );
+		$this->flag_donor( $one_time_with_pending );
+
+		$recurring = $this->create_reader( 'Recurring' );
+		$this->create_individual_subscription( $recurring, 'active', $donation_product_id );
+		$this->flag_donor( $recurring );
+		$recurring_on_hold = $this->create_reader( 'Recurring On Hold' );
+		$this->create_individual_subscription( $recurring_on_hold, 'on-hold', $donation_product_id );
+		$this->flag_donor( $recurring_on_hold );
+		// Cancelled, then gave monthly again: the former flag is still set.
+		$resubscribed = $this->create_reader( 'Resubscribed' );
+		$this->flag_former_donor( $resubscribed );
+		$this->create_individual_subscription( $resubscribed, 'active', $donation_product_id );
+		$live_and_ended = $this->create_reader( 'Live And Ended' );
+		$this->create_individual_subscription( $live_and_ended, 'cancelled', $donation_product_id );
+		$this->create_individual_subscription( $live_and_ended, 'active', $donation_product_id );
+
+		// Neither ended subscription carries a flag, so the subscription alone has to count.
+		$cancelled = $this->create_reader( 'Cancelled' );
+		$this->create_individual_subscription( $cancelled, 'cancelled', $donation_product_id );
+		$expired = $this->create_reader( 'Expired' );
+		$this->create_individual_subscription( $expired, 'expired', $donation_product_id );
+		$flag_only = $this->create_reader( 'Former Flag Only' );
+		$this->flag_former_donor( $flag_only );
+		$gave_again = $this->create_reader( 'Gave Again' );
+		$this->create_individual_subscription( $gave_again, 'cancelled', $donation_product_id );
+		$this->flag_donor( $gave_again );
+
+		$non_donor    = $this->create_reader( 'Non Donor' );
+		$pending_only = $this->create_reader( 'Pending Only' );
+		$this->create_individual_subscription( $pending_only, 'pending', $donation_product_id );
+
+		return [
+			'one-time'  => compact( 'one_time', 'one_time_with_pending' ),
+			'recurring' => compact( 'recurring', 'recurring_on_hold', 'resubscribed', 'live_and_ended' ),
+			'former'    => compact( 'cancelled', 'expired', 'flag_only', 'gave_again' ),
+			'none'      => compact( 'non_donor', 'pending_only' ),
+		];
+	}
+
+	/**
+	 * The reader IDs in one or more groups of the donor fixture, sorted the way
+	 * filtered_ids() returns them.
+	 *
+	 * @param array<string,int> ...$groups Groups of the donor fixture.
+	 *
+	 * @return int[]
+	 */
+	private static function sorted_ids( array ...$groups ): array {
+		$ids = array_merge( ...array_map( 'array_values', $groups ) );
+		sort( $ids );
+		return $ids;
+	}
+
+	/**
+	 * Each Donor filter option lists exactly the readers of that kind.
+	 *
+	 * @dataProvider data_donor_kinds
+	 *
+	 * @param string $kind The Donor filter value.
+	 */
+	public function test_donor_filter_lists_each_kind( string $kind ) {
+		$this->login_admin();
+		$fixture = $this->create_donor_fixture();
+
+		$this->assertSame( self::sorted_ids( $fixture[ $kind ] ), $this->filtered_ids( [ 'donor' => [ $kind ] ] ) );
+	}
+
+	/**
+	 * The donor kinds the filter includes by.
+	 *
+	 * @return array[]
+	 */
+	public function data_donor_kinds() {
+		return [
+			'one-time'  => [ 'one-time' ],
+			'recurring' => [ 'recurring' ],
+			'former'    => [ 'former' ],
+		];
+	}
+
+	/**
+	 * The filter and the badge never disagree: every reader an option returns has
+	 * that kind on their row, and no reader of that kind is left out. The cases
+	 * where the rules compete read Recurring on the row and stay out of Former.
+	 */
+	public function test_donor_filter_matches_the_row_kind() {
+		$this->login_admin();
+		$fixture = $this->create_donor_fixture();
+
+		foreach ( $fixture as $kind => $readers ) {
+			$row_kind = 'none' === $kind ? '' : $kind;
+			$items    = $this->dispatch( [ 'donor' => [ $kind ] ] )->get_data()['items'];
+			foreach ( $items as $item ) {
+				$this->assertSame( $row_kind, $item['donor']['kind'], sprintf( 'Reader %d is listed under "%s" but its row says otherwise.', $item['id'], $kind ) );
+			}
+			$this->assertSame( [], array_values( array_diff( $readers, array_column( $items, 'id' ) ) ), sprintf( 'A reader of kind "%s" is missing from its filter.', $kind ) );
+		}
+
+		$former_ids = $this->filtered_ids( [ 'donor' => [ 'former' ] ] );
+		foreach ( [ 'resubscribed', 'live_and_ended' ] as $label ) {
+			$reader_id = $fixture['recurring'][ $label ];
+			$this->assertSame( 'recurring', $this->list_row( $reader_id )['donor']['kind'], $label );
+			$this->assertNotContains( $reader_id, $former_ids, $label );
+		}
+	}
+
+	/**
+	 * "Not a donor" lists everyone outside the three kinds, including a reader whose
+	 * only donation subscription never took a payment.
+	 */
+	public function test_donor_filter_none_lists_non_donors() {
+		$this->login_admin();
+		$fixture = $this->create_donor_fixture();
+
+		$this->assertSame( self::sorted_ids( $fixture['none'] ), $this->filtered_ids( [ 'donor' => [ 'none' ] ] ) );
+	}
+
+	/**
+	 * "Not a donor" and a kind together list both.
+	 */
+	public function test_donor_filter_none_and_one_time_unions() {
+		$this->login_admin();
+		$fixture = $this->create_donor_fixture();
+
+		$this->assertSame(
+			self::sorted_ids( $fixture['none'], $fixture['one-time'] ),
+			$this->filtered_ids( [ 'donor' => [ 'none', 'one-time' ] ] )
+		);
+	}
+
+	/**
+	 * Ticking every option narrows nothing.
+	 */
+	public function test_donor_filter_with_every_option_lists_every_reader() {
+		$this->login_admin();
+		$fixture = $this->create_donor_fixture();
+
+		$this->assertSame(
+			self::sorted_ids( ...array_values( $fixture ) ),
+			$this->filtered_ids( [ 'donor' => [ 'one-time', 'recurring', 'former', 'none' ] ] )
+		);
+	}
+
+	/**
+	 * Several kinds together list the readers of each.
+	 */
+	public function test_donor_filter_unions_selected_kinds() {
+		$this->login_admin();
+		$fixture = $this->create_donor_fixture();
+
+		$this->assertSame(
+			self::sorted_ids( $fixture['one-time'], $fixture['former'] ),
+			$this->filtered_ids( [ 'donor' => [ 'one-time', 'former' ] ] )
+		);
+	}
+
+	/**
+	 * The Donor filter narrows with the Status filter, including "Not a donor",
+	 * which subtracts from the other filters' set instead of adding one.
+	 */
+	public function test_donor_filter_narrows_with_status() {
+		$this->login_admin();
+		$fixture   = $this->create_donor_fixture();
+		$plan_id   = $this->create_subscription_product( 'Digital' );
+		$one_time  = $fixture['one-time']['one_time'];
+		$non_donor = $fixture['none']['non_donor'];
+		$this->create_individual_subscription( $one_time, 'active', $plan_id );
+		$this->create_individual_subscription( $non_donor, 'active', $plan_id );
+
+		$this->assertSame(
+			[ $one_time ],
+			$this->filtered_ids(
+				[
+					'status' => [ 'active' ],
+					'donor'  => [ 'one-time' ],
+				]
+			)
+		);
+		$this->assertSame(
+			[ $non_donor ],
+			$this->filtered_ids(
+				[
+					'status' => [ 'active' ],
+					'donor'  => [ 'none' ],
+				]
+			)
+		);
+	}
+
+	/**
+	 * A flag stored as `'1'`, which is what Reader_Data keeps for the number 1,
+	 * reads as set on the row, so the filter has to match it too.
+	 */
+	public function test_donor_filter_matches_a_flag_stored_as_a_number() {
+		$this->login_admin();
+		$reader_id = $this->create_reader( 'Numeric Flag' );
+		Reader_Data::update_item( $reader_id, 'is_donor', 1 );
+
+		$this->assertSame( 'one-time', $this->list_row( $reader_id )['donor']['kind'] );
+		$this->assertSame( [ $reader_id ], $this->filtered_ids( [ 'donor' => [ 'one-time' ] ] ) );
+	}
+
+	/**
+	 * A gifted recurring donation makes its recipient the Recurring donor, as the row
+	 * does. The purchaser, flagged by the payment, reads One-time on both sides.
+	 */
+	public function test_donor_filter_follows_the_gift_holder() {
+		$this->login_admin();
+		$purchaser = $this->create_reader( 'Purchaser' );
+		$recipient = $this->create_reader( 'Recipient' );
+		$this->create_gifted_subscription( $purchaser, $recipient, 'active', $this->create_donation_product() );
+		$this->flag_donor( $purchaser );
+
+		$recurring_ids = $this->filtered_ids( [ 'donor' => [ 'recurring' ] ] );
+
+		$this->assertContains( $recipient, $recurring_ids );
+		$this->assertNotContains( $purchaser, $recurring_ids );
+		$this->assertSame( 'recurring', $this->list_row( $recipient )['donor']['kind'] );
+		$this->assertSame( 'one-time', $this->list_row( $purchaser )['donor']['kind'] );
+		$this->assertSame( [ $purchaser ], $this->filtered_ids( [ 'donor' => [ 'one-time' ] ] ) );
+	}
+
+	/**
+	 * A donation subscription run as a group is shown with the reader's groups, not
+	 * as a donation, so it makes no one a donor on the row or in the filter.
+	 */
+	public function test_a_group_donation_subscription_counts_toward_no_kind() {
+		$this->login_admin();
+		$owner        = $this->create_reader( 'Group Owner' );
+		$subscription = $this->create_individual_subscription( $owner, 'active', $this->create_donation_product() );
+		$subscription->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+
+		$this->assertSame( '', $this->list_row( $owner )['donor']['kind'] );
+		$this->assertSame( [], $this->filtered_ids( [ 'donor' => [ 'recurring' ] ] ) );
+		$this->assertSame( [ $owner ], $this->filtered_ids( [ 'donor' => [ 'none' ] ] ) );
+	}
+
+	/**
+	 * Off WooCommerce there are no donor kinds, so the param narrows nothing.
+	 */
+	public function test_donor_filter_is_ignored_when_donations_are_not_woocommerce() {
+		$this->login_admin();
+		$fixture = $this->create_donor_fixture();
+
+		update_option( Donations::NEWSPACK_READER_REVENUE_PLATFORM, 'nrh' );
+		try {
+			$one_time_ids = $this->filtered_ids( [ 'donor' => [ 'one-time' ] ] );
+			$none_ids     = $this->filtered_ids( [ 'donor' => [ 'none' ] ] );
+		} finally {
+			delete_option( Donations::NEWSPACK_READER_REVENUE_PLATFORM );
+		}
+
+		$every_reader = self::sorted_ids( ...array_values( $fixture ) );
+		$this->assertSame( $every_reader, $one_time_ids );
+		$this->assertSame( $every_reader, $none_ids );
+	}
+
+	/**
 	 * A non-admin reader is refused.
 	 */
 	public function test_forbidden_for_non_admin() {
