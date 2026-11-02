@@ -6,15 +6,15 @@
  * WordPress dependencies.
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { DropdownMenu, MenuGroup, MenuItem } from '@wordpress/components';
 import { useState, Fragment } from '@wordpress/element';
-import { blockTable, header, layout, moreVertical, postList } from '@wordpress/icons';
+import { blockTable, header, layout, postList } from '@wordpress/icons';
 import { Card as WPCard, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
 import { Button, Card, Grid, Modal } from '../../../../../packages/components/src';
+import EditTitleLink from '../edit-title-link';
 import SegmentationPreview from '../segmentation-preview';
 import PromptActionCard from '../prompt-action-card';
 import { segmentDescriptionItems, splitCriteriaMessage, warningForPopup } from '../../views/campaigns/utils';
@@ -73,13 +73,7 @@ const SegmentGroup = props => {
 						render={ <TitleTag /> }
 						className="newspack-card--core--sortable-list__title newspack-campaigns__segment-group__title"
 					>
-						{ id ? (
-							<Button href={ `#/segments/${ id }` } isLink>
-								{ label }
-							</Button>
-						) : (
-							label
-						) }
+						{ id ? <EditTitleLink href={ `#/segments/${ id }` }>{ label }</EditTitleLink> : label }
 					</WPCard.Title>
 					{ description.length > 0 && (
 						<div className="newspack-campaigns__details">
@@ -100,9 +94,20 @@ const SegmentGroup = props => {
 					) }
 				</Stack>
 				<Stack direction="row" gap="sm" align="center">
+					<SegmentationPreview
+						campaign={ isPreviewingCampaign ? campaignToPreview : false }
+						segment={ id }
+						showUnpublished={ isPreviewingCampaign } // Only if previewing a specific campaign/group.
+						renderButton={ ( { showPreview } ) => (
+							<Button variant="tertiary" size="compact" onClick={ () => showPreview() }>
+								{ __( 'Preview Segment', 'newspack-plugin' ) }
+							</Button>
+						) }
+						title={ label }
+					/>
 					{ 'unassigned' !== campaignId && ! isTrashView && (
 						<Fragment>
-							<Button variant="secondary" onClick={ () => setModalVisible( ! modalVisible ) }>
+							<Button variant="secondary" size="compact" onClick={ () => setModalVisible( ! modalVisible ) }>
 								{ __( 'Add Prompt', 'newspack-plugin' ) }
 							</Button>
 							{ modalVisible && (
@@ -255,36 +260,6 @@ const SegmentGroup = props => {
 							) }
 						</Fragment>
 					) }
-					<SegmentationPreview
-						campaign={ isPreviewingCampaign ? campaignToPreview : false }
-						segment={ id }
-						showUnpublished={ isPreviewingCampaign } // Only if previewing a specific campaign/group.
-						renderButton={ ( { showPreview } ) => (
-							<DropdownMenu
-								icon={ moreVertical }
-								label={ sprintf(
-									// Translators: %s: segment name.
-									__( 'Segment actions: %s', 'newspack-plugin' ),
-									label
-								) }
-							>
-								{ ( { onClose } ) => (
-									<MenuGroup>
-										<MenuItem
-											onClick={ () => {
-												onClose();
-												showPreview();
-											} }
-										>
-											{ __( 'Preview Segment', 'newspack-plugin' ) }
-										</MenuItem>
-										{ id && <MenuItem href={ `#/segments/${ id }` }>{ __( 'Edit Segment', 'newspack-plugin' ) }</MenuItem> }
-									</MenuGroup>
-								) }
-							</DropdownMenu>
-						) }
-						title={ label }
-					/>
 				</Stack>
 			</WPCard.Header>
 			{ prompts.map( item => (

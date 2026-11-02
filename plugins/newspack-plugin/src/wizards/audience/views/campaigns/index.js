@@ -12,7 +12,6 @@ import { Component } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { addQueryArgs } from '@wordpress/url';
 import { decodeEntities } from '@wordpress/html-entities';
-import { Stack } from '@wordpress/ui';
 
 /**
  * External dependencies.
@@ -371,20 +370,18 @@ class AudienceCampaigns extends Component {
 														'Manage the prompts readers see, grouped by the segment each one targets.',
 														'newspack-plugin'
 													) }
-													headerActions={
-														<Stack direction="row" gap="sm" align="center">
-															<AddCampaignAction createCampaignGroup={ createCampaignGroup } />
-															<CampaignActions
-																archiveCampaignGroup={ archiveCampaignGroup }
-																campaignId={ campaignId }
-																campaigns={ campaigns }
-																deleteCampaignGroup={ deleteCampaignGroup }
-																duplicateCampaignGroup={ duplicateCampaignGroup }
-																manageCampaignGroup={ this.manageCampaignGroup }
-																prompts={ prompts }
-																renameCampaignGroup={ renameCampaignGroup }
-															/>
-														</Stack>
+													headerActions={ <AddCampaignAction createCampaignGroup={ createCampaignGroup } /> }
+													campaignActions={
+														<CampaignActions
+															archiveCampaignGroup={ archiveCampaignGroup }
+															campaignId={ campaignId }
+															campaigns={ campaigns }
+															deleteCampaignGroup={ deleteCampaignGroup }
+															duplicateCampaignGroup={ duplicateCampaignGroup }
+															manageCampaignGroup={ this.manageCampaignGroup }
+															prompts={ prompts }
+															renameCampaignGroup={ renameCampaignGroup }
+														/>
 													}
 												/>
 											</CampaignsContext.Provider>

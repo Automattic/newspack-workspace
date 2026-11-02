@@ -15,15 +15,16 @@ import {
 	Notice as CoreNotice,
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
-import { flushSync, useEffect, useState, Fragment } from '@wordpress/element';
+import { useEffect, useState, Fragment } from '@wordpress/element';
 import { decodeEntities } from '@wordpress/html-entities';
-import { moreVertical } from '@wordpress/icons';
+import { moreVertical, settings } from '@wordpress/icons';
 import { Badge, Card, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
 import { Button, Modal, Notice, TextControl } from '../../../../../packages/components/src';
+import EditTitleLink from '../edit-title-link';
 import PromptSettingsDrawer from '../settings-drawer';
 import { promptDetails, promptStatus } from '../../views/campaigns/utils';
 import './style.scss';
@@ -80,7 +81,7 @@ const PromptActionCard = props => {
 					<Stack direction="column" gap="xs" className="newspack-campaigns__prompt-summary">
 						<Stack direction="row" gap="sm" wrap="wrap" align="center">
 							<h3 className="newspack-campaigns__prompt-title">
-								{ isTrash ? displayTitle : <a href={ decodeEntities( editLink ) }>{ displayTitle }</a> }
+								{ isTrash ? displayTitle : <EditTitleLink href={ decodeEntities( editLink ) }>{ displayTitle }</EditTitleLink> }
 							</h3>
 							<Badge intent={ statusIntent }>{ statusLabel }</Badge>
 						</Stack>
@@ -94,8 +95,24 @@ const PromptActionCard = props => {
 						</div>
 					</Stack>
 					<Stack direction="row" gap="sm" align="center">
+						{ ! isTrash && (
+							<Button
+								icon={ settings }
+								size="compact"
+								label={ sprintf(
+									// Translators: %s: prompt title.
+									__( 'Prompt settings: %s', 'newspack-plugin' ),
+									displayTitle
+								) }
+								onClick={ () => {
+									setSettingsSession( session => session + 1 );
+									setIsSettingsOpen( true );
+								} }
+							/>
+						) }
 						<DropdownMenu
 							icon={ moreVertical }
+							toggleProps={ { size: 'compact' } }
 							label={ sprintf(
 								// Translators: %s: prompt title.
 								__( 'More options: %s', 'newspack-plugin' ),
@@ -145,17 +162,6 @@ const PromptActionCard = props => {
 												{ __( 'Preview', 'newspack-plugin' ) }
 											</MenuItem>
 											<MenuItem href={ decodeEntities( editLink ) }>{ __( 'Edit', 'newspack-plugin' ) }</MenuItem>
-											<MenuItem
-												onClick={ () => {
-													// The drawer records focus as it mounts, to return it on close. Close the
-													// menu first so that focus is on the toggle, not a menu item about to go.
-													flushSync( onClose );
-													setSettingsSession( session => session + 1 );
-													setIsSettingsOpen( true );
-												} }
-											>
-												{ __( 'Settings', 'newspack-plugin' ) }
-											</MenuItem>
 											<MenuItem
 												onClick={ () => {
 													onClose();
