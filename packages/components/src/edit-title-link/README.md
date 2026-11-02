@@ -20,3 +20,14 @@ The styles apply inside a `.newspack-wizard` screen, where they take over from t
 	<EditTitleLink href="#/segments/12">Donors</EditTitleLink>
 </h3>
 ```
+
+With badges beside the heading:
+
+```jsx
+<Stack direction="row" align="center" gap="sm" className="newspack-edit-title-link-row">
+	<h3>
+		<EditTitleLink href="#/edit/7">Paid wall</EditTitleLink>
+	</h3>
+	<Badge intent="stable">Active</Badge>
+</Stack>
+```
