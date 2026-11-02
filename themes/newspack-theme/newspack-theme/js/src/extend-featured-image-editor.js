@@ -67,6 +67,28 @@ const ComposedRadio = compose( [
 	} ) ),
 ] )( RadioCustom );
 
+/**
+ * Convert rendered caption HTML (wrapped in <p>, possibly with a credit link) to plain placeholder text.
+ * DOMParser builds an inert document, so no scripts run and entities are decoded.
+ *
+ * @param {string} html Rendered HTML.
+ * @return {string} Plain text.
+ */
+const htmlToText = html => new window.DOMParser().parseFromString( html, 'text/html' ).body.textContent.replace( /\s+/g, ' ' ).trim();
+
+/**
+ * Placeholder for the caption field, previewing what renders when it's left blank.
+ *
+ * @param {string|null} defaultCaption Plain-text default caption, or null if the attachment isn't loaded.
+ * @return {string} Placeholder text.
+ */
+const getPlaceholder = defaultCaption => {
+	if ( null === defaultCaption ) {
+		return __( "Leave blank to use the image's default caption.", 'newspack-theme' );
+	}
+	return defaultCaption || __( 'No default caption or credit set for this image.', 'newspack-theme' );
+};
+
 const CaptionControl = compose( [
 	withSelect( _select => {
 		const { getCurrentPostAttribute, getEditedPostAttribute } = _select( 'core/editor' );
@@ -75,9 +97,11 @@ const CaptionControl = compose( [
 		const featuredMediaId = getEditedPostAttribute( 'featured_media' );
 
 		// WP 6.9+: getMedia is deprecated; use the attachment entity instead.
-		// Edit context returns caption.raw (the unfiltered post_excerpt);
-		// the record resolves async and re-renders this component when the fetch lands.
-		const media = featuredMediaId ? _select( coreStore ).getEntityRecord( 'postType', 'attachment', featuredMediaId, { context: 'edit' } ) : null;
+		// View context, not edit: edit requires edit_post on the attachment, so it 403s for an
+		// Author using someone else's upload. caption.rendered runs through get_the_excerpt, so it
+		// already includes the image credit, matching what the front end shows by default.
+		// The record resolves async and re-renders this component when the fetch lands.
+		const media = featuredMediaId ? _select( coreStore ).getEntityRecord( 'postType', 'attachment', featuredMediaId, { context: 'view' } ) : null;
 
 		return {
 			featuredMediaId,
@@ -85,7 +109,8 @@ const CaptionControl = compose( [
 				...getCurrentPostAttribute( 'meta' ),
 				...getEditedPostAttribute( 'meta' ),
 			},
-			defaultCaption: media?.caption?.raw ?? '',
+			// null while loading, or when the record can't be read (e.g. the attachment's parent is a draft the user can't see).
+			defaultCaption: media ? htmlToText( media.caption?.rendered ?? '' ) : null,
 		};
 	} ),
 	withDispatch( dispatch => ( {
@@ -130,25 +155,28 @@ const CaptionControl = compose( [
 					<TextControl
 						label={ __( 'Featured Image Caption', 'newspack-theme' ) }
 						value={ value }
-						placeholder={
-							defaultCaption ||
-							__( 'No default caption set for this image; the image credit (if available) will be displayed.', 'newspack-theme' )
-						}
+						placeholder={ getPlaceholder( defaultCaption ) }
 						onChange={ v => updateCaption( v, meta ) }
 						help={
 							hasOverride
-								? __( "This caption applies to this article only. Other articles keep the image's default caption.", 'newspack-theme' )
-								: __( "Leave blank to use the image's default caption (shown above) or credit (if available).", 'newspack-theme' )
+								? __(
+										"This caption applies to this article only. Other articles keep the image's default caption.",
+										'newspack-theme'
+								  )
+								: __( "Leave blank to use the image's default caption and credit.", 'newspack-theme' )
 						}
 						__nextHasNoMarginBottom
 					/>
-					<ToggleControl
-						label={ __( 'Include image credit', 'newspack-theme' ) }
-						help={ __( 'Append the image credit to the custom caption.', 'newspack-theme' ) }
-						checked={ includeCredit }
-						onChange={ () => updateIncludeCredit( ! includeCredit, meta ) }
-						__nextHasNoMarginBottom
-					/>
+					{ /* Only meaningful with a custom caption: the default caption already includes the credit. */ }
+					{ hasOverride && (
+						<ToggleControl
+							label={ __( 'Include image credit', 'newspack-theme' ) }
+							help={ __( 'Append the image credit to the custom caption.', 'newspack-theme' ) }
+							checked={ includeCredit }
+							onChange={ () => updateIncludeCredit( ! includeCredit, meta ) }
+							__nextHasNoMarginBottom
+						/>
+					) }
 				</Fragment>
 			) }
 		</Fragment>

@@ -590,7 +590,19 @@ function newspack_enqueue_scripts() {
 	$extend_featured_image_asset_path = get_theme_file_path( '/js/dist/extend-featured-image-editor.asset.php' );
 	$extend_featured_image_asset      = file_exists( $extend_featured_image_asset_path )
 		? require $extend_featured_image_asset_path
-		: array( 'dependencies' => array( 'wp-blocks', 'wp-components', 'wp-core-data' ), 'version' => $theme_version );
+		: array(
+			'dependencies' => array(
+				'react-jsx-runtime',
+				'wp-components',
+				'wp-compose',
+				'wp-core-data',
+				'wp-data',
+				'wp-element',
+				'wp-hooks',
+				'wp-i18n',
+			),
+			'version'      => $theme_version,
+		);
 	// phpcs:ignore WordPress.WP.EnqueuedResourceParameters.NotInFooter -- TODO: Should we set $in_footer?
 	wp_register_script(
 		'newspack-extend-featured-image-script',

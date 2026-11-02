@@ -474,11 +474,13 @@ if ( ! function_exists( 'newspack_post_thumbnail_caption' ) ) {
 		// Use the per-post custom caption only when the editor has enabled the override.
 		// All meta are stored on the post (see newspack_register_meta()), not the attachment.
 		if ( get_post_meta( get_the_ID(), 'newspack_post_featured_image_caption_enabled', true ) ) {
-			$caption        = get_post_meta( get_the_ID(), 'newspack_post_featured_image_caption', true );
+			// Trim so a whitespace-only caption counts as blank and falls through to the defaults, matching the editor's check.
+			$caption        = trim( (string) get_post_meta( get_the_ID(), 'newspack_post_featured_image_caption', true ) );
 			$include_credit = get_post_meta( get_the_ID(), 'newspack_post_featured_image_caption_include_credit', true );
 
 			// When custom caption is set, optionally append the image credit if enabled.
-			if ( $include_credit && class_exists( '\Newspack\Newspack_Image_Credits' ) ) {
+			// Skipped for a blank caption: both fallbacks below already carry the credit.
+			if ( '' !== $caption && $include_credit && class_exists( '\Newspack\Newspack_Image_Credits' ) ) {
 				$credit = \Newspack\Newspack_Image_Credits::get_media_credit_string( get_post_thumbnail_id() );
 			}
 		}
