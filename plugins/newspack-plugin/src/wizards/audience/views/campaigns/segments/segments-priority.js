@@ -24,7 +24,15 @@ const SegmentsPriority = ( { closeModal, segments, setSegments, wizardApiFetch }
 	const [ isSaving, setIsSaving ] = useState( false );
 	const [ error, setError ] = useState( null );
 
-	const items = useMemo( () => sortedSegments.map( ( { id, name } ) => ( { id, title: decodeEntities( name ) } ) ), [ sortedSegments ] );
+	const items = useMemo(
+		() =>
+			sortedSegments.map( ( { id, name, configuration } ) => ( {
+				id,
+				title: decodeEntities( name ),
+				badge: configuration?.is_disabled ? { label: __( 'Disabled', 'newspack-plugin' ), intent: 'draft' } : undefined,
+			} ) ),
+		[ sortedSegments ]
+	);
 	const hasChanged = idsOf( sortedSegments ).join() !== idsOf( segments ).join();
 
 	const sortSegments = ( index, targetIndex ) => {

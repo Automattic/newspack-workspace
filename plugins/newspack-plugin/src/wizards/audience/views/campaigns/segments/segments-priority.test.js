@@ -13,7 +13,7 @@ const NOTICE = { selector: '.components-notice__content' };
 
 const SEGMENTS = [
 	{ id: 'a', name: 'Alpha' },
-	{ id: 'b', name: 'Beta' },
+	{ id: 'b', name: 'Beta', configuration: { is_disabled: true } },
 	{ id: 'c', name: 'Gamma' },
 ];
 
@@ -42,6 +42,12 @@ describe( 'SegmentsPriority', () => {
 		expect( screen.getByRole( 'heading', { name: 'Alpha' } ) ).toBeInTheDocument();
 		expect( screen.queryByRole( 'checkbox' ) ).not.toBeInTheDocument();
 		expect( screen.queryByRole( 'button', { name: 'More actions' } ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'marks disabled segments, so their place in the order reads as inactive', () => {
+		setup( jest.fn() );
+		expect( screen.getAllByText( 'Disabled' ) ).toHaveLength( 1 );
+		expect( screen.getByText( 'Disabled' ).closest( '.newspack-card--core--sortable-list__card' ) ).toHaveTextContent( 'Beta' );
 	} );
 
 	it( 'enables Save only while the order differs from the saved one', () => {
