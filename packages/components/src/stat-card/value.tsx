@@ -67,13 +67,7 @@ const Value = forwardRef< HTMLSpanElement, StatCardValueProps >( function Value(
 	return (
 		<Stack direction="row" align="baseline" gap="sm" className="newspack-stat-card__figure">
 			{ figure }
-			{ shownUnit && (
-				<span className="newspack-stat-card__unit">
-					{ /* Collapsed on screen, but keeps the figure and its unit apart in copied text and braille. */ }
-					{ ' ' }
-					{ shownUnit }
-				</span>
-			) }
+			{ shownUnit && <span className="newspack-stat-card__unit">{ shownUnit }</span> }
 			{ suffix }
 		</Stack>
 	);

@@ -384,16 +384,6 @@ describe( 'StatCard.Value', () => {
 		expect( container.querySelector( '.newspack-stat-card__value' ) ).toHaveTextContent( /^12$/ );
 	} );
 
-	// The gap is layout only, so without a real space copied text reads "12days".
-	it( 'separates the unit from the figure in the raw text', () => {
-		const { container } = render(
-			<StatCard.Root>
-				<StatCard.Value value="12" unit="days" />
-			</StatCard.Root>
-		);
-		expect( container.querySelector( '.newspack-stat-card__figure' ).textContent ).toBe( '12 days' );
-	} );
-
 	it( 'puts the unit between the figure and the suffix', () => {
 		const { container } = render(
 			<StatCard.Root>

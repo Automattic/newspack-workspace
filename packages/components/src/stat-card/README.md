@@ -311,7 +311,7 @@ With a `unit` or a `suffix`, the figure shares a baseline-aligned row with them,
 the unit first. Without either, the figure renders on its own with no extra
 wrapper.
 
-The unit takes the figure's colour at the delta's size, so the two read as one
+The unit takes the figure's color at the delta's size, so the two read as one
 figure. It is dropped along with the figure when there is none, because "— days"
 would read as a figure of its own; a zero keeps it. It stays out of `valueLabel`,
 so a spoken figure is followed by its unit in the same way as a visible one.
@@ -405,7 +405,8 @@ chose those words.
 
 A short line of body text that stands in for the figure, for a card that has an
 explanation to give rather than a number. It renders a `<div>`, so it can hold
-an icon beside its text, or a paragraph, whose margin it resets.
+an icon beside its text, or a paragraph, whose margin it resets. An icon has to
+fit the note's 20px line, or it pushes the first line out of alignment.
 
 Put it first in `Body`, where `Value` would go:
 
@@ -416,7 +417,7 @@ Put it first in `Body`, where `Value` would go:
 ```
 
 First in `Body`, a note's first line lines up with the figures in the
-neighbouring cards at any card width, so a row mixing figures and notes reads
+neighboring cards at any card width, so a row mixing figures and notes reads
 level without a margin tuned by hand. Without that, 13px text beside a 20px to
 48px figure would sit well above it, because cards align their bodies by the top
 of the box.
