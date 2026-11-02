@@ -242,7 +242,7 @@
 		transition: opacity motion.$duration-reveal motion.$ease-out;
 	}
 
-	&.open-on-hover-click:not(:has(> .wp-block-navigation-submenu__toggle[aria-expanded="true"])):hover > .wp-block-navigation__submenu-container {
+	&.open-on-hover-click:not(:has(> .wp-block-navigation-submenu__toggle[aria-expanded="true"]), .editor-styles-wrapper *):hover > .wp-block-navigation__submenu-container {
 		height: 0;
 		min-width: 0;
 		opacity: 0;

@@ -173,7 +173,7 @@
 
 .comments-panel__panel,
 .comments-panel__scrim {
-	--comments-panel-slide-duration: #{motion.travel-duration(math.min(712px, 704px))};
+	--comments-panel-slide-duration: #{motion.travel-duration(math.min(680px + 32px, 704px))};
 
 	@media (min-width: breakpoints.$tablet_width) {
 		--comments-panel-slide-duration: #{motion.travel-duration(728px)};

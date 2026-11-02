@@ -15,7 +15,7 @@
 	position: fixed;
 	inset: 0;
 	top: var(--wp-admin--admin-bar--height, 0);
-	z-index: 99998;
+	z-index: 99999;
 	display: flex;
 	flex-direction: column;
 	// Anchor content near the top, matching newspack-block-theme's search overlay.

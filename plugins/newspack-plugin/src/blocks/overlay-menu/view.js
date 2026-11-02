@@ -64,6 +64,7 @@ const createFlyoutInstance = wrapper => {
 	// stacking context issues regardless of the wrapper's CSS transforms.
 	document.body.appendChild( panel );
 
+	// Capture phase stops core's openMenuOnHover so drawer submenus open only from the chevron; other pointerenter listeners on these items stop too.
 	panel.addEventListener(
 		'pointerenter',
 		e => {

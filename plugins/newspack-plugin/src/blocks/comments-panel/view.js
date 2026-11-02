@@ -17,9 +17,6 @@ import domReady from '@wordpress/dom-ready';
  */
 import { lockScrollbarGutter, unlockScrollbarGutter } from '../../shared/js/scrollbar-gutter';
 
-/**
- * Internal dependencies
- */
 import { getNoticeIcon } from '../../newspack-ui/js/icons';
 import { getTransitionTime } from '../../newspack-ui/js/utils';
 
