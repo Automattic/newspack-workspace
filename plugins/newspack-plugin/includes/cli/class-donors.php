@@ -33,18 +33,20 @@ class Donors {
 	 * badge in Audience > Subscribers. A reader whose donation subscription ended,
 	 * with no live one, gets `is_former_donor`. Any other reader with a completed
 	 * donation order gets `is_donor`. Readers who already have either flag are left
-	 * alone, so a repeat run skips everyone it flagged before. A reader whose data is
-	 * full can't take a flag. The run warns about them, doesn't count them, and tries
-	 * them again next time. Donation orders with no customer can't be matched to a
-	 * reader. They are skipped and counted.
+	 * alone, so a repeat run skips everyone it flagged before. When a flag can't be
+	 * written, the run warns, doesn't count that reader, and tries them again next
+	 * time. Donation orders with no customer can't be matched to a reader. They are
+	 * skipped and counted.
 	 *
-	 * Only runs when the donation platform is WooCommerce.
+	 * Only runs when the donation platform is WooCommerce and WooCommerce
+	 * Subscriptions is active.
 	 *
 	 * Setting the flags changes who matches the donor segments in Campaigns, which is
 	 * why this only runs on request. Each flag write fires `newspack_reader_data_updated`.
 	 * When this command was added, nothing in the Newspack plugins listened to that
 	 * action, so a run doesn't queue ESP syncs and isn't throttled. Custom code on the
-	 * site that listens to it runs once per write.
+	 * site that listens to it runs twice for each reader flagged, because flagging a
+	 * reader writes two keys: the flag it sets and the one it clears.
 	 *
 	 * ## OPTIONS
 	 *
@@ -76,6 +78,12 @@ class Donors {
 		if ( ! function_exists( 'wc_get_orders' ) ) {
 			WP_CLI::error( 'WooCommerce is not active.' );
 		}
+		// Without Subscriptions the scan finds no donation subscription, so a reader
+		// whose recurring donation ended would be flagged a donor, not a former one,
+		// and a later run would leave that flag alone.
+		if ( ! function_exists( 'wcs_get_subscriptions_for_product' ) || ! function_exists( 'wcs_get_subscription' ) || ! function_exists( 'wcs_get_subscription_statuses' ) ) {
+			WP_CLI::error( 'WooCommerce Subscriptions must be active to tell former donors apart.' );
+		}
 		if ( $batch_size < 1 ) {
 			WP_CLI::error( 'The batch size must be a whole number of at least 1.' );
 		}
@@ -94,7 +102,16 @@ class Donors {
 
 		// Rules, as in Subscribers_Donors::kind(): a live donation subscription outranks
 		// an ended one, so only holders with no live one are former donors.
-		$holders = Subscribers_Donors::holders( 0 );
+		$holders = Subscribers_Donors::holders(
+			0,
+			function () {
+				// Every donation subscription is read, so clear the object cache
+				// between chunks, as the order walk below does between pages.
+				if ( function_exists( '\WP_CLI\Utils\wp_clear_object_cache' ) ) {
+					\WP_CLI\Utils\wp_clear_object_cache();
+				}
+			}
+		);
 		$live    = array_flip( $holders['live'] );
 		foreach ( $holders['ended'] as $user_id ) {
 			if ( isset( $live[ $user_id ] ) ) {
@@ -193,7 +210,7 @@ class Donors {
 		if ( Reader_Data::get_bool( $user_id, $flag ) ) {
 			return true;
 		}
-		WP_CLI::warning( sprintf( 'Could not set `%s` for user %d. The reader\'s data is full.', $flag, $user_id ) );
+		WP_CLI::warning( sprintf( 'Could not set `%s` for user %d: the write was refused. The reader\'s data may be full.', $flag, $user_id ) );
 		return false;
 	}
 
