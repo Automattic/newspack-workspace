@@ -73,7 +73,20 @@ class ImageUpload extends Component {
 	 * Render.
 	 */
 	render = () => {
-		const { buttonLabel, className, disabled, help, image, imageStyle, isCovering, label, onChange, style = {}, withMargin = true } = this.props;
+		const {
+			actionLabels = {},
+			buttonLabel,
+			className,
+			disabled,
+			help,
+			image,
+			imageStyle,
+			isCovering,
+			label,
+			onChange,
+			style = {},
+			withMargin = true,
+		} = this.props;
 		const classes = classnames(
 			'newspack-image-upload__image',
 			{ 'newspack-image-upload__image--has-image': image },
@@ -91,16 +104,22 @@ class ImageUpload extends Component {
 						<>
 							<img data-testid="image-upload" src={ image.url } alt={ __( 'Image preview', 'newspack-plugin' ) } style={ imageStyle } />
 							<div className="newspack-image-upload__controls">
-								<Button disabled={ disabled } onClick={ this.openModal } variant="tertiary">
+								<Button disabled={ disabled } onClick={ this.openModal } variant="tertiary" aria-label={ actionLabels.replace }>
 									{ __( 'Replace', 'newspack-plugin' ) }
 								</Button>
-								<Button disabled={ disabled } onClick={ () => onChange( null ) } variant="tertiary" isDestructive>
+								<Button
+									disabled={ disabled }
+									onClick={ () => onChange( null ) }
+									variant="tertiary"
+									isDestructive
+									aria-label={ actionLabels.remove }
+								>
 									{ __( 'Remove', 'newspack-plugin' ) }
 								</Button>
 							</div>
 						</>
 					) : (
-						<Button disabled={ disabled } onClick={ this.openModal } variant="tertiary">
+						<Button disabled={ disabled } onClick={ this.openModal } variant="tertiary" aria-label={ actionLabels.upload }>
 							{ buttonLabel ? buttonLabel : __( 'Upload', 'newspack-plugin' ) }
 						</Button>
 					) }
