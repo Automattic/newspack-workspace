@@ -58,6 +58,13 @@
 
 		a {
 			color: inherit;
+			transition: color motion.$duration-color motion.$ease-color;
+
+			@include motion.hover {
+				&:hover {
+					color: var(--wp--preset--color--contrast);
+				}
+			}
 		}
 	}
 

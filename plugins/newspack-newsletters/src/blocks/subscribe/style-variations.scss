@@ -87,8 +87,8 @@
 					padding: var(--newspack-ui-spacer-3, 16px);
 					position: relative;
 					transition:
-						border-color var(--newspack-ui-duration-color, 150ms) ease,
-						box-shadow var(--newspack-ui-duration-color, 150ms) ease;
+						border-color var(--newspack-ui-duration-color, 150ms) var(--newspack-ui-ease-color, ease),
+						box-shadow var(--newspack-ui-duration-color, 150ms) var(--newspack-ui-ease-color, ease);
 
 					@media ( hover: hover ) and ( pointer: fine ) {
 						&:hover:not(:has(input[type="checkbox"]:checked, input[type="checkbox"]:disabled, input[type="checkbox"]:focus-visible)) {
@@ -120,7 +120,9 @@
 					border-radius: calc(var(--newspack-ui-radius-control, 8px) * 0.5);
 					height: var(--newspack-ui-control-size, 20px) !important;
 					margin: 0;
-					transition: background-color 125ms ease-in-out, border-color 125ms ease-in-out;
+					transition:
+						background-color var(--newspack-ui-duration-color, 150ms) var(--newspack-ui-ease-color, ease),
+						border-color var(--newspack-ui-duration-color, 150ms) var(--newspack-ui-ease-color, ease);
 					width: var(--newspack-ui-control-size, 20px) !important;
 
 					&:hover:not(:checked, :disabled) {
@@ -206,7 +208,9 @@
 			font-weight: inherit;
 			line-height: inherit;
 			padding: calc(var(--newspack-ui-spacer-2, 12px) - 1px);
-			transition: border-color 125ms ease-in-out, box-shadow 125ms ease-in-out;
+			transition:
+				border-color var(--newspack-ui-duration-color, 150ms) var(--newspack-ui-ease-color, ease),
+				box-shadow var(--newspack-ui-duration-color, 150ms) var(--newspack-ui-ease-color, ease);
 
 			&::placeholder {
 				color: var(--newspack-ui-color-neutral-60, #6c6c6c);
@@ -398,8 +402,8 @@
 				margin: 0;
 				padding: var(--newspack-ui-spacer-4, 24px);
 				transition:
-					border-color var(--newspack-ui-duration-color, 150ms) ease,
-					box-shadow var(--newspack-ui-duration-color, 150ms) ease;
+					border-color var(--newspack-ui-duration-color, 150ms) var(--newspack-ui-ease-color, ease),
+					box-shadow var(--newspack-ui-duration-color, 150ms) var(--newspack-ui-ease-color, ease);
 			}
 
 			.list-details {

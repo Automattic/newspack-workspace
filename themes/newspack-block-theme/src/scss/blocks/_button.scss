@@ -159,20 +159,12 @@
 
 			@include motion.hover {
 				&:hover {
-					background: color-mix(in oklab, var(--wp--preset--color--contrast) var(--wp--custom--state--fill), var(--wp--preset--color--base));
-				}
-
-				&:where(:not(.has-background)):hover {
-					color: var(--wp--preset--color--contrast);
+					background: color-mix(in oklab, currentcolor var(--wp--custom--state--fill), var(--wp--preset--color--base));
 				}
 			}
 
 			&:active:where(:not([contenteditable="true"])) {
-				background: color-mix(in oklab, var(--wp--preset--color--contrast) var(--wp--custom--state--fill-hover), var(--wp--preset--color--base));
-			}
-
-			&:active:where(:not([contenteditable="true"], .has-background)) {
-				color: var(--wp--preset--color--contrast);
+				background: color-mix(in oklab, currentcolor var(--wp--custom--state--fill-hover), var(--wp--preset--color--base));
 			}
 
 			&:focus-visible {

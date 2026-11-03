@@ -157,6 +157,10 @@
 	}
 }
 
+:where(.wp-block-comment-date.has-text-color:not(.has-link-color)) a:hover {
+	color: inherit;
+}
+
 .wp-block-comment-author-name {
 	a {
 		border-radius: var(--wp--custom--border--radius-small);

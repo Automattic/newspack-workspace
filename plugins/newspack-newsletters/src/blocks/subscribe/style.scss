@@ -120,7 +120,10 @@
 		}
 	}
 	input[disabled] {
-		opacity: 0.5;
+		-webkit-text-fill-color: currentcolor;
+		background: var(--newspack-ui-color-input-bg-disabled, color-mix(in oklab, wp-colors.$gray-900 7%, wp-colors.$white));
+		color: var(--newspack-ui-color-disabled-ink, color-mix(in oklab, wp-colors.$gray-900 45%, wp-colors.$white));
+		opacity: 1;
 	}
 
 	// The lists come first in the markup. This moves them below the name and

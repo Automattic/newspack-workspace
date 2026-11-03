@@ -35,8 +35,12 @@
 
 		@include motion.hover {
 			&:hover:not(.current) {
-				background: var(--wp--preset--color--base-2);
+				background: color-mix(in oklab, currentcolor var(--wp--custom--state--fill), transparent);
 			}
+		}
+
+		&:active:not(.current) {
+			background: color-mix(in oklab, currentcolor var(--wp--custom--state--fill-hover), transparent);
 		}
 	}
 }

@@ -47,8 +47,10 @@
 	.edit-account {
 		input {
 			&:disabled {
-				background-color: wp-colors.$gray-100;
-				color: wp-colors.$gray-700;
+				-webkit-text-fill-color: currentcolor;
+				background-color: var(--newspack-ui-color-input-bg-disabled, color-mix(in oklab, wp-colors.$gray-900 7%, wp-colors.$white));
+				color: var(--newspack-ui-color-disabled-ink, color-mix(in oklab, wp-colors.$gray-900 45%, wp-colors.$white));
+				opacity: 1;
 			}
 		}
 	}

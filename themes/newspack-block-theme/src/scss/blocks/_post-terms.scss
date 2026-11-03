@@ -125,6 +125,15 @@
 		&:not(.has-link-color) {
 			a {
 				color: inherit;
+				transition: color motion.$duration-color motion.$ease-color;
+			}
+		}
+
+		&:not(.has-link-color, .has-text-color) a {
+			@include motion.hover {
+				&:hover {
+					color: var(--wp--preset--color--contrast);
+				}
 			}
 		}
 	}
