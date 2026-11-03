@@ -2452,7 +2452,9 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Each Donor filter option lists exactly the readers of that kind.
+	 * Each Donor filter option on its own lists exactly the readers of that kind.
+	 * "Not a donor" lists everyone outside the three kinds, including a reader
+	 * whose only donation subscription never took a payment.
 	 *
 	 * @dataProvider data_donor_kinds
 	 *
@@ -2466,7 +2468,7 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The donor kinds the filter includes by.
+	 * Each Donor filter value.
 	 *
 	 * @return array[]
 	 */
@@ -2475,13 +2477,15 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 			'one-time'  => [ 'one-time' ],
 			'recurring' => [ 'recurring' ],
 			'former'    => [ 'former' ],
+			'none'      => [ 'none' ],
 		];
 	}
 
 	/**
 	 * The filter and the badge never disagree: every reader an option returns has
-	 * that kind on their row, and no reader of that kind is left out. The cases
-	 * where the rules compete read Recurring on the row and stay out of Former.
+	 * that kind on their row, and no reader of that kind is left out. The fixture
+	 * puts the cases where the rules compete under Recurring, so this also proves
+	 * they read Recurring on the row and stay out of Former.
 	 */
 	public function test_donor_filter_matches_the_row_kind() {
 		$this->login_admin();
@@ -2495,63 +2499,35 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 			}
 			$this->assertSame( [], array_values( array_diff( $readers, array_column( $items, 'id' ) ) ), sprintf( 'A reader of kind "%s" is missing from its filter.', $kind ) );
 		}
-
-		$former_ids = $this->filtered_ids( [ 'donor' => [ 'former' ] ] );
-		foreach ( [ 'resubscribed', 'live_and_ended' ] as $label ) {
-			$reader_id = $fixture['recurring'][ $label ];
-			$this->assertSame( 'recurring', $this->list_row( $reader_id )['donor']['kind'], $label );
-			$this->assertNotContains( $reader_id, $former_ids, $label );
-		}
 	}
 
 	/**
-	 * "Not a donor" lists everyone outside the three kinds, including a reader whose
-	 * only donation subscription never took a payment.
+	 * Several options together list the readers of each, so ticking every option
+	 * narrows nothing.
+	 *
+	 * @dataProvider data_donor_filter_unions
+	 *
+	 * @param string[] $options The Donor filter values.
 	 */
-	public function test_donor_filter_none_lists_non_donors() {
+	public function test_donor_filter_unions_selected_options( array $options ) {
 		$this->login_admin();
 		$fixture = $this->create_donor_fixture();
+		$groups  = array_map( fn( $option ) => $fixture[ $option ], $options );
 
-		$this->assertSame( self::sorted_ids( $fixture['none'] ), $this->filtered_ids( [ 'donor' => [ 'none' ] ] ) );
+		$this->assertSame( self::sorted_ids( ...$groups ), $this->filtered_ids( [ 'donor' => $options ] ) );
 	}
 
 	/**
-	 * "Not a donor" and a kind together list both.
+	 * Sets of Donor filter values ticked together.
+	 *
+	 * @return array[]
 	 */
-	public function test_donor_filter_none_and_one_time_unions() {
-		$this->login_admin();
-		$fixture = $this->create_donor_fixture();
-
-		$this->assertSame(
-			self::sorted_ids( $fixture['none'], $fixture['one-time'] ),
-			$this->filtered_ids( [ 'donor' => [ 'none', 'one-time' ] ] )
-		);
-	}
-
-	/**
-	 * Ticking every option narrows nothing.
-	 */
-	public function test_donor_filter_with_every_option_lists_every_reader() {
-		$this->login_admin();
-		$fixture = $this->create_donor_fixture();
-
-		$this->assertSame(
-			self::sorted_ids( ...array_values( $fixture ) ),
-			$this->filtered_ids( [ 'donor' => [ 'one-time', 'recurring', 'former', 'none' ] ] )
-		);
-	}
-
-	/**
-	 * Several kinds together list the readers of each.
-	 */
-	public function test_donor_filter_unions_selected_kinds() {
-		$this->login_admin();
-		$fixture = $this->create_donor_fixture();
-
-		$this->assertSame(
-			self::sorted_ids( $fixture['one-time'], $fixture['former'] ),
-			$this->filtered_ids( [ 'donor' => [ 'one-time', 'former' ] ] )
-		);
+	public function data_donor_filter_unions() {
+		return [
+			'two kinds'                => [ [ 'one-time', 'former' ] ],
+			'not a donor and one kind' => [ [ 'none', 'one-time' ] ],
+			'every option'             => [ [ 'one-time', 'recurring', 'former', 'none' ] ],
+		];
 	}
 
 	/**
