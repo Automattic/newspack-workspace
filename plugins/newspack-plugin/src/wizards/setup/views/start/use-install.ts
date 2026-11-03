@@ -109,6 +109,43 @@ export function useInstall( options: InstallOptions ) {
 		const todo = pending.current;
 		const steps: Step[] = [];
 
+		const pushInit = () => {
+			if ( todo.init ) {
+				steps.push( {
+					work: async () => {
+						try {
+							const response = await starterContent< { post_count?: number } >( 'init', { type: approach, site: siteUrl } );
+							if ( ! alive() ) {
+								return 'abort';
+							}
+							todo.init = false;
+							if ( approach === 'import' ) {
+								const count = Math.max( 0, Number( response?.post_count ) || 0 );
+								todo.items = range( count );
+								setUnits( current => ( { ...current, total: current.total - ARTICLE_ESTIMATE + count } ) );
+								if ( count ) {
+									updateRow( 'items', { total: count, done: 0 } );
+								} else {
+									setRows( current => current.filter( row => row.key !== 'items' ) );
+								}
+							}
+							setUnits( current => ( { ...current, done: current.done + 1 } ) );
+							return 'done';
+						} catch ( error ) {
+							if ( alive() ) {
+								setInitError( errorMessage( error, approach ) );
+							}
+							return 'abort';
+						}
+					},
+				} );
+			}
+		};
+
+		if ( approach === 'import' ) {
+			pushInit();
+		}
+
 		if ( todo.plugins.length || todo.theme ) {
 			steps.push( {
 				key: 'plugins',
@@ -143,35 +180,8 @@ export function useInstall( options: InstallOptions ) {
 			} );
 		}
 
-		if ( todo.init ) {
-			steps.push( {
-				work: async () => {
-					try {
-						const response = await starterContent< { post_count?: number } >( 'init', { type: approach, site: siteUrl } );
-						if ( ! alive() ) {
-							return 'abort';
-						}
-						todo.init = false;
-						if ( approach === 'import' ) {
-							const count = Math.max( 0, Number( response?.post_count ) || 0 );
-							todo.items = range( count );
-							setUnits( current => ( { ...current, total: current.total - ARTICLE_ESTIMATE + count } ) );
-							if ( count ) {
-								updateRow( 'items', { total: count, done: 0 } );
-							} else {
-								setRows( current => current.filter( row => row.key !== 'items' ) );
-							}
-						}
-						setUnits( current => ( { ...current, done: current.done + 1 } ) );
-						return 'done';
-					} catch ( error ) {
-						if ( alive() ) {
-							setInitError( errorMessage( error, approach ) );
-						}
-						return 'abort';
-					}
-				},
-			} );
+		if ( approach !== 'import' ) {
+			pushInit();
 		}
 
 		if ( todo.identity ) {

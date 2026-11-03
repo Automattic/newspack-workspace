@@ -52,16 +52,16 @@ describe( 'useInstall', () => {
 		jest.useRealTimers();
 	} );
 
-	it( 'runs plugins, identity, articles and homepage in order for a move', async () => {
+	it( 'checks the address first, then runs plugins, identity, articles and homepage for a move', async () => {
 		mockApi( { init: () => Promise.resolve( { status: 200, post_count: 3 } ) } );
 		const hook = setup( { approach: 'import', siteUrl: 'https://example.test', plugins: [ inactive( 'one' ), inactive( 'two' ) ] } );
 		await finish();
 
 		expect( paths() ).toEqual( [
+			'init',
 			'/newspack/v1/plugins/one/configure/',
 			'/newspack/v1/plugins/two/configure/',
 			'theme',
-			'init',
 			'identity',
 			'post/0',
 			'post/1',
@@ -85,7 +85,7 @@ describe( 'useInstall', () => {
 		const hook = setup( { approach: 'import', siteUrl: 'https://example.test' } );
 		await finish();
 
-		expect( paths() ).toEqual( [ 'theme', 'init', 'identity', 'homepage' ] );
+		expect( paths() ).toEqual( [ 'init', 'theme', 'identity', 'homepage' ] );
 		expect( hook.result.current.rows.map( row => row.key ) ).toEqual( [ 'plugins', 'identity', 'homepage' ] );
 		expect( hook.result.current.status ).toBe( 'done' );
 	} );
