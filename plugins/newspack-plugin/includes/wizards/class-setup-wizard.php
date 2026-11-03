@@ -330,7 +330,7 @@ class Setup_Wizard extends Wizard {
 	 * @param WP_REST_Request $request Full details about the request.
 	 * @return WP_REST_Response|WP_Error containing info.
 	 */
-	public function api_starter_content_homepage( $request ) {
+	public function api_starter_content_homepage( WP_REST_Request $request ): WP_REST_Response|WP_Error {
 		if ( $request['layout_only'] ) {
 			$status = Starter_Content::create_layout_homepage();
 			if ( is_wp_error( $status ) ) {
@@ -347,7 +347,7 @@ class Setup_Wizard extends Wizard {
 	 *
 	 * @return WP_REST_Response|WP_Error Imported items.
 	 */
-	public function api_starter_content_identity() {
+	public function api_starter_content_identity(): WP_REST_Response|WP_Error {
 		$result = Starter_Content::import_identity();
 		if ( is_wp_error( $result ) ) {
 			return $result;
