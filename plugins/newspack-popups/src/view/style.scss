@@ -20,6 +20,25 @@ $size__large: 1264px;
 $width__mobile: 600px;
 $width__tablet: 782px;
 
+@mixin close-fill {
+	background-color: var(--newspack-lightbox-close-bg);
+	transition:
+		background-color motion.$duration-color motion.$ease-color,
+		transform motion.$duration-press motion.$ease-out;
+
+	@include motion.hover {
+		&:hover {
+			background-color: color-mix(in srgb, var(--newspack-lightbox-close-bg) 85%, currentcolor);
+			box-shadow: none;
+		}
+	}
+
+	&:active {
+		background-color: color-mix(in srgb, var(--newspack-lightbox-close-bg) 75%, currentcolor);
+		box-shadow: none;
+	}
+}
+
 .newspack-lightbox {
 	align-items: center;
 	display: flex;
@@ -28,7 +47,7 @@ $width__tablet: 782px;
 	margin: 0 !important;
 	max-width: 100% !important;
 	opacity: 1;
-	overflow: hidden;
+	overflow: clip;
 	position: fixed;
 	transition:
 		opacity 0s,
@@ -65,10 +84,12 @@ $width__tablet: 782px;
 
 	.admin-bar & {
 		@media only screen and ( min-width: #{$width__mobile + 1} ) {
+			--newspack-lightbox-offset-top: 46px;
 			padding-top: 46px !important;
 		}
 
 		@media only screen and ( min-width: #{$width__tablet + 1} ) {
+			--newspack-lightbox-offset-top: 32px;
 			padding-top: 32px !important;
 		}
 	}
@@ -88,10 +109,6 @@ $width__tablet: 782px;
 		user-select: none;
 		width: 100%;
 		z-index: 0;
-
-		@include motion.reduced-motion {
-			transition: opacity motion.$duration-modal motion.$ease-color;
-		}
 	}
 
 	.newspack-popup-wrapper {
@@ -105,10 +122,6 @@ $width__tablet: 782px;
 			opacity motion.$duration-modal motion.$ease-out,
 			transform motion.$duration-modal motion.$ease-out;
 		z-index: 1;
-
-		@include motion.reduced-motion {
-			transition: opacity motion.$duration-modal motion.$ease-color;
-		}
 	}
 
 	.newspack-popup {
@@ -266,22 +279,7 @@ $width__tablet: 782px;
 	}
 
 	&.newspack-lightbox-close-button-background .newspack-lightbox__close {
-		background-color: var(--newspack-lightbox-close-bg);
-		transition:
-			background-color motion.$duration-color motion.$ease-color,
-			transform motion.$duration-press motion.$ease-out;
-
-		@include motion.hover {
-			&:hover {
-				background-color: color-mix(in srgb, var(--newspack-lightbox-close-bg) 85%, currentcolor);
-				box-shadow: none;
-			}
-		}
-
-		&:active {
-			background-color: color-mix(in srgb, var(--newspack-lightbox-close-bg) 75%, currentcolor);
-			box-shadow: none;
-		}
+		@include close-fill;
 	}
 
 	&-featured-image {
@@ -289,23 +287,9 @@ $width__tablet: 782px;
 			&:not(.newspack-lightbox-close-button-background) {
 				.newspack-lightbox__close {
 					--newspack-lightbox-close-bg: #{rgba(black, 0.5)};
-					background-color: var(--newspack-lightbox-close-bg);
 					color: white !important;
-					transition:
-						background-color motion.$duration-color motion.$ease-color,
-						transform motion.$duration-press motion.$ease-out;
 
-					@include motion.hover {
-						&:hover {
-							background-color: color-mix(in srgb, var(--newspack-lightbox-close-bg) 85%, currentcolor);
-							box-shadow: none;
-						}
-					}
-
-					&:active {
-						background-color: color-mix(in srgb, var(--newspack-lightbox-close-bg) 75%, currentcolor);
-						box-shadow: none;
-					}
+					@include close-fill;
 				}
 			}
 
@@ -450,8 +434,10 @@ $width__tablet: 782px;
 	&.newspack-lightbox-placement-bottom_right,
 	&.newspack-lightbox-placement-center_left,
 	&.newspack-lightbox-placement-center_right {
+		--newspack-lightbox-slide-duration: #{motion.$duration-sheet};
+
 		&.hidden {
-			transition-delay: motion.$duration-sheet;
+			transition-delay: var(--newspack-lightbox-slide-duration);
 
 			@include motion.reduced-motion {
 				transition-delay: motion.$duration-modal;
@@ -459,7 +445,7 @@ $width__tablet: 782px;
 		}
 
 		.newspack-lightbox-overlay {
-			transition-duration: motion.$duration-sheet;
+			transition-duration: var(--newspack-lightbox-slide-duration);
 
 			@include motion.reduced-motion {
 				transition-duration: motion.$duration-modal;
@@ -467,7 +453,7 @@ $width__tablet: 782px;
 		}
 
 		.newspack-popup-wrapper {
-			transition: transform motion.$duration-sheet motion.$ease-drawer;
+			transition: transform var(--newspack-lightbox-slide-duration) motion.$ease-drawer;
 
 			@include motion.reduced-motion {
 				transition: opacity motion.$duration-modal motion.$ease-color;
@@ -487,7 +473,7 @@ $width__tablet: 782px;
 	&.newspack-lightbox-placement-top_left,
 	&.newspack-lightbox-placement-top_right {
 		&.hidden .newspack-popup-wrapper {
-			transform: translateY(calc(-100% - var(--wp-admin--admin-bar--height, 0px)));
+			transform: translateY(calc(-100% - var(--newspack-lightbox-offset-top, 0px)));
 
 			@include motion.reduced-motion {
 				transform: none;
@@ -504,6 +490,23 @@ $width__tablet: 782px;
 			@include motion.reduced-motion {
 				transform: none;
 			}
+		}
+	}
+
+	&.newspack-lightbox-placement-center_left,
+	&.newspack-lightbox-placement-center_right {
+		--newspack-lightbox-slide-duration: #{motion.travel-duration($size__large)};
+
+		&.newspack-lightbox-size-x-small {
+			--newspack-lightbox-slide-duration: #{motion.travel-duration($size__x-small)};
+		}
+
+		&.newspack-lightbox-size-small {
+			--newspack-lightbox-slide-duration: #{motion.travel-duration($size__small)};
+		}
+
+		&.newspack-lightbox-size-medium {
+			--newspack-lightbox-slide-duration: #{motion.travel-duration($size__medium)};
 		}
 	}
 
