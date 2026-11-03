@@ -62,21 +62,23 @@ describe( 'Get started', () => {
 		jest.useRealTimers();
 	} );
 
-	it( 'shows the URL field for a move and keeps Install available', () => {
+	it( 'shows the URL field for a move and holds Install until an address is typed', () => {
 		renderStart();
 		expect( screen.queryByRole( 'textbox', { name: /Address of your current site/ } ) ).toBeNull();
 		expect( screen.getByRole( 'checkbox', { name: /Add sample stories/ } ) ).toBeInTheDocument();
+		expect( isDisabled( installButton() ) ).toBe( false );
 
 		chooseMove();
 		expect( screen.queryByRole( 'checkbox', { name: /Add sample stories/ } ) ).toBeNull();
 		expect( screen.getByRole( 'textbox', { name: /Address of your current site/ } ) ).toBeInTheDocument();
+		expect( isDisabled( installButton() ) ).toBe( true );
+
+		typeUrl( 'https://example.test' );
 		expect( isDisabled( installButton() ) ).toBe( false );
 	} );
 
-	it.each( [
-		[ 'empty', '' ],
-		[ 'not a site address', 'example' ],
-	] )( 'says why on the URL field, and does not install, when the address is %s', async ( _, value ) => {
+	it( 'says why on the URL field, and does not install, when the address is not a site address', async () => {
+		const value = 'example';
 		const view = renderStart();
 		chooseMove();
 		typeUrl( value );

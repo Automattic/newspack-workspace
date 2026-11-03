@@ -207,7 +207,7 @@ export default function Start( { initialCheck, setInstallState, goTo }: SetupVie
 					<StepFooter>
 						<Button
 							variant="primary"
-							disabled={ ! initialCheck.is_ssl }
+							disabled={ ! initialCheck.is_ssl || ( isMove && ! trimmedUrl ) }
 							accessibleWhenDisabled
 							aria-describedby={ initialCheck.is_ssl ? undefined : httpsNoticeId }
 							__next40pxDefaultSize
