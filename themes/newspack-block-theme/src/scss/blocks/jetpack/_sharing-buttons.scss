@@ -21,13 +21,10 @@
 
 				@include mixins.fill-overlay;
 
-				&::before {
+				&.share-x::before,
+				&.share-threads::before,
+				&.share-share::before {
 					background: currentcolor;
-				}
-
-				&.share-mail::before,
-				&.share-print::before {
-					background: black;
 				}
 
 				&:focus-visible::before {
