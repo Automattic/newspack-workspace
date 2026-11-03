@@ -1345,6 +1345,11 @@ class Emails {
 		}
 
 		if ( ( $previous_value['primary_color_hex'] !== $updated_value['primary_color_hex'] ) || ( $previous_value['secondary_color_hex'] !== $updated_value['secondary_color_hex'] ) ) {
+			$previous_palette        = json_decode( (string) get_option( \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_PALETTE_META, '{}' ), true );
+			$previous_palette        = is_array( $previous_palette ) ? $previous_palette : [];
+			$previous_primary_text   = isset( $previous_palette['primary-text'] ) && in_array( $previous_palette['primary-text'], [ 'black', 'white' ], true ) ? $previous_palette['primary-text'] : newspack_get_color_contrast( $previous_value['primary_color_hex'] );
+			$previous_secondary_text = isset( $previous_palette['secondary-text'] ) && in_array( $previous_palette['secondary-text'], [ 'black', 'white' ], true ) ? $previous_palette['secondary-text'] : newspack_get_color_contrast( $previous_value['secondary_color_hex'] );
+
 			// Update the newsletters color palette.
 			$updated = \Newspack_Newsletters::update_color_palette(
 				[
@@ -1377,10 +1382,10 @@ class Emails {
 				$email_html = str_replace(
 					[
 						$previous_value['primary_color_hex'],
-						newspack_get_color_contrast( $previous_value['primary_color_hex'] ),
+						$previous_primary_text,
 						newspack_adjust_brightness( $previous_value['primary_color_hex'], -40 ),
 						$previous_value['secondary_color_hex'],
-						newspack_get_color_contrast( $previous_value['secondary_color_hex'] ),
+						$previous_secondary_text,
 						newspack_adjust_brightness( $previous_value['secondary_color_hex'], -40 ),
 					],
 					[
