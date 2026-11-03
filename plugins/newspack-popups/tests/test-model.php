@@ -641,10 +641,47 @@ class ModelTest extends WP_UnitTestCase {
 			'transparent fill on black prompt' => [ '#00000000', '#000000', '#fff' ],
 			'half-transparent red on white'    => [ '#ff000080', '#FFFFFF', '#000' ],
 			'opaque black'                     => [ '#000000', '#FFFFFF', '#fff' ],
-			'mid grey'                         => [ '#808080', '#FFFFFF', '#000' ],
+			'mid grey'                         => [ '#808080', '#FFFFFF', '#fff' ],
 			'dark blue'                        => [ '#2271b1', '#FFFFFF', '#fff' ],
 			'invalid fill'                     => [ 'red', '#000000', '#fff' ],
+			'orange: white reads better'       => [ '#e65100', '#FFFFFF', '#fff' ],
+			'blue'                             => [ '#3366cc', '#FFFFFF', '#fff' ],
+			'red: white despite a lower ratio' => [ '#dd3333', '#FFFFFF', '#fff' ],
 		];
+	}
+
+	/**
+	 * Prompt text colors, as [ background, expected text ].
+	 */
+	public function foreground_color_for_background_data() {
+		return [
+			'black'      => [ '#000000', '#fff' ],
+			'white'      => [ '#ffffff', '#000' ],
+			'light grey' => [ '#f0f0f0', '#000' ],
+			'yellow'     => [ '#ffcc00', '#000' ],
+			'green'      => [ '#178f15', '#fff' ],
+			'blue'       => [ '#3366cc', '#fff' ],
+			'red'        => [ '#dd3333', '#fff' ],
+			'orange'     => [ '#e65100', '#fff' ],
+			'shorthand'  => [ '#fff', '#000' ],
+			'uppercase'  => [ '#E65100', '#fff' ],
+			'invalid'    => [ 'nonsense', '#000' ],
+			'four digit' => [ '#0008', '#000' ],
+			'with alpha' => [ '#3366ccff', '#fff' ],
+			'no hash'    => [ '3366cc', '#fff' ],
+		];
+	}
+
+	/**
+	 * Tests the prompt text color is whichever of black or white reads better by APCA.
+	 *
+	 * @dataProvider foreground_color_for_background_data
+	 *
+	 * @param string $background Prompt background.
+	 * @param string $expected   Expected text color.
+	 */
+	public function test_foreground_color_for_background( $background, $expected ) {
+		self::assertSame( $expected, Newspack_Popups_Model::foreground_color_for_background( $background ) );
 	}
 
 	/**
