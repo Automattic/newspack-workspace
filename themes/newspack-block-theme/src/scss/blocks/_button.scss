@@ -32,11 +32,11 @@
 }
 
 @media not ((hover: hover) and (pointer: fine)) {
-	:root:root :where(.wp-element-button, .wp-block-button__link):where(:not(.newspack-ui__button, .newspack-ui .button, .newspack-ui .woocommerce-Button, [class*="has-background"], [class*="is-style-"], [style*="background"])):hover {
+	:root:root .wp-block-button > .wp-block-button__link:where(:not([class*="newspack-icon"] *, [class*="is-style-"] > *, .newspack-ui__button, .has-background, [class*="has-background"], [class*="is-style-"], [style*="background"])):hover:not(:active) {
 		background-color: var(--wp--preset--color--accent);
 	}
 
-	:root:root :where(.wp-element-button, .wp-block-button__link):where(:not(.newspack-ui__button, .newspack-ui .button, .newspack-ui .woocommerce-Button, .has-text-color, [class*="has-background-transparent"], [class*="is-style-"], [style*="color:"], [style*="color :"])):hover {
+	:root:root .wp-block-button > .wp-block-button__link:where(:not([class*="newspack-icon"] *, [class*="is-style-"] > *, .newspack-ui__button, .has-text-color, [class*="has-background-transparent"], [class*="is-style-"], [style^="color"], [style*=";color"], [style*="; color"])):hover:not(:active) {
 		color: var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base));
 	}
 }
