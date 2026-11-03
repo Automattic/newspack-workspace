@@ -42,7 +42,10 @@ class Donors {
 	 * Subscriptions is active.
 	 *
 	 * Setting the flags changes who matches the donor segments in Campaigns, which is
-	 * why this only runs on request. Each flag write fires `newspack_reader_data_updated`.
+	 * why this only runs on request. `is_donor` also adds `reader_status=donor` to
+	 * Google Ad Manager targeting when Newspack Ads is active, and sets the GA4
+	 * `is_donor` parameter to `yes` when Site Kit's GA4 is set up, so warn the
+	 * publisher before a real run. Each flag write fires `newspack_reader_data_updated`.
 	 * When this command was added, nothing in the Newspack plugins listened to that
 	 * action, so a run doesn't queue ESP syncs and isn't throttled. Custom code on the
 	 * site that listens to it runs twice for each reader flagged, because flagging a
