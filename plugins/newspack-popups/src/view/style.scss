@@ -402,7 +402,7 @@ $width__tablet: 782px;
 		--newspack-popup-close-corner: var(--newspack-ui-radius-surface, 12px);
 
 		.newspack-lightbox__close {
-			border-radius: max(4px, calc(var(--newspack-popup-close-corner) - var(--newspack-popup-close-inset, 0px)));
+			border-radius: max(var(--newspack-ui-border-radius-s, 4px), calc(var(--newspack-popup-close-corner) - var(--newspack-popup-close-inset, 0px)));
 		}
 
 		&.newspack-lightbox-large-border {
@@ -439,7 +439,7 @@ $width__tablet: 782px;
 		&.newspack-lightbox-size-full-width.newspack-lightbox-placement-center_left,
 		&.newspack-lightbox-size-full-width.newspack-lightbox-placement-center_right {
 			.newspack-lightbox__close {
-				border-radius: 4px;
+				border-radius: var(--newspack-ui-border-radius-s, 4px);
 			}
 		}
 

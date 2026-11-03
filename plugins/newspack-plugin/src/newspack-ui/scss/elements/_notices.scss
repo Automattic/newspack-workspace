@@ -287,7 +287,7 @@
 				order: 3;
 			}
 			&__close.newspack-ui__button {
-				border-radius: max(4px, calc(var(--newspack-ui-radius-control) - var(--newspack-ui-spacer-half)));
+				border-radius: max(var(--newspack-ui-border-radius-s), calc(var(--newspack-ui-radius-control) - var(--newspack-ui-spacer-half)));
 			}
 		}
 	}
