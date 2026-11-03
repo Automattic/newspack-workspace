@@ -305,7 +305,7 @@ class Starter_Content_WordPress extends Starter_Content_Provider {
 		if ( ! $timeout ) {
 			return null;
 		}
-		$response = wp_safe_remote_get( $url, [ 'timeout' => $timeout ] ); //phpcs:ignore
+		$response = wp_safe_remote_get( $url, [ 'timeout' => $timeout, 'limit_response_size' => 512 * KB_IN_BYTES ] ); //phpcs:ignore
 		if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
 			return null;
 		}
@@ -366,8 +366,8 @@ class Starter_Content_WordPress extends Starter_Content_Provider {
 		if ( ! $media_id ) {
 			return '';
 		}
-		$media = self::fetch_json( $site_url . 'wp-json/wp/v2/media/' . $media_id );
-		return ! empty( $media['source_url'] ) ? esc_url_raw( $media['source_url'] ) : '';
+		$media = self::fetch_json( $site_url . 'wp-json/wp/v2/media/' . $media_id . '?_fields=source_url' );
+		return ! empty( $media['source_url'] ) && is_string( $media['source_url'] ) ? esc_url_raw( $media['source_url'] ) : '';
 	}
 
 	/**
@@ -423,7 +423,7 @@ class Starter_Content_WordPress extends Starter_Content_Provider {
 		self::$identity_deadline = microtime( true ) + self::IDENTITY_IMPORT_BUDGET;
 
 		$site_url = trailingslashit( esc_url_raw( $site_url ) );
-		$index    = self::fetch_json( $site_url . 'wp-json/' );
+		$index    = self::fetch_json( $site_url . 'wp-json/?_fields=name,description,site_logo,site_icon' );
 
 		if ( ! empty( $index['name'] ) && is_string( $index['name'] ) ) {
 			update_option( 'blogname', sanitize_text_field( $index['name'] ) );

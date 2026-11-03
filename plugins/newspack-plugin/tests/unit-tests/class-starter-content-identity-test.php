@@ -251,7 +251,7 @@ class Newspack_Test_Starter_Content_Identity extends WP_UnitTestCase {
 	 * Full identity import.
 	 */
 	public function test_identity_import_brings_over_title_tagline_logo_icon_and_currency() {
-		$this->responses['http://localhost/wp-json/']                = [
+		$this->responses['http://localhost/wp-json/?_fields=name,description,site_logo,site_icon']                = [
 			200,
 			wp_json_encode(
 				[
@@ -262,8 +262,8 @@ class Newspack_Test_Starter_Content_Identity extends WP_UnitTestCase {
 				]
 			),
 		];
-		$this->responses['http://localhost/wp-json/wp/v2/media/11']  = [ 200, wp_json_encode( [ 'source_url' => 'http://localhost/logo.png' ] ) ];
-		$this->responses['http://localhost/wp-json/wp/v2/media/12']  = [ 200, wp_json_encode( [ 'source_url' => 'http://localhost/icon.png' ] ) ];
+		$this->responses['http://localhost/wp-json/wp/v2/media/11?_fields=source_url']  = [ 200, wp_json_encode( [ 'source_url' => 'http://localhost/logo.png' ] ) ];
+		$this->responses['http://localhost/wp-json/wp/v2/media/12?_fields=source_url']  = [ 200, wp_json_encode( [ 'source_url' => 'http://localhost/icon.png' ] ) ];
 		$this->responses['http://localhost/wp-json/wc/store/v1/cart'] = [ 200, wp_json_encode( [ 'totals' => [ 'currency_code' => 'USD' ] ] ) ];
 
 		$result = Starter_Content::import_identity();
@@ -289,8 +289,8 @@ class Newspack_Test_Starter_Content_Identity extends WP_UnitTestCase {
 	 * Custom logo fallback.
 	 */
 	public function test_identity_import_falls_back_to_the_custom_logo_image() {
-		$this->responses['http://localhost/wp-json/'] = [ 200, wp_json_encode( [ 'name' => 'Riverbend Gazette' ] ) ];
-		$this->responses['http://localhost/']         = [ 200, '<html><body><a><img class="custom-logo" src="http://localhost/logo.png"></a></body></html>' ];
+		$this->responses['http://localhost/wp-json/?_fields=name,description,site_logo,site_icon'] = [ 200, wp_json_encode( [ 'name' => 'Riverbend Gazette' ] ) ];
+		$this->responses['http://localhost/'] = [ 200, '<html><body><a><img class="custom-logo" src="http://localhost/logo.png"></a></body></html>' ];
 
 		Starter_Content::import_identity();
 		$this->assertGreaterThan( 0, (int) get_theme_mod( 'custom_logo' ) );
@@ -302,8 +302,8 @@ class Newspack_Test_Starter_Content_Identity extends WP_UnitTestCase {
 	public function test_identity_import_hides_the_header_text_only_when_it_brings_a_logo() {
 		set_theme_mod( 'header_text', true );
 		set_theme_mod( 'header_display_tagline', true );
-		$this->responses['http://localhost/wp-json/'] = [ 200, wp_json_encode( [ 'name' => 'Riverbend Gazette' ] ) ];
-		$this->responses['http://localhost/']         = [ 200, '<html><body>No logo</body></html>' ];
+		$this->responses['http://localhost/wp-json/?_fields=name,description,site_logo,site_icon'] = [ 200, wp_json_encode( [ 'name' => 'Riverbend Gazette' ] ) ];
+		$this->responses['http://localhost/'] = [ 200, '<html><body>No logo</body></html>' ];
 
 		Starter_Content::import_identity();
 		$this->assertTrue( get_theme_mod( 'header_text' ) );
@@ -321,12 +321,12 @@ class Newspack_Test_Starter_Content_Identity extends WP_UnitTestCase {
 	 * Every lookup on the moved site gives up quickly, and the homepage download is capped.
 	 */
 	public function test_identity_import_requests_are_time_bound() {
-		$this->responses['http://localhost/wp-json/'] = [ 200, wp_json_encode( [ 'site_icon' => 12 ] ) ];
-		$this->responses['http://localhost/wp-json/wp/v2/media/12'] = [ 200, wp_json_encode( [ 'source_url' => 'http://localhost/icon.png' ] ) ];
+		$this->responses['http://localhost/wp-json/?_fields=name,description,site_logo,site_icon'] = [ 200, wp_json_encode( [ 'site_icon' => 12 ] ) ];
+		$this->responses['http://localhost/wp-json/wp/v2/media/12?_fields=source_url'] = [ 200, wp_json_encode( [ 'source_url' => 'http://localhost/icon.png' ] ) ];
 		$this->responses['http://localhost/'] = [ 200, '<html><body><img class="custom-logo" src="http://localhost/logo.png"></body></html>' ];
 
 		Starter_Content::import_identity();
-		$this->assertSame( 10, $this->requests['http://localhost/wp-json/']['timeout'] );
+		$this->assertSame( 10, $this->requests['http://localhost/wp-json/?_fields=name,description,site_logo,site_icon']['timeout'] );
 		$this->assertSame( 10, $this->requests['http://localhost/']['timeout'] );
 		$this->assertSame( 512 * KB_IN_BYTES, $this->requests['http://localhost/']['limit_response_size'] );
 		$this->assertSame( 15, $this->requests['http://localhost/logo.png']['timeout'] );
@@ -347,7 +347,7 @@ class Newspack_Test_Starter_Content_Identity extends WP_UnitTestCase {
 	 * Once the overall budget is spent, the remaining lookups are skipped.
 	 */
 	public function test_identity_import_skips_remaining_lookups_once_the_budget_is_spent() {
-		$this->responses['http://localhost/wp-json/']               = [
+		$this->responses['http://localhost/wp-json/?_fields=name,description,site_logo,site_icon']               = [
 			200,
 			wp_json_encode(
 				[
@@ -357,8 +357,8 @@ class Newspack_Test_Starter_Content_Identity extends WP_UnitTestCase {
 				]
 			),
 		];
-		$this->responses['http://localhost/wp-json/wp/v2/media/11'] = [ 200, wp_json_encode( [ 'source_url' => 'http://localhost/logo.png' ] ) ];
-		$this->on_request['http://localhost/wp-json/']              = function() {
+		$this->responses['http://localhost/wp-json/wp/v2/media/11?_fields=source_url'] = [ 200, wp_json_encode( [ 'source_url' => 'http://localhost/logo.png' ] ) ];
+		$this->on_request['http://localhost/wp-json/?_fields=name,description,site_logo,site_icon']              = function() {
 			$this->leave_identity_import( 0.5 );
 		};
 
@@ -367,7 +367,7 @@ class Newspack_Test_Starter_Content_Identity extends WP_UnitTestCase {
 		$this->assertFalse( $result['logo'] );
 		$this->assertFalse( $result['icon'] );
 		$this->assertFalse( $result['currency'] );
-		$this->assertArrayNotHasKey( 'http://localhost/wp-json/wp/v2/media/11', $this->requests );
+		$this->assertArrayNotHasKey( 'http://localhost/wp-json/wp/v2/media/11?_fields=source_url', $this->requests );
 		$this->assertArrayNotHasKey( 'http://localhost/wp-json/wc/store/v1/cart', $this->requests );
 	}
 
@@ -375,13 +375,13 @@ class Newspack_Test_Starter_Content_Identity extends WP_UnitTestCase {
 	 * A lookup gets no longer than the time left in the overall budget.
 	 */
 	public function test_identity_import_shortens_a_lookup_to_the_time_left() {
-		$this->responses['http://localhost/wp-json/'] = [ 200, wp_json_encode( [ 'site_logo' => 11 ] ) ];
-		$this->on_request['http://localhost/wp-json/'] = function() {
+		$this->responses['http://localhost/wp-json/?_fields=name,description,site_logo,site_icon'] = [ 200, wp_json_encode( [ 'site_logo' => 11 ] ) ];
+		$this->on_request['http://localhost/wp-json/?_fields=name,description,site_logo,site_icon'] = function() {
 			$this->leave_identity_import( 3.5 );
 		};
 
 		Starter_Content::import_identity();
-		$this->assertSame( 3, $this->requests['http://localhost/wp-json/wp/v2/media/11']['timeout'] );
+		$this->assertSame( 3, $this->requests['http://localhost/wp-json/wp/v2/media/11?_fields=source_url']['timeout'] );
 	}
 
 	/**
@@ -410,9 +410,9 @@ class Newspack_Test_Starter_Content_Identity extends WP_UnitTestCase {
 	 * A site icon another request saved during the download is kept, and the download discarded.
 	 */
 	public function test_identity_import_keeps_a_site_icon_saved_during_the_download() {
-		$this->responses['http://localhost/wp-json/']               = [ 200, wp_json_encode( [ 'site_icon' => 12 ] ) ];
-		$this->responses['http://localhost/wp-json/wp/v2/media/12'] = [ 200, wp_json_encode( [ 'source_url' => 'http://localhost/icon.png' ] ) ];
-		$this->on_request['http://localhost/icon.png']              = function() {
+		$this->responses['http://localhost/wp-json/?_fields=name,description,site_logo,site_icon']               = [ 200, wp_json_encode( [ 'site_icon' => 12 ] ) ];
+		$this->responses['http://localhost/wp-json/wp/v2/media/12?_fields=source_url'] = [ 200, wp_json_encode( [ 'source_url' => 'http://localhost/icon.png' ] ) ];
+		$this->on_request['http://localhost/icon.png'] = function() {
 			global $wpdb;
 			$wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 				$wpdb->options,
@@ -494,7 +494,7 @@ class Newspack_Test_Starter_Content_Identity extends WP_UnitTestCase {
 	 * Skips missing items.
 	 */
 	public function test_identity_import_skips_what_the_site_does_not_expose() {
-		$this->responses['http://localhost/wp-json/'] = [
+		$this->responses['http://localhost/wp-json/?_fields=name,description,site_logo,site_icon'] = [
 			200,
 			wp_json_encode(
 				[
@@ -503,7 +503,7 @@ class Newspack_Test_Starter_Content_Identity extends WP_UnitTestCase {
 				]
 			),
 		];
-		$this->responses['http://localhost/']         = [ 200, '<html><body>No logo</body></html>' ];
+		$this->responses['http://localhost/'] = [ 200, '<html><body>No logo</body></html>' ];
 
 		$result = Starter_Content::import_identity();
 		$this->assertSame(
@@ -525,7 +525,7 @@ class Newspack_Test_Starter_Content_Identity extends WP_UnitTestCase {
 		set_theme_mod( 'custom_logo', 77 );
 		update_option( 'site_icon', 78 );
 		update_option( 'woocommerce_currency', 'GBP' );
-		$this->responses['http://localhost/wp-json/']                = [
+		$this->responses['http://localhost/wp-json/?_fields=name,description,site_logo,site_icon']                = [
 			200,
 			wp_json_encode(
 				[
@@ -535,8 +535,8 @@ class Newspack_Test_Starter_Content_Identity extends WP_UnitTestCase {
 				]
 			),
 		];
-		$this->responses['http://localhost/wp-json/wp/v2/media/11']  = [ 200, wp_json_encode( [ 'source_url' => 'http://localhost/logo.png' ] ) ];
-		$this->responses['http://localhost/wp-json/wp/v2/media/12']  = [ 200, wp_json_encode( [ 'source_url' => 'http://localhost/icon.png' ] ) ];
+		$this->responses['http://localhost/wp-json/wp/v2/media/11?_fields=source_url']  = [ 200, wp_json_encode( [ 'source_url' => 'http://localhost/logo.png' ] ) ];
+		$this->responses['http://localhost/wp-json/wp/v2/media/12?_fields=source_url']  = [ 200, wp_json_encode( [ 'source_url' => 'http://localhost/icon.png' ] ) ];
 		$this->responses['http://localhost/wp-json/wc/store/v1/cart'] = [ 200, wp_json_encode( [ 'totals' => [ 'currency_code' => 'USD' ] ] ) ];
 
 		Starter_Content::import_identity();
