@@ -26,12 +26,12 @@
 
 		@include motion.hover {
 			&:hover {
-				color: color-mix(in oklab, np-colors.$neutral-600 var(--newspack-ui-color-mix-hover, 85%), transparent);
+				color: np-colors.$neutral-900;
 			}
 		}
 
 		&:active:not(.wpbnbd__button--active) {
-			color: color-mix(in oklab, np-colors.$neutral-600 var(--newspack-ui-color-mix-pressed, 75%), transparent);
+			color: color-mix(in oklab, np-colors.$neutral-900 var(--newspack-ui-color-mix-pressed, 75%), transparent);
 		}
 	}
 
