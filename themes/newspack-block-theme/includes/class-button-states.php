@@ -21,9 +21,9 @@ final class Button_States {
 	/**
 	 * Relative luminance below which a fill counts as near-black.
 	 *
-	 * A fill this dark can't darken visibly, so it lightens toward its text by
-	 * the bigger step the motion rules reserve for that case. The cut-off sits
-	 * just above the theme's default contrast color (#1E1E1E).
+	 * A fill this dark can't darken visibly, so it lightens toward its text
+	 * instead, like newspack-ui's dark button. The cut-off sits just above the
+	 * theme's default contrast color (#1E1E1E).
 	 *
 	 * @var float
 	 */
@@ -42,7 +42,8 @@ final class Button_States {
 	 * Palette backgrounds are left to the stylesheet. The custom fill darkens by
 	 * the theme's hover and press shares toward black, or, when it is near-black,
 	 * lightens toward the button's text color (white when none is set) by the
-	 * lighten shares, each read from the settings.custom.state tokens.
+	 * same shares, never by less than pure black would get from the lighten
+	 * shares. Every share is read from the settings.custom.state tokens.
 	 *
 	 * @param string $block_content The rendered block markup.
 	 * @param array  $block         The parsed block.
@@ -94,16 +95,15 @@ final class Button_States {
 			return null;
 		}
 
-		if ( self::get_luminance( $channels ) < self::NEAR_BLACK_LUMINANCE ) {
-			$toward = $text;
-			$shares = [ 1 - self::get_state_share( 'lighten-hover', 0.25 ), 1 - self::get_state_share( 'lighten-pressed', 0.4 ) ];
+		$shares = [ self::get_state_share( 'hover', 0.85 ), self::get_state_share( 'pressed', 0.75 ) ];
+		if ( self::get_luminance( $channels ) >= self::NEAR_BLACK_LUMINANCE ) {
+			$hover   = self::mix( $fill, '#000000', $shares[0] );
+			$pressed = self::mix( $fill, '#000000', $shares[1] );
 		} else {
-			$toward = '#000000';
-			$shares = [ self::get_state_share( 'hover', 0.85 ), self::get_state_share( 'pressed', 0.75 ) ];
+			$floors  = [ 1 - self::get_state_share( 'lighten-hover', 0.25 ), 1 - self::get_state_share( 'lighten-pressed', 0.4 ) ];
+			$hover   = self::lighter( self::mix( $fill, $text, $shares[0] ), self::mix( '#000000', $text, $floors[0] ) );
+			$pressed = self::lighter( self::mix( $fill, $text, $shares[1] ), self::mix( '#000000', $text, $floors[1] ) );
 		}
-
-		$hover   = self::mix( $fill, $toward, $shares[0] );
-		$pressed = self::mix( $fill, $toward, $shares[1] );
 		if ( null === $hover || null === $pressed ) {
 			return null;
 		}
@@ -112,6 +112,23 @@ final class Button_States {
 			'hover'   => $hover,
 			'pressed' => $pressed,
 		];
+	}
+
+	/**
+	 * Pick the lighter of two hex colors by oklab lightness.
+	 *
+	 * @param string|null $a The first hex color.
+	 * @param string|null $b The second hex color.
+	 * @return string|null The lighter color, or null when either is missing.
+	 */
+	private static function lighter( ?string $a, ?string $b ): ?string {
+		if ( null === $a || null === $b ) {
+			return null;
+		}
+		$lab_a = self::to_oklab( $a );
+		$lab_b = self::to_oklab( $b );
+
+		return $lab_b[0] > $lab_a[0] ? $b : $a;
 	}
 
 	/**

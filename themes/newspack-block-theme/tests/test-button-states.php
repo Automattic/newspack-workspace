@@ -39,7 +39,7 @@ class Test_Button_States extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A near-black fill lightens toward its text instead, by the lighten shares.
+	 * Pure black lightens toward its text by the lighten shares, the floor the standard step can't reach from black.
 	 */
 	public function test_near_black_fill_lightens() {
 		$html = $this->render(
@@ -58,12 +58,14 @@ class Test_Button_States extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The theme's own contrast color counts as near-black and lightens, toward white when no text color is set.
+	 * The theme's own contrast color counts as near-black and lightens by the standard step, toward white when no text color is set.
+	 *
+	 * This is the same colour newspack-ui's dark button reaches from the same fill.
 	 */
-	public function test_contrast_fill_lightens_toward_white() {
+	public function test_contrast_fill_lightens_like_newspack_ui() {
 		$html = $this->render( [ 'style' => [ 'color' => [ 'background' => '#1e1e1e' ] ] ], 'background-color:#1e1e1e' );
 
-		$this->assertStringContainsString( '--wp--custom--button--bg-hover: #4f4f4f;--wp--custom--button--bg-pressed: #6f6f6f', $html );
+		$this->assertStringContainsString( '--wp--custom--button--bg-hover: #3a3a3a;--wp--custom--button--bg-pressed: #4f4f4f', $html );
 	}
 
 	/**

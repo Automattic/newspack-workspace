@@ -661,29 +661,43 @@ class ModelTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Close button fills, as [ fill, prompt background, whether hover lightens ].
+	 * Close button fills, as [ fill, prompt background, hover, press ].
 	 */
-	public function close_button_lightens_data() {
+	public function close_button_state_colors_data() {
 		return [
-			'black'                            => [ '#000000', '#FFFFFF', true ],
-			'theme contrast'                   => [ '#1E1E1E', '#FFFFFF', true ],
-			'transparent fill on black prompt' => [ '#00000000', '#000000', true ],
-			'navy'                             => [ '#003DA5', '#FFFFFF', false ],
-			'half-transparent black on white'  => [ '#00000080', '#FFFFFF', false ],
-			'white'                            => [ '#FFFFFF', '#FFFFFF', false ],
+			'black lifts to the floor'         => [ '#000000', '#FFFFFF', '#222222', '#484848' ],
+			'theme contrast, like newspack-ui' => [ '#1E1E1E', '#FFFFFF', '#3a3a3a', '#4f4f4f' ],
+			'transparent fill on black prompt' => [ '#00000000', '#000000', '#222222', '#484848' ],
+			'navy darkens'                     => [ '#003DA5', '#FFFFFF', '#002f84', '#00266f' ],
+			'half-transparent black on white'  => [ '#00000080', '#FFFFFF', '#656565', '#545454' ],
+			'white darkens'                    => [ '#FFFFFF', '#FFFFFF', '#cecece', '#aeaeae' ],
 		];
 	}
 
 	/**
-	 * Tests that only a near-black close button fill lightens on hover; other fills darken like a button.
+	 * Tests that a near-black fill lightens like newspack-ui's dark button and any other fill darkens like a button.
 	 *
-	 * @dataProvider close_button_lightens_data
+	 * @dataProvider close_button_state_colors_data
 	 *
 	 * @param string $fill       Close button fill.
 	 * @param string $background Prompt background.
-	 * @param bool   $expected   Whether the fill lightens.
+	 * @param string $hover      Expected hover fill.
+	 * @param string $pressed    Expected press fill.
 	 */
-	public function test_close_button_lightens( $fill, $background, $expected ) {
-		self::assertSame( $expected, Newspack_Popups_Model::close_button_lightens( $fill, $background ) );
+	public function test_close_button_state_colors( $fill, $background, $hover, $pressed ) {
+		self::assertSame(
+			[
+				'hover'   => $hover,
+				'pressed' => $pressed,
+			],
+			Newspack_Popups_Model::close_button_state_colors( $fill, $background )
+		);
+	}
+
+	/**
+	 * An invalid fill gets no state colors.
+	 */
+	public function test_invalid_close_button_fill_has_no_state_colors() {
+		self::assertNull( Newspack_Popups_Model::close_button_state_colors( 'red', '#FFFFFF' ) );
 	}
 }
