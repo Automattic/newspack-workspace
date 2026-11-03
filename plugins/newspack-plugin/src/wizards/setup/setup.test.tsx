@@ -5,6 +5,7 @@ import { SetupWizard } from './index';
 import { MIN_ROW_MS } from './views/start/use-install';
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
+jest.mock( 'canvas-confetti', () => jest.fn() );
 jest.mock( '../newspack/views/settings/theme-and-brand/theme-select', () => () => null );
 
 const PROFILE_RESPONSE = {

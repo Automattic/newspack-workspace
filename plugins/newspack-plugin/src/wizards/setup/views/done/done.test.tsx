@@ -1,9 +1,11 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import apiFetch from '@wordpress/api-fetch';
+import confetti from 'canvas-confetti';
 
 import Done from './index';
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
+jest.mock( 'canvas-confetti', () => jest.fn() );
 
 const HOMEPAGE_EDIT = 'https://example.test/wp-admin/post.php?post=2&action=edit';
 
@@ -32,6 +34,7 @@ const nextStepLinks = async () => within( await screen.findByRole( 'list', { nam
 describe( 'Done', () => {
 	beforeEach( () => {
 		window.newspack_urls = URLS;
+		( confetti as unknown as jest.Mock ).mockClear();
 		respondWith();
 	} );
 
@@ -82,6 +85,17 @@ describe( 'Done', () => {
 		expect( viewSite ).toHaveAttribute( 'href', URLS.site );
 		expect( viewSite ).toHaveAttribute( 'target', '_blank' );
 		expect( screen.getByText( 'Pick what to set up first, or', { exact: false } ) ).toBeInTheDocument();
+	} );
+
+	it( 'fires confetti from the bottom edge of the next steps, unless motion is reduced', async () => {
+		const rect = jest.spyOn( Element.prototype, 'getBoundingClientRect' ).mockReturnValue( { left: 100, width: 400, bottom: 600 } as DOMRect );
+		Object.defineProperty( window, 'innerWidth', { configurable: true, value: 1000 } );
+		Object.defineProperty( window, 'innerHeight', { configurable: true, value: 800 } );
+		render( <Done /> );
+		await nextStepLinks();
+		await waitFor( () => expect( confetti ).toHaveBeenCalledTimes( 1 ) );
+		expect( confetti ).toHaveBeenCalledWith( expect.objectContaining( { origin: { x: 0.3, y: 0.75 }, disableForReducedMotion: true } ) );
+		rect.mockRestore();
 	} );
 
 	it( 'ends on the dashboard row and the documentation link', async () => {

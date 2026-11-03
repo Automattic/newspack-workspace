@@ -1,7 +1,9 @@
-import { createInterpolateElement, useEffect, useState } from '@wordpress/element';
+import { createInterpolateElement, useEffect, useRef, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { category, currencyDollar, envelope, home, megaphone } from '@wordpress/icons';
 import { Link, Stack, Text } from '@wordpress/ui';
+
+import colors from '../../../../../packages/colors/colors.module.scss';
 
 import { fetchInitialCheck, type NextSteps } from '../../api';
 import LinkList, { type LinkListItem } from '../../components/link-list';
@@ -72,6 +74,41 @@ export default function Done() {
 	const siteUrl = window.newspack_urls?.site ?? '/';
 	const dashboardUrl = window.newspack_urls?.dashboard ?? 'admin.php?page=newspack-dashboard';
 
+	const listRef = useRef< HTMLDivElement >( null );
+
+	useEffect( () => {
+		if ( ! data ) {
+			return;
+		}
+		let active = true;
+		import( 'canvas-confetti' ).then( ( { default: confetti } ) => {
+			const rect = listRef.current?.getBoundingClientRect();
+			if ( ! active || ! rect ) {
+				return;
+			}
+			const palette = [
+				colors[ 'primary-600' ],
+				colors[ 'primary-300' ],
+				colors[ 'secondary-500' ],
+				colors[ 'tertiary-500' ],
+				colors[ 'quaternary-500' ],
+			].filter( Boolean );
+			confetti( {
+				particleCount: 160,
+				angle: 90,
+				spread: 120,
+				startVelocity: 55,
+				scalar: 1.2,
+				colors: palette.length ? palette : undefined,
+				origin: { x: ( rect.left + rect.width / 2 ) / window.innerWidth, y: rect.bottom / window.innerHeight },
+				disableForReducedMotion: true,
+			} );
+		} );
+		return () => {
+			active = false;
+		};
+	}, [ data ] );
+
 	useEffect( () => {
 		let active = true;
 		fetchInitialCheck()
@@ -99,7 +136,9 @@ export default function Done() {
 			/>
 			{ data && (
 				<Stack direction="column" gap="lg">
-					<LinkList label={ __( 'Pick where to start', 'newspack-plugin' ) } items={ nextStepItems( data, dashboardUrl ) } />
+					<div ref={ listRef }>
+						<LinkList label={ __( 'Pick where to start', 'newspack-plugin' ) } items={ nextStepItems( data, dashboardUrl ) } />
+					</div>
 					<Text variant="body-md" className="setup-muted" render={ <p /> }>
 						{ createInterpolateElement( __( 'New to Newspack? <a>Read the documentation</a>', 'newspack-plugin' ), {
 							a: <Link href={ window.newspack_urls?.support } openInNewTab />,
