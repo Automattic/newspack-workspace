@@ -21,7 +21,8 @@ class Donors {
 
 	/**
 	 * How many orders to read per query, and lapsed donors to check between cache
-	 * clears, when `--batch-size` isn't given.
+	 * clears, when `--batch-size` isn't given. WP-CLI fills that in from the
+	 * `default:` in backfill()'s help first, so keep the two equal.
 	 *
 	 * @var int
 	 */
