@@ -32,12 +32,17 @@ import { addQueryArgs } from '@wordpress/url';
 import { Icon, loop, postList } from '@wordpress/icons';
 
 /**
+ * External dependencies
+ */
+import { getContrastColor } from 'newspack-components';
+
+/**
  * Internal dependencies
  */
 import { Listing } from '../listing/listing';
 import { SidebarQueryControls } from '../../components';
 import { List } from '../../svg';
-import { getContrastRatio, getCuratedListClasses, useDidMount } from '../../editor/utils';
+import { getCuratedListClasses, useDidMount } from '../../editor/utils';
 
 /**
  * Debounced fetchPosts function outside of component scope.
@@ -277,15 +282,7 @@ const CuratedListEditorComponent = ( {
 	 * Determine if the background color is dark or light.
 	 */
 	useEffect( () => {
-		if ( backgroundColor ) {
-			const contrastRatio = getContrastRatio( backgroundColor );
-
-			if ( contrastRatio < 5 ) {
-				return setAttributes( { hasDarkBackground: true } );
-			}
-		}
-
-		setAttributes( { hasDarkBackground: false } );
+		setAttributes( { hasDarkBackground: !! backgroundColor && getContrastColor( backgroundColor ) === 'white' } );
 	}, [ backgroundColor ] );
 
 	/**
