@@ -88,8 +88,20 @@
 				transform motion.$duration-press motion.$ease-out;
 		}
 
-		&.has-background:not(.has-accent-2-background-color, .has-contrast-color.has-base-background-color, [contenteditable="true"]) {
+		&.has-background:not(.has-accent-2-background-color, .has-contrast-color.has-base-background-color, [contenteditable="true"], [style*="--wp--custom--button--bg-hover"]) {
 			@include mixins.fill-overlay;
+		}
+
+		&[style*="--wp--custom--button--bg-hover"] {
+			@include motion.hover {
+				&:hover {
+					background-color: var(--wp--custom--button--bg-hover) !important;
+				}
+			}
+
+			&:active:where(:not([contenteditable="true"])) {
+				background-color: var(--wp--custom--button--bg-pressed) !important;
+			}
 		}
 
 		&.has-accent-2-background-color {
