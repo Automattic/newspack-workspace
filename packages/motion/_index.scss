@@ -1,0 +1,52 @@
+@use "sass:math";
+
+$ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+$ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+$ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+$ease-color: ease;
+$duration-color: 150ms;
+$duration-press: 160ms;
+$duration-indicator: 200ms;
+$duration-reveal: 200ms;
+$duration-modal: 250ms;
+$duration-sheet: 400ms;
+$duration-exit: 120ms;
+$press-scale: 0.97;
+$enter-scale: 0.96;
+$enter-offset: 4px;
+$reveal-scale: 0.9;
+$travel-base-distance: 240px;
+$travel-px-per-ms: 4;
+$duration-travel-max: 450ms;
+
+@function travel-duration($distance, $base: $duration-modal) {
+	$extra: math.div(math.max(0px, $distance - $travel-base-distance), $travel-px-per-ms * 1px) * 1ms;
+
+	@return math.min($duration-travel-max, math.round(math.div($base + $extra, 1ms)) * 1ms);
+}
+
+@mixin hover {
+	@media (hover: hover) and (pointer: fine) {
+		@content;
+	}
+}
+
+@mixin reduced-motion {
+	@media (prefers-reduced-motion: reduce) {
+		@content;
+	}
+}
+
+@mixin custom-properties($prefix) {
+	--#{$prefix}-ease-out: #{$ease-out};
+	--#{$prefix}-ease-in-out: #{$ease-in-out};
+	--#{$prefix}-ease-drawer: #{$ease-drawer};
+	--#{$prefix}-ease-color: #{$ease-color};
+	--#{$prefix}-duration-color: #{$duration-color};
+	--#{$prefix}-duration-press: #{$duration-press};
+	--#{$prefix}-duration-indicator: #{$duration-indicator};
+	--#{$prefix}-duration-reveal: #{$duration-reveal};
+	--#{$prefix}-duration-modal: #{$duration-modal};
+	--#{$prefix}-duration-sheet: #{$duration-sheet};
+	--#{$prefix}-duration-exit: #{$duration-exit};
+}

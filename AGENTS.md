@@ -14,7 +14,7 @@ It is a **pnpm workspace** (`plugins/*`, `themes/*`, `packages/*`) with one lock
 | --- | --- | --- |
 | `plugins/<name>/` | 12 product plugins | `/newspack-plugins/` |
 | `themes/<name>/` | `newspack-theme` (classic; style variations nested inside it) and `newspack-block-theme` (FSE) | `/newspack-themes/` |
-| `packages/<name>/` | `scripts`, `components`, `colors`, `icons` — note the directories are unprefixed, the npm packages are `newspack-<name>` | – |
+| `packages/<name>/` | `scripts`, `components`, `colors`, `icons`, `motion` — note the directories are unprefixed, the npm packages are `newspack-<name>` | – |
 | `repos/plugins/<name>/`, `repos/themes/<name>/` | Checkouts that live outside the monorepo | `/newspack-repos` |
 | `html/` | Main WordPress site | `/var/www/html` |
 | `bin/` | Shell scripts | `/var/scripts/` |

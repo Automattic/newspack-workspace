@@ -162,6 +162,7 @@ Defined in `webpack.config.js` using `newspack-scripts/config/getWebpackConfig`:
 - **`newspack-scripts`**: Shared toolchain (ESLint, Stylelint, Prettier, Babel, Webpack, commitlint, semantic-release)
 - **`newspack-components`**: Shared React UI components
 - **`newspack-colors`** / **`newspack-icons`**: Shared color palette and SVG icons
+- **`newspack-motion`**: Shared motion tokens, `prefersReducedMotion()` and `travelDuration()`; SCSS can `@use "newspack-motion"`
 - **`swiper`** (12.x): Carousel slider
 - **`redux`** + **`redux-saga`**: Homepage Articles block store
 

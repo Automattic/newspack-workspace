@@ -56,6 +56,7 @@
 		"newspack-colors": "workspace:*",
 		"newspack-components": "workspace:*",
 		"newspack-icons": "workspace:*",
+		"newspack-motion": "workspace:*",
 		"newspack-scripts": "workspace:*",
 		"prop-types": "^15.8.0",
 		"react": "^18.0.0"

@@ -208,6 +208,9 @@ importers:
       newspack-icons:
         specifier: workspace:*
         version: link:../icons
+      newspack-motion:
+        specifier: workspace:*
+        version: link:../motion
       qs:
         specifier: ^6.15.2
         version: 6.15.2
@@ -249,6 +252,12 @@ importers:
       '@types/react':
         specifier: ^18.0.0
         version: 18.3.28
+      newspack-scripts:
+        specifier: workspace:*
+        version: link:../scripts
+
+  packages/motion:
+    devDependencies:
       newspack-scripts:
         specifier: workspace:*
         version: link:../scripts
@@ -409,6 +418,9 @@ importers:
       newspack-icons:
         specifier: workspace:*
         version: link:../../packages/icons
+      newspack-motion:
+        specifier: workspace:*
+        version: link:../../packages/motion
       redux:
         specifier: ^5.0.0
         version: 5.0.1
@@ -568,6 +580,9 @@ importers:
       newspack-icons:
         specifier: workspace:*
         version: link:../../packages/icons
+      newspack-motion:
+        specifier: workspace:*
+        version: link:../../packages/motion
       newspack-scripts:
         specifier: workspace:*
         version: link:../../packages/scripts
@@ -595,6 +610,9 @@ importers:
       newspack-components:
         specifier: workspace:*
         version: link:../../packages/components
+      newspack-motion:
+        specifier: workspace:*
+        version: link:../../packages/motion
     devDependencies:
       lodash:
         specifier: ^4.17.0
@@ -665,6 +683,9 @@ importers:
       newspack-components:
         specifier: workspace:*
         version: link:../../packages/components
+      newspack-motion:
+        specifier: workspace:*
+        version: link:../../packages/motion
       newspack-scripts:
         specifier: workspace:*
         version: link:../../packages/scripts
