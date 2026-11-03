@@ -261,6 +261,9 @@ class Test_Donors_Backfill extends WP_UnitTestCase {
 			$reader_ids[] = $reader_id;
 			$this->create_subscription( $reader_id, 'cancelled' );
 		}
+		// An already-flagged reader still had their flags checked, so still counts
+		// toward the batch: on a repeat run every lapsed donor is already flagged.
+		Reader_Data::set_is_former_donor( time(), [ 'user_id' => $reader_ids[1] ] );
 
 		// The mock appends 'clear' to this log; the filter appends the reader whose
 		// reader-data keys are being read, which every flag check does first.

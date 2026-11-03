@@ -20,7 +20,8 @@ defined( 'ABSPATH' ) || exit;
 class Donors {
 
 	/**
-	 * How many orders to read per query when `--batch-size` isn't given.
+	 * How many orders to read per query, and lapsed donors to check between cache
+	 * clears, when `--batch-size` isn't given.
 	 *
 	 * @var int
 	 */
@@ -61,7 +62,7 @@ class Donors {
 	 * : Report the counts and write nothing.
 	 *
 	 * [--batch-size=<n>]
-	 * : How many orders to read at a time.
+	 * : How many orders to read, or lapsed donors to check, between cache clears.
 	 * ---
 	 * default: 100
 	 * ---
@@ -123,8 +124,9 @@ class Donors {
 			if ( isset( $live[ $user_id ] ) ) {
 				continue;
 			}
-			// Checking a reader's flags loads their user meta, so on a store with many
-			// lapsed donors clear the cache every batch, before any reader is skipped.
+			// Checking a reader's flags loads their user meta, so clear the cache after
+			// every `--batch-size` readers checked, already-flagged ones included: on a
+			// repeat run every lapsed donor is already flagged.
 			if ( $checked > 0 && 0 === $checked % $batch_size ) {
 				self::clear_object_cache();
 			}
@@ -238,8 +240,9 @@ class Donors {
 	}
 
 	/**
-	 * Drop what the run has loaded into the object cache, so a long run's memory
-	 * stays bounded.
+	 * Drop what the run has loaded into this process's copy of the object cache, so
+	 * a long run's memory stays bounded. A persistent cache such as memcached is
+	 * left alone; wp_cache_flush() would empty it for the whole site.
 	 */
 	private static function clear_object_cache(): void {
 		if ( function_exists( '\WP_CLI\Utils\wp_clear_object_cache' ) ) {
