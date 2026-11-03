@@ -631,4 +631,32 @@ class ModelTest extends WP_UnitTestCase {
 
 		self::assertSame( $setting, 'DONAT' );
 	}
+
+	/**
+	 * Close button icon colors, as [ fill, prompt background, expected icon ].
+	 */
+	public function close_button_icon_color_data() {
+		return [
+			'transparent fill on white prompt' => [ '#00000000', '#FFFFFF', '#000' ],
+			'transparent fill on black prompt' => [ '#00000000', '#000000', '#fff' ],
+			'half-transparent red on white'    => [ '#ff000080', '#FFFFFF', '#000' ],
+			'opaque black'                     => [ '#000000', '#FFFFFF', '#fff' ],
+			'mid grey'                         => [ '#808080', '#FFFFFF', '#000' ],
+			'dark blue'                        => [ '#2271b1', '#FFFFFF', '#fff' ],
+			'invalid fill'                     => [ 'red', '#000000', '#fff' ],
+		];
+	}
+
+	/**
+	 * Tests that the close button icon contrasts with its fill as painted over the prompt.
+	 *
+	 * @dataProvider close_button_icon_color_data
+	 *
+	 * @param string $fill       Close button fill.
+	 * @param string $background Prompt background.
+	 * @param string $expected   Expected icon color.
+	 */
+	public function test_close_button_icon_color( $fill, $background, $expected ) {
+		self::assertSame( $expected, Newspack_Popups_Model::close_button_icon_color( $fill, $background ) );
+	}
 }
