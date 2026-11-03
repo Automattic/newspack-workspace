@@ -253,6 +253,21 @@ describe( 'Get started', () => {
 		expect( screen.getByRole( 'heading', { name: 'Your site is ready to set up' } ) ).toHaveFocus();
 	} );
 
+	it( 'announces a failed new-site start once focus has settled on the heading', async () => {
+		const message = 'Could not start the install.';
+		mockApi( () => Promise.reject( { code: 'newspack_starter_content', message } ) );
+		renderStart();
+		fireEvent.click( installButton() );
+		await advance( 0 );
+
+		expect( screen.getByRole( 'heading', { name: 'Welcome to Newspack' } ) ).toHaveFocus();
+		expect( screen.getByText( message, { ignore: '.a11y-speak-region' } ) ).toBeInTheDocument();
+		expect( spoken() ).not.toContain( message );
+
+		await advance( 300 );
+		expect( document.getElementById( 'a11y-speak-assertive' )?.textContent ).toContain( message );
+	} );
+
 	it( 'shows an inline error on the URL field when the move cannot start', async () => {
 		const message = '"https://example.test/" does not appear to be a WordPress site.';
 		mockApi( () => Promise.reject( { code: 'newspack_starter_content', message } ) );

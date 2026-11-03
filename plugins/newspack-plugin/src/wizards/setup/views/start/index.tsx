@@ -16,6 +16,7 @@ import InstallChecklist from './install-checklist';
 import { useCountdown, useInstall, type Approach, type InstallFailures } from './use-install';
 
 const COUNTDOWN_SECONDS = 5;
+const ANNOUNCE_AFTER_FOCUS_MS = 300;
 
 const isSiteUrl = ( value: string ) => /^https?:\/\/[^\s/]+\.[^\s]+/i.test( value ) && isURL( value );
 
@@ -162,6 +163,8 @@ export default function Start( { initialCheck, setInstallState, goTo }: SetupVie
 				urlRef.current?.focus();
 			} else {
 				headingRef.current?.focus();
+				const timer = window.setTimeout( () => speak( initError, 'assertive' ), ANNOUNCE_AFTER_FOCUS_MS );
+				return () => window.clearTimeout( timer );
 			}
 		} else if ( status === 'partial' || status === 'blocked' ) {
 			speak( `${ title } ${ failureText }`, status === 'blocked' ? 'assertive' : 'polite' );
@@ -279,7 +282,7 @@ export default function Start( { initialCheck, setInstallState, goTo }: SetupVie
 					) }
 				</Stack>
 				{ initError && ! isMove && (
-					<Notice status="error" isDismissible={ false }>
+					<Notice status="error" isDismissible={ false } spokenMessage="">
 						{ initError }
 					</Notice>
 				) }
