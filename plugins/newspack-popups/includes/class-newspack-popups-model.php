@@ -1488,24 +1488,37 @@ final class Newspack_Popups_Model {
 	 * (25% of the icon color in on hover, 40% on press). The cut-off sits just above
 	 * the theme's default contrast color (#1E1E1E), so a dark neutral lightens
 	 * while a dark accent, such as #003DA5, still darkens like a button. A
-	 * translucent fill gets no colors, since a mixed hover would turn opaque over
-	 * whatever the button sits on; the stylesheet's own mix keeps its alpha.
+	 * translucent fill must stay translucent over whatever the button sits on, so
+	 * it gets no mixed colors: a near-black one (the cleared default, #00000000,
+	 * over a dark prompt) gets the floor as a color-mix toward the icon that the
+	 * browser resolves, and any other translucent fill is left to the stylesheet's
+	 * own mix toward black.
 	 *
 	 * @param string $fill_color       Hex close button fill, with optional alpha.
 	 * @param string $background_color Hex prompt background.
-	 * @return string[]|null [ 'hover' => '#rrggbb', 'pressed' => '#rrggbb' ], or null when the fill is translucent or can't be parsed.
+	 * @return string[]|null [ 'hover' => <css color>, 'pressed' => <css color> ], or null when the fill is left to the stylesheet or can't be parsed.
 	 */
 	public static function close_button_state_colors( $fill_color, $background_color ): ?array {
 		$rgba = self::hex_to_rgba( $fill_color );
-		if ( null === $rgba || $rgba[3] < 1 ) {
+		if ( null === $rgba ) {
 			return null;
+		}
+		$near_black = self::close_button_fill_luminance( $fill_color, $background_color ) < self::CLOSE_BUTTON_LIGHTEN_LUMINANCE;
+		if ( $rgba[3] < 1 ) {
+			if ( ! $near_black ) {
+				return null;
+			}
+			return [
+				'hover'   => sprintf( 'color-mix(in oklab, currentcolor %d%%, var(--newspack-lightbox-close-bg))', round( 100 * ( 1 - self::CLOSE_BUTTON_LIGHTEN_FLOORS[0] ) ) ),
+				'pressed' => sprintf( 'color-mix(in oklab, currentcolor %d%%, var(--newspack-lightbox-close-bg))', round( 100 * ( 1 - self::CLOSE_BUTTON_LIGHTEN_FLOORS[1] ) ) ),
+			];
 		}
 		$fill = self::composited_close_button_fill( $fill_color, $background_color );
 		if ( null === $fill ) {
 			return null;
 		}
 
-		if ( self::close_button_fill_luminance( $fill_color, $background_color ) >= self::CLOSE_BUTTON_LIGHTEN_LUMINANCE ) {
+		if ( ! $near_black ) {
 			$hover   = self::mix_oklab( $fill, [ 0, 0, 0 ], self::CLOSE_BUTTON_SHARES[0] );
 			$pressed = self::mix_oklab( $fill, [ 0, 0, 0 ], self::CLOSE_BUTTON_SHARES[1] );
 		} else {
