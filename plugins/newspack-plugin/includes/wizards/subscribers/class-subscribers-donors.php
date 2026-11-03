@@ -121,6 +121,7 @@ class Subscribers_Donors {
 	 *     `donor` filter, which builds each kind's reader set from holders() and
 	 *     flagged_user_ids() instead of calling this per reader.
 	 *   - holders() — which donation subscriptions count, and as live or ended.
+	 *   - scanned_statuses() — which subscription statuses holders() reads.
 	 *   - Newspack\CLI\Donors::backfill() — the support command that flags donors
 	 *     from before the flag existed, so they land in the kind this returns.
 	 *
@@ -130,6 +131,9 @@ class Subscribers_Donors {
 	 * value for a non-donor (DONOR_FILTER_ELEMENTS). The Donor field's getValue
 	 * in screens/SubscriberList.jsx maps a row's '' to that `none`.
 	 * screens/PersonProfile.jsx shows the badge.
+	 *
+	 * The live/ended split in rules 1 and 2 is written once, in bucket(), which
+	 * holders() and scanned_statuses() share.
 	 *
 	 * It reads nothing but the reader's two flags and the statuses it is given:
 	 * the caller resolves which donation subscriptions the reader holds. Callers
@@ -143,16 +147,33 @@ class Subscribers_Donors {
 	 * @return string One of the KIND_* constants, or '' for a reader who isn't a donor.
 	 */
 	public static function kind( int $user_id, array $donation_statuses ): string {
-		if ( in_array( 'active', $donation_statuses, true ) || in_array( 'on-hold', $donation_statuses, true ) ) {
+		$buckets = array_map( [ __CLASS__, 'bucket' ], $donation_statuses );
+		if ( in_array( 'live', $buckets, true ) ) {
 			return self::KIND_RECURRING;
 		}
-		if ( in_array( 'cancelled', $donation_statuses, true ) || Reader_Data::get_bool( $user_id, 'is_former_donor' ) ) {
+		if ( in_array( 'ended', $buckets, true ) || Reader_Data::get_bool( $user_id, 'is_former_donor' ) ) {
 			return self::KIND_FORMER;
 		}
 		if ( Reader_Data::get_bool( $user_id, 'is_donor' ) ) {
 			return self::KIND_ONE_TIME;
 		}
 		return '';
+	}
+
+	/**
+	 * Whether a donation subscription with this mapped status is live or ended.
+	 *
+	 * @param string $mapped_status A status from Subscribers_Wizard::map_subscription_status().
+	 *
+	 * @return string `live` for `active` and `on-hold`, `ended` for `cancelled`, or
+	 *                '' for a status that counts toward no kind, such as `pending`.
+	 */
+	private static function bucket( string $mapped_status ): string {
+		return match ( $mapped_status ) {
+			'active', 'on-hold' => 'live',
+			'cancelled'         => 'ended',
+			default             => '',
+		};
 	}
 
 	/**
@@ -235,12 +256,13 @@ class Subscribers_Donors {
 	 * The subscription statuses the donor scan reads, as live and ended.
 	 *
 	 * Each status WooCommerce Subscriptions registers is placed by its mapped
-	 * status, the way kind() reads it: `active` and `on-hold` are live, `cancelled`
-	 * is ended, and `pending` is neither. Placing by the mapped status, not a fixed
-	 * list of raw ones, keeps a status another plugin registers where the row puts
-	 * it: on hold, so live. Statuses WooCommerce Subscriptions doesn't register,
-	 * such as the trash, are never read. The row never sees a trashed subscription
-	 * either, because WooCommerce Subscriptions leaves it out of a reader's list.
+	 * status through bucket(), as kind() reads it: `active` and `on-hold` are live,
+	 * `cancelled` is ended, and `pending` is neither. Placing by the mapped status,
+	 * not a fixed list of raw ones, keeps a status another plugin registers where
+	 * the row puts it: on hold, so live. Statuses WooCommerce Subscriptions doesn't
+	 * register, such as the trash, are never read. The row never sees a trashed
+	 * subscription either, because WooCommerce Subscriptions leaves it out of a
+	 * reader's list.
 	 *
 	 * @return array{live:string[],ended:string[]} Statuses without the `wc-` prefix.
 	 */
@@ -251,11 +273,7 @@ class Subscribers_Donors {
 		];
 		foreach ( array_keys( \wcs_get_subscription_statuses() ) as $key ) {
 			$status = str_starts_with( $key, 'wc-' ) ? substr( $key, 3 ) : $key;
-			$bucket = match ( Subscribers_Wizard::map_subscription_status( $status ) ) {
-				'active', 'on-hold' => 'live',
-				'cancelled'         => 'ended',
-				default             => '',
-			};
+			$bucket = self::bucket( Subscribers_Wizard::map_subscription_status( $status ) );
 			if ( '' !== $bucket ) {
 				$statuses[ $bucket ][] = $status;
 			}
@@ -272,9 +290,8 @@ class Subscribers_Donors {
 	 * group subscription counts for no one, because the row shows it with the
 	 * reader's groups. Only the statuses scanned_statuses() lists are read, so a
 	 * pending subscription, or one in the trash, counts for no one. Each
-	 * subscription read is still bucketed by its own mapped status the way kind()
-	 * reads it, in case it changed after the query found it: `active` and `on-hold`
-	 * are live, `cancelled` is ended.
+	 * subscription read is still placed by its own mapped status through bucket(),
+	 * as kind() reads it, in case it changed after the query found it.
 	 *
 	 * Subscriptions managed on other network sites carry no product data, so they
 	 * never count, as on the row. A reader can be in both lists.
@@ -323,11 +340,7 @@ class Subscribers_Donors {
 				$subscriptions = array_filter( array_map( 'wcs_get_subscription', $chunk ) );
 				Subscribers_Wizard::prime_gift_recipients( $subscriptions );
 				foreach ( $subscriptions as $subscription ) {
-					$bucket = match ( Subscribers_Wizard::map_subscription_status( $subscription->get_status() ) ) {
-						'active', 'on-hold' => 'live',
-						'cancelled'         => 'ended',
-						default             => '',
-					};
+					$bucket = self::bucket( Subscribers_Wizard::map_subscription_status( $subscription->get_status() ) );
 					if ( '' === $bucket || ! empty( Group_Subscription_Settings::get_subscription_settings( $subscription )['enabled'] ) ) {
 						continue;
 					}
