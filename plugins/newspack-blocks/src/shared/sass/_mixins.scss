@@ -5,7 +5,7 @@ $focus-color: var(--newspack-ui-color-focus, #{np-colors.$neutral-900});
 $focus-halo-width: var(--newspack-ui-focus-halo-width, 3px);
 
 @mixin focus-edge( $color: $focus-color, $width: 1px, $halo: $color, $inner: null, $over-content: false ) {
-	$halo-shadow: 0 0 0 $focus-halo-width color-mix(in srgb, #{$halo} var(--newspack-ui-focus-halo-mix, 30%), transparent);
+	$halo-shadow: 0 0 0 $focus-halo-width color-mix(in oklab, #{$halo} var(--newspack-ui-focus-halo-mix, 30%), transparent);
 
 	border-color: $color;
 

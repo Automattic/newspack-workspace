@@ -19,14 +19,24 @@
 				padding: calc(var(--wp--preset--spacing--20) * 0.875);
 				top: 0;
 
-				@include mixins.fill-overlay;
+				&:where(:not(:is(.share-x, .share-threads, .share-share):not([style*="background-color"]))) {
+					@include mixins.fill-overlay;
 
-				&:is(.share-x, .share-threads, .share-share):not([style*="background-color"])::before {
-					background: currentcolor;
+					&:focus-visible::before {
+						inset: 0;
+					}
 				}
 
-				&:focus-visible::before {
-					inset: 0;
+				&:is(.share-x, .share-threads, .share-share):not([style*="background-color"]) {
+					@include motion.hover {
+						&:hover {
+							background: color-mix(in oklab, currentcolor var(--wp--custom--state--lighten-hover), black);
+						}
+					}
+
+					&:active {
+						background: color-mix(in oklab, currentcolor var(--wp--custom--state--lighten-pressed), black);
+					}
 				}
 
 				&:active {
@@ -60,13 +70,13 @@
 
 				@include motion.hover {
 					&:hover {
-						background: color-mix(in srgb, currentcolor 7%, var(--newspack-ui-color-neutral-0, var(--wp--preset--color--base)));
+						background: color-mix(in oklab, currentcolor var(--wp--custom--state--fill), var(--newspack-ui-color-neutral-0, var(--wp--preset--color--base)));
 						border-color: var(--newspack-ui-color-neutral-40, var(--wp--preset--color--base-4));
 					}
 				}
 
 				&:active {
-					background: color-mix(in srgb, currentcolor 13%, var(--newspack-ui-color-neutral-0, var(--wp--preset--color--base)));
+					background: color-mix(in oklab, currentcolor var(--wp--custom--state--fill-hover), var(--newspack-ui-color-neutral-0, var(--wp--preset--color--base)));
 					transform: scale(motion.$press-scale);
 
 					@include motion.reduced-motion {

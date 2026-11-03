@@ -95,24 +95,24 @@
 		&.has-accent-2-background-color {
 			@include motion.hover {
 				&:hover {
-					background-color: color-mix(in srgb, var(--wp--preset--color--accent-2) 85%, black) !important;
+					background-color: color-mix(in oklab, var(--wp--preset--color--accent-2) var(--wp--custom--state--hover), black) !important;
 				}
 			}
 
 			&:active:where(:not([contenteditable="true"])) {
-				background-color: color-mix(in srgb, var(--wp--preset--color--accent-2) 75%, black) !important;
+				background-color: color-mix(in oklab, var(--wp--preset--color--accent-2) var(--wp--custom--state--pressed), black) !important;
 			}
 		}
 
 		&.has-contrast-color.has-base-background-color {
 			@include motion.hover {
 				&:hover {
-					background-color: color-mix(in srgb, var(--wp--preset--color--contrast) 7%, var(--wp--preset--color--base)) !important;
+					background-color: color-mix(in oklab, var(--wp--preset--color--contrast) var(--wp--custom--state--fill), var(--wp--preset--color--base)) !important;
 				}
 			}
 
 			&:active:where(:not([contenteditable="true"])) {
-				background-color: color-mix(in srgb, var(--wp--preset--color--contrast) 13%, var(--wp--preset--color--base)) !important;
+				background-color: color-mix(in oklab, var(--wp--preset--color--contrast) var(--wp--custom--state--fill-hover), var(--wp--preset--color--base)) !important;
 			}
 		}
 
@@ -147,7 +147,7 @@
 
 			@include motion.hover {
 				&:hover {
-					background: color-mix(in srgb, var(--wp--preset--color--contrast) 7%, var(--wp--preset--color--base));
+					background: color-mix(in oklab, var(--wp--preset--color--contrast) var(--wp--custom--state--fill), var(--wp--preset--color--base));
 				}
 
 				&:where(:not(.has-background)):hover {
@@ -156,7 +156,7 @@
 			}
 
 			&:active:where(:not([contenteditable="true"])) {
-				background: color-mix(in srgb, var(--wp--preset--color--contrast) 13%, var(--wp--preset--color--base));
+				background: color-mix(in oklab, var(--wp--preset--color--contrast) var(--wp--custom--state--fill-hover), var(--wp--preset--color--base));
 			}
 
 			&:active:where(:not([contenteditable="true"], .has-background)) {
@@ -231,11 +231,11 @@
 
 	@include motion.hover {
 		&:hover {
-			background-color: color-mix(in srgb, currentcolor 7%, transparent);
+			background-color: color-mix(in oklab, currentcolor var(--wp--custom--state--fill), transparent);
 		}
 	}
 
 	&:active:where(:not([contenteditable="true"])) {
-		background-color: color-mix(in srgb, currentcolor 13%, transparent);
+		background-color: color-mix(in oklab, currentcolor var(--wp--custom--state--fill-hover), transparent);
 	}
 }

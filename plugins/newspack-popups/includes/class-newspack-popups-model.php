@@ -1365,6 +1365,10 @@ final class Newspack_Popups_Model {
 		$close_button_styles = 'color: ' . $close_button_color . ';';
 		if ( $enable_close_button_background ) {
 			$close_button_styles .= '--newspack-lightbox-close-bg: ' . $close_button_background_color . ';';
+			if ( '#fff' === $close_button_color ) {
+				// Lightening a dark fill by the usual 15%/25% in oklab barely registers, so a white icon gets a bigger step.
+				$close_button_styles .= '--newspack-lightbox-close-mix-hover: 75%; --newspack-lightbox-close-mix-pressed: 60%;';
+			}
 		}
 
 		$animation_id = 'a_' . $element_id;

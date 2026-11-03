@@ -145,14 +145,14 @@ $submenu-static: ".is-menu-open *, .open-always *, .is-style-flatten.is-vertical
 			@include motion.hover {
 				&:hover {
 					&::before {
-						background: color-mix(in srgb, currentcolor 7%, transparent);
+						background: color-mix(in oklab, currentcolor var(--wp--custom--state--fill), transparent);
 					}
 				}
 			}
 
 			&:active {
 				&::before {
-					background: color-mix(in srgb, currentcolor 13%, transparent);
+					background: color-mix(in oklab, currentcolor var(--wp--custom--state--fill-hover), transparent);
 				}
 			}
 

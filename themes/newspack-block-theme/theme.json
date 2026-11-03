@@ -265,6 +265,18 @@
 		},
 		"useRootPaddingAwareAlignments": true,
 		"custom": {
+			"state": {
+				"hover": "85%",
+				"pressed": "75%",
+				"lighten-hover": "25%",
+				"lighten-pressed": "40%",
+				"fill": "7%",
+				"fill-hover": "13%",
+				"fill-pressed": "19%",
+				"inactive": "65.5%",
+				"inactive-on-color": "80%",
+				"disabled-text": "45%"
+			},
 			"border": {
 				"radius-xx-small": "0.125rem",
 				"radius-x-small": "0.1875rem",
@@ -378,7 +390,7 @@
 						},
 						":hover": {
 							"color": {
-								"text": "var( --wp--preset--color--contrast-3 )"
+								"text": "color-mix( in oklab, var( --wp--preset--color--contrast-3 ) var( --wp--custom--state--hover ), transparent )"
 							},
 							"typography": {
 								"textDecoration": "none"
@@ -467,7 +479,7 @@
 						},
 						":hover": {
 							"color": {
-								"text": "color-mix( in srgb, var( --wp--preset--color--contrast ) 85%, transparent )"
+								"text": "color-mix( in oklab, var( --wp--preset--color--contrast ) var( --wp--custom--state--hover ), transparent )"
 							}
 						},
 						"typography": {
@@ -616,7 +628,7 @@
 						},
 						":hover": {
 							"color": {
-								"text": "color-mix(in srgb, currentcolor 85%, transparent) !important"
+								"text": "color-mix( in oklab, currentcolor var( --wp--custom--state--hover ), transparent ) !important"
 							},
 							"typography": {
 								"textDecoration": "none"
@@ -645,7 +657,7 @@
 						},
 						":hover": {
 							"color": {
-								"text": "var( --wp--preset--color--contrast-3 )"
+								"text": "color-mix( in oklab, var( --wp--preset--color--contrast-3 ) var( --wp--custom--state--hover ), transparent )"
 							},
 							"typography": {
 								"textDecoration": "none"
@@ -737,7 +749,7 @@
 						},
 						":hover": {
 							"color": {
-								"text": "color-mix( in srgb, var( --wp--preset--color--contrast ) 85%, transparent )"
+								"text": "color-mix( in oklab, var( --wp--preset--color--contrast ) var( --wp--custom--state--hover ), transparent )"
 							},
 							"typography": {
 								"textDecoration": "none"
@@ -758,7 +770,7 @@
 						},
 						":hover": {
 							"color": {
-								"text": "color-mix( in srgb, var( --wp--preset--color--contrast ) 85%, transparent )"
+								"text": "color-mix( in oklab, var( --wp--preset--color--contrast ) var( --wp--custom--state--hover ), transparent )"
 							},
 							"typography": {
 								"textDecoration": "none"
@@ -1040,13 +1052,13 @@
 			"button": {
 				":hover": {
 					"color": {
-						"background": "color-mix( in srgb, var( --wp--preset--color--accent ) 85%, black )",
+						"background": "color-mix( in oklab, var( --wp--preset--color--accent ) var( --wp--custom--state--hover ), black )",
 						"text": "var( --wp--preset--color--accent-contrast-hover, var( --wp--preset--color--accent-contrast, var( --wp--preset--color--base ) ) )"
 					}
 				},
 				":active": {
 					"color": {
-						"background": "color-mix( in srgb, var( --wp--preset--color--accent ) 75%, black )",
+						"background": "color-mix( in oklab, var( --wp--preset--color--accent ) var( --wp--custom--state--pressed ), black )",
 						"text": "var( --wp--preset--color--accent-contrast-hover, var( --wp--preset--color--accent-contrast, var( --wp--preset--color--base ) ) )"
 					}
 				},

@@ -157,13 +157,13 @@ input[type="submit"]:not(.newspack-ui__button) {
 
 	@include motion.hover {
 		&:hover {
-			background: color-mix(in srgb, var(--wp--preset--color--accent) 85%, black);
+			background: color-mix(in oklab, var(--wp--preset--color--accent) var(--wp--custom--state--hover), black);
 			color: var(--wp--preset--color--accent-contrast-hover, var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base)));
 		}
 	}
 
 	&:active {
-		background: color-mix(in srgb, var(--wp--preset--color--accent) 75%, black);
+		background: color-mix(in oklab, var(--wp--preset--color--accent) var(--wp--custom--state--pressed), black);
 		color: var(--wp--preset--color--accent-contrast-hover, var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base)));
 		transform: scale(motion.$press-scale);
 
@@ -181,8 +181,8 @@ input[type="submit"]:not(.newspack-ui__button) {
 	}
 
 	&:disabled {
-		background: color-mix(in srgb, var(--wp--preset--color--contrast) 7%, transparent);
-		color: color-mix(in srgb, var(--wp--preset--color--contrast) 45%, transparent);
+		background: color-mix(in oklab, var(--wp--preset--color--contrast) var(--wp--custom--state--fill), transparent);
+		color: color-mix(in oklab, var(--wp--preset--color--contrast) var(--wp--custom--state--disabled-text), transparent);
 		cursor: default;
 	}
 }

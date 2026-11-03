@@ -1,4 +1,5 @@
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "newspack-motion" as motion;
 @use "../../shared/scss/mixins";
 
 .newspack-registration {
@@ -27,7 +28,16 @@
 		&:focus,
 		&:hover {
 			color: inherit;
+		}
+
+		&:active {
 			text-decoration: none;
+		}
+
+		@include motion.hover {
+			&:hover {
+				text-decoration: none;
+			}
 		}
 	}
 

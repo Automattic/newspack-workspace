@@ -90,6 +90,25 @@ Larger surfaces get longer durations. No single transition runs longer than 300m
 - **Fills still fade under focus.** If a control's fill changes while it has focus, like a checkbox toggled with Space, restate the transition for the property that draws the fill after the focus mixin, as the checkbox does with `background-color`. A radio draws its dot with the same `box-shadow` as its ring, so its dot changes at once under keyboard focus.
 - **Press feedback scales a button to `$press-scale` (0.97)** over `$duration-press`. Buttons that pick one of a set, like tabs, segmented controls and dropdown items, set `transform: none` and don't scale.
 
+### States
+
+Hover, press, focus and disabled change color by one set of amounts, mixed with `color-mix(in oklab, …)`. newspack-ui publishes them as `--newspack-ui-color-mix-hover` and `--newspack-ui-color-mix-pressed` and its `neutral-fill` properties; the block theme publishes the same amounts as `--wp--custom--state--*` from `settings.custom.state` in its `theme.json`. Plugins read newspack-ui's properties with a literal fallback, since they also run under the classic theme.
+
+| State | Amount | How it mixes |
+|-------|--------|--------------|
+| Hover | 85% | The element's own color at 85%: text and icons toward transparent, a filled button toward black |
+| Press | 75% | The same mix at 75% |
+| Fill at rest, hover, press | 7%, 13%, 19% | The ink mixed over the surface, for chips, ghost and icon buttons (which start transparent and fill 7% then 13%) |
+| Inactive | 65.5% | An inactive indicator, like a carousel bullet, mixed toward transparent (80% where a publisher has chosen the color) |
+| Disabled | 45% text on a 7% fill | |
+
+- **Mix in oklab.** Every state mix uses `color-mix(in oklab, …)`, so the same amount darkens a yellow and a blue by the same perceived step. A mix toward transparent only sets alpha, so the space makes no difference there; use oklab anyway so every rule reads the same.
+- **A dark fill that lightens takes a bigger step.** In oklab, 85% of a black fill toward white lands at about rgb(11, 11, 11), which still reads as black. When a dark fill mixes toward a light icon, as on a prompt's close button with a dark background, the featured-image close button and the X, Threads and Share sharing icons, mix in 25% of the icon color on hover and 40% on press (`--wp--custom--state--lighten-hover` and `--lighten-pressed` in the block theme). That lands near rgb(34, 34, 34) and rgb(72, 72, 72). This is the one exception to the amounts.
+- **An unknown fill gets an overlay.** A button whose fill is a publisher's own color can't be mixed, so a layer of `color-mix(in oklab, black 15%, transparent)` sits over it on hover and 25% on press, which is the same step the 85% and 75% mixes take. Never dim a button with `opacity`: it fades the text too and fails AA.
+- **Focus changes nothing but the ring.** A focused element keeps its resting color, fill and underline.
+- **Indicators mix, they don't fade.** An inactive carousel bullet is its color mixed 65.5% toward transparent, not `opacity: 0.655`, so its focus ring stays at full strength.
+- **Disabled text is the ink at 45% over the surface on a 7% fill**, never `opacity: 0.5`. Loading states keep `opacity: 0.5` on the surface as a whole.
+
 ### Interruption and placement
 
 - **Prefer transitions to keyframes** for anything a reader can reverse halfway, like the segmented thumb, the content gate or a dropdown. A transition picks up from where the element is; a keyframe animation restarts.

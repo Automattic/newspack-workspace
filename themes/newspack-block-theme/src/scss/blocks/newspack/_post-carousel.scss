@@ -202,23 +202,22 @@
 	}
 
 	.swiper-pagination-bullet {
-		background: currentcolor;
+		background: color-mix(in oklab, currentcolor var(--wp--custom--state--inactive), transparent);
 		color: inherit;
-		opacity: 0.655;
 		transition:
+			background-color motion.$duration-indicator motion.$ease-out,
 			box-shadow motion.$duration-color motion.$ease-color,
-			opacity motion.$duration-indicator motion.$ease-out,
 			width motion.$duration-indicator motion.$ease-out;
 		width: var(--wp--preset--spacing--30);
 
 		@include motion.reduced-motion {
 			transition:
-				box-shadow motion.$duration-color motion.$ease-color,
-				opacity motion.$duration-indicator motion.$ease-out;
+				background-color motion.$duration-indicator motion.$ease-out,
+				box-shadow motion.$duration-color motion.$ease-color;
 		}
 
 		&.swiper-pagination-bullet-active {
-			opacity: 1;
+			background: currentcolor;
 			width: var(--wp--preset--spacing--50);
 		}
 
@@ -230,16 +229,16 @@
 		&:focus-visible {
 			@include mixins.focus-line;
 			transition:
-				opacity motion.$duration-indicator motion.$ease-out,
+				background-color motion.$duration-indicator motion.$ease-out,
 				width motion.$duration-indicator motion.$ease-out;
 
 			@include motion.reduced-motion {
-				transition: opacity motion.$duration-indicator motion.$ease-out;
+				transition: background-color motion.$duration-indicator motion.$ease-out;
 			}
 		}
 
 		.has-text-color:not(.has-contrast-color) &:not(.swiper-pagination-bullet-active) {
-			opacity: 0.8;
+			background: color-mix(in oklab, currentcolor var(--wp--custom--state--inactive-on-color), transparent);
 		}
 	}
 }

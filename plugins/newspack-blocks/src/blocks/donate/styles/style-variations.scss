@@ -561,13 +561,13 @@
 
 			@include motion.hover {
 				&:hover {
-					--wpbnbd-overlay: inset 0 0 0 100vmax color-mix(in srgb, black calc(100% - var(--newspack-ui-color-mix-hover, 85%)), transparent);
+					--wpbnbd-overlay: inset 0 0 0 100vmax color-mix(in oklab, black calc(100% - var(--newspack-ui-color-mix-hover, 85%)), transparent);
 					box-shadow: var(--wpbnbd-overlay, 0 0 #0000);
 				}
 			}
 
 			&:active {
-				--wpbnbd-overlay: inset 0 0 0 100vmax color-mix(in srgb, black calc(100% - var(--newspack-ui-color-mix-pressed, 75%)), transparent);
+				--wpbnbd-overlay: inset 0 0 0 100vmax color-mix(in oklab, black calc(100% - var(--newspack-ui-color-mix-pressed, 75%)), transparent);
 				box-shadow: var(--wpbnbd-overlay, 0 0 #0000);
 				transform: scale(motion.$press-scale);
 
@@ -678,13 +678,13 @@
 
 				@include motion.hover {
 					&:hover {
-						--wpbnbd-overlay: inset 0 0 0 100vmax color-mix(in srgb, black calc(100% - var(--newspack-ui-color-mix-hover, 85%)), transparent);
+						--wpbnbd-overlay: inset 0 0 0 100vmax color-mix(in oklab, black calc(100% - var(--newspack-ui-color-mix-hover, 85%)), transparent);
 						box-shadow: var(--wpbnbd-overlay, 0 0 #0000);
 					}
 				}
 
 				&:active {
-					--wpbnbd-overlay: inset 0 0 0 100vmax color-mix(in srgb, black calc(100% - var(--newspack-ui-color-mix-pressed, 75%)), transparent);
+					--wpbnbd-overlay: inset 0 0 0 100vmax color-mix(in oklab, black calc(100% - var(--newspack-ui-color-mix-pressed, 75%)), transparent);
 					box-shadow: var(--wpbnbd-overlay, 0 0 #0000);
 					transform: scale(motion.$press-scale);
 
