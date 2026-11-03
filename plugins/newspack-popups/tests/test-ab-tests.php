@@ -380,6 +380,63 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * Drafting one arm of a three-arm test must not lose the assignment of the
+	 * readers holding it: they see a published arm meanwhile, and return to theirs
+	 * when it is republished.
+	 */
+	public function test_logged_in_bucket_survives_its_variant_being_unpublished() {
+		$this->create_test_variant( 'three-arm-test', 'a', null, [], 50 );
+		$this->create_test_variant( 'three-arm-test', 'b' );
+		$challenger_id = $this->create_test_variant( 'three-arm-test', 'c' );
+
+		$user_id  = self::factory()->user->create();
+		$meta_key = 'newspack_popups_ab_bucket_three-arm-test';
+		wp_set_current_user( $user_id );
+		update_user_meta( $user_id, $meta_key, 'c' );
+
+		wp_update_post(
+			[
+				'ID'          => $challenger_id,
+				'post_status' => 'draft',
+			]
+		);
+		$buckets = Newspack_Popups_AB_Tests::get_logged_in_buckets( Newspack_Popups_AB_Tests::get_tests_config() );
+		self::assertContains( $buckets['three-arm-test'], [ 'a', 'b' ], 'An unpublished arm must not be shown.' );
+		self::assertSame( 'c', get_user_meta( $user_id, $meta_key, true ), 'The stored assignment must outlive the unpublish.' );
+
+		wp_update_post(
+			[
+				'ID'          => $challenger_id,
+				'post_status' => 'publish',
+			]
+		);
+		$buckets = Newspack_Popups_AB_Tests::get_logged_in_buckets( Newspack_Popups_AB_Tests::get_tests_config() );
+		self::assertSame( 'c', $buckets['three-arm-test'], 'Republishing must return the reader to their arm.' );
+
+		wp_set_current_user( 0 );
+	}
+
+	/**
+	 * A stored value that was never a variant has no assignment worth keeping, so
+	 * it is replaced with a real one.
+	 */
+	public function test_logged_in_bucket_replaces_an_invalid_stored_value() {
+		$this->create_test_variant( 'invalid-bucket-test', 'a', null, [], 50 );
+		$this->create_test_variant( 'invalid-bucket-test', 'b' );
+
+		$user_id  = self::factory()->user->create();
+		$meta_key = 'newspack_popups_ab_bucket_invalid-bucket-test';
+		wp_set_current_user( $user_id );
+		update_user_meta( $user_id, $meta_key, 'not-a-variant' );
+
+		$buckets = Newspack_Popups_AB_Tests::get_logged_in_buckets( Newspack_Popups_AB_Tests::get_tests_config() );
+		self::assertContains( $buckets['invalid-bucket-test'], [ 'a', 'b' ] );
+		self::assertSame( $buckets['invalid-bucket-test'], get_user_meta( $user_id, $meta_key, true ) );
+
+		wp_set_current_user( 0 );
+	}
+
+	/**
 	 * Without a client ID cookie, the logged-in bucket hashes the user ID.
 	 */
 	public function test_logged_in_bucket_user_id_fallback() {
