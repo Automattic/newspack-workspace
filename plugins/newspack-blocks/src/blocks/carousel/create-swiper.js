@@ -83,7 +83,7 @@ export default function createSwiper( els, config = {} ) {
 		 */
 		a11y: false,
 		autoplay: !! config.autoplay && {
-			enabled: ! reduceMotion,
+			enabled: true,
 			delay: config.delay,
 			disableOnInteraction: false,
 			waitForTransition: ! reduceMotion,
@@ -196,6 +196,7 @@ export default function createSwiper( els, config = {} ) {
 		const holds = new Set();
 		let isHolding = false;
 		let resumeAfterHold = false;
+		let isInitializing = reduceMotion;
 
 		/**
 		 * Stops autoplay while a mouse is over the carousel or keyboard focus is inside it,
@@ -303,12 +304,14 @@ export default function createSwiper( els, config = {} ) {
 			els.block.addEventListener( 'focusin', handleFocusIn );
 			els.block.addEventListener( 'focusout', handleFocusOut );
 			if ( reduceMotion ) {
+				swiper.autoplay.stop();
+				isInitializing = false;
 				els.block.classList.remove( autoplayClassName );
 			}
 		} );
 
 		swiper.on( 'autoplayStart', function () {
-			if ( isHolding ) {
+			if ( isHolding || isInitializing ) {
 				return;
 			}
 			els.block.classList.add( autoplayClassName ); // Hide play & show pause button.
@@ -316,7 +319,7 @@ export default function createSwiper( els, config = {} ) {
 		} );
 
 		swiper.on( 'autoplayStop', function () {
-			if ( isHolding ) {
+			if ( isHolding || isInitializing ) {
 				return;
 			}
 			els.block.classList.remove( autoplayClassName ); // Hide pause & show play button.

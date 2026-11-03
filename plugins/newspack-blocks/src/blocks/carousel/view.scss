@@ -341,10 +341,10 @@
 		display: none;
 	}
 	@include motion.reduced-motion {
-		&:not(:has(.swiper-initialized)) .swiper-button-play {
+		&:not(.swiper-initialized, :has(.swiper-initialized)) .swiper-button-play {
 			display: block;
 		}
-		&:not(:has(.swiper-initialized)) .swiper-button-pause {
+		&:not(.swiper-initialized, :has(.swiper-initialized)) .swiper-button-pause {
 			display: none;
 		}
 	}

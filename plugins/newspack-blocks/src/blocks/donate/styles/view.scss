@@ -25,7 +25,7 @@
 			color: np-colors.$neutral-900;
 		}
 
-		@media ( hover: hover ) and ( pointer: fine ) {
+		@include motion.hover {
 			&:hover {
 				color: np-colors.$neutral-900;
 			}

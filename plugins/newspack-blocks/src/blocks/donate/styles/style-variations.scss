@@ -377,11 +377,14 @@
 		max-width: 100%;
 		overflow: hidden;
 		right: var(--newspack-ui-spacer-5, 24px);
-		outline: 1px solid transparent;
-		outline-offset: -2px;
 		transition: border-color motion.$duration-color motion.$ease-color, box-shadow motion.$duration-color motion.$ease-color, outline-color motion.$duration-color motion.$ease-color;
 
-		@media ( hover: hover ) and ( pointer: fine ) {
+		@media ( forced-colors: none ) {
+			outline: 1px solid transparent;
+			outline-offset: -2px;
+		}
+
+		@include motion.hover {
 			&:hover:not(:focus-within) {
 				border-color: var(--newspack-ui-color-input-border-hover, np-colors.$neutral-700);
 			}
@@ -496,7 +499,7 @@
 					text-align: center;
 					transition: background motion.$duration-color motion.$ease-color, box-shadow motion.$duration-color motion.$ease-color, color motion.$duration-color motion.$ease-color;
 
-					@media ( hover: hover ) and ( pointer: fine ) {
+					@include motion.hover {
 						&:hover {
 							background: var(--newspack-ui-color-neutral-fill-hover, np-colors.$neutral-200);
 							color: var(--newspack-ui-color-text, np-colors.$neutral-900);
@@ -556,7 +559,7 @@
 				pointer-events: none;
 			}
 
-			@media ( hover: hover ) and ( pointer: fine ) {
+			@include motion.hover {
 				&:hover {
 					--wpbnbd-overlay: inset 0 0 0 100vmax color-mix(in srgb, black calc(100% - var(--newspack-ui-color-mix-hover, 85%)), transparent);
 					box-shadow: var(--wpbnbd-overlay, 0 0 #0000);
@@ -673,7 +676,7 @@
 				padding: calc(var(--newspack-ui-spacer-2, 12px) - 1px) calc(var(--newspack-ui-spacer-5, 24px) - 1px);
 				transition: background motion.$duration-color motion.$ease-color, border-color motion.$duration-color motion.$ease-color, box-shadow motion.$duration-color motion.$ease-color, color motion.$duration-color motion.$ease-color, transform motion.$duration-press motion.$ease-out;
 
-				@media ( hover: hover ) and ( pointer: fine ) {
+				@include motion.hover {
 					&:hover {
 						--wpbnbd-overlay: inset 0 0 0 100vmax color-mix(in srgb, black calc(100% - var(--newspack-ui-color-mix-hover, 85%)), transparent);
 						box-shadow: var(--wpbnbd-overlay, 0 0 #0000);
@@ -704,7 +707,7 @@
 			&__options:has(> .wpbnbd__tiers__tier--recommended) > .wpbnbd__tiers__tier:not(.wpbnbd__tiers__tier--recommended) {
 				button[type="submit"],
 				.submit-button {
-					@media ( hover: hover ) and ( pointer: fine ) {
+					@include motion.hover {
 						&:hover {
 							--wpbnbd-overlay: 0 0 #0000;
 							background: var(--newspack-ui-color-neutral-fill, np-colors.$neutral-100) !important;
