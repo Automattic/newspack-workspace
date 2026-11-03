@@ -3,6 +3,11 @@
  */
 
 /**
+ * External dependencies.
+ */
+import type { ReactNode } from 'react';
+
+/**
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
@@ -17,7 +22,7 @@ import ThemeSelection from './theme-select';
 import WizardsTab from '../../../../wizards-tab';
 import WizardSection from '../../../../wizards-section';
 import { HomepageSelect } from './homepage-select';
-import { Button, Divider, Grid, Router, SectionHeader, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
+import { CollapsibleGroup, Divider, Grid, SectionHeader, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 import { useErrorNoticeFocus } from '../../../../hooks/use-error-notice-focus';
@@ -29,8 +34,6 @@ import Typography from './typography';
 import { DEFAULT_THEME_MODS } from '../constants';
 import { footerColor } from './utils';
 
-const { useHistory } = Router;
-
 const DEFAULT_DATA: ThemeData = {
 	etc: { post_count: '0' },
 	theme: 'newspack-theme',
@@ -38,13 +41,39 @@ const DEFAULT_DATA: ThemeData = {
 	theme_mods: { ...DEFAULT_THEME_MODS },
 };
 
-const ThemeBrand = ( { isPartOfSetup = false } ) => {
+type SetupActionEvent = { currentTarget: Element | null };
+
+type SetupFooterActions = {
+	finish: ( event?: SetupActionEvent ) => void;
+	skip: ( event?: SetupActionEvent ) => void;
+	preview: ( event?: SetupActionEvent ) => Promise< void >;
+	isBusy: boolean;
+	isFinishing: boolean;
+	isPreviewing: boolean;
+};
+
+type ThemeBrandProps = {
+	isPartOfSetup?: boolean;
+	renderSetupFooter?: ( actions: SetupFooterActions ) => ReactNode;
+	renderSetupSection?: ( section: ReactNode ) => ReactNode;
+	onSetupComplete?: () => void;
+};
+
+const ThemeBrand = ( { isPartOfSetup = false, renderSetupFooter, renderSetupSection, onSetupComplete }: ThemeBrandProps ) => {
 	const { wizardApiFetch, isFetching, errorMessage, resetError } = useWizardApiFetch( 'newspack-settings/theme-mods' );
 	const { setHeaderData, addNotice, removeNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ data, setDataState ] = useState< ThemeData >( DEFAULT_DATA );
 	const [ savedData, setSavedData ] = useState< ThemeData >( DEFAULT_DATA );
 
-	const history = useHistory();
+	const [ completing, setCompleting ] = useState< 'finish' | 'skip' | null >( null );
+	const [ isPreviewing, setIsPreviewing ] = useState( false );
+	const isMounted = useRef( true );
+	useEffect(
+		() => () => {
+			isMounted.current = false;
+		},
+		[]
+	);
 
 	const {
 		wrapperProps: noticeWrapperProps,
@@ -61,21 +90,41 @@ const ThemeBrand = ( { isPartOfSetup = false } ) => {
 		setSavedData( { ...data, ...res } );
 	}
 
-	const finishSetup = () => {
-		wizardApiFetch(
-			{
-				data,
-				path: '/newspack/v1/wizard/newspack-setup-wizard/complete',
-				method: 'POST',
-				updateCacheMethods: [ 'GET' ],
-			},
-			{
-				onSuccess: res => {
-					setData( res );
-					history.push( '/completed' );
-				},
+	const completeSetup = () =>
+		wizardApiFetch( {
+			path: '/newspack/v1/wizard/newspack-setup-wizard/complete',
+			method: 'POST',
+		} ).then( () => {
+			if ( isMounted.current ) {
+				onSetupComplete?.();
 			}
-		).catch( () => {} );
+		} );
+
+	const runSetupAction = async ( withSave: boolean, event?: SetupActionEvent ) => {
+		registerSubmit( event );
+		setCompleting( withSave ? 'finish' : 'skip' );
+		try {
+			if ( withSave ) {
+				await save();
+			} else {
+				resetError();
+			}
+			await completeSetup();
+		} catch {
+			setCompleting( null );
+		}
+	};
+
+	const previewSite = async ( event?: SetupActionEvent ) => {
+		registerSubmit( event );
+		setIsPreviewing( true );
+		try {
+			await save();
+		} finally {
+			if ( isMounted.current ) {
+				setIsPreviewing( false );
+			}
+		}
 	};
 
 	async function save() {
@@ -164,7 +213,7 @@ const ThemeBrand = ( { isPartOfSetup = false } ) => {
 	}, [ isPartOfSetup, isFetching, isDirty, setHeaderData ] );
 
 	const { confirmDialog: navBlockDialog } = useUnsavedChangesDialog( {
-		when: ! isPartOfSetup && isDirty && ! isFetching,
+		when: isDirty && ! isFetching && ! completing,
 	} );
 
 	const updateThemeMods = ( theme_mods: Partial< ThemeMods > ) => setData( { ...data, theme_mods: { ...data.theme_mods, ...theme_mods } } );
@@ -202,16 +251,20 @@ const ThemeBrand = ( { isPartOfSetup = false } ) => {
 		},
 	];
 
+	const inSetupColumn = ( section: ReactNode ) => ( renderSetupSection ? renderSetupSection( section ) : section );
+
+	const notice = errorMessage && (
+		<div { ...noticeWrapperProps }>
+			<Notice status="error" isDismissible={ false } politeness="polite" spokenMessage={ spokenMessage }>
+				{ errorMessage }
+			</Notice>
+		</div>
+	);
+
 	return (
-		<WizardsTab isFetching={ isFetching }>
+		<WizardsTab isFetching={ isFetching } className={ isPartOfSetup ? 'setup-design' : '' }>
 			{ navBlockDialog }
-			{ errorMessage && (
-				<div { ...noticeWrapperProps }>
-					<Notice status="error" isDismissible={ false } politeness="polite" spokenMessage={ spokenMessage }>
-						{ errorMessage }
-					</Notice>
-				</div>
-			) }
+			{ ! isPartOfSetup && notice }
 			{ ! isPartOfSetup && (
 				<WizardSection title={ __( 'Theme', 'newspack-plugin' ) } description={ __( 'Update your site’s theme.', 'newspack-plugin' ) }>
 					<ThemeSelection
@@ -220,46 +273,59 @@ const ThemeBrand = ( { isPartOfSetup = false } ) => {
 					/>
 				</WizardSection>
 			) }
-			{ isPartOfSetup && (
-				<WizardSection title={ __( 'Homepage', 'newspack-plugin' ) } description={ __( 'Select a homepage layout.', 'newspack-plugin' ) }>
-					<HomepageSelect
-						isFetching={ isFetching }
-						homepagePatternIndex={ data.theme_mods.homepage_pattern_index }
-						homepagePatterns={ data.homepage_patterns }
-						updateHomepagePattern={ homepage_pattern_index => {
-							setData( {
-								...data,
-								theme_mods: {
-									...data.theme_mods,
-									homepage_pattern_index,
-								},
-							} );
-						} }
-					/>
-				</WizardSection>
-			) }
-			{ sections.map( ( { key, title, description, content } ) => (
-				<Fragment key={ key }>
-					<Divider alignment="full-width" variant="tertiary" />
-					<Grid columns={ 2 } gutter={ 32 } noMargin>
-						<SectionHeader noMargin heading={ 2 } title={ title } description={ description } />
-						{ content }
-					</Grid>
-				</Fragment>
-			) ) }
-			{ isPartOfSetup && (
-				<div className="newspack-buttons-card">
-					<Button
-						variant="primary"
-						onClick={ ( event?: { currentTarget: Element | null } ) => {
-							registerSubmit( event );
-							save().then( finishSetup, () => {} );
-						} }
-					>
-						{ __( 'Finish', 'newspack-plugin' ) }
-					</Button>
-				</div>
-			) }
+			{ isPartOfSetup &&
+				inSetupColumn(
+					<>
+						{ notice }
+						<CollapsibleGroup titleLevel={ 3 } titleSize="xl">
+							<CollapsibleGroup.Item
+								title={ __( 'Homepage', 'newspack-plugin' ) }
+								description={ __( 'Select a homepage layout.', 'newspack-plugin' ) }
+								defaultOpen
+							>
+								<HomepageSelect
+									columns={ 3 }
+									isFetching={ isFetching }
+									homepagePatternIndex={ data.theme_mods.homepage_pattern_index }
+									homepagePatterns={ data.homepage_patterns }
+									updateHomepagePattern={ homepage_pattern_index => {
+										setData( {
+											...data,
+											theme_mods: {
+												...data.theme_mods,
+												homepage_pattern_index,
+											},
+										} );
+									} }
+								/>
+							</CollapsibleGroup.Item>
+							{ sections.map( ( { key, title, description, content } ) => (
+								<CollapsibleGroup.Item key={ key } title={ title } description={ description }>
+									{ content }
+								</CollapsibleGroup.Item>
+							) ) }
+						</CollapsibleGroup>
+					</>
+				) }
+			{ ! isPartOfSetup &&
+				sections.map( ( { key, title, description, content } ) => (
+					<Fragment key={ key }>
+						<Divider alignment="full-width" variant="tertiary" />
+						<Grid columns={ 2 } gutter={ 32 } noMargin>
+							<SectionHeader noMargin heading={ 2 } title={ title } description={ description } />
+							{ content }
+						</Grid>
+					</Fragment>
+				) ) }
+			{ isPartOfSetup &&
+				renderSetupFooter?.( {
+					finish: ( event?: SetupActionEvent ) => runSetupAction( true, event ),
+					skip: ( event?: SetupActionEvent ) => runSetupAction( false, event ),
+					preview: previewSite,
+					isBusy: isFetching || !! completing || isPreviewing,
+					isFinishing: completing === 'finish',
+					isPreviewing,
+				} ) }
 		</WizardsTab>
 	);
 };
