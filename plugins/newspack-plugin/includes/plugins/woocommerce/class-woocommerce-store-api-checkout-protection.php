@@ -22,7 +22,9 @@ defined( 'ABSPATH' ) || exit;
  * Express wallets post to this route too, and their buttons offer no moment to fetch
  * a token, so a verified wallet request is exempt. Its header and nonce are not proof,
  * since a script can read the nonce from a page that shows the buttons. For Stripe the
- * exemption also needs Stripe to confirm the payment method is an accepted wallet.
+ * exemption also needs Stripe to confirm the payment method is an accepted wallet, and
+ * for Link and Amazon Pay that the gateway offers that wallet, so the exemption matches
+ * what its express buttons can send.
  * WooPayments has no such lookup for its confirmation tokens, so there the signal
  * alone decides. Either way the request must go to a gateway that takes a payment, and
  * the rate limit still applies.
@@ -55,7 +57,7 @@ class WooCommerce_Store_API_Checkout_Protection {
 	const STRIPE_LOOKUP_TIMEOUT = 10;
 
 	/**
-	 * Stripe payment method types exempt on their own.
+	 * Stripe payment method types exempt on their own, where the gateway offers them.
 	 */
 	const STRIPE_WALLET_TYPES = [ 'link', 'amazon_pay' ];
 
@@ -332,9 +334,35 @@ class WooCommerce_Store_API_Checkout_Protection {
 		}
 		$type = $payment_method->type ?? '';
 		if ( in_array( $type, self::STRIPE_WALLET_TYPES, true ) ) {
-			return true;
+			return self::stripe_gateway_offers( $type );
 		}
 		return 'card' === $type && in_array( $payment_method->card->wallet->type ?? '', self::STRIPE_CARD_WALLETS, true );
+	}
+
+	/**
+	 * Whether the Stripe gateway has a payment method type turned on. This is the
+	 * list its express buttons read, so a buyer who sees a Link or Amazon Pay button
+	 * is on a site where it answers true, and a site without the button never
+	 * charges that type. No answer refuses the exemption.
+	 *
+	 * @param string $type Stripe payment method type.
+	 *
+	 * @return bool
+	 */
+	private static function stripe_gateway_offers( string $type ): bool {
+		if ( ! class_exists( 'WC_Stripe' ) || ! method_exists( 'WC_Stripe', 'get_instance' ) ) {
+			return false;
+		}
+		$stripe = \WC_Stripe::get_instance();
+		if ( ! is_object( $stripe ) || ! method_exists( $stripe, 'get_main_stripe_gateway' ) ) {
+			return false;
+		}
+		$gateway = $stripe->get_main_stripe_gateway();
+		if ( ! is_object( $gateway ) || ! method_exists( $gateway, 'get_upe_enabled_payment_method_ids' ) ) {
+			return false;
+		}
+		$enabled = $gateway->get_upe_enabled_payment_method_ids();
+		return is_array( $enabled ) && in_array( $type, $enabled, true );
 	}
 
 	/**

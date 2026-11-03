@@ -212,6 +212,8 @@ class Newspack_Test_WooCommerce_Store_API_Checkout_Protection extends WP_UnitTes
 		WC_Stripe_API::$calls    = [];
 		WC_Stripe_API::$timeouts = [];
 		WC_Stripe_API::$throw    = false;
+		WC_Stripe::$enabled      = [ 'card', 'link', 'amazon_pay' ];
+		WC_Stripe::$gateway_missing = false;
 	}
 
 	/**
@@ -465,6 +467,40 @@ class Newspack_Test_WooCommerce_Store_API_Checkout_Protection extends WP_UnitTes
 			$this->assertSame( '', $this->code( $this->stripe_request( $details ) ), wp_json_encode( $details ) );
 			$this->assertSame( array_values( $details ), WC_Stripe_API::$calls, wp_json_encode( $details ) );
 		}
+	}
+
+	/**
+	 * Link and Amazon Pay are exempt only where the gateway offers them, so the
+	 * exemption matches what the express buttons can send. Card wallets don't depend
+	 * on the setting.
+	 */
+	public function test_stripe_link_and_amazon_pay_follow_the_gateway() {
+		add_filter( 'newspack_store_api_checkout_rate_limit', '__return_zero' );
+		$link   = [ 'wc-stripe-payment-method' => 'pm_link' ];
+		$amazon = [ 'wc-stripe-payment-method' => 'pm_amazon' ];
+		$token  = [ 'wc-stripe-confirmation-token' => 'ctoken_amazon' ];
+		$apple  = [ 'wc-stripe-payment-method' => 'pm_apple' ];
+
+		WC_Stripe::$enabled = [ 'card' ];
+		foreach ( [ $link, $amazon, $token ] as $details ) {
+			$this->assertSame( Protection::ERROR_CAPTCHA, $this->code( $this->stripe_request( $details ) ), wp_json_encode( $details ) );
+		}
+		$this->assertSame( '', $this->code( $this->stripe_request( $apple ) ) );
+
+		WC_Stripe::$enabled = [ 'card', 'link' ];
+		$this->assertSame( '', $this->code( $this->stripe_request( $link ) ) );
+		$this->assertSame( Protection::ERROR_CAPTCHA, $this->code( $this->stripe_request( $amazon ) ) );
+
+		WC_Stripe::$enabled = [ 'card', 'amazon_pay' ];
+		$this->assertSame( '', $this->code( $this->stripe_request( $token ) ) );
+		$this->assertSame( Protection::ERROR_CAPTCHA, $this->code( $this->stripe_request( $link ) ) );
+
+		// No usable answer from the gateway refuses the exemption, and leaves card wallets alone.
+		WC_Stripe::$enabled = null;
+		$this->assertSame( Protection::ERROR_CAPTCHA, $this->code( $this->stripe_request( $link ) ) );
+		WC_Stripe::$gateway_missing = true;
+		$this->assertSame( Protection::ERROR_CAPTCHA, $this->code( $this->stripe_request( $amazon ) ) );
+		$this->assertSame( '', $this->code( $this->stripe_request( $apple ) ) );
 	}
 
 	/**
