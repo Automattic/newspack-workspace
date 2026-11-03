@@ -2484,8 +2484,9 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	/**
 	 * The filter and the badge never disagree: every reader an option returns has
 	 * that kind on their row, and no reader of that kind is left out. The fixture
-	 * puts the cases where the rules compete under Recurring, so this also proves
-	 * they read Recurring on the row and stay out of Former.
+	 * includes the readers where the rules compete: Resubscribed and Live And
+	 * Ended must read Recurring and stay out of Former, and Gave Again must read
+	 * Former and stay out of One-time.
 	 */
 	public function test_donor_filter_matches_the_row_kind() {
 		$this->login_admin();
@@ -2585,8 +2586,8 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 				],
 				[ 'non_donor' ],
 			],
-			// Former donors are the last kind in the set "Not a donor" removes, so
-			// they are the ones a cut to the set would leave in.
+			// The only case where "Not a donor" takes Former donors (`cancelled`,
+			// `expired` and `gave_again`) off another filter's results.
 			'not a donor, cancelled' => [
 				[
 					'status' => [ 'cancelled' ],

@@ -1040,7 +1040,7 @@ class Subscribers_Wizard extends Wizard {
 		// to an empty page); a populated list = restrict the query to those users.
 		$include = $this->resolve_filter_include( $request );
 		// WP_User_Query ignores `exclude` once `include` is set, so with other
-		// filters active "Not a donor" is taken off their set here instead, in full.
+		// filters active "Not a donor" is taken off their set here instead.
 		$exclude = $this->resolve_donor_exclude( $request );
 		if ( is_array( $include ) ) {
 			$include = array_values( array_diff( $include, $exclude ) );
@@ -2993,8 +2993,8 @@ class Subscribers_Wizard extends Wizard {
 	 *
 	 * The set isn't cut here. Each kind's set is already bounded (see
 	 * customer_ids_for_donor_kind()), and subtracting from another filter's set
-	 * happens in PHP, so with another filter active every donor of an unticked kind
-	 * is removed. With no other filter, api_get_subscribers() cuts the set to
+	 * happens in PHP, so with another filter active everyone in an unticked kind's
+	 * set is removed. With no other filter, api_get_subscribers() cuts the set to
 	 * FILTER_INCLUDE_CAP to keep the NOT IN() clause bounded. That cap covers the
 	 * unticked kinds together, not each one: once they hold more than
 	 * FILTER_INCLUDE_CAP readers between them, the donors cut off show under "Not

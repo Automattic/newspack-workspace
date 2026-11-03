@@ -120,10 +120,13 @@ class Subscribers_Donors {
 	 *   - Subscribers_Wizard::customer_ids_for_donor_kind() — the endpoint's
 	 *     `donor` filter, which builds each kind's reader set from holders() and
 	 *     flagged_user_ids() instead of calling this per reader.
-	 *   - holders() — which donation subscriptions count, and as live or ended.
+	 *   - holders() — which donation subscriptions count.
 	 *   - scanned_statuses() — which subscription statuses holders() reads.
 	 *   - Newspack\CLI\Donors::backfill() — the support command that flags donors
 	 *     from before the flag existed, so they land in the kind this returns.
+	 *
+	 * The live/ended split in rules 1 and 2 is written once, in bucket(), which
+	 * holders() and scanned_statuses() share.
 	 *
 	 * The client reads `donor.kind` and never re-derives it, but it has to know
 	 * the kinds: src/wizards/subscribers/donor.js holds the labels, the badge
@@ -131,9 +134,6 @@ class Subscribers_Donors {
 	 * value for a non-donor (DONOR_FILTER_ELEMENTS). The Donor field's getValue
 	 * in screens/SubscriberList.jsx maps a row's '' to that `none`.
 	 * screens/PersonProfile.jsx shows the badge.
-	 *
-	 * The live/ended split in rules 1 and 2 is written once, in bucket(), which
-	 * holders() and scanned_statuses() share.
 	 *
 	 * It reads nothing but the reader's two flags and the statuses it is given:
 	 * the caller resolves which donation subscriptions the reader holds. Callers
