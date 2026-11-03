@@ -2,6 +2,11 @@ import {
 	DURATION_MODAL,
 	DURATION_SHEET,
 	DURATION_TRAVEL_MAX,
+	EASE_COLOR,
+	ENTER_OFFSET,
+	ENTER_SCALE,
+	PRESS_SCALE,
+	REVEAL_SCALE,
 	REDUCED_MOTION_QUERY,
 	TRAVEL_BASE_DISTANCE,
 	TRAVEL_PX_PER_MS,
@@ -24,6 +29,8 @@ describe( 'travelDuration', () => {
 	} );
 
 	it( 'never runs past DURATION_TRAVEL_MAX', () => {
+		expect( travelDuration( 1036 ) ).toBe( 449 );
+		expect( travelDuration( 1040 ) ).toBe( DURATION_TRAVEL_MAX );
 		expect( travelDuration( 1296 ) ).toBe( DURATION_TRAVEL_MAX );
 		expect( travelDuration( 10000 ) ).toBe( DURATION_TRAVEL_MAX );
 		expect( travelDuration( 640, DURATION_SHEET ) ).toBe( DURATION_TRAVEL_MAX );
@@ -31,6 +38,16 @@ describe( 'travelDuration', () => {
 
 	it( 'starts from the base it is given', () => {
 		expect( travelDuration( 300, 200 ) ).toBe( 215 );
+	} );
+} );
+
+describe( 'tokens', () => {
+	it( 'exposes the color curve and the scale and offset values', () => {
+		expect( EASE_COLOR ).toBe( 'ease' );
+		expect( PRESS_SCALE ).toBe( 0.97 );
+		expect( ENTER_SCALE ).toBe( 0.96 );
+		expect( REVEAL_SCALE ).toBe( 0.9 );
+		expect( ENTER_OFFSET ).toBe( 4 );
 	} );
 } );
 

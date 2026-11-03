@@ -18,8 +18,8 @@ These rules cover newspack-ui and every surface that uses this package. The moda
 |------|--------|-------------|-------|------------|
 | `$ease-out` | `EASE_OUT` | `--newspack-ui-ease-out` | `cubic-bezier(0.23, 1, 0.32, 1)` | Anything entering or revealing: modals, dropdowns, steps, reveals, the segmented thumb |
 | `$ease-in-out` | `EASE_IN_OUT` | `--newspack-ui-ease-in-out` | `cubic-bezier(0.77, 0, 0.175, 1)` | Something already on screen changing shape, like the modal resizing between steps |
-| `$ease-drawer` | `EASE_DRAWER` | `--newspack-ui-ease-drawer` | `cubic-bezier(0.32, 0.72, 0, 1)` | Bottom sheets, including the bottom content gate |
-| `$ease-color` | | `--newspack-ui-ease-color` | `ease` | Color fades: hover, selection, a focus ring fading out |
+| `$ease-drawer` | `EASE_DRAWER` | `--newspack-ui-ease-drawer` | `cubic-bezier(0.32, 0.72, 0, 1)` | Sheets and drawers sliding in from an edge: bottom sheets, the bottom content gate, side drawers |
+| `$ease-color` | `EASE_COLOR` | `--newspack-ui-ease-color` | `ease` | Color fades: hover, selection, a focus ring fading out, and the fade that replaces a slide under reduced motion |
 
 ### Duration
 
@@ -33,7 +33,7 @@ These rules cover newspack-ui and every surface that uses this package. The moda
 | `$duration-sheet` | `DURATION_SHEET` | `--newspack-ui-duration-sheet` | 400ms | A bottom sheet sliding in or out, and its overlay |
 | `$duration-exit` | `DURATION_EXIT` | `--newspack-ui-duration-exit` | 120ms | A view leaving while another replaces it in the same place, like a modal step on wider screens |
 
-Larger surfaces get longer durations. No single transition runs longer than 300ms, except travel, which follows the travel rule (below) up to 450ms. Bottom sheets with their overlay, the bottom content gate and snackbars slide their own height from an edge in 400ms; they use `$duration-sheet` rather than the travel rule. Looping indicators, like the spinner and the live badge's pulse, sit outside this. Something small that changes often takes 200ms or less.
+Larger surfaces get longer durations. No single transition runs longer than 300ms, except travel, which follows the travel rule (below) up to 450ms. Bottom sheets with their overlay and the bottom content gate slide their own height from an edge in `$duration-sheet` (400ms) rather than following the travel rule. Snackbars slide up in the same 400ms on newspack-ui's own snackbar tokens. Looping indicators, like the spinner and the live badge's pulse, sit outside this. Something small that changes often takes 200ms or less.
 
 ### Travel
 
@@ -42,15 +42,16 @@ Larger surfaces get longer durations. No single transition runs longer than 300m
 | `$travel-base-distance` | `TRAVEL_BASE_DISTANCE` | 240px | Travel up to this distance keeps its base duration |
 | `$travel-px-per-ms` | `TRAVEL_PX_PER_MS` | 4 | Past the base distance, 1ms more for every this many pixels |
 | `$duration-travel-max` | `DURATION_TRAVEL_MAX` | 450ms | The longest any travel takes |
-| `travel-duration($distance, $base: $duration-modal)` | `travelDuration( distance, base = DURATION_MODAL )` | | The duration for a distance in pixels. At the 250ms base: 300px takes 265ms, 410px 293ms, 632px 348ms, 964px 431ms, and 1296px or more 450ms |
+| `travel-duration($distance, $base: $duration-modal)` | `travelDuration( distance, base = DURATION_MODAL )` | | The duration for a distance in pixels. At the 250ms base: 300px takes 265ms, 410px 293ms, 632px 348ms, 964px 431ms, and 1040px or more 450ms. The cap also applies to the base, so a base above `$duration-travel-max` is shortened to it |
 
 ### Scale and distance
 
-| SCSS | Value | Use it for |
-|------|-------|------------|
-| `$press-scale` | `0.97` | A pressed button |
-| `$enter-scale` | `0.96` | Where a centered modal scales from |
-| `$enter-offset` | `4px` | How far a dropdown slides into place |
+| SCSS | Script | Value | Use it for |
+|------|--------|-------|------------|
+| `$press-scale` | `PRESS_SCALE` | `0.97` | A pressed button |
+| `$enter-scale` | `ENTER_SCALE` | `0.96` | Where a centered modal scales from |
+| `$enter-offset` | `ENTER_OFFSET` | `4` (pixels) | How far a dropdown slides into place |
+| `$reveal-scale` | `REVEAL_SCALE` | `0.9` | Where a success icon or checkbox tick scales from |
 
 ### Media queries and custom properties
 
@@ -66,11 +67,11 @@ Larger surfaces get longer durations. No single transition runs longer than 300m
 
 ### Entering and leaving
 
-- **Entrances ease out.** They start fast and settle, so the element feels responsive. Snackbars use plain `ease` for a softer start as they slide up from the edge, and the fades that replace a slide under reduced motion also use plain `ease`.
+- **Entrances ease out.** They start fast and settle, so the element feels responsive. Snackbars use plain `ease` for a softer start as they slide up from the edge, and the fades that replace a slide under reduced motion use `$ease-color` (plain `ease`).
 - **Never ease in.** An ease-in curve holds still at the moment the reader is looking, so the interface feels slow. Name each property in a transition; never use `transition: all`.
-- **Start from somewhere close.** A centered modal scales from `$enter-scale` (0.96), a dropdown slides `$enter-offset` (4px) into place, and a success icon or checkbox tick scales from `0.9`. Nothing scales from `0`. Content that replaces other content in place, like a modal step or an accordion panel, can fade alone.
+- **Start from somewhere close.** A centered modal scales from `$enter-scale` (0.96), a dropdown slides `$enter-offset` (4px) into place, and a success icon or checkbox tick scales from `$reveal-scale` (0.9). Nothing scales from `0`. Content that replaces other content in place, like a modal step or an accordion panel, can fade alone.
 - **Grow from the trigger.** A menu or popover that scales or slides moves away from the edge nearest its trigger, and flips direction when it opens on the other side. Only a centered modal scales from its center.
-- **The further a surface travels, the longer it takes.** A surface that moves across a distance, like a side drawer sliding its width or a space opening by its height, keeps its usual duration up to `$travel-base-distance` (240px), then takes 1ms more for every `$travel-px-per-ms` (4) pixels past it, up to `$duration-travel-max` (450ms). Otherwise a wide drawer covers more ground in the same time as a narrow one and feels faster. Use `motion.travel-duration($distance)` in SCSS or `travelDuration( distance )` in script; both start from `$duration-modal` (250ms), and take a different base as their second argument. Where the distance depends on the viewport, compute one duration per width class at build time, from the width that class is designed for, and measure in script only when it is cheap. Rolling Coverage opens the space for a new entry this way.
+- **The further a surface travels, the longer it takes.** A surface that travels uses `$ease-drawer`; a space opening in place uses `$ease-out`. A surface that moves across a distance, like a side drawer sliding its width or a space opening by its height, keeps its usual duration up to `$travel-base-distance` (240px), then takes 1ms more for every `$travel-px-per-ms` (4) pixels past it, up to `$duration-travel-max` (450ms). Otherwise a wide drawer covers more ground in the same time as a narrow one and feels faster. Use `motion.travel-duration($distance)` in SCSS or `travelDuration( distance )` in script; both start from `$duration-modal` (250ms), and take a different base as their second argument. Where the distance depends on the viewport, compute one duration per width class at build time, from the width that class is designed for, and measure in script only when it is cheap. Rolling Coverage opens the space for a new entry this way.
 - **Bottom sheets slide their full height** on `$ease-drawer` and `$duration-sheet`. A surface that docks to the bottom edge and holds content the reader has to act on, like the bottom content gate, moves the same way. Snackbars slide up on their own tokens, and the slim bottom banners for gifted articles and countdowns only fade. Bottom sheets stay at 400ms rather than following the travel rule.
 - **When one view replaces another, the outgoing view leaves faster.** On screens 600px and wider, a modal step that leaves fades over `$duration-exit` (120ms). The next step fades in over `$duration-reveal` after a 100ms delay, so the two barely overlap. On phones the leaving step is removed at once. A surface that opens and closes, like a modal, sheet, dropdown or snackbar, uses the same duration both ways.
 - **A surface that takes over from another in the same place doesn't make an entrance.** The dim and the surface's position stay as they are, the outgoing surface goes at once, and only the incoming content fades in, over `$duration-reveal` on `$ease-out`. The height jumps to fit the new content. The sign-in modal hands over to email verification this way after a reader registers, and verification hands back the same way when the reader sends the code.
@@ -100,7 +101,7 @@ Larger surfaces get longer durations. No single transition runs longer than 300m
 ### Reduced motion
 
 - **Keep fades, drop movement.** Under `prefers-reduced-motion: reduce` (`@include motion.reduced-motion`, or `prefersReducedMotion()` in script), remove transforms, slides, scaling and size changes, and keep opacity changes so a state change is still visible.
-- **Replace a slide with a fade.** A surface that appears only by moving, like a bottom sheet or the bottom content gate, fades in over `$duration-modal` on plain `ease` instead.
+- **Replace a slide with a fade.** A surface that appears only by moving, like a bottom sheet or the bottom content gate, fades in over `$duration-modal` on `$ease-color` (plain `ease`) instead.
 - **Stop decorative loops at their resting state.** The live badge's pulse becomes a static ring. A loading spinner keeps turning, because its motion is the message.
 - **Gestures stop following the finger.** A bottom sheet doesn't track a drag, but a long enough or quick enough swipe still closes it.
 - **Scroll without smoothing.** A script asks for `behavior: 'smooth'` only when reduced motion is off.

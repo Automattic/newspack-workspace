@@ -50,6 +50,7 @@ The values compile into your stylesheet, so nothing depends on another styleshee
 | `$press-scale` | `0.97` |
 | `$enter-scale` | `0.96` |
 | `$enter-offset` | `4px` |
+| `$reveal-scale` | `0.9` |
 | `$travel-base-distance` | `240px` |
 | `$travel-px-per-ms` | `4` |
 | `$duration-travel-max` | `450ms` |
@@ -65,17 +66,23 @@ Functions and mixins:
 ## JavaScript
 
 ```js
-import { DURATION_MODAL, EASE_OUT, prefersReducedMotion } from 'newspack-motion';
+import { DURATION_MODAL, EASE_COLOR, EASE_OUT, ENTER_SCALE, prefersReducedMotion } from 'newspack-motion';
 
-if ( ! prefersReducedMotion() ) {
-	element.animate( [ { transform: 'scale(0.96)' }, { transform: 'none' } ], {
+const reduce = prefersReducedMotion();
+
+element.animate(
+	[
+		{ opacity: 0, transform: reduce ? 'none' : `scale(${ ENTER_SCALE })` },
+		{ opacity: 1, transform: 'none' },
+	],
+	{
 		duration: DURATION_MODAL,
-		easing: EASE_OUT,
-	} );
-}
+		easing: reduce ? EASE_COLOR : EASE_OUT,
+	}
+);
 ```
 
-Exports: `EASE_OUT`, `EASE_IN_OUT`, `EASE_DRAWER` (strings), `DURATION_COLOR`, `DURATION_PRESS`, `DURATION_INDICATOR`, `DURATION_REVEAL`, `DURATION_MODAL`, `DURATION_SHEET`, `DURATION_EXIT`, `DURATION_TRAVEL_MAX` (numbers, in milliseconds), `TRAVEL_BASE_DISTANCE` (pixels), `TRAVEL_PX_PER_MS`, `REDUCED_MOTION_QUERY`, `prefersReducedMotion()` and `travelDuration( distance, base = DURATION_MODAL )`, which applies the same rule as `travel-duration()` to a measured distance in pixels. TypeScript types are included.
+Exports: `EASE_OUT`, `EASE_IN_OUT`, `EASE_DRAWER`, `EASE_COLOR` (strings), `DURATION_COLOR`, `DURATION_PRESS`, `DURATION_INDICATOR`, `DURATION_REVEAL`, `DURATION_MODAL`, `DURATION_SHEET`, `DURATION_EXIT`, `DURATION_TRAVEL_MAX` (numbers, in milliseconds), `PRESS_SCALE`, `ENTER_SCALE`, `REVEAL_SCALE` (unitless scales), `ENTER_OFFSET` (pixels), `TRAVEL_BASE_DISTANCE` (pixels), `TRAVEL_PX_PER_MS`, `REDUCED_MOTION_QUERY`, `prefersReducedMotion()` and `travelDuration( distance, base = DURATION_MODAL )`, which applies the same rule as `travel-duration()` to a measured distance in pixels. TypeScript types are included.
 
 ## License
 
