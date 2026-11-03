@@ -581,51 +581,127 @@ function newspack_adjust_brightness( $hex, $steps ) {
 }
 
 /**
- * Pick either white or black, whatever has sufficient contrast with the color being passed to it.
+ * Parse a hex color into its 0-255 channels.
  *
- * @param  string $hex Hexidecimal value of the color to adjust.
- * @return string Either black or white hexidecimal values.
+ * Accepts #RGB, #RRGGBB and #RRGGBBAA (the alpha pair is stripped), with or
+ * without the leading #, case-insensitively. Unparseable input returns null.
  *
- * @ref https://stackoverflow.com/questions/1331591/given-a-background-color-black-or-white-text
+ * @param string $hex Hexadecimal color.
+ * @return int[]|null [ $r, $g, $b ] as 0..255 integers, or null when unparseable.
  */
-function newspack_get_color_contrast( $hex ) {
-	// hex RGB
-	$r1 = hexdec( substr( $hex, 1, 2 ) );
-	$g1 = hexdec( substr( $hex, 3, 2 ) );
-	$b1 = hexdec( substr( $hex, 5, 2 ) );
-	// Black RGB
-	$black_color    = '#000';
-	$r2_black_color = hexdec( substr( $black_color, 1, 2 ) );
-	$g2_black_color = hexdec( substr( $black_color, 3, 2 ) );
-	$b2_black_color = hexdec( substr( $black_color, 5, 2 ) );
-	// Calc contrast ratio
-	$l1             = 0.2126 * pow( $r1 / 255, 2.2 ) +
-		0.7152 * pow( $g1 / 255, 2.2 ) +
-		0.0722 * pow( $b1 / 255, 2.2 );
-	$l2             = 0.2126 * pow( $r2_black_color / 255, 2.2 ) +
-		0.7152 * pow( $g2_black_color / 255, 2.2 ) +
-		0.0722 * pow( $b2_black_color / 255, 2.2 );
-	$contrast_ratio = 0;
-	if ( $l1 > $l2 ) {
-		$contrast_ratio = (int) ( ( $l1 + 0.05 ) / ( $l2 + 0.05 ) );
-	} else {
-		$contrast_ratio = (int) ( ( $l2 + 0.05 ) / ( $l1 + 0.05 ) );
+function newspack_parse_hex_channels( $hex ): ?array {
+	$hex = ltrim( trim( (string) $hex ), '#' );
+	if ( 3 === strlen( $hex ) ) {
+		$hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+	} elseif ( 8 === strlen( $hex ) ) {
+		$hex = substr( $hex, 0, 6 );
 	}
-	if ( $contrast_ratio > 5 ) {
-		// If contrast is more than 5, return black color
-		return 'black';
-	} else {
-		// if not, return white color.
-		return 'white';
+	if ( 6 !== strlen( $hex ) || ! ctype_xdigit( $hex ) ) {
+		return null;
 	}
+
+	return [
+		hexdec( substr( $hex, 0, 2 ) ),
+		hexdec( substr( $hex, 2, 2 ) ),
+		hexdec( substr( $hex, 4, 2 ) ),
+	];
+}
+
+/**
+ * Compute the soft-clamped APCA screen luminance (Y) of a hex color.
+ *
+ * Unparseable input is treated as white (luminance 1.0) so callers fall back
+ * to black text.
+ *
+ * @param string $hex Hexadecimal color.
+ * @return float Soft-clamped luminance in the 0..1 range.
+ */
+function newspack_get_apca_luminance( $hex ): float {
+	$channels = newspack_parse_hex_channels( $hex );
+	if ( null === $channels ) {
+		return 1.0;
+	}
+
+	list( $r, $g, $b ) = array_map(
+		function ( $channel ) {
+			return $channel / 255;
+		},
+		$channels
+	);
+
+	$y = 0.2126729 * pow( $r, 2.4 ) + 0.7151522 * pow( $g, 2.4 ) + 0.0721750 * pow( $b, 2.4 );
+
+	if ( $y <= 0.022 ) {
+		$y += pow( 0.022 - $y, 1.414 );
+	}
+
+	return $y;
+}
+
+/**
+ * Compute the APCA lightness contrast (Lc) of text on a background.
+ *
+ * Positive values are dark text on a lighter background; negative values are
+ * light text on a darker background. Both luminances must already be
+ * soft-clamped.
+ *
+ * @param float $background_y Soft-clamped background luminance.
+ * @param float $text_y       Soft-clamped text luminance.
+ * @return float The Lc value.
+ */
+function newspack_get_apca_contrast( float $background_y, float $text_y ): float {
+	if ( abs( $background_y - $text_y ) < 0.0005 ) {
+		return 0.0;
+	}
+
+	if ( $background_y > $text_y ) {
+		$sapc = ( pow( $background_y, 0.56 ) - pow( $text_y, 0.57 ) ) * 1.14;
+		return $sapc < 0.1 ? 0.0 : ( $sapc - 0.027 ) * 100;
+	}
+
+	$sapc = ( pow( $background_y, 0.65 ) - pow( $text_y, 0.62 ) ) * 1.14;
+	return $sapc > -0.1 ? 0.0 : ( $sapc + 0.027 ) * 100;
+}
+
+/**
+ * Pick either black or white text, whichever reads better on the given background.
+ *
+ * Scores pure black and pure white as text against the background and returns
+ * whichever reads better by APCA: the greater lightness contrast (Lc), ties to
+ * black. The constants are the SA98G set from apca-w3 0.1.9.
+ *
+ * Keep in sync with: Newspack_Blocks::get_color_for_contrast() and getColorForContrast() in donate/utils.ts
+ * (newspack-blocks), \Newspack\newspack_get_color_contrast() (newspack-plugin), getContrastColor() in
+ * contrast-color.js (packages/components), Newspack_Popups_Model::contrast_text_color() (newspack-popups)
+ * and Newspack_Listings\Curated_List_Block\contrast_text_color() (newspack-listings). The block theme's
+ * Newspack_Block_Theme\Contrast::get_text_color() makes the same pick (it leaves the property unset for unparseable input).
+ *
+ * @param string $hex Hexadecimal background color (#RGB, #RRGGBB or #RRGGBBAA, with or without #).
+ * @return string Either 'black' or 'white' (literal CSS color keywords).
+ */
+function newspack_get_color_contrast( $hex ): string {
+	$background_y = newspack_get_apca_luminance( $hex );
+	$black_lc     = newspack_get_apca_contrast( $background_y, newspack_get_apca_luminance( '#000000' ) );
+	$white_lc     = newspack_get_apca_contrast( $background_y, newspack_get_apca_luminance( '#ffffff' ) );
+
+	return abs( $white_lc ) > abs( $black_lc ) ? 'white' : 'black';
 }
 
 /**
  * Checks if color has sufficient contrast against white; if no, replaces it.
+ *
+ * Deliberately keeps the original rough luminance test, which answers whether the color reads as text on white. Switching to newspack_get_color_contrast() would turn brand link colors dimgray.
+ *
+ * @ref https://stackoverflow.com/questions/1331591/given-a-background-color-black-or-white-text
  */
 function newspack_color_with_contrast( $color ) {
-	$contrast = newspack_get_color_contrast( $color );
-	if ( 'black' === $contrast ) {
+	$r1             = hexdec( substr( $color, 1, 2 ) );
+	$g1             = hexdec( substr( $color, 3, 2 ) );
+	$b1             = hexdec( substr( $color, 5, 2 ) );
+	$l1             = 0.2126 * pow( $r1 / 255, 2.2 ) + 0.7152 * pow( $g1 / 255, 2.2 ) + 0.0722 * pow( $b1 / 255, 2.2 );
+	$l2             = 0.0;
+	$contrast_ratio = $l1 > $l2 ? (int) ( ( $l1 + 0.05 ) / ( $l2 + 0.05 ) ) : (int) ( ( $l2 + 0.05 ) / ( $l1 + 0.05 ) );
+	if ( $contrast_ratio > 5 ) {
 		return 'dimgray';
 	}
 	return $color;
