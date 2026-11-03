@@ -305,7 +305,7 @@ class Starter_Content_WordPress extends Starter_Content_Provider {
 		if ( ! $timeout ) {
 			return null;
 		}
-		$response = wp_safe_remote_get( $url, [ 'timeout' => $timeout, 'limit_response_size' => 512 * KB_IN_BYTES ] ); //phpcs:ignore
+		$response = wp_safe_remote_get( $url, [ 'timeout' => $timeout ] ); //phpcs:ignore
 		if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
 			return null;
 		}
