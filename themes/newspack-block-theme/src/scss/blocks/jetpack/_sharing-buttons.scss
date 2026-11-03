@@ -27,7 +27,7 @@
 					}
 				}
 
-				&:is(.share-x, .share-threads, .share-share):not([style*="background-color"]) {
+				&:is(.share-x, .share-threads):not([style*="background-color"]) {
 					@include motion.hover {
 						&:hover {
 							background: color-mix(in oklab, currentcolor var(--wp--custom--state--lighten-hover), black);
@@ -36,6 +36,23 @@
 
 					&:active {
 						background: color-mix(in oklab, currentcolor var(--wp--custom--state--lighten-pressed), black);
+					}
+				}
+
+				&.share-share:not([style*="background-color"]) {
+					background: var(--wp--preset--color--accent);
+					color: var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base));
+
+					@include motion.hover {
+						&:hover {
+							background: color-mix(in oklab, var(--wp--preset--color--accent) var(--wp--custom--state--hover), black);
+							color: var(--wp--preset--color--accent-contrast-hover, var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base)));
+						}
+					}
+
+					&:active {
+						background: color-mix(in oklab, var(--wp--preset--color--accent) var(--wp--custom--state--pressed), black);
+						color: var(--wp--preset--color--accent-contrast-hover, var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base)));
 					}
 				}
 
