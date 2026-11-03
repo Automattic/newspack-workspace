@@ -114,16 +114,21 @@ class Donors {
 			function () {
 				// Every donation subscription is read, so clear the object cache
 				// between chunks, as the order walk below does between pages.
-				if ( function_exists( '\WP_CLI\Utils\wp_clear_object_cache' ) ) {
-					\WP_CLI\Utils\wp_clear_object_cache();
-				}
+				self::clear_object_cache();
 			}
 		);
 		$live    = array_flip( $holders['live'] );
+		$checked = 0;
 		foreach ( $holders['ended'] as $user_id ) {
 			if ( isset( $live[ $user_id ] ) ) {
 				continue;
 			}
+			// Checking a reader's flags loads their user meta, so on a store with many
+			// lapsed donors clear the cache every batch, before any reader is skipped.
+			if ( $checked > 0 && 0 === $checked % $batch_size ) {
+				self::clear_object_cache();
+			}
+			++$checked;
 			$counted[ $user_id ] = true;
 			if ( ! self::is_unflagged( $user_id ) ) {
 				++$already;
@@ -176,9 +181,7 @@ class Donors {
 			$read = count( $orders );
 			++$page;
 			// A long run loads every order and customer into the object cache.
-			if ( function_exists( '\WP_CLI\Utils\wp_clear_object_cache' ) ) {
-				\WP_CLI\Utils\wp_clear_object_cache();
-			}
+			self::clear_object_cache();
 		} while ( $read === $batch_size );
 
 		WP_CLI::success(
@@ -232,5 +235,15 @@ class Donors {
 	 */
 	private static function is_unflagged( int $user_id ): bool {
 		return ! Reader_Data::get_bool( $user_id, 'is_donor' ) && ! Reader_Data::get_bool( $user_id, 'is_former_donor' );
+	}
+
+	/**
+	 * Drop what the run has loaded into the object cache, so a long run's memory
+	 * stays bounded.
+	 */
+	private static function clear_object_cache(): void {
+		if ( function_exists( '\WP_CLI\Utils\wp_clear_object_cache' ) ) {
+			\WP_CLI\Utils\wp_clear_object_cache();
+		}
 	}
 }

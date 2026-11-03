@@ -250,6 +250,57 @@ class Test_Donors_Backfill extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Checking a lapsed donor's flags loads their user meta, so a store with many of
+	 * them would hold every record until the order walk began. The run clears the
+	 * cache after each batch of readers, before reading the next one.
+	 */
+	public function test_clears_the_cache_between_batches_of_ended_holders() {
+		$reader_ids = [];
+		for ( $i = 0; $i < 4; $i++ ) {
+			$reader_id    = $this->create_reader();
+			$reader_ids[] = $reader_id;
+			$this->create_subscription( $reader_id, 'cancelled' );
+		}
+
+		// The mock appends 'clear' to this log; the filter appends the reader whose
+		// reader-data keys are being read, which every flag check does first.
+		$GLOBALS['wp_cli_mock_cache_log'] = [];
+		$log_reads                        = function ( $value, $user_id, $meta_key ) {
+			if ( 'newspack_reader_data_keys' === $meta_key ) {
+				$GLOBALS['wp_cli_mock_cache_log'][] = (int) $user_id;
+			}
+			return $value;
+		};
+		add_filter( 'get_user_metadata', $log_reads, 10, 3 );
+		try {
+			$this->run_backfill(
+				[
+					'dry-run'    => true,
+					'batch-size' => 2,
+				]
+			);
+		} finally {
+			remove_filter( 'get_user_metadata', $log_reads, 10 );
+			$log = $GLOBALS['wp_cli_mock_cache_log'];
+			unset( $GLOBALS['wp_cli_mock_cache_log'] );
+		}
+
+		// Each reader is read more than once in a row; keep one entry per run of reads.
+		$sequence = [];
+		foreach ( $log as $entry ) {
+			if ( end( $sequence ) !== $entry ) {
+				$sequence[] = $entry;
+			}
+		}
+		$first = array_search( $reader_ids[0], $sequence, true );
+		$last  = array_search( $reader_ids[3], $sequence, true );
+		$this->assertSame(
+			[ $reader_ids[0], $reader_ids[1], 'clear', $reader_ids[2], $reader_ids[3] ],
+			array_slice( $sequence, $first, $last - $first + 1 )
+		);
+	}
+
+	/**
 	 * A former donor's original gift order must not turn them back into a donor:
 	 * the subscription decides, and the order walk skips a reader it already handled.
 	 */
