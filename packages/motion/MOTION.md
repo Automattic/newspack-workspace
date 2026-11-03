@@ -4,7 +4,7 @@ How Newspack moves, and the rules a new component should follow so it moves the 
 
 These rules and this package cover the front end: the reader-facing surfaces such as the theme, blocks, prompts and reader UI. Admin screens follow the motion built into `@wordpress/ui` and `@wordpress/components` and don't use this package.
 
-The shared easing and duration values live in this package, `newspack-motion`. Use them rather than literal values, so a timing change in one place reaches every component. Outside newspack-ui, `@use "newspack-motion" as motion;` and use the compiled values, such as `motion.$duration-modal`, and in script import the same values from `newspack-motion`. They compile into your own stylesheet or bundle, so nothing depends on newspack-ui being loaded and no `var()` fallback is needed. Inside newspack-ui, use its `--newspack-ui-*` custom properties, which are generated from this package. A few values belong to one component and live beside it, such as newspack-ui's modal step delay; see `plugins/newspack-plugin/src/newspack-ui/MOTION.md`.
+The shared easing and duration values live in this package, `newspack-motion`. Use them rather than literal values, so a timing change in one place reaches every component. Outside newspack-ui, `@use "newspack-motion" as motion;` and use the compiled values, such as `motion.$duration-modal`, and in script import the same values from `newspack-motion`. They compile into your own stylesheet or bundle, so nothing depends on newspack-ui being loaded and no `var()` fallback is needed. Existing `var(--newspack-ui-*, <fallback>)` uses stay valid; they let a theme override the value, and move to the compiled values when next touched. Inside newspack-ui, use its `--newspack-ui-*` custom properties, which are generated from this package. A few values belong to one component and live beside it, such as newspack-ui's modal step delay; see `plugins/newspack-plugin/src/newspack-ui/MOTION.md`.
 
 These rules cover newspack-ui and every surface that uses this package. The modal checkout's fallback dialog, used only when newspack-ui is not loaded, doesn't follow them.
 
@@ -33,7 +33,7 @@ These rules cover newspack-ui and every surface that uses this package. The moda
 | `$duration-sheet` | `DURATION_SHEET` | `--newspack-ui-duration-sheet` | 400ms | A bottom sheet sliding in or out, and its overlay |
 | `$duration-exit` | `DURATION_EXIT` | `--newspack-ui-duration-exit` | 120ms | A view leaving while another replaces it in the same place, like a modal step on wider screens |
 
-Larger surfaces get longer durations. No single transition runs longer than 300ms, except travel, which follows the travel rule (below) up to 450ms. Bottom sheets with their overlay and the bottom content gate slide their own height from an edge in `$duration-sheet` (400ms) rather than following the travel rule. Snackbars slide up in the same 400ms on newspack-ui's own snackbar tokens. Looping indicators, like the spinner and the live badge's pulse, sit outside this. Something small that changes often takes 200ms or less.
+Larger surfaces get longer durations. No single transition runs longer than 300ms, except travel, which follows the travel rule (below) up to 450ms. Bottom sheets with their overlay and the bottom content gate slide their own height from an edge in `$duration-sheet` (400ms) rather than following the travel rule. Snackbars slide up in the same 400ms on newspack-ui's own snackbar tokens. Carousels keep a fixed 300ms slide rather than following the travel rule, because Swiper's speed also sets how fast a swipe settles, and a longer slide feels sluggish under a finger. Looping indicators, like the spinner and the live badge's pulse, sit outside this. Something small that changes often takes 200ms or less.
 
 ### Travel
 
@@ -50,7 +50,7 @@ Larger surfaces get longer durations. No single transition runs longer than 300m
 |------|--------|-------|------------|
 | `$press-scale` | `PRESS_SCALE` | `0.97` | A pressed button |
 | `$enter-scale` | `ENTER_SCALE` | `0.96` | Where a centered modal scales from |
-| `$enter-offset` | `ENTER_OFFSET` | `4` (pixels) | How far a dropdown slides into place |
+| `$enter-offset` | `ENTER_OFFSET` | `4px` (`4` in script) | How far a dropdown slides into place |
 | `$reveal-scale` | `REVEAL_SCALE` | `0.9` | Where a success icon or checkbox tick scales from |
 
 ### Media queries and custom properties

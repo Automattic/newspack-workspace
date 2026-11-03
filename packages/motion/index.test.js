@@ -3,6 +3,7 @@ import {
 	DURATION_SHEET,
 	DURATION_TRAVEL_MAX,
 	EASE_COLOR,
+	EASE_DRAWER,
 	ENTER_OFFSET,
 	ENTER_SCALE,
 	PRESS_SCALE,
@@ -34,6 +35,11 @@ describe( 'travelDuration', () => {
 		expect( travelDuration( 1296 ) ).toBe( DURATION_TRAVEL_MAX );
 		expect( travelDuration( 10000 ) ).toBe( DURATION_TRAVEL_MAX );
 		expect( travelDuration( 640, DURATION_SHEET ) ).toBe( DURATION_TRAVEL_MAX );
+	} );
+
+	it( 'falls back to the base for a distance that is not a number', () => {
+		expect( travelDuration( NaN ) ).toBe( DURATION_MODAL );
+		expect( travelDuration( undefined, 200 ) ).toBe( 200 );
 	} );
 
 	it( 'starts from the base it is given', () => {
@@ -70,5 +76,29 @@ describe( 'prefersReducedMotion', () => {
 	it( 'is false where matchMedia is missing', () => {
 		window.matchMedia = undefined;
 		expect( prefersReducedMotion() ).toBe( false );
+	} );
+} );
+
+describe( 'SCSS parity', () => {
+	const { execFileSync } = require( 'child_process' );
+	const css = source =>
+		execFileSync(
+			process.execPath,
+			[ '-e', 'process.stdout.write( require( "sass" ).compileString( process.argv[ 1 ], { loadPaths: [ process.argv[ 2 ] ] } ).css )', `@use "index" as motion;\n${ source }`, __dirname ],
+			{ encoding: 'utf8' }
+		);
+
+	it( 'emits the same tokens as the script exports', () => {
+		const out = css( 'a { --x: #{motion.$duration-modal}; --y: #{motion.$ease-drawer}; --z: #{motion.$press-scale}; --w: #{motion.$enter-scale}; }' );
+		expect( out ).toContain( `--x: ${ DURATION_MODAL }ms` );
+		expect( out ).toContain( `--y: ${ EASE_DRAWER }` );
+		expect( out ).toContain( `--z: ${ PRESS_SCALE }` );
+		expect( out ).toContain( `--w: ${ ENTER_SCALE }` );
+	} );
+
+	it( 'computes the same travel durations as travelDuration', () => {
+		const distances = [ 0, 240, 300, 410, 632, 964, 1036, 1040, 2000 ];
+		const out = css( `a { ${ distances.map( ( d, i ) => `--d${ i }: #{motion.travel-duration(${ d }px)};` ).join( ' ' ) } }` );
+		distances.forEach( ( d, i ) => expect( out ).toContain( `--d${ i }: ${ travelDuration( d ) }ms` ) );
 	} );
 } );

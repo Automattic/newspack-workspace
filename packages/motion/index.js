@@ -43,6 +43,10 @@ export function prefersReducedMotion() {
  * @return {number} The duration, in milliseconds.
  */
 export function travelDuration( distance, base = DURATION_MODAL ) {
+	if ( ! Number.isFinite( distance ) ) {
+		return Math.round( Math.min( DURATION_TRAVEL_MAX, base ) );
+	}
+
 	const extra = Math.max( 0, distance - TRAVEL_BASE_DISTANCE ) / TRAVEL_PX_PER_MS;
 
 	return Math.round( Math.min( DURATION_TRAVEL_MAX, base + extra ) );
