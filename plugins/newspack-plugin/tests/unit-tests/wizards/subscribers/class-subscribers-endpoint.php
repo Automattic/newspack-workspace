@@ -2595,21 +2595,30 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	 */
 	public function data_donor_filter_with_another_filter() {
 		return [
-			'one-time, active'    => [
+			'one-time, active'       => [
 				[
 					'status' => [ 'active' ],
 					'donor'  => [ 'one-time' ],
 				],
 				[ 'one_time' ],
 			],
-			'not a donor, active' => [
+			'not a donor, active'    => [
 				[
 					'status' => [ 'active' ],
 					'donor'  => [ 'none' ],
 				],
 				[ 'non_donor' ],
 			],
-			'recurring, on hold'  => [
+			// Former donors are the last kind in the set "Not a donor" removes, so
+			// they are the ones a cut to the set would leave in.
+			'not a donor, cancelled' => [
+				[
+					'status' => [ 'cancelled' ],
+					'donor'  => [ 'none' ],
+				],
+				[ 'lapsed_member' ],
+			],
+			'recurring, on hold'     => [
 				[
 					'status' => [ 'on-hold' ],
 					'donor'  => [ 'recurring' ],
@@ -2617,21 +2626,21 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 				[ 'recurring_on_hold' ],
 			],
 			// The flag-only former donor holds no subscription, so has no status.
-			'former, cancelled'   => [
+			'former, cancelled'      => [
 				[
 					'status' => [ 'cancelled' ],
 					'donor'  => [ 'former' ],
 				],
 				[ 'cancelled', 'expired', 'gave_again' ],
 			],
-			'recurring, plan'     => [
+			'recurring, plan'        => [
 				[
 					'plan'  => [ 'Digital' ],
 					'donor' => [ 'recurring' ],
 				],
 				[ 'recurring' ],
 			],
-			'not a donor, plan'   => [
+			'not a donor, plan'      => [
 				[
 					'plan'  => [ 'Digital' ],
 					'donor' => [ 'none' ],

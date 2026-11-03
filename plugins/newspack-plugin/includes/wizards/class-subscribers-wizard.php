@@ -1040,7 +1040,7 @@ class Subscribers_Wizard extends Wizard {
 		// to an empty page); a populated list = restrict the query to those users.
 		$include = $this->resolve_filter_include( $request );
 		// WP_User_Query ignores `exclude` once `include` is set, so with other
-		// filters active "Not a donor" is taken off their set here instead.
+		// filters active "Not a donor" is taken off their set here instead, in full.
 		$exclude = $this->resolve_donor_exclude( $request );
 		if ( is_array( $include ) ) {
 			$include = array_values( array_diff( $include, $exclude ) );
@@ -1055,7 +1055,7 @@ class Subscribers_Wizard extends Wizard {
 			}
 			$query_args['include'] = $include;
 		} elseif ( ! empty( $exclude ) ) {
-			$query_args['exclude'] = $exclude; // phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.PostNotIn_exclude -- User IDs, capped at FILTER_INCLUDE_CAP by resolve_donor_exclude().
+			$query_args['exclude'] = array_slice( $exclude, 0, self::FILTER_INCLUDE_CAP ); // phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.PostNotIn_exclude -- User IDs, at most FILTER_INCLUDE_CAP across the unticked donor kinds together; see resolve_donor_exclude().
 		}
 
 		$user_query = new \WP_User_Query( $query_args );
@@ -2991,10 +2991,15 @@ class Subscribers_Wizard extends Wizard {
 	 * other filters' include set, or, with no other filter, passes it to the user
 	 * query's `exclude`.
 	 *
-	 * The set is cut to FILTER_INCLUDE_CAP to keep the NOT IN() clause bounded.
-	 * Past that ceiling the donors cut off are not removed, so they show under "Not
-	 * a donor": the over-count that matches the under-count the include filters
-	 * accept, at the same 10k+ scale.
+	 * The set isn't cut here. Each kind's set is already bounded (see
+	 * customer_ids_for_donor_kind()), and subtracting from another filter's set
+	 * happens in PHP, so with another filter active every donor of an unticked kind
+	 * is removed. With no other filter, api_get_subscribers() cuts the set to
+	 * FILTER_INCLUDE_CAP to keep the NOT IN() clause bounded. That cap covers the
+	 * unticked kinds together, not each one: once they hold more than
+	 * FILTER_INCLUDE_CAP readers between them, the donors cut off show under "Not
+	 * a donor" while their row reads a kind. The set lists One-time, then
+	 * Recurring, then Former, so Former donors are cut off first.
 	 *
 	 * @param \WP_REST_Request $request The request.
 	 *
@@ -3006,7 +3011,7 @@ class Subscribers_Wizard extends Wizard {
 			return [];
 		}
 		$unticked = array_diff( [ Subscribers_Donors::KIND_ONE_TIME, Subscribers_Donors::KIND_RECURRING, Subscribers_Donors::KIND_FORMER ], $donor_filter );
-		return array_slice( $this->customer_ids_for_donor_kinds( $unticked ), 0, self::FILTER_INCLUDE_CAP );
+		return $this->customer_ids_for_donor_kinds( $unticked );
 	}
 
 	/**
