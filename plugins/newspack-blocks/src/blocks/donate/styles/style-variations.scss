@@ -9,14 +9,22 @@
 	.wpbnbd {
 		&__button {
 			padding: 0.38rem 0.76rem;
-			&:focus {
-				background: var(--newspack-ui-color-neutral-fill, np-colors.$neutral-100);
-			}
 
-			@media ( hover: hover ) and ( pointer: fine ) {
+			@include motion.hover {
 				&:hover {
 					background: var(--newspack-ui-color-neutral-fill, np-colors.$neutral-100);
 				}
+			}
+
+			&:active {
+				background: var(--newspack-ui-color-neutral-fill-hover, np-colors.$neutral-200);
+			}
+
+			&:focus-visible {
+				@include mixins.focus-edge( currentcolor, $halo: mixins.$focus-color );
+				transition:
+					background-color motion.$duration-color motion.$ease-color,
+					color motion.$duration-color motion.$ease-color;
 			}
 		}
 		&__tiers {
@@ -312,6 +320,14 @@
 			&.wpbnbd__button--active {
 				box-shadow: 0 4px 0 currentcolor;
 			}
+
+			&:focus-visible {
+				@include mixins.focus-edge( currentcolor, $halo: mixins.$focus-color, $inner: (0 3px 0 np-colors.$neutral-000, 0 4px 0 0 np-colors.$neutral-300) );
+
+				&.wpbnbd__button--active {
+					@include mixins.focus-edge( currentcolor, $halo: mixins.$focus-color, $inner: 0 4px 0 currentcolor );
+				}
+			}
 		}
 	}
 
@@ -505,6 +521,10 @@
 							color: var(--newspack-ui-color-text, np-colors.$neutral-900);
 						}
 					}
+
+					&:active {
+						background: var(--newspack-ui-color-neutral-fill-pressed, np-colors.$neutral-300);
+					}
 				}
 
 				.odl {
@@ -520,7 +540,6 @@
 				}
 
 				input[type="radio"]:focus + .tier-label {
-					background: var(--newspack-ui-color-neutral-fill, np-colors.$neutral-100);
 					outline: none;
 				}
 
@@ -710,15 +729,13 @@
 					@include motion.hover {
 						&:hover {
 							--wpbnbd-overlay: 0 0 #0000;
-							background: var(--newspack-ui-color-neutral-fill, np-colors.$neutral-100) !important;
-							color: var(--newspack-ui-color-text, np-colors.$neutral-900) !important;
+							background: color-mix(in oklab, currentcolor 7%, var(--newspack-ui-color-surface, #{np-colors.$neutral-000})) !important;
 						}
 					}
 
 					&:active {
 						--wpbnbd-overlay: 0 0 #0000;
-						background: var(--newspack-ui-color-neutral-fill-hover, np-colors.$neutral-200) !important;
-						color: var(--newspack-ui-color-text, np-colors.$neutral-900) !important;
+						background: color-mix(in oklab, currentcolor 13%, var(--newspack-ui-color-surface, #{np-colors.$neutral-000})) !important;
 					}
 				}
 			}

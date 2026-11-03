@@ -122,18 +122,22 @@
 				padding: 0;
 				margin-bottom: 13px;
 				color: np-colors.$neutral-600;
+				transition: color motion.$duration-color motion.$ease-color;
 				span {
 					text-decoration: underline;
 				}
 				&:focus {
-					color: np-colors.$neutral-900;
 					background: none;
 				}
 
-				@media ( hover: hover ) and ( pointer: fine ) {
+				@include motion.hover {
 					&:hover {
-						color: np-colors.$neutral-900;
+						color: color-mix(in oklab, np-colors.$neutral-600 var(--newspack-ui-color-mix-hover, 85%), transparent);
 					}
+				}
+
+				&:active {
+					color: color-mix(in oklab, np-colors.$neutral-600 var(--newspack-ui-color-mix-pressed, 75%), transparent);
 				}
 			}
 			&__tier-tile {
