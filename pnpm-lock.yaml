@@ -253,6 +253,12 @@ importers:
         specifier: workspace:*
         version: link:../scripts
 
+  packages/motion:
+    devDependencies:
+      newspack-scripts:
+        specifier: workspace:*
+        version: link:../scripts
+
   packages/scripts:
     dependencies:
       '@commitlint/cli':
@@ -568,6 +574,9 @@ importers:
       newspack-icons:
         specifier: workspace:*
         version: link:../../packages/icons
+      newspack-motion:
+        specifier: workspace:*
+        version: link:../../packages/motion
       newspack-scripts:
         specifier: workspace:*
         version: link:../../packages/scripts
