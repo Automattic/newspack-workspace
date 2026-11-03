@@ -38,6 +38,10 @@ class Donors {
 	 * time. Donation orders with no customer can't be matched to a reader. They are
 	 * skipped and counted.
 	 *
+	 * A real run prints a line for each reader it flags, naming the user ID and the
+	 * flag. The flags don't record what set them, so keep that output: it is the
+	 * only record of which readers the run changed.
+	 *
 	 * Only runs when the donation platform is WooCommerce and WooCommerce
 	 * Subscriptions is active.
 	 *
@@ -190,7 +194,7 @@ class Donors {
 	}
 
 	/**
-	 * Set a donor flag and confirm it was written.
+	 * Set a donor flag, confirm it was written, and list the reader in the output.
 	 *
 	 * The Reader_Data setters drop the error update_item() returns when a reader
 	 * already holds the most items it allows, so the only sign of a refused write is
@@ -211,6 +215,7 @@ class Donors {
 			Reader_Data::set_is_donor( time(), $data );
 		}
 		if ( Reader_Data::get_bool( $user_id, $flag ) ) {
+			WP_CLI::log( sprintf( 'Flagged user %d: %s', $user_id, $flag ) );
 			return true;
 		}
 		WP_CLI::warning( sprintf( 'Could not set `%s` for user %d: the write was refused. The reader\'s data may be full.', $flag, $user_id ) );

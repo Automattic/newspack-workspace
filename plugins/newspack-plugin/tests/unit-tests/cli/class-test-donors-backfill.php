@@ -190,6 +190,33 @@ class Test_Donors_Backfill extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The flags don't record what set them, so a real run lists each reader it
+	 * flags and support can keep the output. A dry run lists no one, and a reader
+	 * who already has a flag isn't listed.
+	 */
+	public function test_a_real_run_lists_each_reader_it_flags() {
+		$donor_id = $this->create_reader();
+		$this->create_order( $donor_id );
+		$former_id = $this->create_reader();
+		$this->create_subscription( $former_id, 'cancelled' );
+		$already_id = $this->create_reader();
+		Reader_Data::set_is_donor( time(), [ 'user_id' => $already_id ] );
+		$this->create_order( $already_id );
+
+		$this->run_backfill( [ 'dry-run' => true ] );
+		$this->assertSame( [], WP_CLI::$logs, 'A dry run lists no one.' );
+
+		$this->run_backfill();
+		$this->assertSame(
+			[
+				sprintf( 'Flagged user %d: is_former_donor', $former_id ),
+				sprintf( 'Flagged user %d: is_donor', $donor_id ),
+			],
+			WP_CLI::$logs
+		);
+	}
+
+	/**
 	 * A reader with a completed donation order and no flag gets `is_donor`.
 	 */
 	public function test_flags_an_unflagged_one_time_donor() {
@@ -404,6 +431,7 @@ class Test_Donors_Backfill extends WP_UnitTestCase {
 		$this->assertFalse( Reader_Data::get_bool( $reader_id, 'is_donor' ) );
 		$this->assertCount( 1, WP_CLI::$warnings );
 		$this->assertStringContainsString( (string) $reader_id, WP_CLI::$warnings[0] );
+		$this->assertSame( [], WP_CLI::$logs, 'A reader whose flag was refused is not listed as flagged.' );
 		$this->assertSame( 'Flagged 0 donor(s) and 0 former donor(s). 0 already flagged; 0 guest order(s) skipped.', $message );
 	}
 
@@ -422,6 +450,7 @@ class Test_Donors_Backfill extends WP_UnitTestCase {
 		$this->assertFalse( Reader_Data::get_bool( $reader_id, 'is_donor' ) );
 		$this->assertCount( 1, WP_CLI::$warnings );
 		$this->assertStringContainsString( (string) $reader_id, WP_CLI::$warnings[0] );
+		$this->assertSame( [], WP_CLI::$logs, 'A reader whose flag was half written is not listed as flagged.' );
 		$this->assertSame( 'Flagged 0 donor(s) and 0 former donor(s). 0 already flagged; 0 guest order(s) skipped.', $message );
 	}
 
