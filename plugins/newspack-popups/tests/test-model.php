@@ -659,4 +659,31 @@ class ModelTest extends WP_UnitTestCase {
 	public function test_close_button_icon_color( $fill, $background, $expected ) {
 		self::assertSame( $expected, Newspack_Popups_Model::close_button_icon_color( $fill, $background ) );
 	}
+
+	/**
+	 * Close button fills, as [ fill, prompt background, whether hover lightens ].
+	 */
+	public function close_button_lightens_data() {
+		return [
+			'black'                            => [ '#000000', '#FFFFFF', true ],
+			'theme contrast'                   => [ '#1E1E1E', '#FFFFFF', true ],
+			'transparent fill on black prompt' => [ '#00000000', '#000000', true ],
+			'navy'                             => [ '#003DA5', '#FFFFFF', false ],
+			'half-transparent black on white'  => [ '#00000080', '#FFFFFF', false ],
+			'white'                            => [ '#FFFFFF', '#FFFFFF', false ],
+		];
+	}
+
+	/**
+	 * Tests that only a near-black close button fill lightens on hover; other fills darken like a button.
+	 *
+	 * @dataProvider close_button_lightens_data
+	 *
+	 * @param string $fill       Close button fill.
+	 * @param string $background Prompt background.
+	 * @param bool   $expected   Whether the fill lightens.
+	 */
+	public function test_close_button_lightens( $fill, $background, $expected ) {
+		self::assertSame( $expected, Newspack_Popups_Model::close_button_lightens( $fill, $background ) );
+	}
 }

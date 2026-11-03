@@ -12,6 +12,13 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Newspack_Popups_Model {
 	/**
+	 * Relative luminance below which a close button fill counts as near-black, see close_button_lightens().
+	 *
+	 * @var float
+	 */
+	const CLOSE_BUTTON_LIGHTEN_LUMINANCE = 0.02;
+
+	/**
 	 * Transient key caching whether the site has any published above-header prompts.
 	 *
 	 * @var string
@@ -1365,9 +1372,8 @@ final class Newspack_Popups_Model {
 		$close_button_styles = 'color: ' . $close_button_color . ';';
 		if ( $enable_close_button_background ) {
 			$close_button_styles .= '--newspack-lightbox-close-bg: ' . $close_button_background_color . ';';
-			if ( '#fff' === $close_button_color ) {
-				// Lightening a dark fill by the usual 15%/25% in oklab barely registers, so a white icon gets a bigger step.
-				$close_button_styles .= '--newspack-lightbox-close-mix-hover: 75%; --newspack-lightbox-close-mix-pressed: 60%;';
+			if ( self::close_button_lightens( $popup['options']['close_button_background_color'], $popup['options']['background_color'] ) ) {
+				$close_button_styles .= '--newspack-lightbox-close-mix-hover: 75%; --newspack-lightbox-close-mix-pressed: 60%; --newspack-lightbox-close-mix-target: currentcolor;';
 			}
 		}
 
@@ -1450,6 +1456,40 @@ final class Newspack_Popups_Model {
 	 * @return string Either black or white hexadecimal values.
 	 */
 	public static function close_button_icon_color( $fill_color, $background_color ): string {
+		$luminance = self::close_button_fill_luminance( $fill_color, $background_color );
+
+		$contrast_with_black = ( $luminance + 0.05 ) / 0.05;
+		$contrast_with_white = 1.05 / ( $luminance + 0.05 );
+
+		return $contrast_with_black >= $contrast_with_white ? '#000' : '#fff';
+	}
+
+	/**
+	 * Whether the close button's hover and press states lighten the fill rather than darken it.
+	 *
+	 * Filled buttons darken toward black on hover and press. A near-black fill can't
+	 * darken visibly, so it lightens toward its icon instead, by the bigger step the
+	 * motion rules reserve for that case. The cut-off sits just above the theme's
+	 * default contrast color (#1E1E1E), so a dark neutral lightens the way
+	 * newspack-ui's dark button does while a dark accent, such as a navy, still
+	 * darkens like a button.
+	 *
+	 * @param string $fill_color       Hex close button fill, with optional alpha.
+	 * @param string $background_color Hex prompt background.
+	 * @return bool
+	 */
+	public static function close_button_lightens( $fill_color, $background_color ): bool {
+		return self::close_button_fill_luminance( $fill_color, $background_color ) < self::CLOSE_BUTTON_LIGHTEN_LUMINANCE;
+	}
+
+	/**
+	 * Relative luminance of the close button fill as painted over the prompt background.
+	 *
+	 * @param string $fill_color       Hex close button fill, with optional alpha.
+	 * @param string $background_color Hex prompt background.
+	 * @return float WCAG 2 relative luminance in the 0..1 range.
+	 */
+	private static function close_button_fill_luminance( $fill_color, $background_color ): float {
 		$fill       = self::hex_to_rgba( $fill_color );
 		$background = self::hex_to_rgba( $background_color ) ?? [ 255, 255, 255, 1 ];
 		if ( null === $fill ) {
@@ -1463,10 +1503,7 @@ final class Newspack_Popups_Model {
 			$luminance += $weight * $linear;
 		}
 
-		$contrast_with_black = ( $luminance + 0.05 ) / 0.05;
-		$contrast_with_white = 1.05 / ( $luminance + 0.05 );
-
-		return $contrast_with_black >= $contrast_with_white ? '#000' : '#fff';
+		return $luminance;
 	}
 
 	/**

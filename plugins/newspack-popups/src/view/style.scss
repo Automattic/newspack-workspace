@@ -28,13 +28,13 @@ $width__tablet: 782px;
 
 	@include motion.hover {
 		&:hover {
-			background-color: color-mix(in oklab, var(--newspack-lightbox-close-bg) var(--newspack-lightbox-close-mix-hover, 85%), currentcolor);
+			background-color: color-mix(in oklab, var(--newspack-lightbox-close-bg) var(--newspack-lightbox-close-mix-hover, 85%), var(--newspack-lightbox-close-mix-target, black));
 			box-shadow: none;
 		}
 	}
 
 	&:active {
-		background-color: color-mix(in oklab, var(--newspack-lightbox-close-bg) var(--newspack-lightbox-close-mix-pressed, 75%), currentcolor);
+		background-color: color-mix(in oklab, var(--newspack-lightbox-close-bg) var(--newspack-lightbox-close-mix-pressed, 75%), var(--newspack-lightbox-close-mix-target, black));
 		box-shadow: none;
 	}
 }
@@ -289,6 +289,7 @@ $width__tablet: 782px;
 					--newspack-lightbox-close-bg: #{rgba(black, 0.5)};
 					--newspack-lightbox-close-mix-hover: 75%;
 					--newspack-lightbox-close-mix-pressed: 60%;
+					--newspack-lightbox-close-mix-target: currentcolor;
 					color: white !important;
 
 					@include close-fill;
