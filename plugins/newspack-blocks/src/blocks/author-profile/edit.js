@@ -108,6 +108,7 @@ if ( typeof registerBlockBindingsSource === 'function' ) {
 import { SingleAuthor } from './single-author';
 import { AuthorDisplaySettings } from '../shared/author';
 import { AuthorContext } from './context';
+import { getAuthorContextValue } from './context-value';
 
 /**
  * External dependencies
@@ -805,10 +806,8 @@ const AuthorProfile = ( { attributes, setAttributes, context, clientId } ) => {
 		// The useEffect handles cleanup when component unmounts.
 		window.__newspackAuthorsByBlock[ clientId ] = previewAuthor;
 
-		// Like the front end, pass avatarHideDefault to inner blocks along with the author.
-		// The Site Editor placeholder author stands in for any author, so it keeps its avatar.
-		const isRealAuthor = previewAuthor && previewAuthor.id !== 'placeholder';
-		const authorContextValue = isRealAuthor ? { ...previewAuthor, avatarHideDefault: !! avatarHideDefault } : previewAuthor;
+		// Like the front end, tell inner blocks whether default avatars are hidden.
+		const authorContextValue = getAuthorContextValue( previewAuthor, avatarHideDefault );
 
 		const nestedBlockProps = {
 			...blockProps,
