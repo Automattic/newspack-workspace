@@ -667,9 +667,7 @@ class ModelTest extends WP_UnitTestCase {
 		return [
 			'black lifts to the floor'         => [ '#000000', '#FFFFFF', '#222222', '#484848' ],
 			'theme contrast, like newspack-ui' => [ '#1E1E1E', '#FFFFFF', '#3a3a3a', '#4f4f4f' ],
-			'transparent fill on black prompt' => [ '#00000000', '#000000', '#222222', '#484848' ],
-			'navy darkens'                     => [ '#003DA5', '#FFFFFF', '#002f84', '#00266f' ],
-			'half-transparent black on white'  => [ '#00000080', '#FFFFFF', '#656565', '#545454' ],
+			'dark blue darkens'                => [ '#003DA5', '#FFFFFF', '#002f84', '#00266f' ],
 			'white darkens'                    => [ '#FFFFFF', '#FFFFFF', '#cecece', '#aeaeae' ],
 		];
 	}
@@ -695,9 +693,11 @@ class ModelTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An invalid fill gets no state colors.
+	 * An invalid or translucent fill gets no state colors, so the stylesheet's own mix applies.
 	 */
-	public function test_invalid_close_button_fill_has_no_state_colors() {
+	public function test_invalid_or_translucent_close_button_fill_has_no_state_colors() {
 		self::assertNull( Newspack_Popups_Model::close_button_state_colors( 'red', '#FFFFFF' ) );
+		self::assertNull( Newspack_Popups_Model::close_button_state_colors( '#00000080', '#FFFFFF' ) );
+		self::assertNull( Newspack_Popups_Model::close_button_state_colors( '#00000000', '#000000' ) );
 	}
 }

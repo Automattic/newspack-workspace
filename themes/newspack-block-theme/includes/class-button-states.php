@@ -32,22 +32,24 @@ final class Button_States {
 	/**
 	 * Initializer.
 	 */
-	public static function init() {
+	public static function init(): void {
 		\add_filter( 'render_block_core/button', [ __CLASS__, 'render_block' ], 10, 2 );
 	}
 
 	/**
 	 * Add the hover and press colors to a button with a custom background.
 	 *
-	 * Palette backgrounds are left to the stylesheet. The custom fill darkens by
-	 * the theme's hover and press shares toward black, or, when it is near-black,
-	 * lightens toward the button's text color (white when none is set) by the
-	 * same shares, never by less than pure black would get from the lighten
-	 * shares. Every share is read from the settings.custom.state tokens.
+	 * Palette backgrounds are left to the stylesheet, and so is a translucent
+	 * fill, whose hover would turn opaque; those keep the stylesheet's overlay.
+	 * The custom fill darkens by the theme's hover and press shares toward black,
+	 * or, when it is near-black, lightens toward the button's text color (white
+	 * when none is set) by the same shares, never by less than pure black would
+	 * get from the lighten shares. Every share is read from the
+	 * settings.custom.state tokens.
 	 *
-	 * @param string $block_content The rendered block markup.
-	 * @param array  $block         The parsed block.
-	 * @return string The block markup.
+	 * @param mixed $block_content The rendered block markup.
+	 * @param mixed $block         The parsed block.
+	 * @return mixed The block markup.
 	 */
 	public static function render_block( $block_content, $block ) {
 		if ( ! is_string( $block_content ) || '' === $block_content || ! is_array( $block ) ) {
@@ -65,7 +67,7 @@ final class Button_States {
 			return $block_content;
 		}
 
-		$declaration = \safecss_filter_attr( sprintf( '--wp--custom--button--bg-hover: %s; --wp--custom--button--bg-pressed: %s', $colors['hover'], $colors['pressed'] ) );
+		$declaration = \safecss_filter_attr( sprintf( '--newspack-button-bg-hover: %s; --newspack-button-bg-pressed: %s', $colors['hover'], $colors['pressed'] ) );
 		if ( '' === $declaration ) {
 			return $block_content;
 		}
@@ -135,11 +137,11 @@ final class Button_States {
 	 * Read a custom background from a button's attributes.
 	 *
 	 * A palette slug in backgroundColor is left to the stylesheet. A value in
-	 * style.color.background is used when it is a hex color, or a palette
+	 * style.color.background is used when it is an opaque hex color, or a palette
 	 * reference that resolves to one.
 	 *
 	 * @param array $attrs The block attributes.
-	 * @return string|null The hex color, or null when the background is not a custom color.
+	 * @return string|null The hex color, or null when the background is not an opaque custom color.
 	 */
 	private static function get_custom_background( array $attrs ): ?string {
 		$slug = $attrs['backgroundColor'] ?? null;
@@ -147,7 +149,12 @@ final class Button_States {
 			return null;
 		}
 
-		return self::resolve_color( $attrs['style']['color']['background'] ?? null );
+		$fill = self::resolve_color( $attrs['style']['color']['background'] ?? null );
+		if ( null !== $fill && 9 === strlen( $fill ) && 'ff' !== strtolower( substr( $fill, -2 ) ) ) {
+			return null;
+		}
+
+		return $fill;
 	}
 
 	/**
@@ -169,7 +176,7 @@ final class Button_States {
 	 * @param mixed $value A hex color, a var:preset|color|<slug> reference, or anything else.
 	 * @return string|null The hex color, or null when it does not resolve to one.
 	 */
-	private static function resolve_color( $value ): ?string {
+	private static function resolve_color( mixed $value ): ?string {
 		if ( ! is_string( $value ) || '' === $value ) {
 			return null;
 		}
@@ -184,6 +191,9 @@ final class Button_States {
 	/**
 	 * Resolve a palette slug to its color, custom origin first.
 	 *
+	 * The default origin is left out, as Contrast does, since the theme disables
+	 * the default palette.
+	 *
 	 * @param string $slug The palette slug.
 	 * @return string|null The color, or null when no origin defines the slug.
 	 */
@@ -193,7 +203,7 @@ final class Button_States {
 			return null;
 		}
 
-		foreach ( [ 'custom', 'theme', 'default' ] as $origin ) {
+		foreach ( [ 'custom', 'theme' ] as $origin ) {
 			foreach ( $palette[ $origin ] ?? [] as $entry ) {
 				if ( isset( $entry['slug'], $entry['color'] ) && $slug === $entry['slug'] ) {
 					return $entry['color'];

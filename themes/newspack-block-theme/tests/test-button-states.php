@@ -35,7 +35,7 @@ class Test_Button_States extends WP_UnitTestCase {
 	public function test_custom_fill_darkens() {
 		$html = $this->render( [ 'style' => [ 'color' => [ 'background' => '#003da5' ] ] ], 'background-color:#003da5' );
 
-		$this->assertStringContainsString( 'style="background-color:#003da5;--wp--custom--button--bg-hover: #002f84;--wp--custom--button--bg-pressed: #00266f"', $html );
+		$this->assertStringContainsString( 'style="background-color:#003da5;--newspack-button-bg-hover: #002f84;--newspack-button-bg-pressed: #00266f"', $html );
 	}
 
 	/**
@@ -54,18 +54,27 @@ class Test_Button_States extends WP_UnitTestCase {
 			'color:#ffffff;background-color:#000000' 
 		);
 
-		$this->assertStringContainsString( '--wp--custom--button--bg-hover: #222222;--wp--custom--button--bg-pressed: #484848', $html );
+		$this->assertStringContainsString( '--newspack-button-bg-hover: #222222;--newspack-button-bg-pressed: #484848', $html );
 	}
 
 	/**
 	 * The theme's own contrast color counts as near-black and lightens by the standard step, toward white when no text color is set.
 	 *
-	 * This is the same colour newspack-ui's dark button reaches from the same fill.
+	 * This is the same color newspack-ui's dark button reaches from the same fill.
 	 */
 	public function test_contrast_fill_lightens_like_newspack_ui() {
 		$html = $this->render( [ 'style' => [ 'color' => [ 'background' => '#1e1e1e' ] ] ], 'background-color:#1e1e1e' );
 
-		$this->assertStringContainsString( '--wp--custom--button--bg-hover: #3a3a3a;--wp--custom--button--bg-pressed: #4f4f4f', $html );
+		$this->assertStringContainsString( '--newspack-button-bg-hover: #3a3a3a;--newspack-button-bg-pressed: #4f4f4f', $html );
+	}
+
+	/**
+	 * A translucent fill is left to the stylesheet's overlay, since a mixed hover would turn opaque.
+	 */
+	public function test_translucent_fill_is_untouched() {
+		$html = $this->render( [ 'style' => [ 'color' => [ 'background' => '#ffffff33' ] ] ], 'background-color:#ffffff33' );
+
+		$this->assertStringNotContainsString( '--newspack-button', $html );
 	}
 
 	/**
@@ -74,7 +83,7 @@ class Test_Button_States extends WP_UnitTestCase {
 	public function test_palette_fill_is_untouched() {
 		$html = $this->render( [ 'backgroundColor' => 'accent-2' ] );
 
-		$this->assertStringNotContainsString( '--wp--custom--button', $html );
+		$this->assertStringNotContainsString( '--newspack-button', $html );
 	}
 
 	/**
@@ -83,6 +92,6 @@ class Test_Button_States extends WP_UnitTestCase {
 	public function test_no_fill_is_untouched() {
 		$html = $this->render( [] );
 
-		$this->assertStringNotContainsString( '--wp--custom--button', $html );
+		$this->assertStringNotContainsString( '--newspack-button', $html );
 	}
 }

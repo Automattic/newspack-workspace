@@ -1487,13 +1487,19 @@ final class Newspack_Popups_Model {
 	 * like newspack-ui's dark button, and never by less than pure black would get
 	 * (25% of the icon color in on hover, 40% on press). The cut-off sits just above
 	 * the theme's default contrast color (#1E1E1E), so a dark neutral lightens
-	 * while a dark accent, such as a navy, still darkens like a button.
+	 * while a dark accent, such as #003DA5, still darkens like a button. A
+	 * translucent fill gets no colors, since a mixed hover would turn opaque over
+	 * whatever the button sits on; the stylesheet's own mix keeps its alpha.
 	 *
 	 * @param string $fill_color       Hex close button fill, with optional alpha.
 	 * @param string $background_color Hex prompt background.
-	 * @return string[]|null [ 'hover' => '#rrggbb', 'pressed' => '#rrggbb' ], or null when the fill can't be parsed.
+	 * @return string[]|null [ 'hover' => '#rrggbb', 'pressed' => '#rrggbb' ], or null when the fill is translucent or can't be parsed.
 	 */
 	public static function close_button_state_colors( $fill_color, $background_color ): ?array {
+		$rgba = self::hex_to_rgba( $fill_color );
+		if ( null === $rgba || $rgba[3] < 1 ) {
+			return null;
+		}
 		$fill = self::composited_close_button_fill( $fill_color, $background_color );
 		if ( null === $fill ) {
 			return null;
