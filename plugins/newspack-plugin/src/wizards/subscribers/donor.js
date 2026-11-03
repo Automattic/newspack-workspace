@@ -12,7 +12,7 @@
 /**
  * WordPress dependencies.
  */
-import { __ } from '@wordpress/i18n';
+import { __, _x } from '@wordpress/i18n';
 
 export const DONOR_LABELS = {
 	'one-time': __( 'One-time donor', 'newspack-plugin' ),
@@ -24,9 +24,9 @@ export const DONOR_LABELS = {
 // `none` is the one option that excludes rather than includes: readers who are
 // no kind of donor.
 export const DONOR_FILTER_ELEMENTS = [
-	{ value: 'one-time', label: __( 'One-time', 'newspack-plugin' ) },
-	{ value: 'recurring', label: __( 'Recurring', 'newspack-plugin' ) },
-	{ value: 'former', label: __( 'Former', 'newspack-plugin' ) },
+	{ value: 'one-time', label: _x( 'One-time', 'kind of donor', 'newspack-plugin' ) },
+	{ value: 'recurring', label: _x( 'Recurring', 'kind of donor', 'newspack-plugin' ) },
+	{ value: 'former', label: _x( 'Former', 'kind of donor', 'newspack-plugin' ) },
 	{ value: 'none', label: __( 'Not a donor', 'newspack-plugin' ) },
 ];
 
