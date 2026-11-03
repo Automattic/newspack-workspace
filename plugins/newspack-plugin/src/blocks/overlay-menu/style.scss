@@ -1,6 +1,5 @@
 @use "../../newspack-ui/scss/variables/breakpoints";
 @use "../../../packages/colors/colors.module" as colors;
-@use "sass:math";
 @use "newspack-motion" as motion;
 
 .wp-block-newspack-overlay-menu {
@@ -163,20 +162,10 @@
 	// Each size adds horizontal padding to the content-size variable so the inner content area matches.
 
 	@mixin panel-width( $var, $fallback ) {
-		--overlay-menu-slide-duration: #{motion.travel-duration(math.min($fallback + 32px, 704px))};
 		width: calc( var( --wp--preset--spacing--30, 1rem ) + var( #{$var}, #{$fallback} ) + var( --wp--preset--spacing--30, 1rem ) );
 
-		& + .overlay-menu__scrim {
-			--overlay-menu-slide-duration: #{motion.travel-duration(math.min($fallback + 32px, 704px))};
-		}
-
 		@media ( min-width: breakpoints.$tablet_width ) {
-			--overlay-menu-slide-duration: #{motion.travel-duration($fallback + 48px)};
 			width: calc( var( --wp--preset--spacing--40, 1.5rem ) + var( #{$var}, #{$fallback} ) + var( --wp--preset--spacing--40, 1.5rem ) );
-
-			& + .overlay-menu__scrim {
-				--overlay-menu-slide-duration: #{motion.travel-duration($fallback + 48px)};
-			}
 		}
 	}
 
@@ -248,6 +237,10 @@
 			min-width 0s linear motion.$duration-reveal,
 			overflow 0s linear motion.$duration-reveal;
 		transition-behavior: allow-discrete;
+	}
+
+	> .wp-block-navigation-submenu__toggle[aria-expanded="true"] ~ .wp-block-navigation__submenu-container {
+		transition: opacity motion.$duration-reveal motion.$ease-out;
 	}
 
 	> .wp-block-navigation-submenu__toggle[aria-expanded="true"] ~ .wp-block-navigation__submenu-container,
