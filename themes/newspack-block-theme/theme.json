@@ -390,7 +390,7 @@
 						},
 						":hover": {
 							"color": {
-								"text": "color-mix( in oklab, var( --wp--preset--color--contrast-3 ) var( --wp--custom--state--hover ), transparent )"
+								"text": "var( --wp--preset--color--contrast )"
 							},
 							"typography": {
 								"textDecoration": "none"
@@ -657,7 +657,7 @@
 						},
 						":hover": {
 							"color": {
-								"text": "color-mix( in oklab, var( --wp--preset--color--contrast-3 ) var( --wp--custom--state--hover ), transparent )"
+								"text": "var( --wp--preset--color--contrast )"
 							},
 							"typography": {
 								"textDecoration": "none"
