@@ -12,6 +12,27 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Newspack_Popups_Model {
 	/**
+	 * Relative luminance below which a close button fill counts as near-black, see close_button_state_colors().
+	 *
+	 * @var float
+	 */
+	const CLOSE_BUTTON_LIGHTEN_LUMINANCE = 0.02;
+
+	/**
+	 * The shares of the fill kept on hover and press, matching newspack-ui and the block theme.
+	 *
+	 * @var float[]
+	 */
+	const CLOSE_BUTTON_SHARES = [ 0.85, 0.75 ];
+
+	/**
+	 * The least a near-black fill lightens on hover and press: what pure black would get, as shares of black kept.
+	 *
+	 * @var float[]
+	 */
+	const CLOSE_BUTTON_LIGHTEN_FLOORS = [ 0.75, 0.6 ];
+
+	/**
 	 * Transient key caching whether the site has any published above-header prompts.
 	 *
 	 * @var string
@@ -1365,6 +1386,10 @@ final class Newspack_Popups_Model {
 		$close_button_styles = 'color: ' . $close_button_color . ';';
 		if ( $enable_close_button_background ) {
 			$close_button_styles .= '--newspack-lightbox-close-bg: ' . $close_button_background_color . ';';
+			$state_colors = self::close_button_state_colors( $popup['options']['close_button_background_color'], $popup['options']['background_color'] );
+			if ( null !== $state_colors ) {
+				$close_button_styles .= '--newspack-lightbox-close-bg-hover: ' . $state_colors['hover'] . '; --newspack-lightbox-close-bg-pressed: ' . $state_colors['pressed'] . ';';
+			}
 		}
 
 		$animation_id = 'a_' . $element_id;
@@ -1446,6 +1471,191 @@ final class Newspack_Popups_Model {
 	 * @return string Either black or white hexadecimal values.
 	 */
 	public static function close_button_icon_color( $fill_color, $background_color ): string {
+		$luminance = self::close_button_fill_luminance( $fill_color, $background_color );
+
+		$contrast_with_black = ( $luminance + 0.05 ) / 0.05;
+		$contrast_with_white = 1.05 / ( $luminance + 0.05 );
+
+		return $contrast_with_black >= $contrast_with_white ? '#000' : '#fff';
+	}
+
+	/**
+	 * The close button's hover and press fills, mixed in oklab like every other state.
+	 *
+	 * A filled button darkens 85% then 75% toward black. A near-black fill can't
+	 * darken visibly, so it lightens toward its icon by the same shares instead,
+	 * like newspack-ui's dark button, and never by less than pure black would get
+	 * (25% of the icon color in on hover, 40% on press). The cut-off sits just above
+	 * the theme's default contrast color (#1E1E1E), so a dark neutral lightens
+	 * while a dark accent, such as #003DA5, still darkens like a button. A
+	 * translucent fill must stay translucent over whatever the button sits on, so
+	 * it gets no mixed colors: a near-black one (the cleared default, #00000000,
+	 * over a dark prompt) gets the floor as a color-mix toward the icon that the
+	 * browser resolves, and any other translucent fill is left to the stylesheet's
+	 * own mix toward black.
+	 *
+	 * @param string $fill_color       Hex close button fill, with optional alpha.
+	 * @param string $background_color Hex prompt background.
+	 * @return string[]|null [ 'hover' => <css color>, 'pressed' => <css color> ], or null when the fill is left to the stylesheet or can't be parsed.
+	 */
+	public static function close_button_state_colors( $fill_color, $background_color ): ?array {
+		$rgba = self::hex_to_rgba( $fill_color );
+		if ( null === $rgba ) {
+			return null;
+		}
+		$near_black = self::close_button_fill_luminance( $fill_color, $background_color ) < self::CLOSE_BUTTON_LIGHTEN_LUMINANCE;
+		if ( $rgba[3] < 1 ) {
+			if ( ! $near_black ) {
+				return null;
+			}
+			return [
+				'hover'   => sprintf( 'color-mix(in oklab, currentcolor %d%%, var(--newspack-lightbox-close-bg))', round( 100 * ( 1 - self::CLOSE_BUTTON_LIGHTEN_FLOORS[0] ) ) ),
+				'pressed' => sprintf( 'color-mix(in oklab, currentcolor %d%%, var(--newspack-lightbox-close-bg))', round( 100 * ( 1 - self::CLOSE_BUTTON_LIGHTEN_FLOORS[1] ) ) ),
+			];
+		}
+		$fill = self::composited_close_button_fill( $fill_color, $background_color );
+		if ( null === $fill ) {
+			return null;
+		}
+
+		if ( ! $near_black ) {
+			$hover   = self::mix_oklab( $fill, [ 0, 0, 0 ], self::CLOSE_BUTTON_SHARES[0] );
+			$pressed = self::mix_oklab( $fill, [ 0, 0, 0 ], self::CLOSE_BUTTON_SHARES[1] );
+		} else {
+			$icon    = '#fff' === self::close_button_icon_color( $fill_color, $background_color ) ? [ 255, 255, 255 ] : [ 0, 0, 0 ];
+			$hover   = self::lighter_oklab( self::mix_oklab( $fill, $icon, self::CLOSE_BUTTON_SHARES[0] ), self::mix_oklab( [ 0, 0, 0 ], $icon, self::CLOSE_BUTTON_LIGHTEN_FLOORS[0] ) );
+			$pressed = self::lighter_oklab( self::mix_oklab( $fill, $icon, self::CLOSE_BUTTON_SHARES[1] ), self::mix_oklab( [ 0, 0, 0 ], $icon, self::CLOSE_BUTTON_LIGHTEN_FLOORS[1] ) );
+		}
+
+		return [
+			'hover'   => sprintf( '#%02x%02x%02x', ...$hover ),
+			'pressed' => sprintf( '#%02x%02x%02x', ...$pressed ),
+		];
+	}
+
+	/**
+	 * The close button fill as painted over the prompt background, as opaque RGB.
+	 *
+	 * @param string $fill_color       Hex close button fill, with optional alpha.
+	 * @param string $background_color Hex prompt background.
+	 * @return int[]|null [ r, g, b ] in 0..255, or null when the fill is not valid hex.
+	 */
+	private static function composited_close_button_fill( $fill_color, $background_color ): ?array {
+		$fill       = self::hex_to_rgba( $fill_color );
+		$background = self::hex_to_rgba( $background_color ) ?? [ 255, 255, 255, 1 ];
+		if ( null === $fill ) {
+			return null;
+		}
+
+		$composite = [];
+		foreach ( [ 0, 1, 2 ] as $index ) {
+			$composite[ $index ] = (int) round( $fill[ $index ] * $fill[3] + $background[ $index ] * ( 1 - $fill[3] ) );
+		}
+
+		return $composite;
+	}
+
+	/**
+	 * Mix two RGB colors in oklab, as color-mix( in oklab, <a> <share>, <b> ) does.
+	 *
+	 * @param int[] $a     [ r, g, b ] in 0..255.
+	 * @param int[] $b     [ r, g, b ] in 0..255.
+	 * @param float $share The first color's share, in 0..1.
+	 * @return int[] [ r, g, b ] in 0..255.
+	 */
+	private static function mix_oklab( array $a, array $b, float $share ): array {
+		$lab_a = self::rgb_to_oklab( $a );
+		$lab_b = self::rgb_to_oklab( $b );
+		$mixed = [];
+		foreach ( $lab_a as $i => $component ) {
+			$mixed[ $i ] = $share * $component + ( 1 - $share ) * $lab_b[ $i ];
+		}
+
+		return self::oklab_to_rgb( $mixed );
+	}
+
+	/**
+	 * Pick the lighter of two RGB colors by oklab lightness.
+	 *
+	 * @param int[] $a [ r, g, b ] in 0..255.
+	 * @param int[] $b [ r, g, b ] in 0..255.
+	 * @return int[]
+	 */
+	private static function lighter_oklab( array $a, array $b ): array {
+		return self::rgb_to_oklab( $b )[0] > self::rgb_to_oklab( $a )[0] ? $b : $a;
+	}
+
+	/**
+	 * Convert an RGB color to oklab.
+	 *
+	 * @param int[] $rgb [ r, g, b ] in 0..255.
+	 * @return float[] [ L, a, b ].
+	 */
+	private static function rgb_to_oklab( array $rgb ): array {
+		[ $r, $g, $b ] = array_map( [ __CLASS__, 'srgb_channel_to_linear' ], $rgb );
+		$l             = pow( 0.4122214708 * $r + 0.5363325363 * $g + 0.0514459929 * $b, 1 / 3 );
+		$m             = pow( 0.2119034982 * $r + 0.6806995451 * $g + 0.1073969566 * $b, 1 / 3 );
+		$s             = pow( 0.0883024619 * $r + 0.2817188376 * $g + 0.6299787005 * $b, 1 / 3 );
+
+		return [
+			0.2104542553 * $l + 0.7936177850 * $m - 0.0040720468 * $s,
+			1.9779984951 * $l - 2.4285922050 * $m + 0.4505937099 * $s,
+			0.0259040371 * $l + 0.7827717662 * $m - 0.8086757660 * $s,
+		];
+	}
+
+	/**
+	 * Convert an oklab color to RGB, clamping to the sRGB gamut.
+	 *
+	 * @param float[] $lab [ L, a, b ].
+	 * @return int[] [ r, g, b ] in 0..255.
+	 */
+	private static function oklab_to_rgb( array $lab ): array {
+		[ $big_l, $a, $b ] = $lab;
+		$l                 = pow( $big_l + 0.3963377774 * $a + 0.2158037573 * $b, 3 );
+		$m                 = pow( $big_l - 0.1055613458 * $a - 0.0638541728 * $b, 3 );
+		$s                 = pow( $big_l - 0.0894841775 * $a - 1.2914855480 * $b, 3 );
+
+		return array_map(
+			[ __CLASS__, 'linear_channel_to_srgb' ],
+			[
+				4.0767416621 * $l - 3.3077115913 * $m + 0.2309699292 * $s,
+				-1.2684380046 * $l + 2.6097574011 * $m - 0.3413193965 * $s,
+				-0.0041960863 * $l - 0.7034186147 * $m + 1.7076147010 * $s,
+			]
+		);
+	}
+
+	/**
+	 * Decode an 8-bit sRGB channel to linear light.
+	 *
+	 * @param int $channel 0..255.
+	 * @return float
+	 */
+	private static function srgb_channel_to_linear( int $channel ): float {
+		$value = $channel / 255;
+		return $value <= 0.04045 ? $value / 12.92 : pow( ( $value + 0.055 ) / 1.055, 2.4 );
+	}
+
+	/**
+	 * Encode a linear-light channel as an 8-bit sRGB channel.
+	 *
+	 * @param float $value Linear light, clamped to 0..1.
+	 * @return int 0..255.
+	 */
+	private static function linear_channel_to_srgb( float $value ): int {
+		$value = max( 0.0, min( 1.0, $value ) );
+		return (int) round( 255 * ( $value <= 0.0031308 ? $value * 12.92 : 1.055 * pow( $value, 1 / 2.4 ) - 0.055 ) );
+	}
+
+	/**
+	 * Relative luminance of the close button fill as painted over the prompt background.
+	 *
+	 * @param string $fill_color       Hex close button fill, with optional alpha.
+	 * @param string $background_color Hex prompt background.
+	 * @return float WCAG 2 relative luminance in the 0..1 range.
+	 */
+	private static function close_button_fill_luminance( $fill_color, $background_color ): float {
 		$fill       = self::hex_to_rgba( $fill_color );
 		$background = self::hex_to_rgba( $background_color ) ?? [ 255, 255, 255, 1 ];
 		if ( null === $fill ) {
@@ -1459,10 +1669,7 @@ final class Newspack_Popups_Model {
 			$luminance += $weight * $linear;
 		}
 
-		$contrast_with_black = ( $luminance + 0.05 ) / 0.05;
-		$contrast_with_white = 1.05 / ( $luminance + 0.05 );
-
-		return $contrast_with_black >= $contrast_with_white ? '#000' : '#fff';
+		return $luminance;
 	}
 
 	/**

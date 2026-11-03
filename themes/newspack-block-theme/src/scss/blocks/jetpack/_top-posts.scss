@@ -39,7 +39,7 @@
 
 			@include motion.hover {
 				&:hover {
-					color: color-mix(in srgb, var(--wp--preset--color--contrast) 85%, transparent);
+					color: color-mix(in oklab, var(--wp--preset--color--contrast) var(--wp--custom--state--hover), transparent);
 				}
 			}
 		}

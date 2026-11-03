@@ -659,4 +659,46 @@ class ModelTest extends WP_UnitTestCase {
 	public function test_close_button_icon_color( $fill, $background, $expected ) {
 		self::assertSame( $expected, Newspack_Popups_Model::close_button_icon_color( $fill, $background ) );
 	}
+
+	/**
+	 * Close button fills, as [ fill, prompt background, hover, press ].
+	 */
+	public function close_button_state_colors_data() {
+		return [
+			'black lifts to the floor'         => [ '#000000', '#FFFFFF', '#222222', '#484848' ],
+			'theme contrast, like newspack-ui' => [ '#1E1E1E', '#FFFFFF', '#3a3a3a', '#4f4f4f' ],
+			'dark blue darkens'                => [ '#003DA5', '#FFFFFF', '#002f84', '#00266f' ],
+			'cleared fill on a dark prompt'    => [ '#00000000', '#000000', 'color-mix(in oklab, currentcolor 25%, var(--newspack-lightbox-close-bg))', 'color-mix(in oklab, currentcolor 40%, var(--newspack-lightbox-close-bg))' ],
+			'white darkens'                    => [ '#FFFFFF', '#FFFFFF', '#cecece', '#aeaeae' ],
+		];
+	}
+
+	/**
+	 * Tests that a near-black fill lightens like newspack-ui's dark button, any other fill darkens like a button, and a translucent near-black fill lifts toward the icon without turning opaque.
+	 *
+	 * @dataProvider close_button_state_colors_data
+	 *
+	 * @param string $fill       Close button fill.
+	 * @param string $background Prompt background.
+	 * @param string $hover      Expected hover fill.
+	 * @param string $pressed    Expected press fill.
+	 */
+	public function test_close_button_state_colors( $fill, $background, $hover, $pressed ) {
+		self::assertSame(
+			[
+				'hover'   => $hover,
+				'pressed' => $pressed,
+			],
+			Newspack_Popups_Model::close_button_state_colors( $fill, $background )
+		);
+	}
+
+	/**
+	 * An invalid fill, or a translucent one that is not near-black, gets no state colors, so the stylesheet's own mix applies.
+	 */
+	public function test_invalid_or_translucent_close_button_fill_has_no_state_colors() {
+		self::assertNull( Newspack_Popups_Model::close_button_state_colors( 'red', '#FFFFFF' ) );
+		self::assertNull( Newspack_Popups_Model::close_button_state_colors( '#00000080', '#FFFFFF' ) );
+		self::assertNull( Newspack_Popups_Model::close_button_state_colors( '#00000000', '#FFFFFF' ) );
+	}
 }

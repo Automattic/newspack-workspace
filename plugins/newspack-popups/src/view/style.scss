@@ -28,13 +28,13 @@ $width__tablet: 782px;
 
 	@include motion.hover {
 		&:hover {
-			background-color: color-mix(in srgb, var(--newspack-lightbox-close-bg) 85%, currentcolor);
+			background-color: var(--newspack-lightbox-close-bg-hover, color-mix(in oklab, var(--newspack-lightbox-close-bg) var(--newspack-ui-color-mix-hover, 85%), black));
 			box-shadow: none;
 		}
 	}
 
 	&:active {
-		background-color: color-mix(in srgb, var(--newspack-lightbox-close-bg) 75%, currentcolor);
+		background-color: var(--newspack-lightbox-close-bg-pressed, color-mix(in oklab, var(--newspack-lightbox-close-bg) var(--newspack-ui-color-mix-pressed, 75%), black));
 		box-shadow: none;
 	}
 }
@@ -259,12 +259,12 @@ $width__tablet: 782px;
 
 		@include motion.hover {
 			&:hover {
-				box-shadow: inset 0 0 0 100vmax color-mix(in srgb, currentcolor 7%, transparent);
+				box-shadow: inset 0 0 0 100vmax color-mix(in oklab, currentcolor 7%, transparent);
 			}
 		}
 
 		&:active {
-			box-shadow: inset 0 0 0 100vmax color-mix(in srgb, currentcolor 13%, transparent);
+			box-shadow: inset 0 0 0 100vmax color-mix(in oklab, currentcolor 13%, transparent);
 			transform: scale(motion.$press-scale);
 
 			@include motion.reduced-motion {
@@ -287,6 +287,8 @@ $width__tablet: 782px;
 			&:not(.newspack-lightbox-close-button-background) {
 				.newspack-lightbox__close {
 					--newspack-lightbox-close-bg: #{rgba(black, 0.5)};
+					--newspack-lightbox-close-bg-hover: color-mix(in oklab, currentcolor 25%, var(--newspack-lightbox-close-bg));
+					--newspack-lightbox-close-bg-pressed: color-mix(in oklab, currentcolor 40%, var(--newspack-lightbox-close-bg));
 					color: white !important;
 
 					@include close-fill;

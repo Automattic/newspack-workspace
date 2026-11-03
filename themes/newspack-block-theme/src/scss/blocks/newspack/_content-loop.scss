@@ -27,7 +27,7 @@
 
 			@include motion.hover {
 				&:hover {
-					color: color-mix(in srgb, currentcolor 85%, transparent);
+					color: color-mix(in oklab, currentcolor var(--wp--custom--state--hover), transparent);
 				}
 			}
 		}
@@ -289,7 +289,7 @@
 
 				@include motion.hover {
 					&:hover {
-						color: color-mix(in srgb, currentcolor 85%, transparent);
+						color: color-mix(in oklab, currentcolor var(--wp--custom--state--hover), transparent);
 					}
 				}
 			}
