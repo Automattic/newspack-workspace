@@ -157,7 +157,7 @@
 	}
 }
 
-.wp-block-comment-date.has-text-color a:hover {
+:where(.wp-block-comment-date.has-text-color:not(.has-link-color)) a:hover {
 	color: inherit;
 }
 
