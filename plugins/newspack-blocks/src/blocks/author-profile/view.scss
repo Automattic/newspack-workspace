@@ -1,4 +1,3 @@
-@use "newspack-motion" as motion;
 @use "../../shared/sass/variables";
 @use "../../shared/sass/mixins";
 
@@ -111,20 +110,6 @@
 		a,
 		svg {
 			display: block;
-		}
-
-		a > span {
-			transition: color motion.$duration-color motion.$ease-color;
-		}
-
-		@include motion.hover {
-			a:hover > span {
-				color: color-mix(in oklab, currentcolor var(--newspack-ui-color-mix-hover, 85%), transparent);
-			}
-		}
-
-		a:active > span {
-			color: color-mix(in oklab, currentcolor var(--newspack-ui-color-mix-pressed, 75%), transparent);
 		}
 
 		svg {
