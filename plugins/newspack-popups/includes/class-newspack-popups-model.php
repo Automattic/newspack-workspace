@@ -1449,7 +1449,7 @@ final class Newspack_Popups_Model {
 	 * @param string $background_color Hex prompt background.
 	 * @return string Either black or white hexadecimal values.
 	 */
-	public static function close_button_icon_color( $fill_color, $background_color ) {
+	public static function close_button_icon_color( $fill_color, $background_color ): string {
 		$fill       = self::hex_to_rgba( $fill_color );
 		$background = self::hex_to_rgba( $background_color ) ?? [ 255, 255, 255, 1 ];
 		if ( null === $fill ) {
@@ -1475,7 +1475,7 @@ final class Newspack_Popups_Model {
 	 * @param string $color Hex color.
 	 * @return array|null Red, green and blue from 0 to 255 and alpha from 0 to 1, or null if the color is not valid hex.
 	 */
-	private static function hex_to_rgba( $color ) {
+	private static function hex_to_rgba( $color ): ?array {
 		$hex = ltrim( trim( (string) $color ), '#' );
 		if ( in_array( strlen( $hex ), [ 3, 4 ], true ) ) {
 			$hex = implode( '', array_map( fn( $digit ) => $digit . $digit, str_split( $hex ) ) );
