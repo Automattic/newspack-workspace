@@ -79,6 +79,8 @@ function buildLoadMoreHandler( blockWrapperEl ) {
 		const clear = () => {
 			articleEl.classList.remove( 'is-entering' );
 			articleEl.style.removeProperty( '--wpnbha-enter-index' );
+			articleEl.removeEventListener( 'transitionend', handleEnd );
+			articleEl.removeEventListener( 'transitioncancel', handleEnd );
 		};
 		const handleEnd = event => {
 			if ( event.target === articleEl && 'opacity' === event.propertyName ) {

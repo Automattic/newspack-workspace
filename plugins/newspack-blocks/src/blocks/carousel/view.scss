@@ -19,6 +19,7 @@
 		overflow-wrap: break-word;
 		a {
 			color: np-colors.$neutral-000;
+			transition: color motion.$duration-color motion.$ease-color;
 
 			@include motion.hover {
 				&:hover {
@@ -76,6 +77,7 @@
 				color: np-colors.$neutral-000;
 				font-weight: bold;
 				text-decoration: none;
+				transition: color motion.$duration-color motion.$ease-color;
 
 				@include motion.hover {
 					&:hover {
@@ -169,6 +171,15 @@
 				0 0 0 4px np-colors.$neutral-100;
 			outline: 0;
 		}
+		&:focus-visible {
+			transition:
+				opacity motion.$duration-indicator motion.$ease-out,
+				width motion.$duration-indicator motion.$ease-out;
+
+			@include motion.reduced-motion {
+				transition: opacity motion.$duration-indicator motion.$ease-out;
+			}
+		}
 		&.swiper-pagination-bullet-active,
 		&[selected] {
 			opacity: 1;
@@ -195,7 +206,8 @@
 		padding: 0;
 		transition:
 			background-color motion.$duration-color motion.$ease-color,
-			box-shadow motion.$duration-color motion.$ease-color;
+			box-shadow motion.$duration-color motion.$ease-color,
+			transform motion.$duration-press motion.$ease-out;
 		width: 48px;
 		@include motion.hover {
 			&:hover {
@@ -208,6 +220,13 @@
 				inset 0 0 0 2px np-colors.$overlay-700,
 				inset 0 0 0 4px np-colors.$neutral-000;
 			outline: 0;
+		}
+		&:active {
+			transform: scale(motion.$press-scale);
+
+			@include motion.reduced-motion {
+				transform: none;
+			}
 		}
 		&:focus-visible {
 			transition: none;

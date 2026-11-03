@@ -53,11 +53,14 @@ export const setupSlider = ( parentEl: HTMLElement, configuration: Configuration
 
 	const optionsDots = Array.from( optionsDotsEl.children ) as HTMLElement[];
 
+	const paintDots = ( activeIndex: number ) => {
+		optionsDots.forEach( ( dotEl, index ) => {
+			dotEl.style.backgroundColor = index === activeIndex ? configuration.buttonColor : '';
+		} );
+	};
 	const updateDots = () => {
 		currentIndex = findClosestIndex( optionsOffsets, optionsEl.scrollLeft );
-		optionsDots.forEach( ( dotEl, index ) => {
-			dotEl.style.backgroundColor = index === currentIndex ? configuration.buttonColor : '';
-		} );
+		paintDots( currentIndex );
 	};
 	if ( 'onscrollend' in window ) {
 		optionsEl.addEventListener( 'scrollend', updateDots );
@@ -67,6 +70,8 @@ export const setupSlider = ( parentEl: HTMLElement, configuration: Configuration
 
 	optionsDots.forEach( ( dotEl, index ) => {
 		dotEl.addEventListener( 'click', () => {
+			currentIndex = index;
+			paintDots( index );
 			optionsEl.scrollTo( {
 				left: index * optionWidth,
 				behavior: getScrollBehavior(),
