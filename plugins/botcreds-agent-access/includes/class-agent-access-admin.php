@@ -97,7 +97,6 @@ class Agent_Access_Admin {
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="max-width:520px;margin-top:1.5em;">
 				<?php wp_nonce_field( 'agent_access_add_agent_nonce', 'agent_access_add_agent_nonce' ); ?>
 				<input type="hidden" name="action" value="agent_access_add_agent">
-				<input type="hidden" name="agent_password" id="agent_password_hidden">
 
 				<table class="form-table" role="presentation">
 					<tr>
@@ -143,21 +142,6 @@ class Agent_Access_Admin {
 						</td>
 					</tr>
 					<tr>
-						<th scope="row">
-							<label for="agent_password_display"><?php esc_html_e( 'Password', 'botcreds-agent-access' ); ?></label>
-						</th>
-						<td>
-							<input type="text"
-								id="agent_password_display"
-								class="regular-text"
-								readonly
-								autocomplete="new-password"
-								style="font-family:monospace;">
-							<a href="#" id="agent_password_regenerate" style="margin-left:0.5em;"><?php esc_html_e( 'Regenerate', 'botcreds-agent-access' ); ?></a>
-							<p class="description"><?php esc_html_e( 'Auto-generated password. Copy it now — it will not be shown again.', 'botcreds-agent-access' ); ?></p>
-						</td>
-					</tr>
-					<tr>
 						<th scope="row"><?php esc_html_e( 'Role', 'botcreds-agent-access' ); ?></th>
 						<td>
 							<span class="agent-access-badge agent-access-badge--agent"><?php esc_html_e( 'Agent', 'botcreds-agent-access' ); ?></span>
@@ -174,31 +158,6 @@ class Agent_Access_Admin {
 			</form>
 		</div>
 
-		<script>
-		( function() {
-			function generatePassword( length ) {
-				var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%^&*';
-				var pass  = '';
-				for ( var i = 0; i < length; i++ ) {
-					pass += chars.charAt( Math.floor( Math.random() * chars.length ) );
-				}
-				return pass;
-			}
-
-			function syncPassword() {
-				var pass = generatePassword( 24 );
-				document.getElementById( 'agent_password_display' ).value = pass;
-				document.getElementById( 'agent_password_hidden' ).value  = pass;
-			}
-
-			syncPassword();
-
-			document.getElementById( 'agent_password_regenerate' ).addEventListener( 'click', function( e ) {
-				e.preventDefault();
-				syncPassword();
-			} );
-		} )();
-		</script>
 		<?php
 	}
 
@@ -218,9 +177,6 @@ class Agent_Access_Admin {
 		$username     = isset( $_POST['agent_username'] )     ? sanitize_user( wp_unslash( $_POST['agent_username'] ) )          : '';
 		$email        = isset( $_POST['agent_email'] )        ? sanitize_email( wp_unslash( $_POST['agent_email'] ) )             : '';
 		$display_name = isset( $_POST['agent_display_name'] ) ? sanitize_text_field( wp_unslash( $_POST['agent_display_name'] ) ) : '';
-		$password     = isset( $_POST['agent_password'] ) && ! empty( $_POST['agent_password'] )
-			? wp_unslash( $_POST['agent_password'] )
-			: wp_generate_password( 24 );
 
 		$errs = array();
 
@@ -246,7 +202,8 @@ class Agent_Access_Admin {
 			exit;
 		}
 
-		$new_user_id = wp_create_user( $username, $password, $email );
+		// Agents connect via BotCreds; the account password is not displayed or accepted from the form.
+		$new_user_id = wp_create_user( $username, wp_generate_password( 24 ), $email );
 
 		if ( is_wp_error( $new_user_id ) ) {
 			set_transient( $error_key, array( $new_user_id->get_error_message() ), 60 );
