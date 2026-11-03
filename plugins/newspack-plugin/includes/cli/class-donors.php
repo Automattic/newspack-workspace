@@ -215,7 +215,8 @@ class Donors {
 			Reader_Data::set_is_donor( time(), $data );
 		}
 		if ( Reader_Data::get_bool( $user_id, $flag ) ) {
-			WP_CLI::log( sprintf( 'Flagged user %d: %s', $user_id, $flag ) );
+			// line(), not log(): `--quiet` silences log(), and this list is the only record of who was flagged.
+			WP_CLI::line( sprintf( 'Flagged user %d: %s', $user_id, $flag ) );
 			return true;
 		}
 		WP_CLI::warning( sprintf( 'Could not set `%s` for user %d: the write was refused. The reader\'s data may be full.', $flag, $user_id ) );

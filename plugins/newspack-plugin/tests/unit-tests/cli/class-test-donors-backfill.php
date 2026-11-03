@@ -214,6 +214,11 @@ class Test_Donors_Backfill extends WP_UnitTestCase {
 			],
 			WP_CLI::$logs
 		);
+		$this->assertSame(
+			WP_CLI::$logs,
+			array_column( array_filter( WP_CLI::$messages, fn( $message ) => 'line' === $message[0] ), 1 ),
+			'The list is written with line(), which prints even under --quiet.'
+		);
 	}
 
 	/**
