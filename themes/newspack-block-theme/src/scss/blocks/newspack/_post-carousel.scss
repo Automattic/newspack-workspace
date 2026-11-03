@@ -203,7 +203,7 @@
 		}
 
 		&:focus-visible {
-			@include mixins.focus-line;
+			@include mixins.focus-line-inset(var(--wp--custom--color--neutral-0));
 		}
 	}
 
