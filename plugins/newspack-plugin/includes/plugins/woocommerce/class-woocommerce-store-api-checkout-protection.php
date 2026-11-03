@@ -250,8 +250,8 @@ class WooCommerce_Store_API_Checkout_Protection {
 
 	/**
 	 * Whether Stripe confirms that what the request will be charged with is an accepted
-	 * wallet: Apple Pay or Google Pay, or Link or Amazon Pay. Every payment method and
-	 * confirmation token in the request must qualify.
+	 * wallet: Apple Pay or Google Pay, or Link or Amazon Pay where the gateway enables
+	 * them. Every payment method and confirmation token in the request must qualify.
 	 *
 	 * Stripe charges exactly these only on its deferred-intent path, which its express
 	 * clients always ask for, and only when no saved card is named. The first two
@@ -340,10 +340,10 @@ class WooCommerce_Store_API_Checkout_Protection {
 	}
 
 	/**
-	 * Whether the Stripe gateway has a payment method type turned on. This is the
-	 * list its express buttons read, so a buyer who sees a Link or Amazon Pay button
-	 * is on a site where it answers true, and a site without the button never
-	 * charges that type. No answer refuses the exemption.
+	 * Whether the Stripe gateway has a payment method type turned on. Its express
+	 * buttons check this list before they render, so a buyer who sees a Link or
+	 * Amazon Pay button is on a site where it answers true, and a site where it
+	 * answers false offers neither button. No answer refuses the exemption.
 	 *
 	 * @param string $type Stripe payment method type.
 	 *
