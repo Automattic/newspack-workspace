@@ -133,6 +133,35 @@ class Test_Recaptcha extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The token travels in the siteverify query string, so it must be URL-encoded there.
+	 */
+	public function test_verify_captcha_encodes_the_token_for_siteverify() {
+		$this->enable_recaptcha();
+		$seen = '';
+		add_filter(
+			'pre_http_request',
+			function ( $preempt, $args, $url ) use ( &$seen ) {
+				$seen = $url;
+				return [
+					'body'     => wp_json_encode(
+						[
+							'success' => true,
+							'score'   => 0.9,
+						]
+					),
+					'response' => [ 'code' => 200 ],
+				];
+			},
+			10,
+			3
+		);
+
+		Recaptcha::verify_captcha( 'a b&response=good' );
+
+		$this->assertStringContainsString( 'response=a%20b%26response%3Dgood', $seen );
+	}
+
+	/**
 	 * A token passed in is the only one judged, even when empty.
 	 */
 	public function test_verify_captcha_prefers_the_given_token() {

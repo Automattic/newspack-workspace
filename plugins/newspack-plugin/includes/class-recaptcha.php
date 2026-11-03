@@ -462,8 +462,8 @@ final class Recaptcha {
 		$captcha_verify = \wp_safe_remote_post(
 			\add_query_arg(
 				[
-					'secret'   => self::get_site_secret(),
-					'response' => $token,
+					'secret'   => rawurlencode( self::get_site_secret() ),
+					'response' => rawurlencode( $token ),
 				],
 				'https://www.google.com/recaptcha/api/siteverify'
 			)

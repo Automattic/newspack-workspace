@@ -1,10 +1,12 @@
-<?php // phpcs:disable WordPress.Files.FileName.InvalidClassFileName, WordPress.Files.FileName.NotHyphenatedLowercase, Generic.Files.OneObjectStructurePerFile.MultipleFound
+<?php // phpcs:disable WordPress.Files.FileName.InvalidClassFileName, WordPress.Files.FileName.NotHyphenatedLowercase
 /**
- * Mocks for the Stripe gateway: its API client, and the plugin and main gateway
- * that say which payment method types are turned on.
+ * Mock for the Stripe gateway's API client. The plugin and gateway mocks are in
+ * wc-stripe-mock.php, which this file loads.
  *
  * @package Newspack\Tests
  */
+
+require_once __DIR__ . '/wc-stripe-mock.php';
 
 if ( ! class_exists( 'WC_Stripe_API' ) ) {
 	/**
@@ -73,62 +75,6 @@ if ( ! class_exists( 'WC_Stripe_API' ) ) {
 					'code' => 'resource_missing',
 				],
 			];
-		}
-	}
-}
-
-if ( ! class_exists( 'WC_Stripe_UPE_Payment_Gateway' ) ) {
-	/**
-	 * The main gateway, answering which payment method types it has turned on.
-	 */
-	class WC_Stripe_UPE_Payment_Gateway {
-		/**
-		 * Get the enabled payment method types.
-		 *
-		 * @param bool $force_refresh Unused.
-		 * @return mixed What the plugin mock holds.
-		 */
-		public function get_upe_enabled_payment_method_ids( $force_refresh = false ) {
-			return WC_Stripe::$enabled;
-		}
-	}
-}
-
-if ( ! class_exists( 'WC_Stripe' ) ) {
-	/**
-	 * The plugin singleton, handing out the main gateway.
-	 */
-	class WC_Stripe {
-		/**
-		 * What the gateway reports as enabled. Set to a non-array to simulate no answer.
-		 *
-		 * @var mixed
-		 */
-		public static $enabled = [ 'card', 'link', 'amazon_pay' ];
-
-		/**
-		 * Whether there is no gateway to ask.
-		 *
-		 * @var bool
-		 */
-		public static $gateway_missing = false;
-
-		/**
-		 * Get the singleton.
-		 *
-		 * @return WC_Stripe
-		 */
-		public static function get_instance() {
-			return new self();
-		}
-
-		/**
-		 * Get the main gateway.
-		 *
-		 * @return WC_Stripe_UPE_Payment_Gateway|null
-		 */
-		public function get_main_stripe_gateway() {
-			return self::$gateway_missing ? null : new WC_Stripe_UPE_Payment_Gateway();
 		}
 	}
 }
