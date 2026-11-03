@@ -208,6 +208,9 @@ importers:
       newspack-icons:
         specifier: workspace:*
         version: link:../icons
+      newspack-motion:
+        specifier: workspace:*
+        version: link:../motion
       qs:
         specifier: ^6.15.2
         version: 6.15.2
