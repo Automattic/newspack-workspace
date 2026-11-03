@@ -610,6 +610,9 @@ importers:
       newspack-components:
         specifier: workspace:*
         version: link:../../packages/components
+      newspack-motion:
+        specifier: workspace:*
+        version: link:../../packages/motion
     devDependencies:
       lodash:
         specifier: ^4.17.0
