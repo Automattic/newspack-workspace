@@ -116,6 +116,10 @@ declare global {
 			audience_management_enabled?: string;
 			audience_management_url?: string;
 		};
+		newspack_aux_data?: {
+			has_completed_setup?: boolean | string;
+			is_e2e?: boolean;
+		};
 	}
 }
 

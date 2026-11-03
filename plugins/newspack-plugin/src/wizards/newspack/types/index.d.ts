@@ -93,7 +93,10 @@ declare global {
 			};
 		};
 		newspack_urls: {
+			dashboard: string;
+			homepage: string | false | null;
 			site: string;
+			support: string;
 		};
 	}
 }
