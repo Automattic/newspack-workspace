@@ -1,19 +1,19 @@
 <?php
 /**
- * Tests for Copyright Date block.
+ * Tests for the Copyright block.
  *
  * @package Newspack\Tests
- * @covers \Newspack\Blocks\CopyrightDate\Copyright_Date_Block
+ * @covers \Newspack\Blocks\Copyright\Copyright_Block
  */
 
-use Newspack\Blocks\CopyrightDate\Copyright_Date_Block;
+use Newspack\Blocks\Copyright\Copyright_Block;
 
 /**
- * Test class for the Copyright Date Block.
+ * Test class for the Copyright block.
  *
- * @group copyright-date-block
+ * @group copyright-block
  */
-class Newspack_Test_Copyright_Date_Block extends WP_UnitTestCase {
+class Newspack_Test_Copyright_Block extends WP_UnitTestCase {
 
 	/**
 	 * Block CSS class derived from block name.
@@ -28,11 +28,11 @@ class Newspack_Test_Copyright_Date_Block extends WP_UnitTestCase {
 	public function set_up(): void {
 		parent::set_up();
 
-		require_once NEWSPACK_ABSPATH . 'src/blocks/copyright-date/class-copyright-date-block.php';
-		$this->block_class = wp_get_block_default_classname( Copyright_Date_Block::BLOCK_NAME );
+		require_once NEWSPACK_ABSPATH . 'src/blocks/copyright/class-copyright-block.php';
+		$this->block_class = wp_get_block_default_classname( Copyright_Block::BLOCK_NAME );
 
-		if ( ! \WP_Block_Type_Registry::get_instance()->is_registered( Copyright_Date_Block::BLOCK_NAME ) ) {
-			Copyright_Date_Block::register_block();
+		if ( ! \WP_Block_Type_Registry::get_instance()->is_registered( Copyright_Block::BLOCK_NAME ) ) {
+			Copyright_Block::register_block();
 		}
 	}
 
@@ -40,8 +40,8 @@ class Newspack_Test_Copyright_Date_Block extends WP_UnitTestCase {
 	 * Tear down.
 	 */
 	public function tear_down(): void {
-		if ( \WP_Block_Type_Registry::get_instance()->is_registered( Copyright_Date_Block::BLOCK_NAME ) ) {
-			unregister_block_type( Copyright_Date_Block::BLOCK_NAME );
+		if ( \WP_Block_Type_Registry::get_instance()->is_registered( Copyright_Block::BLOCK_NAME ) ) {
+			unregister_block_type( Copyright_Block::BLOCK_NAME );
 		}
 
 		parent::tear_down();
@@ -55,7 +55,7 @@ class Newspack_Test_Copyright_Date_Block extends WP_UnitTestCase {
 	 */
 	private function render_block( array $attributes = [] ) {
 		$attrs = $attributes ? ' ' . wp_json_encode( $attributes ) : '';
-		return do_blocks( '<!-- wp:' . Copyright_Date_Block::BLOCK_NAME . $attrs . ' /-->' );
+		return do_blocks( '<!-- wp:' . Copyright_Block::BLOCK_NAME . $attrs . ' /-->' );
 	}
 
 	/**
@@ -200,5 +200,63 @@ class Newspack_Test_Copyright_Date_Block extends WP_UnitTestCase {
 		$this->assertStringContainsString( $year, $output, 'Year should render even without prefix and suffix.' );
 		$this->assertStringNotContainsString( $this->block_class . '__prefix', $output, 'Prefix span should be omitted.' );
 		$this->assertStringNotContainsString( $this->block_class . '__suffix', $output, 'Suffix span should be omitted.' );
+	}
+
+	/**
+	 * Test the site title is read at render time, so it follows renames and per-brand filters.
+	 */
+	public function test_render_site_title() {
+		$hidden = $this->render_block();
+		$this->assertStringNotContainsString( $this->block_class . '__site-title', $hidden, 'Site title should be off by default.' );
+
+		update_option( 'blogname', 'Tom & Jerry' );
+		$brand_url = 'https://example.org/brand/one/';
+		$url_filter  = function () use ( $brand_url ) {
+			return $brand_url;
+		};
+		$name_filter = function () {
+			return 'Brand One';
+		};
+		add_filter( 'newspack_site_title_url', $url_filter );
+		add_filter( 'option_blogname', $name_filter );
+
+		$linked = $this->render_block( [ 'showSiteTitle' => true ] );
+		$this->assertStringContainsString(
+			'</span> <span class="' . $this->block_class . '__site-title"><a href="' . $brand_url . '" rel="home">Brand One</a></span>',
+			$linked,
+			'Site title should come from the filtered option at render time and link through newspack_site_title_url.'
+		);
+
+		remove_filter( 'newspack_site_title_url', $url_filter );
+		remove_filter( 'option_blogname', $name_filter );
+
+		$unlinked = $this->render_block(
+			[
+				'showSiteTitle' => true,
+				'linkSiteTitle' => false,
+			]
+		);
+		$this->assertStringContainsString( '<span class="' . $this->block_class . '__site-title">Tom &amp; Jerry</span>', $unlinked, 'Unlinked site title should render as escaped text.' );
+
+		update_option( 'blogname', '' );
+		$empty = $this->render_block( [ 'showSiteTitle' => true ] );
+		$this->assertStringNotContainsString( $this->block_class . '__site-title', $empty, 'An empty site title should not render an empty home link.' );
+	}
+
+	/**
+	 * Test a suffix starting with punctuation follows the site title without a space.
+	 */
+	public function test_render_suffix_separator() {
+		$comma = $this->render_block(
+			[
+				'showSiteTitle' => true,
+				'linkSiteTitle' => false,
+				'suffix'        => ', a project of Example Media',
+			]
+		);
+		$this->assertStringContainsString( '</span><span class="' . $this->block_class . '__suffix">, a project', $comma, 'No space should precede a suffix that starts with punctuation.' );
+
+		$word = $this->render_block( [ 'suffix' => 'Acme Inc' ] );
+		$this->assertStringContainsString( '</span> <span class="' . $this->block_class . '__suffix">Acme Inc', $word, 'A space should precede a suffix that starts with a word.' );
 	}
 }
