@@ -63,7 +63,7 @@ figcaption {
 		transition: color motion.$duration-color motion.$ease-color;
 	}
 
-	&:not(.has-background *, .has-text-color *) a {
+	&:not(.has-background *, .has-text-color *, .image-alignbehind *) a {
 		@include motion.hover {
 			&:hover {
 				color: var(--wp--preset--color--contrast);
