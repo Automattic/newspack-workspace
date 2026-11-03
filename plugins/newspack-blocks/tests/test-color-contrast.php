@@ -9,7 +9,7 @@
  * Tests for Newspack_Blocks::get_color_for_contrast().
  *
  * The expectations must stay in parity with getColorForContrast() in
- * src/blocks/donate/utils.ts, which runs the same APCA math and WCAG floor.
+ * src/blocks/donate/utils.ts, which runs the same APCA math.
  */
 class ColorContrastTest extends WP_UnitTestCase {
 	/**
@@ -23,8 +23,8 @@ class ColorContrastTest extends WP_UnitTestCase {
 			'pure white background'    => [ '#ffffff', 'black' ],
 			'near-white background'    => [ '#f0f0f0', 'black' ],
 			'amber background'         => [ '#ffcc00', 'black' ],
-			// APCA picks white (4.22:1), only black reaches 4.5:1 (4.98:1), so the WCAG floor flips it.
-			'mid-tone green flip zone' => [ '#178f15', 'black' ],
+			// White reads better by APCA (Lc 74 against 36) though only black reaches 4.5:1.
+			'mid-tone green'           => [ '#178f15', 'white' ],
 			'blue background'          => [ '#3366cc', 'white' ],
 			'red background'           => [ '#dd3333', 'white' ],
 			'shorthand white'          => [ '#fff', 'black' ],
@@ -32,13 +32,13 @@ class ColorContrastTest extends WP_UnitTestCase {
 			'unparseable input'        => [ 'not-a-color', 'black' ],
 			// Parity cases shared with the jest fixture table.
 			'unprefixed blue'          => [ '3366cc', 'white' ],
-			'unprefixed green'         => [ '178f15', 'black' ],
+			'unprefixed green'         => [ '178f15', 'white' ],
 			'empty string'             => [ '', 'black' ],
 			'dark 8-digit hex'         => [ '#33333380', 'white' ],
 			'uppercase amber'          => [ '#FFCC00', 'black' ],
-			'padded green'             => [ ' #178f15 ', 'black' ],
-			// APCA picks white (3.79:1), only black reaches 4.5:1 (5.54:1), so the WCAG floor flips it.
-			'orange held to AA floor'  => [ '#e65100', 'black' ],
+			'padded green'             => [ ' #178f15 ', 'white' ],
+			// White reads better by APCA (Lc 70 against 40) though only black reaches 4.5:1.
+			'bright orange'            => [ '#e65100', 'white' ],
 		];
 	}
 

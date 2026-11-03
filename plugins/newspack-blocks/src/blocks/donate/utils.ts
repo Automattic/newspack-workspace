@@ -43,21 +43,6 @@ const apcaLuminance = ( color: string ): number => {
 	return y;
 };
 
-// WCAG 2 relative luminance. Unparseable input is treated as white (luminance 1).
-const wcagLuminance = ( color: string ): number => {
-	const hex = normalizeHex( color );
-	if ( hex === null ) {
-		return 1;
-	}
-
-	const [ r, g, b ] = hexToRGB( hex ).map( x => {
-		const value = x / 255;
-		return value <= 0.04045 ? value / 12.92 : Math.pow( ( value + 0.055 ) / 1.055, 2.4 );
-	} );
-
-	return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-};
-
 // APCA lightness contrast (Lc): positive is dark text on a lighter background,
 // negative is light text on a darker background. Both luminances are clamped.
 const apcaContrast = ( backgroundY: number, textY: number ): number => {
@@ -78,14 +63,14 @@ const apcaContrast = ( backgroundY: number, textY: number ): number => {
  * Pick either black or white text, whichever reads better on the given background.
  *
  * Scores pure black and pure white as text against the background and returns
- * whichever produces the greater APCA lightness contrast (Lc); ties fall to
- * black. The constants are the SA98G set from apca-w3 0.1.9. The pick is then
- * held to the WCAG 2 AA floor: when it falls under 4.5:1 and the other color
- * reaches it, the other color wins. On a single background one of the two always
- * reaches it, so the text always meets 4.5:1.
+ * whichever reads better by APCA: the greater lightness contrast (Lc), ties to
+ * black. The constants are the SA98G set from apca-w3 0.1.9.
  *
- * Keep in sync with Newspack_Blocks::get_color_for_contrast() in
- * includes/class-newspack-blocks.php.
+ * Keep in sync with: Newspack_Blocks::get_color_for_contrast() in includes/class-newspack-blocks.php,
+ * newspack_get_color_contrast() (newspack-theme), \Newspack\newspack_get_color_contrast() (newspack-plugin),
+ * getContrastColor() in contrast-color.js (packages/components), Newspack_Popups_Model::contrast_text_color()
+ * (newspack-popups) and Newspack_Listings\Curated_List_Block\contrast_text_color() (newspack-listings).
+ * The block theme's Newspack_Block_Theme\Contrast::get_text_color() makes the same pick (it leaves the property unset for unparseable input).
  */
 export const getColorForContrast = ( color?: string ): string => {
 	const blackColor = '#000000';
@@ -98,13 +83,7 @@ export const getColorForContrast = ( color?: string ): string => {
 	const blackLc = apcaContrast( backgroundY, apcaLuminance( blackColor ) );
 	const whiteLc = apcaContrast( backgroundY, apcaLuminance( whiteColor ) );
 
-	const text = Math.abs( whiteLc ) > Math.abs( blackLc ) ? whiteColor : blackColor;
-	const other = text === whiteColor ? blackColor : whiteColor;
-
-	const luminance = wcagLuminance( color );
-	const ratio = ( textColor: string ) => ( textColor === whiteColor ? 1.05 / ( luminance + 0.05 ) : ( luminance + 0.05 ) / 0.05 );
-
-	return ratio( text ) < 4.5 && ratio( other ) >= 4.5 ? other : text;
+	return Math.abs( whiteLc ) > Math.abs( blackLc ) ? whiteColor : blackColor;
 };
 
 export const getMigratedAmount = (
