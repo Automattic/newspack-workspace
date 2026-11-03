@@ -50,6 +50,7 @@
 		"lodash": "^4.17.21",
 		"newspack-colors": "workspace:*",
 		"newspack-icons": "workspace:*",
+		"newspack-motion": "workspace:*",
 		"redux": "^5.0.0",
 		"redux-saga": "^1.5.0",
 		"regenerator-runtime": "^0.14.1",
