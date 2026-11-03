@@ -202,6 +202,10 @@ html:has(.setup-header) {
 		font-size: wp-vars.$grid-unit-30;
 		line-height: var(--wpds-typography-line-height-xl, #{wp-vars.$font-line-height-x-large});
 		margin: 0;
+
+		&[tabindex="-1"]:focus {
+			outline: none;
+		}
 	}
 
 	&__lede {
