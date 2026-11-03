@@ -10,6 +10,7 @@
  * WordPress dependencies
  */
 import domReady from '@wordpress/dom-ready';
+import { travelDuration } from 'newspack-motion';
 
 /**
  * Internal dependencies
@@ -129,6 +130,12 @@ const createFlyoutInstance = wrapper => {
 		}
 		isOpen = true;
 		lastFocused = trigger.ownerDocument.activeElement;
+
+		if ( ! panel.classList.contains( 'overlay-menu__panel--full-screen' ) ) {
+			const duration = `${ travelDuration( panel.offsetWidth ) }ms`;
+			panel.style.setProperty( '--overlay-menu-slide-duration', duration );
+			scrim.style.setProperty( '--overlay-menu-slide-duration', duration );
+		}
 
 		slideIn();
 

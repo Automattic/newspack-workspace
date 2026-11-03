@@ -11,6 +11,7 @@
  * WordPress dependencies
  */
 import domReady from '@wordpress/dom-ready';
+import { travelDuration } from 'newspack-motion';
 
 /**
  * Internal dependencies
@@ -131,6 +132,10 @@ const createCommentsPanel = ( panel, triggers ) => {
 		}
 		isOpen = true;
 		lastFocused = panel.ownerDocument.activeElement;
+
+		const duration = `${ travelDuration( panel.offsetWidth ) }ms`;
+		panel.style.setProperty( '--comments-panel-slide-duration', duration );
+		scrim.style.setProperty( '--comments-panel-slide-duration', duration );
 
 		slideIn();
 
