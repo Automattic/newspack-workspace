@@ -97,4 +97,36 @@ class Test_Contrast extends WP_UnitTestCase {
 
 		$this->assertStringContainsString( '--wp--preset--color--accent-contrast: #ffffff;', $css );
 	}
+
+	/**
+	 * The theme default hover and press backgrounds get a derived hover contrast color.
+	 *
+	 * @dataProvider data_hover_contrast
+	 *
+	 * @param string $accent   The accent color.
+	 * @param string $expected The expected hover contrast color.
+	 */
+	public function test_theme_default_hover_gets_contrast_color( $accent, $expected ) {
+		$css = $this->get_css(
+			[
+				'accent' => $accent,
+			]
+		);
+
+		$this->assertStringContainsString( '--wp--preset--color--accent-contrast-hover: ' . $expected . ';', $css );
+	}
+
+	/**
+	 * Accents whose hover contrast color depends on the WCAG pick, the press
+	 * background and the 85% hover mix respectively.
+	 *
+	 * @return array[]
+	 */
+	public function data_hover_contrast() {
+		return [
+			'wcag pick'     => [ '#00aaff', '#000000' ],
+			'press counted' => [ '#0099cc', '#ffffff' ],
+			'85% hover mix' => [ '#0099ff', '#000000' ],
+		];
+	}
 }
