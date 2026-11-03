@@ -1,5 +1,6 @@
 @use "mixins";
 @use "sass-utils";
+@use "newspack-motion" as motion;
 
 $select-caret:
 	linear-gradient(45deg, transparent calc(50% - 0.75px), currentcolor calc(50% - 0.75px) calc(50% + 0.75px), transparent calc(50% + 0.75px)),
@@ -135,7 +136,7 @@ input[type="submit"]:not(.newspack-ui__button) {
 	background: var(--wp--preset--color--accent);
 	border: 0;
 	border-radius: var(--newspack-ui-radius-button, var(--wp--custom--border--radius-large));
-	color: var(--wp--preset--color--base);
+	color: var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base));
 	cursor: pointer;
 	font-family: var(--newspack-ui-font-family, var(--wp--preset--font-family--inter, system-ui, sans-serif));
 	font-size: var(--newspack-ui-font-size-s, var(--wp--preset--font-size--small));
@@ -145,21 +146,43 @@ input[type="submit"]:not(.newspack-ui__button) {
 		var(--newspack-ui-spacer-2, var(--wp--custom--spacing--25))
 		var(--newspack-ui-spacer-5, var(--wp--preset--spacing--40));
 	transition:
-		background 125ms ease-in-out,
-		color 125ms ease-in-out,
-		box-shadow 125ms ease-in-out;
+		background motion.$duration-color motion.$ease-color,
+		color motion.$duration-color motion.$ease-color,
+		box-shadow motion.$duration-color motion.$ease-color,
+		transform motion.$duration-press motion.$ease-out;
 
 	&:hover {
-		background: color-mix(in srgb, var(--wp--preset--color--accent) 80%, black);
-		color: var(--wp--preset--color--base);
+		color: var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base));
+	}
+
+	@include motion.hover {
+		&:hover {
+			background: color-mix(in srgb, var(--wp--preset--color--accent) 85%, black);
+			color: var(--wp--preset--color--accent-contrast-hover, var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base)));
+		}
+	}
+
+	&:active {
+		background: color-mix(in srgb, var(--wp--preset--color--accent) 75%, black);
+		color: var(--wp--preset--color--accent-contrast-hover, var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base)));
+		transform: scale(motion.$press-scale);
+
+		@include motion.reduced-motion {
+			transform: none;
+		}
 	}
 
 	&:focus-visible {
 		@include mixins.focus-fill;
+		transition:
+			background motion.$duration-color motion.$ease-color,
+			color motion.$duration-color motion.$ease-color,
+			transform motion.$duration-press motion.$ease-out;
 	}
 
 	&:disabled {
-		background: color-mix(in srgb, var(--wp--preset--color--accent) 20%, transparent);
+		background: color-mix(in srgb, var(--wp--preset--color--contrast) 7%, transparent);
+		color: color-mix(in srgb, var(--wp--preset--color--contrast) 45%, transparent);
 		cursor: default;
 	}
 }
