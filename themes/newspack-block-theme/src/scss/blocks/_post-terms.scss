@@ -55,6 +55,9 @@
 
 			&:focus-visible {
 				@include mixins.focus-line;
+				transition:
+					background motion.$duration-color motion.$ease-color,
+					color motion.$duration-color motion.$ease-color;
 			}
 		}
 

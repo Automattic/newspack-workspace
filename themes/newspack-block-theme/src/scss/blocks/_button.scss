@@ -31,6 +31,16 @@
 	}
 }
 
+@media not ((hover: hover) and (pointer: fine)) {
+	:root:root :where(.wp-element-button, .wp-block-button__link):where(:not(.newspack-ui__button, .newspack-ui .button, .newspack-ui .woocommerce-Button, [class*="has-background"], [class*="is-style-"], [style*="background"])):hover {
+		background-color: var(--wp--preset--color--accent);
+	}
+
+	:root:root :where(.wp-element-button, .wp-block-button__link):where(:not(.newspack-ui__button, .newspack-ui .button, .newspack-ui .woocommerce-Button, .has-text-color, [class*="has-background-transparent"], [class*="is-style-"], [style*="color:"], [style*="color :"])):hover {
+		color: var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base));
+	}
+}
+
 .wc-block-components-button.wp-element-button:where(:not(.newspack-ui__button, .newspack-ui .button, .newspack-ui .woocommerce-Button, [contenteditable="true"])) {
 	transition:
 		background-color motion.$duration-color motion.$ease-color,

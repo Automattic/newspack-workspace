@@ -21,6 +21,19 @@
 
 				@include mixins.fill-overlay;
 
+				&::before {
+					background: currentcolor;
+				}
+
+				&.share-mail::before,
+				&.share-print::before {
+					background: black;
+				}
+
+				&:focus-visible::before {
+					inset: 0;
+				}
+
 				&:active {
 					transform: scale(motion.$press-scale);
 
@@ -30,7 +43,7 @@
 				}
 
 				&:focus-visible {
-					transition: none;
+					transition: transform motion.$duration-press motion.$ease-out;
 				}
 			}
 
@@ -68,6 +81,10 @@
 
 				&:focus-visible {
 					@include mixins.focus-edge(currentcolor);
+					transition:
+						background motion.$duration-color motion.$ease-color,
+						color motion.$duration-color motion.$ease-color,
+						transform motion.$duration-press motion.$ease-out;
 				}
 			}
 		}

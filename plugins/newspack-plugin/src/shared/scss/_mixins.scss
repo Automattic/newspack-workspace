@@ -29,7 +29,9 @@
 		color: var(--icon-color, var(--wp--preset--color--contrast, #1e1e1e));
 	}
 
-	transition: transform motion.$duration-press motion.$ease-out;
+	transition:
+		background-color motion.$duration-color motion.$ease-color,
+		transform motion.$duration-press motion.$ease-out;
 	// Sizing - makes circular by using equal width/height
 	// --icon-size controls the circle diameter (e.g., 36px)
 	// Icon inside is 2/3 of circle size (e.g., 24px icon in 36px circle)
@@ -45,12 +47,17 @@
 	}
 
 	@include motion.hover {
-		&:hover {
-			transform: scale(1.05);
+		&:hover:not(.wp-element-button) {
+			background: color-mix(in srgb, var(--icon-background, var(--wp--preset--color--base-2, #f0f0f0)) 85%, black);
+		}
+	}
 
-			@include motion.reduced-motion {
-				transform: none;
-			}
+	&:active:not(.wp-element-button) {
+		background: color-mix(in srgb, var(--icon-background, var(--wp--preset--color--base-2, #f0f0f0)) 75%, black);
+		transform: scale(motion.$press-scale);
+
+		@include motion.reduced-motion {
+			transform: none;
 		}
 	}
 

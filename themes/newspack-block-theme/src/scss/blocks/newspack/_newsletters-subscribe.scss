@@ -6,8 +6,17 @@
 		.submit-button {
 			transition:
 				background-color motion.$duration-color motion.$ease-color,
+				border-color motion.$duration-color motion.$ease-color,
+				box-shadow motion.$duration-color motion.$ease-color,
 				color motion.$duration-color motion.$ease-color,
 				transform motion.$duration-press motion.$ease-out;
+
+			&:focus-visible {
+				transition:
+					background-color motion.$duration-color motion.$ease-color,
+					color motion.$duration-color motion.$ease-color,
+					transform motion.$duration-press motion.$ease-out;
+			}
 
 			&:not(:disabled):where(:not(:has([contenteditable="true"]))) {
 				@include mixins.fill-overlay;

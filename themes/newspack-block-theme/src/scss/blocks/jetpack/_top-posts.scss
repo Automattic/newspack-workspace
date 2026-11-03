@@ -35,6 +35,7 @@
 		a {
 			color: var(--wp--preset--color--contrast);
 			text-decoration: none;
+			transition: color motion.$duration-color motion.$ease-color;
 
 			@include motion.hover {
 				&:hover {
