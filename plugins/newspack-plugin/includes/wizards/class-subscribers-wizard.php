@@ -1040,7 +1040,8 @@ class Subscribers_Wizard extends Wizard {
 		// to an empty page); a populated list = restrict the query to those users.
 		$include = $this->resolve_filter_include( $request );
 		// WP_User_Query ignores `exclude` once `include` is set, so with other
-		// filters active "Not a donor" is taken off their set here instead.
+		// filters active the donors "Not a donor" leaves out are taken off their
+		// set here instead.
 		$exclude = $this->resolve_donor_exclude( $request );
 		if ( is_array( $include ) ) {
 			$include = array_values( array_diff( $include, $exclude ) );

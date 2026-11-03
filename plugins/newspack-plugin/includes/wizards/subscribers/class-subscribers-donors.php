@@ -135,7 +135,7 @@ class Subscribers_Donors {
 	 * in screens/SubscriberList.jsx maps a row's '' to that `none`.
 	 * screens/PersonProfile.jsx shows the badge.
 	 *
-	 * It reads nothing but the reader's two flags and the statuses it is given:
+	 * kind() reads nothing but the reader's two flags and the statuses it is given:
 	 * the caller resolves which donation subscriptions the reader holds. Callers
 	 * check is_enabled() first.
 	 *
