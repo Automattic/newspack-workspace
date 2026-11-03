@@ -27,5 +27,5 @@ Standard button block supports are available too: text/background color, typogra
 
 ## Notes
 - Block theme only. Registration is gated on `wp_is_block_theme()` (PHP) and `newspack_blocks.is_block_theme` (JS).
-- On open, the panel is moved to `document.body` to avoid stacking-context issues, and a `menu-open--overlay-search-{id}` class is added to `<body>` to lock page scrolling. Because the panel leaves its original ancestor, its styles are written at root scope rather than nested under the block wrapper — the same approach as the [Overlay Menu block](../overlay-menu/README.md).
+- On load, the panel is moved to `document.body` to avoid stacking-context issues. A `menu-open--overlay-search-{id}` class is added to `<body>` while the search is open, to lock page scrolling. Because the panel leaves its original ancestor, its styles are written at root scope rather than nested under the block wrapper — the same approach as the [Overlay Menu block](../overlay-menu/README.md).
 - The close-button icon color is chosen at runtime for contrast against the overlay background, so it stays legible with any `overlayColor`.

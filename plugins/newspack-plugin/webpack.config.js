@@ -109,7 +109,7 @@ if ( miniCssExtractPlugin && miniCssExtractPlugin.options ) {
 // Overwrite default optimisation.
 webpackConfig.optimization.splitChunks.cacheGroups.commons = {
 	name: 'commons',
-	chunks: 'initial',
+	chunks: chunk => chunk.canBeInitial() && ! [ 'overlay-menu-block', 'overlay-search-block' ].includes( chunk.name ),
 	minChunks: 2,
 };
 
