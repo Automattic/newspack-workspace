@@ -91,7 +91,7 @@
 				@include motion.hover {
 					&:hover {
 						background: color-mix(in oklab, currentcolor var(--wp--custom--state--fill), var(--newspack-ui-color-neutral-0, var(--wp--preset--color--base)));
-						border-color: var(--newspack-ui-color-neutral-40, var(--wp--preset--color--base-4));
+						border-color: var(--newspack-ui-color-text-muted, var(--wp--preset--color--contrast-2));
 					}
 				}
 

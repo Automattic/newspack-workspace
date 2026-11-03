@@ -187,6 +187,16 @@
 			top: var(--wp--custom--spacing--10);
 		}
 
+		@include motion.hover {
+			&:hover {
+				background-color: color-mix(in oklab, var(--wp--custom--color--overlay-70) var(--wp--custom--state--hover), black);
+			}
+		}
+
+		&:active {
+			background-color: color-mix(in oklab, var(--wp--custom--color--overlay-70) var(--wp--custom--state--pressed), black);
+		}
+
 		&:focus:not(:focus-visible) {
 			box-shadow: none;
 			outline: none;
