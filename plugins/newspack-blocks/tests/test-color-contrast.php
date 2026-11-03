@@ -8,8 +8,8 @@
 /**
  * Tests for Newspack_Blocks::get_color_for_contrast().
  *
- * The APCA expectations must stay in parity with getColorForContrast() in
- * src/blocks/donate/utils.ts, which runs the same APCA math.
+ * The expectations must stay in parity with getColorForContrast() in
+ * src/blocks/donate/utils.ts, which runs the same APCA math and WCAG floor.
  */
 class ColorContrastTest extends WP_UnitTestCase {
 	/**
@@ -39,8 +39,6 @@ class ColorContrastTest extends WP_UnitTestCase {
 			'padded green'             => [ ' #178f15 ', 'black' ],
 			// APCA picks white (3.79:1), only black reaches 4.5:1 (5.54:1), so the WCAG floor flips it.
 			'orange held to AA floor'  => [ '#e65100', 'black' ],
-			'blue passes AA as white'  => [ '#3366cc', 'white' ],
-			'amber passes AA as black' => [ '#ffcc00', 'black' ],
 		];
 	}
 

@@ -81,7 +81,8 @@ const apcaContrast = ( backgroundY: number, textY: number ): number => {
  * whichever produces the greater APCA lightness contrast (Lc); ties fall to
  * black. The constants are the SA98G set from apca-w3 0.1.9. The pick is then
  * held to the WCAG 2 AA floor: when it falls under 4.5:1 and the other color
- * reaches it, the other color wins. When neither does, the APCA pick stands.
+ * reaches it, the other color wins. On a single background one of the two always
+ * reaches it, so the text always meets 4.5:1.
  *
  * Keep in sync with Newspack_Blocks::get_color_for_contrast() in
  * includes/class-newspack-blocks.php.
