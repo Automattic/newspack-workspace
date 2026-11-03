@@ -51,7 +51,7 @@ describe( 'CoreCard', () => {
 		expect( await screen.findByRole( 'menuitem', { name: 'Delete: Settings' } ) ).toBeInTheDocument();
 	} );
 
-	it( 'closes the actions menu when an item is clicked, then runs its action', async () => {
+	it( 'closes the actions menu and runs the action when an item is clicked', async () => {
 		const action = jest.fn();
 		render( <CoreCard header="Settings" actions={ [ { label: 'Delete', action } ] } /> );
 		fireEvent.click( screen.getByRole( 'button', { name: 'More actions' } ) );
