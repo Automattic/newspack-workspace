@@ -467,7 +467,7 @@
 						},
 						":hover": {
 							"color": {
-								"text": "var( --wp--preset--color--contrast-3 )"
+								"text": "color-mix( in srgb, var( --wp--preset--color--contrast ) 85%, transparent )"
 							}
 						},
 						"typography": {
@@ -616,7 +616,7 @@
 						},
 						":hover": {
 							"color": {
-								"text": "color-mix(in srgb, currentcolor 65.5%, transparent) !important"
+								"text": "color-mix(in srgb, currentcolor 85%, transparent) !important"
 							},
 							"typography": {
 								"textDecoration": "none"
@@ -737,7 +737,7 @@
 						},
 						":hover": {
 							"color": {
-								"text": "var( --wp--preset--color--contrast-3 )"
+								"text": "color-mix( in srgb, var( --wp--preset--color--contrast ) 85%, transparent )"
 							},
 							"typography": {
 								"textDecoration": "none"
@@ -758,7 +758,7 @@
 						},
 						":hover": {
 							"color": {
-								"text": "var( --wp--preset--color--contrast-3 )"
+								"text": "color-mix( in srgb, var( --wp--preset--color--contrast ) 85%, transparent )"
 							},
 							"typography": {
 								"textDecoration": "none"
@@ -1038,15 +1038,15 @@
 		},
 		"elements": {
 			"button": {
-				":focus": {
-					"color": {
-						"background": "var( --wp--preset--color--accent )",
-						"text": "var( --wp--preset--color--accent-contrast, var( --wp--preset--color--base ) )"
-					}
-				},
 				":hover": {
 					"color": {
-						"background": "color-mix( in srgb, var( --wp--preset--color--accent ) 80%, black )",
+						"background": "color-mix( in srgb, var( --wp--preset--color--accent ) 85%, black )",
+						"text": "var( --wp--preset--color--accent-contrast-hover, var( --wp--preset--color--accent-contrast, var( --wp--preset--color--base ) ) )"
+					}
+				},
+				":active": {
+					"color": {
+						"background": "color-mix( in srgb, var( --wp--preset--color--accent ) 75%, black )",
 						"text": "var( --wp--preset--color--accent-contrast-hover, var( --wp--preset--color--accent-contrast, var( --wp--preset--color--base ) ) )"
 					}
 				},

@@ -1,4 +1,5 @@
 @use "../../mixins";
+@use "newspack-motion" as motion;
 
 .wp-block-jetpack-sharing-buttons {
 	gap: var(--wp--custom--spacing--10);
@@ -7,24 +8,37 @@
 		&__button {
 			margin: 0;
 			transition:
-				background 125ms ease-in-out,
-				border-color 125ms ease-in-out,
-				color 125ms ease-in-out,
-				box-shadow 125ms ease-in-out;
+				background motion.$duration-color motion.$ease-color,
+				border-color motion.$duration-color motion.$ease-color,
+				color motion.$duration-color motion.$ease-color,
+				box-shadow motion.$duration-color motion.$ease-color,
+				transform motion.$duration-press motion.$ease-out;
 
 			&.style-icon {
 				line-height: 1;
 				padding: calc(var(--wp--preset--spacing--20) * 0.875);
 				top: 0;
 
-				svg {
-					transition: transform 125ms ease-in-out;
+				@include mixins.fill-overlay;
+
+				&:is(.share-x, .share-threads, .share-share):not([style*="background-color"])::before {
+					background: currentcolor;
 				}
 
-				&:hover {
-					svg {
-						transform: scale(1.1111);
+				&:focus-visible::before {
+					inset: 0;
+				}
+
+				&:active {
+					transform: scale(motion.$press-scale);
+
+					@include motion.reduced-motion {
+						transform: none;
 					}
+				}
+
+				&:focus-visible {
+					transition: transform motion.$duration-press motion.$ease-out;
 				}
 			}
 
@@ -44,13 +58,28 @@
 				min-width: var(--wp--preset--spacing--50);
 				padding: calc(var(--wp--custom--spacing--10) - 1px) calc(var(--wp--preset--spacing--20) - 1px);
 
-				&:hover {
-					background: var(--newspack-ui-color-neutral-5, var(--wp--preset--color--base-2));
-					border-color: var(--newspack-ui-color-neutral-40, var(--wp--preset--color--base-4));
+				@include motion.hover {
+					&:hover {
+						background: color-mix(in srgb, currentcolor 7%, var(--newspack-ui-color-neutral-0, var(--wp--preset--color--base)));
+						border-color: var(--newspack-ui-color-neutral-40, var(--wp--preset--color--base-4));
+					}
+				}
+
+				&:active {
+					background: color-mix(in srgb, currentcolor 13%, var(--newspack-ui-color-neutral-0, var(--wp--preset--color--base)));
+					transform: scale(motion.$press-scale);
+
+					@include motion.reduced-motion {
+						transform: none;
+					}
 				}
 
 				&:focus-visible {
 					@include mixins.focus-edge(currentcolor);
+					transition:
+						background motion.$duration-color motion.$ease-color,
+						color motion.$duration-color motion.$ease-color,
+						transform motion.$duration-press motion.$ease-out;
 				}
 			}
 		}
@@ -72,12 +101,6 @@
 
 		.style-icon {
 			padding: var(--wp--custom--spacing--15);
-
-			&:hover {
-				svg {
-					transform: scale(1.0833);
-				}
-			}
 		}
 	}
 
@@ -98,14 +121,6 @@
 		svg {
 			height: var(--wp--preset--spacing--50);
 			width: var(--wp--preset--spacing--50);
-		}
-
-		.style-icon {
-			&:hover {
-				svg {
-					transform: scale(1.125);
-				}
-			}
 		}
 
 		.style-icon-text,
