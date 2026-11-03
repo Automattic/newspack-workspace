@@ -4,6 +4,11 @@
 import { useDispatch, useSelect } from '@wordpress/data';
 import { useEffect } from '@wordpress/element';
 
+/**
+ * Internal dependencies
+ */
+import { updateNewsletterData } from '../store';
+
 const DEFAULT_KEYS = [ 'senderEmail', 'senderName', 'send_list_id', 'send_sublist_id' ];
 
 /**
@@ -40,10 +45,9 @@ export const getCampaignDefaultsMeta = stringifiedCampaignDefaults => {
 /**
  * Copies a chosen layout's sender and list defaults onto the newsletter, then saves.
  *
- * This must stay mounted whatever the sidebar shows. It used to live in the
- * Newsletter Campaign panel, which renders nothing while collapsed, so a new
- * newsletter could be saved and test-sent with empty sender fields and the
- * provider rejected it.
+ * Keep this outside any collapsible sidebar panel: a collapsed panel renders
+ * nothing, and the newsletter would then save and test-send with empty sender
+ * fields, which the provider rejects.
  */
 const ApplyCampaignDefaults = () => {
 	const stringifiedCampaignDefaults = useSelect( select => select( 'core/editor' ).getEditedPostAttribute( 'meta' )?.stringifiedCampaignDefaults );
@@ -53,6 +57,10 @@ const ApplyCampaignDefaults = () => {
 		const meta = getCampaignDefaultsMeta( stringifiedCampaignDefaults );
 		if ( meta ) {
 			editPost( { meta } );
+			// The Newsletter Campaign panel copies any sender or list held in the
+			// fetched provider data into the post when it mounts. Clear the values
+			// the layout just set, or a value fetched earlier overwrites them.
+			updateNewsletterData( Object.fromEntries( DEFAULT_KEYS.filter( key => key in meta ).map( key => [ key, undefined ] ) ) );
 			savePost();
 		}
 	}, [ stringifiedCampaignDefaults ] );
