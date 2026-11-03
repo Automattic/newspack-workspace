@@ -3,26 +3,20 @@
  */
 
 /**
- * External dependencies
- */
-import classnames from 'classnames';
-
-/**
  * WordPress dependencies.
  */
-import { Notice } from '@wordpress/components';
-import { DataViews as BaseDataViews } from '@wordpress/dataviews';
+import { Notice, SearchControl } from '@wordpress/components';
 import { decodeEntities } from '@wordpress/html-entities';
-import { useContext, useEffect, useMemo, useState, Fragment } from '@wordpress/element';
+import { useContext, useState, Fragment } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
-import { Stack } from '@wordpress/ui';
+import { SelectControl, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import { DataViews, Router, withWizardScreen } from '../../../../../../packages/components/src';
+import { Router, withWizardScreen } from '../../../../../../packages/components/src';
 import SegmentGroup from '../../../components/segment-group';
-import { dataForCampaignId, isAboveHeader, placementForPopup } from '../utils';
+import { dataForCampaignId, isAboveHeader } from '../utils';
 import { CampaignsContext } from '../../../contexts';
 import './style.scss';
 
@@ -60,8 +54,6 @@ const filterBySearch = ( prompts, search ) => {
 	return term ? prompts.filter( ( { title } ) => decodeEntities( title ).toLowerCase().includes( term ) ) : prompts;
 };
 
-const filterByPlacement = ( prompts, placement ) => ( placement ? prompts.filter( prompt => placement === placementForPopup( prompt ) ) : prompts );
-
 const groupBySegment = ( segments, prompts ) => {
 	const grouped = [];
 	grouped.push(
@@ -92,120 +84,63 @@ const groupBySegment = ( segments, prompts ) => {
  * Campaign management screen.
  */
 const Campaigns = props => {
-	const { campaignId: routeFilter = DEFAULT_CAMPAIGNS_FILTER, campaigns = [], segments } = props;
+	const { campaignActions, campaignId: routeFilter = DEFAULT_CAMPAIGNS_FILTER, campaigns = [], segments } = props;
 
 	const isStatusRoute = STATUS_FILTERS.includes( routeFilter );
 	const campaignId = isStatusRoute ? undefined : routeFilter;
+	const status = isStatusRoute ? routeFilter : 'all';
 
-	const routeStatus = isStatusRoute && DEFAULT_CAMPAIGNS_FILTER !== routeFilter ? routeFilter : null;
-	const [ chosenStatus, setChosenStatus ] = useState( routeStatus );
-	const [ placement, setPlacement ] = useState();
 	const [ search, setSearch ] = useState( '' );
-
-	// A campaign opens on everything in it, so its drafts can be activated together.
-	const status = chosenStatus ?? ( campaignId ? 'all' : DEFAULT_CAMPAIGNS_FILTER );
 
 	const allPrompts = useContext( CampaignsContext );
 	const statusPrompts = filterByStatus( filterByCampaign( allPrompts, campaignId ), status );
-	const prompts = filterBySearch( filterByPlacement( statusPrompts, placement ), search );
-	const placements = [ ...new Set( filterByStatus( allPrompts, 'all' ).map( placementForPopup ) ) ].filter( Boolean ).sort();
+	const prompts = filterBySearch( statusPrompts, search );
 	const hasUnassigned = filterByCampaign( filterByStatus( allPrompts, 'all' ), 'unassigned' ).length;
 	const hasPublishedAboveHeader = allPrompts.some( prompt => 'publish' === prompt.status && isAboveHeader( prompt ) );
-
-	// A new route opens on that route's own status: a campaign created while Trash
-	// is selected must not open on an empty Trash view.
-	useEffect( () => {
-		setChosenStatus( routeStatus );
-	}, [ routeFilter ] );
 
 	const history = useHistory();
 
 	const campaignData = dataForCampaignId( campaignId, campaigns );
 
-	const fields = useMemo(
-		() => [
-			{
-				id: 'title',
-				label: __( 'Title', 'newspack-plugin' ),
-				enableGlobalSearch: true,
-				enableSorting: false,
-				getValue: ( { item } ) => item.title,
-			},
-			{
-				id: 'status',
-				label: __( 'Status', 'newspack-plugin' ),
-				elements: [
-					{ value: 'active', label: __( 'Active', 'newspack-plugin' ) },
-					{ value: 'inactive', label: __( 'Inactive', 'newspack-plugin' ) },
-					{ value: 'all', label: __( 'All', 'newspack-plugin' ) },
-					{ value: 'trash', label: __( 'Trash', 'newspack-plugin' ) },
-				],
-				filterBy: { operators: [ 'is' ], isPrimary: true },
-				enableSorting: false,
-			},
-			{
-				id: 'placement',
-				label: __( 'Placement', 'newspack-plugin' ),
-				elements: placements.map( value => ( { value, label: value } ) ),
-				filterBy: { operators: [ 'is' ], isPrimary: true },
-				enableSorting: false,
-			},
-			{
-				id: 'campaign',
-				label: __( 'Campaign', 'newspack-plugin' ),
-				elements: [
-					...( hasUnassigned ? [ { value: 'unassigned', label: __( 'Unassigned', 'newspack-plugin' ) } ] : [] ),
-					...campaigns.map( ( { term_id: id, name, status: groupStatus } ) => ( {
-						value: String( id ),
-						label:
-							'archive' === groupStatus
-								? sprintf(
-										// Translators: %s: campaign name.
-										__( '%s (archived)', 'newspack-plugin' ),
-										name
-								  )
-								: name,
-					} ) ),
-				],
-				filterBy: { operators: [ 'is' ], isPrimary: true },
-				enableSorting: false,
-			},
-		],
-		[ campaigns, hasUnassigned, placements.join() ]
+	const viewItems = [
+		{ value: DEFAULT_CAMPAIGNS_FILTER, label: __( 'Active Prompts', 'newspack-plugin' ) },
+		{ value: 'all', label: __( 'All Prompts', 'newspack-plugin' ) },
+		{ value: 'inactive', label: __( 'Inactive Prompts', 'newspack-plugin' ) },
+		{ value: 'trash', label: __( 'Trash', 'newspack-plugin' ) },
+		...( hasUnassigned || 'unassigned' === routeFilter ? [ { value: 'unassigned', label: __( 'Unassigned Prompts', 'newspack-plugin' ) } ] : [] ),
+	];
+	const campaignGroups = [
+		{
+			label: __( 'Campaigns', 'newspack-plugin' ),
+			items: campaigns
+				.filter( ( { status: groupStatus } ) => 'archive' !== groupStatus )
+				.map( ( { term_id: id, name } ) => ( { value: String( id ), label: name } ) ),
+		},
+		{
+			label: __( 'Archived Campaigns', 'newspack-plugin' ),
+			items: campaigns
+				.filter( ( { status: groupStatus } ) => 'archive' === groupStatus )
+				.map( ( { term_id: id, name } ) => ( {
+					value: String( id ),
+					label: sprintf(
+						// Translators: %s: campaign name.
+						__( '%s (archived)', 'newspack-plugin' ),
+						name
+					),
+				} ) ),
+		},
+	].filter( group => group.items.length );
+	const allViewItems = [ ...viewItems, ...campaignGroups.flatMap( group => group.items ) ];
+	const selectedView = allViewItems.find( item => item.value === String( routeFilter ) ) ?? allViewItems[ 0 ];
+
+	const renderViewItem = item => (
+		<SelectControl.Item key={ item.value } value={ item } label={ item.label }>
+			<SelectControl.ItemLabel>{ item.label }</SelectControl.ItemLabel>
+		</SelectControl.Item>
 	);
 
-	const view = {
-		type: 'table',
-		search,
-		page: 1,
-		perPage: 100,
-		fields: [],
-		filters: [
-			{ field: 'status', operator: 'is', value: status },
-			...( campaignId ? [ { field: 'campaign', operator: 'is', value: String( campaignId ) } ] : [] ),
-			...( placement ? [ { field: 'placement', operator: 'is', value: placement } ] : [] ),
-		],
-	};
-
-	const onChangeView = next => {
-		setSearch( next.search || '' );
-		const nextStatus = next.filters?.find( ( { field } ) => 'status' === field )?.value;
-		const nextCampaign = next.filters?.find( ( { field } ) => 'campaign' === field )?.value;
-		setPlacement( next.filters?.find( ( { field } ) => 'placement' === field )?.value );
-		if ( nextCampaign !== ( campaignId ? String( campaignId ) : undefined ) ) {
-			history.push( nextCampaign ? `/campaigns/${ nextCampaign }` : '/campaigns' );
-		} else if ( nextStatus !== status ) {
-			if ( campaignId ) {
-				setChosenStatus( nextStatus ?? null );
-			} else {
-				history.push( nextStatus && DEFAULT_CAMPAIGNS_FILTER !== nextStatus ? `/campaigns/${ nextStatus }` : '/campaigns' );
-			}
-		}
-	};
-
-	const isDefaultView = DEFAULT_CAMPAIGNS_FILTER === status && ! campaignId && ! placement && ! search;
 	const campaignIsEmpty = !! campaignId && ! filterByStatus( filterByCampaign( allPrompts, campaignId ), 'all' ).length;
-	const hideEmptySegments = ! campaignIsEmpty && ( 'trash' === status || 'inactive' === status || !! placement || !! search.trim() );
+	const hideEmptySegments = ! campaignIsEmpty && ( 'trash' === status || 'inactive' === status || !! search.trim() );
 	const statusGroups = groupBySegment( segments, statusPrompts );
 	const groups = groupBySegment( segments, prompts )
 		.map( ( segment, index ) => ( { ...segment, statusPrompts: statusGroups[ index ].prompts } ) )
@@ -226,23 +161,39 @@ const Campaigns = props => {
 					) }
 				</Notice>
 			) }
-			<DataViews
-				className={ classnames( 'newspack-campaigns__toolbar', { 'is-default-view': isDefaultView } ) }
-				view={ view }
-				onChangeView={ onChangeView }
-				fields={ fields }
-				data={ prompts }
-				getItemId={ item => String( item.id ) }
-				paginationInfo={ { totalItems: prompts.length, totalPages: 1 } }
-				defaultLayouts={ { table: {} } }
-			>
-				<Stack direction="row" justify="space-between" align="flex-start" gap="xs" className="dataviews__view-actions">
-					<Stack direction="row" align="center" gap="sm" wrap="wrap" className="dataviews__search">
-						<BaseDataViews.Search label={ __( 'Search prompts', 'newspack-plugin' ) } />
-						<BaseDataViews.Filters />
-					</Stack>
-				</Stack>
-			</DataViews>
+			<div className="newspack-campaigns__view-toolbar">
+				<SearchControl
+					className="newspack-campaigns__search"
+					label={ __( 'Search prompts', 'newspack-plugin' ) }
+					placeholder={ __( 'Search prompts', 'newspack-plugin' ) }
+					value={ search }
+					onChange={ value => setSearch( value ) }
+					__nextHasNoMarginBottom
+					size="compact"
+				/>
+				<SelectControl
+					className="newspack-campaigns__view-select"
+					label={ __( 'Campaigns', 'newspack-plugin' ) }
+					hideLabelFromVision
+					size="compact"
+					items={ allViewItems }
+					value={ selectedView }
+					onValueChange={ item => {
+						if ( item ) {
+							history.push( DEFAULT_CAMPAIGNS_FILTER === item.value ? '/campaigns' : `/campaigns/${ item.value }` );
+						}
+					} }
+				>
+					{ viewItems.map( renderViewItem ) }
+					{ campaignGroups.map( group => (
+						<SelectControl.Group key={ group.label }>
+							<SelectControl.GroupLabel>{ group.label }</SelectControl.GroupLabel>
+							{ group.items.map( renderViewItem ) }
+						</SelectControl.Group>
+					) ) }
+				</SelectControl>
+				{ campaignActions }
+			</div>
 			<Stack direction="column" gap="lg">
 				{ groups.map( segment => (
 					<SegmentGroup
@@ -256,9 +207,9 @@ const Campaigns = props => {
 				) ) }
 				{ ! groups.length && (
 					<p className="newspack-campaigns__no-results">
-						{ ( search.trim() || placement ) && __( 'No prompts match your search.', 'newspack-plugin' ) }
-						{ ! search.trim() && ! placement && 'trash' === status && __( 'Trash is empty.', 'newspack-plugin' ) }
-						{ ! search.trim() && ! placement && 'inactive' === status && __( 'No inactive prompts.', 'newspack-plugin' ) }
+						{ search.trim() && __( 'No prompts match your search.', 'newspack-plugin' ) }
+						{ ! search.trim() && 'trash' === status && __( 'Trash is empty.', 'newspack-plugin' ) }
+						{ ! search.trim() && 'inactive' === status && __( 'No inactive prompts.', 'newspack-plugin' ) }
 					</p>
 				) }
 			</Stack>

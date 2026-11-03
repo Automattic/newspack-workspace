@@ -10,9 +10,10 @@ import classNames from 'classnames';
 /**
  * WordPress dependencies.
  */
+import { speak } from '@wordpress/a11y';
 import { Disabled, Draggable } from '@wordpress/components';
 import { useEffect, useLayoutEffect, useRef, useState } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { chevronDown, chevronUp, dragHandle } from '@wordpress/icons';
 import { Icon, IconButton, Stack } from '@wordpress/ui';
 
@@ -173,6 +174,15 @@ const CardSortableList = ( {
 		reordered.splice( toIndex, 0, moved );
 		setSortedItems( reordered );
 		setButtonMoveId( id => id + 1 );
+		speak(
+			sprintf(
+				/* translators: 1: title of the moved item. 2: its new position. 3: total number of items. */
+				__( '%1$s moved to position %2$d of %3$d.', 'newspack-plugin' ),
+				moved.title,
+				toIndex + 1,
+				reordered.length
+			)
+		);
 	};
 
 	/**
@@ -413,7 +423,11 @@ const CardSortableList = ( {
 														tone="neutral"
 														size="small"
 														icon={ chevronUp }
-														label={ __( 'Move one position up', 'newspack-plugin' ) }
+														label={ sprintf(
+															/* translators: %s: title of the item to move. */
+															__( 'Move %s up', 'newspack-plugin' ),
+															item.title
+														) }
 														disabled={ index === 0 }
 														focusableWhenDisabled={ false }
 														onClick={ () => handleButtonMove( index, index - 1 ) }
@@ -423,7 +437,11 @@ const CardSortableList = ( {
 														tone="neutral"
 														size="small"
 														icon={ chevronDown }
-														label={ __( 'Move one position down', 'newspack-plugin' ) }
+														label={ sprintf(
+															/* translators: %s: title of the item to move. */
+															__( 'Move %s down', 'newspack-plugin' ),
+															item.title
+														) }
 														disabled={ index === sortedItems.length - 1 }
 														focusableWhenDisabled={ false }
 														onClick={ () => handleButtonMove( index, index + 1 ) }

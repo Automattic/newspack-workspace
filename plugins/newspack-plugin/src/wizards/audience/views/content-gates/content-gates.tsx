@@ -20,7 +20,7 @@ import { Stack } from '@wordpress/ui';
 /**
  * Internal dependencies
  */
-import { DataViews } from '../../../../../packages/components/src';
+import { Button, DataViews } from '../../../../../packages/components/src';
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import ContentGatesOnboarding from './content-gates-onboarding';
@@ -135,15 +135,6 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 		}
 		setHeaderData( {
 			actions: [
-				...( gateCount > 1
-					? [
-							{
-								type: 'secondary',
-								label: __( 'Gate Priority', 'newspack-plugin' ),
-								action: () => setShowPriorityModal( true ),
-							},
-					  ]
-					: [] ),
 				{
 					type: 'primary',
 					label: __( 'Add Content Gate', 'newspack-plugin' ),
@@ -188,6 +179,9 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 							<BaseDataViews.Search label={ __( 'Search content gates', 'newspack-plugin' ) } />
 							<BaseDataViews.Filters />
 						</Stack>
+						<Button variant="secondary" size="compact" onClick={ () => setShowPriorityModal( true ) }>
+							{ __( 'Gate Priority', 'newspack-plugin' ) }
+						</Button>
 					</Stack>
 				</DataViews>
 			) }

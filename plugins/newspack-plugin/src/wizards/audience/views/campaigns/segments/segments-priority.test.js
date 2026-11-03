@@ -13,7 +13,7 @@ const NOTICE = { selector: '.components-notice__content' };
 
 const SEGMENTS = [
 	{ id: 'a', name: 'Alpha' },
-	{ id: 'b', name: 'Beta' },
+	{ id: 'b', name: 'Beta', configuration: { is_disabled: true } },
 	{ id: 'c', name: 'Gamma' },
 ];
 
@@ -25,7 +25,7 @@ const setup = wizardApiFetch => {
 };
 
 const moveFirstDown = () => {
-	fireEvent.click( screen.getAllByRole( 'button', { name: 'Move one position down' } )[ 0 ] );
+	fireEvent.click( screen.getAllByRole( 'button', { name: /^Move .+ down$/ } )[ 0 ] );
 	act( () => {
 		jest.advanceTimersByTime( 200 );
 	} );
@@ -38,14 +38,16 @@ describe( 'SegmentsPriority', () => {
 	it( 'explains the order and lists titles only', () => {
 		setup( jest.fn() );
 		expect( screen.getByRole( 'dialog', { name: 'Segment Priority' } ) ).toBeInTheDocument();
-		expect(
-			screen.getByText(
-				'Segments are checked in this order. When a reader matches more than one segment, only the first matching segment decides which targeted prompts they see.'
-			)
-		).toBeInTheDocument();
+		expect( screen.getByText( 'Readers in more than one segment see prompts from the highest one.' ) ).toBeInTheDocument();
 		expect( screen.getByRole( 'heading', { name: 'Alpha' } ) ).toBeInTheDocument();
 		expect( screen.queryByRole( 'checkbox' ) ).not.toBeInTheDocument();
 		expect( screen.queryByRole( 'button', { name: 'More actions' } ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'marks disabled segments, so their place in the order reads as inactive', () => {
+		setup( jest.fn() );
+		expect( screen.getAllByText( 'Disabled' ) ).toHaveLength( 1 );
+		expect( screen.getByText( 'Disabled' ).closest( '.newspack-card--core--sortable-list__card' ) ).toHaveTextContent( 'Beta' );
 	} );
 
 	it( 'enables Save only while the order differs from the saved one', () => {
@@ -56,7 +58,7 @@ describe( 'SegmentsPriority', () => {
 		moveFirstDown();
 		expect( save ).not.toHaveAttribute( 'aria-disabled', 'true' );
 
-		fireEvent.click( screen.getAllByRole( 'button', { name: 'Move one position up' } )[ 1 ] );
+		fireEvent.click( screen.getAllByRole( 'button', { name: /^Move .+ up$/ } )[ 1 ] );
 		act( () => {
 			jest.advanceTimersByTime( 200 );
 		} );

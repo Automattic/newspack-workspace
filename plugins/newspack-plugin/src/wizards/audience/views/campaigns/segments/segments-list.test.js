@@ -9,7 +9,7 @@ import { MemoryRouter } from 'react-router-dom';
  */
 import SegmentsList from './segments-list';
 
-// Below the medium breakpoint the page header folds secondary actions into its menu.
+// The header assertions read the desktop layout, where actions show their text labels.
 jest.mock( '@wordpress/compose', () => ( {
 	...jest.requireActual( '@wordpress/compose' ),
 	useViewportMatch: jest.fn( () => true ),
@@ -52,6 +52,11 @@ describe( 'SegmentsList', () => {
 		expect( screen.getByRole( 'button', { name: 'Segment actions: Donors' } ) ).toBeInTheDocument();
 	} );
 
+	it( 'links each segment title to its editor', () => {
+		renderList();
+		expect( screen.getByRole( 'link', { name: 'Donors' } ) ).toHaveAttribute( 'href', '#/segments/a' );
+	} );
+
 	it( 'decodes the stored segment name for display and accessible names', () => {
 		renderList( { segments: [ segment( 'a', 'News &amp; Views' ) ] } );
 		expect( rowTitles() ).toEqual( [ 'News & Views' ] );
@@ -61,7 +66,7 @@ describe( 'SegmentsList', () => {
 
 	it( 'has no move buttons', () => {
 		renderList();
-		expect( screen.queryByRole( 'button', { name: 'Move one position up' } ) ).not.toBeInTheDocument();
+		expect( screen.queryByRole( 'button', { name: /^Move .+ up$/ } ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'searches by segment name, with a message when nothing matches', () => {
@@ -71,7 +76,7 @@ describe( 'SegmentsList', () => {
 		fireEvent.change( search, { target: { value: 'donor' } } );
 		return waitFor( () => expect( rowTitles() ).toEqual( [ 'Donors' ] ) ).then( () => {
 			fireEvent.change( search, { target: { value: 'nothing like this' } } );
-			return waitFor( () => expect( screen.getByText( 'No segments match your search or filter.' ) ).toBeInTheDocument() );
+			return waitFor( () => expect( screen.getByText( 'No segments match your search.' ) ).toBeInTheDocument() );
 		} );
 	} );
 
@@ -79,13 +84,14 @@ describe( 'SegmentsList', () => {
 		renderList( { segments: [ SEGMENTS[ 0 ] ] } );
 		const header = document.querySelector( '.newspack-page__header-actions' );
 		expect( within( header ).getByRole( 'link', { name: 'Add Segment' } ) ).toHaveAttribute( 'href', '#/segments/new' );
-		expect( within( header ).queryByRole( 'button', { name: 'Segment Priority' } ) ).not.toBeInTheDocument();
+		expect( screen.queryByRole( 'button', { name: 'Segment Priority' } ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'opens the modal from the header button', async () => {
+	it( 'opens the modal from the toolbar, not the header', async () => {
 		renderList();
 		const header = document.querySelector( '.newspack-page__header-actions' );
-		fireEvent.click( within( header ).getByRole( 'button', { name: 'Segment Priority' } ) );
+		expect( within( header ).queryByRole( 'button', { name: 'Segment Priority' } ) ).not.toBeInTheDocument();
+		fireEvent.click( screen.getByRole( 'button', { name: 'Segment Priority' } ) );
 		expect( await screen.findByRole( 'dialog', { name: 'Segment Priority' } ) ).toBeInTheDocument();
 	} );
 
@@ -143,29 +149,5 @@ describe( 'SegmentsList', () => {
 		fireEvent.click( await screen.findByRole( 'menuitem', { name: 'Delete' } ) );
 		await screen.findByText( 'There was an error deleting the segment. Please try again.', NOTICE );
 		expect( rowTitles() ).toEqual( [ 'Donors', 'Newsletter readers' ] );
-	} );
-
-	describe( 'Status filter', () => {
-		const statusChip = () => screen.getByRole( 'button', { name: /^Status/ } );
-
-		it( 'defaults to All, listing every segment, even when none is disabled', () => {
-			renderList( { segments: [ segment( 'a', 'Donors' ), segment( 'c', 'Members' ) ] } );
-			expect( statusChip() ).toHaveTextContent( 'All' );
-			expect( rowTitles() ).toEqual( [ 'Donors', 'Members' ] );
-		} );
-
-		it( 'narrows the list to the chosen status', async () => {
-			renderList();
-			fireEvent.click( statusChip() );
-			fireEvent.click( await screen.findByRole( 'option', { name: 'Disabled' } ) );
-			await waitFor( () => expect( rowTitles() ).toEqual( [ 'Newsletter readers' ] ) );
-		} );
-
-		it( 'says so when no segment has the chosen status', async () => {
-			renderList( { segments: [ segment( 'a', 'Donors' ) ] } );
-			fireEvent.click( statusChip() );
-			fireEvent.click( await screen.findByRole( 'option', { name: 'Disabled' } ) );
-			expect( await screen.findByText( 'No segments match your search or filter.' ) ).toBeInTheDocument();
-		} );
 	} );
 } );

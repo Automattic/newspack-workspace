@@ -14,16 +14,6 @@
 	font-size: inherit;
 	font-weight: wp-vars.$font-weight-medium;
 	margin: 0;
-
-	a {
-		color: inherit;
-		text-decoration: none;
-
-		&:hover,
-		&:focus {
-			text-decoration: underline;
-		}
-	}
 }
 
 .newspack-campaigns__prompt-warning {

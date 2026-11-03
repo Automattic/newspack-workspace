@@ -1,10 +1,5 @@
 /* globals newspackAudienceCampaigns */
 /**
- * External dependencies.
- */
-import classnames from 'classnames';
-
-/**
  * WordPress dependencies.
  */
 import { Disabled, Notice } from '@wordpress/components';
@@ -24,8 +19,6 @@ import SegmentsScreen from './screen';
 import SegmentsPriority from './segments-priority';
 
 const { useHistory } = Router;
-
-const DEFAULT_STATUS = 'all';
 
 const renderCriteria = segment => {
 	const criteria = segmentDescriptionItems( { ...segment, configuration: { ...segment.configuration, is_disabled: false } } );
@@ -55,7 +48,6 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, ...screenProps }
 	const [ busyIds, setBusyIds ] = useState( [] );
 	const [ error, setError ] = useState( null );
 	const [ search, setSearch ] = useState( '' );
-	const [ status, setStatus ] = useState( DEFAULT_STATUS );
 	const [ showPriorityModal, setShowPriorityModal ] = useState( false );
 	const lastRequest = useRef( 0 );
 	const lastAppliedRequest = useRef( 0 );
@@ -131,17 +123,6 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, ...screenProps }
 				enableSorting: false,
 				getValue: ( { item } ) => item.name,
 			},
-			{
-				id: 'status',
-				label: __( 'Status', 'newspack-plugin' ),
-				elements: [
-					{ value: 'all', label: __( 'All', 'newspack-plugin' ) },
-					{ value: 'enabled', label: __( 'Enabled', 'newspack-plugin' ) },
-					{ value: 'disabled', label: __( 'Disabled', 'newspack-plugin' ) },
-				],
-				filterBy: { operators: [ 'is' ], isPrimary: true },
-				enableSorting: false,
-			},
 		],
 		[]
 	);
@@ -152,31 +133,16 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, ...screenProps }
 		page: 1,
 		perPage: 100,
 		fields: [],
-		filters: [ { field: 'status', operator: 'is', value: status } ],
 	};
 
 	const onChangeView = next => {
 		setSearch( next.search || '' );
-		setStatus( next.filters?.find( ( { field } ) => 'status' === field )?.value ?? DEFAULT_STATUS );
 	};
 
 	const searchTerm = search.trim().toLowerCase();
-	const visibleSegments = segments.filter(
-		segment =>
-			decodeEntities( segment.name ).toLowerCase().includes( searchTerm ) &&
-			( DEFAULT_STATUS === status || ( 'disabled' === status ) === Boolean( segment.configuration.is_disabled ) )
-	);
+	const visibleSegments = segments.filter( segment => decodeEntities( segment.name ).toLowerCase().includes( searchTerm ) );
 
 	const headerActions = [
-		...( segments.length > 1
-			? [
-					{
-						type: 'secondary',
-						label: __( 'Segment Priority', 'newspack-plugin' ),
-						onClick: () => setShowPriorityModal( true ),
-					},
-			  ]
-			: [] ),
 		{
 			type: 'primary',
 			label: __( 'Add Segment', 'newspack-plugin' ),
@@ -203,7 +169,7 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, ...screenProps }
 			{ segments.length ? (
 				<>
 					<DataViews
-						className={ classnames( 'newspack-campaigns__toolbar', { 'is-default-view': DEFAULT_STATUS === status && ! search } ) }
+						className="newspack-campaigns__toolbar"
 						view={ view }
 						onChangeView={ onChangeView }
 						fields={ fields }
@@ -215,8 +181,12 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, ...screenProps }
 						<Stack direction="row" justify="space-between" align="flex-start" gap="xs" className="dataviews__view-actions">
 							<Stack direction="row" align="center" gap="sm" wrap="wrap" className="dataviews__search">
 								<BaseDataViews.Search label={ __( 'Search segments', 'newspack-plugin' ) } />
-								<BaseDataViews.Filters />
 							</Stack>
+							{ segments.length > 1 && (
+								<Button variant="secondary" size="compact" onClick={ () => setShowPriorityModal( true ) }>
+									{ __( 'Segment Priority', 'newspack-plugin' ) }
+								</Button>
+							) }
 						</Stack>
 					</DataViews>
 					<Stack direction="column" gap="lg" ref={ rowsRef }>
@@ -227,6 +197,7 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, ...screenProps }
 									item={ {
 										id: segment.id,
 										title: decodeEntities( segment.name ),
+										href: `#/segments/${ segment.id }`,
 										description: renderCriteria( segment ),
 										badge: segment.is_criteria_duplicated
 											? { label: __( 'Duplicate', 'newspack-plugin' ), intent: 'medium' }
@@ -254,7 +225,7 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, ...screenProps }
 							</Disabled>
 						) ) }
 						{ ! visibleSegments.length && (
-							<p className="newspack-campaigns__no-results">{ __( 'No segments match your search or filter.', 'newspack-plugin' ) }</p>
+							<p className="newspack-campaigns__no-results">{ __( 'No segments match your search.', 'newspack-plugin' ) }</p>
 						) }
 					</Stack>
 				</>
