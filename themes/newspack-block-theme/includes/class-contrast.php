@@ -88,7 +88,7 @@ final class Contrast {
 	 * @param string $accent The resolved accent palette color.
 	 * @return string|null '#000000' or '#ffffff', or null when not derivable.
 	 */
-	private static function get_accent_contrast_hover( $accent ) {
+	private static function get_accent_contrast_hover( string $accent ): ?string {
 		$hover_background = self::get_button_state_background( ':hover' );
 		$hover            = self::resolve_state_background( $accent, $hover_background, 0.85 );
 		if ( null === $hover ) {

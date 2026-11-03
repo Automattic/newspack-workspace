@@ -21,9 +21,7 @@
 
 				@include mixins.fill-overlay;
 
-				&.share-x::before,
-				&.share-threads::before,
-				&.share-share::before {
+				&:is(.share-x, .share-threads, .share-share):not([style*="background-color"])::before {
 					background: currentcolor;
 				}
 
