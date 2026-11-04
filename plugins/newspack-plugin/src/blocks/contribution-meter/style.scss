@@ -1,3 +1,5 @@
+@use "newspack-motion" as motion;
+
 /**
  * Contribution Meter Block Styles.
  */
@@ -50,7 +52,7 @@
 		background-color: currentcolor;
 		height: 100%;
 		position: relative;
-		transition: width 125ms ease-in-out;
+		transition: width motion.$duration-indicator motion.$ease-out;
 	}
 
 	// Thickness variations for linear (with matching border-radius).
@@ -127,7 +129,7 @@
 
 	.contribution-meter__circle-progress {
 		stroke: currentcolor;
-		transition: stroke-dashoffset 125ms ease-in-out;
+		transition: stroke-dashoffset motion.$duration-indicator motion.$ease-out;
 	}
 
 	.contribution-meter__circle-percentage {

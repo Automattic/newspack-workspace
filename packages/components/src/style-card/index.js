@@ -39,6 +39,7 @@ class StyleCard extends Component {
 					<div className="newspack-style-card__actions">
 						{ ! isActive && (
 							<Button
+								className="newspack-style-card__select"
 								variant="tertiary"
 								onClick={ onClick }
 								aria-label={ ariaLabel ? ariaLabel : __( 'Select', 'newspack-plugin' ) + ' ' + cardTitle }

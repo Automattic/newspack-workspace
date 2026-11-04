@@ -1,3 +1,10 @@
+## newspack [6.56.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.2...newspack@6.56.3) (2026-11-04)
+
+
+### Bug Fixes
+
+* **gifting:** count received gifts on the billing page (NPPD-2561) ([#1476](https://github.com/Automattic/newspack-workspace/issues/1476)) ([62ce6e8](https://github.com/Automattic/newspack-workspace/commit/62ce6e87c98cffa4aae26ef904f35f70ce62ef85))
+
 ## newspack [6.56.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.1...newspack@6.56.2) (2026-10-27)
 
 

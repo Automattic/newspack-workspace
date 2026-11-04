@@ -1,3 +1,5 @@
+@use "newspack-motion" as motion;
+
 @mixin visuallyHidden {
 	border: 0;
 	clip: rect(1px, 1px, 1px, 1px);
@@ -27,9 +29,9 @@
 		color: var(--icon-color, var(--wp--preset--color--contrast, #1e1e1e));
 	}
 
-	@media not (prefers-reduced-motion) {
-		transition: transform 100ms ease;
-	}
+	transition:
+		background-color motion.$duration-color motion.$ease-color,
+		transform motion.$duration-press motion.$ease-out;
 	// Sizing - makes circular by using equal width/height
 	// --icon-size controls the circle diameter (e.g., 36px)
 	// Icon inside is 2/3 of circle size (e.g., 24px icon in 36px circle)
@@ -42,7 +44,21 @@
 		background: var(--icon-background, var(--wp--preset--color--base-2, #f0f0f0));
 		color: var(--icon-color, var(--wp--preset--color--contrast, #1e1e1e));
 		text-decoration: none;
-		transform: scale(1.1);
+	}
+
+	@include motion.hover {
+		&:hover:not(.wp-element-button) {
+			background: color-mix(in srgb, var(--icon-background, var(--wp--preset--color--base-2, #f0f0f0)) 85%, black);
+		}
+	}
+
+	&:active:not(.wp-element-button) {
+		background: color-mix(in srgb, var(--icon-background, var(--wp--preset--color--base-2, #f0f0f0)) 75%, black);
+		transform: scale(motion.$press-scale);
+
+		@include motion.reduced-motion {
+			transform: none;
+		}
 	}
 
 	&:focus {

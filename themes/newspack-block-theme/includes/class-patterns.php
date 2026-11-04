@@ -31,6 +31,9 @@ final class Patterns {
 		\add_action( 'init', [ __CLASS__, 'block_pattern_categories' ] );
 		\add_action( 'init', [ __CLASS__, 'register_nested_patterns' ] );
 
+		// Give new header and footer template parts starting content. Priority 9 so core's block hooks pass, at 10, sees it.
+		\add_filter( 'rest_pre_insert_wp_template_part', [ __CLASS__, 'template_part_starter_content' ], 9, 2 );
+
 		// Clean up any remaining unwanted patterns.
 		\add_filter( 'rest_dispatch_request', [ __CLASS__, 'restrict_patterns' ], 12, 3 );
 		\add_action( 'init', [ __CLASS__, 'remove_registered_patterns' ], 999 );
@@ -91,6 +94,35 @@ final class Patterns {
 				register_block_pattern( $pattern['slug'], $pattern );
 			}
 		}
+	}
+
+	/**
+	 * Fills an empty header or footer template part with starter content when it is
+	 * first created, so it starts with the Responsive Container and the ad slots the
+	 * theme's own header and footer use. The Site Editor creates new template parts
+	 * empty and, unlike templates, offers no pattern to start from.
+	 *
+	 * @param stdClass        $changes The template part about to be saved.
+	 * @param WP_REST_Request $request The REST request.
+	 * @return stdClass The template part, with starter content if it applies.
+	 */
+	public static function template_part_starter_content( $changes, $request ) {
+		// Only new template parts; an existing one may have been emptied on purpose.
+		if ( ! empty( $request['id'] ) || ! empty( trim( $changes->post_content ?? '' ) ) ) {
+			return $changes;
+		}
+
+		$area = $changes->tax_input['wp_template_part_area'] ?? '';
+		if ( ! in_array( $area, [ 'header', 'footer' ], true ) ) {
+			return $changes;
+		}
+
+		$pattern = \WP_Block_Patterns_Registry::get_instance()->get_registered( 'newspack-block-theme/' . $area . '-starter' );
+		if ( ! empty( $pattern['content'] ) ) {
+			$changes->post_content = $pattern['content'];
+		}
+
+		return $changes;
 	}
 
 	/**

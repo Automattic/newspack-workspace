@@ -1,3 +1,5 @@
+@use "newspack-motion" as motion;
+
 .wp-block-jetpack-top-posts {
 	&.is-grid-layout {
 		.jetpack-top-posts-wrapper {
@@ -33,9 +35,12 @@
 		a {
 			color: var(--wp--preset--color--contrast);
 			text-decoration: none;
+			transition: color motion.$duration-color motion.$ease-color;
 
-			&:hover {
-				color: var(--wp--preset--color--contrast-3);
+			@include motion.hover {
+				&:hover {
+					color: color-mix(in oklab, var(--wp--preset--color--contrast) var(--wp--custom--state--hover), transparent);
+				}
 			}
 		}
 	}

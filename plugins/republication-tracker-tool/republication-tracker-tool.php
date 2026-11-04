@@ -36,6 +36,7 @@ require plugin_dir_path( __FILE__ ) . 'includes/compatibility-newspack-bylines.p
 require plugin_dir_path( __FILE__ ) . 'includes/class-republication-rewrite.php';
 require plugin_dir_path( __FILE__ ) . 'includes/class-republish-button-block.php';
 require plugin_dir_path( __FILE__ ) . 'includes/class-republish-pattern.php';
+require plugin_dir_path( __FILE__ ) . 'includes/class-jetpack-sharing.php';
 require plugin_dir_path( __FILE__ ) . 'includes/pixel-functions.php';
 
 /**
@@ -270,6 +271,31 @@ final class Republication_Tracker_Tool {
 		return $post instanceof \WP_Post
 			&& is_post_publicly_viewable( $post )
 			&& '' === (string) $post->post_password;
+	}
+
+	/**
+	 * Whether a republish button may be offered for a post: the post is
+	 * republishable, its type is allowed, and it is not hidden from republication.
+	 *
+	 * @param \WP_Post $post The post object.
+	 * @return bool
+	 */
+	public static function can_offer_republish( \WP_Post $post ): bool {
+		if ( ! self::is_post_republishable( $post ) ) {
+			return false;
+		}
+
+		$allowed_post_types = (array) apply_filters( 'republication_tracker_tool_post_types', [ 'post' ] );
+		if ( ! in_array( get_post_type( $post ), $allowed_post_types, true ) ) {
+			return false;
+		}
+
+		$hide = apply_filters(
+			'hide_republication_widget',
+			get_post_meta( $post->ID, 'republication-tracker-tool-hide-widget', true ),
+			$post
+		);
+		return true != $hide; // phpcs:ignore Universal.Operators.StrictComparisons.LooseNotEqual
 	}
 
 	/**

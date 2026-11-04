@@ -7,24 +7,19 @@
 
 namespace Newspack;
 
-use WP_Error, WP_REST_Server;
+use WP_Error, WP_REST_Request, WP_REST_Response, WP_REST_Server;
 defined( 'ABSPATH' ) || exit;
 
 /**
  * Setup Newspack.
  */
 class Setup_Wizard extends Wizard {
-	const SERVICE_ENABLED_OPTION_PREFIX = 'newspack_service_enabled_';
+	const INSTALL_STATE_OPTION = 'newspack_setup_install_state';
 
-	const SERVICE_ENDPOINT_SCHEMA_BASE = [
-		'type'       => 'object',
-		'properties' => [
-			'is_service_enabled' => [
-				'type'     => 'boolean',
-				'required' => true,
-			],
-		],
-	];
+	/**
+	 * Query arg that renders the front end as the setup wizard's site preview.
+	 */
+	const DESIGN_PREVIEW_QUERY_ARG = 'newspack_design_preview';
 
 	/**
 	 * The slug of this wizard.
@@ -72,6 +67,7 @@ class Setup_Wizard extends Wizard {
 			add_action( 'admin_menu', [ $this, 'hide_non_setup_menu_items' ], 1000 );
 		}
 		add_filter( 'show_admin_bar', [ $this, 'show_admin_bar' ], 10, 2 ); // phpcs:ignore WordPressVIPMinimum.UserExperience.AdminBarRemoval.RemovalDetected
+		add_filter( 'newspack_popups_assess_has_disabled_popups', [ __CLASS__, 'disable_prompts_in_design_preview' ] );
 		$this->hidden = get_option( NEWSPACK_SETUP_COMPLETE, false );
 	}
 
@@ -167,29 +163,40 @@ class Setup_Wizard extends Wizard {
 				'methods'             => WP_REST_Server::EDITABLE,
 				'callback'            => [ $this, 'api_starter_content_homepage' ],
 				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'layout_only' => [
+						'type'    => 'boolean',
+						'default' => false,
+					],
+				],
 			]
 		);
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
-			'/wizard/' . $this->slug . '/services',
-			[
-				'methods'             => WP_REST_Server::READABLE,
-				'callback'            => [ $this, 'api_get_services' ],
-				'permission_callback' => [ $this, 'api_permissions_check' ],
-			]
-		);
-		register_rest_route(
-			NEWSPACK_API_NAMESPACE,
-			'/wizard/' . $this->slug . '/services',
+			'/wizard/' . $this->slug . '/starter-content/identity',
 			[
 				'methods'             => WP_REST_Server::EDITABLE,
-				'callback'            => [ $this, 'api_update_services' ],
+				'callback'            => [ $this, 'api_starter_content_identity' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+			]
+		);
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/install-state',
+			[
+				'methods'             => WP_REST_Server::EDITABLE,
+				'callback'            => [ $this, 'api_update_install_state' ],
 				'permission_callback' => [ $this, 'api_permissions_check' ],
 				'args'                => [
-					'reader-revenue'    => self::SERVICE_ENDPOINT_SCHEMA_BASE,
-					'newsletters'       => self::SERVICE_ENDPOINT_SCHEMA_BASE,
-					'google-ad-sense'   => self::SERVICE_ENDPOINT_SCHEMA_BASE,
-					'google-ad-manager' => self::SERVICE_ENDPOINT_SCHEMA_BASE,
+					'approach' => [
+						'type'     => 'string',
+						'enum'     => [ 'generated', 'import' ],
+						'required' => true,
+					],
+					'complete' => [
+						'type'     => 'boolean',
+						'required' => true,
+					],
 				],
 			]
 		);
@@ -221,10 +228,23 @@ class Setup_Wizard extends Wizard {
 			$plugin_info[]        = $plugin;
 		}
 
+		$homepage_edit_url = null;
+		$front_page_id     = (int) get_option( 'page_on_front' );
+		if ( 'page' === get_option( 'show_on_front' ) && $front_page_id && get_post( $front_page_id ) ) {
+			$homepage_edit_url = get_edit_post_link( $front_page_id, 'raw' );
+		}
+
 		return rest_ensure_response(
 			[
-				'plugins' => $plugin_info,
-				'is_ssl'  => is_ssl() || Starter_Content::is_e2e(),
+				'plugins'           => $plugin_info,
+				'is_ssl'            => is_ssl() || Starter_Content::is_e2e(),
+				'install_state'     => self::get_install_state(),
+				'homepage_edit_url' => $homepage_edit_url ? $homepage_edit_url : null,
+				'next_steps'        => [
+					'reader_revenue' => admin_url( 'admin.php?page=newspack-audience' ),
+					'newsletters'    => class_exists( 'Newspack_Newsletters' ) ? admin_url( 'edit.php?post_type=newspack_nl_cpt' ) : null,
+					'ads'            => class_exists( 'Newspack_Ads\Core' ) ? admin_url( 'admin.php?page=newspack-ads-display-ads' ) : null,
+				],
 			]
 		);
 	}
@@ -236,6 +256,7 @@ class Setup_Wizard extends Wizard {
 	 */
 	public function api_complete() {
 		update_option( NEWSPACK_SETUP_COMPLETE, true );
+		delete_option( Starter_Content::IMPORTED_CURRENCY_OPTION );
 		return rest_ensure_response( [ 'complete' => true ] );
 	}
 
@@ -270,7 +291,11 @@ class Setup_Wizard extends Wizard {
 			return $result;
 		}
 
-		return rest_ensure_response( [ 'status' => 200 ] );
+		$response = [ 'status' => 200 ];
+		if ( 'import' === $starter_content_type ) {
+			$response['post_count'] = Starter_Content_WordPress::get_post_count();
+		}
+		return rest_ensure_response( $response );
 	}
 
 	/**
@@ -302,11 +327,32 @@ class Setup_Wizard extends Wizard {
 	/**
 	 * Set up Homepage
 	 *
-	 * @return WP_REST_Response containing info.
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return WP_REST_Response|WP_Error containing info.
 	 */
-	public function api_starter_content_homepage() {
+	public function api_starter_content_homepage( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		if ( $request['layout_only'] ) {
+			$status = Starter_Content::create_layout_homepage();
+			if ( is_wp_error( $status ) ) {
+				return $status;
+			}
+			return rest_ensure_response( [ 'status' => true ] );
+		}
 		$status = Starter_Content::create_homepage();
 		return rest_ensure_response( [ 'status' => $status ] );
+	}
+
+	/**
+	 * Import the identity of the site being moved.
+	 *
+	 * @return WP_REST_Response|WP_Error Imported items.
+	 */
+	public function api_starter_content_identity(): WP_REST_Response|WP_Error {
+		$result = Starter_Content::import_identity();
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return rest_ensure_response( $result );
 	}
 
 	/**
@@ -368,8 +414,8 @@ class Setup_Wizard extends Wizard {
 			$theme_mods['footer_copyright'] = get_theme_mod( 'footer_copyright', '' );
 		}
 
-		$theme_mods['header_text']            = get_theme_mod( 'header_text', '' );
-		$theme_mods['header_display_tagline'] = get_theme_mod( 'header_display_tagline', '' );
+		$theme_mods['header_text']            = get_theme_mod( 'header_text', true );
+		$theme_mods['header_display_tagline'] = get_theme_mod( 'header_display_tagline', true );
 
 		// Append media credits settings.
 		$media_credits_settings = Newspack_Image_Credits::get_settings();
@@ -404,98 +450,13 @@ class Setup_Wizard extends Wizard {
 			[
 				'theme'             => Starter_Content::get_theme(),
 				'theme_mods'        => $theme_mods,
-				'homepage_patterns' => $this->get_homepage_patterns(),
+				'homepage_patterns' => Starter_Content::get_homepage_patterns(),
 				'etc'               => [
 					'post_count'     => wp_count_posts()->publish,
 					'has_pwa_plugin' => defined( 'PWA_PLUGIN_FILE' ),
 				],
 			]
 		);
-	}
-
-	/**
-	 * Load homepage pattern.
-	 *
-	 * @param string $file_path File path of the pattern.
-	 * @return string The pattern markup.
-	 */
-	private function load_homepage_pattern( $file_path ) {
-		$has_donations   = $this->check_service_enabled( 'reader-revenue' );
-		$has_newsletters = $this->check_service_enabled( 'newsletters' );
-		$donate_block    = $has_donations ? '
-		<!-- wp:group {"align":"full","backgroundColor":"primary","className":"has-white-color has-text-color"} -->
-		<div class="wp-block-group alignfull has-white-color has-text-color has-primary-background-color has-background"><div class="wp-block-group__inner-container"><!-- wp:spacer {"height":20} -->
-		<div style="height:20px" aria-hidden="true" class="wp-block-spacer"></div>
-		<!-- /wp:spacer -->
-
-		<!-- wp:columns -->
-		<div class="wp-block-columns"><!-- wp:column {"verticalAlignment":"center","width":"25%"} -->
-		<div class="wp-block-column is-vertically-aligned-center" style="flex-basis:25%"><!-- wp:heading -->
-		<h2>' . __( 'Support our publication', 'newspack' ) . '</h2>
-		<!-- /wp:heading --></div>
-		<!-- /wp:column -->
-
-		<!-- wp:column {"width":"75%"} -->
-		<div class="wp-block-column" style="flex-basis:75%"><!-- wp:newspack-blocks/donate /--></div>
-		<!-- /wp:column --></div>
-
-		<!-- wp:spacer {"height":20} -->
-		<div style="height:20px" aria-hidden="true" class="wp-block-spacer"></div>
-		<!-- /wp:spacer --></div></div>
-		<!-- /wp:group -->
-		' : '';
-		$image_url       = 'https://picsum.photos/id/424/600/400	';
-		$subscribe_block = $has_newsletters ? '<!-- wp:group {"className":"newspack-pattern subscribe__style-1"} -->
-		<div class="wp-block-group newspack-pattern subscribe__style-1"><div class="wp-block-group__inner-container"><!-- wp:media-text {"align":"","mediaPosition":"right","mediaId":131,"mediaType":"image","verticalAlignment":"center","imageFill":true,"backgroundColor":"light-gray"} -->
-		<div class="wp-block-media-text has-media-on-the-right is-stacked-on-mobile is-vertically-aligned-center is-image-fill has-light-gray-background-color has-background"><figure class="wp-block-media-text__media" style="background-image:url(' . $image_url . ');background-position:50% 50%"><img src="' . $image_url . '" alt="" class="wp-image-131 size-full"/></figure><div class="wp-block-media-text__content"><!-- wp:spacer {"height":32} -->
-		<div style="height:32px" aria-hidden="true" class="wp-block-spacer"></div>
-		<!-- /wp:spacer -->
-
-		<!-- wp:heading -->
-		<h2>' . __( 'Subscribe', 'newspack' ) . '</h2>
-		<!-- /wp:heading -->
-
-		<!-- wp:jetpack/mailchimp {"interests":[]} -->
-		<!-- wp:jetpack/button {"element":"button","uniqueId":"mailchimp-widget-id","text":"Join my email list"} /-->
-		<!-- /wp:jetpack/mailchimp -->
-
-		<!-- wp:spacer {"height":32} -->
-		<div style="height:32px" aria-hidden="true" class="wp-block-spacer"></div>
-		<!-- /wp:spacer --></div></div>
-		<!-- /wp:media-text --></div></div>
-		<!-- /wp:group -->' : '';
-		return require $file_path;
-	}
-
-	/**
-	 * Get homepage patterns registered by the Newspack Blocks plugin.
-	 *
-	 * @param int $index Pattern ID.
-	 * @return array|object|bool Homepage pattern (false if not found) or all patterns.
-	 */
-	private function get_homepage_patterns( $index = null ) {
-		$patterns_directory = dirname( NEWSPACK_PLUGIN_FILE ) . '/includes/templates/block-patterns/homepage/';
-
-		// Load a single homepage pattern.
-		if ( null !== $index ) {
-			$index_padded = str_pad( $index + 1, 2, '0', STR_PAD_LEFT );
-			$file_path    = $patterns_directory . $index_padded . '.php';
-			if ( file_exists( $file_path ) ) {
-				return $this->load_homepage_pattern( $file_path );
-			} else {
-				return false;
-			}
-		}
-
-		// Load all homepage patterns.
-		foreach ( scandir( $patterns_directory ) as $file_name ) {
-			if ( '.' !== $file_name && '..' !== $file_name ) {
-				$file_path           = $patterns_directory . $file_name;
-				$homepage_patterns[] = $this->load_homepage_pattern( $file_path );
-			}
-		}
-
-		return $homepage_patterns;
 	}
 
 	/**
@@ -518,10 +479,10 @@ class Setup_Wizard extends Wizard {
 		// Set homepage pattern.
 		if ( isset( $request['theme_mods']['homepage_pattern_index'] ) ) {
 			$homepage_pattern_index = (int) $request['theme_mods']['homepage_pattern_index'];
-			$homepage_pattern       = $this->get_homepage_patterns( $homepage_pattern_index );
+			$homepage_pattern       = Starter_Content::get_homepage_pattern( $homepage_pattern_index );
 			if ( false !== $homepage_pattern ) {
-				$homepage_id = get_option( 'page_on_front', false );
-				if ( $homepage_id && ! get_option( NEWSPACK_SETUP_COMPLETE ) ) {
+				$homepage_id = (int) get_option( 'page_on_front', 0 );
+				if ( ! get_option( NEWSPACK_SETUP_COMPLETE ) && Starter_Content::is_setup_homepage( $homepage_id ) ) {
 					wp_update_post(
 						[
 							'ID'           => $homepage_id,
@@ -630,74 +591,42 @@ class Setup_Wizard extends Wizard {
 	}
 
 	/**
-	 * Check if a particular service is enabled.
+	 * Get the stored install state.
 	 *
-	 * @param string $service_name Name of the service.
-	 * @return bool True if the service is enabled.
-	 */
-	private function check_service_enabled( $service_name ) {
-		return (bool) get_option( self::SERVICE_ENABLED_OPTION_PREFIX . $service_name, false );
-	}
-
-	/**
-	 * Get Services step initial data.
+	 * A site that finished setup before the install state was stored counts as installed.
 	 *
-	 * @return WP_REST_Response containing info.
+	 * @return array{approach: string|null, complete: bool}
 	 */
-	public function api_get_services() {
-		$response = [
-			'reader-revenue'    => [ 'configuration' => [ 'is_service_enabled' => $this->check_service_enabled( 'reader-revenue' ) ] ],
-			'newsletters'       => [ 'configuration' => [ 'is_service_enabled' => $this->check_service_enabled( 'newsletters' ) ] ],
-			'google-ad-manager' => [ 'configuration' => [ 'is_service_enabled' => $this->check_service_enabled( 'google-ad-manager' ) ] ],
+	public static function get_install_state(): array {
+		$state = get_option( self::INSTALL_STATE_OPTION, false );
+		if ( false === $state ) {
+			return [
+				'approach' => null,
+				'complete' => (bool) get_option( NEWSPACK_SETUP_COMPLETE, false ),
+			];
+		}
+		$state = is_array( $state ) ? $state : [];
+		return [
+			'approach' => isset( $state['approach'] ) && in_array( $state['approach'], [ 'generated', 'import' ], true ) ? $state['approach'] : null,
+			'complete' => ! empty( $state['complete'] ),
 		];
-		return rest_ensure_response( $response );
 	}
 
 	/**
-	 * Update Services step.
+	 * Store the install state.
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
-	 * @return WP_REST_Response containing info.
+	 * @return WP_REST_Response containing the stored state.
 	 */
-	public function api_update_services( $request ) {
-		if ( true === $request['newsletters']['is_service_enabled'] ) {
-			$newsletters_configuration_manager = Configuration_Managers::configuration_manager_class_for_plugin_slug( 'newspack-newsletters' );
-			$newsletters_configuration_manager->update_settings( $request['newsletters'] );
-		}
-		if ( true === $request['reader-revenue']['is_service_enabled'] ) {
-			Plugin_Manager::activate( 'woocommerce' );
-			if ( isset( $request['reader-revenue']['donation_data'] ) ) {
-				$rr_wizard = new Audience_Donations();
-				$rr_wizard->update_donation_settings( $request['reader-revenue']['donation_data'] );
-			}
-			if ( ! empty( $request['reader-revenue']['payment_gateways']['stripe'] ) ) {
-				$audience_wizard = new Audience_Wizard();
-				$stripe_settings            = $request['reader-revenue']['payment_gateways']['stripe'];
-				$stripe_settings['enabled'] = true;
-				$audience_wizard->update_stripe_settings( $stripe_settings );
-			}
-		}
-		if ( true === $request['google-ad-manager']['is_service_enabled'] ) {
-			$service = 'google_ad_manager';
-			update_option( Advertising_Display_Ads::NEWSPACK_ADVERTISING_SERVICE_PREFIX . $service, true );
-			if ( isset( $request['google-ad-manager']['networkCode'] ) && ! empty( $request['google-ad-manager']['networkCode'] ) ) {
-				$network_code = $request['google-ad-manager']['networkCode'];
-				// Update legacy network code in case service account credentials are not set.
-				update_option( Advertising_Display_Ads::OPTION_NAME_LEGACY_NETWORK_CODE, $network_code );
-				// Update network code used by authenticated credentials. Ensures use of desired code in case the credentials are for multiple networks.
-				update_option( Advertising_Display_Ads::OPTION_NAME_GAM_NETWORK_CODE, $network_code );
-			}
-			Plugin_Manager::activate( 'newspack-ads' );
-		}
-
-		$available_services = [ 'newsletters', 'reader-revenue', 'google-ad-sense', 'google-ad-manager' ];
-		foreach ( $available_services as $service_name ) {
-			if ( isset( $request[ $service_name ] ) ) {
-				update_option( self::SERVICE_ENABLED_OPTION_PREFIX . $service_name, $request[ $service_name ]['is_service_enabled'] );
-			}
-		}
-
-		return rest_ensure_response( [] );
+	public function api_update_install_state( WP_REST_Request $request ): WP_REST_Response {
+		update_option(
+			self::INSTALL_STATE_OPTION,
+			[
+				'approach' => $request['approach'],
+				'complete' => (bool) $request['complete'],
+			]
+		);
+		return rest_ensure_response( self::get_install_state() );
 	}
 
 	/**
@@ -720,13 +649,6 @@ class Setup_Wizard extends Wizard {
 			Newspack::plugin_url() . '/dist/setup.css',
 			$this->get_style_dependencies(),
 			Newspack::asset_version( 'setup' )
-		);
-		\wp_localize_script(
-			'newspack-setup-wizard',
-			'newspack_ads_wizard',
-			array(
-				'can_connect_google' => OAuth::is_proxy_configured( 'google' ),
-			)
 		);
 		wp_style_add_data( 'newspack-setup-wizard', 'rtl', 'replace' );
 		wp_enqueue_style( 'newspack-setup-wizard' );
@@ -766,10 +688,32 @@ class Setup_Wizard extends Wizard {
 	 * @return boolean Whether admin bar should be shown.
 	 */
 	public static function show_admin_bar( $show ) {
-		if ( $show && isset( $_GET['newspack_design_preview'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( $show && self::is_design_preview() ) {
 			return false;
 		}
 		return $show;
+	}
+
+	/**
+	 * Whether this request renders the front end as the setup wizard's site preview.
+	 *
+	 * Only someone who can run the setup gets the preview, so a visitor adding the
+	 * query arg sees the page as usual.
+	 *
+	 * @return bool
+	 */
+	public static function is_design_preview(): bool {
+		return isset( $_GET[ self::DESIGN_PREVIEW_QUERY_ARG ] ) && current_user_can( 'manage_options' ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	}
+
+	/**
+	 * Keep Campaigns prompts out of the site preview.
+	 *
+	 * @param mixed $disabled Whether prompts are disabled for this request.
+	 * @return mixed True in the preview, otherwise the value as filtered so far.
+	 */
+	public static function disable_prompts_in_design_preview( mixed $disabled ): mixed {
+		return self::is_design_preview() ? true : $disabled;
 	}
 
 	/**

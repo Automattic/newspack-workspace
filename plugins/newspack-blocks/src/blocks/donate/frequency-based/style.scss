@@ -1,4 +1,5 @@
 @use "newspack-colors" as np-colors;
+@use "newspack-motion" as motion;
 @use "../../../shared/sass/mixins";
 @use "../../../shared/sass/variables";
 
@@ -50,7 +51,9 @@
 			margin: 0 1.5rem 1.5rem;
 		}
 		&:disabled {
-			opacity: 0.5;
+			background: var(--newspack-ui-color-neutral-fill, color-mix(in oklab, np-colors.$neutral-900 7%, np-colors.$neutral-000)) !important;
+			border-color: transparent !important;
+			color: var(--newspack-ui-color-disabled-ink, color-mix(in oklab, np-colors.$neutral-900 45%, np-colors.$neutral-000)) !important;
 		}
 	}
 	.wpbnbd {
@@ -92,25 +95,39 @@
 			border-radius: 5px;
 			margin: 0.38rem;
 			padding: 0.38rem 0.76rem;
+			transition:
+				background-color motion.$duration-color motion.$ease-color,
+				border-color motion.$duration-color motion.$ease-color,
+				box-shadow motion.$duration-color motion.$ease-color,
+				color motion.$duration-color motion.$ease-color;
 
-			@media ( hover: hover ) and ( pointer: fine ) {
+			@include motion.hover {
 				&:hover {
-					background: np-colors.$neutral-050;
+					background: var(--newspack-ui-color-neutral-fill, np-colors.$neutral-100);
 				}
+			}
+
+			&:active {
+				background: var(--newspack-ui-color-neutral-fill-hover, np-colors.$neutral-200);
 			}
 		}
 
 		input[type="radio"] {
 			&:focus + .tier-label {
-				background: np-colors.$neutral-050;
-				outline: 1px dotted currentcolor;
-				outline-offset: -4px;
+				outline: none;
 			}
 
 			&:checked + .tier-label {
 				background-color: np-colors.$neutral-600;
 				border-color: transparent;
 				color: np-colors.$neutral-000;
+			}
+
+			&:focus-visible + .tier-label {
+				@include mixins.focus-edge( currentcolor, 2px, mixins.$focus-color );
+				transition:
+					background-color motion.$duration-color motion.$ease-color,
+					color motion.$duration-color motion.$ease-color;
 			}
 		}
 
@@ -230,9 +247,13 @@
 
 			&:focus {
 				outline: 0;
-				text-decoration: underline;
-				text-decoration-style: dotted;
-				text-decoration-thickness: 1px;
+			}
+
+			&:focus-visible {
+				@include mixins.focus-edge( currentcolor, $halo: mixins.$focus-color );
+				transition:
+					background-color motion.$duration-color motion.$ease-color,
+					color motion.$duration-color motion.$ease-color;
 			}
 		}
 	}

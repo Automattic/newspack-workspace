@@ -29,8 +29,8 @@ export const THEME_BRAND_DEFAULTS = {
 	header_color_hex: '#003da5',
 	custom_logo: '',
 	logo_size: 0,
-	header_text: false, // No custom_logo set.
-	header_display_tagline: false, // No custom_logo set.
+	header_text: true,
+	header_display_tagline: true,
 	// Footer.
 	footer_copyright: '',
 	footer_color: 'default',

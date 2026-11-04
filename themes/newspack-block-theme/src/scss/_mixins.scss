@@ -1,4 +1,5 @@
 @use "sass:math";
+@use "newspack-motion" as motion;
 
 $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast));
 
@@ -6,30 +7,33 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 	border-color: $color $important;
 	box-shadow:
 		inset 0 0 0 $width $color,
-		0 0 0 var(--wp--custom--focus--halo-width) color-mix(in srgb, #{$halo} var(--wp--custom--focus--halo-mix), transparent) $important;
+		0 0 0 var(--wp--custom--focus--halo-width) color-mix(in oklab, #{$halo} var(--wp--custom--focus--halo-mix), transparent) $important;
 	outline: 2px solid transparent $important;
+	transition: none $important;
 
 	@media (prefers-contrast: more) {
 		box-shadow:
 			inset 0 0 0 $width $color,
 			0 0 0 1px $halo,
-			0 0 0 calc(1px + var(--wp--custom--focus--halo-width)) color-mix(in srgb, #{$halo} var(--wp--custom--focus--halo-mix), transparent) $important;
+			0 0 0 calc(1px + var(--wp--custom--focus--halo-width)) color-mix(in oklab, #{$halo} var(--wp--custom--focus--halo-mix), transparent) $important;
 	}
 }
 
 @mixin focus-line($color: currentcolor, $important: null) {
 	box-shadow:
 		0 0 0 1px $color,
-		0 0 0 calc(1px + var(--wp--custom--focus--halo-width)) color-mix(in srgb, #{$color} var(--wp--custom--focus--halo-mix), transparent) $important;
+		0 0 0 calc(1px + var(--wp--custom--focus--halo-width)) color-mix(in oklab, #{$color} var(--wp--custom--focus--halo-mix), transparent) $important;
 	outline: 2px solid transparent $important;
+	transition: none $important;
 }
 
 @mixin focus-line-inset($color: currentcolor, $important: null) {
 	box-shadow:
 		inset 0 0 0 1px $color,
-		inset 0 0 0 calc(1px + var(--wp--custom--focus--halo-width)) color-mix(in srgb, #{$color} var(--wp--custom--focus--halo-mix), transparent) $important;
+		inset 0 0 0 calc(1px + var(--wp--custom--focus--halo-width)) color-mix(in oklab, #{$color} var(--wp--custom--focus--halo-mix), transparent) $important;
 	outline: 2px solid transparent $important;
 	outline-offset: -2px $important;
+	transition: none $important;
 }
 
 @mixin focus-fill($color: currentcolor, $halo: $focus-color, $important: null, $inner: null, $width: 2px) {
@@ -37,15 +41,16 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 	box-shadow:
 		inset 0 0 0 $width $color,
 		$inner,
-		0 0 0 var(--wp--custom--focus--halo-width) color-mix(in srgb, #{$halo} var(--wp--custom--focus--halo-mix), transparent) $important;
+		0 0 0 var(--wp--custom--focus--halo-width) color-mix(in oklab, #{$halo} var(--wp--custom--focus--halo-mix), transparent) $important;
 	outline: 2px solid transparent $important;
+	transition: none $important;
 
 	@media (prefers-contrast: more) {
 		box-shadow:
 			inset 0 0 0 $width $color,
 			$inner,
 			0 0 0 1px $halo,
-			0 0 0 calc(1px + var(--wp--custom--focus--halo-width)) color-mix(in srgb, #{$halo} var(--wp--custom--focus--halo-mix), transparent) $important;
+			0 0 0 calc(1px + var(--wp--custom--focus--halo-width)) color-mix(in oklab, #{$halo} var(--wp--custom--focus--halo-mix), transparent) $important;
 	}
 }
 
@@ -65,9 +70,9 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 	min-height: var(--wp--custom--spacing--75);
 	padding: calc(var(--wp--custom--spacing--25) - 1px) calc(var(--wp--custom--spacing--25) + 1px);
 	transition:
-		background-color 150ms ease,
-		border-color 150ms ease,
-		box-shadow 150ms ease;
+		background-color motion.$duration-color motion.$ease-color,
+		border-color motion.$duration-color motion.$ease-color,
+		box-shadow motion.$duration-color motion.$ease-color;
 
 	&::placeholder {
 		color: var(--wp--preset--color--contrast-3);
@@ -78,7 +83,7 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 		border-color: var(--wp--preset--color--contrast-3);
 	}
 
-	@media (hover: hover) and (pointer: fine) {
+	@include motion.hover {
 		&:hover:where(:not(:disabled, :focus, [aria-invalid="true"])) {
 			border-color: var(--wp--preset--color--contrast-2);
 		}
@@ -90,7 +95,7 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 
 	&:disabled {
 		-webkit-text-fill-color: currentcolor;
-		background-color: color-mix(in oklab, var(--wp--preset--color--contrast) 7%, var(--wp--preset--color--base));
+		background-color: color-mix(in oklab, var(--wp--preset--color--contrast) var(--wp--custom--state--fill), var(--wp--preset--color--base));
 		border-color: var(--wp--preset--color--base-3);
 		color: var(--wp--preset--color--contrast-3);
 		cursor: not-allowed;
@@ -129,9 +134,9 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 	margin: 0;
 	place-content: center;
 	transition:
-		background-color 150ms ease,
-		border-color 150ms ease,
-		box-shadow 150ms ease;
+		background-color motion.$duration-color motion.$ease-color,
+		border-color motion.$duration-color motion.$ease-color,
+		box-shadow motion.$duration-color motion.$ease-color;
 	vertical-align: top;
 	width: var(--wp--custom--spacing--35) !important;
 
@@ -139,7 +144,7 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 		border-color: var(--wp--preset--color--contrast-3);
 	}
 
-	@media (hover: hover) and (pointer: fine) {
+	@include motion.hover {
 		&:hover:where(:not(:checked, :disabled, [aria-invalid="true"])) {
 			border-color: var(--wp--preset--color--contrast);
 		}
@@ -151,7 +156,7 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 	}
 
 	&:disabled {
-		background-color: color-mix(in oklab, var(--wp--preset--color--contrast) 7%, var(--wp--preset--color--base));
+		background-color: color-mix(in oklab, var(--wp--preset--color--contrast) var(--wp--custom--state--fill), var(--wp--preset--color--base));
 		border-color: var(--wp--preset--color--base-3);
 		border-style: dashed;
 		cursor: not-allowed;
@@ -165,14 +170,20 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 		&:focus-visible {
 			&:not(:checked) {
 				@include focus-edge(var(--wp--preset--color--contrast), $important, $halo: $focus-color);
+
+				transition: background-color motion.$duration-color motion.$ease-color $important;
 			}
 
 			&[aria-invalid="true"]:not(:checked) {
 				@include focus-edge(var(--wp--custom--color--error-50), $important, $halo: $focus-color, $width: 2px);
+
+				transition: background-color motion.$duration-color motion.$ease-color $important;
 			}
 
 			&:checked {
 				@include focus-fill(var(--wp--preset--color--base), $important: $important, $width: 1px);
+
+				transition: background-color motion.$duration-color motion.$ease-color $important;
 			}
 
 			@media (forced-colors: active) {
@@ -208,11 +219,11 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 		opacity: 0;
 		transform: scale(0.9);
 		transition:
-			opacity 120ms cubic-bezier(0.23, 1, 0.32, 1),
-			transform 120ms cubic-bezier(0.23, 1, 0.32, 1);
+			opacity motion.$duration-press motion.$ease-out,
+			transform motion.$duration-press motion.$ease-out;
 		width: var(--wp--custom--spacing--35);
 
-		@media (prefers-reduced-motion: reduce) {
+		@include motion.reduced-motion {
 			transform: none;
 		}
 	}
@@ -329,16 +340,63 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 	margin: 0;
 	padding: 0;
 	place-items: center;
-	transition: background-color 125ms ease-in-out;
+	transition:
+		background-color motion.$duration-color motion.$ease-color,
+		box-shadow motion.$duration-color motion.$ease-color,
+		transform motion.$duration-press motion.$ease-out;
 	width: var(--wp--custom--spacing--55);
 
-	&:hover {
-		background-color: var(--wp--preset--color--base-2);
-		background-color: color-mix(in srgb, var(--wp--preset--color--contrast) 3.5%, transparent);
+	@include motion.hover {
+		&:hover {
+			background-color: color-mix(in oklab, currentcolor var(--wp--custom--state--fill), transparent);
+		}
+	}
+
+	&:active:where(:not([contenteditable="true"])) {
+		background-color: color-mix(in oklab, currentcolor var(--wp--custom--state--fill-hover), transparent);
 	}
 
 	&:focus-visible {
 		@include focus-line;
+		transition:
+			background-color motion.$duration-color motion.$ease-color,
+			transform motion.$duration-press motion.$ease-out;
+	}
+}
+
+@mixin fill-overlay {
+	isolation: isolate;
+	position: relative;
+
+	&::before {
+		background: transparent;
+		border-radius: inherit;
+		content: "";
+		inset: 0;
+		pointer-events: none;
+		position: absolute;
+		transition: background-color motion.$duration-color motion.$ease-color;
+		z-index: -1;
+	}
+
+	@include motion.hover {
+		&:hover::before {
+			background: color-mix(in oklab, black calc(100% - var(--wp--custom--state--hover)), transparent);
+		}
+	}
+
+	&:active::before {
+		background: color-mix(in oklab, black calc(100% - var(--wp--custom--state--pressed)), transparent);
+	}
+
+	&:focus-visible::before {
+		inset: 2px;
+	}
+
+	@media (forced-colors: active) {
+		&::before {
+			display: none;
+		}
 	}
 }
 

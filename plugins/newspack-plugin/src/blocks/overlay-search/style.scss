@@ -2,19 +2,20 @@
  * Overlay Search Block
  *
  * Panel styles are written at root scope (not nested under the block wrapper
- * selector) because `view.js` moves the panel to `document.body` on open and
+ * selector) because `view.js` moves the panel to `document.body` on load and
  * loses its ancestor context. Same constraint applies to `overlay-menu`.
  */
 
 @use "../../newspack-ui/scss/variables/breakpoints";
 @use "../../../packages/colors/colors.module" as colors;
+@use "newspack-motion" as motion;
 
 // Panel — root scope.
 .newspack-overlay-search__panel {
 	position: fixed;
 	inset: 0;
 	top: var(--wp-admin--admin-bar--height, 0);
-	z-index: 99998;
+	z-index: 99999;
 	display: flex;
 	flex-direction: column;
 	// Anchor content near the top, matching newspack-block-theme's search overlay.
@@ -26,7 +27,9 @@
 	overflow-y: auto;
 	opacity: 0;
 	visibility: hidden;
-	transition: opacity 250ms ease-in-out, visibility 0s linear 250ms;
+	transition:
+		opacity motion.$duration-modal motion.$ease-out,
+		visibility 0s linear motion.$duration-modal;
 
 	@media (min-width: breakpoints.$tablet_width) {
 		padding-right: var(--wp--preset--spacing--40, 1.5rem);
@@ -35,11 +38,13 @@
 
 	&[aria-hidden="false"] {
 		opacity: 1;
+		transition:
+			opacity motion.$duration-modal motion.$ease-out,
+			visibility 0s;
 		visibility: visible;
-		transition: opacity 250ms ease-in-out, visibility 0s linear 0s;
 
 		.newspack-overlay-search__content {
-			animation: newspack-overlay-search__fade-in 250ms ease-in-out;
+			transform: none;
 		}
 	}
 
@@ -47,6 +52,14 @@
 		width: 100%;
 		max-width: var(--wp--style--global--content-size, 632px);
 		margin: 0 auto;
+		transform: translateY(calc(-1 * var(--wp--preset--spacing--30, 1rem)));
+		transition: transform motion.$duration-modal motion.$ease-out;
+	}
+
+	@include motion.reduced-motion {
+		.newspack-overlay-search__content {
+			transform: none;
+		}
 	}
 
 	.newspack-overlay-search__close {
@@ -84,18 +97,4 @@ body:is(
 	[class*=" menu-open--overlay-search-"]
 ) {
 	overflow: hidden !important; // !important to temporarily override style from block theme's overlay approach.
-}
-
-// Slide-down + fade-in on the content as the panel opens — mirrors the
-// `search-contents__fade-in-animation` in newspack-block-theme.
-@keyframes newspack-overlay-search__fade-in { /* stylelint-disable-line keyframes-name-pattern */
-	0% {
-		opacity: 0;
-		transform: translateY(calc(-1 * var(--wp--preset--spacing--30, 1rem)));
-	}
-
-	100% {
-		opacity: 1;
-		transform: translateY(0);
-	}
 }

@@ -27,27 +27,29 @@ let server: ThemeData;
 const mockState = { errorMessage: null as string | null, rejectNext: false, holdNext: false };
 let releaseHeld: () => void = () => {};
 
-const mockWizardApiFetch = jest.fn( ( options: { method?: string; data?: ThemeData }, callbacks: { onSuccess?: ( data: ThemeData ) => void } ) => {
-	if ( mockState.rejectNext ) {
-		mockState.rejectNext = false;
-		return Promise.reject( new Error( 'Request failed.' ) );
+const mockWizardApiFetch = jest.fn(
+	( options: { method?: string; path?: string; data?: ThemeData }, callbacks: { onSuccess?: ( data: ThemeData ) => void } ) => {
+		if ( mockState.rejectNext ) {
+			mockState.rejectNext = false;
+			return Promise.reject( new Error( 'Request failed.' ) );
+		}
+		if ( options.method === 'POST' ) {
+			server = { ...server, ...options.data };
+		}
+		const response = { ...server };
+		if ( mockState.holdNext ) {
+			mockState.holdNext = false;
+			return new Promise( resolve => {
+				releaseHeld = () => {
+					callbacks?.onSuccess?.( response );
+					resolve( response );
+				};
+			} );
+		}
+		callbacks?.onSuccess?.( response );
+		return Promise.resolve( response );
 	}
-	if ( options.method === 'POST' ) {
-		server = { ...server, ...options.data };
-	}
-	const response = { ...server };
-	if ( mockState.holdNext ) {
-		mockState.holdNext = false;
-		return new Promise( resolve => {
-			releaseHeld = () => {
-				callbacks?.onSuccess?.( response );
-				resolve( response );
-			};
-		} );
-	}
-	callbacks?.onSuccess?.( response );
-	return Promise.resolve( response );
-} );
+);
 
 const mockResetError = jest.fn();
 
@@ -210,5 +212,139 @@ describe( 'Theme and Brand', () => {
 		await renderThemeBrand();
 
 		expect( screen.getAllByText( 'Request failed.' ).some( el => el.classList.contains( 'components-notice__content' ) ) ).toBe( true );
+	} );
+
+	describe( 'in setup', () => {
+		const onPreviewSaved = jest.fn();
+		beforeEach( () => onPreviewSaved.mockClear() );
+		const requests = () => mockWizardApiFetch.mock.calls.map( ( [ request ] ) => `${ request.method ?? 'GET' } ${ request.path }` );
+		const renderSetup = async ( onSetupComplete = jest.fn() ) => {
+			render(
+				<ThemeBrand
+					isPartOfSetup
+					onSetupComplete={ onSetupComplete }
+					renderSetupFooter={ ( { finish, skip, preview, isBusy, isPreviewing } ) => (
+						<>
+							<button onClick={ skip } disabled={ isBusy }>
+								Skip for Now
+							</button>
+							<button onClick={ () => preview().then( onPreviewSaved, () => {} ) } disabled={ isBusy } aria-busy={ isPreviewing }>
+								Preview Site
+							</button>
+							<button onClick={ finish } disabled={ isBusy }>
+								Finish
+							</button>
+						</>
+					) }
+				/>
+			);
+			await act( async () => {} );
+			return onSetupComplete;
+		};
+
+		it( 'Skip for Now completes setup without saving theme mods', async () => {
+			const onSetupComplete = await renderSetup();
+
+			await act( async () => {
+				fireEvent.click( screen.getByRole( 'button', { name: 'Skip for Now' } ) );
+			} );
+
+			expect( requests() ).toContain( 'POST /newspack/v1/wizard/newspack-setup-wizard/complete' );
+			expect( requests() ).not.toContain( 'POST /newspack/v1/wizard/newspack-setup-wizard/theme' );
+			expect( onSetupComplete ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it( 'Finish saves then completes', async () => {
+			const onSetupComplete = await renderSetup();
+
+			await act( async () => {
+				fireEvent.click( screen.getByRole( 'button', { name: 'Finish' } ) );
+			} );
+
+			const posts = requests().filter( request => request.startsWith( 'POST' ) );
+			expect( posts ).toEqual( [
+				'POST /newspack/v1/wizard/newspack-setup-wizard/theme',
+				'POST /newspack/v1/wizard/newspack-setup-wizard/complete',
+			] );
+			expect( onSetupComplete ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it( 'Preview Site saves without completing setup', async () => {
+			const onSetupComplete = await renderSetup();
+
+			await act( async () => {
+				fireEvent.click( screen.getByRole( 'button', { name: 'Preview Site' } ) );
+			} );
+
+			expect( requests() ).toContain( 'POST /newspack/v1/wizard/newspack-setup-wizard/theme' );
+			expect( requests() ).not.toContain( 'POST /newspack/v1/wizard/newspack-setup-wizard/complete' );
+			expect( onSetupComplete ).not.toHaveBeenCalled();
+			expect( onPreviewSaved ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it( 'marks only Preview Site busy, and only while its save runs', async () => {
+			await renderSetup();
+			const previewButton = screen.getByRole( 'button', { name: 'Preview Site' } );
+
+			mockState.holdNext = true;
+			await act( async () => {
+				fireEvent.click( previewButton );
+			} );
+			expect( previewButton ).toHaveAttribute( 'aria-busy', 'true' );
+
+			await act( async () => releaseHeld() );
+			expect( previewButton ).toHaveAttribute( 'aria-busy', 'false' );
+
+			mockState.holdNext = true;
+			await act( async () => {
+				fireEvent.click( screen.getByRole( 'button', { name: 'Finish' } ) );
+			} );
+			expect( previewButton ).toHaveAttribute( 'aria-busy', 'false' );
+			await act( async () => releaseHeld() );
+		} );
+
+		it( 'Preview Site does not open the preview when the save fails', async () => {
+			await renderSetup();
+
+			mockState.rejectNext = true;
+			await act( async () => {
+				fireEvent.click( screen.getByRole( 'button', { name: 'Preview Site' } ) );
+			} );
+
+			expect( onPreviewSaved ).not.toHaveBeenCalled();
+		} );
+
+		it( 'stays on the step when the save fails', async () => {
+			const onSetupComplete = await renderSetup();
+
+			mockState.rejectNext = true;
+			await act( async () => {
+				fireEvent.click( screen.getByRole( 'button', { name: 'Finish' } ) );
+			} );
+
+			expect( requests() ).not.toContain( 'POST /newspack/v1/wizard/newspack-setup-wizard/complete' );
+			expect( onSetupComplete ).not.toHaveBeenCalled();
+		} );
+
+		it( 'stays on the step when completing fails', async () => {
+			const onSetupComplete = await renderSetup();
+
+			mockState.rejectNext = true;
+			await act( async () => {
+				fireEvent.click( screen.getByRole( 'button', { name: 'Skip for Now' } ) );
+			} );
+
+			expect( onSetupComplete ).not.toHaveBeenCalled();
+		} );
+	} );
+
+	it( 'outside setup, renders no setup footer and keeps the Save header action', async () => {
+		const renderSetupFooter = jest.fn( () => <button>Finish</button> );
+		render( <ThemeBrand renderSetupFooter={ renderSetupFooter } /> );
+		await act( async () => {} );
+
+		expect( renderSetupFooter ).not.toHaveBeenCalled();
+		expect( screen.queryByRole( 'button', { name: 'Finish' } ) ).not.toBeInTheDocument();
+		expect( headerAction( 'Save' ) ).toBeDefined();
 	} );
 } );
