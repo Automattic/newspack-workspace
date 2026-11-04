@@ -198,6 +198,26 @@ class JetpackSharingTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The modal follows the main query's post object even when the queried
+	 * object is a separate copy of the same post, as it is for page paths.
+	 */
+	public function test_footer_modal_follows_the_main_query_post() {
+		$this->view_test_post();
+		global $wp_query;
+		$wp_query->queried_object    = clone $wp_query->posts[0];
+		$wp_query->queried_object_id = $this->test_post->ID;
+		$this->make_source()->get_display( $wp_query->queried_object );
+		$wp_query->posts[0]->post_content = '<p>Teaser only.</p>';
+
+		ob_start();
+		Republication_Tracker_Tool_Jetpack_Sharing::print_modal();
+		$footer = ob_get_clean();
+
+		$this->assertStringContainsString( 'Teaser only.', $footer );
+		$this->assertStringNotContainsString( 'Shareable content.', $footer );
+	}
+
+	/**
 	 * Where the button can't show, it is left out of Jetpack's enabled services,
 	 * so Jetpack prints no empty item or empty share bar for it.
 	 */

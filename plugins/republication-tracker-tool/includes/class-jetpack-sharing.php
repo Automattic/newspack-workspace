@@ -29,8 +29,10 @@ final class Republication_Tracker_Tool_Jetpack_Sharing {
 	/**
 	 * The post a Republish button was displayed for on this page.
 	 *
-	 * The page's own post object rather than a reloaded copy, so the modal
-	 * copies the post as the page holds it.
+	 * The main query's own post object, the one the loop hands to `the_post`,
+	 * rather than a reloaded copy, so the modal copies the post as the page
+	 * holds it. The queried object can be a separate copy (page paths load it
+	 * on their own), so it isn't used here.
 	 *
 	 * @var WP_Post|null
 	 */
@@ -110,8 +112,8 @@ final class Republication_Tracker_Tool_Jetpack_Sharing {
 		if ( self::$post ) {
 			return;
 		}
-		$queried    = get_queried_object();
-		self::$post = $queried instanceof WP_Post && $queried->ID === $post->ID ? $queried : $post;
+		$main_post  = $GLOBALS['wp_the_query']->posts[0] ?? null;
+		self::$post = $main_post instanceof WP_Post && $main_post->ID === $post->ID ? $main_post : $post;
 
 		Republication_Tracker_Tool_Republish_Button_Block::enqueue_modal_assets();
 		self::enqueue_style();
