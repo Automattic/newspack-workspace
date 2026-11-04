@@ -1,0 +1,30 @@
+- generic [active] [ref=f12e1]:
+  - heading "Log In" [level=1] [ref=f12e2]
+  - generic [ref=f12e3]:
+    - link "Powered by WordPress" [ref=f12e4] [cursor=pointer]:
+      - /url: https://wordpress.org/
+    - generic [ref=f12e5]:
+      - paragraph [ref=f12e6]:
+        - generic [ref=f12e7]: Username or Email Address
+        - textbox "Username or Email Address" [ref=f12e8]
+      - generic [ref=f12e9]:
+        - generic [ref=f12e10]: Password
+        - generic [ref=f12e11]:
+          - textbox "Password" [ref=f12e12]
+          - button "Show password" [ref=f12e13] [cursor=pointer]:
+            - generic [aria-hidden] [ref=f12e14]: 
+      - paragraph [ref=f12e15]:
+        - checkbox "Remember Me" [ref=f12e16] [cursor=pointer]
+        - generic [ref=f12e17]: Remember Me
+        - generic [ref=f12e18]:
+          - button "Help" [ref=f12e19] [cursor=pointer]:
+            - generic [aria-hidden] [ref=f12e20]: 
+          - text: 
+      - paragraph:
+        - button "Log In" [ref=f12e21] [cursor=pointer]
+    - paragraph [ref=f12e22]:
+      - link "Lost your password?" [ref=f12e23] [cursor=pointer]:
+        - /url: https://blocktheme2.local/wp-login.php?action=lostpassword
+    - paragraph [ref=f12e24]:
+      - link "← Go to Block Theme" [ref=f12e25] [cursor=pointer]:
+        - /url: https://blocktheme2.local/

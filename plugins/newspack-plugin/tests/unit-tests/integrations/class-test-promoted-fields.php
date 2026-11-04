@@ -60,6 +60,7 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 		Integrations::register_integrations();
 		delete_option( 'newspack_integration_incoming_fields_promoted-test' );
 		delete_option( 'newspack_integration_incoming_fields_range-test' );
+		delete_option( 'newspack_integration_incoming_fields_boolean-test' );
 		delete_option( Integrations::OPTION_NAME );
 		parent::tear_down();
 	}
@@ -977,6 +978,50 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 		// The probe answers for unknown names too: an operator the installed
 		// build can't resolve still degrades even though the probe exists.
 		$this->assertSame( 'default', $method->invoke( null, 'a_future_operator' ) );
+	}
+
+	/**
+	 * A checkbox field holds a real true or false, while the segment editor saves
+	 * the Yes or No option picked for it. Exact matching compares the two and
+	 * matches no reader, so the criterion is registered with the matcher that
+	 * reads Yes and No against the stored value. Runs after the degrade-path test
+	 * for the same reason as the probe test above: it loads the stub.
+	 */
+	public function test_a_boolean_field_registers_a_yes_no_criterion_with_the_boolean_matcher() {
+		if ( ! class_exists( '\Newspack_Popups_Criteria' ) ) {
+			require_once dirname( __DIR__, 2 ) . '/mocks/class-newspack-popups-criteria-mock.php';
+		}
+
+		$integration = new class( 'boolean-test', 'Test ESP' ) extends Sample_Integration {
+			/**
+			 * Promote a checkbox field as a segment criterion.
+			 *
+			 * @param \Newspack\Reader_Activation\Integrations\Incoming_Field $field The field.
+			 * @return \Newspack\Reader_Activation\Integrations\Incoming_Field
+			 */
+			protected function configure_incoming_field( $field ) {
+				if ( 'is_vip' === $field->get_key() ) {
+					$field->set_name( 'VIP' )
+						->set_value_type( 'boolean' )
+						->set_is_segment_criteria( true );
+				}
+				return $field;
+			}
+		};
+
+		$this->reset_integrations();
+		Integrations::register( $integration );
+		Integrations::enable( 'boolean-test' );
+		$integration->update_enabled_incoming_fields( [ 'is_vip' ] );
+		Promoted_Fields::reset_cache();
+
+		Promoted_Fields::register();
+
+		$registered = wp_list_filter( \Newspack_Popups_Criteria::get_registered_criteria(), [ 'id' => 'boolean-test__is_vip' ] );
+		$this->assertCount( 1, $registered );
+		$criterion = reset( $registered );
+		$this->assertSame( 'boolean', $criterion['matching_function'] );
+		$this->assertSame( [ '', 'yes', 'no' ], wp_list_pluck( $criterion['options'], 'value' ) );
 	}
 
 	/**

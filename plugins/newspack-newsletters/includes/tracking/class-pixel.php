@@ -569,4 +569,7 @@ final class Pixel {
 		update_option( 'newspack_newsletters_tracking_pixel_log_file', $log_file_path );
 	}
 }
-Pixel::init();
+// Boot only when the main plugin file loaded this, not another plugin's autoloader.
+if ( defined( 'NEWSPACK_NEWSLETTERS_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal path constant, set by the main plugin file.
+	Pixel::init();
+}

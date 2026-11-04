@@ -203,6 +203,7 @@ function render_block( $attrs, $content ) {
 	$default_attrs = [
 		'label'           => __( 'Continue', 'newspack-plugin' ),
 		'newsletterLabel' => __( 'Subscribe to our newsletter', 'newspack-plugin' ),
+		'placeholder'     => __( 'Your email address', 'newspack-plugin' ),
 	];
 	$attrs         = \wp_parse_args( $attrs, $default_attrs );
 	foreach ( $default_attrs as $key => $value ) {
@@ -260,6 +261,8 @@ function render_block( $attrs, $content ) {
 		}
 	}
 
+	$form_id = get_form_id();
+
 	ob_start();
 	?>
 	<div class="newspack-registration newspack-ui <?php echo esc_attr( get_block_classes( $attrs ) ); ?>">
@@ -275,7 +278,7 @@ function render_block( $attrs, $content ) {
 				<?php echo $success_registration_markup; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 			</div>
 		<?php else : ?>
-			<form id="<?php echo esc_attr( get_form_id() ); ?>" data-newspack-recaptcha="newspack_register">
+			<form id="<?php echo esc_attr( $form_id ); ?>" data-newspack-recaptcha="newspack_register">
 				<?php if ( ! empty( $attrs['title'] ) ) : ?>
 					<div class="newspack-registration__header">
 						<h3 class="newspack-registration__title"><?php echo \wp_kses_post( $attrs['title'] ); ?></h3>
@@ -323,20 +326,19 @@ function render_block( $attrs, $content ) {
 					?>
 					<div class="newspack-registration__main">
 						<div>
-							<?php if ( empty( $attrs['hideOauth'] ) ) : ?>
-								<?php Reader_Activation::render_third_party_auth(); ?>
-							<?php endif; ?>
 							<div class="newspack-registration__inputs">
-								<input
-								<?php
-								if ( $is_admin_preview ) :
-									?>
-									disabled
-									<?php endif; ?>
-									type="email" name="npe" autocomplete="email"
-									placeholder="<?php echo \esc_attr( $attrs['placeholder'] ); ?>"
-								/>
-								<?php Reader_Activation::render_honeypot_field( $attrs['placeholder'] ); ?>
+								<div class="newspack-registration__email">
+									<input
+									<?php
+									if ( $is_admin_preview ) :
+										?>
+										disabled
+										<?php endif; ?>
+										type="email" name="npe" autocomplete="email"
+										placeholder="<?php echo \esc_attr( $attrs['placeholder'] ); ?>"
+									/>
+									<?php Reader_Activation::render_honeypot_field( $attrs['placeholder'] ); ?>
+								</div>
 								<button
 								<?php
 								if ( $is_admin_preview ) :
@@ -349,11 +351,14 @@ function render_block( $attrs, $content ) {
 									<span class="submit"><?php echo \esc_html( $attrs['label'] ); ?></span>
 								</button>
 							</div>
-							<div class="newspack-registration__response <?php echo ( empty( $message ) ) ? 'newspack-registration--hidden' : null; ?>">
+							<div id="<?php echo esc_attr( $form_id . '-response' ); ?>" class="newspack-registration__response <?php echo ( empty( $message ) ) ? 'newspack-registration--hidden' : null; ?>">
 								<?php if ( ! empty( $message ) ) : ?>
 									<p><?php echo \esc_html( $message ); ?></p>
 								<?php endif; ?>
 							</div>
+							<?php if ( empty( $attrs['hideOauth'] ) ) : ?>
+								<?php Reader_Activation::render_third_party_auth( true ); ?>
+							<?php endif; ?>
 						</div>
 					</div>
 				</div>

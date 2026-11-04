@@ -1078,11 +1078,11 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 			[
 				960                         => 'Publish tier',
 				961                         => 'Private tier [status: Private]',
-				962                         => 'Draft tier [invalid status: Draft]',
-				963                         => 'Pending tier [invalid status: Pending]',
-				964                         => 'Draft membership [invalid status: Draft]',
-				$variation_id               => 'Draft membership - Annual [invalid status: Draft]',
-				$draft_private_variation_id => 'Draft membership - Monthly [invalid status: Draft]',
+				962                         => 'Draft tier [draft]',
+				963                         => 'Pending tier [pending]',
+				964                         => 'Draft membership [draft]',
+				$variation_id               => 'Draft membership - Annual [draft]',
+				$draft_private_variation_id => 'Draft membership - Monthly [draft]',
 				965                         => 'Membership',
 				$private_variation_id       => 'Membership - Legacy [status: Private]',
 				966                         => 'Legacy membership [status: Private]',
@@ -1125,14 +1125,14 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 		$this->assertArrayNotHasKey( 'selectable', $rule_options[970] );
 		$this->assertSame(
 			[
-				'label'      => 'Future tier [invalid status: Scheduled]',
+				'label'      => 'Future tier [scheduled]',
 				'value'      => 971,
 				'ineligible' => true,
 				'selectable' => false,
 			],
 			$rule_options[971]
 		);
-		$this->assertSame( 'Trash tier [invalid status: Trash]', $rule_options[972]['label'] );
+		$this->assertSame( 'Trash tier [trash]', $rule_options[972]['label'] );
 		$this->assertFalse( $rule_options[972]['selectable'] );
 	}
 
@@ -1156,7 +1156,7 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 
 		$rule_options = array_column( Access_Rules::get_access_rules()['subscription']['options'], null, 'value' );
 
-		$this->assertSame( 'Retired membership - Annual [invalid status: Trash]', $rule_options[ $variation_id ]['label'] ?? null );
+		$this->assertSame( 'Retired membership - Annual [trash]', $rule_options[ $variation_id ]['label'] ?? null );
 		$this->assertFalse( $rule_options[ $variation_id ]['selectable'] );
 	}
 

@@ -1,0 +1,5 @@
+- generic [ref=e2]:
+  - text:          
+  - generic:
+    - main:
+      - region "Navigation" [ref=e6]

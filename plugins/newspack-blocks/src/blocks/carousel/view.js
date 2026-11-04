@@ -20,7 +20,7 @@ if ( typeof window !== 'undefined' ) {
 						if ( entry.isIntersecting ) {
 							const slidesPerView = parseInt( block.dataset.slidesPerView );
 							const slideCount = parseInt( block.dataset.slideCount );
-							createSwiper(
+							const swiper = createSwiper(
 								{
 									block,
 									container: block.querySelector( '.swiper' ),
@@ -38,6 +38,9 @@ if ( typeof window !== 'undefined' ) {
 									spaceBetween: 16,
 								}
 							);
+							if ( swiper ) {
+								observer.unobserve( block );
+							}
 						}
 					} );
 				},

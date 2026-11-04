@@ -11,12 +11,18 @@
  * WordPress dependencies
  */
 import domReady from '@wordpress/dom-ready';
+import { travelDuration } from 'newspack-motion';
+
+/**
+ * Internal dependencies
+ */
+import { lockScrollbarGutter, unlockScrollbarGutter } from '../../shared/js/scrollbar-gutter';
+
+import { getNoticeIcon } from '../../newspack-ui/js/icons';
+import { getTransitionTime } from '../../newspack-ui/js/utils';
 
 const PANEL_ID = 'newspack-comments-panel';
 const BODY_OPEN_CLASS = 'comments-panel-open';
-const SLIDE_FALLBACK_MS = 600;
-// Slide duration (250ms in style.scss) plus a short buffer before scrolling to a linked comment.
-const SCROLL_TO_COMMENT_DELAY_MS = 400;
 
 const getScrollBehavior = () => ( window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches ? 'auto' : 'smooth' );
 
@@ -54,7 +60,6 @@ const createCommentsPanel = ( panel, triggers ) => {
 
 	let isOpen = false;
 	let lastFocused = null;
-	let overlay = null;
 	let focusTrapCleanup = null;
 	let escCleanup = null;
 
@@ -62,35 +67,15 @@ const createCommentsPanel = ( panel, triggers ) => {
 	// ancestor CSS transforms / stacking contexts.
 	document.body.appendChild( panel );
 
+	const scrim = document.createElement( 'div' );
+	scrim.className = 'comments-panel__scrim alignfull';
+	scrim.setAttribute( 'aria-hidden', 'true' );
+	if ( panel.dataset.overlayColor ) {
+		scrim.style.background = panel.dataset.overlayColor;
+	}
+	panel.after( scrim );
+
 	// ─── Open/close: overlay, slide animation, focus trap, and trigger wiring ────
-
-	const showOverlay = color => {
-		overlay = document.createElement( 'div' );
-		overlay.className = 'comments-panel__scrim alignfull';
-		overlay.setAttribute( 'aria-hidden', 'true' );
-		overlay.style.opacity = '0';
-		if ( color ) {
-			overlay.style.background = color;
-		}
-		overlay.addEventListener( 'click', closePanel );
-		document.body.appendChild( overlay );
-		void overlay.offsetHeight;
-		requestAnimationFrame( () => {
-			overlay.style.opacity = '1';
-		} );
-	};
-
-	const hideOverlay = () => {
-		if ( ! overlay ) {
-			return;
-		}
-		const el = overlay;
-		overlay = null;
-		el.style.opacity = '0';
-		const cleanup = () => el.remove();
-		el.addEventListener( 'transitionend', cleanup, { once: true } );
-		setTimeout( cleanup, SLIDE_FALLBACK_MS );
-	};
 
 	const slideIn = () => {
 		void panel.offsetHeight;
@@ -148,14 +133,19 @@ const createCommentsPanel = ( panel, triggers ) => {
 		isOpen = true;
 		lastFocused = panel.ownerDocument.activeElement;
 
+		const duration = `${ travelDuration( panel.offsetWidth ) }ms`;
+		panel.style.setProperty( '--comments-panel-slide-duration', duration );
+		scrim.style.setProperty( '--comments-panel-slide-duration', duration );
+
 		slideIn();
 
 		triggers.forEach( t => t.setAttribute( 'aria-expanded', 'true' ) );
 		panel.setAttribute( 'aria-hidden', 'false' );
 		panel.removeAttribute( 'inert' );
+		lockScrollbarGutter();
 		document.body.classList.add( BODY_OPEN_CLASS );
 
-		showOverlay( panel.dataset.overlayColor || '' );
+		scrim.classList.add( 'comments-panel__scrim--open' );
 
 		focusTrapCleanup = trapFocus();
 
@@ -194,18 +184,21 @@ const createCommentsPanel = ( panel, triggers ) => {
 		panel.setAttribute( 'aria-hidden', 'true' );
 		panel.setAttribute( 'inert', '' );
 		document.body.classList.remove( BODY_OPEN_CLASS );
+		unlockScrollbarGutter();
 
 		if ( lastFocused && document.contains( lastFocused ) ) {
 			lastFocused.focus();
 		}
 
-		hideOverlay();
+		scrim.classList.remove( 'comments-panel__scrim--open' );
 		slideOut();
 	};
 
 	triggers.forEach( trigger => {
 		trigger.addEventListener( 'click', () => ( isOpen ? closePanel() : openPanel() ) );
 	} );
+
+	scrim.addEventListener( 'click', closePanel );
 
 	if ( closeBtn ) {
 		closeBtn.addEventListener( 'click', e => {
@@ -325,6 +318,10 @@ const createCommentsPanel = ( panel, triggers ) => {
 			form.prepend( wrapper );
 		}
 		noticeEl.textContent = message;
+		const icon = getNoticeIcon( 'error' );
+		if ( icon ) {
+			noticeEl.prepend( icon );
+		}
 	};
 
 	let isSubmitting = false;
@@ -429,7 +426,7 @@ const createCommentsPanel = ( panel, triggers ) => {
 					focusWithin( target );
 					target.scrollIntoView( { behavior: getScrollBehavior(), block: 'start' } );
 				}
-			}, SCROLL_TO_COMMENT_DELAY_MS );
+			}, getTransitionTime( panel ) );
 		}
 	}
 };

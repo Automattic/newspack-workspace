@@ -9,17 +9,17 @@ Note: The font size still needs to be changed to x-small if we're recreating a N
 | CLASS NAME       | DESCRIPTION                                                                                                          |
 | ---------------- | -------------------------------------------------------------------------------------------------------------------- |
 | has-small-size   | The buttons will have a top and bottom padding of 8px and a left and right padding of 16px.                          |
-| has-x-small-size | The buttons will have a top and bottom padding of 6px, a left and right padding of 12px, and a border-radius of 4px. |
+| has-x-small-size | The buttons will have a top and bottom padding of 6px, a left and right padding of 12px, and a border-radius of 6px. |
 
 # Background
 
-Adding `has-background-transparent` to a button renders it with no background at rest and applies a subtle hover tint: the current text colour mixed at 3.5% opacity, which over a white surface approximates #f7f7f7.
+Adding `has-background-transparent` to a button renders it with no background at rest and applies a subtle tint derived from the current text color: 7% on hover and 13% on press, which over a white surface approximate #efefef and #e2e2e2.
 
-The tint only applies while the background is transparent. If a background colour is applied (e.g. `has-accent-background-color`), the class has no effect and the applied colour takes over.
+The tint only applies while the background is transparent. If a background color is applied (e.g. `has-accent-background-color`), the class has no effect and the applied color takes over.
 
 | CLASS NAME                 | DESCRIPTION                                                                                                       |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| has-background-transparent | Transparent background with a subtle hover tint derived from the current text colour. Inactive when a background colour is set. |
+| has-background-transparent | Transparent background with a subtle hover and press tint derived from the current text color. Inactive when a background color is set. |
 
 # Position
 

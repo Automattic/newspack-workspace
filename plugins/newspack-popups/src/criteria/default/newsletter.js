@@ -43,7 +43,7 @@ export function matchNewsletter( config, { store } ) {
 		case 'non-subscribers':
 			return ! isSubscriber;
 	}
-	// The empty "Subscribers and non-subscribers" value applies no filter, so a
+	// The empty "Any reader" value applies no filter, so a
 	// segment using it never registers this criterion and never reaches here.
 }
 

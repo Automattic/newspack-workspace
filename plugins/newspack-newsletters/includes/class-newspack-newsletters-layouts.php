@@ -428,4 +428,7 @@ final class Newspack_Newsletters_Layouts {
 		);
 	}
 }
-Newspack_Newsletters_Layouts::instance();
+// Boot only when the main plugin file loaded this, not another plugin's autoloader.
+if ( defined( 'NEWSPACK_NEWSLETTERS_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal path constant, set by the main plugin file.
+	Newspack_Newsletters_Layouts::instance();
+}

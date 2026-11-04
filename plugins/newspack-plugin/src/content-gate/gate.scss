@@ -17,12 +17,17 @@
 			inset: 0;
 			background: #000;
 			opacity: 0;
-			transition: opacity 200ms ease;
+			transition: opacity var(--newspack-ui-duration-sheet, 400ms) var(--newspack-ui-ease-out, cubic-bezier(0.23, 1, 0.32, 1));
 		}
 		&[data-visible="true"] {
 			pointer-events: auto;
 			&::before {
 				opacity: 0.75;
+			}
+		}
+		@media ( min-width: 600px ) {
+			&[data-position="center"]::before {
+				transition-duration: var(--newspack-ui-duration-modal, 250ms);
 			}
 		}
 		&__container {
@@ -32,12 +37,24 @@
 			max-height: 100%;
 			left: 50%;
 			bottom: 0;
-			transform: translate(-50%, 50px);
+			transform: translate(-50%, 100%);
 			opacity: 0;
-			transition: transform 200ms ease, opacity 200ms ease;
+			transition:
+				transform var(--newspack-ui-duration-sheet, 400ms) var(--newspack-ui-ease-drawer, cubic-bezier(0.32, 0.72, 0, 1)),
+				opacity 0s linear var(--newspack-ui-duration-sheet, 400ms);
 			[data-visible="true"] & {
 				transform: translate(-50%, 0);
 				opacity: 1;
+				transition:
+					transform var(--newspack-ui-duration-sheet, 400ms) var(--newspack-ui-ease-drawer, cubic-bezier(0.32, 0.72, 0, 1)),
+					opacity 0s;
+			}
+			@media ( prefers-reduced-motion: reduce ) {
+				&,
+				[data-visible="true"] & {
+					transform: translate(-50%, 0);
+					transition: opacity var(--newspack-ui-duration-modal, 250ms) ease;
+				}
 			}
 			[data-size="x-small"] & {
 				max-width: gate.$size__x-small;
@@ -54,14 +71,27 @@
 			[data-size="full-width"] & {
 				background: #fff;
 			}
+			.newspack-is-block-theme [data-size="full-width"] & {
+				border-radius: var(--newspack-ui-radius-sheet, 16px) var(--newspack-ui-radius-sheet, 16px) 0 0;
+			}
 			@media ( min-width: 600px ) {
 				[data-position="center"] & {
 					bottom: auto;
 					top: 50%;
-					transform: translate(-50%, calc(-50% + 50px));
+					transform: translate(-50%, -50%) scale(0.96);
+					transition:
+						opacity var(--newspack-ui-duration-modal, 250ms) var(--newspack-ui-ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
+						transform var(--newspack-ui-duration-modal, 250ms) var(--newspack-ui-ease-out, cubic-bezier(0.23, 1, 0.32, 1));
 				}
 				[data-position="center"][data-visible="true"] & {
 					transform: translate(-50%, -50%);
+				}
+				@media ( prefers-reduced-motion: reduce ) {
+					[data-position="center"] &,
+					[data-position="center"][data-visible="true"] & {
+						transform: translate(-50%, -50%);
+						transition: opacity var(--newspack-ui-duration-modal, 250ms) ease;
+					}
 				}
 			}
 		}
@@ -78,6 +108,15 @@
 				[data-position="center"] & {
 					border-radius: 5px;
 				}
+			}
+			.newspack-is-block-theme & {
+				border-radius: var(--newspack-ui-radius-sheet, 16px) var(--newspack-ui-radius-sheet, 16px) 0 0;
+			}
+		}
+		@media ( min-width: 600px ) {
+			.newspack-is-block-theme [data-position="center"] &__container,
+			.newspack-is-block-theme [data-position="center"] &__content {
+				border-radius: var(--newspack-ui-radius-surface, 12px);
 			}
 		}
 	}

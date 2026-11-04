@@ -109,7 +109,8 @@ class Nodes_List {
 				</p>
 			<?php
 		}
-		if ( ! isset( self::$node_site_info_cache[ $post_id ] ) ) {
+		// Cache a failed lookup (null) too, so a Node is requested once per page, not once per column.
+		if ( ! array_key_exists( $post_id, self::$node_site_info_cache ) ) {
 			self::$node_site_info_cache[ $post_id ] = $node->get_site_info();
 		}
 		$node_site_info = self::$node_site_info_cache[ $post_id ];

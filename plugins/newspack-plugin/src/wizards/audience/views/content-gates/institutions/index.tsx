@@ -59,6 +59,7 @@ export default function Institutions() {
 			actions.push( {
 				type: 'primary',
 				label: __( 'Add Institution', 'newspack-plugin' ),
+				mobileIcon: 'plus',
 				href: '#/institutions/new',
 			} );
 			actions.push( {

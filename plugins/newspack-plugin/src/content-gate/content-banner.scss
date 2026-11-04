@@ -100,9 +100,9 @@ body.newspack-has-countdown-banner:has(.newspack-countdown-banner__cta:not(.news
 		padding: var(--newspack-ui-spacer-2) var(--newspack-ui-spacer-3);
 		position: fixed;
 		right: 0;
-		transition: opacity 0.3s ease-in-out;
+		transition: opacity var(--newspack-ui-duration-modal, 250ms) var(--newspack-ui-ease-out, cubic-bezier(0.23, 1, 0.32, 1));
 		z-index: 99999;
-		@include mixins.newspack-ui-elevation( 3 );
+		@include mixins.newspack-ui-elevation( 3, $direction: up );
 
 		&--hidden {
 			opacity: 0;

@@ -5,9 +5,6 @@
  */
 import domReady from '@wordpress/dom-ready';
 
-let initialized = false;
-let currentTrigger = null;
-
 /**
  * Get the textarea for the currently active tab.
  *
@@ -23,42 +20,67 @@ function getActiveTextarea() {
 }
 
 /**
- * Initialize tab switching between HTML and Plain Text formats.
+ * Select a format tab and show its panel.
+ *
+ * @param {HTMLElement} modal The modal element.
+ * @param {HTMLElement} tab   The tab to select.
+ */
+function selectTab( modal, tab ) {
+	const targetTab = tab.getAttribute( 'data-tab' );
+
+	modal.querySelectorAll( '.republish-format-tabs__button' ).forEach( btn => {
+		const selected = btn === tab;
+		btn.classList.toggle( 'republish-format-tabs__button--active', selected );
+		btn.setAttribute( 'aria-selected', selected ? 'true' : 'false' );
+		btn.setAttribute( 'tabindex', selected ? '0' : '-1' );
+	} );
+
+	modal.querySelectorAll( '.republish-content' ).forEach( content => {
+		content.classList.toggle( 'republish-content--active', content.getAttribute( 'data-tab-content' ) === targetTab );
+	} );
+
+	const mainCopyButton = modal.querySelector( '.republication-tracker-tool__copy-button--main' );
+	if ( mainCopyButton ) {
+		mainCopyButton.classList.toggle( 'show-for-html', targetTab === 'html' );
+	}
+}
+
+/**
+ * Initialize tab switching between HTML and Plain Text formats, and the copy buttons.
  *
  * @param {HTMLElement} modal The modal element.
  */
 function initTabSwitching( modal ) {
-	const tabButtons = modal.querySelectorAll( '.republish-format-tabs__button' );
-	const tabContents = modal.querySelectorAll( '.republish-content' );
-	const mainCopyButton = modal.querySelector( '.republication-tracker-tool__copy-button--main' );
+	const tabs = Array.from( modal.querySelectorAll( '.republish-format-tabs__button' ) );
 
-	tabButtons.forEach( button => {
-		button.addEventListener( 'click', e => {
+	tabs.forEach( ( tab, index ) => {
+		tab.addEventListener( 'click', e => {
 			e.preventDefault();
-			const targetTab = button.getAttribute( 'data-tab' );
+			selectTab( modal, tab );
+		} );
 
-			// Update active states.
-			tabButtons.forEach( btn => btn.classList.remove( 'republish-format-tabs__button--active' ) );
-			tabContents.forEach( content => content.classList.remove( 'republish-content--active' ) );
-
-			button.classList.add( 'republish-format-tabs__button--active' );
-			const targetContent = modal.querySelector( `[data-tab-content="${ targetTab }"]` );
-			if ( targetContent ) {
-				targetContent.classList.add( 'republish-content--active' );
+		tab.addEventListener( 'keydown', e => {
+			if ( e.defaultPrevented ) {
+				return;
 			}
-
-			// Show/hide main copy button based on active tab.
-			if ( mainCopyButton ) {
-				if ( targetTab === 'html' ) {
-					mainCopyButton.classList.add( 'show-for-html' );
-				} else {
-					mainCopyButton.classList.remove( 'show-for-html' );
-				}
+			let next = null;
+			if ( e.key === 'ArrowRight' || e.key === 'ArrowDown' ) {
+				next = tabs[ ( index + 1 ) % tabs.length ];
+			} else if ( e.key === 'ArrowLeft' || e.key === 'ArrowUp' ) {
+				next = tabs[ ( index - 1 + tabs.length ) % tabs.length ];
+			} else if ( e.key === 'Home' ) {
+				next = tabs[ 0 ];
+			} else if ( e.key === 'End' ) {
+				next = tabs[ tabs.length - 1 ];
+			}
+			if ( next ) {
+				e.preventDefault();
+				selectTab( modal, next );
+				next.focus();
 			}
 		} );
 	} );
 
-	// Initialize copy buttons for individual plain text fields.
 	modal.querySelectorAll( '.plain-text-field__button' ).forEach( btn => {
 		btn.addEventListener( 'click', e => {
 			e.preventDefault();
@@ -69,13 +91,12 @@ function initTabSwitching( modal ) {
 		} );
 	} );
 
-	// Bind main copy button via data attribute.
 	const copyActiveBtn = modal.querySelector( '[data-copy-active]' );
 	if ( copyActiveBtn ) {
 		copyActiveBtn.addEventListener( 'click', e => {
 			e.preventDefault();
 			if ( window.ClipboardUtils ) {
-				ClipboardUtils.copyFromElement( getActiveTextarea(), copyActiveBtn );
+				ClipboardUtils.copyHandoutFromElement( getActiveTextarea(), copyActiveBtn );
 			}
 		} );
 	}
@@ -95,42 +116,60 @@ function stripCaptions( modal ) {
 	const parser = new DOMParser();
 	const doc = parser.parseFromString( html, 'text/html' );
 	doc.querySelectorAll( '.wp-caption' ).forEach( el => el.remove() );
-	shareable.innerHTML = doc.body.innerHTML;
+	// .value, not the textarea's innerHTML: innerHTML would decode the copy one more level,
+	// turning an HTML code sample the story shows as text into markup.
+	shareable.value = doc.body.innerHTML;
 }
 
 /**
- * Trap focus within the modal for accessibility.
+ * Keep keyboard focus inside the open modal.
+ *
+ * @param {HTMLElement}   modal The modal element.
+ * @param {KeyboardEvent} e     The Tab keydown event.
+ */
+function containFocus( modal, e ) {
+	const focusableSelector =
+		'a[href]:not([disabled]), button:not([disabled]), textarea:not([disabled]), input[type="text"]:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+	// Recomputed on each Tab because switching tabs hides controls.
+	const focusableEls = Array.from( modal.querySelectorAll( focusableSelector ) ).filter( el => el.offsetParent !== null );
+	if ( ! focusableEls.length ) {
+		return;
+	}
+	const firstFocusable = focusableEls[ 0 ];
+	const lastFocusable = focusableEls[ focusableEls.length - 1 ];
+	const active = modal.ownerDocument.activeElement;
+	const inside = focusableEls.includes( active );
+
+	if ( e.shiftKey && ( active === firstFocusable || ! inside ) ) {
+		lastFocusable.focus();
+		e.preventDefault();
+	} else if ( ! e.shiftKey && ( active === lastFocusable || ! modal.contains( active ) ) ) {
+		firstFocusable.focus();
+		e.preventDefault();
+	}
+}
+
+/**
+ * Whether the modal is built from newspack-ui, whose script opens and closes it.
  *
  * @param {HTMLElement} modal The modal element.
+ * @return {boolean} Whether it uses newspack-ui.
  */
-function trapFocus( modal ) {
-	const focusableSelector =
-		'a[href]:not([disabled]), button:not([disabled]), textarea:not([disabled]), input[type="text"]:not([disabled]), select:not([disabled])';
+function usesNewspackUI( modal ) {
+	return modal.classList.contains( 'newspack-ui__modal-container' );
+}
 
-	modal.addEventListener( 'keydown', e => {
-		if ( e.key !== 'Tab' ) {
-			return;
-		}
-		// Recompute visible focusable elements on each Tab so tab switching
-		// (which hides controls like the main copy button) doesn't leave
-		// stale references that let focus escape the modal.
-		const focusableEls = Array.from( modal.querySelectorAll( focusableSelector ) ).filter( el => el.offsetParent !== null );
-		if ( ! focusableEls.length ) {
-			return;
-		}
-		const firstFocusable = focusableEls[ 0 ];
-		const lastFocusable = focusableEls[ focusableEls.length - 1 ];
-		const active = modal.ownerDocument.activeElement;
-		if ( e.shiftKey ) {
-			if ( active === firstFocusable ) {
-				lastFocusable.focus();
-				e.preventDefault();
-			}
-		} else if ( active === lastFocusable ) {
-			firstFocusable.focus();
-			e.preventDefault();
-		}
-	} );
+/**
+ * Whether the modal is open.
+ *
+ * @param {HTMLElement} modal The modal element.
+ * @return {boolean} Whether it's open.
+ */
+function isModalOpen( modal ) {
+	if ( usesNewspackUI( modal ) ) {
+		return modal.getAttribute( 'data-state' ) === 'open';
+	}
+	return modal.style.display !== 'none';
 }
 
 /**
@@ -139,12 +178,19 @@ function trapFocus( modal ) {
  * @param {HTMLElement} modal The modal element.
  */
 function closeModal( modal ) {
+	if ( ! isModalOpen( modal ) ) {
+		return;
+	}
+	if ( usesNewspackUI( modal ) ) {
+		modal.setAttribute( 'data-state', 'closed' );
+		return;
+	}
 	document.body.classList.remove( 'modal-open-disallow-scrolling' );
 	modal.style.display = 'none';
-	if ( currentTrigger ) {
-		currentTrigger.focus();
+	if ( modal.rttTrigger ) {
+		modal.rttTrigger.focus();
 	}
-	currentTrigger = null;
+	modal.rttTrigger = null;
 }
 
 /**
@@ -153,10 +199,10 @@ function closeModal( modal ) {
  * @param {HTMLElement} modal The modal element.
  */
 function initModal( modal ) {
-	if ( initialized ) {
+	if ( modal.rttReady ) {
 		return;
 	}
-	initialized = true;
+	modal.rttReady = true;
 
 	const modalContent = modal.querySelector( '#republication-tracker-tool-modal-content' );
 	const closeBtn = modal.querySelector( '.republication-tracker-tool-close' );
@@ -172,16 +218,18 @@ function initModal( modal ) {
 	// Tab switching (bind once).
 	initTabSwitching( modal );
 
-	// Focus trap (bind once).
-	trapFocus( modal );
-
 	// Prevent clicks inside modal content from closing modal.
 	if ( modalContent ) {
 		modalContent.addEventListener( 'click', e => e.stopPropagation() );
 	}
 
 	// Click outside modal content closes modal.
-	modal.addEventListener( 'click', () => closeModal( modal ) );
+	modal.addEventListener( 'click', e => {
+		if ( usesNewspackUI( modal ) && ! e.target.classList.contains( 'newspack-ui__modal-container__overlay' ) ) {
+			return;
+		}
+		closeModal( modal );
+	} );
 
 	// Close button.
 	if ( closeBtn ) {
@@ -191,10 +239,14 @@ function initModal( modal ) {
 		} );
 	}
 
-	// Escape key.
 	document.addEventListener( 'keydown', e => {
-		if ( e.key === 'Escape' && modal.style.display !== 'none' ) {
+		if ( usesNewspackUI( modal ) || ! isModalOpen( modal ) ) {
+			return;
+		}
+		if ( e.key === 'Escape' ) {
 			closeModal( modal );
+		} else if ( e.key === 'Tab' && ! e.defaultPrevented ) {
+			containFocus( modal, e );
 		}
 	} );
 }
@@ -207,7 +259,12 @@ function initModal( modal ) {
  */
 function showModal( modal, triggerButton ) {
 	initModal( modal );
-	currentTrigger = triggerButton;
+	if ( usesNewspackUI( modal ) ) {
+		triggerButton?.focus();
+		modal.setAttribute( 'data-state', 'open' );
+		return;
+	}
+	modal.rttTrigger = triggerButton;
 
 	const modalContent = modal.querySelector( '#republication-tracker-tool-modal-content' );
 
@@ -217,10 +274,9 @@ function showModal( modal, triggerButton ) {
 	}
 	document.body.classList.add( 'modal-open-disallow-scrolling' );
 
-	// Focus close button.
-	const closeBtn = modal.querySelector( '.republication-tracker-tool-close' );
-	if ( closeBtn ) {
-		closeBtn.focus();
+	const title = modal.querySelector( '#republish-modal-label' );
+	if ( title ) {
+		title.focus();
 	}
 }
 

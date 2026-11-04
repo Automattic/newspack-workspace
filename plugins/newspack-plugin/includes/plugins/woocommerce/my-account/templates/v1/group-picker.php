@@ -29,7 +29,7 @@ usort(
 ?>
 <div class="newspack-my-account__group-picker">
 	<header class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-1">
-		<h1 class="newspack-ui__font--m">
+		<h1 class="newspack-my-account__page-title newspack-ui__font--l">
 			<?php echo esc_html( Group_Subscription::get_label( 'plural' ) ); ?>
 		</h1>
 		<p>
@@ -62,17 +62,8 @@ usort(
 					_n( '%d seat used', '%d seats used', $member_count, 'newspack-plugin' ),
 					$member_count
 				);
-			$subscription_status = $subscription->get_status();
-			$status_classes      = [ 'newspack-ui__badge' ];
-			if ( in_array( $subscription_status, [ 'cancelled', 'expired' ], true ) ) {
-				$status_classes[] = 'newspack-ui__badge--error';
-			} elseif ( in_array( $subscription_status, [ 'pending-cancel', 'on-hold', 'pending', 'processing' ], true ) ) {
-				$status_classes[] = 'newspack-ui__badge--warning';
-			} elseif ( 'active' === $subscription_status ) {
-				$status_classes[] = 'newspack-ui__badge--success';
-			} else {
-				$status_classes[] = 'newspack-ui__badge--secondary';
-			}
+			$status_modifier = \Newspack\My_Account_UI_V1::get_subscription_status_modifier( $subscription );
+			$status_classes = [ 'newspack-ui__badge', 'newspack-ui__badge--' . ( $status_modifier ? $status_modifier : 'secondary' ) ];
 			?>
 			<a href="<?php echo esc_url( Group_Subscription_MyAccount::get_group_url( $subscription ) ); ?>" class="newspack-ui__box newspack-ui__box--border newspack-my-account__group-picker__card">
 				<div class="newspack-my-account__group-picker__card__content">
@@ -81,7 +72,7 @@ usort(
 				</div>
 				<div class="newspack-ui__box__actions">
 					<div class="newspack-ui__box__badges">
-						<span class="<?php echo esc_attr( implode( ' ', $status_classes ) ); ?>"><?php echo esc_html( wcs_get_subscription_status_name( $subscription_status ) ); ?></span>
+						<span class="<?php echo esc_attr( implode( ' ', $status_classes ) ); ?>"><?php echo esc_html( \Newspack\My_Account_UI_V1::get_subscription_status_label( $subscription ) ); ?></span>
 					</div>
 				</div>
 			</a>

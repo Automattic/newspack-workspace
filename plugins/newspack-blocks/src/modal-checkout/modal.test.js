@@ -10,7 +10,7 @@
  */
 
 const PAGE = `
-	<div id="newspack_modal_checkout" class="newspack-ui__modal-container" data-state="closed">
+	<dialog id="newspack_modal_checkout" class="newspack-ui__modal-container" data-state="closed">
 		<div class="newspack-ui__modal">
 			<div class="newspack-ui__modal__header">
 				<h2></h2>
@@ -19,10 +19,9 @@ const PAGE = `
 			<div class="newspack-ui__modal__content">
 				<div class="newspack-ui__spinner"></div>
 			</div>
-			<span id="newspack-a11y-last-element" tabindex="0"></span>
 		</div>
-	</div>
-	<div class="newspack-ui__modal-container newspack-newsletters-signup-modal" data-state="closed"></div>
+	</dialog>
+	<dialog class="newspack-ui__modal-container newspack-newsletters-signup-modal" data-state="closed"></dialog>
 `;
 
 // jsdom cannot load a new page, so the destinations here are ones it can reach:
@@ -81,11 +80,12 @@ describe( 'modal checkout, leaving the newsletter signup modal after a purchase'
 	/**
 	 * Take a checkout to its thank-you screen and close it, as the reader's "Continue" does.
 	 *
-	 * @param {Object} afterSuccess Where the reader goes after the purchase.
+	 * @param {Object}   afterSuccess Where the reader goes after the purchase.
+	 * @param {Function} close        How the reader closes the checkout.
 	 *
 	 * @return {Object} The options modal checkout opened the newsletter signup modal with.
 	 */
-	function finishCheckout( afterSuccess ) {
+	function finishCheckout( afterSuccess, close = () => window.newspackCloseModalCheckout() ) {
 		window.newspackOpenModalCheckout( { url: 'about:blank' } );
 		const iframe = document.querySelector( 'iframe[name="newspack_modal_checkout_iframe"]' );
 		iframe.contentDocument.open();
@@ -93,7 +93,7 @@ describe( 'modal checkout, leaving the newsletter signup modal after a purchase'
 		iframe.contentDocument.close();
 		iframe.contentDocument.querySelector( '#newspack_modal_checkout_container' ).checkoutComplete = true;
 		openNewslettersSignupModal.mockClear();
-		window.newspackCloseModalCheckout();
+		close();
 		const signupModal = openNewslettersSignupModal.mock.calls[ 0 ][ 0 ];
 		setPendingCheckout.mockClear();
 		overlays.add.mockClear();
@@ -108,6 +108,16 @@ describe( 'modal checkout, leaving the newsletter signup modal after a purchase'
 
 		expect( goBack ).toHaveBeenCalledTimes( 1 );
 		expect( setPendingCheckout ).toHaveBeenCalledWith();
+	} );
+
+	it( 'offers the signup modal when the reader leaves the thank-you screen with Escape', () => {
+		const cancel = new Event( 'cancel', { cancelable: true } );
+
+		const signupModal = finishCheckout( GO_BACK, () => document.getElementById( 'newspack_modal_checkout' ).dispatchEvent( cancel ) );
+
+		expect( cancel.defaultPrevented ).toBe( true );
+		signupModal.onDismiss();
+		expect( goBack ).toHaveBeenCalledTimes( 1 );
 	} );
 
 	it( 'sends the reader on once when they answer the signup modal and then close it', () => {
@@ -155,5 +165,147 @@ describe( 'modal checkout, leaving the newsletter signup modal after a purchase'
 		jest.advanceTimersByTime( 1 );
 
 		expect( overlays.remove ).toHaveBeenCalledWith( heldOverlay );
+	} );
+} );
+
+describe( 'modal checkout as a dialog', () => {
+	const setPendingCheckout = jest.fn();
+	const nativeDialog = {};
+	let checkout;
+	let spinner;
+	let loads = 0;
+
+	beforeAll( () => {
+		[ 'showModal', 'close' ].forEach( method => {
+			nativeDialog[ method ] = HTMLDialogElement.prototype[ method ];
+		} );
+		HTMLDialogElement.prototype.showModal = function () {
+			this.setAttribute( 'open', '' );
+		};
+		HTMLDialogElement.prototype.close = function () {
+			this.removeAttribute( 'open' );
+		};
+		document.body.innerHTML = PAGE;
+		window.newspackBlocksModal = {
+			newspack_class_prefix: 'newspack-ui',
+			ajax_url: '/wp-admin/admin-ajax.php',
+			labels: { checkout_modal_title: 'Checkout', thankyou_modal_title: 'Thank you' },
+			processing_payment_messages: [],
+		};
+		window.newspackReaderActivation = { setPendingCheckout };
+		window.fetch = jest.fn().mockResolvedValue( { ok: true } );
+		// The checkout iframe holds no product details here, which modal checkout reports.
+		jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		jest.isolateModules( () => {
+			require( './modal' );
+		} );
+		checkout = document.getElementById( 'newspack_modal_checkout' );
+		spinner = checkout.querySelector( '.newspack-ui__spinner' );
+	} );
+
+	afterAll( () => {
+		Object.assign( HTMLDialogElement.prototype, nativeDialog );
+		delete window.fetch;
+		jest.restoreAllMocks();
+	} );
+
+	beforeEach( () => {
+		setPendingCheckout.mockClear();
+		window.fetch.mockClear();
+	} );
+
+	afterEach( () => {
+		spinner.removeAttribute( 'aria-busy' );
+		if ( 'open' === checkout.dataset.state ) {
+			window.newspackCloseModalCheckout();
+		}
+	} );
+
+	/**
+	 * Open checkout and load a checkout screen into its iframe.
+	 *
+	 * @param {string} screen The checkout screen's markup.
+	 *
+	 * @return {Promise<Element>} The checkout container inside the iframe.
+	 */
+	async function loadCheckout( screen = '<input id="billing_first_name" />' ) {
+		window.newspackOpenModalCheckout( { url: 'about:blank' } );
+		checkout.setAttribute( 'open', '' );
+		const iframe = checkout.querySelector( 'iframe' );
+		const doc = iframe.contentDocument;
+		doc.open();
+		doc.write( `<html><body><div id="newspack_modal_checkout_container">${ screen }</div></body></html>` );
+		doc.close();
+		// jsdom loads no page into the iframe, so the checkout's own address is faked.
+		Object.defineProperty( doc, 'URL', { configurable: true, value: `http://localhost/checkout/?load=${ ++loads }` } );
+		iframe.contentWindow.Element.prototype.getClientRects = () => [ {} ];
+		await new Promise( resolve => setTimeout( resolve, 100 ) );
+		return doc.getElementById( 'newspack_modal_checkout_container' );
+	}
+
+	const placeOrder = container => container.dispatchEvent( new CustomEvent( 'checkout-place-order-start' ) );
+	const pressEscape = () => {
+		const cancel = new Event( 'cancel', { cancelable: true } );
+		checkout.dispatchEvent( cancel );
+		return cancel;
+	};
+
+	it( 'moves focus to the first field once the checkout shows', async () => {
+		const container = await loadCheckout( '<a href="#terms">Terms</a><input id="billing_first_name" />' );
+
+		container.dispatchEvent( new CustomEvent( 'checkout-ready' ) );
+
+		expect( container.ownerDocument.activeElement.id ).toBe( 'billing_first_name' );
+	} );
+
+	it( 'leaves focus on the Close button when the reader moved there while it loaded', async () => {
+		const container = await loadCheckout();
+		const close = checkout.querySelector( '.newspack-ui__modal__close' );
+		close.focus();
+
+		container.dispatchEvent( new CustomEvent( 'checkout-ready' ) );
+
+		expect( document.activeElement ).toBe( close );
+	} );
+
+	it( 'closes on Escape and empties the cart, like its Close button', async () => {
+		await loadCheckout();
+
+		expect( pressEscape().defaultPrevented ).toBe( true );
+
+		expect( checkout.dataset.state ).toBe( 'closed' );
+		expect( window.fetch.mock.calls[ 0 ][ 1 ].body.get( 'action' ) ).toBe( 'abandon_modal_checkout' );
+		expect( setPendingCheckout ).toHaveBeenCalledWith();
+	} );
+
+	it( 'stays open on Escape while a payment is processing', async () => {
+		placeOrder( await loadCheckout() );
+
+		pressEscape();
+
+		expect( checkout.dataset.state ).toBe( 'open' );
+		expect( window.fetch ).not.toHaveBeenCalled();
+	} );
+
+	it( 'steps the processing screen aside for a payment challenge, and back once it is done', async () => {
+		const container = await loadCheckout();
+		placeOrder( container );
+		const challenge = shown => container.dispatchEvent( new CustomEvent( 'checkout-payment-challenge', { detail: { shown } } ) );
+
+		challenge( true );
+		expect( spinner.style.display ).toBe( 'none' );
+
+		challenge( false );
+		expect( spinner.style.display ).toBe( 'flex' );
+	} );
+
+	it( 'closes on Escape again after the reader closed it during a payment', async () => {
+		placeOrder( await loadCheckout() );
+		window.newspackCloseModalCheckout();
+
+		await loadCheckout();
+		pressEscape();
+
+		expect( checkout.dataset.state ).toBe( 'closed' );
 	} );
 } );

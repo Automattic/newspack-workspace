@@ -11,8 +11,9 @@ docker build \
     -t newspack-dev \
     --build-arg PHP_VERSION=8.3 \
     --build-arg COMPOSER_VERSION=2.9.8 \
-    --build-arg NODE_VERSION=20.16.0 \
+    --build-arg NODE_VERSION="$(cat .nvmrc)" \
     --build-arg APACHE_RUN_USER="$APACHE_USER" \
     --build-arg PHPUNIT_VERSION=9.5.10 \
     --progress=plain \
+    "$@" \
     .

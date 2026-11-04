@@ -25,7 +25,7 @@ type Props = OriginalButtonProps & {
 
 // Control characters are stripped first, as browsers do, so `java\nscript:`
 // cannot slip past.
-const isJavascriptHref = ( href?: string ) =>
+export const isJavascriptHref = ( href?: string ) =>
 	'string' === typeof href &&
 	href
 		.replace( /[\u0000-\u0020]/g, '' )

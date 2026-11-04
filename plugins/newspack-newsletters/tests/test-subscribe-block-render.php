@@ -484,8 +484,8 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A list removed by the block's own filter is hidden outright. It is not a
-	 * gated list, so showPremium does not bring it back as a gated row.
+	 * A list that no gate restricts, removed by the block's own filter, stays
+	 * hidden even with showPremium on.
 	 */
 	public function test_list_removed_by_the_block_filter_is_hidden_not_gated() {
 		$kept    = $this->get_list( 'only_mailchimp' );
@@ -508,6 +508,36 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 			$this->assertStringNotContainsString( 'class="is-gated"', $html );
 			$this->assert_public_id_absent( $removed->get_public_id(), $html );
 		}
+
+		remove_filter( 'newspack_newsletters_subscription_block_available_lists', $filter );
+	}
+
+	/**
+	 * A premium list the block's own filter removes is one the reader can't join,
+	 * which is how Woo Memberships withholds it. With showPremium on it shows as a
+	 * gated row, and with it off it stays hidden.
+	 */
+	public function test_premium_list_removed_by_the_block_filter_is_gated() {
+		$kept    = $this->get_list( 'only_mailchimp' );
+		$removed = $this->get_list( 'two_settings' );
+		$this->mark_premium( [ 'two_settings' ] );
+		$filter = function ( $list_ids ) use ( $removed ) {
+			return array_values( array_diff( $list_ids, [ $removed->get_public_id() ] ) );
+		};
+		add_filter( 'newspack_newsletters_subscription_block_available_lists', $filter );
+
+		$attrs = [ 'lists' => [ $kept->get_public_id(), $removed->get_public_id() ] ];
+
+		$html = $this->render( $this->get_attrs( $attrs + [ 'showPremium' => true ] ) );
+		$this->assertSame( 1, substr_count( $html, 'class="is-gated"' ) );
+		$this->assertStringContainsString( $removed->get_title(), $html );
+		$this->assertSame( 1, substr_count( $html, 'name="lists[]"' ), 'Only the kept list can be submitted.' );
+		$this->assert_public_id_absent( $removed->get_public_id(), $html );
+
+		$html = $this->render( $this->get_attrs( $attrs ) );
+		$this->assertStringContainsString( '<input type="hidden" name="lists[]" value="' . $kept->get_public_id() . '"', $html );
+		$this->assertStringNotContainsString( 'class="is-gated"', $html );
+		$this->assertStringNotContainsString( $removed->get_title(), $html );
 
 		remove_filter( 'newspack_newsletters_subscription_block_available_lists', $filter );
 	}

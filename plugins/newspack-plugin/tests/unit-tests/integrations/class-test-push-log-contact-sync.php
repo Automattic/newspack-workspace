@@ -8,10 +8,12 @@
 namespace Newspack\Tests\Unit\Integrations;
 
 use Newspack\Reader_Activation\Contact_Sync;
+use Newspack\Reader_Activation\Integration;
 use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Integrations\Push_Log;
 
 require_once __DIR__ . '/class-deletion-spy-integration.php';
+require_once dirname( __DIR__, 2 ) . '/mocks/newsletters-mocks.php';
 
 /**
  * Push log wiring test case.
@@ -41,6 +43,7 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		$this->clear_scheduled_retries();
+		\Newspack_Newsletters_Contacts::reset_calls();
 		remove_filter( 'newspack_reader_activation_is_syncing_allowed', '__return_true' );
 		delete_option( Integrations::OPTION_NAME );
 		$this->reset_integrations();
@@ -423,6 +426,117 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Whether a retry is pending on a hook.
+	 *
+	 * @param string $hook The retry hook.
+	 * @return bool
+	 */
+	private function has_pending_retry( string $hook ): bool {
+		return ! empty(
+			\as_get_scheduled_actions(
+				[
+					'hook'   => $hook,
+					'status' => \ActionScheduler_Store::STATUS_PENDING,
+				],
+				'ids'
+			)
+		);
+	}
+
+	/**
+	 * A provider can accept a push and still leave fields out, as Mailchimp
+	 * does for fields it cannot create in an audience at its merge field cap.
+	 * A retry would hit the same limit, so the sync stays a success with
+	 * nothing scheduled, and the row is what tells the publisher.
+	 */
+	public function test_a_push_saved_without_some_fields_needs_attention_and_is_not_retried() {
+		$this->require_action_scheduler();
+		$this->factory()->user->create( [ 'user_email' => 'reader@example.test' ] );
+		$spy              = $this->register_spy( 'unsynced-spy' );
+		$spy->push_result = [ 'unsynced_fields' => [ 'NP_Account_Deleted', 'NP_Membership_Status' ] ];
+
+		$sync_result = Contact_Sync::sync(
+			[
+				'email'    => 'reader@example.test',
+				'metadata' => [],
+			],
+			'Test context'
+		);
+
+		$row = $this->get_rows_by_integration()['unsynced-spy'];
+		$this->assertTrue( $sync_result );
+		$this->assertFalse( $this->has_pending_retry( Contact_Sync::RETRY_HOOK ) );
+		$this->assertSame( Push_Log::STATUS_FAILED, $row['status'] );
+		$this->assertSame( 'permanent_config', $row['error_class'] );
+		$this->assertSame( 'fields_not_synced', $row['error_code'] );
+		$this->assertStringContainsString( 'NP_Account_Deleted, NP_Membership_Status', $row['error_message'] );
+	}
+
+	/**
+	 * Push a reader through a spy once per result, in order.
+	 *
+	 * @param string $integration_id The integration ID.
+	 * @param array  $push_results   What each push returns, in order.
+	 */
+	private function sync_reader_with_results( string $integration_id, array $push_results ) {
+		$spy = $this->register_spy( $integration_id );
+		foreach ( $push_results as $push_result ) {
+			$spy->push_result = $push_result;
+			Contact_Sync::sync(
+				[
+					'email'    => 'reader@example.test',
+					'metadata' => [],
+				],
+				'Test context'
+			);
+		}
+	}
+
+	/**
+	 * While an audience stays at the cap, every push of the same data is
+	 * saved without the same fields. Each one is the same open problem, so it
+	 * stays one row instead of growing the log by a failed row per push.
+	 */
+	public function test_a_repeated_partial_push_folds_into_the_readers_latest_partial_row() {
+		$partial = [ 'unsynced_fields' => [ 'NP_Membership_Status' ] ];
+		$this->sync_reader_with_results( 'repeat-partial-spy', [ $partial, $partial ] );
+
+		$this->assertSame( 1, $this->count_rows() );
+		$row = $this->get_rows_by_integration()['repeat-partial-spy'];
+		$this->assertSame( Push_Log::STATUS_FAILED, $row['status'] );
+		$this->assertSame( 'fields_not_synced', $row['error_code'] );
+		$this->assertEquals( 1, $row['repeat_count'] );
+	}
+
+	/**
+	 * A partial push that left out other fields is a different problem, so it
+	 * adds a row naming those fields instead of folding into the earlier one.
+	 */
+	public function test_a_partial_push_missing_other_fields_adds_its_own_row() {
+		$this->sync_reader_with_results(
+			'other-partial-spy',
+			[
+				[ 'unsynced_fields' => [ 'NP_Membership_Status' ] ],
+				[ 'unsynced_fields' => [ 'NP_Account_Deleted' ] ],
+			]
+		);
+
+		$this->assertSame( 2, $this->count_rows() );
+		$this->assertStringContainsString( 'NP_Account_Deleted', $this->get_rows_by_integration()['other-partial-spy']['error_message'] );
+	}
+
+	/**
+	 * A partial push after a full one is a new problem, so it must not fold
+	 * into the success row and hide there.
+	 */
+	public function test_a_partial_push_after_a_full_one_adds_its_own_row() {
+		$this->sync_reader_with_results( 'partial-after-full-spy', [ true, [ 'unsynced_fields' => [ 'NP_Membership_Status' ] ] ] );
+
+		$this->assertSame( 2, $this->count_rows() );
+		$this->assertSame( Push_Log::STATUS_FAILED, $this->get_rows_by_integration()['partial-after-full-spy']['status'] );
+	}
+
+	/**
 	 * Register a spy configured for account-deletion sync.
 	 *
 	 * @param string $integration_id The integration ID.
@@ -467,6 +581,40 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 		$this->assertSame( 'reader@example.test', $row['email'] );
 		$this->assertEquals( 0, $row['user_id'] );
 		$this->assertNull( $row['payload'] );
+	}
+
+	/**
+	 * Mailchimp answers a hard delete of a reader it has no member for with
+	 * its own "Contact not found". The reader is already gone there, and no
+	 * retry can change that, so the row is done and nothing is retried.
+	 */
+	public function test_a_hard_delete_of_a_reader_mailchimp_does_not_hold_is_final() {
+		$this->require_action_scheduler();
+		\Newspack_Newsletters_Contacts::$next_return = new \WP_Error( 'newspack_newsletters_mailchimp_contact_not_found', 'Contact not found' );
+		\update_option( 'newspack_newsletters_service_provider', 'mailchimp' );
+		\update_option( 'newspack_integration_settings_esp_mailchimp_audience_id', 'list-abc' );
+		$esp = new \Newspack\Reader_Activation\Integrations\ESP();
+		Integrations::register( $esp );
+		$esp->update_settings_field_value( 'sync_account_deletion', true );
+		$esp->update_settings_field_value( 'account_deletion_handling', 'delete' );
+		Integrations::enable( 'esp' );
+
+		$this->delete_sample_reader();
+
+		$delete_calls = \Newspack_Newsletters_Contacts::$delete_calls;
+
+		$row     = $this->get_rows_by_integration()['esp'];
+		$pending = \as_get_scheduled_actions(
+			[
+				'hook'   => Contact_Sync::RETRY_DELETION_HOOK,
+				'group'  => Integrations::get_action_group( 'esp' ),
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			]
+		);
+		$this->assertCount( 1, $delete_calls, 'The delete reached Mailchimp.' );
+		$this->assertEmpty( $pending, 'Nothing is retried.' );
+		$this->assertSame( Push_Log::STATUS_SUCCESS, $row['status'] );
+		$this->assertSame( 'benign', $row['error_class'] );
 	}
 
 	/**
@@ -534,6 +682,49 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A reader the integration holds no contact for has nothing to flag, and
+	 * no retry can make the contact appear. The row is done, nothing is
+	 * retried, and the cleanup still runs.
+	 */
+	public function test_a_deletion_flag_for_a_reader_without_a_contact_is_final() {
+		$this->require_action_scheduler();
+		$spy              = $this->register_deletion_spy( 'missing-spy', 'flag' );
+		$spy->push_result = new \WP_Error( Integration::CONTACT_NOT_FOUND_ERROR_CODE, 'The reader has no live member in the configured Mailchimp audience.' );
+
+		$this->delete_sample_reader();
+
+		$row     = $this->get_rows_by_integration()['missing-spy'];
+		$pending = \as_get_scheduled_actions(
+			[
+				'hook'   => Contact_Sync::RETRY_DELETION_HOOK,
+				'group'  => Integrations::get_action_group( 'missing-spy' ),
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			]
+		);
+		$this->assertEmpty( $pending, 'Nothing is retried.' );
+		$this->assertSame( Push_Log::STATUS_SUCCESS, $row['status'] );
+		$this->assertSame( 'benign', $row['error_class'] );
+		$this->assertSame( Integration::CONTACT_NOT_FOUND_ERROR_CODE, $row['error_code'], 'The row keeps what the integration answered.' );
+		$this->assertCount( 1, $spy->cleanup_calls, 'The cleanup still runs.' );
+	}
+
+	/**
+	 * A not-found answer that comes with another failure is that failure,
+	 * not a finished deletion, so it is retried.
+	 */
+	public function test_a_deletion_flag_whose_missing_contact_comes_with_another_failure_is_retried() {
+		$this->require_action_scheduler();
+		$spy              = $this->register_deletion_spy( 'mixed-spy', 'flag' );
+		$spy->push_result = new \WP_Error( Integration::CONTACT_NOT_FOUND_ERROR_CODE, 'No contact to update.' );
+		$spy->push_result->add( 'provider_down', 'Provider down' );
+
+		$this->delete_sample_reader();
+
+		$this->get_pending_retry( Contact_Sync::RETRY_DELETION_HOOK, 'mixed-spy' );
+		$this->assertSame( Push_Log::STATUS_RETRYING, $this->get_rows_by_integration()['mixed-spy']['status'] );
+	}
+
+	/**
 	 * A provider that answers the flag push with "already deleted" ends the
 	 * chain as a success with no retry behind it. A failed cleanup is then the
 	 * only thing left that can say the reader is still on a list.
@@ -550,6 +741,92 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 		$this->assertSame( 'flag_cleanup_failed', $row['error_code'] );
 		$this->assertStringContainsString( 'Lists API down', $row['error_message'] );
 		$this->assertStringContainsString( 'permanently deleted', $row['error_message'], 'The row keeps what the provider answered.' );
+	}
+
+	/**
+	 * A flag push that fails and is retried leaves its cleanup failure off the
+	 * row, because the retry runs the cleanup again. A retry that hears the
+	 * contact is already gone still ends the chain, so it must run the cleanup
+	 * too, or nothing records that a list may still hold the reader.
+	 */
+	public function test_a_deletion_retry_that_finds_the_contact_gone_still_records_a_failed_list_cleanup() {
+		$this->require_action_scheduler();
+		$spy                 = $this->register_deletion_spy( 'gone-on-retry-spy', 'flag' );
+		$spy->push_result    = new \WP_Error( 'provider_down', 'Provider down' );
+		$spy->cleanup_result = new \WP_Error( 'lists_down', 'Lists API down' );
+		$this->delete_sample_reader();
+		$retry = $this->get_pending_retry( Contact_Sync::RETRY_DELETION_HOOK, 'gone-on-retry-spy' );
+
+		$spy->push_result = new \WP_Error( 'gone', 'reader@example.test was permanently deleted and cannot be re-imported.' );
+		Contact_Sync::execute_deletion_retry( $retry['args'] );
+
+		$row = $this->get_rows_by_integration()['gone-on-retry-spy'];
+		$this->assertSame( Push_Log::STATUS_FAILED, $row['status'] );
+		$this->assertSame( 'flag_cleanup_failed', $row['error_code'] );
+		$this->assertStringContainsString( 'Lists API down', $row['error_message'] );
+		$this->assertStringContainsString( 'permanently deleted', $row['error_message'], 'The row keeps what the provider answered.' );
+	}
+
+	/**
+	 * How a deletion retry chain can end on a failure.
+	 *
+	 * @return array[]
+	 */
+	public function failures_that_end_a_deletion_chain(): array {
+		return [
+			'a permanent error'                 => [ 'reader@example.test looks fake or invalid', 1 ],
+			'a transient error on the last try' => [ 'Provider down', Contact_Sync::MAX_RETRIES ],
+		];
+	}
+
+	/**
+	 * The first attempt leaves a failed cleanup off the row for the retry to
+	 * settle, so the retry that ends the chain runs the cleanup again even when
+	 * its own push fails. The row keeps the push's error: that push never
+	 * arrived, and a cleanup code would read as one that did.
+	 *
+	 * @dataProvider failures_that_end_a_deletion_chain
+	 *
+	 * @param string $last_error  What the last push answers.
+	 * @param int    $retry_count The retry that answers it.
+	 */
+	public function test_a_deletion_chain_that_ends_on_a_failure_still_reruns_the_list_cleanup( string $last_error, int $retry_count ) {
+		$this->require_action_scheduler();
+		$spy                 = $this->register_deletion_spy( 'failed-chain-spy', 'flag' );
+		$spy->push_result    = new \WP_Error( 'provider_down', 'Provider down' );
+		$spy->cleanup_result = new \WP_Error( 'lists_down', 'Lists API down' );
+		$this->delete_sample_reader();
+		$retry = $this->get_pending_retry( Contact_Sync::RETRY_DELETION_HOOK, 'failed-chain-spy' );
+
+		$spy->push_result = new \WP_Error( 'last_push_failed', $last_error );
+		try {
+			Contact_Sync::execute_deletion_retry( array_merge( $retry['args'], [ 'retry_count' => $retry_count ] ) );
+		} catch ( \Exception $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- The last retry throws so Action Scheduler marks it failed.
+		}
+
+		$row = $this->get_rows_by_integration()['failed-chain-spy'];
+		$this->assertCount( 2, $spy->cleanup_calls, 'The retry that ends the chain runs the cleanup again.' );
+		$this->assertSame( Push_Log::STATUS_FAILED, $row['status'] );
+		$this->assertSame( 'last_push_failed', $row['error_code'], 'The row keeps the push error.' );
+	}
+
+	/**
+	 * The deletion flag's fields are created on first use, so they are the
+	 * ones a full audience refuses. A flag saved without them must not read
+	 * as done, and retrying it would meet the same limit.
+	 */
+	public function test_a_deletion_flag_saved_without_its_fields_is_recorded_as_failed_and_not_retried() {
+		$this->require_action_scheduler();
+		$spy              = $this->register_deletion_spy( 'unsynced-flag-spy', 'flag' );
+		$spy->push_result = [ 'unsynced_fields' => [ 'NP_Account_Deleted' ] ];
+
+		$this->delete_sample_reader();
+
+		$row = $this->get_rows_by_integration()['unsynced-flag-spy'];
+		$this->assertFalse( $this->has_pending_retry( Contact_Sync::RETRY_DELETION_HOOK ) );
+		$this->assertSame( Push_Log::STATUS_FAILED, $row['status'] );
+		$this->assertSame( 'fields_not_synced', $row['error_code'] );
+		$this->assertStringContainsString( 'NP_Account_Deleted', $row['error_message'] );
 	}
 
 	/**

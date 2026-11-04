@@ -116,9 +116,9 @@ class Test_Audience_Campaigns_Subscription_Products_API extends \WP_UnitTestCase
 		$products = $this->get_products( [ 'include' => [ $private_id, $draft_id, $future_id, $trashed_id ] ] );
 
 		$this->assertSame( 'Legacy Plan [status: Private]', $products[ $private_id ]['title'] ?? null );
-		$this->assertSame( 'Draft Plan [invalid status: Draft]', $products[ $draft_id ]['title'] ?? null );
-		$this->assertSame( 'Scheduled Plan [invalid status: Scheduled]', $products[ $future_id ]['title'] ?? null );
-		$this->assertSame( 'Trashed Plan [invalid status: Trash]', $products[ $trashed_id ]['title'] ?? null );
+		$this->assertSame( 'Draft Plan [draft]', $products[ $draft_id ]['title'] ?? null );
+		$this->assertSame( 'Scheduled Plan [scheduled]', $products[ $future_id ]['title'] ?? null );
+		$this->assertSame( 'Trashed Plan [trash]', $products[ $trashed_id ]['title'] ?? null );
 		$this->assertArrayNotHasKey( $other_id, $products, 'The lookup returns only the requested products.' );
 	}
 

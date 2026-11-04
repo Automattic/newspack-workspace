@@ -96,7 +96,7 @@ Their class names are hashed CSS modules, so never target them from our styleshe
 - **`Divider`** – Use between logical sections (e.g. between ActionCards) to separate content without another card. Margins are 32px (48px at larger breakpoints) so spacing stays consistent with the rest of the layout.
 - **`EmptyState`** – Use when a list has nothing in it yet, or an onboarding view stands in for a feature that is not set up. Compound: `EmptyState.Root` wraps `EmptyState.Header` and `EmptyState.Actions`. Render it only when the *unfiltered* collection is empty, so a search matching nothing keeps the DataViews "no results" treatment. See [src/empty-state/README.md](src/empty-state/README.md).
 - **`Grid`** – Use for laying out several items in columns (e.g. multiple controls or cards). Default gap is 32px; use `columns` and `gutter` modifiers (8, 16, 24, 32, 48) when you need tighter or looser spacing. For a single row or a simple vertical stack, use **`Stack`** from `@wordpress/ui` in new code; Grid is still used that way in many places and is fine to leave as-is until we refactor.
-- **`SectionHeader`** – Use to start a new section; pair with a short description so the section’s goal is clear. Top margin (48px) and bottom (32px) create clear separation from previous content and the section body.
+- **`SectionHeader`** – Use to start a new section; pair with a short description so the section’s goal is clear. Pass `noMargin`. The space above it comes from the parent `Stack` gap or the `Divider` before it, or from the page content padding when it is the first item; the space below or beside it comes from the parent `Stack` or `Grid` gap. Its default 48px top and 32px bottom margins predate this rule; new and reworked sections pass `noMargin`.
 - **`Drawer`** – Panel that slides in from the right edge for editing one item without leaving the list. Compound: `Drawer.Root`, `Header`, `Title`, `CloseIcon`, `Content`, `Divider`, `Footer`, `Action`. `isDirty` on the root makes every way of closing it ask before discarding edits. See [src/drawer/README.md](src/drawer/README.md).
 - **`StatCard`** – Use for a single headline figure with a label above it and a description below. Compound: `StatCard.Root` wraps `Label`, `Body` (holding `Value` and an optional `Secondary`) and `Footer`, with `Delta` riding in the `Value`'s `suffix` for a change beside the figure. Format the figure yourself and pass a string; a `null`, `undefined` or blank `value` gets the shared null glyph rather than a misleading zero. The figure is sized by a container query, so give the cards a definite width (a Grid track, a `flex: 1` item) and equal widths across a row to keep one type scale. See [src/stat-card/README.md](src/stat-card/README.md).
 
@@ -166,6 +166,7 @@ Their class names are hashed CSS modules, so never target them from our styleshe
 - **`IntegrationIcon`** - Logo for a third-party integration, picked by `provider`. It is `aria-hidden` and renders nothing for an unknown provider, so keep the provider's name in visible text beside it
 - **`NewspackIcon`** - Newspack icon wrapper component
 - **`Popover`** - Legacy popover wrapper (class component); use `Popover` from `@wordpress/ui` in new code (see [From @wordpress/ui](#from-wordpressui) for its parts)
+- **`TooltipBadge`** - A `@wordpress/ui` `Badge` with a tooltip that explains it, for a marker whose meaning isn't obvious from its label (e.g. a gate priority warning). Takes `label`, `tooltip` and `intent`. It is focusable, and screen readers get the tooltip as its description. The tooltip never opens on touch, so it can only add context, never carry something the reader needs
 - **`WebPreview`** - Web preview iframe component
 
 ### Settings Components
@@ -645,8 +646,8 @@ Spacing is based on an **8px unit**. Use these values so new styles match existi
 | **8px** | Tight gaps, badge padding, small padding (e.g. ActionCard is-small) | Inline or dense UI |
 | **16px** | Gaps between related controls, buttons card gap, margins inside ActionCard region-children for Card/Grid/TextControl | Related items, form rows |
 | **24px** | Default ActionCard region padding, toggle/region gaps, expandable content padding and sibling spacing | Default internal padding and gaps within a card |
-| **32px** | Card vertical margin, Grid default gap and margin, SectionHeader first-child top, Newspack Notice margin, Divider margin | Section rhythm, between blocks |
-| **48px** | SectionHeader top margin, buttons card top margin, Divider margins (large breakpoint), Card horizontal padding (small screens) | Major section separation |
+| **32px** | Card vertical margin, Grid default gap and margin, Newspack Notice margin, Divider margin | Section rhythm, between blocks |
+| **48px** | Buttons card top margin, Divider margins (large breakpoint), Card horizontal padding (small screens) | Major section separation |
 | **64px** | Card horizontal padding (large screens) | Large-screen card padding |
 
 **In code:** Card uses `margin: 32px 0` and `padding: 16px 48px` (32px 64px at 744px+). ActionCard uses 24px for region padding and 24px between regions; region-children use `padding: 0 24px 24px` (0 32px 32px for is-medium). Grid uses `grid-gap: 32px` and `margin: 32px 0` by default, with optional gutter classes (`__gutter-8`, `__gutter-16`, etc.). When adding new components or overrides, prefer these values (or 8px multiples) instead of ad-hoc spacing.
@@ -670,11 +671,15 @@ Spacing is based on an **8px unit**. Use these values so new styles match existi
 </>
 ```
 
-The `Grid` collapses to one column below 744px, so the header sits above its fields on narrow screens. Fields drop their own bottom margin so the `Stack` gap is the only spacing: Newspack `TextControl` takes `withMargin={ false }` plus `__nextHasNoMarginBottom` and `__next40pxDefaultSize`; core `ToggleControl` and `CheckboxControl` take `__nextHasNoMarginBottom`. Content that needs the full width (logs, card pickers, tables) stacks its `SectionHeader` above it instead. Some existing editors predate this: their right column is a `VStack` (`spacing={ 4 }` or `{ 6 }`) and their `SectionHeader` has no `noMargin`. New and reworked sections follow the example. A grid of cards that each open their own screen is a different pattern and has no `SectionHeader` column.
+The `Grid` collapses to one column below 744px, so the header sits above its fields on narrow screens. Fields drop their own bottom margin so the `Stack` gap is the only spacing: Newspack `TextControl` takes `withMargin={ false }` plus `__nextHasNoMarginBottom` and `__next40pxDefaultSize`; core `ToggleControl` and `CheckboxControl` take `__nextHasNoMarginBottom`. Content that needs the full width (logs, card pickers, tables) stacks its `SectionHeader` above it instead, unless it is the whole screen (see the page header subtitle below). Some existing editors predate this: their right column is a `VStack` (`spacing={ 4 }` or `{ 6 }`) and their `SectionHeader` has no `noMargin`. New and reworked sections follow the example. A grid of cards that each open their own screen is a different pattern and has no `SectionHeader` column.
 
 **Settings tabs** are built from two-column sections. Save sits in the page header, published with `setHeaderData( { actions } )` from the wizard store and disabled until something changes. The header keeps whichever callback it was handed, so read the latest handler from a ref; passing the save function directly saves stale state. Pair it with `useUnsavedChangesDialog`. See `plugins/newspack-plugin/src/wizards/newspack/views/settings/seo/index.tsx`.
 
-Prefer these patterns (and the spacing scale above) over one-off margins so layout stays consistent with Card, ActionCard, and SectionHeader.
+**A screen's description goes in the page header subtitle**, under the title. That holds for settings tabs, list screens and item editors alike. It replaces an intro `SectionHeader` or card that describes the screen, and a `Wizard` section `description` or `sectionDescription`, which draw one; a `sectionTitle` on its own stays, as the item title on an editor route. When one full-width block is the whole screen, its description is the subtitle too. The subtitle is hidden visually below 782px, so it describes the screen and never carries something needed to use it. Set it with `subHeaderText` (on a `Wizard` section, or as a `withWizardScreen` prop), or under `Wizard` with `setHeaderData( { subTitle } )`, which wins over `subHeaderText`. A section that already publishes header actions sets its subtitle in the same call. Copy that depends on the section's own state has to use `setHeaderData`: the Metering tab describes the current meter. A `Wizard` with more than one section resets header data on every route change, so there is nothing to clear, but a section that stays mounted while its route params change must publish again. See `plugins/newspack-plugin/src/wizards/audience/views/content-gates/`.
+
+A route that edits one item under a tabbed `Wizard` sets `isHidden` (to keep it out of the tabs) and `hideTabbedNavigation` (to hide the tab bar) on its section, and gives its `breadcrumbs` a parent crumb with a `url` so the trail leads back.
+
+Prefer these patterns (and the spacing scale above) over one-off margins so layout stays consistent with Card, ActionCard, and Divider.
 
 ### Responsive breakpoints
 
@@ -701,7 +706,7 @@ Common composition patterns keep screens predictable. Use these as a reference w
 ```
 Wizard
   GlobalNotices
-  SectionHeader          ← 48px top margin
+  SectionHeader          ← noMargin; spaced by the Divider or Stack gap before it
   Card                   ← 32px margin
     ActionCard            ← 24px padding, optional toggle
       Grid or Stack       ← 32px gap (Grid default; Stack gap="2xl")

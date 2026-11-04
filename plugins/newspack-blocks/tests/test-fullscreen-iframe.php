@@ -106,6 +106,24 @@ class Test_Fullscreen_Iframe extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A fullscreen block whose source the block will not embed takes nothing over: the post
+	 * keeps its content, the page keeps its layout, and prompts still show.
+	 */
+	public function test_fullscreen_block_with_unusable_source_takes_nothing_over() {
+		$post_id = self::factory()->post->create(
+			[
+				'post_content' => '<!-- wp:paragraph --><p>Body that stays.</p><!-- /wp:paragraph -->'
+					. '<!-- wp:newspack-blocks/iframe {"src":"javascript:void(0)","isFullScreen":true} /-->',
+			]
+		);
+		$this->go_to( get_permalink( $post_id ) );
+
+		$this->assertStringContainsString( 'Body that stays.', $this->render_content( $post_id ) );
+		$this->assertNotContains( 'newspack-post-with-fullscreen-iframe', get_body_class() );
+		$this->assertFalse( $this->prompts_suppressed() );
+	}
+
+	/**
 	 * Outside a single-post page the fullscreen post's content is still the iframe alone.
 	 */
 	public function test_content_is_still_replaced_outside_the_post_page() {

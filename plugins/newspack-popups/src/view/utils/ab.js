@@ -76,7 +76,10 @@ export const computeBucket = ( readerId, testId, config ) => {
 	if ( ! challengers.length ) {
 		return 'a';
 	}
-	const controlShare = ( config.control_share || DEFAULT_CONTROL_SHARE ) / 100;
+	// `??`, not `||`: a share of 0 is a value, not a missing one, and the server's
+	// compute_bucket() keeps it. The config clamps shares to 20-80 today, so the two
+	// only disagree if that clamp ever goes; the shared parity vectors pin it.
+	const controlShare = ( config.control_share ?? DEFAULT_CONTROL_SHARE ) / 100;
 	const challengerShare = ( 1 - controlShare ) / challengers.length;
 
 	const ranges = [ [ 'a', controlShare ] ];

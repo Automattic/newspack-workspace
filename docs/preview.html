@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spec Preview</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; max-width: 860px; margin: 40px auto; padding: 0 24px; color: #24292f; line-height: 1.6; }
+  h1 { border-bottom: 1px solid #d0d7de; padding-bottom: 10px; }
+  h2 { border-bottom: 1px solid #d0d7de; padding-bottom: 6px; margin-top: 24px; }
+  code { background: #f6f8fa; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; }
+  pre { background: #f6f8fa; padding: 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+  th, td { border: 1px solid #d0d7de; padding: 8px 12px; text-align: left; }
+  th { background: #f6f8fa; font-weight: 600; }
+  tr:nth-child(even) { background: #f6f8fa; }
+  blockquote { border-left: 4px solid #d0d7de; margin: 0; padding: 0 16px; color: #57606a; }
+  a { color: #0969da; }
+  hr { border: none; border-top: 1px solid #d0d7de; margin: 24px 0; }
+  nav { margin-bottom: 24px; font-size: 0.9em; }
+  nav a { margin-right: 12px; }
+</style>
+</head>
+<body>
+<nav id="nav"></nav>
+<div id="content"></div>
+<script>
+  const files = [
+    { label: "WP Release Testing Skill Design", path: "superpowers/specs/2026-04-15-wp-release-testing-skill-design.md" }
+  ];
+
+  const params = new URLSearchParams(window.location.search);
+  const fileIndex = parseInt(params.get("f") || "0");
+  const file = files[fileIndex];
+
+  const nav = document.getElementById("nav");
+  files.forEach((f, i) => {
+    const a = document.createElement("a");
+    a.href = `?f=${i}`;
+    a.textContent = f.label;
+    if (i === fileIndex) a.style.fontWeight = "bold";
+    nav.appendChild(a);
+  });
+
+  fetch(file.path)
+    .then(r => r.text())
+    .then(md => {
+      document.getElementById("content").innerHTML = marked.parse(md);
+      document.title = file.label;
+    });
+</script>
+</body>
+</html>

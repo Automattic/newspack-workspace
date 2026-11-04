@@ -3870,4 +3870,138 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		$this->assertStringContainsString( 'Unrelated post body', $rendered, 'An unrestricted post should render its own content' );
 		$this->assertStringNotContainsString( 'newspack-content-gate__inline-gate', $rendered, 'An unrestricted post must not be gated by what an aborted pass left behind' );
 	}
+
+	/**
+	 * A premium newsletter gate that has never had its list settings saved follows the
+	 * site's own sign-up setting and keeps the lists visible, which is how every gate
+	 * behaved before the settings existed.
+	 */
+	public function test_newsletter_gate_defaults_to_following_site_auto_signup() {
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'N' ], Content_Gate::GATE_CPT, true );
+		$this->assertNotWPError( $gate_id );
+
+		$gate = Content_Gate::get_gate( $gate_id );
+
+		$this->assertSame( 'default', $gate['auto_signup'] );
+		$this->assertFalse( $gate['hide_lists'] );
+	}
+
+	/**
+	 * Creating a newsletter gate with list settings stores them.
+	 */
+	public function test_create_newsletter_gate_persists_list_settings() {
+		$gate_id = Content_Gate::create_gate(
+			[
+				'title'       => 'N',
+				'auto_signup' => 'on',
+				'hide_lists'  => true,
+			],
+			Content_Gate::GATE_CPT,
+			true
+		);
+		$this->assertNotWPError( $gate_id );
+
+		$gate = Content_Gate::get_gate( $gate_id );
+
+		$this->assertSame( 'on', $gate['auto_signup'] );
+		$this->assertTrue( $gate['hide_lists'] );
+	}
+
+	/**
+	 * A save that does not name the list settings leaves them as they were, so renaming a
+	 * gate cannot quietly switch its sign-up behavior back to the default.
+	 */
+	public function test_update_newsletter_gate_without_list_settings_preserves_them() {
+		$gate_id = Content_Gate::create_gate(
+			[
+				'title'       => 'N',
+				'auto_signup' => 'on',
+				'hide_lists'  => true,
+			],
+			Content_Gate::GATE_CPT,
+			true
+		);
+
+		Content_Gate::update_gate_settings( $gate_id, [ 'title' => 'X' ] );
+		$gate = Content_Gate::get_gate( $gate_id );
+
+		$this->assertSame( 'X', $gate['title'] );
+		$this->assertSame( 'on', $gate['auto_signup'] );
+		$this->assertTrue( $gate['hide_lists'] );
+	}
+
+	/**
+	 * A value outside the three modes is ignored rather than stored, so a bad payload
+	 * cannot leave a gate in a mode nothing knows how to read.
+	 */
+	public function test_update_newsletter_gate_ignores_an_invalid_auto_signup() {
+		$gate_id = Content_Gate::create_gate(
+			[
+				'title'       => 'N',
+				'auto_signup' => 'off',
+			],
+			Content_Gate::GATE_CPT,
+			true
+		);
+
+		Content_Gate::update_gate_settings( $gate_id, [ 'auto_signup' => 'yes' ] );
+
+		$this->assertSame( 'off', Content_Gate::get_gate( $gate_id )['auto_signup'] );
+	}
+
+	/**
+	 * The list settings belong to premium newsletter gates only. A content gate neither
+	 * reports them nor stores them, even when a payload carries them.
+	 */
+	public function test_content_gate_ignores_list_settings() {
+		$gate_id = Content_Gate::create_gate(
+			[
+				'title'       => 'C',
+				'auto_signup' => 'on',
+				'hide_lists'  => true,
+			]
+		);
+		$this->assertNotWPError( $gate_id );
+
+		$gate = Content_Gate::get_gate( $gate_id );
+
+		$this->assertArrayNotHasKey( 'auto_signup', $gate );
+		$this->assertArrayNotHasKey( 'hide_lists', $gate );
+		$this->assertSame( '', get_post_meta( $gate_id, 'auto_signup', true ) );
+		$this->assertSame( '', get_post_meta( $gate_id, 'hide_lists', true ) );
+
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'auto_signup' => 'off',
+				'hide_lists'  => true,
+			]
+		);
+
+		$this->assertSame( '', get_post_meta( $gate_id, 'auto_signup', true ), 'An update does not store the settings on a content gate either' );
+		$this->assertSame( '', get_post_meta( $gate_id, 'hide_lists', true ) );
+	}
+
+	/**
+	 * A duplicated newsletter gate behaves like its source for sign-up and list visibility.
+	 */
+	public function test_duplicate_newsletter_gate_copies_list_settings() {
+		$source_id = Content_Gate::create_gate(
+			[
+				'title'       => 'N',
+				'auto_signup' => 'off',
+				'hide_lists'  => true,
+			],
+			Content_Gate::GATE_CPT,
+			true
+		);
+		$this->assertNotWPError( $source_id );
+
+		$copy_id = Content_Gate::duplicate_gate( $source_id );
+		$this->assertNotWPError( $copy_id );
+		$copy = Content_Gate::get_gate( $copy_id );
+
+		$this->assertSame( 'off', $copy['auto_signup'] );
+		$this->assertTrue( $copy['hide_lists'] );
+	}
 }

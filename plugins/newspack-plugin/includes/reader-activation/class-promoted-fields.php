@@ -223,11 +223,15 @@ class Promoted_Fields {
 			if ( ! $field->is_segment_criteria() ) {
 				continue;
 			}
-			$options = $field->get_options();
+			$options           = $field->get_options();
+			$matching_function = $field->get_matching_function();
 
-			// Boolean fields get Yes/No options for segmentation.
+			// Boolean fields get Yes/No options for segmentation. The reader holds
+			// a real true or false, which exact matching never equates with 'yes'
+			// or 'no', so these options take the matcher that reads them.
 			if ( 'boolean' === $field->get_value_type() && empty( $options ) ) {
-				$options = [
+				$matching_function = 'boolean';
+				$options           = [
 					[
 						'value' => 'yes',
 						'label' => __( 'Yes', 'newspack-plugin' ),
@@ -255,7 +259,7 @@ class Promoted_Fields {
 				[
 					'name'               => self::get_display_name( $field, $integration ),
 					'category'           => 'integrations',
-					'matching_function'  => self::supported_matching_function( $field->get_matching_function() ),
+					'matching_function'  => self::supported_matching_function( $matching_function ),
 					'matching_attribute' => $field->get_key(),
 					'options'            => $options,
 					'description'        => $field->get_description(),
@@ -309,12 +313,16 @@ class Promoted_Fields {
 		$raw_value = Reader_Data::get_data( $user_id, $field->get_key() );
 		$value     = self::decode_value( $raw_value );
 
-		// Boolean fields: access rules pass no args (just check truthiness),
-		// segmentation passes 'yes'/'no'.
+		// Boolean fields: an access rule asks only for truthiness. A gate's rule
+		// stores `true` and a block's the rule default `''`, and both end at the
+		// truthiness return below, so a string other than 'yes'/'no' has to stay
+		// on that path. 'yes'/'no' is what a segment saves; segments match in the
+		// browser, so the string branch is the reading the `boolean` matcher in
+		// newspack-popups has to agree with.
 		if ( 'boolean' === $field->get_value_type() ) {
 			$is_truthy = ! empty( $value );
 
-			// Segmentation: expects 'yes'/'no' (case-insensitive) as string arguments.
+			// A segment's 'yes'/'no', case-insensitive.
 			if ( is_string( $args ) ) {
 				$normalized = strtolower( $args );
 				if ( 'yes' === $normalized ) {
@@ -325,7 +333,7 @@ class Promoted_Fields {
 				}
 			}
 
-			// Access rule with is_boolean or non-string args: just check truthiness.
+			// Access rules, gate and block alike.
 			return $is_truthy;
 		}
 

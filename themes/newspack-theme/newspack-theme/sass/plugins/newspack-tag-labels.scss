@@ -8,15 +8,15 @@
 // Sized and spaced like the category row beside it, mirroring the base
 // `.cat-links` rule in `sass/site/primary/_posts-and-pages.scss`. Zero
 // specificity because that rule sits in the theme's own stylesheet, where a
-// style variation's `.cat-links, .tag-labels` rule comes later and wins; this
+// style variation's `.cat-links, .newspack-tag-labels` rule comes later and wins; this
 // file is enqueued after the theme, so at equal weight it would beat the
 // variation instead. `:where()` restores the order the variations expect.
-:where(.tag-labels) {
+:where(.newspack-tag-labels) {
 	font-size: var(--newspack-theme-font-size-xs);
 	margin: 0 0 #{0.75 * structure.$size__spacing-unit};
 }
 
-.tag-labels {
+.newspack-tag-labels {
 	align-items: stretch;
 	display: inline-flex;
 	position: relative;
@@ -39,24 +39,24 @@
 	// is not: the gap between chips belongs to the Default style, which is the
 	// only one that gives a category a chip to sit beside.
 	a,
-	.tag-label {
+	.newspack-tag-label {
 		display: inline-block;
 	}
 }
 
 /* stylelint-disable selector-type-no-unknown  */
-.tag-labels,
-amp-script .tag-labels {
-	// `.tag-label.flag` rather than `.tag-label`: two classes are what put this
-	// above the white `.tag-labels a` sets, so a chip keeps its own color.
-	.tag-label.flag {
+.newspack-tag-labels,
+amp-script .newspack-tag-labels {
+	// `.newspack-tag-label.flag` rather than `.newspack-tag-label`: two classes are what put this
+	// above the white `.newspack-tag-labels a` sets, so a chip keeps its own color.
+	.newspack-tag-label.flag {
 		background: var(--newspack-theme-color-highlight);
 		color: var(--newspack-theme-color-text-main);
 		line-height: 1;
 		padding: 0.3em 0.5em;
 		text-transform: uppercase;
 	}
-	.tag-label + .tag-label {
+	.newspack-tag-label + .newspack-tag-label {
 		margin-left: 0.3em; // Don't collapse multiple labels.
 	}
 }
@@ -64,14 +64,14 @@ amp-script .tag-labels {
 
 // Tag labels render after the category (and sponsor) label and sit on the same line,
 // mirroring the sponsor → category convention. The category `.cat-links` is immediately
-// followed by `.tag-labels` in every context (single posts,
+// followed by `.newspack-tag-labels` in every context (single posts,
 // home, archive, search, and the Content Loop / Carousel blocks), so keep it inline-block
 // and space the tag labels that follow it. The sponsor `.cat-links.sponsor-label` keeps
 // its own layout (from newspack-sponsors), so it is excluded here.
-.cat-links:not( .sponsor-label ):has( + .tag-labels ) {
+.cat-links:not( .sponsor-label ):has( + .newspack-tag-labels ) {
 	display: inline-block;
 }
-.cat-links + .tag-labels {
+.cat-links + .newspack-tag-labels {
 	display: inline-flex;
 	margin-left: 0.5em;
 }
@@ -84,11 +84,11 @@ amp-script .tag-labels {
 // layout wins deterministically.
 .wpnbha,
 .wpnbpc {
-	.cat-links:not( .sponsor-label ):has( + .tag-labels ),
-	.cat-links + .tag-labels {
+	.cat-links:not( .sponsor-label ):has( + .newspack-tag-labels ),
+	.cat-links + .newspack-tag-labels {
 		display: inline-flex;
 	}
-	.cat-links + .tag-labels {
+	.cat-links + .newspack-tag-labels {
 		margin-left: 0.5em;
 	}
 
@@ -97,26 +97,26 @@ amp-script .tag-labels {
 	// block-level and drops the tag labels onto the next line. Restore its own display
 	// without touching the flex/gap layout the exclusion above exists to protect.
 	// `.wpnbpc` never overrides `.cat-links` display, so this is a no-op there.
-	.cat-links.sponsor-label:has( + .tag-labels ) {
+	.cat-links.sponsor-label:has( + .newspack-tag-labels ) {
 		display: inline-flex;
 	}
 }
 
 /* Single Posts */
 .single {
-	.tag-labels {
+	.newspack-tag-labels {
 		display: inline-flex;
 	}
 
 	// Workaround margin/padding override for featured images.
 	.featured-image-behind {
-		.tag-labels {
+		.newspack-tag-labels {
 			a,
 			a:hover {
 				padding: 0.3em 0.5em;
 				margin-right: 0.5em;
 			}
-			.tag-label + .tag-label:hover {
+			.newspack-tag-label + .newspack-tag-label:hover {
 				margin-left: 0.3em; // Don't collapse multiple labels.
 			}
 		}
@@ -128,7 +128,7 @@ amp-script .tag-labels {
 .archive,
 .blog {
 	article {
-		.tag-labels {
+		.newspack-tag-labels {
 			display: inline-flex;
 			font-size: 65%;
 		}
@@ -138,8 +138,8 @@ amp-script .tag-labels {
 // Home page.
 .home {
 	article {
-		.tag-labels a,
-		.tag-labels a:hover {
+		.newspack-tag-labels a,
+		.newspack-tag-labels a:hover {
 			padding: 0.3em 0.5em;
 			text-decoration: none;
 		}

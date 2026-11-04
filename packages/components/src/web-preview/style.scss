@@ -3,6 +3,7 @@
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
 @use "../../../colors/colors.module" as np-colors;
 
 .newspack-web-preview {
@@ -49,6 +50,8 @@
 		animation-fill-mode: forwards;
 		background: white;
 		border-radius: 8px;
+		display: flex;
+		flex-direction: column;
 		overflow: hidden;
 		height: 100%;
 		width: 100%;
@@ -56,7 +59,8 @@
 
 	&__content {
 		background: wp-colors.$gray-100;
-		height: calc(100% - 72px);
+		flex: 1 1 auto;
+		min-height: 0;
 		-webkit-overflow-scrolling: touch;
 		overflow-x: hidden;
 		width: 100%;
@@ -93,6 +97,11 @@
 		justify-content: space-between;
 		min-height: 71px;
 		padding: 12px 24px;
+
+		&--no-title {
+			min-height: 0;
+			padding-block: wp-vars.$grid-unit-10;
+		}
 
 		&-left {
 			display: flex;

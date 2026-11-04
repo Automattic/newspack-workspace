@@ -44,7 +44,7 @@ domReady( function () {
 		googleLoginElement.addEventListener( 'click', () => {
 			debugLog( 'log', '[Google OAuth] Login button clicked' );
 			if ( googleLoginForm?.startLoginFlow ) {
-				googleLoginForm.startLoginFlow();
+				googleLoginForm.startLoginFlow( googleLoginElement );
 			}
 
 			const metadata = googleLoginForm ? convertFormDataToObject( new FormData( googleLoginForm ), [ 'lists[]' ] ) : {};
@@ -52,10 +52,14 @@ domReady( function () {
 			debugLog( 'log', '[Google OAuth] Opening auth window with metadata:', metadata );
 			const authWindow = window.open( 'about:blank', 'newspack_google_login', 'width=500,height=600' );
 			let messageListener = null;
+			let closedPoll = null;
+			let closedTimeout = null;
 
 			// Clean up function to remove listeners.
 			const cleanup = () => {
 				debugLog( 'log', '[Google OAuth] Cleanup called' );
+				clearInterval( closedPoll );
+				clearTimeout( closedTimeout );
 				if ( messageListener ) {
 					window.removeEventListener( 'message', messageListener );
 					messageListener = null;
@@ -77,6 +81,23 @@ domReady( function () {
 				}
 			};
 			window.addEventListener( 'message', messageListener );
+
+			if ( authWindow ) {
+				closedPoll = setInterval( () => {
+					if ( ! authWindow.closed ) {
+						return;
+					}
+					clearInterval( closedPoll );
+					// Give a success postMessage sent just before the popup closed time to arrive.
+					closedTimeout = setTimeout( () => {
+						debugLog( 'log', '[Google OAuth] Auth window closed without signing in' );
+						cleanup();
+						if ( googleLoginForm?.endLoginFlow ) {
+							googleLoginForm.endLoginFlow();
+						}
+					}, 500 );
+				}, 500 );
+			}
 
 			fetch( '/wp-json/newspack/v1/login/google?r=' + Math.random() )
 				.then( res => res.json().then( data => Promise.resolve( { data, status: res.status } ) ) )

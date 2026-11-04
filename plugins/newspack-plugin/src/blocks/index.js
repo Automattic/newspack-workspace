@@ -20,7 +20,7 @@ import * as authorSocialLink from './author-social-link';
 import * as collections from './collections';
 import * as contentGateCountdown from './content-gate/countdown';
 import * as contentGateCountdownBox from './content-gate/countdown-box';
-import * as copyrightDate from './copyright-date';
+import * as copyright from './copyright';
 import * as overlayMenu from './overlay-menu';
 import * as overlayMenuTrigger from './overlay-menu/trigger';
 import * as overlayMenuPanel from './overlay-menu/panel';
@@ -49,7 +49,7 @@ export const blocks = [
 	collections,
 	contentGateCountdown,
 	contentGateCountdownBox,
-	copyrightDate,
+	copyright,
 	overlayMenu,
 	overlayMenuTrigger,
 	overlayMenuPanel,
@@ -70,7 +70,7 @@ const blockThemeBlocks = [
 	'newspack/author-social-link',
 	'newspack/avatar',
 	'newspack/byline',
-	'newspack/copyright-date',
+	'newspack/copyright',
 	'newspack/featured-image-caption',
 	'newspack/overlay-menu',
 	'newspack/overlay-menu-trigger',

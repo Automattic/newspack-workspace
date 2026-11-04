@@ -15,6 +15,7 @@ namespace Newspack_Network\Content_Gate;
 use Newspack_Network\Incoming_Events\Reader_Product_Changed;
 use Newspack_Network\Incoming_Events\Subscription_Changed;
 use Newspack_Network\Incoming_Events\Product_Updated;
+use Newspack_Network\Utils\Sites;
 use Newspack_Network\Woocommerce\Product_Admin;
 
 /**
@@ -46,6 +47,7 @@ class Access {
 	 */
 	public static function init() {
 		add_filter( 'newspack_access_rules_has_active_subscription', [ __CLASS__, 'check_network_subscriptions' ], 10, 4 );
+		add_filter( 'newspack_access_rules_network_subscription_records', [ __CLASS__, 'filter_network_subscription_records' ], 10, 3 );
 		add_filter( 'newspack_access_rules_has_one_time_purchase', [ __CLASS__, 'check_network_one_time_purchases' ], 10, 3 );
 	}
 
@@ -74,17 +76,48 @@ class Access {
 			return $has_subscription;
 		}
 
+		return ! empty( self::get_network_subscription_matches( $user_id, (array) $product_ids, $strict ) ) || $has_subscription;
+	}
+
+	/**
+	 * The records on other network sites that satisfy a subscription rule.
+	 *
+	 * This is the one place that decides what satisfies the rule, shared by the access
+	 * check and the record list. It looks only at what the reader holds on other sites,
+	 * never at local subscriptions, so it lists every match even when the reader also
+	 * passes locally.
+	 *
+	 * @param int   $user_id     User ID.
+	 * @param array $product_ids Required product IDs (local).
+	 * @param bool  $strict      Only count subscriptions the user owns, not group seats.
+	 * @return array[] Matches in the order the reader's records list them, owned subscriptions
+	 *                 first. Each has 'site' (the site's URL), 'id' (the subscription's ID on
+	 *                 that site) and 'type' ('subscription' for one the reader owns, 'group'
+	 *                 for a seat on someone else's group subscription).
+	 */
+	public static function get_network_subscription_matches( $user_id, $product_ids, $strict = false ) {
+		// If no products specified, we can't match by Network ID.
+		if ( empty( $product_ids ) ) {
+			return [];
+		}
+
 		// Get Network IDs for the required local products.
 		$network_ids = self::get_network_ids_for_products( $product_ids );
 		if ( empty( $network_ids ) ) {
-			return $has_subscription;
+			return [];
 		}
+
+		$matches = [];
 
 		// Subscriptions the user owns on other network sites.
 		foreach ( self::get_user_network_active_subscriptions( $user_id ) as $site => $subscriptions ) {
-			foreach ( $subscriptions as $subscription ) {
+			foreach ( $subscriptions as $subscription_id => $subscription ) {
 				if ( self::products_match( $site, $subscription['products'] ?? [], $network_ids ) ) {
-					return true;
+					$matches[] = [
+						'site' => $site,
+						'id'   => (int) ( $subscription['id'] ?? $subscription_id ),
+						'type' => 'subscription',
+					];
 				}
 			}
 		}
@@ -94,13 +127,40 @@ class Access {
 			foreach ( self::get_user_products( $user_id, 'group' ) as $site => $seats ) {
 				foreach ( $seats as $seat ) {
 					if ( in_array( $seat['status'] ?? '', self::ACTIVE_STATUSES, true ) && self::products_match( $site, $seat['products'] ?? [], $network_ids ) ) {
-						return true;
+						$matches[] = [
+							'site' => $site,
+							'id'   => (int) ( $seat['id'] ?? 0 ),
+							'type' => 'group',
+						];
 					}
 				}
 			}
 		}
 
-		return $has_subscription;
+		return $matches;
+	}
+
+	/**
+	 * Add the network records that satisfy a subscription rule to the list of records behind it.
+	 *
+	 * Group seats count, as they do for the access check when it isn't strict.
+	 *
+	 * @param array $records     Records already listed for the rule, such as local subscriptions.
+	 * @param int   $user_id     User ID.
+	 * @param array $product_ids Required product IDs (local).
+	 * @return array The records, with one added for each match on another site.
+	 */
+	public static function filter_network_subscription_records( $records, $user_id, $product_ids ) {
+		$records = is_array( $records ) ? $records : [];
+		foreach ( self::get_network_subscription_matches( $user_id, (array) $product_ids, false ) as $match ) {
+			$records[] = [
+				'id'        => $match['id'],
+				'site_url'  => $match['site'],
+				'site_name' => Sites::get_site_name( $match['site'] ),
+				'edit_url'  => Sites::get_subscription_edit_url( $match['site'], $match['id'] ),
+			];
+		}
+		return $records;
 	}
 
 	/**

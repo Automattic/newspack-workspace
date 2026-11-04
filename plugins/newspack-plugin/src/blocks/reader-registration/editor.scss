@@ -71,14 +71,14 @@
 				}
 
 				&:first-of-type {
-					border-top-left-radius: var(--newspack-ui-border-radius-m) !important;
-					border-top-right-radius: var(--newspack-ui-border-radius-m) !important;
+					border-top-left-radius: var(--newspack-ui-radius-surface, 12px) !important;
+					border-top-right-radius: var(--newspack-ui-radius-surface, 12px) !important;
 					border-top-width: 1px !important;
 				}
 
 				&:last-of-type {
-					border-bottom-left-radius: var(--newspack-ui-border-radius-m) !important;
-					border-bottom-right-radius: var(--newspack-ui-border-radius-m) !important;
+					border-bottom-left-radius: var(--newspack-ui-radius-surface, 12px) !important;
+					border-bottom-right-radius: var(--newspack-ui-radius-surface, 12px) !important;
 					border-bottom-width: 1px !important;
 				}
 
@@ -90,8 +90,8 @@
 		}
 	}
 
-	&__inputs,
-	&__have-account {
+	.wp-block-newspack-reader-registration &__inputs,
+	.wp-block-newspack-reader-registration &__have-account {
 		.newspack-ui__button {
 			cursor: default;
 			font-family: var(--newspack-ui-font-family) !important;
@@ -118,13 +118,15 @@
 		}
 	}
 
-	&__response {
+	&__response:empty {
 		display: none;
 	}
 
-	button:focus,
-	a:focus {
-		outline: none !important;
+	.wp-block-newspack-reader-registration & {
+		button:focus,
+		a:focus {
+			outline: none !important;
+		}
 	}
 
 	.newspack-ui__box--success {
