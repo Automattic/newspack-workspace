@@ -36,11 +36,12 @@ class Subscriptions_Meta {
 	 *
 	 * Screens in wp-admin are staff tools, so they always count. REST requests
 	 * count when the user can manage the store, since the Subscribers wizard and
-	 * WooCommerce's REST API work over REST, where is_admin() is false. Checkout
-	 * also runs over REST, so staff changing their own subscription there act as
-	 * readers, as they do on the front end. "Own" means the purchaser
-	 * (get_user_id()), the same owner the switch code checks. A wrong answer
-	 * mislabels the reason sent to the ESP and Insights.
+	 * WooCommerce's REST API work over REST, where is_admin() is false. The block
+	 * checkout and express wallets also submit over REST (the Store API), so
+	 * staff changing their own subscription there act as readers, as they do on
+	 * the front end. "Own" means the purchaser (get_user_id()), the same owner
+	 * Subscriptions_Tiers checks for switches. A wrong answer mislabels the
+	 * reason sent to the ESP and Insights.
 	 *
 	 * @param \WC_Subscription $subscription The subscription being changed.
 	 *
@@ -62,9 +63,9 @@ class Subscriptions_Meta {
 	/**
 	 * Record woo custom field for cancelled subscriptions.
 	 *
-	 * @param WC_Subscription $subscription  The subscription object.
-	 * @param string          $to_status     The status the subscription is changing to.
-	 * @param string          $from_status   The status the subscription is changing from.
+	 * @param \WC_Subscription $subscription  The subscription object.
+	 * @param string           $to_status     The status the subscription is changing to.
+	 * @param string           $from_status   The status the subscription is changing from.
 	 */
 	public static function maybe_record_cancelled_subscription_meta( $subscription, $to_status, $from_status ) {
 		// We only care about active, cancelled, expired, and pending statuses.
