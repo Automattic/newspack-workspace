@@ -11,6 +11,8 @@
 namespace Newspack;
 
 use Google\Site_Kit\Context;
+use Google\Site_Kit\Core\Authentication\Token;
+use Google\Site_Kit\Core\Storage\User_Options;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -54,6 +56,12 @@ final class GA4_Client {
 	 * rather than failing with a 403. Reads are covered by the base `analytics`
 	 * scope the token always carries, so read callers pass `false`.
 	 *
+	 * Site Kit keeps one token per user, so an administrator who never
+	 * connected Site Kit has none. Read callers pass `prefer_owner => true` to
+	 * authenticate the Site Kit route as the Analytics module owner instead,
+	 * on the rule in `choose_site_kit_user()`. Writes leave it off and keep
+	 * acting as the current user.
+	 *
 	 * The callback is invoked as `$callback( $client, $source )` where
 	 * `$source` is either 'newspack' or 'sitekit'.
 	 *
@@ -63,11 +71,13 @@ final class GA4_Client {
 	 * buried in the log.
 	 *
 	 * @param callable $callback Called with `( $client, string $source )`.
-	 * @param array    $args     Options. `require_edit_scope` (bool, default true).
+	 * @param array    $args     Options. `require_edit_scope` (bool, default true),
+	 *                           `prefer_owner` (bool, default false).
 	 * @return mixed|\WP_Error The callback's return value, or WP_Error.
 	 */
 	public static function with_admin_client( callable $callback, array $args = [] ) {
 		$require_edit_scope = $args['require_edit_scope'] ?? true;
+		$prefer_owner       = $args['prefer_owner'] ?? false;
 		$previous_user_id   = get_current_user_id();
 		$switched_user      = false;
 
@@ -115,7 +125,10 @@ final class GA4_Client {
 				return new \WP_Error( 'newspack_ga4_client', self::describe_auth_failure( $attempts ) );
 			}
 			try {
-				$module = new GoogleSiteKitAnalytics( new Context( GOOGLESITEKIT_PLUGIN_MAIN_FILE ) );
+				$context = new Context( GOOGLESITEKIT_PLUGIN_MAIN_FILE );
+				$module  = $prefer_owner
+					? new GoogleSiteKitAnalytics( $context, null, new User_Options( $context, self::site_kit_user( $context ) ) )
+					: new GoogleSiteKitAnalytics( $context );
 				$result = $callback( $module, 'sitekit' );
 				if ( ! is_wp_error( $result ) ) {
 					return $result;
@@ -130,6 +143,37 @@ final class GA4_Client {
 				wp_set_current_user( $previous_user_id );
 			}
 		}
+	}
+
+	/**
+	 * Which user's Site Kit token an owner-first read should use.
+	 *
+	 * @param int      $owner_id  The Analytics module owner, zero when none is recorded.
+	 * @param callable $has_token Whether a user ID holds a Site Kit token.
+	 * @return int The owner's ID, or zero for the current user.
+	 */
+	public static function choose_site_kit_user( int $owner_id, callable $has_token ): int {
+		// The owner's token is lent only to someone who could connect Site Kit
+		// themselves, so a lower role never reads through it.
+		if ( $owner_id > 0 && $has_token( $owner_id ) && ( get_current_user_id() === $owner_id || current_user_can( 'manage_options' ) ) ) {
+			return $owner_id;
+		}
+		return 0;
+	}
+
+	/**
+	 * Resolve `choose_site_kit_user()` against Site Kit's stored settings and tokens.
+	 *
+	 * @param Context $context Site Kit context.
+	 * @return int The owner's ID, or zero for the current user.
+	 */
+	private static function site_kit_user( Context $context ): int {
+		$settings = get_option( 'googlesitekit_analytics-4_settings', [] );
+		$owner_id = is_array( $settings ) && ! empty( $settings['ownerID'] ) ? (int) $settings['ownerID'] : 0;
+		return self::choose_site_kit_user(
+			$owner_id,
+			fn( int $user_id ) => ( new Token( new User_Options( $context, $user_id ) ) )->has()
+		);
 	}
 
 	/**

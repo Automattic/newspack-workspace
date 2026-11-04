@@ -8,6 +8,7 @@
  * @package Newspack\Tests
  */
 
+use Newspack\GA4_Client;
 use Newspack\Google_OAuth_GA4_Client;
 
 /**
@@ -199,5 +200,55 @@ class Newspack_Test_GA4_Client extends WP_UnitTestCase {
 		$client = Google_OAuth_GA4_Client::build();
 		$this->expectException( \RuntimeException::class );
 		$client->run_report( 'PROP-1', [] );
+	}
+
+	/**
+	 * A has-token callback that answers yes for the listed user IDs only.
+	 *
+	 * @param int[] $user_ids Users holding a Site Kit token.
+	 * @return callable
+	 */
+	private function tokens_for( array $user_ids ) {
+		return fn( int $user_id ) => in_array( $user_id, $user_ids, true );
+	}
+
+	/**
+	 * Another administrator reads through the owner's token, whether or not
+	 * they hold one of their own.
+	 */
+	public function test_owner_token_is_lent_to_another_administrator() {
+		wp_set_current_user( $this->factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$this->assertSame( $this->owner_id, GA4_Client::choose_site_kit_user( $this->owner_id, $this->tokens_for( [ $this->owner_id ] ) ) );
+	}
+
+	/**
+	 * The owner reads through their own token even without manage_options.
+	 */
+	public function test_owner_reads_with_own_token_without_manage_options() {
+		$editor_owner = $this->factory()->user->create( [ 'role' => 'editor' ] );
+		wp_set_current_user( $editor_owner );
+
+		$this->assertSame( $editor_owner, GA4_Client::choose_site_kit_user( $editor_owner, $this->tokens_for( [ $editor_owner ] ) ) );
+	}
+
+	/**
+	 * A user who cannot manage options never borrows the owner's token.
+	 */
+	public function test_owner_token_is_not_lent_below_manage_options() {
+		$editor = $this->factory()->user->create( [ 'role' => 'editor' ] );
+		wp_set_current_user( $editor );
+
+		$this->assertSame( 0, GA4_Client::choose_site_kit_user( $this->owner_id, $this->tokens_for( [ $this->owner_id, $editor ] ) ) );
+	}
+
+	/**
+	 * With no owner token to lend, the read stays with the current user.
+	 */
+	public function test_current_user_without_an_owner_token() {
+		wp_set_current_user( $this->factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$this->assertSame( 0, GA4_Client::choose_site_kit_user( $this->owner_id, $this->tokens_for( [] ) ) );
+		$this->assertSame( 0, GA4_Client::choose_site_kit_user( 0, $this->tokens_for( [ 0 ] ) ) );
 	}
 }
