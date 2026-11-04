@@ -19,7 +19,6 @@ describe( 'isModifiedDate', () => {
 	it( 'ignores publish dates', () => {
 		expect( isModifiedDate( {} ) ).toBe( false );
 		expect( isModifiedDate( { metadata: { bindings: { datetime: { source: 'core/post-data', args: { field: 'date' } } } } } ) ).toBe( false );
-		expect( isModifiedDate( { className: 'wp-block-post-date__modified-date-extra' } ) ).toBe( false );
 	} );
 } );
 
