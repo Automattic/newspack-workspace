@@ -228,8 +228,6 @@ class JetpackSharingTest extends WP_UnitTestCase {
 		set_current_screen( 'settings_page_sharing' );
 
 		$this->assertSame( 'republish', $this->make_source()->get_class() );
-
-		set_current_screen( 'front' );
 	}
 
 	/**
