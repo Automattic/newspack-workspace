@@ -690,17 +690,21 @@ class Group_Subscription_Invite {
 		 *                                       Always 0 for `migration`: Teams already reported
 		 *                                       that invitation with its sender.
 		 * @param string           $source       Where the invite came from (the SOURCE_* constants).
-		 *                                       The value names the code path, not how many
-		 *                                       addresses came in:
-		 *                                       `my_account` (the single-address invite form on the
-		 *                                       group's My Account page, and its resend button),
-		 *                                       `api` (the REST `/invite` route: the Subscribers
-		 *                                       wizard's Add members and Resend invitation actions
-		 *                                       and the subscription edit screen, and open to group
-		 *                                       managers too), `migration` (a Teams invitation link
-		 *                                       followed after the move off Teams), `bulk` (the REST
-		 *                                       `/invite-bulk` route: the "Invite in bulk" dialog on
-		 *                                       My Account and the wizard's "Invite members"
+		 *                                       The value names the code path, not the screen or how
+		 *                                       many addresses came in, so buttons with the same
+		 *                                       label can report different values on My Account and
+		 *                                       in the wizard:
+		 *                                       `my_account` (the invite and resend forms on the
+		 *                                       group's My Account page, handled by
+		 *                                       Group_Subscription_MyAccount::handle_invite_member()),
+		 *                                       `api` (the REST `/invite` route, called by the
+		 *                                       subscription edit screen and by the Subscribers
+		 *                                       wizard when it resends an invite or adds an address
+		 *                                       that has no account yet; group managers may call it
+		 *                                       too), `migration` (a Teams invitation link followed
+		 *                                       after the move off Teams), `bulk` (the REST
+		 *                                       `/invite-bulk` route, called by the bulk invite
+		 *                                       dialog on My Account and the wizard's email invite
 		 *                                       dialog), or `other` (a caller that doesn't say).
 		 *                                       Treat any other value like `other`.
 		 * @param bool             $email_sent   Whether the invitation email went out. False for
