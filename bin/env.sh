@@ -155,9 +155,9 @@ reject_extra_args() {
 }
 
 # The arms below look for a help flag only in the name position. Without this, a
-# help flag after the name is refused as an unknown option, or ignored by list.
-# A help flag anywhere is a help request, so move it into the name position
-# before dispatch. cleanup and e2e-setup parse their own options.
+# help flag after the name does not print usage. A help flag anywhere is a help
+# request, so move it into the name position before dispatch. cleanup and
+# e2e-setup parse their own options.
 case $1 in
     create|up|down|destroy|list)
         for arg in "${@:2}"; do
