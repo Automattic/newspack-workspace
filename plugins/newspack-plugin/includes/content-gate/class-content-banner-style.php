@@ -25,7 +25,7 @@ final class Content_Banner_Style {
 	 *
 	 * @return bool
 	 */
-	public static function supports_theme_style() {
+	public static function supports_theme_style(): bool {
 		return 'newspack-theme' === get_template();
 	}
 
@@ -39,18 +39,18 @@ final class Content_Banner_Style {
 	 *
 	 * @return string One of self::STYLES.
 	 */
-	public static function sanitize_style( $style ) {
+	public static function sanitize_style( mixed $style ): string {
 		return in_array( $style, self::STYLES, true ) ? $style : self::DEFAULT_STYLE;
 	}
 
 	/**
 	 * Get the style a banner renders with on the active theme.
 	 *
-	 * @param string $style The stored style.
+	 * @param mixed $style The stored style.
 	 *
 	 * @return string One of self::STYLES.
 	 */
-	public static function get_render_style( $style ) {
+	public static function get_render_style( mixed $style ): string {
 		$style = self::sanitize_style( $style );
 		if ( 'theme' === $style && ! self::supports_theme_style() ) {
 			return self::DEFAULT_STYLE;
@@ -65,7 +65,7 @@ final class Content_Banner_Style {
 	 *
 	 * @return string A hex color, or an empty string.
 	 */
-	public static function sanitize_color( $color ) {
+	public static function sanitize_color( mixed $color ): string {
 		if ( ! is_string( $color ) ) {
 			return '';
 		}
@@ -79,7 +79,7 @@ final class Content_Banner_Style {
 	 *
 	 * @return string The button style class.
 	 */
-	public static function get_button_class( $style ) {
+	public static function get_button_class( string $style ): string {
 		return 'dark' === $style ? 'newspack-ui__button--primary-light' : 'newspack-ui__button--accent';
 	}
 
@@ -95,7 +95,7 @@ final class Content_Banner_Style {
 	 *
 	 * @return string The declarations, or an empty string.
 	 */
-	public static function get_inline_style( $style, $background_color, $button_color ) {
+	public static function get_inline_style( string $style, string $background_color, string $button_color ): string {
 		if ( 'theme' !== $style ) {
 			return '';
 		}
@@ -120,9 +120,15 @@ final class Content_Banner_Style {
 	/**
 	 * Get the data the wizard previews need.
 	 *
-	 * @return array
+	 * @return array{
+	 *     supports_theme_style: bool,
+	 *     theme_button_bg: string,
+	 *     theme_button_ink: string,
+	 *     theme_font_heading: string,
+	 *     theme_font_body: string,
+	 * }
 	 */
-	public static function get_wizard_data() {
+	public static function get_wizard_data(): array {
 		$data = [
 			'supports_theme_style' => self::supports_theme_style(),
 			'theme_button_bg'      => '',
@@ -149,13 +155,19 @@ final class Content_Banner_Style {
 	/**
 	 * Load the theme's web fonts on a wizard page that previews the Theme style.
 	 */
-	public static function enqueue_wizard_fonts() {
+	public static function enqueue_wizard_fonts(): void {
 		if ( ! self::supports_theme_style() || ! function_exists( 'newspack_sanitize_font_provider_url' ) ) {
 			return;
 		}
-		$url = newspack_sanitize_font_provider_url( (string) get_theme_mod( 'custom_font_import_code', '' ) );
-		if ( $url ) {
-			wp_enqueue_style( 'newspack-content-banner-theme-fonts', esc_url_raw( $url ), [], null ); // phpcs:ignore WordPress.WP.EnqueuedResourceParameters.MissingVersion
+		$font_imports = [
+			'custom_font_import_code'           => 'newspack-content-banner-theme-fonts',
+			'custom_font_import_code_alternate' => 'newspack-content-banner-theme-fonts-alternate',
+		];
+		foreach ( $font_imports as $theme_mod => $handle ) {
+			$url = newspack_sanitize_font_provider_url( (string) get_theme_mod( $theme_mod, '' ) );
+			if ( $url ) {
+				wp_enqueue_style( $handle, esc_url_raw( $url ), [], null ); // phpcs:ignore WordPress.WP.EnqueuedResourceParameters.MissingVersion
+			}
 		}
 	}
 }

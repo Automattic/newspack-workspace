@@ -217,18 +217,18 @@ class Content_Gifting_CTA {
 	 *
 	 * @return string A hex color, or an empty string for the default.
 	 */
-	public static function get_bg_color() {
+	public static function get_bg_color(): string {
 		return Content_Banner_Style::sanitize_color( get_option( 'newspack_content_gifting_cta_bg_color', '' ) );
 	}
 
 	/**
 	 * Set the Theme style's banner background color.
 	 *
-	 * @param string $color A hex color, or an empty string for the default.
+	 * @param mixed $color A hex color, or an empty string for the default.
 	 *
 	 * @return void
 	 */
-	public static function set_bg_color( $color ) {
+	public static function set_bg_color( mixed $color ): void {
 		update_option( 'newspack_content_gifting_cta_bg_color', Content_Banner_Style::sanitize_color( $color ) );
 	}
 
@@ -237,18 +237,18 @@ class Content_Gifting_CTA {
 	 *
 	 * @return string A hex color, or an empty string for the default.
 	 */
-	public static function get_button_color() {
+	public static function get_button_color(): string {
 		return Content_Banner_Style::sanitize_color( get_option( 'newspack_content_gifting_cta_button_color', '' ) );
 	}
 
 	/**
 	 * Set the Theme style's button background color.
 	 *
-	 * @param string $color A hex color, or an empty string for the default.
+	 * @param mixed $color A hex color, or an empty string for the default.
 	 *
 	 * @return void
 	 */
-	public static function set_button_color( $color ) {
+	public static function set_button_color( mixed $color ): void {
 		update_option( 'newspack_content_gifting_cta_button_color', Content_Banner_Style::sanitize_color( $color ) );
 	}
 

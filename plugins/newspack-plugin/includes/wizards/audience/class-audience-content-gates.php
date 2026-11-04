@@ -272,12 +272,15 @@ class Audience_Content_Gates extends Wizard {
 					],
 					'style'                => [
 						'type' => 'string',
+						'enum' => Content_Banner_Style::STYLES,
 					],
 					'bg_color'             => [
-						'type' => 'string',
+						'type'    => 'string',
+						'pattern' => '^(#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?)?$',
 					],
 					'button_color'         => [
-						'type' => 'string',
+						'type'    => 'string',
+						'pattern' => '^(#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?)?$',
 					],
 				],
 			]
@@ -335,12 +338,15 @@ class Audience_Content_Gates extends Wizard {
 					],
 					'style'          => [
 						'type' => 'string',
+						'enum' => Content_Banner_Style::STYLES,
 					],
 					'bg_color'       => [
-						'type' => 'string',
+						'type'    => 'string',
+						'pattern' => '^(#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?)?$',
 					],
 					'button_color'   => [
-						'type' => 'string',
+						'type'    => 'string',
+						'pattern' => '^(#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?)?$',
 					],
 				],
 			]
