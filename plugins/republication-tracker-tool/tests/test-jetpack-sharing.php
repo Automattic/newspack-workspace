@@ -45,9 +45,7 @@ class JetpackSharingTest extends WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		Republication_Tracker_Tool::$modal_rendered = false;
-		$post_id = new ReflectionProperty( 'Republication_Tracker_Tool_Jetpack_Sharing', 'post_id' );
-		$post_id->setAccessible( true );
-		$post_id->setValue( null, 0 );
+		( new ReflectionProperty( 'Republication_Tracker_Tool_Jetpack_Sharing', 'post_id' ) )->setValue( null, 0 );
 		remove_action( 'wp_footer', [ 'Republication_Tracker_Tool_Jetpack_Sharing', 'print_modal' ] );
 		parent::tear_down();
 	}
@@ -136,11 +134,19 @@ class JetpackSharingTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The footer prints the modal for the post when nothing else has.
+	 * The footer prints the modal once, for the post the button was shown for,
+	 * even when a later loop left the global post on another post.
 	 */
-	public function test_footer_prints_modal_once() {
+	public function test_footer_prints_modal_once_for_shown_post() {
+		$other_post = self::factory()->post->create_and_get(
+			[
+				'post_title'  => 'Other Loop Post',
+				'post_status' => 'publish',
+			]
+		);
 		$this->view_test_post();
 		$this->make_source()->get_display( $this->test_post );
+		$GLOBALS['post'] = $other_post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 
 		ob_start();
 		Republication_Tracker_Tool_Jetpack_Sharing::print_modal();
@@ -149,6 +155,42 @@ class JetpackSharingTest extends WP_UnitTestCase {
 
 		$this->assertSame( 1, substr_count( $footer, 'id="republication-tracker-tool-modal"' ) );
 		$this->assertStringContainsString( 'Jetpack Sharing Test Post', $footer );
+		$this->assertStringNotContainsString( 'Other Loop Post', $footer );
+	}
+
+	/**
+	 * Where the button can't show, it is left out of Jetpack's enabled services,
+	 * so Jetpack prints no empty item or empty share bar for it.
+	 */
+	public function test_service_left_out_where_button_cannot_show() {
+		$enabled = [
+			'visible' => [
+				'facebook'  => 'Share_Facebook',
+				'republish' => 'Republication_Tracker_Tool_Jetpack_Share_Republish',
+			],
+			'hidden'  => [],
+			'all'     => [
+				'facebook'  => 'Share_Facebook',
+				'republish' => 'Republication_Tracker_Tool_Jetpack_Share_Republish',
+			],
+		];
+
+		$this->go_to( home_url( '/' ) );
+		$on_home = Republication_Tracker_Tool_Jetpack_Sharing::filter_enabled_services( $enabled );
+		$this->assertSame( [ 'facebook' ], array_keys( $on_home['visible'] ) );
+		$this->assertSame( [ 'facebook' ], array_keys( $on_home['all'] ) );
+
+		$this->view_test_post();
+		$on_post = Republication_Tracker_Tool_Jetpack_Sharing::filter_enabled_services( $enabled );
+		$this->assertSame( $enabled, $on_post );
+	}
+
+	/**
+	 * The settings preview always carries the icon, since Jetpack switches the
+	 * preview's style in the browser without reloading.
+	 */
+	public function test_settings_preview_has_icon_in_text_style() {
+		$this->assertMatchesRegularExpression( '/<a\b[^>]*><svg\b/', $this->make_source( 'text' )->display_preview( false ) );
 	}
 
 	/**

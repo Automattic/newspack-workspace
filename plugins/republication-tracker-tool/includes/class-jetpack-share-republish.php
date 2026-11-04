@@ -49,19 +49,6 @@ class Republication_Tracker_Tool_Jetpack_Share_Republish extends Sharing_Source 
 	}
 
 	/**
-	 * Service class.
-	 *
-	 * @return string
-	 */
-	public function get_class() {
-		// Jetpack's settings preview drops buttons without an official widget when the style is "Official buttons", except Print.
-		if ( is_admin() ) {
-			return $this->id . ' preview-print';
-		}
-		return $this->id;
-	}
-
-	/**
 	 * Markup of the sharing button.
 	 *
 	 * @param WP_Post $post The post object.
@@ -83,7 +70,20 @@ class Republication_Tracker_Tool_Jetpack_Share_Republish extends Sharing_Source 
 			[ 'modal-trigger' => 'republish' ]
 		);
 
+		if ( 'text' === $this->button_style ) {
+			return $link;
+		}
 		return $this->add_icon( $link );
+	}
+
+	/**
+	 * Load the button's styles in the head, so the icon is styled before the
+	 * stylesheet the button itself would enqueue lands in the footer.
+	 */
+	public function display_header() {
+		if ( is_singular() ) {
+			Republication_Tracker_Tool_Jetpack_Sharing::enqueue_style();
+		}
 	}
 
 	/**
@@ -105,7 +105,8 @@ class Republication_Tracker_Tool_Jetpack_Share_Republish extends Sharing_Source 
 	 * @return string|void
 	 */
 	public function display_preview( $echo = true, $force_smart = false, $button_style = null ) {
-		$markup = $this->add_icon( parent::display_preview( false, $force_smart, $button_style ), $button_style );
+		// Jetpack switches the preview between styles in the browser, so the icon is always there and the styles hide it for Text only.
+		$markup = $this->add_icon( parent::display_preview( false, $force_smart, $button_style ) );
 		if ( ! $echo ) {
 			return $markup;
 		}
@@ -118,15 +119,18 @@ class Republication_Tracker_Tool_Jetpack_Share_Republish extends Sharing_Source 
 	 * Jetpack draws its own icons with a font in CSS and escapes the link text,
 	 * so the icon is added to the markup after Jetpack builds it.
 	 *
-	 * @param string      $link         Sharing link markup.
-	 * @param string|null $button_style Button style, defaulting to the site's.
+	 * @param string $link Sharing link markup.
 	 * @return string
 	 */
-	private function add_icon( $link, $button_style = null ) {
-		$button_style = $button_style ? $button_style : $this->button_style;
-		if ( 'text' === $button_style ) {
-			return $link;
-		}
-		return (string) preg_replace( '/<a\b[^>]*>/', '$0' . Republication_Tracker_Tool_Jetpack_Sharing::get_icon(), $link, 1 );
+	private function add_icon( $link ) {
+		$icon = Republication_Tracker_Tool_Jetpack_Sharing::get_icon();
+		return (string) preg_replace_callback(
+			'/<a\b[^>]*>/',
+			function ( $matches ) use ( $icon ) {
+				return $matches[0] . $icon;
+			},
+			$link,
+			1
+		);
 	}
 }

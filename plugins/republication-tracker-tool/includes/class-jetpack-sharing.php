@@ -20,18 +20,26 @@ final class Republication_Tracker_Tool_Jetpack_Sharing {
 	public const SERVICE = 'republish';
 
 	/**
+	 * ID of the template holding the icon on Jetpack's sharing settings screen.
+	 *
+	 * @var string
+	 */
+	private const ICON_TEMPLATE_ID = 'republication-tracker-tool-jetpack-icon';
+
+	/**
 	 * The post a Republish button was displayed for on this page.
 	 *
 	 * @var int
 	 */
-	private static $post_id = 0;
+	private static int $post_id = 0;
 
 	/**
 	 * Initialize the integration.
 	 */
 	public static function init(): void {
 		add_filter( 'sharing_services', [ __CLASS__, 'register_service' ] );
-		add_action( 'admin_enqueue_scripts', [ __CLASS__, 'enqueue_admin_style' ] );
+		add_filter( 'sharing_enabled', [ __CLASS__, 'filter_enabled_services' ] );
+		add_action( 'admin_enqueue_scripts', [ __CLASS__, 'enqueue_admin_assets' ] );
 	}
 
 	/**
@@ -50,12 +58,34 @@ final class Republication_Tracker_Tool_Jetpack_Sharing {
 	}
 
 	/**
+	 * Leave the Republish button out of the sharing buttons where it can't be shown.
+	 *
+	 * Jetpack prints a list item for every enabled service whatever the service
+	 * returns, so an empty button would otherwise leave a gap, or a "Share this:"
+	 * heading over nothing when Republish is the only service.
+	 *
+	 * @param array $enabled Enabled services, grouped as visible, hidden and all.
+	 * @return array
+	 */
+	public static function filter_enabled_services( $enabled ) {
+		if ( ! is_array( $enabled ) || self::should_display( get_post() ) ) {
+			return $enabled;
+		}
+		foreach ( [ 'visible', 'hidden', 'all' ] as $group ) {
+			if ( isset( $enabled[ $group ] ) && is_array( $enabled[ $group ] ) ) {
+				unset( $enabled[ $group ][ self::SERVICE ] );
+			}
+		}
+		return $enabled;
+	}
+
+	/**
 	 * Whether the Republish button may be shown for a post.
 	 *
 	 * Only on the post's own page, since the modal holds a single post and
 	 * Jetpack also adds sharing buttons to posts listed on archives.
 	 *
-	 * @param WP_Post $post The post object.
+	 * @param WP_Post|null $post The post object.
 	 * @return bool
 	 */
 	public static function should_display( $post ): bool {
@@ -121,7 +151,7 @@ final class Republication_Tracker_Tool_Jetpack_Sharing {
 	/**
 	 * Enqueue the button's styles.
 	 */
-	private static function enqueue_style(): void {
+	public static function enqueue_style(): void {
 		wp_enqueue_style(
 			'republication-tracker-tool-jetpack-sharing',
 			REPUBLICATION_TRACKER_TOOL_URL . 'assets/jetpack-sharing.css',
@@ -131,27 +161,34 @@ final class Republication_Tracker_Tool_Jetpack_Sharing {
 	}
 
 	/**
-	 * Enqueue the button's styles on Jetpack's sharing settings screen.
+	 * Enqueue the button's styles and settings script on Jetpack's sharing settings screen.
 	 *
 	 * @param string $hook_suffix The current admin page.
 	 */
-	public static function enqueue_admin_style( $hook_suffix ): void {
+	public static function enqueue_admin_assets( string $hook_suffix ): void {
 		if ( 'settings_page_sharing' !== $hook_suffix ) {
 			return;
 		}
 		self::enqueue_style();
-		add_action( 'admin_print_footer_scripts', [ __CLASS__, 'print_admin_icon_script' ] );
+		wp_enqueue_script(
+			'republication-tracker-tool-jetpack-sharing-admin',
+			REPUBLICATION_TRACKER_TOOL_URL . 'assets/jetpack-sharing-admin.js',
+			[],
+			filemtime( REPUBLICATION_TRACKER_TOOL_PATH . 'assets/jetpack-sharing-admin.js' ),
+			[ 'in_footer' => true ]
+		);
+		add_action( 'admin_footer', [ __CLASS__, 'print_icon_template' ] );
 	}
 
 	/**
-	 * Add the icon to the button's tile in Jetpack's sharing settings, which
-	 * Jetpack renders as escaped text with no hook for markup.
+	 * Print the icon for the settings script to copy into the button's tile,
+	 * which Jetpack renders as escaped text.
 	 */
-	public static function print_admin_icon_script(): void {
+	public static function print_icon_template(): void {
 		printf(
-			'<script>document.querySelectorAll( "li.service.share-%1$s .options-left" ).forEach( function ( el ) { el.insertAdjacentHTML( "afterbegin", %2$s ); } );</script>',
-			esc_js( self::SERVICE ),
-			wp_json_encode( self::get_icon() )
+			'<template id="%s">%s</template>',
+			esc_attr( self::ICON_TEMPLATE_ID ),
+			self::get_icon() // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Static icon markup.
 		);
 	}
 }

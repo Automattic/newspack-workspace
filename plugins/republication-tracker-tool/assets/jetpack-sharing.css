@@ -34,3 +34,8 @@ li.service.share-republish .options-left svg path {
 li.service.share-republish {
 	vertical-align: -2px;
 }
+
+.sd-content ul li.share-republish.no-icon a svg,
+.sd-content ul li.share-republish a.no-icon svg {
+	display: none;
+}
