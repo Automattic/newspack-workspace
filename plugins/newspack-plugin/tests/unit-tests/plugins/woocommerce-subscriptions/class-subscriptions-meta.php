@@ -15,12 +15,10 @@ use Newspack\WooCommerce_Subscriptions;
  */
 class Newspack_Test_Subscriptions_Meta extends WP_UnitTestCase {
 	/**
-	 * Drop the test route, the acting user, and any admin screen.
+	 * Drop the test route.
 	 */
 	public function tear_down() {
 		$GLOBALS['wp_rest_server'] = null;
-		wp_set_current_user( 0 );
-		set_current_screen( 'front' );
 		parent::tear_down();
 	}
 
@@ -117,7 +115,7 @@ class Newspack_Test_Subscriptions_Meta extends WP_UnitTestCase {
 	 * @param string $reason    The reason that should be recorded.
 	 */
 	public function test_staff_change_over_rest_records_manual_reason( $to_status, $reason ) {
-		$subscription = wcs_create_subscription();
+		$subscription = wcs_create_subscription( [ 'customer_id' => self::factory()->user->create( [ 'role' => 'subscriber' ] ) ] );
 		wp_set_current_user( $this->create_staff_user() );
 
 		$this->record_during_rest_request( $subscription, $to_status, 'active' );
@@ -176,8 +174,7 @@ class Newspack_Test_Subscriptions_Meta extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A change made on a wp-admin screen, such as the subscription edit screen,
-	 * is a manual one.
+	 * A change made on a wp-admin screen is a manual one.
 	 */
 	public function test_staff_change_in_wp_admin_records_manual_reason() {
 		$subscription = wcs_create_subscription();
