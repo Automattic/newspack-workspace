@@ -29,7 +29,7 @@ final class Republication_Tracker_Tool_Jetpack_Sharing {
 	/**
 	 * The post a Republish button was displayed for on this page.
 	 *
-	 * Kept as the object Jetpack passed in rather than reloaded, so the modal
+	 * The page's own post object rather than a reloaded copy, so the modal
 	 * copies the post as the page holds it.
 	 *
 	 * @var WP_Post|null
@@ -110,7 +110,8 @@ final class Republication_Tracker_Tool_Jetpack_Sharing {
 		if ( self::$post ) {
 			return;
 		}
-		self::$post = $post;
+		$queried    = get_queried_object();
+		self::$post = $queried instanceof WP_Post && $queried->ID === $post->ID ? $queried : $post;
 
 		Republication_Tracker_Tool_Republish_Button_Block::enqueue_modal_assets();
 		self::enqueue_style();

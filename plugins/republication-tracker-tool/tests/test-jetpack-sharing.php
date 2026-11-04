@@ -180,14 +180,14 @@ class JetpackSharingTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The footer modal copies the post object the button was shown for, as the
-	 * page holds it, rather than reloading the post.
+	 * The footer modal copies the page's own post object as it stands when the
+	 * footer prints, rather than a reloaded copy or one taken when the button rendered.
 	 */
 	public function test_footer_modal_uses_the_shown_post_object() {
 		$this->view_test_post();
 		global $post;
-		$post->post_content = '<p>Teaser only.</p>'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		$this->make_source()->get_display( $post );
+		$post->post_content = '<p>Teaser only.</p>'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 
 		ob_start();
 		Republication_Tracker_Tool_Jetpack_Sharing::print_modal();
