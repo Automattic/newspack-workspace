@@ -34,14 +34,15 @@ class Subscriptions_Meta {
 	/**
 	 * Whether staff made this status change, judged by the request's context.
 	 *
-	 * Screens in wp-admin are staff tools, so they always count. REST requests
-	 * count when the user can manage the store, since the Subscribers wizard and
-	 * WooCommerce's REST API work over REST, where is_admin() is false. The block
-	 * checkout and express wallets also submit over REST (the Store API), so
-	 * staff changing their own subscription there act as readers, as they do on
-	 * the front end. "Own" means the purchaser (get_user_id()), the same owner
-	 * Subscriptions_Tiers checks for switches. A wrong answer mislabels the
-	 * reason sent to the ESP and Insights.
+	 * Requests to wp-admin, including admin-ajax.php, always count, since
+	 * wp-admin is staff tooling. REST requests count when the user can manage
+	 * the store, since the Subscribers wizard and WooCommerce's REST API work
+	 * over REST, where is_admin() is false. The block checkout and express
+	 * wallets also submit over REST (the Store API), so staff changing their own
+	 * subscription there act as readers, as they do on the front end. "Own"
+	 * means the purchaser (get_user_id()), the same owner Subscriptions_Tiers
+	 * checks for switches. A wrong answer mislabels the reason sent to the ESP
+	 * and Insights.
 	 *
 	 * @param \WC_Subscription $subscription The subscription being changed.
 	 *
