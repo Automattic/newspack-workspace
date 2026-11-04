@@ -42,7 +42,7 @@
 					}
 				}
 
-				&:is(.share-mail, .share-print, .share-republish, .share-newspack-gift-article):not([style*="background-color"]) {
+				&:is(.share-mail, .share-print):not([style*="background-color"]) {
 					background: var(--wp--preset--color--contrast-3);
 					color: var(--wp--preset--color--base);
 
@@ -57,7 +57,7 @@
 					}
 				}
 
-				&.share-share:not([style*="background-color"]) {
+				&:is(.share-share, .share-republish, .share-newspack-gift-article):not([style*="background-color"]) {
 					background: var(--wp--preset--color--accent);
 					color: var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base));
 
