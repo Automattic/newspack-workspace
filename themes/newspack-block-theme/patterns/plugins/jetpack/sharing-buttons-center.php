@@ -10,7 +10,11 @@
 
 $registry = WP_Block_Type_Registry::get_instance();
 
-if ( $registry->get_registered( 'jetpack/sharing-buttons' ) ) :
+// Jetpack 16+ registers this block only once it renders on the front end, so the registry check alone misses it.
+$has_sharing_buttons = $registry->get_registered( 'jetpack/sharing-buttons' )
+	|| ( is_callable( [ 'Jetpack_Gutenberg', 'get_extensions' ] ) && in_array( 'sharing-buttons', Jetpack_Gutenberg::get_extensions(), true ) );
+
+if ( $has_sharing_buttons ) :
 	?>
 
 	<!-- wp:jetpack/sharing-buttons {"styleType":"icon","layout":{"type":"flex","justifyContent":"center"}} -->
