@@ -3,7 +3,6 @@
  */
 import { addFilter } from '@wordpress/hooks';
 import { createHigherOrderComponent } from '@wordpress/compose';
-import { __ } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
@@ -21,11 +20,11 @@ addFilter(
 	'newspack-plugin/core-post-date/updated-label',
 	createHigherOrderComponent( BlockListBlock => {
 		return props => {
-			if ( props.name !== 'core/post-date' || ! isModifiedDate( props.attributes ) ) {
+			const label = window.newspack_blocks?.post_date_updated_label;
+			if ( props.name !== 'core/post-date' || ! label || ! isModifiedDate( props.attributes ) ) {
 				return <BlockListBlock { ...props } />;
 			}
-			/* translators: %s: Modified date. */
-			const { before, after } = getLabelParts( __( 'Updated %s', 'newspack-plugin' ) );
+			const { before, after } = getLabelParts( label );
 			const wrapperProps = {
 				...props.wrapperProps,
 				'data-newspack-updated-before': before || undefined,
