@@ -64,7 +64,12 @@ final class Republication_Tracker_Tool_Republish_Button_Block {
 
 		wp_add_inline_script(
 			'republication-tracker-tool-republish-button-editor-script',
-			'window.republicationTrackerToolEditor = ' . wp_json_encode( [ 'license' => $license ] ) . ';',
+			'window.republicationTrackerToolEditor = ' . wp_json_encode(
+				[
+					'license'       => $license,
+					'sharingButton' => true,
+				]
+			) . ';',
 			'before'
 		);
 	}

@@ -10,6 +10,7 @@ import { button as icon } from '@wordpress/icons';
 import metadata from './block.json';
 import Edit from './edit';
 import './style.scss';
+import './sharing-button';
 
 registerBlockType( metadata, {
 	edit: Edit,

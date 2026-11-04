@@ -45,6 +45,9 @@ class JetpackSharingTest extends WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		Republication_Tracker_Tool::$modal_rendered = false;
+		if ( WP_Block_Type_Registry::get_instance()->is_registered( 'jetpack/sharing-button' ) ) {
+			unregister_block_type( 'jetpack/sharing-button' );
+		}
 		( new ReflectionProperty( 'Republication_Tracker_Tool_Jetpack_Sharing', 'post' ) )->setValue( null, null );
 		remove_action( 'wp_footer', [ 'Republication_Tracker_Tool_Jetpack_Sharing', 'print_modal' ] );
 		parent::tear_down();
@@ -281,5 +284,80 @@ class JetpackSharingTest extends WP_UnitTestCase {
 		ob_start();
 		Republication_Tracker_Tool_Jetpack_Sharing::print_modal();
 		$this->assertSame( '', ob_get_clean() );
+	}
+
+	/**
+	 * Build the Sharing Buttons block's button as WordPress passes it to the render filter.
+	 *
+	 * @param string $service Service ID.
+	 * @param string $style   Style type of the parent block.
+	 * @return string
+	 */
+	private function render_block_button( $service = 'republish', $style = 'icon' ) {
+		$parsed = [
+			'blockName' => 'jetpack/sharing-button',
+			'attrs'     => [
+				'service' => $service,
+				'label'   => 'Republish',
+			],
+		];
+		if ( ! WP_Block_Type_Registry::get_instance()->is_registered( 'jetpack/sharing-button' ) ) {
+			register_block_type( 'jetpack/sharing-button', [ 'uses_context' => [ 'postId', 'styleType' ] ] );
+		}
+		$block = new WP_Block(
+			$parsed,
+			[
+				'postId'    => $this->test_post->ID,
+				'styleType' => $style,
+			] 
+		);
+		return Republication_Tracker_Tool_Jetpack_Sharing::render_block_button( '', $parsed, $block );
+	}
+
+	/**
+	 * The block button carries Jetpack's classes and opens the modal, with the modal built for the page.
+	 */
+	public function test_block_button_matches_jetpack_markup_and_opens_modal() {
+		$this->view_test_post();
+
+		$markup = $this->render_block_button();
+
+		$this->assertStringContainsString( 'class="jetpack-sharing-button__button style-icon share-republish"', $markup );
+		$this->assertStringContainsString( 'data-service="republish"', $markup );
+		$this->assertStringContainsString( 'data-modal-trigger="republish"', $markup );
+		$this->assertStringContainsString( '<svg', $markup );
+		$this->assertStringNotContainsString( 'target="_blank"', $markup );
+		$this->assertNotFalse( has_action( 'wp_footer', [ 'Republication_Tracker_Tool_Jetpack_Sharing', 'print_modal' ] ) );
+	}
+
+	/**
+	 * Text-only style leaves the icon out, like Jetpack's own buttons.
+	 */
+	public function test_block_button_text_style_has_no_icon() {
+		$this->view_test_post();
+
+		$this->assertStringNotContainsString( '<svg', $this->render_block_button( 'republish', 'text' ) );
+	}
+
+	/**
+	 * The block button is empty where Republish can't be offered.
+	 */
+	public function test_block_button_is_empty_when_not_offered() {
+		update_post_meta( $this->test_post->ID, 'republication-tracker-tool-hide-widget', true );
+		$this->view_test_post();
+		$this->assertSame( '', $this->render_block_button() );
+
+		delete_post_meta( $this->test_post->ID, 'republication-tracker-tool-hide-widget' );
+		$this->go_to( home_url( '/' ) );
+		$this->assertSame( '', $this->render_block_button() );
+	}
+
+	/**
+	 * Other services are left to Jetpack.
+	 */
+	public function test_block_button_ignores_other_services() {
+		$this->view_test_post();
+
+		$this->assertSame( 'kept', Republication_Tracker_Tool_Jetpack_Sharing::render_block_button( 'kept', [ 'attrs' => [ 'service' => 'facebook' ] ] ) );
 	}
 }

@@ -22,6 +22,8 @@ if ( $has_sharing_buttons ) :
 		<!-- wp:jetpack/sharing-button {"service":"facebook","label":"Facebook"} /-->
 		<!-- wp:jetpack/sharing-button {"service":"x","label":"X"} /-->
 		<!-- wp:jetpack/sharing-button {"service":"mail","label":"Mail"} /-->
+		<!-- wp:jetpack/sharing-button {"service":"republish","label":"Republish"} /-->
+		<!-- wp:jetpack/sharing-button {"service":"newspack-gift-article","label":"Gift this article"} /-->
 	</ul>
 	<!-- /wp:jetpack/sharing-buttons -->
 
