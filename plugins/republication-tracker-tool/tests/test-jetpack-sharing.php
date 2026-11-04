@@ -93,6 +93,27 @@ class JetpackSharingTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The button's styles load in the head on a post's own page, and not where
+	 * the button can't show.
+	 */
+	public function test_styles_load_in_head_only_where_button_shows() {
+		wp_dequeue_style( 'republication-tracker-tool-jetpack-sharing' );
+		$this->go_to( home_url( '/' ) );
+		$this->make_source()->display_header();
+		$this->assertFalse( wp_style_is( 'republication-tracker-tool-jetpack-sharing', 'enqueued' ) );
+
+		update_post_meta( $this->test_post->ID, 'republication-tracker-tool-hide-widget', true );
+		$this->view_test_post();
+		$this->make_source()->display_header();
+		$this->assertFalse( wp_style_is( 'republication-tracker-tool-jetpack-sharing', 'enqueued' ) );
+
+		delete_post_meta( $this->test_post->ID, 'republication-tracker-tool-hide-widget' );
+		$this->view_test_post();
+		$this->make_source()->display_header();
+		$this->assertTrue( wp_style_is( 'republication-tracker-tool-jetpack-sharing', 'enqueued' ) );
+	}
+
+	/**
 	 * The text-only style gets no icon.
 	 */
 	public function test_text_style_has_no_icon() {
@@ -168,16 +189,21 @@ class JetpackSharingTest extends WP_UnitTestCase {
 				'facebook'  => 'Share_Facebook',
 				'republish' => 'Republication_Tracker_Tool_Jetpack_Share_Republish',
 			],
-			'hidden'  => [],
+			'hidden'  => [
+				'republish' => 'Republication_Tracker_Tool_Jetpack_Share_Republish',
+			],
 			'all'     => [
 				'facebook'  => 'Share_Facebook',
 				'republish' => 'Republication_Tracker_Tool_Jetpack_Share_Republish',
 			],
 		];
 
+		$this->assertNotFalse( has_filter( 'sharing_enabled', [ 'Republication_Tracker_Tool_Jetpack_Sharing', 'filter_enabled_services' ] ) );
+
 		$this->go_to( home_url( '/' ) );
 		$on_home = Republication_Tracker_Tool_Jetpack_Sharing::filter_enabled_services( $enabled );
 		$this->assertSame( [ 'facebook' ], array_keys( $on_home['visible'] ) );
+		$this->assertSame( [], $on_home['hidden'] );
 		$this->assertSame( [ 'facebook' ], array_keys( $on_home['all'] ) );
 
 		$this->view_test_post();
@@ -191,6 +217,19 @@ class JetpackSharingTest extends WP_UnitTestCase {
 	 */
 	public function test_settings_preview_has_icon_in_text_style() {
 		$this->assertMatchesRegularExpression( '/<a\b[^>]*><svg\b/', $this->make_source( 'text' )->display_preview( false ) );
+	}
+
+	/**
+	 * In the settings screen the button keeps its own class only. Jetpack's
+	 * preview copies each enabled service by its class, so borrowing another
+	 * service's class would show Republish whenever that service is enabled.
+	 */
+	public function test_settings_preview_uses_only_its_own_class() {
+		set_current_screen( 'settings_page_sharing' );
+
+		$this->assertSame( 'republish', $this->make_source()->get_class() );
+
+		set_current_screen( 'front' );
 	}
 
 	/**

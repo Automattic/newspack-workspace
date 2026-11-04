@@ -81,7 +81,7 @@ class Republication_Tracker_Tool_Jetpack_Share_Republish extends Sharing_Source 
 	 * stylesheet the button itself would enqueue lands in the footer.
 	 */
 	public function display_header() {
-		if ( is_singular() ) {
+		if ( Republication_Tracker_Tool_Jetpack_Sharing::should_display( get_queried_object() ) ) {
 			Republication_Tracker_Tool_Jetpack_Sharing::enqueue_style();
 		}
 	}
