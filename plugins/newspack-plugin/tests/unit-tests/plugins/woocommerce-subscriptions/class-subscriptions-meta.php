@@ -83,4 +83,118 @@ class Newspack_Test_Subscriptions_Meta extends WP_UnitTestCase {
 
 		$this->assertSame( '', $subscription->get_meta( Subscriptions_Meta::CANCELLATION_REASON_META_KEY ) );
 	}
+
+	/**
+	 * Drop the test route and the acting user.
+	 */
+	public function tear_down() {
+		$GLOBALS['wp_rest_server'] = null;
+		wp_set_current_user( 0 );
+		parent::tear_down();
+	}
+
+	/**
+	 * Cancel-type transitions a staff member can make over REST, and the
+	 * reason each one should record.
+	 *
+	 * @return array
+	 */
+	public function staff_rest_transitions() {
+		return [
+			'cancelled'      => [ 'cancelled', Subscriptions_Meta::CANCELLATION_REASON_ADMIN_CANCELLED ],
+			'pending-cancel' => [ 'pending-cancel', Subscriptions_Meta::CANCELLATION_REASON_ADMIN_PENDING_CANCEL ],
+		];
+	}
+
+	/**
+	 * The Subscribers wizard and WooCommerce's REST API change subscriptions
+	 * over REST, where is_admin() is false. A staff member's change there is
+	 * still a manual one.
+	 *
+	 * @dataProvider staff_rest_transitions
+	 * @param string $to_status The status the subscription moves to.
+	 * @param string $reason    The reason that should be recorded.
+	 */
+	public function test_staff_change_over_rest_records_manual_reason( $to_status, $reason ) {
+		$subscription = wcs_create_subscription();
+		wp_set_current_user( $this->create_staff_user() );
+
+		$this->record_during_rest_request( $subscription, $to_status, 'active' );
+
+		$this->assertSame( $reason, $subscription->get_meta( Subscriptions_Meta::CANCELLATION_REASON_META_KEY ) );
+	}
+
+	/**
+	 * A reader's own change stays a reader change, even over REST.
+	 */
+	public function test_reader_change_over_rest_records_user_reason() {
+		$subscription = wcs_create_subscription();
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'subscriber' ] ) );
+
+		$this->record_during_rest_request( $subscription, 'cancelled', 'active' );
+
+		$this->assertSame(
+			Subscriptions_Meta::CANCELLATION_REASON_USER_CANCELLED,
+			$subscription->get_meta( Subscriptions_Meta::CANCELLATION_REASON_META_KEY )
+		);
+	}
+
+	/**
+	 * Outside wp-admin and REST, a staff member is acting as a reader: for
+	 * example, cancelling their own subscription from My Account.
+	 */
+	public function test_staff_change_on_front_end_records_user_reason() {
+		$subscription = wcs_create_subscription();
+		wp_set_current_user( $this->create_staff_user() );
+
+		Subscriptions_Meta::maybe_record_cancelled_subscription_meta( $subscription, 'cancelled', 'active' );
+
+		$this->assertSame(
+			Subscriptions_Meta::CANCELLATION_REASON_USER_CANCELLED,
+			$subscription->get_meta( Subscriptions_Meta::CANCELLATION_REASON_META_KEY )
+		);
+	}
+
+	/**
+	 * An administrator who can manage the store, as on a WooCommerce site.
+	 *
+	 * @return int The user ID.
+	 */
+	private function create_staff_user() {
+		$user_id = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		get_userdata( $user_id )->add_cap( 'manage_woocommerce' );
+		return $user_id;
+	}
+
+	/**
+	 * Record a status change from inside a real REST dispatch, as the
+	 * Subscribers wizard's cancel endpoint does.
+	 *
+	 * @param WC_Subscription $subscription The subscription.
+	 * @param string          $to_status    The status it moves to.
+	 * @param string          $from_status  The status it moves from.
+	 */
+	private function record_during_rest_request( $subscription, $to_status, $from_status ) {
+		$register = function () use ( $subscription, $to_status, $from_status ) {
+			register_rest_route(
+				'newspack-test/v1',
+				'/subscription-status',
+				[
+					'methods'             => 'POST',
+					'callback'            => function () use ( $subscription, $to_status, $from_status ) {
+						Subscriptions_Meta::maybe_record_cancelled_subscription_meta( $subscription, $to_status, $from_status );
+						return rest_ensure_response( true );
+					},
+					'permission_callback' => '__return_true',
+				]
+			);
+		};
+		// A fresh server fires rest_api_init, which registers the route.
+		$GLOBALS['wp_rest_server'] = null;
+		add_action( 'rest_api_init', $register );
+		$response = rest_do_request( new WP_REST_Request( 'POST', '/newspack-test/v1/subscription-status' ) );
+		remove_action( 'rest_api_init', $register );
+
+		$this->assertSame( 200, $response->get_status() );
+	}
 }

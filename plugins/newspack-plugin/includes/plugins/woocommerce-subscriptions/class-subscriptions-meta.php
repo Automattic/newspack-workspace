@@ -32,6 +32,23 @@ class Subscriptions_Meta {
 	}
 
 	/**
+	 * Whether a staff member made this status change, rather than the reader.
+	 *
+	 * The Subscribers wizard and WooCommerce's REST API change subscriptions
+	 * over REST, where is_admin() is false, so a REST request from someone who
+	 * can manage the store counts too. Without it, a staff cancellation is
+	 * recorded, and synced to the ESP, as the reader's own.
+	 *
+	 * @return bool
+	 */
+	private static function is_manual_change() {
+		if ( is_admin() ) {
+			return true;
+		}
+		return Content_Gate::is_dispatching_rest() && current_user_can( 'manage_woocommerce' );
+	}
+
+	/**
 	 * Record woo custom field for cancelled subscriptions.
 	 *
 	 * @param WC_Subscription $subscription  The subscription object.
@@ -61,7 +78,7 @@ class Subscriptions_Meta {
 			} elseif ( self::CANCELLATION_REASON_ADMIN_PENDING_CANCEL === $meta_value ) {
 				$subscription->update_meta_data( self::CANCELLATION_REASON_META_KEY, self::CANCELLATION_REASON_ADMIN_CANCELLED );
 			} else {
-				$meta_value = is_admin() ? self::CANCELLATION_REASON_ADMIN_CANCELLED : self::CANCELLATION_REASON_USER_CANCELLED;
+				$meta_value = self::is_manual_change() ? self::CANCELLATION_REASON_ADMIN_CANCELLED : self::CANCELLATION_REASON_USER_CANCELLED;
 				$subscription->update_meta_data( self::CANCELLATION_REASON_META_KEY, $meta_value );
 			}
 			$subscription->save();
@@ -71,7 +88,7 @@ class Subscriptions_Meta {
 			$subscription->save();
 		}
 		if ( 'pending-cancel' === $to_status ) {
-			$meta_value = is_admin() ? self::CANCELLATION_REASON_ADMIN_PENDING_CANCEL : self::CANCELLATION_REASON_USER_PENDING_CANCEL;
+			$meta_value = self::is_manual_change() ? self::CANCELLATION_REASON_ADMIN_PENDING_CANCEL : self::CANCELLATION_REASON_USER_PENDING_CANCEL;
 			$subscription->update_meta_data( self::CANCELLATION_REASON_META_KEY, $meta_value );
 			$subscription->save();
 		}
