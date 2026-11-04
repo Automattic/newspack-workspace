@@ -1,6 +1,6 @@
 <?php
 /**
- * Tests for GA4 segment reach: Data API clients and the reach cache.
+ * Tests for the shared GA4 API clients.
  *
  * Mocks the GA4 Data API at the HTTP layer (via `pre_http_request`), the same
  * harness pattern as the custom-dimensions tests.
@@ -8,15 +8,14 @@
  * @package Newspack\Tests
  */
 
-use Newspack\GA4_Segment_Reach;
 use Newspack\Google_OAuth_GA4_Client;
 
 /**
- * GA4 segment reach.
+ * Shared GA4 API clients.
  *
- * @group ga4-segment-reach
+ * @group ga4-client
  */
-class Newspack_Test_GA4_Segment_Reach extends WP_UnitTestCase {
+class Newspack_Test_GA4_Client extends WP_UnitTestCase {
 
 	const SK_SETTINGS_OPTION = 'googlesitekit_analytics-4_settings';
 
@@ -52,7 +51,6 @@ class Newspack_Test_GA4_Segment_Reach extends WP_UnitTestCase {
 		$this->http_routes = [];
 		add_filter( 'pre_http_request', [ $this, 'mock_http' ], 10, 3 );
 
-		delete_option( 'newspack_ga4_segment_reach' );
 		delete_option( self::SK_SETTINGS_OPTION );
 
 		if ( ! defined( 'NEWSPACK_MANAGER_API_KEY_OPTION_NAME' ) ) {
@@ -117,8 +115,8 @@ class Newspack_Test_GA4_Segment_Reach extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Make Newspack's Google OAuth count as configured. The reach path must
-	 * work without the analytics.edit scope, so the stored token deliberately
+	 * Make Newspack's Google OAuth count as configured. Reads must work
+	 * without the analytics.edit scope, so the stored token deliberately
 	 * carries only the base analytics scope.
 	 */
 	private function configure_newspack_oauth() {
@@ -136,21 +134,6 @@ class Newspack_Test_GA4_Segment_Reach extends WP_UnitTestCase {
 			[
 				'scope' => 'https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/analytics',
 				'email' => 'owner@example.test',
-			]
-		);
-	}
-
-	/**
-	 * Record a connected GA4 property (and module owner) in Site Kit's settings.
-	 *
-	 * @param string $property_id GA4 property ID.
-	 */
-	private function connect_property( $property_id ) {
-		update_option(
-			self::SK_SETTINGS_OPTION,
-			[
-				'propertyID' => $property_id,
-				'ownerID'    => $this->owner_id,
 			]
 		);
 	}
