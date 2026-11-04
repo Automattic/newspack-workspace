@@ -156,7 +156,7 @@ class Content_Gifting_CTA {
 			return;
 		}
 		$button_label = self::get_button_label();
-		$button_class = 'dark' === self::get_style() ? 'newspack-ui__button--primary-light' : 'newspack-ui__button--accent';
+		$button_class = 'dark' === self::get_style() ? 'newspack-ui__button--primary-light' : 'newspack-ui__button--primary';
 
 		$cta_type = self::get_cta_type();
 		if ( $cta_type === 'url' ) {
