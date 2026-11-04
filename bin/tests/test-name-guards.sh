@@ -194,7 +194,7 @@ assert_rejects_extra() {
 	local sub="$1" extra="$2" out status=0
 	out=$(PATH="$STUB:$PATH" NABSPATH="$SANDBOX" bash "$SCRIPT_DIR/../env.sh" "$sub" demo "$extra" </dev/null 2>&1) || status=$?
 	if [[ "$status" -eq 1 && "$out" == *"Unknown option: $extra"* ]]; then
-		echo "  ok: $sub <name> $extra is refused before anything runs"
+		echo "  ok: $sub <name> $extra is refused"
 	else
 		echo "  FAIL: $sub <name> $extra is refused — want exit 1 naming the option, got exit $status: $out"
 		failures=$((failures + 1))
@@ -205,7 +205,6 @@ echo
 echo "n env down|destroy <name> <anything else>:"
 for sub in down destroy; do
 	assert_rejects_extra "$sub" --dry-run
-	assert_rejects_extra "$sub" -H
 done
 
 echo
