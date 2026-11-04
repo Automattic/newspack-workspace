@@ -144,9 +144,9 @@ env_usage() {
     exit 1
 }
 
-# The arms below look for a help flag only in the name position, so a flag after
-# the name used to be ignored: `n env destroy <name> --help` destroyed the env.
-# A help flag anywhere is a help request, so move it into the name position
+# The arms below look for a help flag only in the name position. Without this, a
+# flag after the name is ignored and `n env destroy <name> --help` destroys the
+# env. A help flag anywhere is a help request, so move it into the name position
 # before dispatch. cleanup and e2e-setup parse their own options.
 case $1 in
     create|up|down|destroy|list)
