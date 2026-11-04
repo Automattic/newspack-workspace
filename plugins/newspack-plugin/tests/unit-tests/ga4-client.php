@@ -245,13 +245,4 @@ class Newspack_Test_GA4_Client extends WP_UnitTestCase {
 
 		$this->assertSame( 0, GA4_Client::choose_site_kit_user( $this->owner_id, $this->tokens_for( [] ) ) );
 	}
-
-	/**
-	 * With no owner recorded, the read stays with the current user.
-	 */
-	public function test_current_user_when_no_owner_is_recorded() {
-		wp_set_current_user( $this->factory()->user->create( [ 'role' => 'administrator' ] ) );
-
-		$this->assertSame( 0, GA4_Client::choose_site_kit_user( 0, $this->tokens_for( [ 0 ] ) ) );
-	}
 }

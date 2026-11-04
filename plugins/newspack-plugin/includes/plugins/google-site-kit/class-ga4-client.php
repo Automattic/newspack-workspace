@@ -44,10 +44,10 @@ final class GA4_Client {
 	 * configured or the callback throws/returns a WP_Error, falls back to Site
 	 * Kit's client (which stores tokens keyed on user ID).
 	 *
-	 * Switches the current user to the Site Kit owner if none is set (e.g. in
-	 * WP-Cron) so both routes have a user to resolve credentials for. Restores
-	 * the previous user before returning so we don't leak an unexpected
-	 * identity into subsequent operations in the same process.
+	 * Switches the current user to the Analytics module owner if none is set
+	 * (e.g. in WP-Cron) so Site Kit has a user whose token to use. Restores the
+	 * previous user before returning so we don't leak an unexpected identity
+	 * into subsequent operations in the same process.
 	 *
 	 * Writes require the `analytics.edit` scope on the Newspack OAuth token,
 	 * which many publishers have not granted — callers doing writes keep the
