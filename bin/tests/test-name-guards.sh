@@ -186,6 +186,7 @@ for sub in create up down destroy; do
 done
 assert_usage 0 "create with options before --help still prints usage" create demo --worktree newspack-plugin:main --help
 assert_usage 0 "up --all --help prints usage instead of starting every env" up --all --help
+assert_usage 0 "list --porcelain --help prints usage instead of the table" list --porcelain --help
 
 echo
 echo "n env <subcommand> with no name:"
