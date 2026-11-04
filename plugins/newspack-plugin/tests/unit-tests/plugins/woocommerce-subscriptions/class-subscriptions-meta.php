@@ -140,6 +140,23 @@ class Newspack_Test_Subscriptions_Meta extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A staff member changing their own subscription over REST is acting as a
+	 * reader, as they are on the front end.
+	 */
+	public function test_staff_change_to_own_subscription_over_rest_records_user_reason() {
+		$staff_id     = $this->create_staff_user();
+		$subscription = wcs_create_subscription( [ 'customer_id' => $staff_id ] );
+		wp_set_current_user( $staff_id );
+
+		$this->record_during_rest_request( $subscription, 'pending-cancel', 'active' );
+
+		$this->assertSame(
+			Subscriptions_Meta::CANCELLATION_REASON_USER_PENDING_CANCEL,
+			$subscription->get_meta( Subscriptions_Meta::CANCELLATION_REASON_META_KEY )
+		);
+	}
+
+	/**
 	 * Outside wp-admin and REST, a staff member is acting as a reader: for
 	 * example, cancelling their own subscription from My Account.
 	 */

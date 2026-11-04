@@ -32,23 +32,29 @@ class Subscriptions_Meta {
 	}
 
 	/**
-	 * Whether a staff member made this status change, rather than the reader.
+	 * Whether this status change came from a staff context, judged by where the
+	 * request came from: wp-admin screens count, and so do REST requests from
+	 * someone who can manage the store, since the Subscribers wizard and
+	 * WooCommerce's REST API change subscriptions over REST, where is_admin() is
+	 * false. Staff changing their own subscription over REST, or on the front
+	 * end, are acting as readers. Getting this wrong mislabels the reason that
+	 * reaches the ESP and Insights.
 	 *
-	 * The Subscribers wizard and WooCommerce's REST API change subscriptions
-	 * over REST, where is_admin() is false, so a REST request from someone who
-	 * can manage the store counts too. Without it, a staff cancellation is
-	 * recorded, and synced to the ESP, as the reader's own.
+	 * @param \WC_Subscription $subscription The subscription being changed.
 	 *
 	 * @return bool
 	 */
-	private static function is_manual_change() {
+	private static function is_manual_change( $subscription ): bool {
 		if ( is_admin() ) {
 			return true;
 		}
 		$is_rest_request = function_exists( 'wp_is_rest_endpoint' )
 			? wp_is_rest_endpoint()
 			: ( defined( 'REST_REQUEST' ) && REST_REQUEST );
-		return $is_rest_request && current_user_can( 'manage_woocommerce' );
+		if ( ! $is_rest_request || ! current_user_can( 'manage_woocommerce' ) ) {
+			return false;
+		}
+		return (int) $subscription->get_user_id() !== get_current_user_id();
 	}
 
 	/**
@@ -81,7 +87,7 @@ class Subscriptions_Meta {
 			} elseif ( self::CANCELLATION_REASON_ADMIN_PENDING_CANCEL === $meta_value ) {
 				$subscription->update_meta_data( self::CANCELLATION_REASON_META_KEY, self::CANCELLATION_REASON_ADMIN_CANCELLED );
 			} else {
-				$meta_value = self::is_manual_change() ? self::CANCELLATION_REASON_ADMIN_CANCELLED : self::CANCELLATION_REASON_USER_CANCELLED;
+				$meta_value = self::is_manual_change( $subscription ) ? self::CANCELLATION_REASON_ADMIN_CANCELLED : self::CANCELLATION_REASON_USER_CANCELLED;
 				$subscription->update_meta_data( self::CANCELLATION_REASON_META_KEY, $meta_value );
 			}
 			$subscription->save();
@@ -91,7 +97,7 @@ class Subscriptions_Meta {
 			$subscription->save();
 		}
 		if ( 'pending-cancel' === $to_status ) {
-			$meta_value = self::is_manual_change() ? self::CANCELLATION_REASON_ADMIN_PENDING_CANCEL : self::CANCELLATION_REASON_USER_PENDING_CANCEL;
+			$meta_value = self::is_manual_change( $subscription ) ? self::CANCELLATION_REASON_ADMIN_PENDING_CANCEL : self::CANCELLATION_REASON_USER_PENDING_CANCEL;
 			$subscription->update_meta_data( self::CANCELLATION_REASON_META_KEY, $meta_value );
 			$subscription->save();
 		}
