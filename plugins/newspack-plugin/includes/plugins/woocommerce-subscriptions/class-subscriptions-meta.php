@@ -45,7 +45,10 @@ class Subscriptions_Meta {
 		if ( is_admin() ) {
 			return true;
 		}
-		return Content_Gate::is_dispatching_rest() && current_user_can( 'manage_woocommerce' );
+		$is_rest_request = function_exists( 'wp_is_rest_endpoint' )
+			? wp_is_rest_endpoint()
+			: ( defined( 'REST_REQUEST' ) && REST_REQUEST );
+		return $is_rest_request && current_user_can( 'manage_woocommerce' );
 	}
 
 	/**
