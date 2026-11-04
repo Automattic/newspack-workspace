@@ -10,9 +10,9 @@
 
 $registry = WP_Block_Type_Registry::get_instance();
 
-// Jetpack 16+ defers registering this block on the front end until it is found in a rendered block tree.
+// Jetpack 16+ registers this block only once it renders on the front end, so the registry check alone misses it.
 $has_sharing_buttons = $registry->get_registered( 'jetpack/sharing-buttons' )
-	|| ( class_exists( 'Jetpack_Gutenberg' ) && in_array( 'sharing-buttons', Jetpack_Gutenberg::get_extensions(), true ) );
+	|| ( is_callable( [ 'Jetpack_Gutenberg', 'get_extensions' ] ) && in_array( 'sharing-buttons', Jetpack_Gutenberg::get_extensions(), true ) );
 
 if ( $has_sharing_buttons ) :
 	?>
