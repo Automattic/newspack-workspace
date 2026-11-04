@@ -119,7 +119,7 @@ export default function CountdownBanner( { config, setConfig, updateConfig, noBo
 														className={ `newspack-ui__button newspack-ui__button--x-small ${
 															( config.countdown_banner.style || 'light' ) === 'dark'
 																? 'newspack-ui__button--primary-light'
-																: 'newspack-ui__button--accent'
+																: 'newspack-ui__button--primary'
 														}` }
 													>
 														{ config.countdown_banner.button_label || __( 'Subscribe now', 'newspack-plugin' ) }
