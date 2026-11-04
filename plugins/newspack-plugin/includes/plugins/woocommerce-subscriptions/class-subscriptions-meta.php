@@ -32,19 +32,21 @@ class Subscriptions_Meta {
 	}
 
 	/**
-	 * Whether this status change came from a staff context, judged by where the
-	 * request came from: wp-admin screens count, and so do REST requests from
-	 * someone who can manage the store, since the Subscribers wizard and
-	 * WooCommerce's REST API change subscriptions over REST, where is_admin() is
-	 * false. Staff changing their own subscription over REST, or on the front
-	 * end, are acting as readers. Getting this wrong mislabels the reason that
-	 * reaches the ESP and Insights.
+	 * Whether staff made this status change, judged by the request's context.
+	 *
+	 * Screens in wp-admin are staff tools, so they always count. REST requests
+	 * count when the user can manage the store, since the Subscribers wizard and
+	 * WooCommerce's REST API work over REST, where is_admin() is false. Checkout
+	 * also runs over REST, so staff changing their own subscription there act as
+	 * readers, as they do on the front end. "Own" means the purchaser
+	 * (get_user_id()), the same owner the switch code checks. A wrong answer
+	 * mislabels the reason sent to the ESP and Insights.
 	 *
 	 * @param \WC_Subscription $subscription The subscription being changed.
 	 *
 	 * @return bool
 	 */
-	private static function is_manual_change( $subscription ): bool {
+	private static function is_manual_change( \WC_Subscription $subscription ): bool {
 		if ( is_admin() ) {
 			return true;
 		}
