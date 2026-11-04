@@ -44,7 +44,6 @@ li.service.share-republish .options-left svg {
 
 .jetpack-sharing-button__button.share-republish svg {
 	fill: currentColor;
-	transform: scale(1.25);
 }
 
 .jetpack-sharing-button__button.share-republish svg path {
@@ -52,5 +51,5 @@ li.service.share-republish .options-left svg {
 }
 
 .jetpack-sharing-button__button.style-icon.share-republish {
-	background: #c5c2c2;
+	background: #000;
 }

@@ -54,7 +54,6 @@ body .sd-social-icon .sd-content ul li[class*="share-"].share-newspack-gift-arti
 
 .jetpack-sharing-button__button.share-newspack-gift-article svg {
 	fill: currentcolor;
-	transform: scale(1.25);
 
 	path {
 		fill: currentcolor;
@@ -62,7 +61,7 @@ body .sd-social-icon .sd-content ul li[class*="share-"].share-newspack-gift-arti
 }
 
 .jetpack-sharing-button__button.style-icon.share-newspack-gift-article {
-	background: #c5c2c2;
+	background: #000;
 }
 
 body.newspack-is-gifted-post,

@@ -22,7 +22,7 @@
 				padding: calc(var(--wp--preset--spacing--20) * 0.875);
 				top: 0;
 
-				&:where(:not(:is(.share-x, .share-threads, .share-share):not([style*="background-color"]))) {
+				&:where(:not(:is(.share-x, .share-threads, .share-share, .share-mail, .share-print, .share-republish, .share-newspack-gift-article):not([style*="background-color"]))) {
 					@include mixins.fill-overlay;
 
 					&:focus-visible::before {
@@ -31,6 +31,21 @@
 				}
 
 				&:is(.share-x, .share-threads):not([style*="background-color"]) {
+					@include motion.hover {
+						&:hover {
+							background: color-mix(in oklab, currentcolor var(--wp--custom--state--lighten-hover), black);
+						}
+					}
+
+					&:active {
+						background: color-mix(in oklab, currentcolor var(--wp--custom--state--lighten-pressed), black);
+					}
+				}
+
+				&:is(.share-mail, .share-print, .share-republish, .share-newspack-gift-article):not([style*="background-color"]) {
+					background: var(--wp--preset--color--contrast);
+					color: var(--wp--preset--color--base);
+
 					@include motion.hover {
 						&:hover {
 							background: color-mix(in oklab, currentcolor var(--wp--custom--state--lighten-hover), black);
@@ -143,6 +158,11 @@
 
 		&__button.share-print {
 			--np--sharing-icon--scale: 0.90625;
+		}
+
+		&__button.share-republish,
+		&__button.share-newspack-gift-article {
+			--np--sharing-icon--scale: 1.125;
 		}
 
 		&__button.share-mail,
