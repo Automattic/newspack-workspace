@@ -125,7 +125,8 @@ class Newspack_Test_Subscriptions_Meta extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A reader's own change stays a reader change, even over REST.
+	 * Over REST, someone who can't manage the store is never staff, whoever
+	 * owns the subscription.
 	 */
 	public function test_reader_change_over_rest_records_user_reason() {
 		$subscription = wcs_create_subscription();
