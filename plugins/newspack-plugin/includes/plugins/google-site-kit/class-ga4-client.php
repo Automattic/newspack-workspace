@@ -44,11 +44,10 @@ final class GA4_Client {
 	 * configured or the callback throws/returns a WP_Error, falls back to Site
 	 * Kit's client (which stores tokens keyed on user ID).
 	 *
-	 * Switches the current user to a capable one if none is set (e.g. in
-	 * WP-Cron) so permission checks in `Google_OAuth::get_oauth2_credentials()`
-	 * and Site Kit's `User_Options` can resolve credentials. Restores the
-	 * previous user before returning so we don't leak an unexpected identity
-	 * into subsequent operations in the same process.
+	 * Switches the current user to the Site Kit owner if none is set (e.g. in
+	 * WP-Cron) so both routes have a user to resolve credentials for. Restores
+	 * the previous user before returning so we don't leak an unexpected
+	 * identity into subsequent operations in the same process.
 	 *
 	 * Writes require the `analytics.edit` scope on the Newspack OAuth token,
 	 * which many publishers have not granted — callers doing writes keep the
@@ -60,7 +59,9 @@ final class GA4_Client {
 	 * connected Site Kit has none. Read callers pass `prefer_owner => true` to
 	 * authenticate the Site Kit route as the Analytics module owner instead,
 	 * on the rule in `choose_site_kit_user()`. Writes leave it off and keep
-	 * acting as the current user.
+	 * acting as the current user. This router does not decide who may read:
+	 * with no user it acts as the owner, so a read caller checks the
+	 * capability its own entry point requires before calling it.
 	 *
 	 * The callback is invoked as `$callback( $client, $source )` where
 	 * `$source` is either 'newspack' or 'sitekit'.
@@ -70,9 +71,8 @@ final class GA4_Client {
 	 * granted analytics.edit to Site Kit" case) is self-explanatory rather than
 	 * buried in the log.
 	 *
-	 * @param callable $callback Called with `( $client, string $source )`.
-	 * @param array    $args     Options. `require_edit_scope` (bool, default true),
-	 *                           `prefer_owner` (bool, default false).
+	 * @param callable                                              $callback Called with `( $client, string $source )`.
+	 * @param array{require_edit_scope?: bool, prefer_owner?: bool} $args     Options: `require_edit_scope` defaults to true, `prefer_owner` to false.
 	 * @return mixed|\WP_Error The callback's return value, or WP_Error.
 	 */
 	public static function with_admin_client( callable $callback, array $args = [] ) {
@@ -153,8 +153,8 @@ final class GA4_Client {
 	 * @return int The owner's ID, or zero for the current user.
 	 */
 	public static function choose_site_kit_user( int $owner_id, callable $has_token ): int {
-		// The owner's token is lent only to someone who could connect Site Kit
-		// themselves, so a lower role never reads through it.
+		// A logged-in user borrows the owner's token only if they could connect
+		// Site Kit themselves, so a lower role never reads through it.
 		if ( $owner_id > 0 && $has_token( $owner_id ) && ( get_current_user_id() === $owner_id || current_user_can( 'manage_options' ) ) ) {
 			return $owner_id;
 		}
