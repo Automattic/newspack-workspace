@@ -129,11 +129,13 @@ class Audience_Content_Gates extends Wizard {
 					'can_use_gifting' => Content_Gifting::can_use_gifting(),
 					'has_metering'    => Content_Gate::is_metering_enabled(),
 				],
+				'content_banner'           => Content_Banner_Style::get_wizard_data(),
 			]
 		);
 
 		// Enqueue content banner CSS for previews.
 		wp_enqueue_style( 'newspack-content-banner', Newspack::plugin_url() . '/dist/content-banner.css', [], Newspack::asset_version( 'content-banner' ) );
+		Content_Banner_Style::enqueue_wizard_fonts();
 	}
 
 	/**
@@ -271,6 +273,12 @@ class Audience_Content_Gates extends Wizard {
 					'style'                => [
 						'type' => 'string',
 					],
+					'bg_color'             => [
+						'type' => 'string',
+					],
+					'button_color'         => [
+						'type' => 'string',
+					],
 				],
 			]
 		);
@@ -326,6 +334,12 @@ class Audience_Content_Gates extends Wizard {
 						'type' => 'boolean',
 					],
 					'style'          => [
+						'type' => 'string',
+					],
+					'bg_color'       => [
+						'type' => 'string',
+					],
+					'button_color'   => [
 						'type' => 'string',
 					],
 				],
@@ -557,6 +571,12 @@ class Audience_Content_Gates extends Wizard {
 		}
 		if ( isset( $args['style'] ) ) {
 			Content_Gifting_CTA::set_style( sanitize_text_field( $args['style'] ) );
+		}
+		if ( isset( $args['bg_color'] ) ) {
+			Content_Gifting_CTA::set_bg_color( $args['bg_color'] );
+		}
+		if ( isset( $args['button_color'] ) ) {
+			Content_Gifting_CTA::set_button_color( $args['button_color'] );
 		}
 		return rest_ensure_response( Content_Gifting::get_settings() );
 	}
