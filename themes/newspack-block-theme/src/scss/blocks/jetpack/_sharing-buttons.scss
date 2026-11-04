@@ -48,12 +48,12 @@
 
 					@include motion.hover {
 						&:hover {
-							background: color-mix(in oklab, currentcolor var(--wp--custom--state--lighten-hover), black);
+							background: color-mix(in oklab, var(--wp--preset--color--contrast) var(--wp--custom--state--hover), var(--wp--preset--color--base));
 						}
 					}
 
 					&:active {
-						background: color-mix(in oklab, currentcolor var(--wp--custom--state--lighten-pressed), black);
+						background: color-mix(in oklab, var(--wp--preset--color--contrast) var(--wp--custom--state--pressed), var(--wp--preset--color--base));
 					}
 				}
 
