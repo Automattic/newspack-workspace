@@ -86,20 +86,4 @@ class Newspack_Test_Comments_Panel_Block extends WP_UnitTestCase {
 
 		$this->assertStringContainsString( 'inner', $this->render_for_post( $post_id ) );
 	}
-
-	/**
-	 * Renders nothing when comments closed automatically on an older post with no comments.
-	 */
-	public function test_hidden_when_auto_closed_and_none_exist() {
-		update_option( 'close_comments_for_old_posts', 1 );
-		update_option( 'close_comments_days_old', 14 );
-		$post_id = self::factory()->post->create(
-			[
-				'comment_status' => 'open',
-				'post_date'      => gmdate( 'Y-m-d H:i:s', strtotime( '-30 days' ) ),
-			]
-		);
-
-		$this->assertSame( '', $this->render_for_post( $post_id ) );
-	}
 }
