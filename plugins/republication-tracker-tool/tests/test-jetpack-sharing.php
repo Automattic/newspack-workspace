@@ -18,6 +18,13 @@ class JetpackSharingTest extends WP_UnitTestCase {
 	private $test_post;
 
 	/**
+	 * Block types this test registered.
+	 *
+	 * @var string[]
+	 */
+	private $registered_blocks = [];
+
+	/**
 	 * Load the Sharing_Source stand-in, since Jetpack is not loaded in tests.
 	 */
 	public static function set_up_before_class() {
@@ -45,9 +52,10 @@ class JetpackSharingTest extends WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		Republication_Tracker_Tool::$modal_rendered = false;
-		if ( WP_Block_Type_Registry::get_instance()->is_registered( 'jetpack/sharing-button' ) ) {
-			unregister_block_type( 'jetpack/sharing-button' );
+		foreach ( $this->registered_blocks as $name ) {
+			unregister_block_type( $name );
 		}
+		$this->registered_blocks = [];
 		( new ReflectionProperty( 'Republication_Tracker_Tool_Jetpack_Sharing', 'post' ) )->setValue( null, null );
 		remove_action( 'wp_footer', [ 'Republication_Tracker_Tool_Jetpack_Sharing', 'print_modal' ] );
 		parent::tear_down();
@@ -287,6 +295,21 @@ class JetpackSharingTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Register Jetpack's sharing blocks unless Jetpack has, remembering ours to remove again.
+	 */
+	private function register_sharing_blocks() {
+		$registry = WP_Block_Type_Registry::get_instance();
+		if ( ! $registry->is_registered( 'jetpack/sharing-buttons' ) ) {
+			register_block_type( 'jetpack/sharing-buttons', [ 'provides_context' => [ 'styleType' => 'styleType' ] ] );
+			$this->registered_blocks[] = 'jetpack/sharing-buttons';
+		}
+		if ( ! $registry->is_registered( 'jetpack/sharing-button' ) ) {
+			register_block_type( 'jetpack/sharing-button', [ 'uses_context' => [ 'postId', 'styleType' ] ] );
+			$this->registered_blocks[] = 'jetpack/sharing-button';
+		}
+	}
+
+	/**
 	 * Build the Sharing Buttons block's button as WordPress passes it to the render filter.
 	 *
 	 * @param string $service Service ID.
@@ -301,9 +324,7 @@ class JetpackSharingTest extends WP_UnitTestCase {
 				'label'   => 'Republish',
 			],
 		];
-		if ( ! WP_Block_Type_Registry::get_instance()->is_registered( 'jetpack/sharing-button' ) ) {
-			register_block_type( 'jetpack/sharing-button', [ 'uses_context' => [ 'postId', 'styleType' ] ] );
-		}
+		$this->register_sharing_blocks();
 		$block = new WP_Block(
 			$parsed,
 			[
@@ -328,6 +349,19 @@ class JetpackSharingTest extends WP_UnitTestCase {
 		$this->assertStringContainsString( '<svg', $markup );
 		$this->assertStringNotContainsString( 'target="_blank"', $markup );
 		$this->assertNotFalse( has_action( 'wp_footer', [ 'Republication_Tracker_Tool_Jetpack_Sharing', 'print_modal' ] ) );
+	}
+
+	/**
+	 * The hook is wired to Jetpack's block, which passes the layout's style type down as context.
+	 */
+	public function test_block_button_renders_through_the_block_pipeline() {
+		$this->view_test_post();
+		$this->register_sharing_blocks();
+
+		$markup = do_blocks( '<!-- wp:jetpack/sharing-buttons {"styleType":"icon"} --><ul><!-- wp:jetpack/sharing-button {"service":"republish"} /--></ul><!-- /wp:jetpack/sharing-buttons -->' );
+
+		$this->assertStringContainsString( 'share-republish', $markup );
+		$this->assertStringContainsString( 'style-icon', $markup );
 	}
 
 	/**
