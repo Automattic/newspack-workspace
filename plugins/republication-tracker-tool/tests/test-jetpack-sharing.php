@@ -199,14 +199,16 @@ class JetpackSharingTest extends WP_UnitTestCase {
 
 	/**
 	 * The modal follows the main query's post object even when the queried
-	 * object is a separate copy of the same post, as it is for page paths.
+	 * object, or the global post a secondary loop left behind, is a separate
+	 * copy of the same post.
 	 */
 	public function test_footer_modal_follows_the_main_query_post() {
 		$this->view_test_post();
 		global $wp_query;
 		$wp_query->queried_object    = clone $wp_query->posts[0];
 		$wp_query->queried_object_id = $this->test_post->ID;
-		$this->make_source()->get_display( $wp_query->queried_object );
+		$GLOBALS['post']             = clone $wp_query->posts[0]; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		$this->make_source()->get_display( $GLOBALS['post'] );
 		$wp_query->posts[0]->post_content = '<p>Teaser only.</p>';
 
 		ob_start();

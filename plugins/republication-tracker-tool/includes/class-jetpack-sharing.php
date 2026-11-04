@@ -29,10 +29,10 @@ final class Republication_Tracker_Tool_Jetpack_Sharing {
 	/**
 	 * The post a Republish button was displayed for on this page.
 	 *
-	 * The main query's own post object, the one the loop hands to `the_post`,
-	 * rather than a reloaded copy, so the modal copies the post as the page
-	 * holds it. The queried object can be a separate copy (page paths load it
-	 * on their own), so it isn't used here.
+	 * The main query's own post object when it is the same post, the one the
+	 * loop hands to `the_post`, so the modal copies the post as the page holds
+	 * it rather than a reloaded or separate copy. The queried object can be
+	 * such a copy (page paths load it on their own), so it isn't used here.
 	 *
 	 * @var WP_Post|null
 	 */
