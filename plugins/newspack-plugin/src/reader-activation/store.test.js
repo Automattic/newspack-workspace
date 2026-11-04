@@ -267,18 +267,15 @@ describe( 'Store', () => {
 		} );
 		it( 'should drain the sync queue so deleted keys are not POSTed on the next tick', () => {
 			jest.useFakeTimers();
-			// items has a known stale server value for the key so the bail-on-match
-			// shortcut in syncItem cannot mask a missing drain — a stale dequeue
-			// would resolve to a DELETE XHR.
-			window.newspack_reader_data = {
-				api_url: 'http://test/api',
-				nonce: 'abc',
-				items: { pageviews: '{"day":{"count":99}}' },
-			};
+			window.newspack_reader_data = { api_url: 'http://test/api', nonce: 'abc', items: {} };
 			const openSpy = jest.spyOn( XMLHttpRequest.prototype, 'open' );
 			const [ store, clearStore ] = Store();
-			store.set( 'pageviews', { day: { count: 1 } } );
+			store.set( 'articles_read', 1 );
 			clearStore();
+			// init()'s account-switch path restores the next reader's server items
+			// right after the wipe (NPPM-2899), so a stale dequeue would POST null
+			// and delete that reader's value.
+			window.newspack_reader_data.items = { articles_read: '99' };
 			jest.advanceTimersByTime( 1500 );
 			expect( openSpy ).not.toHaveBeenCalled();
 			openSpy.mockRestore();
@@ -374,14 +371,14 @@ describe( 'Store', () => {
 			expect( store.get( 'matched_segments' ) ).toEqual( [ '3' ] );
 			expect( sessionStorage.getItem( 'np_reader_matched_segments' ) ).toEqual( '["3"]' );
 			expect( localStorage.getItem( 'np_reader_matched_segments' ) ).toBeNull();
-			store.set( 'pageviews', { day: { count: 1 } } );
+			store.set( 'articles_read', 1 );
 			jest.advanceTimersByTime( 2500 );
 			expect( openSpy ).not.toHaveBeenCalled();
 			openSpy.mockRestore();
 		} );
 		it.each( [
-			[ 'written', store => store.set( 'pageviews', { day: { count: 9 } } ) ],
-			[ 'deleted', store => store.delete( 'pageviews' ) ],
+			[ 'written', store => store.set( 'articles_read', 9 ) ],
+			[ 'deleted', store => store.delete( 'articles_read' ) ],
 		] )( 'still hydrates a key the switched tab has %s', ( _, write ) => {
 			window.newspack_reader_data = { is_switched_session: true, items: {} };
 			let store;
@@ -390,8 +387,106 @@ describe( 'Store', () => {
 			} );
 			write( store );
 			// The next page load in the same tab.
-			store.rehydrate( { pageviews: '{"day":{"count":1}}' } );
-			expect( store.get( 'pageviews' ) ).toEqual( { day: { count: 1 } } );
+			store.rehydrate( { articles_read: '1' } );
+			expect( store.get( 'articles_read' ) ).toEqual( 1 );
+		} );
+	} );
+	describe( 'server sync', () => {
+		let requests;
+		const originalXHR = window.XMLHttpRequest;
+		const getUnsynced = () => JSON.parse( localStorage.getItem( 'np_reader__unsynced' ) || '[]' );
+		const flushPromises = async () => {
+			for ( let i = 0; i < 5; i++ ) {
+				await Promise.resolve();
+			}
+		};
+		beforeEach( () => {
+			requests = [];
+			window.XMLHttpRequest = function () {
+				const req = {
+					open: ( method, url ) => Object.assign( req, { method, url } ),
+					setRequestHeader: () => {},
+					send: body => ( req.body = JSON.parse( body ) ),
+					respond: ( status, body = { success: true, errors: {} } ) => {
+						Object.assign( req, { readyState: 4, status, responseText: JSON.stringify( body ) } );
+						req.onreadystatechange();
+					},
+				};
+				requests.push( req );
+				return req;
+			};
+			window.newspack_reader_data = { api_url: 'http://test/api', nonce: 'abc', items: {} };
+		} );
+		afterEach( () => {
+			window.XMLHttpRequest = originalXHR;
+		} );
+		it( 'sends every pending key in one request', async () => {
+			window.newspack_reader_data.items = { is_newsletter_subscriber: 'true' };
+			const [ store ] = Store();
+			store.set( 'articles_read', 3 );
+			store.set( 'favorite_categories', [ 1, 2 ] );
+			store.set( 'is_newsletter_subscriber', false );
+			jest.advanceTimersByTime( 1000 );
+			expect( requests ).toHaveLength( 1 );
+			expect( requests[ 0 ].method ).toEqual( 'POST' );
+			// A falsy value is sent as null, which deletes the key on the server.
+			expect( requests[ 0 ].body ).toEqual( {
+				items: { articles_read: '3', favorite_categories: '[1,2]', is_newsletter_subscriber: null },
+			} );
+			requests[ 0 ].respond( 200 );
+			await flushPromises();
+			expect( getUnsynced() ).toEqual( [] );
+			expect( window.newspack_reader_data.items.articles_read ).toEqual( '3' );
+		} );
+		it( 'skips values the server already holds', () => {
+			window.newspack_reader_data.items = { articles_read: '3' };
+			const [ store ] = Store();
+			store.set( 'articles_read', 3 );
+			jest.advanceTimersByTime( 1000 );
+			expect( requests ).toHaveLength( 0 );
+		} );
+		it( 'keeps a rejected key pending for the next page load without resending it', async () => {
+			const [ store ] = Store();
+			store.set( 'articles_read', 3 );
+			store.set( 'custom_key', 'value' );
+			jest.advanceTimersByTime( 1000 );
+			requests[ 0 ].respond( 200, { success: true, errors: { custom_key: 'too_many_items' } } );
+			await flushPromises();
+			expect( getUnsynced() ).toEqual( [ 'custom_key' ] );
+			jest.advanceTimersByTime( 1000 );
+			expect( requests ).toHaveLength( 1 );
+		} );
+		describe( 'browser-only keys', () => {
+			beforeEach( () => {
+				window.newspack_reader_data.local_keys = [ 'pageviews' ];
+			} );
+			it.each( [
+				[ 'written', store => store.set( 'pageviews', { day: { count: 1 } } ) ],
+				[ 'deleted', store => store.delete( 'pageviews' ) ],
+			] )( 'are never sent when %s', ( _, write ) => {
+				// The server holds a copy, so a delete would otherwise have something to remove.
+				window.newspack_reader_data.items = { pageviews: '{"day":{"count":9}}' };
+				const [ store ] = Store();
+				write( store );
+				jest.advanceTimersByTime( 1000 );
+				expect( requests ).toHaveLength( 0 );
+				expect( getUnsynced() ).toEqual( [] );
+			} );
+			it( 'are dropped from a queue left by an earlier version', () => {
+				localStorage.setItem( 'np_reader__unsynced', JSON.stringify( [ 'pageviews', 'articles_read' ] ) );
+				localStorage.setItem( 'np_reader_pageviews', '{"day":{"count":1}}' );
+				localStorage.setItem( 'np_reader_articles_read', '3' );
+				Store();
+				jest.advanceTimersByTime( 1000 );
+				expect( requests[ 0 ].body ).toEqual( { items: { articles_read: '3' } } );
+			} );
+			it( "keep the browser's value over the server's copy", () => {
+				localStorage.setItem( 'np_reader_pageviews', '{"day":{"count":7}}' );
+				window.newspack_reader_data.items = { pageviews: '{"day":{"count":1}}' };
+				const [ store ] = Store();
+				store.rehydrate();
+				expect( store.get( 'pageviews' ) ).toEqual( { day: { count: 7 } } );
+			} );
 		} );
 	} );
 } );
