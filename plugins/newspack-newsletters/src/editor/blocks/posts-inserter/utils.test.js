@@ -1,7 +1,7 @@
 // The post subtitle is post meta, which kses does not filter, and this module turns it
 // into a core/heading attribute that is serialized into the newsletter's own
 // post_content -- so anything that survives here is copied into a second post.
-import { sanitizeSubtitle } from './utils';
+import { getAuthorBlockTemplate, sanitizeSubtitle, stripClassAttributes } from './utils';
 
 describe( 'sanitizeSubtitle', () => {
 	it( 'keeps the inline formatting a subtitle is allowed to carry', () => {
@@ -45,5 +45,28 @@ describe( 'sanitizeSubtitle', () => {
 
 	it( 'returns an empty string for an empty subtitle', () => {
 		expect( sanitizeSubtitle( '' ) ).toBe( '' );
+	} );
+} );
+
+// Rich text matches formats by class name alone, so the hCard `fn` class on a custom
+// byline's author link is read as a footnote with no attributes, which crashes the editor.
+const CUSTOM_BYLINE = 'By <span class="author vcard"><a class="url fn n" href="https://example.com/author/jane/">Jane Doe</a></span>';
+
+describe( 'stripClassAttributes', () => {
+	it( 'removes class attributes and keeps the markup and text', () => {
+		expect( stripClassAttributes( CUSTOM_BYLINE ) ).toBe( 'By <span><a href="https://example.com/author/jane/">Jane Doe</a></span>' );
+	} );
+
+	it( 'leaves a plain-text byline unchanged', () => {
+		expect( stripClassAttributes( 'By Jane Doe &amp; John Roe' ) ).toBe( 'By Jane Doe &amp; John Roe' );
+	} );
+} );
+
+describe( 'getAuthorBlockTemplate', () => {
+	it( 'puts a custom byline into the heading without its classes', () => {
+		const [ name, attributes ] = getAuthorBlockTemplate( { newspack_custom_byline: CUSTOM_BYLINE }, {} );
+		expect( name ).toBe( 'core/heading' );
+		expect( attributes.content ).not.toContain( 'class=' );
+		expect( attributes.content ).toContain( '<a href="https://example.com/author/jane/">Jane Doe</a>' );
 	} );
 } );

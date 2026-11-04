@@ -123,10 +123,17 @@ const PostsInserterBlock = ( {
 
 	const handledPostIds = postList.map( post => post.id );
 
+	const insertPosts = () => {
+		replaceBlocks( templateBlocks );
+		setInsertedPostsIds( handledPostIds );
+	};
+
+	// The toolbar button inserts posts directly and no longer sets this flag. A block
+	// saved with it was left halfway through an insert and would render nothing, so
+	// reset it to show the inserter again.
 	useEffect( () => {
 		if ( attributes.areBlocksInserted ) {
-			replaceBlocks( templateBlocks );
-			setInsertedPostsIds( handledPostIds );
+			setAttributes( { areBlocksInserted: false } );
 		}
 	}, [ attributes.areBlocksInserted ] );
 
@@ -310,7 +317,7 @@ const PostsInserterBlock = ( {
 			<BlockControls>
 				{ attributes.displayFeaturedImage && <Toolbar controls={ blockControlsImages } /> }
 				<Toolbar>
-					<ToolbarButton onClick={ () => setAttributes( { areBlocksInserted: true } ) }>
+					<ToolbarButton onClick={ insertPosts }>
 						{ __( 'Insert posts', 'newspack-newsletters' ) }
 					</ToolbarButton>
 				</Toolbar>
@@ -346,7 +353,7 @@ const PostsInserterBlockWithSelect = compose( [
 			displaySponsoredPosts,
 		} = props.attributes;
 		const { getEntityRecords } = select( 'core' );
-		const { getSelectedBlock, getBlocks, getSettings } = select( 'core/block-editor' );
+		const { getBlocks, getSettings } = select( 'core/block-editor' );
 		const catIds = categories && categories.length > 0 ? categories.map( cat => cat.id ) : [];
 
 		const { getHandledPostIds } = select( POSTS_INSERTER_STORE_NAME );
@@ -389,7 +396,6 @@ const PostsInserterBlockWithSelect = compose( [
 			// Not used by the component, but needed in deduplication.
 			existingBlocks: getBlocks(),
 			blockEditorSettings: getSettings(),
-			selectedBlock: getSelectedBlock(),
 			postList: posts,
 		};
 	} ),
@@ -398,7 +404,7 @@ const PostsInserterBlockWithSelect = compose( [
 		const { setHandledPostsIds, setInsertedPostsIds, removeBlock } = dispatch( POSTS_INSERTER_STORE_NAME );
 		return {
 			replaceBlocks: blocks => {
-				replaceBlocks( props.selectedBlock.clientId, blocks );
+				replaceBlocks( props.clientId, blocks );
 			},
 			setHandledPostsIds: ids => setHandledPostsIds( ids, props ),
 			setInsertedPostsIds,
