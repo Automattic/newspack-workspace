@@ -73,8 +73,8 @@ class Newspack_Jetpack_Gift_Article extends Sharing_Source {
 			Newspack\Content_Gifting::get_gift_url( $post->ID ),
 			_x( 'Gift this article', 'Jetpack sharing source', 'newspack-plugin' ),
 			__( 'Click to gift this article', 'newspack-plugin' ),
-			'share=newspack-gift-article',
-			'newspack-gift-article-' . $post->ID
+			'share=' . Newspack\Content_Gifting::SHARING_SERVICE,
+			Newspack\Content_Gifting::SHARING_SERVICE . '-' . $post->ID
 		);
 	}
 }

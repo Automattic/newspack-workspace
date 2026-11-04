@@ -22,6 +22,12 @@ if ( $has_sharing_buttons ) :
 		<!-- wp:jetpack/sharing-button {"service":"facebook","label":"Facebook"} /-->
 		<!-- wp:jetpack/sharing-button {"service":"x","label":"X"} /-->
 		<!-- wp:jetpack/sharing-button {"service":"mail","label":"Mail"} /-->
+		<?php if ( class_exists( 'Republication_Tracker_Tool' ) ) : ?>
+		<!-- wp:jetpack/sharing-button {"service":"republish"} /-->
+		<?php endif; ?>
+		<?php if ( class_exists( '\Newspack\Content_Gifting' ) && \Newspack\Content_Gifting::is_enabled() ) : ?>
+		<!-- wp:jetpack/sharing-button {"service":"newspack-gift-article"} /-->
+		<?php endif; ?>
 	</ul>
 	<!-- /wp:jetpack/sharing-buttons -->
 

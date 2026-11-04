@@ -41,3 +41,15 @@ li.service.share-republish .options-left svg {
 .sd-content a.share-republish.no-icon svg {
 	display: none;
 }
+
+.jetpack-sharing-button__button.share-republish svg {
+	fill: currentColor;
+}
+
+.jetpack-sharing-button__button.share-republish svg path {
+	fill: currentColor;
+}
+
+.jetpack-sharing-button__button.style-icon.share-republish {
+	background: #000;
+}

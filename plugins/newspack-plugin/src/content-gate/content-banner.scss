@@ -52,6 +52,18 @@ body .sd-social-icon .sd-content ul li[class*="share-"].share-newspack-gift-arti
 	margin-top: 1px;
 }
 
+.jetpack-sharing-button__button.share-newspack-gift-article svg {
+	fill: currentcolor;
+
+	path {
+		fill: currentcolor;
+	}
+}
+
+.jetpack-sharing-button__button.style-icon.share-newspack-gift-article {
+	background: #000;
+}
+
 body.newspack-is-gifted-post,
 body.newspack-has-countdown-banner {
 	.site {
