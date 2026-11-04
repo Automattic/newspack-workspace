@@ -115,7 +115,8 @@ class Newspack_Test_Subscriptions_Meta extends WP_UnitTestCase {
 	 * @param string $reason    The reason that should be recorded.
 	 */
 	public function test_staff_change_over_rest_records_manual_reason( $to_status, $reason ) {
-		$subscription = wcs_create_subscription( [ 'customer_id' => self::factory()->user->create( [ 'role' => 'subscriber' ] ) ] );
+		$reader_id    = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		$subscription = wcs_create_subscription( [ 'customer_id' => $reader_id ] );
 		wp_set_current_user( $this->create_staff_user() );
 
 		$this->record_during_rest_request( $subscription, $to_status, 'active' );
