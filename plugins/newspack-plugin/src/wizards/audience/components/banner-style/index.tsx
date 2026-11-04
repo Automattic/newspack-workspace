@@ -86,7 +86,7 @@ export const getBannerPreviewProps = ( settings: BannerStyleSettings ) => {
 	return {
 		bannerClassName: `is-style-${ style }`,
 		bannerStyle: bannerStyle as React.CSSProperties,
-		buttonClassName: style === 'dark' ? 'newspack-ui__button--primary-light' : 'newspack-ui__button--accent',
+		buttonClassName: style === 'theme' ? '' : `newspack-ui__button--${ style === 'dark' ? 'primary-light' : 'primary' }`,
 	};
 };
 

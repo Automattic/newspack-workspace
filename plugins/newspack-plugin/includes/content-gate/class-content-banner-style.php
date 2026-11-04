@@ -73,14 +73,21 @@ final class Content_Banner_Style {
 	}
 
 	/**
-	 * Get the class for the banner's subscribe button.
+	 * Get the variant class for the banner's subscribe button.
+	 *
+	 * The Theme style sets its own button colors in the banner stylesheet, so
+	 * it takes no variant class.
 	 *
 	 * @param string $style The style the banner renders with.
 	 *
-	 * @return string The button style class.
+	 * @return string The button variant class.
 	 */
 	public static function get_button_class( string $style ): string {
-		return 'dark' === $style ? 'newspack-ui__button--primary-light' : 'newspack-ui__button--accent';
+		return match ( $style ) {
+			'dark'  => 'newspack-ui__button--primary-light',
+			'theme' => '',
+			default => 'newspack-ui__button--primary',
+		};
 	}
 
 	/**
