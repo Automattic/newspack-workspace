@@ -390,7 +390,7 @@ final class Group_Subscription_Bulk_Invite {
 		$result['not_sent'] = [];
 		$result['failed']   = [];
 		foreach ( $result['to_invite'] as $email ) {
-			$invite = Group_Subscription_Invite::generate_invite( $subscription, $email );
+			$invite = Group_Subscription_Invite::generate_invite( $subscription, $email, true, Group_Subscription_Invite::SOURCE_BULK );
 			if ( is_wp_error( $invite ) ) {
 				$result['failed'][] = [
 					'email'   => $email,

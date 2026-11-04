@@ -59,6 +59,7 @@ class Group_Subscription_Invite {
 	const SOURCE_MY_ACCOUNT = 'my_account';
 	const SOURCE_API        = 'api';
 	const SOURCE_MIGRATION  = 'migration';
+	const SOURCE_BULK       = 'bulk';
 	const SOURCE_OTHER      = 'other';
 
 	/**
@@ -666,7 +667,8 @@ class Group_Subscription_Invite {
 		/**
 		 * Fires once for each new invitation to a single address, after it is stored
 		 * and, when it is emailed, after the send. It fires even when the email fails,
-		 * because the invite is stored and can be resent.
+		 * because the invite is stored and can be resent. A bulk list fires it once for
+		 * each address it invites.
 		 *
 		 * This replaces WooCommerce Memberships for Teams'
 		 * `wc_memberships_for_teams_invitation_created` for code that reacted to new
@@ -693,8 +695,11 @@ class Group_Subscription_Invite {
 		 *                                       used by the Subscribers wizard and the subscription
 		 *                                       edit screen, and open to group managers too),
 		 *                                       `migration` (a Teams invitation link followed after
-		 *                                       the move off Teams), or `other` (a caller that
-		 *                                       doesn't say). Treat any other value like `other`.
+		 *                                       the move off Teams), `bulk` (a pasted list or CSV
+		 *                                       sent through the REST `/invite-bulk` route, from
+		 *                                       the group's My Account page or the Subscribers
+		 *                                       wizard), or `other` (a caller that doesn't say).
+		 *                                       Treat any other value like `other`.
 		 * @param bool             $email_sent   Whether the invitation email went out. False for
 		 *                                       `migration`, since the Teams link doesn't email
 		 *                                       the invite it creates.
