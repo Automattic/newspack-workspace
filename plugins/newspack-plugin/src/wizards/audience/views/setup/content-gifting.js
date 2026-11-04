@@ -107,7 +107,7 @@ export default function ContentGifting( { config, setConfig, updateConfig, noBor
 							__next40pxDefaultSize
 						/>
 					</Grid>
-					<Grid columns={ 3 } rowGap={ 16 }>
+					<Grid columns={ 2 } rowGap={ 16 }>
 						<ToggleGroupControl
 							label={ __( 'Subscribe button action', 'newspack-plugin' ) }
 							help={ __(
@@ -146,6 +146,7 @@ export default function ContentGifting( { config, setConfig, updateConfig, noBor
 							/>
 						) }
 						<BannerStyleControl
+							gridCells
 							settings={ config.content_gifting }
 							onChange={ value => setConfig( { ...config, content_gifting: { ...config.content_gifting, ...value } } ) }
 						/>

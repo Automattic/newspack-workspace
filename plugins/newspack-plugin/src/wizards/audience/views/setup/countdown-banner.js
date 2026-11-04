@@ -47,7 +47,7 @@ export default function CountdownBanner( { config, setConfig, updateConfig, noBo
 							__next40pxDefaultSize
 						/>
 					</Grid>
-					<Grid columns={ 3 } rowGap={ 16 }>
+					<Grid columns={ 2 } rowGap={ 16 }>
 						<ToggleGroupControl
 							label={ __( 'Subscribe button action', 'newspack-plugin' ) }
 							help={ __(
@@ -86,6 +86,7 @@ export default function CountdownBanner( { config, setConfig, updateConfig, noBo
 							/>
 						) }
 						<BannerStyleControl
+							gridCells
 							settings={ config.countdown_banner }
 							onChange={ value => setConfig( { ...config, countdown_banner: { ...config.countdown_banner, ...value } } ) }
 						/>

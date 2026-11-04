@@ -27,6 +27,8 @@ type BannerStyleControlProps = {
 	settings: BannerStyleSettings;
 	onChange: ( value: BannerStyleSettings ) => void;
 	disabled?: boolean;
+	/** Render the fields as cells of a parent two-column Grid instead of a single column. */
+	gridCells?: boolean;
 };
 
 type ColorFieldProps = {
@@ -117,52 +119,77 @@ const ColorField = ( { label, resetLabel, help, value, defaultValue, onChange, d
 	/>
 );
 
-export default function BannerStyleControl( { settings, onChange, disabled = false }: BannerStyleControlProps ) {
+export default function BannerStyleControl( { settings, onChange, disabled = false, gridCells = false }: BannerStyleControlProps ) {
 	const hasThemeStyle = supportsThemeStyle();
 	const style = getBannerStyle( settings.style );
+	const startRow = { gridColumnStart: 1 };
+	const select = (
+		<SelectControl
+			label={ __( 'Style', 'newspack-plugin' ) }
+			help={
+				hasThemeStyle
+					? __(
+							"Light and Dark use the standard banner. Theme matches the site's buttons and fonts, and lets you pick the colors.",
+							'newspack-plugin'
+					  )
+					: undefined
+			}
+			value={ style }
+			options={ [
+				{ label: __( 'Light', 'newspack-plugin' ), value: 'light' },
+				{ label: __( 'Dark', 'newspack-plugin' ), value: 'dark' },
+				...( hasThemeStyle ? [ { label: __( 'Theme', 'newspack-plugin' ), value: 'theme' } ] : [] ),
+			] }
+			onChange={ ( value: string ) => onChange( { style: value } ) }
+			disabled={ disabled }
+			__next40pxDefaultSize
+			__nextHasNoMarginBottom
+		/>
+	);
+	const bannerColor = (
+		<ColorField
+			label={ __( 'Banner color', 'newspack-plugin' ) }
+			resetLabel={ __( 'Reset banner color', 'newspack-plugin' ) }
+			help={ __( 'Defaults to the Light style background. Text turns black or white to stay readable.', 'newspack-plugin' ) }
+			value={ settings.bg_color }
+			defaultValue={ colors[ 'neutral-000' ] }
+			onChange={ value => onChange( { bg_color: value } ) }
+			disabled={ disabled }
+		/>
+	);
+	const buttonColor = (
+		<ColorField
+			label={ __( 'Button color', 'newspack-plugin' ) }
+			resetLabel={ __( 'Reset button color', 'newspack-plugin' ) }
+			help={ __( "Defaults to the theme's button color. The label turns black or white to stay readable.", 'newspack-plugin' ) }
+			value={ settings.button_color }
+			defaultValue={ window.newspackAudience?.content_banner?.theme_button_bg || colors[ 'neutral-000' ] }
+			onChange={ value => onChange( { button_color: value } ) }
+			disabled={ disabled }
+		/>
+	);
+
+	if ( gridCells ) {
+		return (
+			<>
+				<div style={ startRow }>{ select }</div>
+				{ style === 'theme' && (
+					<>
+						<div style={ startRow }>{ bannerColor }</div>
+						{ buttonColor }
+					</>
+				) }
+			</>
+		);
+	}
+
 	return (
 		<Stack direction="column" gap="xl">
-			<SelectControl
-				label={ __( 'Style', 'newspack-plugin' ) }
-				help={
-					hasThemeStyle
-						? __(
-								"Light and Dark use the standard banner. Theme matches the site's buttons and fonts, and lets you pick the colors.",
-								'newspack-plugin'
-						  )
-						: undefined
-				}
-				value={ style }
-				options={ [
-					{ label: __( 'Light', 'newspack-plugin' ), value: 'light' },
-					{ label: __( 'Dark', 'newspack-plugin' ), value: 'dark' },
-					...( hasThemeStyle ? [ { label: __( 'Theme', 'newspack-plugin' ), value: 'theme' } ] : [] ),
-				] }
-				onChange={ ( value: string ) => onChange( { style: value } ) }
-				disabled={ disabled }
-				__next40pxDefaultSize
-				__nextHasNoMarginBottom
-			/>
+			{ select }
 			{ style === 'theme' && (
 				<>
-					<ColorField
-						label={ __( 'Banner color', 'newspack-plugin' ) }
-						resetLabel={ __( 'Reset banner color', 'newspack-plugin' ) }
-						help={ __( 'Defaults to the Light style background. Text turns black or white to stay readable.', 'newspack-plugin' ) }
-						value={ settings.bg_color }
-						defaultValue={ colors[ 'neutral-000' ] }
-						onChange={ value => onChange( { bg_color: value } ) }
-						disabled={ disabled }
-					/>
-					<ColorField
-						label={ __( 'Button color', 'newspack-plugin' ) }
-						resetLabel={ __( 'Reset button color', 'newspack-plugin' ) }
-						help={ __( "Defaults to the theme's button color. The label turns black or white to stay readable.", 'newspack-plugin' ) }
-						value={ settings.button_color }
-						defaultValue={ window.newspackAudience?.content_banner?.theme_button_bg || colors[ 'neutral-000' ] }
-						onChange={ value => onChange( { button_color: value } ) }
-						disabled={ disabled }
-					/>
+					{ bannerColor }
+					{ buttonColor }
 				</>
 			) }
 		</Stack>
