@@ -46,26 +46,34 @@ final class Republication_Tracker_Tool_Jetpack_Sharing {
 		add_filter( 'sharing_enabled', [ __CLASS__, 'filter_enabled_services' ] );
 		add_action( 'admin_enqueue_scripts', [ __CLASS__, 'enqueue_admin_assets' ] );
 		add_filter( 'render_block_jetpack/sharing-button', [ __CLASS__, 'render_block_button' ], 20, 3 );
+		add_action( 'enqueue_block_assets', [ __CLASS__, 'enqueue_editor_style' ] );
+	}
+
+	/**
+	 * Load the button's styles in the editor, including its iframe.
+	 */
+	public static function enqueue_editor_style(): void {
+		if ( is_admin() ) {
+			self::enqueue_style();
+		}
 	}
 
 	/**
 	 * Render the Republish button in Jetpack's Sharing Buttons block.
 	 *
-	 * Jetpack leaves a button for a service it doesn't know empty, so this
-	 * prints the same markup it does for its own services, which its styles
-	 * and the theme's already cover.
+	 * Jetpack renders nothing for services it doesn't know, so this supplies markup matching its own buttons.
 	 *
-	 * @param string        $block_content The block's rendered content.
-	 * @param array         $parsed_block  The parsed block.
-	 * @param WP_Block|null $block         The block instance.
+	 * @param string         $block_content The block's rendered content.
+	 * @param array          $parsed_block  The parsed block.
+	 * @param \WP_Block|null $block         The block instance.
 	 * @return string
 	 */
-	public static function render_block_button( $block_content, $parsed_block = [], $block = null ) {
+	public static function render_block_button( $block_content, $parsed_block = [], ?\WP_Block $block = null ): string {
 		if ( self::SERVICE !== ( $parsed_block['attrs']['service'] ?? '' ) ) {
 			return $block_content;
 		}
 
-		$context = $block instanceof WP_Block ? $block->context : [];
+		$context = $block ? $block->context : [];
 		$post    = get_post( $context['postId'] ?? get_the_ID() );
 		if ( ! self::should_display( $post ) ) {
 			return '';
@@ -73,8 +81,12 @@ final class Republication_Tracker_Tool_Jetpack_Sharing {
 
 		self::queue_modal( $post );
 
+		if ( is_callable( [ 'Jetpack_Gutenberg', 'load_styles_as_required' ] ) ) {
+			\Jetpack_Gutenberg::load_styles_as_required( 'sharing-button' );
+		}
+
 		$style_type = $context['styleType'] ?? 'icon-text';
-		$label      = $parsed_block['attrs']['label'] ?? __( 'Republish', 'republication-tracker-tool' );
+		$label      = ! empty( $parsed_block['attrs']['label'] ) ? $parsed_block['attrs']['label'] : __( 'Republish', 'republication-tracker-tool' );
 		$shared_id  = 'sharing-' . self::SERVICE . '-' . $post->ID;
 		$styles     = '';
 		if ( ! empty( $context['iconColorValue'] ) ) {
@@ -85,15 +97,14 @@ final class Republication_Tracker_Tool_Jetpack_Sharing {
 		}
 
 		return sprintf(
-			'<li class="jetpack-sharing-button__list-item"><a href="%1$s" class="%2$s" style="%3$s" data-service="%4$s" data-shared="%5$s" data-modal-trigger="republish" aria-labelledby="%5$s"><span id="%5$s" hidden>%6$s</span>%7$s<span class="jetpack-sharing-button__service-label" aria-hidden="true">%8$s</span></a></li>',
+			'<li class="jetpack-sharing-button__list-item"><a href="%1$s" class="%2$s" style="%3$s" data-service="%4$s" data-shared="%5$s" data-modal-trigger="republish" aria-labelledby="%5$s"><span id="%5$s" hidden>%6$s</span>%7$s<span class="jetpack-sharing-button__service-label" aria-hidden="true">%6$s</span></a></li>',
 			esc_url( get_permalink( $post ) . '#show-republish' ),
 			esc_attr( sprintf( 'jetpack-sharing-button__button style-%1$s share-%2$s', $style_type, self::SERVICE ) ),
 			esc_attr( $styles ),
 			esc_attr( self::SERVICE ),
 			esc_attr( $shared_id ),
-			esc_html__( 'Republish this article', 'republication-tracker-tool' ),
-			'text' === $style_type ? '' : self::get_icon(),
-			esc_html( $label )
+			esc_html( $label ),
+			'text' === $style_type ? '' : self::get_icon()
 		);
 	}
 

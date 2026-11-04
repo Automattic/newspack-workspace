@@ -55,6 +55,7 @@ class Content_Gifting {
 		add_action( 'wp_footer', [ __CLASS__, 'print_gift_modal' ] );
 		add_filter( 'render_block_jetpack/sharing-button', [ __CLASS__, 'render_block_button' ], 20, 3 );
 		add_action( 'enqueue_block_editor_assets', [ __CLASS__, 'enqueue_editor_assets' ] );
+		add_action( 'enqueue_block_assets', [ __CLASS__, 'enqueue_editor_style' ] );
 		add_action( 'newspack_content_gifting_enabled_status_changed', [ __CLASS__, 'update_jetpack_sharing_services' ] );
 		add_filter( 'sharing_default_services', [ __CLASS__, 'filter_sharing_default_services' ] );
 
@@ -94,11 +95,11 @@ class Content_Gifting {
 			if ( ! isset( $services['visible'] ) ) {
 				return;
 			}
-			if ( in_array( 'newspack-gift-article', $services['visible'], true ) ) {
+			if ( in_array( self::SHARING_SERVICE, $services['visible'], true ) ) {
 				return;
 			}
 			// Add at the top of the array.
-			$services['visible'] = array_merge( [ 'newspack-gift-article' ], $services['visible'] );
+			$services['visible'] = array_merge( [ self::SHARING_SERVICE ], $services['visible'] );
 			update_option( 'sharing-services', $services );
 
 		}
@@ -118,10 +119,10 @@ class Content_Gifting {
 		if ( ! isset( $services['visible'] ) ) {
 			return $services;
 		}
-		if ( in_array( 'newspack-gift-article', $services['visible'], true ) ) {
+		if ( in_array( self::SHARING_SERVICE, $services['visible'], true ) ) {
 			return $services;
 		}
-		$services['visible'] = array_merge( [ 'newspack-gift-article' ], $services['visible'] );
+		$services['visible'] = array_merge( [ self::SHARING_SERVICE ], $services['visible'] );
 		return $services;
 	}
 
@@ -136,7 +137,7 @@ class Content_Gifting {
 		if ( ! self::can_use_gifting() ) {
 			return $services;
 		}
-		$services['newspack-gift-article'] = 'Newspack_Jetpack_Gift_Article';
+		$services[ self::SHARING_SERVICE ] = 'Newspack_Jetpack_Gift_Article';
 		return $services;
 	}
 
@@ -164,30 +165,31 @@ class Content_Gifting {
 	/**
 	 * Render the gift button in Jetpack's Sharing Buttons block.
 	 *
-	 * Jetpack leaves a button for a service it doesn't know empty, so this
-	 * prints the same markup it does for its own services, which its styles
-	 * and the theme's already cover. The link stays in the same tab, since it
-	 * opens the gift modal.
+	 * Jetpack renders nothing for services it doesn't know, so this supplies markup matching its own buttons.
 	 *
-	 * @param string        $block_content The block's rendered content.
-	 * @param array         $parsed_block  The parsed block.
-	 * @param WP_Block|null $block         The block instance.
+	 * @param string         $block_content The block's rendered content.
+	 * @param array          $parsed_block  The parsed block.
+	 * @param \WP_Block|null $block         The block instance.
 	 *
 	 * @return string
 	 */
-	public static function render_block_button( $block_content, $parsed_block = [], $block = null ) {
+	public static function render_block_button( $block_content, $parsed_block = [], ?\WP_Block $block = null ): string {
 		if ( self::SHARING_SERVICE !== ( $parsed_block['attrs']['service'] ?? '' ) ) {
 			return $block_content;
 		}
 
-		$context = $block instanceof \WP_Block ? $block->context : [];
+		$context = $block ? $block->context : [];
 		$post_id = (int) ( $context['postId'] ?? get_the_ID() );
 		if ( ! is_singular() || get_queried_object_id() !== $post_id || ! self::can_gift_post( $post_id ) ) {
 			return '';
 		}
 
+		if ( is_callable( [ 'Jetpack_Gutenberg', 'load_styles_as_required' ] ) ) {
+			\Jetpack_Gutenberg::load_styles_as_required( 'sharing-button' );
+		}
+
 		$style_type = $context['styleType'] ?? 'icon-text';
-		$label      = $parsed_block['attrs']['label'] ?? __( 'Gift this article', 'newspack-plugin' );
+		$label      = ! empty( $parsed_block['attrs']['label'] ) ? $parsed_block['attrs']['label'] : __( 'Gift this article', 'newspack-plugin' );
 		$shared_id  = 'sharing-' . self::SHARING_SERVICE . '-' . $post_id;
 		$styles     = '';
 		if ( ! empty( $context['iconColorValue'] ) ) {
@@ -198,22 +200,21 @@ class Content_Gifting {
 		}
 
 		return sprintf(
-			'<li class="jetpack-sharing-button__list-item"><a href="%1$s" class="%2$s" style="%3$s" data-service="%4$s" data-shared="%5$s" aria-labelledby="%5$s"><span id="%5$s" hidden>%6$s</span>%7$s<span class="jetpack-sharing-button__service-label" aria-hidden="true">%8$s</span></a></li>',
+			'<li class="jetpack-sharing-button__list-item"><a href="%1$s" class="%2$s" style="%3$s" data-service="%4$s" data-shared="%5$s" aria-labelledby="%5$s"><span id="%5$s" hidden>%6$s</span>%7$s<span class="jetpack-sharing-button__service-label" aria-hidden="true">%6$s</span></a></li>',
 			esc_url( self::get_gift_url( $post_id ) ),
 			esc_attr( sprintf( 'jetpack-sharing-button__button style-%1$s share-%2$s', $style_type, self::SHARING_SERVICE ) ),
 			esc_attr( $styles ),
 			esc_attr( self::SHARING_SERVICE ),
 			esc_attr( $shared_id ),
-			esc_html__( 'Gift this article', 'newspack-plugin' ),
-			'text' === $style_type ? '' : Newspack_UI_Icons::get_svg( 'gift' ),
-			esc_html( $label )
+			esc_html( $label ),
+			'text' === $style_type ? '' : Newspack_UI_Icons::get_svg( 'gift' )
 		);
 	}
 
 	/**
 	 * Offer the gift button as a Sharing Buttons block variation in the editor.
 	 */
-	public static function enqueue_editor_assets() {
+	public static function enqueue_editor_assets(): void {
 		if ( ! self::is_enabled() ) {
 			return;
 		}
@@ -229,6 +230,15 @@ class Content_Gifting {
 			$asset['version'],
 			true
 		);
+	}
+
+	/**
+	 * Load the gift button's styles in the editor, including its iframe.
+	 */
+	public static function enqueue_editor_style(): void {
+		if ( is_admin() && self::is_enabled() ) {
+			wp_enqueue_style( 'newspack-content-banner', Newspack::plugin_url() . '/dist/content-banner.css', [], Newspack::asset_version( 'content-banner' ) );
+		}
 	}
 
 	/**

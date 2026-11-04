@@ -21,7 +21,7 @@ const GiftSharingButton = ( { attributes, context } ) => {
 				style={ { color: context.iconColorValue, backgroundColor: context.iconBackgroundColorValue } }
 			>
 				{ styleType !== 'text' && <Icon icon={ gift } size={ 24 } /> }
-				<span className="jetpack-sharing-button__service-label">{ attributes.label ?? __( 'Gift this article', 'newspack-plugin' ) }</span>
+				<span className="jetpack-sharing-button__service-label">{ attributes.label || __( 'Gift this article', 'newspack-plugin' ) }</span>
 			</Button>
 		</li>
 	);

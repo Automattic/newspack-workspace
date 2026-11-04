@@ -21,7 +21,7 @@ const RepublishSharingButton = ( { attributes, context } ) => {
 				style={ { color: context.iconColorValue, backgroundColor: context.iconBackgroundColorValue } }
 			>
 				{ styleType !== 'text' && <Icon icon={ copy } size={ 24 } /> }
-				<span className="jetpack-sharing-button__service-label">{ attributes.label ?? __( 'Republish', 'republication-tracker-tool' ) }</span>
+				<span className="jetpack-sharing-button__service-label">{ attributes.label || __( 'Republish', 'republication-tracker-tool' ) }</span>
 			</Button>
 		</li>
 	);
@@ -34,15 +34,13 @@ const withRepublishIcon = BlockEdit => props => {
 	return <BlockEdit { ...props } />;
 };
 
-if ( window.republicationTrackerToolEditor?.sharingButton ) {
-	addFilter( 'editor.BlockEdit', 'republication-tracker-tool/sharing-button-icon', withRepublishIcon );
-	domReady( () => {
-		registerBlockVariation( 'jetpack/sharing-button', {
-			name: SERVICE,
-			title: _x( 'Republish', 'Jetpack sharing button', 'republication-tracker-tool' ),
-			icon: copy,
-			attributes: { service: SERVICE, label: _x( 'Republish', 'Jetpack sharing button', 'republication-tracker-tool' ) },
-			isActive: [ 'service' ],
-		} );
+addFilter( 'editor.BlockEdit', 'republication-tracker-tool/sharing-button-icon', withRepublishIcon );
+domReady( () => {
+	registerBlockVariation( 'jetpack/sharing-button', {
+		name: SERVICE,
+		title: _x( 'Republish', 'Jetpack sharing button', 'republication-tracker-tool' ),
+		icon: copy,
+		attributes: { service: SERVICE, label: _x( 'Republish', 'Jetpack sharing button', 'republication-tracker-tool' ) },
+		isActive: [ 'service' ],
 	} );
-}
+} );
