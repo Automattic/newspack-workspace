@@ -51,6 +51,15 @@ describe( 'CoreCard', () => {
 		expect( await screen.findByRole( 'menuitem', { name: 'Delete: Settings' } ) ).toBeInTheDocument();
 	} );
 
+	it( 'closes the actions menu and runs the action when an item is clicked', async () => {
+		const action = jest.fn();
+		render( <CoreCard header="Settings" actions={ [ { label: 'Delete', action } ] } /> );
+		fireEvent.click( screen.getByRole( 'button', { name: 'More actions' } ) );
+		fireEvent.click( await screen.findByRole( 'menuitem', { name: 'Delete' } ) );
+		expect( action ).toHaveBeenCalledTimes( 1 );
+		expect( screen.queryByRole( 'menuitem', { name: 'Delete' } ) ).not.toBeInTheDocument();
+	} );
+
 	it( 'renders the header as a non-button when it is also draggable', () => {
 		const { container } = render( <CoreCard header="Settings" isDraggable onHeaderClick={ () => {} } /> );
 		expect( getHeader( container ).tagName ).not.toBe( 'BUTTON' );
