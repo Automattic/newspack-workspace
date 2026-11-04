@@ -45,7 +45,7 @@ class JetpackSharingTest extends WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		Republication_Tracker_Tool::$modal_rendered = false;
-		( new ReflectionProperty( 'Republication_Tracker_Tool_Jetpack_Sharing', 'post_id' ) )->setValue( null, 0 );
+		( new ReflectionProperty( 'Republication_Tracker_Tool_Jetpack_Sharing', 'post' ) )->setValue( null, null );
 		remove_action( 'wp_footer', [ 'Republication_Tracker_Tool_Jetpack_Sharing', 'print_modal' ] );
 		parent::tear_down();
 	}
@@ -177,6 +177,24 @@ class JetpackSharingTest extends WP_UnitTestCase {
 		$this->assertSame( 1, substr_count( $footer, 'id="republication-tracker-tool-modal"' ) );
 		$this->assertStringContainsString( 'Jetpack Sharing Test Post', $footer );
 		$this->assertStringNotContainsString( 'Other Loop Post', $footer );
+	}
+
+	/**
+	 * The footer modal copies the post object the button was shown for, as the
+	 * page holds it, rather than reloading the post.
+	 */
+	public function test_footer_modal_uses_the_shown_post_object() {
+		$this->view_test_post();
+		global $post;
+		$post->post_content = '<p>Teaser only.</p>'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		$this->make_source()->get_display( $post );
+
+		ob_start();
+		Republication_Tracker_Tool_Jetpack_Sharing::print_modal();
+		$footer = ob_get_clean();
+
+		$this->assertStringContainsString( 'Teaser only.', $footer );
+		$this->assertStringNotContainsString( 'Shareable content.', $footer );
 	}
 
 	/**

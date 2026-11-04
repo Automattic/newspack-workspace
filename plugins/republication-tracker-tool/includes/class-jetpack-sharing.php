@@ -29,9 +29,12 @@ final class Republication_Tracker_Tool_Jetpack_Sharing {
 	/**
 	 * The post a Republish button was displayed for on this page.
 	 *
-	 * @var int
+	 * Kept as the object Jetpack passed in rather than reloaded, so the modal
+	 * copies the post as the page holds it.
+	 *
+	 * @var WP_Post|null
 	 */
-	private static int $post_id = 0;
+	private static ?WP_Post $post = null;
 
 	/**
 	 * Initialize the integration.
@@ -104,10 +107,10 @@ final class Republication_Tracker_Tool_Jetpack_Sharing {
 	 * @param WP_Post $post The post the button was displayed for.
 	 */
 	public static function queue_modal( WP_Post $post ): void {
-		if ( self::$post_id ) {
+		if ( self::$post ) {
 			return;
 		}
-		self::$post_id = $post->ID;
+		self::$post = $post;
 
 		Republication_Tracker_Tool_Republish_Button_Block::enqueue_modal_assets();
 		self::enqueue_style();
@@ -118,13 +121,13 @@ final class Republication_Tracker_Tool_Jetpack_Sharing {
 	 * Print the republish modal, unless the widget or the block already did.
 	 */
 	public static function print_modal(): void {
-		if ( ! self::$post_id || Republication_Tracker_Tool::$modal_rendered ) {
+		if ( ! self::$post || Republication_Tracker_Tool::$modal_rendered ) {
 			return;
 		}
 		Republication_Tracker_Tool::$modal_rendered = true;
 
 		global $post;
-		$post   = get_post( self::$post_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		$post   = self::$post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		$is_amp = false;
 		setup_postdata( $post );
 
