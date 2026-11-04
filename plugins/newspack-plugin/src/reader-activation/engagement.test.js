@@ -90,4 +90,20 @@ describe( 'setupEngagement', () => {
 		expect( mock.storeData.last_active ).toBeGreaterThanOrEqual( before );
 		expect( mock.storeData.last_active ).toBeLessThanOrEqual( after );
 	} );
+
+	describe( 'last_active server sync', () => {
+		const minutesAgo = minutes => String( Date.now() - minutes * 60 * 1000 );
+		afterEach( () => {
+			delete window.newspack_reader_data;
+		} );
+		it.each( [
+			[ 'the server has no value', {}, true ],
+			[ 'the server value is over an hour old', { last_active: minutesAgo( 61 ) }, true ],
+			[ 'the server value is under an hour old', { last_active: minutesAgo( 5 ) }, false ],
+		] )( 'sends it only when %s', ( _, items, shouldSync ) => {
+			window.newspack_reader_data = { items };
+			setupEngagement( mock.ras );
+			expect( mock.ras.store.set ).toHaveBeenCalledWith( 'last_active', expect.any( Number ), shouldSync );
+		} );
+	} );
 } );
