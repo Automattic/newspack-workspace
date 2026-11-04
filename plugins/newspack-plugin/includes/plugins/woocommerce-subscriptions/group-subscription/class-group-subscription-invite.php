@@ -695,10 +695,11 @@ class Group_Subscription_Invite {
 		 *                                       used by the Subscribers wizard and the subscription
 		 *                                       edit screen, and open to group managers too),
 		 *                                       `migration` (a Teams invitation link followed after
-		 *                                       the move off Teams), `bulk` (a pasted list or CSV
-		 *                                       sent through the REST `/invite-bulk` route, from
-		 *                                       the group's My Account page or the Subscribers
-		 *                                       wizard), or `other` (a caller that doesn't say).
+		 *                                       the move off Teams), `bulk` (the REST `/invite-bulk`
+		 *                                       route, used by the group's My Account page and the
+		 *                                       Subscribers wizard's Invite dialog; it takes a pasted
+		 *                                       list or CSV, so a single address sent that way is
+		 *                                       `bulk` too), or `other` (a caller that doesn't say).
 		 *                                       Treat any other value like `other`.
 		 * @param bool             $email_sent   Whether the invitation email went out. False for
 		 *                                       `migration`, since the Teams link doesn't email
