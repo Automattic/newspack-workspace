@@ -1,5 +1,8 @@
 @use "../mixins";
 @use "../sass-utils";
+@use "newspack-motion" as motion;
+
+$submenu-static: ".is-menu-open *, .open-always *, .is-style-flatten.is-vertical *, .overlay-menu__panel *";
 
 .wp-block-navigation {
 	// Give dropdowns a rounded border, a drop-shadow, and increase the top padding.
@@ -12,7 +15,13 @@
 
 	&.has-text-color:not(.has-contrast-color) {
 		a:not(.wp-element-button):hover {
-			color: color-mix(in srgb, currentcolor 80%, transparent) !important;
+			color: currentcolor !important;
+		}
+
+		@include motion.hover {
+			a:not(.wp-element-button):hover {
+				text-decoration: underline;
+			}
 		}
 	}
 
@@ -29,6 +38,52 @@
 		min-width: calc(var(--wp--custom--width--small) / 2);
 	}
 
+	.has-child .wp-block-navigation__submenu-container:not(#{$submenu-static}) {
+		transition:
+			opacity motion.$duration-reveal motion.$ease-out,
+			transform motion.$duration-reveal motion.$ease-out,
+			visibility 0s linear motion.$duration-reveal,
+			width 0s linear motion.$duration-reveal,
+			height 0s linear motion.$duration-reveal,
+			min-width 0s linear motion.$duration-reveal,
+			overflow 0s linear motion.$duration-reveal;
+		transition-behavior: allow-discrete;
+	}
+
+	.has-child .wp-block-navigation-submenu__toggle[aria-expanded="true"] ~ .wp-block-navigation__submenu-container:not(#{$submenu-static}),
+	.has-child:not(.open-on-click):not(.open-on-hover-click):focus-within > .wp-block-navigation__submenu-container:not(#{$submenu-static}),
+	.has-child.is-selected > .wp-block-navigation__submenu-container:not(#{$submenu-static}),
+	.has-child.has-child-selected > .wp-block-navigation__submenu-container:not(#{$submenu-static}),
+	.has-child.is-dragging-within > .wp-block-navigation__submenu-container:not(#{$submenu-static}) {
+		transform: none;
+		transition:
+			opacity motion.$duration-reveal motion.$ease-out,
+			transform motion.$duration-reveal motion.$ease-out;
+	}
+
+	@media (hover: hover) {
+		.has-child:not(.open-on-click):hover > .wp-block-navigation__submenu-container:not(#{$submenu-static}) {
+			transform: none;
+			transition:
+				opacity motion.$duration-reveal motion.$ease-out,
+				transform motion.$duration-reveal motion.$ease-out;
+		}
+	}
+
+	.wp-block-navigation__submenu-icon svg:not(#{$submenu-static}) {
+		transition: transform motion.$duration-reveal motion.$ease-out;
+	}
+
+	@include motion.reduced-motion {
+		.has-child .wp-block-navigation__submenu-container:not(#{$submenu-static}) {
+			transform: none;
+		}
+
+		.wp-block-navigation__submenu-icon svg:not(#{$submenu-static}) {
+			transition: none;
+		}
+	}
+
 	// Don't add the box shadow/padding when using the default mobile view of the navigation block.
 	.wp-block-navigation__responsive-container.has-modal-open {
 		.wp-block-navigation__submenu-container {
@@ -40,8 +95,8 @@
 	// Overlay Menu
 	&__responsive-container {
 		&.is-menu-open {
-			animation-duration: 125ms;
-			animation-timing-function: ease-in-out;
+			animation-duration: motion.$duration-modal;
+			animation-timing-function: motion.$ease-out;
 			padding: var(--wp--custom--spacing--85) var(--wp--preset--spacing--30) var(--wp--preset--spacing--30);
 
 			@include sass-utils.media(medium) {
@@ -81,15 +136,23 @@
 				height: var(--wp--custom--spacing--55);
 				position: absolute;
 				transition:
-					background 125ms ease-in-out,
-					box-shadow 125ms ease-in-out;
+					background motion.$duration-color motion.$ease-color,
+					box-shadow motion.$duration-color motion.$ease-color;
 				width: var(--wp--custom--spacing--55);
 				z-index: -1;
 			}
 
-			&:hover {
+			@include motion.hover {
+				&:hover {
+					&::before {
+						background: color-mix(in oklab, currentcolor var(--wp--custom--state--fill), transparent);
+					}
+				}
+			}
+
+			&:active {
 				&::before {
-					background: var(--wp--custom--color--neutral-5);
+					background: color-mix(in oklab, currentcolor var(--wp--custom--state--fill-hover), transparent);
 				}
 			}
 
@@ -185,8 +248,9 @@
 
 	a {
 		transition:
-			color 125ms ease-in-out,
-			box-shadow 125ms ease-in-out;
+			color motion.$duration-color motion.$ease-color,
+			box-shadow motion.$duration-color motion.$ease-color,
+			border-radius motion.$duration-color motion.$ease-color;
 
 		&:not(.wp-element-button):focus-visible {
 			@include mixins.focus-line;
@@ -206,3 +270,39 @@
 		@include mixins.focus-line-inset;
 	}
 }
+
+:where(.wp-block-navigation .has-child) .wp-block-navigation__submenu-container:not(#{$submenu-static}) {
+	transform: translateY(-1 * motion.$enter-offset);
+}
+
+@include sass-utils.media(medium) {
+	:where(.wp-block-navigation .has-child .wp-block-navigation__submenu-container) .wp-block-navigation__submenu-container:not(#{$submenu-static}) {
+		transform: translateX(-1 * motion.$enter-offset);
+	}
+
+	:where(
+		.wp-block-navigation.items-justified-space-between .wp-block-page-list > .has-child:last-child .wp-block-navigation__submenu-container,
+		.wp-block-navigation.items-justified-space-between > .wp-block-navigation__container > .has-child:last-child .wp-block-navigation__submenu-container,
+		.wp-block-navigation.items-justified-right .wp-block-page-list > .has-child .wp-block-navigation__submenu-container,
+		.wp-block-navigation.items-justified-right .wp-block-navigation__container .has-child .wp-block-navigation__submenu-container
+	) .wp-block-navigation__submenu-container:not(#{$submenu-static}) {
+		transform: translateX(motion.$enter-offset);
+	}
+}
+
+/*! rtl:begin:ignore */
+@include sass-utils.media(medium) {
+	:where([dir="rtl"]) :where(.wp-block-navigation .has-child .wp-block-navigation__submenu-container) .wp-block-navigation__submenu-container:not(#{$submenu-static}) {
+		transform: translateX(motion.$enter-offset);
+	}
+
+	:where([dir="rtl"]) :where(
+		.wp-block-navigation.items-justified-space-between .wp-block-page-list > .has-child:last-child .wp-block-navigation__submenu-container,
+		.wp-block-navigation.items-justified-space-between > .wp-block-navigation__container > .has-child:last-child .wp-block-navigation__submenu-container,
+		.wp-block-navigation.items-justified-right .wp-block-page-list > .has-child .wp-block-navigation__submenu-container,
+		.wp-block-navigation.items-justified-right .wp-block-navigation__container .has-child .wp-block-navigation__submenu-container
+	) .wp-block-navigation__submenu-container:not(#{$submenu-static}) {
+		transform: translateX(-1 * motion.$enter-offset);
+	}
+}
+/*! rtl:end:ignore */

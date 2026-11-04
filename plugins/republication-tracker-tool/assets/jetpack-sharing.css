@@ -1,0 +1,55 @@
+.sd-content ul li.share-republish a.sd-button svg,
+.sd-content ul li.share-republish a.sd-button svg path,
+li.service.share-republish .options-left svg,
+li.service.share-republish .options-left svg path {
+	fill: currentColor;
+}
+
+.sd-content ul li.share-republish a.sd-button svg,
+li.service.share-republish .options-left svg {
+	--rtt-share-icon--box: 18px;
+	--rtt-share-icon--scale: 0.8125;
+	--rtt-share-icon--size: calc(24px * var(--rtt-share-icon--scale));
+	--rtt-share-icon--gutter: calc((var(--rtt-share-icon--box) - var(--rtt-share-icon--size)) / 2);
+	height: var(--rtt-share-icon--size);
+	left: -0.25px;
+	margin: var(--rtt-share-icon--gutter);
+	position: relative;
+	top: 1.5px;
+	vertical-align: top;
+	width: var(--rtt-share-icon--size);
+}
+
+.sd-social-icon .sd-content ul li.share-republish a.sd-button svg {
+	top: -0.5px;
+}
+
+.sd-social-official .sd-content ul li.share-republish a.sd-button svg {
+	--rtt-share-icon--box: 16px;
+	--rtt-share-icon--size: calc(20px * var(--rtt-share-icon--scale));
+	top: -0.5px;
+}
+
+li.service.share-republish .options-left svg {
+	--rtt-share-icon--box: 16px;
+	flex-shrink: 0;
+	margin-right: calc(6px + var(--rtt-share-icon--gutter));
+	top: -0.5px;
+}
+
+.sd-content ul li.share-republish.no-icon a svg,
+.sd-content a.share-republish.no-icon svg {
+	display: none;
+}
+
+.jetpack-sharing-button__button.share-republish svg {
+	fill: currentColor;
+}
+
+.jetpack-sharing-button__button.share-republish svg path {
+	fill: currentColor;
+}
+
+.jetpack-sharing-button__button.style-icon.share-republish {
+	background: #000;
+}

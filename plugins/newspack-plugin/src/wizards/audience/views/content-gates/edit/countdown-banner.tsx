@@ -234,7 +234,7 @@ export default function CountdownBanner( {
 											className={ `newspack-ui__button newspack-ui__button--x-small ${
 												( countdown.style || 'light' ) === 'dark'
 													? 'newspack-ui__button--primary-light'
-													: 'newspack-ui__button--accent'
+													: 'newspack-ui__button--primary'
 											}` }
 										>
 											{ countdown.button_label || __( 'Subscribe now', 'newspack-plugin' ) }

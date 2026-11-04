@@ -3,6 +3,8 @@
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
+@use "../mixins";
 
 .newspack-style-card {
 	margin: 32px 0;
@@ -80,6 +82,24 @@
 			margin: 4px;
 			opacity: 0;
 			transition: opacity 125ms ease-in-out;
+		}
+
+		&:has(> .newspack-style-card__select:only-child) {
+			padding: 0;
+
+			.newspack-style-card__select {
+				align-self: stretch;
+				flex: 1 1 auto;
+				height: auto;
+				justify-content: center;
+				margin: 0;
+
+				&:focus-visible {
+					@include mixins.wpds-focus-ring;
+					box-shadow: none;
+					outline-offset: calc(-1 * var(--wpds-border-width-focus, var(--wp-admin-border-width-focus, #{wp-vars.$border-width-focus-fallback})));
+				}
+			}
 		}
 
 		.newspack-style-card__is-active & {

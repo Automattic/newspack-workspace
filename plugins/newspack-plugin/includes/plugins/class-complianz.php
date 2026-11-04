@@ -81,6 +81,7 @@ class Complianz {
 		add_filter( 'cmplz_cookie_blocker_output', [ __CLASS__, 'extra_third_party_script_blocking' ] );
 		add_filter( 'cmplz_option_enable_cookie_blocker', [ __CLASS__, 'block_before_consent' ] );
 		add_filter( 'cmplz_consenttype', [ __CLASS__, 'force_optin_consenttype' ], 10, 2 );
+		add_filter( 'cmplz_site_needs_cookiewarning', [ __CLASS__, 'hide_banner_in_setup_preview' ] );
 		add_filter( 'newspack_pixel_script_markup', [ __CLASS__, 'pixel_handling_for_complianz' ] );
 		// Complianz Premium registers its GeoIP filters on plugins_loaded:9, so swap them afterwards.
 		add_action( 'plugins_loaded', [ __CLASS__, 'maybe_use_edge_geolocation' ], 11 );
@@ -292,6 +293,16 @@ class Complianz {
 			}
 		}
 		return $consenttype;
+	}
+
+	/**
+	 * Keep the consent banner out of the setup wizard's site preview.
+	 *
+	 * @param bool $needs_warning Whether Complianz shows its banner on this request.
+	 * @return bool
+	 */
+	public static function hide_banner_in_setup_preview( $needs_warning ) {
+		return Setup_Wizard::is_design_preview() ? false : $needs_warning;
 	}
 
 	/**

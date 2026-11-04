@@ -982,7 +982,8 @@ class Group_Subscription_Invite {
 			self::redirect_with_result( 'error_registration_failed' );
 			return;
 		}
-		Reader_Activation::set_reader_verified( $user_id );
+		// The account was created in this request, so no one has set a password on it yet.
+		Reader_Activation::set_reader_verified( $user_id, false );
 		Reader_Activation::set_current_reader( $user_id );
 
 		$result = self::accept_invite( $subscription_id, $key, $email );

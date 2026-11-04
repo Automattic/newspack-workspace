@@ -72,7 +72,7 @@
 			margin-inline: var(--newspack-ui-spacer-3) 0;
 			padding: calc(var(--newspack-ui-spacer-half) / 2);
 			place-items: center;
-			transition: border-color var(--newspack-ui-duration-color) ease;
+			transition: border-color var(--newspack-ui-duration-color) var(--newspack-ui-ease-color);
 			width: var(--newspack-ui-spacer-9);
 
 			img {
@@ -230,8 +230,7 @@
 					}
 
 					&:active {
-						color: var(--newspack-ui-color-inverse-ink);
-						opacity: 0.75;
+						color: color-mix(in oklab, var(--newspack-ui-color-inverse-ink) var(--newspack-ui-color-mix-pressed), transparent);
 					}
 
 					&:focus-visible {
