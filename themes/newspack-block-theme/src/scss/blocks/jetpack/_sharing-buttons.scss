@@ -43,17 +43,17 @@
 				}
 
 				&:is(.share-mail, .share-print, .share-republish, .share-newspack-gift-article):not([style*="background-color"]) {
-					background: var(--wp--preset--color--contrast);
+					background: var(--wp--preset--color--contrast-3);
 					color: var(--wp--preset--color--base);
 
 					@include motion.hover {
 						&:hover {
-							background: color-mix(in oklab, var(--wp--preset--color--contrast) var(--wp--custom--state--hover), var(--wp--preset--color--base));
+							background: color-mix(in oklab, var(--wp--preset--color--contrast-3) var(--wp--custom--state--hover), var(--wp--preset--color--contrast));
 						}
 					}
 
 					&:active {
-						background: color-mix(in oklab, var(--wp--preset--color--contrast) var(--wp--custom--state--pressed), var(--wp--preset--color--base));
+						background: color-mix(in oklab, var(--wp--preset--color--contrast-3) var(--wp--custom--state--pressed), var(--wp--preset--color--contrast));
 					}
 				}
 
