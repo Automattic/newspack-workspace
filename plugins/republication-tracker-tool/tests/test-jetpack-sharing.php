@@ -45,7 +45,7 @@ class JetpackSharingTest extends WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		Republication_Tracker_Tool::$modal_rendered = false;
-		( new ReflectionProperty( 'Republication_Tracker_Tool_Jetpack_Sharing', 'post_id' ) )->setValue( null, 0 );
+		( new ReflectionProperty( 'Republication_Tracker_Tool_Jetpack_Sharing', 'post' ) )->setValue( null, null );
 		remove_action( 'wp_footer', [ 'Republication_Tracker_Tool_Jetpack_Sharing', 'print_modal' ] );
 		parent::tear_down();
 	}
@@ -177,6 +177,46 @@ class JetpackSharingTest extends WP_UnitTestCase {
 		$this->assertSame( 1, substr_count( $footer, 'id="republication-tracker-tool-modal"' ) );
 		$this->assertStringContainsString( 'Jetpack Sharing Test Post', $footer );
 		$this->assertStringNotContainsString( 'Other Loop Post', $footer );
+	}
+
+	/**
+	 * The footer modal copies the page's own post object as it stands when the
+	 * footer prints, rather than a reloaded copy or one taken when the button rendered.
+	 */
+	public function test_footer_modal_uses_the_shown_post_object() {
+		$this->view_test_post();
+		global $post;
+		$this->make_source()->get_display( $post );
+		$post->post_content = '<p>Teaser only.</p>'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+
+		ob_start();
+		Republication_Tracker_Tool_Jetpack_Sharing::print_modal();
+		$footer = ob_get_clean();
+
+		$this->assertStringContainsString( 'Teaser only.', $footer );
+		$this->assertStringNotContainsString( 'Shareable content.', $footer );
+	}
+
+	/**
+	 * The modal follows the main query's post object even when the queried
+	 * object, or the global post a secondary loop left behind, is a separate
+	 * copy of the same post.
+	 */
+	public function test_footer_modal_follows_the_main_query_post() {
+		$this->view_test_post();
+		global $wp_query;
+		$wp_query->queried_object    = clone $wp_query->posts[0];
+		$wp_query->queried_object_id = $this->test_post->ID;
+		$GLOBALS['post']             = clone $wp_query->posts[0]; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		$this->make_source()->get_display( $GLOBALS['post'] );
+		$wp_query->posts[0]->post_content = '<p>Teaser only.</p>';
+
+		ob_start();
+		Republication_Tracker_Tool_Jetpack_Sharing::print_modal();
+		$footer = ob_get_clean();
+
+		$this->assertStringContainsString( 'Teaser only.', $footer );
+		$this->assertStringNotContainsString( 'Shareable content.', $footer );
 	}
 
 	/**
