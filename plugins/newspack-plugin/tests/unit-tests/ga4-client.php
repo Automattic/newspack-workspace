@@ -140,24 +140,17 @@ class Newspack_Test_GA4_Client extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A canned Data API response: segment 12 matched in 1240 sessions and won
-	 * 320; segment 45 matched in 90 with no won rows; `none` matched in 500.
+	 * A canned one-row Data API response.
 	 *
 	 * @return array
 	 */
 	private function report_response() {
-		$row = function ( $segment_id, $event_name, $count ) {
-			return [
-				'dimensionValues' => [ [ 'value' => $segment_id ], [ 'value' => $event_name ] ],
-				'metricValues'    => [ [ 'value' => (string) $count ] ],
-			];
-		};
 		return [
 			'rows' => [
-				$row( '12', 'np_segment_matched', 1240 ),
-				$row( '12', 'np_segment_won', 320 ),
-				$row( '45', 'np_segment_matched', 90 ),
-				$row( 'none', 'np_segment_matched', 500 ),
+				[
+					'dimensionValues' => [ [ 'value' => 'page_view' ] ],
+					'metricValues'    => [ [ 'value' => '1240' ] ],
+				],
 			],
 		];
 	}
@@ -182,7 +175,7 @@ class Newspack_Test_GA4_Client extends WP_UnitTestCase {
 		];
 		$response = $client->run_report( 'PROP-1', $request );
 
-		$this->assertCount( 4, $response['rows'] );
+		$this->assertSame( $this->report_response(), $response );
 		$last = end( $this->http_log );
 		$this->assertStringContainsString( 'analyticsdata.googleapis.com/v1beta/properties/PROP-1:runReport', $last['url'] );
 		$this->assertSame( 'POST', $last['method'] );
@@ -217,9 +210,11 @@ class Newspack_Test_GA4_Client extends WP_UnitTestCase {
 	 * they hold one of their own.
 	 */
 	public function test_owner_token_is_lent_to_another_administrator() {
-		wp_set_current_user( $this->factory()->user->create( [ 'role' => 'administrator' ] ) );
+		$admin = $this->factory()->user->create( [ 'role' => 'administrator' ] );
+		wp_set_current_user( $admin );
 
 		$this->assertSame( $this->owner_id, GA4_Client::choose_site_kit_user( $this->owner_id, $this->tokens_for( [ $this->owner_id ] ) ) );
+		$this->assertSame( $this->owner_id, GA4_Client::choose_site_kit_user( $this->owner_id, $this->tokens_for( [ $this->owner_id, $admin ] ) ) );
 	}
 
 	/**
@@ -245,10 +240,18 @@ class Newspack_Test_GA4_Client extends WP_UnitTestCase {
 	/**
 	 * With no owner token to lend, the read stays with the current user.
 	 */
-	public function test_current_user_without_an_owner_token() {
+	public function test_current_user_when_the_owner_has_no_token() {
 		wp_set_current_user( $this->factory()->user->create( [ 'role' => 'administrator' ] ) );
 
 		$this->assertSame( 0, GA4_Client::choose_site_kit_user( $this->owner_id, $this->tokens_for( [] ) ) );
+	}
+
+	/**
+	 * With no owner recorded, the read stays with the current user.
+	 */
+	public function test_current_user_when_no_owner_is_recorded() {
+		wp_set_current_user( $this->factory()->user->create( [ 'role' => 'administrator' ] ) );
+
 		$this->assertSame( 0, GA4_Client::choose_site_kit_user( 0, $this->tokens_for( [ 0 ] ) ) );
 	}
 }
