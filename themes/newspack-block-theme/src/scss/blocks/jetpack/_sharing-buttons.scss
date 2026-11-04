@@ -68,6 +68,7 @@
 				}
 
 				&:focus-visible {
+					@include mixins.focus-fill;
 					transition: transform motion.$duration-press motion.$ease-out;
 				}
 			}
