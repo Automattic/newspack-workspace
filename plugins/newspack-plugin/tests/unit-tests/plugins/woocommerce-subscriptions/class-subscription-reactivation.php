@@ -6,6 +6,7 @@
  */
 
 use Newspack\Subscription_Reactivation;
+use Newspack\WooCommerce_Connection;
 
 require_once __DIR__ . '/../../../mocks/wc-mocks.php';
 
@@ -175,18 +176,27 @@ class Newspack_Test_Subscription_Reactivation extends WP_UnitTestCase {
 
 	/**
 	 * Subscriptions sends the admin's "Cancelled Subscription" email once per
-	 * subscription, so a reactivated one has to be eligible again in case it's
-	 * cancelled a second time.
+	 * subscription, and Newspack sends the reader's once per cancellation, so a
+	 * reactivated one has to be eligible for both again in case it's cancelled a
+	 * second time.
 	 *
 	 * @dataProvider ended_statuses
 	 * @param string $status Subscription status.
 	 */
-	public function test_reactivate_resets_cancelled_email_flag( $status ) {
-		$subscription = $this->subscription( $status, true, [ 'cancelled_email_sent' => 'true' ] );
+	public function test_reactivate_resets_cancelled_email_flags( $status ) {
+		$subscription = $this->subscription(
+			$status,
+			true,
+			[
+				'cancelled_email_sent' => 'true',
+				'meta'                 => [ WooCommerce_Connection::CANCELLATION_EMAIL_SENT_META => true ],
+			]
+		);
 
 		Subscription_Reactivation::reactivate( $subscription );
 
 		$this->assertSame( [ 'false' ], array_column( $subscription->data['saves'] ?? [], 'cancelled_email_sent' ) );
+		$this->assertFalse( $subscription->meta_exists( WooCommerce_Connection::CANCELLATION_EMAIL_SENT_META ) );
 	}
 
 	/**

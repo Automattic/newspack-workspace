@@ -274,8 +274,9 @@ class My_Account_UI_V1 {
 	 *
 	 * @param string $template      Template path.
 	 * @param string $template_name Template name.
+	 * @param array  $args          Template arguments.
 	 */
-	public static function wc_get_template( $template, $template_name ) {
+	public static function wc_get_template( $template, $template_name, $args = [] ) {
 		switch ( $template_name ) {
 			case 'myaccount/navigation.php':
 				return __DIR__ . '/templates/v1/navigation.php';
@@ -311,10 +312,30 @@ class My_Account_UI_V1 {
 				if ( ! function_exists( 'is_wc_endpoint_url' ) || ! \is_wc_endpoint_url( 'view-order' ) ) {
 					return $template;
 				}
+				if ( self::is_gift_address_withheld( $args['order'] ?? null ) ) {
+					return $template;
+				}
 				return __DIR__ . '/templates/v1/order-details-customer.php';
 			default:
 				return $template;
 		}
+	}
+
+	/**
+	 * Whether the order's shipping address belongs to a gift recipient and is
+	 * withheld from the purchaser viewing it (WooCommerce Subscriptions 9.4+).
+	 * Gifting swaps in its own template for these on the same hook and
+	 * priority, so ours must not replace it, or the purchaser sees the
+	 * recipient's address.
+	 *
+	 * @param \WC_Order|null $order The order being viewed.
+	 * @return bool
+	 */
+	private static function is_gift_address_withheld( $order ) {
+		return is_a( $order, 'WC_Order' )
+			&& class_exists( 'WCSG_Recipient_Addresses' )
+			&& method_exists( 'WCSG_Recipient_Addresses', 'is_shipping_address_withheld' )
+			&& \WCSG_Recipient_Addresses::is_shipping_address_withheld( $order, \get_current_user_id() );
 	}
 
 	/**
