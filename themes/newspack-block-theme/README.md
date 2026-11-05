@@ -30,7 +30,7 @@ This is a WordPress block theme. Global styles, layout, typography, and color ar
 
 - `templates/` — Page templates (front page, single, archive, search, 404, etc.). Some templates have layout variants in subdirectories (e.g. `templates/single/`, `templates/page/`).
 - `parts/` — Reusable template parts (header, footer, menus). Headers and footers have separate mobile and desktop variants (e.g. `parts/header-mobile.html`, `parts/header-desktop.html`).
-- `patterns/` — Block patterns organized into subdirectories by category (header, footer, post-header, post-meta, etc.). Note that patterns in subdirectories are not auto-registered by WordPress and are handled manually in `includes/class-patterns.php`.
+- `patterns/` — Block patterns organized into subdirectories by category (header, footer, post-header, post-meta, etc.).
 
 ### Blocks
 
