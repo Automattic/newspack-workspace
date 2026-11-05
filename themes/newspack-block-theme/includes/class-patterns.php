@@ -39,7 +39,7 @@ final class Patterns {
 	}
 
 	/**
-	 * Pattern registration methods.
+	 * Pattern content and category methods.
 	 */
 
 	/**
