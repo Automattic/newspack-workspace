@@ -27,6 +27,20 @@ class Newspack_UI_Palette {
 		'focus-halo'   => 30,
 	];
 
+	/**
+	 * Mix percents the solver starts from: Phase 1's shares, moved toward contrast only as far as the target needs.
+	 *
+	 * Subtle starts at 61 and the control border at 44 because those give the grey nearest to Neutral's on white,
+	 * one channel step off it.
+	 */
+	public const START_SHARES = [
+		'text-muted'   => 68,
+		'text-subtle'  => 61,
+		'border'       => 20,
+		'input-border' => 44,
+		'focus-halo'   => 30,
+	];
+
 	public const ERROR_TEXT_STEPS = [ '#b32d2e', '#8a2424', '#691c1c' ];
 
 	public const ERROR_EDGE_STEPS = [ '#d63638', '#b32d2e', '#8a2424' ];
@@ -332,10 +346,10 @@ class Newspack_UI_Palette {
 		$brand    = self::normalize_hex( $palette['brand'] ?? '' );
 
 		$fill   = self::mix( $contrast, 7, $base );
-		$muted  = self::mix( $contrast, self::solve_mix( $contrast, $base, 60, self::TARGETS['text-muted'], $fill ), $base );
-		$subtle = self::mix( $contrast, self::solve_mix( $contrast, $base, 50, self::TARGETS['text-subtle'] ), $base );
-		$border = self::mix( $contrast, self::solve_mix( $contrast, $base, 20, self::TARGETS['border'] ), $base );
-		$ctrl   = self::mix( $contrast, self::solve_mix( $contrast, $base, 40, self::TARGETS['input-border'] ), $base );
+		$muted  = self::mix( $contrast, self::solve_mix( $contrast, $base, self::START_SHARES['text-muted'], self::TARGETS['text-muted'], $fill ), $base );
+		$subtle = self::mix( $contrast, self::solve_mix( $contrast, $base, self::START_SHARES['text-subtle'], self::TARGETS['text-subtle'] ), $base );
+		$border = self::mix( $contrast, self::solve_mix( $contrast, $base, self::START_SHARES['border'], self::TARGETS['border'] ), $base );
+		$ctrl   = self::mix( $contrast, self::solve_mix( $contrast, $base, self::START_SHARES['input-border'], self::TARGETS['input-border'] ), $base );
 
 		$properties = [
 			'base'           => $base,
@@ -345,14 +359,18 @@ class Newspack_UI_Palette {
 			'border'         => $border,
 			'border-control' => $ctrl,
 		];
-		$properties = array_diff_assoc( $properties, self::NEUTRAL_DEFAULTS );
+		foreach ( self::NEUTRAL_DEFAULTS as $name => $default ) {
+			if ( self::within_a_step( $properties[ $name ], $default ) ) {
+				unset( $properties[ $name ] );
+			}
+		}
 
 		$surface_subtle = self::surface_subtle( $contrast, $base );
 		if ( self::mix( $contrast, self::SUBTLE_DARK_SHARE, $base ) !== $surface_subtle ) {
 			$properties['surface-subtle'] = $surface_subtle;
 		}
 
-		$properties['focus-halo'] = self::mix( $contrast, self::solve_mix( $contrast, $base, 10, self::TARGETS['focus-halo'] ), $base );
+		$properties['focus-halo'] = self::mix( $contrast, self::solve_mix( $contrast, $base, self::START_SHARES['focus-halo'], self::TARGETS['focus-halo'] ), $base );
 
 		$status                 = self::status_properties( $base, '' !== $brand ? $brand : $contrast, $contrast );
 		$resolved               = $status + self::STATUS_DEFAULTS;
@@ -446,6 +464,21 @@ class Newspack_UI_Palette {
 		}
 
 		return $base;
+	}
+
+	/**
+	 * Whether two colors differ by at most one step in each sRGB channel.
+	 *
+	 * @param string $a Hex color.
+	 * @param string $b Hex color.
+	 *
+	 * @return bool
+	 */
+	private static function within_a_step( string $a, string $b ): bool {
+		$a = newspack_parse_hex_channels( $a );
+		$b = newspack_parse_hex_channels( $b );
+
+		return null !== $a && null !== $b && abs( $a[0] - $b[0] ) <= 1 && abs( $a[1] - $b[1] ) <= 1 && abs( $a[2] - $b[2] ) <= 1;
 	}
 
 	/**
