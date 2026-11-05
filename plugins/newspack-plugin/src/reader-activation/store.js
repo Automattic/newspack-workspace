@@ -2,7 +2,7 @@
 window.newspack_reader_data = window.newspack_reader_data || {};
 
 import { EVENTS, emit, on } from './events';
-import { getApiNonce } from './session';
+import { getApiNonce, refreshApiNonce } from './session';
 
 /**
  * A switched session (an admin browsing as a reader through User Switching)
@@ -17,8 +17,11 @@ const isSwitchedSession = () => !! newspack_reader_data?.is_switched_session;
  * mark keys as pending sync: a switched session hydrates on every page load
  * and rehydrate() skips pending keys, so a mark that can never clear would
  * hide the reader's stored value for the rest of the tab's visit.
+ *
+ * A page also stops syncing, part way through its life, once another reader
+ * holds the session. session.js records that as account_changed.
  */
-const neverSyncs = () => !! newspack_reader_data?.is_temporary || isSwitchedSession();
+const neverSyncs = () => !! newspack_reader_data?.is_temporary || isSwitchedSession() || !! newspack_reader_data?.account_changed;
 
 /**
  * Whether a key lives only in this browser (see Reader_Data::get_local_keys()).
@@ -31,6 +34,13 @@ const neverSyncs = () => !! newspack_reader_data?.is_temporary || isSwitchedSess
  * @return {boolean} Whether the key is browser-only.
  */
 const isLocalKey = key => ( newspack_reader_data?.local_keys || [] ).includes( key );
+
+/**
+ * Keys this page has marked as pending sync.
+ *
+ * @type {Set<string>}
+ */
+const ownPendingKeys = new Set();
 
 /**
  * Store configuration.
@@ -96,6 +106,25 @@ function rehydrateItem( key, serverValue ) {
 }
 
 /**
+ * Keep this page away from the storage it shares with another reader's tabs.
+ *
+ * That reader's next page load sends every key marked as pending, and reads
+ * every value this page writes. Pending marks have no owner, so only the keys
+ * this page marked are cleared.
+ *
+ * @param {string[]} queue Store items keys to sync.
+ *
+ * @return {void}
+ */
+function leaveSharedStorage( queue ) {
+	if ( config.storage === window.sessionStorage ) {
+		return;
+	}
+	[ ...queue.splice( 0 ), ...ownPendingKeys ].forEach( clearPendingSync );
+	config.storage = window.sessionStorage;
+}
+
+/**
  * Initialize sync interval.
  *
  * Each tick sends every queued key in one request. Every request costs the
@@ -107,6 +136,10 @@ function rehydrateItem( key, serverValue ) {
  */
 function initializeSyncInterval( queue ) {
 	setInterval( () => {
+		if ( newspack_reader_data?.account_changed ) {
+			leaveSharedStorage( queue );
+			return;
+		}
 		// Bail if there are no items to sync or if the session never syncs.
 		if ( ! queue.length || neverSyncs() ) {
 			return;
@@ -162,6 +195,7 @@ export function getStoreItemKey( key, internal = false ) {
  * @param {string} key
  */
 function setPendingSync( key ) {
+	ownPendingKeys.add( key );
 	const unsynced = _get( 'unsynced', true ) || [];
 	if ( unsynced.includes( key ) ) {
 		return;
@@ -176,6 +210,7 @@ function setPendingSync( key ) {
  * @param {string} key
  */
 function clearPendingSync( key ) {
+	ownPendingKeys.delete( key );
 	const unsynced = _get( 'unsynced', true ) || [];
 	if ( ! unsynced.includes( key ) ) {
 		return;
@@ -221,22 +256,15 @@ function syncItems( keys ) {
 		return Promise.resolve( inSync );
 	}
 
-	const req = new XMLHttpRequest();
-	req.open( 'POST', newspack_reader_data.api_url, true );
-	req.setRequestHeader( 'Content-Type', 'application/json' );
-	req.setRequestHeader( 'X-WP-Nonce', apiNonce );
-
-	// Send request.
-	req.send( JSON.stringify( { items } ) );
-
-	return new Promise( ( resolve, reject ) => {
-		req.onreadystatechange = () => {
-			if ( 4 !== req.readyState ) {
-				return;
+	return sendItems( items, apiNonce )
+		.catch( async req => {
+			const freshNonce = isInvalidNonceResponse( req ) && ( await refreshApiNonce() );
+			if ( ! freshNonce ) {
+				throw req;
 			}
-			if ( 200 !== req.status ) {
-				return reject( req );
-			}
+			return sendItems( items, freshNonce );
+		} )
+		.then( req => {
 			// The server applies keys independently and reports the ones it rejected.
 			let errors = {};
 			try {
@@ -250,8 +278,52 @@ function syncItems( keys ) {
 			for ( const key of synced ) {
 				newspack_reader_data.items[ key ] = items[ key ] ?? undefined;
 			}
-			return resolve( [ ...inSync, ...synced ] );
+			return [ ...inSync, ...synced ];
+		} );
+}
+
+/**
+ * Whether a failed request was rejected for carrying a nonce from another session.
+ *
+ * @param {XMLHttpRequest} req Failed request.
+ *
+ * @return {boolean} Whether the request failed the nonce check.
+ */
+function isInvalidNonceResponse( req ) {
+	if ( 403 !== req.status ) {
+		return false;
+	}
+	try {
+		return 'rest_cookie_invalid_nonce' === JSON.parse( req.responseText )?.code;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Send a sync request to the server.
+ *
+ * @param {Object} items Encoded values by key.
+ * @param {string} nonce API nonce.
+ *
+ * @return {Promise<XMLHttpRequest>} Resolves on 200, rejects with the request otherwise.
+ */
+function sendItems( items, nonce ) {
+	return new Promise( ( resolve, reject ) => {
+		const req = new XMLHttpRequest();
+		req.open( 'POST', newspack_reader_data.api_url, true );
+		req.setRequestHeader( 'Content-Type', 'application/json' );
+		req.setRequestHeader( 'X-WP-Nonce', nonce );
+		req.onreadystatechange = () => {
+			if ( 4 !== req.readyState ) {
+				return;
+			}
+			if ( 200 !== req.status ) {
+				return reject( req );
+			}
+			return resolve( req );
 		};
+		req.send( JSON.stringify( { items } ) );
 	} );
 }
 

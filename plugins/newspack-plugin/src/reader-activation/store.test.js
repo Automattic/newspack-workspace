@@ -489,4 +489,160 @@ describe( 'Store', () => {
 			} );
 		} );
 	} );
+	describe( 'session change while the page is open', () => {
+		const INVALID_NONCE = JSON.stringify( { code: 'rest_cookie_invalid_nonce' } );
+		const originalXHR = window.XMLHttpRequest;
+		const originalFetch = window.fetch;
+		let requests;
+		let store;
+
+		class FakeXHR {
+			headers = {};
+			open( method, url ) {
+				this.url = url;
+			}
+			setRequestHeader( name, value ) {
+				this.headers[ name ] = value;
+			}
+			send() {
+				requests.push( this );
+			}
+			respond( status, responseText = '{}' ) {
+				this.readyState = 4;
+				this.status = status;
+				this.responseText = responseText;
+				this.onreadystatechange();
+			}
+		}
+
+		const flushPromises = async () => {
+			for ( let tick = 0; tick < 10; tick++ ) {
+				await Promise.resolve();
+			}
+		};
+
+		const mockNonceEndpoint = ( body, ok = true ) => {
+			window.fetch = jest.fn().mockResolvedValue( { ok, json: async () => JSON.parse( body ) } );
+		};
+		const pageReaderNonce = JSON.stringify( { nonce: 'a1b2c3d4e5', user_id: 7 } );
+		const otherReaderNonce = JSON.stringify( { nonce: 'b1b2c3d4e5', user_id: 8 } );
+
+		// Saves one key and runs the sync interval until its POST is in flight.
+		const saveKey = ( key = 'pageviews' ) => {
+			store.set( key, 1 );
+			jest.advanceTimersByTime( 1000 );
+			return requests[ requests.length - 1 ];
+		};
+
+		const pendingKeys = () => JSON.parse( localStorage.getItem( 'np_reader__unsynced' ) );
+
+		beforeEach( () => {
+			requests = [];
+			window.XMLHttpRequest = FakeXHR;
+			window.newspack_reader_data = {
+				api_url: 'http://test/api',
+				nonce_url: 'http://test/nonce',
+				nonce: 'pagenonce0',
+				// A string, as wp_localize_script() delivers it.
+				user_id: '7',
+				items: {},
+			};
+			// A page that leaves shared storage never returns to it, so each test needs its own module.
+			jest.resetModules();
+			[ store ] = require( './store' ).default();
+		} );
+		afterEach( () => {
+			window.XMLHttpRequest = originalXHR;
+			window.fetch = originalFetch;
+		} );
+
+		it( 'adopts a fresh nonce and retries once, so the save survives without a reload', async () => {
+			mockNonceEndpoint( pageReaderNonce );
+			const firstAttempt = saveKey();
+			expect( firstAttempt.headers[ 'X-WP-Nonce' ] ).toBe( 'pagenonce0' );
+
+			firstAttempt.respond( 403, INVALID_NONCE );
+			await flushPromises();
+
+			expect( window.fetch ).toHaveBeenCalledWith( 'http://test/nonce', expect.objectContaining( { credentials: 'same-origin' } ) );
+			expect( requests[ 1 ].headers[ 'X-WP-Nonce' ] ).toBe( 'a1b2c3d4e5' );
+
+			requests[ 1 ].respond( 200 );
+			await flushPromises();
+
+			expect( pendingKeys() ).toEqual( [] );
+			// Stored where every reader-activation entry point reads it, so later saves skip the 403.
+			expect( window.newspack_reader_data.nonce ).toBe( 'a1b2c3d4e5' );
+		} );
+
+		it.each( [
+			[ 'the page reader is logged out', '0', false ],
+			[ 'the endpoint answers with something other than a nonce', '<html>', true ],
+		] )( 'keeps the key pending without retrying when %s', async ( _case, body, ok ) => {
+			mockNonceEndpoint( body, ok );
+			saveKey().respond( 403, INVALID_NONCE );
+			await flushPromises();
+
+			expect( requests ).toHaveLength( 1 );
+			expect( pendingKeys() ).toEqual( [ 'pageviews' ] );
+			expect( window.newspack_reader_data.nonce ).toBe( 'pagenonce0' );
+		} );
+
+		it( 'recovers on a later save after a refresh fails', async () => {
+			// A transient failure, or the same reader logging out and back in.
+			mockNonceEndpoint( 'Service Unavailable', false );
+			saveKey().respond( 403, INVALID_NONCE );
+			await flushPromises();
+
+			mockNonceEndpoint( pageReaderNonce );
+			saveKey( 'articles_read' ).respond( 403, INVALID_NONCE );
+			await flushPromises();
+
+			expect( requests[ 2 ].headers[ 'X-WP-Nonce' ] ).toBe( 'a1b2c3d4e5' );
+		} );
+
+		it( 'gives up after one retry', async () => {
+			mockNonceEndpoint( pageReaderNonce );
+			saveKey().respond( 403, INVALID_NONCE );
+			await flushPromises();
+			requests[ 1 ].respond( 403, INVALID_NONCE );
+			await flushPromises();
+
+			expect( requests ).toHaveLength( 2 );
+			expect( window.fetch ).toHaveBeenCalledTimes( 1 );
+			expect( pendingKeys() ).toEqual( [ 'pageviews' ] );
+		} );
+
+		it( 'does not refresh the nonce for other 403s', async () => {
+			mockNonceEndpoint( pageReaderNonce );
+			saveKey().respond( 403, JSON.stringify( { code: 'newspack_reader_data_switched_session' } ) );
+			await flushPromises();
+
+			expect( window.fetch ).not.toHaveBeenCalled();
+			expect( requests ).toHaveLength( 1 );
+		} );
+
+		it( 'leaves shared storage when another reader holds the session', async () => {
+			// A key from a failed refresh, which is pending but no longer queued.
+			mockNonceEndpoint( '0', false );
+			saveKey( 'articles_read' ).respond( 403, INVALID_NONCE );
+			await flushPromises();
+
+			mockNonceEndpoint( otherReaderNonce );
+			store.set( 'favorite_categories', 1 );
+			saveKey().respond( 403, INVALID_NONCE );
+			await flushPromises();
+
+			// The other reader's tab marks its own key in the same shared list.
+			localStorage.setItem( 'np_reader__unsynced', JSON.stringify( [ ...pendingKeys(), 'other_reader_key' ] ) );
+			jest.advanceTimersByTime( 3000 );
+			store.set( 'written_after', 1 );
+			jest.advanceTimersByTime( 3000 );
+
+			expect( requests ).toHaveLength( 2 );
+			expect( window.newspack_reader_data.nonce ).toBe( 'pagenonce0' );
+			expect( pendingKeys() ).toEqual( [ 'other_reader_key' ] );
+			expect( localStorage.getItem( 'np_reader_written_after' ) ).toBeNull();
+		} );
+	} );
 } );

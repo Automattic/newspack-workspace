@@ -11,6 +11,7 @@ import { EVENTS, emit } from './events';
 window.newspack_reader_data = window.newspack_reader_data || {};
 
 let pending = null;
+let refreshing = null;
 
 /**
  * Hydrate the current session by fetching a fresh wp_rest nonce.
@@ -25,13 +26,13 @@ export function hydrateSession() {
 	if ( ! pending ) {
 		pending = fetchSession()
 			.then( data => {
-				if ( data?.nonce ) {
-					window.newspack_reader_data.nonce = data.nonce;
+				const nonce = adoptNonce( data );
+				if ( nonce ) {
 					emit( EVENTS.session, data );
 				} else {
 					pending = null;
 				}
-				return data?.nonce || null;
+				return nonce;
 			} )
 			.catch( () => {
 				pending = null;
@@ -42,12 +43,81 @@ export function hydrateSession() {
 }
 
 /**
- * Get the cached API nonce from a previous hydrateSession call.
+ * Get the page's current API nonce.
  *
- * @return {string|null} The nonce string, or null if not yet hydrated.
+ * @return {string|null} The nonce string, or null if the page has none.
  */
 export function getApiNonce() {
 	return window.newspack_reader_data?.nonce || null;
+}
+
+/**
+ * Store a nonce from the server, unless it belongs to another reader.
+ *
+ * A page holds the data of the reader it was opened for, so a nonce for anyone
+ * else is refused and recorded as final for this page: the store then keeps this
+ * page's writes away from the storage it shares with that reader's tabs. Only a
+ * reload clears it, even if the first reader logs back in.
+ *
+ * @param {Object|null} data         Server response.
+ * @param {string}      data.nonce   Nonce.
+ * @param {number}      data.user_id User the nonce belongs to.
+ *
+ * @return {string|null} The nonce, or null if it was not adopted.
+ */
+function adoptNonce( data ) {
+	if ( ! data?.nonce ) {
+		return null;
+	}
+	const pageUserId = window.newspack_reader_data.user_id;
+	// wp_localize_script() delivers the page's ID as a string.
+	if ( pageUserId && Number( data.user_id ) !== Number( pageUserId ) ) {
+		window.newspack_reader_data.account_changed = true;
+		return null;
+	}
+	window.newspack_reader_data.nonce = data.nonce;
+	window.newspack_reader_data.user_id = data.user_id;
+	return data.nonce;
+}
+
+/**
+ * Replace the page's nonce with one for the current session.
+ *
+ * A nonce is tied to the session it was created in, so a page loses write access
+ * when the reader's session changes. Unlike hydrateSession, this works at any
+ * time after authentication. A failure is not final: the page's reader can log
+ * back in, so each failed save asks again.
+ *
+ * @return {Promise<string|null>} The new nonce, or null on failure.
+ */
+export function refreshApiNonce() {
+	if ( ! refreshing ) {
+		refreshing = fetchApiNonce().finally( () => {
+			refreshing = null;
+		} );
+	}
+	return refreshing;
+}
+
+/**
+ * Fetch a nonce from the nonce endpoint.
+ *
+ * @return {Promise<string|null>} The nonce, or null on failure.
+ */
+async function fetchApiNonce() {
+	const nonceUrl = window.newspack_reader_data?.nonce_url;
+	if ( ! nonceUrl ) {
+		return null;
+	}
+	try {
+		const response = await fetch( nonceUrl, {
+			credentials: 'same-origin',
+			cache: 'no-store',
+		} );
+		return response.ok ? adoptNonce( await response.json() ) : null;
+	} catch {
+		return null;
+	}
 }
 
 /**
