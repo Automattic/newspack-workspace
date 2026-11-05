@@ -738,4 +738,14 @@ class ModelTest extends WP_UnitTestCase {
 		self::assertNull( Newspack_Popups_Model::close_button_state_colors( '#00000080', '#FFFFFF' ) );
 		self::assertNull( Newspack_Popups_Model::close_button_state_colors( '#00000000', '#FFFFFF' ) );
 	}
+
+	/**
+	 * The near-black cut-off sits between #262626 and #282828, which lightens the first and darkens the second.
+	 */
+	public function test_close_button_near_black_cutoff() {
+		$below = Newspack_Popups_Model::close_button_state_colors( '#262626', '#FFFFFF' );
+		$above = Newspack_Popups_Model::close_button_state_colors( '#282828', '#FFFFFF' );
+		self::assertGreaterThan( 0x26, hexdec( substr( $below['hover'], 1, 2 ) ) );
+		self::assertLessThan( 0x28, hexdec( substr( $above['hover'], 1, 2 ) ) );
+	}
 }
