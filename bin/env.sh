@@ -144,6 +144,31 @@ env_usage() {
     exit 1
 }
 
+# For subcommands that take nothing after the name. Without it, a mistyped or
+# imagined flag is ignored and the command runs anyway, which on destroy drops
+# the env's database and deletes its worktree.
+reject_extra_args() {
+    if [[ $# -gt 2 ]]; then
+        echo "Unknown option: $3"
+        exit 1
+    fi
+}
+
+# The arms below look for a help flag only in the name position. Without this, a
+# help flag after the name does not print usage. A help flag anywhere is a help
+# request, so move it into the name position before dispatch. cleanup and
+# e2e-setup parse their own options.
+case $1 in
+    create|up|down|destroy|list)
+        for arg in "${@:2}"; do
+            if is_help_arg "$arg"; then
+                set -- "$1" "$arg"
+                break
+            fi
+        done
+        ;;
+esac
+
 case $1 in
     create)
         env_name="$2"
@@ -670,6 +695,7 @@ MIGRATE
         if [[ -z "$env_name" ]] || is_help_arg "$env_name"; then
             env_usage "$env_name" "Usage: n env down <name>"
         fi
+        reject_extra_args "$@"
         validate_env_name "$env_name"
         container_name=$(echo "newspack_env_${env_name}" | tr '-' '_')
         docker stop "$container_name" 2>/dev/null
@@ -680,6 +706,7 @@ MIGRATE
         if [[ -z "$env_name" ]] || is_help_arg "$env_name"; then
             env_usage "$env_name" "Usage: n env destroy <name>"
         fi
+        reject_extra_args "$@"
         validate_env_name "$env_name"
         compose_file="$NABSPATH/docker-compose.env-${env_name}.yml"
         container_name=$(echo "newspack_env_${env_name}" | tr '-' '_')
