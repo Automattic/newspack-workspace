@@ -73,7 +73,27 @@ class Newspack_UI_Palette {
 
 	public const NOTICE_SHARE = 4;
 
-	public const DISABLED_INK_SHARE = 45;
+	public const BUTTON_MIN_LC = 45;
+
+	public const BUTTON_HOVER_SHARE = 0.85;
+
+	public const BUTTON_PRESSED_SHARE = 0.75;
+
+	public const MARK_VISIBLE_LC = 45;
+
+	public const FOCUS_ON_BRAND_LC = 30;
+
+	/**
+	 * Neutral values of the grey roles and of the palette, which are never emitted.
+	 */
+	public const NEUTRAL_DEFAULTS = [
+		'base'           => '#ffffff',
+		'contrast'       => '#1e1e1e',
+		'text-muted'     => '#5d5d5d',
+		'text-subtle'    => '#6c6c6c',
+		'border'         => '#dddddd',
+		'border-control' => '#949494',
+	];
 
 	/**
 	 * Neutral status values: the tints and borders multiplied over a light base, and values never emitted.
@@ -94,7 +114,6 @@ class Newspack_UI_Palette {
 		'warning-tint'       => '#fcf9e8',
 		'warning-border'     => '#f5e6ab',
 		'warning-dot'        => '#996800',
-		'disabled-ink'       => '#919191',
 	];
 
 	/**
@@ -238,7 +257,7 @@ class Newspack_UI_Palette {
 	 * error-tint, and likewise for success and warning (mark to success and warning). The rest are derived
 	 * from their covered sibling the way Neutral relates them, against the same base: borders from the mark,
 	 * warning-dot one step darker than the warning mark, error-tint-hover as the tint, error-tint-pressed one step
-	 * stronger than the tint (never the border), disabled-ink as the contrast color mixed into the base.
+	 * stronger than the tint (never the border).
 	 *
 	 * @param string $base_hex     Base color.
 	 * @param string $brand_hex    Brand color.
@@ -281,10 +300,175 @@ class Newspack_UI_Palette {
 			'warning-tint'       => $steps['warning']['tint'],
 			'warning-border'     => $borders['warning'],
 			'warning-dot'        => self::warning_dot( $steps['warning']['mark'], $base, $dark ),
-			'disabled-ink'       => self::mix( $contrast, self::DISABLED_INK_SHARE, $base ),
 		];
 
 		return array_diff_assoc( $properties, self::STATUS_DEFAULTS );
+	}
+
+	/**
+	 * Every newspack-ui color custom property value for a palette.
+	 *
+	 * Keep the hover rule in sync with Newspack_Block_Theme\Button_Hover_Guard: hover and pressed mix the brand
+	 * fill toward the base, and toward black or white when the button text would fall below APCA Lc 45 on either
+	 * state that is not skipped.
+	 *
+	 * Input keys: 'base' and 'contrast' (hex), 'brand' (hex or ''), 'brand_text' (hex, or anything else for
+	 * not set), 'hover_share' and 'pressed_share' (0..1, default 0.85 and 0.75) and 'skip_states' (any of
+	 * 'hover' and 'pressed', whose values the caller sets itself). An unusable contrast becomes white on a dark
+	 * base and black on a light one. Without a brand the brand roles are omitted.
+	 *
+	 * @param array $palette The palette.
+	 *
+	 * @return array<string,string> '--newspack-ui-color-*' property to '#rrggbb', without values equal to Neutral; empty when the base is unusable.
+	 */
+	public static function get_properties( array $palette ): array {
+		$base = self::normalize_hex( $palette['base'] ?? '' );
+		if ( '' === $base ) {
+			return [];
+		}
+		$dark     = self::is_dark( $base );
+		$contrast = self::normalize_hex( $palette['contrast'] ?? '' );
+		$contrast = '' === $contrast ? ( $dark ? '#ffffff' : '#000000' ) : $contrast;
+		$brand    = self::normalize_hex( $palette['brand'] ?? '' );
+
+		$fill   = self::mix( $contrast, 7, $base );
+		$muted  = self::mix( $contrast, self::solve_mix( $contrast, $base, 60, self::TARGETS['text-muted'], $fill ), $base );
+		$subtle = self::mix( $contrast, self::solve_mix( $contrast, $base, 50, self::TARGETS['text-subtle'] ), $base );
+		$border = self::mix( $contrast, self::solve_mix( $contrast, $base, 20, self::TARGETS['border'] ), $base );
+		$ctrl   = self::mix( $contrast, self::solve_mix( $contrast, $base, 40, self::TARGETS['input-border'] ), $base );
+
+		$properties = [
+			'base'           => $base,
+			'contrast'       => $contrast,
+			'text-muted'     => $muted,
+			'text-subtle'    => $subtle,
+			'border'         => $border,
+			'border-control' => $ctrl,
+		];
+		$properties = array_diff_assoc( $properties, self::NEUTRAL_DEFAULTS );
+
+		$surface_subtle = self::surface_subtle( $contrast, $base );
+		if ( self::mix( $contrast, self::SUBTLE_DARK_SHARE, $base ) !== $surface_subtle ) {
+			$properties['surface-subtle'] = $surface_subtle;
+		}
+
+		$properties['focus-halo'] = self::mix( $contrast, self::solve_mix( $contrast, $base, 10, self::TARGETS['focus-halo'] ), $base );
+
+		$status                 = self::status_properties( $base, '' !== $brand ? $brand : $contrast, $contrast );
+		$resolved               = $status + self::STATUS_DEFAULTS;
+		$properties            += $status;
+		$properties['destructive-fill']         = $base;
+		$properties['destructive-fill-hover']   = $resolved['error-tint-hover'];
+		$properties['destructive-fill-pressed'] = $resolved['error-tint-pressed'];
+		$properties['destructive-ink']          = $resolved['error-text'];
+		$properties['destructive-edge']         = $resolved['error'];
+
+		if ( '' !== $brand ) {
+			$properties += self::brand_properties( $palette, $brand, $base, $contrast );
+		}
+
+		$prefixed = [];
+		foreach ( $properties as $name => $value ) {
+			$prefixed[ '--newspack-ui-color-' . $name ] = $value;
+		}
+
+		return $prefixed;
+	}
+
+	/**
+	 * The brand roles: fill, text on it, hover, pressed, the mark and the focus ink.
+	 *
+	 * @param array  $palette  The palette passed to get_properties().
+	 * @param string $brand    Brand hex color.
+	 * @param string $base     Base hex color.
+	 * @param string $contrast Contrast hex color.
+	 *
+	 * @return array<string,string> Token name to '#rrggbb'.
+	 */
+	private static function brand_properties( array $palette, string $brand, string $base, string $contrast ): array {
+		$text = self::normalize_hex( $palette['brand_text'] ?? '' );
+		$text = '' === $text ? self::pick_ink( $brand ) : $text;
+
+		$properties = [
+			'primary'         => $brand,
+			'against-primary' => $text,
+			'button-bg'       => $brand,
+			'button-text'     => $text,
+		];
+
+		$shares  = [
+			'hover'   => self::share( $palette['hover_share'] ?? null, self::BUTTON_HOVER_SHARE ),
+			'pressed' => self::share( $palette['pressed_share'] ?? null, self::BUTTON_PRESSED_SHARE ),
+		];
+		$skipped = is_array( $palette['skip_states'] ?? null ) ? $palette['skip_states'] : [];
+		$target  = self::button_mix_target( $brand, $text, $base, $shares, $skipped );
+		if ( ! in_array( 'hover', $skipped, true ) ) {
+			$hover                        = self::mix( $brand, $shares['hover'] * 100, $target );
+			$properties['button-bg-hover'] = $hover;
+			$properties['btn-hover']       = $hover;
+		}
+		if ( ! in_array( 'pressed', $skipped, true ) ) {
+			$properties['btn-pressed'] = self::mix( $brand, $shares['pressed'] * 100, $target );
+		}
+
+		$mark                  = self::lc( $brand, $base ) >= self::MARK_VISIBLE_LC ? $brand : $contrast;
+		$properties['mark']    = $mark;
+		$properties['on-mark'] = self::pick_ink( $mark );
+		if ( self::lc( $text, $brand ) < self::FOCUS_ON_BRAND_LC ) {
+			$properties['focus-on-brand'] = self::pick_ink( $brand );
+		}
+
+		return $properties;
+	}
+
+	/**
+	 * The color the hover and pressed fills mix toward.
+	 *
+	 * The base, unless the button text falls below APCA Lc 45 on a state that is not skipped: then black when
+	 * the text is lighter than the fill, white otherwise.
+	 *
+	 * @param string   $fill    Button fill.
+	 * @param string   $text    Button text.
+	 * @param string   $base    Base color.
+	 * @param float[]  $shares  Fill shares of 'hover' and 'pressed', 0..1.
+	 * @param string[] $skipped States to leave out.
+	 *
+	 * @return string
+	 */
+	private static function button_mix_target( string $fill, string $text, string $base, array $shares, array $skipped ): string {
+		foreach ( [ 'hover', 'pressed' ] as $state ) {
+			if ( in_array( $state, $skipped, true ) ) {
+				continue;
+			}
+			if ( self::lc( $text, self::mix( $fill, $shares[ $state ] * 100, $base ) ) < self::BUTTON_MIN_LC ) {
+				return newspack_get_apca_luminance( $text ) > newspack_get_apca_luminance( $fill ) ? '#000000' : '#ffffff';
+			}
+		}
+
+		return $base;
+	}
+
+	/**
+	 * Black or white, whichever reads better on a color by APCA.
+	 *
+	 * @param string $hex Background hex color.
+	 *
+	 * @return string
+	 */
+	private static function pick_ink( string $hex ): string {
+		return 'white' === newspack_get_color_contrast( $hex ) ? '#ffffff' : '#000000';
+	}
+
+	/**
+	 * A fill share, or its default when the value is not a number from 0 to 1.
+	 *
+	 * @param mixed $value   The value.
+	 * @param float $default Default share.
+	 *
+	 * @return float
+	 */
+	private static function share( $value, float $default ): float {
+		return is_numeric( $value ) && $value >= 0 && $value <= 1 ? (float) $value : $default;
 	}
 
 	/**
