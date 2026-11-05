@@ -36,22 +36,22 @@
 		font-family: var(--newspack-ui-button-font-family);
 		font-size: var(--newspack-ui-button-font-size);
 		font-style: normal;
-		font-weight: var(--newspack-ui-font-weight-strong);
+		font-weight: var(--newspack-ui-button-font-weight);
 		gap: var(--newspack-ui-button-gap);
 		justify-content: center;
-		letter-spacing: initial;
+		letter-spacing: var(--newspack-ui-button-letter-spacing);
 		line-height: var(--newspack-ui-button-line-height);
 		margin-bottom: var(--newspack-ui-spacer-2);
 		min-height: var(--newspack-ui-button-height);
 		padding: var(--newspack-ui-button-padding-block) var(--newspack-ui-button-padding-inline);
 		text-decoration: none;
-		text-transform: none;
+		text-transform: var(--newspack-ui-button-text-transform);
 		transition:
 			background-color var(--newspack-ui-duration-color) ease,
 			color var(--newspack-ui-duration-color) ease,
 			box-shadow var(--newspack-ui-duration-color) ease,
 			transform var(--newspack-ui-duration-press) var(--newspack-ui-ease-out);
-		white-space: nowrap;
+		white-space: var(--newspack-ui-button-white-space);
 
 		&:last-child {
 			margin-bottom: 0;

@@ -41,6 +41,8 @@
 				--newspack-ui-button-bg-pressed: transparent;
 				--newspack-ui-button-bg-disabled: transparent;
 				--newspack-ui-button-ink: var(--newspack-ui-color-text-muted);
+				--newspack-ui-button-letter-spacing: initial;
+				--newspack-ui-button-text-transform: none;
 
 				border-radius: var(--newspack-ui-radius-button);
 				cursor: pointer;
