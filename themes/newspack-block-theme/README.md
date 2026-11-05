@@ -61,10 +61,11 @@ add_action(
 );
 ```
 
-Two things in this setup are easy to miss:
+Three things in this setup are easy to miss:
 
 - **Editor style order:** a child theme's `functions.php` runs before the parent's, so at the default priority its editor styles load first and lose any tie with the parent's. Priority 11 loads them after the parent's CSS. Styles from `theme.json` still load later, so anything `theme.json` sets belongs in the child's `theme.json`.
 - **`dist/style.css`:** the theme loads its editor styles from this path because a `style.css` in the child theme would otherwise replace them. A child theme should not add its own `dist/style.css` for the same reason.
+- **Site Editor changes:** templates and template parts saved in the Site Editor belong to the theme that was active at the time. After switching to a child theme, the site shows the theme files until the same changes are made under the child theme.
 
 ### Variables
 
