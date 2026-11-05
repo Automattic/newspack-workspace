@@ -690,21 +690,18 @@ function newspack_get_color_contrast( $hex ): string {
 /**
  * Checks if color has sufficient contrast against white; if no, replaces it.
  *
- * Deliberately keeps the original rough luminance test, which answers whether the color reads as text on white. Switching to newspack_get_color_contrast() would turn brand link colors dimgray.
+ * Scores the color as text on white by APCA and replaces it with dimgray below Lc 60, the minimum for non-body content text (APCA body text is Lc 75). That keeps brand link colors, such as #dd3333 and #3366cc, and replaces light ones, such as #ff9800 and #ffcc00.
  *
- * @ref https://stackoverflow.com/questions/1331591/given-a-background-color-black-or-white-text
+ * @param string $color Hexadecimal color.
+ *
+ * @return string The color, or 'dimgray' when it is too light to read on white.
  */
 function newspack_color_with_contrast( $color ) {
-	$r1             = hexdec( substr( $color, 1, 2 ) );
-	$g1             = hexdec( substr( $color, 3, 2 ) );
-	$b1             = hexdec( substr( $color, 5, 2 ) );
-	$l1             = 0.2126 * pow( $r1 / 255, 2.2 ) + 0.7152 * pow( $g1 / 255, 2.2 ) + 0.0722 * pow( $b1 / 255, 2.2 );
-	$l2             = 0.0;
-	$contrast_ratio = $l1 > $l2 ? (int) ( ( $l1 + 0.05 ) / ( $l2 + 0.05 ) ) : (int) ( ( $l2 + 0.05 ) / ( $l1 + 0.05 ) );
-	if ( $contrast_ratio > 5 ) {
-		return 'dimgray';
+	if ( null === newspack_parse_hex_channels( $color ) ) {
+		return $color;
 	}
-	return $color;
+	$lc = newspack_get_apca_contrast( newspack_get_apca_luminance( '#ffffff' ), newspack_get_apca_luminance( $color ) );
+	return abs( $lc ) < 60 ? 'dimgray' : $color;
 }
 
 /**

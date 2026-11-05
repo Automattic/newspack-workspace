@@ -12,11 +12,11 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Newspack_Popups_Model {
 	/**
-	 * Relative luminance below which a close button fill counts as near-black, see close_button_state_colors().
+	 * APCA luminance below which a close button fill counts as near-black, see close_button_state_colors(). The value keeps the neutral cut between #262626 and #282828, matching the previous cut rather than any APCA guidance.
 	 *
 	 * @var float
 	 */
-	const CLOSE_BUTTON_LIGHTEN_LUMINANCE = 0.02;
+	const CLOSE_BUTTON_LIGHTEN_LUMINANCE = 0.0125;
 
 	/**
 	 * The shares of the fill kept on hover and press, matching newspack-ui and the block theme.
@@ -1649,11 +1649,11 @@ final class Newspack_Popups_Model {
 	}
 
 	/**
-	 * Relative luminance of the close button fill as painted over the prompt background.
+	 * APCA luminance of the close button fill as painted over the prompt background.
 	 *
 	 * @param string $fill_color       Hex close button fill, with optional alpha.
 	 * @param string $background_color Hex prompt background.
-	 * @return float WCAG 2 relative luminance in the 0..1 range.
+	 * @return float Soft-clamped luminance in the 0..1 range.
 	 */
 	private static function close_button_fill_luminance( $fill_color, $background_color ): float {
 		$fill       = self::hex_to_rgba( $fill_color );
@@ -1662,14 +1662,12 @@ final class Newspack_Popups_Model {
 			$fill = [ 0, 0, 0, 0 ];
 		}
 
-		$luminance = 0;
-		foreach ( [ 0.2126, 0.7152, 0.0722 ] as $index => $weight ) {
-			$channel    = ( $fill[ $index ] * $fill[3] + $background[ $index ] * ( 1 - $fill[3] ) ) / 255;
-			$linear     = $channel <= 0.04045 ? $channel / 12.92 : pow( ( $channel + 0.055 ) / 1.055, 2.4 );
-			$luminance += $weight * $linear;
+		$channels = [];
+		foreach ( [ 0, 1, 2 ] as $index ) {
+			$channels[] = $fill[ $index ] * $fill[3] + $background[ $index ] * ( 1 - $fill[3] );
 		}
 
-		return $luminance;
+		return self::apca_luminance( $channels );
 	}
 
 	/**
@@ -1744,27 +1742,41 @@ final class Newspack_Popups_Model {
 
 		$channels = self::parse_hex_channels( $hex ) ?? [ 255, 255, 255 ];
 
-		$apca_luminance = function ( array $rgb ): float {
-			$y = 0.2126729 * pow( $rgb[0] / 255, 2.4 ) + 0.7151522 * pow( $rgb[1] / 255, 2.4 ) + 0.072175 * pow( $rgb[2] / 255, 2.4 );
-			return $y <= 0.022 ? $y + pow( 0.022 - $y, 1.414 ) : $y;
-		};
-		$apca_contrast  = function ( float $background_y, float $text_y ): float {
-			if ( abs( $background_y - $text_y ) < 0.0005 ) {
-				return 0.0;
-			}
-			if ( $background_y > $text_y ) {
-				$sapc = ( pow( $background_y, 0.56 ) - pow( $text_y, 0.57 ) ) * 1.14;
-				return $sapc < 0.1 ? 0.0 : ( $sapc - 0.027 ) * 100;
-			}
-			$sapc = ( pow( $background_y, 0.65 ) - pow( $text_y, 0.62 ) ) * 1.14;
-			return $sapc > -0.1 ? 0.0 : ( $sapc + 0.027 ) * 100;
-		};
-
-		$background_y = $apca_luminance( $channels );
-		$black_lc     = $apca_contrast( $background_y, $apca_luminance( [ 0, 0, 0 ] ) );
-		$white_lc     = $apca_contrast( $background_y, $apca_luminance( [ 255, 255, 255 ] ) );
+		$background_y = self::apca_luminance( $channels );
+		$black_lc     = self::apca_contrast( $background_y, self::apca_luminance( [ 0, 0, 0 ] ) );
+		$white_lc     = self::apca_contrast( $background_y, self::apca_luminance( [ 255, 255, 255 ] ) );
 
 		return abs( $white_lc ) > abs( $black_lc ) ? 'white' : 'black';
+	}
+
+	/**
+	 * Soft-clamped APCA screen luminance (Y) of a color, as \Newspack\newspack_get_apca_luminance() computes it.
+	 *
+	 * @param float[]|int[] $rgb Red, green and blue from 0 to 255.
+	 * @return float Luminance in the 0..1 range.
+	 */
+	private static function apca_luminance( array $rgb ): float {
+		$y = 0.2126729 * pow( $rgb[0] / 255, 2.4 ) + 0.7151522 * pow( $rgb[1] / 255, 2.4 ) + 0.072175 * pow( $rgb[2] / 255, 2.4 );
+		return $y <= 0.022 ? $y + pow( 0.022 - $y, 1.414 ) : $y;
+	}
+
+	/**
+	 * APCA lightness contrast (Lc) of text on a background, as \Newspack\newspack_get_apca_contrast() computes it.
+	 *
+	 * @param float $background_y Soft-clamped background luminance.
+	 * @param float $text_y       Soft-clamped text luminance.
+	 * @return float The Lc value.
+	 */
+	private static function apca_contrast( float $background_y, float $text_y ): float {
+		if ( abs( $background_y - $text_y ) < 0.0005 ) {
+			return 0.0;
+		}
+		if ( $background_y > $text_y ) {
+			$sapc = ( pow( $background_y, 0.56 ) - pow( $text_y, 0.57 ) ) * 1.14;
+			return $sapc < 0.1 ? 0.0 : ( $sapc - 0.027 ) * 100;
+		}
+		$sapc = ( pow( $background_y, 0.65 ) - pow( $text_y, 0.62 ) ) * 1.14;
+		return $sapc > -0.1 ? 0.0 : ( $sapc + 0.027 ) * 100;
 	}
 
 	/**

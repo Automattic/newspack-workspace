@@ -738,4 +738,16 @@ class ModelTest extends WP_UnitTestCase {
 		self::assertNull( Newspack_Popups_Model::close_button_state_colors( '#00000080', '#FFFFFF' ) );
 		self::assertNull( Newspack_Popups_Model::close_button_state_colors( '#00000000', '#FFFFFF' ) );
 	}
+
+	/**
+	 * Neutral near-black fills lighten on hover, while dark accents such as navy darken, as the APCA cut-off decides.
+	 */
+	public function test_close_button_lightens_neutral_near_black_and_darkens_dark_accents() {
+		$below = Newspack_Popups_Model::close_button_state_colors( '#262626', '#FFFFFF' );
+		$above = Newspack_Popups_Model::close_button_state_colors( '#282828', '#FFFFFF' );
+		$navy  = Newspack_Popups_Model::close_button_state_colors( '#000080', '#FFFFFF' );
+		self::assertGreaterThan( 0x26, hexdec( substr( $below['hover'], 1, 2 ) ) );
+		self::assertLessThan( 0x28, hexdec( substr( $above['hover'], 1, 2 ) ) );
+		self::assertLessThan( 0x80, hexdec( substr( $navy['hover'], 5, 2 ) ) );
+	}
 }
