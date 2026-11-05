@@ -42,9 +42,7 @@ Eleven style variations are available in `styles/`, `01-theme-alt.json` to `11-n
 
 ### Global styles conventions
 
-Write CSS variable references in `theme.json` and `styles/*.json` as `var(--x)`, with no spaces inside the parentheses. When a value wraps `var()` in another function, leave a space before that function's closing parenthesis, for example `color-mix( in oklab, var(--wp--preset--color--accent) 85%, var(--wp--preset--color--base) )`.
-
-WordPress core resolves global styles with `WP_Theme_JSON::convert_variables_to_value()`, which `wp_get_global_styles()` uses for the `resolve-variables` transform. Its pattern only matches the no-space form, and it otherwise swallows the closing parenthesis of a wrapping function. The upcoming `newspack-ui` "Theme" style reads these resolved values to take the site's colors, fonts and radii, so a spaced `var( --x )` would silently break that. `tests/test-global-styles.php` fails if the spaced form comes back.
+See [AGENTS.md](AGENTS.md#global-styles-conventions).
 
 ### Variables
 

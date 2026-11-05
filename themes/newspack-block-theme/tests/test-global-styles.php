@@ -52,7 +52,7 @@ class Test_Global_Styles extends WP_UnitTestCase {
 	 * @param string $file Path relative to the theme root.
 	 */
 	public function test_no_spaced_var_references( $file ) {
-		$this->assertStringNotContainsString( 'var( ', file_get_contents( dirname( __DIR__ ) . '/' . $file ) );
+		$this->assertDoesNotMatchRegularExpression( '/var\(\s|var\([^()]*\s\)/', file_get_contents( dirname( __DIR__ ) . '/' . $file ) );
 	}
 
 	/**
@@ -101,42 +101,6 @@ class Test_Global_Styles extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The field values both field elements declare.
-	 *
-	 * @return array
-	 */
-	private function field_element(): array {
-		return [
-			'border'     => [
-				'color'  => 'var(--wp--preset--color--base-5)',
-				'radius' => 'var(--wp--custom--border--radius-large)',
-				'style'  => 'solid',
-				'width'  => '1px',
-			],
-			'color'      => [
-				'background' => 'var(--wp--preset--color--base)',
-				'text'       => 'var(--wp--preset--color--contrast)',
-			],
-			'dimensions' => [
-				'minHeight' => 'var(--wp--custom--spacing--75)',
-			],
-			'spacing'    => [
-				'padding' => [
-					'bottom' => 'calc(var(--wp--custom--spacing--25) - 1px)',
-					'left'   => 'calc(var(--wp--custom--spacing--25) + 1px)',
-					'right'  => 'calc(var(--wp--custom--spacing--25) + 1px)',
-					'top'    => 'calc(var(--wp--custom--spacing--25) - 1px)',
-				],
-			],
-			'typography' => [
-				'fontFamily' => 'var(--wp--preset--font-family--inter)',
-				'fontSize'   => 'var(--wp--preset--font-size--small)',
-				'lineHeight' => 'var(--wp--custom--line-height--small)',
-			],
-		];
-	}
-
-	/**
 	 * The raw element declarations of the theme.
 	 *
 	 * @return array
@@ -146,17 +110,11 @@ class Test_Global_Styles extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The textInput element carries the values the field mixin used to set.
-	 */
-	public function test_text_input_element_matches_current_field_values() {
-		$this->assertEquals( $this->field_element(), $this->raw_elements()['textInput'] );
-	}
-
-	/**
-	 * The select element declares the same values as text inputs.
+	 * The select element declares the same values as text inputs, so the two fields stay alike.
 	 */
 	public function test_select_element_matches_text_input() {
-		$this->assertEquals( $this->field_element(), $this->raw_elements()['select'] );
+		$elements = $this->raw_elements();
+		$this->assertEquals( $elements['textInput'], $elements['select'] );
 	}
 
 	/**

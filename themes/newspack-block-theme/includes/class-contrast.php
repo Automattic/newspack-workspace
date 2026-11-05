@@ -16,10 +16,38 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Contrast {
 	/**
+	 * The merged button element styles, read once per request.
+	 *
+	 * @var array|null
+	 */
+	private static $button_styles = null;
+
+	/**
 	 * Initializer.
 	 */
 	public static function init(): void {
 		\add_action( 'enqueue_block_assets', [ __CLASS__, 'enqueue_block_assets' ] );
+	}
+
+	/**
+	 * The merged global styles of the button element.
+	 *
+	 * @return array
+	 */
+	public static function get_button_styles(): array {
+		if ( null === self::$button_styles ) {
+			$styles              = \wp_get_global_styles( [ 'elements', 'button' ] );
+			self::$button_styles = is_array( $styles ) ? $styles : [];
+		}
+
+		return self::$button_styles;
+	}
+
+	/**
+	 * Drop the memoized button styles after the user styles change.
+	 */
+	public static function reset_button_styles(): void {
+		self::$button_styles = null;
 	}
 
 	/**
@@ -99,7 +127,7 @@ final class Contrast {
 	 * @param mixed $value The color value.
 	 * @return string The color, or an empty string when it does not resolve to a plain hex color.
 	 */
-	public static function resolve_color( $value ): string {
+	public static function resolve_color( mixed $value ): string {
 		if ( ! is_string( $value ) ) {
 			return '';
 		}

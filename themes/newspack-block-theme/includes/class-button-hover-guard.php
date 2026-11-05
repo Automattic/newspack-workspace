@@ -52,8 +52,8 @@ final class Button_Hover_Guard {
 	 * @return string|null '#000000' or '#ffffff' when the guard trips, null when the default mix is readable or the inputs are not plain colors.
 	 */
 	public static function get_target(): ?string {
-		$button = \wp_get_global_styles( [ 'elements', 'button' ] );
-		if ( ! is_array( $button ) || ! empty( $button['color']['gradient'] ) ) {
+		$button = Contrast::get_button_styles();
+		if ( ! empty( $button['color']['gradient'] ) ) {
 			return null;
 		}
 

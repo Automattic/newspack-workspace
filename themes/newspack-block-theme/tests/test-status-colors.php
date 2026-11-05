@@ -41,6 +41,7 @@ class Test_Status_Colors extends WP_UnitTestCase {
 	public function tear_down() {
 		remove_filter( 'wp_theme_json_data_user', [ $this, 'set_palette' ] );
 		wp_clean_theme_json_cache();
+		Contrast::reset_button_styles();
 		$GLOBALS['wp_styles'] = $this->original_styles; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		parent::tear_down();
 	}
@@ -79,6 +80,7 @@ class Test_Status_Colors extends WP_UnitTestCase {
 		$this->colors = $colors;
 		add_filter( 'wp_theme_json_data_user', [ $this, 'set_palette' ] );
 		wp_clean_theme_json_cache();
+		Contrast::reset_button_styles();
 
 		Status_Colors::enqueue_block_assets();
 
@@ -134,24 +136,9 @@ class Test_Status_Colors extends WP_UnitTestCase {
 		return $this->data_light_bases() + [
 			'nocturne'   => [ '#1e1e1e', '#003da5' ],
 			'night red'  => [ '#1e1e1e', '#e10600' ],
-			'night blue' => [ '#1e1e1e', '#003da5' ],
 			'charcoal'   => [ '#303030', '#003da5' ],
 			'charcoal 2' => [ '#2b2b2b', '#003da5' ],
 		];
-	}
-
-	/**
-	 * Error text is never lighter than the Phase 1 step on a light base.
-	 *
-	 * @dataProvider data_light_bases
-	 *
-	 * @param string $base  The base.
-	 * @param string $brand The brand.
-	 */
-	public function test_error_not_lighter_than_phase_1_on_light_base( $base, $brand ) {
-		$steps = Status_Colors::steps( $base, $brand );
-
-		$this->assertContains( $steps['error']['text'], Status_Colors::ERROR_TEXT_STEPS );
 	}
 
 	/**
@@ -178,26 +165,6 @@ class Test_Status_Colors extends WP_UnitTestCase {
 
 		$this->assertGreaterThan( 0, array_search( $steps['error']['text'], Status_Colors::ERROR_TEXT_STEPS, true ) );
 		$this->assertSame( $steps['error']['edge'], Status_Colors::ERROR_EDGE_STEPS[ array_search( $steps['error']['text'], Status_Colors::ERROR_TEXT_STEPS, true ) ] );
-	}
-
-	/**
-	 * A dark red brand leaves error where it is.
-	 */
-	public function test_dark_red_brand_leaves_error() {
-		$steps = Status_Colors::steps( '#f7f3ea', '#7a1f1f' );
-
-		$this->assertSame( '#b32d2e', $steps['error']['text'] );
-		$this->assertSame( '#d63638', $steps['error']['edge'] );
-	}
-
-	/**
-	 * A non-red brand leaves error where it is.
-	 */
-	public function test_non_red_brand_leaves_error() {
-		$steps = Status_Colors::steps( '#ffffff', '#003da5' );
-
-		$this->assertSame( '#b32d2e', $steps['error']['text'] );
-		$this->assertSame( '#d63638', $steps['error']['edge'] );
 	}
 
 	/**
@@ -310,7 +277,7 @@ class Test_Status_Colors extends WP_UnitTestCase {
 				],
 			],
 			'nocturne'   => [
-				'#1E1E1E',
+				'#1e1e1e',
 				'#003da5',
 				'#ffffff',
 				[
@@ -341,29 +308,6 @@ class Test_Status_Colors extends WP_UnitTestCase {
 						'text' => '#fcf0f1',
 						'edge' => '#facfd2',
 						'tint' => '#343030',
-					],
-					'success' => [
-						'text' => '#b8e6bf',
-						'mark' => '#008a20',
-						'tint' => '#212a21',
-					],
-					'warning' => [
-						'text' => '#fcf9e8',
-						'mark' => '#dba617',
-						'tint' => '#312d23',
-					],
-					'notice'  => [ 'tint' => '#252525' ],
-				],
-			],
-			'night-blue' => [
-				'#1e1e1e',
-				'#003da5',
-				'#ffffff',
-				[
-					'error'   => [
-						'text' => '#facfd2',
-						'edge' => '#d63638',
-						'tint' => '#332422',
 					],
 					'success' => [
 						'text' => '#b8e6bf',

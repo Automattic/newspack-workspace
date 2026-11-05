@@ -60,6 +60,7 @@ class Test_Button_Hover_Guard extends WP_UnitTestCase {
 		wp_dequeue_style( 'newspack-block-theme-button-hover-guard' );
 		wp_deregister_style( 'newspack-block-theme-button-hover-guard' );
 		wp_clean_theme_json_cache();
+		Contrast::reset_button_styles();
 		parent::tear_down();
 	}
 
@@ -159,6 +160,7 @@ class Test_Button_Hover_Guard extends WP_UnitTestCase {
 			]
 		);
 		WP_Theme_JSON_Resolver::clean_cached_data();
+		Contrast::reset_button_styles();
 	}
 
 	/**

@@ -13,7 +13,7 @@ defined( 'ABSPATH' ) || exit;
  * Derives error, success and warning colors that stay readable on the site's
  * base color and keeps them out of the way of a red brand.
  *
- * The upcoming newspack-ui "Theme" style is meant to derive the same colors, so
+ * The newspack-ui "Theme" style is meant to derive the same colors, so
  * tests/test-status-colors.php pins the rule with fixed vectors; change them
  * only together with that style.
  */
@@ -87,7 +87,7 @@ final class Status_Colors {
 		}
 		$contrast = self::normalize_hex( Contrast::resolve_palette_color( 'contrast' ) );
 
-		$brand = Contrast::resolve_color( \wp_get_global_styles( [ 'elements', 'button', 'color', 'background' ] ) );
+		$brand = Contrast::resolve_color( Contrast::get_button_styles()['color']['background'] ?? '' );
 		if ( '' === $brand ) {
 			$brand = self::normalize_hex( Contrast::resolve_palette_color( 'accent' ) );
 		}
@@ -267,7 +267,7 @@ final class Status_Colors {
 	 * @param mixed $value The value.
 	 * @return string The color, or an empty string when it is not a plain hex color.
 	 */
-	private static function normalize_hex( $value ): string {
+	private static function normalize_hex( mixed $value ): string {
 		if ( ! is_string( $value ) || 1 !== preg_match( '/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i', trim( $value ) ) ) {
 			return '';
 		}

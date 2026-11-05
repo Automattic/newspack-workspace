@@ -23,8 +23,7 @@ final class Button_States {
 	 *
 	 * A fill this dark can't darken visibly, so it lightens toward its text
 	 * instead, like newspack-ui's dark button. The cut-off sits just above the
-	 * theme's default contrast color (#1E1E1E, Y 0.0088), at about #272727. It replaces a WCAG relative
-	 * luminance cut-off of 0.02, which fell on the same gray.
+	 * theme's default contrast color (#1E1E1E), at about #272727.
 	 *
 	 * @var float
 	 */
