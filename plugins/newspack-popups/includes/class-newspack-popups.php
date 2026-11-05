@@ -1531,7 +1531,7 @@ final class Newspack_Popups {
 		$original_base_title = sprintf( __( '%s copy', 'newspack-popups' ), $original_title );
 
 		// Prepend ` copy` only if it's not already on the post title.
-		return preg_match( "/^$original_base_title\s*\d*$/", $parent_title )
+		return preg_match( '/^' . preg_quote( $original_base_title, '/' ) . '\s*\d*$/', $parent_title )
 		? $original_base_title
 		/* translators: %s: Duplicate prompt title */
 		: sprintf( __( '%s copy', 'newspack-popups' ), $parent_title );
@@ -1563,7 +1563,7 @@ final class Newspack_Popups {
 				/* translators: %s: Duplicate prompt title */
 				$original_prompt_title = sprintf( __( '%s copy', 'newspack-popups' ), $original_title );
 				// Filter duplicated posts with a duplicate count postponed to the same title.
-				return preg_match( "/^$original_prompt_title\s*\d*$/", $prompt->post_title );
+				return preg_match( '/^' . preg_quote( $original_prompt_title, '/' ) . '\s*\d*$/', $prompt->post_title );
 			}
 		);
 
@@ -1604,7 +1604,7 @@ final class Newspack_Popups {
 				'tags_input'    => wp_get_post_tags( $id, [ 'fields' => 'ids' ] ),
 				'meta_input'    => [
 					// A campaign is set as the origin of another one, if the later have the same title with the count of occurences suffixed (e.g. my prompt 3).
-					'duplicate_of' => empty( $title ) || preg_match( "/^$original_title_base\s*\d*$/", $title )
+					'duplicate_of' => empty( $title ) || preg_match( '/^' . preg_quote( $original_title_base, '/' ) . '\s*\d*$/', $title )
 									? $original_id : 0,
 				],
 			];

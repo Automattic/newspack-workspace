@@ -41,4 +41,32 @@ class Test_Duplicate_Popup extends WP_UnitTestCase {
 		$this->assertSame( $content, get_post( $copy )->post_content );
 		$this->assertSame( 'promo\banner', get_post_meta( $copy, 'additional_classes', true ) );
 	}
+
+	/**
+	 * Copies of a prompt whose title holds regex characters are linked to it
+	 * and numbered, as the editor's Duplicate flow names them.
+	 *
+	 * @dataProvider titles_with_regex_characters
+	 * @param string $title Original title.
+	 */
+	public function test_copies_of_a_title_with_regex_characters_are_numbered( $title ) {
+		$id = $this->create_prompt( $title );
+
+		$first = Newspack_Popups::duplicate_popup( $id, Newspack_Popups::get_duplicate_title( $id, $id ) );
+		$this->assertSame( "$title copy", get_the_title( $first ) );
+		$this->assertEquals( $id, get_post_meta( $first, 'duplicate_of', true ) );
+
+		$this->assertSame( "$title copy 2", Newspack_Popups::get_duplicate_title( $id, $id ) );
+	}
+
+	/**
+	 * Titles that are not literal regex patterns.
+	 */
+	public function titles_with_regex_characters() {
+		return [
+			'parentheses'            => [ 'Price (2026)' ],
+			'unbalanced paren'       => [ 'Spring (drive' ],
+			'question mark and plus' => [ 'Why give? +1' ],
+		];
+	}
 }
