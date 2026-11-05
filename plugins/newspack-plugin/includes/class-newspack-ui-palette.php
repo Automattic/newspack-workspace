@@ -237,8 +237,8 @@ class Newspack_UI_Palette {
 	 * Roles the block theme covers map as error.edge to error, error.text to error-text, error.tint to
 	 * error-tint, and likewise for success and warning (mark to success and warning). The rest are derived
 	 * from their covered sibling the way Neutral relates them, against the same base: borders from the mark,
-	 * warning-dot one step darker than the warning mark, error-tint-hover as the tint, error-tint-pressed as
-	 * the border, disabled-ink as the contrast color mixed into the base.
+	 * warning-dot one step darker than the warning mark, error-tint-hover as the tint, error-tint-pressed one step
+	 * stronger than the tint (never the border), disabled-ink as the contrast color mixed into the base.
 	 *
 	 * @param string $base_hex     Base color.
 	 * @param string $brand_hex    Brand color.

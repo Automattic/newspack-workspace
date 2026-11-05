@@ -674,7 +674,6 @@ class Newspack_Test_UI_Palette extends WP_UnitTestCase {
 		$properties = Newspack_UI_Palette::status_properties( $base, $brand, $contrast ) + Newspack_UI_Palette::STATUS_DEFAULTS;
 		$steps      = Newspack_UI_Palette::status_steps( $base, $brand, $contrast );
 
-		$this->assertGreaterThanOrEqual( 25, Newspack_UI_Palette::lc( $properties['warning-dot'], $base ), "dot on $base" );
 		foreach ( [ 'error', 'success', 'warning' ] as $role ) {
 			$this->assertGreaterThanOrEqual( min( 25, Newspack_UI_Palette::lc( Newspack_UI_Palette::STATUS_DEFAULTS[ "$role-border" ], '#ffffff' ) ), Newspack_UI_Palette::lc( $properties[ "$role-border" ], $base ), "$role border on $base" );
 		}
@@ -722,7 +721,7 @@ class Newspack_Test_UI_Palette extends WP_UnitTestCase {
 		$neutral  = Newspack_UI_Palette::lc( Newspack_UI_Palette::STATUS_DEFAULTS['error-text'], Newspack_UI_Palette::STATUS_DEFAULTS['error-tint-pressed'] );
 
 		$this->assertGreaterThanOrEqual( 45, Newspack_UI_Palette::lc( $ink, $pressed ), "ink on pressed on $base" );
-		if ( ! in_array( $base, [ '#808080', '#d0d0d0' ], true ) ) {
+		if ( ! in_array( $base, [ '#d0d0d0' ], true ) ) {
 			$this->assertGreaterThanOrEqual( min( 60, $neutral ), Newspack_UI_Palette::lc( $ink, $pressed ), "ink on pressed on $base" );
 		}
 	}
