@@ -55,6 +55,7 @@ class Post_Date {
 		add_filter( 'newspack_blocks_display_updated_date', [ __CLASS__, 'filter_blocks_display_updated_date' ], 100, 2 );
 		add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_scripts' ] );
 		add_action( 'enqueue_block_editor_assets', [ __CLASS__, 'enqueue_editor_assets' ] );
+		add_action( 'enqueue_block_assets', [ __CLASS__, 'enqueue_block_assets' ] );
 		add_action( 'newspack_theme_posted_on', [ __CLASS__, 'render_updated_date_classic' ] );
 		add_filter( 'body_class', [ __CLASS__, 'add_body_show_updated' ] );
 		add_filter( 'newspack_theme_include_hidden_updated_time', [ __CLASS__, 'suppress_theme_hidden_updated_time' ] );
@@ -577,6 +578,27 @@ class Post_Date {
 				'mode'      => $mode,
 				'postTypes' => $post_types,
 			]
+		);
+	}
+
+	/**
+	 * Draw the "Updated" label on modified dates in the editor, from the data
+	 * attributes src/blocks/core-post-date adds, so the preview matches the
+	 * label filter_post_date_block() renders on the front end.
+	 *
+	 * Hooked to `enqueue_block_assets` so it also reaches the iframed editor.
+	 */
+	public static function enqueue_block_assets() {
+		if ( ! is_admin() ) {
+			return;
+		}
+		$handle = 'newspack-post-date-editor-label';
+		wp_register_style( $handle, false, [], NEWSPACK_PLUGIN_VERSION );
+		wp_enqueue_style( $handle );
+		wp_add_inline_style(
+			$handle,
+			'.wp-block-post-date[data-newspack-updated-before]::before{content:attr(data-newspack-updated-before)}' .
+			'.wp-block-post-date[data-newspack-updated-after]::after{content:attr(data-newspack-updated-after)}'
 		);
 	}
 }

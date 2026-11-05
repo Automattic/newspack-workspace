@@ -53,6 +53,14 @@ describe( 'ColorPicker', () => {
 		expect( expander.getAttribute( 'aria-describedby' ) ).toBe( help.id );
 	} );
 
+	it( 'should keep help attached to the swatch when an action sits beside it', () => {
+		const { getByRole, getByText } = render(
+			<ColorPicker label="Background color" help="Choose a color" action={ <button>Reset</button> } onChange={ () => {} } />
+		);
+		expect( getByRole( 'button', { name: 'Background color' } ).getAttribute( 'aria-describedby' ) ).toBe( getByText( 'Choose a color' ).id );
+		expect( getByRole( 'button', { name: 'Reset' } ) ).toBeInTheDocument();
+	} );
+
 	it( 'should not set aria-describedby when no help is provided', () => {
 		const { getByRole } = render( <ColorPicker label="Background color" onChange={ () => {} } /> );
 		expect( getByRole( 'button' ) ).not.toHaveAttribute( 'aria-describedby' );

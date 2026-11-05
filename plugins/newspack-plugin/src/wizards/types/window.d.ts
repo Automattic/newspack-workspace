@@ -28,6 +28,13 @@ declare global {
 				};
 			};
 			institutional_access_url?: string;
+			content_banner?: {
+				supports_theme_style: boolean;
+				theme_button_bg: string;
+				theme_button_ink: string;
+				theme_font_heading: string;
+				theme_font_body: string;
+			};
 			// Optional: consumers guard with `?.`/fallbacks because the
 			// payload can be absent (plugin filter strips it, non-Audience
 			// mount, HMR reseed) — keep the type honest about that.

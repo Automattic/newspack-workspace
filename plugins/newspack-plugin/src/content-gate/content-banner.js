@@ -95,6 +95,7 @@ domReady( () => {
 	[ ...buttons ].forEach( button => {
 		button.addEventListener( 'click', ev => {
 			ev.preventDefault();
+			ev.stopPropagation();
 			linkContainer.style.display = 'none';
 			info.style.display = 'none';
 			modal.setAttribute( 'data-state', 'open' );

@@ -16,10 +16,38 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Contrast {
 	/**
+	 * The merged button element styles, read once per request.
+	 *
+	 * @var array|null
+	 */
+	private static $button_styles = null;
+
+	/**
 	 * Initializer.
 	 */
 	public static function init(): void {
 		\add_action( 'enqueue_block_assets', [ __CLASS__, 'enqueue_block_assets' ] );
+	}
+
+	/**
+	 * The merged global styles of the button element.
+	 *
+	 * @return array
+	 */
+	public static function get_button_styles(): array {
+		if ( null === self::$button_styles ) {
+			$styles              = \wp_get_global_styles( [ 'elements', 'button' ] );
+			self::$button_styles = is_array( $styles ) ? $styles : [];
+		}
+
+		return self::$button_styles;
+	}
+
+	/**
+	 * Drop the memoized button styles after the user styles change.
+	 */
+	public static function reset_button_styles(): void {
+		self::$button_styles = null;
 	}
 
 	/**
@@ -72,7 +100,7 @@ final class Contrast {
 	 * @param string $slug The palette color slug.
 	 * @return string The color, or an empty string if none resolves.
 	 */
-	private static function resolve_palette_color( string $slug ): string {
+	public static function resolve_palette_color( string $slug ): string {
 		$palette = \wp_get_global_settings( [ 'color', 'palette' ] );
 
 		foreach ( [ 'custom', 'theme' ] as $origin ) {
@@ -90,6 +118,37 @@ final class Contrast {
 	}
 
 	/**
+	 * Resolve a color value to a plain lowercase #rrggbb hex color.
+	 *
+	 * Accepts #rgb and #rrggbb, and palette references in the var:preset|color|<slug>
+	 * and var(--wp--preset--color--<slug>) forms, which resolve through the palette.
+	 * Gradients, other functions and anything else return an empty string.
+	 *
+	 * @param mixed $value The color value.
+	 * @return string The color, or an empty string when it does not resolve to a plain hex color.
+	 */
+	public static function resolve_color( mixed $value ): string {
+		if ( ! is_string( $value ) ) {
+			return '';
+		}
+		$value = trim( $value );
+
+		if ( 1 === preg_match( '/^(?:var:preset\|color\|([a-z0-9-]+)|var\(--wp--preset--color--([a-z0-9-]+)\))$/i', $value, $matches ) ) {
+			$value = self::resolve_palette_color( '' !== $matches[1] ? $matches[1] : $matches[2] );
+		}
+		if ( 1 !== preg_match( '/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i', $value ) ) {
+			return '';
+		}
+
+		$hex = strtolower( ltrim( $value, '#' ) );
+		if ( 3 === strlen( $hex ) ) {
+			$hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+		}
+
+		return '#' . $hex;
+	}
+
+	/**
 	 * Pick black or white text, whichever reads better on a background by APCA.
 	 *
 	 * Black wins ties. This is the pick of Newspack_Blocks::get_color_for_contrast()
@@ -99,7 +158,7 @@ final class Contrast {
 	 * @param string $hex Hexadecimal background color (#RGB, #RRGGBB or #RRGGBBAA, with or without #).
 	 * @return string|null '#000000' or '#ffffff', or null when the color is not parseable as hex.
 	 */
-	private static function get_text_color( string $hex ): ?string {
+	public static function get_text_color( string $hex ): ?string {
 		$background_y = self::get_apca_luminance( $hex );
 		if ( null === $background_y ) {
 			return null;
@@ -149,7 +208,7 @@ final class Contrast {
 	 * @param string $hex Hexadecimal color.
 	 * @return float|null Soft-clamped luminance in the 0..1 range, or null when unparseable.
 	 */
-	private static function get_apca_luminance( $hex ): ?float {
+	public static function get_apca_luminance( $hex ): ?float {
 		$channels = self::parse_hex_channels( $hex );
 		if ( null === $channels ) {
 			return null;
@@ -180,7 +239,7 @@ final class Contrast {
 	 * @param float $text_y       Soft-clamped text luminance.
 	 * @return float The Lc value.
 	 */
-	private static function get_apca_contrast( float $background_y, float $text_y ): float {
+	public static function get_apca_contrast( float $background_y, float $text_y ): float {
 		if ( abs( $background_y - $text_y ) < 0.0005 ) {
 			return 0.0;
 		}

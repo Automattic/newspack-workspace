@@ -38,7 +38,11 @@ This theme contains one custom block (`includes/blocks/subtitle-block/`) which i
 
 ### Style variations
 
-Two style variations are available in `styles/`: `harold.json` and `paul.json`. Each is a partial `theme.json` that overrides colors and typography from the base theme. Style variations can be selected from Appearance > Design in wp-admin.
+Eleven style variations are available in `styles/`, `01-theme-alt.json` to `11-nocturne-alt.json`. Each is a partial `theme.json` that overrides colors and typography from the base theme. Style variations can be selected from Appearance > Design in wp-admin.
+
+### Global styles conventions
+
+See [AGENTS.md](AGENTS.md#global-styles-conventions).
 
 ### Variables
 

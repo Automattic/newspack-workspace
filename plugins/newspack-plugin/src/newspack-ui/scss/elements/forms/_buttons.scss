@@ -151,8 +151,6 @@
 
 		// Styles
 		&--primary,
-		&--accent,
-		&--branded,
 		&--primary-light,
 		&--destructive:not(.newspack-ui__button--ghost, .newspack-ui__button--outline) {
 			--newspack-ui-button-focus: var(--newspack-ui-button-ink);
@@ -171,14 +169,6 @@
 					color: var(--newspack-ui-color-button-text-hover);
 				}
 			}
-		}
-
-		&--accent,
-		&--branded {
-			--newspack-ui-button-bg: var(--newspack-ui-color-primary);
-			--newspack-ui-button-bg-hover: color-mix(in oklab, var(--newspack-ui-color-primary) var(--newspack-ui-color-mix-hover), var(--newspack-ui-color-neutral-100));
-			--newspack-ui-button-bg-pressed: color-mix(in oklab, var(--newspack-ui-color-primary) var(--newspack-ui-color-mix-pressed), var(--newspack-ui-color-neutral-100));
-			--newspack-ui-button-ink: var(--newspack-ui-color-against-primary);
 		}
 
 		&--primary-light {

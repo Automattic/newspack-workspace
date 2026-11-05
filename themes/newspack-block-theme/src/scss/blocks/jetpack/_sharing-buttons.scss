@@ -22,7 +22,7 @@
 				padding: calc(var(--wp--preset--spacing--20) * 0.875);
 				top: 0;
 
-				&:where(:not(:is(.share-x, .share-threads, .share-share):not([style*="background-color"]))) {
+				&:where(:not(:is(.share-x, .share-threads, .share-share, .share-mail, .share-print, .share-republish, .share-newspack-gift-article):not([style*="background-color"]))) {
 					@include mixins.fill-overlay;
 
 					&:focus-visible::before {
@@ -42,19 +42,34 @@
 					}
 				}
 
-				&.share-share:not([style*="background-color"]) {
+				&:is(.share-mail, .share-print):not([style*="background-color"]) {
+					background: var(--wp--preset--color--contrast-3);
+					color: var(--wp--preset--color--base);
+
+					@include motion.hover {
+						&:hover {
+							background: color-mix(in oklab, var(--wp--preset--color--contrast-3) var(--wp--custom--state--hover), var(--wp--preset--color--contrast));
+						}
+					}
+
+					&:active {
+						background: color-mix(in oklab, var(--wp--preset--color--contrast-3) var(--wp--custom--state--pressed), var(--wp--preset--color--contrast));
+					}
+				}
+
+				&:is(.share-share, .share-republish, .share-newspack-gift-article):not([style*="background-color"]) {
 					background: var(--wp--preset--color--accent);
 					color: var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base));
 
 					@include motion.hover {
 						&:hover {
-							background: color-mix(in oklab, var(--wp--preset--color--accent) var(--wp--custom--state--hover), black);
+							background: color-mix(in oklab, var(--wp--preset--color--accent) var(--wp--custom--state--hover), var(--wp--custom--button--mix));
 							color: var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base));
 						}
 					}
 
 					&:active {
-						background: color-mix(in oklab, var(--wp--preset--color--accent) var(--wp--custom--state--pressed), black);
+						background: color-mix(in oklab, var(--wp--preset--color--accent) var(--wp--custom--state--pressed), var(--wp--custom--button--mix));
 						color: var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base));
 					}
 				}
@@ -68,6 +83,7 @@
 				}
 
 				&:focus-visible {
+					@include mixins.focus-fill;
 					transition: transform motion.$duration-press motion.$ease-out;
 				}
 			}
@@ -143,6 +159,11 @@
 
 		&__button.share-print {
 			--np--sharing-icon--scale: 0.90625;
+		}
+
+		&__button.share-republish,
+		&__button.share-newspack-gift-article {
+			--np--sharing-icon--scale: 1.125;
 		}
 
 		&__button.share-mail,
