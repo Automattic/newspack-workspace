@@ -213,39 +213,16 @@ class Test_Status_Colors extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The error edge reaches a 3:1 contrast ratio on every base.
+	 * The error edge reaches APCA Lc 25 on every base.
 	 *
 	 * @dataProvider data_bases
 	 *
 	 * @param string $base  The base.
 	 * @param string $brand The brand.
 	 */
-	public function test_error_edge_meets_3_to_1( $base, $brand ) {
+	public function test_error_edge_meets_lc_25( $base, $brand ) {
 		$steps = Status_Colors::steps( $base, $brand );
-		$this->assertGreaterThanOrEqual( 3, $this->ratio( $steps['error']['edge'], $base ) );
 		$this->assertGreaterThanOrEqual( 25, $this->lc( $steps['error']['edge'], $base ) );
-	}
-
-	/**
-	 * WCAG contrast ratio of two colors.
-	 *
-	 * @param string $a The first color.
-	 * @param string $b The second color.
-	 * @return float
-	 */
-	private function ratio( $a, $b ) {
-		$l = [];
-		foreach ( [ $a, $b ] as $hex ) {
-			$c   = array_map(
-				function ( $v ) {
-					$v /= 255;
-					return $v <= 0.04045 ? $v / 12.92 : pow( ( $v + 0.055 ) / 1.055, 2.4 );
-				},
-				sscanf( $hex, '#%02x%02x%02x' )
-			);
-			$l[] = 0.2126 * $c[0] + 0.7152 * $c[1] + 0.0722 * $c[2];
-		}
-		return ( max( $l ) + 0.05 ) / ( min( $l ) + 0.05 );
 	}
 
 	/**
@@ -523,8 +500,8 @@ class Test_Status_Colors extends WP_UnitTestCase {
 				[
 					'error'   => [
 						'text' => '#facfd2',
-						'edge' => '#facfd2',
-						'tint' => '#454141',
+						'edge' => '#d63638',
+						'tint' => '#443432',
 					],
 					'success' => [
 						'text' => '#b8e6bf',
@@ -546,8 +523,8 @@ class Test_Status_Colors extends WP_UnitTestCase {
 				[
 					'error'   => [
 						'text' => '#facfd2',
-						'edge' => '#facfd2',
-						'tint' => '#403c3c',
+						'edge' => '#d63638',
+						'tint' => '#3f2f2e',
 					],
 					'success' => [
 						'text' => '#b8e6bf',

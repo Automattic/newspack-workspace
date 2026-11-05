@@ -19,15 +19,16 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Button_States {
 	/**
-	 * Relative luminance below which a fill counts as near-black.
+	 * APCA screen luminance (Y, soft-clamped) below which a fill counts as near-black.
 	 *
 	 * A fill this dark can't darken visibly, so it lightens toward its text
 	 * instead, like newspack-ui's dark button. The cut-off sits just above the
-	 * theme's default contrast color (#1E1E1E).
+	 * theme's default contrast color (#1E1E1E, Y 0.0088), at about #272727. It replaces a WCAG relative
+	 * luminance cut-off of 0.02, which fell on the same gray.
 	 *
 	 * @var float
 	 */
-	const NEAR_BLACK_LUMINANCE = 0.02;
+	const NEAR_BLACK_Y = 0.0125;
 
 	/**
 	 * Initializer.
@@ -92,13 +93,12 @@ final class Button_States {
 	 * @return string[]|null [ 'hover' => '#rrggbb', 'pressed' => '#rrggbb' ], or null when a color is not parseable.
 	 */
 	public static function get_state_colors( string $fill, string $text ): ?array {
-		$channels = self::parse_hex( $fill );
-		if ( null === $channels ) {
+		if ( null === self::parse_hex( $fill ) ) {
 			return null;
 		}
 
 		$shares = [ self::get_state_share( 'hover', 0.85 ), self::get_state_share( 'pressed', 0.75 ) ];
-		if ( self::get_luminance( $channels ) >= self::NEAR_BLACK_LUMINANCE ) {
+		if ( Contrast::get_apca_luminance( $fill ) >= self::NEAR_BLACK_Y ) {
 			$hover   = self::mix( $fill, '#000000', $shares[0] );
 			$pressed = self::mix( $fill, '#000000', $shares[1] );
 		} else {
@@ -318,17 +318,6 @@ final class Button_States {
 	private static function to_srgb( float $value ): int {
 		$value = max( 0.0, min( 1.0, $value ) );
 		return (int) round( 255 * ( $value <= 0.0031308 ? $value * 12.92 : 1.055 * pow( $value, 1 / 2.4 ) - 0.055 ) );
-	}
-
-	/**
-	 * WCAG 2 relative luminance of an sRGB color.
-	 *
-	 * @param int[] $channels [ r, g, b ], 0..255.
-	 * @return float
-	 */
-	public static function get_luminance( array $channels ): float {
-		[ $r, $g, $b ] = array_map( [ __CLASS__, 'to_linear' ], $channels );
-		return 0.2126 * $r + 0.7152 * $g + 0.0722 * $b;
 	}
 
 	/**

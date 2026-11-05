@@ -94,4 +94,15 @@ class Test_Button_States extends WP_UnitTestCase {
 
 		$this->assertStringNotContainsString( '--newspack-button', $html );
 	}
+
+	/**
+	 * A fill darkens from #272727 up and lightens below it, by APCA luminance.
+	 */
+	public function test_near_black_cut_off() {
+		$above = Button_States::get_state_colors( '#272727', '#ffffff' );
+		$below = Button_States::get_state_colors( '#262626', '#ffffff' );
+
+		$this->assertLessThan( Button_States::to_oklab( '#272727' )[0], Button_States::to_oklab( $above['hover'] )[0] );
+		$this->assertGreaterThan( Button_States::to_oklab( '#262626' )[0], Button_States::to_oklab( $below['hover'] )[0] );
+	}
 }

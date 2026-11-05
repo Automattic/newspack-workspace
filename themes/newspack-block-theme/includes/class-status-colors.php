@@ -48,8 +48,6 @@ final class Status_Colors {
 
 	const TEXT_LC = 60;
 
-	const EDGE_RATIO = 3;
-
 	const MARK_LC = 25;
 
 	const TINT_SHARE = 12;
@@ -89,7 +87,7 @@ final class Status_Colors {
 		}
 		$contrast = self::normalize_hex( Contrast::resolve_palette_color( 'contrast' ) );
 
-		$brand = self::normalize_hex( \wp_get_global_styles( [ 'elements', 'button', 'color', 'background' ] ) );
+		$brand = Contrast::resolve_color( \wp_get_global_styles( [ 'elements', 'button', 'color', 'background' ] ) );
 		if ( '' === $brand ) {
 			$brand = self::normalize_hex( Contrast::resolve_palette_color( 'accent' ) );
 		}
@@ -133,7 +131,7 @@ final class Status_Colors {
 	 * Text reaches APCA Lc 60 on the base and marks (borders, edges) Lc 25. On a
 	 * light base each role starts at its default step and moves only darker; on a
 	 * dark base it takes the lightest scale steps. A red brand moves error away
-	 * from the brand's lightness. The error edge also reaches a 3:1 contrast ratio.
+	 * from the brand's lightness.
 	 * On a light base each tint is the role's default tint multiplied over the
 	 * base; on a dark base it is 12% of the mark over the base.
 	 *
@@ -155,10 +153,10 @@ final class Status_Colors {
 		$index      = self::move_from_brand( $text_steps, $start, $brand_hex, $dark );
 		$index      = self::pick( $text_steps, $base, self::TEXT_LC, $index );
 		if ( $dark ) {
-			$edge_start = self::pick( self::ERROR_DARK_STEPS, $base, self::MARK_LC, 0, self::EDGE_RATIO );
+			$edge_start = self::pick( self::ERROR_DARK_STEPS, $base, self::MARK_LC );
 			$edge       = self::ERROR_DARK_STEPS[ min( $edge_start + $index - $start, count( self::ERROR_DARK_STEPS ) - 1 ) ];
 		} else {
-			$edge = self::ERROR_EDGE_STEPS[ self::pick( self::ERROR_EDGE_STEPS, $base, self::MARK_LC, $index, self::EDGE_RATIO ) ];
+			$edge = self::ERROR_EDGE_STEPS[ self::pick( self::ERROR_EDGE_STEPS, $base, self::MARK_LC, $index ) ];
 		}
 		$error_text = $text_steps[ $index ];
 
@@ -299,25 +297,6 @@ final class Status_Colors {
 	}
 
 	/**
-	 * WCAG 2 contrast ratio of two hex colors.
-	 *
-	 * @param string $a The first hex color.
-	 * @param string $b The second hex color.
-	 * @return float
-	 */
-	private static function ratio( string $a, string $b ): float {
-		$channels_a = Button_States::parse_hex( $a );
-		$channels_b = Button_States::parse_hex( $b );
-		if ( null === $channels_a || null === $channels_b ) {
-			return 1.0;
-		}
-		$luminance_a = Button_States::get_luminance( $channels_a );
-		$luminance_b = Button_States::get_luminance( $channels_b );
-
-		return ( max( $luminance_a, $luminance_b ) + 0.05 ) / ( min( $luminance_a, $luminance_b ) + 0.05 );
-	}
-
-	/**
 	 * Whether white text reads better than black on a base by APCA.
 	 *
 	 * @param string $base The base hex color.
@@ -334,13 +313,12 @@ final class Status_Colors {
 	 * @param string   $base  The base hex color.
 	 * @param float    $min   The minimum Lc.
 	 * @param int      $from  The index to start at.
-	 * @param float    $ratio The minimum WCAG contrast ratio, 0 for none.
 	 * @return int
 	 */
-	private static function pick( array $steps, string $base, float $min, int $from = 0, float $ratio = 0 ): int {
+	private static function pick( array $steps, string $base, float $min, int $from = 0 ): int {
 		$last = count( $steps ) - 1;
 		for ( $i = $from; $i < $last; $i++ ) {
-			if ( self::lc( $steps[ $i ], $base ) >= $min && self::ratio( $steps[ $i ], $base ) >= $ratio ) {
+			if ( self::lc( $steps[ $i ], $base ) >= $min ) {
 				return $i;
 			}
 		}
