@@ -438,10 +438,6 @@ final class Newspack_Popups_AB_Tests {
 			'ineligible_placements' => self::get_ineligible_placements(),
 			'results_url'           => current_user_can( 'manage_options' ) && class_exists( 'Newspack_Popups_AB_Dashboard' ) ? Newspack_Popups_AB_Dashboard::get_page_url() : '',
 			'test_name'             => $post_id ? self::get_test_name( (string) get_post_meta( (int) $post_id, self::META_TEST_ID, true ) ) : '',
-			'variants'              => [
-				'a' => __( 'A', 'newspack-popups' ),
-				'b' => __( 'B', 'newspack-popups' ),
-			],
 		];
 	}
 
@@ -503,7 +499,7 @@ final class Newspack_Popups_AB_Tests {
 	 * save one, so one can only come from a direct meta write.
 	 *
 	 * @return array[] Ordered by Test ID. Each `[ 'test_id', 'goal', 'goal_label',
-	 *                 'control_share', 'started_at', 'variants', 'duplicates' ]`. `control_share`
+	 *                 'control_share', 'started_at', 'variants', 'duplicates', 'prompt_count' ]`. `control_share`
 	 *                 comes from the control prompt, or DEFAULT_CONTROL_SHARE without
 	 *                 one. `started_at` is when the split began: the later of the
 	 *                 control's publish date and the earliest challenger's, ISO 8601
@@ -516,7 +512,9 @@ final class Newspack_Popups_AB_Tests {
 	 *                 `letter` plus those fields. The arm shown is the first
 	 *                 published prompt by ID, or the first by ID when none is
 	 *                 published; this page reports that one, but readers still
-	 *                 see every published prompt with the letter.
+	 *                 see every published prompt with the letter. `prompt_count`
+	 *                 counts every untrashed prompt with the Test ID, those with no
+	 *                 version included, since a start refuses a test that has any.
 	 */
 	public static function get_tests() {
 		$prompts = get_posts(
@@ -536,11 +534,16 @@ final class Newspack_Popups_AB_Tests {
 				],
 			]
 		);
-		$grouped = [];
+		$grouped       = [];
+		$prompt_counts = [];
 		foreach ( $prompts as $prompt ) {
 			$test_id = self::sanitize_test_id( get_post_meta( $prompt->ID, self::META_TEST_ID, true ) );
 			$variant = (string) get_post_meta( $prompt->ID, self::META_VARIANT, true );
-			if ( '' === $test_id || ! in_array( $variant, self::VALID_VARIANTS, true ) ) {
+			if ( '' === $test_id ) {
+				continue;
+			}
+			$prompt_counts[ $test_id ] = ( $prompt_counts[ $test_id ] ?? 0 ) + 1;
+			if ( ! in_array( $variant, self::VALID_VARIANTS, true ) ) {
 				continue;
 			}
 			$grouped[ $test_id ][ $variant ][] = $prompt;
@@ -562,6 +565,7 @@ final class Newspack_Popups_AB_Tests {
 				'started_at'    => null,
 				'variants'      => [],
 				'duplicates'    => [],
+				'prompt_count'  => $prompt_counts[ $test_id ],
 			];
 			$published_at = [];
 			$control_goal = null;
@@ -840,9 +844,10 @@ final class Newspack_Popups_AB_Tests {
 	 * as one whose B was trashed, resumes that test: it keeps its ID and results,
 	 * takes the new name, goal and split, and gets a new B.
 	 *
-	 * A is claimed before B is made, so a second start on the same prompt fails
-	 * instead of making a second test, and a failure after that removes what this
-	 * call made. The goal and split are stored on A only, because A's are the
+	 * A new test claims A before B is made, so a second start on the same prompt
+	 * fails instead of making a second test, and a failure after that removes the
+	 * new test. A resume makes no claim and undoes nothing on failure: two resumes
+	 * at once can each make a B, which the dashboard then flags. The goal and split are stored on A only, because A's are the
 	 * test's. The meta is written directly, past guard_rest_ab_meta(), which is
 	 * why the placement rule is checked here.
 	 *
@@ -872,6 +877,15 @@ final class Newspack_Popups_AB_Tests {
 		if ( $resuming ) {
 			if ( 'a' !== get_post_meta( $prompt->ID, self::META_VARIANT, true ) || self::has_other_versions( $existing, $prompt->ID ) ) {
 				return self::already_in_test_error();
+			}
+			// A new name renames the whole test, trashed versions included, so it
+			// takes the same permission as the rename route.
+			$clean_name = self::sanitize_test_name( $name );
+			if ( is_wp_error( $clean_name ) ) {
+				return $clean_name;
+			}
+			if ( self::get_test_name( $existing ) !== $clean_name && ! self::can_rename_test( get_current_user_id(), $existing ) ) {
+				return new WP_Error( 'newspack_popups_ab_rename_forbidden', __( 'You can’t rename this test.', 'newspack-popups' ), [ 'status' => 403 ] );
 			}
 			$renamed = self::rename_test( $existing, $name );
 			if ( is_wp_error( $renamed ) ) {
@@ -928,13 +942,35 @@ final class Newspack_Popups_AB_Tests {
 		// Its own check is a read before the insert, not a lock, so two starts in
 		// the same instant can still both succeed; the result is a second B whose
 		// test has no A, which the dashboard shows as Incomplete. A row left empty
-		// by clearing a test would refuse every start, so it goes first.
-		delete_post_meta( $prompt_id, self::META_TEST_ID, '' );
+		// by clearing a test would refuse every start, so it goes first, by row:
+		// delete_post_meta() with an empty value deletes every row of the key,
+		// which would take another start's claim with it.
+		self::delete_empty_test_id_rows( $prompt_id );
 		if ( ! add_post_meta( $prompt_id, self::META_TEST_ID, $test_id, true ) ) {
 			self::delete_test_term( $test_id );
 			return self::already_in_test_error();
 		}
 		return $test_id;
+	}
+
+	/**
+	 * Delete a prompt's empty Test ID rows, leaving any with a value.
+	 *
+	 * @param int $prompt_id Prompt ID.
+	 */
+	private static function delete_empty_test_id_rows( $prompt_id ) {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Must read the rows as stored, past the meta cache, to find their IDs.
+		$meta_ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT meta_id FROM $wpdb->postmeta WHERE post_id = %d AND meta_key = %s AND meta_value = ''",
+				$prompt_id,
+				self::META_TEST_ID
+			)
+		);
+		foreach ( $meta_ids as $meta_id ) {
+			delete_metadata_by_mid( 'post', (int) $meta_id );
+		}
 	}
 
 	/**

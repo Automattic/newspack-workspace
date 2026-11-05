@@ -303,7 +303,7 @@ final class Newspack_Popups_API {
 
 	/**
 	 * Permission to start a test: may the user change the prompt's A/B settings
-	 * and create prompts, since the start creates version B.
+	 * and edit prompts, since the start creates version B.
 	 *
 	 * @param WP_REST_Request $request Request.
 	 * @return bool

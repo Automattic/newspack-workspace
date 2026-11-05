@@ -314,6 +314,75 @@ class ABStartTestTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * Discovery counts the prompts a start would refuse over, so the dashboard
+	 * offers Create Version B only where the start can succeed: a prompt with
+	 * no version counts, a trashed one doesn't.
+	 */
+	public function test_discovery_counts_the_prompts_a_start_refuses_over() {
+		$a = $this->create_prompt();
+		update_post_meta( $a, Newspack_Popups_AB_Tests::META_TEST_ID, 'spring-drive' );
+		update_post_meta( $a, Newspack_Popups_AB_Tests::META_VARIANT, 'a' );
+		$letterless = $this->create_prompt();
+		update_post_meta( $letterless, Newspack_Popups_AB_Tests::META_TEST_ID, 'spring-drive' );
+		$trashed_b = $this->create_prompt( 'inline', [ 'post_status' => 'trash' ] );
+		update_post_meta( $trashed_b, Newspack_Popups_AB_Tests::META_TEST_ID, 'spring-drive' );
+		update_post_meta( $trashed_b, Newspack_Popups_AB_Tests::META_VARIANT, 'b' );
+
+		$tests = array_column( Newspack_Popups_AB_Tests::get_tests(), null, 'test_id' );
+
+		$this->assertSame( 2, $tests['spring-drive']['prompt_count'] );
+	}
+
+	/**
+	 * Clearing an empty Test ID row leaves a claim another start already made.
+	 */
+	public function test_start_keeps_a_claim_made_beside_an_empty_row() {
+		$this->sign_in();
+		$a = $this->create_prompt();
+		add_post_meta( $a, Newspack_Popups_AB_Tests::META_TEST_ID, '' );
+		add_post_meta( $a, Newspack_Popups_AB_Tests::META_TEST_ID, 'autumn-drive' );
+
+		$response = $this->start_request( [ 'prompt_id' => $a ] );
+
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( [ 'autumn-drive' ], get_post_meta( $a, Newspack_Popups_AB_Tests::META_TEST_ID, false ) );
+	}
+
+	/**
+	 * A resume that renames the test needs the rename route's permission, which
+	 * covers trashed versions too; keeping the name needs only A.
+	 */
+	public function test_resume_renames_only_with_permission_over_every_version() {
+		$author = $this->sign_in( 'author' );
+		$editor = self::factory()->user->create( [ 'role' => 'editor' ] );
+		wp_insert_term( 'Spring drive', Newspack_Popups_AB_Tests::TAXONOMY, [ 'slug' => 'spring-drive' ] );
+		$a = $this->create_prompt( 'inline', [ 'post_author' => $author ] );
+		update_post_meta( $a, Newspack_Popups_AB_Tests::META_TEST_ID, 'spring-drive' );
+		update_post_meta( $a, Newspack_Popups_AB_Tests::META_VARIANT, 'a' );
+		$old_b = $this->create_prompt(
+			'inline',
+			[
+				'post_author' => $editor,
+				'post_status' => 'trash',
+			]
+		);
+		update_post_meta( $old_b, Newspack_Popups_AB_Tests::META_TEST_ID, 'spring-drive' );
+		update_post_meta( $old_b, Newspack_Popups_AB_Tests::META_VARIANT, 'b' );
+
+		$renamed = $this->start_request(
+			[
+				'prompt_id' => $a,
+				'name'      => 'Autumn drive',
+			]
+		);
+		$this->assertSame( 403, $renamed->get_status() );
+		$this->assertSame( 'Spring drive', Newspack_Popups_AB_Tests::get_test_name( 'spring-drive' ) );
+
+		$kept = $this->start_request( [ 'prompt_id' => $a ] );
+		$this->assertSame( 201, $kept->get_status() );
+	}
+
+	/**
 	 * A start that can't create version B leaves A out of any test and no name behind.
 	 */
 	public function test_start_rolls_back_when_version_b_fails() {
