@@ -28,6 +28,13 @@ final class Newspack_Popups_AB_Tests {
 	const USER_META_BUCKET_PREFIX = 'newspack_popups_ab_bucket_';
 
 	/**
+	 * Private taxonomy holding one term per test: the slug is the Test ID, the
+	 * name is what publishers see. Prompts still join a test through
+	 * META_TEST_ID, so a test with no term is valid and shows its ID as its name.
+	 */
+	const TAXONOMY = 'newspack_popups_ab_test';
+
+	/**
 	 * Autoloaded flag recording whether any valid test exists.
 	 *
 	 * Three states, and the distinction matters: '1' and absent both fall through to
@@ -55,6 +62,7 @@ final class Newspack_Popups_AB_Tests {
 	 */
 	public static function init() {
 		add_action( 'init', [ __CLASS__, 'register_meta' ] );
+		add_action( 'init', [ __CLASS__, 'register_taxonomy' ] );
 		add_filter( 'rest_pre_insert_' . Newspack_Popups::NEWSPACK_POPUPS_CPT, [ __CLASS__, 'guard_rest_ab_meta' ], 10, 2 );
 
 		// Anything that can add or remove a test invalidates the flag. Scoped to the
@@ -136,6 +144,30 @@ final class Newspack_Popups_AB_Tests {
 		if ( self::META_TEST_ID === $meta_key ) {
 			self::invalidate_has_tests_for_post( $object_id );
 		}
+	}
+
+	/**
+	 * Register the taxonomy that holds test names. Registered whether or not the
+	 * feature flag is on, like the meta, so names survive the flag being switched.
+	 */
+	public static function register_taxonomy() {
+		register_taxonomy(
+			self::TAXONOMY,
+			[],
+			[
+				'public'             => false,
+				'show_ui'            => false,
+				'show_in_menu'       => false,
+				'show_in_nav_menus'  => false,
+				'show_in_rest'       => false,
+				'show_tagcloud'      => false,
+				'show_in_quick_edit' => false,
+				'show_admin_column'  => false,
+				'hierarchical'       => false,
+				'rewrite'            => false,
+				'query_var'          => false,
+			]
+		);
 	}
 
 	/**
@@ -514,11 +546,14 @@ final class Newspack_Popups_AB_Tests {
 		ksort( $grouped );
 
 		$labels = self::get_goal_labels();
+		$names  = self::get_test_names( array_map( 'strval', array_keys( $grouped ) ) );
 		$tests  = [];
 		foreach ( $grouped as $test_id => $letters ) {
 			ksort( $letters );
-			$test = [
-				'test_id'       => (string) $test_id, // PHP stores an integer-like key as an int; get_stats() compares the ID strictly.
+			$test_id = (string) $test_id; // PHP stores an integer-like key as an int; get_stats() compares the ID strictly.
+			$test    = [
+				'test_id'       => $test_id,
+				'name'          => $names[ $test_id ] ?? $test_id,
 				'goal'          => '',
 				'goal_label'    => '',
 				'control_share' => self::DEFAULT_CONTROL_SHARE,
@@ -577,6 +612,176 @@ final class Newspack_Popups_AB_Tests {
 		}
 
 		return array_values( $tests );
+	}
+
+	/**
+	 * Display names for a set of tests, in one query.
+	 *
+	 * @param string[] $test_ids Test IDs.
+	 * @return array<string,string> Test ID => name, only for tests that have a term.
+	 */
+	private static function get_test_names( array $test_ids ) {
+		if ( empty( $test_ids ) ) {
+			return [];
+		}
+		$terms = get_terms(
+			[
+				'taxonomy'   => self::TAXONOMY,
+				'slug'       => $test_ids,
+				'hide_empty' => false,
+			]
+		);
+		$names = [];
+		foreach ( is_array( $terms ) ? $terms : [] as $term ) {
+			$names[ (string) $term->slug ] = $term->name;
+		}
+		return $names;
+	}
+
+	/**
+	 * A test's display name: its term's name, or the Test ID for a test that was
+	 * never named, which covers every test made before names existed.
+	 *
+	 * @param string $test_id Test ID.
+	 * @return string
+	 */
+	public static function get_test_name( $test_id ) {
+		$test_id = self::sanitize_test_id( $test_id );
+		if ( '' === $test_id ) {
+			return '';
+		}
+		return self::get_test_names( [ $test_id ] )[ $test_id ] ?? $test_id;
+	}
+
+	/**
+	 * Start a test record with a new, unique Test ID.
+	 *
+	 * The ID is the name's slug plus a random suffix, so it stays readable in GA4
+	 * reports, where it is the `ab_test_id` value, and never changes after a
+	 * rename. A name that leaves no slug, such as one in a non-Latin script,
+	 * gets `test` as its base. The ID is also what readers are bucketed on, which
+	 * is why nothing here ever rewrites one.
+	 *
+	 * @param string $name Display name.
+	 * @return string|WP_Error The new Test ID.
+	 */
+	public static function create_test( $name ) {
+		$name = self::sanitize_test_name( $name );
+		if ( is_wp_error( $name ) ) {
+			return $name;
+		}
+		// GA4 caps an event parameter value at 100 characters.
+		$base = trim( substr( self::sanitize_test_id( $name ), 0, 40 ), '-' );
+		$base = '' === $base ? 'test' : $base;
+		for ( $attempt = 0; $attempt < 5; $attempt++ ) {
+			$test_id = $base . '-' . bin2hex( random_bytes( 2 ) );
+			if ( self::is_test_id_in_use( $test_id ) ) {
+				continue;
+			}
+			$term = wp_insert_term( $name, self::TAXONOMY, [ 'slug' => $test_id ] );
+			return is_wp_error( $term ) ? $term : $test_id;
+		}
+		return new WP_Error( 'newspack_popups_ab_test_id', __( 'Could not create the test. Try again.', 'newspack-popups' ), [ 'status' => 500 ] );
+	}
+
+	/**
+	 * Clean a display name, refusing one that is empty or longer than a term name
+	 * can hold.
+	 *
+	 * @param mixed $name Raw name.
+	 * @return string|WP_Error
+	 */
+	private static function sanitize_test_name( $name ) {
+		$name = is_scalar( $name ) ? trim( sanitize_text_field( (string) $name ) ) : '';
+		if ( '' === $name ) {
+			return new WP_Error( 'newspack_popups_ab_test_name', __( 'Enter a test name.', 'newspack-popups' ), [ 'status' => 400 ] );
+		}
+		if ( mb_strlen( $name ) > 200 ) {
+			return new WP_Error( 'newspack_popups_ab_test_name', __( 'Use a test name of 200 characters or fewer.', 'newspack-popups' ), [ 'status' => 400 ] );
+		}
+		return $name;
+	}
+
+	/**
+	 * Change a test's display name. The Test ID, and so every reader's bucket and
+	 * every recorded result, stays the same.
+	 *
+	 * A test made before names existed has no term yet; renaming it creates one
+	 * with the existing ID as its slug.
+	 *
+	 * @param string $test_id Test ID.
+	 * @param string $name    New display name.
+	 * @return string|WP_Error The stored name.
+	 */
+	public static function rename_test( $test_id, $name ) {
+		$test_id = self::sanitize_test_id( $test_id );
+		$name    = self::sanitize_test_name( $name );
+		if ( is_wp_error( $name ) ) {
+			return $name;
+		}
+		$term = '' === $test_id ? false : get_term_by( 'slug', $test_id, self::TAXONOMY );
+		if ( $term ) {
+			$result = wp_update_term( $term->term_id, self::TAXONOMY, [ 'name' => $name ] );
+		} elseif ( '' !== $test_id && ! empty( self::get_test_prompt_ids( $test_id ) ) ) {
+			$result = wp_insert_term( $name, self::TAXONOMY, [ 'slug' => $test_id ] );
+		} else {
+			return new WP_Error( 'newspack_popups_ab_test_not_found', __( 'This test no longer exists.', 'newspack-popups' ), [ 'status' => 404 ] );
+		}
+		return is_wp_error( $result ) ? $result : $name;
+	}
+
+	/**
+	 * Whether a user may rename a test: only someone who may change the A/B
+	 * settings of every prompt in it, since the name shows on all of them.
+	 *
+	 * @param int    $user_id User ID.
+	 * @param string $test_id Test ID.
+	 * @return bool False for a test with no prompts.
+	 */
+	public static function can_rename_test( $user_id, $test_id ) {
+		$prompt_ids = self::get_test_prompt_ids( self::sanitize_test_id( $test_id ) );
+		foreach ( $prompt_ids as $prompt_id ) {
+			if ( ! self::can_manage_tests( $user_id, $prompt_id ) ) {
+				return false;
+			}
+		}
+		return ! empty( $prompt_ids );
+	}
+
+	/**
+	 * IDs of every prompt carrying a Test ID, trashed ones included, so a trashed
+	 * prompt still holds its ID against reuse.
+	 *
+	 * @param string $test_id Sanitized Test ID.
+	 * @return int[]
+	 */
+	private static function get_test_prompt_ids( $test_id ) {
+		if ( '' === $test_id ) {
+			return [];
+		}
+		return array_map(
+			'intval',
+			get_posts(
+				[
+					'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+					'post_status'    => [ 'publish', 'future', 'draft', 'pending', 'private', 'trash' ],
+					'fields'         => 'ids',
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Prompts CPT; config-scale.
+					'meta_key'       => self::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+					'meta_value'     => $test_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				]
+			)
+		);
+	}
+
+	/**
+	 * Whether a Test ID already belongs to a test, named or not.
+	 *
+	 * @param string $test_id Test ID.
+	 * @return bool
+	 */
+	private static function is_test_id_in_use( $test_id ) {
+		return (bool) get_term_by( 'slug', $test_id, self::TAXONOMY ) || ! empty( self::get_test_prompt_ids( $test_id ) );
 	}
 
 	/**
