@@ -40,11 +40,15 @@ label:where(:not(.newspack-ui *)) {
 	input[type="time"],
 	input[type="datetime"],
 	input[type="datetime-local"],
-	input[type="zip"],
-	input[type="color"]
+	input[type="zip"]
 ):where(:not(.newspack-ui *)) {
 	@include mixins.input-skin;
 	@include mixins.input;
+}
+
+input[type="color"]:where(:not(.newspack-ui *)) {
+	@include mixins.input-skin;
+	@include mixins.input($fill: false);
 }
 
 :root textarea:where(:not(.newspack-ui *, .wc-block-components-textarea)) {
@@ -75,7 +79,7 @@ label:where(:not(.newspack-ui *)) {
 }
 
 /*! rtl:ignore */
-select:where(:not([multiple], [size], .newspack-ui *)):dir(rtl) {
+:root select:where(:not([multiple], [size], .newspack-ui *)):dir(rtl) {
 	background-image: $select-caret;
 	background-position:
 		left calc(var(--wp--preset--spacing--20) + 8px) center,
@@ -302,6 +306,18 @@ input[type="submit"]:not(.newspack-ui__button) {
 	}
 }
 
+/*! rtl:ignore */
+:root .select2-container.select2-container--default:where(:not(.newspack-ui *)) .select2-selection--single:dir(rtl) {
+	background-image: $select-caret;
+	background-position:
+		left calc(var(--wp--preset--spacing--20) + 8px) center,
+		left calc(var(--wp--preset--spacing--20) + 12px) center;
+
+	@media (forced-colors: active) {
+		background-image: none;
+	}
+}
+
 :root .select2-container.select2-container--default.select2-container--open:where(:not(.newspack-ui *)) .select2-selection--single {
 	@include mixins.focus-edge;
 	border-radius: var(--wp--custom--border--radius-large);
@@ -348,11 +364,13 @@ input[type="submit"]:not(.newspack-ui__button) {
 }
 
 :root .select2-container:where(:not(.newspack-ui *)) .select2-dropdown.select2-dropdown--below {
+	border-block-start: 0;
 	border-start-end-radius: 0;
 	border-start-start-radius: 0;
 }
 
 :root .select2-container:where(:not(.newspack-ui *)) .select2-dropdown.select2-dropdown--above {
+	border-block-end: 0;
 	border-end-end-radius: 0;
 	border-end-start-radius: 0;
 }

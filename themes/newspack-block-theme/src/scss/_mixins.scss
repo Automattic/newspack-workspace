@@ -69,15 +69,21 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 	padding: calc(var(--wp--custom--spacing--25) - 1px) calc(var(--wp--custom--spacing--25) + 1px);
 }
 
-@mixin input {
+@mixin input($fill: true) {
+	@at-root :where(#{&}) {
+		display: block;
+
+		@if $fill {
+			width: 100%;
+		}
+	}
+
 	box-shadow: none;
 	box-sizing: border-box;
-	display: block;
 	transition:
 		background-color motion.$duration-color motion.$ease-color,
 		border-color motion.$duration-color motion.$ease-color,
 		box-shadow motion.$duration-color motion.$ease-color;
-	width: 100%;
 
 	&::placeholder {
 		color: var(--wp--preset--color--contrast-3);

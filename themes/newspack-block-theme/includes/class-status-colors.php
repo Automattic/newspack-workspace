@@ -13,9 +13,9 @@ defined( 'ABSPATH' ) || exit;
  * Derives error, success and warning colors that stay readable on the site's
  * base color and keeps them out of the way of a red brand.
  *
- * The rule is the same as Newspack_UI_Palette::semantic_steps() in newspack-plugin.
- * Both must change together, and tests/test-status-colors.php shares its
- * vectors with that class's tests.
+ * The upcoming newspack-ui "Theme" style is meant to derive the same colors, so
+ * tests/test-status-colors.php pins the rule with fixed vectors; change them
+ * only together with that style.
  */
 final class Status_Colors {
 	const ERROR_TEXT_STEPS = [ '#b32d2e', '#8a2424', '#691c1c' ];

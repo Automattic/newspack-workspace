@@ -63,7 +63,7 @@ class Test_Global_Styles extends WP_UnitTestCase {
 	 * @param string $file Path relative to the theme root.
 	 */
 	public function test_resolved_values_have_balanced_parentheses( $file ) {
-		$styles = 'theme.json' === $file ? $this->resolved_styles() : $this->resolved_variation_styles( $file );
+		$styles = $this->styles_for( $file );
 		$this->assertNotEmpty( $styles );
 		$bad = [];
 		array_walk_recursive(
@@ -183,6 +183,18 @@ class Test_Global_Styles extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The status color roles in theme.json match the derivation's defaults.
+	 */
+	public function test_status_color_roles_match_defaults() {
+		$colors = wp_get_global_settings( [ 'custom', 'color' ] );
+
+		foreach ( Newspack_Block_Theme\Status_Colors::DEFAULTS as $role => $value ) {
+			$this->assertArrayHasKey( $role, $colors );
+			$this->assertSame( strtolower( $value ), strtolower( $colors[ $role ] ), $role );
+		}
+	}
+
+	/**
 	 * The button mix target defaults to the base preset.
 	 */
 	public function test_button_mix_target_defaults_to_base() {
@@ -266,7 +278,7 @@ class Test_Global_Styles extends WP_UnitTestCase {
 		foreach ( [ [ 'typography', 'fontFamily' ], [ 'typography', 'fontSize' ], [ 'typography', 'lineHeight' ], [ 'color', 'text' ] ] as $path ) {
 			$value = $caption[ $path[0] ][ $path[1] ] ?? '';
 			$this->assertNotEmpty( $value, $file . ' ' . implode( '.', $path ) );
-			$this->assertStringNotContainsString( 'var( ', $value, $file . ' ' . implode( '.', $path ) );
+			$this->assertStringNotContainsString( 'var(', $value, $file . ' ' . implode( '.', $path ) );
 		}
 	}
 
