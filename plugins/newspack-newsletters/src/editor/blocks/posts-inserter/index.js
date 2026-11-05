@@ -125,7 +125,10 @@ const PostsInserterBlock = ( {
 
 	const insertPosts = () => {
 		replaceBlocks( templateBlocks );
-		setInsertedPostsIds( handledPostIds );
+		setInsertedPostsIds(
+			handledPostIds,
+			templateBlocks.map( block => block.clientId )
+		);
 	};
 
 	useEffect( () => {
