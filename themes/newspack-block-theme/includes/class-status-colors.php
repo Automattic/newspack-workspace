@@ -122,7 +122,7 @@ final class Status_Colors {
 		$handle = 'newspack-block-theme-status-colors';
 		\wp_register_style( $handle, false, [], \wp_get_theme()->get( 'Version' ) );
 		\wp_enqueue_style( $handle );
-		\wp_add_inline_style( $handle, ':root, .editor-styles-wrapper {' . $declarations . ' }' );
+		\wp_add_inline_style( $handle, ':root:root, :root .editor-styles-wrapper {' . $declarations . ' }' );
 	}
 
 	/**

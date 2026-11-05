@@ -43,7 +43,7 @@ final class Button_Hover_Guard {
 		$handle = 'newspack-block-theme-button-hover-guard';
 		\wp_register_style( $handle, false, [], \wp_get_theme()->get( 'Version' ) );
 		\wp_enqueue_style( $handle );
-		\wp_add_inline_style( $handle, sprintf( ':root, .editor-styles-wrapper { --wp--custom--button--mix: %s; }', $target ) );
+		\wp_add_inline_style( $handle, sprintf( ':root:root, :root .editor-styles-wrapper { --wp--custom--button--mix: %s; }', $target ) );
 	}
 
 	/**

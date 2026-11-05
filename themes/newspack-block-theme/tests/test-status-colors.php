@@ -578,6 +578,21 @@ class Test_Status_Colors extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The declarations outrank core's global styles declared on the root.
+	 */
+	public function test_selector_outranks_global_styles() {
+		$css = $this->get_css(
+			[
+				'base'     => '#1E1E1E',
+				'contrast' => '#ffffff',
+				'accent'   => '#0099cc',
+			]
+		);
+
+		$this->assertStringStartsWith( ':root:root, :root .editor-styles-wrapper {', $css );
+	}
+
+	/**
 	 * Every emitted value is a plain hex color.
 	 */
 	public function test_values_are_plain_hex() {

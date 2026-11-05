@@ -57,6 +57,8 @@ class Test_Button_Hover_Guard extends WP_UnitTestCase {
 	 * Drop the cached user global styles a test saved.
 	 */
 	public function tear_down() {
+		wp_dequeue_style( 'newspack-block-theme-button-hover-guard' );
+		wp_deregister_style( 'newspack-block-theme-button-hover-guard' );
 		wp_clean_theme_json_cache();
 		parent::tear_down();
 	}
@@ -233,6 +235,28 @@ class Test_Button_Hover_Guard extends WP_UnitTestCase {
 			]
 		);
 		$this->assertNull( Button_Hover_Guard::get_target() );
+	}
+
+	/**
+	 * The mix target outranks core's global styles declared on the root.
+	 */
+	public function test_selector_outranks_global_styles() {
+		$this->set_user_styles(
+			[
+				'elements' => [
+					'button' => [
+						'color' => [
+							'background' => 'var:preset|color|accent-3',
+							'text'       => '#ffffff',
+						],
+					],
+				],
+			]
+		);
+		Button_Hover_Guard::enqueue_block_assets();
+
+		$css = implode( '', (array) wp_styles()->get_data( 'newspack-block-theme-button-hover-guard', 'after' ) );
+		$this->assertSame( ':root:root, :root .editor-styles-wrapper { --wp--custom--button--mix: #000000; }', $css );
 	}
 
 	/**
