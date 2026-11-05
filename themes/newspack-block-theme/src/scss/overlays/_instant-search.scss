@@ -614,8 +614,8 @@ body .jetpack-instant-search {
 
 		&-text {
 			color: inherit;
-			font-size: var(--newspack-ui-font-size-2xs, 12px);
-			line-height: var(--newspack-ui-line-height-2xs, 1.3333);
+			font-size: var(--newspack-ui-font-size-fine, var(--newspack-ui-font-size-2xs, 12px));
+			line-height: var(--newspack-ui-line-height-fine, var(--newspack-ui-line-height-2xs, 1.3333));
 		}
 	}
 }
