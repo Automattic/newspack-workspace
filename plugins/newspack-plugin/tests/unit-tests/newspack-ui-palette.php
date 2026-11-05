@@ -138,4 +138,548 @@ class Newspack_Test_UI_Palette extends WP_UnitTestCase {
 		$this->assertSame( '#eae8e3', Newspack_UI_Palette::surface_subtle( '#000000', '#f2f0ea' ) );
 		$this->assertSame( Newspack_UI_Palette::mix( '#ffffff', 4, '#1e1e1e' ), Newspack_UI_Palette::surface_subtle( '#ffffff', '#1e1e1e' ) );
 	}
+
+	/**
+	 * Light bases and the brand the vectors use.
+	 *
+	 * @return array[]
+	 */
+	public function data_light_bases() {
+		return [
+			'neutral'    => [ '#ffffff', '#003da5' ],
+			'cream'      => [ '#f7f3ea', '#003da5' ],
+			'acid'       => [ '#ececec', '#003da5' ],
+			'tabloid'    => [ '#ffffff', '#e10600' ],
+			'gazette'    => [ '#f7f3ea', '#7a1f1f' ],
+			'ledger'     => [ '#f2f0ea', '#003da5' ],
+			'near white' => [ '#fdfdfd', '#003da5' ],
+		];
+	}
+
+	/**
+	 * Every base the vectors use.
+	 *
+	 * @return array[]
+	 */
+	public function data_bases() {
+		return $this->data_light_bases() + [
+			'nocturne'   => [ '#1e1e1e', '#003da5' ],
+			'night red'  => [ '#1e1e1e', '#e10600' ],
+			'charcoal'   => [ '#303030', '#003da5' ],
+			'charcoal 2' => [ '#2b2b2b', '#003da5' ],
+		];
+	}
+
+	/**
+	 * Text steps reach Lc 60 on every base.
+	 *
+	 * @dataProvider data_bases
+	 *
+	 * @param string $base  Base.
+	 * @param string $brand Brand.
+	 */
+	public function test_error_meets_lc_60_on_base( $base, $brand ) {
+		$steps = Newspack_UI_Palette::status_steps( $base, $brand );
+
+		foreach ( [ 'error', 'success', 'warning' ] as $role ) {
+			$this->assertGreaterThanOrEqual( 60, Newspack_UI_Palette::lc( $steps[ $role ]['text'], $base ), "$role text on $base" );
+		}
+	}
+
+	/**
+	 * Error is never lighter than Phase 1 on a light base.
+	 *
+	 * @dataProvider data_light_bases
+	 *
+	 * @param string $base  Base.
+	 * @param string $brand Brand.
+	 */
+	public function test_error_not_lighter_than_phase_1_on_light_base( $base, $brand ) {
+		$steps = Newspack_UI_Palette::status_steps( $base, $brand );
+
+		$this->assertContains( $steps['error']['text'], Newspack_UI_Palette::ERROR_TEXT_STEPS );
+	}
+
+	/**
+	 * A bright red brand pushes error darker on a light base.
+	 */
+	public function test_bright_red_brand_pushes_error_darker() {
+		$steps = Newspack_UI_Palette::status_steps( '#ffffff', '#e10600' );
+		$index = array_search( $steps['error']['text'], Newspack_UI_Palette::ERROR_TEXT_STEPS, true );
+
+		$this->assertGreaterThan( 0, $index );
+		$this->assertSame( $steps['error']['edge'], Newspack_UI_Palette::ERROR_EDGE_STEPS[ $index ] );
+	}
+
+	/**
+	 * A brand already darker than the error step leaves error alone.
+	 */
+	public function test_dark_red_brand_leaves_error() {
+		$this->assertSame( '#b32d2e', Newspack_UI_Palette::status_steps( '#f7f3ea', '#7a1f1f' )['error']['text'] );
+	}
+
+	/**
+	 * A non-red brand leaves error alone.
+	 */
+	public function test_non_red_brand_leaves_error() {
+		$this->assertSame( '#b32d2e', Newspack_UI_Palette::status_steps( '#ffffff', '#003da5' )['error']['text'] );
+	}
+
+	/**
+	 * A grey brand is not read as a hue near red.
+	 */
+	public function test_grey_brand_leaves_error() {
+		$this->assertSame( '#b32d2e', Newspack_UI_Palette::status_steps( '#ffffff', '#cccccc' )['error']['text'] );
+		$this->assertSame( '#b32d2e', Newspack_UI_Palette::status_steps( '#ffffff', '#ffffff' )['error']['text'] );
+	}
+
+	/**
+	 * On a dark base a red brand moves error lighter and away from its lightness.
+	 */
+	public function test_dark_base_red_brand_moves_error_lighter() {
+		$red  = Newspack_UI_Palette::status_steps( '#1e1e1e', '#e10600' );
+		$blue = Newspack_UI_Palette::status_steps( '#1e1e1e', '#003da5' );
+
+		$this->assertGreaterThan( Newspack_UI_Palette::oklab_lightness( $blue['error']['text'] ), Newspack_UI_Palette::oklab_lightness( $red['error']['text'] ) );
+		$this->assertGreaterThanOrEqual( 0.08, abs( Newspack_UI_Palette::oklab_lightness( $red['error']['text'] ) - Newspack_UI_Palette::oklab_lightness( '#e10600' ) ) );
+		$this->assertGreaterThanOrEqual( 60, Newspack_UI_Palette::lc( $red['error']['text'], '#1e1e1e' ) );
+	}
+
+	/**
+	 * A dark base picks light steps.
+	 */
+	public function test_dark_base_picks_light_steps() {
+		$steps = Newspack_UI_Palette::status_steps( '#1e1e1e', '#003da5' );
+
+		$this->assertGreaterThanOrEqual( 60, Newspack_UI_Palette::lc( $steps['error']['text'], '#1e1e1e' ) );
+		$this->assertGreaterThan( Newspack_UI_Palette::oklab_lightness( '#b32d2e' ), Newspack_UI_Palette::oklab_lightness( $steps['error']['text'] ) );
+	}
+
+	/**
+	 * The error edge reaches Lc 25 on every base.
+	 *
+	 * @dataProvider data_bases
+	 *
+	 * @param string $base  Base.
+	 * @param string $brand Brand.
+	 */
+	public function test_error_edge_meets_lc_25( $base, $brand ) {
+		$this->assertGreaterThanOrEqual( 25, Newspack_UI_Palette::lc( Newspack_UI_Palette::status_steps( $base, $brand )['error']['edge'], $base ) );
+	}
+
+	/**
+	 * Badge text reads on its tint at Lc 60 or more.
+	 *
+	 * @dataProvider data_bases
+	 *
+	 * @param string $base  Base.
+	 * @param string $brand Brand.
+	 */
+	public function test_badge_text_meets_lc_60_on_tint( $base, $brand ) {
+		$steps = Newspack_UI_Palette::status_steps( $base, $brand );
+
+		foreach ( [ 'error', 'success', 'warning' ] as $role ) {
+			$this->assertGreaterThanOrEqual( 60, Newspack_UI_Palette::lc( $steps[ $role ]['text'], $steps[ $role ]['tint'] ), "$role text on its tint on $base" );
+		}
+	}
+
+	/**
+	 * A 3-digit hex input is normalized.
+	 */
+	public function test_short_hex_is_normalized() {
+		$this->assertSame( Newspack_UI_Palette::status_steps( '#ffffff', '#003da5' ), Newspack_UI_Palette::status_steps( '#FFF', '#003DA5' ) );
+	}
+
+	/**
+	 * An unusable contrast color falls back to white on a dark base and black on a light one.
+	 */
+	public function test_unusable_contrast_falls_back() {
+		$this->assertSame( Newspack_UI_Palette::status_steps( '#1e1e1e', '#003da5', '#ffffff' ), Newspack_UI_Palette::status_steps( '#1e1e1e', '#003da5', 'nope' ) );
+		$this->assertSame( Newspack_UI_Palette::status_steps( '#f7f3ea', '#003da5', '#000000' ), Newspack_UI_Palette::status_steps( '#f7f3ea', '#003da5', '' ) );
+	}
+
+	/**
+	 * The shared vectors: the exact values both implementations must give.
+	 *
+	 * @dataProvider data_vectors
+	 *
+	 * @param string $base     Base.
+	 * @param string $brand    Brand.
+	 * @param string $contrast Text color.
+	 * @param array  $expected Expected steps.
+	 */
+	public function test_vectors( $base, $brand, $contrast, $expected ) {
+		$this->assertSame( $expected, Newspack_UI_Palette::status_steps( $base, $brand, $contrast ) );
+	}
+
+	/**
+	 * The vectors copied from the block theme's tests/test-status-colors.php; keep both in step.
+	 *
+	 * @return array[]
+	 */
+	public function data_vectors() {
+		return [
+			'neutral'    => [
+				'#ffffff',
+				'#003da5',
+				'#1e1e1e',
+				[
+					'error'   => [
+						'text' => '#b32d2e',
+						'edge' => '#d63638',
+						'tint' => '#fcf0f1',
+					],
+					'success' => [
+						'text' => '#007017',
+						'mark' => '#008a20',
+						'tint' => '#edfaef',
+					],
+					'warning' => [
+						'text' => '#755100',
+						'mark' => '#bd8600',
+						'tint' => '#fcf9e8',
+					],
+					'notice'  => [ 'tint' => '#f7f7f7' ],
+				],
+			],
+			'cream'      => [
+				'#f7f3ea',
+				'#003da5',
+				'#1e1e1e',
+				[
+					'error'   => [
+						'text' => '#b32d2e',
+						'edge' => '#d63638',
+						'tint' => '#f4e5dd',
+					],
+					'success' => [
+						'text' => '#007017',
+						'mark' => '#008a20',
+						'tint' => '#e6eedb',
+					],
+					'warning' => [
+						'text' => '#755100',
+						'mark' => '#bd8600',
+						'tint' => '#f4edd5',
+					],
+					'notice'  => [ 'tint' => '#efebe3' ],
+				],
+			],
+			'nocturne'   => [
+				'#1e1e1e',
+				'#003da5',
+				'#ffffff',
+				[
+					'error'   => [
+						'text' => '#facfd2',
+						'edge' => '#d63638',
+						'tint' => '#332422',
+					],
+					'success' => [
+						'text' => '#b8e6bf',
+						'mark' => '#008a20',
+						'tint' => '#212a21',
+					],
+					'warning' => [
+						'text' => '#fcf9e8',
+						'mark' => '#dba617',
+						'tint' => '#312d23',
+					],
+					'notice'  => [ 'tint' => '#252525' ],
+				],
+			],
+			'night-red'  => [
+				'#1e1e1e',
+				'#e10600',
+				'#ffffff',
+				[
+					'error'   => [
+						'text' => '#fcf0f1',
+						'edge' => '#facfd2',
+						'tint' => '#343030',
+					],
+					'success' => [
+						'text' => '#b8e6bf',
+						'mark' => '#008a20',
+						'tint' => '#212a21',
+					],
+					'warning' => [
+						'text' => '#fcf9e8',
+						'mark' => '#dba617',
+						'tint' => '#312d23',
+					],
+					'notice'  => [ 'tint' => '#252525' ],
+				],
+			],
+			'tabloid'    => [
+				'#ffffff',
+				'#e10600',
+				'#1e1e1e',
+				[
+					'error'   => [
+						'text' => '#691c1c',
+						'edge' => '#8a2424',
+						'tint' => '#fcf0f1',
+					],
+					'success' => [
+						'text' => '#007017',
+						'mark' => '#008a20',
+						'tint' => '#edfaef',
+					],
+					'warning' => [
+						'text' => '#755100',
+						'mark' => '#bd8600',
+						'tint' => '#fcf9e8',
+					],
+					'notice'  => [ 'tint' => '#f7f7f7' ],
+				],
+			],
+			'gazette'    => [
+				'#f7f3ea',
+				'#7a1f1f',
+				'#1e1e1e',
+				[
+					'error'   => [
+						'text' => '#b32d2e',
+						'edge' => '#d63638',
+						'tint' => '#f4e5dd',
+					],
+					'success' => [
+						'text' => '#007017',
+						'mark' => '#008a20',
+						'tint' => '#e6eedb',
+					],
+					'warning' => [
+						'text' => '#755100',
+						'mark' => '#bd8600',
+						'tint' => '#f4edd5',
+					],
+					'notice'  => [ 'tint' => '#efebe3' ],
+				],
+			],
+			'acid'       => [
+				'#ececec',
+				'#003da5',
+				'#1e1e1e',
+				[
+					'error'   => [
+						'text' => '#b32d2e',
+						'edge' => '#d63638',
+						'tint' => '#e9dedf',
+					],
+					'success' => [
+						'text' => '#007017',
+						'mark' => '#008a20',
+						'tint' => '#dbe7dd',
+					],
+					'warning' => [
+						'text' => '#755100',
+						'mark' => '#bd8600',
+						'tint' => '#e9e6d7',
+					],
+					'notice'  => [ 'tint' => '#e5e5e5' ],
+				],
+			],
+			'ledger'     => [
+				'#f2f0ea',
+				'#003da5',
+				'#1e1e1e',
+				[
+					'error'   => [
+						'text' => '#b32d2e',
+						'edge' => '#d63638',
+						'tint' => '#efe2dd',
+					],
+					'success' => [
+						'text' => '#007017',
+						'mark' => '#008a20',
+						'tint' => '#e1ebdb',
+					],
+					'warning' => [
+						'text' => '#755100',
+						'mark' => '#bd8600',
+						'tint' => '#efead5',
+					],
+					'notice'  => [ 'tint' => '#eae8e3' ],
+				],
+			],
+			'near-white' => [
+				'#fdfdfd',
+				'#003da5',
+				'#1e1e1e',
+				[
+					'error'   => [
+						'text' => '#b32d2e',
+						'edge' => '#d63638',
+						'tint' => '#faeeef',
+					],
+					'success' => [
+						'text' => '#007017',
+						'mark' => '#008a20',
+						'tint' => '#ebf8ed',
+					],
+					'warning' => [
+						'text' => '#755100',
+						'mark' => '#bd8600',
+						'tint' => '#faf7e6',
+					],
+					'notice'  => [ 'tint' => '#f5f5f5' ],
+				],
+			],
+			'charcoal'   => [
+				'#303030',
+				'#003da5',
+				'#ffffff',
+				[
+					'error'   => [
+						'text' => '#facfd2',
+						'edge' => '#d63638',
+						'tint' => '#443432',
+					],
+					'success' => [
+						'text' => '#b8e6bf',
+						'mark' => '#008a20',
+						'tint' => '#313a31',
+					],
+					'warning' => [
+						'text' => '#fcf9e8',
+						'mark' => '#dba617',
+						'tint' => '#423d33',
+					],
+					'notice'  => [ 'tint' => '#373737' ],
+				],
+			],
+			'charcoal2'  => [
+				'#2b2b2b',
+				'#003da5',
+				'#ffffff',
+				[
+					'error'   => [
+						'text' => '#facfd2',
+						'edge' => '#d63638',
+						'tint' => '#3f2f2e',
+					],
+					'success' => [
+						'text' => '#b8e6bf',
+						'mark' => '#008a20',
+						'tint' => '#2d362c',
+					],
+					'warning' => [
+						'text' => '#fcf9e8',
+						'mark' => '#dba617',
+						'tint' => '#3e392f',
+					],
+					'notice'  => [ 'tint' => '#323232' ],
+				],
+			],
+		];
+	}
+
+	/**
+	 * Neutral emits no status tokens.
+	 */
+	public function test_status_defaults_not_emitted() {
+		$this->assertSame( [], Newspack_UI_Palette::status_properties( '#ffffff', '#003da5', '#1e1e1e' ) );
+	}
+
+	/**
+	 * The theme's roles map onto newspack-ui's token names.
+	 */
+	public function test_status_properties_map_theme_roles() {
+		$steps      = Newspack_UI_Palette::status_steps( '#1e1e1e', '#003da5', '#ffffff' );
+		$properties = Newspack_UI_Palette::status_properties( '#1e1e1e', '#003da5', '#ffffff' );
+
+		$this->assertSame( $steps['error']['text'], $properties['error-text'] );
+		$this->assertSame( $steps['error']['tint'], $properties['error-tint'] );
+		$this->assertSame( $steps['success']['tint'], $properties['success-tint'] );
+		$this->assertSame( $steps['warning']['mark'], $properties['warning'] );
+		$this->assertSame( $steps['warning']['text'], $properties['warning-text'] );
+		$this->assertSame( $steps['warning']['tint'], $properties['warning-tint'] );
+	}
+
+	/**
+	 * Roles without a theme rule: derived values on white, Nocturne and mid-grey.
+	 *
+	 * @dataProvider data_derived_roles
+	 *
+	 * @param string $base     Base.
+	 * @param string $contrast Text color.
+	 * @param array  $expected Expected derived tokens.
+	 */
+	public function test_derived_roles( $base, $contrast, $expected ) {
+		$properties = Newspack_UI_Palette::status_properties( $base, '#003da5', $contrast );
+
+		foreach ( $expected as $token => $value ) {
+			$this->assertSame( $value, $properties[ $token ] ?? null, "$token on $base" );
+		}
+	}
+
+	/**
+	 * Derived role vectors.
+	 *
+	 * @return array[]
+	 */
+	public function data_derived_roles() {
+		return [
+			'cream'    => [
+				'#f7f3ea',
+				'#1e1e1e',
+				[
+					'error-border'       => '#f1bfba',
+					'error-tint-hover'   => '#f4e5dd',
+					'error-tint-pressed' => '#f1bfba',
+					'success-border'     => '#abd7a8',
+					'warning-border'     => '#ebd797',
+					'disabled-ink'       => '#8d8b86',
+				],
+			],
+			'nocturne' => [
+				'#1e1e1e',
+				'#ffffff',
+				[
+					'error-border'       => '#b13634',
+					'error-tint-hover'   => '#332422',
+					'error-tint-pressed' => '#b13634',
+					'success-border'     => '#1c7025',
+					'warning-border'     => '#61502a',
+					'warning-dot'        => '#dba617',
+					'disabled-ink'       => '#7a7a7a',
+				],
+			],
+			'mid grey' => [
+				'#808080',
+				'#ffffff',
+				[
+					'error-border'       => '#b8a4a5',
+					'error-tint-hover'   => '#8e8989',
+					'error-tint-pressed' => '#b4a1a2',
+					'success-border'     => '#9baf9d',
+					'warning-border'     => '#9c9c98',
+					'warning-dot'        => '#fcf9e8',
+					'disabled-ink'       => '#b7b7b7',
+				],
+			],
+		];
+	}
+
+	/**
+	 * Derived roles hold their APCA guards on every base.
+	 *
+	 * @dataProvider data_bases
+	 *
+	 * @param string $base  Base.
+	 * @param string $brand Brand.
+	 */
+	public function test_derived_roles_meet_guards( $base, $brand ) {
+		$dark       = 'white' === \Newspack\newspack_get_color_contrast( $base );
+		$contrast   = $dark ? '#ffffff' : '#1e1e1e';
+		$properties = Newspack_UI_Palette::status_properties( $base, $brand, $contrast ) + Newspack_UI_Palette::STATUS_DEFAULTS;
+		$steps      = Newspack_UI_Palette::status_steps( $base, $brand, $contrast );
+
+		$this->assertGreaterThanOrEqual( 25, Newspack_UI_Palette::lc( $properties['warning-dot'], $base ), "dot on $base" );
+		$this->assertGreaterThanOrEqual( 45, Newspack_UI_Palette::lc( $steps['error']['text'], $properties['error-tint-pressed'] ), "ink on pressed on $base" );
+		foreach ( [ 'error', 'success', 'warning' ] as $role ) {
+			$this->assertGreaterThanOrEqual( min( 25, Newspack_UI_Palette::lc( Newspack_UI_Palette::STATUS_DEFAULTS[ "$role-border" ], '#ffffff' ) ), Newspack_UI_Palette::lc( $properties[ "$role-border" ], $base ), "$role border on $base" );
+		}
+	}
 }
