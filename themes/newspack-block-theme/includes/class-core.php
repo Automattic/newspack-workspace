@@ -34,8 +34,8 @@ final class Core {
 	 * @return void
 	 */
 	public static function theme_support() {
-		// Enqueue editor styles.
-		\add_editor_style( 'style.css' );
+		// Enqueue editor styles. Loaded from dist/ because a child theme's style.css would replace a root style.css here.
+		\add_editor_style( 'dist/style.css' );
 
 		// Make theme available for translation.
 		\load_theme_textdomain( 'newspack-block-theme' );
@@ -54,9 +54,9 @@ final class Core {
 		// Register theme stylesheet.
 		\wp_register_style(
 			'newspack_block_theme-style',
-			\get_stylesheet_directory_uri() . '/style.css',
+			\get_parent_theme_file_uri( 'style.css' ),
 			array(),
-			\wp_get_theme()->get( 'Version' )
+			\wp_get_theme( \get_template() )->get( 'Version' )
 		);
 
 		// Enqueue theme stylesheet.
@@ -71,7 +71,7 @@ final class Core {
 			return;
 		}
 		// Enqueue editor JavaScript.
-		wp_enqueue_script( 'editor-script', get_theme_file_uri( '/dist/editor.js' ), array( 'wp-blocks', 'wp-dom' ), wp_get_theme()->get( 'Version' ), true );
+		wp_enqueue_script( 'editor-script', get_theme_file_uri( '/dist/editor.js' ), array( 'wp-blocks', 'wp-dom' ), wp_get_theme( get_template() )->get( 'Version' ), true );
 	}
 
 	/**

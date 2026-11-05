@@ -40,6 +40,32 @@ This theme contains one custom block (`includes/blocks/subtitle-block/`) which i
 
 Two style variations are available in `styles/`: `harold.json` and `paul.json`. Each is a partial `theme.json` that overrides colors and typography from the base theme. Style variations can be selected from Appearance > Design in wp-admin.
 
+### Child themes
+
+The theme only loads its own CSS, so a child theme with only a `style.css` header and a `theme.json` needs no PHP. A child theme that adds CSS loads it from its `functions.php`:
+
+```php
+add_action(
+	'wp_enqueue_scripts',
+	function () {
+		wp_enqueue_style( 'my-child-style', get_stylesheet_uri(), [ 'newspack_block_theme-style' ], wp_get_theme()->get( 'Version' ) );
+	}
+);
+
+add_action(
+	'after_setup_theme',
+	function () {
+		add_editor_style( 'editor-style.css' );
+	},
+	11
+);
+```
+
+Two things in this setup are easy to miss:
+
+- **Editor style order:** a child theme's `functions.php` runs before the parent's, so at the default priority its editor styles load first and lose any tie with the parent's. Priority 11 loads them last.
+- **`dist/style.css`:** the theme loads its editor styles from this path because a `style.css` in the child theme would otherwise replace them. A child theme should not add its own `dist/style.css` for the same reason.
+
 ### Variables
 
 A cheat sheet of the most important CSS variables is available [here](https://github.com/Automattic/newspack-block-theme/blob/trunk/.github/VARIABLES.md).
