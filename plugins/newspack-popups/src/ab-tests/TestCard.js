@@ -61,9 +61,10 @@ const TestCard = ( { test, data } ) => {
 	const hasStats = hasStarted && stats && stats.source.state !== 'unavailable';
 
 	const ineligible = letters.filter( letter => false === test.variants[ letter ].eligible );
-	// An Incomplete test whose A is still here can get its B from the card. One
-	// whose A is gone has nothing to copy.
-	const canCreateVersionB = status === 'incomplete' && !! test.variants.a && false !== test.variants.a.eligible;
+	// An Incomplete test whose A is still here can get its B from the card, as
+	// long as A is its only prompt: a start refuses a test with any other, such
+	// as a second A or one with no version. One whose A is gone has nothing to copy.
+	const canCreateVersionB = status === 'incomplete' && !! test.variants.a && false !== test.variants.a.eligible && 1 === test.prompt_count;
 
 	const load = refresh => {
 		setLoading( true );

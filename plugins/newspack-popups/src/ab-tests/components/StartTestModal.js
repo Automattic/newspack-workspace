@@ -8,15 +8,8 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import {
-	Button,
-	Modal,
-	Notice,
-	SelectControl,
-	TextControl,
-	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
-	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
-} from '@wordpress/components';
+import { Button, Modal, Notice, SelectControl, TextControl } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 import { useState } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 
@@ -92,7 +85,7 @@ const StartTestModal = ( {
 
 	return (
 		<Modal title={ __( 'Start A/B Test', 'newspack-popups' ) } size="medium" focusOnMount="firstContentElement" onRequestClose={ onClose }>
-			<VStack spacing={ 6 }>
+			<Stack direction="column" gap="xl">
 				<p className="newspack-popups-ab-test__intro">{ intro }</p>
 				{ error && (
 					<Notice status="error" isDismissible={ false }>
@@ -123,7 +116,7 @@ const StartTestModal = ( {
 					__next40pxDefaultSize
 				/>
 				<SplitControls controlShare={ controlShare } onChange={ setControlShare } disabled={ isBusy } help={ splitSummary( controlShare ) } />
-				<HStack justify="flex-end" spacing={ 4 }>
+				<Stack justify="flex-end" align="center" gap="lg">
 					<Button variant="secondary" onClick={ onClose } disabled={ isBusy } __next40pxDefaultSize>
 						{ __( 'Cancel', 'newspack-popups' ) }
 					</Button>
@@ -137,8 +130,8 @@ const StartTestModal = ( {
 					>
 						{ __( 'Create Version B', 'newspack-popups' ) }
 					</Button>
-				</HStack>
-			</VStack>
+				</Stack>
+			</Stack>
 		</Modal>
 	);
 };

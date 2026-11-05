@@ -18,7 +18,9 @@ const mockEditor = {
 	blockNames: [ 'core/paragraph' ],
 	dirty: false,
 	saveFailed: false,
+	saving: false,
 };
+const mockSubscribers = [];
 const mockSavePost = jest.fn( () => Promise.resolve() );
 const mockSelect = store =>
 	'core/block-editor' === store
@@ -32,10 +34,15 @@ const mockSelect = store =>
 				getEditedPostContent: () => mockEditor.content,
 				isEditedPostDirty: () => mockEditor.dirty,
 				didPostSaveRequestFail: () => mockEditor.saveFailed,
+				isSavingPost: () => mockEditor.saving,
 		  };
 
 jest.mock( '@wordpress/data', () => ( {
 	select: store => mockSelect( store ),
+	subscribe: listener => {
+		mockSubscribers.push( listener );
+		return () => mockSubscribers.splice( mockSubscribers.indexOf( listener ), 1 );
+	},
 	useSelect: fn => fn( store => mockSelect( store ) ),
 	useDispatch: () => ( { savePost: mockSavePost } ),
 } ) );
@@ -97,7 +104,6 @@ const AB_TESTING = {
 		donation: 'Donation',
 		subscription: 'Subscription',
 	},
-	variants: { a: 'A', b: 'B' },
 	ineligible_placements: [ 'manual', 'custom1' ],
 	results_url: '/wp-admin/admin.php?page=newspack-ab-tests',
 	test_name: 'Spring drive',
@@ -152,7 +158,15 @@ const versionB = ( overrides = {} ) => ( {
 beforeEach( () => {
 	window.newspack_popups_data = { ab_testing: { ...AB_TESTING } };
 	onMetaFieldChange = jest.fn();
-	Object.assign( mockEditor, { status: 'draft', title: 'Spring drive', blockNames: [ 'core/paragraph' ], dirty: false, saveFailed: false } );
+	Object.assign( mockEditor, {
+		status: 'draft',
+		title: 'Spring drive',
+		blockNames: [ 'core/paragraph' ],
+		dirty: false,
+		saveFailed: false,
+		saving: false,
+	} );
+	mockSubscribers.length = 0;
 	mockSavePost.mockClear();
 	mockModalProps = null;
 	apiFetch.mockResolvedValue( [] );
@@ -180,10 +194,11 @@ describe( 'not in a test', () => {
 		expect( screen.getByRole( 'note' ).textContent ).toBe( 'Prompts on manual or custom placements can’t be A/B tested.' );
 	} );
 
-	it( 'offers nothing to a user the site excludes from managing tests', () => {
+	it( 'tells a user the site excludes from managing tests that they can’t start one', () => {
 		window.newspack_popups_data.ab_testing.can_manage_tests = false;
 		renderPanel();
 		expect( screen.queryByRole( 'button' ) ).toBeNull();
+		expect( screen.getByText( "You can't start a test on this prompt." ) ).toBeTruthy();
 	} );
 
 	it( 'saves unsaved edits before the start, since the route copies the stored prompt', async () => {
@@ -192,6 +207,28 @@ describe( 'not in a test', () => {
 		fireEvent.click( screen.getByRole( 'button', { name: 'Start A/B Test' } ) );
 		await mockModalProps.beforeCreate();
 		expect( mockSavePost ).toHaveBeenCalled();
+	} );
+
+	it( 'waits for a save already running before deciding whether to save', async () => {
+		mockEditor.saving = true;
+		renderPanel();
+		fireEvent.click( screen.getByRole( 'button', { name: 'Start A/B Test' } ) );
+		const started = mockModalProps.beforeCreate();
+		mockEditor.dirty = true;
+		mockEditor.saving = false;
+		mockSubscribers.forEach( listener => listener() );
+		await started;
+		expect( mockSavePost ).toHaveBeenCalled();
+		expect( mockSubscribers ).toHaveLength( 0 );
+	} );
+
+	it( 'leaves unsaved edits on a published prompt for the publisher to update', async () => {
+		mockEditor.status = 'publish';
+		mockEditor.dirty = true;
+		renderPanel();
+		fireEvent.click( screen.getByRole( 'button', { name: 'Start A/B Test' } ) );
+		await expect( mockModalProps.beforeCreate() ).rejects.toThrow( 'Update this prompt first' );
+		expect( mockSavePost ).not.toHaveBeenCalled();
 	} );
 
 	it( 'refuses to start when that save fails', async () => {
@@ -245,11 +282,21 @@ describe( 'version A', () => {
 
 	it( 'offers Create Version B when the test has no B, starting from its goal and split', async () => {
 		apiFetch.mockResolvedValue( [ versionA() ] );
-		inTest( 'a', { newspack_popups_ab_test_goal: 'donation', newspack_popups_ab_control_share: 70 } );
+		inTest( 'a', { postId: 1, newspack_popups_ab_test_goal: 'donation', newspack_popups_ab_control_share: 70 } );
 
 		fireEvent.click( await screen.findByRole( 'button', { name: 'Create Version B' } ) );
 
 		expect( mockModalProps ).toMatchObject( { promptTitle: 'Spring drive', initialGoal: 'donation', initialShare: 70 } );
+	} );
+
+	it.each( [
+		[ 'a second A', { variant: 'a' } ],
+		[ 'a prompt with no version', { variant: '' } ],
+	] )( 'does not offer Create Version B while the test has %s, which a start refuses', async ( _, extra ) => {
+		apiFetch.mockResolvedValue( [ versionA(), versionB( { id: 5, title: 'Extra', ...extra } ) ] );
+		inTest( 'a', { postId: 1 } );
+		await screen.findByText( 'Extra' );
+		expect( screen.queryByRole( 'button', { name: 'Create Version B' } ) ).toBeNull();
 	} );
 
 	it( 'does not offer Create Version B while a B exists', async () => {
@@ -278,6 +325,16 @@ describe( 'version B', () => {
 		expect( notices.map( notice => notice.textContent ) ).toEqual( [ 'Publish B to start the test.' ] );
 		expect( screen.queryByRole( 'link', { name: 'View results' } ) ).toBeNull();
 		expect( screen.queryByRole( 'combobox' ) ).toBeNull();
+	} );
+
+	it.each( [
+		[ 'both are drafts', 'draft', 'Publish A and B to start the test.' ],
+		[ 'only A is a draft', 'publish', 'Publish A to start the test.' ],
+	] )( 'asks for A to be published too when %s, since the test needs both', async ( _, bStatus, message ) => {
+		mockEditor.status = bStatus;
+		apiFetch.mockResolvedValue( [ versionA( { status: 'draft', status_label: 'Draft' } ), versionB( { status: bStatus } ) ] );
+		inTest( 'b', { postId: 3 } );
+		expect( await screen.findByText( message ) ).toBeTruthy();
 	} );
 
 	it( 'shows View results in place of the notice once B is live', async () => {

@@ -67,13 +67,18 @@ describe( 'TestCard', () => {
 	} );
 
 	it( 'offers Create Version B on an Incomplete test that still has its A, starting from its goal and split', () => {
-		const incomplete = { ...test, name: 'Hero', control_share: 70, started_at: null, variants: { a: test.variants.a } };
+		const incomplete = { ...test, name: 'Hero', control_share: 70, started_at: null, variants: { a: test.variants.a }, prompt_count: 1 };
 		render( <TestCard test={ incomplete } data={ { ...data, goals: { link_click: 'Link click' } } } /> );
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'Create Version B' } ) );
 
 		expect( screen.getByRole( 'dialog' ) ).toBeTruthy();
 		expect( mockModalProps ).toMatchObject( { promptId: 1, promptTitle: 'Hero', initialGoal: 'link_click', initialShare: 70 } );
+	} );
+
+	it( 'offers no Create Version B on an Incomplete test with another prompt in it, which a start refuses', () => {
+		render( <TestCard test={ { ...test, started_at: null, variants: { a: test.variants.a }, prompt_count: 2 } } data={ data } /> );
+		expect( screen.queryByRole( 'button', { name: 'Create Version B' } ) ).toBeNull();
 	} );
 
 	it( 'offers no Create Version B on an Incomplete test with no A to copy', () => {

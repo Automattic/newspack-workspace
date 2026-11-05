@@ -10,7 +10,7 @@
 import { __, sprintf } from '@wordpress/i18n';
 import { BaseControl, Button, SelectControl, Notice, ExternalLink } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
-import { select, useDispatch, useSelect } from '@wordpress/data';
+import { select, subscribe, useDispatch, useSelect } from '@wordpress/data';
 import { useEffect, useRef, useState, useCallback } from '@wordpress/element';
 import { useDebounce } from '@wordpress/compose';
 import { addQueryArgs } from '@wordpress/url';
@@ -22,6 +22,7 @@ import apiFetch from '@wordpress/api-fetch';
 import { isEligiblePlacement, splitSummary, promptLacksGoalBlock, missingGoalBlockMessage, testPromptWarnings } from './ab-utils';
 import SplitControls from '../ab-tests/components/SplitControls';
 import StartTestModal from '../ab-tests/components/StartTestModal';
+import '../ab-tests/components/style.scss';
 
 const META_GOAL = 'newspack_popups_ab_test_goal';
 const META_CONTROL_SHARE = 'newspack_popups_ab_control_share';
@@ -92,9 +93,28 @@ const ABTestPanel = ( {
 	}, [ testId ] );
 
 	// The route copies the prompt as stored, so unsaved edits are saved first.
+	// A save already running makes savePost() return without saving or failing,
+	// so wait it out. On a published prompt a save is an update readers see, so
+	// that is left to the publisher rather than done as a side effect.
 	const saveFirst = async () => {
+		await new Promise( resolve => {
+			if ( ! select( 'core/editor' ).isSavingPost() ) {
+				resolve();
+				return;
+			}
+			const unsubscribe = subscribe( () => {
+				if ( ! select( 'core/editor' ).isSavingPost() ) {
+					unsubscribe();
+					resolve();
+				}
+			} );
+		} );
 		const editor = select( 'core/editor' );
-		if ( editor.isEditedPostDirty() || 'auto-draft' === editor.getCurrentPostAttribute( 'status' ) ) {
+		const currentStatus = editor.getCurrentPostAttribute( 'status' );
+		if ( 'publish' === currentStatus && editor.isEditedPostDirty() ) {
+			throw new Error( __( 'Update this prompt first, so version B starts from what readers see.', 'newspack-popups' ) );
+		}
+		if ( editor.isEditedPostDirty() || 'auto-draft' === currentStatus ) {
 			await savePost();
 			if ( select( 'core/editor' ).didPostSaveRequestFail() ) {
 				throw new Error( __( 'Save this prompt, then try again.', 'newspack-popups' ) );
@@ -137,6 +157,9 @@ const ABTestPanel = ( {
 				<p className="newspack-popups-ab-test__intro">
 					{ __( 'Compare this prompt with a second version to see which gets more readers to act.', 'newspack-popups' ) }
 				</p>
+				{ ! canManage && (
+					<p className="newspack-popups-ab-test__note">{ __( "You can't start a test on this prompt.", 'newspack-popups' ) }</p>
+				) }
 				{ ! eligible && (
 					<Notice status="warning" spokenMessage="" isDismissible={ false }>
 						{ __( 'Prompts on manual or custom placements can’t be A/B tested.', 'newspack-popups' ) }
@@ -168,6 +191,12 @@ const ABTestPanel = ( {
 	const warnings = testPromptWarnings( { postId, variant, prompts } );
 	const lookupPending = lookedUpFor !== testId;
 	const hasChallenger = others.some( prompt => prompt.variant && 'a' !== prompt.variant );
+	// Unpublished versions keep the test from running; on B, A's status comes
+	// from the lookup, so it is named only once that has answered.
+	const toPublish = [
+		control && 'publish' !== control.status ? 'A' : null,
+		'publish' !== status ? letter || __( 'this prompt', 'newspack-popups' ) : null,
+	].filter( Boolean );
 	// Running is the dashboard's rule: every version published, with at least a
 	// B. Until then the goal and split can still change without mixing results.
 	const isRunning = 'publish' === status && ( isControl ? hasChallenger : !! control ) && others.every( prompt => 'publish' === prompt.status );
@@ -235,7 +264,8 @@ const ABTestPanel = ( {
 					/>
 				</>
 			) }
-			{ isControl && canManage && eligible && ! lookupPending && ! hasChallenger && (
+			{ /* A start refuses a test with any other version in it, a second A or one with no version included. */ }
+			{ isControl && canManage && eligible && ! lookupPending && 0 === others.length && (
 				<div>
 					<Button variant="secondary" onClick={ () => setIsModalOpen( true ) } __next40pxDefaultSize>
 						{ __( 'Create Version B', 'newspack-popups' ) }
@@ -293,13 +323,19 @@ const ABTestPanel = ( {
 					{ missingGoalBlockMessage( effectiveGoal, !! control ) }
 				</Notice>
 			) }
-			{ ! isControl && 'publish' !== status && (
+			{ ! isControl && toPublish.length > 0 && (
 				<Notice status="info" spokenMessage="" isDismissible={ false }>
-					{ sprintf(
-						// Translators: %s is the version letter.
-						__( 'Publish %s to start the test.', 'newspack-popups' ),
-						letter || __( 'this prompt', 'newspack-popups' )
-					) }
+					{ 2 === toPublish.length
+						? sprintf(
+								// Translators: %1$s and %2$s are version letters, such as "A" and "B".
+								__( 'Publish %1$s and %2$s to start the test.', 'newspack-popups' ),
+								...toPublish
+						  )
+						: sprintf(
+								// Translators: %s is the version letter.
+								__( 'Publish %s to start the test.', 'newspack-popups' ),
+								toPublish[ 0 ]
+						  ) }
 				</Notice>
 			) }
 			{ others.length > 0 && (
