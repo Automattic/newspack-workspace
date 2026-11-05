@@ -193,8 +193,8 @@ const ABTestPanel = ( {
 	const warnings = testPromptWarnings( { postId, variant, prompts } );
 	const lookupPending = lookedUpFor !== testId;
 	const hasChallenger = others.some( prompt => prompt.variant && 'a' !== prompt.variant );
-	// Unpublished versions keep the test from running; on B, A's status comes
-	// from the lookup, so it is named only once that has answered.
+	// Unpublished versions keep the test from running. On B, A's status comes
+	// from the lookup, so the notice naming them waits for it.
 	const toPublish = [
 		control && 'publish' !== control.status ? 'A' : null,
 		'publish' !== status ? letter || __( 'this prompt', 'newspack-popups' ) : null,
@@ -232,7 +232,7 @@ const ABTestPanel = ( {
 			{ ! eligible && (
 				<Notice status="warning" spokenMessage="" isDismissible={ false }>
 					{ sprintf(
-						// Translators: %s is the version letter.
+						// Translators: %s is a version letter such as "A", or the phrase "this prompt".
 						__(
 							'Prompts on manual or custom placements can’t be A/B tested. Choose another placement to count %s’s results.',
 							'newspack-popups'

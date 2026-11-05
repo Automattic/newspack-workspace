@@ -388,6 +388,7 @@ class ABStartTestTest extends WP_UnitTestCase_PageWithPopups {
 			]
 		);
 		$this->assertSame( 201, $kept->get_status() );
+		$this->assertSame( $name, Newspack_Popups_AB_Tests::get_test_name( 'spring-drive' ) );
 	}
 
 	/**
