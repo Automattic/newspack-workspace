@@ -740,12 +740,14 @@ class ModelTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The near-black cut-off sits between #262626 and #282828, which lightens the first and darkens the second.
+	 * Neutral near-black fills lighten on hover, while dark accents such as navy darken, as the APCA cut-off decides.
 	 */
-	public function test_close_button_near_black_cutoff() {
+	public function test_close_button_lightens_neutral_near_black_and_darkens_dark_accents() {
 		$below = Newspack_Popups_Model::close_button_state_colors( '#262626', '#FFFFFF' );
 		$above = Newspack_Popups_Model::close_button_state_colors( '#282828', '#FFFFFF' );
+		$navy  = Newspack_Popups_Model::close_button_state_colors( '#000080', '#FFFFFF' );
 		self::assertGreaterThan( 0x26, hexdec( substr( $below['hover'], 1, 2 ) ) );
 		self::assertLessThan( 0x28, hexdec( substr( $above['hover'], 1, 2 ) ) );
+		self::assertLessThan( 0x80, hexdec( substr( $navy['hover'], 5, 2 ) ) );
 	}
 }

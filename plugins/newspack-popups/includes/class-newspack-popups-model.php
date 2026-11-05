@@ -12,7 +12,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Newspack_Popups_Model {
 	/**
-	 * APCA luminance below which a close button fill counts as near-black, see close_button_state_colors().
+	 * APCA luminance below which a close button fill counts as near-black, see close_button_state_colors(). The value keeps the neutral cut between #262626 and #282828, matching the previous cut rather than any APCA guidance.
 	 *
 	 * @var float
 	 */
