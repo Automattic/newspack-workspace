@@ -56,7 +56,7 @@ class Newspack_Dashboard extends Wizard {
 			[
 				'icon'  => 'settings',
 				'title' => __( 'Configuration', 'newspack-plugin' ),
-				'desc'  => __( 'Set how readers register and sign in.', 'newspack-plugin' ),
+				'desc'  => __( 'Set up reader registration, checkout, and emails.', 'newspack-plugin' ),
 				'href'  => admin_url( 'admin.php?page=newspack-audience' ),
 			],
 			[
@@ -90,14 +90,14 @@ class Newspack_Dashboard extends Wizard {
 		$audience_cards[] = [
 			'icon'  => 'plugins',
 			'title' => __( 'Integrations', 'newspack-plugin' ),
-			'desc'  => __( 'Connect email, CRM, donation, and form tools to reader accounts.', 'newspack-plugin' ),
+			'desc'  => __( 'Connect your email provider and form tools to reader accounts.', 'newspack-plugin' ),
 			'href'  => admin_url( 'admin.php?page=newspack-audience-integrations' ),
 		];
 
 		$audience_cards[] = [
 			'icon'  => 'payment',
 			'title' => __( 'Subscriptions', 'newspack-plugin' ),
-			'desc'  => __( 'Set subscriber discounts and subscriber-only products.', 'newspack-plugin' ),
+			'desc'  => __( 'Set subscription options, discounts, and subscriber-only products.', 'newspack-plugin' ),
 			'href'  => admin_url( 'admin.php?page=newspack-audience-subscriptions' ),
 		];
 
@@ -150,7 +150,7 @@ class Newspack_Dashboard extends Wizard {
 				[
 					'icon'  => 'ad',
 					'title' => __( 'Display Ads', 'newspack-plugin' ),
-					'desc'  => __( 'Place programmatic ads on your site through Google Ad Manager.', 'newspack-plugin' ),
+					'desc'  => __( 'Place ads on your site through Google Ad Manager and other ad providers.', 'newspack-plugin' ),
 					'href'  => admin_url( 'admin.php?page=newspack-ads-display-ads#/' ),
 				],
 				[
