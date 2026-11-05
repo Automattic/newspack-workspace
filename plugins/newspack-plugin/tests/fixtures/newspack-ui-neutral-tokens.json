@@ -8,7 +8,7 @@
 	"--newspack-ui-border-radius-xs": "3px",
 	"--newspack-ui-button-font-family": "\"Inter\", system-ui, sans-serif",
 	"--newspack-ui-button-font-weight": "600",
-	"--newspack-ui-button-letter-spacing": "initial",
+	"--newspack-ui-button-letter-spacing": "normal",
 	"--newspack-ui-button-text-transform": "none",
 	"--newspack-ui-button-white-space": "nowrap",
 	"--newspack-ui-color-accent": "#1e1e1e",
