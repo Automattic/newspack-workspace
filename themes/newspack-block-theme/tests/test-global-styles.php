@@ -36,7 +36,7 @@ class Test_Global_Styles extends WP_UnitTestCase {
 	 *
 	 * @return array
 	 */
-	public function style_files() {
+	public function style_files(): array {
 		$files = [ 'theme.json' => [ 'theme.json' ] ];
 		foreach ( glob( dirname( __DIR__ ) . '/styles/*.json' ) as $path ) {
 			$files[ 'styles/' . basename( $path ) ] = [ 'styles/' . basename( $path ) ];

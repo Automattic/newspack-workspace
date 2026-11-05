@@ -20,10 +20,6 @@ label:where(:not(.newspack-ui *)) {
 	margin-bottom: var(--wp--preset--spacing--20);
 }
 
-.wp-block-post-comments-form .comment-form :is(.comment-form-author, .comment-form-email, .comment-form-url) label {
-	margin-bottom: var(--wp--preset--spacing--20);
-}
-
 :is(
 	input[type="text"],
 	input[type="email"],
@@ -54,6 +50,10 @@ label:where(:not(.newspack-ui *)) {
 :root textarea:where(:not(.newspack-ui *, .wc-block-components-textarea)) {
 	@include mixins.input;
 	min-height: calc(var(--wp--custom--spacing--75) * 2);
+}
+
+:root select:where([multiple], [size]):where(:not(.newspack-ui *)) {
+	@include mixins.input;
 }
 
 :root select:where(:not([multiple], [size], .newspack-ui *)) {
@@ -104,16 +104,16 @@ input[type="search"]::-webkit-search-cancel-button {
 	@include mixins.checkbox-radio(!important);
 
 	&:has(+ label) {
+		float: inline-start;
 		font-size: var(--wp--preset--font-size--small);
 		line-height: var(--wp--custom--line-height--small);
+		margin-inline-end: var(--wp--custom--spacing--25);
 		margin-top: calc((1lh - var(--wp--custom--spacing--35)) / 2);
 
 		+ label {
-			display: inline-block;
+			display: flow-root;
 			font-weight: 400;
 			margin-bottom: 0;
-			margin-inline-start: var(--wp--custom--spacing--25);
-			vertical-align: top;
 		}
 	}
 
