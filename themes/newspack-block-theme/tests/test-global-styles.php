@@ -236,4 +236,58 @@ class Test_Global_Styles extends WP_UnitTestCase {
 		$this->assertSame( '1.25rem', $padding['left'] );
 		$this->assertSame( '1.25rem', $padding['right'] );
 	}
+
+	/**
+	 * The resolved styles for a theme.json or style variation file.
+	 *
+	 * @param string $file Path relative to the theme root.
+	 * @return array
+	 */
+	private function styles_for( string $file ): array {
+		return 'theme.json' === $file ? $this->resolved_styles() : $this->resolved_variation_styles( $file );
+	}
+
+	/**
+	 * The caption element declares every value newspack-ui reads, as literals.
+	 *
+	 * @dataProvider style_files
+	 *
+	 * @param string $file Path relative to the theme root.
+	 */
+	public function test_caption_element_is_complete( $file ) {
+		$caption = $this->styles_for( $file )['elements']['caption'] ?? [];
+
+		foreach ( [ [ 'typography', 'fontFamily' ], [ 'typography', 'fontSize' ], [ 'typography', 'lineHeight' ], [ 'color', 'text' ] ] as $path ) {
+			$value = $caption[ $path[0] ][ $path[1] ] ?? '';
+			$this->assertNotEmpty( $value, $file . ' ' . implode( '.', $path ) );
+			$this->assertStringNotContainsString( 'var( ', $value, $file . ' ' . implode( '.', $path ) );
+		}
+	}
+
+	/**
+	 * Captions use the same font as the body in every variation.
+	 *
+	 * @dataProvider style_files
+	 *
+	 * @param string $file Path relative to the theme root.
+	 */
+	public function test_caption_font_follows_body_font( $file ) {
+		$styles = $this->styles_for( $file );
+
+		$this->assertSame( $styles['typography']['fontFamily'], $styles['elements']['caption']['typography']['fontFamily'], $file );
+	}
+
+	/**
+	 * Links have a color and drop the underline on hover.
+	 *
+	 * @dataProvider style_files
+	 *
+	 * @param string $file Path relative to the theme root.
+	 */
+	public function test_link_element_is_complete( $file ) {
+		$link = $this->styles_for( $file )['elements']['link'] ?? [];
+
+		$this->assertNotEmpty( $link['color']['text'] ?? '', $file );
+		$this->assertSame( 'none', $link[':hover']['typography']['textDecoration'] ?? '', $file );
+	}
 }
