@@ -238,7 +238,7 @@ final class Button_States {
 	 * @param float  $share The first color's share, in the 0..1 range.
 	 * @return string|null The mixed '#rrggbb' color, or null when a color is not parseable.
 	 */
-	private static function mix( string $a, string $b, float $share ): ?string {
+	public static function mix( string $a, string $b, float $share ): ?string {
 		$lab_a = self::to_oklab( $a );
 		$lab_b = self::to_oklab( $b );
 		if ( null === $lab_a || null === $lab_b ) {
@@ -259,7 +259,7 @@ final class Button_States {
 	 * @param string $hex The hex color.
 	 * @return float[]|null [ L, a, b ], or null when unparseable.
 	 */
-	private static function to_oklab( string $hex ): ?array {
+	public static function to_oklab( string $hex ): ?array {
 		$channels = self::parse_hex( $hex );
 		if ( null === $channels ) {
 			return null;

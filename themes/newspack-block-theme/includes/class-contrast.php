@@ -72,7 +72,7 @@ final class Contrast {
 	 * @param string $slug The palette color slug.
 	 * @return string The color, or an empty string if none resolves.
 	 */
-	private static function resolve_palette_color( string $slug ): string {
+	public static function resolve_palette_color( string $slug ): string {
 		$palette = \wp_get_global_settings( [ 'color', 'palette' ] );
 
 		foreach ( [ 'custom', 'theme' ] as $origin ) {
@@ -99,7 +99,7 @@ final class Contrast {
 	 * @param string $hex Hexadecimal background color (#RGB, #RRGGBB or #RRGGBBAA, with or without #).
 	 * @return string|null '#000000' or '#ffffff', or null when the color is not parseable as hex.
 	 */
-	private static function get_text_color( string $hex ): ?string {
+	public static function get_text_color( string $hex ): ?string {
 		$background_y = self::get_apca_luminance( $hex );
 		if ( null === $background_y ) {
 			return null;
@@ -149,7 +149,7 @@ final class Contrast {
 	 * @param string $hex Hexadecimal color.
 	 * @return float|null Soft-clamped luminance in the 0..1 range, or null when unparseable.
 	 */
-	private static function get_apca_luminance( $hex ): ?float {
+	public static function get_apca_luminance( $hex ): ?float {
 		$channels = self::parse_hex_channels( $hex );
 		if ( null === $channels ) {
 			return null;
@@ -180,7 +180,7 @@ final class Contrast {
 	 * @param float $text_y       Soft-clamped text luminance.
 	 * @return float The Lc value.
 	 */
-	private static function get_apca_contrast( float $background_y, float $text_y ): float {
+	public static function get_apca_contrast( float $background_y, float $text_y ): float {
 		if ( abs( $background_y - $text_y ) < 0.0005 ) {
 			return 0.0;
 		}
