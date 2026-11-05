@@ -57,22 +57,27 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 /*
  * Input Styles
  */
-@mixin input {
+@mixin input-skin {
 	background-color: var(--wp--preset--color--base);
 	border: 1px solid var(--wp--preset--color--base-5);
 	border-radius: var(--wp--custom--border--radius-large);
-	box-shadow: none;
-	box-sizing: border-box;
 	color: var(--wp--preset--color--contrast);
 	font-family: var(--wp--preset--font-family--inter);
 	font-size: var(--wp--preset--font-size--small);
 	line-height: var(--wp--custom--line-height--small);
 	min-height: var(--wp--custom--spacing--75);
 	padding: calc(var(--wp--custom--spacing--25) - 1px) calc(var(--wp--custom--spacing--25) + 1px);
+}
+
+@mixin input {
+	box-shadow: none;
+	box-sizing: border-box;
+	display: block;
 	transition:
 		background-color motion.$duration-color motion.$ease-color,
 		border-color motion.$duration-color motion.$ease-color,
 		box-shadow motion.$duration-color motion.$ease-color;
+	width: 100%;
 
 	&::placeholder {
 		color: var(--wp--preset--color--contrast-3);
@@ -313,8 +318,7 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 }
 
 @mixin choice-layout {
-	display: inline-block;
-	margin-bottom: 0;
+	display: flow-root;
 	padding-inline-start: calc(var(--wp--custom--spacing--35) + var(--wp--custom--spacing--25));
 
 	> input:first-child {

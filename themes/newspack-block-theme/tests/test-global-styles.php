@@ -14,7 +14,7 @@ class Test_Global_Styles extends WP_UnitTestCase {
 	 *
 	 * @return array
 	 */
-	private function resolved_styles() {
+	private function resolved_styles(): array {
 		return wp_get_global_styles( [], [ 'transforms' => [ 'resolve-variables' ] ] );
 	}
 
@@ -24,9 +24,9 @@ class Test_Global_Styles extends WP_UnitTestCase {
 	 * @param string $file Path of the variation file inside `styles/`.
 	 * @return array
 	 */
-	private function resolved_variation_styles( $file ) {
+	private function resolved_variation_styles( string $file ): array {
 		$theme = WP_Theme_JSON_Resolver::get_theme_data();
-		$theme->merge( new WP_Theme_JSON( wp_json_file_decode( get_stylesheet_directory() . '/' . $file, [ 'associative' => true ] ), 'theme' ) );
+		$theme->merge( new WP_Theme_JSON( wp_json_file_decode( dirname( __DIR__ ) . '/' . $file, [ 'associative' => true ] ), 'theme' ) );
 		$data = WP_Theme_JSON::resolve_variables( $theme )->get_raw_data();
 		return $data['styles'] ?? [];
 	}
@@ -70,7 +70,7 @@ class Test_Global_Styles extends WP_UnitTestCase {
 			$styles,
 			function ( $value, $key ) use ( &$bad ) {
 				if ( is_string( $value ) && substr_count( $value, '(' ) !== substr_count( $value, ')' ) ) {
-					$bad[ $key ] = $value;
+					$bad[] = $key . ': ' . $value;
 				}
 			}
 		);
@@ -83,11 +83,91 @@ class Test_Global_Styles extends WP_UnitTestCase {
 	public function test_button_element_resolves_to_literals() {
 		$button = $this->resolved_styles()['elements']['button'];
 
-		$this->assertSame( '#003da5', strtolower( $button['color']['background'] ) );
+		$this->assertSame( $this->palette()['accent'], strtolower( $button['color']['background'] ) );
 		$this->assertSame( '0.5rem', $button['border']['radius'] );
 		$this->assertStringNotContainsString( 'var(', $button['typography']['fontFamily'] );
 		$this->assertStringNotContainsString( 'var(', $button['typography']['fontSize'] );
 		$this->assertStringNotContainsString( 'var( ', $button['color']['text'] );
-		$this->assertStringContainsString( 'accent-contrast, #ffffff', strtolower( $button['color']['text'] ) );
+		$this->assertStringContainsString( 'accent-contrast, ' . $this->palette()['base'], strtolower( $button['color']['text'] ) );
+	}
+
+	/**
+	 * The theme palette keyed by slug, lowercased.
+	 *
+	 * @return array
+	 */
+	private function palette(): array {
+		return array_map( 'strtolower', wp_list_pluck( wp_get_global_settings( [ 'color', 'palette', 'theme' ] ), 'color', 'slug' ) );
+	}
+
+	/**
+	 * The field values both field elements declare.
+	 *
+	 * @return array
+	 */
+	private function field_element(): array {
+		return [
+			'border'     => [
+				'color'  => 'var(--wp--preset--color--base-5)',
+				'radius' => 'var(--wp--custom--border--radius-large)',
+				'style'  => 'solid',
+				'width'  => '1px',
+			],
+			'color'      => [
+				'background' => 'var(--wp--preset--color--base)',
+				'text'       => 'var(--wp--preset--color--contrast)',
+			],
+			'dimensions' => [
+				'minHeight' => 'var(--wp--custom--spacing--75)',
+			],
+			'spacing'    => [
+				'padding' => [
+					'bottom' => 'calc(var(--wp--custom--spacing--25) - 1px)',
+					'left'   => 'calc(var(--wp--custom--spacing--25) + 1px)',
+					'right'  => 'calc(var(--wp--custom--spacing--25) + 1px)',
+					'top'    => 'calc(var(--wp--custom--spacing--25) - 1px)',
+				],
+			],
+			'typography' => [
+				'fontFamily' => 'var(--wp--preset--font-family--inter)',
+				'fontSize'   => 'var(--wp--preset--font-size--small)',
+				'lineHeight' => 'var(--wp--custom--line-height--small)',
+			],
+		];
+	}
+
+	/**
+	 * The raw element declarations of the theme.
+	 *
+	 * @return array
+	 */
+	private function raw_elements(): array {
+		return WP_Theme_JSON_Resolver::get_theme_data()->get_raw_data()['styles']['elements'];
+	}
+
+	/**
+	 * The textInput element carries the values the field mixin used to set.
+	 */
+	public function test_text_input_element_matches_current_field_values() {
+		$this->assertEquals( $this->field_element(), $this->raw_elements()['textInput'] );
+	}
+
+	/**
+	 * The select element declares the same values as text inputs.
+	 */
+	public function test_select_element_matches_text_input() {
+		$this->assertEquals( $this->field_element(), $this->raw_elements()['select'] );
+	}
+
+	/**
+	 * Field elements resolve to literals newspack-ui can read.
+	 */
+	public function test_field_elements_resolve_to_literals() {
+		$elements = $this->resolved_styles()['elements'];
+		foreach ( [ 'textInput', 'select' ] as $name ) {
+			$this->assertStringNotContainsString( 'var(', $elements[ $name ]['color']['background'] );
+			$this->assertStringNotContainsString( 'var(', $elements[ $name ]['border']['color'] );
+			$this->assertStringNotContainsString( 'var(', $elements[ $name ]['typography']['fontFamily'] );
+		}
 	}
 }

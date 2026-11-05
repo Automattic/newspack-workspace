@@ -12,11 +12,15 @@ $select-caret:
  */
 label:where(:not(.newspack-ui *)) {
 	color: var(--wp--preset--color--contrast);
-	display: inline-block;
+	display: block;
 	font-family: var(--wp--preset--font-family--inter);
 	font-size: var(--wp--preset--font-size--small);
 	font-weight: 500;
 	line-height: var(--wp--custom--line-height--small);
+	margin-bottom: var(--wp--preset--spacing--20);
+}
+
+.wp-block-post-comments-form .comment-form :is(.comment-form-author, .comment-form-email, .comment-form-url) label {
 	margin-bottom: var(--wp--preset--spacing--20);
 }
 
@@ -27,7 +31,12 @@ label:where(:not(.newspack-ui *)) {
 	input[type="password"],
 	input[type="search"],
 	input[type="number"],
-	input[type="tel"],
+	input[type="tel"]
+):where(:not(.newspack-ui *)) {
+	@include mixins.input;
+}
+
+:is(
 	input[type="range"],
 	input[type="date"],
 	input[type="month"],
@@ -38,15 +47,16 @@ label:where(:not(.newspack-ui *)) {
 	input[type="zip"],
 	input[type="color"]
 ):where(:not(.newspack-ui *)) {
+	@include mixins.input-skin;
 	@include mixins.input;
 }
 
-textarea:where(:not(.newspack-ui *, .wc-block-components-textarea)) {
+:root textarea:where(:not(.newspack-ui *, .wc-block-components-textarea)) {
 	@include mixins.input;
 	min-height: calc(var(--wp--custom--spacing--75) * 2);
 }
 
-select:where(:not([multiple], [size], .newspack-ui *)) {
+:root select:where(:not([multiple], [size], .newspack-ui *)) {
 	@include mixins.input;
 	appearance: none;
 	background-image: $select-caret;
@@ -99,8 +109,10 @@ input[type="search"]::-webkit-search-cancel-button {
 		margin-top: calc((1lh - var(--wp--custom--spacing--35)) / 2);
 
 		+ label {
+			display: inline-block;
 			font-weight: 400;
 			margin-bottom: 0;
+			margin-inline-start: var(--wp--custom--spacing--25);
 			vertical-align: top;
 		}
 	}
