@@ -112,7 +112,7 @@ const ABTestPanel = ( {
 		const editor = select( 'core/editor' );
 		const currentStatus = editor.getCurrentPostAttribute( 'status' );
 		if ( 'publish' === currentStatus && editor.isEditedPostDirty() ) {
-			throw new Error( __( 'Update this prompt first, so version B starts from what readers see.', 'newspack-popups' ) );
+			throw new Error( __( 'Save your changes to this prompt first, so version B starts from what readers see.', 'newspack-popups' ) );
 		}
 		if ( editor.isEditedPostDirty() || 'auto-draft' === currentStatus ) {
 			await savePost();
@@ -158,7 +158,9 @@ const ABTestPanel = ( {
 					{ __( 'Compare this prompt with a second version to see which gets more readers to act.', 'newspack-popups' ) }
 				</p>
 				{ ! canManage && (
-					<p className="newspack-popups-ab-test__note">{ __( "You can't start a test on this prompt.", 'newspack-popups' ) }</p>
+					<p className="newspack-popups-ab-test__note">
+						{ __( "You don't have permission to start a test on this prompt.", 'newspack-popups' ) }
+					</p>
 				) }
 				{ ! eligible && (
 					<Notice status="warning" spokenMessage="" isDismissible={ false }>
@@ -323,16 +325,16 @@ const ABTestPanel = ( {
 					{ missingGoalBlockMessage( effectiveGoal, !! control ) }
 				</Notice>
 			) }
-			{ ! isControl && toPublish.length > 0 && (
+			{ ! isControl && ! lookupPending && toPublish.length > 0 && (
 				<Notice status="info" spokenMessage="" isDismissible={ false }>
 					{ 2 === toPublish.length
 						? sprintf(
-								// Translators: %1$s and %2$s are version letters, such as "A" and "B".
+								// Translators: %1$s is the version letter "A"; %2$s is a version letter such as "B", or the phrase "this prompt".
 								__( 'Publish %1$s and %2$s to start the test.', 'newspack-popups' ),
 								...toPublish
 						  )
 						: sprintf(
-								// Translators: %s is the version letter.
+								// Translators: %s is a version letter such as "A", or the phrase "this prompt".
 								__( 'Publish %s to start the test.', 'newspack-popups' ),
 								toPublish[ 0 ]
 						  ) }

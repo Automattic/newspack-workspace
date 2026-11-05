@@ -198,7 +198,7 @@ describe( 'not in a test', () => {
 		window.newspack_popups_data.ab_testing.can_manage_tests = false;
 		renderPanel();
 		expect( screen.queryByRole( 'button' ) ).toBeNull();
-		expect( screen.getByText( "You can't start a test on this prompt." ) ).toBeTruthy();
+		expect( screen.getByText( "You don't have permission to start a test on this prompt." ) ).toBeTruthy();
 	} );
 
 	it( 'saves unsaved edits before the start, since the route copies the stored prompt', async () => {
@@ -227,7 +227,7 @@ describe( 'not in a test', () => {
 		mockEditor.dirty = true;
 		renderPanel();
 		fireEvent.click( screen.getByRole( 'button', { name: 'Start A/B Test' } ) );
-		await expect( mockModalProps.beforeCreate() ).rejects.toThrow( 'Update this prompt first' );
+		await expect( mockModalProps.beforeCreate() ).rejects.toThrow( 'Save your changes to this prompt first' );
 		expect( mockSavePost ).not.toHaveBeenCalled();
 	} );
 
@@ -335,6 +335,15 @@ describe( 'version B', () => {
 		apiFetch.mockResolvedValue( [ versionA( { status: 'draft', status_label: 'Draft' } ), versionB( { status: bStatus } ) ] );
 		inTest( 'b', { postId: 3 } );
 		expect( await screen.findByText( message ) ).toBeTruthy();
+	} );
+
+	it( 'names no versions to publish until the lookup has said whether A is published', async () => {
+		let answer;
+		apiFetch.mockReturnValue( new Promise( resolve => ( answer = resolve ) ) );
+		inTest( 'b', { postId: 3 } );
+		expect( screen.queryByText( /to start the test/ ) ).toBeNull();
+		answer( [ versionA( { status: 'draft', status_label: 'Draft' } ), versionB() ] );
+		expect( await screen.findByText( 'Publish A and B to start the test.' ) ).toBeTruthy();
 	} );
 
 	it( 'shows View results in place of the notice once B is live', async () => {
