@@ -11,7 +11,7 @@ import metadata from './block.json';
 import Edit from './edit';
 import colors from '../../../packages/colors/colors.module.scss';
 
-export const title = __( 'Copyright Date', 'newspack-plugin' );
+export const title = __( 'Copyright', 'newspack-plugin' );
 
 const { name } = metadata;
 
@@ -29,6 +29,6 @@ export const settings = {
 		__( 'year', 'newspack-plugin' ),
 		__( 'newspack', 'newspack-plugin' ),
 	],
-	description: __( 'Display the current year with configurable prefix and suffix text.', 'newspack-plugin' ),
+	description: __( 'Display a copyright line with the current year and, optionally, the site title.', 'newspack-plugin' ),
 	edit: Edit,
 };

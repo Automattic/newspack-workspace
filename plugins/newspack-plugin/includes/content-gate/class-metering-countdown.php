@@ -165,7 +165,7 @@ class Metering_Countdown {
 		}
 		$settings     = self::get_settings();
 		$button_label = $settings['button_label'];
-		$button_class = 'dark' === $settings['style'] ? 'newspack-ui__button--primary-light' : 'newspack-ui__button--accent';
+		$button_class = 'dark' === $settings['style'] ? 'newspack-ui__button--primary-light' : 'newspack-ui__button--primary';
 
 		$cta_type = $settings['cta_type'];
 		if ( $cta_type === 'url' ) {

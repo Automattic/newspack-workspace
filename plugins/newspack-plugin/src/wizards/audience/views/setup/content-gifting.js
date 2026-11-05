@@ -181,7 +181,7 @@ export default function ContentGifting( { config, setConfig, updateConfig, noBor
 														className={ `newspack-ui__button newspack-ui__button--x-small ${
 															( config.content_gifting.style || 'light' ) === 'dark'
 																? 'newspack-ui__button--primary-light'
-																: 'newspack-ui__button--accent'
+																: 'newspack-ui__button--primary'
 														}` }
 													>
 														{ config.content_gifting.button_label || __( 'Subscribe now', 'newspack-plugin' ) }

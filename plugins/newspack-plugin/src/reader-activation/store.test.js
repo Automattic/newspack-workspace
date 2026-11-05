@@ -267,18 +267,15 @@ describe( 'Store', () => {
 		} );
 		it( 'should drain the sync queue so deleted keys are not POSTed on the next tick', () => {
 			jest.useFakeTimers();
-			// items has a known stale server value for the key so the bail-on-match
-			// shortcut in syncItem cannot mask a missing drain — a stale dequeue
-			// would resolve to a DELETE XHR.
-			window.newspack_reader_data = {
-				api_url: 'http://test/api',
-				nonce: 'abc',
-				items: { pageviews: '{"day":{"count":99}}' },
-			};
+			window.newspack_reader_data = { api_url: 'http://test/api', nonce: 'abc', items: {} };
 			const openSpy = jest.spyOn( XMLHttpRequest.prototype, 'open' );
 			const [ store, clearStore ] = Store();
-			store.set( 'pageviews', { day: { count: 1 } } );
+			store.set( 'articles_read', 1 );
 			clearStore();
+			// init()'s account-switch path restores the next reader's server items
+			// right after the wipe (NPPM-2899), so a stale dequeue would POST null
+			// and delete that reader's value.
+			window.newspack_reader_data.items = { articles_read: '99' };
 			jest.advanceTimersByTime( 1500 );
 			expect( openSpy ).not.toHaveBeenCalled();
 			openSpy.mockRestore();
@@ -374,14 +371,14 @@ describe( 'Store', () => {
 			expect( store.get( 'matched_segments' ) ).toEqual( [ '3' ] );
 			expect( sessionStorage.getItem( 'np_reader_matched_segments' ) ).toEqual( '["3"]' );
 			expect( localStorage.getItem( 'np_reader_matched_segments' ) ).toBeNull();
-			store.set( 'pageviews', { day: { count: 1 } } );
+			store.set( 'articles_read', 1 );
 			jest.advanceTimersByTime( 2500 );
 			expect( openSpy ).not.toHaveBeenCalled();
 			openSpy.mockRestore();
 		} );
 		it.each( [
-			[ 'written', store => store.set( 'pageviews', { day: { count: 9 } } ) ],
-			[ 'deleted', store => store.delete( 'pageviews' ) ],
+			[ 'written', store => store.set( 'articles_read', 9 ) ],
+			[ 'deleted', store => store.delete( 'articles_read' ) ],
 		] )( 'still hydrates a key the switched tab has %s', ( _, write ) => {
 			window.newspack_reader_data = { is_switched_session: true, items: {} };
 			let store;
@@ -390,8 +387,301 @@ describe( 'Store', () => {
 			} );
 			write( store );
 			// The next page load in the same tab.
-			store.rehydrate( { pageviews: '{"day":{"count":1}}' } );
-			expect( store.get( 'pageviews' ) ).toEqual( { day: { count: 1 } } );
+			store.rehydrate( { articles_read: '1' } );
+			expect( store.get( 'articles_read' ) ).toEqual( 1 );
+		} );
+	} );
+	describe( 'server sync', () => {
+		let requests;
+		const originalXHR = window.XMLHttpRequest;
+		const getUnsynced = () => JSON.parse( localStorage.getItem( 'np_reader__unsynced' ) || '[]' );
+		const flushPromises = async () => {
+			for ( let i = 0; i < 5; i++ ) {
+				await Promise.resolve();
+			}
+		};
+		beforeEach( () => {
+			requests = [];
+			window.XMLHttpRequest = function () {
+				const req = {
+					open: ( method, url ) => Object.assign( req, { method, url } ),
+					setRequestHeader: () => {},
+					send: body => ( req.body = JSON.parse( body ) ),
+					respond: ( status, body = { success: true, errors: {} } ) => {
+						Object.assign( req, { readyState: 4, status, responseText: JSON.stringify( body ) } );
+						req.onreadystatechange();
+					},
+				};
+				requests.push( req );
+				return req;
+			};
+			window.newspack_reader_data = { api_url: 'http://test/api', nonce: 'abc', items: {} };
+		} );
+		afterEach( () => {
+			window.XMLHttpRequest = originalXHR;
+		} );
+		it( 'sends every pending key in one request', async () => {
+			window.newspack_reader_data.items = { is_newsletter_subscriber: 'true' };
+			const [ store ] = Store();
+			store.set( 'articles_read', 3 );
+			store.set( 'favorite_categories', [ 1, 2 ] );
+			store.set( 'is_newsletter_subscriber', false );
+			jest.advanceTimersByTime( 1000 );
+			expect( requests ).toHaveLength( 1 );
+			expect( requests[ 0 ].method ).toEqual( 'POST' );
+			// A falsy value is sent as null, which deletes the key on the server.
+			expect( requests[ 0 ].body ).toEqual( {
+				items: { articles_read: '3', favorite_categories: '[1,2]', is_newsletter_subscriber: null },
+			} );
+			requests[ 0 ].respond( 200 );
+			await flushPromises();
+			expect( getUnsynced() ).toEqual( [] );
+			expect( window.newspack_reader_data.items.articles_read ).toEqual( '3' );
+		} );
+		it( 'skips values the server already holds', () => {
+			window.newspack_reader_data.items = { articles_read: '3' };
+			const [ store ] = Store();
+			store.set( 'articles_read', 3 );
+			jest.advanceTimersByTime( 1000 );
+			expect( requests ).toHaveLength( 0 );
+		} );
+		it( 'keeps a rejected key pending for the next page load without resending it', async () => {
+			const [ store ] = Store();
+			store.set( 'articles_read', 3 );
+			store.set( 'custom_key', 'value' );
+			jest.advanceTimersByTime( 1000 );
+			requests[ 0 ].respond( 200, { success: true, errors: { custom_key: 'too_many_items' } } );
+			await flushPromises();
+			expect( getUnsynced() ).toEqual( [ 'custom_key' ] );
+			jest.advanceTimersByTime( 1000 );
+			expect( requests ).toHaveLength( 1 );
+		} );
+		describe( 'browser-only keys', () => {
+			beforeEach( () => {
+				window.newspack_reader_data.local_keys = [ 'pageviews' ];
+			} );
+			it.each( [
+				[ 'written', store => store.set( 'pageviews', { day: { count: 1 } } ) ],
+				[ 'deleted', store => store.delete( 'pageviews' ) ],
+			] )( 'are never sent when %s', ( _, write ) => {
+				// The server holds a copy, so a delete would otherwise have something to remove.
+				window.newspack_reader_data.items = { pageviews: '{"day":{"count":9}}' };
+				const [ store ] = Store();
+				write( store );
+				jest.advanceTimersByTime( 1000 );
+				expect( requests ).toHaveLength( 0 );
+				expect( getUnsynced() ).toEqual( [] );
+			} );
+			it( 'are dropped from a queue left by an earlier version', () => {
+				localStorage.setItem( 'np_reader__unsynced', JSON.stringify( [ 'pageviews', 'articles_read' ] ) );
+				localStorage.setItem( 'np_reader_pageviews', '{"day":{"count":1}}' );
+				localStorage.setItem( 'np_reader_articles_read', '3' );
+				Store();
+				jest.advanceTimersByTime( 1000 );
+				expect( requests[ 0 ].body ).toEqual( { items: { articles_read: '3' } } );
+			} );
+			it( "keep the browser's value over the server's copy", () => {
+				localStorage.setItem( 'np_reader_pageviews', '{"day":{"count":7}}' );
+				window.newspack_reader_data.items = { pageviews: '{"day":{"count":1}}' };
+				const [ store ] = Store();
+				store.rehydrate();
+				expect( store.get( 'pageviews' ) ).toEqual( { day: { count: 7 } } );
+			} );
+		} );
+	} );
+	describe( 'session change while the page is open', () => {
+		const INVALID_NONCE = JSON.stringify( { code: 'rest_cookie_invalid_nonce' } );
+		const NONCE_URL = `${ window.location.origin }/nonce`;
+		const originalXHR = window.XMLHttpRequest;
+		const originalFetch = window.fetch;
+		let requests;
+		let store;
+
+		class FakeXHR {
+			headers = {};
+			open( method, url ) {
+				this.url = url;
+			}
+			setRequestHeader( name, value ) {
+				this.headers[ name ] = value;
+			}
+			send() {
+				requests.push( this );
+			}
+			respond( status, responseText = '{}' ) {
+				this.readyState = 4;
+				this.status = status;
+				this.responseText = responseText;
+				this.onreadystatechange();
+			}
+		}
+
+		const flushPromises = async () => {
+			for ( let tick = 0; tick < 10; tick++ ) {
+				await Promise.resolve();
+			}
+		};
+
+		const mockNonceEndpoint = ( body, status = 200 ) => {
+			window.fetch = jest.fn().mockResolvedValue( {
+				ok: 200 === status,
+				status,
+				json: async () => JSON.parse( body ),
+				text: async () => body,
+			} );
+		};
+		const pageReaderNonce = JSON.stringify( { nonce: 'a1b2c3d4e5', user_id: 7 } );
+		const otherReaderNonce = JSON.stringify( { nonce: 'b1b2c3d4e5', user_id: 8 } );
+
+		// Saves one key and runs the sync interval until its POST is in flight.
+		const saveKey = ( key = 'pageviews' ) => {
+			store.set( key, 1 );
+			jest.advanceTimersByTime( 1000 );
+			return requests[ requests.length - 1 ];
+		};
+
+		const pendingKeys = () => JSON.parse( localStorage.getItem( 'np_reader__unsynced' ) );
+
+		beforeEach( () => {
+			requests = [];
+			window.XMLHttpRequest = FakeXHR;
+			window.newspack_reader_data = {
+				api_url: 'http://test/api',
+				nonce_url: NONCE_URL,
+				nonce: 'pagenonce0',
+				// A string, as wp_localize_script() delivers it.
+				user_id: '7',
+				items: {},
+			};
+			// A page that leaves shared storage never returns to it, so each test needs its own module.
+			jest.resetModules();
+			[ store ] = require( './store' ).default();
+		} );
+		afterEach( () => {
+			window.XMLHttpRequest = originalXHR;
+			window.fetch = originalFetch;
+		} );
+
+		it( 'adopts a fresh nonce and retries once, so the save survives without a reload', async () => {
+			mockNonceEndpoint( pageReaderNonce );
+			const firstAttempt = saveKey();
+			expect( firstAttempt.headers[ 'X-WP-Nonce' ] ).toBe( 'pagenonce0' );
+
+			firstAttempt.respond( 403, INVALID_NONCE );
+			await flushPromises();
+
+			expect( window.fetch ).toHaveBeenCalledWith( NONCE_URL, expect.objectContaining( { credentials: 'same-origin' } ) );
+			expect( requests[ 1 ].headers[ 'X-WP-Nonce' ] ).toBe( 'a1b2c3d4e5' );
+
+			requests[ 1 ].respond( 200 );
+			await flushPromises();
+
+			expect( pendingKeys() ).toEqual( [] );
+			// Stored where every reader-activation entry point reads it, so later saves skip the 403.
+			expect( window.newspack_reader_data.nonce ).toBe( 'a1b2c3d4e5' );
+		} );
+
+		it.each( [
+			[ 'the endpoint is unavailable', 'Service Unavailable', 503 ],
+			[ 'the endpoint answers with something other than a nonce', '<html>', 200 ],
+			[ 'something other than WordPress answers 400', '<html>Bad Request</html>', 400 ],
+		] )( 'keeps the key pending without retrying when %s', async ( _case, body, status ) => {
+			mockNonceEndpoint( body, status );
+			saveKey().respond( 403, INVALID_NONCE );
+			await flushPromises();
+
+			expect( requests ).toHaveLength( 1 );
+			expect( pendingKeys() ).toEqual( [ 'pageviews' ] );
+			expect( window.newspack_reader_data.nonce ).toBe( 'pagenonce0' );
+		} );
+
+		it( 'drops pending keys once the reader has logged out', async () => {
+			// A key from an earlier outage, which is pending but no longer queued.
+			mockNonceEndpoint( 'Service Unavailable', 503 );
+			saveKey( 'articles_read' ).respond( 403, INVALID_NONCE );
+			await flushPromises();
+
+			// admin-ajax answers a logged-out visitor with a 400 and a body of `0`.
+			mockNonceEndpoint( '0', 400 );
+			saveKey().respond( 403, INVALID_NONCE );
+			await flushPromises();
+
+			// Shared with whoever logs in next, whose next page load would send these keys.
+			expect( pendingKeys() ).toEqual( [] );
+			expect( requests ).toHaveLength( 2 );
+		} );
+
+		it( 'keeps keys pending when a cross-origin refresh gets the logged-out answer', async () => {
+			// The request carries no cookies, so the answer says nothing about the reader.
+			window.newspack_reader_data.nonce_url = 'http://admin.test/nonce';
+			mockNonceEndpoint( '0', 400 );
+			saveKey().respond( 403, INVALID_NONCE );
+			await flushPromises();
+
+			expect( pendingKeys() ).toEqual( [ 'pageviews' ] );
+		} );
+
+		it( 'recovers on a later save after a refresh fails', async () => {
+			mockNonceEndpoint( '0', 400 );
+			saveKey().respond( 403, INVALID_NONCE );
+			await flushPromises();
+
+			mockNonceEndpoint( pageReaderNonce );
+			saveKey( 'articles_read' ).respond( 403, INVALID_NONCE );
+			await flushPromises();
+
+			expect( requests[ 2 ].headers[ 'X-WP-Nonce' ] ).toBe( 'a1b2c3d4e5' );
+
+			// The reader is back, so an unrelated failure must not drop their keys.
+			requests[ 2 ].respond( 500 );
+			await flushPromises();
+
+			expect( pendingKeys() ).toContain( 'articles_read' );
+		} );
+
+		it( 'gives up after one retry', async () => {
+			mockNonceEndpoint( pageReaderNonce );
+			saveKey().respond( 403, INVALID_NONCE );
+			await flushPromises();
+			requests[ 1 ].respond( 403, INVALID_NONCE );
+			await flushPromises();
+
+			expect( requests ).toHaveLength( 2 );
+			expect( window.fetch ).toHaveBeenCalledTimes( 1 );
+			expect( pendingKeys() ).toEqual( [ 'pageviews' ] );
+		} );
+
+		it( 'does not refresh the nonce for other 403s', async () => {
+			mockNonceEndpoint( pageReaderNonce );
+			saveKey().respond( 403, JSON.stringify( { code: 'newspack_reader_data_switched_session' } ) );
+			await flushPromises();
+
+			expect( window.fetch ).not.toHaveBeenCalled();
+			expect( requests ).toHaveLength( 1 );
+		} );
+
+		it( 'leaves shared storage when another reader holds the session', async () => {
+			// A key from an outage, which is pending but no longer queued.
+			mockNonceEndpoint( 'Service Unavailable', 503 );
+			saveKey( 'articles_read' ).respond( 403, INVALID_NONCE );
+			await flushPromises();
+
+			// The other reader's tab marks its own key in the same shared list.
+			localStorage.setItem( 'np_reader__unsynced', JSON.stringify( [ ...pendingKeys(), 'other_reader_key' ] ) );
+
+			mockNonceEndpoint( otherReaderNonce );
+			saveKey().respond( 403, INVALID_NONCE );
+			await flushPromises();
+
+			store.set( 'written_after', 1 );
+			jest.advanceTimersByTime( 3000 );
+
+			expect( requests ).toHaveLength( 2 );
+			expect( window.newspack_reader_data.nonce ).toBe( 'pagenonce0' );
+			expect( pendingKeys() ).toEqual( [ 'other_reader_key' ] );
+			expect( localStorage.getItem( 'np_reader_pageviews' ) ).toBeNull();
+			expect( localStorage.getItem( 'np_reader_articles_read' ) ).toBeNull();
+			expect( localStorage.getItem( 'np_reader_written_after' ) ).toBeNull();
 		} );
 	} );
 } );
