@@ -123,23 +123,7 @@ final class Republication_Tracker_Tool_Republish_Button_Block {
 			return '';
 		}
 
-		if ( ! Republication_Tracker_Tool::is_post_republishable( $post ) ) {
-			return '';
-		}
-
-		// Guard: check allowed post types.
-		$allowed_post_types = (array) apply_filters( 'republication_tracker_tool_post_types', [ 'post' ] );
-		if ( ! in_array( get_post_type( $post ), $allowed_post_types, true ) ) {
-			return '';
-		}
-
-		// Guard: check if widget is hidden for this post (same filter as the widget).
-		$hide = apply_filters(
-			'hide_republication_widget',
-			get_post_meta( $post->ID, 'republication-tracker-tool-hide-widget', true ),
-			$post
-		);
-		if ( true == $hide ) { // phpcs:ignore Universal.Operators.StrictComparisons.LooseEqual
+		if ( ! Republication_Tracker_Tool::can_offer_republish( $post ) ) {
 			return '';
 		}
 
@@ -220,7 +204,7 @@ final class Republication_Tracker_Tool_Republish_Button_Block {
 	/**
 	 * Enqueue modal-specific assets.
 	 */
-	private static function enqueue_modal_assets(): void {
+	public static function enqueue_modal_assets(): void {
 		Republication_Tracker_Tool::enqueue_modal_style();
 
 		// Clipboard utilities (shared with widget).

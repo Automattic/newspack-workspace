@@ -492,6 +492,7 @@ jobs:
       - name: Post-release branch maintenance
         env:
           ALPHA_SYNC: ${{ github.event_name == 'workflow_dispatch' && 'merge' || 'auto' }}
+          RELEASED_TAGS: ${{ needs.release.outputs.released-tags }}
           SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
           SLACK_AUTH_TOKEN: ${{ secrets.SLACK_AUTH_TOKEN }}
         run: ./.github/scripts/post-release.sh
