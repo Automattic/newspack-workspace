@@ -690,7 +690,7 @@ function newspack_get_color_contrast( $hex ): string {
 /**
  * Checks if color has sufficient contrast against white; if no, replaces it.
  *
- * Scores the color as text on white by APCA and replaces it with dimgray below Lc 60, the content text minimum. That keeps brand link colors, such as #dd3333 and #3366cc, and replaces light ones, such as #ff9800 and #ffcc00.
+ * Scores the color as text on white by APCA and replaces it with dimgray below Lc 60, the minimum for non-body content text (APCA body text is Lc 75). That keeps brand link colors, such as #dd3333 and #3366cc, and replaces light ones, such as #ff9800 and #ffcc00.
  *
  * @param string $color Hexadecimal color.
  *
