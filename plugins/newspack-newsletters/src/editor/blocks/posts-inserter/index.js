@@ -128,15 +128,6 @@ const PostsInserterBlock = ( {
 		setInsertedPostsIds( handledPostIds );
 	};
 
-	// The toolbar button inserts posts directly and no longer sets this flag. A block
-	// saved with it was left halfway through an insert and would render nothing, so
-	// reset it to show the inserter again.
-	useEffect( () => {
-		if ( attributes.areBlocksInserted ) {
-			setAttributes( { areBlocksInserted: false } );
-		}
-	}, [ attributes.areBlocksInserted ] );
-
 	useEffect( () => {
 		if ( ! attributes.preventDeduplication ) {
 			setHandledPostsIds( handledPostIds );
@@ -183,7 +174,7 @@ const PostsInserterBlock = ( {
 		},
 	];
 
-	return attributes.areBlocksInserted ? null : (
+	return (
 		<Fragment>
 			<InspectorControls>
 				<PanelBody title={ __( 'Post Content', 'newspack-newsletters' ) }>
