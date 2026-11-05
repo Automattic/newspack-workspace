@@ -86,7 +86,8 @@ function adoptNonce( data ) {
  * A nonce is tied to the session it was created in, so a page loses write access
  * when the reader's session changes. Unlike hydrateSession, this works at any
  * time after authentication. A failure is not final: the page's reader can log
- * back in, so each failed save asks again.
+ * back in, so each failed save asks again. A logged-out answer is recorded, so
+ * the store can stop leaving keys for whoever logs in next.
  *
  * @return {Promise<string|null>} The new nonce, or null on failure.
  */
@@ -114,6 +115,8 @@ async function fetchApiNonce() {
 			credentials: 'same-origin',
 			cache: 'no-store',
 		} );
+		// The action has no logged-out handler, so admin-ajax answers those requests with a 400.
+		window.newspack_reader_data.logged_out = 400 === response.status;
 		return response.ok ? adoptNonce( await response.json() ) : null;
 	} catch {
 		return null;

@@ -155,7 +155,15 @@ function initializeSyncInterval( queue ) {
 					}
 				}
 			} )
-			.catch( () => keys.forEach( key => setPendingSync( key ) ) );
+			.catch( () => {
+				if ( newspack_reader_data?.logged_out ) {
+					// Pending keys live in storage shared with whoever logs in next, whose
+					// next page load would send them.
+					[ ...keys, ...ownPendingKeys ].forEach( clearPendingSync );
+				} else {
+					keys.forEach( key => setPendingSync( key ) );
+				}
+			} );
 	}, 1000 );
 }
 

@@ -521,8 +521,8 @@ describe( 'Store', () => {
 			}
 		};
 
-		const mockNonceEndpoint = ( body, ok = true ) => {
-			window.fetch = jest.fn().mockResolvedValue( { ok, json: async () => JSON.parse( body ) } );
+		const mockNonceEndpoint = ( body, status = 200 ) => {
+			window.fetch = jest.fn().mockResolvedValue( { ok: 200 === status, status, json: async () => JSON.parse( body ) } );
 		};
 		const pageReaderNonce = JSON.stringify( { nonce: 'a1b2c3d4e5', user_id: 7 } );
 		const otherReaderNonce = JSON.stringify( { nonce: 'b1b2c3d4e5', user_id: 8 } );
@@ -576,10 +576,10 @@ describe( 'Store', () => {
 		} );
 
 		it.each( [
-			[ 'the page reader is logged out', '0', false ],
-			[ 'the endpoint answers with something other than a nonce', '<html>', true ],
-		] )( 'keeps the key pending without retrying when %s', async ( _case, body, ok ) => {
-			mockNonceEndpoint( body, ok );
+			[ 'the endpoint is unavailable', 'Service Unavailable', 503 ],
+			[ 'the endpoint answers with something other than a nonce', '<html>', 200 ],
+		] )( 'keeps the key pending without retrying when %s', async ( _case, body, status ) => {
+			mockNonceEndpoint( body, status );
 			saveKey().respond( 403, INVALID_NONCE );
 			await flushPromises();
 
@@ -588,9 +588,24 @@ describe( 'Store', () => {
 			expect( window.newspack_reader_data.nonce ).toBe( 'pagenonce0' );
 		} );
 
+		it( 'drops pending keys once the reader has logged out', async () => {
+			// A key from an earlier outage, which is pending but no longer queued.
+			mockNonceEndpoint( 'Service Unavailable', 503 );
+			saveKey( 'articles_read' ).respond( 403, INVALID_NONCE );
+			await flushPromises();
+
+			// admin-ajax answers a logged-out visitor with a 400 and a body of `0`.
+			mockNonceEndpoint( '0', 400 );
+			saveKey().respond( 403, INVALID_NONCE );
+			await flushPromises();
+
+			// Shared with whoever logs in next, whose next page load would send these keys.
+			expect( pendingKeys() ).toEqual( [] );
+			expect( requests ).toHaveLength( 2 );
+		} );
+
 		it( 'recovers on a later save after a refresh fails', async () => {
-			// A transient failure, or the same reader logging out and back in.
-			mockNonceEndpoint( 'Service Unavailable', false );
+			mockNonceEndpoint( '0', 400 );
 			saveKey().respond( 403, INVALID_NONCE );
 			await flushPromises();
 
@@ -623,8 +638,8 @@ describe( 'Store', () => {
 		} );
 
 		it( 'leaves shared storage when another reader holds the session', async () => {
-			// A key from a failed refresh, which is pending but no longer queued.
-			mockNonceEndpoint( '0', false );
+			// A key from an outage, which is pending but no longer queued.
+			mockNonceEndpoint( 'Service Unavailable', 503 );
 			saveKey( 'articles_read' ).respond( 403, INVALID_NONCE );
 			await flushPromises();
 
