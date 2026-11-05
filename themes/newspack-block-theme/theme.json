@@ -265,6 +265,9 @@
 		},
 		"useRootPaddingAwareAlignments": true,
 		"custom": {
+			"button": {
+				"mix": "var(--wp--preset--color--base)"
+			},
 			"state": {
 				"hover": "85%",
 				"pressed": "75%",
@@ -1083,13 +1086,13 @@
 			"button": {
 				":hover": {
 					"color": {
-						"background": "color-mix( in oklab, var(--wp--preset--color--accent) var(--wp--custom--state--hover), var(--wp--preset--color--base) )",
+						"background": "color-mix( in oklab, var(--wp--preset--color--accent) var(--wp--custom--state--hover), var(--wp--custom--button--mix) )",
 						"text": "var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base))"
 					}
 				},
 				":active": {
 					"color": {
-						"background": "color-mix( in oklab, var(--wp--preset--color--accent) var(--wp--custom--state--pressed), var(--wp--preset--color--base) )",
+						"background": "color-mix( in oklab, var(--wp--preset--color--accent) var(--wp--custom--state--pressed), var(--wp--custom--button--mix) )",
 						"text": "var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base))"
 					}
 				},

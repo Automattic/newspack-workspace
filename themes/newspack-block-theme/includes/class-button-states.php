@@ -221,7 +221,7 @@ final class Button_States {
 	 * @param float  $default The theme's own value, used when the token is unavailable.
 	 * @return float The share in the 0..1 range.
 	 */
-	private static function get_state_share( string $state, float $default ): float {
+	public static function get_state_share( string $state, float $default ): float {
 		$value = \wp_get_global_settings( [ 'custom', 'state', $state ] );
 		if ( is_string( $value ) && preg_match( '/^\s*(\d{1,3}(?:\.\d+)?)%\s*$/', $value, $matches ) && (float) $matches[1] <= 100 ) {
 			return (float) $matches[1] / 100;

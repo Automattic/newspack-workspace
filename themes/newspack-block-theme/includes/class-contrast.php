@@ -90,6 +90,37 @@ final class Contrast {
 	}
 
 	/**
+	 * Resolve a color value to a plain lowercase #rrggbb hex color.
+	 *
+	 * Accepts #rgb and #rrggbb, and palette references in the var:preset|color|<slug>
+	 * and var(--wp--preset--color--<slug>) forms, which resolve through the palette.
+	 * Gradients, other functions and anything else return an empty string.
+	 *
+	 * @param mixed $value The color value.
+	 * @return string The color, or an empty string when it does not resolve to a plain hex color.
+	 */
+	public static function resolve_color( $value ): string {
+		if ( ! is_string( $value ) ) {
+			return '';
+		}
+		$value = trim( $value );
+
+		if ( 1 === preg_match( '/^(?:var:preset\|color\|([a-z0-9-]+)|var\(--wp--preset--color--([a-z0-9-]+)\))$/i', $value, $matches ) ) {
+			$value = self::resolve_palette_color( '' !== $matches[1] ? $matches[1] : $matches[2] );
+		}
+		if ( 1 !== preg_match( '/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i', $value ) ) {
+			return '';
+		}
+
+		$hex = strtolower( ltrim( $value, '#' ) );
+		if ( 3 === strlen( $hex ) ) {
+			$hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+		}
+
+		return '#' . $hex;
+	}
+
+	/**
 	 * Pick black or white text, whichever reads better on a background by APCA.
 	 *
 	 * Black wins ties. This is the pick of Newspack_Blocks::get_color_for_contrast()

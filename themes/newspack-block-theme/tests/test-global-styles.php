@@ -177,10 +177,16 @@ class Test_Global_Styles extends WP_UnitTestCase {
 	public function test_button_hover_and_pressed_mix_toward_base() {
 		$button = $this->resolved_styles()['elements']['button'];
 		$accent = $this->palette()['accent'];
-		$base   = $this->palette()['base'];
 
-		$this->assertSame( sprintf( 'color-mix( in oklab, %s 85%%, %s )', $accent, $base ), strtolower( $button[':hover']['color']['background'] ) );
-		$this->assertSame( sprintf( 'color-mix( in oklab, %s 75%%, %s )', $accent, $base ), strtolower( $button[':active']['color']['background'] ) );
+		$this->assertSame( sprintf( 'color-mix( in oklab, %s 85%%, var(--wp--preset--color--base) )', $accent ), strtolower( $button[':hover']['color']['background'] ) );
+		$this->assertSame( sprintf( 'color-mix( in oklab, %s 75%%, var(--wp--preset--color--base) )', $accent ), strtolower( $button[':active']['color']['background'] ) );
+	}
+
+	/**
+	 * The button mix target defaults to the base preset.
+	 */
+	public function test_button_mix_target_defaults_to_base() {
+		$this->assertSame( 'var(--wp--preset--color--base)', wp_get_global_settings( [ 'custom', 'button', 'mix' ] ) );
 	}
 
 	/**
