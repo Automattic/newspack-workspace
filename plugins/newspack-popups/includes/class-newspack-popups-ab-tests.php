@@ -148,7 +148,8 @@ final class Newspack_Popups_AB_Tests {
 
 	/**
 	 * Register the taxonomy that holds test names. Registered whether or not the
-	 * feature flag is on, like the meta, so names survive the flag being switched.
+	 * feature flag is on, like the meta: the terms outlive the flag either way, but
+	 * core can only read them back while the taxonomy is registered.
 	 */
 	public static function register_taxonomy() {
 		register_taxonomy(
@@ -626,14 +627,15 @@ final class Newspack_Popups_AB_Tests {
 		}
 		$terms = get_terms(
 			[
-				'taxonomy'   => self::TAXONOMY,
-				'slug'       => $test_ids,
-				'hide_empty' => false,
+				'taxonomy'               => self::TAXONOMY,
+				'slug'                   => $test_ids,
+				'hide_empty'             => false,
+				'update_term_meta_cache' => false,
 			]
 		);
 		$names = [];
 		foreach ( is_array( $terms ) ? $terms : [] as $term ) {
-			$names[ (string) $term->slug ] = $term->name;
+			$names[ (string) $term->slug ] = self::decode_term_name( $term->name );
 		}
 		return $names;
 	}
@@ -670,7 +672,8 @@ final class Newspack_Popups_AB_Tests {
 		if ( is_wp_error( $name ) ) {
 			return $name;
 		}
-		// GA4 caps an event parameter value at 100 characters.
+		// GA4 caps an event parameter value at 100 characters; 40 leaves room for
+		// the suffix and for whatever a report prefixes to the ID.
 		$base = trim( substr( self::sanitize_test_id( $name ), 0, 40 ), '-' );
 		$base = '' === $base ? 'test' : $base;
 		for ( $attempt = 0; $attempt < 5; $attempt++ ) {
@@ -678,8 +681,20 @@ final class Newspack_Popups_AB_Tests {
 			if ( self::is_test_id_in_use( $test_id ) ) {
 				continue;
 			}
-			$term = wp_insert_term( $name, self::TAXONOMY, [ 'slug' => $test_id ] );
-			return is_wp_error( $term ) ? $term : $test_id;
+			$term = wp_insert_term( wp_slash( $name ), self::TAXONOMY, [ 'slug' => $test_id ] );
+			if ( is_wp_error( $term ) ) {
+				if ( 'term_exists' === $term->get_error_code() ) {
+					continue;
+				}
+				return $term;
+			}
+			// Another request took the ID after the check above, so core stored
+			// this term under a suffixed slug that no test would ever read.
+			if ( get_term( $term['term_id'], self::TAXONOMY )->slug !== $test_id ) {
+				wp_delete_term( $term['term_id'], self::TAXONOMY );
+				continue;
+			}
+			return $test_id;
 		}
 		return new WP_Error( 'newspack_popups_ab_test_id', __( 'Could not create the test. Try again.', 'newspack-popups' ), [ 'status' => 500 ] );
 	}
@@ -696,10 +711,23 @@ final class Newspack_Popups_AB_Tests {
 		if ( '' === $name ) {
 			return new WP_Error( 'newspack_popups_ab_test_name', __( 'Enter a test name.', 'newspack-popups' ), [ 'status' => 400 ] );
 		}
-		if ( mb_strlen( $name ) > 200 ) {
-			return new WP_Error( 'newspack_popups_ab_test_name', __( 'Use a test name of 200 characters or fewer.', 'newspack-popups' ), [ 'status' => 400 ] );
+		// Measured as core will store it: its filters turn `&` into `&amp;`, and a
+		// name over the column's 200 characters is not cut short but dropped,
+		// silently on update.
+		if ( mb_strlen( sanitize_term_field( 'name', $name, 0, self::TAXONOMY, 'db' ) ) > 200 ) {
+			return new WP_Error( 'newspack_popups_ab_test_name', __( 'Use a shorter test name.', 'newspack-popups' ), [ 'status' => 400 ] );
 		}
 		return $name;
+	}
+
+	/**
+	 * A term name as it was entered. Core stores `&`, `<` and `>` HTML-encoded.
+	 *
+	 * @param string $name Stored name.
+	 * @return string
+	 */
+	private static function decode_term_name( $name ) {
+		return wp_specialchars_decode( (string) $name, ENT_QUOTES );
 	}
 
 	/**
@@ -720,14 +748,34 @@ final class Newspack_Popups_AB_Tests {
 			return $name;
 		}
 		$term = '' === $test_id ? false : get_term_by( 'slug', $test_id, self::TAXONOMY );
-		if ( $term ) {
-			$result = wp_update_term( $term->term_id, self::TAXONOMY, [ 'name' => $name ] );
-		} elseif ( '' !== $test_id && ! empty( self::get_test_prompt_ids( $test_id ) ) ) {
-			$result = wp_insert_term( $name, self::TAXONOMY, [ 'slug' => $test_id ] );
-		} else {
-			return new WP_Error( 'newspack_popups_ab_test_not_found', __( 'This test no longer exists.', 'newspack-popups' ), [ 'status' => 404 ] );
+		if ( ! $term ) {
+			if ( '' === $test_id || empty( self::get_test_prompt_ids( $test_id ) ) ) {
+				return new WP_Error( 'newspack_popups_ab_test_not_found', __( 'This test no longer exists.', 'newspack-popups' ), [ 'status' => 404 ] );
+			}
+			$inserted = wp_insert_term( wp_slash( $name ), self::TAXONOMY, [ 'slug' => $test_id ] );
+			if ( is_wp_error( $inserted ) && 'term_exists' !== $inserted->get_error_code() ) {
+				return $inserted;
+			}
+			if ( ! is_wp_error( $inserted ) ) {
+				$term = get_term( $inserted['term_id'], self::TAXONOMY );
+				if ( $term->slug === $test_id ) {
+					return self::decode_term_name( $term->name );
+				}
+				// A concurrent rename created this test's term after the lookup
+				// above, and core gave this one a suffixed slug. Drop it and
+				// rename the real one instead.
+				wp_delete_term( $term->term_id, self::TAXONOMY );
+			}
+			$term = get_term_by( 'slug', $test_id, self::TAXONOMY );
+			if ( ! $term ) {
+				return new WP_Error( 'newspack_popups_ab_test_name', __( 'Could not rename the test. Try again.', 'newspack-popups' ), [ 'status' => 500 ] );
+			}
 		}
-		return is_wp_error( $result ) ? $result : $name;
+		$result = wp_update_term( $term->term_id, self::TAXONOMY, [ 'name' => wp_slash( $name ) ] );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return self::decode_term_name( get_term( $term->term_id, self::TAXONOMY )->name );
 	}
 
 	/**

@@ -136,17 +136,64 @@ class ABTestNamesTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * Renaming a test to a name another test holds, after both are named.
+	 * A name comes back exactly as entered, though core stores `&` encoded and
+	 * strips backslashes from unslashed input.
 	 */
-	public function test_rename_to_a_name_another_named_test_holds() {
+	public function test_name_round_trips_as_entered() {
 		$this->sign_in();
-		$this->create_test_variant( 'first', 'a' );
-		$this->create_test_variant( 'second', 'a' );
-		$this->rename_request( 'first', 'One' );
-		$this->rename_request( 'second', 'Two' );
-		$this->assertSame( 200, $this->rename_request( 'second', 'One' )->get_status() );
-		$this->assertSame( 'One', $this->test_row( 'second' )['name'] );
-		$this->assertSame( 'One', $this->test_row( 'first' )['name'] );
+		$this->create_test_variant( 'spring-drive', 'a' );
+		$name = 'News & Culture \\ "Tips"';
+
+		$first = $this->rename_request( 'spring-drive', $name );
+		$this->assertSame( $name, $first->get_data()['name'] );
+		$this->assertSame( $name, $this->test_row( 'spring-drive' )['name'] );
+
+		$this->rename_request( 'spring-drive', 'Members & donors \\ 2026' );
+		$this->assertSame( 'Members & donors \\ 2026', Newspack_Popups_AB_Tests::get_test_name( 'spring-drive' ) );
+
+		$created = Newspack_Popups_AB_Tests::create_test( $name );
+		$this->assertSame( $name, Newspack_Popups_AB_Tests::get_test_name( $created ) );
+	}
+
+	/**
+	 * A rename that races another one to create the same test's record still
+	 * lands on that record, whether or not the two names match.
+	 *
+	 * @dataProvider data_racing_names
+	 * @param string $earlier Name the other request stored.
+	 */
+	public function test_rename_that_loses_the_create_race_updates_the_record( $earlier ) {
+		$this->sign_in();
+		$this->create_test_variant( 'spring-drive', 'a' );
+		wp_insert_term( $earlier, Newspack_Popups_AB_Tests::TAXONOMY, [ 'slug' => 'spring-drive' ] );
+		// The lookup misses once, as it would for a request that ran before the
+		// other one stored its term.
+		$miss_once = function ( $terms, $query ) use ( &$miss_once ) {
+			if ( 1 === $query->query_vars['number'] && in_array( 'spring-drive', (array) $query->query_vars['slug'], true ) ) {
+				remove_filter( 'terms_pre_query', $miss_once, 10 );
+				return [];
+			}
+			return $terms;
+		};
+		add_filter( 'terms_pre_query', $miss_once, 10, 2 );
+
+		$response = $this->rename_request( 'spring-drive', 'Spring drive' );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'Spring drive', $this->test_row( 'spring-drive' )['name'] );
+		$this->assertSame( 1, (int) wp_count_terms( [ 'taxonomy' => Newspack_Popups_AB_Tests::TAXONOMY ] ) );
+	}
+
+	/**
+	 * Names the losing request may race against.
+	 *
+	 * @return array
+	 */
+	public function data_racing_names() {
+		return [
+			'same name'      => [ 'Spring drive' ],
+			'different name' => [ 'Earlier name' ],
+		];
 	}
 
 	/**
@@ -237,13 +284,25 @@ class ABTestNamesTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * An ID already held by a prompt, trashed or not, is never handed out again.
+	 * The limit applies to the name as stored, where each `&` takes five
+	 * characters, so a rename never reports success for a name that wasn't saved.
 	 */
-	public function test_create_test_skips_ids_in_use() {
+	public function test_rename_measures_the_name_as_stored() {
+		$this->sign_in();
+		$this->create_test_variant( 'spring-drive', 'a' );
+		$this->rename_request( 'spring-drive', 'Kept' );
+		$this->assertSame( 400, $this->rename_request( 'spring-drive', str_repeat( 'x', 197 ) . '&' )->get_status() );
+		$this->assertSame( 'Kept', $this->test_row( 'spring-drive' )['name'] );
+		$this->assertSame( 200, $this->rename_request( 'spring-drive', str_repeat( 'x', 195 ) . '&' )->get_status() );
+	}
+
+	/**
+	 * An ID held by a prompt, trashed or not, counts as in use.
+	 */
+	public function test_trashed_prompt_keeps_its_id_in_use() {
 		$prompt_id = $this->create_test_variant( 'taken-0000', 'a' );
 		wp_trash_post( $prompt_id );
 		$method = new ReflectionMethod( Newspack_Popups_AB_Tests::class, 'is_test_id_in_use' );
-		$method->setAccessible( true );
 		$this->assertTrue( $method->invoke( null, 'taken-0000' ) );
 		$this->assertFalse( $method->invoke( null, 'free-0000' ) );
 	}

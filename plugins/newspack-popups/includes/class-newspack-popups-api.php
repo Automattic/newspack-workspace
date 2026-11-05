@@ -262,7 +262,7 @@ final class Newspack_Popups_API {
 		}
 		return rest_ensure_response(
 			[
-				'test_id' => (string) $request->get_param( 'test_id' ),
+				'test_id' => Newspack_Popups_AB_Tests::sanitize_test_id( $request->get_param( 'test_id' ) ),
 				'name'    => $name,
 			]
 		);
