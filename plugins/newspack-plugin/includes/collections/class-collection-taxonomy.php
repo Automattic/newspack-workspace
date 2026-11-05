@@ -175,18 +175,12 @@ class Collection_Taxonomy {
 
 		$meta_query = isset( $args['meta_query'] ) && is_array( $args['meta_query'] ) ? $args['meta_query'] : [];
 
+		// The flag is only ever stored as '1' or deleted, so NOT EXISTS is enough.
+		// An OR'd value comparison would join every meta row of the term, which
+		// inflates term counts (and the REST X-WP-Total header).
 		$meta_query[] = [
-			'relation' => 'OR',
-			[
-				'key'     => self::INACTIVE_TERM_META_KEY,
-				'compare' => 'NOT EXISTS',
-			],
-			[
-				'key'     => self::INACTIVE_TERM_META_KEY,
-				'value'   => '1',
-				'compare' => '!=',
-				'type'    => 'CHAR',
-			],
+			'key'     => self::INACTIVE_TERM_META_KEY,
+			'compare' => 'NOT EXISTS',
 		];
 
 		$args['meta_query'] = $meta_query; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
