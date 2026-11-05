@@ -7,7 +7,7 @@
 /**
  * External dependencies
  */
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 /**
  * WordPress dependencies
@@ -18,6 +18,12 @@ import apiFetch from '@wordpress/api-fetch';
  * Internal dependencies
  */
 import TestCard from './TestCard';
+
+let mockModalProps = null;
+jest.mock( './components/StartTestModal', () => props => {
+	mockModalProps = props;
+	return <div role="dialog" />;
+} );
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 jest.mock( '@wordpress/ui', () => ( {
@@ -58,6 +64,22 @@ describe( 'TestCard', () => {
 	beforeEach( () => {
 		apiFetch.mockReset();
 		apiFetch.mockResolvedValue( stats );
+	} );
+
+	it( 'offers Create Version B on an Incomplete test that still has its A, starting from its goal and split', () => {
+		const incomplete = { ...test, name: 'Hero', control_share: 70, started_at: null, variants: { a: test.variants.a } };
+		render( <TestCard test={ incomplete } data={ { ...data, goals: { link_click: 'Link click' } } } /> );
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Create Version B' } ) );
+
+		expect( screen.getByRole( 'dialog' ) ).toBeTruthy();
+		expect( mockModalProps ).toMatchObject( { promptId: 1, promptTitle: 'Hero', initialGoal: 'link_click', initialShare: 70 } );
+	} );
+
+	it( 'offers no Create Version B on an Incomplete test with no A to copy', () => {
+		render( <TestCard test={ { ...test, started_at: null, variants: { b: test.variants.b } } } data={ data } /> );
+		expect( screen.queryByRole( 'button', { name: 'Create Version B' } ) ).toBeNull();
+		expect( screen.getByText( 'This test has no version A, so it can’t run.' ) ).toBeTruthy();
 	} );
 
 	it( 'loads results on open for a started test with a stats source, and offers Refresh', async () => {

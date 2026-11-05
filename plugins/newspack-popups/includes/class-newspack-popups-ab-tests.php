@@ -437,9 +437,10 @@ final class Newspack_Popups_AB_Tests {
 			'goals'                 => self::get_goal_labels(),
 			'ineligible_placements' => self::get_ineligible_placements(),
 			'results_url'           => current_user_can( 'manage_options' ) && class_exists( 'Newspack_Popups_AB_Dashboard' ) ? Newspack_Popups_AB_Dashboard::get_page_url() : '',
+			'test_name'             => $post_id ? self::get_test_name( (string) get_post_meta( (int) $post_id, self::META_TEST_ID, true ) ) : '',
 			'variants'              => [
-				'a' => __( 'A (control)', 'newspack-popups' ),
-				'b' => __( 'B (challenger)', 'newspack-popups' ),
+				'a' => __( 'A', 'newspack-popups' ),
+				'b' => __( 'B', 'newspack-popups' ),
 			],
 		];
 	}
@@ -835,6 +836,10 @@ final class Newspack_Popups_AB_Tests {
 	 * Start a test on a prompt: it becomes version A, and a draft copy of it
 	 * becomes version B with the same placement and other settings.
 	 *
+	 * A prompt that is already version A of a test with no other version, such
+	 * as one whose B was trashed, resumes that test: it keeps its ID and results,
+	 * takes the new name, goal and split, and gets a new B.
+	 *
 	 * A is claimed before B is made, so a second start on the same prompt fails
 	 * instead of making a second test, and a failure after that removes what this
 	 * call made. The goal and split are stored on A only, because A's are the
@@ -860,31 +865,34 @@ final class Newspack_Popups_AB_Tests {
 		if ( '' === $goal ) {
 			return new WP_Error( 'newspack_popups_ab_test_goal', __( 'Choose a goal.', 'newspack-popups' ), [ 'status' => 400 ] );
 		}
-		if ( '' !== (string) get_post_meta( $prompt->ID, self::META_TEST_ID, true ) ) {
-			return self::already_in_test_error();
-		}
-
-		$test_id = self::create_test( $name );
-		if ( is_wp_error( $test_id ) ) {
-			return $test_id;
-		}
-		// The claim: add_post_meta() with $unique refuses to add a second row, so
-		// of two starts that both passed the check above, usually only one gets A.
-		// Its own check is a read before the insert, not a lock, so two starts in
-		// the same instant can still both succeed; the result is a second B whose
-		// test has no A, which the dashboard shows as Incomplete. A row left empty
-		// by clearing a test would refuse every start, so it goes first.
-		delete_post_meta( $prompt->ID, self::META_TEST_ID, '' );
-		if ( ! add_post_meta( $prompt->ID, self::META_TEST_ID, $test_id, true ) ) {
-			self::delete_test_term( $test_id );
-			return self::already_in_test_error();
+		// The ID as stored, not re-sanitized: B has to carry exactly A's value, or
+		// an ID stored under an earlier sanitizer would split the test in two.
+		$existing = (string) get_post_meta( $prompt->ID, self::META_TEST_ID, true );
+		$resuming = '' !== $existing;
+		if ( $resuming ) {
+			if ( 'a' !== get_post_meta( $prompt->ID, self::META_VARIANT, true ) || self::has_other_versions( $existing, $prompt->ID ) ) {
+				return self::already_in_test_error();
+			}
+			$renamed = self::rename_test( $existing, $name );
+			if ( is_wp_error( $renamed ) ) {
+				return $renamed;
+			}
+			$test_id = $existing;
+		} else {
+			$test_id = self::claim_new_test( $prompt->ID, $name );
+			if ( is_wp_error( $test_id ) ) {
+				return $test_id;
+			}
 		}
 
 		/* translators: %s: title of the prompt being tested, which is version A. */
 		$version_b = Newspack_Popups::duplicate_popup( $prompt->ID, sprintf( __( '%s (B)', 'newspack-popups' ), $prompt->post_title ) );
 		if ( ! $version_b || is_wp_error( $version_b ) ) {
-			delete_post_meta( $prompt->ID, self::META_TEST_ID, $test_id );
-			self::delete_test_term( $test_id );
+			// A resumed test was there before this call, so only a new one is undone.
+			if ( ! $resuming ) {
+				delete_post_meta( $prompt->ID, self::META_TEST_ID, $test_id );
+				self::delete_test_term( $test_id );
+			}
 			return new WP_Error( 'newspack_popups_ab_version_b', __( 'Could not create version B. Try again.', 'newspack-popups' ), [ 'status' => 500 ] );
 		}
 		update_post_meta( $version_b, self::META_TEST_ID, $test_id );
@@ -901,6 +909,55 @@ final class Newspack_Popups_AB_Tests {
 				'edit_link' => get_edit_post_link( $version_b, 'raw' ),
 			],
 		];
+	}
+
+	/**
+	 * Create a test and claim a prompt for it as version A.
+	 *
+	 * @param int    $prompt_id Prompt ID.
+	 * @param string $name      Display name.
+	 * @return string|WP_Error Test ID.
+	 */
+	private static function claim_new_test( $prompt_id, $name ) {
+		$test_id = self::create_test( $name );
+		if ( is_wp_error( $test_id ) ) {
+			return $test_id;
+		}
+		// The claim: add_post_meta() with $unique refuses to add a second row, so
+		// of two starts that both found the prompt in no test, usually only one gets A.
+		// Its own check is a read before the insert, not a lock, so two starts in
+		// the same instant can still both succeed; the result is a second B whose
+		// test has no A, which the dashboard shows as Incomplete. A row left empty
+		// by clearing a test would refuse every start, so it goes first.
+		delete_post_meta( $prompt_id, self::META_TEST_ID, '' );
+		if ( ! add_post_meta( $prompt_id, self::META_TEST_ID, $test_id, true ) ) {
+			self::delete_test_term( $test_id );
+			return self::already_in_test_error();
+		}
+		return $test_id;
+	}
+
+	/**
+	 * Whether a test has a version other than this prompt, trashed ones aside.
+	 *
+	 * @param string $test_id   Test ID.
+	 * @param int    $prompt_id Prompt to leave out.
+	 * @return bool
+	 */
+	private static function has_other_versions( $test_id, $prompt_id ) {
+		return ! empty(
+			get_posts(
+				[
+					'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+					'post_status'    => [ 'publish', 'future', 'draft', 'pending', 'private' ],
+					'fields'         => 'ids',
+					'posts_per_page' => 1,
+					'post__not_in'   => [ (int) $prompt_id ], // phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.PostNotIn_post__not_in -- One ID; config-scale CPT.
+					'meta_key'       => self::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+					'meta_value'     => $test_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				]
+			)
+		);
 	}
 
 	/**

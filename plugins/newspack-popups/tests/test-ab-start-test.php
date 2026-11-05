@@ -169,6 +169,89 @@ class ABStartTestTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * Version A of a test with no other version resumes that test: same ID, the
+	 * new name, goal and split, and a new B.
+	 *
+	 * @dataProvider data_resumable_tests
+	 * @param string|null $old_b_status Status of an earlier B, or null for none.
+	 */
+	public function test_start_resumes_a_test_whose_only_version_is_a( $old_b_status ) {
+		$this->sign_in();
+		$a = $this->create_prompt();
+		update_post_meta( $a, Newspack_Popups_AB_Tests::META_TEST_ID, 'spring-drive' );
+		update_post_meta( $a, Newspack_Popups_AB_Tests::META_VARIANT, 'a' );
+		update_post_meta( $a, Newspack_Popups_AB_Tests::META_GOAL, 'donation' );
+		if ( $old_b_status ) {
+			$old_b = $this->create_prompt( 'inline', [ 'post_status' => $old_b_status ] );
+			update_post_meta( $old_b, Newspack_Popups_AB_Tests::META_TEST_ID, 'spring-drive' );
+			update_post_meta( $old_b, Newspack_Popups_AB_Tests::META_VARIANT, 'b' );
+		}
+
+		$response = $this->start_request(
+			[
+				'prompt_id' => $a,
+				'name'      => 'Spring drive, take two',
+			]
+		);
+
+		$this->assertSame( 201, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertSame( 'spring-drive', $data['test_id'] );
+		$this->assertSame( 'Spring drive, take two', $data['name'] );
+		$this->assertSame( 'spring-drive', get_post_meta( $data['version_b']['id'], Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+		$this->assertSame( 'subscription', get_post_meta( $a, Newspack_Popups_AB_Tests::META_GOAL, true ) );
+	}
+
+	/**
+	 * Tests a start can resume.
+	 *
+	 * @return array
+	 */
+	public function data_resumable_tests() {
+		return [
+			'no B yet'       => [ null ],
+			'B in the trash' => [ 'trash' ],
+		];
+	}
+
+	/**
+	 * A prompt that is B of a test, or A of one that already has a B, can't start.
+	 *
+	 * @dataProvider data_unresumable_tests
+	 * @param string $variant      The prompt's version.
+	 * @param string $other_status Status of the test's other version.
+	 */
+	public function test_start_refuses_to_resume_a_test_with_another_version( $variant, $other_status ) {
+		$this->sign_in();
+		$prompt = $this->create_prompt();
+		update_post_meta( $prompt, Newspack_Popups_AB_Tests::META_TEST_ID, 'spring-drive' );
+		update_post_meta( $prompt, Newspack_Popups_AB_Tests::META_VARIANT, $variant );
+		$other = $this->create_prompt( 'inline', [ 'post_status' => $other_status ] );
+		update_post_meta( $other, Newspack_Popups_AB_Tests::META_TEST_ID, 'spring-drive' );
+		update_post_meta( $other, Newspack_Popups_AB_Tests::META_VARIANT, 'a' === $variant ? 'b' : 'a' );
+		$prompts = $this->prompt_count();
+
+		$response = $this->start_request( [ 'prompt_id' => $prompt ] );
+
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( $prompts, $this->prompt_count() );
+	}
+
+	/**
+	 * Tests a start must not resume.
+	 *
+	 * @return array
+	 */
+	public function data_unresumable_tests() {
+		return [
+			'A with a draft B'      => [ 'a', 'draft' ],
+			'A with a live B'       => [ 'a', 'publish' ],
+			'B of a test with an A' => [ 'b', 'publish' ],
+			'B of a test with no A' => [ 'b', 'trash' ],
+		];
+	}
+
+	/**
 	 * A manual placement can't start a test.
 	 */
 	public function test_start_refuses_an_ineligible_placement() {

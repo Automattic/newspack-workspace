@@ -9,13 +9,13 @@
  */
 import { __ } from '@wordpress/i18n';
 import { compose } from '@wordpress/compose';
-import { withSelect, withDispatch, useSelect, useDispatch } from '@wordpress/data';
+import { withSelect, withDispatch, useSelect, useDispatch, select as selectFromStore } from '@wordpress/data';
 import { registerPlugin } from '@wordpress/plugins';
 import { PluginDocumentSettingPanel, PluginPostStatusInfo } from '@wordpress/edit-post';
 import { ExternalLink } from '@wordpress/components';
 import { store as coreStore } from '@wordpress/core-data';
 import { store as editorStore } from '@wordpress/editor';
-import { useEffect } from '@wordpress/element';
+import { useEffect, useRef } from '@wordpress/element';
 import { Stack } from '@wordpress/ui';
 
 /**
@@ -32,7 +32,7 @@ import Duplicate from './Duplicate';
 import EditorAdditions from './EditorAdditions';
 import PostTypesPanel from './PostTypesPanel';
 import ExpirationPanel from './ExpirationPanel';
-import ABTestPanel from './ABTestPanel';
+import ABTestPanel, { CREATED_QUERY_ARG as AB_TEST_CREATED_QUERY_ARG } from './ABTestPanel';
 import MergeTagsBlockControl from './MergeTagsBlockControl';
 import './style.scss';
 
@@ -98,12 +98,69 @@ if ( window?.newspack_popups_data?.segmentation_enabled ) {
 	} );
 }
 
+const AB_TEST_PANEL_ID = 'newspack-popups-ab-test/ab-test-panel';
+
+/**
+ * After Create Version B, B's editor opens with this panel open and its toggle
+ * focused. The flag is read when this script loads: the editor rewrites the URL
+ * to the plain edit link while it starts, so it is gone by the time any effect
+ * runs. The editor can mount this component more than once, and the only
+ * action available toggles rather than opens, so the panel is opened once, on
+ * its live state; two calls would close it again. Focusing waits for
+ * FocusPanelToggle, inside the panel, because a closed panel renders nothing
+ * and the sidebar can render well over a second after load.
+ */
+const openedFromCreate = new URL( window.location.href ).searchParams.has( AB_TEST_CREATED_QUERY_ARG );
+let openPanelPending = openedFromCreate;
+let focusPanelToggleOnMount = openedFromCreate;
+
+const ABTestPanelFocus = () => {
+	const { toggleEditorPanelOpened } = useDispatch( editorStore );
+	const { openGeneralSidebar } = useDispatch( 'core/edit-post' );
+	useEffect( () => {
+		if ( ! openPanelPending ) {
+			return;
+		}
+		openPanelPending = false;
+		const url = new URL( window.location.href );
+		if ( url.searchParams.has( AB_TEST_CREATED_QUERY_ARG ) ) {
+			url.searchParams.delete( AB_TEST_CREATED_QUERY_ARG );
+			window.history.replaceState( window.history.state, '', url.toString() );
+		}
+		openGeneralSidebar( 'edit-post/document' );
+		if ( ! selectFromStore( editorStore ).isEditorPanelOpened( AB_TEST_PANEL_ID ) ) {
+			toggleEditorPanelOpened( AB_TEST_PANEL_ID );
+		}
+	}, [] );
+	return null;
+};
+
+const FocusPanelToggle = () => {
+	const ref = useRef();
+	useEffect( () => {
+		if ( ! focusPanelToggleOnMount ) {
+			return;
+		}
+		focusPanelToggleOnMount = false;
+		ref.current?.closest( '.components-panel__body' )?.querySelector( '.components-panel__body-toggle' )?.focus();
+	}, [] );
+	return <span ref={ ref } hidden />;
+};
+
 if ( window?.newspack_popups_data?.ab_testing?.enabled ) {
 	registerPlugin( 'newspack-popups-ab-test', {
 		render: () => (
-			<PluginDocumentSettingPanel name="ab-test-panel" title={ __( 'A/B Test', 'newspack-popups' ) }>
-				<ABTestPanelWithData />
-			</PluginDocumentSettingPanel>
+			<>
+				<ABTestPanelFocus />
+				<PluginDocumentSettingPanel
+					name="ab-test-panel"
+					className="newspack-popups-ab-test-panel"
+					title={ __( 'A/B Test', 'newspack-popups' ) }
+				>
+					<FocusPanelToggle />
+					<ABTestPanelWithData />
+				</PluginDocumentSettingPanel>
+			</>
 		),
 		icon: null,
 	} );

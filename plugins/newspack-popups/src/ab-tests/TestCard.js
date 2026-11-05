@@ -5,6 +5,7 @@ import { useEffect, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { speak } from '@wordpress/a11y';
 import apiFetch from '@wordpress/api-fetch';
+import { addQueryArgs } from '@wordpress/url';
 import { decodeEntities } from '@wordpress/html-entities';
 import { dateI18n, getSettings } from '@wordpress/date';
 import { Button, Card, CardBody, CardHeader, Notice, Spinner } from '@wordpress/components';
@@ -14,6 +15,7 @@ import { Badge, Stack } from '@wordpress/ui';
  * Internal dependencies
  */
 import AllocationBar, { getShares } from './AllocationBar';
+import StartTestModal from './components/StartTestModal';
 import {
 	formatConfidence,
 	formatLift,
@@ -35,8 +37,8 @@ import {
  */
 const getMissingRoleHint = variants =>
 	variants.a
-		? __( 'Add version B: give another prompt this test name.', 'newspack-popups' )
-		: __( 'Add version A: give another prompt this test name.', 'newspack-popups' );
+		? __( 'Not started. Create version B, then publish it to start the test.', 'newspack-popups' )
+		: __( 'This test has no version A, so it can’t run.', 'newspack-popups' );
 
 /**
  * One test: its split, its variants and their results, loaded when the card opens.
@@ -50,6 +52,7 @@ const TestCard = ( { test, data } ) => {
 	const [ loading, setLoading ] = useState( false );
 	const [ error, setError ] = useState( null );
 	const [ wasRefresh, setWasRefresh ] = useState( false );
+	const [ isStarting, setIsStarting ] = useState( false );
 	const status = getTestStatus( test );
 	const letters = Object.keys( test.variants );
 	const duplicates = test.duplicates || [];
@@ -58,6 +61,9 @@ const TestCard = ( { test, data } ) => {
 	const hasStats = hasStarted && stats && stats.source.state !== 'unavailable';
 
 	const ineligible = letters.filter( letter => false === test.variants[ letter ].eligible );
+	// An Incomplete test whose A is still here can get its B from the card. One
+	// whose A is gone has nothing to copy.
+	const canCreateVersionB = status === 'incomplete' && !! test.variants.a && false !== test.variants.a.eligible;
 
 	const load = refresh => {
 		setLoading( true );
@@ -99,6 +105,11 @@ const TestCard = ( { test, data } ) => {
 				</Stack>
 				<Stack direction="row" gap="md" align="center">
 					<Badge intent={ getStatusIntent( status ) }>{ getStatusLabel( status ) }</Badge>
+					{ canCreateVersionB && (
+						<Button variant="secondary" size="compact" onClick={ () => setIsStarting( true ) }>
+							{ __( 'Create Version B', 'newspack-popups' ) }
+						</Button>
+					) }
 					{ data.provider.available && hasStarted && (
 						<Button
 							variant="secondary"
@@ -118,7 +129,7 @@ const TestCard = ( { test, data } ) => {
 					{ duplicates.length > 0 && (
 						<Notice status="error" isDismissible={ false } spokenMessage="">
 							{ __(
-								'More than one prompt in this test is the same version. Readers still see both, and results only count the first. Clear the test name on the extra prompt, or unpublish it:',
+								'More than one prompt in this test is the same version. Readers still see both, and results only count the first. Unpublish the extra prompt:',
 								'newspack-popups'
 							) }{ ' ' }
 							{ duplicates.map( ( duplicate, index ) => {
@@ -288,6 +299,31 @@ const TestCard = ( { test, data } ) => {
 					) }
 				</Stack>
 			</CardBody>
+			{ isStarting && (
+				<StartTestModal
+					promptId={ test.variants.a.id }
+					promptTitle={ test.name || test.test_id }
+					goals={ data.goals || {} }
+					initialGoal={ test.goal }
+					initialShare={ test.control_share }
+					intro={ sprintf(
+						// Translators: %s is the title of version A.
+						__(
+							'Version B starts as a draft copy of “%s” with the same placement. Change what you want to compare, then publish it to start the test.',
+							'newspack-popups'
+						),
+						decodeEntities( test.variants.a.title )
+					) }
+					onCreated={ result => {
+						if ( result?.version_b?.edit_link ) {
+							window.location.assign( addQueryArgs( result.version_b.edit_link, { 'newspack-ab-test': 'created' } ) );
+						} else {
+							window.location.reload();
+						}
+					} }
+					onClose={ () => setIsStarting( false ) }
+				/>
+			) }
 		</Card>
 	);
 };

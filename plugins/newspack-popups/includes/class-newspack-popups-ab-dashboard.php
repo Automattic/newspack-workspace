@@ -228,6 +228,7 @@ final class Newspack_Popups_AB_Dashboard {
 				'min_readers' => Newspack_Popups_AB_Stats::MIN_READERS_PER_ARM,
 			],
 			'copy'             => self::get_advisory_copy(),
+			'goals'            => Newspack_Popups_AB_Tests::get_goal_labels(),
 			'labels'           => [
 				'collecting'  => __( 'Too early', 'newspack-popups' ),
 				'directional' => __( 'Early signal', 'newspack-popups' ),
