@@ -98,9 +98,9 @@ class Newspack_Test_UI_Palette extends WP_UnitTestCase {
 	 */
 	public function test_solved_mixes_meet_targets( $base, $contrast ) {
 		$fill   = Newspack_UI_Palette::mix( $contrast, 7, $base );
-		$muted  = Newspack_UI_Palette::mix( $contrast, Newspack_UI_Palette::solve_mix( $contrast, $base, 60, Newspack_UI_Palette::TARGETS['text-muted'], $fill ), $base );
-		$subtle = Newspack_UI_Palette::mix( $contrast, Newspack_UI_Palette::solve_mix( $contrast, $base, 50, Newspack_UI_Palette::TARGETS['text-subtle'] ), $base );
-		$border = Newspack_UI_Palette::mix( $contrast, Newspack_UI_Palette::solve_mix( $contrast, $base, 20, Newspack_UI_Palette::TARGETS['border'] ), $base );
+		$muted  = Newspack_UI_Palette::mix( $contrast, Newspack_UI_Palette::solve_mix( $contrast, $base, Newspack_UI_Palette::START_SHARES['text-muted'], Newspack_UI_Palette::TARGETS['text-muted'], $fill ), $base );
+		$subtle = Newspack_UI_Palette::mix( $contrast, Newspack_UI_Palette::solve_mix( $contrast, $base, Newspack_UI_Palette::START_SHARES['text-subtle'], Newspack_UI_Palette::TARGETS['text-subtle'] ), $base );
+		$border = Newspack_UI_Palette::mix( $contrast, Newspack_UI_Palette::solve_mix( $contrast, $base, Newspack_UI_Palette::START_SHARES['border'], Newspack_UI_Palette::TARGETS['border'] ), $base );
 
 		$this->assertGreaterThanOrEqual( 60, Newspack_UI_Palette::lc( $muted, $base ) );
 		$this->assertGreaterThanOrEqual( 45, Newspack_UI_Palette::lc( $subtle, $base ) );
@@ -112,7 +112,7 @@ class Newspack_Test_UI_Palette extends WP_UnitTestCase {
 	 * Neutral stays at or under Phase 1's 70.
 	 */
 	public function test_neutral_stays_close_to_phase_1() {
-		$this->assertLessThanOrEqual( 70, Newspack_UI_Palette::solve_mix( '#1e1e1e', '#ffffff', 60, 60, Newspack_UI_Palette::mix( '#1e1e1e', 7, '#ffffff' ) ) );
+		$this->assertLessThanOrEqual( 70, Newspack_UI_Palette::solve_mix( '#1e1e1e', '#ffffff', Newspack_UI_Palette::START_SHARES['text-muted'], 60, Newspack_UI_Palette::mix( '#1e1e1e', 7, '#ffffff' ) ) );
 	}
 
 	/**
@@ -933,7 +933,7 @@ class Newspack_Test_UI_Palette extends WP_UnitTestCase {
 	public function test_nocturne_function_equals_adapter_values() {
 		$expected = [
 			'text-muted'               => '#b9b9b9',
-			'text-subtle'              => '#9a9a9a',
+			'text-subtle'              => '#9f9f9f',
 			'border'                   => '#7a7a7a',
 			'border-control'           => '#7a7a7a',
 			'focus-halo'               => '#7a7a7a',
@@ -1044,6 +1044,42 @@ class Newspack_Test_UI_Palette extends WP_UnitTestCase {
 
 		$pressed = $this->properties( $palette + [ 'skip_states' => [ 'pressed' ] ] );
 		$this->assertSame( Newspack_UI_Palette::mix( '#c08a1a', 85, '#ffffff' ), $pressed['button-bg-hover'] );
+	}
+
+	/**
+	 * A skipped pressed state does not trip the guard: hover alone reads at Lc 47.5, so both mix toward the base.
+	 */
+	public function test_skipped_pressed_state_keeps_the_base_target() {
+		$properties = $this->properties(
+			[
+				'base'        => '#1e1e1e',
+				'contrast'    => '#ffffff',
+				'brand'       => '#e0a030',
+				'brand_text'  => '#000000',
+				'skip_states' => [ 'pressed' ],
+			] 
+		);
+
+		$this->assertEqualsWithDelta( 47.5, Newspack_UI_Palette::lc( '#000000', Newspack_UI_Palette::mix( '#e0a030', 85, '#1e1e1e' ) ), 0.05 );
+		$this->assertSame( Newspack_UI_Palette::mix( '#e0a030', 85, '#1e1e1e' ), $properties['button-bg-hover'] );
+		$this->assertArrayNotHasKey( 'btn-pressed', $properties );
+	}
+
+	/**
+	 * On the default white palette the grey roles equal Neutral's, so none of them is written.
+	 */
+	public function test_default_white_palette_writes_no_neutral_greys() {
+		$properties = $this->properties(
+			[
+				'base'     => '#ffffff',
+				'contrast' => '#1e1e1e',
+				'brand'    => '#003da5',
+			] 
+		);
+
+		foreach ( [ 'text-muted', 'text-subtle', 'border-control' ] as $key ) {
+			$this->assertArrayNotHasKey( $key, $properties, $key );
+		}
 	}
 
 	/**
@@ -1202,6 +1238,9 @@ class Newspack_Test_UI_Palette extends WP_UnitTestCase {
 
 		$this->assertMatchesRegularExpression( '/^#[0-9a-f]{6}$/', $properties['focus-halo'] );
 		$this->assertGreaterThanOrEqual( Newspack_UI_Palette::TARGETS['focus-halo'], Newspack_UI_Palette::lc( $properties['focus-halo'], strtolower( $base ) ) );
+		if ( 'black' === \Newspack\newspack_get_color_contrast( $base ) ) {
+			$this->assertGreaterThanOrEqual( Newspack_UI_Palette::lc( $properties['border'], strtolower( $base ) ), Newspack_UI_Palette::lc( $properties['focus-halo'], strtolower( $base ) ) );
+		}
 	}
 
 	/**
@@ -1220,7 +1259,7 @@ class Newspack_Test_UI_Palette extends WP_UnitTestCase {
 				'contrast' => $contrast,
 				'brand'    => $brand,
 			] 
-		);
+		) + Newspack_UI_Palette::NEUTRAL_DEFAULTS;
 		$base       = strtolower( $base );
 
 		$this->assertGreaterThanOrEqual( 60, Newspack_UI_Palette::lc( $properties['text-muted'], $base ) );
