@@ -690,8 +690,13 @@ final class Newspack_Popups_AB_Tests {
 			}
 			// Another request took the ID after the check above, so core stored
 			// this term under a suffixed slug that no test would ever read.
-			if ( get_term( $term['term_id'], self::TAXONOMY )->slug !== $test_id ) {
-				wp_delete_term( $term['term_id'], self::TAXONOMY );
+			$stored_slug = get_term( $term['term_id'], self::TAXONOMY )->slug;
+			if ( $stored_slug !== $test_id ) {
+				// Core can hand back an older term holding that slug instead; it
+				// belongs to another test if a prompt carries it.
+				if ( empty( self::get_test_prompt_ids( $stored_slug ) ) ) {
+					wp_delete_term( $term['term_id'], self::TAXONOMY );
+				}
 				continue;
 			}
 			return $test_id;
@@ -713,15 +718,17 @@ final class Newspack_Popups_AB_Tests {
 		}
 		// Measured as core will store it: its filters turn `&` into `&amp;`, and a
 		// name over the column's 200 characters is not cut short but dropped,
-		// silently on update.
-		if ( mb_strlen( sanitize_term_field( 'name', $name, 0, self::TAXONOMY, 'db' ) ) > 200 ) {
+		// silently on update. The filters expect slashed input, as the term APIs
+		// pass it; unslashed, they miscount backslashes and quotes.
+		if ( mb_strlen( wp_unslash( sanitize_term_field( 'name', wp_slash( $name ), 0, self::TAXONOMY, 'db' ) ) ) > 200 ) {
 			return new WP_Error( 'newspack_popups_ab_test_name', __( 'Use a shorter test name.', 'newspack-popups' ), [ 'status' => 400 ] );
 		}
 		return $name;
 	}
 
 	/**
-	 * A term name as it was entered. Core stores `&`, `<` and `>` HTML-encoded.
+	 * A term name with core's HTML encoding undone, so `&` and a lone `<` or `>`
+	 * read as entered. Entity text typed into a name is decoded too.
 	 *
 	 * @param string $name Stored name.
 	 * @return string
@@ -762,9 +769,11 @@ final class Newspack_Popups_AB_Tests {
 					return self::decode_term_name( $term->name );
 				}
 				// A concurrent rename created this test's term after the lookup
-				// above, and core gave this one a suffixed slug. Drop it and
-				// rename the real one instead.
-				wp_delete_term( $term->term_id, self::TAXONOMY );
+				// above, and core gave this one a suffixed slug. Drop it, unless
+				// core handed back another test's term, and rename the real one.
+				if ( empty( self::get_test_prompt_ids( $term->slug ) ) ) {
+					wp_delete_term( $term->term_id, self::TAXONOMY );
+				}
 			}
 			$term = get_term_by( 'slug', $test_id, self::TAXONOMY );
 			if ( ! $term ) {

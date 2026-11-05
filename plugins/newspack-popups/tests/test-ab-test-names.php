@@ -136,8 +136,8 @@ class ABTestNamesTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * A name comes back exactly as entered, though core stores `&` encoded and
-	 * strips backslashes from unslashed input.
+	 * A name with `&`, a backslash and quotes comes back as entered, though core
+	 * stores `&` encoded and strips backslashes from unslashed input.
 	 */
 	public function test_name_round_trips_as_entered() {
 		$this->sign_in();
@@ -284,16 +284,34 @@ class ABTestNamesTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * The limit applies to the name as stored, where each `&` takes five
-	 * characters, so a rename never reports success for a name that wasn't saved.
+	 * Names one character over and exactly at the stored limit.
+	 *
+	 * @return array
 	 */
-	public function test_rename_measures_the_name_as_stored() {
+	public function data_names_at_the_limit() {
+		return [
+			'ampersand, stored as five characters' => [ str_repeat( 'x', 196 ) . '&', str_repeat( 'x', 195 ) . '&' ],
+			'backslash'                            => [ str_repeat( 'x', 200 ) . '\\', str_repeat( 'x', 199 ) . '\\' ],
+			'apostrophe'                           => [ str_repeat( 'x', 200 ) . "'", str_repeat( 'x', 199 ) . "'" ],
+		];
+	}
+
+	/**
+	 * The limit applies to the name as stored, so a rename never reports success
+	 * for a name that wasn't saved, nor refuses one that fits.
+	 *
+	 * @dataProvider data_names_at_the_limit
+	 * @param string $too_long A name one character over the limit as stored.
+	 * @param string $fits     A name exactly at the limit as stored.
+	 */
+	public function test_rename_measures_the_name_as_stored( $too_long, $fits ) {
 		$this->sign_in();
 		$this->create_test_variant( 'spring-drive', 'a' );
 		$this->rename_request( 'spring-drive', 'Kept' );
-		$this->assertSame( 400, $this->rename_request( 'spring-drive', str_repeat( 'x', 197 ) . '&' )->get_status() );
+		$this->assertSame( 400, $this->rename_request( 'spring-drive', $too_long )->get_status() );
 		$this->assertSame( 'Kept', $this->test_row( 'spring-drive' )['name'] );
-		$this->assertSame( 200, $this->rename_request( 'spring-drive', str_repeat( 'x', 195 ) . '&' )->get_status() );
+		$this->assertSame( 200, $this->rename_request( 'spring-drive', $fits )->get_status() );
+		$this->assertSame( $fits, $this->test_row( 'spring-drive' )['name'] );
 	}
 
 	/**
@@ -302,9 +320,9 @@ class ABTestNamesTest extends WP_UnitTestCase_PageWithPopups {
 	public function test_trashed_prompt_keeps_its_id_in_use() {
 		$prompt_id = $this->create_test_variant( 'taken-0000', 'a' );
 		wp_trash_post( $prompt_id );
-		$method = new ReflectionMethod( Newspack_Popups_AB_Tests::class, 'is_test_id_in_use' );
-		$this->assertTrue( $method->invoke( null, 'taken-0000' ) );
-		$this->assertFalse( $method->invoke( null, 'free-0000' ) );
+		$is_test_id_in_use = new ReflectionMethod( Newspack_Popups_AB_Tests::class, 'is_test_id_in_use' );
+		$this->assertTrue( $is_test_id_in_use->invoke( null, 'taken-0000' ) );
+		$this->assertFalse( $is_test_id_in_use->invoke( null, 'free-0000' ) );
 	}
 
 	/**
