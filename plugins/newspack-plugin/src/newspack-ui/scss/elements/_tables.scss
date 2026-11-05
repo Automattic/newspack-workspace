@@ -1,7 +1,7 @@
 .newspack-ui {
 	table {
 		border: 0;
-		font-family: var(--newspack-ui-font-family);
+		font-family: var(--newspack-ui-font-family-body);
 		font-size: var(--newspack-ui-font-size-small); // Prevent relative font size
 		line-height: var(--newspack-ui-line-height-small);
 		margin: calc(var(--newspack-ui-spacer-1) / -2) 0; // Offset cell padding.

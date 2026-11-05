@@ -17,7 +17,7 @@ $caret-disabled: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/sv
 		color: var(--newspack-ui-color-text);
 		cursor: pointer;
 		display: block;
-		font-family: var(--newspack-ui-font-family);
+		font-family: var(--newspack-ui-font-family-control);
 		font-size: var(--newspack-ui-font-size-body);
 		line-height: var(--newspack-ui-line-height-body);
 		margin: 0;
@@ -79,7 +79,7 @@ $caret-disabled: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/sv
 			.select2-selection__rendered {
 				color: var(--newspack-ui-color-text);
 				flex: 1;
-				font-family: var(--newspack-ui-font-family);
+				font-family: var(--newspack-ui-font-family-control);
 				font-size: var(--newspack-ui-font-size-body);
 				line-height: var(--newspack-ui-line-height-body);
 				padding: 0;
