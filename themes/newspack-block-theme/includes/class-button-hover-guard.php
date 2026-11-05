@@ -14,13 +14,13 @@ defined( 'ABSPATH' ) || exit;
  *
  * Those fills mix the button fill toward the base. On a fill close to the base
  * the mix washes out, and the button text stops reading. When the text on
- * either fill falls below APCA Lc 60, both states mix toward the text side
+ * either fill falls below APCA Lc 45, both states mix toward the text side
  * instead, black for light text and white for dark text, through the
  * --wp--custom--button--mix custom property that the hover and pressed rules
  * read. A hover or pressed fill the publisher set in Styles is left alone.
  */
 final class Button_Hover_Guard {
-	const MIN_LC = 60;
+	const MIN_LC = 45;
 
 	/**
 	 * Initializer.

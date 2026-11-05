@@ -54,6 +54,14 @@ class Test_Button_Hover_Guard extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Drop the cached user global styles a test saved.
+	 */
+	public function tear_down() {
+		wp_clean_theme_json_cache();
+		parent::tear_down();
+	}
+
+	/**
 	 * The APCA Lc of the button text at rest, on hover and pressed, and the mix target, per file.
 	 *
 	 * @return array
@@ -70,13 +78,13 @@ class Test_Button_Hover_Guard extends WP_UnitTestCase {
 			'styles/07-foundry-alt.json'  => [ 'styles/07-foundry-alt.json', 92.2, 82.9, 75.6, null ],
 			'styles/08-ledger.json'       => [ 'styles/08-ledger.json', 79.5, 71.6, 65.8, null ],
 			'styles/09-ledger-alt.json'   => [ 'styles/09-ledger-alt.json', 79.5, 71.6, 65.8, null ],
-			'styles/10-nocturne.json'     => [ 'styles/10-nocturne.json', 79.1, 62.8, 52.4, '#ffffff' ],
-			'styles/11-nocturne-alt.json' => [ 'styles/11-nocturne-alt.json', 79.1, 62.8, 52.4, '#ffffff' ],
+			'styles/10-nocturne.json'     => [ 'styles/10-nocturne.json', 79.1, 62.8, 52.4, null ],
+			'styles/11-nocturne-alt.json' => [ 'styles/11-nocturne-alt.json', 79.1, 62.8, 52.4, null ],
 		];
 	}
 
 	/**
-	 * Every file's default button reads at APCA Lc 60 at rest, and the guard trips exactly where hover or pressed drop below it.
+	 * Every file's default button reads at rest, and the guard trips exactly where hover or pressed drop below it.
 	 *
 	 * @dataProvider guard_vectors
 	 *
@@ -99,11 +107,21 @@ class Test_Button_Hover_Guard extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Nocturne's amber accent stays above Lc 45 in every state, so it mixes toward the base.
+	 */
+	public function test_nocturne_does_not_trip() {
+		$result = Button_Hover_Guard::evaluate( '#ffc857', '#000000', '#1e1e1e', self::SHARES );
+
+		$this->assertNull( $result['target'] );
+		$this->assertGreaterThan( Button_Hover_Guard::MIN_LC, $result['pressed'] );
+	}
+
+	/**
 	 * Light text mixes toward black and dark text toward white.
 	 */
 	public function test_target_follows_the_text_side() {
 		$light = Button_Hover_Guard::evaluate( '#9fb6dd', '#ffffff', '#ffffff', self::SHARES );
-		$dark  = Button_Hover_Guard::evaluate( '#ffc857', '#000000', '#1e1e1e', self::SHARES );
+		$dark  = Button_Hover_Guard::evaluate( '#c08a1a', '#000000', '#1e1e1e', self::SHARES );
 
 		$this->assertSame( '#000000', $light['target'] );
 		$this->assertSame( '#ffffff', $dark['target'] );
@@ -113,8 +131,8 @@ class Test_Button_Hover_Guard extends WP_UnitTestCase {
 	 * A skipped state does not trip the guard.
 	 */
 	public function test_skipped_states_are_ignored() {
-		$this->assertNull( Button_Hover_Guard::evaluate( '#ffc857', '#000000', '#1e1e1e', self::SHARES, [ 'hover', 'pressed' ] )['target'] );
-		$this->assertSame( '#ffffff', Button_Hover_Guard::evaluate( '#ffc857', '#000000', '#1e1e1e', self::SHARES, [ 'hover' ] )['target'] );
+		$this->assertNull( Button_Hover_Guard::evaluate( '#c08a1a', '#000000', '#1e1e1e', self::SHARES, [ 'hover', 'pressed' ] )['target'] );
+		$this->assertSame( '#ffffff', Button_Hover_Guard::evaluate( '#c08a1a', '#000000', '#1e1e1e', self::SHARES, [ 'hover' ] )['target'] );
 	}
 
 	/**
