@@ -121,9 +121,9 @@ final class Session_Hydration {
 	/**
 	 * Send a nonce for the current session.
 	 *
-	 * This is an admin-ajax action rather than a REST route because other sites
-	 * can read REST responses, and the REST API relies on the nonce staying out of
-	 * their reach.
+	 * This is an admin-ajax action rather than a REST route because admin-ajax only
+	 * lets allowed origins read the response, where a REST route has to enforce that
+	 * itself. Other sites must never be able to read a nonce.
 	 */
 	public static function ajax_get_nonce(): void {
 		\wp_send_json( self::get_nonce_data() );

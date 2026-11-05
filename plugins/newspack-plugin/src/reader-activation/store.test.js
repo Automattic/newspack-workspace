@@ -491,6 +491,7 @@ describe( 'Store', () => {
 	} );
 	describe( 'session change while the page is open', () => {
 		const INVALID_NONCE = JSON.stringify( { code: 'rest_cookie_invalid_nonce' } );
+		const NONCE_URL = `${ window.location.origin }/nonce`;
 		const originalXHR = window.XMLHttpRequest;
 		const originalFetch = window.fetch;
 		let requests;
@@ -522,7 +523,12 @@ describe( 'Store', () => {
 		};
 
 		const mockNonceEndpoint = ( body, status = 200 ) => {
-			window.fetch = jest.fn().mockResolvedValue( { ok: 200 === status, status, json: async () => JSON.parse( body ) } );
+			window.fetch = jest.fn().mockResolvedValue( {
+				ok: 200 === status,
+				status,
+				json: async () => JSON.parse( body ),
+				text: async () => body,
+			} );
 		};
 		const pageReaderNonce = JSON.stringify( { nonce: 'a1b2c3d4e5', user_id: 7 } );
 		const otherReaderNonce = JSON.stringify( { nonce: 'b1b2c3d4e5', user_id: 8 } );
@@ -541,7 +547,7 @@ describe( 'Store', () => {
 			window.XMLHttpRequest = FakeXHR;
 			window.newspack_reader_data = {
 				api_url: 'http://test/api',
-				nonce_url: 'http://test/nonce',
+				nonce_url: NONCE_URL,
 				nonce: 'pagenonce0',
 				// A string, as wp_localize_script() delivers it.
 				user_id: '7',
@@ -564,7 +570,7 @@ describe( 'Store', () => {
 			firstAttempt.respond( 403, INVALID_NONCE );
 			await flushPromises();
 
-			expect( window.fetch ).toHaveBeenCalledWith( 'http://test/nonce', expect.objectContaining( { credentials: 'same-origin' } ) );
+			expect( window.fetch ).toHaveBeenCalledWith( NONCE_URL, expect.objectContaining( { credentials: 'same-origin' } ) );
 			expect( requests[ 1 ].headers[ 'X-WP-Nonce' ] ).toBe( 'a1b2c3d4e5' );
 
 			requests[ 1 ].respond( 200 );
@@ -578,6 +584,7 @@ describe( 'Store', () => {
 		it.each( [
 			[ 'the endpoint is unavailable', 'Service Unavailable', 503 ],
 			[ 'the endpoint answers with something other than a nonce', '<html>', 200 ],
+			[ 'something other than WordPress answers 400', '<html>Bad Request</html>', 400 ],
 		] )( 'keeps the key pending without retrying when %s', async ( _case, body, status ) => {
 			mockNonceEndpoint( body, status );
 			saveKey().respond( 403, INVALID_NONCE );
@@ -604,6 +611,16 @@ describe( 'Store', () => {
 			expect( requests ).toHaveLength( 2 );
 		} );
 
+		it( 'keeps keys pending when a cross-origin refresh gets the logged-out answer', async () => {
+			// The request carries no cookies, so the answer says nothing about the reader.
+			window.newspack_reader_data.nonce_url = 'http://admin.test/nonce';
+			mockNonceEndpoint( '0', 400 );
+			saveKey().respond( 403, INVALID_NONCE );
+			await flushPromises();
+
+			expect( pendingKeys() ).toEqual( [ 'pageviews' ] );
+		} );
+
 		it( 'recovers on a later save after a refresh fails', async () => {
 			mockNonceEndpoint( '0', 400 );
 			saveKey().respond( 403, INVALID_NONCE );
@@ -614,6 +631,12 @@ describe( 'Store', () => {
 			await flushPromises();
 
 			expect( requests[ 2 ].headers[ 'X-WP-Nonce' ] ).toBe( 'a1b2c3d4e5' );
+
+			// The reader is back, so an unrelated failure must not drop their keys.
+			requests[ 2 ].respond( 500 );
+			await flushPromises();
+
+			expect( pendingKeys() ).toContain( 'articles_read' );
 		} );
 
 		it( 'gives up after one retry', async () => {
@@ -643,20 +666,21 @@ describe( 'Store', () => {
 			saveKey( 'articles_read' ).respond( 403, INVALID_NONCE );
 			await flushPromises();
 
+			// The other reader's tab marks its own key in the same shared list.
+			localStorage.setItem( 'np_reader__unsynced', JSON.stringify( [ ...pendingKeys(), 'other_reader_key' ] ) );
+
 			mockNonceEndpoint( otherReaderNonce );
-			store.set( 'favorite_categories', 1 );
 			saveKey().respond( 403, INVALID_NONCE );
 			await flushPromises();
 
-			// The other reader's tab marks its own key in the same shared list.
-			localStorage.setItem( 'np_reader__unsynced', JSON.stringify( [ ...pendingKeys(), 'other_reader_key' ] ) );
-			jest.advanceTimersByTime( 3000 );
 			store.set( 'written_after', 1 );
 			jest.advanceTimersByTime( 3000 );
 
 			expect( requests ).toHaveLength( 2 );
 			expect( window.newspack_reader_data.nonce ).toBe( 'pagenonce0' );
 			expect( pendingKeys() ).toEqual( [ 'other_reader_key' ] );
+			expect( localStorage.getItem( 'np_reader_pageviews' ) ).toBeNull();
+			expect( localStorage.getItem( 'np_reader_articles_read' ) ).toBeNull();
 			expect( localStorage.getItem( 'np_reader_written_after' ) ).toBeNull();
 		} );
 	} );

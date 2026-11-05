@@ -224,14 +224,20 @@ class Newspack_Test_Session_Hydration extends WP_UnitTestCase {
 
 	/**
 	 * The nonce action has no logged-out handler, so a visitor without a session
-	 * gets no nonce. The page config names its reader for the nonce check to compare.
+	 * gets no nonce.
 	 */
-	public function test_nonce_action_is_logged_in_only_and_config_names_the_reader() {
+	public function test_nonce_action_is_logged_in_only() {
+		$this->assertNotFalse( has_action( 'wp_ajax_newspack_reader_nonce' ) );
+		$this->assertFalse( has_action( 'wp_ajax_nopriv_newspack_reader_nonce' ) );
+	}
+
+	/**
+	 * The page config names its reader, for the nonce check to compare against.
+	 */
+	public function test_page_config_names_the_reader() {
 		$user_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
 		wp_set_current_user( $user_id );
 
 		$this->assertSame( $user_id, \Newspack\Reader_Data::get_config()['user_id'] );
-		$this->assertNotFalse( has_action( 'wp_ajax_newspack_reader_nonce' ) );
-		$this->assertFalse( has_action( 'wp_ajax_nopriv_newspack_reader_nonce' ) );
 	}
 }

@@ -5,10 +5,15 @@ import { getCookie } from './utils';
 import { EVENTS, emit } from './events';
 
 /**
- * Shared nonce storage. Uses newspack_reader_data as the shared state so that
- * all webpack entry points read and write the same value.
+ * Shared session state. Uses newspack_reader_data so that all webpack entry
+ * points read and write the same nonce, reader ID, and account_changed flag.
  */
 window.newspack_reader_data = window.newspack_reader_data || {};
+
+/**
+ * What refreshApiNonce resolves with when the reader has no session left.
+ */
+export const LOGGED_OUT = Symbol( 'logged-out' );
 
 let pending = null;
 let refreshing = null;
@@ -86,10 +91,9 @@ function adoptNonce( data ) {
  * A nonce is tied to the session it was created in, so a page loses write access
  * when the reader's session changes. Unlike hydrateSession, this works at any
  * time after authentication. A failure is not final: the page's reader can log
- * back in, so each failed save asks again. A logged-out answer is recorded, so
- * the store can stop leaving keys for whoever logs in next.
+ * back in, so each failed save asks again.
  *
- * @return {Promise<string|null>} The new nonce, or null on failure.
+ * @return {Promise<string|symbol|null>} The new nonce, LOGGED_OUT, or null on failure.
  */
 export function refreshApiNonce() {
 	if ( ! refreshing ) {
@@ -103,7 +107,11 @@ export function refreshApiNonce() {
 /**
  * Fetch a nonce from the nonce endpoint.
  *
- * @return {Promise<string|null>} The nonce, or null on failure.
+ * The action has no logged-out handler, so admin-ajax answers a visitor with no
+ * session with a 400 and a body of `0`. A cross-origin request carries no cookies
+ * and gets the same answer, which says nothing about the reader.
+ *
+ * @return {Promise<string|symbol|null>} The nonce, LOGGED_OUT, or null on failure.
  */
 async function fetchApiNonce() {
 	const nonceUrl = window.newspack_reader_data?.nonce_url;
@@ -115,8 +123,10 @@ async function fetchApiNonce() {
 			credentials: 'same-origin',
 			cache: 'no-store',
 		} );
-		// The action has no logged-out handler, so admin-ajax answers those requests with a 400.
-		window.newspack_reader_data.logged_out = 400 === response.status;
+		if ( 400 === response.status ) {
+			const isSameOrigin = new URL( nonceUrl, window.location.href ).origin === window.location.origin;
+			return isSameOrigin && '0' === ( await response.text() ).trim() ? LOGGED_OUT : null;
+		}
 		return response.ok ? adoptNonce( await response.json() ) : null;
 	} catch {
 		return null;

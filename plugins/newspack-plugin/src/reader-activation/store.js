@@ -2,7 +2,7 @@
 window.newspack_reader_data = window.newspack_reader_data || {};
 
 import { EVENTS, emit, on } from './events';
-import { getApiNonce, refreshApiNonce } from './session';
+import { getApiNonce, LOGGED_OUT, refreshApiNonce } from './session';
 
 /**
  * A switched session (an admin browsing as a reader through User Switching)
@@ -106,21 +106,34 @@ function rehydrateItem( key, serverValue ) {
 }
 
 /**
- * Keep this page away from the storage it shares with another reader's tabs.
+ * Clear the keys this page has left pending.
  *
- * That reader's next page load sends every key marked as pending, and reads
- * every value this page writes. Pending marks have no owner, so only the keys
- * this page marked are cleared.
+ * Pending marks live in storage shared with whoever logs in next, whose next page
+ * load would send them. Marks have no owner, so only this page's keys are cleared.
  *
- * @param {string[]} queue Store items keys to sync.
+ * @param {string[]} keys Keys to clear, along with the ones this page marked.
+ *
+ * @return {string[]} The cleared keys.
+ */
+function dropPendingKeys( keys ) {
+	const droppedKeys = [ ...keys, ...ownPendingKeys ];
+	droppedKeys.forEach( clearPendingSync );
+	return droppedKeys;
+}
+
+/**
+ * Keep this page away from the storage it shares with another reader's tabs,
+ * which read every value this page leaves there.
+ *
+ * @param {string[]} keys Keys this page was still syncing.
  *
  * @return {void}
  */
-function leaveSharedStorage( queue ) {
+function leaveSharedStorage( keys ) {
 	if ( config.storage === window.sessionStorage ) {
 		return;
 	}
-	[ ...queue.splice( 0 ), ...ownPendingKeys ].forEach( clearPendingSync );
+	dropPendingKeys( keys ).forEach( key => config.storage.removeItem( getStoreItemKey( key ) ) );
 	config.storage = window.sessionStorage;
 }
 
@@ -137,7 +150,7 @@ function leaveSharedStorage( queue ) {
 function initializeSyncInterval( queue ) {
 	setInterval( () => {
 		if ( newspack_reader_data?.account_changed ) {
-			leaveSharedStorage( queue );
+			leaveSharedStorage( queue.splice( 0 ) );
 			return;
 		}
 		// Bail if there are no items to sync or if the session never syncs.
@@ -155,11 +168,11 @@ function initializeSyncInterval( queue ) {
 					}
 				}
 			} )
-			.catch( () => {
-				if ( newspack_reader_data?.logged_out ) {
-					// Pending keys live in storage shared with whoever logs in next, whose
-					// next page load would send them.
-					[ ...keys, ...ownPendingKeys ].forEach( clearPendingSync );
+			.catch( reason => {
+				if ( newspack_reader_data?.account_changed ) {
+					leaveSharedStorage( [ ...keys, ...queue.splice( 0 ) ] );
+				} else if ( LOGGED_OUT === reason ) {
+					dropPendingKeys( keys );
 				} else {
 					keys.forEach( key => setPendingSync( key ) );
 				}
@@ -228,7 +241,7 @@ function clearPendingSync( key ) {
 }
 
 /**
- * Send data items to the server in a single request.
+ * Send data items to the server in one batch, retried once on an invalid nonce.
  *
  * @param {string[]} keys Data keys.
  *
@@ -266,11 +279,11 @@ function syncItems( keys ) {
 
 	return sendItems( items, apiNonce )
 		.catch( async req => {
-			const freshNonce = isInvalidNonceResponse( req ) && ( await refreshApiNonce() );
-			if ( ! freshNonce ) {
-				throw req;
+			const refreshed = isInvalidNonceResponse( req ) && ( await refreshApiNonce() );
+			if ( ! refreshed || LOGGED_OUT === refreshed ) {
+				throw refreshed || req;
 			}
-			return sendItems( items, freshNonce );
+			return sendItems( items, refreshed );
 		} )
 		.then( req => {
 			// The server applies keys independently and reports the ones it rejected.
