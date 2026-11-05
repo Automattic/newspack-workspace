@@ -11,8 +11,73 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Pure colour helpers for deriving the Newspack UI palette from a theme palette.
+ *
+ * Keep in sync with Newspack_Block_Theme\Button_States and Newspack_Block_Theme\Status_Colors in the block theme.
  */
 class Newspack_UI_Palette {
+
+	/**
+	 * Lc targets for the solved mixes.
+	 */
+	public const TARGETS = [
+		'text-muted'   => 60,
+		'text-subtle'  => 45,
+		'border'       => 30,
+		'input-border' => 30,
+		'focus-halo'   => 30,
+	];
+
+	/**
+	 * Share of the contrast color in the subtle surface on a dark base.
+	 */
+	private const SUBTLE_DARK_SHARE = 4;
+
+	/**
+	 * Tint multiplied over a light base for the subtle surface.
+	 */
+	private const SUBTLE_LIGHT_TINT = '#f7f7f7';
+
+	/**
+	 * Smallest mix percent, at or above the start, whose mix reaches an Lc target on the base.
+	 *
+	 * @param string $contrast_hex  Color mixed in.
+	 * @param string $base_hex      Color mixed into.
+	 * @param int    $start_percent First percent to try.
+	 * @param int    $target_lc     Minimum Lc of the mix on the base.
+	 * @param string $surface_hex   Optional surface the mix must also reach the target on.
+	 *
+	 * @return int Percent, at most 100.
+	 */
+	public static function solve_mix( string $contrast_hex, string $base_hex, int $start_percent, int $target_lc, string $surface_hex = '' ): int {
+		$percent = max( 0, $start_percent );
+		while ( $percent < 100 ) {
+			$mixed = self::mix( $contrast_hex, $percent, $base_hex );
+			if ( self::lc( $mixed, $base_hex ) >= $target_lc && ( '' === $surface_hex || self::lc( $mixed, $surface_hex ) >= $target_lc ) ) {
+				break;
+			}
+			++$percent;
+		}
+
+		return min( 100, $percent );
+	}
+
+	/**
+	 * Subtle surface color: the block theme's notice tint.
+	 *
+	 * On a light base the tint is multiplied over it; on a dark base the contrast color is mixed in at 4%.
+	 *
+	 * @param string $contrast_hex Text color on the base.
+	 * @param string $base_hex     Base color.
+	 *
+	 * @return string The '#rrggbb' color.
+	 */
+	public static function surface_subtle( string $contrast_hex, string $base_hex ): string {
+		if ( 'white' === newspack_get_color_contrast( $base_hex ) ) {
+			return self::mix( $contrast_hex, self::SUBTLE_DARK_SHARE, $base_hex );
+		}
+
+		return self::multiply( self::SUBTLE_LIGHT_TINT, $base_hex );
+	}
 
 	/**
 	 * Mix two hex colors in oklab, as CSS color-mix( in oklab, <fg> <percent>%, <bg> ) does.
@@ -76,15 +141,37 @@ class Newspack_UI_Palette {
 	 * @param string $text_hex       Text hex color.
 	 * @param string $background_hex Background hex color.
 	 *
-	 * @return float Lc magnitude, sign-free.
+	 * @return float Lc magnitude, sign-free. Unparseable input returns 0.
 	 */
 	public static function lc( string $text_hex, string $background_hex ): float {
+		if ( null === newspack_parse_hex_channels( $text_hex ) || null === newspack_parse_hex_channels( $background_hex ) ) {
+			return 0.0;
+		}
+
 		return abs(
 			newspack_get_apca_contrast(
 				newspack_get_apca_luminance( $background_hex ),
 				newspack_get_apca_luminance( $text_hex )
 			)
 		);
+	}
+
+	/**
+	 * Multiply a color over a background, per sRGB channel.
+	 *
+	 * @param string $color      Hex color.
+	 * @param string $background Hex background.
+	 *
+	 * @return string The '#rrggbb' color, or the color when either is unparseable.
+	 */
+	private static function multiply( string $color, string $background ): string {
+		$a = newspack_parse_hex_channels( $color );
+		$b = newspack_parse_hex_channels( $background );
+		if ( null === $a || null === $b ) {
+			return $color;
+		}
+
+		return sprintf( '#%02x%02x%02x', (int) round( $a[0] * $b[0] / 255 ), (int) round( $a[1] * $b[1] / 255 ), (int) round( $a[2] * $b[2] / 255 ) );
 	}
 
 	/**
