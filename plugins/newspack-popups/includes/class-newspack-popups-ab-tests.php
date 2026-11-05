@@ -681,7 +681,7 @@ final class Newspack_Popups_AB_Tests {
 			if ( self::is_test_id_in_use( $test_id ) ) {
 				continue;
 			}
-			$term = wp_insert_term( wp_slash( $name ), self::TAXONOMY, [ 'slug' => $test_id ] );
+			$term = self::insert_term( $name, $test_id );
 			if ( is_wp_error( $term ) ) {
 				if ( 'term_exists' === $term->get_error_code() ) {
 					continue;
@@ -690,11 +690,8 @@ final class Newspack_Popups_AB_Tests {
 			}
 			// Another request took the ID after the check above, so core stored
 			// this term under a suffixed slug that no test would ever read.
-			$stored_slug = get_term( $term['term_id'], self::TAXONOMY )->slug;
-			if ( $stored_slug !== $test_id ) {
-				// Core can hand back an older term holding that slug instead; it
-				// belongs to another test if a prompt carries it.
-				if ( empty( self::get_test_prompt_ids( $stored_slug ) ) ) {
+			if ( get_term( $term['term_id'], self::TAXONOMY )->slug !== $test_id ) {
+				if ( $term['created'] ) {
 					wp_delete_term( $term['term_id'], self::TAXONOMY );
 				}
 				continue;
@@ -719,11 +716,37 @@ final class Newspack_Popups_AB_Tests {
 		// Measured as core will store it: its filters turn `&` into `&amp;`, and a
 		// name over the column's 200 characters is not cut short but dropped,
 		// silently on update. The filters expect slashed input, as the term APIs
-		// pass it; unslashed, they miscount backslashes and quotes.
-		if ( mb_strlen( wp_unslash( sanitize_term_field( 'name', wp_slash( $name ), 0, self::TAXONOMY, 'db' ) ) ) > 200 ) {
+		// pass it; unslashed, they strip a lone backslash and add one before
+		// each quote.
+		if ( mb_strlen( wp_unslash( sanitize_term_field( 'name', wp_slash( $name ), 0, self::TAXONOMY, 'db' ) ), 'UTF-8' ) > 200 ) {
 			return new WP_Error( 'newspack_popups_ab_test_name', __( 'Use a shorter test name.', 'newspack-popups' ), [ 'status' => 400 ] );
 		}
 		return $name;
+	}
+
+	/**
+	 * Insert a test's term, noting whether this call created it.
+	 *
+	 * When two inserts race for one slug, core can delete the newer row and
+	 * return the older term, which may be another test's. It returns before the
+	 * create hooks fire, so only a term this call made is safe to delete.
+	 *
+	 * @param string $name    Clean display name.
+	 * @param string $test_id Test ID to use as the slug.
+	 * @return array|WP_Error Core's result, plus `created`.
+	 */
+	private static function insert_term( $name, $test_id ) {
+		$created = 0;
+		$listen  = function ( $term_id ) use ( &$created ) {
+			$created = (int) $term_id;
+		};
+		add_action( 'created_' . self::TAXONOMY, $listen );
+		$term = wp_insert_term( wp_slash( $name ), self::TAXONOMY, [ 'slug' => $test_id ] );
+		remove_action( 'created_' . self::TAXONOMY, $listen );
+		if ( ! is_wp_error( $term ) ) {
+			$term['created'] = (int) $term['term_id'] === $created;
+		}
+		return $term;
 	}
 
 	/**
@@ -759,7 +782,7 @@ final class Newspack_Popups_AB_Tests {
 			if ( '' === $test_id || empty( self::get_test_prompt_ids( $test_id ) ) ) {
 				return new WP_Error( 'newspack_popups_ab_test_not_found', __( 'This test no longer exists.', 'newspack-popups' ), [ 'status' => 404 ] );
 			}
-			$inserted = wp_insert_term( wp_slash( $name ), self::TAXONOMY, [ 'slug' => $test_id ] );
+			$inserted = self::insert_term( $name, $test_id );
 			if ( is_wp_error( $inserted ) && 'term_exists' !== $inserted->get_error_code() ) {
 				return $inserted;
 			}
@@ -769,9 +792,9 @@ final class Newspack_Popups_AB_Tests {
 					return self::decode_term_name( $term->name );
 				}
 				// A concurrent rename created this test's term after the lookup
-				// above, and core gave this one a suffixed slug. Drop it, unless
-				// core handed back another test's term, and rename the real one.
-				if ( empty( self::get_test_prompt_ids( $term->slug ) ) ) {
+				// above, and core gave this one a suffixed slug. Drop it if this
+				// call made it, and rename the real one.
+				if ( $inserted['created'] ) {
 					wp_delete_term( $term->term_id, self::TAXONOMY );
 				}
 			}

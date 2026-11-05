@@ -185,6 +185,52 @@ class ABTestNamesTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * A rename that loses the create race leaves no name on a test whose ID is
+	 * the suffixed slug core gave the losing term.
+	 */
+	public function test_rename_that_loses_the_create_race_leaves_other_tests_unnamed() {
+		$this->sign_in();
+		$this->create_test_variant( 'spring-drive', 'a' );
+		$this->create_test_variant( 'spring-drive-2', 'a' );
+		wp_insert_term( 'Earlier name', Newspack_Popups_AB_Tests::TAXONOMY, [ 'slug' => 'spring-drive' ] );
+		$miss_once = function ( $terms, $query ) use ( &$miss_once ) {
+			if ( 1 === $query->query_vars['number'] && in_array( 'spring-drive', (array) $query->query_vars['slug'], true ) ) {
+				remove_filter( 'terms_pre_query', $miss_once, 10 );
+				return [];
+			}
+			return $terms;
+		};
+		add_filter( 'terms_pre_query', $miss_once, 10, 2 );
+
+		$this->assertSame( 200, $this->rename_request( 'spring-drive', 'Spring drive' )->get_status() );
+		$this->assertSame( 'Spring drive', $this->test_row( 'spring-drive' )['name'] );
+		$this->assertSame( 'spring-drive-2', $this->test_row( 'spring-drive-2' )['name'] );
+	}
+
+	/**
+	 * When core hands a racing insert another test's term instead of the new
+	 * one, that term is left alone.
+	 */
+	public function test_rename_leaves_a_term_core_hands_back() {
+		$this->sign_in();
+		$this->create_test_variant( 'spring-drive', 'a' );
+		$this->create_test_variant( 'autumn-drive', 'a' );
+		$other     = wp_insert_term( 'Autumn drive', Newspack_Popups_AB_Tests::TAXONOMY, [ 'slug' => 'autumn-drive' ] );
+		$hand_back = function () use ( $other, &$hand_back ) {
+			remove_filter( 'wp_insert_term_duplicate_term_check', $hand_back );
+			return (object) [
+				'term_id'          => $other['term_id'],
+				'term_taxonomy_id' => $other['term_taxonomy_id'],
+			];
+		};
+		add_filter( 'wp_insert_term_duplicate_term_check', $hand_back );
+
+		$this->rename_request( 'spring-drive', 'Spring drive' );
+
+		$this->assertSame( 'Autumn drive', $this->test_row( 'autumn-drive' )['name'] );
+	}
+
+	/**
 	 * Names the losing request may race against.
 	 *
 	 * @return array
