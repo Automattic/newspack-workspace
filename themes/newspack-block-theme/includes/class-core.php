@@ -71,7 +71,7 @@ final class Core {
 			return;
 		}
 		// Enqueue editor JavaScript.
-		wp_enqueue_script( 'editor-script', get_theme_file_uri( '/dist/editor.js' ), array( 'wp-blocks', 'wp-dom' ), wp_get_theme( get_template() )->get( 'Version' ), true );
+		wp_enqueue_script( 'editor-script', get_parent_theme_file_uri( 'dist/editor.js' ), array( 'wp-blocks', 'wp-dom' ), wp_get_theme( get_template() )->get( 'Version' ), true );
 	}
 
 	/**
