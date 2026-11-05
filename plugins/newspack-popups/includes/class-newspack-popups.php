@@ -1599,8 +1599,11 @@ final class Newspack_Popups {
 				],
 			];
 
-			// Create the copy.
-			$new_popup_id = wp_insert_post( $new_popup );
+			// Create the copy. wp_insert_post() and update_post_meta() unslash what they
+			// are given, and these values come from the database already unslashed, so
+			// without wp_slash() the copy loses every backslash (block attributes store
+			// quotes and angle brackets as \u0022, \u003c and so on).
+			$new_popup_id = wp_insert_post( wp_slash( $new_popup ) );
 
 			// Apply campaign taxonomy.
 			$old_campaigns = wp_get_post_terms(
@@ -1621,7 +1624,7 @@ final class Newspack_Popups {
 			// Set prompt options to match old prompt.
 			$old_popup_options = Newspack_Popups_Model::get_popup_options( $id );
 			foreach ( $old_popup_options as $key => $value ) {
-				update_post_meta( $new_popup_id, $key, $value );
+				update_post_meta( $new_popup_id, $key, wp_slash( $value ) );
 			}
 		}
 

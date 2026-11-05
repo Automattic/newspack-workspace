@@ -345,6 +345,21 @@ class ABStartTestTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * Version B keeps A's backslashes, including the escapes block attributes use.
+	 */
+	public function test_start_copies_content_with_backslashes() {
+		$this->sign_in();
+		$content = '<!-- wp:button {"text":""Subscribe""} --><p>Back\slash</p><!-- /wp:button -->';
+		$a       = $this->create_prompt( 'inline', [ 'post_content' => wp_slash( $content ) ] );
+		$this->assertSame( $content, get_post( $a )->post_content );
+
+		$response = $this->start_request( [ 'prompt_id' => $a ] );
+
+		$this->assertSame( 201, $response->get_status() );
+		$this->assertSame( $content, get_post( $response->get_data()['version_b']['id'] )->post_content );
+	}
+
+	/**
 	 * When core hands back a term another create just made under the same ID,
 	 * create_test() draws a new ID instead of sharing that test's.
 	 */
