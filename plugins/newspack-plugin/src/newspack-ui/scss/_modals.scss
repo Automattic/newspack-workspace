@@ -198,7 +198,7 @@
 				--newspack-ui-button-bg: transparent;
 				--newspack-ui-button-bg-hover: var(--newspack-ui-color-neutral-fill);
 				--newspack-ui-button-bg-pressed: var(--newspack-ui-color-neutral-fill-hover);
-				--newspack-ui-modal-close-block-margin: calc(( var(--newspack-ui-font-size-title-m) * var(--newspack-ui-line-height-title-m) - var(--newspack-ui-modal-close-size, var(--newspack-ui-spacer-8)) ) / 2);
+				--newspack-ui-modal-close-block-margin: calc(( max(18px, var(--newspack-ui-font-size-title-m)) *var(--newspack-ui-line-height-title-m) - var(--newspack-ui-modal-close-size, var(--newspack-ui-spacer-8)) ) / 2);
 
 				border-radius: var(--newspack-ui-radius-pill);
 				flex: none;
