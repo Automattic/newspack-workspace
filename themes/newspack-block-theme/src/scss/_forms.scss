@@ -170,6 +170,10 @@ $jetpack-choice: ":root .contact-form .grunion-field-wrap:not(.is-style-button-w
 	}
 }
 
+.contact-form .grunion-field-wrap:not(.is-style-button-wrap) .contact-form__checkbox-wrap {
+	align-items: flex-start;
+}
+
 #{$jetpack-choice}.radio {
 	@include mixins.checkbox-radio(null, null);
 	@include mixins.radio;
