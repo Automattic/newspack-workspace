@@ -688,12 +688,15 @@ final class Newspack_Popups_AB_Tests {
 				}
 				return $term;
 			}
+			// Core handed back a term it already had: another create drew the same
+			// ID after the check above, and that test owns the term.
+			if ( ! $term['created'] ) {
+				continue;
+			}
 			// Another request took the ID after the check above, so core stored
 			// this term under a suffixed slug that no test would ever read.
 			if ( get_term( $term['term_id'], self::TAXONOMY )->slug !== $test_id ) {
-				if ( $term['created'] ) {
-					wp_delete_term( $term['term_id'], self::TAXONOMY );
-				}
+				wp_delete_term( $term['term_id'], self::TAXONOMY );
 				continue;
 			}
 			return $test_id;
@@ -826,6 +829,99 @@ final class Newspack_Popups_AB_Tests {
 			}
 		}
 		return ! empty( $prompt_ids );
+	}
+
+	/**
+	 * Start a test on a prompt: it becomes version A, and a draft copy of it
+	 * becomes version B with the same placement and other settings.
+	 *
+	 * A is claimed before B is made, so a second start on the same prompt fails
+	 * instead of making a second test, and a failure after that removes what this
+	 * call made. The goal and split are stored on A only, because A's are the
+	 * test's. The meta is written directly, past guard_rest_ab_meta(), which is
+	 * why the placement rule is checked here.
+	 *
+	 * @param int    $prompt_id     Prompt to test.
+	 * @param string $name          Display name.
+	 * @param string $goal          Goal key.
+	 * @param int    $control_share Percent of readers who see A, 20 to 80.
+	 * @return array|WP_Error `[ 'test_id', 'name', 'version_b' => [ 'id', 'edit_link' ] ]`;
+	 *                        `edit_link` is null when the current user can't edit B.
+	 */
+	public static function start_test( $prompt_id, $name, $goal, $control_share ) {
+		$prompt = get_post( $prompt_id );
+		if ( ! $prompt || Newspack_Popups::NEWSPACK_POPUPS_CPT !== $prompt->post_type || 'trash' === $prompt->post_status ) {
+			return new WP_Error( 'newspack_popups_ab_prompt_not_found', __( 'This prompt no longer exists.', 'newspack-popups' ), [ 'status' => 404 ] );
+		}
+		if ( ! self::is_eligible_placement( get_post_meta( $prompt->ID, 'placement', true ) ) ) {
+			return new WP_Error( 'newspack_popups_ab_ineligible_placement', __( 'Prompts on manual or custom placements can’t be A/B tested.', 'newspack-popups' ), [ 'status' => 400 ] );
+		}
+		$goal = self::sanitize_goal( $goal );
+		if ( '' === $goal ) {
+			return new WP_Error( 'newspack_popups_ab_test_goal', __( 'Choose a goal.', 'newspack-popups' ), [ 'status' => 400 ] );
+		}
+		if ( '' !== (string) get_post_meta( $prompt->ID, self::META_TEST_ID, true ) ) {
+			return self::already_in_test_error();
+		}
+
+		$test_id = self::create_test( $name );
+		if ( is_wp_error( $test_id ) ) {
+			return $test_id;
+		}
+		// The claim: add_post_meta() with $unique refuses to add a second row, so
+		// of two starts that both passed the check above, usually only one gets A.
+		// Its own check is a read before the insert, not a lock, so two starts in
+		// the same instant can still both succeed; the result is a second B whose
+		// test has no A, which the dashboard shows as Incomplete. A row left empty
+		// by clearing a test would refuse every start, so it goes first.
+		delete_post_meta( $prompt->ID, self::META_TEST_ID, '' );
+		if ( ! add_post_meta( $prompt->ID, self::META_TEST_ID, $test_id, true ) ) {
+			self::delete_test_term( $test_id );
+			return self::already_in_test_error();
+		}
+
+		/* translators: %s: title of the prompt being tested, which is version A. */
+		$version_b = Newspack_Popups::duplicate_popup( $prompt->ID, sprintf( __( '%s (B)', 'newspack-popups' ), $prompt->post_title ) );
+		if ( ! $version_b || is_wp_error( $version_b ) ) {
+			delete_post_meta( $prompt->ID, self::META_TEST_ID, $test_id );
+			self::delete_test_term( $test_id );
+			return new WP_Error( 'newspack_popups_ab_version_b', __( 'Could not create version B. Try again.', 'newspack-popups' ), [ 'status' => 500 ] );
+		}
+		update_post_meta( $version_b, self::META_TEST_ID, $test_id );
+		update_post_meta( $version_b, self::META_VARIANT, 'b' );
+		update_post_meta( $prompt->ID, self::META_VARIANT, 'a' );
+		update_post_meta( $prompt->ID, self::META_GOAL, $goal );
+		update_post_meta( $prompt->ID, self::META_CONTROL_SHARE, self::sanitize_control_share( $control_share ) );
+
+		return [
+			'test_id'   => $test_id,
+			'name'      => self::get_test_name( $test_id ),
+			'version_b' => [
+				'id'        => (int) $version_b,
+				'edit_link' => get_edit_post_link( $version_b, 'raw' ),
+			],
+		];
+	}
+
+	/**
+	 * The error for a start on a prompt that is already in a test.
+	 *
+	 * @return WP_Error
+	 */
+	private static function already_in_test_error() {
+		return new WP_Error( 'newspack_popups_ab_already_in_test', __( 'This prompt is already in an A/B test.', 'newspack-popups' ), [ 'status' => 409 ] );
+	}
+
+	/**
+	 * Delete the name term of a test this request created and is abandoning.
+	 *
+	 * @param string $test_id Test ID.
+	 */
+	private static function delete_test_term( $test_id ) {
+		$term = get_term_by( 'slug', $test_id, self::TAXONOMY );
+		if ( $term ) {
+			wp_delete_term( $term->term_id, self::TAXONOMY );
+		}
 	}
 
 	/**
