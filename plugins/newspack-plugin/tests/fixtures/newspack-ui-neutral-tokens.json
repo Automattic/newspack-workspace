@@ -13,6 +13,7 @@
 	"--newspack-ui-color-border": "#ddd",
 	"--newspack-ui-color-border-control": "#949494",
 	"--newspack-ui-color-border-hover": "#5d5d5d",
+	"--newspack-ui-color-border-outline": "color-mix(in srgb, currentcolor 60%, transparent)",
 	"--newspack-ui-color-border-outline-mix": "60%",
 	"--newspack-ui-color-btn": "#1e1e1e",
 	"--newspack-ui-color-btn-hover": "color-mix(in oklab, #1e1e1e 85%, #fff)",
@@ -120,6 +121,8 @@
 	"--newspack-ui-color-warning-dot": "#996800",
 	"--newspack-ui-color-warning-text": "#755100",
 	"--newspack-ui-color-warning-tint": "#fcf9e8",
+	"--newspack-ui-control-padding-inline": "calc(calc(8px * 1.5) + 1px)",
+	"--newspack-ui-control-size": "calc(8px * 2.5)",
 	"--newspack-ui-duration-color": "150ms",
 	"--newspack-ui-duration-exit": "120ms",
 	"--newspack-ui-duration-indicator": "200ms",
@@ -183,12 +186,39 @@
 	"--newspack-ui-radius-pill": "999px",
 	"--newspack-ui-radius-sheet": "16px",
 	"--newspack-ui-radius-surface": "12px",
-	"--newspack-ui-target-size": "var(--newspack-ui-spacer-8)",
+	"--newspack-ui-spacer-1": "8px",
+	"--newspack-ui-spacer-10": "calc(8px * 7)",
+	"--newspack-ui-spacer-11": "calc(8px * 8)",
+	"--newspack-ui-spacer-12": "calc(8px * 9)",
+	"--newspack-ui-spacer-2": "calc(8px * 1.5)",
+	"--newspack-ui-spacer-3": "calc(8px * 2)",
+	"--newspack-ui-spacer-4": "calc(8px * 2.5)",
+	"--newspack-ui-spacer-5": "calc(8px * 3)",
+	"--newspack-ui-spacer-6": "calc(8px * 4)",
+	"--newspack-ui-spacer-7": "calc(8px * 4.5)",
+	"--newspack-ui-spacer-8": "calc(8px * 5)",
+	"--newspack-ui-spacer-9": "calc(8px * 6)",
+	"--newspack-ui-spacer-base": "8px",
+	"--newspack-ui-spacer-half": "calc(8px * 0.5)",
+	"--newspack-ui-target-size": "calc(8px * 5)",
 	"--newspack-ui-touch-target": "44px",
 	"--newspack-ui-width-content": "720px",
 	"--newspack-ui-width-l": "964px",
 	"--newspack-ui-width-m": "632px",
 	"--newspack-ui-width-s": "410px",
 	"--newspack-ui-width-sidebar": "300px",
-	"--newspack-ui-width-xs": "300px"
+	"--newspack-ui-width-xs": "300px",
+	"@media (pointer: coarse)": {
+		"--newspack-ui-target-size": "44px"
+	},
+	"@media (prefers-contrast: more)": {
+		"--newspack-ui-color-input-bg-disabled": "color-mix(in oklab, #1e1e1e 19%, #fff)",
+		"--newspack-ui-color-input-border": "#6c6c6c",
+		"--newspack-ui-color-input-border-disabled": "#949494",
+		"--newspack-ui-color-input-border-hover": "#393939"
+	},
+	"@media only screen and (min-width: 782px)": {
+		"--newspack-ui-font-size-title-l": "28px",
+		"--newspack-ui-line-height-title-l": "1.2857"
+	}
 }
