@@ -41,6 +41,7 @@ final class Core {
 		\load_theme_textdomain( 'newspack-block-theme' );
 
 		\add_theme_support( 'post-subtitle' );
+		\add_theme_support( 'newspack-ui-theme-style' );
 	}
 
 	/**
