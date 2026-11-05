@@ -217,7 +217,7 @@ input[type="submit"]:not(.newspack-ui__button) {
 	line-height: var(--newspack-ui-line-height-s, var(--wp--custom--line-height--small));
 	padding:
 		var(--newspack-ui-spacer-2, var(--wp--custom--spacing--25))
-		var(--newspack-ui-spacer-5, var(--wp--preset--spacing--40));
+		var(--newspack-ui-spacer-4, var(--wp--custom--spacing--35));
 	transition:
 		background motion.$duration-color motion.$ease-color,
 		color motion.$duration-color motion.$ease-color,
@@ -230,12 +230,12 @@ input[type="submit"]:not(.newspack-ui__button) {
 
 	@include motion.hover {
 		&:hover {
-			background: color-mix(in oklab, var(--wp--preset--color--accent) var(--wp--custom--state--hover), black);
+			background: color-mix(in oklab, var(--wp--preset--color--accent) var(--wp--custom--state--hover), var(--wp--preset--color--base));
 		}
 	}
 
 	&:active {
-		background: color-mix(in oklab, var(--wp--preset--color--accent) var(--wp--custom--state--pressed), black);
+		background: color-mix(in oklab, var(--wp--preset--color--accent) var(--wp--custom--state--pressed), var(--wp--preset--color--base));
 		color: var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base));
 		transform: scale(motion.$press-scale);
 

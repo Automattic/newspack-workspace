@@ -170,4 +170,70 @@ class Test_Global_Styles extends WP_UnitTestCase {
 			$this->assertStringNotContainsString( 'var(', $elements[ $name ]['typography']['fontFamily'] );
 		}
 	}
+
+	/**
+	 * Hover and pressed fills mix the accent toward the base, as newspack-ui does.
+	 */
+	public function test_button_hover_and_pressed_mix_toward_base() {
+		$button = $this->resolved_styles()['elements']['button'];
+		$accent = $this->palette()['accent'];
+		$base   = $this->palette()['base'];
+
+		$this->assertSame( sprintf( 'color-mix( in oklab, %s 85%%, %s )', $accent, $base ), strtolower( $button[':hover']['color']['background'] ) );
+		$this->assertSame( sprintf( 'color-mix( in oklab, %s 75%%, %s )', $accent, $base ), strtolower( $button[':active']['color']['background'] ) );
+	}
+
+	/**
+	 * The button text colour does not change between states.
+	 */
+	public function test_button_text_is_the_same_in_every_state() {
+		$button = $this->resolved_styles()['elements']['button'];
+
+		$this->assertSame( $button['color']['text'], $button[':hover']['color']['text'] );
+		$this->assertSame( $button['color']['text'], $button[':active']['color']['text'] );
+	}
+
+	/**
+	 * The state shares match the newspack-ui hover and pressed mixes.
+	 */
+	public function test_state_shares_match_newspack_ui() {
+		$state = wp_get_global_settings( [ 'custom', 'state' ] );
+
+		$this->assertSame( '85%', $state['hover'] );
+		$this->assertSame( '75%', $state['pressed'] );
+	}
+
+	/**
+	 * The resolved state backgrounds keep their parentheses balanced.
+	 */
+	public function test_resolved_hover_background_is_not_broken() {
+		$button = $this->resolved_styles()['elements']['button'];
+		foreach ( [ ':hover', ':active' ] as $state ) {
+			$value = $button[ $state ]['color']['background'];
+			$this->assertSame( substr_count( $value, '(' ), substr_count( $value, ')' ), $value );
+			$this->assertStringEndsWith( ')', $value );
+		}
+	}
+
+	/**
+	 * No style variation overrides the button states or inline padding.
+	 */
+	public function test_no_variation_overrides_button_states() {
+		foreach ( glob( dirname( __DIR__ ) . '/styles/*.json' ) as $path ) {
+			$button = wp_json_file_decode( $path, [ 'associative' => true ] )['styles']['elements']['button'] ?? [];
+			$this->assertArrayNotHasKey( ':hover', $button, basename( $path ) );
+			$this->assertArrayNotHasKey( ':active', $button, basename( $path ) );
+			$this->assertArrayNotHasKey( 'padding', $button['spacing'] ?? [], basename( $path ) );
+		}
+	}
+
+	/**
+	 * Default buttons use the same inline padding as newspack-ui buttons.
+	 */
+	public function test_button_inline_padding_matches_newspack_ui() {
+		$padding = $this->resolved_styles()['elements']['button']['spacing']['padding'];
+
+		$this->assertSame( '1.25rem', $padding['left'] );
+		$this->assertSame( '1.25rem', $padding['right'] );
+	}
 }
