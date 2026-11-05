@@ -99,9 +99,10 @@ export const sanitizeSubtitle = html => {
 /**
  * Removes every class attribute from a custom byline before it becomes block content.
  *
- * Newspack marks author links in a custom byline with hCard classes such as `fn`.
- * Rich text matches formats by class name alone, whatever the tag, so `fn` is read
- * as a core/footnote with no attributes, which breaks the editor after insertion.
+ * Rich text reads any element whose class matches a registered format's className as
+ * that format, whatever the tag. Newspack's hCard author links carry `fn`, which becomes
+ * a core/footnote with no attributes and breaks the editor after insertion. Bylines are
+ * editor-authored HTML that can carry other format classes too, so strip them all.
  *
  * @param {string} html Custom byline HTML.
  * @return {string} The byline without class attributes.
