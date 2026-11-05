@@ -190,8 +190,8 @@
 		&__link {
 			align-items: center;
 			display: inline-flex;
-			min-height: var(--wp--custom--spacing--65);
-			padding: var(--wp--preset--spacing--20) var(--wp--preset--spacing--30);
+			min-height: var(--wp--custom--spacing--55);
+			padding: var(--wp--preset--spacing--20) calc(var(--wp--custom--spacing--25) + 2px);
 
 			&:is([style*="border-width:1px"], [style*="border-width: 1px"]) {
 				padding-block: calc(var(--wp--preset--spacing--20) - 1px);
@@ -199,10 +199,15 @@
 		}
 	}
 
+	.wp-block-button > .wp-block-button__link.wp-block-newspack-my-account-button:has(svg) svg {
+		height: calc(var(--wp--custom--spacing--55) - 2 * var(--wp--preset--spacing--20));
+		width: calc(var(--wp--custom--spacing--55) - 2 * var(--wp--preset--spacing--20));
+	}
+
 	.is-style-outline,
 	&.is-style-outline {
 		.wp-block-button__link {
-			padding: calc(var(--wp--preset--spacing--20) - 1px) calc(var(--wp--preset--spacing--30) - 1px) !important;
+			padding: calc(var(--wp--preset--spacing--20) - 1px) calc(var(--wp--custom--spacing--25) + 1px) !important;
 		}
 	}
 }
@@ -213,19 +218,24 @@
 			align-items: center;
 			border-radius: var(--wp--custom--border--radius-medium);
 			display: inline-flex;
-			min-height: var(--wp--custom--spacing--55);
-			padding: var(--wp--custom--spacing--15) var(--wp--custom--spacing--25);
+			min-height: var(--wp--custom--spacing--45);
+			padding: var(--wp--custom--spacing--10) calc(var(--wp--custom--spacing--25) - 2px);
 
 			&:is([style*="border-width:1px"], [style*="border-width: 1px"]) {
-				padding-block: calc(var(--wp--custom--spacing--15) - 1px);
+				padding-block: calc(var(--wp--custom--spacing--10) - 1px);
 			}
 		}
+	}
+
+	.wp-block-button > .wp-block-button__link.wp-block-newspack-my-account-button:has(svg) svg {
+		height: calc(var(--wp--custom--spacing--45) - 2 * var(--wp--custom--spacing--10));
+		width: calc(var(--wp--custom--spacing--45) - 2 * var(--wp--custom--spacing--10));
 	}
 
 	.is-style-outline,
 	&.is-style-outline {
 		.wp-block-button__link {
-			padding: calc(var(--wp--custom--spacing--15) - 1px) calc(var(--wp--custom--spacing--25) - 1px) !important;
+			padding: calc(var(--wp--custom--spacing--10) - 1px) calc(var(--wp--custom--spacing--25) - 3px) !important;
 		}
 	}
 }
