@@ -661,9 +661,9 @@
 				margin-bottom: var(--newspack-ui-spacer-5, 24px);
 
 				&__value {
-					color: var(--newspack-ui-color-text-muted, np-colors.$neutral-700);
-					font-size: var(--newspack-ui-font-size-caption, 12px);
-					line-height: var(--newspack-ui-line-height-caption, 1.3333);
+					color: var(--newspack-ui-color-text-fine, var(--newspack-ui-color-text-muted, np-colors.$neutral-700));
+					font-size: var(--newspack-ui-font-size-fine, var(--newspack-ui-font-size-caption, 12px));
+					line-height: var(--newspack-ui-line-height-fine, var(--newspack-ui-line-height-caption, 1.3333));
 				}
 
 				.amount {

@@ -21,6 +21,7 @@
 	--newspack-ui-font-family-body: var(--newspack-ui-font-family);
 	--newspack-ui-font-family-heading: var(--newspack-ui-font-family-body);
 	--newspack-ui-font-family-control: var(--newspack-ui-font-family);
+	--newspack-ui-font-family-fine: var(--newspack-ui-font-family-body);
 	--newspack-ui-button-font-family: var(--newspack-ui-font-family-control);
 	--newspack-ui-button-font-weight: var(--newspack-ui-font-weight-strong);
 	--newspack-ui-button-letter-spacing: normal;
@@ -32,6 +33,8 @@
 
 	--newspack-ui-font-size-caption: 12px;
 	--newspack-ui-line-height-caption: 1.3333;
+	--newspack-ui-font-size-fine: var(--newspack-ui-font-size-caption);
+	--newspack-ui-line-height-fine: var(--newspack-ui-line-height-caption);
 	--newspack-ui-font-size-small: 14px;
 	--newspack-ui-line-height-small: 1.4286;
 	--newspack-ui-font-size-body: 16px;
