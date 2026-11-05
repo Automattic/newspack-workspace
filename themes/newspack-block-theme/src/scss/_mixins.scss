@@ -125,7 +125,7 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 /*
  * Checkbox and Radio Styles
  */
-@mixin checkbox-radio($important: null) {
+@mixin checkbox-radio($important: null, $margin: 0) {
 	appearance: none;
 	background-color: var(--wp--preset--color--base);
 	border: 1px solid var(--wp--preset--color--base-5);
@@ -136,7 +136,7 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
 	flex-shrink: 0;
 	font: inherit;
 	height: var(--wp--custom--spacing--35) !important;
-	margin: 0;
+	margin: $margin;
 	place-content: center;
 	transition:
 		background-color motion.$duration-color motion.$ease-color,
@@ -211,7 +211,7 @@ $focus-color: var(--wp--custom--focus--color, var(--wp--preset--color--contrast)
  * Checkbox Styles
  */
 @mixin checkbox($important: null) {
-	$jetpack-tick: ".contact-form .grunion-field-wrap:not(.is-style-plain) .checkbox-multiple, .contact-form .is-style-list :is(.checkbox, .consent)";
+	$jetpack-tick: ".contact-form .is-style-button-wrap .grunion-field";
 
 	border-radius: var(--wp--custom--border--radius-small);
 
