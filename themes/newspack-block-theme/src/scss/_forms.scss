@@ -131,7 +131,7 @@ input[type="radio"]:where(:not(.newspack-ui *, .wc-block-components-radio-contro
 	@include mixins.radio(!important);
 }
 
-$jetpack-choice: ":root .contact-form .grunion-field-wrap:not(.is-style-button-wrap) input.grunion-field.grunion-field";
+$jetpack-choice: ":root .contact-form .grunion-field-wrap:not(.is-style-button-wrap) input.grunion-field";
 
 #{$jetpack-choice}:is(.checkbox, .consent, .checkbox-multiple, .radio) {
 	margin-block: 0;
@@ -140,7 +140,6 @@ $jetpack-choice: ":root .contact-form .grunion-field-wrap:not(.is-style-button-w
 	min-width: 0;
 	padding: 0;
 	transform: none;
-
 }
 
 #{$jetpack-choice}:is(.checkbox, .consent, .checkbox-multiple) {
@@ -260,7 +259,7 @@ input[type="submit"]:not(.newspack-ui__button) {
 	}
 }
 
-.select2-container.select2-container--default .select2-selection--single {
+:root .select2-container.select2-container--default:where(:not(.newspack-ui *)) .select2-selection--single {
 	@include mixins.input-skin;
 	@include mixins.input;
 	align-items: center;
@@ -303,12 +302,12 @@ input[type="submit"]:not(.newspack-ui__button) {
 	}
 }
 
-.select2-container.select2-container--default.select2-container--open .select2-selection--single {
+:root .select2-container.select2-container--default.select2-container--open:where(:not(.newspack-ui *)) .select2-selection--single {
 	@include mixins.focus-edge;
 	border-radius: var(--wp--custom--border--radius-large);
 }
 
-.select2-container .select2-dropdown.select2-dropdown {
+:root .select2-container:where(:not(.newspack-ui *)) .select2-dropdown.select2-dropdown {
 	background-color: var(--wp--preset--color--base);
 	border: 1px solid var(--wp--preset--color--base-5);
 	border-radius: var(--wp--custom--border--radius-large);
@@ -318,22 +317,42 @@ input[type="submit"]:not(.newspack-ui__button) {
 	overflow: hidden;
 }
 
-.select2-container.select2-container--default .select2-search--dropdown {
+:root .select2-container.select2-container--default:where(:not(.newspack-ui *)) .select2-search--dropdown {
 	padding: var(--wp--preset--spacing--20);
 }
 
-.select2-container.select2-container--default .select2-results__option {
+:root .select2-container.select2-container--default:where(:not(.newspack-ui *)) .select2-results__option {
 	color: var(--wp--preset--color--contrast);
 	padding: calc(var(--wp--preset--spacing--20) - 1px) calc(var(--wp--custom--spacing--25) + 1px);
 }
 
-.select2-container.select2-container--default .select2-results__option[data-selected="true"],
-.select2-container.select2-container--default .select2-results__option[aria-selected="true"] {
+:root .select2-container.select2-container--default:where(:not(.newspack-ui *)) .select2-results__option[data-selected="true"],
+:root .select2-container.select2-container--default:where(:not(.newspack-ui *)) .select2-results__option[aria-selected="true"] {
 	background-color: color-mix(in oklab, var(--wp--preset--color--contrast) var(--wp--custom--state--fill), var(--wp--preset--color--base));
 }
 
-.select2-container.select2-container--default .select2-results__option--highlighted[data-selected],
-.select2-container.select2-container--default .select2-results__option--highlighted[aria-selected] {
+:root .select2-container.select2-container--default:where(:not(.newspack-ui *)) .select2-results__option--highlighted[data-selected],
+:root .select2-container.select2-container--default:where(:not(.newspack-ui *)) .select2-results__option--highlighted[aria-selected] {
 	background-color: var(--wp--preset--color--contrast);
 	color: var(--wp--preset--color--base);
+}
+
+:root .select2-container.select2-container--default.select2-container--open:where(:not(.newspack-ui *)).select2-container--below .select2-selection--single {
+	border-end-end-radius: 0;
+	border-end-start-radius: 0;
+}
+
+:root .select2-container.select2-container--default.select2-container--open:where(:not(.newspack-ui *)).select2-container--above .select2-selection--single {
+	border-start-end-radius: 0;
+	border-start-start-radius: 0;
+}
+
+:root .select2-container:where(:not(.newspack-ui *)) .select2-dropdown.select2-dropdown--below {
+	border-start-end-radius: 0;
+	border-start-start-radius: 0;
+}
+
+:root .select2-container:where(:not(.newspack-ui *)) .select2-dropdown.select2-dropdown--above {
+	border-end-end-radius: 0;
+	border-end-start-radius: 0;
 }
