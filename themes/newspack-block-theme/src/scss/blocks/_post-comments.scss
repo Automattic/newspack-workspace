@@ -47,6 +47,7 @@
 		input[type="checkbox"] {
 			font-size: var(--wp--preset--font-size--small);
 			line-height: var(--wp--custom--line-height--small);
+			margin-inline-end: 0;
 			margin-top: calc((1lh - var(--wp--custom--spacing--35)) / 2) !important;
 		}
 
@@ -60,8 +61,12 @@
 		display: none;
 	}
 
+	.comment-form :is(.comment-form-author, .comment-form-email) label {
+		margin-bottom: var(--wp--preset--spacing--20);
+	}
+
 	.required {
-		color: var(--wp--custom--color--error-50);
+		color: var(--newspack-ui-color-error-text, var(--wp--custom--color--error-text));
 	}
 
 	.required-field-message {

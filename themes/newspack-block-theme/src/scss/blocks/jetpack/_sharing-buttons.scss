@@ -63,13 +63,13 @@
 
 					@include motion.hover {
 						&:hover {
-							background: color-mix(in oklab, var(--wp--preset--color--accent) var(--wp--custom--state--hover), black);
+							background: color-mix(in oklab, var(--wp--preset--color--accent) var(--wp--custom--state--hover), var(--wp--custom--button--mix));
 							color: var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base));
 						}
 					}
 
 					&:active {
-						background: color-mix(in oklab, var(--wp--preset--color--accent) var(--wp--custom--state--pressed), black);
+						background: color-mix(in oklab, var(--wp--preset--color--accent) var(--wp--custom--state--pressed), var(--wp--custom--button--mix));
 						color: var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base));
 					}
 				}
