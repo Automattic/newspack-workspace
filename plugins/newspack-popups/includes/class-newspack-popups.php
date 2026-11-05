@@ -1582,7 +1582,7 @@ final class Newspack_Popups {
 	 * as the source prompt, but are always set to draft status at first.
 	 *
 	 * @param int    $id Prompt ID to duplicate.
-	 * @param string $title Title to give to the duplicate.
+	 * @param string $title Title to give to the duplicate, unslashed.
 	 * @return int|boolean|WP_Error The copy's post ID, false if the ID to copy isn't a valid prompt, or WP_Error if the operation failed.
 	 */
 	public static function duplicate_popup( $id, $title = '' ) {
@@ -1610,9 +1610,9 @@ final class Newspack_Popups {
 			];
 
 			// Create the copy. wp_insert_post() and update_post_meta() unslash what they
-			// are given, and these values come from the database already unslashed, so
-			// without wp_slash() the copy loses every backslash (block attributes store
-			// quotes and angle brackets as \u0022, \u003c and so on).
+			// are given, and these values arrive unslashed (read from the database, or the
+			// caller's title), so without wp_slash() the copy loses every backslash (block
+			// attributes store quotes and angle brackets as \u0022, \u003c and so on).
 			$new_popup_id = wp_insert_post( wp_slash( $new_popup ) );
 
 			// Apply campaign taxonomy.
