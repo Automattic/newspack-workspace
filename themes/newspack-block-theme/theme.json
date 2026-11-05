@@ -1088,13 +1088,13 @@
 				":hover": {
 					"color": {
 						"background": "color-mix( in oklab, var( --wp--preset--color--accent ) var( --wp--custom--state--hover ), black )",
-						"text": "var( --wp--preset--color--accent-contrast-hover, var( --wp--preset--color--accent-contrast, var( --wp--preset--color--base ) ) )"
+						"text": "var( --wp--preset--color--accent-contrast, var( --wp--preset--color--base ) )"
 					}
 				},
 				":active": {
 					"color": {
 						"background": "color-mix( in oklab, var( --wp--preset--color--accent ) var( --wp--custom--state--pressed ), black )",
-						"text": "var( --wp--preset--color--accent-contrast-hover, var( --wp--preset--color--accent-contrast, var( --wp--preset--color--base ) ) )"
+						"text": "var( --wp--preset--color--accent-contrast, var( --wp--preset--color--base ) )"
 					}
 				},
 				"border": {

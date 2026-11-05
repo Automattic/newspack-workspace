@@ -31,6 +31,14 @@ describe( 'ColorPicker', () => {
 		expect( expander ).toHaveAttribute( 'aria-expanded', 'true' );
 	} );
 
+	it( 'should pick white expander text on orange and black on yellow', () => {
+		const orange = render( <ColorPicker label="Background color" color="#e65100" onChange={ () => {} } /> );
+		expect( orange.getByRole( 'button' ).style.color ).toBe( 'white' );
+		orange.unmount();
+		const yellow = render( <ColorPicker label="Background color" color="#ffcc00" onChange={ () => {} } /> );
+		expect( yellow.getByRole( 'button' ).style.color ).toBe( 'black' );
+	} );
+
 	it( 'should associate label via aria-labelledby', () => {
 		const { getByRole, getByText } = render( <ColorPicker label="Background color" onChange={ () => {} } /> );
 		const expander = getByRole( 'button' );

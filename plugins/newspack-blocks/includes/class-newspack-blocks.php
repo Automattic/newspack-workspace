@@ -1800,13 +1800,13 @@ class Newspack_Blocks {
 	 * Pick either black or white text, whichever reads better on the given background.
 	 *
 	 * Scores pure black and pure white as text against the background and returns
-	 * whichever produces the greater APCA lightness contrast (Lc); ties fall to
-	 * black. The constants are the SA98G set from apca-w3 0.1.9. The pick is then
-	 * held to the WCAG 2 AA floor: when it falls under 4.5:1 and the other color
-	 * reaches it, the other color wins. On a single background one of the two always
-	 * reaches it, so the text always meets 4.5:1.
+	 * whichever reads better by APCA: the greater lightness contrast (Lc), ties to
+	 * black. The constants are the SA98G set from apca-w3 0.1.9.
 	 *
-	 * Keep in sync with getColorForContrast() in src/blocks/donate/utils.ts.
+	 * Keep in sync with: getColorForContrast() in src/blocks/donate/utils.ts, newspack_get_color_contrast() (newspack-theme),
+	 * \Newspack\newspack_get_color_contrast() (newspack-plugin), getContrastColor() in contrast-color.js (packages/components),
+	 * Newspack_Popups_Model::contrast_text_color() (newspack-popups) and Newspack_Listings\Curated_List_Block\contrast_text_color() (newspack-listings).
+	 * The block theme's Newspack_Block_Theme\Contrast::get_text_color() makes the same pick (it leaves the property unset for unparseable input).
 	 *
 	 * @param string $hex Hexadecimal background color (#RGB, #RRGGBB or #RRGGBBAA, with or without #).
 	 * @return string Either 'black' or 'white' (literal CSS color keywords).
@@ -1816,25 +1816,7 @@ class Newspack_Blocks {
 		$black_lc     = self::get_apca_contrast( $background_y, self::get_apca_luminance( '#000000' ) );
 		$white_lc     = self::get_apca_contrast( $background_y, self::get_apca_luminance( '#ffffff' ) );
 
-		$text  = abs( $white_lc ) > abs( $black_lc ) ? 'white' : 'black';
-		$other = 'white' === $text ? 'black' : 'white';
-
-		$luminance   = self::get_wcag_luminance( $hex );
-		$text_ratio  = self::get_wcag_ratio( $luminance, $text );
-		$other_ratio = self::get_wcag_ratio( $luminance, $other );
-
-		return $text_ratio < 4.5 && $other_ratio >= 4.5 ? $other : $text;
-	}
-
-	/**
-	 * Compute the WCAG 2 contrast ratio of black or white text on a background.
-	 *
-	 * @param float  $luminance WCAG 2 relative luminance of the background.
-	 * @param string $text      'black' or 'white'.
-	 * @return float The contrast ratio.
-	 */
-	private static function get_wcag_ratio( float $luminance, string $text ): float {
-		return 'white' === $text ? 1.05 / ( $luminance + 0.05 ) : ( $luminance + 0.05 ) / 0.05;
+		return abs( $white_lc ) > abs( $black_lc ) ? 'white' : 'black';
 	}
 
 	/**
@@ -1862,32 +1844,6 @@ class Newspack_Blocks {
 			hexdec( substr( $hex, 2, 2 ) ),
 			hexdec( substr( $hex, 4, 2 ) ),
 		];
-	}
-
-	/**
-	 * Compute the WCAG 2 relative luminance of a hex color.
-	 *
-	 * Accepts the same formats as parse_hex_channels(). Unparseable input is
-	 * treated as white (luminance 1.0).
-	 *
-	 * @param string $hex Hexadecimal color.
-	 * @return float Relative luminance in the 0..1 range.
-	 */
-	private static function get_wcag_luminance( $hex ): float {
-		$channels = self::parse_hex_channels( $hex );
-		if ( null === $channels ) {
-			return 1.0;
-		}
-
-		$linear = array_map(
-			function ( $channel ) {
-				$value = $channel / 255;
-				return $value <= 0.04045 ? $value / 12.92 : pow( ( $value + 0.055 ) / 1.055, 2.4 );
-			},
-			$channels
-		);
-
-		return 0.2126 * $linear[0] + 0.7152 * $linear[1] + 0.0722 * $linear[2];
 	}
 
 	/**

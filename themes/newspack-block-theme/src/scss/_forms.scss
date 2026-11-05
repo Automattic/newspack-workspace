@@ -158,13 +158,12 @@ input[type="submit"]:not(.newspack-ui__button) {
 	@include motion.hover {
 		&:hover {
 			background: color-mix(in oklab, var(--wp--preset--color--accent) var(--wp--custom--state--hover), black);
-			color: var(--wp--preset--color--accent-contrast-hover, var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base)));
 		}
 	}
 
 	&:active {
 		background: color-mix(in oklab, var(--wp--preset--color--accent) var(--wp--custom--state--pressed), black);
-		color: var(--wp--preset--color--accent-contrast-hover, var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base)));
+		color: var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base));
 		transform: scale(motion.$press-scale);
 
 		@include motion.reduced-motion {

@@ -69,5 +69,6 @@ import * as integrationIcons from './integration-icons';
 export { integrationIcons };
 export { espProviderOrder } from './integration-icons';
 export { default as utils } from './utils';
+export { getContrastColor, getContrastColorFromRGB } from './utils/contrast-color';
 
 import './style.scss';

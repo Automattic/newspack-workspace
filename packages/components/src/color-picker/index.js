@@ -9,17 +9,15 @@ import { useState, useRef, useEffect } from '@wordpress/element';
  * External dependencies.
  */
 import classnames from 'classnames';
-import { colord, extend } from 'colord';
-import a11yPlugin from 'colord/plugins/a11y';
 
 /**
  * Internal dependencies.
  */
 import hooks from '../hooks';
 import utils from '../utils';
+import { getContrastColor } from '../utils/contrast-color';
 import './style.scss';
 
-extend( [ a11yPlugin ] );
 const { InteractiveDiv } = utils;
 
 /**
@@ -39,7 +37,6 @@ const ColorPicker = ( { label, help, color = '#ffffff', onChange, className, dis
 	const ref = useRef( undefined );
 	const id = useInstanceId( ColorPicker, 'newspack-color-picker' );
 	const labelId = `${ id }-label`;
-	const colordColor = colord( color );
 	hooks.useOnClickOutside( ref, () => setIsExpanded( false ) );
 	useEffect( () => {
 		if ( disabled ) {
@@ -66,7 +63,7 @@ const ColorPicker = ( { label, help, color = '#ffffff', onChange, className, dis
 				style={ {
 					...( disabled && { cursor: 'default' } ),
 					backgroundColor: color,
-					color: colordColor.contrast() > colordColor.contrast( '#000000' ) ? '#ffffff' : '#000000',
+					color: getContrastColor( color ),
 				} }
 			>
 				{ color }

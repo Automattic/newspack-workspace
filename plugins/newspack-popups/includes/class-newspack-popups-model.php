@@ -1461,22 +1461,22 @@ final class Newspack_Popups_Model {
 	}
 
 	/**
-	 * Pick black or white for the close button icon, whichever contrasts more with its fill.
+	 * Pick black or white for the close button icon on its fill.
 	 *
 	 * The fill may be translucent, so it is composited over the prompt background first.
-	 * Picking the higher contrast keeps the icon at 3:1 or more on hover, where the fill mixes toward the icon.
+	 * The pick follows the same rule as the prompt text: whichever of black or white reads better by APCA (ties to black).
 	 *
 	 * @param string $fill_color       Hex close button fill, with optional alpha.
 	 * @param string $background_color Hex prompt background.
 	 * @return string Either black or white hexadecimal values.
 	 */
 	public static function close_button_icon_color( $fill_color, $background_color ): string {
-		$luminance = self::close_button_fill_luminance( $fill_color, $background_color );
+		$rgb = self::composited_close_button_fill( $fill_color, $background_color );
+		if ( null === $rgb ) {
+			$rgb = self::composited_close_button_fill( '#00000000', $background_color );
+		}
 
-		$contrast_with_black = ( $luminance + 0.05 ) / 0.05;
-		$contrast_with_white = 1.05 / ( $luminance + 0.05 );
-
-		return $contrast_with_black >= $contrast_with_white ? '#000' : '#fff';
+		return 'white' === self::contrast_text_color( vsprintf( '#%02x%02x%02x', $rgb ) ) ? '#fff' : '#000';
 	}
 
 	/**
@@ -1691,44 +1691,80 @@ final class Newspack_Popups_Model {
 	}
 
 	/**
-	 * Pick either white or black, whatever has sufficient contrast with the color being passed to it.
-	 * Copied from https://github.com/Automattic/newspack-theme/blob/trunk/newspack-theme/inc/template-functions.php#L401-L431
+	 * Pick either white or black text for a background.
 	 *
-	 * @param  string $background_color Hexidecimal value of the background color.
-	 * @return string Either black or white hexidecimal values.
+	 * Whichever of black or white reads better by APCA (ties to black).
 	 *
-	 * @ref https://stackoverflow.com/questions/1331591/given-a-background-color-black-or-white-text
+	 * @param  string $background_color Hexadecimal value of the background color.
+	 * @return string Either black or white hexadecimal values.
 	 */
 	public static function foreground_color_for_background( $background_color ) {
-		// hex RGB.
-		$r1 = hexdec( substr( $background_color, 1, 2 ) );
-		$g1 = hexdec( substr( $background_color, 3, 2 ) );
-		$b1 = hexdec( substr( $background_color, 5, 2 ) );
-		// Black RGB.
-		$black_color    = '#000';
-		$r2_black_color = hexdec( substr( $black_color, 1, 2 ) );
-		$g2_black_color = hexdec( substr( $black_color, 3, 2 ) );
-		$b2_black_color = hexdec( substr( $black_color, 5, 2 ) );
-		// Calc contrast ratio.
-		$l1             = 0.2126 * pow( $r1 / 255, 2.2 ) +
-			0.7152 * pow( $g1 / 255, 2.2 ) +
-			0.0722 * pow( $b1 / 255, 2.2 );
-		$l2             = 0.2126 * pow( $r2_black_color / 255, 2.2 ) +
-			0.7152 * pow( $g2_black_color / 255, 2.2 ) +
-			0.0722 * pow( $b2_black_color / 255, 2.2 );
-		$contrast_ratio = 0;
-		if ( $l1 > $l2 ) {
-			$contrast_ratio = (int) ( ( $l1 + 0.05 ) / ( $l2 + 0.05 ) );
-		} else {
-			$contrast_ratio = (int) ( ( $l2 + 0.05 ) / ( $l1 + 0.05 ) );
+		return 'white' === self::contrast_text_color( $background_color ) ? '#fff' : '#000';
+	}
+
+	/**
+	 * Parse a hex color into its 0-255 channels, as \Newspack\newspack_parse_hex_channels() does.
+	 *
+	 * Accepts #RGB, #RRGGBB and #RRGGBBAA (the alpha pair is stripped), with or without the leading #.
+	 *
+	 * @param string $hex Hexadecimal color.
+	 * @return int[]|null [ $r, $g, $b ], or null when unparseable.
+	 */
+	private static function parse_hex_channels( $hex ): ?array {
+		$hex = ltrim( trim( (string) $hex ), '#' );
+		if ( 3 === strlen( $hex ) ) {
+			$hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+		} elseif ( 8 === strlen( $hex ) ) {
+			$hex = substr( $hex, 0, 6 );
 		}
-		if ( $contrast_ratio > 5 ) {
-			// If contrast is more than 5, return black color.
-			return '#000';
-		} else {
-			// if not, return white color.
-			return '#fff';
+		if ( 6 !== strlen( $hex ) || ! ctype_xdigit( $hex ) ) {
+			return null;
 		}
+		return [ hexdec( substr( $hex, 0, 2 ) ), hexdec( substr( $hex, 2, 2 ) ), hexdec( substr( $hex, 4, 2 ) ) ];
+	}
+
+	/**
+	 * Pick the text color for a background, as newspack-plugin does when it is active.
+	 *
+	 * Whichever of black or white reads better by APCA (ties to black).
+	 *
+	 * Keep in sync with: \Newspack\newspack_get_color_contrast() (newspack-plugin),
+	 * Newspack_Blocks::get_color_for_contrast() and getColorForContrast() in donate/utils.ts (newspack-blocks),
+	 * newspack_get_color_contrast() (newspack-theme), getContrastColor() in contrast-color.js (packages/components),
+	 * and Newspack_Listings\Curated_List_Block\contrast_text_color() (newspack-listings).
+	 * The block theme's Newspack_Block_Theme\Contrast::get_text_color() makes the same pick (it leaves the property unset for unparseable input).
+	 *
+	 * @param string $hex Hexadecimal background color.
+	 * @return string Either 'black' or 'white'.
+	 */
+	private static function contrast_text_color( $hex ): string {
+		if ( function_exists( '\Newspack\newspack_get_color_contrast' ) ) {
+			return \Newspack\newspack_get_color_contrast( $hex );
+		}
+
+		$channels = self::parse_hex_channels( $hex ) ?? [ 255, 255, 255 ];
+
+		$apca_luminance = function ( array $rgb ): float {
+			$y = 0.2126729 * pow( $rgb[0] / 255, 2.4 ) + 0.7151522 * pow( $rgb[1] / 255, 2.4 ) + 0.072175 * pow( $rgb[2] / 255, 2.4 );
+			return $y <= 0.022 ? $y + pow( 0.022 - $y, 1.414 ) : $y;
+		};
+		$apca_contrast  = function ( float $background_y, float $text_y ): float {
+			if ( abs( $background_y - $text_y ) < 0.0005 ) {
+				return 0.0;
+			}
+			if ( $background_y > $text_y ) {
+				$sapc = ( pow( $background_y, 0.56 ) - pow( $text_y, 0.57 ) ) * 1.14;
+				return $sapc < 0.1 ? 0.0 : ( $sapc - 0.027 ) * 100;
+			}
+			$sapc = ( pow( $background_y, 0.65 ) - pow( $text_y, 0.62 ) ) * 1.14;
+			return $sapc > -0.1 ? 0.0 : ( $sapc + 0.027 ) * 100;
+		};
+
+		$background_y = $apca_luminance( $channels );
+		$black_lc     = $apca_contrast( $background_y, $apca_luminance( [ 0, 0, 0 ] ) );
+		$white_lc     = $apca_contrast( $background_y, $apca_luminance( [ 255, 255, 255 ] ) );
+
+		return abs( $white_lc ) > abs( $black_lc ) ? 'white' : 'black';
 	}
 
 	/**
