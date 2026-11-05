@@ -175,7 +175,8 @@ class Collection_Taxonomy {
 
 		$meta_query = isset( $args['meta_query'] ) && is_array( $args['meta_query'] ) ? $args['meta_query'] : [];
 
-		// The flag is only ever stored as '1' or deleted, so NOT EXISTS is enough.
+		// The flag is only ever stored as '1' (deactivate_term()) or deleted
+		// (reactivate_term()), so NOT EXISTS is enough.
 		// An OR'd value comparison would join every meta row of the term, which
 		// inflates term counts (and the REST X-WP-Total header).
 		$meta_query[] = [

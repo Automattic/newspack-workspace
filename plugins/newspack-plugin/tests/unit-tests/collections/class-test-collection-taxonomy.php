@@ -224,6 +224,7 @@ class Test_Collection_Taxonomy extends WP_UnitTestCase {
 		];
 
 		$this->assertCount( 3, get_terms( $args ), 'Only active terms should be returned.' );
+		// The regression check: get_terms() dedupes rows, but the count (which feeds X-WP-Total) did not.
 		$this->assertSame( 3, (int) wp_count_terms( $args ), 'Count should match the number of active terms.' );
 	}
 }
