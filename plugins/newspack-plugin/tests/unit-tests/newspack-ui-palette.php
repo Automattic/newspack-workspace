@@ -627,7 +627,6 @@ class Newspack_Test_UI_Palette extends WP_UnitTestCase {
 				[
 					'error-border'       => '#f1bfba',
 					'error-tint-hover'   => '#f4e5dd',
-					'error-tint-pressed' => '#f1bfba',
 					'success-border'     => '#abd7a8',
 					'warning-border'     => '#ebd797',
 					'disabled-ink'       => '#8d8b86',
@@ -639,7 +638,7 @@ class Newspack_Test_UI_Palette extends WP_UnitTestCase {
 				[
 					'error-border'       => '#b13634',
 					'error-tint-hover'   => '#332422',
-					'error-tint-pressed' => '#b13634',
+					'error-tint-pressed' => '#412725',
 					'success-border'     => '#1c7025',
 					'warning-border'     => '#61502a',
 					'warning-dot'        => '#dba617',
@@ -652,7 +651,6 @@ class Newspack_Test_UI_Palette extends WP_UnitTestCase {
 				[
 					'error-border'       => '#b8a4a5',
 					'error-tint-hover'   => '#8e8989',
-					'error-tint-pressed' => '#b4a1a2',
 					'success-border'     => '#9baf9d',
 					'warning-border'     => '#9c9c98',
 					'warning-dot'        => '#fcf9e8',
@@ -677,9 +675,73 @@ class Newspack_Test_UI_Palette extends WP_UnitTestCase {
 		$steps      = Newspack_UI_Palette::status_steps( $base, $brand, $contrast );
 
 		$this->assertGreaterThanOrEqual( 25, Newspack_UI_Palette::lc( $properties['warning-dot'], $base ), "dot on $base" );
-		$this->assertGreaterThanOrEqual( 45, Newspack_UI_Palette::lc( $steps['error']['text'], $properties['error-tint-pressed'] ), "ink on pressed on $base" );
 		foreach ( [ 'error', 'success', 'warning' ] as $role ) {
 			$this->assertGreaterThanOrEqual( min( 25, Newspack_UI_Palette::lc( Newspack_UI_Palette::STATUS_DEFAULTS[ "$role-border" ], '#ffffff' ) ), Newspack_UI_Palette::lc( $properties[ "$role-border" ], $base ), "$role border on $base" );
 		}
+	}
+
+	/**
+	 * Bases for the pressed tint tests, including ones where the ink guard has to move the value.
+	 *
+	 * @return array[]
+	 */
+	public function data_pressed_bases() {
+		return $this->data_bases() + [
+			'mid grey'  => [ '#808080', '#003da5' ],
+			'light grey' => [ '#d0d0d0', '#003da5' ],
+		];
+	}
+
+	/**
+	 * Dark bases.
+	 *
+	 * @return array[]
+	 */
+	public function data_dark_bases() {
+		return [
+			'nocturne'   => [ '#1e1e1e', '#003da5' ],
+			'night red'  => [ '#1e1e1e', '#e10600' ],
+			'charcoal'   => [ '#303030', '#003da5' ],
+			'charcoal 2' => [ '#2b2b2b', '#003da5' ],
+			'mid grey'   => [ '#808080', '#003da5' ],
+		];
+	}
+
+	/**
+	 * The pressed destructive tint keeps the error text readable at Lc 60, or at Lc 45 where 60 is unreachable.
+	 *
+	 * @dataProvider data_pressed_bases
+	 *
+	 * @param string $base  Base.
+	 * @param string $brand Brand.
+	 */
+	public function test_pressed_tint_keeps_ink_readable( $base, $brand ) {
+		$contrast = 'white' === \Newspack\newspack_get_color_contrast( $base ) ? '#ffffff' : '#1e1e1e';
+		$pressed  = ( Newspack_UI_Palette::status_properties( $base, $brand, $contrast ) + Newspack_UI_Palette::STATUS_DEFAULTS )['error-tint-pressed'];
+		$ink      = Newspack_UI_Palette::status_steps( $base, $brand, $contrast )['error']['text'];
+		$neutral  = Newspack_UI_Palette::lc( Newspack_UI_Palette::STATUS_DEFAULTS['error-text'], Newspack_UI_Palette::STATUS_DEFAULTS['error-tint-pressed'] );
+
+		$this->assertGreaterThanOrEqual( 45, Newspack_UI_Palette::lc( $ink, $pressed ), "ink on pressed on $base" );
+		if ( ! in_array( $base, [ '#808080', '#d0d0d0' ], true ) ) {
+			$this->assertGreaterThanOrEqual( min( 60, $neutral ), Newspack_UI_Palette::lc( $ink, $pressed ), "ink on pressed on $base" );
+		}
+	}
+
+	/**
+	 * On a dark base the pressed tint stays a tint: at most 30% of the way from the base to the error edge, and above the hover tint.
+	 *
+	 * @dataProvider data_dark_bases
+	 *
+	 * @param string $base  Base.
+	 * @param string $brand Brand.
+	 */
+	public function test_pressed_tint_on_dark_base_stays_a_tint( $base, $brand ) {
+		$properties = Newspack_UI_Palette::status_properties( $base, $brand, '#ffffff' );
+		$edge       = Newspack_UI_Palette::status_steps( $base, $brand, '#ffffff' )['error']['edge'];
+		$reach      = Newspack_UI_Palette::oklab_lightness( $edge ) - Newspack_UI_Palette::oklab_lightness( $base );
+		$pressed    = Newspack_UI_Palette::oklab_lightness( $properties['error-tint-pressed'] ) - Newspack_UI_Palette::oklab_lightness( $base );
+
+		$this->assertLessThanOrEqual( 0.3 * $reach + 0.005, $pressed );
+		$this->assertGreaterThan( Newspack_UI_Palette::oklab_lightness( $properties['error-tint-hover'] ), Newspack_UI_Palette::oklab_lightness( $properties['error-tint-pressed'] ) );
 	}
 }
