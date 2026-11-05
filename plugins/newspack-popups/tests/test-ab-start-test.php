@@ -351,11 +351,14 @@ class ABStartTestTest extends WP_UnitTestCase_PageWithPopups {
 	/**
 	 * A resume that renames the test needs the rename route's permission, which
 	 * covers trashed versions too; keeping the name needs only A.
+	 *
+	 * @dataProvider kept_names
+	 * @param string $name Name the test already has.
 	 */
-	public function test_resume_renames_only_with_permission_over_every_version() {
+	public function test_resume_renames_only_with_permission_over_every_version( $name ) {
 		$author = $this->sign_in( 'author' );
 		$editor = self::factory()->user->create( [ 'role' => 'editor' ] );
-		wp_insert_term( 'Spring drive', Newspack_Popups_AB_Tests::TAXONOMY, [ 'slug' => 'spring-drive' ] );
+		wp_insert_term( $name, Newspack_Popups_AB_Tests::TAXONOMY, [ 'slug' => 'spring-drive' ] );
 		$a = $this->create_prompt( 'inline', [ 'post_author' => $author ] );
 		update_post_meta( $a, Newspack_Popups_AB_Tests::META_TEST_ID, 'spring-drive' );
 		update_post_meta( $a, Newspack_Popups_AB_Tests::META_VARIANT, 'a' );
@@ -376,10 +379,25 @@ class ABStartTestTest extends WP_UnitTestCase_PageWithPopups {
 			]
 		);
 		$this->assertSame( 403, $renamed->get_status() );
-		$this->assertSame( 'Spring drive', Newspack_Popups_AB_Tests::get_test_name( 'spring-drive' ) );
+		$this->assertSame( $name, Newspack_Popups_AB_Tests::get_test_name( 'spring-drive' ) );
 
-		$kept = $this->start_request( [ 'prompt_id' => $a ] );
+		$kept = $this->start_request(
+			[
+				'prompt_id' => $a,
+				'name'      => Newspack_Popups_AB_Tests::get_test_name( 'spring-drive' ),
+			]
+		);
 		$this->assertSame( 201, $kept->get_status() );
+	}
+
+	/**
+	 * Names a resume keeps, as the panel sends them back: decoded.
+	 */
+	public function kept_names() {
+		return [
+			'plain'          => [ 'Spring drive' ],
+			'lone less-than' => [ 'Price < $5' ],
+		];
 	}
 
 	/**
@@ -418,7 +436,7 @@ class ABStartTestTest extends WP_UnitTestCase_PageWithPopups {
 	 */
 	public function test_start_copies_content_with_backslashes() {
 		$this->sign_in();
-		$content = '<!-- wp:button {"text":""Subscribe""} --><p>Back\slash</p><!-- /wp:button -->';
+		$content = '<!-- wp:button {"text":"\u0022Subscribe\u0022"} --><p>Back\slash</p><!-- /wp:button -->';
 		$a       = $this->create_prompt( 'inline', [ 'post_content' => wp_slash( $content ) ] );
 		$this->assertSame( $content, get_post( $a )->post_content );
 

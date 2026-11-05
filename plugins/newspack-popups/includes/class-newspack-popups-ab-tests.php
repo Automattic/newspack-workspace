@@ -847,9 +847,11 @@ final class Newspack_Popups_AB_Tests {
 	 * A new test claims A before B is made, so a second start on the same prompt
 	 * fails instead of making a second test, and a failure after that removes the
 	 * new test. A resume makes no claim and undoes nothing on failure: two resumes
-	 * at once can each make a B, which the dashboard then flags. The goal and split are stored on A only, because A's are the
-	 * test's. The meta is written directly, past guard_rest_ab_meta(), which is
-	 * why the placement rule is checked here.
+	 * at once can each make a B, which the dashboard then flags.
+	 *
+	 * The goal and split are stored on A only, because A's are the test's. The
+	 * meta is written directly, past guard_rest_ab_meta(), which is why the
+	 * placement rule is checked here.
 	 *
 	 * @param int    $prompt_id     Prompt to test.
 	 * @param string $name          Display name.
@@ -879,12 +881,15 @@ final class Newspack_Popups_AB_Tests {
 				return self::already_in_test_error();
 			}
 			// A new name renames the whole test, trashed versions included, so it
-			// takes the same permission as the rename route.
+			// takes the same permission as the rename route. The stored name is
+			// sanitized too before comparing: it reads back decoded, so a kept name
+			// with a lone `<` would otherwise look changed.
 			$clean_name = self::sanitize_test_name( $name );
 			if ( is_wp_error( $clean_name ) ) {
 				return $clean_name;
 			}
-			if ( self::get_test_name( $existing ) !== $clean_name && ! self::can_rename_test( get_current_user_id(), $existing ) ) {
+			$current_name = self::sanitize_test_name( self::get_test_name( $existing ) );
+			if ( $current_name !== $clean_name && ! self::can_rename_test( get_current_user_id(), $existing ) ) {
 				return new WP_Error( 'newspack_popups_ab_rename_forbidden', __( 'You can’t rename this test.', 'newspack-popups' ), [ 'status' => 403 ] );
 			}
 			$renamed = self::rename_test( $existing, $name );
