@@ -61,7 +61,8 @@
 		"newspack-motion": "workspace:*",
 		"newspack-scripts": "workspace:*",
 		"prop-types": "^15.8.0",
-		"react": "^18.0.0"
+		"react": "^18.0.0",
+		"sass": "^1.100.0"
 	},
 	"repository": {
 		"type": "git",

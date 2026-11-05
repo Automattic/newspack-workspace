@@ -595,6 +595,9 @@ importers:
       react:
         specifier: 18.3.1
         version: 18.3.1
+      sass:
+        specifier: ^1.100.0
+        version: 1.100.0
 
   plugins/newspack-popups:
     dependencies:
