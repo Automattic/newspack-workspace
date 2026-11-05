@@ -28,17 +28,45 @@ const compile = () =>
 	);
 
 const collectRootProperties = css => {
-	const properties = {};
-	const rule = /(^|\})\s*:root\s*\{([^}]*)\}/g;
-	let match;
-	while ( ( match = rule.exec( css ) ) !== null ) {
-		const declaration = /(--[\w-]+)\s*:\s*([^;]+);/g;
-		let found;
-		while ( ( found = declaration.exec( match[ 2 ] ) ) !== null ) {
-			properties[ found[ 1 ] ] = found[ 2 ].trim();
+	const base = {};
+	const media = {};
+	const stack = [];
+	let buffer = '';
+
+	const declare = () => {
+		const declaration = buffer.match( /^\s*(--[\w-]+)\s*:\s*([\s\S]+?)\s*$/ );
+		buffer = '';
+		const header = stack[ stack.length - 1 ];
+		if ( ! declaration || ! header || ! header.split( ',' ).some( selector => selector.trim() === ':root' ) ) {
+			return;
+		}
+		const queries = stack
+			.slice( 0, -1 )
+			.filter( entry => entry.startsWith( '@' ) )
+			.map( entry => entry.replace( /\s+/g, ' ' ) );
+		if ( ! queries.length ) {
+			base[ declaration[ 1 ] ] = declaration[ 2 ];
+			return;
+		}
+		const key = queries.join( ' > ' );
+		media[ key ] = media[ key ] || {};
+		media[ key ][ declaration[ 1 ] ] = declaration[ 2 ];
+	};
+
+	for ( const char of css.replace( /\/\*[\s\S]*?\*\//g, '' ) ) {
+		if ( char === '{' ) {
+			stack.push( buffer.trim() );
+			buffer = '';
+		} else if ( char === ';' ) {
+			declare();
+		} else if ( char === '}' ) {
+			declare();
+			stack.pop();
+		} else {
+			buffer += char;
 		}
 	}
-	return properties;
+	return { base, media };
 };
 
 const resolveValue = ( value, properties, seen = [] ) =>
@@ -49,19 +77,37 @@ const resolveValue = ( value, properties, seen = [] ) =>
 		return fallback !== undefined ? resolveValue( fallback.trim(), properties, seen ) : whole;
 	} );
 
-const resolveAll = properties =>
+const resolveAll = ( properties, context = properties ) =>
 	Object.keys( properties )
 		.sort()
 		.reduce( ( resolved, name ) => {
-			resolved[ name ] = resolveValue( properties[ name ], properties, [ name ] );
+			resolved[ name ] = resolveValue( properties[ name ], context, [ name ] );
 			return resolved;
 		}, {} );
 
+const resolveTokens = css => {
+	const { base, media } = collectRootProperties( css );
+	const tokens = resolveAll( base );
+	Object.keys( media )
+		.sort()
+		.forEach( query => {
+			tokens[ query ] = resolveAll( media[ query ], { ...base, ...media[ query ] } );
+		} );
+	return tokens;
+};
+
+const flatten = tokens => Object.values( tokens ).flatMap( value => ( typeof value === 'string' ? [ value ] : Object.values( value ) ) );
+
 describe( 'Newspack UI Neutral tokens', () => {
+	const actual = resolveTokens( compile() );
+
 	it( 'resolve to the pinned values', () => {
-		const actual = resolveAll( collectRootProperties( compile() ) );
 		const expected = JSON.parse( fs.readFileSync( FIXTURE, 'utf8' ) );
 		expect( Object.keys( actual ).length ).toBeGreaterThan( 100 );
 		expect( actual ).toEqual( expected );
+	} );
+
+	it( 'leave no unresolved var() reference', () => {
+		expect( flatten( actual ).filter( value => value.includes( 'var(' ) ) ).toEqual( [] );
 	} );
 } );
