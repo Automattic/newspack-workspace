@@ -29,7 +29,7 @@
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
-<p>All checkout components meet WCAG AA color contrast requirements (minimum 4.5:1 ratio for normal text, 3:1 for large text) and maintain consistent accessibility standards throughout.</p>
+<p>Checkout text and controls are designed for readable color contrast and follow the site’s own colors.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:heading {"level":3} -->
