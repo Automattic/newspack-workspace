@@ -322,7 +322,19 @@
 				"warning": "#BD8600",
 				"warning-text": "#755100",
 				"warning-tint": "#FCF9E8",
-				"notice-tint": "#F7F7F7"
+				"notice-tint": "#F7F7F7",
+				"error-60": "#B32D2E",
+				"error-50": "#D63638",
+				"error-5": "#FACFD2",
+				"error-0": "#FCF0F1",
+				"success-60": "#007017",
+				"success-50": "#008A20",
+				"success-5": "#B8E6BF",
+				"success-0": "#EDFAEF",
+				"warning-40": "#BD8600",
+				"warning-30": "#DBA617",
+				"warning-5": "#F5E6AB",
+				"warning-0": "#FCF9E8"
 			},
 			"focus": {
 				"color": "var(--wp--preset--color--contrast)",

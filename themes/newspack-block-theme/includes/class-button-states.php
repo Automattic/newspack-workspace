@@ -326,7 +326,7 @@ final class Button_States {
 	 * @param int[] $channels [ r, g, b ], 0..255.
 	 * @return float
 	 */
-	private static function get_luminance( array $channels ): float {
+	public static function get_luminance( array $channels ): float {
 		[ $r, $g, $b ] = array_map( [ __CLASS__, 'to_linear' ], $channels );
 		return 0.2126 * $r + 0.7152 * $g + 0.0722 * $b;
 	}
@@ -339,7 +339,7 @@ final class Button_States {
 	 * @param string $hex The hex color.
 	 * @return int[]|null [ r, g, b ], or null when unparseable.
 	 */
-	private static function parse_hex( string $hex ): ?array {
+	public static function parse_hex( string $hex ): ?array {
 		$hex = ltrim( trim( $hex ), '#' );
 		if ( 3 === strlen( $hex ) ) {
 			$hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];

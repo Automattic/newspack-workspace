@@ -48,6 +48,8 @@ final class Status_Colors {
 
 	const TEXT_LC = 60;
 
+	const EDGE_RATIO = 3;
+
 	const MARK_LC = 25;
 
 	const TINT_SHARE = 12;
@@ -81,20 +83,17 @@ final class Status_Colors {
 	 * @return void
 	 */
 	public static function enqueue_block_assets(): void {
-		$base     = Contrast::resolve_palette_color( 'base' );
-		$contrast = Contrast::resolve_palette_color( 'contrast' );
-		if ( ! self::is_hex( $base ) ) {
+		$base = self::normalize_hex( Contrast::resolve_palette_color( 'base' ) );
+		if ( '' === $base ) {
 			return;
 		}
-		if ( ! self::is_hex( $contrast ) ) {
-			$contrast = '';
-		}
+		$contrast = self::normalize_hex( Contrast::resolve_palette_color( 'contrast' ) );
 
-		$brand = \wp_get_global_styles( [ 'elements', 'button', 'color', 'background' ] );
-		if ( ! is_string( $brand ) || ! self::is_hex( $brand ) ) {
-			$brand = Contrast::resolve_palette_color( 'accent' );
+		$brand = self::normalize_hex( \wp_get_global_styles( [ 'elements', 'button', 'color', 'background' ] ) );
+		if ( '' === $brand ) {
+			$brand = self::normalize_hex( Contrast::resolve_palette_color( 'accent' ) );
 		}
-		if ( ! self::is_hex( $brand ) ) {
+		if ( '' === $brand ) {
 			$brand = '' !== $contrast ? $contrast : $base;
 		}
 
@@ -134,8 +133,9 @@ final class Status_Colors {
 	 * Text reaches APCA Lc 60 on the base and marks (borders, edges) Lc 25. On a
 	 * light base each role starts at its default step and moves only darker; on a
 	 * dark base it takes the lightest scale steps. A red brand moves error away
-	 * from the brand's lightness. Tints are 12% of the mark over the base, and the
-	 * default base keeps the default tints.
+	 * from the brand's lightness. The error edge also reaches a 3:1 contrast ratio.
+	 * On a light base each tint is the role's default tint multiplied over the
+	 * base; on a dark base it is 12% of the mark over the base.
 	 *
 	 * @param string $base_hex     The base color.
 	 * @param string $brand_hex    The brand color.
@@ -143,18 +143,22 @@ final class Status_Colors {
 	 * @return array{error: array{text: string, edge: string, tint: string}, success: array{text: string, mark: string, tint: string}, warning: array{text: string, mark: string, tint: string}, notice: array{tint: string}}
 	 */
 	public static function steps( string $base_hex, string $brand_hex, string $contrast_hex = '' ): array {
-		$base = strtolower( $base_hex );
-		$dark = self::is_dark( $base );
+		$base         = self::normalize_hex( $base_hex );
+		$base         = '' === $base ? '#ffffff' : $base;
+		$brand_hex    = self::normalize_hex( $brand_hex );
+		$brand_hex    = '' === $brand_hex ? $base : $brand_hex;
+		$contrast_hex = self::normalize_hex( $contrast_hex );
+		$dark         = self::is_dark( $base );
 
 		$text_steps = $dark ? self::ERROR_DARK_STEPS : self::ERROR_TEXT_STEPS;
 		$start      = self::pick( $text_steps, $base, self::TEXT_LC );
 		$index      = self::move_from_brand( $text_steps, $start, $brand_hex, $dark );
 		$index      = self::pick( $text_steps, $base, self::TEXT_LC, $index );
 		if ( $dark ) {
-			$edge_start = self::pick( self::ERROR_DARK_STEPS, $base, self::MARK_LC );
+			$edge_start = self::pick( self::ERROR_DARK_STEPS, $base, self::MARK_LC, 0, self::EDGE_RATIO );
 			$edge       = self::ERROR_DARK_STEPS[ min( $edge_start + $index - $start, count( self::ERROR_DARK_STEPS ) - 1 ) ];
 		} else {
-			$edge = self::ERROR_EDGE_STEPS[ $index ];
+			$edge = self::ERROR_EDGE_STEPS[ self::pick( self::ERROR_EDGE_STEPS, $base, self::MARK_LC, $index, self::EDGE_RATIO ) ];
 		}
 		$error_text = $text_steps[ $index ];
 
@@ -167,19 +171,19 @@ final class Status_Colors {
 			$contrast_hex = $dark ? '#ffffff' : '#000000';
 		}
 
-		if ( '#ffffff' === $base ) {
-			$tints = [
-				'error'   => self::DEFAULTS['error-tint'],
-				'success' => self::DEFAULTS['success-tint'],
-				'warning' => self::DEFAULTS['warning-tint'],
-				'notice'  => self::DEFAULTS['notice-tint'],
-			];
-		} else {
+		if ( $dark ) {
 			$tints = [
 				'error'   => self::mix( $edge, self::TINT_SHARE, $base ),
 				'success' => self::mix( $success_mark, self::TINT_SHARE, $base ),
 				'warning' => self::mix( $warning_mark, self::TINT_SHARE, $base ),
 				'notice'  => self::mix( $contrast_hex, self::NOTICE_SHARE, $base ),
+			];
+		} else {
+			$tints = [
+				'error'   => self::multiply( self::DEFAULTS['error-tint'], $base ),
+				'success' => self::multiply( self::DEFAULTS['success-tint'], $base ),
+				'warning' => self::multiply( self::DEFAULTS['warning-tint'], $base ),
+				'notice'  => self::multiply( self::DEFAULTS['notice-tint'], $base ),
 			];
 		}
 
@@ -260,13 +264,57 @@ final class Status_Colors {
 	}
 
 	/**
-	 * Whether a value is a plain hex color.
+	 * Normalize a plain hex color to lowercase #rrggbb.
 	 *
 	 * @param mixed $value The value.
-	 * @return bool
+	 * @return string The color, or an empty string when it is not a plain hex color.
 	 */
-	private static function is_hex( $value ): bool {
-		return is_string( $value ) && 1 === preg_match( '/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i', trim( $value ) );
+	private static function normalize_hex( $value ): string {
+		if ( ! is_string( $value ) || 1 !== preg_match( '/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i', trim( $value ) ) ) {
+			return '';
+		}
+		$hex = strtolower( ltrim( trim( $value ), '#' ) );
+		if ( 3 === strlen( $hex ) ) {
+			$hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+		}
+
+		return '#' . $hex;
+	}
+
+	/**
+	 * Multiply a color over a background, per sRGB channel.
+	 *
+	 * @param string $color      The hex color.
+	 * @param string $background The hex background.
+	 * @return string The '#rrggbb' color.
+	 */
+	private static function multiply( string $color, string $background ): string {
+		$a = Button_States::parse_hex( $color );
+		$b = Button_States::parse_hex( $background );
+		if ( null === $a || null === $b ) {
+			return $color;
+		}
+
+		return sprintf( '#%02x%02x%02x', (int) round( $a[0] * $b[0] / 255 ), (int) round( $a[1] * $b[1] / 255 ), (int) round( $a[2] * $b[2] / 255 ) );
+	}
+
+	/**
+	 * WCAG 2 contrast ratio of two hex colors.
+	 *
+	 * @param string $a The first hex color.
+	 * @param string $b The second hex color.
+	 * @return float
+	 */
+	private static function ratio( string $a, string $b ): float {
+		$channels_a = Button_States::parse_hex( $a );
+		$channels_b = Button_States::parse_hex( $b );
+		if ( null === $channels_a || null === $channels_b ) {
+			return 1.0;
+		}
+		$luminance_a = Button_States::get_luminance( $channels_a );
+		$luminance_b = Button_States::get_luminance( $channels_b );
+
+		return ( max( $luminance_a, $luminance_b ) + 0.05 ) / ( min( $luminance_a, $luminance_b ) + 0.05 );
 	}
 
 	/**
@@ -276,7 +324,7 @@ final class Status_Colors {
 	 * @return bool
 	 */
 	private static function is_dark( string $base ): bool {
-		return self::lc( '#ffffff', $base ) > self::lc( '#000000', $base );
+		return '#ffffff' === Contrast::get_text_color( $base );
 	}
 
 	/**
@@ -286,12 +334,13 @@ final class Status_Colors {
 	 * @param string   $base  The base hex color.
 	 * @param float    $min   The minimum Lc.
 	 * @param int      $from  The index to start at.
+	 * @param float    $ratio The minimum WCAG contrast ratio, 0 for none.
 	 * @return int
 	 */
-	private static function pick( array $steps, string $base, float $min, int $from = 0 ): int {
+	private static function pick( array $steps, string $base, float $min, int $from = 0, float $ratio = 0 ): int {
 		$last = count( $steps ) - 1;
 		for ( $i = $from; $i < $last; $i++ ) {
-			if ( self::lc( $steps[ $i ], $base ) >= $min ) {
+			if ( self::lc( $steps[ $i ], $base ) >= $min && self::ratio( $steps[ $i ], $base ) >= $ratio ) {
 				return $i;
 			}
 		}

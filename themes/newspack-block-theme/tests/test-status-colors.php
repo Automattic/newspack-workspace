@@ -115,11 +115,13 @@ class Test_Status_Colors extends WP_UnitTestCase {
 	 */
 	public function data_light_bases() {
 		return [
-			'neutral' => [ '#ffffff', '#003da5' ],
-			'cream'   => [ '#f7f3ea', '#003da5' ],
-			'acid'    => [ '#ececec', '#003da5' ],
-			'tabloid' => [ '#ffffff', '#e10600' ],
-			'gazette' => [ '#f7f3ea', '#7a1f1f' ],
+			'neutral'    => [ '#ffffff', '#003da5' ],
+			'cream'      => [ '#f7f3ea', '#003da5' ],
+			'acid'       => [ '#ececec', '#003da5' ],
+			'tabloid'    => [ '#ffffff', '#e10600' ],
+			'gazette'    => [ '#f7f3ea', '#7a1f1f' ],
+			'ledger'     => [ '#f2f0ea', '#003da5' ],
+			'near white' => [ '#fdfdfd', '#003da5' ],
 		];
 	}
 
@@ -133,6 +135,8 @@ class Test_Status_Colors extends WP_UnitTestCase {
 			'nocturne'   => [ '#1e1e1e', '#003da5' ],
 			'night red'  => [ '#1e1e1e', '#e10600' ],
 			'night blue' => [ '#1e1e1e', '#003da5' ],
+			'charcoal'   => [ '#303030', '#003da5' ],
+			'charcoal 2' => [ '#2b2b2b', '#003da5' ],
 		];
 	}
 
@@ -148,7 +152,6 @@ class Test_Status_Colors extends WP_UnitTestCase {
 		$steps = Status_Colors::steps( $base, $brand );
 
 		$this->assertContains( $steps['error']['text'], Status_Colors::ERROR_TEXT_STEPS );
-		$this->assertGreaterThanOrEqual( 0, array_search( $steps['error']['text'], Status_Colors::ERROR_TEXT_STEPS, true ) );
 	}
 
 	/**
@@ -207,6 +210,49 @@ class Test_Status_Colors extends WP_UnitTestCase {
 		$this->assertGreaterThan( Status_Colors::oklab_lightness( $blue['error']['text'] ), Status_Colors::oklab_lightness( $red['error']['text'] ) );
 		$this->assertGreaterThanOrEqual( 0.08, abs( Status_Colors::oklab_lightness( $red['error']['text'] ) - Status_Colors::oklab_lightness( '#e10600' ) ) );
 		$this->assertGreaterThanOrEqual( 60, $this->lc( $red['error']['text'], '#1e1e1e' ) );
+	}
+
+	/**
+	 * The error edge reaches a 3:1 contrast ratio on every base.
+	 *
+	 * @dataProvider data_bases
+	 *
+	 * @param string $base  The base.
+	 * @param string $brand The brand.
+	 */
+	public function test_error_edge_meets_3_to_1( $base, $brand ) {
+		$steps = Status_Colors::steps( $base, $brand );
+		$this->assertGreaterThanOrEqual( 3, $this->ratio( $steps['error']['edge'], $base ) );
+		$this->assertGreaterThanOrEqual( 25, $this->lc( $steps['error']['edge'], $base ) );
+	}
+
+	/**
+	 * WCAG contrast ratio of two colors.
+	 *
+	 * @param string $a The first color.
+	 * @param string $b The second color.
+	 * @return float
+	 */
+	private function ratio( $a, $b ) {
+		$l = [];
+		foreach ( [ $a, $b ] as $hex ) {
+			$c   = array_map(
+				function ( $v ) {
+					$v /= 255;
+					return $v <= 0.04045 ? $v / 12.92 : pow( ( $v + 0.055 ) / 1.055, 2.4 );
+				},
+				sscanf( $hex, '#%02x%02x%02x' )
+			);
+			$l[] = 0.2126 * $c[0] + 0.7152 * $c[1] + 0.0722 * $c[2];
+		}
+		return ( max( $l ) + 0.05 ) / ( min( $l ) + 0.05 );
+	}
+
+	/**
+	 * A 3-digit hex input is normalized.
+	 */
+	public function test_short_hex_is_normalized() {
+		$this->assertSame( Status_Colors::steps( '#ffffff', '#003da5' ), Status_Colors::steps( '#FFF', '#003DA5' ) );
 	}
 
 	/**
@@ -271,19 +317,19 @@ class Test_Status_Colors extends WP_UnitTestCase {
 					'error'   => [
 						'text' => '#b32d2e',
 						'edge' => '#d63638',
-						'tint' => '#f7ded4',
+						'tint' => '#f4e5dd',
 					],
 					'success' => [
 						'text' => '#007017',
 						'mark' => '#008a20',
-						'tint' => '#dee7d2',
+						'tint' => '#e6eedb',
 					],
 					'warning' => [
 						'text' => '#755100',
 						'mark' => '#bd8600',
-						'tint' => '#f0e6d3',
+						'tint' => '#f4edd5',
 					],
-					'notice'  => [ 'tint' => '#ede9e1' ],
+					'notice'  => [ 'tint' => '#efebe3' ],
 				],
 			],
 			'nocturne'   => [
@@ -386,19 +432,19 @@ class Test_Status_Colors extends WP_UnitTestCase {
 					'error'   => [
 						'text' => '#b32d2e',
 						'edge' => '#d63638',
-						'tint' => '#f7ded4',
+						'tint' => '#f4e5dd',
 					],
 					'success' => [
 						'text' => '#007017',
 						'mark' => '#008a20',
-						'tint' => '#dee7d2',
+						'tint' => '#e6eedb',
 					],
 					'warning' => [
 						'text' => '#755100',
 						'mark' => '#bd8600',
-						'tint' => '#f0e6d3',
+						'tint' => '#f4edd5',
 					],
-					'notice'  => [ 'tint' => '#ede9e1' ],
+					'notice'  => [ 'tint' => '#efebe3' ],
 				],
 			],
 			'acid'       => [
@@ -409,19 +455,111 @@ class Test_Status_Colors extends WP_UnitTestCase {
 					'error'   => [
 						'text' => '#b32d2e',
 						'edge' => '#d63638',
-						'tint' => '#edd8d6',
+						'tint' => '#e9dedf',
 					],
 					'success' => [
 						'text' => '#007017',
 						'mark' => '#008a20',
-						'tint' => '#d5e1d4',
+						'tint' => '#dbe7dd',
 					],
 					'warning' => [
 						'text' => '#755100',
 						'mark' => '#bd8600',
-						'tint' => '#e7e0d5',
+						'tint' => '#e9e6d7',
 					],
-					'notice'  => [ 'tint' => '#e3e3e3' ],
+					'notice'  => [ 'tint' => '#e5e5e5' ],
+				],
+			],
+			'ledger'     => [
+				'#f2f0ea',
+				'#003da5',
+				'#1e1e1e',
+				[
+					'error'   => [
+						'text' => '#b32d2e',
+						'edge' => '#d63638',
+						'tint' => '#efe2dd',
+					],
+					'success' => [
+						'text' => '#007017',
+						'mark' => '#008a20',
+						'tint' => '#e1ebdb',
+					],
+					'warning' => [
+						'text' => '#755100',
+						'mark' => '#bd8600',
+						'tint' => '#efead5',
+					],
+					'notice'  => [ 'tint' => '#eae8e3' ],
+				],
+			],
+			'near-white' => [
+				'#fdfdfd',
+				'#003da5',
+				'#1e1e1e',
+				[
+					'error'   => [
+						'text' => '#b32d2e',
+						'edge' => '#d63638',
+						'tint' => '#faeeef',
+					],
+					'success' => [
+						'text' => '#007017',
+						'mark' => '#008a20',
+						'tint' => '#ebf8ed',
+					],
+					'warning' => [
+						'text' => '#755100',
+						'mark' => '#bd8600',
+						'tint' => '#faf7e6',
+					],
+					'notice'  => [ 'tint' => '#f5f5f5' ],
+				],
+			],
+			'charcoal'   => [
+				'#303030',
+				'#003da5',
+				'#ffffff',
+				[
+					'error'   => [
+						'text' => '#facfd2',
+						'edge' => '#facfd2',
+						'tint' => '#454141',
+					],
+					'success' => [
+						'text' => '#b8e6bf',
+						'mark' => '#008a20',
+						'tint' => '#313a31',
+					],
+					'warning' => [
+						'text' => '#fcf9e8',
+						'mark' => '#dba617',
+						'tint' => '#423d33',
+					],
+					'notice'  => [ 'tint' => '#373737' ],
+				],
+			],
+			'charcoal2'  => [
+				'#2b2b2b',
+				'#003da5',
+				'#ffffff',
+				[
+					'error'   => [
+						'text' => '#facfd2',
+						'edge' => '#facfd2',
+						'tint' => '#403c3c',
+					],
+					'success' => [
+						'text' => '#b8e6bf',
+						'mark' => '#008a20',
+						'tint' => '#2d362c',
+					],
+					'warning' => [
+						'text' => '#fcf9e8',
+						'mark' => '#dba617',
+						'tint' => '#3e392f',
+					],
+					'notice'  => [ 'tint' => '#323232' ],
 				],
 			],
 		];
