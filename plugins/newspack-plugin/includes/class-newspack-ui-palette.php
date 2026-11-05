@@ -59,7 +59,13 @@ class Newspack_UI_Palette {
 
 	public const MARK_LC = 25;
 
-	public const INK_ON_PRESSED_LC = 45;
+	public const INK_ON_PRESSED_LC = 60;
+
+	public const INK_ON_PRESSED_MIN_LC = 45;
+
+	public const PRESSED_SHARE = 20;
+
+	public const PRESSED_SHARE_FLOOR = 14;
 
 	public const TINT_SHARE = 12;
 
@@ -257,7 +263,7 @@ class Newspack_UI_Palette {
 			$borders[ $role ] = self::status_border( self::STATUS_DEFAULTS[ $role . '-border' ], $mark, $base, $dark );
 		}
 
-		$pressed = self::guard_ink( $borders['error'], $steps['error']['tint'], $steps['error']['text'] );
+		$pressed = self::error_tint_pressed( $steps['error'], $base, $dark );
 
 		$properties = [
 			'error'              => $steps['error']['edge'],
@@ -497,23 +503,45 @@ class Newspack_UI_Palette {
 	}
 
 	/**
-	 * The pressed destructive tint: the error border, stepped toward the tint until the error text reads on it at Lc 45.
+	 * The pressed destructive tint, one step stronger than the error tint and never derived from the border.
 	 *
-	 * @param string $pressed Pressed tint candidate.
-	 * @param string $tint    Error tint, the cap.
-	 * @param string $ink     Error text color.
+	 * A light base multiplies the pressed default over it; a dark base mixes 20% of the error edge into it.
+	 * The error text must read on it at Lc 60 (or as well as Neutral's pressed tint does, if that is lower), or at Lc 45 where that is unreachable: a light base steps toward
+	 * the tint, a dark base lowers the share, never below the floor that keeps it above the hover tint.
+	 *
+	 * @param array  $error Error text, edge and tint.
+	 * @param string $base  Base hex color.
+	 * @param bool   $dark  Whether the base is dark.
 	 *
 	 * @return string
 	 */
-	private static function guard_ink( string $pressed, string $tint, string $ink ): string {
-		$start = $pressed;
-		$share = 5;
-		while ( self::lc( $ink, $pressed ) < self::INK_ON_PRESSED_LC && $share <= 100 ) {
-			$pressed = self::mix( $tint, $share, $start );
-			$share  += 5;
+	private static function error_tint_pressed( array $error, string $base, bool $dark ): string {
+		$ink        = $error['text'];
+		$candidates = [];
+		if ( $dark ) {
+			for ( $share = self::PRESSED_SHARE; $share >= self::PRESSED_SHARE_FLOOR; $share-- ) {
+				$candidates[] = self::mix( $error['edge'], $share, $base );
+			}
+		} else {
+			$start = self::multiply( self::STATUS_DEFAULTS['error-tint-pressed'], $base );
+			for ( $share = 0; $share <= 100; $share += 5 ) {
+				$candidates[] = self::mix( $error['tint'], $share, $start );
+			}
 		}
 
-		return $pressed;
+		$target   = min( self::INK_ON_PRESSED_LC, self::lc( self::STATUS_DEFAULTS['error-text'], self::STATUS_DEFAULTS['error-tint-pressed'] ) );
+		$fallback = null;
+		foreach ( $candidates as $candidate ) {
+			$lc = self::lc( $ink, $candidate );
+			if ( $lc >= $target ) {
+				return $candidate;
+			}
+			if ( null === $fallback && $lc >= self::INK_ON_PRESSED_MIN_LC ) {
+				$fallback = $candidate;
+			}
+		}
+
+		return $fallback ?? end( $candidates );
 	}
 
 	/**
