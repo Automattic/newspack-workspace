@@ -26,30 +26,39 @@ import SpecificPostsControl from './specific-posts-control';
 
 const getCategoryTitle = category => decodeEntities( category.name ) || __( '(no title)', 'newspack-blocks' );
 
+const getPostStatusName = status =>
+	( {
+		publish: __( 'Published', 'newspack-blocks' ),
+		draft: __( 'Draft', 'newspack-blocks' ),
+		future: __( 'Scheduled', 'newspack-blocks' ),
+	} )[ status ];
+
 const getTermTitle = term => decodeEntities( term.name ) || __( '(no title)', 'newspack-blocks' );
 
 class QueryControls extends Component {
 	fetchPostSuggestions = search => {
-		const { postType } = this.props;
+		const { postType, includedPostStatuses } = this.props;
 		const restUrl = window.newspack_blocks_data.specific_posts_rest_url;
 		return apiFetch( {
 			url: addQueryArgs( restUrl, {
 				search,
 				postsToShow: 20,
-				_fields: 'id,title',
+				_fields: 'id,title,post_status',
 				type: 'post',
 				postType,
+				includedPostStatuses,
 			} ),
 		} ).then( function ( posts ) {
 			const result = posts.map( post => ( {
 				value: post.id,
 				label: decodeEntities( post.title ) || __( '(no title)', 'newspack-blocks' ),
+				clashNote: getPostStatusName( post.post_status ),
 			} ) );
 			return result;
 		} );
 	};
 	fetchSavedPosts = postIDs => {
-		const { postType } = this.props;
+		const { postType, includedPostStatuses } = this.props;
 		const restUrl = window.newspack_blocks_data.posts_rest_url;
 		// An empty `include` is dropped server-side, which would answer with the
 		// most recent post rather than nothing.
@@ -61,13 +70,15 @@ class QueryControls extends Component {
 				// These params use the block query parameters (see Newspack_Blocks::build_articles_query).
 				postsToShow: postIDs.length,
 				include: postIDs.join( ',' ),
-				_fields: 'id,title',
+				_fields: 'id,title,post_status',
 				postType,
+				includedPostStatuses,
 			} ),
 		} ).then( function ( posts ) {
 			const allPosts = posts.map( post => ( {
 				value: post.id,
 				label: decodeEntities( post.title.rendered ) || __( '(no title)', 'newspack-blocks' ),
+				clashNote: getPostStatusName( post.post_status ),
 			} ) );
 			// An ID the endpoint did not return still needs an entry, or the token
 			// field drops it from the block on the next edit. The ID goes in the
@@ -268,6 +279,7 @@ class QueryControls extends Component {
 			onSpecificModeChange,
 			onLoopModeChange,
 			specificPosts,
+			includedPostStatuses,
 			onSpecificPostsChange,
 			authors,
 			onAuthorsChange,
@@ -332,6 +344,8 @@ class QueryControls extends Component {
 				) }
 				{ specificMode ? (
 					<SpecificPostsControl
+						// The statuses decide which saved posts resolve, and the token field only fetches on mount.
+						key={ includedPostStatuses.join() }
 						postIds={ specificPosts || [] }
 						onChange={ onSpecificPostsChange }
 						fetchSuggestions={ this.fetchPostSuggestions }
@@ -460,6 +474,7 @@ class QueryControls extends Component {
 QueryControls.defaultProps = {
 	enableSpecific: true,
 	specificPosts: [],
+	includedPostStatuses: [],
 	authors: [],
 	categories: [],
 	tags: [],

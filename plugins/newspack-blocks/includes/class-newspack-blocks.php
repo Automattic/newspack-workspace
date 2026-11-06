@@ -1779,6 +1779,21 @@ class Newspack_Blocks {
 	}
 
 	/**
+	 * Get the post statuses a block query may use for the current user.
+	 *
+	 * @param array $attributes Block attributes, or request params carrying the same key.
+	 * @return string[] Post statuses.
+	 */
+	public static function get_included_post_statuses( $attributes ) {
+		if ( ! current_user_can( 'edit_others_posts' ) || empty( $attributes['includedPostStatuses'] ) ) {
+			return [ 'publish' ];
+		}
+		// Only the statuses the block editor offers. An empty list would let WP_Query choose, which adds private posts.
+		$post_statuses = array_values( array_intersect( (array) $attributes['includedPostStatuses'], [ 'publish', 'draft', 'future' ] ) );
+		return empty( $post_statuses ) ? [ 'publish' ] : $post_statuses;
+	}
+
+	/**
 	 * Get post status label.
 	 */
 	public static function get_post_status_label() {
