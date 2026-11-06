@@ -27,20 +27,25 @@ const { useHistory } = Router;
 const API_PATH = '/wp/v2/np_institution';
 
 /**
- * Keeps each item of a list such as `a.edu,b.edu` or `org=a;role=b` on one
+ * Keeps each item of a list such as `a.edu, b.edu` or `org=a;role=b` on one
  * line where it fits, so the list wraps after a separator rather than inside
- * an item, such as at the hyphen of an IP range.
+ * an item, such as at the hyphen of an IP range. Any space after a separator
+ * stays between the items, where it still shows.
  *
  * @param value A comma or semicolon separated value.
  * @return The value's items, with a line break opportunity between them.
  */
 const withBreakOpportunities = ( value: string ) =>
-	value.split( /(?<=[,;])/ ).map( ( part, index ) => (
-		<Fragment key={ index }>
-			{ index > 0 && <wbr /> }
-			<span className="newspack-institutions__list-item">{ part }</span>
-		</Fragment>
-	) );
+	value.split( /(?<=[,;])/ ).map( ( part, index ) => {
+		const item = part.trimStart();
+		const space = part.slice( 0, part.length - item.length );
+		return (
+			<Fragment key={ index }>
+				{ index > 0 && ( space || <wbr /> ) }
+				<span className="newspack-institutions__list-item">{ item }</span>
+			</Fragment>
+		);
+	} );
 
 const DEFAULT_VIEW: View = {
 	type: 'table',
