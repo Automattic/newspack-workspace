@@ -19,15 +19,15 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Button_States {
 	/**
-	 * Relative luminance below which a fill counts as near-black.
+	 * APCA screen luminance (Y, soft-clamped) below which a fill counts as near-black.
 	 *
 	 * A fill this dark can't darken visibly, so it lightens toward its text
 	 * instead, like newspack-ui's dark button. The cut-off sits just above the
-	 * theme's default contrast color (#1E1E1E).
+	 * theme's default contrast color (#1E1E1E), at about #272727.
 	 *
 	 * @var float
 	 */
-	const NEAR_BLACK_LUMINANCE = 0.02;
+	const NEAR_BLACK_Y = 0.0125;
 
 	/**
 	 * Initializer.
@@ -92,13 +92,12 @@ final class Button_States {
 	 * @return string[]|null [ 'hover' => '#rrggbb', 'pressed' => '#rrggbb' ], or null when a color is not parseable.
 	 */
 	public static function get_state_colors( string $fill, string $text ): ?array {
-		$channels = self::parse_hex( $fill );
-		if ( null === $channels ) {
+		if ( null === self::parse_hex( $fill ) ) {
 			return null;
 		}
 
 		$shares = [ self::get_state_share( 'hover', 0.85 ), self::get_state_share( 'pressed', 0.75 ) ];
-		if ( self::get_luminance( $channels ) >= self::NEAR_BLACK_LUMINANCE ) {
+		if ( Contrast::get_apca_luminance( $fill ) >= self::NEAR_BLACK_Y ) {
 			$hover   = self::mix( $fill, '#000000', $shares[0] );
 			$pressed = self::mix( $fill, '#000000', $shares[1] );
 		} else {
@@ -221,7 +220,7 @@ final class Button_States {
 	 * @param float  $default The theme's own value, used when the token is unavailable.
 	 * @return float The share in the 0..1 range.
 	 */
-	private static function get_state_share( string $state, float $default ): float {
+	public static function get_state_share( string $state, float $default ): float {
 		$value = \wp_get_global_settings( [ 'custom', 'state', $state ] );
 		if ( is_string( $value ) && preg_match( '/^\s*(\d{1,3}(?:\.\d+)?)%\s*$/', $value, $matches ) && (float) $matches[1] <= 100 ) {
 			return (float) $matches[1] / 100;
@@ -238,7 +237,7 @@ final class Button_States {
 	 * @param float  $share The first color's share, in the 0..1 range.
 	 * @return string|null The mixed '#rrggbb' color, or null when a color is not parseable.
 	 */
-	private static function mix( string $a, string $b, float $share ): ?string {
+	public static function mix( string $a, string $b, float $share ): ?string {
 		$lab_a = self::to_oklab( $a );
 		$lab_b = self::to_oklab( $b );
 		if ( null === $lab_a || null === $lab_b ) {
@@ -259,7 +258,7 @@ final class Button_States {
 	 * @param string $hex The hex color.
 	 * @return float[]|null [ L, a, b ], or null when unparseable.
 	 */
-	private static function to_oklab( string $hex ): ?array {
+	public static function to_oklab( string $hex ): ?array {
 		$channels = self::parse_hex( $hex );
 		if ( null === $channels ) {
 			return null;
@@ -321,17 +320,6 @@ final class Button_States {
 	}
 
 	/**
-	 * WCAG 2 relative luminance of an sRGB color.
-	 *
-	 * @param int[] $channels [ r, g, b ], 0..255.
-	 * @return float
-	 */
-	private static function get_luminance( array $channels ): float {
-		[ $r, $g, $b ] = array_map( [ __CLASS__, 'to_linear' ], $channels );
-		return 0.2126 * $r + 0.7152 * $g + 0.0722 * $b;
-	}
-
-	/**
 	 * Parse a hex color into its 0..255 channels.
 	 *
 	 * Accepts #rgb, #rrggbb and #rrggbbaa, with or without the leading #.
@@ -339,7 +327,7 @@ final class Button_States {
 	 * @param string $hex The hex color.
 	 * @return int[]|null [ r, g, b ], or null when unparseable.
 	 */
-	private static function parse_hex( string $hex ): ?array {
+	public static function parse_hex( string $hex ): ?array {
 		$hex = ltrim( trim( $hex ), '#' );
 		if ( 3 === strlen( $hex ) ) {
 			$hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];

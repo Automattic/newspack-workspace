@@ -35,6 +35,7 @@ import * as responsiveContainerBreakpoint from './responsive-container/breakpoin
  * Block Scripts
  */
 import './core-image';
+import './core-post-date';
 
 export const blocks = [
 	readerRegistration,

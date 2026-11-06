@@ -12,7 +12,7 @@ $select-caret:
  */
 label:where(:not(.newspack-ui *)) {
 	color: var(--wp--preset--color--contrast);
-	display: inline-block;
+	display: block;
 	font-family: var(--wp--preset--font-family--inter);
 	font-size: var(--wp--preset--font-size--small);
 	font-weight: 500;
@@ -27,7 +27,12 @@ label:where(:not(.newspack-ui *)) {
 	input[type="password"],
 	input[type="search"],
 	input[type="number"],
-	input[type="tel"],
+	input[type="tel"]
+):where(:not(.newspack-ui *)) {
+	@include mixins.input;
+}
+
+:is(
 	input[type="range"],
 	input[type="date"],
 	input[type="month"],
@@ -35,18 +40,27 @@ label:where(:not(.newspack-ui *)) {
 	input[type="time"],
 	input[type="datetime"],
 	input[type="datetime-local"],
-	input[type="zip"],
-	input[type="color"]
+	input[type="zip"]
 ):where(:not(.newspack-ui *)) {
+	@include mixins.input-skin;
 	@include mixins.input;
 }
 
-textarea:where(:not(.newspack-ui *, .wc-block-components-textarea)) {
+input[type="color"]:where(:not(.newspack-ui *)) {
+	@include mixins.input-skin;
+	@include mixins.input($fill: false);
+}
+
+:root textarea:where(:not(.newspack-ui *, .wc-block-components-textarea)) {
 	@include mixins.input;
 	min-height: calc(var(--wp--custom--spacing--75) * 2);
 }
 
-select:where(:not([multiple], [size], .newspack-ui *)) {
+:root select:where([multiple], [size]):where(:not(.newspack-ui *)) {
+	@include mixins.input;
+}
+
+:root select:where(:not([multiple], [size], .newspack-ui *)) {
 	@include mixins.input;
 	appearance: none;
 	background-image: $select-caret;
@@ -65,7 +79,7 @@ select:where(:not([multiple], [size], .newspack-ui *)) {
 }
 
 /*! rtl:ignore */
-select:where(:not([multiple], [size], .newspack-ui *)):dir(rtl) {
+:root select:where(:not([multiple], [size], .newspack-ui *)):dir(rtl) {
 	background-image: $select-caret;
 	background-position:
 		left calc(var(--wp--preset--spacing--20) + 8px) center,
@@ -94,14 +108,16 @@ input[type="search"]::-webkit-search-cancel-button {
 	@include mixins.checkbox-radio(!important);
 
 	&:has(+ label) {
+		float: inline-start;
 		font-size: var(--wp--preset--font-size--small);
 		line-height: var(--wp--custom--line-height--small);
+		margin-inline-end: var(--wp--custom--spacing--25);
 		margin-top: calc((1lh - var(--wp--custom--spacing--35)) / 2);
 
 		+ label {
+			display: flow-root;
 			font-weight: 400;
 			margin-bottom: 0;
-			vertical-align: top;
 		}
 	}
 
@@ -117,6 +133,71 @@ input[type="checkbox"]:where(:not(.newspack-ui *, .wc-block-components-checkbox_
 
 input[type="radio"]:where(:not(.newspack-ui *, .wc-block-components-radio-control__input)) {
 	@include mixins.radio(!important);
+}
+
+$jetpack-choice: ":root .contact-form .grunion-field-wrap:not(.is-style-button-wrap) input.grunion-field";
+
+#{$jetpack-choice}:is(.checkbox, .consent, .checkbox-multiple, .radio) {
+	margin-block: 0;
+	margin-inline: 0 var(--wp--custom--spacing--25);
+	min-height: 0;
+	min-width: 0;
+	padding: 0;
+	transform: none;
+}
+
+#{$jetpack-choice}:is(.checkbox, .consent, .checkbox-multiple) {
+	@include mixins.checkbox-radio(null, null);
+	@include mixins.checkbox;
+
+	&:has(+ label) {
+		font-size: var(--wp--preset--font-size--small);
+		line-height: var(--wp--custom--line-height--small);
+		margin-top: calc((1lh - var(--wp--custom--spacing--35)) / 2);
+	}
+
+	&:is(.checkbox-multiple) {
+		align-self: flex-start;
+		margin-top: calc((var(--wp--custom--line-height--small) * 1em - var(--wp--custom--spacing--35)) / 2);
+	}
+
+	&::before {
+		border: 0;
+		inset: auto;
+		margin: 0;
+		position: static;
+		scale: none;
+	}
+}
+
+.contact-form .grunion-field-wrap:not(.is-style-button-wrap) .contact-form__checkbox-wrap {
+	align-items: flex-start;
+}
+
+#{$jetpack-choice}.radio {
+	@include mixins.checkbox-radio(null, null);
+	@include mixins.radio;
+	align-self: flex-start;
+	margin-top: calc((var(--wp--custom--line-height--small) * 1em - var(--wp--custom--spacing--35)) / 2);
+
+	&::before,
+	&:checked::before {
+		content: none;
+		display: none;
+	}
+}
+
+.contact-form .grunion-field-wrap :is(label, legend).grunion-field-label:where(:not(.checkbox, .consent, .radio, .checkbox-multiple, .is-style-outlined *, .is-style-animated *)) {
+	color: var(--wp--preset--color--contrast);
+	font-family: var(--wp--preset--font-family--inter);
+	font-size: var(--wp--preset--font-size--small);
+	font-weight: 500;
+	line-height: var(--wp--custom--line-height--small);
+	margin-bottom: var(--wp--preset--spacing--20);
+}
+
+.contact-form .grunion-field-wrap legend.grunion-field-label:where(:not(.is-style-outlined *, .is-style-animated *)) {
+	margin-bottom: 0;
 }
 
 label:where(:has(> input:is([type="checkbox"], [type="radio"]))):where(:not(.newspack-ui *)) {
@@ -144,7 +225,7 @@ input[type="submit"]:not(.newspack-ui__button) {
 	line-height: var(--newspack-ui-line-height-s, var(--wp--custom--line-height--small));
 	padding:
 		var(--newspack-ui-spacer-2, var(--wp--custom--spacing--25))
-		var(--newspack-ui-spacer-5, var(--wp--preset--spacing--40));
+		var(--newspack-ui-spacer-4, var(--wp--custom--spacing--35));
 	transition:
 		background motion.$duration-color motion.$ease-color,
 		color motion.$duration-color motion.$ease-color,
@@ -157,14 +238,13 @@ input[type="submit"]:not(.newspack-ui__button) {
 
 	@include motion.hover {
 		&:hover {
-			background: color-mix(in oklab, var(--wp--preset--color--accent) var(--wp--custom--state--hover), black);
-			color: var(--wp--preset--color--accent-contrast-hover, var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base)));
+			background: color-mix(in oklab, var(--wp--preset--color--accent) var(--wp--custom--state--hover), var(--wp--custom--button--mix));
 		}
 	}
 
 	&:active {
-		background: color-mix(in oklab, var(--wp--preset--color--accent) var(--wp--custom--state--pressed), black);
-		color: var(--wp--preset--color--accent-contrast-hover, var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base)));
+		background: color-mix(in oklab, var(--wp--preset--color--accent) var(--wp--custom--state--pressed), var(--wp--custom--button--mix));
+		color: var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base));
 		transform: scale(motion.$press-scale);
 
 		@include motion.reduced-motion {
@@ -185,4 +265,116 @@ input[type="submit"]:not(.newspack-ui__button) {
 		color: color-mix(in oklab, var(--wp--preset--color--contrast) var(--wp--custom--state--disabled-text), transparent);
 		cursor: default;
 	}
+}
+
+:root .select2-container.select2-container--default:where(:not(.newspack-ui *)) .select2-selection--single {
+	@include mixins.input-skin;
+	@include mixins.input;
+	align-items: center;
+	background-image: $select-caret;
+	background-position:
+		right calc(var(--wp--preset--spacing--20) + 12px) center,
+		right calc(var(--wp--preset--spacing--20) + 8px) center;
+	background-repeat: no-repeat;
+	background-size: 4px 4px;
+	cursor: pointer;
+	display: flex;
+	height: auto;
+	user-select: none;
+
+	&:focus-visible {
+		@include mixins.focus-edge;
+	}
+
+	.select2-selection__rendered {
+		color: var(--wp--preset--color--contrast);
+		flex: 1;
+		line-height: inherit;
+		overflow: hidden;
+		padding: 0;
+		padding-inline-end: calc(var(--wp--preset--spacing--40) + var(--wp--preset--spacing--20) + 10px - 13px);
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.select2-selection__placeholder {
+		color: var(--wp--preset--color--contrast-3);
+	}
+
+	.select2-selection__arrow {
+		display: none;
+	}
+
+	@media (forced-colors: active) {
+		background-image: none;
+	}
+}
+
+/*! rtl:ignore */
+:root .select2-container.select2-container--default:where(:not(.newspack-ui *)) .select2-selection--single:dir(rtl) {
+	background-image: $select-caret;
+	background-position:
+		left calc(var(--wp--preset--spacing--20) + 8px) center,
+		left calc(var(--wp--preset--spacing--20) + 12px) center;
+
+	@media (forced-colors: active) {
+		background-image: none;
+	}
+}
+
+:root .select2-container.select2-container--default.select2-container--open:where(:not(.newspack-ui *)) .select2-selection--single {
+	@include mixins.focus-edge;
+	border-radius: var(--wp--custom--border--radius-large);
+}
+
+:root .select2-container:where(:not(.newspack-ui *)) .select2-dropdown.select2-dropdown {
+	background-color: var(--wp--preset--color--base);
+	border: 1px solid var(--wp--preset--color--base-5);
+	border-radius: var(--wp--custom--border--radius-large);
+	font-family: var(--wp--preset--font-family--inter);
+	font-size: var(--wp--preset--font-size--small);
+	line-height: var(--wp--custom--line-height--small);
+	overflow: hidden;
+}
+
+:root .select2-container.select2-container--default:where(:not(.newspack-ui *)) .select2-search--dropdown {
+	padding: var(--wp--preset--spacing--20);
+}
+
+:root .select2-container.select2-container--default:where(:not(.newspack-ui *)) .select2-results__option {
+	color: var(--wp--preset--color--contrast);
+	padding: calc(var(--wp--preset--spacing--20) - 1px) calc(var(--wp--custom--spacing--25) + 1px);
+}
+
+:root .select2-container.select2-container--default:where(:not(.newspack-ui *)) .select2-results__option[data-selected="true"],
+:root .select2-container.select2-container--default:where(:not(.newspack-ui *)) .select2-results__option[aria-selected="true"] {
+	background-color: color-mix(in oklab, var(--wp--preset--color--contrast) var(--wp--custom--state--fill), var(--wp--preset--color--base));
+}
+
+:root .select2-container.select2-container--default:where(:not(.newspack-ui *)) .select2-results__option--highlighted[data-selected],
+:root .select2-container.select2-container--default:where(:not(.newspack-ui *)) .select2-results__option--highlighted[aria-selected] {
+	background-color: var(--wp--preset--color--contrast);
+	color: var(--wp--preset--color--base);
+}
+
+:root .select2-container.select2-container--default.select2-container--open:where(:not(.newspack-ui *)).select2-container--below .select2-selection--single {
+	border-end-end-radius: 0;
+	border-end-start-radius: 0;
+}
+
+:root .select2-container.select2-container--default.select2-container--open:where(:not(.newspack-ui *)).select2-container--above .select2-selection--single {
+	border-start-end-radius: 0;
+	border-start-start-radius: 0;
+}
+
+:root .select2-container:where(:not(.newspack-ui *)) .select2-dropdown.select2-dropdown--below {
+	border-block-start: 0;
+	border-start-end-radius: 0;
+	border-start-start-radius: 0;
+}
+
+:root .select2-container:where(:not(.newspack-ui *)) .select2-dropdown.select2-dropdown--above {
+	border-block-end: 0;
+	border-end-end-radius: 0;
+	border-end-start-radius: 0;
 }

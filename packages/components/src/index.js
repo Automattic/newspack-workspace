@@ -17,6 +17,7 @@ export { default as ColorPicker } from './color-picker';
 export { default as ConfirmDialog } from './confirm-dialog';
 export { default as CustomSelectControl } from './custom-select-control';
 export { default as DataViews } from './dataviews';
+export { evenColumns, withoutColumnStyles } from './dataviews/even-columns';
 export { default as DebugBadge } from './debug-badge';
 export { default as Divider } from './divider';
 export { default as Drawer } from './drawer';
@@ -69,5 +70,6 @@ import * as integrationIcons from './integration-icons';
 export { integrationIcons };
 export { espProviderOrder } from './integration-icons';
 export { default as utils } from './utils';
+export { getContrastColor, getContrastColorFromRGB } from './utils/contrast-color';
 
 import './style.scss';

@@ -1,4 +1,5 @@
 import { __, sprintf, _n } from '@wordpress/i18n';
+import { getContrastColor } from 'newspack-components';
 
 /**
  * Data selector for popup options (stored in post meta)
@@ -39,6 +40,10 @@ export const promptEditorPropsSelector = select => {
 		excluded_categories,
 		excluded_tags,
 		expiration_date,
+		newspack_popups_ab_test_id,
+		newspack_popups_ab_variant,
+		newspack_popups_ab_test_goal,
+		newspack_popups_ab_control_share,
 	} = meta || {};
 
 	const isOverlay = isOverlayPlacement( placement );
@@ -79,21 +84,13 @@ export const promptEditorPropsSelector = select => {
 		excluded_tags,
 		expiration_date,
 		postStatus,
+		newspack_popups_ab_test_id,
+		newspack_popups_ab_variant,
+		newspack_popups_ab_test_goal,
+		newspack_popups_ab_control_share,
+		postId: select( 'core/editor' ).getCurrentPostId(),
 	};
 };
-
-/**
- * Convert hex color to RGB.
- * From https://stackoverflow.com/questions/5623838/rgb-to-hex-and-hex-to-rgb
- *
- * @param {string} hex Color in HEX format
- */
-const hexToRGB = hex =>
-	hex
-		.replace( /^#?([a-f\d])([a-f\d])([a-f\d])$/i, ( m, r, g, b ) => '#' + r + r + g + g + b + b )
-		.substring( 1 )
-		.match( /.{2}/g )
-		.map( x => parseInt( x, 16 ) );
 
 const EDITOR_CANVAS_SELECTOR = 'iframe[name="editor-canvas"]';
 
@@ -186,22 +183,7 @@ export const updateEditorColors = backgroundColor => {
 	if ( ! backgroundColor ) {
 		return;
 	}
-	const blackColor = '#000000';
-	const whiteColor = '#ffffff';
-
-	const backgroundColorRGB = hexToRGB( backgroundColor );
-	const blackRGB = hexToRGB( blackColor );
-
-	const l1 =
-		0.2126 * Math.pow( backgroundColorRGB[ 0 ] / 255, 2.2 ) +
-		0.7152 * Math.pow( backgroundColorRGB[ 1 ] / 255, 2.2 ) +
-		0.0722 * Math.pow( backgroundColorRGB[ 2 ] / 255, 2.2 );
-	const l2 =
-		0.2126 * Math.pow( blackRGB[ 0 ] / 255, 2.2 ) + 0.7152 * Math.pow( blackRGB[ 1 ] / 255, 2.2 ) + 0.0722 * Math.pow( blackRGB[ 2 ] / 255, 2.2 );
-
-	const contrastRatio = l1 > l2 ? parseInt( ( l1 + 0.05 ) / ( l2 + 0.05 ) ) : parseInt( ( l2 + 0.05 ) / ( l1 + 0.05 ) );
-
-	const foregroundColor = contrastRatio > 5 ? blackColor : whiteColor;
+	const foregroundColor = getContrastColor( backgroundColor ) === 'black' ? '#000000' : '#ffffff';
 
 	const editorDoc = getEditorDocument();
 	const editorStylesEl = editorDoc.querySelector( '.editor-styles-wrapper' );

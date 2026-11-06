@@ -238,6 +238,121 @@ class Test_Private_Tags_Integrations extends WP_UnitTestCase {
 	}
 
 	// -----------------------------------------------------------------
+	// REST tag creation with the labeled name.
+	// -----------------------------------------------------------------
+
+	/**
+	 * Creating a tag with a private tag's labeled name returns the private tag.
+	 */
+	public function test_rest_create_with_labeled_name_reuses_private_tag() {
+		$editor = $this->factory()->user->create( [ 'role' => 'editor' ] );
+		wp_set_current_user( $editor );
+
+		$private = $this->make_private_tag( 'Beastie' );
+
+		$request = new WP_REST_Request( 'POST', '/wp/v2/tags' );
+		$request->set_param( 'name', 'Beastie (private)' );
+		$response = rest_do_request( $request );
+		$data     = $response->get_data();
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'term_exists', $data['code'] );
+		$this->assertSame( $private, (int) $data['data']['term_id'] );
+		$this->assertFalse( get_term_by( 'name', 'Beastie (private)', 'post_tag' ) );
+	}
+
+	/**
+	 * Strip private label from rest handles names that are escaped when stored.
+	 */
+	public function test_strip_private_label_from_rest_handles_escaped_names() {
+		$this->make_private_tag( 'News & Views' );
+
+		$prepared = (object) [ 'name' => 'News & Views (private)' ];
+		$out      = Private_Tags::strip_private_label_from_rest( $prepared, new WP_REST_Request( 'POST', '/wp/v2/tags' ) );
+		$this->assertSame( 'News & Views', $out->name );
+	}
+
+	/**
+	 * Strip private label from rest keeps the name when no private tag matches.
+	 */
+	public function test_strip_private_label_from_rest_keeps_name_without_private_match() {
+		$this->make_private_tag( 'Beastie' );
+		$this->make_public_tag( 'Jazz' );
+
+		$prepared = (object) [ 'name' => 'Jazz (private)' ];
+		$out      = Private_Tags::strip_private_label_from_rest( $prepared, new WP_REST_Request( 'POST', '/wp/v2/tags' ) );
+		$this->assertSame( 'Jazz (private)', $out->name );
+	}
+
+	/**
+	 * Strip private label from rest keeps the name on updates.
+	 */
+	public function test_strip_private_label_from_rest_keeps_name_on_update() {
+		$this->make_private_tag( 'Beastie' );
+		$public = $this->make_public_tag( 'Jazz' );
+
+		$request = new WP_REST_Request( 'POST', '/wp/v2/tags/' . $public );
+		$request->set_param( 'id', $public );
+		$prepared = (object) [ 'name' => 'Beastie (private)' ];
+		$out      = Private_Tags::strip_private_label_from_rest( $prepared, $request );
+		$this->assertSame( 'Beastie (private)', $out->name );
+	}
+
+	/**
+	 * Strip private label from rest keeps the name when a slug is given.
+	 */
+	public function test_strip_private_label_from_rest_keeps_name_with_slug() {
+		$this->make_private_tag( 'Beastie' );
+
+		$prepared = (object) [
+			'name' => 'Beastie (private)',
+			'slug' => 'beastie-private',
+		];
+
+		$out = Private_Tags::strip_private_label_from_rest( $prepared, new WP_REST_Request( 'POST', '/wp/v2/tags' ) );
+		$this->assertSame( 'Beastie (private)', $out->name );
+	}
+
+	/**
+	 * Strip private label from rest keeps the name when the private tag differs only by accents.
+	 *
+	 * The DB collation matches "Beastie" to "Beastié", but wp_insert_term() would not,
+	 * so stripping here would create a new public "Beastie" tag.
+	 */
+	public function test_strip_private_label_from_rest_keeps_name_when_only_accents_match() {
+		$private = $this->make_private_tag( 'Beastié' );
+
+		// This test only means something when the collation ignores accents, so the name lookup finds "Beastié".
+		$collation_matches = get_terms(
+			[
+				'taxonomy'   => 'post_tag',
+				'name'       => 'Beastie',
+				'hide_empty' => false,
+				'fields'     => 'ids',
+			]
+		);
+		$this->assertContains( $private, $collation_matches );
+
+		$prepared = (object) [ 'name' => 'Beastie (private)' ];
+		$out      = Private_Tags::strip_private_label_from_rest( $prepared, new WP_REST_Request( 'POST', '/wp/v2/tags' ) );
+		$this->assertSame( 'Beastie (private)', $out->name );
+	}
+
+	/**
+	 * Strip private label from rest keeps the name when the private tag differs only by a backslash.
+	 *
+	 * The name lookup strips slashes, so "AC\DC" finds a private "ACDC", but wp_insert_term()
+	 * compares the unslashed name and would create a new public "AC\DC" tag.
+	 */
+	public function test_strip_private_label_from_rest_keeps_name_when_only_backslash_differs() {
+		$this->make_private_tag( 'ACDC' );
+
+		$prepared = (object) [ 'name' => 'AC\DC (private)' ];
+		$out      = Private_Tags::strip_private_label_from_rest( $prepared, new WP_REST_Request( 'POST', '/wp/v2/tags' ) );
+		$this->assertSame( 'AC\DC (private)', $out->name );
+	}
+
+	// -----------------------------------------------------------------
 	// Admin column.
 	// -----------------------------------------------------------------
 

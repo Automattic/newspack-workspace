@@ -213,3 +213,19 @@ describe( 'change owner', () => {
 		expect( screen.queryByRole( 'button', { name: 'Change owner' } ) ).toBeNull();
 	} );
 } );
+
+describe( 'the members table', () => {
+	// The email sits under the name as its own field, so the search only reaches it
+	// if that field opts in, and the name alone labels the row.
+	it( 'finds a member by the email shown under their name', async () => {
+		await renderDetail( group() );
+
+		expect( screen.getByRole( 'checkbox', { name: 'Mel Member' } ) ).toBeTruthy();
+
+		fireEvent.change( screen.getByRole( 'searchbox' ), { target: { value: 'mel@example' } } );
+
+		await waitFor( () => expect( screen.queryByText( 'Olive Owner' ) ).toBeNull() );
+		expect( screen.getByText( 'Mel Member' ) ).toBeTruthy();
+		expect( screen.getByText( 'mel@example.com' ) ).toBeTruthy();
+	} );
+} );
