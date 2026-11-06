@@ -44,13 +44,15 @@ type ColorFieldProps = {
 const supportsThemeStyle = () => !! window.newspackAudience?.content_banner?.supports_theme_style;
 const usesSiteTheme = () => !! window.newspackAudience?.content_banner?.uses_site_theme;
 
+export type BannerRenderStyle = 'light' | 'dark' | 'theme' | 'site';
+
 /**
  * The style a banner renders with: the site Theme wherever the adapter is active, otherwise the stored
  * style, with Theme falling back to Light where the theme does not offer it.
  *
  * @param style The stored style.
  */
-export const getBannerStyle = ( style?: string ) => {
+export const getBannerStyle = ( style?: string ): BannerRenderStyle => {
 	if ( usesSiteTheme() ) {
 		return 'site';
 	}
