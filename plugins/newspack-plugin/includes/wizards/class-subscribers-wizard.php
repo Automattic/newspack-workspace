@@ -55,6 +55,12 @@ class Subscribers_Wizard extends Wizard {
 	const MANAGED_ON_THIS_SITE = 'this-site';
 
 	/**
+	 * The `donor` filter value for readers who aren't donors, beside the
+	 * Subscribers_Donors::KIND_* values. See resolve_donor_exclude().
+	 */
+	const DONOR_NONE = 'none';
+
+	/**
 	 * Upper bound on the number of avatars one /avatars request resolves. A single
 	 * list page needs at most `per_page` (≤100); the client batches larger sets.
 	 */
@@ -104,6 +110,23 @@ class Subscribers_Wizard extends Wizard {
 	 * @var array<int,array{user_id:int,plan_label:string,site_name:string,status:string}>|null
 	 */
 	private ?array $network_index_cache = null;
+
+	/**
+	 * Per-request memo of donation subscription holders, as
+	 * Subscribers_Donors::holders() returns them. Null until resolved. See
+	 * customer_ids_for_donor_kind().
+	 *
+	 * @var array{live:int[],ended:int[]}|null
+	 */
+	private ?array $donor_holders_cache = null;
+
+	/**
+	 * Per-request memo of the readers with each donor flag set, keyed by the
+	 * Reader_Data key. See customer_ids_for_donor_kind().
+	 *
+	 * @var array<string,int[]>
+	 */
+	private array $donor_flag_ids_cache = [];
 
 	/**
 	 * Per-request memo of newsletter list public ID → display title, built once
@@ -342,6 +365,22 @@ class Subscribers_Wizard extends Wizard {
 						'type'              => 'array',
 						'items'             => [ 'type' => 'string' ],
 						'maxItems'          => 100,
+						'sanitize_callback' => 'rest_sanitize_request_arg',
+						'validate_callback' => 'rest_validate_request_arg',
+					],
+					// The kind of donor a reader's badge reads, or not a donor. Ignored
+					// where donor labels are off (see donor_filter()).
+					'donor'      => [
+						'type'              => 'array',
+						'items'             => [
+							'type' => 'string',
+							'enum' => [
+								Subscribers_Donors::KIND_ONE_TIME,
+								Subscribers_Donors::KIND_RECURRING,
+								Subscribers_Donors::KIND_FORMER,
+								self::DONOR_NONE,
+							],
+						],
 						'sanitize_callback' => 'rest_sanitize_request_arg',
 						'validate_callback' => 'rest_validate_request_arg',
 					],
@@ -968,7 +1007,8 @@ class Subscribers_Wizard extends Wizard {
 	 * Subscription-status and plan filters can't be expressed as user-table
 	 * columns, so they run inverted: an HPOS-safe subscription query resolves the
 	 * matching holder IDs, which are then intersected into the user query's
-	 * `include` set. See resolve_filter_include().
+	 * `include` set. See resolve_filter_include(). The Donor filter's "Not a donor"
+	 * option instead removes readers; see resolve_donor_exclude().
 	 *
 	 * @param \WP_REST_Request $request The request.
 	 *
@@ -999,7 +1039,12 @@ class Subscribers_Wizard extends Wizard {
 		// null = no filter applied; [] = filter active but matched nobody (short-circuit
 		// to an empty page); a populated list = restrict the query to those users.
 		$include = $this->resolve_filter_include( $request );
+		// WP_User_Query ignores `exclude` once `include` is set, so with other
+		// filters active the donors "Not a donor" leaves out are taken off their
+		// set here instead.
+		$exclude = $this->resolve_donor_exclude( $request );
 		if ( is_array( $include ) ) {
+			$include = array_values( array_diff( $include, $exclude ) );
 			if ( empty( $include ) ) {
 				return rest_ensure_response(
 					[
@@ -1010,6 +1055,8 @@ class Subscribers_Wizard extends Wizard {
 				);
 			}
 			$query_args['include'] = $include;
+		} elseif ( ! empty( $exclude ) ) {
+			$query_args['exclude'] = array_slice( $exclude, 0, self::FILTER_INCLUDE_CAP ); // phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.PostNotIn_exclude -- User IDs, at most FILTER_INCLUDE_CAP across the unticked donor kinds together; see resolve_donor_exclude().
 		}
 
 		$user_query = new \WP_User_Query( $query_args );
@@ -1523,6 +1570,8 @@ class Subscribers_Wizard extends Wizard {
 		$this->network_index_cache             = null;
 		$this->newsletter_list_titles_cache    = null;
 		$this->newsletter_list_titles_resolved = false;
+		$this->donor_holders_cache             = null;
+		$this->donor_flag_ids_cache            = [];
 	}
 
 	/**
@@ -1541,6 +1590,12 @@ class Subscribers_Wizard extends Wizard {
 	 * outside it. The bounded per-row shape is the correct trade-off here, and
 	 * matches the existing convention elsewhere in the plugin
 	 * (Sync\Contact_Metadata\Engagement::get_latest_order).
+	 *
+	 * A One-time donor's row adds one more bounded order query: the latest donation
+	 * among the reader's newest Subscribers_Donors::ORDER_SCAN_LIMIT completed
+	 * orders. That query can load up to that many orders and read their line items
+	 * before it finds a donation. Every other row adds none, Recurring and Former
+	 * donors included.
 	 *
 	 * @param \WP_User $user     The reader user.
 	 * @param bool     $detailed Whether to hydrate the per-subscription billing
@@ -1589,6 +1644,34 @@ class Subscribers_Wizard extends Wizard {
 			// resolving tokens per row would cost a query on every row of every page.
 			'paymentMethods' => $detailed ? Subscribers_Payments::payment_methods_for_user( $user_id ) : [],
 		];
+
+		// Off WooCommerce the key is absent, not empty, so a site that can't tell
+		// donors apart never shows a half-answer.
+		if ( Subscribers_Donors::is_enabled() ) {
+			// The rules read the mapped status of each donation subscription the reader
+			// holds. Network entries are never marked as donations, so they don't count.
+			$donations = array_filter( $subscriptions, fn( $subscription ) => ! empty( $subscription['isDonation'] ) );
+
+			$donor_kind = Subscribers_Donors::kind( $user_id, array_column( $donations, 'status' ) );
+
+			// Only a One-time donor has a single gift worth linking. The other kinds
+			// already show their donation subscription, and an order lookup for them
+			// would add a query to each of their rows.
+			$last_donation = null;
+			$latest_order  = Subscribers_Donors::KIND_ONE_TIME === $donor_kind ? Subscribers_Donors::latest_donation_order( $user_id ) : null;
+			if ( $latest_order ) {
+				$paid          = $latest_order->get_date_paid();
+				$last_donation = [
+					'date'    => $this->local_date( $paid ? $paid->getTimestamp() : null ),
+					'editUrl' => $latest_order->get_edit_order_url(),
+				];
+			}
+
+			$subscriber['donor'] = [
+				'kind'         => $donor_kind,
+				'lastDonation' => $last_donation,
+			];
+		}
 
 		if ( $detailed ) {
 			/**
@@ -1644,6 +1727,8 @@ class Subscribers_Wizard extends Wizard {
 				'status'          => self::map_subscription_status( $subscription->get_status() ),
 				'editUrl'         => $this->subscription_edit_url( $subscription ),
 				'isComplimentary' => Complimentary_Access::is_complimentary_order( $subscription ),
+				// Lets the donor badge and the client tell a donation apart from a plan.
+				'isDonation'      => Donations::is_donation_order( $subscription ),
 			];
 			$out[] = $detailed
 				? array_merge(
@@ -1759,6 +1844,8 @@ class Subscribers_Wizard extends Wizard {
 				'status'          => self::map_subscription_status( $network['status'] ),
 				'editUrl'         => esc_url_raw( $network['edit_url'] ),
 				'isComplimentary' => false,
+				// Network records carry no product data, so only this site's donation subscriptions count.
+				'isDonation'      => false,
 				'managedOn'       => [
 					'name' => $network['site_name'],
 					'url'  => esc_url_raw( $network['site_url'] ),
@@ -2434,7 +2521,7 @@ class Subscribers_Wizard extends Wizard {
 
 	/**
 	 * Resolve the `include` user-ID set for the active subscription-status, plan,
-	 * access and Managed on filters, or null when none is present.
+	 * access, Managed on and Donor filters, or null when none is present.
 	 *
 	 * Each active filter resolves to a set of holder IDs; the sets are
 	 * intersected so multiple filters narrow (AND) rather than widen. The result
@@ -2452,7 +2539,11 @@ class Subscribers_Wizard extends Wizard {
 		$plan_filter   = array_filter( array_map( 'sanitize_text_field', (array) $request->get_param( 'plan' ) ) );
 		$access_filter  = array_filter( array_map( 'sanitize_text_field', (array) $request->get_param( 'access' ) ) );
 		$managed_filter = array_filter( array_map( 'sanitize_text_field', (array) $request->get_param( 'managed_on' ) ) );
-		if ( empty( $status_filter ) && empty( $plan_filter ) && empty( $access_filter ) && empty( $managed_filter ) ) {
+		// With "Not a donor" ticked the Donor filter removes readers instead, in
+		// resolve_donor_exclude(), so it adds no set here.
+		$donor_filter = $this->donor_filter( $request );
+		$donor_kinds  = in_array( self::DONOR_NONE, $donor_filter, true ) ? [] : $donor_filter;
+		if ( empty( $status_filter ) && empty( $plan_filter ) && empty( $access_filter ) && empty( $managed_filter ) && empty( $donor_kinds ) ) {
 			return null;
 		}
 
@@ -2468,6 +2559,9 @@ class Subscribers_Wizard extends Wizard {
 		}
 		if ( ! empty( $managed_filter ) ) {
 			$sets[] = $this->customer_ids_for_managed_on( $managed_filter );
+		}
+		if ( ! empty( $donor_kinds ) ) {
+			$sets[] = $this->customer_ids_for_donor_kinds( $donor_kinds );
 		}
 
 		$include = array_shift( $sets );
@@ -2605,9 +2699,12 @@ class Subscribers_Wizard extends Wizard {
 	 * The holder lookup checks that each gift recipient's account still exists,
 	 * which would otherwise cost a query pair per gift inside the filter scans.
 	 *
+	 * Public only so the donor scan in Subscribers_Donors::holders() can share it;
+	 * it isn't meant as an API for other code.
+	 *
 	 * @param \WC_Subscription[] $subscriptions The subscriptions about to be resolved to holders.
 	 */
-	private static function prime_gift_recipients( array $subscriptions ): void {
+	public static function prime_gift_recipients( array $subscriptions ): void {
 		if ( ! class_exists( 'WCS_Gifting' ) ) {
 			return;
 		}
@@ -2811,6 +2908,115 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
+	 * The `donor` filter values on a request.
+	 *
+	 * Empty where donor labels are off: there are no donor kinds to match, and the
+	 * flags alone can be set from the browser, so the param narrows nothing.
+	 *
+	 * @param \WP_REST_Request $request The request.
+	 *
+	 * @return string[] Subscribers_Donors::KIND_* values and/or DONOR_NONE.
+	 */
+	private function donor_filter( $request ): array {
+		if ( ! Subscribers_Donors::is_enabled() ) {
+			return [];
+		}
+		return array_values( array_unique( array_filter( array_map( 'sanitize_text_field', (array) $request->get_param( 'donor' ) ) ) ) );
+	}
+
+	/**
+	 * Reader IDs whose donor badge reads $kind.
+	 *
+	 * Subscribers_Donors::kind() is the SOURCE OF TRUTH for the rules; this mirrors
+	 * them as sets, for the whole site at once, and changes in step with it:
+	 *   - Recurring: holders of a live donation subscription.
+	 *   - Former: holders of an ended one, plus the `is_former_donor` flag, minus
+	 *     Recurring.
+	 *   - One-time: the `is_donor` flag, minus holders of any counted donation
+	 *     subscription, live or ended, minus the `is_former_donor` flag. Recurring
+	 *     donors carry `is_donor` too, so this subtraction is what keeps them out.
+	 *
+	 * Each input is bounded. At most FILTER_INCLUDE_CAP donation subscriptions are
+	 * scanned in total, across every donation product, live ones first and ended
+	 * ones with whatever budget is left; pending and trashed ones are never read
+	 * (see Subscribers_Donors::holders()). Up to the cap the live set is exact.
+	 * Past it, ended holders go missing first: a reader whose only ended
+	 * subscription wasn't scanned drops out of Former, or reads One-time if they
+	 * also carry the `is_donor` flag. Only once live donation subscriptions alone
+	 * pass the cap is a Recurring donor missing from Recurring, and because Former,
+	 * One-time and "Not a donor" are all worked out against the live set, they can
+	 * then be listed under one of those while their row reads Recurring. Each flag
+	 * query returns at most FILTER_INCLUDE_CAP readers, so past that One-time and
+	 * Former under-count, as the other filters do (see resolve_filter_include()).
+	 *
+	 * @param string $kind One of the Subscribers_Donors::KIND_* values.
+	 *
+	 * @return int[]
+	 */
+	private function customer_ids_for_donor_kind( string $kind ): array {
+		$holders = $this->donor_holders_cache ??= Subscribers_Donors::holders( self::FILTER_INCLUDE_CAP );
+		$flagged = fn( string $key ) => $this->donor_flag_ids_cache[ $key ] ??= Subscribers_Donors::flagged_user_ids( $key, self::FILTER_INCLUDE_CAP );
+
+		$ids = match ( $kind ) {
+			Subscribers_Donors::KIND_RECURRING => $holders['live'],
+			Subscribers_Donors::KIND_FORMER    => array_diff( array_merge( $holders['ended'], $flagged( 'is_former_donor' ) ), $holders['live'] ),
+			Subscribers_Donors::KIND_ONE_TIME  => array_diff( $flagged( 'is_donor' ), $holders['live'], $holders['ended'], $flagged( 'is_former_donor' ) ),
+			default                            => [],
+		};
+		return array_values( array_unique( $ids ) );
+	}
+
+	/**
+	 * Reader IDs whose donor badge reads any of $kinds.
+	 *
+	 * @param string[] $kinds Subscribers_Donors::KIND_* values.
+	 *
+	 * @return int[]
+	 */
+	private function customer_ids_for_donor_kinds( array $kinds ): array {
+		$ids = [];
+		foreach ( $kinds as $kind ) {
+			$ids = array_merge( $ids, $this->customer_ids_for_donor_kind( $kind ) );
+		}
+		return array_values( array_unique( $ids ) );
+	}
+
+	/**
+	 * The reader IDs the Donor filter removes, or none when "Not a donor" isn't
+	 * ticked.
+	 *
+	 * "Not a donor" is the one option that excludes rather than includes: a reader
+	 * matches it by being in none of the three kinds. So with it ticked, the filter
+	 * removes the readers of every kind left unticked, and keeps the rest — the
+	 * non-donors plus the readers of any kind ticked beside it. With every option
+	 * ticked it removes no one. api_get_subscribers() subtracts the set from the
+	 * other filters' include set, or, with no other filter, passes it to the user
+	 * query's `exclude`.
+	 *
+	 * The set isn't cut here. Each kind's set is already bounded (see
+	 * customer_ids_for_donor_kind()), and subtracting from another filter's set
+	 * happens in PHP, so with another filter active everyone in an unticked kind's
+	 * set is removed. With no other filter, api_get_subscribers() cuts the set to
+	 * FILTER_INCLUDE_CAP to keep the NOT IN() clause bounded. That cap covers the
+	 * unticked kinds together, not each one: once they hold more than
+	 * FILTER_INCLUDE_CAP readers between them, the donors cut off show under "Not
+	 * a donor" while their row reads a kind. The set lists One-time, then
+	 * Recurring, then Former, so Former donors are cut off first.
+	 *
+	 * @param \WP_REST_Request $request The request.
+	 *
+	 * @return int[]
+	 */
+	private function resolve_donor_exclude( $request ): array {
+		$donor_filter = $this->donor_filter( $request );
+		if ( ! in_array( self::DONOR_NONE, $donor_filter, true ) ) {
+			return [];
+		}
+		$unticked = array_diff( [ Subscribers_Donors::KIND_ONE_TIME, Subscribers_Donors::KIND_RECURRING, Subscribers_Donors::KIND_FORMER ], $donor_filter );
+		return $this->customer_ids_for_donor_kinds( $unticked );
+	}
+
+	/**
 	 * Resolve product IDs whose title exactly matches any of the given names.
 	 *
 	 * @param string[] $names Product names.
@@ -2983,6 +3189,10 @@ class Subscribers_Wizard extends Wizard {
 					// is published here so there is one authority instead of two
 					// constants that can drift apart silently.
 					'avatarBatchCap'          => self::AVATAR_BATCH_CAP,
+					// Whether the donor badge and filter apply. The server omits the
+					// `donor` key when they don't, so the client keys off this rather
+					// than inferring it from the rows.
+					'donorsEnabled'           => Subscribers_Donors::is_enabled(),
 				]
 			) . ';',
 			'before'

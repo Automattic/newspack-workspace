@@ -171,7 +171,11 @@ namespace WP_CLI\Utils {
 
 	if ( ! function_exists( 'WP_CLI\Utils\wp_clear_object_cache' ) ) {
 		function wp_clear_object_cache() {
-			// No-op: the real helper trims caches to bound long-running CLI memory.
+			// The real helper trims caches to bound long-running CLI memory. A test that
+			// needs to see when a command clears sets this global to an array first.
+			if ( isset( $GLOBALS['wp_cli_mock_cache_log'] ) && is_array( $GLOBALS['wp_cli_mock_cache_log'] ) ) {
+				$GLOBALS['wp_cli_mock_cache_log'][] = 'clear';
+			}
 		}
 	}
 

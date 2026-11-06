@@ -31,6 +31,7 @@ import './style.scss';
 import LoadFailureNotice from '../components/LoadFailureNotice';
 import { useRetryFocus } from '../use-retry-focus';
 import { fmtRelative, fmtDate } from '../format';
+import { DONOR_BADGE_INTENT, DONOR_FILTER_ELEMENTS, DONOR_LABELS, donorKind, donorsEnabled } from '../donor';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { getSavedListView, saveListView } from '../data/list-view-state';
 import { usePlans } from '../data/use-plans';
@@ -197,6 +198,9 @@ export default function SubscriberList() {
 		}
 	};
 
+	// Whether the site tracks donors: the Donor filter only exists when it does.
+	const showDonor = donorsEnabled();
+
 	const fields = useMemo(
 		() => [
 			{
@@ -239,16 +243,23 @@ export default function SubscriberList() {
 				getValue: ( { item } ) => subscriberStatuses( item, groupEntriesOf( item ) ),
 				// A subscriber can hold several statuses at once, so they stack rather
 				// than sitting on one line, where two icon-and-label pairs would run
-				// together into one phrase.
-				render: ( { item } ) => (
-					<Stack direction="column" align="flex-start" gap="sm">
-						{ subscriberStatuses( item, groupEntriesOf( item ) ).map( status => (
-							<StatusIndicator key={ status } status={ STATUS_INDICATORS[ status ] }>
-								{ STATUS_LABELS[ status ] }
-							</StatusIndicator>
-						) ) }
-					</Stack>
-				),
+				// together into one phrase. The donor kind follows as a badge, not an
+				// indicator, so it doesn't read as one more subscription status; it is
+				// not a Status filter value either, so it stays out of `elements` and
+				// `getValue` above.
+				render: ( { item } ) => {
+					const kind = donorKind( item );
+					return (
+						<Stack direction="column" align="flex-start" gap="sm">
+							{ subscriberStatuses( item, groupEntriesOf( item ) ).map( status => (
+								<StatusIndicator key={ status } status={ STATUS_INDICATORS[ status ] }>
+									{ STATUS_LABELS[ status ] }
+								</StatusIndicator>
+							) ) }
+							{ DONOR_LABELS[ kind ] && <Badge intent={ DONOR_BADGE_INTENT[ kind ] }>{ DONOR_LABELS[ kind ] }</Badge> }
+						</Stack>
+					);
+				},
 			},
 			{
 				id: 'plans',
@@ -263,7 +274,10 @@ export default function SubscriberList() {
 				enableSorting: false,
 				render: ( { item } ) => {
 					const entries = visiblePlanEntries( planEntries( item, groupEntriesOf( item ) ) );
-					if ( entries.length === 0 ) {
+					// Only a One-time donor carries this: Recurring and Former donors
+					// already show their donation plan above.
+					const lastDonation = item.donor?.lastDonation;
+					if ( entries.length === 0 && ! lastDonation ) {
 						return <span>—</span>;
 					}
 					// 8px between subscriptions so each reads as a distinct block. A
@@ -271,6 +285,9 @@ export default function SubscriberList() {
 					// L1 information (profile card, group members table). The plan
 					// name links to that subscription while the row resolves to the
 					// person, so the two affordances stay distinct — see links.jsx.
+					// A one-time gift has no subscription, so its line links to the
+					// order instead, with the date below; an order with no paid date
+					// shows the link alone.
 					return (
 						<VStack spacing={ 2 } alignment="left">
 							{ entries.map( ( e, i ) => (
@@ -280,6 +297,14 @@ export default function SubscriberList() {
 									{ e.site && <>&nbsp;{ `(${ e.site })` }</> }
 								</div>
 							) ) }
+							{ lastDonation && (
+								<div>
+									<SubscriptionLink href={ lastDonation.editUrl }>
+										{ __( 'One-time donation', 'newspack-plugin' ) }
+									</SubscriptionLink>
+									{ lastDonation.date && <div className="newspack-subscribers__muted">{ fmtDate( lastDonation.date ) }</div> }
+								</div>
+							) }
 						</VStack>
 					);
 				},
@@ -302,6 +327,23 @@ export default function SubscriberList() {
 						<span>—</span>
 					),
 			},
+			...( showDonor
+				? [
+						{
+							id: 'donor',
+							label: __( 'Donor', 'newspack-plugin' ),
+							// Hidden by default, filter-only in practice: the badge in the
+							// Status column is how a donor shows. Filtered server-side: the
+							// `donor` param matches readers by the same kind the badge
+							// shows, and `none` is a reader who has no kind.
+							elements: DONOR_FILTER_ELEMENTS,
+							filterBy: { operators: [ 'isAny' ] },
+							enableSorting: false,
+							getValue: ( { item } ) => donorKind( item ) || 'none',
+							render: ( { item } ) => <span>{ DONOR_LABELS[ donorKind( item ) ] || '—' }</span>,
+						},
+				  ]
+				: [] ),
 			...( managedOnElements.length
 				? [
 						{
@@ -450,7 +492,7 @@ export default function SubscriberList() {
 				},
 			},
 		],
-		[ avatars, planElements, managedOnElements ]
+		[ avatars, planElements, managedOnElements, showDonor ]
 	);
 
 	// DataViews only makes the title cell clickable; delegate clicks from the

@@ -2250,15 +2250,31 @@ function wcs_get_subscriptions_for_product( $product_ids, $fields = 'ids', $args
 	// ID (so array_keys() yields subscription IDs), matched via WC_Subscription's
 	// `products` array (has_product()), ordered by ID as the real function's
 	// `ORDER BY order_items.order_id` does. `limit` is honoured because the plan
-	// filter relies on it to bound its scan in SQL; `offset` and
-	// `subscription_status` are ignored — extend here if a test needs them.
+	// filter relies on it to bound its scan in SQL; `offset` is ignored — extend
+	// here if a test needs it.
+	//
+	// `subscription_status` is honoured the way the real SQL matches it. 'any' (the
+	// default) adds no status condition, so trashed subscriptions come back too.
+	// Otherwise each status is prefixed with `wc-` (wcs_sanitize_subscription_status_key())
+	// and compared with the stored status, which carries that prefix only for the
+	// statuses WCS registers: a trashed subscription is stored as 'trash', so
+	// asking for 'trash' matches nothing, as in production.
 	global $subscriptions_database;
 	$product_ids   = array_map( 'absint', (array) $product_ids );
 	$limit         = isset( $args['limit'] ) ? (int) $args['limit'] : -1;
+	$statuses      = (array) ( $args['subscription_status'] ?? 'any' );
+	$statuses      = in_array( 'any', $statuses, true ) ? null : array_map( 'wcs_sanitize_subscription_status_key', array_filter( $statuses ) );
+	$registered    = wcs_get_subscription_statuses();
 	$subscriptions = [];
 	foreach ( $subscriptions_database as $id => $subscription ) {
 		if ( ! method_exists( $subscription, 'has_product' ) ) {
 			continue;
+		}
+		if ( null !== $statuses ) {
+			$stored_status = isset( $registered[ 'wc-' . $subscription->get_status() ] ) ? 'wc-' . $subscription->get_status() : $subscription->get_status();
+			if ( ! in_array( $stored_status, $statuses, true ) ) {
+				continue;
+			}
 		}
 		foreach ( $product_ids as $product_id ) {
 			if ( $subscription->has_product( $product_id ) ) {

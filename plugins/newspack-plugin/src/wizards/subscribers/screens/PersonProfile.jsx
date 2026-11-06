@@ -63,6 +63,7 @@ import { GROUP_LABEL, GROUP_LABEL_PLURAL, groupViewLabel } from '../labels';
 import { groupDetailHref, isInternalHashPath } from '../links';
 import { STATUS_LABELS, STATUS_BADGE_INTENT, statusRank, displayStatuses } from '../status';
 import { isNetworkSubscription, shouldShowPaymentMethods } from '../network';
+import { DONOR_LABELS, DONOR_BADGE_INTENT, donorKind } from '../donor';
 
 const { useParams, useLocation } = Router;
 
@@ -239,6 +240,13 @@ export default function PersonProfile() {
 		// reached from a group sits under the groups tab, otherwise under
 		// Subscribers. Both crumbs stay clickable so the trail is a way back.
 		const originatedInGroups = backNav.startsWith( '#/groups' );
+		// The donor badge follows the status badges, as the list shows it beside
+		// them. The server decides the kind; a reader with none gets no badge.
+		const kind = donorKind( subscriber );
+		const badges = headlineStatuses.map( status => ( { label: STATUS_LABELS[ status ], intent: STATUS_BADGE_INTENT[ status ] } ) );
+		if ( kind ) {
+			badges.push( { label: DONOR_LABELS[ kind ], intent: DONOR_BADGE_INTENT[ kind ] } );
+		}
 		setHeaderData( {
 			backNav,
 			sectionName: [
@@ -246,7 +254,7 @@ export default function PersonProfile() {
 				{ label: subscriber.name },
 			],
 			sectionTitle: subscriber.name,
-			badges: headlineStatuses.map( status => ( { label: STATUS_LABELS[ status ], intent: STATUS_BADGE_INTENT[ status ] } ) ),
+			badges,
 			// A newline-joined string, not markup: SectionHeader renders a
 			// description inside a `<p>`, so a stack of divs would be invalid
 			// nesting. The wizard stylesheet sets `white-space: pre-line` on that
