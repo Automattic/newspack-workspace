@@ -124,6 +124,9 @@ class Audience_Campaigns extends Wizard {
 	 * Defers to newspack-popups, which owns the flag and the routes the tab
 	 * reads, so an older popups without them never exposes the tab.
 	 *
+	 * newspack-popups checks that this method is callable before it links or
+	 * redirects to the tab, so it has to stay public and keep its name.
+	 *
 	 * @return bool
 	 */
 	public static function is_ab_testing_enabled() {

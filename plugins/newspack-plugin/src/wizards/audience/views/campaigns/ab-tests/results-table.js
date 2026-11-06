@@ -13,6 +13,8 @@ import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
  */
 import { DASH, computeLift, formatConfidence, formatLift, formatRate, getCountLabel } from './utils';
 
+// The stylesheet sets column widths by position, which holds because columns
+// can't be moved; reordering this list moves those widths with it.
 const FIELD_IDS = [ 'version', 'prompt', 'readers', 'rate', 'lift', 'confidence' ];
 
 /**

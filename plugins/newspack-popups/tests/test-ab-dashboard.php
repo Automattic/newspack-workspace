@@ -596,10 +596,14 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 
 	/**
 	 * The tab's URL needs the flag, an administrator and the Campaigns wizard.
+	 *
+	 * The branch for an older newspack-plugin, which builds the Audience menu
+	 * but has no A/B Tests tab, is not covered: the stand-in Audience_Campaigns
+	 * class stays loaded for the whole run, and a class can't be unloaded.
 	 */
 	public function test_page_url_is_the_campaigns_tab() {
 		$this->as_admin();
-		$this->assertSame( '', Newspack_Popups_AB_Dashboard::get_page_url(), 'Without newspack-plugin there is no tab.' );
+		$this->assertSame( '', Newspack_Popups_AB_Dashboard::get_page_url(), 'Without the Audience menu there is no tab.' );
 
 		$this->with_audience_menu();
 		$this->assertSame( admin_url( 'admin.php?page=newspack-audience-campaigns#/ab-tests' ), Newspack_Popups_AB_Dashboard::get_page_url() );

@@ -956,7 +956,7 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 
 		$editor_id = get_current_user_id();
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
-		self::assertSame( '', Newspack_Popups_AB_Tests::get_editor_data( $prompt_id )['results_url'], 'Without the Campaigns wizard there is no results page.' );
+		self::assertSame( '', Newspack_Popups_AB_Tests::get_editor_data( $prompt_id )['results_url'], 'Without the Audience menu there is no results page.' );
 		$GLOBALS['admin_page_hooks']['newspack-audience'] = 'audience'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Stands in for newspack-plugin's Audience menu.
 		self::assertStringEndsWith( 'page=newspack-audience-campaigns#/ab-tests', Newspack_Popups_AB_Tests::get_editor_data( $prompt_id )['results_url'] );
 		wp_set_current_user( $editor_id );
