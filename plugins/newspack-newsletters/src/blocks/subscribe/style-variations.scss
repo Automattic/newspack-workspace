@@ -33,7 +33,7 @@
 	// covers a block with no style class and one that carries `is-style-default`,
 	// which the style picker wrote before Legacy existed.
 	&:not(.is-style-legacy) {
-		font-family: var(--newspack-ui-font-family, system-ui, sans-serif);
+		font-family: var(--newspack-ui-font-family-body, system-ui, sans-serif);
 		font-size: var(--newspack-ui-font-size-s, 16px);
 		font-weight: 400;
 		line-height: var(--newspack-ui-line-height-s, 1.5);
@@ -79,7 +79,7 @@
 				// Each list is its own card, with or without a description. Only the
 				// Legacy style puts the lists in one box.
 				li {
-					background: var(--newspack-ui-color-neutral-0, #fff);
+					background: var(--newspack-ui-color-surface, #fff);
 					border: 1px solid var(--newspack-ui-color-border, #ddd);
 					border-radius: var(--newspack-ui-radius-surface, 12px);
 					margin: 0;
@@ -141,9 +141,9 @@
 					}
 
 					&:checked {
-						background: var(--newspack-ui-color-neutral-90, #1e1e1e);
+						background: var(--newspack-ui-color-mark, #1e1e1e);
 						border-color: transparent;
-						color: var(--newspack-ui-color-neutral-0, #fff);
+						color: var(--newspack-ui-color-on-mark, #fff);
 					}
 
 					&:disabled {
@@ -153,14 +153,14 @@
 					}
 
 					&:checked:disabled {
-						background: var(--newspack-ui-color-neutral-60, #6c6c6c);
-						border-color: var(--newspack-ui-color-neutral-60, #6c6c6c);
+						background: var(--newspack-ui-color-text-subtle, #6c6c6c);
+						border-color: var(--newspack-ui-color-text-subtle, #6c6c6c);
 					}
 				}
 			}
 
 			.list-title {
-				color: var(--newspack-ui-color-neutral-90, #1e1e1e);
+				color: var(--newspack-ui-color-text, #1e1e1e);
 				font-size: inherit;
 				font-weight: 600;
 				line-height: inherit;
@@ -199,10 +199,10 @@
 
 		input[type="email"],
 		input[type="text"] {
-			background: var(--newspack-ui-color-neutral-0, #fff);
+			background: var(--newspack-ui-field-bg, #fff);
 			border: 1px solid var(--newspack-ui-color-input-border, #949494);
 			border-radius: var(--newspack-ui-radius-control, 8px);
-			color: var(--newspack-ui-color-neutral-90, #1e1e1e);
+			color: var(--newspack-ui-field-ink, #1e1e1e);
 			font-family: inherit;
 			font-size: inherit;
 			font-weight: inherit;
@@ -213,7 +213,7 @@
 				box-shadow var(--newspack-ui-duration-color, 150ms) var(--newspack-ui-ease-color, ease);
 
 			&::placeholder {
-				color: var(--newspack-ui-color-neutral-60, #6c6c6c);
+				color: var(--newspack-ui-color-text-subtle, #6c6c6c);
 			}
 
 			&:hover:not(:disabled, :focus) {
@@ -221,14 +221,14 @@
 			}
 
 			&:focus {
-				@include focus.focus-edge( var(--newspack-ui-color-input-border-focus, #1e1e1e) );
+				@include focus.focus-edge( var(--newspack-ui-color-input-border-focus, #1e1e1e), $halo: focus.$focus-color );
 			}
 
 			&:disabled {
 				-webkit-text-fill-color: currentcolor;
 				background: var(--newspack-ui-color-input-bg-disabled, #f0f0f0);
 				border-color: var(--newspack-ui-color-input-border-disabled, #ddd);
-				color: var(--newspack-ui-color-neutral-60, #6c6c6c);
+				color: var(--newspack-ui-color-text-subtle, #6c6c6c);
 				cursor: not-allowed;
 				opacity: 1;
 			}
@@ -288,7 +288,7 @@
 
 			&__message {
 				p {
-					color: var(--newspack-ui-color-neutral-90, #1e1e1e);
+					color: var(--newspack-ui-color-text, #1e1e1e);
 					font-size: inherit;
 					font-weight: 600;
 					line-height: inherit;
@@ -392,7 +392,7 @@
 
 			ul li,
 			&__list {
-				background: var(--newspack-ui-color-neutral-0, #fff);
+				background: var(--newspack-ui-color-surface, #fff);
 				border: 1px solid var(--newspack-ui-color-border, #ddd);
 				border-radius: var(--newspack-ui-radius-surface, 12px);
 				display: flex;
