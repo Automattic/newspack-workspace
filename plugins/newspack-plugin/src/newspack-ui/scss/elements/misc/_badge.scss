@@ -130,7 +130,7 @@ $status-dot-margin-end: calc((1.25em - #{$status-dot-size}) / 2);
 	align-items: baseline;
 	color: var(--newspack-ui-color-text);
 	display: inline-flex;
-	font-family: var(--newspack-ui-font-family-control);
+	font-family: var(--newspack-ui-font-family-body);
 	font-size: inherit;
 	font-weight: var(--newspack-ui-font-weight-regular);
 	gap: $status-dot-gap;
