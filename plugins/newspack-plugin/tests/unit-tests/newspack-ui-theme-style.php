@@ -745,9 +745,9 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Destructive buttons read as an outline in the base color and error steps.
+	 * The solid destructive button is filled with the status error.
 	 */
-	public function test_destructive_reads_as_outline_in_theme(): void {
+	public function test_destructive_is_solid_error_in_theme(): void {
 		$properties = Newspack_UI_Theme_Style::get_properties(
 			[
 				'color' => [
@@ -758,10 +758,9 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 			[]
 		);
 
-		$this->assertSame( '#1e1e1e', $properties['--newspack-ui-color-destructive-fill'] );
-		$this->assertSame( $this->resolved( $properties, 'error-text' ), $properties['--newspack-ui-color-destructive-ink'] );
-		$this->assertSame( $this->resolved( $properties, 'error-text' ), $properties['--newspack-ui-color-destructive-text'] );
+		$this->assertSame( $this->resolved( $properties, 'error' ), $properties['--newspack-ui-color-destructive-fill'] );
 		$this->assertSame( $this->resolved( $properties, 'error' ), $properties['--newspack-ui-color-destructive-edge'] );
+		$this->assertSame( $this->resolved( $properties, 'error-text' ), $properties['--newspack-ui-color-destructive-text'] );
 	}
 
 	/**
