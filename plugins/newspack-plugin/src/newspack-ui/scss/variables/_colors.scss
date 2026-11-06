@@ -113,6 +113,12 @@
 	--newspack-ui-color-error-tint-hover: var(--newspack-ui-color-error-0);
 	--newspack-ui-color-error-tint-pressed: var(--newspack-ui-color-error-5);
 	--newspack-ui-color-on-error: var(--newspack-ui-color-neutral-0);
+	--newspack-ui-color-destructive-fill: var(--newspack-ui-color-error-fill);
+	--newspack-ui-color-destructive-fill-hover: var(--newspack-ui-color-error-fill-hover);
+	--newspack-ui-color-destructive-fill-pressed: var(--newspack-ui-color-error-fill-pressed);
+	--newspack-ui-color-destructive-ink: var(--newspack-ui-color-on-error);
+	--newspack-ui-color-destructive-edge: transparent;
+	--newspack-ui-color-destructive-text: var(--newspack-ui-color-error);
 
 	// Theme variables - from the classic and block themes; overridden in class-newspack-ui.php for block theme.
 	--newspack-ui-color-primary: var(--newspack-theme-color-primary, var(--newspack-ui-color-primary-60));

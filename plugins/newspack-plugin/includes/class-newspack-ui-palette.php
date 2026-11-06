@@ -380,6 +380,7 @@ class Newspack_UI_Palette {
 		$properties['destructive-fill-pressed'] = $resolved['error-tint-pressed'];
 		$properties['destructive-ink']          = $resolved['error-text'];
 		$properties['destructive-edge']         = $resolved['error'];
+		$properties['destructive-text']         = $resolved['error-text'];
 
 		if ( '' !== $brand ) {
 			$properties += self::brand_properties( $palette, $brand, $base, $contrast );

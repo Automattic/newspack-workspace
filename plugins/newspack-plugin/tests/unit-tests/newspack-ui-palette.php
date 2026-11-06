@@ -955,6 +955,7 @@ class Newspack_Test_UI_Palette extends WP_UnitTestCase {
 			'destructive-fill-pressed' => '#412725',
 			'destructive-ink'          => '#facfd2',
 			'destructive-edge'         => '#d63638',
+			'destructive-text'         => '#facfd2',
 			'primary'                  => '#ffc857',
 			'against-primary'          => '#000000',
 			'button-bg'                => '#ffc857',
@@ -1291,6 +1292,7 @@ class Newspack_Test_UI_Palette extends WP_UnitTestCase {
 		$this->assertSame( $base, $properties['destructive-fill'] );
 		$this->assertSame( $status['error-text'], $properties['destructive-ink'] );
 		$this->assertSame( $status['error'], $properties['destructive-edge'] );
+		$this->assertSame( $status['error-text'], $properties['destructive-text'] );
 		$this->assertSame( $status['error-tint-hover'], $properties['destructive-fill-hover'] );
 		$this->assertSame( $status['error-tint-pressed'], $properties['destructive-fill-pressed'] );
 		$this->assertGreaterThanOrEqual( 60, Newspack_UI_Palette::lc( $properties['destructive-ink'], $base ) );
