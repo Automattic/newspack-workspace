@@ -46,8 +46,8 @@ const STATUS_TONES: Record< StatusName, StatusTone | undefined > = {
 	attention: 'warning',
 	error: 'error',
 	draft: 'neutral',
-	cancelled: 'neutral',
-	ended: 'neutral',
+	cancelled: 'error',
+	ended: 'error',
 	trash: 'neutral',
 	private: undefined,
 };

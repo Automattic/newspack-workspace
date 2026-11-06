@@ -70,8 +70,8 @@ takes the props of a `div`.
 | `attention` | exclamation circle | warning | Live but needing a look, usually a payment. |
 | `error` | error | error | Failed, and the one state that asks the reader to act. |
 | `progress` | update | info | Running right now. |
-| `cancelled` | slash circle | neutral | Stopped on purpose. |
-| `ended` | slash circle | neutral | Stopped because its window closed. |
+| `cancelled` | slash circle | error | Stopped on purpose. |
+| `ended` | slash circle | error | Stopped because its window closed. |
 | `private` | lock | none | Live, but not publicly reachable. |
 | `trash` | trash | neutral | Binned. |
 
@@ -108,15 +108,15 @@ apart by their glyphs.
 Color backs the glyph and label up; it does not replace them. The glyph does the
 separating on its own, so no status leans on color to carry its meaning, and two
 statuses may share a tone where the glyphs tell them apart (`scheduled` and
-`progress`, or the stopped states). `private` has no tone: it is live, and
+`progress`, or `draft` and `trash`). `private` has no tone: it is live, and
 tinting it like `active` would make the two read alike. A status drawn with a
 glyph passed through `icon` is never tinted, since a classifying field has no
 lifecycle to color. `statusTone` is exported alongside `statusGlyph` for tests.
 
-`tone` overrides a status's own tone for a screen where the state means less
-than its glyph suggests. Scheduled Actions is the one case: a finished job only
-says the job ran, not that the sync inside it worked, so its Complete keeps the
-check glyph with `tone="neutral"`.
+`tone` overrides a status's own tone for a screen where the state means
+something narrower than its glyph suggests. Scheduled Actions uses it for
+Canceled: a canceled job was stopped on purpose and leaves nothing to act on, so
+it stays neutral rather than reading like Failed.
 
 ## When to pass a glyph instead
 
