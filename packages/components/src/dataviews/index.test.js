@@ -80,7 +80,6 @@ describe( 'DataViews', () => {
 		);
 	} );
 
-	// DataViews never sizes the title column, so the wrapper hands it the width.
 	it( 'gives the title column its width through a custom property', () => {
 		const { container } = renderDataViews();
 		const wrapper = container.querySelector( '.newspack-dataviews' );
