@@ -21,7 +21,7 @@ export const API_BASE = '/newspack/v1/wizard/newspack-audience-integrations/sett
 export const STATUS_MAP = {
 	complete: { label: __( 'Complete', 'newspack-plugin' ), status: 'done', intent: 'stable' },
 	failed: { label: __( 'Failed', 'newspack-plugin' ), status: 'error', intent: 'high' },
-	pending: { label: __( 'Pending', 'newspack-plugin' ), status: 'pending', intent: 'low' },
+	pending: { label: __( 'Pending', 'newspack-plugin' ), status: 'pending', intent: 'draft' },
 	'in-progress': { label: __( 'In progress', 'newspack-plugin' ), status: 'progress', intent: 'informational' },
 	canceled: { label: __( 'Canceled', 'newspack-plugin' ), status: 'cancelled', tone: 'neutral', intent: 'none' },
 };
