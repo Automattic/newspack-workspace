@@ -6,7 +6,7 @@ import { uniq, pick, flatten, values, flatMap, slice, without, omit } from 'loda
 /**
  * WordPress dependencies
  */
-import { registerStore } from '@wordpress/data';
+import { createRegistrySelector, registerStore } from '@wordpress/data';
 
 /**
  * Internal dependencies
@@ -16,7 +16,7 @@ import { POSTS_INSERTER_BLOCK_NAME, POSTS_INSERTER_STORE_NAME } from './consts';
 const DEFAULT_STATE = {
 	postIdsByBlocks: {},
 	existingBlockIdsInOrder: [],
-	insertedPostIds: [],
+	insertedPosts: [],
 };
 
 const actions = {
@@ -28,14 +28,16 @@ const actions = {
 		};
 	},
 	/**
-	 * After insertion, save the inserted post ids.
+	 * After insertion, save the inserted post ids with the blocks that hold them.
 	 *
 	 * @param {Array} insertedPostIds post ids
+	 * @param {Array} clientIds       client IDs of the inserted blocks
 	 */
-	setInsertedPostsIds( insertedPostIds ) {
+	setInsertedPostsIds( insertedPostIds, clientIds ) {
 		return {
 			type: 'SET_INSERTED_POST_IDS',
 			insertedPostIds,
+			clientIds,
 		};
 	},
 	removeBlock( clientId ) {
@@ -45,6 +47,24 @@ const actions = {
 		};
 	},
 };
+
+/**
+ * Post IDs from the inserts whose blocks are still in the editor.
+ *
+ * Inserted posts are reserved only while at least one of their blocks remains, so undoing
+ * an insert, or deleting the inserted blocks, makes those posts available again.
+ *
+ * @param {Array}    insertedPosts  Inserts, each with `postIds` and `clientIds`.
+ * @param {Function} isBlockPresent Whether a block with the given client ID is in the editor.
+ * @return {Array} Reserved post IDs.
+ */
+export const getReservedInsertedPostIds = ( insertedPosts, isBlockPresent ) =>
+	uniq(
+		flatMap(
+			insertedPosts.filter( ( { clientIds } ) => clientIds.some( isBlockPresent ) ),
+			'postIds'
+		)
+	);
 
 const getAllPostsInserterBlocksIds = blocks =>
 	flatMap( blocks, block => [
@@ -72,7 +92,7 @@ registerStore( POSTS_INSERTER_STORE_NAME, {
 			case 'SET_INSERTED_POST_IDS':
 				return {
 					...state,
-					insertedPostIds: uniq( [ ...state.insertedPostIds, ...action.insertedPostIds ] ),
+					insertedPosts: [ ...state.insertedPosts, { postIds: action.insertedPostIds, clientIds: action.clientIds } ],
 				};
 			case 'REMOVE_BLOCK':
 				return {
@@ -88,7 +108,8 @@ registerStore( POSTS_INSERTER_STORE_NAME, {
 	actions,
 
 	selectors: {
-		getHandledPostIds( { postIdsByBlocks, existingBlockIdsInOrder, insertedPostIds }, blockClientId ) {
+		getHandledPostIds: createRegistrySelector( select => ( { postIdsByBlocks, existingBlockIdsInOrder, insertedPosts }, blockClientId ) => {
+			const { getBlock } = select( 'core/block-editor' );
 			const blockIndex = existingBlockIdsInOrder.indexOf( blockClientId );
 			const blocksBeforeIds = slice( existingBlockIdsInOrder, 0, blockIndex );
 			return [
@@ -99,8 +120,8 @@ registerStore( POSTS_INSERTER_STORE_NAME, {
 				/**
 				 * Ids of posts that were inserted.
 				 */
-				...insertedPostIds,
+				...getReservedInsertedPostIds( insertedPosts, clientId => Boolean( getBlock( clientId ) ) ),
 			];
-		},
+		} ),
 	},
 } );
