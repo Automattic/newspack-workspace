@@ -1012,6 +1012,9 @@ class WC_Order {
 		// customer must read the same way when another suite's query walks it.
 		return $this->data['customer_id'] ?? 0;
 	}
+	public function get_user() {
+		return $this->get_customer_id() ? get_user_by( 'id', $this->get_customer_id() ) : false;
+	}
 	public function get_meta( $field_name ) {
 		return isset( $this->meta[ $field_name ] ) ? $this->meta[ $field_name ] : '';
 	}

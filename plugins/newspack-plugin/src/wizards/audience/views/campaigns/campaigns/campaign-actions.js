@@ -1,5 +1,5 @@
 /**
- * Header menu for the campaign selected in the Campaign filter.
+ * Actions menu for the campaign selected in the Campaigns dropdown.
  */
 
 /**
@@ -62,6 +62,7 @@ const CampaignActions = ( {
 					__( 'Campaign actions: %s', 'newspack-plugin' ),
 					campaignData.name
 				) }
+				toggleProps={ { size: 'compact' } }
 			>
 				{ ( { onClose } ) => (
 					<>

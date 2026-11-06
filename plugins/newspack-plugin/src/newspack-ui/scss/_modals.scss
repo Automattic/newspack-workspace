@@ -337,8 +337,8 @@
 		&[inert] {
 			opacity: 0;
 			transition:
-				opacity 120ms var(--newspack-ui-ease-out),
-				visibility 0s linear 120ms;
+				opacity var(--newspack-ui-duration-exit) var(--newspack-ui-ease-out),
+				visibility 0s linear var(--newspack-ui-duration-exit);
 			visibility: hidden;
 		}
 	}

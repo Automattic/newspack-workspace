@@ -230,7 +230,7 @@ class Starter_Content_Generated extends Starter_Content_Provider {
 		$content = ob_get_clean();
 
 		$post_data = [
-			'post_title'   => 'Homepage',
+			'post_title'   => __( 'Homepage', 'newspack-plugin' ),
 			'post_type'    => 'page',
 			'post_content' => $content,
 		];

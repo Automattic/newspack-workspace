@@ -27,9 +27,11 @@ final class Patterns {
 		\add_action( 'woocommerce_blocks_loaded', [ __CLASS__, 'disable_woocommerce_patterns' ] );
 		\add_action( 'wp_loaded', [ __CLASS__, 'disable_additional_woocommerce_patterns' ], \PHP_INT_MIN );
 
-		// Register our own patterns and categories.
+		// Register our own pattern categories.
 		\add_action( 'init', [ __CLASS__, 'block_pattern_categories' ] );
-		\add_action( 'init', [ __CLASS__, 'register_nested_patterns' ] );
+
+		// Give new header and footer template parts starting content. Priority 9 so core's block hooks pass, at 10, sees it.
+		\add_filter( 'rest_pre_insert_wp_template_part', [ __CLASS__, 'template_part_starter_content' ], 9, 2 );
 
 		// Clean up any remaining unwanted patterns.
 		\add_filter( 'rest_dispatch_request', [ __CLASS__, 'restrict_patterns' ], 12, 3 );
@@ -37,80 +39,36 @@ final class Patterns {
 	}
 
 	/**
-	 * Pattern registration methods.
+	 * Pattern content and category methods.
 	 */
 
 	/**
-	 * Registers patterns nested in the /patterns directory. WP will only
-	 * register automatically the patterns which are top-level files in this directory.
+	 * Fills an empty header or footer template part with starter content when it is
+	 * first created, so it starts with the Responsive Container and the ad slots the
+	 * theme's own header and footer use. The Site Editor creates new template parts
+	 * empty and, unlike templates, offers no pattern to start from.
 	 *
-	 * @see get_block_patterns
+	 * @param stdClass        $changes The template part about to be saved.
+	 * @param WP_REST_Request $request The REST request.
+	 * @return stdClass The template part, with starter content if it applies.
 	 */
-	public static function register_nested_patterns() {
-		$directory = get_stylesheet_directory() . '/patterns';
-		$files = self::find_nested_php_files( $directory );
-
-		foreach ( $files as $file ) {
-			$relative_path = str_replace( $directory, '', $file );
-			// Check if the path is nested. Non-nested patterns will be automatically registered by WP.
-			if ( substr_count( $relative_path, '/' ) === 1 ) {
-				continue;
-			}
-			$default_headers = [
-				'title'         => 'Title',
-				'slug'          => 'Slug',
-				'description'   => 'Description',
-				'viewportWidth' => 'Viewport Width',
-				'inserter'      => 'Inserter',
-				'categories'    => 'Categories',
-				'keywords'      => 'Keywords',
-				'blockTypes'    => 'Block Types',
-				'postTypes'     => 'Post Types',
-				'templateTypes' => 'Template Types',
-			];
-			$pattern = get_file_data( $file, $default_headers );
-
-			if ( isset( $pattern['slug'] ) ) {
-				$properties_to_parse = [
-					'categories',
-					'keywords',
-					'blockTypes',
-					'postTypes',
-					'templateTypes',
-				];
-				// For properties of type array, parse data as comma-separated.
-				foreach ( $properties_to_parse as $property ) {
-					if ( ! empty( $pattern[ $property ] ) ) {
-						$pattern[ $property ] = array_filter( wp_parse_list( (string) $pattern[ $property ] ) );
-					} else {
-						unset( $pattern[ $property ] );
-					}
-				}
-
-				$pattern['filePath'] = $file;
-				register_block_pattern( $pattern['slug'], $pattern );
-			}
-		}
-	}
-
-	/**
-	 * Find nested PHP files.
-	 *
-	 * @param string $directory The base directory to search in.
-	 */
-	public static function find_nested_php_files( $directory ) {
-		$php_files = [];
-		$items = glob( $directory . '/*' );
-
-		foreach ( $items as $item ) {
-			if ( is_dir( $item ) ) {
-				$php_files = array_merge( $php_files, self::find_nested_php_files( $item ) );
-			} elseif ( is_file( $item ) && pathinfo( $item, PATHINFO_EXTENSION ) === 'php' ) {
-				$php_files[] = $item;
-			}
+	public static function template_part_starter_content( $changes, $request ) {
+		// Only new template parts; an existing one may have been emptied on purpose.
+		if ( ! empty( $request['id'] ) || ! empty( trim( $changes->post_content ?? '' ) ) ) {
+			return $changes;
 		}
 
-		return $php_files;
+		$area = $changes->tax_input['wp_template_part_area'] ?? '';
+		if ( ! in_array( $area, [ 'header', 'footer' ], true ) ) {
+			return $changes;
+		}
+
+		$pattern = \WP_Block_Patterns_Registry::get_instance()->get_registered( 'newspack-block-theme/' . $area . '-starter' );
+		if ( ! empty( $pattern['content'] ) ) {
+			$changes->post_content = $pattern['content'];
+		}
+
+		return $changes;
 	}
 
 	/**

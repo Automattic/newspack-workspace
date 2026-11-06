@@ -46,6 +46,7 @@
 		--newspack-ui-button-bg-hover: transparent;
 		--newspack-ui-button-bg-pressed: transparent;
 
+		border-radius: max(var(--newspack-ui-border-radius-s), calc(var(--newspack-ui-radius-control) - var(--newspack-ui-spacer-half)));
 		inset-inline-end: var(--newspack-ui-spacer-half);
 		margin: 0;
 		position: absolute;

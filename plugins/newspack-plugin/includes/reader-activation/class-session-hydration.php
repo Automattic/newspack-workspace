@@ -30,9 +30,15 @@ final class Session_Hydration {
 	const TRANSIENT_PREFIX = 'newspack_cid_';
 
 	/**
+	 * The admin-ajax action that returns a nonce for the current session.
+	 */
+	const NONCE_ACTION = 'newspack_reader_nonce';
+
+	/**
 	 * Initialize hooks.
 	 */
 	public static function init() {
+		add_action( 'wp_ajax_' . self::NONCE_ACTION, [ __CLASS__, 'ajax_get_nonce' ] );
 		add_action( 'rest_api_init', [ __CLASS__, 'register_routes' ] );
 		add_action( 'wp_login', [ __CLASS__, 'on_wp_login' ], 10, 2 );
 		add_action( 'newspack_registered_reader_via_woo', [ __CLASS__, 'on_woo_customer_created' ], 10, 2 );
@@ -96,6 +102,34 @@ final class Session_Hydration {
 	}
 
 	/**
+	 * Get a nonce for the current session and the user it belongs to.
+	 *
+	 * A nonce only authenticates whoever holds the cookie, so the user ID lets a
+	 * page opened as one reader refuse a nonce for another. Without that check,
+	 * a page left open after a second account logs in to the same browser could
+	 * write to that account.
+	 *
+	 * @return array{nonce: string, user_id: int}
+	 */
+	public static function get_nonce_data(): array {
+		return [
+			'nonce'   => \wp_create_nonce( 'wp_rest' ),
+			'user_id' => \get_current_user_id(),
+		];
+	}
+
+	/**
+	 * Send a nonce for the current session.
+	 *
+	 * This is an admin-ajax action rather than a REST route because admin-ajax only
+	 * lets allowed origins read the response, where a REST route has to enforce that
+	 * itself. Other sites must never be able to read a nonce.
+	 */
+	public static function ajax_get_nonce(): void {
+		\wp_send_json( self::get_nonce_data() );
+	}
+
+	/**
 	 * Register REST routes.
 	 */
 	public static function register_routes() {
@@ -118,11 +152,21 @@ final class Session_Hydration {
 	 *
 	 * This endpoint cannot rely on X-WP-Nonce for authentication since
 	 * providing a nonce is its purpose. Instead, it validates the user
-	 * directly from auth cookies.
+	 * directly from auth cookies. It also refuses other origins, since no nonce
+	 * protects it and it returns a nonce and the reader's data.
 	 *
 	 * @return true|\WP_Error
 	 */
 	public static function permission_callback() {
+		$origin = \get_http_origin();
+		if ( $origin && ! \is_allowed_http_origin( $origin ) ) {
+			return new \WP_Error(
+				'rest_forbidden',
+				__( 'Origin not allowed.', 'newspack-plugin' ),
+				[ 'status' => 403 ]
+			);
+		}
+
 		$user_id = \wp_validate_auth_cookie( '', 'logged_in' );
 		if ( ! $user_id ) {
 			return new \WP_Error(
@@ -171,7 +215,7 @@ final class Session_Hydration {
 			);
 		}
 
-		$data = [ 'nonce' => \wp_create_nonce( 'wp_rest' ) ];
+		$data = self::get_nonce_data();
 
 		/**
 		 * Filters the session hydration response data.
@@ -188,7 +232,7 @@ final class Session_Hydration {
 		 * only make correct (see Gate_Access_Reader_Data and
 		 * Active_Subscriptions_Reader_Data).
 		 *
-		 * @param array $data    Response data containing 'nonce'.
+		 * @param array $data    Response data containing 'nonce' and 'user_id'.
 		 * @param int   $user_id The authenticated user's ID.
 		 */
 		$data = apply_filters( 'newspack_session_hydration_response', $data, \get_current_user_id() );

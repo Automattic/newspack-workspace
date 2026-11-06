@@ -1,5 +1,6 @@
 @use "../sass-utils";
 @use "../mixins";
+@use "newspack-motion" as motion;
 
 /**
  * Jetpack Instant Search overlay styles
@@ -74,8 +75,8 @@ body .jetpack-instant-search {
 				calc(var(--newspack-ui-spacer-base, var(--wp--preset--spacing--20)) / 2 - 1px)
 				calc(var(--newspack-ui-spacer-base, var(--wp--preset--spacing--20)) - 1px);
 			transition:
-				border-color 125ms ease-in-out,
-				box-shadow 125ms ease-in-out;
+				border-color motion.$duration-color motion.$ease-color,
+				box-shadow motion.$duration-color motion.$ease-color;
 
 			&:focus {
 				@include mixins.focus-edge(var(--jp--color--text), !important);
@@ -90,6 +91,16 @@ body .jetpack-instant-search {
 		font-size: var(--newspack-ui-font-size-s, 16px);
 		line-height: var(--newspack-ui-line-height-s, 1.5);
 		padding: var(--wp--preset--spacing--30);
+		transition:
+			opacity motion.$duration-modal motion.$ease-out,
+			visibility 0s;
+
+		&.is-hidden {
+			pointer-events: none;
+			transition:
+				opacity motion.$duration-modal motion.$ease-out,
+				visibility 0s linear motion.$duration-modal;
+		}
 
 		@include sass-utils.media("576px") {
 			padding: var(--wp--preset--spacing--80);
@@ -117,15 +128,17 @@ body .jetpack-instant-search {
 				height: var(--wp--custom--spacing--55);
 				position: absolute;
 				transition:
-					background 125ms ease-in-out,
-					box-shadow 125ms ease-in-out;
+					background motion.$duration-color motion.$ease-color,
+					box-shadow motion.$duration-color motion.$ease-color;
 				width: var(--wp--custom--spacing--55);
 				z-index: -1;
 			}
 
-			&:hover {
-				&::before {
-					background: var(--jp--color--background-light);
+			@include motion.hover {
+				&:hover {
+					&::before {
+						background: var(--jp--color--background-light);
+					}
 				}
 			}
 
@@ -156,7 +169,9 @@ body .jetpack-instant-search {
 		border-color: var(--jp--color--border) !important;
 
 		&-label {
-			transition: box-shadow 125ms ease-in-out;
+			transition:
+				border-radius motion.$duration-color motion.$ease-color,
+				box-shadow motion.$duration-color motion.$ease-color;
 
 			&:focus-within {
 				@include mixins.focus-line-inset(var(--jp--color--text));
@@ -219,11 +234,16 @@ body .jetpack-instant-search {
 			padding:
 				calc(var(--newspack-ui-spacer-base, var(--wp--preset--spacing--20)) / 2 - 1px)
 				calc(var(--newspack-ui-spacer-base, var(--wp--preset--spacing--20)) - 1px);
-			transition: background 125ms ease-in-out;
+			transition: background motion.$duration-color motion.$ease-color;
 
 			&:hover {
-				background: var(--jp--color--background-light);
 				text-decoration: none;
+			}
+
+			@include motion.hover {
+				&:hover {
+					background: var(--jp--color--background-light);
+				}
 			}
 		}
 
@@ -300,15 +320,20 @@ body .jetpack-instant-search {
 				color: var(--jp--color--background) !important;
 				padding:
 					var(--newspack-ui-spacer-2, var(--wp--custom--spacing--25))
-					var(--newspack-ui-spacer-5, var(--wp--preset--spacing--40)) !important;
+					var(--newspack-ui-spacer-4, var(--wp--custom--spacing--35)) !important;
 				transition:
-					background 125ms ease-in-out,
-					color 125ms ease-in-out,
-					box-shadow 125ms ease-in-out;
+					background motion.$duration-color motion.$ease-color,
+					color motion.$duration-color motion.$ease-color,
+					box-shadow motion.$duration-color motion.$ease-color;
 
 				&:hover {
-					background: var(--jp--color--text-light) !important;
 					text-decoration: none !important;
+				}
+
+				@include motion.hover {
+					&:hover {
+						background: var(--jp--color--text-light) !important;
+					}
 				}
 
 				&:focus {
@@ -502,8 +527,8 @@ body .jetpack-instant-search {
 		min-height: var(--wp--preset--spacing--50);
 		padding: calc(var(--newspack-ui-spacer-base, var(--wp--preset--spacing--20)) / 2);
 		transition:
-			border-color 125ms ease-in-out,
-			box-shadow 125ms ease-in-out;
+			border-color motion.$duration-color motion.$ease-color,
+			box-shadow motion.$duration-color motion.$ease-color;
 
 		&:focus-visible {
 			@include mixins.focus-edge(var(--jp--color--text));

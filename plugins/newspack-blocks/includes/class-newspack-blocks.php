@@ -1800,10 +1800,13 @@ class Newspack_Blocks {
 	 * Pick either black or white text, whichever reads better on the given background.
 	 *
 	 * Scores pure black and pure white as text against the background and returns
-	 * whichever produces the greater APCA lightness contrast (Lc); ties fall to
+	 * whichever reads better by APCA: the greater lightness contrast (Lc), ties to
 	 * black. The constants are the SA98G set from apca-w3 0.1.9.
 	 *
-	 * Keep in sync with getColorForContrast() in src/blocks/donate/utils.ts.
+	 * Keep in sync with: getColorForContrast() in src/blocks/donate/utils.ts, newspack_get_color_contrast() (newspack-theme),
+	 * \Newspack\newspack_get_color_contrast() (newspack-plugin), getContrastColor() in contrast-color.js (packages/components),
+	 * Newspack_Popups_Model::contrast_text_color() (newspack-popups) and Newspack_Listings\Curated_List_Block\contrast_text_color() (newspack-listings).
+	 * The block theme's Newspack_Block_Theme\Contrast::get_text_color() makes the same pick (it leaves the property unset for unparseable input).
 	 *
 	 * @param string $hex Hexadecimal background color (#RGB, #RRGGBB or #RRGGBBAA, with or without #).
 	 * @return string Either 'black' or 'white' (literal CSS color keywords).
@@ -1817,30 +1820,53 @@ class Newspack_Blocks {
 	}
 
 	/**
-	 * Compute the soft-clamped APCA screen luminance (Y) of a hex color.
+	 * Parse a hex color into its 0-255 channels.
 	 *
 	 * Accepts #RGB, #RRGGBB and #RRGGBBAA (the alpha pair is stripped), with or
-	 * without the leading #, case-insensitively. Unparseable input is treated as
-	 * white (luminance 1.0) so callers fall back to black text.
+	 * without the leading #, case-insensitively. Unparseable input returns null.
+	 *
+	 * @param string $hex Hexadecimal color.
+	 * @return int[]|null [ $r, $g, $b ] as 0..255 integers, or null when unparseable.
+	 */
+	private static function parse_hex_channels( $hex ): ?array {
+		$hex = ltrim( trim( (string) $hex ), '#' );
+		if ( 3 === strlen( $hex ) ) {
+			$hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+		} elseif ( 8 === strlen( $hex ) ) {
+			$hex = substr( $hex, 0, 6 );
+		}
+		if ( 6 !== strlen( $hex ) || ! ctype_xdigit( $hex ) ) {
+			return null;
+		}
+
+		return [
+			hexdec( substr( $hex, 0, 2 ) ),
+			hexdec( substr( $hex, 2, 2 ) ),
+			hexdec( substr( $hex, 4, 2 ) ),
+		];
+	}
+
+	/**
+	 * Compute the soft-clamped APCA screen luminance (Y) of a hex color.
+	 *
+	 * Accepts the same formats as parse_hex_channels(). Unparseable input is
+	 * treated as white (luminance 1.0) so callers fall back to black text.
 	 *
 	 * @param string $hex Hexadecimal color.
 	 * @return float Soft-clamped luminance in the 0..1 range.
 	 */
 	private static function get_apca_luminance( $hex ) {
-		$hex = ltrim( trim( (string) $hex ), '#' );
-		if ( 3 === strlen( $hex ) ) {
-			$hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
-		} elseif ( 8 === strlen( $hex ) ) {
-			// Drop the alpha pair from #RRGGBBAA.
-			$hex = substr( $hex, 0, 6 );
-		}
-		if ( 6 !== strlen( $hex ) || ! ctype_xdigit( $hex ) ) {
+		$channels = self::parse_hex_channels( $hex );
+		if ( null === $channels ) {
 			return 1.0;
 		}
 
-		$r = hexdec( substr( $hex, 0, 2 ) ) / 255;
-		$g = hexdec( substr( $hex, 2, 2 ) ) / 255;
-		$b = hexdec( substr( $hex, 4, 2 ) ) / 255;
+		list( $r, $g, $b ) = array_map(
+			function ( $channel ) {
+				return $channel / 255;
+			},
+			$channels
+		);
 
 		$y = 0.2126729 * pow( $r, 2.4 ) + 0.7151522 * pow( $g, 2.4 ) + 0.0721750 * pow( $b, 2.4 );
 

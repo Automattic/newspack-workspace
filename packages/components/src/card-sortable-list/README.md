@@ -1,6 +1,6 @@
 # CardSortableList
 
-A drag-and-drop sortable list of cards, built on the `@wordpress/ui` Card. Each row shows a drag handle and up/down buttons, then the title with its badges and description, then an optional toggle and actions menu on the right. Items can be reordered by dragging with a pointer or by using the up/down chevron buttons (keyboard accessible). The list locks its height during a drag to prevent layout shifts.
+A drag-and-drop sortable list of cards, built on the `@wordpress/ui` Card. Each row shows a drag handle and up/down buttons, then the title with its badges and description, then an optional toggle and actions menu on the right. Items can be reordered by dragging with a pointer or by using the up/down chevron buttons (keyboard accessible). Each chevron is named after its item ("Move Homepage up"), keeps focus on the moved row, and announces the new position to screen readers. The list locks its height during a drag to prevent layout shifts.
 
 ## Props
 
@@ -16,6 +16,7 @@ A drag-and-drop sortable list of cards, built on the `@wordpress/ui` Card. Each 
 |-------|------|-------------|
 | `id` | `string` \| `number` | Unique identifier for the item. Used as the React `key`. |
 | `title` | `string` | Label rendered in the card header. |
+| `href` | `string` | Links the title, e.g. to the item's edit screen. The link reveals a pencil on hover and keyboard focus (see [`EditTitleLink`](../edit-title-link/README.md)). |
 | `badge` | `{ label: string; intent?: BadgeIntent }` | Status badge for the row. Omit it, or leave `label` empty, to render no badge. `intent` defaults to `none`. See [`BadgeIntent`](../types.ts) for the available intents. |
 | `description` | `ReactNode` | Text under the title. |
 | `toggleChecked`, `onToggleChange` | `boolean`, `() => void` | Shows a toggle before the actions menu. Its label is visually hidden and its accessible name is the item `title`. Omit `onToggleChange` for no toggle. |

@@ -499,7 +499,7 @@ final class Newspack {
 	 * Is the Setup completed?
 	 */
 	public static function is_setup_complete() {
-		return '1' === get_option( NEWSPACK_SETUP_COMPLETE, '0' );
+		return (bool) get_option( NEWSPACK_SETUP_COMPLETE, false );
 	}
 
 	/**

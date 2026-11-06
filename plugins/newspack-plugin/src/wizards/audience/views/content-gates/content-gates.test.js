@@ -58,9 +58,14 @@ jest.mock( '@wordpress/a11y', () => ( { speak: ( ...args ) => mockSpeak( ...args
 jest.mock( '@wordpress/dataviews', () => ( { DataViews: { Search: () => null, Filters: () => null } } ) );
 
 jest.mock( '../../../../../packages/components/src', () => ( {
+	Button: ( { children, onClick } ) => (
+		<button type="button" onClick={ onClick }>
+			{ children }
+		</button>
+	),
 	DataViews: props => {
 		mockDataViewsProps = props;
-		return null;
+		return props.children ?? null;
 	},
 } ) );
 
@@ -102,14 +107,15 @@ describe( 'Content Gates page header', () => {
 	} );
 
 	it.each( [
-		{ gateCount: 1, expectedSecondary: [] },
-		{ gateCount: 2, expectedSecondary: [ 'Gate Priority' ] },
-	] )( 'shows Gate Priority as a button only with more than one gate ($gateCount)', ( { gateCount, expectedSecondary } ) => {
+		{ gateCount: 1, hasPriority: false },
+		{ gateCount: 2, hasPriority: true },
+	] )( 'shows Gate Priority in the toolbar only with more than one gate ($gateCount)', ( { gateCount, hasPriority } ) => {
 		mockWizardData = { gates: gatesOfLength( gateCount ), config: {} };
 		render( <ContentGates updateGatesData={ () => {} } /> );
 
 		const headerData = lastHeaderData();
-		expect( headerData.actions.filter( action => action.type === 'secondary' ).map( action => action.label ) ).toEqual( expectedSecondary );
+		expect( headerData.actions.filter( action => action.type === 'secondary' ) ).toEqual( [] );
+		expect( Boolean( screen.queryByRole( 'button', { name: 'Gate Priority' } ) ) ).toBe( hasPriority );
 		expect( moreActionLabels( headerData ) ).toEqual( [ 'Advanced Settings' ] );
 		expect( headerData.sectionMenu ).toBeUndefined();
 		expect( headerData.sectionTitle ).toBeUndefined();

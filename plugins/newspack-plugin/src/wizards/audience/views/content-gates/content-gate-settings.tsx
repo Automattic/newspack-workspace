@@ -12,7 +12,7 @@ import { Badge, Card, Stack } from '@wordpress/ui';
 /**
  * Internal dependencies
  */
-import { Divider, Router, TooltipBadge, useConfirmDialog } from '../../../../../packages/components/src';
+import { Divider, EditTitleLink, Router, TooltipBadge, useConfirmDialog } from '../../../../../packages/components/src';
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import { useWizardApiFetch } from '../../../hooks/use-wizard-api-fetch';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
@@ -250,9 +250,15 @@ export default function ContentGateSettings( {
 			{ deleteDialog }
 			<Card.Root className="newspack-content-gates__gate" id={ String( gate.id ) }>
 				<Card.Header render={ <Stack direction="row" gap="md" align="center" justify="space-between" /> }>
-					<Stack direction="row" gap="sm" wrap="wrap" align="center" className="newspack-content-gates__gate__heading">
+					<Stack
+						direction="row"
+						gap="sm"
+						wrap="wrap"
+						align="center"
+						className="newspack-content-gates__gate__heading newspack-edit-title-link-row"
+					>
 						<Card.Title render={ <TitleTag /> } className="newspack-content-gates__gate__title">
-							<a href={ `#/edit/${ gate.id }` }>{ gate.title }</a>
+							<EditTitleLink href={ `#/edit/${ gate.id }` }>{ decodeEntities( gate.title ) || `#${ gate.id }` }</EditTitleLink>
 						</Card.Title>
 						<Badge intent={ getGateStatusBadgeIntent( gate.status ) }>{ getGateStatus( gate.status ) }</Badge>
 						{ priorityWarning && <TooltipBadge label={ getPriorityWarningLabel() } tooltip={ priorityWarning } intent="low" /> }

@@ -20,6 +20,7 @@ export { default as DataViews } from './dataviews';
 export { default as DebugBadge } from './debug-badge';
 export { default as Divider } from './divider';
 export { default as Drawer } from './drawer';
+export { default as EditTitleLink } from './edit-title-link';
 export { default as EmptyState } from './empty-state';
 export { default as FormTokenField } from './form-token-field';
 export { default as Footer } from './footer';
@@ -68,5 +69,6 @@ import * as integrationIcons from './integration-icons';
 export { integrationIcons };
 export { espProviderOrder } from './integration-icons';
 export { default as utils } from './utils';
+export { getContrastColor, getContrastColorFromRGB } from './utils/contrast-color';
 
 import './style.scss';

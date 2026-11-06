@@ -6,12 +6,15 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 /**
  * WordPress dependencies.
  */
+import { speak } from '@wordpress/a11y';
 import { useState } from '@wordpress/element';
 
 /**
  * Internal dependencies.
  */
 import CardSortableList from './';
+
+jest.mock( '@wordpress/a11y', () => ( { speak: jest.fn() } ) );
 
 const items = [
 	{ id: 1, title: 'Homepage', badge: { label: 'Active', intent: 'stable' } },
@@ -47,27 +50,29 @@ describe( 'CardSortableList', () => {
 
 	it( 'disables the first up and last down move buttons', () => {
 		render( <CardSortableList items={ items } /> );
-		const up = screen.getAllByRole( 'button', { name: 'Move one position up' } );
-		const down = screen.getAllByRole( 'button', { name: 'Move one position down' } );
-		expect( up[ 0 ] ).toBeDisabled();
-		expect( up[ 1 ] ).toBeEnabled();
-		expect( down[ 0 ] ).toBeEnabled();
-		expect( down[ 1 ] ).toBeDisabled();
+		expect( screen.getByRole( 'button', { name: 'Move Homepage up' } ) ).toBeDisabled();
+		expect( screen.getByRole( 'button', { name: 'Move About up' } ) ).toBeEnabled();
+		expect( screen.getByRole( 'button', { name: 'Move Homepage down' } ) ).toBeEnabled();
+		expect( screen.getByRole( 'button', { name: 'Move About down' } ) ).toBeDisabled();
 	} );
 
-	it( 'keeps focus on a move button after a keyboard move', () => {
+	it( 'keeps focus on a move button after a keyboard move, and announces the new position', () => {
 		jest.useFakeTimers();
 		const onDragCallback = jest.fn();
 		render( <CardSortableList items={ items } onDragCallback={ onDragCallback } /> );
-		fireEvent.click( screen.getAllByRole( 'button', { name: 'Move one position down' } )[ 0 ] );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Move Homepage down' } ) );
 		act( () => {
 			jest.runAllTimers();
 		} );
 		expect( onDragCallback ).toHaveBeenCalledWith( 0, 1 );
-		const rows = document.querySelectorAll( '.newspack-card--core--sortable-list__item' );
-		expect( rows[ 1 ].contains( document.activeElement ) ).toBe( true );
-		expect( document.activeElement ).toHaveAccessibleName( 'Move one position up' );
+		expect( document.activeElement ).toHaveAccessibleName( 'Move Homepage up' );
+		expect( speak ).toHaveBeenCalledWith( 'Homepage moved to position 2 of 2.' );
 		jest.useRealTimers();
+	} );
+
+	it( 'links the title when the item has an href', () => {
+		render( <CardSortableList items={ [ { id: 1, title: 'Homepage', href: '#/edit/1' } ] } /> );
+		expect( screen.getByRole( 'link', { name: 'Homepage' } ) ).toHaveAttribute( 'href', '#/edit/1' );
 	} );
 
 	it( 'omits the toggle and menu when an item has neither', () => {
@@ -109,7 +114,7 @@ describe( 'CardSortableList', () => {
 		};
 
 		const titles = () => [ ...document.querySelectorAll( '.newspack-card--core--sortable-list__title' ) ].map( el => el.textContent );
-		const moveDown = index => fireEvent.click( screen.getAllByRole( 'button', { name: 'Move one position down' } )[ index ] );
+		const moveDown = index => fireEvent.click( screen.getAllByRole( 'button', { name: /^Move .+ down$/ } )[ index ] );
 
 		beforeEach( () => jest.useFakeTimers() );
 		afterEach( () => jest.useRealTimers() );

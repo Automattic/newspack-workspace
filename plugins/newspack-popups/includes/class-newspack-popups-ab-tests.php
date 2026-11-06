@@ -567,12 +567,12 @@ final class Newspack_Popups_AB_Tests {
 	 * control-share edits never re-bucket a reader, and assignment is stable across
 	 * devices once logged in.
 	 *
-	 * The exception is a stored variant that leaves the published set: the guard
-	 * below recomputes and overwrites it. In a two-arm test that cannot happen --
-	 * unpublishing the only challenger ends the test -- but with three or more arms,
-	 * briefly drafting one variant permanently reassigns every reader holding it, and
-	 * republishing does not bring them back. Tracked separately; the fix is to keep
-	 * any stored VALID_VARIANTS value and fall back only for display.
+	 * A stored variant stays stored while no published prompt holds it: a variant
+	 * can be drafted while the test keeps running, and overwriting the value would
+	 * strand its readers on another arm for good. They see a computed published arm
+	 * until a published prompt holds that letter again, which may never happen,
+	 * since nothing tells a draft from a retired arm. That fallback is not
+	 * persisted, so a second device or a control-share edit can move it.
 	 *
 	 * @param array $tests_config Config from get_tests_config().
 	 * @return array Buckets keyed by test ID.
@@ -587,11 +587,14 @@ final class Newspack_Popups_AB_Tests {
 		$buckets   = [];
 		foreach ( $tests_config as $test_id => $config ) {
 			$meta_key = self::USER_META_BUCKET_PREFIX . $test_id;
-			$bucket   = get_user_meta( $user_id, $meta_key, true );
+			$stored   = get_user_meta( $user_id, $meta_key, true );
+			$bucket   = $stored;
 			if ( ! in_array( $bucket, $config['variants'], true ) ) {
 				$reader_key = $client_id ? $client_id : (string) $user_id;
 				$bucket     = self::compute_bucket( $reader_key, $test_id, $config );
-				update_user_meta( $user_id, $meta_key, $bucket );
+				if ( ! in_array( $stored, self::VALID_VARIANTS, true ) ) {
+					update_user_meta( $user_id, $meta_key, $bucket );
+				}
 			}
 			$buckets[ $test_id ] = $bucket;
 		}

@@ -70,6 +70,10 @@ $drop-duration: 400ms; /* must match DROP_ANIMATION_DURATION in index.tsx */
 			height: wp-vars.$grid-unit-20;
 			min-height: 0;
 		}
+
+		svg {
+			fill: currentcolor;
+		}
 	}
 
 	.newspack-card--core--sortable-list__summary {

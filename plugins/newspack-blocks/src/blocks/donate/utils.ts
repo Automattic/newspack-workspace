@@ -63,11 +63,14 @@ const apcaContrast = ( backgroundY: number, textY: number ): number => {
  * Pick either black or white text, whichever reads better on the given background.
  *
  * Scores pure black and pure white as text against the background and returns
- * whichever produces the greater APCA lightness contrast (Lc); ties fall to
+ * whichever reads better by APCA: the greater lightness contrast (Lc), ties to
  * black. The constants are the SA98G set from apca-w3 0.1.9.
  *
- * Keep in sync with Newspack_Blocks::get_color_for_contrast() in
- * includes/class-newspack-blocks.php.
+ * Keep in sync with: Newspack_Blocks::get_color_for_contrast() in includes/class-newspack-blocks.php,
+ * newspack_get_color_contrast() (newspack-theme), \Newspack\newspack_get_color_contrast() (newspack-plugin),
+ * getContrastColor() in contrast-color.js (packages/components), Newspack_Popups_Model::contrast_text_color()
+ * (newspack-popups) and Newspack_Listings\Curated_List_Block\contrast_text_color() (newspack-listings).
+ * The block theme's Newspack_Block_Theme\Contrast::get_text_color() makes the same pick (it leaves the property unset for unparseable input).
  */
 export const getColorForContrast = ( color?: string ): string => {
 	const blackColor = '#000000';

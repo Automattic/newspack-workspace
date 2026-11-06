@@ -24,7 +24,15 @@ const SegmentsPriority = ( { closeModal, segments, setSegments, wizardApiFetch }
 	const [ isSaving, setIsSaving ] = useState( false );
 	const [ error, setError ] = useState( null );
 
-	const items = useMemo( () => sortedSegments.map( ( { id, name } ) => ( { id, title: decodeEntities( name ) } ) ), [ sortedSegments ] );
+	const items = useMemo(
+		() =>
+			sortedSegments.map( ( { id, name, configuration } ) => ( {
+				id,
+				title: decodeEntities( name ),
+				badge: configuration?.is_disabled ? { label: __( 'Disabled', 'newspack-plugin' ), intent: 'draft' } : undefined,
+			} ) ),
+		[ sortedSegments ]
+	);
 	const hasChanged = idsOf( sortedSegments ).join() !== idsOf( segments ).join();
 
 	const sortSegments = ( index, targetIndex ) => {
@@ -66,12 +74,7 @@ const SegmentsPriority = ( { closeModal, segments, setSegments, wizardApiFetch }
 			} }
 		>
 			<Stack direction="column" gap="xl">
-				<span>
-					{ __(
-						'Segments are checked in this order. When a reader matches more than one segment, only the first matching segment decides which targeted prompts they see.',
-						'newspack-plugin'
-					) }
-				</span>
+				<span>{ __( 'Readers in more than one segment see prompts from the highest one.', 'newspack-plugin' ) }</span>
 				{ error && (
 					<Notice status="error" isDismissible={ false }>
 						{ error }
