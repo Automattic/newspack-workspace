@@ -324,7 +324,7 @@
 	.newspack-reader-auth__inline-wrapper {
 		h2 {
 			font-size: var(--newspack-ui-font-size-title-m);
-			font-weight: var(--newspack-ui-font-weight-strong);
+			font-weight: var(--newspack-ui-heading-font-weight, var(--newspack-ui-font-weight-strong));
 		}
 
 		p {

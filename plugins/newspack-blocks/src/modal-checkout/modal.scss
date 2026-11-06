@@ -217,7 +217,7 @@
 						.price {
 							del,
 							.suggested-prefix {
-								color: var(--newspack-ui-color-neutral-60, np-colors.$neutral-600);
+								color: var(--newspack-ui-color-text-subtle, np-colors.$neutral-600);
 								left: 0;
 								position: absolute;
 								top: calc(var(--newspack-ui-spacer-base, 8px) * 0.75);
