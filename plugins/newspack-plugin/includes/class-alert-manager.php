@@ -61,6 +61,18 @@ class Alert_Manager {
 	const HEALTH_STREAK_MAX_GAP = 3 * HOUR_IN_SECONDS;
 
 	/**
+	 * Option holding, per integration ID, a contact push the provider refused
+	 * with an account error while the hourly check found nothing wrong. It
+	 * waits for the integration's next check: a failure drops it, and a pass
+	 * pages for it, since the check cannot see a problem that only blocks
+	 * writes.
+	 *
+	 * An option rather than a transient, as for HEALTH_STATE_OPTION: here an
+	 * early eviction would lose the page.
+	 */
+	const REFUSED_PUSH_OPTION = 'newspack_integration_refused_pushes';
+
+	/**
 	 * Substring signatures (lowercase) that mark a health-check failure as
 	 * publisher-side: the ESP account is disabled, unpaid, or holding a dead
 	 * key, so the fix belongs to the publisher and retrying on our side
@@ -370,18 +382,23 @@ class Alert_Manager {
 	 * Handle a permanent (non-retryable) contact-sync failure.
 	 *
 	 * Both classes forward at 'warning' severity, which reaches the log but
-	 * not Slack, apart from the fallback described for `permanent_config`:
+	 * not Slack, apart from the escalations described for `permanent_config`:
 	 *
 	 * - `permanent_config` (an ESP account that is disabled, unpaid or rejects
 	 *   the site's credentials) is site-level, so it is reported at most once
 	 *   an hour per integration; the push log keeps the per-contact history.
 	 *   The hourly health check observes the same account state within the
 	 *   hour through its own request, and owns the escalation through
-	 *   handle_health_check_failed(). An account that refuses writes but
-	 *   still answers the check's request passes it, so those failures reach
-	 *   the log alone. Where the check isn't running, because
-	 *   it is switched off or its cron has stalled, this path is the only one
-	 *   that sees the account state, so its hourly report pages instead.
+	 *   handle_health_check_failed(). That request is a read, though, and an
+	 *   account that refuses writes but still answers it passes the check. So
+	 *   while the integration has no current health record, the report is
+	 *   also kept as a refused push (REFUSED_PUSH_OPTION) for the next check:
+	 *   a failure drops it, and a pass pages for it through
+	 *   handle_health_check_passed(). A current record means the check sees a
+	 *   problem already, so nothing is kept. Where the check isn't running,
+	 *   because it is switched off or its cron has stalled, this path is the
+	 *   only one that sees the account state, so its hourly report pages
+	 *   instead.
 	 * - `permanent_contact` (fired by the deletion path only, where a skipped
 	 *   retry has no natural re-trigger and the dropped deletion signal is
 	 *   GDPR-relevant) concerns one contact each and stays observable.
@@ -393,8 +410,9 @@ class Alert_Manager {
 	 * @param array $payload Alert data from Contact_Sync.
 	 */
 	public static function handle_sync_permanent_failure( $payload ) {
-		$integration_id = $payload['integration_id'] ?? 'unknown';
-		$is_config      = 'permanent_contact' !== ( $payload['error_class'] ?? 'permanent_config' );
+		$integration_id   = $payload['integration_id'] ?? 'unknown';
+		$is_config        = 'permanent_contact' !== ( $payload['error_class'] ?? 'permanent_config' );
+		$is_check_running = self::is_health_check_running();
 
 		if ( $is_config ) {
 			$dedup_key = 'newspack_alert_pf_' . md5( (string) $integration_id );
@@ -404,6 +422,18 @@ class Alert_Manager {
 			// Set before dispatch, so a `newspack_alert` handler that throws
 			// cannot leave the slot free for the next failed contact.
 			set_transient( $dedup_key, time(), HOUR_IN_SECONDS );
+
+			if ( $is_check_running && null === self::get_current_health_record( $integration_id ) ) {
+				$refused_pushes = get_option( self::REFUSED_PUSH_OPTION, [] );
+				if ( ! is_array( $refused_pushes ) ) {
+					$refused_pushes = [];
+				}
+				$refused_pushes[ (string) $integration_id ] = [
+					'refused_at' => time(),
+					'reason'     => (string) ( $payload['reason'] ?? 'unknown' ),
+				];
+				update_option( self::REFUSED_PUSH_OPTION, $refused_pushes, false );
+			}
 		}
 
 		$message = $is_config
@@ -423,7 +453,7 @@ class Alert_Manager {
 			'newspack_alert',
 			[
 				'type'      => 'sync_permanent_failure',
-				'severity'  => $is_config && ! self::is_health_check_running() ? 'error' : 'warning',
+				'severity'  => $is_config && ! $is_check_running ? 'error' : 'warning',
 				'message'   => $message,
 				'context'   => $payload,
 				'timestamp' => time(),
@@ -627,6 +657,11 @@ class Alert_Manager {
 	 * it. When an issue tracks the outage (get_tracking_issue_url()), the
 	 * transition reaches the log with the issue URL instead of paging.
 	 *
+	 * A failure also drops the integration's refused push, if one is waiting
+	 * (see handle_sync_permanent_failure()): the check sees the problem now,
+	 * so the record owns it, and paging for the push too would report the
+	 * same outage twice.
+	 *
 	 * The record is written before dispatch so a `newspack_alert` handler
 	 * that throws cannot leave the transition unrecorded and page again on
 	 * the next hourly cron.
@@ -638,6 +673,8 @@ class Alert_Manager {
 		$integration_name = (string) ( $payload['integration_name'] ?? 'unknown' );
 		$error            = $payload['error'] ?? null;
 		$message          = is_wp_error( $error ) ? implode( '; ', $error->get_error_messages() ) : 'unknown error';
+
+		self::take_refused_push( $integration_id );
 
 		$state = get_option( self::HEALTH_STATE_OPTION, [] );
 		if ( ! is_array( $state ) ) {
@@ -805,11 +842,39 @@ class Alert_Manager {
 	 * reported. A pass with no record is the hourly steady state and costs
 	 * no option write.
 	 *
+	 * A pass also pages, once, for the integration's refused push, if one is
+	 * waiting (see handle_sync_permanent_failure()): the provider refused a
+	 * write with an account error that this check cannot see, so nothing
+	 * else would page for it. A refused push older than
+	 * HEALTH_STREAK_MAX_GAP is dropped silently instead, since no check ran
+	 * in between to say what the account was doing then.
+	 *
 	 * @param array $payload Health check pass data (integration_id, integration_name).
 	 */
 	public static function handle_health_check_passed( $payload ) {
 		$integration_id = (string) ( $payload['integration_id'] ?? 'unknown' );
-		$state          = get_option( self::HEALTH_STATE_OPTION, [] );
+
+		$refused_push = self::take_refused_push( $integration_id );
+		if ( null !== $refused_push && time() - (int) ( $refused_push['refused_at'] ?? 0 ) <= self::HEALTH_STREAK_MAX_GAP ) {
+			/** This action is documented in includes/class-alert-manager.php */
+			do_action(
+				'newspack_alert',
+				[
+					'type'      => 'sync_permanent_failure',
+					'severity'  => 'error',
+					'message'   => sprintf(
+						'Integration "%s" passes its health check, but its provider refused a contact push with an account error at %s, so contact sync is failing. Last error: %s',
+						(string) ( $payload['integration_name'] ?? 'unknown' ),
+						gmdate( 'Y-m-d H:i', (int) $refused_push['refused_at'] ) . ' UTC',
+						(string) ( $refused_push['reason'] ?? 'unknown' )
+					),
+					'context'   => array_merge( $payload, [ 'refused_push' => $refused_push ] ),
+					'timestamp' => time(),
+				]
+			);
+		}
+
+		$state = get_option( self::HEALTH_STATE_OPTION, [] );
 		if ( ! is_array( $state ) || ! isset( $state[ $integration_id ] ) ) {
 			return;
 		}
@@ -1001,6 +1066,29 @@ class Alert_Manager {
 	private static function is_integration_broken( $integration_id ) {
 		$record = self::get_current_health_record( $integration_id );
 		return 'broken' === ( $record['status'] ?? '' );
+	}
+
+	/**
+	 * Remove an integration's refused push, the one waiting for its next
+	 * health check, and return it. Writes the option only when one was there.
+	 *
+	 * @param string $integration_id The integration ID.
+	 * @return array|null The refused push, or null when none was waiting.
+	 */
+	private static function take_refused_push( $integration_id ) {
+		$refused_pushes = get_option( self::REFUSED_PUSH_OPTION, [] );
+		if ( ! is_array( $refused_pushes ) || ! isset( $refused_pushes[ $integration_id ] ) ) {
+			return null;
+		}
+
+		$refused_push = $refused_pushes[ $integration_id ];
+		unset( $refused_pushes[ $integration_id ] );
+		if ( empty( $refused_pushes ) ) {
+			delete_option( self::REFUSED_PUSH_OPTION );
+		} else {
+			update_option( self::REFUSED_PUSH_OPTION, $refused_pushes, false );
+		}
+		return is_array( $refused_push ) ? $refused_push : null;
 	}
 
 	/**
