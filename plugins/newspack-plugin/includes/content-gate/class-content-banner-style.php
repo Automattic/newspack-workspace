@@ -126,7 +126,7 @@ final class Content_Banner_Style {
 	 *
 	 * @return string The declarations, or an empty string.
 	 */
-	public static function get_inline_style( string $style, string $background_color, string $button_color, string $text_color = '', string $button_text_color = '', string $stored_style = 'theme' ): string {
+	public static function get_inline_style( string $style, string $background_color, string $button_color, string $text_color = '', string $button_text_color = '', string $stored_style = self::DEFAULT_STYLE ): string {
 		if ( ! self::has_options( $style, $stored_style ) ) {
 			return '';
 		}
@@ -165,7 +165,7 @@ final class Content_Banner_Style {
 	 *
 	 * @return bool
 	 */
-	public static function has_options( string $style, string $stored_style = 'theme' ): bool {
+	public static function has_options( string $style, string $stored_style = self::DEFAULT_STYLE ): bool {
 		return 'theme' === $style || ( self::SITE_STYLE === $style && 'theme' === self::sanitize_style( $stored_style ) );
 	}
 
@@ -178,7 +178,7 @@ final class Content_Banner_Style {
 	 *
 	 * @return string The class, or an empty string.
 	 */
-	public static function get_shadow_class( string $style, bool $shadow, string $stored_style = 'theme' ): string {
+	public static function get_shadow_class( string $style, bool $shadow, string $stored_style = self::DEFAULT_STYLE ): string {
 		return ! $shadow && self::has_options( $style, $stored_style ) ? 'has-no-shadow' : '';
 	}
 
@@ -212,12 +212,12 @@ final class Content_Banner_Style {
 			'site_button_ink'      => '',
 		];
 		if ( $data['uses_site_theme'] ) {
-			$palette                   = Newspack_UI_Theme_Style::get_palette( Newspack_UI_Theme_Style::get_global_styles() );
-			$css                       = Newspack_UI_Theme_Style::get_site_css();
-			$data['site_bg']           = self::sanitize_color( $palette['base'] );
-			$data['site_text']         = self::sanitize_color( $palette['contrast'] );
-			$data['site_button_bg']    = self::get_css_color( $css, '--newspack-ui-color-button-bg' );
-			$data['site_button_ink']   = self::get_css_color( $css, '--newspack-ui-color-button-text' );
+			$properties              = Newspack_UI_Theme_Style::get_site_properties();
+			$neutral                 = Newspack_UI_Palette::NEUTRAL_DEFAULTS;
+			$data['site_bg']         = self::sanitize_color( $properties['--newspack-ui-color-base'] ?? $neutral['base'] );
+			$data['site_text']       = self::sanitize_color( $properties['--newspack-ui-color-contrast'] ?? $neutral['contrast'] );
+			$data['site_button_bg']  = self::sanitize_color( $properties['--newspack-ui-color-button-bg'] ?? $data['site_text'] );
+			$data['site_button_ink'] = self::sanitize_color( $properties['--newspack-ui-color-button-text'] ?? $data['site_bg'] );
 		}
 		if ( ! $data['supports_theme_style'] ) {
 			return $data;
@@ -233,18 +233,6 @@ final class Content_Banner_Style {
 			$data['theme_font_body']    = $stacks['body'] ?? '';
 		}
 		return $data;
-	}
-
-	/**
-	 * Read a hex color property out of the site Theme's CSS.
-	 *
-	 * @param string $css      The CSS.
-	 * @param string $property The custom property name.
-	 *
-	 * @return string A hex color, or an empty string.
-	 */
-	private static function get_css_color( string $css, string $property ): string {
-		return preg_match( '/' . preg_quote( $property, '/' ) . ':\s*(#[0-9a-fA-F]{3,6})\s*[;}]/', $css, $matches ) ? self::sanitize_color( $matches[1] ) : '';
 	}
 
 	/**

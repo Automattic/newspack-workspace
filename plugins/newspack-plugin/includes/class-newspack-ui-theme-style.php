@@ -124,6 +124,13 @@ class Newspack_UI_Theme_Style {
 	private static ?bool $has_palette = null;
 
 	/**
+	 * The properties the ':root' rule prints for this request.
+	 *
+	 * @var array<string,string>|null
+	 */
+	private static ?array $properties = null;
+
+	/**
 	 * Register the hooks that drop the memoized global styles and print the rule.
 	 */
 	public static function init(): void {
@@ -166,6 +173,7 @@ class Newspack_UI_Theme_Style {
 		self::$global_styles = null;
 		self::$css           = null;
 		self::$has_palette   = null;
+		self::$properties    = null;
 	}
 
 	/**
@@ -240,6 +248,7 @@ class Newspack_UI_Theme_Style {
 			);
 
 			self::$has_palette = $solved['has_palette'];
+			self::$properties  = self::printable( $solved['properties'] );
 			self::$css         = self::render( $solved['properties'], $solved['high_contrast'] );
 		}
 
@@ -255,6 +264,17 @@ class Newspack_UI_Theme_Style {
 	 */
 	public static function get_button_radius(): string {
 		return self::get_radius_properties( self::get_global_styles() )['--newspack-ui-radius-button'] ?? '';
+	}
+
+	/**
+	 * The properties of the site's ':root' rule, by name, as get_site_css() prints them.
+	 *
+	 * @return array<string,string>
+	 */
+	public static function get_site_properties(): array {
+		self::get_site_css();
+
+		return self::$properties ?? [];
 	}
 
 	/**
@@ -1009,16 +1029,31 @@ class Newspack_UI_Theme_Style {
 	 */
 	private static function declarations( array $properties ): string {
 		$declarations = '';
-		foreach ( $properties as $name => $value ) {
-			$type  = self::property_type( (string) $name );
-			$value = '' === $type ? '' : self::sanitize_value( $value, $type );
-			if ( '' === $value ) {
-				continue;
-			}
+		foreach ( self::printable( $properties ) as $name => $value ) {
 			$declarations .= $name . ':' . $value . ';';
 		}
 
 		return $declarations;
+	}
+
+	/**
+	 * The properties whose values pass the allow-list of their type, with the values as they are printed.
+	 *
+	 * @param array<string,string> $properties The properties.
+	 *
+	 * @return array<string,string>
+	 */
+	private static function printable( array $properties ): array {
+		$printable = [];
+		foreach ( $properties as $name => $value ) {
+			$type  = self::property_type( (string) $name );
+			$value = '' === $type ? '' : self::sanitize_value( $value, $type );
+			if ( '' !== $value ) {
+				$printable[ $name ] = $value;
+			}
+		}
+
+		return $printable;
 	}
 
 	/**

@@ -16,7 +16,9 @@ import BannerStyleControl, { getBannerPreviewProps, getBannerStyle, toLongHex } 
 jest.mock( '@wordpress/components', () => ( {
 	Button: () => null,
 	SelectControl: () => <div data-testid="style-select" />,
-	__experimentalToggleGroupControl: () => <div data-testid="shadow-toggle" />,
+	__experimentalToggleGroupControl: ( { value, onChange } ) => (
+		<button type="button" data-testid="shadow-toggle" data-value={ value } onClick={ () => onChange( 'disabled' ) } />
+	),
 	__experimentalToggleGroupControlOption: () => null,
 } ) );
 jest.mock( '@wordpress/ui', () => ( { Stack: ( { children } ) => <div>{ children }</div> } ) );
@@ -180,7 +182,45 @@ describe( 'on a site that uses the site Theme', () => {
 		const onChange = jest.fn();
 		const { getAllByTestId } = render( <BannerStyleControl settings={ { style: 'dark' } } onChange={ onChange } /> );
 		fireEvent.click( getAllByTestId( 'color-picker' )[ 1 ] );
-		expect( onChange ).toHaveBeenCalledWith( { text_color: '#abcdef', style: 'theme' } );
+		expect( onChange ).toHaveBeenCalledWith( {
+			bg_color: '',
+			text_color: '#abcdef',
+			button_color: '',
+			button_text_color: '',
+			shadow: true,
+			style: 'theme',
+		} );
+	} );
+
+	it( 'shows empty pickers and the shadow on for a stored Light or Dark, and sends no leftovers on the first edit', () => {
+		setThemeData( { supports_theme_style: true, uses_site_theme: true, site_bg: '#1e1e1e', site_text: '#ffffff' } );
+		const onChange = jest.fn();
+		const leftovers = {
+			style: 'light',
+			bg_color: '#ff0000',
+			text_color: '#00ff00',
+			button_color: '#0000ff',
+			button_text_color: '#ffff00',
+			shadow: false,
+		};
+		const utils = render( <BannerStyleControl settings={ leftovers } onChange={ onChange } /> );
+		const pickers = utils.getAllByTestId( 'color-picker' );
+		expect( pickers.map( e => e.dataset.color ) ).not.toContain( '#ff0000' );
+		expect( pickers[ 0 ].dataset.color ).toBe( '#1e1e1e' );
+		expect( utils.getByTestId( 'shadow-toggle' ).dataset.value ).toBe( 'enabled' );
+		fireEvent.click( utils.getByTestId( 'shadow-toggle' ) );
+		expect( onChange ).toHaveBeenLastCalledWith( {
+			bg_color: '',
+			text_color: '',
+			button_color: '',
+			button_text_color: '',
+			shadow: false,
+			style: 'theme',
+		} );
+		utils.unmount();
+		const stored = render( <BannerStyleControl settings={ { ...leftovers, style: 'theme' } } onChange={ onChange } /> );
+		expect( stored.getAllByTestId( 'color-picker' )[ 0 ].dataset.color ).toBe( '#ff0000' );
+		expect( stored.getByTestId( 'shadow-toggle' ).dataset.value ).toBe( 'disabled' );
 	} );
 
 	it( 'defaults the empty pickers to the site Theme colors, then to the picked colors black or white', () => {

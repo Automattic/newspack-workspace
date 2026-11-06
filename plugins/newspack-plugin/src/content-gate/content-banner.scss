@@ -260,7 +260,8 @@ body.newspack-has-countdown-banner:has(.newspack-countdown-banner__cta.is-style-
 			&-preview {
 				border: 1px solid var(--wp-components-color-gray-600, #{wp-colors.$gray-600});
 				border-radius: 2px;
-				padding: 3px;
+				overflow: clip;
+				padding: 32px 3px 3px;
 				pointer-events: none;
 			}
 		}
