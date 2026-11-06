@@ -35,24 +35,24 @@
 
 	button,
 	.submit-button {
-		font-size: variables.$font__size-sm;
 		outline: none;
-
-		&[type="submit"] {
-			border: none;
-		}
 	}
 	button[type="submit"],
 	.submit-button {
 		box-sizing: border-box;
 	}
-	button:not(.wp-element-button),
-	.submit-button:not(.wp-element-button) {
+	button:where(:not(.wp-element-button)),
+	.submit-button:where(:not(.wp-element-button)) {
 		font-family: var(--newspack-theme-font-heading, sans-serif);
+		font-size: variables.$font__size-sm;
 		font-weight: bold;
+
+		&[type="submit"] {
+			border: none;
+		}
 	}
-	button[type="submit"]:not(.wp-element-button),
-	.submit-button:not(.wp-element-button) {
+	button[type="submit"]:where(:not(.wp-element-button)),
+	.submit-button:where(:not(.wp-element-button)) {
 		border-radius: 5px;
 		color: np-colors.$neutral-000;
 		line-height: 3;

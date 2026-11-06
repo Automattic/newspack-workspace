@@ -568,7 +568,6 @@
 			margin: 0 calc(1px + var(--newspack-ui-spacer-5, 24px)) calc(1px + var(--newspack-ui-spacer-5, 24px));
 			padding: var(--newspack-ui-spacer-2, 12px) var(--newspack-ui-spacer-5, 24px);
 			position: relative;
-			transition: box-shadow motion.$duration-color motion.$ease-color, transform motion.$duration-press motion.$ease-out;
 			width: calc(100% - 2 * var(--newspack-ui-spacer-5, 24px) - 2px);
 			z-index: 1;
 
@@ -579,6 +578,7 @@
 			&:not(.wp-element-button) {
 				font-family: inherit;
 				font-weight: var(--newspack-ui-font-weight-strong, 600);
+				transition: box-shadow motion.$duration-color motion.$ease-color, transform motion.$duration-press motion.$ease-out;
 			}
 
 			@include motion.hover {
