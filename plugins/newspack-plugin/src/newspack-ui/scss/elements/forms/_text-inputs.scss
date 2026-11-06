@@ -64,6 +64,22 @@
 		}
 	}
 
+	input[type="text"],
+	input[type="email"],
+	input[type="url"],
+	input[type="password"],
+	input[type="search"],
+	input[type="number"],
+	input[type="tel"],
+	textarea {
+		background-color: var(--newspack-ui-field-bg);
+		border-color: var(--newspack-ui-field-border-color, var(--newspack-ui-color-input-border));
+		border-radius: var(--newspack-ui-field-radius);
+		border-width: var(--newspack-ui-field-border-width);
+		color: var(--newspack-ui-field-ink);
+		font-family: var(--newspack-ui-field-font-family);
+	}
+
 	textarea {
 		min-height: calc(var(--newspack-ui-spacer-9) * 2);
 	}
