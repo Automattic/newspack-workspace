@@ -200,4 +200,10 @@ describe( 'Newspack UI Neutral tokens', () => {
 			/border:\s*var\(--newspack-ui-field-border-width\) solid var\(--newspack-ui-field-border-color, var\(--newspack-ui-color-input-border\)\)/
 		);
 	} );
+
+	it( 'read the modal title line height from the title-m role only', () => {
+		const css = compile();
+		expect( css ).not.toContain( '--newspack-ui-heading-line-height' );
+		expect( css ).toMatch( /line-height:\s*var\(--newspack-ui-line-height-title-m\)/ );
+	} );
 } );

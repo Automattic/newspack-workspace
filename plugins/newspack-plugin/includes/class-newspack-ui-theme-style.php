@@ -59,15 +59,15 @@ class Newspack_UI_Theme_Style {
 	];
 
 	/**
-	 * Type scale tokens to the font size preset slug and the Neutral size they fall back to.
+	 * Type scale tokens to the font size preset slug, the Neutral size and the Neutral line height they fall back to.
 	 */
 	const SIZE_SCALE = [
-		'caption' => [ 'xx-small', '12px' ],
-		'small'   => [ 'x-small', '14px' ],
-		'body'    => [ 'small', '16px' ],
-		'title-m' => [ 'medium', '20px' ],
-		'title-l' => [ 'x-large', '24px' ],
-		'display' => [ 'xx-large', '32px' ],
+		'caption' => [ 'xx-small', '12px', '1.3333' ],
+		'small'   => [ 'x-small', '14px', '1.4286' ],
+		'body'    => [ 'small', '16px', '1.5' ],
+		'title-m' => [ 'medium', '20px', '1.4' ],
+		'title-l' => [ 'x-large', '24px', '1.3333' ],
+		'display' => [ 'xx-large', '32px', '1.25' ],
 	];
 
 	/**
@@ -506,20 +506,56 @@ class Newspack_UI_Theme_Style {
 		}
 
 		foreach ( self::SIZE_SCALE as $token => $scale ) {
-			if ( isset( $sizes[ $scale[0] ] ) ) {
-				$properties[ '--newspack-ui-font-size-' . $token ] = 'var(--wp--preset--font-size--' . $scale[0] . ', ' . $scale[1] . ')';
+			$line_height = self::slug_line_height( $settings, $scale[0] );
+			if ( isset( $sizes[ $scale[0] ] ) && '' !== $line_height ) {
+				$properties[ '--newspack-ui-font-size-' . $token ]   = 'var(--wp--preset--font-size--' . $scale[0] . ', ' . $scale[1] . ')';
+				$properties[ '--newspack-ui-line-height-' . $token ] = 'var(--wp--custom--line-height--' . $scale[0] . ', ' . $scale[2] . ')';
 			}
 		}
 
-		$fine_size = is_string( $caption['fontSize'] ?? null ) ? $caption['fontSize'] : '';
-		if ( '' === self::sanitize_value( $fine_size, 'length' ) ) {
-			$fine_size = isset( $sizes['x-small'] ) ? 'var(--wp--preset--font-size--x-small, 14px)' : null;
+		$fine_size   = is_string( $caption['fontSize'] ?? null ) ? $caption['fontSize'] : '';
+		$fine_height = self::unitless( $caption['lineHeight'] ?? null );
+		if ( '' !== self::sanitize_value( $fine_size, 'length' ) ) {
+			if ( '' !== $fine_height ) {
+				$properties['--newspack-ui-font-size-fine']   = $fine_size;
+				$properties['--newspack-ui-line-height-fine'] = $fine_height;
+			}
+		} elseif ( isset( $sizes['x-small'] ) && '' !== self::slug_line_height( $settings, 'x-small' ) ) {
+			$properties['--newspack-ui-font-size-fine']   = 'var(--wp--preset--font-size--x-small, 14px)';
+			$properties['--newspack-ui-line-height-fine'] = 'var(--wp--custom--line-height--x-small, 1.4286)';
 		}
-		self::put( $properties, '--newspack-ui-font-size-fine', $fine_size );
-		self::put( $properties, '--newspack-ui-line-height-fine', $caption['lineHeight'] ?? null );
 		self::put( $properties, '--newspack-ui-font-family-fine', $caption['fontFamily'] ?? null );
 
 		return $properties;
+	}
+
+	/**
+	 * A unitless line height, as a string.
+	 *
+	 * @param mixed $value The value.
+	 *
+	 * @return string Empty when the value is not a unitless number.
+	 */
+	private static function unitless( $value ): string {
+		if ( is_int( $value ) || is_float( $value ) ) {
+			$value = (string) $value;
+		}
+
+		return is_string( $value ) && 1 === preg_match( '/^\d+(?:\.\d+)?$/', trim( $value ) ) ? trim( $value ) : '';
+	}
+
+	/**
+	 * The unitless line height the theme pairs with a font size slug.
+	 *
+	 * @param array  $settings Merged global settings.
+	 * @param string $slug     The font size slug.
+	 *
+	 * @return string Empty when the theme sets none.
+	 */
+	private static function slug_line_height( array $settings, string $slug ): string {
+		$heights = $settings['custom']['line-height'] ?? $settings['custom']['lineHeight'] ?? null;
+
+		return is_array( $heights ) ? self::unitless( $heights[ $slug ] ?? null ) : '';
 	}
 
 	/**
@@ -938,7 +974,7 @@ class Newspack_UI_Theme_Style {
 			case 'length':
 				return self::is_length( $value ) || self::is_var( $value, 'length' ) ? $value : '';
 			case 'line-height':
-				return 1 === preg_match( '/^\d+(\.\d+)?$/', $value ) || self::is_length( $value ) ? $value : '';
+				return 1 === preg_match( '/^\d+(\.\d+)?$/', $value ) || self::is_length( $value ) || self::is_var( $value, 'line-height' ) ? $value : '';
 			case 'weight':
 				return 1 === preg_match( '/^[1-9]00$|^(normal|bold)$/', $value ) ? $value : '';
 			case 'letter-spacing':
