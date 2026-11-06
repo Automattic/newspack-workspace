@@ -12,6 +12,7 @@ use Newspack\Content_Gate;
 use Newspack\Content_Gifting;
 use Newspack\Content_Gifting_CTA;
 use Newspack\Metering_Countdown;
+use Newspack\Newspack_UI_Palette;
 use Newspack\Newspack_UI_Theme_Style;
 
 /**
@@ -32,6 +33,9 @@ class Test_Content_Banner_Style extends \WP_UnitTestCase {
 	 */
 	public function tear_down(): void {
 		remove_theme_support( Newspack_UI_Theme_Style::THEME_SUPPORT );
+		remove_all_filters( 'wp_theme_json_data_user' );
+		\WP_Theme_JSON_Resolver::clean_cached_data();
+		Newspack_UI_Theme_Style::reset_cache();
 		unset( $_GET[ Content_Gifting::QUERY_ARG ] );
 		$is_enabled = new \ReflectionProperty( Metering_Countdown::class, 'is_enabled' );
 		$is_enabled->setAccessible( true );
@@ -145,11 +149,11 @@ class Test_Content_Banner_Style extends \WP_UnitTestCase {
 	public function test_theme_text_colors_override_the_automatic_pick(): void {
 		$this->assertSame(
 			'--newspack-content-banner-bg:#fff59d;--newspack-content-banner-ink:#102030;--newspack-content-banner-button-bg:#0d47a1;--newspack-content-banner-button-ink:#ffeb3b',
-			Content_Banner_Style::get_inline_style( 'theme', '#fff59d', '#0d47a1', '#102030', '#ffeb3b' )
+			Content_Banner_Style::get_inline_style( 'theme', '#fff59d', '#0d47a1', '#102030', '#ffeb3b', 'theme' )
 		);
 		$this->assertSame(
 			'--newspack-content-banner-ink:#102030;--newspack-content-banner-button-ink:#ffeb3b',
-			Content_Banner_Style::get_inline_style( 'theme', '', '', '#102030', '#ffeb3b' )
+			Content_Banner_Style::get_inline_style( 'theme', '', '', '#102030', '#ffeb3b', 'theme' )
 		);
 		$this->assertSame(
 			'--newspack-content-banner-bg:#fff59d;--newspack-content-banner-ink:black;--newspack-content-banner-button-bg:#0d47a1;--newspack-content-banner-button-ink:white',
@@ -162,22 +166,22 @@ class Test_Content_Banner_Style extends \WP_UnitTestCase {
 	 * The site style prints only what is picked, and picks black or white only for a color it was not given text for.
 	 */
 	public function test_site_style_prints_only_picked_colors(): void {
-		$this->assertSame( '', Content_Banner_Style::get_inline_style( Content_Banner_Style::SITE_STYLE, '', '' ) );
+		$this->assertSame( '', Content_Banner_Style::get_inline_style( Content_Banner_Style::SITE_STYLE, '', '', '', '', 'theme' ) );
 		$this->assertSame(
 			'--newspack-content-banner-bg:#fff59d;--newspack-content-banner-ink:black',
-			Content_Banner_Style::get_inline_style( Content_Banner_Style::SITE_STYLE, '#fff59d', '' )
+			Content_Banner_Style::get_inline_style( Content_Banner_Style::SITE_STYLE, '#fff59d', '', '', '', 'theme' )
 		);
 		$this->assertSame(
 			'--newspack-content-banner-button-bg:#0d47a1;--newspack-content-banner-button-ink:white',
-			Content_Banner_Style::get_inline_style( Content_Banner_Style::SITE_STYLE, '', '#0d47a1' )
+			Content_Banner_Style::get_inline_style( Content_Banner_Style::SITE_STYLE, '', '#0d47a1', '', '', 'theme' )
 		);
 		$this->assertSame(
 			'--newspack-content-banner-bg:#fff59d;--newspack-content-banner-ink:#102030;--newspack-content-banner-button-bg:#0d47a1;--newspack-content-banner-button-ink:#ffeb3b',
-			Content_Banner_Style::get_inline_style( Content_Banner_Style::SITE_STYLE, '#fff59d', '#0d47a1', '#102030', '#ffeb3b' )
+			Content_Banner_Style::get_inline_style( Content_Banner_Style::SITE_STYLE, '#fff59d', '#0d47a1', '#102030', '#ffeb3b', 'theme' )
 		);
 		$this->assertSame(
 			'--newspack-content-banner-ink:#102030',
-			Content_Banner_Style::get_inline_style( Content_Banner_Style::SITE_STYLE, '', '', '#102030', 'not a color' )
+			Content_Banner_Style::get_inline_style( Content_Banner_Style::SITE_STYLE, '', '', '#102030', 'not a color', 'theme' )
 		);
 	}
 
@@ -206,7 +210,8 @@ class Test_Content_Banner_Style extends \WP_UnitTestCase {
 	public function test_shadow_class_is_added_only_when_off_on_theme_and_site_styles(): void {
 		$this->assertSame( '', Content_Banner_Style::get_shadow_class( 'theme', true ) );
 		$this->assertSame( 'has-no-shadow', Content_Banner_Style::get_shadow_class( 'theme', false ) );
-		$this->assertSame( 'has-no-shadow', Content_Banner_Style::get_shadow_class( Content_Banner_Style::SITE_STYLE, false ) );
+		$this->assertSame( 'has-no-shadow', Content_Banner_Style::get_shadow_class( Content_Banner_Style::SITE_STYLE, false, 'theme' ) );
+		$this->assertSame( '', Content_Banner_Style::get_shadow_class( Content_Banner_Style::SITE_STYLE, false ) );
 		$this->assertSame( '', Content_Banner_Style::get_shadow_class( 'light', false ) );
 		$this->assertSame( '', Content_Banner_Style::get_shadow_class( 'dark', false ) );
 	}
@@ -442,6 +447,27 @@ class Test_Content_Banner_Style extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Make the global styles carry these user styles.
+	 *
+	 * @param array $styles The styles.
+	 */
+	private function set_user_styles( array $styles ): void {
+		add_filter(
+			'wp_theme_json_data_user',
+			function ( $data ) use ( $styles ) {
+				return $data->update_with(
+					[
+						'version' => \WP_Theme_JSON::LATEST_SCHEMA,
+						'styles'  => $styles,
+					]
+				);
+			}
+		);
+		\WP_Theme_JSON_Resolver::clean_cached_data();
+		Newspack_UI_Theme_Style::reset_cache();
+	}
+
+	/**
 	 * The wizard gets the site Theme's colors only where the site Theme is in use.
 	 */
 	public function test_wizard_data_carries_site_colors_only_on_the_site_theme(): void {
@@ -455,5 +481,76 @@ class Test_Content_Banner_Style extends \WP_UnitTestCase {
 			$this->assertArrayHasKey( $key, $data );
 			$this->assertIsString( $data[ $key ] );
 		}
+	}
+
+	/**
+	 * The site colors are the ones the adapter prints.
+	 */
+	public function test_wizard_data_site_colors_are_the_rendered_colors(): void {
+		add_theme_support( Newspack_UI_Theme_Style::THEME_SUPPORT );
+		$this->set_user_styles(
+			[
+				'color'    => [
+					'background' => '#112233',
+					'text'       => '#ddeeff',
+				],
+				'elements' => [
+					'button' => [
+						'color' => [
+							'background' => '#aa3300',
+							'text'       => '#ffeedd',
+						],
+					],
+				],
+			]
+		);
+
+		$data = Content_Banner_Style::get_wizard_data();
+		$this->assertSame( '#112233', $data['site_bg'] );
+		$this->assertSame( '#ddeeff', $data['site_text'] );
+		$this->assertSame( '#aa3300', $data['site_button_bg'] );
+		$this->assertSame( '#ffeedd', $data['site_button_ink'] );
+
+		$properties = Newspack_UI_Theme_Style::get_site_properties();
+		$this->assertSame( $data['site_bg'], $properties['--newspack-ui-color-base'] );
+		$this->assertSame( $data['site_button_bg'], $properties['--newspack-ui-color-button-bg'] );
+	}
+
+	/**
+	 * A site that sets nothing renders Neutral, and the button is the text color on the base.
+	 */
+	public function test_wizard_data_site_colors_fall_back_to_what_neutral_renders(): void {
+		add_theme_support( Newspack_UI_Theme_Style::THEME_SUPPORT );
+		$data = Content_Banner_Style::get_wizard_data();
+		$this->assertSame( Newspack_UI_Palette::NEUTRAL_DEFAULTS['base'], $data['site_bg'] );
+		$this->assertSame( Newspack_UI_Palette::NEUTRAL_DEFAULTS['contrast'], $data['site_text'] );
+		$this->assertSame( $data['site_text'], $data['site_button_bg'] );
+		$this->assertSame( $data['site_bg'], $data['site_button_ink'] );
+	}
+
+	/**
+	 * The solved properties are memoized with the CSS and dropped with it.
+	 */
+	public function test_site_properties_follow_the_css_cache(): void {
+		add_theme_support( Newspack_UI_Theme_Style::THEME_SUPPORT );
+		$this->set_user_styles(
+			[
+				'color' => [
+					'background' => '#112233',
+					'text'       => '#ddeeff',
+				],
+			]
+		);
+		$this->assertSame( '#112233', Newspack_UI_Theme_Style::get_site_properties()['--newspack-ui-color-base'] );
+		$this->assertStringContainsString( '--newspack-ui-color-base:#112233', Newspack_UI_Theme_Style::get_site_css() );
+		$this->set_user_styles(
+			[
+				'color' => [
+					'background' => '#334455',
+					'text'       => '#ddeeff',
+				],
+			]
+		);
+		$this->assertSame( '#334455', Newspack_UI_Theme_Style::get_site_properties()['--newspack-ui-color-base'] );
 	}
 }
