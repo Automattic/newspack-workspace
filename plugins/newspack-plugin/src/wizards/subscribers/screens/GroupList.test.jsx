@@ -277,4 +277,19 @@ describe( 'the group list search', () => {
 		} );
 		expect( dataViewsProps.data.map( item => item.id ) ).toEqual( [ 2 ] );
 	} );
+
+	it( 'hides cancelled groups until the Status filter is cleared', async () => {
+		const statuses = [ 'active', 'pending', 'on-hold', 'cancelled' ];
+		apiFetch.mockResolvedValue( { items: statuses.map( ( status, index ) => ( { ...group( index + 1 ), status } ) ) } );
+		await act( async () => {
+			render( <GroupList /> );
+		} );
+
+		expect( dataViewsProps.data.map( item => item.status ).sort() ).toEqual( [ 'active', 'on-hold', 'pending' ] );
+
+		await act( async () => {
+			dataViewsProps.onChangeView( { ...dataViewsProps.view, filters: [] } );
+		} );
+		expect( dataViewsProps.data ).toHaveLength( 4 );
+	} );
 } );

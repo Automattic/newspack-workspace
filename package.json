@@ -35,7 +35,7 @@
 		"@wordpress/components": "^30.6.0",
 		"@wordpress/compose": "^7.33.0",
 		"@wordpress/data": "^10.48.0",
-		"@wordpress/dataviews": "^10.2.0",
+		"@wordpress/dataviews": "^22.0.0",
 		"@wordpress/date": "^5.48.0",
 		"@wordpress/dom-ready": "^4.48.0",
 		"@wordpress/edit-post": "^8.48.0",
@@ -74,8 +74,9 @@
 	"pnpm": {
 		"overrides": {
 			"@wordpress/private-apis": "^1.56.0",
-			"@wordpress/stylelint-config>@wordpress/theme": "^2.2.0",
+			"@wordpress/stylelint-config>@wordpress/theme": "^3.0.0",
 			"basic-ftp": "5.3.1",
+			"moment": "^2.31.0",
 			"@typescript-eslint/parser": "8.61.0",
 			"prettier": "npm:wp-prettier@^3.0.3",
 			"react": "18.3.1",

@@ -33,11 +33,6 @@ export const filter = ( stories, fields, view ) => {
 						return value.every( v => fieldValue.includes( v ) );
 					}
 					return value.includes( fieldValue );
-				case 'isNotAll':
-					if ( fieldObject.is_multiple ) {
-						return ! value.every( v => fieldValue.includes( v ) );
-					}
-					return ! value.includes( fieldValue );
 				default:
 					return true;
 			}
