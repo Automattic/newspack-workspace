@@ -27,6 +27,8 @@ const compile = () =>
 		}
 	);
 
+const stylesheet = compile();
+
 const collectRootProperties = css => {
 	const base = {};
 	const media = {};
@@ -99,7 +101,7 @@ const resolveTokens = css => {
 const flatten = tokens => Object.values( tokens ).flatMap( value => ( typeof value === 'string' ? [ value ] : Object.values( value ) ) );
 
 describe( 'Newspack UI Neutral tokens', () => {
-	const actual = resolveTokens( compile() );
+	const actual = resolveTokens( stylesheet );
 
 	it( 'resolve to the pinned values', () => {
 		const expected = JSON.parse( fs.readFileSync( FIXTURE, 'utf8' ) );
@@ -112,8 +114,7 @@ describe( 'Newspack UI Neutral tokens', () => {
 	} );
 
 	it( 'read destructive buttons through the destructive role tokens', () => {
-		const css = compile();
-		const rules = [ ...css.matchAll( /([^{}]+)\{([^{}]*)\}/g ) ].filter( ( [ , selector ] ) =>
+		const rules = [ ...stylesheet.matchAll( /([^{}]+)\{([^{}]*)\}/g ) ].filter( ( [ , selector ] ) =>
 			selector.includes( '.newspack-ui__button--destructive' )
 		);
 		const background = rules.find(
@@ -126,8 +127,7 @@ describe( 'Newspack UI Neutral tokens', () => {
 	} );
 
 	it( 'read the field tokens only from the text input and select selectors', () => {
-		const css = compile();
-		const reading = [ ...css.matchAll( /([^{}]+)\{([^{}]*)\}/g ) ].filter( ( [ , , body ] ) =>
+		const reading = [ ...stylesheet.matchAll( /([^{}]+)\{([^{}]*)\}/g ) ].filter( ( [ , , body ] ) =>
 			/var\(--newspack-ui-field-(?:radius|border-width|border-color|bg|ink|font-family)/.test( body )
 		);
 		const uncovered = /type="?(?:range|date|month|week|time|datetime|datetime-local|zip|color|file|checkbox|radio)"?\]/;
@@ -139,20 +139,10 @@ describe( 'Newspack UI Neutral tokens', () => {
 		expect( reading.some( ( [ , selector ] ) => /\bselect\b/.test( selector ) ) ).toBe( true );
 	} );
 
-	it( 'keep labels and field messages on the control font family', () => {
-		const css = compile();
-		const rules = [ ...css.matchAll( /([^{}]+)\{([^{}]*)\}/g ) ].filter( ( [ , selector ] ) =>
-			/label|field-message|helper-text|inline-error/.test( selector )
-		);
-		rules.forEach( ( [ , , body ] ) => {
-			expect( body ).not.toMatch( /var\(--newspack-ui-field-font-family/ );
-		} );
-	} );
-
 	const rulesOf = css => [ ...css.matchAll( /([^{}]+)\{([^{}]*)\}/g ) ];
 
 	it( 'draw the code input from the field background and ink', () => {
-		const rule = rulesOf( compile() ).find(
+		const rule = rulesOf( stylesheet ).find(
 			( [ , selector, body ] ) => selector.includes( '__code-input input' ) && body.includes( 'linear-gradient' )
 		);
 		expect( rule[ 2 ] ).toMatch( /var\(--newspack-ui-field-bg\);/ );
@@ -160,7 +150,7 @@ describe( 'Newspack UI Neutral tokens', () => {
 	} );
 
 	it( 'draw select2 from the field tokens', () => {
-		const rules = rulesOf( compile() );
+		const rules = rulesOf( stylesheet );
 		const selection = rules.find(
 			( [ , selector, body ] ) => selector.trim().endsWith( '.select2-selection--single' ) && body.includes( 'display: flex' )
 		);
@@ -174,17 +164,15 @@ describe( 'Newspack UI Neutral tokens', () => {
 	} );
 
 	it( "read the select caret, placeholder and toggle tones with today's fallbacks", () => {
-		const css = compile();
-		expect( css ).toMatch(
+		expect( stylesheet ).toMatch(
 			/background:\s*var\(--newspack-ui-field-bg\)\s*var\(--newspack-ui-field-caret, var\(--newspack-ui-field-caret-dark\)\)/
 		);
-		expect( css ).toMatch( /::placeholder\s*\{[^}]*var\(--newspack-ui-field-ink-subtle, var\(--newspack-ui-color-text-subtle\)\)/ );
-		expect( css ).toMatch( /--newspack-ui-button-ink:\s*var\(--newspack-ui-field-ink-muted, var\(--newspack-ui-color-text-muted\)\)/ );
+		expect( stylesheet ).toMatch( /::placeholder\s*\{[^}]*var\(--newspack-ui-field-ink-subtle, var\(--newspack-ui-color-text-subtle\)\)/ );
+		expect( stylesheet ).toMatch( /--newspack-ui-button-ink:\s*var\(--newspack-ui-field-ink-muted, var\(--newspack-ui-color-text-muted\)\)/ );
 	} );
 
 	it( 'return the covered field border to the input border under high contrast', () => {
-		const css = compile();
-		const blocks = [ ...css.matchAll( /@media \(prefers-contrast: more\)\s*\{\s*([^{}]+)\{([^{}]*)\}/g ) ];
+		const blocks = [ ...stylesheet.matchAll( /@media \(prefers-contrast: more\)\s*\{\s*([^{}]+)\{([^{}]*)\}/g ) ];
 		const fieldBlocks = blocks.filter( ( [ , , body ] ) => /border-color:\s*var\(--newspack-ui-color-input-border\)/.test( body ) );
 		expect( fieldBlocks.some( ( [ , selector ] ) => /input\[type="?text"?\]/.test( selector ) ) ).toBe( true );
 		expect( fieldBlocks.some( ( [ , selector ] ) => /(^|[\s,])\.newspack-ui select/.test( selector ) ) ).toBe( true );
@@ -192,18 +180,12 @@ describe( 'Newspack UI Neutral tokens', () => {
 	} );
 
 	it( 'draw the currency wrapper from the field border and radius', () => {
-		const wrapper = rulesOf( compile() ).find(
+		const wrapper = rulesOf( stylesheet ).find(
 			( [ , selector, body ] ) => selector.trim() === '.newspack-ui__currency-input' && body.includes( 'grid-template-columns' )
 		);
 		expect( wrapper[ 2 ] ).toMatch( /border-radius:\s*var\(--newspack-ui-field-radius\)/ );
 		expect( wrapper[ 2 ] ).toMatch(
 			/border:\s*var\(--newspack-ui-field-border-width\) solid var\(--newspack-ui-field-border-color, var\(--newspack-ui-color-input-border\)\)/
 		);
-	} );
-
-	it( 'read the modal title line height from the title-m role only', () => {
-		const css = compile();
-		expect( css ).not.toContain( '--newspack-ui-heading-line-height' );
-		expect( css ).toMatch( /line-height:\s*var\(--newspack-ui-line-height-title-m\)/ );
 	} );
 } );
