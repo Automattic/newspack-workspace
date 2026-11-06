@@ -216,8 +216,8 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 	const [ composeMode, setComposeMode ] = useState< PricingRuleRow[ 'compose_mode' ] >( rule?.compose_mode ?? 'min' );
 	// A saved rule keeps its stored application. A new Custom rule starts locked,
 	// the engine's own default: a rule that pins at purchase can only touch new
-	// sign-ups, so a toggle left alone cannot reprice existing subscribers.
-	// Retention is the one goal that seeds `current`.
+	// sign-ups, so a toggle left alone cannot reprice existing subscribers at
+	// renewal. Retention is the one goal that seeds `current`.
 	const [ application, setApplication ] = useState( () => {
 		if ( rule ) {
 			return rule.application === 'locked' ? 'locked' : 'current';
@@ -817,7 +817,7 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 							<ToggleControl
 								label={ __( 'Lock pricing at purchase', 'newspack-plugin' ) }
 								help={ __(
-									'On: subscribers keep the price they bought at — the rule only applies to new sign-ups. Off: the rule applies to every matching subscriber at each renewal.',
+									"On: the rule reaches readers at checkout (or, with the pending-cancellation condition, only at reactivation), and they keep its terms from that day — later edits, or trashing the rule, don't reach them. Percentage and amount-off discounts follow the product's current regular price. Off: the rule applies to every matching subscriber at each renewal.",
 									'newspack-plugin'
 								) }
 								checked={ 'locked' === application }

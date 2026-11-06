@@ -87,8 +87,12 @@ class Subscription_Policy_Resolver {
 	 * Produce the resolution payload by reading the live pricing-rule engine.
 	 *
 	 * Composes all active rules over the product's purchase (acquisition) cycle for
-	 * the effective price, and lists the rules that apply — the same engine the
-	 * storefront uses, so the table matches what buyers see.
+	 * the effective price, and lists the rules that apply, with the same engine the
+	 * storefront uses. It prices a new, logged-out buyer, so the Plans table shows
+	 * that buyer's price and rules. Rules gated on who the reader is are judged
+	 * against that buyer and may not match the way they would for a given reader:
+	 * a segment or win-back rule never matches, and the new-subscribers-only
+	 * condition always passes.
 	 * Without the engine (plugin inactive), an invalid product, or an
 	 * engine-excluded product (e.g. donations), it reports the base price and no
 	 * rules.
@@ -126,6 +130,7 @@ class Subscription_Policy_Resolver {
 		// Project the composed price across the subscription's cycles with the engine's
 		// public projector — the same walk the admin inspector uses, sharing its
 		// per-request memo. Segment 0 (the purchase cycle) is the headline effective price.
+		// No customer is passed; see the method docblock.
 		// Cost note: the memo dedupes repeat lookups of the SAME product within the
 		// request, not distinct products — a list request still walks the full cycle
 		// horizon once per product/variation row. Fine for an admin catalog read; a
@@ -133,9 +138,9 @@ class Subscription_Policy_Resolver {
 		$schedule  = \Automattic\WooCommerce\DynamicPricing\Schedule_Projector::project_for_product( $product );
 		$effective = ! empty( $schedule ) ? (float) $schedule[0]['amount'] : $base;
 
-		// Chips list the rules that actually apply: matching_rules() runs the condition
-		// gate (unlike a raw scope+window lookup), so segment/reader-gated rules that
-		// don't apply to this product no longer over-list as chips.
+		// Chips list the rules that match a context with no customer (see the method
+		// docblock): matching_rules() runs the condition gate, unlike a raw
+		// scope+window lookup.
 		$rules = [];
 		foreach ( $engine->matching_rules( self::context_for( $product, $base, 1 ) ) as $rule ) {
 			$rule_id = (string) $rule->id;
@@ -161,6 +166,8 @@ class Subscription_Policy_Resolver {
 
 	/**
 	 * Build the acquisition pricing context for a product at a given cycle.
+	 *
+	 * The context carries no customer (see get_resolution()).
 	 *
 	 * @param \WC_Product $product The product.
 	 * @param float       $base    The base recurring price.
