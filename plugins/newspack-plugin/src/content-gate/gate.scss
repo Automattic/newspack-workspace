@@ -135,7 +135,7 @@
 		left: 0;
 		height: 10em;
 		width: 100%;
-		background: linear-gradient(180deg, color-mix(in srgb, var(--newspack-ui-color-surface, #fff) 0%, transparent) 14%, var(--newspack-ui-color-surface, #fff) 76%);
+		background: linear-gradient(180deg, color-mix(in oklab, var(--newspack-ui-color-surface, #fff) 0%, transparent) 14%, var(--newspack-ui-color-surface, #fff) 76%);
 		z-index: 1;
 	}
 }

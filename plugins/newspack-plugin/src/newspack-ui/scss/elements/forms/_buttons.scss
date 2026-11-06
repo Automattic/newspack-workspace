@@ -229,7 +229,7 @@
 			--newspack-ui-button-bg-pressed: color-mix(in oklab, var(--newspack-ui-color-inverse-bg) var(--newspack-ui-color-mix-pressed), var(--newspack-ui-color-inverse-ink));
 			--newspack-ui-button-ink: var(--newspack-ui-color-inverse-ink);
 			--newspack-ui-button-focus: var(--newspack-ui-color-inverse-ink);
-			--newspack-ui-button-focus-halo-color: color-mix(in srgb, var(--newspack-ui-color-inverse-ink) var(--newspack-ui-focus-halo-mix), transparent);
+			--newspack-ui-button-focus-halo-color: color-mix(in oklab, var(--newspack-ui-color-inverse-ink) var(--newspack-ui-focus-halo-mix), transparent);
 		}
 
 		&--destructive {
