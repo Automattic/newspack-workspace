@@ -121,11 +121,38 @@ class Newspack_UI_Theme_Style {
 	private static $has_palette = null;
 
 	/**
-	 * Register the hooks that drop the memoized global styles.
+	 * Register the hooks that drop the memoized global styles and print the rule.
 	 */
 	public static function init() {
+		\add_action( 'wp_enqueue_scripts', [ __CLASS__, 'print_css' ], 20 );
+		\add_action( 'enqueue_block_assets', [ __CLASS__, 'print_css' ], 20 );
+		\add_action( 'admin_enqueue_scripts', [ __CLASS__, 'print_css' ], 20 );
 		\add_action( 'save_post_wp_global_styles', [ __CLASS__, 'reset_cache' ] );
 		\add_action( 'switch_theme', [ __CLASS__, 'reset_cache' ] );
+	}
+
+	/**
+	 * Attach the ':root' rule to the newspack-ui stylesheet.
+	 *
+	 * The guard reads the handle's own inline data rather than a static flag, because the editor collects
+	 * its iframe assets in a separate styles instance.
+	 */
+	public static function print_css(): void {
+		if ( ! self::is_active() || ! \wp_style_is( 'newspack-ui', 'enqueued' ) ) {
+			return;
+		}
+
+		$css = self::get_site_css();
+		if ( '' === $css ) {
+			return;
+		}
+
+		$inline = (array) \wp_styles()->get_data( 'newspack-ui', 'after' );
+		if ( in_array( $css, $inline, true ) ) {
+			return;
+		}
+
+		\wp_add_inline_style( 'newspack-ui', $css );
 	}
 
 	/**

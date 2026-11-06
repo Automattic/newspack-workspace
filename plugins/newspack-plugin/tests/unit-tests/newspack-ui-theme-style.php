@@ -2325,4 +2325,73 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 			'not a string'      => [ [ '#fff' ], 'color', '' ],
 		];
 	}
+
+	/**
+	 * The rule prints on the front end, in the editor canvas and in wp-admin.
+	 */
+	public function test_print_css_runs_on_front_editor_and_admin(): void {
+		foreach ( [ 'wp_enqueue_scripts', 'enqueue_block_assets', 'admin_enqueue_scripts' ] as $hook ) {
+			$this->assertSame( 20, has_action( $hook, [ Newspack_UI_Theme_Style::class, 'print_css' ] ), $hook );
+		}
+	}
+
+	/**
+	 * The rule is attached to the newspack-ui handle once.
+	 */
+	public function test_inline_css_attached_to_newspack_ui_handle_once(): void {
+		add_theme_support( Newspack_UI_Theme_Style::THEME_SUPPORT );
+		$this->set_user_styles( [ 'elements' => [ 'button' => [ 'border' => [ 'radius' => '12px' ] ] ] ] );
+		Newspack_UI::enqueue_assets();
+
+		Newspack_UI_Theme_Style::print_css();
+		Newspack_UI_Theme_Style::print_css();
+
+		$inline = implode( "\n", (array) wp_styles()->get_data( 'newspack-ui', 'after' ) );
+		$this->assertSame( 1, substr_count( $inline, ':root{' ) );
+		$this->assertStringContainsString( Newspack_UI_Theme_Style::get_site_css(), $inline );
+	}
+
+	/**
+	 * A fresh styles instance gets the rule even after another instance printed it.
+	 */
+	public function test_guard_keys_on_handle_data_not_a_static_flag(): void {
+		global $wp_styles;
+		$original = $wp_styles;
+
+		add_theme_support( Newspack_UI_Theme_Style::THEME_SUPPORT );
+		$this->set_user_styles( [ 'elements' => [ 'button' => [ 'border' => [ 'radius' => '12px' ] ] ] ] );
+		Newspack_UI::enqueue_assets();
+		Newspack_UI_Theme_Style::print_css();
+
+		$wp_styles = new WP_Styles(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		Newspack_UI::enqueue_assets();
+		Newspack_UI_Theme_Style::print_css();
+
+		$inline = implode( "\n", (array) wp_styles()->get_data( 'newspack-ui', 'after' ) );
+		$wp_styles = $original; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+
+		$this->assertSame( 1, substr_count( $inline, ':root{' ) );
+	}
+
+	/**
+	 * Nothing prints when the Theme style is off.
+	 */
+	public function test_noop_when_inactive(): void {
+		Newspack_UI::enqueue_assets();
+
+		Newspack_UI_Theme_Style::print_css();
+
+		$this->assertEmpty( wp_styles()->get_data( 'newspack-ui', 'after' ) );
+	}
+
+	/**
+	 * Nothing prints, and nothing is raised, when the handle is not enqueued.
+	 */
+	public function test_noop_when_handle_not_enqueued(): void {
+		add_theme_support( Newspack_UI_Theme_Style::THEME_SUPPORT );
+
+		Newspack_UI_Theme_Style::print_css();
+
+		$this->assertFalse( wp_style_is( 'newspack-ui', 'registered' ) );
+	}
 }
