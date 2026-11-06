@@ -30,6 +30,10 @@
 	--newspack-ui-radius-surface: var(--newspack-ui-border-radius-2xl);
 	--newspack-ui-radius-sheet: 16px;
 	--newspack-ui-radius-pill: 999px;
+	--newspack-ui-radius-segment-inner: max(0px, calc(var(--newspack-ui-radius-surface) - var(--newspack-ui-spacer-half)));
+	--newspack-ui-radius-tab-inner: max(0px, calc(var(--newspack-ui-radius-control) - var(--newspack-ui-spacer-half)));
+	--newspack-ui-radius-choice-inner: max(0px, calc(var(--newspack-ui-radius-surface) - var(--newspack-ui-spacer-3)));
+	--newspack-ui-radius-sheet-handle: var(--newspack-ui-radius-pill);
 
 	--newspack-ui-touch-target: 44px;
 	--newspack-ui-target-size: var(--newspack-ui-spacer-8);
