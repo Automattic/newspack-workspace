@@ -866,6 +866,18 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The button radius accessor returns the printed length, or nothing without one.
+	 */
+	public function test_button_radius_accessor(): void {
+		$this->set_user_styles( [ 'elements' => [ 'button' => [ 'border' => [ 'radius' => '24px' ] ] ] ] );
+		$this->assertSame( '24px', Newspack_UI_Theme_Style::get_button_radius() );
+
+		remove_all_filters( 'wp_theme_json_data_user' );
+		$this->set_user_styles( [ 'elements' => [ 'button' => [ 'border' => [ 'radius' => 'var(--x)' ] ] ] ] );
+		$this->assertSame( '', Newspack_UI_Theme_Style::get_button_radius() );
+	}
+
+	/**
 	 * A radius that is not a plain length prints no radius role.
 	 *
 	 * @dataProvider data_invalid_radius
