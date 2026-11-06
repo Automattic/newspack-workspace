@@ -17,7 +17,7 @@ export { default as ColorPicker } from './color-picker';
 export { default as ConfirmDialog } from './confirm-dialog';
 export { default as CustomSelectControl } from './custom-select-control';
 export { default as DataViews } from './dataviews';
-export { evenColumns, titleColumnWidth, withoutColumnStyles } from './dataviews/even-columns';
+export { columnShareWidth, evenColumns, titleColumnWidth, withoutColumnStyles } from './dataviews/even-columns';
 export { default as DebugBadge } from './debug-badge';
 export { default as Divider } from './divider';
 export { default as Drawer } from './drawer';

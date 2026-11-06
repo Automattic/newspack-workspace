@@ -1,7 +1,7 @@
 /**
  * Internal dependencies
  */
-import { evenColumns, titleColumnWidth, withoutColumnStyles } from './even-columns';
+import { columnShareWidth, evenColumns, titleColumnWidth, withoutColumnStyles } from './even-columns';
 
 describe( 'evenColumns', () => {
 	it( 'gives the title the same share as the other columns when they are few', () => {
@@ -39,6 +39,21 @@ describe( 'evenColumns', () => {
 	it( 'leaves a grid alone', () => {
 		const grid = { type: 'grid', titleField: 'name', fields: [ 'status' ] };
 		expect( evenColumns( grid ) ).toBe( grid );
+	} );
+} );
+
+describe( 'columnShareWidth', () => {
+	it( 'gives each other column its share of the container', () => {
+		expect( columnShareWidth( { type: 'table', titleField: 'name', fields: [ 'status', 'plan', 'date', 'author' ] } ) ).toBe( '17.5cqi' );
+	} );
+
+	it( 'splits the whole container when the title is hidden', () => {
+		expect( columnShareWidth( { type: 'table', titleField: 'name', showTitle: false, fields: [ 'status', 'plan' ] } ) ).toBe( '50cqi' );
+	} );
+
+	it( 'has no width without other columns, or for a grid', () => {
+		expect( columnShareWidth( { type: 'table', titleField: 'name', fields: [ 'name' ] } ) ).toBeUndefined();
+		expect( columnShareWidth( { type: 'grid', titleField: 'name', fields: [ 'status' ] } ) ).toBeUndefined();
 	} );
 } );
 

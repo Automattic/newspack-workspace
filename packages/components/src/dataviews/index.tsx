@@ -19,7 +19,7 @@ import classnames from 'classnames';
 /**
  * Internal dependencies
  */
-import { evenColumns, titleColumnWidth, withoutColumnStyles } from './even-columns';
+import { columnShareWidth, evenColumns, titleColumnWidth, withoutColumnStyles } from './even-columns';
 import './style.scss';
 
 type DataViewsProps< Item > = React.ComponentProps< typeof BaseDataViews< Item > > & {
@@ -62,7 +62,18 @@ function DataViews( { className, inlineFilters = false, fields, children, view, 
 		[ fields, inlineFilters ]
 	);
 	const evenView = useMemo( () => evenColumns( view ), [ view ] );
-	const titleWidth = titleColumnWidth( view );
+	const columnWidths = useMemo( () => {
+		const widths: Record< string, string > = {};
+		const titleWidth = titleColumnWidth( view );
+		const columnWidth = columnShareWidth( view );
+		if ( titleWidth ) {
+			widths[ '--newspack-dataviews-title-width' ] = titleWidth;
+		}
+		if ( columnWidth ) {
+			widths[ '--newspack-dataviews-column-width' ] = columnWidth;
+		}
+		return Object.keys( widths ).length ? ( widths as React.CSSProperties ) : undefined;
+	}, [ view ] );
 	const layout =
 		children ??
 		( inlineFilters ? (
@@ -70,10 +81,7 @@ function DataViews( { className, inlineFilters = false, fields, children, view, 
 		) : undefined );
 
 	return (
-		<div
-			className={ classnames( 'newspack-dataviews', className ) }
-			style={ titleWidth ? ( { '--newspack-dataviews-title-width': titleWidth } as React.CSSProperties ) : undefined }
-		>
+		<div className={ classnames( 'newspack-dataviews', className ) } style={ columnWidths }>
 			<BaseDataViews
 				{ ...props }
 				view={ evenView }
@@ -95,5 +103,5 @@ function DataViews( { className, inlineFilters = false, fields, children, view, 
 // implementation's concrete one.
 export default DataViews as < Item >( props: DataViewsProps< Item > ) => React.JSX.Element;
 
-export { evenColumns, titleColumnWidth, withoutColumnStyles } from './even-columns';
+export { columnShareWidth, evenColumns, titleColumnWidth, withoutColumnStyles } from './even-columns';
 export type { Action, Field, View } from '@wordpress/dataviews';
