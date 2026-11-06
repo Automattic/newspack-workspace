@@ -80,7 +80,7 @@
 				opacity: 0;
 				transition: transform 0.1s linear, opacity 0.1s linear;
 				border-radius: 6px;
-				background: np-colors.$neutral-000;
+				background: var(--newspack-ui-color-surface, np-colors.$neutral-000);
 				max-width: 600px;
 				max-height: 90%;
 				min-height: 300px;
@@ -142,7 +142,7 @@
 
 			&__spinner {
 				align-items: center;
-				background: np-colors.$neutral-000;
+				background: var(--newspack-ui-color-surface, np-colors.$neutral-000);
 				border-radius: 5px;
 				display: flex;
 				justify-content: center;
@@ -152,7 +152,7 @@
 				width: calc(100% - 24px);
 				> span {
 					animation: spin 1s infinite linear;
-					border: 2px solid np-colors.$neutral-000;
+					border: 2px solid var(--newspack-ui-color-surface, np-colors.$neutral-000);
 					border-top-color: np-colors.$neutral-600;
 					border-radius: 50%;
 					height: 25px;
