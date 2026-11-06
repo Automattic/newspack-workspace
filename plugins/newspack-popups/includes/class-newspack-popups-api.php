@@ -201,29 +201,36 @@ final class Newspack_Popups_API {
 				'newspack-popups/v1',
 				'/ab-tests',
 				[
-					'methods'             => \WP_REST_Server::CREATABLE,
-					'callback'            => [ __CLASS__, 'api_start_ab_test' ],
-					'permission_callback' => [ __CLASS__, 'start_ab_test_permission_callback' ],
-					'args'                => [
-						'prompt_id'     => [
-							'type'     => 'integer',
-							'required' => true,
-							'minimum'  => 1,
-						],
-						'name'          => [
-							'type'     => 'string',
-							'required' => true,
-						],
-						'goal'          => [
-							'type'     => 'string',
-							'required' => true,
-							'enum'     => Newspack_Popups_AB_Tests::VALID_GOALS,
-						],
-						'control_share' => [
-							'type'    => 'integer',
-							'default' => 50,
-							'minimum' => 20,
-							'maximum' => 80,
+					[
+						'methods'             => \WP_REST_Server::READABLE,
+						'callback'            => [ __CLASS__, 'api_list_ab_tests' ],
+						'permission_callback' => [ __CLASS__, 'permission_callback' ],
+					],
+					[
+						'methods'             => \WP_REST_Server::CREATABLE,
+						'callback'            => [ __CLASS__, 'api_start_ab_test' ],
+						'permission_callback' => [ __CLASS__, 'start_ab_test_permission_callback' ],
+						'args'                => [
+							'prompt_id'     => [
+								'type'     => 'integer',
+								'required' => true,
+								'minimum'  => 1,
+							],
+							'name'          => [
+								'type'     => 'string',
+								'required' => true,
+							],
+							'goal'          => [
+								'type'     => 'string',
+								'required' => true,
+								'enum'     => Newspack_Popups_AB_Tests::VALID_GOALS,
+							],
+							'control_share' => [
+								'type'    => 'integer',
+								'default' => 50,
+								'minimum' => 20,
+								'maximum' => 80,
+							],
 						],
 					],
 				]
@@ -345,7 +352,16 @@ final class Newspack_Popups_API {
 	}
 
 	/**
-	 * Stats for one A/B test, for the A/B Tests dashboard.
+	 * Every A/B test and what the Campaigns A/B Tests tab needs to show them.
+	 *
+	 * @return WP_REST_Response
+	 */
+	public static function api_list_ab_tests() {
+		return rest_ensure_response( Newspack_Popups_AB_Dashboard::get_list_data() );
+	}
+
+	/**
+	 * Stats for one A/B test, for the A/B Tests tab.
 	 *
 	 * @param WP_REST_Request $request Request.
 	 * @return WP_REST_Response|WP_Error

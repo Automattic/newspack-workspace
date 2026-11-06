@@ -784,6 +784,17 @@ final class Newspack_Popups {
 	}
 
 	/**
+	 * Whether A/B testing is enabled. newspack-plugin reads this to show the
+	 * A/B Tests tab in Campaigns, and its presence tells it this version has
+	 * the tab's list route.
+	 *
+	 * @return bool
+	 */
+	public static function is_ab_testing_enabled() {
+		return Newspack_Popups_AB_Tests::is_enabled();
+	}
+
+	/**
 	 * Whether the Contextual Prompts feature is enabled.
 	 *
 	 * @return bool

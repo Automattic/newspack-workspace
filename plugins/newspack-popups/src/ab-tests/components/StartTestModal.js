@@ -1,7 +1,11 @@
 /**
  * The Start A/B Test modal: names the test, picks its goal and split, and
- * creates version B as a draft copy of the prompt. Shared so the Campaigns
- * screens can open the same modal.
+ * creates version B as a draft copy of the prompt.
+ *
+ * newspack-plugin's A/B Tests tab carries its own copy
+ * (src/wizards/audience/views/campaigns/ab-tests/start-test-modal.js), since it
+ * cannot build from this plugin's source. Keep the request and the field rules
+ * in step with it.
  */
 
 /**
