@@ -52,10 +52,9 @@ const DEFAULT_VIEW = {
 	// subscription is reachable — see the owner field below for why the title
 	// cell can't carry that link.
 	fields: [ 'status', 'product', 'members', 'createdAt' ],
-	// Hide cancelled groups by default: they add noise with little value. Still
-	// reachable by ticking "Cancelled" in the Status filter (or clearing it).
-	// A group awaiting its first payment sits in `pending`, so it stays visible.
-	filters: [ { field: 'status', operator: 'isAny', value: [ 'active', 'pending', 'on-hold' ] } ],
+	// Hide cancelled groups by default: they add noise with little value.
+	// Clearing the Status filter brings them back.
+	filters: [ { field: 'status', operator: 'isNot', value: 'cancelled' } ],
 	layout: {},
 	titleField: 'owner',
 };
@@ -185,7 +184,7 @@ export default function GroupList() {
 				id: 'status',
 				label: __( 'Status', 'newspack-plugin' ),
 				elements: Object.entries( STATUS_LABELS ).map( ( [ value, label ] ) => ( { value, label } ) ),
-				filterBy: { operators: [ 'isAny' ] },
+				filterBy: { operators: [ 'isAny', 'isNot' ] },
 				getValue: ( { item } ) => item.status,
 				render: ( { item } ) => (
 					<StatusIndicator status={ STATUS_INDICATORS[ item.status ] }>{ STATUS_LABELS[ item.status ] }</StatusIndicator>
