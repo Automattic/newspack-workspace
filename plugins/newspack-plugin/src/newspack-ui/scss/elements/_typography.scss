@@ -29,7 +29,7 @@
 	h5,
 	h6 {
 		font-family: var(--newspack-ui-font-family-heading);
-		font-weight: var(--newspack-ui-font-weight-strong);
+		font-weight: var(--newspack-ui-heading-font-weight, var(--newspack-ui-font-weight-strong));
 		letter-spacing: unset;
 		text-transform: unset;
 	}

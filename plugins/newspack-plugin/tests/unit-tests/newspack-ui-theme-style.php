@@ -148,12 +148,62 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 		$properties = Newspack_UI_Theme_Style::get_properties( $resolved, $this->settings() );
 
 		if ( null === $brand ) {
-			$this->assertSame( [], $properties );
+			$this->assertSame( [], preg_grep( '/^--newspack-ui-color-/', array_keys( $properties ) ) );
 			return;
 		}
 		$this->assertSame( $brand, $properties['--newspack-ui-color-primary'] );
 		$this->assertSame( '#1e1e1e', $properties['--newspack-ui-color-base'] );
 		$this->assertSame( '#ffffff', $properties['--newspack-ui-color-contrast'] );
+	}
+
+	/**
+	 * Preset-referenced fonts and the button size print.
+	 */
+	public function test_preset_referenced_fonts_and_sizes_print(): void {
+		$resolved = Newspack_UI_Theme_Style::resolve_references(
+			[
+				'typography' => [ 'fontFamily' => 'var:preset|font-family|body' ],
+				'elements'   => [
+					'button' => [
+						'typography' => [
+							'fontFamily' => 'var:preset|font-family|body',
+							'fontSize'   => 'var:preset|font-size|medium',
+						],
+					],
+				],
+			],
+			$this->settings()
+		);
+		$css      = Newspack_UI_Theme_Style::get_css( $resolved, $this->settings(), [] );
+
+		$this->assertStringContainsString( '--newspack-ui-font-family-body:Georgia, serif;', $css );
+		$this->assertStringContainsString( '--newspack-ui-button-font-family:Georgia, serif;', $css );
+		$this->assertStringContainsString( '--newspack-ui-font-family-control:Georgia, serif;', $css );
+		$this->assertStringContainsString( '--newspack-ui-font-size-button:1.125rem;', $css );
+	}
+
+	/**
+	 * Font settings with the size presets the scale reads.
+	 *
+	 * @return array
+	 */
+	private function scale_settings(): array {
+		$sizes = [];
+		foreach ( [
+			'xx-small' => '0.75rem',
+			'x-small'  => '0.875rem',
+			'small'    => '1rem',
+			'medium'   => '1.25rem',
+			'x-large'  => '1.5rem',
+			'xx-large' => '2rem',
+		] as $slug => $size ) {
+			$sizes[] = [
+				'slug' => $slug,
+				'size' => $size,
+			];
+		}
+
+		return [ 'typography' => [ 'fontSizes' => [ 'theme' => $sizes ] ] ];
 	}
 
 	/**
@@ -860,6 +910,521 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 
 		$this->assertStringContainsString( '--newspack-ui-radius-button:12px;', Newspack_UI_Theme_Style::get_site_css() );
 		$this->assertStringContainsString( 'body {--newspack-ui-color-primary', $this->wrap_output() );
+	}
+
+	/**
+	 * The body, heading and control families come from the three places the theme sets them.
+	 */
+	public function test_fonts_map_to_heading_body_control(): void {
+		$css = Newspack_UI_Theme_Style::get_css(
+			[
+				'typography' => [ 'fontFamily' => 'Georgia, serif' ],
+				'elements'   => [
+					'heading' => [ 'typography' => [ 'fontFamily' => '"Playfair Display", serif' ] ],
+					'button'  => [ 'typography' => [ 'fontFamily' => 'Arial, sans-serif' ] ],
+				],
+			],
+			[],
+			[]
+		);
+
+		$this->assertStringContainsString( '--newspack-ui-font-family-body:Georgia, serif;', $css );
+		$this->assertStringContainsString( '--newspack-ui-font-family-heading:"Playfair Display", serif;', $css );
+		$this->assertStringContainsString( '--newspack-ui-font-family-control:Arial, sans-serif;', $css );
+		$this->assertStringContainsString( '--newspack-ui-button-font-family:Arial, sans-serif;', $css );
+	}
+
+	/**
+	 * Without a heading family nothing is printed, so the body family stands.
+	 */
+	public function test_heading_family_falls_back_to_body(): void {
+		$css = Newspack_UI_Theme_Style::get_css( [ 'typography' => [ 'fontFamily' => 'Georgia, serif' ] ], [], [] );
+
+		$this->assertStringContainsString( '--newspack-ui-font-family-body:', $css );
+		$this->assertStringNotContainsString( '--newspack-ui-font-family-heading', $css );
+	}
+
+	/**
+	 * The heading weight and line height print as their own tokens.
+	 */
+	public function test_heading_weight_and_line_height_print(): void {
+		$css = Newspack_UI_Theme_Style::get_css(
+			[
+				'elements' => [
+					'heading' => [
+						'typography' => [
+							'fontWeight' => '800',
+							'lineHeight' => 1.15,
+						],
+					],
+				],
+			],
+			[],
+			[]
+		);
+
+		$this->assertStringContainsString( '--newspack-ui-heading-font-weight:800;', $css );
+		$this->assertStringContainsString( '--newspack-ui-heading-line-height:1.15;', $css );
+	}
+
+	/**
+	 * The control family and the field message tokens carry no transform or spacing.
+	 */
+	public function test_control_takes_family_only(): void {
+		$css = Newspack_UI_Theme_Style::get_css(
+			[
+				'elements' => [
+					'button' => [
+						'typography' => [
+							'fontFamily'    => 'Arial, sans-serif',
+							'textTransform' => 'uppercase',
+							'letterSpacing' => '0.1em',
+						],
+					],
+				],
+			],
+			[],
+			[]
+		);
+
+		$this->assertStringContainsString( '--newspack-ui-button-text-transform:uppercase;', $css );
+		$this->assertStringContainsString( '--newspack-ui-button-letter-spacing:0.1em;', $css );
+		foreach ( [ '--newspack-ui-font-family-control', '--newspack-ui-font-family-fine' ] as $name ) {
+			$this->assertDoesNotMatchRegularExpression( '/' . preg_quote( $name, '/' ) . ':[^;]*(uppercase|0\.1em)/', $css );
+		}
+		$this->assertStringNotContainsString( '--newspack-ui-font-family-fine', $css );
+	}
+
+	/**
+	 * The button typography prints in full and the label wraps.
+	 */
+	public function test_button_typography_full_and_wraps(): void {
+		$css = Newspack_UI_Theme_Style::get_css(
+			[
+				'elements' => [
+					'button' => [
+						'typography' => [
+							'fontSize'      => '1.125rem',
+							'fontWeight'    => '700',
+							'letterSpacing' => '0.05em',
+							'textTransform' => 'uppercase',
+							'lineHeight'    => '1.2',
+						],
+					],
+				],
+			],
+			[],
+			[]
+		);
+
+		$this->assertStringContainsString( '--newspack-ui-font-size-button:1.125rem;', $css );
+		$this->assertStringContainsString( '--newspack-ui-button-font-weight:700;', $css );
+		$this->assertStringContainsString( '--newspack-ui-button-letter-spacing:0.05em;', $css );
+		$this->assertStringContainsString( '--newspack-ui-button-text-transform:uppercase;', $css );
+		$this->assertStringContainsString( '--newspack-ui-line-height-button:1.2;', $css );
+		$this->assertStringContainsString( '--newspack-ui-button-white-space:normal;', $css );
+		$this->assertSame( '', Newspack_UI_Theme_Style::get_css( [], [], [] ) );
+	}
+
+	/**
+	 * The Button block's colors and typography win over the element's.
+	 */
+	public function test_block_button_typography_and_text_win(): void {
+		$css = Newspack_UI_Theme_Style::get_css(
+			[
+				'color'    => [
+					'background' => '#ffffff',
+					'text'       => '#111111',
+				],
+				'elements' => [
+					'button' => [
+						'color'      => [
+							'background' => '#003da5',
+							'text'       => '#ffffff',
+						],
+						'typography' => [ 'fontWeight' => '400' ],
+					],
+				],
+				'blocks'   => [
+					'core/button' => [
+						'color'      => [ 'background' => '#c93a00' ],
+						'typography' => [ 'fontWeight' => '700' ],
+						':hover'     => [ 'color' => [ 'text' => '#fff4e0' ] ],
+					],
+				],
+			],
+			[],
+			[]
+		);
+
+		$this->assertStringContainsString( '--newspack-ui-color-button-bg:#c93a00;', $css );
+		$this->assertStringContainsString( '--newspack-ui-color-button-text:#ffffff;', $css );
+		$this->assertStringContainsString( '--newspack-ui-button-font-weight:700;', $css );
+		$this->assertStringContainsString( '--newspack-ui-color-button-text-hover:#fff4e0;', $css );
+	}
+
+	/**
+	 * The block button subtrees survive the read-path filter.
+	 */
+	public function test_block_button_colors_and_typography_are_read(): void {
+		$this->set_user_styles(
+			[
+				'blocks' => [
+					'core/button' => [
+						'color'      => [ 'background' => '#c93a00' ],
+						'typography' => [ 'fontWeight' => '700' ],
+						':hover'     => [ 'color' => [ 'background' => '#112233' ] ],
+						':active'    => [ 'color' => [ 'background' => '#223344' ] ],
+					],
+				],
+			]
+		);
+		$button = Newspack_UI_Theme_Style::get_global_styles()['blocks']['core/button'];
+
+		$this->assertSame( '#c93a00', $button['color']['background'] );
+		$this->assertSame( '700', $button['typography']['fontWeight'] );
+		$this->assertSame( '#112233', $button[':hover']['color']['background'] );
+		$this->assertSame( '#223344', $button[':active']['color']['background'] );
+	}
+
+	/**
+	 * The scale maps by slug and a missing slug prints nothing.
+	 */
+	public function test_scale_maps_by_slug_with_fallback(): void {
+		$settings = $this->scale_settings();
+		$css      = Newspack_UI_Theme_Style::get_css( [], $settings, [] );
+
+		$this->assertStringContainsString( '--newspack-ui-font-size-caption:var(--wp--preset--font-size--xx-small, 12px);', $css );
+		$this->assertStringContainsString( '--newspack-ui-font-size-small:var(--wp--preset--font-size--x-small, 14px);', $css );
+		$this->assertStringContainsString( '--newspack-ui-font-size-body:var(--wp--preset--font-size--small, 16px);', $css );
+		$this->assertStringContainsString( '--newspack-ui-font-size-title-m:var(--wp--preset--font-size--medium, 20px);', $css );
+		$this->assertStringContainsString( '--newspack-ui-font-size-title-l:var(--wp--preset--font-size--x-large, 24px);', $css );
+		$this->assertStringContainsString( '--newspack-ui-font-size-display:var(--wp--preset--font-size--xx-large, 32px);', $css );
+
+		array_shift( $settings['typography']['fontSizes']['theme'] );
+		$css = Newspack_UI_Theme_Style::get_css( [], $settings, [] );
+		$this->assertStringNotContainsString( '--newspack-ui-font-size-caption:', $css );
+		$this->assertStringContainsString( '--newspack-ui-font-size-small:', $css );
+	}
+
+	/**
+	 * The caption element drives the fine print.
+	 */
+	public function test_caption_drives_fine_print(): void {
+		$css = Newspack_UI_Theme_Style::get_css(
+			[
+				'elements' => [
+					'caption' => [
+						'typography' => [
+							'fontSize'   => '0.8125rem',
+							'lineHeight' => '1.4',
+						],
+					],
+				],
+			],
+			$this->scale_settings(),
+			[]
+		);
+
+		$this->assertStringContainsString( '--newspack-ui-font-size-fine:0.8125rem;', $css );
+		$this->assertStringContainsString( '--newspack-ui-line-height-fine:1.4;', $css );
+	}
+
+	/**
+	 * Without a caption the fine print takes the x-small size.
+	 */
+	public function test_missing_caption_falls_back_to_x_small(): void {
+		$css = Newspack_UI_Theme_Style::get_css( [], $this->scale_settings(), [] );
+		$this->assertStringContainsString( '--newspack-ui-font-size-fine:var(--wp--preset--font-size--x-small, 14px);', $css );
+
+		$settings = $this->scale_settings();
+		unset( $settings['typography']['fontSizes']['theme'][1] );
+		$settings['typography']['fontSizes']['theme'] = array_values( $settings['typography']['fontSizes']['theme'] );
+		$this->assertStringNotContainsString( '--newspack-ui-font-size-fine', Newspack_UI_Theme_Style::get_css( [], $settings, [] ) );
+	}
+
+	/**
+	 * The caption family and a plain-hex color print for the fine print; field messages keep the control family.
+	 */
+	public function test_caption_font_family_and_colour_drive_fine_print(): void {
+		$css = Newspack_UI_Theme_Style::get_css(
+			[
+				'color'    => [
+					'background' => '#ffffff',
+					'text'       => '#111111',
+				],
+				'elements' => [
+					'caption' => [
+						'typography' => [ 'fontFamily' => 'Georgia, serif' ],
+						'color'      => [ 'text' => '#555555' ],
+					],
+					'button'  => [ 'typography' => [ 'fontFamily' => 'Arial, sans-serif' ] ],
+				],
+			],
+			[],
+			[]
+		);
+
+		$this->assertStringContainsString( '--newspack-ui-font-family-fine:Georgia, serif;', $css );
+		$this->assertStringContainsString( '--newspack-ui-color-text-fine:#555555;', $css );
+		$this->assertStringContainsString( '--newspack-ui-font-family-control:Arial, sans-serif;', $css );
+	}
+
+	/**
+	 * Without a plain-hex caption color the solved muted color stands.
+	 */
+	public function test_caption_colour_absent_keeps_solved_muted(): void {
+		foreach ( [ null, 'var(--wp--preset--color--contrast)', 'rgba(0,0,0,0.5)' ] as $color ) {
+			$caption = null === $color ? [] : [ 'color' => [ 'text' => $color ] ];
+			$css     = Newspack_UI_Theme_Style::get_css(
+				[
+					'color'    => [
+						'background' => '#ffffff',
+						'text'       => '#111111',
+					],
+					'elements' => [ 'caption' => $caption ],
+				],
+				[],
+				[]
+			);
+			$this->assertStringContainsString( '--newspack-ui-color-text-muted:', $css );
+			$this->assertStringNotContainsString( '--newspack-ui-color-text-fine', $css );
+		}
+	}
+
+	/**
+	 * A hostile family never prints.
+	 */
+	public function test_hostile_font_family_rejected(): void {
+		$css = Newspack_UI_Theme_Style::get_css(
+			[
+				'typography' => [ 'fontFamily' => 'Georgia; } body { display: none' ],
+				'elements'   => [
+					'heading' => [ 'typography' => [ 'fontFamily' => 'x") ; y' ] ],
+					'button'  => [ 'typography' => [ 'fontFamily' => 'url(https://e.com/f)' ] ],
+				],
+			],
+			[],
+			[]
+		);
+
+		$this->assertSame( '', $css );
+	}
+
+	/**
+	 * The states are computed from the fill, whatever the theme's own hover strings say.
+	 */
+	public function test_hover_computed_from_user_fill(): void {
+		$styles   = [
+			'color'    => [
+				'background' => '#1e1e1e',
+				'text'       => '#ffffff',
+			],
+			'elements' => [
+				'button' => [
+					'color'  => [
+						'background' => '#c93a00',
+						'text'       => '#ffffff',
+					],
+					':hover' => [ 'color' => [ 'background' => 'color-mix(in oklab, #ffc857 85%, #1e1e1e)' ] ],
+				],
+			],
+		];
+		$expected = Newspack_UI_Palette::get_properties(
+			[
+				'base'       => '#1e1e1e',
+				'contrast'   => '#ffffff',
+				'brand'      => '#c93a00',
+				'brand_text' => '#ffffff',
+			]
+		);
+		$css      = Newspack_UI_Theme_Style::get_css( $styles, [], [] );
+
+		$this->assertStringContainsString( '--newspack-ui-color-btn-hover:' . $expected['--newspack-ui-color-btn-hover'] . ';', $css );
+		$this->assertStringContainsString( '--newspack-ui-color-button-bg-hover:' . $expected['--newspack-ui-color-button-bg-hover'] . ';', $css );
+		$this->assertStringContainsString( '--newspack-ui-color-btn-pressed:' . $expected['--newspack-ui-color-btn-pressed'] . ';', $css );
+		$this->assertStringNotContainsString( 'color-mix', $css );
+	}
+
+	/**
+	 * The theme's hover and pressed shares drive the computed states.
+	 */
+	public function test_state_shares_come_from_custom_settings(): void {
+		$styles   = [
+			'color'    => [
+				'background' => '#ffffff',
+				'text'       => '#111111',
+			],
+			'elements' => [
+				'button' => [
+					'color' => [
+						'background' => '#003da5',
+						'text'       => '#ffffff',
+					],
+				],
+			],
+		];
+		$expected = Newspack_UI_Palette::get_properties(
+			[
+				'base'          => '#ffffff',
+				'contrast'      => '#111111',
+				'brand'         => '#003da5',
+				'brand_text'    => '#ffffff',
+				'hover_share'   => 0.6,
+				'pressed_share' => 0.4,
+			]
+		);
+		$css      = Newspack_UI_Theme_Style::get_css(
+			$styles,
+			[
+				'custom' => [
+					'state' => [
+						'hover'   => '60%',
+						'pressed' => '40%',
+					],
+				],
+			],
+			[] 
+		);
+
+		$this->assertStringContainsString( '--newspack-ui-color-btn-hover:' . $expected['--newspack-ui-color-btn-hover'] . ';', $css );
+		$this->assertStringContainsString( '--newspack-ui-color-btn-pressed:' . $expected['--newspack-ui-color-btn-pressed'] . ';', $css );
+
+		$default = Newspack_UI_Theme_Style::get_css(
+			$styles,
+			[
+				'custom' => [
+					'state' => [
+						'hover'   => '#abcdef',
+						'pressed' => 'lots',
+					],
+				],
+			],
+			[] 
+		);
+		$this->assertStringNotContainsString( $expected['--newspack-ui-color-btn-hover'], $default );
+	}
+
+	/**
+	 * A state the publisher set wins, and the guard leaves it out of its checks.
+	 */
+	public function test_user_state_wins_and_is_skipped_by_guard(): void {
+		$styles = [
+			'color'    => [
+				'background' => '#111111',
+				'text'       => '#ffffff',
+			],
+			'elements' => [
+				'button' => [
+					'color' => [
+						'background' => '#ff9900',
+						'text'       => '#000000',
+					],
+				],
+			],
+		];
+		$base   = [
+			'base'       => '#111111',
+			'contrast'   => '#ffffff',
+			'brand'      => '#ff9900',
+			'brand_text' => '#000000',
+		];
+		$plain  = Newspack_UI_Palette::get_properties( $base );
+		$user   = [ 'elements' => [ 'button' => [ ':active' => [ 'color' => [ 'background' => 'var:preset|color|brand' ] ] ] ] ];
+		$skip   = Newspack_UI_Palette::get_properties( $base + [ 'skip_states' => [ 'pressed' ] ] );
+		$css    = Newspack_UI_Theme_Style::get_css( $styles, $this->settings(), $user );
+
+		$this->assertStringContainsString( '--newspack-ui-color-btn-pressed:#003da5;', $css );
+		$this->assertStringContainsString( '--newspack-ui-color-btn-hover:' . $skip['--newspack-ui-color-btn-hover'] . ';', $css );
+		$this->assertNotSame( $plain['--newspack-ui-color-btn-hover'], $skip['--newspack-ui-color-btn-hover'] );
+
+		$user = [ 'elements' => [ 'button' => [ ':hover' => [ 'color' => [ 'background' => '#112233' ] ] ] ] ];
+		$css  = Newspack_UI_Theme_Style::get_css( $styles, $this->settings(), $user );
+		$this->assertStringContainsString( '--newspack-ui-color-btn-hover:#112233;', $css );
+		$this->assertStringContainsString( '--newspack-ui-color-button-bg-hover:#112233;', $css );
+
+		$user    = [ 'elements' => [ 'button' => [ ':hover' => [ 'color' => [ 'background' => 'color-mix(in oklab, red, blue)' ] ] ] ] ];
+		$ignored = Newspack_UI_Theme_Style::get_css( $styles, $this->settings(), $user );
+		$this->assertStringContainsString( '--newspack-ui-color-btn-hover:' . $plain['--newspack-ui-color-btn-hover'] . ';', $ignored );
+	}
+
+	/**
+	 * A plain hex hover text prints; anything else leaves the default.
+	 */
+	public function test_hover_text_plain_hex_only(): void {
+		$styles = [
+			'color'    => [
+				'background' => '#ffffff',
+				'text'       => '#111111',
+			],
+			'elements' => [
+				'button' => [
+					'color'  => [
+						'background' => '#003da5',
+						'text'       => '#ffffff',
+					],
+					':hover' => [ 'color' => [ 'text' => '#fff4e0' ] ],
+				],
+			],
+		];
+		$this->assertStringContainsString( '--newspack-ui-color-button-text-hover:#fff4e0;', Newspack_UI_Theme_Style::get_css( $styles, [], [] ) );
+
+		$styles['elements']['button'][':hover']['color']['text'] = 'var(--wp--preset--color--x)';
+		$this->assertStringNotContainsString( '--newspack-ui-color-button-text-hover', Newspack_UI_Theme_Style::get_css( $styles, [], [] ) );
+	}
+
+	/**
+	 * Link color, hover color and hover decoration print.
+	 */
+	public function test_links_print(): void {
+		$css = Newspack_UI_Theme_Style::get_css(
+			[
+				'elements' => [
+					'link' => [
+						'color'  => [ 'text' => '#003da5' ],
+						':hover' => [
+							'color'      => [ 'text' => '#001f55' ],
+							'typography' => [ 'textDecoration' => 'none' ],
+						],
+					],
+				],
+			],
+			[],
+			[]
+		);
+
+		$this->assertStringContainsString( '--newspack-ui-color-link:#003da5;', $css );
+		$this->assertStringContainsString( '--newspack-ui-color-link-hover:#001f55;', $css );
+		$this->assertStringContainsString( '--newspack-ui-link-hover-decoration:none;', $css );
+
+		$bad = Newspack_UI_Theme_Style::get_css( [ 'elements' => [ 'link' => [ ':hover' => [ 'typography' => [ 'textDecoration' => 'underline; color: red' ] ] ] ] ], [], [] );
+		$this->assertStringNotContainsString( 'decoration', $bad );
+	}
+
+	/**
+	 * Link colors alone do not stand in for the palette.
+	 */
+	public function test_link_color_alone_is_not_a_palette(): void {
+		add_theme_support( Newspack_UI_Theme_Style::THEME_SUPPORT );
+		$this->set_user_styles( [ 'elements' => [ 'link' => [ 'color' => [ 'text' => '#003da5' ] ] ] ] );
+
+		$this->assertStringContainsString( '--newspack-ui-color-link:#003da5;', Newspack_UI_Theme_Style::get_site_css() );
+		$this->assertFalse( Newspack_UI_Theme_Style::has_color_properties() );
+	}
+
+	/**
+	 * The new value types.
+	 */
+	public function test_new_value_types(): void {
+		$this->assertSame( 'var(--wp--preset--font-size--x, 12px)', Newspack_UI_Theme_Style::sanitize_value( 'var(--wp--preset--font-size--x, 12px)', 'length' ) );
+		$this->assertSame( '', Newspack_UI_Theme_Style::sanitize_value( 'var(--wp--preset--font-size--x, red)', 'length' ) );
+		$this->assertSame( 'uppercase', Newspack_UI_Theme_Style::sanitize_value( 'uppercase', 'text-transform' ) );
+		$this->assertSame( '', Newspack_UI_Theme_Style::sanitize_value( 'upper', 'text-transform' ) );
+		$this->assertSame( 'normal', Newspack_UI_Theme_Style::sanitize_value( 'normal', 'white-space' ) );
+		$this->assertSame( '', Newspack_UI_Theme_Style::sanitize_value( 'nowrap; x', 'white-space' ) );
+		$this->assertSame( 'underline', Newspack_UI_Theme_Style::sanitize_value( 'underline', 'text-decoration' ) );
+		$this->assertSame( 'underline overline', Newspack_UI_Theme_Style::sanitize_value( 'underline overline', 'text-decoration' ) );
+		$this->assertSame( '', Newspack_UI_Theme_Style::sanitize_value( 'underline dotted', 'text-decoration' ) );
 	}
 
 	/**

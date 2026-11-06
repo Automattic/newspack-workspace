@@ -5,8 +5,8 @@
 	--newspack-ui-button-padding-block: var(--newspack-ui-spacer-2);
 	--newspack-ui-button-padding-inline: var(--newspack-ui-spacer-4);
 	--newspack-ui-button-gap: var(--newspack-ui-spacer-1);
-	--newspack-ui-button-font-size: var(--newspack-ui-font-size-body);
-	--newspack-ui-button-line-height: var(--newspack-ui-line-height-body);
+	--newspack-ui-button-font-size: var(--newspack-ui-font-size-button, var(--newspack-ui-font-size-body));
+	--newspack-ui-button-line-height: var(--newspack-ui-line-height-button, var(--newspack-ui-line-height-body));
 }
 
 .newspack-ui {
@@ -347,7 +347,7 @@
 		--newspack-ui-link-hit-block: var(--newspack-ui-spacer-half);
 		--newspack-ui-link-hit-inline: calc(var(--newspack-ui-spacer-1) * 0.75);
 
-		color: var(--newspack-ui-color-text);
+		color: var(--newspack-ui-color-link, var(--newspack-ui-color-text));
 		cursor: pointer;
 		font-family: var(--newspack-ui-font-family-body);
 		font-size: var(--newspack-ui-font-size-small);
@@ -356,7 +356,7 @@
 		border-radius: calc(var(--newspack-ui-radius-control) * 0.5);
 		position: relative;
 		text-decoration: underline;
-		text-decoration-color: color-mix(in oklab, var(--newspack-ui-color-text) 50%, var(--newspack-ui-color-surface));
+		text-decoration-color: color-mix(in oklab, var(--newspack-ui-color-link, var(--newspack-ui-color-text)) 50%, var(--newspack-ui-color-surface));
 		text-underline-offset: 3px;
 		transition:
 			text-decoration-color var(--newspack-ui-duration-color) ease,
@@ -376,8 +376,9 @@
 
 		@media ( hover: hover ) and ( pointer: fine ) {
 			&:hover {
-				color: var(--newspack-ui-color-text);
-				text-decoration-color: var(--newspack-ui-color-text);
+				color: var(--newspack-ui-color-link-hover, var(--newspack-ui-color-link, var(--newspack-ui-color-text)));
+				text-decoration-color: var(--newspack-ui-color-link-hover, var(--newspack-ui-color-link, var(--newspack-ui-color-text)));
+				text-decoration-line: var(--newspack-ui-link-hover-decoration, underline);
 			}
 		}
 

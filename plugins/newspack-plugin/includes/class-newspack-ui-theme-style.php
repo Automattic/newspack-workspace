@@ -35,8 +35,31 @@ class Newspack_UI_Theme_Style {
 	 * Custom property prefix to the value type its values are checked as. A property under no prefix is never printed.
 	 */
 	const PROPERTY_TYPES = [
-		'--newspack-ui-color-'  => 'color',
-		'--newspack-ui-radius-' => 'length',
+		'--newspack-ui-color-'                => 'color',
+		'--newspack-ui-radius-'               => 'length',
+		'--newspack-ui-font-family-'          => 'font-family',
+		'--newspack-ui-font-size-'            => 'length',
+		'--newspack-ui-line-height-'          => 'line-height',
+		'--newspack-ui-button-font-family'    => 'font-family',
+		'--newspack-ui-button-font-weight'    => 'weight',
+		'--newspack-ui-button-letter-spacing' => 'letter-spacing',
+		'--newspack-ui-button-text-transform' => 'text-transform',
+		'--newspack-ui-button-white-space'    => 'white-space',
+		'--newspack-ui-heading-font-weight'   => 'weight',
+		'--newspack-ui-heading-line-height'   => 'line-height',
+		'--newspack-ui-link-hover-decoration' => 'text-decoration',
+	];
+
+	/**
+	 * Type scale tokens to the font size preset slug and the Neutral size they fall back to.
+	 */
+	const SIZE_SCALE = [
+		'caption' => [ 'xx-small', '12px' ],
+		'small'   => [ 'x-small', '14px' ],
+		'body'    => [ 'small', '16px' ],
+		'title-m' => [ 'medium', '20px' ],
+		'title-l' => [ 'x-large', '24px' ],
+		'display' => [ 'xx-large', '32px' ],
 	];
 
 	/**
@@ -46,6 +69,10 @@ class Newspack_UI_Theme_Style {
 		[ 'color' ],
 		[ 'elements', 'button' ],
 		[ 'blocks', 'core/button', 'border' ],
+		[ 'blocks', 'core/button', 'color' ],
+		[ 'blocks', 'core/button', 'typography' ],
+		[ 'blocks', 'core/button', ':hover' ],
+		[ 'blocks', 'core/button', ':active' ],
 		[ 'elements', 'link' ],
 		[ 'elements', 'caption' ],
 		[ 'elements', 'heading' ],
@@ -162,7 +189,7 @@ class Newspack_UI_Theme_Style {
 	 * @return bool
 	 */
 	public static function has_color_properties(): bool {
-		return false !== strpos( self::get_site_css(), '--newspack-ui-color-' );
+		return false !== strpos( self::get_site_css(), '--newspack-ui-color-focus-halo:' );
 	}
 
 	/**
@@ -175,9 +202,8 @@ class Newspack_UI_Theme_Style {
 	 */
 	public static function get_palette( array $global_styles, ?array $settings = null ): array {
 		$settings = $settings ?? self::get_settings();
-		$button   = $global_styles['elements']['button']['color'] ?? [];
 
-		$brand = self::plain_hex( $button['background'] ?? '' );
+		$brand = self::plain_hex( self::button_value( $global_styles, [ 'color', 'background' ] ) );
 		if ( '' === $brand ) {
 			$accent = self::flatten_presets( self::dig( $settings, [ 'color', 'palette' ] ) )['accent']['color'] ?? '';
 			$brand  = self::plain_hex( $accent );
@@ -187,7 +213,7 @@ class Newspack_UI_Theme_Style {
 			'base'       => is_string( $global_styles['color']['background'] ?? null ) ? $global_styles['color']['background'] : '',
 			'contrast'   => is_string( $global_styles['color']['text'] ?? null ) ? $global_styles['color']['text'] : '',
 			'brand'      => $brand,
-			'brand_text' => self::plain_hex( $button['text'] ?? '' ),
+			'brand_text' => self::plain_hex( self::button_value( $global_styles, [ 'color', 'text' ] ) ),
 		];
 	}
 
@@ -196,14 +222,190 @@ class Newspack_UI_Theme_Style {
 	 *
 	 * @param array      $global_styles Resolved global styles.
 	 * @param array|null $settings      Merged global settings, or null for the site's own.
+	 * @param array|null $user_styles   The user origin's styles, or null for the site's own.
 	 *
 	 * @return array<string,string>
 	 */
-	public static function get_properties( array $global_styles, ?array $settings = null ): array {
+	public static function get_properties( array $global_styles, ?array $settings = null, ?array $user_styles = null ): array {
+		$settings = $settings ?? self::get_settings();
+
 		return array_merge(
-			Newspack_UI_Palette::get_properties( self::get_palette( $global_styles, $settings ) ),
-			self::get_radius_properties( $global_styles )
+			self::get_color_properties( $global_styles, $settings, $user_styles ),
+			self::get_radius_properties( $global_styles ),
+			self::get_typography_properties( $global_styles, $settings )
 		);
+	}
+
+	/**
+	 * The palette roles, the button state overrides, the link colors and the fine print color.
+	 *
+	 * @param array      $global_styles Resolved global styles.
+	 * @param array      $settings      Merged global settings.
+	 * @param array|null $user_styles   The user origin's styles, or null for the site's own.
+	 *
+	 * @return array<string,string>
+	 */
+	private static function get_color_properties( array $global_styles, array $settings, ?array $user_styles ): array {
+		$palette = self::get_palette( $global_styles, $settings );
+		$states  = self::get_user_states( $user_styles, $settings );
+		$shares  = is_array( $settings['custom']['state'] ?? null ) ? $settings['custom']['state'] : [];
+		foreach ( [ 'hover', 'pressed' ] as $state ) {
+			if ( is_string( $shares[ $state ] ?? null ) && 1 === preg_match( '/^\s*(\d+(?:\.\d+)?)\s*%\s*$/', $shares[ $state ], $match ) && (float) $match[1] <= 100 ) {
+				$palette[ $state . '_share' ] = (float) $match[1] / 100;
+			}
+		}
+		$palette['skip_states'] = array_keys( $states );
+
+		$properties = Newspack_UI_Palette::get_properties( $palette );
+		if ( isset( $properties['--newspack-ui-color-button-bg'] ) ) {
+			if ( isset( $states['hover'] ) ) {
+				$properties['--newspack-ui-color-button-bg-hover'] = $states['hover'];
+				$properties['--newspack-ui-color-btn-hover']       = $states['hover'];
+			}
+			if ( isset( $states['pressed'] ) ) {
+				$properties['--newspack-ui-color-btn-pressed'] = $states['pressed'];
+			}
+		}
+
+		$hover_text = self::plain_hex( self::button_value( $global_styles, [ ':hover', 'color', 'text' ] ) );
+		if ( '' !== $hover_text ) {
+			$properties['--newspack-ui-color-button-text-hover'] = $hover_text;
+		}
+
+		$link = $global_styles['elements']['link'] ?? [];
+		self::put( $properties, '--newspack-ui-color-link', $link['color']['text'] ?? null );
+		self::put( $properties, '--newspack-ui-color-link-hover', $link[':hover']['color']['text'] ?? null );
+		self::put( $properties, '--newspack-ui-link-hover-decoration', $link[':hover']['typography']['textDecoration'] ?? null );
+
+		$fine = self::plain_hex( $global_styles['elements']['caption']['color']['text'] ?? '' );
+		if ( '' !== $fine ) {
+			$properties['--newspack-ui-color-text-fine'] = $fine;
+		}
+
+		return $properties;
+	}
+
+	/**
+	 * The hover and pressed fills the publisher set themselves, as plain hex colors.
+	 *
+	 * Only the user origin counts: the theme's own states are mixes of its fill, and the palette computes those.
+	 *
+	 * @param array|null $user_styles The user origin's styles, or null for the site's own.
+	 * @param array      $settings    Merged global settings.
+	 *
+	 * @return array<string,string> 'hover' and 'pressed' to a hex color, for the states that are set.
+	 */
+	private static function get_user_states( ?array $user_styles, array $settings ): array {
+		if ( null === $user_styles ) {
+			$user_styles = [];
+			if ( class_exists( '\WP_Theme_JSON_Resolver' ) ) {
+				$raw         = \WP_Theme_JSON_Resolver::get_user_data()->get_raw_data();
+				$user_styles = is_array( $raw['styles'] ?? null ) ? $raw['styles'] : [];
+			}
+		}
+
+		$found = [];
+		foreach ( [
+			'hover'   => ':hover',
+			'pressed' => ':active',
+		] as $state => $selector ) {
+			$found[ $state ] = self::button_value( $user_styles, [ $selector, 'color', 'background' ] );
+		}
+		$found = self::resolve_references( $found, $settings );
+
+		$states = [];
+		foreach ( $found as $state => $value ) {
+			$hex = self::plain_hex( $value );
+			if ( '' !== $hex ) {
+				$states[ $state ] = $hex;
+			}
+		}
+
+		return $states;
+	}
+
+	/**
+	 * The fonts, the type scale, the button typography and the fine print.
+	 *
+	 * @param array $global_styles Resolved global styles.
+	 * @param array $settings      Merged global settings.
+	 *
+	 * @return array<string,string>
+	 */
+	private static function get_typography_properties( array $global_styles, array $settings ): array {
+		$properties = [];
+		$heading    = $global_styles['elements']['heading']['typography'] ?? [];
+		$caption    = $global_styles['elements']['caption']['typography'] ?? [];
+		$sizes      = self::flatten_presets( self::dig( $settings, [ 'typography', 'fontSizes' ] ) );
+
+		self::put( $properties, '--newspack-ui-font-family-body', $global_styles['typography']['fontFamily'] ?? null );
+		self::put( $properties, '--newspack-ui-font-family-heading', $heading['fontFamily'] ?? null );
+		self::put( $properties, '--newspack-ui-heading-font-weight', $heading['fontWeight'] ?? null );
+		self::put( $properties, '--newspack-ui-heading-line-height', $heading['lineHeight'] ?? null );
+
+		$family = self::button_value( $global_styles, [ 'typography', 'fontFamily' ] );
+		self::put( $properties, '--newspack-ui-font-family-control', $family );
+		self::put( $properties, '--newspack-ui-button-font-family', $family );
+		self::put( $properties, '--newspack-ui-font-size-button', self::button_value( $global_styles, [ 'typography', 'fontSize' ] ) );
+		self::put( $properties, '--newspack-ui-line-height-button', self::button_value( $global_styles, [ 'typography', 'lineHeight' ] ) );
+		self::put( $properties, '--newspack-ui-button-font-weight', self::button_value( $global_styles, [ 'typography', 'fontWeight' ] ) );
+		self::put( $properties, '--newspack-ui-button-letter-spacing', self::button_value( $global_styles, [ 'typography', 'letterSpacing' ] ) );
+		self::put( $properties, '--newspack-ui-button-text-transform', self::button_value( $global_styles, [ 'typography', 'textTransform' ] ) );
+		foreach ( [ 'font-size-button', 'line-height-button', 'button-font-weight', 'button-letter-spacing', 'button-text-transform', 'button-font-family' ] as $name ) {
+			$name = '--newspack-ui-' . $name;
+			if ( isset( $properties[ $name ] ) && '' !== self::sanitize_value( $properties[ $name ], self::property_type( $name ) ) ) {
+				$properties['--newspack-ui-button-white-space'] = 'normal';
+				break;
+			}
+		}
+
+
+		foreach ( self::SIZE_SCALE as $token => $scale ) {
+			if ( isset( $sizes[ $scale[0] ] ) ) {
+				$properties[ '--newspack-ui-font-size-' . $token ] = 'var(--wp--preset--font-size--' . $scale[0] . ', ' . $scale[1] . ')';
+			}
+		}
+
+		self::put( $properties, '--newspack-ui-font-size-fine', $caption['fontSize'] ?? ( isset( $sizes['x-small'] ) ? 'var(--wp--preset--font-size--x-small, 14px)' : null ) );
+		self::put( $properties, '--newspack-ui-line-height-fine', $caption['lineHeight'] ?? null );
+		self::put( $properties, '--newspack-ui-font-family-fine', $caption['fontFamily'] ?? null );
+
+		return $properties;
+	}
+
+	/**
+	 * Set a property when the value is a non-empty string or number.
+	 *
+	 * @param array  $properties The properties, by reference.
+	 * @param string $name       The property name.
+	 * @param mixed  $value      The value.
+	 */
+	private static function put( array &$properties, string $name, $value ): void {
+		if ( is_int( $value ) || is_float( $value ) ) {
+			$value = (string) $value;
+		}
+		if ( is_string( $value ) && '' !== trim( $value ) ) {
+			$properties[ $name ] = $value;
+		}
+	}
+
+	/**
+	 * A button style: the Button block's wins over the button element's.
+	 *
+	 * @param array    $styles Global styles.
+	 * @param string[] $path   Keys below the button.
+	 *
+	 * @return mixed Null when neither sets it.
+	 */
+	private static function button_value( array $styles, array $path ) {
+		foreach ( [ [ 'blocks', 'core/button' ], [ 'elements', 'button' ] ] as $root ) {
+			$value = self::dig( $styles, array_merge( $root, $path ) );
+			if ( null !== $value && '' !== $value && [] !== $value ) {
+				return $value;
+			}
+		}
+
+		return null;
 	}
 
 	/**
@@ -267,12 +469,13 @@ class Newspack_UI_Theme_Style {
 	 *
 	 * @param array      $global_styles Resolved global styles.
 	 * @param array|null $settings      Merged global settings, or null for the site's own.
+	 * @param array|null $user_styles   The user origin's styles, or null for the site's own.
 	 *
 	 * @return string The rule, or an empty string when there is nothing to print.
 	 */
-	public static function get_css( array $global_styles, ?array $settings = null ): string {
+	public static function get_css( array $global_styles, ?array $settings = null, ?array $user_styles = null ): string {
 		$declarations = '';
-		foreach ( self::get_properties( $global_styles, $settings ) as $name => $value ) {
+		foreach ( self::get_properties( $global_styles, $settings, $user_styles ) as $name => $value ) {
 			$type  = self::property_type( (string) $name );
 			$value = '' === $type ? '' : self::sanitize_value( $value, $type );
 			if ( '' === $value ) {
@@ -332,7 +535,7 @@ class Newspack_UI_Theme_Style {
 	 * Check a value against the allow-list for its property type.
 	 *
 	 * @param mixed  $value The value.
-	 * @param string $type  One of 'color', 'font-family', 'length', 'line-height', 'weight', 'letter-spacing'.
+	 * @param string $type  One of 'color', 'font-family', 'length', 'line-height', 'weight', 'letter-spacing', 'text-transform', 'white-space', 'text-decoration'.
 	 *
 	 * @return string The trimmed value, or an empty string when it is not allowed.
 	 */
@@ -358,13 +561,19 @@ class Newspack_UI_Theme_Style {
 			case 'font-family':
 				return self::is_var( $value, 'font-family' ) || 1 === preg_match( self::FONT_FAMILY_PATTERN, $value ) ? $value : '';
 			case 'length':
-				return self::is_length( $value ) ? $value : '';
+				return self::is_length( $value ) || self::is_var( $value, 'length' ) ? $value : '';
 			case 'line-height':
 				return 1 === preg_match( '/^\d+(\.\d+)?$/', $value ) || self::is_length( $value ) ? $value : '';
 			case 'weight':
 				return 1 === preg_match( '/^[1-9]00$|^(normal|bold)$/', $value ) ? $value : '';
 			case 'letter-spacing':
 				return '0' === $value || self::is_length( $value ) ? $value : '';
+			case 'text-transform':
+				return 1 === preg_match( '/^(?:none|capitalize|uppercase|lowercase)$/', $value ) ? $value : '';
+			case 'white-space':
+				return 1 === preg_match( '/^(?:normal|nowrap|pre|pre-wrap|pre-line|break-spaces)$/', $value ) ? $value : '';
+			case 'text-decoration':
+				return 1 === preg_match( '/^(?:none|(?:underline|overline|line-through)(?: (?:underline|overline|line-through))*)$/', $value ) ? $value : '';
 		}
 
 		return '';
