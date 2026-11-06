@@ -529,6 +529,7 @@ function GroupDetailView() {
 				defaultLayouts={ { table: {} } }
 				getItemId={ item => item.id }
 				search
+				inlineFilters
 			/>
 
 			{ inviteRows.length > 0 && (

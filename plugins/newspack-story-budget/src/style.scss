@@ -461,3 +461,24 @@ body.toplevel_page_newspack-story-budget {
 div[role="menuitem"] {
 	cursor: pointer;
 }
+
+.newspack-story-budget__toolbar {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: wp-vars.$grid-unit-05;
+}
+
+.newspack-story-budget__filters {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: wp-vars.$grid-unit-10;
+}
+
+.newspack-story-budget__view-config {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: wp-vars.$grid-unit-05;
+}

@@ -376,6 +376,7 @@ export default function PricingRulesList() {
 				isLoading={ isLoading }
 				getItemId={ ( item: PricingRuleRow ) => String( item.id ) }
 				search
+				inlineFilters
 			/>
 			{ stats?.supported && <CatalogImpact key={ statsVersion } stats={ stats } /> }
 		</div>

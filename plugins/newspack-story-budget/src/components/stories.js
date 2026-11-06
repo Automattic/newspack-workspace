@@ -173,34 +173,47 @@ export default () => {
 			data={ isLoading ? [] : currentStories }
 			paginationInfo={ paginationInfo }
 			defaultLayouts={ defaultLayouts }
-			header={
-				<HStack style={ { marginLeft: '8px' } }>
-					{ canRefreshStories && (
-						<Button
-							className={
-								isLoading || isRefreshing ? 'newspack-story-budget__refresh-button-is-busy' : 'newspack-story-budget__refresh-button'
-							}
-							icon={ update }
-							disabled={ isLoading || isRefreshing }
-							label={
-								isLoading || isRefreshing
-									? __( 'Loading stories…', 'newspack-story-budget' )
-									: __( 'Refresh all stories', 'newspack-story-budget' )
-							}
-							size="compact"
-							onClick={ refresh }
-						/>
-					) }
-					{ canManage && (
-						<ToggleControl
-							label={ __( 'Edit mode', 'newspack-story-budget' ) }
-							checked={ editMode }
-							onChange={ setEditMode }
-							__nextHasNoMarginBottom
-						/>
-					) }
-				</HStack>
-			}
-		/>
+		>
+			<div className="dataviews__view-actions newspack-story-budget__toolbar">
+				<div className="dataviews__search newspack-story-budget__filters">
+					<DataViews.Search />
+					<DataViews.Filters />
+				</div>
+				<div className="newspack-story-budget__view-config">
+					<DataViews.LayoutSwitcher />
+					<DataViews.ViewConfig />
+					<HStack style={ { marginLeft: '8px' } }>
+						{ canRefreshStories && (
+							<Button
+								className={
+									isLoading || isRefreshing
+										? 'newspack-story-budget__refresh-button-is-busy'
+										: 'newspack-story-budget__refresh-button'
+								}
+								icon={ update }
+								disabled={ isLoading || isRefreshing }
+								label={
+									isLoading || isRefreshing
+										? __( 'Loading stories…', 'newspack-story-budget' )
+										: __( 'Refresh all stories', 'newspack-story-budget' )
+								}
+								size="compact"
+								onClick={ refresh }
+							/>
+						) }
+						{ canManage && (
+							<ToggleControl
+								label={ __( 'Edit mode', 'newspack-story-budget' ) }
+								checked={ editMode }
+								onChange={ setEditMode }
+								__nextHasNoMarginBottom
+							/>
+						) }
+					</HStack>
+				</div>
+			</div>
+			<DataViews.Layout />
+			<DataViews.Footer />
+		</DataViews>
 	);
 };

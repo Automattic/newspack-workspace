@@ -299,6 +299,7 @@ function SubscriberDiscounts() {
 					getItemId={ ( item: DiscountRule ) => item.id }
 					onClickItem={ ( item: DiscountRule ) => history.push( `${ baseUrl }/edit/${ item.id }` ) }
 					search
+					inlineFilters
 				/>
 			) }
 			<DiscountEditor

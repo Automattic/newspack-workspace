@@ -7,7 +7,7 @@
  */
 import { __, sprintf } from '@wordpress/i18n';
 import { useState, useEffect, useCallback, useMemo, Fragment } from '@wordpress/element';
-import { DataViews as WPDataViews, filterSortAndPaginate } from '@wordpress/dataviews';
+import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
 import { Notice } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
@@ -446,20 +446,8 @@ const Emails = () => {
 				defaultLayouts={ { grid: {} } }
 				isLoading={ isFetching }
 				getItemId={ ( item: EmailItem ) => String( item.post_id ) }
-			>
-				<Stack direction="row" justify="space-between" align="flex-start" gap="sm" className="dataviews__view-actions">
-					<Stack direction="row" align="center" gap="xl" wrap="wrap" className="dataviews__search">
-						<WPDataViews.Search />
-						<WPDataViews.Filters />
-					</Stack>
-					<Stack direction="row" align="center" gap="xs">
-						<WPDataViews.LayoutSwitcher />
-						<WPDataViews.ViewConfig />
-					</Stack>
-				</Stack>
-				<WPDataViews.Layout />
-				<WPDataViews.Footer />
-			</DataViews>
+				inlineFilters
+			/>
 		</Fragment>
 	);
 };

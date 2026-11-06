@@ -292,6 +292,7 @@ export default function Institutions() {
 				isLoading={ isLoading }
 				getItemId={ ( item: Institution ) => String( item.id ) }
 				search
+				inlineFilters
 			/>
 			{ showAdvancedSettings && <InstitutionsAdvancedSettings closeModal={ () => setShowAdvancedSettings( false ) } /> }
 		</>

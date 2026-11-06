@@ -246,6 +246,7 @@ function SubscriberOnlyProducts() {
 					getItemId={ ( item: unknown ) => ( item as Restriction ).id }
 					defaultLayouts={ { table: {} } }
 					isLoading={ saving }
+					inlineFilters
 				/>
 			) }
 			{ ! loading && ! hasRestrictions && (
