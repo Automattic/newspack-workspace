@@ -7,7 +7,14 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { Button, SelectControl } from '@wordpress/components';
+import {
+	Button,
+	SelectControl,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalToggleGroupControl as ToggleGroupControl,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalToggleGroupControlOption as ToggleGroupControlOption,
+} from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
 
 /**
@@ -21,6 +28,9 @@ export type BannerStyleSettings = {
 	style?: string;
 	bg_color?: string;
 	button_color?: string;
+	text_color?: string;
+	button_text_color?: string;
+	shadow?: boolean | number;
 };
 
 type BannerStyleControlProps = {
@@ -70,28 +80,38 @@ export const getBannerStyle = ( style?: string ): BannerRenderStyle => {
 export const getBannerPreviewProps = ( settings: BannerStyleSettings ) => {
 	const style = getBannerStyle( settings.style );
 	const bannerStyle: Record< string, string > = {};
+	const theme = window.newspackAudience?.content_banner;
+	const hasOptions = style === 'theme' || style === 'site';
 	if ( style === 'theme' ) {
-		const theme = window.newspackAudience?.content_banner;
 		if ( theme?.theme_font_heading ) {
 			bannerStyle[ '--newspack-theme-font-heading' ] = theme.theme_font_heading;
 		}
 		if ( theme?.theme_font_body ) {
 			bannerStyle[ '--newspack-theme-font-body' ] = theme.theme_font_body;
 		}
+	}
+	if ( hasOptions ) {
 		if ( settings.bg_color ) {
 			bannerStyle[ '--newspack-content-banner-bg' ] = settings.bg_color;
-			bannerStyle[ '--newspack-content-banner-ink' ] = getContrastColor( settings.bg_color );
+		}
+		const ink = settings.text_color || ( settings.bg_color ? getContrastColor( settings.bg_color ) : '' );
+		if ( ink ) {
+			bannerStyle[ '--newspack-content-banner-ink' ] = ink;
 		}
 		if ( settings.button_color ) {
 			bannerStyle[ '--newspack-content-banner-button-bg' ] = settings.button_color;
-			bannerStyle[ '--newspack-content-banner-button-ink' ] = getContrastColor( settings.button_color );
-		} else if ( theme?.theme_button_bg ) {
+			bannerStyle[ '--newspack-content-banner-button-ink' ] = settings.button_text_color || getContrastColor( settings.button_color );
+		} else if ( style === 'theme' && theme?.theme_button_bg ) {
 			bannerStyle[ '--newspack-content-banner-button-bg' ] = theme.theme_button_bg;
-			bannerStyle[ '--newspack-content-banner-button-ink' ] = theme.theme_button_ink || getContrastColor( theme.theme_button_bg );
+			bannerStyle[ '--newspack-content-banner-button-ink' ] =
+				settings.button_text_color || theme.theme_button_ink || getContrastColor( theme.theme_button_bg );
+		} else if ( settings.button_text_color ) {
+			bannerStyle[ '--newspack-content-banner-button-ink' ] = settings.button_text_color;
 		}
 	}
+	const hasShadow = settings.shadow !== false && settings.shadow !== 0;
 	return {
-		bannerClassName: `is-style-${ style }`,
+		bannerClassName: `is-style-${ style }${ hasOptions && ! hasShadow ? ' has-no-shadow' : '' }`,
 		bannerStyle: bannerStyle as React.CSSProperties,
 		buttonClassName: style === 'theme' ? '' : `newspack-ui__button--${ style === 'dark' ? 'primary-light' : 'primary' }`,
 	};
@@ -126,14 +146,23 @@ const ColorField = ( { label, resetLabel, help, value, defaultValue, onChange, d
 	/>
 );
 
-export default function BannerStyleControl( { settings, onChange, disabled = false, gridCells = false }: BannerStyleControlProps ) {
-	if ( usesSiteTheme() ) {
-		return null;
+const toHex = ( color?: string ) => {
+	if ( color === 'white' ) {
+		return '#ffffff';
 	}
+	if ( color === 'black' ) {
+		return '#000000';
+	}
+	return color || '';
+};
+
+export default function BannerStyleControl( { settings, onChange, disabled = false, gridCells = false }: BannerStyleControlProps ) {
+	const isSite = usesSiteTheme();
 	const hasThemeStyle = supportsThemeStyle();
 	const style = getBannerStyle( settings.style );
+	const hasOptions = style === 'theme' || style === 'site';
 	const startRow = { gridColumnStart: 1 };
-	const select = (
+	const select = isSite ? null : (
 		<SelectControl
 			label={ __( 'Style', 'newspack-plugin' ) }
 			help={
@@ -158,35 +187,89 @@ export default function BannerStyleControl( { settings, onChange, disabled = fal
 	);
 	const bannerColor = (
 		<ColorField
-			label={ __( 'Banner color', 'newspack-plugin' ) }
+			label={ __( 'Banner Color', 'newspack-plugin' ) }
 			resetLabel={ __( 'Reset banner color', 'newspack-plugin' ) }
-			help={ __( 'Defaults to the Light style background. Text turns black or white to stay readable.', 'newspack-plugin' ) }
+			help={
+				isSite
+					? __( "Defaults to the site's background color.", 'newspack-plugin' )
+					: __( 'Defaults to the Light style background. Text turns black or white to stay readable.', 'newspack-plugin' )
+			}
 			value={ settings.bg_color }
 			defaultValue={ colors[ 'neutral-000' ] }
 			onChange={ value => onChange( { bg_color: value } ) }
 			disabled={ disabled }
 		/>
 	);
+	const textColor = (
+		<ColorField
+			label={ __( 'Text Color', 'newspack-plugin' ) }
+			resetLabel={ __( 'Reset text color', 'newspack-plugin' ) }
+			help={
+				isSite
+					? __( "Defaults to the site's text color, or black or white when you pick a banner color.", 'newspack-plugin' )
+					: __( 'Defaults to black or white, whichever reads better on the banner color.', 'newspack-plugin' )
+			}
+			value={ settings.text_color }
+			defaultValue={ settings.bg_color ? toHex( getContrastColor( settings.bg_color ) ) : colors[ 'neutral-900' ] }
+			onChange={ value => onChange( { text_color: value } ) }
+			disabled={ disabled }
+		/>
+	);
 	const buttonColor = (
 		<ColorField
-			label={ __( 'Button color', 'newspack-plugin' ) }
+			label={ __( 'Button Color', 'newspack-plugin' ) }
 			resetLabel={ __( 'Reset button color', 'newspack-plugin' ) }
-			help={ __( "Defaults to the theme's button color. The label turns black or white to stay readable.", 'newspack-plugin' ) }
+			help={
+				isSite
+					? __( "Defaults to the site's button color. The label turns black or white to stay readable.", 'newspack-plugin' )
+					: __( "Defaults to the theme's button color. The label turns black or white to stay readable.", 'newspack-plugin' )
+			}
 			value={ settings.button_color }
 			defaultValue={ window.newspackAudience?.content_banner?.theme_button_bg || colors[ 'neutral-000' ] }
 			onChange={ value => onChange( { button_color: value } ) }
 			disabled={ disabled }
 		/>
 	);
+	const buttonTextColor = (
+		<ColorField
+			label={ __( 'Button Text Color', 'newspack-plugin' ) }
+			resetLabel={ __( 'Reset button text color', 'newspack-plugin' ) }
+			help={ __( 'Defaults to black or white, whichever reads better on the button color.', 'newspack-plugin' ) }
+			value={ settings.button_text_color }
+			defaultValue={
+				settings.button_color
+					? toHex( getContrastColor( settings.button_color ) )
+					: toHex( window.newspackAudience?.content_banner?.theme_button_ink ) || colors[ 'neutral-000' ]
+			}
+			onChange={ value => onChange( { button_text_color: value } ) }
+			disabled={ disabled }
+		/>
+	);
+	const shadow = (
+		<ToggleGroupControl
+			label={ __( 'Shadow', 'newspack-plugin' ) }
+			value={ settings.shadow === false || settings.shadow === 0 ? 'disabled' : 'enabled' }
+			onChange={ value => onChange( { shadow: value === 'enabled' } ) }
+			isBlock
+			disabled={ disabled }
+			__next40pxDefaultSize
+		>
+			<ToggleGroupControlOption label={ __( 'Enabled', 'newspack-plugin' ) } value="enabled" />
+			<ToggleGroupControlOption label={ __( 'Disabled', 'newspack-plugin' ) } value="disabled" />
+		</ToggleGroupControl>
+	);
 
 	if ( gridCells ) {
 		return (
 			<>
-				<div style={ startRow }>{ select }</div>
-				{ style === 'theme' && (
+				{ select && <div style={ startRow }>{ select }</div> }
+				{ hasOptions && (
 					<>
 						<div style={ startRow }>{ bannerColor }</div>
-						{ buttonColor }
+						{ textColor }
+						<div style={ startRow }>{ buttonColor }</div>
+						{ buttonTextColor }
+						<div style={ startRow }>{ shadow }</div>
 					</>
 				) }
 			</>
@@ -196,10 +279,13 @@ export default function BannerStyleControl( { settings, onChange, disabled = fal
 	return (
 		<Stack direction="column" gap="xl">
 			{ select }
-			{ style === 'theme' && (
+			{ hasOptions && (
 				<>
 					{ bannerColor }
+					{ textColor }
 					{ buttonColor }
+					{ buttonTextColor }
+					{ shadow }
 				</>
 			) }
 		</Stack>

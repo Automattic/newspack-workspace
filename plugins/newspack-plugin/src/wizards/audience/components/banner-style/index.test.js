@@ -16,9 +16,11 @@ import BannerStyleControl, { getBannerPreviewProps, getBannerStyle, toLongHex } 
 jest.mock( '@wordpress/components', () => ( {
 	Button: () => null,
 	SelectControl: () => <div data-testid="style-select" />,
+	__experimentalToggleGroupControl: () => <div data-testid="shadow-toggle" />,
+	__experimentalToggleGroupControlOption: () => null,
 } ) );
 jest.mock( '@wordpress/ui', () => ( { Stack: ( { children } ) => <div>{ children }</div> } ) );
-jest.mock( '../../../../../packages/colors/colors.module.scss', () => ( { 'neutral-000': '#ffffff' } ) );
+jest.mock( '../../../../../packages/colors/colors.module.scss', () => ( { 'neutral-000': '#ffffff', 'neutral-900': '#1e1e1e' } ) );
 jest.mock( '../../../../../packages/components/src/color-picker', () => () => <div data-testid="color-picker" /> );
 
 const setThemeData = contentBanner => {
@@ -51,6 +53,22 @@ describe( 'getBannerPreviewProps', () => {
 			'--newspack-content-banner-button-bg': '#0d47a1',
 			'--newspack-content-banner-button-ink': 'white',
 		} );
+		expect(
+			getBannerPreviewProps( {
+				style: 'theme',
+				bg_color: '#fff59d',
+				text_color: '#102030',
+				button_color: '#0d47a1',
+				button_text_color: '#ffeb3b',
+			} ).bannerStyle
+		).toMatchObject( {
+			'--newspack-content-banner-ink': '#102030',
+			'--newspack-content-banner-button-ink': '#ffeb3b',
+		} );
+		expect( getBannerPreviewProps( { style: 'theme', button_text_color: '#ffeb3b' } ).bannerStyle ).toMatchObject( {
+			'--newspack-content-banner-button-bg': '#666666',
+			'--newspack-content-banner-button-ink': '#ffeb3b',
+		} );
 		expect( getBannerPreviewProps( { style: 'theme', bg_color: '', button_color: '' } ).bannerStyle ).toEqual( {
 			'--newspack-theme-font-heading': '"Playfair Display",serif',
 			'--newspack-theme-font-body': '"Space Mono",monospace',
@@ -72,26 +90,75 @@ describe( 'on a site that uses the site Theme', () => {
 		[ 'light', 'dark', 'theme', undefined ].forEach( style => expect( getBannerStyle( style ) ).toBe( 'site' ) );
 	} );
 
-	it( 'previews with the site class, the primary button and no inline colors', () => {
+	it( 'previews with the site class and the primary button, and no inline colors until some are picked', () => {
 		setThemeData( { supports_theme_style: true, uses_site_theme: true, theme_button_bg: '#666666' } );
-		expect( getBannerPreviewProps( { style: 'dark', bg_color: '#fff59d', button_color: '#0d47a1' } ) ).toEqual( {
+		expect( getBannerPreviewProps( { style: 'dark' } ) ).toEqual( {
 			bannerClassName: 'is-style-site',
 			bannerStyle: {},
 			buttonClassName: 'newspack-ui__button--primary',
 		} );
 	} );
 
-	it( 'BannerStyleControl renders no style option on a site Theme', () => {
+	it( 'previews the picked colors on the site style, with black or white text only where none is picked', () => {
+		setThemeData( { supports_theme_style: true, uses_site_theme: true, theme_button_bg: '#666666', theme_button_ink: 'white' } );
+		expect( getBannerPreviewProps( { style: 'dark', bg_color: '#fff59d', button_color: '#0d47a1' } ).bannerStyle ).toEqual( {
+			'--newspack-content-banner-bg': '#fff59d',
+			'--newspack-content-banner-ink': 'black',
+			'--newspack-content-banner-button-bg': '#0d47a1',
+			'--newspack-content-banner-button-ink': 'white',
+		} );
+		expect(
+			getBannerPreviewProps( {
+				bg_color: '#fff59d',
+				text_color: '#102030',
+				button_color: '#0d47a1',
+				button_text_color: '#ffeb3b',
+			} ).bannerStyle
+		).toEqual( {
+			'--newspack-content-banner-bg': '#fff59d',
+			'--newspack-content-banner-ink': '#102030',
+			'--newspack-content-banner-button-bg': '#0d47a1',
+			'--newspack-content-banner-button-ink': '#ffeb3b',
+		} );
+		expect( getBannerPreviewProps( { text_color: '#102030', button_text_color: '#ffeb3b' } ).bannerStyle ).toEqual( {
+			'--newspack-content-banner-ink': '#102030',
+			'--newspack-content-banner-button-ink': '#ffeb3b',
+		} );
+	} );
+
+	it( 'BannerStyleControl renders no style option on a site Theme, but the four colors and the shadow', () => {
 		setThemeData( { supports_theme_style: true, uses_site_theme: true } );
-		const { queryByTestId } = render( <BannerStyleControl settings={ { style: 'theme' } } onChange={ () => {} } /> );
+		const { queryByTestId, getAllByTestId } = render( <BannerStyleControl settings={ { style: 'theme' } } onChange={ () => {} } /> );
 		expect( queryByTestId( 'style-select' ) ).toBeNull();
-		expect( queryByTestId( 'color-picker' ) ).toBeNull();
+		expect( getAllByTestId( 'color-picker' ) ).toHaveLength( 4 );
+		expect( queryByTestId( 'shadow-toggle' ) ).not.toBeNull();
 	} );
 
 	it( 'BannerStyleControl still renders the style option without the site Theme', () => {
 		setThemeData( { supports_theme_style: true, uses_site_theme: false } );
 		const { queryByTestId, getAllByTestId } = render( <BannerStyleControl settings={ { style: 'theme' } } onChange={ () => {} } /> );
 		expect( queryByTestId( 'style-select' ) ).not.toBeNull();
-		expect( getAllByTestId( 'color-picker' ) ).toHaveLength( 2 );
+		expect( getAllByTestId( 'color-picker' ) ).toHaveLength( 4 );
+	} );
+
+	it( 'BannerStyleControl shows the colors and the shadow only under Theme on classic', () => {
+		setThemeData( { supports_theme_style: true, uses_site_theme: false } );
+		const light = render( <BannerStyleControl settings={ { style: 'light' } } onChange={ () => {} } /> );
+		expect( light.queryAllByTestId( 'color-picker' ) ).toHaveLength( 0 );
+		expect( light.queryByTestId( 'shadow-toggle' ) ).toBeNull();
+		light.unmount();
+		const theme = render( <BannerStyleControl settings={ { style: 'theme' } } onChange={ () => {} } /> );
+		expect( theme.queryAllByTestId( 'color-picker' ) ).toHaveLength( 4 );
+		expect( theme.queryByTestId( 'shadow-toggle' ) ).not.toBeNull();
+	} );
+
+	it( 'previews the shadow as off only on the Theme and site styles', () => {
+		setThemeData( { supports_theme_style: true, uses_site_theme: false } );
+		expect( getBannerPreviewProps( { style: 'theme' } ).bannerClassName ).toBe( 'is-style-theme' );
+		expect( getBannerPreviewProps( { style: 'theme', shadow: false } ).bannerClassName ).toBe( 'is-style-theme has-no-shadow' );
+		expect( getBannerPreviewProps( { style: 'theme', shadow: 0 } ).bannerClassName ).toBe( 'is-style-theme has-no-shadow' );
+		expect( getBannerPreviewProps( { style: 'dark', shadow: false } ).bannerClassName ).toBe( 'is-style-dark' );
+		setThemeData( { supports_theme_style: true, uses_site_theme: true } );
+		expect( getBannerPreviewProps( { style: 'dark', shadow: false } ).bannerClassName ).toBe( 'is-style-site has-no-shadow' );
 	} );
 } );
