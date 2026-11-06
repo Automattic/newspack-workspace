@@ -684,7 +684,7 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	 * @param WP_REST_Response $response Response to a refused save.
 	 */
 	private function assert_refused_by_guard( $response ) {
-		self::assertStringStartsWith( "You don't have permission to change this prompt's A/B test settings.", $response->get_data()['message'] );
+		self::assertStringStartsWith( "You can't change this prompt's test settings.", $response->get_data()['message'] );
 	}
 
 	/**
