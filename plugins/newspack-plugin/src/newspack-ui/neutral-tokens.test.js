@@ -110,4 +110,18 @@ describe( 'Newspack UI Neutral tokens', () => {
 	it( 'leave no unresolved var() reference', () => {
 		expect( flatten( actual ).filter( value => value.includes( 'var(' ) ) ).toEqual( [] );
 	} );
+
+	it( 'read destructive buttons through the destructive role tokens', () => {
+		const css = compile();
+		const rules = [ ...css.matchAll( /([^{}]+)\{([^{}]*)\}/g ) ].filter( ( [ , selector ] ) =>
+			selector.includes( '.newspack-ui__button--destructive' )
+		);
+		const background = rules.find(
+			( [ , selector, body ] ) =>
+				selector.split( ',' ).some( part => part.trim() === '.newspack-ui .newspack-ui__button--destructive' ) &&
+				body.includes( '--newspack-ui-button-bg:' )
+		);
+		expect( background[ 2 ] ).toMatch( /--newspack-ui-button-bg:\s*var\(--newspack-ui-color-destructive-fill\)/ );
+		expect( rules.filter( ( [ , , body ] ) => body.includes( '--newspack-ui-color-error-fill' ) ) ).toEqual( [] );
+	} );
 } );

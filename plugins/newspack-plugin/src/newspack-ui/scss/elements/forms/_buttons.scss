@@ -222,17 +222,19 @@
 		}
 
 		&--destructive {
-			--newspack-ui-button-bg: var(--newspack-ui-color-error-fill);
-			--newspack-ui-button-bg-hover: var(--newspack-ui-color-error-fill-hover);
-			--newspack-ui-button-bg-pressed: var(--newspack-ui-color-error-fill-pressed);
-			--newspack-ui-button-ink: var(--newspack-ui-color-on-error);
+			--newspack-ui-button-bg: var(--newspack-ui-color-destructive-fill);
+			--newspack-ui-button-bg-hover: var(--newspack-ui-color-destructive-fill-hover);
+			--newspack-ui-button-bg-pressed: var(--newspack-ui-color-destructive-fill-pressed);
+			--newspack-ui-button-ink: var(--newspack-ui-color-destructive-ink);
+			--newspack-ui-button-border: var(--newspack-ui-color-destructive-edge);
 
 			&.newspack-ui__button--ghost,
 			&.newspack-ui__button--outline {
 				--newspack-ui-button-bg: transparent;
+				--newspack-ui-button-border: transparent;
 				--newspack-ui-button-bg-hover: var(--newspack-ui-color-error-tint-hover);
 				--newspack-ui-button-bg-pressed: var(--newspack-ui-color-error-tint-pressed);
-				--newspack-ui-button-ink: var(--newspack-ui-color-error);
+				--newspack-ui-button-ink: var(--newspack-ui-color-destructive-text);
 				--newspack-ui-button-ink-pressed: var(--newspack-ui-color-error-text);
 				--newspack-ui-button-focus: var(--newspack-ui-button-ink);
 			}
