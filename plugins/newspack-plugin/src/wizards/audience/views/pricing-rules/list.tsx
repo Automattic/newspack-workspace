@@ -29,7 +29,7 @@ import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/w
 import CatalogImpact from './catalog-impact';
 import PricingRulesOnboarding from './onboarding';
 import { postStatus } from '../../post-status';
-import { intentLabel } from './recipes';
+import { intentLabel, pathOptions } from './recipes';
 import { pricingModelSentence } from './model-sentence';
 import { RULES_API_PATH as API_PATH, IMPACT_PREVIEW_API_PATH } from './constants';
 
@@ -58,6 +58,9 @@ const ACTIVE_STATE_LABEL: Record< PricingRuleRow[ 'active_state' ], string > = {
 	scheduled: __( 'Scheduled', 'newspack-plugin' ),
 	ended: __( 'Ended', 'newspack-plugin' ),
 };
+
+/** Filter value for a rule with no reader segment, which applies to every reader. */
+const ANY_READER = 'any';
 
 /** Map a rule's reader_segment condition (segment ids) to names via the vocab id→label map. */
 function readerSegmentNames( conditions: PricingRuleRow[ 'conditions' ], map: Record< number, string > ): string[] {
@@ -247,14 +250,24 @@ export default function PricingRulesList() {
 			{
 				id: 'goal',
 				label: __( 'Goal', 'newspack-plugin' ),
-				getValue: ( { item } ) => intentLabel( item.intent ),
+				getValue: ( { item } ) => item.intent,
 				render: ( { item } ) => <span>{ intentLabel( item.intent ) }</span>,
+				elements: pathOptions().map( ( { value, label } ) => ( { value, label } ) ),
+				filterBy: { operators: [ 'isAny' ] },
 				enableSorting: false,
 			},
 			{
 				id: 'reader_segments',
 				label: __( 'Reader segments', 'newspack-plugin' ),
-				getValue: ( { item } ) => readerSegmentNames( item.conditions, segmentMap ).join( ', ' ),
+				getValue: ( { item } ) => {
+					const ids = item.conditions.reader_segment;
+					return Array.isArray( ids ) && ids.length ? ids.map( String ) : [ ANY_READER ];
+				},
+				elements: [
+					{ value: ANY_READER, label: __( 'Any reader', 'newspack-plugin' ) },
+					...Object.entries( segmentMap ).map( ( [ value, label ] ) => ( { value, label } ) ),
+				],
+				filterBy: { operators: [ 'isAny' ] },
 				render: ( { item } ) => {
 					const names = readerSegmentNames( item.conditions, segmentMap );
 					return names.length ? (

@@ -27,7 +27,7 @@ import { WIZARD_STORE_NAMESPACE } from '../../../../../../../packages/components
 import Router from '../../../../../../../packages/components/src/proxied-imports/router';
 import { formatCount } from '../../../../../../../packages/components/src/breadcrumbs/format-count';
 import { registerTab } from '../registry';
-import { allSubscriptionsLabel, SEARCH_ENDPOINTS } from '../../constants';
+import { ALL_SUBSCRIPTIONS_FILTER_VALUE, allSubscriptionsLabel, SEARCH_ENDPOINTS } from '../../constants';
 import { useRestrictions } from './use-restrictions';
 import { useNames } from '../../use-names';
 import { excludedLabel, leadingProductNames, moreProductsLabel, scopeLabel } from './labels';
@@ -106,13 +106,16 @@ function SubscriberOnlyProducts() {
 				id: 'availableTo',
 				label: __( 'Available to', 'newspack-plugin' ),
 				enableSorting: false,
-				// The cell's own text is what the list's search matches, so a rule open
-				// to every subscriber stays findable by the name the editor gives it.
-				enableGlobalSearch: true,
+				elements: [
+					{ value: ALL_SUBSCRIPTIONS_FILTER_VALUE, label: allSubscriptionsLabel() },
+					...[ ...new Set( subscriptionIds ) ].map( id => ( { value: id, label: subscriptionNames[ id ] || `#${ id }` } ) ),
+				],
+				filterBy: { operators: [ 'isAny' ] },
+				// Ids rather than names, so the filter keeps two same-named subscriptions
+				// apart. A rule open to every subscriber names none, so it takes the
+				// sentinel instead and stays filterable.
 				getValue: ( { item }: { item: Restriction } ) =>
-					'all' === item.subscription_targeting
-						? allSubscriptionsLabel()
-						: ( item.subscription_product_ids || [] ).map( id => subscriptionNames[ id ] || '' ).join( ', ' ),
+					'all' === item.subscription_targeting ? [ ALL_SUBSCRIPTIONS_FILTER_VALUE ] : item.subscription_product_ids || [],
 				render: ( { item }: { item: Restriction } ) => {
 					if ( 'all' === item.subscription_targeting ) {
 						return <span>{ allSubscriptionsLabel() }</span>;
@@ -120,6 +123,20 @@ function SubscriberOnlyProducts() {
 					const names = ( item.subscription_product_ids || [] ).map( id => subscriptionNames[ id ] ).filter( Boolean );
 					return <span>{ names.length ? names.join( ', ' ) : __( 'No subscriptions', 'newspack-plugin' ) }</span>;
 				},
+			},
+			{
+				id: 'available_to_names',
+				// Never shown: the field stays out of the view and `enableHiding: false`
+				// keeps it out of the column menu. It's what the search matches, since
+				// Available to has to hold ids for its filter.
+				label: __( 'Available to (names)', 'newspack-plugin' ),
+				enableHiding: false,
+				enableSorting: false,
+				enableGlobalSearch: true,
+				getValue: ( { item }: { item: Restriction } ) =>
+					'all' === item.subscription_targeting
+						? allSubscriptionsLabel()
+						: ( item.subscription_product_ids || [] ).map( id => subscriptionNames[ id ] || '' ).join( ', ' ),
 			},
 			{
 				id: 'status',
@@ -143,7 +160,7 @@ function SubscriberOnlyProducts() {
 				enableSorting: true,
 			},
 		],
-		[ productNames, categoryNames, subscriptionNames ]
+		[ productNames, categoryNames, subscriptionNames, subscriptionIds ]
 	);
 
 	const actions: Action< Restriction >[] = useMemo(
