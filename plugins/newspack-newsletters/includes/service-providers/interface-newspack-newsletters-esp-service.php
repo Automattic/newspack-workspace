@@ -149,7 +149,7 @@ interface Newspack_Newsletters_ESP_API_Interface {
 	 *
 	 * @param string $email The contact email.
 	 *
-	 * @return string[] Contact subscribed lists IDs.
+	 * @return string[]|WP_Error Contact subscribed lists IDs, or an error when the lists could not be read.
 	 */
 	public function get_contact_lists( $email );
 
