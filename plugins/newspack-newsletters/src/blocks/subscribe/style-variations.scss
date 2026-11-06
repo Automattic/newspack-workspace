@@ -155,6 +155,7 @@
 					&:checked:disabled {
 						background: var(--newspack-ui-color-text-subtle, #6c6c6c);
 						border-color: var(--newspack-ui-color-text-subtle, #6c6c6c);
+						color: var(--newspack-ui-color-surface, #fff);
 					}
 				}
 			}
