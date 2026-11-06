@@ -21,7 +21,6 @@ const entry = {
 	settings: path.join( __dirname, 'src', 'settings' ),
 	blocks: path.join( __dirname, 'src', 'blocks' ),
 	criteria: path.join( __dirname, 'src', 'criteria' ),
-	abTests: path.join( __dirname, 'src', 'ab-tests' ),
 };
 
 const webpackConfig = getBaseWebpackConfig( {
