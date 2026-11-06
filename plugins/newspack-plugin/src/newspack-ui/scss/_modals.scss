@@ -277,7 +277,10 @@
 		h3,
 		h4,
 		h5,
-		h6,
+		h6 {
+			font-weight: var(--newspack-ui-heading-font-weight, var(--newspack-ui-font-weight-strong));
+		}
+
 		strong {
 			font-weight: var(--newspack-ui-font-weight-strong);
 		}

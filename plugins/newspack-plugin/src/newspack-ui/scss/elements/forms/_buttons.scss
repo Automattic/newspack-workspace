@@ -207,6 +207,16 @@
 			}
 		}
 
+		&--google-oauth {
+			--newspack-ui-button-font-family: var(--newspack-ui-font-family);
+			--newspack-ui-button-font-size: var(--newspack-ui-font-size-body);
+			--newspack-ui-button-line-height: var(--newspack-ui-line-height-body);
+			--newspack-ui-button-font-weight: var(--newspack-ui-font-weight-strong);
+			--newspack-ui-button-letter-spacing: normal;
+			--newspack-ui-button-text-transform: none;
+			--newspack-ui-radius-button: var(--newspack-ui-border-radius-l);
+		}
+
 		&--ghost-light {
 			--newspack-ui-button-ink: var(--newspack-ui-color-text-muted);
 			--newspack-ui-button-focus: var(--newspack-ui-button-ink);

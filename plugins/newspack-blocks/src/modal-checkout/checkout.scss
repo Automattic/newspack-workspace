@@ -4,7 +4,7 @@
 // stylelint-disable-next-line selector-id-pattern
 #newspack_modal_checkout_container {
 	outline: none;
-	background: var(--newspack-ui-color-neutral-0, np-colors.$neutral-000);
+	background: var(--newspack-ui-color-surface, np-colors.$neutral-000);
 	margin: 0;
 	padding: var(--newspack-ui-spacer-4, 20px) var(--newspack-ui-spacer-5, 24px) var(--newspack-ui-spacer-5, 24px);
 
@@ -69,7 +69,7 @@
 
 	// Required fields.
 	.woocommerce form .form-row .required {
-		color: var(--newspack-ui-color-error-50, np-colors.$error-500);
+		color: var(--newspack-ui-color-error-text, np-colors.$error-600);
 	}
 
 	// Billing & Shipping fields
