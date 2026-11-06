@@ -205,6 +205,21 @@ body.newspack-has-countdown-banner:has(.newspack-countdown-banner__cta:not(.news
 			}
 		}
 
+		&.is-style-site {
+			--newspack-content-banner-message-color: var(--newspack-ui-color-text-muted);
+			--newspack-content-banner__cta__content__links--color: var(--newspack-ui-color-text-muted);
+			background: var(--newspack-ui-color-surface);
+			color: var(--newspack-ui-color-text);
+
+			> .wrapper {
+				font-family: var(--newspack-ui-font-family-body);
+			}
+
+			a:not(.newspack-ui__button) {
+				color: var(--newspack-ui-color-link, var(--newspack-ui-color-text));
+			}
+		}
+
 		.newspack-wizard & {
 			box-shadow: none;
 			position: relative;
