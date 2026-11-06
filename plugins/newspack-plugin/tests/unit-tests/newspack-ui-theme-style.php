@@ -203,7 +203,19 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 			];
 		}
 
-		return [ 'typography' => [ 'fontSizes' => [ 'theme' => $sizes ] ] ];
+		return [
+			'typography' => [ 'fontSizes' => [ 'theme' => $sizes ] ],
+			'custom'     => [
+				'line-height' => [
+					'xx-small' => 1.3333333333,
+					'x-small'  => 1.4285714286,
+					'small'    => 1.5,
+					'medium'   => 1.6,
+					'x-large'  => 1.375,
+					'xx-large' => 1.3333333333,
+				],
+			],
+		];
 	}
 
 	/**
@@ -1104,6 +1116,147 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The six roles with their slug and Neutral pair.
+	 *
+	 * @return array
+	 */
+	public function data_scale_roles(): array {
+		return [
+			'caption' => [ 'caption', 'xx-small', '12px', '1.3333' ],
+			'small'   => [ 'small', 'x-small', '14px', '1.4286' ],
+			'body'    => [ 'body', 'small', '16px', '1.5' ],
+			'title-m' => [ 'title-m', 'medium', '20px', '1.4' ],
+			'title-l' => [ 'title-l', 'x-large', '24px', '1.3333' ],
+			'display' => [ 'display', 'xx-large', '32px', '1.25' ],
+		];
+	}
+
+	/**
+	 * Each role takes its size and its line height from one slug.
+	 *
+	 * @dataProvider data_scale_roles
+	 *
+	 * @param string $role  The role.
+	 * @param string $slug  The slug.
+	 * @param string $size  The Neutral size.
+	 * @param string $lh    The Neutral line height.
+	 */
+	public function test_scale_pairs_size_and_line_height_by_slug( string $role, string $slug, string $size, string $lh ): void {
+		$css = Newspack_UI_Theme_Style::get_css( [], $this->scale_settings(), [] );
+		$this->assertStringContainsString( '--newspack-ui-font-size-' . $role . ':var(--wp--preset--font-size--' . $slug . ', ' . $size . ');', $css );
+		$this->assertStringContainsString( '--newspack-ui-line-height-' . $role . ':var(--wp--custom--line-height--' . $slug . ', ' . $lh . ');', $css );
+	}
+
+	/**
+	 * A role without a line height prints neither half.
+	 *
+	 * @dataProvider data_scale_roles
+	 *
+	 * @param string $role The role.
+	 * @param string $slug The slug.
+	 */
+	public function test_scale_role_without_line_height_prints_neither( string $role, string $slug ): void {
+		$settings = $this->scale_settings();
+		unset( $settings['custom']['line-height'][ $slug ] );
+		$css = Newspack_UI_Theme_Style::get_css( [], $settings, [] );
+		$this->assertStringNotContainsString( '--newspack-ui-font-size-' . $role . ':', $css );
+		$this->assertStringNotContainsString( '--newspack-ui-line-height-' . $role . ':', $css );
+	}
+
+	/**
+	 * A role without a font size prints neither half.
+	 *
+	 * @dataProvider data_scale_roles
+	 *
+	 * @param string $role The role.
+	 * @param string $slug The slug.
+	 */
+	public function test_scale_role_without_size_prints_neither( string $role, string $slug ): void {
+		$settings = $this->scale_settings();
+		$settings['typography']['fontSizes']['theme'] = array_values(
+			array_filter(
+				$settings['typography']['fontSizes']['theme'],
+				static function ( $preset ) use ( $slug ) {
+					return $preset['slug'] !== $slug;
+				}
+			)
+		);
+		$css = Newspack_UI_Theme_Style::get_css( [], $settings, [] );
+		$this->assertStringNotContainsString( '--newspack-ui-font-size-' . $role . ':', $css );
+		$this->assertStringNotContainsString( '--newspack-ui-line-height-' . $role . ':', $css );
+	}
+
+	/**
+	 * The block theme's medium pair feeds the modal title role.
+	 */
+	public function test_title_m_uses_medium_line_height(): void {
+		$css = Newspack_UI_Theme_Style::get_css( [], $this->scale_settings(), [] );
+		$this->assertStringContainsString( '--newspack-ui-line-height-title-m:var(--wp--custom--line-height--medium, 1.4);', $css );
+	}
+
+	/**
+	 * Fine print takes its line height from the source of its size.
+	 */
+	public function test_fine_print_line_height_follows_size_source(): void {
+		$settings = $this->scale_settings();
+		$css      = Newspack_UI_Theme_Style::get_css(
+			[
+				'elements' => [
+					'caption' => [
+						'typography' => [
+							'fontSize'   => '0.8125rem',
+							'lineHeight' => '1.4',
+						],
+					],
+				],
+			],
+			$settings,
+			[] 
+		);
+		$this->assertStringContainsString( '--newspack-ui-font-size-fine:0.8125rem;', $css );
+		$this->assertStringContainsString( '--newspack-ui-line-height-fine:1.4;', $css );
+
+		$css = Newspack_UI_Theme_Style::get_css( [ 'elements' => [ 'caption' => [ 'typography' => [ 'fontSize' => '0.8125rem' ] ] ] ], $settings, [] );
+		$this->assertStringNotContainsString( '--newspack-ui-font-size-fine', $css );
+		$this->assertStringNotContainsString( '--newspack-ui-line-height-fine', $css );
+
+		$css = Newspack_UI_Theme_Style::get_css( [], $settings, [] );
+		$this->assertStringContainsString( '--newspack-ui-font-size-fine:var(--wp--preset--font-size--x-small, 14px);', $css );
+		$this->assertStringContainsString( '--newspack-ui-line-height-fine:var(--wp--custom--line-height--x-small, 1.4286);', $css );
+
+		unset( $settings['custom']['line-height']['x-small'] );
+		$css = Newspack_UI_Theme_Style::get_css( [], $settings, [] );
+		$this->assertStringNotContainsString( '--newspack-ui-font-size-fine', $css );
+		$this->assertStringNotContainsString( '--newspack-ui-line-height-fine', $css );
+	}
+
+	/**
+	 * A line height with units is not a pair half.
+	 */
+	public function test_line_height_with_units_rejected(): void {
+		$settings = $this->scale_settings();
+		$settings['custom']['line-height']['medium'] = '24px';
+		$css = Newspack_UI_Theme_Style::get_css(
+			[
+				'elements' => [
+					'caption' => [
+						'typography' => [
+							'fontSize'   => '0.8125rem',
+							'lineHeight' => '24px',
+						],
+					],
+				],
+			],
+			$settings,
+			[] 
+		);
+		$this->assertStringNotContainsString( '--newspack-ui-font-size-title-m:', $css );
+		$this->assertStringNotContainsString( '--newspack-ui-line-height-title-m:', $css );
+		$this->assertStringNotContainsString( '--newspack-ui-font-size-fine:0.8125rem', $css );
+		$this->assertStringNotContainsString( '--newspack-ui-line-height-fine:24px', $css );
+	}
+
+	/**
 	 * The caption element drives the fine print.
 	 */
 	public function test_caption_drives_fine_print(): void {
@@ -1501,6 +1654,7 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 			'slug' => 'small',
 			'size' => '1rem',
 		];
+		$settings['custom']['line-height']['small'] = 1.5;
 		$this->assertStringContainsString( '--newspack-ui-font-size-body:var(--wp--preset--font-size--small, 16px);', Newspack_UI_Theme_Style::get_css( [], $settings ) );
 	}
 
