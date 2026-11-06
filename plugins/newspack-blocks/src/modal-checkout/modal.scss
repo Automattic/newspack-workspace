@@ -19,7 +19,7 @@
 // Close button while a payment is processing (see modal.js).
 // stylelint-disable-next-line selector-id-pattern
 #newspack_modal_checkout [class*="__modal__close"][aria-disabled="true"] {
-	color: var(--newspack-ui-color-border, var(--newspack-ui-color-neutral-30));
+	color: var(--newspack-ui-color-border, var(--newspack-ui-color-neutral-30, #ddd));
 	pointer-events: none;
 }
 
