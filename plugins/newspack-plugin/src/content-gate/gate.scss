@@ -69,7 +69,7 @@
 				max-width: gate.$size__large;
 			}
 			[data-size="full-width"] & {
-				background: #fff;
+				background: var(--newspack-ui-color-surface, #fff);
 			}
 			.newspack-is-block-theme [data-size="full-width"] & {
 				border-radius: var(--newspack-ui-radius-sheet, 16px) var(--newspack-ui-radius-sheet, 16px) 0 0;
@@ -100,7 +100,7 @@
 			max-height: 100%;
 			padding: 5vw;
 			margin: 0 auto;
-			background: #fff;
+			background: var(--newspack-ui-color-surface, #fff);
 			overflow-y: auto;
 			@media ( min-width: 600px ) {
 				border-radius: 5px 5px 0 0;
@@ -135,7 +135,7 @@
 		left: 0;
 		height: 10em;
 		width: 100%;
-		background: linear-gradient(180deg, rgba(255,255,255,0) 14%, rgba(255,255,255,1) 76%);
+		background: linear-gradient(180deg, color-mix(in srgb, var(--newspack-ui-color-surface, #fff) 0%, transparent) 14%, var(--newspack-ui-color-surface, #fff) 76%);
 		z-index: 1;
 	}
 }
