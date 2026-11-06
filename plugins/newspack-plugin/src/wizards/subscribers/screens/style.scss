@@ -107,6 +107,18 @@
 	background: wp-colors.$gray-100;
 }
 
+.dataviews-column-primary__media:has( > .newspack-subscribers__avatar ) {
+	border-radius: 50%;
+
+	&::after {
+		display: none;
+	}
+
+	> .newspack-subscribers__avatar {
+		display: block;
+	}
+}
+
 // Profile header avatar, portaled into the wizard section header, top-right.
 .newspack-wizard__section-header.newspack-subscribers__has-avatar {
 	position: relative;

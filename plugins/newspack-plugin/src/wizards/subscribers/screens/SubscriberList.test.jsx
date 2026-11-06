@@ -589,3 +589,37 @@ describe( 'the network subscription rows', () => {
 		expect( field( 'managedOn' ).getValue( { item } ) ).toEqual( [ 'this-site' ] );
 	} );
 } );
+
+describe( 'the subscriber column', () => {
+	beforeEach( () => {
+		headerCalls = [];
+		mockDataViewsProps = null;
+		apiFetch.mockReset();
+	} );
+
+	// The avatar setting is off in this file's mock, so DataViews must get no media
+	// field: an empty slot would still take its square beside every name.
+	it( 'shows the email under the name and leaves out the avatar slot when avatars are off', async () => {
+		apiFetch.mockResolvedValue( page( 1 ) );
+		await act( async () => {
+			render( <SubscriberList /> );
+		} );
+
+		expect( mockDataViewsProps.view.descriptionField ).toBe( 'email' );
+		expect( mockDataViewsProps.view.mediaField ).toBeUndefined();
+		expect( mockDataViewsProps.fields.some( field => 'avatar' === field.id ) ).toBe( false );
+	} );
+
+	// The whole-row click resolves the reader from this id, wherever in the row the
+	// click lands, so it has to stay on the name.
+	it( 'stamps the subscriber id on the name the row click resolves', async () => {
+		apiFetch.mockResolvedValue( page( 1 ) );
+		await act( async () => {
+			render( <SubscriberList /> );
+		} );
+		const name = mockDataViewsProps.fields.find( field => 'name' === field.id );
+		const { container } = render( name.render( { item: subscriber( 4 ) } ) );
+
+		expect( container.querySelector( '[data-subscriber-id="4"]' ).textContent ).toBe( 'Reader 4' );
+	} );
+} );

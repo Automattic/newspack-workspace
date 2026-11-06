@@ -118,6 +118,8 @@ const DEFAULT_VIEW = {
 	filters: [],
 	layout: {},
 	titleField: 'name',
+	descriptionField: 'email',
+	...( SHOW_AVATARS ? { mediaField: 'avatar' } : {} ),
 };
 
 export default function SubscriberList() {
@@ -204,29 +206,32 @@ export default function SubscriberList() {
 				label: __( 'Subscriber', 'newspack-plugin' ),
 				enableGlobalSearch: true,
 				enableSorting: true,
-				getValue: ( { item } ) => `${ item.name } ${ item.email }`,
-				render: ( { item } ) => {
-					const details = (
-						<div>
-							<div>{ item.name }</div>
-							<div className="newspack-subscribers__email">{ item.email }</div>
-						</div>
-					);
-					if ( ! SHOW_AVATARS ) {
-						return <div data-subscriber-id={ item.id }>{ details }</div>;
-					}
-					return (
-						<HStack data-subscriber-id={ item.id } spacing={ 3 } justify="flex-start" alignment="center">
-							{ avatars[ item.id ] ? (
-								<img className="newspack-subscribers__avatar" src={ avatars[ item.id ] } alt="" width={ 32 } height={ 32 } />
-							) : (
-								<span className="newspack-subscribers__avatar" aria-hidden="true" />
-							) }
-							{ details }
-						</HStack>
-					);
-				},
+				getValue: ( { item } ) => item.name,
+				render: ( { item } ) => <span data-subscriber-id={ item.id }>{ item.name }</span>,
 			},
+			{
+				id: 'email',
+				label: __( 'Email', 'newspack-plugin' ),
+				enableGlobalSearch: true,
+				enableSorting: false,
+				getValue: ( { item } ) => item.email,
+				render: ( { item } ) => <span className="newspack-subscribers__email">{ item.email }</span>,
+			},
+			...( SHOW_AVATARS
+				? [
+						{
+							id: 'avatar',
+							label: __( 'Avatar', 'newspack-plugin' ),
+							enableSorting: false,
+							render: ( { item } ) =>
+								avatars[ item.id ] ? (
+									<img className="newspack-subscribers__avatar" src={ avatars[ item.id ] } alt="" width={ 32 } height={ 32 } />
+								) : (
+									<span className="newspack-subscribers__avatar" aria-hidden="true" />
+								),
+						},
+				  ]
+				: [] ),
 			{
 				id: 'status',
 				label: __( 'Status', 'newspack-plugin' ),
