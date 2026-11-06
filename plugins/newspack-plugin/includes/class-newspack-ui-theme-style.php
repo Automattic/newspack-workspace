@@ -27,7 +27,55 @@ class Newspack_UI_Theme_Style {
 		'font-family' => [ [ 'typography', 'fontFamilies' ], 'fontFamily' ],
 		'font-size'   => [ [ 'typography', 'fontSizes' ], 'size' ],
 		'gradient'    => [ [ 'color', 'gradients' ], 'gradient' ],
+		'spacing'     => [ [ 'spacing', 'spacingSizes' ], 'size' ],
 	];
+
+	/**
+	 * Custom property prefix to the value type its values are checked as. A property under no prefix is never printed.
+	 */
+	const PROPERTY_TYPES = [
+		'--newspack-ui-color-' => 'color',
+	];
+
+	/**
+	 * The global styles subtrees the adapter reads, as key paths.
+	 */
+	const READ_PATHS = [
+		[ 'color' ],
+		[ 'elements', 'button' ],
+		[ 'elements', 'link' ],
+		[ 'elements', 'caption' ],
+		[ 'elements', 'textInput' ],
+		[ 'elements', 'select' ],
+		[ 'typography' ],
+	];
+
+	/**
+	 * Most passes of reference resolution, for presets that are themselves references.
+	 */
+	const MAX_PASSES = 3;
+
+	/**
+	 * Resolved global styles for this request.
+	 *
+	 * @var array|null
+	 */
+	private static $global_styles = null;
+
+	/**
+	 * Register the hooks that drop the memoized global styles.
+	 */
+	public static function init() {
+		\add_action( 'save_post_wp_global_styles', [ __CLASS__, 'reset_cache' ] );
+		\add_action( 'switch_theme', [ __CLASS__, 'reset_cache' ] );
+	}
+
+	/**
+	 * Drop the memoized global styles.
+	 */
+	public static function reset_cache() {
+		self::$global_styles = null;
+	}
 
 	/**
 	 * Whether the Theme style is on: the theme opted in and no filter turned it off.
@@ -51,9 +99,31 @@ class Newspack_UI_Theme_Style {
 	 * @return array
 	 */
 	public static function get_global_styles(): array {
-		$styles = \wp_get_global_styles( [], [ 'transforms' => [ 'resolve-variables' ] ] );
+		if ( null === self::$global_styles ) {
+			$styles = \wp_get_global_styles( [], [ 'transforms' => [ 'resolve-variables' ] ] );
+			$styles = is_array( $styles ) ? $styles : [];
 
-		return self::resolve_references( is_array( $styles ) ? $styles : [], self::get_settings() );
+			$picked = [];
+			foreach ( self::READ_PATHS as $path ) {
+				$subtree = self::dig( $styles, $path );
+				if ( null === $subtree ) {
+					continue;
+				}
+				$target = &$picked;
+				foreach ( $path as $key ) {
+					if ( ! isset( $target[ $key ] ) || ! is_array( $target[ $key ] ) ) {
+						$target[ $key ] = [];
+					}
+					$target = &$target[ $key ];
+				}
+				$target = $subtree;
+				unset( $target );
+			}
+
+			self::$global_styles = self::resolve_references( $picked, self::get_settings() );
+		}
+
+		return self::$global_styles;
 	}
 
 	/**
@@ -70,7 +140,7 @@ class Newspack_UI_Theme_Style {
 
 		$brand = self::plain_hex( $button['background'] ?? '' );
 		if ( '' === $brand ) {
-			$accent = self::flatten_presets( self::dig( $settings, [ 'color', 'palette' ] ) )['accent'] ?? '';
+			$accent = self::flatten_presets( self::dig( $settings, [ 'color', 'palette' ] ) )['accent']['color'] ?? '';
 			$brand  = self::plain_hex( $accent );
 		}
 
@@ -105,7 +175,9 @@ class Newspack_UI_Theme_Style {
 	public static function get_css( array $global_styles, ?array $settings = null ): string {
 		$declarations = '';
 		foreach ( self::get_properties( $global_styles, $settings ) as $name => $value ) {
-			if ( 1 !== preg_match( '/^--newspack-ui-[a-z0-9-]+$/', (string) $name ) || ! self::is_printable( $value ) ) {
+			$type  = self::property_type( (string) $name );
+			$value = '' === $type ? '' : self::sanitize_value( $value, $type );
+			if ( '' === $value ) {
 				continue;
 			}
 			$declarations .= $name . ':' . $value . ';';
@@ -127,10 +199,35 @@ class Newspack_UI_Theme_Style {
 	public static function resolve_references( array $styles, array $settings ): array {
 		$presets = [];
 		foreach ( self::PRESET_TYPES as $type => $definition ) {
-			$presets[ $type ] = self::flatten_presets( self::dig( $settings, $definition[0] ), $definition[1] );
+			$presets[ $type ] = self::flatten_presets( self::dig( $settings, $definition[0] ) );
 		}
 
-		return self::walk( $styles, $presets, $settings );
+		for ( $pass = 0; $pass < self::MAX_PASSES; $pass++ ) {
+			$next = self::walk( $styles, $presets, $settings );
+			if ( $next === $styles ) {
+				break;
+			}
+			$styles = $next;
+		}
+
+		return $styles;
+	}
+
+	/**
+	 * The type a custom property's value is checked as, from its name.
+	 *
+	 * @param string $name The property name.
+	 *
+	 * @return string The type, or an empty string for a property no group owns.
+	 */
+	public static function property_type( string $name ): string {
+		foreach ( self::PROPERTY_TYPES as $prefix => $type ) {
+			if ( 0 === strpos( $name, $prefix ) && 1 === preg_match( '/^--newspack-ui-[a-z0-9-]+$/', $name ) ) {
+				return $type;
+			}
+		}
+
+		return '';
 	}
 
 	/**
@@ -152,9 +249,9 @@ class Newspack_UI_Theme_Style {
 
 		switch ( $type ) {
 			case 'color':
-				return 1 === preg_match( '/^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i', $value ) || self::is_var( $value ) ? $value : '';
+				return 1 === preg_match( '/^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i', $value ) || self::is_var( $value, 'color' ) ? $value : '';
 			case 'font-family':
-				return self::is_var( $value ) || 1 === preg_match( '/^[A-Za-z0-9 ,"\'._-]+$/', $value ) ? $value : '';
+				return self::is_var( $value, 'font-family' ) || 1 === preg_match( '/^[A-Za-z0-9 ,"\'._-]+$/', $value ) ? $value : '';
 			case 'length':
 				return self::is_length( $value ) ? $value : '';
 			case 'line-height':
@@ -210,14 +307,13 @@ class Newspack_UI_Theme_Style {
 	}
 
 	/**
-	 * Flatten the origin-keyed presets of one type to slug => value, custom over theme over default.
+	 * Flatten the origin-keyed presets of one type to slug => preset, custom over theme over default.
 	 *
-	 * @param mixed  $presets Presets keyed by origin, or a flat list of presets.
-	 * @param string $key     The key holding the value; 'color' when omitted.
+	 * @param mixed $presets Presets keyed by origin, or a flat list of presets.
 	 *
-	 * @return array<string,string>
+	 * @return array<string,array>
 	 */
-	private static function flatten_presets( $presets, string $key = 'color' ): array {
+	private static function flatten_presets( $presets ): array {
 		if ( ! is_array( $presets ) ) {
 			return [];
 		}
@@ -226,8 +322,8 @@ class Newspack_UI_Theme_Style {
 		$flat = [];
 		foreach ( $origins as $origin ) {
 			foreach ( is_array( $origin ) ? $origin : [] as $preset ) {
-				if ( is_array( $preset ) && is_string( $preset['slug'] ?? null ) && is_string( $preset[ $key ] ?? null ) ) {
-					$flat[ $preset['slug'] ] = $preset[ $key ];
+				if ( is_array( $preset ) && is_string( $preset['slug'] ?? null ) ) {
+					$flat[ $preset['slug'] ] = $preset;
 				}
 			}
 		}
@@ -267,13 +363,26 @@ class Newspack_UI_Theme_Style {
 	 */
 	private static function resolve_string( string $value, array $presets, array $settings ): string {
 		$parts = explode( '|', $value );
-		if ( 3 === count( $parts ) && 'var:preset' === $parts[0] && isset( $presets[ $parts[1] ][ $parts[2] ] ) ) {
-			return $presets[ $parts[1] ][ $parts[2] ];
+		if ( 3 === count( $parts ) && 'var:preset' === $parts[0] && isset( self::PRESET_TYPES[ $parts[1] ], $presets[ $parts[1] ][ $parts[2] ] ) ) {
+			$preset = $presets[ $parts[1] ][ $parts[2] ];
+			if ( 'font-size' === $parts[1] && function_exists( 'wp_get_typography_font_size_value' ) ) {
+				$size = \wp_get_typography_font_size_value( $preset, $settings );
+				return is_string( $size ) || is_int( $size ) || is_float( $size ) ? (string) $size : $value;
+			}
+			$leaf = $preset[ self::PRESET_TYPES[ $parts[1] ][1] ] ?? null;
+			return is_string( $leaf ) ? $leaf : $value;
 		}
-		if ( 3 === count( $parts ) && 'var:custom' === $parts[0] ) {
-			$leaf = self::dig( $settings, [ 'custom', $parts[1], $parts[2] ] );
-			if ( is_string( $leaf ) || is_int( $leaf ) || is_float( $leaf ) ) {
-				return (string) $leaf;
+		if ( count( $parts ) >= 2 && 'var:custom' === $parts[0] ) {
+			$node = $settings['custom'] ?? null;
+			foreach ( array_slice( $parts, 1 ) as $segment ) {
+				$camel = lcfirst( str_replace( ' ', '', ucwords( str_replace( '-', ' ', $segment ) ) ) );
+				if ( ! is_array( $node ) ) {
+					return $value;
+				}
+				$node = array_key_exists( $segment, $node ) ? $node[ $segment ] : ( $node[ $camel ] ?? null );
+			}
+			if ( is_string( $node ) || is_int( $node ) || is_float( $node ) ) {
+				return (string) $node;
 			}
 		}
 
@@ -288,7 +397,11 @@ class Newspack_UI_Theme_Style {
 	 * @return bool
 	 */
 	private static function is_printable( $value ): bool {
-		return is_string( $value ) && 1 !== preg_match( '/[;{}<>\\\\]|\/\*/', $value ) && self::balanced( $value );
+		return is_string( $value )
+			&& 1 !== preg_match( '/[;{}<>\\\\]|\/\*/', $value )
+			&& 0 === substr_count( $value, '"' ) % 2
+			&& 0 === substr_count( $value, "'" ) % 2
+			&& self::balanced( $value );
 	}
 
 	/**
@@ -312,14 +425,31 @@ class Newspack_UI_Theme_Style {
 	}
 
 	/**
-	 * Whether a value is a well-formed var() reference.
+	 * Whether a value is a single var() reference whose fallback, if any, is itself a valid value of the type.
 	 *
 	 * @param string $value The value.
+	 * @param string $type  The value type.
 	 *
 	 * @return bool
 	 */
-	private static function is_var( string $value ): bool {
-		return 1 === preg_match( '/^var\(\s*--[A-Za-z0-9_-]+\s*(,[^;{}]*)?\)$/', $value ) && self::balanced( $value );
+	private static function is_var( string $value, string $type ): bool {
+		if ( 0 !== strpos( $value, 'var(' ) || ')' !== substr( $value, -1 ) ) {
+			return false;
+		}
+		$depth = 0;
+		$last  = strlen( $value ) - 1;
+		for ( $i = 3; $i <= $last; $i++ ) {
+			if ( '(' === $value[ $i ] ) {
+				++$depth;
+			} elseif ( ')' === $value[ $i ] && 0 === --$depth && $i < $last ) {
+				return false;
+			}
+		}
+		if ( 0 !== $depth || 1 !== preg_match( '/^\s*--[A-Za-z0-9_-]+\s*(?:,(.*))?$/s', substr( $value, 4, -1 ), $match ) ) {
+			return false;
+		}
+
+		return ! isset( $match[1] ) || '' === trim( $match[1] ) || '' !== self::sanitize_value( $match[1], $type );
 	}
 
 	/**
@@ -343,3 +473,5 @@ class Newspack_UI_Theme_Style {
 		return 1 === preg_match( '/^[\s+\-*\/,.()]*$/', (string) $rest );
 	}
 }
+
+Newspack_UI_Theme_Style::init();
