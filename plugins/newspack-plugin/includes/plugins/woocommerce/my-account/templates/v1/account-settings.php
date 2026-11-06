@@ -75,7 +75,15 @@ $display_email           = $is_pending_email_change ? $pending_email_change : $u
 				placeholder="<?php esc_attr_e( 'Your display name', 'newspack-plugin' ); ?>"
 				value="<?php echo ! Reader_Activation::reader_has_generic_display_name() ? \esc_attr( $user->display_name ) : ''; ?>"
 			/>
-			<span class="legend"><?php esc_html_e( 'This is how your name is displayed publicly.', 'newspack-plugin' ); ?></span>
+			<span class="legend">
+				<?php
+				esc_html_e( 'This is how your name is displayed publicly.', 'newspack-plugin' );
+				if ( Reader_Activation\Comment_Display_Name::is_full_name_required() ) {
+					echo ' ';
+					esc_html_e( 'Comments show your first and last name instead.', 'newspack-plugin' );
+				}
+				?>
+			</span>
 		</p>
 
 		<p class="woocommerce-form-row woocommerce-form-row--wide form-row form-row-wide">

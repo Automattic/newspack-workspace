@@ -221,6 +221,7 @@ class Audience_Content_Gates extends Wizard {
 								// An empty string clears the link, so 'uri' format is too strict.
 								'maxLength' => 2000,
 							],
+							'comment_require_full_name'   => [ 'type' => 'boolean' ],
 						],
 						// Validate the whole object against the schema so the nested
 						// feed_restriction_mode enum is actually enforced (a bad value
@@ -532,6 +533,7 @@ class Audience_Content_Gates extends Wizard {
 			'comment_restriction_gate_id'      => (int) ( $advanced['comment_restriction_gate_id'] ?? 0 ),
 			'comment_restriction_message'      => (string) ( $advanced['comment_restriction_message'] ?? '' ),
 			'comment_restriction_purchase_url' => (string) ( $advanced['comment_restriction_purchase_url'] ?? '' ),
+			'comment_require_full_name'        => (bool) ( $advanced['comment_require_full_name'] ?? false ),
 		];
 	}
 

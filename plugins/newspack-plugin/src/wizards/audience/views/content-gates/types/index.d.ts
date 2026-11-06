@@ -214,6 +214,7 @@ type AdvancedSettingsConfig = {
 	comment_restriction_gate_id: number;
 	comment_restriction_message: string;
 	comment_restriction_purchase_url: string;
+	comment_require_full_name: boolean;
 };
 
 type GateSettings = {
