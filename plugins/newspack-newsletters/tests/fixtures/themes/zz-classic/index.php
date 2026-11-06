@@ -1,2 +1,0 @@
-<?php
-// Classic theme fixture.

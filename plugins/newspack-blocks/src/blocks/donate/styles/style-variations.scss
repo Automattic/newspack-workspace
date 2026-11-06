@@ -563,9 +563,7 @@
 		button[type="submit"],
 		.submit-button {
 			border-radius: var(--newspack-ui-radius-button, 8px);
-			font-family: inherit;
 			font-size: var(--newspack-ui-font-size-body, 16px);
-			font-weight: var(--newspack-ui-font-weight-strong, 600);
 			line-height: var(--newspack-ui-line-height-body, 1.5);
 			margin: 0 calc(1px + var(--newspack-ui-spacer-5, 24px)) calc(1px + var(--newspack-ui-spacer-5, 24px));
 			padding: var(--newspack-ui-spacer-2, 12px) var(--newspack-ui-spacer-5, 24px);
@@ -578,16 +576,24 @@
 				pointer-events: none;
 			}
 
+			&:not(.wp-element-button) {
+				font-family: inherit;
+				font-weight: var(--newspack-ui-font-weight-strong, 600);
+			}
+
 			@include motion.hover {
-				&:hover {
+				&:not(.wp-element-button):hover {
 					--wpbnbd-overlay: inset 0 0 0 100vmax color-mix(in oklab, black calc(100% - var(--newspack-ui-color-mix-hover, 85%)), transparent);
 					box-shadow: var(--wpbnbd-overlay, 0 0 #0000);
 				}
 			}
 
-			&:active {
+			&:not(.wp-element-button):active {
 				--wpbnbd-overlay: inset 0 0 0 100vmax color-mix(in oklab, black calc(100% - var(--newspack-ui-color-mix-pressed, 75%)), transparent);
 				box-shadow: var(--wpbnbd-overlay, 0 0 #0000);
+			}
+
+			&:active {
 				transform: scale(motion.$press-scale);
 
 				@include motion.reduced-motion {
@@ -687,24 +693,30 @@
 			.submit-button {
 				border-radius: var(--newspack-ui-radius-button, 8px);
 				border-width: 1px;
-				font-family: inherit;
 				font-size: var(--newspack-ui-font-size-body, 16px);
-				font-weight: var(--newspack-ui-font-weight-strong, 600);
 				line-height: var(--newspack-ui-line-height-body, 1.5);
 				margin: auto 0 0;
 				padding: calc(var(--newspack-ui-spacer-2, 12px) - 1px) calc(var(--newspack-ui-spacer-5, 24px) - 1px);
 				transition: background motion.$duration-color motion.$ease-color, border-color motion.$duration-color motion.$ease-color, box-shadow motion.$duration-color motion.$ease-color, color motion.$duration-color motion.$ease-color, transform motion.$duration-press motion.$ease-out;
 
+				&:not(.wp-element-button) {
+					font-family: inherit;
+					font-weight: var(--newspack-ui-font-weight-strong, 600);
+				}
+
 				@include motion.hover {
-					&:hover {
+					&:not(.wp-element-button):hover {
 						--wpbnbd-overlay: inset 0 0 0 100vmax color-mix(in oklab, black calc(100% - var(--newspack-ui-color-mix-hover, 85%)), transparent);
 						box-shadow: var(--wpbnbd-overlay, 0 0 #0000);
 					}
 				}
 
-				&:active {
+				&:not(.wp-element-button):active {
 					--wpbnbd-overlay: inset 0 0 0 100vmax color-mix(in oklab, black calc(100% - var(--newspack-ui-color-mix-pressed, 75%)), transparent);
 					box-shadow: var(--wpbnbd-overlay, 0 0 #0000);
+				}
+
+				&:active {
 					transform: scale(motion.$press-scale);
 
 					@include motion.reduced-motion {

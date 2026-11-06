@@ -35,9 +35,7 @@
 
 	button,
 	.submit-button {
-		font-family: var(--newspack-theme-font-heading, sans-serif);
 		font-size: variables.$font__size-sm;
-		font-weight: bold;
 		outline: none;
 
 		&[type="submit"] {
@@ -46,15 +44,20 @@
 	}
 	button[type="submit"],
 	.submit-button {
-		border-radius: 5px;
 		box-sizing: border-box;
-		line-height: 3;
-		padding-left: 20px;
-		padding-right: 20px;
+	}
+	button:not(.wp-element-button),
+	.submit-button:not(.wp-element-button) {
+		font-family: var(--newspack-theme-font-heading, sans-serif);
+		font-weight: bold;
 	}
 	button[type="submit"]:not(.wp-element-button),
 	.submit-button:not(.wp-element-button) {
+		border-radius: 5px;
 		color: np-colors.$neutral-000;
+		line-height: 3;
+		padding-left: 20px;
+		padding-right: 20px;
 	}
 }
 
