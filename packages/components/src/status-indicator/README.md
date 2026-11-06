@@ -115,9 +115,10 @@ Color backs the glyph and label up; it does not replace them. The glyph does the
 separating on its own, so no status leans on color to carry its meaning, and two
 statuses may share a tone where the glyphs tell them apart (`scheduled` and
 `progress`, or `draft`, `pending` and `trash`). `private` has no tone: it is
-live, and tinting it like `active` would make the two read alike. A status drawn with a
-glyph passed through `icon` is never tinted, since a classifying field has no
-lifecycle to color. `statusTone` is exported alongside `statusGlyph` for tests.
+live, and tinting it like `active` would make the two read alike. A status drawn
+with a glyph passed through `icon` is never tinted, since a classifying field has
+no lifecycle to color. `statusTone` is exported alongside `statusGlyph` for
+tests.
 
 `tone` overrides a status's own tone for a screen where the state means
 something narrower than its glyph suggests. Scheduled Actions uses it for
