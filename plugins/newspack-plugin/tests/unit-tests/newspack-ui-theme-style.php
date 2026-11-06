@@ -22,6 +22,9 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 	public function tear_down(): void {
 		remove_theme_support( Newspack_UI_Theme_Style::THEME_SUPPORT );
 		remove_all_filters( 'newspack_ui_theme_style_active' );
+		remove_all_filters( 'wp_theme_json_data_user' );
+		WP_Theme_JSON_Resolver::clean_cached_data();
+		Newspack_UI_Theme_Style::reset_cache();
 		wp_dequeue_style( 'newspack-ui' );
 		wp_deregister_style( 'newspack-ui' );
 		parent::tear_down();
@@ -150,6 +153,7 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 		}
 		$this->assertSame( $brand, $properties['--newspack-ui-color-primary'] );
 		$this->assertSame( '#1e1e1e', $properties['--newspack-ui-color-base'] );
+		$this->assertSame( '#ffffff', $properties['--newspack-ui-color-contrast'] );
 	}
 
 	/**
@@ -165,9 +169,9 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 						'background' => 'var:preset|color|base',
 						'text'       => 'var:preset|color|contrast',
 					],
-					'elements' => [ 'button' => [ 'color' => [ 'background' => 'var:preset|color|accent' ] ] ],
+					'elements' => [ 'button' => [ 'color' => [ 'background' => 'var:preset|color|brand' ] ] ],
 				],
-				'#ffc857',
+				'#003da5',
 			],
 			'unknown slug' => [
 				[
@@ -390,14 +394,217 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 	}
 
 	/**
-	 * With the Theme style on, the old body rule is not printed.
+	 * Make the global styles carry these user styles.
+	 *
+	 * @param array $styles The styles.
 	 */
-	public function test_colors_css_wrap_returns_when_active(): void {
-		add_theme_support( Newspack_UI_Theme_Style::THEME_SUPPORT );
+	private function set_user_styles( array $styles ): void {
+		add_filter(
+			'wp_theme_json_data_user',
+			function ( $data ) use ( $styles ) {
+				return $data->update_with(
+					[
+						'version' => WP_Theme_JSON::LATEST_SCHEMA,
+						'styles'  => $styles,
+					]
+				);
+			}
+		);
+		WP_Theme_JSON_Resolver::clean_cached_data();
+		Newspack_UI_Theme_Style::reset_cache();
+	}
+
+	/**
+	 * The inline CSS the wrap prints.
+	 *
+	 * @return string
+	 */
+	private function wrap_output(): string {
 		Newspack_UI::enqueue_assets();
 		Newspack_UI::colors_css_wrap();
 
-		$this->assertStringNotContainsString( 'body {', implode( "\n", (array) wp_styles()->get_data( 'newspack-ui', 'after' ) ) );
+		return implode( "\n", (array) wp_styles()->get_data( 'newspack-ui', 'after' ) );
+	}
+
+	/**
+	 * With the Theme style on and a usable base, the old body rule is not printed.
+	 */
+	public function test_colors_css_wrap_returns_when_active(): void {
+		add_theme_support( Newspack_UI_Theme_Style::THEME_SUPPORT );
+		$this->set_user_styles(
+			[
+				'color' => [
+					'background' => '#1e1e1e',
+					'text'       => '#ffffff',
+				],
+			] 
+		);
+
+		$this->assertStringNotContainsString( 'body {', $this->wrap_output() );
+	}
+
+	/**
+	 * With the Theme style on but a base it cannot read, the legacy rule prints as before.
+	 *
+	 * @dataProvider data_unreadable_bases
+	 *
+	 * @param string $base The page background.
+	 */
+	public function test_colors_css_wrap_falls_back_when_base_is_unreadable( string $base ): void {
+		add_theme_support( Newspack_UI_Theme_Style::THEME_SUPPORT );
+		$this->set_user_styles(
+			[
+				'color' => [
+					'background' => $base,
+					'text'       => '#ffffff',
+				],
+			] 
+		);
+
+		$this->assertSame( 'body {--newspack-ui-color-primary: #32373c;--newspack-ui-color-against-primary: #fff;}', substr( $this->wrap_output(), -strlen( 'body {--newspack-ui-color-primary: #32373c;--newspack-ui-color-against-primary: #fff;}' ) ) );
+	}
+
+	/**
+	 * Backgrounds the palette cannot read.
+	 *
+	 * @return array
+	 */
+	public function data_unreadable_bases(): array {
+		return [
+			'alpha hex' => [ '#1e1e1ecc' ],
+			'rgba'      => [ 'rgba(30,30,30,0.8)' ],
+			'gradient'  => [ 'linear-gradient(red,blue)' ],
+		];
+	}
+
+	/**
+	 * The global styles are resolved once until the cache is reset.
+	 */
+	public function test_global_styles_are_memoized_until_reset(): void {
+		$this->set_user_styles( [ 'color' => [ 'background' => '#112233' ] ] );
+		$this->assertSame( '#112233', Newspack_UI_Theme_Style::get_global_styles()['color']['background'] );
+
+		remove_all_filters( 'wp_theme_json_data_user' );
+		WP_Theme_JSON_Resolver::clean_cached_data();
+		$this->assertSame( '#112233', Newspack_UI_Theme_Style::get_global_styles()['color']['background'] );
+
+		do_action( 'switch_theme' );
+		$this->assertNotSame( '#112233', Newspack_UI_Theme_Style::get_global_styles()['color']['background'] ?? null );
+
+		$this->set_user_styles( [ 'color' => [ 'background' => '#445566' ] ] );
+		$this->assertSame( '#445566', Newspack_UI_Theme_Style::get_global_styles()['color']['background'] );
+		remove_all_filters( 'wp_theme_json_data_user' );
+		WP_Theme_JSON_Resolver::clean_cached_data();
+		do_action( 'save_post_wp_global_styles' );
+		$this->assertNotSame( '#445566', Newspack_UI_Theme_Style::get_global_styles()['color']['background'] ?? null );
+	}
+
+	/**
+	 * Only the subtrees the adapter reads are kept.
+	 */
+	public function test_only_read_subtrees_are_kept(): void {
+		$this->set_user_styles(
+			[
+				'color'   => [ 'background' => '#112233' ],
+				'spacing' => [ 'padding' => '1px' ],
+				'css'     => 'a{b:c}',
+			]
+		);
+		$styles = Newspack_UI_Theme_Style::get_global_styles();
+
+		$this->assertArrayHasKey( 'color', $styles );
+		$this->assertArrayNotHasKey( 'spacing', $styles );
+		$this->assertArrayNotHasKey( 'css', $styles );
+	}
+
+	/**
+	 * A font size preset resolves through core's fluid typography.
+	 */
+	public function test_font_size_preset_uses_core_fluid_value(): void {
+		$settings                        = $this->settings();
+		$settings['typography']['fluid'] = true;
+		$settings['typography']['fontSizes']['theme'][0]['size'] = '2rem';
+
+		$resolved = Newspack_UI_Theme_Style::resolve_references( [ 'a' => 'var:preset|font-size|medium' ], $settings );
+
+		$this->assertSame( wp_get_typography_font_size_value( $settings['typography']['fontSizes']['theme'][0], $settings ), $resolved['a'] );
+		$this->assertStringStartsWith( 'clamp(', $resolved['a'] );
+	}
+
+	/**
+	 * Custom references resolve at any depth and map kebab-case to camelCase.
+	 */
+	public function test_var_custom_resolves_deep_and_camel_case(): void {
+		$settings           = $this->settings();
+		$settings['custom'] = [
+			'lineHeight' => [ 'body' => '1.6' ],
+			'a'          => [ 'bC' => [ 'd' => 'deep' ] ],
+		];
+
+		$resolved = Newspack_UI_Theme_Style::resolve_references(
+			[
+				'x' => 'var:custom|line-height|body',
+				'y' => 'var:custom|a|b-c|d',
+				'z' => 'var:custom|a|missing|d',
+			],
+			$settings
+		);
+
+		$this->assertSame( '1.6', $resolved['x'] );
+		$this->assertSame( 'deep', $resolved['y'] );
+		$this->assertSame( 'var:custom|a|missing|d', $resolved['z'] );
+	}
+
+	/**
+	 * Spacing presets resolve.
+	 */
+	public function test_spacing_preset_resolves(): void {
+		$settings                                   = $this->settings();
+		$settings['spacing']['spacingSizes']['theme'] = [
+			[
+				'slug' => '40',
+				'size' => '1.5rem',
+			],
+		];
+
+		$resolved = Newspack_UI_Theme_Style::resolve_references( [ 'a' => 'var:preset|spacing|40' ], $settings );
+
+		$this->assertSame( '1.5rem', $resolved['a'] );
+	}
+
+	/**
+	 * A preset that is itself a reference resolves, within the pass cap.
+	 */
+	public function test_nested_references_resolve_with_a_cap(): void {
+		$settings                                        = $this->settings();
+		$settings['color']['palette']['custom'][]        = [
+			'slug'  => 'alias',
+			'color' => 'var:preset|color|accent',
+		];
+		$settings['color']['palette']['custom'][]        = [
+			'slug'  => 'loop',
+			'color' => 'var:preset|color|loop',
+		];
+
+		$resolved = Newspack_UI_Theme_Style::resolve_references(
+			[
+				'a' => 'var:preset|color|alias',
+				'b' => 'var:preset|color|loop',
+			],
+			$settings 
+		);
+
+		$this->assertSame( '#ffc857', $resolved['a'] );
+		$this->assertSame( 'var:preset|color|loop', $resolved['b'] );
+	}
+
+	/**
+	 * Only properties of a mapped group are printed, with their values checked.
+	 */
+	public function test_unmapped_property_names_have_no_type(): void {
+		$this->assertSame( 'color', Newspack_UI_Theme_Style::property_type( '--newspack-ui-color-base' ) );
+		$this->assertSame( '', Newspack_UI_Theme_Style::property_type( '--newspack-ui-other-thing' ) );
+		$this->assertSame( '', Newspack_UI_Theme_Style::property_type( '--other-color-base' ) );
 	}
 
 	/**
@@ -500,6 +707,17 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 			'spacing zero'      => [ '0', 'letter-spacing', '0' ],
 			'spacing em'        => [ '-0.01em', 'letter-spacing', '-0.01em' ],
 			'spacing bad'       => [ 'wide', 'letter-spacing', '' ],
+			'var then url'      => [ 'var(--a, x) url(https://e.com/p.png)', 'color', '' ],
+			'var shorthand'     => [ 'var(--a, 1px solid red)', 'color', '' ],
+			'var open quote'    => [ 'var(--a, ")', 'color', '' ],
+			'var url fallback'  => [ 'var(--x, url(https://e.com/p.png))', 'color', '' ],
+			'var plain'         => [ 'var(--a)', 'color', 'var(--a)' ],
+			'var hex fallback'  => [ 'var(--a, #fff)', 'color', 'var(--a, #fff)' ],
+			'var nested'        => [ 'var(--a, var(--b, #fff))', 'color', 'var(--a, var(--b, #fff))' ],
+			'var empty'         => [ 'var(--a,)', 'color', 'var(--a,)' ],
+			'family quote'      => [ 'Georgia"', 'font-family', '' ],
+			'family open quote' => [ 'Georgia, "Serif', 'font-family', '' ],
+			'family var'        => [ 'var(--wp--preset--font-family--body, Georgia, serif)', 'font-family', 'var(--wp--preset--font-family--body, Georgia, serif)' ],
 			'not a string'      => [ [ '#fff' ], 'color', '' ],
 		];
 	}
