@@ -8,7 +8,7 @@ import { find } from 'lodash';
  */
 import { parse } from '@wordpress/blocks';
 import { useDispatch } from '@wordpress/data';
-import { DataViewsPicker } from '@wordpress/dataviews/wp';
+import { DataViewsPicker } from '@wordpress/dataviews';
 import { Button, Spinner, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { useEffect, useMemo, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';

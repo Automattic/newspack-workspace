@@ -6,14 +6,14 @@
 
 import { getBlockType, registerBlockType } from '@wordpress/blocks';
 import { registerCoreBlocks } from '@wordpress/block-library';
-import { DataViews } from '@wordpress/dataviews/wp';
 import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
+
+import { DataViews } from 'newspack-components';
 
 import { getAdminUrl } from '../../admin-globals';
 import HeaderCount from '../../components/header-count';
 import LoadingState from '../../components/loading-state';
-import InlineFiltersLayout from '../../components/inline-filters-layout';
 import ItemsPerPage from '../../components/items-per-page';
 import { useHeaderActions } from '../../header-actions-context';
 import usePersistedView from '../../hooks/use-persisted-view';
@@ -283,17 +283,15 @@ export default function LayoutsListScreen() {
 				isLoading={ isLoading || isPrebuiltLoading }
 				getItemId={ item => String( item.id ) }
 				config={ DATAVIEWS_CONFIG }
-			>
-				<InlineFiltersLayout
-					header={
-						<ItemsPerPage
-							value={ view.perPage }
-							options={ PER_PAGE_OPTIONS }
-							onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) }
-						/>
-					}
-				/>
-			</DataViews>
+				inlineFilters
+				header={
+					<ItemsPerPage
+						value={ view.perPage }
+						options={ PER_PAGE_OPTIONS }
+						onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) }
+					/>
+				}
+			/>
 		</>
 	);
 }

@@ -54,6 +54,7 @@ export function getFields( { onEdit } = {} ) {
 			label: __( 'Description', 'newspack-newsletters' ),
 			enableSorting: false,
 			getValue: ( { item } ) => item?.description || '',
+			render: ( { item } ) => ( item?.description ? <span className="newspack-newsletters-list__secondary">{ item.description }</span> : null ),
 		},
 		{
 			id: 'slug',

@@ -40,6 +40,11 @@
 	visibility: hidden;
 }
 
+.newspack-subscribers__owner-role {
+	color: var(--wpds-color-foreground-content-neutral, #{wp-colors.$gray-900});
+	font-weight: wp-vars.$font-weight-medium;
+}
+
 .newspack-subscribers__email,
 .newspack-subscribers__muted {
 	color: var(--wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700});
@@ -100,6 +105,18 @@
 	flex-shrink: 0;
 	object-fit: cover;
 	background: wp-colors.$gray-100;
+}
+
+.dataviews-column-primary__media:has( > .newspack-subscribers__avatar ) {
+	border-radius: 50%;
+
+	&::after {
+		display: none;
+	}
+
+	> .newspack-subscribers__avatar {
+		display: block;
+	}
 }
 
 // Profile header avatar, portaled into the wizard section header, top-right.
@@ -314,7 +331,8 @@
 
 	// The footer ships its own 48px horizontal padding; tighten it to match the
 	// table cells so the pagination and bulk-action bar line up with the content.
-	.dataviews-footer {
+	.dataviews-footer,
+	.dataviews-view-table__bulk-actions-overlay > .dataviews-bulk-actions {
 		padding-left: wp-vars.$grid-unit-15 !important;
 		padding-right: wp-vars.$grid-unit-15 !important;
 	}

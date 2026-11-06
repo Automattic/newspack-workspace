@@ -8,15 +8,13 @@
  */
 
 import { Button } from '@wordpress/components';
-import { DataViews } from '@wordpress/dataviews/wp';
 import { useCallback, useMemo, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { store } from '@wordpress/icons';
 
-import { EmptyState, evenColumns, withoutColumnStyles } from 'newspack-components';
+import { DataViews, EmptyState } from 'newspack-components';
 import LoadingState from '../../components/loading-state';
 import HeaderCount from '../../components/header-count';
-import InlineFiltersLayout from '../../components/inline-filters-layout';
 import ItemsPerPage from '../../components/items-per-page';
 import { EMPTY_STATE_CLASS, getEmptyStateHeading } from '../../constants';
 import { useHeaderActions } from '../../header-actions-context';
@@ -37,7 +35,8 @@ const DEFAULT_VIEW = {
 	search: '',
 	filters: [],
 	titleField: 'name',
-	fields: [ 'description', 'slug', 'count' ],
+	descriptionField: 'description',
+	fields: [ 'slug', 'count' ],
 };
 
 const DEFAULT_LAYOUTS = { table: {} };
@@ -46,6 +45,8 @@ const PERSIST_OPTIONS = {
 	fieldIds: FIELD_IDS,
 	layoutTypes: Object.keys( DEFAULT_LAYOUTS ),
 	urlPatch: getInitialView(),
+	// A view saved while the description had its own column would show it twice.
+	normalize: view => ( { ...view, fields: ( view.fields || [] ).filter( field => field !== 'description' ) } ),
 };
 
 // Suppress the built-in ViewConfig per-page control — the custom
@@ -128,21 +129,19 @@ export default function AdvertisersListScreen() {
 					className="newspack-newsletters-list newspack-newsletters-advertisers-list"
 					data={ data }
 					fields={ fields }
-					view={ evenColumns( view ) }
-					onChangeView={ nextView => setView( withoutColumnStyles( nextView ) ) }
+					view={ view }
+					onChangeView={ setView }
 					actions={ actions }
 					paginationInfo={ paginationInfo }
 					defaultLayouts={ DEFAULT_LAYOUTS }
 					isLoading={ isLoading }
 					getItemId={ item => String( item.id ) }
 					config={ DATAVIEWS_CONFIG }
-				>
-					<InlineFiltersLayout
-						header={
-							<ItemsPerPage value={ view.perPage } onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) } />
-						}
-					/>
-				</DataViews>
+					inlineFilters
+					header={
+						<ItemsPerPage value={ view.perPage } onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) } />
+					}
+				/>
 			) }
 
 			{ modalState && (
