@@ -302,7 +302,7 @@ class Agent_Access_Admin {
 	/** Localized presentation text shared by the settings renderer and script. */
 	private static function get_ui_text() {
 		return array(
-			'seo_only' => __( 'Yoast SEO only — existing content; no content edits or publishing.', 'botcreds-agent-access' ),
+			'seo_only' => __( 'Yoast SEO only — all authors; no content edits or publishing.', 'botcreds-agent-access' ),
 			'read_only' => __( 'Read only — writes disabled.', 'botcreds-agent-access' ),
 			'full' => __( 'Full write access — within this user’s permissions.', 'botcreds-agent-access' ),
 			'selected' => __( 'Selected access — writes limited to the selections below.', 'botcreds-agent-access' ),
@@ -413,7 +413,7 @@ class Agent_Access_Admin {
 			wp_send_json_error( $site_management->get_error_message() );
 		}
 
-		$scope = self::collect_scope_from_post();
+		$scope = self::collect_scope_from_post( $user_id );
 		if ( is_wp_error( $scope ) ) {
 			wp_send_json_error( $scope->get_error_message() );
 		}
@@ -513,7 +513,7 @@ class Agent_Access_Admin {
 		}
 
 		$uuid       = $existing['uuid'];
-		$scope      = self::collect_scope_from_post();
+		$scope      = self::collect_scope_from_post( $user_id );
 		if ( is_wp_error( $scope ) ) {
 			wp_send_json_error( $scope->get_error_message() );
 		}
@@ -578,9 +578,9 @@ class Agent_Access_Admin {
 	 *
 	 * @param array $scope Existing grants or creation defaults.
 	 */
-	private function render_scope_controls( array $scope ) {
+	private function render_scope_controls( array $scope, $user_id = 0 ) {
 		$read_only    = in_array( '__read_only__', $scope, true );
-		$seo_only = in_array( Agent_Access_Yoast_SEO::SCOPE, $scope, true );
+		$seo_only = Agent_Access_Yoast_SEO::has_scope( $scope );
 		$full         = in_array( '*', $scope, true );
 		$all_custom   = in_array( Agent_Access_Scope::ALL_CUSTOM_ENDPOINTS, $scope, true );
 		$integrations = Agent_Access_Scope::get_custom_integrations();
@@ -593,7 +593,7 @@ class Agent_Access_Admin {
 		$routes_id = wp_unique_id( 'agent-access-custom-routes-' );
 		// Preserve grants for post types whose plugins are temporarily inactive.
 		foreach ( $scope as $slug ) {
-			if ( is_string( $slug ) && '' !== $slug && '/' !== $slug[0] && ! in_array( $slug, array( '*', '__read_only__', Agent_Access_Yoast_SEO::SCOPE, Agent_Access_Scope::ALL_CUSTOM_ENDPOINTS ), true ) && ! in_array( $slug, $known_types, true ) ) {
+			if ( is_string( $slug ) && '' !== $slug && '/' !== $slug[0] && ! in_array( $slug, array( '*', '__read_only__', Agent_Access_Yoast_SEO::SCOPE, Agent_Access_Yoast_SEO::LEGACY_SCOPE, Agent_Access_Scope::ALL_CUSTOM_ENDPOINTS ), true ) && ! in_array( $slug, $known_types, true ) ) {
 				$types[] = array( 'slug' => $slug, 'label' => $slug );
 			}
 		}
@@ -612,11 +612,18 @@ class Agent_Access_Admin {
 			<?php esc_html_e( 'Full write access', 'botcreds-agent-access' ); ?>
 		</label>
 		</div>
+		<?php if ( Agent_Access_Yoast_SEO::can_assign( $user_id ) ) : ?>
 		<div class="agent-access-control-row">
 		<label><input type="checkbox" name="scope_seo_only" class="agent-access-scope-seo-only" value="1" <?php checked( $seo_only ); ?> <?php disabled( $read_only ); ?>> <?php esc_html_e( 'Yoast SEO only', 'botcreds-agent-access' ); ?></label>
-		<?php $this->render_help_tooltip( __( 'Yoast SEO only', 'botcreds-agent-access' ), __( 'Requires active Yoast SEO. Allows SEO title, description, focus keyphrase and social titles/descriptions through /agent-access/v1/yoast-seo/{id}. Existing content only, within the account’s editing permissions. Blocks all other writes, including content, publishing and plugin integrations. Overrides full and selected write access. Reads are unchanged.', 'botcreds-agent-access' ) ); ?>
+		<?php $this->render_help_tooltip( __( 'Yoast SEO only', 'botcreds-agent-access' ), __( 'Requires active Yoast SEO. Allows SEO title, description, focus keyphrase and social titles/descriptions through /agent-access/v1/yoast-seo/{id}. Existing content across all authors; only a human administrator can assign this scope. Blocks all other writes, including content, publishing and plugin integrations. Overrides full and selected write access. Reads are unchanged.', 'botcreds-agent-access' ) ); ?>
 		</div>
-		<p class="agent-access-scope-summary" aria-live="polite"><?php echo esc_html( $read_only ? __( 'Read only — writes disabled.', 'botcreds-agent-access' ) : ( $seo_only ? __( 'Yoast SEO only — existing content; no content edits or publishing.', 'botcreds-agent-access' ) : ( $full ? __( 'Full write access — within this user’s permissions.', 'botcreds-agent-access' ) : __( 'Selected access — writes limited to the selections below.', 'botcreds-agent-access' ) ) ) ); ?></p>
+		<?php elseif ( $seo_only ) : ?>
+		<p><?php esc_html_e( 'Yoast SEO only — managed by an administrator.', 'botcreds-agent-access' ); ?></p>
+		<?php endif; ?>
+		<?php if ( in_array( Agent_Access_Yoast_SEO::LEGACY_SCOPE, $scope, true ) ) : ?>
+		<p class="description"><?php esc_html_e( 'Earlier SEO grant: an administrator must save this selection again to enable access across all authors.', 'botcreds-agent-access' ); ?></p>
+		<?php endif; ?>
+		<p class="agent-access-scope-summary" aria-live="polite"><?php echo esc_html( $read_only ? __( 'Read only — writes disabled.', 'botcreds-agent-access' ) : ( $seo_only ? __( 'Yoast SEO only — all authors; no content edits or publishing.', 'botcreds-agent-access' ) : ( $full ? __( 'Full write access — within this user’s permissions.', 'botcreds-agent-access' ) : __( 'Selected access — writes limited to the selections below.', 'botcreds-agent-access' ) ) ) ); ?></p>
 		<fieldset class="agent-access-scoped-options">
 			<legend class="agent-access-scope-heading"><?php esc_html_e( 'WordPress content', 'botcreds-agent-access' ); ?></legend>
 			<?php foreach ( $types as $type ) : ?>
@@ -672,13 +679,16 @@ class Agent_Access_Admin {
 	 *
 	 * @return array|WP_Error
 	 */
-	private static function collect_scope_from_post() {
+	private static function collect_scope_from_post( $user_id = 0 ) {
 		// Nonces and capabilities are checked by each AJAX caller before collection.
 		// phpcs:disable WordPress.Security.NonceVerification.Missing
 		if ( ! empty( $_POST['scope_read_only'] ) ) {
 			return array( '__read_only__' );
 		}
 		if ( ! empty( $_POST['scope_seo_only'] ) ) {
+			if ( ! Agent_Access_Yoast_SEO::can_assign( $user_id ) ) {
+				return new WP_Error( 'seo_scope_forbidden', __( 'Only a signed-in administrator with user-management permissions can assign Yoast SEO-only access to another user.', 'botcreds-agent-access' ) );
+			}
 			return array( Agent_Access_Yoast_SEO::SCOPE );
 		}
 		if ( ! empty( $_POST['scope_full'] ) ) {
@@ -700,7 +710,7 @@ class Agent_Access_Admin {
 				if ( ! Agent_Access_Scope::is_valid_custom_pattern( $slug ) ) {
 					return new WP_Error( 'invalid_scope', __( 'Use custom route prefixes such as /newspack-workflows/v1/*; core WordPress routes belong in the content scope.', 'botcreds-agent-access' ) );
 				}
-			} elseif ( '*' !== $slug && ( sanitize_key( $slug ) !== $slug || '__read_only__' === $slug || Agent_Access_Yoast_SEO::SCOPE === $slug || Agent_Access_Scope::ALL_CUSTOM_ENDPOINTS === $slug ) ) {
+			} elseif ( '*' !== $slug && ( sanitize_key( $slug ) !== $slug || '__read_only__' === $slug || Agent_Access_Yoast_SEO::SCOPE === $slug || Agent_Access_Yoast_SEO::LEGACY_SCOPE === $slug || Agent_Access_Scope::ALL_CUSTOM_ENDPOINTS === $slug ) ) {
 				return new WP_Error( 'invalid_scope', __( 'Invalid scope settings.', 'botcreds-agent-access' ) );
 			}
 			$clean[] = $slug;
@@ -875,7 +885,7 @@ class Agent_Access_Admin {
 							<td>
 								<div class="agent-access-scope-checklist agent-access-admin-update-scope"
 									data-user-id="<?php echo esc_attr( $user->ID ); ?>">
-									<?php $this->render_scope_controls( $checked_slugs ); ?>
+									<?php $this->render_scope_controls( $checked_slugs, $user->ID ); ?>
 								</div>
 							</td>
 						</tr>
@@ -941,7 +951,7 @@ class Agent_Access_Admin {
 							</th>
 							<td>
 								<div class="agent-access-scope-checklist">
-							<?php $this->render_scope_controls( $admin_create_defaults ); ?>
+							<?php $this->render_scope_controls( $admin_create_defaults, $user->ID ); ?>
 						</div>
 							</td>
 						</tr>

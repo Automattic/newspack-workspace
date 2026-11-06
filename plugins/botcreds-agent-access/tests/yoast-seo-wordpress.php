@@ -62,7 +62,7 @@ try {
 	aa_seo_check( $before === get_post( $post_id, ARRAY_A ), 'ALL post columns unchanged' );
 	$parse = new ReflectionMethod( 'Agent_Access_Admin', 'collect_scope_from_post' ); $parse->setAccessible( true );
 	$_POST = array( 'scope_seo_only' => '1', 'scope_full' => '1', 'scope_all_custom' => '1', 'scope_types' => array( 'post' ) );
-	aa_seo_check( $scope === $parse->invoke( null ), 'SEO mode overrides broad UI payload' );
+	aa_seo_check( is_wp_error( $parse->invoke( null ) ), 'self-service cannot assign cross-author SEO scope' );
 	$_POST['scope_read_only'] = '1'; aa_seo_check( array( '__read_only__' ) === $parse->invoke( null ), 'read only overrides SEO form' );
 	Agent_Access_Scope::save( $uid, 'seo-test', $scope ); aa_seo_check( $scope === Agent_Access_Scope::get( $uid, 'seo-test' ), 'scope persists' );
 	aa_seo_check( 'Yoast SEO only' === Agent_Access_Scope::get_label( $scope ), 'scope label' );

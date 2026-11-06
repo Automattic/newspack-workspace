@@ -93,7 +93,7 @@ class Agent_Access_Scope {
 		}
 
 		// Restrictive mode wins over full, content and integration grants, including legacy mixtures.
-		if ( in_array( Agent_Access_Yoast_SEO::SCOPE, $slugs, true ) ) {
+		if ( Agent_Access_Yoast_SEO::has_scope( $slugs ) ) {
 			$valid = Agent_Access_Yoast_SEO::validate_write( $request );
 			return is_wp_error( $valid ) ? $valid : $result;
 		}
@@ -542,7 +542,7 @@ class Agent_Access_Scope {
 			return __( 'Read only', 'botcreds-agent-access' );
 		}
 
-		if ( in_array( Agent_Access_Yoast_SEO::SCOPE, $scope, true ) ) {
+		if ( Agent_Access_Yoast_SEO::has_scope( $scope ) ) {
 			return __( 'Yoast SEO only', 'botcreds-agent-access' );
 		}
 

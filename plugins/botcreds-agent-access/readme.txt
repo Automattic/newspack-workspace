@@ -4,7 +4,7 @@ Tags: ai-agents, mcp, application-passwords, rest-api, security
 Requires at least: 5.7
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.4.0-rc.9
+Stable tag: 2.4.0-rc.10
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -75,6 +75,11 @@ BotCreds manages one Application Password per user. Revoke the existing one befo
 3. The "Connected" state showing status and revoke option.
 
 == Changelog ==
+
+= 2.4.0-rc.10 =
+* One admin-assigned Yoast SEO-only scope covers content across all authors without granting general editing capabilities.
+* Earlier self-selectable SEO grants stay restricted until an administrator explicitly re-saves the scope.
+
 
 = 2.4.0-rc.9 =
 * Add a restrictive Yoast SEO-only credential scope and dedicated, field-allowlisted metadata API.

@@ -111,7 +111,7 @@
 			var summary = checklist.querySelector('.agent-access-scope-summary');
 			var routes = checklist.querySelector('.agent-access-scope-custom-routes');
 			var hasSelection = checklist.querySelector('.agent-access-scope-type:checked:not(:disabled)') || (allCustom && allCustom.checked) || (routes && routes.value.trim());
-			setLiveText(summary, readMode ? uiText('read_only', 'Read only — writes disabled.') : (seoMode ? uiText('seo_only', 'Yoast SEO only — existing content; no content edits or publishing.') : (fullMode ? uiText('full', 'Full write access — within this user’s permissions.') : (hasSelection ? uiText('selected', 'Selected access — writes limited to the selections below.') : uiText('empty', 'No selections — writes disabled.')))));
+			setLiveText(summary, readMode ? uiText('read_only', 'Read only — writes disabled.') : (seoMode ? uiText('seo_only', 'Yoast SEO only — all authors; no content edits or publishing.') : (fullMode ? uiText('full', 'Full write access — within this user’s permissions.') : (hasSelection ? uiText('selected', 'Selected access — writes limited to the selections below.') : uiText('empty', 'No selections — writes disabled.')))));
 		}
 		document.querySelectorAll('.agent-access-scope-checklist').forEach(sync);
 		['change', 'input'].forEach(function (name) {

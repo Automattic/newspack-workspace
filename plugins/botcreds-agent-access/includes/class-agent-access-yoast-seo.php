@@ -9,12 +9,29 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 class Agent_Access_Yoast_SEO {
-	const SCOPE = '__yoast_seo_only__';
+	const SCOPE = '__yoast_seo_all__';
+	// rc.9 was self-selectable. Never silently promote its saved grants.
+	const LEGACY_SCOPE = '__yoast_seo_only__';
 	const ROUTE = '/agent-access/v1/yoast-seo/';
 	const FIELDS = array( 'title', 'metadesc', 'focuskw', 'opengraph-title', 'opengraph-description', 'twitter-title', 'twitter-description' );
 
 	public static function init() {
 		add_action( 'rest_api_init', array( __CLASS__, 'register_routes' ) );
+	}
+
+	/** Only a separate, user-managing human administrator may assign this scope. */
+	public static function can_assign( $user_id ) {
+		if ( ! $user_id || ! get_userdata( $user_id ) || get_current_user_id() === (int) $user_id || in_array( Agent_Access_Role::ROLE_SLUG, wp_get_current_user()->roles, true ) ) {
+			return false;
+		}
+		if ( ! current_user_can( 'manage_options' ) || ! current_user_can( 'promote_users' ) || ! current_user_can( 'edit_user', $user_id ) || null !== Agent_Access_Scope::get_slugs_for_current_request() || ( function_exists( 'rest_get_authenticated_app_password' ) && rest_get_authenticated_app_password() ) ) {
+			return false;
+		}
+		return (int) wp_validate_auth_cookie( '', 'logged_in' ) === get_current_user_id();
+	}
+
+	public static function has_scope( $scope ) {
+		return is_array( $scope ) && ( in_array( self::SCOPE, $scope, true ) || in_array( self::LEGACY_SCOPE, $scope, true ) );
 	}
 
 	public static function available() {
@@ -39,7 +56,11 @@ class Agent_Access_Yoast_SEO {
 		if ( ! $post || ! $type || ! $type->show_in_rest || in_array( $post->post_type, array( 'attachment', 'revision' ), true ) || in_array( $post->post_status, array( 'trash', 'auto-draft' ), true ) ) {
 			return new WP_Error( 'agent_seo_invalid_post', __( 'An existing editable content item is required.', 'botcreds-agent-access' ), array( 'status' => 404 ) );
 		}
-		if ( ! current_user_can( 'edit_post', $id ) ) {
+		$scope = Agent_Access_Scope::get_slugs_for_current_request();
+		$seo_grant = is_array( $scope ) && in_array( self::SCOPE, $scope, true ) && ! in_array( '__read_only__', $scope, true ) && current_user_can( 'read' );
+		// The explicit administrator-issued grant is valid ONLY in this metadata controller.
+		// Never add edit_others_posts or change the role/user capability map.
+		if ( ! $seo_grant && ! current_user_can( 'edit_post', $id ) ) {
 			return new WP_Error( 'rest_forbidden', __( 'You cannot edit SEO for this content item.', 'botcreds-agent-access' ), array( 'status' => rest_authorization_required_code() ) );
 		}
 		return true;
