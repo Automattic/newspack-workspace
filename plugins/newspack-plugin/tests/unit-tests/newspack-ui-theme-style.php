@@ -1611,6 +1611,37 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Literal sizes go fluid as in core; sizes from presets keep the theme's own value.
+	 */
+	public function test_fluid_applies_to_literal_sizes_only(): void {
+		$settings = [
+			'typography' => [
+				'fluid'     => true,
+				'fontSizes' => [
+					'theme' => [
+						[
+							'slug'  => 'small',
+							'size'  => '1rem',
+							'fluid' => false,
+						],
+					],
+				],
+			],
+		];
+		foreach ( [ 'var:preset|font-size|small', 'var(--wp--preset--font-size--small)' ] as $reference ) {
+			$authored = [ 'elements' => [ 'button' => [ 'typography' => [ 'fontSize' => $reference ] ] ] ];
+			$styles   = Newspack_UI_Theme_Style::resolve_references( $authored, $settings );
+			$styles   = Newspack_UI_Theme_Style::apply_fluid_sizes( $styles, $authored, $settings );
+
+			$this->assertStringContainsString( '--newspack-ui-font-size-button:1rem;', Newspack_UI_Theme_Style::get_css( $styles, $settings ) );
+		}
+
+		$authored = [ 'elements' => [ 'button' => [ 'typography' => [ 'fontSize' => '1.5rem' ] ] ] ];
+		$styles   = Newspack_UI_Theme_Style::apply_fluid_sizes( $authored, $authored, $settings );
+		$this->assertStringContainsString( '--newspack-ui-font-size-button:clamp(', Newspack_UI_Theme_Style::get_css( $styles, $settings ) );
+	}
+
+	/**
 	 * A hostile value never reaches the output.
 	 */
 	public function test_hostile_values_are_not_printed(): void {
