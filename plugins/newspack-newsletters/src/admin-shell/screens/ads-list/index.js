@@ -31,6 +31,7 @@ const DEFAULT_VIEW = {
 	search: '',
 	filters: [],
 	titleField: 'title',
+	descriptionField: 'advertiser',
 	fields: [ 'status', 'start_date', 'expiry_date', 'ad_placement', 'impressions', 'clicks', 'price' ],
 };
 

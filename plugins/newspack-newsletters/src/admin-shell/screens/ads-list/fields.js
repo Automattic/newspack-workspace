@@ -83,15 +83,16 @@ const advertiserNames = item =>
 const renderTitle = ( { item } ) => {
 	const raw = getTitle( item );
 	const title = raw || __( '(no title)', 'newspack-newsletters' );
-	const advertiser = advertiserNames( item );
 	return (
-		<div>
-			<a className="newspack-newsletters-list__title" href={ editUrl( item ) } onClickCapture={ event => event.stopPropagation() }>
-				<strong>{ title }</strong>
-			</a>
-			{ advertiser && <div className="newspack-newsletters-list__secondary">{ advertiser }</div> }
-		</div>
+		<a className="newspack-newsletters-list__title" href={ editUrl( item ) } onClickCapture={ event => event.stopPropagation() }>
+			<strong>{ title }</strong>
+		</a>
 	);
+};
+
+const renderAdvertiser = ( { item } ) => {
+	const advertiser = advertiserNames( item );
+	return advertiser ? <span className="newspack-newsletters-list__secondary">{ advertiser }</span> : null;
 };
 
 const renderStatus = ( { item } ) => {
@@ -208,7 +209,7 @@ export function getFields( { advertisers = [], placements = [] } = {} ) {
 			filterBy: { operators: [ 'isAny' ], isPrimary: true },
 			enableSorting: false,
 			getValue: ( { item } ) => advertiserNames( item ),
-			render: renderTerms( 'newspack_nl_advertiser' ),
+			render: renderAdvertiser,
 		},
 		{
 			id: 'ad_placement',
