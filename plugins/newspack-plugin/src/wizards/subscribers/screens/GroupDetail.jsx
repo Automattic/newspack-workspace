@@ -528,6 +528,7 @@ function GroupDetailView() {
 				</HStack>
 			</HStack>
 			<DataViews
+				className="newspack-subscribers__members-dataviews"
 				data={ processedMembers }
 				fields={ memberFields }
 				view={ membersView }

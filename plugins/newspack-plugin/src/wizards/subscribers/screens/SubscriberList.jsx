@@ -206,6 +206,8 @@ export default function SubscriberList() {
 				label: __( 'Subscriber', 'newspack-plugin' ),
 				enableGlobalSearch: true,
 				enableSorting: true,
+				// The avatar takes its accessible name from this field, and row clicks find the reader through it.
+				enableHiding: false,
 				getValue: ( { item } ) => item.name,
 				render: ( { item } ) => <span data-subscriber-id={ item.id }>{ item.name }</span>,
 			},
@@ -458,9 +460,10 @@ export default function SubscriberList() {
 		[ avatars, planElements, managedOnElements ]
 	);
 
-	// DataViews only makes the title cell clickable; delegate clicks from the
-	// rest of the row to the same target, ignoring genuinely interactive elements
-	// (the title button, selection checkbox, links).
+	// DataViews only makes the title cell and the avatar clickable; delegate
+	// clicks from the rest of the row to the same target, ignoring genuinely
+	// interactive elements (the title and avatar buttons, selection checkbox,
+	// links).
 	//
 	// DEPENDS ON DATAVIEWS INTERNAL MARKUP: the row is located by the
 	// `dataviews-view-table__row` class, which DataViews owns and could rename on
