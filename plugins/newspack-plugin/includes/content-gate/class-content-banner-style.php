@@ -18,7 +18,7 @@ final class Content_Banner_Style {
 	const STYLES = [ 'light', 'dark', 'theme' ];
 
 	/**
-	 * The render style of banners on a site that uses the adapter. Never stored, so it is not in self::STYLES.
+	 * The render style of banners on a site that uses the site Theme. Never stored, so it is not in self::STYLES.
 	 */
 	const SITE_STYLE = 'site';
 
@@ -102,9 +102,9 @@ final class Content_Banner_Style {
 	 */
 	public static function get_button_class( string $style ): string {
 		return match ( $style ) {
-			'dark'            => 'newspack-ui__button--primary-light',
-			'theme'           => '',
-			self::SITE_STYLE  => 'newspack-ui__button--primary',
+			'dark'           => 'newspack-ui__button--primary-light',
+			'theme'          => '',
+			self::SITE_STYLE => 'newspack-ui__button--primary',
 			default => 'newspack-ui__button--primary',
 		};
 	}
