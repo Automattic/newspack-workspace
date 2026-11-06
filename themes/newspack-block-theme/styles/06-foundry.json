@@ -123,32 +123,32 @@
 		"blocks": {
 			"core/button": {
 				"typography": {
-					"fontFamily": "var( --wp--preset--font-family--inter )"
+					"fontFamily": "var(--wp--preset--font-family--inter)"
 				}
 			},
 			"core/navigation": {
 				"typography": {
-					"fontFamily": "var( --wp--preset--font-family--eb-garamond )"
+					"fontFamily": "var(--wp--preset--font-family--eb-garamond)"
 				}
 			}
 		},
 		"typography": {
-			"fontFamily": "var( --wp--preset--font-family--eb-garamond )"
+			"fontFamily": "var(--wp--preset--font-family--eb-garamond)"
 		},
 		"elements": {
 			"button": {
 				"typography": {
-					"fontFamily": "var( --wp--preset--font-family--inter )"
+					"fontFamily": "var(--wp--preset--font-family--inter)"
 				}
 			},
 			"caption": {
 				"typography": {
-					"fontFamily": "var( --wp--preset--font-family--eb-garamond )"
+					"fontFamily": "var(--wp--preset--font-family--eb-garamond)"
 				}
 			},
 			"heading": {
 				"typography": {
-					"fontFamily": "var( --wp--preset--font-family--eb-garamond )"
+					"fontFamily": "var(--wp--preset--font-family--eb-garamond)"
 				}
 			}
 		}

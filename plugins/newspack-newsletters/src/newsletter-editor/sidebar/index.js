@@ -44,8 +44,6 @@ const Sidebar = ( {
 	status,
 	campaignName,
 	previewText,
-	savePost,
-	stringifiedCampaignDefaults,
 	postId,
 } ) => {
 	const [ plainTextTitle, setPlainTextTitle ] = useState( null );
@@ -107,31 +105,6 @@ const Sidebar = ( {
 			updateNewsletterData( updatedNewsletterData );
 		}
 	}, [ newsletterData?.senderEmail, newsletterData?.senderName, newsletterData?.send_list_id, newsletterData?.send_sublist_id ] );
-
-	useEffect( () => {
-		if ( stringifiedCampaignDefaults ) {
-			const campaignDefaults =
-				'string' === typeof stringifiedCampaignDefaults ? JSON.parse( stringifiedCampaignDefaults ) : stringifiedCampaignDefaults;
-			const updatedMeta = {};
-			if ( campaignDefaults?.senderEmail ) {
-				updatedMeta.senderEmail = campaignDefaults.senderEmail;
-			}
-			if ( campaignDefaults?.senderName ) {
-				updatedMeta.senderName = campaignDefaults.senderName;
-			}
-			if ( campaignDefaults?.send_list_id ) {
-				updatedMeta.send_list_id = campaignDefaults.send_list_id;
-			}
-			if ( campaignDefaults?.send_sublist_id ) {
-				updatedMeta.send_sublist_id = campaignDefaults.send_sublist_id;
-			}
-			if ( Object.keys( updatedMeta ).length ) {
-				updatedMeta.stringifiedCampaignDefaults = '';
-				updateMeta( updatedMeta );
-				savePost();
-			}
-		}
-	}, [ stringifiedCampaignDefaults ] );
 
 	const getCampaignName = () => {
 		if ( typeof campaignName === 'string' ) {
@@ -256,12 +229,11 @@ export default compose( [
 			campaignName: meta.campaign_name,
 			previewText: meta.preview_text || '',
 			status: getCurrentPostAttribute( 'status' ),
-			stringifiedCampaignDefaults: meta.stringifiedCampaignDefaults || {},
 		};
 	} ),
 	withDispatch( dispatch => {
-		const { editPost, savePost } = dispatch( 'core/editor' );
+		const { editPost } = dispatch( 'core/editor' );
 		const { createErrorNotice } = dispatch( 'core/notices' );
-		return { editPost, savePost, createErrorNotice };
+		return { editPost, createErrorNotice };
 	} ),
 ] )( Sidebar );

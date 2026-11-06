@@ -495,6 +495,13 @@ class Newsletters_List_REST {
 
 		if ( get_post_meta( $post->ID, 'sending_scheduled', true ) ) {
 			$payload['kind'] = 'scheduled';
+			// A send queued when its scheduled time arrived keeps that time as the
+			// post date. Only while published: a send that gave up is moved back to
+			// draft with the flag still set, and its date is no longer a promise.
+			$datetime = 'publish' === $post->post_status ? get_post_datetime( $post, 'date', 'gmt' ) : false;
+			if ( $datetime ) {
+				$payload['scheduled_at'] = $datetime->getTimestamp();
+			}
 			return $payload;
 		}
 

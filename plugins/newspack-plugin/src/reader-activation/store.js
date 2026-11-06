@@ -2,7 +2,7 @@
 window.newspack_reader_data = window.newspack_reader_data || {};
 
 import { EVENTS, emit, on } from './events';
-import { getApiNonce } from './session';
+import { getApiNonce, LOGGED_OUT, refreshApiNonce } from './session';
 
 /**
  * A switched session (an admin browsing as a reader through User Switching)
@@ -17,8 +17,30 @@ const isSwitchedSession = () => !! newspack_reader_data?.is_switched_session;
  * mark keys as pending sync: a switched session hydrates on every page load
  * and rehydrate() skips pending keys, so a mark that can never clear would
  * hide the reader's stored value for the rest of the tab's visit.
+ *
+ * A page also stops syncing, part way through its life, once another reader
+ * holds the session. session.js records that as account_changed.
  */
-const neverSyncs = () => !! newspack_reader_data?.is_temporary || isSwitchedSession();
+const neverSyncs = () => !! newspack_reader_data?.is_temporary || isSwitchedSession() || !! newspack_reader_data?.account_changed;
+
+/**
+ * Whether a key lives only in this browser (see Reader_Data::get_local_keys()).
+ * Such a key is never sent, and never hydrated: the server may still hold a
+ * copy from before the key became browser-only, and it must not overwrite the
+ * browser's value.
+ *
+ * @param {string} key Store key.
+ *
+ * @return {boolean} Whether the key is browser-only.
+ */
+const isLocalKey = key => ( newspack_reader_data?.local_keys || [] ).includes( key );
+
+/**
+ * Keys this page has marked as pending sync.
+ *
+ * @type {Set<string>}
+ */
+const ownPendingKeys = new Set();
 
 /**
  * Store configuration.
@@ -84,7 +106,42 @@ function rehydrateItem( key, serverValue ) {
 }
 
 /**
+ * Clear the keys this page has left pending.
+ *
+ * Pending marks live in storage shared with whoever logs in next, whose next page
+ * load would send them. Marks have no owner, so only this page's keys are cleared.
+ *
+ * @param {string[]} keys Keys to clear, along with the ones this page marked.
+ *
+ * @return {string[]} The cleared keys.
+ */
+function dropPendingKeys( keys ) {
+	const droppedKeys = [ ...keys, ...ownPendingKeys ];
+	droppedKeys.forEach( clearPendingSync );
+	return droppedKeys;
+}
+
+/**
+ * Keep this page away from the storage it shares with another reader's tabs,
+ * which read every value this page leaves there.
+ *
+ * @param {string[]} keys Keys this page was still syncing.
+ *
+ * @return {void}
+ */
+function leaveSharedStorage( keys ) {
+	if ( config.storage === window.sessionStorage ) {
+		return;
+	}
+	dropPendingKeys( keys ).forEach( key => config.storage.removeItem( getStoreItemKey( key ) ) );
+	config.storage = window.sessionStorage;
+}
+
+/**
  * Initialize sync interval.
+ *
+ * Each tick sends every queued key in one request. Every request costs the
+ * site a full WordPress load, and a single page view can change several keys.
  *
  * @param {string[]} queue Store items keys to sync.
  *
@@ -92,14 +149,34 @@ function rehydrateItem( key, serverValue ) {
  */
 function initializeSyncInterval( queue ) {
 	setInterval( () => {
+		if ( newspack_reader_data?.account_changed ) {
+			leaveSharedStorage( queue.splice( 0 ) );
+			return;
+		}
 		// Bail if there are no items to sync or if the session never syncs.
 		if ( ! queue.length || neverSyncs() ) {
 			return;
 		}
-		const key = queue.shift();
-		syncItem( key )
-			.then( () => clearPendingSync( key ) )
-			.catch( () => setPendingSync( key ) );
+		const keys = [ ...new Set( queue.splice( 0 ) ) ];
+		syncItems( keys )
+			.then( synced => {
+				for ( const key of keys ) {
+					if ( synced.includes( key ) ) {
+						clearPendingSync( key );
+					} else {
+						setPendingSync( key );
+					}
+				}
+			} )
+			.catch( reason => {
+				if ( newspack_reader_data?.account_changed ) {
+					leaveSharedStorage( [ ...keys, ...queue.splice( 0 ) ] );
+				} else if ( LOGGED_OUT === reason ) {
+					dropPendingKeys( keys );
+				} else {
+					keys.forEach( key => setPendingSync( key ) );
+				}
+			} );
 	}, 1000 );
 }
 
@@ -139,6 +216,7 @@ export function getStoreItemKey( key, internal = false ) {
  * @param {string} key
  */
 function setPendingSync( key ) {
+	ownPendingKeys.add( key );
 	const unsynced = _get( 'unsynced', true ) || [];
 	if ( unsynced.includes( key ) ) {
 		return;
@@ -153,6 +231,7 @@ function setPendingSync( key ) {
  * @param {string} key
  */
 function clearPendingSync( key ) {
+	ownPendingKeys.delete( key );
 	const unsynced = _get( 'unsynced', true ) || [];
 	if ( ! unsynced.includes( key ) ) {
 		return;
@@ -162,41 +241,100 @@ function clearPendingSync( key ) {
 }
 
 /**
- * Send a data item to the server.
+ * Send data items to the server in one batch, retried once on an invalid nonce.
  *
- * @param {string} key Data key.
+ * @param {string[]} keys Data keys.
  *
- * @return {Promise} Promise that resolves when the request is complete.
+ * @return {Promise<string[]>} Promise that resolves with the keys the server now holds.
  */
-function syncItem( key ) {
-	if ( ! key ) {
-		return Promise.reject( 'Key is required.' );
-	}
+function syncItems( keys ) {
 	const apiNonce = getApiNonce();
 	if ( ! newspack_reader_data.api_url || ! apiNonce ) {
 		return Promise.reject( 'API not available.' );
 	}
 
-	const value = _get( key );
-	const payload = { key };
-	if ( value ) {
-		payload.value = JSON.stringify( value );
+	const serverItems = newspack_reader_data.items || {};
+	const items = {};
+	const inSync = [];
+	for ( const key of keys ) {
+		let value;
+		try {
+			value = _get( key );
+		} catch {
+			// An unreadable value stays pending without holding back the others.
+			continue;
+		}
+		// A falsy value deletes the key on the server.
+		const encoded = value ? JSON.stringify( value ) : null;
+		// Skip values the server already holds.
+		if ( serverItems[ key ] === ( encoded ?? undefined ) ) {
+			inSync.push( key );
+			continue;
+		}
+		items[ key ] = encoded;
+	}
+	if ( ! Object.keys( items ).length ) {
+		return Promise.resolve( inSync );
 	}
 
-	// Bail if value matches server value.
-	if ( newspack_reader_data?.items && newspack_reader_data.items[ key ] === payload.value ) {
-		return Promise.resolve();
+	return sendItems( items, apiNonce )
+		.catch( async req => {
+			const refreshed = isInvalidNonceResponse( req ) && ( await refreshApiNonce() );
+			if ( ! refreshed || LOGGED_OUT === refreshed ) {
+				throw refreshed || req;
+			}
+			return sendItems( items, refreshed );
+		} )
+		.then( req => {
+			// The server applies keys independently and reports the ones it rejected.
+			let errors = {};
+			try {
+				errors = JSON.parse( req.responseText )?.errors || {};
+			} catch {
+				// The request succeeded; an unreadable body reports no rejections.
+			}
+			const synced = Object.keys( items ).filter( key => ! errors[ key ] );
+			// Update the known server values.
+			newspack_reader_data.items = newspack_reader_data.items || {};
+			for ( const key of synced ) {
+				newspack_reader_data.items[ key ] = items[ key ] ?? undefined;
+			}
+			return [ ...inSync, ...synced ];
+		} );
+}
+
+/**
+ * Whether a failed request was rejected for carrying a nonce from another session.
+ *
+ * @param {XMLHttpRequest} req Failed request.
+ *
+ * @return {boolean} Whether the request failed the nonce check.
+ */
+function isInvalidNonceResponse( req ) {
+	if ( 403 !== req.status ) {
+		return false;
 	}
+	try {
+		return 'rest_cookie_invalid_nonce' === JSON.parse( req.responseText )?.code;
+	} catch {
+		return false;
+	}
+}
 
-	const req = new XMLHttpRequest();
-	req.open( payload.value ? 'POST' : 'DELETE', newspack_reader_data.api_url, true );
-	req.setRequestHeader( 'Content-Type', 'application/json' );
-	req.setRequestHeader( 'X-WP-Nonce', apiNonce );
-
-	// Send request.
-	req.send( JSON.stringify( payload ) );
-
+/**
+ * Send a sync request to the server.
+ *
+ * @param {Object} items Encoded values by key.
+ * @param {string} nonce API nonce.
+ *
+ * @return {Promise<XMLHttpRequest>} Resolves on 200, rejects with the request otherwise.
+ */
+function sendItems( items, nonce ) {
 	return new Promise( ( resolve, reject ) => {
+		const req = new XMLHttpRequest();
+		req.open( 'POST', newspack_reader_data.api_url, true );
+		req.setRequestHeader( 'Content-Type', 'application/json' );
+		req.setRequestHeader( 'X-WP-Nonce', nonce );
 		req.onreadystatechange = () => {
 			if ( 4 !== req.readyState ) {
 				return;
@@ -204,10 +342,9 @@ function syncItem( key ) {
 			if ( 200 !== req.status ) {
 				return reject( req );
 			}
-			// Update the known server value.
-			newspack_reader_data.items[ key ] = payload.value;
 			return resolve( req );
 		};
+		req.send( JSON.stringify( { items } ) );
 	} );
 }
 
@@ -314,10 +451,10 @@ export default function Store() {
 	const syncQueue = [];
 	initializeSyncInterval( syncQueue );
 
-	// Push unsynced items to the sync queue, pruning existing read-only
-	// keys in order to address the upgrade case.
+	// Push unsynced items to the sync queue, pruning existing read-only and
+	// browser-only keys in order to address the upgrade case.
 	const readOnlyKeys = newspack_reader_data?.read_only_keys || [];
-	const unsynced = ( _get( 'unsynced', true ) || [] ).filter( key => ! readOnlyKeys.includes( key ) );
+	const unsynced = ( _get( 'unsynced', true ) || [] ).filter( key => ! readOnlyKeys.includes( key ) && ! isLocalKey( key ) );
 	_set( 'unsynced', unsynced, true );
 	for ( const key of unsynced ) {
 		if ( ! syncQueue.includes( key ) ) {
@@ -355,6 +492,9 @@ export default function Store() {
 		}
 		const unsyncedKeys = _get( 'unsynced', true ) || [];
 		for ( const key of Object.keys( items ) ) {
+			if ( isLocalKey( key ) ) {
+				continue;
+			}
 			// Skip unsynced items unless they have a merge strategy,
 			// which is the authority on how to reconcile values.
 			if ( unsyncedKeys.includes( key ) && ! mergeStrategies.has( key ) ) {
@@ -423,7 +563,7 @@ export default function Store() {
 			}
 		}
 		drainSyncQueue();
-		// Reset the in-memory server-known-items cache that syncItem reads to
+		// Reset the in-memory server-known-items cache that syncItems reads to
 		// short-circuit no-op writes. window.newspack_reader_data is initialized
 		// at module load (top of this file), so no presence guard is needed.
 		//
@@ -490,7 +630,7 @@ export default function Store() {
 		set: ( key, value, sync = true ) => {
 			assertNotReadOnly( key );
 			_set( key, value, false );
-			if ( sync && ! neverSyncs() ) {
+			if ( sync && ! neverSyncs() && ! isLocalKey( key ) ) {
 				setPendingSync( key );
 				syncQueue.push( key );
 			}
@@ -507,7 +647,7 @@ export default function Store() {
 			assertNotReadOnly( key );
 			config.storage.removeItem( getStoreItemKey( key ) );
 			emit( EVENTS.data, { key, value: undefined } );
-			if ( ! neverSyncs() ) {
+			if ( ! neverSyncs() && ! isLocalKey( key ) ) {
 				setPendingSync( key );
 				syncQueue.push( key );
 			}

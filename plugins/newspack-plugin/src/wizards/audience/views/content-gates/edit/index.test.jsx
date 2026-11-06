@@ -172,10 +172,10 @@ describe( 'Content gate editor', () => {
 		await renderEdit();
 
 		// A status change saves the stored gate as it is, so the editor has to copy the response back.
-		await runHeaderAction( 'Set to inactive' );
+		await runHeaderAction( 'Set to Inactive' );
 		await act( async () => {} );
 
-		expect( headerAction( 'Set to active' ) ).toBeDefined();
+		expect( headerAction( 'Set to Active' ) ).toBeDefined();
 	} );
 } );
 

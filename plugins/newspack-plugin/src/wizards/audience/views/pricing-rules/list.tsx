@@ -41,7 +41,7 @@ const DEFAULT_VIEW: View = {
 	perPage: 25,
 	sort: { field: 'title', direction: 'asc' },
 	search: '',
-	fields: [ 'strategy', 'scope', 'priority', 'status', 'goal', 'reader_segments' ],
+	fields: [ 'status', 'strategy', 'scope', 'priority', 'goal', 'reader_segments' ],
 	filters: [], // Show all statuses by default; the REST already excludes trash.
 	layout: {},
 	titleField: 'title',

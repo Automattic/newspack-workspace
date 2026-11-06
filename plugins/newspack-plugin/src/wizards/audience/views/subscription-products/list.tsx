@@ -106,7 +106,7 @@ const DEFAULT_VIEW: View & { fields: string[] } = {
 	//  - `category`: 4 of 6 sampled publishers leave subscription products uncategorized.
 	//  - `availability`: derived heuristic (placeholder for a real entitlement field), and
 	//    mostly "Public" for most publishers — low signal density for a default slot.
-	fields: [ 'price', 'active_subscriptions', 'unlocks', 'status', 'policies', 'effective_price' ],
+	fields: [ 'status', 'price', 'active_subscriptions', 'unlocks', 'policies', 'effective_price' ],
 	// Default to published only. The REST query returns every non-trashed status, so
 	// draft/private/pending products remain reachable behind the Status filter without
 	// cluttering the default view with "(TEST COPY)" drafts and hidden strategy products.

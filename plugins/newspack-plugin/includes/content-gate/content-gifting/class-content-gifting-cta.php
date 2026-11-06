@@ -156,14 +156,14 @@ class Content_Gifting_CTA {
 			return;
 		}
 		$button_label = self::get_button_label();
-		$button_class = 'dark' === self::get_style() ? 'newspack-ui__button--primary-light' : 'newspack-ui__button--accent';
+		$button_class = Content_Banner_Style::get_button_class( Content_Banner_Style::get_render_style( self::get_style() ) );
 
 		$cta_type = self::get_cta_type();
 		if ( $cta_type === 'url' ) {
 			$cta_url = self::get_cta_url();
 			if ( $cta_url ) {
 				?>
-				<a href="<?php echo esc_url( $cta_url ); ?>" class="newspack-ui__button newspack-ui__button--x-small <?php echo esc_attr( $button_class ); ?>"><?php echo esc_html( $button_label ); ?></a>
+				<a href="<?php echo esc_url( $cta_url ); ?>" class="newspack-ui__button <?php echo esc_attr( $button_class ); ?>"><?php echo esc_html( $button_label ); ?></a>
 				<?php
 				return;
 			}
@@ -185,7 +185,7 @@ class Content_Gifting_CTA {
 					<input type="hidden" name="newspack_checkout" value="1" />
 					<input type="hidden" name="modal_checkout" value="1" />
 					<input type="hidden" name="product_id" value="<?php echo esc_attr( $product_id ); ?>" />
-					<button type="submit" class="newspack-ui__button newspack-ui__button--x-small <?php echo esc_attr( $button_class ); ?>"><?php echo esc_html( $button_label ); ?></button>
+					<button type="submit" class="newspack-ui__button <?php echo esc_attr( $button_class ); ?>"><?php echo esc_html( $button_label ); ?></button>
 				</form>
 			</div>
 			<?php
@@ -195,11 +195,10 @@ class Content_Gifting_CTA {
 	/**
 	 * Get CTA style.
 	 *
-	 * @return string The style, 'light' or 'dark'.
+	 * @return string The style, 'light', 'dark' or 'theme'.
 	 */
 	public static function get_style() {
-		$style = (string) get_option( 'newspack_content_gifting_cta_style', 'light' );
-		return in_array( $style, [ 'light', 'dark' ], true ) ? $style : 'light';
+		return Content_Banner_Style::sanitize_style( get_option( 'newspack_content_gifting_cta_style', Content_Banner_Style::DEFAULT_STYLE ) );
 	}
 
 	/**
@@ -210,8 +209,47 @@ class Content_Gifting_CTA {
 	 * @return void
 	 */
 	public static function set_style( $style ) {
-		$style = in_array( $style, [ 'light', 'dark' ], true ) ? $style : 'light';
-		update_option( 'newspack_content_gifting_cta_style', $style );
+		update_option( 'newspack_content_gifting_cta_style', Content_Banner_Style::sanitize_style( $style ) );
+	}
+
+	/**
+	 * Get the Theme style's banner background color.
+	 *
+	 * @return string A hex color, or an empty string for the default.
+	 */
+	public static function get_bg_color(): string {
+		return Content_Banner_Style::sanitize_color( get_option( 'newspack_content_gifting_cta_bg_color', '' ) );
+	}
+
+	/**
+	 * Set the Theme style's banner background color.
+	 *
+	 * @param mixed $color A hex color, or an empty string for the default.
+	 *
+	 * @return void
+	 */
+	public static function set_bg_color( mixed $color ): void {
+		update_option( 'newspack_content_gifting_cta_bg_color', Content_Banner_Style::sanitize_color( $color ) );
+	}
+
+	/**
+	 * Get the Theme style's button background color.
+	 *
+	 * @return string A hex color, or an empty string for the default.
+	 */
+	public static function get_button_color(): string {
+		return Content_Banner_Style::sanitize_color( get_option( 'newspack_content_gifting_cta_button_color', '' ) );
+	}
+
+	/**
+	 * Set the Theme style's button background color.
+	 *
+	 * @param mixed $color A hex color, or an empty string for the default.
+	 *
+	 * @return void
+	 */
+	public static function set_button_color( mixed $color ): void {
+		update_option( 'newspack_content_gifting_cta_button_color', Content_Banner_Style::sanitize_color( $color ) );
 	}
 
 	/**
@@ -225,10 +263,11 @@ class Content_Gifting_CTA {
 		if ( ! Content_Gate::is_post_restricted() ) {
 			return;
 		}
-		$style_class = sprintf( 'is-style-%s', self::get_style() );
+		$style        = Content_Banner_Style::get_render_style( self::get_style() );
+		$inline_style = Content_Banner_Style::get_inline_style( $style, self::get_bg_color(), self::get_button_color() );
 		?>
 		<div class="newspack-ui">
-			<div class="banner newspack-content-gifting__cta <?php echo esc_attr( $style_class ); ?>">
+			<div class="banner newspack-content-gifting__cta <?php echo esc_attr( sprintf( 'is-style-%s', $style ) ); ?>"<?php echo $inline_style ? ' style="' . esc_attr( $inline_style ) . '"' : ''; ?>>
 				<div class="wrapper newspack-content-gifting__cta__content">
 					<div class="newspack-ui__font--s">
 						<?php echo esc_html( self::get_cta_label() ); ?>

@@ -484,3 +484,108 @@ describe( 'the newsletters column', () => {
 		expect( cell ).toBe( 'Daily Brief, Unknown list (abc123def)' );
 	} );
 } );
+
+/**
+ * Subscriptions other network sites manage sit in the list beside the local ones.
+ * The site that manages each one is named after the plan rather than inside its
+ * link, and the Managed on filter narrows the list by it.
+ */
+describe( 'the network subscription rows', () => {
+	beforeEach( () => {
+		headerCalls = [];
+		mockDataViewsProps = null;
+		apiFetch.mockReset();
+	} );
+
+	const networkSubscription = ( id, site, status = 'active' ) => ( {
+		id,
+		plan: `All-Access Premium (${ site })`,
+		planName: 'All-Access Premium',
+		status,
+		editUrl: `https://${ id }.example.com/wp-admin/post.php?post=${ id }&action=edit`,
+		isComplimentary: false,
+		managedOn: { name: site, url: `https://${ id }.example.com` },
+	} );
+
+	const localSubscription = { id: 7, plan: 'Digital', status: 'active', editUrl: '/edit/7', isComplimentary: false };
+
+	/** Mount the list with the given network sites and rows. */
+	const mount = async ( { sites = [], items = [ subscriber( 1 ) ] } = {} ) => {
+		apiFetch.mockImplementation( ( { path } ) =>
+			Promise.resolve( path.includes( '/plans' ) ? { items: [], sites } : { items, total: items.length, pages: 1 } )
+		);
+		await act( async () => {
+			render( <SubscriberList /> );
+		} );
+	};
+
+	const field = id => mockDataViewsProps.fields.find( f => id === f.id );
+
+	it( 'shows the filters beside the search', async () => {
+		await mount();
+
+		expect( mockDataViewsProps.inlineFilters ).toBe( true );
+	} );
+
+	it( 'names the managing site after the plan, outside its link', async () => {
+		await mount();
+		const item = { ...subscriber( 1 ), subscriptions: [ networkSubscription( 12, 'Riverbend Daily' ) ] };
+		const { container } = render( field( 'plans' ).render( { item } ) );
+
+		expect( container.querySelector( 'a' ).textContent ).toBe( 'All-Access Premium' );
+		expect( container.textContent ).toBe( 'All-Access Premium\u00a0(Riverbend Daily)' );
+	} );
+
+	it( 'keeps the plan-and-site label as the value the Subscription filter matches', async () => {
+		await mount();
+		const item = { ...subscriber( 1 ), subscriptions: [ networkSubscription( 12, 'Riverbend Daily' ) ] };
+
+		expect( field( 'plans' ).getValue( { item } ) ).toEqual( [ 'All-Access Premium (Riverbend Daily)' ] );
+	} );
+
+	it( 'offers This site, then each network site, as Managed on options', async () => {
+		await mount( { sites: [ "Reader's News & Co", 'Riverbend Daily' ] } );
+
+		expect( field( 'managedOn' ).elements ).toEqual( [
+			{ value: 'this-site', label: 'This site' },
+			{ value: "Reader's News & Co", label: "Reader's News & Co" },
+			{ value: 'Riverbend Daily', label: 'Riverbend Daily' },
+		] );
+	} );
+
+	it( 'leaves Managed on out on a site with no network subscriptions', async () => {
+		await mount();
+
+		expect( field( 'managedOn' ) ).toBeUndefined();
+	} );
+
+	it( 'keeps a restored Managed on filter clearable when the site list comes back empty', async () => {
+		await mount();
+		await act( async () => {
+			mockDataViewsProps.onChangeView( {
+				...mockDataViewsProps.view,
+				filters: [ { field: 'managedOn', operator: 'isAny', value: [ 'this-site' ] } ],
+			} );
+		} );
+
+		expect( field( 'managedOn' ).elements ).toEqual( [ { value: 'this-site', label: 'This site' } ] );
+	} );
+
+	it( "lists where a reader's subscriptions are managed, this site first and without repeats", async () => {
+		await mount( { sites: [ 'Riverbend Daily' ] } );
+		const item = {
+			...subscriber( 1 ),
+			subscriptions: [ networkSubscription( 12, 'Riverbend Daily' ), localSubscription, networkSubscription( 13, 'Riverbend Daily' ) ],
+		};
+
+		expect( field( 'managedOn' ).getValue( { item } ) ).toEqual( [ 'this-site', 'Riverbend Daily' ] );
+		expect( render( field( 'managedOn' ).render( { item } ) ).container.textContent ).toBe( 'This siteRiverbend Daily' );
+	} );
+
+	it( 'leaves a cancelled subscription out of Managed on while a live one remains', async () => {
+		await mount( { sites: [ 'Riverbend Daily' ] } );
+		const item = { ...subscriber( 1 ), subscriptions: [ networkSubscription( 12, 'Riverbend Daily', 'cancelled' ), localSubscription ] };
+
+		expect( field( 'managedOn' ).getValue( { item } ) ).toEqual( [ 'this-site' ] );
+	} );
+} );

@@ -1,4 +1,5 @@
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "newspack-motion" as motion;
 @use "../../shared/scss/mixins";
 
 .newspack-registration {
@@ -6,7 +7,7 @@
 
 	.has-background & {
 		background: var(--newspack-ui-color-body-bg);
-		border-radius: var(--newspack-ui-border-radius-m);
+		border-radius: var(--newspack-ui-radius-surface, 12px);
 		overflow: hidden;
 		padding: var(--newspack-ui-spacer-5);
 
@@ -27,7 +28,16 @@
 		&:focus,
 		&:hover {
 			color: inherit;
+		}
+
+		&:active {
 			text-decoration: none;
+		}
+
+		@include motion.hover {
+			&:hover {
+				text-decoration: none;
+			}
 		}
 	}
 
@@ -42,16 +52,6 @@
 			.newspack-registration__main {
 				flex: 1 1 63.4146%;
 			}
-			.newspack-reader__lists {
-				flex: 1 1 31.7073%;
-				h3 {
-					display: block;
-					margin: 0.4rem 0.4rem 0.8rem;
-				}
-				ul li {
-					flex: 1 1 100%;
-				}
-			}
 		}
 	}
 
@@ -65,7 +65,6 @@
 
 	&__form-content {
 		margin: 0;
-		transition: opacity 250ms ease-in-out;
 
 		.newspack-ui__input-card {
 			margin: 0 !important;
@@ -95,6 +94,7 @@
 	}
 
 	&__inputs {
+		align-items: start;
 		gap: var(--newspack-ui-spacer-5);
 
 		.newspack-ui__button {

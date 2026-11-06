@@ -5,7 +5,7 @@ number counts. Cards sit in a row, so they share a type scale and a null
 treatment rather than each screen inventing its own.
 
 The API is compound: a `StatCard.Root` and one subcomponent per slot. As `Drawer`
-does, the parts hang off one exported object, which keeps a seven-part component
+does, the parts hang off one exported object, which keeps a nine-part component
 to one name on the barrel.
 
 ## Importing
@@ -138,20 +138,21 @@ default rather than hiding the figure behind a name that says nothing.
 
 ### Outside `newspack-plugin`
 
-The spoken defaults, "Not applicable", "Up" and "Down", carry the
+The spoken defaults, "Not applicable", "Up", "Down" and "Unchanged", carry the
 `newspack-plugin` text domain, as every string in this package does. WordPress
 resolves JS translations per script handle, so a bundle registered against
 another domain never loads them and they read in English.
 
-`labels` on `StatCard.Root` replaces all three at once, from whichever domain the
+`labels` on `StatCard.Root` replaces all four at once, from whichever domain the
 consumer is registered under:
 
 ```jsx
 <StatCard.Root
 	labels={ {
-		notApplicable: __( 'Not applicable', 'newspack-manager' ),
-		up: __( 'Up', 'newspack-manager' ),
-		down: __( 'Down', 'newspack-manager' ),
+		notApplicable: _x( 'Not applicable', 'a statistic with no number to show', 'newspack-manager' ),
+		up: _x( 'Up', 'a statistic that has increased', 'newspack-manager' ),
+		down: _x( 'Down', 'a statistic that has decreased', 'newspack-manager' ),
+		unchanged: _x( 'Unchanged', 'a statistic that has neither increased nor decreased', 'newspack-manager' ),
 	} }
 >
 ```
@@ -187,8 +188,10 @@ and `data-*` all land on the DOM node:
 | `Body` | The body column |
 | `Value` | The figure, not the row it shares with a `suffix` |
 | `Delta` | The delta |
+| `Note` | The note |
 | `Secondary` | The secondary line |
 | `Footer` | The footer column |
+| `Description` | The paragraph |
 
 That is what lets a wrapper hang the unabbreviated amount off a `$1.2M` without
 wrapping the figure in an element the body layout would then have to carry.
@@ -203,13 +206,16 @@ The component emits these, so a stylesheet can hook onto any of them:
 | `newspack-stat-card__content` | The content column |
 | `newspack-stat-card__label` | The label row |
 | `newspack-stat-card__label-text` | The heading inside that row |
+| `newspack-stat-card__label-qualifier` | The qualifier line inside that heading |
 | `newspack-stat-card__body` | The body column |
-| `newspack-stat-card__figure` | The row the figure shares with a `Value` `suffix`, present only when there is one |
+| `newspack-stat-card__figure` | The row the figure shares with a `Value` `unit` or `suffix`, present only when there is one |
 | `newspack-stat-card__value` | The figure |
+| `newspack-stat-card__unit` | The unit beside the figure |
 | `newspack-stat-card__delta` | The delta |
+| `newspack-stat-card__note` | A note in place of the figure |
 | `newspack-stat-card__secondary` | The secondary line |
 | `newspack-stat-card__footer` | The footer column |
-| `newspack-stat-card__description` | Each paragraph of the description |
+| `newspack-stat-card__description` | Each paragraph of the description, from `Description` or a run of text in `Footer` |
 
 `newspack-stat-card__action` is the one exception, and it runs the other way: the card
 carries the rule but never applies the class, so an action in `Footer` takes it by hand.
@@ -221,7 +227,7 @@ carries the rule but never applies the class, so an action in `Footer` takes it 
 | `children` | `React.ReactNode` | — | The slots. |
 | `className` | `string` | — | Merged onto the card, alongside `newspack-stat-card`. |
 | `heading` | `2`–`6` | `3` | Heading level for `StatCard.Label`, passed through context. |
-| `labels` | `{ notApplicable, up, down }` | The built-in strings | Spoken defaults for every card underneath. See [Outside `newspack-plugin`](#outside-newspack-plugin). |
+| `labels` | `{ notApplicable, up, down, unchanged }` | The built-in strings | Spoken defaults for every card underneath. See [Outside `newspack-plugin`](#outside-newspack-plugin). |
 
 Renders `Card.Root` / `Card.Content` from `@wordpress/ui`, and owns the
 container query.
@@ -233,6 +239,7 @@ container query.
 | `children` | `React.ReactNode` | — | The label text. |
 | `className` | `string` | — | Merged onto the label row, not the heading. |
 | `heading` | `2`–`6` | Root's | Overrides the level set on `Root`. |
+| `qualifier` | `React.ReactNode` | — | A second line inside the heading, e.g. "(excluding refunds)". |
 | `suffix` | `React.ReactNode` | — | Rendered beside the heading, e.g. an info button. |
 
 `suffix` sits next to the heading rather than inside it, so a control there stays
@@ -261,6 +268,20 @@ the trim lives here rather than on it.
 Any other control in that slot has to hold the 20px line itself, or it grows the
 row and drops that card's figure below the rest.
 
+`qualifier` narrows what the label counts, and drops onto a line of its own so
+the label itself stays one line across a row of cards. It sits inside the
+heading, so the heading's name is the whole thing, "Revenue (excluding refunds)",
+with a real space between the two rather than one the line break implies.
+
+That extra line grows the label row, so within a row of cards give every card a
+qualifier or none, or the qualified cards' figures sit a line below the rest.
+
+```jsx
+<StatCard.Label qualifier={ __( '(excluding refunds)', 'newspack-plugin' ) }>
+	{ __( 'Revenue', 'newspack-plugin' ) }
+</StatCard.Label>
+```
+
 A level outside 2–6 falls back to `3` and warns outside production, rather than
 rendering an element that is not a heading at all.
 
@@ -272,7 +293,8 @@ rendering an element that is not a heading at all.
 | `className` | `string` | — | Merged onto the body. |
 
 A column that takes the free space. Put `StatCard.Value` in it, plus a
-`StatCard.Secondary` line or a consumer-owned element such as a delta.
+`StatCard.Secondary` line, or a `StatCard.Note` when the card has no figure to
+show.
 
 ## `StatCard.Value`
 
@@ -280,12 +302,27 @@ A column that takes the free space. Put `StatCard.Value` in it, plus a
 |------|------|---------|-------------|
 | `className` | `string` | — | Merged onto the value. |
 | `suffix` | `React.ReactNode` | — | Rendered in a row beside the figure, e.g. a `StatCard.Delta`. |
+| `unit` | `React.ReactNode` | — | What the figure counts, e.g. "days". Rendered between the figure and the `suffix`. |
 | `value` | `string` \| `number` \| `null` \| `undefined` | — | **Required.** Pre-formatted. `null`, `undefined` and a blank string render the null glyph. |
 | `valueLabel` | `string` | Root's `notApplicable` when null | Spoken instead of the visible value. |
 | `variant` | `'figure'` \| `'text'` | `'figure'` | `text` drops the hero scale for a phrase. |
 
-With a `suffix`, the figure and the suffix share a baseline-aligned row. Without
-one, the figure renders on its own with no extra wrapper.
+With a `unit` or a `suffix`, the figure shares a baseline-aligned row with them,
+the unit first. Without either, the figure renders on its own with no extra
+wrapper.
+
+The unit takes the figure's color at the delta's size, so the two read as one
+figure. It is dropped along with the figure when there is none, because "— days"
+would read as a figure of its own; a zero keeps it. It stays out of `valueLabel`,
+so a spoken figure is followed by its unit in the same way as a visible one.
+
+```jsx
+<StatCard.Value
+	value="214"
+	unit={ __( 'days', 'newspack-plugin' ) }
+	suffix={ <StatCard.Delta direction="up">2%</StatCard.Delta> }
+/>
+```
 
 ## `StatCard.Delta`
 
@@ -293,8 +330,8 @@ one, the figure renders on its own with no extra wrapper.
 |------|------|---------|-------------|
 | `children` | `React.ReactNode` | — | The change, pre-formatted. Must be non-interactive. |
 | `className` | `string` | — | Merged onto the delta. |
-| `direction` | `'up'` \| `'down'` | — | **Required.** Which arrow to show. |
-| `directionLabel` | `string` | Root's `up` or `down` | Spoken in place of the direction. |
+| `direction` | `'up'` \| `'down'` \| `'unchanged'` | — | **Required.** Which arrow to show, or none. |
+| `directionLabel` | `string` | Root's `up`, `down` or `unchanged` | Spoken in place of the direction. |
 | `label` | `string` | — | Spoken in place of the whole delta. Wins over `directionLabel`. |
 | `tone` | `'positive'` \| `'negative'` \| `'neutral'` | `'neutral'` | Which colour to use. |
 
@@ -345,10 +382,48 @@ text followed by the children, which the markup fixes: a language that wants the
 figure inside the phrase, or the direction after it, cannot get there by swapping
 one word with `directionLabel`. One translatable sentence can.
 
-A direction outside `up` and `down` shows no arrow and warns outside production.
+`unchanged` is for a comparison that came out flat. It shows no arrow, since there
+is no direction to point in, and speaks "Unchanged" in its place, so a `0%` still
+reads as a result rather than as a card with nothing to compare. Without it, a
+steady figure would render the same blank as a card with no previous period.
+
+```jsx
+<StatCard.Delta direction="unchanged">0%</StatCard.Delta>
+```
+
+A direction outside `up`, `down` and `unchanged` shows no arrow and warns outside production.
 With nothing else to go on it says nothing, rather than naming the opposite
 direction. A `directionLabel` or a `label` is still spoken, because the caller
 chose those words.
+
+## `StatCard.Note`
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `children` | `React.ReactNode` | — | Why there is no figure, e.g. "Not configured for this site." |
+| `className` | `string` | — | Merged onto the note. |
+
+A short line of body text that stands in for the figure, for a card that has an
+explanation to give rather than a number. It renders a `<div>`, so it can hold
+an icon beside its text, or a paragraph, whose margin it resets. An icon has to
+fit the note's 20px line, or it pushes the first line out of alignment.
+
+Put it first in `Body`, where `Value` would go:
+
+```jsx
+<StatCard.Body>
+	<StatCard.Note>{ __( 'No recurring donors at the start of this timeframe.', 'newspack-plugin' ) }</StatCard.Note>
+</StatCard.Body>
+```
+
+First in `Body`, a note's first line lines up with the figures in the
+neighboring cards at any card width, so a row mixing figures and notes reads
+level without a margin tuned by hand. Without that, 13px text beside a 20px to
+48px figure would sit well above it, because cards align their bodies by the top
+of the box.
+
+A note after something else in `Body` gets no such offset, since it is no longer
+standing in for the figure.
 
 ## `StatCard.Secondary`
 
@@ -385,13 +460,16 @@ other description.
 </StatCard.Footer>
 ```
 
-Anything else you want kept together, wrap yourself and it passes through as one:
+Anything else you want kept together, or several sentences that should each be
+their own paragraph, go in a `StatCard.Description`, which passes through as
+one:
 
 ```jsx
 <StatCard.Footer>
-	<p className="newspack-stat-card__description">
+	<StatCard.Description>
 		Applies to <strong>12</strong> products.
-	</p>
+	</StatCard.Description>
+	<StatCard.Description>{ __( 'Excludes refunded orders.', 'newspack-plugin' ) }</StatCard.Description>
 </StatCard.Footer>
 ```
 
@@ -412,6 +490,18 @@ An action keeps the description's type scale by taking the
 	</Button>
 </StatCard.Footer>
 ```
+
+## `StatCard.Description`
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `children` | `React.ReactNode` | — | One paragraph of the description. |
+| `className` | `string` | — | Merged onto the paragraph. |
+
+A `<p>` with the description styling, the same element `Footer` wraps a run of
+text in. Reach for it when the footer holds more than one sentence that should
+stand apart, a caveat under a definition say, or when a sentence carries inline
+markup that would otherwise split the run.
 
 ## `STAT_CARD_NULL_GLYPH`
 
