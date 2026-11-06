@@ -186,6 +186,7 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 						'typography' => [
 							'fontFamily' => 'var:preset|font-family|body',
 							'fontSize'   => 'var:preset|font-size|medium',
+							'lineHeight' => '1.3',
 						],
 					],
 				],
@@ -357,7 +358,7 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 					'brand'      => '#FFC857',
 					'brand_text' => '',
 				]
-			),
+			) + [ '--newspack-ui-field-caret' => 'var(--newspack-ui-field-caret-light)' ],
 			$properties
 		);
 
@@ -2236,14 +2237,32 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 			],
 		];
 		foreach ( [ 'var:preset|font-size|small', 'var(--wp--preset--font-size--small)' ] as $reference ) {
-			$authored = [ 'elements' => [ 'button' => [ 'typography' => [ 'fontSize' => $reference ] ] ] ];
+			$authored = [
+				'elements' => [
+					'button' => [
+						'typography' => [
+							'fontSize'   => $reference,
+							'lineHeight' => '1.3',
+						],
+					],
+				],
+			];
 			$styles   = Newspack_UI_Theme_Style::resolve_references( $authored, $settings );
 			$styles   = Newspack_UI_Theme_Style::apply_fluid_sizes( $styles, $authored, $settings );
 
 			$this->assertStringContainsString( '--newspack-ui-font-size-button:1rem;', Newspack_UI_Theme_Style::get_css( $styles, $settings ) );
 		}
 
-		$authored = [ 'elements' => [ 'button' => [ 'typography' => [ 'fontSize' => '1.5rem' ] ] ] ];
+		$authored = [
+			'elements' => [
+				'button' => [
+					'typography' => [
+						'fontSize'   => '1.5rem',
+						'lineHeight' => '1.3',
+					],
+				],
+			],
+		];
 		$styles   = Newspack_UI_Theme_Style::apply_fluid_sizes( $authored, $authored, $settings );
 		$this->assertStringContainsString( '--newspack-ui-font-size-button:clamp(', Newspack_UI_Theme_Style::get_css( $styles, $settings ) );
 	}
@@ -2422,5 +2441,185 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 		Newspack_UI_Theme_Style::print_css();
 
 		$this->assertEmpty( wp_styles()->get_data( 'newspack-ui', 'after' ) );
+	}
+
+	/**
+	 * The button size and line height print as a pair from one source, or not at all.
+	 */
+	public function test_button_size_and_line_height_print_as_a_pair(): void {
+		$both  = [
+			'fontSize'   => '1.125rem',
+			'lineHeight' => '1.2',
+		];
+		$pair  = Newspack_UI_Theme_Style::get_css( [ 'elements' => [ 'button' => [ 'typography' => $both ] ] ], [] );
+		$this->assertStringContainsString( '--newspack-ui-font-size-button:1.125rem;', $pair );
+		$this->assertStringContainsString( '--newspack-ui-line-height-button:1.2;', $pair );
+
+		$block = Newspack_UI_Theme_Style::get_css(
+			[
+				'blocks'   => [ 'core/button' => [ 'typography' => [ 'fontSize' => '1rem' ] ] ],
+				'elements' => [ 'button' => [ 'typography' => $both ] ],
+			],
+			[]
+		);
+		$this->assertStringNotContainsString( '--newspack-ui-font-size-button', $block );
+		$this->assertStringNotContainsString( '--newspack-ui-line-height-button', $block );
+
+		$block_pair = Newspack_UI_Theme_Style::get_css(
+			[
+				'blocks'   => [
+					'core/button' => [
+						'typography' => [
+							'fontSize'   => '1rem',
+							'lineHeight' => '1.5',
+						],
+					],
+				],
+				'elements' => [ 'button' => [ 'typography' => $both ] ],
+			],
+			[]
+		);
+		$this->assertStringContainsString( '--newspack-ui-font-size-button:1rem;', $block_pair );
+		$this->assertStringContainsString( '--newspack-ui-line-height-button:1.5;', $block_pair );
+
+		foreach ( [ [ 'fontSize' => '1rem' ], [ 'lineHeight' => '1.4' ] ] as $one ) {
+			$css = Newspack_UI_Theme_Style::get_css( [ 'elements' => [ 'button' => [ 'typography' => $one ] ] ], [] );
+			$this->assertStringNotContainsString( '--newspack-ui-font-size-button', $css );
+			$this->assertStringNotContainsString( '--newspack-ui-line-height-button', $css );
+		}
+	}
+
+	/**
+	 * Without a field pair, a dark base still gets the light caret; a light base keeps Neutral's.
+	 */
+	public function test_caret_falls_back_to_the_base(): void {
+		$dark = Newspack_UI_Theme_Style::get_css(
+			[
+				'color' => [
+					'background' => '#1e1e1e',
+					'text'       => '#ffffff',
+				],
+			],
+			[] 
+		);
+		$this->assertStringContainsString( '--newspack-ui-field-caret:var(--newspack-ui-field-caret-light);', $dark );
+
+		$light = Newspack_UI_Theme_Style::get_css(
+			[
+				'color' => [
+					'background' => '#f2f0ea',
+					'text'       => '#000000',
+				],
+			],
+			[] 
+		);
+		$this->assertStringNotContainsString( '--newspack-ui-field-caret', $light );
+	}
+
+	/**
+	 * Every property the adapter can produce has a value type, so render() never drops one silently.
+	 */
+	public function test_every_produced_property_has_a_type_and_prints(): void {
+		$settings = $this->settings();
+		$settings['custom']['line-height'] = [ 'medium' => '1.4' ];
+		$settings['typography']['fontSizes']['theme'] = [
+			[
+				'slug' => 'xx-small',
+				'size' => '0.75rem',
+			],
+			[
+				'slug' => 'x-small',
+				'size' => '0.875rem',
+			],
+			[
+				'slug' => 'small',
+				'size' => '1rem',
+			],
+			[
+				'slug' => 'medium',
+				'size' => '1.25rem',
+			],
+			[
+				'slug' => 'x-large',
+				'size' => '1.5rem',
+			],
+			[
+				'slug' => 'xx-large',
+				'size' => '2rem',
+			],
+		];
+		$settings['custom']['line-height'] = [
+			'xx-small' => '1.3',
+			'x-small'  => '1.4',
+			'small'    => '1.5',
+			'medium'   => '1.4',
+			'x-large'  => '1.3',
+			'xx-large' => '1.2',
+		];
+		$styles = [
+			'color'      => [
+				'background' => '#f2f0ea',
+				'text'       => '#111111',
+			],
+			'typography' => [ 'fontFamily' => 'Georgia, serif' ],
+			'blocks'     => [
+				'core/button' => [
+					'border'     => [ 'radius' => '4px' ],
+					'typography' => [
+						'fontFamily'    => 'Arial, sans-serif',
+						'fontSize'      => '1rem',
+						'lineHeight'    => '1.5',
+						'fontWeight'    => '700',
+						'letterSpacing' => '0.05em',
+						'textTransform' => 'uppercase',
+					],
+				],
+			],
+			'elements'   => [
+				'button'    => [
+					'color'  => [
+						'background' => '#003da5',
+						'text'       => '#ffffff',
+					],
+					':hover' => [ 'color' => [ 'text' => '#ffffff' ] ],
+				],
+				'link'      => [
+					'color'  => [ 'text' => '#003da5' ],
+					':hover' => [
+						'color'      => [ 'text' => '#002a73' ],
+						'typography' => [ 'textDecoration' => 'underline' ],
+					],
+				],
+				'caption'   => [ 'color' => [ 'text' => '#555555' ] ],
+				'heading'   => [
+					'typography' => [
+						'fontFamily' => 'Georgia, serif',
+						'fontWeight' => '800',
+					],
+				],
+				'textInput' => [
+					'border'     => [
+						'radius' => '2px',
+						'width'  => '1px',
+						'color'  => '#999999',
+					],
+					'color'      => [
+						'background' => '#222222',
+						'text'       => '#eeeeee',
+					],
+					'typography' => [ 'fontFamily' => 'Arial, sans-serif' ],
+				],
+			],
+		];
+		$user = [ 'elements' => [ 'button' => [ ':hover' => [ 'color' => [ 'background' => '#112233' ] ] ] ] ];
+
+		$properties = Newspack_UI_Theme_Style::get_properties( $styles, $settings, $user );
+		$css        = Newspack_UI_Theme_Style::get_css( $styles, $settings, $user );
+
+		$this->assertGreaterThan( 60, count( $properties ) );
+		foreach ( array_keys( $properties ) as $name ) {
+			$this->assertNotSame( '', Newspack_UI_Theme_Style::property_type( $name ), $name );
+			$this->assertStringContainsString( $name . ':', $css, $name );
+		}
 	}
 }

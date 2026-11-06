@@ -175,6 +175,8 @@ class Newspack_UI_Theme_Style {
 		/**
 		 * Filters whether the newspack-ui Theme style is active. Returning false forces the Neutral style.
 		 *
+		 * On a dark block theme this also leaves Neutral status colors for the theme's own notices, which read newspack-ui first.
+		 *
 		 * @param bool $supported Whether the active theme declares support for the Theme style.
 		 */
 		return (bool) \apply_filters( 'newspack_ui_theme_style_active', $supported );
@@ -302,14 +304,22 @@ class Newspack_UI_Theme_Style {
 	 */
 	private static function solve( array $global_styles, array $settings, array $user_styles, $variation_styles ): array {
 		$has_palette = false;
+		$properties  = array_merge(
+			self::get_color_properties( $global_styles, $settings, $user_styles, $variation_styles, $has_palette ),
+			self::get_radius_properties( $global_styles ),
+			self::get_typography_properties( $global_styles, $settings ),
+			self::get_field_properties( $global_styles )
+		);
+
+		if ( ! isset( $properties['--newspack-ui-field-caret'] ) ) {
+			$base = self::expand_hex( (string) self::get_palette( $global_styles, $settings )['base'] );
+			if ( '' !== $base && ! self::prefers_dark_caret( $base ) ) {
+				$properties['--newspack-ui-field-caret'] = 'var(--newspack-ui-field-caret-light)';
+			}
+		}
 
 		return [
-			'properties'  => array_merge(
-				self::get_color_properties( $global_styles, $settings, $user_styles, $variation_styles, $has_palette ),
-				self::get_radius_properties( $global_styles ),
-				self::get_typography_properties( $global_styles, $settings ),
-				self::get_field_properties( $global_styles )
-			),
+			'properties'  => $properties,
 			'has_palette' => $has_palette,
 		];
 	}
@@ -519,8 +529,20 @@ class Newspack_UI_Theme_Style {
 		$family = self::button_value( $global_styles, [ 'typography', 'fontFamily' ] );
 		self::put( $properties, '--newspack-ui-font-family-control', $family );
 		self::put( $properties, '--newspack-ui-button-font-family', $family );
-		self::put( $properties, '--newspack-ui-font-size-button', self::button_value( $global_styles, [ 'typography', 'fontSize' ] ) );
-		self::put( $properties, '--newspack-ui-line-height-button', self::button_value( $global_styles, [ 'typography', 'lineHeight' ] ) );
+		foreach ( [ [ 'blocks', 'core/button' ], [ 'elements', 'button' ] ] as $root ) {
+			$size        = self::dig( $global_styles, array_merge( $root, [ 'typography', 'fontSize' ] ) );
+			$line_height = self::dig( $global_styles, array_merge( $root, [ 'typography', 'lineHeight' ] ) );
+			$has_size    = null !== $size && '' !== $size && [] !== $size;
+			$has_line    = null !== $line_height && '' !== $line_height && [] !== $line_height;
+			if ( ! $has_size && ! $has_line ) {
+				continue;
+			}
+			if ( $has_size && $has_line ) {
+				self::put( $properties, '--newspack-ui-font-size-button', $size );
+				self::put( $properties, '--newspack-ui-line-height-button', $line_height );
+			}
+			break;
+		}
 		self::put( $properties, '--newspack-ui-button-font-weight', self::button_value( $global_styles, [ 'typography', 'fontWeight' ] ) );
 		self::put( $properties, '--newspack-ui-button-letter-spacing', self::button_value( $global_styles, [ 'typography', 'letterSpacing' ] ) );
 		self::put( $properties, '--newspack-ui-button-text-transform', self::button_value( $global_styles, [ 'typography', 'textTransform' ] ) );
@@ -863,13 +885,24 @@ class Newspack_UI_Theme_Style {
 			return [];
 		}
 		$tones = Newspack_UI_Palette::text_tones( $text, $background );
-		$dark  = Newspack_UI_Palette::lc( '#1e1e1e', $background ) >= Newspack_UI_Palette::lc( '#ffffff', $background );
+		$dark  = self::prefers_dark_caret( $background );
 
 		return [
 			'--newspack-ui-field-caret'      => 'var(--newspack-ui-field-caret-' . ( $dark ? 'dark' : 'light' ) . ')',
 			'--newspack-ui-field-ink-subtle' => $tones['subtle'],
 			'--newspack-ui-field-ink-muted'  => $tones['muted'],
 		];
+	}
+
+	/**
+	 * Whether the dark caret reads at least as well as the light one on a background.
+	 *
+	 * @param string $background Lowercase '#rrggbb'.
+	 *
+	 * @return bool
+	 */
+	private static function prefers_dark_caret( string $background ): bool {
+		return Newspack_UI_Palette::lc( '#1e1e1e', $background ) >= Newspack_UI_Palette::lc( '#ffffff', $background );
 	}
 
 	/**

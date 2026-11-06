@@ -935,8 +935,8 @@ class Newspack_Test_UI_Palette extends WP_UnitTestCase {
 			'text-muted'               => '#b9b9b9',
 			'text-subtle'              => '#9f9f9f',
 			'border'                   => '#7a7a7a',
-			'border-control'           => '#7a7a7a',
-			'focus-halo'               => '#7a7a7a',
+			'border-control'           => '#afafaf',
+			'focus-halo'               => '#919191',
 			'error-text'               => '#facfd2',
 			'error-tint'               => '#332422',
 			'error-border'             => '#b13634',
@@ -1322,5 +1322,68 @@ class Newspack_Test_UI_Palette extends WP_UnitTestCase {
 		$this->assertLessThan( 30, Newspack_UI_Palette::lc( '#0a4ab5', '#003da5' ) );
 		$this->assertSame( '#ffffff', $bad['focus-on-brand'] );
 		$this->assertGreaterThanOrEqual( 30, Newspack_UI_Palette::lc( $ok['button-text'], '#003da5' ) );
+	}
+
+	/**
+	 * Border, control border and focus halo keep Neutral's order of strength on dark and mid-grey bases.
+	 *
+	 * @dataProvider data_grey_step_bases
+	 *
+	 * @param string $base     Base.
+	 * @param string $contrast Contrast.
+	 */
+	public function test_grey_roles_stay_distinct_and_ordered( $base, $contrast ) {
+		$properties = $this->properties(
+			[
+				'base'     => $base,
+				'contrast' => $contrast,
+			]
+		);
+		$border     = Newspack_UI_Palette::lc( $properties['border'], $base );
+		$halo       = Newspack_UI_Palette::lc( $properties['focus-halo'], $base );
+		$control    = Newspack_UI_Palette::lc( $properties['border-control'], $base );
+
+		$this->assertCount( 3, array_unique( [ $properties['border'], $properties['focus-halo'], $properties['border-control'] ] ) );
+		$this->assertGreaterThan( $border, $halo );
+		$this->assertGreaterThan( $halo, $control );
+	}
+
+	/**
+	 * Bases where the three greys must come out apart.
+	 *
+	 * @return array
+	 */
+	public function data_grey_step_bases() {
+		return [
+			'nocturne' => [ '#1e1e1e', '#ffffff' ],
+			'night'    => [ '#0d0d0f', '#ffffff' ],
+			'mid grey' => [ '#7f7f7f', '#ffffff' ],
+			'charcoal' => [ '#303030', '#ffffff' ],
+		];
+	}
+
+	/**
+	 * Nocturne's control border and halo land at Neutral's relationship, not at the plain border.
+	 */
+	public function test_nocturne_grey_steps() {
+		$properties = $this->properties(
+			[
+				'base'     => '#1e1e1e',
+				'contrast' => '#ffffff',
+			]
+		);
+
+		$this->assertSame( '#7a7a7a', $properties['border'] );
+		$this->assertSame( '#afafaf', $properties['border-control'] );
+		$this->assertSame( '#919191', $properties['focus-halo'] );
+		$this->assertSame(
+			'#b4b4b4',
+			$this->properties(
+				[
+					'base'     => '#ffffff',
+					'contrast' => '#1e1e1e',
+				] 
+			)['focus-halo'] 
+		);
 	}
 }
