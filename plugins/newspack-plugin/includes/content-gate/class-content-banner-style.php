@@ -30,6 +30,15 @@ final class Content_Banner_Style {
 	}
 
 	/**
+	 * Whether banners render with the site Theme, which replaces the stored style.
+	 *
+	 * @return bool
+	 */
+	public static function uses_site_theme(): bool {
+		return Newspack_UI_Theme_Style::is_active();
+	}
+
+	/**
 	 * Sanitize a stored style.
 	 *
 	 * Theme is kept whatever the active theme, so switching back to the classic
@@ -48,9 +57,12 @@ final class Content_Banner_Style {
 	 *
 	 * @param mixed $style The stored style.
 	 *
-	 * @return string One of self::STYLES.
+	 * @return string One of self::STYLES, or 'site' when the site Theme is in use.
 	 */
 	public static function get_render_style( mixed $style ): string {
+		if ( self::uses_site_theme() ) {
+			return 'site';
+		}
 		$style = self::sanitize_style( $style );
 		if ( 'theme' === $style && ! self::supports_theme_style() ) {
 			return self::DEFAULT_STYLE;
