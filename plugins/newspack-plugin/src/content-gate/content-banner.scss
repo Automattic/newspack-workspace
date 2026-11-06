@@ -209,6 +209,7 @@ body.newspack-has-countdown-banner:has(.newspack-countdown-banner__cta:not(.news
 			--newspack-content-banner-message-color: var(--newspack-ui-color-text-muted);
 			--newspack-content-banner__cta__content__links--color: var(--newspack-ui-color-text-muted);
 			background: var(--newspack-ui-color-surface);
+			border-top: 1px solid var(--newspack-ui-color-border);
 			color: var(--newspack-ui-color-text);
 
 			> .wrapper {
