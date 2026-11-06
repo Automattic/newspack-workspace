@@ -30,7 +30,7 @@
 
 		.has-background & {
 			border-color: currentcolor; // Fallback
-			border-color: color-mix(in srgb, currentcolor 15%, transparent); // #DDDDDD if currentcolor is #1E1E1E
+			border-color: color-mix(in oklab, currentcolor 15%, transparent); // #DDDDDD if currentcolor is #1E1E1E
 		}
 	}
 }
