@@ -13,12 +13,14 @@ use Newspack_Block_Theme\Status_Colors;
  * Tests the readability guard on the Outline button text and border.
  */
 class Test_Outline_Button_Guard extends WP_UnitTestCase {
+	const HANDLE = 'newspack-block-theme-outline-button-guard';
+
 	/**
 	 * Drop the styles a test saved.
 	 */
 	public function tear_down() {
-		wp_dequeue_style( 'newspack-block-theme-outline-button-guard' );
-		wp_deregister_style( 'newspack-block-theme-outline-button-guard' );
+		wp_dequeue_style( self::HANDLE );
+		wp_deregister_style( self::HANDLE );
 		wp_clean_theme_json_cache();
 		Contrast::reset_button_styles();
 		parent::tear_down();
@@ -51,7 +53,7 @@ class Test_Outline_Button_Guard extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A user palette with the given accent and base.
+	 * A user palette with the given accent and base, saved as the Site Editor saves edited theme colors.
 	 *
 	 * @param string $accent The accent color.
 	 * @param string $base   The base color.
@@ -62,15 +64,17 @@ class Test_Outline_Button_Guard extends WP_UnitTestCase {
 			'settings' => [
 				'color' => [
 					'palette' => [
-						[
-							'slug'  => 'accent',
-							'color' => $accent,
-							'name'  => 'Accent',
-						],
-						[
-							'slug'  => 'base',
-							'color' => $base,
-							'name'  => 'Base',
+						'theme' => [
+							[
+								'slug'  => 'accent',
+								'color' => $accent,
+								'name'  => 'Accent',
+							],
+							[
+								'slug'  => 'base',
+								'color' => $base,
+								'name'  => 'Base',
+							],
 						],
 					],
 				],
@@ -79,42 +83,86 @@ class Test_Outline_Button_Guard extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The shipped accent on base pairs and the Lc of each.
+	 * User styles with an Outline text color set in Styles.
+	 *
+	 * @param string $text The Outline text color.
+	 * @return array
+	 */
+	private function outline_text( string $text ): array {
+		return [
+			'styles' => [
+				'blocks' => [
+					'core/button' => [
+						'variations' => [
+							'outline' => [ 'color' => [ 'text' => $text ] ],
+						],
+					],
+				],
+			],
+		];
+	}
+
+	/**
+	 * The CSS the guard printed.
+	 *
+	 * @return string
+	 */
+	private function printed_css(): string {
+		Outline_Button_Guard::enqueue_block_assets();
+		return implode( '', (array) wp_styles()->get_data( self::HANDLE, 'after' ) );
+	}
+
+	/**
+	 * Every shipped palette file.
 	 *
 	 * @return array
 	 */
-	public function shipped_vectors(): array {
-		return [
-			'theme.json'  => [ '#003da5', '#ffffff', 91.0 ],
-			'02-arc'      => [ '#7047eb', '#ffffff', 76.9 ],
-			'04-bulletin' => [ '#d63638', '#ffffff', 71.4 ],
-			'06-foundry'  => [ '#375844', '#ffffff', 87.5 ],
-			'08-ledger'   => [ '#c93a00', '#f2f0ea', 65.1 ],
-			'10-nocturne' => [ '#ffc857', '#1e1e1e', 76.6 ],
-		];
+	public function shipped_files(): array {
+		$files = [ 'theme.json' => [ 'theme.json' ] ];
+		foreach ( glob( dirname( __DIR__ ) . '/styles/*.json' ) as $path ) {
+			$name           = 'styles/' . basename( $path );
+			$files[ $name ] = [ $name ];
+		}
+		return $files;
 	}
 
 	/**
 	 * Every shipped palette keeps the accent for the Outline button.
 	 *
-	 * @dataProvider shipped_vectors
+	 * @dataProvider shipped_files
 	 *
-	 * @param string $accent The accent.
-	 * @param string $base   The base.
-	 * @param float  $lc     Expected Lc.
+	 * @param string $file Path relative to the theme root.
 	 */
-	public function test_shipped_palettes_stay_above_the_threshold( $accent, $base, $lc ) {
-		$this->assertEqualsWithDelta( $lc, Status_Colors::lc( $accent, $base ), 0.1 );
-		$this->assertGreaterThanOrEqual( Outline_Button_Guard::MIN_LC, Status_Colors::lc( $accent, $base ) );
+	public function test_shipped_palettes_keep_the_accent( $file ) {
+		$palette = [];
+		foreach ( array_unique( [ 'theme.json', $file ] ) as $name ) {
+			$data = wp_json_file_decode( dirname( __DIR__ ) . '/' . $name, [ 'associative' => true ] );
+			foreach ( $data['settings']['color']['palette'] ?? [] as $entry ) {
+				$palette[ $entry['slug'] ] = $entry['color'];
+			}
+		}
+
+		$this->set_user_data( $this->palette( $palette['accent'], $palette['base'] ) );
+		$this->assertNull( Outline_Button_Guard::get_color() );
+	}
+
+	/**
+	 * The Outline rules in theme.json read the guarded property, which defaults to the accent.
+	 */
+	public function test_outline_variation_reads_the_guarded_property() {
+		$data = wp_json_file_decode( dirname( __DIR__ ) . '/theme.json', [ 'associative' => true ] );
+
+		$this->assertSame( 'var(--wp--preset--color--accent)', $data['settings']['custom']['button']['outline'] );
+		$this->assertSame( 'var(--wp--custom--button--outline)', $data['styles']['blocks']['core/button']['variations']['outline']['color']['text'] );
 	}
 
 	/**
 	 * The default theme keeps the accent.
 	 */
 	public function test_default_styles_do_not_trip() {
-		$this->assertFalse( Outline_Button_Guard::is_tripped() );
+		$this->assertNull( Outline_Button_Guard::get_color() );
 		Outline_Button_Guard::enqueue_block_assets();
-		$this->assertFalse( wp_style_is( 'newspack-block-theme-outline-button-guard', 'enqueued' ) );
+		$this->assertFalse( wp_style_is( self::HANDLE, 'enqueued' ) );
 	}
 
 	/**
@@ -124,11 +172,7 @@ class Test_Outline_Button_Guard extends WP_UnitTestCase {
 		$this->assertLessThan( Outline_Button_Guard::MIN_LC, Status_Colors::lc( '#c6ff00', '#dfdfdb' ) );
 
 		$this->set_user_data( $this->palette( '#c6ff00', '#dfdfdb' ) );
-		$this->assertTrue( Outline_Button_Guard::is_tripped() );
-
-		Outline_Button_Guard::enqueue_block_assets();
-		$css = implode( '', (array) wp_styles()->get_data( 'newspack-block-theme-outline-button-guard', 'after' ) );
-		$this->assertSame( ':root:root, :root .editor-styles-wrapper { --wp--custom--button--outline: var(--wp--preset--color--contrast); }', $css );
+		$this->assertSame( ':root:root, :root .editor-styles-wrapper { --wp--custom--button--outline: var(--wp--preset--color--contrast); }', $this->printed_css() );
 	}
 
 	/**
@@ -143,23 +187,38 @@ class Test_Outline_Button_Guard extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An Outline text color the publisher set in Styles wins.
+	 * An Outline text color the publisher set in Styles is what the Outline rules read, faint accent or not.
+	 *
+	 * @dataProvider publisher_colors
+	 *
+	 * @param string $text     The color saved in Styles.
+	 * @param string $expected The value the property takes.
 	 */
-	public function test_publisher_color_wins() {
-		$this->set_user_data(
-			$this->palette( '#c6ff00', '#dfdfdb' ) + [
-				'styles' => [
-					'blocks' => [
-						'core/button' => [
-							'variations' => [
-								'outline' => [ 'color' => [ 'text' => '#123456' ] ],
-							],
-						],
-					],
-				],
-			]
-		);
+	public function test_publisher_color_wins( $text, $expected ) {
+		$this->set_user_data( $this->palette( '#c6ff00', '#dfdfdb' ) + $this->outline_text( $text ) );
 
-		$this->assertFalse( Outline_Button_Guard::is_tripped() );
+		$this->assertSame( ':root:root, :root .editor-styles-wrapper { --wp--custom--button--outline: ' . $expected . '; }', $this->printed_css() );
+	}
+
+	/**
+	 * Publisher colors as Styles saves them, and the CSS value each becomes.
+	 *
+	 * @return array
+	 */
+	public function publisher_colors(): array {
+		return [
+			'hex'          => [ '#123456', '#123456' ],
+			'preset'       => [ 'var:preset|color|accent-3', 'var(--wp--preset--color--accent-3)' ],
+			'css variable' => [ 'var(--wp--preset--color--contrast)', 'var(--wp--preset--color--contrast)' ],
+		];
+	}
+
+	/**
+	 * A Styles value that is not a plain color leaves the guard in charge.
+	 */
+	public function test_unsafe_publisher_value_is_ignored() {
+		$this->set_user_data( $this->palette( '#c6ff00', '#dfdfdb' ) + $this->outline_text( 'red;}body{color:red' ) );
+
+		$this->assertSame( 'var(--wp--preset--color--contrast)', Outline_Button_Guard::get_color() );
 	}
 }
