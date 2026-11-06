@@ -218,10 +218,22 @@ function newspack_body_classes( $classes ) {
 		$classes[] = 'af-widget';
 	}
 
-	// Add a class for each category assigned to a single post.
+	// Add classes for each category assigned to a single post.
 	if ( is_single() ) {
+		// Legacy `cat-<slug>` classes that would match a class the theme styles, such
+		// as the category list's `cat-links`, which a category slugged "links" would put
+		// on `body` and so restyle the whole post. These categories get only the
+		// `newspack-cat-<slug>` class. No test covers this list: keep it when refactoring,
+		// and add to it when adding a theme class of the form `cat-<word>`.
+		$reserved_category_classes = array( 'cat-links' );
+
 		foreach ( ( get_the_category( $page_id ) ) as $category ) {
-			$classes[] = 'cat-' . $category->category_nicename;
+			$classes[] = 'newspack-cat-' . $category->category_nicename;
+
+			$legacy_class = 'cat-' . $category->category_nicename;
+			if ( ! in_array( $legacy_class, $reserved_category_classes, true ) ) {
+				$classes[] = $legacy_class;
+			}
 		}
 	}
 
