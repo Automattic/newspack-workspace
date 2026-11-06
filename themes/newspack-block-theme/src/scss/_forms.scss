@@ -219,7 +219,7 @@ input[type="submit"]:not(.newspack-ui__button) {
 	border-radius: var(--newspack-ui-radius-button, var(--wp--custom--border--radius-large));
 	color: var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base));
 	cursor: pointer;
-	font-family: var(--newspack-ui-font-family, var(--wp--preset--font-family--inter, system-ui, sans-serif));
+	font-family: var(--newspack-ui-font-family-control, var(--wp--preset--font-family--inter, system-ui, sans-serif));
 	font-size: var(--newspack-ui-font-size-s, var(--wp--preset--font-size--small));
 	font-weight: 600;
 	line-height: var(--newspack-ui-line-height-s, var(--wp--custom--line-height--small));
