@@ -17,9 +17,29 @@ use Newspack\Newspack_UI_Theme_Style;
 class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 
 	/**
+	 * The styles registry before the test swapped it.
+	 *
+	 * @var WP_Styles|null
+	 */
+	private $original_styles = null;
+
+	/**
+	 * Remember the styles registry.
+	 */
+	public function set_up(): void {
+		global $wp_styles;
+		parent::set_up();
+		$this->original_styles = $wp_styles;
+	}
+
+	/**
 	 * Reset the style registry.
 	 */
 	public function tear_down(): void {
+		global $wp_styles;
+		$wp_styles = $this->original_styles; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		remove_all_actions( 'admin_print_styles' );
+		set_current_screen( 'front' );
 		remove_theme_support( Newspack_UI_Theme_Style::THEME_SUPPORT );
 		remove_all_filters( 'newspack_ui_theme_style_active' );
 		remove_all_filters( 'wp_theme_json_data_user' );
@@ -2352,11 +2372,11 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A fresh styles instance gets the rule even after another instance printed it.
+	 * A fresh styles instance gets the rule even after another instance printed it, and a copy that shares the
+	 * registered handles does not get it twice.
 	 */
 	public function test_guard_keys_on_handle_data_not_a_static_flag(): void {
 		global $wp_styles;
-		$original = $wp_styles;
 
 		add_theme_support( Newspack_UI_Theme_Style::THEME_SUPPORT );
 		$this->set_user_styles( [ 'elements' => [ 'button' => [ 'border' => [ 'radius' => '12px' ] ] ] ] );
@@ -2366,18 +2386,26 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 		$wp_styles = new WP_Styles(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		Newspack_UI::enqueue_assets();
 		Newspack_UI_Theme_Style::print_css();
+		$fresh = implode( "\n", (array) wp_styles()->get_data( 'newspack-ui', 'after' ) );
+		$this->assertSame( 1, substr_count( $fresh, ':root{' ) );
 
-		$inline = implode( "\n", (array) wp_styles()->get_data( 'newspack-ui', 'after' ) );
-		$wp_styles = $original; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
-
-		$this->assertSame( 1, substr_count( $inline, ':root{' ) );
+		$shared             = new WP_Styles();
+		$shared->registered = $wp_styles->registered;
+		$wp_styles          = $shared; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		wp_enqueue_style( 'newspack-ui' );
+		Newspack_UI_Theme_Style::print_css();
+		Newspack_UI_Theme_Style::print_css();
+		$copy = implode( "\n", (array) wp_styles()->get_data( 'newspack-ui', 'after' ) );
+		$this->assertSame( 1, substr_count( $copy, ':root{' ) );
 	}
 
 	/**
-	 * Nothing prints when the Theme style is off.
+	 * Nothing prints when the Theme style is off, even with CSS to print.
 	 */
 	public function test_noop_when_inactive(): void {
+		$this->set_user_styles( [ 'elements' => [ 'button' => [ 'border' => [ 'radius' => '12px' ] ] ] ] );
 		Newspack_UI::enqueue_assets();
+		$this->assertNotSame( '', Newspack_UI_Theme_Style::get_site_css() );
 
 		Newspack_UI_Theme_Style::print_css();
 
@@ -2385,13 +2413,52 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Nothing prints, and nothing is raised, when the handle is not enqueued.
+	 * Nothing prints, and nothing is raised, when the handle is registered but not enqueued.
 	 */
 	public function test_noop_when_handle_not_enqueued(): void {
 		add_theme_support( Newspack_UI_Theme_Style::THEME_SUPPORT );
+		$this->set_user_styles( [ 'elements' => [ 'button' => [ 'border' => [ 'radius' => '12px' ] ] ] ] );
+		wp_register_style( 'newspack-ui', false, [], '1' );
+		$this->assertNotSame( '', Newspack_UI_Theme_Style::get_site_css() );
 
 		Newspack_UI_Theme_Style::print_css();
 
-		$this->assertFalse( wp_style_is( 'newspack-ui', 'registered' ) );
+		$this->assertEmpty( wp_styles()->get_data( 'newspack-ui', 'after' ) );
+	}
+
+	/**
+	 * The theme's font faces load in wp-admin only when the rule names a font family.
+	 */
+	public function test_admin_font_faces_hooked_only_for_font_family_rules(): void {
+		set_current_screen( 'dashboard' );
+		remove_action( 'admin_print_styles', 'wp_print_font_faces', 50 );
+		add_theme_support( Newspack_UI_Theme_Style::THEME_SUPPORT );
+		Newspack_UI::enqueue_assets();
+
+		$this->set_user_styles( [ 'elements' => [ 'button' => [ 'border' => [ 'radius' => '12px' ] ] ] ] );
+		Newspack_UI_Theme_Style::print_css();
+		$this->assertFalse( has_action( 'admin_print_styles', 'wp_print_font_faces' ) );
+
+		Newspack_UI_Theme_Style::reset_cache();
+		$this->set_user_styles( [ 'typography' => [ 'fontFamily' => 'Georgia, serif' ] ] );
+		$this->assertStringContainsString( 'font-family', Newspack_UI_Theme_Style::get_site_css() );
+		Newspack_UI_Theme_Style::print_css();
+		$this->assertSame( 10, has_action( 'admin_print_styles', 'wp_print_font_faces' ) );
+	}
+
+	/**
+	 * A font-face hook already on the admin screen is left alone.
+	 */
+	public function test_admin_font_faces_not_hooked_twice(): void {
+		set_current_screen( 'dashboard' );
+		add_action( 'admin_print_styles', 'wp_print_font_faces', 50 );
+		add_theme_support( Newspack_UI_Theme_Style::THEME_SUPPORT );
+		Newspack_UI::enqueue_assets();
+		$this->set_user_styles( [ 'typography' => [ 'fontFamily' => 'Georgia, serif' ] ] );
+
+		Newspack_UI_Theme_Style::print_css();
+
+		$this->assertSame( 50, has_action( 'admin_print_styles', 'wp_print_font_faces' ) );
+		$this->assertArrayNotHasKey( 'wp_print_font_faces', $GLOBALS['wp_filter']['admin_print_styles']->callbacks[10] ?? [] );
 	}
 }

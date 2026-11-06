@@ -123,19 +123,22 @@ class Newspack_UI_Theme_Style {
 	/**
 	 * Register the hooks that drop the memoized global styles and print the rule.
 	 */
-	public static function init() {
+	public static function init(): void {
 		\add_action( 'wp_enqueue_scripts', [ __CLASS__, 'print_css' ], 20 );
 		\add_action( 'enqueue_block_assets', [ __CLASS__, 'print_css' ], 20 );
 		\add_action( 'admin_enqueue_scripts', [ __CLASS__, 'print_css' ], 20 );
-		\add_action( 'save_post_wp_global_styles', [ __CLASS__, 'reset_cache' ] );
-		\add_action( 'switch_theme', [ __CLASS__, 'reset_cache' ] );
+		\add_action( 'save_post_wp_global_styles', [ __CLASS__, 'reset_cache' ], 10, 0 );
+		\add_action( 'switch_theme', [ __CLASS__, 'reset_cache' ], 10, 0 );
 	}
 
 	/**
 	 * Attach the ':root' rule to the newspack-ui stylesheet.
 	 *
 	 * The guard reads the handle's own inline data rather than a static flag, because the editor collects
-	 * its iframe assets in a separate styles instance.
+	 * its iframe assets in a separate styles instance, possibly sharing registered handles.
+	 *
+	 * In wp-admin, a rule that names a font family also queues the theme's font faces when nothing on the
+	 * screen prints them already.
 	 */
 	public static function print_css(): void {
 		if ( ! self::is_active() || ! \wp_style_is( 'newspack-ui', 'enqueued' ) ) {
@@ -153,12 +156,29 @@ class Newspack_UI_Theme_Style {
 		}
 
 		\wp_add_inline_style( 'newspack-ui', $css );
+
+		if ( \is_admin() && str_contains( $css, 'font-family' ) && ! self::is_block_editor_screen() ) {
+			if ( false === \has_action( 'admin_print_styles', 'wp_print_font_faces' ) ) {
+				\add_action( 'admin_print_styles', 'wp_print_font_faces' );
+			}
+		}
+	}
+
+	/**
+	 * Whether the current admin screen is a block editor, which prints the theme's font faces itself.
+	 *
+	 * @return bool
+	 */
+	private static function is_block_editor_screen(): bool {
+		$screen = \function_exists( 'get_current_screen' ) ? \get_current_screen() : null;
+
+		return $screen instanceof \WP_Screen && $screen->is_block_editor();
 	}
 
 	/**
 	 * Drop the memoized global styles.
 	 */
-	public static function reset_cache() {
+	public static function reset_cache(): void {
 		self::$global_styles = null;
 		self::$css           = null;
 		self::$has_palette   = null;
