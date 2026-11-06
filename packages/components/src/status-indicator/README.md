@@ -51,7 +51,8 @@ vocabulary:
 | Prop | Type | Required | Description |
 | --- | --- | --- | --- |
 | `status` | `StatusName` | one of the two | The status to draw, from the vocabulary below. |
-| `icon` | `Icon`'s `icon` prop | one of the two | A glyph, for a field the vocabulary does not cover. |
+| `icon` | `Icon`'s `icon` prop | one of the two | A glyph, for a field the vocabulary does not cover. Never tinted. |
+| `tone` | `StatusTone` | no | Overrides the tone of `status`. Only with `status`. |
 | `children` | `ReactNode` | yes | The status label. `@wordpress/primitives` forces `aria-hidden` on the glyph, so this is the whole accessible name. |
 
 `status` and `icon` are mutually exclusive, and one of them is required.
@@ -66,7 +67,7 @@ takes the props of a `div`.
 | `done` | check circle | success | Finished successfully: a sent newsletter, a completed sync. |
 | `scheduled` | clock | info | Waiting for a date to arrive. |
 | `draft` | half circle | neutral | Not live yet, or switched off. |
-| `pending` | part-filled circle | caution | Waiting on something outside the publisher's hands. |
+| `pending` | part-filled circle | info | Waiting on something outside the publisher's hands. |
 | `attention` | exclamation circle | warning | Live but needing a look, usually a payment. |
 | `error` | error | error | Failed, and the one state that asks the reader to act. |
 | `progress` | update | info | Running right now. |
@@ -95,9 +96,15 @@ exported for the columns that want to assert it directly.
 ## Colour
 
 Each tone is the design system's `--wpds-color-foreground-content-<tone>-weak`
-token, applied to the glyph through an `is-<tone>` class. Without the token
-sheet the glyph falls back to the text colour, which is how it looked before
-tones existed.
+token, applied to the glyph through a `newspack-status-indicator--<tone>`
+modifier. A screen that loads no token sheet still reads correctly: the glyph
+falls back to the text colour. The `$tones` list in `style.scss` and the
+`StatusTone` type in `statuses.ts` change together; a tone missing from the
+list renders untinted without any error.
+
+Amber is kept for `attention` alone, so it always means "look at this". Waiting
+states (`scheduled`, `pending`, `progress`) share blue and are told apart by
+their glyphs.
 
 Colour backs the glyph up; it does not replace it. The glyph still does the
 separating on its own, so no status leans on colour to carry its meaning, and
@@ -106,6 +113,11 @@ two statuses may share a tone where the glyphs tell them apart (`scheduled` and
 tinting it like `active` would make the two read alike. A glyph passed through
 `icon` is never tinted, since a classifying field has no lifecycle to colour.
 `statusTone` is exported alongside `statusGlyph` for tests.
+
+`tone` overrides a status's own tone for a screen where the state means less
+than its glyph suggests. Scheduled Actions is the one case: a finished job only
+says the job ran, not that the sync inside it worked, so its Complete keeps the
+check glyph with `tone="neutral"`.
 
 ## When to pass a glyph instead
 

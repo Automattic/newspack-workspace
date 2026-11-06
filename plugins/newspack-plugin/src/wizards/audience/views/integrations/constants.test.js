@@ -49,6 +49,7 @@ describe( 'STATUS_MAP', () => {
 		expect( STATUS_MAP.complete.label ).toBe( 'Complete' );
 		expect( STATUS_MAP.complete.intent ).toBe( 'draft' );
 		expect( STATUS_MAP.complete.status ).toBe( 'done' );
+		expect( STATUS_MAP.complete.tone ).toBe( 'neutral' );
 	} );
 } );
 

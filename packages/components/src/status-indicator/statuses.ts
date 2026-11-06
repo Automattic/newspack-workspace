@@ -34,16 +34,14 @@ export type StatusName = keyof typeof STATUS_GLYPHS;
  * The colour each status draws its glyph in, named after the design system's
  * foreground content tones. Colour backs up the glyph rather than replacing it:
  * every status keeps its own mark, so the column still reads without colour.
- *
- * `private` has no tone: it is live, but tinting it like `active` would make the
- * two read as the same state at a glance.
+ * `private` has no tone so it never reads as `active`.
  */
 const STATUS_TONES: Record< StatusName, StatusTone | undefined > = {
 	active: 'success',
 	done: 'success',
 	scheduled: 'info',
 	progress: 'info',
-	pending: 'caution',
+	pending: 'info',
 	attention: 'warning',
 	error: 'error',
 	draft: 'neutral',
@@ -53,7 +51,7 @@ const STATUS_TONES: Record< StatusName, StatusTone | undefined > = {
 	private: undefined,
 };
 
-export type StatusTone = 'success' | 'info' | 'caution' | 'warning' | 'error' | 'neutral';
+export type StatusTone = 'success' | 'info' | 'warning' | 'error' | 'neutral';
 
 export const statusGlyph = ( status: StatusName ) => STATUS_GLYPHS[ status ];
 

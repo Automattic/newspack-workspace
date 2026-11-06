@@ -132,7 +132,11 @@ export const ScheduledActions = ( { integrationId } ) => {
 				render: ( { item } ) => {
 					// A status Action Scheduler grows later is one to look at, not a deliberate stop.
 					const mapped = STATUS_MAP[ item.status ] || { label: item.status, status: 'attention' };
-					return <StatusIndicator status={ mapped.status }>{ mapped.label }</StatusIndicator>;
+					return (
+						<StatusIndicator status={ mapped.status } tone={ mapped.tone }>
+							{ mapped.label }
+						</StatusIndicator>
+					);
 				},
 				enableSorting: true,
 				elements: Object.entries( STATUS_MAP ).map( ( [ value, { label } ] ) => ( { value, label } ) ),

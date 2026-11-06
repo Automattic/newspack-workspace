@@ -1,6 +1,6 @@
 @use "~@wordpress/base-styles/variables" as wp-vars;
 
-$tones: success, info, caution, warning, error, neutral;
+$tones: success, info, warning, error, neutral;
 
 .newspack-status-indicator {
 	&__icon {
@@ -10,7 +10,7 @@ $tones: success, info, caution, warning, error, neutral;
 	}
 
 	@each $tone in $tones {
-		&.is-#{$tone} &__icon {
+		&--#{$tone} &__icon {
 			color: var(--wpds-color-foreground-content-#{$tone}-weak, currentcolor);
 		}
 	}

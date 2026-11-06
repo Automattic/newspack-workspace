@@ -22,17 +22,17 @@ import { statusGlyph, statusTone } from './statuses';
 import './style.scss';
 
 const StatusIndicator = forwardRef< HTMLDivElement, StatusIndicatorProps >( function StatusIndicator(
-	{ status, icon, className, children, ...props },
+	{ status, tone: toneOverride, icon, className, children, ...props },
 	ref
 ) {
-	const tone = status ? statusTone( status ) : undefined;
+	const tone = status ? toneOverride ?? statusTone( status ) : undefined;
 	return (
 		<Stack
 			ref={ ref }
 			direction="row"
 			align="center"
 			gap="sm"
-			className={ classnames( 'newspack-status-indicator', tone && `is-${ tone }`, className ) }
+			className={ classnames( 'newspack-status-indicator', tone && `newspack-status-indicator--${ tone }`, className ) }
 			{ ...props }
 		>
 			<Icon className="newspack-status-indicator__icon" icon={ status ? statusGlyph( status ) : icon } size={ 24 } />
