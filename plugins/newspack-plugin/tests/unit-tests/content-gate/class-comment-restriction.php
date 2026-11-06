@@ -226,11 +226,12 @@ class Test_Comment_Restriction extends WP_UnitTestCase {
 	/**
 	 * Create a comment through the REST API.
 	 *
-	 * @param int $user_id User to submit as.
+	 * @param int   $user_id User to submit as.
+	 * @param mixed $type    Comment type to send, if any.
 	 *
 	 * @return int Response status.
 	 */
-	private function rest_create_comment_as( $user_id ) {
+	private function rest_create_comment_as( $user_id, $type = null ) {
 		wp_set_current_user( $user_id );
 		Comment_Restriction::reset_cache();
 		// A submission arrives with no current post, unlike the rendered form.
@@ -238,6 +239,9 @@ class Test_Comment_Restriction extends WP_UnitTestCase {
 		$request = new WP_REST_Request( 'POST', '/wp/v2/comments' );
 		$request->set_param( 'post', $this->post_id );
 		$request->set_param( 'content', 'A comment ' . wp_generate_password( 8, false ) );
+		if ( null !== $type ) {
+			$request->set_param( 'type', $type );
+		}
 		return rest_get_server()->dispatch( $request )->get_status();
 	}
 
@@ -550,5 +554,107 @@ class Test_Comment_Restriction extends WP_UnitTestCase {
 		remove_filter( 'user_has_cap', $count, 10 );
 
 		$this->assertSame( 1, $asks );
+	}
+
+	/**
+	 * Check a comment the way the REST controller does, with the raw type it
+	 * was sent and no normalization by wp_new_comment().
+	 *
+	 * @param int   $user_id      Comment author, also the current user.
+	 * @param mixed $comment_type Comment type.
+	 *
+	 * @return int|string|WP_Error
+	 */
+	private function allow_comment_as( $user_id, $comment_type ) {
+		wp_set_current_user( $user_id );
+		Comment_Restriction::reset_cache();
+		return wp_allow_comment(
+			[
+				'comment_post_ID'      => $this->post_id,
+				'comment_parent'       => 0,
+				'comment_author'       => 'Reader',
+				'comment_author_email' => 'reader@example.test',
+				'comment_author_url'   => '',
+				'comment_author_IP'    => '127.0.0.1',
+				'comment_agent'        => '',
+				'comment_date'         => current_time( 'mysql' ),
+				'comment_date_gmt'     => current_time( 'mysql', true ),
+				'comment_content'      => 'A comment ' . wp_generate_password( 8, false ),
+				'comment_type'         => $comment_type,
+				'user_id'              => $user_id,
+			],
+			true
+		);
+	}
+
+	/**
+	 * REST copies a `type` it sees as empty, such as an empty array, into the
+	 * comment unchecked. That is a plain comment, not a fatal, whether or not
+	 * commenting is restricted.
+	 */
+	public function test_a_rest_comment_type_of_an_empty_array_is_not_a_fatal() {
+		$this->assertSame( 201, $this->rest_create_comment_as( $this->create_reader(), [] ), 'Unrestricted.' );
+
+		$this->restrict_comments_to_gate();
+		$this->assertSame( 201, $this->rest_create_comment_as( $this->create_subscriber()['owner'], [] ), 'Subscriber the gate admits.' );
+	}
+
+	/**
+	 * Comment types core stores as a plain comment.
+	 *
+	 * @return array
+	 */
+	public function empty_comment_types() {
+		return [
+			'empty string'                     => [ '' ],
+			'string zero'                      => [ '0' ],
+			'integer zero'                     => [ 0 ],
+			'false'                            => [ false ],
+			'empty array'                      => [ [] ],
+			'null, read as empty by the check' => [ null ],
+		];
+	}
+
+	/**
+	 * Any empty type is a plain comment to wp_insert_comment(), so the
+	 * restriction judges it as a reader comment.
+	 *
+	 * @dataProvider empty_comment_types
+	 *
+	 * @param mixed $comment_type Comment type.
+	 */
+	public function test_any_empty_comment_type_is_a_reader_comment( $comment_type ) {
+		$this->restrict_comments_to_gate();
+		$result = $this->allow_comment_as( $this->create_reader(), $comment_type );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'newspack_comment_restricted', $result->get_error_code() );
+	}
+
+	/**
+	 * A non-empty type other than `comment` is not a reader comment, even when
+	 * it is not a string.
+	 *
+	 * @dataProvider other_comment_types
+	 *
+	 * @param mixed $comment_type Comment type.
+	 */
+	public function test_other_comment_types_are_not_refused( $comment_type ) {
+		$this->restrict_comments_to_gate();
+		$result = $this->allow_comment_as( $this->create_reader(), $comment_type );
+
+		$this->assertFalse( is_wp_error( $result ) && 'newspack_comment_restricted' === $result->get_error_code() );
+	}
+
+	/**
+	 * Comment types that are not reader comments.
+	 *
+	 * @return array
+	 */
+	public function other_comment_types() {
+		return [
+			'custom type'               => [ 'custom' ],
+			'array holding a type name' => [ [ 'comment' ] ],
+		];
 	}
 }
