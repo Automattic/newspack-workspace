@@ -6,9 +6,9 @@
 .wpbnbd {
 	&__button,
 	.tab-container .freq-label {
-		border: 0 solid np-colors.$neutral-300;
-		background: np-colors.$neutral-000;
-		color: np-colors.$neutral-600;
+		border: 0 solid var(--newspack-ui-color-border, #{np-colors.$neutral-300});
+		background: var(--newspack-ui-color-surface, #{np-colors.$neutral-000});
+		color: var(--newspack-ui-color-text-subtle, #{np-colors.$neutral-600});
 		line-height: variables.$font__line-height-body;
 		text-overflow: ellipsis;
 		text-align: center;
@@ -17,21 +17,21 @@
 			border-color motion.$duration-color motion.$ease-color,
 			color motion.$duration-color motion.$ease-color;
 		&:hover {
-			color: np-colors.$neutral-600;
+			color: var(--newspack-ui-color-text-subtle, #{np-colors.$neutral-600});
 		}
 		&--active,
 		&.wpbnbd__button--active:hover {
-			color: np-colors.$neutral-900;
+			color: var(--newspack-ui-color-text, #{np-colors.$neutral-900});
 		}
 
 		@include motion.hover {
 			&:hover {
-				color: np-colors.$neutral-900;
+				color: var(--newspack-ui-color-text, #{np-colors.$neutral-900});
 			}
 		}
 
 		&:active:not(.wpbnbd__button--active) {
-			color: color-mix(in oklab, np-colors.$neutral-900 var(--newspack-ui-color-mix-pressed, 75%), transparent);
+			color: color-mix(in oklab, var(--newspack-ui-color-text, #{np-colors.$neutral-900}) var(--newspack-ui-color-mix-pressed, 75%), transparent);
 		}
 	}
 

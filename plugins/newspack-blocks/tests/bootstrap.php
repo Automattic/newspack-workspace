@@ -63,6 +63,7 @@ require_once __DIR__ . '/class-newspack-block-visibility-stub.php';
 require_once __DIR__ . '/class-newspack-sponsors-stub.php';
 require_once __DIR__ . '/class-wc-order-stub.php';
 require_once __DIR__ . '/class-jetpack-memberships-stub.php';
+require_once __DIR__ . '/class-newspack-ui-theme-style-stub.php';
 
 // Start up the WP testing environment.
 require $newspack_blocks_tests_dir . '/includes/bootstrap.php';

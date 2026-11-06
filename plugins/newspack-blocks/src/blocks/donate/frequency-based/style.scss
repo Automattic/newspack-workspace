@@ -4,9 +4,9 @@
 @use "../../../shared/sass/variables";
 
 .wpbnbd--frequency-based {
-	background: np-colors.$neutral-000;
-	border: 1px solid np-colors.$neutral-300;
-	color: np-colors.$neutral-900;
+	background: var(--newspack-ui-color-surface, #{np-colors.$neutral-000});
+	border: 1px solid var(--newspack-ui-color-border, #{np-colors.$neutral-300});
+	color: var(--newspack-ui-color-text, #{np-colors.$neutral-900});
 	position: relative;
 	width: 100%;
 
@@ -23,8 +23,8 @@
 	}
 
 	input[readonly] {
-		background-color: np-colors.$neutral-050;
-		color: np-colors.$neutral-600;
+		background-color: var(--newspack-ui-color-surface-subtle, #{np-colors.$neutral-050});
+		color: var(--newspack-ui-color-text-subtle, #{np-colors.$neutral-600});
 	}
 
 	.freq-label,
@@ -64,7 +64,7 @@
 	}
 
 	.thanks {
-		color: np-colors.$neutral-600;
+		color: var(--newspack-ui-color-text-subtle, #{np-colors.$neutral-600});
 		font-size: variables.$font__size-sm;
 		margin: 0.38rem 0.76rem 0.76rem;
 		display: none;
@@ -91,7 +91,7 @@
 		}
 
 		.tier-label {
-			border: 1px solid np-colors.$neutral-300;
+			border: 1px solid var(--newspack-ui-color-border, #{np-colors.$neutral-300});
 			border-radius: 5px;
 			margin: 0.38rem;
 			padding: 0.38rem 0.76rem;
@@ -118,9 +118,9 @@
 			}
 
 			&:checked + .tier-label {
-				background-color: np-colors.$neutral-600;
+				background-color: var(--newspack-ui-color-text-subtle, #{np-colors.$neutral-600});
 				border-color: transparent;
-				color: np-colors.$neutral-000;
+				color: var(--newspack-ui-color-surface, #{np-colors.$neutral-000});
 			}
 
 			&:focus-visible + .tier-label {
@@ -191,13 +191,13 @@
 	align-items: center;
 	position: relative;
 	max-width: 200px;
-	background-color: np-colors.$neutral-000;
+	background-color: var(--newspack-ui-color-surface, #{np-colors.$neutral-000});
 	border-radius: 3px;
-	border: 1px solid np-colors.$neutral-300;
+	border: 1px solid var(--newspack-ui-color-border, #{np-colors.$neutral-300});
 
 	&:focus-within {
-		border-color: np-colors.$neutral-900;
-		outline: thin solid rgba(np-colors.$neutral-900, 0.15);
+		border-color: var(--newspack-ui-color-text, #{np-colors.$neutral-900});
+		outline: thin solid color-mix(in srgb, var(--newspack-ui-color-text, #{np-colors.$neutral-900}) 15%, transparent);
 		outline-offset: -4px;
 	}
 
@@ -208,6 +208,7 @@
 	}
 
 	input[type="number"] {
+		color: var(--newspack-ui-field-ink, inherit);
 		border: none;
 		outline: none;
 		box-shadow: none;
@@ -242,7 +243,7 @@
 			margin: 0;
 
 			&.wpbnbd__button--active {
-				color: np-colors.$neutral-900;
+				color: var(--newspack-ui-color-text, #{np-colors.$neutral-900});
 			}
 
 			&:focus {
