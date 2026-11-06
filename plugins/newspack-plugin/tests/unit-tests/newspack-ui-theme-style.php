@@ -364,6 +364,40 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Checkbox and radio marks follow the brand, falling back to the contrast color when the brand is too faint.
+	 */
+	public function test_adapter_prints_mark_and_on_mark(): void {
+		$styles = [
+			'color'    => [
+				'background' => '#1E1E1E',
+				'text'       => '#FFFFFF',
+			],
+			'elements' => [
+				'button' => [
+					'color' => [
+						'background' => '#FFC857',
+						'text'       => 'var(--wp--preset--color--accent-contrast, #000000)',
+					],
+				],
+			],
+		];
+
+		$css = Newspack_UI_Theme_Style::get_css( $styles, [] );
+		$this->assertStringContainsString( '--newspack-ui-color-mark:#ffc857;', $css );
+		$this->assertStringContainsString( '--newspack-ui-color-on-mark:#000000;', $css );
+
+		$styles['elements']['button']['color'] = [
+			'background' => '#333333',
+			'text'       => '#FFFFFF',
+		];
+		$this->assertLessThan( Newspack_UI_Palette::MARK_VISIBLE_LC, Newspack_UI_Palette::lc( '#333333', '#1e1e1e' ) );
+
+		$css = Newspack_UI_Theme_Style::get_css( $styles, [] );
+		$this->assertStringContainsString( '--newspack-ui-color-mark:#ffffff;', $css );
+		$this->assertStringContainsString( '--newspack-ui-color-on-mark:#000000;', $css );
+	}
+
+	/**
 	 * The theme's accent-contrast var is not a set button text.
 	 */
 	public function test_theme_accent_contrast_var_is_ignored(): void {
