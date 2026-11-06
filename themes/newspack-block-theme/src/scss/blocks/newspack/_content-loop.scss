@@ -202,7 +202,7 @@
 		.has-text-color & {
 			article {
 				border-color: currentcolor; // Fallback
-				border-color: color-mix(in srgb, currentcolor 15%, transparent); // #DDDDDD if currentcolor is #1E1E1E
+				border-color: color-mix(in oklab, currentcolor 15%, transparent); // #DDDDDD if currentcolor is #1E1E1E
 			}
 		}
 
@@ -255,7 +255,7 @@
 			.has-text-color & {
 				article::after {
 					background: currentcolor; // Fallback
-					background: color-mix(in srgb, currentcolor 15%, transparent); // #DDDDDD if currentcolor is #1E1E1E
+					background: color-mix(in oklab, currentcolor 15%, transparent); // #DDDDDD if currentcolor is #1E1E1E
 				}
 			}
 		}
