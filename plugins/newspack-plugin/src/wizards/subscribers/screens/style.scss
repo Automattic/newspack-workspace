@@ -319,7 +319,8 @@
 
 	// The footer ships its own 48px horizontal padding; tighten it to match the
 	// table cells so the pagination and bulk-action bar line up with the content.
-	.dataviews-footer {
+	.dataviews-footer,
+	.dataviews-view-table__bulk-actions-overlay > .dataviews-bulk-actions {
 		padding-left: wp-vars.$grid-unit-15 !important;
 		padding-right: wp-vars.$grid-unit-15 !important;
 	}

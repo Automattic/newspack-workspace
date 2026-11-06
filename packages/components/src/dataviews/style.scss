@@ -9,6 +9,10 @@
 	}
 }
 
+.newspack-dataviews .dataviews-view-grid {
+	padding-bottom: wp-vars.$grid-unit-30;
+}
+
 .newspack-dataviews__view-config {
 	flex-shrink: 0;
 }
