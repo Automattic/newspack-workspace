@@ -101,6 +101,11 @@ still reads correctly: the status falls back to the text color. The `$tones`
 list in `style.scss` and the `StatusTone` type in `statuses.ts` change together;
 a tone missing from the list renders untinted without any error.
 
+Red means stopped: failed (`error`), cancelled (`cancelled`) or past its window
+(`ended`). The glyph tells failed apart from the other two. A column that shows
+a failure next to a deliberate stop can pass `tone="neutral"` to the stop, as
+Scheduled Actions does, so only the failure reads red.
+
 Amber is kept for `attention` alone, so it always means "look at this". States
 still in flight (`scheduled`, `pending`, `progress`) share blue and are told
 apart by their glyphs.

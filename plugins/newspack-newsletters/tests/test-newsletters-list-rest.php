@@ -186,6 +186,25 @@ class Newsletters_List_REST_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A scheduled send that gave up goes back to draft with the flag still set;
+	 * its old date is not reported as a send still to come.
+	 */
+	public function test_abandoned_scheduled_send_reports_no_time() {
+		$post_id = $this->make_newsletter(
+			[
+				'post_status'   => 'draft',
+				'post_date'     => '2026-08-24 16:21:00',
+				'post_date_gmt' => '2026-08-24 16:21:00',
+				'meta_input'    => [ 'sending_scheduled' => true ],
+			]
+		);
+
+		$status = Newsletters_List_REST::get_status_for_post( get_post( $post_id ) );
+
+		$this->assertNull( $status['scheduled_at'] );
+	}
+
+	/**
 	 * A trashed newsletter reports kind=trash regardless of any sent state.
 	 */
 	public function test_trashed_post_reports_trash_kind() {

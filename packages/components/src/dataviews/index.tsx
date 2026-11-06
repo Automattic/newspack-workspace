@@ -61,6 +61,7 @@ function DataViews( { className, inlineFilters = false, fields, children, view, 
 				: fields,
 		[ fields, inlineFilters ]
 	);
+	const evenView = useMemo( () => evenColumns( view ), [ view ] );
 	const layout =
 		children ??
 		( inlineFilters ? (
@@ -71,7 +72,7 @@ function DataViews( { className, inlineFilters = false, fields, children, view, 
 		<div className={ classnames( 'newspack-dataviews', className ) }>
 			<BaseDataViews
 				{ ...props }
-				view={ evenColumns( view ) }
+				view={ evenView }
 				onChangeView={ nextView => onChangeView( withoutColumnStyles( nextView ) ) }
 				fields={ shownFields }
 			>

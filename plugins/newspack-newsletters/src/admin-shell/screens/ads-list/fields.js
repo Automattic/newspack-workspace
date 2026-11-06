@@ -149,8 +149,8 @@ const renderClicks = ( { item } ) => String( item?.meta?.tracking_clicks ?? 0 );
 const CURRENCY_LAYOUTS = {
 	left: ( symbol, amount ) => `${ symbol }${ amount }`,
 	right: ( symbol, amount ) => `${ amount }${ symbol }`,
-	left_space: ( symbol, amount ) => `${ symbol } ${ amount }`,
-	right_space: ( symbol, amount ) => `${ amount } ${ symbol }`,
+	left_space: ( symbol, amount ) => `${ symbol }\u00a0${ amount }`,
+	right_space: ( symbol, amount ) => `${ amount }\u00a0${ symbol }`,
 };
 
 export const formatPrice = price => {

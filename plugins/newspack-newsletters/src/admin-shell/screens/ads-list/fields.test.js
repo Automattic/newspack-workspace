@@ -207,7 +207,7 @@ describe( 'formatPrice', () => {
 		window.newspackNewslettersAdmin = {
 			currency: { symbol: '€', position: 'right_space', decimals: 2, decimalSeparator: ',', thousandSeparator: '.' },
 		};
-		expect( formatPrice( 1250.5 ) ).toBe( '1.250,50 €' );
+		expect( formatPrice( 1250.5 ) ).toBe( '1.250,50\u00a0€' );
 	} );
 
 	it( 'shows a plain number without a store', () => {

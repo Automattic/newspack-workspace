@@ -4,10 +4,9 @@
 import { evenColumns, withoutColumnStyles } from './even-columns';
 
 describe( 'evenColumns', () => {
-	it( 'gives the title 30% and splits the rest evenly', () => {
+	it( 'splits 70% evenly between the columns beside the title', () => {
 		const view = evenColumns( { type: 'table', titleField: 'name', fields: [ 'status', 'plan' ] } );
 		expect( view.layout.styles ).toEqual( {
-			name: { width: '30%' },
 			status: { width: '35%' },
 			plan: { width: '35%' },
 		} );
@@ -16,7 +15,7 @@ describe( 'evenColumns', () => {
 	it( 'follows the columns the viewer has switched on', () => {
 		const view = evenColumns( { type: 'table', titleField: 'name', fields: [ 'status', 'plan', 'date', 'author' ] } );
 		expect( view.layout.styles.status ).toEqual( { width: '17.5%' } );
-		expect( Object.keys( view.layout.styles ) ).toEqual( [ 'name', 'status', 'plan', 'date', 'author' ] );
+		expect( Object.keys( view.layout.styles ) ).toEqual( [ 'status', 'plan', 'date', 'author' ] );
 	} );
 
 	it( 'splits every column evenly when the title is hidden', () => {

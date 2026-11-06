@@ -15,10 +15,10 @@ type ColumnStyles = Record< string, { width?: string } >;
  * Gives a table consistent column widths: every visible column except the title
  * takes an equal share of 70%, and the title keeps what is left. Without it the
  * browser hands all spare width to the title column, so a short title still
- * fills half the table. DataViews does not apply a width to the title column
- * itself, so a row actions column comes out of the title's share. The widths
- * follow whichever columns the viewer has switched on, so they are worked out on
- * every render and never stored with the view.
+ * fills half the table. DataViews sizes the title column from what remains
+ * rather than from a width of its own, so a row actions column comes out of the
+ * title's share. The widths follow whichever columns the viewer has switched on,
+ * so they are worked out on every render and never stored with the view.
  *
  * @param view The DataViews view.
  * @return The view with column widths, unchanged for any layout but a table.
@@ -32,12 +32,11 @@ export function evenColumns< V extends View >( view: V ): V {
 	if ( ! hasTitle && ! columns.length ) {
 		return view;
 	}
-	const titleShare = columns.length ? TITLE_SHARE : 100;
-	const columnShare = `${ Number( ( ( hasTitle ? 100 - titleShare : 100 ) / columns.length ).toFixed( 2 ) ) }%`;
-	const styles: ColumnStyles = {};
-	if ( hasTitle && view.titleField ) {
-		styles[ view.titleField ] = { width: `${ titleShare }%` };
+	if ( ! columns.length ) {
+		return view;
 	}
+	const columnShare = `${ Number( ( ( hasTitle ? 100 - TITLE_SHARE : 100 ) / columns.length ).toFixed( 2 ) ) }%`;
+	const styles: ColumnStyles = {};
 	columns.forEach( id => {
 		styles[ id ] = { width: columnShare };
 	} );

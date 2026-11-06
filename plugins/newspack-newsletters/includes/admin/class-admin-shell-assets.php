@@ -92,7 +92,7 @@ class Admin_Shell_Assets {
 	 *
 	 * @return array|null { symbol, position, decimals, decimalSeparator, thousandSeparator }
 	 */
-	private static function get_currency() {
+	private static function get_currency(): ?array {
 		if ( ! function_exists( 'get_woocommerce_currency_symbol' ) ) {
 			return null;
 		}

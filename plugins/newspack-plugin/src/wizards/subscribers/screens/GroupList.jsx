@@ -108,11 +108,13 @@ export default function GroupList() {
 				getValue: ( { item } ) => item.owner?.name || '',
 				// Owners tell groups apart where group names repeat, so the owner leads.
 				// The group's name sits under it only when it was renamed: an unnamed
-				// group takes its subscription's name, which the next column shows. This is the DataViews title field,
-				// which ColumnPrimary wraps in an ItemClickWrapper: a role="button" whose
-				// own Enter/Space handler fires onClickItem regardless of where the key
-				// originated, so a link nested here would resolve to two destinations at
-				// once. The subscription's link lives in the `product` column instead.
+				// group takes its subscription's name, which the next column shows.
+				//
+				// This is the DataViews title field, which ColumnPrimary wraps in an
+				// ItemClickWrapper: a role="button" whose own Enter/Space handler fires
+				// onClickItem regardless of where the key originated, so a link nested
+				// here would resolve to two destinations at once. The subscription's
+				// link lives in the `product` column instead.
 				render: ( { item } ) => {
 					const details = (
 						<div>
@@ -126,7 +128,7 @@ export default function GroupList() {
 									</Badge>
 								) }
 							</HStack>
-							{ item.plan && item.plan !== item.product && <div className="newspack-subscribers__email">{ item.plan }</div> }
+							{ item.plan && item.plan !== item.product && <div className="newspack-subscribers__muted">{ item.plan }</div> }
 						</div>
 					);
 					return (

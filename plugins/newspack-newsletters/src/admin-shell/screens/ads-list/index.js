@@ -41,6 +41,9 @@ const PERSIST_OPTIONS = {
 	fieldIds: FIELD_IDS,
 	layoutTypes: Object.keys( DEFAULT_LAYOUTS ),
 	urlPatch: getInitialView(),
+	// The advertiser now sits under the title, so a view saved while it had its
+	// own column would show it twice. The field stays for its filter.
+	normalize: view => ( { ...view, fields: ( view.fields || [] ).filter( field => field !== 'advertiser' ) } ),
 };
 
 // Suppress the built-in ViewConfig per-page control — the custom

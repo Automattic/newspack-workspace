@@ -25,6 +25,7 @@ import EmptyState from '../../../../../../../packages/components/src/empty-state
 import type { Action, Field, View } from '../../../../../../../packages/components/src/dataviews';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../../packages/components/src/wizard/store';
 import Router from '../../../../../../../packages/components/src/proxied-imports/router';
+import { formatCount } from '../../../../../../../packages/components/src/breadcrumbs/format-count';
 import { registerTab } from '../registry';
 import { allSubscriptionsLabel, SEARCH_ENDPOINTS } from '../../constants';
 import { useRestrictions } from './use-restrictions';
@@ -188,9 +189,9 @@ function SubscriberOnlyProducts() {
 					label: SECTION_LABEL,
 					count: total,
 					countLabel: sprintf(
-						/* translators: %d: number of restrictions. */
-						_n( '%d restriction', '%d restrictions', total, 'newspack-plugin' ),
-						total
+						/* translators: %s: number of restrictions. */
+						_n( '%s restriction', '%s restrictions', total, 'newspack-plugin' ),
+						formatCount( total )
 					),
 				},
 			],
