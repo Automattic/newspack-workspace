@@ -56,3 +56,74 @@ describe( 'AutocompleteTokenField when the saved titles cannot be loaded', () =>
 		expect( onChange ).toHaveBeenCalledWith( [ '22' ] );
 	} );
 } );
+
+describe( 'AutocompleteTokenField with two posts sharing a title', () => {
+	const twins = () => [
+		{ value: 65, label: 'Twin Story' },
+		{ value: 66, label: 'Twin Story' },
+		{ value: 67, label: 'Other Story' },
+	];
+
+	const search = input => {
+		fireEvent.focus( input );
+		fireEvent.change( input, { target: { value: 'Story' } } );
+	};
+
+	const renderField = tokens => {
+		const onChange = jest.fn();
+		render(
+			<AutocompleteTokenField
+				tokens={ tokens }
+				onChange={ onChange }
+				fetchSuggestions={ () => Promise.resolve( twins() ) }
+				fetchSavedInfo={ () => Promise.resolve( twins().filter( ( { value } ) => tokens.includes( value ) ) ) }
+				label="Content"
+			/>
+		);
+		return { onChange };
+	};
+
+	// A draft copy of a saved story has a lower or higher ID, and the saved one must survive either way.
+	it( 'keeps the saved post when the editor adds something else', async () => {
+		const { onChange } = renderField( [ 66 ] );
+		await screen.findByText( 'Twin Story' );
+		search( screen.getByRole( 'combobox' ) );
+		fireEvent.click( await screen.findByRole( 'option', { name: 'Other Story' }, { timeout: 1500 } ) );
+		expect( onChange ).toHaveBeenCalledWith( [ '66', '67' ] );
+	} );
+
+	it( 'adds the twin the editor picked', async () => {
+		const { onChange } = renderField( [] );
+		search( screen.getByRole( 'combobox' ) );
+		fireEvent.click( await screen.findByRole( 'option', { name: 'Twin Story (66)' }, { timeout: 1500 } ) );
+		expect( onChange ).toHaveBeenCalledWith( [ '66' ] );
+	} );
+
+	it( 'names every clashing post with its note, and adds the ID only when the notes clash too', async () => {
+		const posts = [
+			{ value: 65, label: 'Twin Story', clashNote: 'Draft' },
+			{ value: 66, label: 'Twin Story', clashNote: 'Published' },
+			{ value: 67, label: 'Copy Story', clashNote: 'Draft' },
+			{ value: 68, label: 'Copy Story', clashNote: 'Draft' },
+			{ value: 69, label: 'Other Story', clashNote: 'Draft' },
+		];
+		render( <AutocompleteTokenField tokens={ [] } onChange={ noop } fetchSuggestions={ () => Promise.resolve( posts ) } label="Content" /> );
+		search( screen.getByRole( 'combobox' ) );
+		await screen.findByRole( 'option', { name: 'Other Story' }, { timeout: 1500 } );
+		expect( screen.getAllByRole( 'option' ).map( option => option.textContent ) ).toEqual( [
+			'Twin Story (Draft)',
+			'Twin Story (Published)',
+			'Copy Story (Draft, 67)',
+			'Copy Story (Draft, 68)',
+			'Other Story',
+		] );
+	} );
+
+	it( 'keeps both saved twins when one more is added', async () => {
+		const { onChange } = renderField( [ 65, 66 ] );
+		await screen.findByText( 'Twin Story (66)' );
+		search( screen.getByRole( 'combobox' ) );
+		fireEvent.click( await screen.findByRole( 'option', { name: 'Other Story' }, { timeout: 1500 } ) );
+		expect( onChange ).toHaveBeenCalledWith( [ '65', '66', '67' ] );
+	} );
+} );

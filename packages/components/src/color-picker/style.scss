@@ -20,6 +20,10 @@
 		}
 	}
 
+	&__row > &__expander {
+		flex-grow: 1;
+	}
+
 	&.is-disabled &__expander {
 		opacity: 0.5;
 	}

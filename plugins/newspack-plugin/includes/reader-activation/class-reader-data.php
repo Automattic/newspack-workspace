@@ -181,10 +181,11 @@ final class Reader_Data {
 			'local_keys'          => self::get_local_keys(),
 			'api_url'             => \get_rest_url( null, NEWSPACK_API_NAMESPACE . '/reader-data' ),
 			'session_url'         => \get_rest_url( null, NEWSPACK_API_NAMESPACE . '/reader/session' ),
+			'nonce_url'           => \admin_url( 'admin-ajax.php?action=' . Reader_Activation\Session_Hydration::NONCE_ACTION ),
 		];
 
 		if ( \is_user_logged_in() ) {
-			$config['nonce'] = \wp_create_nonce( 'wp_rest' );
+			$config = array_merge( $config, Reader_Activation\Session_Hydration::get_nonce_data() );
 			$config['items'] = self::get_data( \get_current_user_id() );
 		}
 

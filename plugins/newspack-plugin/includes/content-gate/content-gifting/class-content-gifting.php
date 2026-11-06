@@ -305,6 +305,8 @@ class Content_Gifting {
 			'cta_product_id'       => Content_Gifting_CTA::get_cta_product_id(),
 			'cta_url'              => Content_Gifting_CTA::get_cta_url(),
 			'style'                => Content_Gifting_CTA::get_style(),
+			'bg_color'             => Content_Gifting_CTA::get_bg_color(),
+			'button_color'         => Content_Gifting_CTA::get_button_color(),
 		];
 	}
 
