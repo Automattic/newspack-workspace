@@ -188,6 +188,7 @@ describe( 'Newspack UI Neutral tokens', () => {
 		const fieldBlocks = blocks.filter( ( [ , , body ] ) => /border-color:\s*var\(--newspack-ui-color-input-border\)/.test( body ) );
 		expect( fieldBlocks.some( ( [ , selector ] ) => /input\[type="?text"?\]/.test( selector ) ) ).toBe( true );
 		expect( fieldBlocks.some( ( [ , selector ] ) => /(^|[\s,])\.newspack-ui select/.test( selector ) ) ).toBe( true );
+		expect( fieldBlocks.some( ( [ , selector ] ) => selector.trim() === '.newspack-ui__currency-input' ) ).toBe( true );
 	} );
 
 	it( 'draw the currency wrapper from the field border and radius', () => {
