@@ -97,9 +97,9 @@ exported for the columns that want to assert it directly.
 Each tone is the design system's `--wpds-color-foreground-content-<tone>-weak`
 token, applied to the glyph and label through a
 `newspack-status-indicator--<tone>` modifier. A screen that loads no token sheet
-still reads correctly: the status falls back to the text color. The `$tones`
-list in `style.scss` and the `StatusTone` type in `statuses.ts` change together;
-a tone missing from the list renders untinted without any error.
+still reads correctly: the status falls back to the text color. Each tone has
+its own rule in `style.scss`, so a tone added to `StatusTone` in `statuses.ts`
+needs a rule too, or it renders untinted without any error.
 
 Red means stopped: failed (`error`), cancelled (`cancelled`) or past its window
 (`ended`). The glyph tells failed apart from the other two. A column that shows
