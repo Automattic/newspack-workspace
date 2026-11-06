@@ -229,6 +229,7 @@ body.newspack-newsletters-admin-screen .dataviews-filters__visibility-toggle[ari
 	&__secondary {
 		color: var(--wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700});
 		font-size: wp-vars.$helptext-font-size;
+		font-weight: wp-vars.$font-weight-regular;
 		line-height: wp-vars.$default-line-height;
 	}
 }
