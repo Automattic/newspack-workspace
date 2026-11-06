@@ -125,7 +125,6 @@ export function getActions( { onRenameStart, onMutated } ) {
 		id: 'delete-permanently',
 		label: __( 'Delete', 'newspack-newsletters' ),
 		isDestructive: true,
-		supportsBulk: true,
 		isEligible: isUserOwned,
 		modalSize: 'small',
 		RenderModal: ( { items, closeModal } ) => (
