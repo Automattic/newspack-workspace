@@ -107,15 +107,31 @@
 			}
 			button[type="submit"],
 			.submit-button {
-				border-radius: 3px;
-				border: 2px solid;
-				font-size: 14px;
-				line-height: 1;
-				padding: 10px 16px;
 				margin-bottom: 16px;
 
-				&.wp-element-button {
-					border-color: transparent;
+				&:where(:not(.wp-element-button)) {
+					border-radius: 3px;
+					border: 2px solid;
+					font-size: 14px;
+					line-height: 1;
+					padding: 10px 16px;
+				}
+
+				&.wpbnbd__tiers__outline {
+					background: var(--wp--preset--color--base, #{np-colors.$neutral-000});
+					border: 1px solid currentcolor;
+					color: var(--newspack-ui-color-btn, #{np-colors.$neutral-900});
+					padding: calc(var(--wp--custom--spacing--25, 0.75rem) - 1px) calc(var(--wp--custom--spacing--35, 1.25rem) - 1px);
+
+					@include motion.hover {
+						&:hover {
+							background: color-mix(in oklab, currentcolor var(--wp--custom--state--fill, 7%), var(--wp--preset--color--base, #{np-colors.$neutral-000}));
+						}
+					}
+
+					&:active {
+						background: color-mix(in oklab, currentcolor var(--wp--custom--state--fill-hover, 13%), var(--wp--preset--color--base, #{np-colors.$neutral-000}));
+					}
 				}
 			}
 			&__description {
