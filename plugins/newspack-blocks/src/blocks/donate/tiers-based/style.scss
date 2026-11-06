@@ -57,7 +57,7 @@
 							margin: 0 5px;
 							transition: background-color motion.$duration-color motion.$ease-color;
 							&.is-active {
-								background: var(--newspack-ui-color-btn, #{np-colors.$neutral-900});
+								background: var(--newspack-ui-color-mark, var(--wp--preset--color--accent, #{np-colors.$neutral-900}));
 							}
 						}
 					}
@@ -121,7 +121,7 @@
 				&.wpbnbd__tiers__outline {
 					background: var(--wp--preset--color--base, #{np-colors.$neutral-000});
 					border: 1px solid currentcolor;
-					color: var(--newspack-ui-color-btn, #{np-colors.$neutral-900});
+					color: var(--newspack-ui-color-mark, var(--wp--preset--color--accent, #{np-colors.$neutral-900}));
 					padding: calc(var(--wp--custom--spacing--25, 0.75rem) - 1px) calc(var(--wp--custom--spacing--35, 1.25rem) - 1px);
 
 					@include motion.hover {
