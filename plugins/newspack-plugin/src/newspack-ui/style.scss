@@ -32,8 +32,16 @@
 
 	a,
 	a:hover {
-		&:not(.newspack-ui__button):not(:where(.newspack-ui__tabs__list > a)) {
+		&:not(.newspack-ui__button, .newspack-ui__link):not(:where(.newspack-ui__tabs__list > a)) {
 			color: inherit;
+		}
+	}
+
+	a.newspack-ui__link:not(.newspack-ui__button) {
+		color: var(--newspack-ui-color-link, inherit);
+
+		&:hover {
+			color: var(--newspack-ui-color-link-hover, var(--newspack-ui-color-link, inherit));
 		}
 	}
 }
