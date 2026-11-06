@@ -14,9 +14,9 @@ describe( 'evenColumns', () => {
 	} );
 
 	it( 'keeps at least 30% for the title when there are many columns', () => {
-		const view = { type: 'table', titleField: 'name', fields: [ 'status', 'plan', 'date', 'author' ] };
+		const view = { type: 'table', titleField: 'name', fields: [ 'status', 'plan', 'date' ] };
 		expect( titleColumnWidth( view ) ).toBe( '30%' );
-		expect( evenColumns( view ).layout.styles.status ).toEqual( { width: '17.5%' } );
+		expect( evenColumns( view ).layout.styles.status ).toEqual( { width: '23.33%' } );
 	} );
 
 	it( 'follows the columns the viewer has switched on', () => {

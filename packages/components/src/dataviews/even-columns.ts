@@ -30,7 +30,9 @@ function getShares( view: View ): { columns: string[]; titleShare: number } {
  * Gives a table consistent column widths: the title takes an equal share, and
  * never less than 30%, and every other visible column splits the rest evenly.
  * Without it the browser hands all spare width to the title column, so a short
- * title still fills half the table. The widths follow whichever columns the
+ * title still fills half the table. DataViews never sizes the title column, so a
+ * caller that renders DataViews itself must also apply `titleColumnWidth`, as
+ * the shared DataViews component does. The widths follow whichever columns the
  * viewer has switched on, so they are worked out on every render and never
  * stored with the view.
  *

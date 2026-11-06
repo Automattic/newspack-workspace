@@ -503,7 +503,3 @@ div[role="menuitem"] {
 		padding-right: calc(var(--wpds-dimension-padding-2xl, #{wp-vars.$grid-unit-30}) - var(--wpds-dimension-padding-sm, #{wp-vars.$grid-unit-10}));
 	}
 }
-
-.newspack-story-budget__content .dataviews-view-table col.dataviews-view-table__col-first-data {
-	width: var(--newspack-dataviews-title-width, auto);
-}
