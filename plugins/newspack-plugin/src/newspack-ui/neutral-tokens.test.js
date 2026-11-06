@@ -124,4 +124,28 @@ describe( 'Newspack UI Neutral tokens', () => {
 		expect( background[ 2 ] ).toMatch( /--newspack-ui-button-bg:\s*var\(--newspack-ui-color-destructive-fill\)/ );
 		expect( rules.filter( ( [ , , body ] ) => body.includes( '--newspack-ui-color-error-fill' ) ) ).toEqual( [] );
 	} );
+
+	it( 'read the field tokens only from the text input and select selectors', () => {
+		const css = compile();
+		const reading = [ ...css.matchAll( /([^{}]+)\{([^{}]*)\}/g ) ].filter( ( [ , , body ] ) =>
+			/var\(--newspack-ui-field-(?:radius|border-width|border-color|bg|ink|font-family)/.test( body )
+		);
+		const uncovered = /type="?(?:range|date|month|week|time|datetime|datetime-local|zip|color|file|checkbox|radio)"?\]/;
+		expect( reading.length ).toBeGreaterThan( 0 );
+		reading.forEach( ( [ , selector ] ) => {
+			expect( selector ).not.toMatch( uncovered );
+		} );
+		expect( reading.some( ( [ , selector ] ) => /input\[type="?text"?\]/.test( selector ) ) ).toBe( true );
+		expect( reading.some( ( [ , selector ] ) => /\bselect\b/.test( selector ) ) ).toBe( true );
+	} );
+
+	it( 'keep labels and field messages on the control font family', () => {
+		const css = compile();
+		const rules = [ ...css.matchAll( /([^{}]+)\{([^{}]*)\}/g ) ].filter( ( [ , selector ] ) =>
+			/label|field-message|helper-text|inline-error/.test( selector )
+		);
+		rules.forEach( ( [ , , body ] ) => {
+			expect( body ).not.toMatch( /var\(--newspack-ui-field-font-family/ );
+		} );
+	} );
 } );

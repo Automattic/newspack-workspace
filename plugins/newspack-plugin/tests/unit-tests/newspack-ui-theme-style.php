@@ -402,8 +402,8 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 	public function test_gradient_button_falls_back_to_accent_then_neutral(): void {
 		$styles = [
 			'color'    => [
-				'background' => '#ffffff',
-				'text'       => '#1e1e1e',
+				'background' => '#f4efe6',
+				'text'       => '#222222',
 			],
 			'elements' => [ 'button' => [ 'color' => [ 'background' => 'linear-gradient(red,blue)' ] ] ],
 		];
@@ -1608,6 +1608,248 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 		$this->assertSame( '#003da5', $resolved['b'] );
 		$this->assertSame( 'var(--wp--preset--color--nope)', $resolved['c'] );
 		$this->assertSame( 'Georgia, serif', $resolved['d'] );
+	}
+
+	/**
+	 * The field styles of a global styles tree.
+	 *
+	 * @param array $text_input The textInput element.
+	 * @param array $select     The select element.
+	 *
+	 * @return array
+	 */
+	private function field_styles( array $text_input, array $select = [] ): array {
+		return [
+			'elements' => [
+				'textInput' => $text_input,
+				'select'    => $select,
+			],
+		];
+	}
+
+	/**
+	 * Every field value the text input sets is printed.
+	 */
+	public function test_text_input_values_win(): void {
+		$css = Newspack_UI_Theme_Style::get_css(
+			$this->field_styles(
+				[
+					'border'     => [
+						'radius' => '.5rem',
+						'width'  => '2px',
+						'color'  => '#336699',
+					],
+					'color'      => [
+						'background' => '#f5f5f5',
+						'text'       => '#111111',
+					],
+					'typography' => [ 'fontFamily' => 'Georgia, serif' ],
+				],
+				[
+					'border'     => [
+						'radius' => '1rem',
+						'width'  => '4px',
+						'color'  => '#990000',
+					],
+					'color'      => [
+						'background' => '#000000',
+						'text'       => '#ffffff',
+					],
+					'typography' => [ 'fontFamily' => 'Arial, sans-serif' ],
+				]
+			),
+			[]
+		);
+
+		$this->assertStringContainsString( '--newspack-ui-field-radius:0.5rem;', $css );
+		$this->assertStringContainsString( '--newspack-ui-field-border-width:2px;', $css );
+		$this->assertStringContainsString( '--newspack-ui-field-border-color:#336699;', $css );
+		$this->assertStringContainsString( '--newspack-ui-field-bg:#f5f5f5;', $css );
+		$this->assertStringContainsString( '--newspack-ui-field-ink:#111111;', $css );
+		$this->assertStringContainsString( '--newspack-ui-field-font-family:Georgia, serif;', $css );
+	}
+
+	/**
+	 * The select fills in what the text input leaves out.
+	 */
+	public function test_select_fills_in_missing_field_values(): void {
+		$css = Newspack_UI_Theme_Style::get_css(
+			$this->field_styles(
+				[ 'border' => [ 'width' => '2px' ] ],
+				[
+					'border' => [
+						'radius' => [
+							'topLeft'     => '6px',
+							'topRight'    => '6px',
+							'bottomRight' => '6px',
+							'bottomLeft'  => '6px',
+						],
+						'width'  => '4px',
+					],
+				]
+			),
+			[]
+		);
+
+		$this->assertStringContainsString( '--newspack-ui-field-radius:6px;', $css );
+		$this->assertStringContainsString( '--newspack-ui-field-border-width:2px;', $css );
+	}
+
+	/**
+	 * Without field styles nothing is printed, and the solved input border stays.
+	 */
+	public function test_missing_text_input_uses_fallbacks(): void {
+		$styles = [
+			'color'    => [
+				'background' => '#f4efe6',
+				'text'       => '#222222',
+			],
+			'elements' => [ 'button' => [ 'border' => [ 'radius' => '4px' ] ] ],
+		];
+		$css    = Newspack_UI_Theme_Style::get_css( $styles, [] );
+
+		$this->assertStringNotContainsString( '--newspack-ui-field-', $css );
+		$this->assertStringContainsString( '--newspack-ui-color-border-control:', $css );
+		$this->assertStringContainsString( '--newspack-ui-radius-control:min(4px, 12px);', $css );
+	}
+
+	/**
+	 * The solved input border prints when the text input sets no border color.
+	 */
+	public function test_input_border_mix_prints_without_a_field_border_color(): void {
+		$styles = [
+			'color'    => [
+				'background' => '#f4efe6',
+				'text'       => '#222222',
+			],
+			'elements' => [ 'textInput' => [ 'border' => [ 'radius' => '4px' ] ] ],
+		];
+		$css    = Newspack_UI_Theme_Style::get_css( $styles, [] );
+
+		$this->assertStringContainsString( '--newspack-ui-field-radius:4px;', $css );
+		$this->assertStringNotContainsString( '--newspack-ui-field-border-color', $css );
+		$this->assertStringContainsString( '--newspack-ui-color-border-control:', $css );
+	}
+
+	/**
+	 * Background and text color print together or not at all.
+	 */
+	public function test_field_colors_print_as_a_pair(): void {
+		$css = Newspack_UI_Theme_Style::get_css(
+			$this->field_styles( [ 'color' => [ 'background' => '#f5f5f5' ] ] ),
+			[]
+		);
+		$this->assertStringNotContainsString( '--newspack-ui-field-bg', $css );
+		$this->assertStringNotContainsString( '--newspack-ui-field-ink', $css );
+
+		$css = Newspack_UI_Theme_Style::get_css(
+			$this->field_styles( [ 'color' => [ 'text' => '#111111' ] ] ),
+			[]
+		);
+		$this->assertStringNotContainsString( '--newspack-ui-field-bg', $css );
+		$this->assertStringNotContainsString( '--newspack-ui-field-ink', $css );
+
+		$css = Newspack_UI_Theme_Style::get_css(
+			$this->field_styles(
+				[ 'color' => [ 'background' => '#f5f5f5' ] ],
+				[
+					'color' => [
+						'background' => '#222222',
+						'text'       => '#eeeeee',
+					],
+				]
+			),
+			[]
+		);
+		$this->assertStringContainsString( '--newspack-ui-field-bg:#222222;', $css );
+		$this->assertStringContainsString( '--newspack-ui-field-ink:#eeeeee;', $css );
+
+		$css = Newspack_UI_Theme_Style::get_css(
+			$this->field_styles(
+				[
+					'color' => [
+						'background' => '#f5f5f5',
+						'text'       => 'notacolor',
+					],
+				]
+			),
+			[]
+		);
+		$this->assertStringNotContainsString( '--newspack-ui-field-bg', $css );
+	}
+
+	/**
+	 * The publisher's field border color is printed as set, whatever the contrast.
+	 */
+	public function test_publisher_field_border_not_rechecked(): void {
+		$css = Newspack_UI_Theme_Style::get_css(
+			$this->field_styles(
+				[
+					'border' => [ 'color' => '#eeeeee' ],
+					'color'  => [
+						'background' => '#ffffff',
+						'text'       => '#111111',
+					],
+				]
+			),
+			[]
+		);
+
+		$this->assertStringContainsString( '--newspack-ui-field-border-color:#eeeeee;', $css );
+	}
+
+	/**
+	 * A user-origin font family or color preset on the text input is used.
+	 */
+	public function test_user_origin_field_font_family_preset_is_used(): void {
+		$settings = $this->settings();
+		$styles   = Newspack_UI_Theme_Style::resolve_references(
+			$this->field_styles(
+				[
+					'border'     => [ 'color' => 'var:preset|color|brand' ],
+					'typography' => [ 'fontFamily' => 'var:preset|font-family|body' ],
+				]
+			),
+			$settings
+		);
+		$css      = Newspack_UI_Theme_Style::get_css( $styles, $settings );
+
+		$this->assertStringContainsString( '--newspack-ui-field-font-family:Georgia, serif;', $css );
+		$this->assertStringContainsString( '--newspack-ui-field-border-color:#003da5;', $css );
+	}
+
+	/**
+	 * The field family never reaches the control family that labels and messages read.
+	 */
+	public function test_labels_keep_control_font(): void {
+		$css = Newspack_UI_Theme_Style::get_css(
+			$this->field_styles( [ 'typography' => [ 'fontFamily' => 'Georgia, serif' ] ] ),
+			[]
+		);
+
+		$this->assertStringContainsString( '--newspack-ui-field-font-family:Georgia, serif;', $css );
+		$this->assertStringNotContainsString( '--newspack-ui-font-family-control', $css );
+	}
+
+	/**
+	 * Hostile field values are not printed.
+	 */
+	public function test_hostile_field_values_are_not_printed(): void {
+		$css = Newspack_UI_Theme_Style::get_css(
+			$this->field_styles(
+				[
+					'border'     => [
+						'radius' => 'red; } body { display:none',
+						'width'  => 'calc(1px',
+						'color'  => 'url(x)',
+					],
+					'typography' => [ 'fontFamily' => 'a; b' ],
+				]
+			),
+			[]
+		);
+
+		$this->assertStringNotContainsString( '--newspack-ui-field-', $css );
 	}
 
 	/**

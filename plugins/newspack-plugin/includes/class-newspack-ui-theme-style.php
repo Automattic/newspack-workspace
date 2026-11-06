@@ -47,6 +47,12 @@ class Newspack_UI_Theme_Style {
 		'--newspack-ui-button-white-space'    => 'white-space',
 		'--newspack-ui-heading-font-weight'   => 'weight',
 		'--newspack-ui-link-hover-decoration' => 'text-decoration',
+		'--newspack-ui-field-radius'          => 'length',
+		'--newspack-ui-field-border-width'    => 'length',
+		'--newspack-ui-field-border-color'    => 'color',
+		'--newspack-ui-field-bg'              => 'color',
+		'--newspack-ui-field-ink'             => 'color',
+		'--newspack-ui-field-font-family'     => 'font-family',
 	];
 
 	/**
@@ -271,7 +277,8 @@ class Newspack_UI_Theme_Style {
 			'properties'  => array_merge(
 				self::get_color_properties( $global_styles, $settings, $user_styles, $variation_styles, $has_palette ),
 				self::get_radius_properties( $global_styles ),
-				self::get_typography_properties( $global_styles, $settings )
+				self::get_typography_properties( $global_styles, $settings ),
+				self::get_field_properties( $global_styles )
 			),
 			'has_palette' => $has_palette,
 		];
@@ -658,6 +665,64 @@ class Newspack_UI_Theme_Style {
 			'--newspack-ui-radius-surface' => 'min(calc(' . $radius . ' * 1.5), 24px)',
 			'--newspack-ui-radius-sheet'   => 'min(calc(' . $radius . ' * 2), 24px)',
 		];
+	}
+
+	/**
+	 * The field tokens, from the text input and select element styles.
+	 *
+	 * Background and text color print as a pair from one element, or not at all. The border color is the publisher's choice and is not checked.
+	 *
+	 * @param array $global_styles Resolved global styles.
+	 *
+	 * @return array<string,string>
+	 */
+	private static function get_field_properties( array $global_styles ): array {
+		$properties = [];
+
+		foreach ( [ 'textInput', 'select' ] as $element ) {
+			$radius = self::parse_radius( $global_styles['elements'][ $element ]['border']['radius'] ?? null );
+			if ( '' !== $radius ) {
+				$properties['--newspack-ui-field-radius'] = $radius;
+				break;
+			}
+		}
+
+		foreach ( [ 'textInput', 'select' ] as $element ) {
+			$width = $global_styles['elements'][ $element ]['border']['width'] ?? null;
+			$width = 0 === $width || '0' === $width ? '0px' : $width;
+			if ( '' !== self::sanitize_value( $width, 'length' ) ) {
+				$properties['--newspack-ui-field-border-width'] = $width;
+				break;
+			}
+		}
+
+		foreach ( [ 'textInput', 'select' ] as $element ) {
+			$color = $global_styles['elements'][ $element ]['border']['color'] ?? null;
+			if ( '' !== self::sanitize_value( $color, 'color' ) ) {
+				$properties['--newspack-ui-field-border-color'] = $color;
+				break;
+			}
+		}
+
+		foreach ( [ 'textInput', 'select' ] as $element ) {
+			$background = $global_styles['elements'][ $element ]['color']['background'] ?? null;
+			$text       = $global_styles['elements'][ $element ]['color']['text'] ?? null;
+			if ( '' !== self::sanitize_value( $background, 'color' ) && '' !== self::sanitize_value( $text, 'color' ) ) {
+				$properties['--newspack-ui-field-bg']  = $background;
+				$properties['--newspack-ui-field-ink'] = $text;
+				break;
+			}
+		}
+
+		foreach ( [ 'textInput', 'select' ] as $element ) {
+			$family = $global_styles['elements'][ $element ]['typography']['fontFamily'] ?? null;
+			if ( '' !== self::sanitize_value( $family, 'font-family' ) ) {
+				$properties['--newspack-ui-field-font-family'] = $family;
+				break;
+			}
+		}
+
+		return $properties;
 	}
 
 	/**
