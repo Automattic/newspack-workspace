@@ -6,7 +6,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { useState, useEffect, useCallback, useMemo } from '@wordpress/element';
+import { Fragment, useState, useEffect, useCallback, useMemo } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
@@ -25,6 +25,22 @@ import InstitutionsAdvancedSettings from './advanced-settings';
 const { useHistory } = Router;
 
 const API_PATH = '/wp/v2/np_institution';
+
+/**
+ * Keeps each item of a list such as `a.edu,b.edu` or `org=a;role=b` on one
+ * line where it fits, so the list wraps after a separator rather than inside
+ * an item, such as at the hyphen of an IP range.
+ *
+ * @param value A comma or semicolon separated value.
+ * @return The value's items, with a line break opportunity between them.
+ */
+const withBreakOpportunities = ( value: string ) =>
+	value.split( /(?<=[,;])/ ).map( ( part, index ) => (
+		<Fragment key={ index }>
+			{ index > 0 && <wbr /> }
+			<span className="newspack-institutions__list-item">{ part }</span>
+		</Fragment>
+	) );
 
 const DEFAULT_VIEW: View = {
 	type: 'table',
@@ -135,7 +151,7 @@ export default function Institutions() {
 				getValue: ( { item }: { item: Institution } ) => item.meta?.np_institution_email_domain || '',
 				render: ( { item }: { item: Institution } ) => {
 					const val = item.meta?.np_institution_email_domain;
-					return val ? <code>{ val }</code> : <span className="newspack-institutions__empty">&mdash;</span>;
+					return val ? <code>{ withBreakOpportunities( val ) }</code> : <span className="newspack-institutions__empty">&mdash;</span>;
 				},
 			},
 			{
@@ -144,7 +160,7 @@ export default function Institutions() {
 				getValue: ( { item }: { item: Institution } ) => item.meta?.np_institution_ip_range || '',
 				render: ( { item }: { item: Institution } ) => {
 					const val = item.meta?.np_institution_ip_range;
-					return val ? <code>{ val }</code> : <span className="newspack-institutions__empty">&mdash;</span>;
+					return val ? <code>{ withBreakOpportunities( val ) }</code> : <span className="newspack-institutions__empty">&mdash;</span>;
 				},
 			},
 			{
@@ -153,7 +169,7 @@ export default function Institutions() {
 				getValue: ( { item }: { item: Institution } ) => item.meta?.np_institution_reader_data || '',
 				render: ( { item }: { item: Institution } ) => {
 					const val = item.meta?.np_institution_reader_data;
-					return val ? <code>{ val }</code> : <span className="newspack-institutions__empty">&mdash;</span>;
+					return val ? <code>{ withBreakOpportunities( val ) }</code> : <span className="newspack-institutions__empty">&mdash;</span>;
 				},
 			},
 		],
