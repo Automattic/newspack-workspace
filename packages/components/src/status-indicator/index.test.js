@@ -56,7 +56,7 @@ describe( 'StatusIndicator', () => {
 		expect( root ).not.toHaveClass( 'newspack-status-indicator--success' );
 	} );
 
-	it( 'leaves a passed glyph and a toneless status in the text colour', () => {
+	it( 'leaves a passed glyph and a toneless status in the text color', () => {
 		const { container: free } = render( <StatusIndicator icon={ gift }>Free</StatusIndicator> );
 		const { container: privateStatus } = render( <StatusIndicator status="private">Private</StatusIndicator> );
 		[ free, privateStatus ].forEach( container =>
@@ -94,7 +94,7 @@ describe( 'statusGlyph', () => {
 } );
 
 describe( 'statusTone', () => {
-	it( 'never gives a live status and a stopped one the same colour', () => {
+	it( 'never gives a live status and a stopped one the same color', () => {
 		const live = [ 'active', 'done', 'scheduled', 'progress', 'pending', 'attention' ].map( statusTone );
 		const stopped = [ 'draft', 'cancelled', 'ended', 'trash' ].map( statusTone );
 		expect( live.filter( tone => stopped.includes( tone ) ) ).toEqual( [] );

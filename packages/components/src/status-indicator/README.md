@@ -1,12 +1,12 @@
 # StatusIndicator
 
 A status glyph followed by its label, for the Status column of a DataView. Both
-are tinted by what the status means, so a column can be scanned by colour.
+are tinted by what the status means, so a column can be scanned by color.
 
 A badge is an attention marker. In a column where every row carries one it marks
-nothing and adds a block of colour to each row, so a tinted glyph and label
-carry the colour there and a badge is kept for the rare row that genuinely stands out, such as a
-group with a seat request waiting on payment.
+nothing and adds a block of color to each row, so a tinted glyph and label carry
+the color there, and a badge is kept for the rare row that genuinely stands out,
+such as a group with a seat request waiting on payment.
 
 ## Importing
 
@@ -92,26 +92,26 @@ them apart later without touching a consumer. The pairs are `active`/`done` and
 rule by using distinct names and at most one half of a pair. `statusGlyph` is
 exported for the columns that want to assert it directly.
 
-## Colour
+## Color
 
 Each tone is the design system's `--wpds-color-foreground-content-<tone>-weak`
 token, applied to the glyph and label through a
 `newspack-status-indicator--<tone>` modifier. A screen that loads no token sheet
-still reads correctly: the status falls back to the text colour. The `$tones` list in `style.scss` and the
-`StatusTone` type in `statuses.ts` change together; a tone missing from the
-list renders untinted without any error.
+still reads correctly: the status falls back to the text color. The `$tones`
+list in `style.scss` and the `StatusTone` type in `statuses.ts` change together;
+a tone missing from the list renders untinted without any error.
 
 Amber is kept for `attention` alone, so it always means "look at this". States
-still in flight (`scheduled`, `pending`, `progress`) share blue and are told apart by
-their glyphs.
+still in flight (`scheduled`, `pending`, `progress`) share blue and are told
+apart by their glyphs.
 
-Colour backs the glyph and label up; it does not replace them. The glyph does the
-separating on its own, so no status leans on colour to carry its meaning, and
-two statuses may share a tone where the glyphs tell them apart (`scheduled` and
+Color backs the glyph and label up; it does not replace them. The glyph does the
+separating on its own, so no status leans on color to carry its meaning, and two
+statuses may share a tone where the glyphs tell them apart (`scheduled` and
 `progress`, or the stopped states). `private` has no tone: it is live, and
 tinting it like `active` would make the two read alike. A status drawn with a
-glyph passed through `icon` is never tinted, since a classifying field has no lifecycle to colour.
-`statusTone` is exported alongside `statusGlyph` for tests.
+glyph passed through `icon` is never tinted, since a classifying field has no
+lifecycle to color. `statusTone` is exported alongside `statusGlyph` for tests.
 
 `tone` overrides a status's own tone for a screen where the state means less
 than its glyph suggests. Scheduled Actions is the one case: a finished job only

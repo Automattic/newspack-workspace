@@ -31,9 +31,10 @@ const STATUS_GLYPHS = {
 export type StatusName = keyof typeof STATUS_GLYPHS;
 
 /**
- * The colour each status draws its glyph and label in, named after the design system's
- * foreground content tones. Colour backs up the glyph rather than replacing it:
- * every status keeps its own mark, so the column still reads without colour.
+ * The color each status draws its glyph and label in, named after the design
+ * system's foreground content tones. Color backs up the glyph rather than
+ * replacing it: every status keeps its own mark, so the column still reads
+ * without color.
  * `private` has no tone so it never reads as `active`.
  */
 const STATUS_TONES: Record< StatusName, StatusTone | undefined > = {
