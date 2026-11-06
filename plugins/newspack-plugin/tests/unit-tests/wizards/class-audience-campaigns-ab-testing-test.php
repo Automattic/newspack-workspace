@@ -12,12 +12,12 @@ use Newspack\Audience_Campaigns;
  */
 class Audience_Campaigns_AB_Testing_Test extends WP_UnitTestCase {
 	/**
-	 * Without newspack-popups, or with one too old to have the helper, the tab
-	 * stays hidden. The suite does not load newspack-popups, and defining a
-	 * stand-in Newspack_Popups would leak into every later test that checks for
-	 * the class, so the enabled path is covered by the live check instead.
+	 * Without newspack-popups the tab stays hidden. The suite does not load
+	 * newspack-popups, and defining a stand-in Newspack_Popups would leak into
+	 * every later test that checks for the class, so neither an older
+	 * newspack-popups nor the enabled path is covered here.
 	 */
-	public function test_tab_is_hidden_without_the_popups_helper() {
+	public function test_tab_is_hidden_without_newspack_popups() {
 		if ( method_exists( 'Newspack_Popups', 'is_ab_testing_enabled' ) ) {
 			$this->markTestSkipped( 'newspack-popups is loaded in this run.' );
 		}
