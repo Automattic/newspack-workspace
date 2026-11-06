@@ -1220,6 +1220,9 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		self::assertSame( [ $control ], wp_list_pluck( $response->get_data(), 'id' ) );
 		// A different test on the front end, so not one of this test's prompts.
 		self::assertNotContains( $other, wp_list_pluck( $response->get_data(), 'id' ) );
+		// Nor does an underscore ID with no stored match borrow the hyphenated test.
+		$this->create_test_variant( 'header-test', 'a' );
+		self::assertSame( [], rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/header_test' ) )->get_data() );
 	}
 
 	/**

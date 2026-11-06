@@ -429,10 +429,15 @@ final class Newspack_Popups_AB_Tests {
 		}
 		// The ID as stored first: the save guard keeps a legacy ID with underscores,
 		// and the front end keys tests by the stored value, so footer_test and
-		// footer-test are different tests and only a miss falls back to the
-		// normalized spelling.
+		// footer-test are different tests. Only input that isn't already in stored
+		// form, such as typed text, falls back to the spelling a save would store.
+		$stored_form = sanitize_title( (string) $test_id );
+		$candidates  = [ $stored_form ];
+		if ( (string) $test_id !== $stored_form ) {
+			$candidates[] = self::sanitize_test_id( $test_id );
+		}
 		$prompts = [];
-		foreach ( array_unique( [ sanitize_title( (string) $test_id ), self::sanitize_test_id( $test_id ) ] ) as $candidate ) {
+		foreach ( array_unique( $candidates ) as $candidate ) {
 			if ( '' !== $candidate ) {
 				$prompts = self::query_test_prompts( $candidate );
 			}
@@ -517,9 +522,9 @@ final class Newspack_Popups_AB_Tests {
 	 * meta key as the second argument, which sanitize_title() reads as the fallback
 	 * title, so an empty value would be stored as the key name instead of clearing
 	 * the test. And sanitize_title() keeps underscores and percent-encodes what it
-	 * can't transliterate, which the editor's slug can't produce. IDs stored that
-	 * way before this sanitizer stay as they are; get_test_prompts() still finds
-	 * the ones with underscores, and percent-encoded ones can't be looked up.
+	 * can't transliterate, which the editor's slug can't produce. A legacy ID
+	 * stored by sanitize_title() stays as it is; get_test_prompts() finds one with
+	 * underscores, and a percent-encoded one can't be looked up.
 	 *
 	 * @param mixed $value Raw value.
 	 * @return string Slug, or empty string.
