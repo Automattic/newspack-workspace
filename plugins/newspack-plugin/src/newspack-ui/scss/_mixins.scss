@@ -60,7 +60,7 @@ $elevation-drop-levels: (
 }
 
 @mixin focus-edge( $color: var(--newspack-ui-color-focus), $width: 1px, $halo: $color, $inner: null, $over-content: false ) {
-	$halo-color: color-mix(in srgb, #{$halo} var(--newspack-ui-focus-halo-mix), transparent);
+	$halo-color: color-mix(in oklab, #{$halo} var(--newspack-ui-focus-halo-mix), transparent);
 
 	@if list.index($halo-tokens, "#{$halo}") {
 		$halo-color: var(--newspack-ui-color-focus-halo);
@@ -88,7 +88,7 @@ $elevation-drop-levels: (
 }
 
 @mixin focus-line( $color: var(--newspack-ui-color-focus), $inner: null, $inset: false, $radius: null, $width: 2px ) {
-	$halo: color-mix(in srgb, #{$color} var(--newspack-ui-focus-halo-mix), transparent);
+	$halo: color-mix(in oklab, #{$color} var(--newspack-ui-focus-halo-mix), transparent);
 	$position: null;
 
 	@if list.index($halo-tokens, "#{$color}") {
@@ -194,7 +194,7 @@ $elevation-drop-levels: (
 
 @mixin spinner {
 	animation: spin 900ms infinite linear;
-	border: 2px solid color-mix(in srgb, currentcolor 30%, transparent);
+	border: 2px solid color-mix(in oklab, currentcolor 30%, transparent);
 	border-radius: 50%;
 	border-top-color: currentcolor;
 	height: calc(var(--newspack-ui-spacer-1) * 2.25);
