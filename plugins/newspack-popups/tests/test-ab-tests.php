@@ -62,6 +62,48 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * An overlay set to Manual only is never inserted on its own, so it is
+	 * ineligible like a manual placement, whatever wrote the setting.
+	 */
+	public function test_get_tests_reports_a_manual_only_overlay_as_ineligible() {
+		$this->create_test_variant( 'mo', 'a' );
+		$overlay = $this->create_test_variant( 'mo', 'b' );
+		update_post_meta( $overlay, 'placement', 'center' );
+		update_post_meta( $overlay, 'manual_only', '1' );
+		$test = Newspack_Popups_AB_Tests::get_tests()[0];
+		$this->assertTrue( $test['variants']['a']['eligible'] );
+		$this->assertFalse( $test['variants']['b']['eligible'] );
+	}
+
+	/**
+	 * A legacy Test ID with an underscore is its own test, as readers see it,
+	 * not part of the hyphenated test it would sanitize to.
+	 */
+	public function test_get_tests_keeps_a_legacy_test_id_apart_from_its_hyphenated_spelling() {
+		global $wpdb;
+		$legacy = [ $this->create_test_variant( 'footer-test', 'a' ), $this->create_test_variant( 'footer-test', 'b' ) ];
+		$this->create_test_variant( 'footer-test', 'a' );
+		$this->create_test_variant( 'footer-test', 'b' );
+		foreach ( $legacy as $prompt_id ) {
+			// A value the earlier sanitizer stored; the current one can't write it.
+			$wpdb->update( // phpcs:ignore WordPress.DB
+				$wpdb->postmeta,
+				[ 'meta_value' => 'footer_test' ], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				[
+					'post_id'  => $prompt_id,
+					'meta_key' => Newspack_Popups_AB_Tests::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				]
+			);
+			wp_cache_delete( $prompt_id, 'post_meta' );
+		}
+		$tests = array_column( Newspack_Popups_AB_Tests::get_tests(), null, 'test_id' );
+		$this->assertSame( [ 'footer-test', 'footer_test' ], array_keys( $tests ) );
+		$this->assertSame( [], $tests['footer_test']['duplicates'] );
+		$this->assertSame( [], $tests['footer-test']['duplicates'] );
+		$this->assertSame( $legacy[0], $tests['footer_test']['variants']['a']['id'] );
+	}
+
+	/**
 	 * The control share is read from the control; one stored on a challenger is ignored.
 	 */
 	public function test_get_tests_control_share_defaults_to_fifty_even_when_set_on_a_challenger() {

@@ -505,7 +505,8 @@ final class Newspack_Popups_AB_Tests {
 	 *                 alone before then, so an earlier date would count traffic the
 	 *                 test never split. `variants` maps the letter to
 	 *                 `[ 'id', 'title', 'status', 'status_label', 'edit_link', 'eligible' ]`,
-	 *                 where `eligible` is false for a manual or custom placement.
+	 *                 where `eligible` is false for a manual or custom placement
+	 *                 and for an overlay set to Manual only.
 	 *                 `duplicates` lists the other prompts carrying a letter, as
 	 *                 `letter` plus those fields. The arm shown is the first
 	 *                 published prompt by ID, or the first by ID when none is
@@ -532,7 +533,9 @@ final class Newspack_Popups_AB_Tests {
 		);
 		$grouped = [];
 		foreach ( $prompts as $prompt ) {
-			$test_id = self::sanitize_test_id( get_post_meta( $prompt->ID, self::META_TEST_ID, true ) );
+			// Keyed by the ID as stored, as get_tests_config() keys the test readers
+			// see: a legacy footer_test and footer-test are two tests, not one.
+			$test_id = trim( (string) get_post_meta( $prompt->ID, self::META_TEST_ID, true ) );
 			$variant = (string) get_post_meta( $prompt->ID, self::META_VARIANT, true );
 			if ( '' === $test_id || ! in_array( $variant, self::VALID_VARIANTS, true ) ) {
 				continue;
@@ -621,7 +624,10 @@ final class Newspack_Popups_AB_Tests {
 			'status'       => $prompt->post_status,
 			'status_label' => $status ? $status->label : $prompt->post_status,
 			'edit_link'    => get_edit_post_link( $prompt->ID, 'raw' ),
-			'eligible'     => self::is_eligible_placement( get_post_meta( $prompt->ID, 'placement', true ) ),
+			'eligible'     => self::is_eligible_placement(
+				get_post_meta( $prompt->ID, 'placement', true ),
+				rest_sanitize_boolean( get_post_meta( $prompt->ID, 'manual_only', true ) )
+			),
 		];
 	}
 

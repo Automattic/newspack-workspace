@@ -209,7 +209,8 @@ final class Newspack_Popups_API {
 			);
 			register_rest_route(
 				'newspack-popups/v1',
-				'/ab-tests/(?P<test_id>[a-z0-9-]+)/stats',
+				// Underscores too, for the same legacy IDs as the route above.
+				'/ab-tests/(?P<test_id>[a-z0-9_-]+)/stats',
 				[
 					'methods'             => \WP_REST_Server::READABLE,
 					'callback'            => [ __CLASS__, 'api_get_ab_test_stats' ],
