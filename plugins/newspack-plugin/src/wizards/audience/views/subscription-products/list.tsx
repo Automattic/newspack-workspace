@@ -466,6 +466,7 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				isLoading={ isLoading }
 				getItemId={ ( item: SubscriptionProduct ) => String( item.id ) }
 				search
+				inlineFilters
 			/>
 		</div>
 	);

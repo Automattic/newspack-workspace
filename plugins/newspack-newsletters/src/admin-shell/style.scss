@@ -197,15 +197,25 @@ body.newspack-newsletters-admin-screen .dataviews-view-table a:not(.newspack-new
 	}
 }
 
-// The funnel toggle is permanently disabled once a primary filter pins
-// the filter row open (core can't hide the row anymore) — drop it.
-body.newspack-newsletters-admin-screen .dataviews-filters__visibility-toggle:disabled,
-body.newspack-newsletters-admin-screen .dataviews-filters__visibility-toggle[aria-disabled="true"] {
-	display: none;
+.newspack-newsletters-list__toolbar {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: wp-vars.$grid-unit-05;
 }
 
-.newspack-newsletters-admin .dataviews-filters-toggle__count {
-	display: none;
+.newspack-newsletters-list__filters {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: wp-vars.$grid-unit-10;
+}
+
+.newspack-newsletters-list__view-config {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: wp-vars.$grid-unit-05;
 }
 
 // Muted item count portalled next to the breadcrumbs page title.
@@ -408,4 +418,12 @@ body.newspack-newsletters-admin-screen .dataviews-filters__visibility-toggle[ari
 // Suppress DataViews' `::after` hairline on layout tiles; the preview wrapper draws its own border.
 .dataviews-view-grid .dataviews-view-grid__media:has(.newspack-newsletters-layouts-list__preview)::after {
 	box-shadow: none;
+}
+
+.newspack-newsletters-admin .dataviews-view-grid {
+	padding-inline: wp-vars.$grid-unit-60;
+
+	@container (max-width: 430px) {
+		padding-inline: wp-vars.$grid-unit-30;
+	}
 }

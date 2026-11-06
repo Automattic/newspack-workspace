@@ -8,7 +8,6 @@ import apiFetch from '@wordpress/api-fetch';
 import { addQueryArgs } from '@wordpress/url';
 import { Spinner } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
-import { DataViews as WPDataViews } from '@wordpress/dataviews';
 
 /**
  * Internal dependencies
@@ -30,6 +29,8 @@ const DEFAULT_VIEW = {
 	filters: [],
 	layout: {},
 };
+
+const PER_PAGE_CONFIG = { perPageSizes: [ 10, 25, 50, 100 ] };
 
 const ORDERBY_MAP = {
 	timestamp: 'scheduled_date_gmt',
@@ -186,16 +187,9 @@ export const ScheduledActions = ( { integrationId } ) => {
 				isLoading={ isLoading }
 				getItemId={ item => item.id }
 				search
-			>
-				<Stack direction="row" align="flex-start" gap="sm" className="dataviews__view-actions">
-					<Stack direction="row" align="center" gap="xl" wrap="wrap" className="dataviews__search">
-						<WPDataViews.Search />
-						<WPDataViews.Filters />
-					</Stack>
-				</Stack>
-				<WPDataViews.Layout />
-				<WPDataViews.Footer />
-			</DataViews>
+				config={ PER_PAGE_CONFIG }
+				inlineFilters
+			/>
 			<Drawer.Root isOpen={ isDetailsOpen } size="x-large" onRequestClose={ () => setIsDetailsOpen( false ) }>
 				<Drawer.Header>
 					<Drawer.Title>{ __( 'Action Details', 'newspack-plugin' ) }</Drawer.Title>

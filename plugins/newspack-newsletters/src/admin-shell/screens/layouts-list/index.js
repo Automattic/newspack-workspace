@@ -13,6 +13,7 @@ import { __ } from '@wordpress/i18n';
 import { getAdminUrl } from '../../admin-globals';
 import HeaderCount from '../../components/header-count';
 import LoadingState from '../../components/loading-state';
+import InlineFiltersLayout from '../../components/inline-filters-layout';
 import ItemsPerPage from '../../components/items-per-page';
 import { useHeaderActions } from '../../header-actions-context';
 import usePersistedView from '../../hooks/use-persisted-view';
@@ -61,10 +62,7 @@ const DEFAULT_VIEW = {
 	fields: [ 'author' ],
 };
 
-const DEFAULT_LAYOUTS = {
-	grid: {},
-	table: {},
-};
+const DEFAULT_LAYOUTS = { grid: {} };
 
 // Suppress the built-in ViewConfig per-page control — the custom
 // `ItemsPerPage` renders in its place inside the View options popover.
@@ -73,25 +71,11 @@ const DEFAULT_LAYOUTS = {
 const DATAVIEWS_CONFIG = { perPageSizes: [] };
 const PER_PAGE_OPTIONS = [ 12, 24, 48, 96, PER_PAGE_ALL ];
 
-// `mediaField` is grid-only: the table renders it in the primary column,
-// so leaving it set mounts a BlockPreview iframe per row. Applied to the
-// restored view too, which arrives merged over the grid default.
-const withLayoutMedia = view => {
-	if ( 'table' === view.type && view.mediaField ) {
-		return { ...view, mediaField: undefined };
-	}
-	if ( 'grid' === view.type && ! view.mediaField ) {
-		return { ...view, mediaField: 'preview' };
-	}
-	return view;
-};
-
 const PERSIST_OPTIONS = {
 	perPageOptions: PER_PAGE_OPTIONS,
 	fieldIds: FIELD_IDS,
 	layoutTypes: Object.keys( DEFAULT_LAYOUTS ),
 	urlPatch: getInitialView(),
-	normalize: withLayoutMedia,
 };
 
 export default function LayoutsListScreen() {
@@ -225,8 +209,6 @@ export default function LayoutsListScreen() {
 		};
 	}, [ savedPagination, prebuiltCount, showSaved, authorShowPrebuilts, ridingAlong, firstPageSavedSlots, view.perPage, view.search, fetchingAll ] );
 
-	const onChangeView = useCallback( next => setView( withLayoutMedia( next ) ), [] );
-
 	const onMutated = useCallback( () => setMutationKey( key => key + 1 ), [] );
 
 	const startRenaming = useCallback( item => {
@@ -294,22 +276,24 @@ export default function LayoutsListScreen() {
 				data={ data }
 				fields={ fields }
 				view={ view }
-				onChangeView={ onChangeView }
+				onChangeView={ setView }
 				actions={ actions }
 				paginationInfo={ paginationInfo }
 				defaultLayouts={ DEFAULT_LAYOUTS }
 				isLoading={ isLoading || isPrebuiltLoading }
 				getItemId={ item => String( item.id ) }
-				search
 				config={ DATAVIEWS_CONFIG }
-				header={
-					<ItemsPerPage
-						value={ view.perPage }
-						options={ PER_PAGE_OPTIONS }
-						onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) }
-					/>
-				}
-			/>
+			>
+				<InlineFiltersLayout
+					header={
+						<ItemsPerPage
+							value={ view.perPage }
+							options={ PER_PAGE_OPTIONS }
+							onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) }
+						/>
+					}
+				/>
+			</DataViews>
 		</>
 	);
 }

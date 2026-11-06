@@ -194,7 +194,7 @@ export function getFields( { advertisers = [], placements = [] } = {} ) {
 				{ value: 'draft', label: statusLabels.draft },
 				{ value: 'trash', label: statusLabels.trash },
 			],
-			filterBy: { operators: [ 'isAny' ] },
+			filterBy: { operators: [ 'isAny' ], isPrimary: true },
 			getValue: ( { item } ) => item?.newspack_newsletters_ad_status?.kind || 'draft',
 			render: renderStatus,
 		},
@@ -205,7 +205,7 @@ export function getFields( { advertisers = [], placements = [] } = {} ) {
 				value: String( term.id ),
 				label: term.name,
 			} ) ),
-			filterBy: { operators: [ 'isAny' ] },
+			filterBy: { operators: [ 'isAny' ], isPrimary: true },
 			enableSorting: false,
 			getValue: ( { item } ) => advertiserNames( item ),
 			render: renderTerms( 'newspack_nl_advertiser' ),
@@ -217,7 +217,7 @@ export function getFields( { advertisers = [], placements = [] } = {} ) {
 				value: String( term.id ),
 				label: term.name,
 			} ) ),
-			filterBy: { operators: [ 'isAny' ] },
+			filterBy: { operators: [ 'isAny' ], isPrimary: true },
 			enableSorting: false,
 			getValue: ( { item } ) =>
 				termsForTaxonomy( item, 'newspack_nl_ad_placement' )
