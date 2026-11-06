@@ -12,6 +12,7 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 import { useEffect, useMemo, useState } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
+import { Stack } from '@wordpress/ui';
 import { people } from '@wordpress/icons';
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 import { __experimentalHStack as HStack, CheckboxControl } from '@wordpress/components';
@@ -223,7 +224,14 @@ function SubscriberOnlyProducts() {
 	return (
 		<div className="newspack-subscriber-only">
 			{ error && <Notice isError noticeText={ error } /> }
-			{ loading && <Waiting isCenter /> }
+			{ loading && (
+				<div className="newspack-wizard__loader">
+					<Stack direction="column" align="center" gap="sm">
+						<Waiting noMargin />
+						<strong>{ __( 'Fetching…', 'newspack-plugin' ) }</strong>
+					</Stack>
+				</div>
+			) }
 			{ ! loading && hasRestrictions && (
 				// The DataViews wrapper isn't generic — its props resolve to `unknown`,
 				// so the typed definitions above are cast at the boundary.
