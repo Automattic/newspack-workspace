@@ -6,7 +6,7 @@
 /**
  * External dependencies
  */
-import { render } from '@testing-library/react';
+import { fireEvent, render } from '@testing-library/react';
 
 /**
  * Internal dependencies
@@ -21,7 +21,9 @@ jest.mock( '@wordpress/components', () => ( {
 } ) );
 jest.mock( '@wordpress/ui', () => ( { Stack: ( { children } ) => <div>{ children }</div> } ) );
 jest.mock( '../../../../../packages/colors/colors.module.scss', () => ( { 'neutral-000': '#ffffff', 'neutral-900': '#1e1e1e' } ) );
-jest.mock( '../../../../../packages/components/src/color-picker', () => () => <div data-testid="color-picker" /> );
+jest.mock( '../../../../../packages/components/src/color-picker', () => ( { label, color, onChange } ) => (
+	<button type="button" data-testid="color-picker" data-label={ label } data-color={ color } onClick={ () => onChange( '#abcdef' ) } />
+) );
 
 const setThemeData = contentBanner => {
 	window.newspackAudience = { content_banner: contentBanner };
@@ -101,7 +103,7 @@ describe( 'on a site that uses the site Theme', () => {
 
 	it( 'previews the picked colors on the site style, with black or white text only where none is picked', () => {
 		setThemeData( { supports_theme_style: true, uses_site_theme: true, theme_button_bg: '#666666', theme_button_ink: 'white' } );
-		expect( getBannerPreviewProps( { style: 'dark', bg_color: '#fff59d', button_color: '#0d47a1' } ).bannerStyle ).toEqual( {
+		expect( getBannerPreviewProps( { style: 'theme', bg_color: '#fff59d', button_color: '#0d47a1' } ).bannerStyle ).toEqual( {
 			'--newspack-content-banner-bg': '#fff59d',
 			'--newspack-content-banner-ink': 'black',
 			'--newspack-content-banner-button-bg': '#0d47a1',
@@ -109,6 +111,7 @@ describe( 'on a site that uses the site Theme', () => {
 		} );
 		expect(
 			getBannerPreviewProps( {
+				style: 'theme',
 				bg_color: '#fff59d',
 				text_color: '#102030',
 				button_color: '#0d47a1',
@@ -120,7 +123,7 @@ describe( 'on a site that uses the site Theme', () => {
 			'--newspack-content-banner-button-bg': '#0d47a1',
 			'--newspack-content-banner-button-ink': '#ffeb3b',
 		} );
-		expect( getBannerPreviewProps( { text_color: '#102030', button_text_color: '#ffeb3b' } ).bannerStyle ).toEqual( {
+		expect( getBannerPreviewProps( { style: 'theme', text_color: '#102030', button_text_color: '#ffeb3b' } ).bannerStyle ).toEqual( {
 			'--newspack-content-banner-ink': '#102030',
 			'--newspack-content-banner-button-ink': '#ffeb3b',
 		} );
@@ -159,6 +162,49 @@ describe( 'on a site that uses the site Theme', () => {
 		expect( getBannerPreviewProps( { style: 'theme', shadow: 0 } ).bannerClassName ).toBe( 'is-style-theme has-no-shadow' );
 		expect( getBannerPreviewProps( { style: 'dark', shadow: false } ).bannerClassName ).toBe( 'is-style-dark' );
 		setThemeData( { supports_theme_style: true, uses_site_theme: true } );
-		expect( getBannerPreviewProps( { style: 'dark', shadow: false } ).bannerClassName ).toBe( 'is-style-site has-no-shadow' );
+		expect( getBannerPreviewProps( { style: 'theme', shadow: false } ).bannerClassName ).toBe( 'is-style-site has-no-shadow' );
+		expect( getBannerPreviewProps( { style: 'dark', shadow: false } ).bannerClassName ).toBe( 'is-style-site' );
+	} );
+
+	it( 'ignores colors left over from the Light or Dark style on the site style', () => {
+		setThemeData( { supports_theme_style: true, uses_site_theme: true } );
+		[ 'light', 'dark', undefined ].forEach( style =>
+			expect( getBannerPreviewProps( { style, bg_color: '#fff59d', button_color: '#0d47a1', text_color: '#102030' } ).bannerStyle ).toEqual(
+				{}
+			)
+		);
+	} );
+
+	it( 'stores the Theme style whenever a color or the shadow is changed on the site style', () => {
+		setThemeData( { supports_theme_style: true, uses_site_theme: true } );
+		const onChange = jest.fn();
+		const { getAllByTestId } = render( <BannerStyleControl settings={ { style: 'dark' } } onChange={ onChange } /> );
+		fireEvent.click( getAllByTestId( 'color-picker' )[ 1 ] );
+		expect( onChange ).toHaveBeenCalledWith( { text_color: '#abcdef', style: 'theme' } );
+	} );
+
+	it( 'defaults the empty pickers to the site Theme colors, then to the picked colors black or white', () => {
+		setThemeData( {
+			supports_theme_style: false,
+			uses_site_theme: true,
+			site_bg: '#1e1e1e',
+			site_text: '#ffffff',
+			site_button_bg: '#ffc857',
+			site_button_ink: '#000000',
+		} );
+		const colorOf = ( utils, label ) => utils.getAllByTestId( 'color-picker' ).find( e => e.dataset.label === label ).dataset.color;
+		const site = render( <BannerStyleControl settings={ {} } onChange={ () => {} } /> );
+		expect( [ 'Banner Color', 'Text Color', 'Button Color', 'Button Text Color' ].map( l => colorOf( site, l ) ) ).toEqual( [
+			'#1e1e1e',
+			'#ffffff',
+			'#ffc857',
+			'#000000',
+		] );
+		site.unmount();
+		const picked = render(
+			<BannerStyleControl settings={ { style: 'theme', bg_color: '#fff59d', button_color: '#0d47a1' } } onChange={ () => {} } />
+		);
+		expect( colorOf( picked, 'Text Color' ) ).toBe( '#000000' );
+		expect( colorOf( picked, 'Button Text Color' ) ).toBe( '#ffffff' );
 	} );
 } );

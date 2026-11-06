@@ -223,11 +223,11 @@ class Metering_Countdown {
 		}
 		$settings     = self::get_settings();
 		$style        = Content_Banner_Style::get_render_style( $settings['style'] );
-		$inline_style = Content_Banner_Style::get_inline_style( $style, $settings['bg_color'], $settings['button_color'], $settings['text_color'], $settings['button_text_color'] );
+		$inline_style = Content_Banner_Style::get_inline_style( $style, $settings['bg_color'], $settings['button_color'], $settings['text_color'], $settings['button_text_color'], $settings['style'] );
 		$classes      = array_filter(
 			[
 				sprintf( 'is-style-%s', $style ),
-				Content_Banner_Style::get_shadow_class( $style, (bool) $settings['shadow'] ),
+				Content_Banner_Style::get_shadow_class( $style, (bool) $settings['shadow'], $settings['style'] ),
 			]
 		);
 		$total_views = Metering::get_total_metered_views( \is_user_logged_in() );

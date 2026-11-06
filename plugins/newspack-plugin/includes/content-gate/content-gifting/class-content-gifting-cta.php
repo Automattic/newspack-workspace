@@ -324,8 +324,8 @@ class Content_Gifting_CTA {
 			return;
 		}
 		$style        = Content_Banner_Style::get_render_style( self::get_style() );
-		$inline_style = Content_Banner_Style::get_inline_style( $style, self::get_bg_color(), self::get_button_color(), self::get_text_color(), self::get_button_text_color() );
-		$shadow_class = Content_Banner_Style::get_shadow_class( $style, self::get_shadow() );
+		$inline_style = Content_Banner_Style::get_inline_style( $style, self::get_bg_color(), self::get_button_color(), self::get_text_color(), self::get_button_text_color(), self::get_style() );
+		$shadow_class = Content_Banner_Style::get_shadow_class( $style, self::get_shadow(), self::get_style() );
 		?>
 		<div class="newspack-ui">
 			<div class="banner newspack-content-gifting__cta <?php echo esc_attr( trim( sprintf( 'is-style-%s %s', $style, $shadow_class ) ) ); ?>"<?php echo $inline_style ? ' style="' . esc_attr( $inline_style ) . '"' : ''; ?>>
