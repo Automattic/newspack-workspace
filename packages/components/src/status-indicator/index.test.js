@@ -99,4 +99,9 @@ describe( 'statusTone', () => {
 		const stopped = [ 'draft', 'cancelled', 'ended', 'trash' ].map( statusTone );
 		expect( live.filter( tone => stopped.includes( tone ) ) ).toEqual( [] );
 	} );
+
+	it( 'draws pending in the same grey as draft, not the blue of work under way', () => {
+		expect( statusTone( 'pending' ) ).toBe( statusTone( 'draft' ) );
+		expect( statusTone( 'pending' ) ).not.toBe( statusTone( 'progress' ) );
+	} );
 } );

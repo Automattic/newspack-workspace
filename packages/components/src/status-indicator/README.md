@@ -108,14 +108,14 @@ Scheduled Actions does, so only the failure reads red.
 
 Amber is kept for `attention` alone, so it always means "look at this". States
 on their way (`scheduled`, `progress`) share blue and are told apart by their
-glyphs. `pending` is grey, like `draft`: it waits on someone else, so nothing
-is moving yet.
+glyphs. `pending` is grey, like `draft`: it waits on something else, so
+nothing is moving yet.
 
 Color backs the glyph and label up; it does not replace them. The glyph does the
 separating on its own, so no status leans on color to carry its meaning, and two
 statuses may share a tone where the glyphs tell them apart (`scheduled` and
-`progress`, or `draft`, `pending` and `trash`). `private` has no tone: it is live, and
-tinting it like `active` would make the two read alike. A status drawn with a
+`progress`, or `draft`, `pending` and `trash`). `private` has no tone: it is
+live, and tinting it like `active` would make the two read alike. A status drawn with a
 glyph passed through `icon` is never tinted, since a classifying field has no
 lifecycle to color. `statusTone` is exported alongside `statusGlyph` for tests.
 
