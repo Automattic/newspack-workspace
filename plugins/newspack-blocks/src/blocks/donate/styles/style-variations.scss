@@ -575,20 +575,20 @@
 				pointer-events: none;
 			}
 
-			&:not(.wp-element-button) {
+			&:where(:not(.wp-element-button)) {
 				font-family: inherit;
 				font-weight: var(--newspack-ui-font-weight-strong, 600);
 				transition: box-shadow motion.$duration-color motion.$ease-color, transform motion.$duration-press motion.$ease-out;
 			}
 
 			@include motion.hover {
-				&:not(.wp-element-button):hover {
+				&:where(:not(.wp-element-button)):hover {
 					--wpbnbd-overlay: inset 0 0 0 100vmax color-mix(in oklab, black calc(100% - var(--newspack-ui-color-mix-hover, 85%)), transparent);
 					box-shadow: var(--wpbnbd-overlay, 0 0 #0000);
 				}
 			}
 
-			&:not(.wp-element-button):active {
+			&:where(:not(.wp-element-button)):active {
 				--wpbnbd-overlay: inset 0 0 0 100vmax color-mix(in oklab, black calc(100% - var(--newspack-ui-color-mix-pressed, 75%)), transparent);
 				box-shadow: var(--wpbnbd-overlay, 0 0 #0000);
 			}
@@ -705,13 +705,13 @@
 				}
 
 				@include motion.hover {
-					&:not(.wp-element-button):hover {
+					&:where(:not(.wp-element-button)):hover {
 						--wpbnbd-overlay: inset 0 0 0 100vmax color-mix(in oklab, black calc(100% - var(--newspack-ui-color-mix-hover, 85%)), transparent);
 						box-shadow: var(--wpbnbd-overlay, 0 0 #0000);
 					}
 				}
 
-				&:not(.wp-element-button):active {
+				&:where(:not(.wp-element-button)):active {
 					--wpbnbd-overlay: inset 0 0 0 100vmax color-mix(in oklab, black calc(100% - var(--newspack-ui-color-mix-pressed, 75%)), transparent);
 					box-shadow: var(--wpbnbd-overlay, 0 0 #0000);
 				}
@@ -728,7 +728,7 @@
 					outline: none;
 				}
 
-				&:focus-visible {
+				&:focus-visible:where(:not(.wp-element-button)) {
 					border-color: currentcolor !important;
 
 					@include mixins.focus-edge( currentcolor, $halo: mixins.$focus-color, $inner: var(--wpbnbd-overlay, 0 0 #0000) );
@@ -739,13 +739,13 @@
 				button[type="submit"],
 				.submit-button {
 					@include motion.hover {
-						&:not(.wp-element-button):hover {
+						&:where(:not(.wp-element-button)):hover {
 							--wpbnbd-overlay: 0 0 #0000;
 							background: color-mix(in oklab, currentcolor 7%, var(--newspack-ui-color-surface, #{np-colors.$neutral-000})) !important;
 						}
 					}
 
-					&:not(.wp-element-button):active {
+					&:where(:not(.wp-element-button)):active {
 						--wpbnbd-overlay: 0 0 #0000;
 						background: color-mix(in oklab, currentcolor 13%, var(--newspack-ui-color-surface, #{np-colors.$neutral-000})) !important;
 					}
