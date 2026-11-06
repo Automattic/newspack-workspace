@@ -14,6 +14,8 @@ use Google\Site_Kit\Core\Modules\Module;
 use Google\Site_Kit\Core\Authentication\Clients\Google_Site_Kit_Client;
 use Google\Site_Kit_Dependencies\Google\Service\GoogleAnalyticsAdmin as Google_Service_GoogleAnalyticsAdmin;
 use Google\Site_Kit_Dependencies\Google\Service\GoogleAnalyticsAdmin\GoogleAnalyticsAdminV1betaCustomDimension;
+use Google\Site_Kit_Dependencies\Google\Service\AnalyticsData as Google_Service_AnalyticsData;
+use Google\Site_Kit_Dependencies\Google\Service\AnalyticsData\RunReportRequest;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -37,7 +39,27 @@ class GoogleSiteKitAnalytics extends Module {
 	protected function setup_services( Google_Site_Kit_Client $client ) {
 		return array(
 			'analyticsadmin' => new Google_Service_GoogleAnalyticsAdmin( $client ),
+			'analyticsdata'  => new Google_Service_AnalyticsData( $client ),
 		);
+	}
+
+	/**
+	 * Run a GA4 Data API report through Site Kit's authenticated client.
+	 *
+	 * Mirrors `Google_OAuth_GA4_Client::run_report()` so the auth router's
+	 * callback can call either client without knowing which it holds.
+	 *
+	 * @param string $property_id GA4 property ID.
+	 * @param array  $request     runReport request body (Data API shape).
+	 * @return array Decoded response as an associative array.
+	 */
+	public function run_report( $property_id, array $request ) {
+		$analyticsdata = $this->get_service( 'analyticsdata' );
+		$response      = $analyticsdata->properties->runReport(
+			'properties/' . $property_id,
+			new RunReportRequest( $request )
+		);
+		return json_decode( wp_json_encode( $response->toSimpleObject() ), true );
 	}
 
 	/**
