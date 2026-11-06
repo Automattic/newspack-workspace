@@ -19,7 +19,7 @@ import { currencyDollar } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { ConfirmDialog, TableCard, evenColumns, withoutColumnStyles } from '../../../../../packages/components/src';
+import { ConfirmDialog, TableCard } from '../../../../../packages/components/src';
 import EmptyState from '../../../../../packages/components/src/empty-state';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { byCycle, cycleRange, priceSummary } from './schedule-format';
@@ -206,7 +206,7 @@ export default function SchedulePrices( { steps, onChange, publicize, calcTypes,
 
 	// perPage and the reader-facing column follow the live values; in view state,
 	// an effect would land them a paint late.
-	const tableView = useMemo( () => evenColumns( { ...view, perPage, fields: fieldIds } ), [ view, perPage, fieldIds ] );
+	const tableView = useMemo( () => ( { ...view, perPage, fields: fieldIds } ), [ view, perPage, fieldIds ] );
 
 	const { data, paginationInfo } = useMemo( () => filterSortAndPaginate( rows, tableView, fields ), [ rows, tableView, fields ] );
 
@@ -247,7 +247,7 @@ export default function SchedulePrices( { steps, onChange, publicize, calcTypes,
 							data={ data }
 							fields={ fields }
 							view={ tableView }
-							onChangeView={ nextView => setView( withoutColumnStyles( nextView ) ) }
+							onChangeView={ setView }
 							actions={ actions }
 							paginationInfo={ paginationInfo }
 							defaultLayouts={ { table: {} } }
