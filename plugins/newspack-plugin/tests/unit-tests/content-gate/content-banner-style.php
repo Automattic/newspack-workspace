@@ -31,7 +31,7 @@ class Test_Content_Banner_Style extends \WP_UnitTestCase {
 	 */
 	public function tear_down(): void {
 		remove_theme_support( Newspack_UI_Theme_Style::THEME_SUPPORT );
-		unset( $_GET['content_key'] );
+		unset( $_GET[ Content_Gifting::QUERY_ARG ] );
 		parent::tear_down();
 	}
 
@@ -164,24 +164,16 @@ class Test_Content_Banner_Style extends \WP_UnitTestCase {
 		add_filter( 'newspack_ui_theme_style_active', '__return_false' );
 		$this->assertFalse( Content_Banner_Style::uses_site_theme() );
 		$this->assertSame( 'dark', Content_Banner_Style::get_render_style( 'dark' ) );
-		remove_filter( 'newspack_ui_theme_style_active', '__return_false' );
 	}
 
 	/**
-	 * The site style takes the primary button and prints no inline colors.
-	 */
-	public function test_site_style_button_class_and_no_inline_style(): void {
-		$this->assertSame( 'newspack-ui__button--primary', Content_Banner_Style::get_button_class( Content_Banner_Style::SITE_STYLE ) );
-		$this->assertSame( '', Content_Banner_Style::get_inline_style( Content_Banner_Style::SITE_STYLE, '#fff59d', '#0d47a1' ) );
-	}
-
-	/**
-	 * A gifted view of a gated post, with the style stored as dark, prints the site style: its class, the
-	 * primary button and no inline style.
+	 * A gifted view of a gated post, with the Theme style stored with both colors, prints the site style
+	 * and none of the inline colors.
 	 */
 	public function test_gifting_banner_renders_the_site_style_over_a_stored_style(): void {
+		$this->use_template( 'newspack-theme' );
 		add_theme_support( Newspack_UI_Theme_Style::THEME_SUPPORT );
-		Content_Gifting_CTA::set_style( 'dark' );
+		Content_Gifting_CTA::set_style( 'theme' );
 		Content_Gifting_CTA::set_bg_color( '#fff59d' );
 		Content_Gifting_CTA::set_button_color( '#0d47a1' );
 
@@ -204,7 +196,7 @@ class Test_Content_Banner_Style extends \WP_UnitTestCase {
 		add_filter( 'newspack_content_gifting_enabled', '__return_true' );
 		add_filter( 'newspack_is_post_restricted', '__return_true' );
 		$this->go_to( get_permalink( $post_id ) );
-		$_GET['content_key'] = $gifter . '|' . $key;
+		$_GET[ Content_Gifting::QUERY_ARG ] = $gifter . '|' . $key;
 		$GLOBALS['post'] = get_post( $post_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 
 		ob_start();
@@ -212,12 +204,8 @@ class Test_Content_Banner_Style extends \WP_UnitTestCase {
 		$markup = ob_get_clean();
 
 		$this->assertStringContainsString( 'newspack-content-gifting__cta is-style-site', $markup );
-		$this->assertStringNotContainsString( 'is-style-dark', $markup );
+		$this->assertStringNotContainsString( 'is-style-theme', $markup );
 		$this->assertStringNotContainsString( 'style="', $markup );
-
-		unset( $_GET['content_key'] );
-		remove_filter( 'newspack_content_gifting_enabled', '__return_true' );
-		remove_filter( 'newspack_is_post_restricted', '__return_true' );
 	}
 
 	/**

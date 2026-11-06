@@ -47,7 +47,7 @@ const usesSiteTheme = () => !! window.newspackAudience?.content_banner?.uses_sit
 export type BannerRenderStyle = 'light' | 'dark' | 'theme' | 'site';
 
 /**
- * The style a banner renders with: the site Theme wherever the adapter is active, otherwise the stored
+ * The style a banner renders with: the site Theme wherever it is in use, otherwise the stored
  * style, with Theme falling back to Light where the theme does not offer it.
  *
  * @param style The stored style.
