@@ -92,6 +92,7 @@ class Newspack_Test_Comment_Required_Name extends WP_UnitTestCase {
 
 		$this->assertMatchesRegularExpression( '/name="comment_first_name"[^>]*value="Ada"[^>]*required/', $output );
 		$this->assertMatchesRegularExpression( '/name="comment_last_name"[^>]*value=""[^>]*required/', $output );
+		$this->assertStringContainsString( 'New comments show the first and last name below.', $output );
 		$this->assertStringEndsWith( '<submit />', $output );
 	}
 
@@ -108,9 +109,9 @@ class Newspack_Test_Comment_Required_Name extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A reader whose public name would not change is asked for nothing, not even by
-	 * the email-derived prompt, because the handle cannot be published. Their comment
-	 * goes out under the names, and the display name stays on the profile.
+	 * A reader with both names and no other chosen public name is asked for nothing,
+	 * not even by the email-derived prompt, because the handle cannot be published. Form
+	 * and REST comments go out under the names, and the display name stays on the profile.
 	 *
 	 * @dataProvider data_display_names
 	 *
@@ -136,6 +137,18 @@ class Newspack_Test_Comment_Required_Name extends WP_UnitTestCase {
 		$result = Comment_Display_Name::validate_display_name( $this->get_commentdata() );
 
 		$this->assertSame( 'Ada King', $result['comment_author'] );
+
+		$request = new WP_REST_Request( 'POST', '/wp/v2/comments' );
+		$request->set_body_params(
+			[
+				'post'    => $this->factory->post->create(),
+				'content' => 'A reader comment',
+			]
+		);
+		$created = rest_do_request( $request );
+		$this->assertSame( 201, $created->get_status() );
+		$this->assertSame( 'Ada King', get_comment( $created->get_data()['id'] )->comment_author );
+
 		$this->assertSame( $display_name, get_userdata( $user_id )->display_name );
 	}
 
@@ -154,7 +167,7 @@ class Newspack_Test_Comment_Required_Name extends WP_UnitTestCase {
 
 		$output = Comment_Display_Name::render_display_name_field( '<submit />' );
 		$this->assertMatchesRegularExpression( '/name="comment_first_name"[^>]*value="Ada"/', $output );
-		$this->assertStringContainsString( 'Please confirm them.', $output );
+		$this->assertStringContainsString( 'Check both before posting.', $output );
 
 		try {
 			Comment_Display_Name::validate_display_name( $this->get_commentdata() );
@@ -336,8 +349,8 @@ class Newspack_Test_Comment_Required_Name extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Over REST a reader missing a name is refused, and a reader with both is published
-	 * under them.
+	 * Over REST a reader missing a name is refused, as is one who has yet to confirm
+	 * their names in the form. Once confirmed, comments are published under them.
 	 */
 	public function test_rest_requires_and_publishes_full_name() {
 		$user_id = $this->log_in_reader();

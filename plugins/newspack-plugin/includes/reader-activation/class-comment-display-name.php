@@ -253,10 +253,10 @@ final class Comment_Display_Name {
 		if ( self::requires_full_name( (int) \get_the_ID() ) ) {
 			$full_name = self::get_full_name( \wp_get_current_user() );
 			if ( self::needs_name_fields() ) {
-				$notice = '' !== $full_name ? '<p class="comment-notes comment-form-published-name">' . esc_html__( 'Your comments now show your first and last name. Please confirm them.', 'newspack-plugin' ) . '</p>' : '';
+				$notice = '<p class="comment-notes comment-form-published-name">' . esc_html__( 'New comments show the first and last name below. Check both before posting.', 'newspack-plugin' ) . '</p>';
 				return $notice . self::render_required_name_fields() . $submit_field;
 			}
-			// The name on the comment is not the one the account shows, so the reader sees it before posting.
+			// The name on the comment can differ from the one the account shows, so the reader sees it before posting.
 			/* translators: %s: reader's first and last name. */
 			$notice = sprintf( __( 'Your comment will show as %s.', 'newspack-plugin' ), $full_name );
 			return '<p class="comment-notes comment-form-published-name">' . esc_html( $notice ) . '</p>' . $submit_field;
@@ -314,7 +314,7 @@ final class Comment_Display_Name {
 	 * @param \WP_REST_Request $request          Request.
 	 * @return array|\WP_Error
 	 */
-	public static function refuse_rest_comment( $prepared_comment, $request ) {
+	public static function refuse_rest_comment( array|\WP_Error $prepared_comment, \WP_REST_Request $request ): array|\WP_Error {
 		// The same filter runs when a comment is updated; only creation needs the name.
 		if ( \is_wp_error( $prepared_comment ) || ! empty( $request['id'] ) || 'note' === $request['type'] ) {
 			return $prepared_comment;
@@ -341,7 +341,7 @@ final class Comment_Display_Name {
 	 * @param \WP_REST_Request $request          Request.
 	 * @return array|\WP_Error
 	 */
-	public static function use_full_name_on_rest_comment( $prepared_comment, $request ) {
+	public static function use_full_name_on_rest_comment( array|\WP_Error $prepared_comment, \WP_REST_Request $request ): array|\WP_Error {
 		if ( \is_wp_error( $prepared_comment ) || 'note' === $request['type'] || ! self::requires_full_name( (int) ( $prepared_comment['comment_post_ID'] ?? 0 ) ) ) {
 			return $prepared_comment;
 		}
