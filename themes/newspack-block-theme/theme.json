@@ -266,7 +266,8 @@
 		"useRootPaddingAwareAlignments": true,
 		"custom": {
 			"button": {
-				"mix": "var(--wp--preset--color--base)"
+				"mix": "var(--wp--preset--color--base)",
+				"outline": "var(--wp--preset--color--accent)"
 			},
 			"state": {
 				"hover": "85%",
@@ -436,7 +437,7 @@
 						},
 						"color": {
 							"background": "var(--wp--preset--color--base)",
-							"text": "var(--wp--preset--color--accent)"
+							"text": "var(--wp--custom--button--outline)"
 						},
 						"spacing": {
 							"padding": {

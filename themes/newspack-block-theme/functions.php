@@ -26,6 +26,7 @@ require_once NEWSPACK_BLOCK_THEME_FILE_PATH . '/includes/class-focus-color.php';
 require_once NEWSPACK_BLOCK_THEME_FILE_PATH . '/includes/class-button-states.php';
 require_once NEWSPACK_BLOCK_THEME_FILE_PATH . '/includes/class-status-colors.php';
 require_once NEWSPACK_BLOCK_THEME_FILE_PATH . '/includes/class-button-hover-guard.php';
+require_once NEWSPACK_BLOCK_THEME_FILE_PATH . '/includes/class-outline-button-guard.php';
 require_once NEWSPACK_BLOCK_THEME_FILE_PATH . '/includes/blocks/index.php';
 require_once NEWSPACK_BLOCK_THEME_FILE_PATH . '/includes/class-patterns.php';
 require_once NEWSPACK_BLOCK_THEME_FILE_PATH . '/includes/class-jetpack.php';
