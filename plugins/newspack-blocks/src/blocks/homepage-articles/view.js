@@ -71,6 +71,34 @@ function buildLoadMoreHandler( blockWrapperEl ) {
 	};
 
 	/**
+	 * Removes the entering state once the fade finishes, or at once when no fade runs.
+	 *
+	 * @param {Element} articleEl Article element.
+	 */
+	function settleEntering( articleEl ) {
+		const clear = () => {
+			articleEl.classList.remove( 'is-entering' );
+			articleEl.style.removeProperty( '--wpnbha-enter-index' );
+			articleEl.removeEventListener( 'transitionend', handleEnd );
+			articleEl.removeEventListener( 'transitioncancel', handleEnd );
+		};
+		const handleEnd = event => {
+			if ( event.target === articleEl && 'opacity' === event.propertyName ) {
+				clear();
+			}
+		};
+		articleEl.addEventListener( 'transitionend', handleEnd );
+		articleEl.addEventListener( 'transitioncancel', handleEnd );
+		requestAnimationFrame( () =>
+			requestAnimationFrame( () => {
+				if ( ! articleEl.getAnimations().length && articleEl.classList.contains( 'is-entering' ) ) {
+					clear();
+				}
+			} )
+		);
+	}
+
+	/**
 	 * @param {Object} data Post data
 	 */
 	function onSuccess( data ) {
@@ -81,8 +109,17 @@ function buildLoadMoreHandler( blockWrapperEl ) {
 
 		if ( data.items.length ) {
 			// Render posts' HTML from string.
-			const postsHTML = data.items.map( item => item.html ).join( '' );
-			postsContainerEl.insertAdjacentHTML( 'beforeend', postsHTML );
+			const template = document.createElement( 'template' );
+			template.innerHTML = data.items.map( item => item.html ).join( '' );
+			// Mark new posts before they enter the DOM, so @starting-style applies to their first style.
+			Array.from( template.content.children )
+				.filter( el => el.matches( 'article' ) )
+				.forEach( ( articleEl, index ) => {
+					articleEl.classList.add( 'is-entering' );
+					articleEl.style.setProperty( '--wpnbha-enter-index', String( Math.min( index, 5 ) ) );
+					settleEntering( articleEl );
+				} );
+			postsContainerEl.append( template.content );
 		}
 
 		if ( data.next ) {

@@ -123,23 +123,7 @@ final class Republication_Tracker_Tool_Republish_Button_Block {
 			return '';
 		}
 
-		if ( ! Republication_Tracker_Tool::is_post_republishable( $post ) ) {
-			return '';
-		}
-
-		// Guard: check allowed post types.
-		$allowed_post_types = (array) apply_filters( 'republication_tracker_tool_post_types', [ 'post' ] );
-		if ( ! in_array( get_post_type( $post ), $allowed_post_types, true ) ) {
-			return '';
-		}
-
-		// Guard: check if widget is hidden for this post (same filter as the widget).
-		$hide = apply_filters(
-			'hide_republication_widget',
-			get_post_meta( $post->ID, 'republication-tracker-tool-hide-widget', true ),
-			$post
-		);
-		if ( true == $hide ) { // phpcs:ignore Universal.Operators.StrictComparisons.LooseEqual
+		if ( ! Republication_Tracker_Tool::can_offer_republish( $post ) ) {
 			return '';
 		}
 
@@ -183,15 +167,10 @@ final class Republication_Tracker_Tool_Republish_Button_Block {
 		if ( ! Republication_Tracker_Tool::$modal_rendered ) {
 			Republication_Tracker_Tool::$modal_rendered = true;
 
-			$is_amp             = false; // Used by shareable-content.php; block themes do not support AMP.
-			$modal_content_path = REPUBLICATION_TRACKER_TOOL_PATH . 'includes/shareable-content.php';
+			$is_amp = false; // Used by shareable-content.php; block themes do not support AMP.
 
 			ob_start();
-			?>
-			<div id="republication-tracker-tool-modal" style="display:none;" data-postid="<?php echo esc_attr( $post->ID ); ?>" data-pluginsdir="<?php echo esc_attr( plugins_url() ); ?>" role="dialog" aria-modal="true" aria-labelledby="republish-modal-label">
-				<?php include $modal_content_path; ?>
-			</div>
-			<?php
+			include REPUBLICATION_TRACKER_TOOL_PATH . 'includes/shareable-content.php';
 			$html .= ob_get_clean();
 		}
 
@@ -225,14 +204,8 @@ final class Republication_Tracker_Tool_Republish_Button_Block {
 	/**
 	 * Enqueue modal-specific assets.
 	 */
-	private static function enqueue_modal_assets(): void {
-		// Modal styles (same handle as widget for deduplication).
-		wp_enqueue_style(
-			'republication-tracker-tool-css',
-			REPUBLICATION_TRACKER_TOOL_URL . 'assets/widget.css',
-			[],
-			filemtime( REPUBLICATION_TRACKER_TOOL_PATH . 'assets/widget.css' )
-		);
+	public static function enqueue_modal_assets(): void {
+		Republication_Tracker_Tool::enqueue_modal_style();
 
 		// Clipboard utilities (shared with widget).
 		wp_enqueue_script(
@@ -258,7 +231,7 @@ final class Republication_Tracker_Tool_Republish_Button_Block {
 		wp_enqueue_script(
 			'republication-tracker-tool-republish-button-view',
 			REPUBLICATION_TRACKER_TOOL_URL . 'dist/republish-button-view.js',
-			array_merge( $asset['dependencies'], [ 'republication-tracker-tool-clipboard-utils' ] ),
+			array_merge( $asset['dependencies'], [ 'republication-tracker-tool-clipboard-utils' ], Republication_Tracker_Tool::use_newspack_ui() ? [ 'newspack-ui' ] : [] ),
 			$asset['version'],
 			[
 				'in_footer' => true,

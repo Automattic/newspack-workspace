@@ -44,6 +44,7 @@ class ModelTest extends WP_UnitTestCase {
 				'overlay_opacity'                => '30',
 				'overlay_size'                   => 'medium',
 				'no_overlay_background'          => false,
+				'manual_only'                    => false,
 				'placement'                      => 'inline',
 				'trigger_type'                   => 'scroll',
 				'trigger_delay'                  => '3',
@@ -153,6 +154,27 @@ class ModelTest extends WP_UnitTestCase {
 			'The position marker is set at position passed in options.'
 		);
 
+		Newspack_Popups_Model::set_block_theme_override( false );
+		try {
+			foreach ( [ 'inline', 'center' ] as $placement ) {
+				$popup_object_classic = Newspack_Popups_Model::create_popup_object(
+					get_post( self::$popup_id ),
+					false,
+					[
+						'placement'    => $placement,
+						'trigger_type' => 'time',
+					]
+				);
+				self::assertStringNotContainsString(
+					'newspack-popup--block-theme',
+					Newspack_Popups_Model::generate_popup( $popup_object_classic ),
+					'Classic theme prompts do not get the block theme class.'
+				);
+			}
+		} finally {
+			Newspack_Popups_Model::set_block_theme_override( null );
+		}
+
 		Newspack_Popups_Model::set_block_theme_override( true );
 		try {
 			$popup_object_inline_block_theme = Newspack_Popups_Model::create_popup_object(
@@ -178,6 +200,11 @@ class ModelTest extends WP_UnitTestCase {
 				$inline_container->getAttribute( 'class' ),
 				'Inline popups receive block theme layout class.'
 			);
+			self::assertStringContainsString(
+				'newspack-popup--block-theme',
+				$inline_container->getAttribute( 'class' ),
+				'Inline popups receive the block theme class.'
+			);
 
 			$popup_object_overlay_block_theme = Newspack_Popups_Model::create_popup_object(
 				get_post( self::$popup_id ),
@@ -202,9 +229,82 @@ class ModelTest extends WP_UnitTestCase {
 				$content->getAttribute( 'class' ),
 				'Overlay popup content receives block theme layout class.'
 			);
+
+			$lightbox = $xpath->query( '//*[contains(concat(" ", normalize-space(@class), " "), " newspack-lightbox ")]' )->item( 0 );
+			self::assertStringContainsString(
+				'newspack-popup--block-theme',
+				$lightbox->getAttribute( 'class' ),
+				'Overlay popups receive the block theme class.'
+			);
 		} finally {
 			Newspack_Popups_Model::set_block_theme_override( null );
 		}
+	}
+
+	/**
+	 * Placements covering the inline and overlay templates.
+	 */
+	public function container_placement_provider() {
+		return [
+			'inline'  => [ 'inline', 'newspack-inline-popup' ],
+			'overlay' => [ 'center', 'newspack-lightbox' ],
+		];
+	}
+
+	/**
+	 * The prompt container is not a keyboard stop of its own, so keyboard and
+	 * screen reader users land on the prompt's content instead of a blank button.
+	 *
+	 * @dataProvider container_placement_provider
+	 *
+	 * @param string $placement       Prompt placement.
+	 * @param string $container_class Class that identifies the container.
+	 */
+	public function test_container_is_not_focusable( $placement, $container_class ) {
+		$popup_object = Newspack_Popups_Model::create_popup_object(
+			get_post( self::$popup_id ),
+			false,
+			[
+				'placement'    => $placement,
+				'trigger_type' => 'time',
+			]
+		);
+
+		$dom = new DomDocument();
+		@$dom->loadHTML( Newspack_Popups_Model::generate_popup( $popup_object ) ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		$xpath = new DOMXpath( $dom );
+
+		$container = $xpath->query( '//*[contains(concat(" ", normalize-space(@class), " "), " ' . $container_class . ' ")]' )->item( 0 );
+		self::assertNotNull( $container, 'The prompt container is present.' );
+		self::assertNotSame( 'button', $container->getAttribute( 'role' ), 'The prompt container is not announced as a button.' );
+		self::assertFalse( $container->hasAttribute( 'tabindex' ), 'The prompt container is not in the tab order.' );
+	}
+
+	/**
+	 * The tappable overlay backdrop is a pointer target only. Keyboard and
+	 * screen reader users dismiss the overlay with its labeled close button.
+	 */
+	public function test_overlay_backdrop_is_hidden_from_keyboard() {
+		update_option( 'newspack_popups_dismiss_overlays_on_tap', true );
+		$popup_object = Newspack_Popups_Model::create_popup_object(
+			get_post( self::$popup_id ),
+			false,
+			[
+				'placement'    => 'center',
+				'trigger_type' => 'time',
+			]
+		);
+		$markup = Newspack_Popups_Model::generate_popup( $popup_object );
+		delete_option( 'newspack_popups_dismiss_overlays_on_tap' );
+
+		$dom = new DomDocument();
+		@$dom->loadHTML( $markup ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		$xpath = new DOMXpath( $dom );
+
+		$backdrop = $xpath->query( '//button[contains(concat(" ", normalize-space(@class), " "), " newspack-lightbox-overlay ")]' )->item( 0 );
+		self::assertNotNull( $backdrop, 'The tappable backdrop is present.' );
+		self::assertSame( '-1', $backdrop->getAttribute( 'tabindex' ), 'The backdrop is not in the tab order.' );
+		self::assertSame( 'true', $backdrop->getAttribute( 'aria-hidden' ), 'The backdrop is hidden from screen readers.' );
 	}
 
 	/**
@@ -530,5 +630,124 @@ class ModelTest extends WP_UnitTestCase {
 		$setting = Newspack_Popups_Settings::get_setting( 'newspack_popups_mc_donor_merge_field' );
 
 		self::assertSame( $setting, 'DONAT' );
+	}
+
+	/**
+	 * Close button icon colors, as [ fill, prompt background, expected icon ].
+	 */
+	public function close_button_icon_color_data() {
+		return [
+			'transparent fill on white prompt' => [ '#00000000', '#FFFFFF', '#000' ],
+			'transparent fill on black prompt' => [ '#00000000', '#000000', '#fff' ],
+			'half-transparent red on white'    => [ '#ff000080', '#FFFFFF', '#000' ],
+			'opaque black'                     => [ '#000000', '#FFFFFF', '#fff' ],
+			'mid grey'                         => [ '#808080', '#FFFFFF', '#fff' ],
+			'dark blue'                        => [ '#2271b1', '#FFFFFF', '#fff' ],
+			'invalid fill'                     => [ 'red', '#000000', '#fff' ],
+			'orange: white reads better'       => [ '#e65100', '#FFFFFF', '#fff' ],
+			'blue'                             => [ '#3366cc', '#FFFFFF', '#fff' ],
+			'red: white despite a lower ratio' => [ '#dd3333', '#FFFFFF', '#fff' ],
+		];
+	}
+
+	/**
+	 * Prompt text colors, as [ background, expected text ].
+	 */
+	public function foreground_color_for_background_data() {
+		return [
+			'black'      => [ '#000000', '#fff' ],
+			'white'      => [ '#ffffff', '#000' ],
+			'light grey' => [ '#f0f0f0', '#000' ],
+			'yellow'     => [ '#ffcc00', '#000' ],
+			'green'      => [ '#178f15', '#fff' ],
+			'blue'       => [ '#3366cc', '#fff' ],
+			'red'        => [ '#dd3333', '#fff' ],
+			'orange'     => [ '#e65100', '#fff' ],
+			'shorthand'  => [ '#fff', '#000' ],
+			'uppercase'  => [ '#E65100', '#fff' ],
+			'invalid'    => [ 'nonsense', '#000' ],
+			'four digit' => [ '#0008', '#000' ],
+			'with alpha' => [ '#3366ccff', '#fff' ],
+			'no hash'    => [ '3366cc', '#fff' ],
+		];
+	}
+
+	/**
+	 * Tests the prompt text color is whichever of black or white reads better by APCA.
+	 *
+	 * @dataProvider foreground_color_for_background_data
+	 *
+	 * @param string $background Prompt background.
+	 * @param string $expected   Expected text color.
+	 */
+	public function test_foreground_color_for_background( $background, $expected ) {
+		self::assertSame( $expected, Newspack_Popups_Model::foreground_color_for_background( $background ) );
+	}
+
+	/**
+	 * Tests that the close button icon contrasts with its fill as painted over the prompt.
+	 *
+	 * @dataProvider close_button_icon_color_data
+	 *
+	 * @param string $fill       Close button fill.
+	 * @param string $background Prompt background.
+	 * @param string $expected   Expected icon color.
+	 */
+	public function test_close_button_icon_color( $fill, $background, $expected ) {
+		self::assertSame( $expected, Newspack_Popups_Model::close_button_icon_color( $fill, $background ) );
+	}
+
+	/**
+	 * Close button fills, as [ fill, prompt background, hover, press ].
+	 */
+	public function close_button_state_colors_data() {
+		return [
+			'black lifts to the floor'         => [ '#000000', '#FFFFFF', '#222222', '#484848' ],
+			'theme contrast, like newspack-ui' => [ '#1E1E1E', '#FFFFFF', '#3a3a3a', '#4f4f4f' ],
+			'dark blue darkens'                => [ '#003DA5', '#FFFFFF', '#002f84', '#00266f' ],
+			'cleared fill on a dark prompt'    => [ '#00000000', '#000000', 'color-mix(in oklab, currentcolor 25%, var(--newspack-lightbox-close-bg))', 'color-mix(in oklab, currentcolor 40%, var(--newspack-lightbox-close-bg))' ],
+			'white darkens'                    => [ '#FFFFFF', '#FFFFFF', '#cecece', '#aeaeae' ],
+		];
+	}
+
+	/**
+	 * Tests that a near-black fill lightens like newspack-ui's dark button, any other fill darkens like a button, and a translucent near-black fill lifts toward the icon without turning opaque.
+	 *
+	 * @dataProvider close_button_state_colors_data
+	 *
+	 * @param string $fill       Close button fill.
+	 * @param string $background Prompt background.
+	 * @param string $hover      Expected hover fill.
+	 * @param string $pressed    Expected press fill.
+	 */
+	public function test_close_button_state_colors( $fill, $background, $hover, $pressed ) {
+		self::assertSame(
+			[
+				'hover'   => $hover,
+				'pressed' => $pressed,
+			],
+			Newspack_Popups_Model::close_button_state_colors( $fill, $background )
+		);
+	}
+
+	/**
+	 * An invalid fill, or a translucent one that is not near-black, gets no state colors, so the stylesheet's own mix applies.
+	 */
+	public function test_invalid_or_translucent_close_button_fill_has_no_state_colors() {
+		self::assertNull( Newspack_Popups_Model::close_button_state_colors( 'red', '#FFFFFF' ) );
+		self::assertNull( Newspack_Popups_Model::close_button_state_colors( '#00000080', '#FFFFFF' ) );
+		self::assertNull( Newspack_Popups_Model::close_button_state_colors( '#00000000', '#FFFFFF' ) );
+	}
+
+	/**
+	 * Neutral near-black fills lighten on hover, while dark accents such as navy darken, as the APCA cut-off decides.
+	 */
+	public function test_close_button_lightens_neutral_near_black_and_darkens_dark_accents() {
+		$below = Newspack_Popups_Model::close_button_state_colors( '#262626', '#FFFFFF' );
+		$above = Newspack_Popups_Model::close_button_state_colors( '#282828', '#FFFFFF' );
+		$navy  = Newspack_Popups_Model::close_button_state_colors( '#000080', '#FFFFFF' );
+		self::assertGreaterThan( 0x26, hexdec( substr( $below['hover'], 1, 2 ) ) );
+		self::assertLessThan( 0x28, hexdec( substr( $above['hover'], 1, 2 ) ) );
+		self::assertLessThan( 0x80, hexdec( substr( $navy['hover'], 5, 2 ) ) );
 	}
 }

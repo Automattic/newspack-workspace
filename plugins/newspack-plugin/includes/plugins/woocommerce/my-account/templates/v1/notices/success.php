@@ -14,13 +14,4 @@ defined( 'ABSPATH' ) || exit;
 if ( ! $notices ) {
 	return;
 }
-foreach ( $notices as $notice ) {
-	Newspack_UI::add_notice(
-		$notice['notice'],
-		[
-			'id'             => uniqid( 'newspack-myaccount-success-' ),
-			'autohide'       => ! apply_filters( 'newspack_ui_notice_is_urgent', false, $notice['notice'] ),
-			'active_on_load' => true,
-		]
-	);
-}
+My_Account_UI_V1::add_snackbar_notices( $notices, 'success' );

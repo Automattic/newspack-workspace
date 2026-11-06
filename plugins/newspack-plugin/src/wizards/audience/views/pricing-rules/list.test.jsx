@@ -24,8 +24,8 @@ jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
 jest.mock( '../../../../../packages/components/src/wizard/store', () => ( { WIZARD_STORE_NAMESPACE: 'test/pricing-rules-list' } ) );
 
-// Exposes a filter-to-nothing trigger and the trash action's confirm step, neither
-// of which the real DataViews makes reachable from a test.
+// Exposes filter triggers, the rows left after filtering, and the trash action's
+// confirm step, none of which the real DataViews makes reachable from a test.
 jest.mock( '../../../../../packages/components/src', () => {
 	const history = { push: jest.fn() };
 	return {
@@ -34,6 +34,17 @@ jest.mock( '../../../../../packages/components/src', () => {
 			return (
 				<>
 					<button onClick={ () => onChangeView( { ...view, search: 'no-such-rule' } ) }>filter to nothing</button>
+					<button
+						onClick={ () => onChangeView( { ...view, filters: [ { field: 'reader_segments', operator: 'isAny', value: [ '7' ] } ] } ) }
+					>
+						filter to segment 7
+					</button>
+					<button
+						onClick={ () => onChangeView( { ...view, filters: [ { field: 'reader_segments', operator: 'isAny', value: [ 'any' ] } ] } ) }
+					>
+						filter to any reader
+					</button>
+					<span data-testid="rule-titles">{ data.map( item => item.title ).join( ', ' ) }</span>
 					{ trash && data.length > 0 && <trash.RenderModal items={ [ data[ 0 ] ] } closeModal={ () => {} } /> }
 				</>
 			);
@@ -303,6 +314,23 @@ describe( 'the Pricing Rules list', () => {
 
 		expect( screen.queryByTestId( 'onboarding' ) ).not.toBeInTheDocument();
 		expect( publishedSection().count ).toBe( 0 );
+	} );
+
+	it.each( [
+		[ 'filter to segment 7', 'Rule 1' ],
+		[ 'filter to any reader', 'Rule 2' ],
+	] )( 'narrows the rules by reader segment: %s', async ( trigger, expected ) => {
+		serve( { rules: [ { ...rule( 1 ), conditions: { reader_segment: [ 7 ] } }, rule( 2 ) ] } );
+		await act( async () => {
+			render( <PricingRulesList /> );
+		} );
+
+		await act( async () => {
+			fireEvent.click( screen.getByRole( 'button', { name: trigger } ) );
+		} );
+
+		expect( publishedSection().count ).toBe( 1 );
+		expect( screen.getByTestId( 'rule-titles' ) ).toHaveTextContent( expected );
 	} );
 
 	it( 'keeps the table rather than the empty state when the read fails', async () => {

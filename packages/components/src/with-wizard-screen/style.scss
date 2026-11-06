@@ -39,7 +39,7 @@
 	}
 
 	// Links
-	a {
+	a:where(:not(.components-button)) {
 		color: var(--wp-admin-theme-color);
 
 		&:active,

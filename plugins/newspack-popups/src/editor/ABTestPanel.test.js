@@ -15,7 +15,7 @@ import apiFetch from '@wordpress/api-fetch';
 jest.mock( '@wordpress/data', () => ( { useSelect: jest.fn() } ) );
 jest.mock( '@wordpress/compose', () => ( { useDebounce: fn => fn } ) );
 jest.mock( '@wordpress/api-fetch' );
-// Provided by WordPress at runtime, not installed here.
+// Stubbed so the tests read the panel's logic, not its layout.
 jest.mock( '@wordpress/ui', () => ( { Stack: ( { children } ) => <div>{ children }</div> } ), { virtual: true } );
 
 jest.mock( '@wordpress/components', () => ( {
@@ -101,7 +101,7 @@ afterEach( () => {
 } );
 
 describe( 'ABTestPanel', () => {
-	it( 'shows only the Test ID field until one is set', () => {
+	it( 'shows only the test name field until one is set', () => {
 		renderPanel();
 
 		expect( screen.getByLabelText( 'Test name' ) ).toBeTruthy();
@@ -124,7 +124,7 @@ describe( 'ABTestPanel', () => {
 		expect( field().value ).toBe( 'spring' );
 	} );
 
-	it( 'slugs a typed Test ID and makes the prompt the control', () => {
+	it( 'slugs a typed test name and makes the prompt the control', () => {
 		renderPanel();
 
 		fireEvent.change( screen.getByLabelText( 'Test name' ), { target: { value: 'Spring Drive' } } );
@@ -135,7 +135,7 @@ describe( 'ABTestPanel', () => {
 		} );
 	} );
 
-	it( 'clearing the Test ID resets the variant and the goal too', () => {
+	it( 'clearing the test name resets the version and the goal too', () => {
 		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'b', newspack_popups_ab_test_goal: 'donation' } );
 
 		fireEvent.change( screen.getByLabelText( 'Test name' ), { target: { value: '' } } );
@@ -157,7 +157,7 @@ describe( 'ABTestPanel', () => {
 		expect( screen.queryByLabelText( 'Readers who see A' ) ).toBeNull();
 	} );
 
-	it( 'shows a stored variant the editor does not offer, and leaves it alone', () => {
+	it( 'shows a stored version the editor does not offer, and leaves it alone', () => {
 		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'c' } );
 
 		const option = screen.getByRole( 'option', { name: 'Unsupported version (C)' } );
@@ -166,7 +166,7 @@ describe( 'ABTestPanel', () => {
 		expect( onMetaFieldChange ).not.toHaveBeenCalled();
 	} );
 
-	it( 'blocks a test on an ineligible placement, and escalates once a Test ID is set', () => {
+	it( 'blocks a test on an ineligible placement, and escalates once a test name is set', () => {
 		const { unmount } = renderPanel( { placement: 'manual' } );
 		expect( screen.getByRole( 'note' ).textContent ).toBe( INELIGIBLE );
 		expect( screen.getByRole( 'note' ).dataset.status ).toBe( 'warning' );
@@ -179,7 +179,16 @@ describe( 'ABTestPanel', () => {
 		const note = screen.getAllByRole( 'note' )[ 0 ];
 		expect( note.dataset.status ).toBe( 'error' );
 		expect( note.textContent ).toContain( 'Clear the test name or choose another placement to save.' );
+		// An error asks the author to act, so it is the one notice the panel speaks.
+		expect( note.dataset.spoken ).toBe( note.textContent );
 		expect( screen.getByLabelText( 'Test name' ).disabled ).toBe( false );
+	} );
+
+	it( 'treats an overlay set to Manual only as ineligible, and says which setting to change', () => {
+		renderPanel( { placement: 'center', isOverlay: true, manual_only: true, newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'a' } );
+		const note = screen.getAllByRole( 'note' )[ 0 ];
+		expect( note.dataset.status ).toBe( 'error' );
+		expect( note.textContent ).toContain( 'Clear the test name or turn off Manual only to save.' );
 	} );
 
 	it( 'renders read-only for a user the site excludes from managing tests', () => {
@@ -232,6 +241,17 @@ describe( 'ABTestPanel', () => {
 		expect( screen.queryByLabelText( 'Goal' ) ).toBeNull();
 		expect( screen.queryByLabelText( 'Readers who see A' ) ).toBeNull();
 		expect( screen.getByText( MISSING_BLOCK_FROM_CONTROL ) ).toBeTruthy();
+	} );
+
+	it( 'reads the summary from the published control when a drafted old A is still in the test', async () => {
+		apiFetch.mockResolvedValue( [
+			{ id: 11, variant: 'a', title: 'Old A', goal: 'donation', control_share: 70, status: 'draft', status_label: 'Draft', edit_link: null },
+			{ id: 12, variant: 'a', title: 'New A', goal: '', control_share: 60, status: 'publish', status_label: 'Published', edit_link: null },
+		] );
+
+		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'b' } );
+
+		expect( await screen.findByText( 'No goal set on version A. 60% see A, 40% see B.' ) ).toBeTruthy();
 	} );
 
 	it( 'holds the challenger Goal row until the lookup for the current test name resolves', async () => {
@@ -288,7 +308,7 @@ describe( 'ABTestPanel', () => {
 		expect( screen.getByLabelText( 'Goal' ) ).toBeTruthy();
 	} );
 
-	it( 'does not show a stored test with no variant as the control', async () => {
+	it( 'does not show a stored test with no version as the control', async () => {
 		apiFetch.mockResolvedValue( [
 			{ id: 1, variant: '', title: 'Other', status: 'draft', status_label: 'Draft', edit_link: 'http://example.test/post.php?post=1' },
 		] );
@@ -302,7 +322,7 @@ describe( 'ABTestPanel', () => {
 		expect( onMetaFieldChange ).not.toHaveBeenCalled();
 	} );
 
-	it( 'lists the other prompts in the test and warns about a duplicate variant', async () => {
+	it( 'lists the other prompts in the test and warns about a duplicate version', async () => {
 		apiFetch.mockResolvedValue( [
 			{ id: 1, variant: 'a', title: 'Control', status: 'publish', status_label: 'Published', edit_link: 'http://example.test/post.php?post=1' },
 			{ id: 2, variant: 'a', title: 'Me', status: 'draft', status_label: 'Draft', edit_link: 'http://example.test/post.php?post=2' },
@@ -316,9 +336,14 @@ describe( 'ABTestPanel', () => {
 		expect( screen.queryByText( 'Me' ) ).toBeNull();
 		expect( screen.getByRole( 'list', { name: 'Other versions in this test' } ) ).toBeTruthy();
 		expect(
-			screen.getByText( 'Another prompt in this test is already version A. Clear the test name on one of them, or unpublish it.' )
+			screen.getByText(
+				'Another prompt in this test is already version A. Clear the test name on one of them, or give one a different version.'
+			)
 		).toBeTruthy();
 		expect( screen.getByText( /already version A/ ).dataset.status ).toBe( 'error' );
+		expect( screen.getByText( /already version A/ ).dataset.spoken ).toBe(
+			'Another prompt in this test is already version A. Clear the test name on one of them, or give one a different version.'
+		);
 		expect( apiFetch ).toHaveBeenCalledWith( { path: '/newspack-popups/v1/ab-tests/x' } );
 	} );
 } );

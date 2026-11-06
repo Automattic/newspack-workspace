@@ -7,7 +7,7 @@
  */
 import { __, sprintf } from '@wordpress/i18n';
 import { useState, useEffect, useCallback, useMemo, Fragment } from '@wordpress/element';
-import { DataViews as WPDataViews, filterSortAndPaginate } from '@wordpress/dataviews';
+import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
 import { Notice } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
@@ -399,39 +399,6 @@ const Emails = () => {
 
 	const { data: processedData, paginationInfo } = useMemo( () => filterSortAndPaginate( data, view, fields ), [ data, view, fields ] );
 
-	// The `preview` media field belongs to the grid view (each card
-	// renders the iframe as its top tile). DataViews v14 also renders
-	// the media field as a leading thumbnail in table view, where the
-	// EmailPreview iframe is too constrained to actually show
-	// content — leaving an empty rounded square next to every row.
-	// Strip `mediaField` from the view passed to DataViews when
-	// the user has switched to table layout; the underlying state
-	// keeps the value so toggling back to grid restores the tile.
-	const effectiveView = useMemo< View >( () => {
-		if ( 'table' === view.type ) {
-			const { mediaField: _stripped, ...rest } = view;
-			return rest as View;
-		}
-		return view;
-	}, [ view ] );
-
-	// Normalize the view DataViews hands back before persisting it.
-	// `effectiveView` strips `mediaField` while in table layout, so
-	// without this a table→grid toggle would store a grid view that
-	// lost its preview tile, leaving grid cards with no media field.
-	// Grid always carries `mediaField: 'preview'`; table never does
-	// (it's stripped in `effectiveView` regardless, but drop it here
-	// too so the persisted state stays canonical). This keeps a
-	// grid→table→grid round-trip lossless.
-	const handleChangeView = useCallback( ( nextView: View ) => {
-		if ( 'grid' === nextView.type ) {
-			setView( { ...nextView, mediaField: 'preview' } );
-			return;
-		}
-		const { mediaField: _stripped, ...rest } = nextView;
-		setView( rest as View );
-	}, [] );
-
 	if ( false === pluginsReady ) {
 		return (
 			<Fragment>
@@ -472,27 +439,15 @@ const Emails = () => {
 				className="newspack-emails"
 				data={ processedData }
 				fields={ fields }
-				view={ effectiveView }
-				onChangeView={ handleChangeView }
+				view={ view }
+				onChangeView={ setView }
 				actions={ actions }
 				paginationInfo={ paginationInfo }
-				defaultLayouts={ { table: {}, grid: {} } }
+				defaultLayouts={ { grid: {} } }
 				isLoading={ isFetching }
 				getItemId={ ( item: EmailItem ) => String( item.post_id ) }
-			>
-				<Stack direction="row" justify="space-between" align="flex-start" gap="sm" className="dataviews__view-actions">
-					<Stack direction="row" align="center" gap="xl" wrap="wrap" className="dataviews__search">
-						<WPDataViews.Search />
-						<WPDataViews.Filters />
-					</Stack>
-					<Stack direction="row" align="center" gap="xs">
-						<WPDataViews.LayoutSwitcher />
-						<WPDataViews.ViewConfig />
-					</Stack>
-				</Stack>
-				<WPDataViews.Layout />
-				<WPDataViews.Footer />
-			</DataViews>
+				inlineFilters
+			/>
 		</Fragment>
 	);
 };

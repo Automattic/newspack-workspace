@@ -42,10 +42,10 @@
 
 .newspack-subscribers__email,
 .newspack-subscribers__muted {
-	color: wp-colors.$gray-700;
+	color: var(--wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700});
 	font-size: wp-vars.$helptext-font-size;
 	line-height: wp-vars.$default-line-height;
-	font-weight: normal;
+	font-weight: wp-vars.$font-weight-regular;
 }
 
 // Center the loading spinner in the content area while data resolves.

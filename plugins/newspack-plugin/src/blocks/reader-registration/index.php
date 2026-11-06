@@ -203,6 +203,7 @@ function render_block( $attrs, $content ) {
 	$default_attrs = [
 		'label'           => __( 'Continue', 'newspack-plugin' ),
 		'newsletterLabel' => __( 'Subscribe to our newsletter', 'newspack-plugin' ),
+		'placeholder'     => __( 'Your email address', 'newspack-plugin' ),
 	];
 	$attrs         = \wp_parse_args( $attrs, $default_attrs );
 	foreach ( $default_attrs as $key => $value ) {
@@ -325,20 +326,19 @@ function render_block( $attrs, $content ) {
 					?>
 					<div class="newspack-registration__main">
 						<div>
-							<?php if ( empty( $attrs['hideOauth'] ) ) : ?>
-								<?php Reader_Activation::render_third_party_auth(); ?>
-							<?php endif; ?>
 							<div class="newspack-registration__inputs">
-								<input
-								<?php
-								if ( $is_admin_preview ) :
-									?>
-									disabled
-									<?php endif; ?>
-									type="email" name="npe" autocomplete="email"
-									placeholder="<?php echo \esc_attr( $attrs['placeholder'] ); ?>"
-								/>
-								<?php Reader_Activation::render_honeypot_field( $attrs['placeholder'] ); ?>
+								<div class="newspack-registration__email">
+									<input
+									<?php
+									if ( $is_admin_preview ) :
+										?>
+										disabled
+										<?php endif; ?>
+										type="email" name="npe" autocomplete="email"
+										placeholder="<?php echo \esc_attr( $attrs['placeholder'] ); ?>"
+									/>
+									<?php Reader_Activation::render_honeypot_field( $attrs['placeholder'] ); ?>
+								</div>
 								<button
 								<?php
 								if ( $is_admin_preview ) :
@@ -356,6 +356,9 @@ function render_block( $attrs, $content ) {
 									<p><?php echo \esc_html( $message ); ?></p>
 								<?php endif; ?>
 							</div>
+							<?php if ( empty( $attrs['hideOauth'] ) ) : ?>
+								<?php Reader_Activation::render_third_party_auth( true ); ?>
+							<?php endif; ?>
 						</div>
 					</div>
 				</div>

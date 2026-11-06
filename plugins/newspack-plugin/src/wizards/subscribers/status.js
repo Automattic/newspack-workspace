@@ -28,8 +28,7 @@ export const STATUS_INDICATORS = {
 /** @type {Record< string, import('../../../packages/components/src/types').BadgeIntent >} */
 export const STATUS_BADGE_INTENT = {
 	active: 'stable',
-	// "Pending" is queued work rather than an idle state, hence low, not informational.
-	pending: 'low',
+	pending: 'draft',
 	'on-hold': 'medium',
 	cancelled: 'high',
 };

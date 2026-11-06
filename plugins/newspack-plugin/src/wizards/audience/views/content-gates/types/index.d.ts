@@ -47,7 +47,8 @@ type AccessRule = {
 	value: GateAccessRuleValue;
 };
 
-type GateContentRuleValue = string[];
+type PublishedAgeRuleValue = import( '../../../../../content-gate/utils/published-age' ).PublishedAgeValue;
+type GateContentRuleValue = string[] | PublishedAgeRuleValue;
 type ContentRule = {
 	name: string;
 	default: GateContentRuleValue;
@@ -179,6 +180,8 @@ type ContentGiftingConfig = {
 	expiration_time?: number;
 	expiration_time_unit?: string;
 	style?: string;
+	bg_color?: string;
+	button_color?: string;
 	cta_label?: string;
 	button_label?: string;
 	cta_type?: string;
@@ -191,6 +194,8 @@ type MeteringCountdownConfig = {
 	// and writes should stay int-shaped to keep dirty checks honest.
 	enabled?: boolean | number;
 	style?: string;
+	bg_color?: string;
+	button_color?: string;
 	cta_label?: string;
 	button_label?: string;
 	cta_url?: string;
@@ -209,6 +214,7 @@ type AdvancedSettingsConfig = {
 	comment_restriction_gate_id: number;
 	comment_restriction_message: string;
 	comment_restriction_purchase_url: string;
+	comment_require_full_name: boolean;
 };
 
 type GateSettings = {

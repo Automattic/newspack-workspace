@@ -10,7 +10,11 @@
 
 $registry = WP_Block_Type_Registry::get_instance();
 
-if ( $registry->get_registered( 'jetpack/sharing-buttons' ) ) :
+// Jetpack 16+ registers this block only once it renders on the front end, so the registry check alone misses it.
+$has_sharing_buttons = $registry->get_registered( 'jetpack/sharing-buttons' )
+	|| ( is_callable( [ 'Jetpack_Gutenberg', 'get_extensions' ] ) && in_array( 'sharing-buttons', Jetpack_Gutenberg::get_extensions(), true ) );
+
+if ( $has_sharing_buttons ) :
 	?>
 
 	<!-- wp:jetpack/sharing-buttons {"styleType":"icon","layout":{"type":"flex","justifyContent":"center"}} -->
@@ -18,6 +22,12 @@ if ( $registry->get_registered( 'jetpack/sharing-buttons' ) ) :
 		<!-- wp:jetpack/sharing-button {"service":"facebook","label":"Facebook"} /-->
 		<!-- wp:jetpack/sharing-button {"service":"x","label":"X"} /-->
 		<!-- wp:jetpack/sharing-button {"service":"mail","label":"Mail"} /-->
+		<?php if ( class_exists( 'Republication_Tracker_Tool' ) ) : ?>
+		<!-- wp:jetpack/sharing-button {"service":"republish"} /-->
+		<?php endif; ?>
+		<?php if ( class_exists( '\Newspack\Content_Gifting' ) && \Newspack\Content_Gifting::is_enabled() ) : ?>
+		<!-- wp:jetpack/sharing-button {"service":"newspack-gift-article"} /-->
+		<?php endif; ?>
 	</ul>
 	<!-- /wp:jetpack/sharing-buttons -->
 

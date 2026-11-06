@@ -8,10 +8,11 @@ import { useMemo, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { envelope } from '@wordpress/icons';
 
-import { EmptyState } from 'newspack-components';
+import { EmptyState, evenColumns, withoutColumnStyles } from 'newspack-components';
 import { getAdminUrl, getCptSlug } from '../../admin-globals';
 import LoadingState from '../../components/loading-state';
 import HeaderCount from '../../components/header-count';
+import InlineFiltersLayout from '../../components/inline-filters-layout';
 import ItemsPerPage from '../../components/items-per-page';
 import { EMPTY_STATE_CLASS, getEmptyStateHeading } from '../../constants';
 import { useHeaderActions } from '../../header-actions-context';
@@ -33,7 +34,7 @@ const DEFAULT_VIEW = {
 	search: '',
 	filters: [],
 	titleField: 'title',
-	fields: [ 'status', 'date', 'send_date', 'send_list', 'author', 'public_page' ],
+	fields: [ 'status', 'date', 'send_list', 'author', 'public_page' ],
 };
 
 const DEFAULT_LAYOUTS = { table: {} };
@@ -113,19 +114,21 @@ export default function NewslettersListScreen() {
 					className="newspack-newsletters-list"
 					data={ data }
 					fields={ fields }
-					view={ view }
-					onChangeView={ setView }
+					view={ evenColumns( view ) }
+					onChangeView={ nextView => setView( withoutColumnStyles( nextView ) ) }
 					actions={ actions }
 					paginationInfo={ paginationInfo }
 					defaultLayouts={ DEFAULT_LAYOUTS }
 					isLoading={ isLoading }
 					getItemId={ item => String( item.id ) }
-					search
 					config={ DATAVIEWS_CONFIG }
-					header={
-						<ItemsPerPage value={ view.perPage } onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) } />
-					}
-				/>
+				>
+					<InlineFiltersLayout
+						header={
+							<ItemsPerPage value={ view.perPage } onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) } />
+						}
+					/>
+				</DataViews>
 			</LockedPostsContext.Provider>
 			{ quickEditItem && (
 				<NewslettersQuickEditPanel

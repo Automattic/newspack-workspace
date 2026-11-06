@@ -30,6 +30,8 @@ class Setup_Wizard_Theme_Mods_Test extends WP_UnitTestCase {
 	public function tear_down() {
 		remove_theme_mod( 'custom_logo' );
 		remove_theme_mod( 'header_color_hex' );
+		remove_theme_mod( 'header_text' );
+		remove_theme_mod( 'header_display_tagline' );
 		parent::tear_down();
 	}
 
@@ -79,6 +81,32 @@ class Setup_Wizard_Theme_Mods_Test extends WP_UnitTestCase {
 		$this->assertSame( $logo_id, $logo['id'] );
 		$this->assertSame( 909, $logo['width'] );
 		$this->assertSame( 160, $logo['height'] );
+	}
+
+	/**
+	 * A site that never set the header text shows its title and tagline, as core and the theme do.
+	 */
+	public function test_unset_header_text_is_reported_as_shown() {
+		remove_theme_mod( 'header_text' );
+		remove_theme_mod( 'header_display_tagline' );
+
+		$theme_mods = $this->get_theme_mods();
+
+		$this->assertTrue( $theme_mods['header_text'] );
+		$this->assertTrue( $theme_mods['header_display_tagline'] );
+	}
+
+	/**
+	 * A saved choice to hide the header text is kept.
+	 */
+	public function test_hidden_header_text_is_kept() {
+		set_theme_mod( 'header_text', false );
+		set_theme_mod( 'header_display_tagline', false );
+
+		$theme_mods = $this->get_theme_mods();
+
+		$this->assertFalse( $theme_mods['header_text'] );
+		$this->assertFalse( $theme_mods['header_display_tagline'] );
 	}
 
 	/**

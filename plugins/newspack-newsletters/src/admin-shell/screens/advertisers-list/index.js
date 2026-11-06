@@ -13,9 +13,10 @@ import { useCallback, useMemo, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { store } from '@wordpress/icons';
 
-import { EmptyState } from 'newspack-components';
+import { EmptyState, evenColumns, withoutColumnStyles } from 'newspack-components';
 import LoadingState from '../../components/loading-state';
 import HeaderCount from '../../components/header-count';
+import InlineFiltersLayout from '../../components/inline-filters-layout';
 import ItemsPerPage from '../../components/items-per-page';
 import { EMPTY_STATE_CLASS, getEmptyStateHeading } from '../../constants';
 import { useHeaderActions } from '../../header-actions-context';
@@ -127,19 +128,21 @@ export default function AdvertisersListScreen() {
 					className="newspack-newsletters-list newspack-newsletters-advertisers-list"
 					data={ data }
 					fields={ fields }
-					view={ view }
-					onChangeView={ setView }
+					view={ evenColumns( view ) }
+					onChangeView={ nextView => setView( withoutColumnStyles( nextView ) ) }
 					actions={ actions }
 					paginationInfo={ paginationInfo }
 					defaultLayouts={ DEFAULT_LAYOUTS }
 					isLoading={ isLoading }
 					getItemId={ item => String( item.id ) }
-					search
 					config={ DATAVIEWS_CONFIG }
-					header={
-						<ItemsPerPage value={ view.perPage } onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) } />
-					}
-				/>
+				>
+					<InlineFiltersLayout
+						header={
+							<ItemsPerPage value={ view.perPage } onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) } />
+						}
+					/>
+				</DataViews>
 			) }
 
 			{ modalState && (

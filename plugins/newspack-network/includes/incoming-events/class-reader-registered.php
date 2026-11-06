@@ -50,11 +50,18 @@ class Reader_Registered extends Abstract_Incoming_Event {
 
 		User_Update_Watcher::$enabled = false;
 
-		// If a user exists, but has a non-synchronizable role, add a synchronizable role.
+		// If a user exists with no role of its own, add a synchronizable role.
+		// An account that already holds any role is left exactly as it is: this
+		// event is the only signal that the two emails match, and that alone
+		// isn't enough to change what the account can already do here. This is
+		// narrower than Users::is_syncable_account() on purpose—a roleless
+		// account is the only case that needs a role *added*; one that already
+		// holds a synced role needs no action, so reusing that check here would
+		// just re-run add_role() on every such account on every event.
 		$existing_user = get_user_by( 'email', $email );
 		if ( $existing_user ) {
 			$synced_roles = \Newspack_Network\Utils\Users::get_synced_user_roles();
-			if ( ! array_intersect( $existing_user->roles, $synced_roles ) ) {
+			if ( empty( $existing_user->roles ) && ! empty( $synced_roles ) ) {
 				$existing_user->add_role( $synced_roles[0] );
 			}
 		} else {

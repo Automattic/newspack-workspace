@@ -8,3 +8,11 @@
 		margin-top: calc(-1 * var(--newspack-page-dataviews-offset, #{wp-vars.$grid-unit-20}));
 	}
 }
+
+.newspack-dataviews__view-config {
+	flex-shrink: 0;
+}
+
+.dataviews-filters__search-widget-listitem-multi-selection {
+	flex-shrink: 0;
+}
