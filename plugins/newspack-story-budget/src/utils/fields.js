@@ -51,7 +51,7 @@ export const getDataViewsType = field => {
 
 export const getFilterByOperators = field => {
 	if ( field.is_multiple ) {
-		return [ 'isAny', 'isNone', 'isAll', 'isNotAll' ];
+		return [ 'isAny', 'isNone', 'isAll' ];
 	}
 	if ( field.type === 'boolean' ) {
 		return [ 'is' ];
