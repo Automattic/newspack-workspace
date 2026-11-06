@@ -156,17 +156,9 @@ class Agent_Access_Scope {
 			return self::migrate_legacy_scope( $scope );
 		}
 
-		// App password path.
-		$uuid = function_exists( 'rest_get_authenticated_app_password' )
-			? rest_get_authenticated_app_password()
-			: null;
+		// Authorization depends on the verified credential, never audit attribution.
+		$uuid = Agent_Access_Activity_Log::get_authenticated_botcreds_uuid();
 		if ( ! $uuid ) {
-			return null;
-		}
-
-		// Only govern Agent Access credentials.
-		$source = Agent_Access_Activity_Log::detect_source();
-		if ( null === $source || Agent_Access_Activity_Log::SOURCE_AA !== $source['source'] ) {
 			return null;
 		}
 

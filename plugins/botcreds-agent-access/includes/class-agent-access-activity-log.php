@@ -122,6 +122,19 @@ class Agent_Access_Activity_Log {
 	 * @return array{source: string, app_password_name: string|null}|null
 	 *   Null if the request is not from a tracked source.
 	 */
+	/** Verified BotCreds identity; client-controlled attribution headers never authorize. */
+	public static function get_authenticated_botcreds_uuid() {
+		if ( ! defined( 'REST_REQUEST' ) || ! REST_REQUEST || ! get_current_user_id() || ! function_exists( 'rest_get_authenticated_app_password' ) ) {
+			return null;
+		}
+		$uuid = rest_get_authenticated_app_password();
+		if ( ! $uuid ) {
+			return null;
+		}
+		$item = WP_Application_Passwords::get_user_application_password( get_current_user_id(), $uuid );
+		return is_array( $item ) && isset( $item['name'] ) && AGENT_ACCESS_APP_PASSWORD_NAME === $item['name'] ? $uuid : null;
+	}
+
 	public static function detect_source() {
 		// Must be a REST API request.
 		if ( ! defined( 'REST_REQUEST' ) || ! REST_REQUEST ) {
@@ -131,6 +144,11 @@ class Agent_Access_Activity_Log {
 		// Must be authenticated.
 		if ( ! get_current_user_id() ) {
 			return null;
+		}
+
+		// Verified credential takes precedence over client-supplied attribution hints.
+		if ( self::get_authenticated_botcreds_uuid() ) {
+			return array( 'source' => self::SOURCE_AA, 'app_password_name' => AGENT_ACCESS_APP_PASSWORD_NAME );
 		}
 
 		// ---- WP.com MCP via User-Agent ----
