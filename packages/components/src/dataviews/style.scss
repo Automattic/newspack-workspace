@@ -17,6 +17,11 @@
 	width: var(--newspack-dataviews-title-width, auto);
 }
 
+.newspack-dataviews .dataviews-view-table tbody td:not(.dataviews-view-table__checkbox-column, .dataviews-view-table__actions-column) > .dataviews-view-table__cell-content-wrapper {
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+
 .newspack-dataviews__view-config {
 	flex-shrink: 0;
 }
