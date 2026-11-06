@@ -154,7 +154,7 @@ export function getStatusDisplay( item ) {
 export function getEmptyMessage( view, retentionDays ) {
 	// Worded as what the log holds, not as an all-clear: a push that sent
 	// only some fields still closes a failed one.
-	if ( getFilterValue( view, 'status' ) === NEEDS_ATTENTION_VALUE ) {
+	if ( getFilterValue( view, 'status' ) === NEEDS_ATTENTION_VALUE && ! getFilterValue( view, 'operation' ) ) {
 		return __( 'Nothing in the log needs attention.', 'newspack-plugin' );
 	}
 	if ( getFilterValue( view, 'status' ) || getFilterValue( view, 'operation' ) ) {

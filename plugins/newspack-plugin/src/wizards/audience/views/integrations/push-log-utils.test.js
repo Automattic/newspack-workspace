@@ -148,6 +148,19 @@ describe( 'getEmptyMessage', () => {
 		);
 	} );
 
+	it( 'does not read an empty "needs attention" list as clear when an operation filter narrowed it', () => {
+		expect(
+			getEmptyMessage(
+				view( {
+					filters: [
+						{ field: 'status', operator: 'is', value: NEEDS_ATTENTION_VALUE },
+						{ field: 'operation', operator: 'is', value: 'delete' },
+					],
+				} )
+			)
+		).toBe( 'No pushes match these filters.' );
+	} );
+
 	it( 'says a status or operation filter matched nothing, rather than that the log is empty', () => {
 		expect( getEmptyMessage( view( { filters: [ { field: 'status', operator: 'is', value: 'failed' } ] } ) ) ).toBe(
 			'No pushes match these filters.'
