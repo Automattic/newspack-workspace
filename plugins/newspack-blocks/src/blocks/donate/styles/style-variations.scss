@@ -727,7 +727,7 @@
 					}
 				}
 
-				&:focus {
+				&:focus:where(:not(.wp-element-button)) {
 					outline: none;
 				}
 

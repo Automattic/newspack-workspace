@@ -135,7 +135,12 @@
 					}
 
 					&:focus-visible {
-						@include mixins.focus-edge( currentcolor, $halo: mixins.$focus-color );
+						@include mixins.focus-edge( currentcolor, $halo: var(--wp--custom--focus--color, #{mixins.$focus-color}) );
+						transition:
+							background-color motion.$duration-color motion.$ease-color,
+							color motion.$duration-color motion.$ease-color,
+							opacity motion.$duration-color motion.$ease-color,
+							transform motion.$duration-press motion.$ease-out;
 					}
 				}
 			}
