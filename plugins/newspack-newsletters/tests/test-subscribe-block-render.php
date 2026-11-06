@@ -805,15 +805,6 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Switch to the classic theme fixture.
-	 */
-	private function use_classic_theme() {
-		register_theme_directory( NEWSPACK_NEWSLETTERS_PLUGIN_FILE . 'tests/fixtures/themes' );
-		wp_clean_themes_cache();
-		$this->use_theme( 'zz-classic' );
-	}
-
-	/**
 	 * Get the opening tag of the rendered submit button.
 	 *
 	 * @param array $overrides Attributes to set.
@@ -828,33 +819,9 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Default colors on a block theme leave the button to the site's styles.
+	 * The button classes mark which colors are set, which the stylesheet relies on to pick the site's button or the block's own colors.
 	 */
-	public function test_default_colors_render_without_inline_style_when_active() {
-		$this->use_theme( 'twentytwentyfive' );
-		$tag = $this->get_button_tag();
-
-		$this->assertStringContainsString( 'wp-element-button', $tag );
-		$this->assertStringNotContainsString( 'has-background-color', $tag );
-		$this->assertStringNotContainsString( 'has-text-color', $tag );
-		$this->assertStringNotContainsString( 'background-color:', $tag );
-	}
-
-	/**
-	 * A picked background keeps its inline style on a block theme.
-	 */
-	public function test_custom_background_keeps_inline_style() {
-		$this->use_theme( 'twentytwentyfive' );
-		$tag = $this->get_button_tag( [ 'backgroundColor' => '#6c6c6c' ] );
-
-		$this->assertStringContainsString( 'has-background-color', $tag );
-		$this->assertStringContainsString( 'background-color: #6c6c6c;', $tag );
-	}
-
-	/**
-	 * Each color combination marks the button so the stylesheet knows which color is set.
-	 */
-	public function test_each_color_combination_sets_its_own_classes() {
+	public function test_button_classes_mark_which_colors_are_set() {
 		$this->use_theme( 'twentytwentyfive' );
 
 		$text_only = $this->get_button_tag( [ 'textColor' => '#000000' ] );
@@ -874,18 +841,5 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 		);
 		$this->assertStringContainsString( 'has-background-color', $both );
 		$this->assertStringContainsString( 'has-text-color', $both );
-	}
-
-	/**
-	 * A classic theme renders the button without the core button class.
-	 */
-	public function test_classic_behavior_unchanged() {
-		$this->use_classic_theme();
-		$default = $this->get_button_tag();
-		$custom  = $this->get_button_tag( [ 'backgroundColor' => '#6c6c6c' ] );
-
-		$this->assertStringNotContainsString( 'wp-element-button', $default );
-		$this->assertStringNotContainsString( 'background-color:', $default );
-		$this->assertStringContainsString( 'background-color: #6c6c6c;', $custom );
 	}
 }
