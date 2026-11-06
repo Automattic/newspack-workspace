@@ -49,11 +49,9 @@
 		[type="submit"],
 		.submit-button {
 			transition: background 150ms ease-in-out;
-			background: #d33;
 			border: none;
 			border-radius: 5px;
 			box-sizing: border-box;
-			color: #fff;
 			font-family: var(--newspack-theme-font-heading);
 			font-size: 1rem;
 			font-weight: 700;
@@ -68,6 +66,11 @@
 			@media ( min-width: 782px ) {
 				width: auto;
 			}
+		}
+		[type="submit"]:not(.wp-element-button),
+		.submit-button:not(.wp-element-button) {
+			background: #d33;
+			color: #fff;
 		}
 	}
 	.newspack-newsletters-subscribe__state-bar {

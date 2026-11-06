@@ -779,4 +779,74 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 		$this->assertNotSame( '', $this->get_checkbox_row( '8', $html ) );
 		$this->assertStringNotContainsString( 'newspack-ui__badge', $this->get_checkbox_row( '8', $html ) );
 	}
+	/**
+	 * Switch theme, skipping when it is not available.
+	 *
+	 * @param string $slug Theme slug.
+	 *
+	 * @return string Previous stylesheet.
+	 */
+	private function use_theme( $slug ) {
+		$original = get_stylesheet();
+		switch_theme( $slug );
+		if ( get_stylesheet() !== $slug ) {
+			switch_theme( $original );
+			$this->markTestSkipped( $slug . ' is not available in this environment.' );
+		}
+		return $original;
+	}
+
+	/**
+	 * Get the opening tag of the rendered submit button.
+	 *
+	 * @param array $overrides Attributes to set.
+	 *
+	 * @return string
+	 */
+	private function get_button_tag( $overrides = [] ) {
+		$lists = [ $this->get_list( 'only_mailchimp' )->get_public_id() ];
+		$html  = $this->render( $this->get_attrs( [ 'lists' => $lists ] + $overrides ) );
+		preg_match( '/<button[^>]*type="submit"[^>]*>/', $html, $matches );
+		return $matches[0];
+	}
+
+	/**
+	 * Default colours on a block theme leave the button to the site's styles.
+	 */
+	public function test_default_colors_render_without_inline_style_when_active() {
+		$original = $this->use_theme( 'twentytwentyfive' );
+		$tag      = $this->get_button_tag();
+		switch_theme( $original );
+
+		$this->assertStringContainsString( 'wp-element-button', $tag );
+		$this->assertStringNotContainsString( 'has-background-color', $tag );
+		$this->assertStringNotContainsString( 'has-text-color', $tag );
+		$this->assertStringNotContainsString( 'background-color:', $tag );
+	}
+
+	/**
+	 * A picked background keeps its inline style on a block theme.
+	 */
+	public function test_custom_background_keeps_inline_style() {
+		$original = $this->use_theme( 'twentytwentyfive' );
+		$tag      = $this->get_button_tag( [ 'backgroundColor' => '#6c6c6c' ] );
+		switch_theme( $original );
+
+		$this->assertStringContainsString( 'has-background-color', $tag );
+		$this->assertStringContainsString( 'background-color: #6c6c6c;', $tag );
+	}
+
+	/**
+	 * A classic theme renders the button without the core button class.
+	 */
+	public function test_classic_behavior_unchanged() {
+		$original = $this->use_theme( 'newspack-theme' );
+		$default  = $this->get_button_tag();
+		$custom   = $this->get_button_tag( [ 'backgroundColor' => '#6c6c6c' ] );
+		switch_theme( $original );
+
+		$this->assertStringNotContainsString( 'wp-element-button', $default );
+		$this->assertStringNotContainsString( 'background-color:', $default );
+		$this->assertStringContainsString( 'background-color: #6c6c6c;', $custom );
+	}
 }

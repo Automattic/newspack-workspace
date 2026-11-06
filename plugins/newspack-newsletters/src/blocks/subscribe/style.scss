@@ -110,13 +110,20 @@
 		}
 	}
 	button[type="submit"] {
-		background-color: #d33;
-		color: white;
 		cursor: pointer;
 		flex: 1 1 100%;
 
 		@media ( min-width: 782px ) {
 			flex: 0 0 auto;
+		}
+
+		&:not(.wp-element-button) {
+			background-color: #d33;
+			color: white;
+		}
+
+		&.has-background-color {
+			color: white;
 		}
 	}
 	input[disabled] {

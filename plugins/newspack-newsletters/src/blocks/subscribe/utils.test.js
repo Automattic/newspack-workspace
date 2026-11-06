@@ -1,7 +1,7 @@
 /**
  * Internal dependencies
  */
-import { hasGatedLists, isListGated, listsToKeep, syncListOrder } from './utils';
+import { hasGatedLists, isListGated, listsToKeep, syncListOrder, usesSiteButtonStyle } from './utils';
 
 describe( 'syncListOrder', () => {
 	it( 'builds the order on first load: lists that are on first, in form order, then the rest', () => {
@@ -87,5 +87,20 @@ describe( 'hasGatedLists', () => {
 		expect( hasGatedLists( { a: [] } ) ).toBe( false );
 		expect( hasGatedLists( undefined ) ).toBe( false );
 		expect( hasGatedLists( [] ) ).toBe( false );
+	} );
+} );
+
+describe( 'usesSiteButtonStyle', () => {
+	it( 'is true when both colours are the defaults on a block theme', () => {
+		expect( usesSiteButtonStyle( '#dd3333', '#ffffff', true ) ).toBe( true );
+	} );
+
+	it( 'is false when either colour was picked', () => {
+		expect( usesSiteButtonStyle( '#6c6c6c', '#ffffff', true ) ).toBe( false );
+		expect( usesSiteButtonStyle( '#dd3333', '#000000', true ) ).toBe( false );
+	} );
+
+	it( 'is false off a block theme', () => {
+		expect( usesSiteButtonStyle( '#dd3333', '#ffffff', false ) ).toBe( false );
 	} );
 } );
