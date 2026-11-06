@@ -55,7 +55,9 @@ export const setupSlider = ( parentEl: HTMLElement, configuration: Configuration
 
 	const paintDots = ( activeIndex: number ) => {
 		optionsDots.forEach( ( dotEl, index ) => {
-			dotEl.style.backgroundColor = index === activeIndex ? configuration.buttonColor : '';
+			const isActive = index === activeIndex;
+			dotEl.classList.toggle( 'is-active', isActive && ! configuration.buttonColor );
+			dotEl.style.backgroundColor = isActive ? configuration.buttonColor : '';
 		} );
 	};
 	const updateDots = () => {

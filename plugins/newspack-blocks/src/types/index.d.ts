@@ -13,6 +13,7 @@ declare global {
 			tier_amounts_template: string;
 			currency: string;
 		};
+		newspackIsBlockTheme?: boolean;
 		grecaptcha: any;
 		newspackReaderActivation: {
 			on: function;

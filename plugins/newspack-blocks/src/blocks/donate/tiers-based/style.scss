@@ -55,6 +55,9 @@
 							background: np-colors.$neutral-300;
 							margin: 0 5px;
 							transition: background-color motion.$duration-color motion.$ease-color;
+							&.is-active {
+								background: var(--newspack-ui-color-btn);
+							}
 						}
 					}
 				}
@@ -110,6 +113,10 @@
 				line-height: 1;
 				padding: 10px 16px;
 				margin-bottom: 16px;
+
+				&.wp-element-button {
+					border-color: transparent;
+				}
 			}
 			&__description {
 				flex: 1;

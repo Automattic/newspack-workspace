@@ -396,6 +396,12 @@ class Newspack_Blocks {
 				$localized_data
 			);
 
+			wp_add_inline_script(
+				'newspack-blocks-editor',
+				'if ( undefined === window.newspackIsBlockTheme ) { window.newspackIsBlockTheme = ' . ( wp_is_block_theme() ? 'true' : 'false' ) . '; }',
+				'before'
+			);
+
 			wp_set_script_translations(
 				'newspack-blocks-editor',
 				'newspack-blocks',
@@ -1817,6 +1823,18 @@ class Newspack_Blocks {
 		$white_lc     = self::get_apca_contrast( $background_y, self::get_apca_luminance( '#ffffff' ) );
 
 		return abs( $white_lc ) > abs( $black_lc ) ? 'white' : 'black';
+	}
+
+	/**
+	 * Whether a Donate block button left at the default colour should render as the site's own button.
+	 *
+	 * @param array $attributes Block attributes.
+	 * @return bool
+	 */
+	public static function donate_button_uses_site_style( $attributes ) {
+		return wp_is_block_theme()
+			&& isset( $attributes['buttonColor'] )
+			&& '#dd3333' === strtolower( (string) $attributes['buttonColor'] );
 	}
 
 	/**

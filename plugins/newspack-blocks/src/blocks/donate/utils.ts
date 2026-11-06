@@ -59,6 +59,15 @@ const apcaContrast = ( backgroundY: number, textY: number ): number => {
 	return sapc > -0.1 ? 0 : ( sapc + 0.027 ) * 100;
 };
 
+export const DEFAULT_BUTTON_COLOR = '#dd3333';
+
+/**
+ * Whether a button left at the default colour should render as the site's own button.
+ * Keep in sync with Newspack_Blocks::donate_button_uses_site_style().
+ */
+export const usesSiteButtonStyle = ( color: string | undefined, isBlockTheme = !! window.newspackIsBlockTheme ): boolean =>
+	isBlockTheme && typeof color === 'string' && color.toLowerCase() === DEFAULT_BUTTON_COLOR;
+
 /**
  * Pick either black or white text, whichever reads better on the given background.
  *
