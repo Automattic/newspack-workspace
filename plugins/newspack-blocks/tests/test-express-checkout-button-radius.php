@@ -53,57 +53,33 @@ class ExpressCheckoutButtonRadiusTest extends WP_UnitTestCase_Blocks { // phpcs:
 	}
 
 	/**
-	 * A pixel radius under the Theme style is used.
+	 * Theme radii resolve to a pixel count, or keep 8 when unusable.
+	 *
+	 * @dataProvider theme_radius_provider
+	 *
+	 * @param string $radius   Printed button radius.
+	 * @param int    $expected Expected pixel radius.
 	 */
-	public function test_theme_pixel_radius_is_used() {
-		$this->set_theme_radius( '24px' );
+	public function test_theme_radius_resolution( string $radius, int $expected ) {
+		$this->set_theme_radius( $radius );
 
-		$this->assertSame( 24, \Newspack_Blocks\Modal_Checkout::get_express_checkout_button_radius() );
+		$this->assertSame( $expected, \Newspack_Blocks\Modal_Checkout::get_express_checkout_button_radius() );
 	}
 
 	/**
-	 * A fractional pixel radius is rounded.
+	 * Radius fixtures.
+	 *
+	 * @return array
 	 */
-	public function test_theme_fractional_radius_is_rounded() {
-		$this->set_theme_radius( '1.5px' );
-
-		$this->assertSame( 2, \Newspack_Blocks\Modal_Checkout::get_express_checkout_button_radius() );
-	}
-
-	/**
-	 * A rem radius is converted at a 16px root.
-	 */
-	public function test_theme_rem_radius_is_converted() {
-		$this->set_theme_radius( '1.5rem' );
-
-		$this->assertSame( 24, \Newspack_Blocks\Modal_Checkout::get_express_checkout_button_radius() );
-	}
-
-	/**
-	 * A zero radius is a square button.
-	 */
-	public function test_theme_zero_radius_is_square() {
-		$this->set_theme_radius( '0px' );
-
-		$this->assertSame( 0, \Newspack_Blocks\Modal_Checkout::get_express_checkout_button_radius() );
-	}
-
-	/**
-	 * An em radius keeps 8.
-	 */
-	public function test_theme_em_radius_keeps_eight() {
-		$this->set_theme_radius( '2em' );
-
-		$this->assertSame( 8, \Newspack_Blocks\Modal_Checkout::get_express_checkout_button_radius() );
-	}
-
-	/**
-	 * No printed radius keeps 8.
-	 */
-	public function test_theme_without_radius_keeps_eight() {
-		$this->set_theme_radius( '' );
-
-		$this->assertSame( 8, \Newspack_Blocks\Modal_Checkout::get_express_checkout_button_radius() );
+	public function theme_radius_provider() {
+		return [
+			'pixel'      => [ '24px', 24 ],
+			'fractional' => [ '1.5px', 2 ],
+			'rem'        => [ '1.5rem', 24 ],
+			'zero'       => [ '0px', 0 ],
+			'em'         => [ '2em', 8 ],
+			'empty'      => [ '', 8 ],
+		];
 	}
 
 	/**
