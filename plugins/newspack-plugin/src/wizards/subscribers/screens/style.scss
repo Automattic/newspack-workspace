@@ -40,6 +40,11 @@
 	visibility: hidden;
 }
 
+.newspack-subscribers__owner-role {
+	color: var(--wpds-color-foreground-content-neutral, #{wp-colors.$gray-900});
+	font-weight: wp-vars.$font-weight-medium;
+}
+
 .newspack-subscribers__email,
 .newspack-subscribers__muted {
 	color: var(--wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700});

@@ -254,12 +254,15 @@ function GroupDetailView() {
 				// Rank, not the label: sorting the strings would slot Manager below
 				// Member and put the owner in the middle.
 				getValue: ( { item } ) => ROLE_RANK[ item.role ] ?? ROLE_RANK.member,
-				render: ( { item } ) =>
-					'member' === item.role ? (
-						<span>{ ROLE_LABELS.member }</span>
-					) : (
-						<Badge intent={ 'owner' === item.role ? 'stable' : 'informational' }>{ ROLE_LABELS[ item.role ] }</Badge>
-					),
+				render: ( { item } ) => {
+					if ( 'owner' === item.role ) {
+						return <span className="newspack-subscribers__owner-role">{ ROLE_LABELS.owner }</span>;
+					}
+					if ( 'manager' === item.role ) {
+						return <Badge intent="informational">{ ROLE_LABELS.manager }</Badge>;
+					}
+					return <span>{ ROLE_LABELS.member }</span>;
+				},
 				enableSorting: true,
 			},
 			{
