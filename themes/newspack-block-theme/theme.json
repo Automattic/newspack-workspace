@@ -266,7 +266,8 @@
 		"useRootPaddingAwareAlignments": true,
 		"custom": {
 			"button": {
-				"mix": "var(--wp--preset--color--base)"
+				"mix": "var(--wp--preset--color--base)",
+				"outline": "var(--wp--preset--color--accent)"
 			},
 			"elevation": {
 				"ink": "color-mix( in oklab, var(--wp--preset--color--contrast) 60%, #000 )",
@@ -441,7 +442,7 @@
 						},
 						"color": {
 							"background": "var(--wp--preset--color--base)",
-							"text": "var(--wp--preset--color--accent)"
+							"text": "var(--wp--custom--button--outline)"
 						},
 						"spacing": {
 							"padding": {
