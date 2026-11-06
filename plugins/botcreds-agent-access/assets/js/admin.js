@@ -12,24 +12,110 @@
 		initAdminRevokeButtons();
 		initAdminUpdateButtons();
 		initScopeReadOnlyToggles();
+		initHelpTooltips();
 	});
+
+	function uiText(key, fallback) {
+		return agentAccess.ui_text && agentAccess.ui_text[key] ? agentAccess.ui_text[key] : fallback;
+	}
+	function uiCount(template, values) {
+		var next = 0;
+		return template.replace(/%(?:(\d+)\$)?d/g, function (match, position) { return values[position ? Number(position) - 1 : next++]; });
+	}
+	function setLiveText(node, text) {
+		if (node && node.textContent !== text) node.textContent = text;
+	}
+
+	/** Small contextual popovers: hover/focus to read, click/touch to pin, Escape to dismiss. */
+	function initHelpTooltips() {
+		var active = null;
+		var closeTimer = null;
+		function cancelClose() { if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; } }
+		function scheduleClose() { cancelClose(); closeTimer = setTimeout(function () { if (active && !active.pinned && !active.wrapper.matches(':hover') && !active.wrapper.contains(document.activeElement)) close(); }, 250); }
+		function close() {
+			cancelClose();
+			if (!active) return;
+			active.panel.hidden = true;
+			active.button.setAttribute('aria-expanded', 'false');
+			active = null;
+		}
+		function position() {
+			if (!active) return;
+			var rect = active.button.getBoundingClientRect();
+			var box = active.panel.getBoundingClientRect();
+			var left = Math.max(16, Math.min(rect.left, window.innerWidth - box.width - 16));
+			var top = rect.bottom + 8;
+			if (top + box.height > window.innerHeight - 16) top = rect.top - box.height - 8;
+			active.panel.style.left = left + 'px';
+			active.panel.style.top = Math.max(16, top) + 'px';
+		}
+		function open(wrapper, pinned) {
+			cancelClose();
+			if (active && active.wrapper === wrapper) { active.pinned = active.pinned || pinned; return; }
+			close();
+			active = { wrapper: wrapper, button: wrapper.querySelector('.agent-access-help-toggle'), panel: wrapper.querySelector('.agent-access-help-content'), pinned: pinned };
+			active.panel.hidden = false;
+			active.button.setAttribute('aria-expanded', 'true');
+			position();
+		}
+		document.addEventListener('click', function (event) {
+			var button = event.target.closest('.agent-access-help-toggle');
+			if (button) {
+				var wrapper = button.closest('.agent-access-help');
+				if (active && active.wrapper === wrapper && active.pinned) close(); else open(wrapper, true);
+			} else if (active && !active.wrapper.contains(event.target)) close();
+		});
+		document.addEventListener('pointerover', function (event) {
+			var wrapper = event.target.closest('.agent-access-help');
+			if (wrapper && !wrapper.contains(event.relatedTarget) && event.pointerType !== 'touch' && window.matchMedia('(hover: hover)').matches) open(wrapper, false);
+		});
+		document.addEventListener('pointerout', function (event) {
+			if (active && active.wrapper.contains(event.target) && !active.wrapper.contains(event.relatedTarget) && !active.pinned && !active.wrapper.contains(document.activeElement)) scheduleClose();
+		});
+		document.addEventListener('focusin', function (event) {
+			var button = event.target.closest('.agent-access-help-toggle');
+			if (button) open(button.closest('.agent-access-help'), false);
+		});
+		document.addEventListener('focusout', function () {
+			Promise.resolve().then(function () { if (active && !active.wrapper.contains(document.activeElement)) { active.pinned = false; scheduleClose(); } });
+		});
+		document.addEventListener('keydown', function (event) { if (event.key === 'Escape' && active) { close(); event.preventDefault(); } });
+		window.addEventListener('resize', position);
+		window.addEventListener('scroll', position, true);
+	}
 
 	/** Keep specific grants intact while read-only, full or all-custom is selected. */
 	function initScopeReadOnlyToggles() {
 		function sync(checklist) {
 			var readOnly = checklist.querySelector('.agent-access-scope-read-only');
 			var full = checklist.querySelector('.agent-access-scope-full');
-			var options = checklist.querySelector('.agent-access-scoped-options');
 			var allCustom = checklist.querySelector('.agent-access-scope-all-custom');
-			var customOptions = checklist.querySelector('.agent-access-custom-options');
-			if (full) full.disabled = !!(readOnly && readOnly.checked);
-			if (options) options.disabled = !!((readOnly && readOnly.checked) || (full && full.checked));
-			if (customOptions) customOptions.disabled = !!(allCustom && allCustom.checked);
+			var readMode = !!(readOnly && readOnly.checked);
+			var fullMode = !!(full && full.checked);
+			var inactive = readMode || fullMode;
+			if (full) full.disabled = readMode;
+			if (allCustom) allCustom.disabled = inactive;
+			checklist.querySelectorAll('.agent-access-scope-type, .agent-access-scope-custom-routes').forEach(function (control) {
+				var custom = !!control.closest('.agent-access-custom-options');
+				control.disabled = inactive || (custom && !!(allCustom && allCustom.checked));
+			});
+			var list = checklist.querySelector('.agent-access-integration-list');
+			var selected = list ? list.querySelectorAll('.agent-access-scope-type:checked').length : 0;
+			var total = list ? list.querySelectorAll('.agent-access-scope-type').length : 0;
+			if (list) list.classList.toggle('is-inactive', inactive || !!(allCustom && allCustom.checked));
+			var count = checklist.querySelector('.agent-access-integration-count');
+			setLiveText(count, readMode ? uiText('integrations_disabled', 'Integration writes disabled.') : (fullMode ? uiText('integrations_full', 'All detected integrations allowed by full access.') : (allCustom && allCustom.checked ? uiText('integrations_all', 'All detected integrations allowed.') : uiCount(uiText('integrations_selected', '%1$d of %2$d selected'), [selected, total]))));
+			var summary = checklist.querySelector('.agent-access-scope-summary');
+			var routes = checklist.querySelector('.agent-access-scope-custom-routes');
+			var hasSelection = checklist.querySelector('.agent-access-scope-type:checked:not(:disabled)') || (allCustom && allCustom.checked) || (routes && routes.value.trim());
+			setLiveText(summary, readMode ? uiText('read_only', 'Read only — writes disabled.') : (fullMode ? uiText('full', 'Full write access — within this user’s permissions.') : (hasSelection ? uiText('selected', 'Selected access — writes limited to the selections below.') : uiText('empty', 'No selections — writes disabled.'))));
 		}
 		document.querySelectorAll('.agent-access-scope-checklist').forEach(sync);
-		document.addEventListener('change', function (e) {
-			var checklist = e.target.closest('.agent-access-scope-checklist');
-			if (checklist) sync(checklist);
+		['change', 'input'].forEach(function (name) {
+			document.addEventListener(name, function (event) {
+				var checklist = event.target.closest('.agent-access-scope-checklist');
+				if (checklist) sync(checklist);
+			});
 		});
 	}
 
@@ -307,92 +393,60 @@
 	 * Admin: save scope/policy/rate-limit for an already-connected agent.
 	 */
 	function initAdminUpdateButtons() {
-		var buttons = document.querySelectorAll('.agent-access-admin-update-btn');
-		buttons.forEach(function (btn) {
+		document.querySelectorAll('.agent-access-admin-update-btn').forEach(function (btn) {
+			var userId = btn.getAttribute('data-user-id');
+			var section = btn.closest('.agent-access-settings-section') || btn.closest('td').closest('table').closest('div');
+			var statusEl = document.querySelector('.agent-access-admin-update-status[data-user-id="' + userId + '"]');
+			var revision = 0;
+			if (statusEl) {
+				statusEl.setAttribute('role', 'status');
+				statusEl.setAttribute('aria-live', 'polite');
+				statusEl.setAttribute('aria-atomic', 'true');
+			}
+			function status(text, state) {
+				if (!statusEl) return;
+				setLiveText(statusEl, text);
+				statusEl.dataset.state = state;
+			}
+			function changed(event) {
+				if (!event.target.matches('input, select, textarea')) return;
+				revision++;
+				status(uiText('unsaved', 'Unsaved changes'), 'dirty');
+			}
+			if (section) { section.addEventListener('input', changed); section.addEventListener('change', changed); }
 			btn.addEventListener('click', function () {
-				var userId  = btn.getAttribute('data-user-id');
-				var section = btn.closest('.agent-access-settings-section') || btn.closest('td').closest('table').closest('div');
-
-				// The update scope is rendered as a .agent-access-admin-update-scope div (checklist).
-				var checklistEl = section ? section.querySelector('.agent-access-admin-update-scope') : null;
-				var scopeData   = collectScopeFromChecklist(checklistEl);
-				var rlEl        = section ? section.querySelector('.agent-access-admin-update-rate-limit') : null;
-				var cpEl        = section ? section.querySelector('.agent-access-admin-update-content-policy') : null;
-
-				var rl     = rlEl     ? rlEl.value     : 'standard';
-				var policy = cpEl     ? cpEl.value     : 'standard';
-
-				var statusEl = document.querySelector('.agent-access-admin-update-status[data-user-id="' + userId + '"]');
-
-				btn.disabled    = true;
-				btn.textContent = 'Saving…';
-				if (statusEl) {
-					statusEl.style.display = 'none';
-					statusEl.textContent   = '';
-				}
-
+				var checklist = section ? section.querySelector('.agent-access-admin-update-scope') : null;
+				var scopeData = collectScopeFromChecklist(checklist);
+				var rlEl = section ? section.querySelector('.agent-access-admin-update-rate-limit') : null;
+				var cpEl = section ? section.querySelector('.agent-access-admin-update-content-policy') : null;
+				var savedRevision = revision;
+				btn.disabled = true;
+				btn.textContent = uiText('saving', 'Saving…');
+				status(uiText('saving', 'Saving…'), 'saving');
+				function ready() { btn.disabled = false; btn.textContent = uiText('save_settings', 'Save settings'); }
 				var xhr = new XMLHttpRequest();
 				xhr.open('POST', agentAccess.ajax_url, true);
 				xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-
 				xhr.onload = function () {
+					ready();
 					var response;
-					try {
-						response = JSON.parse(xhr.responseText);
-					} catch (e) {
-						if (statusEl) {
-							statusEl.textContent   = 'Unexpected error.';
-							statusEl.style.color   = '#b32d2e';
-							statusEl.style.display = 'inline';
-						}
-						btn.disabled    = false;
-						btn.textContent = 'Save settings';
-						return;
-					}
-
-					btn.disabled    = false;
-					btn.textContent = 'Save settings';
-
-					if (response.success) {
-						if (statusEl) {
-							statusEl.textContent   = '\u2713 Saved';
-							statusEl.style.color   = '#1a7a1a';
-							statusEl.style.display = 'inline';
-							setTimeout(function () {
-								statusEl.style.display = 'none';
-							}, 3000);
-						}
+					try { response = JSON.parse(xhr.responseText); }
+					catch (error) { status(uiText('unexpected_response', 'Unexpected response. Settings were not confirmed saved.'), 'error'); return; }
+					if (response && response.success) {
+						status(revision === savedRevision ? uiText('saved', 'Settings saved.') : uiText('unsaved_remaining', 'Unsaved changes remain.'), revision === savedRevision ? 'saved' : 'dirty');
 					} else {
-						if (statusEl) {
-							statusEl.textContent   = response.data || 'Error saving settings.';
-							statusEl.style.color   = '#b32d2e';
-							statusEl.style.display = 'inline';
-						} else {
-							alert(response.data || 'Error saving settings.');
-						}
+						status(response && typeof response.data === 'string' ? response.data : uiText('error_saving', 'Error saving settings.'), 'error');
 					}
 				};
-
-				xhr.onerror = function () {
-					btn.disabled    = false;
-					btn.textContent = 'Save settings';
-					if (statusEl) {
-						statusEl.textContent   = 'Network error.';
-						statusEl.style.color   = '#b32d2e';
-						statusEl.style.display = 'inline';
-					} else {
-						alert('Network error. Please try again.');
-					}
-				};
-
+				xhr.onerror = function () { ready(); status(uiText('network_error', 'Network error. Please try again.'), 'error'); };
 				xhr.send(
 					'action=agent_access_admin_update' +
 					'&nonce=' + encodeURIComponent(agentAccess.admin_update_nonce) +
 					'&user_id=' + encodeURIComponent(userId) +
 					'&' + encodeScopeParams(scopeData) +
 					encodeSiteManagement(section) +
-					'&rate_limit=' + encodeURIComponent(rl) +
-					'&content_policy=' + encodeURIComponent(policy)
+					'&rate_limit=' + encodeURIComponent(rlEl ? rlEl.value : 'standard') +
+					'&content_policy=' + encodeURIComponent(cpEl ? cpEl.value : 'standard')
 				);
 			});
 		});

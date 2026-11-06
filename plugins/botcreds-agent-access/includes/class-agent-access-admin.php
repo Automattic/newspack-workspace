@@ -295,7 +295,31 @@ class Agent_Access_Admin {
 			'revoking_text'       => __( 'Revoking…', 'botcreds-agent-access' ),
 			'copied_text'         => __( 'Copied!', 'botcreds-agent-access' ),
 			'copy_text'           => __( 'Copy', 'botcreds-agent-access' ),
+			'ui_text'             => self::get_ui_text(),
 		) );
+	}
+
+	/** Localized presentation text shared by the settings renderer and script. */
+	private static function get_ui_text() {
+		return array(
+			'read_only' => __( 'Read only — writes disabled.', 'botcreds-agent-access' ),
+			'full' => __( 'Full write access — within this user’s permissions.', 'botcreds-agent-access' ),
+			'selected' => __( 'Selected access — writes limited to the selections below.', 'botcreds-agent-access' ),
+			'empty' => __( 'No selections — writes disabled.', 'botcreds-agent-access' ),
+			'integrations_disabled' => __( 'Integration writes disabled.', 'botcreds-agent-access' ),
+			'integrations_full' => __( 'All detected integrations allowed by full access.', 'botcreds-agent-access' ),
+			'integrations_all' => __( 'All detected integrations allowed.', 'botcreds-agent-access' ),
+			/* translators: 1: selected integration count, 2: available integration count. */
+			'integrations_selected' => __( '%1$d of %2$d selected', 'botcreds-agent-access' ),
+			'unsaved' => __( 'Unsaved changes', 'botcreds-agent-access' ),
+			'saving' => __( 'Saving…', 'botcreds-agent-access' ),
+			'saved' => __( 'Settings saved.', 'botcreds-agent-access' ),
+			'unsaved_remaining' => __( 'Unsaved changes remain.', 'botcreds-agent-access' ),
+			'unexpected_response' => __( 'Unexpected response. Settings were not confirmed saved.', 'botcreds-agent-access' ),
+			'error_saving' => __( 'Error saving settings.', 'botcreds-agent-access' ),
+			'network_error' => __( 'Network error. Please try again.', 'botcreds-agent-access' ),
+			'save_settings' => __( 'Save settings', 'botcreds-agent-access' ),
+		);
 	}
 
 	/**
@@ -505,6 +529,24 @@ class Agent_Access_Admin {
 	}
 
 	/**
+	 * Accessible contextual help, operable by mouse, keyboard and touch.
+	 *
+	 * @param string $label Help topic.
+	 * @param string $text Plain-text explanation.
+	 */
+	private function render_help_tooltip( $label, $text ) {
+		$id = wp_unique_id( 'agent-access-help-' );
+		?>
+		<span class="agent-access-help">
+			<button type="button" class="agent-access-help-toggle" aria-expanded="false" aria-controls="<?php echo esc_attr( $id ); ?>" aria-describedby="<?php echo esc_attr( $id ); ?>" aria-label="<?php echo esc_attr( sprintf( /* translators: %s: contextual help topic. */ __( 'Help: %s', 'botcreds-agent-access' ), $label ) ); ?>">
+				<span class="dashicons dashicons-editor-help" aria-hidden="true"></span>
+			</button>
+			<span id="<?php echo esc_attr( $id ); ?>" class="agent-access-help-content" role="tooltip" hidden><?php echo esc_html( $text ); ?></span>
+		</span>
+		<?php
+	}
+
+	/**
 	 * Render the administrator-only, per-account site-management switch.
 	 *
 	 * @param int $user_id Dedicated agent account.
@@ -517,11 +559,14 @@ class Agent_Access_Admin {
 		<tr>
 			<th scope="row"><?php esc_html_e( 'Site management', 'botcreds-agent-access' ); ?></th>
 			<td>
+				<div class="agent-access-control-row">
 				<label>
 					<input type="checkbox" class="agent-access-site-management" value="1" <?php checked( Agent_Access_Site_Management::is_enabled( $user_id ) ); ?>>
-					<?php esc_html_e( 'Allow this agent to manage site settings, appearance, and menus.', 'botcreds-agent-access' ); ?>
+					<?php esc_html_e( 'Manage site settings, appearance, and menus.', 'botcreds-agent-access' ); ?>
 				</label>
-				<p class="description"><?php esc_html_e( 'Grants manage_options and edit_theme_options to this Agent account on this site. Applies to all sessions and credentials for this account. Endpoint scopes still apply. Does not grant user management or plugin/theme installation. Switching off removes only the grant from this plugin, not permissions from other sources.', 'botcreds-agent-access' ); ?></p>
+				<?php $this->render_help_tooltip( __( 'Site management', 'botcreds-agent-access' ), __( 'Applies to every session and credential for this Agent account on this site. Grants manage_options and edit_theme_options, not user management or plugin/theme installation. Endpoint scopes still apply. Turning this off removes only the grant from this plugin; permissions from other sources are preserved.', 'botcreds-agent-access' ) ); ?>
+				</div>
+				<p class="agent-access-brief"><?php esc_html_e( 'Applies to every session and credential for this agent account.', 'botcreds-agent-access' ); ?></p>
 			</td>
 		</tr>
 		<?php
@@ -543,6 +588,7 @@ class Agent_Access_Admin {
 		} );
 		$types = Agent_Access_Scope::get_available_post_types();
 		$known_types = array_column( $types, 'slug' );
+		$routes_id = wp_unique_id( 'agent-access-custom-routes-' );
 		// Preserve grants for post types whose plugins are temporarily inactive.
 		foreach ( $scope as $slug ) {
 			if ( is_string( $slug ) && '' !== $slug && '/' !== $slug[0] && ! in_array( $slug, array( '*', '__read_only__', Agent_Access_Scope::ALL_CUSTOM_ENDPOINTS ), true ) && ! in_array( $slug, $known_types, true ) ) {
@@ -550,52 +596,65 @@ class Agent_Access_Admin {
 			}
 		}
 		?>
+		<div class="agent-access-scope-heading">
+			<span><?php esc_html_e( 'Write access', 'botcreds-agent-access' ); ?></span>
+			<?php $this->render_help_tooltip( __( 'Write access', 'botcreds-agent-access' ), __( 'Scope limits writes, not reads. Read only blocks every write; full access allows writes wherever the account has permission. Otherwise, writes are limited to the selections below. No selection means no writes. Integration grants include every write method, including DELETE, where permitted.', 'botcreds-agent-access' ) ); ?>
+		</div>
+		<div class="agent-access-mode-options">
 		<label style="display:block;margin-bottom:6px;font-weight:600;">
 			<input type="checkbox" name="scope_read_only" class="agent-access-scope-read-only" value="1" <?php checked( $read_only ); ?>>
 			<?php esc_html_e( 'Read only (no writes)', 'botcreds-agent-access' ); ?>
 		</label>
 		<label style="display:block;margin-bottom:6px;">
 			<input type="checkbox" name="scope_full" class="agent-access-scope-full" value="1" <?php checked( $full ); ?> <?php disabled( $read_only ); ?>>
-			<?php esc_html_e( 'Full write access (WordPress and all integrations)', 'botcreds-agent-access' ); ?>
+			<?php esc_html_e( 'Full write access', 'botcreds-agent-access' ); ?>
 		</label>
-		<fieldset class="agent-access-scoped-options" <?php disabled( $read_only || $full ); ?>>
-			<legend style="font-weight:600;margin:6px 0;"><?php esc_html_e( 'WordPress content', 'botcreds-agent-access' ); ?></legend>
+		</div>
+		<p class="agent-access-scope-summary" aria-live="polite"><?php echo esc_html( $read_only ? __( 'Read only — writes disabled.', 'botcreds-agent-access' ) : ( $full ? __( 'Full write access — within this user’s permissions.', 'botcreds-agent-access' ) : __( 'Selected access — writes limited to the selections below.', 'botcreds-agent-access' ) ) ); ?></p>
+		<fieldset class="agent-access-scoped-options">
+			<legend class="agent-access-scope-heading"><?php esc_html_e( 'WordPress content', 'botcreds-agent-access' ); ?></legend>
 			<?php foreach ( $types as $type ) : ?>
 				<label style="display:block;margin-bottom:3px;">
-					<input type="checkbox" name="scope_types[]" class="agent-access-scope-type" value="<?php echo esc_attr( $type['slug'] ); ?>" <?php checked( in_array( $type['slug'], $scope, true ) ); ?>>
+					<input type="checkbox" name="scope_types[]" class="agent-access-scope-type" value="<?php echo esc_attr( $type['slug'] ); ?>" <?php checked( in_array( $type['slug'], $scope, true ) ); ?> <?php disabled( $read_only || $full ); ?>>
 					<?php echo esc_html( $type['label'] ); ?>
 				</label>
 			<?php endforeach; ?>
 			<hr style="margin:10px 0;">
 			<p style="font-weight:600;margin:6px 0;"><?php esc_html_e( 'Plugin integrations', 'botcreds-agent-access' ); ?></p>
-			<label style="display:block;margin-bottom:6px;">
-				<input type="checkbox" name="scope_all_custom" class="agent-access-scope-all-custom" value="1" <?php checked( $all_custom ); ?>>
-				<?php esc_html_e( 'Allow all custom endpoints', 'botcreds-agent-access' ); ?>
+			<div class="agent-access-control-row">
+			<label>
+				<input type="checkbox" name="scope_all_custom" class="agent-access-scope-all-custom" value="1" <?php checked( $all_custom ); ?> <?php disabled( $read_only || $full ); ?>>
+				<?php esc_html_e( 'Allow all plugin integrations', 'botcreds-agent-access' ); ?>
 			</label>
-			<p class="description"><?php esc_html_e( 'Allows writes to all current and future non-core REST namespaces. Does not expand WordPress content access. The user\'s WordPress permissions still apply.', 'botcreds-agent-access' ); ?></p>
-			<fieldset class="agent-access-custom-options" <?php disabled( $all_custom ); ?>>
+			<?php $this->render_help_tooltip( __( 'Plugin integration access', 'botcreds-agent-access' ), __( 'Allows writes to current and future plugin REST namespaces, including DELETE when permitted. Does not expand WordPress content access. The user\'s WordPress permissions still apply.', 'botcreds-agent-access' ) ); ?>
+			</div>
+			<p class="agent-access-brief"><?php esc_html_e( 'Includes integrations added in the future.', 'botcreds-agent-access' ); ?></p>
+			<fieldset class="agent-access-custom-options">
 				<legend class="screen-reader-text"><?php esc_html_e( 'Specific integrations', 'botcreds-agent-access' ); ?></legend>
+				<p class="agent-access-integration-count" aria-live="polite"><?php printf( /* translators: 1: selected integration count, 2: available integration count. */ esc_html__( '%1$d of %2$d selected', 'botcreds-agent-access' ), count( array_intersect( $known_routes, $scope ) ), count( $integrations ) ); ?></p>
+				<div class="agent-access-integration-list" role="group" aria-label="<?php esc_attr_e( 'Available plugin integrations', 'botcreds-agent-access' ); ?>">
 				<?php foreach ( $integrations as $integration ) : ?>
 					<label style="display:block;margin:6px 0;">
-						<input type="checkbox" name="scope_types[]" class="agent-access-scope-type" value="<?php echo esc_attr( $integration['slug'] ); ?>" <?php checked( in_array( $integration['slug'], $scope, true ) ); ?>>
+						<input type="checkbox" name="scope_types[]" class="agent-access-scope-type" value="<?php echo esc_attr( $integration['slug'] ); ?>" <?php checked( in_array( $integration['slug'], $scope, true ) ); ?> <?php disabled( $read_only || $full || $all_custom ); ?>>
 						<?php echo esc_html( $integration['label'] ); ?>
-						<small style="display:block;margin-left:24px;color:#646970;"><?php echo esc_html( $integration['slug'] ); ?></small>
+						<small class="agent-access-route-hint"><?php echo esc_html( $integration['slug'] ); ?></small>
 					</label>
 				<?php endforeach; ?>
 				<?php if ( empty( $integrations ) ) : ?>
 					<p class="description"><?php esc_html_e( 'No custom REST integrations detected.', 'botcreds-agent-access' ); ?></p>
 				<?php endif; ?>
-				<details style="margin-top:10px;" <?php echo empty( $extra_routes ) ? '' : 'open'; ?>>
+				</div>
+				<details class="agent-access-advanced-routes" <?php echo empty( $extra_routes ) ? '' : 'open'; ?>>
 					<summary><?php esc_html_e( 'Advanced: specific route patterns', 'botcreds-agent-access' ); ?></summary>
-					<label style="display:block;margin-top:6px;">
-						<span><?php esc_html_e( 'Custom route prefixes (one per line)', 'botcreds-agent-access' ); ?></span>
-						<textarea name="scope_custom_routes" class="agent-access-scope-custom-routes large-text code" rows="3" placeholder="/newspack-workflows/v1/*"><?php echo esc_textarea( implode( "\n", $extra_routes ) ); ?></textarea>
-					</label>
-					<p class="description"><?php esc_html_e( 'Start each prefix with /. A prefix includes its subroutes; an optional trailing /* is supported. Use route paths, not full URLs. These grants allow all write methods, including DELETE, where the user has permission.', 'botcreds-agent-access' ); ?></p>
+					<div class="agent-access-control-row">
+						<label for="<?php echo esc_attr( $routes_id ); ?>"><?php esc_html_e( 'Custom route prefixes (one per line)', 'botcreds-agent-access' ); ?></label>
+						<?php $this->render_help_tooltip( __( 'Custom route prefixes', 'botcreds-agent-access' ), __( 'Enter one path per line, beginning with /. Prefixes include their subroutes; a trailing /* is optional. Use route paths, not full URLs. Grants include all write methods, including DELETE, subject to WordPress permissions.', 'botcreds-agent-access' ) ); ?>
+					</div>
+					<textarea id="<?php echo esc_attr( $routes_id ); ?>" name="scope_custom_routes" class="agent-access-scope-custom-routes large-text code" rows="3" placeholder="/newspack-workflows/v1/*" <?php disabled( $read_only || $full || $all_custom ); ?>><?php echo esc_textarea( implode( "\n", $extra_routes ) ); ?></textarea>
 				</details>
 			</fieldset>
 		</fieldset>
-		<p class="description"><?php esc_html_e( 'Scope limits writes only; reads still use the user\'s WordPress permissions. Selecting nothing allows no writes. Integration grants allow all write methods, not just POST or PUT.', 'botcreds-agent-access' ); ?></p>
+		<p class="agent-access-brief"><?php esc_html_e( 'Reads follow the account’s WordPress permissions. No selection means no writes.', 'botcreds-agent-access' ); ?></p>
 		<?php
 	}
 
@@ -798,7 +857,7 @@ class Agent_Access_Admin {
 				?>
 				<div class="agent-access-settings-section" style="margin-top:1.5em;">
 					<h3 style="margin-bottom:0.5em;"><?php esc_html_e( 'Agent Settings', 'botcreds-agent-access' ); ?></h3>
-					<table class="form-table" role="presentation" style="max-width:480px;">
+					<table class="form-table agent-access-settings-table" role="presentation">
 					<?php $this->render_site_management_control( $user->ID ); ?>
 						<tr>
 							<th scope="row">
@@ -855,7 +914,7 @@ class Agent_Access_Admin {
 									data-user-id="<?php echo esc_attr( $user->ID ); ?>">
 									<?php esc_html_e( 'Save settings', 'botcreds-agent-access' ); ?>
 								</button>
-								<span class="agent-access-admin-update-status" data-user-id="<?php echo esc_attr( $user->ID ); ?>" style="margin-left:0.75em;display:none;"></span>
+								<span class="agent-access-admin-update-status" data-user-id="<?php echo esc_attr( $user->ID ); ?>" role="status" aria-live="polite" aria-atomic="true"></span>
 							</td>
 						</tr>
 					</table>
@@ -865,7 +924,7 @@ class Agent_Access_Admin {
 			<?php else : ?>
 				<?php $admin_create_defaults = array( 'post', 'attachment' ); ?>
 				<div id="agent-access-admin-card" data-user-id="<?php echo esc_attr( $user->ID ); ?>">
-					<table class="form-table" role="presentation" style="max-width:480px;">
+					<table class="form-table agent-access-settings-table" role="presentation">
 					<?php $this->render_site_management_control( $user->ID ); ?>
 						<tr>
 							<th scope="row">
@@ -951,9 +1010,6 @@ class Agent_Access_Admin {
 		<div class="agent-access-notice-row">
 			<div class="agent-access-notice-box agent-access-notice-box--green">
 				<?php esc_html_e( 'Connected', 'botcreds-agent-access' ); ?>
-			</div>
-			<div class="agent-access-notice-box agent-access-notice-box--red">
-				<?php esc_html_e( 'Your AI agent can post here on your behalf.', 'botcreds-agent-access' ); ?>
 			</div>
 		</div>
 
@@ -1079,7 +1135,7 @@ class Agent_Access_Admin {
 		$default_slugs   = array( 'post', 'attachment' );
 		?>
 		<div id="agent-access-card">
-			<table class="form-table" role="presentation" style="max-width:480px;">
+			<table class="form-table agent-access-settings-table" role="presentation">
 				<tr>
 					<th scope="row">
 						<?php esc_html_e( 'Scope', 'botcreds-agent-access' ); ?>

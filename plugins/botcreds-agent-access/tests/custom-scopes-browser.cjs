@@ -11,8 +11,9 @@ const server = http.createServer((req, res) => {
  if (req.url === '/qa-save') {
   let body = ''; req.on('data', b => body += b); req.on('end', () => { captured = new URLSearchParams(body); res.setHeader('Content-Type','application/json'); res.end('{"success":true}'); }); return;
  }
- const file = req.url === '/admin.js' ? 'admin.js' : 'ui-fixture.html';
- res.setHeader('Content-Type', file.endsWith('.js') ? 'application/javascript' : 'text/html');
+ const file = req.url === '/' ? 'ui-fixture.html' : path.basename(new URL(req.url, 'http://127.0.0.1').pathname);
+ if (!fs.existsSync(path.join(dir, file))) { res.statusCode=404;res.end();return; }
+ res.setHeader('Content-Type', file.endsWith('.js') ? 'application/javascript' : (file.endsWith('.css') ? 'text/css' : 'text/html'));
  res.end(fs.readFileSync(path.join(dir, file)));
 });
 (async () => {
@@ -26,7 +27,7 @@ const server = http.createServer((req, res) => {
   check(await posts.isChecked(),'existing post scope rendered');
   check((await text.inputValue()).includes('/inactive-plugin/v1/*'),'inactive route shown');
   check(await page.locator('label').filter({has:page.locator('input[value="/newspack-workflows/v1/*"]')}).count()===1,'friendly detected integration');
-  const save=async()=>{captured=null;await page.getByRole('button',{name:'Save settings',exact:true}).click();await page.waitForFunction(()=>document.querySelector('button').disabled===false);check(captured!==null,'settings request captured');return captured;};
+  const save=async()=>{captured=null;await page.getByRole('button',{name:'Save settings',exact:true}).click();await page.waitForFunction(()=>document.querySelector('.agent-access-admin-update-btn').disabled===false);check(captured!==null,'settings request captured');return captured;};
   let data=await save();if(await page.locator('.agent-access-site-management').count()){check(data.get('site_management')==='0','site management default off serialized');await page.locator('.agent-access-site-management').check();data=await save();check(data.get('site_management')==='1','explicit site management grant serialized');await page.locator('.agent-access-site-management').uncheck();}check(data.get('scope_custom_routes')==='/inactive-plugin/v1/*','advanced route serialized');check(data.getAll('scope_types[]').includes('post'),'post selection serialized');
   await all.check();check(await text.isDisabled(),'all-custom disables specific routes');check(!(await posts.isDisabled()),'all-custom leaves core controls enabled');
   data=await save();check(data.get('scope_all_custom')==='1','all-custom marker serialized');check(!data.has('scope_full'),'all-custom is not full access');check(!data.has('scope_custom_routes'),'disabled custom text not serialized');
