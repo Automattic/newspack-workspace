@@ -54,7 +54,7 @@ const stats = {
 	source: { state: 'ok', unit: 'readers', provider: 'stub', reason: null, fetched_at: '2026-10-29T09:00:00Z' },
 	variants: {
 		a: { readers: 8214, conversions: 156, rate: 1.9, lift: null },
-		b: { readers: 8190, conversions: 220, rate: 2.69, lift: 41.6 },
+		b: { readers: 8190, conversions: 220, rate: 2.69, lift: 12.3 },
 	},
 	comparisons: { b: { confidence: 99.12, label: 'reliable' } },
 	flags: { young_test: false, high_anonymous: false },
@@ -135,6 +135,8 @@ describe( 'A/B Tests tab', () => {
 		expect( document.body.textContent ).not.toMatch( /control|challenger/ );
 	} );
 
+	// The fixture's lift is deliberately one the shown rates can't produce, so the
+	// test fails if the table computes lift itself instead of showing the route's.
 	it( 'shows the rates, lift and confidence the route returns', async () => {
 		mockRoutes( listResponse( [ test( 'run', { a: prompt( 4 ), b: prompt( 5 ) }, { started_at: '2026-10-01 00:00:00' } ) ] ) );
 		render( <ABTests /> );
@@ -142,7 +144,7 @@ describe( 'A/B Tests tab', () => {
 		expect( await within( card ).findByText( '2.69%' ) ).toBeInTheDocument();
 		expect( within( card ).getByText( '1.90%' ) ).toBeInTheDocument();
 		expect( within( card ).getByText( '220 of 8,190' ) ).toBeInTheDocument();
-		expect( within( card ).getByText( '+41.6%' ) ).toBeInTheDocument();
+		expect( within( card ).getByText( '+12.3%' ) ).toBeInTheDocument();
 		expect( within( card ).getByText( '99.1% Reliable' ) ).toBeInTheDocument();
 		expect( within( card ).getByText( /^Updated .*\. Results refresh every hour\.$/ ) ).toBeInTheDocument();
 	} );
