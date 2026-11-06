@@ -26,7 +26,7 @@ const DEFAULT_VIEW = {
 	perPage: 25,
 	sort: { field: 'timestamp', direction: 'desc' },
 	search: '',
-	fields: [ 'timestamp', 'status', 'email', 'event' ],
+	fields: [ 'event', 'status', 'email', 'timestamp' ],
 	filters: [],
 	layout: {},
 };

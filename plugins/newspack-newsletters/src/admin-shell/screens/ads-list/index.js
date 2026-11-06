@@ -32,7 +32,7 @@ const DEFAULT_VIEW = {
 	search: '',
 	filters: [],
 	titleField: 'title',
-	fields: [ 'status', 'ad_placement', 'start_date', 'expiry_date', 'impressions', 'clicks', 'price' ],
+	fields: [ 'status', 'start_date', 'expiry_date', 'ad_placement', 'impressions', 'clicks', 'price' ],
 };
 
 const DEFAULT_LAYOUTS = { table: {} };
