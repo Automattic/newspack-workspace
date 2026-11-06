@@ -1,9 +1,9 @@
-import { getDataViewsType, getDisplayValue } from './fields';
+import { getDataViewsType, getDisplayValue, getFilterByOperators } from './fields';
 
 describe( 'fields utils', () => {
 	describe( 'getDataViewsType', () => {
 		it( 'uses the array type for multi-value fields so "is all" stays available', () => {
-			expect( getDataViewsType( { type: 'text', is_multiple: true } ) ).toBe( 'array' );
+			expect( getDataViewsType( { type: 'number', is_multiple: true, options: [ { value: 1, label: 'Weekend Edition' } ] } ) ).toBe( 'array' );
 		} );
 
 		it( 'treats a numeric field with options as text so its label is not right-aligned', () => {
@@ -12,6 +12,12 @@ describe( 'fields utils', () => {
 
 		it( 'keeps the type of a plain numeric field', () => {
 			expect( getDataViewsType( { type: 'number' } ) ).toBe( 'number' );
+		} );
+	} );
+
+	describe( 'getFilterByOperators', () => {
+		it( 'leaves out "is not all", which DataViews labels the same as "is none of"', () => {
+			expect( getFilterByOperators( { is_multiple: true } ) ).not.toContain( 'isNotAll' );
 		} );
 	} );
 

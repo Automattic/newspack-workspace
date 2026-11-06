@@ -18,7 +18,7 @@
 	border-bottom: var( --wpds-border-width-xs, #{wp-vars.$border-width} ) solid var( --wpds-color-stroke-surface-neutral-weak, #{wp-colors.$gray-100} );
 	width: 100%;
 
-	/* stylelint-disable-next-line plugin-wpds/no-setting-wpds-custom-properties -- deliberate Newspack brand override of the indicator token. */
+	/* stylelint-disable-next-line plugin-wpds/no-setting-wpds-custom-properties -- deliberate Newspack brand override of the link variant's active underline. */
 	--wpds-color-stroke-interactive-neutral-strong: #{np-colors.$primary-600};
 
 	[role="tablist"] {
@@ -60,7 +60,7 @@
 		}
 
 		// Square the component's focus ring corners.
-		&::after {
+		&:focus-visible::after {
 			border-radius: 0;
 		}
 
