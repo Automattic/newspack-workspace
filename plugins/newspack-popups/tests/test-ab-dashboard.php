@@ -7,6 +7,7 @@
  */
 
 require_once __DIR__ . '/mocks/class-ab-stub-provider.php';
+require_once __DIR__ . '/mocks/class-audience-campaigns.php';
 
 /**
  * Dashboard tests.
@@ -14,8 +15,16 @@ require_once __DIR__ . '/mocks/class-ab-stub-provider.php';
  * @group ab-tests
  */
 class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
+	/**
+	 * WordPress's own value, restored after each test.
+	 *
+	 * @var string|null
+	 */
+	private $pagenow;
+
 	public function set_up() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
 		parent::set_up();
+		$this->pagenow = $GLOBALS['pagenow'] ?? null;
 		Newspack_Popups_AB_Tests::reset_config_cache();
 		remove_all_filters( 'newspack_popups_ab_stats_provider' );
 		// WP_UnitTestCase keeps one REST server for the whole run, so routes
@@ -24,7 +33,8 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	public function tear_down() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
-		unset( $_GET['page'], $GLOBALS['pagenow'], $GLOBALS['admin_page_hooks'][ Newspack_Popups_AB_Dashboard::AUDIENCE_MENU_SLUG ] );
+		unset( $_GET['page'], $GLOBALS['admin_page_hooks'][ Newspack_Popups_AB_Dashboard::AUDIENCE_MENU_SLUG ] );
+		$GLOBALS['pagenow'] = $this->pagenow; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Puts back WordPress's own value.
 		remove_all_filters( 'newspack_popups_ab_testing_enabled' );
 		parent::tear_down();
 	}
@@ -617,7 +627,10 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 
 		$_GET['page']       = Newspack_Popups_AB_Dashboard::PAGE_SLUG;
 		$GLOBALS['pagenow'] = 'tools.php'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
-		$this->assertSame( '', Newspack_Popups_AB_Dashboard::get_redirect_url(), 'Only admin.php serves the page slug.' );
+		$this->assertStringEndsWith( 'page=newspack-audience-campaigns#/ab-tests', Newspack_Popups_AB_Dashboard::get_redirect_url(), 'Sites without the Audience menu served the page under Tools.' );
+
+		$GLOBALS['pagenow'] = 'options-general.php'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		$this->assertSame( '', Newspack_Popups_AB_Dashboard::get_redirect_url(), 'Only admin.php and tools.php served the page slug.' );
 
 		$GLOBALS['pagenow'] = 'admin.php'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		unset( $GLOBALS['admin_page_hooks'][ Newspack_Popups_AB_Dashboard::AUDIENCE_MENU_SLUG ] );

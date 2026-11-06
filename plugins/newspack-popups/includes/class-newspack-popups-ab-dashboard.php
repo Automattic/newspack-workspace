@@ -63,7 +63,9 @@ final class Newspack_Popups_AB_Dashboard {
 	public static function get_redirect_url() {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reads the page slug to redirect; nothing is changed.
 		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
-		if ( self::PAGE_SLUG !== $page || 'admin.php' !== ( $GLOBALS['pagenow'] ?? '' ) ) {
+		// Tools served the page on sites without the Audience menu, so saved
+		// links can still name tools.php.
+		if ( self::PAGE_SLUG !== $page || ! in_array( $GLOBALS['pagenow'] ?? '', [ 'admin.php', 'tools.php' ], true ) ) {
 			return '';
 		}
 		return self::get_page_url();
@@ -72,7 +74,8 @@ final class Newspack_Popups_AB_Dashboard {
 	/**
 	 * URL of the A/B Tests tab, for the editor's "View results" link and the
 	 * redirect. The tab lives in newspack-plugin's Campaigns wizard, so a site
-	 * without that plugin has no results page and gets ''.
+	 * without that plugin, or with a release from before the tab, has no
+	 * results page and gets ''.
 	 *
 	 * @return string
 	 */
@@ -80,7 +83,9 @@ final class Newspack_Popups_AB_Dashboard {
 		if ( ! Newspack_Popups_AB_Tests::is_enabled() || ! current_user_can( 'manage_options' ) ) {
 			return '';
 		}
-		if ( empty( $GLOBALS['admin_page_hooks'][ self::AUDIENCE_MENU_SLUG ] ) ) {
+		// The menu alone is not enough: an older newspack-plugin builds it too,
+		// and its wizard sends #/ab-tests back to the Campaigns list.
+		if ( empty( $GLOBALS['admin_page_hooks'][ self::AUDIENCE_MENU_SLUG ] ) || ! is_callable( [ '\Newspack\Audience_Campaigns', 'is_ab_testing_enabled' ] ) ) {
 			return '';
 		}
 		return admin_url( 'admin.php?page=' . self::CAMPAIGNS_MENU_SLUG . '#' . self::TAB_ROUTE );
@@ -212,9 +217,9 @@ final class Newspack_Popups_AB_Dashboard {
 	/**
 	 * Whether the provider can answer, as true or a WP_Error that says why not.
 	 *
-	 * The provider is third-party code running inside the page's enqueue
-	 * hook and the stats route, so a false, an unexpected value or an
-	 * exception all become an "unavailable" the page can show, never a fatal.
+	 * The provider is third-party code running inside the list and stats
+	 * routes, so a false, an unexpected value or an exception all become an
+	 * "unavailable" the tab can show, never a fatal.
 	 *
 	 * @param Newspack_Popups_AB_Stats_Provider|null $provider Provider, or null when none is registered.
 	 * @return true|WP_Error
@@ -444,11 +449,11 @@ final class Newspack_Popups_AB_Dashboard {
 	 */
 	public static function get_provider() {
 		/**
-		 * Supplies the stats provider the A/B Tests dashboard reads from.
+		 * Supplies the stats provider the A/B Tests tab reads from.
 		 *
 		 * One provider per site. Return an object implementing
 		 * Newspack_Popups_AB_Stats_Provider; anything else counts as no
-		 * provider, and the dashboard reports its stats source as unavailable.
+		 * provider, and the tab reports its stats source as unavailable.
 		 *
 		 * @param Newspack_Popups_AB_Stats_Provider|null $provider The provider; null when none is registered.
 		 */
