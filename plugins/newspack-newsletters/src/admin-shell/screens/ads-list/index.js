@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from '@wordpress/el
 import { __ } from '@wordpress/i18n';
 import { emailAd } from 'newspack-icons';
 
-import { EmptyState } from 'newspack-components';
+import { EmptyState, evenColumns, withoutColumnStyles } from 'newspack-components';
 import { getAdminUrl } from '../../admin-globals';
 import LoadingState from '../../components/loading-state';
 import HeaderCount from '../../components/header-count';
@@ -32,7 +32,7 @@ const DEFAULT_VIEW = {
 	search: '',
 	filters: [],
 	titleField: 'title',
-	fields: [ 'ad_placement', 'status', 'start_date', 'expiry_date', 'impressions', 'clicks', 'price' ],
+	fields: [ 'status', 'ad_placement', 'start_date', 'expiry_date', 'impressions', 'clicks', 'price' ],
 };
 
 const DEFAULT_LAYOUTS = { table: {} };
@@ -186,8 +186,8 @@ export default function AdsListScreen() {
 				className="newspack-newsletters-list newspack-newsletters-ads-list"
 				data={ data }
 				fields={ fields }
-				view={ view }
-				onChangeView={ setView }
+				view={ evenColumns( view ) }
+				onChangeView={ nextView => setView( withoutColumnStyles( nextView ) ) }
 				actions={ actions }
 				paginationInfo={ paginationInfo }
 				defaultLayouts={ DEFAULT_LAYOUTS }

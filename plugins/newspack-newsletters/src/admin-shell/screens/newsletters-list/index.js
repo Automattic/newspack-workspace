@@ -8,7 +8,7 @@ import { useMemo, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { envelope } from '@wordpress/icons';
 
-import { EmptyState } from 'newspack-components';
+import { EmptyState, evenColumns, withoutColumnStyles } from 'newspack-components';
 import { getAdminUrl, getCptSlug } from '../../admin-globals';
 import LoadingState from '../../components/loading-state';
 import HeaderCount from '../../components/header-count';
@@ -113,8 +113,8 @@ export default function NewslettersListScreen() {
 					className="newspack-newsletters-list"
 					data={ data }
 					fields={ fields }
-					view={ view }
-					onChangeView={ setView }
+					view={ evenColumns( view ) }
+					onChangeView={ nextView => setView( withoutColumnStyles( nextView ) ) }
 					actions={ actions }
 					paginationInfo={ paginationInfo }
 					defaultLayouts={ DEFAULT_LAYOUTS }

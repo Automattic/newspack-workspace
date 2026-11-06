@@ -13,7 +13,7 @@
 import { render, screen } from '@testing-library/react';
 import { setSettings } from '@wordpress/date';
 
-import { getFields, STATUS_KIND_STATUSES } from './fields';
+import { formatPrice, getFields, STATUS_KIND_STATUSES } from './fields';
 import { statusGlyph } from 'newspack-components/src/status-indicator';
 
 const L10N = {
@@ -192,5 +192,25 @@ describe( 'STATUS_KIND_STATUSES', () => {
 
 	it( 'reads an expired ad as its window closing, not a deliberate stop', () => {
 		expect( STATUS_KIND_STATUSES.expired ).toBe( 'ended' );
+	} );
+} );
+
+describe( 'formatPrice', () => {
+	afterEach( () => {
+		delete window.newspackNewslettersAdmin;
+	} );
+
+	it( 'puts the store currency where the store puts it', () => {
+		window.newspackNewslettersAdmin = { currency: { symbol: '£', position: 'left', decimals: 2, decimalSeparator: '.', thousandSeparator: ',' } };
+		expect( formatPrice( 1250 ) ).toBe( '£1,250.00' );
+
+		window.newspackNewslettersAdmin = {
+			currency: { symbol: '€', position: 'right_space', decimals: 2, decimalSeparator: ',', thousandSeparator: '.' },
+		};
+		expect( formatPrice( 1250.5 ) ).toBe( '1.250,50 €' );
+	} );
+
+	it( 'shows a plain number without a store', () => {
+		expect( formatPrice( 1250 ) ).toBe( '1250' );
 	} );
 } );

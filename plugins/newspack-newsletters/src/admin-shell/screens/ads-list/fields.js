@@ -11,7 +11,7 @@ import { dateI18n, getSettings as getDateSettings, gmdateI18n } from '@wordpress
 
 import { StatusIndicator } from 'newspack-components';
 
-import { getAdminUrl } from '../../admin-globals';
+import { getAdminUrl, getCurrency } from '../../admin-globals';
 import { formatPostDate } from '../../utils/format-date';
 import { termsForTaxonomy } from '../../utils/terms';
 import { statusKindLabel, STATUS_KIND_LABELS } from './status-label';
@@ -146,12 +146,29 @@ const renderExpiryDate = ( { item } ) => renderAdDate( item?.meta?.expiry_date, 
 
 const renderImpressions = ( { item } ) => String( item?.meta?.tracking_impressions ?? 0 );
 const renderClicks = ( { item } ) => String( item?.meta?.tracking_clicks ?? 0 );
+const CURRENCY_LAYOUTS = {
+	left: ( symbol, amount ) => `${ symbol }${ amount }`,
+	right: ( symbol, amount ) => `${ amount }${ symbol }`,
+	left_space: ( symbol, amount ) => `${ symbol } ${ amount }`,
+	right_space: ( symbol, amount ) => `${ amount } ${ symbol }`,
+};
+
+export const formatPrice = price => {
+	const currency = getCurrency();
+	if ( ! currency ) {
+		return String( price );
+	}
+	const [ whole, fraction ] = Number( price ).toFixed( currency.decimals ).split( '.' );
+	const amount = whole.replace( /\B(?=(\d{3})+(?!\d))/g, currency.thousandSeparator ) + ( fraction ? currency.decimalSeparator + fraction : '' );
+	return ( CURRENCY_LAYOUTS[ currency.position ] || CURRENCY_LAYOUTS.left )( currency.symbol, amount );
+};
+
 const renderPrice = ( { item } ) => {
 	const price = item?.meta?.price;
 	if ( ! price ) {
 		return '';
 	}
-	return String( price );
+	return formatPrice( price );
 };
 
 const renderDate = ( { item } ) => formatPostDate( item );

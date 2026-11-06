@@ -166,6 +166,26 @@ class Newsletters_List_REST_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A send queued when its scheduled time arrived reports that time, so the
+	 * list can show when it was due.
+	 */
+	public function test_sending_scheduled_meta_reports_scheduled_time() {
+		$post_id = $this->make_newsletter(
+			[
+				'post_status'   => 'publish',
+				'post_date'     => '2026-08-24 16:21:00',
+				'post_date_gmt' => '2026-08-24 16:21:00',
+				'meta_input'    => [ 'sending_scheduled' => true ],
+			]
+		);
+
+		$status = Newsletters_List_REST::get_status_for_post( get_post( $post_id ) );
+
+		$this->assertSame( 'scheduled', $status['kind'] );
+		$this->assertSame( strtotime( '2026-08-24 16:21:00 UTC' ), $status['scheduled_at'] );
+	}
+
+	/**
 	 * A trashed newsletter reports kind=trash regardless of any sent state.
 	 */
 	public function test_trashed_post_reports_trash_kind() {

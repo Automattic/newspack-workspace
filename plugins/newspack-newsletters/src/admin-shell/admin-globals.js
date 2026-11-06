@@ -27,6 +27,15 @@ export function getAdminUrl() {
  *
  * @return {string} CPT slug.
  */
+/**
+ * The store's currency format, or null when WooCommerce is not active.
+ *
+ * @return {{symbol: string, position: string, decimals: number, decimalSeparator: string, thousandSeparator: string}|null} The format.
+ */
+export function getCurrency() {
+	return getGlobal()?.currency || null;
+}
+
 export function getCptSlug() {
 	return getGlobal()?.cptSlug || DEFAULT_CPT_SLUG;
 }

@@ -495,6 +495,12 @@ class Newsletters_List_REST {
 
 		if ( get_post_meta( $post->ID, 'sending_scheduled', true ) ) {
 			$payload['kind'] = 'scheduled';
+			// A send queued when its scheduled time arrived keeps that time as
+			// the post date, so the list can say when it was due.
+			$datetime = get_post_datetime( $post, 'date', 'gmt' );
+			if ( $datetime ) {
+				$payload['scheduled_at'] = $datetime->getTimestamp();
+			}
 			return $payload;
 		}
 

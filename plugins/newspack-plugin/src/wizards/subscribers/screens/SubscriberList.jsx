@@ -116,15 +116,7 @@ const DEFAULT_VIEW = {
 	search: '',
 	fields: [ 'status', 'plans', 'lastPayment', 'memberSince' ],
 	filters: [],
-	layout: {
-		styles: {
-			name: { width: '30%' },
-			status: { width: '15%' },
-			plans: { width: '20%' },
-			lastPayment: { width: '15%' },
-			memberSince: { width: '20%' },
-		},
-	},
+	layout: {},
 	titleField: 'name',
 };
 

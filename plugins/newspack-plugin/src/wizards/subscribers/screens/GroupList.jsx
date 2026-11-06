@@ -56,15 +56,7 @@ const DEFAULT_VIEW = {
 	// reachable by ticking "Cancelled" in the Status filter (or clearing it).
 	// A group awaiting its first payment sits in `pending`, so it stays visible.
 	filters: [ { field: 'status', operator: 'isAny', value: [ 'active', 'pending', 'on-hold' ] } ],
-	layout: {
-		styles: {
-			owner: { width: '30%' },
-			status: { width: '15%' },
-			product: { width: '20%' },
-			members: { width: '15%' },
-			createdAt: { width: '20%' },
-		},
-	},
+	layout: {},
 	titleField: 'owner',
 };
 
@@ -114,8 +106,9 @@ export default function GroupList() {
 				label: __( 'Owner', 'newspack-plugin' ),
 				enableGlobalSearch: true,
 				getValue: ( { item } ) => item.owner?.name || '',
-				// Owners tell groups apart where group names repeat, so the owner leads
-				// and the group's name sits under it. This is the DataViews title field,
+				// Owners tell groups apart where group names repeat, so the owner leads.
+				// The group's name sits under it only when it was renamed: an unnamed
+				// group takes its subscription's name, which the next column shows. This is the DataViews title field,
 				// which ColumnPrimary wraps in an ItemClickWrapper: a role="button" whose
 				// own Enter/Space handler fires onClickItem regardless of where the key
 				// originated, so a link nested here would resolve to two destinations at
@@ -133,7 +126,7 @@ export default function GroupList() {
 									</Badge>
 								) }
 							</HStack>
-							{ item.plan && <div className="newspack-subscribers__email">{ item.plan }</div> }
+							{ item.plan && item.plan !== item.product && <div className="newspack-subscribers__email">{ item.plan }</div> }
 						</div>
 					);
 					return (

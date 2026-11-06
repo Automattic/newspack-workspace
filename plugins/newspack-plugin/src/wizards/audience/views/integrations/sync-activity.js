@@ -29,15 +29,7 @@ const DEFAULT_VIEW = {
 	search: '',
 	fields: [ 'email', 'status', 'operation', 'context', 'updated_at' ],
 	filters: [],
-	layout: {
-		styles: {
-			email: { width: '26%' },
-			status: { width: '20%' },
-			operation: { width: '14%' },
-			context: { width: '20%' },
-			updated_at: { width: '20%' },
-		},
-	},
+	layout: {},
 };
 
 // The retry's action finishing does not say the push worked, so the notice

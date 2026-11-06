@@ -28,14 +28,7 @@ const DEFAULT_VIEW = {
 	search: '',
 	fields: [ 'timestamp', 'email', 'event', 'status' ],
 	filters: [],
-	layout: {
-		styles: {
-			timestamp: { width: '35%' },
-			email: { width: '30%' },
-			event: { width: '20%' },
-			status: { width: '15%' },
-		},
-	},
+	layout: {},
 };
 
 const ORDERBY_MAP = {
