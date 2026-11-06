@@ -237,8 +237,8 @@
 
 			&:checked + label {
 				&::before {
-					background: var(--newspack-ui-color-selected);
-					box-shadow: 0 0 0 2px var(--newspack-ui-color-selected);
+					background: var(--newspack-ui-color-mark);
+					box-shadow: 0 0 0 2px var(--newspack-ui-color-mark);
 				}
 			}
 		}
