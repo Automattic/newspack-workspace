@@ -9,9 +9,8 @@
  * density, grid preview size and items per page. Not persisted: page,
  * search and filters, which are a query rather than a configuration.
  *
- * Column widths (`view.layout.styles`) round-trip too, but nothing writes
- * them yet: DataViews 16 reads the map to size cells and ships no resize
- * handle. The plumbing is here so widths persist the day one appears.
+ * Column widths (`view.layout.styles`) are not stored: the lists work them
+ * out on every render with `evenColumns` and strip them before saving.
  *
  * Saves are debounced because the grid's preview-size slider streams
  * changes, and flushed on `pagehide` so navigating away right after a

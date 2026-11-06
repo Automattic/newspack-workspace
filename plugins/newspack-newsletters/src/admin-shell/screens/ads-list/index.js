@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from '@wordpress/el
 import { __ } from '@wordpress/i18n';
 import { emailAd } from 'newspack-icons';
 
-import { EmptyState } from 'newspack-components';
+import { EmptyState, evenColumns, withoutColumnStyles } from 'newspack-components';
 import { getAdminUrl } from '../../admin-globals';
 import LoadingState from '../../components/loading-state';
 import HeaderCount from '../../components/header-count';
@@ -32,7 +32,7 @@ const DEFAULT_VIEW = {
 	search: '',
 	filters: [],
 	titleField: 'title',
-	fields: [ 'advertiser', 'ad_placement', 'status', 'start_date', 'expiry_date', 'impressions', 'clicks', 'price' ],
+	fields: [ 'status', 'start_date', 'expiry_date', 'ad_placement', 'impressions', 'clicks', 'price' ],
 };
 
 const DEFAULT_LAYOUTS = { table: {} };
@@ -41,6 +41,9 @@ const PERSIST_OPTIONS = {
 	fieldIds: FIELD_IDS,
 	layoutTypes: Object.keys( DEFAULT_LAYOUTS ),
 	urlPatch: getInitialView(),
+	// The advertiser now sits under the title, so a view saved while it had its
+	// own column would show it twice. The field stays for its filter.
+	normalize: view => ( { ...view, fields: ( view.fields || [] ).filter( field => field !== 'advertiser' ) } ),
 };
 
 // Suppress the built-in ViewConfig per-page control — the custom
@@ -186,8 +189,8 @@ export default function AdsListScreen() {
 				className="newspack-newsletters-list newspack-newsletters-ads-list"
 				data={ data }
 				fields={ fields }
-				view={ view }
-				onChangeView={ setView }
+				view={ evenColumns( view ) }
+				onChangeView={ nextView => setView( withoutColumnStyles( nextView ) ) }
 				actions={ actions }
 				paginationInfo={ paginationInfo }
 				defaultLayouts={ DEFAULT_LAYOUTS }

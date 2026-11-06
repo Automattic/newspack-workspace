@@ -114,7 +114,7 @@ describe( 'SyncActivity', () => {
 	it( 'shows the working columns and keeps the rest a click away', async () => {
 		await renderLoaded();
 
-		expect( mockDataViewsProps.current.view.fields ).toEqual( [ 'updated_at', 'email', 'operation', 'context', 'status' ] );
+		expect( mockDataViewsProps.current.view.fields ).toEqual( [ 'email', 'status', 'operation', 'context', 'updated_at' ] );
 		const ids = mockDataViewsProps.current.fields.map( field => field.id );
 		expect( ids ).toEqual( expect.arrayContaining( [ 'created_at', 'repeat_count', 'needs_attention' ] ) );
 	} );

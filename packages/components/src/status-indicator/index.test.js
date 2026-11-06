@@ -11,7 +11,7 @@ import { drafts, gift, published } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import StatusIndicator, { statusGlyph, STATUS_NAMES } from '.';
+import StatusIndicator, { statusGlyph, statusTone, STATUS_NAMES } from '.';
 
 describe( 'StatusIndicator', () => {
 	it( 'renders the glyph alongside the label', () => {
@@ -40,6 +40,30 @@ describe( 'StatusIndicator', () => {
 		expect( free.querySelector( 'svg' ).innerHTML ).not.toBe( active.querySelector( 'svg' ).innerHTML );
 	} );
 
+	it( 'tints a named status with its tone', () => {
+		const { container } = render( <StatusIndicator status="error">Failed</StatusIndicator> );
+		expect( container.querySelector( '.newspack-status-indicator' ) ).toHaveClass( 'newspack-status-indicator--error' );
+	} );
+
+	it( 'lets a screen narrow the tone of a named status', () => {
+		const { container } = render(
+			<StatusIndicator status="done" tone="neutral">
+				Complete
+			</StatusIndicator>
+		);
+		const root = container.querySelector( '.newspack-status-indicator' );
+		expect( root ).toHaveClass( 'newspack-status-indicator--neutral' );
+		expect( root ).not.toHaveClass( 'newspack-status-indicator--success' );
+	} );
+
+	it( 'leaves a passed glyph and a toneless status in the text color', () => {
+		const { container: free } = render( <StatusIndicator icon={ gift }>Free</StatusIndicator> );
+		const { container: privateStatus } = render( <StatusIndicator status="private">Private</StatusIndicator> );
+		[ free, privateStatus ].forEach( container =>
+			expect( container.querySelector( '.newspack-status-indicator' ).className ).not.toMatch( /newspack-status-indicator--/ )
+		);
+	} );
+
 	it( 'keeps the consumer class and passes the rest through', () => {
 		const { container } = render(
 			<StatusIndicator className="custom" data-testid="status" status="active">
@@ -66,5 +90,13 @@ describe( 'statusGlyph', () => {
 			[ 'active', 'done' ],
 			[ 'cancelled', 'ended' ],
 		] );
+	} );
+} );
+
+describe( 'statusTone', () => {
+	it( 'never gives a live status and a stopped one the same color', () => {
+		const live = [ 'active', 'done', 'scheduled', 'progress', 'pending', 'attention' ].map( statusTone );
+		const stopped = [ 'draft', 'cancelled', 'ended', 'trash' ].map( statusTone );
+		expect( live.filter( tone => stopped.includes( tone ) ) ).toEqual( [] );
 	} );
 } );
