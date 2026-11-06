@@ -2,9 +2,9 @@
 Contributors: jboydston, droyal
 Tags: ai-agents, mcp, application-passwords, rest-api, security
 Requires at least: 5.7
-Tested up to: 7.0
+Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.3.2
+Stable tag: 2.4.0-rc.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -75,6 +75,13 @@ BotCreds manages one Application Password per user. Revoke the existing one befo
 3. The "Connected" state showing status and revoke option.
 
 == Changelog ==
+
+= 2.4.0-rc.2 =
+* Scope UI: discover registered plugin REST namespaces with friendly integration labels.
+* Scope UI: allow all custom endpoints separately from core WordPress content access, or enter specific route prefixes in Advanced.
+* Preserve full-access and inactive-plugin grants; an empty selection is now read-only, never full access.
+* Add Agent: generate the account password server-side without displaying an unused password.
+
 
 = 2.3.4 =
 * Scope UI: Agent Memory integration detection uses class_exists() instead of is_plugin_active() — works regardless of plugin folder name

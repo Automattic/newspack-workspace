@@ -14,57 +14,55 @@
 		initScopeReadOnlyToggles();
 	});
 
-	/**
-	 * When "Read only" is toggled on, disable and uncheck all other scope checkboxes.
-	 * When toggled off, re-enable them.
-	 */
+	/** Keep specific grants intact while read-only, full or all-custom is selected. */
 	function initScopeReadOnlyToggles() {
-		// Delegate so it also works for dynamically injected checklists.
+		function sync(checklist) {
+			var readOnly = checklist.querySelector('.agent-access-scope-read-only');
+			var full = checklist.querySelector('.agent-access-scope-full');
+			var options = checklist.querySelector('.agent-access-scoped-options');
+			var allCustom = checklist.querySelector('.agent-access-scope-all-custom');
+			var customOptions = checklist.querySelector('.agent-access-custom-options');
+			if (full) full.disabled = !!(readOnly && readOnly.checked);
+			if (options) options.disabled = !!((readOnly && readOnly.checked) || (full && full.checked));
+			if (customOptions) customOptions.disabled = !!(allCustom && allCustom.checked);
+		}
+		document.querySelectorAll('.agent-access-scope-checklist').forEach(sync);
 		document.addEventListener('change', function (e) {
-			if (!e.target.classList.contains('agent-access-scope-read-only')) return;
 			var checklist = e.target.closest('.agent-access-scope-checklist');
-			if (!checklist) return;
-			var typeCheckboxes = checklist.querySelectorAll('.agent-access-scope-type');
-			var isReadOnly = e.target.checked;
-			typeCheckboxes.forEach(function (cb) {
-				cb.disabled = isReadOnly;
-				if (isReadOnly) {
-					cb.checked = false;
-				}
-			});
+			if (checklist) sync(checklist);
 		});
 	}
 
-	/**
-	 * Collect scope data from a checklist container.
-	 * Returns { scope_read_only: '1'|'', scope_types: string[] }
-	 */
+	/** Collect only effective controls; disabled fieldsets must not submit grants. */
 	function collectScopeFromChecklist(container) {
-		var readOnlyEl = container ? container.querySelector('.agent-access-scope-read-only') : null;
-		if (readOnlyEl && readOnlyEl.checked) {
-			return { scope_read_only: '1', scope_types: [] };
+		var data = { scope_read_only: '', scope_full: '', scope_all_custom: '', scope_types: [], scope_custom_routes: '' };
+		if (!container) return data;
+		if (container.querySelector('.agent-access-scope-read-only:checked')) {
+			data.scope_read_only = '1';
+			return data;
 		}
-		var typeCheckboxes = container ? container.querySelectorAll('.agent-access-scope-type:checked') : [];
-		var types = [];
-		typeCheckboxes.forEach(function (cb) {
-			types.push(cb.value);
+		if (container.querySelector('.agent-access-scope-full:checked')) {
+			data.scope_full = '1';
+			return data;
+		}
+		var allCustom = container.querySelector('.agent-access-scope-all-custom:checked');
+		data.scope_all_custom = allCustom ? '1' : '';
+		container.querySelectorAll('.agent-access-scope-type:checked:not(:disabled)').forEach(function (cb) {
+			data.scope_types.push(cb.value);
 		});
-		return { scope_read_only: '', scope_types: types };
+		var custom = container.querySelector('.agent-access-scope-custom-routes:not(:disabled)');
+		data.scope_custom_routes = custom ? custom.value : '';
+		return data;
 	}
 
-	/**
-	 * Encode scope data as a query-string fragment.
-	 */
-	function encodeScopeParams(scopeData) {
+	function encodeScopeParams(data) {
 		var parts = [];
-		if (scopeData.scope_read_only) {
-			parts.push('scope_read_only=' + encodeURIComponent(scopeData.scope_read_only));
-		}
-		if (scopeData.scope_types && scopeData.scope_types.length > 0) {
-			scopeData.scope_types.forEach(function (t) {
-				parts.push('scope_types%5B%5D=' + encodeURIComponent(t));
-			});
-		}
+		['scope_read_only', 'scope_full', 'scope_all_custom', 'scope_custom_routes'].forEach(function (key) {
+			if (data[key]) parts.push(key + '=' + encodeURIComponent(data[key]));
+		});
+		data.scope_types.forEach(function (type) {
+			parts.push('scope_types%5B%5D=' + encodeURIComponent(type));
+		});
 		return parts.join('&');
 	}
 

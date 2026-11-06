@@ -11,15 +11,21 @@ set -euo pipefail
 
 PLUGIN_SLUG="botcreds-agent-access"
 PLUGIN_DIR="$(cd "$(dirname "$0")" && pwd)"
-VERSION=$(grep "define( 'AGENT_ACCESS_VERSION'" "$PLUGIN_DIR/botcreds-agent-access.php" | grep -o "'[0-9.]*'" | tr -d "'")
+VERSION=$(sed -n "s/^define( 'AGENT_ACCESS_VERSION', '\([^']*\)' );/\1/p" "$PLUGIN_DIR/botcreds-agent-access.php")
+if [[ -z "$VERSION" || ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][a-zA-Z0-9.-]+)?$ ]]; then
+  echo "Invalid or missing plugin version" >&2
+  exit 1
+fi
 OUT="$HOME/Public/${PLUGIN_SLUG}-${VERSION}.zip"
 TMP=$(mktemp -d)
 
 echo "Building ${PLUGIN_SLUG} v${VERSION}..."
 
 # Copy into a correctly-named subfolder
-cp -r "$PLUGIN_DIR" "$TMP/$PLUGIN_SLUG"
-rm -rf "$TMP/$PLUGIN_SLUG/.git"
+mkdir "$TMP/$PLUGIN_SLUG"
+for entry in assets includes botcreds-agent-access.php uninstall.php index.php LICENSE readme.txt; do
+  cp -R "$PLUGIN_DIR/$entry" "$TMP/$PLUGIN_SLUG/"
+done
 
 # Build zip from the parent so the folder name is the root entry
 cd "$TMP"

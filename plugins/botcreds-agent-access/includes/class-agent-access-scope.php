@@ -26,6 +26,7 @@ class Agent_Access_Scope {
 	const META_PREFIX    = '_agent_access_scope_';
 	const DEFAULT_SCOPE  = 'posts_media';   // kept for back-compat; maps to ['post','attachment']
 	const STORAGE_VERSION = 2;
+	const ALL_CUSTOM_ENDPOINTS = '__custom_endpoints__';
 
 	/** Post types excluded from the checklist. */
 	private static $excluded_types = array(
@@ -93,6 +94,11 @@ class Agent_Access_Scope {
 
 		// Wildcard — full write access.
 		if ( in_array( '*', $slugs, true ) ) {
+			return $result;
+		}
+
+		// Custom integrations never override the core WordPress scope.
+		if ( in_array( self::ALL_CUSTOM_ENDPOINTS, $slugs, true ) && self::is_custom_route( $request->get_route() ) ) {
 			return $result;
 		}
 
@@ -178,6 +184,7 @@ class Agent_Access_Scope {
 	 */
 	private static function build_allowed_routes( array $slugs ) {
 		$routes = array();
+		$has_content_scope = false;
 
 		// Fetch all REST-enabled types so we can resolve rest_base.
 		$all_types = get_post_types( array(), 'objects' );
@@ -193,11 +200,12 @@ class Agent_Access_Scope {
 				continue;
 			}
 
-			if ( '*' === $slug || '__read_only__' === $slug ) {
+			if ( '*' === $slug || '__read_only__' === $slug || self::ALL_CUSTOM_ENDPOINTS === $slug ) {
 				continue;
 			}
 
 			// Find the rest_base for this post type.
+			$has_content_scope = true;
 			$rest_base = $slug; // fallback
 			if ( isset( $all_types[ $slug ] ) ) {
 				$rest_base = $all_types[ $slug ]->rest_base ?: $slug;
@@ -220,7 +228,7 @@ class Agent_Access_Scope {
 
 		// Always allow taxonomy routes (categories/tags) when posting.
 		// These are commonly needed alongside post types.
-		if ( ! empty( $slugs ) && ! in_array( '__read_only__', $slugs, true ) ) {
+		if ( $has_content_scope ) {
 			$routes[] = '/wp/v2/categories';
 			$routes[] = '/wp/v2/categories/*';
 			$routes[] = '/wp/v2/tags';
@@ -255,6 +263,92 @@ class Agent_Access_Scope {
 			}
 		}
 
+		return false;
+	}
+
+	/**
+	 * Core namespaces are never part of the custom-endpoint blanket grant.
+	 * Reserve WordPress namespace prefixes, including future core namespaces.
+	 *
+	 * @param string $namespace REST namespace.
+	 * @return bool
+	 */
+	public static function is_core_namespace( $namespace ) {
+		return 'wp' === $namespace || 0 === strpos( $namespace, 'wp/' )
+			|| 0 === strpos( $namespace, 'wp-' ) || 'oembed/1.0' === $namespace;
+	}
+
+	/**
+	 * Validate a custom route prefix without transforming malformed grants.
+	 *
+	 * @param mixed $pattern Route prefix, optionally ending in /*.
+	 * @return bool
+	 */
+	public static function is_valid_custom_pattern( $pattern ) {
+		if ( ! is_string( $pattern ) || ! preg_match( '#^/[a-zA-Z0-9_-]+(?:/[a-zA-Z0-9_.-]+)*(?:/\*)?$#D', $pattern ) ) {
+			return false;
+		}
+		foreach ( explode( '/', $pattern ) as $segment ) {
+			if ( '.' === $segment || '..' === $segment ) {
+				return false;
+			}
+		}
+		$prefix = trim( $pattern, '/' );
+		return ! self::is_core_namespace( $prefix ) && 'oembed' !== explode( '/', $prefix )[0];
+	}
+
+	/**
+	 * Discover namespaces from registered REST routes, not installed plugin names.
+	 * Registration is initialized by rest_get_server() on admin pages too.
+	 *
+	 * @return array
+	 */
+	public static function get_custom_integrations() {
+		$labels = array(
+			'newspack-workflows' => __( 'Newspack Workflows', 'botcreds-agent-access' ),
+			'wc'                => __( 'WooCommerce', 'botcreds-agent-access' ),
+			'wc-admin'          => __( 'WooCommerce Admin', 'botcreds-agent-access' ),
+			'wc-analytics'      => __( 'WooCommerce Analytics', 'botcreds-agent-access' ),
+			'wc/store'          => __( 'WooCommerce Store', 'botcreds-agent-access' ),
+			'botcreds-memory'   => __( 'Agent Memory', 'botcreds-agent-access' ),
+		);
+		$result = array();
+		$namespaces = rest_get_server()->get_namespaces();
+		foreach ( $namespaces as $namespace ) {
+			if ( self::is_core_namespace( $namespace ) || ! self::is_valid_custom_pattern( '/' . $namespace . '/*' ) ) {
+				continue;
+			}
+			// A parent namespace already grants all descendants; do not list them twice.
+			foreach ( $namespaces as $parent ) {
+				if ( $parent !== $namespace && ! self::is_core_namespace( $parent ) && 0 === strpos( $namespace, $parent . '/' ) ) {
+					continue 2;
+				}
+			}
+			$parts   = explode( '/', $namespace );
+			$version = array_pop( $parts );
+			$name    = implode( '/', $parts );
+			$label   = $labels[ $name ] ?? ucwords( str_replace( array( '-', '_', '/' ), ' ', $name ?: $namespace ) );
+			$result[] = array(
+				'slug'  => '/' . $namespace . '/*',
+				'label' => $label . ( $name ? ' (' . $version . ')' : '' ),
+			);
+		}
+		usort( $result, static function ( $a, $b ) { return strcasecmp( $a['label'], $b['label'] ); } );
+		return $result;
+	}
+
+	/**
+	 * Only registered, non-core namespaces qualify for the blanket grant.
+	 *
+	 * @param string $route REST request route.
+	 * @return bool
+	 */
+	private static function is_custom_route( $route ) {
+		foreach ( self::get_custom_integrations() as $integration ) {
+			if ( self::route_matches_patterns( $route, array( $integration['slug'] ) ) ) {
+				return true;
+			}
+		}
 		return false;
 	}
 
@@ -450,7 +544,9 @@ class Agent_Access_Scope {
 		$all_types = get_post_types( array(), 'objects' );
 		$labels    = array();
 		foreach ( $scope as $slug ) {
-			if ( isset( $all_types[ $slug ] ) ) {
+			if ( self::ALL_CUSTOM_ENDPOINTS === $slug ) {
+				$labels[] = __( 'All custom endpoints', 'botcreds-agent-access' );
+			} elseif ( isset( $all_types[ $slug ] ) ) {
 				$labels[] = $all_types[ $slug ]->labels->singular_name ?? ucfirst( $slug );
 			} else {
 				$labels[] = ucfirst( $slug );

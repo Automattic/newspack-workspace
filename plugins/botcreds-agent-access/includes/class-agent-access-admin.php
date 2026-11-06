@@ -309,6 +309,11 @@ class Agent_Access_Admin {
 
 		check_ajax_referer( 'agent_access_create', 'nonce' );
 
+		$scope = self::collect_scope_from_post();
+		if ( is_wp_error( $scope ) ) {
+			wp_send_json_error( $scope->get_error_message() );
+		}
+
 		$result = $this->api->create_password();
 
 		if ( is_wp_error( $result ) ) {
@@ -316,7 +321,6 @@ class Agent_Access_Admin {
 		}
 
 		// Save scope and rate-limit tier for this credential.
-		$scope = self::collect_scope_from_post();
 		$tier  = isset( $_POST['rate_limit'] ) ? sanitize_key( $_POST['rate_limit'] ) : Agent_Access_Rate_Limiter::DEFAULT_TIER; // phpcs:ignore WordPress.Security.NonceVerification.Missing
 		Agent_Access_Scope::save( get_current_user_id(), $result['uuid'], $scope );
 		Agent_Access_Rate_Limiter::save( get_current_user_id(), $result['uuid'], $tier );
@@ -371,6 +375,11 @@ class Agent_Access_Admin {
 			wp_send_json_error( __( 'Invalid user.', 'botcreds-agent-access' ) );
 		}
 
+		$scope = self::collect_scope_from_post();
+		if ( is_wp_error( $scope ) ) {
+			wp_send_json_error( $scope->get_error_message() );
+		}
+
 		$result = $this->api->create_password( $user_id );
 
 		if ( is_wp_error( $result ) ) {
@@ -378,7 +387,6 @@ class Agent_Access_Admin {
 		}
 
 		// Save scope and rate-limit tier for this credential.
-		$scope = self::collect_scope_from_post();
 		$tier  = isset( $_POST['rate_limit'] ) ? sanitize_key( $_POST['rate_limit'] ) : Agent_Access_Rate_Limiter::DEFAULT_TIER; // phpcs:ignore WordPress.Security.NonceVerification.Missing
 		Agent_Access_Scope::save( $user_id, $result['uuid'], $scope );
 		Agent_Access_Rate_Limiter::save( $user_id, $result['uuid'], $tier );
@@ -453,6 +461,9 @@ class Agent_Access_Admin {
 
 		$uuid       = $existing['uuid'];
 		$scope      = self::collect_scope_from_post();
+		if ( is_wp_error( $scope ) ) {
+			wp_send_json_error( $scope->get_error_message() );
+		}
 		$policy     = isset( $_POST['content_policy'] ) ? sanitize_key( $_POST['content_policy'] ) : Agent_Access_Content_Policy::DEFAULT_POLICY;
 		$rate_limit = isset( $_POST['rate_limit'] ) ? sanitize_key( $_POST['rate_limit'] ) : Agent_Access_Rate_Limiter::DEFAULT_TIER;
 
@@ -464,44 +475,130 @@ class Agent_Access_Admin {
 	}
 
 	/**
+	 * Shared scope controls for self-service creation, admin creation and updates.
+	 *
+	 * @param array $scope Existing grants or creation defaults.
+	 */
+	private function render_scope_controls( array $scope ) {
+		$read_only    = in_array( '__read_only__', $scope, true );
+		$full         = in_array( '*', $scope, true );
+		$all_custom   = in_array( Agent_Access_Scope::ALL_CUSTOM_ENDPOINTS, $scope, true );
+		$integrations = Agent_Access_Scope::get_custom_integrations();
+		$known_routes = array_column( $integrations, 'slug' );
+		$extra_routes = array_filter( $scope, static function ( $slug ) use ( $known_routes ) {
+			return is_string( $slug ) && isset( $slug[0] ) && '/' === $slug[0] && ! in_array( $slug, $known_routes, true );
+		} );
+		$types = Agent_Access_Scope::get_available_post_types();
+		$known_types = array_column( $types, 'slug' );
+		// Preserve grants for post types whose plugins are temporarily inactive.
+		foreach ( $scope as $slug ) {
+			if ( is_string( $slug ) && '' !== $slug && '/' !== $slug[0] && ! in_array( $slug, array( '*', '__read_only__', Agent_Access_Scope::ALL_CUSTOM_ENDPOINTS ), true ) && ! in_array( $slug, $known_types, true ) ) {
+				$types[] = array( 'slug' => $slug, 'label' => $slug );
+			}
+		}
+		?>
+		<label style="display:block;margin-bottom:6px;font-weight:600;">
+			<input type="checkbox" name="scope_read_only" class="agent-access-scope-read-only" value="1" <?php checked( $read_only ); ?>>
+			<?php esc_html_e( 'Read only (no writes)', 'botcreds-agent-access' ); ?>
+		</label>
+		<label style="display:block;margin-bottom:6px;">
+			<input type="checkbox" name="scope_full" class="agent-access-scope-full" value="1" <?php checked( $full ); ?> <?php disabled( $read_only ); ?>>
+			<?php esc_html_e( 'Full write access (WordPress and all integrations)', 'botcreds-agent-access' ); ?>
+		</label>
+		<fieldset class="agent-access-scoped-options" <?php disabled( $read_only || $full ); ?>>
+			<legend style="font-weight:600;margin:6px 0;"><?php esc_html_e( 'WordPress content', 'botcreds-agent-access' ); ?></legend>
+			<?php foreach ( $types as $type ) : ?>
+				<label style="display:block;margin-bottom:3px;">
+					<input type="checkbox" name="scope_types[]" class="agent-access-scope-type" value="<?php echo esc_attr( $type['slug'] ); ?>" <?php checked( in_array( $type['slug'], $scope, true ) ); ?>>
+					<?php echo esc_html( $type['label'] ); ?>
+				</label>
+			<?php endforeach; ?>
+			<hr style="margin:10px 0;">
+			<p style="font-weight:600;margin:6px 0;"><?php esc_html_e( 'Plugin integrations', 'botcreds-agent-access' ); ?></p>
+			<label style="display:block;margin-bottom:6px;">
+				<input type="checkbox" name="scope_all_custom" class="agent-access-scope-all-custom" value="1" <?php checked( $all_custom ); ?>>
+				<?php esc_html_e( 'Allow all custom endpoints', 'botcreds-agent-access' ); ?>
+			</label>
+			<p class="description"><?php esc_html_e( 'Allows writes to all current and future non-core REST namespaces. Does not expand WordPress content access. The user\'s WordPress permissions still apply.', 'botcreds-agent-access' ); ?></p>
+			<fieldset class="agent-access-custom-options" <?php disabled( $all_custom ); ?>>
+				<legend class="screen-reader-text"><?php esc_html_e( 'Specific integrations', 'botcreds-agent-access' ); ?></legend>
+				<?php foreach ( $integrations as $integration ) : ?>
+					<label style="display:block;margin:6px 0;">
+						<input type="checkbox" name="scope_types[]" class="agent-access-scope-type" value="<?php echo esc_attr( $integration['slug'] ); ?>" <?php checked( in_array( $integration['slug'], $scope, true ) ); ?>>
+						<?php echo esc_html( $integration['label'] ); ?>
+						<small style="display:block;margin-left:24px;color:#646970;"><?php echo esc_html( $integration['slug'] ); ?></small>
+					</label>
+				<?php endforeach; ?>
+				<?php if ( empty( $integrations ) ) : ?>
+					<p class="description"><?php esc_html_e( 'No custom REST integrations detected.', 'botcreds-agent-access' ); ?></p>
+				<?php endif; ?>
+				<details style="margin-top:10px;" <?php echo empty( $extra_routes ) ? '' : 'open'; ?>>
+					<summary><?php esc_html_e( 'Advanced: specific route patterns', 'botcreds-agent-access' ); ?></summary>
+					<label style="display:block;margin-top:6px;">
+						<span><?php esc_html_e( 'Custom route prefixes (one per line)', 'botcreds-agent-access' ); ?></span>
+						<textarea name="scope_custom_routes" class="agent-access-scope-custom-routes large-text code" rows="3" placeholder="/newspack-workflows/v1/*"><?php echo esc_textarea( implode( "\n", $extra_routes ) ); ?></textarea>
+					</label>
+					<p class="description"><?php esc_html_e( 'Start each prefix with /. A prefix includes its subroutes; an optional trailing /* is supported. Use route paths, not full URLs. These grants allow all write methods, including DELETE, where the user has permission.', 'botcreds-agent-access' ); ?></p>
+				</details>
+			</fieldset>
+		</fieldset>
+		<p class="description"><?php esc_html_e( 'Scope limits writes only; reads still use the user\'s WordPress permissions. Selecting nothing allows no writes. Integration grants allow all write methods, not just POST or PUT.', 'botcreds-agent-access' ); ?></p>
+		<?php
+	}
+
+
+	/**
 	 * Collect scope from the current AJAX POST request.
 	 *
-	 * Reads scope_read_only and scope_types[] POST fields and returns an array
-	 * of post type slugs suitable for Agent_Access_Scope::save().
+	 * Collects content, integration and custom route grants for Scope::save().
 	 *
-	 * @return array
+	 * @return array|WP_Error
 	 */
 	private static function collect_scope_from_post() {
+		// Nonces and capabilities are checked by each AJAX caller before collection.
 		// phpcs:disable WordPress.Security.NonceVerification.Missing
 		if ( ! empty( $_POST['scope_read_only'] ) ) {
 			return array( '__read_only__' );
 		}
-
-		$raw_types = isset( $_POST['scope_types'] ) && is_array( $_POST['scope_types'] )
-			? (array) $_POST['scope_types']
-			: array();
-		// phpcs:enable WordPress.Security.NonceVerification.Missing
-
-		$clean = array();
-		foreach ( $raw_types as $slug ) {
-			$slug = (string) $slug;
-			// Literal route patterns (start with /) — preserve as-is; sanitize_key() strips slashes.
-			if ( isset( $slug[0] ) && '/' === $slug[0] ) {
-				$clean[] = $slug;
-				continue;
-			}
-			$s = sanitize_key( $slug );
-			if ( '' !== $s ) {
-				$clean[] = $s;
-			}
-		}
-
-		// Default to full if nothing was selected.
-		if ( empty( $clean ) ) {
+		if ( ! empty( $_POST['scope_full'] ) ) {
 			return array( '*' );
 		}
-
-		return $clean;
+		$raw_types = isset( $_POST['scope_types'] ) ? wp_unslash( $_POST['scope_types'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Strict type/allowlist validation below rejects malformed grants without widening them.
+		$raw_custom = isset( $_POST['scope_custom_routes'] ) ? wp_unslash( $_POST['scope_custom_routes'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Each line is strictly validated below, not transformed into a different grant.
+		$all_custom = ! empty( $_POST['scope_all_custom'] );
+		// phpcs:enable WordPress.Security.NonceVerification.Missing
+		if ( ! is_array( $raw_types ) || ! is_string( $raw_custom ) ) {
+			return new WP_Error( 'invalid_scope', __( 'Invalid scope settings.', 'botcreds-agent-access' ) );
+		}
+		$clean = array();
+		foreach ( $raw_types as $slug ) {
+			if ( ! is_string( $slug ) || '' === $slug ) {
+				return new WP_Error( 'invalid_scope', __( 'Invalid scope settings.', 'botcreds-agent-access' ) );
+			}
+			if ( '/' === $slug[0] ) {
+				if ( ! Agent_Access_Scope::is_valid_custom_pattern( $slug ) ) {
+					return new WP_Error( 'invalid_scope', __( 'Use custom route prefixes such as /newspack-workflows/v1/*; core WordPress routes belong in the content scope.', 'botcreds-agent-access' ) );
+				}
+			} elseif ( '*' !== $slug && ( sanitize_key( $slug ) !== $slug || '__read_only__' === $slug || Agent_Access_Scope::ALL_CUSTOM_ENDPOINTS === $slug ) ) {
+				return new WP_Error( 'invalid_scope', __( 'Invalid scope settings.', 'botcreds-agent-access' ) );
+			}
+			$clean[] = $slug;
+		}
+		foreach ( preg_split( '/\r\n|\r|\n/', $raw_custom ) as $pattern ) {
+			$pattern = trim( $pattern );
+			if ( '' === $pattern ) {
+				continue;
+			}
+			if ( ! Agent_Access_Scope::is_valid_custom_pattern( $pattern ) ) {
+				return new WP_Error( 'invalid_scope', __( 'Enter one custom route prefix per line, beginning with /. Only a trailing /* wildcard is supported. Do not enter URLs or core WordPress routes.', 'botcreds-agent-access' ) );
+			}
+			$clean[] = $pattern;
+		}
+		if ( $all_custom ) {
+			$clean[] = Agent_Access_Scope::ALL_CUSTOM_ENDPOINTS;
+		}
+		// An explicit empty selection must never turn into full write access.
+		return empty( $clean ) ? array( '__read_only__' ) : array_values( array_unique( $clean ) );
 	}
 
 	/**
@@ -646,9 +743,6 @@ class Agent_Access_Admin {
 				$current_rl     = Agent_Access_Rate_Limiter::get( $user->ID, $uuid );
 				?>
 				<?php
-					$update_available_types = Agent_Access_Scope::get_available_post_types();
-					$is_read_only_scope     = is_array( $current_scope ) && array( '__read_only__' ) === $current_scope;
-					$is_wildcard_scope      = is_array( $current_scope ) && in_array( '*', (array) $current_scope, true );
 					$checked_slugs          = is_array( $current_scope ) ? $current_scope : array( 'post', 'attachment' );
 				?>
 				<div class="agent-access-settings-section" style="margin-top:1.5em;">
@@ -661,56 +755,7 @@ class Agent_Access_Admin {
 							<td>
 								<div class="agent-access-scope-checklist agent-access-admin-update-scope"
 									data-user-id="<?php echo esc_attr( $user->ID ); ?>">
-									<label class="agent-access-scope-read-only-label" style="display:block;margin-bottom:6px;font-weight:600;">
-										<input type="checkbox"
-											name="scope_read_only"
-											class="agent-access-scope-read-only"
-											value="1"
-											<?php checked( $is_read_only_scope ); ?>>
-										<?php esc_html_e( 'Read only (no writes)', 'botcreds-agent-access' ); ?>
-									</label>
-									<hr style="margin:4px 0 6px;">
-									<?php foreach ( $update_available_types as $type ) : ?>
-										<label style="display:block;margin-bottom:3px;">
-											<input type="checkbox"
-												name="scope_types[]"
-												class="agent-access-scope-type"
-												value="<?php echo esc_attr( $type['slug'] ); ?>"
-												<?php checked( $is_wildcard_scope || in_array( $type['slug'], $checked_slugs, true ) ); ?>
-												<?php echo $is_read_only_scope ? 'disabled' : ''; ?>>
-											<?php echo esc_html( $type['label'] ); ?>
-											<span class="description" style="font-size:11px;color:#777;">(<?php echo esc_html( $type['slug'] ); ?>)</span>
-										</label>
-									<?php endforeach; ?>
-									<?php
-									// Plugin integrations — auto-detected.
-									if ( ! function_exists( 'is_plugin_active' ) ) {
-										require_once ABSPATH . 'wp-admin/includes/plugin.php';
-									}
-									$aa_integrations = array();
-									if ( class_exists( 'Botcreds_Memory_MCP' ) ) {
-										$aa_integrations[] = array(
-											'slug'  => '/botcreds-memory/v1/*',
-											'label' => __( 'Agent Memory', 'botcreds-agent-access' ),
-											'hint'  => 'botcreds-memory/v1/*',
-										);
-									}
-									if ( ! empty( $aa_integrations ) ) : ?>
-										<hr style="margin:6px 0;">
-										<p style="margin:4px 0 4px;font-size:12px;font-weight:600;color:#555;"><?php esc_html_e( 'Plugin integrations', 'botcreds-agent-access' ); ?></p>
-										<?php foreach ( $aa_integrations as $aa_integ ) : ?>
-											<label style="display:block;margin-bottom:3px;">
-												<input type="checkbox"
-													name="scope_types[]"
-													class="agent-access-scope-type"
-													value="<?php echo esc_attr( $aa_integ['slug'] ); ?>"
-													<?php checked( $is_wildcard_scope || in_array( $aa_integ['slug'], $checked_slugs, true ) ); ?>
-													<?php echo $is_read_only_scope ? 'disabled' : ''; ?>>
-												<?php echo esc_html( $aa_integ['label'] ); ?> <span style="font-size:11px;color:#2271b1;">(BotCreds)</span>
-												<span class="description" style="font-size:11px;color:#777;">(<?php echo esc_html( $aa_integ['hint'] ); ?>)</span>
-											</label>
-										<?php endforeach; ?>
-									<?php endif; ?>
+									<?php $this->render_scope_controls( $checked_slugs ); ?>
 								</div>
 							</td>
 						</tr>
@@ -766,7 +811,6 @@ class Agent_Access_Admin {
 
 				<?php $this->render_profile_content_table( $user->ID ); ?>
 			<?php else : ?>
-				<?php $admin_create_types = Agent_Access_Scope::get_available_post_types(); ?>
 				<?php $admin_create_defaults = array( 'post', 'attachment' ); ?>
 				<div id="agent-access-admin-card" data-user-id="<?php echo esc_attr( $user->ID ); ?>">
 					<table class="form-table" role="presentation" style="max-width:480px;">
@@ -776,54 +820,8 @@ class Agent_Access_Admin {
 							</th>
 							<td>
 								<div class="agent-access-scope-checklist">
-									<label class="agent-access-scope-read-only-label" style="display:block;margin-bottom:6px;font-weight:600;">
-										<input type="checkbox"
-											name="scope_read_only"
-											class="agent-access-scope-read-only"
-											value="1">
-										<?php esc_html_e( 'Read only (no writes)', 'botcreds-agent-access' ); ?>
-									</label>
-									<hr style="margin:4px 0 6px;">
-									<?php foreach ( $admin_create_types as $type ) : ?>
-										<label style="display:block;margin-bottom:3px;">
-											<input type="checkbox"
-												name="scope_types[]"
-												class="agent-access-scope-type"
-												value="<?php echo esc_attr( $type['slug'] ); ?>"
-												<?php checked( in_array( $type['slug'], $admin_create_defaults, true ) ); ?>>
-											<?php echo esc_html( $type['label'] ); ?>
-											<span class="description" style="font-size:11px;color:#777;">(<?php echo esc_html( $type['slug'] ); ?>)</span>
-										</label>
-									<?php endforeach; ?>
-									<?php
-									// Plugin integrations — auto-detected.
-									if ( ! function_exists( 'is_plugin_active' ) ) {
-										require_once ABSPATH . 'wp-admin/includes/plugin.php';
-									}
-									$aa_create_integrations = array();
-									if ( class_exists( 'Botcreds_Memory_MCP' ) ) {
-										$aa_create_integrations[] = array(
-											'slug'  => '/botcreds-memory/v1/*',
-											'label' => __( 'Agent Memory', 'botcreds-agent-access' ),
-											'hint'  => 'botcreds-memory/v1/*',
-										);
-									}
-									if ( ! empty( $aa_create_integrations ) ) : ?>
-										<hr style="margin:6px 0;">
-										<p style="margin:4px 0 4px;font-size:12px;font-weight:600;color:#555;"><?php esc_html_e( 'Plugin integrations', 'botcreds-agent-access' ); ?></p>
-										<?php foreach ( $aa_create_integrations as $aa_integ ) : ?>
-											<label style="display:block;margin-bottom:3px;">
-												<input type="checkbox"
-													name="scope_types[]"
-													class="agent-access-scope-type"
-													value="<?php echo esc_attr( $aa_integ['slug'] ); ?>"
-													<?php checked( false ); ?>>
-												<?php echo esc_html( $aa_integ['label'] ); ?> <span style="font-size:11px;color:#2271b1;">(BotCreds)</span>
-												<span class="description" style="font-size:11px;color:#777;">(<?php echo esc_html( $aa_integ['hint'] ); ?>)</span>
-											</label>
-										<?php endforeach; ?>
-									<?php endif; ?>
-								</div>
+							<?php $this->render_scope_controls( $admin_create_defaults ); ?>
+						</div>
 							</td>
 						</tr>
 						<tr>
@@ -1024,7 +1022,6 @@ class Agent_Access_Admin {
 	 * Render the "disconnected" state with create button.
 	 */
 	private function render_disconnected_state() {
-		$available_types = Agent_Access_Scope::get_available_post_types();
 		// Default checked: post + attachment (posts_media equivalent)
 		$default_slugs   = array( 'post', 'attachment' );
 		?>
@@ -1036,25 +1033,7 @@ class Agent_Access_Admin {
 					</th>
 					<td>
 						<div class="agent-access-scope-checklist">
-							<label class="agent-access-scope-read-only-label" style="display:block;margin-bottom:6px;font-weight:600;">
-								<input type="checkbox"
-									name="scope_read_only"
-									class="agent-access-scope-read-only"
-									value="1">
-								<?php esc_html_e( 'Read only (no writes)', 'botcreds-agent-access' ); ?>
-							</label>
-							<hr style="margin:4px 0 6px;">
-							<?php foreach ( $available_types as $type ) : ?>
-								<label style="display:block;margin-bottom:3px;">
-									<input type="checkbox"
-										name="scope_types[]"
-										class="agent-access-scope-type"
-										value="<?php echo esc_attr( $type['slug'] ); ?>"
-										<?php checked( in_array( $type['slug'], $default_slugs, true ) ); ?>>
-									<?php echo esc_html( $type['label'] ); ?>
-									<span class="description" style="font-size:11px;color:#777;">(<?php echo esc_html( $type['slug'] ); ?>)</span>
-								</label>
-							<?php endforeach; ?>
+							<?php $this->render_scope_controls( $default_slugs ); ?>
 						</div>
 					</td>
 				</tr>
