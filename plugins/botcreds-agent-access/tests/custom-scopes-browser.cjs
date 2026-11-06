@@ -17,7 +17,7 @@ const server = http.createServer((req, res) => {
 });
 (async () => {
  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
- const browser = await chromium.connectOverCDP('http://127.0.0.1:18800');
+ const browser = process.env.AA_HEADLESS === '1' ? await chromium.launch({executablePath:process.env.AA_CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true}) : await chromium.connectOverCDP('http://127.0.0.1:18800');
  const context = await browser.newContext({viewport:{width:900,height:1100}});
  const page = await context.newPage();
  try {
@@ -27,7 +27,7 @@ const server = http.createServer((req, res) => {
   check((await text.inputValue()).includes('/inactive-plugin/v1/*'),'inactive route shown');
   check(await page.locator('label').filter({has:page.locator('input[value="/newspack-workflows/v1/*"]')}).count()===1,'friendly detected integration');
   const save=async()=>{captured=null;await page.getByRole('button',{name:'Save settings',exact:true}).click();await page.waitForFunction(()=>document.querySelector('button').disabled===false);check(captured!==null,'settings request captured');return captured;};
-  let data=await save();check(data.get('scope_custom_routes')==='/inactive-plugin/v1/*','advanced route serialized');check(data.getAll('scope_types[]').includes('post'),'post selection serialized');
+  let data=await save();if(await page.locator('.agent-access-site-management').count()){check(data.get('site_management')==='0','site management default off serialized');await page.locator('.agent-access-site-management').check();data=await save();check(data.get('site_management')==='1','explicit site management grant serialized');await page.locator('.agent-access-site-management').uncheck();}check(data.get('scope_custom_routes')==='/inactive-plugin/v1/*','advanced route serialized');check(data.getAll('scope_types[]').includes('post'),'post selection serialized');
   await all.check();check(await text.isDisabled(),'all-custom disables specific routes');check(!(await posts.isDisabled()),'all-custom leaves core controls enabled');
   data=await save();check(data.get('scope_all_custom')==='1','all-custom marker serialized');check(!data.has('scope_full'),'all-custom is not full access');check(!data.has('scope_custom_routes'),'disabled custom text not serialized');
   await all.uncheck();check((await text.inputValue())==='/inactive-plugin/v1/*','toggling blanket preserves unsaved specific routes');
@@ -41,6 +41,7 @@ const server = http.createServer((req, res) => {
   await page.setViewportSize({width:390,height:844});
   check(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),'mobile has no horizontal overflow');
   await page.screenshot({path:path.join(dir,'scope-controls-mobile.png'),fullPage:true});
+  if(await page.locator('.agent-access-site-management').count()){await page.locator('.agent-access-site-management').evaluate(el=>el.remove());data=await save();check(!data.has('site_management'),'unauthorized/older forms omit grant field');}
   fs.writeFileSync(path.join(dir,'browser-results.json'),JSON.stringify({passed:checks,boundary:'Actual hosted PHP scope controls and production JS; mocked AJAX response, actual serialized payloads; not an authenticated wp-admin browser session'},null,2));
   console.log('PASS '+checks+' browser UI assertions.');
  } finally { await context.close();await browser.close();server.close(); }

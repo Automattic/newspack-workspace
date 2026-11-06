@@ -44,6 +44,16 @@ foreach ( $agent_access_user_ids as $agent_access_uid ) {
 	}
 }
 
+// Remove all site-specific runtime grants; no capabilities were persisted.
+foreach ( $agent_access_user_ids as $agent_access_uid ) {
+	$agent_access_user_meta = get_user_meta( $agent_access_uid );
+	foreach ( array_keys( $agent_access_user_meta ) as $agent_access_key ) {
+		if ( 0 === strpos( $agent_access_key, '_agent_access_site_management_' ) ) {
+			delete_user_meta( $agent_access_uid, $agent_access_key );
+		}
+	}
+}
+
 // Remove provisioner user meta.
 $agent_access_meta_keys = array(
 	'_agent_access_provisioned',

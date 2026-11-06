@@ -309,6 +309,11 @@ class Agent_Access_Admin {
 
 		check_ajax_referer( 'agent_access_create', 'nonce' );
 
+		// Self-service connections cannot promote their account.
+		if ( isset( $_POST['site_management'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- AJAX nonce verified above.
+			wp_send_json_error( __( 'Site-management access must be set by another administrator.', 'botcreds-agent-access' ) );
+		}
+
 		$scope = self::collect_scope_from_post();
 		if ( is_wp_error( $scope ) ) {
 			wp_send_json_error( $scope->get_error_message() );
@@ -375,6 +380,15 @@ class Agent_Access_Admin {
 			wp_send_json_error( __( 'Invalid user.', 'botcreds-agent-access' ) );
 		}
 
+		if ( ! current_user_can( 'edit_user', $user_id ) ) {
+			wp_send_json_error( __( 'You do not have permission to manage credentials for this user.', 'botcreds-agent-access' ) );
+		}
+
+		$site_management = Agent_Access_Site_Management::requested_grant( $user_id );
+		if ( is_wp_error( $site_management ) ) {
+			wp_send_json_error( $site_management->get_error_message() );
+		}
+
 		$scope = self::collect_scope_from_post();
 		if ( is_wp_error( $scope ) ) {
 			wp_send_json_error( $scope->get_error_message() );
@@ -395,6 +409,8 @@ class Agent_Access_Admin {
 		}
 		$policy = isset( $_POST['content_policy'] ) ? sanitize_key( $_POST['content_policy'] ) : Agent_Access_Content_Policy::DEFAULT_POLICY; // phpcs:ignore WordPress.Security.NonceVerification.Missing
 		Agent_Access_Content_Policy::save( $user_id, $result['uuid'], $policy );
+
+		Agent_Access_Site_Management::save( $user_id, $site_management );
 
 		$connection_info = $this->api->get_connection_info( $result['password'], $user_id );
 
@@ -421,6 +437,10 @@ class Agent_Access_Admin {
 		$user_id = isset( $_POST['user_id'] ) ? (int) $_POST['user_id'] : 0;
 		if ( ! $user_id || ! get_userdata( $user_id ) ) {
 			wp_send_json_error( __( 'Invalid user.', 'botcreds-agent-access' ) );
+		}
+
+		if ( ! current_user_can( 'edit_user', $user_id ) ) {
+			wp_send_json_error( __( 'You do not have permission to manage credentials for this user.', 'botcreds-agent-access' ) );
 		}
 
 		$result = $this->api->revoke_password( $user_id );
@@ -459,6 +479,15 @@ class Agent_Access_Admin {
 			wp_send_json_error( __( 'No active agent connection found for this user.', 'botcreds-agent-access' ) );
 		}
 
+		if ( ! current_user_can( 'edit_user', $user_id ) ) {
+			wp_send_json_error( __( 'You do not have permission to manage credentials for this user.', 'botcreds-agent-access' ) );
+		}
+
+		$site_management = Agent_Access_Site_Management::requested_grant( $user_id );
+		if ( is_wp_error( $site_management ) ) {
+			wp_send_json_error( $site_management->get_error_message() );
+		}
+
 		$uuid       = $existing['uuid'];
 		$scope      = self::collect_scope_from_post();
 		if ( is_wp_error( $scope ) ) {
@@ -471,7 +500,32 @@ class Agent_Access_Admin {
 		Agent_Access_Content_Policy::save( $user_id, $uuid, $policy );
 		Agent_Access_Rate_Limiter::save( $user_id, $uuid, $rate_limit );
 
+		Agent_Access_Site_Management::save( $user_id, $site_management );
+
 		wp_send_json_success( __( 'Settings saved.', 'botcreds-agent-access' ) );
+	}
+
+	/**
+	 * Render the administrator-only, per-account site-management switch.
+	 *
+	 * @param int $user_id Dedicated agent account.
+	 */
+	private function render_site_management_control( $user_id ) {
+		if ( ! Agent_Access_Site_Management::can_manage( $user_id ) ) {
+			return;
+		}
+		?>
+		<tr>
+			<th scope="row"><?php esc_html_e( 'Site management', 'botcreds-agent-access' ); ?></th>
+			<td>
+				<label>
+					<input type="checkbox" class="agent-access-site-management" value="1" <?php checked( Agent_Access_Site_Management::is_enabled( $user_id ) ); ?>>
+					<?php esc_html_e( 'Allow this agent to manage site settings, appearance, and menus.', 'botcreds-agent-access' ); ?>
+				</label>
+				<p class="description"><?php esc_html_e( 'Grants manage_options and edit_theme_options to this Agent account on this site. Applies to all sessions and credentials for this account. Endpoint scopes still apply. Does not grant user management or plugin/theme installation. Switching off removes only the grant from this plugin, not permissions from other sources.', 'botcreds-agent-access' ); ?></p>
+			</td>
+		</tr>
+		<?php
 	}
 
 	/**
@@ -748,6 +802,7 @@ class Agent_Access_Admin {
 				<div class="agent-access-settings-section" style="margin-top:1.5em;">
 					<h3 style="margin-bottom:0.5em;"><?php esc_html_e( 'Agent Settings', 'botcreds-agent-access' ); ?></h3>
 					<table class="form-table" role="presentation" style="max-width:480px;">
+					<?php $this->render_site_management_control( $user->ID ); ?>
 						<tr>
 							<th scope="row">
 								<?php esc_html_e( 'Scope', 'botcreds-agent-access' ); ?>
@@ -814,6 +869,7 @@ class Agent_Access_Admin {
 				<?php $admin_create_defaults = array( 'post', 'attachment' ); ?>
 				<div id="agent-access-admin-card" data-user-id="<?php echo esc_attr( $user->ID ); ?>">
 					<table class="form-table" role="presentation" style="max-width:480px;">
+					<?php $this->render_site_management_control( $user->ID ); ?>
 						<tr>
 							<th scope="row">
 								<?php esc_html_e( 'Scope', 'botcreds-agent-access' ); ?>
@@ -1429,6 +1485,10 @@ class Agent_Access_Admin {
 			wp_send_json_error( __( 'Invalid user.', 'botcreds-agent-access' ) );
 		}
 
+		if ( ! current_user_can( 'edit_user', $user_id ) ) {
+			wp_send_json_error( __( 'You do not have permission to manage credentials for this user.', 'botcreds-agent-access' ) );
+		}
+
 		$result = Agent_Access_Pro_Auth::generate_setup_link( $user_id, $label );
 
 		wp_send_json_success( array(
@@ -1442,7 +1502,7 @@ class Agent_Access_Admin {
 	 * AJAX: revoke a Pro Auth token by DB id.
 	 */
 	public function handle_revoke_pro_token_ajax() {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( 'manage_options' ) || ! current_user_can( 'edit_users' ) ) {
 			wp_send_json_error( __( 'Permission denied.', 'botcreds-agent-access' ) );
 		}
 		check_ajax_referer( 'agent_access_revoke_pro_token', 'nonce' );

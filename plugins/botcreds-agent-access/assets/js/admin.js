@@ -66,6 +66,12 @@
 		return parts.join('&');
 	}
 
+	/** Optional field is omitted for older forms and unauthorized actors. */
+	function encodeSiteManagement(container) {
+		var control = container ? container.querySelector('.agent-access-site-management') : null;
+		return control ? '&site_management=' + (control.checked ? '1' : '0') : '';
+	}
+
 	/**
 	 * Create connection via AJAX.
 	 */
@@ -265,6 +271,7 @@
 					'&nonce=' + encodeURIComponent(agentAccess.admin_create_nonce) +
 					'&user_id=' + encodeURIComponent(userId) +
 					'&' + encodeScopeParams(scopeData) +
+					encodeSiteManagement(adminCard) +
 					'&rate_limit=' + encodeURIComponent(rl) +
 					'&content_policy=' + encodeURIComponent(cp)
 				);
@@ -383,6 +390,7 @@
 					'&nonce=' + encodeURIComponent(agentAccess.admin_update_nonce) +
 					'&user_id=' + encodeURIComponent(userId) +
 					'&' + encodeScopeParams(scopeData) +
+					encodeSiteManagement(section) +
 					'&rate_limit=' + encodeURIComponent(rl) +
 					'&content_policy=' + encodeURIComponent(policy)
 				);
