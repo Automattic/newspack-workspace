@@ -2921,19 +2921,20 @@ final class Modal_Checkout {
 	/**
 	 * The express checkout button radius in pixels.
 	 *
-	 * Follows the Theme style's button radius when it is a pixel length, and keeps the Neutral 8 otherwise.
+	 * Follows the Theme style's button radius when it is a px or rem length (rem at a 16px root),
+	 * and keeps the Neutral 8 for anything else.
 	 *
 	 * @return int
 	 */
-	public static function get_express_checkout_button_radius() {
+	public static function get_express_checkout_button_radius(): int {
 		$radius = 8;
 		if (
 			class_exists( 'Newspack\Newspack_UI_Theme_Style' )
 			&& method_exists( 'Newspack\Newspack_UI_Theme_Style', 'get_button_radius' )
 			&& \Newspack\Newspack_UI_Theme_Style::is_active()
-			&& 1 === preg_match( '/^(\d+(?:\.\d+)?)px$/D', \Newspack\Newspack_UI_Theme_Style::get_button_radius(), $matches )
+			&& 1 === preg_match( '/^(\d+(?:\.\d+)?)(px|rem)$/D', \Newspack\Newspack_UI_Theme_Style::get_button_radius(), $matches )
 		) {
-			$radius = (int) round( (float) $matches[1] );
+			$radius = (int) round( (float) $matches[1] * ( 'rem' === $matches[2] ? 16 : 1 ) );
 		}
 		return $radius;
 	}

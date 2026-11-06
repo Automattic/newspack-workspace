@@ -1,3 +1,4 @@
+@use "sass:string";
 @use "newspack-colors" as np-colors;
 @use "./variables";
 
@@ -7,7 +8,7 @@ $focus-halo-width: var(--newspack-ui-focus-halo-width, 3px);
 @mixin focus-edge( $color: $focus-color, $width: 1px, $halo: $color, $inner: null, $over-content: false ) {
 	$halo-color: color-mix(in oklab, #{$halo} var(--newspack-ui-focus-halo-mix, 30%), transparent);
 
-	@if "#{$halo}" == "#{$focus-color}" {
+	@if "#{$halo}" == "#{$focus-color}" or string.index("#{$halo}", "var(--newspack-ui-color-input-border-focus") == 1 {
 		$halo-color: var(--newspack-ui-color-focus-halo, #{$halo-color});
 	}
 
