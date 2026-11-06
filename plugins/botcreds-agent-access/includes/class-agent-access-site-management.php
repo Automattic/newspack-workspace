@@ -20,6 +20,7 @@ class Agent_Access_Site_Management {
 	/** Register the runtime grant and role-change cleanup. */
 	public static function init() {
 		add_filter( 'user_has_cap', array( __CLASS__, 'apply_grant' ), 10, 4 );
+		add_filter( 'rest_prepare_user', array( __CLASS__, 'report_effective_caps' ), 10, 2 );
 		add_action( 'set_user_role', array( __CLASS__, 'clear_if_not_agent' ) );
 		add_action( 'remove_user_role', array( __CLASS__, 'clear_if_not_agent' ) );
 	}
@@ -121,6 +122,27 @@ class Agent_Access_Site_Management {
 			$allcaps[ $cap ] = true;
 		}
 		return $allcaps;
+	}
+
+	/**
+	 * Keep authorized REST capability discovery consistent with runtime checks.
+	 * Never add a capabilities field to a response that did not already expose it.
+	 *
+	 * @param WP_REST_Response $response Prepared user response.
+	 * @param WP_User          $user Prepared user.
+	 * @return WP_REST_Response
+	 */
+	public static function report_effective_caps( $response, $user ) {
+		$data = $response->get_data();
+		if ( ! isset( $data['capabilities'] ) || ( ! is_array( $data['capabilities'] ) && ! is_object( $data['capabilities'] ) ) || ! in_array( Agent_Access_Role::ROLE_SLUG, $user->roles, true ) || ! self::is_enabled( $user->ID ) ) {
+			return $response;
+		}
+		$data['capabilities'] = (array) $data['capabilities'];
+		foreach ( self::CAPS as $cap ) {
+			$data['capabilities'][ $cap ] = user_can( $user, $cap );
+		}
+		$response->set_data( $data );
+		return $response;
 	}
 
 	/**

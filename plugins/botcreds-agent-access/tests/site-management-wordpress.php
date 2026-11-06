@@ -64,6 +64,12 @@ try {
  sm_check( $direct_before === get_user_meta( $agent, $GLOBALS['wpdb']->get_blog_prefix() . 'capabilities', true ), 'does not persist direct capabilities' );
  sm_check( $role_before === get_role( 'agent' )->capabilities, 'shared Agent role untouched' );
  sm_check( ! user_can( $other, 'manage_options' ) && ! user_can( $other, 'edit_theme_options' ), 'unrelated Agent unchanged' );
+ $response = Agent_Access_Site_Management::report_effective_caps( new WP_REST_Response( array( 'capabilities' => array( 'read' => true ) ) ), get_userdata( $agent ) );
+ sm_check( true === $response->get_data()['capabilities']['manage_options'] && true === $response->get_data()['capabilities']['edit_theme_options'], 'authorized REST capability discovery reflects grant' );
+ $response = Agent_Access_Site_Management::report_effective_caps( new WP_REST_Response( array( 'capabilities' => (object) array( 'read' => true ) ) ), get_userdata( $agent ) );
+ sm_check( true === $response->get_data()['capabilities']['manage_options'] && true === $response->get_data()['capabilities']['edit_theme_options'], 'native REST object-shaped capability map reflects grant' );
+ $response = Agent_Access_Site_Management::report_effective_caps( new WP_REST_Response( array( 'name' => 'Synthetic' ) ), get_userdata( $agent ) );
+ sm_check( ! isset( $response->get_data()['capabilities'] ), 'public REST response does not gain a capabilities field' );
  sm_check( false !== strpos( sm_render( $admin, $agent ), "checked='checked'" ), 'enabled grant reflected in UI' );
  sm_actor( $agent );
  sm_check( current_user_can( 'manage_options' ) && current_user_can( 'edit_theme_options' ), 'grant available in agent session' );

@@ -4,7 +4,7 @@ Tags: ai-agents, mcp, application-passwords, rest-api, security
 Requires at least: 5.7
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.4.0-rc.3
+Stable tag: 2.4.0-rc.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -76,7 +76,7 @@ BotCreds manages one Application Password per user. Revoke the existing one befo
 
 == Changelog ==
 
-= 2.4.0-rc.3 =
+= 2.4.0-rc.5 =
 * Admin-only Site management switch for dedicated Agent accounts: grants site settings and appearance capabilities without changing the shared role.
 * Grants are site-specific and reversible; other capability sources are preserved. Agents cannot grant this access to themselves.
 

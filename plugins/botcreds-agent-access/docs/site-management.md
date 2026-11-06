@@ -1,6 +1,6 @@
 # Per-agent Site management
 
-An administrator can enable **Site management** while creating or updating a BotCreds connection on a dedicated Agent user's profile. The switch is off by default and grants exactly `manage_options` and `edit_theme_options`. It is **account-level**, not per credential: all sessions and credentials for that user on that site get these capabilities. Endpoint scope, rate limits, content policy, approval controls and endpoint-native permissions still apply.
+An administrator can enable **Site management** while creating or updating a BotCreds connection on a dedicated Agent user's profile. The switch is off by default and grants exactly `manage_options` and `edit_theme_options`. It is **account-level**, not per credential: all sessions and credentials for that user on that site get these capabilities. The user keeps the Agent role. Authorized REST user responses that already include a capabilities field report the two effective grants, so API clients can discover them without exposing capabilities in public responses. Endpoint scope, rate limits, content policy, approval controls and endpoint-native permissions still apply.
 
 ## Authorization
 
