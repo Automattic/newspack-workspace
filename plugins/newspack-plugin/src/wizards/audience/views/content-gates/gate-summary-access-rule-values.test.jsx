@@ -19,6 +19,10 @@ window.newspackAudienceContentGates = {
 		},
 		institution: { name: 'Institutional access', has_options: true, requires_value: true, options: [] },
 		email_domain: { name: 'Whitelisted email domain', has_options: false, empty_grants_access: true, requires_value: true },
+		reader_data: { name: 'Reader data', has_options: false, empty_grants_access: true, requires_value: true, trusted_keys: [ 'plan' ] },
+		esp__PLAN: { name: 'Plan', has_options: true, is_untrusted: true, options: [ { value: 'gold', label: 'Gold' } ] },
+		esp__FLAG: { name: 'Flag', is_boolean: true, is_untrusted: true },
+		esp__SPEND: { name: 'Spend', is_range: true, is_untrusted: true, empty_grants_access: true, requires_value: true },
 		esp__DONATION: { name: 'Donation total', has_options: false, is_range: true, empty_grants_access: true, requires_value: true },
 	},
 	available_content_rules: {},
@@ -310,5 +314,45 @@ describe( 'gate summary, long rule values', () => {
 		expect( screen.queryByRole( 'button' ) ).not.toBeInTheDocument();
 		expect( paragraph.textContent.match( /Institution \d+/g ) ).toHaveLength( INSTITUTIONS.length );
 		expect( paragraph.contains( paragraph.ownerDocument.activeElement ) ).toBe( true );
+	} );
+} );
+
+describe( 'gate summary, reader data rule', () => {
+	it( 'flags a key the browser can also set as matching no reader', () => {
+		renderPaidAccess( gateWith( { slug: 'reader_data', value: 'utm_source=x' } ) );
+
+		expect( screen.getByText( 'utm_source=x (matches no reader)', { exact: false } ) ).toBeInTheDocument();
+	} );
+
+	it( 'shows a key the server sets as it is', () => {
+		renderPaidAccess( gateWith( { slug: 'reader_data', value: 'plan=x' } ) );
+
+		expect( screen.getByText( 'plan=x', { exact: false } ) ).toBeInTheDocument();
+		expect( screen.queryByText( /matches no reader/ ) ).not.toBeInTheDocument();
+	} );
+} );
+
+describe( 'gate summary, untrusted promoted fields', () => {
+	it( 'marks a list-valued field', () => {
+		renderPaidAccess( gateWith( { slug: 'esp__PLAN', value: [ 'gold', 'silver' ] } ), {
+			esp__PLAN: [
+				{ value: 'gold', label: 'Gold' },
+				{ value: 'silver', label: 'Silver' },
+			],
+		} );
+
+		expect( screen.getByText( /Gold \(#gold\) or Silver \(#silver\) \(matches no reader\)/ ) ).toBeInTheDocument();
+	} );
+
+	it( 'marks a boolean field', () => {
+		renderPaidAccess( gateWith( { slug: 'esp__FLAG', value: true } ) );
+
+		expect( screen.getByText( 'Matches no reader' ) ).toBeInTheDocument();
+	} );
+
+	it( 'carries one marker when the range bounds are also unusable', () => {
+		renderPaidAccess( gateWith( { slug: 'esp__SPEND', value: { min: 50, max: 10 } } ) );
+
+		expect( screen.getByText( /\(matches no reader\)/ ).textContent ).not.toMatch( /grants no access/ );
 	} );
 } );
