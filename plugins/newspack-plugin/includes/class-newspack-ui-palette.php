@@ -141,6 +141,28 @@ class Newspack_UI_Palette {
 	private const SUBTLE_LIGHT_TINT = '#f7f7f7';
 
 	/**
+	 * Lc target of a grey role: its floor, or the whole Lc it has in Neutral on white when that is higher.
+	 *
+	 * Keeps the border, the control border and the focus halo in Neutral's order on bases where one share
+	 * would otherwise land all three on the same grey. Only the control border and the halo are lifted, and
+	 * never past three quarters of the contrast color's own Lc, so a mid-grey base does not push them to the
+	 * contrast color itself.
+	 *
+	 * @param string $role     'input-border' or 'focus-halo'.
+	 * @param string $contrast Color mixed in.
+	 * @param string $base     Color mixed into.
+	 *
+	 * @return int Lc.
+	 */
+	private static function role_target( string $role, string $contrast, string $base ): int {
+		$neutral = 'input-border' === $role ? self::NEUTRAL_DEFAULTS['border-control'] : self::mix( self::NEUTRAL_DEFAULTS['contrast'], self::START_SHARES['focus-halo'], self::NEUTRAL_DEFAULTS['base'] );
+
+		$lifted = min( (int) floor( self::lc( $neutral, self::NEUTRAL_DEFAULTS['base'] ) ), (int) floor( 0.75 * self::lc( $contrast, $base ) ) );
+
+		return max( self::TARGETS[ $role ], $lifted );
+	}
+
+	/**
 	 * Smallest mix percent, at or above the start, whose mix reaches an Lc target on the base.
 	 *
 	 * @param string $contrast_hex  Color mixed in.
@@ -366,7 +388,7 @@ class Newspack_UI_Palette {
 		$muted  = $tones['muted'];
 		$subtle = $tones['subtle'];
 		$border = self::mix( $contrast, self::solve_mix( $contrast, $base, self::START_SHARES['border'], self::TARGETS['border'] ), $base );
-		$ctrl   = self::mix( $contrast, self::solve_mix( $contrast, $base, self::START_SHARES['input-border'], self::TARGETS['input-border'] ), $base );
+		$ctrl   = self::mix( $contrast, self::solve_mix( $contrast, $base, self::START_SHARES['input-border'], self::role_target( 'input-border', $contrast, $base ) ), $base );
 
 		$properties = [
 			'base'           => $base,
@@ -387,7 +409,7 @@ class Newspack_UI_Palette {
 			$properties['surface-subtle'] = $surface_subtle;
 		}
 
-		$properties['focus-halo'] = self::mix( $contrast, self::solve_mix( $contrast, $base, self::START_SHARES['focus-halo'], self::TARGETS['focus-halo'] ), $base );
+		$properties['focus-halo'] = self::mix( $contrast, self::solve_mix( $contrast, $base, self::START_SHARES['focus-halo'], self::role_target( 'focus-halo', $contrast, $base ) ), $base );
 
 		$status                 = self::status_properties( $base, '' !== $brand ? $brand : $contrast, $contrast );
 		$resolved               = $status + self::STATUS_DEFAULTS;
