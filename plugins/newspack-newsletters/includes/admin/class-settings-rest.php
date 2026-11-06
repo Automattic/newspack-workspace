@@ -400,6 +400,7 @@ class Settings_REST {
 				'help_url'    => isset( $entry['helpURL'] ) && is_string( $entry['helpURL'] ) ? esc_url_raw( $entry['helpURL'] ) : '',
 				'placeholder' => isset( $entry['placeholder'] ) ? $entry['placeholder'] : '',
 				'provider'    => $entry_provider,
+				'options'     => isset( $entry['options'] ) && is_array( $entry['options'] ) ? array_values( $entry['options'] ) : [],
 				'sanitize'    => isset( $entry['sanitize_callback'] ) && is_callable( $entry['sanitize_callback'] )
 					? $entry['sanitize_callback']
 					: null,
