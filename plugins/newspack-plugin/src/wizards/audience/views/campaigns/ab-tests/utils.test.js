@@ -51,6 +51,15 @@ describe( 'splitSummary', () => {
 		expect( summary ).toContain( '20% see C' );
 		expect( summary ).not.toContain( '40%' );
 	} );
+	it( 'names the challenger when it is not B', () => {
+		expect( splitSummary( 60, [ 'a', 'c' ] ) ).toBe( '60% see A, 40% see C.' );
+	} );
+	it( 'keeps the shares at 100 when they do not divide evenly', () => {
+		const summary = splitSummary( 50, [ 'a', 'b', 'c', 'd' ] );
+		expect( summary ).toContain( '17% see B' );
+		expect( summary ).toContain( '17% see C' );
+		expect( summary ).toContain( '16% see D' );
+	} );
 } );
 
 describe( 'sortTests', () => {

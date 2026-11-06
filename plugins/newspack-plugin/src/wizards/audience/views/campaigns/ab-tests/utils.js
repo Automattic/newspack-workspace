@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _x, sprintf } from '@wordpress/i18n';
 
 export const DASH = '—';
 
@@ -153,26 +153,40 @@ export const getCountLabel = unit => ( unit === 'events' ? __( 'Views', 'newspac
  */
 export const splitSummary = ( controlShare, letters = [ 'a', 'b' ] ) => {
 	const challengers = letters.filter( letter => letter !== 'a' ).sort();
-	if ( challengers.length <= 1 ) {
+	if ( challengers.length === 0 ) {
+		challengers.push( 'b' );
+	}
+	if ( challengers.length === 1 ) {
 		return sprintf(
-			// Translators: %1$d is the share of readers who see version A, %2$d the share who see version B.
-			__( '%1$d%% see A, %2$d%% see B.', 'newspack-plugin' ),
+			// Translators: %1$d is the share of readers who see version A, %2$d the share who see the other version, %3$s that version's letter such as "B".
+			__( '%1$d%% see A, %2$d%% see %3$s.', 'newspack-plugin' ),
 			controlShare,
-			100 - controlShare
+			100 - controlShare,
+			challengers[ 0 ].toUpperCase()
 		);
 	}
-	const challengerShare = Math.round( ( 100 - controlShare ) / challengers.length );
-	const parts = [ 'a', ...challengers ].map( letter =>
-		sprintf(
+	// Rounding each share on its own can total 101; the last version takes the
+	// remainder so the line always adds up to 100.
+	const rest = 100 - controlShare;
+	const challengerShare = Math.round( rest / challengers.length );
+	const lastShare = rest - challengerShare * ( challengers.length - 1 );
+	const parts = [ 'a', ...challengers ].map( ( letter, index ) => {
+		let share = challengerShare;
+		if ( letter === 'a' ) {
+			share = controlShare;
+		} else if ( index === challengers.length ) {
+			share = lastShare;
+		}
+		return sprintf(
 			// Translators: %1$d is a share of readers, %2$s a version letter such as "C".
 			__( '%1$d%% see %2$s', 'newspack-plugin' ),
-			letter === 'a' ? controlShare : challengerShare,
+			share,
 			letter.toUpperCase()
-		)
-	);
+		);
+	} );
 	return sprintf(
 		// Translators: %s is a list such as "60% see A, 20% see B and 20% see C".
-		__( '%s.', 'newspack-plugin' ),
+		_x( '%s.', 'list of version shares', 'newspack-plugin' ),
 		formatList( parts )
 	);
 };
