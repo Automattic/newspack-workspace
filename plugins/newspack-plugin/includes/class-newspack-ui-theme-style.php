@@ -45,10 +45,16 @@ class Newspack_UI_Theme_Style {
 		[ 'elements', 'button' ],
 		[ 'elements', 'link' ],
 		[ 'elements', 'caption' ],
+		[ 'elements', 'heading' ],
 		[ 'elements', 'textInput' ],
 		[ 'elements', 'select' ],
 		[ 'typography' ],
 	];
+
+	/**
+	 * A font family list: quoted names (a quote of the other kind may sit inside) and plain names.
+	 */
+	const FONT_FAMILY_PATTERN = '/^\s*(?:"[^"]*"|\'[^\']*\'|[A-Za-z0-9 ._-]+)\s*(?:,\s*(?:"[^"]*"|\'[^\']*\'|[A-Za-z0-9 ._-]+)\s*)*$/';
 
 	/**
 	 * Most passes of reference resolution, for presets that are themselves references.
@@ -63,6 +69,13 @@ class Newspack_UI_Theme_Style {
 	private static $global_styles = null;
 
 	/**
+	 * The ':root' rule for this request.
+	 *
+	 * @var string|null
+	 */
+	private static $css = null;
+
+	/**
 	 * Register the hooks that drop the memoized global styles.
 	 */
 	public static function init() {
@@ -75,6 +88,7 @@ class Newspack_UI_Theme_Style {
 	 */
 	public static function reset_cache() {
 		self::$global_styles = null;
+		self::$css           = null;
 	}
 
 	/**
@@ -124,6 +138,19 @@ class Newspack_UI_Theme_Style {
 		}
 
 		return self::$global_styles;
+	}
+
+	/**
+	 * The ':root' rule for the site's own global styles, solved once per request.
+	 *
+	 * @return string The rule, or an empty string when there is nothing to print.
+	 */
+	public static function get_site_css(): string {
+		if ( null === self::$css ) {
+			self::$css = self::get_css( self::get_global_styles() );
+		}
+
+		return self::$css;
 	}
 
 	/**
@@ -247,11 +274,15 @@ class Newspack_UI_Theme_Style {
 			return '';
 		}
 
+		if ( 'font-family' !== $type && 1 === preg_match( '/["\']/', $value ) ) {
+			return '';
+		}
+
 		switch ( $type ) {
 			case 'color':
 				return 1 === preg_match( '/^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i', $value ) || self::is_var( $value, 'color' ) ? $value : '';
 			case 'font-family':
-				return self::is_var( $value, 'font-family' ) || 1 === preg_match( '/^[A-Za-z0-9 ,"\'._-]+$/', $value ) ? $value : '';
+				return self::is_var( $value, 'font-family' ) || 1 === preg_match( self::FONT_FAMILY_PATTERN, $value ) ? $value : '';
 			case 'length':
 				return self::is_length( $value ) ? $value : '';
 			case 'line-height':
@@ -399,8 +430,6 @@ class Newspack_UI_Theme_Style {
 	private static function is_printable( $value ): bool {
 		return is_string( $value )
 			&& 1 !== preg_match( '/[;{}<>\\\\]|\/\*/', $value )
-			&& 0 === substr_count( $value, '"' ) % 2
-			&& 0 === substr_count( $value, "'" ) % 2
 			&& self::balanced( $value );
 	}
 

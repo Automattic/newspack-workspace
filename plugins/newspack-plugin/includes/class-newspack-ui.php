@@ -420,7 +420,7 @@ class Newspack_UI {
 	 * See: https://developer.wordpress.org/reference/functions/wp_get_global_styles/
 	 */
 	public static function colors_css_wrap() {
-		if ( Newspack_UI_Theme_Style::is_active() && '' !== Newspack_UI_Theme_Style::get_css( Newspack_UI_Theme_Style::get_global_styles() ) ) {
+		if ( Newspack_UI_Theme_Style::is_active() && '' !== Newspack_UI_Theme_Style::get_site_css() ) {
 			return;
 		}
 

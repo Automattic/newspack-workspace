@@ -505,9 +505,13 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 	public function test_only_read_subtrees_are_kept(): void {
 		$this->set_user_styles(
 			[
-				'color'   => [ 'background' => '#112233' ],
-				'spacing' => [ 'padding' => '1px' ],
-				'css'     => 'a{b:c}',
+				'color'    => [ 'background' => '#112233' ],
+				'spacing'  => [ 'padding' => '1px' ],
+				'css'      => 'a{b:c}',
+				'elements' => [
+					'heading' => [ 'typography' => [ 'fontWeight' => '700' ] ],
+					'cite'    => [ 'color' => [ 'text' => '#000000' ] ],
+				],
 			]
 		);
 		$styles = Newspack_UI_Theme_Style::get_global_styles();
@@ -515,6 +519,31 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'color', $styles );
 		$this->assertArrayNotHasKey( 'spacing', $styles );
 		$this->assertArrayNotHasKey( 'css', $styles );
+		$this->assertSame( '700', $styles['elements']['heading']['typography']['fontWeight'] );
+		$this->assertArrayNotHasKey( 'cite', $styles['elements'] );
+	}
+
+	/**
+	 * The rule is solved once until the cache is reset.
+	 */
+	public function test_site_css_is_memoized_until_reset(): void {
+		$this->set_user_styles(
+			[
+				'color' => [
+					'background' => '#1e1e1e',
+					'text'       => '#ffffff',
+				],
+			] 
+		);
+		$first = Newspack_UI_Theme_Style::get_site_css();
+		$this->assertStringContainsString( '--newspack-ui-color-base:#1e1e1e;', $first );
+
+		remove_all_filters( 'wp_theme_json_data_user' );
+		WP_Theme_JSON_Resolver::clean_cached_data();
+		$this->assertSame( $first, Newspack_UI_Theme_Style::get_site_css() );
+
+		do_action( 'switch_theme' );
+		$this->assertNotSame( $first, Newspack_UI_Theme_Style::get_site_css() );
 	}
 
 	/**
@@ -718,6 +747,11 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 			'family quote'      => [ 'Georgia"', 'font-family', '' ],
 			'family open quote' => [ 'Georgia, "Serif', 'font-family', '' ],
 			'family var'        => [ 'var(--wp--preset--font-family--body, Georgia, serif)', 'font-family', 'var(--wp--preset--font-family--body, Georgia, serif)' ],
+			'mixed quotes 1'    => [ '"it\'s" \'', 'font-family', '' ],
+			'mixed quotes 2'    => [ '\'a"b\' "', 'font-family', '' ],
+			'var mixed quotes'  => [ 'var(--a, "it\'s" \')', 'font-family', '' ],
+			'apostrophe name'   => [ '"Kid\'s Font", serif', 'font-family', '"Kid\'s Font", serif' ],
+			'quote in color'    => [ 'var(--a, "x")', 'color', '' ],
 			'not a string'      => [ [ '#fff' ], 'color', '' ],
 		];
 	}
