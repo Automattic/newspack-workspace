@@ -60,13 +60,13 @@ export const hasGatedLists = listGates => Object.keys( listGates || {} ).some( l
 /**
  * Whether the button should render as the site's own button.
  *
- * Mirrors the front end: on a block theme, a button left at both default colours
- * takes its fill and text from the theme.
+ * Mirrors the front end: on a block theme, a button left at both default colors
+ * takes its fill and text from the theme. If either color was set, both come from the block.
  *
- * @param {string}  backgroundColor The block's background colour.
- * @param {string}  textColor       The block's text colour.
+ * @param {string}  backgroundColor The block's background color.
+ * @param {string}  textColor       The block's text color.
  * @param {boolean} isBlockTheme    Whether the site runs a block theme.
- * @return {boolean} Whether the colours are left to the theme.
+ * @return {boolean} Whether the colors are left to the theme.
  */
 export const usesSiteButtonStyle = ( backgroundColor, textColor, isBlockTheme = !! window.newspackIsBlockTheme ) =>
 	isBlockTheme && backgroundColor === '#dd3333' && textColor === '#ffffff';

@@ -125,6 +125,10 @@
 		&.has-background-color {
 			color: white;
 		}
+
+		&.has-text-color {
+			background-color: #d33;
+		}
 	}
 	input[disabled] {
 		-webkit-text-fill-color: currentcolor;
@@ -267,9 +271,20 @@
 	}
 
 	& &__continue {
-		background-color: #d33;
-		color: white;
 		cursor: pointer;
+
+		&:not(.wp-element-button) {
+			background-color: #d33;
+			color: white;
+		}
+
+		&.has-background-color {
+			color: white;
+		}
+
+		&.has-text-color {
+			background-color: #d33;
+		}
 	}
 
 	.nphp {
