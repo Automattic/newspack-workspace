@@ -950,10 +950,10 @@ class Newspack_Test_UI_Palette extends WP_UnitTestCase {
 			'warning-tint'             => '#312d23',
 			'warning-border'           => '#61502a',
 			'warning-dot'              => '#dba617',
-			'destructive-fill'         => '#1e1e1e',
-			'destructive-fill-hover'   => '#332422',
-			'destructive-fill-pressed' => '#412725',
-			'destructive-ink'          => '#facfd2',
+			'destructive-fill'         => '#d63638',
+			'destructive-fill-hover'   => '#b83635',
+			'destructive-fill-pressed' => '#a53533',
+			'destructive-ink'          => '#ffffff',
 			'destructive-edge'         => '#d63638',
 			'destructive-text'         => '#facfd2',
 			'primary'                  => '#ffc857',
@@ -1270,7 +1270,7 @@ class Newspack_Test_UI_Palette extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Destructive roles are the outline roles: the base as fill, the error text as ink.
+	 * The solid destructive button is filled with the status error, never the accent, and reads at APCA Lc 45.
 	 *
 	 * @dataProvider data_palettes
 	 *
@@ -1278,24 +1278,60 @@ class Newspack_Test_UI_Palette extends WP_UnitTestCase {
 	 * @param string $contrast Contrast.
 	 * @param string $brand    Brand.
 	 */
-	public function test_destructive_roles_are_outline_roles( $base, $contrast, $brand ) {
+	public function test_destructive_fill_is_the_status_error( $base, $contrast, $brand ) {
 		$properties = $this->properties(
 			[
 				'base'     => $base,
 				'contrast' => $contrast,
 				'brand'    => $brand,
-			] 
+			]
 		);
 		$status     = Newspack_UI_Palette::status_properties( $base, '' === $brand ? $contrast : $brand, $contrast ) + Newspack_UI_Palette::STATUS_DEFAULTS;
-		$base       = strtolower( $base );
 
-		$this->assertSame( $base, $properties['destructive-fill'] );
-		$this->assertSame( $status['error-text'], $properties['destructive-ink'] );
+		$this->assertSame( $status['error'], $properties['destructive-fill'] );
 		$this->assertSame( $status['error'], $properties['destructive-edge'] );
 		$this->assertSame( $status['error-text'], $properties['destructive-text'] );
-		$this->assertSame( $status['error-tint-hover'], $properties['destructive-fill-hover'] );
-		$this->assertSame( $status['error-tint-pressed'], $properties['destructive-fill-pressed'] );
-		$this->assertGreaterThanOrEqual( 60, Newspack_UI_Palette::lc( $properties['destructive-ink'], $base ) );
+		$this->assertGreaterThanOrEqual( 45, Newspack_UI_Palette::lc( $properties['destructive-ink'], $properties['destructive-fill'] ) );
+		$this->assertGreaterThanOrEqual( 45, Newspack_UI_Palette::lc( $properties['destructive-ink'], $properties['destructive-fill-hover'] ) );
+		$this->assertGreaterThanOrEqual( 45, Newspack_UI_Palette::lc( $properties['destructive-ink'], $properties['destructive-fill-pressed'] ) );
+	}
+
+	/**
+	 * Exact destructive values for a blue accent on white and for a red accent, where the error steps away from the accent.
+	 */
+	public function test_destructive_values_for_default_and_red_accent() {
+		$blue = $this->properties(
+			[
+				'base'     => '#ffffff',
+				'contrast' => '#1e1e1e',
+				'brand'    => '#0073aa',
+			]
+		);
+		$red  = $this->properties(
+			[
+				'base'     => '#ffffff',
+				'contrast' => '#000000',
+				'brand'    => '#d63638',
+			]
+		);
+
+		$this->assertSame(
+			[
+				'destructive-fill'         => '#d63638',
+				'destructive-fill-hover'   => '#e05c56',
+				'destructive-fill-pressed' => '#e7716a',
+				'destructive-ink'          => '#ffffff',
+				'destructive-edge'         => '#d63638',
+				'destructive-text'         => '#b32d2e',
+			],
+			array_intersect_key( $blue, array_flip( [ 'destructive-fill', 'destructive-fill-hover', 'destructive-fill-pressed', 'destructive-ink', 'destructive-edge', 'destructive-text' ] ) )
+		);
+		$this->assertSame( '#8a2424', $red['destructive-fill'] );
+		$this->assertSame( '#9e4843', $red['destructive-fill-hover'] );
+		$this->assertSame( '#ab5d57', $red['destructive-fill-pressed'] );
+		$this->assertSame( '#ffffff', $red['destructive-ink'] );
+		$this->assertSame( '#8a2424', $red['destructive-edge'] );
+		$this->assertNotSame( $red['primary'], $red['destructive-fill'] );
 	}
 
 	/**

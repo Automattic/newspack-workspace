@@ -423,11 +423,18 @@ class Newspack_UI_Palette {
 		$status                 = self::status_properties( $base, '' !== $brand ? $brand : $contrast, $contrast );
 		$resolved               = $status + self::STATUS_DEFAULTS;
 		$properties            += $status;
-		$properties['destructive-fill']         = $base;
-		$properties['destructive-fill-hover']   = $resolved['error-tint-hover'];
-		$properties['destructive-fill-pressed'] = $resolved['error-tint-pressed'];
-		$properties['destructive-ink']          = $resolved['error-text'];
-		$properties['destructive-edge']         = $resolved['error'];
+		$destructive_fill       = $resolved['error'];
+		$destructive_ink        = self::pick_ink( $destructive_fill );
+		$destructive_shares     = [
+			'hover'   => self::share( $palette['hover_share'] ?? null, self::BUTTON_HOVER_SHARE ),
+			'pressed' => self::share( $palette['pressed_share'] ?? null, self::BUTTON_PRESSED_SHARE ),
+		];
+		$destructive_target     = self::button_mix_target( $destructive_fill, $destructive_ink, $base, $destructive_shares, [] );
+		$properties['destructive-fill']         = $destructive_fill;
+		$properties['destructive-fill-hover']   = self::mix( $destructive_fill, $destructive_shares['hover'] * 100, $destructive_target );
+		$properties['destructive-fill-pressed'] = self::mix( $destructive_fill, $destructive_shares['pressed'] * 100, $destructive_target );
+		$properties['destructive-ink']          = $destructive_ink;
+		$properties['destructive-edge']         = $destructive_fill;
 		$properties['destructive-text']         = $resolved['error-text'];
 
 		if ( '' !== $brand ) {
