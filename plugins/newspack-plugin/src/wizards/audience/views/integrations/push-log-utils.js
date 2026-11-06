@@ -14,8 +14,9 @@ import { isEmail } from '@wordpress/url';
  */
 import { PUSH_LOG_STATUS_MAP, PUSH_LOG_ERROR_CLASS_LABELS } from './constants';
 
-// The "Needs attention" filter has one option; this is its value.
-export const NEEDS_ATTENTION_VALUE = 'yes';
+// The Status filter's "Needs attention" option. It is not a stored status:
+// the server works it out from later pushes, so it travels as its own arg.
+export const NEEDS_ATTENTION_VALUE = 'needs_attention';
 
 // How long the log is kept, by outcome, when the server did not say.
 const DEFAULT_RETENTION_DAYS = { success: 30, failed: 90 };
@@ -40,14 +41,16 @@ const formatRetentionDuration = days =>
  * @return {Object} Args for the push-log route.
  */
 export function buildPushLogQuery( view ) {
+	const status = getFilterValue( view, 'status' );
+	const needsAttention = status === NEEDS_ATTENTION_VALUE;
 	return {
 		page: view.page,
 		per_page: view.perPage,
 		order: ( view.sort?.direction || 'desc' ).toUpperCase(),
 		search: view.search || undefined,
-		status: getFilterValue( view, 'status' ) || undefined,
+		status: ( ! needsAttention && status ) || undefined,
 		operation: getFilterValue( view, 'operation' ) || undefined,
-		needs_attention: getFilterValue( view, 'needs_attention' ) === NEEDS_ATTENTION_VALUE ? true : undefined,
+		needs_attention: needsAttention || undefined,
 	};
 }
 
@@ -151,7 +154,7 @@ export function getStatusDisplay( item ) {
 export function getEmptyMessage( view, retentionDays ) {
 	// Worded as what the log holds, not as an all-clear: a push that sent
 	// only some fields still closes a failed one.
-	if ( getFilterValue( view, 'needs_attention' ) === NEEDS_ATTENTION_VALUE ) {
+	if ( getFilterValue( view, 'status' ) === NEEDS_ATTENTION_VALUE ) {
 		return __( 'Nothing in the log needs attention.', 'newspack-plugin' );
 	}
 	if ( getFilterValue( view, 'status' ) || getFilterValue( view, 'operation' ) ) {

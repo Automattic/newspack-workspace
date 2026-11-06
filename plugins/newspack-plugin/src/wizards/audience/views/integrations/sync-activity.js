@@ -37,6 +37,15 @@ const PER_PAGE_CONFIG = { perPageSizes: [ 10, 25, 50, 100 ] };
 // sends the reader to the entry rather than calling it a success.
 const RETRY_RAN_NOTICE = { message: __( 'The retry ran. Its entry shows the result.', 'newspack-plugin' ), type: 'info' };
 
+const STATUS_FILTER_ELEMENTS = [
+	{
+		value: NEEDS_ATTENTION_VALUE,
+		label: __( 'Needs attention', 'newspack-plugin' ),
+		description: __( 'Retrying or failed, with no later success', 'newspack-plugin' ),
+	},
+	...Object.entries( PUSH_LOG_STATUS_MAP ).map( ( [ value, { label } ] ) => ( { value, label } ) ),
+];
+
 const toElements = labels => Object.entries( labels ).map( ( [ value, label ] ) => ( { value, label } ) );
 
 /**
@@ -164,7 +173,7 @@ export const SyncActivity = ( { integrationId } ) => {
 					);
 				},
 				enableSorting: false,
-				elements: Object.entries( PUSH_LOG_STATUS_MAP ).map( ( [ value, { label } ] ) => ( { value, label } ) ),
+				elements: STATUS_FILTER_ELEMENTS,
 				filterBy: { isPrimary: true, operators: [ 'is' ] },
 			},
 			{
@@ -191,17 +200,6 @@ export const SyncActivity = ( { integrationId } ) => {
 				label: __( 'Repeats', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.repeat_count,
 				enableSorting: false,
-			},
-			{
-				// Carries the filter only: what needs attention is worked out by
-				// the server from later pushes, so there is no column to show.
-				id: 'needs_attention',
-				label: __( 'Needs attention', 'newspack-plugin' ),
-				getValue: () => '',
-				enableSorting: false,
-				enableHiding: false,
-				elements: [ { value: NEEDS_ATTENTION_VALUE, label: __( 'Retrying or failed, with no later success', 'newspack-plugin' ) } ],
-				filterBy: { isPrimary: true, operators: [ 'is' ] },
 			},
 		],
 		[ openDetails ]
