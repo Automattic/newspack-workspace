@@ -94,3 +94,31 @@ describe( 'Institutions list — fetched option list invalidation', () => {
 		expect( mockInvalidate ).toHaveBeenCalledWith( 'institution' );
 	} );
 } );
+
+describe( 'Institutions list — address lists', () => {
+	const renderCell = async ( fieldId, meta ) => {
+		mockApiFetch.mockResolvedValue( [] );
+		render( <Institutions /> );
+		await waitFor( () => expect( mockDataViewsProps.current ).not.toBeNull() );
+		const field = mockDataViewsProps.current.fields.find( ( { id } ) => id === fieldId );
+		return render( field.render( { item: { id: 1, title: { raw: 'City Library' }, meta } } ) ).container;
+	};
+
+	it( 'keeps the space after each comma', async () => {
+		const cell = await renderCell( 'email_domain', { np_institution_email_domain: 'a.edu, b.edu' } );
+
+		expect( cell.querySelector( 'code' ).textContent ).toBe( 'a.edu, b.edu' );
+		expect( [ ...cell.querySelectorAll( '.newspack-institutions__list-item' ) ].map( item => item.textContent ) ).toEqual( [
+			'a.edu,',
+			'b.edu',
+		] );
+		expect( cell.querySelector( 'wbr' ) ).toBeNull();
+	} );
+
+	it( 'adds a break opportunity where no space follows the separator', async () => {
+		const cell = await renderCell( 'ip_range', { np_institution_ip_range: '192.0.2.0/24,198.51.100.10-198.51.100.40' } );
+
+		expect( cell.querySelector( 'code' ).textContent ).toBe( '192.0.2.0/24,198.51.100.10-198.51.100.40' );
+		expect( cell.querySelectorAll( 'wbr' ) ).toHaveLength( 1 );
+	} );
+} );

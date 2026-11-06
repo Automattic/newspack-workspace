@@ -108,6 +108,7 @@
 }
 
 .dataviews-column-primary__media:has( > .newspack-subscribers__avatar ) {
+	align-self: center;
 	border-radius: 50%;
 
 	&::after {
@@ -116,6 +117,11 @@
 
 	> .newspack-subscribers__avatar {
 		display: block;
+	}
+
+	+ .dataviews-view-table__primary-column-content > .dataviews-title-field:not(:last-child) {
+		min-height: 0;
+		margin-bottom: max(0px, calc((var(--wpds-dimension-size-md, #{wp-vars.$grid-unit-40}) - 1lh) / 2));
 	}
 }
 
