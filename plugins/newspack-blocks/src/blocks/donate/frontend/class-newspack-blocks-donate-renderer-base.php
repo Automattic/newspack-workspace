@@ -143,6 +143,9 @@ abstract class Newspack_Blocks_Donate_Renderer_Base {
 		if ( ! Newspack_Blocks::can_use_name_your_price() ) {
 			$class_names[] = 'wpbnbd--nyp-disabled';
 		}
+		if ( wp_is_block_theme() ) {
+			$class_names[] = 'wpbnbd--site-theme';
+		}
 		$configuration['container_classnames'] = implode( ' ', $class_names );
 
 		if ( isset( $configuration['minimumDonation'] ) ) {

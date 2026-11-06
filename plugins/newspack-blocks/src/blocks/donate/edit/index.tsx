@@ -179,7 +179,8 @@ const Edit = ( { attributes, setAttributes }: EditProps ) => {
 			`wpbnbd--${ isTierBasedLayoutEnabled ? 'tiers-based' : 'frequency-based' }`,
 			`wpbnbd--platform-${ settings.platform }`,
 			`wpbnbd-frequencies--${ availableFrequencies.length }`,
-			isTierBasedLayoutEnabled && `wpbnbd--tier-style-${ tierLayoutStyle }`
+			isTierBasedLayoutEnabled && `wpbnbd--tier-style-${ tierLayoutStyle }`,
+			window.newspackIsBlockTheme && 'wpbnbd--site-theme'
 		);
 
 	const tiersLayoutControls = [
