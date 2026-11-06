@@ -53,8 +53,8 @@ const stats = {
 	test_id: 'run',
 	source: { state: 'ok', unit: 'readers', provider: 'stub', reason: null, fetched_at: '2026-10-29T09:00:00Z' },
 	variants: {
-		a: { readers: 8214, conversions: 156, rate: 1.8992, lift: null },
-		b: { readers: 8190, conversions: 220, rate: 2.6862, lift: 41.4 },
+		a: { readers: 8214, conversions: 156, rate: 1.9, lift: null },
+		b: { readers: 8190, conversions: 220, rate: 2.69, lift: 41.6 },
 	},
 	comparisons: { b: { confidence: 99.12, label: 'reliable' } },
 	flags: { young_test: false, high_anonymous: false },
@@ -135,7 +135,7 @@ describe( 'A/B Tests tab', () => {
 		expect( document.body.textContent ).not.toMatch( /control|challenger/ );
 	} );
 
-	it( 'shows results with lift from the rates as shown and confidence as text', async () => {
+	it( 'shows the rates, lift and confidence the route returns', async () => {
 		mockRoutes( listResponse( [ test( 'run', { a: prompt( 4 ), b: prompt( 5 ) }, { started_at: '2026-10-01 00:00:00' } ) ] ) );
 		render( <ABTests /> );
 		const card = await screen.findByRole( 'region', { name: 'Test run' } );

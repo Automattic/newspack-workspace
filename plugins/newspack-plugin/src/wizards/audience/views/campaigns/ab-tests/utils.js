@@ -77,35 +77,10 @@ export const getStatusIntent = status => {
 };
 
 /**
- * A rate as the table shows it, so every figure derived from it agrees.
- *
- * @param {?number} rate Conversions per hundred readers.
- * @return {?number} Rounded to two places, or null.
- */
-export const roundRate = rate => ( rate === null || rate === undefined ? null : Math.round( Number( rate ) * 100 ) / 100 );
-
-/**
  * @param {?number} rate Conversions per hundred readers.
  * @return {string} Formatted.
  */
 export const formatRate = rate => ( rate === null || rate === undefined ? DASH : `${ Number( rate ).toFixed( 2 ) }%` );
-
-/**
- * Lift of a version over A, from the rates as shown rather than the raw ones,
- * so a reader checking the table by hand gets the same figure.
- *
- * @param {?number} controlRate A's rate.
- * @param {?number} rate        The version's rate.
- * @return {?number} Percent change, or null when there is nothing to compare.
- */
-export const computeLift = ( controlRate, rate ) => {
-	const base = roundRate( controlRate );
-	const value = roundRate( rate );
-	if ( base === null || value === null || base === 0 ) {
-		return null;
-	}
-	return ( ( value - base ) / base ) * 100;
-};
 
 /**
  * @param {?number} lift Percent change against A.

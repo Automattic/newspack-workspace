@@ -11,7 +11,7 @@ import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 /**
  * Internal dependencies
  */
-import { DASH, computeLift, formatConfidence, formatLift, formatRate, getCountLabel } from './utils';
+import { DASH, formatConfidence, formatLift, formatRate, getCountLabel } from './utils';
 
 // The stylesheet sets column widths by position, which holds because columns
 // can't be moved; reordering this list moves those widths with it.
@@ -29,14 +29,13 @@ const FIELD_IDS = [ 'version', 'prompt', 'readers', 'rate', 'lift', 'confidence'
  */
 const ResultsTable = ( { test, status, stats, labels } ) => {
 	const rows = useMemo( () => {
-		const controlRate = stats?.variants?.a?.rate;
 		return Object.keys( test.variants ).map( letter => {
 			const row = stats?.variants?.[ letter ] || null;
 			return {
 				letter,
 				variant: test.variants[ letter ],
 				row,
-				lift: letter === 'a' || ! row ? null : computeLift( controlRate, row.rate ),
+				lift: row?.lift ?? null,
 				comparison: stats?.comparisons?.[ letter ] || null,
 			};
 		} );

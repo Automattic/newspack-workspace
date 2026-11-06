@@ -1,4 +1,4 @@
-import { computeLift, formatConfidence, formatLift, getStatusIntent, getTestStatus, sortTests, splitSummary } from './utils';
+import { formatConfidence, formatLift, getStatusIntent, getTestStatus, sortTests, splitSummary } from './utils';
 
 const variant = ( extra = {} ) => ( { status: 'publish', eligible: true, ...extra } );
 
@@ -17,16 +17,10 @@ describe( 'getStatusIntent', () => {
 	} );
 } );
 
-describe( 'computeLift', () => {
-	it( 'uses the rates as the table shows them', () => {
-		// The raw rates give +41.4%; the 1.90% and 2.69% the table shows give +41.6%.
-		expect( formatLift( computeLift( 1.8992, 2.6862 ) ) ).toBe( '+41.6%' );
-		expect( formatLift( computeLift( 1.9, 2.69 ) ) ).toBe( '+41.6%' );
-	} );
-
-	it( 'has nothing to compare against a zero or missing rate', () => {
-		expect( computeLift( 0, 2 ) ).toBeNull();
-		expect( computeLift( null, 2 ) ).toBeNull();
+describe( 'formatLift', () => {
+	it( 'always shows a sign, and a dash when there is nothing to compare', () => {
+		expect( formatLift( 41.6 ) ).toBe( '+41.6%' );
+		expect( formatLift( -3.25 ) ).toBe( '-3.3%' );
 		expect( formatLift( null ) ).toBe( '—' );
 	} );
 } );
