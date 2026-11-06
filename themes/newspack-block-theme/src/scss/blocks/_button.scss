@@ -155,7 +155,7 @@
 		form .wp-block-button__link {
 			background: var(--wp--preset--color--base);
 			border: 1px solid currentcolor;
-			color: var(--wp--preset--color--accent);
+			color: var(--wp--custom--button--outline, var(--wp--preset--color--accent));
 
 			@include motion.hover {
 				&:hover {
