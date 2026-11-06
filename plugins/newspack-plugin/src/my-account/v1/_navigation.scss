@@ -45,7 +45,7 @@
 		display: flex;
 		flex-direction: column;
 		float: none;
-		font-family: var(--newspack-ui-font-family);
+		font-family: var(--newspack-ui-font-family-control);
 		font-size: var(--newspack-ui-font-size-body);
 		line-height: var(--newspack-ui-line-height-body);
 		width: auto;
@@ -97,6 +97,7 @@
 		.newspack-my-account__navigation-sign-out {
 			align-items: center;
 			display: inline-flex;
+			font-family: var(--newspack-ui-font-family-control);
 
 			svg {
 				fill: currentcolor;
@@ -122,6 +123,9 @@
 			--newspack-ui-button-height: var(--newspack-ui-spacer-8);
 			--newspack-ui-button-padding-block: var(--newspack-ui-spacer-1);
 			--newspack-ui-button-padding-inline: var(--newspack-ui-spacer-3);
+			--newspack-ui-button-font-family: var(--newspack-ui-font-family-control);
+			--newspack-ui-button-letter-spacing: normal;
+			--newspack-ui-button-text-transform: none;
 
 			font-weight: var(--newspack-ui-font-weight-medium);
 			margin: 0;
