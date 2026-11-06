@@ -38,11 +38,7 @@ const PER_PAGE_CONFIG = { perPageSizes: [ 10, 25, 50, 100 ] };
 const RETRY_RAN_NOTICE = { message: __( 'The retry ran. Its entry shows the result.', 'newspack-plugin' ), type: 'info' };
 
 const STATUS_FILTER_ELEMENTS = [
-	{
-		value: NEEDS_ATTENTION_VALUE,
-		label: __( 'Needs attention', 'newspack-plugin' ),
-		description: __( 'Retrying or failed, with no later success', 'newspack-plugin' ),
-	},
+	{ value: NEEDS_ATTENTION_VALUE, label: __( 'Needs attention', 'newspack-plugin' ) },
 	...Object.entries( PUSH_LOG_STATUS_MAP ).map( ( [ value, { label } ] ) => ( { value, label } ) ),
 ];
 
