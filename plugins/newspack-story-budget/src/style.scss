@@ -486,3 +486,10 @@ div[role="menuitem"] {
 .newspack-story-budget__header-actions {
 	margin-inline-start: wp-vars.$grid-unit-10;
 }
+
+@container dataviews-wrapper (min-width: 431px) {
+	.newspack-story-budget__content .dataviews-wrapper > * {
+		/* stylelint-disable-next-line plugin-wpds/no-setting-wpds-custom-properties -- restores the 48px list gutter DataViews used before it moved to this token. */
+		--wpds-dimension-padding-2xl: #{wp-vars.$grid-unit-60};
+	}
+}
