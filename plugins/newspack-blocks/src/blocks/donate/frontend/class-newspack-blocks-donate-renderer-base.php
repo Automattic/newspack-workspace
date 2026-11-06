@@ -179,6 +179,10 @@ abstract class Newspack_Blocks_Donate_Renderer_Base {
 	 * @param array $is_reverse_style Reverse background/foreground colors.
 	 */
 	protected static function get_button_style( $attributes, $is_reverse_style = false ) {
+		if ( Newspack_Blocks::donate_button_uses_site_style( $attributes ) ) {
+			return $is_reverse_style ? 'border-color: var(--newspack-ui-color-btn); color: var(--newspack-ui-color-btn); background: transparent;' : '';
+		}
+
 		$button_color      = $attributes['buttonColor'];
 		$button_text_color = Newspack_Blocks::get_color_for_contrast( $button_color );
 		if ( $is_reverse_style ) {
@@ -186,6 +190,22 @@ abstract class Newspack_Blocks_Donate_Renderer_Base {
 		}
 
 		return 'border-color: ' . esc_attr( $button_color ) . '; background-color: ' . esc_attr( $button_color ) . '; color: ' . esc_attr( $button_text_color ) . ';';
+	}
+
+	/**
+	 * Get the style attribute and class list for a button.
+	 *
+	 * @param array $attributes Block attributes.
+	 * @param bool  $is_reverse_style Reverse background/foreground colors.
+	 * @return string Attributes to print inside the button tag.
+	 */
+	protected static function get_button_attrs( $attributes, $is_reverse_style = false ) {
+		$style = self::get_button_style( $attributes, $is_reverse_style );
+		$attrs = '' !== $style ? ' style="' . $style . '"' : '';
+		if ( Newspack_Blocks::donate_button_uses_site_style( $attributes ) && ! $is_reverse_style ) {
+			$attrs .= ' class="wp-element-button wp-block-button__link"';
+		}
+		return $attrs;
 	}
 
 	/**

@@ -91,7 +91,7 @@ class Newspack_Blocks_Donate_Renderer_Frequency_Based extends Newspack_Blocks_Do
 	 */
 	private static function render_footer( $attributes ) {
 		$campaign          = $attributes['campaign'] ?? false;
-		$button_style_attr = 'style="' . self::get_button_style( $attributes ) . '"';
+		$button_attrs      = self::get_button_attrs( $attributes );
 
 		ob_start();
 		?>
@@ -99,7 +99,7 @@ class Newspack_Blocks_Donate_Renderer_Frequency_Based extends Newspack_Blocks_Do
 			<?php echo wp_kses_post( $attributes['thanksText'] ); ?>
 		</p>
 
-		<button type='submit' <?php echo $button_style_attr; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
+		<button type='submit' <?php echo $button_attrs; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
 			<?php echo wp_kses_post( $attributes['buttonText'] ); ?>
 		</button>
 		<?php if ( $campaign ) : ?>

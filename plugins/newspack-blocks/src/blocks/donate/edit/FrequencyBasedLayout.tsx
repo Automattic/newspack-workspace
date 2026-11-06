@@ -14,7 +14,14 @@ import { RichText } from '@wordpress/block-editor';
  * Internal dependencies
  */
 import { AmountValueInput } from './components';
-import { getColorForContrast, getFrequencyLabel, getFormattedAmount, getFrequencyLabelWithAmount, isModernStyle } from '../utils';
+import {
+	getColorForContrast,
+	getFrequencyLabel,
+	getFormattedAmount,
+	getFrequencyLabelWithAmount,
+	isModernStyle,
+	usesSiteButtonStyle,
+} from '../utils';
 import { FREQUENCIES } from '../consts';
 import type { ComponentProps, DonationFrequencySlug } from '../types';
 import { updateBlockClassName, getFormData } from '../view';
@@ -257,11 +264,15 @@ const FrequencyBasedLayout = ( props: { canUseNameYourPrice: boolean; isTiered: 
 
 	const renderButton = () => (
 		<div
-			className="submit-button"
-			style={ {
-				backgroundColor: attributes.buttonColor,
-				color: getColorForContrast( attributes.buttonColor ),
-			} }
+			className={ classNames( 'submit-button', { 'wp-element-button wp-block-button__link': usesSiteButtonStyle( attributes.buttonColor ) } ) }
+			style={
+				usesSiteButtonStyle( attributes.buttonColor )
+					? undefined
+					: {
+							backgroundColor: attributes.buttonColor,
+							color: getColorForContrast( attributes.buttonColor ),
+					  }
+			}
 		>
 			<RichText
 				onChange={ ( value: string ) => setAttributes( { buttonText: value } ) }

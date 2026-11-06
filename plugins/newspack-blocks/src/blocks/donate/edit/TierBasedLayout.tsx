@@ -10,7 +10,7 @@ import classNames from 'classnames';
  * Internal dependencies
  */
 import type { ComponentProps, DonateBlockAttributes, TierBasedOptionValue } from '../types';
-import { getColorForContrast, getFrequencyLabelWithAmount, isModernStyle } from '../utils';
+import { getColorForContrast, getFrequencyLabelWithAmount, isModernStyle, usesSiteButtonStyle } from '../utils';
 import { FREQUENCIES, DISABLED_IN_TIERS_BASED_LAYOUT_TIER_INDEX } from '../consts';
 
 const TierBasedLayout = ( props: ComponentProps ) => {
@@ -36,6 +36,27 @@ const TierBasedLayout = ( props: ComponentProps ) => {
 
 	const isAnyRecommended = attributes.tiersBasedOptions.some( tier => Boolean( tier.recommendLabel ) );
 	const isModern = isModernStyle( attributes.className );
+	const useSiteStyle = usesSiteButtonStyle( attributes.buttonColor );
+
+	const getButtonStyle = ( isReverse: boolean ) => {
+		if ( useSiteStyle ) {
+			return isReverse
+				? {
+						appearance: 'button' as const,
+						borderColor: 'var(--newspack-ui-color-btn)',
+						backgroundColor: 'transparent',
+						color: 'var(--newspack-ui-color-btn)',
+				  }
+				: { appearance: 'button' as const };
+		}
+		return {
+			appearance: 'button' as const,
+			borderColor: attributes.buttonColor,
+			...( isReverse
+				? { backgroundColor: 'transparent', color: attributes.buttonColor }
+				: { backgroundColor: attributes.buttonColor, color: getColorForContrast( attributes.buttonColor ) } ),
+		};
+	};
 
 	return (
 		<form className="wpbnbd__tiers" onSubmit={ e => e.preventDefault() }>
@@ -126,20 +147,10 @@ const TierBasedLayout = ( props: ComponentProps ) => {
 								/>
 							</div>
 							<div
-								className="submit-button"
-								style={ {
-									appearance: 'button',
-									borderColor: attributes.buttonColor,
-									...( isAnyRecommended && ! recommendLabel
-										? {
-												backgroundColor: 'transparent',
-												color: attributes.buttonColor,
-										  }
-										: {
-												backgroundColor: attributes.buttonColor,
-												color: getColorForContrast( attributes.buttonColor ),
-										  } ),
-								} }
+								className={ classNames( 'submit-button', {
+									'wp-element-button wp-block-button__link': useSiteStyle && ( ! isAnyRecommended || recommendLabel ),
+								} ) }
+								style={ getButtonStyle( isAnyRecommended && ! recommendLabel ) }
 							>
 								<RichText
 									onChange={ handleTierOptionChange( index, 'buttonText' ) }

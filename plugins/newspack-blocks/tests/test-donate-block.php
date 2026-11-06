@@ -93,4 +93,80 @@ class DonateBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 			'<span class="wpbnbd__tiers__amount__value"><span class="woocommerce-Price-amount amount"><bdi><span class="woocommerce-Price-currencySymbol">$</span>AMOUNT_PLACEHOLDER</bdi></span> FREQUENCY_PLACEHOLDER</span>'
 		);
 	}
+	/**
+	 * Switch theme, skipping when it is not available.
+	 *
+	 * @param string $slug Theme slug.
+	 * @return string Previous stylesheet.
+	 */
+	private function use_theme( $slug ) {
+		$original = get_stylesheet();
+		switch_theme( $slug );
+		if ( get_stylesheet() !== $slug ) {
+			switch_theme( $original );
+			$this->markTestSkipped( $slug . ' is not available in this environment.' );
+		}
+		return $original;
+	}
+
+	/**
+	 * Call the protected button style helper on a renderer.
+	 *
+	 * @param array $attributes Block attributes.
+	 * @param bool  $reverse    Reverse style.
+	 * @return string
+	 */
+	private function get_button_style( $attributes, $reverse = false ) {
+		require_once NEWSPACK_BLOCKS__PLUGIN_DIR . 'src/blocks/donate/frontend/class-newspack-blocks-donate-renderer-frequency-based.php';
+		$method = new ReflectionMethod( 'Newspack_Blocks_Donate_Renderer_Frequency_Based', 'get_button_style' );
+		$method->setAccessible( true );
+		return $method->invoke( null, $attributes, $reverse );
+	}
+
+	/**
+	 * The default button colour defers to the site's button on a block theme.
+	 */
+	public function test_donate_button_uses_site_style_when_default_and_active() {
+		$original = $this->use_theme( 'twentytwentyfive' );
+		$this->assertTrue( Newspack_Blocks::donate_button_uses_site_style( [ 'buttonColor' => '#dd3333' ] ) );
+		$this->assertTrue( Newspack_Blocks::donate_button_uses_site_style( [ 'buttonColor' => '#DD3333' ] ) );
+		$this->assertSame( '', $this->get_button_style( [ 'buttonColor' => '#dd3333' ] ) );
+		switch_theme( $original );
+	}
+
+	/**
+	 * A picked colour is kept.
+	 */
+	public function test_donate_button_keeps_custom_colour() {
+		$original = $this->use_theme( 'twentytwentyfive' );
+		$this->assertFalse( Newspack_Blocks::donate_button_uses_site_style( [ 'buttonColor' => '#6c6c6c' ] ) );
+		$style = $this->get_button_style( [ 'buttonColor' => '#6c6c6c' ] );
+		$this->assertStringContainsString( 'background-color: #6c6c6c', $style );
+		switch_theme( $original );
+	}
+
+	/**
+	 * Classic themes keep the inline colours.
+	 */
+	public function test_donate_button_unchanged_on_classic() {
+		$original = $this->use_theme( 'newspack-theme' );
+		$this->assertFalse( Newspack_Blocks::donate_button_uses_site_style( [ 'buttonColor' => '#dd3333' ] ) );
+		$this->assertSame(
+			'border-color: #dd3333; background-color: #dd3333; color: white;',
+			$this->get_button_style( [ 'buttonColor' => '#dd3333' ] )
+		);
+		switch_theme( $original );
+	}
+
+	/**
+	 * The reverse style outlines the button with the brand token.
+	 */
+	public function test_reverse_style_uses_brand_token() {
+		$original = $this->use_theme( 'twentytwentyfive' );
+		$this->assertSame(
+			'border-color: var(--newspack-ui-color-btn); color: var(--newspack-ui-color-btn); background: transparent;',
+			$this->get_button_style( [ 'buttonColor' => '#dd3333' ], true )
+		);
+		switch_theme( $original );
+	}
 }
