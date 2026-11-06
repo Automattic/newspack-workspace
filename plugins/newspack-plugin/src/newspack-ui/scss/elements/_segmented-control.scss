@@ -53,6 +53,8 @@
 
 				&:not([class*="--small"]) {
 					--newspack-ui-button-height: var(--newspack-ui-spacer-8);
+					--newspack-ui-button-font-size: var(--newspack-ui-font-size-body);
+					--newspack-ui-button-line-height: var(--newspack-ui-line-height-body);
 					--newspack-ui-button-padding-block: var(--newspack-ui-spacer-1);
 					--newspack-ui-button-padding-inline: calc(var(--newspack-ui-spacer-1) * 2.25);
 				}

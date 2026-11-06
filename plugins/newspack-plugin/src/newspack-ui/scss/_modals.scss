@@ -8,7 +8,7 @@
 	.newspack-ui__modal__header h2:not([class*="font-size"]):not(#{mixins.$font-size-classes}) {
 		font-size: max(18px, var(--newspack-ui-font-size-title-m));
 		letter-spacing: var(--newspack-ui-letter-spacing-title-m);
-		line-height: var(--newspack-ui-line-height-title-m);
+		line-height: var(--newspack-ui-heading-line-height, var(--newspack-ui-line-height-title-m));
 	}
 
 	&__modal-container {
@@ -184,7 +184,7 @@
 			h2 {
 				color: inherit;
 				font-family: var(--newspack-ui-font-family-heading);
-				font-weight: var(--newspack-ui-font-weight-strong);
+				font-weight: var(--newspack-ui-heading-font-weight, var(--newspack-ui-font-weight-strong));
 				margin: 0;
 
 				&[tabindex="-1"]:focus {
@@ -198,7 +198,7 @@
 				--newspack-ui-button-bg: transparent;
 				--newspack-ui-button-bg-hover: var(--newspack-ui-color-neutral-fill);
 				--newspack-ui-button-bg-pressed: var(--newspack-ui-color-neutral-fill-hover);
-				--newspack-ui-modal-close-block-margin: calc(( max(18px, var(--newspack-ui-font-size-title-m)) *var(--newspack-ui-line-height-title-m) - var(--newspack-ui-modal-close-size, var(--newspack-ui-spacer-8)) ) / 2);
+				--newspack-ui-modal-close-block-margin: calc(( max(18px, var(--newspack-ui-font-size-title-m)) * var(--newspack-ui-heading-line-height, var(--newspack-ui-line-height-title-m)) - var(--newspack-ui-modal-close-size, var(--newspack-ui-spacer-8)) ) / 2);
 
 				border-radius: var(--newspack-ui-radius-pill);
 				flex: none;
