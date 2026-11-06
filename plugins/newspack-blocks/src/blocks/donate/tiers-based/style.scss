@@ -56,7 +56,7 @@
 							margin: 0 5px;
 							transition: background-color motion.$duration-color motion.$ease-color;
 							&.is-active {
-								background: var(--newspack-ui-color-btn);
+								background: var(--newspack-ui-color-btn, #{np-colors.$neutral-900});
 							}
 						}
 					}

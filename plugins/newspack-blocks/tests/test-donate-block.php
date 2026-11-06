@@ -94,79 +94,135 @@ class DonateBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		);
 	}
 	/**
-	 * Switch theme, skipping when it is not available.
+	 * Theme to restore after each test.
 	 *
-	 * @param string $slug Theme slug.
-	 * @return string Previous stylesheet.
+	 * @var string|null
 	 */
-	private function use_theme( $slug ) {
-		$original = get_stylesheet();
-		switch_theme( $slug );
-		if ( get_stylesheet() !== $slug ) {
-			switch_theme( $original );
-			$this->markTestSkipped( $slug . ' is not available in this environment.' );
+	private $original_theme = null;
+
+	/**
+	 * Restore the theme a test switched.
+	 */
+	public function tear_down() {
+		if ( null !== $this->original_theme ) {
+			switch_theme( $this->original_theme );
+			$this->original_theme = null;
 		}
-		return $original;
+		wp_clean_themes_cache();
+		parent::tear_down();
 	}
 
 	/**
-	 * Call the protected button style helper on a renderer.
+	 * Switch theme, skipping when it is not available.
+	 *
+	 * @param string $slug Theme slug.
+	 */
+	private function use_theme( $slug ) {
+		if ( ! wp_get_theme( $slug )->exists() ) {
+			$this->markTestSkipped( $slug . ' is not available in this environment.' );
+		}
+		$this->original_theme = get_stylesheet();
+		switch_theme( $slug );
+	}
+
+	/**
+	 * Switch to the classic theme fixture.
+	 */
+	private function use_classic_theme() {
+		register_theme_directory( NEWSPACK_BLOCKS__PLUGIN_DIR . 'tests/fixtures/themes' );
+		wp_clean_themes_cache();
+		$this->use_theme( 'zz-classic' );
+	}
+
+	/**
+	 * Call a protected renderer method.
+	 *
+	 * @param string $class_name Renderer class.
+	 * @param string $method     Method name.
+	 * @param array  $args       Arguments.
+	 * @return mixed
+	 */
+	private function call_renderer( $class_name, $method, $args ) {
+		require_once NEWSPACK_BLOCKS__PLUGIN_DIR . 'src/blocks/donate/frontend/class-newspack-blocks-donate-renderer-frequency-based.php';
+		require_once NEWSPACK_BLOCKS__PLUGIN_DIR . 'src/blocks/donate/frontend/class-newspack-blocks-donate-renderer-tiers-based.php';
+		$reflection = new ReflectionMethod( $class_name, $method );
+		$reflection->setAccessible( true );
+		return $reflection->invokeArgs( null, $args );
+	}
+
+	/**
+	 * Get a button's raw style.
 	 *
 	 * @param array $attributes Block attributes.
 	 * @param bool  $reverse    Reverse style.
 	 * @return string
 	 */
 	private function get_button_style( $attributes, $reverse = false ) {
-		require_once NEWSPACK_BLOCKS__PLUGIN_DIR . 'src/blocks/donate/frontend/class-newspack-blocks-donate-renderer-frequency-based.php';
-		$method = new ReflectionMethod( 'Newspack_Blocks_Donate_Renderer_Frequency_Based', 'get_button_style' );
-		$method->setAccessible( true );
-		return $method->invoke( null, $attributes, $reverse );
+		return $this->call_renderer( 'Newspack_Blocks_Donate_Renderer_Frequency_Based', 'get_button_style', [ $attributes, $reverse ] );
 	}
 
 	/**
-	 * The default button colour defers to the site's button on a block theme.
+	 * Get a button's raw style and class values.
+	 *
+	 * @param array $attributes Block attributes.
+	 * @param bool  $reverse    Reverse style.
+	 * @return array
+	 */
+	private function get_button_attrs( $attributes, $reverse = false ) {
+		return $this->call_renderer( 'Newspack_Blocks_Donate_Renderer_Frequency_Based', 'get_button_attrs', [ $attributes, $reverse ] );
+	}
+
+	/**
+	 * The default button color defers to the site's button on a block theme.
 	 */
 	public function test_donate_button_uses_site_style_when_default_and_active() {
-		$original = $this->use_theme( 'twentytwentyfive' );
+		$this->use_theme( 'twentytwentyfive' );
 		$this->assertTrue( Newspack_Blocks::donate_button_uses_site_style( [ 'buttonColor' => '#dd3333' ] ) );
 		$this->assertTrue( Newspack_Blocks::donate_button_uses_site_style( [ 'buttonColor' => '#DD3333' ] ) );
 		$this->assertSame( '', $this->get_button_style( [ 'buttonColor' => '#dd3333' ] ) );
-		switch_theme( $original );
+		$this->assertSame(
+			[
+				'style' => '',
+				'class' => 'wp-element-button',
+			],
+			$this->get_button_attrs( [ 'buttonColor' => '#dd3333' ] )
+		);
 	}
 
 	/**
-	 * A picked colour is kept.
+	 * A picked color is kept.
 	 */
-	public function test_donate_button_keeps_custom_colour() {
-		$original = $this->use_theme( 'twentytwentyfive' );
+	public function test_donate_button_keeps_custom_color() {
+		$this->use_theme( 'twentytwentyfive' );
 		$this->assertFalse( Newspack_Blocks::donate_button_uses_site_style( [ 'buttonColor' => '#6c6c6c' ] ) );
-		$style = $this->get_button_style( [ 'buttonColor' => '#6c6c6c' ] );
-		$this->assertStringContainsString( 'background-color: #6c6c6c', $style );
-		switch_theme( $original );
+		$attrs = $this->get_button_attrs( [ 'buttonColor' => '#6c6c6c' ] );
+		$this->assertStringContainsString( 'background-color: #6c6c6c', $attrs['style'] );
+		$this->assertSame( '', $attrs['class'] );
 	}
 
 	/**
-	 * Classic themes keep the inline colours.
+	 * Classic themes keep the inline colors.
 	 */
 	public function test_donate_button_unchanged_on_classic() {
-		$original = $this->use_theme( 'newspack-theme' );
+		$this->use_classic_theme();
 		$this->assertFalse( Newspack_Blocks::donate_button_uses_site_style( [ 'buttonColor' => '#dd3333' ] ) );
 		$this->assertSame(
-			'border-color: #dd3333; background-color: #dd3333; color: white;',
-			$this->get_button_style( [ 'buttonColor' => '#dd3333' ] )
+			[
+				'style' => 'border-color: #dd3333; background-color: #dd3333; color: white;',
+				'class' => '',
+			],
+			$this->get_button_attrs( [ 'buttonColor' => '#dd3333' ] )
 		);
-		switch_theme( $original );
 	}
 
 	/**
-	 * The reverse style outlines the button with the brand token.
+	 * The reverse style outlines the button with the brand token and the button typography tokens.
 	 */
 	public function test_reverse_style_uses_brand_token() {
-		$original = $this->use_theme( 'twentytwentyfive' );
-		$this->assertSame(
-			'border-color: var(--newspack-ui-color-btn); color: var(--newspack-ui-color-btn); background: transparent;',
-			$this->get_button_style( [ 'buttonColor' => '#dd3333' ], true )
-		);
-		switch_theme( $original );
+		$this->use_theme( 'twentytwentyfive' );
+		$attrs = $this->get_button_attrs( [ 'buttonColor' => '#dd3333' ], true );
+		$this->assertStringContainsString( 'border-color: var(--newspack-ui-color-btn, #1e1e1e); color: var(--newspack-ui-color-btn, #1e1e1e); background: transparent;', $attrs['style'] );
+		$this->assertStringContainsString( 'font-family: var(--newspack-ui-button-font-family,', $attrs['style'] );
+		$this->assertSame( '', $attrs['class'] );
 	}
 }

@@ -1835,12 +1835,12 @@ class Newspack_Blocks {
 	}
 
 	/**
-	 * Whether a Donate block button left at the default colour should render as the site's own button.
+	 * Whether a Donate block button left at the default color should render as the site's own button.
 	 *
 	 * @param array $attributes Block attributes.
 	 * @return bool
 	 */
-	public static function donate_button_uses_site_style( $attributes ) {
+	public static function donate_button_uses_site_style( array $attributes ): bool {
 		return wp_is_block_theme()
 			&& isset( $attributes['buttonColor'] )
 			&& '#dd3333' === strtolower( (string) $attributes['buttonColor'] );
