@@ -35,7 +35,8 @@ const DEFAULT_VIEW = {
 	search: '',
 	filters: [],
 	titleField: 'name',
-	fields: [ 'description', 'slug', 'count' ],
+	descriptionField: 'description',
+	fields: [ 'slug', 'count' ],
 };
 
 const DEFAULT_LAYOUTS = { table: {} };
@@ -44,6 +45,8 @@ const PERSIST_OPTIONS = {
 	fieldIds: FIELD_IDS,
 	layoutTypes: Object.keys( DEFAULT_LAYOUTS ),
 	urlPatch: getInitialView(),
+	// A view saved while the description had its own column would show it twice.
+	normalize: view => ( { ...view, fields: ( view.fields || [] ).filter( field => field !== 'description' ) } ),
 };
 
 // Suppress the built-in ViewConfig per-page control — the custom
