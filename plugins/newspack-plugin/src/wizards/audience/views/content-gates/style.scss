@@ -129,3 +129,7 @@
 .newspack-content-gifting__prerequisites {
 	margin: 0 0 wp-vars.$grid-unit-40;
 }
+
+.newspack-institutions .dataviews-column-primary__media:empty {
+	display: none;
+}
