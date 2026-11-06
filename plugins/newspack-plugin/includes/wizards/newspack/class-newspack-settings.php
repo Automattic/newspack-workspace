@@ -36,11 +36,21 @@ class Newspack_Settings extends Wizard {
 	protected $capability = 'manage_options';
 
 	/**
+	 * Local data, built once per request.
+	 *
+	 * @var array|null
+	 */
+	private ?array $local_data = null;
+
+	/**
 	 * Get Settings local data
 	 *
 	 * @return []
 	 */
 	public function get_local_data() {
+		if ( null !== $this->local_data ) {
+			return $this->local_data;
+		}
 		$google_site_kit_url = google_site_kit_available() ? admin_url( 'admin.php?page=googlesitekit-settings#/connected-services/analytics-4' ) : admin_url( 'admin.php?page=googlesitekit-splash' );
 		$newspack_settings = [
 			'connections'     => [
@@ -151,7 +161,8 @@ class Newspack_Settings extends Wizard {
 			'label' => __( 'Advanced Settings', 'newspack-plugin' ),
 		];
 
-		return $newspack_settings;
+		$this->local_data = $newspack_settings;
+		return $this->local_data;
 	}
 
 	/**
@@ -183,7 +194,7 @@ class Newspack_Settings extends Wizard {
 	public function enqueue_scripts_and_styles() {
 		parent::enqueue_scripts_and_styles();
 
-		if ( filter_input( INPUT_GET, 'page', FILTER_SANITIZE_FULL_SPECIAL_CHARS ) !== $this->slug ) {
+		if ( ! $this->is_wizard_page() && ! \Newspack\Admin_App::serves( $this->slug ) ) {
 			return;
 		}
 

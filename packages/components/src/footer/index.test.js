@@ -50,6 +50,18 @@ describe( 'Footer', () => {
 		}
 	} );
 
+	it( 'links to About by default', () => {
+		render( <Footer /> );
+		expect( screen.getByRole( 'link', { name: /About/ } ) ).toHaveAttribute( 'href', 'https://newspack.com/' );
+	} );
+
+	it( 'leaves About out when asked, keeping the version and Documentation', () => {
+		render( <Footer hideAbout /> );
+		expect( screen.queryByRole( 'link', { name: /About/ } ) ).toBeNull();
+		expect( screen.getByRole( 'link', { name: /Newspack 1\.0\.0/ } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'link', { name: /Documentation/ } ) ).toBeInTheDocument();
+	} );
+
 	it( 'offers no link for a browser gesture to follow', () => {
 		render( <Footer /> );
 		expect( screen.getByRole( 'button', { name: 'Reset Newspack' } ) ).not.toHaveAttribute( 'href' );
