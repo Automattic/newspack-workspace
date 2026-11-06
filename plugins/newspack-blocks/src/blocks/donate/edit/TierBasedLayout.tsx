@@ -96,6 +96,7 @@ const TierBasedLayout = ( props: ComponentProps ) => {
 			<div className="wpbnbd__tiers__options">
 				{ displayedAmounts.map( ( amount, index ) => {
 					const recommendLabel = attributes.tiersBasedOptions[ index ].recommendLabel || '';
+					const isReverse = isAnyRecommended && ! recommendLabel;
 					return (
 						<div
 							key={ index }
@@ -142,9 +143,9 @@ const TierBasedLayout = ( props: ComponentProps ) => {
 							<div
 								className={ classNames( 'submit-button', {
 									'wp-element-button': useSiteStyle,
-									wpbnbd__tiers__outline: useSiteStyle && isAnyRecommended && ! recommendLabel,
+									wpbnbd__tiers__outline: useSiteStyle && isReverse,
 								} ) }
-								style={ getButtonStyle( isAnyRecommended && ! recommendLabel ) }
+								style={ getButtonStyle( isReverse ) }
 							>
 								<RichText
 									onChange={ handleTierOptionChange( index, 'buttonText' ) }

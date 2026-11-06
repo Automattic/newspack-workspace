@@ -1,5 +1,6 @@
 @use "newspack-colors" as np-colors;
 @use "newspack-motion" as motion;
+@use "../../../shared/sass/mixins";
 @use "../../../shared/sass/variables";
 
 .wpbnbd--tiers-based {
@@ -129,8 +130,12 @@
 						}
 					}
 
-					&:active {
+					&:active:where(:not(:has([contenteditable="true"]))) {
 						background: color-mix(in oklab, currentcolor var(--wp--custom--state--fill-hover, 13%), var(--wp--preset--color--base, #{np-colors.$neutral-000}));
+					}
+
+					&:focus-visible {
+						@include mixins.focus-edge( currentcolor, $halo: mixins.$focus-color );
 					}
 				}
 			}
