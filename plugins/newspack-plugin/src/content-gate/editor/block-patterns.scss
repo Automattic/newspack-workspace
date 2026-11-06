@@ -107,7 +107,7 @@
 	background: var(--newspack-ui-color-neutral-fill) !important;
 	border-radius: var(--newspack-ui-radius-badge) !important;
 	color: var(--newspack-ui-color-text) !important;
-	font-family: var(--newspack-ui-font-family-control);
+	font-family: var(--newspack-ui-font-family-control, var(--newspack-ui-font-family));
 	font-size: var(--newspack-ui-font-size-caption) !important;
 	font-weight: var(--newspack-ui-font-weight-strong) !important;
 	height: var(--newspack-ui-spacer-4);

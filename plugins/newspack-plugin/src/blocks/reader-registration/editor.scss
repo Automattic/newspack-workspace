@@ -41,7 +41,7 @@
 	}
 
 	& &__title {
-		font-family: var(--newspack-ui-font-family-heading);
+		font-family: var(--newspack-ui-font-family-heading, var(--newspack-ui-font-family));
 	}
 
 	&__main {
@@ -94,7 +94,7 @@
 	.wp-block-newspack-reader-registration &__have-account {
 		.newspack-ui__button {
 			cursor: default;
-			font-family: var(--newspack-ui-font-family-control) !important;
+			font-family: var(--newspack-ui-font-family-control, var(--newspack-ui-font-family)) !important;
 
 			&:focus {
 				box-shadow: none;
