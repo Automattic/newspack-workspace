@@ -118,6 +118,11 @@
 	> .newspack-subscribers__avatar {
 		display: block;
 	}
+
+	+ .dataviews-view-table__primary-column-content > .dataviews-title-field {
+		min-height: 0;
+		margin-bottom: calc((var(--wpds-dimension-size-md, #{wp-vars.$grid-unit-40}) - 1lh) / 2);
+	}
 }
 
 // Profile header avatar, portaled into the wizard section header, top-right.
