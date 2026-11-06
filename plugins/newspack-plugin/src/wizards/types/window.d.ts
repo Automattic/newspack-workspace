@@ -30,6 +30,7 @@ declare global {
 			institutional_access_url?: string;
 			content_banner?: {
 				supports_theme_style: boolean;
+				uses_site_theme: boolean;
 				theme_button_bg: string;
 				theme_button_ink: string;
 				theme_font_heading: string;
