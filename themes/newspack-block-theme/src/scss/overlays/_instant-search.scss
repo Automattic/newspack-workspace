@@ -613,7 +613,7 @@ body .jetpack-instant-search {
 		border-color: var(--jp--color--border) !important;
 
 		&-text {
-			color: var(--newspack-ui-color-text-fine, inherit);
+			color: var(--jp--color--text-light, inherit);
 			font-family: var(--newspack-ui-font-family-fine, inherit);
 			font-size: var(--newspack-ui-font-size-fine, 12px);
 			line-height: var(--newspack-ui-line-height-fine, 1.3333);
