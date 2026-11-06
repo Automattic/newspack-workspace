@@ -38,15 +38,18 @@ class Metering_Countdown {
 	public static function get_default_settings() {
 		$primary_product = Subscriptions_Tiers::get_primary_subscription_tier_product();
 		return [
-			'enabled'        => false,
-			'style'          => 'light',
-			'cta_label'      => __( 'Subscribe now and get unlimited access.', 'newspack-plugin' ),
-			'button_label'   => __( 'Subscribe now', 'newspack-plugin' ),
-			'cta_type'       => 'product',
-			'cta_product_id' => $primary_product ? $primary_product->get_id() : 0,
-			'cta_url'        => '',
-			'bg_color'       => '',
-			'button_color'   => '',
+			'enabled'           => false,
+			'style'             => 'light',
+			'cta_label'         => __( 'Subscribe now and get unlimited access.', 'newspack-plugin' ),
+			'button_label'      => __( 'Subscribe now', 'newspack-plugin' ),
+			'cta_type'          => 'product',
+			'cta_product_id'    => $primary_product ? $primary_product->get_id() : 0,
+			'cta_url'           => '',
+			'bg_color'          => '',
+			'button_color'      => '',
+			'text_color'        => '',
+			'button_text_color' => '',
+			'shadow'            => true,
 		];
 	}
 
@@ -85,8 +88,11 @@ class Metering_Countdown {
 		if ( $key === 'style' ) {
 			return Content_Banner_Style::sanitize_style( $value );
 		}
-		if ( $key === 'bg_color' || $key === 'button_color' ) {
+		if ( in_array( $key, [ 'bg_color', 'button_color', 'text_color', 'button_text_color' ], true ) ) {
 			return Content_Banner_Style::sanitize_color( $value );
+		}
+		if ( $key === 'shadow' ) {
+			return (int) filter_var( $value, FILTER_VALIDATE_BOOLEAN );
 		}
 		if ( $key === 'cta_type' && ! in_array( $value, [ 'product', 'url' ], true ) ) {
 			return $default_settings[ $key ];
@@ -217,8 +223,13 @@ class Metering_Countdown {
 		}
 		$settings     = self::get_settings();
 		$style        = Content_Banner_Style::get_render_style( $settings['style'] );
-		$inline_style = Content_Banner_Style::get_inline_style( $style, $settings['bg_color'], $settings['button_color'] );
-		$classes      = [ sprintf( 'is-style-%s', $style ) ];
+		$inline_style = Content_Banner_Style::get_inline_style( $style, $settings['bg_color'], $settings['button_color'], $settings['text_color'], $settings['button_text_color'] );
+		$classes      = array_filter(
+			[
+				sprintf( 'is-style-%s', $style ),
+				Content_Banner_Style::get_shadow_class( $style, (bool) $settings['shadow'] ),
+			]
+		);
 		$total_views = Metering::get_total_metered_views( \is_user_logged_in() );
 		if ( false === $total_views ) {
 			return;

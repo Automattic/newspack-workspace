@@ -112,36 +112,70 @@ final class Content_Banner_Style {
 	/**
 	 * Get the inline CSS custom properties for a banner.
 	 *
-	 * Text on each color is black or white, whichever reads better. An empty
-	 * color sets nothing, so the stylesheet's defaults apply. Only the Theme
-	 * style prints colors; the site style takes everything from the site Theme.
+	 * Text on each color is the picked text color, or black or white, whichever
+	 * reads better. An empty color sets nothing, so the stylesheet's defaults
+	 * apply. Light and Dark print nothing; the Theme and site styles print the
+	 * colors that are picked.
 	 *
-	 * @param string $style            The style the banner renders with, one of self::STYLES or self::SITE_STYLE.
-	 * @param string $background_color The banner background color.
-	 * @param string $button_color     The button background color.
+	 * @param string $style             The style the banner renders with, one of self::STYLES or self::SITE_STYLE.
+	 * @param string $background_color  The banner background color.
+	 * @param string $button_color      The button background color.
+	 * @param string $text_color        The banner text color.
+	 * @param string $button_text_color The button text color.
 	 *
 	 * @return string The declarations, or an empty string.
 	 */
-	public static function get_inline_style( string $style, string $background_color, string $button_color ): string {
-		if ( 'theme' !== $style ) {
+	public static function get_inline_style( string $style, string $background_color, string $button_color, string $text_color = '', string $button_text_color = '' ): string {
+		if ( 'theme' !== $style && self::SITE_STYLE !== $style ) {
 			return '';
 		}
-		$properties       = [];
-		$background_color = self::sanitize_color( $background_color );
-		$button_color     = self::sanitize_color( $button_color );
+		$properties        = [];
+		$background_color  = self::sanitize_color( $background_color );
+		$button_color      = self::sanitize_color( $button_color );
+		$text_color        = self::sanitize_color( $text_color );
+		$button_text_color = self::sanitize_color( $button_text_color );
 		if ( $background_color ) {
-			$properties['--newspack-content-banner-bg']  = $background_color;
-			$properties['--newspack-content-banner-ink'] = newspack_get_color_contrast( $background_color );
+			$properties['--newspack-content-banner-bg'] = $background_color;
+		}
+		$ink = $text_color ? $text_color : ( $background_color ? newspack_get_color_contrast( $background_color ) : '' );
+		if ( $ink ) {
+			$properties['--newspack-content-banner-ink'] = $ink;
 		}
 		if ( $button_color ) {
-			$properties['--newspack-content-banner-button-bg']  = $button_color;
-			$properties['--newspack-content-banner-button-ink'] = newspack_get_color_contrast( $button_color );
+			$properties['--newspack-content-banner-button-bg'] = $button_color;
+		}
+		$button_ink = $button_text_color ? $button_text_color : ( $button_color ? newspack_get_color_contrast( $button_color ) : '' );
+		if ( $button_ink ) {
+			$properties['--newspack-content-banner-button-ink'] = $button_ink;
 		}
 		$declarations = [];
 		foreach ( $properties as $property => $value ) {
 			$declarations[] = $property . ':' . $value;
 		}
 		return implode( ';', $declarations );
+	}
+
+	/**
+	 * Whether a banner style has a shadow option. Light and Dark always have their shadow.
+	 *
+	 * @param string $style The style the banner renders with.
+	 *
+	 * @return bool
+	 */
+	public static function supports_shadow_option( string $style ): bool {
+		return 'theme' === $style || self::SITE_STYLE === $style;
+	}
+
+	/**
+	 * Get the class that removes a banner's shadow.
+	 *
+	 * @param string $style  The style the banner renders with.
+	 * @param bool   $shadow Whether the banner has a shadow.
+	 *
+	 * @return string The class, or an empty string.
+	 */
+	public static function get_shadow_class( string $style, bool $shadow ): string {
+		return ! $shadow && self::supports_shadow_option( $style ) ? 'has-no-shadow' : '';
 	}
 
 	/**

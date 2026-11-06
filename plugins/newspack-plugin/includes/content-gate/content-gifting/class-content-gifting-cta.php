@@ -253,6 +253,66 @@ class Content_Gifting_CTA {
 	}
 
 	/**
+	 * Get the banner text color.
+	 *
+	 * @return string A hex color, or an empty string for the default.
+	 */
+	public static function get_text_color(): string {
+		return Content_Banner_Style::sanitize_color( get_option( 'newspack_content_gifting_cta_text_color', '' ) );
+	}
+
+	/**
+	 * Set the banner text color.
+	 *
+	 * @param mixed $color A hex color, or an empty string for the default.
+	 *
+	 * @return void
+	 */
+	public static function set_text_color( mixed $color ): void {
+		update_option( 'newspack_content_gifting_cta_text_color', Content_Banner_Style::sanitize_color( $color ) );
+	}
+
+	/**
+	 * Get the button text color.
+	 *
+	 * @return string A hex color, or an empty string for the default.
+	 */
+	public static function get_button_text_color(): string {
+		return Content_Banner_Style::sanitize_color( get_option( 'newspack_content_gifting_cta_button_text_color', '' ) );
+	}
+
+	/**
+	 * Set the button text color.
+	 *
+	 * @param mixed $color A hex color, or an empty string for the default.
+	 *
+	 * @return void
+	 */
+	public static function set_button_text_color( mixed $color ): void {
+		update_option( 'newspack_content_gifting_cta_button_text_color', Content_Banner_Style::sanitize_color( $color ) );
+	}
+
+	/**
+	 * Whether the banner has a shadow. On unless turned off.
+	 *
+	 * @return bool
+	 */
+	public static function get_shadow(): bool {
+		return filter_var( get_option( 'newspack_content_gifting_cta_shadow', true ), FILTER_VALIDATE_BOOLEAN );
+	}
+
+	/**
+	 * Set whether the banner has a shadow.
+	 *
+	 * @param mixed $shadow Whether the banner has a shadow.
+	 *
+	 * @return void
+	 */
+	public static function set_shadow( mixed $shadow ): void {
+		update_option( 'newspack_content_gifting_cta_shadow', filter_var( $shadow, FILTER_VALIDATE_BOOLEAN ) ? 1 : 0 );
+	}
+
+	/**
 	 * Hook the cta.
 	 */
 	public static function print_cta() {
@@ -264,10 +324,11 @@ class Content_Gifting_CTA {
 			return;
 		}
 		$style        = Content_Banner_Style::get_render_style( self::get_style() );
-		$inline_style = Content_Banner_Style::get_inline_style( $style, self::get_bg_color(), self::get_button_color() );
+		$inline_style = Content_Banner_Style::get_inline_style( $style, self::get_bg_color(), self::get_button_color(), self::get_text_color(), self::get_button_text_color() );
+		$shadow_class = Content_Banner_Style::get_shadow_class( $style, self::get_shadow() );
 		?>
 		<div class="newspack-ui">
-			<div class="banner newspack-content-gifting__cta <?php echo esc_attr( sprintf( 'is-style-%s', $style ) ); ?>"<?php echo $inline_style ? ' style="' . esc_attr( $inline_style ) . '"' : ''; ?>>
+			<div class="banner newspack-content-gifting__cta <?php echo esc_attr( trim( sprintf( 'is-style-%s %s', $style, $shadow_class ) ) ); ?>"<?php echo $inline_style ? ' style="' . esc_attr( $inline_style ) . '"' : ''; ?>>
 				<div class="wrapper newspack-content-gifting__cta__content">
 					<div class="newspack-ui__font--s">
 						<?php echo esc_html( self::get_cta_label() ); ?>
