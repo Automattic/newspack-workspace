@@ -2,6 +2,12 @@
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/breakpoints" as wp-breakpoints;
 
+.newspack-subscriber-only__empty {
+	margin: 0 auto;
+	max-width: calc(var(--newspack-wizard-section-space) * 2 + var(--newspack-wizard-section-width));
+	padding: 0 var(--newspack-wizard-section-space);
+}
+
 // Secondary lines in a list row: the "+N more products" and "N excluded"
 // suffixes, and the placeholder when a rule names nothing.
 .newspack-subscriber-only__muted {

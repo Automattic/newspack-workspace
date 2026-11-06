@@ -12,11 +12,13 @@ const TITLE_SHARE = 30;
 type ColumnStyles = Record< string, { width?: string } >;
 
 /**
- * Gives a table consistent column widths: the title column takes 30% and every
- * other visible column an equal share of the rest. Without it the browser hands
- * all spare width to the title column, so a short title still fills half the
- * table. The widths follow whichever columns the viewer has switched on, so they
- * are worked out on every render and never stored with the view.
+ * Gives a table consistent column widths: every visible column except the title
+ * takes an equal share of 70%, and the title keeps what is left. Without it the
+ * browser hands all spare width to the title column, so a short title still
+ * fills half the table. DataViews does not apply a width to the title column
+ * itself, so a row actions column comes out of the title's share. The widths
+ * follow whichever columns the viewer has switched on, so they are worked out on
+ * every render and never stored with the view.
  *
  * @param view The DataViews view.
  * @return The view with column widths, unchanged for any layout but a table.
