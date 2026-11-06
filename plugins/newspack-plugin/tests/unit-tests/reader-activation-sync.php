@@ -751,22 +751,23 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 	 * Test that the deletion direction uses its own signature map: "member
 	 * exists" phrases must retry (the ESP contact still exists without the
 	 * deletion flags) and "was permanently deleted" is the benign end-state.
-	 * An auth or payment status that no signature explains retries too, since
-	 * no later event re-sends a deletion; a message naming an account problem
-	 * still ends it.
+	 * An account problem retries too, whether a status or a message names it,
+	 * since no later event re-sends a deletion and the account may be fixed
+	 * before the backoff runs out.
 	 */
 	public function test_classify_error_deletion_direction() {
 		$reflection = new \ReflectionMethod( Contact_Sync::class, 'classify_error' );
 		$reflection->setAccessible( true );
 
 		$cases = [
-			'Member Exists' => 'transient',
+			'Member Exists'    => 'transient',
 			'cindy@example.com is already a list member. Use PUT to insert or update.' => 'transient',
 			'neil@example.com was permanently deleted and cannot be re-imported.' => 'benign',
 			'asdf@example.com looks fake or invalid, please enter a real email address.' => 'permanent_contact',
 			'ActiveCampaign REST returned status 422 for /api/3/contacts/1234: Email address already exists in the system.' => 'permanent_contact',
 			'Invalid Resource: The value you selected is not a valid choice.' => 'permanent_contact',
-			'API Access has been disabled for this account.' => 'permanent_config',
+			'API Access has been disabled for this account.' => 'transient',
+			'Payment Required' => 'transient',
 			'ActiveCampaign REST returned status 402 for /api/3/contact/sync.' => 'transient',
 		];
 
@@ -966,57 +967,6 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 			'ARRAY_A'
 		);
 		$this->assertEmpty( $pending, 'No retry should be scheduled for invalid data.' );
-	}
-
-	/**
-	 * Test that a permanent deletion error skips the retry and fires the hook.
-	 */
-	public function test_permanent_deletion_error_skips_retry() {
-		if ( ! function_exists( 'as_schedule_single_action' ) ) {
-			$this->markTestSkipped( 'ActionScheduler not available.' );
-		}
-
-		$fired = false;
-		$data  = null;
-		add_action(
-			'newspack_sync_permanent_failure',
-			function ( $d ) use ( &$fired, &$data ) {
-				$fired = true;
-				$data  = $d;
-			}
-		);
-
-		as_unschedule_all_actions( Contact_Sync::RETRY_DELETION_HOOK );
-
-		$reflection = new \ReflectionMethod( Contact_Sync::class, 'schedule_deletion_retry' );
-		$reflection->setAccessible( true );
-		$reflection->invoke(
-			null,
-			'esp',           // integration_id.
-			'delete',        // mode.
-			'gone@example.com', // email.
-			[],              // contact.
-			'Test',          // context.
-			0,               // retry_count.
-			new \WP_Error( 'esp_error', 'API Access has been disabled for this account.' )
-		);
-
-		$pending = as_get_scheduled_actions(
-			[
-				'hook'   => Contact_Sync::RETRY_DELETION_HOOK,
-				'status' => \ActionScheduler_Store::STATUS_PENDING,
-			],
-			'ARRAY_A'
-		);
-
-		$this->assertEmpty( $pending, 'No deletion retry should be scheduled for a permanent error.' );
-		$this->assertTrue( $fired, 'newspack_sync_permanent_failure should fire.' );
-		$this->assertEquals( 'delete', $data['mode'] );
-		$this->assertEquals( 'gone@example.com', $data['email'] );
-		$this->assertEquals( 'esp', $data['integration_id'] );
-		$this->assertEquals( 'Test', $data['context'] );
-		$this->assertEquals( 'API Access has been disabled for this account.', $data['reason'] );
-		$this->assertEquals( 'permanent_config', $data['error_class'] );
 	}
 
 	/**

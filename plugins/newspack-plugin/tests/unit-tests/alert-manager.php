@@ -1446,6 +1446,78 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A deletion whose retries run out pings even while its integration is
+	 * broken. The outage's own ping doesn't cover it: once the deletion stops
+	 * retrying, nothing re-sends it after the account is fixed, so someone
+	 * has to finish it at the provider. One ping an hour per integration
+	 * carries the outage; the other readers reach the log.
+	 */
+	public function test_sync_retry_exhausted_for_deletions_pings_once_an_hour_while_the_integration_is_broken() {
+		$this->break_integration( 'esp' );
+		$this->capture_alerts( 'sync_retry_exhausted' );
+
+		$deletions = [
+			[ 'esp', 'first@example.test' ],
+			[ 'esp', 'second@example.test' ],
+			[ 'crm', 'third@example.test' ],
+		];
+		foreach ( $deletions as [ $integration_id, $email ] ) {
+			do_action(
+				'newspack_sync_retry_exhausted',
+				[
+					'integration_id' => $integration_id,
+					'email'          => $email,
+					'mode'           => 'delete',
+					'context'        => 'Reader deleted',
+					'retry_count'    => 5,
+					'reason'         => 'Payment Required',
+				]
+			);
+		}
+
+		$pinged = array_column( array_column( $this->captured['sync_retry_exhausted']['error'], 'context' ), 'email' );
+		$this->assertSame( [ 'first@example.test', 'third@example.test' ], $pinged, 'Each integration pings once.' );
+		$this->assertStringContainsString( 'deletion', $this->captured['sync_retry_exhausted']['error'][0]['message'] );
+		$this->assertCount( 1, $this->captured['sync_retry_exhausted']['warning'], 'The second reader still reaches the log.' );
+	}
+
+	/**
+	 * A deletion flag saved without its fields is reported apart from the
+	 * account failures that share its class: in the same hour, neither holds
+	 * back the other, and the deletion's message says it is one.
+	 */
+	public function test_a_deletion_flag_config_failure_does_not_take_the_account_failure_slot() {
+		$this->capture_alerts( 'sync_permanent_failure' );
+
+		do_action(
+			'newspack_sync_permanent_failure',
+			[
+				'integration_id' => 'esp',
+				'email'          => 'reader@example.test',
+				'mode'           => 'flag',
+				'context'        => 'Reader deleted',
+				'reason'         => 'The provider saved the deletion flag without these fields: NP_Account_Deleted.',
+				'error_class'    => 'permanent_config',
+			]
+		);
+		do_action(
+			'newspack_sync_permanent_failure',
+			[
+				'integration_id' => 'esp',
+				'user_id'        => 1,
+				'context'        => 'Reader registered',
+				'reason'         => 'Payment Required',
+				'error_class'    => 'permanent_config',
+			]
+		);
+
+		$alerts = array_merge( ...array_values( $this->captured['sync_permanent_failure'] ) );
+		$this->assertCount( 2, $alerts );
+		$this->assertStringContainsString( 'account-deletion', $alerts[0]['message'] );
+		$this->assertStringNotContainsString( 'account-deletion', $alerts[1]['message'] );
+	}
+
+	/**
 	 * A broken integration's contact failures stay out of the failure log, so
 	 * its outage doesn't trip the hourly pattern rules. Another
 	 * integration's failures are still recorded.
