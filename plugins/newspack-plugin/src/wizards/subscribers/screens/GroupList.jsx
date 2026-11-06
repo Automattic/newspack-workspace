@@ -184,7 +184,7 @@ export default function GroupList() {
 				id: 'status',
 				label: __( 'Status', 'newspack-plugin' ),
 				elements: Object.entries( STATUS_LABELS ).map( ( [ value, label ] ) => ( { value, label } ) ),
-				filterBy: { operators: [ 'isAny', 'isNot' ] },
+				filterBy: { operators: [ 'is', 'isNot' ] },
 				getValue: ( { item } ) => item.status,
 				render: ( { item } ) => (
 					<StatusIndicator status={ STATUS_INDICATORS[ item.status ] }>{ STATUS_LABELS[ item.status ] }</StatusIndicator>
