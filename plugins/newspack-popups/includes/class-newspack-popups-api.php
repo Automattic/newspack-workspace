@@ -199,7 +199,8 @@ final class Newspack_Popups_API {
 		if ( Newspack_Popups_AB_Tests::is_enabled() ) {
 			register_rest_route(
 				'newspack-popups/v1',
-				'/ab-tests/(?P<test_id>[a-z0-9-]+)',
+				// Underscores too: the save guard keeps a legacy Test ID as stored.
+				'/ab-tests/(?P<test_id>[a-z0-9_-]+)',
 				[
 					'methods'             => \WP_REST_Server::READABLE,
 					'callback'            => [ __CLASS__, 'api_get_ab_test_prompts' ],

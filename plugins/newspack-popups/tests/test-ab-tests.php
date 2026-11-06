@@ -1192,6 +1192,37 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * A Test ID stored by the earlier sanitize_title() callback keeps its underscore,
+	 * since the save guard leaves an unchanged ID alone, so the lookup still finds it.
+	 */
+	public function test_test_prompts_route_finds_a_legacy_test_id() {
+		global $wpdb;
+		$control = $this->create_test_variant( 'footer-test', 'a' );
+		$other   = $this->create_test_variant( 'footer-test', 'b' );
+		// A value the earlier sanitizer stored; the current one can't write it.
+		$wpdb->update( // phpcs:ignore WordPress.DB
+			$wpdb->postmeta,
+			[ 'meta_value' => 'footer_test' ], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			[
+				'post_id'  => $control,
+				'meta_key' => Newspack_Popups_AB_Tests::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+			]
+		);
+		wp_cache_delete( $control, 'post_meta' );
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+		global $wp_rest_server;
+		$wp_rest_server = new WP_REST_Server(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		do_action( 'rest_api_init' );
+
+		$response = rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/footer_test' ) );
+		self::assertSame( 200, $response->get_status() );
+		self::assertSame( [ $control ], wp_list_pluck( $response->get_data(), 'id' ) );
+		// A different test on the front end, so not one of this test's prompts.
+		self::assertNotContains( $other, wp_list_pluck( $response->get_data(), 'id' ) );
+	}
+
+	/**
 	 * Another author's private prompt is listed to administrators and hidden from
 	 * a user without read_private_posts, which is the rule the Prompts list and
 	 * core's REST endpoint already apply. Drafts stay listed to everyone who can

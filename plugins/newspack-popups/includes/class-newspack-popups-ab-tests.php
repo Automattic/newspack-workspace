@@ -424,24 +424,22 @@ final class Newspack_Popups_AB_Tests {
 	 * @return array[] Each `[ 'id', 'title', 'variant', 'goal', 'control_share', 'status', 'status_label', 'edit_link' ]`; `edit_link` is null when the current user can't edit that prompt. `goal` and `control_share` are each prompt's stored values; only the control's take effect.
 	 */
 	public static function get_test_prompts( $test_id ) {
-		$test_id = self::sanitize_test_id( $test_id );
-		if ( '' === $test_id ) {
+		if ( ! is_scalar( $test_id ) ) {
 			return [];
 		}
-		$prompts = get_posts(
-			[
-				'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
-				'post_status'    => [ 'publish', 'future', 'draft', 'pending', 'private' ],
-				'perm'           => 'readable',
-				// Same reasoning as get_tests_config(): a bound would silently drop
-				// prompts from the list.
-				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Prompts CPT; config-scale.
-				'orderby'        => 'ID',
-				'order'          => 'ASC',
-				'meta_key'       => self::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
-				'meta_value'     => $test_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
-			]
-		);
+		// The ID as stored first: the save guard keeps a legacy ID with underscores,
+		// and the front end keys tests by the stored value, so footer_test and
+		// footer-test are different tests and only a miss falls back to the
+		// normalized spelling.
+		$prompts = [];
+		foreach ( array_unique( [ sanitize_title( (string) $test_id ), self::sanitize_test_id( $test_id ) ] ) as $candidate ) {
+			if ( '' !== $candidate ) {
+				$prompts = self::query_test_prompts( $candidate );
+			}
+			if ( $prompts ) {
+				break;
+			}
+		}
 		$list = [];
 		foreach ( $prompts as $prompt ) {
 			$status = get_post_status_object( $prompt->post_status );
@@ -458,6 +456,29 @@ final class Newspack_Popups_AB_Tests {
 			];
 		}
 		return $list;
+	}
+
+	/**
+	 * The prompts whose stored Test ID is exactly this one.
+	 *
+	 * @param string $test_id Test ID as stored.
+	 * @return WP_Post[]
+	 */
+	private static function query_test_prompts( $test_id ) {
+		return get_posts(
+			[
+				'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+				'post_status'    => [ 'publish', 'future', 'draft', 'pending', 'private' ],
+				'perm'           => 'readable',
+				// Same reasoning as get_tests_config(): a bound would silently drop
+				// prompts from the list.
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Prompts CPT; config-scale.
+				'orderby'        => 'ID',
+				'order'          => 'ASC',
+				'meta_key'       => self::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'meta_value'     => $test_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			]
+		);
 	}
 
 	/**
@@ -496,8 +517,9 @@ final class Newspack_Popups_AB_Tests {
 	 * meta key as the second argument, which sanitize_title() reads as the fallback
 	 * title, so an empty value would be stored as the key name instead of clearing
 	 * the test. And sanitize_title() keeps underscores and percent-encodes what it
-	 * can't transliterate, while the editor's slug and the lookup route accept
-	 * neither, so an ID stored with either could never be looked up.
+	 * can't transliterate, which the editor's slug can't produce. IDs stored that
+	 * way before this sanitizer stay as they are; get_test_prompts() still finds
+	 * the ones with underscores, and percent-encoded ones can't be looked up.
 	 *
 	 * @param mixed $value Raw value.
 	 * @return string Slug, or empty string.
@@ -698,7 +720,8 @@ final class Newspack_Popups_AB_Tests {
 	 * ASCII-ONLY PRECONDITION: this hashes UTF-8 *bytes* (strlen/ord) while the
 	 * client hashes UTF-16 *code units* (charCodeAt) — the two agree only while
 	 * every hashed input (client ID, test ID) is ASCII. That holds today by
-	 * construction (generated cookie IDs; sanitize_title output). If either
+	 * construction (generated cookie IDs; Test IDs from sanitize_test_id(), or
+	 * from sanitize_title() for legacy ones, which percent-encodes the rest). If either
 	 * input's charset ever widens, normalize both implementations together.
 	 *
 	 * @param string $str String to hash.
