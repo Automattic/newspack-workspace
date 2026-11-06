@@ -119,9 +119,9 @@
 		display: block;
 	}
 
-	+ .dataviews-view-table__primary-column-content > .dataviews-title-field {
+	+ .dataviews-view-table__primary-column-content > .dataviews-title-field:not(:last-child) {
 		min-height: 0;
-		margin-bottom: calc((var(--wpds-dimension-size-md, #{wp-vars.$grid-unit-40}) - 1lh) / 2);
+		margin-bottom: max(0px, calc((var(--wpds-dimension-size-md, #{wp-vars.$grid-unit-40}) - 1lh) / 2));
 	}
 }
 
