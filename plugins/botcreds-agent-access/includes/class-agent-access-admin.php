@@ -79,7 +79,6 @@ class Agent_Access_Admin {
 		?>
 		<div class="wrap">
 			<h1>
-				<span>&#129438;</span>
 				<?php esc_html_e( 'Add Agent', 'botcreds-agent-access' ); ?>
 			</h1>
 			<p class="description">
@@ -702,7 +701,6 @@ class Agent_Access_Admin {
 		?>
 		<div id="agent-access" class="agent-access-profile-section">
 			<h2 class="agent-access-title">
-				<span class="agent-access-logo">&#129438;</span>
 				<?php esc_html_e( 'Agent Access', 'botcreds-agent-access' ); ?>
 				<span class="dashicons dashicons-wordpress" style="font-size:1.2em;vertical-align:middle;opacity:0.7;"></span>
 			</h2>
@@ -735,7 +733,6 @@ class Agent_Access_Admin {
 		?>
 		<div id="agent-access" class="agent-access-profile-section">
 			<h2 class="agent-access-title">
-				<span class="agent-access-logo">&#129438;</span>
 				<?php esc_html_e( 'Agent Access', 'botcreds-agent-access' ); ?>
 				<span class="agent-access-admin-badge"><?php esc_html_e( 'Admin', 'botcreds-agent-access' ); ?></span>
 			</h2>
@@ -1150,7 +1147,6 @@ class Agent_Access_Admin {
 		?>
 		<div class="wrap">
 			<h1>
-				<span>&#129438;</span>
 				<?php esc_html_e( 'Agent Access', 'botcreds-agent-access' ); ?>
 			</h1>
 
