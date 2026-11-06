@@ -171,7 +171,8 @@ class Newspack_UI_Theme_Style {
 				unset( $target );
 			}
 
-			$picked = self::mask_to_authored( $picked, self::get_authored_styles() );
+			$authored = self::get_authored_styles();
+			$picked   = self::apply_fluid_sizes( self::mask_to_authored( $picked, $authored ), $authored, self::get_settings() );
 
 			self::$global_styles = self::resolve_references( $picked, self::get_settings() );
 		}
@@ -424,7 +425,7 @@ class Newspack_UI_Theme_Style {
 	private static function get_authored_styles(): array {
 		$theme = [];
 		if ( class_exists( '\WP_Theme_JSON_Resolver' ) ) {
-			$raw   = \WP_Theme_JSON_Resolver::get_theme_data()->get_raw_data();
+			$raw   = \WP_Theme_JSON_Resolver::get_theme_data( [], [ 'with_supports' => false ] )->get_raw_data();
 			$theme = is_array( $raw['styles'] ?? null ) ? $raw['styles'] : [];
 		}
 
@@ -481,7 +482,7 @@ class Newspack_UI_Theme_Style {
 		$family = self::button_value( $global_styles, [ 'typography', 'fontFamily' ] );
 		self::put( $properties, '--newspack-ui-font-family-control', $family );
 		self::put( $properties, '--newspack-ui-button-font-family', $family );
-		self::put( $properties, '--newspack-ui-font-size-button', self::fluid_size( self::button_value( $global_styles, [ 'typography', 'fontSize' ] ), $settings ) );
+		self::put( $properties, '--newspack-ui-font-size-button', self::button_value( $global_styles, [ 'typography', 'fontSize' ] ) );
 		self::put( $properties, '--newspack-ui-line-height-button', self::button_value( $global_styles, [ 'typography', 'lineHeight' ] ) );
 		self::put( $properties, '--newspack-ui-button-font-weight', self::button_value( $global_styles, [ 'typography', 'fontWeight' ] ) );
 		self::put( $properties, '--newspack-ui-button-letter-spacing', self::button_value( $global_styles, [ 'typography', 'letterSpacing' ] ) );
@@ -500,7 +501,7 @@ class Newspack_UI_Theme_Style {
 			}
 		}
 
-		$fine_size = self::fluid_size( $caption['fontSize'] ?? null, $settings );
+		$fine_size = is_string( $caption['fontSize'] ?? null ) ? $caption['fontSize'] : '';
 		if ( '' === self::sanitize_value( $fine_size, 'length' ) ) {
 			$fine_size = isset( $sizes['x-small'] ) ? 'var(--wp--preset--font-size--x-small, 14px)' : null;
 		}
@@ -530,25 +531,42 @@ class Newspack_UI_Theme_Style {
 	}
 
 	/**
-	 * A font size as core prints it: fluid when the theme asks for it.
+	 * Make the literal button and caption font sizes fluid as core does.
 	 *
-	 * @param mixed $size     The size.
+	 * A size that points at a preset is left alone: the preset resolves through core's own fluid rules.
+	 *
+	 * @param array $styles   The masked styles.
+	 * @param array $authored The styles the theme or the user set, unresolved.
 	 * @param array $settings Merged global settings.
 	 *
-	 * @return string The size, or an empty string when there is none.
+	 * @return array
 	 */
-	private static function fluid_size( $size, array $settings ): string {
-		if ( ! is_string( $size ) || '' === trim( $size ) ) {
-			return '';
+	public static function apply_fluid_sizes( array $styles, array $authored, array $settings ): array {
+		if ( ! function_exists( 'wp_get_typography_font_size_value' ) ) {
+			return $styles;
 		}
-		if ( function_exists( 'wp_get_typography_font_size_value' ) ) {
-			$fluid = \wp_get_typography_font_size_value( [ 'size' => $size ], $settings );
-			if ( is_string( $fluid ) && '' !== $fluid ) {
-				return $fluid;
+		foreach ( [
+			[ 'blocks', 'core/button', 'typography', 'fontSize' ],
+			[ 'elements', 'button', 'typography', 'fontSize' ],
+			[ 'elements', 'caption', 'typography', 'fontSize' ],
+		] as $path ) {
+			$raw = self::dig( $authored, $path );
+			if ( ! is_string( $raw ) || '' === trim( $raw ) || 0 === strpos( trim( $raw ), 'var' ) || null === self::dig( $styles, $path ) ) {
+				continue;
 			}
+			$fluid = \wp_get_typography_font_size_value( [ 'size' => $raw ], $settings );
+			if ( ! is_string( $fluid ) || '' === $fluid ) {
+				continue;
+			}
+			$target = &$styles;
+			foreach ( $path as $key ) {
+				$target = &$target[ $key ];
+			}
+			$target = $fluid;
+			unset( $target );
 		}
 
-		return $size;
+		return $styles;
 	}
 
 	/**
