@@ -23,7 +23,7 @@
 		--newspack-ui-button-bg-disabled: var(--newspack-ui-color-surface-subtle);
 		--newspack-ui-button-ink-disabled: var(--newspack-ui-color-disabled-ink);
 		--newspack-ui-button-focus: var(--newspack-ui-color-focus);
-		--newspack-ui-button-focus-halo: var(--newspack-ui-color-focus);
+		--newspack-ui-button-focus-halo-color: var(--newspack-ui-color-focus-halo);
 
 		align-items: center;
 		background: var(--newspack-ui-button-bg);
@@ -109,7 +109,7 @@
 		}
 
 		&:focus-visible {
-			@include mixins.focus-edge( var(--newspack-ui-button-focus), 2px, var(--newspack-ui-button-focus-halo) );
+			@include mixins.focus-edge( var(--newspack-ui-button-focus), 2px, var(--newspack-ui-button-focus-halo-color) );
 		}
 
 		&__row {
@@ -150,13 +150,13 @@
 		}
 
 		// Styles
-		&--primary,
 		&--primary-light,
 		&--destructive:not(.newspack-ui__button--ghost, .newspack-ui__button--outline) {
 			--newspack-ui-button-focus: var(--newspack-ui-button-ink);
 		}
 
 		&--primary {
+			--newspack-ui-button-focus: var(--newspack-ui-color-focus-on-brand);
 			--newspack-ui-button-bg: var(--newspack-ui-color-btn);
 			--newspack-ui-button-bg-hover: var(--newspack-ui-color-btn-hover);
 			--newspack-ui-button-bg-pressed: var(--newspack-ui-color-btn-pressed);
@@ -218,7 +218,7 @@
 			--newspack-ui-button-bg-pressed: color-mix(in oklab, var(--newspack-ui-color-inverse-bg) var(--newspack-ui-color-mix-pressed), var(--newspack-ui-color-inverse-ink));
 			--newspack-ui-button-ink: var(--newspack-ui-color-inverse-ink);
 			--newspack-ui-button-focus: var(--newspack-ui-color-inverse-ink);
-			--newspack-ui-button-focus-halo: var(--newspack-ui-color-inverse-ink);
+			--newspack-ui-button-focus-halo-color: color-mix(in srgb, var(--newspack-ui-color-inverse-ink) var(--newspack-ui-focus-halo-mix), transparent);
 		}
 
 		&--destructive {
