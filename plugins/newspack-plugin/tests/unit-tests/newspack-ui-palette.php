@@ -109,9 +109,9 @@ class Newspack_Test_UI_Palette extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Neutral stays at or under Phase 1's 70.
+	 * Neutral stays at or under 70.
 	 */
-	public function test_neutral_stays_close_to_phase_1() {
+	public function test_neutral_stays_close_to_neutral_share() {
 		$this->assertLessThanOrEqual( 70, Newspack_UI_Palette::solve_mix( '#1e1e1e', '#ffffff', Newspack_UI_Palette::START_SHARES['text-muted'], 60, Newspack_UI_Palette::mix( '#1e1e1e', 7, '#ffffff' ) ) );
 	}
 
@@ -187,14 +187,14 @@ class Newspack_Test_UI_Palette extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Error is never lighter than Phase 1 on a light base.
+	 * Error is never lighter than Neutral's step on a light base.
 	 *
 	 * @dataProvider data_light_bases
 	 *
 	 * @param string $base  Base.
 	 * @param string $brand Brand.
 	 */
-	public function test_error_not_lighter_than_phase_1_on_light_base( $base, $brand ) {
+	public function test_error_not_lighter_than_neutral_on_light_base( $base, $brand ) {
 		$steps = Newspack_UI_Palette::status_steps( $base, $brand );
 
 		$this->assertContains( $steps['error']['text'], Newspack_UI_Palette::ERROR_TEXT_STEPS );

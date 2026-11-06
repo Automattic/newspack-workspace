@@ -28,7 +28,7 @@ class Newspack_UI_Palette {
 	];
 
 	/**
-	 * Mix percents the solver starts from: Phase 1's shares, moved toward contrast only as far as the target needs.
+	 * Mix percents the solver starts from: Neutral's shares, moved toward contrast only as far as the target needs.
 	 *
 	 * Subtle starts at 61 and the control border at 44 because those give the grey nearest to Neutral's on white,
 	 * one channel step off it.
@@ -107,6 +107,15 @@ class Newspack_UI_Palette {
 		'text-subtle'    => '#6c6c6c',
 		'border'         => '#dddddd',
 		'border-control' => '#949494',
+	];
+
+	/**
+	 * Neutral's field border greys under `prefers-contrast: more`, weakest first.
+	 */
+	private const HIGH_CONTRAST_DEFAULTS = [
+		'input-border-disabled' => '#949494',
+		'input-border'          => '#6c6c6c',
+		'input-border-hover'    => '#393939',
 	];
 
 	/**
@@ -434,7 +443,44 @@ class Newspack_UI_Palette {
 	}
 
 	/**
+	 * The field border values for `prefers-contrast: more`, solved against the palette's base.
+	 *
+	 * Each has the Lc its Neutral high-contrast grey has on white and keeps Neutral's order: hover over border over disabled,
+	 * with the border over the control border.
+	 *
+	 * @param array $palette The palette passed to get_properties().
+	 *
+	 * @return array<string,string> '--newspack-ui-color-input-border*' property to '#rrggbb'; empty when the base is unusable or every value equals Neutral's.
+	 */
+	public static function get_high_contrast_properties( array $palette ): array {
+		$base = self::normalize_hex( $palette['base'] ?? '' );
+		if ( '' === $base ) {
+			return [];
+		}
+		$contrast = self::normalize_hex( $palette['contrast'] ?? '' );
+		$contrast = '' === $contrast ? ( self::is_dark( $base ) ? '#ffffff' : '#000000' ) : $contrast;
+
+		$percent = self::solve_mix( $contrast, $base, self::START_SHARES['input-border'], self::role_target( 'input-border', $contrast, $base ) );
+		$solved  = [];
+		$matches = true;
+		foreach ( self::HIGH_CONTRAST_DEFAULTS as $name => $neutral ) {
+			$target  = (int) floor( self::lc( $neutral, self::NEUTRAL_DEFAULTS['base'] ) );
+			$step    = 'input-border-disabled' === $name ? 0 : 1;
+			$percent = min( 100, max( $percent + $step, self::solve_mix( $contrast, $base, self::START_SHARES['input-border'], $target ) ) );
+			$hex     = self::mix( $contrast, $percent, $base );
+			if ( ! self::within_a_step( $hex, $neutral, 3 ) ) {
+				$matches = false;
+			}
+			$solved[ '--newspack-ui-color-' . $name ] = $hex;
+		}
+
+		return $matches ? [] : $solved;
+	}
+
+	/**
 	 * The brand roles: fill, text on it, hover, pressed, the mark and the focus ink.
+	 *
+	 * The primary and against-primary roles stay printed for the legacy body rule that site CSS may still read.
 	 *
 	 * @param array  $palette  The palette passed to get_properties().
 	 * @param string $brand    Brand hex color.
@@ -507,18 +553,19 @@ class Newspack_UI_Palette {
 	}
 
 	/**
-	 * Whether two colors differ by at most one step in each sRGB channel.
+	 * Whether two colors differ by at most a few steps in each sRGB channel.
 	 *
-	 * @param string $a Hex color.
-	 * @param string $b Hex color.
+	 * @param string $a         Hex color.
+	 * @param string $b         Hex color.
+	 * @param int    $tolerance Most steps a channel may differ by.
 	 *
 	 * @return bool
 	 */
-	private static function within_a_step( string $a, string $b ): bool {
+	private static function within_a_step( string $a, string $b, int $tolerance = 1 ): bool {
 		$a = newspack_parse_hex_channels( $a );
 		$b = newspack_parse_hex_channels( $b );
 
-		return null !== $a && null !== $b && abs( $a[0] - $b[0] ) <= 1 && abs( $a[1] - $b[1] ) <= 1 && abs( $a[2] - $b[2] ) <= 1;
+		return null !== $a && null !== $b && abs( $a[0] - $b[0] ) <= $tolerance && abs( $a[1] - $b[1] ) <= $tolerance && abs( $a[2] - $b[2] ) <= $tolerance;
 	}
 
 	/**
