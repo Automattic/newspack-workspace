@@ -1,10 +1,11 @@
 'use strict';
 
 import { addFilter } from '@wordpress/hooks';
-import { RadioControl } from '@wordpress/components';
+import { RadioControl, TextControl, ToggleControl } from '@wordpress/components';
 import { withDispatch, withSelect, select } from '@wordpress/data';
 import { Component, Fragment } from '@wordpress/element';
 import { compose } from '@wordpress/compose';
+import { store as coreStore } from '@wordpress/core-data';
 import { __ } from '@wordpress/i18n';
 
 class RadioCustom extends Component {
@@ -66,6 +67,122 @@ const ComposedRadio = compose( [
 	} ) ),
 ] )( RadioCustom );
 
+/**
+ * Convert rendered caption HTML (wrapped in <p>, possibly with a credit link) to plain placeholder text.
+ * DOMParser builds an inert document, so no scripts run and entities are decoded.
+ *
+ * @param {string} html Rendered HTML.
+ * @return {string} Plain text.
+ */
+const htmlToText = html => new window.DOMParser().parseFromString( html, 'text/html' ).body.textContent.replace( /\s+/g, ' ' ).trim();
+
+/**
+ * Placeholder for the caption field, previewing what renders when it's left blank.
+ *
+ * @param {string|null} defaultCaption Plain-text default caption, or null if the attachment isn't loaded.
+ * @return {string} Placeholder text.
+ */
+const getPlaceholder = defaultCaption => {
+	if ( null === defaultCaption ) {
+		return __( "Leave blank to use the image's default caption.", 'newspack-theme' );
+	}
+	return defaultCaption || __( 'No default caption or credit set for this image.', 'newspack-theme' );
+};
+
+const CaptionControl = compose( [
+	withSelect( _select => {
+		const { getCurrentPostAttribute, getEditedPostAttribute } = _select( 'core/editor' );
+
+		// featured_media updates live when the user swaps the featured image.
+		const featuredMediaId = getEditedPostAttribute( 'featured_media' );
+
+		// WP 6.9+: getMedia is deprecated; use the attachment entity instead.
+		// View context, not edit: edit requires edit_post on the attachment, so it 403s for an
+		// Author using someone else's upload. caption.rendered runs through get_the_excerpt, so it
+		// already includes the image credit, matching what the front end shows by default.
+		// The record resolves async and re-renders this component when the fetch lands.
+		const media = featuredMediaId ? _select( coreStore ).getEntityRecord( 'postType', 'attachment', featuredMediaId, { context: 'view' } ) : null;
+
+		return {
+			featuredMediaId,
+			meta: {
+				...getCurrentPostAttribute( 'meta' ),
+				...getEditedPostAttribute( 'meta' ),
+			},
+			// null while loading, or when the record can't be read (e.g. the attachment's parent is a draft the user can't see).
+			defaultCaption: media ? htmlToText( media.caption?.rendered ?? '' ) : null,
+		};
+	} ),
+	withDispatch( dispatch => ( {
+		updateCaption( value, meta ) {
+			dispatch( 'core/editor' ).editPost( {
+				meta: { ...meta, newspack_post_featured_image_caption: value },
+			} );
+		},
+		updateCaptionEnabled( value, meta ) {
+			dispatch( 'core/editor' ).editPost( {
+				meta: { ...meta, newspack_post_featured_image_caption_enabled: value },
+			} );
+		},
+		updateIncludeCredit( value, meta ) {
+			dispatch( 'core/editor' ).editPost( {
+				meta: { ...meta, newspack_post_featured_image_caption_include_credit: value },
+			} );
+		},
+	} ) ),
+] )( ( { featuredMediaId, meta, defaultCaption, updateCaption, updateCaptionEnabled, updateIncludeCredit } ) => {
+	// Only show these controls once a featured image has been selected.
+	if ( ! featuredMediaId ) {
+		return null;
+	}
+
+	const isEnabled = !! meta.newspack_post_featured_image_caption_enabled;
+	const value = meta.newspack_post_featured_image_caption || '';
+	const hasOverride = value.trim().length > 0;
+	const includeCredit = !! meta.newspack_post_featured_image_caption_include_credit;
+
+	return (
+		<Fragment>
+			<ToggleControl
+				label={ __( 'Enable custom caption', 'newspack-theme' ) }
+				help={ __( 'Provides flexibility to overwrite the featured image caption.', 'newspack-theme' ) }
+				checked={ isEnabled }
+				onChange={ () => updateCaptionEnabled( ! isEnabled, meta ) }
+				__nextHasNoMarginBottom
+			/>
+			{ isEnabled && (
+				<Fragment>
+					<TextControl
+						label={ __( 'Featured Image Caption', 'newspack-theme' ) }
+						value={ value }
+						placeholder={ getPlaceholder( defaultCaption ) }
+						onChange={ v => updateCaption( v, meta ) }
+						help={
+							hasOverride
+								? __(
+										"This caption applies to this article only. Other articles keep the image's default caption.",
+										'newspack-theme'
+								  )
+								: __( "Leave blank to use the image's default caption and credit.", 'newspack-theme' )
+						}
+						__nextHasNoMarginBottom
+					/>
+					{ /* Only meaningful with a custom caption: the default caption already includes the credit. */ }
+					{ hasOverride && (
+						<ToggleControl
+							label={ __( 'Include image credit', 'newspack-theme' ) }
+							help={ __( 'Append the image credit to the custom caption.', 'newspack-theme' ) }
+							checked={ includeCredit }
+							onChange={ () => updateIncludeCredit( ! includeCredit, meta ) }
+							__nextHasNoMarginBottom
+						/>
+					) }
+				</Fragment>
+			) }
+		</Fragment>
+	);
+} );
+
 const wrapPostFeaturedImage = OriginalComponent => {
 	// eslint-disable-next-line react/display-name
 	return props => {
@@ -80,6 +197,7 @@ const wrapPostFeaturedImage = OriginalComponent => {
 			<Fragment>
 				<OriginalComponent { ...props } />
 				<ComposedRadio />
+				<CaptionControl />
 			</Fragment>
 		);
 	};
