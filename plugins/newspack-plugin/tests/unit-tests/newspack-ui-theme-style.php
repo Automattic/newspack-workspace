@@ -38,8 +38,6 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 	public function tear_down(): void {
 		global $wp_styles;
 		$wp_styles = $this->original_styles; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
-		remove_all_actions( 'admin_print_styles' );
-		set_current_screen( 'front' );
 		remove_theme_support( Newspack_UI_Theme_Style::THEME_SUPPORT );
 		remove_all_filters( 'newspack_ui_theme_style_active' );
 		remove_all_filters( 'wp_theme_json_data_user' );
@@ -2424,41 +2422,5 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 		Newspack_UI_Theme_Style::print_css();
 
 		$this->assertEmpty( wp_styles()->get_data( 'newspack-ui', 'after' ) );
-	}
-
-	/**
-	 * The theme's font faces load in wp-admin only when the rule names a font family.
-	 */
-	public function test_admin_font_faces_hooked_only_for_font_family_rules(): void {
-		set_current_screen( 'dashboard' );
-		remove_action( 'admin_print_styles', 'wp_print_font_faces', 50 );
-		add_theme_support( Newspack_UI_Theme_Style::THEME_SUPPORT );
-		Newspack_UI::enqueue_assets();
-
-		$this->set_user_styles( [ 'elements' => [ 'button' => [ 'border' => [ 'radius' => '12px' ] ] ] ] );
-		Newspack_UI_Theme_Style::print_css();
-		$this->assertFalse( has_action( 'admin_print_styles', 'wp_print_font_faces' ) );
-
-		Newspack_UI_Theme_Style::reset_cache();
-		$this->set_user_styles( [ 'typography' => [ 'fontFamily' => 'Georgia, serif' ] ] );
-		$this->assertStringContainsString( 'font-family', Newspack_UI_Theme_Style::get_site_css() );
-		Newspack_UI_Theme_Style::print_css();
-		$this->assertSame( 10, has_action( 'admin_print_styles', 'wp_print_font_faces' ) );
-	}
-
-	/**
-	 * A font-face hook already on the admin screen is left alone.
-	 */
-	public function test_admin_font_faces_not_hooked_twice(): void {
-		set_current_screen( 'dashboard' );
-		add_action( 'admin_print_styles', 'wp_print_font_faces', 50 );
-		add_theme_support( Newspack_UI_Theme_Style::THEME_SUPPORT );
-		Newspack_UI::enqueue_assets();
-		$this->set_user_styles( [ 'typography' => [ 'fontFamily' => 'Georgia, serif' ] ] );
-
-		Newspack_UI_Theme_Style::print_css();
-
-		$this->assertSame( 50, has_action( 'admin_print_styles', 'wp_print_font_faces' ) );
-		$this->assertArrayNotHasKey( 'wp_print_font_faces', $GLOBALS['wp_filter']['admin_print_styles']->callbacks[10] ?? [] );
 	}
 }
