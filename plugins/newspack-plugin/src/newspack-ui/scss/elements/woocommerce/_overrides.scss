@@ -167,6 +167,10 @@
 	.wc_payment_method {
 		list-style: none;
 
+		> .newspack-ui__input-card > .payment_box {
+			border-radius: var(--newspack-ui-radius-choice-inner);
+		}
+
 		.payment_box {
 			padding: 1rem;
 			background: var(--newspack-theme-color-bg-pre, var(--newspack-ui-color-surface-sunken));

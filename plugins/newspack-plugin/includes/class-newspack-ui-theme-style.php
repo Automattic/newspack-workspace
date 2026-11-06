@@ -23,11 +23,12 @@ class Newspack_UI_Theme_Style {
 	 * Preset types that "var:preset|<type>|<slug>" can point at: settings path and value key.
 	 */
 	const PRESET_TYPES = [
-		'color'       => [ [ 'color', 'palette' ], 'color' ],
-		'font-family' => [ [ 'typography', 'fontFamilies' ], 'fontFamily' ],
-		'font-size'   => [ [ 'typography', 'fontSizes' ], 'size' ],
-		'gradient'    => [ [ 'color', 'gradients' ], 'gradient' ],
-		'spacing'     => [ [ 'spacing', 'spacingSizes' ], 'size' ],
+		'border-radius' => [ [ 'border', 'radiusSizes' ], 'size' ],
+		'color'         => [ [ 'color', 'palette' ], 'color' ],
+		'font-family'   => [ [ 'typography', 'fontFamilies' ], 'fontFamily' ],
+		'font-size'     => [ [ 'typography', 'fontSizes' ], 'size' ],
+		'gradient'      => [ [ 'color', 'gradients' ], 'gradient' ],
+		'spacing'       => [ [ 'spacing', 'spacingSizes' ], 'size' ],
 	];
 
 	/**
@@ -44,6 +45,7 @@ class Newspack_UI_Theme_Style {
 	const READ_PATHS = [
 		[ 'color' ],
 		[ 'elements', 'button' ],
+		[ 'blocks', 'core/button', 'border' ],
 		[ 'elements', 'link' ],
 		[ 'elements', 'caption' ],
 		[ 'elements', 'heading' ],
@@ -155,6 +157,15 @@ class Newspack_UI_Theme_Style {
 	}
 
 	/**
+	 * Whether the site's Theme style prints any color property.
+	 *
+	 * @return bool
+	 */
+	public static function has_color_properties(): bool {
+		return false !== strpos( self::get_site_css(), '--newspack-ui-color-' );
+	}
+
+	/**
 	 * The palette the adapter derives the colors from.
 	 *
 	 * @param array      $global_styles Resolved global styles.
@@ -196,6 +207,37 @@ class Newspack_UI_Theme_Style {
 	}
 
 	/**
+	 * A button radius as one plain length.
+	 *
+	 * The Site Editor writes a per-corner array once the corners are set apart; four identical corners count as one radius.
+	 *
+	 * @param mixed $radius The radius from the global styles.
+	 *
+	 * @return string The length, or an empty string when it is not a single plain length.
+	 */
+	private static function parse_radius( $radius ): string {
+		if ( is_array( $radius ) ) {
+			$corners = [];
+			foreach ( [ 'topLeft', 'topRight', 'bottomRight', 'bottomLeft' ] as $corner ) {
+				$corners[] = self::parse_radius( $radius[ $corner ] ?? null );
+			}
+			return '' !== $corners[0] && 1 === count( array_unique( $corners ) ) ? $corners[0] : '';
+		}
+		if ( 0 === $radius ) {
+			return '0px';
+		}
+		if ( ! is_string( $radius ) ) {
+			return '';
+		}
+		$radius = trim( $radius );
+		if ( 1 !== preg_match( '/^(?:(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem|em)|0)$/D', $radius ) ) {
+			return '';
+		}
+
+		return '0' === $radius ? '0px' : ( '.' === $radius[0] ? '0' . $radius : $radius );
+	}
+
+	/**
 	 * The radius roles, all derived from the theme's button radius.
 	 *
 	 * @param array $global_styles Resolved global styles.
@@ -203,11 +245,13 @@ class Newspack_UI_Theme_Style {
 	 * @return array<string,string> Empty when the button radius is not a plain length.
 	 */
 	private static function get_radius_properties( array $global_styles ): array {
-		$radius = $global_styles['elements']['button']['border']['radius'] ?? null;
-		if ( ! is_string( $radius ) || 1 !== preg_match( '/^(?:\d+(?:\.\d+)?(?:px|rem|em)|0)$/D', $radius ) ) {
+		$radius = self::parse_radius( $global_styles['blocks']['core/button']['border']['radius'] ?? null );
+		if ( '' === $radius ) {
+			$radius = self::parse_radius( $global_styles['elements']['button']['border']['radius'] ?? null );
+		}
+		if ( '' === $radius ) {
 			return [];
 		}
-		$radius = '0' === $radius ? '0px' : $radius;
 
 		return [
 			'--newspack-ui-radius-button'  => $radius,

@@ -725,10 +725,141 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 			'inherit'   => [ 'inherit' ],
 			'negative'  => [ '-4px' ],
 			'injection' => [ '8px;}' ],
-			'newline'   => [ "8px\n" ],
+			'inner gap' => [ '8 px' ],
 			'corners'   => [ [ 'topLeft' => '8px' ] ],
 			'empty'     => [ '' ],
 		];
+	}
+
+	/**
+	 * Radius forms that collapse to one plain length.
+	 *
+	 * @dataProvider data_radius_forms
+	 *
+	 * @param mixed  $radius   The button radius.
+	 * @param string $expected The button role it prints.
+	 */
+	public function test_radius_forms( $radius, string $expected ): void {
+		$styles = [ 'elements' => [ 'button' => [ 'border' => [ 'radius' => $radius ] ] ] ];
+		$this->assertStringContainsString( '--newspack-ui-radius-button:' . $expected . ';', Newspack_UI_Theme_Style::get_css( $styles, [] ) );
+	}
+
+	/**
+	 * Radius forms and what they print.
+	 *
+	 * @return array
+	 */
+	public function data_radius_forms(): array {
+		return [
+			'padded'        => [ ' 8px ', '8px' ],
+			'leading dot'   => [ '.5rem', '0.5rem' ],
+			'int zero'      => [ 0, '0px' ],
+			'equal corners' => [
+				[
+					'topLeft'     => '6px',
+					'topRight'    => ' 6px',
+					'bottomRight' => '6px',
+					'bottomLeft'  => '6px',
+				],
+				'6px',
+			],
+			'equal zero'    => [
+				[
+					'topLeft'     => '0',
+					'topRight'    => '0px',
+					'bottomRight' => 0,
+					'bottomLeft'  => '0',
+				],
+				'0px',
+			],
+		];
+	}
+
+	/**
+	 * The Button block's radius wins over the element's.
+	 */
+	public function test_block_button_radius_wins_over_element(): void {
+		$styles = [
+			'elements' => [ 'button' => [ 'border' => [ 'radius' => '4px' ] ] ],
+			'blocks'   => [ 'core/button' => [ 'border' => [ 'radius' => '20px' ] ] ],
+		];
+		$css    = Newspack_UI_Theme_Style::get_css( $styles, [] );
+		$this->assertStringContainsString( '--newspack-ui-radius-button:20px;', $css );
+		$this->assertStringNotContainsString( 'min(4px', $css );
+	}
+
+	/**
+	 * An unusable block radius falls back to the element's.
+	 */
+	public function test_invalid_block_radius_falls_back_to_element(): void {
+		$styles = [
+			'elements' => [ 'button' => [ 'border' => [ 'radius' => '4px' ] ] ],
+			'blocks'   => [ 'core/button' => [ 'border' => [ 'radius' => 'var(--x)' ] ] ],
+		];
+		$this->assertStringContainsString( '--newspack-ui-radius-button:4px;', Newspack_UI_Theme_Style::get_css( $styles, [] ) );
+	}
+
+	/**
+	 * The block radius is kept from the global styles.
+	 */
+	public function test_block_button_border_is_read(): void {
+		$this->set_user_styles( [ 'blocks' => [ 'core/button' => [ 'border' => [ 'radius' => '20px' ] ] ] ] );
+		$this->assertSame( '20px', Newspack_UI_Theme_Style::get_global_styles()['blocks']['core/button']['border']['radius'] );
+	}
+
+	/**
+	 * Radius presets and custom values resolve to a length that prints.
+	 */
+	public function test_radius_references_resolve_and_print(): void {
+		$settings           = $this->settings();
+		$settings['border'] = [
+			'radiusSizes' => [
+				'theme' => [
+					[
+						'slug' => 'large',
+						'size' => '14px',
+					],
+				],
+			],
+		];
+		$settings['custom'] = [ 'border' => [ 'radius-large' => '10px' ] ];
+
+		$resolved = Newspack_UI_Theme_Style::resolve_references(
+			[
+				'elements' => [
+					'button' => [ 'border' => [ 'radius' => 'var:preset|border-radius|large' ] ],
+				],
+				'blocks'   => [
+					'core/button' => [ 'border' => [ 'radius' => 'var:custom|border|radius-large' ] ],
+				],
+			],
+			$settings
+		);
+
+		$this->assertSame( '14px', $resolved['elements']['button']['border']['radius'] );
+		$this->assertSame( '10px', $resolved['blocks']['core/button']['border']['radius'] );
+		$this->assertStringContainsString( '--newspack-ui-radius-button:10px;', Newspack_UI_Theme_Style::get_css( $resolved, [] ) );
+		unset( $resolved['blocks'] );
+		$this->assertStringContainsString( '--newspack-ui-radius-button:14px;', Newspack_UI_Theme_Style::get_css( $resolved, [] ) );
+	}
+
+	/**
+	 * A radius alone does not drop the legacy color rule.
+	 */
+	public function test_radius_alone_keeps_legacy_color_rule(): void {
+		add_theme_support( Newspack_UI_Theme_Style::THEME_SUPPORT );
+		$this->set_user_styles(
+			[
+				'color'    => [
+					'background' => 'rgba(30,30,30,0.8)',
+					'text'       => '#ffffff',
+				],
+				'elements' => [ 'button' => [ 'border' => [ 'radius' => '12px' ] ] ],
+			]
+		);
+
+		$this->assertStringContainsString( '--newspack-ui-radius-button:12px;', Newspack_UI_Theme_Style::get_site_css() );
+		$this->assertStringContainsString( 'body {--newspack-ui-color-primary', $this->wrap_output() );
 	}
 
 	/**
