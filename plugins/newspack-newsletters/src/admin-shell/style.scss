@@ -419,3 +419,7 @@ body.newspack-newsletters-admin-screen .dataviews-view-table a:not(.newspack-new
 .dataviews-view-grid .dataviews-view-grid__media:has(.newspack-newsletters-layouts-list__preview)::after {
 	box-shadow: none;
 }
+
+.newspack-newsletters-admin .dataviews-view-grid {
+	padding-inline: wp-vars.$grid-unit-60;
+}
