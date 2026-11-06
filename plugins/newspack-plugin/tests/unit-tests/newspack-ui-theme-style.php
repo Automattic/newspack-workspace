@@ -240,7 +240,7 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 					'text'       => '#ffffff',
 				],
 			],
-			[] 
+			[]
 		);
 
 		$this->assertStringStartsWith( ':root{', $css );
@@ -437,7 +437,7 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 					'background' => '#1e1e1e',
 					'text'       => '#ffffff',
 				],
-			] 
+			]
 		);
 
 		$this->assertStringNotContainsString( 'body {', $this->wrap_output() );
@@ -458,7 +458,7 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 					'background' => $base,
 					'text'       => '#ffffff',
 				],
-			] 
+			]
 		);
 
 		$this->assertSame( 'body {--newspack-ui-color-primary: #32373c;--newspack-ui-color-against-primary: #fff;}', substr( $this->wrap_output(), -strlen( 'body {--newspack-ui-color-primary: #32373c;--newspack-ui-color-against-primary: #fff;}' ) ) );
@@ -533,7 +533,7 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 					'background' => '#1e1e1e',
 					'text'       => '#ffffff',
 				],
-			] 
+			]
 		);
 		$first = Newspack_UI_Theme_Style::get_site_css();
 		$this->assertStringContainsString( '--newspack-ui-color-base:#1e1e1e;', $first );
@@ -620,7 +620,7 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 				'a' => 'var:preset|color|alias',
 				'b' => 'var:preset|color|loop',
 			],
-			$settings 
+			$settings
 		);
 
 		$this->assertSame( '#ffc857', $resolved['a'] );
@@ -647,7 +647,7 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 					'text'       => '#ffffff',
 				],
 			],
-			[] 
+			[]
 		);
 
 		$this->assertSame( '#1e1e1e', $properties['--newspack-ui-color-destructive-fill'] );
@@ -752,6 +752,13 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 			'var mixed quotes'  => [ 'var(--a, "it\'s" \')', 'font-family', '' ],
 			'apostrophe name'   => [ '"Kid\'s Font", serif', 'font-family', '"Kid\'s Font", serif' ],
 			'quote in color'    => [ 'var(--a, "x")', 'color', '' ],
+			'family newline'    => [ "\"a\nb\", serif", 'font-family', '' ],
+			'family return'     => [ "\"a\rb\"", 'font-family', '' ],
+			'family formfeed'   => [ "'a\fb'", 'font-family', '' ],
+			'var newline'       => [ "var(--a, \"x\ny\")", 'font-family', '' ],
+			'family tab'        => [ "Georgia,\tserif", 'font-family', '' ],
+			'family nul'        => [ "Geor\0gia", 'font-family', '' ],
+			'color trailing nl' => [ "#fff\n", 'color', '' ],
 			'not a string'      => [ [ '#fff' ], 'color', '' ],
 		];
 	}

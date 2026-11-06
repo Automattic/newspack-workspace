@@ -54,7 +54,7 @@ class Newspack_UI_Theme_Style {
 	/**
 	 * A font family list: quoted names (a quote of the other kind may sit inside) and plain names.
 	 */
-	const FONT_FAMILY_PATTERN = '/^\s*(?:"[^"]*"|\'[^\']*\'|[A-Za-z0-9 ._-]+)\s*(?:,\s*(?:"[^"]*"|\'[^\']*\'|[A-Za-z0-9 ._-]+)\s*)*$/';
+	const FONT_FAMILY_PATTERN = '/^\s*(?:"[^"\r\n\f]*"|\'[^\'\r\n\f]*\'|[A-Za-z0-9 ._-]+)\s*(?:,\s*(?:"[^"\r\n\f]*"|\'[^\'\r\n\f]*\'|[A-Za-z0-9 ._-]+)\s*)*$/';
 
 	/**
 	 * Most passes of reference resolution, for presets that are themselves references.
@@ -269,8 +269,11 @@ class Newspack_UI_Theme_Style {
 		if ( ! is_string( $value ) ) {
 			return '';
 		}
+		if ( ! self::is_printable( $value ) ) {
+			return '';
+		}
 		$value = trim( $value );
-		if ( '' === $value || ! self::is_printable( $value ) ) {
+		if ( '' === $value ) {
 			return '';
 		}
 
@@ -429,7 +432,7 @@ class Newspack_UI_Theme_Style {
 	 */
 	private static function is_printable( $value ): bool {
 		return is_string( $value )
-			&& 1 !== preg_match( '/[;{}<>\\\\]|\/\*/', $value )
+			&& 1 !== preg_match( '/[;{}<>\\\\\x00-\x1F\x7F]|\/\*/', $value )
 			&& self::balanced( $value );
 	}
 
