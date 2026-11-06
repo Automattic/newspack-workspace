@@ -10,7 +10,7 @@ $tones: success, info, warning, error, neutral;
 	}
 
 	@each $tone in $tones {
-		&--#{$tone} &__icon {
+		&--#{$tone} {
 			color: var(--wpds-color-foreground-content-#{$tone}-weak, currentcolor);
 		}
 	}

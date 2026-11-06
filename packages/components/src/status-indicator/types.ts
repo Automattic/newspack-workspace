@@ -31,7 +31,7 @@ interface NamedStatusProps {
 	icon?: never;
 }
 
-/** `icon` is the escape hatch for fields that classify rather than track a lifecycle; a passed glyph is never tinted. */
+/** `icon` is the escape hatch for fields that classify rather than track a lifecycle; a status drawn this way is never tinted. */
 interface GlyphProps {
 	status?: never;
 	tone?: never;
