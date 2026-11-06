@@ -191,7 +191,7 @@
 	align-items: center;
 	position: relative;
 	max-width: 200px;
-	background-color: var(--newspack-ui-color-surface, #{np-colors.$neutral-000});
+	background-color: var(--newspack-ui-field-bg, var(--newspack-ui-color-surface, #{np-colors.$neutral-000}));
 	border-radius: 3px;
 	border: 1px solid var(--newspack-ui-color-border, #{np-colors.$neutral-300});
 

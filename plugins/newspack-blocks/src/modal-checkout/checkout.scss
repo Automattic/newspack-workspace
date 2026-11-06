@@ -350,15 +350,15 @@
 
 				&.short,
 				&.bad {
-					color: var(--newspack-ui-color-error, #{np-colors.$error-500});
+					color: var(--newspack-ui-color-error-text, #{np-colors.$error-600});
 				}
 
 				&.good {
-					color: var(--newspack-ui-color-warning, #{np-colors.$warning-400});
+					color: var(--newspack-ui-color-warning-text, #{np-colors.$warning-600});
 				}
 
 				&.strong {
-					color: var(--newspack-ui-color-success, #{np-colors.$success-500});
+					color: var(--newspack-ui-color-success-text, #{np-colors.$success-600});
 				}
 			}
 
@@ -642,7 +642,7 @@
 			border: 1px solid var(--newspack-ui-color-input-border, np-colors.$neutral-500);
 			border-radius: var(--newspack-ui-radius-control, 8px);
 			display: block;
-			font-family: var(--newspack-ui-field-font-family, system-ui);
+			font-family: var(--newspack-ui-field-font-family, var(--newspack-ui-font-family, system-ui, sans-serif));
 			font-size: var(--newspack-ui-font-size-s, 16px);
 			line-height: var(--newspack-ui-line-height-s, 1.5);
 			padding: calc(var(--newspack-ui-spacer-2, 12px) - 1px) calc(var(--newspack-ui-spacer-3, 16px) - 1px);
@@ -655,7 +655,7 @@
 			}
 
 			&.StripeElement--focus {
-				@include mixins.focus-edge( var(--newspack-ui-color-input-border-focus, #{np-colors.$neutral-900}), $halo: mixins.$focus-color, $over-content: true );
+				@include mixins.focus-edge( var(--newspack-ui-color-input-border-focus, #{np-colors.$neutral-900}), $over-content: true );
 			}
 		}
 
@@ -675,7 +675,7 @@
 			.woocommerce_error {
 				background: transparent;
 				color: var(--newspack-ui-color-error-text, np-colors.$error-600);
-				font-family: var(--newspack-ui-font-family-body, system-ui);
+				font-family: var(--newspack-ui-font-family-body, var(--newspack-ui-font-family, system-ui, sans-serif));
 				font-size: var(--newspack-ui-font-size-xs, 14px);
 				line-height: var(--newspack-ui-line-height-xs, 1.4286);
 				padding: 0;
@@ -866,7 +866,7 @@
 	}
 
 	.woocommerce .first-payment-date {
-		font-family: var(--newspack-ui-font-family-body, system-ui);
+		font-family: var(--newspack-ui-font-family-body, var(--newspack-ui-font-family, system-ui, sans-serif));
 	}
 
 	// Errors
@@ -1020,7 +1020,7 @@
 		.woocommerce-message,
 		.woocommerce-error,
 		.woocommerce-info {
-			font-family: var(--newspack-ui-font-family-body, system-ui);
+			font-family: var(--newspack-ui-font-family-body, var(--newspack-ui-font-family, system-ui, sans-serif));
 			list-style-type: none;
 			margin: 0;
 

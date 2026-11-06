@@ -21,21 +21,21 @@ if ( ! class_exists( __NAMESPACE__ . '\Newspack_UI_Theme_Style' ) ) {
 		 *
 		 * @var bool
 		 */
-		public static $stub_active = false;
+		public static bool $stub_active = false;
 
 		/**
 		 * The button radius the stub reports. Set by the test.
 		 *
 		 * @var string
 		 */
-		public static $stub_button_radius = '';
+		public static string $stub_button_radius = '';
 
 		/**
 		 * Whether the Theme style is on.
 		 *
 		 * @return bool
 		 */
-		public static function is_active() {
+		public static function is_active(): bool {
 			return self::$stub_active;
 		}
 
@@ -44,7 +44,7 @@ if ( ! class_exists( __NAMESPACE__ . '\Newspack_UI_Theme_Style' ) ) {
 		 *
 		 * @return string
 		 */
-		public static function get_button_radius() {
+		public static function get_button_radius(): string {
 			return self::$stub_button_radius;
 		}
 	}
