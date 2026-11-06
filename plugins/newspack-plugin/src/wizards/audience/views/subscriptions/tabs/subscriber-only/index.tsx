@@ -40,7 +40,7 @@ const DEFAULT_VIEW = {
 	perPage: 20,
 	sort: { field: 'created_at', direction: 'desc' as const },
 	search: '',
-	fields: [ 'availableTo', 'status', 'created_at' ],
+	fields: [ 'status', 'availableTo', 'created_at' ],
 	filters: [],
 	layout: {},
 	titleField: 'products',
