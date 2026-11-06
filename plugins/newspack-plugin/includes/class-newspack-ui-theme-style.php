@@ -59,15 +59,15 @@ class Newspack_UI_Theme_Style {
 	];
 
 	/**
-	 * Type scale tokens to the font size preset slug, the Neutral size and the Neutral line height they fall back to.
+	 * Type scale tokens to the font size preset slug they read.
 	 */
 	const SIZE_SCALE = [
-		'caption' => [ 'xx-small', '12px', '1.3333' ],
-		'small'   => [ 'x-small', '14px', '1.4286' ],
-		'body'    => [ 'small', '16px', '1.5' ],
-		'title-m' => [ 'medium', '20px', '1.4' ],
-		'title-l' => [ 'x-large', '24px', '1.3333' ],
-		'display' => [ 'xx-large', '32px', '1.25' ],
+		'caption' => 'xx-small',
+		'small'   => 'x-small',
+		'body'    => 'small',
+		'title-m' => 'medium',
+		'title-l' => 'x-large',
+		'display' => 'xx-large',
 	];
 
 	/**
@@ -104,21 +104,21 @@ class Newspack_UI_Theme_Style {
 	 *
 	 * @var array|null
 	 */
-	private static $global_styles = null;
+	private static ?array $global_styles = null;
 
 	/**
 	 * The ':root' rule for this request.
 	 *
 	 * @var string|null
 	 */
-	private static $css = null;
+	private static ?string $css = null;
 
 	/**
 	 * Whether the site's Theme style printed palette colors.
 	 *
 	 * @var bool|null
 	 */
-	private static $has_palette = null;
+	private static ?bool $has_palette = null;
 
 	/**
 	 * Register the hooks that drop the memoized global styles and print the rule.
@@ -129,6 +129,7 @@ class Newspack_UI_Theme_Style {
 		\add_action( 'admin_enqueue_scripts', [ __CLASS__, 'print_css' ], 20 );
 		\add_action( 'save_post_wp_global_styles', [ __CLASS__, 'reset_cache' ], 10, 0 );
 		\add_action( 'switch_theme', [ __CLASS__, 'reset_cache' ], 10, 0 );
+		\add_action( 'switch_blog', [ __CLASS__, 'reset_cache' ], 10, 0 );
 	}
 
 	/**
@@ -175,7 +176,7 @@ class Newspack_UI_Theme_Style {
 		/**
 		 * Filters whether the newspack-ui Theme style is active. Returning false forces the Neutral style.
 		 *
-		 * On a dark block theme this also leaves Neutral status colors for the theme's own notices, which read newspack-ui first.
+		 * Forcing Neutral on a dark block theme also gives the theme's own notices Neutral status colors, since they read newspack-ui first.
 		 *
 		 * @param bool $supported Whether the active theme declares support for the Theme style.
 		 */
@@ -236,7 +237,7 @@ class Newspack_UI_Theme_Style {
 			);
 
 			self::$has_palette = $solved['has_palette'];
-			self::$css         = self::render( $solved['properties'] );
+			self::$css         = self::render( $solved['properties'], $solved['high_contrast'] );
 		}
 
 		return self::$css;
@@ -281,28 +282,28 @@ class Newspack_UI_Theme_Style {
 	/**
 	 * Every custom property the Theme style sets, as '--newspack-ui-*' => value.
 	 *
-	 * @param array         $global_styles    Resolved global styles.
-	 * @param array|null    $settings         Merged global settings, or null for the site's own.
-	 * @param array         $user_styles      The user origin's styles.
-	 * @param array|Closure $variation_styles The styles of the theme's style variations, or a closure returning them.
+	 * @param array          $global_styles    Resolved global styles.
+	 * @param array|null     $settings         Merged global settings, or null for the site's own.
+	 * @param array          $user_styles      The user origin's styles.
+	 * @param array|\Closure $variation_styles The styles of the theme's style variations, or a closure returning them.
 	 *
 	 * @return array<string,string>
 	 */
-	public static function get_properties( array $global_styles, ?array $settings = null, array $user_styles = [], $variation_styles = [] ): array {
+	public static function get_properties( array $global_styles, ?array $settings = null, array $user_styles = [], array|\Closure $variation_styles = [] ): array {
 		return self::solve( $global_styles, $settings ?? self::get_settings(), $user_styles, $variation_styles )['properties'];
 	}
 
 	/**
 	 * Solve every property and note whether the palette printed.
 	 *
-	 * @param array         $global_styles    Resolved global styles.
-	 * @param array         $settings         Merged global settings.
-	 * @param array         $user_styles      The user origin's styles.
-	 * @param array|Closure $variation_styles The styles of the theme's style variations, or a closure returning them.
+	 * @param array          $global_styles    Resolved global styles.
+	 * @param array          $settings         Merged global settings.
+	 * @param array          $user_styles      The user origin's styles.
+	 * @param array|\Closure $variation_styles The styles of the theme's style variations, or a closure returning them.
 	 *
-	 * @return array{properties:array<string,string>,has_palette:bool}
+	 * @return array{properties:array<string,string>,has_palette:bool,high_contrast:array<string,string>}
 	 */
-	private static function solve( array $global_styles, array $settings, array $user_styles, $variation_styles ): array {
+	private static function solve( array $global_styles, array $settings, array $user_styles, array|\Closure $variation_styles ): array {
 		$has_palette = false;
 		$properties  = array_merge(
 			self::get_color_properties( $global_styles, $settings, $user_styles, $variation_styles, $has_palette ),
@@ -319,23 +320,26 @@ class Newspack_UI_Theme_Style {
 		}
 
 		return [
-			'properties'  => $properties,
-			'has_palette' => $has_palette,
+			'properties'    => $properties,
+			'has_palette'   => $has_palette,
+			'high_contrast' => $has_palette ? Newspack_UI_Palette::get_high_contrast_properties( self::get_palette( $global_styles, $settings ) ) : [],
 		];
 	}
 
 	/**
 	 * The palette roles, the button state overrides, the link colors and the fine print color.
 	 *
-	 * @param array         $global_styles    Resolved global styles.
-	 * @param array         $settings         Merged global settings.
-	 * @param array         $user_styles      The user origin's styles.
-	 * @param array|Closure $variation_styles The styles of the theme's style variations, or a closure returning them.
-	 * @param bool          $has_palette      Set to whether the palette printed.
+	 * The fine print color is the caption color the publisher set, which the theme renders its own captions with, so it is not APCA-checked.
+	 *
+	 * @param array          $global_styles    Resolved global styles.
+	 * @param array          $settings         Merged global settings.
+	 * @param array          $user_styles      The user origin's styles.
+	 * @param array|\Closure $variation_styles The styles of the theme's style variations, or a closure returning them.
+	 * @param bool           $has_palette      Set to whether the palette printed.
 	 *
 	 * @return array<string,string>
 	 */
-	private static function get_color_properties( array $global_styles, array $settings, array $user_styles, $variation_styles, bool &$has_palette ): array {
+	private static function get_color_properties( array $global_styles, array $settings, array $user_styles, array|\Closure $variation_styles, bool &$has_palette ): array {
 		$palette = self::get_palette( $global_styles, $settings );
 		$states  = self::get_user_states( $user_styles, $variation_styles, $settings );
 		$shares  = is_array( $settings['custom']['state'] ?? null ) ? $settings['custom']['state'] : [];
@@ -382,13 +386,13 @@ class Newspack_UI_Theme_Style {
 	 * Only the user origin counts: the theme's own states are mixes of its fill, and the palette computes those.
 	 * A state equal to one a style variation sets was copied in when the variation was picked, so it is the theme's.
 	 *
-	 * @param array         $user_styles      The user origin's styles.
-	 * @param array|Closure $variation_styles The styles of the theme's style variations, or a closure returning them.
-	 * @param array         $settings         Merged global settings.
+	 * @param array          $user_styles      The user origin's styles.
+	 * @param array|\Closure $variation_styles The styles of the theme's style variations, or a closure returning them.
+	 * @param array          $settings         Merged global settings.
 	 *
 	 * @return array<string,string> 'hover' and 'pressed' to a hex color, for the states that are set.
 	 */
-	private static function get_user_states( array $user_styles, $variation_styles, array $settings ): array {
+	private static function get_user_states( array $user_styles, array|\Closure $variation_styles, array $settings ): array {
 		$selectors = [
 			'hover'   => ':hover',
 			'pressed' => ':active',
@@ -537,9 +541,11 @@ class Newspack_UI_Theme_Style {
 			if ( ! $has_size && ! $has_line ) {
 				continue;
 			}
-			if ( $has_size && $has_line ) {
-				self::put( $properties, '--newspack-ui-font-size-button', $size );
-				self::put( $properties, '--newspack-ui-line-height-button', $line_height );
+			$size        = self::sanitize_value( is_int( $size ) || is_float( $size ) ? (string) $size : $size, 'length' );
+			$line_height = self::sanitize_value( is_int( $line_height ) || is_float( $line_height ) ? (string) $line_height : $line_height, 'line-height' );
+			if ( '' !== $size && '' !== $line_height ) {
+				$properties['--newspack-ui-font-size-button']   = $size;
+				$properties['--newspack-ui-line-height-button'] = $line_height;
 			}
 			break;
 		}
@@ -554,11 +560,11 @@ class Newspack_UI_Theme_Style {
 			}
 		}
 
-		foreach ( self::SIZE_SCALE as $token => $scale ) {
-			$line_height = self::slug_line_height( $settings, $scale[0] );
-			if ( isset( $sizes[ $scale[0] ] ) && '' !== $line_height ) {
-				$properties[ '--newspack-ui-font-size-' . $token ]   = 'var(--wp--preset--font-size--' . $scale[0] . ', ' . $scale[1] . ')';
-				$properties[ '--newspack-ui-line-height-' . $token ] = 'var(--wp--custom--line-height--' . $scale[0] . ', ' . $scale[2] . ')';
+		foreach ( self::SIZE_SCALE as $token => $slug ) {
+			$pair = self::scale_pair( $sizes, $settings, $slug );
+			if ( [] !== $pair ) {
+				$properties[ '--newspack-ui-font-size-' . $token ]   = $pair[0];
+				$properties[ '--newspack-ui-line-height-' . $token ] = $pair[1];
 			}
 		}
 
@@ -569,13 +575,40 @@ class Newspack_UI_Theme_Style {
 				$properties['--newspack-ui-font-size-fine']   = $fine_size;
 				$properties['--newspack-ui-line-height-fine'] = $fine_height;
 			}
-		} elseif ( isset( $sizes['x-small'] ) && '' !== self::slug_line_height( $settings, 'x-small' ) ) {
-			$properties['--newspack-ui-font-size-fine']   = 'var(--wp--preset--font-size--x-small, 14px)';
-			$properties['--newspack-ui-line-height-fine'] = 'var(--wp--custom--line-height--x-small, 1.4286)';
+		} else {
+			$pair = self::scale_pair( $sizes, $settings, 'x-small' );
+			if ( [] !== $pair ) {
+				$properties['--newspack-ui-font-size-fine']   = $pair[0];
+				$properties['--newspack-ui-line-height-fine'] = $pair[1];
+			}
 		}
 		self::put( $properties, '--newspack-ui-font-family-fine', $caption['fontFamily'] ?? null );
 
 		return $properties;
+	}
+
+	/**
+	 * A font size preset's resolved size and the unitless line height the theme pairs with it.
+	 *
+	 * Printed as values rather than var() references: the modal checkout iframe does not load core's global styles.
+	 *
+	 * @param array  $sizes    Font size presets by slug.
+	 * @param array  $settings Merged global settings.
+	 * @param string $slug     The font size slug.
+	 *
+	 * @return string[] The size and the line height, or an empty array unless both are usable.
+	 */
+	private static function scale_pair( array $sizes, array $settings, string $slug ): array {
+		$line_height = self::slug_line_height( $settings, $slug );
+		if ( ! isset( $sizes[ $slug ] ) || '' === $line_height ) {
+			return [];
+		}
+		$size = function_exists( 'wp_get_typography_font_size_value' ) ? \wp_get_typography_font_size_value( $sizes[ $slug ], $settings ) : ( $sizes[ $slug ]['size'] ?? null );
+		$size = is_int( $size ) || is_float( $size ) ? (string) $size : $size;
+
+		$size = self::sanitize_value( $size, 'length' );
+
+		return '' === $size ? [] : [ $size, $line_height ];
 	}
 
 	/**
@@ -585,7 +618,7 @@ class Newspack_UI_Theme_Style {
 	 *
 	 * @return string Empty when the value is not a unitless number.
 	 */
-	private static function unitless( $value ): string {
+	private static function unitless( mixed $value ): string {
 		if ( is_int( $value ) || is_float( $value ) ) {
 			$value = (string) $value;
 		}
@@ -614,7 +647,7 @@ class Newspack_UI_Theme_Style {
 	 *
 	 * @return array
 	 */
-	private static function authored_presets( $presets ) {
+	private static function authored_presets( mixed $presets ): mixed {
 		if ( ! is_array( $presets ) || isset( $presets[0] ) ) {
 			return $presets;
 		}
@@ -671,7 +704,7 @@ class Newspack_UI_Theme_Style {
 	 * @param string $name       The property name.
 	 * @param mixed  $value      The value.
 	 */
-	private static function put( array &$properties, string $name, $value ): void {
+	private static function put( array &$properties, string $name, mixed $value ): void {
 		if ( is_int( $value ) || is_float( $value ) ) {
 			$value = (string) $value;
 		}
@@ -688,7 +721,7 @@ class Newspack_UI_Theme_Style {
 	 *
 	 * @return mixed Null when neither sets it.
 	 */
-	private static function button_value( array $styles, array $path ) {
+	private static function button_value( array $styles, array $path ): mixed {
 		foreach ( [ [ 'blocks', 'core/button' ], [ 'elements', 'button' ] ] as $root ) {
 			$value = self::dig( $styles, array_merge( $root, $path ) );
 			if ( null !== $value && '' !== $value && [] !== $value ) {
@@ -765,7 +798,7 @@ class Newspack_UI_Theme_Style {
 	 *
 	 * @return mixed Null when the property is not set or the sides differ.
 	 */
-	private static function border_value( array $border, string $property ) {
+	private static function border_value( array $border, string $property ): mixed {
 		$values = [];
 		foreach ( [ 'top', 'right', 'bottom', 'left' ] as $side ) {
 			if ( is_array( $border[ $side ] ?? null ) && isset( $border[ $side ][ $property ] ) ) {
@@ -807,7 +840,7 @@ class Newspack_UI_Theme_Style {
 	/**
 	 * The field tokens, from the text input and select element styles.
 	 *
-	 * Background and text color print as a pair from one element, or not at all, with the placeholder, toggle and caret tones solved against that pair.
+	 * Background and text color print as a pair of plain hex colors from one element, or not at all, with the placeholder, toggle and caret tones solved against that pair.
 	 * The border color is the publisher's choice and is not checked.
 	 *
 	 * @param array $global_styles Resolved global styles.
@@ -851,7 +884,7 @@ class Newspack_UI_Theme_Style {
 		foreach ( $elements as $element ) {
 			$background = $global_styles['elements'][ $element ]['color']['background'] ?? null;
 			$text       = $global_styles['elements'][ $element ]['color']['text'] ?? null;
-			if ( '' !== self::sanitize_value( $background, 'color' ) && '' !== self::sanitize_value( $text, 'color' ) ) {
+			if ( is_string( $background ) && is_string( $text ) && '' !== self::expand_hex( $background ) && '' !== self::expand_hex( $text ) ) {
 				$properties['--newspack-ui-field-bg']  = $background;
 				$properties['--newspack-ui-field-ink'] = $text;
 				$properties                           += self::get_field_tones( $background, $text );
@@ -924,25 +957,42 @@ class Newspack_UI_Theme_Style {
 	/**
 	 * The ':root' rule for the Theme style.
 	 *
-	 * @param array         $global_styles Resolved global styles.
-	 * @param array|null    $settings      Merged global settings, or null for the site's own.
-	 * @param array         $user_styles      The user origin's styles.
-	 * @param array|Closure $variation_styles The styles of the theme's style variations, or a closure returning them.
+	 * @param array          $global_styles Resolved global styles.
+	 * @param array|null     $settings      Merged global settings, or null for the site's own.
+	 * @param array          $user_styles      The user origin's styles.
+	 * @param array|\Closure $variation_styles The styles of the theme's style variations, or a closure returning them.
 	 *
 	 * @return string The rule, or an empty string when there is nothing to print.
 	 */
-	public static function get_css( array $global_styles, ?array $settings = null, array $user_styles = [], $variation_styles = [] ): string {
-		return self::render( self::get_properties( $global_styles, $settings, $user_styles, $variation_styles ) );
+	public static function get_css( array $global_styles, ?array $settings = null, array $user_styles = [], array|\Closure $variation_styles = [] ): string {
+		$solved = self::solve( $global_styles, $settings ?? self::get_settings(), $user_styles, $variation_styles );
+
+		return self::render( $solved['properties'], $solved['high_contrast'] );
 	}
 
 	/**
-	 * The ':root' rule for a set of properties.
+	 * The ':root' rule for a set of properties, then the same for the properties that apply under `prefers-contrast: more`.
+	 *
+	 * @param array<string,string> $properties    The properties.
+	 * @param array<string,string> $high_contrast The properties for `prefers-contrast: more`.
+	 *
+	 * @return string The rules, or an empty string when there is nothing to print.
+	 */
+	private static function render( array $properties, array $high_contrast = [] ): string {
+		$base = self::declarations( $properties );
+		$more = self::declarations( $high_contrast );
+
+		return ( '' === $base ? '' : ':root{' . $base . '}' ) . ( '' === $more ? '' : '@media (prefers-contrast: more){:root{' . $more . '}}' );
+	}
+
+	/**
+	 * Declarations for the properties whose values pass the allow-list of their type.
 	 *
 	 * @param array<string,string> $properties The properties.
 	 *
-	 * @return string The rule, or an empty string when there is nothing to print.
+	 * @return string
 	 */
-	private static function render( array $properties ): string {
+	private static function declarations( array $properties ): string {
 		$declarations = '';
 		foreach ( $properties as $name => $value ) {
 			$type  = self::property_type( (string) $name );
@@ -953,7 +1003,7 @@ class Newspack_UI_Theme_Style {
 			$declarations .= $name . ':' . $value . ';';
 		}
 
-		return '' === $declarations ? '' : ':root{' . $declarations . '}';
+		return $declarations;
 	}
 
 	/**
@@ -1080,7 +1130,7 @@ class Newspack_UI_Theme_Style {
 	 *
 	 * @return mixed Null when the path does not exist.
 	 */
-	private static function dig( array $data, array $path ) {
+	private static function dig( array $data, array $path ): mixed {
 		foreach ( $path as $key ) {
 			if ( ! is_array( $data ) || ! array_key_exists( $key, $data ) ) {
 				return null;

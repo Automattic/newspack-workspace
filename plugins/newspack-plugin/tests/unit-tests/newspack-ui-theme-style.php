@@ -49,9 +49,9 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Without a theme opt-in, the inline CSS is the pre-adapter output.
+	 * Without a theme opt-in, the inline CSS is the pre-adapter output, which pins the block theme's legacy body rule.
 	 */
-	public function test_classic_theme_inline_css_matches_baseline(): void {
+	public function test_inline_css_without_theme_support_matches_legacy_rule(): void {
 		Newspack_UI::enqueue_assets();
 		Newspack_UI::theme_colors_css();
 		Newspack_UI::colors_css_wrap();
@@ -502,13 +502,6 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Without the Theme style, nothing is added and the inline CSS matches the baseline.
-	 */
-	public function test_colors_css_wrap_unchanged_when_inactive(): void {
-		$this->test_classic_theme_inline_css_matches_baseline();
-	}
-
-	/**
 	 * Make the global styles carry these user styles.
 	 *
 	 * @param array $styles The styles.
@@ -779,7 +772,7 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 		foreach ( array_keys( Newspack_UI_Theme_Style::get_properties( [], [] ) ) as $name ) {
 			$this->assertStringNotContainsString( 'destructive', $name );
 		}
-		$this->test_classic_theme_inline_css_matches_baseline();
+		$this->test_inline_css_without_theme_support_matches_legacy_rule();
 	}
 
 	/**
@@ -1151,16 +1144,16 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 	/**
 	 * The scale maps by slug and a missing slug prints nothing.
 	 */
-	public function test_scale_maps_by_slug_with_fallback(): void {
+	public function test_scale_maps_by_slug_to_resolved_values(): void {
 		$settings = $this->scale_settings();
 		$css      = Newspack_UI_Theme_Style::get_css( [], $settings, [] );
 
-		$this->assertStringContainsString( '--newspack-ui-font-size-caption:var(--wp--preset--font-size--xx-small, 12px);', $css );
-		$this->assertStringContainsString( '--newspack-ui-font-size-small:var(--wp--preset--font-size--x-small, 14px);', $css );
-		$this->assertStringContainsString( '--newspack-ui-font-size-body:var(--wp--preset--font-size--small, 16px);', $css );
-		$this->assertStringContainsString( '--newspack-ui-font-size-title-m:var(--wp--preset--font-size--medium, 20px);', $css );
-		$this->assertStringContainsString( '--newspack-ui-font-size-title-l:var(--wp--preset--font-size--x-large, 24px);', $css );
-		$this->assertStringContainsString( '--newspack-ui-font-size-display:var(--wp--preset--font-size--xx-large, 32px);', $css );
+		$this->assertStringContainsString( '--newspack-ui-font-size-caption:0.75rem;', $css );
+		$this->assertStringContainsString( '--newspack-ui-font-size-small:0.875rem;', $css );
+		$this->assertStringContainsString( '--newspack-ui-font-size-body:1rem;', $css );
+		$this->assertStringContainsString( '--newspack-ui-font-size-title-m:1.25rem;', $css );
+		$this->assertStringContainsString( '--newspack-ui-font-size-title-l:1.5rem;', $css );
+		$this->assertStringContainsString( '--newspack-ui-font-size-display:2rem;', $css );
 
 		array_shift( $settings['typography']['fontSizes']['theme'] );
 		$css = Newspack_UI_Theme_Style::get_css( [], $settings, [] );
@@ -1169,18 +1162,18 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The six roles with their slug and Neutral pair.
+	 * The six roles with their slug and resolved pair.
 	 *
 	 * @return array
 	 */
 	public function data_scale_roles(): array {
 		return [
-			'caption' => [ 'caption', 'xx-small', '12px', '1.3333' ],
-			'small'   => [ 'small', 'x-small', '14px', '1.4286' ],
-			'body'    => [ 'body', 'small', '16px', '1.5' ],
-			'title-m' => [ 'title-m', 'medium', '20px', '1.4' ],
-			'title-l' => [ 'title-l', 'x-large', '24px', '1.3333' ],
-			'display' => [ 'display', 'xx-large', '32px', '1.25' ],
+			'caption' => [ 'caption', 'xx-small', '0.75rem', '1.3333333333' ],
+			'small'   => [ 'small', 'x-small', '0.875rem', '1.4285714286' ],
+			'body'    => [ 'body', 'small', '1rem', '1.5' ],
+			'title-m' => [ 'title-m', 'medium', '1.25rem', '1.6' ],
+			'title-l' => [ 'title-l', 'x-large', '1.5rem', '1.375' ],
+			'display' => [ 'display', 'xx-large', '2rem', '1.3333333333' ],
 		];
 	}
 
@@ -1191,13 +1184,15 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 	 *
 	 * @param string $role  The role.
 	 * @param string $slug  The slug.
-	 * @param string $size  The Neutral size.
-	 * @param string $lh    The Neutral line height.
+	 * @param string $size  The resolved size.
+	 * @param string $lh    The unitless line height.
 	 */
 	public function test_scale_pairs_size_and_line_height_by_slug( string $role, string $slug, string $size, string $lh ): void {
 		$css = Newspack_UI_Theme_Style::get_css( [], $this->scale_settings(), [] );
-		$this->assertStringContainsString( '--newspack-ui-font-size-' . $role . ':var(--wp--preset--font-size--' . $slug . ', ' . $size . ');', $css );
-		$this->assertStringContainsString( '--newspack-ui-line-height-' . $role . ':var(--wp--custom--line-height--' . $slug . ', ' . $lh . ');', $css );
+		$this->assertStringContainsString( '--newspack-ui-font-size-' . $role . ':' . $size . ';', $css );
+		$this->assertStringContainsString( '--newspack-ui-line-height-' . $role . ':' . $lh . ';', $css );
+		$this->assertStringNotContainsString( 'var(--wp--preset--font-size--', $css );
+		$this->assertStringNotContainsString( 'var(--wp--custom--line-height--', $css );
 	}
 
 	/**
@@ -1243,8 +1238,16 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 	 * The block theme's medium pair feeds the modal title role.
 	 */
 	public function test_title_m_uses_medium_line_height(): void {
-		$css = Newspack_UI_Theme_Style::get_css( [], $this->scale_settings(), [] );
-		$this->assertStringContainsString( '--newspack-ui-line-height-title-m:var(--wp--custom--line-height--medium, 1.4);', $css );
+		$settings = $this->scale_settings();
+		$settings['typography']['fluid'] = true;
+		$settings['typography']['fontSizes']['theme'][3]['fluid'] = [
+			'min' => '1.125rem',
+			'max' => '1.5rem',
+		];
+		$css = Newspack_UI_Theme_Style::get_css( [], $settings, [] );
+
+		$this->assertMatchesRegularExpression( '/--newspack-ui-font-size-title-m:clamp\([^;]+\);/', $css );
+		$this->assertStringContainsString( '--newspack-ui-line-height-title-m:1.6;', $css );
 	}
 
 	/**
@@ -1264,7 +1267,7 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 				],
 			],
 			$settings,
-			[] 
+			[]
 		);
 		$this->assertStringContainsString( '--newspack-ui-font-size-fine:0.8125rem;', $css );
 		$this->assertStringContainsString( '--newspack-ui-line-height-fine:1.4;', $css );
@@ -1274,8 +1277,8 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 		$this->assertStringNotContainsString( '--newspack-ui-line-height-fine', $css );
 
 		$css = Newspack_UI_Theme_Style::get_css( [], $settings, [] );
-		$this->assertStringContainsString( '--newspack-ui-font-size-fine:var(--wp--preset--font-size--x-small, 14px);', $css );
-		$this->assertStringContainsString( '--newspack-ui-line-height-fine:var(--wp--custom--line-height--x-small, 1.4286);', $css );
+		$this->assertStringContainsString( '--newspack-ui-font-size-fine:0.875rem;', $css );
+		$this->assertStringContainsString( '--newspack-ui-line-height-fine:1.4285714286;', $css );
 
 		unset( $settings['custom']['line-height']['x-small'] );
 		$css = Newspack_UI_Theme_Style::get_css( [], $settings, [] );
@@ -1301,7 +1304,7 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 				],
 			],
 			$settings,
-			[] 
+			[]
 		);
 		$this->assertStringNotContainsString( '--newspack-ui-font-size-title-m:', $css );
 		$this->assertStringNotContainsString( '--newspack-ui-line-height-title-m:', $css );
@@ -1337,7 +1340,7 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 	 */
 	public function test_missing_caption_falls_back_to_x_small(): void {
 		$css = Newspack_UI_Theme_Style::get_css( [], $this->scale_settings(), [] );
-		$this->assertStringContainsString( '--newspack-ui-font-size-fine:var(--wp--preset--font-size--x-small, 14px);', $css );
+		$this->assertStringContainsString( '--newspack-ui-font-size-fine:0.875rem;', $css );
 
 		$settings = $this->scale_settings();
 		unset( $settings['typography']['fontSizes']['theme'][1] );
@@ -1708,7 +1711,7 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 			'size' => '1rem',
 		];
 		$settings['custom']['line-height']['small'] = 1.5;
-		$this->assertStringContainsString( '--newspack-ui-font-size-body:var(--wp--preset--font-size--small, 16px);', Newspack_UI_Theme_Style::get_css( [], $settings ) );
+		$this->assertStringContainsString( '--newspack-ui-font-size-body:1rem;', Newspack_UI_Theme_Style::get_css( [], $settings ) );
 	}
 
 	/**
@@ -1717,7 +1720,7 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 	public function test_invalid_caption_size_falls_back_to_x_small(): void {
 		$css = Newspack_UI_Theme_Style::get_css( [ 'elements' => [ 'caption' => [ 'typography' => [ 'fontSize' => 'bogus' ] ] ] ], $this->scale_settings() );
 
-		$this->assertStringContainsString( '--newspack-ui-font-size-fine:var(--wp--preset--font-size--x-small, 14px);', $css );
+		$this->assertStringContainsString( '--newspack-ui-font-size-fine:0.875rem;', $css );
 	}
 
 	/**
@@ -2214,7 +2217,7 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 			),
 			[]
 		);
-		$this->assertStringContainsString( '--newspack-ui-field-bg:var(--wp--preset--color--base);', $var );
+		$this->assertStringNotContainsString( '--newspack-ui-field-bg', $var );
 		$this->assertStringNotContainsString( '--newspack-ui-field-caret', $var );
 	}
 
@@ -2364,15 +2367,6 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The rule prints on the front end, in the editor canvas and in wp-admin.
-	 */
-	public function test_print_css_runs_on_front_editor_and_admin(): void {
-		foreach ( [ 'wp_enqueue_scripts', 'enqueue_block_assets', 'admin_enqueue_scripts' ] as $hook ) {
-			$this->assertSame( 20, has_action( $hook, [ Newspack_UI_Theme_Style::class, 'print_css' ] ), $hook );
-		}
-	}
-
-	/**
 	 * The rule is attached to the newspack-ui handle once.
 	 */
 	public function test_inline_css_attached_to_newspack_ui_handle_once(): void {
@@ -2500,7 +2494,7 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 					'text'       => '#ffffff',
 				],
 			],
-			[] 
+			[]
 		);
 		$this->assertStringContainsString( '--newspack-ui-field-caret:var(--newspack-ui-field-caret-light);', $dark );
 
@@ -2511,7 +2505,7 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 					'text'       => '#000000',
 				],
 			],
-			[] 
+			[]
 		);
 		$this->assertStringNotContainsString( '--newspack-ui-field-caret', $light );
 	}
@@ -2521,7 +2515,6 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 	 */
 	public function test_every_produced_property_has_a_type_and_prints(): void {
 		$settings = $this->settings();
-		$settings['custom']['line-height'] = [ 'medium' => '1.4' ];
 		$settings['typography']['fontSizes']['theme'] = [
 			[
 				'slug' => 'xx-small',
@@ -2621,5 +2614,133 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 			$this->assertNotSame( '', Newspack_UI_Theme_Style::property_type( $name ), $name );
 			$this->assertStringContainsString( $name . ':', $css, $name );
 		}
+	}
+
+	/**
+	 * A dark base prints stronger field borders for `prefers-contrast: more`; a white base prints none.
+	 */
+	public function test_high_contrast_field_borders_follow_the_theme_base(): void {
+		$dark = Newspack_UI_Theme_Style::get_css(
+			[
+				'color' => [
+					'background' => '#1e1e1e',
+					'text'       => '#ffffff',
+				],
+			],
+			[]
+		);
+		$this->assertSame( 1, preg_match( '/@media \(prefers-contrast: more\)\{:root\{([^{}]+)\}\}$/', $dark, $match ) );
+		preg_match_all( '/(--newspack-ui-color-input-border[a-z-]*):(#[0-9a-f]{6});/', $match[1], $found );
+		$more = array_combine( $found[1], $found[2] );
+		$this->assertCount( 3, $more );
+
+		preg_match( '/--newspack-ui-color-border-control:(#[0-9a-f]{6});/', $dark, $control );
+		$lc = static function ( $hex ) {
+			return Newspack_UI_Palette::lc( $hex, '#1e1e1e' );
+		};
+		$this->assertGreaterThan( $lc( $control[1] ), $lc( $more['--newspack-ui-color-input-border'] ) );
+		$this->assertGreaterThan( $lc( $more['--newspack-ui-color-input-border'] ), $lc( $more['--newspack-ui-color-input-border-hover'] ) );
+		$this->assertGreaterThanOrEqual( $lc( $control[1] ), $lc( $more['--newspack-ui-color-input-border-disabled'] ) );
+		$this->assertGreaterThan( $lc( $more['--newspack-ui-color-input-border-disabled'] ), $lc( $more['--newspack-ui-color-input-border'] ) );
+
+		$white = Newspack_UI_Theme_Style::get_css(
+			[
+				'color'    => [
+					'background' => '#ffffff',
+					'text'       => '#1e1e1e',
+				],
+				'elements' => [ 'button' => [ 'color' => [ 'background' => '#003da5' ] ] ],
+			],
+			[]
+		);
+		$this->assertStringNotContainsString( 'prefers-contrast', $white );
+	}
+
+	/**
+	 * Printing the high contrast block goes through the same allow-list as the rest of the rule.
+	 */
+	public function test_high_contrast_block_is_valid_css_without_injection(): void {
+		$css = Newspack_UI_Theme_Style::get_css(
+			[
+				'color' => [
+					'background' => '#1e1e1e',
+					'text'       => 'red;} body{display:none',
+				],
+			],
+			[]
+		);
+
+		$this->assertStringNotContainsString( 'display:none', $css );
+		$this->assertSame( substr_count( $css, '{' ), substr_count( $css, '}' ) );
+		$this->assertSame( 1, preg_match( '/^:root\{[^{}]*\}@media \(prefers-contrast: more\)\{:root\{[^{}]*\}\}$/', $css ) );
+	}
+
+	/**
+	 * A button size with a keyword line height prints neither half.
+	 */
+	public function test_button_size_with_keyword_line_height_prints_neither(): void {
+		foreach ( [ 'normal', 'inherit' ] as $line_height ) {
+			$css = Newspack_UI_Theme_Style::get_css(
+				[
+					'elements' => [
+						'button' => [
+							'typography' => [
+								'fontSize'   => '1.125rem',
+								'lineHeight' => $line_height,
+							],
+						],
+					],
+				],
+				[]
+			);
+			$this->assertStringNotContainsString( '--newspack-ui-font-size-button', $css, $line_height );
+			$this->assertStringNotContainsString( '--newspack-ui-line-height-button', $css, $line_height );
+		}
+	}
+
+	/**
+	 * A field background or text color that is not plain hex prints no pair, so the tones and the caret never come without it.
+	 */
+	public function test_field_pair_needs_plain_hex_on_both_sides(): void {
+		foreach ( [ 'var(--wp--custom--field--bg)', '#222222cc' ] as $background ) {
+			$css = Newspack_UI_Theme_Style::get_css(
+				[
+					'elements' => [
+						'textInput' => [
+							'color' => [
+								'background' => $background,
+								'text'       => '#eeeeee',
+							],
+						],
+					],
+				],
+				[]
+			);
+			$this->assertStringNotContainsString( '--newspack-ui-field-bg', $css, $background );
+			$this->assertStringNotContainsString( '--newspack-ui-field-ink', $css, $background );
+		}
+
+		$css = Newspack_UI_Theme_Style::get_css(
+			[
+				'elements' => [
+					'textInput' => [
+						'color' => [
+							'background' => '#222',
+							'text'       => '#eeeeee',
+						],
+					],
+				],
+			],
+			[]
+		);
+		$this->assertStringContainsString( '--newspack-ui-field-bg:#222;', $css );
+		$this->assertStringContainsString( '--newspack-ui-field-ink-muted:', $css );
+	}
+
+	/**
+	 * Switching blogs drops the memoized rule.
+	 */
+	public function test_switch_blog_resets_the_memoized_rule(): void {
+		$this->assertSame( 10, has_action( 'switch_blog', [ Newspack_UI_Theme_Style::class, 'reset_cache' ] ) );
 	}
 }
