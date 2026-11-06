@@ -77,10 +77,10 @@ $display_email           = $is_pending_email_change ? $pending_email_change : $u
 			/>
 			<span class="legend">
 				<?php
-				esc_html_e( 'This is how your name is displayed publicly.', 'newspack-plugin' );
 				if ( Reader_Activation\Comment_Display_Name::is_full_name_required() ) {
-					echo ' ';
-					esc_html_e( 'Comments show your first and last name instead.', 'newspack-plugin' );
+					esc_html_e( 'Comments show your first and last name, not this display name.', 'newspack-plugin' );
+				} else {
+					esc_html_e( 'This is how your name is displayed publicly.', 'newspack-plugin' );
 				}
 				?>
 			</span>
