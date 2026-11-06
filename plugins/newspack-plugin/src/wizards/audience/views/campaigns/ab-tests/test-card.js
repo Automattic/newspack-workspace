@@ -188,7 +188,11 @@ const TestCard = ( { test, data, onRenamed } ) => {
 				status="error"
 				isDismissible={ false }
 				politeness="polite"
-				spokenMessage={ __( 'More than one prompt in this test is the same version. Unpublish the extra prompt.', 'newspack-plugin' ) }
+				spokenMessage={ sprintf(
+					// Translators: %s is the test name.
+					__( 'More than one prompt in %s is the same version. Unpublish the extra prompt.', 'newspack-plugin' ),
+					name
+				) }
 			>
 				{ __(
 					'More than one prompt in this test is the same version. Readers still see both, and results only count the first. Unpublish the extra prompt:',
