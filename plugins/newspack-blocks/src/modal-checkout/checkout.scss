@@ -660,6 +660,7 @@
 		}
 
 		&:has(div.stripe-source-errors[role="alert"]:not(:empty)) {
+			--newspack-ui-field-border-color: var(--newspack-ui-color-error, #{np-colors.$error-600});
 			--newspack-ui-color-input-border: var(--newspack-ui-color-error, #{np-colors.$error-600});
 			--newspack-ui-color-input-border-hover: var(--newspack-ui-color-error, #{np-colors.$error-600});
 
