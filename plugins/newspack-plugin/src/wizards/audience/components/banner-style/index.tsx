@@ -81,7 +81,7 @@ export const getBannerPreviewProps = ( settings: BannerStyleSettings ) => {
 	const style = getBannerStyle( settings.style );
 	const bannerStyle: Record< string, string > = {};
 	const theme = window.newspackAudience?.content_banner;
-	const hasOptions = style === 'theme' || style === 'site';
+	const hasOptions = style === 'theme' || ( style === 'site' && settings.style === 'theme' );
 	if ( style === 'theme' ) {
 		if ( theme?.theme_font_heading ) {
 			bannerStyle[ '--newspack-theme-font-heading' ] = theme.theme_font_heading;
@@ -161,6 +161,8 @@ export default function BannerStyleControl( { settings, onChange, disabled = fal
 	const hasThemeStyle = supportsThemeStyle();
 	const style = getBannerStyle( settings.style );
 	const hasOptions = style === 'theme' || style === 'site';
+	const banner = window.newspackAudience?.content_banner;
+	const change = ( value: BannerStyleSettings ) => onChange( isSite ? { ...value, style: 'theme' } : value );
 	const startRow = { gridColumnStart: 1 };
 	const select = isSite ? null : (
 		<SelectControl
@@ -191,12 +193,12 @@ export default function BannerStyleControl( { settings, onChange, disabled = fal
 			resetLabel={ __( 'Reset banner color', 'newspack-plugin' ) }
 			help={
 				isSite
-					? __( "Defaults to the site's background color.", 'newspack-plugin' )
-					: __( 'Defaults to the Light style background. Text turns black or white to stay readable.', 'newspack-plugin' )
+					? __( 'Defaults to the site background.', 'newspack-plugin' )
+					: __( 'Defaults to the Light style background.', 'newspack-plugin' )
 			}
 			value={ settings.bg_color }
-			defaultValue={ colors[ 'neutral-000' ] }
-			onChange={ value => onChange( { bg_color: value } ) }
+			defaultValue={ ( isSite && banner?.site_bg ) || colors[ 'neutral-000' ] }
+			onChange={ value => change( { bg_color: value } ) }
 			disabled={ disabled }
 		/>
 	);
@@ -206,12 +208,14 @@ export default function BannerStyleControl( { settings, onChange, disabled = fal
 			resetLabel={ __( 'Reset text color', 'newspack-plugin' ) }
 			help={
 				isSite
-					? __( "Defaults to the site's text color, or black or white when you pick a banner color.", 'newspack-plugin' )
+					? __( 'Defaults to the site text color, or black or white once you pick a banner color.', 'newspack-plugin' )
 					: __( 'Defaults to black or white, whichever reads better on the banner color.', 'newspack-plugin' )
 			}
 			value={ settings.text_color }
-			defaultValue={ settings.bg_color ? toHex( getContrastColor( settings.bg_color ) ) : colors[ 'neutral-900' ] }
-			onChange={ value => onChange( { text_color: value } ) }
+			defaultValue={
+				settings.bg_color ? toHex( getContrastColor( settings.bg_color ) ) : ( isSite && banner?.site_text ) || colors[ 'neutral-900' ]
+			}
+			onChange={ value => change( { text_color: value } ) }
 			disabled={ disabled }
 		/>
 	);
@@ -221,12 +225,12 @@ export default function BannerStyleControl( { settings, onChange, disabled = fal
 			resetLabel={ __( 'Reset button color', 'newspack-plugin' ) }
 			help={
 				isSite
-					? __( "Defaults to the site's button color. The label turns black or white to stay readable.", 'newspack-plugin' )
-					: __( "Defaults to the theme's button color. The label turns black or white to stay readable.", 'newspack-plugin' )
+					? __( 'Defaults to the site button color.', 'newspack-plugin' )
+					: __( 'Defaults to the theme button color.', 'newspack-plugin' )
 			}
 			value={ settings.button_color }
-			defaultValue={ window.newspackAudience?.content_banner?.theme_button_bg || colors[ 'neutral-000' ] }
-			onChange={ value => onChange( { button_color: value } ) }
+			defaultValue={ ( isSite ? banner?.site_button_bg : banner?.theme_button_bg ) || colors[ 'neutral-900' ] }
+			onChange={ value => change( { button_color: value } ) }
 			disabled={ disabled }
 		/>
 	);
@@ -234,14 +238,18 @@ export default function BannerStyleControl( { settings, onChange, disabled = fal
 		<ColorField
 			label={ __( 'Button Text Color', 'newspack-plugin' ) }
 			resetLabel={ __( 'Reset button text color', 'newspack-plugin' ) }
-			help={ __( 'Defaults to black or white, whichever reads better on the button color.', 'newspack-plugin' ) }
+			help={
+				isSite
+					? __( 'Defaults to the site button text color, or black or white once you pick a button color.', 'newspack-plugin' )
+					: __( 'Defaults to black or white, whichever reads better on the button color.', 'newspack-plugin' )
+			}
 			value={ settings.button_text_color }
 			defaultValue={
 				settings.button_color
 					? toHex( getContrastColor( settings.button_color ) )
-					: toHex( window.newspackAudience?.content_banner?.theme_button_ink ) || colors[ 'neutral-000' ]
+					: toHex( isSite ? banner?.site_button_ink : banner?.theme_button_ink ) || colors[ 'neutral-000' ]
 			}
-			onChange={ value => onChange( { button_text_color: value } ) }
+			onChange={ value => change( { button_text_color: value } ) }
 			disabled={ disabled }
 		/>
 	);
@@ -249,10 +257,10 @@ export default function BannerStyleControl( { settings, onChange, disabled = fal
 		<ToggleGroupControl
 			label={ __( 'Shadow', 'newspack-plugin' ) }
 			value={ settings.shadow === false || settings.shadow === 0 ? 'disabled' : 'enabled' }
-			onChange={ value => onChange( { shadow: value === 'enabled' } ) }
+			onChange={ value => change( { shadow: value === 'enabled' } ) }
 			isBlock
-			disabled={ disabled }
 			__next40pxDefaultSize
+			__nextHasNoMarginBottom
 		>
 			<ToggleGroupControlOption label={ __( 'Enabled', 'newspack-plugin' ) } value="enabled" />
 			<ToggleGroupControlOption label={ __( 'Disabled', 'newspack-plugin' ) } value="disabled" />

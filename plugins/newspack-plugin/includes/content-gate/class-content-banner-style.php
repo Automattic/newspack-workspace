@@ -122,11 +122,12 @@ final class Content_Banner_Style {
 	 * @param string $button_color      The button background color.
 	 * @param string $text_color        The banner text color.
 	 * @param string $button_text_color The button text color.
+	 * @param string $stored_style      The style stored for the banner. The site style only prints colors when it is Theme.
 	 *
 	 * @return string The declarations, or an empty string.
 	 */
-	public static function get_inline_style( string $style, string $background_color, string $button_color, string $text_color = '', string $button_text_color = '' ): string {
-		if ( 'theme' !== $style && self::SITE_STYLE !== $style ) {
+	public static function get_inline_style( string $style, string $background_color, string $button_color, string $text_color = '', string $button_text_color = '', string $stored_style = 'theme' ): string {
+		if ( ! self::has_options( $style, $stored_style ) ) {
 			return '';
 		}
 		$properties        = [];
@@ -156,26 +157,29 @@ final class Content_Banner_Style {
 	}
 
 	/**
-	 * Whether a banner style has a shadow option. Light and Dark always have their shadow.
+	 * Whether a banner's colors and shadow apply. Light and Dark never take them. The site style takes them
+	 * only when the stored style is Theme, which the block theme wizard stores whenever one is set.
 	 *
-	 * @param string $style The style the banner renders with.
+	 * @param string $style        The style the banner renders with.
+	 * @param string $stored_style The style stored for the banner.
 	 *
 	 * @return bool
 	 */
-	public static function supports_shadow_option( string $style ): bool {
-		return 'theme' === $style || self::SITE_STYLE === $style;
+	public static function has_options( string $style, string $stored_style = 'theme' ): bool {
+		return 'theme' === $style || ( self::SITE_STYLE === $style && 'theme' === self::sanitize_style( $stored_style ) );
 	}
 
 	/**
 	 * Get the class that removes a banner's shadow.
 	 *
-	 * @param string $style  The style the banner renders with.
-	 * @param bool   $shadow Whether the banner has a shadow.
+	 * @param string $style        The style the banner renders with.
+	 * @param bool   $shadow       Whether the banner has a shadow.
+	 * @param string $stored_style The style stored for the banner.
 	 *
 	 * @return string The class, or an empty string.
 	 */
-	public static function get_shadow_class( string $style, bool $shadow ): string {
-		return ! $shadow && self::supports_shadow_option( $style ) ? 'has-no-shadow' : '';
+	public static function get_shadow_class( string $style, bool $shadow, string $stored_style = 'theme' ): string {
+		return ! $shadow && self::has_options( $style, $stored_style ) ? 'has-no-shadow' : '';
 	}
 
 	/**
@@ -188,6 +192,10 @@ final class Content_Banner_Style {
 	 *     theme_button_ink: string,
 	 *     theme_font_heading: string,
 	 *     theme_font_body: string,
+	 *     site_bg: string,
+	 *     site_text: string,
+	 *     site_button_bg: string,
+	 *     site_button_ink: string,
 	 * }
 	 */
 	public static function get_wizard_data(): array {
@@ -198,7 +206,19 @@ final class Content_Banner_Style {
 			'theme_button_ink'     => '',
 			'theme_font_heading'   => '',
 			'theme_font_body'      => '',
+			'site_bg'              => '',
+			'site_text'            => '',
+			'site_button_bg'       => '',
+			'site_button_ink'      => '',
 		];
+		if ( $data['uses_site_theme'] ) {
+			$palette                   = Newspack_UI_Theme_Style::get_palette( Newspack_UI_Theme_Style::get_global_styles() );
+			$css                       = Newspack_UI_Theme_Style::get_site_css();
+			$data['site_bg']           = self::sanitize_color( $palette['base'] );
+			$data['site_text']         = self::sanitize_color( $palette['contrast'] );
+			$data['site_button_bg']    = self::get_css_color( $css, '--newspack-ui-color-button-bg' );
+			$data['site_button_ink']   = self::get_css_color( $css, '--newspack-ui-color-button-text' );
+		}
 		if ( ! $data['supports_theme_style'] ) {
 			return $data;
 		}
@@ -213,6 +233,18 @@ final class Content_Banner_Style {
 			$data['theme_font_body']    = $stacks['body'] ?? '';
 		}
 		return $data;
+	}
+
+	/**
+	 * Read a hex color property out of the site Theme's CSS.
+	 *
+	 * @param string $css      The CSS.
+	 * @param string $property The custom property name.
+	 *
+	 * @return string A hex color, or an empty string.
+	 */
+	private static function get_css_color( string $css, string $property ): string {
+		return preg_match( '/' . preg_quote( $property, '/' ) . ':\s*(#[0-9a-fA-F]{3,6})\s*[;}]/', $css, $matches ) ? self::sanitize_color( $matches[1] ) : '';
 	}
 
 	/**

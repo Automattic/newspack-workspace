@@ -8,6 +8,7 @@
 namespace Newspack\Tests\Content_Gate;
 
 use Newspack\Content_Banner_Style;
+use Newspack\Content_Gate;
 use Newspack\Content_Gifting;
 use Newspack\Content_Gifting_CTA;
 use Newspack\Metering_Countdown;
@@ -32,6 +33,9 @@ class Test_Content_Banner_Style extends \WP_UnitTestCase {
 	public function tear_down(): void {
 		remove_theme_support( Newspack_UI_Theme_Style::THEME_SUPPORT );
 		unset( $_GET[ Content_Gifting::QUERY_ARG ] );
+		$is_enabled = new \ReflectionProperty( Metering_Countdown::class, 'is_enabled' );
+		$is_enabled->setAccessible( true );
+		$is_enabled->setValue( null, null );
 		parent::tear_down();
 	}
 
@@ -178,6 +182,25 @@ class Test_Content_Banner_Style extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Colors left over from another style do not apply on the site style, only a stored Theme style's do.
+	 */
+	public function test_site_style_ignores_colors_stored_under_light_or_dark(): void {
+		foreach ( [ 'light', 'dark', 'neon' ] as $stored ) {
+			$this->assertSame(
+				'',
+				Content_Banner_Style::get_inline_style( Content_Banner_Style::SITE_STYLE, '#fff59d', '#0d47a1', '#102030', '#ffeb3b', $stored ),
+				"A stored $stored style leaves the site tokens alone."
+			);
+			$this->assertSame( '', Content_Banner_Style::get_shadow_class( Content_Banner_Style::SITE_STYLE, false, $stored ) );
+		}
+		$this->assertNotSame(
+			'',
+			Content_Banner_Style::get_inline_style( Content_Banner_Style::SITE_STYLE, '#fff59d', '', '', '', 'theme' )
+		);
+		$this->assertSame( 'has-no-shadow', Content_Banner_Style::get_shadow_class( Content_Banner_Style::SITE_STYLE, false, 'theme' ) );
+	}
+
+	/**
 	 * The shadow is on unless turned off, and only the Theme and site styles can turn it off.
 	 */
 	public function test_shadow_class_is_added_only_when_off_on_theme_and_site_styles(): void {
@@ -271,31 +294,7 @@ class Test_Content_Banner_Style extends \WP_UnitTestCase {
 		Content_Gifting_CTA::set_bg_color( '#fff59d' );
 		Content_Gifting_CTA::set_button_color( '#0d47a1' );
 
-		$gifter  = self::factory()->user->create();
-		$post_id = self::factory()->post->create();
-		$key     = 'giftkey';
-		update_user_meta(
-			$gifter,
-			Content_Gifting::META,
-			[
-				'keys'   => [
-					$post_id => [
-						'key'       => $key,
-						'timestamp' => time(),
-					],
-				],
-				'limits' => [],
-			]
-		);
-		add_filter( 'newspack_content_gifting_enabled', '__return_true' );
-		add_filter( 'newspack_is_post_restricted', '__return_true' );
-		$this->go_to( get_permalink( $post_id ) );
-		$_GET[ Content_Gifting::QUERY_ARG ] = $gifter . '|' . $key;
-		$GLOBALS['post'] = get_post( $post_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
-
-		ob_start();
-		Content_Gifting_CTA::print_cta();
-		$markup = ob_get_clean();
+		$markup = $this->print_gifted_banner();
 
 		$this->assertStringContainsString( 'newspack-content-gifting__cta is-style-site', $markup );
 		$this->assertStringNotContainsString( 'is-style-theme', $markup );
@@ -306,36 +305,13 @@ class Test_Content_Banner_Style extends \WP_UnitTestCase {
 	 */
 	public function test_gifting_banner_prints_picked_colors_on_the_site_style(): void {
 		add_theme_support( Newspack_UI_Theme_Style::THEME_SUPPORT );
+		Content_Gifting_CTA::set_style( 'theme' );
 		Content_Gifting_CTA::set_bg_color( '#fff59d' );
 		Content_Gifting_CTA::set_text_color( '#102030' );
 		Content_Gifting_CTA::set_button_color( '#0d47a1' );
 		Content_Gifting_CTA::set_button_text_color( '#ffeb3b' );
 
-		$gifter  = self::factory()->user->create();
-		$post_id = self::factory()->post->create();
-		$key     = 'giftkey';
-		update_user_meta(
-			$gifter,
-			Content_Gifting::META,
-			[
-				'keys'   => [
-					$post_id => [
-						'key'       => $key,
-						'timestamp' => time(),
-					],
-				],
-				'limits' => [],
-			]
-		);
-		add_filter( 'newspack_content_gifting_enabled', '__return_true' );
-		add_filter( 'newspack_is_post_restricted', '__return_true' );
-		$this->go_to( get_permalink( $post_id ) );
-		$_GET[ Content_Gifting::QUERY_ARG ] = $gifter . '|' . $key;
-		$GLOBALS['post'] = get_post( $post_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
-
-		ob_start();
-		Content_Gifting_CTA::print_cta();
-		$markup = ob_get_clean();
+		$markup = $this->print_gifted_banner();
 
 		$this->assertStringContainsString( 'is-style-site', $markup );
 		$this->assertStringContainsString(
@@ -392,7 +368,68 @@ class Test_Content_Banner_Style extends \WP_UnitTestCase {
 		$this->assertStringNotContainsString( 'has-no-shadow', $this->print_gifted_banner(), 'Dark keeps its shadow.' );
 
 		add_theme_support( Newspack_UI_Theme_Style::THEME_SUPPORT );
+		$this->assertStringNotContainsString( 'has-no-shadow', $this->print_gifted_banner(), 'A stored Dark style leaves the site banner as it is.' );
+
+		Content_Gifting_CTA::set_style( 'theme' );
 		$this->assertStringContainsString( 'is-style-site has-no-shadow"', $this->print_gifted_banner() );
+	}
+
+	/**
+	 * The countdown banner prints the picked colors and the no-shadow class on the Theme style.
+	 */
+	public function test_countdown_banner_prints_picked_colors_and_shadow_class(): void {
+		$this->use_template( 'newspack-theme' );
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'Banner gate' ] );
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'         => 'Banner gate',
+				'status'        => 'publish',
+				'priority'      => 0,
+				'registration'  => [
+					'active'   => true,
+					'metering' => [
+						'enabled' => true,
+						'count'   => 3,
+						'period'  => 'month',
+						'scope'   => 'gate',
+					],
+				],
+				'custom_access' => [
+					'active'   => false,
+					'metering' => [ 'enabled' => false ],
+				],
+			]
+		);
+		add_filter(
+			'newspack_content_gate_post_id',
+			function () use ( $gate_id ) {
+				return $gate_id;
+			}
+		);
+		$is_enabled = new \ReflectionProperty( Metering_Countdown::class, 'is_enabled' );
+		$is_enabled->setAccessible( true );
+		$is_enabled->setValue( null, true );
+		Metering_Countdown::update_settings(
+			[
+				'style'             => 'theme',
+				'bg_color'          => '#fff59d',
+				'text_color'        => '#102030',
+				'button_color'      => '#0d47a1',
+				'button_text_color' => '#ffeb3b',
+				'shadow'            => false,
+			]
+		);
+
+		ob_start();
+		Metering_Countdown::print_cta();
+		$markup = ob_get_clean();
+
+		$this->assertStringContainsString( 'is-style-theme has-no-shadow', $markup );
+		$this->assertStringContainsString(
+			'style="--newspack-content-banner-bg:#fff59d;--newspack-content-banner-ink:#102030;--newspack-content-banner-button-bg:#0d47a1;--newspack-content-banner-button-ink:#ffeb3b"',
+			$markup
+		);
 	}
 
 	/**
@@ -402,5 +439,21 @@ class Test_Content_Banner_Style extends \WP_UnitTestCase {
 		$this->assertFalse( Content_Banner_Style::get_wizard_data()['uses_site_theme'] );
 		add_theme_support( Newspack_UI_Theme_Style::THEME_SUPPORT );
 		$this->assertTrue( Content_Banner_Style::get_wizard_data()['uses_site_theme'] );
+	}
+
+	/**
+	 * The wizard gets the site Theme's colors only where the site Theme is in use.
+	 */
+	public function test_wizard_data_carries_site_colors_only_on_the_site_theme(): void {
+		$keys = [ 'site_bg', 'site_text', 'site_button_bg', 'site_button_ink' ];
+		foreach ( $keys as $key ) {
+			$this->assertSame( '', Content_Banner_Style::get_wizard_data()[ $key ] );
+		}
+		add_theme_support( Newspack_UI_Theme_Style::THEME_SUPPORT );
+		$data = Content_Banner_Style::get_wizard_data();
+		foreach ( $keys as $key ) {
+			$this->assertArrayHasKey( $key, $data );
+			$this->assertIsString( $data[ $key ] );
+		}
 	}
 }

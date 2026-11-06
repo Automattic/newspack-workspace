@@ -35,6 +35,10 @@ declare global {
 				theme_button_ink: string;
 				theme_font_heading: string;
 				theme_font_body: string;
+				site_bg: string;
+				site_text: string;
+				site_button_bg: string;
+				site_button_ink: string;
 			};
 			// Optional: consumers guard with `?.`/fallbacks because the
 			// payload can be absent (plugin filter strips it, non-Audience
