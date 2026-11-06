@@ -965,6 +965,33 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		self::assertFalse( Newspack_Popups_AB_Tests::is_eligible_placement( 'custom2' ) );
 		self::assertTrue( Newspack_Popups_AB_Tests::is_eligible_placement( 'inline' ) );
 		self::assertTrue( Newspack_Popups_AB_Tests::is_eligible_placement( 'center' ) );
+		self::assertFalse( Newspack_Popups_AB_Tests::is_eligible_placement( 'center', true ) );
+		// Manual only is an overlay setting; an inline prompt ignores it.
+		self::assertTrue( Newspack_Popups_AB_Tests::is_eligible_placement( 'inline', true ) );
+	}
+
+	/**
+	 * An overlay set to Manual only is placed by a block or shortcode as a manual
+	 * prompt is, so it can't carry a test, and a tested overlay can't be switched to it.
+	 */
+	public function test_a_manual_only_overlay_is_refused_a_test() {
+		$prompt_id = $this->createPopup(
+			null,
+			[
+				'placement'   => 'center',
+				'manual_only' => true,
+			]
+		);
+		$response  = $this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ Newspack_Popups_AB_Tests::META_TEST_ID => 'manual-only-test' ] ] );
+		self::assertSame( 400, $response->get_status() );
+		self::assertSame( 'newspack_popups_ab_ineligible_placement', $response->get_data()['code'] );
+		self::assertStringContainsString( 'Manual only', $response->get_data()['message'] );
+		self::assertSame( '', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+
+		$tested_id = $this->create_test_variant( 'manual-only-move', 'a', [ 'placement' => 'center' ] );
+		$response  = $this->save_prompt_as( $tested_id, 'administrator', [ 'meta' => [ 'manual_only' => true ] ] );
+		self::assertSame( 400, $response->get_status() );
+		self::assertSame( '', (string) get_post_meta( $tested_id, 'manual_only', true ) );
 	}
 
 	/**

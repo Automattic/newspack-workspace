@@ -46,13 +46,16 @@ export const slugifyTestId = value =>
 		.replace( /^-|-$/g, '' );
 
 /**
- * Whether a prompt with this placement can be part of a test.
+ * Whether a prompt with this placement can be part of a test. Mirrors the
+ * server's is_eligible_placement(), including its Manual only rule.
  *
- * @param {string}   placement  Placement value.
- * @param {string[]} ineligible Placements the server refuses.
+ * @param {string}   placement         Placement value.
+ * @param {string[]} ineligible        Placements the server refuses.
+ * @param {boolean}  manualOnlyOverlay Whether the prompt is an overlay set to Manual only.
  * @return {boolean} Eligible.
  */
-export const isEligiblePlacement = ( placement, ineligible ) => ! ( ineligible || [] ).includes( placement );
+export const isEligiblePlacement = ( placement, ineligible, manualOnlyOverlay = false ) =>
+	! manualOnlyOverlay && ! ( ineligible || [] ).includes( placement );
 
 /**
  * One line describing the traffic split.

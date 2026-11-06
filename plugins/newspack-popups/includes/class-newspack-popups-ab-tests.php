@@ -337,13 +337,15 @@ final class Newspack_Popups_AB_Tests {
 		if (
 			self::is_enabled()
 			&& ! $is_autosave
-			&& ( ( $changes( self::META_TEST_ID ) && $test_id !== $stored( self::META_TEST_ID ) ) || $changes( 'placement' ) )
+			&& ( ( $changes( self::META_TEST_ID ) && $test_id !== $stored( self::META_TEST_ID ) ) || $changes( 'placement' ) || $changes( 'manual_only' ) )
 			&& '' !== $test_id
-			&& ! self::is_eligible_placement( $effective( 'placement' ) )
+			&& ! self::is_eligible_placement( $effective( 'placement' ), rest_sanitize_boolean( $effective( 'manual_only' ) ) )
 		) {
 			return new WP_Error(
 				'newspack_popups_ab_ineligible_placement',
-				__( 'A/B tests only work on prompts that Newspack places for you. Clear the test name or choose another placement.', 'newspack-popups' ),
+				self::is_eligible_placement( $effective( 'placement' ) )
+					? __( 'A/B tests only work on prompts that Newspack places for you. Clear the test name or turn off Manual only.', 'newspack-popups' )
+					: __( 'A/B tests only work on prompts that Newspack places for you. Clear the test name or choose another placement.', 'newspack-popups' ),
 				[ 'status' => 400 ]
 			);
 		}
@@ -461,7 +463,8 @@ final class Newspack_Popups_AB_Tests {
 	/**
 	 * Placements a tested prompt can't have. Manual and custom placements render
 	 * wherever a block or shortcode puts them, so there is no slot to split
-	 * between variants.
+	 * between variants. An overlay set to Manual only is in the same position;
+	 * is_eligible_placement() covers it, since it is a flag rather than a value.
 	 *
 	 * @return string[] Placement values.
 	 */
@@ -470,13 +473,20 @@ final class Newspack_Popups_AB_Tests {
 	}
 
 	/**
-	 * Whether a prompt with this placement can be part of a test.
+	 * Whether a prompt with this placement can be part of a test. Follows
+	 * Newspack_Popups_Model::is_manual_only(), which treats an overlay set to
+	 * Manual only like the manual placement.
 	 *
-	 * @param string $placement Placement value.
+	 * @param string $placement   Placement value.
+	 * @param bool   $manual_only The prompt's Manual only setting.
 	 * @return bool
 	 */
-	public static function is_eligible_placement( $placement ) {
-		return ! in_array( (string) $placement, self::get_ineligible_placements(), true );
+	public static function is_eligible_placement( $placement, $manual_only = false ) {
+		$placement = (string) $placement;
+		if ( in_array( $placement, self::get_ineligible_placements(), true ) ) {
+			return false;
+		}
+		return ! ( $manual_only && in_array( $placement, Newspack_Popups_Model::get_overlay_placements(), true ) );
 	}
 
 	/**

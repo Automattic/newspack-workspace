@@ -30,6 +30,8 @@ const ABTestPanel = ( {
 	newspack_popups_ab_test_goal: goal = '',
 	newspack_popups_ab_control_share: controlShare = 50,
 	placement,
+	manual_only: manualOnly = false,
+	isOverlay = false,
 	postId,
 	onMetaFieldChange,
 } ) => {
@@ -39,7 +41,8 @@ const ABTestPanel = ( {
 		variants = {},
 		ineligible_placements: ineligible = [],
 	} = window?.newspack_popups_data?.ab_testing || {};
-	const eligible = isEligiblePlacement( placement, ineligible );
+	const manualOnlyOverlay = isOverlay && !! manualOnly;
+	const eligible = isEligiblePlacement( placement, ineligible, manualOnlyOverlay );
 
 	// What the author typed, kept apart from the stored slug so a trailing space
 	// or hyphen survives until the next keystroke instead of being trimmed away
@@ -140,7 +143,12 @@ const ABTestPanel = ( {
 	// before the prompt can save, so it is spoken politely each time it renders.
 	const placementMessage =
 		__( 'A/B tests only work on prompts that Newspack places for you.', 'newspack-popups' ) +
-		( testId ? ' ' + __( 'Clear the test name or choose another placement to save.', 'newspack-popups' ) : '' );
+		( testId
+			? ' ' +
+			  ( isEligiblePlacement( placement, ineligible )
+					? __( 'Clear the test name or turn off Manual only to save.', 'newspack-popups' )
+					: __( 'Clear the test name or choose another placement to save.', 'newspack-popups' ) )
+			: '' );
 	return (
 		<Stack direction="column" gap="lg">
 			{ ! canManage && (

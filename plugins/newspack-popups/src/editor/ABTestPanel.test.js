@@ -184,6 +184,13 @@ describe( 'ABTestPanel', () => {
 		expect( screen.getByLabelText( 'Test name' ).disabled ).toBe( false );
 	} );
 
+	it( 'treats an overlay set to Manual only as ineligible, and says which setting to change', () => {
+		renderPanel( { placement: 'center', isOverlay: true, manual_only: true, newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'a' } );
+		const note = screen.getAllByRole( 'note' )[ 0 ];
+		expect( note.dataset.status ).toBe( 'error' );
+		expect( note.textContent ).toContain( 'Clear the test name or turn off Manual only to save.' );
+	} );
+
 	it( 'renders read-only for a user the site excludes from managing tests', () => {
 		window.newspack_popups_data.ab_testing.can_manage_tests = false;
 

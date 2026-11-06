@@ -22,6 +22,7 @@ it( 'treats manual and custom placements as ineligible', () => {
 	expect( isEligiblePlacement( 'manual', [ 'manual', 'custom1' ] ) ).toBe( false );
 	expect( isEligiblePlacement( 'custom1', [ 'manual', 'custom1' ] ) ).toBe( false );
 	expect( isEligiblePlacement( 'inline', [ 'manual', 'custom1' ] ) ).toBe( true );
+	expect( isEligiblePlacement( 'center', [ 'manual', 'custom1' ], true ) ).toBe( false );
 } );
 
 it( 'summarizes the split from the control share', () => {
