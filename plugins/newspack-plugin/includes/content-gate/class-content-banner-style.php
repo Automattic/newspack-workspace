@@ -18,6 +18,11 @@ final class Content_Banner_Style {
 	const STYLES = [ 'light', 'dark', 'theme' ];
 
 	/**
+	 * The render style of banners on a site that uses the adapter. Never stored, so it is not in self::STYLES.
+	 */
+	const SITE_STYLE = 'site';
+
+	/**
 	 * Whether the active theme supports the Theme style.
 	 *
 	 * The Theme style follows the classic theme's buttons, so it is only offered
@@ -57,11 +62,11 @@ final class Content_Banner_Style {
 	 *
 	 * @param mixed $style The stored style.
 	 *
-	 * @return string One of self::STYLES, or 'site' when the site Theme is in use.
+	 * @return string One of self::STYLES, or self::SITE_STYLE when the site Theme is in use.
 	 */
 	public static function get_render_style( mixed $style ): string {
 		if ( self::uses_site_theme() ) {
-			return 'site';
+			return self::SITE_STYLE;
 		}
 		$style = self::sanitize_style( $style );
 		if ( 'theme' === $style && ! self::supports_theme_style() ) {
@@ -88,16 +93,18 @@ final class Content_Banner_Style {
 	 * Get the variant class for the banner's subscribe button.
 	 *
 	 * The Theme style sets its own button colors in the banner stylesheet, so
-	 * it takes no variant class.
+	 * it takes no variant class. The site style uses the primary button, which
+	 * the site Theme colors.
 	 *
-	 * @param string $style The style the banner renders with.
+	 * @param string $style The style the banner renders with, one of self::STYLES or self::SITE_STYLE.
 	 *
 	 * @return string The button variant class.
 	 */
 	public static function get_button_class( string $style ): string {
 		return match ( $style ) {
-			'dark'  => 'newspack-ui__button--primary-light',
-			'theme' => '',
+			'dark'            => 'newspack-ui__button--primary-light',
+			'theme'           => '',
+			self::SITE_STYLE  => 'newspack-ui__button--primary',
 			default => 'newspack-ui__button--primary',
 		};
 	}
@@ -106,9 +113,10 @@ final class Content_Banner_Style {
 	 * Get the inline CSS custom properties for a banner.
 	 *
 	 * Text on each color is black or white, whichever reads better. An empty
-	 * color sets nothing, so the stylesheet's defaults apply.
+	 * color sets nothing, so the stylesheet's defaults apply. Only the Theme
+	 * style prints colors; the site style takes everything from the site Theme.
 	 *
-	 * @param string $style            The style the banner renders with.
+	 * @param string $style            The style the banner renders with, one of self::STYLES or self::SITE_STYLE.
 	 * @param string $background_color The banner background color.
 	 * @param string $button_color     The button background color.
 	 *
