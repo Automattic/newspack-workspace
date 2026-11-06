@@ -3,16 +3,14 @@
  */
 
 import { Button } from '@wordpress/components';
-import { DataViews } from '@wordpress/dataviews/wp';
 import { useMemo, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { envelope } from '@wordpress/icons';
 
-import { EmptyState, evenColumns, withoutColumnStyles } from 'newspack-components';
+import { DataViews, EmptyState } from 'newspack-components';
 import { getAdminUrl, getCptSlug } from '../../admin-globals';
 import LoadingState from '../../components/loading-state';
 import HeaderCount from '../../components/header-count';
-import InlineFiltersLayout from '../../components/inline-filters-layout';
 import ItemsPerPage from '../../components/items-per-page';
 import { EMPTY_STATE_CLASS, getEmptyStateHeading } from '../../constants';
 import { useHeaderActions } from '../../header-actions-context';
@@ -114,21 +112,19 @@ export default function NewslettersListScreen() {
 					className="newspack-newsletters-list"
 					data={ data }
 					fields={ fields }
-					view={ evenColumns( view ) }
-					onChangeView={ nextView => setView( withoutColumnStyles( nextView ) ) }
+					view={ view }
+					onChangeView={ setView }
 					actions={ actions }
 					paginationInfo={ paginationInfo }
 					defaultLayouts={ DEFAULT_LAYOUTS }
 					isLoading={ isLoading }
 					getItemId={ item => String( item.id ) }
 					config={ DATAVIEWS_CONFIG }
-				>
-					<InlineFiltersLayout
-						header={
-							<ItemsPerPage value={ view.perPage } onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) } />
-						}
-					/>
-				</DataViews>
+					inlineFilters
+					header={
+						<ItemsPerPage value={ view.perPage } onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) } />
+					}
+				/>
 			</LockedPostsContext.Provider>
 			{ quickEditItem && (
 				<NewslettersQuickEditPanel

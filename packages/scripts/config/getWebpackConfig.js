@@ -4,8 +4,8 @@ const DependencyExtractionWebpackPlugin = require( '@wordpress/dependency-extrac
 const defaultConfig = require( '@wordpress/scripts/config/webpack.config' );
 
 // @wordpress packages that WP does NOT expose as runtime globals and that
-// `@wordpress/admin-ui`/`@wordpress/ui` depend on, so they must be bundled.
-const FORCE_BUNDLE = new Set( [ '@wordpress/theme', '@wordpress/style-runtime' ] );
+// `@wordpress/admin-ui`/`@wordpress/ui`/`@wordpress/dataviews` depend on, so they must be bundled.
+const FORCE_BUNDLE = new Set( [ '@wordpress/theme', '@wordpress/style-runtime', '@wordpress/react-inert-value' ] );
 
 module.exports = ( ...args ) => {
 	let config = { ...defaultConfig };

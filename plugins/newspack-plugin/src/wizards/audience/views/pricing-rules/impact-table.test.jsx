@@ -6,7 +6,7 @@
 /**
  * External dependencies
  */
-import { render, screen, fireEvent, waitForElementToBeRemoved } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 /**
  * Internal dependencies
@@ -83,7 +83,7 @@ describe( 'ImpactTable', () => {
 		// The header menu renders over a backdrop that hides the table from the
 		// accessibility tree, so the rows only read once it has gone.
 		fireEvent.keyDown( ascending, { key: 'Escape' } );
-		await waitForElementToBeRemoved( () => screen.queryByRole( 'menu' ) );
+		await waitFor( () => expect( screen.queryByRole( 'menu' ) ).not.toBeInTheDocument() );
 
 		expect( bodyRows() ).toBe( 10 );
 		// Ascending by regular puts the last-listed products first.

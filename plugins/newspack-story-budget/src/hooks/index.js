@@ -90,7 +90,8 @@ export const useStoryFields = ( { allowEdit } ) => {
 					id: field.slug,
 					label: field.name,
 					isVisible: () => field.show_in_table || field.always_visible_in_table,
-					type: field.type,
+					// DataViews offers "is all" only on its `array` type.
+					type: field.is_multiple ? 'array' : field.type,
 					enableHiding: ! field.always_visible_in_table,
 					enableSorting: field.is_sortable,
 					elements: getFieldElements( field ),
