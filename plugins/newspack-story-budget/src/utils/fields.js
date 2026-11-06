@@ -29,6 +29,26 @@ export const getFieldElements = field => {
 	} ) );
 };
 
+/**
+ * The DataViews field type for a Story Budget field.
+ *
+ * DataViews offers the "is all" operator only on its `array` type, and
+ * right-aligns `number` columns, which suits counts but not a field that
+ * shows a label picked from its options.
+ *
+ * @param {Object} field The Story Budget field.
+ * @return {string} The DataViews field type.
+ */
+export const getDataViewsType = field => {
+	if ( field.is_multiple ) {
+		return 'array';
+	}
+	if ( field.options?.length && [ 'number', 'integer' ].includes( field.type ) ) {
+		return 'text';
+	}
+	return field.type;
+};
+
 export const getFilterByOperators = field => {
 	if ( field.is_multiple ) {
 		return [ 'isAny', 'isNone', 'isAll', 'isNotAll' ];

@@ -11,7 +11,7 @@ import { applyFilters } from '@wordpress/hooks';
  */
 import { NAMESPACE } from '../store/constants';
 import TableRowField from '../components/table-row-field';
-import { getFieldElements, getFilterByOperators } from '../utils/fields';
+import { getDataViewsType, getFieldElements, getFilterByOperators } from '../utils/fields';
 import { isBudgetStories } from '../utils/budgets';
 import StoriesEdit from '../components/stories-edit';
 
@@ -90,8 +90,7 @@ export const useStoryFields = ( { allowEdit } ) => {
 					id: field.slug,
 					label: field.name,
 					isVisible: () => field.show_in_table || field.always_visible_in_table,
-					// DataViews offers "is all" only on its `array` type.
-					type: field.is_multiple ? 'array' : field.type,
+					type: getDataViewsType( field ),
 					enableHiding: ! field.always_visible_in_table,
 					enableSorting: field.is_sortable,
 					elements: getFieldElements( field ),
