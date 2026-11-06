@@ -11,7 +11,7 @@ import { drafts, gift, published } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import StatusIndicator, { statusGlyph, STATUS_NAMES } from '.';
+import StatusIndicator, { statusGlyph, statusTone, STATUS_NAMES } from '.';
 
 describe( 'StatusIndicator', () => {
 	it( 'renders the glyph alongside the label', () => {
@@ -40,6 +40,19 @@ describe( 'StatusIndicator', () => {
 		expect( free.querySelector( 'svg' ).innerHTML ).not.toBe( active.querySelector( 'svg' ).innerHTML );
 	} );
 
+	it( 'tints a named status with its tone', () => {
+		const { container } = render( <StatusIndicator status="error">Failed</StatusIndicator> );
+		expect( container.querySelector( '.newspack-status-indicator' ) ).toHaveClass( 'is-error' );
+	} );
+
+	it( 'leaves a passed glyph and a toneless status in the text colour', () => {
+		const { container: free } = render( <StatusIndicator icon={ gift }>Free</StatusIndicator> );
+		const { container: privateStatus } = render( <StatusIndicator status="private">Private</StatusIndicator> );
+		[ free, privateStatus ].forEach( container =>
+			expect( container.querySelector( '.newspack-status-indicator' ).className ).not.toMatch( /\bis-/ )
+		);
+	} );
+
 	it( 'keeps the consumer class and passes the rest through', () => {
 		const { container } = render(
 			<StatusIndicator className="custom" data-testid="status" status="active">
@@ -66,5 +79,15 @@ describe( 'statusGlyph', () => {
 			[ 'active', 'done' ],
 			[ 'cancelled', 'ended' ],
 		] );
+	} );
+} );
+
+describe( 'statusTone', () => {
+	// A live state and a stopped one must never share a colour, or the tint would
+	// say the opposite of the glyph.
+	it( 'keeps live and stopped states apart', () => {
+		expect( statusTone( 'active' ) ).toBe( 'success' );
+		expect( statusTone( 'error' ) ).toBe( 'error' );
+		[ 'draft', 'cancelled', 'ended', 'trash' ].forEach( name => expect( statusTone( name ) ).toBe( 'neutral' ) );
 	} );
 } );

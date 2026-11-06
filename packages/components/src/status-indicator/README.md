@@ -1,11 +1,13 @@
 # StatusIndicator
 
-A status glyph followed by its label, for the Status column of a DataView.
+A status glyph followed by its label, for the Status column of a DataView. The
+glyph is tinted by what the status means, so a column can be scanned by colour;
+the label stays in the text colour.
 
 A badge is an attention marker. In a column where every row carries one it marks
-nothing and adds a block of colour to each row, so the quiet treatment is the
-default there and a badge is kept for the rare row that genuinely stands out,
-such as a group with a seat request waiting on payment.
+nothing and adds a block of colour to each row, so the glyph carries the colour
+there and a badge is kept for the rare row that genuinely stands out, such as a
+group with a seat request waiting on payment.
 
 ## Importing
 
@@ -19,7 +21,7 @@ import StatusIndicator from '../../packages/components/src/status-indicator';
 // The vocabulary, for a column's own test. Deliberately not on the barrel: that
 // entry also pulls `Page`'s `:root` token block and the wizards store into
 // whichever bundle asks for it.
-import { statusGlyph, STATUS_NAMES } from '../../packages/components/src/status-indicator';
+import { statusGlyph, statusTone, STATUS_NAMES } from '../../packages/components/src/status-indicator';
 ```
 
 ## Usage
@@ -58,20 +60,20 @@ takes the props of a `div`.
 
 ## The vocabulary
 
-| Name | Glyph | What it means |
-| --- | --- | --- |
-| `active` | check circle | Live now: a published plan, a running subscription. |
-| `done` | check circle | Finished successfully: a sent newsletter, a completed sync. |
-| `scheduled` | clock | Waiting for a date to arrive. |
-| `draft` | half circle | Not live yet, or switched off. |
-| `pending` | part-filled circle | Waiting on something outside the publisher's hands. |
-| `attention` | exclamation circle | Live but needing a look, usually a payment. |
-| `error` | error | Failed, and the one state that asks the reader to act. |
-| `progress` | update | Running right now. |
-| `cancelled` | slash circle | Stopped on purpose. |
-| `ended` | slash circle | Stopped because its window closed. |
-| `private` | lock | Live, but not publicly reachable. |
-| `trash` | trash | Binned. |
+| Name | Glyph | Tone | What it means |
+| --- | --- | --- | --- |
+| `active` | check circle | success | Live now: a published plan, a running subscription. |
+| `done` | check circle | success | Finished successfully: a sent newsletter, a completed sync. |
+| `scheduled` | clock | info | Waiting for a date to arrive. |
+| `draft` | half circle | neutral | Not live yet, or switched off. |
+| `pending` | part-filled circle | caution | Waiting on something outside the publisher's hands. |
+| `attention` | exclamation circle | warning | Live but needing a look, usually a payment. |
+| `error` | error | error | Failed, and the one state that asks the reader to act. |
+| `progress` | update | info | Running right now. |
+| `cancelled` | slash circle | neutral | Stopped on purpose. |
+| `ended` | slash circle | neutral | Stopped because its window closed. |
+| `private` | lock | none | Live, but not publicly reachable. |
+| `trash` | trash | neutral | Binned. |
 
 The component owns this so one meaning draws one mark everywhere. Before it
 existed the vocabulary lived in ten screen-level maps, and had already drifted:
@@ -90,10 +92,20 @@ them apart later without touching a consumer. The pairs are `active`/`done` and
 rule by using distinct names and at most one half of a pair. `statusGlyph` is
 exported for the columns that want to assert it directly.
 
-The glyph does the separating on its own: the component inherits its colour from
-the surrounding text and tints nothing, so no status leans on colour to carry
-its meaning. That also means a state that needs to shout cannot, which is the
-trade the quiet treatment makes.
+## Colour
+
+Each tone is the design system's `--wpds-color-foreground-content-<tone>-weak`
+token, applied to the glyph through an `is-<tone>` class. Without the token
+sheet the glyph falls back to the text colour, which is how it looked before
+tones existed.
+
+Colour backs the glyph up; it does not replace it. The glyph still does the
+separating on its own, so no status leans on colour to carry its meaning, and
+two statuses may share a tone where the glyphs tell them apart (`scheduled` and
+`progress`, or the stopped states). `private` has no tone: it is live, and
+tinting it like `active` would make the two read alike. A glyph passed through
+`icon` is never tinted, since a classifying field has no lifecycle to colour.
+`statusTone` is exported alongside `statusGlyph` for tests.
 
 ## When to pass a glyph instead
 
