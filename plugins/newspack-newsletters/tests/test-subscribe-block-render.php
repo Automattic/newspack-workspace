@@ -49,6 +49,11 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 	 * Remove the filter and forget the hidden lists.
 	 */
 	public function tear_down() {
+		if ( null !== $this->original_theme ) {
+			switch_theme( $this->original_theme );
+			$this->original_theme = null;
+		}
+		wp_clean_themes_cache();
 		remove_filter( 'newspack_newsletters_subscription_lists', [ $this, 'hide_lists' ] );
 		remove_filter( 'newspack_newsletters_subscription_list_gates', [ $this, 'report_premium_lists' ] );
 		$this->hidden_list_ids    = [];
@@ -780,20 +785,32 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 		$this->assertStringNotContainsString( 'newspack-ui__badge', $this->get_checkbox_row( '8', $html ) );
 	}
 	/**
+	 * Theme to restore after each test.
+	 *
+	 * @var string|null
+	 */
+	private $original_theme = null;
+
+	/**
 	 * Switch theme, skipping when it is not available.
 	 *
 	 * @param string $slug Theme slug.
-	 *
-	 * @return string Previous stylesheet.
 	 */
 	private function use_theme( $slug ) {
-		$original = get_stylesheet();
-		switch_theme( $slug );
-		if ( get_stylesheet() !== $slug ) {
-			switch_theme( $original );
+		if ( ! wp_get_theme( $slug )->exists() ) {
 			$this->markTestSkipped( $slug . ' is not available in this environment.' );
 		}
-		return $original;
+		$this->original_theme = get_stylesheet();
+		switch_theme( $slug );
+	}
+
+	/**
+	 * Switch to the classic theme fixture.
+	 */
+	private function use_classic_theme() {
+		register_theme_directory( NEWSPACK_NEWSLETTERS_PLUGIN_FILE . 'tests/fixtures/themes' );
+		wp_clean_themes_cache();
+		$this->use_theme( 'zz-classic' );
 	}
 
 	/**
@@ -811,12 +828,11 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Default colours on a block theme leave the button to the site's styles.
+	 * Default colors on a block theme leave the button to the site's styles.
 	 */
 	public function test_default_colors_render_without_inline_style_when_active() {
-		$original = $this->use_theme( 'twentytwentyfive' );
-		$tag      = $this->get_button_tag();
-		switch_theme( $original );
+		$this->use_theme( 'twentytwentyfive' );
+		$tag = $this->get_button_tag();
 
 		$this->assertStringContainsString( 'wp-element-button', $tag );
 		$this->assertStringNotContainsString( 'has-background-color', $tag );
@@ -828,22 +844,45 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 	 * A picked background keeps its inline style on a block theme.
 	 */
 	public function test_custom_background_keeps_inline_style() {
-		$original = $this->use_theme( 'twentytwentyfive' );
-		$tag      = $this->get_button_tag( [ 'backgroundColor' => '#6c6c6c' ] );
-		switch_theme( $original );
+		$this->use_theme( 'twentytwentyfive' );
+		$tag = $this->get_button_tag( [ 'backgroundColor' => '#6c6c6c' ] );
 
 		$this->assertStringContainsString( 'has-background-color', $tag );
 		$this->assertStringContainsString( 'background-color: #6c6c6c;', $tag );
 	}
 
 	/**
+	 * Each color combination marks the button so the stylesheet knows which color is set.
+	 */
+	public function test_each_color_combination_sets_its_own_classes() {
+		$this->use_theme( 'twentytwentyfive' );
+
+		$text_only = $this->get_button_tag( [ 'textColor' => '#000000' ] );
+		$this->assertStringContainsString( 'has-text-color', $text_only );
+		$this->assertStringNotContainsString( 'has-background-color', $text_only );
+		$this->assertStringContainsString( 'color: #000000;', $text_only );
+
+		$background_only = $this->get_button_tag( [ 'backgroundColor' => '#6c6c6c' ] );
+		$this->assertStringContainsString( 'has-background-color', $background_only );
+		$this->assertStringNotContainsString( 'has-text-color', $background_only );
+
+		$both = $this->get_button_tag(
+			[
+				'backgroundColor' => '#6c6c6c',
+				'textColor'       => '#000000',
+			]
+		);
+		$this->assertStringContainsString( 'has-background-color', $both );
+		$this->assertStringContainsString( 'has-text-color', $both );
+	}
+
+	/**
 	 * A classic theme renders the button without the core button class.
 	 */
 	public function test_classic_behavior_unchanged() {
-		$original = $this->use_theme( 'newspack-theme' );
-		$default  = $this->get_button_tag();
-		$custom   = $this->get_button_tag( [ 'backgroundColor' => '#6c6c6c' ] );
-		switch_theme( $original );
+		$this->use_classic_theme();
+		$default = $this->get_button_tag();
+		$custom  = $this->get_button_tag( [ 'backgroundColor' => '#6c6c6c' ] );
 
 		$this->assertStringNotContainsString( 'wp-element-button', $default );
 		$this->assertStringNotContainsString( 'background-color:', $default );

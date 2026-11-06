@@ -91,11 +91,11 @@ describe( 'hasGatedLists', () => {
 } );
 
 describe( 'usesSiteButtonStyle', () => {
-	it( 'is true when both colours are the defaults on a block theme', () => {
+	it( 'is true when both colors are the defaults on a block theme', () => {
 		expect( usesSiteButtonStyle( '#dd3333', '#ffffff', true ) ).toBe( true );
 	} );
 
-	it( 'is false when either colour was picked', () => {
+	it( 'is false when either color was picked', () => {
 		expect( usesSiteButtonStyle( '#6c6c6c', '#ffffff', true ) ).toBe( false );
 		expect( usesSiteButtonStyle( '#dd3333', '#000000', true ) ).toBe( false );
 	} );
