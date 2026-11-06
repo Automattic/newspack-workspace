@@ -53,6 +53,9 @@ class Newspack_UI_Theme_Style {
 		'--newspack-ui-field-bg'              => 'color',
 		'--newspack-ui-field-ink'             => 'color',
 		'--newspack-ui-field-font-family'     => 'font-family',
+		'--newspack-ui-field-caret'           => 'reference',
+		'--newspack-ui-field-ink-subtle'      => 'color',
+		'--newspack-ui-field-ink-muted'       => 'color',
 	];
 
 	/**
@@ -668,9 +671,59 @@ class Newspack_UI_Theme_Style {
 	}
 
 	/**
+	 * One border property of a field element, as a single value.
+	 *
+	 * Four identical per-side values count as one; differing sides give nothing.
+	 *
+	 * @param array  $border   The element's border.
+	 * @param string $property 'width', 'color' or 'style'.
+	 *
+	 * @return mixed Null when the property is not set or the sides differ.
+	 */
+	private static function border_value( array $border, string $property ) {
+		$values = [];
+		foreach ( [ 'top', 'right', 'bottom', 'left' ] as $side ) {
+			if ( is_array( $border[ $side ] ?? null ) && isset( $border[ $side ][ $property ] ) ) {
+				$values[] = $border[ $side ][ $property ];
+			}
+		}
+		if ( [] === $values ) {
+			return $border[ $property ] ?? null;
+		}
+
+		return 4 === count( $values ) && 1 === count( array_unique( array_map( 'strval', $values ) ) ) ? $values[0] : null;
+	}
+
+	/**
+	 * A field border width as one plain length.
+	 *
+	 * @param mixed $width The width from the global styles.
+	 *
+	 * @return string Empty when it is not a non-negative px, rem or em length, zero, or a var() reference.
+	 */
+	private static function parse_border_width( $width ): string {
+		if ( 0 === $width ) {
+			return '0px';
+		}
+		if ( ! is_string( $width ) ) {
+			return '';
+		}
+		$width = trim( $width );
+		if ( '0' === $width ) {
+			return '0px';
+		}
+		if ( 1 === preg_match( '/^(?:(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem|em))$/D', $width ) ) {
+			return '.' === $width[0] ? '0' . $width : $width;
+		}
+
+		return 0 === strpos( $width, 'var(' ) ? self::sanitize_value( $width, 'length' ) : '';
+	}
+
+	/**
 	 * The field tokens, from the text input and select element styles.
 	 *
-	 * Background and text color print as a pair from one element, or not at all. The border color is the publisher's choice and is not checked.
+	 * Background and text color print as a pair from one element, or not at all, with the placeholder, toggle and caret tones solved against that pair.
+	 * The border color is the publisher's choice and is not checked.
 	 *
 	 * @param array $global_styles Resolved global styles.
 	 *
@@ -678,8 +731,9 @@ class Newspack_UI_Theme_Style {
 	 */
 	private static function get_field_properties( array $global_styles ): array {
 		$properties = [];
+		$elements   = [ 'textInput', 'select' ];
 
-		foreach ( [ 'textInput', 'select' ] as $element ) {
+		foreach ( $elements as $element ) {
 			$radius = self::parse_radius( $global_styles['elements'][ $element ]['border']['radius'] ?? null );
 			if ( '' !== $radius ) {
 				$properties['--newspack-ui-field-radius'] = $radius;
@@ -687,34 +741,40 @@ class Newspack_UI_Theme_Style {
 			}
 		}
 
-		foreach ( [ 'textInput', 'select' ] as $element ) {
-			$width = $global_styles['elements'][ $element ]['border']['width'] ?? null;
-			$width = 0 === $width || '0' === $width ? '0px' : $width;
-			if ( '' !== self::sanitize_value( $width, 'length' ) ) {
+		foreach ( $elements as $element ) {
+			$border = $global_styles['elements'][ $element ]['border'] ?? null;
+			if ( ! is_array( $border ) ) {
+				continue;
+			}
+			$style = self::border_value( $border, 'style' );
+			$width = in_array( $style, [ 'none', 'hidden' ], true ) ? '0px' : self::parse_border_width( self::border_value( $border, 'width' ) );
+			if ( '' !== $width ) {
 				$properties['--newspack-ui-field-border-width'] = $width;
 				break;
 			}
 		}
 
-		foreach ( [ 'textInput', 'select' ] as $element ) {
-			$color = $global_styles['elements'][ $element ]['border']['color'] ?? null;
+		foreach ( $elements as $element ) {
+			$border = $global_styles['elements'][ $element ]['border'] ?? null;
+			$color  = is_array( $border ) ? self::border_value( $border, 'color' ) : null;
 			if ( '' !== self::sanitize_value( $color, 'color' ) ) {
 				$properties['--newspack-ui-field-border-color'] = $color;
 				break;
 			}
 		}
 
-		foreach ( [ 'textInput', 'select' ] as $element ) {
+		foreach ( $elements as $element ) {
 			$background = $global_styles['elements'][ $element ]['color']['background'] ?? null;
 			$text       = $global_styles['elements'][ $element ]['color']['text'] ?? null;
 			if ( '' !== self::sanitize_value( $background, 'color' ) && '' !== self::sanitize_value( $text, 'color' ) ) {
 				$properties['--newspack-ui-field-bg']  = $background;
 				$properties['--newspack-ui-field-ink'] = $text;
+				$properties                           += self::get_field_tones( $background, $text );
 				break;
 			}
 		}
 
-		foreach ( [ 'textInput', 'select' ] as $element ) {
+		foreach ( $elements as $element ) {
 			$family = $global_styles['elements'][ $element ]['typography']['fontFamily'] ?? null;
 			if ( '' !== self::sanitize_value( $family, 'font-family' ) ) {
 				$properties['--newspack-ui-field-font-family'] = $family;
@@ -723,6 +783,46 @@ class Newspack_UI_Theme_Style {
 		}
 
 		return $properties;
+	}
+
+	/**
+	 * The select caret and the placeholder and toggle tones for a field background and text color.
+	 *
+	 * @param string $background The field background.
+	 * @param string $text       The field text color.
+	 *
+	 * @return array<string,string> Empty unless both are plain hex colors.
+	 */
+	private static function get_field_tones( string $background, string $text ): array {
+		$background = self::expand_hex( $background );
+		$text       = self::expand_hex( $text );
+		if ( '' === $background || '' === $text ) {
+			return [];
+		}
+		$tones = Newspack_UI_Palette::text_tones( $text, $background );
+		$dark  = Newspack_UI_Palette::lc( '#1e1e1e', $background ) >= Newspack_UI_Palette::lc( '#ffffff', $background );
+
+		return [
+			'--newspack-ui-field-caret'      => 'var(--newspack-ui-field-caret-' . ( $dark ? 'dark' : 'light' ) . ')',
+			'--newspack-ui-field-ink-subtle' => $tones['subtle'],
+			'--newspack-ui-field-ink-muted'  => $tones['muted'],
+		];
+	}
+
+	/**
+	 * A plain hex color as lowercase #rrggbb.
+	 *
+	 * @param string $value The value.
+	 *
+	 * @return string Empty when it is not a plain 3 or 6 digit hex color.
+	 */
+	private static function expand_hex( string $value ): string {
+		$hex = strtolower( self::plain_hex( $value ) );
+		if ( '' === $hex ) {
+			return '';
+		}
+
+		return 4 === strlen( $hex ) ? '#' . $hex[1] . $hex[1] . $hex[2] . $hex[2] . $hex[3] . $hex[3] : $hex;
 	}
 
 	/**
@@ -808,7 +908,7 @@ class Newspack_UI_Theme_Style {
 	 * Check a value against the allow-list for its property type.
 	 *
 	 * @param mixed  $value The value.
-	 * @param string $type  One of 'color', 'font-family', 'length', 'line-height', 'weight', 'letter-spacing', 'text-transform', 'white-space', 'text-decoration'.
+	 * @param string $type  One of 'color', 'reference', 'font-family', 'length', 'line-height', 'weight', 'letter-spacing', 'text-transform', 'white-space', 'text-decoration'.
 	 *
 	 * @return string The trimmed value, or an empty string when it is not allowed.
 	 */
@@ -831,6 +931,8 @@ class Newspack_UI_Theme_Style {
 		switch ( $type ) {
 			case 'color':
 				return 1 === preg_match( '/^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i', $value ) || self::is_var( $value, 'color' ) ? $value : '';
+			case 'reference':
+				return self::is_var( $value, 'reference' ) ? $value : '';
 			case 'font-family':
 				return self::is_var( $value, 'font-family' ) || 1 === preg_match( self::FONT_FAMILY_PATTERN, $value ) ? $value : '';
 			case 'length':

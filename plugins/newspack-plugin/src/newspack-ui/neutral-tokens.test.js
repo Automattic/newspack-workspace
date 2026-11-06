@@ -148,4 +148,55 @@ describe( 'Newspack UI Neutral tokens', () => {
 			expect( body ).not.toMatch( /var\(--newspack-ui-field-font-family/ );
 		} );
 	} );
+
+	const rulesOf = css => [ ...css.matchAll( /([^{}]+)\{([^{}]*)\}/g ) ];
+
+	it( 'draw the code input from the field background and ink', () => {
+		const rule = rulesOf( compile() ).find(
+			( [ , selector, body ] ) => selector.includes( '__code-input input' ) && body.includes( 'linear-gradient' )
+		);
+		expect( rule[ 2 ] ).toMatch( /var\(--newspack-ui-field-bg\);/ );
+		expect( rule[ 2 ] ).toMatch( /linear-gradient\(var\(--newspack-ui-field-ink\), var\(--newspack-ui-field-ink\)\)/ );
+	} );
+
+	it( 'draw select2 from the field tokens', () => {
+		const rules = rulesOf( compile() );
+		const selection = rules.find(
+			( [ , selector, body ] ) => selector.trim().endsWith( '.select2-selection--single' ) && body.includes( 'display: flex' )
+		);
+		expect( selection[ 2 ] ).toMatch( /background:\s*var\(--newspack-ui-field-bg\)/ );
+		expect( selection[ 2 ] ).toMatch( /border-radius:\s*var\(--newspack-ui-field-radius\)/ );
+		expect( selection[ 2 ] ).toMatch( /color:\s*var\(--newspack-ui-field-ink\)/ );
+		const rendered = rules.find( ( [ , selector ] ) => selector.trim().endsWith( '.select2-selection__rendered' ) );
+		expect( rendered[ 2 ] ).toMatch( /font-family:\s*var\(--newspack-ui-field-font-family\)/ );
+		const dropdown = rules.find( ( [ , selector ] ) => selector.trim().endsWith( '.select2-dropdown' ) );
+		expect( dropdown[ 2 ] ).not.toMatch( /--newspack-ui-field-/ );
+	} );
+
+	it( "read the select caret, placeholder and toggle tones with today's fallbacks", () => {
+		const css = compile();
+		expect( css ).toMatch(
+			/background:\s*var\(--newspack-ui-field-bg\)\s*var\(--newspack-ui-field-caret, var\(--newspack-ui-field-caret-dark\)\)/
+		);
+		expect( css ).toMatch( /::placeholder\s*\{[^}]*var\(--newspack-ui-field-ink-subtle, var\(--newspack-ui-color-text-subtle\)\)/ );
+		expect( css ).toMatch( /--newspack-ui-button-ink:\s*var\(--newspack-ui-field-ink-muted, var\(--newspack-ui-color-text-muted\)\)/ );
+	} );
+
+	it( 'return the covered field border to the input border under high contrast', () => {
+		const css = compile();
+		const blocks = [ ...css.matchAll( /@media \(prefers-contrast: more\)\s*\{\s*([^{}]+)\{([^{}]*)\}/g ) ];
+		const fieldBlocks = blocks.filter( ( [ , , body ] ) => /border-color:\s*var\(--newspack-ui-color-input-border\)/.test( body ) );
+		expect( fieldBlocks.some( ( [ , selector ] ) => /input\[type="?text"?\]/.test( selector ) ) ).toBe( true );
+		expect( fieldBlocks.some( ( [ , selector ] ) => /(^|[\s,])\.newspack-ui select/.test( selector ) ) ).toBe( true );
+	} );
+
+	it( 'draw the currency wrapper from the field border and radius', () => {
+		const wrapper = rulesOf( compile() ).find(
+			( [ , selector, body ] ) => selector.trim() === '.newspack-ui__currency-input' && body.includes( 'grid-template-columns' )
+		);
+		expect( wrapper[ 2 ] ).toMatch( /border-radius:\s*var\(--newspack-ui-field-radius\)/ );
+		expect( wrapper[ 2 ] ).toMatch(
+			/border:\s*var\(--newspack-ui-field-border-width\) solid var\(--newspack-ui-field-border-color, var\(--newspack-ui-color-input-border\)\)/
+		);
+	} );
 } );

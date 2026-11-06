@@ -402,8 +402,8 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 	public function test_gradient_button_falls_back_to_accent_then_neutral(): void {
 		$styles = [
 			'color'    => [
-				'background' => '#f4efe6',
-				'text'       => '#222222',
+				'background' => '#ffffff',
+				'text'       => '#1e1e1e',
 			],
 			'elements' => [ 'button' => [ 'color' => [ 'background' => 'linear-gradient(red,blue)' ] ] ],
 		];
@@ -1850,6 +1850,165 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 		);
 
 		$this->assertStringNotContainsString( '--newspack-ui-field-', $css );
+	}
+
+	/**
+	 * A zero border width prints as 0px, however it is written.
+	 */
+	public function test_zero_border_width_prints(): void {
+		foreach ( [ 0, '0', '0px' ] as $zero ) {
+			$css = Newspack_UI_Theme_Style::get_css( $this->field_styles( [ 'border' => [ 'width' => $zero ] ] ), [] );
+			$this->assertStringContainsString( '--newspack-ui-field-border-width:0px;', $css );
+		}
+	}
+
+	/**
+	 * Only non-negative px, rem and em widths, zero and var() references are printed.
+	 */
+	public function test_border_width_is_validated(): void {
+		foreach ( [ '5%', '-1px', '1vw', 'calc(1px + 2px)', 'thick', '2px 3px' ] as $width ) {
+			$css = Newspack_UI_Theme_Style::get_css( $this->field_styles( [ 'border' => [ 'width' => $width ] ] ), [] );
+			$this->assertStringNotContainsString( '--newspack-ui-field-border-width', $css, $width );
+		}
+		foreach ( [ '1px', '.5rem', '0.1em' ] as $width ) {
+			$css = Newspack_UI_Theme_Style::get_css( $this->field_styles( [ 'border' => [ 'width' => $width ] ] ), [] );
+			$this->assertStringContainsString( '--newspack-ui-field-border-width:', $css, $width );
+		}
+	}
+
+	/**
+	 * A border style of none or hidden removes the border.
+	 */
+	public function test_border_style_none_prints_zero_width(): void {
+		foreach ( [ 'none', 'hidden' ] as $style ) {
+			$css = Newspack_UI_Theme_Style::get_css(
+				$this->field_styles(
+					[
+						'border' => [
+							'style' => $style,
+							'width' => '3px',
+						],
+					]
+				),
+				[]
+			);
+			$this->assertStringContainsString( '--newspack-ui-field-border-width:0px;', $css );
+		}
+		$css = Newspack_UI_Theme_Style::get_css( $this->field_styles( [ 'border' => [ 'style' => 'solid' ] ] ), [] );
+		$this->assertStringNotContainsString( '--newspack-ui-field-border-width', $css );
+	}
+
+	/**
+	 * Four identical per-side borders count as one; differing sides print nothing.
+	 */
+	public function test_per_side_borders_collapse_like_corners(): void {
+		$side = static function ( string $width, string $color ): array {
+			return [
+				'width' => $width,
+				'color' => $color,
+				'style' => 'solid',
+			];
+		};
+		$css  = Newspack_UI_Theme_Style::get_css(
+			$this->field_styles(
+				[
+					'border' => [
+						'top'    => $side( '2px', '#336699' ),
+						'right'  => $side( '2px', '#336699' ),
+						'bottom' => $side( '2px', '#336699' ),
+						'left'   => $side( '2px', '#336699' ),
+					],
+				]
+			),
+			[]
+		);
+		$this->assertStringContainsString( '--newspack-ui-field-border-width:2px;', $css );
+		$this->assertStringContainsString( '--newspack-ui-field-border-color:#336699;', $css );
+
+		$css = Newspack_UI_Theme_Style::get_css(
+			$this->field_styles(
+				[
+					'border' => [
+						'bottom' => $side( '2px', '#336699' ),
+					],
+				]
+			),
+			[]
+		);
+		$this->assertStringNotContainsString( '--newspack-ui-field-border-width', $css );
+		$this->assertStringNotContainsString( '--newspack-ui-field-border-color', $css );
+	}
+
+	/**
+	 * The select's colors are used when the text input sets none.
+	 */
+	public function test_select_only_color_pair_prints(): void {
+		$css = Newspack_UI_Theme_Style::get_css(
+			$this->field_styles(
+				[ 'border' => [ 'radius' => '4px' ] ],
+				[
+					'color' => [
+						'background' => '#222222',
+						'text'       => '#eeeeee',
+					],
+				]
+			),
+			[]
+		);
+
+		$this->assertStringContainsString( '--newspack-ui-field-bg:#222222;', $css );
+		$this->assertStringContainsString( '--newspack-ui-field-ink:#eeeeee;', $css );
+	}
+
+	/**
+	 * A dark field gets the light caret; a light one the dark caret; tones follow the pair.
+	 */
+	public function test_caret_and_tones_follow_the_pair(): void {
+		$dark = Newspack_UI_Theme_Style::get_css(
+			$this->field_styles(
+				[
+					'color' => [
+						'background' => '#222222',
+						'text'       => '#eeeeee',
+					],
+				]
+			),
+			[]
+		);
+		$this->assertStringContainsString( '--newspack-ui-field-caret:var(--newspack-ui-field-caret-light);', $dark );
+		$this->assertMatchesRegularExpression( '/--newspack-ui-field-ink-subtle:#[0-9a-f]{6};/', $dark );
+		$this->assertMatchesRegularExpression( '/--newspack-ui-field-ink-muted:#[0-9a-f]{6};/', $dark );
+
+		$light = Newspack_UI_Theme_Style::get_css(
+			$this->field_styles(
+				[
+					'color' => [
+						'background' => '#fff',
+						'text'       => '#111',
+					],
+				]
+			),
+			[]
+		);
+		$this->assertStringContainsString( '--newspack-ui-field-caret:var(--newspack-ui-field-caret-dark);', $light );
+
+		$none = Newspack_UI_Theme_Style::get_css( $this->field_styles( [ 'color' => [ 'background' => '#222222' ] ] ), [] );
+		$this->assertStringNotContainsString( '--newspack-ui-field-caret', $none );
+		$this->assertStringNotContainsString( '--newspack-ui-field-ink-', $none );
+
+		$var = Newspack_UI_Theme_Style::get_css(
+			$this->field_styles(
+				[
+					'color' => [
+						'background' => 'var(--wp--preset--color--base)',
+						'text'       => '#111111',
+					],
+				]
+			),
+			[]
+		);
+		$this->assertStringContainsString( '--newspack-ui-field-bg:var(--wp--preset--color--base);', $var );
+		$this->assertStringNotContainsString( '--newspack-ui-field-caret', $var );
 	}
 
 	/**
