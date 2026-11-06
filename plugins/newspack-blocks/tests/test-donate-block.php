@@ -255,4 +255,41 @@ class DonateBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 			$this->get_button_attrs( [ 'buttonColor' => '#6c6c6c' ], true )
 		);
 	}
+
+	/**
+	 * Attributes for a wrapper test; the name keeps the configuration cache apart.
+	 *
+	 * @param string $name Test name.
+	 * @return array
+	 */
+	private function get_wrapper_attributes( $name ) {
+		return [
+			'defaultFrequency' => 'month',
+			'className'        => 'is-style-' . $name,
+			'layoutOption'     => 'frequency',
+			'tierStyle'        => 'grid',
+		];
+	}
+
+	/**
+	 * The wrapper carries the site theme marker on a block theme.
+	 */
+	public function test_wrapper_has_the_site_theme_class_on_a_block_theme() {
+		$this->use_theme( 'twentytwentyfive' );
+		$this->assertContains(
+			'wpbnbd--site-theme',
+			explode( ' ', Newspack_Blocks_Donate_Renderer_Base::get_configuration( $this->get_wrapper_attributes( 'block-theme' ) )['container_classnames'] )
+		);
+	}
+
+	/**
+	 * The classic wrapper has no site theme marker.
+	 */
+	public function test_wrapper_has_no_site_theme_class_on_classic() {
+		$this->use_classic_theme();
+		$this->assertStringNotContainsString(
+			'wpbnbd--site-theme',
+			Newspack_Blocks_Donate_Renderer_Base::get_configuration( $this->get_wrapper_attributes( 'classic' ) )['container_classnames']
+		);
+	}
 }

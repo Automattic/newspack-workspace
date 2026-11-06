@@ -757,3 +757,31 @@
 		}
 	}
 }
+
+.wpbnbd.wpbnbd--site-theme:not(.is-style-modern) {
+	.wpbnbd__tiers__tier {
+		border-radius: var(--newspack-ui-radius-surface, 12px);
+	}
+
+	.wpbnbd__tiers__recommend-label {
+		border-radius: var(--newspack-ui-radius-badge, 4px);
+	}
+
+	.wpbnbd__tiers__selection .wpbnbd__button,
+	.tiers .tier-label,
+	.money-input {
+		border-radius: var(--newspack-ui-radius-control, 8px);
+	}
+
+	&.is-style-alternate {
+		border-radius: var(--newspack-ui-radius-surface, 12px);
+
+		.wpbnbd__tiers__selection {
+			border-radius: var(--newspack-ui-radius-surface, 12px);
+		}
+
+		.tab-container .freq-label.wpbnbd__button--active::after {
+			border-radius: var(--newspack-ui-radius-control, 8px);
+		}
+	}
+}
