@@ -130,7 +130,7 @@ const TestCard = ( { test, data } ) => {
 										'newspack-popups'
 								  )
 								: __(
-										"More than one prompt in this test is the same version. The extra one isn't published, so readers don't see it yet, but publishing it would show both. Clear the test name on the extra prompt:",
+										"More than one prompt in this test is the same version. The extra one isn't published, so readers don't see it. Clear the test name on the extra prompt:",
 										'newspack-popups'
 								  ) }{ ' ' }
 							{ duplicates.map( ( duplicate, index ) => {

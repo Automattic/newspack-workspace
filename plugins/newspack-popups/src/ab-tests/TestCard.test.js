@@ -100,7 +100,7 @@ describe( 'TestCard', () => {
 		const quiet = { ...data, provider: { available: false } };
 		const duplicate = { id: 3, title: 'Extra', letter: 'b', status: 'draft', status_label: 'Draft', eligible: true };
 		const { unmount } = render( <TestCard test={ { ...test, duplicates: [ duplicate ] } } data={ quiet } /> );
-		expect( screen.getByText( /readers don't see it yet/ ) ).toBeTruthy();
+		expect( screen.getByText( /isn't published, so readers don't see it\./ ) ).toBeTruthy();
 		expect( screen.queryByText( /Readers still see both/ ) ).toBeNull();
 		unmount();
 
