@@ -288,10 +288,11 @@ export default function Institutions() {
 				onChangeView={ setView }
 				actions={ actions }
 				paginationInfo={ paginationInfo }
-				defaultLayouts={ { table: {}, grid: {} } }
+				defaultLayouts={ { table: {} } }
 				isLoading={ isLoading }
 				getItemId={ ( item: Institution ) => String( item.id ) }
 				search
+				inlineFilters
 			/>
 			{ showAdvancedSettings && <InstitutionsAdvancedSettings closeModal={ () => setShowAdvancedSettings( false ) } /> }
 		</>
