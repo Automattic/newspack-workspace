@@ -197,7 +197,6 @@ export default function AdsListScreen() {
 				defaultLayouts={ DEFAULT_LAYOUTS }
 				isLoading={ isLoading }
 				getItemId={ item => String( item.id ) }
-				search
 				config={ DATAVIEWS_CONFIG }
 			>
 				<InlineFiltersLayout

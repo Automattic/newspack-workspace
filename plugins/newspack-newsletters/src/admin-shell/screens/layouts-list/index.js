@@ -301,7 +301,6 @@ export default function LayoutsListScreen() {
 				defaultLayouts={ DEFAULT_LAYOUTS }
 				isLoading={ isLoading || isPrebuiltLoading }
 				getItemId={ item => String( item.id ) }
-				search
 				config={ DATAVIEWS_CONFIG }
 			>
 				<InlineFiltersLayout

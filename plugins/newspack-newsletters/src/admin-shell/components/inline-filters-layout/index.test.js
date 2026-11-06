@@ -68,11 +68,4 @@ describe( 'InlineFiltersLayout', () => {
 			screen.getByRole( 'button', { name: 'Per page' } )
 		);
 	} );
-
-	it( 'leaves the search out when search is off', () => {
-		const { container } = renderList( { search: false } );
-
-		expect( container.querySelector( 'input[type="search"]' ) ).not.toBeInTheDocument();
-		expect( filterChips( container ) ).toEqual( [ 'Author', 'Status' ] );
-	} );
 } );

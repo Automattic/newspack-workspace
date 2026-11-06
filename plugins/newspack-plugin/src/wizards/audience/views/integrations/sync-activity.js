@@ -31,6 +31,8 @@ const DEFAULT_VIEW = {
 	layout: {},
 };
 
+const PER_PAGE_CONFIG = { perPageSizes: [ 10, 25, 50, 100 ] };
+
 // The retry's action finishing does not say the push worked, so the notice
 // sends the reader to the entry rather than calling it a success.
 const RETRY_RAN_NOTICE = { message: __( 'The retry ran. Its entry shows the result.', 'newspack-plugin' ), type: 'info' };
@@ -254,6 +256,7 @@ export const SyncActivity = ( { integrationId } ) => {
 				empty={ <p>{ hasFailed ? __( 'The sync activity did not load.', 'newspack-plugin' ) : getEmptyMessage( view, retentionDays ) }</p> }
 				search
 				searchLabel={ __( 'Search by reader email', 'newspack-plugin' ) }
+				config={ PER_PAGE_CONFIG }
 				inlineFilters
 			/>
 			<Drawer.Root isOpen={ isDetailsOpen } size="x-large" onRequestClose={ () => setIsDetailsOpen( false ) }>

@@ -5,18 +5,20 @@
  * replaces the default layout's filter toggle and the row of chips under
  * the search.
  *
- * Only filters marked `isPrimary` show as chips; any others sit behind the
- * "Add filter" button in the same row.
+ * Only filters marked `isPrimary` show as chips. DataViews renders the
+ * "Add filter" button only beside a visible chip, so a list using this
+ * layout needs at least one primary filter or its other filters can't be
+ * reached.
  */
 
 import { DataViews } from '@wordpress/dataviews/wp';
 
-export default function InlineFiltersLayout( { header, search = true, searchLabel } ) {
+export default function InlineFiltersLayout( { header } ) {
 	return (
 		<>
 			<div className="dataviews__view-actions newspack-newsletters-list__toolbar">
 				<div className="dataviews__search newspack-newsletters-list__filters">
-					{ search && <DataViews.Search label={ searchLabel } /> }
+					<DataViews.Search />
 					<DataViews.Filters />
 				</div>
 				<div className="newspack-newsletters-list__view-config">

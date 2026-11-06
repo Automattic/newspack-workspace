@@ -121,7 +121,6 @@ export default function NewslettersListScreen() {
 					defaultLayouts={ DEFAULT_LAYOUTS }
 					isLoading={ isLoading }
 					getItemId={ item => String( item.id ) }
-					search
 					config={ DATAVIEWS_CONFIG }
 				>
 					<InlineFiltersLayout

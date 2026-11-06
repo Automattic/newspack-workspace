@@ -30,6 +30,8 @@ const DEFAULT_VIEW = {
 	layout: {},
 };
 
+const PER_PAGE_CONFIG = { perPageSizes: [ 10, 25, 50, 100 ] };
+
 const ORDERBY_MAP = {
 	timestamp: 'scheduled_date_gmt',
 	status: 'status',
@@ -185,6 +187,7 @@ export const ScheduledActions = ( { integrationId } ) => {
 				isLoading={ isLoading }
 				getItemId={ item => item.id }
 				search
+				config={ PER_PAGE_CONFIG }
 				inlineFilters
 			/>
 			<Drawer.Root isOpen={ isDetailsOpen } size="x-large" onRequestClose={ () => setIsDetailsOpen( false ) }>

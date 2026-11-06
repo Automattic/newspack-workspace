@@ -182,7 +182,7 @@ export default () => {
 				<div className="newspack-story-budget__view-config">
 					<DataViews.LayoutSwitcher />
 					<DataViews.ViewConfig />
-					<HStack style={ { marginLeft: '8px' } }>
+					<HStack className="newspack-story-budget__header-actions">
 						{ canRefreshStories && (
 							<Button
 								className={
