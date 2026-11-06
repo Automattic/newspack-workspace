@@ -95,6 +95,12 @@ describe( 'usesSiteButtonStyle', () => {
 		expect( usesSiteButtonStyle( '#dd3333', '#ffffff', true ) ).toBe( true );
 	} );
 
+	it( 'treats a cleared color as its default', () => {
+		expect( usesSiteButtonStyle( undefined, '#ffffff', true ) ).toBe( true );
+		expect( usesSiteButtonStyle( '#dd3333', undefined, true ) ).toBe( true );
+		expect( usesSiteButtonStyle( undefined, '#000000', true ) ).toBe( false );
+	} );
+
 	it( 'is false when either color was picked', () => {
 		expect( usesSiteButtonStyle( '#6c6c6c', '#ffffff', true ) ).toBe( false );
 		expect( usesSiteButtonStyle( '#dd3333', '#000000', true ) ).toBe( false );
