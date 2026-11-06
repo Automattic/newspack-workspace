@@ -197,7 +197,7 @@
 
 	&:focus-within {
 		border-color: var(--newspack-ui-color-text, #{np-colors.$neutral-900});
-		outline: thin solid color-mix(in srgb, var(--newspack-ui-color-text, #{np-colors.$neutral-900}) 15%, transparent);
+		outline: thin solid color-mix(in oklab, var(--newspack-ui-color-text, #{np-colors.$neutral-900}) 15%, transparent);
 		outline-offset: -4px;
 	}
 
