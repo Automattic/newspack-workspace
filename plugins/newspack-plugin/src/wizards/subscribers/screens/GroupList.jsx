@@ -33,11 +33,10 @@ import { fmtDate } from '../format';
 import './style.scss';
 import LoadFailureNotice from '../components/LoadFailureNotice';
 import { useRetryFocus } from '../use-retry-focus';
-import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { useGroups } from '../data/use-groups';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
 import { STATUS_INDICATORS, STATUS_LABELS } from '../status';
-import { GROUP_LABEL_PLURAL, groupCountLabel, groupLoadFailedLabel, groupNameLabel } from '../labels';
+import { GROUP_LABEL_PLURAL, groupCountLabel, groupLoadFailedLabel } from '../labels';
 import { SubscriptionLink } from '../links';
 
 const { useHistory } = Router;
@@ -49,15 +48,23 @@ const DEFAULT_VIEW = {
 	sort: { field: 'createdAt', direction: 'desc' },
 	search: '',
 	// `product` is visible by default because it is the only place a group's
-	// subscription is reachable — see the name field below for why the title
+	// subscription is reachable — see the owner field below for why the title
 	// cell can't carry that link.
-	fields: [ 'owner', 'product', 'members', 'status', 'createdAt' ],
+	fields: [ 'product', 'members', 'status', 'createdAt' ],
 	// Hide cancelled groups by default: they add noise with little value. Still
 	// reachable by ticking "Cancelled" in the Status filter (or clearing it).
 	// A group awaiting its first payment sits in `pending`, so it stays visible.
 	filters: [ { field: 'status', operator: 'isAny', value: [ 'active', 'pending', 'on-hold' ] } ],
-	layout: {},
-	titleField: 'name',
+	layout: {
+		styles: {
+			owner: { width: '30%' },
+			product: { width: '20%' },
+			members: { width: '15%' },
+			status: { width: '15%' },
+			createdAt: { width: '20%' },
+		},
+	},
+	titleField: 'owner',
 };
 
 export default function GroupList() {
@@ -78,19 +85,6 @@ export default function GroupList() {
 		}
 	};
 
-	// Resolve owner avatar URLs, keyed by group id. The table renders immediately
-	// with the avatar placeholder and each avatar fills in as it resolves.
-	const ownerEmails = useMemo( () => groups.map( g => g.owner?.email ), [ groups ] );
-	const { avatars: avatarsByEmail } = useAvatars( ownerEmails );
-	const avatars = useMemo( () => {
-		const byId = {};
-		groups.forEach( g => {
-			const email = g.owner?.email;
-			byId[ g.id ] = email ? avatarsByEmail[ email ] : undefined;
-		} );
-		return byId;
-	}, [ groups, avatarsByEmail ] );
-
 	// Subscription filter options come from the loaded groups, which are the full
 	// set, not from /plans: that endpoint also lists individual plans, which match
 	// no group. Distinct, in first-seen order.
@@ -102,22 +96,20 @@ export default function GroupList() {
 	const fields = useMemo(
 		() => [
 			{
-				id: 'name',
-				label: groupNameLabel(),
+				id: 'owner',
+				label: __( 'Owner', 'newspack-plugin' ),
 				enableGlobalSearch: true,
-				// The group's own name; the endpoint already falls back to the
-				// product name for a group that was never renamed.
-				getValue: ( { item } ) => item.plan || '',
-				// This is the DataViews title field, which ColumnPrimary wraps in an
-				// ItemClickWrapper: a role="button" whose own Enter/Space handler
-				// fires onClickItem regardless of where the key originated, so a link
-				// nested here resolves to two destinations at once, and ARIA treats
-				// descendants of role="button" as presentational. The subscription's
-				// link lives in the `product` column below, outside the wrapper.
+				getValue: ( { item } ) => item.owner?.name || '',
+				// Owners tell groups apart where group names repeat, so the owner leads
+				// and the group's name sits under it. This is the DataViews title field,
+				// which ColumnPrimary wraps in an ItemClickWrapper: a role="button" whose
+				// own Enter/Space handler fires onClickItem regardless of where the key
+				// originated, so a link nested here would resolve to two destinations at
+				// once. The subscription's link lives in the `product` column instead.
 				render: ( { item } ) => (
 					<div data-group-id={ item.id }>
 						<HStack spacing={ 2 } justify="flex-start" alignment="center" expanded={ false }>
-							<span>{ item.plan || '—' }</span>
+							<span>{ item.owner?.name || '—' }</span>
 							{ item.seatRequest && (
 								<Badge intent="medium">
 									{ item.seatRequest.status === 'awaiting-payment'
@@ -126,38 +118,9 @@ export default function GroupList() {
 								</Badge>
 							) }
 						</HStack>
+						{ item.plan && <div className="newspack-subscribers__email">{ item.plan }</div> }
 					</div>
 				),
-				enableSorting: true,
-			},
-			{
-				id: 'owner',
-				label: __( 'Owner', 'newspack-plugin' ),
-				enableGlobalSearch: true,
-				getValue: ( { item } ) => item.owner?.name || '',
-				// The secondary line is the owner's email, mirroring the subscriber
-				// list's title cell.
-				render: ( { item } ) => {
-					const details = (
-						<div>
-							<div>{ item.owner ? item.owner.name : '—' }</div>
-							<div className="newspack-subscribers__email">{ item.owner?.email }</div>
-						</div>
-					);
-					if ( ! SHOW_AVATARS ) {
-						return details;
-					}
-					return (
-						<HStack spacing={ 3 } justify="flex-start" alignment="center">
-							{ avatars[ item.id ] ? (
-								<img className="newspack-subscribers__avatar" src={ avatars[ item.id ] } alt="" width={ 32 } height={ 32 } />
-							) : (
-								<span className="newspack-subscribers__avatar" aria-hidden="true" />
-							) }
-							{ details }
-						</HStack>
-					);
-				},
 				enableSorting: true,
 			},
 			{
@@ -209,14 +172,18 @@ export default function GroupList() {
 				enableSorting: true,
 			},
 		],
-		[ avatars, productElements ]
+		[ productElements ]
 	);
 
-	// The owner's email shows under their name, so search matches it too. It has
-	// no column of its own, so it joins the search as a query-only field rather
-	// than going into `fields`, where DataViews would offer it as a column.
+	// The group name and the owner's email have no column of their own, so they
+	// join the search as query-only fields rather than going into `fields`, where
+	// DataViews would offer them as columns.
 	const queryFields = useMemo(
-		() => [ ...fields, { id: 'ownerEmail', enableGlobalSearch: true, getValue: ( { item } ) => item.owner?.email || '' } ],
+		() => [
+			...fields,
+			{ id: 'groupName', enableGlobalSearch: true, getValue: ( { item } ) => item.plan || '' },
+			{ id: 'ownerEmail', enableGlobalSearch: true, getValue: ( { item } ) => item.owner?.email || '' },
+		],
 		[ fields ]
 	);
 
