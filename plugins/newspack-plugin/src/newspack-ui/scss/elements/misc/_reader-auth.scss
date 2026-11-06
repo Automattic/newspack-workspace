@@ -1,5 +1,3 @@
-@use "../../mixins";
-
 .newspack-ui {
 	&.newspack-reader-auth .response > p {
 		margin: 0;
@@ -23,12 +21,6 @@
 
 		> [hidden] {
 			display: none;
-		}
-
-		@include mixins.media( mobile ) {
-			column-gap: var(--newspack-ui-spacer-2);
-			grid-auto-columns: minmax( 0, 1fr );
-			grid-auto-flow: column;
 		}
 	}
 
