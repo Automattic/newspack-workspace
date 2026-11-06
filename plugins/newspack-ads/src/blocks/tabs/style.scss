@@ -5,7 +5,7 @@
 
 	.tab-list {
 		display: flex;
-		font-family: var(--newspack-ui-font-family-control, system-ui, sans-serif);
+		font-family: var(--newspack-ui-font-family-control, var(--newspack-ui-font-family, system-ui, sans-serif));
 		font-size: var(--newspack-ui-font-size-s, 16px);
 		font-weight: 600;
 		line-height: var(--newspack-ui-line-height-s, 1.5);
@@ -34,7 +34,7 @@
 				box-shadow:
 					inset 0
 					calc(var(--newspack-ui-spacer-base, 8px) / -2) 0 0
-					var(--newspack-ui-color-border, var(--wp--preset--color--base-3, #ddd));
+					var(--wp--preset--color--base-3, var(--newspack-ui-color-border, #ddd));
 				color: inherit;
 			}
 
