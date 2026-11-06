@@ -992,15 +992,7 @@ class Newspack_Blocks {
 		// previews, which are open to anyone who can edit posts. So the post type restriction
 		// lives here rather than in each caller.
 		$post_type              = self::filter_viewable_post_types( isset( $attributes['postType'] ) ? $attributes['postType'] : [ 'post' ] );
-		$included_post_statuses = [ 'publish' ];
-		if ( current_user_can( 'edit_others_posts' ) && isset( $attributes['includedPostStatuses'] ) ) {
-			// Only the statuses the editor offers. Anything else (private, or core's request-*
-			// statuses) would let the editor routes read content the block was never meant to show.
-			$included_post_statuses = array_values( array_intersect( (array) $attributes['includedPostStatuses'], [ 'publish', 'draft', 'future' ] ) );
-			if ( empty( $included_post_statuses ) ) {
-				$included_post_statuses = [ 'publish' ];
-			}
-		}
+		$included_post_statuses = self::get_included_post_statuses( $attributes );
 		$authors                    = isset( $attributes['authors'] ) ? $attributes['authors'] : array();
 		$categories                 = isset( $attributes['categories'] ) ? $attributes['categories'] : array();
 		$include_subcategories      = isset( $attributes['includeSubcategories'] ) ? intval( $attributes['includeSubcategories'] ) : false;
@@ -1788,7 +1780,9 @@ class Newspack_Blocks {
 		if ( ! current_user_can( 'edit_others_posts' ) || empty( $attributes['includedPostStatuses'] ) ) {
 			return [ 'publish' ];
 		}
-		// Only the statuses the block editor offers. An empty list would let WP_Query choose, which adds private posts.
+		// Only the statuses the block editor offers. Anything else (private, or core's request-*
+		// statuses) would let the editor routes read content the block was never meant to show.
+		// An empty list would let WP_Query choose, which adds private posts.
 		$post_statuses = array_values( array_intersect( (array) $attributes['includedPostStatuses'], [ 'publish', 'draft', 'future' ] ) );
 		return empty( $post_statuses ) ? [ 'publish' ] : $post_statuses;
 	}
