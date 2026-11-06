@@ -126,9 +126,7 @@ function SubscriberOnlyProducts() {
 			},
 			{
 				id: 'available_to_names',
-				// Never shown: the field stays out of the view and `enableHiding: false`
-				// keeps it out of the column menu. It's what the search matches, since
-				// Available to has to hold ids for its filter.
+				// What the search matches, since Available to has to hold ids for its filter.
 				label: __( 'Available to (names)', 'newspack-plugin' ),
 				enableHiding: false,
 				enableSorting: false,
