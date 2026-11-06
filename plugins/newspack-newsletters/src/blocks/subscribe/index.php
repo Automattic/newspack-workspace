@@ -112,6 +112,7 @@ function enqueue_scripts() {
 		[
 			'recaptcha_error' => __( 'Error loading the reCaptcha library.', 'newspack-newsletters' ),
 			'invalid_email'   => __( 'Please enter a valid email address', 'newspack-newsletter' ),
+			'use_captcha'     => $use_captcha,
 		]
 	);
 	\wp_script_add_data( $handle, 'async', true );
