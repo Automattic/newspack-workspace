@@ -363,7 +363,7 @@
 			}
 
 			.woocommerce-password-hint {
-				color: var(--newspack-ui-color-neutral-60, np-colors.$neutral-600);
+				color: var(--newspack-ui-color-text-subtle, np-colors.$neutral-600);
 				font-size: var(--newspack-ui-font-size-xs, 14px);
 				line-height: var(--newspack-ui-line-height-xs, 1.4286);
 			}
@@ -923,7 +923,7 @@
 
 		// Privacy Policy
 		.woocommerce-privacy-policy-text {
-			color: var(--newspack-ui-color-neutral-60, np-colors.$neutral-600);
+			color: var(--newspack-ui-color-text-subtle, np-colors.$neutral-600);
 		}
 
 		.woocommerce-terms-and-conditions {
@@ -942,7 +942,7 @@
 	.woocommerce-terms-and-conditions-wrapper > p.form-row {
 		--newspack-ui-color-input-border: var(--newspack-ui-color-neutral-60, #{np-colors.$neutral-600});
 
-		background: var(--newspack-ui-color-neutral-5, np-colors.$neutral-050);
+		background: var(--newspack-ui-color-surface-subtle, np-colors.$neutral-050);
 		border-color: var(--newspack-ui-color-border, np-colors.$neutral-300);
 		box-shadow: none;
 		font-size: var(--newspack-ui-font-size-xs, 14px);
