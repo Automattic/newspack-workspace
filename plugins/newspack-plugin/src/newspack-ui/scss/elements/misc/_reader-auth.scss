@@ -54,7 +54,7 @@
 
 		@media ( hover: hover ) and ( pointer: fine ) {
 			&:hover {
-				color: var(--newspack-ui-color-text);
+				color: var(--newspack-ui-field-ink, var(--newspack-ui-color-text));
 			}
 		}
 	}
