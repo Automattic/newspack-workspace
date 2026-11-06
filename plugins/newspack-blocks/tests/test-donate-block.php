@@ -229,13 +229,30 @@ class DonateBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
-	 * The reverse style outlines the button with the brand token and the button typography tokens.
+	 * The reverse tier is the site's button with the outline modifier and no inline style.
 	 */
-	public function test_reverse_style_uses_brand_token() {
+	public function test_reverse_tier_is_the_sites_outline_button_on_a_block_theme() {
 		$this->use_theme( 'twentytwentyfive' );
-		$attrs = $this->get_button_attrs( [ 'buttonColor' => '#dd3333' ], true );
-		$this->assertStringContainsString( 'border-color: var(--newspack-ui-color-btn, #1e1e1e); color: var(--newspack-ui-color-btn, #1e1e1e); background: transparent;', $attrs['style'] );
-		$this->assertStringContainsString( 'font-family: var(--newspack-ui-button-font-family,', $attrs['style'] );
-		$this->assertSame( '', $attrs['class'] );
+		$this->assertSame(
+			[
+				'style' => '',
+				'class' => 'wp-element-button wpbnbd__tiers__outline',
+			],
+			$this->get_button_attrs( [ 'buttonColor' => '#dd3333' ], true )
+		);
+	}
+
+	/**
+	 * A picked color keeps the inline outline and gets no site classes.
+	 */
+	public function test_reverse_tier_keeps_inline_outline_for_a_custom_color() {
+		$this->use_theme( 'twentytwentyfive' );
+		$this->assertSame(
+			[
+				'style' => 'border-color: #6c6c6c; color: #6c6c6c; background: transparent;',
+				'class' => '',
+			],
+			$this->get_button_attrs( [ 'buttonColor' => '#6c6c6c' ], true )
+		);
 	}
 }
