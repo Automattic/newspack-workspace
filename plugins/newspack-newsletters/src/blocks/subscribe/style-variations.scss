@@ -33,7 +33,7 @@
 	// covers a block with no style class and one that carries `is-style-default`,
 	// which the style picker wrote before Legacy existed.
 	&:not(.is-style-legacy) {
-		font-family: var(--newspack-ui-font-family-body, system-ui, sans-serif);
+		font-family: var(--newspack-ui-font-family-body, var(--newspack-ui-font-family, system-ui, sans-serif));
 		font-size: var(--newspack-ui-font-size-s, 16px);
 		font-weight: 400;
 		line-height: var(--newspack-ui-line-height-s, 1.5);
@@ -200,10 +200,12 @@
 		input[type="email"],
 		input[type="text"] {
 			background: var(--newspack-ui-field-bg, #fff);
-			border: 1px solid var(--newspack-ui-color-input-border, #949494);
-			border-radius: var(--newspack-ui-radius-control, 8px);
+			border-color: var(--newspack-ui-field-border-color, var(--newspack-ui-color-input-border, #949494));
+			border-radius: var(--newspack-ui-field-radius, var(--newspack-ui-radius-control, 8px));
+			border-style: solid;
+			border-width: var(--newspack-ui-field-border-width, 1px);
 			color: var(--newspack-ui-field-ink, #1e1e1e);
-			font-family: inherit;
+			font-family: var(--newspack-ui-field-font-family, inherit);
 			font-size: inherit;
 			font-weight: inherit;
 			line-height: inherit;
@@ -213,7 +215,7 @@
 				box-shadow var(--newspack-ui-duration-color, 150ms) var(--newspack-ui-ease-color, ease);
 
 			&::placeholder {
-				color: var(--newspack-ui-color-text-subtle, #6c6c6c);
+				color: var(--newspack-ui-field-ink-subtle, var(--newspack-ui-color-text-subtle, #6c6c6c));
 			}
 
 			&:hover:not(:disabled, :focus) {
@@ -221,7 +223,7 @@
 			}
 
 			&:focus {
-				@include focus.focus-edge( var(--newspack-ui-color-input-border-focus, #1e1e1e), $halo: focus.$focus-color );
+				@include focus.focus-edge( var(--newspack-ui-color-input-border-focus, #1e1e1e) );
 			}
 
 			&:disabled {

@@ -137,8 +137,8 @@
 	}
 
 	.newspack-newsletters-lists {
-		background: white;
-		border: 1px solid wp-colors.$gray-200;
+		background: var(--newspack-ui-color-surface, white);
+		border: 1px solid var(--newspack-ui-color-border, wp-colors.$gray-200);
 		border-radius: 2px;
 		box-sizing: border-box;
 		color: var(--newspack-ui-color-text, #1e1e1e);
@@ -254,7 +254,7 @@
 
 			&.status-400,
 			&.status-500 {
-				color: var(--newspack-ui-color-error, #d63638);
+				color: var(--newspack-ui-color-error-text, #b32d2e);
 			}
 		}
 	}
@@ -285,7 +285,7 @@
 		text-align: center;
 		font-size: 0.8em;
 		margin: 0;
-		color: var(--newspack-ui-color-error, #d63638);
+		color: var(--newspack-ui-color-error-text, #b32d2e);
 	}
 }
 
