@@ -16,6 +16,7 @@ import { store } from '@wordpress/icons';
 import { EmptyState, evenColumns, withoutColumnStyles } from 'newspack-components';
 import LoadingState from '../../components/loading-state';
 import HeaderCount from '../../components/header-count';
+import InlineFiltersLayout from '../../components/inline-filters-layout';
 import ItemsPerPage from '../../components/items-per-page';
 import { EMPTY_STATE_CLASS, getEmptyStateHeading } from '../../constants';
 import { useHeaderActions } from '../../header-actions-context';
@@ -134,12 +135,14 @@ export default function AdvertisersListScreen() {
 					defaultLayouts={ DEFAULT_LAYOUTS }
 					isLoading={ isLoading }
 					getItemId={ item => String( item.id ) }
-					search
 					config={ DATAVIEWS_CONFIG }
-					header={
-						<ItemsPerPage value={ view.perPage } onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) } />
-					}
-				/>
+				>
+					<InlineFiltersLayout
+						header={
+							<ItemsPerPage value={ view.perPage } onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) } />
+						}
+					/>
+				</DataViews>
 			) }
 
 			{ modalState && (

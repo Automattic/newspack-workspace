@@ -42,7 +42,7 @@ const STATUS_TONES: Record< StatusName, StatusTone | undefined > = {
 	done: 'success',
 	scheduled: 'info',
 	progress: 'info',
-	pending: 'info',
+	pending: 'neutral',
 	attention: 'warning',
 	error: 'error',
 	draft: 'neutral',

@@ -256,9 +256,10 @@ function toViewPatch( prefs, { perPageOptions, fieldIds, layoutTypes } ) {
  * @param {Array<string>} [options.layoutTypes]    Layout types this screen offers.
  * @param {Object}        [options.urlPatch]       View patch seeded from the URL. Applied last, so a
  *                                                 forwarded legacy link still wins over saved preferences.
- * @param {Function}      [options.normalize]      Reconciles the restored view with the screen's own rules. Runs on
- *                                                 the merged view, so settings a stored layout type implies are
- *                                                 applied at mount rather than only on the next change.
+ * @param {Function}      [options.normalize]      Reconciles the restored view with the screen's own rules, such as
+ *                                                 dropping a field the screen no longer shows. Runs on the merged
+ *                                                 view, so a stale saved view is corrected at mount rather than only
+ *                                                 on the next change.
  * @return {[Object, Function]} `[ view, setView ]` pair.
  */
 export default function usePersistedView(

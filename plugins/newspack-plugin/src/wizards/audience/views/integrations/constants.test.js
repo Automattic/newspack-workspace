@@ -39,8 +39,8 @@ describe( 'STATUS_MAP', () => {
 		expect( STATUS_MAP.canceled.tone ).toBe( 'neutral' );
 	} );
 
-	it( 'reads a queued job as worth noticing and a running one as context', () => {
-		expect( STATUS_MAP.pending.intent ).toBe( 'low' );
+	it( 'badges a queued job in grey, like its mark, and a running one as context', () => {
+		expect( STATUS_MAP.pending.intent ).toBe( 'draft' );
 		expect( STATUS_MAP[ 'in-progress' ].intent ).toBe( 'informational' );
 	} );
 

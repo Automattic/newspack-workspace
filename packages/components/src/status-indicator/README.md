@@ -66,7 +66,7 @@ takes the props of a `div`.
 | `done` | check circle | success | Finished successfully: a sent newsletter, a completed sync. |
 | `scheduled` | clock | info | Waiting for a date to arrive. |
 | `draft` | half circle | neutral | Not live yet, or switched off. |
-| `pending` | part-filled circle | info | Waiting on something outside the publisher's hands. |
+| `pending` | part-filled circle | neutral | Waiting on something outside the publisher's hands. |
 | `attention` | exclamation circle | warning | Live but needing a look, usually a payment. |
 | `error` | error | error | Failed, and the one state that asks the reader to act. |
 | `progress` | update | info | Running right now. |
@@ -107,16 +107,18 @@ a failure next to a deliberate stop can pass `tone="neutral"` to the stop, as
 Scheduled Actions does, so only the failure reads red.
 
 Amber is kept for `attention` alone, so it always means "look at this". States
-still in flight (`scheduled`, `pending`, `progress`) share blue and are told
-apart by their glyphs.
+on their way (`scheduled`, `progress`) share blue and are told apart by their
+glyphs. `pending` is grey, like `draft`: it waits on something else, so
+nothing is moving yet.
 
 Color backs the glyph and label up; it does not replace them. The glyph does the
 separating on its own, so no status leans on color to carry its meaning, and two
 statuses may share a tone where the glyphs tell them apart (`scheduled` and
-`progress`, or `draft` and `trash`). `private` has no tone: it is live, and
-tinting it like `active` would make the two read alike. A status drawn with a
-glyph passed through `icon` is never tinted, since a classifying field has no
-lifecycle to color. `statusTone` is exported alongside `statusGlyph` for tests.
+`progress`, or `draft`, `pending` and `trash`). `private` has no tone: it is
+live, and tinting it like `active` would make the two read alike. A status drawn
+with a glyph passed through `icon` is never tinted, since a classifying field has
+no lifecycle to color. `statusTone` is exported alongside `statusGlyph` for
+tests.
 
 `tone` overrides a status's own tone for a screen where the state means
 something narrower than its glyph suggests. Scheduled Actions uses it for

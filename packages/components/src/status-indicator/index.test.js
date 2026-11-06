@@ -95,8 +95,13 @@ describe( 'statusGlyph', () => {
 
 describe( 'statusTone', () => {
 	it( 'never gives a live status and a stopped one the same color', () => {
-		const live = [ 'active', 'done', 'scheduled', 'progress', 'pending', 'attention' ].map( statusTone );
+		const live = [ 'active', 'done', 'scheduled', 'progress', 'attention' ].map( statusTone );
 		const stopped = [ 'draft', 'cancelled', 'ended', 'trash' ].map( statusTone );
 		expect( live.filter( tone => stopped.includes( tone ) ) ).toEqual( [] );
+	} );
+
+	it( 'draws pending in the same grey as draft, not the blue of work under way', () => {
+		expect( statusTone( 'pending' ) ).toBe( statusTone( 'draft' ) );
+		expect( statusTone( 'pending' ) ).not.toBe( statusTone( 'progress' ) );
 	} );
 } );
