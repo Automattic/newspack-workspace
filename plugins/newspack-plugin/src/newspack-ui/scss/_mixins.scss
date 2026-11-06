@@ -1,5 +1,8 @@
 @use "../../../packages/colors/colors.module" as colors;
+@use "sass:list";
 @use "variables/breakpoints";
+
+$halo-tokens: "var(--newspack-ui-color-focus)", "var(--newspack-ui-color-input-border-focus)";
 
 $font-size-classes: ".newspack-ui__font--2xs, .newspack-ui__font--xs, .newspack-ui__font--s, .newspack-ui__font--m, .newspack-ui__font--l, .newspack-ui__font--xl, .newspack-ui__font--2xl, .newspack-ui__font--3xl, .newspack-ui__font--4xl, .newspack-ui__font--5xl, .newspack-ui__font--6xl";
 
@@ -32,7 +35,16 @@ $font-size-classes: ".newspack-ui__font--2xs, .newspack-ui__font--xs, .newspack-
 }
 
 @mixin focus-edge( $color: var(--newspack-ui-color-focus), $width: 1px, $halo: $color, $inner: null, $over-content: false ) {
-	$halo-shadow: 0 0 0 var(--newspack-ui-focus-halo-width) color-mix(in srgb, #{$halo} var(--newspack-ui-focus-halo-mix), transparent);
+	$halo-color: color-mix(in srgb, #{$halo} var(--newspack-ui-focus-halo-mix), transparent);
+
+	@if list.index($halo-tokens, "#{$halo}") {
+		$halo-color: var(--newspack-ui-color-focus-halo);
+	}
+	@else if "#{$halo}" == "var(--newspack-ui-button-focus-halo-color)" {
+		$halo-color: var(--newspack-ui-button-focus-halo-color);
+	}
+
+	$halo-shadow: 0 0 0 var(--newspack-ui-focus-halo-width) $halo-color;
 
 	border-color: $color;
 
@@ -53,6 +65,11 @@ $font-size-classes: ".newspack-ui__font--2xs, .newspack-ui__font--xs, .newspack-
 @mixin focus-line( $color: var(--newspack-ui-color-focus), $inner: null, $inset: false, $radius: null, $width: 2px ) {
 	$halo: color-mix(in srgb, #{$color} var(--newspack-ui-focus-halo-mix), transparent);
 	$position: null;
+
+	@if list.index($halo-tokens, "#{$color}") {
+		$halo: var(--newspack-ui-color-focus-halo);
+	}
+
 	$offset: 0;
 
 	@if $inset {
