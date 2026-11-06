@@ -119,6 +119,10 @@
 	}
 }
 
+.dataviews-view-table :has( > .dataviews-column-primary__media > .newspack-subscribers__avatar ) {
+	align-items: center;
+}
+
 // Profile header avatar, portaled into the wizard section header, top-right.
 .newspack-wizard__section-header.newspack-subscribers__has-avatar {
 	position: relative;
