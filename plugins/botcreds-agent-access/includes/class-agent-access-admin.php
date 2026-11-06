@@ -302,6 +302,7 @@ class Agent_Access_Admin {
 	/** Localized presentation text shared by the settings renderer and script. */
 	private static function get_ui_text() {
 		return array(
+			'seo_only' => __( 'Yoast SEO only — existing content; no content edits or publishing.', 'botcreds-agent-access' ),
 			'read_only' => __( 'Read only — writes disabled.', 'botcreds-agent-access' ),
 			'full' => __( 'Full write access — within this user’s permissions.', 'botcreds-agent-access' ),
 			'selected' => __( 'Selected access — writes limited to the selections below.', 'botcreds-agent-access' ),
@@ -579,6 +580,7 @@ class Agent_Access_Admin {
 	 */
 	private function render_scope_controls( array $scope ) {
 		$read_only    = in_array( '__read_only__', $scope, true );
+		$seo_only = in_array( Agent_Access_Yoast_SEO::SCOPE, $scope, true );
 		$full         = in_array( '*', $scope, true );
 		$all_custom   = in_array( Agent_Access_Scope::ALL_CUSTOM_ENDPOINTS, $scope, true );
 		$integrations = Agent_Access_Scope::get_custom_integrations();
@@ -591,7 +593,7 @@ class Agent_Access_Admin {
 		$routes_id = wp_unique_id( 'agent-access-custom-routes-' );
 		// Preserve grants for post types whose plugins are temporarily inactive.
 		foreach ( $scope as $slug ) {
-			if ( is_string( $slug ) && '' !== $slug && '/' !== $slug[0] && ! in_array( $slug, array( '*', '__read_only__', Agent_Access_Scope::ALL_CUSTOM_ENDPOINTS ), true ) && ! in_array( $slug, $known_types, true ) ) {
+			if ( is_string( $slug ) && '' !== $slug && '/' !== $slug[0] && ! in_array( $slug, array( '*', '__read_only__', Agent_Access_Yoast_SEO::SCOPE, Agent_Access_Scope::ALL_CUSTOM_ENDPOINTS ), true ) && ! in_array( $slug, $known_types, true ) ) {
 				$types[] = array( 'slug' => $slug, 'label' => $slug );
 			}
 		}
@@ -606,16 +608,20 @@ class Agent_Access_Admin {
 			<?php esc_html_e( 'Read only (no writes)', 'botcreds-agent-access' ); ?>
 		</label>
 		<label style="display:block;margin-bottom:6px;">
-			<input type="checkbox" name="scope_full" class="agent-access-scope-full" value="1" <?php checked( $full ); ?> <?php disabled( $read_only ); ?>>
+			<input type="checkbox" name="scope_full" class="agent-access-scope-full" value="1" <?php checked( $full ); ?> <?php disabled( $read_only || $seo_only ); ?>>
 			<?php esc_html_e( 'Full write access', 'botcreds-agent-access' ); ?>
 		</label>
 		</div>
-		<p class="agent-access-scope-summary" aria-live="polite"><?php echo esc_html( $read_only ? __( 'Read only — writes disabled.', 'botcreds-agent-access' ) : ( $full ? __( 'Full write access — within this user’s permissions.', 'botcreds-agent-access' ) : __( 'Selected access — writes limited to the selections below.', 'botcreds-agent-access' ) ) ); ?></p>
+		<div class="agent-access-control-row">
+		<label><input type="checkbox" name="scope_seo_only" class="agent-access-scope-seo-only" value="1" <?php checked( $seo_only ); ?> <?php disabled( $read_only ); ?>> <?php esc_html_e( 'Yoast SEO only', 'botcreds-agent-access' ); ?></label>
+		<?php $this->render_help_tooltip( __( 'Yoast SEO only', 'botcreds-agent-access' ), __( 'Requires active Yoast SEO. Allows SEO title, description, focus keyphrase and social titles/descriptions through /agent-access/v1/yoast-seo/{id}. Existing content only, within the account’s editing permissions. Blocks all other writes, including content, publishing and plugin integrations. Overrides full and selected write access. Reads are unchanged.', 'botcreds-agent-access' ) ); ?>
+		</div>
+		<p class="agent-access-scope-summary" aria-live="polite"><?php echo esc_html( $read_only ? __( 'Read only — writes disabled.', 'botcreds-agent-access' ) : ( $seo_only ? __( 'Yoast SEO only — existing content; no content edits or publishing.', 'botcreds-agent-access' ) : ( $full ? __( 'Full write access — within this user’s permissions.', 'botcreds-agent-access' ) : __( 'Selected access — writes limited to the selections below.', 'botcreds-agent-access' ) ) ) ); ?></p>
 		<fieldset class="agent-access-scoped-options">
 			<legend class="agent-access-scope-heading"><?php esc_html_e( 'WordPress content', 'botcreds-agent-access' ); ?></legend>
 			<?php foreach ( $types as $type ) : ?>
 				<label style="display:block;margin-bottom:3px;">
-					<input type="checkbox" name="scope_types[]" class="agent-access-scope-type" value="<?php echo esc_attr( $type['slug'] ); ?>" <?php checked( in_array( $type['slug'], $scope, true ) ); ?> <?php disabled( $read_only || $full ); ?>>
+					<input type="checkbox" name="scope_types[]" class="agent-access-scope-type" value="<?php echo esc_attr( $type['slug'] ); ?>" <?php checked( in_array( $type['slug'], $scope, true ) ); ?> <?php disabled( $read_only || $seo_only || $full ); ?>>
 					<?php echo esc_html( $type['label'] ); ?>
 				</label>
 			<?php endforeach; ?>
@@ -623,7 +629,7 @@ class Agent_Access_Admin {
 			<p style="font-weight:600;margin:6px 0;"><?php esc_html_e( 'Plugin integrations', 'botcreds-agent-access' ); ?></p>
 			<div class="agent-access-control-row">
 			<label>
-				<input type="checkbox" name="scope_all_custom" class="agent-access-scope-all-custom" value="1" <?php checked( $all_custom ); ?> <?php disabled( $read_only || $full ); ?>>
+				<input type="checkbox" name="scope_all_custom" class="agent-access-scope-all-custom" value="1" <?php checked( $all_custom ); ?> <?php disabled( $read_only || $seo_only || $full ); ?>>
 				<?php esc_html_e( 'Allow all plugin integrations', 'botcreds-agent-access' ); ?>
 			</label>
 			<?php $this->render_help_tooltip( __( 'Plugin integration access', 'botcreds-agent-access' ), __( 'Allows writes to current and future plugin REST namespaces, including DELETE when permitted. Does not expand WordPress content access. The user\'s WordPress permissions still apply.', 'botcreds-agent-access' ) ); ?>
@@ -635,7 +641,7 @@ class Agent_Access_Admin {
 				<div class="agent-access-integration-list" role="group" aria-label="<?php esc_attr_e( 'Available plugin integrations', 'botcreds-agent-access' ); ?>">
 				<?php foreach ( $integrations as $integration ) : ?>
 					<label style="display:block;margin:6px 0;">
-						<input type="checkbox" name="scope_types[]" class="agent-access-scope-type" value="<?php echo esc_attr( $integration['slug'] ); ?>" <?php checked( in_array( $integration['slug'], $scope, true ) ); ?> <?php disabled( $read_only || $full || $all_custom ); ?>>
+						<input type="checkbox" name="scope_types[]" class="agent-access-scope-type" value="<?php echo esc_attr( $integration['slug'] ); ?>" <?php checked( in_array( $integration['slug'], $scope, true ) ); ?> <?php disabled( $read_only || $seo_only || $full || $all_custom ); ?>>
 						<?php echo esc_html( $integration['label'] ); ?>
 						<small class="agent-access-route-hint"><?php echo esc_html( $integration['slug'] ); ?></small>
 					</label>
@@ -650,7 +656,7 @@ class Agent_Access_Admin {
 						<label for="<?php echo esc_attr( $routes_id ); ?>"><?php esc_html_e( 'Custom route prefixes (one per line)', 'botcreds-agent-access' ); ?></label>
 						<?php $this->render_help_tooltip( __( 'Custom route prefixes', 'botcreds-agent-access' ), __( 'Enter one path per line, beginning with /. Prefixes include their subroutes; a trailing /* is optional. Use route paths, not full URLs. Grants include all write methods, including DELETE, subject to WordPress permissions.', 'botcreds-agent-access' ) ); ?>
 					</div>
-					<textarea id="<?php echo esc_attr( $routes_id ); ?>" name="scope_custom_routes" class="agent-access-scope-custom-routes large-text code" rows="3" placeholder="/newspack-workflows/v1/*" <?php disabled( $read_only || $full || $all_custom ); ?>><?php echo esc_textarea( implode( "\n", $extra_routes ) ); ?></textarea>
+					<textarea id="<?php echo esc_attr( $routes_id ); ?>" name="scope_custom_routes" class="agent-access-scope-custom-routes large-text code" rows="3" placeholder="/newspack-workflows/v1/*" <?php disabled( $read_only || $seo_only || $full || $all_custom ); ?>><?php echo esc_textarea( implode( "\n", $extra_routes ) ); ?></textarea>
 				</details>
 			</fieldset>
 		</fieldset>
@@ -672,6 +678,9 @@ class Agent_Access_Admin {
 		if ( ! empty( $_POST['scope_read_only'] ) ) {
 			return array( '__read_only__' );
 		}
+		if ( ! empty( $_POST['scope_seo_only'] ) ) {
+			return array( Agent_Access_Yoast_SEO::SCOPE );
+		}
 		if ( ! empty( $_POST['scope_full'] ) ) {
 			return array( '*' );
 		}
@@ -691,7 +700,7 @@ class Agent_Access_Admin {
 				if ( ! Agent_Access_Scope::is_valid_custom_pattern( $slug ) ) {
 					return new WP_Error( 'invalid_scope', __( 'Use custom route prefixes such as /newspack-workflows/v1/*; core WordPress routes belong in the content scope.', 'botcreds-agent-access' ) );
 				}
-			} elseif ( '*' !== $slug && ( sanitize_key( $slug ) !== $slug || '__read_only__' === $slug || Agent_Access_Scope::ALL_CUSTOM_ENDPOINTS === $slug ) ) {
+			} elseif ( '*' !== $slug && ( sanitize_key( $slug ) !== $slug || '__read_only__' === $slug || Agent_Access_Yoast_SEO::SCOPE === $slug || Agent_Access_Scope::ALL_CUSTOM_ENDPOINTS === $slug ) ) {
 				return new WP_Error( 'invalid_scope', __( 'Invalid scope settings.', 'botcreds-agent-access' ) );
 			}
 			$clean[] = $slug;

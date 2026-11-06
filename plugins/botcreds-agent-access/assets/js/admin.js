@@ -91,9 +91,12 @@
 			var full = checklist.querySelector('.agent-access-scope-full');
 			var allCustom = checklist.querySelector('.agent-access-scope-all-custom');
 			var readMode = !!(readOnly && readOnly.checked);
-			var fullMode = !!(full && full.checked);
-			var inactive = readMode || fullMode;
-			if (full) full.disabled = readMode;
+			var seo = checklist.querySelector('.agent-access-scope-seo-only');
+			var seoMode = !!(seo && seo.checked);
+			if (seo) seo.disabled = readMode;
+			var fullMode = !seoMode && !!(full && full.checked);
+			var inactive = readMode || seoMode || fullMode;
+			if (full) full.disabled = readMode || seoMode;
 			if (allCustom) allCustom.disabled = inactive;
 			checklist.querySelectorAll('.agent-access-scope-type, .agent-access-scope-custom-routes').forEach(function (control) {
 				var custom = !!control.closest('.agent-access-custom-options');
@@ -104,11 +107,11 @@
 			var total = list ? list.querySelectorAll('.agent-access-scope-type').length : 0;
 			if (list) list.classList.toggle('is-inactive', inactive || !!(allCustom && allCustom.checked));
 			var count = checklist.querySelector('.agent-access-integration-count');
-			setLiveText(count, readMode ? uiText('integrations_disabled', 'Integration writes disabled.') : (fullMode ? uiText('integrations_full', 'All detected integrations allowed by full access.') : (allCustom && allCustom.checked ? uiText('integrations_all', 'All detected integrations allowed.') : uiCount(uiText('integrations_selected', '%1$d of %2$d selected'), [selected, total]))));
+			setLiveText(count, (readMode || seoMode) ? uiText('integrations_disabled', 'Integration writes disabled.') : (fullMode ? uiText('integrations_full', 'All detected integrations allowed by full access.') : (allCustom && allCustom.checked ? uiText('integrations_all', 'All detected integrations allowed.') : uiCount(uiText('integrations_selected', '%1$d of %2$d selected'), [selected, total]))));
 			var summary = checklist.querySelector('.agent-access-scope-summary');
 			var routes = checklist.querySelector('.agent-access-scope-custom-routes');
 			var hasSelection = checklist.querySelector('.agent-access-scope-type:checked:not(:disabled)') || (allCustom && allCustom.checked) || (routes && routes.value.trim());
-			setLiveText(summary, readMode ? uiText('read_only', 'Read only — writes disabled.') : (fullMode ? uiText('full', 'Full write access — within this user’s permissions.') : (hasSelection ? uiText('selected', 'Selected access — writes limited to the selections below.') : uiText('empty', 'No selections — writes disabled.'))));
+			setLiveText(summary, readMode ? uiText('read_only', 'Read only — writes disabled.') : (seoMode ? uiText('seo_only', 'Yoast SEO only — existing content; no content edits or publishing.') : (fullMode ? uiText('full', 'Full write access — within this user’s permissions.') : (hasSelection ? uiText('selected', 'Selected access — writes limited to the selections below.') : uiText('empty', 'No selections — writes disabled.')))));
 		}
 		document.querySelectorAll('.agent-access-scope-checklist').forEach(sync);
 		['change', 'input'].forEach(function (name) {
@@ -121,10 +124,14 @@
 
 	/** Collect only effective controls; disabled fieldsets must not submit grants. */
 	function collectScopeFromChecklist(container) {
-		var data = { scope_read_only: '', scope_full: '', scope_all_custom: '', scope_types: [], scope_custom_routes: '' };
+		var data = { scope_read_only: '', scope_seo_only: '', scope_full: '', scope_all_custom: '', scope_types: [], scope_custom_routes: '' };
 		if (!container) return data;
 		if (container.querySelector('.agent-access-scope-read-only:checked')) {
 			data.scope_read_only = '1';
+			return data;
+		}
+		if (container.querySelector('.agent-access-scope-seo-only:checked')) {
+			data.scope_seo_only = '1';
 			return data;
 		}
 		if (container.querySelector('.agent-access-scope-full:checked')) {
@@ -143,7 +150,7 @@
 
 	function encodeScopeParams(data) {
 		var parts = [];
-		['scope_read_only', 'scope_full', 'scope_all_custom', 'scope_custom_routes'].forEach(function (key) {
+		['scope_read_only', 'scope_seo_only', 'scope_full', 'scope_all_custom', 'scope_custom_routes'].forEach(function (key) {
 			if (data[key]) parts.push(key + '=' + encodeURIComponent(data[key]));
 		});
 		data.scope_types.forEach(function (type) {

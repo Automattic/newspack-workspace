@@ -38,6 +38,14 @@ const server = http.createServer((req, res) => {
   await full.check();check(await posts.isDisabled(),'full access disables narrower controls');data=await save();check(data.get('scope_full')==='1','full marker serialized');check(data.getAll('scope_types[]').length===0,'full does not serialize narrower grants');
   await read.check();check(await full.isDisabled(),'read-only disables full');data=await save();check(data.get('scope_read_only')==='1'&&!data.has('scope_full'),'read-only overrides full');
   await read.uncheck();await full.uncheck();check(await posts.isChecked(),'toggling modes preserves specific selections');
+  const seo=page.locator('.agent-access-scope-seo-only');
+  await seo.check();check(await full.isDisabled()&&await posts.isDisabled()&&await all.isDisabled()&&await text.isDisabled(),'SEO-only disables every broader grant control');
+  check((await page.locator('.agent-access-scope-summary').innerText()).startsWith('Yoast SEO only'),'SEO-only summary is explicit');
+  check(await page.getByRole('button',{name:'Help: Yoast SEO only',exact:true}).isEnabled(),'SEO help remains enabled');
+  data=await save();check(data.get('scope_seo_only')==='1'&&!data.has('scope_full')&&!data.has('scope_all_custom')&&!data.has('scope_custom_routes')&&data.getAll('scope_types[]').length===0,'SEO-only submits no broader grants');
+  await read.check();check(await seo.isDisabled(),'read-only takes priority over SEO');data=await save();check(data.get('scope_read_only')==='1'&&!data.has('scope_seo_only'),'read-only payload excludes SEO writes');
+  await read.uncheck();check(await seo.isChecked()&&await full.isDisabled(),'SEO choice survives mode switch');
+  await seo.uncheck();check(await posts.isChecked()&&!(await posts.isDisabled()),'leaving SEO preserves prior selected grants');
   await page.screenshot({path:path.join(dir,'scope-controls-desktop.png'),fullPage:true});
   await page.setViewportSize({width:390,height:844});
   check(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),'mobile has no horizontal overflow');

@@ -76,7 +76,7 @@ class Agent_Access_Scope {
 		}
 
 		// Read-only scope — block all writes.
-		if ( array( '__read_only__' ) === $slugs || ( 1 === count( $slugs ) && '__read_only__' === $slugs[0] ) ) {
+		if ( in_array( '__read_only__', $slugs, true ) ) {
 			if ( $is_write ) {
 				return new WP_Error(
 					'agent_scope_violation',
@@ -90,6 +90,12 @@ class Agent_Access_Scope {
 		// Pass GETs regardless of scope (reads are always allowed).
 		if ( ! $is_write ) {
 			return $result;
+		}
+
+		// Restrictive mode wins over full, content and integration grants, including legacy mixtures.
+		if ( in_array( Agent_Access_Yoast_SEO::SCOPE, $slugs, true ) ) {
+			$valid = Agent_Access_Yoast_SEO::validate_write( $request );
+			return is_wp_error( $valid ) ? $valid : $result;
 		}
 
 		// Wildcard — full write access.
@@ -534,6 +540,10 @@ class Agent_Access_Scope {
 
 		if ( in_array( '__read_only__', $scope, true ) ) {
 			return __( 'Read only', 'botcreds-agent-access' );
+		}
+
+		if ( in_array( Agent_Access_Yoast_SEO::SCOPE, $scope, true ) ) {
+			return __( 'Yoast SEO only', 'botcreds-agent-access' );
 		}
 
 		if ( in_array( '*', $scope, true ) ) {
