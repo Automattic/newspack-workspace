@@ -1,4 +1,4 @@
-import { computeLift, formatConfidence, formatLift, getStatusIntent, getTestStatus, sortTests } from './utils';
+import { computeLift, formatConfidence, formatLift, getStatusIntent, getTestStatus, sortTests, splitSummary } from './utils';
 
 const variant = ( extra = {} ) => ( { status: 'publish', eligible: true, ...extra } );
 
@@ -40,8 +40,21 @@ describe( 'formatConfidence', () => {
 	} );
 } );
 
+describe( 'splitSummary', () => {
+	it( 'gives B the rest of an A/B test', () => {
+		expect( splitSummary( 60, [ 'a', 'b' ] ) ).toBe( '60% see A, 40% see B.' );
+	} );
+	it( 'divides the rest evenly when there are more versions', () => {
+		const summary = splitSummary( 60, [ 'c', 'a', 'b' ] );
+		expect( summary ).toContain( '60% see A' );
+		expect( summary ).toContain( '20% see B' );
+		expect( summary ).toContain( '20% see C' );
+		expect( summary ).not.toContain( '40%' );
+	} );
+} );
+
 describe( 'sortTests', () => {
-	it( 'keeps the retired page’s order', () => {
+	it( 'lists running tests before incomplete ones', () => {
 		const tests = [
 			{ test_id: 'i', variants: { a: variant() } },
 			{ test_id: 'r', variants: { a: variant(), b: variant() } },

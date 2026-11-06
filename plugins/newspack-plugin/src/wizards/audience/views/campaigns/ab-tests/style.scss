@@ -41,10 +41,6 @@
 		font-size: var(--wpds-typography-font-size-lg, 15px);
 		font-weight: 600;
 		line-height: 1.4;
-
-		&:focus {
-			outline: none;
-		}
 	}
 
 	&__header-actions {
@@ -81,7 +77,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: wp-vars.$grid-unit-10;
-		color: wp-colors.$gray-900;
+		color: var(--wpds-color-foreground-content-neutral, #{wp-colors.$gray-900});
 		font-weight: 500;
 		white-space: nowrap;
 	}
@@ -96,7 +92,9 @@
 			background: colors.$primary-600;
 		}
 
-		// One step darker than the old key, so the swatch clears 3:1 on the card.
+		// One step darker than the old key, so B clears 3:1 on the card. C and D
+		// sit lower, which is fine because the letter beside every swatch names
+		// the version.
 		&.is-variant-b {
 			background: colors.$primary-300;
 		}

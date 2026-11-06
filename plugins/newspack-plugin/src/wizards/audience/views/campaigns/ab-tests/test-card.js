@@ -154,7 +154,7 @@ const TestCard = ( { test, data, onRenamed } ) => {
 	const header = (
 		<div className="newspack-ab-tests__header">
 			<div className="newspack-ab-tests__header-top">
-				<h2 id={ headingId } className="newspack-ab-tests__title" tabIndex={ -1 }>
+				<h2 id={ headingId } className="newspack-ab-tests__title">
 					{ name }
 				</h2>
 				<Badge intent={ getStatusIntent( status ) }>{ getStatusLabel( status ) }</Badge>
@@ -171,7 +171,9 @@ const TestCard = ( { test, data, onRenamed } ) => {
 				{ status !== 'incomplete' && (
 					<span>
 						<span className="newspack-ab-tests__setup-key">{ __( 'Split:', 'newspack-plugin' ) }</span>{ ' ' }
-						<span className="newspack-ab-tests__setup-value">{ splitSummary( test.control_share ) }</span>
+						<span className="newspack-ab-tests__setup-value">
+							{ splitSummary( test.control_share, Object.keys( test.variants || {} ) ) }
+						</span>
 					</span>
 				) }
 			</p>

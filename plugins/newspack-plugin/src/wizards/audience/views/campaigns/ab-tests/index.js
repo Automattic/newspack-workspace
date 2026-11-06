@@ -46,7 +46,6 @@ const ABTests = props => {
 	} else if ( ! data ) {
 		content = <Waiting isCenter />;
 	} else if ( ( data.tests || [] ).length === 0 ) {
-		// The Start A/B Test button joins this empty state once the modal can pick a prompt.
 		content = (
 			<EmptyState.Root>
 				<EmptyState.Header

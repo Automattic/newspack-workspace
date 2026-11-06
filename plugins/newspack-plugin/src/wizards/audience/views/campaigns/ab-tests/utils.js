@@ -11,8 +11,8 @@ export const DASH = '—';
 export const REST_BASE = '/newspack-popups/v1/ab-tests';
 
 /**
- * Cards that need someone's attention come first, as on the retired page,
- * until the tab sorts by what needs doing.
+ * Card order: running tests, then those needing attention, drafts, and
+ * tests still missing a version.
  */
 export const STATUS_ORDER = [ 'running', 'needs-attention', 'draft', 'incomplete' ];
 
@@ -144,16 +144,38 @@ export const formatConfidence = ( comparison, labels = {} ) => {
 export const getCountLabel = unit => ( unit === 'events' ? __( 'Views', 'newspack-plugin' ) : __( 'Readers', 'newspack-plugin' ) );
 
 /**
- * @param {number} controlShare Percent of readers who see A.
+ * A keeps its share and the other versions divide the rest evenly, which is
+ * how readers are assigned.
+ *
+ * @param {number}   controlShare Percent of readers who see A.
+ * @param {string[]} letters      The test's version letters.
  * @return {string} The split, such as "50% see A, 50% see B."
  */
-export const splitSummary = controlShare =>
-	sprintf(
-		// Translators: %1$d is the share of readers who see version A, %2$d the share who see version B.
-		__( '%1$d%% see A, %2$d%% see B.', 'newspack-plugin' ),
-		controlShare,
-		100 - controlShare
+export const splitSummary = ( controlShare, letters = [ 'a', 'b' ] ) => {
+	const challengers = letters.filter( letter => letter !== 'a' ).sort();
+	if ( challengers.length <= 1 ) {
+		return sprintf(
+			// Translators: %1$d is the share of readers who see version A, %2$d the share who see version B.
+			__( '%1$d%% see A, %2$d%% see B.', 'newspack-plugin' ),
+			controlShare,
+			100 - controlShare
+		);
+	}
+	const challengerShare = Math.round( ( 100 - controlShare ) / challengers.length );
+	const parts = [ 'a', ...challengers ].map( letter =>
+		sprintf(
+			// Translators: %1$d is a share of readers, %2$s a version letter such as "C".
+			__( '%1$d%% see %2$s', 'newspack-plugin' ),
+			letter === 'a' ? controlShare : challengerShare,
+			letter.toUpperCase()
+		)
 	);
+	return sprintf(
+		// Translators: %s is a list such as "60% see A, 20% see B and 20% see C".
+		__( '%s.', 'newspack-plugin' ),
+		formatList( parts )
+	);
+};
 
 /**
  * A list in the page's language, such as "A and B".
