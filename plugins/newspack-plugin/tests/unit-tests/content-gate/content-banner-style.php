@@ -150,4 +150,14 @@ class Test_Content_Banner_Style extends \WP_UnitTestCase {
 		$this->assertSame( 'newspack-ui__button--primary', Content_Banner_Style::get_button_class( 'site' ) );
 		$this->assertSame( '', Content_Banner_Style::get_inline_style( 'site', '#fff59d', '#0d47a1' ) );
 	}
+
+	/**
+	 * The wizard is told when the site Theme replaces the style option.
+	 */
+	public function test_wizard_data_reports_site_theme() {
+		$this->assertFalse( Content_Banner_Style::get_wizard_data()['uses_site_theme'] );
+		add_theme_support( Newspack_UI_Theme_Style::THEME_SUPPORT );
+		$this->assertTrue( Content_Banner_Style::get_wizard_data()['uses_site_theme'] );
+		remove_theme_support( Newspack_UI_Theme_Style::THEME_SUPPORT );
+	}
 }

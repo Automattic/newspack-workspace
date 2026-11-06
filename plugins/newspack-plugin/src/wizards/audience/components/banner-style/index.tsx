@@ -42,13 +42,18 @@ type ColorFieldProps = {
 };
 
 const supportsThemeStyle = () => !! window.newspackAudience?.content_banner?.supports_theme_style;
+const usesSiteTheme = () => !! window.newspackAudience?.content_banner?.uses_site_theme;
 
 /**
- * The style a banner renders with: Theme falls back to Light where the theme does not offer it.
+ * The style a banner renders with: the site Theme wherever the adapter is active, otherwise the stored
+ * style, with Theme falling back to Light where the theme does not offer it.
  *
  * @param style The stored style.
  */
 export const getBannerStyle = ( style?: string ) => {
+	if ( usesSiteTheme() ) {
+		return 'site';
+	}
 	if ( style === 'dark' || ( style === 'theme' && supportsThemeStyle() ) ) {
 		return style;
 	}
@@ -120,6 +125,9 @@ const ColorField = ( { label, resetLabel, help, value, defaultValue, onChange, d
 );
 
 export default function BannerStyleControl( { settings, onChange, disabled = false, gridCells = false }: BannerStyleControlProps ) {
+	if ( usesSiteTheme() ) {
+		return null;
+	}
 	const hasThemeStyle = supportsThemeStyle();
 	const style = getBannerStyle( settings.style );
 	const startRow = { gridColumnStart: 1 };

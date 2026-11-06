@@ -141,6 +141,7 @@ final class Content_Banner_Style {
 	 *
 	 * @return array{
 	 *     supports_theme_style: bool,
+	 *     uses_site_theme: bool,
 	 *     theme_button_bg: string,
 	 *     theme_button_ink: string,
 	 *     theme_font_heading: string,
@@ -150,6 +151,7 @@ final class Content_Banner_Style {
 	public static function get_wizard_data(): array {
 		$data = [
 			'supports_theme_style' => self::supports_theme_style(),
+			'uses_site_theme'      => self::uses_site_theme(),
 			'theme_button_bg'      => '',
 			'theme_button_ink'     => '',
 			'theme_font_heading'   => '',

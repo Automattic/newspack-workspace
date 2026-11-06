@@ -6,11 +6,16 @@
 /**
  * Internal dependencies
  */
-import { getBannerPreviewProps, toLongHex } from '.';
+import { render } from '@testing-library/react';
+import BannerStyleControl, { getBannerPreviewProps, getBannerStyle, toLongHex } from '.';
 
-jest.mock( '@wordpress/components', () => ( {} ) );
-jest.mock( '@wordpress/ui', () => ( {} ) );
-jest.mock( '../../../../../packages/components/src/color-picker', () => () => null );
+jest.mock( '@wordpress/components', () => ( {
+	Button: () => null,
+	SelectControl: () => <div data-testid="style-select" />,
+} ) );
+jest.mock( '@wordpress/ui', () => ( { Stack: ( { children } ) => <div>{ children }</div> } ) );
+jest.mock( '../../../../../packages/colors/colors.module.scss', () => ( { 'neutral-000': '#ffffff' } ) );
+jest.mock( '../../../../../packages/components/src/color-picker', () => () => <div data-testid="color-picker" /> );
 
 const setThemeData = contentBanner => {
 	window.newspackAudience = { content_banner: contentBanner };
@@ -52,3 +57,50 @@ describe( 'getBannerPreviewProps', () => {
 } );
 
 it( 'expands three-digit hex colors before they reach the color picker', () => expect( toLongHex( '#fff' ) ).toBe( '#ffffff' ) );
+
+describe( 'on a site that uses the Theme', () => {
+	afterEach( () => {
+		delete window.newspackAudience;
+	} );
+
+	it( 'getBannerStyle returns site on a Theme site for any stored style', () => {
+		setThemeData( { supports_theme_style: false, uses_site_theme: true } );
+		[ 'light', 'dark', 'theme', undefined ].forEach( style => expect( getBannerStyle( style ) ).toBe( 'site' ) );
+	} );
+
+	it( 'previews with the Theme class, the primary button and no inline colors', () => {
+		setThemeData( { supports_theme_style: true, uses_site_theme: true, theme_button_bg: '#666666' } );
+		expect( getBannerPreviewProps( { style: 'dark', bg_color: '#fff59d', button_color: '#0d47a1' } ) ).toEqual( {
+			bannerClassName: 'is-style-site',
+			bannerStyle: {},
+			buttonClassName: 'newspack-ui__button--primary',
+		} );
+	} );
+
+	it( 'BannerStyleControl renders no style option on a Theme site', () => {
+		setThemeData( { supports_theme_style: true, uses_site_theme: true } );
+		const { queryByTestId } = render( <BannerStyleControl settings={ { style: 'theme' } } onChange={ () => {} } /> );
+		expect( queryByTestId( 'style-select' ) ).toBeNull();
+		expect( queryByTestId( 'color-picker' ) ).toBeNull();
+	} );
+
+	it( 'BannerStyleControl still renders the style option on classic', () => {
+		setThemeData( { supports_theme_style: true, uses_site_theme: false } );
+		const { queryByTestId, getAllByTestId } = render( <BannerStyleControl settings={ { style: 'theme' } } onChange={ () => {} } /> );
+		expect( queryByTestId( 'style-select' ) ).not.toBeNull();
+		expect( getAllByTestId( 'color-picker' ) ).toHaveLength( 2 );
+	} );
+} );
+
+describe( 'getBannerStyle on classic', () => {
+	afterEach( () => {
+		delete window.newspackAudience;
+	} );
+
+	it( 'keeps light, dark and theme where the theme offers it', () => {
+		setThemeData( { supports_theme_style: true, uses_site_theme: false } );
+		expect( [ 'light', 'dark', 'theme' ].map( getBannerStyle ) ).toEqual( [ 'light', 'dark', 'theme' ] );
+		setThemeData( { supports_theme_style: false, uses_site_theme: false } );
+		expect( getBannerStyle( 'theme' ) ).toBe( 'light' );
+	} );
+} );
