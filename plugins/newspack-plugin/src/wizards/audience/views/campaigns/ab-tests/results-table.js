@@ -149,15 +149,7 @@ const ResultsTable = ( { test, status, stats, labels } ) => {
 	const { data, paginationInfo } = useMemo( () => filterSortAndPaginate( rows, tableView, fields ), [ rows, tableView, fields ] );
 
 	return (
-		<div
-			className="newspack-ab-tests__table"
-			role="region"
-			aria-label={ sprintf(
-				// Translators: %s is the test name.
-				__( 'Results for %s', 'newspack-plugin' ),
-				test.name || test.test_id
-			) }
-		>
+		<div className="newspack-ab-tests__table">
 			<DataViews
 				data={ data }
 				fields={ fields }

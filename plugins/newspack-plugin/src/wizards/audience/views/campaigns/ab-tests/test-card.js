@@ -183,7 +183,13 @@ const TestCard = ( { test, data, onRenamed } ) => {
 	const notices = [];
 	if ( duplicates.length > 0 ) {
 		notices.push(
-			<Notice key="duplicates" status="error" isDismissible={ false } spokenMessage="">
+			<Notice
+				key="duplicates"
+				status="error"
+				isDismissible={ false }
+				politeness="polite"
+				spokenMessage={ __( 'More than one prompt in this test is the same version. Unpublish the extra prompt.', 'newspack-plugin' ) }
+			>
 				{ __(
 					'More than one prompt in this test is the same version. Readers still see both, and results only count the first. Unpublish the extra prompt:',
 					'newspack-plugin'
