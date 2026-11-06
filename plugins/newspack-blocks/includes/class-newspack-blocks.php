@@ -1841,9 +1841,11 @@ class Newspack_Blocks {
 	 * @return bool
 	 */
 	public static function donate_button_uses_site_style( array $attributes ): bool {
-		return wp_is_block_theme()
-			&& isset( $attributes['buttonColor'] )
-			&& '#dd3333' === strtolower( (string) $attributes['buttonColor'] );
+		if ( ! wp_is_block_theme() ) {
+			return false;
+		}
+		$color = strtolower( (string) ( $attributes['buttonColor'] ?? '' ) );
+		return '' === $color || '#dd3333' === $color;
 	}
 
 	/**

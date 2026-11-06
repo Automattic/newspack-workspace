@@ -108,6 +108,10 @@ class DonateBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 			switch_theme( $this->original_theme );
 			$this->original_theme = null;
 		}
+		if ( null !== $this->classic_theme_root ) {
+			$GLOBALS['wp_theme_directories'] = array_values( array_diff( $GLOBALS['wp_theme_directories'], [ $this->classic_theme_root ] ) );
+			$this->classic_theme_root        = null;
+		}
 		wp_clean_themes_cache();
 		parent::tear_down();
 	}
@@ -126,12 +130,20 @@ class DonateBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * Theme root registered for the classic fixture, when one was.
+	 *
+	 * @var string|null
+	 */
+	private $classic_theme_root = null;
+
+	/**
 	 * Switch to the classic theme fixture.
 	 */
 	private function use_classic_theme() {
-		register_theme_directory( NEWSPACK_BLOCKS__PLUGIN_DIR . 'tests/fixtures/themes' );
+		$this->classic_theme_root = untrailingslashit( NEWSPACK_BLOCKS__PLUGIN_DIR . 'tests/fixtures/themes' );
+		register_theme_directory( $this->classic_theme_root );
 		wp_clean_themes_cache();
-		$this->use_theme( 'zz-classic' );
+		$this->use_theme( 'classic-fixture' );
 	}
 
 	/**
@@ -175,10 +187,11 @@ class DonateBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	/**
 	 * The default button color defers to the site's button on a block theme.
 	 */
-	public function test_donate_button_uses_site_style_when_default_and_active() {
+	public function test_donate_button_uses_site_style_when_default_on_a_block_theme() {
 		$this->use_theme( 'twentytwentyfive' );
 		$this->assertTrue( Newspack_Blocks::donate_button_uses_site_style( [ 'buttonColor' => '#dd3333' ] ) );
 		$this->assertTrue( Newspack_Blocks::donate_button_uses_site_style( [ 'buttonColor' => '#DD3333' ] ) );
+		$this->assertTrue( Newspack_Blocks::donate_button_uses_site_style( [ 'buttonColor' => '' ] ) );
 		$this->assertSame( '', $this->get_button_style( [ 'buttonColor' => '#dd3333' ] ) );
 		$this->assertSame(
 			[
