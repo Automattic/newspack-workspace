@@ -68,7 +68,7 @@
 				}
 
 				&:focus-visible {
-					@include mixins.focus-line( $inner: var(--newspack-ui-tabs-indicator, 0 0 transparent), $inset: true, $radius: calc(var(--newspack-ui-radius-control) * 0.5) );
+					@include mixins.focus-line( $inner: var(--newspack-ui-tabs-indicator, 0 0 transparent), $inset: true, $radius: var(--newspack-ui-radius-tab-inner) );
 				}
 
 				.newspack-ui__badge {

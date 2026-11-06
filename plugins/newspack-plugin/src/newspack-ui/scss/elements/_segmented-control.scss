@@ -27,7 +27,7 @@
 
 		&__tabs {
 			background: var(--newspack-ui-color-neutral-fill);
-			border-radius: calc(var(--newspack-ui-radius-button) * 1.5);
+			border-radius: var(--newspack-ui-radius-surface);
 			display: flex;
 			flex-wrap: wrap;
 			gap: var(--newspack-ui-spacer-half);
@@ -45,7 +45,7 @@
 				--newspack-ui-button-text-transform: none;
 				--newspack-ui-button-white-space: nowrap;
 
-				border-radius: var(--newspack-ui-radius-button);
+				border-radius: var(--newspack-ui-radius-segment-inner);
 				cursor: pointer;
 				font-weight: var(--newspack-ui-font-weight-medium);
 				margin: 0;
@@ -89,7 +89,7 @@
 
 				&::before {
 					background: var(--newspack-ui-color-surface);
-					border-radius: var(--newspack-ui-radius-button);
+					border-radius: var(--newspack-ui-radius-segment-inner);
 					box-shadow: inset 0 0 0 1px var(--newspack-ui-color-border-outline);
 					content: "";
 					height: var(--newspack-ui-segmented-thumb-height, 0);

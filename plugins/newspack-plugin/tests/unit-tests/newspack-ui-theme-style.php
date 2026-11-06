@@ -668,6 +668,70 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The theme's button radius sets every radius role.
+	 *
+	 * @dataProvider data_radius_roles
+	 *
+	 * @param string $radius   The button radius.
+	 * @param string $expected The radius the roles are built from.
+	 */
+	public function test_radius_roles( string $radius, string $expected ): void {
+		$styles = [ 'elements' => [ 'button' => [ 'border' => [ 'radius' => $radius ] ] ] ];
+		$css    = Newspack_UI_Theme_Style::get_css( $styles, [] );
+
+		$this->assertStringContainsString( '--newspack-ui-radius-button:' . $expected . ';', $css );
+		$this->assertStringContainsString( '--newspack-ui-radius-control:min(' . $expected . ', 12px);', $css );
+		$this->assertStringContainsString( '--newspack-ui-radius-badge:calc(' . $expected . ' * 0.5);', $css );
+		$this->assertStringContainsString( '--newspack-ui-radius-surface:min(calc(' . $expected . ' * 1.5), 24px);', $css );
+		$this->assertStringContainsString( '--newspack-ui-radius-sheet:min(calc(' . $expected . ' * 2), 24px);', $css );
+	}
+
+	/**
+	 * Button radii and the value the roles are built from.
+	 *
+	 * @return array
+	 */
+	public function data_radius_roles(): array {
+		return [
+			'zero'   => [ '0', '0px' ],
+			'8px'    => [ '8px', '8px' ],
+			'0.5rem' => [ '0.5rem', '0.5rem' ],
+			'pill'   => [ '999px', '999px' ],
+			'2px'    => [ '2px', '2px' ],
+		];
+	}
+
+	/**
+	 * A radius that is not a plain length prints no radius role.
+	 *
+	 * @dataProvider data_invalid_radius
+	 *
+	 * @param mixed $radius The button radius.
+	 */
+	public function test_invalid_radius_prints_nothing( $radius ): void {
+		$styles = [ 'elements' => [ 'button' => [ 'border' => [ 'radius' => $radius ] ] ] ];
+		$this->assertStringNotContainsString( 'radius', Newspack_UI_Theme_Style::get_css( $styles, [] ) );
+		$this->assertSame( [], array_filter( array_keys( Newspack_UI_Theme_Style::get_properties( $styles, [] ) ), fn( $name ) => false !== strpos( $name, 'radius' ) ) );
+	}
+
+	/**
+	 * Button radii the roles are not built from.
+	 *
+	 * @return array
+	 */
+	public function data_invalid_radius(): array {
+		return [
+			'var'       => [ 'var(--x)' ],
+			'inherit'   => [ 'inherit' ],
+			'negative'  => [ '-4px' ],
+			'injection' => [ '8px;}' ],
+			'newline'   => [ "8px\n" ],
+			'corners'   => [ [ 'topLeft' => '8px' ] ],
+			'empty'     => [ '' ],
+		];
+	}
+
+	/**
 	 * A hostile value never reaches the output.
 	 */
 	public function test_hostile_values_are_not_printed(): void {

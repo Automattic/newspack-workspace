@@ -118,7 +118,7 @@
 
 				&::before {
 					background-color: color-mix(in srgb, currentcolor 23%, transparent);
-					border-radius: var(--newspack-ui-radius-pill);
+					border-radius: var(--newspack-ui-radius-sheet-handle);
 					content: "";
 					height: var(--newspack-ui-spacer-half);
 					inset-inline: 0;

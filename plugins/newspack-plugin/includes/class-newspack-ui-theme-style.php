@@ -34,7 +34,8 @@ class Newspack_UI_Theme_Style {
 	 * Custom property prefix to the value type its values are checked as. A property under no prefix is never printed.
 	 */
 	const PROPERTY_TYPES = [
-		'--newspack-ui-color-' => 'color',
+		'--newspack-ui-color-'  => 'color',
+		'--newspack-ui-radius-' => 'length',
 	];
 
 	/**
@@ -188,7 +189,33 @@ class Newspack_UI_Theme_Style {
 	 * @return array<string,string>
 	 */
 	public static function get_properties( array $global_styles, ?array $settings = null ): array {
-		return Newspack_UI_Palette::get_properties( self::get_palette( $global_styles, $settings ) );
+		return array_merge(
+			Newspack_UI_Palette::get_properties( self::get_palette( $global_styles, $settings ) ),
+			self::get_radius_properties( $global_styles )
+		);
+	}
+
+	/**
+	 * The radius roles, all derived from the theme's button radius.
+	 *
+	 * @param array $global_styles Resolved global styles.
+	 *
+	 * @return array<string,string> Empty when the button radius is not a plain length.
+	 */
+	private static function get_radius_properties( array $global_styles ): array {
+		$radius = $global_styles['elements']['button']['border']['radius'] ?? null;
+		if ( ! is_string( $radius ) || 1 !== preg_match( '/^(?:\d+(?:\.\d+)?(?:px|rem|em)|0)$/D', $radius ) ) {
+			return [];
+		}
+		$radius = '0' === $radius ? '0px' : $radius;
+
+		return [
+			'--newspack-ui-radius-button'  => $radius,
+			'--newspack-ui-radius-control' => 'min(' . $radius . ', 12px)',
+			'--newspack-ui-radius-badge'   => 'calc(' . $radius . ' * 0.5)',
+			'--newspack-ui-radius-surface' => 'min(calc(' . $radius . ' * 1.5), 24px)',
+			'--newspack-ui-radius-sheet'   => 'min(calc(' . $radius . ' * 2), 24px)',
+		];
 	}
 
 	/**
