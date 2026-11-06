@@ -165,6 +165,23 @@ class Newspack_UI_Palette {
 	}
 
 	/**
+	 * The muted and subtle text tones for a text color on a background.
+	 *
+	 * @param string $contrast_hex Text color, '#rrggbb'.
+	 * @param string $base_hex     Background color, '#rrggbb'.
+	 *
+	 * @return array{muted:string,subtle:string}
+	 */
+	public static function text_tones( string $contrast_hex, string $base_hex ): array {
+		$fill = self::mix( $contrast_hex, 7, $base_hex );
+
+		return [
+			'muted'  => self::mix( $contrast_hex, self::solve_mix( $contrast_hex, $base_hex, self::START_SHARES['text-muted'], self::TARGETS['text-muted'], $fill ), $base_hex ),
+			'subtle' => self::mix( $contrast_hex, self::solve_mix( $contrast_hex, $base_hex, self::START_SHARES['text-subtle'], self::TARGETS['text-subtle'] ), $base_hex ),
+		];
+	}
+
+	/**
 	 * Subtle surface color: the block theme's notice tint.
 	 *
 	 * On a light base the tint is multiplied over it; on a dark base the contrast color is mixed in at 4%.
@@ -345,9 +362,9 @@ class Newspack_UI_Palette {
 		$contrast = '' === $contrast ? ( $dark ? '#ffffff' : '#000000' ) : $contrast;
 		$brand    = self::normalize_hex( $palette['brand'] ?? '' );
 
-		$fill   = self::mix( $contrast, 7, $base );
-		$muted  = self::mix( $contrast, self::solve_mix( $contrast, $base, self::START_SHARES['text-muted'], self::TARGETS['text-muted'], $fill ), $base );
-		$subtle = self::mix( $contrast, self::solve_mix( $contrast, $base, self::START_SHARES['text-subtle'], self::TARGETS['text-subtle'] ), $base );
+		$tones  = self::text_tones( $contrast, $base );
+		$muted  = $tones['muted'];
+		$subtle = $tones['subtle'];
 		$border = self::mix( $contrast, self::solve_mix( $contrast, $base, self::START_SHARES['border'], self::TARGETS['border'] ), $base );
 		$ctrl   = self::mix( $contrast, self::solve_mix( $contrast, $base, self::START_SHARES['input-border'], self::TARGETS['input-border'] ), $base );
 

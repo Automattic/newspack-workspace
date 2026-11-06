@@ -28,6 +28,8 @@
 	--newspack-ui-radius-button: var(--newspack-ui-border-radius-l);
 	--newspack-ui-field-radius: var(--newspack-ui-radius-control);
 	--newspack-ui-field-border-width: 1px;
+	--newspack-ui-field-caret-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M15.9902 10.889L12.0022 14.307L8.01416 10.889L8.99016 9.74899L12.0022 12.331L15.0142 9.74999L15.9902 10.889Z' fill='%231E1E1E'/%3E%3C/svg%3E");
+	--newspack-ui-field-caret-light: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M15.9902 10.889L12.0022 14.307L8.01416 10.889L8.99016 9.74899L12.0022 12.331L15.0142 9.74999L15.9902 10.889Z' fill='%23FFFFFF'/%3E%3C/svg%3E");
 	--newspack-ui-radius-badge: var(--newspack-ui-border-radius-s);
 	--newspack-ui-radius-surface: var(--newspack-ui-border-radius-2xl);
 	--newspack-ui-radius-sheet: 16px;
