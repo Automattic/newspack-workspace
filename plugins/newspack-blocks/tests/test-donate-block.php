@@ -5,6 +5,8 @@
  * @package Newspack_Blocks
  */
 
+require_once __DIR__ . '/class-newspack-donations-stub.php';
+
 /**
  * Mock WooCommerce functions for testing.
  */
