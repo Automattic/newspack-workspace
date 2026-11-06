@@ -43,9 +43,13 @@ const TierBasedLayout = ( props: ComponentProps ) => {
 			return isReverse
 				? {
 						appearance: 'button' as const,
-						borderColor: 'var(--newspack-ui-color-btn)',
+						borderColor: 'var(--newspack-ui-color-btn, #1e1e1e)',
 						backgroundColor: 'transparent',
-						color: 'var(--newspack-ui-color-btn)',
+						color: 'var(--newspack-ui-color-btn, #1e1e1e)',
+						fontFamily: 'var(--newspack-ui-button-font-family, var(--newspack-theme-font-heading, sans-serif))',
+						fontWeight: 'var(--newspack-ui-button-font-weight, bold)',
+						letterSpacing: 'var(--newspack-ui-button-letter-spacing, normal)',
+						textTransform: 'var(--newspack-ui-button-text-transform, none)',
 				  }
 				: { appearance: 'button' as const };
 		}
@@ -148,7 +152,7 @@ const TierBasedLayout = ( props: ComponentProps ) => {
 							</div>
 							<div
 								className={ classNames( 'submit-button', {
-									'wp-element-button wp-block-button__link': useSiteStyle && ( ! isAnyRecommended || recommendLabel ),
+									'wp-element-button': useSiteStyle && ( ! isAnyRecommended || recommendLabel ),
 								} ) }
 								style={ getButtonStyle( isAnyRecommended && ! recommendLabel ) }
 							>

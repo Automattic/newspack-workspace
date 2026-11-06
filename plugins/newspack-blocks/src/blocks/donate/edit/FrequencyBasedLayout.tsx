@@ -264,7 +264,7 @@ const FrequencyBasedLayout = ( props: { canUseNameYourPrice: boolean; isTiered: 
 
 	const renderButton = () => (
 		<div
-			className={ classNames( 'submit-button', { 'wp-element-button wp-block-button__link': usesSiteButtonStyle( attributes.buttonColor ) } ) }
+			className={ classNames( 'submit-button', { 'wp-element-button': usesSiteButtonStyle( attributes.buttonColor ) } ) }
 			style={
 				usesSiteButtonStyle( attributes.buttonColor )
 					? undefined

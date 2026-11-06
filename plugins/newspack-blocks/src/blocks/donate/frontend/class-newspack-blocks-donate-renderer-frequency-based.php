@@ -99,7 +99,7 @@ class Newspack_Blocks_Donate_Renderer_Frequency_Based extends Newspack_Blocks_Do
 			<?php echo wp_kses_post( $attributes['thanksText'] ); ?>
 		</p>
 
-		<button type='submit' <?php echo $button_attrs; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
+		<button type='submit'<?php self::print_button_attrs( $button_attrs ); ?>>
 			<?php echo wp_kses_post( $attributes['buttonText'] ); ?>
 		</button>
 		<?php if ( $campaign ) : ?>
