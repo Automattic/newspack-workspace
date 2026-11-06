@@ -33,6 +33,7 @@ import { fmtDate } from '../format';
 import './style.scss';
 import LoadFailureNotice from '../components/LoadFailureNotice';
 import { useRetryFocus } from '../use-retry-focus';
+import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { useGroups } from '../data/use-groups';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
 import { STATUS_INDICATORS, STATUS_LABELS } from '../status';
@@ -50,7 +51,7 @@ const DEFAULT_VIEW = {
 	// `product` is visible by default because it is the only place a group's
 	// subscription is reachable — see the owner field below for why the title
 	// cell can't carry that link.
-	fields: [ 'product', 'members', 'status', 'createdAt' ],
+	fields: [ 'status', 'product', 'members', 'createdAt' ],
 	// Hide cancelled groups by default: they add noise with little value. Still
 	// reachable by ticking "Cancelled" in the Status filter (or clearing it).
 	// A group awaiting its first payment sits in `pending`, so it stays visible.
@@ -58,9 +59,9 @@ const DEFAULT_VIEW = {
 	layout: {
 		styles: {
 			owner: { width: '30%' },
+			status: { width: '15%' },
 			product: { width: '20%' },
 			members: { width: '15%' },
-			status: { width: '15%' },
 			createdAt: { width: '20%' },
 		},
 	},
@@ -85,6 +86,19 @@ export default function GroupList() {
 		}
 	};
 
+	// Resolve owner avatar URLs, keyed by group id. The table renders immediately
+	// with the avatar placeholder and each avatar fills in as it resolves.
+	const ownerEmails = useMemo( () => groups.map( g => g.owner?.email ), [ groups ] );
+	const { avatars: avatarsByEmail } = useAvatars( ownerEmails );
+	const avatars = useMemo( () => {
+		const byId = {};
+		groups.forEach( g => {
+			const email = g.owner?.email;
+			byId[ g.id ] = email ? avatarsByEmail[ email ] : undefined;
+		} );
+		return byId;
+	}, [ groups, avatarsByEmail ] );
+
 	// Subscription filter options come from the loaded groups, which are the full
 	// set, not from /plans: that endpoint also lists individual plans, which match
 	// no group. Distinct, in first-seen order.
@@ -106,21 +120,39 @@ export default function GroupList() {
 				// own Enter/Space handler fires onClickItem regardless of where the key
 				// originated, so a link nested here would resolve to two destinations at
 				// once. The subscription's link lives in the `product` column instead.
-				render: ( { item } ) => (
-					<div data-group-id={ item.id }>
-						<HStack spacing={ 2 } justify="flex-start" alignment="center" expanded={ false }>
-							<span>{ item.owner?.name || '—' }</span>
-							{ item.seatRequest && (
-								<Badge intent="medium">
-									{ item.seatRequest.status === 'awaiting-payment'
-										? __( 'Awaiting payment', 'newspack-plugin' )
-										: __( 'Seat increase requested', 'newspack-plugin' ) }
-								</Badge>
+				render: ( { item } ) => {
+					const details = (
+						<div>
+							<HStack spacing={ 2 } justify="flex-start" alignment="center" expanded={ false }>
+								<span>{ item.owner?.name || '—' }</span>
+								{ item.seatRequest && (
+									<Badge intent="medium">
+										{ item.seatRequest.status === 'awaiting-payment'
+											? __( 'Awaiting payment', 'newspack-plugin' )
+											: __( 'Seat increase requested', 'newspack-plugin' ) }
+									</Badge>
+								) }
+							</HStack>
+							{ item.plan && <div className="newspack-subscribers__email">{ item.plan }</div> }
+						</div>
+					);
+					return (
+						<div data-group-id={ item.id }>
+							{ SHOW_AVATARS ? (
+								<HStack spacing={ 3 } justify="flex-start" alignment="center">
+									{ avatars[ item.id ] ? (
+										<img className="newspack-subscribers__avatar" src={ avatars[ item.id ] } alt="" width={ 32 } height={ 32 } />
+									) : (
+										<span className="newspack-subscribers__avatar" aria-hidden="true" />
+									) }
+									{ details }
+								</HStack>
+							) : (
+								details
 							) }
-						</HStack>
-						{ item.plan && <div className="newspack-subscribers__email">{ item.plan }</div> }
-					</div>
-				),
+						</div>
+					);
+				},
 				enableSorting: true,
 			},
 			{
@@ -172,7 +204,7 @@ export default function GroupList() {
 				enableSorting: true,
 			},
 		],
-		[ productElements ]
+		[ avatars, productElements ]
 	);
 
 	// The group name and the owner's email have no column of their own, so they

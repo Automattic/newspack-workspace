@@ -74,13 +74,23 @@ const editUrl = item => `${ getAdminUrl() }post.php?post=${ item.id }&action=edi
 
 const getTitle = item => item?.title?.raw ?? item?.title?.rendered ?? '';
 
+const advertiserNames = item =>
+	termsForTaxonomy( item, 'newspack_nl_advertiser' )
+		.map( term => term?.name )
+		.filter( Boolean )
+		.join( ', ' );
+
 const renderTitle = ( { item } ) => {
 	const raw = getTitle( item );
 	const title = raw || __( '(no title)', 'newspack-newsletters' );
+	const advertiser = advertiserNames( item );
 	return (
-		<a className="newspack-newsletters-list__title" href={ editUrl( item ) } onClickCapture={ event => event.stopPropagation() }>
-			<strong>{ title }</strong>
-		</a>
+		<div>
+			<a className="newspack-newsletters-list__title" href={ editUrl( item ) } onClickCapture={ event => event.stopPropagation() }>
+				<strong>{ title }</strong>
+			</a>
+			{ advertiser && <div className="newspack-newsletters-list__secondary">{ advertiser }</div> }
+		</div>
 	);
 };
 
@@ -90,14 +100,10 @@ const renderStatus = ( { item } ) => {
 	const statusName = STATUS_KIND_STATUSES[ kind ] || STATUS_KIND_STATUSES.draft;
 
 	let label;
-	if ( 'expired' === kind && status.expires_at ) {
-		// `expires_at` is only ever set from the date meta, so always an anchor.
-		label = sprintf(
-			/* translators: %s: formatted expiry date */
-			__( 'Expired %s', 'newspack-newsletters' ),
-			formatDayAnchor( status.expires_at )
-		);
-	} else if ( 'scheduled' === kind && status.starts_at ) {
+	// An expired ad's date is its expiration date, which has a column of its own,
+	// so the label stops at the state. A scheduled ad keeps its date: for a
+	// `future` post it is the publish time, which no column shows.
+	if ( 'scheduled' === kind && status.starts_at ) {
 		// Scheduled has two sources: a `future` post reports its publish instant,
 		// while a published ad with a future start date reports a day anchor.
 		const formatStart = 'future' === item?.status ? formatInstant : formatDayAnchor;
@@ -184,11 +190,7 @@ export function getFields( { advertisers = [], placements = [] } = {} ) {
 			} ) ),
 			filterBy: { operators: [ 'isAny' ] },
 			enableSorting: false,
-			getValue: ( { item } ) =>
-				termsForTaxonomy( item, 'newspack_nl_advertiser' )
-					.map( term => term?.name )
-					.filter( Boolean )
-					.join( ', ' ),
+			getValue: ( { item } ) => advertiserNames( item ),
 			render: renderTerms( 'newspack_nl_advertiser' ),
 		},
 		{

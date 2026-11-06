@@ -170,15 +170,10 @@ describe( 'Ads list status column dates', () => {
 		expect( label ).toBe( 'Starts August 4, 2026' );
 	} );
 
-	it.each( [
-		[ 'New York', -4 ],
-		[ 'Kiritimati', 14 ],
-	] )( 'dates an expired ad by its stored expiry day in %s', ( _label, offset ) => {
-		configureSite( offset );
-
+	it( 'leaves the expiry date to its own column', () => {
 		const label = statusLabel( { kind: 'expired', expires_at: Date.UTC( 2026, 7, 4, 12 ) / 1000 } );
 
-		expect( label ).toBe( 'Expired August 4, 2026' );
+		expect( label ).toBe( 'Expired' );
 	} );
 } );
 
