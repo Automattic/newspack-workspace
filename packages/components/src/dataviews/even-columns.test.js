@@ -1,15 +1,22 @@
 /**
  * Internal dependencies
  */
-import { evenColumns, withoutColumnStyles } from './even-columns';
+import { evenColumns, titleColumnWidth, withoutColumnStyles } from './even-columns';
 
 describe( 'evenColumns', () => {
-	it( 'splits 70% evenly between the columns beside the title', () => {
-		const view = evenColumns( { type: 'table', titleField: 'name', fields: [ 'status', 'plan' ] } );
-		expect( view.layout.styles ).toEqual( {
-			status: { width: '35%' },
-			plan: { width: '35%' },
+	it( 'gives the title the same share as the other columns when they are few', () => {
+		const view = { type: 'table', titleField: 'name', fields: [ 'status', 'plan' ] };
+		expect( evenColumns( view ).layout.styles ).toEqual( {
+			status: { width: '33.33%' },
+			plan: { width: '33.33%' },
 		} );
+		expect( titleColumnWidth( view ) ).toBe( '33.33%' );
+	} );
+
+	it( 'keeps at least 30% for the title when there are many columns', () => {
+		const view = { type: 'table', titleField: 'name', fields: [ 'status', 'plan', 'date', 'author' ] };
+		expect( titleColumnWidth( view ) ).toBe( '30%' );
+		expect( evenColumns( view ).layout.styles.status ).toEqual( { width: '17.5%' } );
 	} );
 
 	it( 'follows the columns the viewer has switched on', () => {
@@ -19,8 +26,9 @@ describe( 'evenColumns', () => {
 	} );
 
 	it( 'splits every column evenly when the title is hidden', () => {
-		const view = evenColumns( { type: 'table', titleField: 'name', showTitle: false, fields: [ 'status', 'plan' ] } );
-		expect( view.layout.styles ).toEqual( { status: { width: '50%' }, plan: { width: '50%' } } );
+		const view = { type: 'table', titleField: 'name', showTitle: false, fields: [ 'status', 'plan' ] };
+		expect( evenColumns( view ).layout.styles ).toEqual( { status: { width: '50%' }, plan: { width: '50%' } } );
+		expect( titleColumnWidth( view ) ).toBeUndefined();
 	} );
 
 	it( 'keeps the rest of the layout', () => {

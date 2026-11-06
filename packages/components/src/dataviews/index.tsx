@@ -19,7 +19,7 @@ import classnames from 'classnames';
 /**
  * Internal dependencies
  */
-import { evenColumns, withoutColumnStyles } from './even-columns';
+import { evenColumns, titleColumnWidth, withoutColumnStyles } from './even-columns';
 import './style.scss';
 
 type DataViewsProps< Item > = React.ComponentProps< typeof BaseDataViews< Item > > & {
@@ -62,6 +62,7 @@ function DataViews( { className, inlineFilters = false, fields, children, view, 
 		[ fields, inlineFilters ]
 	);
 	const evenView = useMemo( () => evenColumns( view ), [ view ] );
+	const titleWidth = titleColumnWidth( view );
 	const layout =
 		children ??
 		( inlineFilters ? (
@@ -69,7 +70,10 @@ function DataViews( { className, inlineFilters = false, fields, children, view, 
 		) : undefined );
 
 	return (
-		<div className={ classnames( 'newspack-dataviews', className ) }>
+		<div
+			className={ classnames( 'newspack-dataviews', className ) }
+			style={ titleWidth ? ( { '--newspack-dataviews-title-width': titleWidth } as React.CSSProperties ) : undefined }
+		>
 			<BaseDataViews
 				{ ...props }
 				view={ evenView }
@@ -91,5 +95,5 @@ function DataViews( { className, inlineFilters = false, fields, children, view, 
 // implementation's concrete one.
 export default DataViews as < Item >( props: DataViewsProps< Item > ) => React.JSX.Element;
 
-export { evenColumns, withoutColumnStyles } from './even-columns';
+export { evenColumns, titleColumnWidth, withoutColumnStyles } from './even-columns';
 export type { Action, Field, View } from '@wordpress/dataviews';

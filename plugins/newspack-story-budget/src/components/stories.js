@@ -12,7 +12,7 @@ import { applyFilters } from '@wordpress/hooks';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { useEffect, useState, useMemo, useCallback } from '@wordpress/element';
 import { DataViews } from '@wordpress/dataviews/wp';
-import { evenColumns, withoutColumnStyles } from 'newspack-components';
+import { evenColumns, titleColumnWidth, withoutColumnStyles } from 'newspack-components';
 import {
 	__experimentalHStack as HStack,
 	__experimentalVStack as VStack,
@@ -163,57 +163,61 @@ export default () => {
 		);
 	}
 
+	const titleWidth = titleColumnWidth( view );
+
 	return (
-		<DataViews
-			isLoading={ isLoading }
-			fields={ dataViewFields }
-			view={ evenColumns( view ) }
-			onChangeView={ nextView => setView( withoutColumnStyles( nextView ) ) }
-			actions={ actions }
-			data={ isLoading ? [] : currentStories }
-			paginationInfo={ paginationInfo }
-			defaultLayouts={ defaultLayouts }
-		>
-			<div className="dataviews__view-actions newspack-story-budget__toolbar">
-				<div className="dataviews__search newspack-story-budget__filters">
-					<DataViews.Search />
-					<DataViews.Filters />
+		<div style={ titleWidth ? { '--newspack-dataviews-title-width': titleWidth } : undefined }>
+			<DataViews
+				isLoading={ isLoading }
+				fields={ dataViewFields }
+				view={ evenColumns( view ) }
+				onChangeView={ nextView => setView( withoutColumnStyles( nextView ) ) }
+				actions={ actions }
+				data={ isLoading ? [] : currentStories }
+				paginationInfo={ paginationInfo }
+				defaultLayouts={ defaultLayouts }
+			>
+				<div className="dataviews__view-actions newspack-story-budget__toolbar">
+					<div className="dataviews__search newspack-story-budget__filters">
+						<DataViews.Search />
+						<DataViews.Filters />
+					</div>
+					<div className="newspack-story-budget__view-config">
+						<DataViews.LayoutSwitcher />
+						<DataViews.ViewConfig />
+						<HStack className="newspack-story-budget__header-actions">
+							{ canRefreshStories && (
+								<Button
+									className={
+										isLoading || isRefreshing
+											? 'newspack-story-budget__refresh-button-is-busy'
+											: 'newspack-story-budget__refresh-button'
+									}
+									icon={ update }
+									disabled={ isLoading || isRefreshing }
+									label={
+										isLoading || isRefreshing
+											? __( 'Loading stories…', 'newspack-story-budget' )
+											: __( 'Refresh all stories', 'newspack-story-budget' )
+									}
+									size="compact"
+									onClick={ refresh }
+								/>
+							) }
+							{ canManage && (
+								<ToggleControl
+									label={ __( 'Edit mode', 'newspack-story-budget' ) }
+									checked={ editMode }
+									onChange={ setEditMode }
+									__nextHasNoMarginBottom
+								/>
+							) }
+						</HStack>
+					</div>
 				</div>
-				<div className="newspack-story-budget__view-config">
-					<DataViews.LayoutSwitcher />
-					<DataViews.ViewConfig />
-					<HStack className="newspack-story-budget__header-actions">
-						{ canRefreshStories && (
-							<Button
-								className={
-									isLoading || isRefreshing
-										? 'newspack-story-budget__refresh-button-is-busy'
-										: 'newspack-story-budget__refresh-button'
-								}
-								icon={ update }
-								disabled={ isLoading || isRefreshing }
-								label={
-									isLoading || isRefreshing
-										? __( 'Loading stories…', 'newspack-story-budget' )
-										: __( 'Refresh all stories', 'newspack-story-budget' )
-								}
-								size="compact"
-								onClick={ refresh }
-							/>
-						) }
-						{ canManage && (
-							<ToggleControl
-								label={ __( 'Edit mode', 'newspack-story-budget' ) }
-								checked={ editMode }
-								onChange={ setEditMode }
-								__nextHasNoMarginBottom
-							/>
-						) }
-					</HStack>
-				</div>
-			</div>
-			<DataViews.Layout />
-			<DataViews.Footer />
-		</DataViews>
+				<DataViews.Layout />
+				<DataViews.Footer />
+			</DataViews>
+		</div>
 	);
 };

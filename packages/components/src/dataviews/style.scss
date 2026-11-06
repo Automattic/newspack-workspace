@@ -13,6 +13,10 @@
 	padding-bottom: wp-vars.$grid-unit-30;
 }
 
+.newspack-dataviews .dataviews-view-table col.dataviews-view-table__col-first-data {
+	width: var(--newspack-dataviews-title-width, auto);
+}
+
 .newspack-dataviews__view-config {
 	flex-shrink: 0;
 }

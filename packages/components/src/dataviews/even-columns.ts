@@ -7,18 +7,32 @@
  */
 import type { View } from '@wordpress/dataviews';
 
-const TITLE_SHARE = 30;
+const MIN_TITLE_SHARE = 30;
 
 type ColumnStyles = Record< string, { width?: string } >;
 
+const percent = ( share: number ) => `${ Number( share.toFixed( 2 ) ) }%`;
+
 /**
- * Gives a table consistent column widths: every visible column except the title
- * takes an equal share of 70%, and the title keeps what is left. Without it the
- * browser hands all spare width to the title column, so a short title still
- * fills half the table. DataViews sizes the title column from what remains
- * rather than from a width of its own, so a row actions column comes out of the
- * title's share. The widths follow whichever columns the viewer has switched on,
- * so they are worked out on every render and never stored with the view.
+ * The visible columns beside the title, and the title's share of the width.
+ *
+ * @param view The DataViews view.
+ * @return The other columns, and the title's share (0 when it isn't shown).
+ */
+function getShares( view: View ): { columns: string[]; titleShare: number } {
+	const hasTitle = Boolean( view.titleField ) && view.showTitle !== false;
+	const columns = ( view.fields ?? [] ).filter( id => id !== view.titleField );
+	const titleShare = hasTitle ? Math.max( MIN_TITLE_SHARE, 100 / ( columns.length + 1 ) ) : 0;
+	return { columns, titleShare };
+}
+
+/**
+ * Gives a table consistent column widths: the title takes an equal share, and
+ * never less than 30%, and every other visible column splits the rest evenly.
+ * Without it the browser hands all spare width to the title column, so a short
+ * title still fills half the table. The widths follow whichever columns the
+ * viewer has switched on, so they are worked out on every render and never
+ * stored with the view.
  *
  * @param view The DataViews view.
  * @return The view with column widths, unchanged for any layout but a table.
@@ -27,20 +41,32 @@ export function evenColumns< V extends View >( view: V ): V {
 	if ( view.type !== 'table' ) {
 		return view;
 	}
-	const hasTitle = Boolean( view.titleField ) && view.showTitle !== false;
-	const columns = ( view.fields ?? [] ).filter( id => id !== view.titleField );
-	if ( ! hasTitle && ! columns.length ) {
-		return view;
-	}
+	const { columns, titleShare } = getShares( view );
 	if ( ! columns.length ) {
 		return view;
 	}
-	const columnShare = `${ Number( ( ( hasTitle ? 100 - TITLE_SHARE : 100 ) / columns.length ).toFixed( 2 ) ) }%`;
+	const columnShare = percent( ( 100 - titleShare ) / columns.length );
 	const styles: ColumnStyles = {};
 	columns.forEach( id => {
 		styles[ id ] = { width: columnShare };
 	} );
 	return { ...view, layout: { ...view.layout, styles } };
+}
+
+/**
+ * The title column's width for a table that `evenColumns` sized. DataViews
+ * never applies a width to the title column, so a table gives it one through
+ * the `--newspack-dataviews-title-width` custom property instead.
+ *
+ * @param view The DataViews view.
+ * @return The width, or undefined when the view has no visible title column.
+ */
+export function titleColumnWidth( view: View ): string | undefined {
+	if ( view.type !== 'table' ) {
+		return undefined;
+	}
+	const { columns, titleShare } = getShares( view );
+	return titleShare && columns.length ? percent( titleShare ) : undefined;
 }
 
 /**
