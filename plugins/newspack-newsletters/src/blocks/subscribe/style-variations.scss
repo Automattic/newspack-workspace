@@ -247,14 +247,17 @@
 			border-radius: var(--newspack-ui-radius-button, 8px);
 			cursor: pointer;
 			display: inline-flex;
-			font-family: inherit;
 			font-size: var(--newspack-ui-font-size-s, 16px);
-			font-weight: var(--newspack-ui-font-weight-strong, 600);
 			justify-content: center;
 			line-height: var(--newspack-ui-line-height-s, 1.5);
 			margin-top: calc(var(--newspack-ui-spacer-2, 12px) - var(--newspack-ui-spacer-base, 8px));
 			min-height: var(--newspack-ui-spacer-9, 48px);
 			padding: var(--newspack-ui-spacer-2, 12px) var(--newspack-ui-spacer-4, 20px);
+
+			&:where(:not(.wp-element-button)) {
+				font-family: inherit;
+				font-weight: var(--newspack-ui-font-weight-strong, 600);
+			}
 
 			@media ( min-width: 782px ) {
 				margin-top: 0;
