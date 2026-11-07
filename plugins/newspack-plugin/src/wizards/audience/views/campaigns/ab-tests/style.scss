@@ -41,6 +41,11 @@
 		font-size: var(--wpds-typography-font-size-lg, 15px);
 		font-weight: 600;
 		line-height: 1.4;
+
+		&:focus-visible {
+			outline: var(--wpds-border-width-focus, #{wp-vars.$border-width-focus-fallback}) solid var(--wpds-color-stroke-focus, #{colors.$primary-600});
+			outline-offset: var(--wpds-border-width-focus, #{wp-vars.$border-width-focus-fallback});
+		}
 	}
 
 	&__header-actions {
