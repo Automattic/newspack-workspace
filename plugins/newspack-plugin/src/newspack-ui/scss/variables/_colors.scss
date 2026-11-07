@@ -81,9 +81,13 @@
 	--newspack-ui-color-border-control: var(--newspack-ui-color-neutral-50);
 	--newspack-ui-color-selected: var(--newspack-ui-color-text);
 	--newspack-ui-color-on-selected: var(--newspack-ui-color-surface);
+	--newspack-ui-color-mark: var(--newspack-ui-color-selected);
+	--newspack-ui-color-on-mark: var(--newspack-ui-color-on-selected);
 	--newspack-ui-color-focus: var(--newspack-ui-color-text);
+	--newspack-ui-color-focus-halo: color-mix(in srgb, var(--newspack-ui-color-focus) var(--newspack-ui-focus-halo-mix), transparent);
 	--newspack-ui-color-btn: var(--newspack-ui-color-button-bg);
 	--newspack-ui-color-btn-ink: var(--newspack-ui-color-button-text);
+	--newspack-ui-color-focus-on-brand: var(--newspack-ui-color-btn-ink);
 	--newspack-ui-color-btn-hover: var(--newspack-ui-color-button-bg-hover);
 	--newspack-ui-color-btn-pressed: color-mix(in oklab, var(--newspack-ui-color-btn) var(--newspack-ui-color-mix-pressed), var(--newspack-ui-color-surface));
 	--newspack-ui-color-disabled-ink: color-mix(in oklab, var(--newspack-ui-color-text) 45%, var(--newspack-ui-color-surface));
@@ -109,6 +113,12 @@
 	--newspack-ui-color-error-tint-hover: var(--newspack-ui-color-error-0);
 	--newspack-ui-color-error-tint-pressed: var(--newspack-ui-color-error-5);
 	--newspack-ui-color-on-error: var(--newspack-ui-color-neutral-0);
+	--newspack-ui-color-destructive-fill: var(--newspack-ui-color-error-fill);
+	--newspack-ui-color-destructive-fill-hover: var(--newspack-ui-color-error-fill-hover);
+	--newspack-ui-color-destructive-fill-pressed: var(--newspack-ui-color-error-fill-pressed);
+	--newspack-ui-color-destructive-ink: var(--newspack-ui-color-on-error);
+	--newspack-ui-color-destructive-edge: transparent;
+	--newspack-ui-color-destructive-text: var(--newspack-ui-color-error);
 
 	// Theme variables - from the classic and block themes; overridden in class-newspack-ui.php for block theme.
 	--newspack-ui-color-primary: var(--newspack-theme-color-primary, var(--newspack-ui-color-primary-60));
@@ -121,6 +131,9 @@
 	--newspack-ui-color-body-bg: var(--newspack-ui-color-surface);
 	--newspack-ui-color-divider-start: var(--newspack-ui-color-surface);
 	--newspack-ui-color-divider-end: transparent;
+	--newspack-ui-elevation-ink: color-mix(in oklab, var(--newspack-ui-color-contrast) 60%, #{colors.$neutral-1000});
+	--newspack-ui-elevation-edge: transparent;
+	--newspack-ui-elevation-strength: 1;
 
 	// Specific assignments - form elements - buttons:
 	--newspack-ui-color-button-bg: var(--newspack-ui-color-accent);
@@ -135,6 +148,8 @@
 	--newspack-ui-color-input-border-disabled: var(--newspack-ui-color-border);
 	--newspack-ui-color-input-bg: var(--newspack-ui-color-surface);
 	--newspack-ui-color-input-bg-disabled: var(--newspack-ui-color-surface-sunken);
+	--newspack-ui-field-bg: var(--newspack-ui-color-input-bg);
+	--newspack-ui-field-ink: var(--newspack-ui-color-text);
 	--newspack-ui-color-error-text: var(--newspack-ui-color-error-60);
 	--newspack-ui-label-color: var(--newspack-ui-color-text);
 

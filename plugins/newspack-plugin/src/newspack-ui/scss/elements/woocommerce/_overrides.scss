@@ -94,7 +94,7 @@
 			border-style: solid;
 			border-width: 1px;
 			display: flex;
-			font-family: var(--newspack-ui-font-family);
+			font-family: var(--newspack-ui-font-family-body);
 
 			> svg[class*="newspack-ui__svg-icon--"] {
 				background: none;
@@ -167,6 +167,10 @@
 	.wc_payment_method {
 		list-style: none;
 
+		> .newspack-ui__input-card > .payment_box {
+			border-radius: var(--newspack-ui-radius-choice-inner);
+		}
+
 		.payment_box {
 			padding: 1rem;
 			background: var(--newspack-theme-color-bg-pre, var(--newspack-ui-color-surface-sunken));
@@ -237,8 +241,8 @@
 
 			&:checked + label {
 				&::before {
-					background: var(--newspack-ui-color-selected);
-					box-shadow: 0 0 0 2px var(--newspack-ui-color-selected);
+					background: var(--newspack-ui-color-mark);
+					box-shadow: 0 0 0 2px var(--newspack-ui-color-mark);
 				}
 			}
 		}
@@ -249,7 +253,7 @@
 		@include mixins.input-card;
 
 		color: var(--newspack-ui-label-color);
-		font-family: var(--newspack-ui-font-family);
+		font-family: var(--newspack-ui-font-family-control);
 		font-size: var(--newspack-ui-font-size-body);
 		line-height: var(--newspack-ui-line-height-body);
 		position: relative;
@@ -320,7 +324,7 @@
 	.newspack-reader-auth__inline-wrapper {
 		h2 {
 			font-size: var(--newspack-ui-font-size-title-m);
-			font-weight: var(--newspack-ui-font-weight-strong);
+			font-weight: var(--newspack-ui-heading-font-weight, var(--newspack-ui-font-weight-strong));
 		}
 
 		p {

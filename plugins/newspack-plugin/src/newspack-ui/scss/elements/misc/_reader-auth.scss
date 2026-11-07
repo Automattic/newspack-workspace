@@ -42,7 +42,7 @@
 	}
 
 	& &__password-toggle {
-		--newspack-ui-button-ink: var(--newspack-ui-color-text-muted);
+		--newspack-ui-button-ink: var(--newspack-ui-field-ink-muted, var(--newspack-ui-color-text-muted));
 		--newspack-ui-button-bg-hover: transparent;
 		--newspack-ui-button-bg-pressed: transparent;
 
@@ -54,7 +54,7 @@
 
 		@media ( hover: hover ) and ( pointer: fine ) {
 			&:hover {
-				color: var(--newspack-ui-color-text);
+				color: var(--newspack-ui-field-ink, var(--newspack-ui-color-text));
 			}
 		}
 	}

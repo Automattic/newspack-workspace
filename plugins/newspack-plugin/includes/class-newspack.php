@@ -315,6 +315,8 @@ final class Newspack {
 		// Load the general Newspack UI front-end styles.
 		include_once NEWSPACK_ABSPATH . 'includes/class-newspack-ui.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-newspack-ui-icons.php';
+		include_once NEWSPACK_ABSPATH . 'includes/class-newspack-ui-palette.php';
+		include_once NEWSPACK_ABSPATH . 'includes/class-newspack-ui-theme-style.php';
 
 		\Newspack\CLI\Initializer::init();
 	}
