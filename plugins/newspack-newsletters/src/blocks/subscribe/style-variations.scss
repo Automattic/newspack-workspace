@@ -66,6 +66,7 @@
 
 			label,
 			.list-label {
+				font-family: var(--newspack-ui-font-family-control, inherit);
 				font-size: var(--newspack-ui-font-size-s, 16px);
 				font-weight: 400;
 				line-height: var(--newspack-ui-line-height-s, 1.5);
@@ -169,6 +170,7 @@
 
 			.list-description {
 				color: var(--newspack-ui-color-text-muted, #5d5d5d);
+				font-family: var(--newspack-ui-font-family-body, inherit);
 				font-size: var(--newspack-ui-font-size-xs, 14px);
 				line-height: var(--newspack-ui-line-height-xs, 1.4286);
 			}
@@ -179,6 +181,7 @@
 			gap: var(--newspack-ui-spacer-2, 12px);
 
 			label {
+				font-family: var(--newspack-ui-font-family-control, inherit);
 				font-size: inherit;
 				font-weight: 600;
 				line-height: inherit;
