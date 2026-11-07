@@ -759,7 +759,7 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 		);
 
 		$this->assertSame( $this->resolved( $properties, 'error' ), $properties['--newspack-ui-color-destructive-fill'] );
-		$this->assertSame( $this->resolved( $properties, 'error' ), $properties['--newspack-ui-color-destructive-edge'] );
+		$this->assertArrayNotHasKey( '--newspack-ui-color-destructive-edge', $properties );
 		$this->assertSame( $this->resolved( $properties, 'error-text' ), $properties['--newspack-ui-color-destructive-text'] );
 	}
 

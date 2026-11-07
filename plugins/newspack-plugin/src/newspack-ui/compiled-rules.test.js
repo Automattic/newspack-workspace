@@ -71,4 +71,15 @@ describe( 'Newspack UI compiled rules', () => {
 			expect( declarationsOf( selector, 'font-family' ) ).toEqual( [ 'var(--newspack-ui-font-family-body)' ] );
 		} );
 	} );
+
+	it( 'the link colour rule weighs less than the muted and disabled link modifiers', () => {
+		const selectors = [ ...css.matchAll( /([^{}]+)\{([^{}]*)\}/g ) ]
+			.filter( ( [ , , body ] ) => /(?:^|[;\s])color:\s*var\(--newspack-ui-color-link, inherit\)/.test( body ) )
+			.flatMap( ( [ , rule ] ) => rule.split( ',' ).map( s => s.trim() ) );
+		expect( selectors.length ).toBeGreaterThan( 0 );
+		selectors.forEach( selector => {
+			expect( selector ).toContain( 'a:where(.newspack-ui__link)' );
+			expect( selector.replace( /:where\([^)]*\)/g, '' ) ).not.toContain( '.newspack-ui__link' );
+		} );
+	} );
 } );
