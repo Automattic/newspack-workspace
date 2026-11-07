@@ -5,9 +5,9 @@
 
 $colors: (
 	"primary": var(--wp--preset--color--accent),
-	"primary-variation": color-mix(in srgb, var(--wp--preset--color--accent) 80%, black),
+	"primary-variation": color-mix(in oklab, var(--wp--preset--color--accent) 85.5%, black),
 	"secondary": var(--wp--preset--color--accent-2),
-	"secondary-variation": color-mix(in srgb, var(--wp--preset--color--accent-2) 80%, black),
+	"secondary-variation": color-mix(in oklab, var(--wp--preset--color--accent-2) 85%, black),
 	"dark-gray": var(--wp--preset--color--contrast),
 	"medium-gray": var(--wp--preset--color--contrast-3),
 	"light-gray": var(--wp--preset--color--base-2),

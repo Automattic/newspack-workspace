@@ -84,7 +84,7 @@
 	--newspack-ui-color-mark: var(--newspack-ui-color-selected);
 	--newspack-ui-color-on-mark: var(--newspack-ui-color-on-selected);
 	--newspack-ui-color-focus: var(--newspack-ui-color-text);
-	--newspack-ui-color-focus-halo: color-mix(in srgb, var(--newspack-ui-color-focus) var(--newspack-ui-focus-halo-mix), transparent);
+	--newspack-ui-color-focus-halo: color-mix(in oklab, var(--newspack-ui-color-focus) var(--newspack-ui-focus-halo-mix), transparent);
 	--newspack-ui-color-btn: var(--newspack-ui-color-button-bg);
 	--newspack-ui-color-btn-ink: var(--newspack-ui-color-button-text);
 	--newspack-ui-color-focus-on-brand: var(--newspack-ui-color-btn-ink);
@@ -162,5 +162,5 @@
 :root,
 .newspack-ui__button,
 .newspack-ui__badge {
-	--newspack-ui-color-border-outline: color-mix(in srgb, currentcolor var(--newspack-ui-color-border-outline-mix), transparent);
+	--newspack-ui-color-border-outline: color-mix(in oklab, currentcolor var(--newspack-ui-color-border-outline-mix), transparent);
 }

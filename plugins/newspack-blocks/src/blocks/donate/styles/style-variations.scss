@@ -40,7 +40,7 @@
 		.wpbnbd__button {
 			border-width: 0 0 1px;
 			&--active {
-				background: np-colors.$neutral-000;
+				background: var(--newspack-ui-color-surface, #{np-colors.$neutral-000});
 				border-bottom: 0;
 			}
 		}
@@ -60,7 +60,7 @@
 /* Alternate Style */
 
 .wpbnbd.is-style-alternate {
-	border-color: np-colors.$neutral-050;
+	border-color: var(--newspack-ui-color-surface-subtle, #{np-colors.$neutral-050});
 	border-radius: 5px;
 
 	.thanks {
@@ -85,8 +85,8 @@
 	&.tiered {
 		.tiers {
 			.tier-label {
-				background: np-colors.$neutral-050;
-				border-color: np-colors.$neutral-050;
+				background: var(--newspack-ui-color-surface-subtle, #{np-colors.$neutral-050});
+				border-color: var(--newspack-ui-color-surface-subtle, #{np-colors.$neutral-050});
 				margin: 0;
 				text-align: center;
 			}
@@ -101,8 +101,8 @@
 
 	.tab-container .freq-label,
 	.wpbnbd__tiers__selection {
-		background: np-colors.$neutral-050;
-		border-color: np-colors.$neutral-050;
+		background: var(--newspack-ui-color-surface-subtle, #{np-colors.$neutral-050});
+		border-color: var(--newspack-ui-color-surface-subtle, #{np-colors.$neutral-050});
 	}
 
 	.wpbnbd__tiers__selection {
@@ -112,7 +112,7 @@
 		padding: 5px;
 		border-radius: 5px;
 		.wpbnbd__button {
-			color: np-colors.$neutral-900;
+			color: var(--newspack-ui-color-text, #{np-colors.$neutral-900});
 			padding: 0 15px;
 		}
 	}
@@ -122,16 +122,16 @@
 		border: 0.19rem solid transparent;
 
 		&--active {
-			border-color: np-colors.$neutral-000;
+			border-color: var(--newspack-ui-color-surface, #{np-colors.$neutral-000});
 		}
 	}
 
 	.wpbnbd__tiers .wpbnbd__button--active,
 	/* Frequency-based version. */
 	.tab-container .freq-label.wpbnbd__button--active::after {
-		background: np-colors.$neutral-000;
+		background: var(--newspack-ui-color-surface, #{np-colors.$neutral-000});
 		border-radius: 5px;
-		box-shadow: 0 0 0 1px np-colors.$neutral-300;
+		box-shadow: 0 0 0 1px var(--newspack-ui-color-border, #{np-colors.$neutral-300});
 	}
 
 	.tab-container {
@@ -144,7 +144,7 @@
 			}
 
 			&.wpbnbd__button--active {
-				color: np-colors.$neutral-900;
+				color: var(--newspack-ui-color-text, #{np-colors.$neutral-900});
 				&::after {
 					box-sizing: content-box;
 					content: "";
@@ -228,7 +228,7 @@
 					content: "";
 					display: block;
 					height: 1px;
-					background: np-colors.$neutral-300;
+					background: var(--newspack-ui-color-border, #{np-colors.$neutral-300});
 					width: 100%;
 					left: 0;
 					bottom: 0;
@@ -236,7 +236,7 @@
 				&--active {
 					&::after {
 						height: 3px;
-						background: np-colors.$neutral-900;
+						background: var(--newspack-ui-color-text, #{np-colors.$neutral-900});
 					}
 				}
 			}
@@ -254,7 +254,7 @@
 				display: grid;
 				background: transparent;
 				border: none;
-				color: np-colors.$neutral-600;
+				color: var(--newspack-ui-color-text-subtle, #{np-colors.$neutral-600});
 				font-family: inherit;
 				font-weight: inherit;
 				grid-gap: 0.25rem;
@@ -264,10 +264,10 @@
 				text-align: left;
 
 				&::before {
-					background: np-colors.$neutral-000;
-					border: 1px solid np-colors.$neutral-300;
+					background: var(--newspack-ui-color-surface, #{np-colors.$neutral-000});
+					border: 1px solid var(--newspack-ui-color-border, #{np-colors.$neutral-300});
 					border-radius: 100%;
-					box-shadow: inset 0 0 0 3px np-colors.$neutral-000;
+					box-shadow: inset 0 0 0 3px var(--newspack-ui-color-surface, #{np-colors.$neutral-000});
 					content: "";
 					display: block;
 					height: 20px;
@@ -303,7 +303,7 @@
 		.freq-label {
 			background: transparent;
 			border: none;
-			box-shadow: 0 3px 0 np-colors.$neutral-000, 0 4px 0 0 np-colors.$neutral-300;
+			box-shadow: 0 3px 0 var(--newspack-ui-color-surface, #{np-colors.$neutral-000}), 0 4px 0 0 var(--newspack-ui-color-border, #{np-colors.$neutral-300});
 			padding: 0.38rem 0;
 			transition: none;
 
@@ -314,7 +314,7 @@
 
 			&::before {
 				border-width: 1px;
-				border-color: np-colors.$neutral-300;
+				border-color: var(--newspack-ui-color-border, #{np-colors.$neutral-300});
 			}
 
 			&.wpbnbd__button--active {
@@ -322,7 +322,7 @@
 			}
 
 			&:focus-visible {
-				@include mixins.focus-edge( currentcolor, $halo: mixins.$focus-color, $inner: (0 3px 0 np-colors.$neutral-000, 0 4px 0 0 np-colors.$neutral-300) );
+				@include mixins.focus-edge( currentcolor, $halo: mixins.$focus-color, $inner: (0 3px 0 var(--newspack-ui-color-surface, #{np-colors.$neutral-000}), 0 4px 0 0 var(--newspack-ui-color-border, #{np-colors.$neutral-300})) );
 
 				&.wpbnbd__button--active {
 					@include mixins.focus-edge( currentcolor, $halo: mixins.$focus-color, $inner: 0 4px 0 currentcolor );
@@ -366,7 +366,7 @@
 	background: none;
 	border: none;
 	color: var(--newspack-ui-color-text, np-colors.$neutral-900);
-	font-family: var(--newspack-ui-font-family, system-ui, sans-serif);
+	font-family: var(--newspack-ui-font-family-body, var(--newspack-ui-font-family, system-ui, sans-serif));
 	font-size: var(--newspack-ui-font-size-body, 16px);
 	line-height: var(--newspack-ui-line-height-body, 1.5);
 	position: relative;
@@ -384,8 +384,10 @@
 	}
 
 	.money-input {
-		border-color: var(--newspack-ui-color-input-border, np-colors.$neutral-500);
-		border-radius: var(--newspack-ui-radius-control, 8px);
+		background: var(--newspack-ui-field-bg, var(--newspack-ui-color-surface, np-colors.$neutral-000));
+		border-color: var(--newspack-ui-field-border-color, var(--newspack-ui-color-input-border, np-colors.$neutral-500));
+		border-radius: var(--newspack-ui-field-radius, var(--newspack-ui-radius-control, 8px));
+		border-width: var(--newspack-ui-field-border-width, 1px);
 		color: var(--newspack-ui-color-text, np-colors.$neutral-900);
 		font-size: var(--newspack-ui-font-size-body, 16px);
 		left: var(--newspack-ui-spacer-5, 24px);
@@ -425,6 +427,7 @@
 		}
 
 		input[type="number"] {
+			color: var(--newspack-ui-field-ink, inherit);
 			font-family: inherit;
 			font-size: inherit;
 			font-weight: 400;
@@ -613,7 +616,7 @@
 
 			&__heading {
 				align-self: flex-start;
-				font-family: inherit;
+				font-family: var(--newspack-ui-font-family-heading, inherit);
 				font-size: var(--newspack-ui-font-size-title-m, 20px);
 				font-weight: var(--newspack-ui-font-weight-strong, 600);
 				letter-spacing: var(--newspack-ui-letter-spacing-title-m, -0.012em);

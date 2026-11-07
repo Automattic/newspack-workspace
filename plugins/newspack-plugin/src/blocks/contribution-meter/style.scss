@@ -42,7 +42,7 @@
 	}
 
 	.contribution-meter__bar-track {
-		background-color: color-mix(in srgb, currentcolor 17%, transparent);
+		background-color: color-mix(in oklab, currentcolor 17%, transparent);
 		overflow: hidden;
 		position: relative;
 		width: 100%;
@@ -124,7 +124,7 @@
 	}
 
 	.contribution-meter__circle-track {
-		stroke: color-mix(in srgb, currentcolor 17%, transparent);
+		stroke: color-mix(in oklab, currentcolor 17%, transparent);
 	}
 
 	.contribution-meter__circle-progress {

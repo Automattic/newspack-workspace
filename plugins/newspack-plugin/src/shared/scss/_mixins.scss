@@ -48,12 +48,12 @@
 
 	@include motion.hover {
 		&:hover:not(.wp-element-button) {
-			background: color-mix(in srgb, var(--icon-background, var(--wp--preset--color--base-2, #f0f0f0)) 85%, black);
+			background: color-mix(in oklab, var(--icon-background, var(--wp--preset--color--base-2, #f0f0f0)) 88.5%, black);
 		}
 	}
 
 	&:active:not(.wp-element-button) {
-		background: color-mix(in srgb, var(--icon-background, var(--wp--preset--color--base-2, #f0f0f0)) 75%, black);
+		background: color-mix(in oklab, var(--icon-background, var(--wp--preset--color--base-2, #f0f0f0)) 80.5%, black);
 		transform: scale(motion.$press-scale);
 
 		@include motion.reduced-motion {

@@ -244,6 +244,17 @@ class Newspack_UI_Theme_Style {
 	}
 
 	/**
+	 * The button radius the Theme style prints as '--newspack-ui-radius-button'.
+	 *
+	 * Returns the radius regardless of is_active(); callers check is_active() first.
+	 *
+	 * @return string The length, or an empty string when the style does not print one.
+	 */
+	public static function get_button_radius(): string {
+		return self::get_radius_properties( self::get_global_styles() )['--newspack-ui-radius-button'] ?? '';
+	}
+
+	/**
 	 * Whether the site's Theme style prints palette colors.
 	 *
 	 * @return bool
