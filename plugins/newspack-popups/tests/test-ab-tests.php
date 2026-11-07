@@ -1365,6 +1365,17 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * With the flag off the editor still receives this data, so it must not
+	 * link to a results page that doesn't exist.
+	 */
+	public function test_editor_data_has_no_results_link_with_the_flag_off() {
+		$prompt_id = $this->createPopup();
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
+		self::assertSame( '', Newspack_Popups_AB_Tests::get_editor_data( $prompt_id )['results_url'] );
+	}
+
+	/**
 	 * The editor's "other prompts in this test" list reads this route: every
 	 * prompt carrying the Test ID except trashed ones, in ID order, for anyone
 	 * who can edit prompts.

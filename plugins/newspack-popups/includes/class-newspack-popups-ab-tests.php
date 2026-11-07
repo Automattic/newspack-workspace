@@ -405,7 +405,8 @@ final class Newspack_Popups_AB_Tests {
 			'can_manage_tests'      => self::can_manage_tests( get_current_user_id(), (int) $post_id ),
 			'goals'                 => self::get_goal_labels(),
 			'ineligible_placements' => self::get_ineligible_placements(),
-			'results_url'           => current_user_can( 'manage_options' ) && class_exists( 'Newspack_Popups_AB_Dashboard' ) ? Newspack_Popups_AB_Dashboard::get_page_url() : '',
+			// The editor gets this data with the flag off too, and the page doesn't exist then.
+			'results_url'           => self::is_enabled() && current_user_can( 'manage_options' ) && class_exists( 'Newspack_Popups_AB_Dashboard' ) ? Newspack_Popups_AB_Dashboard::get_page_url() : '',
 			'variants'              => [
 				'a' => __( 'A (control)', 'newspack-popups' ),
 				'b' => __( 'B (challenger)', 'newspack-popups' ),
