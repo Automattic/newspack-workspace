@@ -62,6 +62,22 @@ const TestCard = ( { test, data, onRenamed } ) => {
 	const unpublished =
 		status === 'draft' ? letters.find( letter => test.variants[ letter ].status !== 'publish' && test.variants[ letter ].edit_link ) : null;
 
+	let footer = null;
+	if ( hasStats && stats.source.state === 'collecting' ) {
+		// Until a reader is counted, the start date tells more than the fetch time.
+		footer = sprintf(
+			// Translators: %s is a date.
+			__( 'Started %s. Results refresh every hour.', 'newspack-plugin' ),
+			dateI18n( getSettings().formats.date, test.started_at )
+		);
+	} else if ( stats?.source?.fetched_at ) {
+		footer = sprintf(
+			// Translators: %s is a date and time.
+			__( 'Updated %s. Results refresh every hour.', 'newspack-plugin' ),
+			dateI18n( getSettings().formats.datetime, stats.source.fetched_at )
+		);
+	}
+
 	const load = refresh => {
 		setLoading( true );
 		setError( null );
@@ -336,15 +352,9 @@ const TestCard = ( { test, data, onRenamed } ) => {
 			<CardBody className="newspack-ab-tests__results">
 				<ResultsTable test={ test } status={ status } stats={ hasStats ? stats : null } labels={ data.labels || {} } />
 			</CardBody>
-			{ stats?.source?.fetched_at && (
+			{ footer && (
 				<CardBody className="newspack-ab-tests__footer">
-					<p className="newspack-ab-tests__updated">
-						{ sprintf(
-							// Translators: %s is a date and time.
-							__( 'Updated %s. Results refresh every hour.', 'newspack-plugin' ),
-							dateI18n( getSettings().formats.datetime, stats.source.fetched_at )
-						) }
-					</p>
+					<p className="newspack-ab-tests__updated">{ footer }</p>
 				</CardBody>
 			) }
 			{ modal === 'start' && (

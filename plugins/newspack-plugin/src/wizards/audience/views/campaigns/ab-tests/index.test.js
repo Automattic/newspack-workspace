@@ -60,13 +60,13 @@ const stats = {
 	flags: { young_test: false, high_anonymous: false },
 };
 
-const mockRoutes = ( list, extra = {} ) =>
+const mockRoutes = ( list, extra = {}, statsResponse = stats ) =>
 	apiFetch.mockImplementation( ( { path, method } ) => {
 		if ( path === '/newspack-popups/v1/ab-tests' && ! method ) {
 			return Promise.resolve( list );
 		}
 		if ( path.endsWith( '/stats' ) || path.includes( '/stats?' ) ) {
-			return Promise.resolve( stats );
+			return Promise.resolve( statsResponse );
 		}
 		if ( extra[ path ] ) {
 			return extra[ path ]();
@@ -174,6 +174,24 @@ describe( 'A/B Tests tab', () => {
 		expect( within( card ).getByText( '+12.3%' ) ).toBeInTheDocument();
 		expect( within( card ).getByText( '99.1% Reliable' ) ).toBeInTheDocument();
 		expect( within( card ).getByText( /^Updated .*\. Results refresh every hour\.$/ ) ).toBeInTheDocument();
+	} );
+
+	it( 'gives the start date, not the fetch time, until a reader is counted', async () => {
+		const collecting = {
+			...stats,
+			source: { ...stats.source, state: 'collecting' },
+			variants: {
+				a: { readers: 0, conversions: 0, rate: null, lift: null },
+				b: { readers: 0, conversions: 0, rate: null, lift: null },
+			},
+			comparisons: {},
+		};
+		mockRoutes( listResponse( [ test( 'run', { a: prompt( 4 ), b: prompt( 5 ) }, { started_at: '2026-10-01 00:00:00' } ) ] ), {}, collecting );
+		render( <ABTests /> );
+		const card = await screen.findByRole( 'region', { name: 'Test run' } );
+		expect( await within( card ).findByText( /^Started .*\. Results refresh every hour\.$/ ) ).toBeInTheDocument();
+		expect( within( card ).queryByText( /^Updated / ) ).not.toBeInTheDocument();
+		expect( within( card ).getAllByText( '0' ) ).toHaveLength( 2 );
 	} );
 
 	it( 'lists the test actions in the menu and refreshes results', async () => {
