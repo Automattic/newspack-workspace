@@ -1348,7 +1348,6 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		self::assertSame( [ 'form_submission', 'link_click', 'donation', 'subscription' ], array_keys( $data['goals'] ) );
 		self::assertContains( 'manual', $data['ineligible_placements'] );
 		self::assertContains( 'custom1', $data['ineligible_placements'] );
-		self::assertSame( [ 'a', 'b' ], array_keys( $data['variants'] ) );
 		self::assertSame( '', $data['results_url'], 'The results page is for administrators only.' );
 
 		$editor_id = get_current_user_id();

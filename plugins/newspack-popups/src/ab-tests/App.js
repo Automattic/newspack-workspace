@@ -50,7 +50,7 @@ const App = ( { data } ) => {
 					<EmptyState.Root>
 						<EmptyState.Header
 							title={ __( 'No A/B tests yet', 'newspack-popups' ) }
-							description={ __( 'Give two prompts the same test name to compare them.', 'newspack-popups' ) }
+							description={ __( 'Open a prompt and choose Start A/B Test in its A/B Test panel.', 'newspack-popups' ) }
 						/>
 						<EmptyState.Actions>
 							<Button variant="primary" href={ campaignsUrl }>
