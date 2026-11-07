@@ -84,7 +84,7 @@ describe( 'Institutions list — fetched option list invalidation', () => {
 		render( <Institutions /> );
 		await waitFor( () => expect( mockDataViewsProps.current ).not.toBeNull() );
 
-		const { RenderModal } = mockDataViewsProps.current.actions.find( action => action.isDestructive );
+		const { RenderModal } = mockDataViewsProps.current.actions.find( action => action.id === 'delete' );
 		render( <RenderModal items={ [ { id: 1 } ] } closeModal={ () => {} } /> );
 
 		await act( async () => {

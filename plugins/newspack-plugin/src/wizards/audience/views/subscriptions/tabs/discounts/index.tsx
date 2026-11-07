@@ -236,6 +236,11 @@ function SubscriberDiscounts() {
 			),
 			actions: [
 				{
+					type: 'secondary',
+					label: __( 'Settings', 'newspack-plugin' ),
+					action: () => setShowSettings( true ),
+				},
+				{
 					type: 'primary',
 					label: __( 'Add Discount', 'newspack-plugin' ),
 					mobileIcon: 'plus',
@@ -294,11 +299,7 @@ function SubscriberDiscounts() {
 					getItemId={ ( item: DiscountRule ) => item.id }
 					onClickItem={ ( item: DiscountRule ) => history.push( `${ baseUrl }/edit/${ item.id }` ) }
 					search
-					header={
-						<Button variant="secondary" size="compact" onClick={ () => setShowSettings( true ) }>
-							{ __( 'Settings', 'newspack-plugin' ) }
-						</Button>
-					}
+					inlineFilters
 				/>
 			) }
 			<DiscountEditor

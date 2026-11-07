@@ -26,11 +26,6 @@ const { useHistory } = Router;
 
 const API_PATH = '/wp/v2/np_institution';
 
-// The bundled @wordpress/dataviews types (v10) predate `isDestructive`,
-// which the WP-core-provided runtime DataViews does support — extend the
-// Action type locally so destructive styling can be declared.
-type InstitutionAction = Action< Institution > & { isDestructive?: boolean };
-
 const DEFAULT_VIEW: View = {
 	type: 'table',
 	page: 1,
@@ -41,7 +36,6 @@ const DEFAULT_VIEW: View = {
 	filters: [],
 	layout: {},
 	titleField: 'title',
-	mediaField: 'logo',
 	descriptionField: 'description',
 };
 
@@ -85,7 +79,7 @@ export default function Institutions() {
 		// size put the institutions past it out of reach entirely: not listed, and so not
 		// editable. The value is apiFetch's, not the REST API's: the posts controller caps
 		// `per_page` at 100 and would reject -1 outright.
-		apiFetch< Institution[] >( { path: `${ API_PATH }?per_page=-1&context=edit&_embed=wp:featuredmedia` } )
+		apiFetch< Institution[] >( { path: `${ API_PATH }?per_page=-1&context=edit` } )
 			.then( institutions => {
 				setData( institutions );
 			} )
@@ -105,16 +99,6 @@ export default function Institutions() {
 
 	const fields: Field< Institution >[] = useMemo(
 		() => [
-			{
-				id: 'logo',
-				label: __( 'Logo', 'newspack-plugin' ),
-				type: 'media',
-				render: ( { item }: { item: Institution } ) => {
-					const url = item._embedded?.[ 'wp:featuredmedia' ]?.[ 0 ]?.source_url;
-					return url ? <img src={ url } alt={ item.title.raw } /> : null;
-				},
-				enableSorting: false,
-			},
 			{
 				id: 'id',
 				label: __( 'ID', 'newspack-plugin' ),
@@ -176,7 +160,7 @@ export default function Institutions() {
 		[]
 	);
 
-	const actions: InstitutionAction[] = useMemo(
+	const actions: Action< Institution >[] = useMemo(
 		() => [
 			{
 				id: 'edit',
@@ -215,7 +199,6 @@ export default function Institutions() {
 			{
 				id: 'delete',
 				label: __( 'Delete', 'newspack-plugin' ),
-				isDestructive: true,
 				RenderModal: ( { items, closeModal }: { items: Institution[]; closeModal?: () => void } ) => {
 					const item = items[ 0 ];
 					const [ isDeleting, setIsDeleting ] = useState( false );
@@ -288,10 +271,11 @@ export default function Institutions() {
 				onChangeView={ setView }
 				actions={ actions }
 				paginationInfo={ paginationInfo }
-				defaultLayouts={ { table: {}, grid: {} } }
+				defaultLayouts={ { table: {} } }
 				isLoading={ isLoading }
 				getItemId={ ( item: Institution ) => String( item.id ) }
 				search
+				inlineFilters
 			/>
 			{ showAdvancedSettings && <InstitutionsAdvancedSettings closeModal={ () => setShowAdvancedSettings( false ) } /> }
 		</>

@@ -177,6 +177,34 @@ body.newspack-has-countdown-banner:has(.newspack-countdown-banner__cta:not(.news
 			color: var(--newspack-ui-color-neutral-0);
 		}
 
+		&.is-style-theme {
+			--newspack-content-banner-message-color: var(--newspack-content-banner-ink, var(--newspack-ui-color-neutral-60));
+			--newspack-content-banner__cta__content__links--color: var(--newspack-content-banner-ink, var(--newspack-ui-color-neutral-60));
+			background: var(--newspack-content-banner-bg, var(--newspack-ui-color-neutral-0));
+			color: var(--newspack-content-banner-ink, var(--newspack-ui-color-neutral-90));
+
+			> .wrapper {
+				font-family: var(--newspack-theme-font-body);
+			}
+
+			a:not(.newspack-ui__button) {
+				color: var(--newspack-content-banner-ink, var(--newspack-ui-color-primary-60));
+			}
+
+			.newspack-ui__button {
+				--newspack-ui-button-bg: var(--newspack-content-banner-button-bg, var(--newspack-theme-color-secondary));
+				--newspack-ui-button-ink: var(--newspack-content-banner-button-ink, var(--newspack-theme-color-against-secondary));
+				--newspack-ui-button-bg-hover: color-mix(in oklab, var(--newspack-ui-button-bg) var(--newspack-ui-color-mix-hover), var(--newspack-ui-button-ink));
+				--newspack-ui-button-bg-pressed: color-mix(in oklab, var(--newspack-ui-button-bg) var(--newspack-ui-color-mix-pressed), var(--newspack-ui-button-ink));
+				--newspack-ui-button-focus: var(--newspack-ui-button-ink);
+				--newspack-ui-button-focus-halo: var(--newspack-content-banner-ink, var(--newspack-ui-color-focus));
+
+				border-radius: 5px;
+				font-family: var(--newspack-theme-font-heading);
+				font-weight: 700;
+			}
+		}
+
 		.newspack-wizard & {
 			box-shadow: none;
 			position: relative;

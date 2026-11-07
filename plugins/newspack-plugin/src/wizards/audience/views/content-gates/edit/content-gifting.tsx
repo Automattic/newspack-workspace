@@ -29,6 +29,7 @@ import { useWizardData } from '../../../../../../packages/components/src/wizard/
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from '../consts';
+import BannerStyleControl, { getBannerPreviewProps } from '../../../components/banner-style';
 
 const ContentGiftingSettings = () => {
 	const wizardData = useWizardData( AUDIENCE_CONTENT_GATES_WIZARD_SLUG ) as ContentGatesWizardData;
@@ -38,6 +39,7 @@ const ContentGiftingSettings = () => {
 	const availableProducts = window.newspackAudience?.available_products || [];
 	const hasMetering = window.newspackAudience?.content_gifting?.has_metering;
 	const isEnabled = !! wizardData?.config?.content_gifting?.enabled;
+	const preview = getBannerPreviewProps( config?.content_gifting || {} );
 	const giftingErrors = Object.values( window.newspackAudience?.content_gifting?.can_use_gifting?.errors || {} ).flat();
 	const isDirty = useMemo( () => {
 		return (
@@ -264,16 +266,6 @@ const ContentGiftingSettings = () => {
 							__next40pxDefaultSize
 						/>
 						<ToggleGroupControl
-							label={ __( 'Style', 'newspack-plugin' ) }
-							value={ config?.content_gifting?.style || 'light' }
-							onChange={ value => setConfig( { ...config, content_gifting: { ...config?.content_gifting, style: value as string } } ) }
-							isBlock
-							__next40pxDefaultSize
-						>
-							<ToggleGroupControlOption label={ __( 'Light', 'newspack-plugin' ) } value="light" />
-							<ToggleGroupControlOption label={ __( 'Dark', 'newspack-plugin' ) } value="dark" />
-						</ToggleGroupControl>
-						<ToggleGroupControl
 							label={ __( 'Subscribe button action', 'newspack-plugin' ) }
 							help={ __(
 								'Whether the subscribe button should start a product checkout or redirect to a landing page.',
@@ -314,12 +306,16 @@ const ContentGiftingSettings = () => {
 								__next40pxDefaultSize
 							/>
 						) }
+						<BannerStyleControl
+							settings={ config?.content_gifting || {} }
+							onChange={ value => setConfig( { ...config, content_gifting: { ...config?.content_gifting, ...value } } ) }
+						/>
 					</Stack>
 				</Grid>
 				<BaseControl id="newspack-content-gifting-cta-preview" label={ __( 'Preview', 'newspack-plugin' ) }>
 					<div className="newspack-content-gifting__cta-preview" inert="true">
 						<div className="newspack-ui">
-							<div className={ `banner newspack-content-gifting__cta is-style-${ config?.content_gifting?.style || 'light' }` }>
+							<div className={ `banner newspack-content-gifting__cta ${ preview.bannerClassName }` } style={ preview.bannerStyle }>
 								<div className="wrapper newspack-content-gifting__cta__content">
 									<div className="newspack-ui__font--s">
 										{ config?.content_gifting?.cta_label ||
@@ -337,13 +333,7 @@ const ContentGiftingSettings = () => {
 									</div>
 									{ ( ( config?.content_gifting?.cta_type === 'product' && config?.content_gifting?.cta_product_id ) ||
 										( config?.content_gifting?.cta_type === 'url' && config?.content_gifting?.cta_url ) ) && (
-										<button
-											className={ `newspack-ui__button newspack-ui__button--x-small ${
-												( config?.content_gifting?.style || 'light' ) === 'dark'
-													? 'newspack-ui__button--primary-light'
-													: 'newspack-ui__button--primary'
-											}` }
-										>
+										<button className={ `newspack-ui__button ${ preview.buttonClassName }` }>
 											{ config?.content_gifting?.button_label || __( 'Subscribe now', 'newspack-plugin' ) }
 										</button>
 									) }

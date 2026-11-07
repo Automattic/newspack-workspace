@@ -125,7 +125,7 @@ export const promptStatus = ( { status }, segmentDisabled = false ) => {
 			: { label: __( 'Active', 'newspack-plugin' ), intent: 'stable' };
 	}
 	if ( 'pending' === status ) {
-		return { label: __( 'Pending Review', 'newspack-plugin' ), intent: 'low' };
+		return { label: __( 'Pending Review', 'newspack-plugin' ), intent: 'draft' };
 	}
 	if ( 'future' === status ) {
 		return { label: __( 'Scheduled', 'newspack-plugin' ), intent: 'informational' };

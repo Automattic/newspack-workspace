@@ -6,4 +6,24 @@
 		flex-shrink: 0;
 		margin: calc((#{wp-vars.$grid-unit-20} - #{wp-vars.$icon-size}) / 2);
 	}
+
+	&--success {
+		color: var(--wpds-color-foreground-content-success-weak, currentcolor);
+	}
+
+	&--info {
+		color: var(--wpds-color-foreground-content-info-weak, currentcolor);
+	}
+
+	&--warning {
+		color: var(--wpds-color-foreground-content-warning-weak, currentcolor);
+	}
+
+	&--error {
+		color: var(--wpds-color-foreground-content-error-weak, currentcolor);
+	}
+
+	&--neutral {
+		color: var(--wpds-color-foreground-content-neutral-weak, currentcolor);
+	}
 }

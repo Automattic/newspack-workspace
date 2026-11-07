@@ -15,11 +15,13 @@ import {
 	__experimentalToggleGroupControlOption as ToggleGroupControlOption,
 } from '@wordpress/components';
 import { ActionCard, Button, Grid, Notice, SelectControl, TextControl } from '../../../../../packages/components/src';
+import BannerStyleControl, { getBannerPreviewProps } from '../../components/banner-style';
 
 export default function ContentGifting( { config, setConfig, updateConfig, noBorder = false } ) {
 	const giftingErrors = Object.values( newspackAudience?.content_gifting?.can_use_gifting?.errors || {} ).flat();
 	const availableProducts = newspackAudience?.available_products || [];
 	const hasMetering = newspackAudience?.content_gifting?.has_metering;
+	const preview = getBannerPreviewProps( config.content_gifting || {} );
 
 	return (
 		<ActionCard
@@ -105,17 +107,7 @@ export default function ContentGifting( { config, setConfig, updateConfig, noBor
 							__next40pxDefaultSize
 						/>
 					</Grid>
-					<Grid columns={ 3 } rowGap={ 16 }>
-						<ToggleGroupControl
-							label={ __( 'Style', 'newspack-plugin' ) }
-							value={ config.content_gifting.style || 'light' }
-							onChange={ value => setConfig( { ...config, content_gifting: { ...config.content_gifting, style: value } } ) }
-							isBlock
-							__next40pxDefaultSize
-						>
-							<ToggleGroupControlOption label={ __( 'Light', 'newspack-plugin' ) } value="light" />
-							<ToggleGroupControlOption label={ __( 'Dark', 'newspack-plugin' ) } value="dark" />
-						</ToggleGroupControl>
+					<Grid columns={ 2 } rowGap={ 16 }>
 						<ToggleGroupControl
 							label={ __( 'Subscribe button action', 'newspack-plugin' ) }
 							help={ __(
@@ -153,12 +145,18 @@ export default function ContentGifting( { config, setConfig, updateConfig, noBor
 								__next40pxDefaultSize
 							/>
 						) }
+						<BannerStyleControl
+							gridCells
+							settings={ config.content_gifting }
+							onChange={ value => setConfig( { ...config, content_gifting: { ...config.content_gifting, ...value } } ) }
+						/>
 						<div style={ { gridColumn: '1 / -1' } }>
 							<BaseControl id="newspack-content-gifting-cta-preview" label={ __( 'Preview', 'newspack-plugin' ) }>
 								<div className="newspack-content-gifting__cta-preview" inert="true">
 									<div className="newspack-ui">
 										<div
-											className={ `banner newspack-content-gifting__cta is-style-${ config.content_gifting.style || 'light' }` }
+											className={ `banner newspack-content-gifting__cta ${ preview.bannerClassName }` }
+											style={ preview.bannerStyle }
 										>
 											<div className="wrapper newspack-content-gifting__cta__content">
 												<div className="newspack-ui__font--s">
@@ -177,13 +175,7 @@ export default function ContentGifting( { config, setConfig, updateConfig, noBor
 												</div>
 												{ ( ( config.content_gifting.cta_type === 'product' && config.content_gifting.cta_product_id ) ||
 													( config.content_gifting.cta_type === 'url' && config.content_gifting.cta_url ) ) && (
-													<button
-														className={ `newspack-ui__button newspack-ui__button--x-small ${
-															( config.content_gifting.style || 'light' ) === 'dark'
-																? 'newspack-ui__button--primary-light'
-																: 'newspack-ui__button--primary'
-														}` }
-													>
+													<button className={ `newspack-ui__button ${ preview.buttonClassName }` }>
 														{ config.content_gifting.button_label || __( 'Subscribe now', 'newspack-plugin' ) }
 													</button>
 												) }

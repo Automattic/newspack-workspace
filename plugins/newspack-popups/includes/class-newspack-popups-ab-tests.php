@@ -28,6 +28,13 @@ final class Newspack_Popups_AB_Tests {
 	const USER_META_BUCKET_PREFIX = 'newspack_popups_ab_bucket_';
 
 	/**
+	 * Private taxonomy holding one term per test: the slug is the Test ID, the
+	 * name is what publishers see. Prompts still join a test through
+	 * META_TEST_ID, so a test with no term is valid and shows its ID as its name.
+	 */
+	const TAXONOMY = 'newspack_popups_ab_test';
+
+	/**
 	 * Autoloaded flag recording whether any valid test exists.
 	 *
 	 * Three states, and the distinction matters: '1' and absent both fall through to
@@ -38,6 +45,8 @@ final class Newspack_Popups_AB_Tests {
 	const OPTION_HAS_TESTS = 'newspack_popups_ab_has_tests';
 
 	const VALID_VARIANTS = [ 'a', 'b', 'c', 'd' ];
+
+	const VALID_GOALS = [ 'form_submission', 'link_click', 'donation', 'subscription' ];
 
 	const DEFAULT_CONTROL_SHARE = 50;
 
@@ -53,6 +62,7 @@ final class Newspack_Popups_AB_Tests {
 	 */
 	public static function init() {
 		add_action( 'init', [ __CLASS__, 'register_meta' ] );
+		add_action( 'init', [ __CLASS__, 'register_taxonomy' ] );
 		add_filter( 'rest_pre_insert_' . Newspack_Popups::NEWSPACK_POPUPS_CPT, [ __CLASS__, 'guard_rest_ab_meta' ], 10, 2 );
 
 		// Anything that can add or remove a test invalidates the flag. Scoped to the
@@ -137,6 +147,31 @@ final class Newspack_Popups_AB_Tests {
 	}
 
 	/**
+	 * Register the taxonomy that holds test names. Registered whether or not the
+	 * feature flag is on, like the meta: the terms outlive the flag either way, but
+	 * core can only read them back while the taxonomy is registered.
+	 */
+	public static function register_taxonomy() {
+		register_taxonomy(
+			self::TAXONOMY,
+			[],
+			[
+				'public'             => false,
+				'show_ui'            => false,
+				'show_in_menu'       => false,
+				'show_in_nav_menus'  => false,
+				'show_in_rest'       => false,
+				'show_tagcloud'      => false,
+				'show_in_quick_edit' => false,
+				'show_admin_column'  => false,
+				'hierarchical'       => false,
+				'rewrite'            => false,
+				'query_var'          => false,
+			]
+		);
+	}
+
+	/**
 	 * Register A/B test meta fields on the prompts CPT.
 	 */
 	public static function register_meta() {
@@ -154,7 +189,7 @@ final class Newspack_Popups_AB_Tests {
 				$base,
 				[
 					'type'              => 'string',
-					'sanitize_callback' => 'sanitize_title',
+					'sanitize_callback' => [ __CLASS__, 'sanitize_test_id' ],
 				]
 			)
 		);
@@ -188,7 +223,16 @@ final class Newspack_Popups_AB_Tests {
 				$base,
 				[
 					'type'              => 'string',
-					'sanitize_callback' => 'sanitize_key',
+					'sanitize_callback' => [ __CLASS__, 'sanitize_goal' ],
+					// Same reason as the variant enum: an unknown goal fails the REST
+					// write with a 400 the editor can show, instead of being coerced to
+					// '' (no goal) on a 200. The empty string stays valid.
+					'show_in_rest'      => [
+						'schema' => [
+							'type' => 'string',
+							'enum' => array_merge( [ '' ], self::VALID_GOALS ),
+						],
+					],
 				]
 			)
 		);
@@ -290,26 +334,82 @@ final class Newspack_Popups_AB_Tests {
 			return $prepared_post;
 		}
 
-		$post_id = isset( $prepared_post->ID ) ? (int) $prepared_post->ID : 0;
+		$post_id     = isset( $prepared_post->ID ) ? (int) $prepared_post->ID : 0;
+		$is_autosave = str_ends_with( $request->get_route(), '/autosaves' );
+
+		// A validity rule, not a permission, so it runs before the permission branch
+		// and applies to administrators too. It reads the values the save would
+		// leave in place: a key the request omits keeps its stored value. A
+		// non-scalar reads as empty here; the meta schema refuses it on its own.
+		$stored    = function ( $meta_key ) use ( $post_id ) {
+			return $post_id ? (string) get_post_meta( $post_id, $meta_key, true ) : '';
+		};
+		$effective = function ( $meta_key ) use ( $meta, $stored ) {
+			if ( ! array_key_exists( $meta_key, $meta ) ) {
+				return $stored( $meta_key );
+			}
+			return is_scalar( $meta[ $meta_key ] ) ? (string) $meta[ $meta_key ] : '';
+		};
+		$changes   = function ( $meta_key ) use ( $effective, $stored ) {
+			return $effective( $meta_key ) !== $stored( $meta_key );
+		};
+		// The ID the save would store, so a value the sanitizer empties reads as
+		// clearing the test rather than as a new one.
+		$test_id = self::sanitize_test_id( $effective( self::META_TEST_ID ) );
+		// The rule refuses the save that creates a violation, not every later save
+		// of a prompt already in one. A tested prompt can reach a manual placement
+		// past this guard (the Campaigns wizard writes placement directly, and a
+		// save while the flag is off is not checked), and the editor sends the
+		// whole meta object on every save, so checking the stored state too would
+		// refuse a frequency edit with an error about a field the editor may have
+		// disabled for that user. The editor's notice asks for the fix instead.
+		// An ID sent back as stored is unchanged here as it is for the write below,
+		// even where the current sanitizer would spell it differently.
+		// Only while the flag is on: with it off a stored test has no effect, and
+		// the panel that could clear the Test ID is not registered.
+		if (
+			self::is_enabled()
+			&& ! $is_autosave
+			&& ( ( $changes( self::META_TEST_ID ) && $test_id !== $stored( self::META_TEST_ID ) ) || $changes( 'placement' ) || $changes( 'manual_only' ) )
+			&& '' !== $test_id
+			&& ! self::is_eligible_placement( $effective( 'placement' ), rest_sanitize_boolean( $effective( 'manual_only' ) ) )
+		) {
+			return new WP_Error(
+				'newspack_popups_ab_ineligible_placement',
+				self::is_eligible_placement( $effective( 'placement' ) )
+					? __( 'A/B tests only work on prompts that Newspack places for you. Turn off Manual only.', 'newspack-popups' )
+					: __( 'A/B tests only work on prompts that Newspack places for you. Choose another placement.', 'newspack-popups' ),
+				[ 'status' => 400 ]
+			);
+		}
+
+		// A Test ID sent back unchanged is left out of the write. Core re-sanitizes
+		// a submitted value before comparing it with the stored one, so an ID stored
+		// under an earlier, looser sanitizer would otherwise be rewritten on one
+		// variant by any save and split its test; only a deliberate edit normalizes it.
+		if ( array_key_exists( self::META_TEST_ID, $meta ) && is_scalar( $meta[ self::META_TEST_ID ] ) && ! $changes( self::META_TEST_ID ) ) {
+			unset( $meta[ self::META_TEST_ID ] );
+			$request->set_param( 'meta', $meta );
+		}
+
 		if ( self::can_manage_tests( get_current_user_id(), $post_id ) ) {
 			return $prepared_post;
 		}
 
-		$is_autosave = str_ends_with( $request->get_route(), '/autosaves' );
-		$registered  = get_registered_meta_keys( 'post', Newspack_Popups::NEWSPACK_POPUPS_CPT );
+		$registered = get_registered_meta_keys( 'post', Newspack_Popups::NEWSPACK_POPUPS_CPT );
 		foreach ( self::META_KEYS as $meta_key ) {
 			if ( ! array_key_exists( $meta_key, $meta ) ) {
 				continue;
 			}
 			// get_post_meta() applies the registered default to an unset key, which
 			// is also what the editor read and is sending back.
-			$stored = $post_id ? get_post_meta( $post_id, $meta_key, true ) : ( $registered[ $meta_key ]['default'] ?? '' );
+			$stored_value = $post_id ? get_post_meta( $post_id, $meta_key, true ) : ( $registered[ $meta_key ]['default'] ?? '' );
 			// A null asks core to delete the key, which resets it to its registered default.
 			$value = $meta[ $meta_key ] ?? ( $registered[ $meta_key ]['default'] ?? '' );
-			if ( ! $is_autosave && ( ! is_scalar( $value ) || (string) $value !== (string) $stored ) ) {
+			if ( ! $is_autosave && ( ! is_scalar( $value ) || (string) $value !== (string) $stored_value ) ) {
 				return new WP_Error(
 					'rest_cannot_update',
-					__( "You don't have permission to change this prompt's A/B test settings. If someone changed its test while you were editing, reload the editor and try again.", 'newspack-popups' ),
+					__( "You can't change this prompt's test settings. If someone else just edited it, reload and try again.", 'newspack-popups' ),
 					[
 						'status' => rest_authorization_required_code(),
 						'key'    => $meta_key,
@@ -324,6 +424,807 @@ final class Newspack_Popups_AB_Tests {
 	}
 
 	/**
+	 * What the prompt editor needs to show the A/B test panel: whether the
+	 * feature is on, whether this user may change the fields, and the vocabulary
+	 * the fields offer. Variants stop at B because the editor supports two-arm
+	 * tests; the server keeps accepting c and d so stored ones are not lost.
+	 *
+	 * @param int $post_id Prompt post ID, or 0 for a prompt not yet created.
+	 * @return array
+	 */
+	public static function get_editor_data( $post_id ) {
+		return [
+			'enabled'               => self::is_enabled(),
+			'can_manage_tests'      => self::can_manage_tests( get_current_user_id(), (int) $post_id ),
+			'goals'                 => self::get_goal_labels(),
+			'ineligible_placements' => self::get_ineligible_placements(),
+			// The editor gets this data with the flag off too, and the page doesn't exist then.
+			'results_url'           => self::is_enabled() && current_user_can( 'manage_options' ) && class_exists( 'Newspack_Popups_AB_Dashboard' ) ? Newspack_Popups_AB_Dashboard::get_page_url() : '',
+			'test_name'             => $post_id ? self::get_test_name( (string) get_post_meta( (int) $post_id, self::META_TEST_ID, true ) ) : '',
+		];
+	}
+
+	/**
+	 * The prompts carrying a Test ID, for the editor's list of the other prompts in
+	 * the test. Drafts and pending prompts are included, since an author sets up the
+	 * challenger before publishing it; trashed ones are not. Private prompts follow
+	 * the Prompts list's rule: another author's are listed only to a user with
+	 * read_private_posts, which is why the statuses are spelled out. WP_Query
+	 * applies 'readable' to an explicit list and ignores it for 'any'.
+	 *
+	 * @param string $test_id Test ID.
+	 * @return array[] Each `[ 'id', 'title', 'variant', 'goal', 'control_share', 'status', 'status_label', 'edit_link' ]`; `edit_link` is null when the current user can't edit that prompt. `goal` and `control_share` are each prompt's stored values; only the control's take effect.
+	 */
+	public static function get_test_prompts( $test_id ) {
+		$prompts = [];
+		foreach ( self::test_id_candidates( $test_id ) as $candidate ) {
+			$prompts = self::query_test_prompts( $candidate );
+			if ( $prompts ) {
+				break;
+			}
+		}
+		$list = [];
+		foreach ( $prompts as $prompt ) {
+			$status = get_post_status_object( $prompt->post_status );
+			$share  = get_post_meta( $prompt->ID, self::META_CONTROL_SHARE, true );
+			$list[] = [
+				'id'            => (int) $prompt->ID,
+				'title'         => $prompt->post_title,
+				'variant'       => (string) get_post_meta( $prompt->ID, self::META_VARIANT, true ),
+				'goal'          => self::sanitize_goal( get_post_meta( $prompt->ID, self::META_GOAL, true ) ),
+				'control_share' => $share ? self::sanitize_control_share( $share ) : self::DEFAULT_CONTROL_SHARE,
+				'status'        => $prompt->post_status,
+				'status_label'  => $status ? $status->label : $prompt->post_status,
+				'edit_link'     => get_edit_post_link( $prompt->ID, 'raw' ),
+			];
+		}
+		return $list;
+	}
+
+	/**
+	 * The prompts whose stored Test ID is exactly this one.
+	 *
+	 * @param string $test_id Test ID as stored.
+	 * @return WP_Post[]
+	 */
+	private static function query_test_prompts( $test_id ) {
+		return get_posts(
+			[
+				'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+				'post_status'    => [ 'publish', 'future', 'draft', 'pending', 'private' ],
+				'perm'           => 'readable',
+				// Same reasoning as get_tests_config(): a bound would silently drop
+				// prompts from the list.
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Prompts CPT; config-scale.
+				'orderby'        => 'ID',
+				'order'          => 'ASC',
+				'meta_key'       => self::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'meta_value'     => $test_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			]
+		);
+	}
+
+	/**
+	 * Every test on the site, for the A/B Tests dashboard.
+	 *
+	 * Tests are discovered from prompts carrying a Test ID, in every non-trashed
+	 * status, so a test still being set up (one arm published, the other a draft)
+	 * is listed with its state rather than hidden until it is valid. A prompt
+	 * whose variant key is outside VALID_VARIANTS is skipped: the schema will not
+	 * save one, so one can only come from a direct meta write.
+	 *
+	 * @return array[] Ordered by Test ID. Each `[ 'test_id', 'name', 'goal', 'goal_label',
+	 *                 'control_share', 'started_at', 'variants', 'duplicates', 'prompt_count' ]`. `control_share`
+	 *                 comes from the control prompt, or DEFAULT_CONTROL_SHARE without
+	 *                 one. `started_at` is when the split began: the later of the
+	 *                 control's publish date and the earliest challenger's, ISO 8601
+	 *                 UTC, or null until both are published. Readers see the control
+	 *                 alone before then, so an earlier date would count traffic the
+	 *                 test never split. `variants` maps the letter to
+	 *                 `[ 'id', 'title', 'status', 'status_label', 'edit_link', 'eligible' ]`,
+	 *                 where `eligible` is false for a manual or custom placement
+	 *                 and for an overlay set to Manual only.
+	 *                 `duplicates` lists the other prompts carrying a letter, as
+	 *                 `letter` plus those fields. The arm shown is the first
+	 *                 published prompt by ID, or the first by ID when none is
+	 *                 published; this page reports that one, but readers still
+	 *                 see every published prompt with the letter. `prompt_count`
+	 *                 counts every untrashed prompt with the Test ID, those with no
+	 *                 version included, since a start refuses a test that has any.
+	 */
+	public static function get_tests() {
+		$prompts = get_posts(
+			[
+				'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+				'post_status'    => [ 'publish', 'future', 'draft', 'pending', 'private' ],
+				'perm'           => 'readable',
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Prompts CPT; config-scale.
+				'orderby'        => 'ID',
+				'order'          => 'ASC',
+				'meta_query'     => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- The Test ID lives in meta; every prompt in a test carries it.
+					[
+						'key'     => self::META_TEST_ID,
+						'value'   => '',
+						'compare' => '!=',
+					],
+				],
+			]
+		);
+		$grouped       = [];
+		$prompt_counts = [];
+		foreach ( $prompts as $prompt ) {
+			// Keyed by the ID as stored, as get_tests_config() keys the test readers
+			// see: a legacy footer_test and footer-test are two tests, not one.
+			$test_id = trim( (string) get_post_meta( $prompt->ID, self::META_TEST_ID, true ) );
+			$variant = (string) get_post_meta( $prompt->ID, self::META_VARIANT, true );
+			if ( '' === $test_id ) {
+				continue;
+			}
+			$prompt_counts[ $test_id ] = ( $prompt_counts[ $test_id ] ?? 0 ) + 1;
+			if ( ! in_array( $variant, self::VALID_VARIANTS, true ) ) {
+				continue;
+			}
+			$grouped[ $test_id ][ $variant ][] = $prompt;
+		}
+		ksort( $grouped );
+
+		$labels = self::get_goal_labels();
+		$names  = self::get_test_names( array_map( 'strval', array_keys( $grouped ) ) );
+		$tests  = [];
+		foreach ( $grouped as $test_id => $letters ) {
+			ksort( $letters );
+			$test_id = (string) $test_id; // PHP stores an integer-like key as an int; get_stats() compares the ID strictly.
+			$test    = [
+				'test_id'       => $test_id,
+				'name'          => $names[ $test_id ] ?? $test_id,
+				'goal'          => '',
+				'goal_label'    => '',
+				'control_share' => self::DEFAULT_CONTROL_SHARE,
+				'started_at'    => null,
+				'variants'      => [],
+				'duplicates'    => [],
+				'prompt_count'  => $prompt_counts[ $test_id ],
+			];
+			$published_at = [];
+			$control_goal = null;
+			foreach ( $letters as $variant => $candidates ) {
+				// Two prompts on one letter: this page reports the first published
+				// one, or the first by ID when none is, and lists the rest so an
+				// editor can split them. Readers still see every published prompt.
+				$kept = null;
+				foreach ( $candidates as $candidate ) {
+					if ( 'publish' === $candidate->post_status ) {
+						$kept = $candidate;
+						break;
+					}
+				}
+				$kept = $kept ?? $candidates[0];
+				foreach ( $candidates as $candidate ) {
+					if ( $candidate !== $kept ) {
+						$test['duplicates'][] = [ 'letter' => $variant ] + self::describe_prompt( $candidate );
+					}
+				}
+				$test['variants'][ $variant ] = self::describe_prompt( $kept );
+
+				if ( 'a' === $variant ) {
+					$share = get_post_meta( $kept->ID, self::META_CONTROL_SHARE, true );
+					if ( '' !== $share && null !== $share ) {
+						$test['control_share'] = self::sanitize_control_share( $share );
+					}
+				}
+
+				// The control's goal is the test's, an empty one included, since the
+				// editor sets the goal on version A only. A challenger's stored goal
+				// counts only while the test has no control.
+				$goal = self::sanitize_goal( get_post_meta( $kept->ID, self::META_GOAL, true ) );
+				if ( 'a' === $variant ) {
+					$control_goal = $goal;
+				} elseif ( '' !== $goal && '' === $test['goal'] ) {
+					$test['goal'] = $goal;
+				}
+
+				if ( 'publish' === $kept->post_status && '0000-00-00 00:00:00' !== $kept->post_date_gmt ) {
+					$published_at[ $variant ] = gmdate( 'Y-m-d\TH:i:s\Z', strtotime( $kept->post_date_gmt . ' UTC' ) );
+				}
+			}
+			if ( null !== $control_goal ) {
+				$test['goal'] = $control_goal;
+			}
+			$test['goal_label'] = $labels[ $test['goal'] ] ?? '';
+			$test['started_at'] = self::get_started_at( $published_at );
+			$tests[]            = $test;
+		}
+
+		return array_values( $tests );
+	}
+
+	/**
+	 * Display names for a set of tests, in one query.
+	 *
+	 * @param string[] $test_ids Test IDs.
+	 * @return array<string,string> Test ID => name, only for tests that have a term.
+	 */
+	private static function get_test_names( array $test_ids ) {
+		if ( empty( $test_ids ) ) {
+			return [];
+		}
+		$terms = get_terms(
+			[
+				'taxonomy'               => self::TAXONOMY,
+				'slug'                   => $test_ids,
+				'hide_empty'             => false,
+				'update_term_meta_cache' => false,
+			]
+		);
+		$names = [];
+		foreach ( is_array( $terms ) ? $terms : [] as $term ) {
+			$names[ (string) $term->slug ] = self::decode_term_name( $term->name );
+		}
+		return $names;
+	}
+
+	/**
+	 * A test's display name: its term's name, or the Test ID for a test that was
+	 * never named, which covers every test made before names existed.
+	 *
+	 * @param string $test_id Test ID.
+	 * @return string
+	 */
+	public static function get_test_name( $test_id ) {
+		$test_id = self::resolve_test_id( $test_id );
+		if ( '' === $test_id ) {
+			return '';
+		}
+		return self::get_test_names( [ $test_id ] )[ $test_id ] ?? $test_id;
+	}
+
+	/**
+	 * Start a test record with a new, unique Test ID.
+	 *
+	 * The ID is the name's slug plus a random suffix, so it stays readable in GA4
+	 * reports, where it is the `ab_test_id` value, and never changes after a
+	 * rename. A name that leaves no slug, such as one in a non-Latin script,
+	 * gets `test` as its base. The ID is also what readers are bucketed on, which
+	 * is why nothing here ever rewrites one.
+	 *
+	 * @param string $name Display name.
+	 * @return string|WP_Error The new Test ID.
+	 */
+	public static function create_test( $name ) {
+		$name = self::sanitize_test_name( $name );
+		if ( is_wp_error( $name ) ) {
+			return $name;
+		}
+		// GA4 caps an event parameter value at 100 characters; 40 leaves room for
+		// the suffix and for whatever a report prefixes to the ID.
+		$base = trim( substr( self::sanitize_test_id( $name ), 0, 40 ), '-' );
+		$base = '' === $base ? 'test' : $base;
+		for ( $attempt = 0; $attempt < 5; $attempt++ ) {
+			$test_id = $base . '-' . bin2hex( random_bytes( 2 ) );
+			if ( self::is_test_id_in_use( $test_id ) ) {
+				continue;
+			}
+			$term = self::insert_term( $name, $test_id );
+			if ( is_wp_error( $term ) ) {
+				if ( 'term_exists' === $term->get_error_code() ) {
+					continue;
+				}
+				return $term;
+			}
+			// Core handed back a term it already had: another create drew the same
+			// ID after the check above, and that test owns the term.
+			if ( ! $term['created'] ) {
+				continue;
+			}
+			// Another request took the ID after the check above, so core stored
+			// this term under a suffixed slug that no test would ever read.
+			if ( get_term( $term['term_id'], self::TAXONOMY )->slug !== $test_id ) {
+				wp_delete_term( $term['term_id'], self::TAXONOMY );
+				continue;
+			}
+			return $test_id;
+		}
+		return new WP_Error( 'newspack_popups_ab_test_id', __( 'Could not create the test. Try again.', 'newspack-popups' ), [ 'status' => 500 ] );
+	}
+
+	/**
+	 * Clean a display name, refusing one that is empty or longer than a term name
+	 * can hold.
+	 *
+	 * @param mixed $name Raw name.
+	 * @return string|WP_Error
+	 */
+	private static function sanitize_test_name( $name ) {
+		$name = is_scalar( $name ) ? trim( sanitize_text_field( (string) $name ) ) : '';
+		if ( '' === $name ) {
+			return new WP_Error( 'newspack_popups_ab_test_name', __( 'Enter a test name.', 'newspack-popups' ), [ 'status' => 400 ] );
+		}
+		// Measured as core will store it: its filters turn `&` into `&amp;`, and a
+		// name over the column's 200 characters is not cut short but dropped,
+		// silently on update. The filters expect slashed input, as the term APIs
+		// pass it; unslashed, they strip a lone backslash and add one before
+		// each quote.
+		if ( mb_strlen( wp_unslash( sanitize_term_field( 'name', wp_slash( $name ), 0, self::TAXONOMY, 'db' ) ), 'UTF-8' ) > 200 ) {
+			return new WP_Error( 'newspack_popups_ab_test_name', __( 'Use a shorter test name.', 'newspack-popups' ), [ 'status' => 400 ] );
+		}
+		return $name;
+	}
+
+	/**
+	 * Insert a test's term, noting whether this call created it.
+	 *
+	 * When two inserts race for one slug, core can delete the newer row and
+	 * return the older term, which may be another test's. It returns before the
+	 * create hooks fire, so only a term this call made is safe to delete.
+	 *
+	 * @param string $name    Clean display name.
+	 * @param string $test_id Test ID to use as the slug.
+	 * @return array|WP_Error Core's result, plus `created`.
+	 */
+	private static function insert_term( $name, $test_id ) {
+		$created = 0;
+		$listen  = function ( $term_id ) use ( &$created ) {
+			$created = (int) $term_id;
+		};
+		add_action( 'created_' . self::TAXONOMY, $listen );
+		$term = wp_insert_term( wp_slash( $name ), self::TAXONOMY, [ 'slug' => $test_id ] );
+		remove_action( 'created_' . self::TAXONOMY, $listen );
+		if ( ! is_wp_error( $term ) ) {
+			$term['created'] = (int) $term['term_id'] === $created;
+		}
+		return $term;
+	}
+
+	/**
+	 * A term name with core's HTML encoding undone, so `&` and a lone `<` or `>`
+	 * read as entered. Entity text typed into a name is decoded too.
+	 *
+	 * @param string $name Stored name.
+	 * @return string
+	 */
+	private static function decode_term_name( $name ) {
+		return wp_specialchars_decode( (string) $name, ENT_QUOTES );
+	}
+
+	/**
+	 * The spellings a given Test ID could be stored under, in the order to try
+	 * them. The ID as stored comes first: the save guard keeps a legacy ID with
+	 * underscores, and the front end keys tests by the stored value, so
+	 * footer_test and footer-test are different tests. Only input that isn't
+	 * already in stored form, such as typed text, falls back to the spelling a
+	 * save would store.
+	 *
+	 * @param mixed $test_id Test ID as given.
+	 * @return string[] Empty for input with no usable ID.
+	 */
+	private static function test_id_candidates( $test_id ) {
+		if ( ! is_scalar( $test_id ) ) {
+			return [];
+		}
+		$stored_form = sanitize_title( (string) $test_id );
+		$candidates  = [ $stored_form ];
+		if ( (string) $test_id !== $stored_form ) {
+			$candidates[] = self::sanitize_test_id( $test_id );
+		}
+		return array_values( array_filter( array_unique( $candidates ), 'strlen' ) );
+	}
+
+	/**
+	 * The Test ID a caller means, resolved the way the page finds a test, so a
+	 * rename lands on the test the page listed.
+	 *
+	 * @param mixed $test_id Test ID as given.
+	 * @return string The first candidate a prompt carries, else the last candidate,
+	 *                or an empty string for input with no usable ID.
+	 */
+	public static function resolve_test_id( $test_id ) {
+		$candidates = self::test_id_candidates( $test_id );
+		foreach ( $candidates as $candidate ) {
+			if ( self::get_test_prompt_ids( $candidate ) ) {
+				return $candidate;
+			}
+		}
+		return $candidates ? $candidates[ count( $candidates ) - 1 ] : '';
+	}
+
+	/**
+	 * Change a test's display name. The Test ID, and so every reader's bucket and
+	 * every recorded result, stays the same.
+	 *
+	 * A test made before names existed has no term yet; renaming it creates one
+	 * with the existing ID as its slug.
+	 *
+	 * @param string $test_id Test ID.
+	 * @param string $name    New display name.
+	 * @return string|WP_Error The stored name.
+	 */
+	public static function rename_test( $test_id, $name ) {
+		$test_id = self::resolve_test_id( $test_id );
+		$name    = self::sanitize_test_name( $name );
+		if ( is_wp_error( $name ) ) {
+			return $name;
+		}
+		$term = '' === $test_id ? false : get_term_by( 'slug', $test_id, self::TAXONOMY );
+		if ( ! $term ) {
+			if ( '' === $test_id || empty( self::get_test_prompt_ids( $test_id ) ) ) {
+				return new WP_Error( 'newspack_popups_ab_test_not_found', __( 'This test no longer exists.', 'newspack-popups' ), [ 'status' => 404 ] );
+			}
+			$inserted = self::insert_term( $name, $test_id );
+			if ( is_wp_error( $inserted ) && 'term_exists' !== $inserted->get_error_code() ) {
+				return $inserted;
+			}
+			if ( ! is_wp_error( $inserted ) ) {
+				$term = get_term( $inserted['term_id'], self::TAXONOMY );
+				if ( $term->slug === $test_id ) {
+					return self::decode_term_name( $term->name );
+				}
+				// A concurrent rename created this test's term after the lookup
+				// above, and core gave this one a suffixed slug. Drop it if this
+				// call made it, and rename the real one.
+				if ( $inserted['created'] ) {
+					wp_delete_term( $term->term_id, self::TAXONOMY );
+				}
+			}
+			$term = get_term_by( 'slug', $test_id, self::TAXONOMY );
+			if ( ! $term ) {
+				return new WP_Error( 'newspack_popups_ab_test_name', __( 'Could not rename the test. Try again.', 'newspack-popups' ), [ 'status' => 500 ] );
+			}
+		}
+		$result = wp_update_term( $term->term_id, self::TAXONOMY, [ 'name' => wp_slash( $name ) ] );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return self::decode_term_name( get_term( $term->term_id, self::TAXONOMY )->name );
+	}
+
+	/**
+	 * Whether a user may rename a test: only someone who may change the A/B
+	 * settings of every prompt in it, since the name shows on all of them.
+	 *
+	 * @param int    $user_id User ID.
+	 * @param string $test_id Test ID.
+	 * @return bool False for a test with no prompts.
+	 */
+	public static function can_rename_test( $user_id, $test_id ) {
+		$prompt_ids = self::get_test_prompt_ids( self::resolve_test_id( $test_id ) );
+		foreach ( $prompt_ids as $prompt_id ) {
+			if ( ! self::can_manage_tests( $user_id, $prompt_id ) ) {
+				return false;
+			}
+		}
+		return ! empty( $prompt_ids );
+	}
+
+	/**
+	 * Start a test on a prompt: it becomes version A, and a draft copy of it
+	 * becomes version B with the same placement and other settings.
+	 *
+	 * A prompt that is already version A of a test with no other version, such
+	 * as one whose B was trashed, resumes that test: it keeps its ID and results,
+	 * takes the new name, goal and split, and gets a new B.
+	 *
+	 * A new test claims A before B is made, so a second start on the same prompt
+	 * fails instead of making a second test, and a failure after that removes the
+	 * new test. A resume makes no claim and undoes nothing on failure: two resumes
+	 * at once can each make a B, which the dashboard then flags.
+	 *
+	 * The goal and split are stored on A only, because A's are the test's. The
+	 * meta is written directly, past guard_rest_ab_meta(), which is why the
+	 * placement rule is checked here.
+	 *
+	 * @param int    $prompt_id     Prompt to test.
+	 * @param string $name          Display name.
+	 * @param string $goal          Goal key.
+	 * @param int    $control_share Percent of readers who see A, 20 to 80.
+	 * @return array|WP_Error `[ 'test_id', 'name', 'version_b' => [ 'id', 'edit_link' ] ]`;
+	 *                        `edit_link` is null when the current user can't edit B.
+	 */
+	public static function start_test( $prompt_id, $name, $goal, $control_share ) {
+		$prompt = get_post( $prompt_id );
+		if ( ! $prompt || Newspack_Popups::NEWSPACK_POPUPS_CPT !== $prompt->post_type || 'trash' === $prompt->post_status ) {
+			return new WP_Error( 'newspack_popups_ab_prompt_not_found', __( 'This prompt no longer exists.', 'newspack-popups' ), [ 'status' => 404 ] );
+		}
+		$placement = get_post_meta( $prompt->ID, 'placement', true );
+		if ( ! self::is_eligible_placement( $placement, rest_sanitize_boolean( get_post_meta( $prompt->ID, 'manual_only', true ) ) ) ) {
+			return new WP_Error(
+				'newspack_popups_ab_ineligible_placement',
+				self::is_eligible_placement( $placement )
+					? __( 'Overlays set to Manual only can’t be A/B tested.', 'newspack-popups' )
+					: __( 'Prompts on manual or custom placements can’t be A/B tested.', 'newspack-popups' ),
+				[ 'status' => 400 ]
+			);
+		}
+		$goal = self::sanitize_goal( $goal );
+		if ( '' === $goal ) {
+			return new WP_Error( 'newspack_popups_ab_test_goal', __( 'Choose a goal.', 'newspack-popups' ), [ 'status' => 400 ] );
+		}
+		// The ID as stored, not re-sanitized: B has to carry exactly A's value, or
+		// an ID stored under an earlier sanitizer would split the test in two.
+		$existing = (string) get_post_meta( $prompt->ID, self::META_TEST_ID, true );
+		$resuming = '' !== $existing;
+		if ( $resuming ) {
+			if ( 'a' !== get_post_meta( $prompt->ID, self::META_VARIANT, true ) || self::has_other_versions( $existing, $prompt->ID ) ) {
+				return self::already_in_test_error();
+			}
+			// A new name renames the whole test, trashed versions included, so it
+			// takes the same permission as the rename route. The stored name is
+			// sanitized too before comparing: it reads back decoded, so a kept name
+			// with a lone `<` would otherwise look changed.
+			$clean_name = self::sanitize_test_name( $name );
+			if ( is_wp_error( $clean_name ) ) {
+				return $clean_name;
+			}
+			$current_name = self::sanitize_test_name( self::get_test_name( $existing ) );
+			if ( $current_name !== $clean_name && ! self::can_rename_test( get_current_user_id(), $existing ) ) {
+				return new WP_Error( 'newspack_popups_ab_rename_forbidden', __( 'You can’t rename this test.', 'newspack-popups' ), [ 'status' => 403 ] );
+			}
+			$renamed = self::rename_test( $existing, $name );
+			if ( is_wp_error( $renamed ) ) {
+				return $renamed;
+			}
+			$test_id = $existing;
+		} else {
+			$test_id = self::claim_new_test( $prompt->ID, $name );
+			if ( is_wp_error( $test_id ) ) {
+				return $test_id;
+			}
+		}
+
+		/* translators: %s: title of the prompt being tested, which is version A. */
+		$version_b = Newspack_Popups::duplicate_popup( $prompt->ID, sprintf( __( '%s (B)', 'newspack-popups' ), $prompt->post_title ) );
+		if ( ! $version_b || is_wp_error( $version_b ) ) {
+			// A resumed test was there before this call, so only a new one is undone.
+			if ( ! $resuming ) {
+				delete_post_meta( $prompt->ID, self::META_TEST_ID, $test_id );
+				self::delete_test_term( $test_id );
+			}
+			return new WP_Error( 'newspack_popups_ab_version_b', __( 'Could not create version B. Try again.', 'newspack-popups' ), [ 'status' => 500 ] );
+		}
+		// The registered sanitizer would rewrite a legacy ID (`footer_test` to
+		// `footer-test`) and put B in a different test, so this copy skips it.
+		$keep_stored = static function () use ( $test_id ) {
+			return $test_id;
+		};
+		add_filter( 'sanitize_post_meta_' . self::META_TEST_ID . '_for_' . Newspack_Popups::NEWSPACK_POPUPS_CPT, $keep_stored, PHP_INT_MAX );
+		update_post_meta( $version_b, self::META_TEST_ID, $test_id );
+		remove_filter( 'sanitize_post_meta_' . self::META_TEST_ID . '_for_' . Newspack_Popups::NEWSPACK_POPUPS_CPT, $keep_stored, PHP_INT_MAX );
+		update_post_meta( $version_b, self::META_VARIANT, 'b' );
+		update_post_meta( $prompt->ID, self::META_VARIANT, 'a' );
+		update_post_meta( $prompt->ID, self::META_GOAL, $goal );
+		update_post_meta( $prompt->ID, self::META_CONTROL_SHARE, self::sanitize_control_share( $control_share ) );
+
+		return [
+			'test_id'   => $test_id,
+			'name'      => self::get_test_name( $test_id ),
+			'version_b' => [
+				'id'        => (int) $version_b,
+				'edit_link' => get_edit_post_link( $version_b, 'raw' ),
+			],
+		];
+	}
+
+	/**
+	 * Create a test and claim a prompt for it as version A.
+	 *
+	 * @param int    $prompt_id Prompt ID.
+	 * @param string $name      Display name.
+	 * @return string|WP_Error Test ID.
+	 */
+	private static function claim_new_test( $prompt_id, $name ) {
+		$test_id = self::create_test( $name );
+		if ( is_wp_error( $test_id ) ) {
+			return $test_id;
+		}
+		// The claim: add_post_meta() with $unique refuses to add a second row, so
+		// of two starts that both found the prompt in no test, usually only one gets A.
+		// Its own check is a read before the insert, not a lock, so two starts in
+		// the same instant can still both succeed; the result is a second B whose
+		// test has no A, which the dashboard shows as Incomplete. A row left empty
+		// by clearing a test would refuse every start, so it goes first, by row:
+		// delete_post_meta() with an empty value deletes every row of the key,
+		// which would take another start's claim with it.
+		self::delete_empty_test_id_rows( $prompt_id );
+		if ( ! add_post_meta( $prompt_id, self::META_TEST_ID, $test_id, true ) ) {
+			self::delete_test_term( $test_id );
+			return self::already_in_test_error();
+		}
+		return $test_id;
+	}
+
+	/**
+	 * Delete a prompt's empty Test ID rows, leaving any with a value.
+	 *
+	 * @param int $prompt_id Prompt ID.
+	 */
+	private static function delete_empty_test_id_rows( $prompt_id ) {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Must read the rows as stored, past the meta cache, to find their IDs.
+		$meta_ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT meta_id FROM $wpdb->postmeta WHERE post_id = %d AND meta_key = %s AND meta_value = ''",
+				$prompt_id,
+				self::META_TEST_ID
+			)
+		);
+		foreach ( $meta_ids as $meta_id ) {
+			delete_metadata_by_mid( 'post', (int) $meta_id );
+		}
+	}
+
+	/**
+	 * Whether a test has a version other than this prompt, trashed ones aside.
+	 *
+	 * @param string $test_id   Test ID.
+	 * @param int    $prompt_id Prompt to leave out.
+	 * @return bool
+	 */
+	private static function has_other_versions( $test_id, $prompt_id ) {
+		return ! empty(
+			get_posts(
+				[
+					'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+					'post_status'    => [ 'publish', 'future', 'draft', 'pending', 'private' ],
+					'fields'         => 'ids',
+					'posts_per_page' => 1,
+					'post__not_in'   => [ (int) $prompt_id ], // phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.PostNotIn_post__not_in -- One ID; config-scale CPT.
+					'meta_key'       => self::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+					'meta_value'     => $test_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				]
+			)
+		);
+	}
+
+	/**
+	 * The error for a start on a prompt that is already in a test.
+	 *
+	 * @return WP_Error
+	 */
+	private static function already_in_test_error() {
+		return new WP_Error( 'newspack_popups_ab_already_in_test', __( 'This prompt is already in an A/B test.', 'newspack-popups' ), [ 'status' => 409 ] );
+	}
+
+	/**
+	 * Delete the name term of a test this request created and is abandoning.
+	 *
+	 * @param string $test_id Test ID.
+	 */
+	private static function delete_test_term( $test_id ) {
+		$term = get_term_by( 'slug', $test_id, self::TAXONOMY );
+		if ( $term ) {
+			wp_delete_term( $term->term_id, self::TAXONOMY );
+		}
+	}
+
+	/**
+	 * IDs of every prompt carrying a Test ID, trashed ones included, so a trashed
+	 * prompt still holds its ID against reuse.
+	 *
+	 * @param string $test_id Sanitized Test ID.
+	 * @return int[]
+	 */
+	private static function get_test_prompt_ids( $test_id ) {
+		if ( '' === $test_id ) {
+			return [];
+		}
+		return array_map(
+			'intval',
+			get_posts(
+				[
+					'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+					'post_status'    => [ 'publish', 'future', 'draft', 'pending', 'private', 'trash' ],
+					'fields'         => 'ids',
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Prompts CPT; config-scale.
+					'meta_key'       => self::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+					'meta_value'     => $test_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				]
+			)
+		);
+	}
+
+	/**
+	 * Whether a Test ID already belongs to a test, named or not.
+	 *
+	 * @param string $test_id Test ID.
+	 * @return bool
+	 */
+	private static function is_test_id_in_use( $test_id ) {
+		return (bool) get_term_by( 'slug', $test_id, self::TAXONOMY ) || ! empty( self::get_test_prompt_ids( $test_id ) );
+	}
+
+	/**
+	 * What the page shows for one prompt.
+	 *
+	 * @param WP_Post $prompt Prompt.
+	 * @return array `id`, `title`, `status`, `status_label`, `edit_link`, `eligible`.
+	 */
+	private static function describe_prompt( $prompt ) {
+		$status = get_post_status_object( $prompt->post_status );
+		return [
+			'id'           => (int) $prompt->ID,
+			'title'        => $prompt->post_title,
+			'status'       => $prompt->post_status,
+			'status_label' => $status ? $status->label : $prompt->post_status,
+			'edit_link'    => get_edit_post_link( $prompt->ID, 'raw' ),
+			'eligible'     => self::is_eligible_placement(
+				get_post_meta( $prompt->ID, 'placement', true ),
+				rest_sanitize_boolean( get_post_meta( $prompt->ID, 'manual_only', true ) )
+			),
+		];
+	}
+
+	/**
+	 * When a test's split began: the moment both a control and a challenger
+	 * were published. Before that, readers see the control alone.
+	 *
+	 * @param string[] $published_at Publish dates keyed by variant letter, ISO 8601 UTC.
+	 * @return string|null The later of the control's date and the earliest
+	 *                     challenger's, or null until both exist.
+	 */
+	private static function get_started_at( $published_at ) {
+		if ( empty( $published_at['a'] ) ) {
+			return null;
+		}
+		$challengers = $published_at;
+		unset( $challengers['a'] );
+		if ( empty( $challengers ) ) {
+			return null;
+		}
+		return max( $published_at['a'], min( $challengers ) );
+	}
+
+	/**
+	 * Placements a tested prompt can't have. Manual and custom placements render
+	 * wherever a block or shortcode puts them, so there is no slot to split
+	 * between variants. An overlay set to Manual only is in the same position;
+	 * is_eligible_placement() covers it, since it is a flag rather than a value.
+	 *
+	 * @return string[] Placement values.
+	 */
+	public static function get_ineligible_placements() {
+		return array_merge( [ 'manual' ], Newspack_Popups_Custom_Placements::get_custom_placement_values() );
+	}
+
+	/**
+	 * Whether a prompt with this placement can be part of a test. Follows
+	 * Newspack_Popups_Model::is_manual_only(), which treats an overlay set to
+	 * Manual only like the manual placement.
+	 *
+	 * @param string $placement   Placement value.
+	 * @param bool   $manual_only The prompt's Manual only setting.
+	 * @return bool
+	 */
+	public static function is_eligible_placement( $placement, $manual_only = false ) {
+		$placement = (string) $placement;
+		if ( in_array( $placement, self::get_ineligible_placements(), true ) ) {
+			return false;
+		}
+		return ! ( $manual_only && in_array( $placement, Newspack_Popups_Model::get_overlay_placements(), true ) );
+	}
+
+	/**
+	 * Sanitize a Test ID to a slug of lowercase letters, digits and hyphens.
+	 *
+	 * Not sanitize_title() directly, for two reasons. register_meta() passes the
+	 * meta key as the second argument, which sanitize_title() reads as the fallback
+	 * title, so an empty value would be stored as the key name instead of clearing
+	 * the test. And sanitize_title() keeps underscores and percent-encodes what it
+	 * can't transliterate, which the editor's slug can't produce. A legacy ID
+	 * stored by sanitize_title() stays as it is; get_test_prompts() finds one with
+	 * underscores, and a percent-encoded one can't be looked up.
+	 *
+	 * @param mixed $value Raw value.
+	 * @return string Slug, or empty string.
+	 */
+	public static function sanitize_test_id( $value ) {
+		if ( ! is_scalar( $value ) ) {
+			return '';
+		}
+		$slug = preg_replace( '/%[0-9a-f]{2}/', '', sanitize_title( (string) $value ) );
+		$slug = preg_replace( '/[^a-z0-9-]+/', '-', $slug );
+		return trim( preg_replace( '/-+/', '-', $slug ), '-' );
+	}
+
+	/**
 	 * Sanitize a variant key.
 	 *
 	 * @param string $value Raw value.
@@ -331,6 +1232,30 @@ final class Newspack_Popups_AB_Tests {
 	 */
 	public static function sanitize_variant( $value ) {
 		return in_array( $value, self::VALID_VARIANTS, true ) ? $value : '';
+	}
+
+	/**
+	 * Sanitize a conversion goal.
+	 *
+	 * @param string $value Raw value.
+	 * @return string Valid goal key, or empty string.
+	 */
+	public static function sanitize_goal( $value ) {
+		return in_array( $value, self::VALID_GOALS, true ) ? $value : '';
+	}
+
+	/**
+	 * The conversion goals a test can measure, keyed by stored value.
+	 *
+	 * @return array Goal key => label.
+	 */
+	public static function get_goal_labels() {
+		return [
+			'form_submission' => __( 'Form submission', 'newspack-popups' ),
+			'link_click'      => __( 'Link or button click', 'newspack-popups' ),
+			'donation'        => __( 'Donation', 'newspack-popups' ),
+			'subscription'    => __( 'Subscription', 'newspack-popups' ),
+		];
 	}
 
 	/**
@@ -486,7 +1411,8 @@ final class Newspack_Popups_AB_Tests {
 	 * ASCII-ONLY PRECONDITION: this hashes UTF-8 *bytes* (strlen/ord) while the
 	 * client hashes UTF-16 *code units* (charCodeAt) — the two agree only while
 	 * every hashed input (client ID, test ID) is ASCII. That holds today by
-	 * construction (generated cookie IDs; sanitize_title output). If either
+	 * construction (generated cookie IDs; Test IDs from sanitize_test_id(), or
+	 * from sanitize_title() for legacy ones, which percent-encodes the rest). If either
 	 * input's charset ever widens, normalize both implementations together.
 	 *
 	 * @param string $str String to hash.
