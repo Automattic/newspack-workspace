@@ -4,7 +4,7 @@ Tags: ai-agents, mcp, application-passwords, rest-api, security
 Requires at least: 5.7
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.4.0-rc.11
+Stable tag: 2.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -68,6 +68,16 @@ The plain-text password is shown once when created. WordPress stores only a hash
 
 BotCreds manages one Application Password per user. Revoke the existing one before creating a new connection, or create additional passwords directly in your WordPress profile.
 
+= What does Yoast SEO only permit? =
+
+A separate signed-in administrator can assign this scope to an agent credential. With Yoast SEO active, the agent may edit SEO titles, descriptions, focus keyphrases and social titles/descriptions on existing content across all authors. It cannot update post content, headlines, publication status, taxonomies or other settings.
+
+Clients must use `GET`, `POST`, `PUT` or `PATCH` on `/wp-json/agent-access/v1/yoast-seo/{id}`. Writes accept a JSON object containing supported Yoast fields, for example `{"opengraph-title":"Social title"}`. The regular post-update endpoint remains blocked. This does not grant general WordPress editing capabilities. Existing prerelease SEO credentials require an administrator to save the scope again; Application Password regeneration is not required.
+
+= Does allowing plugin integrations give agents Administrator access? =
+
+No. Integration scopes permit routes, not WordPress capabilities. The account's existing permissions still apply. The separate Site management control grants settings and appearance capabilities to an Agent account only when an authorized administrator enables it; it does not grant user management or plugin/theme installation.
+
 == Screenshots ==
 
 1. The "Not Connected" state with the one-click connect button.
@@ -76,40 +86,15 @@ BotCreds manages one Application Password per user. Revoke the existing one befo
 
 == Changelog ==
 
-= 2.4.0-rc.11 =
-* Resolve scope authorization from the verified BotCreds credential, independently of User-Agent attribution.
-* Preserve scope, rate-limit and content-policy enforcement when BotCreds clients send MCP-like headers.
-
-
-= 2.4.0-rc.10 =
-* One admin-assigned Yoast SEO-only scope covers content across all authors without granting general editing capabilities.
-* Earlier self-selectable SEO grants stay restricted until an administrator explicitly re-saves the scope.
-
-
-= 2.4.0-rc.9 =
-* Add a restrictive Yoast SEO-only credential scope and dedicated, field-allowlisted metadata API.
-* Block content, publishing, creation, deletion and integration writes for SEO-only credentials.
-
-= 2.4.0-rc.8 =
-* Replace verbose permission instructions with accessible keyboard, hover and touch help.
-* Improve settings width, integration-list layout, access summaries and persistent save feedback.
-
-
-= 2.4.0-rc.6 =
-* Remove lobster icons from Agent Access settings, user profiles and Add Agent headings.
-
-
-= 2.4.0-rc.5 =
-* Admin-only Site management switch for dedicated Agent accounts: grants site settings and appearance capabilities without changing the shared role.
-* Grants are site-specific and reversible; other capability sources are preserved. Agents cannot grant this access to themselves.
-
-
-= 2.4.0-rc.2 =
-* Scope UI: discover registered plugin REST namespaces with friendly integration labels.
-* Scope UI: allow all custom endpoints separately from core WordPress content access, or enter specific route prefixes in Advanced.
-* Preserve full-access and inactive-plugin grants; an empty selection is now read-only, never full access.
-* Add Agent: generate the account password server-side without displaying an unused password.
-
+= 2.4.0 =
+* Add an administrator-assigned Yoast SEO-only credential scope for existing content across all authors. The dedicated metadata endpoint blocks content edits, publishing, creation, deletion and unrelated writes.
+* Add friendly plugin-integration scopes, an allow-all integrations option, and advanced custom REST route prefixes without widening core content access.
+* Add explicit per-Agent site-management access for settings, appearance and menus, with administrator-only assignment and reversible, site-specific grants.
+* Resolve authorization from the verified BotCreds credential before client-controlled MCP attribution, preserving scope, rate-limit and content-policy enforcement.
+* Harden credential-management authorization and report effective capabilities in authorized REST user responses.
+* Improve settings layout, accessible contextual help, scope summaries and persistent save/unsaved/error feedback.
+* Remove lobster icons and stop displaying unused WordPress account passwords when creating agents.
+* Preserve restrictive prerelease SEO grants until an administrator explicitly re-saves the SEO-only selection.
 
 = 2.3.4 =
 * Scope UI: Agent Memory integration detection uses class_exists() instead of is_plugin_active() — works regardless of plugin folder name
@@ -214,3 +199,7 @@ BotCreds manages one Application Password per user. Revoke the existing one befo
 * Copy-to-clipboard support for credentials.
 
 
+== Upgrade Notice ==
+
+= 2.4.0 =
+Adds SEO-only access, integration scopes and site-management controls. Fixes header-dependent credential scope enforcement. Prerelease SEO users: an administrator must re-save the SEO-only scope; existing passwords remain valid.
