@@ -225,7 +225,8 @@ final class Newspack_Popups_API {
 			);
 			register_rest_route(
 				'newspack-popups/v1',
-				'/ab-tests/(?P<test_id>[a-z0-9-]+)/name',
+				// Underscores too, so a legacy test the page lists can be renamed.
+				'/ab-tests/(?P<test_id>[a-z0-9_-]+)/name',
 				[
 					'methods'             => \WP_REST_Server::EDITABLE,
 					'callback'            => [ __CLASS__, 'api_rename_ab_test' ],
@@ -264,7 +265,7 @@ final class Newspack_Popups_API {
 		}
 		return rest_ensure_response(
 			[
-				'test_id' => Newspack_Popups_AB_Tests::sanitize_test_id( $request->get_param( 'test_id' ) ),
+				'test_id' => Newspack_Popups_AB_Tests::resolve_test_id( $request->get_param( 'test_id' ) ),
 				'name'    => $name,
 			]
 		);

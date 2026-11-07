@@ -459,23 +459,9 @@ final class Newspack_Popups_AB_Tests {
 	 * @return array[] Each `[ 'id', 'title', 'variant', 'goal', 'control_share', 'status', 'status_label', 'edit_link' ]`; `edit_link` is null when the current user can't edit that prompt. `goal` and `control_share` are each prompt's stored values; only the control's take effect.
 	 */
 	public static function get_test_prompts( $test_id ) {
-		if ( ! is_scalar( $test_id ) ) {
-			return [];
-		}
-		// The ID as stored first: the save guard keeps a legacy ID with underscores,
-		// and the front end keys tests by the stored value, so footer_test and
-		// footer-test are different tests. Only input that isn't already in stored
-		// form, such as typed text, falls back to the spelling a save would store.
-		$stored_form = sanitize_title( (string) $test_id );
-		$candidates  = [ $stored_form ];
-		if ( (string) $test_id !== $stored_form ) {
-			$candidates[] = self::sanitize_test_id( $test_id );
-		}
 		$prompts = [];
-		foreach ( array_unique( $candidates ) as $candidate ) {
-			if ( '' !== $candidate ) {
-				$prompts = self::query_test_prompts( $candidate );
-			}
+		foreach ( self::test_id_candidates( $test_id ) as $candidate ) {
+			$prompts = self::query_test_prompts( $candidate );
 			if ( $prompts ) {
 				break;
 			}
@@ -530,7 +516,7 @@ final class Newspack_Popups_AB_Tests {
 	 * whose variant key is outside VALID_VARIANTS is skipped: the schema will not
 	 * save one, so one can only come from a direct meta write.
 	 *
-	 * @return array[] Ordered by Test ID. Each `[ 'test_id', 'goal', 'goal_label',
+	 * @return array[] Ordered by Test ID. Each `[ 'test_id', 'name', 'goal', 'goal_label',
 	 *                 'control_share', 'started_at', 'variants', 'duplicates' ]`. `control_share`
 	 *                 comes from the control prompt, or DEFAULT_CONTROL_SHARE without
 	 *                 one. `started_at` is when the split began: the later of the
@@ -680,7 +666,7 @@ final class Newspack_Popups_AB_Tests {
 	 * @return string
 	 */
 	public static function get_test_name( $test_id ) {
-		$test_id = self::sanitize_test_id( $test_id );
+		$test_id = self::resolve_test_id( $test_id );
 		if ( '' === $test_id ) {
 			return '';
 		}
@@ -793,6 +779,47 @@ final class Newspack_Popups_AB_Tests {
 	}
 
 	/**
+	 * The spellings a given Test ID could be stored under, in the order to try
+	 * them. The ID as stored comes first: the save guard keeps a legacy ID with
+	 * underscores, and the front end keys tests by the stored value, so
+	 * footer_test and footer-test are different tests. Only input that isn't
+	 * already in stored form, such as typed text, falls back to the spelling a
+	 * save would store.
+	 *
+	 * @param mixed $test_id Test ID as given.
+	 * @return string[] Empty for input with no usable ID.
+	 */
+	private static function test_id_candidates( $test_id ) {
+		if ( ! is_scalar( $test_id ) ) {
+			return [];
+		}
+		$stored_form = sanitize_title( (string) $test_id );
+		$candidates  = [ $stored_form ];
+		if ( (string) $test_id !== $stored_form ) {
+			$candidates[] = self::sanitize_test_id( $test_id );
+		}
+		return array_values( array_filter( array_unique( $candidates ), 'strlen' ) );
+	}
+
+	/**
+	 * The Test ID a caller means, resolved the way the page finds a test, so a
+	 * rename lands on the test the page listed.
+	 *
+	 * @param mixed $test_id Test ID as given.
+	 * @return string The first candidate a prompt carries, else the last candidate,
+	 *                or an empty string for input with no usable ID.
+	 */
+	public static function resolve_test_id( $test_id ) {
+		$candidates = self::test_id_candidates( $test_id );
+		foreach ( $candidates as $candidate ) {
+			if ( self::get_test_prompt_ids( $candidate ) ) {
+				return $candidate;
+			}
+		}
+		return $candidates ? $candidates[ count( $candidates ) - 1 ] : '';
+	}
+
+	/**
 	 * Change a test's display name. The Test ID, and so every reader's bucket and
 	 * every recorded result, stays the same.
 	 *
@@ -804,7 +831,7 @@ final class Newspack_Popups_AB_Tests {
 	 * @return string|WP_Error The stored name.
 	 */
 	public static function rename_test( $test_id, $name ) {
-		$test_id = self::sanitize_test_id( $test_id );
+		$test_id = self::resolve_test_id( $test_id );
 		$name    = self::sanitize_test_name( $name );
 		if ( is_wp_error( $name ) ) {
 			return $name;
@@ -851,7 +878,7 @@ final class Newspack_Popups_AB_Tests {
 	 * @return bool False for a test with no prompts.
 	 */
 	public static function can_rename_test( $user_id, $test_id ) {
-		$prompt_ids = self::get_test_prompt_ids( self::sanitize_test_id( $test_id ) );
+		$prompt_ids = self::get_test_prompt_ids( self::resolve_test_id( $test_id ) );
 		foreach ( $prompt_ids as $prompt_id ) {
 			if ( ! self::can_manage_tests( $user_id, $prompt_id ) ) {
 				return false;
