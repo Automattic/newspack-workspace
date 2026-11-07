@@ -143,8 +143,8 @@ export const promptStatus = ( { status }, segmentDisabled = false ) => {
  * at least one other published version, so the test's own state needs no check
  * here. Draft, scheduled and private versions still carry it but take no part
  * in the test, so the prompt itself must be published. A disabled segment is
- * left to the status badge, matching the A/B Tests tab, which also counts only
- * post status.
+ * left to the status badge, matching the A/B Tests tab, which doesn't look at
+ * segments either.
  *
  * @param {Object} prompt The prompt.
  * @return {?Object} `{ label, intent }`, or null when the prompt gets no badge.
