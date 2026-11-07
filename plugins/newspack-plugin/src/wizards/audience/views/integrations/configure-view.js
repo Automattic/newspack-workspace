@@ -54,7 +54,10 @@ export const operatorOptionsForField = field => {
 				{ label: __( 'Multiple values', 'newspack-plugin' ), value: 'list__in' },
 			];
 		case 'boolean':
-			// A boolean can't be range- or list-matched; only exact (text) match applies.
+			// A boolean can't be range- or list-matched, so exact match is the only
+			// operator offered. The Yes/No segment criterion Promoted_Fields builds
+			// for a boolean uses its own matcher, where Campaigns has one, rather
+			// than this operator.
 			return [ { label: __( 'Text', 'newspack-plugin' ), value: 'default' } ];
 		default:
 			// 'string' / unknown: fall back to the options-presence heuristic.

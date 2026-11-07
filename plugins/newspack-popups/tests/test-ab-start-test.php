@@ -88,7 +88,7 @@ class ABStartTestTest extends WP_UnitTestCase_PageWithPopups {
 				[
 					'post_type'   => Newspack_Popups::NEWSPACK_POPUPS_CPT,
 					'post_status' => 'any',
-					'numberposts' => -1,
+					'numberposts' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Test fixture; counts a handful of prompts.
 					'fields'      => 'ids',
 				]
 			)
@@ -203,6 +203,37 @@ class ABStartTestTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * Resuming a test whose ID was stored under an earlier, looser sanitizer gives
+	 * B that same ID, not the one the current sanitizer would write.
+	 */
+	public function test_resume_keeps_a_legacy_underscore_id_on_b() {
+		global $wpdb;
+		$this->sign_in();
+		$a = $this->create_prompt();
+		update_post_meta( $a, Newspack_Popups_AB_Tests::META_TEST_ID, 'footer-test' );
+		update_post_meta( $a, Newspack_Popups_AB_Tests::META_VARIANT, 'a' );
+		// The current sanitizer can't store an underscore, so write it as a legacy save left it.
+		$wpdb->update( // phpcs:ignore WordPress.DB
+			$wpdb->postmeta,
+			[ 'meta_value' => 'footer_test' ], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			[
+				'post_id'  => $a,
+				'meta_key' => Newspack_Popups_AB_Tests::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+			]
+		);
+		wp_cache_delete( $a, 'post_meta' );
+
+		$response = $this->start_request( [ 'prompt_id' => $a ] );
+
+		$this->assertSame( 201, $response->get_status() );
+		$this->assertSame( 'footer_test', $response->get_data()['test_id'] );
+		$this->assertSame( 'footer_test', get_post_meta( $response->get_data()['version_b']['id'], Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+		// The sanitizer still applies to every other write.
+		update_post_meta( $a, Newspack_Popups_AB_Tests::META_TEST_ID, 'other_test' );
+		$this->assertSame( 'other-test', get_post_meta( $a, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+	}
+
+	/**
 	 * Tests a start can resume.
 	 *
 	 * @return array
@@ -266,6 +297,45 @@ class ABStartTestTest extends WP_UnitTestCase_PageWithPopups {
 		$this->assertSame( '', get_post_meta( $a, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
 		$this->assertSame( 0, $this->term_count() );
 		$this->assertSame( $prompts, $this->prompt_count() );
+	}
+
+	/**
+	 * An overlay set to Manual only can't start a test, new or resumed, and the
+	 * refusal names that setting.
+	 *
+	 * @dataProvider data_manual_only_starts
+	 * @param bool $resume Whether the prompt is already version A of a test.
+	 */
+	public function test_start_refuses_a_manual_only_overlay( $resume ) {
+		$this->sign_in();
+		$a = $this->create_prompt( 'center' );
+		update_post_meta( $a, 'manual_only', '1' );
+		if ( $resume ) {
+			update_post_meta( $a, Newspack_Popups_AB_Tests::META_TEST_ID, 'spring-drive' );
+			update_post_meta( $a, Newspack_Popups_AB_Tests::META_VARIANT, 'a' );
+		}
+		$terms   = $this->term_count();
+		$prompts = $this->prompt_count();
+
+		$response = $this->start_request( [ 'prompt_id' => $a ] );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'newspack_popups_ab_ineligible_placement', $response->get_data()['code'] );
+		$this->assertSame( 'Overlays set to Manual only can’t be A/B tested.', $response->get_data()['message'] );
+		$this->assertSame( $terms, $this->term_count() );
+		$this->assertSame( $prompts, $this->prompt_count() );
+	}
+
+	/**
+	 * Starts on a Manual only overlay.
+	 *
+	 * @return array
+	 */
+	public function data_manual_only_starts() {
+		return [
+			'new test'     => [ false ],
+			'resumed test' => [ true ],
+		];
 	}
 
 	/**

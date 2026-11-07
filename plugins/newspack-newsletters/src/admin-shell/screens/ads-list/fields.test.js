@@ -13,7 +13,7 @@
 import { render, screen } from '@testing-library/react';
 import { setSettings } from '@wordpress/date';
 
-import { getFields, STATUS_KIND_STATUSES } from './fields';
+import { formatPrice, getFields, STATUS_KIND_STATUSES } from './fields';
 import { statusGlyph } from 'newspack-components/src/status-indicator';
 
 const L10N = {
@@ -170,15 +170,10 @@ describe( 'Ads list status column dates', () => {
 		expect( label ).toBe( 'Starts August 4, 2026' );
 	} );
 
-	it.each( [
-		[ 'New York', -4 ],
-		[ 'Kiritimati', 14 ],
-	] )( 'dates an expired ad by its stored expiry day in %s', ( _label, offset ) => {
-		configureSite( offset );
-
+	it( 'leaves the expiry date to its own column', () => {
 		const label = statusLabel( { kind: 'expired', expires_at: Date.UTC( 2026, 7, 4, 12 ) / 1000 } );
 
-		expect( label ).toBe( 'Expired August 4, 2026' );
+		expect( label ).toBe( 'Expired' );
 	} );
 } );
 
@@ -197,5 +192,25 @@ describe( 'STATUS_KIND_STATUSES', () => {
 
 	it( 'reads an expired ad as its window closing, not a deliberate stop', () => {
 		expect( STATUS_KIND_STATUSES.expired ).toBe( 'ended' );
+	} );
+} );
+
+describe( 'formatPrice', () => {
+	afterEach( () => {
+		delete window.newspackNewslettersAdmin;
+	} );
+
+	it( 'puts the store currency where the store puts it', () => {
+		window.newspackNewslettersAdmin = { currency: { symbol: '£', position: 'left', decimals: 2, decimalSeparator: '.', thousandSeparator: ',' } };
+		expect( formatPrice( 1250 ) ).toBe( '£1,250.00' );
+
+		window.newspackNewslettersAdmin = {
+			currency: { symbol: '€', position: 'right_space', decimals: 2, decimalSeparator: ',', thousandSeparator: '.' },
+		};
+		expect( formatPrice( 1250.5 ) ).toBe( '1.250,50\u00a0€' );
+	} );
+
+	it( 'shows a plain number without a store', () => {
+		expect( formatPrice( 1250 ) ).toBe( '1250' );
 	} );
 } );

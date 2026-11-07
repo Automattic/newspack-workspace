@@ -62,7 +62,7 @@ document.addEventListener("DOMContentLoaded", () => {
 				return;
 			}
 
-			ClipboardUtils.copyFromElement(activeTextarea, event.target);
+			ClipboardUtils.copyHandoutFromElement(activeTextarea, event.target);
 		});
 
 	/**

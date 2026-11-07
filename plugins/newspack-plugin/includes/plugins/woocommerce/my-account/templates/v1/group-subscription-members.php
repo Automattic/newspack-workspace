@@ -76,6 +76,7 @@ $render_search_field = static function ( string $list, string $label, string $st
 ?>
 <?php if ( ! $is_manageable ) : ?>
 	<div class="newspack-ui__notice newspack-ui__notice--info newspack-my-account__group_subscription__inactive-notice" role="status">
+		<?php Newspack_UI::print_notice_icon( 'info' ); ?>
 		<p class="newspack-ui__spacing-top--0 newspack-ui__spacing-bottom--0">
 			<?php
 			echo esc_html(
@@ -94,7 +95,7 @@ $render_search_field = static function ( string $list, string $label, string $st
 <?php if ( $is_completely_empty ) : ?>
 	<div class="newspack-ui__box newspack-ui__box--border newspack-ui__box--text-center newspack-ui__box--2x-large">
 		<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--align-center newspack-ui__stack--gap-1">
-			<h3 class="newspack-ui__font--m"><?php esc_html_e( "You haven't added anyone yet", 'newspack-plugin' ); ?></h3>
+			<h2 class="newspack-ui__font--m"><?php esc_html_e( "You haven't added anyone yet", 'newspack-plugin' ); ?></h2>
 			<p class="newspack-ui__spacing-top--0 newspack-ui__spacing-bottom--3">
 				<?php
 				echo esc_html(
@@ -130,7 +131,7 @@ $render_search_field = static function ( string $list, string $label, string $st
 				class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--small<?php echo 'members' === $active_tab ? ' selected' : ''; ?>"
 			>
 				<?php esc_html_e( 'Members', 'newspack-plugin' ); ?>
-				<span class="newspack-ui__badge newspack-ui__badge--outline newspack-group-subscription--members-count"><?php echo esc_html( count( $managers_and_members ) ); ?></span>
+				<span class="newspack-ui__badge newspack-ui__badge--secondary newspack-group-subscription--members-count"><?php echo esc_html( count( $managers_and_members ) ); ?></span>
 			</button>
 			<button
 				type="button"
@@ -142,7 +143,7 @@ $render_search_field = static function ( string $list, string $label, string $st
 				class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--small<?php echo 'invites' === $active_tab ? ' selected' : ''; ?>"
 			>
 				<?php esc_html_e( 'Invitations', 'newspack-plugin' ); ?>
-				<span class="newspack-ui__badge newspack-ui__badge--outline newspack-group-subscription--invitations-count"><?php echo esc_html( count( $all_invites ) ); ?></span>
+				<span class="newspack-ui__badge newspack-ui__badge--secondary newspack-group-subscription--invitations-count"><?php echo esc_html( count( $all_invites ) ); ?></span>
 			</button>
 		</div>
 		<div class="newspack-ui__tabs__content">
@@ -212,7 +213,7 @@ $render_search_field = static function ( string $list, string $label, string $st
 					?>
 					<?php if ( $show_row_actions ) : ?>
 					<div class="newspack-ui__dropdown">
-						<button class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--small newspack-ui__dropdown__toggle newspack-ui__button--icon">
+						<button class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--small newspack-ui__dropdown__toggle newspack-ui__button--icon" aria-expanded="false">
 							<?php Newspack_UI_Icons::print_svg( 'more' ); ?>
 							<span class="screen-reader-text"><?php \esc_html_e( 'More', 'newspack-plugin' ); ?></span>
 						</button>
@@ -292,7 +293,7 @@ $render_search_field = static function ( string $list, string $label, string $st
 				<td data-title="<?php esc_attr_e( 'Status', 'newspack-plugin' ); ?>"><?php echo esc_html( Group_Subscription_Invite::is_invite_expired( $invite ) ? __( 'Expired', 'newspack-plugin' ) : __( 'Pending', 'newspack-plugin' ) ); ?></td>
 				<td class="newspack-my-account__group_subscription__invites--actions order-actions">
 					<div class="newspack-ui__dropdown">
-						<button class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--small newspack-ui__dropdown__toggle newspack-ui__button--icon">
+						<button class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--small newspack-ui__dropdown__toggle newspack-ui__button--icon" aria-expanded="false">
 							<?php Newspack_UI_Icons::print_svg( 'more' ); ?>
 							<span class="screen-reader-text"><?php \esc_html_e( 'More', 'newspack-plugin' ); ?></span>
 						</button>
@@ -390,11 +391,11 @@ $render_search_field = static function ( string $list, string $label, string $st
 							<input type="hidden" name="subscription_id" value="<?php echo esc_attr( $subscription->get_id() ); ?>">
 							<?php wp_nonce_field( Group_Subscription_MyAccount::INVITE_NONCE_ACTION ); ?>
 							<p>
+								<label for="newspack-group-subscription-invite-email" class="screen-reader-text"><?php esc_html_e( 'Recipient’s email address', 'newspack-plugin' ); ?></label>
 								<input type="email" placeholder="<?php esc_attr_e( 'Recipient’s email address', 'newspack-plugin' ); ?>" name="newspack-group-subscription-invite-email" id="newspack-group-subscription-invite-email" required>
 							</p>
 
 							<button type="submit" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide"><span><?php esc_html_e( 'Invite', 'newspack-plugin' ); ?></span></button>
-							<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-ui__modal__close"><?php esc_html_e( 'Cancel', 'newspack-plugin' ); ?></button>
 						</form>
 					<?php endif; ?>
 				</section>
@@ -427,7 +428,7 @@ $render_search_field = static function ( string $list, string $label, string $st
 						?>
 					</p>
 				<?php else : ?>
-					<div class="newspack-ui__notice newspack-ui__notice--error newspack-my-account__group_subscription__invite-bulk__error hidden" role="alert"><p class="newspack-ui__spacing-top--0 newspack-ui__spacing-bottom--0"></p></div>
+					<div class="newspack-ui__notice newspack-ui__notice--error newspack-my-account__group_subscription__invite-bulk__error hidden" role="alert"><?php Newspack_UI::print_notice_icon( 'error' ); ?><p class="newspack-ui__spacing-top--0 newspack-ui__spacing-bottom--0"></p></div>
 					<?php // Step 1: the list. The server parses it, so the review below shows exactly what it will send. ?>
 					<form
 						class="newspack-my-account__group_subscription__invite-bulk__input"
@@ -467,13 +468,14 @@ $render_search_field = static function ( string $list, string $label, string $st
 							<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--small newspack-my-account__group_subscription__invite-bulk__remove-file hidden"><?php esc_html_e( 'Remove file', 'newspack-plugin' ); ?></button>
 						</div>
 						<button type="submit" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide"><span><?php esc_html_e( 'Review', 'newspack-plugin' ); ?></span></button>
-						<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-ui__modal__close"><?php esc_html_e( 'Cancel', 'newspack-plugin' ); ?></button>
 					</form>
 					<?php // Step 2: the review, then the outcome. Filled in by group-subscriptions.js. ?>
 					<div class="newspack-my-account__group_subscription__invite-bulk__review hidden" tabindex="-1">
 						<ul class="newspack-my-account__group_subscription__invite-bulk__summary"></ul>
 						<button type="button" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide newspack-my-account__group_subscription__invite-bulk__send"><span><?php esc_html_e( 'Send invitations', 'newspack-plugin' ); ?></span></button>
-						<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-my-account__group_subscription__invite-bulk__back"><?php esc_html_e( 'Back', 'newspack-plugin' ); ?></button>
+						<div class="newspack-ui__stack newspack-ui__stack--horizontal newspack-ui__stack--justify-center">
+							<button type="button" class="newspack-ui__link newspack-my-account__group_subscription__invite-bulk__back"><?php esc_html_e( 'Back', 'newspack-plugin' ); ?></button>
+						</div>
 						<a href="<?php echo esc_url( add_query_arg( 'activeTab', 'invites' ) ); ?>" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide newspack-my-account__group_subscription__invite-bulk__done hidden"><?php esc_html_e( 'Done', 'newspack-plugin' ); ?></a>
 					</div>
 				<?php endif; ?>
@@ -500,7 +502,7 @@ $render_search_field = static function ( string $list, string $label, string $st
 						</p>
 
 						<button type="button" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide newspack-my-account__group_subscription__invite-link__regenerate" data-error-text="<?php echo esc_attr( __( 'Could not regenerate. Please try again.', 'newspack-plugin' ) ); ?>"><span><?php esc_html_e( 'Regenerate link', 'newspack-plugin' ); ?></span></button>
-						<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-ui__modal__close"><?php esc_html_e( 'Cancel', 'newspack-plugin' ); ?></button>
+						<button type="button" class="newspack-ui__button newspack-ui__button--outline newspack-ui__button--wide newspack-ui__modal__close"><?php esc_html_e( 'Cancel', 'newspack-plugin' ); ?></button>
 				</section>
 			</div><!-- .newspack-ui__modal__small -->
 	</dialog>
@@ -526,7 +528,6 @@ $render_search_field = static function ( string $list, string $label, string $st
 				</header>
 
 				<form class="newspack-ui__modal__content" method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-					<h2 class="newspack-ui__font--l"><?php esc_html_e( 'Are you sure?', 'newspack-plugin' ); ?></h2>
 					<p>
 						<?php
 						echo wp_kses(
@@ -547,7 +548,7 @@ $render_search_field = static function ( string $list, string $label, string $st
 					<button type="submit" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide newspack-ui__button--destructive">
 						<span><?php esc_html_e( 'Remove member', 'newspack-plugin' ); ?></span>
 					</button>
-					<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-ui__modal__close">
+					<button type="button" class="newspack-ui__button newspack-ui__button--outline newspack-ui__button--wide newspack-ui__modal__close">
 						<?php esc_html_e( 'Cancel', 'newspack-plugin' ); ?>
 					</button>
 				</form>
@@ -568,13 +569,12 @@ $render_search_field = static function ( string $list, string $label, string $st
 				</header>
 
 				<section class="newspack-ui__modal__content">
-						<h2 class="newspack-ui__font--l"><?php esc_html_e( 'Are you sure?', 'newspack-plugin' ); ?></h2>
 						<p>
 							<?php esc_html_e( 'Any invite link for this group will stop working. Anyone who hasn\'t joined yet will no longer be able to. You can create a new link at any time.', 'newspack-plugin' ); ?>
 						</p>
 
 						<button type="button" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide newspack-ui__button--destructive newspack-my-account__group_subscription__invite-link__disable" data-error-text="<?php echo esc_attr( __( 'Could not disable. Please try again.', 'newspack-plugin' ) ); ?>"><span><?php esc_html_e( 'Disable link', 'newspack-plugin' ); ?></span></button>
-						<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-ui__modal__close"><?php esc_html_e( 'Cancel', 'newspack-plugin' ); ?></button>
+						<button type="button" class="newspack-ui__button newspack-ui__button--outline newspack-ui__button--wide newspack-ui__modal__close"><?php esc_html_e( 'Cancel', 'newspack-plugin' ); ?></button>
 				</section>
 			</div><!-- .newspack-ui__modal__small -->
 	</dialog>

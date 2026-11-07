@@ -1,9 +1,17 @@
+@use "../mixins";
+@use "newspack-motion" as motion;
+
 .wp-block-post-terms {
 	a {
-		transition: color 125ms ease-in-out;
+		transition: color motion.$duration-color motion.$ease-color;
+	}
 
-		.has-link-color &:hover {
-			color: color-mix(in srgb, currentcolor 80%, transparent);
+	&:not(.is-style-buttons, .is-style-links) {
+		@include motion.hover {
+			&.has-link-color a:hover,
+			.has-link-color & a:hover {
+				text-decoration: underline;
+			}
 		}
 	}
 
@@ -18,7 +26,7 @@
 
 		a,
 		> span:not([class*="wp-block-post-terms__"]) {
-			background: var(--wp--preset--color--base-2);
+			background: color-mix(in oklab, var(--wp--preset--color--contrast) var(--wp--custom--state--fill), var(--wp--preset--color--base));
 			border-radius: var(--wp--custom--border--radius-small);
 			color: var(--wp--preset--color--contrast);
 			display: grid;
@@ -27,23 +35,29 @@
 			padding: var(--wp--custom--spacing--10) var(--wp--preset--spacing--20);
 			place-items: center;
 			transition:
-				background 125ms ease-in-out,
-				color 125ms ease-in-out,
-				outline 125ms ease-in-out,
-				text-decoration 125ms ease-in-out;
+				background motion.$duration-color motion.$ease-color,
+				color motion.$duration-color motion.$ease-color,
+				box-shadow motion.$duration-color motion.$ease-color;
 
 			&:hover {
-				background: var(--wp--preset--color--base-3);
 				text-decoration: none;
 			}
 
-			&:focus {
-				outline: none;
+			@include motion.hover {
+				&:where(a):hover {
+					background: color-mix(in oklab, var(--wp--preset--color--contrast) var(--wp--custom--state--fill-hover), var(--wp--preset--color--base));
+				}
+			}
+
+			&:where(a):active {
+				background: color-mix(in oklab, var(--wp--preset--color--contrast) var(--wp--custom--state--fill-pressed), var(--wp--preset--color--base));
 			}
 
 			&:focus-visible {
-				outline: 2px solid;
-				outline-offset: 1px;
+				@include mixins.focus-line;
+				transition:
+					background motion.$duration-color motion.$ease-color,
+					color motion.$duration-color motion.$ease-color;
 			}
 		}
 
@@ -73,11 +87,17 @@
 		&.has-background {
 			a,
 			> span:not([class*="wp-block-post-terms__"]) {
-				background: color-mix(in srgb, currentcolor 15%, transparent);
+				background: color-mix(in oklab, currentcolor var(--wp--custom--state--fill), transparent);
 				color: currentcolor;
 
-				&:hover {
-					background: color-mix(in srgb, currentcolor 20%, transparent);
+				@include motion.hover {
+					&:where(a):hover {
+						background: color-mix(in oklab, currentcolor var(--wp--custom--state--fill-hover), transparent);
+					}
+				}
+
+				&:where(a):active {
+					background: color-mix(in oklab, currentcolor var(--wp--custom--state--fill-pressed), transparent);
 				}
 			}
 		}
@@ -105,6 +125,15 @@
 		&:not(.has-link-color) {
 			a {
 				color: inherit;
+				transition: color motion.$duration-color motion.$ease-color;
+			}
+		}
+
+		&:not(.has-link-color, .has-text-color) a {
+			@include motion.hover {
+				&:hover {
+					color: var(--wp--preset--color--contrast);
+				}
 			}
 		}
 	}

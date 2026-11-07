@@ -25,6 +25,7 @@ const Sidebar = props => {
 		onMetaFieldChange,
 		placement,
 		overlay_size,
+		manual_only,
 		trigger_type,
 		trigger_delay,
 		trigger_scroll_progress,
@@ -36,6 +37,16 @@ const Sidebar = props => {
 	} = props;
 	const updatePlacement = value => {
 		onMetaFieldChange( { placement: value } );
+	};
+	// Switching type keeps a prompt manual-only or automatic as it was, so a hand-placed prompt never starts appearing site-wide.
+	const updatePromptType = value => {
+		if ( 'center' === value ) {
+			onMetaFieldChange( { placement: value, manual_only: 'manual' === placement } );
+		} else if ( 'inline' === value && isOverlay && manual_only ) {
+			onMetaFieldChange( { placement: 'manual' } );
+		} else {
+			updatePlacement( value );
+		}
 	};
 	const updatePlacementWhenPopupIsFullWidth = () => {
 		switch ( placement ) {
@@ -100,7 +111,7 @@ const Sidebar = props => {
 					{ label: __( 'Inline', 'newspack-popups' ), value: 'inline' },
 					{ label: __( 'Overlay', 'newspack-popups' ), value: 'center' },
 				] }
-				onChange={ updatePlacement }
+				onChange={ updatePromptType }
 			/>
 			{ isOverlay ? (
 				<>
@@ -117,6 +128,24 @@ const Sidebar = props => {
 						value={ placement }
 						onChange={ updatePlacement }
 						size={ overlay_size }
+					/>
+					<ToggleControl
+						label={ __( 'Manual only', 'newspack-popups' ) }
+						help={
+							inTest
+								? [
+										__(
+											'The prompt will appear only where inserted using the Single Prompt block or a shortcode.',
+											'newspack-popups'
+										),
+										__( 'Manual only isn’t available while this prompt is in an A/B test.', 'newspack-popups' ),
+								  ].join( ' ' )
+								: __( 'The prompt will appear only where inserted using the Single Prompt block or a shortcode.', 'newspack-popups' )
+						}
+						checked={ !! manual_only }
+						onChange={ value => onMetaFieldChange( { manual_only: value } ) }
+						// Still on for a prompt that already has it, so it can be turned off.
+						disabled={ inTest && ! manual_only }
 					/>
 				</>
 			) : (

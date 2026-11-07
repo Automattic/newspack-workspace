@@ -255,6 +255,34 @@ class ABTestNamesTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * A legacy ID with underscores is its own test, apart from its hyphenated
+	 * spelling, so each rename lands on the test it names.
+	 */
+	public function test_legacy_underscore_id_renames_its_own_test() {
+		global $wpdb;
+		$this->sign_in();
+		$legacy_id = $this->create_test_variant( 'footer-test', 'a' );
+		$this->create_test_variant( 'footer-test', 'a' );
+		// A value the earlier sanitizer stored; the current one can't write it.
+		$wpdb->update( // phpcs:ignore WordPress.DB
+			$wpdb->postmeta,
+			[ 'meta_value' => 'footer_test' ], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			[
+				'post_id'  => $legacy_id,
+				'meta_key' => Newspack_Popups_AB_Tests::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+			]
+		);
+		wp_cache_delete( $legacy_id, 'post_meta' );
+
+		$response = $this->rename_request( 'footer_test', 'Legacy footer' );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'footer_test', $response->get_data()['test_id'] );
+		$this->assertSame( 'Legacy footer', $this->test_row( 'footer_test' )['name'] );
+		$this->assertSame( 'footer-test', $this->test_row( 'footer-test' )['name'] );
+		$this->assertSame( 'Legacy footer', Newspack_Popups_AB_Tests::get_test_name( 'footer_test' ) );
+	}
+
+	/**
 	 * The route refuses an empty name and leaves the test as it was.
 	 */
 	public function test_rename_refuses_an_empty_name() {

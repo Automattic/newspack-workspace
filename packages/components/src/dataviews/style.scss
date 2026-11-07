@@ -8,3 +8,28 @@
 		margin-top: calc(-1 * var(--newspack-page-dataviews-offset, #{wp-vars.$grid-unit-20}));
 	}
 }
+
+.newspack-dataviews .dataviews-view-grid {
+	padding-bottom: wp-vars.$grid-unit-30;
+}
+
+.newspack-dataviews__view-config {
+	flex-shrink: 0;
+}
+
+@container dataviews-wrapper (min-width: 431px) {
+	.newspack-dataviews .dataviews-wrapper > * {
+		/* stylelint-disable-next-line plugin-wpds/no-setting-wpds-custom-properties -- restores the 48px list gutter DataViews used before it moved to this token. */
+		--wpds-dimension-padding-2xl: #{wp-vars.$grid-unit-60};
+	}
+}
+
+.newspack-dataviews .dataviews-view-table thead th:has(.dataviews-view-table-header-button) {
+	&:first-child {
+		padding-left: calc(var(--wpds-dimension-padding-2xl, #{wp-vars.$grid-unit-30}) - var(--wpds-dimension-padding-sm, #{wp-vars.$grid-unit-10}));
+	}
+
+	&:last-child {
+		padding-right: calc(var(--wpds-dimension-padding-2xl, #{wp-vars.$grid-unit-30}) - var(--wpds-dimension-padding-sm, #{wp-vars.$grid-unit-10}));
+	}
+}

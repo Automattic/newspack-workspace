@@ -27,11 +27,6 @@ jest.mock( '@wordpress/ui', () => {
 	return { Stack: ( { children } ) => React.createElement( 'div', null, children ) };
 } );
 
-jest.mock( '@wordpress/dataviews', () => {
-	const Part = () => null;
-	return { DataViews: { Search: Part, Filters: Part, Layout: Part, Footer: Part } };
-} );
-
 // Captured rather than rendered: the real DataViews cannot load in this jsdom env.
 jest.mock( '../../../../../packages/components/src', () => {
 	const React = require( 'react' );
@@ -114,9 +109,9 @@ describe( 'SyncActivity', () => {
 	it( 'shows the working columns and keeps the rest a click away', async () => {
 		await renderLoaded();
 
-		expect( mockDataViewsProps.current.view.fields ).toEqual( [ 'updated_at', 'email', 'operation', 'context', 'status' ] );
+		expect( mockDataViewsProps.current.view.fields ).toEqual( [ 'email', 'status', 'operation', 'context', 'updated_at' ] );
 		const ids = mockDataViewsProps.current.fields.map( field => field.id );
-		expect( ids ).toEqual( expect.arrayContaining( [ 'created_at', 'repeat_count', 'needs_attention' ] ) );
+		expect( ids ).toEqual( expect.arrayContaining( [ 'created_at', 'repeat_count' ] ) );
 	} );
 
 	it( 'sends the search, the filters and the page to the request', async () => {
@@ -130,7 +125,6 @@ describe( 'SyncActivity', () => {
 				filters: [
 					{ field: 'status', operator: 'is', value: 'failed' },
 					{ field: 'operation', operator: 'is', value: 'flag' },
-					{ field: 'needs_attention', operator: 'is', value: 'yes' },
 				],
 			} );
 		} );
@@ -139,7 +133,25 @@ describe( 'SyncActivity', () => {
 		expect( lastPath() ).toContain( 'search=reader%40example.test' );
 		expect( lastPath() ).toContain( 'status=failed' );
 		expect( lastPath() ).toContain( 'operation=flag' );
-		expect( lastPath() ).toContain( 'needs_attention=true' );
+		expect( lastPath() ).not.toContain( 'needs_attention' );
+	} );
+
+	it( 'offers "Needs attention" first in the Status filter', async () => {
+		await renderLoaded();
+
+		const status = mockDataViewsProps.current.fields.find( field => field.id === 'status' );
+		expect( status.elements.map( element => element.label ) ).toEqual( [ 'Needs attention', 'Synced', 'Retrying', 'Failed' ] );
+		expect( mockDataViewsProps.current.fields.map( field => field.id ) ).not.toContain( 'needs_attention' );
+
+		act( () => {
+			mockDataViewsProps.current.onChangeView( {
+				...mockDataViewsProps.current.view,
+				filters: [ { field: 'status', operator: 'is', value: status.elements[ 0 ].value } ],
+			} );
+		} );
+
+		await waitFor( () => expect( lastPath() ).toContain( 'needs_attention=true' ) );
+		expect( lastPath() ).not.toContain( 'status=' );
 	} );
 
 	it( 'keeps a long trigger to its own column, with the whole of it on hover', async () => {

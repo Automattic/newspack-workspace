@@ -194,6 +194,12 @@ describe( 'not in a test', () => {
 		expect( screen.getByRole( 'note' ).textContent ).toBe( 'Prompts on manual or custom placements can’t be A/B tested.' );
 	} );
 
+	it( 'disables the button on an overlay set to Manual only and names that setting', () => {
+		renderPanel( { placement: 'center', isOverlay: true, manual_only: true } );
+		expect( screen.getByRole( 'button', { name: 'Start A/B Test' } ).disabled ).toBe( true );
+		expect( screen.getByRole( 'note' ).textContent ).toBe( 'Overlays set to Manual only can’t be A/B tested.' );
+	} );
+
 	it( 'tells a user the site excludes from managing tests that they can’t start one', () => {
 		window.newspack_popups_data.ab_testing.can_manage_tests = false;
 		renderPanel();
@@ -365,6 +371,24 @@ describe( 'version B', () => {
 		).toBeTruthy();
 	} );
 
+	it( 'asks to turn off Manual only on an older B overlay set to it', async () => {
+		apiFetch.mockResolvedValue( [ versionA(), versionB() ] );
+		inTest( 'b', { postId: 3, placement: 'center', isOverlay: true, manual_only: true } );
+		expect(
+			await screen.findByText( 'Overlays set to Manual only can’t be A/B tested. Turn off Manual only to count B’s results.' )
+		).toBeTruthy();
+	} );
+
+	it( 'reads the summary from the published A when a drafted old A is still in the test', async () => {
+		apiFetch.mockResolvedValue( [
+			versionA( { id: 11, title: 'Old A', goal: 'donation', control_share: 70, status: 'draft', status_label: 'Draft' } ),
+			versionA( { id: 12, title: 'New A', goal: '', control_share: 60 } ),
+			versionB(),
+		] );
+		inTest( 'b', { postId: 3 } );
+		expect( await screen.findByText( 'No goal set on version A. 60% see A, 40% see B.' ) ).toBeTruthy();
+	} );
+
 	it( "warns when B has no block for A's goal", async () => {
 		apiFetch.mockResolvedValue( [ versionA( { goal: 'donation' } ), versionB() ] );
 		inTest( 'b', { postId: 3 } );
@@ -382,6 +406,8 @@ describe( 'version B', () => {
 	it( 'warns about another prompt with the same version', async () => {
 		apiFetch.mockResolvedValue( [ versionA(), versionB(), versionB( { id: 4, title: 'Extra B' } ) ] );
 		inTest( 'b', { postId: 3 } );
-		expect( await screen.findByText( 'Another prompt in this test is already version B. Unpublish one of them.' ) ).toBeTruthy();
+		const warning = await screen.findByText( 'Another prompt in this test is already version B. Move the unpublished one to the trash.' );
+		// An error asks the author to act, so it is spoken, unlike the standing notices.
+		expect( warning.dataset.spoken ).toBe( warning.textContent );
 	} );
 } );

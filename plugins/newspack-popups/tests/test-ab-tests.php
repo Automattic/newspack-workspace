@@ -69,6 +69,48 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * An overlay set to Manual only is never inserted on its own, so it is
+	 * ineligible like a manual placement, whatever wrote the setting.
+	 */
+	public function test_get_tests_reports_a_manual_only_overlay_as_ineligible() {
+		$this->create_test_variant( 'mo', 'a' );
+		$overlay = $this->create_test_variant( 'mo', 'b' );
+		update_post_meta( $overlay, 'placement', 'center' );
+		update_post_meta( $overlay, 'manual_only', '1' );
+		$test = Newspack_Popups_AB_Tests::get_tests()[0];
+		$this->assertTrue( $test['variants']['a']['eligible'] );
+		$this->assertFalse( $test['variants']['b']['eligible'] );
+	}
+
+	/**
+	 * A legacy Test ID with an underscore is its own test, as readers see it,
+	 * not part of the hyphenated test it would sanitize to.
+	 */
+	public function test_get_tests_keeps_a_legacy_test_id_apart_from_its_hyphenated_spelling() {
+		global $wpdb;
+		$legacy = [ $this->create_test_variant( 'footer-test', 'a' ), $this->create_test_variant( 'footer-test', 'b' ) ];
+		$this->create_test_variant( 'footer-test', 'a' );
+		$this->create_test_variant( 'footer-test', 'b' );
+		foreach ( $legacy as $prompt_id ) {
+			// A value the earlier sanitizer stored; the current one can't write it.
+			$wpdb->update( // phpcs:ignore WordPress.DB
+				$wpdb->postmeta,
+				[ 'meta_value' => 'footer_test' ], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				[
+					'post_id'  => $prompt_id,
+					'meta_key' => Newspack_Popups_AB_Tests::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				]
+			);
+			wp_cache_delete( $prompt_id, 'post_meta' );
+		}
+		$tests = array_column( Newspack_Popups_AB_Tests::get_tests(), null, 'test_id' );
+		$this->assertSame( [ 'footer-test', 'footer_test' ], array_keys( $tests ) );
+		$this->assertSame( [], $tests['footer_test']['duplicates'] );
+		$this->assertSame( [], $tests['footer-test']['duplicates'] );
+		$this->assertSame( $legacy[0], $tests['footer_test']['variants']['a']['id'] );
+	}
+
+	/**
 	 * The control share is read from the control; one stored on a challenger is ignored.
 	 */
 	public function test_get_tests_control_share_defaults_to_fifty_even_when_set_on_a_challenger() {
@@ -399,17 +441,86 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * The server-side djb2 hash is bit-for-bit identical to the client-side hash.
-	 * The vector is pinned in src/view/utils/ab.test.js too — if either side
-	 * changes, both parity tests fail together.
+	 * Store a raw control share the way an importer or a direct query would,
+	 * skipping the meta sanitize callback that update_post_meta() runs.
+	 *
+	 * @param int    $popup_id Prompt ID.
+	 * @param string $value    Raw stored value.
 	 */
-	public function test_hash_parity_with_client() {
-		self::assertSame( 809016026, Newspack_Popups_AB_Tests::hash_djb2( 'abc|test-x' ) );
-		$parity_config = [
-			'variants'      => [ 'a', 'b' ],
-			'control_share' => 50,
-		];
-		self::assertSame( 'a', Newspack_Popups_AB_Tests::compute_bucket( 'abc', 'test-x', $parity_config ) );
+	private function store_raw_control_share( $popup_id, $value ) {
+		global $wpdb;
+		$wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+			$wpdb->postmeta,
+			[
+				'post_id'    => $popup_id,
+				'meta_key'   => Newspack_Popups_AB_Tests::META_CONTROL_SHARE, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'meta_value' => $value, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			]
+		);
+		wp_cache_delete( $popup_id, 'post_meta' );
+	}
+
+	/**
+	 * An out-of-range share that bypassed the sanitize callback is clamped when the
+	 * config is built, so the client never receives a range it would skew on.
+	 */
+	public function test_tests_config_clamps_unsanitized_control_share() {
+		$high = $this->create_test_variant( 'too-high', 'a' );
+		$this->create_test_variant( 'too-high', 'b' );
+		$this->store_raw_control_share( $high, '95' );
+
+		$low = $this->create_test_variant( 'too-low', 'a' );
+		$this->create_test_variant( 'too-low', 'b' );
+		$this->store_raw_control_share( $low, '5' );
+
+		$config = Newspack_Popups_AB_Tests::get_tests_config();
+		self::assertSame( 80, $config['too-high']['control_share'] );
+		self::assertSame( 20, $config['too-low']['control_share'] );
+	}
+
+	/**
+	 * A stored share of 0 falls back to the default when the config is built. The
+	 * config is the only thing the client receives, so it never sees a 0; the
+	 * shared parity vectors cover what both bucketing functions do if it ever did.
+	 */
+	public function test_tests_config_reads_stored_zero_share_as_default() {
+		$control = $this->create_test_variant( 'zero-share', 'a' );
+		$this->create_test_variant( 'zero-share', 'b' );
+		$this->store_raw_control_share( $control, '0' );
+
+		$config = Newspack_Popups_AB_Tests::get_tests_config();
+		self::assertSame( Newspack_Popups_AB_Tests::DEFAULT_CONTROL_SHARE, $config['zero-share']['control_share'] );
+	}
+
+	/**
+	 * Vectors shared with src/view/utils/ab.test.js, so both implementations are
+	 * checked against one expectation rather than two copies kept in step by hand.
+	 *
+	 * @return array[] Each case: reader, test ID, config, expected hash, expected bucket.
+	 */
+	public function parity_vectors() {
+		$fixture = json_decode( file_get_contents( __DIR__ . '/fixtures/ab-bucket-parity.json' ), true ); // phpcs:ignore WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown
+		$cases   = [];
+		foreach ( $fixture['vectors'] as $vector ) {
+			$cases[ $vector['note'] ] = [ $vector['reader'], $vector['test_id'], $vector['config'], $vector['hash'], $vector['bucket'] ];
+		}
+		return $cases;
+	}
+
+	/**
+	 * The server-side hash and bucket agree with the client's on every shared vector.
+	 *
+	 * @dataProvider parity_vectors
+	 *
+	 * @param string $reader  Reader key.
+	 * @param string $test_id Test ID.
+	 * @param array  $config  Test config.
+	 * @param int    $hash    Expected hash of "reader|test_id".
+	 * @param string $bucket  Expected variant.
+	 */
+	public function test_bucketing_matches_client_vectors( $reader, $test_id, $config, $hash, $bucket ) {
+		self::assertSame( $hash, Newspack_Popups_AB_Tests::hash_djb2( $reader . '|' . $test_id ) );
+		self::assertSame( $bucket, Newspack_Popups_AB_Tests::compute_bucket( $reader, $test_id, $config ) );
 	}
 
 	/**
@@ -490,6 +601,63 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * Drafting one arm of a three-arm test must not lose the assignment of the
+	 * readers holding it: they see a published arm meanwhile, and return to theirs
+	 * when it is republished.
+	 */
+	public function test_logged_in_bucket_survives_its_variant_being_unpublished() {
+		$this->create_test_variant( 'three-arm-test', 'a', null, [], 50 );
+		$this->create_test_variant( 'three-arm-test', 'b' );
+		$challenger_id = $this->create_test_variant( 'three-arm-test', 'c' );
+
+		$user_id  = self::factory()->user->create();
+		$meta_key = 'newspack_popups_ab_bucket_three-arm-test';
+		wp_set_current_user( $user_id );
+		update_user_meta( $user_id, $meta_key, 'c' );
+
+		wp_update_post(
+			[
+				'ID'          => $challenger_id,
+				'post_status' => 'draft',
+			]
+		);
+		$buckets = Newspack_Popups_AB_Tests::get_logged_in_buckets( Newspack_Popups_AB_Tests::get_tests_config() );
+		self::assertContains( $buckets['three-arm-test'], [ 'a', 'b' ], 'An unpublished arm must not be shown.' );
+		self::assertSame( 'c', get_user_meta( $user_id, $meta_key, true ), 'The stored assignment must outlive the unpublish.' );
+
+		wp_update_post(
+			[
+				'ID'          => $challenger_id,
+				'post_status' => 'publish',
+			]
+		);
+		$buckets = Newspack_Popups_AB_Tests::get_logged_in_buckets( Newspack_Popups_AB_Tests::get_tests_config() );
+		self::assertSame( 'c', $buckets['three-arm-test'], 'Republishing must return the reader to their arm.' );
+
+		wp_set_current_user( 0 );
+	}
+
+	/**
+	 * A stored value that was never a variant has no assignment worth keeping, so
+	 * it is replaced with a real one.
+	 */
+	public function test_logged_in_bucket_replaces_an_invalid_stored_value() {
+		$this->create_test_variant( 'invalid-bucket-test', 'a', null, [], 50 );
+		$this->create_test_variant( 'invalid-bucket-test', 'b' );
+
+		$user_id  = self::factory()->user->create();
+		$meta_key = 'newspack_popups_ab_bucket_invalid-bucket-test';
+		wp_set_current_user( $user_id );
+		update_user_meta( $user_id, $meta_key, 'not-a-variant' );
+
+		$buckets = Newspack_Popups_AB_Tests::get_logged_in_buckets( Newspack_Popups_AB_Tests::get_tests_config() );
+		self::assertContains( $buckets['invalid-bucket-test'], [ 'a', 'b' ] );
+		self::assertSame( $buckets['invalid-bucket-test'], get_user_meta( $user_id, $meta_key, true ) );
+
+		wp_set_current_user( 0 );
+	}
+
+	/**
 	 * Without a client ID cookie, the logged-in bucket hashes the user ID.
 	 */
 	public function test_logged_in_bucket_user_id_fallback() {
@@ -505,6 +673,72 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		$expected = Newspack_Popups_AB_Tests::compute_bucket( (string) $user_id, 'fallback-test', $config['fallback-test'] );
 		self::assertSame( $expected, $buckets['fallback-test'], 'With no client ID cookie, the bucket should derive from the user ID.' );
 
+		wp_set_current_user( 0 );
+	}
+
+	/**
+	 * A site with no live test sends the view script none of the A/B keys.
+	 */
+	public function test_view_script_ab_data_is_empty_without_a_live_test() {
+		self::assertSame( [], Newspack_Popups_Inserter::get_view_script_ab_data() );
+
+		// A test with no published challenger is not live either.
+		$this->create_test_variant( 'control-only', 'a' );
+		Newspack_Popups_AB_Tests::reset_config_cache();
+		self::assertSame( [], Newspack_Popups_Inserter::get_view_script_ab_data() );
+	}
+
+	/**
+	 * Pins the server's half of the PHP-to-JS contract for a live test: the front
+	 * end reads these keys from newspack_popups_view, and renaming `ab_tests` or
+	 * `variants` here alone would stop every test splitting traffic. The JS tests
+	 * build that object by hand, so they would not notice.
+	 */
+	public function test_view_script_ab_data_for_a_live_test() {
+		$this->create_test_variant( 'live-test', 'a', null, [], 60 );
+		$this->create_test_variant( 'live-test', 'b' );
+
+		$data = Newspack_Popups_Inserter::get_view_script_ab_data();
+		self::assertSame(
+			[
+				'live-test' => [
+					'variants'      => [ 'a', 'b' ],
+					'control_share' => 60,
+				],
+			],
+			$data['ab_tests']
+		);
+		self::assertSame( 'newspack-cid', $data['cid_cookie'] );
+		self::assertArrayNotHasKey( 'ab_buckets', $data, 'An anonymous reader is bucketed client-side only.' );
+		self::assertArrayNotHasKey( 'ab_view_as', $data, 'No preview was requested.' );
+
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+		$data = Newspack_Popups_Inserter::get_view_script_ab_data();
+		self::assertArrayHasKey( 'live-test', $data['ab_buckets'], 'A logged-in reader gets the server-persisted bucket.' );
+		wp_set_current_user( 0 );
+	}
+
+	/**
+	 * A variant preview reaches the view script only for an admin, and only for a
+	 * letter a test can have.
+	 */
+	public function test_view_script_ab_data_echoes_admin_variant_preview() {
+		$this->create_test_variant( 'preview-test', 'a' );
+		$this->create_test_variant( 'preview-test', 'b' );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$_GET['view_as'] = 'ab_variant:b';
+		self::assertSame( 'b', Newspack_Popups_Inserter::get_view_script_ab_data()['ab_view_as'] );
+
+		$_GET['view_as'] = 'ab_variant:z';
+		self::assertArrayNotHasKey( 'ab_view_as', Newspack_Popups_Inserter::get_view_script_ab_data() );
+
+		$_GET['view_as'] = 'ab_variant:b';
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'subscriber' ] ) );
+		self::assertArrayNotHasKey( 'ab_view_as', Newspack_Popups_Inserter::get_view_script_ab_data() );
+
+		unset( $_GET['view_as'] );
 		wp_set_current_user( 0 );
 	}
 
@@ -595,6 +829,48 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	 * @return WP_REST_Response
 	 */
 	private function save_prompt_as( $prompt_id, $role, $changes ) {
+		$this->start_rest_as( $role );
+
+		$route   = '/wp/v2/' . Newspack_Popups::NEWSPACK_POPUPS_CPT . '/' . $prompt_id;
+		$stored  = rest_do_request( new WP_REST_Request( 'GET', $route ) )->get_data();
+		$request = new WP_REST_Request( 'POST', $route );
+		$request->set_body_params( array_merge( $changes, [ 'meta' => array_merge( $stored['meta'], $changes['meta'] ?? [] ) ] ) );
+		return rest_do_request( $request );
+	}
+
+	/**
+	 * Create a prompt through REST the way a REST client does, sending every
+	 * registered A/B key at its default unless the test overrides it. The block
+	 * editor never takes this path: it saves an auto-draft by ID.
+	 *
+	 * @param string $role Role of the user creating it.
+	 * @param array  $meta A/B values to send in place of the defaults.
+	 * @return WP_REST_Response
+	 */
+	private function create_prompt_as( $role, $meta ) {
+		$this->start_rest_as( $role );
+		$registered = get_registered_meta_keys( 'post', Newspack_Popups::NEWSPACK_POPUPS_CPT );
+		$defaults   = [];
+		foreach ( Newspack_Popups_AB_Tests::META_KEYS as $meta_key ) {
+			$defaults[ $meta_key ] = $registered[ $meta_key ]['default'] ?? '';
+		}
+
+		$request = new WP_REST_Request( 'POST', '/wp/v2/' . Newspack_Popups::NEWSPACK_POPUPS_CPT );
+		$request->set_body_params(
+			[
+				'title' => 'Created by a restricted editor',
+				'meta'  => array_merge( $defaults, $meta ),
+			]
+		);
+		return rest_do_request( $request );
+	}
+
+	/**
+	 * Reset the REST server and act as a new user with the given role.
+	 *
+	 * @param string $role Role of the user.
+	 */
+	private function start_rest_as( $role ) {
 		// Meta registered at boot does not survive into later tests in this suite,
 		// and REST silently ignores an unregistered key.
 		Newspack_Popups::register_meta();
@@ -603,12 +879,33 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		$wp_rest_server = new WP_REST_Server(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		do_action( 'rest_api_init' );
 		wp_set_current_user( self::factory()->user->create( [ 'role' => $role ] ) );
+	}
 
-		$route   = '/wp/v2/' . Newspack_Popups::NEWSPACK_POPUPS_CPT . '/' . $prompt_id;
-		$stored  = rest_do_request( new WP_REST_Request( 'GET', $route ) )->get_data();
-		$request = new WP_REST_Request( 'POST', $route );
-		$request->set_body_params( array_merge( $changes, [ 'meta' => array_merge( $stored['meta'], $changes['meta'] ?? [] ) ] ) );
-		return rest_do_request( $request );
+	/**
+	 * Count prompts in any status.
+	 *
+	 * @return int
+	 */
+	private function count_prompts() {
+		$query = new WP_Query(
+			[
+				'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+				'post_status'    => 'any',
+				'fields'         => 'ids',
+				'posts_per_page' => 1,
+			]
+		);
+		return $query->found_posts;
+	}
+
+	/**
+	 * Assert the refusal came from the guard. Core's own meta refusals are also
+	 * 403s with the same error code, so only the message tells them apart.
+	 *
+	 * @param WP_REST_Response $response Response to a refused save.
+	 */
+	private function assert_refused_by_guard( $response ) {
+		self::assertStringStartsWith( "You can't change this prompt's test settings.", $response->get_data()['message'] );
 	}
 
 	/**
@@ -745,6 +1042,85 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * A REST create asks the guard with post ID 0, before the prompt exists. A
+	 * restricted user sending the registered defaults is creating a prompt, not a
+	 * test, so the create goes through. The control share's default is 50, not an
+	 * empty string, which is what this pins.
+	 */
+	public function test_restricted_editor_can_create_a_prompt_with_ab_defaults() {
+		$this->restrict_tests_to_admins();
+		$before = $this->count_prompts();
+
+		$response = $this->create_prompt_as( 'editor', [] );
+
+		self::assertSame( 201, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		self::assertSame( $before + 1, $this->count_prompts() );
+	}
+
+	/**
+	 * A restricted user's create that sets a test is refused before the prompt is
+	 * created. Without the guard, core would insert the post and only then refuse
+	 * the meta, leaving a prompt behind with the request reported as failed.
+	 */
+	public function test_restricted_editor_cannot_create_a_prompt_with_a_test() {
+		$this->restrict_tests_to_admins();
+		$before = $this->count_prompts();
+
+		$response = $this->create_prompt_as( 'editor', [ Newspack_Popups_AB_Tests::META_TEST_ID => 'editor-made-test' ] );
+
+		self::assertSame( 403, $response->get_status() );
+		$this->assert_refused_by_guard( $response );
+		self::assertSame( $before, $this->count_prompts() );
+	}
+
+	/**
+	 * A null asks core to delete the key, which leaves an unset control share at
+	 * its default of 50. Nothing changes, so a restricted user's save goes through.
+	 */
+	public function test_restricted_editor_null_control_share_on_an_unset_share_saves() {
+		$this->restrict_tests_to_admins();
+		$prompt_id = $this->createPopup();
+
+		$response = $this->save_prompt_as(
+			$prompt_id,
+			'editor',
+			[
+				'meta' => [
+					Newspack_Popups_AB_Tests::META_CONTROL_SHARE => null,
+					'trigger_delay' => 7,
+				],
+			]
+		);
+
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		self::assertSame( '7', get_post_meta( $prompt_id, 'trigger_delay', true ) );
+	}
+
+	/**
+	 * A null for a stored control share of 60 would reset it to 50, which changes
+	 * the live split, so a restricted user's save is refused before anything saves.
+	 */
+	public function test_restricted_editor_null_control_share_on_a_stored_share_is_refused() {
+		$this->restrict_tests_to_admins();
+		$prompt_id    = $this->create_test_variant( 'null-share-test', 'a', null, [], 60 );
+		$title_before = get_the_title( $prompt_id );
+
+		$response = $this->save_prompt_as(
+			$prompt_id,
+			'editor',
+			[
+				'title' => 'Edited alongside a share reset',
+				'meta'  => [ Newspack_Popups_AB_Tests::META_CONTROL_SHARE => null ],
+			]
+		);
+
+		self::assertSame( 403, $response->get_status() );
+		$this->assert_refused_by_guard( $response );
+		self::assertSame( '60', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_CONTROL_SHARE, true ) );
+		self::assertSame( $title_before, get_the_title( $prompt_id ) );
+	}
+
+	/**
 	 * Administrators can create and change tests through REST, including when
 	 * test management is narrowed to them.
 	 */
@@ -810,6 +1186,33 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		self::assertFalse( Newspack_Popups_AB_Tests::is_eligible_placement( 'custom2' ) );
 		self::assertTrue( Newspack_Popups_AB_Tests::is_eligible_placement( 'inline' ) );
 		self::assertTrue( Newspack_Popups_AB_Tests::is_eligible_placement( 'center' ) );
+		self::assertFalse( Newspack_Popups_AB_Tests::is_eligible_placement( 'center', true ) );
+		// Manual only is an overlay setting; an inline prompt ignores it.
+		self::assertTrue( Newspack_Popups_AB_Tests::is_eligible_placement( 'inline', true ) );
+	}
+
+	/**
+	 * An overlay set to Manual only is placed by a block or shortcode as a manual
+	 * prompt is, so it can't carry a test, and a tested overlay can't be switched to it.
+	 */
+	public function test_a_manual_only_overlay_is_refused_a_test() {
+		$prompt_id = $this->createPopup(
+			null,
+			[
+				'placement'   => 'center',
+				'manual_only' => true,
+			]
+		);
+		$response  = $this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ Newspack_Popups_AB_Tests::META_TEST_ID => 'manual-only-test' ] ] );
+		self::assertSame( 400, $response->get_status() );
+		self::assertSame( 'newspack_popups_ab_ineligible_placement', $response->get_data()['code'] );
+		self::assertStringContainsString( 'Manual only', $response->get_data()['message'] );
+		self::assertSame( '', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+
+		$tested_id = $this->create_test_variant( 'manual-only-move', 'a', [ 'placement' => 'center' ] );
+		$response  = $this->save_prompt_as( $tested_id, 'administrator', [ 'meta' => [ 'manual_only' => true ] ] );
+		self::assertSame( 400, $response->get_status() );
+		self::assertSame( '', (string) get_post_meta( $tested_id, 'manual_only', true ) );
 	}
 
 	/**
@@ -970,6 +1373,17 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * With the flag off the editor still receives this data, so it must not
+	 * link to a results page that doesn't exist.
+	 */
+	public function test_editor_data_has_no_results_link_with_the_flag_off() {
+		$prompt_id = $this->createPopup();
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
+		self::assertSame( '', Newspack_Popups_AB_Tests::get_editor_data( $prompt_id )['results_url'] );
+	}
+
+	/**
 	 * The editor's "other prompts in this test" list reads this route: every
 	 * prompt carrying the Test ID except trashed ones, in ID order, for anyone
 	 * who can edit prompts.
@@ -1014,6 +1428,40 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'subscriber' ] ) );
 		self::assertSame( 403, rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/lookup-test' ) )->get_status() );
+	}
+
+	/**
+	 * A Test ID stored by the earlier sanitize_title() callback keeps its underscore,
+	 * since the save guard leaves an unchanged ID alone, so the lookup still finds it.
+	 */
+	public function test_test_prompts_route_finds_a_legacy_test_id() {
+		global $wpdb;
+		$control = $this->create_test_variant( 'footer-test', 'a' );
+		$other   = $this->create_test_variant( 'footer-test', 'b' );
+		// A value the earlier sanitizer stored; the current one can't write it.
+		$wpdb->update( // phpcs:ignore WordPress.DB
+			$wpdb->postmeta,
+			[ 'meta_value' => 'footer_test' ], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			[
+				'post_id'  => $control,
+				'meta_key' => Newspack_Popups_AB_Tests::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+			]
+		);
+		wp_cache_delete( $control, 'post_meta' );
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+		global $wp_rest_server;
+		$wp_rest_server = new WP_REST_Server(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		do_action( 'rest_api_init' );
+
+		$response = rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/footer_test' ) );
+		self::assertSame( 200, $response->get_status() );
+		self::assertSame( [ $control ], wp_list_pluck( $response->get_data(), 'id' ) );
+		// A different test on the front end, so not one of this test's prompts.
+		self::assertNotContains( $other, wp_list_pluck( $response->get_data(), 'id' ) );
+		// Nor does an underscore ID with no stored match borrow the hyphenated test.
+		$this->create_test_variant( 'header-test', 'a' );
+		self::assertSame( [], rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/header_test' ) )->get_data() );
 	}
 
 	/**

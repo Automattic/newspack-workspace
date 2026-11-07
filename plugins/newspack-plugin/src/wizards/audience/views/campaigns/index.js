@@ -21,13 +21,14 @@ import { stringify } from 'qs';
 /**
  * Internal dependencies.
  */
-import { Button, WebPreview, withWizard } from '../../../../../packages/components/src';
+import { WebPreview, withWizard } from '../../../../../packages/components/src';
 import Router from '../../../../../packages/components/src/proxied-imports/router';
 import { ABTests, Campaigns, ContextualPrompts, Settings, Segments } from './views';
 import AddCampaignAction from './campaigns/add-campaign-action';
+import CampaignActions from './campaigns/campaign-actions';
 import { CampaignsContext } from '../../contexts';
 
-const { HashRouter, NavLink, Redirect, Route, Switch } = Router;
+const { HashRouter, Redirect, Route, Switch } = Router;
 
 const headerText = __( 'Audience Management / Campaigns', 'newspack-plugin' );
 
@@ -43,7 +44,7 @@ const tabbedNavigation = [
 	{
 		label: __( 'Campaigns', 'newspack-plugin' ),
 		path: '/campaigns',
-		exact: true,
+		exact: false,
 		breadcrumbs: [ ...ROOT, { label: __( 'Campaigns', 'newspack-plugin' ) } ],
 	},
 	{
@@ -117,7 +118,10 @@ class AudienceCampaigns extends Component {
 			quiet: true,
 		} )
 			.then( this.updateAfterAPI )
-			.catch( error => setError( error ) );
+			.catch( error => {
+				this.setState( { inFlight: false } );
+				setError( error );
+			} );
 	};
 
 	/**
@@ -371,14 +375,25 @@ class AudienceCampaigns extends Component {
 											<CampaignsContext.Provider value={ prompts }>
 												<Campaigns
 													{ ...popupManagementSharedProps }
-													archiveCampaignGroup={ archiveCampaignGroup }
 													campaignId={ campaignId }
-													createCampaignGroup={ createCampaignGroup }
-													deleteCampaignGroup={ deleteCampaignGroup }
-													duplicateCampaignGroup={ duplicateCampaignGroup }
-													renameCampaignGroup={ renameCampaignGroup }
 													campaigns={ campaigns }
+													subHeaderText={ __(
+														'Manage the prompts readers see, grouped by the segment each one targets.',
+														'newspack-plugin'
+													) }
 													headerActions={ <AddCampaignAction createCampaignGroup={ createCampaignGroup } /> }
+													campaignActions={
+														<CampaignActions
+															archiveCampaignGroup={ archiveCampaignGroup }
+															campaignId={ campaignId }
+															campaigns={ campaigns }
+															deleteCampaignGroup={ deleteCampaignGroup }
+															duplicateCampaignGroup={ duplicateCampaignGroup }
+															manageCampaignGroup={ this.manageCampaignGroup }
+															prompts={ prompts }
+															renameCampaignGroup={ renameCampaignGroup }
+														/>
+													}
 												/>
 											</CampaignsContext.Provider>
 										);
@@ -391,21 +406,42 @@ class AudienceCampaigns extends Component {
 											{ ...props }
 											{ ...sharedProps }
 											setSegments={ segmentsList => this.setState( { segments: segmentsList } ) }
-											headerActions={
-												props.match.params.id ? undefined : (
-													<NavLink to="segments/new">
-														<Button variant="primary">{ __( 'Add Segment', 'newspack-plugin' ) }</Button>
-													</NavLink>
-												)
+											subHeaderText={
+												props.match.params.id
+													? undefined
+													: __(
+															'Group readers by what they do on the site, then target prompts at them.',
+															'newspack-plugin'
+													  )
 											}
 										/>
 									) }
 								/>
 								{ contextualPromptsEnabled && (
-									<Route path="/contextual-prompts" exact render={ () => <ContextualPrompts { ...sharedProps } /> } />
+									<Route
+										path="/contextual-prompts"
+										exact
+										render={ () => (
+											<ContextualPrompts
+												{ ...sharedProps }
+												subHeaderText={ __(
+													'Let editors generate story-specific donation prompts with AI.',
+													'newspack-plugin'
+												) }
+											/>
+										) }
+									/>
 								) }
 								{ abTestingEnabled && <Route path="/ab-tests" exact render={ () => <ABTests { ...sharedProps } /> } /> }
-								<Route path="/settings" render={ () => <Settings { ...sharedProps } /> } />
+								<Route
+									path="/settings"
+									render={ () => (
+										<Settings
+											{ ...sharedProps }
+											subHeaderText={ __( 'Choose how prompts behave across the site.', 'newspack-plugin' ) }
+										/>
+									) }
+								/>
 								<Redirect to="/campaigns" />
 							</Switch>
 						</HashRouter>

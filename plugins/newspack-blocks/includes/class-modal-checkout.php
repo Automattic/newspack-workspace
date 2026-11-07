@@ -298,6 +298,8 @@ final class Modal_Checkout {
 		add_filter( 'jetpack_active_modules', [ __CLASS__, 'jetpack_active_modules' ] );
 		add_filter( 'woocommerce_checkout_update_order_review_expired', [ __CLASS__, 'is_not_modal_checkout_filter' ] );
 		add_filter( 'woocommerce_checkout_registration_enabled', [ __CLASS__, 'is_modal_checkout_filter' ] );
+		add_filter( 'wc_stripe_express_checkout_params', [ __CLASS__, 'set_express_checkout_button_radius' ] );
+		add_filter( 'wcpay_express_checkout_js_params', [ __CLASS__, 'set_express_checkout_button_radius' ] );
 
 		// Make the current cart price available to the JavaScript.
 		add_action( 'wp_ajax_get_cart_total', [ __CLASS__, 'get_cart_total_js' ] );
@@ -1439,6 +1441,7 @@ final class Modal_Checkout {
 				'newspack_class_prefix' => self::get_class_prefix(),
 				'is_checkout_complete'  => function_exists( 'is_order_received_page' ) && is_order_received_page(),
 				'divider_text'          => esc_html__( 'Or', 'newspack-blocks' ),
+				'error_icon'            => method_exists( '\Newspack\Newspack_UI', 'get_notice_icons' ) ? \Newspack\Newspack_UI_Icons::get_svg( \Newspack\Newspack_UI::get_notice_icons()['error'] ) : '',
 				'is_error'              => ! is_checkout() && ! is_order_received_page(),
 				'labels'                => [
 					'billing_details'  => self::get_modal_checkout_labels( 'billing_details' ),
@@ -1737,6 +1740,11 @@ final class Modal_Checkout {
 				// If template is not checkout or order received we want to render an error and back button in modal checkout context.
 				?>
 				<div class="newspack-ui__notice newspack-ui__notice--error">
+					<?php
+					if ( method_exists( '\Newspack\Newspack_UI', 'print_notice_icon' ) ) {
+						\Newspack\Newspack_UI::print_notice_icon( 'error' );
+					}
+					?>
 					<div>
 						<p>
 							<?php
@@ -2892,6 +2900,25 @@ final class Modal_Checkout {
 	}
 
 	/**
+	 * Match the express checkout wallet buttons (Apple Pay, Google Pay) to the Newspack UI button radius.
+	 *
+	 * The buttons are drawn by Stripe inside its own iframes, so CSS can't reach them. The value
+	 * mirrors --newspack-ui-radius-button.
+	 *
+	 * @param mixed $params Express checkout script params from WooCommerce Stripe Gateway or WooPayments.
+	 *
+	 * @return mixed Params with the button radius set on modal checkout requests.
+	 */
+	public static function set_express_checkout_button_radius( $params ) {
+		if ( ! is_array( $params ) || ! self::is_modal_checkout() ) {
+			return $params;
+		}
+		$params['button']           = isset( $params['button'] ) && is_array( $params['button'] ) ? $params['button'] : [];
+		$params['button']['radius'] = 8;
+		return $params;
+	}
+
+	/**
 	 * Does this request originate from the modal checkout?
 	 *
 	 * Superset of is_modal_checkout(): additionally true for Store API JSON
@@ -3073,7 +3100,7 @@ final class Modal_Checkout {
 								<span class="currency"><?php echo esc_html( $currency_symbol ); ?></span>
 								<input type="number" min="0" step=".01" name="price" placeholder="<?php echo esc_attr( $price ); ?>" onwheel="return false" />
 							</label>
-							<button type="submit" class="<?php echo esc_attr( "{$class_prefix}__button {$class_prefix}__button--outline" ); ?>">
+							<button type="submit" class="<?php echo esc_attr( "{$class_prefix}__button {$class_prefix}__button--secondary" ); ?>">
 								<?php echo esc_html( self::get_modal_checkout_labels( 'checkout_nyp_apply' ) ); ?>
 							</button>
 						</p>
@@ -3159,7 +3186,7 @@ final class Modal_Checkout {
 			<input type="hidden" name="product_id" value="<?php echo esc_attr( $product->get_id() ); ?>" />
 			<p class="input-quantity">
 				<input type="number" id="modal_checkout_quantity" name="quantity" step="1" min="<?php echo esc_attr( $args['min'] ); ?>" <?php echo $args['max'] > 0 ? 'max="' . esc_attr( $args['max'] ) . '"' : ''; ?> value="<?php echo esc_attr( $quantity ); ?>" onwheel="return false" />
-				<button type="submit" class="<?php echo esc_attr( "{$class_prefix}__button {$class_prefix}__button--outline" ); ?>"><?php esc_html_e( 'Update', 'newspack-blocks' ); ?></button>
+				<button type="submit" class="<?php echo esc_attr( "{$class_prefix}__button {$class_prefix}__button--secondary" ); ?>"><?php esc_html_e( 'Update', 'newspack-blocks' ); ?></button>
 			</p>
 			<p class="result <?php echo esc_attr( "{$class_prefix}__helper-text" ); ?>"><?php echo esc_html( $args['help'] ); ?></p>
 		</form>
@@ -3464,7 +3491,6 @@ final class Modal_Checkout {
 				'checkout_confirm'           => __( 'Complete transaction', 'newspack-blocks' ),
 				'checkout_confirm_variation' => __( 'Purchase', 'newspack-blocks' ),
 				'checkout_edit_billing'      => __( 'Edit billing information', 'newspack-blocks' ),
-				'checkout_cancel'            => __( 'Cancel', 'newspack-blocks' ),
 				'checkout_success'           => __( 'Transaction successful', 'newspack-blocks' ),
 				'checkout_nyp'               => __( "Your contribution directly funds our work. If you're moved to do so, you can opt to pay more than the standard rate.", 'newspack-blocks' ),
 				'checkout_nyp_thankyou'      => __( "Thank you for your generosity! We couldn't do this without you!", 'newspack-blocks' ),

@@ -23,7 +23,7 @@ const headings = {
 	6: 'h6',
 } as const;
 
-const Label = forwardRef< HTMLDivElement, StatCardLabelProps >( function Label( { suffix, heading, className, children, ...props }, ref ) {
+const Label = forwardRef< HTMLDivElement, StatCardLabelProps >( function Label( { suffix, qualifier, heading, className, children, ...props }, ref ) {
 	const context = useStatCardContext();
 	const level = ( heading ?? context.heading ) as StatCardHeadingLevel;
 	// Consumers are largely untyped JS, where an out-of-range level would
@@ -52,7 +52,16 @@ const Label = forwardRef< HTMLDivElement, StatCardLabelProps >( function Label( 
 			className={ classnames( 'newspack-stat-card__label', className ) }
 			{ ...props }
 		>
-			<Heading className="newspack-stat-card__label-text">{ children }</Heading>
+			<Heading className="newspack-stat-card__label-text">
+				{ children }
+				{ /* The line break is CSS, so the heading's name needs a real space between the two. */ }
+				{ qualifier && (
+					<>
+						{ ' ' }
+						<span className="newspack-stat-card__label-qualifier">{ qualifier }</span>
+					</>
+				) }
+			</Heading>
 			{ suffix }
 		</Stack>
 	);

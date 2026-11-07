@@ -7,8 +7,10 @@
  */
 import Body from './body';
 import Delta from './delta';
+import Description from './description';
 import Footer from './footer';
 import Label from './label';
+import Note from './note';
 import Root from './root';
 import Secondary from './secondary';
 import Value from './value';
@@ -19,10 +21,12 @@ export type {
 	StatCardDeltaDirection,
 	StatCardDeltaProps,
 	StatCardDeltaTone,
+	StatCardDescriptionProps,
 	StatCardFooterProps,
 	StatCardHeadingLevel,
 	StatCardLabelProps,
 	StatCardLabels,
+	StatCardNoteProps,
 	StatCardRootProps,
 	StatCardSecondaryProps,
 	StatCardValue,
@@ -37,8 +41,10 @@ export const StatCard = {
 	Body,
 	Value,
 	Delta,
+	Note,
 	Secondary,
 	Footer,
+	Description,
 };
 
 Object.entries( StatCard ).forEach( ( [ name, part ] ) => {
