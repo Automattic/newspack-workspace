@@ -133,13 +133,10 @@ const Sidebar = props => {
 						label={ __( 'Manual only', 'newspack-popups' ) }
 						help={
 							inTest
-								? [
-										__(
-											'The prompt will appear only where inserted using the Single Prompt block or a shortcode.',
-											'newspack-popups'
-										),
-										__( 'Manual only isn’t available while this prompt is in an A/B test.', 'newspack-popups' ),
-								  ].join( ' ' )
+								? __(
+										'The prompt will appear only where inserted using the Single Prompt block or a shortcode. Manual only isn’t available while this prompt is in an A/B test.',
+										'newspack-popups'
+								  )
 								: __( 'The prompt will appear only where inserted using the Single Prompt block or a shortcode.', 'newspack-popups' )
 						}
 						checked={ !! manual_only }

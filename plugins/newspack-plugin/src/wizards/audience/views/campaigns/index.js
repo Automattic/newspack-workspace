@@ -23,7 +23,7 @@ import { stringify } from 'qs';
  */
 import { WebPreview, withWizard } from '../../../../../packages/components/src';
 import Router from '../../../../../packages/components/src/proxied-imports/router';
-import { Campaigns, ContextualPrompts, Settings, Segments } from './views';
+import { ABTests, Campaigns, ContextualPrompts, Settings, Segments } from './views';
 import AddCampaignAction from './campaigns/add-campaign-action';
 import CampaignActions from './campaigns/campaign-actions';
 import { CampaignsContext } from '../../contexts';
@@ -38,6 +38,7 @@ const ROOT = [ { label: __( 'Audience Management', 'newspack-plugin' ) } ];
 const CAMPAIGNS_CRUMB = { label: __( 'Campaigns', 'newspack-plugin' ), url: '#/campaigns' };
 
 const contextualPromptsEnabled = Boolean( window.newspackAudienceCampaigns?.contextual_prompts_enabled );
+const abTestingEnabled = Boolean( window.newspackAudienceCampaigns?.ab_testing_enabled );
 
 const tabbedNavigation = [
 	{
@@ -59,6 +60,16 @@ const tabbedNavigation = [
 					path: '/contextual-prompts',
 					exact: true,
 					breadcrumbs: [ ...ROOT, CAMPAIGNS_CRUMB, { label: __( 'Contextual Prompts', 'newspack-plugin' ) } ],
+				},
+		  ]
+		: [] ),
+	...( abTestingEnabled
+		? [
+				{
+					label: __( 'A/B Tests', 'newspack-plugin' ),
+					path: '/ab-tests',
+					exact: true,
+					breadcrumbs: [ ...ROOT, CAMPAIGNS_CRUMB, { label: __( 'A/B Tests', 'newspack-plugin' ) } ],
 				},
 		  ]
 		: [] ),
@@ -421,6 +432,7 @@ class AudienceCampaigns extends Component {
 										) }
 									/>
 								) }
+								{ abTestingEnabled && <Route path="/ab-tests" exact render={ () => <ABTests { ...sharedProps } /> } /> }
 								<Route
 									path="/settings"
 									render={ () => (

@@ -105,7 +105,7 @@ const AB_TESTING = {
 		subscription: 'Subscription',
 	},
 	ineligible_placements: [ 'manual', 'custom1' ],
-	results_url: '/wp-admin/admin.php?page=newspack-ab-tests',
+	results_url: '/wp-admin/admin.php?page=newspack-audience-campaigns#/ab-tests',
 	test_name: 'Spring drive',
 };
 

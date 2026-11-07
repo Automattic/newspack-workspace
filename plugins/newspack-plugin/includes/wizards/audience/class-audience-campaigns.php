@@ -98,6 +98,7 @@ class Audience_Campaigns extends Wizard {
 				'experimental'               => Reader_Activation::is_enabled(),
 				'criteria'                   => $criteria,
 				'contextual_prompts_enabled' => self::is_contextual_prompts_enabled(),
+				'ab_testing_enabled'         => self::is_ab_testing_enabled(),
 			]
 		);
 	}
@@ -115,6 +116,23 @@ class Audience_Campaigns extends Wizard {
 		return class_exists( 'Newspack_Popups' )
 			&& method_exists( 'Newspack_Popups', 'is_contextual_prompts_enabled' )
 			&& \Newspack_Popups::is_contextual_prompts_enabled();
+	}
+
+	/**
+	 * Whether the A/B Tests tab shows.
+	 *
+	 * Defers to newspack-popups, which owns the flag and the routes the tab
+	 * reads, so an older popups without them never exposes the tab.
+	 *
+	 * newspack-popups checks that this method is callable before it links or
+	 * redirects to the tab, so it has to stay public and keep its name.
+	 *
+	 * @return bool
+	 */
+	public static function is_ab_testing_enabled() {
+		return class_exists( 'Newspack_Popups' )
+			&& method_exists( 'Newspack_Popups', 'is_ab_testing_enabled' )
+			&& \Newspack_Popups::is_ab_testing_enabled();
 	}
 
 	/**
