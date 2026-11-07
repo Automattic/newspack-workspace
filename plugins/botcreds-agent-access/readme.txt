@@ -4,7 +4,7 @@ Tags: ai-agents, mcp, application-passwords, rest-api, security
 Requires at least: 5.7
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.4.1-rc.1
+Stable tag: 2.4.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -96,7 +96,7 @@ No. Integration scopes permit routes, not WordPress capabilities. The account's 
 
 == Changelog ==
 
-= 2.4.1-rc.1 =
+= 2.4.1 =
 * Hide native Application Passwords controls on profile pages while Agent Access is active, keeping credential creation in the managed flow without disabling authentication.
 * Clarify replacement credentials, separate users for multiple agents, and write-only activity logging.
 
@@ -214,6 +214,9 @@ No. Integration scopes permit routes, not WordPress capabilities. The account's 
 
 
 == Upgrade Notice ==
+
+= 2.4.1 =
+Native Application Passwords controls are hidden while Agent Access is active. Use Agent Access to generate or replace managed credentials. Existing passwords continue to work.
 
 = 2.4.0 =
 Adds SEO-only access, integration scopes and site-management controls. Fixes header-dependent credential scope enforcement. Prerelease SEO users: an administrator must re-save the SEO-only scope; existing passwords remain valid.
