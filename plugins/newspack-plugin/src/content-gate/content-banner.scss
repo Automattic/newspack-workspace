@@ -216,9 +216,15 @@ body.newspack-has-countdown-banner:has(.newspack-countdown-banner__cta.is-style-
 			background: var(--newspack-content-banner-bg, var(--newspack-ui-color-surface));
 			border-top: 1px solid var(--newspack-ui-color-border);
 			color: var(--newspack-content-banner-ink, var(--newspack-ui-color-text));
+			padding-left: var(--wp--style--root--padding-left, var(--newspack-ui-spacer-3));
+			padding-right: var(--wp--style--root--padding-right, var(--newspack-ui-spacer-3));
 
 			> .wrapper {
 				font-family: var(--newspack-ui-font-family-body);
+				margin-left: auto;
+				margin-right: auto;
+				max-width: var(--wp--style--global--wide-size, none);
+				width: 100%;
 			}
 
 			a:not(.newspack-ui__button) {
