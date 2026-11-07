@@ -17,16 +17,16 @@ const EditorAdditions = () => {
 	const meta = useSelect( select => select( 'core/editor' ).getEditedPostAttribute( 'meta' ) ) || {};
 	const { background_color, overlay_size, placement } = meta;
 
-	// Keep a ref so the mount effect always has the current background color.
-	const backgroundColorRef = useRef( background_color );
+	// Keep a ref so the mount effect always has the current colors and placement.
+	const colorsRef = useRef( { background_color, placement } );
 	useEffect( () => {
-		backgroundColorRef.current = background_color;
-	}, [ background_color ] );
+		colorsRef.current = { background_color, placement };
+	}, [ background_color, placement ] );
 
 	// Update editor colors when the color picker changes.
 	useEffect( () => {
-		updateEditorColors( background_color );
-	}, [ background_color ] );
+		updateEditorColors( background_color, placement );
+	}, [ background_color, placement ] );
 
 	// Apply the initial color once the editor canvas is ready. In WP 7.0+ the
 	// canvas is an iframe that may not be loaded when the component first mounts,
@@ -34,7 +34,7 @@ const EditorAdditions = () => {
 	// Deps are intentionally empty so the readiness listener isn't re-registered
 	// on every colour change — the ref above captures the latest value.
 	useEffect( () => {
-		return whenEditorReady( () => updateEditorColors( backgroundColorRef.current ) );
+		return whenEditorReady( () => updateEditorColors( colorsRef.current.background_color, colorsRef.current.placement ) );
 	}, [] ); // eslint-disable-line react-hooks/exhaustive-deps
 
 	// Setting editor size as per the popup size.

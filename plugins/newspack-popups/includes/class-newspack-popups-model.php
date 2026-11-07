@@ -1363,7 +1363,7 @@ final class Newspack_Popups_Model {
 		$has_featured_image             = has_post_thumbnail( $popup['id'] ) || ! empty( $popup['options']['featured_image_id'] );
 		$enable_close_button_background = $popup['options']['enable_close_button_background'];
 		$close_button_background_color  = $enable_close_button_background ? $popup['options']['close_button_background_color'] : '';
-		$close_button_color             = $enable_close_button_background ? self::close_button_icon_color( $popup['options']['close_button_background_color'], $popup['options']['background_color'] ) : self::foreground_color_for_background( $popup['options']['background_color'] );
+		$close_button_color             = $enable_close_button_background ? self::close_button_icon_color( $popup['options']['close_button_background_color'], $popup['options']['background_color'] ) : ( self::uses_site_background( $popup ) ? 'var(--wp--preset--color--contrast, #000)' : self::foreground_color_for_background( $popup['options']['background_color'] ) );
 		$hidden_fields                  = self::get_hidden_fields( $popup );
 		$is_newsletter_prompt           = self::has_newsletter_prompt( $popup );
 		$classes                        = [ 'newspack-popup-container', 'newspack-lightbox', 'newspack-popup', 'hidden', 'newspack-lightbox-placement-' . $popup['options']['placement'], 'newspack-lightbox-size-' . $overlay_size ];
@@ -1780,13 +1780,30 @@ final class Newspack_Popups_Model {
 	}
 
 	/**
+	 * Whether an overlay prompt takes the site's background and text colors.
+	 *
+	 * On block themes, an overlay left on the default white background follows the
+	 * theme's base and contrast colors. Any other background the publisher picks wins.
+	 *
+	 * @param array $popup A Pop-up object.
+	 * @return bool
+	 */
+	public static function uses_site_background( $popup ): bool {
+		return self::is_block_theme()
+			&& self::is_overlay( $popup )
+			&& [ 255, 255, 255 ] === self::parse_hex_channels( $popup['options']['background_color'] ?? '' );
+	}
+
+	/**
 	 * Generate inline styles for Popup element.
 	 *
 	 * @param  object $popup A Pop-up object.
 	 * @return string Inline styles attribute.
 	 */
 	public static function container_style( $popup ) {
-		$hide_border      = $popup['options']['hide_border'];
+		if ( self::uses_site_background( $popup ) ) {
+			return 'background-color:var(--wp--preset--color--base, #fff);color:var(--wp--preset--color--contrast, #000)';
+		}
 		$background_color = $popup['options']['background_color'];
 		$foreground_color = self::foreground_color_for_background( $background_color );
 		return 'background-color:' . $background_color . ';color:' . $foreground_color;

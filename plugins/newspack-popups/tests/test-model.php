@@ -685,6 +685,55 @@ class ModelTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Prompt backgrounds, as [ block theme, placement, background, follows the site ].
+	 */
+	public function uses_site_background_data() {
+		return [
+			'block theme overlay on default white' => [ true, 'center', '#FFFFFF', true ],
+			'block theme overlay on lowercase'     => [ true, 'bottom', '#ffffff', true ],
+			'block theme overlay on shorthand'     => [ true, 'center', '#fff', true ],
+			'block theme overlay on custom color'  => [ true, 'center', '#f0f0f0', false ],
+			'block theme overlay on black'         => [ true, 'center', '#000000', false ],
+			'block theme inline on white'          => [ true, 'inline', '#FFFFFF', false ],
+			'classic overlay on white'             => [ false, 'center', '#FFFFFF', false ],
+		];
+	}
+
+	/**
+	 * Tests that only block theme overlays on the default white follow the site's colors.
+	 *
+	 * @dataProvider uses_site_background_data
+	 *
+	 * @param bool   $is_block_theme Whether a block theme is active.
+	 * @param string $placement      Prompt placement.
+	 * @param string $background     Prompt background.
+	 * @param bool   $expected       Whether the prompt follows the site's background.
+	 */
+	public function test_uses_site_background( $is_block_theme, $placement, $background, $expected ) {
+		$popup = [
+			'options' => [
+				'placement'        => $placement,
+				'background_color' => $background,
+				'hide_border'      => false,
+			],
+		];
+		Newspack_Popups_Model::set_block_theme_override( $is_block_theme );
+		try {
+			self::assertSame( $expected, Newspack_Popups_Model::uses_site_background( $popup ) );
+			if ( $expected ) {
+				self::assertSame(
+					'background-color:var(--wp--preset--color--base, #fff);color:var(--wp--preset--color--contrast, #000)',
+					Newspack_Popups_Model::container_style( $popup )
+				);
+			} else {
+				self::assertStringStartsWith( 'background-color:' . $background . ';', Newspack_Popups_Model::container_style( $popup ) );
+			}
+		} finally {
+			Newspack_Popups_Model::set_block_theme_override( null );
+		}
+	}
+
+	/**
 	 * Tests that the close button icon contrasts with its fill as painted over the prompt.
 	 *
 	 * @dataProvider close_button_icon_color_data
