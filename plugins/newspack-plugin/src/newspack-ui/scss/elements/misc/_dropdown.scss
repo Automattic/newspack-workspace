@@ -27,7 +27,7 @@
 				background: var(--newspack-ui-color-surface);
 				border: 1px solid var(--newspack-ui-color-border);
 				border-radius: var(--newspack-ui-radius-control);
-				@include mixins.newspack-ui-elevation( 1 );
+				@include mixins.newspack-ui-elevation( 2 );
 
 				font-size: var(--newspack-ui-font-size-body);
 				left: 0;

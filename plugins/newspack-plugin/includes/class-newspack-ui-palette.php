@@ -140,6 +140,15 @@ class Newspack_UI_Palette {
 	];
 
 	/**
+	 * Elevation tokens on a dark base, where a shadow in the contrast color would vanish: black ink at a higher strength and a hairline edge.
+	 */
+	public const ELEVATION_DARK = [
+		'--newspack-ui-elevation-ink'      => '#000',
+		'--newspack-ui-elevation-edge'     => 'color-mix(in oklab, var(--newspack-ui-color-contrast) 14%, transparent)',
+		'--newspack-ui-elevation-strength' => '2.5',
+	];
+
+	/**
 	 * Share of the contrast color in the subtle surface on a dark base.
 	 */
 	private const SUBTLE_DARK_SHARE = 4;
@@ -446,6 +455,19 @@ class Newspack_UI_Palette {
 		}
 
 		return $prefixed;
+	}
+
+	/**
+	 * The newspack-ui elevation tokens for a base, which differ from Neutral only on a dark base.
+	 *
+	 * @param string $base_hex Base hex color.
+	 *
+	 * @return array<string,string> '--newspack-ui-elevation-*' property to value; empty on a light or unusable base.
+	 */
+	public static function elevation_properties( string $base_hex ): array {
+		$base = self::normalize_hex( $base_hex );
+
+		return '' !== $base && self::is_dark( $base ) ? self::ELEVATION_DARK : [];
 	}
 
 	/**
