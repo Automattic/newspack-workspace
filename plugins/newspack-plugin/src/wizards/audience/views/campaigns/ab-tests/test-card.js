@@ -44,6 +44,7 @@ const TestCard = ( { test, data, onRenamed } ) => {
 	const [ error, setError ] = useState( null );
 	const [ wasRefresh, setWasRefresh ] = useState( false );
 	const [ modal, setModal ] = useState( null );
+	const [ focusHeading, setFocusHeading ] = useState( false );
 	const headingId = useId();
 	const headingRef = useRef( null );
 
@@ -78,6 +79,16 @@ const TestCard = ( { test, data, onRenamed } ) => {
 			dateI18n( getSettings().formats.datetime, stats.source.fetched_at )
 		);
 	}
+
+	// Waits for the rename to render and the modal to close: focused any
+	// earlier, the heading still reads the old name and sits under the modal's
+	// aria-hidden, so a screen reader may not announce it.
+	useEffect( () => {
+		if ( focusHeading ) {
+			headingRef.current?.focus();
+			setFocusHeading( false );
+		}
+	}, [ focusHeading ] );
 
 	const load = refresh => {
 		setLoading( true );
@@ -389,7 +400,7 @@ const TestCard = ( { test, data, onRenamed } ) => {
 					onRenamed={ newName => {
 						setModal( null );
 						onRenamed( test.test_id, newName );
-						headingRef.current?.focus();
+						setFocusHeading( true );
 						speak( __( 'Test renamed.', 'newspack-plugin' ) );
 					} }
 					onClose={ () => setModal( null ) }

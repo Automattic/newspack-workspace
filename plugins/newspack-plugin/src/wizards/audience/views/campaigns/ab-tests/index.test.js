@@ -248,10 +248,13 @@ describe( 'A/B Tests tab', () => {
 		fireEvent.change( screen.getByLabelText( 'Test name' ), { target: { value: ' ' } } );
 		expect( screen.getByRole( 'button', { name: 'Save' } ) ).toHaveAttribute( 'aria-disabled', 'true' );
 		fireEvent.change( screen.getByLabelText( 'Test name' ), { target: { value: 'Year-end appeal' } } );
+		const focusedHeadings = [];
+		card.addEventListener( 'focusin', event => event.target.matches( 'h2' ) && focusedHeadings.push( event.target.textContent ) );
 		screen.getByRole( 'button', { name: 'Save' } ).focus();
 		fireEvent.click( screen.getByRole( 'button', { name: 'Save' } ) );
 		const renamed = await screen.findByRole( 'region', { name: 'Year-end appeal' } );
 		await waitFor( () => expect( within( renamed ).getByRole( 'heading', { name: 'Year-end appeal' } ) ).toHaveFocus() );
+		expect( focusedHeadings ).toEqual( [ 'Year-end appeal' ] );
 		expect( apiFetch ).toHaveBeenCalledWith( {
 			path: '/newspack-popups/v1/ab-tests/inc/name',
 			method: 'POST',
