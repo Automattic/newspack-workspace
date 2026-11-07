@@ -145,12 +145,7 @@
 			]
 		},
 		"custom": {
-			"className": "nocturne-alt",
-			"elevation": {
-				"ink": "#000",
-				"edge": "color-mix( in oklab, var(--wp--preset--color--contrast) 14%, transparent )",
-				"strength": "2.5"
-			}
+			"className": "nocturne-alt"
 		}
 	},
 	"styles": {

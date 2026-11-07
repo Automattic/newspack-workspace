@@ -59,6 +59,14 @@ const darkTokens = Object.fromEntries(
 	)
 );
 
+const elevation = fs.readFileSync( path.join( THEME, 'includes/class-elevation.php' ), 'utf8' );
+const themeDarkTokens = Object.fromEntries(
+	[ ...elevation.match( /const DARK = \[([\s\S]*?)\];/ )[ 1 ].matchAll( /'(\w+)'\s*=>\s*'([^']+)'/g ) ].map( ( [ , name, value ] ) => [
+		name,
+		value,
+	] )
+);
+
 describe( 'Elevation scale', () => {
 	it.each( LEVELS )( 'theme preset elevation-%i matches the newspack-ui mixin', level => {
 		const compiled = declaration( `.level-${ level }`, 'box-shadow' );
@@ -74,11 +82,11 @@ describe( 'Elevation scale', () => {
 		} );
 	} );
 
-	it.each( [ 'styles/10-nocturne.json', 'styles/11-nocturne-alt.json' ] )( '%s uses the dark tokens the Theme adapter prints', file => {
-		const elevation = readJson( file ).settings.custom.elevation;
+	it( 'theme runtime dark tokens match the ones the Theme adapter prints', () => {
 		expect( Object.keys( darkTokens ).sort() ).toEqual( [ 'edge', 'ink', 'strength' ] );
+		expect( Object.keys( themeDarkTokens ).sort() ).toEqual( Object.keys( darkTokens ).sort() );
 		Object.entries( darkTokens ).forEach( ( [ name, value ] ) => {
-			expect( normalize( elevation[ name ] ) ).toBe( normalize( value ) );
+			expect( normalize( themeDarkTokens[ name ] ) ).toBe( normalize( value ) );
 		} );
 	} );
 } );
