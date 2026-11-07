@@ -372,7 +372,10 @@ class Content_Gate_Excerpt {
 	 * @return bool
 	 */
 	public static function has_overlay_ellipsis( string $teaser ): bool {
-		return str_ends_with( rtrim( wp_strip_all_tags( $teaser ) ), '[&hellip;]' );
+		// The teaser has been through wp_kses_post(), which from WordPress 7.2 on
+		// prints the ellipsis as a literal "…", so compare the decoded text.
+		$text = html_entity_decode( wp_strip_all_tags( $teaser ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+		return str_ends_with( rtrim( $text ), '[…]' );
 	}
 
 	/**
