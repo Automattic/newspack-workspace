@@ -140,6 +140,9 @@ final class Newspack_Popups {
 		include_once __DIR__ . '/class-newspack-popups-view-as.php';
 		include_once __DIR__ . '/class-newspack-popups-data-api.php';
 		include_once __DIR__ . '/class-newspack-popups-ab-tests.php';
+		include_once __DIR__ . '/class-newspack-popups-ab-stats.php';
+		include_once __DIR__ . '/interface-newspack-popups-ab-stats-provider.php';
+		include_once __DIR__ . '/class-newspack-popups-ab-dashboard.php';
 		include_once __DIR__ . '/class-newspack-popups-criteria.php';
 		include_once __DIR__ . '/class-newspack-popups-expiry.php';
 		include_once __DIR__ . '/merge-tags/class-merge-tag.php';

@@ -207,6 +207,22 @@ final class Newspack_Popups_API {
 					'permission_callback' => [ __CLASS__, 'prompt_editor_permission_callback' ],
 				]
 			);
+			register_rest_route(
+				'newspack-popups/v1',
+				// Underscores too, for the same legacy IDs as the route above.
+				'/ab-tests/(?P<test_id>[a-z0-9_-]+)/stats',
+				[
+					'methods'             => \WP_REST_Server::READABLE,
+					'callback'            => [ __CLASS__, 'api_get_ab_test_stats' ],
+					'permission_callback' => [ __CLASS__, 'permission_callback' ],
+					'args'                => [
+						'refresh' => [
+							'type'    => 'boolean',
+							'default' => false,
+						],
+					],
+				]
+			);
 		}
 	}
 
@@ -218,6 +234,16 @@ final class Newspack_Popups_API {
 	 */
 	public static function api_get_ab_test_prompts( $request ) {
 		return rest_ensure_response( Newspack_Popups_AB_Tests::get_test_prompts( $request->get_param( 'test_id' ) ) );
+	}
+
+	/**
+	 * Stats for one A/B test, for the A/B Tests dashboard.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function api_get_ab_test_stats( $request ) {
+		return rest_ensure_response( Newspack_Popups_AB_Dashboard::get_stats( $request->get_param( 'test_id' ), (bool) $request->get_param( 'refresh' ) ) );
 	}
 
 	/**

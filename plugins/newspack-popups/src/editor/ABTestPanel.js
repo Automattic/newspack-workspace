@@ -40,6 +40,7 @@ const ABTestPanel = ( {
 		goals = {},
 		variants = {},
 		ineligible_placements: ineligible = [],
+		results_url: resultsUrl = '',
 	} = window?.newspack_popups_data?.ab_testing || {};
 	const manualOnlyOverlay = isOverlay && !! manualOnly;
 	const eligible = isEligiblePlacement( placement, ineligible, manualOnlyOverlay );
@@ -277,6 +278,7 @@ const ABTestPanel = ( {
 							</ul>
 						</div>
 					) }
+					{ resultsUrl && <ExternalLink href={ resultsUrl }>{ __( 'View results', 'newspack-popups' ) }</ExternalLink> }
 				</>
 			) }
 		</Stack>
