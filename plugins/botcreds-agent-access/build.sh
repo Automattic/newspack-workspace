@@ -27,6 +27,11 @@ for entry in assets includes botcreds-agent-access.php uninstall.php index.php L
   cp -R "$PLUGIN_DIR/$entry" "$TMP/$PLUGIN_SLUG/"
 done
 
+# Working copies can be private (0600/0700). Ship readable files and traversable
+# directories so the web server can serve assets after ZIP extraction.
+find "$TMP/$PLUGIN_SLUG" -type d -exec chmod 755 {} +
+find "$TMP/$PLUGIN_SLUG" -type f -exec chmod 644 {} +
+
 # Build zip from the parent so the folder name is the root entry
 cd "$TMP"
 zip -r "$OUT" "$PLUGIN_SLUG" -x "*.DS_Store"

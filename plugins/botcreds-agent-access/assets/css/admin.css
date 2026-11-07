@@ -3,6 +3,14 @@
  * Matches native wp-admin profile section styling.
  */
 
+/* Keep profile credential creation in the managed Agent Access flow.
+ * Presentation only: existing Application Passwords and REST auth are unchanged.
+ */
+body.profile-php #application-passwords-section,
+body.user-edit-php #application-passwords-section {
+	display: none;
+}
+
 /* Section wrapper */
 .agent-access-profile-section {
 	margin-top: 2em;

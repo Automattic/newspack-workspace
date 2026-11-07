@@ -4,7 +4,7 @@ Tags: ai-agents, mcp, application-passwords, rest-api, security
 Requires at least: 5.7
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.4.0
+Stable tag: 2.4.1-rc.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -66,7 +66,17 @@ The plain-text password is shown once when created. WordPress stores only a hash
 
 = Can I have multiple agent connections? =
 
-BotCreds manages one Application Password per user. Revoke the existing one before creating a new connection, or create additional passwords directly in your WordPress profile.
+BotCreds manages one Application Password per WordPress user. For multiple agents, create a separate Agent user for each. If you lose a password, use Agent Access to revoke the existing connection and generate replacement credentials for the same user.
+
+= Where did the native Application Passwords controls go? =
+
+While Agent Access is active, the native Application Passwords section is hidden on your profile and on profiles edited by administrators. Use the Agent Access controls to generate and revoke managed credentials. Passwords created through other tools are not automatically managed or logged by Agent Access.
+
+This is a profile UI change only: existing Application Passwords and WordPress REST authentication continue to work. Deactivating Agent Access restores the native profile controls.
+
+= Which requests appear in the activity log? =
+
+By default, the log records write requests from recognized credentials, not reads. A successful read alone does not create an activity entry.
 
 = What does Yoast SEO only permit? =
 
@@ -85,6 +95,10 @@ No. Integration scopes permit routes, not WordPress capabilities. The account's 
 3. The "Connected" state showing status and revoke option.
 
 == Changelog ==
+
+= 2.4.1-rc.1 =
+* Hide native Application Passwords controls on profile pages while Agent Access is active, keeping credential creation in the managed flow without disabling authentication.
+* Clarify replacement credentials, separate users for multiple agents, and write-only activity logging.
 
 = 2.4.0 =
 * Add an administrator-assigned Yoast SEO-only credential scope for existing content across all authors. The dedicated metadata endpoint blocks content edits, publishing, creation, deletion and unrelated writes.
