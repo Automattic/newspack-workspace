@@ -1,3 +1,4 @@
+@use "../../packages/colors/colors.module" as colors;
 @use "vars" as gate;
 
 .newspack-content-gate {
@@ -15,14 +16,14 @@
 			content: "";
 			position: fixed;
 			inset: 0;
-			background: #000;
+			background: var(--newspack-ui-color-overlay-50, var(--wp--custom--color--overlay-50, #{colors.$overlay-500}));
 			opacity: 0;
 			transition: opacity var(--newspack-ui-duration-sheet, 400ms) var(--newspack-ui-ease-out, cubic-bezier(0.23, 1, 0.32, 1));
 		}
 		&[data-visible="true"] {
 			pointer-events: auto;
 			&::before {
-				opacity: 0.75;
+				opacity: 1;
 			}
 		}
 		@media ( min-width: 600px ) {
