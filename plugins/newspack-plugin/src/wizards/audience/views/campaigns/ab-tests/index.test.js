@@ -240,8 +240,8 @@ describe( 'A/B Tests tab', () => {
 		const card = await screen.findByRole( 'region', { name: 'Test inc' } );
 		const toggle = within( card ).getByRole( 'button', { name: 'Test actions: Test inc' } );
 		fireEvent.click( toggle );
-		// A browser leaves focus on the menu toggle when the dialog opens, and the
-		// dialog hands focus back to it on close; jsdom moves no focus on click.
+		// In a browser the toggle holds focus as the dialog mounts, so the dialog
+		// records it as the place to return focus to; jsdom moves no focus on click.
 		toggle.focus();
 		fireEvent.click( screen.getByRole( 'menuitem', { name: 'Rename: Test inc' } ) );
 		expect( screen.getByRole( 'dialog', { name: 'Rename Test' } ) ).toBeInTheDocument();
@@ -274,6 +274,7 @@ describe( 'A/B Tests tab', () => {
 		fireEvent.change( field, { target: { value: 'Year-end appeal' } } );
 		// Focus starts outside the field, where a browser leaves it once the
 		// field is disabled for the save.
+		expect( field ).not.toHaveFocus();
 		fireEvent.submit( field.closest( 'form' ) );
 		expect( await screen.findByText( 'Rename failed.' ) ).toBeInTheDocument();
 		await waitFor( () => expect( field ).toHaveFocus() );

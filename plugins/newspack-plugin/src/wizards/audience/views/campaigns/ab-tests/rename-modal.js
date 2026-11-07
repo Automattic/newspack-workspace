@@ -48,8 +48,8 @@ const RenameModal = ( { test, onRenamed, onClose } ) => {
 		}
 	};
 
-	// The field is disabled while saving, which drops focus out of the dialog,
-	// so a failed save hands it back to the field to retry from.
+	// A failed save puts focus back in the field to retry from. When the save
+	// started from the field, disabling it had dropped focus out of the dialog.
 	useEffect( () => {
 		if ( error ) {
 			inputRef.current?.focus();
