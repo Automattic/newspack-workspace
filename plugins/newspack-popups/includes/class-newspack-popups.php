@@ -1002,6 +1002,7 @@ final class Newspack_Popups {
 				'preview_archive'              => self::preview_archive_permalink(),
 				'custom_placements'            => Newspack_Popups_Custom_Placements::get_custom_placements(),
 				'overlay_placements'           => Newspack_Popups_Model::get_overlay_placements(),
+				'is_block_theme'               => Newspack_Popups_Model::is_block_theme(),
 				'popup_size_options'           => Newspack_Popups_Model::get_popup_size_options(),
 				'available_archive_page_types' => Newspack_Popups_Model::get_available_archive_page_types(),
 				'taxonomy'                     => self::NEWSPACK_POPUPS_TAXONOMY,
