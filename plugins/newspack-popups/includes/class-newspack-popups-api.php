@@ -223,6 +223,22 @@ final class Newspack_Popups_API {
 					],
 				]
 			);
+			register_rest_route(
+				'newspack-popups/v1',
+				// Underscores too, so a legacy test the page lists can be renamed.
+				'/ab-tests/(?P<test_id>[a-z0-9_-]+)/name',
+				[
+					'methods'             => \WP_REST_Server::EDITABLE,
+					'callback'            => [ __CLASS__, 'api_rename_ab_test' ],
+					'permission_callback' => [ __CLASS__, 'rename_ab_test_permission_callback' ],
+					'args'                => [
+						'name' => [
+							'type'     => 'string',
+							'required' => true,
+						],
+					],
+				]
+			);
 		}
 	}
 
@@ -234,6 +250,35 @@ final class Newspack_Popups_API {
 	 */
 	public static function api_get_ab_test_prompts( $request ) {
 		return rest_ensure_response( Newspack_Popups_AB_Tests::get_test_prompts( $request->get_param( 'test_id' ) ) );
+	}
+
+	/**
+	 * Rename an A/B test. Only its display name changes.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function api_rename_ab_test( $request ) {
+		$name = Newspack_Popups_AB_Tests::rename_test( $request->get_param( 'test_id' ), $request->get_param( 'name' ) );
+		if ( is_wp_error( $name ) ) {
+			return $name;
+		}
+		return rest_ensure_response(
+			[
+				'test_id' => Newspack_Popups_AB_Tests::resolve_test_id( $request->get_param( 'test_id' ) ),
+				'name'    => $name,
+			]
+		);
+	}
+
+	/**
+	 * Permission to rename a test: may the user change every prompt in it.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return bool
+	 */
+	public static function rename_ab_test_permission_callback( $request ) {
+		return Newspack_Popups_AB_Tests::can_rename_test( get_current_user_id(), (string) $request->get_param( 'test_id' ) );
 	}
 
 	/**
