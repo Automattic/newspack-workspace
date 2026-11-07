@@ -238,12 +238,17 @@ describe( 'A/B Tests tab', () => {
 		} );
 		render( <ABTests /> );
 		const card = await screen.findByRole( 'region', { name: 'Test inc' } );
-		fireEvent.click( within( card ).getByRole( 'button', { name: 'Test actions: Test inc' } ) );
+		const toggle = within( card ).getByRole( 'button', { name: 'Test actions: Test inc' } );
+		fireEvent.click( toggle );
+		// A browser leaves focus on the menu toggle when the dialog opens, and the
+		// dialog hands focus back to it on close; jsdom moves no focus on click.
+		toggle.focus();
 		fireEvent.click( screen.getByRole( 'menuitem', { name: 'Rename: Test inc' } ) );
 		expect( screen.getByRole( 'dialog', { name: 'Rename Test' } ) ).toBeInTheDocument();
 		fireEvent.change( screen.getByLabelText( 'Test name' ), { target: { value: ' ' } } );
 		expect( screen.getByRole( 'button', { name: 'Save' } ) ).toHaveAttribute( 'aria-disabled', 'true' );
 		fireEvent.change( screen.getByLabelText( 'Test name' ), { target: { value: 'Year-end appeal' } } );
+		screen.getByRole( 'button', { name: 'Save' } ).focus();
 		fireEvent.click( screen.getByRole( 'button', { name: 'Save' } ) );
 		const renamed = await screen.findByRole( 'region', { name: 'Year-end appeal' } );
 		await waitFor( () => expect( within( renamed ).getByRole( 'heading', { name: 'Year-end appeal' } ) ).toHaveFocus() );

@@ -44,7 +44,6 @@ const TestCard = ( { test, data, onRenamed } ) => {
 	const [ error, setError ] = useState( null );
 	const [ wasRefresh, setWasRefresh ] = useState( false );
 	const [ modal, setModal ] = useState( null );
-	const [ focusHeading, setFocusHeading ] = useState( false );
 	const headingId = useId();
 	const headingRef = useRef( null );
 
@@ -79,15 +78,6 @@ const TestCard = ( { test, data, onRenamed } ) => {
 			dateI18n( getSettings().formats.datetime, stats.source.fetched_at )
 		);
 	}
-
-	// Runs after the modal unmounts, so it wins over the modal handing focus
-	// back to the menu button.
-	useEffect( () => {
-		if ( focusHeading ) {
-			headingRef.current?.focus();
-			setFocusHeading( false );
-		}
-	}, [ focusHeading ] );
 
 	const load = refresh => {
 		setLoading( true );
@@ -399,7 +389,7 @@ const TestCard = ( { test, data, onRenamed } ) => {
 					onRenamed={ newName => {
 						setModal( null );
 						onRenamed( test.test_id, newName );
-						setFocusHeading( true );
+						headingRef.current?.focus();
 						speak( __( 'Test renamed.', 'newspack-plugin' ) );
 					} }
 					onClose={ () => setModal( null ) }
