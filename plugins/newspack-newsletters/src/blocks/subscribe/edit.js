@@ -111,7 +111,8 @@ export default function SubscribeEdit( {
 } ) {
 	const blockProps = useBlockProps();
 	const useSiteStyle = usesSiteButtonStyle( backgroundColor, textColor );
-	const buttonStyle = useSiteStyle ? undefined : { backgroundColor, color: textColor };
+	const isBlockTheme = !! window.newspackIsBlockTheme;
+	const buttonStyle = useSiteStyle ? undefined : { backgroundColor: backgroundColor ?? '#dd3333', color: textColor ?? '#ffffff' };
 	const [ editedState, setEditedState ] = useState( editedStateOptions[ 0 ].value );
 	const [ inFlight, setInFlight ] = useState( false );
 	const [ listConfig, setListConfig ] = useState( {} );
@@ -579,7 +580,7 @@ export default function SubscribeEdit( {
 										) }
 									</label>
 									<input type="email" placeholder={ placeholder || __( 'Your email address', 'newspack-newsletters' ) } />
-									<div className={ classnames( 'submit-button', { 'wp-element-button': useSiteStyle } ) } style={ buttonStyle }>
+									<div className={ classnames( 'submit-button', { 'wp-element-button': isBlockTheme } ) } style={ buttonStyle }>
 										<RichText
 											onChange={ value => setAttributes( { label: value } ) }
 											placeholder={ __( 'Sign up', 'newspack-newsletters' ) }
@@ -609,7 +610,7 @@ export default function SubscribeEdit( {
 									! ( 'custom' === afterSuccessBehavior && ! afterSuccessURL ) && (
 										<div
 											className={ classnames( 'newspack-newsletters-subscribe__continue submit-button', {
-												'wp-element-button': useSiteStyle,
+												'wp-element-button': isBlockTheme,
 											} ) }
 											style={ buttonStyle }
 										>
