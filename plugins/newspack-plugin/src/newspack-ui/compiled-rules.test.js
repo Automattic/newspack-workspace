@@ -50,7 +50,7 @@ describe( 'Newspack UI compiled rules', () => {
 		weights.forEach( weight => expect( weight ).toBe( HEADING_WEIGHT ) );
 	} );
 
-	it( 'the Google button resets typography and radius to Neutral values', () => {
+	it( 'the Google button resets typography to Neutral values and follows the button radius', () => {
 		const bodies = rulesFor( '.newspack-ui .newspack-ui__button--google-oauth' ).join( ';' );
 		[
 			[ 'button-font-family', 'var(--newspack-ui-font-family)' ],
@@ -60,9 +60,15 @@ describe( 'Newspack UI compiled rules', () => {
 			[ 'button-letter-spacing', 'normal' ],
 			[ 'button-text-transform', 'none' ],
 			[ 'button-white-space', 'nowrap' ],
-			[ 'radius-button', 'var(--newspack-ui-border-radius-l)' ],
 		].forEach( ( [ name, value ] ) => {
 			expect( bodies ).toContain( `--newspack-ui-${ name }: ${ value }` );
+		} );
+		expect( bodies ).not.toContain( '--newspack-ui-radius-button' );
+	} );
+
+	it( 'helper text, inline errors and badges read the body font', () => {
+		[ '.newspack-ui .newspack-ui__helper-text', '.newspack-ui .newspack-ui__inline-error', '.newspack-ui__badge' ].forEach( selector => {
+			expect( declarationsOf( selector, 'font-family' ) ).toEqual( [ 'var(--newspack-ui-font-family-body)' ] );
 		} );
 	} );
 } );
