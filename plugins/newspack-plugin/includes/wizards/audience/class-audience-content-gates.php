@@ -282,6 +282,17 @@ class Audience_Content_Gates extends Wizard {
 						'type'    => 'string',
 						'pattern' => '^(#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?)?$',
 					],
+					'text_color'           => [
+						'type'    => 'string',
+						'pattern' => '^(#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?)?$',
+					],
+					'button_text_color'    => [
+						'type'    => 'string',
+						'pattern' => '^(#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?)?$',
+					],
+					'shadow'               => [
+						'type' => 'boolean',
+					],
 				],
 			]
 		);
@@ -318,35 +329,46 @@ class Audience_Content_Gates extends Wizard {
 				'callback'            => [ $this, 'update_countdown_banner' ],
 				'permission_callback' => [ $this, 'api_permissions_check' ],
 				'args'                => [
-					'button_label'   => [
+					'button_label'      => [
 						'type' => 'string',
 					],
-					'cta_label'      => [
+					'cta_label'         => [
 						'type' => 'string',
 					],
-					'cta_product_id' => [
+					'cta_product_id'    => [
 						'type' => 'integer',
 					],
-					'cta_type'       => [
+					'cta_type'          => [
 						'type' => 'string',
 					],
-					'cta_url'        => [
+					'cta_url'           => [
 						'type' => 'string',
 					],
-					'enabled'        => [
+					'enabled'           => [
 						'type' => 'boolean',
 					],
-					'style'          => [
+					'style'             => [
 						'type' => 'string',
 						'enum' => Content_Banner_Style::STYLES,
 					],
-					'bg_color'       => [
+					'bg_color'          => [
 						'type'    => 'string',
 						'pattern' => '^(#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?)?$',
 					],
-					'button_color'   => [
+					'button_color'      => [
 						'type'    => 'string',
 						'pattern' => '^(#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?)?$',
+					],
+					'text_color'        => [
+						'type'    => 'string',
+						'pattern' => '^(#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?)?$',
+					],
+					'button_text_color' => [
+						'type'    => 'string',
+						'pattern' => '^(#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?)?$',
+					],
+					'shadow'            => [
+						'type' => 'boolean',
 					],
 				],
 			]
@@ -583,6 +605,15 @@ class Audience_Content_Gates extends Wizard {
 		}
 		if ( isset( $args['button_color'] ) ) {
 			Content_Gifting_CTA::set_button_color( $args['button_color'] );
+		}
+		if ( isset( $args['text_color'] ) ) {
+			Content_Gifting_CTA::set_text_color( $args['text_color'] );
+		}
+		if ( isset( $args['button_text_color'] ) ) {
+			Content_Gifting_CTA::set_button_text_color( $args['button_text_color'] );
+		}
+		if ( isset( $args['shadow'] ) ) {
+			Content_Gifting_CTA::set_shadow( $args['shadow'] );
 		}
 		return rest_ensure_response( Content_Gifting::get_settings() );
 	}

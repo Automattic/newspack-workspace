@@ -104,6 +104,11 @@ body.newspack-has-countdown-banner:has(.newspack-countdown-banner__cta:not(.news
 	}
 }
 
+body.newspack-is-gifted-post:has(.newspack-content-gifting__cta.is-style-site),
+body.newspack-has-countdown-banner:has(.newspack-countdown-banner__cta.is-style-site) {
+	--newspack-content-banner-cta-offset: 73px;
+}
+
 .newspack-content-gifting,
 .newspack-countdown-banner {
 	&__cta {
@@ -205,6 +210,49 @@ body.newspack-has-countdown-banner:has(.newspack-countdown-banner__cta:not(.news
 			}
 		}
 
+		&.is-style-site {
+			--newspack-content-banner-message-color: var(--newspack-content-banner-ink, var(--newspack-ui-color-text-muted));
+			--newspack-content-banner__cta__content__links--color: var(--newspack-content-banner-ink, var(--newspack-ui-color-text-muted));
+			background: var(--newspack-content-banner-bg, var(--newspack-ui-color-surface));
+			border-top: 1px solid var(--newspack-ui-color-border);
+			color: var(--newspack-content-banner-ink, var(--newspack-ui-color-text));
+			padding-left: var(--wp--style--root--padding-left, var(--newspack-ui-spacer-3));
+			padding-right: var(--wp--style--root--padding-right, var(--newspack-ui-spacer-3));
+
+			> .wrapper {
+				font-family: var(--newspack-ui-font-family-body);
+				margin-left: auto;
+				margin-right: auto;
+				max-width: var(--wp--style--global--wide-size, none);
+				width: 100%;
+			}
+
+			a:not(.newspack-ui__button) {
+				color: var(--newspack-content-banner-ink, var(--newspack-ui-color-link, var(--newspack-ui-color-text)));
+			}
+
+			.newspack-ui__button {
+				--newspack-ui-button-bg: var(--newspack-content-banner-button-bg, var(--newspack-ui-color-btn));
+				--newspack-ui-button-ink: var(--newspack-content-banner-button-ink, var(--newspack-ui-color-btn-ink));
+			}
+
+			&[style*="--newspack-content-banner-button-"] .newspack-ui__button {
+				--newspack-ui-button-bg-hover: color-mix(in oklab, var(--newspack-ui-button-bg) var(--newspack-ui-color-mix-hover), var(--newspack-ui-button-ink));
+				--newspack-ui-button-bg-pressed: color-mix(in oklab, var(--newspack-ui-button-bg) var(--newspack-ui-color-mix-pressed), var(--newspack-ui-button-ink));
+				--newspack-ui-button-focus: var(--newspack-ui-button-ink);
+
+				&:hover {
+					--newspack-ui-button-focus: var(--newspack-ui-button-ink);
+
+					color: var(--newspack-ui-button-ink);
+				}
+			}
+		}
+
+		&.has-no-shadow {
+			box-shadow: none;
+		}
+
 		.newspack-wizard & {
 			box-shadow: none;
 			position: relative;
@@ -213,7 +261,8 @@ body.newspack-has-countdown-banner:has(.newspack-countdown-banner__cta:not(.news
 			&-preview {
 				border: 1px solid var(--wp-components-color-gray-600, #{wp-colors.$gray-600});
 				border-radius: 2px;
-				padding: 3px;
+				overflow: clip;
+				padding: 32px 3px 3px;
 				pointer-events: none;
 			}
 		}
