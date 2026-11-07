@@ -547,7 +547,7 @@ final class Newspack_Popups_Model {
 				'close_button_background_color'  => '#00000000',
 				'enable_close_button_background' => false,
 				'overlay_color'                  => '#000000',
-				'overlay_opacity'                => 30,
+				'overlay_opacity'                => 50,
 				'overlay_size'                   => 'medium',
 				'no_overlay_background'          => false,
 				'manual_only'                    => false,

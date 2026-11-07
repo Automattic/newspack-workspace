@@ -11,7 +11,7 @@
 }
 
 amp-lightbox#republication-tracker-tool-modal {
-	background: var(--newspack-ui-color-overlay-70);
+	background: var(--newspack-ui-color-overlay-50, var(--wp--custom--color--overlay-50, #00000080));
 }
 
 amp-lightbox #republication-tracker-tool-modal-content {

@@ -1216,7 +1216,7 @@ final class Newspack_Popups {
 		update_post_meta( $post_id, 'close_button_background_color', '#00000000' );
 		update_post_meta( $post_id, 'enable_close_button_background', false );
 		update_post_meta( $post_id, 'overlay_color', '#000000' );
-		update_post_meta( $post_id, 'overlay_opacity', 30 );
+		update_post_meta( $post_id, 'overlay_opacity', 50 );
 		update_post_meta( $post_id, 'overlay_size', $overlay_size );
 		update_post_meta( $post_id, 'no_overlay_background', false );
 		update_post_meta( $post_id, 'placement', $placement );

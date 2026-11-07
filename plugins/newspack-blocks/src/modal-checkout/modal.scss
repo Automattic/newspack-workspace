@@ -54,7 +54,7 @@
 			z-index: 1;
 			inset: 0;
 			opacity: 0;
-			background: np-colors.$overlay-700;
+			background: var(--newspack-ui-color-overlay-50, var(--wp--custom--color--overlay-50, #{np-colors.$overlay-500}));
 			transition: opacity 0.1s linear;
 		}
 

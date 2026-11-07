@@ -85,7 +85,7 @@ body .jetpack-instant-search {
 	}
 
 	&__overlay {
-		background: var(--wp--custom--color--overlay-70) !important;
+		background: var(--newspack-ui-color-overlay-50, var(--wp--custom--color--overlay-50)) !important;
 		color: var(--jp--color--text);
 		font-family: var(--newspack-ui-font-family-body, var(--wp--preset--font-family--inter, system-ui, sans-serif));
 		font-size: var(--newspack-ui-font-size-s, 16px);
