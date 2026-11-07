@@ -131,6 +131,9 @@
 	--newspack-ui-color-body-bg: var(--newspack-ui-color-surface);
 	--newspack-ui-color-divider-start: var(--newspack-ui-color-surface);
 	--newspack-ui-color-divider-end: transparent;
+	--newspack-ui-elevation-ink: color-mix(in oklab, var(--newspack-ui-color-contrast) 60%, #{colors.$neutral-1000});
+	--newspack-ui-elevation-edge: transparent;
+	--newspack-ui-elevation-strength: 1;
 
 	// Specific assignments - form elements - buttons:
 	--newspack-ui-color-button-bg: var(--newspack-ui-color-accent);

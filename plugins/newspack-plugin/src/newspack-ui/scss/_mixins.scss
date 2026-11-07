@@ -1,36 +1,61 @@
-@use "../../../packages/colors/colors.module" as colors;
 @use "sass:list";
+@use "sass:map";
+@use "sass:string";
 @use "variables/breakpoints";
 
 $halo-tokens: "var(--newspack-ui-color-focus)", "var(--newspack-ui-color-input-border-focus)";
 
 $font-size-classes: ".newspack-ui__font--2xs, .newspack-ui__font--xs, .newspack-ui__font--s, .newspack-ui__font--m, .newspack-ui__font--l, .newspack-ui__font--xl, .newspack-ui__font--2xl, .newspack-ui__font--3xl, .newspack-ui__font--4xl, .newspack-ui__font--5xl, .newspack-ui__font--6xl";
 
-@mixin newspack-ui-elevation( $size: 1, $drop-shadow: false, $direction: down ) {
+$elevation-levels: (
+	1: ( ( 1px, 2px, 0, 6% ), ( 2px, 6px, -2px, 6% ) ),
+	2: ( ( 1px, 2px, 0, 8% ), ( 6px, 16px, -4px, 14% ) ),
+	3: ( ( 1px, 3px, 0, 8% ), ( 12px, 28px, -8px, 20% ) ),
+	4: ( ( 2px, 6px, 0, 8% ), ( 24px, 48px, -12px, 24% ) ),
+);
+
+$elevation-drop-levels: (
+	3: ( ( 1px, 1.5px, 8% ), ( 7px, 9px, 13% ) ),
+	4: ( ( 2px, 3px, 8% ), ( 14px, 16px, 16% ) ),
+);
+
+@function elevation-color( $share ) {
+	@return string.unquote("color-mix(in oklab, var(--newspack-ui-elevation-ink) calc(var(--newspack-ui-elevation-strength) * #{$share}), transparent)");
+}
+
+@mixin newspack-ui-elevation( $level: 1, $drop-shadow: false, $direction: down ) {
 	$y: 1;
 	@if $direction == up {
 		$y: -1;
 	}
 
 	@if $drop-shadow {
-		@if $size == 3 {
-			filter: drop-shadow(0 ($y * 1px) 1px colors.$overlay-050) drop-shadow(0 ($y * 12px) 18px colors.$overlay-200);
+		@if not map.has-key($elevation-drop-levels, $level) {
+			@error "newspack-ui-elevation: the drop-shadow form only supports levels 3 and 4, got #{$level}.";
 		}
-		@else {
-			@error "newspack-ui-elevation: the drop-shadow form only supports size 3, got #{$size}.";
+
+		$filter: string.unquote("drop-shadow(0 0 0.5px var(--newspack-ui-elevation-edge))");
+		@each $offset, $blur, $share in map.get($elevation-drop-levels, $level) {
+			$filter: list.append($filter, string.unquote("drop-shadow(0 #{$y * $offset} #{$blur} #{elevation-color($share)})"), $separator: space);
 		}
+
+		filter: $filter;
 	}
-	@else if $size == 1 {
-		box-shadow: 0 ($y * 1px) 2px colors.$overlay-000, 0 ($y * 8px) 24px -8px colors.$overlay-200;
-	}
-	@else if $size == 2 {
-		box-shadow: 0 ($y * 8px) 24px -8px colors.$overlay-400;
-	}
-	@else if $size == 3 {
-		box-shadow: 0 ($y * 1px) 2px colors.$overlay-050, 0 ($y * 16px) 40px -12px colors.$overlay-300;
-	}
-	@else if $size == 4 {
-		box-shadow: 0 0 20px colors.$overlay-050, 0 ($y * 25px) 30px colors.$overlay-100;
+	@else {
+		@if not map.has-key($elevation-levels, $level) {
+			@error "newspack-ui-elevation: unknown level #{$level}, expected 1 to 4.";
+		}
+
+		$shadow: list.append((), string.unquote("0 0 0 1px var(--newspack-ui-elevation-edge)"), $separator: comma);
+		@each $offset, $blur, $spread, $share in map.get($elevation-levels, $level) {
+			$layer: string.unquote("0 #{$y * $offset} #{$blur}");
+			@if $spread != 0 {
+				$layer: string.unquote("#{$layer} #{$spread}");
+			}
+			$shadow: list.append($shadow, string.unquote("#{$layer} #{elevation-color($share)}"), $separator: comma);
+		}
+
+		box-shadow: $shadow;
 	}
 }
 

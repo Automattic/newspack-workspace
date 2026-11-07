@@ -302,7 +302,7 @@ final class Status_Colors {
 	 * @param string $base The base hex color.
 	 * @return bool
 	 */
-	private static function is_dark( string $base ): bool {
+	public static function is_dark( string $base ): bool {
 		return '#ffffff' === Contrast::get_text_color( $base );
 	}
 
