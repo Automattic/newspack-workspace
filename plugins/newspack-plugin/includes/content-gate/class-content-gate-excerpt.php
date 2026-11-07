@@ -375,7 +375,9 @@ class Content_Gate_Excerpt {
 		// The overlay's "[&hellip;]" reaches here as the entity or as the character,
 		// depending on the WordPress version. Match only those two forms: decoding
 		// everything would also match an author's own "[...]", which wptexturize
-		// stores as "[&#8230;]", and drop their last free paragraph.
+		// renders as "[&#8230;]", and drop their last free paragraph. From 7.2 that
+		// prints as the character too, so there it still counts, which only
+		// shortens the excerpt.
 		$text = rtrim( wp_strip_all_tags( $teaser ) );
 		return str_ends_with( $text, '[&hellip;]' ) || str_ends_with( $text, '[…]' );
 	}
