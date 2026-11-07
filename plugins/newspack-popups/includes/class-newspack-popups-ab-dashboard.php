@@ -306,6 +306,7 @@ final class Newspack_Popups_AB_Dashboard {
 			'fetched_at' => null,
 			'cached'     => false,
 			'unit'       => 'readers',
+			'note'       => null,
 		];
 		$counts    = [];
 
@@ -322,6 +323,8 @@ final class Newspack_Popups_AB_Dashboard {
 				$source['fetched_at'] = $result['fetched_at'];
 				$source['cached']     = $result['cached'];
 				$source['unit']       = in_array( $counts['unit'] ?? '', [ 'readers', 'events' ], true ) ? $counts['unit'] : 'readers';
+				$note                 = $counts['note'] ?? null;
+				$source['note']       = is_string( $note ) && '' !== trim( $note ) ? sanitize_text_field( $note ) : null;
 			}
 		}
 

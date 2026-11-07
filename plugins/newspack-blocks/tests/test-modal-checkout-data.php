@@ -194,16 +194,25 @@ if ( ! class_exists( 'WC_Order_Item_Product' ) ) {
 		private $quantity;
 
 		/**
+		 * Variation ID.
+		 *
+		 * @var int
+		 */
+		private $variation_id;
+
+		/**
 		 * Constructor.
 		 *
-		 * @param int    $product_id Product ID.
-		 * @param string $subtotal   Line subtotal.
-		 * @param int    $quantity   Line-item quantity.
+		 * @param int    $product_id   Product ID.
+		 * @param string $subtotal     Line subtotal.
+		 * @param int    $quantity     Line-item quantity.
+		 * @param int    $variation_id Variation ID.
 		 */
-		public function __construct( $product_id, $subtotal = '25', $quantity = 1 ) {
-			$this->product_id = $product_id;
-			$this->subtotal   = $subtotal;
-			$this->quantity   = $quantity;
+		public function __construct( $product_id, $subtotal = '25', $quantity = 1, $variation_id = 0 ) {
+			$this->product_id   = $product_id;
+			$this->subtotal     = $subtotal;
+			$this->quantity     = $quantity;
+			$this->variation_id = $variation_id;
 		}
 
 		public function get_product_id() {
@@ -211,7 +220,7 @@ if ( ! class_exists( 'WC_Order_Item_Product' ) ) {
 		}
 
 		public function get_variation_id() {
-			return 0;
+			return $this->variation_id;
 		}
 
 		public function get_subtotal() {
@@ -478,6 +487,26 @@ class Newspack_Blocks_Modal_Checkout_Data_Test extends WP_UnitTestCase_Blocks {
 
 		$this->assertSame( 4, $data['quantity'] );
 		$this->assertSame( '40', $data['amount'], 'The order subtotal already reflects quantity and must not be multiplied again.' );
+	}
+
+	/**
+	 * The billing period lives on the variation, and the A/B subscription goal
+	 * counts checkouts by it, so an order must not report the parent's `once`.
+	 */
+	public function test_order_for_a_subscription_variation_reports_its_billing_period() {
+		$parent_id    = self::factory()->post->create();
+		$variation_id = self::factory()->post->create();
+		update_post_meta( $variation_id, '_subscription_period', 'month' );
+
+		$GLOBALS['newspack_blocks_test_products'] = [
+			$parent_id    => new WC_Product( $parent_id, 'variable-subscription', [ $variation_id ], '', 'Subscription' ),
+			$variation_id => new WC_Product( $variation_id, 'subscription_variation', [], '10', 'Monthly', $parent_id ),
+		];
+		$order = new WC_Order( 952, '', [ new WC_Order_Item_Product( $parent_id, '10', 1, $variation_id ) ] );
+
+		$data = Checkout_Data::get_checkout_data( $order );
+
+		$this->assertSame( 'month', $data['recurrence'] );
 	}
 
 	/**
