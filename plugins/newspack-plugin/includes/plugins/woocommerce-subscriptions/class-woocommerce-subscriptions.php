@@ -1151,6 +1151,66 @@ class WooCommerce_Subscriptions {
 	}
 
 	/**
+	 * Get the readers a change to a subscription can affect.
+	 *
+	 * A subscription isn't held only by its customer: a gift is held by its
+	 * recipient, and an enabled group by its members. Callers that refresh
+	 * per-reader data when a subscription changes use this to reach everyone whose
+	 * answer can change, instead of only the customer.
+	 *
+	 * The purchaser is always listed, even for a gift. A gift's buyer doesn't hold
+	 * it, but recomputing them still gives the right answer, and leaving them out
+	 * could leave a stale answer behind for the buyer.
+	 *
+	 * Anything that isn't a subscription yields the empty shape rather than an
+	 * error, because callers pass whatever a hook hands them.
+	 *
+	 * @param \WC_Subscription|int|mixed $subscription Subscription or ID.
+	 *
+	 * @return array{purchaser:int, recipient:int, members:int[]} Purchaser, gift recipient
+	 *         (0 when there is none), and group members. Members exclude the purchaser
+	 *         and the recipient, so a reader appears under only one key.
+	 */
+	public static function get_subscription_readers( $subscription ): array {
+		$readers = [
+			'purchaser' => 0,
+			'recipient' => 0,
+			'members'   => [],
+		];
+
+		if ( is_numeric( $subscription ) ) {
+			if ( ! function_exists( 'wcs_get_subscription' ) ) {
+				return $readers;
+			}
+			$subscription = \wcs_get_subscription( (int) $subscription );
+		}
+		if ( ! $subscription instanceof \WC_Subscription ) {
+			return $readers;
+		}
+
+		$readers['purchaser'] = (int) $subscription->get_customer_id();
+		$readers['recipient'] = WooCommerce_Subscriptions_Gifting::get_recipient_id( $subscription );
+
+		// Read the settings rather than ask `Group_Subscription::is_group_subscription()`,
+		// which can answer "no" on a My Account page, but only when WooCommerce
+		// Memberships is active (see its `is_group_subscription()`). That would hide
+		// members from a change made while a reader is on that page.
+		$group_settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
+		if ( ! empty( $group_settings['enabled'] ) ) {
+			$members = array_map( 'intval', (array) Group_Subscription::get_members( $subscription ) );
+			$members = array_filter(
+				$members,
+				function ( $member_id ) {
+					return $member_id > 0;
+				}
+			);
+			$readers['members'] = array_values( array_diff( array_unique( $members ), [ $readers['purchaser'], $readers['recipient'] ] ) );
+		}
+
+		return $readers;
+	}
+
+	/**
 	 * Get the user's active subscription for a product (simple, grouped, or variable).
 	 *
 	 * @param \WC_Product $product Product.
