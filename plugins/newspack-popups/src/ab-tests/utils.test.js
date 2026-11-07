@@ -59,9 +59,9 @@ describe( 'labels', () => {
 		expect( getCountLabel( undefined ) ).toBe( 'Readers' );
 	} );
 	it( 'names variants by role', () => {
-		expect( getVariantLabel( 'a' ) ).toBe( 'A (control)' );
-		expect( getVariantLabel( 'b' ) ).toBe( 'B (challenger)' );
-		expect( getVariantLabel( 'd' ) ).toBe( 'D (challenger)' );
+		expect( getVariantLabel( 'a' ) ).toBe( 'A' );
+		expect( getVariantLabel( 'b' ) ).toBe( 'B' );
+		expect( getVariantLabel( 'd' ) ).toBe( 'D' );
 	} );
 } );
 

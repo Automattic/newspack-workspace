@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __ } from '@wordpress/i18n';
 
 const DASH = '—';
 
@@ -77,14 +77,9 @@ export const getCountLabel = unit => ( unit === 'events' ? __( 'Views', 'newspac
 
 /**
  * @param {string} letter Variant letter.
- * @return {string} Label naming the variant's role.
+ * @return {string} The version's label: the letter alone.
  */
-export const getVariantLabel = letter =>
-	letter === 'a'
-		? // Translators: %s is the variant letter.
-		  sprintf( __( '%s (control)', 'newspack-popups' ), letter.toUpperCase() )
-		: // Translators: %s is the variant letter.
-		  sprintf( __( '%s (challenger)', 'newspack-popups' ), letter.toUpperCase() );
+export const getVariantLabel = letter => String( letter ).toUpperCase();
 
 /**
  * Badge intent for a test status.
