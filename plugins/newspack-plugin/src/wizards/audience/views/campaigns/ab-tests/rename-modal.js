@@ -48,7 +48,7 @@ const RenameModal = ( { test, onRenamed, onClose } ) => {
 	};
 
 	return (
-		<Modal title={ __( 'Rename test', 'newspack-plugin' ) } size="small" onRequestClose={ onClose }>
+		<Modal title={ __( 'Rename Test', 'newspack-plugin' ) } size="small" focusOnMount="firstContentElement" onRequestClose={ onClose }>
 			<form onSubmit={ save }>
 				<Stack direction="column" gap="xl">
 					{ error && (
@@ -73,7 +73,7 @@ const RenameModal = ( { test, onRenamed, onClose } ) => {
 							{ __( 'Cancel', 'newspack-plugin' ) }
 						</Button>
 						<Button variant="primary" type="submit" disabled={ ! canSave } isBusy={ isBusy } accessibleWhenDisabled __next40pxDefaultSize>
-							{ __( 'Rename', 'newspack-plugin' ) }
+							{ __( 'Save', 'newspack-plugin' ) }
 						</Button>
 					</Stack>
 				</Stack>

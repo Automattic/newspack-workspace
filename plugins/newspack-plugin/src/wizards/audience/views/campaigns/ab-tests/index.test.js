@@ -240,9 +240,13 @@ describe( 'A/B Tests tab', () => {
 		const card = await screen.findByRole( 'region', { name: 'Test inc' } );
 		fireEvent.click( within( card ).getByRole( 'button', { name: 'Test actions: Test inc' } ) );
 		fireEvent.click( screen.getByRole( 'menuitem', { name: 'Rename: Test inc' } ) );
+		expect( screen.getByRole( 'dialog', { name: 'Rename Test' } ) ).toBeInTheDocument();
+		fireEvent.change( screen.getByLabelText( 'Test name' ), { target: { value: ' ' } } );
+		expect( screen.getByRole( 'button', { name: 'Save' } ) ).toHaveAttribute( 'aria-disabled', 'true' );
 		fireEvent.change( screen.getByLabelText( 'Test name' ), { target: { value: 'Year-end appeal' } } );
-		fireEvent.click( screen.getByRole( 'button', { name: 'Rename' } ) );
-		expect( await screen.findByRole( 'region', { name: 'Year-end appeal' } ) ).toBeInTheDocument();
+		fireEvent.click( screen.getByRole( 'button', { name: 'Save' } ) );
+		const renamed = await screen.findByRole( 'region', { name: 'Year-end appeal' } );
+		await waitFor( () => expect( within( renamed ).getByRole( 'heading', { name: 'Year-end appeal' } ) ).toHaveFocus() );
 		expect( apiFetch ).toHaveBeenCalledWith( {
 			path: '/newspack-popups/v1/ab-tests/inc/name',
 			method: 'POST',
