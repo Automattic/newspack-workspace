@@ -563,14 +563,11 @@
 		button[type="submit"],
 		.submit-button {
 			border-radius: var(--newspack-ui-radius-button, 8px);
-			font-family: inherit;
 			font-size: var(--newspack-ui-font-size-body, 16px);
-			font-weight: var(--newspack-ui-font-weight-strong, 600);
 			line-height: var(--newspack-ui-line-height-body, 1.5);
 			margin: 0 calc(1px + var(--newspack-ui-spacer-5, 24px)) calc(1px + var(--newspack-ui-spacer-5, 24px));
 			padding: var(--newspack-ui-spacer-2, 12px) var(--newspack-ui-spacer-5, 24px);
 			position: relative;
-			transition: box-shadow motion.$duration-color motion.$ease-color, transform motion.$duration-press motion.$ease-out;
 			width: calc(100% - 2 * var(--newspack-ui-spacer-5, 24px) - 2px);
 			z-index: 1;
 
@@ -578,16 +575,25 @@
 				pointer-events: none;
 			}
 
+			&:where(:not(.wp-element-button)) {
+				font-family: inherit;
+				font-weight: var(--newspack-ui-font-weight-strong, 600);
+				transition: box-shadow motion.$duration-color motion.$ease-color, transform motion.$duration-press motion.$ease-out;
+			}
+
 			@include motion.hover {
-				&:hover {
+				&:where(:not(.wp-element-button)):hover {
 					--wpbnbd-overlay: inset 0 0 0 100vmax color-mix(in oklab, black calc(100% - var(--newspack-ui-color-mix-hover, 85%)), transparent);
 					box-shadow: var(--wpbnbd-overlay, 0 0 #0000);
 				}
 			}
 
-			&:active {
+			&:where(:not(.wp-element-button)):active {
 				--wpbnbd-overlay: inset 0 0 0 100vmax color-mix(in oklab, black calc(100% - var(--newspack-ui-color-mix-pressed, 75%)), transparent);
 				box-shadow: var(--wpbnbd-overlay, 0 0 #0000);
+			}
+
+			&:active {
 				transform: scale(motion.$press-scale);
 
 				@include motion.reduced-motion {
@@ -685,26 +691,32 @@
 
 			button[type="submit"],
 			.submit-button {
-				border-radius: var(--newspack-ui-radius-button, 8px);
-				border-width: 1px;
-				font-family: inherit;
-				font-size: var(--newspack-ui-font-size-body, 16px);
-				font-weight: var(--newspack-ui-font-weight-strong, 600);
-				line-height: var(--newspack-ui-line-height-body, 1.5);
 				margin: auto 0 0;
-				padding: calc(var(--newspack-ui-spacer-2, 12px) - 1px) calc(var(--newspack-ui-spacer-5, 24px) - 1px);
-				transition: background motion.$duration-color motion.$ease-color, border-color motion.$duration-color motion.$ease-color, box-shadow motion.$duration-color motion.$ease-color, color motion.$duration-color motion.$ease-color, transform motion.$duration-press motion.$ease-out;
+
+				&:where(:not(.wp-element-button)) {
+					border-radius: var(--newspack-ui-radius-button, 8px);
+					border-width: 1px;
+					font-size: var(--newspack-ui-font-size-body, 16px);
+					line-height: var(--newspack-ui-line-height-body, 1.5);
+					padding: calc(var(--newspack-ui-spacer-2, 12px) - 1px) calc(var(--newspack-ui-spacer-5, 24px) - 1px);
+					transition: background motion.$duration-color motion.$ease-color, border-color motion.$duration-color motion.$ease-color, box-shadow motion.$duration-color motion.$ease-color, color motion.$duration-color motion.$ease-color, transform motion.$duration-press motion.$ease-out;
+					font-family: inherit;
+					font-weight: var(--newspack-ui-font-weight-strong, 600);
+				}
 
 				@include motion.hover {
-					&:hover {
+					&:where(:not(.wp-element-button)):hover {
 						--wpbnbd-overlay: inset 0 0 0 100vmax color-mix(in oklab, black calc(100% - var(--newspack-ui-color-mix-hover, 85%)), transparent);
 						box-shadow: var(--wpbnbd-overlay, 0 0 #0000);
 					}
 				}
 
-				&:active {
+				&:where(:not(.wp-element-button)):active {
 					--wpbnbd-overlay: inset 0 0 0 100vmax color-mix(in oklab, black calc(100% - var(--newspack-ui-color-mix-pressed, 75%)), transparent);
 					box-shadow: var(--wpbnbd-overlay, 0 0 #0000);
+				}
+
+				&:active {
 					transform: scale(motion.$press-scale);
 
 					@include motion.reduced-motion {
@@ -712,11 +724,11 @@
 					}
 				}
 
-				&:focus {
+				&:focus:where(:not(.wp-element-button)) {
 					outline: none;
 				}
 
-				&:focus-visible {
+				&:focus-visible:where(:not(.wp-element-button)) {
 					border-color: currentcolor !important;
 
 					@include mixins.focus-edge( currentcolor, $halo: mixins.$focus-color, $inner: var(--wpbnbd-overlay, 0 0 #0000) );
@@ -727,18 +739,59 @@
 				button[type="submit"],
 				.submit-button {
 					@include motion.hover {
-						&:hover {
+						&:where(:not(.wp-element-button)):hover {
 							--wpbnbd-overlay: 0 0 #0000;
 							background: color-mix(in oklab, currentcolor 7%, var(--newspack-ui-color-surface, #{np-colors.$neutral-000})) !important;
 						}
 					}
 
-					&:active {
+					&:where(:not(.wp-element-button)):active {
 						--wpbnbd-overlay: 0 0 #0000;
 						background: color-mix(in oklab, currentcolor 13%, var(--newspack-ui-color-surface, #{np-colors.$neutral-000})) !important;
 					}
 				}
 			}
+		}
+	}
+}
+
+.wpbnbd.wpbnbd--site-theme:not(.is-style-modern) {
+	.wpbnbd__tiers__tier {
+		border-radius: var(--newspack-ui-radius-surface, 12px);
+	}
+
+	.wpbnbd__tiers__recommend-label {
+		border-radius: var(--newspack-ui-radius-badge, 4px);
+	}
+
+	.money-input {
+		border-radius: var(--newspack-ui-radius-control, 8px);
+	}
+
+	&:not(.is-style-minimal) {
+		.wpbnbd__tiers__selection .wpbnbd__button,
+		.tiers .tier-label {
+			border-radius: var(--newspack-ui-radius-control, 8px);
+		}
+	}
+
+	&.is-style-alternate {
+		border-radius: var(--newspack-ui-radius-surface, 12px);
+
+		.wpbnbd__tiers__selection {
+			border-radius: var(--newspack-ui-radius-surface, 12px);
+		}
+
+		.tab-container .freq-label.wpbnbd__button--active::after {
+			border-radius: var(--newspack-ui-radius-control, 8px);
+		}
+
+		.tab-container .freq-label:first-of-type {
+			border-top-left-radius: max(0px, calc(var(--newspack-ui-radius-surface, 12px) - 1px));
+		}
+
+		.tab-container .freq-label:last-of-type {
+			border-top-right-radius: max(0px, calc(var(--newspack-ui-radius-surface, 12px) - 1px));
 		}
 	}
 }

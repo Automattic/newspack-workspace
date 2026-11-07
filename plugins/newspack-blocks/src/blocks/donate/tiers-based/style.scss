@@ -1,5 +1,6 @@
 @use "newspack-colors" as np-colors;
 @use "newspack-motion" as motion;
+@use "../../../shared/sass/mixins";
 @use "../../../shared/sass/variables";
 
 .wpbnbd--tiers-based {
@@ -55,6 +56,9 @@
 							background: np-colors.$neutral-300;
 							margin: 0 5px;
 							transition: background-color motion.$duration-color motion.$ease-color;
+							&.is-active {
+								background: var(--newspack-ui-color-mark, var(--wp--preset--color--accent, #{np-colors.$neutral-900}));
+							}
 						}
 					}
 				}
@@ -104,12 +108,41 @@
 			}
 			button[type="submit"],
 			.submit-button {
-				border-radius: 3px;
-				border: 2px solid;
-				font-size: 14px;
-				line-height: 1;
-				padding: 10px 16px;
 				margin-bottom: 16px;
+
+				&:where(:not(.wp-element-button)) {
+					border-radius: 3px;
+					border: 2px solid;
+					font-size: 14px;
+					line-height: 1;
+					padding: 10px 16px;
+				}
+
+				&.wpbnbd__tiers__outline {
+					background: var(--wp--preset--color--base, #{np-colors.$neutral-000});
+					border: 1px solid currentcolor;
+					color: var(--newspack-ui-color-mark, var(--wp--preset--color--accent, #{np-colors.$neutral-900}));
+					padding: calc(var(--wp--custom--spacing--25, 0.75rem) - 1px) calc(var(--wp--custom--spacing--35, 1.25rem) - 1px);
+
+					@include motion.hover {
+						&:hover {
+							background: color-mix(in oklab, currentcolor var(--wp--custom--state--fill, 7%), var(--wp--preset--color--base, #{np-colors.$neutral-000}));
+						}
+					}
+
+					&:active:where(:not(:has([contenteditable="true"]))) {
+						background: color-mix(in oklab, currentcolor var(--wp--custom--state--fill-hover, 13%), var(--wp--preset--color--base, #{np-colors.$neutral-000}));
+					}
+
+					&:focus-visible {
+						@include mixins.focus-edge( currentcolor, $halo: var(--wp--custom--focus--color, #{mixins.$focus-color}) );
+						transition:
+							background-color motion.$duration-color motion.$ease-color,
+							color motion.$duration-color motion.$ease-color,
+							opacity motion.$duration-color motion.$ease-color,
+							transform motion.$duration-press motion.$ease-out;
+					}
+				}
 			}
 			&__description {
 				flex: 1;

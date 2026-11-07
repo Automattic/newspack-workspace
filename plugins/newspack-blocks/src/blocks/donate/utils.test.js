@@ -1,4 +1,4 @@
-import { getColorForContrast } from './utils';
+import { getColorForContrast, usesSiteButtonStyle } from './utils';
 
 describe( 'getColorForContrast', () => {
 	// Must stay in parity with Newspack_Blocks::get_color_for_contrast(), which
@@ -35,5 +35,25 @@ describe( 'getColorForContrast', () => {
 	it( 'expands 3-digit hex the same as 6-digit hex', () => {
 		expect( getColorForContrast( '#36c' ) ).toBe( getColorForContrast( '#3366cc' ) );
 		expect( getColorForContrast( '#fff' ) ).toBe( getColorForContrast( '#ffffff' ) );
+	} );
+} );
+
+describe( 'usesSiteButtonStyle', () => {
+	it( 'is true for the default color on a block theme, ignoring case', () => {
+		expect( usesSiteButtonStyle( '#dd3333', true ) ).toBe( true );
+		expect( usesSiteButtonStyle( '#DD3333', true ) ).toBe( true );
+	} );
+
+	it( 'treats a cleared or missing color like the default', () => {
+		expect( usesSiteButtonStyle( undefined, true ) ).toBe( true );
+		expect( usesSiteButtonStyle( '', true ) ).toBe( true );
+	} );
+
+	it( 'is false for a picked color', () => {
+		expect( usesSiteButtonStyle( '#6c6c6c', true ) ).toBe( false );
+	} );
+
+	it( 'is false off a block theme', () => {
+		expect( usesSiteButtonStyle( '#dd3333', false ) ).toBe( false );
 	} );
 } );

@@ -82,6 +82,11 @@ final class Newspack_Newsletters_Blocks {
 				'list_gates'         => (object) self::get_list_gates(),
 			]
 		);
+		wp_add_inline_script(
+			$handle,
+			'if ( undefined === window.newspackIsBlockTheme ) { window.newspackIsBlockTheme = ' . ( wp_is_block_theme() ? 'true' : 'false' ) . '; }',
+			'before'
+		);
 		wp_enqueue_style(
 			$handle,
 			plugins_url( '../dist/blocks.css', __FILE__ ),
