@@ -88,7 +88,7 @@ class ABStartTestTest extends WP_UnitTestCase_PageWithPopups {
 				[
 					'post_type'   => Newspack_Popups::NEWSPACK_POPUPS_CPT,
 					'post_status' => 'any',
-					'numberposts' => -1,
+					'numberposts' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Test fixture; counts a handful of prompts.
 					'fields'      => 'ids',
 				]
 			)
