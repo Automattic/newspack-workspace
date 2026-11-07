@@ -54,6 +54,8 @@ const TestCard = ( { test, data, onRenamed } ) => {
 	const canLoadStats = !! data.provider?.available && hasStarted;
 	const hasStats = hasStarted && stats && stats.source.state !== 'unavailable';
 	const ineligible = letters.filter( letter => false === test.variants[ letter ].eligible );
+	// Scheduled counts as live: readers see it once the date comes.
+	const publishedDuplicate = duplicates.some( duplicate => [ 'publish', 'future' ].includes( duplicate.status ) );
 	// An Incomplete test can get its B from the card while A is its only prompt:
 	// a start refuses a test with any other, and one whose A is gone has nothing to copy.
 	const canCreateVersionB = status === 'incomplete' && !! test.variants.a && false !== test.variants.a.eligible && 1 === test.prompt_count;
@@ -188,16 +190,29 @@ const TestCard = ( { test, data, onRenamed } ) => {
 				status="error"
 				isDismissible={ false }
 				politeness="polite"
-				spokenMessage={ sprintf(
-					// Translators: %s is the test name.
-					__( 'More than one prompt in %s is the same version. Unpublish the extra prompt.', 'newspack-plugin' ),
-					name
-				) }
+				spokenMessage={
+					publishedDuplicate
+						? sprintf(
+								// Translators: %s is the test name.
+								__( 'More than one prompt in %s is the same version. Unpublish the extra prompt.', 'newspack-plugin' ),
+								name
+						  )
+						: sprintf(
+								// Translators: %s is the test name.
+								__( 'More than one prompt in %s is the same version. Move the extra prompt to the trash.', 'newspack-plugin' ),
+								name
+						  )
+				}
 			>
-				{ __(
-					'More than one prompt in this test is the same version. Readers still see both, and results only count the first. Unpublish the extra prompt:',
-					'newspack-plugin'
-				) }{ ' ' }
+				{ publishedDuplicate
+					? __(
+							'More than one prompt in this test is the same version. Readers still see both, and results only count the first. Unpublish the extra prompt:',
+							'newspack-plugin'
+					  )
+					: __(
+							"More than one prompt in this test is the same version. The extra one isn't published, so readers don't see it. Move the extra prompt to the trash:",
+							'newspack-plugin'
+					  ) }{ ' ' }
 				{ duplicates.map( ( duplicate, index ) => {
 					const title = decodeEntities( duplicate.title );
 					return (
@@ -221,8 +236,8 @@ const TestCard = ( { test, data, onRenamed } ) => {
 				{ sprintf(
 					// Translators: %s is a list of version letters, such as "A" or "A and B".
 					_n(
-						"Version %s uses a manual or custom placement, which A/B tests don't support, so its results aren't reliable. Change its placement in the prompt editor.",
-						"Versions %s use a manual or custom placement, which A/B tests don't support, so their results aren't reliable. Change their placement in the prompt editor.",
+						"Version %s uses a manual or custom placement, or is an overlay set to Manual only, which A/B tests don't support, so its results aren't reliable. Change its placement or turn off Manual only in the prompt editor.",
+						"Versions %s use a manual or custom placement, or are overlays set to Manual only, which A/B tests don't support, so their results aren't reliable. Change their placement or turn off Manual only in the prompt editor.",
 						ineligible.length,
 						'newspack-plugin'
 					),

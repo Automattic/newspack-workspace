@@ -161,6 +161,32 @@ describe( 'A/B Tests tab', () => {
 		await waitFor( () => expect( apiFetch ).toHaveBeenCalledWith( { path: '/newspack-popups/v1/ab-tests/run/stats?refresh=1' } ) );
 	} );
 
+	it( 'says readers see both duplicates only when the extra prompt is published', async () => {
+		const duplicate = { ...prompt( 6, { status: 'draft', status_label: 'Draft' } ), letter: 'b' };
+		mockRoutes(
+			listResponse( [
+				test( 'drf', { a: prompt( 1 ), b: prompt( 2 ) }, { duplicates: [ duplicate ] } ),
+				test(
+					'pub',
+					{ a: prompt( 3 ), b: prompt( 4 ) },
+					{ duplicates: [ { ...duplicate, id: 7, status: 'publish', status_label: 'Published' } ] }
+				),
+			] )
+		);
+		render( <ABTests /> );
+		const draftCard = await screen.findByRole( 'region', { name: 'Test drf' } );
+		expect( within( draftCard ).getByText( /isn't published, so readers don't see it\./ ) ).toBeInTheDocument();
+		expect( within( draftCard ).queryByText( /Readers still see both/ ) ).not.toBeInTheDocument();
+		expect( within( cardFor( 'Test pub' ) ).getByText( /Readers still see both/ ) ).toBeInTheDocument();
+	} );
+
+	it( 'names Manual only as a reason a version is ineligible', async () => {
+		mockRoutes( listResponse( [ test( 'man', { a: prompt( 1, { eligible: false } ), b: prompt( 2 ) } ) ] ) );
+		render( <ABTests /> );
+		const card = await screen.findByRole( 'region', { name: 'Test man' } );
+		expect( within( card ).getByText( /^Version A uses a manual or custom placement, or is an overlay set to Manual only/ ) ).toBeInTheDocument();
+	} );
+
 	it( 'renames a test and updates its card', async () => {
 		mockRoutes( listResponse( [ test( 'inc', { a: prompt( 1 ) } ) ] ), {
 			'/newspack-popups/v1/ab-tests/inc/name': () => Promise.resolve( { test_id: 'inc', name: 'Year-end appeal' } ),
