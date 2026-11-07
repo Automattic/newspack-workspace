@@ -3,12 +3,11 @@
  */
 
 import { Button } from '@wordpress/components';
-import { DataViews } from '@wordpress/dataviews/wp';
 import { useMemo, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { envelope } from '@wordpress/icons';
 
-import { EmptyState } from 'newspack-components';
+import { DataViews, EmptyState } from 'newspack-components';
 import { getAdminUrl, getCptSlug } from '../../admin-globals';
 import LoadingState from '../../components/loading-state';
 import HeaderCount from '../../components/header-count';
@@ -33,7 +32,7 @@ const DEFAULT_VIEW = {
 	search: '',
 	filters: [],
 	titleField: 'title',
-	fields: [ 'status', 'date', 'send_date', 'send_list', 'author', 'public_page' ],
+	fields: [ 'status', 'date', 'send_list', 'author', 'public_page' ],
 };
 
 const DEFAULT_LAYOUTS = { table: {} };
@@ -120,8 +119,8 @@ export default function NewslettersListScreen() {
 					defaultLayouts={ DEFAULT_LAYOUTS }
 					isLoading={ isLoading }
 					getItemId={ item => String( item.id ) }
-					search
 					config={ DATAVIEWS_CONFIG }
+					inlineFilters
 					header={
 						<ItemsPerPage value={ view.perPage } onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) } />
 					}

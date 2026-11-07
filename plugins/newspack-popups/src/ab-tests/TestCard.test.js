@@ -1,7 +1,7 @@
 /**
  * The card's own decisions: when results load on open, when Refresh is offered,
- * how the ineligible-placement notice reads, and when the source's note shows.
- * The stats route is mocked, and
+ * how the ineligible-placement, duplicate and split notices read, and when the
+ * source's note shows. The stats route is mocked, and
  * `@wordpress/ui` is stubbed so the tests read the card's logic, not its layout.
  */
 
@@ -64,19 +64,19 @@ describe( 'TestCard', () => {
 	it( 'loads results on open for a started test with a stats source, and offers Refresh', async () => {
 		render( <TestCard test={ test } data={ data } /> );
 		await waitFor( () => expect( apiFetch ).toHaveBeenCalledWith( { path: '/newspack-popups/v1/ab-tests/hero/stats' } ) );
-		expect( await screen.findByRole( 'button', { name: 'Refresh' } ) ).toBeTruthy();
+		expect( await screen.findByRole( 'button', { name: 'Refresh results: hero' } ) ).toBeTruthy();
 	} );
 
 	it( 'does not load, and hides Refresh, when no stats source is connected', () => {
 		render( <TestCard test={ test } data={ { ...data, provider: { available: false } } } /> );
 		expect( apiFetch ).not.toHaveBeenCalled();
-		expect( screen.queryByRole( 'button', { name: 'Refresh' } ) ).toBeNull();
+		expect( screen.queryByRole( 'button', { name: 'Refresh results: hero' } ) ).toBeNull();
 	} );
 
 	it( 'does not load, and hides Refresh, for a test that has not started', () => {
 		render( <TestCard test={ { ...test, started_at: null } } data={ data } /> );
 		expect( apiFetch ).not.toHaveBeenCalled();
-		expect( screen.queryByRole( 'button', { name: 'Refresh' } ) ).toBeNull();
+		expect( screen.queryByRole( 'button', { name: 'Refresh results: hero' } ) ).toBeNull();
 	} );
 
 	it( 'names each version on an unsupported placement, singular and plural', () => {
@@ -120,5 +120,32 @@ describe( 'TestCard', () => {
 		render( <TestCard test={ test } data={ data } /> );
 		await waitFor( () => expect( screen.getByText( 'No source.' ) ).not.toBeNull() );
 		expect( screen.queryByText( 'Counts update once a day.' ) ).toBeNull();
+	} );
+
+	it( 'says readers see both duplicates only when the extra prompt is published', () => {
+		const quiet = { ...data, provider: { available: false } };
+		const duplicate = { id: 3, title: 'Extra', letter: 'b', status: 'draft', status_label: 'Draft', eligible: true };
+		const { unmount } = render( <TestCard test={ { ...test, duplicates: [ duplicate ] } } data={ quiet } /> );
+		expect( screen.getByText( /isn't published, so readers don't see it\./ ) ).toBeTruthy();
+		expect( screen.queryByText( /Readers still see both/ ) ).toBeNull();
+		unmount();
+
+		render( <TestCard test={ { ...test, duplicates: [ { ...duplicate, status: 'publish', status_label: 'Published' } ] } } data={ quiet } /> );
+		expect( screen.getByText( /Readers still see both/ ) ).toBeTruthy();
+	} );
+
+	it( 'labels the split as planned until every version is published', () => {
+		const quiet = { ...data, provider: { available: false } };
+		const { unmount } = render(
+			<TestCard
+				test={ { ...test, variants: { ...test.variants, b: { ...test.variants.b, status: 'draft', status_label: 'Draft' } } } }
+				data={ quiet }
+			/>
+		);
+		expect( screen.getByRole( 'img', { name: /^Planned split once every version is published/ } ) ).toBeTruthy();
+		unmount();
+
+		render( <TestCard test={ test } data={ quiet } /> );
+		expect( screen.getByRole( 'img', { name: /^Readers who see each version/ } ) ).toBeTruthy();
 	} );
 } );

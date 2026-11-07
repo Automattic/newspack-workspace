@@ -20,17 +20,21 @@ import './style.scss';
 const clampTitleLevel = ( level: unknown ): HeadingLevel | undefined =>
 	Number.isFinite( level ) ? ( Math.min( 6, Math.max( 1, Math.round( level as number ) ) ) as HeadingLevel ) : undefined;
 
-const Root = ( { children, className, gap = 'xl', hideSingleTitle = false, titleLevel }: CollapsibleGroupProps ) => {
+const Root = ( { children, className, gap = 'xl', hideSingleTitle = false, titleLevel, titleSize = 'lg' }: CollapsibleGroupProps ) => {
 	const inheritedTitleLevel = useTitleLevel();
 	const items = Children.toArray( children ).filter( isValidElement ) as React.ReactElement< CollapsibleGroupItemProps >[];
 	const hideTitle = hideSingleTitle && items.length === 1;
 
 	return (
 		<TitleLevelContext.Provider value={ clampTitleLevel( titleLevel ) ?? inheritedTitleLevel }>
-			<Stack className={ classNames( 'newspack-collapsible-group', className ) } direction="column" gap={ gap }>
+			<Stack
+				className={ classNames( 'newspack-collapsible-group', `newspack-collapsible-group--title-${ titleSize }`, className ) }
+				direction="column"
+				gap={ gap }
+			>
 				{ items.map( ( item, index ) => (
 					<Fragment key={ item.key }>
-						{ hideTitle ? cloneElement( item, { title: undefined } ) : item }
+						{ hideTitle ? cloneElement( item, { description: undefined, title: undefined } ) : item }
 						{ index < items.length - 1 && <Divider variant="tertiary" marginBottom={ 0 } marginTop={ 0 } /> }
 					</Fragment>
 				) ) }

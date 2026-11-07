@@ -9,8 +9,10 @@
  * WordPress dependencies.
  */
 import { __, _n, sprintf } from '@wordpress/i18n';
-import { useMemo, useState } from '@wordpress/element';
+import { useEffect, useMemo, useState } from '@wordpress/element';
+import { useDispatch } from '@wordpress/data';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
+import { Stack } from '@wordpress/ui';
 import { people } from '@wordpress/icons';
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 import { __experimentalHStack as HStack, CheckboxControl } from '@wordpress/components';
@@ -21,10 +23,11 @@ import { __experimentalHStack as HStack, CheckboxControl } from '@wordpress/comp
 import { Button, DataViews, Modal, Notice, StatusIndicator, Waiting } from '../../../../../../../packages/components/src';
 import EmptyState from '../../../../../../../packages/components/src/empty-state';
 import type { Action, Field, View } from '../../../../../../../packages/components/src/dataviews';
-import WizardsTab from '../../../../../wizards-tab';
-import WizardSection from '../../../../../wizards-section';
+import { WIZARD_STORE_NAMESPACE } from '../../../../../../../packages/components/src/wizard/store';
+import Router from '../../../../../../../packages/components/src/proxied-imports/router';
+import { formatCount } from '../../../../../../../packages/components/src/breadcrumbs/format-count';
 import { registerTab } from '../registry';
-import { allSubscriptionsLabel, SEARCH_ENDPOINTS } from '../../constants';
+import { ALL_SUBSCRIPTIONS_FILTER_VALUE, allSubscriptionsLabel, SEARCH_ENDPOINTS } from '../../constants';
 import { useRestrictions } from './use-restrictions';
 import { useNames } from '../../use-names';
 import { excludedLabel, leadingProductNames, moreProductsLabel, scopeLabel } from './labels';
@@ -38,11 +41,15 @@ const DEFAULT_VIEW = {
 	perPage: 20,
 	sort: { field: 'created_at', direction: 'desc' as const },
 	search: '',
-	fields: [ 'availableTo', 'status', 'created_at' ],
+	fields: [ 'status', 'availableTo', 'created_at' ],
 	filters: [],
 	layout: {},
 	titleField: 'products',
 };
+
+const { useLocation } = Router;
+
+const SECTION_LABEL = __( 'Subscriber-only products', 'newspack-plugin' );
 
 function SubscriberOnlyProducts() {
 	const { restrictions, settings, loading, saving, error, saveRestriction, deleteRestriction, setActive, saveSettings } = useRestrictions();
@@ -50,6 +57,8 @@ function SubscriberOnlyProducts() {
 	const [ deleting, setDeleting ] = useState< Restriction | null >( null );
 	const [ settingsOpen, setSettingsOpen ] = useState( false );
 	const [ view, setView ] = useState( DEFAULT_VIEW );
+	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
+	const { pathname } = useLocation();
 
 	// Resolve the IDs the rules store into names for the list.
 	const productIds = useMemo( () => restrictions.flatMap( rule => rule.product_ids || [] ), [ restrictions ] );
@@ -97,13 +106,16 @@ function SubscriberOnlyProducts() {
 				id: 'availableTo',
 				label: __( 'Available to', 'newspack-plugin' ),
 				enableSorting: false,
-				// The cell's own text is what the list's search matches, so a rule open
-				// to every subscriber stays findable by the name the editor gives it.
-				enableGlobalSearch: true,
+				elements: [
+					{ value: ALL_SUBSCRIPTIONS_FILTER_VALUE, label: allSubscriptionsLabel() },
+					...[ ...new Set( subscriptionIds ) ].map( id => ( { value: id, label: subscriptionNames[ id ] || `#${ id }` } ) ),
+				],
+				filterBy: { operators: [ 'isAny' ] },
+				// Ids rather than names, so the filter keeps two same-named subscriptions
+				// apart. A rule open to every subscriber names none, so it takes the
+				// sentinel instead and stays filterable.
 				getValue: ( { item }: { item: Restriction } ) =>
-					'all' === item.subscription_targeting
-						? allSubscriptionsLabel()
-						: ( item.subscription_product_ids || [] ).map( id => subscriptionNames[ id ] || '' ).join( ', ' ),
+					'all' === item.subscription_targeting ? [ ALL_SUBSCRIPTIONS_FILTER_VALUE ] : item.subscription_product_ids || [],
 				render: ( { item }: { item: Restriction } ) => {
 					if ( 'all' === item.subscription_targeting ) {
 						return <span>{ allSubscriptionsLabel() }</span>;
@@ -111,6 +123,18 @@ function SubscriberOnlyProducts() {
 					const names = ( item.subscription_product_ids || [] ).map( id => subscriptionNames[ id ] ).filter( Boolean );
 					return <span>{ names.length ? names.join( ', ' ) : __( 'No subscriptions', 'newspack-plugin' ) }</span>;
 				},
+			},
+			{
+				id: 'available_to_names',
+				// What the search matches, since Available to has to hold ids for its filter.
+				label: __( 'Available to (names)', 'newspack-plugin' ),
+				enableHiding: false,
+				enableSorting: false,
+				enableGlobalSearch: true,
+				getValue: ( { item }: { item: Restriction } ) =>
+					'all' === item.subscription_targeting
+						? allSubscriptionsLabel()
+						: ( item.subscription_product_ids || [] ).map( id => subscriptionNames[ id ] || '' ).join( ', ' ),
 			},
 			{
 				id: 'status',
@@ -134,7 +158,7 @@ function SubscriberOnlyProducts() {
 				enableSorting: true,
 			},
 		],
-		[ productNames, categoryNames, subscriptionNames ]
+		[ productNames, categoryNames, subscriptionNames, subscriptionIds ]
 	);
 
 	const actions: Action< Restriction >[] = useMemo(
@@ -167,6 +191,32 @@ function SubscriberOnlyProducts() {
 	);
 
 	const total = paginationInfo?.totalItems ?? 0;
+	const hasRestrictions = restrictions.length > 0;
+
+	useEffect( () => {
+		if ( loading || ! hasRestrictions ) {
+			setHeaderData( { sectionName: SECTION_LABEL, actions: [] } );
+			return;
+		}
+		setHeaderData( {
+			sectionName: [
+				{
+					label: SECTION_LABEL,
+					count: total,
+					countLabel: sprintf(
+						/* translators: %s: number of restrictions. */
+						_n( '%s restriction', '%s restrictions', total, 'newspack-plugin' ),
+						formatCount( total )
+					),
+				},
+			],
+			actions: [
+				{ type: 'secondary', label: __( 'Settings', 'newspack-plugin' ), action: () => setSettingsOpen( true ) },
+				{ type: 'primary', label: __( 'Add Restriction', 'newspack-plugin' ), mobileIcon: 'plus', action: () => setEditing( {} ) },
+			],
+		} );
+		// `pathname` re-asserts the header after the wizard resets it on a route change.
+	}, [ setHeaderData, loading, hasRestrictions, total, pathname ] );
 
 	const handleSave = ( rule: Partial< Restriction > ) => {
 		saveRestriction( rule ).then( ( ok: boolean ) => {
@@ -188,69 +238,51 @@ function SubscriberOnlyProducts() {
 	};
 
 	return (
-		<WizardsTab
-			title={
-				restrictions.length
-					? sprintf(
-							/* translators: %d: number of restrictions. */
-							_n( 'Subscriber-only products (%d)', 'Subscriber-only products (%d)', total, 'newspack-plugin' ),
-							total
-					  )
-					: // The empty state carries its own heading, and the breadcrumb already names the screen.
-					  undefined
-			}
-		>
-			<WizardSection>
-				{ error && <Notice isError noticeText={ error } /> }
-				{ loading ? (
-					<Waiting />
-				) : (
-					<>
-						{ restrictions.length ? (
-							<>
-								<HStack justify="flex-end" spacing={ 2 }>
-									<Button variant="secondary" onClick={ () => setSettingsOpen( true ) }>
-										{ __( 'Settings', 'newspack-plugin' ) }
-									</Button>
-									<Button variant="primary" onClick={ () => setEditing( {} ) }>
-										{ __( 'Add Restriction', 'newspack-plugin' ) }
-									</Button>
-								</HStack>
-								{ /* The DataViews wrapper isn't generic — its props resolve to
-								     `unknown`, so the typed definitions above are cast at the
-								     boundary rather than being written untyped. */ }
-								<DataViews
-									data={ processedData }
-									fields={ fields as unknown as Field< unknown >[] }
-									view={ view as View }
-									onChangeView={ nextView => setView( nextView as typeof view ) }
-									actions={ actions as unknown as Action< unknown >[] }
-									paginationInfo={ paginationInfo }
-									getItemId={ ( item: unknown ) => ( item as Restriction ).id }
-									defaultLayouts={ { table: {} } }
-									isLoading={ saving }
-								/>
-							</>
-						) : (
-							<EmptyState.Root>
-								<EmptyState.Header
-									icon={ people }
-									title={ __( 'Get started with subscriber-only products', 'newspack-plugin' ) }
-									description={ __(
-										'Make selected products purchasable only by subscribers. Readers still see the product and its price — only the purchase is blocked.',
-										'newspack-plugin'
-									) }
-								/>
-								<EmptyState.Actions>
-									<Button variant="primary" onClick={ () => setEditing( {} ) }>
-										{ __( 'Add Restriction', 'newspack-plugin' ) }
-									</Button>
-								</EmptyState.Actions>
-							</EmptyState.Root>
-						) }
-					</>
-				) }
-			</WizardSection>
+		<div className="newspack-subscriber-only">
+			{ error && <Notice isError noticeText={ error } /> }
+			{ loading && (
+				<div className="newspack-wizard__loader">
+					<Stack direction="column" align="center" gap="sm">
+						<Waiting noMargin />
+						<strong>{ __( 'Fetching…', 'newspack-plugin' ) }</strong>
+					</Stack>
+				</div>
+			) }
+			{ ! loading && hasRestrictions && (
+				// The DataViews wrapper isn't generic — its props resolve to `unknown`,
+				// so the typed definitions above are cast at the boundary.
+				<DataViews
+					data={ processedData }
+					fields={ fields as unknown as Field< unknown >[] }
+					view={ view as View }
+					onChangeView={ nextView => setView( nextView as typeof view ) }
+					actions={ actions as unknown as Action< unknown >[] }
+					paginationInfo={ paginationInfo }
+					getItemId={ ( item: unknown ) => ( item as Restriction ).id }
+					defaultLayouts={ { table: {} } }
+					isLoading={ saving }
+					inlineFilters
+				/>
+			) }
+			{ ! loading && ! hasRestrictions && (
+				<div className="newspack-subscriber-only__empty">
+					<EmptyState.Root>
+						<EmptyState.Header
+							icon={ people }
+							title={ __( 'Get started with subscriber-only products', 'newspack-plugin' ) }
+							description={ __(
+								'Make selected products purchasable only by subscribers. Readers still see the product and its price — only the purchase is blocked.',
+								'newspack-plugin'
+							) }
+						/>
+						<EmptyState.Actions>
+							<Button variant="primary" onClick={ () => setEditing( {} ) }>
+								{ __( 'Add Restriction', 'newspack-plugin' ) }
+							</Button>
+						</EmptyState.Actions>
+					</EmptyState.Root>
+				</div>
+			) }
 
 			{ editing && <RestrictionEditor restriction={ editing } saving={ saving } onSave={ handleSave } onClose={ () => setEditing( null ) } /> }
 
@@ -276,7 +308,7 @@ function SubscriberOnlyProducts() {
 			{ settingsOpen && (
 				<SettingsModal settings={ settings } saving={ saving } onSave={ saveSettings } onClose={ () => setSettingsOpen( false ) } />
 			) }
-		</WizardsTab>
+		</div>
 	);
 }
 
@@ -324,4 +356,4 @@ function SettingsModal( { settings, saving, onSave, onClose }: SettingsModalProp
 	);
 }
 
-registerTab( 'subscriber-only', { render: () => <SubscriberOnlyProducts /> } );
+registerTab( 'subscriber-only', { render: () => <SubscriberOnlyProducts />, fullWidth: true, rendersLeafCrumb: true } );

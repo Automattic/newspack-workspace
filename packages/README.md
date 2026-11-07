@@ -7,6 +7,7 @@ This directory contains reusable packages for Newspack projects.
 - `colors/` - A collection of color tokens for Newspack projects
 - `components/` - A collection of React components for Newspack projects
 - `icons/` - A collection of custom SVG icons for Newspack projects
+- `motion/` - Shared motion tokens (easing curves, durations) for Newspack projects
 
 ## Development
 

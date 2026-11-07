@@ -1,9 +1,11 @@
 @use "newspack-colors" as np-colors;
+@use "newspack-motion" as motion;
 @use "../../shared/sass/variables";
 @use "../../shared/sass/mixins";
 @use "../../shared/sass/preview";
 
 .wp-block-newspack-blocks-carousel {
+	--swiper-wrapper-transition-timing-function: #{motion.$ease-out};
 	position: relative;
 	margin-top: 0;
 	max-width: 100%;
@@ -17,11 +19,16 @@
 		overflow-wrap: break-word;
 		a {
 			color: np-colors.$neutral-000;
+			transition: color motion.$duration-color motion.$ease-color;
 
-			&:active,
-			&:focus,
-			&:hover {
-				color: rgba(np-colors.$neutral-000, 0.75);
+			@include motion.hover {
+				&:hover {
+					color: color-mix(in oklab, np-colors.$neutral-000 var(--newspack-ui-color-mix-hover, 85%), transparent);
+				}
+			}
+
+			&:active {
+				color: color-mix(in oklab, np-colors.$neutral-000 var(--newspack-ui-color-mix-pressed, 75%), transparent);
 			}
 		}
 		.entry-title {
@@ -70,11 +77,16 @@
 				color: np-colors.$neutral-000;
 				font-weight: bold;
 				text-decoration: none;
+				transition: color motion.$duration-color motion.$ease-color;
 
-				&:active,
-				&:focus,
-				&:hover {
-					color: rgba(np-colors.$neutral-000, 0.75);
+				@include motion.hover {
+					&:hover {
+						color: color-mix(in oklab, np-colors.$neutral-000 var(--newspack-ui-color-mix-hover, 85%), transparent);
+					}
+				}
+
+				&:active {
+					color: color-mix(in oklab, np-colors.$neutral-000 var(--newspack-ui-color-mix-pressed, 75%), transparent);
 				}
 			}
 		}
@@ -134,27 +146,43 @@
 		position: relative;
 	}
 	.swiper-pagination-bullet {
-		background: np-colors.$neutral-1000;
+		background: color-mix(in oklab, np-colors.$neutral-1000 65.5%, transparent);
 		border-radius: 6px;
 		display: inline-block;
 		height: 12px;
 		margin: 0 4px;
-		opacity: 0.5;
+		opacity: 1;
 		padding: 0;
 		transition:
-			box-shadow 250ms,
-			opacity 250ms,
-			width 250ms;
+			background-color motion.$duration-indicator motion.$ease-out,
+			box-shadow motion.$duration-color motion.$ease-color,
+			width motion.$duration-indicator motion.$ease-out;
 		width: 12px;
+
+		@include motion.reduced-motion {
+			transition:
+				background-color motion.$duration-indicator motion.$ease-out,
+				box-shadow motion.$duration-color motion.$ease-color;
+		}
+
 		&:focus {
 			box-shadow:
 				0 0 0 2px np-colors.$neutral-000,
 				0 0 0 4px np-colors.$neutral-100;
 			outline: 0;
 		}
+		&:focus-visible {
+			transition:
+				background-color motion.$duration-indicator motion.$ease-out,
+				width motion.$duration-indicator motion.$ease-out;
+
+			@include motion.reduced-motion {
+				transition: background-color motion.$duration-indicator motion.$ease-out;
+			}
+		}
 		&.swiper-pagination-bullet-active,
 		&[selected] {
-			opacity: 1;
+			background: np-colors.$neutral-1000;
 			outline: 0;
 			width: 24px;
 		}
@@ -177,18 +205,31 @@
 		margin: 0;
 		padding: 0;
 		transition:
-			background-color 250ms,
-			box-shadow 250ms;
+			background-color motion.$duration-color motion.$ease-color,
+			box-shadow motion.$duration-color motion.$ease-color,
+			transform motion.$duration-press motion.$ease-out;
 		width: 48px;
-		&:focus,
-		&:hover {
-			background-color: np-colors.$overlay-700;
+		@include motion.hover {
+			&:hover {
+				background-color: color-mix(in oklab, np-colors.$overlay-500 var(--newspack-ui-color-mix-hover, 85%), black);
+			}
 		}
 		&:focus {
 			box-shadow:
 				inset 0 0 0 2px np-colors.$overlay-700,
 				inset 0 0 0 4px np-colors.$neutral-000;
 			outline: 0;
+		}
+		&:active {
+			background-color: color-mix(in oklab, np-colors.$overlay-500 var(--newspack-ui-color-mix-pressed, 75%), black);
+			transform: scale(motion.$press-scale);
+
+			@include motion.reduced-motion {
+				transform: none;
+			}
+		}
+		&:focus-visible {
+			transition: none;
 		}
 	}
 	.swiper-button-next,
@@ -298,6 +339,14 @@
 	&.wp-block-newspack-blocks-carousel__autoplay-playing .swiper-button-play,
 	.swiper-button-pause {
 		display: none;
+	}
+	@include motion.reduced-motion {
+		&:not(.swiper-initialized, :has(.swiper-initialized)) .swiper-button-play {
+			display: block;
+		}
+		&:not(.swiper-initialized, :has(.swiper-initialized)) .swiper-button-pause {
+			display: none;
+		}
 	}
 
 	// Make sure Jetpack Content Options don't affect the block.

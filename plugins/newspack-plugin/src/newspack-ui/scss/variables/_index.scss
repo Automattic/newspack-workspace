@@ -2,6 +2,7 @@
 @use "colors";
 @use "fonts";
 @use "spacing";
+@use "newspack-motion" as motion;
 
 // TODO: Some misc styles that need a home!
 :root {
@@ -19,4 +20,28 @@
 	--newspack-ui-border-radius-s: 4px;
 	--newspack-ui-border-radius-xs: 3px;
 	--newspack-ui-border-radius-2xs: 2px;
+
+	--newspack-ui-width-content: 720px;
+	--newspack-ui-width-sidebar: var(--newspack-ui-width-xs);
+
+	--newspack-ui-radius-control: var(--newspack-ui-border-radius-l);
+	--newspack-ui-radius-button: var(--newspack-ui-border-radius-l);
+	--newspack-ui-radius-badge: var(--newspack-ui-border-radius-s);
+	--newspack-ui-radius-surface: var(--newspack-ui-border-radius-2xl);
+	--newspack-ui-radius-sheet: 16px;
+	--newspack-ui-radius-pill: 999px;
+
+	--newspack-ui-touch-target: 44px;
+	--newspack-ui-target-size: var(--newspack-ui-spacer-8);
+
+	--newspack-ui-focus-halo-width: 3px;
+	--newspack-ui-focus-halo-mix: 30%;
+
+	@include motion.custom-properties(newspack-ui);
+	--newspack-ui-duration-snackbar: 400ms;
+	--newspack-ui-ease-snackbar: ease;
+
+	@media ( pointer: coarse ) {
+		--newspack-ui-target-size: var(--newspack-ui-touch-target);
+	}
 }

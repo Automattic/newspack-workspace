@@ -1,3 +1,5 @@
+@use "newspack-motion" as motion;
+
 .wp-block-newspack-collections {
 	// Categories.
 	.wp-block-newspack-collections__categories {
@@ -8,14 +10,21 @@
 			display: inline-block;
 			margin-right: 0.5em;
 			padding: 0.5em;
-			background: var(--newspack-ui-color-neutral-10);
+			background: var(--newspack-ui-color-neutral-fill);
 			font-size: var(--newspack-ui-font-size-2xs);
 			text-decoration: none;
 			border-radius: var(--newspack-ui-border-radius-s);
 			text-transform: uppercase;
+			transition: background-color motion.$duration-color motion.$ease-color;
 
-			&:hover {
-				background: var(--newspack-ui-color-neutral-20);
+			@include motion.hover {
+				&:hover {
+					background: var(--newspack-ui-color-neutral-fill-hover);
+				}
+			}
+
+			&:active {
+				background: var(--newspack-ui-color-neutral-fill-pressed);
 			}
 
 			&:last-child {

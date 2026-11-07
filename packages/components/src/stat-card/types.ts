@@ -17,6 +17,8 @@ export type StatCardLabels = {
 	up: string;
 	/** Spoken for a down arrow. */
 	down: string;
+	/** Spoken for a delta with no change to point at. */
+	unchanged: string;
 };
 
 export type StatCardRootProps = DivProps & {
@@ -32,6 +34,8 @@ export type StatCardRootProps = DivProps & {
 export type StatCardLabelProps = DivProps & {
 	/** Rendered beside the heading rather than inside it, so a control here stays out of the document outline. */
 	suffix?: React.ReactNode;
+	/** A line under the label inside the heading, e.g. "(excluding refunds)", so it stays part of the heading's name. */
+	qualifier?: React.ReactNode;
 	/** Overrides the level set on `StatCard.Root`. */
 	heading?: StatCardHeadingLevel;
 	/** Merged onto the label row, not the heading. */
@@ -50,26 +54,33 @@ export type StatCardValueProps = SpanProps & {
 	valueLabel?: string;
 	/** `text` drops the hero scale, for a phrase standing in for a number. */
 	variant?: StatCardValueVariant;
+	/** What the figure counts, e.g. "days". Rendered beside it, and dropped with the figure when there is none. */
+	unit?: React.ReactNode;
 	/** Rendered in a row beside the figure, e.g. a `StatCard.Delta`. */
 	suffix?: React.ReactNode;
 	className?: string;
 };
 
-export type StatCardDeltaDirection = 'up' | 'down';
+export type StatCardDeltaDirection = 'up' | 'down' | 'unchanged';
 
 export type StatCardDeltaTone = 'positive' | 'negative' | 'neutral';
 
 export type StatCardDeltaProps = SpanProps & {
-	/** Which arrow to show. Says nothing about whether the change is good. */
+	/** Which arrow to show, or none for `unchanged`. Says nothing about whether the change is good. */
 	direction: StatCardDeltaDirection;
 	/** Which colour to use. The caller decides, because a rise is not always good news. */
 	tone?: StatCardDeltaTone;
-	/** Spoken in place of "Up" or "Down". */
+	/** Spoken in place of "Up", "Down" or "Unchanged". */
 	directionLabel?: string;
 	/** Spoken in place of the whole delta, arrow and change together. Wins over `directionLabel`. */
 	label?: string;
 	className?: string;
 	/** The change, pre-formatted. Must be non-interactive: `label` hides it from assistive technology. */
+	children?: React.ReactNode;
+};
+
+export type StatCardNoteProps = DivProps & {
+	className?: string;
 	children?: React.ReactNode;
 };
 
@@ -79,6 +90,11 @@ export type StatCardSecondaryProps = DivProps & {
 };
 
 export type StatCardFooterProps = DivProps & {
+	className?: string;
+	children?: React.ReactNode;
+};
+
+export type StatCardDescriptionProps = Omit< React.ComponentPropsWithoutRef< 'p' >, 'children' > & {
 	className?: string;
 	children?: React.ReactNode;
 };

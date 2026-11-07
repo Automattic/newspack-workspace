@@ -46,13 +46,16 @@ export const slugifyTestId = value =>
 		.replace( /^-|-$/g, '' );
 
 /**
- * Whether a prompt with this placement can be part of a test.
+ * Whether a prompt with this placement can be part of a test. Mirrors the
+ * server's is_eligible_placement(), including its Manual only rule.
  *
- * @param {string}   placement  Placement value.
- * @param {string[]} ineligible Placements the server refuses.
+ * @param {string}   placement         Placement value.
+ * @param {string[]} ineligible        Placements the server refuses.
+ * @param {boolean}  manualOnlyOverlay Whether the prompt is an overlay set to Manual only.
  * @return {boolean} Eligible.
  */
-export const isEligiblePlacement = ( placement, ineligible ) => ! ( ineligible || [] ).includes( placement );
+export const isEligiblePlacement = ( placement, ineligible, manualOnlyOverlay = false ) =>
+	! manualOnlyOverlay && ! ( ineligible || [] ).includes( placement );
 
 /**
  * One line describing the traffic split.
@@ -100,11 +103,11 @@ export const missingGoalBlockMessage = ( goal, fromControl = false ) => {
 		default:
 			return fromControl
 				? __(
-						"Readers can't fill in a form from this prompt. Add a sign-up, registration, donate or checkout block, or change the goal on version A.",
+						"Readers can't fill in a form from this prompt. Add a Newsletter Subscription Form, Reader Registration, Donate or Checkout Button block, or change the goal on version A.",
 						'newspack-popups'
 				  )
 				: __(
-						"Readers can't fill in a form from this prompt. Add a sign-up, registration, donate or checkout block, or choose another goal.",
+						"Readers can't fill in a form from this prompt. Add a Newsletter Subscription Form, Reader Registration, Donate or Checkout Button block, or choose another goal.",
 						'newspack-popups'
 				  );
 	}
@@ -126,7 +129,10 @@ export const testPromptWarnings = ( { postId, variant, prompts } ) => {
 		warnings.push(
 			sprintf(
 				// Translators: %s is the version letter.
-				__( 'Another prompt in this test is already version %s. Clear the test name on one of them, or unpublish it.', 'newspack-popups' ),
+				__(
+					'Another prompt in this test is already version %s. Clear the test name on one of them, or give one a different version.',
+					'newspack-popups'
+				),
 				String( variant ).toUpperCase()
 			)
 		);

@@ -274,12 +274,22 @@ final class Newspack_Popups_AB_Dashboard {
 	 * @return array|WP_Error The response array, or a 404 error for an unknown test.
 	 */
 	public static function get_stats( $test_id, $refresh = false ) {
-		$test_id = Newspack_Popups_AB_Tests::sanitize_test_id( $test_id );
-		$test    = null;
-		foreach ( Newspack_Popups_AB_Tests::get_tests() as $candidate ) {
-			if ( $candidate['test_id'] === $test_id ) {
-				$test = $candidate;
-				break;
+		$test = null;
+		if ( is_scalar( $test_id ) ) {
+			// Looked up as get_test_prompts() does: the stored form, and the spelling
+			// a save would store only for input not already in stored form, so a
+			// request for footer_test never reports the separate footer-test test.
+			$tests       = array_column( Newspack_Popups_AB_Tests::get_tests(), null, 'test_id' );
+			$stored_form = sanitize_title( (string) $test_id );
+			$candidates  = [ $stored_form ];
+			if ( (string) $test_id !== $stored_form ) {
+				$candidates[] = Newspack_Popups_AB_Tests::sanitize_test_id( $test_id );
+			}
+			foreach ( $candidates as $candidate ) {
+				if ( '' !== $candidate && isset( $tests[ $candidate ] ) ) {
+					$test = $tests[ $candidate ];
+					break;
+				}
 			}
 		}
 		if ( null === $test ) {

@@ -29,7 +29,6 @@ const FIELD_TO_QUERY_PARAM = {
 const SORT_FIELD_TO_ORDERBY = {
 	title: 'title',
 	date: 'date',
-	send_date: 'date',
 	author: 'author',
 };
 

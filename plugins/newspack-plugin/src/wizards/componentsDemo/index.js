@@ -456,6 +456,39 @@ class ComponentsDemo extends Component {
 										{ __( 'A phrase rather than a number, so it drops the hero scale.', 'newspack-plugin' ) }
 									</StatCard.Footer>
 								</StatCard.Root>
+								<StatCard.Root>
+									<StatCard.Label qualifier={ __( '(recurring donors)', 'newspack-plugin' ) }>
+										{ __( 'Average tenure', 'newspack-plugin' ) }
+									</StatCard.Label>
+									<StatCard.Body>
+										<StatCard.Value
+											value="214"
+											unit={ __( 'days', 'newspack-plugin' ) }
+											suffix={ <StatCard.Delta direction="unchanged">0%</StatCard.Delta> }
+										/>
+									</StatCard.Body>
+									<StatCard.Footer>
+										<StatCard.Description>
+											{ __( 'A unit beside the figure, and a delta with nothing to point at.', 'newspack-plugin' ) }
+										</StatCard.Description>
+									</StatCard.Footer>
+								</StatCard.Root>
+								<StatCard.Root>
+									<StatCard.Label qualifier={ __( '(recurring donors)', 'newspack-plugin' ) }>
+										{ __( 'Donor retention', 'newspack-plugin' ) }
+									</StatCard.Label>
+									<StatCard.Body>
+										<StatCard.Note>
+											{ __( 'No recurring donors at the start of this timeframe.', 'newspack-plugin' ) }
+										</StatCard.Note>
+									</StatCard.Body>
+									<StatCard.Footer>
+										<StatCard.Description>
+											{ __( 'A note in place of the figure, level with the figures beside it.', 'newspack-plugin' ) }
+										</StatCard.Description>
+										<StatCard.Description>{ __( 'Two descriptions, stacked.', 'newspack-plugin' ) }</StatCard.Description>
+									</StatCard.Footer>
+								</StatCard.Root>
 							</Grid>
 						</Card>
 						<Card>

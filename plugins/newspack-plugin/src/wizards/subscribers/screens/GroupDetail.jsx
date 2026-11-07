@@ -67,6 +67,8 @@ const MEMBERS_VIEW = {
 	filters: [],
 	layout: {},
 	titleField: 'name',
+	descriptionField: 'email',
+	...( SHOW_AVATARS ? { mediaField: 'avatar' } : {} ),
 };
 
 const INVITES_VIEW = {
@@ -224,42 +226,48 @@ function GroupDetailView() {
 				id: 'name',
 				label: __( 'Member', 'newspack-plugin' ),
 				enableGlobalSearch: true,
-				getValue: ( { item } ) => `${ item.name } ${ item.email }`,
-				render: ( { item } ) => {
-					const details = (
-						<div>
-							<span>{ item.name }</span>
-							<div className="newspack-subscribers__email">{ item.email }</div>
-						</div>
-					);
-					if ( ! SHOW_AVATARS ) {
-						return details;
-					}
-					const avatar = item.email ? avatarsByEmail[ item.email ] : undefined;
-					return (
-						<HStack spacing={ 3 } justify="flex-start" alignment="center">
-							{ avatar ? (
-								<img className="newspack-subscribers__avatar" src={ avatar } alt="" width={ 32 } height={ 32 } />
-							) : (
-								<span className="newspack-subscribers__avatar" aria-hidden="true" />
-							) }
-							{ details }
-						</HStack>
-					);
-				},
+				getValue: ( { item } ) => item.name,
 			},
+			{
+				id: 'email',
+				label: __( 'Email', 'newspack-plugin' ),
+				enableGlobalSearch: true,
+				enableSorting: false,
+				getValue: ( { item } ) => item.email,
+				render: ( { item } ) => <span className="newspack-subscribers__email">{ item.email }</span>,
+			},
+			...( SHOW_AVATARS
+				? [
+						{
+							id: 'avatar',
+							label: __( 'Avatar', 'newspack-plugin' ),
+							enableSorting: false,
+							render: ( { item } ) => {
+								const avatar = item.email ? avatarsByEmail[ item.email ] : undefined;
+								return avatar ? (
+									<img className="newspack-subscribers__avatar" src={ avatar } alt="" width={ 32 } height={ 32 } />
+								) : (
+									<span className="newspack-subscribers__avatar" aria-hidden="true" />
+								);
+							},
+						},
+				  ]
+				: [] ),
 			{
 				id: 'role',
 				label: __( 'Role', 'newspack-plugin' ),
 				// Rank, not the label: sorting the strings would slot Manager below
 				// Member and put the owner in the middle.
 				getValue: ( { item } ) => ROLE_RANK[ item.role ] ?? ROLE_RANK.member,
-				render: ( { item } ) =>
-					'member' === item.role ? (
-						<span>{ ROLE_LABELS.member }</span>
-					) : (
-						<Badge intent={ 'owner' === item.role ? 'stable' : 'informational' }>{ ROLE_LABELS[ item.role ] }</Badge>
-					),
+				render: ( { item } ) => {
+					if ( 'owner' === item.role ) {
+						return <span className="newspack-subscribers__owner-role">{ ROLE_LABELS.owner }</span>;
+					}
+					if ( 'manager' === item.role ) {
+						return <Badge intent="informational">{ ROLE_LABELS.manager }</Badge>;
+					}
+					return <span>{ ROLE_LABELS.member }</span>;
+				},
 				enableSorting: true,
 			},
 			{
@@ -520,6 +528,7 @@ function GroupDetailView() {
 				</HStack>
 			</HStack>
 			<DataViews
+				className="newspack-subscribers__members-dataviews"
 				data={ processedMembers }
 				fields={ memberFields }
 				view={ membersView }
@@ -529,6 +538,7 @@ function GroupDetailView() {
 				defaultLayouts={ { table: {} } }
 				getItemId={ item => item.id }
 				search
+				inlineFilters
 			/>
 
 			{ inviteRows.length > 0 && (

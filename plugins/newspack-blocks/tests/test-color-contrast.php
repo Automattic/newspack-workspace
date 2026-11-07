@@ -23,9 +23,8 @@ class ColorContrastTest extends WP_UnitTestCase {
 			'pure white background'    => [ '#ffffff', 'black' ],
 			'near-white background'    => [ '#f0f0f0', 'black' ],
 			'amber background'         => [ '#ffcc00', 'black' ],
-			// APCA flip zone: the old WCAG2 heuristic picked black here, but APCA
-			// scores white decisively higher, so white must win.
-			'mid-tone green flip zone' => [ '#178f15', 'white' ],
+			// White reads better by APCA (Lc 74 against 36) though only black reaches 4.5:1.
+			'mid-tone green'           => [ '#178f15', 'white' ],
 			'blue background'          => [ '#3366cc', 'white' ],
 			'red background'           => [ '#dd3333', 'white' ],
 			'shorthand white'          => [ '#fff', 'black' ],
@@ -38,6 +37,8 @@ class ColorContrastTest extends WP_UnitTestCase {
 			'dark 8-digit hex'         => [ '#33333380', 'white' ],
 			'uppercase amber'          => [ '#FFCC00', 'black' ],
 			'padded green'             => [ ' #178f15 ', 'white' ],
+			// White reads better by APCA (Lc 70 against 40) though only black reaches 4.5:1.
+			'bright orange'            => [ '#e65100', 'white' ],
 		];
 	}
 

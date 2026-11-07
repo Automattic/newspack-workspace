@@ -96,12 +96,13 @@ const selectTab = (
 ) => {
 	// Loop through tabs and set them as selected or not selected:
 	tabList.forEach( ( thisTab: HTMLElement ) => {
+		const activeClassName = thisTab.classList.contains( 'newspack-ui__button' ) ? 'selected' : 'wpbnbd__button--active';
 		if ( tab === thisTab ) {
 			thisTab.setAttribute( 'aria-selected', 'true' );
-			thisTab.classList.add( 'wpbnbd__button--active' );
+			thisTab.classList.add( activeClassName );
 		} else {
 			thisTab.setAttribute( 'aria-selected', 'false' );
-			thisTab.classList.remove( 'wpbnbd__button--active' );
+			thisTab.classList.remove( activeClassName );
 		}
 	} );
 

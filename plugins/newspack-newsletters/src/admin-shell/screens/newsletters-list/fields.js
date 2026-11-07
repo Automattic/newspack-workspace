@@ -105,12 +105,6 @@ const renderStatus = ( { item } ) => {
 	return <StatusIndicator status={ statusName }>{ label }</StatusIndicator>;
 };
 
-const renderSendDate = ( { item } ) => {
-	const status = item?.newspack_newsletters_status || {};
-	const ts = status.sent_at || status.scheduled_at;
-	return ts ? formatDate( ts ) : '';
-};
-
 const renderSendList = ( { item } ) => {
 	const id = item?.meta?.send_list_id || '';
 	const sublistId = item?.meta?.send_sublist_id || '';
@@ -184,14 +178,6 @@ export function getFields( { authors = [], categories = [], tags = [], sendLists
 			filterBy: { operators: [ 'isAny' ], isPrimary: true },
 			getValue: ( { item } ) => item?.newspack_newsletters_status?.kind || 'draft',
 			render: renderStatus,
-		},
-		{
-			id: 'send_date',
-			// For the manual provider the date is a publish date, not an ESP send date.
-			label: isManualProvider() ? __( 'Publish date', 'newspack-newsletters' ) : __( 'Send date', 'newspack-newsletters' ),
-			enableSorting: true,
-			getValue: ( { item } ) => item?.newspack_newsletters_status?.sent_at || item?.newspack_newsletters_status?.scheduled_at || 0,
-			render: renderSendDate,
 		},
 		{
 			id: 'send_list',
