@@ -37,11 +37,13 @@
 		}
 	}
 
-	a.newspack-ui__link:not(.newspack-ui__button) {
+	a:where(.newspack-ui__link):not(.newspack-ui__button) {
 		color: var(--newspack-ui-color-link, inherit);
 
-		&:hover {
-			color: var(--newspack-ui-color-link-hover, var(--newspack-ui-color-link, inherit));
+		@media ( hover: hover ) and ( pointer: fine ) {
+			&:hover {
+				color: var(--newspack-ui-color-link-hover, var(--newspack-ui-color-link, inherit));
+			}
 		}
 	}
 }

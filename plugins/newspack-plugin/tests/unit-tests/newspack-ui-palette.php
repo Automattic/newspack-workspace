@@ -954,7 +954,6 @@ class Newspack_Test_UI_Palette extends WP_UnitTestCase {
 			'destructive-fill-hover'   => '#b83635',
 			'destructive-fill-pressed' => '#a53533',
 			'destructive-ink'          => '#ffffff',
-			'destructive-edge'         => '#d63638',
 			'destructive-text'         => '#facfd2',
 			'primary'                  => '#ffc857',
 			'against-primary'          => '#000000',
@@ -1289,7 +1288,7 @@ class Newspack_Test_UI_Palette extends WP_UnitTestCase {
 		$status     = Newspack_UI_Palette::status_properties( $base, '' === $brand ? $contrast : $brand, $contrast ) + Newspack_UI_Palette::STATUS_DEFAULTS;
 
 		$this->assertSame( $status['error'], $properties['destructive-fill'] );
-		$this->assertSame( $status['error'], $properties['destructive-edge'] );
+		$this->assertArrayNotHasKey( 'destructive-edge', $properties );
 		$this->assertSame( $status['error-text'], $properties['destructive-text'] );
 		$this->assertGreaterThanOrEqual( 45, Newspack_UI_Palette::lc( $properties['destructive-ink'], $properties['destructive-fill'] ) );
 		$this->assertGreaterThanOrEqual( 45, Newspack_UI_Palette::lc( $properties['destructive-ink'], $properties['destructive-fill-hover'] ) );
@@ -1321,16 +1320,15 @@ class Newspack_Test_UI_Palette extends WP_UnitTestCase {
 				'destructive-fill-hover'   => '#e05c56',
 				'destructive-fill-pressed' => '#e7716a',
 				'destructive-ink'          => '#ffffff',
-				'destructive-edge'         => '#d63638',
 				'destructive-text'         => '#b32d2e',
 			],
-			array_intersect_key( $blue, array_flip( [ 'destructive-fill', 'destructive-fill-hover', 'destructive-fill-pressed', 'destructive-ink', 'destructive-edge', 'destructive-text' ] ) )
+			array_intersect_key( $blue, array_flip( [ 'destructive-fill', 'destructive-fill-hover', 'destructive-fill-pressed', 'destructive-ink', 'destructive-text' ] ) )
 		);
 		$this->assertSame( '#8a2424', $red['destructive-fill'] );
 		$this->assertSame( '#9e4843', $red['destructive-fill-hover'] );
 		$this->assertSame( '#ab5d57', $red['destructive-fill-pressed'] );
 		$this->assertSame( '#ffffff', $red['destructive-ink'] );
-		$this->assertSame( '#8a2424', $red['destructive-edge'] );
+		$this->assertArrayNotHasKey( 'destructive-edge', $red );
 		$this->assertNotSame( $red['primary'], $red['destructive-fill'] );
 	}
 

@@ -434,7 +434,6 @@ class Newspack_UI_Palette {
 		$properties['destructive-fill-hover']   = self::mix( $destructive_fill, $destructive_shares['hover'] * 100, $destructive_target );
 		$properties['destructive-fill-pressed'] = self::mix( $destructive_fill, $destructive_shares['pressed'] * 100, $destructive_target );
 		$properties['destructive-ink']          = $destructive_ink;
-		$properties['destructive-edge']         = $destructive_fill;
 		$properties['destructive-text']         = $resolved['error-text'];
 
 		if ( '' !== $brand ) {
