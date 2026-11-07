@@ -135,6 +135,33 @@ describe( 'A/B Tests tab', () => {
 		expect( document.body.textContent ).not.toMatch( /control|challenger/ );
 	} );
 
+	it( 'offers Create Version B only while A is the test’s only prompt', async () => {
+		mockRoutes( listResponse( [ test( 'two', { a: prompt( 1 ) }, { prompt_count: 2 } ), test( 'noa', { b: prompt( 2 ) } ) ] ) );
+		render( <ABTests /> );
+		for ( const name of [ 'Test two', 'Test noa' ] ) {
+			const card = await screen.findByRole( 'region', { name } );
+			expect( within( card ).getByText( 'Incomplete' ) ).toBeInTheDocument();
+			expect( within( card ).queryByRole( 'button', { name: /Create Version B/ } ) ).not.toBeInTheDocument();
+		}
+	} );
+
+	it( 'loads results only for a started test with a stats source', async () => {
+		const unstarted = test( 'new', { a: prompt( 1 ), b: prompt( 2 ) } );
+		const started = test( 'run', { a: prompt( 3 ), b: prompt( 4 ) }, { started_at: '2026-10-01 00:00:00' } );
+		const expectNoStats = async ( list, name ) => {
+			mockRoutes( list );
+			const { unmount } = render( <ABTests /> );
+			const card = await screen.findByRole( 'region', { name } );
+			fireEvent.click( within( card ).getByRole( 'button', { name: `Test actions: ${ name }` } ) );
+			expect( screen.queryByRole( 'menuitem', { name: 'Refresh Results' } ) ).not.toBeInTheDocument();
+			expect( apiFetch.mock.calls.some( ( [ { path } ] ) => path.includes( '/stats' ) ) ).toBe( false );
+			unmount();
+			apiFetch.mockClear();
+		};
+		await expectNoStats( listResponse( [ unstarted ] ), 'Test new' );
+		await expectNoStats( listResponse( [ started ], { available: false, slug: null, reason: 'No source.' } ), 'Test run' );
+	} );
+
 	// The fixture's lift is deliberately one the shown rates can't produce, so the
 	// test fails if the table computes lift itself instead of showing the route's.
 	it( 'shows the rates, lift and confidence the route returns', async () => {
