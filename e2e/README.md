@@ -20,11 +20,28 @@ Will need a local test site – set it up with [`newspack-docker`](https://githu
 
 ### CI testing
 
-The suite runs nightly (~07:00 UTC) on TeamCity, build configuration
-`Newspack_E2eTests` (project `Newspack_E2ETests`), against the Atomic staging
-site `https://e2e.newspackstaging.com`. The build definition lives in TeamCity
-settings, not in this repo; its steps are: install dependencies, write a `.env`,
-then run `npm run test:setup` (the setup projects provision the site over SSH).
+The suite runs nightly (~07:00 UTC) on TeamCity, project `Newspack_E2ETests`,
+against Atomic staging sites. The build definitions live in TeamCity settings, not
+in this repo; each config's steps are: install dependencies, write a `.env`, then
+run its slice script (the setup projects provision the site over SSH).
+
+The full suite (every phase, both viewports) runs well over TeamCity's 20-minute
+per-build execution timeout, so it is split into parallel build configs, one per
+phase/viewport slice (`npm run test:vanilla:desktop` / `:vanilla:mobile` /
+`:woo:desktop` / `:woo:mobile` / `:ac:desktop` / `:ac:mobile`). Each provisions its
+own site from scratch, so they must each target a **different** site (a shared
+site's reset would clobber a parallel slice). The Access-Control specs run in their
+own `ac` phase (tagged `@access-control`, not `@vanilla`/`@with-woo`), so an AC
+regression can't fail a base or woo build. See `AGENTS.md` → "Sliced into parallel
+build configs".
+
+That staging site is pinned to the **stable release** channel, and provisioning
+rebuilds against the plugin version installed there – not the version the specs
+were merged with. Write specs against the release-channel UI: a spec that drives
+UI which only exists in `alpha`/`main` will fail nightly until that feature ships
+to stable. Don't work around that with channel branching or skips – hold coverage
+for alpha-only UI until it reaches release. See `AGENTS.md` → "Site setup model"
+for details.
 
 [Credentials for the Atomic site used for the e2e testing.](https://mc.a8c.com/secret-store/?secret_id=12168)
 
@@ -110,9 +127,19 @@ USE_SETUP is TRUE (with workers: 1):
           ▼
 ┌─────────────────┐
 │ With Woo Mobile │  (@with-woo tests)
-│     Chrome      │
+│     Chrome      │  ← LAST @with-woo test
+└─────────┬───────┘
+          │
+🔒 ACCESS-CONTROL TESTS PHASE
+          ▼           (reuses the woo-provisioned site; gates need WooCommerce)
+┌─────────────────┐
+│  Access Control │  (@access-control tests: content gates, paywalls,
+│  Desktop → Mob. │   premium newsletters)
 └─────────────────┘
 ```
+
+A sliced `ac` build instead provisions its own site with `setup-with-woo` first,
+then runs the `@access-control` specs against it.
 
 ## Writing tests
 
@@ -121,6 +148,16 @@ Tests can be written by hand in the `tests` directory, or with the help of Playw
 Tag tests `@vanilla` or `@with-woo` so they run in the matching phase. If a test
 needs a particular fixture (a page, product, user, …), have `e2e-setup.sh` (or the
 underlying `site-setup.sh`) create it, so it's rebuilt on every run.
+
+### Content gating (Access Control)
+
+Provisioning defines `NEWSPACK_CONTENT_GATES` in wp-config, enabling the
+Audience > Access control wizard and its front-end enforcement, which
+`content-gating.spec.ts` and `premium-newsletters.spec.ts` cover. In the
+`--woo` phase, `e2e-setup.sh` deactivates `woocommerce-memberships` after the
+generic bootstrap: Access Control defers to Memberships whenever that plugin
+is active, so leaving it on would make the first-party gating inert (this also
+matches the target state of migrated Newspack sites).
 
 ## Provisioning the test site manually
 
