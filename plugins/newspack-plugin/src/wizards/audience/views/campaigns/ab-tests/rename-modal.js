@@ -4,7 +4,7 @@
 import { __ } from '@wordpress/i18n';
 import { Button, Modal, Notice, TextControl } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
-import { useState } from '@wordpress/element';
+import { useEffect, useRef, useState } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 
 /**
@@ -25,6 +25,7 @@ const RenameModal = ( { test, onRenamed, onClose } ) => {
 	const [ name, setName ] = useState( test.name || test.test_id );
 	const [ isBusy, setIsBusy ] = useState( false );
 	const [ error, setError ] = useState( '' );
+	const inputRef = useRef( null );
 	const canSave = '' !== name.trim() && ! isBusy;
 
 	const save = async event => {
@@ -47,6 +48,14 @@ const RenameModal = ( { test, onRenamed, onClose } ) => {
 		}
 	};
 
+	// The field is disabled while saving, which drops focus out of the dialog,
+	// so a failed save hands it back to the field to retry from.
+	useEffect( () => {
+		if ( error ) {
+			inputRef.current?.focus();
+		}
+	}, [ error ] );
+
 	return (
 		<Modal title={ __( 'Rename Test', 'newspack-plugin' ) } size="small" focusOnMount="firstContentElement" onRequestClose={ onClose }>
 			<form onSubmit={ save }>
@@ -64,6 +73,7 @@ const RenameModal = ( { test, onRenamed, onClose } ) => {
 						) }
 						value={ name }
 						onChange={ setName }
+						ref={ inputRef }
 						disabled={ isBusy }
 						__nextHasNoMarginBottom
 						__next40pxDefaultSize

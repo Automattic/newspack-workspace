@@ -253,4 +253,21 @@ describe( 'A/B Tests tab', () => {
 			data: { name: 'Year-end appeal' },
 		} );
 	} );
+
+	it( 'returns focus to the name field when a rename fails', async () => {
+		mockRoutes( listResponse( [ test( 'inc', { a: prompt( 1 ) } ) ] ), {
+			'/newspack-popups/v1/ab-tests/inc/name': () => Promise.reject( { message: 'Rename failed.' } ),
+		} );
+		render( <ABTests /> );
+		const card = await screen.findByRole( 'region', { name: 'Test inc' } );
+		fireEvent.click( within( card ).getByRole( 'button', { name: 'Test actions: Test inc' } ) );
+		fireEvent.click( screen.getByRole( 'menuitem', { name: 'Rename: Test inc' } ) );
+		const field = screen.getByLabelText( 'Test name' );
+		fireEvent.change( field, { target: { value: 'Year-end appeal' } } );
+		// Focus starts outside the field, where a browser leaves it once the
+		// field is disabled for the save.
+		fireEvent.submit( field.closest( 'form' ) );
+		expect( await screen.findByText( 'Rename failed.' ) ).toBeInTheDocument();
+		await waitFor( () => expect( field ).toHaveFocus() );
+	} );
 } );
