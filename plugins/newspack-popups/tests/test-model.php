@@ -236,6 +236,44 @@ class ModelTest extends WP_UnitTestCase {
 				$lightbox->getAttribute( 'class' ),
 				'Overlay popups receive the block theme class.'
 			);
+
+			$wrapper = $xpath->query( '//*[contains(concat(" ", normalize-space(@class), " "), " newspack-popup-wrapper ")]' )->item( 0 );
+			self::assertStringContainsString(
+				'background-color:var(--wp--preset--color--base, #fff)',
+				$wrapper->getAttribute( 'style' ),
+				'An overlay on the default white takes the site background.'
+			);
+			$close = $xpath->query( '//*[contains(concat(" ", normalize-space(@class), " "), " newspack-lightbox__close ")]' )->item( 0 );
+			self::assertStringContainsString(
+				'color: var(--wp--preset--color--contrast, #000)',
+				$close->getAttribute( 'style' ),
+				'The close icon follows the site text color.'
+			);
+
+			$popup_object_translucent_close = Newspack_Popups_Model::create_popup_object(
+				get_post( self::$popup_id ),
+				false,
+				[
+					'placement'                      => 'center',
+					'trigger_type'                   => 'time',
+					'enable_close_button_background' => true,
+					'close_button_background_color'  => '#00000000',
+				]
+			);
+			$dom = new DomDocument();
+			@$dom->loadHTML( Newspack_Popups_Model::generate_popup( $popup_object_translucent_close ) ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			$xpath       = new DOMXpath( $dom );
+			$close_style = $xpath->query( '//*[contains(concat(" ", normalize-space(@class), " "), " newspack-lightbox__close ")]' )->item( 0 )->getAttribute( 'style' );
+			self::assertStringContainsString(
+				'color: var(--wp--preset--color--contrast, #000)',
+				$close_style,
+				'A translucent close fill over the site background uses the site text color for its icon.'
+			);
+			self::assertStringContainsString(
+				'--newspack-lightbox-close-bg-hover: color-mix(in oklab, currentcolor',
+				$close_style,
+				'Its hover state mixes the icon color, not a color computed against white.'
+			);
 		} finally {
 			Newspack_Popups_Model::set_block_theme_override( null );
 		}
@@ -714,7 +752,6 @@ class ModelTest extends WP_UnitTestCase {
 			'options' => [
 				'placement'        => $placement,
 				'background_color' => $background,
-				'hide_border'      => false,
 			],
 		];
 		Newspack_Popups_Model::set_block_theme_override( $is_block_theme );

@@ -1363,7 +1363,14 @@ final class Newspack_Popups_Model {
 		$has_featured_image             = has_post_thumbnail( $popup['id'] ) || ! empty( $popup['options']['featured_image_id'] );
 		$enable_close_button_background = $popup['options']['enable_close_button_background'];
 		$close_button_background_color  = $enable_close_button_background ? $popup['options']['close_button_background_color'] : '';
-		$close_button_color             = $enable_close_button_background ? self::close_button_icon_color( $popup['options']['close_button_background_color'], $popup['options']['background_color'] ) : ( self::uses_site_background( $popup ) ? 'var(--wp--preset--color--contrast, #000)' : self::foreground_color_for_background( $popup['options']['background_color'] ) );
+		$close_follows_site             = self::uses_site_background( $popup ) && ( ! $enable_close_button_background || self::is_translucent_color( $popup['options']['close_button_background_color'] ) );
+		if ( $close_follows_site ) {
+			$close_button_color = 'var(--wp--preset--color--contrast, #000)';
+		} elseif ( $enable_close_button_background ) {
+			$close_button_color = self::close_button_icon_color( $popup['options']['close_button_background_color'], $popup['options']['background_color'] );
+		} else {
+			$close_button_color = self::foreground_color_for_background( $popup['options']['background_color'] );
+		}
 		$hidden_fields                  = self::get_hidden_fields( $popup );
 		$is_newsletter_prompt           = self::has_newsletter_prompt( $popup );
 		$classes                        = [ 'newspack-popup-container', 'newspack-lightbox', 'newspack-popup', 'hidden', 'newspack-lightbox-placement-' . $popup['options']['placement'], 'newspack-lightbox-size-' . $overlay_size ];
@@ -1386,7 +1393,7 @@ final class Newspack_Popups_Model {
 		$close_button_styles = 'color: ' . $close_button_color . ';';
 		if ( $enable_close_button_background ) {
 			$close_button_styles .= '--newspack-lightbox-close-bg: ' . $close_button_background_color . ';';
-			$state_colors = self::close_button_state_colors( $popup['options']['close_button_background_color'], $popup['options']['background_color'] );
+			$state_colors = $close_follows_site ? self::close_button_currentcolor_states() : self::close_button_state_colors( $popup['options']['close_button_background_color'], $popup['options']['background_color'] );
 			if ( null !== $state_colors ) {
 				$close_button_styles .= '--newspack-lightbox-close-bg-hover: ' . $state_colors['hover'] . '; --newspack-lightbox-close-bg-pressed: ' . $state_colors['pressed'] . ';';
 			}
@@ -1508,10 +1515,7 @@ final class Newspack_Popups_Model {
 			if ( ! $near_black ) {
 				return null;
 			}
-			return [
-				'hover'   => sprintf( 'color-mix(in oklab, currentcolor %d%%, var(--newspack-lightbox-close-bg))', round( 100 * ( 1 - self::CLOSE_BUTTON_LIGHTEN_FLOORS[0] ) ) ),
-				'pressed' => sprintf( 'color-mix(in oklab, currentcolor %d%%, var(--newspack-lightbox-close-bg))', round( 100 * ( 1 - self::CLOSE_BUTTON_LIGHTEN_FLOORS[1] ) ) ),
-			];
+			return self::close_button_currentcolor_states();
 		}
 		$fill = self::composited_close_button_fill( $fill_color, $background_color );
 		if ( null === $fill ) {
@@ -1531,6 +1535,31 @@ final class Newspack_Popups_Model {
 			'hover'   => sprintf( '#%02x%02x%02x', ...$hover ),
 			'pressed' => sprintf( '#%02x%02x%02x', ...$pressed ),
 		];
+	}
+
+	/**
+	 * Hover and pressed fills that mix the icon color into a translucent close button fill.
+	 *
+	 * Resolved by the browser, so they hold on any backdrop, including a site background PHP can't see.
+	 *
+	 * @return array{hover: string, pressed: string}
+	 */
+	private static function close_button_currentcolor_states(): array {
+		return [
+			'hover'   => sprintf( 'color-mix(in oklab, currentcolor %d%%, var(--newspack-lightbox-close-bg))', round( 100 * ( 1 - self::CLOSE_BUTTON_LIGHTEN_FLOORS[0] ) ) ),
+			'pressed' => sprintf( 'color-mix(in oklab, currentcolor %d%%, var(--newspack-lightbox-close-bg))', round( 100 * ( 1 - self::CLOSE_BUTTON_LIGHTEN_FLOORS[1] ) ) ),
+		];
+	}
+
+	/**
+	 * Whether a hex color has an alpha below 1.
+	 *
+	 * @param string $color Hex color, with optional alpha.
+	 * @return bool False for opaque or unparseable colors.
+	 */
+	private static function is_translucent_color( $color ): bool {
+		$rgba = self::hex_to_rgba( $color );
+		return null !== $rgba && $rgba[3] < 1;
 	}
 
 	/**
@@ -1788,7 +1817,7 @@ final class Newspack_Popups_Model {
 	 * @param array $popup A Pop-up object.
 	 * @return bool
 	 */
-	public static function uses_site_background( $popup ): bool {
+	public static function uses_site_background( array $popup ): bool {
 		return self::is_block_theme()
 			&& self::is_overlay( $popup )
 			&& [ 255, 255, 255 ] === self::parse_hex_channels( $popup['options']['background_color'] ?? '' );
