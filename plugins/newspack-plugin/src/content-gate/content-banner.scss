@@ -258,11 +258,6 @@ body.newspack-has-countdown-banner:has(.newspack-countdown-banner__cta.is-style-
 			position: relative;
 			z-index: 0;
 
-			&.is-style-theme:not(.has-no-shadow),
-			&.is-style-site:not(.has-no-shadow) {
-				@include mixins.newspack-ui-elevation( 3, $direction: up );
-			}
-
 			&-preview {
 				border: 1px solid var(--wp-components-color-gray-600, #{wp-colors.$gray-600});
 				border-radius: 2px;

@@ -157,17 +157,6 @@ describe( 'on a site that uses the site Theme', () => {
 		expect( theme.queryByTestId( 'shadow-toggle' ) ).not.toBeNull();
 	} );
 
-	it( 'previews the shadow as off only on the Theme and site styles', () => {
-		setThemeData( { supports_theme_style: true, uses_site_theme: false } );
-		expect( getBannerPreviewProps( { style: 'theme' } ).bannerClassName ).toBe( 'is-style-theme' );
-		expect( getBannerPreviewProps( { style: 'theme', shadow: false } ).bannerClassName ).toBe( 'is-style-theme has-no-shadow' );
-		expect( getBannerPreviewProps( { style: 'theme', shadow: 0 } ).bannerClassName ).toBe( 'is-style-theme has-no-shadow' );
-		expect( getBannerPreviewProps( { style: 'dark', shadow: false } ).bannerClassName ).toBe( 'is-style-dark' );
-		setThemeData( { supports_theme_style: true, uses_site_theme: true } );
-		expect( getBannerPreviewProps( { style: 'theme', shadow: false } ).bannerClassName ).toBe( 'is-style-site has-no-shadow' );
-		expect( getBannerPreviewProps( { style: 'dark', shadow: false } ).bannerClassName ).toBe( 'is-style-site' );
-	} );
-
 	it( 'ignores colors left over from the Light or Dark style on the site style', () => {
 		setThemeData( { supports_theme_style: true, uses_site_theme: true } );
 		[ 'light', 'dark', undefined ].forEach( style =>
