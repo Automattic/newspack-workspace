@@ -118,7 +118,7 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 			return true;
 		}
 		if ( ! defined( 'GOOGLESITEKIT_PLUGIN_MAIN_FILE' ) ) {
-			return new WP_Error( 'newspack_ga4_ab_stats', __( 'Site Kit is not installed.', 'newspack' ) );
+			return new WP_Error( 'newspack_ga4_ab_stats', __( 'Site Kit is not active.', 'newspack' ) );
 		}
 		if ( ! self::get_property_id() || ! $this->has_credentials() ) {
 			return new WP_Error( 'newspack_ga4_ab_stats', __( 'Connect Google Analytics through Site Kit.', 'newspack' ) );
@@ -441,7 +441,7 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 	 */
 	private function run_through_site_kit( string $property_id, array $request ): array|WP_Error {
 		if ( ! GoogleSiteKit::is_active() ) {
-			return new WP_Error( 'newspack_ga4_ab_stats', __( 'Site Kit is not installed.', 'newspack' ) );
+			return new WP_Error( 'newspack_ga4_ab_stats', __( 'Site Kit is not active.', 'newspack' ) );
 		}
 		try {
 			if ( null === $this->module ) {

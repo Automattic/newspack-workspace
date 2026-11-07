@@ -273,7 +273,7 @@ class Newspack_Test_GA4_AB_Stats_Provider extends WP_UnitTestCase {
 		$provider  = new GA4_AB_Stats_Provider();
 		$available = $provider->is_available();
 		$this->assertWPError( $available );
-		$this->assertSame( 'Site Kit is not installed.', $available->get_error_message() );
+		$this->assertSame( 'Site Kit is not active.', $available->get_error_message() );
 		$this->assertWPError( $provider->get_counts( $this->fixture_test(), 'link_click', self::START, self::END ) );
 	}
 
