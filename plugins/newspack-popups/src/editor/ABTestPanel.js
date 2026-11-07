@@ -30,6 +30,8 @@ const ABTestPanel = ( {
 	newspack_popups_ab_test_goal: goal = '',
 	newspack_popups_ab_control_share: controlShare = 50,
 	placement,
+	manual_only: manualOnly = false,
+	isOverlay = false,
 	postId,
 	onMetaFieldChange,
 } ) => {
@@ -40,7 +42,8 @@ const ABTestPanel = ( {
 		ineligible_placements: ineligible = [],
 		results_url: resultsUrl = '',
 	} = window?.newspack_popups_data?.ab_testing || {};
-	const eligible = isEligiblePlacement( placement, ineligible );
+	const manualOnlyOverlay = isOverlay && !! manualOnly;
+	const eligible = isEligiblePlacement( placement, ineligible, manualOnlyOverlay );
 
 	// What the author typed, kept apart from the stored slug so a trailing space
 	// or hyphen survives until the next keystroke instead of being trimmed away
@@ -126,15 +129,27 @@ const ABTestPanel = ( {
 	];
 
 	const others = prompts.filter( prompt => prompt.id !== postId );
-	const control = 'a' !== variant ? others.find( prompt => 'a' === prompt.variant ) : null;
+	// Prefer the published control: after an author drafts the old A and publishes
+	// a replacement, the lookup lists both, and the live split is the published one's.
+	const controls = 'a' !== variant ? others.filter( prompt => 'a' === prompt.variant ) : [];
+	const control = controls.find( prompt => 'publish' === prompt.status ) || controls[ 0 ] || null;
 	const effectiveGoal = control ? control.goal || '' : goal;
 	const warnings = testPromptWarnings( { postId, variant, prompts } );
 	const lookupPending = !! testId && lookedUpFor !== testId;
 	const holdGoal = lookupPending && 'a' !== variant;
 	const hasChallenger = others.some( prompt => prompt.variant && 'a' !== prompt.variant );
 
-	// The notices describe standing state rather than the result of an action, so
-	// none is announced on mount (the panel re-mounts them on every expand).
+	// Info and warning notices describe standing state, so they stay silent on mount
+	// (the panel re-mounts them on every expand). An error asks the author to act
+	// before the prompt can save, so it is spoken politely each time it renders.
+	const placementMessage =
+		__( 'A/B tests only work on prompts that Newspack places for you.', 'newspack-popups' ) +
+		( testId
+			? ' ' +
+			  ( isEligiblePlacement( placement, ineligible )
+					? __( 'Clear the test name or turn off Manual only to save.', 'newspack-popups' )
+					: __( 'Clear the test name or choose another placement to save.', 'newspack-popups' ) )
+			: '' );
 	return (
 		<Stack direction="column" gap="lg">
 			{ ! canManage && (
@@ -143,9 +158,13 @@ const ABTestPanel = ( {
 				</p>
 			) }
 			{ ! eligible && (
-				<Notice status={ testId ? 'error' : 'warning' } spokenMessage="" isDismissible={ false }>
-					{ __( 'A/B tests only work on prompts that Newspack places for you.', 'newspack-popups' ) }
-					{ testId ? ' ' + __( 'Clear the test name or choose another placement to save.', 'newspack-popups' ) : '' }
+				<Notice
+					status={ testId ? 'error' : 'warning' }
+					spokenMessage={ testId ? placementMessage : '' }
+					politeness="polite"
+					isDismissible={ false }
+				>
+					{ placementMessage }
 				</Notice>
 			) }
 			{ ( eligible || testId ) && (
@@ -172,7 +191,7 @@ const ABTestPanel = ( {
 						__next40pxDefaultSize
 					/>
 					{ warnings.map( warning => (
-						<Notice key={ warning } status="error" spokenMessage="" isDismissible={ false }>
+						<Notice key={ warning } status="error" spokenMessage={ warning } politeness="polite" isDismissible={ false }>
 							{ warning }
 						</Notice>
 					) ) }
@@ -201,12 +220,18 @@ const ABTestPanel = ( {
 					{ ! holdGoal &&
 						( control ? (
 							<p className="newspack-popups-ab-test__note">
-								{ sprintf(
-									// Translators: %1$s is the test's goal, %2$s the traffic split, such as "60% see A, 40% see B".
-									__( 'Goal: %1$s. %2$s. Set on version A.', 'newspack-popups' ),
-									goals[ effectiveGoal ] || __( 'none', 'newspack-popups' ),
-									splitSummary( control.control_share ?? 50 )
-								) }
+								{ goals[ effectiveGoal ]
+									? sprintf(
+											// Translators: %1$s is the test's goal, %2$s the traffic split, such as "60% see A, 40% see B".
+											__( 'Goal: %1$s. %2$s. Set on version A.', 'newspack-popups' ),
+											goals[ effectiveGoal ],
+											splitSummary( control.control_share ?? 50 )
+									  )
+									: sprintf(
+											// Translators: %s is the traffic split, such as "60% see A, 40% see B".
+											__( 'No goal set on version A. %s.', 'newspack-popups' ),
+											splitSummary( control.control_share ?? 50 )
+									  ) }
 							</p>
 						) : (
 							<SelectControl

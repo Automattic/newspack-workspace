@@ -127,7 +127,7 @@ body.newspack-popups-ab-tests-screen {
 		th,
 		td {
 			padding: wp-vars.$grid-unit-15 wp-vars.$grid-unit-20 wp-vars.$grid-unit-15 0;
-			border-bottom: 1px solid var(--wpds-color-stroke-surface-neutral-weak, #{wp-colors.$gray-200});
+			border-bottom: var(--wpds-border-width-xs, #{wp-vars.$border-width}) solid var(--wpds-color-stroke-surface-neutral-weak, #{wp-colors.$gray-200});
 			text-align: start;
 			vertical-align: top;
 			font-weight: normal;

@@ -10,6 +10,12 @@
  * WordPress dependencies
  */
 import domReady from '@wordpress/dom-ready';
+import { travelDuration } from 'newspack-motion';
+
+/**
+ * Internal dependencies
+ */
+import { lockScrollbarGutter, unlockScrollbarGutter } from '../../shared/js/scrollbar-gutter';
 
 // Focusable element selector
 const FOCUSABLE_SELECTOR =
@@ -52,7 +58,6 @@ const createFlyoutInstance = wrapper => {
 
 	let isOpen = false;
 	let lastFocused = null;
-	let overlay = null;
 	let focusTrapCleanup = null;
 	let escCleanup = null;
 
@@ -60,35 +65,24 @@ const createFlyoutInstance = wrapper => {
 	// stacking context issues regardless of the wrapper's CSS transforms.
 	document.body.appendChild( panel );
 
-	// Overlay
-	const showOverlay = color => {
-		overlay = document.createElement( 'div' );
-		overlay.className = 'overlay-menu__scrim alignfull';
-		overlay.setAttribute( 'aria-hidden', 'true' );
-		overlay.style.opacity = '0';
-		if ( color ) {
-			overlay.style.background = color;
-		}
-		overlay.addEventListener( 'click', closeMenu );
-		document.body.appendChild( overlay );
-		// Force reflow so the CSS transition fires on the opacity change.
-		void overlay.offsetHeight;
-		requestAnimationFrame( () => {
-			overlay.style.opacity = '1';
-		} );
-	};
+	// Capture phase stops core's openMenuOnHover so drawer submenus open only from the chevron; other pointerenter listeners on these items stop too.
+	panel.addEventListener(
+		'pointerenter',
+		e => {
+			if ( e.target.matches( '.wp-block-navigation:not(.is-style-flatten) .has-child.open-on-hover-click' ) ) {
+				e.stopPropagation();
+			}
+		},
+		true
+	);
 
-	const hideOverlay = () => {
-		if ( ! overlay ) {
-			return;
-		}
-		const el = overlay;
-		overlay = null;
-		el.style.opacity = '0';
-		const cleanup = () => el.remove();
-		el.addEventListener( 'transitionend', cleanup, { once: true } );
-		setTimeout( cleanup, 600 ); // Fallback if transition is skipped.
-	};
+	const scrim = document.createElement( 'div' );
+	scrim.className = 'overlay-menu__scrim alignfull';
+	scrim.setAttribute( 'aria-hidden', 'true' );
+	if ( panel.dataset.overlayColor ) {
+		scrim.style.background = panel.dataset.overlayColor;
+	}
+	panel.after( scrim );
 
 	// Slide animation
 	// CSS owns the transition and all position values; JS only adds/removes the --open modifier class.
@@ -137,17 +131,22 @@ const createFlyoutInstance = wrapper => {
 		isOpen = true;
 		lastFocused = trigger.ownerDocument.activeElement;
 
+		if ( ! panel.classList.contains( 'overlay-menu__panel--full-screen' ) ) {
+			const duration = `${ travelDuration( panel.offsetWidth ) }ms`;
+			panel.style.setProperty( '--overlay-menu-slide-duration', duration );
+			scrim.style.setProperty( '--overlay-menu-slide-duration', duration );
+		}
+
 		slideIn();
 
 		// ARIA state.
 		trigger.setAttribute( 'aria-expanded', 'true' );
 		panel.setAttribute( 'aria-hidden', 'false' );
 		panel.removeAttribute( 'inert' );
+		lockScrollbarGutter();
 		document.body.classList.add( `menu-open--overlay-menu-${ overlayId }` );
 
-		// Show scrim overlay (reads overlay color from data attribute).
-		const overlayColor = panel.dataset.overlayColor || '';
-		showOverlay( overlayColor );
+		scrim.classList.add( 'overlay-menu__scrim--open' );
 
 		// Focus trap.
 		focusTrapCleanup = trapFocus();
@@ -192,18 +191,20 @@ const createFlyoutInstance = wrapper => {
 		panel.setAttribute( 'aria-hidden', 'true' );
 		panel.setAttribute( 'inert', '' );
 		document.body.classList.remove( `menu-open--overlay-menu-${ overlayId }` );
+		unlockScrollbarGutter();
 
 		// Return focus immediately so screen readers don't lose context.
 		if ( lastFocused && document.contains( lastFocused ) ) {
 			lastFocused.focus();
 		}
 
-		hideOverlay();
+		scrim.classList.remove( 'overlay-menu__scrim--open' );
 		slideOut();
 	};
 
 	// Event listeners.
 	trigger.addEventListener( 'click', () => ( isOpen ? closeMenu() : openMenu() ) );
+	scrim.addEventListener( 'click', closeMenu );
 
 	if ( closeBtn ) {
 		closeBtn.addEventListener( 'click', e => {

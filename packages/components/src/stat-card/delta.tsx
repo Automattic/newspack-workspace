@@ -18,7 +18,10 @@ import type { StatCardDeltaDirection, StatCardDeltaProps, StatCardDeltaTone } fr
 const glyphs: Record< StatCardDeltaDirection, string > = {
 	up: '↑',
 	down: '↓',
+	unchanged: '',
 };
+
+const knownDirections = Object.keys( glyphs );
 
 const tones: StatCardDeltaTone[] = [ 'positive', 'negative', 'neutral' ];
 
@@ -32,9 +35,9 @@ const Delta = forwardRef< HTMLSpanElement, StatCardDeltaProps >( function Delta(
 		if ( 'production' === process.env.NODE_ENV ) {
 			return;
 		}
-		if ( ! glyphs[ direction ] ) {
+		if ( ! knownDirections.includes( direction ) ) {
 			// eslint-disable-next-line no-console
-			console.warn( `StatCard.Delta: unknown direction "${ direction }". Use one of ${ Object.keys( glyphs ).join( ', ' ) }.` );
+			console.warn( `StatCard.Delta: unknown direction "${ direction }". Use one of ${ knownDirections.join( ', ' ) }.` );
 		}
 		if ( ! tones.includes( tone ) ) {
 			// eslint-disable-next-line no-console
@@ -45,6 +48,7 @@ const Delta = forwardRef< HTMLSpanElement, StatCardDeltaProps >( function Delta(
 	const directions: Record< StatCardDeltaDirection, string > = {
 		up: labels.up,
 		down: labels.down,
+		unchanged: labels.unchanged,
 	};
 
 	const glyph = glyphs[ direction ];

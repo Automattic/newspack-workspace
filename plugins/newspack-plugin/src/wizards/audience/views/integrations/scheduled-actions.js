@@ -8,7 +8,6 @@ import apiFetch from '@wordpress/api-fetch';
 import { addQueryArgs } from '@wordpress/url';
 import { Spinner } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
-import { DataViews as WPDataViews } from '@wordpress/dataviews';
 
 /**
  * Internal dependencies
@@ -26,17 +25,12 @@ const DEFAULT_VIEW = {
 	perPage: 25,
 	sort: { field: 'timestamp', direction: 'desc' },
 	search: '',
-	fields: [ 'timestamp', 'email', 'event', 'status' ],
+	fields: [ 'event', 'status', 'email', 'timestamp' ],
 	filters: [],
-	layout: {
-		styles: {
-			timestamp: { width: '35%' },
-			email: { width: '30%' },
-			event: { width: '20%' },
-			status: { width: '15%' },
-		},
-	},
+	layout: {},
 };
+
+const PER_PAGE_CONFIG = { perPageSizes: [ 10, 25, 50, 100 ] };
 
 const ORDERBY_MAP = {
 	timestamp: 'scheduled_date_gmt',
@@ -132,7 +126,11 @@ export const ScheduledActions = ( { integrationId } ) => {
 				render: ( { item } ) => {
 					// A status Action Scheduler grows later is one to look at, not a deliberate stop.
 					const mapped = STATUS_MAP[ item.status ] || { label: item.status, status: 'attention' };
-					return <StatusIndicator status={ mapped.status }>{ mapped.label }</StatusIndicator>;
+					return (
+						<StatusIndicator status={ mapped.status } tone={ mapped.tone }>
+							{ mapped.label }
+						</StatusIndicator>
+					);
 				},
 				enableSorting: true,
 				elements: Object.entries( STATUS_MAP ).map( ( [ value, { label } ] ) => ( { value, label } ) ),
@@ -189,16 +187,9 @@ export const ScheduledActions = ( { integrationId } ) => {
 				isLoading={ isLoading }
 				getItemId={ item => item.id }
 				search
-			>
-				<Stack direction="row" align="flex-start" gap="sm" className="dataviews__view-actions">
-					<Stack direction="row" align="center" gap="xl" wrap="wrap" className="dataviews__search">
-						<WPDataViews.Search />
-						<WPDataViews.Filters />
-					</Stack>
-				</Stack>
-				<WPDataViews.Layout />
-				<WPDataViews.Footer />
-			</DataViews>
+				config={ PER_PAGE_CONFIG }
+				inlineFilters
+			/>
 			<Drawer.Root isOpen={ isDetailsOpen } size="x-large" onRequestClose={ () => setIsDetailsOpen( false ) }>
 				<Drawer.Header>
 					<Drawer.Title>{ __( 'Action Details', 'newspack-plugin' ) }</Drawer.Title>

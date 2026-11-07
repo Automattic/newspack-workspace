@@ -1,3 +1,10 @@
+## newspack-theme [2.28.2](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.28.1...newspack-theme@2.28.2) (2026-11-04)
+
+
+### Bug Fixes
+
+* **newspack-theme:** add a visual marker to HTML blocks in the editor ([#1460](https://github.com/Automattic/newspack-workspace/issues/1460)) ([66e69bb](https://github.com/Automattic/newspack-workspace/commit/66e69bb8c61d7bfe92fdafb4c5dfb77e7f736baf))
+
 ## newspack-theme [2.28.1](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.28.0...newspack-theme@2.28.1) (2026-10-20)
 
 

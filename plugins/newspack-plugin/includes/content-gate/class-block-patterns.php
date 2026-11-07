@@ -18,6 +18,21 @@ class Block_Patterns {
 		add_action( 'admin_init', [ __CLASS__, 'register_block_patterns' ] );
 		add_action( 'enqueue_block_editor_assets', [ __CLASS__, 'enqueue_styles' ] );
 		add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_styles' ] );
+		add_action( 'enqueue_block_assets', [ __CLASS__, 'enqueue_editor_canvas_styles' ] );
+	}
+
+	/**
+	 * Enqueue styles in the editor canvas when editing a gate layout or a memberships gate.
+	 */
+	public static function enqueue_editor_canvas_styles() {
+		if ( ! is_admin() || ! function_exists( 'get_current_screen' ) ) {
+			return;
+		}
+		$screen = get_current_screen();
+		if ( ! $screen || ! in_array( $screen->post_type, [ \Newspack\Content_Gate::GATE_LAYOUT_CPT, \Newspack\Memberships::GATE_CPT ], true ) ) {
+			return;
+		}
+		self::enqueue_styles();
 	}
 
 	/**

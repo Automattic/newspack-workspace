@@ -39,7 +39,7 @@ final class Blocks {
 			require_once NEWSPACK_ABSPATH . 'src/blocks/featured-image-caption/class-featured-image-caption-block.php';
 			require_once NEWSPACK_ABSPATH . 'src/blocks/author-profile-social/class-author-profile-social-block.php';
 			require_once NEWSPACK_ABSPATH . 'src/blocks/author-social-link/class-author-social-link-block.php';
-			require_once NEWSPACK_ABSPATH . 'src/blocks/copyright-date/class-copyright-date-block.php';
+			require_once NEWSPACK_ABSPATH . 'src/blocks/copyright/class-copyright-block.php';
 			require_once NEWSPACK_ABSPATH . 'src/blocks/overlay-menu/class-overlay-menu-block.php';
 			require_once NEWSPACK_ABSPATH . 'src/blocks/overlay-menu/trigger/class-overlay-menu-trigger-block.php';
 			require_once NEWSPACK_ABSPATH . 'src/blocks/overlay-menu/panel/class-overlay-menu-panel-block.php';
@@ -146,6 +146,9 @@ final class Blocks {
 			'collections_enabled'              => Collections::is_module_active(),
 			'has_memberships'                  => Memberships::is_active(),
 			'is_content_gate_countdown_active' => Content_Gate_Countdown_Block::is_active(),
+			// Translated here because this plugin's scripts load no JS translations.
+			/* translators: %s: Modified date. */
+			'post_date_updated_label'          => __( 'Updated %s', 'newspack-plugin' ),
 		];
 		if ( $script_data['has_memberships'] ) {
 			$script_data['content_gate_data'] = [

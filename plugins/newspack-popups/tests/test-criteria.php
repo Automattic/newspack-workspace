@@ -133,10 +133,11 @@ class CriteriaTest extends WP_UnitTestCase {
 	 * is exactly the unresolvable-function crash the probe exists to avoid.
 	 */
 	public function test_supports_matching_function() {
-		// date_range is the operator registering plugins actually probe for; the
-		// baseline operators predate the probe and are covered by the JS-module
-		// assertion below.
+		// date_range and boolean are the operators registering plugins actually
+		// probe for; the baseline operators predate the probe and are covered by
+		// the JS-module assertion below.
 		$this->assertTrue( Newspack_Popups_Criteria::supports_matching_function( 'date_range' ) );
+		$this->assertTrue( Newspack_Popups_Criteria::supports_matching_function( 'boolean' ) );
 
 		$this->assertFalse( Newspack_Popups_Criteria::supports_matching_function( 'does_not_exist' ) );
 		$this->assertFalse( Newspack_Popups_Criteria::supports_matching_function( '' ) );

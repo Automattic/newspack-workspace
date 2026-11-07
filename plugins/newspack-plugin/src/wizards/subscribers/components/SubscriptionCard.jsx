@@ -240,16 +240,22 @@ export default function SubscriptionCard( {
 				),
 			} }
 		>
-			{ rows.length > 0 && (
-				<Grid columns={ 2 } gutter={ 16 } noMargin>
-					{ rows.map( row => (
-						<CardRow key={ row.label } label={ row.label }>
-							{ row.value }
-						</CardRow>
-					) ) }
-				</Grid>
-			) }
-			{ children }
+			{ /* With no rows and no children the card is its header alone: the Card
+			     renders an empty body for any truthy children, an array included. */ }
+			{ rows.length > 0 || children ? (
+				<>
+					{ rows.length > 0 && (
+						<Grid columns={ 2 } gutter={ 16 } noMargin>
+							{ rows.map( row => (
+								<CardRow key={ row.label } label={ row.label }>
+									{ row.value }
+								</CardRow>
+							) ) }
+						</Grid>
+					) }
+					{ children }
+				</>
+			) : null }
 		</Card>
 	);
 }

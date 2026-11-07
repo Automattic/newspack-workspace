@@ -370,13 +370,15 @@ final class Newspack_Popups_AB_Tests {
 		if (
 			self::is_enabled()
 			&& ! $is_autosave
-			&& ( ( $changes( self::META_TEST_ID ) && $test_id !== $stored( self::META_TEST_ID ) ) || $changes( 'placement' ) )
+			&& ( ( $changes( self::META_TEST_ID ) && $test_id !== $stored( self::META_TEST_ID ) ) || $changes( 'placement' ) || $changes( 'manual_only' ) )
 			&& '' !== $test_id
-			&& ! self::is_eligible_placement( $effective( 'placement' ) )
+			&& ! self::is_eligible_placement( $effective( 'placement' ), rest_sanitize_boolean( $effective( 'manual_only' ) ) )
 		) {
 			return new WP_Error(
 				'newspack_popups_ab_ineligible_placement',
-				__( 'A/B tests only work on prompts that Newspack places for you. Clear the test name or choose another placement.', 'newspack-popups' ),
+				self::is_eligible_placement( $effective( 'placement' ) )
+					? __( 'A/B tests only work on prompts that Newspack places for you. Clear the test name or turn off Manual only.', 'newspack-popups' )
+					: __( 'A/B tests only work on prompts that Newspack places for you. Clear the test name or choose another placement.', 'newspack-popups' ),
 				[ 'status' => 400 ]
 			);
 		}
@@ -436,7 +438,8 @@ final class Newspack_Popups_AB_Tests {
 			'can_manage_tests'      => self::can_manage_tests( get_current_user_id(), (int) $post_id ),
 			'goals'                 => self::get_goal_labels(),
 			'ineligible_placements' => self::get_ineligible_placements(),
-			'results_url'           => current_user_can( 'manage_options' ) && class_exists( 'Newspack_Popups_AB_Dashboard' ) ? Newspack_Popups_AB_Dashboard::get_page_url() : '',
+			// The editor gets this data with the flag off too, and the page doesn't exist then.
+			'results_url'           => self::is_enabled() && current_user_can( 'manage_options' ) && class_exists( 'Newspack_Popups_AB_Dashboard' ) ? Newspack_Popups_AB_Dashboard::get_page_url() : '',
 			'variants'              => [
 				'a' => __( 'A (control)', 'newspack-popups' ),
 				'b' => __( 'B (challenger)', 'newspack-popups' ),
@@ -453,27 +456,30 @@ final class Newspack_Popups_AB_Tests {
 	 * applies 'readable' to an explicit list and ignores it for 'any'.
 	 *
 	 * @param string $test_id Test ID.
-	 * @return array[] Each `[ 'id', 'title', 'variant', 'goal', 'control_share', 'status', 'status_label', 'edit_link' ]`; `edit_link` is null when the current user can't edit that prompt. `goal` and `control_share` are the stored values, which only the control's count.
+	 * @return array[] Each `[ 'id', 'title', 'variant', 'goal', 'control_share', 'status', 'status_label', 'edit_link' ]`; `edit_link` is null when the current user can't edit that prompt. `goal` and `control_share` are each prompt's stored values; only the control's take effect.
 	 */
 	public static function get_test_prompts( $test_id ) {
-		$test_id = self::sanitize_test_id( $test_id );
-		if ( '' === $test_id ) {
+		if ( ! is_scalar( $test_id ) ) {
 			return [];
 		}
-		$prompts = get_posts(
-			[
-				'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
-				'post_status'    => [ 'publish', 'future', 'draft', 'pending', 'private' ],
-				'perm'           => 'readable',
-				// Same reasoning as get_tests_config(): a bound would silently drop
-				// prompts from the list.
-				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Prompts CPT; config-scale.
-				'orderby'        => 'ID',
-				'order'          => 'ASC',
-				'meta_key'       => self::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
-				'meta_value'     => $test_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
-			]
-		);
+		// The ID as stored first: the save guard keeps a legacy ID with underscores,
+		// and the front end keys tests by the stored value, so footer_test and
+		// footer-test are different tests. Only input that isn't already in stored
+		// form, such as typed text, falls back to the spelling a save would store.
+		$stored_form = sanitize_title( (string) $test_id );
+		$candidates  = [ $stored_form ];
+		if ( (string) $test_id !== $stored_form ) {
+			$candidates[] = self::sanitize_test_id( $test_id );
+		}
+		$prompts = [];
+		foreach ( array_unique( $candidates ) as $candidate ) {
+			if ( '' !== $candidate ) {
+				$prompts = self::query_test_prompts( $candidate );
+			}
+			if ( $prompts ) {
+				break;
+			}
+		}
 		$list = [];
 		foreach ( $prompts as $prompt ) {
 			$status = get_post_status_object( $prompt->post_status );
@@ -490,6 +496,29 @@ final class Newspack_Popups_AB_Tests {
 			];
 		}
 		return $list;
+	}
+
+	/**
+	 * The prompts whose stored Test ID is exactly this one.
+	 *
+	 * @param string $test_id Test ID as stored.
+	 * @return WP_Post[]
+	 */
+	private static function query_test_prompts( $test_id ) {
+		return get_posts(
+			[
+				'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+				'post_status'    => [ 'publish', 'future', 'draft', 'pending', 'private' ],
+				'perm'           => 'readable',
+				// Same reasoning as get_tests_config(): a bound would silently drop
+				// prompts from the list.
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Prompts CPT; config-scale.
+				'orderby'        => 'ID',
+				'order'          => 'ASC',
+				'meta_key'       => self::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'meta_value'     => $test_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			]
+		);
 	}
 
 	/**
@@ -510,7 +539,8 @@ final class Newspack_Popups_AB_Tests {
 	 *                 alone before then, so an earlier date would count traffic the
 	 *                 test never split. `variants` maps the letter to
 	 *                 `[ 'id', 'title', 'status', 'status_label', 'edit_link', 'eligible' ]`,
-	 *                 where `eligible` is false for a manual or custom placement.
+	 *                 where `eligible` is false for a manual or custom placement
+	 *                 and for an overlay set to Manual only.
 	 *                 `duplicates` lists the other prompts carrying a letter, as
 	 *                 `letter` plus those fields. The arm shown is the first
 	 *                 published prompt by ID, or the first by ID when none is
@@ -537,7 +567,9 @@ final class Newspack_Popups_AB_Tests {
 		);
 		$grouped = [];
 		foreach ( $prompts as $prompt ) {
-			$test_id = self::sanitize_test_id( get_post_meta( $prompt->ID, self::META_TEST_ID, true ) );
+			// Keyed by the ID as stored, as get_tests_config() keys the test readers
+			// see: a legacy footer_test and footer-test are two tests, not one.
+			$test_id = trim( (string) get_post_meta( $prompt->ID, self::META_TEST_ID, true ) );
 			$variant = (string) get_post_meta( $prompt->ID, self::META_VARIANT, true );
 			if ( '' === $test_id || ! in_array( $variant, self::VALID_VARIANTS, true ) ) {
 				continue;
@@ -878,7 +910,10 @@ final class Newspack_Popups_AB_Tests {
 			'status'       => $prompt->post_status,
 			'status_label' => $status ? $status->label : $prompt->post_status,
 			'edit_link'    => get_edit_post_link( $prompt->ID, 'raw' ),
-			'eligible'     => self::is_eligible_placement( get_post_meta( $prompt->ID, 'placement', true ) ),
+			'eligible'     => self::is_eligible_placement(
+				get_post_meta( $prompt->ID, 'placement', true ),
+				rest_sanitize_boolean( get_post_meta( $prompt->ID, 'manual_only', true ) )
+			),
 		];
 	}
 
@@ -905,7 +940,8 @@ final class Newspack_Popups_AB_Tests {
 	/**
 	 * Placements a tested prompt can't have. Manual and custom placements render
 	 * wherever a block or shortcode puts them, so there is no slot to split
-	 * between variants.
+	 * between variants. An overlay set to Manual only is in the same position;
+	 * is_eligible_placement() covers it, since it is a flag rather than a value.
 	 *
 	 * @return string[] Placement values.
 	 */
@@ -914,13 +950,20 @@ final class Newspack_Popups_AB_Tests {
 	}
 
 	/**
-	 * Whether a prompt with this placement can be part of a test.
+	 * Whether a prompt with this placement can be part of a test. Follows
+	 * Newspack_Popups_Model::is_manual_only(), which treats an overlay set to
+	 * Manual only like the manual placement.
 	 *
-	 * @param string $placement Placement value.
+	 * @param string $placement   Placement value.
+	 * @param bool   $manual_only The prompt's Manual only setting.
 	 * @return bool
 	 */
-	public static function is_eligible_placement( $placement ) {
-		return ! in_array( (string) $placement, self::get_ineligible_placements(), true );
+	public static function is_eligible_placement( $placement, $manual_only = false ) {
+		$placement = (string) $placement;
+		if ( in_array( $placement, self::get_ineligible_placements(), true ) ) {
+			return false;
+		}
+		return ! ( $manual_only && in_array( $placement, Newspack_Popups_Model::get_overlay_placements(), true ) );
 	}
 
 	/**
@@ -930,8 +973,9 @@ final class Newspack_Popups_AB_Tests {
 	 * meta key as the second argument, which sanitize_title() reads as the fallback
 	 * title, so an empty value would be stored as the key name instead of clearing
 	 * the test. And sanitize_title() keeps underscores and percent-encodes what it
-	 * can't transliterate, while the editor's slug and the lookup route accept
-	 * neither, so an ID stored with either could never be looked up.
+	 * can't transliterate, which the editor's slug can't produce. A legacy ID
+	 * stored by sanitize_title() stays as it is; get_test_prompts() finds one with
+	 * underscores, and a percent-encoded one can't be looked up.
 	 *
 	 * @param mixed $value Raw value.
 	 * @return string Slug, or empty string.
@@ -1132,7 +1176,8 @@ final class Newspack_Popups_AB_Tests {
 	 * ASCII-ONLY PRECONDITION: this hashes UTF-8 *bytes* (strlen/ord) while the
 	 * client hashes UTF-16 *code units* (charCodeAt) — the two agree only while
 	 * every hashed input (client ID, test ID) is ASCII. That holds today by
-	 * construction (generated cookie IDs; sanitize_title output). If either
+	 * construction (generated cookie IDs; Test IDs from sanitize_test_id(), or
+	 * from sanitize_title() for legacy ones, which percent-encodes the rest). If either
 	 * input's charset ever widens, normalize both implementations together.
 	 *
 	 * @param string $str String to hash.
@@ -1213,12 +1258,12 @@ final class Newspack_Popups_AB_Tests {
 	 * control-share edits never re-bucket a reader, and assignment is stable across
 	 * devices once logged in.
 	 *
-	 * The exception is a stored variant that leaves the published set: the guard
-	 * below recomputes and overwrites it. In a two-arm test that cannot happen --
-	 * unpublishing the only challenger ends the test -- but with three or more arms,
-	 * briefly drafting one variant permanently reassigns every reader holding it, and
-	 * republishing does not bring them back. Tracked separately; the fix is to keep
-	 * any stored VALID_VARIANTS value and fall back only for display.
+	 * A stored variant stays stored while no published prompt holds it: a variant
+	 * can be drafted while the test keeps running, and overwriting the value would
+	 * strand its readers on another arm for good. They see a computed published arm
+	 * until a published prompt holds that letter again, which may never happen,
+	 * since nothing tells a draft from a retired arm. That fallback is not
+	 * persisted, so a second device or a control-share edit can move it.
 	 *
 	 * @param array $tests_config Config from get_tests_config().
 	 * @return array Buckets keyed by test ID.
@@ -1233,11 +1278,14 @@ final class Newspack_Popups_AB_Tests {
 		$buckets   = [];
 		foreach ( $tests_config as $test_id => $config ) {
 			$meta_key = self::USER_META_BUCKET_PREFIX . $test_id;
-			$bucket   = get_user_meta( $user_id, $meta_key, true );
+			$stored   = get_user_meta( $user_id, $meta_key, true );
+			$bucket   = $stored;
 			if ( ! in_array( $bucket, $config['variants'], true ) ) {
 				$reader_key = $client_id ? $client_id : (string) $user_id;
 				$bucket     = self::compute_bucket( $reader_key, $test_id, $config );
-				update_user_meta( $user_id, $meta_key, $bucket );
+				if ( ! in_array( $stored, self::VALID_VARIANTS, true ) ) {
+					update_user_meta( $user_id, $meta_key, $bucket );
+				}
 			}
 			$buckets[ $test_id ] = $bucket;
 		}

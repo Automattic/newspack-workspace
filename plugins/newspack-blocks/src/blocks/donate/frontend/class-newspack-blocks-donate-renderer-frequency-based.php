@@ -54,17 +54,24 @@ class Newspack_Blocks_Donate_Renderer_Frequency_Based extends Newspack_Blocks_Do
 	 * @param string $frequency_name Frequency name.
 	 * @param number $uid Unique ID.
 	 * @param array  $configuration The donations settings.
+	 * @param bool   $is_modern Whether the block uses the Modern style.
 	 *
 	 * @return string
 	 */
-	private static function render_frequency_tab( $frequency_slug, $frequency_name, $uid, $configuration ) {
+	private static function render_frequency_tab( $frequency_slug, $frequency_name, $uid, $configuration, bool $is_modern = false ) {
+		$is_selected = $frequency_slug === $configuration['defaultFrequency'];
+		if ( $is_modern ) {
+			$tab_class = 'newspack-ui__button newspack-ui__button--small' . ( $is_selected ? ' selected' : '' );
+		} else {
+			$tab_class = 'wpbnbd__button freq-label' . ( $is_selected ? ' wpbnbd__button--active' : '' );
+		}
 		ob_start();
 		?>
 		<button
 			role='tab'
 			type='button'
 			aria-controls='tab-panel-<?php echo esc_attr( $frequency_slug . '-' . $uid ); ?>'
-			class="wpbnbd__button freq-label<?php echo esc_attr( $frequency_slug === $configuration['defaultFrequency'] ? ' wpbnbd__button--active' : '' ); ?>"
+			class="<?php echo esc_attr( $tab_class ); ?>"
 			data-tab-id="<?php echo esc_attr( $frequency_slug . '-' . $uid ); ?>"
 			id="tab-newspack-donate-<?php echo esc_attr( $frequency_slug . '-' . $uid ); ?>"
 			<?php echo "aria-selected='" . ( $frequency_slug === $configuration['defaultFrequency'] ? 'true' : 'false' ) . "'"; ?>
@@ -108,13 +115,14 @@ class Newspack_Blocks_Donate_Renderer_Frequency_Based extends Newspack_Blocks_Do
 	 *
 	 * @param array  $configuration The donations settings.
 	 * @param string $uid ID of the block.
+	 * @param bool   $is_modern Whether the block uses the Modern style.
 	 */
-	private static function render_form_header( $configuration, $uid ) {
+	private static function render_form_header( $configuration, $uid, bool $is_modern = false ) {
 		?>
 			<?php if ( ! self::renders_single_frequency( $configuration ) ) : ?>
-				<div role='tablist' class='tab-container'>
+				<div role='tablist' class='<?php echo esc_attr( $is_modern ? 'newspack-ui newspack-ui__segmented-control__tabs' : 'tab-container' ); ?>'>
 					<?php foreach ( $configuration['frequencies'] as $frequency_slug => $frequency_name ) : ?>
-						<?php echo self::render_frequency_tab( $frequency_slug, $frequency_name, $uid, $configuration ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+						<?php echo self::render_frequency_tab( $frequency_slug, $frequency_name, $uid, $configuration, $is_modern ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 					<?php endforeach; ?>
 				</div>
 			<?php endif; ?>
@@ -139,6 +147,7 @@ class Newspack_Blocks_Donate_Renderer_Frequency_Based extends Newspack_Blocks_Do
 		$uid = wp_rand( 10000, 99999 ); // Unique identifier to prevent labels colliding with other instances of Donate block.
 
 		$configuration = self::get_configuration( $attributes );
+		$is_modern     = self::is_modern_style( $attributes );
 
 		// Calculate the value for the "step" property of the custom amount donation value `input` element.
 		$input_element_step_attribute = '1';
@@ -168,8 +177,11 @@ class Newspack_Blocks_Donate_Renderer_Frequency_Based extends Newspack_Blocks_Do
 			<form>
 				<?php echo self::render_hidden_form_inputs( $attributes ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 				<div class='wp-block-newspack-blocks-donate__options'>
-					<div class='wp-block-newspack-blocks-donate__frequencies frequencies'>
-						<?php echo self::render_form_header( $configuration, $uid ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+					<div class='wp-block-newspack-blocks-donate__frequencies frequencies<?php echo $is_modern ? ' newspack-ui__segmented-control' : ''; ?>'>
+						<?php echo self::render_form_header( $configuration, $uid, $is_modern ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+						<?php if ( $is_modern ) : ?>
+						<div class='newspack-ui__segmented-control__content'>
+						<?php endif; ?>
 						<?php foreach ( $configuration['frequencies'] as $frequency_slug => $frequency_name ) : ?>
 							<?php $amount = $configuration['amounts'][ $frequency_slug ][3]; ?>
 							<div
@@ -222,6 +234,9 @@ class Newspack_Blocks_Donate_Renderer_Frequency_Based extends Newspack_Blocks_Do
 							</div>
 
 						<?php endforeach; ?>
+						<?php if ( $is_modern ) : ?>
+						</div>
+						<?php endif; ?>
 					</div>
 				</div>
 					<?php echo self::render_footer( $attributes ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
@@ -240,8 +255,11 @@ class Newspack_Blocks_Donate_Renderer_Frequency_Based extends Newspack_Blocks_Do
 			<form>
 				<?php echo self::render_hidden_form_inputs( $attributes ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 				<div class='wp-block-newspack-blocks-donate__options'>
-					<div class='wp-block-newspack-blocks-donate__frequencies frequencies'>
-						<?php echo self::render_form_header( $configuration, $uid ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+					<div class='wp-block-newspack-blocks-donate__frequencies frequencies<?php echo $is_modern ? ' newspack-ui__segmented-control' : ''; ?>'>
+						<?php echo self::render_form_header( $configuration, $uid, $is_modern ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+						<?php if ( $is_modern ) : ?>
+						<div class='newspack-ui__segmented-control__content'>
+						<?php endif; ?>
 						<?php foreach ( $configuration['frequencies'] as $frequency_slug => $frequency_name ) : ?>
 							<div
 								class='wp-block-newspack-blocks-donate__frequency frequency'
@@ -328,6 +346,9 @@ class Newspack_Blocks_Donate_Renderer_Frequency_Based extends Newspack_Blocks_Do
 							</div>
 
 						<?php endforeach; ?>
+						<?php if ( $is_modern ) : ?>
+						</div>
+						<?php endif; ?>
 					</div>
 				</div>
 					<?php echo self::render_footer( $attributes ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>

@@ -58,6 +58,8 @@ const TestCard = ( { test, data } ) => {
 	const hasStats = hasStarted && stats && stats.source.state !== 'unavailable';
 
 	const ineligible = letters.filter( letter => false === test.variants[ letter ].eligible );
+	const allPublished = letters.every( letter => test.variants[ letter ].status === 'publish' );
+	const publishedDuplicate = duplicates.some( duplicate => duplicate.status === 'publish' );
 
 	const load = refresh => {
 		setLoading( true );
@@ -103,6 +105,11 @@ const TestCard = ( { test, data } ) => {
 						<Button
 							variant="secondary"
 							size="compact"
+							label={ sprintf(
+								// Translators: %s is the test's name.
+								__( 'Refresh results: %s', 'newspack-popups' ),
+								test.test_id
+							) }
 							onClick={ () => load( true ) }
 							disabled={ loading }
 							accessibleWhenDisabled
@@ -117,10 +124,15 @@ const TestCard = ( { test, data } ) => {
 				<Stack direction="column" gap="lg">
 					{ duplicates.length > 0 && (
 						<Notice status="error" isDismissible={ false } spokenMessage="">
-							{ __(
-								'More than one prompt in this test is the same version. Readers still see both, and results only count the first. Clear the test name on the extra prompt, or unpublish it:',
-								'newspack-popups'
-							) }{ ' ' }
+							{ publishedDuplicate
+								? __(
+										'More than one prompt in this test is the same version. Readers still see both, and results only count the first. Clear the test name on the extra prompt, or unpublish it:',
+										'newspack-popups'
+								  )
+								: __(
+										"More than one prompt in this test is the same version. The extra one isn't published, so readers don't see it. Clear the test name on the extra prompt:",
+										'newspack-popups'
+								  ) }{ ' ' }
 							{ duplicates.map( ( duplicate, index ) => {
 								const title = decodeEntities( duplicate.title );
 								return (
@@ -142,8 +154,8 @@ const TestCard = ( { test, data } ) => {
 							{ sprintf(
 								// Translators: %s is a list of version letters, such as "A" or "A and B".
 								_n(
-									"Version %s uses a manual or custom placement, which A/B tests don't support, so its results aren't reliable. Change its placement in the prompt editor.",
-									"Versions %s use a manual or custom placement, which A/B tests don't support, so their results aren't reliable. Change their placement in the prompt editor.",
+									"Version %s uses a manual or custom placement, or is an overlay set to Manual only, which A/B tests don't support, so its results aren't reliable. Change its placement or turn off Manual only in the prompt editor.",
+									"Versions %s use a manual or custom placement, or are overlays set to Manual only, which A/B tests don't support, so their results aren't reliable. Change their placement or turn off Manual only in the prompt editor.",
 									ineligible.length,
 									'newspack-popups'
 								),
@@ -154,7 +166,7 @@ const TestCard = ( { test, data } ) => {
 					{ status === 'incomplete' ? (
 						<p className="newspack-popups-ab-tests__hint">{ getMissingRoleHint( test.variants ) }</p>
 					) : (
-						<AllocationBar controlShare={ test.control_share } variants={ test.variants } />
+						<AllocationBar controlShare={ test.control_share } variants={ test.variants } planned={ ! allPublished } />
 					) }
 					<div
 						className="newspack-popups-ab-tests__table-scroll"
