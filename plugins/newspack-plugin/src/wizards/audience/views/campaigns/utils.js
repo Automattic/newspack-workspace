@@ -141,8 +141,10 @@ export const promptStatus = ( { status }, segmentDisabled = false ) => {
  *
  * The payload carries `ab_test_id` only while the test has a published A and
  * at least one other published version, so the test's own state needs no check
- * here. A draft version of such a test still carries it, though, and the badge
- * means the prompt is live on purpose, so the prompt itself must be published.
+ * here. Draft, scheduled and private versions still carry it but take no part
+ * in the test, so the prompt itself must be published. A disabled segment is
+ * left to the status badge, matching the A/B Tests tab, which also counts only
+ * post status.
  *
  * @param {Object} prompt The prompt.
  * @return {?Object} `{ label, intent }`, or null when the prompt gets no badge.
