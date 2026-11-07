@@ -116,8 +116,8 @@ describe( 'A/B Tests tab', () => {
 		expect( within( draft ).getAllByText( 'Draft' ) ).toHaveLength( 2 ); // The badge, and B's status line.
 		expect( within( incomplete ).getByText( 'Incomplete' ) ).toBeInTheDocument();
 
-		expect( within( incomplete ).getByRole( 'button', { name: 'Create Version B' } ) ).toBeInTheDocument();
-		expect( within( draft ).getByRole( 'link', { name: 'Edit Version B' } ) ).toHaveAttribute( 'href', prompt( 3 ).edit_link );
+		expect( within( incomplete ).getByRole( 'button', { name: 'Create Version B: Test inc' } ) ).toBeInTheDocument();
+		expect( within( draft ).getByRole( 'link', { name: 'Edit Version B: Test drf' } ) ).toHaveAttribute( 'href', prompt( 3 ).edit_link );
 		// End Test comes later; a running card has only its menu.
 		expect( within( running ).queryByRole( 'button', { name: /End Test|Create Version B/ } ) ).not.toBeInTheDocument();
 

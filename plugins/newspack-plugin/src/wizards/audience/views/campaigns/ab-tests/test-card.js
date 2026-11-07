@@ -86,13 +86,30 @@ const TestCard = ( { test, data, onRenamed } ) => {
 	let mainAction = null;
 	if ( canCreateVersionB ) {
 		mainAction = (
-			<Button variant="secondary" onClick={ () => setModal( 'start' ) }>
+			<Button
+				variant="secondary"
+				onClick={ () => setModal( 'start' ) }
+				aria-label={ sprintf(
+					// Translators: %s is the test name.
+					__( 'Create Version B: %s', 'newspack-plugin' ),
+					name
+				) }
+			>
 				{ __( 'Create Version B', 'newspack-plugin' ) }
 			</Button>
 		);
 	} else if ( unpublished ) {
 		mainAction = (
-			<Button variant="secondary" href={ test.variants[ unpublished ].edit_link }>
+			<Button
+				variant="secondary"
+				href={ test.variants[ unpublished ].edit_link }
+				aria-label={ sprintf(
+					// Translators: %1$s is a version letter, %2$s is the test name.
+					__( 'Edit Version %1$s: %2$s', 'newspack-plugin' ),
+					unpublished.toUpperCase(),
+					name
+				) }
+			>
 				{ sprintf(
 					// Translators: %s is a version letter.
 					__( 'Edit Version %s', 'newspack-plugin' ),
