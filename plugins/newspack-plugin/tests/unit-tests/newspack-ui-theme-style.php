@@ -358,7 +358,7 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 					'brand'      => '#FFC857',
 					'brand_text' => '',
 				]
-			) + [ '--newspack-ui-field-caret' => 'var(--newspack-ui-field-caret-light)' ],
+			) + Newspack_UI_Palette::ELEVATION_DARK + [ '--newspack-ui-field-caret' => 'var(--newspack-ui-field-caret-light)' ],
 			$properties
 		);
 
@@ -742,6 +742,63 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 		$this->assertSame( 'color', Newspack_UI_Theme_Style::property_type( '--newspack-ui-color-base' ) );
 		$this->assertSame( '', Newspack_UI_Theme_Style::property_type( '--newspack-ui-other-thing' ) );
 		$this->assertSame( '', Newspack_UI_Theme_Style::property_type( '--other-color-base' ) );
+	}
+
+	/**
+	 * A dark base prints the dark elevation tokens; a light one leaves the Neutral defaults.
+	 */
+	public function test_elevation_tokens_print_only_on_a_dark_base(): void {
+		$dark = Newspack_UI_Theme_Style::get_css(
+			[
+				'color' => [
+					'background' => '#1e1e1e',
+					'text'       => '#ffffff',
+				],
+			],
+			[]
+		);
+		$this->assertStringContainsString( '--newspack-ui-elevation-ink:#000;', $dark );
+		$this->assertStringContainsString( '--newspack-ui-elevation-edge:color-mix(in oklab, var(--newspack-ui-color-contrast) 14%, transparent);', $dark );
+		$this->assertStringContainsString( '--newspack-ui-elevation-strength:2.5;', $dark );
+
+		foreach ( [ '#ffffff', '#f2f0ea' ] as $base ) {
+			$light = Newspack_UI_Theme_Style::get_css(
+				[
+					'color' => [
+						'background' => $base,
+						'text'       => '#1e1e1e',
+					],
+				],
+				[]
+			);
+			$this->assertStringNotContainsString( '--newspack-ui-elevation-', $light, $base );
+		}
+	}
+
+	/**
+	 * The elevation values pass only their own allow-lists.
+	 */
+	public function test_elevation_value_types(): void {
+		$this->assertSame( 'color-mix', Newspack_UI_Theme_Style::property_type( '--newspack-ui-elevation-edge' ) );
+		$this->assertSame( 'number', Newspack_UI_Theme_Style::property_type( '--newspack-ui-elevation-strength' ) );
+		$this->assertSame( 'color', Newspack_UI_Theme_Style::property_type( '--newspack-ui-elevation-ink' ) );
+
+		$edge = 'color-mix(in oklab, var(--newspack-ui-color-contrast) 14%, transparent)';
+		$this->assertSame( $edge, Newspack_UI_Theme_Style::sanitize_value( $edge, 'color-mix' ) );
+		$this->assertSame( 'color-mix(in oklab, #ffffff 14%, transparent)', Newspack_UI_Theme_Style::sanitize_value( 'color-mix(in oklab, #ffffff 14%, transparent)', 'color-mix' ) );
+		foreach ( [
+			'color-mix(in srgb, #ffffff 14%, transparent)',
+			'color-mix(in oklab, url(x) 14%, transparent)',
+			'color-mix(in oklab, #fff 14%, #000)',
+			'#ffffff',
+		] as $value ) {
+			$this->assertSame( '', Newspack_UI_Theme_Style::sanitize_value( $value, 'color-mix' ), $value );
+		}
+
+		$this->assertSame( '2.5', Newspack_UI_Theme_Style::sanitize_value( '2.5', 'number' ) );
+		foreach ( [ '-1', '2.5px', 'calc(2)', '' ] as $value ) {
+			$this->assertSame( '', Newspack_UI_Theme_Style::sanitize_value( $value, 'number' ), $value );
+		}
 	}
 
 	/**
@@ -1447,7 +1504,7 @@ class Newspack_Test_UI_Theme_Style extends WP_UnitTestCase {
 		$this->assertStringContainsString( '--newspack-ui-color-btn-hover:' . $expected['--newspack-ui-color-btn-hover'] . ';', $css );
 		$this->assertStringContainsString( '--newspack-ui-color-button-bg-hover:' . $expected['--newspack-ui-color-button-bg-hover'] . ';', $css );
 		$this->assertStringContainsString( '--newspack-ui-color-btn-pressed:' . $expected['--newspack-ui-color-btn-pressed'] . ';', $css );
-		$this->assertStringNotContainsString( 'color-mix', $css );
+		$this->assertStringNotContainsString( '#ffc857', $css );
 	}
 
 	/**

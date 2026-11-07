@@ -56,6 +56,9 @@ class Newspack_UI_Theme_Style {
 		'--newspack-ui-field-caret'           => 'reference',
 		'--newspack-ui-field-ink-subtle'      => 'color',
 		'--newspack-ui-field-ink-muted'       => 'color',
+		'--newspack-ui-elevation-ink'         => 'color',
+		'--newspack-ui-elevation-edge'        => 'color-mix',
+		'--newspack-ui-elevation-strength'    => 'number',
 	];
 
 	/**
@@ -352,6 +355,7 @@ class Newspack_UI_Theme_Style {
 
 		$properties  = Newspack_UI_Palette::get_properties( $palette );
 		$has_palette = [] !== $properties;
+		$properties += Newspack_UI_Palette::elevation_properties( $palette['base'] );
 		if ( isset( $properties['--newspack-ui-color-button-bg'] ) ) {
 			if ( isset( $states['hover'] ) ) {
 				$properties['--newspack-ui-color-button-bg-hover'] = $states['hover'];
@@ -1054,7 +1058,7 @@ class Newspack_UI_Theme_Style {
 	 * Check a value against the allow-list for its property type.
 	 *
 	 * @param mixed  $value The value.
-	 * @param string $type  One of 'color', 'reference', 'font-family', 'length', 'line-height', 'weight', 'letter-spacing', 'text-transform', 'white-space', 'text-decoration'.
+	 * @param string $type  One of 'color', 'color-mix', 'number', 'reference', 'font-family', 'length', 'line-height', 'weight', 'letter-spacing', 'text-transform', 'white-space', 'text-decoration'.
 	 *
 	 * @return string The trimmed value, or an empty string when it is not allowed.
 	 */
@@ -1077,6 +1081,10 @@ class Newspack_UI_Theme_Style {
 		switch ( $type ) {
 			case 'color':
 				return 1 === preg_match( '/^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i', $value ) || self::is_var( $value, 'color' ) ? $value : '';
+			case 'color-mix':
+				return 1 === preg_match( '/^color-mix\(in oklab, (.+) \d+(?:\.\d+)?%, transparent\)$/', $value, $match ) && '' !== self::sanitize_value( $match[1], 'color' ) ? $value : '';
+			case 'number':
+				return 1 === preg_match( '/^\d+(?:\.\d+)?$/', $value ) ? $value : '';
 			case 'reference':
 				return self::is_var( $value, 'reference' ) ? $value : '';
 			case 'font-family':

@@ -576,6 +576,17 @@ class Newspack_Test_UI_Palette extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Elevation tokens change only on a dark base, by the same dark test the status colors use.
+	 */
+	public function test_elevation_properties_follow_the_dark_base_test() {
+		$this->assertSame( Newspack_UI_Palette::ELEVATION_DARK, Newspack_UI_Palette::elevation_properties( '#1e1e1e' ) );
+		$this->assertSame( Newspack_UI_Palette::ELEVATION_DARK, Newspack_UI_Palette::elevation_properties( '#000' ) );
+		foreach ( [ '#ffffff', '#f2f0ea', '#e6f05a', '', 'var(--x)', '#1e1e1ecc' ] as $base ) {
+			$this->assertSame( [], Newspack_UI_Palette::elevation_properties( $base ), $base );
+		}
+	}
+
+	/**
 	 * Neutral emits no status tokens.
 	 */
 	public function test_status_defaults_not_emitted() {

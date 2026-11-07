@@ -102,7 +102,7 @@
 			position: fixed;
 			z-index: 100000;
 			&__item {
-				@include mixins.newspack-ui-elevation( 2 );
+				@include mixins.newspack-ui-elevation( 3 );
 
 				align-items: center;
 				background-color: var(--newspack-ui-color-inverse-bg);
@@ -127,6 +127,10 @@
 						opacity var(--newspack-ui-duration-snackbar) var(--newspack-ui-ease-snackbar),
 						height 0ms linear var(--newspack-ui-duration-snackbar),
 						margin-top 0ms linear var(--newspack-ui-duration-snackbar);
+				}
+				@media ( forced-colors: active ) {
+					outline: 1px solid CanvasText;
+					outline-offset: -1px;
 				}
 				&.active {
 					height: auto;
