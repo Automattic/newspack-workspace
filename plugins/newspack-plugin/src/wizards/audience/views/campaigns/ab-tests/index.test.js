@@ -238,15 +238,45 @@ describe( 'A/B Tests tab', () => {
 		} );
 		render( <ABTests /> );
 		const card = await screen.findByRole( 'region', { name: 'Test inc' } );
-		fireEvent.click( within( card ).getByRole( 'button', { name: 'Test actions: Test inc' } ) );
+		const toggle = within( card ).getByRole( 'button', { name: 'Test actions: Test inc' } );
+		fireEvent.click( toggle );
+		// In a browser the toggle holds focus as the dialog mounts, so the dialog
+		// records it as the place to return focus to; jsdom moves no focus on click.
+		toggle.focus();
 		fireEvent.click( screen.getByRole( 'menuitem', { name: 'Rename: Test inc' } ) );
+		expect( screen.getByRole( 'dialog', { name: 'Rename Test' } ) ).toBeInTheDocument();
+		fireEvent.change( screen.getByLabelText( 'Test name' ), { target: { value: ' ' } } );
+		expect( screen.getByRole( 'button', { name: 'Save' } ) ).toHaveAttribute( 'aria-disabled', 'true' );
 		fireEvent.change( screen.getByLabelText( 'Test name' ), { target: { value: 'Year-end appeal' } } );
-		fireEvent.click( screen.getByRole( 'button', { name: 'Rename' } ) );
-		expect( await screen.findByRole( 'region', { name: 'Year-end appeal' } ) ).toBeInTheDocument();
+		const focusedHeadings = [];
+		card.addEventListener( 'focusin', event => event.target.matches( 'h2' ) && focusedHeadings.push( event.target.textContent ) );
+		screen.getByRole( 'button', { name: 'Save' } ).focus();
+		fireEvent.click( screen.getByRole( 'button', { name: 'Save' } ) );
+		const renamed = await screen.findByRole( 'region', { name: 'Year-end appeal' } );
+		await waitFor( () => expect( within( renamed ).getByRole( 'heading', { name: 'Year-end appeal' } ) ).toHaveFocus() );
+		expect( focusedHeadings ).toEqual( [ 'Year-end appeal' ] );
 		expect( apiFetch ).toHaveBeenCalledWith( {
 			path: '/newspack-popups/v1/ab-tests/inc/name',
 			method: 'POST',
 			data: { name: 'Year-end appeal' },
 		} );
+	} );
+
+	it( 'returns focus to the name field when a rename fails', async () => {
+		mockRoutes( listResponse( [ test( 'inc', { a: prompt( 1 ) } ) ] ), {
+			'/newspack-popups/v1/ab-tests/inc/name': () => Promise.reject( { message: 'Rename failed.' } ),
+		} );
+		render( <ABTests /> );
+		const card = await screen.findByRole( 'region', { name: 'Test inc' } );
+		fireEvent.click( within( card ).getByRole( 'button', { name: 'Test actions: Test inc' } ) );
+		fireEvent.click( screen.getByRole( 'menuitem', { name: 'Rename: Test inc' } ) );
+		const field = screen.getByLabelText( 'Test name' );
+		fireEvent.change( field, { target: { value: 'Year-end appeal' } } );
+		// Focus starts outside the field, where a browser leaves it once the
+		// field is disabled for the save.
+		expect( field ).not.toHaveFocus();
+		fireEvent.submit( field.closest( 'form' ) );
+		expect( await screen.findByText( 'Rename failed.' ) ).toBeInTheDocument();
+		await waitFor( () => expect( field ).toHaveFocus() );
 	} );
 } );

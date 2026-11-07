@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies
  */
-import { useEffect, useId, useState } from '@wordpress/element';
+import { useEffect, useId, useRef, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { speak } from '@wordpress/a11y';
 import apiFetch from '@wordpress/api-fetch';
@@ -44,7 +44,9 @@ const TestCard = ( { test, data, onRenamed } ) => {
 	const [ error, setError ] = useState( null );
 	const [ wasRefresh, setWasRefresh ] = useState( false );
 	const [ modal, setModal ] = useState( null );
+	const [ focusHeading, setFocusHeading ] = useState( false );
 	const headingId = useId();
+	const headingRef = useRef( null );
 
 	const status = getTestStatus( test );
 	const name = test.name || test.test_id;
@@ -77,6 +79,16 @@ const TestCard = ( { test, data, onRenamed } ) => {
 			dateI18n( getSettings().formats.datetime, stats.source.fetched_at )
 		);
 	}
+
+	// Waits for the rename to render and the modal to close: focused any
+	// earlier, the heading still reads the old name and sits under the modal's
+	// aria-hidden, so a screen reader may not announce it.
+	useEffect( () => {
+		if ( focusHeading ) {
+			headingRef.current?.focus();
+			setFocusHeading( false );
+		}
+	}, [ focusHeading ] );
 
 	const load = refresh => {
 		setLoading( true );
@@ -189,7 +201,7 @@ const TestCard = ( { test, data, onRenamed } ) => {
 	const header = (
 		<div className="newspack-ab-tests__header">
 			<div className="newspack-ab-tests__header-top">
-				<h2 id={ headingId } className="newspack-ab-tests__title">
+				<h2 id={ headingId } ref={ headingRef } tabIndex={ -1 } className="newspack-ab-tests__title">
 					{ name }
 				</h2>
 				<Badge intent={ getStatusIntent( status ) }>{ getStatusLabel( status ) }</Badge>
@@ -388,6 +400,7 @@ const TestCard = ( { test, data, onRenamed } ) => {
 					onRenamed={ newName => {
 						setModal( null );
 						onRenamed( test.test_id, newName );
+						setFocusHeading( true );
 						speak( __( 'Test renamed.', 'newspack-plugin' ) );
 					} }
 					onClose={ () => setModal( null ) }
