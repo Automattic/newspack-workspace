@@ -136,6 +136,31 @@ export const promptStatus = ( { status }, segmentDisabled = false ) => {
 	return { label: __( 'Inactive', 'newspack-plugin' ), intent: 'draft' };
 };
 
+/**
+ * The badge that marks a prompt as one version of a running A/B test.
+ *
+ * The payload carries `ab_test_id` only while the test has a published A and
+ * at least one other published version, so the test's own state needs no check
+ * here. A draft version of such a test still carries it, though, and the badge
+ * means the prompt is live on purpose, so the prompt itself must be published.
+ *
+ * @param {Object} prompt The prompt.
+ * @return {?Object} `{ label, intent }`, or null when the prompt gets no badge.
+ */
+export const abTestBadge = prompt => {
+	if ( ! prompt.ab_test_id || ! prompt.ab_variant || 'publish' !== prompt.status ) {
+		return null;
+	}
+	return {
+		label: sprintf(
+			// Translators: %s is the letter of the prompt's version in its A/B test, such as A or B.
+			__( 'A/B test · %s', 'newspack-plugin' ),
+			String( prompt.ab_variant ).toUpperCase()
+		),
+		intent: 'informational',
+	};
+};
+
 export const promptDetails = prompt => {
 	const { categories, tags, campaign_groups: campaigns } = prompt;
 	const validCampaigns = ensureTermArray( campaigns );
@@ -157,17 +182,6 @@ export const promptDetails = prompt => {
 	}
 	if ( validTags.length > 0 ) {
 		details.push( { label: __( 'Tags:', 'newspack-plugin' ), value: names( validTags ) } );
-	}
-	if ( prompt.ab_test_id ) {
-		details.push( {
-			label: __( 'A/B test:', 'newspack-plugin' ),
-			value: sprintf(
-				// Translators: %1$s is the A/B test ID, %2$s is the variant letter.
-				__( '%1$s (variant %2$s)', 'newspack-plugin' ),
-				prompt.ab_test_id,
-				String( prompt.ab_variant || '' ).toUpperCase()
-			),
-		} );
 	}
 	return details;
 };

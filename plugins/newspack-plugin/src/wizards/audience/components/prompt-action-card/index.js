@@ -25,7 +25,7 @@ import { Badge, Card, Stack } from '@wordpress/ui';
  */
 import { Button, EditTitleLink, Modal, Notice, TextControl } from '../../../../../packages/components/src';
 import PromptSettingsDrawer from '../settings-drawer';
-import { promptDetails, promptStatus } from '../../views/campaigns/utils';
+import { abTestBadge, promptDetails, promptStatus } from '../../views/campaigns/utils';
 import './style.scss';
 
 const PromptActionCard = props => {
@@ -53,6 +53,7 @@ const PromptActionCard = props => {
 	const isTrash = 'trash' === status;
 	const displayTitle = title.length ? decodeEntities( title ) : __( '(no title)', 'newspack-plugin' );
 	const { label: statusLabel, intent: statusIntent } = promptStatus( prompt, segmentDisabled );
+	const abBadge = abTestBadge( prompt );
 
 	useEffect( () => {
 		if ( isDuplicatePromptModalVisible && ! duplicateTitle ) {
@@ -83,6 +84,7 @@ const PromptActionCard = props => {
 								{ isTrash ? displayTitle : <EditTitleLink href={ decodeEntities( editLink ) }>{ displayTitle }</EditTitleLink> }
 							</h3>
 							<Badge intent={ statusIntent }>{ statusLabel }</Badge>
+							{ abBadge && <Badge intent={ abBadge.intent }>{ abBadge.label }</Badge> }
 						</Stack>
 						<div className="newspack-campaigns__details">
 							{ promptDetails( prompt ).map( ( { label, value } ) => (
