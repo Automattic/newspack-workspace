@@ -66,6 +66,13 @@ describe( 'TestCard', () => {
 		expect( await screen.findByRole( 'button', { name: 'Refresh results: hero' } ) ).toBeTruthy();
 	} );
 
+	it( 'heads the card with the test name, and still loads results by its ID', async () => {
+		render( <TestCard test={ { ...test, name: 'Homepage hero copy' } } data={ data } /> );
+		expect( screen.getByRole( 'heading', { name: 'Homepage hero copy' } ) ).toBeTruthy();
+		expect( screen.getByRole( 'region', { name: 'Results for Homepage hero copy' } ) ).toBeTruthy();
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledWith( { path: '/newspack-popups/v1/ab-tests/hero/stats' } ) );
+	} );
+
 	it( 'does not load, and hides Refresh, when no stats source is connected', () => {
 		render( <TestCard test={ test } data={ { ...data, provider: { available: false } } } /> );
 		expect( apiFetch ).not.toHaveBeenCalled();

@@ -28,6 +28,13 @@ final class Newspack_Popups_AB_Tests {
 	const USER_META_BUCKET_PREFIX = 'newspack_popups_ab_bucket_';
 
 	/**
+	 * Private taxonomy holding one term per test: the slug is the Test ID, the
+	 * name is what publishers see. Prompts still join a test through
+	 * META_TEST_ID, so a test with no term is valid and shows its ID as its name.
+	 */
+	const TAXONOMY = 'newspack_popups_ab_test';
+
+	/**
 	 * Autoloaded flag recording whether any valid test exists.
 	 *
 	 * Three states, and the distinction matters: '1' and absent both fall through to
@@ -55,6 +62,7 @@ final class Newspack_Popups_AB_Tests {
 	 */
 	public static function init() {
 		add_action( 'init', [ __CLASS__, 'register_meta' ] );
+		add_action( 'init', [ __CLASS__, 'register_taxonomy' ] );
 		add_filter( 'rest_pre_insert_' . Newspack_Popups::NEWSPACK_POPUPS_CPT, [ __CLASS__, 'guard_rest_ab_meta' ], 10, 2 );
 
 		// Anything that can add or remove a test invalidates the flag. Scoped to the
@@ -136,6 +144,31 @@ final class Newspack_Popups_AB_Tests {
 		if ( self::META_TEST_ID === $meta_key ) {
 			self::invalidate_has_tests_for_post( $object_id );
 		}
+	}
+
+	/**
+	 * Register the taxonomy that holds test names. Registered whether or not the
+	 * feature flag is on, like the meta: the terms outlive the flag either way, but
+	 * core can only read them back while the taxonomy is registered.
+	 */
+	public static function register_taxonomy() {
+		register_taxonomy(
+			self::TAXONOMY,
+			[],
+			[
+				'public'             => false,
+				'show_ui'            => false,
+				'show_in_menu'       => false,
+				'show_in_nav_menus'  => false,
+				'show_in_rest'       => false,
+				'show_tagcloud'      => false,
+				'show_in_quick_edit' => false,
+				'show_admin_column'  => false,
+				'hierarchical'       => false,
+				'rewrite'            => false,
+				'query_var'          => false,
+			]
+		);
 	}
 
 	/**
@@ -426,23 +459,9 @@ final class Newspack_Popups_AB_Tests {
 	 * @return array[] Each `[ 'id', 'title', 'variant', 'goal', 'control_share', 'status', 'status_label', 'edit_link' ]`; `edit_link` is null when the current user can't edit that prompt. `goal` and `control_share` are each prompt's stored values; only the control's take effect.
 	 */
 	public static function get_test_prompts( $test_id ) {
-		if ( ! is_scalar( $test_id ) ) {
-			return [];
-		}
-		// The ID as stored first: the save guard keeps a legacy ID with underscores,
-		// and the front end keys tests by the stored value, so footer_test and
-		// footer-test are different tests. Only input that isn't already in stored
-		// form, such as typed text, falls back to the spelling a save would store.
-		$stored_form = sanitize_title( (string) $test_id );
-		$candidates  = [ $stored_form ];
-		if ( (string) $test_id !== $stored_form ) {
-			$candidates[] = self::sanitize_test_id( $test_id );
-		}
 		$prompts = [];
-		foreach ( array_unique( $candidates ) as $candidate ) {
-			if ( '' !== $candidate ) {
-				$prompts = self::query_test_prompts( $candidate );
-			}
+		foreach ( self::test_id_candidates( $test_id ) as $candidate ) {
+			$prompts = self::query_test_prompts( $candidate );
 			if ( $prompts ) {
 				break;
 			}
@@ -497,7 +516,7 @@ final class Newspack_Popups_AB_Tests {
 	 * whose variant key is outside VALID_VARIANTS is skipped: the schema will not
 	 * save one, so one can only come from a direct meta write.
 	 *
-	 * @return array[] Ordered by Test ID. Each `[ 'test_id', 'goal', 'goal_label',
+	 * @return array[] Ordered by Test ID. Each `[ 'test_id', 'name', 'goal', 'goal_label',
 	 *                 'control_share', 'started_at', 'variants', 'duplicates' ]`. `control_share`
 	 *                 comes from the control prompt, or DEFAULT_CONTROL_SHARE without
 	 *                 one. `started_at` is when the split began: the later of the
@@ -546,11 +565,14 @@ final class Newspack_Popups_AB_Tests {
 		ksort( $grouped );
 
 		$labels = self::get_goal_labels();
+		$names  = self::get_test_names( array_map( 'strval', array_keys( $grouped ) ) );
 		$tests  = [];
 		foreach ( $grouped as $test_id => $letters ) {
 			ksort( $letters );
-			$test = [
-				'test_id'       => (string) $test_id, // PHP stores an integer-like key as an int; get_stats() compares the ID strictly.
+			$test_id = (string) $test_id; // PHP stores an integer-like key as an int; get_stats() compares the ID strictly.
+			$test    = [
+				'test_id'       => $test_id,
+				'name'          => $names[ $test_id ] ?? $test_id,
 				'goal'          => '',
 				'goal_label'    => '',
 				'control_share' => self::DEFAULT_CONTROL_SHARE,
@@ -609,6 +631,296 @@ final class Newspack_Popups_AB_Tests {
 		}
 
 		return array_values( $tests );
+	}
+
+	/**
+	 * Display names for a set of tests, in one query.
+	 *
+	 * @param string[] $test_ids Test IDs.
+	 * @return array<string,string> Test ID => name, only for tests that have a term.
+	 */
+	private static function get_test_names( array $test_ids ) {
+		if ( empty( $test_ids ) ) {
+			return [];
+		}
+		$terms = get_terms(
+			[
+				'taxonomy'               => self::TAXONOMY,
+				'slug'                   => $test_ids,
+				'hide_empty'             => false,
+				'update_term_meta_cache' => false,
+			]
+		);
+		$names = [];
+		foreach ( is_array( $terms ) ? $terms : [] as $term ) {
+			$names[ (string) $term->slug ] = self::decode_term_name( $term->name );
+		}
+		return $names;
+	}
+
+	/**
+	 * A test's display name: its term's name, or the Test ID for a test that was
+	 * never named, which covers every test made before names existed.
+	 *
+	 * @param string $test_id Test ID.
+	 * @return string
+	 */
+	public static function get_test_name( $test_id ) {
+		$test_id = self::resolve_test_id( $test_id );
+		if ( '' === $test_id ) {
+			return '';
+		}
+		return self::get_test_names( [ $test_id ] )[ $test_id ] ?? $test_id;
+	}
+
+	/**
+	 * Start a test record with a new, unique Test ID.
+	 *
+	 * The ID is the name's slug plus a random suffix, so it stays readable in GA4
+	 * reports, where it is the `ab_test_id` value, and never changes after a
+	 * rename. A name that leaves no slug, such as one in a non-Latin script,
+	 * gets `test` as its base. The ID is also what readers are bucketed on, which
+	 * is why nothing here ever rewrites one.
+	 *
+	 * @param string $name Display name.
+	 * @return string|WP_Error The new Test ID.
+	 */
+	public static function create_test( $name ) {
+		$name = self::sanitize_test_name( $name );
+		if ( is_wp_error( $name ) ) {
+			return $name;
+		}
+		// GA4 caps an event parameter value at 100 characters; 40 leaves room for
+		// the suffix and for whatever a report prefixes to the ID.
+		$base = trim( substr( self::sanitize_test_id( $name ), 0, 40 ), '-' );
+		$base = '' === $base ? 'test' : $base;
+		for ( $attempt = 0; $attempt < 5; $attempt++ ) {
+			$test_id = $base . '-' . bin2hex( random_bytes( 2 ) );
+			if ( self::is_test_id_in_use( $test_id ) ) {
+				continue;
+			}
+			$term = self::insert_term( $name, $test_id );
+			if ( is_wp_error( $term ) ) {
+				if ( 'term_exists' === $term->get_error_code() ) {
+					continue;
+				}
+				return $term;
+			}
+			// Another request took the ID after the check above, so core stored
+			// this term under a suffixed slug that no test would ever read.
+			if ( get_term( $term['term_id'], self::TAXONOMY )->slug !== $test_id ) {
+				if ( $term['created'] ) {
+					wp_delete_term( $term['term_id'], self::TAXONOMY );
+				}
+				continue;
+			}
+			return $test_id;
+		}
+		return new WP_Error( 'newspack_popups_ab_test_id', __( 'Could not create the test. Try again.', 'newspack-popups' ), [ 'status' => 500 ] );
+	}
+
+	/**
+	 * Clean a display name, refusing one that is empty or longer than a term name
+	 * can hold.
+	 *
+	 * @param mixed $name Raw name.
+	 * @return string|WP_Error
+	 */
+	private static function sanitize_test_name( $name ) {
+		$name = is_scalar( $name ) ? trim( sanitize_text_field( (string) $name ) ) : '';
+		if ( '' === $name ) {
+			return new WP_Error( 'newspack_popups_ab_test_name', __( 'Enter a test name.', 'newspack-popups' ), [ 'status' => 400 ] );
+		}
+		// Measured as core will store it: its filters turn `&` into `&amp;`, and a
+		// name over the column's 200 characters is not cut short but dropped,
+		// silently on update. The filters expect slashed input, as the term APIs
+		// pass it; unslashed, they strip a lone backslash and add one before
+		// each quote.
+		if ( mb_strlen( wp_unslash( sanitize_term_field( 'name', wp_slash( $name ), 0, self::TAXONOMY, 'db' ) ), 'UTF-8' ) > 200 ) {
+			return new WP_Error( 'newspack_popups_ab_test_name', __( 'Use a shorter test name.', 'newspack-popups' ), [ 'status' => 400 ] );
+		}
+		return $name;
+	}
+
+	/**
+	 * Insert a test's term, noting whether this call created it.
+	 *
+	 * When two inserts race for one slug, core can delete the newer row and
+	 * return the older term, which may be another test's. It returns before the
+	 * create hooks fire, so only a term this call made is safe to delete.
+	 *
+	 * @param string $name    Clean display name.
+	 * @param string $test_id Test ID to use as the slug.
+	 * @return array|WP_Error Core's result, plus `created`.
+	 */
+	private static function insert_term( $name, $test_id ) {
+		$created = 0;
+		$listen  = function ( $term_id ) use ( &$created ) {
+			$created = (int) $term_id;
+		};
+		add_action( 'created_' . self::TAXONOMY, $listen );
+		$term = wp_insert_term( wp_slash( $name ), self::TAXONOMY, [ 'slug' => $test_id ] );
+		remove_action( 'created_' . self::TAXONOMY, $listen );
+		if ( ! is_wp_error( $term ) ) {
+			$term['created'] = (int) $term['term_id'] === $created;
+		}
+		return $term;
+	}
+
+	/**
+	 * A term name with core's HTML encoding undone, so `&` and a lone `<` or `>`
+	 * read as entered. Entity text typed into a name is decoded too.
+	 *
+	 * @param string $name Stored name.
+	 * @return string
+	 */
+	private static function decode_term_name( $name ) {
+		return wp_specialchars_decode( (string) $name, ENT_QUOTES );
+	}
+
+	/**
+	 * The spellings a given Test ID could be stored under, in the order to try
+	 * them. The ID as stored comes first: the save guard keeps a legacy ID with
+	 * underscores, and the front end keys tests by the stored value, so
+	 * footer_test and footer-test are different tests. Only input that isn't
+	 * already in stored form, such as typed text, falls back to the spelling a
+	 * save would store.
+	 *
+	 * @param mixed $test_id Test ID as given.
+	 * @return string[] Empty for input with no usable ID.
+	 */
+	private static function test_id_candidates( $test_id ) {
+		if ( ! is_scalar( $test_id ) ) {
+			return [];
+		}
+		$stored_form = sanitize_title( (string) $test_id );
+		$candidates  = [ $stored_form ];
+		if ( (string) $test_id !== $stored_form ) {
+			$candidates[] = self::sanitize_test_id( $test_id );
+		}
+		return array_values( array_filter( array_unique( $candidates ), 'strlen' ) );
+	}
+
+	/**
+	 * The Test ID a caller means, resolved the way the page finds a test, so a
+	 * rename lands on the test the page listed.
+	 *
+	 * @param mixed $test_id Test ID as given.
+	 * @return string The first candidate a prompt carries, else the last candidate,
+	 *                or an empty string for input with no usable ID.
+	 */
+	public static function resolve_test_id( $test_id ) {
+		$candidates = self::test_id_candidates( $test_id );
+		foreach ( $candidates as $candidate ) {
+			if ( self::get_test_prompt_ids( $candidate ) ) {
+				return $candidate;
+			}
+		}
+		return $candidates ? $candidates[ count( $candidates ) - 1 ] : '';
+	}
+
+	/**
+	 * Change a test's display name. The Test ID, and so every reader's bucket and
+	 * every recorded result, stays the same.
+	 *
+	 * A test made before names existed has no term yet; renaming it creates one
+	 * with the existing ID as its slug.
+	 *
+	 * @param string $test_id Test ID.
+	 * @param string $name    New display name.
+	 * @return string|WP_Error The stored name.
+	 */
+	public static function rename_test( $test_id, $name ) {
+		$test_id = self::resolve_test_id( $test_id );
+		$name    = self::sanitize_test_name( $name );
+		if ( is_wp_error( $name ) ) {
+			return $name;
+		}
+		$term = '' === $test_id ? false : get_term_by( 'slug', $test_id, self::TAXONOMY );
+		if ( ! $term ) {
+			if ( '' === $test_id || empty( self::get_test_prompt_ids( $test_id ) ) ) {
+				return new WP_Error( 'newspack_popups_ab_test_not_found', __( 'This test no longer exists.', 'newspack-popups' ), [ 'status' => 404 ] );
+			}
+			$inserted = self::insert_term( $name, $test_id );
+			if ( is_wp_error( $inserted ) && 'term_exists' !== $inserted->get_error_code() ) {
+				return $inserted;
+			}
+			if ( ! is_wp_error( $inserted ) ) {
+				$term = get_term( $inserted['term_id'], self::TAXONOMY );
+				if ( $term->slug === $test_id ) {
+					return self::decode_term_name( $term->name );
+				}
+				// A concurrent rename created this test's term after the lookup
+				// above, and core gave this one a suffixed slug. Drop it if this
+				// call made it, and rename the real one.
+				if ( $inserted['created'] ) {
+					wp_delete_term( $term->term_id, self::TAXONOMY );
+				}
+			}
+			$term = get_term_by( 'slug', $test_id, self::TAXONOMY );
+			if ( ! $term ) {
+				return new WP_Error( 'newspack_popups_ab_test_name', __( 'Could not rename the test. Try again.', 'newspack-popups' ), [ 'status' => 500 ] );
+			}
+		}
+		$result = wp_update_term( $term->term_id, self::TAXONOMY, [ 'name' => wp_slash( $name ) ] );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return self::decode_term_name( get_term( $term->term_id, self::TAXONOMY )->name );
+	}
+
+	/**
+	 * Whether a user may rename a test: only someone who may change the A/B
+	 * settings of every prompt in it, since the name shows on all of them.
+	 *
+	 * @param int    $user_id User ID.
+	 * @param string $test_id Test ID.
+	 * @return bool False for a test with no prompts.
+	 */
+	public static function can_rename_test( $user_id, $test_id ) {
+		$prompt_ids = self::get_test_prompt_ids( self::resolve_test_id( $test_id ) );
+		foreach ( $prompt_ids as $prompt_id ) {
+			if ( ! self::can_manage_tests( $user_id, $prompt_id ) ) {
+				return false;
+			}
+		}
+		return ! empty( $prompt_ids );
+	}
+
+	/**
+	 * IDs of every prompt carrying a Test ID, trashed ones included, so a trashed
+	 * prompt still holds its ID against reuse.
+	 *
+	 * @param string $test_id Sanitized Test ID.
+	 * @return int[]
+	 */
+	private static function get_test_prompt_ids( $test_id ) {
+		if ( '' === $test_id ) {
+			return [];
+		}
+		return array_map(
+			'intval',
+			get_posts(
+				[
+					'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+					'post_status'    => [ 'publish', 'future', 'draft', 'pending', 'private', 'trash' ],
+					'fields'         => 'ids',
+					'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Prompts CPT; config-scale.
+					'meta_key'       => self::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+					'meta_value'     => $test_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				]
+			)
+		);
+	}
+
+	/**
+	 * Whether a Test ID already belongs to a test, named or not.
+	 *
+	 * @param string $test_id Test ID.
+	 * @return bool
+	 */
+	private static function is_test_id_in_use( $test_id ) {
+		return (bool) get_term_by( 'slug', $test_id, self::TAXONOMY ) || ! empty( self::get_test_prompt_ids( $test_id ) );
 	}
 
 	/**
