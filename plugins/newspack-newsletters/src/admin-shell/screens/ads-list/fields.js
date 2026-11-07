@@ -11,7 +11,7 @@ import { dateI18n, getSettings as getDateSettings, gmdateI18n } from '@wordpress
 
 import { StatusIndicator } from 'newspack-components';
 
-import { getAdminUrl } from '../../admin-globals';
+import { getAdminUrl, getCurrency } from '../../admin-globals';
 import { formatPostDate } from '../../utils/format-date';
 import { termsForTaxonomy } from '../../utils/terms';
 import { statusKindLabel, STATUS_KIND_LABELS } from './status-label';
@@ -74,6 +74,12 @@ const editUrl = item => `${ getAdminUrl() }post.php?post=${ item.id }&action=edi
 
 const getTitle = item => item?.title?.raw ?? item?.title?.rendered ?? '';
 
+const advertiserNames = item =>
+	termsForTaxonomy( item, 'newspack_nl_advertiser' )
+		.map( term => term?.name )
+		.filter( Boolean )
+		.join( ', ' );
+
 const renderTitle = ( { item } ) => {
 	const raw = getTitle( item );
 	const title = raw || __( '(no title)', 'newspack-newsletters' );
@@ -84,20 +90,21 @@ const renderTitle = ( { item } ) => {
 	);
 };
 
+const renderAdvertiser = ( { item } ) => {
+	const advertiser = advertiserNames( item );
+	return advertiser ? <span className="newspack-newsletters-list__secondary">{ advertiser }</span> : null;
+};
+
 const renderStatus = ( { item } ) => {
 	const status = item?.newspack_newsletters_ad_status || {};
 	const kind = status.kind || 'draft';
 	const statusName = STATUS_KIND_STATUSES[ kind ] || STATUS_KIND_STATUSES.draft;
 
 	let label;
-	if ( 'expired' === kind && status.expires_at ) {
-		// `expires_at` is only ever set from the date meta, so always an anchor.
-		label = sprintf(
-			/* translators: %s: formatted expiry date */
-			__( 'Expired %s', 'newspack-newsletters' ),
-			formatDayAnchor( status.expires_at )
-		);
-	} else if ( 'scheduled' === kind && status.starts_at ) {
+	// An expired ad's date is its expiration date, which has a column of its own,
+	// so the label stops at the state. A scheduled ad keeps its date: for a
+	// `future` post it is the publish time, which no column shows.
+	if ( 'scheduled' === kind && status.starts_at ) {
 		// Scheduled has two sources: a `future` post reports its publish instant,
 		// while a published ad with a future start date reports a day anchor.
 		const formatStart = 'future' === item?.status ? formatInstant : formatDayAnchor;
@@ -140,12 +147,29 @@ const renderExpiryDate = ( { item } ) => renderAdDate( item?.meta?.expiry_date, 
 
 const renderImpressions = ( { item } ) => String( item?.meta?.tracking_impressions ?? 0 );
 const renderClicks = ( { item } ) => String( item?.meta?.tracking_clicks ?? 0 );
+const CURRENCY_LAYOUTS = {
+	left: ( symbol, amount ) => `${ symbol }${ amount }`,
+	right: ( symbol, amount ) => `${ amount }${ symbol }`,
+	left_space: ( symbol, amount ) => `${ symbol }\u00a0${ amount }`,
+	right_space: ( symbol, amount ) => `${ amount }\u00a0${ symbol }`,
+};
+
+export const formatPrice = price => {
+	const currency = getCurrency();
+	if ( ! currency ) {
+		return String( price );
+	}
+	const [ whole, fraction ] = Number( price ).toFixed( currency.decimals ).split( '.' );
+	const amount = whole.replace( /\B(?=(\d{3})+(?!\d))/g, currency.thousandSeparator ) + ( fraction ? currency.decimalSeparator + fraction : '' );
+	return ( CURRENCY_LAYOUTS[ currency.position ] || CURRENCY_LAYOUTS.left )( currency.symbol, amount );
+};
+
 const renderPrice = ( { item } ) => {
 	const price = item?.meta?.price;
 	if ( ! price ) {
 		return '';
 	}
-	return String( price );
+	return formatPrice( price );
 };
 
 const renderDate = ( { item } ) => formatPostDate( item );
@@ -171,7 +195,7 @@ export function getFields( { advertisers = [], placements = [] } = {} ) {
 				{ value: 'draft', label: statusLabels.draft },
 				{ value: 'trash', label: statusLabels.trash },
 			],
-			filterBy: { operators: [ 'isAny' ] },
+			filterBy: { operators: [ 'isAny' ], isPrimary: true },
 			getValue: ( { item } ) => item?.newspack_newsletters_ad_status?.kind || 'draft',
 			render: renderStatus,
 		},
@@ -182,14 +206,10 @@ export function getFields( { advertisers = [], placements = [] } = {} ) {
 				value: String( term.id ),
 				label: term.name,
 			} ) ),
-			filterBy: { operators: [ 'isAny' ] },
+			filterBy: { operators: [ 'isAny' ], isPrimary: true },
 			enableSorting: false,
-			getValue: ( { item } ) =>
-				termsForTaxonomy( item, 'newspack_nl_advertiser' )
-					.map( term => term?.name )
-					.filter( Boolean )
-					.join( ', ' ),
-			render: renderTerms( 'newspack_nl_advertiser' ),
+			getValue: ( { item } ) => advertiserNames( item ),
+			render: renderAdvertiser,
 		},
 		{
 			id: 'ad_placement',
@@ -198,7 +218,7 @@ export function getFields( { advertisers = [], placements = [] } = {} ) {
 				value: String( term.id ),
 				label: term.name,
 			} ) ),
-			filterBy: { operators: [ 'isAny' ] },
+			filterBy: { operators: [ 'isAny' ], isPrimary: true },
 			enableSorting: false,
 			getValue: ( { item } ) =>
 				termsForTaxonomy( item, 'newspack_nl_ad_placement' )

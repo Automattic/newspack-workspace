@@ -19,6 +19,7 @@ import classnames from 'classnames';
 /**
  * Internal dependencies
  */
+import { evenColumns, withoutColumnStyles } from './even-columns';
 import './style.scss';
 
 type DataViewsProps< Item > = React.ComponentProps< typeof BaseDataViews< Item > > & {
@@ -51,7 +52,7 @@ function InlineFiltersLayout( { header, search, searchLabel }: { header?: React.
 	);
 }
 
-function DataViews( { className, inlineFilters = false, fields, children, ...props }: DataViewsProps< unknown > ) {
+function DataViews( { className, inlineFilters = false, fields, children, view, onChangeView, ...props }: DataViewsProps< unknown > ) {
 	// A primary filter is always on show, so the toggle has nothing left to hide.
 	const shownFields = useMemo(
 		() =>
@@ -60,6 +61,7 @@ function DataViews( { className, inlineFilters = false, fields, children, ...pro
 				: fields,
 		[ fields, inlineFilters ]
 	);
+	const evenView = useMemo( () => evenColumns( view ), [ view ] );
 	const layout =
 		children ??
 		( inlineFilters ? (
@@ -68,7 +70,12 @@ function DataViews( { className, inlineFilters = false, fields, children, ...pro
 
 	return (
 		<div className={ classnames( 'newspack-dataviews', className ) }>
-			<BaseDataViews { ...props } fields={ shownFields }>
+			<BaseDataViews
+				{ ...props }
+				view={ evenView }
+				onChangeView={ nextView => onChangeView( withoutColumnStyles( nextView ) ) }
+				fields={ shownFields }
+			>
 				{ layout }
 			</BaseDataViews>
 		</div>
@@ -84,4 +91,5 @@ function DataViews( { className, inlineFilters = false, fields, children, ...pro
 // implementation's concrete one.
 export default DataViews as < Item >( props: DataViewsProps< Item > ) => React.JSX.Element;
 
+export { evenColumns, withoutColumnStyles } from './even-columns';
 export type { Action, Field, View } from '@wordpress/dataviews';

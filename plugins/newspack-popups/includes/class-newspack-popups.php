@@ -140,6 +140,9 @@ final class Newspack_Popups {
 		include_once __DIR__ . '/class-newspack-popups-view-as.php';
 		include_once __DIR__ . '/class-newspack-popups-data-api.php';
 		include_once __DIR__ . '/class-newspack-popups-ab-tests.php';
+		include_once __DIR__ . '/class-newspack-popups-ab-stats.php';
+		include_once __DIR__ . '/interface-newspack-popups-ab-stats-provider.php';
+		include_once __DIR__ . '/class-newspack-popups-ab-dashboard.php';
 		include_once __DIR__ . '/class-newspack-popups-criteria.php';
 		include_once __DIR__ . '/class-newspack-popups-expiry.php';
 		include_once __DIR__ . '/merge-tags/class-merge-tag.php';
@@ -1020,6 +1023,7 @@ final class Newspack_Popups {
 				),
 				'preview_query_keys'           => self::PREVIEW_QUERY_KEYS,
 				'segmentation_enabled'         => self::$segmentation_enabled,
+				'ab_testing'                   => Newspack_Popups_AB_Tests::get_editor_data( get_the_ID() ? (int) get_the_ID() : 0 ),
 			]
 		);
 		$editor_style_path = dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/editor.css';

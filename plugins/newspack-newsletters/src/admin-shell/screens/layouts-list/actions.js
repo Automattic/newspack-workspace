@@ -1,5 +1,5 @@
 /**
- * Per-row + bulk actions for the Layouts list.
+ * Per-row actions for the Layouts list.
  */
 
 import apiFetch from '@wordpress/api-fetch';
@@ -125,7 +125,6 @@ export function getActions( { onRenameStart, onMutated } ) {
 		id: 'delete-permanently',
 		label: __( 'Delete', 'newspack-newsletters' ),
 		isDestructive: true,
-		supportsBulk: true,
 		isEligible: isUserOwned,
 		modalSize: 'small',
 		RenderModal: ( { items, closeModal } ) => (

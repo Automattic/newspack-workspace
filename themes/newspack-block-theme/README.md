@@ -30,7 +30,7 @@ This is a WordPress block theme. Global styles, layout, typography, and color ar
 
 - `templates/` — Page templates (front page, single, archive, search, 404, etc.). Some templates have layout variants in subdirectories (e.g. `templates/single/`, `templates/page/`).
 - `parts/` — Reusable template parts (header, footer, menus). Headers and footers have separate mobile and desktop variants (e.g. `parts/header-mobile.html`, `parts/header-desktop.html`).
-- `patterns/` — Block patterns organized into subdirectories by category (header, footer, post-header, post-meta, etc.). Note that patterns in subdirectories are not auto-registered by WordPress and are handled manually in `includes/class-patterns.php`.
+- `patterns/` — Block patterns organized into subdirectories by category (header, footer, post-header, post-meta, etc.).
 
 ### Blocks
 
@@ -43,6 +43,33 @@ Eleven style variations are available in `styles/`, `01-theme-alt.json` to `11-n
 ### Global styles conventions
 
 See [AGENTS.md](AGENTS.md#global-styles-conventions).
+
+### Child themes
+
+The theme only loads its own CSS, so a child theme with only a `style.css` header and a `theme.json` needs no PHP. A child theme that adds CSS loads it from its `functions.php`:
+
+```php
+add_action(
+	'wp_enqueue_scripts',
+	function () {
+		wp_enqueue_style( 'my-child-style', get_stylesheet_uri(), [ 'newspack_block_theme-style' ], wp_get_theme()->get( 'Version' ) );
+	}
+);
+
+add_action(
+	'after_setup_theme',
+	function () {
+		add_editor_style( 'editor-style.css' );
+	},
+	11
+);
+```
+
+Three things in this setup are easy to miss:
+
+- **Editor style order:** a child theme's `functions.php` runs before the parent's, so at the default priority its editor styles load first and lose any tie with the parent's. Priority 11 loads them after the parent's CSS. Styles from `theme.json` still load later, so anything `theme.json` sets belongs in the child's `theme.json`.
+- **`dist/style.css`:** the theme loads its editor styles from this path because a `style.css` in the child theme would otherwise replace them. A child theme should not add its own `dist/style.css` for the same reason.
+- **Site Editor changes:** templates, template parts, and Styles saved in the Site Editor belong to the theme that was active at the time. After switching to a child theme, the site goes back to the theme's files until the same changes are made under the child theme.
 
 ### Variables
 

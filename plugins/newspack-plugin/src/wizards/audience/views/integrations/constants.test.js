@@ -36,19 +36,19 @@ describe( 'STATUS_MAP', () => {
 		expect( statusGlyph( STATUS_MAP.failed.status ) ).not.toBe( statusGlyph( STATUS_MAP.canceled.status ) );
 		expect( STATUS_MAP.failed.intent ).toBe( 'high' );
 		expect( STATUS_MAP.canceled.intent ).toBe( 'none' );
+		expect( STATUS_MAP.canceled.tone ).toBe( 'neutral' );
 	} );
 
-	it( 'reads a queued job as worth noticing and a running one as context', () => {
-		expect( STATUS_MAP.pending.intent ).toBe( 'low' );
+	it( 'badges a queued job in grey, like its mark, and a running one as context', () => {
+		expect( STATUS_MAP.pending.intent ).toBe( 'draft' );
 		expect( STATUS_MAP[ 'in-progress' ].intent ).toBe( 'informational' );
 	} );
 
-	it( 'says a finished action is complete, not that the sync worked', () => {
-		// The action finishing says nothing about the push inside it, so the
-		// neutral badge stops short of "success".
+	it( 'reads a finished action as complete in the column and its badge', () => {
 		expect( STATUS_MAP.complete.label ).toBe( 'Complete' );
-		expect( STATUS_MAP.complete.intent ).toBe( 'draft' );
+		expect( STATUS_MAP.complete.intent ).toBe( 'stable' );
 		expect( STATUS_MAP.complete.status ).toBe( 'done' );
+		expect( STATUS_MAP.complete.tone ).toBeUndefined();
 	} );
 } );
 

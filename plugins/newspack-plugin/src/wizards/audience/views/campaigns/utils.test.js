@@ -268,7 +268,7 @@ describe( 'promptStatus', () => {
 	it.each( [
 		[ 'publish', 'Active', 'stable' ],
 		[ 'draft', 'Inactive', 'draft' ],
-		[ 'pending', 'Pending Review', 'low' ],
+		[ 'pending', 'Pending Review', 'draft' ],
 		[ 'future', 'Scheduled', 'informational' ],
 		[ 'trash', 'Trash', 'draft' ],
 	] )( 'labels a %s prompt', ( status, label, intent ) => {

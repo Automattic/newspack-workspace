@@ -129,8 +129,12 @@
 	}
 
 	&__schedule-table {
-		.dataviews-view-table colgroup col:not(.dataviews-view-table__col-actions) {
-			width: auto;
+		.dataviews-view-table colgroup col[class]:not(.dataviews-view-table__col-actions) {
+			width: 50%;
+		}
+
+		.dataviews-view-table:has(.dataviews-view-table__col-label) colgroup col[class]:not(.dataviews-view-table__col-actions) {
+			width: calc(100% / 3);
 		}
 
 		.dataviews-view-table tr .dataviews-item-actions .components-button {

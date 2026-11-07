@@ -38,6 +38,220 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * The dashboard lists drafts and tests missing an arm; trashed prompts are gone.
+	 */
+	public function test_get_tests_lists_drafts_and_incomplete_tests() {
+		$this->create_test_variant( 'draft-test', 'a', null, [ 'post_status' => 'draft' ] );
+		$this->create_test_variant( 'lonely', 'a' );
+		$this->create_test_variant( 'gone', 'a', null, [ 'post_status' => 'trash' ] );
+		$ids = array_column( Newspack_Popups_AB_Tests::get_tests(), 'test_id' );
+		$this->assertSame( [ 'draft-test', 'lonely' ], $ids );
+	}
+
+	/**
+	 * A prompt on a manual or custom placement is reported as ineligible, so the
+	 * page can say why the test can't run.
+	 */
+	public function test_get_tests_reports_variants_on_ineligible_placements() {
+		$this->create_test_variant( 'elig', 'a' );
+		$manual = $this->create_test_variant( 'elig', 'b' );
+		update_post_meta( $manual, 'placement', 'manual' );
+		$test = Newspack_Popups_AB_Tests::get_tests()[0];
+		$this->assertTrue( $test['variants']['a']['eligible'] );
+		$this->assertFalse( $test['variants']['b']['eligible'] );
+	}
+
+	/**
+	 * An overlay set to Manual only is never inserted on its own, so it is
+	 * ineligible like a manual placement, whatever wrote the setting.
+	 */
+	public function test_get_tests_reports_a_manual_only_overlay_as_ineligible() {
+		$this->create_test_variant( 'mo', 'a' );
+		$overlay = $this->create_test_variant( 'mo', 'b' );
+		update_post_meta( $overlay, 'placement', 'center' );
+		update_post_meta( $overlay, 'manual_only', '1' );
+		$test = Newspack_Popups_AB_Tests::get_tests()[0];
+		$this->assertTrue( $test['variants']['a']['eligible'] );
+		$this->assertFalse( $test['variants']['b']['eligible'] );
+	}
+
+	/**
+	 * A legacy Test ID with an underscore is its own test, as readers see it,
+	 * not part of the hyphenated test it would sanitize to.
+	 */
+	public function test_get_tests_keeps_a_legacy_test_id_apart_from_its_hyphenated_spelling() {
+		global $wpdb;
+		$legacy = [ $this->create_test_variant( 'footer-test', 'a' ), $this->create_test_variant( 'footer-test', 'b' ) ];
+		$this->create_test_variant( 'footer-test', 'a' );
+		$this->create_test_variant( 'footer-test', 'b' );
+		foreach ( $legacy as $prompt_id ) {
+			// A value the earlier sanitizer stored; the current one can't write it.
+			$wpdb->update( // phpcs:ignore WordPress.DB
+				$wpdb->postmeta,
+				[ 'meta_value' => 'footer_test' ], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				[
+					'post_id'  => $prompt_id,
+					'meta_key' => Newspack_Popups_AB_Tests::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				]
+			);
+			wp_cache_delete( $prompt_id, 'post_meta' );
+		}
+		$tests = array_column( Newspack_Popups_AB_Tests::get_tests(), null, 'test_id' );
+		$this->assertSame( [ 'footer-test', 'footer_test' ], array_keys( $tests ) );
+		$this->assertSame( [], $tests['footer_test']['duplicates'] );
+		$this->assertSame( [], $tests['footer-test']['duplicates'] );
+		$this->assertSame( $legacy[0], $tests['footer_test']['variants']['a']['id'] );
+	}
+
+	/**
+	 * The control share is read from the control; one stored on a challenger is ignored.
+	 */
+	public function test_get_tests_control_share_defaults_to_fifty_even_when_set_on_a_challenger() {
+		$this->create_test_variant( 'cs', 'a' );
+		$this->create_test_variant( 'cs', 'b', null, [], 70 );
+		$this->assertSame( 50, Newspack_Popups_AB_Tests::get_tests()[0]['control_share'] );
+	}
+
+	/**
+	 * The control's stored share is reported.
+	 */
+	public function test_get_tests_reads_control_share_from_the_control() {
+		$this->create_test_variant( 'cs2', 'a', null, [], 60 );
+		$this->assertSame( 60, Newspack_Popups_AB_Tests::get_tests()[0]['control_share'] );
+	}
+
+	/**
+	 * A test starts when the split does: once both the control and a challenger
+	 * are published, which is the later of the two dates.
+	 */
+	public function test_get_tests_started_at_is_when_both_arms_were_published() {
+		$this->create_test_variant(
+			'dates',
+			'a',
+			null,
+			[
+				'post_date_gmt' => '2026-10-05 00:00:00',
+				'post_date'     => '2026-10-05 00:00:00',
+			]
+		);
+		$this->create_test_variant(
+			'dates',
+			'b',
+			null,
+			[
+				'post_date_gmt' => '2026-10-01 00:00:00',
+				'post_date'     => '2026-10-01 00:00:00',
+			]
+		);
+		$this->assertSame( '2026-10-05T00:00:00Z', Newspack_Popups_AB_Tests::get_tests()[0]['started_at'] );
+	}
+
+	/**
+	 * A published control with only a draft challenger has not started: readers
+	 * still see the control alone.
+	 */
+	public function test_get_tests_started_at_is_null_until_a_challenger_is_published() {
+		$this->create_test_variant( 'solo', 'a' );
+		$this->create_test_variant( 'solo', 'b', null, [ 'post_status' => 'draft' ] );
+		$this->assertNull( Newspack_Popups_AB_Tests::get_tests()[0]['started_at'] );
+	}
+
+	/**
+	 * A test with nothing published has not started.
+	 */
+	public function test_get_tests_started_at_is_null_without_a_published_prompt() {
+		$this->create_test_variant( 'unpub', 'a', null, [ 'post_status' => 'draft' ] );
+		$this->assertNull( Newspack_Popups_AB_Tests::get_tests()[0]['started_at'] );
+	}
+
+	/**
+	 * Two prompts on one letter: the published one is the arm, whichever was
+	 * saved first, and the other is reported so the page can point at it.
+	 */
+	public function test_get_tests_prefers_the_published_prompt_when_a_letter_is_duplicated() {
+		$this->create_test_variant( 'dup', 'a' );
+		$live  = $this->create_test_variant( 'dup', 'b' );
+		$draft = $this->create_test_variant( 'dup', 'b', null, [ 'post_status' => 'draft' ] );
+		$this->create_test_variant( 'dup2', 'a' );
+		$draft2 = $this->create_test_variant( 'dup2', 'b', null, [ 'post_status' => 'draft' ] );
+		$live2  = $this->create_test_variant( 'dup2', 'b' );
+		$tests  = Newspack_Popups_AB_Tests::get_tests();
+		$this->assertSame( $live, $tests[0]['variants']['b']['id'] );
+		$this->assertSame( [ 'b' ], array_column( $tests[0]['duplicates'], 'letter' ) );
+		$this->assertSame( [ $draft ], array_column( $tests[0]['duplicates'], 'id' ) );
+		$this->assertArrayHasKey( 'edit_link', $tests[0]['duplicates'][0] );
+		$this->assertSame( $live2, $tests[1]['variants']['b']['id'] );
+		$this->assertSame( [ $draft2 ], array_column( $tests[1]['duplicates'], 'id' ) );
+	}
+
+	/**
+	 * A duplicate never supplies the share or the goal.
+	 */
+	public function test_get_tests_ignores_a_duplicate_control_s_share_and_goal() {
+		$live = $this->create_test_variant( 'dupa', 'a', null, [], 60 );
+		update_post_meta( $live, Newspack_Popups_AB_Tests::META_GOAL, 'donation' );
+		$draft = $this->create_test_variant( 'dupa', 'a', null, [ 'post_status' => 'draft' ], 30 );
+		update_post_meta( $draft, Newspack_Popups_AB_Tests::META_GOAL, 'link_click' );
+		$test = Newspack_Popups_AB_Tests::get_tests()[0];
+		$this->assertSame( 60, $test['control_share'] );
+		$this->assertSame( 'donation', $test['goal'] );
+		$this->assertSame( $live, $test['variants']['a']['id'] );
+	}
+
+	/**
+	 * The control's goal is the test's goal even when it is empty, because the
+	 * editor sets the goal on version A only; a challenger's stored goal is used
+	 * only while the test has no control.
+	 */
+	public function test_get_tests_takes_the_goal_from_the_control_even_when_empty() {
+		$challenger = $this->create_test_variant( 'goalless', 'b' );
+		update_post_meta( $challenger, Newspack_Popups_AB_Tests::META_GOAL, 'donation' );
+		$this->assertSame( 'donation', Newspack_Popups_AB_Tests::get_tests()[0]['goal'], 'With no control, the challenger\'s goal stands in.' );
+
+		$this->create_test_variant( 'goalless', 'a' );
+		$test = Newspack_Popups_AB_Tests::get_tests()[0];
+		$this->assertSame( '', $test['goal'] );
+		$this->assertSame( '', $test['goal_label'] );
+	}
+
+	/**
+	 * A Test ID made of digits stays the string it was saved as, so the route
+	 * that looks a test up by its sanitized ID still finds it.
+	 */
+	public function test_get_tests_keeps_a_numeric_test_id_a_string() {
+		$this->create_test_variant( '123', 'a' );
+		$this->create_test_variant( '123', 'b' );
+		$this->create_test_variant( 'alpha', 'a' );
+		$ids = array_column( Newspack_Popups_AB_Tests::get_tests(), 'test_id' );
+		$this->assertSame( [ '123', 'alpha' ], $ids );
+	}
+
+	/**
+	 * The goal and its label come along; variants carry what the page shows.
+	 */
+	public function test_get_tests_goal_label_and_variants() {
+		$id = $this->create_test_variant( 'goal', 'a' );
+		update_post_meta( $id, Newspack_Popups_AB_Tests::META_GOAL, 'donation' );
+		$test = Newspack_Popups_AB_Tests::get_tests()[0];
+		$this->assertSame( 'donation', $test['goal'] );
+		$this->assertSame( 'Donation', $test['goal_label'] );
+		$this->assertSame( $id, $test['variants']['a']['id'] );
+		$this->assertSame( 'publish', $test['variants']['a']['status'] );
+		$this->assertSame( 'Published', $test['variants']['a']['status_label'] );
+		$this->assertArrayHasKey( 'edit_link', $test['variants']['a'] );
+		$this->assertArrayHasKey( 'title', $test['variants']['a'] );
+	}
+
+	/**
+	 * A prompt whose variant key is not a letter the schema knows is left out.
+	 */
+	public function test_get_tests_skips_prompts_with_an_unknown_variant() {
+		$this->create_test_variant( 'odd', 'a' );
+		$this->create_test_variant( 'odd', 'z' );
+		$this->assertSame( [ 'a' ], array_keys( Newspack_Popups_AB_Tests::get_tests()[0]['variants'] ) );
+	}
+
+	/**
 	 * A site with no tests records the flag, so later requests skip the query.
 	 */
 	public function test_zero_test_site_records_the_has_tests_flag() {
@@ -684,7 +898,7 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	 * @param WP_REST_Response $response Response to a refused save.
 	 */
 	private function assert_refused_by_guard( $response ) {
-		self::assertStringStartsWith( "You don't have permission to change this prompt's A/B test settings.", $response->get_data()['message'] );
+		self::assertStringStartsWith( "You can't change this prompt's test settings.", $response->get_data()['message'] );
 	}
 
 	/**
@@ -810,6 +1024,14 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 
 		self::assertSame( $prepared_post, Newspack_Popups_AB_Tests::guard_rest_ab_meta( $prepared_post, $request ) );
 		self::assertSame( [ 'trigger_delay' => 7 ], $request->get_param( 'meta' ) );
+
+		// The placement rule is skipped on autosaves too: a draft mid-edit is not
+		// a save, and refusing it would make the editor flash an error while typing.
+		$tested_id = $this->create_test_variant( 'autosave-placement', 'a', [ 'placement' => 'inline' ] );
+		$request   = new WP_REST_Request( 'POST', '/wp/v2/' . Newspack_Popups::NEWSPACK_POPUPS_CPT . '/' . $tested_id . '/autosaves' );
+		$request->set_body_params( [ 'meta' => [ 'placement' => 'manual' ] ] );
+		$prepared_post = (object) [ 'ID' => $tested_id ];
+		self::assertSame( $prepared_post, Newspack_Popups_AB_Tests::guard_rest_ab_meta( $prepared_post, $request ) );
 	}
 
 	/**
@@ -906,10 +1128,10 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * Pins a decision rather than this change: the flag gates what reads A/B meta,
-	 * never its registration, so REST writes keep their sanitizers and schema
-	 * checks while the feature is off. A gate added where the class hooks in at
-	 * load would not show here, since the suite runs with the flag on.
+	 * The flag gates what reads A/B meta, never its registration, so REST writes
+	 * keep their sanitizers and schema checks while the feature is off. A gate
+	 * added where the class hooks in at load would not show here, since the suite
+	 * runs with the flag on.
 	 */
 	public function test_flag_off_keeps_meta_registered() {
 		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
@@ -919,5 +1141,425 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 
 		$registered = get_registered_meta_keys( 'post', Newspack_Popups::NEWSPACK_POPUPS_CPT );
 		self::assertArrayHasKey( Newspack_Popups_AB_Tests::META_VARIANT, $registered );
+	}
+
+	/**
+	 * The conversion goal is one of four fixed values. A value outside the list
+	 * is refused with a schema error the editor can show, not coerced to "no goal".
+	 */
+	public function test_goal_meta_accepts_only_the_four_goals() {
+		$prompt_id = $this->createPopup();
+		foreach ( Newspack_Popups_AB_Tests::VALID_GOALS as $goal ) {
+			$response = $this->save_prompt_as( $prompt_id, 'editor', [ 'meta' => [ Newspack_Popups_AB_Tests::META_GOAL => $goal ] ] );
+			self::assertSame( 200, $response->get_status(), $goal . ': ' . wp_json_encode( $response->get_data() ) );
+			self::assertSame( $goal, get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_GOAL, true ) );
+		}
+		$response = $this->save_prompt_as( $prompt_id, 'editor', [ 'meta' => [ Newspack_Popups_AB_Tests::META_GOAL => 'any_interaction' ] ] );
+		self::assertSame( 400, $response->get_status(), 'A goal outside the list is a schema error, not a silent reset.' );
+		self::assertSame( 'subscription', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_GOAL, true ) );
+		// The empty string is the "no goal" state and stays writable.
+		$response = $this->save_prompt_as( $prompt_id, 'editor', [ 'meta' => [ Newspack_Popups_AB_Tests::META_GOAL => '' ] ] );
+		self::assertSame( 200, $response->get_status() );
+		self::assertSame( [ 'form_submission', 'link_click', 'donation', 'subscription' ], array_keys( Newspack_Popups_AB_Tests::get_goal_labels() ) );
+		self::assertSame( '', Newspack_Popups_AB_Tests::sanitize_goal( 'Donation' ) );
+	}
+
+	/**
+	 * Manual and custom placements render through a block or a shortcode, so the
+	 * bucketing has nothing to split. A Test ID on one is refused, for every user.
+	 */
+	public function test_a_test_id_is_refused_on_manual_and_custom_placements() {
+		foreach ( [ 'manual', 'custom1' ] as $placement ) {
+			$prompt_id = $this->createPopup( null, [ 'placement' => $placement ] );
+			$response  = $this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ Newspack_Popups_AB_Tests::META_TEST_ID => 'placement-test' ] ] );
+			self::assertSame( 400, $response->get_status(), $placement );
+			self::assertSame( 'newspack_popups_ab_ineligible_placement', $response->get_data()['code'] );
+			self::assertSame( '', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+		}
+		self::assertFalse( Newspack_Popups_AB_Tests::is_eligible_placement( 'custom2' ) );
+		self::assertTrue( Newspack_Popups_AB_Tests::is_eligible_placement( 'inline' ) );
+		self::assertTrue( Newspack_Popups_AB_Tests::is_eligible_placement( 'center' ) );
+		self::assertFalse( Newspack_Popups_AB_Tests::is_eligible_placement( 'center', true ) );
+		// Manual only is an overlay setting; an inline prompt ignores it.
+		self::assertTrue( Newspack_Popups_AB_Tests::is_eligible_placement( 'inline', true ) );
+	}
+
+	/**
+	 * An overlay set to Manual only is placed by a block or shortcode as a manual
+	 * prompt is, so it can't carry a test, and a tested overlay can't be switched to it.
+	 */
+	public function test_a_manual_only_overlay_is_refused_a_test() {
+		$prompt_id = $this->createPopup(
+			null,
+			[
+				'placement'   => 'center',
+				'manual_only' => true,
+			]
+		);
+		$response  = $this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ Newspack_Popups_AB_Tests::META_TEST_ID => 'manual-only-test' ] ] );
+		self::assertSame( 400, $response->get_status() );
+		self::assertSame( 'newspack_popups_ab_ineligible_placement', $response->get_data()['code'] );
+		self::assertStringContainsString( 'Manual only', $response->get_data()['message'] );
+		self::assertSame( '', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+
+		$tested_id = $this->create_test_variant( 'manual-only-move', 'a', [ 'placement' => 'center' ] );
+		$response  = $this->save_prompt_as( $tested_id, 'administrator', [ 'meta' => [ 'manual_only' => true ] ] );
+		self::assertSame( 400, $response->get_status() );
+		self::assertSame( '', (string) get_post_meta( $tested_id, 'manual_only', true ) );
+	}
+
+	/**
+	 * The rule reads the placement the save would leave, not only the one it sends,
+	 * so moving a tested prompt to an ineligible placement is refused as well.
+	 */
+	public function test_moving_a_tested_prompt_to_an_ineligible_placement_is_refused() {
+		$prompt_id = $this->create_test_variant( 'placement-move', 'a', [ 'placement' => 'inline' ] );
+		$response  = $this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ 'placement' => 'manual' ] ] );
+		self::assertSame( 400, $response->get_status() );
+		self::assertSame( 'inline', get_post_meta( $prompt_id, 'placement', true ) );
+		// Clearing the test in the same save is the way out.
+		$response = $this->save_prompt_as(
+			$prompt_id,
+			'administrator',
+			[
+				'meta' => [
+					'placement'                            => 'manual',
+					Newspack_Popups_AB_Tests::META_TEST_ID => '',
+				],
+			]
+		);
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		self::assertSame( 'manual', get_post_meta( $prompt_id, 'placement', true ) );
+	}
+
+	/**
+	 * The rule refuses the save that creates a violation, not every later edit of
+	 * a prompt already in one; the guard's own comment says why that matters.
+	 */
+	public function test_a_prompt_already_breaking_the_placement_rule_keeps_taking_other_edits() {
+		$prompt_id = $this->create_test_variant( 'stuck-test', 'a', [ 'placement' => 'inline' ] );
+		update_post_meta( $prompt_id, 'placement', 'manual' );
+
+		$response = $this->save_prompt_as(
+			$prompt_id,
+			'administrator',
+			[
+				'meta' => [
+					'placement'                            => 'manual',
+					Newspack_Popups_AB_Tests::META_TEST_ID => 'stuck-test',
+					'frequency'                            => 'once',
+				],
+			]
+		);
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		self::assertSame( 'once', get_post_meta( $prompt_id, 'frequency', true ) );
+
+		// Changing the Test ID is a new violation and is still refused.
+		$response = $this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ Newspack_Popups_AB_Tests::META_TEST_ID => 'other-test' ] ] );
+		self::assertSame( 400, $response->get_status() );
+		self::assertSame( 'stuck-test', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+	}
+
+	/**
+	 * The placement rule judges the Test ID the save would store, not the raw
+	 * request string, so a value the sanitizer empties clears the test rather
+	 * than being refused as a new one.
+	 */
+	public function test_the_placement_rule_reads_the_sanitized_test_id() {
+		$prompt_id = $this->create_test_variant( 'stuck-test', 'a', [ 'placement' => 'inline' ] );
+		update_post_meta( $prompt_id, 'placement', 'manual' );
+
+		$response = $this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ Newspack_Popups_AB_Tests::META_TEST_ID => '   ' ] ] );
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		self::assertSame( '', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+	}
+
+	/**
+	 * A Test ID the request sends back unchanged is left out of the write, so an
+	 * unrelated save cannot rewrite one the earlier sanitizer stored.
+	 */
+	public function test_an_unchanged_test_id_is_not_rewritten_by_an_unrelated_save() {
+		global $wpdb;
+		$prompt_id = $this->create_test_variant( 'footer-test', 'a' );
+		// A value the earlier sanitizer stored; the current one can't write it.
+		$wpdb->update( // phpcs:ignore WordPress.DB
+			$wpdb->postmeta,
+			[ 'meta_value' => 'footer_test' ], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			[
+				'post_id'  => $prompt_id,
+				'meta_key' => Newspack_Popups_AB_Tests::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+			]
+		);
+		wp_cache_delete( $prompt_id, 'post_meta' );
+		self::assertSame( 'footer_test', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+
+		$response = $this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ 'frequency' => 'once' ] ] );
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		self::assertSame( 'once', get_post_meta( $prompt_id, 'frequency', true ) );
+		self::assertSame( 'footer_test', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+
+		// A deliberate edit still stores the normalized form.
+		$this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ Newspack_Popups_AB_Tests::META_TEST_ID => 'Footer_Test 2' ] ] );
+		self::assertSame( 'footer-test-2', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+	}
+
+	/**
+	 * The placement rule reads "unchanged" the way the write guard does: a legacy
+	 * Test ID sent back as stored is not a new violation, so a stuck prompt that
+	 * carries one still takes other edits.
+	 */
+	public function test_a_stuck_prompt_with_a_legacy_test_id_keeps_taking_other_edits() {
+		global $wpdb;
+		$prompt_id = $this->create_test_variant( 'footer-test', 'a', [ 'placement' => 'inline' ] );
+		$wpdb->update( // phpcs:ignore WordPress.DB
+			$wpdb->postmeta,
+			[ 'meta_value' => 'footer_test' ], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			[
+				'post_id'  => $prompt_id,
+				'meta_key' => Newspack_Popups_AB_Tests::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+			]
+		);
+		wp_cache_delete( $prompt_id, 'post_meta' );
+		update_post_meta( $prompt_id, 'placement', 'manual' );
+
+		$response = $this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ 'frequency' => 'once' ] ] );
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		self::assertSame( 'once', get_post_meta( $prompt_id, 'frequency', true ) );
+		self::assertSame( 'footer_test', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+
+		// Retyping it as its own slug would be written, so on a stuck prompt it is
+		// still refused, like any other change of Test ID.
+		$response = $this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ Newspack_Popups_AB_Tests::META_TEST_ID => 'footer-test' ] ] );
+		self::assertSame( 400, $response->get_status() );
+		self::assertSame( 'footer_test', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+	}
+
+	/**
+	 * What the prompt editor is told: the flag and the permission decide whether
+	 * the panel shows and whether its fields are writable.
+	 */
+	public function test_editor_data_reflects_the_flag_and_the_permission() {
+		$prompt_id = $this->createPopup();
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+
+		$data = Newspack_Popups_AB_Tests::get_editor_data( $prompt_id );
+		self::assertTrue( $data['enabled'] );
+		self::assertTrue( $data['can_manage_tests'] );
+		self::assertSame( [ 'form_submission', 'link_click', 'donation', 'subscription' ], array_keys( $data['goals'] ) );
+		self::assertContains( 'manual', $data['ineligible_placements'] );
+		self::assertContains( 'custom1', $data['ineligible_placements'] );
+		self::assertSame( [ 'a', 'b' ], array_keys( $data['variants'] ) );
+		self::assertSame( '', $data['results_url'], 'The results page is for administrators only.' );
+
+		$editor_id = get_current_user_id();
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		self::assertStringContainsString( 'page=' . Newspack_Popups_AB_Dashboard::PAGE_SLUG, Newspack_Popups_AB_Tests::get_editor_data( $prompt_id )['results_url'] );
+		wp_set_current_user( $editor_id );
+
+		$this->restrict_tests_to_admins();
+		self::assertFalse( Newspack_Popups_AB_Tests::get_editor_data( $prompt_id )['can_manage_tests'] );
+		self::assertFalse( Newspack_Popups_AB_Tests::get_editor_data( 0 )['can_manage_tests'], 'A new prompt asks with post ID 0.' );
+
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
+		self::assertFalse( Newspack_Popups_AB_Tests::get_editor_data( $prompt_id )['enabled'] );
+	}
+
+	/**
+	 * With the flag off the editor still receives this data, so it must not
+	 * link to a results page that doesn't exist.
+	 */
+	public function test_editor_data_has_no_results_link_with_the_flag_off() {
+		$prompt_id = $this->createPopup();
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
+		self::assertSame( '', Newspack_Popups_AB_Tests::get_editor_data( $prompt_id )['results_url'] );
+	}
+
+	/**
+	 * The editor's "other prompts in this test" list reads this route: every
+	 * prompt carrying the Test ID except trashed ones, in ID order, for anyone
+	 * who can edit prompts.
+	 */
+	public function test_test_prompts_route_lists_every_prompt_in_the_test() {
+		$control    = $this->create_test_variant( 'lookup-test', 'a', null, [], 60 );
+		$challenger = $this->create_test_variant( 'lookup-test', 'b', null, [ 'post_status' => 'draft' ] );
+		update_post_meta( $control, Newspack_Popups_AB_Tests::META_GOAL, 'donation' );
+		$this->create_test_variant( 'lookup-test', 'b', null, [ 'post_status' => 'trash' ] );
+		$this->create_test_variant( 'other-test', 'a' );
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+		global $wp_rest_server;
+		$wp_rest_server = new WP_REST_Server(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		do_action( 'rest_api_init' );
+
+		$response = rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/lookup-test' ) );
+		self::assertSame( 200, $response->get_status() );
+		self::assertSame( [ $control, $challenger ], wp_list_pluck( $response->get_data(), 'id' ) );
+		self::assertSame( [ 'a', 'b' ], wp_list_pluck( $response->get_data(), 'variant' ) );
+		self::assertStringContainsString( 'post=' . $control, $response->get_data()[0]['edit_link'] );
+		self::assertSame( [ 'donation', '' ], wp_list_pluck( $response->get_data(), 'goal' ) );
+		self::assertSame( [ 60, 50 ], wp_list_pluck( $response->get_data(), 'control_share' ) );
+
+		global $wpdb;
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery, WordPress.DB.SlowDBQuery
+		$wpdb->update(
+			$wpdb->postmeta,
+			[ 'meta_value' => '0' ],
+			[
+				'post_id'  => $control,
+				'meta_key' => Newspack_Popups_AB_Tests::META_CONTROL_SHARE,
+			]
+		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery, WordPress.DB.SlowDBQuery
+		wp_cache_delete( $control, 'post_meta' );
+		$response = rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/lookup-test' ) );
+		self::assertSame( [ 50, 50 ], wp_list_pluck( $response->get_data(), 'control_share' ) );
+
+		self::assertSame( [], rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/no-such-test' ) )->get_data() );
+		self::assertSame( 404, rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/Not%20A%20Slug' ) )->get_status() );
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'subscriber' ] ) );
+		self::assertSame( 403, rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/lookup-test' ) )->get_status() );
+	}
+
+	/**
+	 * A Test ID stored by the earlier sanitize_title() callback keeps its underscore,
+	 * since the save guard leaves an unchanged ID alone, so the lookup still finds it.
+	 */
+	public function test_test_prompts_route_finds_a_legacy_test_id() {
+		global $wpdb;
+		$control = $this->create_test_variant( 'footer-test', 'a' );
+		$other   = $this->create_test_variant( 'footer-test', 'b' );
+		// A value the earlier sanitizer stored; the current one can't write it.
+		$wpdb->update( // phpcs:ignore WordPress.DB
+			$wpdb->postmeta,
+			[ 'meta_value' => 'footer_test' ], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			[
+				'post_id'  => $control,
+				'meta_key' => Newspack_Popups_AB_Tests::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+			]
+		);
+		wp_cache_delete( $control, 'post_meta' );
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+		global $wp_rest_server;
+		$wp_rest_server = new WP_REST_Server(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		do_action( 'rest_api_init' );
+
+		$response = rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/footer_test' ) );
+		self::assertSame( 200, $response->get_status() );
+		self::assertSame( [ $control ], wp_list_pluck( $response->get_data(), 'id' ) );
+		// A different test on the front end, so not one of this test's prompts.
+		self::assertNotContains( $other, wp_list_pluck( $response->get_data(), 'id' ) );
+		// Nor does an underscore ID with no stored match borrow the hyphenated test.
+		$this->create_test_variant( 'header-test', 'a' );
+		self::assertSame( [], rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/header_test' ) )->get_data() );
+	}
+
+	/**
+	 * Another author's private prompt is listed to administrators and hidden from
+	 * a user without read_private_posts, which is the rule the Prompts list and
+	 * core's REST endpoint already apply. Drafts stay listed to everyone who can
+	 * edit prompts, since a challenger's author needs to see the control.
+	 */
+	public function test_test_prompts_route_hides_other_authors_private_prompts() {
+		$admin_id = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		$this->create_test_variant(
+			'private-test',
+			'a',
+			null,
+			[
+				'post_status' => 'private',
+				'post_author' => $admin_id,
+			]
+		);
+		$this->create_test_variant(
+			'private-test',
+			'b',
+			null,
+			[
+				'post_status' => 'draft',
+				'post_author' => $admin_id,
+			]
+		);
+
+		global $wp_rest_server;
+		$wp_rest_server = new WP_REST_Server(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		do_action( 'rest_api_init' );
+		$request = new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/private-test' );
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'contributor' ] ) );
+		self::assertSame( [ 'draft' ], wp_list_pluck( rest_do_request( $request )->get_data(), 'status' ) );
+
+		wp_set_current_user( $admin_id );
+		$prompts = rest_do_request( $request )->get_data();
+		self::assertSame( [ 'private', 'draft' ], wp_list_pluck( $prompts, 'status' ) );
+		// The panel shows the label, not the slug.
+		self::assertSame( [ 'Private', 'Draft' ], wp_list_pluck( $prompts, 'status_label' ) );
+	}
+
+	/**
+	 * A stored Test ID uses the characters the editor's slug and the lookup route
+	 * allow: lowercase letters, digits and hyphens. sanitize_title() alone keeps
+	 * underscores and percent-encodes what it can't transliterate, and an ID with
+	 * either could be stored through REST and never looked up.
+	 */
+	public function test_test_id_is_normalized_to_the_editor_charset() {
+		$prompt_id = $this->createPopup();
+
+		$response = $this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ Newspack_Popups_AB_Tests::META_TEST_ID => '  Footer_Test v1.2  ' ] ] );
+
+		self::assertSame( 200, $response->get_status() );
+		self::assertSame( 'footer-test-v1-2', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+		self::assertSame( '', Newspack_Popups_AB_Tests::sanitize_test_id( 'тест' ) );
+		self::assertSame( [ $prompt_id ], wp_list_pluck( Newspack_Popups_AB_Tests::get_test_prompts( 'footer_test v1.2' ), 'id' ) );
+	}
+
+	/**
+	 * Clearing a Test ID through REST leaves an empty string, not a phantom test:
+	 * an empty value must never fall back to the meta key's name. WordPress calls
+	 * a meta sanitize callback with the meta key as its second argument, which is
+	 * the fallback a sanitizer built on sanitize_title() would otherwise store.
+	 */
+	public function test_clearing_the_test_id_stores_an_empty_string() {
+		$prompt_id = $this->create_test_variant( 'clear-me', 'a' );
+		update_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_GOAL, 'donation' );
+
+		$response = $this->save_prompt_as(
+			$prompt_id,
+			'administrator',
+			[
+				'meta' => [
+					Newspack_Popups_AB_Tests::META_TEST_ID => '',
+					Newspack_Popups_AB_Tests::META_VARIANT => '',
+					Newspack_Popups_AB_Tests::META_GOAL    => '',
+				],
+			]
+		);
+
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		self::assertSame( '', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+		self::assertSame( '', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_VARIANT, true ) );
+		self::assertSame( '', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_GOAL, true ) );
+		self::assertSame( '', Newspack_Popups_AB_Tests::sanitize_test_id( [ 'x' ] ) );
+		self::assertSame( 'spring-drive-2026', Newspack_Popups_AB_Tests::sanitize_test_id( 'Spring Drive 2026' ) );
+	}
+
+	/**
+	 * With the flag off, stored tests have no effect, the placement rule included.
+	 *
+	 * A site that ran tests and turned the flag off may still hold a tested prompt
+	 * on a manual placement, and the panel that clears the Test ID is gone with
+	 * the flag, so a refusal here would leave that prompt unsaveable.
+	 */
+	public function test_placement_rule_is_off_with_the_flag() {
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
+		$prompt_id = $this->create_test_variant( 'flag-off-move', 'a', [ 'placement' => 'inline' ] );
+
+		$response = $this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ 'placement' => 'manual' ] ] );
+
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		self::assertSame( 'manual', get_post_meta( $prompt_id, 'placement', true ) );
+		self::assertSame( 'flag-off-move', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
 	}
 }
