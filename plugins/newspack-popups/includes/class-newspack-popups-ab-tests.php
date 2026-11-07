@@ -377,8 +377,8 @@ final class Newspack_Popups_AB_Tests {
 			return new WP_Error(
 				'newspack_popups_ab_ineligible_placement',
 				self::is_eligible_placement( $effective( 'placement' ) )
-					? __( 'A/B tests only work on prompts that Newspack places for you. Clear the test name or turn off Manual only.', 'newspack-popups' )
-					: __( 'A/B tests only work on prompts that Newspack places for you. Clear the test name or choose another placement.', 'newspack-popups' ),
+					? __( 'A/B tests only work on prompts that Newspack places for you. Turn off Manual only.', 'newspack-popups' )
+					: __( 'A/B tests only work on prompts that Newspack places for you. Choose another placement.', 'newspack-popups' ),
 				[ 'status' => 400 ]
 			);
 		}
@@ -980,7 +980,14 @@ final class Newspack_Popups_AB_Tests {
 			}
 			return new WP_Error( 'newspack_popups_ab_version_b', __( 'Could not create version B. Try again.', 'newspack-popups' ), [ 'status' => 500 ] );
 		}
+		// The registered sanitizer would rewrite a legacy ID (`footer_test` to
+		// `footer-test`) and put B in a different test, so this copy skips it.
+		$keep_stored = static function () use ( $test_id ) {
+			return $test_id;
+		};
+		add_filter( 'sanitize_post_meta_' . self::META_TEST_ID . '_for_' . Newspack_Popups::NEWSPACK_POPUPS_CPT, $keep_stored, PHP_INT_MAX );
 		update_post_meta( $version_b, self::META_TEST_ID, $test_id );
+		remove_filter( 'sanitize_post_meta_' . self::META_TEST_ID . '_for_' . Newspack_Popups::NEWSPACK_POPUPS_CPT, $keep_stored, PHP_INT_MAX );
 		update_post_meta( $version_b, self::META_VARIANT, 'b' );
 		update_post_meta( $prompt->ID, self::META_VARIANT, 'a' );
 		update_post_meta( $prompt->ID, self::META_GOAL, $goal );

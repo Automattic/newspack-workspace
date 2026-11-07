@@ -51,13 +51,23 @@ it( 'names the block a goal needs', () => {
 
 it( 'warns when another prompt holds the same variant', () => {
 	const prompts = [
-		{ id: 1, variant: 'a' },
+		{ id: 1, variant: 'a', status: 'publish' },
 		{ id: 2, variant: 'b' },
 	];
 	expect( testPromptWarnings( { postId: 2, variant: 'a', prompts } ) ).toHaveLength( 1 );
 	expect( testPromptWarnings( { postId: 2, variant: 'b', prompts } ) ).toHaveLength( 0 );
 	// A variant this editor doesn't offer can still be stored elsewhere; the message names it.
 	expect( testPromptWarnings( { postId: 2, variant: 'c', prompts: [ { id: 3, variant: 'c' } ] } ) ).toEqual( [
-		'Another prompt in this test is already version C. Unpublish one of them.',
+		'Another prompt in this test is already version C. Move the unpublished one to the trash.',
+	] );
+} );
+
+it( 'asks to unpublish only when both duplicates are live, counting a scheduled one', () => {
+	const prompts = [ { id: 3, variant: 'a', status: 'future' } ];
+	expect( testPromptWarnings( { postId: 2, variant: 'a', status: 'publish', prompts } ) ).toEqual( [
+		'Another prompt in this test is already version A. Unpublish one of them.',
+	] );
+	expect( testPromptWarnings( { postId: 2, variant: 'a', status: 'draft', prompts } ) ).toEqual( [
+		'Another prompt in this test is already version A. Move the unpublished one to the trash.',
 	] );
 } );

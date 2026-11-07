@@ -198,7 +198,7 @@ const ABTestPanel = ( {
 	const controls = ! isControl ? others.filter( prompt => 'a' === prompt.variant ) : [];
 	const control = controls.find( prompt => 'publish' === prompt.status ) || controls[ 0 ] || null;
 	const effectiveGoal = control ? control.goal || '' : goal;
-	const warnings = testPromptWarnings( { postId, variant, prompts } );
+	const warnings = testPromptWarnings( { postId, variant, status, prompts } );
 	const lookupPending = lookedUpFor !== testId;
 	const hasChallenger = others.some( prompt => prompt.variant && 'a' !== prompt.variant );
 	// Unpublished versions keep the test from running. On B, A's status comes

@@ -131,9 +131,21 @@ const Sidebar = props => {
 					/>
 					<ToggleControl
 						label={ __( 'Manual only', 'newspack-popups' ) }
-						help={ __( 'The prompt will appear only where inserted using the Single Prompt block or a shortcode.', 'newspack-popups' ) }
+						help={
+							inTest
+								? [
+										__(
+											'The prompt will appear only where inserted using the Single Prompt block or a shortcode.',
+											'newspack-popups'
+										),
+										__( 'Manual only isn’t available while this prompt is in an A/B test.', 'newspack-popups' ),
+								  ].join( ' ' )
+								: __( 'The prompt will appear only where inserted using the Single Prompt block or a shortcode.', 'newspack-popups' )
+						}
 						checked={ !! manual_only }
 						onChange={ value => onMetaFieldChange( { manual_only: value } ) }
+						// Still on for a prompt that already has it, so it can be turned off.
+						disabled={ inTest && ! manual_only }
 					/>
 				</>
 			) : (

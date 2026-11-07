@@ -66,7 +66,8 @@ const TestCard = ( { test, data } ) => {
 	// as a second A or one with no version. One whose A is gone has nothing to copy.
 	const canCreateVersionB = status === 'incomplete' && !! test.variants.a && false !== test.variants.a.eligible && 1 === test.prompt_count;
 	const allPublished = letters.every( letter => test.variants[ letter ].status === 'publish' );
-	const publishedDuplicate = duplicates.some( duplicate => duplicate.status === 'publish' );
+	// Scheduled counts as live: readers see it once the date comes.
+	const publishedDuplicate = duplicates.some( duplicate => [ 'publish', 'future' ].includes( duplicate.status ) );
 
 	const load = refresh => {
 		setLoading( true );

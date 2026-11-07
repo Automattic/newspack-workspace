@@ -406,7 +406,7 @@ describe( 'version B', () => {
 	it( 'warns about another prompt with the same version', async () => {
 		apiFetch.mockResolvedValue( [ versionA(), versionB(), versionB( { id: 4, title: 'Extra B' } ) ] );
 		inTest( 'b', { postId: 3 } );
-		const warning = await screen.findByText( 'Another prompt in this test is already version B. Unpublish one of them.' );
+		const warning = await screen.findByText( 'Another prompt in this test is already version B. Move the unpublished one to the trash.' );
 		// An error asks the author to act, so it is spoken, unlike the standing notices.
 		expect( warning.dataset.spoken ).toBe( warning.textContent );
 	} );

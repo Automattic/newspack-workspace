@@ -139,19 +139,30 @@ export const missingGoalBlockMessage = ( goal, fromControl = false ) => {
  * @param {Object}   args
  * @param {number}   args.postId  This prompt's ID.
  * @param {string}   args.variant This prompt's variant.
+ * @param {string}   args.status  This prompt's post status.
  * @param {Object[]} args.prompts The prompts in the test, as the lookup route returns them.
  * @return {string[]} Messages.
  */
-export const testPromptWarnings = ( { postId, variant, prompts } ) => {
+export const testPromptWarnings = ( { postId, variant, status, prompts } ) => {
 	const others = ( prompts || [] ).filter( prompt => prompt.id !== postId );
+	const duplicates = others.filter( prompt => prompt.variant === variant );
 	const warnings = [];
-	if ( variant && others.some( prompt => prompt.variant === variant ) ) {
+	if ( variant && duplicates.length ) {
+		// Scheduled counts as live: readers see it once the date comes.
+		const live = [ status, ...duplicates.map( prompt => prompt.status ) ].filter( value => 'publish' === value || 'future' === value ).length;
+		const letter = String( variant ).toUpperCase();
 		warnings.push(
-			sprintf(
-				// Translators: %s is the version letter.
-				__( 'Another prompt in this test is already version %s. Unpublish one of them.', 'newspack-popups' ),
-				String( variant ).toUpperCase()
-			)
+			live > 1
+				? sprintf(
+						// Translators: %s is the version letter.
+						__( 'Another prompt in this test is already version %s. Unpublish one of them.', 'newspack-popups' ),
+						letter
+				  )
+				: sprintf(
+						// Translators: %s is the version letter.
+						__( 'Another prompt in this test is already version %s. Move the unpublished one to the trash.', 'newspack-popups' ),
+						letter
+				  )
 		);
 	}
 	return warnings;
