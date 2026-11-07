@@ -230,7 +230,8 @@ final class Newspack_Popups_API {
 			);
 			register_rest_route(
 				'newspack-popups/v1',
-				'/ab-tests/(?P<test_id>[a-z0-9-]+)',
+				// Underscores too: the save guard keeps a legacy Test ID as stored.
+				'/ab-tests/(?P<test_id>[a-z0-9_-]+)',
 				[
 					'methods'             => \WP_REST_Server::READABLE,
 					'callback'            => [ __CLASS__, 'api_get_ab_test_prompts' ],
@@ -239,22 +240,8 @@ final class Newspack_Popups_API {
 			);
 			register_rest_route(
 				'newspack-popups/v1',
-				'/ab-tests/(?P<test_id>[a-z0-9-]+)/name',
-				[
-					'methods'             => \WP_REST_Server::EDITABLE,
-					'callback'            => [ __CLASS__, 'api_rename_ab_test' ],
-					'permission_callback' => [ __CLASS__, 'rename_ab_test_permission_callback' ],
-					'args'                => [
-						'name' => [
-							'type'     => 'string',
-							'required' => true,
-						],
-					],
-				]
-			);
-			register_rest_route(
-				'newspack-popups/v1',
-				'/ab-tests/(?P<test_id>[a-z0-9-]+)/stats',
+				// Underscores too, for the same legacy IDs as the route above.
+				'/ab-tests/(?P<test_id>[a-z0-9_-]+)/stats',
 				[
 					'methods'             => \WP_REST_Server::READABLE,
 					'callback'            => [ __CLASS__, 'api_get_ab_test_stats' ],
@@ -263,6 +250,22 @@ final class Newspack_Popups_API {
 						'refresh' => [
 							'type'    => 'boolean',
 							'default' => false,
+						],
+					],
+				]
+			);
+			register_rest_route(
+				'newspack-popups/v1',
+				// Underscores too, so a legacy test the page lists can be renamed.
+				'/ab-tests/(?P<test_id>[a-z0-9_-]+)/name',
+				[
+					'methods'             => \WP_REST_Server::EDITABLE,
+					'callback'            => [ __CLASS__, 'api_rename_ab_test' ],
+					'permission_callback' => [ __CLASS__, 'rename_ab_test_permission_callback' ],
+					'args'                => [
+						'name' => [
+							'type'     => 'string',
+							'required' => true,
 						],
 					],
 				]
@@ -328,7 +331,7 @@ final class Newspack_Popups_API {
 		}
 		return rest_ensure_response(
 			[
-				'test_id' => Newspack_Popups_AB_Tests::sanitize_test_id( $request->get_param( 'test_id' ) ),
+				'test_id' => Newspack_Popups_AB_Tests::resolve_test_id( $request->get_param( 'test_id' ) ),
 				'name'    => $name,
 			]
 		);
@@ -633,10 +636,27 @@ final class Newspack_Popups_API {
 			'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
 			'post_status'    => 'publish',
 			'posts_per_page' => $per_page,
-			'meta_key'       => 'placement',
-			'meta_compare'   => 'IN',
-			// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
-			'meta_value'     => [ 'inline', 'manual' ],
+			// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+			'meta_query'     => [
+				'relation' => 'OR',
+				[
+					'key'     => 'placement',
+					'value'   => [ 'inline', 'manual' ],
+					'compare' => 'IN',
+				],
+				[
+					'relation' => 'AND',
+					[
+						'key'     => 'placement',
+						'value'   => Newspack_Popups_Model::get_overlay_placements(),
+						'compare' => 'IN',
+					],
+					[
+						'key'   => 'manual_only',
+						'value' => '1',
+					],
+				],
+			],
 		];
 
 		// Look up by title only if provided with a search term and not post IDs.

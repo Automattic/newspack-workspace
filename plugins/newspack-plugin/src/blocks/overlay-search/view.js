@@ -12,6 +12,12 @@
  */
 import domReady from '@wordpress/dom-ready';
 
+/**
+ * Internal dependencies
+ */
+import { lockScrollbarGutter, unlockScrollbarGutter } from '../../shared/js/scrollbar-gutter';
+import { getContrastColorFromRGB } from '../../../packages/components/src/utils/contrast-color';
+
 const FOCUSABLE_SELECTOR =
 	'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), ' +
 	'textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), iframe, object, embed, ' +
@@ -26,33 +32,8 @@ const CONTRAST_BLACK = 'var(--wp--custom--color--neutral-100, var(--newspack-ui-
 const CONTRAST_WHITE = 'var(--wp--custom--color--neutral-0, var(--newspack-ui-color-neutral-0, #ffffff))';
 
 /**
- * Convert an sRGB triple (0-255 per channel) to APCA screen luminance Y.
- * APCA uses a single fixed gamma (2.4) instead of WCAG 2's piecewise function;
- * the per-channel coefficients are APCA's perceptual weighting.
- *
- * @param {number} r Red channel, 0-255.
- * @param {number} g Green channel, 0-255.
- * @param {number} b Blue channel, 0-255.
- * @return {number} Y in 0-1.
- */
-// prettier-ignore
-const sRGBtoY = ( r, g, b ) => ( 0.2126729 * Math.pow( r / 255, 2.4 ) ) + ( 0.7151522 * Math.pow( g / 255, 2.4 ) ) + ( 0.072175 * Math.pow( b / 255, 2.4 ) );
-
-/**
- * APCA Lc contrast value (signed). Polarity-aware: the algorithm uses
- * different exponents depending on whether the text is darker than the
- * background (`bgY > textY`) or lighter.
- *
- * @param {number} textY Text luminance from {@link sRGBtoY}.
- * @param {number} bgY   Background luminance from {@link sRGBtoY}.
- * @return {number} Lc in roughly -108..108. Compare absolute values to pick a winner.
- */
-// prettier-ignore
-const apcaLc = ( textY, bgY ) => bgY > textY ? ( Math.pow( bgY, 0.56 ) - Math.pow( textY, 0.57 ) ) * 1.14 * 100 : ( Math.pow( bgY, 0.65 ) - Math.pow( textY, 0.62 ) ) * 1.14 * 100;
-
-/**
- * Pick whichever of `CONTRAST_BLACK`/`CONTRAST_WHITE` has the higher APCA Lc
- * against the element's resolved `background-color`. Reads via
+ * Pick whichever of `CONTRAST_BLACK`/`CONTRAST_WHITE` reads better by APCA (ties
+ * to black) against the element's resolved `background-color`. Reads via
  * `getComputedStyle()` so theme tokens, hex values, and rgba() all work the
  * same way. Falls back to white when the background can't be parsed
  * (transparent, none, or non-rgb keywords).
@@ -70,10 +51,7 @@ const pickContrastColor = el => {
 	if ( ! Number.isFinite( r ) || ! Number.isFinite( g ) || ! Number.isFinite( b ) ) {
 		return CONTRAST_WHITE;
 	}
-	const bgY = sRGBtoY( r, g, b );
-	const blackLc = Math.abs( apcaLc( 0, bgY ) );
-	const whiteLc = Math.abs( apcaLc( 1, bgY ) );
-	return blackLc > whiteLc ? CONTRAST_BLACK : CONTRAST_WHITE;
+	return getContrastColorFromRGB( [ r, g, b ] ) === 'black' ? CONTRAST_BLACK : CONTRAST_WHITE;
 };
 
 const getVisibleFocusable = container =>
@@ -96,11 +74,7 @@ const init = trigger => {
 
 	const closeBtn = panel.querySelector( '.newspack-overlay-search__close' );
 
-	// Captured once. Reassigning on every open is unsafe: if a previous close ever
-	// fell through to the `document.body` fallback, the next open would record
-	// `document.body` as "original" and the panel would be stranded there.
-	const originalParent = panel.parentNode;
-	const originalNextSibling = panel.nextSibling;
+	document.body.appendChild( panel );
 
 	let isOpen = false;
 	let lastFocused = null;
@@ -140,8 +114,6 @@ const init = trigger => {
 
 		lastFocused = trigger.ownerDocument.activeElement;
 
-		document.body.appendChild( panel );
-
 		// Recompute on each open so the contrast color tracks any runtime change
 		// to the panel's background (theme switches, overlayColor edits, etc.).
 		if ( closeBtn ) {
@@ -151,24 +123,24 @@ const init = trigger => {
 		trigger.setAttribute( 'aria-expanded', 'true' );
 		panel.setAttribute( 'aria-hidden', 'false' );
 		panel.removeAttribute( 'inert' );
+		lockScrollbarGutter();
 		document.body.classList.add( `menu-open--overlay-search-${ panelId }` );
 
 		focusTrapCleanup = trapFocus();
 
 		const onEsc = e => {
 			if ( e.key === 'Escape' ) {
+				e.stopPropagation();
 				closeOverlay();
 			}
 		};
-		document.addEventListener( 'keydown', onEsc );
-		escCleanup = () => document.removeEventListener( 'keydown', onEsc );
+		document.addEventListener( 'keydown', onEsc, true );
+		escCleanup = () => document.removeEventListener( 'keydown', onEsc, true );
 
 		// Focus the search input on the next paint. Two `requestAnimationFrame`s
 		// guarantee that the panel's `aria-hidden`/`inert` flips and the CSS
 		// transition's first frame have committed before we try to focus —
 		// otherwise the input may still be considered hidden by some browsers.
-		// Survives `prefers-reduced-motion` (transitions collapse to 0s) where a
-		// fixed `setTimeout` would either fire too early or hold focus too long.
 		// The `isOpen` guard prevents the callback from stealing focus back into
 		// the panel if the user closed the overlay before the frame landed.
 		requestAnimationFrame( () => {
@@ -204,24 +176,13 @@ const init = trigger => {
 		panel.setAttribute( 'aria-hidden', 'true' );
 		panel.setAttribute( 'inert', '' );
 		document.body.classList.remove( `menu-open--overlay-search-${ panelId }` );
+		unlockScrollbarGutter();
 
 		// Return focus to the element that had focus when we opened — usually
 		// the trigger, but fall back to it if for some reason that element is
 		// gone.
 		const focusTarget = lastFocused && document.contains( lastFocused ) ? lastFocused : trigger;
 		focusTarget.focus();
-
-		if ( originalParent ) {
-			try {
-				if ( originalNextSibling && originalNextSibling.parentNode === originalParent ) {
-					originalParent.insertBefore( panel, originalNextSibling );
-				} else {
-					originalParent.appendChild( panel );
-				}
-			} catch {
-				document.body.appendChild( panel );
-			}
-		}
 	};
 
 	trigger.addEventListener( 'click', e => {

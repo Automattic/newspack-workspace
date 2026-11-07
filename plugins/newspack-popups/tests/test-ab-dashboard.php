@@ -231,6 +231,42 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * A legacy Test ID with an underscore reaches the route and is reported as
+	 * stored, since readers' events carry that spelling.
+	 */
+	public function test_stats_route_finds_a_legacy_test_id() {
+		global $wpdb;
+		$this->as_admin();
+		foreach ( $this->create_running_test( 'footer-test' ) as $prompt_id ) {
+			// A value the earlier sanitizer stored; the current one can't write it.
+			$wpdb->update( // phpcs:ignore WordPress.DB
+				$wpdb->postmeta,
+				[ 'meta_value' => 'footer_test' ], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				[
+					'post_id'  => $prompt_id,
+					'meta_key' => Newspack_Popups_AB_Tests::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				]
+			);
+			wp_cache_delete( $prompt_id, 'post_meta' );
+		}
+		$response = $this->stats_request( 'footer_test' );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'footer_test', $response->get_data()['test_id'] );
+		$this->assertSame( 404, $this->stats_request( 'footer-test' )->get_status() );
+	}
+
+	/**
+	 * An underscore request with no stored match does not fall through to the
+	 * hyphenated test, which readers see as a different one.
+	 */
+	public function test_stats_route_does_not_map_an_underscore_id_to_the_hyphenated_test() {
+		$this->as_admin();
+		$this->create_running_test( 'footer-test' );
+		$this->assertSame( 404, $this->stats_request( 'footer_test' )->get_status() );
+		$this->assertSame( 200, $this->stats_request( 'footer-test' )->get_status() );
+	}
+
+	/**
 	 * Sign in as an administrator.
 	 */
 	private function as_admin() {

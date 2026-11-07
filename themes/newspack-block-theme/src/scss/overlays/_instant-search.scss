@@ -1,5 +1,6 @@
 @use "../sass-utils";
 @use "../mixins";
+@use "newspack-motion" as motion;
 
 /**
  * Jetpack Instant Search overlay styles
@@ -11,6 +12,7 @@ body .jetpack-instant-search {
 	--jp--color--background-light: var(--wp--custom--color--neutral-5);
 	--jp--color--border: var(--wp--custom--color--neutral-30);
 	--jp--sidebar--width: calc(1px + var(--wp--preset--spacing--30) + var(--wp--custom--width--x-small) + var(--wp--preset--spacing--30));
+	--wp--custom--focus--color: var(--jp--color--text);
 
 	&[class*="--dark"] {
 		--jp--color--text: var(--wp--custom--color--neutral-0);
@@ -53,8 +55,7 @@ body .jetpack-instant-search {
 		}
 
 		&:focus-visible {
-			outline: 2px solid var(--jp--color--text);
-			outline-offset: 1px;
+			@include mixins.focus-line(var(--jp--color--text));
 		}
 	}
 
@@ -63,7 +64,7 @@ body .jetpack-instant-search {
 		font-family: inherit;
 
 		&#jetpack-instant-search__overlay-focus-anchor { /* stylelint-disable-line selector-id-pattern */
-			border-radius: var(--wp--custom--border--radius-medium);
+			border-radius: var(--wp--custom--border--radius-large);
 			border: 1px solid var(--jp--color--border);
 			color: var(--jp--color--text);
 			font-size: var(--newspack-ui-font-size-xs, 14px);
@@ -73,11 +74,12 @@ body .jetpack-instant-search {
 			padding:
 				calc(var(--newspack-ui-spacer-base, var(--wp--preset--spacing--20)) / 2 - 1px)
 				calc(var(--newspack-ui-spacer-base, var(--wp--preset--spacing--20)) - 1px);
-			transition: outline 125ms ease-in-out;
+			transition:
+				border-color motion.$duration-color motion.$ease-color,
+				box-shadow motion.$duration-color motion.$ease-color;
 
 			&:focus {
-				outline: 2px solid var(--jp--color--text) !important;
-				outline-offset: 1px;
+				@include mixins.focus-edge(var(--jp--color--text), !important);
 			}
 		}
 	}
@@ -89,6 +91,16 @@ body .jetpack-instant-search {
 		font-size: var(--newspack-ui-font-size-s, 16px);
 		line-height: var(--newspack-ui-line-height-s, 1.5);
 		padding: var(--wp--preset--spacing--30);
+		transition:
+			opacity motion.$duration-modal motion.$ease-out,
+			visibility 0s;
+
+		&.is-hidden {
+			pointer-events: none;
+			transition:
+				opacity motion.$duration-modal motion.$ease-out,
+				visibility 0s linear motion.$duration-modal;
+		}
 
 		@include sass-utils.media("576px") {
 			padding: var(--wp--preset--spacing--80);
@@ -110,21 +122,23 @@ body .jetpack-instant-search {
 
 			&::before {
 				background: var(--jp--color--background);
-				border-radius: var(--newspack-ui-border-radius-m, 6px);
+				border-radius: var(--newspack-ui-radius-control, var(--wp--custom--border--radius-large));
 				content: "";
 				display: block;
 				height: var(--wp--custom--spacing--55);
 				position: absolute;
 				transition:
-					background 125ms ease-in-out,
-					outline 125ms ease-in-out;
+					background motion.$duration-color motion.$ease-color,
+					box-shadow motion.$duration-color motion.$ease-color;
 				width: var(--wp--custom--spacing--55);
 				z-index: -1;
 			}
 
-			&:hover {
-				&::before {
-					background: var(--jp--color--background-light);
+			@include motion.hover {
+				&:hover {
+					&::before {
+						background: var(--jp--color--background-light);
+					}
 				}
 			}
 
@@ -134,8 +148,7 @@ body .jetpack-instant-search {
 
 			&:focus-visible {
 				&::before {
-					outline: 2px solid var(--jp--color--text);
-					outline-offset: 1px;
+					@include mixins.focus-line(var(--jp--color--text));
 				}
 			}
 		}
@@ -156,12 +169,13 @@ body .jetpack-instant-search {
 		border-color: var(--jp--color--border) !important;
 
 		&-label {
-			transition: outline 125ms ease-in-out;
+			transition:
+				border-radius motion.$duration-color motion.$ease-color,
+				box-shadow motion.$duration-color motion.$ease-color;
 
 			&:focus-within {
-				border-radius: var(--newspack-ui-border-radius-m, 6px);
-				outline: 2px solid var(--jp--color--text);
-				outline-offset: -4px;
+				@include mixins.focus-line-inset(var(--jp--color--text));
+				border-radius: var(--newspack-ui-radius-control, var(--wp--custom--border--radius-large));
 			}
 		}
 
@@ -199,7 +213,7 @@ body .jetpack-instant-search {
 		background: var(--jp--color--background);
 
 		&-wrapper {
-			border-radius: var(--wp--custom--border--radius-medium);
+			border-radius: var(--wp--custom--border--radius-xx-large);
 			max-width: calc(var(--wp--preset--spacing--80) + var(--wp--style--global--content-size) + var(--wp--preset--spacing--80));
 
 			@include sass-utils.media("992px") {
@@ -210,7 +224,7 @@ body .jetpack-instant-search {
 		}
 
 		&-filter-button {
-			border-radius: var(--wp--custom--border--radius-medium);
+			border-radius: var(--wp--custom--border--radius-large);
 			border: 1px solid var(--jp--color--border);
 			color: var(--jp--color--text);
 			font-size: var(--newspack-ui-font-size-xs, 14px);
@@ -220,11 +234,16 @@ body .jetpack-instant-search {
 			padding:
 				calc(var(--newspack-ui-spacer-base, var(--wp--preset--spacing--20)) / 2 - 1px)
 				calc(var(--newspack-ui-spacer-base, var(--wp--preset--spacing--20)) - 1px);
-			transition: background 125ms ease-in-out;
+			transition: background motion.$duration-color motion.$ease-color;
 
 			&:hover {
-				background: var(--jp--color--background-light);
 				text-decoration: none;
+			}
+
+			@include motion.hover {
+				&:hover {
+					background: var(--jp--color--background-light);
+				}
 			}
 		}
 
@@ -297,19 +316,24 @@ body .jetpack-instant-search {
 
 			button {
 				background: var(--jp--color--text) !important;
-				border-radius: var(--wp--custom--border--radius-medium) !important;
+				border-radius: var(--wp--custom--border--radius-large) !important;
 				color: var(--jp--color--background) !important;
 				padding:
 					var(--newspack-ui-spacer-2, var(--wp--custom--spacing--25))
-					var(--newspack-ui-spacer-5, var(--wp--preset--spacing--40)) !important;
+					var(--newspack-ui-spacer-4, var(--wp--custom--spacing--35)) !important;
 				transition:
-					background 125ms ease-in-out,
-					color 125ms ease-in-out,
-					outline 125ms ease-in-out;
+					background motion.$duration-color motion.$ease-color,
+					color motion.$duration-color motion.$ease-color,
+					box-shadow motion.$duration-color motion.$ease-color;
 
 				&:hover {
-					background: var(--jp--color--text-light) !important;
 					text-decoration: none !important;
+				}
+
+				@include motion.hover {
+					&:hover {
+						background: var(--jp--color--text-light) !important;
+					}
 				}
 
 				&:focus {
@@ -318,8 +342,7 @@ body .jetpack-instant-search {
 				}
 
 				&:focus-visible {
-					outline: 2px solid var(--jp--color--text) !important;
-					outline-offset: 1px;
+					@include mixins.focus-fill(var(--jp--color--background), var(--jp--color--text), !important);
 				}
 
 				&:disabled {
@@ -465,7 +488,7 @@ body .jetpack-instant-search {
 
 				input[type="checkbox"] {
 					position: relative;
-					@include mixins.checkbox-radio;
+					@include mixins.checkbox-radio(!important);
 					@include mixins.checkbox;
 					margin-top: 1px;
 				}
@@ -487,7 +510,7 @@ body .jetpack-instant-search {
 			}
 
 			&:focus-visible {
-				outline: 2px solid var(--jp--color--text) !important;
+				@include mixins.focus-line(var(--jp--color--text), !important);
 			}
 		}
 	}
@@ -497,16 +520,18 @@ body .jetpack-instant-search {
 	}
 
 	&__search-sort-select {
+		background-color: transparent;
 		border-color: var(--jp--color--border);
-		border-radius: var(--newspack-ui-border-radius-m, 6px);
+		border-radius: var(--newspack-ui-radius-control, var(--wp--custom--border--radius-large));
 		color: inherit;
 		min-height: var(--wp--preset--spacing--50);
 		padding: calc(var(--newspack-ui-spacer-base, var(--wp--preset--spacing--20)) / 2);
-		transition: outline 125ms ease-in-out;
+		transition:
+			border-color motion.$duration-color motion.$ease-color,
+			box-shadow motion.$duration-color motion.$ease-color;
 
 		&:focus-visible {
-			outline: 2px solid var(--jp--color--text);
-			outline-offset: -1px;
+			@include mixins.focus-edge(var(--jp--color--text));
 		}
 	}
 
@@ -569,8 +594,7 @@ body .jetpack-instant-search {
 			}
 
 			&:focus-visible {
-				outline: 2px solid var(--jp--color--text) !important;
-				outline-offset: 2px;
+				@include mixins.focus-line(var(--jp--color--text), !important);
 			}
 		}
 	}

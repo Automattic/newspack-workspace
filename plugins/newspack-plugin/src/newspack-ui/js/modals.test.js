@@ -76,6 +76,36 @@ describe( 'newspack-ui modal forms', () => {
 		expect( isButtonLoading( button ) ).toBe( true );
 	} );
 
+	it( 'marks the submit button busy in every form of a steps modal', async () => {
+		document.body.innerHTML = `
+			<div id="newspack-my-account__steps" class="newspack-ui__modal-container" data-state="open">
+				<div class="newspack-ui__modal__steps">
+					<div class="newspack-ui__modal__step">
+						<form class="newspack-ui__modal__content" action="https://example.test/one" target="step-frame">
+							<button type="submit" class="newspack-ui__button"><span>Continue</span></button>
+						</form>
+					</div>
+					<div class="newspack-ui__modal__step">
+						<form class="newspack-ui__modal__content" action="https://example.test/two" target="step-frame">
+							<button type="submit" class="newspack-ui__button"><span>Delete account</span></button>
+						</form>
+					</div>
+				</div>
+			</div>
+		`;
+		jest.isolateModules( () => {
+			require( './modals' );
+		} );
+		jest.spyOn( console, 'error' ).mockImplementation( () => {} );
+		const [ , secondForm ] = document.querySelectorAll( 'form' );
+		const button = secondForm.querySelector( 'button' );
+
+		secondForm.requestSubmit( button );
+		await nextTask();
+
+		expect( isButtonLoading( button ) ).toBe( true );
+	} );
+
 	it( 'leaves the button of a form that handles its own submit to that form', async () => {
 		const { form, button } = renderModal( true );
 
@@ -155,6 +185,27 @@ describe( 'newspack-ui modal dialogs', () => {
 		return event;
 	};
 
+	it( 'keeps an open modal above the on-screen keyboard', async () => {
+		const viewport = new EventTarget();
+		viewport.height = window.innerHeight;
+		viewport.offsetTop = 0;
+		Object.defineProperty( window, 'visualViewport', { value: viewport, configurable: true } );
+		try {
+			const { modal } = renderDialog( '<input type="text" />' );
+			await open( modal );
+
+			viewport.height = window.innerHeight - 300;
+			viewport.dispatchEvent( new Event( 'resize' ) );
+			expect( modal.style.getPropertyValue( '--newspack-ui-keyboard-offset' ) ).toBe( '300px' );
+
+			modal.setAttribute( 'data-state', 'closed' );
+			await nextTask();
+			expect( modal.style.getPropertyValue( '--newspack-ui-keyboard-offset' ) ).toBe( '' );
+		} finally {
+			delete window.visualViewport;
+		}
+	} );
+
 	it( 'opens as a modal labelled by its heading', async () => {
 		const { modal } = renderDialog( '<input type="email" />' );
 		await open( modal );
@@ -172,21 +223,75 @@ describe( 'newspack-ui modal dialogs', () => {
 		expect( document.activeElement.id ).toBe( 'email' );
 	} );
 
-	it( 'focuses the first action, even a destructive one, not the Close button', async () => {
+	it( 'focuses the element marked data-autofocus before any field or link', async () => {
 		const { modal } = renderDialog(
-			'<button class="newspack-ui__button--destructive" id="delete">Delete</button><button class="newspack-ui__modal__close">Cancel</button>'
+			'<a href="#subscriptions">Manage subscriptions</a><button id="delete" data-autofocus>Delete account</button>'
 		);
 		await open( modal );
 
 		expect( document.activeElement.id ).toBe( 'delete' );
 	} );
 
-	it( 'focuses the heading when there is nothing else to focus', async () => {
+	it( 'focuses the title, not an action, when there is no field', async () => {
+		const { modal } = renderDialog(
+			'<button class="newspack-ui__button--destructive" id="delete">Delete</button><button class="newspack-ui__modal__close">Cancel</button>'
+		);
+		await open( modal );
+
+		expect( document.activeElement ).toBe( modal.querySelector( 'h2' ) );
+		expect( document.activeElement.getAttribute( 'tabindex' ) ).toBe( '-1' );
+		expect( modal.getAttribute( 'aria-labelledby' ) ).toBe( document.activeElement.id );
+	} );
+
+	it( 'focuses the title when there is nothing else to focus', async () => {
 		const { modal } = renderDialog( '<p>Done.</p>' );
 		await open( modal );
 
 		expect( document.activeElement ).toBe( modal.querySelector( 'h2' ) );
 		expect( document.activeElement.getAttribute( 'tabindex' ) ).toBe( '-1' );
+	} );
+
+	it( 'focuses the first heading in the content when the title is hidden', async () => {
+		const { modal } = renderDialog( '<h3 id="result">All set</h3><button id="done">Continue</button>' );
+		modal.querySelector( 'header' ).hidden = true;
+		await open( modal );
+
+		expect( document.activeElement.id ).toBe( 'result' );
+		expect( document.activeElement.getAttribute( 'tabindex' ) ).toBe( '-1' );
+	} );
+
+	it( 'focuses the dialog itself when it shows no title or heading', async () => {
+		const { modal } = renderDialog( '<button id="done">Continue</button>' );
+		modal.querySelector( 'header' ).hidden = true;
+		await open( modal );
+
+		expect( document.activeElement ).toBe( modal );
+		expect( modal.getAttribute( 'tabindex' ) ).toBe( '-1' );
+	} );
+
+	it( 'focuses a frame as it would a field', async () => {
+		const { modal } = renderDialog( '<button id="help">Help</button><iframe id="frame"></iframe>' );
+		await open( modal );
+
+		expect( document.activeElement.id ).toBe( 'frame' );
+	} );
+
+	it( 'moves Tab from the title to the first action, not the Close button', async () => {
+		const { modal } = renderDialog( '<p>Sure?</p><button id="delete">Delete</button><button id="cancel">Cancel</button>' );
+		await open( modal );
+		expect( document.activeElement ).toBe( modal.querySelector( 'h2' ) );
+
+		expect( pressTab( modal ).defaultPrevented ).toBe( true );
+		expect( document.activeElement.id ).toBe( 'delete' );
+	} );
+
+	it( 'moves Tab from the dialog itself to the first action', async () => {
+		const { modal } = renderDialog( '<button id="done">Continue</button>' );
+		modal.querySelector( 'header' ).hidden = true;
+		await open( modal );
+
+		expect( pressTab( modal ).defaultPrevented ).toBe( true );
+		expect( document.activeElement.id ).toBe( 'done' );
 	} );
 
 	it( 'skips hidden fields', async () => {

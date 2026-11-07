@@ -228,3 +228,7 @@ input[type="radio"]:checked + .tier-select-label {
 		margin-bottom: 0;
 	}
 }
+
+.wpbnbd__tiers__top .newspack-ui__badge[contenteditable="true"] {
+	cursor: text;
+}

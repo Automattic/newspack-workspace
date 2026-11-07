@@ -8,7 +8,7 @@ describe( 'getColorForContrast', () => {
 		[ '#ffffff', '#000000' ],
 		[ '#f0f0f0', '#000000' ],
 		[ '#ffcc00', '#000000' ],
-		// APCA flip zone: WCAG2 said black, APCA says white decisively.
+		// White reads better by APCA (Lc 74 against 36) though only black reaches 4.5:1.
 		[ '#178f15', '#ffffff' ],
 		[ '#3366cc', '#ffffff' ],
 		[ '#dd3333', '#ffffff' ],
@@ -22,6 +22,8 @@ describe( 'getColorForContrast', () => {
 		[ '#33333380', '#ffffff' ],
 		[ '#FFCC00', '#000000' ],
 		[ ' #178f15 ', '#ffffff' ],
+		// White reads better by APCA (Lc 70 against 40) though only black reaches 4.5:1.
+		[ '#e65100', '#ffffff' ],
 	] )( 'picks readable text for %s', ( background, expected ) => {
 		expect( getColorForContrast( background ) ).toBe( expected );
 	} );

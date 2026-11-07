@@ -159,7 +159,7 @@ export function getFields( { renamingId = null, onRenameCommit, onRenameCancel, 
 		// `isNone` would need client-side post-filter after server pagination;
 		// that leaves blank slots and miscounts totals. Add once the REST
 		// collection accepts author exclusions.
-		authorField.filterBy = { operators: [ 'is', 'isAny' ] };
+		authorField.filterBy = { operators: [ 'is', 'isAny' ], isPrimary: true };
 	}
 
 	return [

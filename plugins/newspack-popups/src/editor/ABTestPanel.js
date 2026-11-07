@@ -39,6 +39,8 @@ const ABTestPanel = ( {
 	newspack_popups_ab_test_goal: goal = '',
 	newspack_popups_ab_control_share: controlShare = 50,
 	placement,
+	manual_only: manualOnly = false,
+	isOverlay = false,
 	postId,
 	onMetaFieldChange,
 } ) => {
@@ -49,7 +51,8 @@ const ABTestPanel = ( {
 		results_url: resultsUrl = '',
 		test_name: testName = '',
 	} = window?.newspack_popups_data?.ab_testing || {};
-	const eligible = isEligiblePlacement( placement, ineligible );
+	const manualOnlyOverlay = isOverlay && !! manualOnly;
+	const eligible = isEligiblePlacement( placement, ineligible, manualOnlyOverlay );
 
 	const blockNames = useSelect( registrySelect => {
 		const { getClientIdsWithDescendants, getBlockName } = registrySelect( 'core/block-editor' );
@@ -164,7 +167,9 @@ const ABTestPanel = ( {
 				) }
 				{ ! eligible && (
 					<Notice status="warning" spokenMessage="" isDismissible={ false }>
-						{ __( 'Prompts on manual or custom placements can’t be A/B tested.', 'newspack-popups' ) }
+						{ manualOnlyOverlay && isEligiblePlacement( placement, ineligible )
+							? __( 'Overlays set to Manual only can’t be A/B tested.', 'newspack-popups' )
+							: __( 'Prompts on manual or custom placements can’t be A/B tested.', 'newspack-popups' ) }
 					</Notice>
 				) }
 				{ canManage && (
@@ -188,7 +193,10 @@ const ABTestPanel = ( {
 	const isControl = 'a' === variant;
 	const letter = variant ? String( variant ).toUpperCase() : '';
 	const others = prompts.filter( prompt => prompt.id !== postId );
-	const control = ! isControl ? others.find( prompt => 'a' === prompt.variant ) : null;
+	// Prefer the published control: after an author drafts the old A and publishes
+	// a replacement, the lookup lists both, and the live split is the published one's.
+	const controls = ! isControl ? others.filter( prompt => 'a' === prompt.variant ) : [];
+	const control = controls.find( prompt => 'publish' === prompt.status ) || controls[ 0 ] || null;
 	const effectiveGoal = control ? control.goal || '' : goal;
 	const warnings = testPromptWarnings( { postId, variant, prompts } );
 	const lookupPending = lookedUpFor !== testId;
@@ -231,18 +239,27 @@ const ABTestPanel = ( {
 			) }
 			{ ! eligible && (
 				<Notice status="warning" spokenMessage="" isDismissible={ false }>
-					{ sprintf(
-						// Translators: %s is a version letter such as "A", or the phrase "this prompt".
-						__(
-							'Prompts on manual or custom placements can’t be A/B tested. Choose another placement to count %s’s results.',
-							'newspack-popups'
-						),
-						letter || __( 'this prompt', 'newspack-popups' )
-					) }
+					{ manualOnlyOverlay && isEligiblePlacement( placement, ineligible )
+						? sprintf(
+								// Translators: %s is a version letter such as "A", or the phrase "this prompt".
+								__(
+									'Overlays set to Manual only can’t be A/B tested. Turn off Manual only to count %s’s results.',
+									'newspack-popups'
+								),
+								letter || __( 'this prompt', 'newspack-popups' )
+						  )
+						: sprintf(
+								// Translators: %s is a version letter such as "A", or the phrase "this prompt".
+								__(
+									'Prompts on manual or custom placements can’t be A/B tested. Choose another placement to count %s’s results.',
+									'newspack-popups'
+								),
+								letter || __( 'this prompt', 'newspack-popups' )
+						  ) }
 				</Notice>
 			) }
 			{ warnings.map( warning => (
-				<Notice key={ warning } status="error" spokenMessage="" isDismissible={ false }>
+				<Notice key={ warning } status="error" spokenMessage={ warning } politeness="polite" isDismissible={ false }>
 					{ warning }
 				</Notice>
 			) ) }
@@ -292,12 +309,18 @@ const ABTestPanel = ( {
 				! lookupPending &&
 				( control ? (
 					<p className="newspack-popups-ab-test__intro">
-						{ sprintf(
-							// Translators: %1$s is the test's goal, %2$s the traffic split, such as "60% see A, 40% see B".
-							__( 'Goal: %1$s. %2$s. Set on version A.', 'newspack-popups' ),
-							goalLabel,
-							splitSummary( control.control_share ?? 50 )
-						) }
+						{ goals[ effectiveGoal ]
+							? sprintf(
+									// Translators: %1$s is the test's goal, %2$s the traffic split, such as "60% see A, 40% see B".
+									__( 'Goal: %1$s. %2$s. Set on version A.', 'newspack-popups' ),
+									goalLabel,
+									splitSummary( control.control_share ?? 50 )
+							  )
+							: sprintf(
+									// Translators: %s is the traffic split, such as "60% see A, 40% see B".
+									__( 'No goal set on version A. %s.', 'newspack-popups' ),
+									splitSummary( control.control_share ?? 50 )
+							  ) }
 					</p>
 				) : (
 					// A test made before version B was created from A can lack an A;

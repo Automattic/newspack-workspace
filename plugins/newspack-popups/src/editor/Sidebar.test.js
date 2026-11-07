@@ -15,6 +15,8 @@ import { render, screen } from '@testing-library/react';
 import Sidebar from './Sidebar';
 
 jest.mock( './PositionPlacementControl', () => () => null );
+// utils.js imports it for a color helper, and the real package pulls in DataViews, which can't load under Jest.
+jest.mock( 'newspack-components', () => ( { getContrastColor: () => '#000000' } ) );
 jest.mock( '@wordpress/components', () => ( {
 	RadioControl: () => null,
 	RangeControl: () => null,

@@ -27,13 +27,16 @@ export const GOAL_BLOCKS = {
 };
 
 /**
- * Whether a prompt with this placement can be part of a test.
+ * Whether a prompt with this placement can be part of a test. Mirrors the
+ * server's is_eligible_placement(), including its Manual only rule.
  *
- * @param {string}   placement  Placement value.
- * @param {string[]} ineligible Placements the server refuses.
+ * @param {string}   placement         Placement value.
+ * @param {string[]} ineligible        Placements the server refuses.
+ * @param {boolean}  manualOnlyOverlay Whether the prompt is an overlay set to Manual only.
  * @return {boolean} Eligible.
  */
-export const isEligiblePlacement = ( placement, ineligible ) => ! ( ineligible || [] ).includes( placement );
+export const isEligiblePlacement = ( placement, ineligible, manualOnlyOverlay = false ) =>
+	! manualOnlyOverlay && ! ( ineligible || [] ).includes( placement );
 
 /**
  * The goal to suggest for a new test, from the blocks in the prompt, and the
@@ -120,11 +123,11 @@ export const missingGoalBlockMessage = ( goal, fromControl = false ) => {
 		default:
 			return fromControl
 				? __(
-						"Readers can't fill in a form from this prompt. Add a sign-up, registration, donate or checkout block, or change the goal on version A.",
+						"Readers can't fill in a form from this prompt. Add a Newsletter Subscription Form, Reader Registration, Donate or Checkout Button block, or change the goal on version A.",
 						'newspack-popups'
 				  )
 				: __(
-						"Readers can't fill in a form from this prompt. Add a sign-up, registration, donate or checkout block, or choose another goal.",
+						"Readers can't fill in a form from this prompt. Add a Newsletter Subscription Form, Reader Registration, Donate or Checkout Button block, or choose another goal.",
 						'newspack-popups'
 				  );
 	}

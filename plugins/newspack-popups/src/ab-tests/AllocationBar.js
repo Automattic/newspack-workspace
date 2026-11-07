@@ -25,19 +25,25 @@ export const getShares = ( controlShare, variants ) => {
 /**
  * The traffic split between the control and the challengers.
  *
- * @param {Object} props              Props.
- * @param {number} props.controlShare Percent of readers who see the control.
- * @param {Object} props.variants     Variants keyed by letter.
+ * @param {Object}  props              Props.
+ * @param {number}  props.controlShare Percent of readers who see the control.
+ * @param {Object}  props.variants     Variants keyed by letter.
+ * @param {boolean} props.planned      Not every version is published, so readers
+ *                                     aren't split yet and the shares are a plan.
  */
-const AllocationBar = ( { controlShare, variants } ) => {
+const AllocationBar = ( { controlShare, variants, planned = false } ) => {
 	const shares = getShares( controlShare, variants );
+	const format = planned
+		? // Translators: %s is a list of version letters with their share of readers, such as "A 60% and B 40%".
+		  __( 'Planned split once every version is published: %s.', 'newspack-popups' )
+		: // Translators: %s is a list of version letters with their share of readers, such as "A 60% and B 40%".
+		  __( 'Readers who see each version: %s.', 'newspack-popups' );
 	return (
 		<div
 			className="newspack-popups-ab-tests__allocation"
 			role="img"
 			aria-label={ sprintf(
-				// Translators: %s is a list of version letters with their share of readers, such as "A 60% and B 40%".
-				__( 'Readers who see each version: %s.', 'newspack-popups' ),
+				format,
 				formatLetterList(
 					Object.keys( variants ).map( letter =>
 						sprintf(
