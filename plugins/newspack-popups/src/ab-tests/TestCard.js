@@ -88,7 +88,7 @@ const TestCard = ( { test, data } ) => {
 		<Card className="newspack-popups-ab-tests__test">
 			<CardHeader>
 				<Stack direction="column" gap="xs">
-					<h2 className="newspack-popups-ab-tests__title">{ test.test_id }</h2>
+					<h2 className="newspack-popups-ab-tests__title">{ test.name || test.test_id }</h2>
 					<span className="newspack-popups-ab-tests__goal">
 						{ test.goal_label
 							? sprintf(
@@ -175,7 +175,7 @@ const TestCard = ( { test, data } ) => {
 						aria-label={ sprintf(
 							// Translators: %s is the test name.
 							__( 'Results for %s', 'newspack-popups' ),
-							test.test_id
+							test.name || test.test_id
 						) }
 					>
 						<table className="newspack-popups-ab-tests__table">
