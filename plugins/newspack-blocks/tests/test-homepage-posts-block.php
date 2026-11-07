@@ -1228,9 +1228,10 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 			Newspack_Blocks::sanitize_post_subtitle( 'A <em>real</em> <strong>subtitle</strong>' ),
 			'Allowed inline tags survive sanitization.'
 		);
-		self::assertSame(
+		self::assertEqualHTML(
 			'<a href="https://example.com" target="_blank" rel="noopener">Link</a>',
 			Newspack_Blocks::sanitize_post_subtitle( '<a href="https://example.com" target="_blank" rel="noopener">Link</a>' ),
+			'<body>',
 			'A link keeps href, target and rel.'
 		);
 	}
