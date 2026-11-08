@@ -1,4 +1,14 @@
-import { formatConfidence, formatLift, getStatusIntent, getTestStatus, latestOnly, sortTests, splitSummary } from './utils';
+import {
+	canEndTest,
+	formatConfidence,
+	formatLift,
+	getRecommendation,
+	getStatusIntent,
+	getTestStatus,
+	latestOnly,
+	sortTests,
+	splitSummary,
+} from './utils';
 
 const variant = ( extra = {} ) => ( { status: 'publish', eligible: true, ...extra } );
 
@@ -9,11 +19,21 @@ describe( 'getTestStatus', () => {
 		expect( getTestStatus( { variants: { a: variant(), b: variant() } } ) ).toBe( 'running' );
 		expect( getTestStatus( { variants: { a: variant(), b: variant( { eligible: false } ) } } ) ).toBe( 'needs-attention' );
 	} );
+
+	it( 'takes an ended test’s state from the server, whatever its versions say', () => {
+		expect( getTestStatus( { status: 'ended', variants: { a: variant( { status: 'draft' } ), b: variant() } } ) ).toBe( 'ended' );
+	} );
 } );
 
 describe( 'getStatusIntent', () => {
 	it( 'gives each status its badge intent', () => {
-		expect( [ 'running', 'needs-attention', 'draft', 'incomplete' ].map( getStatusIntent ) ).toEqual( [ 'stable', 'high', 'draft', 'low' ] );
+		expect( [ 'running', 'needs-attention', 'draft', 'incomplete', 'ended' ].map( getStatusIntent ) ).toEqual( [
+			'stable',
+			'high',
+			'draft',
+			'low',
+			'informational',
+		] );
 	} );
 } );
 
@@ -110,5 +130,39 @@ describe( 'latestOnly', () => {
 		second.reject( new Error( 'down' ) );
 		await b;
 		expect( onSettle ).toHaveBeenCalledWith( null );
+	} );
+} );
+
+describe( 'canEndTest', () => {
+	it( 'allows ending only a test that is splitting readers', () => {
+		expect( [ 'running', 'needs-attention', 'draft', 'incomplete', 'ended' ].map( canEndTest ) ).toEqual( [ true, true, false, false, false ] );
+	} );
+} );
+
+describe( 'getRecommendation', () => {
+	const twoVersions = { variants: { a: variant(), b: variant() } };
+	const result = ( { label = 'reliable', lift = 12.3, young = false, state = 'ok' } = {} ) => ( {
+		source: { state },
+		variants: { a: { rate: 1.9, lift: null }, b: { rate: lift > 0 ? 2.69 : 1.5, lift } },
+		comparisons: { b: { confidence: 99.1, label } },
+		flags: { young_test: young },
+	} );
+
+	it( 'recommends a reliable winner once the test is old enough', () => {
+		expect( getRecommendation( twoVersions, result() ) ).toEqual( { letter: 'b', winner: true } );
+	} );
+
+	it( 'recommends A while the test is young, however reliable the result', () => {
+		expect( getRecommendation( twoVersions, result( { young: true } ) ) ).toEqual( { letter: 'a', winner: false } );
+	} );
+
+	it( 'recommends A without a reliable result, or without results', () => {
+		expect( getRecommendation( twoVersions, result( { label: 'directional' } ) ) ).toEqual( { letter: 'a', winner: false } );
+		expect( getRecommendation( twoVersions, result( { state: 'unavailable' } ) ) ).toEqual( { letter: 'a', winner: false } );
+		expect( getRecommendation( twoVersions, null ) ).toEqual( { letter: 'a', winner: false } );
+	} );
+
+	it( 'names A the winner when the challenger is reliably worse', () => {
+		expect( getRecommendation( twoVersions, result( { lift: -21 } ) ) ).toEqual( { letter: 'a', winner: true } );
 	} );
 } );

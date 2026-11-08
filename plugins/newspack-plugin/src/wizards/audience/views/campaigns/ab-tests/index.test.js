@@ -11,6 +11,8 @@ import ABTests from './index';
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 jest.mock( '@wordpress/a11y', () => ( { speak: jest.fn() } ) );
+// eslint-disable-next-line import/order -- After the mock it reads.
+import { speak } from '@wordpress/a11y';
 
 jest.mock( '../../../../../../packages/components/src/with-wizard-screen', () => ( {
 	__esModule: true,
@@ -175,8 +177,10 @@ describe( 'A/B Tests tab', () => {
 
 		expect( within( incomplete ).getByRole( 'button', { name: 'Create Version B: Test inc' } ) ).toBeInTheDocument();
 		expect( within( draft ).getByRole( 'link', { name: 'Edit Version B: Test drf' } ) ).toHaveAttribute( 'href', prompt( 3 ).edit_link );
-		// End Test comes later; a running card has only its menu.
-		expect( within( running ).queryByRole( 'button', { name: /End Test|Create Version B/ } ) ).not.toBeInTheDocument();
+		expect( within( running ).getByRole( 'button', { name: 'End Test: Test run' } ) ).toBeInTheDocument();
+		for ( const card of [ draft, incomplete ] ) {
+			expect( within( card ).queryByRole( 'button', { name: /End Test/ } ) ).not.toBeInTheDocument();
+		}
 
 		expect( within( running ).getByText( 'Split:' ) ).toBeInTheDocument();
 		expect( within( incomplete ).queryByText( 'Split:' ) ).not.toBeInTheDocument();
@@ -336,4 +340,91 @@ describe( 'A/B Tests tab', () => {
 		expect( await screen.findByText( 'Rename failed.' ) ).toBeInTheDocument();
 		await waitFor( () => expect( field ).toHaveFocus() );
 	} );
+} );
+
+describe( 'Ended tests', () => {
+	beforeEach( () => jest.clearAllMocks() );
+
+	const running = () => test( 'run', { a: prompt( 4 ), b: prompt( 5 ) }, { started_at: '2026-10-01T00:00:00Z', status: 'active' } );
+	const ended = ( id = 'old', extra = {} ) =>
+		test(
+			id,
+			{ a: prompt( 8, { status: 'draft', status_label: 'Draft' } ), b: prompt( 9 ) },
+			{ started_at: '2026-09-30T00:00:00Z', status: 'ended', ended_at: '2026-10-29T12:00:00Z', kept: 'b', ...extra }
+		);
+
+	it( 'hides ended tests until the Status filter asks for them', async () => {
+		mockRoutes( listResponse( [ running(), ended() ] ) );
+		render( <ABTests /> );
+		await screen.findByRole( 'region', { name: 'Test run' } );
+		expect( screen.queryByRole( 'region', { name: 'Test old' } ) ).not.toBeInTheDocument();
+		expect( screen.getByRole( 'searchbox', { name: 'Search tests' } ) ).toBeInTheDocument();
+	} );
+
+	it( 'says there are no active tests when every test has ended', async () => {
+		mockRoutes( listResponse( [ ended() ] ) );
+		render( <ABTests /> );
+		expect( await screen.findByText( 'No active tests.' ) ).toBeInTheDocument();
+	} );
+
+	it( 'says nothing matched a search', async () => {
+		mockRoutes( listResponse( [ running() ] ) );
+		render( <ABTests /> );
+		await screen.findByRole( 'region', { name: 'Test run' } );
+		fireEvent.change( screen.getByRole( 'searchbox', { name: 'Search tests' } ), { target: { value: 'nothing like it' } } );
+		expect( await screen.findByText( 'No tests match your search or filter.' ) ).toBeInTheDocument();
+	} );
+
+	it( 'shows an ended test as ended, with its verdict, final dates and kept row, and no main action', async () => {
+		mockRoutes( listResponse( [ ended() ] ) );
+		render( <ABTests location={ { search: '?test=old' } } /> );
+		const card = await screen.findByRole( 'region', { name: 'Test old' } );
+		expect( within( card ).getByText( 'Ended' ) ).toBeInTheDocument();
+		expect( within( card ).getByText( /^Ended .+\. Kept B\.$/ ) ).toBeInTheDocument();
+		expect( await within( card ).findByText( /^Final results from .+ to .+\.$/ ) ).toBeInTheDocument();
+		expect( within( card ).queryByText( 'Split:' ) ).not.toBeInTheDocument();
+		expect( within( card ).queryByRole( 'button', { name: /End Test|Edit Version|Create Version/ } ) ).not.toBeInTheDocument();
+		// The row is tinted by the stylesheet from this marker; its text stays "B".
+		const kept = card.querySelector( '.newspack-ab-tests__version.is-kept' );
+		expect( kept ).toHaveTextContent( /^B$/ );
+		expect( card.querySelectorAll( '.is-kept' ) ).toHaveLength( 1 );
+
+		fireEvent.click( within( card ).getByRole( 'button', { name: 'Test actions: Test old' } ) );
+		expect( screen.queryByRole( 'menuitem', { name: 'Refresh Results' } ) ).not.toBeInTheDocument();
+		expect( screen.getByRole( 'menuitem', { name: 'Edit Version A' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'menuitem', { name: 'Rename: Test old' } ) ).toBeInTheDocument();
+	} );
+
+	it( 'loads an ended test’s kept results even with no stats source connected', async () => {
+		mockRoutes( listResponse( [ ended() ], { available: false, slug: null, reason: 'No source.' } ) );
+		render( <ABTests location={ { search: '?test=old' } } /> );
+		const card = await screen.findByRole( 'region', { name: 'Test old' } );
+		expect( await within( card ).findByText( '2.69%' ) ).toBeInTheDocument();
+	} );
+
+	it( 'ends a test, then shows it first among ended tests, focused and announced', async () => {
+		const refetch = jest.fn();
+		// The earlier-ended test is listed first, so only the move puts this one ahead.
+		mockRoutes( listResponse( [ ended( 'aaa' ), running() ] ), {
+			'/newspack-popups/v1/ab-tests/run/end': () =>
+				Promise.resolve( { ...running(), status: 'ended', ended_at: '2026-11-08T10:00:00Z', kept: 'b' } ),
+		} );
+		render( <ABTests refetch={ refetch } /> );
+		const card = await screen.findByRole( 'region', { name: 'Test run' } );
+		await within( card ).findByText( '2.69%' );
+		fireEvent.click( within( card ).getByRole( 'button', { name: 'End Test: Test run' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'End Test' } ) );
+
+		const endedCard = await screen.findByRole( 'region', { name: 'Test run' } );
+		await waitFor( () => expect( within( endedCard ).getByRole( 'heading', { name: 'Test run' } ) ).toHaveFocus() );
+		expect( within( endedCard ).getByText( /Kept B\.$/ ) ).toBeInTheDocument();
+		const cards = screen.getAllByRole( 'region' );
+		expect( cards[ 0 ] ).toBe( endedCard );
+		expect( cards[ 1 ] ).toBe( screen.getByRole( 'region', { name: 'Test aaa' } ) );
+		expect( speak ).toHaveBeenCalledWith( 'Test ended. Kept B.' );
+		expect( refetch ).toHaveBeenCalledTimes( 1 );
+		expect( refetch ).toHaveBeenCalledWith( { quiet: true } );
+		expect( apiFetch ).toHaveBeenCalledWith( { path: '/newspack-popups/v1/ab-tests/run/end', method: 'POST', data: { keep: 'b' } } );
+		// The whole end-to-end flow; Jest's 5s default trips on a loaded machine.
+	}, 15000 );
 } );

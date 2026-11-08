@@ -3,6 +3,7 @@
  */
 import { __, _x, sprintf } from '@wordpress/i18n';
 import { addQueryArgs } from '@wordpress/url';
+import { dateI18n, getSettings } from '@wordpress/date';
 
 export const DASH = '—';
 
@@ -12,18 +13,21 @@ export const DASH = '—';
 export const REST_BASE = '/newspack-popups/v1/ab-tests';
 
 /**
- * Card order: running tests, then those needing attention, drafts, and
- * tests still missing a version.
+ * Card order: running tests, then those needing attention, drafts, tests
+ * still missing a version, and ended tests last.
  */
-export const STATUS_ORDER = [ 'running', 'needs-attention', 'draft', 'incomplete' ];
+export const STATUS_ORDER = [ 'running', 'needs-attention', 'draft', 'incomplete', 'ended' ];
 
 /**
  * A test's state from its variants' post statuses.
  *
  * @param {Object} test A test from the list route.
- * @return {string} 'running', 'needs-attention', 'draft' or 'incomplete'.
+ * @return {string} 'running', 'needs-attention', 'draft', 'incomplete' or 'ended'.
  */
 export const getTestStatus = test => {
+	if ( test?.status === 'ended' ) {
+		return 'ended';
+	}
 	const variants = ( test && test.variants ) || {};
 	const letters = Object.keys( variants );
 	const challengers = letters.filter( letter => letter !== 'a' );
@@ -55,6 +59,8 @@ export const getStatusLabel = status => {
 			return __( 'Needs attention', 'newspack-plugin' );
 		case 'draft':
 			return __( 'Draft', 'newspack-plugin' );
+		case 'ended':
+			return __( 'Ended', 'newspack-plugin' );
 		default:
 			return __( 'Incomplete', 'newspack-plugin' );
 	}
@@ -72,6 +78,8 @@ export const getStatusIntent = status => {
 			return 'high';
 		case 'draft':
 			return 'draft';
+		case 'ended':
+			return 'informational';
 		default:
 			return 'low';
 	}
@@ -256,3 +264,53 @@ export const openVersionB = result => {
 		window.location.reload();
 	}
 };
+
+/**
+ * Whether a test can be ended from its card: it is splitting readers now.
+ *
+ * @param {string} status From getTestStatus().
+ * @return {boolean} Endable.
+ */
+export const canEndTest = status => status === 'running' || status === 'needs-attention';
+
+/**
+ * Which version the End Test modal recommends keeping, and why.
+ *
+ * Only a Reliable result names a winner, and only once the test is past the
+ * server's young-test age (14 days): early results swing. A Reliable result for a challenger that converts worse than A is A
+ * winning. Anything else recommends A, the version readers saw before the test.
+ *
+ * @param {Object}  test  The test.
+ * @param {?Object} stats Its stats, or null.
+ * @return {{ letter: string, winner: boolean }} The letter to recommend, and
+ *                                               whether a reliable winner backs it.
+ */
+export const getRecommendation = ( test, stats ) => {
+	const fallback = { letter: 'a', winner: false };
+	if ( ! stats || stats.source?.state === 'unavailable' ) {
+		return fallback;
+	}
+	// The server's young-test flag, so the two never disagree about the age.
+	if ( stats.flags?.young_test !== false ) {
+		return fallback;
+	}
+	const reliable = Object.keys( stats.comparisons || {} ).filter(
+		letter => test.variants?.[ letter ] && stats.comparisons[ letter ]?.label === 'reliable' && stats.variants?.[ letter ]
+	);
+	const better = reliable.filter( letter => ( stats.variants[ letter ].lift ?? 0 ) > 0 );
+	if ( better.length > 0 ) {
+		const best = better.reduce( ( top, letter ) => ( stats.variants[ letter ].rate > stats.variants[ top ].rate ? letter : top ) );
+		return { letter: best, winner: true };
+	}
+	// Every reliable challenger converts worse than A, so A is the winner.
+	if ( reliable.length > 0 && reliable.length === Object.keys( test.variants ).length - 1 ) {
+		return { letter: 'a', winner: true };
+	}
+	return fallback;
+};
+
+/**
+ * @param {string} iso An ISO 8601 date.
+ * @return {string} The date in the site's format, without a time.
+ */
+export const formatDay = iso => dateI18n( getSettings().formats.date, iso );

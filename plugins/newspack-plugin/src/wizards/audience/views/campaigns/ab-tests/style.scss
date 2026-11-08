@@ -79,6 +79,17 @@
 		color: var(--wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700});
 	}
 
+	&__verdict {
+		margin: wp-vars.$grid-unit-10 0 0;
+		font-weight: 500;
+	}
+
+	// The kept version on an ended test. DataViews offers no row class, so the
+	// row is found from the marker its Version cell renders.
+	&__table tr:has(.newspack-ab-tests__version.is-kept) td {
+		background: rgba(var(--wp-admin-theme-color--rgb), 0.04);
+	}
+
 	&__version {
 		display: inline-flex;
 		align-items: center;
@@ -162,6 +173,8 @@
 
 	&__updated {
 		margin: 0;
+		// The card body has no padding; line the text up with the table's cells.
+		padding: wp-vars.$grid-unit-15 wp-vars.$grid-unit-30 wp-vars.$grid-unit-20;
 		color: var(--wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700});
 		font-size: wp-vars.$helptext-font-size;
 	}

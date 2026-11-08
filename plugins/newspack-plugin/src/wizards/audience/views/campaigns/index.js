@@ -103,10 +103,13 @@ class AudienceCampaigns extends Component {
 		this.refetch();
 	};
 
-	refetch = () => {
+	// Quiet keeps the page on screen while it reloads, and with it whatever has
+	// focus; a plain refetch hides the page until the response arrives.
+	refetch = ( { quiet = false } = {} ) => {
 		const { setError, wizardApiFetch } = this.props;
 		wizardApiFetch( {
 			path: newspackAudienceCampaigns.api,
+			quiet,
 		} )
 			.then( this.updateAfterAPI )
 			.catch( error => setError( error ) );
@@ -456,7 +459,9 @@ class AudienceCampaigns extends Component {
 										<Route
 											path="/ab-tests"
 											exact
-											render={ routeProps => <ABTests { ...sharedProps } location={ routeProps.location } /> }
+											render={ routeProps => (
+												<ABTests { ...sharedProps } refetch={ this.refetch } location={ routeProps.location } />
+											) }
 										/>
 									) }
 									<Route

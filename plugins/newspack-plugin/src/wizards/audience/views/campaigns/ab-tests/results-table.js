@@ -26,8 +26,9 @@ const FIELD_IDS = [ 'version', 'prompt', 'readers', 'rate', 'lift', 'confidence'
  * @param {string}  props.status From getTestStatus().
  * @param {?Object} props.stats  Its stats, or null.
  * @param {Object}  props.labels Confidence label key => text.
+ * @param {?string} props.kept   On an ended test, the letter of the version kept.
  */
-const ResultsTable = ( { test, status, stats, labels } ) => {
+const ResultsTable = ( { test, status, stats, labels, kept = null } ) => {
 	const rows = useMemo( () => {
 		return Object.keys( test.variants ).map( letter => {
 			const row = stats?.variants?.[ letter ] || null;
@@ -50,7 +51,9 @@ const ResultsTable = ( { test, status, stats, labels } ) => {
 				filterBy: false,
 				getValue: ( { item } ) => item.letter,
 				render: ( { item } ) => (
-					<span className="newspack-ab-tests__version">
+					// The class lets the stylesheet tint the kept version's row, which
+					// DataViews gives no way to mark directly.
+					<span className={ `newspack-ab-tests__version${ item.letter === kept ? ' is-kept' : '' }` }>
 						<span className={ `newspack-ab-tests__swatch is-variant-${ item.letter }` } aria-hidden="true" />
 						{ item.letter.toUpperCase() }
 					</span>
@@ -126,7 +129,7 @@ const ResultsTable = ( { test, status, stats, labels } ) => {
 				render: ( { item } ) => formatConfidence( item.comparison, labels ),
 			},
 		],
-		[ stats, status, labels ]
+		[ stats, status, labels, kept ]
 	);
 
 	const [ view, setView ] = useState( {
