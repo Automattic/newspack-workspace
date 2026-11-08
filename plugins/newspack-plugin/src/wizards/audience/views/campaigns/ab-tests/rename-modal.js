@@ -2,7 +2,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { Button, Modal, Notice, TextControl } from '@wordpress/components';
+import { Button, Notice, TextControl } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
 import { useEffect, useRef, useState } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
@@ -10,6 +10,7 @@ import apiFetch from '@wordpress/api-fetch';
 /**
  * Internal dependencies
  */
+import Modal from '../../../../../../packages/components/src/modal';
 import { REST_BASE } from './utils';
 
 /**

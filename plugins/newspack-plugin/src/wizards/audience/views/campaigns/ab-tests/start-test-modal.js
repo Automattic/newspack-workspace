@@ -14,7 +14,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { Button, Modal, Notice, RangeControl, SelectControl, TextControl } from '@wordpress/components';
+import { Button, Notice, RangeControl, SelectControl, TextControl } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
 import { useState } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
@@ -23,6 +23,7 @@ import { decodeEntities } from '@wordpress/html-entities';
 /**
  * Internal dependencies
  */
+import Modal from '../../../../../../packages/components/src/modal';
 import { GOAL_SUGGESTION_HELP, REST_BASE, splitSummary } from './utils';
 
 const MIN_SHARE = 20;
@@ -124,7 +125,17 @@ const StartTestModal = ( {
 						{ error }
 					</Notice>
 				) }
-				{ isPicker && (
+				{ isPicker && ! prompts.length && (
+					<p className="newspack-ab-tests__picker-empty">
+						{ hasIneligible
+							? `${ __( 'No published prompts are free to test yet.', 'newspack-plugin' ) } ${ __(
+									'Prompts on manual or custom placements can’t be A/B tested.',
+									'newspack-plugin'
+							  ) }`
+							: __( 'No published prompts are free to test yet.', 'newspack-plugin' ) }
+					</p>
+				) }
+				{ isPicker && !! prompts.length && (
 					<SelectControl
 						label={ __( 'Prompt to test', 'newspack-plugin' ) }
 						help={ pickerHelp }

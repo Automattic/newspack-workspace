@@ -197,7 +197,8 @@ export const GOAL_SUGGESTION_HELP = {
 
 /**
  * Whether a prompt can start a test from the tab's picker: published, in no
- * test, and on a placement a test can use.
+ * test, and on a placement a test can use. A prompt's own menu also offers
+ * drafts, as the editor's panel does; the picker lists only what is live.
  *
  * @param {Object} prompt A prompt from the list route's `prompts`.
  * @return {boolean} Startable.
