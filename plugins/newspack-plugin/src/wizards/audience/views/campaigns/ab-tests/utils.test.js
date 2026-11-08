@@ -1,4 +1,4 @@
-import { formatConfidence, formatLift, getStatusIntent, getTestStatus, sortTests, splitSummary } from './utils';
+import { formatConfidence, formatLift, getStatusIntent, getTestStatus, latestOnly, sortTests, splitSummary } from './utils';
 
 const variant = ( extra = {} ) => ( { status: 'publish', eligible: true, ...extra } );
 
@@ -63,5 +63,52 @@ describe( 'sortTests', () => {
 			{ test_id: 'r', variants: { a: variant(), b: variant() } },
 		];
 		expect( sortTests( tests ).map( test => test.test_id ) ).toEqual( [ 'r', 'i' ] );
+	} );
+} );
+
+describe( 'latestOnly', () => {
+	const deferred = () => {
+		let resolve, reject;
+		const promise = new Promise( ( res, rej ) => {
+			resolve = res;
+			reject = rej;
+		} );
+		return { promise, resolve, reject };
+	};
+
+	it( 'drops an earlier response that resolves after a later one', async () => {
+		const first = deferred();
+		const second = deferred();
+		const fetcher = jest.fn().mockReturnValueOnce( first.promise ).mockReturnValueOnce( second.promise );
+		const onSettle = jest.fn();
+		const load = latestOnly( fetcher, onSettle );
+
+		const a = load();
+		const b = load();
+		second.resolve( 'new' );
+		await b;
+		first.resolve( 'old' );
+		await a;
+
+		expect( onSettle ).toHaveBeenCalledTimes( 1 );
+		expect( onSettle ).toHaveBeenCalledWith( 'new' );
+	} );
+
+	it( 'settles the latest failure with null, but not an earlier one', async () => {
+		const first = deferred();
+		const second = deferred();
+		const fetcher = jest.fn().mockReturnValueOnce( first.promise ).mockReturnValueOnce( second.promise );
+		const onSettle = jest.fn();
+		const load = latestOnly( fetcher, onSettle );
+
+		const a = load();
+		const b = load();
+		first.reject( new Error( 'stale' ) );
+		await a;
+		expect( onSettle ).not.toHaveBeenCalled();
+
+		second.reject( new Error( 'down' ) );
+		await b;
+		expect( onSettle ).toHaveBeenCalledWith( null );
 	} );
 } );

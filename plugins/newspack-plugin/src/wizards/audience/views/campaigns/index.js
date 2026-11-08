@@ -28,7 +28,7 @@ import { ABTests, Campaigns, ContextualPrompts, Settings, Segments } from './vie
 import AddCampaignAction from './campaigns/add-campaign-action';
 import CampaignActions from './campaigns/campaign-actions';
 import ABTestsContext from './ab-tests/context';
-import { REST_BASE as AB_TESTS_REST_BASE } from './ab-tests/utils';
+import { REST_BASE as AB_TESTS_REST_BASE, latestOnly } from './ab-tests/utils';
 import { CampaignsContext } from '../../contexts';
 
 const { HashRouter, Redirect, Route, Switch } = Router;
@@ -242,21 +242,17 @@ class AudienceCampaigns extends Component {
 		this.refetchABTests();
 	};
 
+	loadABTests = latestOnly(
+		() => apiFetch( { path: AB_TESTS_REST_BASE } ),
+		abTests => this.setState( { abTests } )
+	);
+
 	// Reloaded with the prompts, since a duplicate, a delete or a new test
 	// changes which prompts a menu can start a test from.
-	// Only the latest request may set the state: two writes close together
-	// would otherwise let the earlier response land last.
-	abTestsRequest = 0;
-
 	refetchABTests = () => {
-		if ( ! abTestingEnabled ) {
-			return;
+		if ( abTestingEnabled ) {
+			this.loadABTests();
 		}
-		const request = ++this.abTestsRequest;
-		const settle = abTests => request === this.abTestsRequest && this.setState( { abTests } );
-		apiFetch( { path: AB_TESTS_REST_BASE } )
-			.then( settle )
-			.catch( () => settle( null ) );
 	};
 
 	manageCampaignGroup = ( campaigns, method = 'POST' ) => {

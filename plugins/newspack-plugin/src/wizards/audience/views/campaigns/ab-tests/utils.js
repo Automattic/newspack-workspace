@@ -218,6 +218,25 @@ export const getPickerPrompts = ( prompts = [] ) => ( {
 } );
 
 /**
+ * Wraps a fetcher so that only the latest call's result reaches `onSettle`.
+ * Two calls close together can resolve out of order; without this, the earlier
+ * response could land last and overwrite the newer one. A failure settles with
+ * null, under the same rule.
+ *
+ * @param {Function} fetcher  Returns a promise.
+ * @param {Function} onSettle Called with the latest call's result, or null.
+ * @return {Function} Starts a fetch; returns its promise.
+ */
+export const latestOnly = ( fetcher, onSettle ) => {
+	let latest = 0;
+	return () => {
+		const request = ++latest;
+		const settle = value => request === latest && onSettle( value );
+		return fetcher().then( settle, () => settle( null ) );
+	};
+};
+
+/**
  * The link that opens one test's card on the A/B Tests tab.
  *
  * @param {string} testId Test ID.
