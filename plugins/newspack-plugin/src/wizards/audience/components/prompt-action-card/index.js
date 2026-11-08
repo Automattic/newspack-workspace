@@ -13,9 +13,10 @@ import {
 	MenuGroup,
 	MenuItem,
 	Notice as CoreNotice,
+	Tooltip,
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
-import { useEffect, useState, Fragment } from '@wordpress/element';
+import { useContext, useEffect, useState, Fragment } from '@wordpress/element';
 import { decodeEntities } from '@wordpress/html-entities';
 import { moreVertical, settings } from '@wordpress/icons';
 import { Badge, Card, Stack } from '@wordpress/ui';
@@ -26,6 +27,9 @@ import { Badge, Card, Stack } from '@wordpress/ui';
 import { Button, EditTitleLink, Modal, Notice, TextControl } from '../../../../../packages/components/src';
 import PromptSettingsDrawer from '../settings-drawer';
 import { abTestBadge, promptDetails, promptStatus } from '../../views/campaigns/utils';
+import ABTestsContext from '../../views/campaigns/ab-tests/context';
+import StartTestModal from '../../views/campaigns/ab-tests/start-test-modal';
+import { openVersionB, testCardHash } from '../../views/campaigns/ab-tests/utils';
 import './style.scss';
 
 const PromptActionCard = props => {
@@ -33,6 +37,8 @@ const PromptActionCard = props => {
 	const [ settingsSession, setSettingsSession ] = useState( 0 );
 	const [ isDuplicatePromptModalVisible, setIsDuplicatePromptModalVisible ] = useState( false );
 	const [ duplicateTitle, setDuplicateTitle ] = useState( null );
+	const [ isStartTestModalVisible, setIsStartTestModalVisible ] = useState( false );
+	const abTests = useContext( ABTestsContext );
 
 	const {
 		deletePopup,
@@ -54,6 +60,40 @@ const PromptActionCard = props => {
 	const displayTitle = title.length ? decodeEntities( title ) : __( '(no title)', 'newspack-plugin' );
 	const { label: statusLabel, intent: statusIntent } = promptStatus( prompt, segmentDisabled );
 	const abBadge = abTestBadge( prompt );
+	// Null while A/B testing is off, or for a prompt the list route didn't return.
+	const abState = abTests?.prompts?.find( item => item.id === id ) || null;
+
+	const renderABTestItem = onClose => {
+		if ( ! abState ) {
+			return null;
+		}
+		if ( abState.test_id ) {
+			return (
+				<MenuItem href={ testCardHash( abState.test_id ) } onClick={ onClose }>
+					{ __( 'View A/B Test', 'newspack-plugin' ) }
+				</MenuItem>
+			);
+		}
+		if ( abState.ineligible_reason ) {
+			return (
+				<Tooltip text={ abState.ineligible_reason } placement="left">
+					<MenuItem disabled accessibleWhenDisabled describedBy={ abState.ineligible_reason }>
+						{ __( 'Start A/B Test', 'newspack-plugin' ) }
+					</MenuItem>
+				</Tooltip>
+			);
+		}
+		return (
+			<MenuItem
+				onClick={ () => {
+					onClose();
+					setIsStartTestModalVisible( true );
+				} }
+			>
+				{ __( 'Start A/B Test', 'newspack-plugin' ) }
+			</MenuItem>
+		);
+	};
 
 	useEffect( () => {
 		if ( isDuplicatePromptModalVisible && ! duplicateTitle ) {
@@ -171,6 +211,7 @@ const PromptActionCard = props => {
 											>
 												{ __( 'Duplicate', 'newspack-plugin' ) }
 											</MenuItem>
+											{ renderABTestItem( onClose ) }
 											<MenuItem
 												onClick={ () => {
 													onClose();
@@ -211,6 +252,24 @@ const PromptActionCard = props => {
 				onClose={ () => setIsSettingsOpen( false ) }
 				updatePopup={ props.updatePopup }
 			/>
+			{ isStartTestModalVisible && abState && (
+				<StartTestModal
+					promptId={ id }
+					testName={ title.length ? decodeEntities( title ) : '' }
+					goals={ abTests?.goals || {} }
+					suggestedGoal={ abState.suggested_goal }
+					intro={ sprintf(
+						// Translators: %s is the title of the prompt that becomes version A.
+						__(
+							'Version B starts as a draft copy of “%s” with the same placement. Change what you want to compare, then publish it to start the test.',
+							'newspack-plugin'
+						),
+						displayTitle
+					) }
+					onCreated={ openVersionB }
+					onClose={ () => setIsStartTestModalVisible( false ) }
+				/>
+			) }
 			{ isDuplicatePromptModalVisible && (
 				<Modal
 					className="newspack-popups__duplicate-modal"

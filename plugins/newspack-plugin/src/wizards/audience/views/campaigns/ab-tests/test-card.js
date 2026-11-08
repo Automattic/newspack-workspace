@@ -5,7 +5,6 @@ import { useEffect, useId, useRef, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { speak } from '@wordpress/a11y';
 import apiFetch from '@wordpress/api-fetch';
-import { addQueryArgs } from '@wordpress/url';
 import { decodeEntities } from '@wordpress/html-entities';
 import { dateI18n, getSettings } from '@wordpress/date';
 import { Button, CardBody, DropdownMenu, MenuGroup, MenuItem, Notice, Spinner } from '@wordpress/components';
@@ -19,7 +18,7 @@ import { Card } from '../../../../../../packages/components/src';
 import ResultsTable from './results-table';
 import RenameModal from './rename-modal';
 import StartTestModal from './start-test-modal';
-import { REST_BASE, formatList, getStatusIntent, getStatusLabel, getTestStatus, splitSummary } from './utils';
+import { REST_BASE, formatList, getStatusIntent, getStatusLabel, getTestStatus, openVersionB, splitSummary } from './utils';
 
 /**
  * @param {Object} variants Variants keyed by letter.
@@ -37,8 +36,9 @@ const getMissingVersionHint = variants =>
  * @param {Object}   props.test      A test from the list route.
  * @param {Object}   props.data      The rest of the list route's response.
  * @param {Function} props.onRenamed Called with the test ID and its new name.
+ * @param {boolean}  props.isTarget  Whether the page was opened to show this test.
  */
-const TestCard = ( { test, data, onRenamed } ) => {
+const TestCard = ( { test, data, onRenamed, isTarget = false } ) => {
 	const [ stats, setStats ] = useState( null );
 	const [ loading, setLoading ] = useState( false );
 	const [ error, setError ] = useState( null );
@@ -89,6 +89,16 @@ const TestCard = ( { test, data, onRenamed } ) => {
 			setFocusHeading( false );
 		}
 	}, [ focusHeading ] );
+
+	// Opened from "View A/B Test" in a prompt's menu: bring this card into view.
+	// Centered, because the page header is sticky from 782px up and would cover
+	// a heading scrolled to the top.
+	useEffect( () => {
+		if ( isTarget ) {
+			headingRef.current?.scrollIntoView?.( { block: 'center' } );
+			headingRef.current?.focus( { preventScroll: true } );
+		}
+	}, [ isTarget ] );
 
 	const load = refresh => {
 		setLoading( true );
@@ -384,13 +394,7 @@ const TestCard = ( { test, data, onRenamed } ) => {
 						),
 						decodeEntities( test.variants.a.title )
 					) }
-					onCreated={ result => {
-						if ( result?.version_b?.edit_link ) {
-							window.location.assign( addQueryArgs( result.version_b.edit_link, { 'newspack-ab-test': 'created' } ) );
-						} else {
-							window.location.reload();
-						}
-					} }
+					onCreated={ openVersionB }
 					onClose={ () => setModal( null ) }
 				/>
 			) }

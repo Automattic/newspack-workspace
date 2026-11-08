@@ -8,6 +8,7 @@ import '../../../../shared/js/public-path';
 /**
  * WordPress dependencies.
  */
+import apiFetch from '@wordpress/api-fetch';
 import { Component } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { addQueryArgs } from '@wordpress/url';
@@ -26,6 +27,8 @@ import Router from '../../../../../packages/components/src/proxied-imports/route
 import { ABTests, Campaigns, ContextualPrompts, Settings, Segments } from './views';
 import AddCampaignAction from './campaigns/add-campaign-action';
 import CampaignActions from './campaigns/campaign-actions';
+import ABTestsContext from './ab-tests/context';
+import { REST_BASE as AB_TESTS_REST_BASE, latestOnly } from './ab-tests/utils';
 import { CampaignsContext } from '../../contexts';
 
 const { HashRouter, Redirect, Route, Switch } = Router;
@@ -93,6 +96,7 @@ class AudienceCampaigns extends Component {
 			previewTitle: null,
 			duplicated: null,
 			inFlight: false,
+			abTests: null,
 		};
 	}
 	onWizardReady = () => {
@@ -233,8 +237,23 @@ class AudienceCampaigns extends Component {
 		return `${ previewURL }?${ stringify( { ...abbreviatedKeys, pid: id } ) }`;
 	};
 
-	updateAfterAPI = ( { campaigns, prompts, segments, settings, duplicated = null } ) =>
+	updateAfterAPI = ( { campaigns, prompts, segments, settings, duplicated = null } ) => {
 		this.setState( { campaigns, prompts, segments, settings, duplicated, inFlight: false } );
+		this.refetchABTests();
+	};
+
+	loadABTests = latestOnly(
+		() => apiFetch( { path: AB_TESTS_REST_BASE } ),
+		abTests => this.setState( { abTests } )
+	);
+
+	// Reloaded with the prompts, since a duplicate, a delete or a new test
+	// changes which prompts a menu can start a test from.
+	refetchABTests = () => {
+		if ( abTestingEnabled ) {
+			this.loadABTests();
+		}
+	};
 
 	manageCampaignGroup = ( campaigns, method = 'POST' ) => {
 		const { setError, wizardApiFetch } = this.props;
@@ -290,161 +309,169 @@ class AudienceCampaigns extends Component {
 						refetch: this.refetch,
 					};
 					return (
-						<HashRouter hashType="slash">
-							<Switch>
-								{ pluginRequirements }
-								<Route
-									path="/campaigns/:id?"
-									render={ props => {
-										const campaignId = props.match.params.id;
-
-										const archiveCampaignGroup = ( id, status ) => {
-											return wizardApiFetch( {
-												path: `${ newspackAudienceCampaigns.api }/archive-campaign/${ id }`,
-												method: status ? 'POST' : 'DELETE',
-												quiet: true,
-											} )
-												.then( this.updateAfterAPI )
-												.catch( error => setError( error ) );
-										};
-										const createCampaignGroup = name => {
-											return wizardApiFetch( {
-												path: `${ newspackAudienceCampaigns.api }/create-campaign/`,
-												method: 'POST',
-												data: { name },
-												quiet: true,
-											} )
-												.then( result => {
-													this.setState( {
-														campaigns: result.campaigns,
-														prompts: result.prompts,
-														segments: result.segments,
-														settings: result.settings,
-													} );
-													props.history.push( `/campaigns/${ result.term_id }` );
-												} )
-												.catch( error => setError( error ) );
-										};
-										const deleteCampaignGroup = id => {
-											return wizardApiFetch( {
-												path: `${ newspackAudienceCampaigns.api }/delete-campaign/${ id }`,
-												method: 'DELETE',
-												quiet: true,
-											} )
-												.then( result => {
-													this.setState( {
-														campaigns: result.campaigns,
-														prompts: result.prompts,
-														segments: result.segments,
-														settings: result.settings,
-													} );
-													props.history.push( '/campaigns/' );
-												} )
-												.catch( error => setError( error ) );
-										};
-										const duplicateCampaignGroup = ( id, name ) => {
-											return wizardApiFetch( {
-												path: `${ newspackAudienceCampaigns.api }/duplicate-campaign/${ id }`,
-												method: 'POST',
-												data: { name },
-												quiet: true,
-											} )
-												.then( result => {
-													this.setState( {
-														campaigns: result.campaigns,
-														prompts: result.prompts,
-														segments: result.segments,
-														settings: result.settings,
-													} );
-													props.history.push( `/campaigns/${ result.term_id }` );
-												} )
-												.catch( error => setError( error ) );
-										};
-										const renameCampaignGroup = ( id, name ) => {
-											return wizardApiFetch( {
-												path: `${ newspackAudienceCampaigns.api }/rename-campaign/${ id }`,
-												method: 'POST',
-												data: { name },
-												quiet: true,
-											} )
-												.then( this.updateAfterAPI )
-												.catch( error => setError( error ) );
-										};
-
-										return (
-											<CampaignsContext.Provider value={ prompts }>
-												<Campaigns
-													{ ...popupManagementSharedProps }
-													campaignId={ campaignId }
-													campaigns={ campaigns }
-													subHeaderText={ __(
-														'Manage the prompts readers see, grouped by the segment each one targets.',
-														'newspack-plugin'
-													) }
-													headerActions={ <AddCampaignAction createCampaignGroup={ createCampaignGroup } /> }
-													campaignActions={
-														<CampaignActions
-															archiveCampaignGroup={ archiveCampaignGroup }
-															campaignId={ campaignId }
-															campaigns={ campaigns }
-															deleteCampaignGroup={ deleteCampaignGroup }
-															duplicateCampaignGroup={ duplicateCampaignGroup }
-															manageCampaignGroup={ this.manageCampaignGroup }
-															prompts={ prompts }
-															renameCampaignGroup={ renameCampaignGroup }
-														/>
-													}
-												/>
-											</CampaignsContext.Provider>
-										);
-									} }
-								/>
-								<Route
-									path="/segments/:id?"
-									render={ props => (
-										<Segments
-											{ ...props }
-											{ ...sharedProps }
-											setSegments={ segmentsList => this.setState( { segments: segmentsList } ) }
-											subHeaderText={
-												props.match.params.id
-													? undefined
-													: __(
-															'Group readers by what they do on the site, then target prompts at them.',
-															'newspack-plugin'
-													  )
-											}
-										/>
-									) }
-								/>
-								{ contextualPromptsEnabled && (
+						<ABTestsContext.Provider value={ this.state.abTests }>
+							<HashRouter hashType="slash">
+								<Switch>
+									{ pluginRequirements }
 									<Route
-										path="/contextual-prompts"
-										exact
-										render={ () => (
-											<ContextualPrompts
+										path="/campaigns/:id?"
+										render={ props => {
+											const campaignId = props.match.params.id;
+
+											const archiveCampaignGroup = ( id, status ) => {
+												return wizardApiFetch( {
+													path: `${ newspackAudienceCampaigns.api }/archive-campaign/${ id }`,
+													method: status ? 'POST' : 'DELETE',
+													quiet: true,
+												} )
+													.then( this.updateAfterAPI )
+													.catch( error => setError( error ) );
+											};
+											const createCampaignGroup = name => {
+												return wizardApiFetch( {
+													path: `${ newspackAudienceCampaigns.api }/create-campaign/`,
+													method: 'POST',
+													data: { name },
+													quiet: true,
+												} )
+													.then( result => {
+														this.setState( {
+															campaigns: result.campaigns,
+															prompts: result.prompts,
+															segments: result.segments,
+															settings: result.settings,
+														} );
+														props.history.push( `/campaigns/${ result.term_id }` );
+													} )
+													.catch( error => setError( error ) );
+											};
+											const deleteCampaignGroup = id => {
+												return wizardApiFetch( {
+													path: `${ newspackAudienceCampaigns.api }/delete-campaign/${ id }`,
+													method: 'DELETE',
+													quiet: true,
+												} )
+													.then( result => {
+														this.setState( {
+															campaigns: result.campaigns,
+															prompts: result.prompts,
+															segments: result.segments,
+															settings: result.settings,
+														} );
+														props.history.push( '/campaigns/' );
+													} )
+													.catch( error => setError( error ) );
+											};
+											const duplicateCampaignGroup = ( id, name ) => {
+												return wizardApiFetch( {
+													path: `${ newspackAudienceCampaigns.api }/duplicate-campaign/${ id }`,
+													method: 'POST',
+													data: { name },
+													quiet: true,
+												} )
+													.then( result => {
+														this.setState( {
+															campaigns: result.campaigns,
+															prompts: result.prompts,
+															segments: result.segments,
+															settings: result.settings,
+														} );
+														props.history.push( `/campaigns/${ result.term_id }` );
+													} )
+													.catch( error => setError( error ) );
+											};
+											const renameCampaignGroup = ( id, name ) => {
+												return wizardApiFetch( {
+													path: `${ newspackAudienceCampaigns.api }/rename-campaign/${ id }`,
+													method: 'POST',
+													data: { name },
+													quiet: true,
+												} )
+													.then( this.updateAfterAPI )
+													.catch( error => setError( error ) );
+											};
+
+											return (
+												<CampaignsContext.Provider value={ prompts }>
+													<Campaigns
+														{ ...popupManagementSharedProps }
+														campaignId={ campaignId }
+														campaigns={ campaigns }
+														subHeaderText={ __(
+															'Manage the prompts readers see, grouped by the segment each one targets.',
+															'newspack-plugin'
+														) }
+														headerActions={ <AddCampaignAction createCampaignGroup={ createCampaignGroup } /> }
+														campaignActions={
+															<CampaignActions
+																archiveCampaignGroup={ archiveCampaignGroup }
+																campaignId={ campaignId }
+																campaigns={ campaigns }
+																deleteCampaignGroup={ deleteCampaignGroup }
+																duplicateCampaignGroup={ duplicateCampaignGroup }
+																manageCampaignGroup={ this.manageCampaignGroup }
+																prompts={ prompts }
+																renameCampaignGroup={ renameCampaignGroup }
+															/>
+														}
+													/>
+												</CampaignsContext.Provider>
+											);
+										} }
+									/>
+									<Route
+										path="/segments/:id?"
+										render={ props => (
+											<Segments
+												{ ...props }
 												{ ...sharedProps }
-												subHeaderText={ __(
-													'Let editors generate story-specific donation prompts with AI.',
-													'newspack-plugin'
-												) }
+												setSegments={ segmentsList => this.setState( { segments: segmentsList } ) }
+												subHeaderText={
+													props.match.params.id
+														? undefined
+														: __(
+																'Group readers by what they do on the site, then target prompts at them.',
+																'newspack-plugin'
+														  )
+												}
 											/>
 										) }
 									/>
-								) }
-								{ abTestingEnabled && <Route path="/ab-tests" exact render={ () => <ABTests { ...sharedProps } /> } /> }
-								<Route
-									path="/settings"
-									render={ () => (
-										<Settings
-											{ ...sharedProps }
-											subHeaderText={ __( 'Choose how prompts behave across the site.', 'newspack-plugin' ) }
+									{ contextualPromptsEnabled && (
+										<Route
+											path="/contextual-prompts"
+											exact
+											render={ () => (
+												<ContextualPrompts
+													{ ...sharedProps }
+													subHeaderText={ __(
+														'Let editors generate story-specific donation prompts with AI.',
+														'newspack-plugin'
+													) }
+												/>
+											) }
 										/>
 									) }
-								/>
-								<Redirect to="/campaigns" />
-							</Switch>
-						</HashRouter>
+									{ abTestingEnabled && (
+										<Route
+											path="/ab-tests"
+											exact
+											render={ routeProps => <ABTests { ...sharedProps } location={ routeProps.location } /> }
+										/>
+									) }
+									<Route
+										path="/settings"
+										render={ () => (
+											<Settings
+												{ ...sharedProps }
+												subHeaderText={ __( 'Choose how prompts behave across the site.', 'newspack-plugin' ) }
+											/>
+										) }
+									/>
+									<Redirect to="/campaigns" />
+								</Switch>
+							</HashRouter>
+						</ABTestsContext.Provider>
 					);
 				} }
 			/>

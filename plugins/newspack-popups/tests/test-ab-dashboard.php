@@ -564,8 +564,8 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * The list route carries the tests, the provider state, the thresholds and
-	 * the copy the tab's cards need.
+	 * The list route carries the tests, the prompts a test can start from, the
+	 * provider state, the thresholds and the copy the tab's cards need.
 	 */
 	public function test_list_route_reports_tests_provider_state_and_copy() {
 		$this->as_admin();
@@ -573,7 +573,7 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 		$response = $this->list_request();
 		$this->assertSame( 200, $response->get_status() );
 		$data = $response->get_data();
-		$this->assertSame( [ 'tests', 'provider', 'thresholds', 'copy', 'goals', 'labels' ], array_keys( $data ) );
+		$this->assertSame( [ 'tests', 'prompts', 'provider', 'thresholds', 'copy', 'goals', 'labels' ], array_keys( $data ) );
 		$this->assertSame( 't', $data['tests'][0]['test_id'] );
 		$this->assertFalse( $data['provider']['available'] );
 		$this->assertNull( $data['provider']['slug'] );

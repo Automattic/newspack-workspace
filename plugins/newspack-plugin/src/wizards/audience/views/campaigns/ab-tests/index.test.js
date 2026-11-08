@@ -14,7 +14,12 @@ jest.mock( '@wordpress/a11y', () => ( { speak: jest.fn() } ) );
 
 jest.mock( '../../../../../../packages/components/src/with-wizard-screen', () => ( {
 	__esModule: true,
-	default: Component => props => <Component { ...props } />,
+	default: Component => props => (
+		<>
+			<header>{ props.headerActions }</header>
+			<Component { ...props } />
+		</>
+	),
 } ) );
 
 const prompt = ( id, extra = {} ) => ( {
@@ -40,8 +45,9 @@ const test = ( id, variants, extra = {} ) => ( {
 	...extra,
 } );
 
-const listResponse = ( tests, provider = { available: true, slug: 'stub', reason: null } ) => ( {
+const listResponse = ( tests, provider = { available: true, slug: 'stub', reason: null }, prompts = [] ) => ( {
 	tests,
+	prompts,
 	provider,
 	thresholds: { directional: 80, reliable: 95, min_readers: 30 },
 	copy: { young_test: 'Too early to call a winner.', high_anonymous: 'Most readers are logged out.' },
@@ -83,7 +89,58 @@ describe( 'A/B Tests tab', () => {
 		mockRoutes( listResponse( [] ) );
 		render( <ABTests /> );
 		expect( await screen.findByText( 'Find out which prompt works best' ) ).toBeInTheDocument();
-		expect( screen.queryByRole( 'button', { name: 'Start A/B Test' } ) ).not.toBeInTheDocument();
+		// Only the empty state's button: the header's waits for a first test.
+		expect( screen.getAllByRole( 'button', { name: 'Start A/B Test' } ) ).toHaveLength( 1 );
+	} );
+
+	it( 'puts Start A/B Test in the header once there are tests', async () => {
+		mockRoutes( listResponse( [ test( 'inc', { a: prompt( 1 ) } ) ] ) );
+		render( <ABTests /> );
+		await screen.findByRole( 'region', { name: 'Test inc' } );
+		expect( within( screen.getByRole( 'banner' ) ).getByRole( 'button', { name: 'Start A/B Test' } ) ).toBeInTheDocument();
+	} );
+
+	it( 'offers only published prompts in no test and on a testable placement, and says why others are missing', async () => {
+		const startState = ( id, extra = {} ) => ( {
+			id,
+			title: `Prompt ${ id }`,
+			status: 'publish',
+			test_id: '',
+			ineligible_reason: '',
+			suggested_goal: '',
+			...extra,
+		} );
+		mockRoutes(
+			listResponse( [], undefined, [
+				startState( 1 ),
+				startState( 2, { status: 'draft' } ),
+				startState( 3, { test_id: 'spring-1a2b' } ),
+				startState( 4, { ineligible_reason: 'Prompts on manual or custom placements can’t be A/B tested.' } ),
+			] )
+		);
+		render( <ABTests /> );
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Start A/B Test' } ) );
+
+		const picker = await screen.findByLabelText( 'Prompt to test' );
+		const offered = within( picker )
+			.getAllByRole( 'option' )
+			.filter( option => ! option.disabled )
+			.map( option => option.textContent );
+		expect( offered ).toEqual( [ 'Prompt 1' ] );
+		expect( screen.getByText( /Prompts on manual or custom placements can’t be A\/B tested\./ ) ).toBeInTheDocument();
+	} );
+
+	it( 'brings the test a prompt menu linked to into view and focuses its heading', async () => {
+		const scrollIntoView = jest.fn();
+		window.HTMLElement.prototype.scrollIntoView = scrollIntoView;
+		mockRoutes( listResponse( [ test( 'one', { a: prompt( 1 ) } ), test( 'two', { a: prompt( 2 ) } ) ] ) );
+		render( <ABTests location={ { search: '?test=two' } } /> );
+
+		const heading = await within( await screen.findByRole( 'region', { name: 'Test two' } ) ).findByRole( 'heading', { name: 'Test two' } );
+		await waitFor( () => expect( heading ).toHaveFocus() );
+		expect( scrollIntoView ).toHaveBeenCalledTimes( 1 );
+		// Centered, so the sticky page header doesn't cover it.
+		expect( scrollIntoView ).toHaveBeenCalledWith( { block: 'center' } );
 	} );
 
 	it( 'says why results are missing when no provider is connected', async () => {
