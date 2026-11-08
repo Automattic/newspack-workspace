@@ -193,16 +193,32 @@ final class Newspack_Popups_AB_Dashboard {
 			'unit'       => 'readers',
 		];
 		$counts    = [];
+		$ended     = 'ended' === ( $test['status'] ?? '' );
+		$final     = $ended ? Newspack_Popups_AB_Tests::get_final_counts( $test['test_id'] ) : null;
 
-		if ( is_wp_error( $available ) ) {
+		if ( $final ) {
+			// An ended test's results were taken once and never change, so the
+			// provider isn't asked again, or even whether it is still connected.
+			$counts               = $final['counts'];
+			$source['state']      = 'collecting';
+			$source['reason']     = null;
+			$source['fetched_at'] = $final['fetched_at'];
+			$source['cached']     = true;
+			$source['unit']       = in_array( $counts['unit'] ?? '', [ 'readers', 'events' ], true ) ? $counts['unit'] : 'readers';
+		} elseif ( is_wp_error( $available ) ) {
 			$source['state']  = 'unavailable';
 			$source['reason'] = $available->get_error_message();
 		} elseif ( null !== $window ) {
-			$result = self::fetch_counts( $provider, $test, $window, (bool) $refresh );
+			// An ended test without final results yet skips the cache, so what
+			// gets frozen is a fresh answer for the test's own dates.
+			$result = self::fetch_counts( $provider, $test, $window, $ended || (bool) $refresh );
 			if ( is_wp_error( $result ) ) {
 				$source['state']  = 'unavailable';
 				$source['reason'] = $result->get_error_message();
 			} else {
+				if ( $ended ) {
+					Newspack_Popups_AB_Tests::store_final_counts( $test['test_id'], $result['counts'], $result['fetched_at'] );
+				}
 				$counts               = $result['counts'];
 				$source['fetched_at'] = $result['fetched_at'];
 				$source['cached']     = $result['cached'];
@@ -269,7 +285,8 @@ final class Newspack_Popups_AB_Dashboard {
 	}
 
 	/**
-	 * The reporting window: the day the split began through today, UTC.
+	 * The reporting window: the day the split began through today, or through
+	 * the day it ended for an ended test, UTC.
 	 *
 	 * @param array $test One entry of Newspack_Popups_AB_Tests::get_tests().
 	 * @return array|null `[ 'start', 'end' ]` as Y-m-d, or null until both arms are published.
@@ -280,7 +297,7 @@ final class Newspack_Popups_AB_Dashboard {
 		}
 		return [
 			'start' => gmdate( 'Y-m-d', strtotime( $test['started_at'] ) ),
-			'end'   => gmdate( 'Y-m-d' ),
+			'end'   => gmdate( 'Y-m-d', empty( $test['ended_at'] ) ? time() : strtotime( $test['ended_at'] ) ),
 		];
 	}
 
@@ -439,7 +456,8 @@ final class Newspack_Popups_AB_Dashboard {
 	private static function compute_flags( $test, $variants ) {
 		$days_running = null;
 		if ( ! empty( $test['started_at'] ) ) {
-			$days_running = (int) floor( ( time() - strtotime( $test['started_at'] ) ) / DAY_IN_SECONDS );
+			$until        = empty( $test['ended_at'] ) ? time() : strtotime( $test['ended_at'] );
+			$days_running = (int) floor( ( $until - strtotime( $test['started_at'] ) ) / DAY_IN_SECONDS );
 		}
 		$readers         = array_sum( array_column( $variants, 'readers' ) );
 		$logged_in       = array_sum( array_column( $variants, 'logged_in_readers' ) );
