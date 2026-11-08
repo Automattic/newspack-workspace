@@ -13,7 +13,8 @@ defined( 'ABSPATH' ) || exit;
  * The dashboard asks one provider per site, chosen through the
  * `newspack_popups_ab_stats_provider` filter, for raw counts; it computes
  * rates, lift and confidence itself, so two surfaces never disagree about
- * one test. A provider returns counts and nothing else.
+ * one test. A provider returns counts, and at most one sentence of its own
+ * about them, which the stats route returns alongside the results.
  */
 interface Newspack_Popups_AB_Stats_Provider {
 	/**
@@ -54,7 +55,11 @@ interface Newspack_Popups_AB_Stats_Provider {
 	 *                        source could not count readers. Variants the source
 	 *                        has nothing for may be left out. An empty `variants`
 	 *                        means no data yet; a WP_Error means the source could
-	 *                        not answer, with the reason in its message.
+	 *                        not answer, with the reason in its message. An optional
+	 *                        `note` is one sentence, in words a site administrator
+	 *                        can read, such as how often the source refreshes. The
+	 *                        stats route returns it; the A/B Tests tab does not
+	 *                        show it.
 	 */
 	public function get_counts( array $test, string $goal, string $start, string $end );
 }
