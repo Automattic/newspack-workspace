@@ -92,7 +92,8 @@ final class Newspack_Popups_AB_Dashboard {
 	}
 
 	/**
-	 * What the tab loads: every test, and what the cards need to read them.
+	 * What the tab loads: every test, what the cards need to read them, and the
+	 * prompts a test can start from, for the tab's picker and the Campaigns menu.
 	 *
 	 * @return array
 	 */
@@ -101,6 +102,7 @@ final class Newspack_Popups_AB_Dashboard {
 		$available = self::availability( $provider );
 		return [
 			'tests'      => Newspack_Popups_AB_Tests::get_tests(),
+			'prompts'    => Newspack_Popups_AB_Tests::get_prompt_start_states(),
 			'provider'   => [
 				'available' => true === $available,
 				'slug'      => self::provider_slug( $provider ),

@@ -638,6 +638,92 @@ final class Newspack_Popups_AB_Tests {
 	}
 
 	/**
+	 * Every untrashed prompt, with what a start from outside the editor needs to
+	 * know about it: the A/B Tests tab's prompt picker lists the ones that can
+	 * start a test, and the prompt menu in Campaigns offers to start one, view
+	 * the prompt's test, or says why it can't.
+	 *
+	 * @return array[] Ordered by ID. Each is `[ 'id', 'title', 'status', 'test_id',
+	 *                 'ineligible_reason', 'suggested_goal' ]`. `test_id` is the ID
+	 *                 as stored, or '' for a prompt in no test, whatever the
+	 *                 test's state: a start refuses a prompt that has one, except
+	 *                 to resume a test with no other version, which that test's
+	 *                 card offers. `ineligible_reason` is the message a start would
+	 *                 refuse the placement with, or ''.
+	 */
+	public static function get_prompt_start_states() {
+		$prompts = get_posts(
+			[
+				'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+				'post_status'    => [ 'publish', 'future', 'draft', 'pending', 'private' ],
+				'perm'           => 'readable',
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Prompts CPT; config-scale.
+				'orderby'        => 'ID',
+				'order'          => 'ASC',
+			]
+		);
+		return array_map(
+			static function ( $prompt ) {
+				return [
+					'id'                => (int) $prompt->ID,
+					'title'             => $prompt->post_title,
+					'status'            => $prompt->post_status,
+					'test_id'           => trim( (string) get_post_meta( $prompt->ID, self::META_TEST_ID, true ) ),
+					'ineligible_reason' => self::get_ineligible_reason(
+						get_post_meta( $prompt->ID, 'placement', true ),
+						rest_sanitize_boolean( get_post_meta( $prompt->ID, 'manual_only', true ) )
+					),
+					'suggested_goal'    => self::suggest_goal( $prompt->post_content ),
+				];
+			},
+			$prompts
+		);
+	}
+
+	/**
+	 * The goal to suggest for a new test, from the blocks in a prompt.
+	 *
+	 * Mirrors suggestGoal() in src/editor/ab-utils.js, which the editor runs on
+	 * the blocks it has loaded; keep the order in step. The most specific goal
+	 * wins, so GOAL_BLOCKS can't be read in order: it lists the Checkout Button
+	 * under form submissions too.
+	 *
+	 * @param string $content Prompt content.
+	 * @return string Goal key, or '' when nothing in the prompt names a goal.
+	 */
+	public static function suggest_goal( $content ) {
+		$content = (string) $content;
+		$names   = [];
+		$collect = static function ( $blocks ) use ( &$collect, &$names ) {
+			foreach ( $blocks as $block ) {
+				if ( ! empty( $block['blockName'] ) ) {
+					$names[] = $block['blockName'];
+				}
+				if ( ! empty( $block['innerBlocks'] ) ) {
+					$collect( $block['innerBlocks'] );
+				}
+			}
+		};
+		$collect( parse_blocks( $content ) );
+		$has = static function ( $name ) use ( $names ) {
+			return in_array( $name, $names, true );
+		};
+		if ( $has( 'newspack-blocks/checkout-button' ) ) {
+			return 'subscription';
+		}
+		if ( $has( 'newspack-blocks/donate' ) ) {
+			return 'donation';
+		}
+		if ( $has( 'newspack/reader-registration' ) || $has( 'newspack-newsletters/subscribe' ) ) {
+			return 'form_submission';
+		}
+		if ( $has( 'core/button' ) || preg_match( '/<a\s[^>]*href=/i', $content ) ) {
+			return 'link_click';
+		}
+		return '';
+	}
+
+	/**
 	 * Display names for a set of tests, in one query.
 	 *
 	 * @param string[] $test_ids Test IDs.
@@ -923,15 +1009,9 @@ final class Newspack_Popups_AB_Tests {
 		if ( ! $prompt || Newspack_Popups::NEWSPACK_POPUPS_CPT !== $prompt->post_type || 'trash' === $prompt->post_status ) {
 			return new WP_Error( 'newspack_popups_ab_prompt_not_found', __( 'This prompt no longer exists.', 'newspack-popups' ), [ 'status' => 404 ] );
 		}
-		$placement = get_post_meta( $prompt->ID, 'placement', true );
-		if ( ! self::is_eligible_placement( $placement, rest_sanitize_boolean( get_post_meta( $prompt->ID, 'manual_only', true ) ) ) ) {
-			return new WP_Error(
-				'newspack_popups_ab_ineligible_placement',
-				self::is_eligible_placement( $placement )
-					? __( 'Overlays set to Manual only can’t be A/B tested.', 'newspack-popups' )
-					: __( 'Prompts on manual or custom placements can’t be A/B tested.', 'newspack-popups' ),
-				[ 'status' => 400 ]
-			);
+		$ineligible = self::get_ineligible_reason( get_post_meta( $prompt->ID, 'placement', true ), rest_sanitize_boolean( get_post_meta( $prompt->ID, 'manual_only', true ) ) );
+		if ( '' !== $ineligible ) {
+			return new WP_Error( 'newspack_popups_ab_ineligible_placement', $ineligible, [ 'status' => 400 ] );
 		}
 		$goal = self::sanitize_goal( $goal );
 		if ( '' === $goal ) {
@@ -1198,6 +1278,22 @@ final class Newspack_Popups_AB_Tests {
 			return false;
 		}
 		return ! ( $manual_only && in_array( $placement, Newspack_Popups_Model::get_overlay_placements(), true ) );
+	}
+
+	/**
+	 * Why a prompt with this placement can't be part of a test.
+	 *
+	 * @param string $placement   Placement value.
+	 * @param bool   $manual_only The prompt's Manual only setting.
+	 * @return string The message, or '' when the placement can be tested.
+	 */
+	public static function get_ineligible_reason( $placement, $manual_only = false ) {
+		if ( self::is_eligible_placement( $placement, $manual_only ) ) {
+			return '';
+		}
+		return self::is_eligible_placement( $placement )
+			? __( 'Overlays set to Manual only can’t be A/B tested.', 'newspack-popups' )
+			: __( 'Prompts on manual or custom placements can’t be A/B tested.', 'newspack-popups' );
 	}
 
 	/**

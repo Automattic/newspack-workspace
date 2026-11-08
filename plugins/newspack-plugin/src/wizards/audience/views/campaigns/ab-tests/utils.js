@@ -2,6 +2,7 @@
  * WordPress dependencies
  */
 import { __, _x, sprintf } from '@wordpress/i18n';
+import { addQueryArgs } from '@wordpress/url';
 
 export const DASH = '—';
 
@@ -179,5 +180,59 @@ export const formatList = items => {
 		return new Intl.ListFormat( document.documentElement.lang || 'en', { type: 'conjunction' } ).format( items );
 	} catch ( e ) {
 		return items.join( ', ' );
+	}
+};
+
+/**
+ * What the Start A/B Test modal says about a suggested goal, by goal. The
+ * suggestion itself comes from the server, which reads the prompt's blocks the
+ * way the editor's suggestGoal() does; these lines follow its wording.
+ */
+export const GOAL_SUGGESTION_HELP = {
+	subscription: __( 'What a reader does that counts as a success. Suggested from the Checkout Button in this prompt.', 'newspack-plugin' ),
+	donation: __( 'What a reader does that counts as a success. Suggested from the Donate block in this prompt.', 'newspack-plugin' ),
+	form_submission: __( 'What a reader does that counts as a success. Suggested from the sign-up form in this prompt.', 'newspack-plugin' ),
+	link_click: __( 'What a reader does that counts as a success. Suggested from the link in this prompt.', 'newspack-plugin' ),
+};
+
+/**
+ * Whether a prompt can start a test from the tab's picker: published, in no
+ * test, and on a placement a test can use.
+ *
+ * @param {Object} prompt A prompt from the list route's `prompts`.
+ * @return {boolean} Startable.
+ */
+export const canStartFromPicker = prompt => 'publish' === prompt.status && ! prompt.test_id && ! prompt.ineligible_reason;
+
+/**
+ * The prompts the tab's picker offers, and whether any published prompt was
+ * left out for its placement alone, so the picker can say why.
+ *
+ * @param {Object[]} prompts The list route's `prompts`.
+ * @return {{ startable: Object[], hasIneligible: boolean }} Picker contents.
+ */
+export const getPickerPrompts = ( prompts = [] ) => ( {
+	startable: prompts.filter( canStartFromPicker ),
+	hasIneligible: prompts.some( prompt => 'publish' === prompt.status && ! prompt.test_id && prompt.ineligible_reason ),
+} );
+
+/**
+ * The link that opens one test's card on the A/B Tests tab.
+ *
+ * @param {string} testId Test ID.
+ * @return {string} Hash route.
+ */
+export const testCardHash = testId => `#/ab-tests?test=${ encodeURIComponent( testId ) }`;
+
+/**
+ * Where to go once version B exists: its editor, which says the test was created.
+ *
+ * @param {Object} result The start route's result.
+ */
+export const openVersionB = result => {
+	if ( result?.version_b?.edit_link ) {
+		window.location.assign( addQueryArgs( result.version_b.edit_link, { 'newspack-ab-test': 'created' } ) );
+	} else {
+		window.location.reload();
 	}
 };
