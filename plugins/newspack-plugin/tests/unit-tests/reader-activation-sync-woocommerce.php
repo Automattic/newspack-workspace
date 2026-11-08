@@ -33,6 +33,13 @@ class Newspack_Test_RAS_Sync_WooCommerce extends WP_UnitTestCase {
 		],
 	];
 
+	/**
+	 * Paid date for orders whose payment date a test asserts. The mock order
+	 * stamps "now" when it gets none, which can land in a different second
+	 * from a "now" read later at assertion time.
+	 */
+	const DATE_PAID = '2026-01-15 12:00:00';
+
 	private static $user_id = null; // phpcs:ignore Squiz.Commenting.VariableComment.Missing
 
 	public static function set_up_before_class() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
@@ -82,6 +89,7 @@ class Newspack_Test_RAS_Sync_WooCommerce extends WP_UnitTestCase {
 			'customer_id' => self::$user_id,
 			'status'      => 'completed',
 			'total'       => 50,
+			'date_paid'   => self::DATE_PAID,
 			'meta'        => [
 				'utm' => [
 					'source'   => 'test_source',
@@ -96,7 +104,8 @@ class Newspack_Test_RAS_Sync_WooCommerce extends WP_UnitTestCase {
 
 		$payment_page_url = 'https://example.com/donate';
 		$contact_data = Sync\WooCommerce::get_contact_from_order( $order, $payment_page_url );
-		$today = gmdate( Metadata::DATE_FORMAT );
+		// The sync reports the registration date in site time.
+		$registration_date = get_date_from_gmt( get_userdata( self::$user_id )->user_registered );
 		$this->assertEquals(
 			[
 				'email'    => self::USER_DATA['user_email'],
@@ -106,7 +115,7 @@ class Newspack_Test_RAS_Sync_WooCommerce extends WP_UnitTestCase {
 					'membership_status'         => 'customer',
 					'product_name'              => '',
 					'last_payment_amount'       => $order_data['total'],
-					'last_payment_date'         => $today,
+					'last_payment_date'         => self::DATE_PAID,
 					'payment_page_utm_source'   => 'test_source',
 					'payment_page_utm_medium'   => '',
 					'payment_page_utm_campaign' => 'test_campaign',
@@ -119,7 +128,7 @@ class Newspack_Test_RAS_Sync_WooCommerce extends WP_UnitTestCase {
 					'next_payment_date'         => '',
 					'total_paid'                => self::USER_DATA['meta_input']['wc_total_spent'] + $order_data['total'],
 					'account'                   => self::$user_id,
-					'registration_date'         => $today,
+					'registration_date'         => $registration_date,
 					'cancellation_reason'       => '',
 				],
 			],
@@ -182,6 +191,7 @@ class Newspack_Test_RAS_Sync_WooCommerce extends WP_UnitTestCase {
 			'customer_id' => self::$user_id,
 			'status'      => 'completed',
 			'total'       => 70,
+			'date_paid'   => self::DATE_PAID,
 		];
 		$order = \wc_create_order( $order_data );
 
@@ -189,7 +199,7 @@ class Newspack_Test_RAS_Sync_WooCommerce extends WP_UnitTestCase {
 
 		$contact_data = Sync\WooCommerce::get_contact_from_customer( self::$user_id );
 		$this->assertEquals( $order_data['total'], $contact_data['metadata']['last_payment_amount'] );
-		$this->assertEquals( gmdate( Metadata::DATE_FORMAT ), $contact_data['metadata']['last_payment_date'] );
+		$this->assertEquals( self::DATE_PAID, $contact_data['metadata']['last_payment_date'] );
 	}
 
 	/**
