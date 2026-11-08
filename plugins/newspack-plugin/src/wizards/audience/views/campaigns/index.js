@@ -244,13 +244,19 @@ class AudienceCampaigns extends Component {
 
 	// Reloaded with the prompts, since a duplicate, a delete or a new test
 	// changes which prompts a menu can start a test from.
+	// Only the latest request may set the state: two writes close together
+	// would otherwise let the earlier response land last.
+	abTestsRequest = 0;
+
 	refetchABTests = () => {
 		if ( ! abTestingEnabled ) {
 			return;
 		}
+		const request = ++this.abTestsRequest;
+		const settle = abTests => request === this.abTestsRequest && this.setState( { abTests } );
 		apiFetch( { path: AB_TESTS_REST_BASE } )
-			.then( abTests => this.setState( { abTests } ) )
-			.catch( () => this.setState( { abTests: null } ) );
+			.then( settle )
+			.catch( () => settle( null ) );
 	};
 
 	manageCampaignGroup = ( campaigns, method = 'POST' ) => {
