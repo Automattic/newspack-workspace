@@ -29,8 +29,9 @@ jest.mock( '../../../../../packages/components/src/wizard/store', () => ( { WIZA
 jest.mock( '../../../../../packages/components/src', () => {
 	const history = { push: jest.fn() };
 	return {
-		DataViews: ( { view, onChangeView, actions, data } ) => {
+		DataViews: ( { view, onChangeView, actions, data, fields } ) => {
 			const trash = ( actions || [] ).find( action => action.id === 'trash' );
+			const segments = ( fields || [] ).find( field => field.id === 'reader_segments' );
 			return (
 				<>
 					<button onClick={ () => onChangeView( { ...view, search: 'no-such-rule' } ) }>filter to nothing</button>
@@ -45,6 +46,7 @@ jest.mock( '../../../../../packages/components/src', () => {
 						filter to any reader
 					</button>
 					<span data-testid="rule-titles">{ data.map( item => item.title ).join( ', ' ) }</span>
+					{ segments && data.length > 0 && <div data-testid="first-row-segments">{ segments.render( { item: data[ 0 ] } ) }</div> }
 					{ trash && data.length > 0 && <trash.RenderModal items={ [ data[ 0 ] ] } closeModal={ () => {} } /> }
 				</>
 			);
@@ -117,13 +119,13 @@ const rule = id => ( {
 	edit_link: '',
 } );
 
-const response = rules => ( {
+const response = ( rules, conditions = [] ) => ( {
 	rules,
 	currency: { code: 'USD', symbol: '$', decimals: 2 },
 	strategies: [],
 	scopes: [],
 	calc_types: [],
-	conditions: [],
+	conditions,
 } );
 
 const catalogStats = ( over = {} ) => ( {
@@ -141,12 +143,12 @@ const catalogStats = ( over = {} ) => ( {
 const isCatalogPath = path => path.startsWith( '/wc-dynamic-pricing/v1/impact-preview' );
 
 /** Route each request by path, so the catalogue call never receives the rules payload. */
-const serve = ( { rules = [], stats = catalogStats(), rulesFail = false, statsFail = false } = {} ) => {
+const serve = ( { rules = [], conditions = [], stats = catalogStats(), rulesFail = false, statsFail = false } = {} ) => {
 	apiFetch.mockImplementation( ( { path } ) => {
 		if ( isCatalogPath( path ) ) {
 			return statsFail ? Promise.reject( new Error( 'nope' ) ) : Promise.resolve( stats );
 		}
-		return rulesFail ? Promise.reject( new Error( 'nope' ) ) : Promise.resolve( response( rules ) );
+		return rulesFail ? Promise.reject( new Error( 'nope' ) ) : Promise.resolve( response( rules, conditions ) );
 	} );
 };
 
@@ -331,6 +333,31 @@ describe( 'the Pricing Rules list', () => {
 
 		expect( publishedSection().count ).toBe( 1 );
 		expect( screen.getByTestId( 'rule-titles' ) ).toHaveTextContent( expected );
+	} );
+
+	it( 'lists each reader segment on its own line', async () => {
+		serve( {
+			rules: [ { ...rule( 1 ), conditions: { reader_segment: [ 7, 8 ] } } ],
+			conditions: [
+				{
+					id: 'reader_segment',
+					options: [
+						{ value: 7, label: 'Engaged newsletter subscribers in the metro area' },
+						{ value: 8, label: 'Registered readers' },
+					],
+				},
+			],
+		} );
+		await act( async () => {
+			render( <PricingRulesList /> );
+		} );
+
+		const segments = screen.getByTestId( 'first-row-segments' ).querySelectorAll( '.newspack-pricing-rules__segment' );
+		expect( [ ...segments ].map( segment => segment.textContent ) ).toEqual( [
+			'Engaged newsletter subscribers in the metro area',
+			'Registered readers',
+		] );
+		expect( segments[ 0 ] ).toHaveAttribute( 'title', 'Engaged newsletter subscribers in the metro area' );
 	} );
 
 	it( 'keeps the table rather than the empty state when the read fails', async () => {

@@ -19,7 +19,7 @@ import classnames from 'classnames';
 /**
  * Internal dependencies
  */
-import { evenColumns, withoutColumnStyles } from './even-columns';
+import { columnShareWidth, evenColumns, titleColumnWidth, withoutColumnStyles } from './even-columns';
 import './style.scss';
 
 type DataViewsProps< Item > = React.ComponentProps< typeof BaseDataViews< Item > > & {
@@ -53,15 +53,31 @@ function InlineFiltersLayout( { header, search, searchLabel }: { header?: React.
 }
 
 function DataViews( { className, inlineFilters = false, fields, children, view, onChangeView, ...props }: DataViewsProps< unknown > ) {
+	// A row without its title can't be told apart from the next, so the title is
+	// never offered as a field to hide, and a stored view that hid it shows it again.
 	// A primary filter is always on show, so the toggle has nothing left to hide.
 	const shownFields = useMemo(
 		() =>
-			inlineFilters
-				? fields.map( field => ( field.filterBy ? { ...field, filterBy: { ...field.filterBy, isPrimary: true } } : field ) )
-				: fields,
-		[ fields, inlineFilters ]
+			fields.map( field => {
+				const shown = field.id === view.titleField ? { ...field, enableHiding: false } : field;
+				return inlineFilters && shown.filterBy ? { ...shown, filterBy: { ...shown.filterBy, isPrimary: true } } : shown;
+			} ),
+		[ fields, inlineFilters, view.titleField ]
 	);
-	const evenView = useMemo( () => evenColumns( view ), [ view ] );
+	const titledView = useMemo( () => ( view.titleField && view.showTitle === false ? { ...view, showTitle: true } : view ), [ view ] );
+	const evenView = useMemo( () => evenColumns( titledView ), [ titledView ] );
+	const columnWidths = useMemo( () => {
+		const widths: Record< string, string > = {};
+		const titleWidth = titleColumnWidth( titledView );
+		const columnWidth = columnShareWidth( titledView );
+		if ( titleWidth ) {
+			widths[ '--newspack-dataviews-title-width' ] = titleWidth;
+		}
+		if ( columnWidth ) {
+			widths[ '--newspack-dataviews-column-width' ] = columnWidth;
+		}
+		return Object.keys( widths ).length ? ( widths as React.CSSProperties ) : undefined;
+	}, [ titledView ] );
 	const layout =
 		children ??
 		( inlineFilters ? (
@@ -69,7 +85,7 @@ function DataViews( { className, inlineFilters = false, fields, children, view, 
 		) : undefined );
 
 	return (
-		<div className={ classnames( 'newspack-dataviews', className ) }>
+		<div className={ classnames( 'newspack-dataviews', className ) } style={ columnWidths }>
 			<BaseDataViews
 				{ ...props }
 				view={ evenView }
@@ -91,5 +107,5 @@ function DataViews( { className, inlineFilters = false, fields, children, view, 
 // implementation's concrete one.
 export default DataViews as < Item >( props: DataViewsProps< Item > ) => React.JSX.Element;
 
-export { evenColumns, withoutColumnStyles } from './even-columns';
+export { columnShareWidth, evenColumns, titleColumnWidth, withoutColumnStyles } from './even-columns';
 export type { Action, Field, View } from '@wordpress/dataviews';

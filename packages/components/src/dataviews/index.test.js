@@ -80,6 +80,31 @@ describe( 'DataViews', () => {
 		);
 	} );
 
+	it( 'gives the title column its width through a custom property', () => {
+		const { container } = renderDataViews();
+		const wrapper = container.querySelector( '.newspack-dataviews' );
+
+		expect( wrapper.style.getPropertyValue( '--newspack-dataviews-title-width' ) ).toBe( '33.33%' );
+	} );
+
+	it( 'gives the other columns their share through a custom property', () => {
+		const { container } = renderDataViews();
+
+		expect( container.querySelector( '.newspack-dataviews' ).style.getPropertyValue( '--newspack-dataviews-column-width' ) ).toBe( '33.33cqi' );
+	} );
+
+	it( 'sets no title width for a grid', () => {
+		const { container } = renderDataViews( { view: { ...view, type: 'grid' }, defaultLayouts: { grid: {} } } );
+
+		expect( container.querySelector( '.newspack-dataviews' ).style.getPropertyValue( '--newspack-dataviews-title-width' ) ).toBe( '' );
+	} );
+
+	it( 'shows the title even when a stored view hid it', () => {
+		renderDataViews( { view: { ...view, showTitle: false } } );
+
+		expect( screen.getByText( 'One' ) ).toBeInTheDocument();
+	} );
+
 	it( 'leaves the search out when search is off', () => {
 		const { container } = renderDataViews( { inlineFilters: true, search: false } );
 

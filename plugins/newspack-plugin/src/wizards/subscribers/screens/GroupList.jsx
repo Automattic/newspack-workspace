@@ -194,7 +194,7 @@ export default function GroupList() {
 				id: 'createdAt',
 				label: __( 'Created', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.createdAt,
-				render: ( { item } ) => <span>{ fmtDate( item.createdAt ) }</span>,
+				render: ( { item } ) => <span className="newspack-dataviews__date">{ fmtDate( item.createdAt ) }</span>,
 				enableSorting: true,
 			},
 		],

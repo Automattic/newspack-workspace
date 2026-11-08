@@ -53,6 +53,10 @@
 	font-weight: wp-vars.$font-weight-regular;
 }
 
+.newspack-dataviews .newspack-subscribers__muted:not(:first-child) {
+	margin-top: var(--newspack-dataviews-stack-gap);
+}
+
 // Center the loading spinner in the content area while data resolves.
 .newspack-subscribers__loading {
 	align-items: center;
@@ -108,6 +112,7 @@
 }
 
 .dataviews-column-primary__media:has( > .newspack-subscribers__avatar ) {
+	align-self: center;
 	border-radius: 50%;
 
 	&::after {

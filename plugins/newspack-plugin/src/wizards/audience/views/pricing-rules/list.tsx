@@ -9,6 +9,7 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 import { useState, useEffect, useCallback, useMemo, useRef } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
+import { Stack } from '@wordpress/ui';
 import { addQueryArgs } from '@wordpress/url';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View, RenderModalProps } from '@wordpress/dataviews';
@@ -271,7 +272,13 @@ export default function PricingRulesList() {
 				render: ( { item } ) => {
 					const names = readerSegmentNames( item.conditions, segmentMap );
 					return names.length ? (
-						<span>{ names.join( ', ' ) }</span>
+						<Stack direction="column" align="flex-start" gap="sm" className="newspack-pricing-rules__segments">
+							{ names.map( ( name, index ) => (
+								<span key={ index } className="newspack-pricing-rules__segment" title={ name } dir="auto">
+									{ name }
+								</span>
+							) ) }
+						</Stack>
 					) : (
 						<span className="newspack-pricing-rules__muted">{ __( 'Any reader', 'newspack-plugin' ) }</span>
 					);

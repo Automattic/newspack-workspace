@@ -1,11 +1,13 @@
 # StatusIndicator
 
-A status glyph followed by its label, for the Status column of a DataView. Both
-are tinted by what the status means, so a column can be scanned by color.
+A status glyph followed by its label, for the Status column of a DataView. The
+glyph is tinted by what the status means, so a column can be scanned by color;
+the label stays in the text color so the column reads as calmly as the rest of
+the row.
 
 A badge is an attention marker. In a column where every row carries one it marks
-nothing and adds a block of color to each row, so a tinted glyph and label carry
-the color there, and a badge is kept for the rare row that genuinely stands out,
+nothing and adds a block of color to each row, so a tinted glyph carries the
+color there, and a badge is kept for the rare row that genuinely stands out,
 such as a group with a seat request waiting on payment.
 
 ## Importing
@@ -95,9 +97,9 @@ exported for the columns that want to assert it directly.
 ## Color
 
 Each tone is the design system's `--wpds-color-foreground-content-<tone>-weak`
-token, applied to the glyph and label through a
-`newspack-status-indicator--<tone>` modifier. A screen that loads no token sheet
-still reads correctly: the status falls back to the text color. Each tone has
+token, applied to the glyph through a `newspack-status-indicator--<tone>`
+modifier. The label is never tinted. A screen that loads no token sheet still
+reads correctly: the glyph falls back to the text color. Each tone has
 its own rule in `style.scss`, so a tone added to `StatusTone` in `statuses.ts`
 needs a rule too, or it renders untinted without any error.
 
@@ -111,7 +113,7 @@ on their way (`scheduled`, `progress`) share blue and are told apart by their
 glyphs. `pending` is grey, like `draft`: it waits on something else, so
 nothing is moving yet.
 
-Color backs the glyph and label up; it does not replace them. The glyph does the
+Color backs the glyph up; it does not replace it. The glyph does the
 separating on its own, so no status leans on color to carry its meaning, and two
 statuses may share a tone where the glyphs tell them apart (`scheduled` and
 `progress`, or `draft`, `pending` and `trash`). `private` has no tone: it is

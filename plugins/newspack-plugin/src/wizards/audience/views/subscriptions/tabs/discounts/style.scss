@@ -17,8 +17,12 @@
 	}
 
 	&__applies-to-excluded {
-		color: wp-colors.$gray-700;
+		color: var(--wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700});
 		display: block;
+		font-size: wp-vars.$helptext-font-size;
+		font-weight: wp-vars.$font-weight-regular;
+		line-height: wp-vars.$default-line-height;
+		margin-top: var(--newspack-dataviews-stack-gap);
 	}
 
 	&__fetching {
