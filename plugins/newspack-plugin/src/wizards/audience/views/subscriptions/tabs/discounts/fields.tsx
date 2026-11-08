@@ -126,7 +126,12 @@ export function discountFields( currency: DiscountCurrency, subscriptions: Subsc
 			id: 'created_at',
 			label: __( 'Created', 'newspack-plugin' ),
 			getValue: ( { item } ) => item.created_at,
-			render: ( { item } ) => ( item.created_at ? dateI18n( getDateSettings().formats.date, item.created_at ) : '' ),
+			render: ( { item } ) =>
+				item.created_at ? (
+					<span className="newspack-dataviews__date">{ dateI18n( getDateSettings().formats.date, item.created_at ) }</span>
+				) : (
+					''
+				),
 		},
 	];
 }
