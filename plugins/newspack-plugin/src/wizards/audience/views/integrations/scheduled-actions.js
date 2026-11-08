@@ -105,7 +105,11 @@ export const ScheduledActions = ( { integrationId } ) => {
 			{
 				id: 'timestamp',
 				label: __( 'Timestamp', 'newspack-plugin' ),
-				render: ( { item } ) => <DetailsLink onClick={ () => openDetails( item ) }>{ formatTimestamp( item.timestamp ) }</DetailsLink>,
+				render: ( { item } ) => (
+					<DetailsLink onClick={ () => openDetails( item ) }>
+						<span className="newspack-dataviews__date">{ formatTimestamp( item.timestamp ) }</span>
+					</DetailsLink>
+				),
 				enableSorting: true,
 			},
 			{

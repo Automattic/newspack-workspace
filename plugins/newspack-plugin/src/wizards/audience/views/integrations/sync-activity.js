@@ -129,7 +129,11 @@ export const SyncActivity = ( { integrationId } ) => {
 			{
 				id: 'updated_at',
 				label: __( 'Last activity', 'newspack-plugin' ),
-				render: ( { item } ) => <DetailsLink onClick={ () => openDetails( item ) }>{ formatTimestamp( item.updated_at ) }</DetailsLink>,
+				render: ( { item } ) => (
+					<DetailsLink onClick={ () => openDetails( item ) }>
+						<span className="newspack-dataviews__date">{ formatTimestamp( item.updated_at ) }</span>
+					</DetailsLink>
+				),
 				enableSorting: true,
 				enableHiding: false,
 			},
@@ -188,7 +192,7 @@ export const SyncActivity = ( { integrationId } ) => {
 			{
 				id: 'created_at',
 				label: __( 'First attempt', 'newspack-plugin' ),
-				render: ( { item } ) => formatTimestamp( item.created_at ),
+				render: ( { item } ) => <span className="newspack-dataviews__date">{ formatTimestamp( item.created_at ) }</span>,
 				enableSorting: false,
 			},
 			{
