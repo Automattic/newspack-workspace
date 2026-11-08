@@ -25,8 +25,8 @@ jest.mock( '@wordpress/ui', () => ( {
 	Stack: ( { children } ) => <div>{ children }</div>,
 } ) );
 jest.mock( '@wordpress/components', () => ( {
-	Modal: ( { title, children } ) => (
-		<div role="dialog" aria-label={ title }>
+	Modal: ( { title, aria, children } ) => (
+		<div role="dialog" aria-label={ title } aria-describedby={ aria?.describedby }>
 			{ children }
 		</div>
 	),
@@ -177,12 +177,14 @@ describe( 'StartTestModal', () => {
 		} );
 
 		it( 'only says why when no prompt can start a test', () => {
-			renderPicker( { prompts: [] } );
+			renderPicker( { prompts: [], intro: 'Pick the prompt to test.' } );
 			expect( screen.getByText( 'No published prompts are free to test yet.' ) ).toBeInTheDocument();
+			expect( screen.queryByText( 'Pick the prompt to test.' ) ).not.toBeInTheDocument();
 			expect( screen.queryByLabelText( 'Prompt to test' ) ).not.toBeInTheDocument();
 			expect( screen.queryByLabelText( 'Test name' ) ).not.toBeInTheDocument();
 			expect( screen.queryByRole( 'button', { name: 'Create Version B' } ) ).not.toBeInTheDocument();
-			expect( screen.getByRole( 'button', { name: 'Cancel' } ) ).toBeInTheDocument();
+			expect( screen.getByRole( 'button', { name: 'Close' } ) ).toBeInTheDocument();
+			expect( screen.getByRole( 'dialog' ) ).toHaveAccessibleDescription( 'No published prompts are free to test yet.' );
 		} );
 	} );
 } );

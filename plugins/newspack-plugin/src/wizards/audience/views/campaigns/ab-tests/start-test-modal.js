@@ -70,7 +70,8 @@ const StartTestModal = ( {
 	const [ isBusy, setIsBusy ] = useState( false );
 	const [ error, setError ] = useState( '' );
 
-	// Nothing to pick: the dialog only says why, since no field could be sent.
+	// Nothing to pick: the dialog only says why, since no field could be sent
+	// and the intro would ask for a pick that can't be made.
 	const isEmptyPicker = isPicker && ! prompts.length;
 	const emptyId = useInstanceId( StartTestModal, 'newspack-ab-tests-picker-empty' );
 	const versionA = isPicker ? Number( pickedId ) : promptId;
@@ -126,7 +127,7 @@ const StartTestModal = ( {
 			onRequestClose={ onClose }
 		>
 			<Stack direction="column" gap="xl">
-				<p className="newspack-ab-tests__intro">{ intro }</p>
+				{ ! isEmptyPicker && <p className="newspack-ab-tests__intro">{ intro }</p> }
 				{ error && (
 					<Notice status="error" isDismissible={ false }>
 						{ error }
@@ -218,7 +219,7 @@ const StartTestModal = ( {
 				) }
 				<Stack justify="flex-end" align="center" gap="lg">
 					<Button variant="secondary" onClick={ onClose } disabled={ isBusy } __next40pxDefaultSize>
-						{ __( 'Cancel', 'newspack-plugin' ) }
+						{ isEmptyPicker ? __( 'Close', 'newspack-plugin' ) : __( 'Cancel', 'newspack-plugin' ) }
 					</Button>
 					{ ! isEmptyPicker && (
 						<Button
