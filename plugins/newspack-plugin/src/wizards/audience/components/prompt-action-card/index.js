@@ -69,12 +69,7 @@ const PromptActionCard = props => {
 		}
 		if ( abState.test_id ) {
 			return (
-				<MenuItem
-					onClick={ () => {
-						onClose();
-						window.location.hash = testCardHash( abState.test_id );
-					} }
-				>
+				<MenuItem href={ testCardHash( abState.test_id ) } onClick={ onClose }>
 					{ __( 'View A/B Test', 'newspack-plugin' ) }
 				</MenuItem>
 			);

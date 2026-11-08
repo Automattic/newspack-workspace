@@ -57,8 +57,7 @@ describe( 'PromptActionCard A/B test item', () => {
 		openMenu( abData( { test_id: 'spring-drive-1a2b' } ) );
 		expect( screen.queryByRole( 'menuitem', { name: 'Start A/B Test' } ) ).not.toBeInTheDocument();
 
-		fireEvent.click( screen.getByRole( 'menuitem', { name: 'View A/B Test' } ) );
-		expect( window.location.hash ).toBe( '#/ab-tests?test=spring-drive-1a2b' );
+		expect( screen.getByRole( 'menuitem', { name: 'View A/B Test' } ) ).toHaveAttribute( 'href', '#/ab-tests?test=spring-drive-1a2b' );
 	} );
 
 	it( 'disables Start A/B Test on a placement a test can’t use and describes why', () => {
