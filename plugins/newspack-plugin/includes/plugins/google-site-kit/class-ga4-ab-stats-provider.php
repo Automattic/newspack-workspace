@@ -428,10 +428,9 @@ final class GA4_AB_Stats_Provider implements \Newspack_Popups_AB_Stats_Provider 
 	 *
 	 * Preferring the owner is deliberate, and it has one cost: an owner who
 	 * has lost access to the property breaks the page for every
-	 * administrator until Site Kit's Analytics owner changes. A stale token
-	 * is not that case; Site Kit refreshes it inside the report and drops it
-	 * when Google rejects the refresh token, so the next view falls back to
-	 * the viewer's own.
+	 * administrator until Site Kit's Analytics owner changes. Once Site Kit
+	 * has dropped an owner's token, the owner no longer blocks the others.
+	 *
 	 * The provider assumes a logged-in administrator's request; with no user
 	 * set, as in cron, no token is lent and the error below is the answer.
 	 *
