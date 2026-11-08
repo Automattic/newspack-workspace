@@ -56,9 +56,10 @@ interface Newspack_Popups_AB_Stats_Provider {
 	 *                        has nothing for may be left out. An empty `variants`
 	 *                        means no data yet; a WP_Error means the source could
 	 *                        not answer, with the reason in its message. An optional
-	 *                        `note` is one sentence the page shows under the counts,
-	 *                        in words a site administrator can read, such as how
-	 *                        often the source refreshes.
+	 *                        `note` is one sentence, in words a site administrator
+	 *                        can read, such as how often the source refreshes. The
+	 *                        stats route returns it; the A/B Tests tab does not
+	 *                        show it.
 	 */
 	public function get_counts( array $test, string $goal, string $start, string $end );
 }

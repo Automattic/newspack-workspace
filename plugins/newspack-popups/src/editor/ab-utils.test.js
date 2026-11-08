@@ -2,20 +2,25 @@
  * Pure helpers behind the A/B Test panel. The panel's own tests stub the editor
  * stores; these run the logic the panel delegates to with no stubs at all.
  */
-import { slugifyTestId, isEligiblePlacement, splitSummary, promptLacksGoalBlock, missingGoalBlockMessage, testPromptWarnings } from './ab-utils';
+import { suggestGoal, isEligiblePlacement, splitSummary, promptLacksGoalBlock, missingGoalBlockMessage, testPromptWarnings } from './ab-utils';
 
-describe( 'slugifyTestId', () => {
-	// Expected values are what the server's sanitize_test_id() stores for the same
-	// input, so a Test ID typed in the editor matches the stored one.
+describe( 'suggestGoal', () => {
 	it.each( [
-		[ 'Spring Drive 2026', 'spring-drive-2026' ],
-		[ '  footer_test  ', 'footer-test' ],
-		[ 'Test--ID!!', 'test-id' ],
-		[ 'already-a-slug', 'already-a-slug' ],
-		// The PHP test's own input: the server turns periods and slashes into hyphens.
-		[ 'Footer_Test v1.2', 'footer-test-v1-2' ],
-		[ 'a/b', 'a-b' ],
-	] )( 'turns %p into %p', ( input, expected ) => expect( slugifyTestId( input ) ).toBe( expected ) );
+		// The Checkout Button also counts as a form, so the more specific goal has to win.
+		[ [ 'newspack-blocks/checkout-button', 'newspack/reader-registration' ], '', 'subscription', 'Checkout Button' ],
+		[ [ 'core/paragraph', 'newspack-blocks/donate' ], '', 'donation', 'Donate block' ],
+		[ [ 'newspack-newsletters/subscribe' ], '', 'form_submission', 'sign-up form' ],
+		[ [ 'core/buttons', 'core/button' ], '', 'link_click', 'link' ],
+		[ [ 'core/paragraph' ], '<p>Read <a href="https://example.test/">more</a></p>', 'link_click', 'link' ],
+	] )( 'suggests from %p', ( blockNames, content, goal, source ) => {
+		const suggestion = suggestGoal( blockNames, content );
+		expect( suggestion.goal ).toBe( goal );
+		expect( suggestion.help ).toContain( `Suggested from the ${ source } in this prompt.` );
+	} );
+
+	it( 'suggests nothing for a prompt with no way to act', () => {
+		expect( suggestGoal( [ 'core/paragraph' ], '<p>Hello</p>' ) ).toBeNull();
+	} );
 } );
 
 it( 'treats manual and custom placements as ineligible', () => {
@@ -46,13 +51,23 @@ it( 'names the block a goal needs', () => {
 
 it( 'warns when another prompt holds the same variant', () => {
 	const prompts = [
-		{ id: 1, variant: 'a' },
+		{ id: 1, variant: 'a', status: 'publish' },
 		{ id: 2, variant: 'b' },
 	];
 	expect( testPromptWarnings( { postId: 2, variant: 'a', prompts } ) ).toHaveLength( 1 );
 	expect( testPromptWarnings( { postId: 2, variant: 'b', prompts } ) ).toHaveLength( 0 );
 	// A variant this editor doesn't offer can still be stored elsewhere; the message names it.
 	expect( testPromptWarnings( { postId: 2, variant: 'c', prompts: [ { id: 3, variant: 'c' } ] } ) ).toEqual( [
-		'Another prompt in this test is already version C. Clear the test name on one of them, or give one a different version.',
+		'Another prompt in this test is already version C. Move the unpublished one to the trash.',
+	] );
+} );
+
+it( 'asks to unpublish only when both duplicates are live, counting a scheduled one', () => {
+	const prompts = [ { id: 3, variant: 'a', status: 'future' } ];
+	expect( testPromptWarnings( { postId: 2, variant: 'a', status: 'publish', prompts } ) ).toEqual( [
+		'Another prompt in this test is already version A. Unpublish one of them.',
+	] );
+	expect( testPromptWarnings( { postId: 2, variant: 'a', status: 'draft', prompts } ) ).toEqual( [
+		'Another prompt in this test is already version A. Move the unpublished one to the trash.',
 	] );
 } );

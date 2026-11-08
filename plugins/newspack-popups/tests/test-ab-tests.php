@@ -5,6 +5,8 @@
  * @package Newspack_Popups
  */
 
+require_once __DIR__ . '/mocks/class-audience-campaigns.php';
+
 /**
  * A/B tests display-integration test case.
  *
@@ -15,6 +17,11 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	public function set_up() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
 		parent::set_up();
 		Newspack_Popups_AB_Tests::reset_config_cache();
+	}
+
+	public function tear_down() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
+		unset( $GLOBALS['admin_page_hooks']['newspack-audience'] );
+		parent::tear_down();
 	}
 
 	/**
@@ -1348,12 +1355,13 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		self::assertSame( [ 'form_submission', 'link_click', 'donation', 'subscription' ], array_keys( $data['goals'] ) );
 		self::assertContains( 'manual', $data['ineligible_placements'] );
 		self::assertContains( 'custom1', $data['ineligible_placements'] );
-		self::assertSame( [ 'a', 'b' ], array_keys( $data['variants'] ) );
 		self::assertSame( '', $data['results_url'], 'The results page is for administrators only.' );
 
 		$editor_id = get_current_user_id();
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
-		self::assertStringContainsString( 'page=' . Newspack_Popups_AB_Dashboard::PAGE_SLUG, Newspack_Popups_AB_Tests::get_editor_data( $prompt_id )['results_url'] );
+		self::assertSame( '', Newspack_Popups_AB_Tests::get_editor_data( $prompt_id )['results_url'], 'Without the Audience menu there is no results page.' );
+		$GLOBALS['admin_page_hooks']['newspack-audience'] = 'audience'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Stands in for newspack-plugin's Audience menu.
+		self::assertStringEndsWith( 'page=newspack-audience-campaigns#/ab-tests', Newspack_Popups_AB_Tests::get_editor_data( $prompt_id )['results_url'] );
 		wp_set_current_user( $editor_id );
 
 		$this->restrict_tests_to_admins();

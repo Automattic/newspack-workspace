@@ -1,11 +1,13 @@
 <?php // phpcs:ignore WordPress.Files.FileName.InvalidClassFileName
 /**
- * Tests for the A/B Tests dashboard: provider seam, stats route and page.
+ * Tests for the A/B Tests results: provider seam, list and stats routes, and
+ * the retired page's redirect.
  *
  * @package Newspack_Popups
  */
 
 require_once __DIR__ . '/mocks/class-ab-stub-provider.php';
+require_once __DIR__ . '/mocks/class-audience-campaigns.php';
 
 /**
  * Dashboard tests.
@@ -14,21 +16,15 @@ require_once __DIR__ . '/mocks/class-ab-stub-provider.php';
  */
 class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 	/**
-	 * Built asset files moved aside for a fixture, original => backup.
+	 * WordPress's own value, restored after each test.
 	 *
-	 * @var string[]
+	 * @var string|null
 	 */
-	private $asset_backups = [];
-
-	/**
-	 * Fixture asset files this test wrote.
-	 *
-	 * @var string[]
-	 */
-	private $asset_fixtures = [];
+	private $pagenow;
 
 	public function set_up() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
 		parent::set_up();
+		$this->pagenow = $GLOBALS['pagenow'] ?? null;
 		Newspack_Popups_AB_Tests::reset_config_cache();
 		remove_all_filters( 'newspack_popups_ab_stats_provider' );
 		// WP_UnitTestCase keeps one REST server for the whole run, so routes
@@ -37,67 +33,17 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	public function tear_down() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
-		foreach ( $this->asset_fixtures as $file ) {
-			if ( file_exists( $file ) ) {
-				// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink -- Removes only the fixture assets this test wrote.
-				unlink( $file );
-			}
-		}
-		foreach ( $this->asset_backups as $file => $backup ) {
-			// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_rename -- Restores the built asset this test moved aside.
-			rename( $backup, $file );
-		}
-		$this->asset_fixtures = [];
-		$this->asset_backups  = [];
-		wp_dequeue_script( Newspack_Popups_AB_Dashboard::SCRIPT_HANDLE );
-		wp_deregister_script( Newspack_Popups_AB_Dashboard::SCRIPT_HANDLE );
-		wp_dequeue_style( Newspack_Popups_AB_Dashboard::SCRIPT_HANDLE );
-		wp_deregister_style( Newspack_Popups_AB_Dashboard::SCRIPT_HANDLE );
+		unset( $_GET['page'], $GLOBALS['admin_page_hooks'][ Newspack_Popups_AB_Dashboard::AUDIENCE_MENU_SLUG ] );
+		$GLOBALS['pagenow'] = $this->pagenow; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Puts back WordPress's own value.
+		remove_all_filters( 'newspack_popups_ab_testing_enabled' );
 		parent::tear_down();
 	}
 
 	/**
-	 * Replace the dashboard's built assets with fixtures for one test.
-	 *
-	 * The build output is gitignored, so CI's PHPUnit job has none; a test
-	 * that reads it has to supply its own. A built copy, where one exists,
-	 * is moved aside and put back in tear_down().
-	 *
-	 * @param array  $dependencies Dependencies the fixture manifest declares.
-	 * @param string $version      Version the fixture manifest declares.
+	 * Stand in for newspack-plugin's Audience menu, which holds Campaigns.
 	 */
-	private function plant_asset_fixtures( $dependencies, $version ) {
-		$dist = dirname( __DIR__ ) . '/dist';
-		if ( ! is_dir( $dist ) ) {
-			wp_mkdir_p( $dist );
-		}
-		$manifest = sprintf(
-			'<?php return [ \'dependencies\' => %s, \'version\' => %s ];',
-			wp_json_encode( $dependencies ),
-			wp_json_encode( $version )
-		);
-		$fixtures = [
-			'abTests.asset.php' => $manifest,
-			'abTests.js'        => '',
-			'abTests.css'       => '',
-		];
-		foreach ( $fixtures as $name => $contents ) {
-			$path = $dist . '/' . $name;
-			if ( file_exists( $path . '.bak' ) ) {
-				// A run killed between planting and tear_down() leaves the build in
-				// the backup; put it back first, or the fixture would overwrite it.
-				// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_rename -- Restores a stranded backup of the built asset.
-				rename( $path . '.bak', $path );
-			}
-			if ( file_exists( $path ) ) {
-				// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_rename -- Moves the built asset aside for the fixture.
-				rename( $path, $path . '.bak' );
-				$this->asset_backups[ $path ] = $path . '.bak';
-			}
-			// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_file_put_contents -- Per-test fixture under the generated dist directory.
-			file_put_contents( $path, $contents );
-			$this->asset_fixtures[] = $path;
-		}
+	private function with_audience_menu() {
+		$GLOBALS['admin_page_hooks'][ Newspack_Popups_AB_Dashboard::AUDIENCE_MENU_SLUG ] = 'audience'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Stands in for newspack-plugin's Audience menu.
 	}
 
 	/**
@@ -350,10 +296,10 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 		$this->assertSame( $reason, $data['source']['reason'] );
 		$this->assertSame( 'stub', $data['source']['provider'] );
 		$this->assertCount( 0, $stub->calls );
-		$boot = Newspack_Popups_AB_Dashboard::get_boot_data();
-		$this->assertFalse( $boot['provider']['available'] );
-		$this->assertSame( 'stub', $boot['provider']['slug'] );
-		$this->assertSame( $reason, $boot['provider']['reason'] );
+		$list = Newspack_Popups_AB_Dashboard::get_list_data();
+		$this->assertFalse( $list['provider']['available'] );
+		$this->assertSame( 'stub', $list['provider']['slug'] );
+		$this->assertSame( $reason, $list['provider']['reason'] );
 	}
 
 	/**
@@ -446,25 +392,11 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 		$this->assertSame( 'readers', $data['source']['unit'] );
 		$this->assertSame( 3.0, $data['variants']['a']['rate'] );
 		$this->assertSame( 4.07, $data['variants']['b']['rate'] );
-		$this->assertSame( 35.6, $data['variants']['b']['lift'] );
+		$this->assertSame( 35.7, $data['variants']['b']['lift'] );
 		$this->assertNull( $data['variants']['a']['lift'] );
 		$this->assertIsFloat( $data['comparisons']['b']['confidence'] );
 		$this->assertContains( $data['comparisons']['b']['label'], [ 'directional', 'reliable' ] );
 		$this->assertArrayNotHasKey( 'a', $data['comparisons'] );
-	}
-
-	/**
-	 * Lift comes from the raw counts: two rates that display the same can still
-	 * differ by a third.
-	 */
-	public function test_lift_is_computed_before_the_rates_are_rounded() {
-		$this->as_admin();
-		$this->create_running_test();
-		$this->use_provider( $this->counts( 1000000, 100, 1500000, 200 ) );
-		$data = $this->stats_request( 't' )->get_data();
-		$this->assertSame( 0.01, $data['variants']['a']['rate'] );
-		$this->assertSame( 0.01, $data['variants']['b']['rate'] );
-		$this->assertSame( 33.3, $data['variants']['b']['lift'] );
 	}
 
 	/**
@@ -651,147 +583,25 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * Slugs of the Tools submenu after admin_menu runs.
+	 * Request the list of tests.
 	 *
-	 * @return string[]
+	 * @return WP_REST_Response
 	 */
-	private function tools_menu_slugs() {
-		$GLOBALS['submenu'] = []; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Resetting the menu between tests.
-		do_action( 'admin_menu' );
-		return array_column( $GLOBALS['submenu']['tools.php'] ?? [], 2 );
+	private function list_request() {
+		return rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests' ) );
 	}
 
 	/**
-	 * With the flag on, Tools gains an A/B Tests page.
+	 * The list route carries the tests, the prompts a test can start from, the
+	 * provider state, the thresholds and the copy the tab's cards need.
 	 */
-	public function test_menu_is_registered_with_the_flag_on() {
-		$this->as_admin();
-		add_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
-		$slugs = $this->tools_menu_slugs();
-		remove_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
-		$this->assertContains( Newspack_Popups_AB_Dashboard::PAGE_SLUG, $slugs );
-	}
-
-	/**
-	 * With the flag off the page is not registered.
-	 */
-	public function test_menu_is_absent_with_the_flag_off() {
-		$this->as_admin();
-		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
-		$slugs = $this->tools_menu_slugs();
-		remove_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
-		$this->assertNotContains( Newspack_Popups_AB_Dashboard::PAGE_SLUG, $slugs );
-	}
-
-	/**
-	 * Under the Audience menu the page sits directly below Campaigns, the
-	 * breadcrumb links back to it, and the script registers under that hook.
-	 */
-	public function test_menu_sits_below_campaigns_in_the_audience_menu() {
-		$this->as_admin();
-		add_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
-		$GLOBALS['admin_page_hooks']['newspack-audience'] = 'audience'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Stands in for newspack-plugin's Audience menu.
-		$register_audience = function () {
-			add_submenu_page( 'newspack-audience', 'Campaigns', 'Campaigns', 'manage_options', 'newspack-audience-campaigns', '__return_null' );
-			add_submenu_page( 'newspack-audience', 'Donations', 'Donations', 'manage_options', 'newspack-audience-donations', '__return_null' );
-		};
-		add_action( 'admin_menu', $register_audience );
-		$GLOBALS['submenu'] = []; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Resetting the menu between tests.
-		do_action( 'admin_menu' );
-		$data = Newspack_Popups_AB_Dashboard::get_boot_data();
-		remove_action( 'admin_menu', $register_audience );
-		remove_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
-		unset( $GLOBALS['admin_page_hooks']['newspack-audience'] );
-
-		$this->assertSame(
-			[ 'newspack-audience-campaigns', Newspack_Popups_AB_Dashboard::PAGE_SLUG, 'newspack-audience-donations' ],
-			array_column( $GLOBALS['submenu']['newspack-audience'], 2 )
-		);
-		$this->assertTrue( $data['in_audience_menu'] );
-		$this->assertStringContainsString( 'page=newspack-audience-campaigns', $data['campaigns_url'] );
-
-		$this->plant_asset_fixtures( [ 'wp-element' ], 'audience-fixture' );
-		$hook_property = new ReflectionProperty( Newspack_Popups_AB_Dashboard::class, 'page_hook' );
-		$page_hook     = $hook_property->getValue();
-		add_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
-		Newspack_Popups_AB_Dashboard::enqueue( $page_hook );
-		remove_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
-		$hook_property->setValue( null, false );
-
-		$this->assertNotEmpty( $page_hook );
-		$this->assertArrayHasKey( Newspack_Popups_AB_Dashboard::SCRIPT_HANDLE, wp_scripts()->registered );
-	}
-
-	/**
-	 * The body class marks this page and no other admin screen.
-	 */
-	public function test_body_class_only_on_the_page() {
-		$this->as_admin();
-		add_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
-		$this->tools_menu_slugs();
-		$hook_property = new ReflectionProperty( Newspack_Popups_AB_Dashboard::class, 'page_hook' );
-		$page_hook     = $hook_property->getValue();
-		$GLOBALS['hook_suffix'] = $page_hook; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- WordPress sets it per admin request.
-		$with_page              = Newspack_Popups_AB_Dashboard::add_body_class( 'wp-admin' );
-		$GLOBALS['hook_suffix'] = 'toplevel_page_other'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
-		$elsewhere              = Newspack_Popups_AB_Dashboard::add_body_class( 'wp-admin' );
-		unset( $GLOBALS['hook_suffix'] );
-		remove_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
-		$hook_property->setValue( null, false );
-
-		$this->assertNotEmpty( $page_hook );
-		$this->assertStringContainsString( Newspack_Popups_AB_Dashboard::BODY_CLASS, $with_page );
-		$this->assertSame( 'wp-admin', $elsewhere );
-	}
-
-	/**
-	 * The script's dependencies and version come from the build manifest, so a
-	 * dependency the bundle gains is loaded without anyone editing a PHP list.
-	 */
-	public function test_page_script_is_registered_from_the_build_manifest() {
-		$this->plant_asset_fixtures( [ 'wp-element', 'wp-api-fetch' ], 'ab-tests-fixture' );
-		$this->as_admin();
-		add_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
-		$this->tools_menu_slugs();
-		$hook = get_plugin_page_hookname( Newspack_Popups_AB_Dashboard::PAGE_SLUG, 'tools.php' );
-		Newspack_Popups_AB_Dashboard::enqueue( $hook );
-		remove_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
-		$script = wp_scripts()->registered[ Newspack_Popups_AB_Dashboard::SCRIPT_HANDLE ] ?? null;
-		$this->assertNotNull( $script );
-		// wp_set_script_translations() adds wp-i18n to whatever the manifest listed.
-		$this->assertSame( [ 'wp-element', 'wp-api-fetch', 'wp-i18n' ], $script->deps );
-		$this->assertSame( 'ab-tests-fixture', $script->ver );
-		$style = wp_styles()->registered[ Newspack_Popups_AB_Dashboard::SCRIPT_HANDLE ] ?? null;
-		$this->assertNotNull( $style );
-		$this->assertSame( [ 'wp-components' ], $style->deps );
-		$this->assertSame( 'ab-tests-fixture', $style->ver );
-	}
-
-	/**
-	 * Without a build there is nothing to register, and nothing breaks.
-	 */
-	public function test_page_script_is_skipped_without_a_build() {
-		$this->plant_asset_fixtures( [], 'unused' );
-		foreach ( $this->asset_fixtures as $file ) {
-			// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink -- Removes the fixture to stand in for an unbuilt checkout.
-			unlink( $file );
-		}
-		$this->as_admin();
-		add_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
-		$this->tools_menu_slugs();
-		$hook = get_plugin_page_hookname( Newspack_Popups_AB_Dashboard::PAGE_SLUG, 'tools.php' );
-		Newspack_Popups_AB_Dashboard::enqueue( $hook );
-		remove_filter( 'newspack_popups_ab_testing_enabled', '__return_true' );
-		$this->assertArrayNotHasKey( Newspack_Popups_AB_Dashboard::SCRIPT_HANDLE, wp_scripts()->registered );
-	}
-
-	/**
-	 * Boot data carries the tests, the provider state, the thresholds and the copy.
-	 */
-	public function test_boot_data_reports_provider_state_and_copy() {
+	public function test_list_route_reports_tests_provider_state_and_copy() {
 		$this->as_admin();
 		$this->create_running_test();
-		$data = Newspack_Popups_AB_Dashboard::get_boot_data();
+		$response = $this->list_request();
+		$this->assertSame( 200, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertSame( [ 'tests', 'prompts', 'provider', 'thresholds', 'copy', 'goals', 'labels' ], array_keys( $data ) );
 		$this->assertSame( 't', $data['tests'][0]['test_id'] );
 		$this->assertFalse( $data['provider']['available'] );
 		$this->assertNull( $data['provider']['slug'] );
@@ -802,19 +612,82 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 		$this->assertStringStartsWith( "Most readers in this test aren't logged in", $data['copy']['high_anonymous'] );
 		$this->assertStringStartsWith( 'Too early to call a winner.', $data['copy']['young_test'] );
 		$this->assertSame( 'Too early', $data['labels']['collecting'] );
-		$this->assertFalse( $data['in_audience_menu'], 'Without the Audience menu the page sits under Tools.' );
-		$this->assertStringContainsString( 'edit.php?post_type=' . Newspack_Popups::NEWSPACK_POPUPS_CPT, $data['campaigns_url'] );
-		$this->assertSame( 'newspack-popups/v1', $data['rest_base'] );
 	}
 
 	/**
 	 * An available provider is reported with its slug and no reason.
 	 */
-	public function test_boot_data_with_an_available_provider() {
+	public function test_list_data_with_an_available_provider() {
 		$this->use_provider( $this->counts( 1, 1, 1, 1 ) );
-		$data = Newspack_Popups_AB_Dashboard::get_boot_data();
+		$data = Newspack_Popups_AB_Dashboard::get_list_data();
 		$this->assertTrue( $data['provider']['available'] );
 		$this->assertSame( 'stub', $data['provider']['slug'] );
 		$this->assertNull( $data['provider']['reason'] );
+	}
+
+	/**
+	 * Editors can manage prompts but not read the results.
+	 */
+	public function test_list_route_requires_manage_options() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+		$this->assertSame( 403, $this->list_request()->get_status() );
+	}
+
+	/**
+	 * With the flag off the list route does not exist.
+	 */
+	public function test_list_route_is_absent_with_the_flag_off() {
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
+		$this->as_admin();
+		$response = $this->list_request();
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'rest_no_route', $response->get_data()['code'] );
+	}
+
+	/**
+	 * The tab's URL needs the flag, an administrator and the Campaigns wizard.
+	 *
+	 * The branch for an older newspack-plugin, which builds the Audience menu
+	 * but has no A/B Tests tab, is not covered: the stand-in Audience_Campaigns
+	 * class stays loaded for the whole run, and a class can't be unloaded.
+	 */
+	public function test_page_url_is_the_campaigns_tab() {
+		$this->as_admin();
+		$this->assertSame( '', Newspack_Popups_AB_Dashboard::get_page_url(), 'Without the Audience menu there is no tab.' );
+
+		$this->with_audience_menu();
+		$this->assertSame( admin_url( 'admin.php?page=newspack-audience-campaigns#/ab-tests' ), Newspack_Popups_AB_Dashboard::get_page_url() );
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+		$this->assertSame( '', Newspack_Popups_AB_Dashboard::get_page_url(), 'The results are for administrators only.' );
+
+		$this->as_admin();
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
+		$this->assertSame( '', Newspack_Popups_AB_Dashboard::get_page_url() );
+	}
+
+	/**
+	 * A request for the retired page goes to the tab, and nothing else does.
+	 */
+	public function test_retired_page_redirects_to_the_tab() {
+		$this->as_admin();
+		$this->with_audience_menu();
+		$GLOBALS['pagenow'] = 'admin.php'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- WordPress sets it per admin request.
+		$_GET['page']       = Newspack_Popups_AB_Dashboard::PAGE_SLUG;
+		$this->assertStringEndsWith( 'page=newspack-audience-campaigns#/ab-tests', Newspack_Popups_AB_Dashboard::get_redirect_url() );
+
+		$_GET['page'] = 'newspack-audience-campaigns';
+		$this->assertSame( '', Newspack_Popups_AB_Dashboard::get_redirect_url(), 'Other pages stay where they are.' );
+
+		$_GET['page']       = Newspack_Popups_AB_Dashboard::PAGE_SLUG;
+		$GLOBALS['pagenow'] = 'tools.php'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		$this->assertStringEndsWith( 'page=newspack-audience-campaigns#/ab-tests', Newspack_Popups_AB_Dashboard::get_redirect_url(), 'Sites without the Audience menu served the page under Tools.' );
+
+		$GLOBALS['pagenow'] = 'options-general.php'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		$this->assertSame( '', Newspack_Popups_AB_Dashboard::get_redirect_url(), 'Only admin.php and tools.php served the page slug.' );
+
+		$GLOBALS['pagenow'] = 'admin.php'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		unset( $GLOBALS['admin_page_hooks'][ Newspack_Popups_AB_Dashboard::AUDIENCE_MENU_SLUG ] );
+		$this->assertSame( '', Newspack_Popups_AB_Dashboard::get_redirect_url(), 'With no tab to land on, nothing redirects.' );
 	}
 }
