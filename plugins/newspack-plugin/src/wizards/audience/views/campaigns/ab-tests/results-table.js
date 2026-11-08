@@ -2,9 +2,9 @@
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { VisuallyHidden } from '@wordpress/components';
 import { useMemo, useState } from '@wordpress/element';
 import { decodeEntities } from '@wordpress/html-entities';
+import { VisuallyHidden } from '@wordpress/ui';
 // Not the Newspack wrapper: with-wizard-screen/style.scss gives `.newspack-dataviews`
 // a page bleed that would hang this table past its card.
 import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
@@ -58,7 +58,7 @@ const ResultsTable = ( { test, status, stats, labels, kept = null } ) => {
 						<span className={ `newspack-ab-tests__swatch is-variant-${ item.letter }` } aria-hidden="true" />
 						{ item.letter.toUpperCase() }
 						{ /* The tint is faint and color-only; this says it to screen readers too. */ }
-						{ item.letter === kept && <VisuallyHidden as="span">{ ` ${ __( '(kept)', 'newspack-plugin' ) }` }</VisuallyHidden> }
+						{ item.letter === kept && <VisuallyHidden render={ <span /> }>{ ` ${ __( '(kept)', 'newspack-plugin' ) }` }</VisuallyHidden> }
 					</span>
 				),
 			},

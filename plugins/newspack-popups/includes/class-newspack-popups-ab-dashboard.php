@@ -221,10 +221,14 @@ final class Newspack_Popups_AB_Dashboard {
 		} elseif ( null !== $window ) {
 			$result = self::fetch_counts( $provider, $test, $window, (bool) $refresh );
 			// What gets frozen must have been fetched after the end date settled;
-			// a copy cached before that is asked for again, once.
+			// a copy cached before that is asked for again, once. If that fails,
+			// the cached copy is still shown, just not frozen.
+			$settled_copy = true;
 			if ( $ended && self::has_settled( $test ) && ! is_wp_error( $result )
 				&& strtotime( $result['fetched_at'] ) < strtotime( $test['ended_at'] ) + self::SETTLE_SECONDS ) {
-				$result = self::fetch_counts( $provider, $test, $window, true );
+				$fresh        = self::fetch_counts( $provider, $test, $window, true );
+				$settled_copy = ! is_wp_error( $fresh );
+				$result       = $settled_copy ? $fresh : $result;
 			}
 			if ( is_wp_error( $result ) ) {
 				$source['state']  = 'unavailable';
@@ -233,7 +237,7 @@ final class Newspack_Popups_AB_Dashboard {
 				// Stats sources keep counting a day's readers for a day or two after
 				// it, so results are only final once the end date has settled, and
 				// "no data yet" is never final.
-				if ( $ended && self::has_settled( $test ) && ! empty( $result['counts']['variants'] ) ) {
+				if ( $ended && $settled_copy && self::has_settled( $test ) && ! empty( $result['counts']['variants'] ) ) {
 					Newspack_Popups_AB_Tests::store_final_counts( $test['test_id'], $result['counts'], $result['fetched_at'] );
 					$source['final'] = true;
 				}

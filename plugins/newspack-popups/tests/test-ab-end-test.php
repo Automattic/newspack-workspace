@@ -467,6 +467,35 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * When that second fetch fails, the cached copy is still shown, unfrozen.
+	 */
+	public function test_a_failed_refetch_keeps_the_cached_results() {
+		$this->sign_in();
+		$this->create_running_test();
+		$this->end_request( 't', 'b' );
+		$ended_at = gmdate( 'Y-m-d\TH:i:s\Z', time() - 3 * DAY_IN_SECONDS );
+		$this->backdate_end( 't', $ended_at );
+		$test  = $this->rows( 't' )[0];
+		$key   = new ReflectionMethod( 'Newspack_Popups_AB_Dashboard', 'cache_key' );
+		$key->setAccessible( true );
+		$stale = $this->use_provider( $this->counts( 1000, 19, 1000, 20 ) );
+		set_transient(
+			$key->invoke( null, $test, $stale->get_slug() ),
+			[
+				'counts'     => $this->counts( 1000, 19, 1000, 20 ),
+				'fetched_at' => $ended_at,
+			],
+			HOUR_IN_SECONDS
+		);
+
+		$this->use_provider( new WP_Error( 'down', 'The source is down.' ) );
+		$stats = $this->stats_request( 't' )->get_data();
+		$this->assertSame( 20, $stats['variants']['b']['conversions'] );
+		$this->assertFalse( $stats['source']['final'] );
+		$this->assertNull( Newspack_Popups_AB_Tests::get_final_counts( 't' ) );
+	}
+
+	/**
 	 * Forget every cached stats answer, as an hour passing would.
 	 */
 	private function expire_stats_cache() {
@@ -503,6 +532,9 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 		global $wpdb;
 		$this->sign_in();
 		$ids = $this->create_running_test();
+		// As if a reader request had seen the rival's record and stored that no
+		// test is running.
+		update_option( Newspack_Popups_AB_Tests::OPTION_HAS_TESTS, '0' );
 		// The other request's insert lands after this one's check and before its own.
 		$rival = function ( $term_id, $meta_key ) use ( $wpdb ) {
 			if ( Newspack_Popups_AB_Tests::TERM_META_ENDED !== $meta_key ) {
@@ -535,6 +567,7 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 		$records = get_term_meta( $term->term_id, Newspack_Popups_AB_Tests::TERM_META_ENDED, false );
 		$this->assertCount( 1, $records );
 		$this->assertSame( 'rival', $records[0]['claim'] );
+		$this->assertNotSame( '0', get_option( Newspack_Popups_AB_Tests::OPTION_HAS_TESTS ) );
 	}
 
 	/**
@@ -544,6 +577,13 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 	public function test_a_failed_draft_leaves_the_test_running() {
 		$this->sign_in();
 		$ids = $this->create_running_test( 't', [ 'a', 'b', 'c' ] );
+		// A backslash in a title: the record must still match to be removed.
+		wp_update_post(
+			[
+				'ID'         => $ids['b'],
+				'post_title' => wp_slash( 'Path C:\\Users' ),
+			]
+		);
 		// The second draft fails, whichever version that is, so one is put back.
 		$attempts = 0;
 		$fail     = function ( $maybe_empty, $postarr ) use ( &$attempts ) {
