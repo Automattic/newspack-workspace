@@ -6,7 +6,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { useState, useEffect, useCallback, useMemo } from '@wordpress/element';
+import { Fragment, useState, useEffect, useCallback, useMemo } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
@@ -25,6 +25,25 @@ import InstitutionsAdvancedSettings from './advanced-settings';
 const { useHistory } = Router;
 
 const API_PATH = '/wp/v2/np_institution';
+
+/**
+ * Shows a list such as `a.edu,b.edu` or `org=a;role=b` with one space after
+ * each separator, however it was saved, and keeps each item on one line where
+ * it fits, so the list wraps between items rather than inside one, such as at
+ * the hyphen of an IP range. Only the separator the field's access rule splits
+ * on counts, so a comma inside a reader data value stays part of that value.
+ *
+ * @param value     The stored list.
+ * @param separator The character the field's access rule splits the list on.
+ * @return The value's items, separated by a space.
+ */
+const withBreakOpportunities = ( value: string, separator: ',' | ';' ) =>
+	value.split( separator === ',' ? /(?<=,)/ : /(?<=;)/ ).map( ( part, index ) => (
+		<Fragment key={ index }>
+			{ index > 0 && ' ' }
+			<span className="newspack-institutions__list-item">{ part.trim() }</span>
+		</Fragment>
+	) );
 
 const DEFAULT_VIEW: View = {
 	type: 'table',
@@ -108,7 +127,7 @@ export default function Institutions() {
 				filterBy: false,
 				enableGlobalSearch: true,
 				getValue: ( { item }: { item: Institution } ) => item.id,
-				render: ( { item }: { item: Institution } ) => <code>{ item.id }</code>,
+				render: ( { item }: { item: Institution } ) => item.id,
 			},
 			{
 				id: 'title',
@@ -135,7 +154,7 @@ export default function Institutions() {
 				getValue: ( { item }: { item: Institution } ) => item.meta?.np_institution_email_domain || '',
 				render: ( { item }: { item: Institution } ) => {
 					const val = item.meta?.np_institution_email_domain;
-					return val ? <code>{ val }</code> : <span className="newspack-institutions__empty">&mdash;</span>;
+					return val ? <span>{ withBreakOpportunities( val, ',' ) }</span> : <span className="newspack-institutions__empty">&mdash;</span>;
 				},
 			},
 			{
@@ -144,7 +163,7 @@ export default function Institutions() {
 				getValue: ( { item }: { item: Institution } ) => item.meta?.np_institution_ip_range || '',
 				render: ( { item }: { item: Institution } ) => {
 					const val = item.meta?.np_institution_ip_range;
-					return val ? <code>{ val }</code> : <span className="newspack-institutions__empty">&mdash;</span>;
+					return val ? <span>{ withBreakOpportunities( val, ',' ) }</span> : <span className="newspack-institutions__empty">&mdash;</span>;
 				},
 			},
 			{
@@ -153,7 +172,7 @@ export default function Institutions() {
 				getValue: ( { item }: { item: Institution } ) => item.meta?.np_institution_reader_data || '',
 				render: ( { item }: { item: Institution } ) => {
 					const val = item.meta?.np_institution_reader_data;
-					return val ? <code>{ val }</code> : <span className="newspack-institutions__empty">&mdash;</span>;
+					return val ? <span>{ withBreakOpportunities( val, ';' ) }</span> : <span className="newspack-institutions__empty">&mdash;</span>;
 				},
 			},
 		],
