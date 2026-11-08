@@ -361,6 +361,26 @@ describe( 'Ended tests', () => {
 		expect( screen.getByRole( 'searchbox', { name: 'Search tests' } ) ).toBeInTheDocument();
 	} );
 
+	it( "says an ended test's results are not final until they are", async () => {
+		mockRoutes( listResponse( [ ended() ] ) );
+		render( <ABTests location={ { search: '?test=old' } } /> );
+		const card = await screen.findByRole( 'region', { name: 'Test old' } );
+		expect( await within( card ).findByText( /^Results from .+ to .+\. They become final two days after the test ends\.$/ ) ).toBeInTheDocument();
+		expect( within( card ).queryByText( /^Final results/ ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'offers no End Test on a test whose versions are not all published', async () => {
+		const unready = test(
+			'una',
+			{ a: prompt( 10 ), b: prompt( 11, { status: 'draft', eligible: false } ) },
+			{ started_at: '2026-10-01T00:00:00Z', status: 'active' }
+		);
+		mockRoutes( listResponse( [ unready ] ) );
+		render( <ABTests /> );
+		const card = await screen.findByRole( 'region', { name: 'Test una' } );
+		expect( within( card ).queryByRole( 'button', { name: /End Test/ } ) ).not.toBeInTheDocument();
+	} );
+
 	it( 'says there are no active tests when every test has ended', async () => {
 		mockRoutes( listResponse( [ ended() ] ) );
 		render( <ABTests /> );
@@ -376,7 +396,7 @@ describe( 'Ended tests', () => {
 	} );
 
 	it( 'shows an ended test as ended, with its verdict, final dates and kept row, and no main action', async () => {
-		mockRoutes( listResponse( [ ended() ] ) );
+		mockRoutes( listResponse( [ ended() ] ), {}, { ...stats, source: { ...stats.source, final: true } } );
 		render( <ABTests location={ { search: '?test=old' } } /> );
 		const card = await screen.findByRole( 'region', { name: 'Test old' } );
 		expect( within( card ).getByText( 'Ended' ) ).toBeInTheDocument();
@@ -384,9 +404,9 @@ describe( 'Ended tests', () => {
 		expect( await within( card ).findByText( /^Final results from .+ to .+\.$/ ) ).toBeInTheDocument();
 		expect( within( card ).queryByText( 'Split:' ) ).not.toBeInTheDocument();
 		expect( within( card ).queryByRole( 'button', { name: /End Test|Edit Version|Create Version/ } ) ).not.toBeInTheDocument();
-		// The row is tinted by the stylesheet from this marker; its text stays "B".
+		// The row is tinted by the stylesheet from this marker; screen readers hear "(kept)".
 		const kept = card.querySelector( '.newspack-ab-tests__version.is-kept' );
-		expect( kept ).toHaveTextContent( /^B$/ );
+		expect( kept ).toHaveTextContent( /^B\(kept\)$/ );
 		expect( card.querySelectorAll( '.is-kept' ) ).toHaveLength( 1 );
 
 		fireEvent.click( within( card ).getByRole( 'button', { name: 'Test actions: Test old' } ) );

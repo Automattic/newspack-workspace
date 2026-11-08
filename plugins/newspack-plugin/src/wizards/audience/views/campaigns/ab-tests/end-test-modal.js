@@ -55,7 +55,8 @@ const describeOption = ( { letter, test, stats, recommendation } ) => {
 				)
 			);
 		}
-		if ( recommendation.letter === letter ) {
+		// Only over results: with none, there's no winner to say is missing.
+		if ( recommendation.letter === letter && rate ) {
 			parts.push( __( "There's no reliable winner yet, so keeping the original is the safer choice.", 'newspack-plugin' ) );
 		}
 	}
@@ -77,15 +78,18 @@ const describeOption = ( { letter, test, stats, recommendation } ) => {
  */
 const EndTestModal = ( { test, stats, onEnded, onClose } ) => {
 	const recommendation = getRecommendation( test, stats );
-	const [ keep, setKeep ] = useState( recommendation.letter );
+	// The selection follows the recommendation, which can change as the card's
+	// results arrive, until the user picks a version.
+	const [ picked, setPicked ] = useState( null );
+	const keep = picked ?? recommendation.letter;
 	const [ isBusy, setIsBusy ] = useState( false );
 	const [ error, setError ] = useState( '' );
 	const formRef = useRef( null );
 	const letters = Object.keys( test.variants ).sort();
 	const name = test.name || test.test_id;
 
-	// The modal focuses its first focusable element, which in a radio group is
-	// the first option; start on the selected one instead, as the arrow keys do.
+	// Start on the selected option, where the arrow keys move from, rather than
+	// on whichever element the modal's own focus-on-mount settles on.
 	useEffect( () => {
 		formRef.current?.querySelector( 'input[type="radio"]:checked' )?.focus();
 	}, [] );
@@ -119,7 +123,7 @@ const EndTestModal = ( { test, stats, onEnded, onClose } ) => {
 							{ error }
 						</Notice>
 					) }
-					<p className="newspack-ab-tests__modal-intro">
+					<p className="newspack-ab-tests__intro">
 						{ sprintf(
 							// Translators: %s is the test name.
 							_n(
@@ -134,7 +138,7 @@ const EndTestModal = ( { test, stats, onEnded, onClose } ) => {
 					<RadioControl
 						label={ __( 'Version to keep', 'newspack-plugin' ) }
 						selected={ keep }
-						onChange={ setKeep }
+						onChange={ setPicked }
 						disabled={ isBusy }
 						options={ letters.map( letter => ( {
 							value: letter,
@@ -153,7 +157,7 @@ const EndTestModal = ( { test, stats, onEnded, onClose } ) => {
 							description: describeOption( { letter, test, stats, recommendation } ),
 						} ) ) }
 					/>
-					<Stack justify="flex-end" align="center" gap="lg" className="newspack-modal__footer">
+					<Stack justify="flex-end" align="center" gap="lg">
 						<Button variant="secondary" onClick={ onClose } disabled={ isBusy } __next40pxDefaultSize>
 							{ __( 'Cancel', 'newspack-plugin' ) }
 						</Button>

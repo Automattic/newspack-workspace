@@ -2,6 +2,7 @@
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
+import { VisuallyHidden } from '@wordpress/components';
 import { useMemo, useState } from '@wordpress/element';
 import { decodeEntities } from '@wordpress/html-entities';
 // Not the Newspack wrapper: with-wizard-screen/style.scss gives `.newspack-dataviews`
@@ -56,6 +57,8 @@ const ResultsTable = ( { test, status, stats, labels, kept = null } ) => {
 					<span className={ `newspack-ab-tests__version${ item.letter === kept ? ' is-kept' : '' }` }>
 						<span className={ `newspack-ab-tests__swatch is-variant-${ item.letter }` } aria-hidden="true" />
 						{ item.letter.toUpperCase() }
+						{ /* The tint is faint and color-only; this says it to screen readers too. */ }
+						{ item.letter === kept && <VisuallyHidden>{ __( '(kept)', 'newspack-plugin' ) }</VisuallyHidden> }
 					</span>
 				),
 			},

@@ -54,7 +54,22 @@ describe( 'EndTestModal', () => {
 
 	it( 'describes each version by title alone when there are no results', () => {
 		render( <EndTestModal test={ test } stats={ null } onEnded={ jest.fn() } onClose={ jest.fn() } /> );
+		expect( descriptionOf( option( 'Keep A (Recommended)' ) ) ).toBe( 'Donate banner: one-time ask' );
 		expect( descriptionOf( option( 'Keep B' ) ) ).toBe( 'Donate banner: monthly ask' );
+	} );
+
+	it( 'moves the selection to the recommendation when results arrive', () => {
+		const { rerender } = render( <EndTestModal test={ test } stats={ null } onEnded={ jest.fn() } onClose={ jest.fn() } /> );
+		expect( option( 'Keep A (Recommended)' ) ).toBeChecked();
+		rerender( <EndTestModal test={ test } stats={ stats() } onEnded={ jest.fn() } onClose={ jest.fn() } /> );
+		expect( option( 'Keep B (Recommended)' ) ).toBeChecked();
+	} );
+
+	it( 'keeps the version the user picked when results arrive', () => {
+		const { rerender } = render( <EndTestModal test={ test } stats={ null } onEnded={ jest.fn() } onClose={ jest.fn() } /> );
+		fireEvent.click( option( 'Keep B' ) );
+		rerender( <EndTestModal test={ test } stats={ stats( { young: true } ) } onEnded={ jest.fn() } onClose={ jest.fn() } /> );
+		expect( option( 'Keep B' ) ).toBeChecked();
 	} );
 
 	it( 'ends the test with the version chosen', async () => {

@@ -70,13 +70,23 @@ const TestCard = ( { test, data, onRenamed, onEnded, isTarget = false } ) => {
 		status === 'draft' ? letters.find( letter => test.variants[ letter ].status !== 'publish' && test.variants[ letter ].edit_link ) : null;
 
 	let footer = null;
-	if ( isEnded && hasStarted ) {
-		footer = sprintf(
-			// Translators: %1$s is the date the test started, %2$s the date it ended.
-			__( 'Final results from %1$s to %2$s.', 'newspack-plugin' ),
-			formatDay( test.started_at ),
-			formatDay( test.ended_at )
-		);
+	if ( isEnded ) {
+		// Only over numbers: an ended test whose source can't answer shows dashes.
+		if ( hasStats && stats.source.final ) {
+			footer = sprintf(
+				// Translators: %1$s is the date the test started, %2$s the date it ended.
+				__( 'Final results from %1$s to %2$s.', 'newspack-plugin' ),
+				formatDay( test.started_at ),
+				formatDay( test.ended_at )
+			);
+		} else if ( hasStats ) {
+			footer = sprintf(
+				// Translators: %1$s is the date the test started, %2$s the date it ended.
+				__( 'Results from %1$s to %2$s. They become final two days after the test ends.', 'newspack-plugin' ),
+				formatDay( test.started_at ),
+				formatDay( test.ended_at )
+			);
+		}
 	} else if ( hasStats && stats.source.state === 'collecting' ) {
 		// Until a reader is counted, the start date tells more than the fetch time.
 		footer = sprintf(
@@ -137,7 +147,7 @@ const TestCard = ( { test, data, onRenamed, onEnded, isTarget = false } ) => {
 	}, [ isEnded ] );
 
 	let mainAction = null;
-	if ( canEndTest( status ) ) {
+	if ( canEndTest( test ) ) {
 		mainAction = (
 			<Button
 				variant="secondary"

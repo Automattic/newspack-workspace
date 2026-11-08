@@ -134,8 +134,17 @@ describe( 'latestOnly', () => {
 } );
 
 describe( 'canEndTest', () => {
-	it( 'allows ending only a test that is splitting readers', () => {
-		expect( [ 'running', 'needs-attention', 'draft', 'incomplete', 'ended' ].map( canEndTest ) ).toEqual( [ true, true, false, false, false ] );
+	const version = ( status = 'publish', eligible = true ) => ( { status, eligible } );
+	it( 'allows ending only a test that is splitting readers, as the server does', () => {
+		const tests = [
+			{ variants: { a: version(), b: version() } }, // Running.
+			{ variants: { a: version(), b: version( 'publish', false ) } }, // Needs attention, still splitting.
+			{ variants: { a: version(), b: version( 'draft', false ) } }, // Needs attention, not splitting.
+			{ variants: { a: version(), b: version( 'draft' ) } }, // Draft.
+			{ variants: { a: version() } }, // Incomplete.
+			{ status: 'ended', variants: { a: version(), b: version() } },
+		];
+		expect( tests.map( canEndTest ) ).toEqual( [ true, true, false, false, false, false ] );
 	} );
 } );
 

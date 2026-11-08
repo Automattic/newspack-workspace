@@ -266,19 +266,28 @@ export const openVersionB = result => {
 };
 
 /**
- * Whether a test can be ended from its card: it is splitting readers now.
+ * Whether a test can be ended from its card: it is splitting readers now,
+ * which is the server's rule too. A Needs Attention test qualifies only while
+ * every version is still published.
  *
- * @param {string} status From getTestStatus().
+ * @param {Object} test The test.
  * @return {boolean} Endable.
  */
-export const canEndTest = status => status === 'running' || status === 'needs-attention';
+export const canEndTest = test => {
+	const status = getTestStatus( test );
+	if ( status !== 'running' && status !== 'needs-attention' ) {
+		return false;
+	}
+	return Object.values( test.variants ).every( variant => variant.status === 'publish' );
+};
 
 /**
  * Which version the End Test modal recommends keeping, and why.
  *
  * Only a Reliable result names a winner, and only once the test is past the
- * server's young-test age (14 days): early results swing. A Reliable result for a challenger that converts worse than A is A
- * winning. Anything else recommends A, the version readers saw before the test.
+ * server's young-test age: early results swing. A Reliable result for a
+ * challenger that converts worse than A is A winning. Anything else recommends
+ * A, the version readers saw before the test.
  *
  * @param {Object}  test  The test.
  * @param {?Object} stats Its stats, or null.
