@@ -21,6 +21,10 @@ import StartTestModal from './start-test-modal';
 import EndTestModal from './end-test-modal';
 import { REST_BASE, canEndTest, formatDay, formatList, getStatusIntent, getStatusLabel, getTestStatus, openVersionB, splitSummary } from './utils';
 
+// How long after a test ends its results become final: the server's
+// SETTLE_SECONDS, which the footer copy also names as two days.
+const SETTLE_MS = 2 * 24 * 60 * 60 * 1000;
+
 /**
  * @param {Object} variants Variants keyed by letter.
  * @return {string} What a test without both versions still needs.
@@ -79,10 +83,18 @@ const TestCard = ( { test, data, onRenamed, onEnded, isTarget = false } ) => {
 				formatDay( test.started_at ),
 				formatDay( test.ended_at )
 			);
-		} else if ( hasStats ) {
+		} else if ( hasStats && Date.now() < new Date( test.ended_at ).getTime() + SETTLE_MS ) {
 			footer = sprintf(
 				// Translators: %1$s is the date the test started, %2$s the date it ended.
 				__( 'Results from %1$s to %2$s. They become final two days after the test ends.', 'newspack-plugin' ),
+				formatDay( test.started_at ),
+				formatDay( test.ended_at )
+			);
+		} else if ( hasStats ) {
+			// Settled, but the source hasn't answered with numbers to keep yet.
+			footer = sprintf(
+				// Translators: %1$s is the date the test started, %2$s the date it ended.
+				__( 'Results from %1$s to %2$s.', 'newspack-plugin' ),
 				formatDay( test.started_at ),
 				formatDay( test.ended_at )
 			);
@@ -138,8 +150,8 @@ const TestCard = ( { test, data, onRenamed, onEnded, isTarget = false } ) => {
 			.finally( () => setLoading( false ) );
 	};
 
-	// Again once the test ends: ending takes its final counts, which can be
-	// newer than the ones already on the card.
+	// Again once the test ends: its results now stop at the day it ended, not
+	// today, so the counts already on the card no longer match.
 	useEffect( () => {
 		if ( canLoadStats ) {
 			load( false );

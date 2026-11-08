@@ -135,7 +135,8 @@ final class Newspack_Popups_AB_Dashboard {
 
 	/**
 	 * How long after a test ends before its results are final. GA4 can take up
-	 * to two days to finish processing a day's events.
+	 * to two days to finish processing a day's events. The A/B tab's footer
+	 * copy says "two days" and mirrors this value.
 	 */
 	const SETTLE_SECONDS = 2 * DAY_IN_SECONDS;
 
@@ -218,9 +219,13 @@ final class Newspack_Popups_AB_Dashboard {
 			$source['state']  = 'unavailable';
 			$source['reason'] = $available->get_error_message();
 		} elseif ( null !== $window ) {
-			// An ended test without final results yet skips the cache, so what
-			// gets frozen is a fresh answer for the test's own dates.
-			$result = self::fetch_counts( $provider, $test, $window, $ended || (bool) $refresh );
+			$result = self::fetch_counts( $provider, $test, $window, (bool) $refresh );
+			// What gets frozen must have been fetched after the end date settled;
+			// a copy cached before that is asked for again, once.
+			if ( $ended && self::has_settled( $test ) && ! is_wp_error( $result )
+				&& strtotime( $result['fetched_at'] ) < strtotime( $test['ended_at'] ) + self::SETTLE_SECONDS ) {
+				$result = self::fetch_counts( $provider, $test, $window, true );
+			}
 			if ( is_wp_error( $result ) ) {
 				$source['state']  = 'unavailable';
 				$source['reason'] = $result->get_error_message();

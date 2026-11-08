@@ -362,11 +362,19 @@ describe( 'Ended tests', () => {
 	} );
 
 	it( "says an ended test's results are not final until they are", async () => {
-		mockRoutes( listResponse( [ ended() ] ) );
+		mockRoutes( listResponse( [ ended( 'old', { ended_at: new Date().toISOString() } ) ] ) );
 		render( <ABTests location={ { search: '?test=old' } } /> );
 		const card = await screen.findByRole( 'region', { name: 'Test old' } );
 		expect( await within( card ).findByText( /^Results from .+ to .+\. They become final two days after the test ends\.$/ ) ).toBeInTheDocument();
 		expect( within( card ).queryByText( /^Final results/ ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'stops promising final results once the two days have passed', async () => {
+		mockRoutes( listResponse( [ ended() ] ) );
+		render( <ABTests location={ { search: '?test=old' } } /> );
+		const card = await screen.findByRole( 'region', { name: 'Test old' } );
+		expect( await within( card ).findByText( /^Results from .+ to .+\.$/ ) ).toBeInTheDocument();
+		expect( within( card ).queryByText( /become final/ ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'offers no End Test on a test whose versions are not all published', async () => {
@@ -406,7 +414,7 @@ describe( 'Ended tests', () => {
 		expect( within( card ).queryByRole( 'button', { name: /End Test|Edit Version|Create Version/ } ) ).not.toBeInTheDocument();
 		// The row is tinted by the stylesheet from this marker; screen readers hear "(kept)".
 		const kept = card.querySelector( '.newspack-ab-tests__version.is-kept' );
-		expect( kept ).toHaveTextContent( /^B\(kept\)$/ );
+		expect( kept ).toHaveTextContent( /^B \(kept\)$/ );
 		expect( card.querySelectorAll( '.is-kept' ) ).toHaveLength( 1 );
 
 		fireEvent.click( within( card ).getByRole( 'button', { name: 'Test actions: Test old' } ) );

@@ -368,8 +368,8 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * Results aren't final until the end date has settled: until then each read
-	 * asks the source again, for the test's own dates.
+	 * Results aren't final until the end date has settled: until then they come
+	 * from the source, for the test's own dates, cached as a running test's are.
 	 */
 	public function test_results_are_not_final_until_the_end_has_settled() {
 		$this->sign_in();
@@ -384,8 +384,8 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 		$this->assertSame( gmdate( 'Y-m-d' ), $stub->calls[0]['end'] );
 
 		$later = $this->use_provider( $this->counts( 1000, 19, 1000, 30 ) );
-		$this->assertSame( 30, $this->stats_request( 't' )->get_data()['variants']['b']['conversions'] );
-		$this->assertCount( 1, $later->calls );
+		$this->assertSame( 27, $this->stats_request( 't' )->get_data()['variants']['b']['conversions'] );
+		$this->assertCount( 0, $later->calls );
 	}
 
 	/**
@@ -426,8 +426,53 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 		);
 		$this->assertFalse( $this->stats_request( 't' )->get_data()['source']['final'] );
 
-		$this->use_provider( $this->counts( 1000, 19, 1000, 27 ) );
+		// The empty answer is cached like any other, so the source is asked again
+		// once the cache expires, not on every read.
+		$cached = $this->use_provider( $this->counts( 1000, 19, 1000, 27 ) );
+		$this->assertFalse( $this->stats_request( 't' )->get_data()['source']['final'] );
+		$this->assertCount( 0, $cached->calls );
+
+		$this->expire_stats_cache();
 		$this->assertTrue( $this->stats_request( 't' )->get_data()['source']['final'] );
+	}
+
+	/**
+	 * A copy cached before the end settled is fetched again before it is frozen.
+	 */
+	public function test_results_cached_before_settling_are_fetched_again() {
+		$this->sign_in();
+		$this->create_running_test();
+		$this->end_request( 't', 'b' );
+		$ended_at = gmdate( 'Y-m-d\TH:i:s\Z', time() - 3 * DAY_IN_SECONDS );
+		$this->backdate_end( 't', $ended_at );
+		// A copy cached the day the test ended, before it settled.
+		$test  = $this->rows( 't' )[0];
+		$key   = new ReflectionMethod( 'Newspack_Popups_AB_Dashboard', 'cache_key' );
+		$key->setAccessible( true );
+		$stale = $this->use_provider( $this->counts( 1000, 19, 1000, 20 ) );
+		set_transient(
+			$key->invoke( null, $test, $stale->get_slug() ),
+			[
+				'counts'     => $this->counts( 1000, 19, 1000, 20 ),
+				'fetched_at' => $ended_at,
+			],
+			HOUR_IN_SECONDS
+		);
+
+		$fresh = $this->use_provider( $this->counts( 1000, 19, 1000, 27 ) );
+		$stats = $this->stats_request( 't' )->get_data();
+		$this->assertCount( 1, $fresh->calls );
+		$this->assertSame( 27, $stats['variants']['b']['conversions'] );
+		$this->assertTrue( $stats['source']['final'] );
+	}
+
+	/**
+	 * Forget every cached stats answer, as an hour passing would.
+	 */
+	private function expire_stats_cache() {
+		global $wpdb;
+		$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '\\_transient\\_%'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		wp_cache_flush();
 	}
 
 	/**
@@ -498,8 +543,15 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 	 */
 	public function test_a_failed_draft_leaves_the_test_running() {
 		$this->sign_in();
-		$ids  = $this->create_running_test( 't', [ 'a', 'b', 'c' ] );
-		$fail = fn( $maybe_empty, $postarr ) => ( (int) ( $postarr['ID'] ?? 0 ) === $ids['c'] ) ? true : $maybe_empty;
+		$ids = $this->create_running_test( 't', [ 'a', 'b', 'c' ] );
+		// The second draft fails, whichever version that is, so one is put back.
+		$attempts = 0;
+		$fail     = function ( $maybe_empty, $postarr ) use ( &$attempts ) {
+			if ( 'draft' === ( $postarr['post_status'] ?? '' ) && ++$attempts === 2 ) {
+				return true;
+			}
+			return $maybe_empty;
+		};
 		add_filter( 'wp_insert_post_empty_content', $fail, 10, 2 );
 		$response = $this->end_request( 't', 'a' );
 		remove_filter( 'wp_insert_post_empty_content', $fail, 10 );
@@ -511,6 +563,43 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 		}
 		$this->assertSame( 'active', $this->rows( 't' )[0]['status'] );
 		$this->assertSame( 200, $this->end_request( 't', 'a' )->get_status() );
+	}
+
+	/**
+	 * A reader request that lands mid-end, while the record exists, doesn't leave
+	 * the site believing no test is running once a failed end puts it back.
+	 */
+	public function test_a_failed_end_keeps_the_test_splitting_readers() {
+		$this->sign_in();
+		$this->create_running_test();
+		$fail = function () {
+			Newspack_Popups_AB_Tests::reset_config_cache();
+			Newspack_Popups_AB_Tests::get_tests_config();
+			return true;
+		};
+		add_filter( 'wp_insert_post_empty_content', $fail );
+		$this->end_request( 't', 'a' );
+		remove_filter( 'wp_insert_post_empty_content', $fail );
+
+		// Not reset_config_cache(), which would clear the flag this is about.
+		$this->assertNotSame( '0', get_option( Newspack_Popups_AB_Tests::OPTION_HAS_TESTS ) );
+		$this->assertArrayHasKey( 't', Newspack_Popups_AB_Tests::get_tests_config() );
+	}
+
+	/**
+	 * A title's backslash survives into the record.
+	 */
+	public function test_record_keeps_a_backslash_in_a_title() {
+		$this->sign_in();
+		$ids = $this->create_running_test();
+		wp_update_post(
+			[
+				'ID'         => $ids['b'],
+				'post_title' => wp_slash( 'Path C:\\Users' ),
+			]
+		);
+		$this->end_request( 't', 'a' );
+		$this->assertSame( 'Path C:\\Users', $this->rows( 't' )[0]['variants']['b']['title'] );
 	}
 
 	/**

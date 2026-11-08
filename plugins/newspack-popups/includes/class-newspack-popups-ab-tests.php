@@ -1073,6 +1073,26 @@ final class Newspack_Popups_AB_Tests {
 	}
 
 	/**
+	 * The claim on a test's earliest ended record, read from the database: the
+	 * object cache can hold a copy read before this request's insert.
+	 *
+	 * @param int $term_id Term ID.
+	 * @return string|null
+	 */
+	private static function get_first_ended_claim( $term_id ) {
+		global $wpdb;
+		$value  = $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->prepare(
+				"SELECT meta_value FROM {$wpdb->termmeta} WHERE term_id = %d AND meta_key = %s ORDER BY meta_id ASC LIMIT 1",
+				$term_id,
+				self::TERM_META_ENDED
+			)
+		);
+		$record = maybe_unserialize( $value );
+		return is_array( $record ) ? ( $record['claim'] ?? null ) : null;
+	}
+
+	/**
 	 * End a running test, keeping one version.
 	 *
 	 * The order matters, because nothing here is a transaction. The record goes
@@ -1084,10 +1104,11 @@ final class Newspack_Popups_AB_Tests {
 	 * so the test is still running and can be ended again. Only after every draft
 	 * do the prompts leave the test, so a fatal in between leaves a test that has
 	 * ended but still lists its prompts, never one that has silently lost its
-	 * record, and never a version still published without its test. Every prompt
-	 * carrying the ID leaves it, trashed ones too, so restoring one can't restart
-	 * the test. The term stays,
-	 * holding the ID against reuse and the record for the page.
+	 * record. A fatal partway through the drafts can still leave a version
+	 * published; it shows to every reader until it is drafted by hand. Every
+	 * prompt carrying the ID leaves it, trashed ones too, so restoring one can't
+	 * restart the test. The term stays, holding the ID against reuse and the
+	 * record for the page.
 	 *
 	 * The kept version's status is left as it is: ending a test never publishes
 	 * anything.
@@ -1142,13 +1163,17 @@ final class Newspack_Popups_AB_Tests {
 		];
 		// The claim tells this request's record from one written at the same moment.
 		$record['claim'] = wp_generate_uuid4();
-		if ( ! add_term_meta( $term->term_id, self::TERM_META_ENDED, $record, true ) ) {
+		// Slashed, because the meta functions unslash: a backslash in a title
+		// would otherwise be lost, and the deletes below must match what was stored.
+		$stored = wp_slash( $record );
+		if ( ! add_term_meta( $term->term_id, self::TERM_META_ENDED, $stored, true ) ) {
 			return self::already_ended_error();
 		}
-		wp_cache_delete( $term->term_id, 'term_meta' );
-		$records = get_term_meta( $term->term_id, self::TERM_META_ENDED, false );
-		if ( ( $records[0]['claim'] ?? null ) !== $record['claim'] ) {
-			delete_term_meta( $term->term_id, self::TERM_META_ENDED, $record );
+		if ( self::get_first_ended_claim( $term->term_id ) !== $record['claim'] ) {
+			delete_term_meta( $term->term_id, self::TERM_META_ENDED, $stored );
+			// A reader request may have seen this record and recorded that the
+			// site has no tests running.
+			self::invalidate_has_tests();
 			return self::already_ended_error();
 		}
 
@@ -1176,7 +1201,10 @@ final class Newspack_Popups_AB_Tests {
 						]
 					);
 				}
-				delete_term_meta( $term->term_id, self::TERM_META_ENDED, $record );
+				delete_term_meta( $term->term_id, self::TERM_META_ENDED, $stored );
+				// A reader request that saw the record may have recorded that the
+				// site has no tests running; the test is running again.
+				self::invalidate_has_tests();
 				return is_wp_error( $result ) ? $result : new WP_Error( 'newspack_popups_ab_end_failed', __( 'Could not end the test. Try again.', 'newspack-popups' ), [ 'status' => 500 ] );
 			}
 			$drafted[ $prompt_id ] = $status;

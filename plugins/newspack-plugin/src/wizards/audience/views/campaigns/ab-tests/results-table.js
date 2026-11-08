@@ -58,7 +58,7 @@ const ResultsTable = ( { test, status, stats, labels, kept = null } ) => {
 						<span className={ `newspack-ab-tests__swatch is-variant-${ item.letter }` } aria-hidden="true" />
 						{ item.letter.toUpperCase() }
 						{ /* The tint is faint and color-only; this says it to screen readers too. */ }
-						{ item.letter === kept && <VisuallyHidden>{ __( '(kept)', 'newspack-plugin' ) }</VisuallyHidden> }
+						{ item.letter === kept && <VisuallyHidden as="span">{ ` ${ __( '(kept)', 'newspack-plugin' ) }` }</VisuallyHidden> }
 					</span>
 				),
 			},
