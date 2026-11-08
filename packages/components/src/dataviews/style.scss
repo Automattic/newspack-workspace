@@ -4,6 +4,8 @@
 @import "@wordpress/dataviews/build-style/style.css";
 
 .newspack-dataviews {
+	--newspack-dataviews-stack-gap: calc((var(--wpds-dimension-size-md, #{wp-vars.$grid-unit-40}) - var(--wpds-typography-line-height-sm, #{wp-vars.$font-line-height-small})) / 2);
+
 	.newspack-wizard__content--full-width & {
 		margin-top: calc(-1 * var(--newspack-page-dataviews-offset, #{wp-vars.$grid-unit-20}));
 	}
@@ -13,8 +15,63 @@
 	padding-bottom: wp-vars.$grid-unit-30;
 }
 
+.newspack-dataviews .dataviews-view-table col.dataviews-view-table__col-first-data {
+	width: var(--newspack-dataviews-title-width, auto);
+}
+
+.newspack-dataviews .dataviews-view-table {
+	--newspack-dataviews-cell-padding: var(--wpds-dimension-padding-md, #{wp-vars.$grid-unit-15});
+	--newspack-dataviews-column-min-width: 30ch;
+
+	&.has-compact-density {
+		--newspack-dataviews-cell-padding: var(--wpds-dimension-padding-sm, #{wp-vars.$grid-unit-10});
+	}
+
+	tbody td:not(.dataviews-view-table__checkbox-column, .dataviews-view-table__actions-column) > .dataviews-view-table__cell-content-wrapper {
+		width: max-content;
+		max-width: max(calc(var(--newspack-dataviews-column-width, 100%) - 2 * var(--newspack-dataviews-cell-padding)), var(--newspack-dataviews-column-min-width));
+		white-space: normal;
+		overflow-wrap: anywhere;
+		text-wrap: pretty;
+
+		&.dataviews-view-table__cell-align-end {
+			margin-inline-start: auto;
+		}
+
+		&.dataviews-view-table__cell-align-center {
+			margin-inline: auto;
+		}
+
+		&:has(.newspack-status-indicator, .newspack-dataviews__date) {
+			max-width: none;
+		}
+	}
+
+	.dataviews-title-field {
+		&,
+		a,
+		button.components-button.is-link {
+			white-space: normal;
+		}
+	}
+
+	.dataviews-column-primary__media + .dataviews-view-table__primary-column-content > .dataviews-title-field:not(:last-child) {
+		min-height: 0;
+		margin-bottom: var(--newspack-dataviews-stack-gap);
+	}
+
+	tbody td > :has(> .dataviews-view-table__primary-column-content) {
+		min-width: max(calc(var(--newspack-dataviews-column-width, 0px) - 2 * var(--newspack-dataviews-cell-padding)), var(--newspack-dataviews-column-min-width));
+	}
+}
+
 .newspack-dataviews__view-config {
 	flex-shrink: 0;
+}
+
+.newspack-dataviews .newspack-dataviews__date,
+.newspack-dataviews .dataviews-view-table .newspack-status-indicator {
+	white-space: nowrap;
 }
 
 @container dataviews-wrapper (min-width: 431px) {
