@@ -18,7 +18,8 @@
 		font-size: wp-vars.$helptext-font-size;
 	}
 
-	&__intro {
+	&__intro,
+	&__picker-empty {
 		margin: 0;
 	}
 

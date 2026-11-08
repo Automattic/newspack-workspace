@@ -176,11 +176,13 @@ describe( 'StartTestModal', () => {
 			expect( screen.getByText( /manual or custom placements can’t be A\/B tested/ ) ).toBeInTheDocument();
 		} );
 
-		it( 'says why when no prompt can start a test, instead of an empty picker', () => {
+		it( 'only says why when no prompt can start a test', () => {
 			renderPicker( { prompts: [] } );
-			expect( screen.queryByLabelText( 'Prompt to test' ) ).not.toBeInTheDocument();
 			expect( screen.getByText( 'No published prompts are free to test yet.' ) ).toBeInTheDocument();
-			expect( screen.getByRole( 'button', { name: 'Create Version B' } ) ).toBeDisabled();
+			expect( screen.queryByLabelText( 'Prompt to test' ) ).not.toBeInTheDocument();
+			expect( screen.queryByLabelText( 'Test name' ) ).not.toBeInTheDocument();
+			expect( screen.queryByRole( 'button', { name: 'Create Version B' } ) ).not.toBeInTheDocument();
+			expect( screen.getByRole( 'button', { name: 'Cancel' } ) ).toBeInTheDocument();
 		} );
 	} );
 } );

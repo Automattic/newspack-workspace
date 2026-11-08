@@ -17,6 +17,7 @@ import { __ } from '@wordpress/i18n';
 import { Button, Notice, RangeControl, SelectControl, TextControl } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
 import { useState } from '@wordpress/element';
+import { useInstanceId } from '@wordpress/compose';
 import apiFetch from '@wordpress/api-fetch';
 import { decodeEntities } from '@wordpress/html-entities';
 
@@ -69,6 +70,9 @@ const StartTestModal = ( {
 	const [ isBusy, setIsBusy ] = useState( false );
 	const [ error, setError ] = useState( '' );
 
+	// Nothing to pick: the dialog only says why, since no field could be sent.
+	const isEmptyPicker = isPicker && ! prompts.length;
+	const emptyId = useInstanceId( StartTestModal, 'newspack-ab-tests-picker-empty' );
 	const versionA = isPicker ? Number( pickedId ) : promptId;
 	const canCreate = !! versionA && '' !== name.trim() && '' !== goal && ! isBusy;
 
@@ -105,10 +109,7 @@ const StartTestModal = ( {
 	};
 
 	const pickerHelp = hasIneligible
-		? `${ __( 'Published prompts that aren’t already in a test.', 'newspack-plugin' ) } ${ __(
-				'Prompts on manual or custom placements can’t be A/B tested.',
-				'newspack-plugin'
-		  ) }`
+		? __( 'Published prompts that aren’t already in a test. Prompts on manual or custom placements can’t be A/B tested.', 'newspack-plugin' )
 		: __( 'Published prompts that aren’t already in a test.', 'newspack-plugin' );
 
 	const goalOptions = [
@@ -117,7 +118,13 @@ const StartTestModal = ( {
 	];
 
 	return (
-		<Modal title={ __( 'Start A/B Test', 'newspack-plugin' ) } size="medium" focusOnMount="firstContentElement" onRequestClose={ onClose }>
+		<Modal
+			title={ __( 'Start A/B Test', 'newspack-plugin' ) }
+			size="medium"
+			focusOnMount="firstContentElement"
+			aria={ { describedby: isEmptyPicker ? emptyId : undefined } }
+			onRequestClose={ onClose }
+		>
 			<Stack direction="column" gap="xl">
 				<p className="newspack-ab-tests__intro">{ intro }</p>
 				{ error && (
@@ -125,17 +132,17 @@ const StartTestModal = ( {
 						{ error }
 					</Notice>
 				) }
-				{ isPicker && ! prompts.length && (
-					<p className="newspack-ab-tests__picker-empty">
+				{ isEmptyPicker && (
+					<p id={ emptyId } className="newspack-ab-tests__picker-empty">
 						{ hasIneligible
-							? `${ __( 'No published prompts are free to test yet.', 'newspack-plugin' ) } ${ __(
-									'Prompts on manual or custom placements can’t be A/B tested.',
+							? __(
+									'No published prompts are free to test yet. Prompts on manual or custom placements can’t be A/B tested.',
 									'newspack-plugin'
-							  ) }`
+							  )
 							: __( 'No published prompts are free to test yet.', 'newspack-plugin' ) }
 					</p>
 				) }
-				{ isPicker && !! prompts.length && (
+				{ isPicker && ! isEmptyPicker && (
 					<SelectControl
 						label={ __( 'Prompt to test', 'newspack-plugin' ) }
 						help={ pickerHelp }
@@ -153,72 +160,78 @@ const StartTestModal = ( {
 						__next40pxDefaultSize
 					/>
 				) }
-				<TextControl
-					label={ __( 'Test name', 'newspack-plugin' ) }
-					help={ __( 'Shown on the A/B Tests tab. Version B joins this test automatically.', 'newspack-plugin' ) }
-					value={ name }
-					onChange={ value => {
-						setIsNameEdited( true );
-						setName( value );
-					} }
-					disabled={ isBusy }
-					__nextHasNoMarginBottom
-					__next40pxDefaultSize
-				/>
-				<SelectControl
-					label={ __( 'Goal', 'newspack-plugin' ) }
-					help={
-						suggestion && suggestion === goal && GOAL_SUGGESTION_HELP[ goal ]
-							? GOAL_SUGGESTION_HELP[ goal ]
-							: __( 'What a reader does that counts as a success.', 'newspack-plugin' )
-					}
-					value={ goal }
-					options={ goalOptions }
-					onChange={ value => {
-						setIsGoalEdited( true );
-						setGoal( value );
-					} }
-					disabled={ isBusy }
-					__nextHasNoMarginBottom
-					__next40pxDefaultSize
-				/>
-				<RangeControl
-					label={ __( 'Readers who see A', 'newspack-plugin' ) }
-					value={ controlShare }
-					min={ MIN_SHARE }
-					max={ MAX_SHARE }
-					step={ 1 }
-					onChange={ value => setControlShare( value ?? controlShare ) }
-					disabled={ isBusy }
-					__nextHasNoMarginBottom
-					__next40pxDefaultSize
-				/>
-				<RangeControl
-					label={ __( 'Readers who see B', 'newspack-plugin' ) }
-					value={ 100 - controlShare }
-					min={ MIN_SHARE }
-					max={ MAX_SHARE }
-					step={ 1 }
-					onChange={ value => setControlShare( 100 - ( value ?? 100 - controlShare ) ) }
-					disabled={ isBusy }
-					help={ splitSummary( controlShare ) }
-					__nextHasNoMarginBottom
-					__next40pxDefaultSize
-				/>
+				{ ! isEmptyPicker && (
+					<>
+						<TextControl
+							label={ __( 'Test name', 'newspack-plugin' ) }
+							help={ __( 'Shown on the A/B Tests tab. Version B joins this test automatically.', 'newspack-plugin' ) }
+							value={ name }
+							onChange={ value => {
+								setIsNameEdited( true );
+								setName( value );
+							} }
+							disabled={ isBusy }
+							__nextHasNoMarginBottom
+							__next40pxDefaultSize
+						/>
+						<SelectControl
+							label={ __( 'Goal', 'newspack-plugin' ) }
+							help={
+								suggestion && suggestion === goal && GOAL_SUGGESTION_HELP[ goal ]
+									? GOAL_SUGGESTION_HELP[ goal ]
+									: __( 'What a reader does that counts as a success.', 'newspack-plugin' )
+							}
+							value={ goal }
+							options={ goalOptions }
+							onChange={ value => {
+								setIsGoalEdited( true );
+								setGoal( value );
+							} }
+							disabled={ isBusy }
+							__nextHasNoMarginBottom
+							__next40pxDefaultSize
+						/>
+						<RangeControl
+							label={ __( 'Readers who see A', 'newspack-plugin' ) }
+							value={ controlShare }
+							min={ MIN_SHARE }
+							max={ MAX_SHARE }
+							step={ 1 }
+							onChange={ value => setControlShare( value ?? controlShare ) }
+							disabled={ isBusy }
+							__nextHasNoMarginBottom
+							__next40pxDefaultSize
+						/>
+						<RangeControl
+							label={ __( 'Readers who see B', 'newspack-plugin' ) }
+							value={ 100 - controlShare }
+							min={ MIN_SHARE }
+							max={ MAX_SHARE }
+							step={ 1 }
+							onChange={ value => setControlShare( 100 - ( value ?? 100 - controlShare ) ) }
+							disabled={ isBusy }
+							help={ splitSummary( controlShare ) }
+							__nextHasNoMarginBottom
+							__next40pxDefaultSize
+						/>
+					</>
+				) }
 				<Stack justify="flex-end" align="center" gap="lg">
 					<Button variant="secondary" onClick={ onClose } disabled={ isBusy } __next40pxDefaultSize>
 						{ __( 'Cancel', 'newspack-plugin' ) }
 					</Button>
-					<Button
-						variant="primary"
-						onClick={ create }
-						disabled={ ! canCreate }
-						isBusy={ isBusy }
-						accessibleWhenDisabled
-						__next40pxDefaultSize
-					>
-						{ __( 'Create Version B', 'newspack-plugin' ) }
-					</Button>
+					{ ! isEmptyPicker && (
+						<Button
+							variant="primary"
+							onClick={ create }
+							disabled={ ! canCreate }
+							isBusy={ isBusy }
+							accessibleWhenDisabled
+							__next40pxDefaultSize
+						>
+							{ __( 'Create Version B', 'newspack-plugin' ) }
+						</Button>
+					) }
 				</Stack>
 			</Stack>
 		</Modal>
