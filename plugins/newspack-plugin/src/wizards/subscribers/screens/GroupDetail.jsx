@@ -275,7 +275,7 @@ function GroupDetailView() {
 				label: __( 'Member since', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.joinedAt || '',
 				// The owner holds no membership record, so they have no join date.
-				render: ( { item } ) => <span>{ item.joinedAt ? fmtDate( item.joinedAt ) : '—' }</span>,
+				render: ( { item } ) => <span className="newspack-dataviews__date">{ item.joinedAt ? fmtDate( item.joinedAt ) : '—' }</span>,
 				enableSorting: true,
 			},
 		],
@@ -355,7 +355,7 @@ function GroupDetailView() {
 				id: 'sentAt',
 				label: __( 'Sent', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.sentAt || '',
-				render: ( { item } ) => <span>{ item.sentAt ? fmtDate( item.sentAt ) : '—' }</span>,
+				render: ( { item } ) => <span className="newspack-dataviews__date">{ item.sentAt ? fmtDate( item.sentAt ) : '—' }</span>,
 				enableSorting: true,
 			},
 		],
