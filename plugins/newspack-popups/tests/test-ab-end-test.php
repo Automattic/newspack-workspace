@@ -318,9 +318,9 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * Ending twice keeps the first record and still answers with it.
+	 * Ending a test that has already ended is refused, and the first record stays.
 	 */
-	public function test_ending_twice_keeps_the_first_record() {
+	public function test_ending_an_ended_test_is_refused() {
 		$this->sign_in();
 		$this->create_running_test();
 		$first  = $this->end_request( 't', 'b' )->get_data();
@@ -355,43 +355,202 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * Final results are taken at the end, for the test's own dates, and never
-	 * fetched again.
+	 * Move an ended test's end back in time.
+	 *
+	 * @param string $test_id  Test ID.
+	 * @param string $ended_at When it ended.
 	 */
-	public function test_final_results_are_frozen_at_the_end() {
-		$this->sign_in();
-		$this->create_running_test();
-		$stub = $this->use_provider( $this->counts( 1000, 19, 1000, 27 ) );
-		$this->end_request( 't', 'b' );
-		$this->assertCount( 1, $stub->calls );
-		$this->assertSame( '2026-10-01', $stub->calls[0]['start'] );
-		$this->assertSame( gmdate( 'Y-m-d' ), $stub->calls[0]['end'] );
-
-		$later = $this->use_provider( $this->counts( 5000, 10, 5000, 10 ) );
-		$stats = $this->stats_request( 't' )->get_data();
-		$this->assertCount( 0, $later->calls );
-		$this->assertSame( 27, $stats['variants']['b']['conversions'] );
-		$this->assertSame( 'ok', $stats['source']['state'] );
-		$this->assertSame( gmdate( 'Y-m-d' ), $stats['window']['end'] );
+	private function backdate_end( $test_id, $ended_at ) {
+		$term               = get_term_by( 'slug', $test_id, Newspack_Popups_AB_Tests::TAXONOMY );
+		$record             = get_term_meta( $term->term_id, Newspack_Popups_AB_Tests::TERM_META_ENDED, true );
+		$record['ended_at'] = $ended_at;
+		update_term_meta( $term->term_id, Newspack_Popups_AB_Tests::TERM_META_ENDED, $record );
 	}
 
 	/**
-	 * With the stats source down at the end, the test still ends, the card
-	 * says the source is unavailable, and the first answer later is frozen.
+	 * Results aren't final until the end date has settled: until then each read
+	 * asks the source again, for the test's own dates.
 	 */
-	public function test_results_unavailable_at_the_end_are_frozen_on_the_first_answer() {
+	public function test_results_are_not_final_until_the_end_has_settled() {
+		$this->sign_in();
+		$this->create_running_test();
+		$this->end_request( 't', 'b' );
+
+		$stub  = $this->use_provider( $this->counts( 1000, 19, 1000, 27 ) );
+		$stats = $this->stats_request( 't' )->get_data();
+		$this->assertSame( 27, $stats['variants']['b']['conversions'] );
+		$this->assertFalse( $stats['source']['final'] );
+		$this->assertSame( '2026-10-01', $stub->calls[0]['start'] );
+		$this->assertSame( gmdate( 'Y-m-d' ), $stub->calls[0]['end'] );
+
+		$later = $this->use_provider( $this->counts( 1000, 19, 1000, 30 ) );
+		$this->assertSame( 30, $this->stats_request( 't' )->get_data()['variants']['b']['conversions'] );
+		$this->assertCount( 1, $later->calls );
+	}
+
+	/**
+	 * Once the end date has settled, the first answer is frozen and the source
+	 * isn't asked again.
+	 */
+	public function test_settled_results_are_frozen() {
+		$this->sign_in();
+		$this->create_running_test();
+		$this->end_request( 't', 'b' );
+		$this->backdate_end( 't', gmdate( 'Y-m-d\TH:i:s\Z', time() - 3 * DAY_IN_SECONDS ) );
+
+		$this->use_provider( $this->counts( 1000, 19, 1000, 27 ) );
+		$this->assertTrue( $this->stats_request( 't' )->get_data()['source']['final'] );
+
+		$after = $this->use_provider( $this->counts( 5000, 10, 5000, 10 ) );
+		$stats = $this->stats_request( 't' )->get_data();
+		$this->assertCount( 0, $after->calls );
+		$this->assertSame( 27, $stats['variants']['b']['conversions'] );
+		$this->assertSame( 'ok', $stats['source']['state'] );
+		$this->assertTrue( $stats['source']['final'] );
+	}
+
+	/**
+	 * An answer with no data yet is never frozen, even once settled.
+	 */
+	public function test_an_empty_answer_is_not_frozen() {
+		$this->sign_in();
+		$this->create_running_test();
+		$this->end_request( 't', 'b' );
+		$this->backdate_end( 't', gmdate( 'Y-m-d\TH:i:s\Z', time() - 3 * DAY_IN_SECONDS ) );
+
+		$this->use_provider(
+			[
+				'unit'     => 'readers',
+				'variants' => [],
+			]
+		);
+		$this->assertFalse( $this->stats_request( 't' )->get_data()['source']['final'] );
+
+		$this->use_provider( $this->counts( 1000, 19, 1000, 27 ) );
+		$this->assertTrue( $this->stats_request( 't' )->get_data()['source']['final'] );
+	}
+
+	/**
+	 * With the stats source down, the card says it is unavailable, and the first
+	 * answer after the end has settled is frozen.
+	 */
+	public function test_results_unavailable_are_frozen_on_the_first_settled_answer() {
 		$this->sign_in();
 		$this->create_running_test();
 		$this->use_provider( null, new WP_Error( 'down', 'Not connected.' ) );
 		$this->assertSame( 200, $this->end_request( 't', 'b' )->get_status() );
 		$this->assertSame( 'unavailable', $this->stats_request( 't' )->get_data()['source']['state'] );
 
+		$this->backdate_end( 't', gmdate( 'Y-m-d\TH:i:s\Z', time() - 3 * DAY_IN_SECONDS ) );
 		$this->use_provider( $this->counts( 1000, 19, 1000, 27 ) );
 		$this->assertSame( 27, $this->stats_request( 't' )->get_data()['variants']['b']['conversions'] );
 
 		$after = $this->use_provider( $this->counts( 5000, 10, 5000, 10 ) );
 		$this->assertSame( 27, $this->stats_request( 't' )->get_data()['variants']['b']['conversions'] );
 		$this->assertCount( 0, $after->calls );
+	}
+
+	/**
+	 * Two ends at once, each passing core's unique check before the other's
+	 * insert: only the first record stands, and the later request drafts nothing.
+	 */
+	public function test_simultaneous_ends_let_only_the_first_through() {
+		global $wpdb;
+		$this->sign_in();
+		$ids = $this->create_running_test();
+		// The other request's insert lands after this one's check and before its own.
+		$rival = function ( $term_id, $meta_key ) use ( $wpdb ) {
+			if ( Newspack_Popups_AB_Tests::TERM_META_ENDED !== $meta_key ) {
+				return;
+			}
+			$wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$wpdb->termmeta,
+				[
+					'term_id'    => $term_id,
+					'meta_key'   => $meta_key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+					'meta_value' => maybe_serialize( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+						[
+							'ended_at' => gmdate( 'Y-m-d\TH:i:s\Z' ),
+							'kept'     => 'a',
+							'versions' => [],
+							'claim'    => 'rival',
+						]
+					),
+				]
+			);
+		};
+		add_action( 'add_term_meta', $rival, 10, 2 );
+		$response = $this->end_request( 't', 'b' );
+		remove_action( 'add_term_meta', $rival, 10 );
+
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'publish', get_post_status( $ids['a'] ) );
+		$term = get_term_by( 'slug', 't', Newspack_Popups_AB_Tests::TAXONOMY );
+		wp_cache_delete( $term->term_id, 'term_meta' );
+		$records = get_term_meta( $term->term_id, Newspack_Popups_AB_Tests::TERM_META_ENDED, false );
+		$this->assertCount( 1, $records );
+		$this->assertSame( 'rival', $records[0]['claim'] );
+	}
+
+	/**
+	 * A draft that fails puts back what was drafted and leaves the test running,
+	 * so it can be ended again.
+	 */
+	public function test_a_failed_draft_leaves_the_test_running() {
+		$this->sign_in();
+		$ids  = $this->create_running_test( 't', [ 'a', 'b', 'c' ] );
+		$fail = fn( $maybe_empty, $postarr ) => ( (int) ( $postarr['ID'] ?? 0 ) === $ids['c'] ) ? true : $maybe_empty;
+		add_filter( 'wp_insert_post_empty_content', $fail, 10, 2 );
+		$response = $this->end_request( 't', 'a' );
+		remove_filter( 'wp_insert_post_empty_content', $fail, 10 );
+
+		$this->assertGreaterThanOrEqual( 400, $response->get_status() );
+		foreach ( $ids as $id ) {
+			$this->assertSame( 'publish', get_post_status( $id ) );
+			$this->assertSame( 't', get_post_meta( $id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+		}
+		$this->assertSame( 'active', $this->rows( 't' )[0]['status'] );
+		$this->assertSame( 200, $this->end_request( 't', 'a' )->get_status() );
+	}
+
+	/**
+	 * Giving a prompt of one's own an ended test's ID doesn't let an author
+	 * rename that test.
+	 */
+	public function test_joining_an_ended_test_does_not_grant_rename() {
+		$this->sign_in();
+		$this->create_running_test();
+		$this->end_request( 't', 'b' );
+		$author_id = self::factory()->user->create( [ 'role' => 'author' ] );
+		$this->create_test_variant( 't', 'a', [ 'post_author' => $author_id ] );
+		wp_set_current_user( $author_id );
+		$request = new WP_REST_Request( 'POST', '/newspack-popups/v1/ab-tests/t/name' );
+		$request->set_param( 'name', 'Mine now' );
+		$this->assertSame( 403, rest_do_request( $request )->get_status() );
+	}
+
+	/**
+	 * Prompts given an ended test's ID again don't split readers.
+	 */
+	public function test_ended_test_is_left_out_of_the_reader_config() {
+		$this->sign_in();
+		$ids = $this->create_running_test();
+		$this->end_request( 't', 'b' );
+		foreach ( $ids as $letter => $id ) {
+			wp_update_post(
+				[
+					'ID'          => $id,
+					'post_status' => 'publish',
+				]
+			);
+			update_post_meta( $id, Newspack_Popups_AB_Tests::META_TEST_ID, 't' );
+			update_post_meta( $id, Newspack_Popups_AB_Tests::META_VARIANT, $letter );
+		}
+		$this->create_running_test( 'u' );
+		Newspack_Popups_AB_Tests::reset_config_cache();
+		$config = Newspack_Popups_AB_Tests::get_tests_config();
+		$this->assertArrayNotHasKey( 't', $config );
+		$this->assertArrayHasKey( 'u', $config );
 	}
 
 	/**
@@ -417,10 +576,7 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 		$this->use_provider( null, new WP_Error( 'down', 'Not connected.' ) );
 		$this->end_request( 't', 'b' );
 		// The test ended on an earlier day than this read.
-		$term               = get_term_by( 'slug', 't', Newspack_Popups_AB_Tests::TAXONOMY );
-		$record             = get_term_meta( $term->term_id, Newspack_Popups_AB_Tests::TERM_META_ENDED, true );
-		$record['ended_at'] = '2026-10-20T12:00:00Z';
-		update_term_meta( $term->term_id, Newspack_Popups_AB_Tests::TERM_META_ENDED, $record );
+		$this->backdate_end( 't', '2026-10-20T12:00:00Z' );
 
 		$stub  = $this->use_provider( $this->counts( 10, 1, 10, 1 ) );
 		$stats = $this->stats_request( 't' )->get_data();

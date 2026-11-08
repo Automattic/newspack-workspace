@@ -647,7 +647,8 @@ final class Newspack_Popups_AB_Tests {
 		}
 
 		// An ended test's prompts no longer carry its ID, so it is listed from its
-		// record. A prompt given the ID again by hand doesn't revive it.
+		// record. A prompt given the ID again by hand doesn't revive it, here or for
+		// readers: get_tests_config() leaves ended IDs out too.
 		$ended     = self::get_ended_tests( $labels );
 		$ended_ids = array_column( $ended, 'test_id' );
 		$tests     = array_filter( $tests, fn( $test ) => ! in_array( $test['test_id'], $ended_ids, true ) );
@@ -1022,27 +1023,25 @@ final class Newspack_Popups_AB_Tests {
 	}
 
 	/**
-	 * The prompts a test is made of: those carrying its ID, or for an ended test,
-	 * whose prompts no longer carry it, the versions its record names.
+	 * The prompts a test is made of: those carrying its ID and, for an ended test,
+	 * the versions its record names. Both, because anyone who can edit a prompt
+	 * can give it an ended test's ID, and that alone mustn't make the test theirs.
 	 *
 	 * @param string $test_id Test ID.
 	 * @return int[]
 	 */
 	private static function get_member_prompt_ids( $test_id ) {
 		$prompt_ids = self::get_test_prompt_ids( $test_id );
-		if ( $prompt_ids ) {
-			return $prompt_ids;
+		$record     = '' === $test_id ? null : self::get_ended_record( $test_id );
+		if ( $record ) {
+			foreach ( $record['versions'] as $version ) {
+				$prompt_id = (int) ( $version['id'] ?? 0 );
+				if ( $prompt_id > 0 && get_post( $prompt_id ) ) {
+					$prompt_ids[] = $prompt_id;
+				}
+			}
 		}
-		$record = '' === $test_id ? null : self::get_ended_record( $test_id );
-		if ( ! $record ) {
-			return [];
-		}
-		return array_values(
-			array_filter(
-				array_map( fn( $version ) => (int) ( $version['id'] ?? 0 ), $record['versions'] ),
-				fn( $prompt_id ) => $prompt_id > 0 && get_post( $prompt_id )
-			)
-		);
+		return array_values( array_unique( $prompt_ids ) );
 	}
 
 	/**
@@ -1077,12 +1076,17 @@ final class Newspack_Popups_AB_Tests {
 	 * End a running test, keeping one version.
 	 *
 	 * The order matters, because nothing here is a transaction. The record goes
-	 * first, and only one request can write it, so two ends at once can't both
-	 * win. Then every other prompt in the test goes to draft, which stops the
-	 * split, and only then do the prompts leave the test, so a failure in between
-	 * leaves a test that has ended but still lists its prompts, never one that
-	 * has silently lost its record. Every prompt carrying the ID leaves it,
-	 * trashed ones too, so restoring one can't restart the test. The term stays,
+	 * first. Core's unique write is a read before the insert, not a lock, so two
+	 * ends at once can both insert one; each request then reads the records back
+	 * and only the earliest goes on, before either has drafted anything. Then
+	 * every other prompt in the test goes to draft, which stops the split; a
+	 * draft that fails puts back the ones already drafted and removes the record,
+	 * so the test is still running and can be ended again. Only after every draft
+	 * do the prompts leave the test, so a fatal in between leaves a test that has
+	 * ended but still lists its prompts, never one that has silently lost its
+	 * record, and never a version still published without its test. Every prompt
+	 * carrying the ID leaves it, trashed ones too, so restoring one can't restart
+	 * the test. The term stays,
 	 * holding the ID against reuse and the record for the page.
 	 *
 	 * The kept version's status is left as it is: ending a test never publishes
@@ -1136,21 +1140,46 @@ final class Newspack_Popups_AB_Tests {
 				$test['variants']
 			),
 		];
+		// The claim tells this request's record from one written at the same moment.
+		$record['claim'] = wp_generate_uuid4();
 		if ( ! add_term_meta( $term->term_id, self::TERM_META_ENDED, $record, true ) ) {
+			return self::already_ended_error();
+		}
+		wp_cache_delete( $term->term_id, 'term_meta' );
+		$records = get_term_meta( $term->term_id, self::TERM_META_ENDED, false );
+		if ( ( $records[0]['claim'] ?? null ) !== $record['claim'] ) {
+			delete_term_meta( $term->term_id, self::TERM_META_ENDED, $record );
 			return self::already_ended_error();
 		}
 
 		$kept_id    = (int) $test['variants'][ $keep ]['id'];
 		$prompt_ids = self::get_test_prompt_ids( $test_id );
+		$drafted    = [];
 		foreach ( $prompt_ids as $prompt_id ) {
-			if ( $kept_id !== $prompt_id && ! in_array( get_post_status( $prompt_id ), [ 'draft', 'trash' ], true ) ) {
-				wp_update_post(
-					[
-						'ID'          => $prompt_id,
-						'post_status' => 'draft',
-					]
-				);
+			$status = get_post_status( $prompt_id );
+			if ( $kept_id === $prompt_id || in_array( $status, [ 'draft', 'trash' ], true ) ) {
+				continue;
 			}
+			$result = wp_update_post(
+				[
+					'ID'          => $prompt_id,
+					'post_status' => 'draft',
+				],
+				true
+			);
+			if ( is_wp_error( $result ) || ! $result ) {
+				foreach ( $drafted as $drafted_id => $drafted_status ) {
+					wp_update_post(
+						[
+							'ID'          => $drafted_id,
+							'post_status' => $drafted_status,
+						]
+					);
+				}
+				delete_term_meta( $term->term_id, self::TERM_META_ENDED, $record );
+				return is_wp_error( $result ) ? $result : new WP_Error( 'newspack_popups_ab_end_failed', __( 'Could not end the test. Try again.', 'newspack-popups' ), [ 'status' => 500 ] );
+			}
+			$drafted[ $prompt_id ] = $status;
 		}
 		foreach ( $prompt_ids as $prompt_id ) {
 			foreach ( self::META_KEYS as $meta_key ) {
@@ -1158,13 +1187,6 @@ final class Newspack_Popups_AB_Tests {
 			}
 		}
 		self::invalidate_has_tests();
-
-		// Take the final results now, while the stats source has them for these
-		// dates. If it can't answer, the first stats read that gets an answer
-		// takes them instead.
-		if ( class_exists( 'Newspack_Popups_AB_Dashboard' ) ) {
-			Newspack_Popups_AB_Dashboard::get_stats( $test_id, true );
-		}
 
 		foreach ( self::get_tests() as $row ) {
 			if ( $test_id === $row['test_id'] ) {
@@ -1236,8 +1258,22 @@ final class Newspack_Popups_AB_Tests {
 				'meta_key'   => self::TERM_META_ENDED, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
 			]
 		);
+		$terms = is_array( $terms ) ? $terms : [];
+		// Ended tests are kept for good, so load every version's post and meta in
+		// one go rather than a few queries per version on each list.
+		$version_ids = [];
+		foreach ( $terms as $term ) {
+			$record = get_term_meta( $term->term_id, self::TERM_META_ENDED, true );
+			foreach ( is_array( $record['versions'] ?? null ) ? $record['versions'] : [] as $version ) {
+				$version_ids[] = (int) ( $version['id'] ?? 0 );
+			}
+		}
+		$version_ids = array_filter( array_unique( $version_ids ) );
+		if ( $version_ids ) {
+			_prime_post_caches( $version_ids, false, true );
+		}
 		$tests = [];
-		foreach ( is_array( $terms ) ? $terms : [] as $term ) {
+		foreach ( $terms as $term ) {
 			$record = get_term_meta( $term->term_id, self::TERM_META_ENDED, true );
 			if ( ! is_array( $record ) || empty( $record['ended_at'] ) || ! is_array( $record['versions'] ?? null ) ) {
 				continue;
@@ -1784,6 +1820,23 @@ final class Newspack_Popups_AB_Tests {
 				return in_array( 'a', $test['variants'], true ) && count( $test['variants'] ) >= 2;
 			}
 		);
+
+		// An ended test stays ended: prompts given its ID again by hand read as
+		// untested, as the A/B tab lists them, instead of splitting readers.
+		if ( ! empty( $config ) ) {
+			$ended = get_terms(
+				[
+					'taxonomy'   => self::TAXONOMY,
+					'hide_empty' => false,
+					'slug'       => array_map( 'strval', array_keys( $config ) ),
+					'fields'     => 'slugs',
+					'meta_key'   => self::TERM_META_ENDED, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				]
+			);
+			foreach ( is_array( $ended ) ? $ended : [] as $slug ) {
+				unset( $config[ $slug ] );
+			}
+		}
 
 		// Normalize variant order for stable client-side range math.
 		foreach ( $config as $test_id => $test ) {

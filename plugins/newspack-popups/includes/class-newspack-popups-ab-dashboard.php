@@ -134,6 +134,12 @@ final class Newspack_Popups_AB_Dashboard {
 	const YOUNG_TEST_DAYS = 14;
 
 	/**
+	 * How long after a test ends before its results are final. GA4 can take up
+	 * to two days to finish processing a day's events.
+	 */
+	const SETTLE_SECONDS = 2 * DAY_IN_SECONDS;
+
+	/**
 	 * Share of logged-out readers at which per-browser assignment is flagged.
 	 */
 	const HIGH_ANONYMOUS_SHARE = 0.8;
@@ -191,6 +197,8 @@ final class Newspack_Popups_AB_Dashboard {
 			'fetched_at' => null,
 			'cached'     => false,
 			'unit'       => 'readers',
+			// Whether these are an ended test's final results.
+			'final'      => false,
 		];
 		$counts    = [];
 		$ended     = 'ended' === ( $test['status'] ?? '' );
@@ -204,6 +212,7 @@ final class Newspack_Popups_AB_Dashboard {
 			$source['reason']     = null;
 			$source['fetched_at'] = $final['fetched_at'];
 			$source['cached']     = true;
+			$source['final']      = true;
 			$source['unit']       = in_array( $counts['unit'] ?? '', [ 'readers', 'events' ], true ) ? $counts['unit'] : 'readers';
 		} elseif ( is_wp_error( $available ) ) {
 			$source['state']  = 'unavailable';
@@ -216,8 +225,12 @@ final class Newspack_Popups_AB_Dashboard {
 				$source['state']  = 'unavailable';
 				$source['reason'] = $result->get_error_message();
 			} else {
-				if ( $ended ) {
+				// Stats sources keep counting a day's readers for a day or two after
+				// it, so results are only final once the end date has settled, and
+				// "no data yet" is never final.
+				if ( $ended && self::has_settled( $test ) && ! empty( $result['counts']['variants'] ) ) {
 					Newspack_Popups_AB_Tests::store_final_counts( $test['test_id'], $result['counts'], $result['fetched_at'] );
+					$source['final'] = true;
 				}
 				$counts               = $result['counts'];
 				$source['fetched_at'] = $result['fetched_at'];
@@ -282,6 +295,17 @@ final class Newspack_Popups_AB_Dashboard {
 		} catch ( \Throwable $e ) {
 			return null;
 		}
+	}
+
+	/**
+	 * Whether an ended test's results can be taken as final: its end date is far
+	 * enough behind that the stats source has finished counting it.
+	 *
+	 * @param array $test One entry of Newspack_Popups_AB_Tests::get_tests().
+	 * @return bool
+	 */
+	public static function has_settled( $test ) {
+		return ! empty( $test['ended_at'] ) && strtotime( $test['ended_at'] ) + self::SETTLE_SECONDS <= time();
 	}
 
 	/**
