@@ -91,9 +91,11 @@ const TestCard = ( { test, data, onRenamed, isTarget = false } ) => {
 	}, [ focusHeading ] );
 
 	// Opened from "View A/B Test" in a prompt's menu: bring this card into view.
+	// Centered, because the page header is sticky from 782px up and would cover
+	// a heading scrolled to the top.
 	useEffect( () => {
 		if ( isTarget ) {
-			headingRef.current?.scrollIntoView?.( { block: 'start' } );
+			headingRef.current?.scrollIntoView?.( { block: 'center' } );
 			headingRef.current?.focus( { preventScroll: true } );
 		}
 	}, [ isTarget ] );

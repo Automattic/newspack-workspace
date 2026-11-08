@@ -139,6 +139,8 @@ describe( 'A/B Tests tab', () => {
 		const heading = await within( await screen.findByRole( 'region', { name: 'Test two' } ) ).findByRole( 'heading', { name: 'Test two' } );
 		await waitFor( () => expect( heading ).toHaveFocus() );
 		expect( scrollIntoView ).toHaveBeenCalledTimes( 1 );
+		// Centered, so the sticky page header doesn't cover it.
+		expect( scrollIntoView ).toHaveBeenCalledWith( { block: 'center' } );
 	} );
 
 	it( 'says why results are missing when no provider is connected', async () => {
