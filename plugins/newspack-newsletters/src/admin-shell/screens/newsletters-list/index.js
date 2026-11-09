@@ -32,7 +32,7 @@ const DEFAULT_VIEW = {
 	search: '',
 	filters: [],
 	titleField: 'title',
-	fields: [ 'author', 'status', 'date', 'send_list', 'public_page' ],
+	fields: [ 'status', 'date', 'author', 'send_list', 'public_page' ],
 };
 
 const DEFAULT_LAYOUTS = { table: {} };
