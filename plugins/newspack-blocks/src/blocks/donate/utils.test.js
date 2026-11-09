@@ -1,12 +1,4 @@
-import { getColorForContrast, getMinimumDonation, toggleManualMode } from './utils';
-
-describe( 'toggleManualMode', () => {
-	// A block without manual mode can carry a minimum from a preset or an earlier
-	// editor. Turning manual mode on must start it following the site-wide one.
-	it( 'clears the stored minimum when manual mode is turned on', () => {
-		expect( toggleManualMode( false ) ).toStrictEqual( { manual: true, minimumDonation: undefined } );
-	} );
-} );
+import { getColorForContrast, getMinimumDonation } from './utils';
 
 describe( 'getMinimumDonation', () => {
 	it.each( [

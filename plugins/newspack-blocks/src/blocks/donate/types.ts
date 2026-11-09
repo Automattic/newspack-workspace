@@ -87,7 +87,7 @@ export type ComponentProps = {
 	setSettings: ( settings: Partial< EditState > ) => void;
 	amounts: DonationAmounts;
 	availableFrequencies: typeof FREQUENCY_SLUGS;
-	// The minimum the front end enforces for this block: its own when manual, else the site-wide one.
+	// The minimum the front end uses: a manual block's own minimum, or the site-wide one when it has none.
 	minimumDonation: number;
 };
 
