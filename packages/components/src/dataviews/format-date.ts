@@ -19,6 +19,9 @@ function formatWith( format: string, value: SiteDateValue ): string {
 		return Number.isFinite( value ) ? dateI18n( format, value * 1000 ) : '';
 	}
 	const trimmed = value.trim();
+	if ( trimmed === '0' ) {
+		return '';
+	}
 	// A bare date names a calendar day, not an instant: anchored at UTC midnight
 	// and formatted in UTC, it shows the same day in every browser and site zone.
 	if ( BARE_DATE.test( trimmed ) ) {

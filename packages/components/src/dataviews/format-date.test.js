@@ -67,7 +67,7 @@ describe( 'site date formatting', () => {
 		} );
 	} );
 
-	it.each( [ null, undefined, '', 0, 'not a date', new Date( NaN ) ] )( 'returns an empty string for %p', value => {
+	it.each( [ null, undefined, '', 0, '0', 'not a date', new Date( NaN ) ] )( 'returns an empty string for %p', value => {
 		expect( formatSiteDate( value ) ).toBe( '' );
 		expect( formatSiteDateTime( value ) ).toBe( '' );
 		expect( formatSiteTime( value ) ).toBe( '' );
