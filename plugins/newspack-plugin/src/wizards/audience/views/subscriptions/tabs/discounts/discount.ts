@@ -18,6 +18,7 @@ import { decodeEntities } from '@wordpress/html-entities';
 /**
  * Internal dependencies.
  */
+import { worthCollapsing } from '../../../../../../../packages/components/src/cell-list/collapse';
 import { MAX_NAMED_ITEMS } from '../../constants';
 import type { DiscountCurrency, DiscountRule } from './types';
 
@@ -146,7 +147,7 @@ export function subscriptionsSummary( ids: number[], options: { id: number; name
 			hidden: [],
 		};
 	}
-	const shown = names.slice( 0, MAX_NAMED_ITEMS );
+	const shown = names.slice( 0, worthCollapsing( ids.length - MAX_NAMED_ITEMS ) ? MAX_NAMED_ITEMS : names.length );
 	const remaining = ids.length - shown.length;
 	return {
 		shown,
@@ -161,6 +162,9 @@ export function subscriptionsSummary( ids: number[], options: { id: number; name
 	};
 }
 
+/** The label for a rule that covers every product. */
+export const allProductsLabel = (): string => __( 'All products', 'newspack-plugin' );
+
 type TargetingFieldsOnly = Pick< DiscountRule, 'targeting' | 'product_ids' | 'category_ids' | 'excluded_product_ids' >;
 
 /**
@@ -170,7 +174,7 @@ type TargetingFieldsOnly = Pick< DiscountRule, 'targeting' | 'product_ids' | 'ca
  */
 export function targetingBaseLabel( rule: TargetingFieldsOnly ): string {
 	if ( 'all' === rule.targeting ) {
-		return __( 'All products', 'newspack-plugin' );
+		return allProductsLabel();
 	}
 	if ( 'category' === rule.targeting ) {
 		const count = rule.category_ids.length;

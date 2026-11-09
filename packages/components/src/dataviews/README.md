@@ -6,6 +6,14 @@
 import { DataViews } from 'newspack-components';
 ```
 
+Column widths are shares of the table. When the list has row actions, `ACTIONS_COLUMN_SHARE` of the width is held back for the actions column, so the shares do not add up to more than the table and push the last column under it.
+
+## Lists of names in a cell
+
+- **Title cell:** the first two names, then a muted "+N more <noun>" with a tooltip listing the rest.
+- **Every other cell:** a [`CellList`](../cell-list/README.md): two names, then "Show N more" / "Show less". A single leftover name shows inline, so no toggle ever reads "Show 1 more".
+- Exclusions go under the list as a muted "N excluded" line whose tooltip lists the excluded names.
+
 ## Where a list sits
 
 - **Full-width page:** render `DataViews` directly. The list runs edge to edge with the page gutter.

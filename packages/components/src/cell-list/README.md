@@ -6,7 +6,7 @@ A list of items inside a table cell, one per line: the first two, then "Show N m
 import { CellList } from 'newspack-components';
 ```
 
-Use it for any cell that holds several named things, such as plans, gates or rules. Show each item as plain text, or as a link when it has its own screen. Don't put the items in badges: a badge marks a state, such as Active or Failed (see the [StatusIndicator README](../status-indicator/README.md)).
+Use it for every cell that lists several names, except the title column. A title cell leads with its first names, then a muted "+N more <noun>" trigger whose tooltip lists the rest. Use it for any cell that holds several named things, such as plans, gates or rules. Show each item as plain text, or as a link when it has its own screen. Don't put the items in badges: a badge marks a state, such as Active or Failed (see the [StatusIndicator README](../status-indicator/README.md)).
 
 ```jsx
 <CellList>

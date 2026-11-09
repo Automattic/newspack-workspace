@@ -30,9 +30,8 @@ import { fmtDate } from '../../../../../subscribers/format';
 import { registerTab } from '../registry';
 import { ALL_SUBSCRIPTIONS_FILTER_VALUE, allSubscriptionsLabel } from '../../constants';
 import { useRestrictions } from './use-restrictions';
-import NamesSummary from '../../../../components/names-summary';
 import ScopeSummary from '../../../../components/scope-summary';
-import { leadingProductNames, moreProductsLabel, scopeLabel } from './labels';
+import { scopeLabel } from './labels';
 import RestrictionEditor from './restriction-editor';
 import type { Restriction, RestrictionSettings } from './types';
 import './style.scss';
@@ -89,28 +88,17 @@ function SubscriberOnlyProducts() {
 					'products' === item.targeting
 						? ( item.product_ids || [] ).map( id => productNames[ id ] || '' ).join( ' ' )
 						: scopeLabel( item, id => categoryNames[ id ] ),
-				render: ( { item }: { item: Restriction } ) => {
-					if ( 'products' !== item.targeting ) {
-						return (
-							<ScopeSummary
-								targeting={ item.targeting }
-								productIds={ item.product_ids }
-								categoryIds={ item.category_ids }
-								excludedProductIds={ item.excluded_product_ids }
-								productNames={ productNames }
-								categoryNames={ categoryNames }
-							/>
-						);
-					}
-					const { shown, hidden, remaining } = leadingProductNames( item, id => productNames[ id ] );
-					return (
-						<NamesSummary
-							shown={ shown.length ? shown : [ __( 'No products', 'newspack-plugin' ) ] }
-							more={ remaining > 0 ? moreProductsLabel( remaining ) : undefined }
-							hidden={ hidden }
-						/>
-					);
-				},
+				render: ( { item }: { item: Restriction } ) => (
+					<ScopeSummary
+						asTitle
+						targeting={ item.targeting }
+						productIds={ item.product_ids }
+						categoryIds={ item.category_ids }
+						excludedProductIds={ item.excluded_product_ids }
+						productNames={ productNames }
+						categoryNames={ categoryNames }
+					/>
+				),
 			},
 			{
 				id: 'availableTo',

@@ -3,6 +3,15 @@
  */
 import { columnShareWidth, evenColumns, titleColumnWidth, withoutColumnStyles } from './even-columns';
 
+describe( 'actions column', () => {
+	it( 'holds back room for the actions column so the shares do not overflow it', () => {
+		const view = { type: 'table', titleField: 'name', fields: [ 'status', 'plan' ] };
+		expect( titleColumnWidth( view, 13 ) ).toBe( '30%' );
+		expect( evenColumns( view, 13 ).layout.styles.status ).toEqual( { width: '28.5%' } );
+		expect( columnShareWidth( view, 13 ) ).toBe( '28.5cqi' );
+	} );
+} );
+
 describe( 'evenColumns', () => {
 	it( 'gives the title the same share as the other columns when they are few', () => {
 		const view = { type: 'table', titleField: 'name', fields: [ 'status', 'plan' ] };

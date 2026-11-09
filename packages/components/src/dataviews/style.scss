@@ -19,6 +19,10 @@
 	width: var(--newspack-dataviews-title-width, auto);
 }
 
+.newspack-dataviews.newspack-dataviews--many-columns .dataviews-view-table {
+	--newspack-dataviews-column-min-width: 20ch;
+}
+
 .newspack-dataviews .dataviews-view-table {
 	--newspack-dataviews-cell-padding: var(--wpds-dimension-padding-md, #{wp-vars.$grid-unit-15});
 	--newspack-dataviews-column-min-width: 30ch;

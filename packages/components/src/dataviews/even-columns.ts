@@ -9,6 +9,8 @@ import type { View } from '@wordpress/dataviews';
 
 const MIN_TITLE_SHARE = 30;
 
+export const ACTIONS_COLUMN_SHARE = 13;
+
 type ColumnStyles = Record< string, { width?: string } >;
 
 const percent = ( share: number ) => `${ Number( share.toFixed( 2 ) ) }%`;
@@ -16,15 +18,18 @@ const percent = ( share: number ) => `${ Number( share.toFixed( 2 ) ) }%`;
 /**
  * The visible columns beside the title, and each column's share of the width.
  *
- * @param view The DataViews view.
+ * @param view     The DataViews view.
+ * @param reserved Share of the width held back for the actions column, which sits
+ *                 beside the shares rather than inside them.
  * @return The other columns, the title's share (0 when it isn't shown), and
  *         the share each other column gets.
  */
-function getShares( view: View ): { columns: string[]; titleShare: number; columnShare: number } {
+function getShares( view: View, reserved = 0 ): { columns: string[]; titleShare: number; columnShare: number } {
 	const hasTitle = Boolean( view.titleField ) && view.showTitle !== false;
 	const columns = ( view.fields ?? [] ).filter( id => id !== view.titleField );
-	const titleShare = hasTitle ? Math.max( MIN_TITLE_SHARE, 100 / ( columns.length + 1 ) ) : 0;
-	const columnShare = columns.length ? ( 100 - titleShare ) / columns.length : 0;
+	const available = 100 - reserved;
+	const titleShare = hasTitle ? Math.max( MIN_TITLE_SHARE, available / ( columns.length + 1 ) ) : 0;
+	const columnShare = columns.length ? ( available - titleShare ) / columns.length : 0;
 	return { columns, titleShare, columnShare };
 }
 
@@ -41,11 +46,11 @@ function getShares( view: View ): { columns: string[]; titleShare: number; colum
  * @param view The DataViews view.
  * @return The view with column widths, unchanged for any layout but a table.
  */
-export function evenColumns< V extends View >( view: V ): V {
+export function evenColumns< V extends View >( view: V, reserved = 0 ): V {
 	if ( view.type !== 'table' ) {
 		return view;
 	}
-	const { columns, columnShare } = getShares( view );
+	const { columns, columnShare } = getShares( view, reserved );
 	if ( ! columns.length ) {
 		return view;
 	}
@@ -64,11 +69,11 @@ export function evenColumns< V extends View >( view: V ): V {
  * @param view The DataViews view.
  * @return The width, or undefined when the view has no visible title column.
  */
-export function titleColumnWidth( view: View ): string | undefined {
+export function titleColumnWidth( view: View, reserved = 0 ): string | undefined {
 	if ( view.type !== 'table' ) {
 		return undefined;
 	}
-	const { columns, titleShare } = getShares( view );
+	const { columns, titleShare } = getShares( view, reserved );
 	return titleShare && columns.length ? percent( titleShare ) : undefined;
 }
 
@@ -81,11 +86,11 @@ export function titleColumnWidth( view: View ): string | undefined {
  * @return The width in container query units, or undefined when the view has
  *         no columns beside the title.
  */
-export function columnShareWidth( view: View ): string | undefined {
+export function columnShareWidth( view: View, reserved = 0 ): string | undefined {
 	if ( view.type !== 'table' ) {
 		return undefined;
 	}
-	const { columns, columnShare } = getShares( view );
+	const { columns, columnShare } = getShares( view, reserved );
 	return columns.length ? `${ Number( columnShare.toFixed( 2 ) ) }cqi` : undefined;
 }
 

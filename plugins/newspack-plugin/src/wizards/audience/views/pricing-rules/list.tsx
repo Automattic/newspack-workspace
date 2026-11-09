@@ -37,6 +37,13 @@ import { RULES_API_PATH as API_PATH, IMPACT_PREVIEW_API_PATH } from './constants
 
 const { useHistory } = Router;
 
+/**
+ * Inactive rules stay out of the way until someone asks for them. Clearing the
+ * Status filter returns to this rather than to every rule; the REST already
+ * excludes trash.
+ */
+const DEFAULT_STATUS_FILTER = { field: 'status', operator: 'isNot' as const, value: 'inactive' };
+
 const DEFAULT_VIEW: View = {
 	type: 'table',
 	page: 1,
@@ -44,7 +51,7 @@ const DEFAULT_VIEW: View = {
 	sort: { field: 'title', direction: 'asc' },
 	search: '',
 	fields: [ 'status', 'strategy', 'scope', 'priority', 'goal', 'reader_segments' ],
-	filters: [], // Show all statuses by default; the REST already excludes trash.
+	filters: [ DEFAULT_STATUS_FILTER ],
 	layout: {},
 	titleField: 'title',
 };
@@ -97,6 +104,12 @@ function scopeOf( item: PricingRuleRow ) {
 		excluded_product_ids: [] as number[],
 	};
 }
+
+/** The view, with the default Status filter put back if it was cleared. */
+const withStatusFilter = ( next: View ): View => {
+	const filters = ( next.filters ?? [] ).filter( filter => filter.field !== 'status' || ( filter.value !== undefined && filter.value !== '' ) );
+	return filters.some( filter => filter.field === 'status' ) ? { ...next, filters } : { ...next, filters: [ ...filters, DEFAULT_STATUS_FILTER ] };
+};
 
 export default function PricingRulesList() {
 	const { setHeaderData, addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
@@ -215,7 +228,7 @@ export default function PricingRulesList() {
 	);
 
 	const statusElements = useMemo( () => {
-		const present = new Set( data.map( ruleState ) );
+		const present = new Set( [ ...data.map( ruleState ), DEFAULT_STATUS_FILTER.value ] );
 		return ( Object.keys( RULE_STATE_LABEL ) as RuleState[] )
 			.filter( state => present.has( state ) )
 			.map( state => ( { value: state, label: RULE_STATE_LABEL[ state ] } ) );
@@ -284,7 +297,7 @@ export default function PricingRulesList() {
 					return <StatusBadge status={ RULE_STATE_STATUS[ state ] }>{ RULE_STATE_LABEL[ state ] }</StatusBadge>;
 				},
 				elements: statusElements,
-				filterBy: { operators: [ 'is' ] },
+				filterBy: { operators: [ 'is', 'isNot' ] },
 			},
 			{
 				id: 'goal',
@@ -427,7 +440,7 @@ export default function PricingRulesList() {
 				data={ processedData }
 				fields={ fields }
 				view={ view }
-				onChangeView={ setView }
+				onChangeView={ next => setView( withStatusFilter( next ) ) }
 				actions={ actions }
 				paginationInfo={ paginationInfo }
 				defaultLayouts={ { table: {} } }
