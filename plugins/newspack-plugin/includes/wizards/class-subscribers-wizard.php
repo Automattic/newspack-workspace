@@ -851,7 +851,7 @@ class Subscribers_Wizard extends Wizard {
 				'email'    => $user->user_email,
 				'role'     => $role,
 				// The owner holds no membership record, so they have no join date.
-				'joinedAt' => $joined_at ? gmdate( 'Y-m-d', $joined_at ) : null,
+				'joinedAt' => $this->local_date( $joined_at ),
 				// A person's name links to the person, matching the lists.
 				'editUrl'  => (string) get_edit_user_link( $user_id ),
 			];
@@ -906,8 +906,8 @@ class Subscribers_Wizard extends Wizard {
 				// Only the expiry is stored, and it is always exactly one window
 				// after the invitation was sent, so the sent date is derived rather
 				// than persisted twice and left to drift.
-				'sentAt'    => $expiration ? gmdate( 'Y-m-d', $expiration - $expiration_window ) : null,
-				'expiresAt' => $expiration ? gmdate( 'Y-m-d', $expiration ) : null,
+				'sentAt'    => $expiration ? $this->local_date( $expiration - $expiration_window ) : null,
+				'expiresAt' => $this->local_date( $expiration ),
 			];
 		}
 		return $invites;

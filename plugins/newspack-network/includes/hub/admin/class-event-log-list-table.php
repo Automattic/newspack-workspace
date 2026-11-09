@@ -180,7 +180,7 @@ class Event_Log_List_Table extends \WP_List_Table {
 			case 'id':
 				return $item->get_id();
 			case 'date':
-				return gmdate( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $item->get_timestamp() );
+				return esc_html( wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $item->get_timestamp() ) );
 			case 'summary':
 				return esc_html( $item->get_summary() );
 			case 'node':

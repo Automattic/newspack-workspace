@@ -3,6 +3,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { select } from '@wordpress/data';
+import { formatSiteDate, formatSiteDateTime } from 'newspack-components';
 import { NAMESPACE as storeNamespace } from '../store/constants';
 
 export const getFieldElements = field => {
@@ -76,15 +77,10 @@ export const getDisplayValue = ( field, value ) => {
 		value = field.options.find( o => o.value === value )?.label || value;
 	}
 	if ( field.type === 'date' ) {
-		return new Date( value * 1000 ).toLocaleDateString( undefined, {
-			dateStyle: 'medium',
-		} );
+		return formatSiteDate( value );
 	}
 	if ( field.type === 'datetime' ) {
-		return new Date( value * 1000 ).toLocaleString( undefined, {
-			dateStyle: 'medium',
-			timeStyle: 'short',
-		} );
+		return formatSiteDateTime( value );
 	}
 	if ( field.type === 'boolean' ) {
 		return value ? 'Yes' : 'No';
