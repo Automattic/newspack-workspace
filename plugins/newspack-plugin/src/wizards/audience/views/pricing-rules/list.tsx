@@ -108,12 +108,16 @@ function scopeOf( item: PricingRuleRow ) {
 }
 
 /**
- * Whether a view change is the filter bar's Reset rather than a chip's remove button:
- * it clears the search, or every one of several filters, which no single remove can.
- * The toolbar Reset then lands on the default view, like "Reset view".
+ * Whether a view change is the filter bar's Reset rather than a chip's remove button
+ * or a cleared search box: it clears the filters together with the search, or every
+ * one of several filters, which no single action can. The toolbar Reset then lands
+ * on the default view, like "Reset view". With the default chip as the only filter
+ * and no search, Reset and the chip's remove button look the same, so both remove it.
  */
-const isFilterBarReset = ( current: View, next: View ): boolean =>
-	! next.search && ! next.filters?.length && ( !! current.search || ( current.filters?.length ?? 0 ) > 1 );
+const isFilterBarReset = ( current: View, next: View ): boolean => {
+	const before = current.filters?.length ?? 0;
+	return ! next.search && ! next.filters?.length && before > 0 && ( !! current.search || before > 1 );
+};
 
 /** Whether the view matches the default one, so "Reset view" has nothing to do. */
 const isDefaultView = ( view: View ): boolean =>
