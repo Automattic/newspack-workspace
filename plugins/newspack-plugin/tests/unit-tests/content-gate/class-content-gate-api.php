@@ -418,6 +418,86 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A malformed publication date value gets the rule's own message, not the generic one.
+	 */
+	public function test_malformed_published_age_value_gets_age_specific_error() {
+		$result = Content_Gate_API::sanitize_content_rule(
+			[
+				'slug'  => Content_Rules::PUBLISHED_AGE_RULE,
+				'value' => '7',
+			]
+		);
+		$this->assertWPError( $result );
+		$this->assertSame( 'invalid_content_rule_value', $result->get_error_code() );
+		$this->assertStringContainsString( 'The publication date rule needs', $result->get_error_message() );
+	}
+
+	/**
+	 * A post type that isn't registered right now is kept: it can't match any post
+	 * being read, and it applies again if the post type comes back.
+	 */
+	public function test_sanitize_content_rule_keeps_unregistered_post_type() {
+		$this->assertFalse( post_type_exists( 'np_gone_type' ), 'Setup: the post type is not registered.' );
+
+		$this->assertSame(
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post', 'np_gone_type' ],
+			],
+			Content_Gate_API::sanitize_content_rule(
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post', 'np_gone_type' ],
+				]
+			)
+		);
+	}
+
+	/**
+	 * A registered post type the picker doesn't offer is refused, naming the rule and the value.
+	 */
+	public function test_sanitize_content_rule_rejects_registered_unoffered_post_type() {
+		$this->assertTrue( post_type_exists( 'attachment' ), 'Setup: attachments are registered.' );
+
+		$result = Content_Gate_API::sanitize_content_rule(
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post', 'attachment' ],
+			]
+		);
+		$this->assertWPError( $result );
+		$this->assertSame( 'invalid_content_rule_value', $result->get_error_code() );
+		$this->assertSame(
+			'The content rule "Post types" includes values that aren\'t available on this site: attachment.',
+			$result->get_error_message()
+		);
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+	}
+
+	/**
+	 * A gate covering Collections can still be published after the Collections module
+	 * is turned off and its post type is no longer registered.
+	 */
+	public function test_gate_with_unregistered_collection_post_type_can_be_published() {
+		$this->assertFalse( post_type_exists( 'newspack_collection' ), 'Setup: the Collections post type is not registered.' );
+		$stored  = [
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post', 'newspack_collection' ],
+			],
+		];
+		$gate_id = $this->create_gate_with_content_rules( $stored );
+
+		$sanitized = Content_Gate_API::sanitize_gate(
+			array_merge( Content_Gate::get_gate( $gate_id ), [ 'status' => 'publish' ] ),
+			$this->gate_update_request( $gate_id )
+		);
+
+		$this->assertIsArray( $sanitized );
+		$this->assertSame( $stored, $sanitized['content_rules'] );
+	}
+
+	/**
 	 * Dropping an unreadable content rule would widen an AND gate, so the set fails.
 	 */
 	public function test_sanitize_rules_returns_error_instead_of_dropping() {
