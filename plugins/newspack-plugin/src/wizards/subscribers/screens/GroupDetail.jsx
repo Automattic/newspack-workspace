@@ -46,6 +46,8 @@ import RemoveMemberFlow from '../flows/RemoveMemberFlow';
 import ResendInviteFlow from '../flows/ResendInviteFlow';
 import SubscriptionDetailsDrawer from '../flows/SubscriptionDetailsDrawer';
 
+const FIT_COLUMNS = [ 'status' ];
+
 const { useHistory, useParams } = Router;
 
 const MEMBERS_VIEW = {
@@ -541,6 +543,7 @@ function GroupDetailView() {
 						}
 						className="newspack-subscribers__no-toolbar"
 						data={ processedInvites }
+						fitColumns={ FIT_COLUMNS }
 						fields={ inviteFields }
 						view={ invitesView }
 						onChangeView={ setInvitesView }

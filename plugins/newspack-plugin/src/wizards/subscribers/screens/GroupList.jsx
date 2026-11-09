@@ -40,6 +40,8 @@ import { STATUS_INDICATORS, STATUS_LABELS } from '../status';
 import { GROUP_LABEL_PLURAL, groupCountLabel, groupLoadFailedLabel } from '../labels';
 import { SubscriptionLink } from '../links';
 
+const FIT_COLUMNS = [ 'status' ];
+
 const { useHistory } = Router;
 
 const DEFAULT_VIEW = {
@@ -292,6 +294,7 @@ export default function GroupList() {
 		// eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
 		<div className="newspack-subscribers__clickable-rows" onClick={ onRowClick }>
 			<DataViews
+				fitColumns={ FIT_COLUMNS }
 				countLabel={ groupCountLabel }
 				data={ processedData }
 				fields={ fields }

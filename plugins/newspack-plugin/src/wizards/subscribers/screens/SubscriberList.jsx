@@ -40,6 +40,8 @@ import { GROUP_LABEL, ROLE_LABELS, groupRoleLabel } from '../labels';
 import { SubscriptionLink } from '../links';
 import { STATUS_INDICATORS, STATUS_LABELS, displayStatuses, statusRank } from '../status';
 
+const FIT_COLUMNS = [ 'status' ];
+
 // A subscriber's group memberships, in the shape the column helpers expect
 // ([{ group, role }]). The endpoint embeds them flat on the item as
 // item.groups = [{ id, plan, planName, status, role, editUrl, isComplimentary }]:
@@ -596,6 +598,7 @@ export default function SubscriberList() {
 				/>
 			) }
 			<DataViews
+				fitColumns={ FIT_COLUMNS }
 				countLabel={ ( count, formatted ) =>
 					sprintf(
 						/* translators: %s: number of subscribers. */
