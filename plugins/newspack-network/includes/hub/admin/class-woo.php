@@ -237,16 +237,16 @@ abstract class Woo {
 	 * Formats a date the nodes report in GMT, in the site's date format and timezone.
 	 *
 	 * @param string $value A GMT date string, such as WooCommerce's `Y-m-d H:i:s` or `Y-m-d\TH:i:s`.
-	 * @return string The formatted date, or an empty string when the value is not a date.
+	 * @return string The formatted date, or '-' when the value is empty or not a date.
 	 */
 	protected static function format_gmt_date( $value ) {
 		if ( empty( $value ) ) {
-			return '';
+			return '-';
 		}
 		try {
 			$date = new \DateTimeImmutable( (string) $value, new \DateTimeZone( 'UTC' ) );
 		} catch ( \Exception $e ) {
-			return '';
+			return '-';
 		}
 		return (string) wp_date( get_option( 'date_format' ), $date->getTimestamp() );
 	}
