@@ -78,12 +78,34 @@ describe( 'splitSummary', () => {
 } );
 
 describe( 'sortTests', () => {
-	it( 'lists running tests before incomplete ones', () => {
+	const cached = ( { label = 'reliable', young = false } = {} ) => ( {
+		variants: { a: { rate: 1.9, lift: null }, b: { rate: 2.69, lift: 41.6 } },
+		comparisons: { b: { confidence: 99.1, label } },
+		flags: { young_test: young },
+	} );
+	const running = ( id, cachedStats = null ) => ( { test_id: id, variants: { a: variant(), b: variant() }, cached_stats: cachedStats } );
+	const ids = tests => sortTests( tests ).map( test => test.test_id );
+
+	it( 'puts what needs the publisher first and ended tests last', () => {
 		const tests = [
-			{ test_id: 'i', variants: { a: variant() } },
-			{ test_id: 'r', variants: { a: variant(), b: variant() } },
+			{ test_id: 'ended', status: 'ended', variants: { a: variant(), b: variant() } },
+			running( 'running' ),
+			running( 'ready', cached() ),
+			{ test_id: 'draft', variants: { a: variant(), b: variant( { status: 'draft' } ) } },
+			{ test_id: 'incomplete', variants: { a: variant() } },
+			{ test_id: 'attention', variants: { a: variant(), b: variant( { eligible: false } ) } },
 		];
-		expect( sortTests( tests ).map( test => test.test_id ) ).toEqual( [ 'r', 'i' ] );
+		expect( ids( tests ) ).toEqual( [ 'attention', 'incomplete', 'draft', 'ready', 'running', 'ended' ] );
+	} );
+
+	it( 'puts a running test ahead only when its card would name a winner', () => {
+		const tests = [
+			running( 'none' ),
+			running( 'early', cached( { label: 'directional' } ) ),
+			running( 'young', cached( { young: true } ) ),
+			running( 'ready', cached() ),
+		];
+		expect( ids( tests ) ).toEqual( [ 'ready', 'none', 'early', 'young' ] );
 	} );
 } );
 
