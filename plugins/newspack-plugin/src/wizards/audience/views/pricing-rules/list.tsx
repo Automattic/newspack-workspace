@@ -338,7 +338,7 @@ export default function PricingRulesList() {
 				render: ( { item } ) => {
 					const names = readerSegmentNames( item.conditions, segmentMap );
 					return names.length ? (
-						<Stack direction="column" align="flex-start" gap="sm" className="newspack-pricing-rules__segments newspack-dataviews__stack">
+						<Stack direction="column" align="flex-start" gap="sm" className="newspack-pricing-rules__segments">
 							{ names.map( ( name, index ) => (
 								<span key={ index } className="newspack-pricing-rules__segment" title={ name } dir="auto">
 									{ name }

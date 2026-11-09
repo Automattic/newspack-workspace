@@ -47,12 +47,22 @@
 		}
 	}
 
+	tbody td:not(.dataviews-view-table__checkbox-column, .dataviews-view-table__actions-column) .dataviews-view-table__cell-content-wrapper {
+		align-items: flex-start;
+		padding-block-start: var(--newspack-dataviews-stack-gap);
+	}
+
 	.dataviews-title-field {
 		&,
 		a,
 		button.components-button.is-link {
+			line-height: inherit;
 			white-space: normal;
 		}
+	}
+
+	.newspack-cell-list button.components-button.is-link {
+		line-height: inherit;
 	}
 
 	.dataviews-column-primary__media + .dataviews-view-table__primary-column-content > .dataviews-title-field:not(:last-child) {
@@ -63,11 +73,6 @@
 	tbody td > :has(> .dataviews-view-table__primary-column-content) {
 		min-width: max(calc(var(--newspack-dataviews-column-width, 0px) - 2 * var(--newspack-dataviews-cell-padding)), var(--newspack-dataviews-column-min-width));
 	}
-}
-
-.newspack-dataviews .newspack-cell-list:has(> :nth-child(2), > :first-child > :nth-child(2)),
-.newspack-dataviews .newspack-dataviews__stack:has(> :nth-child(2)) {
-	margin-block-start: var(--newspack-dataviews-stack-gap);
 }
 
 .newspack-dataviews__view-config {

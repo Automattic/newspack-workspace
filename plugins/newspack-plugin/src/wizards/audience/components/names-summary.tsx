@@ -23,7 +23,7 @@ type NamesSummaryProps = {
  */
 export default function NamesSummary( { shown, more, hidden = [] }: NamesSummaryProps ) {
 	return (
-		<Stack direction="column" gap="sm" align="flex-start" className="newspack-dataviews__stack">
+		<Stack direction="column" gap="sm" align="flex-start">
 			{ shown.map( ( name, index ) => (
 				<div key={ `${ name }-${ index }` }>{ name }</div>
 			) ) }
