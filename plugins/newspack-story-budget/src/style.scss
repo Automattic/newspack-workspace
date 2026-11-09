@@ -161,11 +161,11 @@ body.toplevel_page_newspack-story-budget {
 		margin: 0 -8px;
 		position: relative;
 		.newspack-story-budget__field__button {
-			margin-block: -4px;
-			padding: 4px 8px;
+			margin-block-start: calc(-1 * #{wp-vars.$grid-unit-05});
+			padding: wp-vars.$grid-unit-05 wp-vars.$grid-unit-10;
 		}
 		.newspack-story-budget__field__value {
-			padding: 0 8px;
+			padding: 0 wp-vars.$grid-unit-10;
 		}
 		.newspack-story-budget__table-row-field-error {
 			fill: wp-colors.$alert-red;
@@ -508,10 +508,10 @@ div[role="menuitem"] {
 		-webkit-line-clamp: 2;
 		-webkit-box-orient: vertical;
 		overflow: hidden;
-		padding-block: 0;
 	}
 
 	.newspack-story-budget__field__button {
+		margin-block-start: 0;
 		font-size: inherit;
 		font-weight: inherit;
 	}
