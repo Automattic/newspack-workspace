@@ -33,6 +33,47 @@ class Audience_Pricing_Rules extends Wizard {
 	protected $parent_slug = 'newspack-audience';
 
 	/**
+	 * Constructor.
+	 */
+	public function __construct() {
+		parent::__construct();
+		add_filter( 'rest_post_dispatch', [ __CLASS__, 'add_scope_names' ], 10, 3 );
+	}
+
+	/**
+	 * Name the products and categories the rules list targets, in the same
+	 * response, so the list renders finished rows without a second request.
+	 *
+	 * @param \WP_REST_Response $response The response.
+	 * @param \WP_REST_Server   $server   The server.
+	 * @param \WP_REST_Request  $request  The request.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	public static function add_scope_names( $response, $server, $request ) {
+		if ( 'GET' !== $request->get_method() || '/wc-dynamic-pricing/v1/rules' !== $request->get_route() || ! $response instanceof \WP_REST_Response ) {
+			return $response;
+		}
+		$data = $response->get_data();
+		if ( ! is_array( $data ) || ! isset( $data['rules'] ) || ! is_array( $data['rules'] ) ) {
+			return $response;
+		}
+		$rules = array_map(
+			function ( $rule ) {
+				$ids = array_map( 'absint', (array) ( $rule['scope_ids'] ?? [] ) );
+				return [
+					'product_ids'  => 'product_ids' === ( $rule['scope_type'] ?? '' ) ? $ids : [],
+					'category_ids' => 'category' === ( $rule['scope_type'] ?? '' ) ? $ids : [],
+				];
+			},
+			$data['rules']
+		);
+		$data['names'] = Subscriber_Commerce::get_rule_names( $rules );
+		$response->set_data( $data );
+		return $response;
+	}
+
+	/**
 	 * Expose the slug for tests/consumers.
 	 *
 	 * @return string

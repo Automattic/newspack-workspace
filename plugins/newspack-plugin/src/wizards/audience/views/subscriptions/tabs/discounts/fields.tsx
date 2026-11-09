@@ -15,11 +15,12 @@ import type { Field } from '@wordpress/dataviews';
 /**
  * Internal dependencies.
  */
-import NamesTooltip from '../../components/names-tooltip';
+import NamesSummary from '../../../../components/names-summary';
+import ScopeSummary from '../../../../components/scope-summary';
 import { fmtDate } from '../../../../../subscribers/format';
 import { StatusBadge } from '../../../../../../../packages/components/src';
 import { ALL_SUBSCRIPTIONS_FILTER_VALUE, allSubscriptionsLabel } from '../../constants';
-import { discountLabel, excludedLabel, subscriptionNames, subscriptionsSummary, targetingBaseLabel, targetingLabel } from './discount';
+import { discountLabel, subscriptionNames, subscriptionsSummary, targetingLabel } from './discount';
 import type { DiscountCurrency, DiscountRule } from './types';
 
 type Subscription = { id: number; name: string };
@@ -58,18 +59,7 @@ export function discountFields(
 					return <span>{ allSubscriptionsLabel() }</span>;
 				}
 				const { shown, more, hidden } = subscriptionsSummary( item.subscription_product_ids, subscriptions );
-				return (
-					<div>
-						{ shown.map( name => (
-							<div key={ name }>{ name }</div>
-						) ) }
-						{ more && (
-							<div>
-								<NamesTooltip muted label={ more } names={ hidden } />
-							</div>
-						) }
-					</div>
-				);
+				return <NamesSummary shown={ shown } more={ more } hidden={ hidden } />;
 			},
 		},
 		{
@@ -116,27 +106,16 @@ export function discountFields(
 			label: __( 'Applies to', 'newspack-plugin' ),
 			enableGlobalSearch: true,
 			getValue: ( { item } ) => targetingLabel( item ),
-			render: ( { item } ) => {
-				const excluded = excludedLabel( item );
-				const namesOf = ( ids: number[], names: Record< number, string > ) => ids.map( id => names[ id ] ).filter( Boolean );
-				let base: React.ReactNode = targetingBaseLabel( item );
-				if ( 'products' === item.targeting ) {
-					base = <NamesTooltip label={ targetingBaseLabel( item ) } names={ namesOf( item.product_ids, productNames ) } />;
-				} else if ( 'category' === item.targeting ) {
-					base = <NamesTooltip label={ targetingBaseLabel( item ) } names={ namesOf( item.category_ids, categoryNames ) } />;
-				}
-				if ( ! excluded ) {
-					return base;
-				}
-				return (
-					<span className="newspack-subscriber-discounts__applies-to">
-						{ base }
-						<span className="newspack-subscriber-discounts__applies-to-excluded">
-							<NamesTooltip muted label={ excluded } names={ namesOf( item.excluded_product_ids, productNames ) } />
-						</span>
-					</span>
-				);
-			},
+			render: ( { item } ) => (
+				<ScopeSummary
+					targeting={ item.targeting }
+					productIds={ item.product_ids }
+					categoryIds={ item.category_ids }
+					excludedProductIds={ item.excluded_product_ids }
+					productNames={ productNames }
+					categoryNames={ categoryNames }
+				/>
+			),
 		},
 		{
 			id: 'created_at',

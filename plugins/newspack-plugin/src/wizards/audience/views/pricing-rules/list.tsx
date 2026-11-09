@@ -27,6 +27,8 @@ import {
 import { DataViews, Router, StatusBadge, WizardBanner } from '../../../../../packages/components/src';
 import { formatCount } from '../../../../../packages/components/src/breadcrumbs/format-count';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
+import ScopeSummary from '../../components/scope-summary';
+import { targetingLabel } from '../subscriptions/tabs/discounts/discount';
 import CatalogImpact from './catalog-impact';
 import PricingRulesOnboarding from './onboarding';
 import { intentLabel, pathOptions } from './recipes';
@@ -83,6 +85,19 @@ function readerSegmentNames( conditions: PricingRuleRow[ 'conditions' ], map: Re
 	return ids.map( id => map[ Number( id ) ] ?? `#${ id }` );
 }
 
+const SCOPE_TARGETING = { product_ids: 'products', category: 'category', all_products: 'all' } as const;
+
+/** The rule's scope in the shape the Audience lists share. */
+function scopeOf( item: PricingRuleRow ) {
+	const targeting = SCOPE_TARGETING[ item.scope_type as keyof typeof SCOPE_TARGETING ] ?? 'all';
+	return {
+		targeting,
+		product_ids: 'products' === targeting ? item.scope_ids : [],
+		category_ids: 'category' === targeting ? item.scope_ids : [],
+		excluded_product_ids: [] as number[],
+	};
+}
+
 export default function PricingRulesList() {
 	const { setHeaderData, addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const history = useHistory();
@@ -97,6 +112,10 @@ export default function PricingRulesList() {
 	// Remounts the card so its cached product sample cannot outlive a trash.
 	const [ statsVersion, setStatsVersion ] = useState( 0 );
 	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
+	const [ scopeNames, setScopeNames ] = useState< { products: Record< number, string >; categories: Record< number, string > } >( {
+		products: {},
+		categories: {},
+	} );
 	const [ segmentMap, setSegmentMap ] = useState< Record< number, string > >( {} );
 	const [ currency, setCurrency ] = useState< PricingRulesCurrency >( { code: '', symbol: '', decimals: 2 } );
 
@@ -121,6 +140,7 @@ export default function PricingRulesList() {
 			.then( response => {
 				setData( response.rules || [] );
 				setCurrency( response.currency );
+				setScopeNames( response.names ?? { products: {}, categories: {} } );
 				// Capture the reader_segment id→label options so the list can name segments.
 				const seg = ( response.conditions || [] ).find( c => c.id === 'reader_segment' );
 				const map: Record< number, string > = {};
@@ -231,13 +251,27 @@ export default function PricingRulesList() {
 			{
 				id: 'scope',
 				label: __( 'Applies to', 'newspack-plugin' ),
-				getValue: ( { item } ) => item.scope_label,
-				render: ( { item } ) => (
-					<span>
-						{ item.scope_label }
-						{ item.scope_ids.length ? ` (${ item.scope_ids.length })` : '' }
-					</span>
-				),
+				getValue: ( { item } ) => {
+					const scope = scopeOf( item );
+					const names =
+						'products' === scope.targeting
+							? scope.product_ids.map( id => scopeNames.products[ id ] )
+							: scope.category_ids.map( id => scopeNames.categories[ id ] );
+					return [ targetingLabel( scope ), ...names ].filter( Boolean ).join( ' ' );
+				},
+				render: ( { item } ) => {
+					const scope = scopeOf( item );
+					return (
+						<ScopeSummary
+							targeting={ scope.targeting }
+							productIds={ scope.product_ids }
+							categoryIds={ scope.category_ids }
+							excludedProductIds={ [] }
+							productNames={ scopeNames.products }
+							categoryNames={ scopeNames.categories }
+						/>
+					);
+				},
 				enableSorting: false,
 			},
 			{ id: 'priority', label: __( 'Priority', 'newspack-plugin' ), getValue: ( { item } ) => item.priority },
@@ -297,7 +331,7 @@ export default function PricingRulesList() {
 				enableSorting: false,
 			},
 		],
-		[ statusElements, history, segmentMap, currency ]
+		[ statusElements, history, segmentMap, currency, scopeNames ]
 	);
 
 	const actions: Action< PricingRuleRow >[] = useMemo(

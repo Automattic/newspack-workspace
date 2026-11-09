@@ -30,8 +30,9 @@ import { fmtDate } from '../../../../../subscribers/format';
 import { registerTab } from '../registry';
 import { ALL_SUBSCRIPTIONS_FILTER_VALUE, allSubscriptionsLabel } from '../../constants';
 import { useRestrictions } from './use-restrictions';
-import NamesTooltip from '../../components/names-tooltip';
-import { excludedLabel, leadingProductNames, moreProductsLabel, scopeLabel } from './labels';
+import NamesSummary from '../../../../components/names-summary';
+import ScopeSummary from '../../../../components/scope-summary';
+import { leadingProductNames, moreProductsLabel, scopeLabel } from './labels';
 import RestrictionEditor from './restriction-editor';
 import type { Restriction, RestrictionSettings } from './types';
 import './style.scss';
@@ -89,29 +90,25 @@ function SubscriberOnlyProducts() {
 						? ( item.product_ids || [] ).map( id => productNames[ id ] || '' ).join( ' ' )
 						: scopeLabel( item, id => categoryNames[ id ] ),
 				render: ( { item }: { item: Restriction } ) => {
-					const excluded = excludedLabel( item );
 					if ( 'products' !== item.targeting ) {
 						return (
-							<div>
-								<div>{ scopeLabel( item, id => categoryNames[ id ] ) }</div>
-								{ excluded && <div className="newspack-subscriber-only__muted">{ excluded }</div> }
-							</div>
+							<ScopeSummary
+								targeting={ item.targeting }
+								productIds={ item.product_ids }
+								categoryIds={ item.category_ids }
+								excludedProductIds={ item.excluded_product_ids }
+								productNames={ productNames }
+								categoryNames={ categoryNames }
+							/>
 						);
 					}
 					const { shown, hidden, remaining } = leadingProductNames( item, id => productNames[ id ] );
 					return (
-						<div>
-							{ shown.length ? (
-								shown.map( name => <div key={ name }>{ name }</div> )
-							) : (
-								<div className="newspack-subscriber-only__muted">{ __( 'No products', 'newspack-plugin' ) }</div>
-							) }
-							{ remaining > 0 && (
-								<div className="newspack-subscriber-only__muted">
-									<NamesTooltip muted label={ moreProductsLabel( remaining ) } names={ hidden } />
-								</div>
-							) }
-						</div>
+						<NamesSummary
+							shown={ shown.length ? shown : [ __( 'No products', 'newspack-plugin' ) ] }
+							more={ remaining > 0 ? moreProductsLabel( remaining ) : undefined }
+							hidden={ hidden }
+						/>
 					);
 				},
 			},

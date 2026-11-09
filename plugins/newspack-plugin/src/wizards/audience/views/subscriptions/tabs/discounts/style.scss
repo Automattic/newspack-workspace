@@ -12,19 +12,6 @@
 		padding: 0 var(--newspack-wizard-section-space);
 	}
 
-	&__applies-to {
-		display: inline-block;
-	}
-
-	&__applies-to-excluded {
-		color: var(--wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700});
-		display: block;
-		font-size: wp-vars.$helptext-font-size;
-		font-weight: wp-vars.$font-weight-regular;
-		line-height: wp-vars.$default-line-height;
-		margin-top: var(--newspack-dataviews-stack-gap);
-	}
-
 	&__fetching {
 		display: flex;
 		justify-content: center;
