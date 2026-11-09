@@ -63,6 +63,19 @@ class Content_Gate_API {
 				],
 			],
 		],
+		'archive_rules'       => [
+			'type'  => 'array',
+			'items' => [
+				'type'       => 'object',
+				'properties' => [
+					'slug'  => [ 'type' => 'string' ],
+					'value' => [
+						'type'  => 'array',
+						'items' => [ 'type' => 'string' ],
+					],
+				],
+			],
+		],
 		'registration'        => [
 			'type'       => 'object',
 			'properties' => [
@@ -209,6 +222,17 @@ class Content_Gate_API {
 			} elseif ( 'publish' === ( $gate['status'] ?? 'publish' ) || ! self::content_rules_are_unchanged( $gate['content_rules'], $gate_id ) ) {
 				return $sanitized_content_rules;
 			}
+		}
+		if ( isset( $gate['archive_rules'] ) ) {
+			$sanitized_archive_rules = self::sanitize_archive_rules( $gate['archive_rules'] );
+			if ( ! is_wp_error( $sanitized_archive_rules ) ) {
+				$sanitized['archive_rules'] = $sanitized_archive_rules;
+			} elseif ( self::caller_can_manage_gates() ) {
+				return $sanitized_archive_rules;
+			}
+			// Otherwise leave archive_rules out. Sanitization runs ahead of the route's
+			// `permission_callback`, so the error must not answer an unauthorized caller;
+			// the request fails on permissions instead.
 		}
 		if ( isset( $gate['registration'] ) ) {
 			$sanitized_registration = self::sanitize_registration( $gate['registration'], self::registration_wall_is_live( $gate['registration'], $sanitized, $gate_id ) );
@@ -597,6 +621,42 @@ class Content_Gate_API {
 		}
 		$stored_rules = Content_Gate::get_custom_access_settings( $gate_id )['access_rules'] ?? [];
 		return self::access_rules_fingerprint( $gate['custom_access']['access_rules'] ) === self::access_rules_fingerprint( $stored_rules );
+	}
+
+	/**
+	 * Sanitize a gate's archive rules.
+	 *
+	 * Values are not checked against the post types offered now, so a choice for a
+	 * post type that is switched off survives a save and applies again once it is
+	 * offered.
+	 *
+	 * @param mixed $rules The archive rules in the request.
+	 *
+	 * @return array|\WP_Error The sanitized rules, or an error for a malformed or unknown rule.
+	 */
+	public static function sanitize_archive_rules( $rules ) {
+		if ( ! is_array( $rules ) ) {
+			return new \WP_Error( 'invalid_archive_rule', __( 'Archive rules must be a list.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+		$sanitized = [];
+		foreach ( $rules as $rule ) {
+			if ( ! is_array( $rule ) ) {
+				return new \WP_Error( 'invalid_archive_rule', __( 'Each archive rule must be an object.', 'newspack-plugin' ), [ 'status' => 400 ] );
+			}
+			$slug = $rule['slug'] ?? '';
+			if ( ! is_string( $slug ) || ! isset( Content_Rules::get_archive_rules()[ $slug ] ) ) {
+				return new \WP_Error( 'invalid_archive_rule_slug', __( 'That archive rule isn\'t available.', 'newspack-plugin' ), [ 'status' => 400 ] );
+			}
+			$value = $rule['value'] ?? [];
+			if ( ! is_array( $value ) ) {
+				return new \WP_Error( 'invalid_archive_rule', __( 'An archive rule\'s value must be a list.', 'newspack-plugin' ), [ 'status' => 400 ] );
+			}
+			$sanitized[] = [
+				'slug'  => $slug,
+				'value' => array_values( array_filter( array_map( 'sanitize_key', $value ) ) ),
+			];
+		}
+		return $sanitized;
 	}
 
 	/**

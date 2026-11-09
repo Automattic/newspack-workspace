@@ -2306,6 +2306,11 @@ class Content_Gate {
 			Content_Rules::update_gate_content_rules( $gate_id, $gate['content_rules'] );
 		}
 
+		// Update archive rules.
+		if ( isset( $gate['archive_rules'] ) ) {
+			Content_Rules::update_gate_archive_rules( $gate_id, $gate['archive_rules'] );
+		}
+
 		// Update rule-combination mode.
 		if ( isset( $gate['content_rules_match'] ) ) {
 			Content_Rules::update_gate_content_rules_match( $gate_id, $gate['content_rules_match'] );
@@ -3139,6 +3144,7 @@ class Content_Gate {
 			'priority'            => (int) get_post_meta( $post->ID, 'gate_priority', true ),
 			'content_rules'       => Content_Rules::get_gate_content_rules( $post->ID ),
 			'content_rules_match' => Content_Rules::get_gate_content_rules_match( $post->ID ),
+			'archive_rules'       => Content_Rules::get_gate_archive_rules( $post->ID ),
 			'registration'        => self::get_registration_settings( $post->ID ),
 			'custom_access'       => self::get_custom_access_settings( $post->ID ),
 		];
@@ -3237,6 +3243,11 @@ class Content_Gate {
 		// Update content rules.
 		if ( isset( $gate['content_rules'] ) ) {
 			Content_Rules::update_gate_content_rules( $id, $gate['content_rules'] );
+		}
+
+		// Update archive rules.
+		if ( isset( $gate['archive_rules'] ) ) {
+			Content_Rules::update_gate_archive_rules( $id, $gate['archive_rules'] );
 		}
 
 		// Update rule-combination mode.

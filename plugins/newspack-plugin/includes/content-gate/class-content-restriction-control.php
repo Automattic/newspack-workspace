@@ -184,6 +184,39 @@ class Content_Restriction_Control {
 	}
 
 	/**
+	 * Get the post types whose archive page can be gated.
+	 *
+	 * Nothing is offered unless a plugin adds its post type with the
+	 * `newspack_content_gate_supported_archive_post_types` filter. Only registered
+	 * post types that have an archive page are kept.
+	 *
+	 * @return array[] List of `[ 'value' => post type slug, 'label' => name ]`.
+	 */
+	public static function get_available_archive_post_types() {
+		/**
+		 * Filters the post types whose archive page a content gate can restrict.
+		 *
+		 * @param string[] $post_types Post type slugs. Empty by default.
+		 */
+		$post_types = apply_filters( 'newspack_content_gate_supported_archive_post_types', [] );
+		$available  = [];
+		foreach ( is_array( $post_types ) ? $post_types : [] as $post_type ) {
+			if ( ! is_string( $post_type ) ) {
+				continue;
+			}
+			$object = \get_post_type_object( $post_type );
+			if ( ! $object || empty( $object->has_archive ) ) {
+				continue;
+			}
+			$available[] = [
+				'value' => $post_type,
+				'label' => $object->labels->name,
+			];
+		}
+		return $available;
+	}
+
+	/**
 	 * Get post gates.
 	 *
 	 * Returns the matching gates in Content_Gate::get_gates() priority order. Callers

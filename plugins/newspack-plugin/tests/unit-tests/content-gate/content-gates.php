@@ -4098,4 +4098,185 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		$this->assertSame( 'off', $copy['auto_signup'] );
 		$this->assertTrue( $copy['hide_lists'] );
 	}
+
+	/**
+	 * A gate has no archive rules until some are saved.
+	 */
+	public function test_get_gate_includes_empty_archive_rules_by_default() {
+		$gate = Content_Gate::get_gate( $this->gate_ids[0] );
+		$this->assertArrayHasKey( 'archive_rules', $gate );
+		$this->assertSame( [], $gate['archive_rules'] );
+	}
+
+	/**
+	 * Archive rules survive a save and a read.
+	 */
+	public function test_update_gate_settings_persists_archive_rules() {
+		$rules = [
+			[
+				'slug'  => 'post_type_archives',
+				'value' => [ 'newspack_collection' ],
+			],
+		];
+		Content_Gate::update_gate_settings( $this->gate_ids[0], [ 'archive_rules' => $rules ] );
+		$this->assertSame( $rules, Content_Gate::get_gate( $this->gate_ids[0] )['archive_rules'] );
+
+		$created = Content_Gate::create_gate( [ 'title' => 'Archive Gate' ] );
+		$this->gate_ids[] = $created;
+		Content_Gate::update_gate_settings( $created, [ 'archive_rules' => $rules ] );
+		$this->assertSame( $rules, Content_Gate::get_gate( $created )['archive_rules'] );
+	}
+
+	/**
+	 * An unknown archive rule slug fails the save.
+	 */
+	public function test_sanitize_archive_rules_rejects_unknown_slug() {
+		$result = Content_Gate_API::sanitize_archive_rules(
+			[
+				[
+					'slug'  => 'category',
+					'value' => [ 'news' ],
+				],
+			] 
+		);
+		$this->assertWPError( $result );
+		$this->assertSame( 'invalid_archive_rule_slug', $result->get_error_code() );
+
+		$result = Content_Gate_API::sanitize_archive_rules( 'nope' );
+		$this->assertWPError( $result );
+		$this->assertSame( 'invalid_archive_rule', $result->get_error_code() );
+	}
+
+	/**
+	 * A post type that isn't offered right now is still kept.
+	 */
+	public function test_sanitize_archive_rules_keeps_values_not_offered() {
+		$result = Content_Gate_API::sanitize_archive_rules(
+			[
+				[
+					'slug'  => 'post_type_archives',
+					'value' => [ 'newspack_collection', '' ],
+				],
+			] 
+		);
+		$this->assertSame(
+			[
+				[
+					'slug'  => 'post_type_archives',
+					'value' => [ 'newspack_collection' ],
+				],
+			],
+			$result 
+		);
+	}
+
+	/**
+	 * A caller who can't manage gates gets no archive rule error from sanitizing.
+	 */
+	public function test_sanitize_gate_hides_archive_rule_errors_from_non_managers() {
+		$gate = [
+			'archive_rules' => [
+				[
+					'slug'  => 'bogus',
+					'value' => [ 'x' ],
+				],
+			],
+		];
+
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'subscriber' ] ) );
+		$sanitized = Content_Gate_API::sanitize_gate( $gate );
+		$this->assertNotWPError( $sanitized );
+		$this->assertArrayNotHasKey( 'archive_rules', $sanitized );
+
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+		$this->assertWPError( Content_Gate_API::sanitize_gate( $gate ) );
+	}
+
+	/**
+	 * Only registered post types with an archive page are offered.
+	 */
+	public function test_available_archive_post_types_requires_has_archive() {
+		register_post_type(
+			'np_archive_cpt',
+			[
+				'public'      => true,
+				'has_archive' => true,
+				'labels'      => [ 'name' => 'Archive CPT' ],
+			] 
+		);
+		$filter = function () {
+			return [ 'post', 'np_archive_cpt', 'np_unregistered' ];
+		};
+		add_filter( 'newspack_content_gate_supported_archive_post_types', $filter );
+
+		$this->assertSame(
+			[
+				[
+					'value' => 'np_archive_cpt',
+					'label' => 'Archive CPT',
+				],
+			],
+			Content_Restriction_Control::get_available_archive_post_types()
+		);
+		$this->assertTrue(
+			Content_Rules::gate_matches_archive(
+				[
+					[
+						'slug'  => 'post_type_archives',
+						'value' => [ 'np_archive_cpt' ],
+					],
+				],
+				[ 'np_archive_cpt' ] 
+			) 
+		);
+		$this->assertFalse(
+			Content_Rules::gate_matches_archive(
+				[
+					[
+						'slug'  => 'post_type_archives',
+						'value' => [ 'post' ],
+					],
+				],
+				[ 'post' ] 
+			) 
+		);
+
+		remove_filter( 'newspack_content_gate_supported_archive_post_types', $filter );
+		unregister_post_type( 'np_archive_cpt' );
+	}
+
+	/**
+	 * A gate with archive rules and no content rules restricts no posts.
+	 */
+	public function test_gate_with_only_archive_rules_matches_no_posts() {
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'Archive Only' ] );
+		$this->gate_ids[] = $gate_id;
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'         => 'Archive Only',
+				'status'        => 'publish',
+				'content_rules' => [],
+				'archive_rules' => [
+					[
+						'slug'  => 'post_type_archives',
+						'value' => [ 'newspack_collection' ],
+					],
+				],
+				'registration'  => [
+					'active'               => true,
+					'metering'             => [
+						'enabled' => false,
+						'count'   => 0,
+						'period'  => 'month',
+					],
+					'require_verification' => false,
+					'gate_id'              => 0,
+				],
+			]
+		);
+		$this->reset_restriction_cache();
+		$ids = wp_list_pluck( Content_Restriction_Control::get_post_gates( $this->post_ids[0] ), 'id' );
+		$this->assertNotContains( $gate_id, $ids );
+	}
 }
