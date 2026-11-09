@@ -262,7 +262,7 @@ const Emails = () => {
 				getValue: ( { item }: { item: EmailItem } ) => item.label,
 				render: ( { item }: { item: EmailItem } ) => (
 					<a href={ item.edit_link } className="newspack-emails__name-link">
-						<strong>{ item.label }</strong>
+						{ item.label }
 					</a>
 				),
 			},

@@ -256,7 +256,7 @@ export default function PricingRulesList() {
 				getValue: ( { item } ) => item.title,
 				render: ( { item } ) => (
 					<Button variant="link" onClick={ () => history.push( `/edit/${ item.id }` ) }>
-						<strong>{ item.title || `#${ item.id }` }</strong>
+						{ item.title || `#${ item.id }` }
 					</Button>
 				),
 			},

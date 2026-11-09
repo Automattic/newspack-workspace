@@ -200,7 +200,7 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 							className="newspack-subscription-products__name-link"
 							onClick={ () => history.push( `/edit/${ item.id }` ) }
 						>
-							<strong>{ item.name }</strong>
+							{ item.name }
 						</Button>
 						{ item.is_complimentary && (
 							<>

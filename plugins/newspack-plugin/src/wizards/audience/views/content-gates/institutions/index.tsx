@@ -134,11 +134,7 @@ export default function Institutions() {
 				label: __( 'Title', 'newspack-plugin' ),
 				enableGlobalSearch: true,
 				getValue: ( { item }: { item: Institution } ) => item.title.raw,
-				render: ( { item }: { item: Institution } ) => (
-					<div>
-						<strong>{ item.title.raw }</strong>
-					</div>
-				),
+				render: ( { item }: { item: Institution } ) => <div>{ item.title.raw }</div>,
 			},
 			{
 				id: 'description',
