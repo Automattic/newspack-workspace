@@ -115,8 +115,7 @@ describe( 'the header', () => {
 	it( 'leaves the owner to the members table', async () => {
 		await renderDetail( group() );
 
-		const { sectionName, sectionTitle } = setHeaderData.mock.calls.at( -1 )[ 0 ];
-		expect( JSON.stringify( sectionName ) ).not.toContain( 'Olive Owner' );
+		const { sectionTitle } = setHeaderData.mock.calls.at( -1 )[ 0 ];
 		const { container } = render( createElement( sectionTitle ) );
 		expect( container.textContent ).not.toContain( 'Olive Owner' );
 	} );

@@ -159,8 +159,7 @@ function GroupDetailView() {
 	// Search earns its row only once the members run past one page.
 	const isSearchable = memberRows.length > MEMBERS_VIEW.perPage;
 
-	// Header: the group leads. The owner is the first row of the members table, and
-	// stays in the breadcrumb because groups without their own name share the plan's.
+	// Header: the group leads. The owner is the first row of the members table.
 	useEffect( () => {
 		if ( ! group ) {
 			return;
