@@ -240,7 +240,7 @@ export default function ImpactTable( {
 				</p>
 			) }
 			{ framed ? (
-				<TableCard separator title={ __( 'Affected Products', 'newspack-plugin' ) } after={ seeMore ?? undefined }>
+				<TableCard title={ __( 'Affected Products', 'newspack-plugin' ) } after={ seeMore ?? undefined }>
 					{ table }
 				</TableCard>
 			) : (

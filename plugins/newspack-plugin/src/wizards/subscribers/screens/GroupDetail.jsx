@@ -415,7 +415,6 @@ function GroupDetailView() {
 			{ roleError && <Notice isError noticeText={ roleError } /> }
 			<TableCard
 				heading={ 2 }
-				separator
 				title={
 					<>
 						{ __( 'Members', 'newspack-plugin' ) }{ ' ' }
@@ -531,7 +530,7 @@ function GroupDetailView() {
 			</TableCard>
 
 			{ inviteRows.length > 0 && (
-				<TableCard heading={ 2 } separator title={ __( 'Invitations', 'newspack-plugin' ) }>
+				<TableCard heading={ 2 } title={ __( 'Invitations', 'newspack-plugin' ) }>
 					<DataViews
 						countLabel={ ( count, formatted ) =>
 							sprintf(

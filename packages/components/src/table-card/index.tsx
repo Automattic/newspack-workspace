@@ -32,7 +32,10 @@ interface TableCardProps {
 	description?: React.ReactNode;
 	before?: React.ReactNode;
 	after?: React.ReactNode;
-	/** Draw a line between the header and the table, which then starts right under it. */
+	/**
+	 * Draw a line between the header and the table, which then starts right
+	 * under it. On whenever the card has a header; pass `false` to leave it out.
+	 */
 	separator?: boolean;
 	className?: string;
 	/** Rendered edge-to-edge via `Card.FullBleed`. */
@@ -42,12 +45,13 @@ interface TableCardProps {
 /** `0` is a renderable slot value; the falsy leftovers of `cond && <X />` are not. */
 const isRenderable = ( node: React.ReactNode ) => node !== undefined && node !== null && node !== '' && typeof node !== 'boolean';
 
-export default function TableCard( { title, titleId, heading = 3, actions, description, before, after, separator = false, className, children }: TableCardProps ) {
+export default function TableCard( { title, titleId, heading = 3, actions, description, before, after, separator = true, className, children }: TableCardProps ) {
 	const TitleTag = `h${ heading }` as const;
 	const hasTitle = isRenderable( title );
 	const hasActions = isRenderable( actions );
 	const hasDescription = isRenderable( description );
-	const rowProps = { direction: 'row', justify: hasTitle ? 'space-between' : 'end', align: 'center' } as const;
+	const hasHeader = hasTitle || hasActions || hasDescription;
+	const rowProps = { direction: 'row', justify: hasTitle || hasDescription ? 'space-between' : 'end', align: 'center' } as const;
 	const titleNode = hasTitle && <Card.Title render={ <TitleTag id={ titleId } /> }>{ title }</Card.Title>;
 	/* Its own row, so several actions don't scatter across the header's space-between. */
 	const actionsNode = hasActions && (
@@ -57,8 +61,8 @@ export default function TableCard( { title, titleId, heading = 3, actions, descr
 	);
 	return (
 		<TableCardContext.Provider value={ true }>
-			<Card.Root className={ classnames( 'newspack-table-card', { 'newspack-table-card--separated': separator }, className ) }>
-				{ ( hasTitle || hasActions ) && (
+			<Card.Root className={ classnames( 'newspack-table-card', { 'newspack-table-card--separated': hasHeader && separator }, className ) }>
+				{ hasHeader && (
 					<Card.Header className="newspack-table-card__header" render={ hasActions || hasDescription ? <Stack { ...rowProps } /> : undefined }>
 						{ hasDescription ? (
 							<Stack direction="column" gap="xs">

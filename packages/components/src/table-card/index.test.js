@@ -105,6 +105,45 @@ describe( 'TableCard', () => {
 		expect( heading.parentElement.parentElement ).toContainElement( action );
 	} );
 
+	it( 'separates the header from the table whenever there is a header', () => {
+		const separated = container => container.querySelector( '.newspack-table-card--separated' );
+		const { container, rerender } = render(
+			<TableCard title="Members">
+				<table aria-label="Members" />
+			</TableCard>
+		);
+		expect( separated( container ) ).toBeInTheDocument();
+
+		rerender(
+			<TableCard description="2 invitations pending">
+				<table aria-label="Members" />
+			</TableCard>
+		);
+		expect( screen.getByText( '2 invitations pending' ) ).toBeInTheDocument();
+		expect( separated( container ) ).toBeInTheDocument();
+
+		rerender(
+			<TableCard actions={ <button>Add Price</button> }>
+				<table aria-label="Prices" />
+			</TableCard>
+		);
+		expect( separated( container ) ).toBeInTheDocument();
+
+		rerender(
+			<TableCard title="Members" separator={ false }>
+				<table aria-label="Members" />
+			</TableCard>
+		);
+		expect( separated( container ) ).not.toBeInTheDocument();
+
+		rerender(
+			<TableCard before={ <p>Stats row</p> }>
+				<table aria-label="Prices" />
+			</TableCard>
+		);
+		expect( separated( container ) ).not.toBeInTheDocument();
+	} );
+
 	it( 'orders before, table, after within the card body', () => {
 		render(
 			<TableCard before={ <p>Stats row</p> } after={ <button>Show 12 more</button> }>

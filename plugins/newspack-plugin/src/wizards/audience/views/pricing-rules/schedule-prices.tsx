@@ -212,7 +212,6 @@ export default function SchedulePrices( { steps, onChange, publicize, calcTypes,
 	return (
 		<>
 			<TableCard
-				separator={ rows.length > 0 }
 				title={ rows.length > 0 && __( 'Price Schedule', 'newspack-plugin' ) }
 				titleId={ titleId }
 				actions={
