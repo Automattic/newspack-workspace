@@ -132,7 +132,7 @@ export function subscriptionNames( ids: number[], options: { id: number; name: s
  * @param ids     The rule's subscription product ids.
  * @param options Known subscription products.
  */
-export function subscriptionsSummary( ids: number[], options: { id: number; name: string }[] ): { named: string; more: string } {
+export function subscriptionsSummary( ids: number[], options: { id: number; name: string }[] ): { named: string; more: string; hidden: string[] } {
 	const names = subscriptionNames( ids, options );
 	if ( ! names.length ) {
 		return {
@@ -142,12 +142,14 @@ export function subscriptionsSummary( ids: number[], options: { id: number; name
 				ids.length
 			),
 			more: '',
+			hidden: [],
 		};
 	}
 	const shown = names.slice( 0, MAX_NAMED_ITEMS );
 	const remaining = ids.length - shown.length;
 	return {
 		named: shown.join( ', ' ),
+		hidden: names.slice( shown.length ),
 		more: remaining
 			? sprintf(
 					/* translators: %d: number of further subscriptions the rule covers beyond the ones named beside this. */

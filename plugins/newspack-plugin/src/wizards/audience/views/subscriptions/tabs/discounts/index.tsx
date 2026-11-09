@@ -157,7 +157,13 @@ function SubscriberDiscounts() {
 		return [ ...byId ].map( ( [ id, name ] ) => ( { id, name } ) );
 	}, [ subscriptionOptions, resolvedNames ] );
 
-	const fields = useMemo( () => discountFields( currency, namedSubscriptions ), [ currency, namedSubscriptions ] );
+	const ruleProductIds = useMemo(
+		() => payload.rules.flatMap( rule => [ ...( rule.product_ids || [] ), ...( rule.excluded_product_ids || [] ) ] ),
+		[ payload.rules ]
+	);
+	const productNames = useNames( SEARCH_ENDPOINTS.products, ruleProductIds );
+
+	const fields = useMemo( () => discountFields( currency, namedSubscriptions, productNames ), [ currency, namedSubscriptions, productNames ] );
 
 	const actions: Action< DiscountRule >[] = useMemo(
 		() => [

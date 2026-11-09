@@ -16,6 +16,7 @@ import type { Field } from '@wordpress/dataviews';
 /**
  * Internal dependencies.
  */
+import NamesTooltip from '../../components/names-tooltip';
 import { StatusBadge } from '../../../../../../../packages/components/src';
 import { ALL_SUBSCRIPTIONS_FILTER_VALUE, allSubscriptionsLabel } from '../../constants';
 import { discountLabel, excludedLabel, subscriptionNames, subscriptionsSummary, targetingBaseLabel, targetingLabel } from './discount';
@@ -32,7 +33,11 @@ type Subscription = { id: number; name: string };
  *                      as trashed ones. The filter narrows rules already on
  *                      screen, so it offers that same set.
  */
-export function discountFields( currency: DiscountCurrency, subscriptions: Subscription[] ): Field< DiscountRule >[] {
+export function discountFields(
+	currency: DiscountCurrency,
+	subscriptions: Subscription[],
+	productNames: Record< number, string > = {}
+): Field< DiscountRule >[] {
 	return [
 		{
 			id: 'subscription',
@@ -51,7 +56,7 @@ export function discountFields( currency: DiscountCurrency, subscriptions: Subsc
 				if ( 'all' === item.subscription_targeting ) {
 					return <span className="newspack-subscriber-discounts__subscriptions">{ allSubscriptionsLabel() }</span>;
 				}
-				const { named, more } = subscriptionsSummary( item.subscription_product_ids, subscriptions );
+				const { named, more, hidden } = subscriptionsSummary( item.subscription_product_ids, subscriptions );
 				return (
 					<span className="newspack-subscriber-discounts__subscriptions">
 						{ /* The clipped names stay in the DOM, so a screen reader reads the
@@ -60,7 +65,7 @@ export function discountFields( currency: DiscountCurrency, subscriptions: Subsc
 						<span className="newspack-subscriber-discounts__subscriptions-named" title={ named }>
 							{ named }
 						</span>
-						{ more && <span className="newspack-subscriber-discounts__subscriptions-more">{ more }</span> }
+						{ more && <NamesTooltip label={ more } names={ hidden } /> }
 					</span>
 				);
 			},
@@ -111,13 +116,22 @@ export function discountFields( currency: DiscountCurrency, subscriptions: Subsc
 			getValue: ( { item } ) => targetingLabel( item ),
 			render: ( { item } ) => {
 				const excluded = excludedLabel( item );
+				const namesOf = ( ids: number[] ) => ids.map( id => productNames[ id ] ).filter( Boolean );
+				const base =
+					'products' === item.targeting ? (
+						<NamesTooltip label={ targetingBaseLabel( item ) } names={ namesOf( item.product_ids ) } />
+					) : (
+						targetingBaseLabel( item )
+					);
 				if ( ! excluded ) {
-					return targetingBaseLabel( item );
+					return base;
 				}
 				return (
 					<span className="newspack-subscriber-discounts__applies-to">
-						{ targetingBaseLabel( item ) }
-						<span className="newspack-subscriber-discounts__applies-to-excluded">{ excluded }</span>
+						{ base }
+						<span className="newspack-subscriber-discounts__applies-to-excluded">
+							<NamesTooltip label={ excluded } names={ namesOf( item.excluded_product_ids ) } />
+						</span>
 					</span>
 				);
 			},
