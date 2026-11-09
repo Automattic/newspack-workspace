@@ -1411,7 +1411,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 			[
 				'show_in_rest' => true,
 				'rest_base'    => 'custom-base',
-			] 
+			]
 		);
 		$offer = function( $taxonomies ) {
 			$taxonomies[] = [
@@ -1439,7 +1439,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 			[
 				'show_in_rest' => true,
 				'labels'       => [ 'name' => 'Test Sections' ],
-			] 
+			]
 		);
 		$gates = [
 			[
@@ -4162,7 +4162,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 					'slug'  => 'category',
 					'value' => [ 'news' ],
 				],
-			] 
+			]
 		);
 		$this->assertWPError( $result );
 		$this->assertSame( 'invalid_archive_rule_slug', $result->get_error_code() );
@@ -4182,7 +4182,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 					'slug'  => 'post_type_archives',
 					'value' => [ 'newspack_collection', '' ],
 				],
-			] 
+			]
 		);
 		$this->assertSame(
 			[
@@ -4191,7 +4191,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 					'value' => [ 'newspack_collection' ],
 				],
 			],
-			$result 
+			$result
 		);
 	}
 
@@ -4227,7 +4227,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 				'public'      => true,
 				'has_archive' => true,
 				'labels'      => [ 'name' => 'Archive CPT' ],
-			] 
+			]
 		);
 		$filter = function () {
 			return [ 'post', 'np_archive_cpt', 'np_unregistered' ];
@@ -4251,8 +4251,8 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 						'value' => [ 'np_archive_cpt' ],
 					],
 				],
-				[ 'np_archive_cpt' ] 
-			) 
+				[ 'np_archive_cpt' ]
+			)
 		);
 		$this->assertFalse(
 			Content_Rules::gate_matches_archive(
@@ -4262,8 +4262,8 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 						'value' => [ 'post' ],
 					],
 				],
-				[ 'post' ] 
-			) 
+				[ 'post' ]
+			)
 		);
 
 		remove_filter( 'newspack_content_gate_supported_archive_post_types', $filter );

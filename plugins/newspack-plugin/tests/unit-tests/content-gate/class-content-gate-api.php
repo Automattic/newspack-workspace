@@ -479,7 +479,11 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 	 * is turned off and its post type is no longer registered.
 	 */
 	public function test_gate_with_unregistered_collection_post_type_can_be_published() {
-		$this->assertFalse( post_type_exists( 'newspack_collection' ), 'Setup: the Collections post type is not registered.' );
+		// Collections tests earlier in a run leave the post type registered. Take it out
+		// of the registry as the module being off would, and put the same object back.
+		global $wp_post_types;
+		$registered_collection_type = $wp_post_types['newspack_collection'] ?? null;
+		unset( $wp_post_types['newspack_collection'] );
 		$stored  = [
 			[
 				'slug'  => 'post_types',
@@ -488,10 +492,17 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 		];
 		$gate_id = $this->create_gate_with_content_rules( $stored );
 
-		$sanitized = Content_Gate_API::sanitize_gate(
-			array_merge( Content_Gate::get_gate( $gate_id ), [ 'status' => 'publish' ] ),
-			$this->gate_update_request( $gate_id )
-		);
+		try {
+			$this->assertFalse( post_type_exists( 'newspack_collection' ), 'Setup: the Collections post type is not registered.' );
+			$sanitized = Content_Gate_API::sanitize_gate(
+				array_merge( Content_Gate::get_gate( $gate_id ), [ 'status' => 'publish' ] ),
+				$this->gate_update_request( $gate_id )
+			);
+		} finally {
+			if ( $registered_collection_type ) {
+				$wp_post_types['newspack_collection'] = $registered_collection_type;
+			}
+		}
 
 		$this->assertIsArray( $sanitized );
 		$this->assertSame( $stored, $sanitized['content_rules'] );
