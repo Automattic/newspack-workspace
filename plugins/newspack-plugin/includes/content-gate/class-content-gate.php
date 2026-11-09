@@ -2182,6 +2182,21 @@ class Content_Gate {
 	}
 
 	/**
+	 * Whether {@see self::restrict_post()} restricted this post as the article
+	 * being read on this request.
+	 *
+	 * That decision already accounts for metering, so a view metering lets
+	 * through answers false. Not {@see self::has_staged_restriction()}, which
+	 * also counts the teasers a listing stages for the posts it shows.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return bool
+	 */
+	public static function did_restrict_post( int $post_id ): bool {
+		return self::STAGED_BY_ARTICLE === ( self::$restricted_content[ $post_id ]['source'] ?? '' );
+	}
+
+	/**
 	 * Whether the post has restrictions
 	 *
 	 * @param int $post_id Post ID.

@@ -7,6 +7,7 @@
  * @package Newspack\Collections
  */
 
+use Newspack\Collections\Gate_Integration;
 use Newspack\Collections\Query_Helper;
 use Newspack\Collections\Template_Helper;
 
@@ -40,8 +41,11 @@ get_header();
 
 			echo wp_kses_post( Template_Helper::render_separator( 'is-latest-collection' ) );
 
+			// A gated Collection shows the teaser and the gate in place of its sections.
+			$is_gated = Gate_Integration::render_single_gate( $collection_id );
+
 			// Get posts in this collection organized by sections.
-			$collection_posts = Query_Helper::get_collection_posts( $collection_id );
+			$collection_posts = $is_gated ? [] : Query_Helper::get_collection_posts( $collection_id );
 
 			if ( $collection_posts ) :
 				foreach ( $collection_posts as $section_slug => $post_ids ) :
