@@ -23,7 +23,7 @@ const AmountValueInput = ( {
 	const onChange = ( { value, frequency }: { value: string; frequency: DonationFrequencySlug } ) => {
 		const subject = attributes.manual ? attributes : settings;
 		subject.amounts[ frequency ][ tierIndex ] = parseFloat( value );
-		const update: Partial< DonateBlockAttributes > = {
+		const update: Pick< DonateBlockAttributes, 'amounts' > = {
 			amounts: {
 				[ frequency ]: subject.amounts[ frequency ],
 				...subject.amounts,

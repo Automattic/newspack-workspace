@@ -1,4 +1,21 @@
-import { getColorForContrast } from './utils';
+import { getColorForContrast, getMinimumDonation } from './utils';
+
+describe( 'getMinimumDonation', () => {
+	it.each( [
+		[ 1200, 1200 ],
+		[ '1200', 1200 ],
+		[ '12.5', 12.5 ],
+		[ 0, 0 ],
+	] )( 'reads %p as the minimum %p', ( value, expected ) => {
+		expect( getMinimumDonation( value ) ).toBe( expected );
+	} );
+
+	// An unset minimum is what lets the editor fill in the site-wide value. A
+	// number must never count as unset, or the block's own minimum is replaced.
+	it.each( [ undefined, null, '', 'abc' ] )( 'treats %p as no minimum', value => {
+		expect( getMinimumDonation( value ) ).toBeUndefined();
+	} );
+} );
 
 describe( 'getColorForContrast', () => {
 	// Must stay in parity with Newspack_Blocks::get_color_for_contrast(), which

@@ -30,7 +30,7 @@ import { Icon, formatListBullets, grid } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { getMigratedAmount } from '../utils';
+import { getMigratedAmount, getMinimumDonation } from '../utils';
 import type { DonationSettings, DonationFrequencySlug, DonationAmountsArray, EditState, EditProps } from '../types';
 import TierBasedLayout from './TierBasedLayout';
 import FrequencyBasedLayout from './FrequencyBasedLayout';
@@ -85,8 +85,10 @@ const Edit = ( { attributes, setAttributes }: EditProps ) => {
 					setAttributes( { disabledFrequencies: donationSettings.disabledFrequencies } );
 				}
 
-				if ( isEmpty( attributes.minimumDonation ) ) {
-					setAttributes( { minimumDonation: donationSettings.minimumDonation } );
+				// Only a block with no minimum of its own takes the site-wide one.
+				// lodash's isEmpty() is true for every number, so it can't make this check.
+				if ( getMinimumDonation( attributes.minimumDonation ) === undefined ) {
+					setAttributes( { minimumDonation: getMinimumDonation( donationSettings.minimumDonation ) } );
 				}
 
 				// Migrate old attributes.
@@ -197,7 +199,7 @@ const Edit = ( { attributes, setAttributes }: EditProps ) => {
 		},
 	];
 
-	const minimumDonation = isManual ? attributes.minimumDonation : settings.minimumDonation;
+	const minimumDonation = getMinimumDonation( isManual ? attributes.minimumDonation : settings.minimumDonation ) ?? 0;
 	const displayedAmounts = { ...amounts };
 	( Object.keys( amounts ) as DonationFrequencySlug[] ).forEach( frequency => {
 		const amountsWithMinimum = amounts[ frequency ].map( amount => Math.max( amount, minimumDonation ) ) as DonationAmountsArray;
@@ -341,9 +343,7 @@ const Edit = ( { attributes, setAttributes }: EditProps ) => {
 										<div className="wp-block-newspack-blocks-donate__panel-inputs">
 											{ FREQUENCY_SLUGS.reduce(
 												( acc: boolean, frequencySlug: DonationFrequencySlug ) =>
-													! amounts[ frequencySlug ][ 3 ] || amounts[ frequencySlug ][ 3 ] < attributes.minimumDonation
-														? true
-														: acc,
+													! amounts[ frequencySlug ][ 3 ] || amounts[ frequencySlug ][ 3 ] < minimumDonation ? true : acc,
 												false
 											) && renderMinAmountWarning() }
 
@@ -366,7 +366,7 @@ const Edit = ( { attributes, setAttributes }: EditProps ) => {
 									type="number"
 									label={ __( 'Minimum donation', 'newspack-blocks' ) }
 									min={ 1 }
-									onChange={ ( value: number ) => setAttributes( { minimumDonation: value } ) }
+									onChange={ ( value: string ) => setAttributes( { minimumDonation: getMinimumDonation( value ) } ) }
 									value={ attributes.minimumDonation }
 								/>
 							</>

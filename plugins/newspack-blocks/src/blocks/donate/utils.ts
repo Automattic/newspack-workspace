@@ -83,6 +83,24 @@ export const getColorForContrast = ( color?: string ): string => {
 	return Math.abs( whiteLc ) > Math.abs( blackLc ) ? whiteColor : blackColor;
 };
 
+/**
+ * Read a minimum donation as a number, or undefined when none is set.
+ *
+ * Blocks saved before minimums were stored as numbers carry them as strings,
+ * so both forms count. Only a missing or unreadable value is "not set": the
+ * editor fills that in from the site-wide minimum, and treating a real
+ * minimum as unset would replace the block's own on the next save.
+ *
+ * @param value Stored or entered minimum.
+ */
+export const getMinimumDonation = ( value: unknown ): number | undefined => {
+	if ( value === undefined || value === null || value === '' ) {
+		return undefined;
+	}
+	const minimum = Number( value );
+	return Number.isFinite( minimum ) ? minimum : undefined;
+};
+
 export const getMigratedAmount = (
 	frequency: DonationFrequencySlug,
 	amounts: [ number, number, number ],
