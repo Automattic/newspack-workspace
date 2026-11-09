@@ -1,20 +1,16 @@
-import { getColorForContrast, getMinimumDonation, usesSiteMinimumDonation } from './utils';
+import { dropsMinimumDonation, getColorForContrast, getMinimumDonation } from './utils';
 
-describe( 'usesSiteMinimumDonation', () => {
-	// A manual block's own minimum is what its form enforces. Replacing it on
-	// load was the bug that kept resetting publishers' per-block minimums.
-	it.each( [ 1200, '1200', 0 ] )( 'keeps a manual block minimum of %p', minimumDonation => {
-		expect( usesSiteMinimumDonation( { manual: true, minimumDonation } ) ).toBe( false );
+describe( 'dropsMinimumDonation', () => {
+	// A manual block's minimum is what its form enforces, so loading the editor
+	// must never change it. Without one, the block follows the site-wide minimum.
+	it.each( [ 1200, '1200', 0, undefined ] )( 'keeps a manual block minimum of %p', minimumDonation => {
+		expect( dropsMinimumDonation( { manual: true, minimumDonation } ) ).toBe( false );
 	} );
 
-	it.each( [ undefined, '' ] )( 'fills in a manual block minimum of %p', minimumDonation => {
-		expect( usesSiteMinimumDonation( { manual: true, minimumDonation } ) ).toBe( true );
-	} );
-
-	// Without manual mode the front end ignores the block's minimum, so it should
-	// track the site-wide value for whenever manual mode is turned on.
-	it.each( [ undefined, false ] )( 'refreshes the minimum when manual is %p', manual => {
-		expect( usesSiteMinimumDonation( { manual, minimumDonation: 5 } ) ).toBe( true );
+	// Only manual blocks use their minimum on the front end. Dropping it from the
+	// others means turning manual mode on starts out following the site minimum.
+	it.each( [ undefined, false ] )( 'drops a stored minimum when manual is %p', manual => {
+		expect( dropsMinimumDonation( { manual, minimumDonation: 5 } ) ).toBe( true );
 	} );
 } );
 

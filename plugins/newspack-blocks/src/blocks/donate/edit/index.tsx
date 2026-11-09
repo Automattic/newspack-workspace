@@ -30,7 +30,7 @@ import { Icon, formatListBullets, grid } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { getMigratedAmount, getMinimumDonation, usesSiteMinimumDonation } from '../utils';
+import { dropsMinimumDonation, getMigratedAmount, getMinimumDonation } from '../utils';
 import type { DonationSettings, DonationFrequencySlug, DonationAmountsArray, EditState, EditProps } from '../types';
 import TierBasedLayout from './TierBasedLayout';
 import FrequencyBasedLayout from './FrequencyBasedLayout';
@@ -85,10 +85,8 @@ const Edit = ( { attributes, setAttributes }: EditProps ) => {
 					setAttributes( { disabledFrequencies: donationSettings.disabledFrequencies } );
 				}
 
-				// Not isEmpty(), which is true for every number and so replaced every
-				// manual block's own minimum.
-				if ( usesSiteMinimumDonation( attributes ) ) {
-					setAttributes( { minimumDonation: getMinimumDonation( donationSettings.minimumDonation ) } );
+				if ( dropsMinimumDonation( attributes ) ) {
+					setAttributes( { minimumDonation: undefined } );
 				}
 
 				// Migrate old attributes.
@@ -199,7 +197,9 @@ const Edit = ( { attributes, setAttributes }: EditProps ) => {
 		},
 	];
 
-	const minimumDonation = getMinimumDonation( isManual ? attributes.minimumDonation : settings.minimumDonation ) ?? 0;
+	// The front end uses a manual block's own minimum, or the site-wide one when it has none.
+	const siteMinimumDonation = getMinimumDonation( settings.minimumDonation );
+	const minimumDonation = ( isManual ? getMinimumDonation( attributes.minimumDonation ) : undefined ) ?? siteMinimumDonation ?? 0;
 	const displayedAmounts = { ...amounts };
 	( Object.keys( amounts ) as DonationFrequencySlug[] ).forEach( frequency => {
 		const amountsWithMinimum = amounts[ frequency ].map( amount => Math.max( amount, minimumDonation ) ) as DonationAmountsArray;
@@ -365,7 +365,9 @@ const Edit = ( { attributes, setAttributes }: EditProps ) => {
 									className="components-frequency-donations__minimum-donation"
 									type="number"
 									label={ __( 'Minimum donation', 'newspack-blocks' ) }
+									help={ __( 'Leave empty to use the site-wide minimum donation.', 'newspack-blocks' ) }
 									min={ 1 }
+									placeholder={ siteMinimumDonation === undefined ? undefined : String( siteMinimumDonation ) }
 									onChange={ ( value: string ) => setAttributes( { minimumDonation: getMinimumDonation( value ) } ) }
 									value={ attributes.minimumDonation ?? '' }
 								/>

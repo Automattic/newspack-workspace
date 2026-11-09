@@ -85,7 +85,7 @@ class DonateBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 
 	/**
 	 * A manual block's own minimum applies only when it is a number. Anything
-	 * else falls back to the site-wide minimum, so a block can't drop the floor.
+	 * else falls back to the site-wide minimum, so a blank minimum can't drop the floor.
 	 *
 	 * @dataProvider block_minimum_provider
 	 *

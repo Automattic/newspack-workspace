@@ -14,6 +14,7 @@ const BLOCK_NAME = `newspack-blocks/${ metadata.name }`;
 describe( 'Donate block minimum donation attribute', () => {
 	beforeAll( () => {
 		registerBlockType( BLOCK_NAME, {
+			apiVersion: metadata.apiVersion,
 			title: 'Donate',
 			category: 'widgets',
 			attributes: metadata.attributes,

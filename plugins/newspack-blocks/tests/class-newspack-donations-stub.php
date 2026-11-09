@@ -4,7 +4,8 @@
  *
  * The newspack-blocks test suite runs without newspack-plugin loaded, so the
  * real \Newspack\Donations class is absent. This lightweight stub lets the
- * tests exercise the newspack_is_donation REST field contract in isolation.
+ * tests exercise the newspack_is_donation REST field contract and the Donate
+ * block renderer in isolation.
  *
  * @package Newspack_Blocks
  */
@@ -32,17 +33,6 @@ if ( ! class_exists( __NAMESPACE__ . '\Donations' ) ) {
 		public static $stub_calls = [];
 
 		/**
-		 * Whether the given product ID is a donation product.
-		 *
-		 * @param int $product_id Product ID to check.
-		 * @return bool
-		 */
-		public static function is_donation_product( $product_id ) {
-			self::$stub_calls[] = $product_id;
-			return in_array( (int) $product_id, self::$stub_donation_product_ids, true );
-		}
-
-		/**
 		 * Site-wide donation settings the stub returns. Set by the test.
 		 *
 		 * @var array
@@ -56,6 +46,17 @@ if ( ! class_exists( __NAMESPACE__ . '\Donations' ) ) {
 		 * @var bool
 		 */
 		public static $stub_is_platform_nrh = false;
+
+		/**
+		 * Whether the given product ID is a donation product.
+		 *
+		 * @param int $product_id Product ID to check.
+		 * @return bool
+		 */
+		public static function is_donation_product( $product_id ) {
+			self::$stub_calls[] = $product_id;
+			return in_array( (int) $product_id, self::$stub_donation_product_ids, true );
+		}
 
 		/**
 		 * Site-wide donation settings.
