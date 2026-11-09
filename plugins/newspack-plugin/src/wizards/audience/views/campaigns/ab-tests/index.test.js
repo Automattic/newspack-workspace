@@ -291,7 +291,9 @@ describe( 'A/B Tests tab', () => {
 		render( <ABTests /> );
 		const card = await screen.findByRole( 'region', { name: 'Test man' } );
 		expect(
-			within( card ).getByText( /^Version A is on a manual or custom placement, or is an overlay set to Manual only/ )
+			within( card ).getByText(
+				"Version A is on a manual or custom placement, or is an overlay set to Manual only, so its results can't be measured. Move it to a placement Newspack controls, or end the test."
+			)
 		).toBeInTheDocument();
 		// A notice instead of the answer, never both.
 		expect( within( card ).queryByText( 'Result' ) ).not.toBeInTheDocument();
@@ -391,6 +393,25 @@ describe( 'Ended tests', () => {
 		render( <ABTests /> );
 		const card = await screen.findByRole( 'region', { name: 'Test una' } );
 		expect( within( card ).queryByRole( 'button', { name: /End Test/ } ) ).not.toBeInTheDocument();
+		// Nor tells the publisher to end it.
+		expect(
+			within( card ).getByText(
+				"Version B is on a manual or custom placement, or is an overlay set to Manual only, so its results can't be measured. Move it to a placement Newspack controls."
+			)
+		).toBeInTheDocument();
+	} );
+
+	it( 'asks for no placement change on an ended test', async () => {
+		const moved = test(
+			'mov',
+			{ a: prompt( 12, { status: 'draft', status_label: 'Draft' } ), b: prompt( 13, { eligible: false } ) },
+			{ started_at: '2026-09-30T00:00:00Z', status: 'ended', ended_at: '2026-10-29T12:00:00Z', kept: 'b' }
+		);
+		mockRoutes( listResponse( [ moved ] ) );
+		render( <ABTests location={ { search: '?test=mov' } } /> );
+		const card = await screen.findByRole( 'region', { name: 'Test mov' } );
+		expect( await within( card ).findByText( /^Ended .+\. Kept B\.$/ ) ).toBeInTheDocument();
+		expect( within( card ).queryByText( /Move it to a placement/ ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'says there are no active tests when every test has ended', async () => {

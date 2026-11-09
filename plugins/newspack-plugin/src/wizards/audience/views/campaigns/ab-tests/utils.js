@@ -408,6 +408,7 @@ export const getVerdict = ( test, status, stats ) => {
 		if ( ! other ) {
 			return { answer, detail: null, bars: null };
 		}
+		const endedBars = getBars( letters, rates );
 		return {
 			answer,
 			detail: sprintf(
@@ -418,7 +419,8 @@ export const getVerdict = ( test, status, stats ) => {
 				formatRate( rates[ other ] ),
 				other.toUpperCase()
 			),
-			bars: getBars( letters, rates ),
+			// Faint bars mean "no data yet", which an ended test never is.
+			bars: endedBars.placeholder ? null : endedBars,
 		};
 	}
 

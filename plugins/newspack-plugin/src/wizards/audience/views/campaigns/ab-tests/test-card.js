@@ -2,7 +2,7 @@
  * WordPress dependencies
  */
 import { useEffect, useId, useRef, useState } from '@wordpress/element';
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { speak } from '@wordpress/a11y';
 import apiFetch from '@wordpress/api-fetch';
 import { decodeEntities } from '@wordpress/html-entities';
@@ -351,46 +351,30 @@ const TestCard = ( { test, data, onRenamed, onEnded, isTarget = false } ) => {
 			</Notice>
 		);
 	}
-	if ( ineligible.length > 0 ) {
-		const endable = canEndTest( test );
-		let message;
-		if ( ineligible.length > 1 ) {
-			message = endable
-				? sprintf(
-						// Translators: %s is a list of version letters, such as "A and B".
-						__(
-							"Versions %s are on manual or custom placements, or are overlays set to Manual only, so their results can't be measured. Move them to placements Newspack controls, or end the test.",
-							'newspack-plugin'
-						),
-						formatList( ineligible.map( letter => letter.toUpperCase() ) )
-				  )
-				: sprintf(
-						// Translators: %s is a list of version letters, such as "A and B".
-						__(
-							"Versions %s are on manual or custom placements, or are overlays set to Manual only, so their results can't be measured. Move them to placements Newspack controls.",
-							'newspack-plugin'
-						),
-						formatList( ineligible.map( letter => letter.toUpperCase() ) )
-				  );
-		} else {
-			message = endable
-				? sprintf(
-						// Translators: %s is a version letter, such as "B".
-						__(
-							"Version %s is on a manual or custom placement, or is an overlay set to Manual only, so its results can't be measured. Move it to a placement Newspack controls, or end the test.",
-							'newspack-plugin'
-						),
-						ineligible[ 0 ].toUpperCase()
-				  )
-				: sprintf(
-						// Translators: %s is a version letter, such as "B".
-						__(
-							"Version %s is on a manual or custom placement, or is an overlay set to Manual only, so its results can't be measured. Move it to a placement Newspack controls.",
-							'newspack-plugin'
-						),
-						ineligible[ 0 ].toUpperCase()
-				  );
-		}
+	// An ended test's placements no longer affect its results.
+	if ( ineligible.length > 0 && ! isEnded ) {
+		const versions = formatList( ineligible.map( letter => letter.toUpperCase() ) );
+		const message = canEndTest( test )
+			? sprintf(
+					// Translators: %s is a version letter, such as "B", or a list of them, such as "A and B".
+					_n(
+						"Version %s is on a manual or custom placement, or is an overlay set to Manual only, so its results can't be measured. Move it to a placement Newspack controls, or end the test.",
+						"Versions %s are on manual or custom placements, or are overlays set to Manual only, so their results can't be measured. Move them to placements Newspack controls, or end the test.",
+						ineligible.length,
+						'newspack-plugin'
+					),
+					versions
+			  )
+			: sprintf(
+					// Translators: %s is a version letter, such as "B", or a list of them, such as "A and B".
+					_n(
+						"Version %s is on a manual or custom placement, or is an overlay set to Manual only, so its results can't be measured. Move it to a placement Newspack controls.",
+						"Versions %s are on manual or custom placements, or are overlays set to Manual only, so their results can't be measured. Move them to placements Newspack controls.",
+						ineligible.length,
+						'newspack-plugin'
+					),
+					versions
+			  );
 		notices.push(
 			<Notice key="ineligible" status="error" isDismissible={ false } spokenMessage="">
 				{ message }

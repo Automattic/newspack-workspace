@@ -262,6 +262,39 @@ describe( 'getVerdict', () => {
 		expect( getVerdict( ended, 'ended', null ).detail ).toBeNull();
 	} );
 
+	it( 'names A the winner when every challenger is reliably worse', () => {
+		const verdict = getVerdict( twoVersions, 'running', result( { rates: { a: 2.69, b: 1.9 } } ) );
+		expect( verdict.answer ).toBe( 'A wins. 2.69% of readers who saw A converted, against 1.90% for B.' );
+	} );
+
+	it( 'agrees with the End Test recommendation on whether there is a winner', () => {
+		expect( getVerdict( twoVersions, 'running', result() ).answer ).toMatch( /^B wins\./ );
+		expect( getRecommendation( twoVersions, result() ) ).toEqual( { letter: 'b', winner: true } );
+		const young = result( { young: true, days: 6 } );
+		expect( getVerdict( twoVersions, 'running', young ).answer ).not.toMatch( /wins/ );
+		expect( getRecommendation( twoVersions, young ) ).toEqual( { letter: 'a', winner: false } );
+	} );
+
+	it( 'says nothing on a running card when the stats source is unavailable', () => {
+		expect( getVerdict( twoVersions, 'running', { ...result(), source: { state: 'unavailable' } } ) ).toBeNull();
+	} );
+
+	it( 'compares a kept A with the best challenger', () => {
+		const ended = { ...twoVersions, status: 'ended', kept: 'a', ended_at: '2026-10-29T12:00:00Z' };
+		expect( getVerdict( ended, 'ended', result() ).detail ).toBe( 'A converted 1.90% of readers, against 2.69% for B.' );
+	} );
+
+	it( 'gives an ended test no numbers or bars it cannot back', () => {
+		const ended = { ...twoVersions, status: 'ended', kept: 'b', ended_at: '2026-10-29T12:00:00Z' };
+		const uncounted = getVerdict( ended, 'ended', result( { rates: { a: 1.9, b: null } } ) );
+		expect( uncounted.detail ).toBeNull();
+		expect( uncounted.bars ).toBeNull();
+		// Nothing converted: the numbers stand, but faint "no data yet" bars would not.
+		const flat = getVerdict( ended, 'ended', result( { rates: { a: 0, b: 0 } } ) );
+		expect( flat.detail ).toBe( 'B converted 0.00% of readers, against 0.00% for A.' );
+		expect( flat.bars ).toBeNull();
+	} );
+
 	it( 'leaves incomplete and needs-attention cards to their notice', () => {
 		expect( getVerdict( twoVersions, 'incomplete', result() ) ).toBeNull();
 		expect( getVerdict( twoVersions, 'needs-attention', result() ) ).toBeNull();
