@@ -27,25 +27,6 @@ export const GOAL_BLOCKS = {
 };
 
 /**
- * Normalize a typed Test ID the way the server's sanitize_test_id() stores it, so
- * two prompts typed "Spring Drive 2026" and "spring-drive-2026" share one test.
- * Periods and slashes become hyphens because core's sanitize_title() turns them
- * into hyphens before stripping; non-ASCII letters are the known divergence
- * (the server transliterates them, this drops them).
- *
- * @param {string} value Typed value.
- * @return {string} Slug.
- */
-export const slugifyTestId = value =>
-	String( value ?? '' )
-		.toLowerCase()
-		.trim()
-		.replace( /[\s_./]+/g, '-' )
-		.replace( /[^a-z0-9-]/g, '' )
-		.replace( /-+/g, '-' )
-		.replace( /^-|-$/g, '' );
-
-/**
  * Whether a prompt with this placement can be part of a test. Mirrors the
  * server's is_eligible_placement(), including its Manual only rule.
  *
@@ -56,6 +37,45 @@ export const slugifyTestId = value =>
  */
 export const isEligiblePlacement = ( placement, ineligible, manualOnlyOverlay = false ) =>
 	! manualOnlyOverlay && ! ( ineligible || [] ).includes( placement );
+
+/**
+ * The goal to suggest for a new test, from the blocks in the prompt, and the
+ * help line that says where it came from. The most specific goal wins:
+ * GOAL_BLOCKS can't be read in order for this, because it lists the Checkout
+ * Button under form submissions too.
+ *
+ * @param {string[]} blockNames Names of the blocks in the prompt.
+ * @param {string}   content    The prompt's content, for links outside a button block.
+ * @return {{goal: string, help: string}|null} Suggestion, or null when nothing in the prompt names a goal.
+ */
+export const suggestGoal = ( blockNames, content = '' ) => {
+	const has = name => ( blockNames || [] ).includes( name );
+	if ( has( 'newspack-blocks/checkout-button' ) ) {
+		return {
+			goal: 'subscription',
+			help: __( 'What a reader does that counts as a success. Suggested from the Checkout Button in this prompt.', 'newspack-popups' ),
+		};
+	}
+	if ( has( 'newspack-blocks/donate' ) ) {
+		return {
+			goal: 'donation',
+			help: __( 'What a reader does that counts as a success. Suggested from the Donate block in this prompt.', 'newspack-popups' ),
+		};
+	}
+	if ( has( 'newspack/reader-registration' ) || has( 'newspack-newsletters/subscribe' ) ) {
+		return {
+			goal: 'form_submission',
+			help: __( 'What a reader does that counts as a success. Suggested from the sign-up form in this prompt.', 'newspack-popups' ),
+		};
+	}
+	if ( has( 'core/button' ) || /<a\s[^>]*href=/i.test( content || '' ) ) {
+		return {
+			goal: 'link_click',
+			help: __( 'What a reader does that counts as a success. Suggested from the link in this prompt.', 'newspack-popups' ),
+		};
+	}
+	return null;
+};
 
 /**
  * One line describing the traffic split.
@@ -119,22 +139,30 @@ export const missingGoalBlockMessage = ( goal, fromControl = false ) => {
  * @param {Object}   args
  * @param {number}   args.postId  This prompt's ID.
  * @param {string}   args.variant This prompt's variant.
+ * @param {string}   args.status  This prompt's post status.
  * @param {Object[]} args.prompts The prompts in the test, as the lookup route returns them.
  * @return {string[]} Messages.
  */
-export const testPromptWarnings = ( { postId, variant, prompts } ) => {
+export const testPromptWarnings = ( { postId, variant, status, prompts } ) => {
 	const others = ( prompts || [] ).filter( prompt => prompt.id !== postId );
+	const duplicates = others.filter( prompt => prompt.variant === variant );
 	const warnings = [];
-	if ( variant && others.some( prompt => prompt.variant === variant ) ) {
+	if ( variant && duplicates.length ) {
+		// Scheduled counts as live: readers see it once the date comes.
+		const live = [ status, ...duplicates.map( prompt => prompt.status ) ].filter( value => 'publish' === value || 'future' === value ).length;
+		const letter = String( variant ).toUpperCase();
 		warnings.push(
-			sprintf(
-				// Translators: %s is the version letter.
-				__(
-					'Another prompt in this test is already version %s. Clear the test name on one of them, or give one a different version.',
-					'newspack-popups'
-				),
-				String( variant ).toUpperCase()
-			)
+			live > 1
+				? sprintf(
+						// Translators: %s is the version letter.
+						__( 'Another prompt in this test is already version %s. Unpublish one of them.', 'newspack-popups' ),
+						letter
+				  )
+				: sprintf(
+						// Translators: %s is the version letter.
+						__( 'Another prompt in this test is already version %s. Move the unpublished one to the trash.', 'newspack-popups' ),
+						letter
+				  )
 		);
 	}
 	return warnings;

@@ -17,8 +17,7 @@ import apiFetch from '@wordpress/api-fetch';
 /**
  * Internal dependencies
  */
-import PricingRulesList, { ACTIVE_STATE_STATUS } from './list';
-import { statusGlyph } from '../../../../../packages/components/src/status-indicator';
+import PricingRulesList, { ruleState } from './list';
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
@@ -29,8 +28,9 @@ jest.mock( '../../../../../packages/components/src/wizard/store', () => ( { WIZA
 jest.mock( '../../../../../packages/components/src', () => {
 	const history = { push: jest.fn() };
 	return {
-		DataViews: ( { view, onChangeView, actions, data } ) => {
+		DataViews: ( { view, onChangeView, actions, data, fields } ) => {
 			const trash = ( actions || [] ).find( action => action.id === 'trash' );
+			const segments = ( fields || [] ).find( field => field.id === 'reader_segments' );
 			return (
 				<>
 					<button onClick={ () => onChangeView( { ...view, search: 'no-such-rule' } ) }>filter to nothing</button>
@@ -45,6 +45,7 @@ jest.mock( '../../../../../packages/components/src', () => {
 						filter to any reader
 					</button>
 					<span data-testid="rule-titles">{ data.map( item => item.title ).join( ', ' ) }</span>
+					{ segments && data.length > 0 && <div data-testid="first-row-segments">{ segments.render( { item: data[ 0 ] } ) }</div> }
 					{ trash && data.length > 0 && <trash.RenderModal items={ [ data[ 0 ] ] } closeModal={ () => {} } /> }
 				</>
 			);
@@ -117,13 +118,13 @@ const rule = id => ( {
 	edit_link: '',
 } );
 
-const response = rules => ( {
+const response = ( rules, conditions = [] ) => ( {
 	rules,
 	currency: { code: 'USD', symbol: '$', decimals: 2 },
 	strategies: [],
 	scopes: [],
 	calc_types: [],
-	conditions: [],
+	conditions,
 } );
 
 const catalogStats = ( over = {} ) => ( {
@@ -141,12 +142,12 @@ const catalogStats = ( over = {} ) => ( {
 const isCatalogPath = path => path.startsWith( '/wc-dynamic-pricing/v1/impact-preview' );
 
 /** Route each request by path, so the catalogue call never receives the rules payload. */
-const serve = ( { rules = [], stats = catalogStats(), rulesFail = false, statsFail = false } = {} ) => {
+const serve = ( { rules = [], conditions = [], stats = catalogStats(), rulesFail = false, statsFail = false } = {} ) => {
 	apiFetch.mockImplementation( ( { path } ) => {
 		if ( isCatalogPath( path ) ) {
 			return statsFail ? Promise.reject( new Error( 'nope' ) ) : Promise.resolve( stats );
 		}
-		return rulesFail ? Promise.reject( new Error( 'nope' ) ) : Promise.resolve( response( rules ) );
+		return rulesFail ? Promise.reject( new Error( 'nope' ) ) : Promise.resolve( response( rules, conditions ) );
 	} );
 };
 
@@ -333,6 +334,31 @@ describe( 'the Pricing Rules list', () => {
 		expect( screen.getByTestId( 'rule-titles' ) ).toHaveTextContent( expected );
 	} );
 
+	it( 'lists each reader segment on its own line', async () => {
+		serve( {
+			rules: [ { ...rule( 1 ), conditions: { reader_segment: [ 7, 8 ] } } ],
+			conditions: [
+				{
+					id: 'reader_segment',
+					options: [
+						{ value: 7, label: 'Engaged newsletter subscribers in the metro area' },
+						{ value: 8, label: 'Registered readers' },
+					],
+				},
+			],
+		} );
+		await act( async () => {
+			render( <PricingRulesList /> );
+		} );
+
+		const segments = screen.getByTestId( 'first-row-segments' ).querySelectorAll( '.newspack-pricing-rules__segment' );
+		expect( [ ...segments ].map( segment => segment.textContent ) ).toEqual( [
+			'Engaged newsletter subscribers in the metro area',
+			'Registered readers',
+		] );
+		expect( segments[ 0 ] ).toHaveAttribute( 'title', 'Engaged newsletter subscribers in the metro area' );
+	} );
+
 	it( 'keeps the table rather than the empty state when the read fails', async () => {
 		serve( { rulesFail: true } );
 		await act( async () => {
@@ -420,15 +446,12 @@ describe( 'the Pricing Rules list', () => {
 	} );
 } );
 
-describe( 'ACTIVE_STATE_STATUS', () => {
-	it( 'names every window state a rule can be in', () => {
-		expect( Object.keys( ACTIVE_STATE_STATUS ).sort() ).toEqual( [ 'active', 'ended', 'scheduled' ] );
-	} );
-
-	// The column offers the three as separate filters, and the glyph is the only thing
-	// telling them apart: nothing here is tinted.
-	it( 'gives no two states the same mark', () => {
-		const glyphs = Object.values( ACTIVE_STATE_STATUS ).map( name => statusGlyph( name ) );
-		expect( new Set( glyphs ).size ).toBe( glyphs.length );
+describe( 'ruleState', () => {
+	// A published rule outside its window changes no prices, so Status can't call it Active.
+	it( 'reads a published rule by its window and a draft as inactive', () => {
+		expect( ruleState( { status: 'publish', active_state: 'active' } ) ).toBe( 'active' );
+		expect( ruleState( { status: 'publish', active_state: 'scheduled' } ) ).toBe( 'scheduled' );
+		expect( ruleState( { status: 'publish', active_state: 'ended' } ) ).toBe( 'ended' );
+		expect( ruleState( { status: 'draft', active_state: 'active' } ) ).toBe( 'inactive' );
 	} );
 } );

@@ -9,6 +9,7 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 import { useState, useEffect, useCallback, useMemo, useRef } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
+import { Stack } from '@wordpress/ui';
 import { addQueryArgs } from '@wordpress/url';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View, RenderModalProps } from '@wordpress/dataviews';
@@ -23,12 +24,11 @@ import {
 /**
  * Internal dependencies
  */
-import { DataViews, Router, StatusIndicator, WizardBanner } from '../../../../../packages/components/src';
+import { DataViews, Router, StatusBadge, WizardBanner } from '../../../../../packages/components/src';
 import { formatCount } from '../../../../../packages/components/src/breadcrumbs/format-count';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import CatalogImpact from './catalog-impact';
 import PricingRulesOnboarding from './onboarding';
-import { postStatus } from '../../post-status';
 import { intentLabel, pathOptions } from './recipes';
 import { pricingModelSentence } from './model-sentence';
 import { RULES_API_PATH as API_PATH, IMPACT_PREVIEW_API_PATH } from './constants';
@@ -51,13 +51,25 @@ const DEFAULT_VIEW: View = {
 // hold the whole screen behind the spinner indefinitely.
 const STATS_GATE_TIMEOUT_MS = 8000;
 
-export const ACTIVE_STATE_STATUS = { active: 'active', scheduled: 'scheduled', ended: 'ended' } as const;
+export const RULE_STATE_STATUS = { active: 'active', scheduled: 'scheduled', ended: 'ended', inactive: 'draft' } as const;
 
-const ACTIVE_STATE_LABEL: Record< PricingRuleRow[ 'active_state' ], string > = {
+type RuleState = keyof typeof RULE_STATE_STATUS;
+
+const RULE_STATE_LABEL: Record< RuleState, string > = {
 	active: __( 'Active', 'newspack-plugin' ),
 	scheduled: __( 'Scheduled', 'newspack-plugin' ),
 	ended: __( 'Ended', 'newspack-plugin' ),
+	inactive: __( 'Inactive', 'newspack-plugin' ),
 };
+
+/**
+ * Whether a rule is changing prices now: a draft is inactive, and a published rule
+ * is active, scheduled or ended depending on its date window.
+ *
+ * @param item The rule row.
+ * @return The rule's state.
+ */
+export const ruleState = ( item: PricingRuleRow ): RuleState => ( 'publish' === item.status ? item.active_state ?? 'active' : 'inactive' );
 
 /** Filter value for a rule with no reader segment, which applies to every reader. */
 const ANY_READER = 'any';
@@ -183,9 +195,10 @@ export default function PricingRulesList() {
 	);
 
 	const statusElements = useMemo( () => {
-		const seen = new Map< string, string >();
-		data.forEach( item => seen.set( item.status, item.status_label ) );
-		return Array.from( seen, ( [ value, label ] ) => ( { value, label } ) );
+		const present = new Set( data.map( ruleState ) );
+		return ( Object.keys( RULE_STATE_LABEL ) as RuleState[] )
+			.filter( state => present.has( state ) )
+			.map( state => ( { value: state, label: RULE_STATE_LABEL[ state ] } ) );
 	}, [ data ] );
 
 	const fields: Field< PricingRuleRow >[] = useMemo(
@@ -231,21 +244,13 @@ export default function PricingRulesList() {
 			{
 				id: 'status',
 				label: __( 'Status', 'newspack-plugin' ),
-				getValue: ( { item } ) => item.status,
-				render: ( { item } ) => <StatusIndicator status={ postStatus( item.status ) }>{ item.status_label }</StatusIndicator>,
+				getValue: ( { item } ) => ruleState( item ),
+				render: ( { item } ) => {
+					const state = ruleState( item );
+					return <StatusBadge status={ RULE_STATE_STATUS[ state ] }>{ RULE_STATE_LABEL[ state ] }</StatusBadge>;
+				},
 				elements: statusElements,
 				filterBy: { operators: [ 'is' ] },
-			},
-			{
-				id: 'active_window',
-				label: __( 'Active window', 'newspack-plugin' ),
-				getValue: ( { item } ) => item.active_state,
-				render: ( { item } ) => (
-					<StatusIndicator status={ ACTIVE_STATE_STATUS[ item.active_state ] ?? 'ended' }>
-						{ ACTIVE_STATE_LABEL[ item.active_state ] ?? item.active_state }
-					</StatusIndicator>
-				),
-				enableSorting: false,
 			},
 			{
 				id: 'goal',
@@ -271,7 +276,13 @@ export default function PricingRulesList() {
 				render: ( { item } ) => {
 					const names = readerSegmentNames( item.conditions, segmentMap );
 					return names.length ? (
-						<span>{ names.join( ', ' ) }</span>
+						<Stack direction="column" align="flex-start" gap="sm" className="newspack-pricing-rules__segments">
+							{ names.map( ( name, index ) => (
+								<span key={ index } className="newspack-pricing-rules__segment" title={ name } dir="auto">
+									{ name }
+								</span>
+							) ) }
+						</Stack>
 					) : (
 						<span className="newspack-pricing-rules__muted">{ __( 'Any reader', 'newspack-plugin' ) }</span>
 					);

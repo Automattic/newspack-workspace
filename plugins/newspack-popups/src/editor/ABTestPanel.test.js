@@ -1,30 +1,65 @@
 /**
- * The A/B Test panel's decisions: which fields show, what a Test ID edit writes,
- * when the placement blocks a test, what a read-only user sees, and how the
- * other prompts in the test are listed. The editor's component library is
- * stubbed down to native inputs that forward value, change, disabled and help.
+ * The A/B Test panel's states: a prompt not in a test can start one, version A
+ * edits the goal and split until the test runs, and version B repeats them
+ * read-only. The editor's component library is stubbed down to native inputs,
+ * and the Start A/B Test modal down to its props, which have their own tests.
  */
 
 /**
  * WordPress dependencies.
  */
 import { render, screen, fireEvent } from '@testing-library/react';
-import { useSelect } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 
-jest.mock( '@wordpress/data', () => ( { useSelect: jest.fn() } ) );
+const mockEditor = {
+	status: 'draft',
+	title: 'Spring drive',
+	content: '<!-- wp:paragraph --><p>Hi</p><!-- /wp:paragraph -->',
+	blockNames: [ 'core/paragraph' ],
+	dirty: false,
+	saveFailed: false,
+	saving: false,
+};
+const mockSubscribers = [];
+const mockSavePost = jest.fn( () => Promise.resolve() );
+const mockSelect = store =>
+	'core/block-editor' === store
+		? {
+				getClientIdsWithDescendants: () => mockEditor.blockNames.map( ( name, index ) => index ),
+				getBlockName: index => mockEditor.blockNames[ index ],
+		  }
+		: {
+				getCurrentPostAttribute: () => mockEditor.status,
+				getEditedPostAttribute: () => mockEditor.title,
+				getEditedPostContent: () => mockEditor.content,
+				isEditedPostDirty: () => mockEditor.dirty,
+				didPostSaveRequestFail: () => mockEditor.saveFailed,
+				isSavingPost: () => mockEditor.saving,
+		  };
+
+jest.mock( '@wordpress/data', () => ( {
+	select: store => mockSelect( store ),
+	subscribe: listener => {
+		mockSubscribers.push( listener );
+		return () => mockSubscribers.splice( mockSubscribers.indexOf( listener ), 1 );
+	},
+	useSelect: fn => fn( store => mockSelect( store ) ),
+	useDispatch: () => ( { savePost: mockSavePost } ),
+} ) );
 jest.mock( '@wordpress/compose', () => ( { useDebounce: fn => fn } ) );
 jest.mock( '@wordpress/api-fetch' );
-// Stubbed so the tests read the panel's logic, not its layout.
+// Provided by WordPress at runtime, not installed here.
 jest.mock( '@wordpress/ui', () => ( { Stack: ( { children } ) => <div>{ children }</div> } ), { virtual: true } );
 
 jest.mock( '@wordpress/components', () => ( {
-	TextControl: ( { label, value, onChange, onBlur, disabled, help } ) => (
-		<div>
-			<input aria-label={ label } value={ value } onChange={ e => onChange( e.target.value ) } onBlur={ onBlur } disabled={ disabled } />
-			{ help && <p>{ help }</p> }
-		</div>
-	),
+	Button: ( { children, onClick, disabled, href } ) =>
+		href ? (
+			<a href={ href }>{ children }</a>
+		) : (
+			<button onClick={ onClick } disabled={ disabled }>
+				{ children }
+			</button>
+		),
 	SelectControl: ( { label, value, onChange, disabled, options, help } ) => (
 		<div>
 			<select aria-label={ label } value={ value } onChange={ e => onChange( e.target.value ) } disabled={ disabled }>
@@ -52,6 +87,12 @@ jest.mock( '@wordpress/components', () => ( {
 	BaseControl: { VisualLabel: ( { id, children } ) => <span id={ id }>{ children }</span> },
 } ) );
 
+let mockModalProps = null;
+jest.mock( '../ab-tests/components/StartTestModal', () => props => {
+	mockModalProps = props;
+	return <div role="dialog">{ props.promptTitle }</div>;
+} );
+
 import ABTestPanel from './ABTestPanel';
 
 const AB_TESTING = {
@@ -63,36 +104,71 @@ const AB_TESTING = {
 		donation: 'Donation',
 		subscription: 'Subscription',
 	},
-	variants: { a: 'A (control)', b: 'B (challenger)' },
 	ineligible_placements: [ 'manual', 'custom1' ],
+	results_url: '/wp-admin/admin.php?page=newspack-audience-campaigns#/ab-tests',
+	test_name: 'Spring drive',
 };
-
-const INELIGIBLE = 'A/B tests only work on prompts that Newspack places for you.';
-const MISSING_BLOCK = "Readers can't donate from this prompt. Add a Donate block, or choose another goal.";
-const MISSING_BLOCK_FROM_CONTROL = "Readers can't donate from this prompt. Add a Donate block, or change the goal on version A.";
 
 let onMetaFieldChange;
 
-const panelElement = props => (
-	<ABTestPanel
-		newspack_popups_ab_test_id=""
-		newspack_popups_ab_variant=""
-		newspack_popups_ab_test_goal=""
-		newspack_popups_ab_control_share={ 50 }
-		placement="center"
-		postId={ 2 }
-		onMetaFieldChange={ onMetaFieldChange }
-		{ ...props }
-	/>
-);
-const renderPanel = props => render( panelElement( props ) );
+const renderPanel = props =>
+	render(
+		<ABTestPanel
+			newspack_popups_ab_test_id=""
+			newspack_popups_ab_variant=""
+			newspack_popups_ab_test_goal=""
+			newspack_popups_ab_control_share={ 50 }
+			placement="inline"
+			postId={ 2 }
+			onMetaFieldChange={ onMetaFieldChange }
+			{ ...props }
+		/>
+	);
 
-const allInputs = () => [ ...screen.getAllByRole( 'textbox' ), ...screen.getAllByRole( 'combobox' ), ...screen.getAllByRole( 'slider' ) ];
+const inTest = ( variant, props = {} ) =>
+	renderPanel( {
+		newspack_popups_ab_test_id: 'spring-drive-1a2b',
+		newspack_popups_ab_variant: variant,
+		...props,
+	} );
+
+const versionA = ( overrides = {} ) => ( {
+	id: 1,
+	title: 'Spring drive',
+	variant: 'a',
+	goal: 'subscription',
+	control_share: 60,
+	status: 'publish',
+	status_label: 'Published',
+	edit_link: '/wp-admin/post.php?post=1&action=edit',
+	...overrides,
+} );
+const versionB = ( overrides = {} ) => ( {
+	id: 3,
+	title: 'Spring drive (B)',
+	variant: 'b',
+	goal: '',
+	control_share: 50,
+	status: 'draft',
+	status_label: 'Draft',
+	edit_link: '/wp-admin/post.php?post=3&action=edit',
+	...overrides,
+} );
 
 beforeEach( () => {
 	window.newspack_popups_data = { ab_testing: { ...AB_TESTING } };
 	onMetaFieldChange = jest.fn();
-	useSelect.mockReturnValue( [ 'core/paragraph' ] );
+	Object.assign( mockEditor, {
+		status: 'draft',
+		title: 'Spring drive',
+		blockNames: [ 'core/paragraph' ],
+		dirty: false,
+		saveFailed: false,
+		saving: false,
+	} );
+	mockSubscribers.length = 0;
+	mockSavePost.mockClear();
+	mockModalProps = null;
 	apiFetch.mockResolvedValue( [] );
 } );
 
@@ -100,250 +176,238 @@ afterEach( () => {
 	delete window.newspack_popups_data;
 } );
 
-describe( 'ABTestPanel', () => {
-	it( 'shows only the test name field until one is set', () => {
+describe( 'not in a test', () => {
+	it( 'offers Start A/B Test, which opens the modal for this prompt', () => {
 		renderPanel();
+		expect( screen.getByText( 'Compare this prompt with a second version to see which gets more readers to act.' ) ).toBeTruthy();
+		expect( screen.queryByRole( 'combobox' ) ).toBeNull();
 
-		expect( screen.getByLabelText( 'Test name' ) ).toBeTruthy();
-		expect( screen.getByText( /Prompts with the same test name are compared with each other/ ) ).toBeTruthy();
-		expect( screen.queryByLabelText( 'Version' ) ).toBeNull();
-		expect( screen.queryByLabelText( 'Goal' ) ).toBeNull();
+		fireEvent.click( screen.getByRole( 'button', { name: 'Start A/B Test' } ) );
+
+		expect( mockModalProps.promptId ).toBe( 2 );
+		expect( mockModalProps.promptTitle ).toBe( 'Spring drive' );
 	} );
 
-	it( 'keeps what was typed in the field until focus leaves it, and writes the slug', () => {
-		const { rerender } = renderPanel();
-		const field = () => screen.getByLabelText( 'Test name' );
-
-		fireEvent.change( field(), { target: { value: 'spring-' } } );
-		expect( field().value ).toBe( 'spring-' );
-		expect( onMetaFieldChange ).toHaveBeenLastCalledWith( { newspack_popups_ab_test_id: 'spring', newspack_popups_ab_variant: 'a' } );
-
-		rerender( panelElement( { newspack_popups_ab_test_id: 'spring', newspack_popups_ab_variant: 'a' } ) );
-		expect( field().value ).toBe( 'spring-' );
-		fireEvent.blur( field() );
-		expect( field().value ).toBe( 'spring' );
+	it( 'disables the button on a manual or custom placement and says why', () => {
+		renderPanel( { placement: 'custom1' } );
+		expect( screen.getByRole( 'button', { name: 'Start A/B Test' } ).disabled ).toBe( true );
+		expect( screen.getByRole( 'note' ).textContent ).toBe( 'Prompts on manual or custom placements can’t be A/B tested.' );
 	} );
 
-	it( 'slugs a typed test name and makes the prompt the control', () => {
-		renderPanel();
-
-		fireEvent.change( screen.getByLabelText( 'Test name' ), { target: { value: 'Spring Drive' } } );
-
-		expect( onMetaFieldChange ).toHaveBeenCalledWith( {
-			newspack_popups_ab_test_id: 'spring-drive',
-			newspack_popups_ab_variant: 'a',
-		} );
+	it( 'disables the button on an overlay set to Manual only and names that setting', () => {
+		renderPanel( { placement: 'center', isOverlay: true, manual_only: true } );
+		expect( screen.getByRole( 'button', { name: 'Start A/B Test' } ).disabled ).toBe( true );
+		expect( screen.getByRole( 'note' ).textContent ).toBe( 'Overlays set to Manual only can’t be A/B tested.' );
 	} );
 
-	it( 'clearing the test name resets the version and the goal too', () => {
-		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'b', newspack_popups_ab_test_goal: 'donation' } );
-
-		fireEvent.change( screen.getByLabelText( 'Test name' ), { target: { value: '' } } );
-
-		expect( onMetaFieldChange ).toHaveBeenCalledWith( {
-			newspack_popups_ab_test_id: '',
-			newspack_popups_ab_variant: '',
-			newspack_popups_ab_test_goal: '',
-		} );
-	} );
-
-	it( 'offers the control share on the control only, with the split spelled out', () => {
-		const { unmount } = renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'a', newspack_popups_ab_control_share: 60 } );
-		expect( screen.getByLabelText( 'Readers who see A' ) ).toBeTruthy();
-		expect( screen.getByText( '60% see A, 40% see B' ) ).toBeTruthy();
-		unmount();
-
-		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'b' } );
-		expect( screen.queryByLabelText( 'Readers who see A' ) ).toBeNull();
-	} );
-
-	it( 'shows a stored version the editor does not offer, and leaves it alone', () => {
-		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'c' } );
-
-		const option = screen.getByRole( 'option', { name: 'Unsupported version (C)' } );
-		expect( option.disabled ).toBe( true );
-		expect( screen.getByLabelText( 'Version' ).value ).toBe( 'c' );
-		expect( onMetaFieldChange ).not.toHaveBeenCalled();
-	} );
-
-	it( 'blocks a test on an ineligible placement, and escalates once a test name is set', () => {
-		const { unmount } = renderPanel( { placement: 'manual' } );
-		expect( screen.getByRole( 'note' ).textContent ).toBe( INELIGIBLE );
-		expect( screen.getByRole( 'note' ).dataset.status ).toBe( 'warning' );
-		// Standing state, not the result of an action: nothing to announce on mount.
-		expect( screen.getByRole( 'note' ).dataset.spoken ).toBe( '' );
-		expect( screen.queryByLabelText( 'Test name' ) ).toBeNull();
-		unmount();
-
-		renderPanel( { placement: 'manual', newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'a' } );
-		const note = screen.getAllByRole( 'note' )[ 0 ];
-		expect( note.dataset.status ).toBe( 'error' );
-		expect( note.textContent ).toContain( 'Clear the test name or choose another placement to save.' );
-		// An error asks the author to act, so it is the one notice the panel speaks.
-		expect( note.dataset.spoken ).toBe( note.textContent );
-		expect( screen.getByLabelText( 'Test name' ).disabled ).toBe( false );
-	} );
-
-	it( 'treats an overlay set to Manual only as ineligible, and says which setting to change', () => {
-		renderPanel( { placement: 'center', isOverlay: true, manual_only: true, newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'a' } );
-		const note = screen.getAllByRole( 'note' )[ 0 ];
-		expect( note.dataset.status ).toBe( 'error' );
-		expect( note.textContent ).toContain( 'Clear the test name or turn off Manual only to save.' );
-	} );
-
-	it( 'renders read-only for a user the site excludes from managing tests', () => {
+	it( 'tells a user the site excludes from managing tests that they can’t start one', () => {
 		window.newspack_popups_data.ab_testing.can_manage_tests = false;
-
-		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'a', newspack_popups_ab_test_goal: 'donation' } );
-
-		expect( screen.getByText( "You can see this test's settings but can't change them." ) ).toBeTruthy();
-		expect( allInputs().length ).toBeGreaterThan( 2 );
-		allInputs().forEach( input => expect( input.disabled ).toBe( true ) );
+		renderPanel();
+		expect( screen.queryByRole( 'button' ) ).toBeNull();
+		expect( screen.getByText( "You don't have permission to start a test on this prompt." ) ).toBeTruthy();
 	} );
 
-	it( 'warns when the prompt has no block that records the chosen goal', async () => {
-		const { unmount } = renderPanel( {
-			newspack_popups_ab_test_id: 'x',
-			newspack_popups_ab_variant: 'b',
-			newspack_popups_ab_test_goal: 'donation',
-		} );
-		expect( await screen.findByText( MISSING_BLOCK ) ).toBeTruthy();
-		expect( screen.getByRole( 'note' ).dataset.spoken ).toBe( '' );
-		unmount();
-
-		useSelect.mockReturnValue( [ 'core/paragraph', 'newspack-blocks/donate' ] );
-		const second = renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'b', newspack_popups_ab_test_goal: 'donation' } );
-		expect( screen.queryByText( MISSING_BLOCK ) ).toBeNull();
-		second.unmount();
-
-		useSelect.mockReturnValue( [ 'core/paragraph' ] );
-		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'b', newspack_popups_ab_test_goal: 'link_click' } );
-		expect( screen.queryByText( MISSING_BLOCK ) ).toBeNull();
+	it( 'saves unsaved edits before the start, since the route copies the stored prompt', async () => {
+		mockEditor.dirty = true;
+		renderPanel();
+		fireEvent.click( screen.getByRole( 'button', { name: 'Start A/B Test' } ) );
+		await mockModalProps.beforeCreate();
+		expect( mockSavePost ).toHaveBeenCalled();
 	} );
 
-	it( 'sets the goal and split on version A only, so a challenger sees a read-only summary', async () => {
+	it( 'waits for a save already running before deciding whether to save', async () => {
+		mockEditor.saving = true;
+		renderPanel();
+		fireEvent.click( screen.getByRole( 'button', { name: 'Start A/B Test' } ) );
+		const started = mockModalProps.beforeCreate();
+		mockEditor.dirty = true;
+		mockEditor.saving = false;
+		mockSubscribers.forEach( listener => listener() );
+		await started;
+		expect( mockSavePost ).toHaveBeenCalled();
+		expect( mockSubscribers ).toHaveLength( 0 );
+	} );
+
+	it( 'leaves unsaved edits on a published prompt for the publisher to update', async () => {
+		mockEditor.status = 'publish';
+		mockEditor.dirty = true;
+		renderPanel();
+		fireEvent.click( screen.getByRole( 'button', { name: 'Start A/B Test' } ) );
+		await expect( mockModalProps.beforeCreate() ).rejects.toThrow( 'Save your changes to this prompt first' );
+		expect( mockSavePost ).not.toHaveBeenCalled();
+	} );
+
+	it( 'refuses to start when that save fails', async () => {
+		mockEditor.dirty = true;
+		mockEditor.saveFailed = true;
+		renderPanel();
+		fireEvent.click( screen.getByRole( 'button', { name: 'Start A/B Test' } ) );
+		await expect( mockModalProps.beforeCreate() ).rejects.toThrow( 'Save this prompt, then try again.' );
+	} );
+
+	it( "opens B's editor once B exists, marked so its panel takes focus", () => {
+		const assign = jest.fn();
+		const { location } = window;
+		delete window.location;
+		window.location = { assign, reload: jest.fn() };
+		renderPanel();
+		fireEvent.click( screen.getByRole( 'button', { name: 'Start A/B Test' } ) );
+
+		mockModalProps.onCreated( { version_b: { id: 3, edit_link: '/wp-admin/post.php?post=3&action=edit' } } );
+
+		expect( assign ).toHaveBeenCalledWith( '/wp-admin/post.php?post=3&action=edit&newspack-ab-test=created' );
+		window.location = location;
+	} );
+} );
+
+describe( 'version A', () => {
+	it( 'edits the goal and the split, with two linked ranges, before B is live', async () => {
+		apiFetch.mockResolvedValue( [ versionA(), versionB() ] );
+		inTest( 'a', { newspack_popups_ab_test_goal: 'subscription', newspack_popups_ab_control_share: 60 } );
+		await screen.findByText( 'Spring drive (B)' );
+
+		expect( screen.getByText( 'Version A in the Spring drive test.' ) ).toBeTruthy();
+		expect( screen.getByLabelText( 'Readers who see B' ).value ).toBe( '40' );
+		fireEvent.change( screen.getByLabelText( 'Readers who see B' ), { target: { value: '30' } } );
+		expect( onMetaFieldChange ).toHaveBeenCalledWith( { newspack_popups_ab_control_share: 70 } );
+		fireEvent.change( screen.getByLabelText( 'Goal' ), { target: { value: 'donation' } } );
+		expect( onMetaFieldChange ).toHaveBeenCalledWith( { newspack_popups_ab_test_goal: 'donation' } );
+		expect( screen.getByText( 'Version B · Draft' ) ).toBeTruthy();
+	} );
+
+	it( 'shows the goal and split read-only once every version is published', async () => {
+		mockEditor.status = 'publish';
+		apiFetch.mockResolvedValue( [ versionA(), versionB( { status: 'publish', status_label: 'Published' } ) ] );
+		inTest( 'a', { newspack_popups_ab_test_goal: 'subscription', newspack_popups_ab_control_share: 60 } );
+
+		expect( await screen.findByText( 'Goal: Subscription. 60% see A, 40% see B.' ) ).toBeTruthy();
+		expect( screen.getByText( 'End the test to change the goal or split.' ) ).toBeTruthy();
+		expect( screen.queryByRole( 'combobox' ) ).toBeNull();
+		expect( screen.queryByRole( 'slider' ) ).toBeNull();
+	} );
+
+	it( 'offers Create Version B when the test has no B, starting from its goal and split', async () => {
+		apiFetch.mockResolvedValue( [ versionA() ] );
+		inTest( 'a', { postId: 1, newspack_popups_ab_test_goal: 'donation', newspack_popups_ab_control_share: 70 } );
+
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Create Version B' } ) );
+
+		expect( mockModalProps ).toMatchObject( { promptTitle: 'Spring drive', initialGoal: 'donation', initialShare: 70 } );
+	} );
+
+	it.each( [
+		[ 'a second A', { variant: 'a' } ],
+		[ 'a prompt with no version', { variant: '' } ],
+	] )( 'does not offer Create Version B while the test has %s, which a start refuses', async ( _, extra ) => {
+		apiFetch.mockResolvedValue( [ versionA(), versionB( { id: 5, title: 'Extra', ...extra } ) ] );
+		inTest( 'a', { postId: 1 } );
+		await screen.findByText( 'Extra' );
+		expect( screen.queryByRole( 'button', { name: 'Create Version B' } ) ).toBeNull();
+	} );
+
+	it( 'does not offer Create Version B while a B exists', async () => {
+		apiFetch.mockResolvedValue( [ versionA(), versionB() ] );
+		inTest( 'a' );
+		await screen.findByText( 'Spring drive (B)' );
+		expect( screen.queryByRole( 'button', { name: 'Create Version B' } ) ).toBeNull();
+	} );
+} );
+
+describe( 'version B', () => {
+	// B carries a block for A's goal, so the missing-block warning stays out of
+	// tests about other notices; one test below removes it on purpose.
+	beforeEach( () => {
+		mockEditor.blockNames = [ 'core/paragraph', 'newspack-blocks/checkout-button' ];
+	} );
+
+	it( "repeats A's goal and split, links to A and asks for B to be published while B is a draft", async () => {
+		apiFetch.mockResolvedValue( [ versionA(), versionB() ] );
+		inTest( 'b', { postId: 3 } );
+
+		expect( await screen.findByText( 'Goal: Subscription. 60% see A, 40% see B. Set on version A.' ) ).toBeTruthy();
+		expect( screen.getByText( 'Version B in the Spring drive test.' ) ).toBeTruthy();
+		expect( screen.getByRole( 'link', { name: 'Change these on version A' } ).getAttribute( 'href' ) ).toBe( versionA().edit_link );
+		const notices = screen.getAllByRole( 'note' );
+		expect( notices.map( notice => notice.textContent ) ).toEqual( [ 'Publish B to start the test.' ] );
+		expect( screen.queryByRole( 'link', { name: 'View results' } ) ).toBeNull();
+		expect( screen.queryByRole( 'combobox' ) ).toBeNull();
+	} );
+
+	it.each( [
+		[ 'both are drafts', 'draft', 'Publish A and B to start the test.' ],
+		[ 'only A is a draft', 'publish', 'Publish A to start the test.' ],
+	] )( 'asks for A to be published too when %s, since the test needs both', async ( _, bStatus, message ) => {
+		mockEditor.status = bStatus;
+		apiFetch.mockResolvedValue( [ versionA( { status: 'draft', status_label: 'Draft' } ), versionB( { status: bStatus } ) ] );
+		inTest( 'b', { postId: 3 } );
+		expect( await screen.findByText( message ) ).toBeTruthy();
+	} );
+
+	it( 'names no versions to publish until the lookup has said whether A is published', async () => {
+		let answer;
+		apiFetch.mockReturnValue( new Promise( resolve => ( answer = resolve ) ) );
+		inTest( 'b', { postId: 3 } );
+		expect( screen.queryByText( /to start the test/ ) ).toBeNull();
+		answer( [ versionA( { status: 'draft', status_label: 'Draft' } ), versionB() ] );
+		expect( await screen.findByText( 'Publish A and B to start the test.' ) ).toBeTruthy();
+	} );
+
+	it( 'shows View results in place of the notice once B is live', async () => {
+		mockEditor.status = 'publish';
+		apiFetch.mockResolvedValue( [ versionA(), versionB( { status: 'publish' } ) ] );
+		inTest( 'b', { postId: 3 } );
+
+		expect( await screen.findByRole( 'link', { name: 'View results' } ) ).toBeTruthy();
+		expect( screen.queryByRole( 'note' ) ).toBeNull();
+		expect( screen.queryByRole( 'link', { name: 'Change these on version A' } ) ).toBeNull();
+	} );
+
+	it( 'asks for another placement on an older B that sits on a manual or custom one', async () => {
+		apiFetch.mockResolvedValue( [ versionA(), versionB() ] );
+		inTest( 'b', { postId: 3, placement: 'manual' } );
+		await screen.findByText( 'Goal: Subscription. 60% see A, 40% see B. Set on version A.' );
+		expect(
+			screen.getByText( 'Prompts on manual or custom placements can’t be A/B tested. Choose another placement to count B’s results.' )
+		).toBeTruthy();
+	} );
+
+	it( 'asks to turn off Manual only on an older B overlay set to it', async () => {
+		apiFetch.mockResolvedValue( [ versionA(), versionB() ] );
+		inTest( 'b', { postId: 3, placement: 'center', isOverlay: true, manual_only: true } );
+		expect(
+			await screen.findByText( 'Overlays set to Manual only can’t be A/B tested. Turn off Manual only to count B’s results.' )
+		).toBeTruthy();
+	} );
+
+	it( 'reads the summary from the published A when a drafted old A is still in the test', async () => {
 		apiFetch.mockResolvedValue( [
-			{
-				id: 1,
-				variant: 'a',
-				title: 'Control',
-				goal: 'donation',
-				control_share: 60,
-				status: 'publish',
-				status_label: 'Published',
-				edit_link: null,
-			},
+			versionA( { id: 11, title: 'Old A', goal: 'donation', control_share: 70, status: 'draft', status_label: 'Draft' } ),
+			versionA( { id: 12, title: 'New A', goal: '', control_share: 60 } ),
+			versionB(),
 		] );
-
-		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'b' } );
-
-		expect( await screen.findByText( 'Goal: Donation. 60% see A, 40% see B. Set on version A.' ) ).toBeTruthy();
-		expect( screen.queryByLabelText( 'Goal' ) ).toBeNull();
-		expect( screen.queryByLabelText( 'Readers who see A' ) ).toBeNull();
-		expect( screen.getByText( MISSING_BLOCK_FROM_CONTROL ) ).toBeTruthy();
-	} );
-
-	it( 'reads the summary from the published control when a drafted old A is still in the test', async () => {
-		apiFetch.mockResolvedValue( [
-			{ id: 11, variant: 'a', title: 'Old A', goal: 'donation', control_share: 70, status: 'draft', status_label: 'Draft', edit_link: null },
-			{ id: 12, variant: 'a', title: 'New A', goal: '', control_share: 60, status: 'publish', status_label: 'Published', edit_link: null },
-		] );
-
-		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'b' } );
-
+		inTest( 'b', { postId: 3 } );
 		expect( await screen.findByText( 'No goal set on version A. 60% see A, 40% see B.' ) ).toBeTruthy();
 	} );
 
-	it( 'holds the challenger Goal row until the lookup for the current test name resolves', async () => {
-		let resolve;
-		apiFetch.mockReturnValue( new Promise( r => ( resolve = r ) ) );
-
-		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'b', newspack_popups_ab_test_goal: 'donation' } );
-
-		expect( screen.queryByLabelText( 'Goal' ) ).toBeNull();
-		expect( screen.queryByText( MISSING_BLOCK ) ).toBeNull();
-		resolve( [] );
-		expect( await screen.findByLabelText( 'Goal' ) ).toBeTruthy();
-	} );
-
-	it( 'releases the held Goal row when the lookup fails', async () => {
-		apiFetch.mockRejectedValue( new Error( 'offline' ) );
-
-		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'b' } );
-
-		expect( await screen.findByLabelText( 'Goal' ) ).toBeTruthy();
-	} );
-
-	it( 'says the split starts once version B is added, until a challenger exists', async () => {
-		const { unmount } = renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'a', newspack_popups_ab_control_share: 60 } );
-		expect( await screen.findByText( '60% will see A once version B is added.' ) ).toBeTruthy();
-		unmount();
-
-		apiFetch.mockResolvedValue( [
-			{ id: 3, variant: 'b', title: 'Other', goal: '', control_share: 50, status: 'draft', status_label: 'Draft', edit_link: null },
-		] );
-		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'a', newspack_popups_ab_control_share: 60 } );
-		expect( await screen.findByText( '60% see A, 40% see B' ) ).toBeTruthy();
-	} );
-
-	it( 'keeps the Goal select on a challenger while the test has no control', async () => {
-		apiFetch.mockResolvedValue( [
-			{ id: 3, variant: 'b', title: 'Other', goal: '', control_share: 50, status: 'draft', status_label: 'Draft', edit_link: null },
-		] );
-
-		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'b' } );
-
-		expect( await screen.findByText( 'B (challenger) · Draft' ) ).toBeTruthy();
-		expect( screen.getByLabelText( 'Goal' ) ).toBeTruthy();
-	} );
-
-	it( 'keeps the Goal select on the control', async () => {
-		apiFetch.mockResolvedValue( [
-			{ id: 1, variant: 'b', title: 'Other', goal: '', control_share: 50, status: 'draft', status_label: 'Draft', edit_link: null },
-		] );
-
-		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'a' } );
-
-		expect( await screen.findByText( 'B (challenger) · Draft' ) ).toBeTruthy();
-		expect( screen.getByLabelText( 'Goal' ) ).toBeTruthy();
-	} );
-
-	it( 'does not show a stored test with no version as the control', async () => {
-		apiFetch.mockResolvedValue( [
-			{ id: 1, variant: '', title: 'Other', status: 'draft', status_label: 'Draft', edit_link: 'http://example.test/post.php?post=1' },
-		] );
-
-		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: '' } );
-
-		const option = screen.getByRole( 'option', { name: 'Select a version' } );
-		expect( option.disabled ).toBe( true );
-		expect( screen.getByLabelText( 'Version' ).value ).toBe( '' );
-		expect( await screen.findByText( 'No version · Draft' ) ).toBeTruthy();
-		expect( onMetaFieldChange ).not.toHaveBeenCalled();
-	} );
-
-	it( 'lists the other prompts in the test and warns about a duplicate version', async () => {
-		apiFetch.mockResolvedValue( [
-			{ id: 1, variant: 'a', title: 'Control', status: 'publish', status_label: 'Published', edit_link: 'http://example.test/post.php?post=1' },
-			{ id: 2, variant: 'a', title: 'Me', status: 'draft', status_label: 'Draft', edit_link: 'http://example.test/post.php?post=2' },
-		] );
-
-		renderPanel( { newspack_popups_ab_test_id: 'x', newspack_popups_ab_variant: 'a' } );
-
-		const link = await screen.findByText( 'Control' );
-		expect( link.getAttribute( 'href' ) ).toBe( 'http://example.test/post.php?post=1' );
-		expect( screen.getByText( 'A (control) · Published' ) ).toBeTruthy();
-		expect( screen.queryByText( 'Me' ) ).toBeNull();
-		expect( screen.getByRole( 'list', { name: 'Other versions in this test' } ) ).toBeTruthy();
+	it( "warns when B has no block for A's goal", async () => {
+		apiFetch.mockResolvedValue( [ versionA( { goal: 'donation' } ), versionB() ] );
+		inTest( 'b', { postId: 3 } );
 		expect(
-			screen.getByText(
-				'Another prompt in this test is already version A. Clear the test name on one of them, or give one a different version.'
-			)
+			await screen.findByText( "Readers can't donate from this prompt. Add a Donate block, or change the goal on version A." )
 		).toBeTruthy();
-		expect( screen.getByText( /already version A/ ).dataset.status ).toBe( 'error' );
-		expect( screen.getByText( /already version A/ ).dataset.spoken ).toBe(
-			'Another prompt in this test is already version A. Clear the test name on one of them, or give one a different version.'
-		);
-		expect( apiFetch ).toHaveBeenCalledWith( { path: '/newspack-popups/v1/ab-tests/x' } );
+	} );
+
+	it( 'keeps the Goal select on a B whose test has no A', async () => {
+		apiFetch.mockResolvedValue( [ versionB() ] );
+		inTest( 'b', { postId: 3 } );
+		expect( await screen.findByLabelText( 'Goal' ) ).toBeTruthy();
+	} );
+
+	it( 'warns about another prompt with the same version', async () => {
+		apiFetch.mockResolvedValue( [ versionA(), versionB(), versionB( { id: 4, title: 'Extra B' } ) ] );
+		inTest( 'b', { postId: 3 } );
+		const warning = await screen.findByText( 'Another prompt in this test is already version B. Move the unpublished one to the trash.' );
+		// An error asks the author to act, so it is spoken, unlike the standing notices.
+		expect( warning.dataset.spoken ).toBe( warning.textContent );
 	} );
 } );

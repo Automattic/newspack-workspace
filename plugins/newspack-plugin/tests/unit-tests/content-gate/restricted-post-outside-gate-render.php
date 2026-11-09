@@ -552,7 +552,8 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 
 		$this->assertStringEndsWith( ' MORELINK', $excerpt );
 		$this->assertStringNotContainsString( '[&hellip;]', $excerpt );
-		$this->assertStringContainsString( '[&hellip;]', Content_Gate::get_teaser_outside_article( get_post( $post_id ) ) );
+		$teaser = Content_Gate::get_teaser_outside_article( get_post( $post_id ) );
+		$this->assertStringContainsString( '[…]', html_entity_decode( $teaser, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) );
 	}
 
 	/**

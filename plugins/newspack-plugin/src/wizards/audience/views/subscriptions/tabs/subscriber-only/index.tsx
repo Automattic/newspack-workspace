@@ -20,7 +20,7 @@ import { __experimentalHStack as HStack, CheckboxControl } from '@wordpress/comp
 /**
  * Internal dependencies.
  */
-import { Button, DataViews, Modal, Notice, StatusIndicator, Waiting } from '../../../../../../../packages/components/src';
+import { Button, DataViews, Modal, Notice, StatusBadge, Waiting } from '../../../../../../../packages/components/src';
 import EmptyState from '../../../../../../../packages/components/src/empty-state';
 import type { Action, Field, View } from '../../../../../../../packages/components/src/dataviews';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../../packages/components/src/wizard/store';
@@ -146,15 +146,16 @@ function SubscriberOnlyProducts() {
 				filterBy: { operators: [ 'isAny' as const ] },
 				getValue: ( { item }: { item: Restriction } ) => ( item.active ? 'active' : 'inactive' ),
 				render: ( { item }: { item: Restriction } ) => (
-					<StatusIndicator status={ item.active ? 'active' : 'draft' }>
+					<StatusBadge status={ item.active ? 'active' : 'draft' }>
 						{ item.active ? __( 'Active', 'newspack-plugin' ) : __( 'Inactive', 'newspack-plugin' ) }
-					</StatusIndicator>
+					</StatusBadge>
 				),
 			},
 			{
 				id: 'created_at',
 				label: __( 'Created', 'newspack-plugin' ),
 				getValue: ( { item }: { item: Restriction } ) => item.created_at,
+				render: ( { item }: { item: Restriction } ) => <span className="newspack-dataviews__date">{ item.created_at }</span>,
 				enableSorting: true,
 			},
 		],

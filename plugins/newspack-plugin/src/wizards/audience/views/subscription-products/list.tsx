@@ -23,11 +23,12 @@ import { Badge } from '@wordpress/ui';
 /**
  * Internal dependencies
  */
-import { DataViews, Router, StatusIndicator, WizardBanner } from '../../../../../packages/components/src';
+import { CellList, DataViews, Router, StatusBadge, StatusIndicator, WizardBanner } from '../../../../../packages/components/src';
 import { formatCount } from '../../../../../packages/components/src/breadcrumbs/format-count';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
-import { postStatus } from '../../post-status';
-import { PolicyChips, EffectivePrice } from './policy-cells';
+import { audienceStatusLabel, postStatus } from '../../post-status';
+import { PolicyLinks, EffectivePrice } from './policy-cells';
+import { bundledLinks, gateLinks } from './item-links';
 import PromoUrlModal from './promo-url-modal';
 
 const { useHistory } = Router;
@@ -173,7 +174,7 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 	// Filter elements derived from the loaded data.
 	const statusElements = useMemo( () => {
 		const seen = new Map< string, string >();
-		data.forEach( item => seen.set( item.status, item.status_label ) );
+		data.forEach( item => seen.set( item.status, audienceStatusLabel( item.status, item.status_label ) ) );
 		return Array.from( seen, ( [ value, label ] ) => ( { value, label } ) );
 	}, [ data ] );
 
@@ -231,13 +232,7 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 					// Grouped products aren't priced themselves — show what they bundle instead.
 					if ( item.type === 'grouped' ) {
 						return item.bundled_products.length ? (
-							<div className="newspack-subscription-products__bundled">
-								{ item.bundled_products.map( bundled => (
-									<Badge key={ bundled.id } intent="none">
-										{ bundled.name }
-									</Badge>
-								) ) }
-							</div>
+							<CellList>{ bundledLinks( item.bundled_products ) }</CellList>
 						) : (
 							<span className="newspack-subscription-products__muted">&mdash;</span>
 						);
@@ -270,13 +265,7 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				enableSorting: false,
 				render: ( { item } ) =>
 					item.bundled_products.length ? (
-						<div className="newspack-subscription-products__bundled">
-							{ item.bundled_products.map( bundled => (
-								<Badge key={ bundled.id } intent="none">
-									{ bundled.name }
-								</Badge>
-							) ) }
-						</div>
+						<CellList>{ bundledLinks( item.bundled_products ) }</CellList>
 					) : (
 						<span className="newspack-subscription-products__muted">&mdash;</span>
 					),
@@ -325,20 +314,13 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 			{
 				id: 'unlocks',
 				label: __( 'Unlocks', 'newspack-plugin' ),
-				// Content gates this product unlocks (Access control). Sortable/searchable by
-				// gate titles; rendered as chips linking to the gate editor.
+				// Content gates this product unlocks (Access control), searchable by title.
 				getValue: ( { item } ) => item.unlocks_label,
 				enableGlobalSearch: true,
 				enableSorting: false,
 				render: ( { item } ) =>
 					item.unlocks.length ? (
-						<div className="newspack-subscription-products__unlocks">
-							{ item.unlocks.map( gate => (
-								<Badge key={ gate.id } intent="none">
-									{ gate.title }
-								</Badge>
-							) ) }
-						</div>
+						<CellList>{ gateLinks( item.unlocks ) }</CellList>
 					) : (
 						<span className="newspack-subscription-products__muted">{ __( 'Nothing gated', 'newspack-plugin' ) }</span>
 					),
@@ -347,7 +329,9 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				id: 'status',
 				label: __( 'Status', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.status,
-				render: ( { item } ) => <StatusIndicator status={ postStatus( item.status ) }>{ item.status_label }</StatusIndicator>,
+				render: ( { item } ) => (
+					<StatusBadge status={ postStatus( item.status ) }>{ audienceStatusLabel( item.status, item.status_label ) }</StatusBadge>
+				),
 				elements: statusElements,
 				filterBy: { operators: [ 'is' ] },
 			},
@@ -355,7 +339,7 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				id: 'policies',
 				label: __( 'Applied rules', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.policy?.policies?.map( p => p.label ).join( ', ' ) || '',
-				render: ( { item } ) => <PolicyChips policy={ item.policy } />,
+				render: ( { item } ) => <PolicyLinks policy={ item.policy } />,
 				enableSorting: false,
 			},
 			{

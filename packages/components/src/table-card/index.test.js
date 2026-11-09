@@ -91,12 +91,12 @@ describe( 'TableCard', () => {
 
 	it( 'orders before, table, after within the card body', () => {
 		render(
-			<TableCard before={ <p>Stats row</p> } after={ <button>See More</button> }>
+			<TableCard before={ <p>Stats row</p> } after={ <button>Show 12 more</button> }>
 				<table aria-label="Prices" />
 			</TableCard>
 		);
 		const before = screen.getByText( 'Stats row' );
-		const after = screen.getByRole( 'button', { name: 'See More' } );
+		const after = screen.getByRole( 'button', { name: 'Show 12 more' } );
 		const table = screen.getByRole( 'table', { name: 'Prices' } );
 		// Walk the table up to the card body's direct child, so extra upstream
 		// wrappers cannot silently repoint the comparison.

@@ -1,0 +1,665 @@
+<?php // phpcs:ignore WordPress.Files.FileName.InvalidClassFileName
+/**
+ * Tests for the A/B Tests results: provider seam, list and stats routes, and
+ * the retired page's redirect.
+ *
+ * @package Newspack_Popups
+ */
+
+require_once __DIR__ . '/mocks/class-ab-stub-provider.php';
+require_once __DIR__ . '/mocks/class-audience-campaigns.php';
+
+/**
+ * Dashboard tests.
+ *
+ * @group ab-tests
+ */
+class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
+	/**
+	 * WordPress's own value, restored after each test.
+	 *
+	 * @var string|null
+	 */
+	private $pagenow;
+
+	public function set_up() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
+		parent::set_up();
+		$this->pagenow = $GLOBALS['pagenow'] ?? null;
+		Newspack_Popups_AB_Tests::reset_config_cache();
+		remove_all_filters( 'newspack_popups_ab_stats_provider' );
+		// WP_UnitTestCase keeps one REST server for the whole run, so routes
+		// registered under one test's flag state would outlive it.
+		$GLOBALS['wp_rest_server'] = null;
+	}
+
+	public function tear_down() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
+		unset( $_GET['page'], $GLOBALS['admin_page_hooks'][ Newspack_Popups_AB_Dashboard::AUDIENCE_MENU_SLUG ] );
+		$GLOBALS['pagenow'] = $this->pagenow; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Puts back WordPress's own value.
+		remove_all_filters( 'newspack_popups_ab_testing_enabled' );
+		parent::tear_down();
+	}
+
+	/**
+	 * Stand in for newspack-plugin's Audience menu, which holds Campaigns.
+	 */
+	private function with_audience_menu() {
+		$GLOBALS['admin_page_hooks'][ Newspack_Popups_AB_Dashboard::AUDIENCE_MENU_SLUG ] = 'audience'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Stands in for newspack-plugin's Audience menu.
+	}
+
+	/**
+	 * Without a filter there is no provider.
+	 */
+	public function test_no_provider_by_default() {
+		$this->assertNull( Newspack_Popups_AB_Dashboard::get_provider() );
+	}
+
+	/**
+	 * The filter supplies the provider.
+	 */
+	public function test_filter_supplies_the_provider() {
+		$stub = new AB_Stub_Provider(
+			[
+				'unit'     => 'readers',
+				'variants' => [],
+			] 
+		);
+		add_filter( 'newspack_popups_ab_stats_provider', fn() => $stub );
+		$this->assertSame( $stub, Newspack_Popups_AB_Dashboard::get_provider() );
+	}
+
+	/**
+	 * A filter value that is not a provider is treated as none.
+	 */
+	public function test_filter_value_that_is_not_a_provider_is_ignored() {
+		add_filter( 'newspack_popups_ab_stats_provider', fn() => new stdClass() );
+		$this->assertNull( Newspack_Popups_AB_Dashboard::get_provider() );
+	}
+
+	/**
+	 * Create a prompt in a test.
+	 *
+	 * @param string $test_id      Test ID.
+	 * @param string $variant      Variant letter.
+	 * @param array  $post_options Post fields.
+	 * @return int Prompt ID.
+	 */
+	private function create_test_variant( $test_id, $variant, $post_options = [] ) {
+		$popup_id = $this->createPopup( null, null, $post_options );
+		update_post_meta( $popup_id, Newspack_Popups_AB_Tests::META_TEST_ID, $test_id );
+		update_post_meta( $popup_id, Newspack_Popups_AB_Tests::META_VARIANT, $variant );
+		return $popup_id;
+	}
+
+	/**
+	 * A published two-arm test that started on a fixed day.
+	 *
+	 * @param string $test_id Test ID.
+	 * @param string $started Publish date, Y-m-d.
+	 * @return int[] Prompt IDs by variant letter.
+	 */
+	private function create_running_test( $test_id = 't', $started = '2026-10-01' ) {
+		$dates = [
+			'post_date_gmt' => $started . ' 00:00:00',
+			'post_date'     => $started . ' 00:00:00',
+		];
+		return [
+			'a' => $this->create_test_variant( $test_id, 'a', $dates ),
+			'b' => $this->create_test_variant( $test_id, 'b', $dates ),
+		];
+	}
+
+	/**
+	 * Register a stub provider with the given counts.
+	 *
+	 * @param array|WP_Error $counts    Counts.
+	 * @param true|WP_Error  $available Availability.
+	 * @return AB_Stub_Provider
+	 */
+	private function use_provider( $counts, $available = true ) {
+		$stub = new AB_Stub_Provider( $counts, $available );
+		add_filter( 'newspack_popups_ab_stats_provider', fn() => $stub );
+		return $stub;
+	}
+
+	/**
+	 * Counts for a two-arm test.
+	 *
+	 * @param int $a_readers     Control readers.
+	 * @param int $a_conversions Control conversions.
+	 * @param int $b_readers     Challenger readers.
+	 * @param int $b_conversions Challenger conversions.
+	 * @param int $a_logged_in   Control logged-in readers.
+	 * @param int $b_logged_in   Challenger logged-in readers.
+	 * @return array
+	 */
+	private function counts( $a_readers, $a_conversions, $b_readers, $b_conversions, $a_logged_in = 0, $b_logged_in = 0 ) {
+		return [
+			'unit'     => 'readers',
+			'variants' => [
+				'a' => [
+					'readers'           => $a_readers,
+					'conversions'       => $a_conversions,
+					'logged_in_readers' => $a_logged_in,
+				],
+				'b' => [
+					'readers'           => $b_readers,
+					'conversions'       => $b_conversions,
+					'logged_in_readers' => $b_logged_in,
+				],
+			],
+		];
+	}
+
+	/**
+	 * Request a test's stats.
+	 *
+	 * @param string $test_id Test ID.
+	 * @param array  $params  Query parameters.
+	 * @return WP_REST_Response
+	 */
+	private function stats_request( $test_id, $params = [] ) {
+		$request = new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/' . $test_id . '/stats' );
+		foreach ( $params as $key => $value ) {
+			$request->set_param( $key, $value );
+		}
+		return rest_do_request( $request );
+	}
+
+	/**
+	 * A Test ID made of digits reaches the route as the string it was saved as.
+	 */
+	public function test_stats_route_finds_a_numeric_test_id() {
+		$this->as_admin();
+		$this->create_running_test( '123' );
+		$response = $this->stats_request( '123' );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( '123', $response->get_data()['test_id'] );
+	}
+
+	/**
+	 * A legacy Test ID with an underscore reaches the route and is reported as
+	 * stored, since readers' events carry that spelling.
+	 */
+	public function test_stats_route_finds_a_legacy_test_id() {
+		global $wpdb;
+		$this->as_admin();
+		foreach ( $this->create_running_test( 'footer-test' ) as $prompt_id ) {
+			// A value the earlier sanitizer stored; the current one can't write it.
+			$wpdb->update( // phpcs:ignore WordPress.DB
+				$wpdb->postmeta,
+				[ 'meta_value' => 'footer_test' ], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				[
+					'post_id'  => $prompt_id,
+					'meta_key' => Newspack_Popups_AB_Tests::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				]
+			);
+			wp_cache_delete( $prompt_id, 'post_meta' );
+		}
+		$response = $this->stats_request( 'footer_test' );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'footer_test', $response->get_data()['test_id'] );
+		$this->assertSame( 404, $this->stats_request( 'footer-test' )->get_status() );
+	}
+
+	/**
+	 * An underscore request with no stored match does not fall through to the
+	 * hyphenated test, which readers see as a different one.
+	 */
+	public function test_stats_route_does_not_map_an_underscore_id_to_the_hyphenated_test() {
+		$this->as_admin();
+		$this->create_running_test( 'footer-test' );
+		$this->assertSame( 404, $this->stats_request( 'footer_test' )->get_status() );
+		$this->assertSame( 200, $this->stats_request( 'footer-test' )->get_status() );
+	}
+
+	/**
+	 * Sign in as an administrator.
+	 */
+	private function as_admin() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+	}
+
+	/**
+	 * Editors can manage prompts but not read the dashboard.
+	 */
+	public function test_route_requires_manage_options() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+		$this->create_running_test();
+		$this->assertSame( 403, $this->stats_request( 't' )->get_status() );
+	}
+
+	/**
+	 * An unknown Test ID is a 404.
+	 */
+	public function test_unknown_test_is_404() {
+		$this->as_admin();
+		$this->assertSame( 404, $this->stats_request( 'nope' )->get_status() );
+	}
+
+	/**
+	 * With the flag off the route does not exist.
+	 */
+	public function test_route_is_absent_with_the_flag_off() {
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
+		$this->as_admin();
+		$this->create_running_test();
+		$response = $this->stats_request( 't' );
+		remove_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'rest_no_route', $response->get_data()['code'] );
+	}
+
+	/**
+	 * Without a provider the response says so and every variant is zero.
+	 */
+	public function test_no_provider_is_unavailable_with_a_reason() {
+		$this->as_admin();
+		$this->create_running_test();
+		$data = $this->stats_request( 't' )->get_data();
+		$this->assertSame( 'unavailable', $data['source']['state'] );
+		$this->assertSame( 'Results will show here once a stats source is connected.', $data['source']['reason'] );
+		$this->assertNull( $data['source']['provider'] );
+		$this->assertSame( 'collecting', $data['comparisons']['b']['label'] );
+		$this->assertNull( $data['comparisons']['b']['confidence'] );
+		$this->assertSame( 0, $data['variants']['a']['readers'] );
+		$this->assertSame( 0, $data['variants']['b']['conversions'] );
+		$this->assertNull( $data['variants']['a']['rate'] );
+	}
+
+	/**
+	 * Ways is_available() can say no, with the reason the page should show.
+	 *
+	 * @return array[]
+	 */
+	public function not_available_answers() {
+		return [
+			'error'     => [ new WP_Error( 'x', 'Connect the thing.' ), 'Connect the thing.' ],
+			'false'     => [ false, 'The stats source is not available on this site.' ],
+			'exception' => [ new RuntimeException( 'No client.' ), 'No client.' ],
+		];
+	}
+
+	/**
+	 * A provider that is not available is unavailable on the route and the page,
+	 * with the same reason, and is never asked for counts.
+	 *
+	 * @dataProvider not_available_answers
+	 * @param mixed  $answer What is_available() returns or throws.
+	 * @param string $reason What the page shows.
+	 */
+	public function test_not_available_provider_is_unavailable_everywhere( $answer, $reason ) {
+		$this->as_admin();
+		$this->create_running_test();
+		$stub = $this->use_provider( $this->counts( 1, 1, 1, 1 ), $answer );
+		$data = $this->stats_request( 't' )->get_data();
+		$this->assertSame( 'unavailable', $data['source']['state'] );
+		$this->assertSame( $reason, $data['source']['reason'] );
+		$this->assertSame( 'stub', $data['source']['provider'] );
+		$this->assertCount( 0, $stub->calls );
+		$list = Newspack_Popups_AB_Dashboard::get_list_data();
+		$this->assertFalse( $list['provider']['available'] );
+		$this->assertSame( 'stub', $list['provider']['slug'] );
+		$this->assertSame( $reason, $list['provider']['reason'] );
+	}
+
+	/**
+	 * Ways get_counts() can fail.
+	 *
+	 * @return array[]
+	 */
+	public function count_failures() {
+		return [
+			'error'     => [ new WP_Error( 'x', 'The source timed out.' ), 'The source timed out.' ],
+			'exception' => [ new RuntimeException( 'The client blew up.' ), 'The client blew up.' ],
+			'malformed' => [ [ 'error' => 'no variants key' ], 'The stats source returned an unexpected answer.' ],
+		];
+	}
+
+	/**
+	 * A failed count is reported with its reason and never cached.
+	 *
+	 * @dataProvider count_failures
+	 * @param mixed  $failure What get_counts() returns or throws.
+	 * @param string $reason  What the page shows.
+	 */
+	public function test_count_failure_is_unavailable_and_not_cached( $failure, $reason ) {
+		$this->as_admin();
+		$this->create_running_test();
+		$stub = $this->use_provider( $failure );
+		$data = $this->stats_request( 't' )->get_data();
+		$this->assertSame( 'unavailable', $data['source']['state'] );
+		$this->assertSame( $reason, $data['source']['reason'] );
+		$this->stats_request( 't' );
+		$this->assertCount( 2, $stub->calls );
+	}
+
+	/**
+	 * A provider with nothing yet means the test is collecting.
+	 */
+	public function test_empty_counts_are_collecting() {
+		$this->as_admin();
+		$this->create_running_test();
+		$this->use_provider(
+			[
+				'unit'     => 'readers',
+				'variants' => [],
+			] 
+		);
+		$data = $this->stats_request( 't' )->get_data();
+		$this->assertSame( 'collecting', $data['source']['state'] );
+		$this->assertNull( $data['source']['reason'] );
+		$this->assertSame( [ 'a', 'b' ], array_keys( $data['variants'] ) );
+		$this->assertSame( 0, $data['variants']['b']['readers'] );
+	}
+
+	/**
+	 * Counts become rates, lift against control, and a confidence per challenger.
+	 */
+	public function test_counts_become_rates_lift_and_confidence() {
+		$this->as_admin();
+		$this->create_running_test();
+		$this->use_provider( $this->counts( 1200, 36, 1180, 48 ) );
+		$data = $this->stats_request( 't' )->get_data();
+		$this->assertSame( 'ok', $data['source']['state'] );
+		$this->assertSame( 'readers', $data['source']['unit'] );
+		$this->assertSame( 3.0, $data['variants']['a']['rate'] );
+		$this->assertSame( 4.07, $data['variants']['b']['rate'] );
+		$this->assertSame( 35.7, $data['variants']['b']['lift'] );
+		$this->assertNull( $data['variants']['a']['lift'] );
+		$this->assertIsFloat( $data['comparisons']['b']['confidence'] );
+		$this->assertContains( $data['comparisons']['b']['label'], [ 'directional', 'reliable' ] );
+		$this->assertArrayNotHasKey( 'a', $data['comparisons'] );
+	}
+
+	/**
+	 * The provider's variants are matched to discovery's, not trusted as the list.
+	 */
+	public function test_unknown_variants_are_dropped_and_missing_ones_zero_filled() {
+		$this->as_admin();
+		$this->create_running_test();
+		$this->use_provider(
+			[
+				'unit'     => 'readers',
+				'variants' => [
+					'c' => [
+						'readers'           => 500,
+						'conversions'       => 5,
+						'logged_in_readers' => 0,
+					],
+					'a' => [
+						'readers'           => 100,
+						'conversions'       => 1,
+						'logged_in_readers' => 0,
+					],
+				],
+			]
+		);
+		$data = $this->stats_request( 't' )->get_data();
+		$this->assertSame( [ 'a', 'b' ], array_keys( $data['variants'] ) );
+		$this->assertSame( 100, $data['variants']['a']['readers'] );
+		$this->assertSame( 0, $data['variants']['b']['readers'] );
+		$this->assertSame( 'ok', $data['source']['state'] );
+	}
+
+	/**
+	 * Zero readers everywhere produces nulls, not division errors.
+	 */
+	public function test_both_arms_zero_readers_give_nulls() {
+		$this->as_admin();
+		$this->create_running_test();
+		$this->use_provider( $this->counts( 0, 0, 0, 0 ) );
+		$data = $this->stats_request( 't' )->get_data();
+		$this->assertSame( 'collecting', $data['source']['state'] );
+		$this->assertNull( $data['variants']['a']['rate'] );
+		$this->assertNull( $data['variants']['b']['lift'] );
+		$this->assertNull( $data['comparisons']['b']['confidence'] );
+		$this->assertNull( $data['flags']['anonymous_share'] );
+		$this->assertFalse( $data['flags']['high_anonymous'] );
+	}
+
+	/**
+	 * The window runs from the day the split began to today and reaches the provider.
+	 */
+	public function test_window_runs_from_started_at_and_is_passed_to_the_provider() {
+		$this->as_admin();
+		$this->create_running_test( 't', '2026-10-01' );
+		$stub = $this->use_provider( $this->counts( 10, 1, 10, 1 ) );
+		$data = $this->stats_request( 't' )->get_data();
+		$this->assertSame( '2026-10-01', $data['window']['start'] );
+		$this->assertSame( gmdate( 'Y-m-d' ), $data['window']['end'] );
+		$this->assertSame( '2026-10-01', $stub->calls[0]['start'] );
+		$this->assertSame( gmdate( 'Y-m-d' ), $stub->calls[0]['end'] );
+		$this->assertSame( 't', $stub->calls[0]['test']['test_id'] );
+	}
+
+	/**
+	 * A test with nothing published has no window and asks the provider nothing.
+	 */
+	public function test_unpublished_test_has_no_window_and_is_collecting() {
+		$this->as_admin();
+		$this->create_test_variant( 'd', 'a', [ 'post_status' => 'draft' ] );
+		$stub = $this->use_provider( $this->counts( 10, 1, 10, 1 ) );
+		$data = $this->stats_request( 'd' )->get_data();
+		$this->assertNull( $data['window'] );
+		$this->assertSame( 'collecting', $data['source']['state'] );
+		$this->assertCount( 0, $stub->calls );
+		$this->assertTrue( $data['flags']['young_test'] );
+		$this->assertNull( $data['flags']['days_running'] );
+	}
+
+	/**
+	 * Counts are cached for an hour; refresh asks the provider again.
+	 */
+	public function test_counts_are_cached_and_refresh_bypasses() {
+		$this->as_admin();
+		$this->create_running_test();
+		$stub = $this->use_provider( $this->counts( 100, 5, 100, 6 ) );
+		$first = $this->stats_request( 't' )->get_data();
+		$second = $this->stats_request( 't' )->get_data();
+		$this->assertCount( 1, $stub->calls );
+		$this->assertFalse( $first['source']['cached'] );
+		$this->assertTrue( $second['source']['cached'] );
+		$this->assertSame( $first['source']['fetched_at'], $second['source']['fetched_at'] );
+		$third = $this->stats_request( 't', [ 'refresh' => '1' ] )->get_data();
+		$this->assertCount( 2, $stub->calls );
+		$this->assertFalse( $third['source']['cached'] );
+	}
+
+	/**
+	 * A new goal must not be served from the old goal's counts.
+	 */
+	public function test_changing_the_goal_misses_the_cache() {
+		$this->as_admin();
+		$ids  = $this->create_running_test();
+		$stub = $this->use_provider( $this->counts( 100, 5, 100, 6 ) );
+		$this->stats_request( 't' );
+		update_post_meta( $ids['a'], Newspack_Popups_AB_Tests::META_GOAL, 'donation' );
+		$data = $this->stats_request( 't' )->get_data();
+		$this->assertCount( 2, $stub->calls );
+		$this->assertSame( 'donation', $stub->calls[1]['goal'] );
+		$this->assertSame( 'donation', $data['goal'] );
+	}
+
+	/**
+	 * Swapping which prompt carries a letter must not be served the old arm's counts.
+	 */
+	public function test_changing_an_arm_s_prompt_misses_the_cache() {
+		$this->as_admin();
+		$ids  = $this->create_running_test();
+		$stub = $this->use_provider( $this->counts( 100, 5, 100, 6 ) );
+		$this->stats_request( 't' );
+		wp_update_post(
+			[
+				'ID'          => $ids['b'],
+				'post_status' => 'draft',
+			]
+		);
+		$replacement = $this->create_test_variant(
+			't',
+			'b',
+			[
+				'post_date_gmt' => '2026-10-01 00:00:00',
+				'post_date'     => '2026-10-01 00:00:00',
+			]
+		);
+		$data        = $this->stats_request( 't' )->get_data();
+		$this->assertCount( 2, $stub->calls );
+		$this->assertSame( $replacement, $stub->calls[1]['test']['variants']['b']['id'] );
+		$this->assertFalse( $data['source']['cached'] );
+	}
+
+	/**
+	 * A test younger than fourteen days is flagged; one at fourteen is not.
+	 */
+	public function test_young_test_flag_boundaries() {
+		$this->as_admin();
+		$this->use_provider( $this->counts( 100, 5, 100, 6 ) );
+		$this->create_running_test( 'young', gmdate( 'Y-m-d', strtotime( '-13 days' ) ) );
+		$this->create_running_test( 'settled', gmdate( 'Y-m-d', strtotime( '-14 days' ) ) );
+		$young   = $this->stats_request( 'young' )->get_data();
+		$settled = $this->stats_request( 'settled' )->get_data();
+		$this->assertTrue( $young['flags']['young_test'] );
+		$this->assertSame( 13, $young['flags']['days_running'] );
+		$this->assertFalse( $settled['flags']['young_test'] );
+		$this->assertSame( 14, $settled['flags']['days_running'] );
+	}
+
+	/**
+	 * Eighty percent anonymous is high; seventy-nine is not.
+	 */
+	public function test_high_anonymous_boundaries() {
+		$this->as_admin();
+		$this->create_running_test( 'high' );
+		$this->create_running_test( 'low' );
+		$stub = $this->use_provider( $this->counts( 100, 5, 100, 6, 20, 20 ) );
+		$high = $this->stats_request( 'high' )->get_data();
+		$this->assertSame( 0.8, $high['flags']['anonymous_share'] );
+		$this->assertTrue( $high['flags']['high_anonymous'] );
+		remove_all_filters( 'newspack_popups_ab_stats_provider' );
+		$this->use_provider( $this->counts( 100, 5, 100, 6, 21, 21 ) );
+		$low = $this->stats_request( 'low' )->get_data();
+		$this->assertSame( 0.79, $low['flags']['anonymous_share'] );
+		$this->assertFalse( $low['flags']['high_anonymous'] );
+	}
+
+	/**
+	 * The provider's counting unit is passed through.
+	 */
+	public function test_unit_is_passed_through() {
+		$this->as_admin();
+		$this->create_running_test();
+		$counts         = $this->counts( 100, 5, 100, 6 );
+		$counts['unit'] = 'events';
+		$this->use_provider( $counts );
+		$this->assertSame( 'events', $this->stats_request( 't' )->get_data()['source']['unit'] );
+	}
+
+	/**
+	 * Request the list of tests.
+	 *
+	 * @return WP_REST_Response
+	 */
+	private function list_request() {
+		return rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests' ) );
+	}
+
+	/**
+	 * The list route carries the tests, the prompts a test can start from, the
+	 * provider state, the thresholds and the copy the tab's cards need.
+	 */
+	public function test_list_route_reports_tests_provider_state_and_copy() {
+		$this->as_admin();
+		$this->create_running_test();
+		$response = $this->list_request();
+		$this->assertSame( 200, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertSame( [ 'tests', 'prompts', 'provider', 'thresholds', 'copy', 'goals', 'labels' ], array_keys( $data ) );
+		$this->assertSame( 't', $data['tests'][0]['test_id'] );
+		$this->assertFalse( $data['provider']['available'] );
+		$this->assertNull( $data['provider']['slug'] );
+		$this->assertSame( 'Results will show here once a stats source is connected.', $data['provider']['reason'] );
+		$this->assertSame( 80, $data['thresholds']['directional'] );
+		$this->assertSame( 95, $data['thresholds']['reliable'] );
+		$this->assertSame( 30, $data['thresholds']['min_readers'] );
+		$this->assertStringStartsWith( "Most readers in this test aren't logged in", $data['copy']['high_anonymous'] );
+		$this->assertStringStartsWith( 'Too early to call a winner.', $data['copy']['young_test'] );
+		$this->assertSame( 'Too early', $data['labels']['collecting'] );
+	}
+
+	/**
+	 * An available provider is reported with its slug and no reason.
+	 */
+	public function test_list_data_with_an_available_provider() {
+		$this->use_provider( $this->counts( 1, 1, 1, 1 ) );
+		$data = Newspack_Popups_AB_Dashboard::get_list_data();
+		$this->assertTrue( $data['provider']['available'] );
+		$this->assertSame( 'stub', $data['provider']['slug'] );
+		$this->assertNull( $data['provider']['reason'] );
+	}
+
+	/**
+	 * Editors can manage prompts but not read the results.
+	 */
+	public function test_list_route_requires_manage_options() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+		$this->assertSame( 403, $this->list_request()->get_status() );
+	}
+
+	/**
+	 * With the flag off the list route does not exist.
+	 */
+	public function test_list_route_is_absent_with_the_flag_off() {
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
+		$this->as_admin();
+		$response = $this->list_request();
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'rest_no_route', $response->get_data()['code'] );
+	}
+
+	/**
+	 * The tab's URL needs the flag, an administrator and the Campaigns wizard.
+	 *
+	 * The branch for an older newspack-plugin, which builds the Audience menu
+	 * but has no A/B Tests tab, is not covered: the stand-in Audience_Campaigns
+	 * class stays loaded for the whole run, and a class can't be unloaded.
+	 */
+	public function test_page_url_is_the_campaigns_tab() {
+		$this->as_admin();
+		$this->assertSame( '', Newspack_Popups_AB_Dashboard::get_page_url(), 'Without the Audience menu there is no tab.' );
+
+		$this->with_audience_menu();
+		$this->assertSame( admin_url( 'admin.php?page=newspack-audience-campaigns#/ab-tests' ), Newspack_Popups_AB_Dashboard::get_page_url() );
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+		$this->assertSame( '', Newspack_Popups_AB_Dashboard::get_page_url(), 'The results are for administrators only.' );
+
+		$this->as_admin();
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
+		$this->assertSame( '', Newspack_Popups_AB_Dashboard::get_page_url() );
+	}
+
+	/**
+	 * A request for the retired page goes to the tab, and nothing else does.
+	 */
+	public function test_retired_page_redirects_to_the_tab() {
+		$this->as_admin();
+		$this->with_audience_menu();
+		$GLOBALS['pagenow'] = 'admin.php'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- WordPress sets it per admin request.
+		$_GET['page']       = Newspack_Popups_AB_Dashboard::PAGE_SLUG;
+		$this->assertStringEndsWith( 'page=newspack-audience-campaigns#/ab-tests', Newspack_Popups_AB_Dashboard::get_redirect_url() );
+
+		$_GET['page'] = 'newspack-audience-campaigns';
+		$this->assertSame( '', Newspack_Popups_AB_Dashboard::get_redirect_url(), 'Other pages stay where they are.' );
+
+		$_GET['page']       = Newspack_Popups_AB_Dashboard::PAGE_SLUG;
+		$GLOBALS['pagenow'] = 'tools.php'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		$this->assertStringEndsWith( 'page=newspack-audience-campaigns#/ab-tests', Newspack_Popups_AB_Dashboard::get_redirect_url(), 'Sites without the Audience menu served the page under Tools.' );
+
+		$GLOBALS['pagenow'] = 'options-general.php'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		$this->assertSame( '', Newspack_Popups_AB_Dashboard::get_redirect_url(), 'Only admin.php and tools.php served the page slug.' );
+
+		$GLOBALS['pagenow'] = 'admin.php'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		unset( $GLOBALS['admin_page_hooks'][ Newspack_Popups_AB_Dashboard::AUDIENCE_MENU_SLUG ] );
+		$this->assertSame( '', Newspack_Popups_AB_Dashboard::get_redirect_url(), 'With no tab to land on, nothing redirects.' );
+	}
+}

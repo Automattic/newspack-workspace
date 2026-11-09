@@ -126,12 +126,21 @@ describe( 'Ads list date columns', () => {
 describe( 'Ads list status column dates', () => {
 	afterEach( () => configureSite( 0 ) );
 
-	// `newspack-components` is stubbed for these tests, so read the label off the
-	// StatusIndicator's props rather than rendering it.
-	const statusLabel = ( status, postStatus = 'publish' ) =>
-		fieldById( 'status' ).render( {
+	const renderLabel = ( status, postStatus = 'publish' ) => {
+		const { children } = fieldById( 'status' ).render( {
 			item: { id: 1, meta: {}, status: postStatus, newspack_newsletters_ad_status: status },
-		} ).props.children;
+		} ).props;
+		return render( <div>{ children }</div> ).container;
+	};
+	const statusLabel = ( status, postStatus ) => renderLabel( status, postStatus ).textContent;
+
+	it( 'keeps the start date on one line', () => {
+		configureSite( 0 );
+
+		const label = renderLabel( { kind: 'scheduled', starts_at: Date.UTC( 2026, 7, 4, 12 ) / 1000 } );
+
+		expect( label.querySelector( '.newspack-dataviews__date' ) ).toHaveTextContent( 'August 4, 2026' );
+	} );
 
 	it( 'drops the clock time when the site date format carries one', () => {
 		configureSite( -4, 'F j, Y, g:i a' );

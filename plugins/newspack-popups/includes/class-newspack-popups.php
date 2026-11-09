@@ -140,6 +140,9 @@ final class Newspack_Popups {
 		include_once __DIR__ . '/class-newspack-popups-view-as.php';
 		include_once __DIR__ . '/class-newspack-popups-data-api.php';
 		include_once __DIR__ . '/class-newspack-popups-ab-tests.php';
+		include_once __DIR__ . '/class-newspack-popups-ab-stats.php';
+		include_once __DIR__ . '/interface-newspack-popups-ab-stats-provider.php';
+		include_once __DIR__ . '/class-newspack-popups-ab-dashboard.php';
 		include_once __DIR__ . '/class-newspack-popups-criteria.php';
 		include_once __DIR__ . '/class-newspack-popups-expiry.php';
 		include_once __DIR__ . '/merge-tags/class-merge-tag.php';
@@ -792,6 +795,17 @@ final class Newspack_Popups {
 		$categories = array_values( get_categories() );
 
 		return count( $categories ) > 0 ? get_category_link( $categories[0] ) : '';
+	}
+
+	/**
+	 * Whether A/B testing is enabled. newspack-plugin reads this to show the
+	 * A/B Tests tab in Campaigns, and its presence tells it this version has
+	 * the tab's list route.
+	 *
+	 * @return bool
+	 */
+	public static function is_ab_testing_enabled() {
+		return Newspack_Popups_AB_Tests::is_enabled();
 	}
 
 	/**
@@ -1532,7 +1546,7 @@ final class Newspack_Popups {
 		$original_base_title = sprintf( __( '%s copy', 'newspack-popups' ), $original_title );
 
 		// Prepend ` copy` only if it's not already on the post title.
-		return preg_match( "/^$original_base_title\s*\d*$/", $parent_title )
+		return preg_match( '/^' . preg_quote( $original_base_title, '/' ) . '\s*\d*$/', $parent_title )
 		? $original_base_title
 		/* translators: %s: Duplicate prompt title */
 		: sprintf( __( '%s copy', 'newspack-popups' ), $parent_title );
@@ -1564,7 +1578,7 @@ final class Newspack_Popups {
 				/* translators: %s: Duplicate prompt title */
 				$original_prompt_title = sprintf( __( '%s copy', 'newspack-popups' ), $original_title );
 				// Filter duplicated posts with a duplicate count postponed to the same title.
-				return preg_match( "/^$original_prompt_title\s*\d*$/", $prompt->post_title );
+				return preg_match( '/^' . preg_quote( $original_prompt_title, '/' ) . '\s*\d*$/', $prompt->post_title );
 			}
 		);
 
@@ -1583,7 +1597,7 @@ final class Newspack_Popups {
 	 * as the source prompt, but are always set to draft status at first.
 	 *
 	 * @param int    $id Prompt ID to duplicate.
-	 * @param string $title Title to give to the duplicate.
+	 * @param string $title Title to give to the duplicate, unslashed.
 	 * @return int|boolean|WP_Error The copy's post ID, false if the ID to copy isn't a valid prompt, or WP_Error if the operation failed.
 	 */
 	public static function duplicate_popup( $id, $title = '' ) {
@@ -1605,13 +1619,16 @@ final class Newspack_Popups {
 				'tags_input'    => wp_get_post_tags( $id, [ 'fields' => 'ids' ] ),
 				'meta_input'    => [
 					// A campaign is set as the origin of another one, if the later have the same title with the count of occurences suffixed (e.g. my prompt 3).
-					'duplicate_of' => empty( $title ) || preg_match( "/^$original_title_base\s*\d*$/", $title )
+					'duplicate_of' => empty( $title ) || preg_match( '/^' . preg_quote( $original_title_base, '/' ) . '\s*\d*$/', $title )
 									? $original_id : 0,
 				],
 			];
 
-			// Create the copy.
-			$new_popup_id = wp_insert_post( $new_popup );
+			// Create the copy. wp_insert_post() and update_post_meta() unslash what they
+			// are given, and these values arrive unslashed (read from the database, or the
+			// caller's title), so without wp_slash() the copy loses every backslash (block
+			// attributes store quotes and angle brackets as \u0022, \u003c and so on).
+			$new_popup_id = wp_insert_post( wp_slash( $new_popup ) );
 
 			// Apply campaign taxonomy.
 			$old_campaigns = wp_get_post_terms(
@@ -1632,7 +1649,7 @@ final class Newspack_Popups {
 			// Set prompt options to match old prompt.
 			$old_popup_options = Newspack_Popups_Model::get_popup_options( $id );
 			foreach ( $old_popup_options as $key => $value ) {
-				update_post_meta( $new_popup_id, $key, $value );
+				update_post_meta( $new_popup_id, $key, wp_slash( $value ) );
 			}
 		}
 
