@@ -9,9 +9,8 @@ import { ExternalLink, __experimentalVStack as VStack } from '@wordpress/compone
 import { createInterpolateElement } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { envelope, globe } from '@wordpress/icons';
-import { dateI18n, getSettings as getDateSettings } from '@wordpress/date';
 
-import { StatusIndicator } from 'newspack-components';
+import { formatSiteDateTime, StatusIndicator } from 'newspack-components';
 
 import UserRow, { avatarPropsFromAuthor } from '../../../components/user-row';
 import { useLockedPost } from '../../hooks/use-locked-posts';
@@ -28,16 +27,7 @@ export const STATUS_KIND_STATUSES = {
 	trash: 'trash',
 };
 
-const formatDate = timestamp => {
-	if ( ! timestamp ) {
-		return '';
-	}
-	const settings = getDateSettings();
-	const format = settings.formats?.datetime || 'M j, Y g:ia';
-	return dateI18n( format, timestamp * 1000 );
-};
-
-const renderStatusDate = timestamp => <span className="newspack-dataviews__date">{ formatDate( timestamp ) }</span>;
+const renderStatusDate = timestamp => <span className="newspack-dataviews__date">{ formatSiteDateTime( timestamp ) }</span>;
 
 const withDate = ( template, timestamp ) => createInterpolateElement( sprintf( template, '<date />' ), { date: renderStatusDate( timestamp ) } );
 
