@@ -152,11 +152,20 @@ if ( ! class_exists( 'Newspack_Newsletters' ) ) {
 		}
 
 		/**
+		 * How many times get_esp_lists() has been called. In production each call
+		 * asks the ESP, so tests can assert a code path makes none.
+		 *
+		 * @var int
+		 */
+		public static $esp_lists_calls = 0;
+
+		/**
 		 * The configured ESP's lists. Empty, so no newsletter content rule is offered.
 		 *
 		 * @return array
 		 */
 		public static function get_esp_lists() {
+			++self::$esp_lists_calls;
 			return [];
 		}
 

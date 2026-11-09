@@ -117,10 +117,11 @@ class Content_Rules {
 	 * @return array[] Rule definitions keyed by slug. Unregistered slugs are flagged `unavailable`.
 	 */
 	public static function get_unoffered_content_rules( array $gates ): array {
+		// The newsletter rule's slug is named here rather than read from
+		// get_premium_newsletter_rules(), which asks the ESP for its lists.
 		$known = array_merge(
 			array_keys( self::get_content_rules() ),
-			array_keys( self::get_premium_newsletter_rules() ),
-			[ 'specific_posts', self::PUBLISHED_AGE_RULE ]
+			[ 'newsletters', 'specific_posts', self::PUBLISHED_AGE_RULE ]
 		);
 		$extra = [];
 		foreach ( $gates as $gate ) {

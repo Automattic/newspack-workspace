@@ -1494,6 +1494,30 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Describing stored rules runs on every Access Control load, so it must not ask
+	 * the ESP for its lists, and a stored newsletter rule still counts as known.
+	 */
+	public function test_unoffered_rules_make_no_esp_call() {
+		require_once dirname( __DIR__, 2 ) . '/mocks/newsletters-mocks.php';
+		\Newspack_Newsletters::$esp_lists_calls = 0;
+		$gates = [
+			[
+				'content_rules' => [
+					[
+						'slug'  => 'newsletters',
+						'value' => [ 'list-1' ],
+					],
+				],
+			],
+		];
+
+		$extra = Content_Rules::get_unoffered_content_rules( $gates );
+
+		$this->assertSame( 0, \Newspack_Newsletters::$esp_lists_calls );
+		$this->assertSame( [], $extra );
+	}
+
+	/**
 	 * Test the posts-search REST endpoint returns published posts of supported post types.
 	 */
 	public function test_posts_search_endpoint_returns_published_posts() {
