@@ -401,6 +401,19 @@ describe( 'Ended tests', () => {
 		).toBeInTheDocument();
 	} );
 
+	it( 'names every ineligible version in one notice', async () => {
+		mockRoutes(
+			listResponse( [ test( 'two', { a: prompt( 14 ), b: prompt( 15, { eligible: false } ), c: prompt( 16, { eligible: false } ) } ) ] )
+		);
+		render( <ABTests /> );
+		const card = await screen.findByRole( 'region', { name: 'Test two' } );
+		expect(
+			within( card ).getByText(
+				"Versions B and C are on manual or custom placements, or are overlays set to Manual only, so their results can't be measured. Move them to placements Newspack controls, or end the test."
+			)
+		).toBeInTheDocument();
+	} );
+
 	it( 'asks for no placement change on an ended test', async () => {
 		const moved = test(
 			'mov',
