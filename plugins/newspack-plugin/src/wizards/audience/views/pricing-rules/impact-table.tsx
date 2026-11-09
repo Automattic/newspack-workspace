@@ -18,8 +18,9 @@ import {
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
-// Not the Newspack wrapper: with-wizard-screen/style.scss gives `.newspack-dataviews`
-// a -48px page bleed that hangs this embedded table past the form column.
+// The unframed table stays on core DataViews: outside a card, the Newspack wrapper
+// takes the page bleed (with-wizard-screen/style.scss), which hangs this embedded
+// table past the form column.
 import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Field, View } from '@wordpress/dataviews';
 
@@ -27,6 +28,7 @@ import type { Field, View } from '@wordpress/dataviews';
  * Internal dependencies
  */
 import { TableCard } from '../../../../../packages/components/src';
+import NewspackDataViews from '../../../../../packages/components/src/dataviews';
 import { cycleMarkerNote, formatPrice, formatSegment } from './impact-format';
 
 /** Rows shown before the publisher asks for the rest. */
@@ -159,14 +161,18 @@ export default function ImpactTable( {
 		page: 1,
 		search: '',
 		filters: [],
-		layout: { density: 'compact', enableMoving: false },
+		layout: { enableMoving: false },
 		titleField: 'product',
 		fields: fieldIds,
 	} ) );
 
 	// perPage and the segment columns follow the data; in view state, an effect
 	// would land them a paint late.
-	const tableView = useMemo( () => ( { ...view, perPage, fields: fieldIds } ), [ view, perPage, fieldIds ] );
+	// The catalog-wide table in the modal holds every product, so it keeps compact rows.
+	const tableView = useMemo(
+		() => ( { ...view, perPage, fields: fieldIds, layout: { ...view.layout, density: framed ? 'balanced' : 'compact' } } ) as View,
+		[ view, perPage, fieldIds, framed ]
+	);
 
 	const { data: sorted, paginationInfo } = useMemo( () => filterSortAndPaginate( baseline, tableView, fields ), [ baseline, tableView, fields ] );
 
@@ -198,14 +204,15 @@ export default function ImpactTable( {
 		</HStack>
 	) : null;
 
+	const Views = framed ? NewspackDataViews : DataViews;
 	const table = (
 		<div
 			id={ tableId }
-			className={ `newspack-pricing-rules__impact-table${ framed ? ' newspack-pricing-rules__impact-table--framed' : '' }` }
+			className="newspack-pricing-rules__impact-table"
 			role="region"
 			aria-label={ __( 'Resulting prices by product and reader segment', 'newspack-plugin' ) }
 		>
-			<DataViews
+			<Views
 				data={ data }
 				fields={ fields }
 				view={ tableView }
@@ -216,7 +223,7 @@ export default function ImpactTable( {
 				empty={ <p className="newspack-pricing-rules__muted">{ __( 'No products to show.', 'newspack-plugin' ) }</p> }
 			>
 				<DataViews.Layout />
-			</DataViews>
+			</Views>
 		</div>
 	);
 
@@ -232,7 +239,9 @@ export default function ImpactTable( {
 				</p>
 			) }
 			{ framed ? (
-				<TableCard after={ seeMore ?? undefined }>{ table }</TableCard>
+				<TableCard separator title={ __( 'Affected Products', 'newspack-plugin' ) } after={ seeMore ?? undefined }>
+					{ table }
+				</TableCard>
 			) : (
 				<>
 					{ table }

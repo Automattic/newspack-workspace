@@ -240,8 +240,8 @@ describe( 'ImpactTable', () => {
 		expect( screen.queryByText( /c1 is the initial purchase/ ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'renders without the Newspack DataViews page wrapper', () => {
-		const { container } = render( <ImpactTable baseline={ [ row() ] } segmentGroups={ [] } currency={ CURRENCY } /> );
+	it( 'renders without the Newspack DataViews page wrapper when unframed', () => {
+		const { container } = render( <ImpactTable baseline={ [ row() ] } segmentGroups={ [] } currency={ CURRENCY } framed={ false } /> );
 		expect( container.querySelector( '.newspack-dataviews' ) ).toBeNull();
 	} );
 
