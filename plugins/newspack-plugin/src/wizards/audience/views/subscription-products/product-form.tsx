@@ -165,7 +165,11 @@ export default function ProductForm( {
 		bundled,
 	} );
 	const initialSnapshot = useRef( snapshot ).current;
-	const { confirmDialog: navBlockDialog } = useUnsavedChangesDialog( {
+	const {
+		confirmDialog: navBlockDialog,
+		requestConfirm,
+		allowNextUnload,
+	} = useUnsavedChangesDialog( {
 		when: snapshot !== initialSnapshot && ! isSaving,
 	} );
 
@@ -577,7 +581,7 @@ export default function ProductForm( {
 													<span className="newspack-subscription-products__policy-plan-label">{ row.label }</span>
 												) }
 												<VStack spacing={ 2 } alignment="left">
-													{ ruleLinks( row.policy ) }
+													{ ruleLinks( row.policy, { requestConfirm, allowNextUnload } ) }
 												</VStack>
 												<EffectivePrice policy={ row.policy } currency={ currency } />
 											</HStack>
@@ -589,7 +593,7 @@ export default function ProductForm( {
 								<div>
 									<span className="newspack-subscription-products__modal-label">{ __( 'Unlocks', 'newspack-plugin' ) }</span>
 									<VStack spacing={ 2 } alignment="left">
-										{ gateLinks( initial.unlocks ) }
+										{ gateLinks( initial.unlocks, { requestConfirm, allowNextUnload } ) }
 									</VStack>
 								</div>
 							) }
