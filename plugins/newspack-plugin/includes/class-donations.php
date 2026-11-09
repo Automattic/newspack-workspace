@@ -592,8 +592,8 @@ class Donations {
 
 		// A cleared minimum would remove the floor from every donation product and
 		// Donate block that follows it, so clearing the field keeps the minimum
-		// saved before. A site whose saved minimum is blank too gets the default;
-		// entering 0 is how to have no minimum.
+		// saved before. A site whose saved minimum is blank too gets the default.
+		// A numeric 0 is saved as is and means no minimum.
 		if ( ! is_numeric( $configuration['minimumDonation'] ) ) {
 			$saved_minimum = self::get_saved_minimum_donation();
 			if ( is_numeric( $saved_minimum ) ) {

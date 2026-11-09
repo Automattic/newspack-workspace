@@ -170,7 +170,7 @@ export const DonationAmounts = ( { hideHeader = false }: { hideHeader?: boolean 
 					) } ${ __( 'Leave empty to keep the current minimum.', 'newspack-plugin' ) }` }
 					type="number"
 					min={ 1 }
-					value={ minimumDonationFloat }
+					value={ Number.isNaN( minimumDonationFloat ) ? '' : minimumDonationFloat }
 					onChange={ ( value: string ) => changeHandler( [ 'minimumDonation' ] )( value ) }
 					withMargin={ false }
 				/>
