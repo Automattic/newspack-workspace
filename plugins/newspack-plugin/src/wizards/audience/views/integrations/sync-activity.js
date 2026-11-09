@@ -12,7 +12,7 @@ import { Stack } from '@wordpress/ui';
 /**
  * Internal dependencies
  */
-import { DataViews, Drawer, StatusIndicator } from '../../../../../packages/components/src';
+import { DataViews, Drawer, StatusBadge } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { API_BASE, PUSH_LOG_STATUS_MAP, PUSH_LOG_OPERATION_LABELS, formatTimestamp } from './constants';
 import { NEEDS_ATTENTION_VALUE, buildPushLogQuery, getAttemptLabel, getRetryNote, getStatusDisplay, getEmptyMessage } from './push-log-utils';
@@ -162,8 +162,8 @@ export const SyncActivity = ( { integrationId } ) => {
 					// out in a row and does not wrap, so the notes need a
 					// column of their own to sit under the status.
 					return (
-						<Stack direction="column" gap="xs">
-							<StatusIndicator status={ mapped.status }>{ mapped.label }</StatusIndicator>
+						<Stack direction="column" align="flex-start" gap="xs">
+							<StatusBadge status={ mapped.status }>{ mapped.label }</StatusBadge>
 							{ notes.map( note => (
 								<span key={ note } className="newspack-integration-logs__status-note">
 									{ note }

@@ -536,6 +536,35 @@ describe( 'the network subscription rows', () => {
 		expect( container.textContent ).toBe( 'All-Access Premium\u00a0(Riverbend Daily)' );
 	} );
 
+	it( 'shows two subscriptions and toggles the rest', async () => {
+		await mount();
+		const item = {
+			...subscriber( 1 ),
+			subscriptions: [ 7, 8, 9 ].map( id => ( { ...localSubscription, id, plan: `Plan ${ id }`, editUrl: `/edit/${ id }` } ) ),
+		};
+		const { container, getByRole } = render( field( 'plans' ).render( { item } ) );
+		const toggle = getByRole( 'button', { name: 'See more' } );
+
+		expect( container.querySelectorAll( 'a' ) ).toHaveLength( 2 );
+		expect( toggle.getAttribute( 'aria-expanded' ) ).toBe( 'false' );
+		expect( container.querySelector( `#${ CSS.escape( toggle.getAttribute( 'aria-controls' ) ) }` ) ).not.toBeNull();
+
+		fireEvent.click( toggle );
+
+		expect( container.querySelectorAll( 'a' ) ).toHaveLength( 3 );
+		expect( toggle.getAttribute( 'aria-expanded' ) ).toBe( 'true' );
+		expect( toggle.textContent ).toBe( 'See less' );
+	} );
+
+	it( 'leaves the toggle out for two subscriptions or fewer', async () => {
+		await mount();
+		const item = { ...subscriber( 1 ), subscriptions: [ localSubscription, { ...localSubscription, id: 8, plan: 'Print' } ] };
+		const { container } = render( field( 'plans' ).render( { item } ) );
+
+		expect( container.querySelectorAll( 'a' ) ).toHaveLength( 2 );
+		expect( container.querySelector( 'button' ) ).toBeNull();
+	} );
+
 	it( 'keeps the plan-and-site label as the value the Subscription filter matches', async () => {
 		await mount();
 		const item = { ...subscriber( 1 ), subscriptions: [ networkSubscription( 12, 'Riverbend Daily' ) ] };
