@@ -115,7 +115,7 @@ export const getView = createSelector(
 					direction: 'desc',
 				},
 				layout: {
-					density: 'compact',
+					density: 'default',
 				},
 			} ),
 			...state.view,
