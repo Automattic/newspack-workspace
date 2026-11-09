@@ -1,6 +1,6 @@
 import { getSettings, setSettings } from '@wordpress/date';
 
-import { getDataViewsType, getDisplayValue, getFilterByOperators } from './fields';
+import { getDataViewsType, getDisplayValue, getFilterByOperators, isEmptyValue } from './fields';
 
 describe( 'fields utils', () => {
 	describe( 'getDataViewsType', () => {
@@ -23,6 +23,17 @@ describe( 'fields utils', () => {
 		} );
 	} );
 
+	describe( 'isEmptyValue', () => {
+		it( 'treats only null, undefined and an empty string as empty', () => {
+			expect( isEmptyValue( null ) ).toBe( true );
+			expect( isEmptyValue( undefined ) ).toBe( true );
+			expect( isEmptyValue( '' ) ).toBe( true );
+			expect( isEmptyValue( 0 ) ).toBe( false );
+			expect( isEmptyValue( false ) ).toBe( false );
+			expect( isEmptyValue( 'draft' ) ).toBe( false );
+		} );
+	} );
+
 	describe( 'getDisplayValue', () => {
 		it( 'should return null for missing values', () => {
 			const field = { type: 'text', slug: 'title' };
@@ -30,6 +41,11 @@ describe( 'fields utils', () => {
 			expect( getDisplayValue( field, undefined ) ).toBeNull();
 			expect( getDisplayValue( field, '' ) ).toBeNull();
 			expect( getDisplayValue( field, [] ) ).toBeNull();
+		} );
+
+		it( 'should show 0 and false rather than an empty value', () => {
+			expect( getDisplayValue( { type: 'integer', slug: 'images' }, 0 ) ).toBe( 0 );
+			expect( getDisplayValue( { type: 'boolean', slug: 'locked' }, false ) ).toBe( 'No' );
 		} );
 
 		describe( 'on a site with its own formats and timezone', () => {
