@@ -18,7 +18,7 @@
  * WordPress dependencies.
  */
 import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
-import { __, _n, _x, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import { Dropdown, MenuGroup, MenuItem, Snackbar } from '@wordpress/components';
@@ -159,28 +159,18 @@ function GroupDetailView() {
 	// Search earns its row only once the members run past one page.
 	const isSearchable = memberRows.length > MEMBERS_VIEW.perPage;
 
-	// Header: the group leads. The owner is the first row of the members table, and
-	// stays in the breadcrumb because groups without their own name share the plan's.
+	// Header: the group leads. The owner is the first row of the members table.
 	useEffect( () => {
 		if ( ! group ) {
 			return;
 		}
-		const ownerName = group.owner?.name;
 		const groupsHref = '#/groups';
 		setHeaderData( {
 			backNav: groupsHref,
 			// Separate crumbs, so the group list stays a link back from here. The
 			// leaf is a plain string: the page region takes its accessible name
 			// from it, and markup there would be announced as "[object Object]".
-			sectionName: [
-				{ label: GROUP_LABEL_PLURAL, url: groupsHref },
-				{
-					label: ownerName
-						? /* translators: 1: group name, 2: name of the group owner. */
-						  sprintf( _x( '%1$s (%2$s)', 'group name and owner', 'newspack-plugin' ), group.plan, ownerName )
-						: group.plan,
-				},
-			],
+			sectionName: [ { label: GROUP_LABEL_PLURAL, url: groupsHref }, { label: group.plan } ],
 			// A function title renders its own badge: SectionHeader only auto-renders
 			// the `badges` array for string titles.
 			sectionTitle: () => (

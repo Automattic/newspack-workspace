@@ -169,7 +169,7 @@ const CollapsibleValues = ( { values, ruleName }: { values: string[]; ruleName: 
 						  )
 						: sprintf(
 								// translators: 1: number of hidden values, 2: access rule name, e.g. "Institutional access".
-								_n( '%1$d more for %2$s', '%1$d more for %2$s', hiddenCount, 'newspack-plugin' ),
+								_n( 'Show %1$d more for %2$s', 'Show %1$d more for %2$s', hiddenCount, 'newspack-plugin' ),
 								hiddenCount,
 								ruleName
 						  )
@@ -180,7 +180,7 @@ const CollapsibleValues = ( { values, ruleName }: { values: string[]; ruleName: 
 					? __( 'Show less', 'newspack-plugin' )
 					: sprintf(
 							// translators: %d: number of hidden values.
-							_n( '+ %d more', '+ %d more', hiddenCount, 'newspack-plugin' ),
+							_n( 'Show %d more', 'Show %d more', hiddenCount, 'newspack-plugin' ),
 							hiddenCount
 					  ) }
 			</Button>

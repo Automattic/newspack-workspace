@@ -13,9 +13,10 @@ import { DataViews } from 'newspack-components';
 
 Inside a `TableCard`, the list:
 
-- uses compact rows, unless the view sets its own `layout.density`
 - keeps the card's 24px side padding instead of the page's 48px gutter, so the first column lines up with the card title
 - drops the negative margins a list gets on a page that isn't full width
+
+Rows keep the default density wherever the list sits. Set `layout.density: 'compact'` on the view only when the list holds a lot of data, such as a table of every product in the catalog.
 
 ```jsx
 <TableCard heading={ 2 } title={ __( 'Invitations', 'newspack-plugin' ) }>

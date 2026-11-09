@@ -8,7 +8,7 @@
  * WordPress dependencies
  */
 import { useContext, useMemo } from '@wordpress/element';
-import { DataViews as BaseDataViews, type View } from '@wordpress/dataviews';
+import { DataViews as BaseDataViews } from '@wordpress/dataviews';
 import { Stack } from '@wordpress/ui';
 
 /**
@@ -96,19 +96,8 @@ function DataViews( {
 			} ),
 		[ fields, inlineFilters, view.titleField ]
 	);
-	// A table inside a card defaults to compact rows; a view that sets its own density keeps it.
 	const isInCard = useContext( TableCardContext );
-	const cardView = useMemo(
-		() =>
-			isInCard && 'table' === view.type && ! view.layout?.density
-				? ( { ...view, layout: { ...view.layout, density: 'compact' } } as View )
-				: view,
-		[ isInCard, view ]
-	);
-	const titledView = useMemo(
-		() => ( cardView.titleField && cardView.showTitle === false ? { ...cardView, showTitle: true } : cardView ),
-		[ cardView ]
-	);
+	const titledView = useMemo( () => ( view.titleField && view.showTitle === false ? { ...view, showTitle: true } : view ), [ view ] );
 	const evenView = useMemo( () => evenColumns( titledView ), [ titledView ] );
 	const columnWidths = useMemo( () => {
 		const widths: Record< string, string > = {};

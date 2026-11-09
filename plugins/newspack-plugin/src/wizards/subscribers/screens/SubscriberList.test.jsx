@@ -33,6 +33,7 @@ jest.mock( '../../../../packages/components/src/wizard/store', () => ( { WIZARD_
 // router at module scope, so the proxy has to answer here too.
 let mockDataViewsProps = null;
 jest.mock( '../../../../packages/components/src', () => ( {
+	CellList: jest.requireActual( '../../../../packages/components/src/cell-list' ).default,
 	DataViews: props => {
 		mockDataViewsProps = props;
 		return null;
@@ -536,6 +537,21 @@ describe( 'the network subscription rows', () => {
 		expect( container.textContent ).toBe( 'All-Access Premium\u00a0(Riverbend Daily)' );
 	} );
 
+	it( 'names a group membership by the plan it is sold on, not the group', async () => {
+		await mount();
+		const item = {
+			...subscriber( 1 ),
+			groups: [
+				{ id: 5, plan: 'Acme Team', planName: 'Team Plan', status: 'active', role: 'member', editUrl: '/edit/5', isComplimentary: false },
+			],
+		};
+		const { container } = render( field( 'plans' ).render( { item } ) );
+
+		expect( container.querySelector( 'a' ).textContent ).toBe( 'Team Plan' );
+		expect( container.textContent ).toBe( 'Team Plan\u00a0(Group)' );
+		expect( field( 'plans' ).getValue( { item } ) ).toEqual( [ 'Team Plan' ] );
+	} );
+
 	it( 'shows two subscriptions and toggles the rest', async () => {
 		await mount();
 		const item = {
@@ -543,7 +559,7 @@ describe( 'the network subscription rows', () => {
 			subscriptions: [ 7, 8, 9 ].map( id => ( { ...localSubscription, id, plan: `Plan ${ id }`, editUrl: `/edit/${ id }` } ) ),
 		};
 		const { container, getByRole } = render( field( 'plans' ).render( { item } ) );
-		const toggle = getByRole( 'button', { name: 'See more' } );
+		const toggle = getByRole( 'button', { name: 'Show 1 more' } );
 
 		expect( container.querySelectorAll( 'a' ) ).toHaveLength( 2 );
 		expect( toggle.getAttribute( 'aria-expanded' ) ).toBe( 'false' );
@@ -553,7 +569,22 @@ describe( 'the network subscription rows', () => {
 
 		expect( container.querySelectorAll( 'a' ) ).toHaveLength( 3 );
 		expect( toggle.getAttribute( 'aria-expanded' ) ).toBe( 'true' );
-		expect( toggle.textContent ).toBe( 'See less' );
+		expect( toggle.textContent ).toBe( 'Show less' );
+	} );
+
+	it( 'keeps an open row open when DataViews remounts the cell', async () => {
+		await mount();
+		const item = {
+			...subscriber( 1 ),
+			subscriptions: [ 7, 8, 9 ].map( id => ( { ...localSubscription, id, plan: `Plan ${ id }`, editUrl: `/edit/${ id }` } ) ),
+		};
+		const first = render( field( 'plans' ).render( { item } ) );
+		fireEvent.click( first.getByRole( 'button', { name: 'Show 1 more' } ) );
+		first.unmount();
+
+		const { container } = render( field( 'plans' ).render( { item } ) );
+
+		expect( container.querySelectorAll( 'a' ) ).toHaveLength( 3 );
 	} );
 
 	it( 'leaves the toggle out for two subscriptions or fewer', async () => {

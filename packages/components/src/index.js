@@ -10,6 +10,7 @@ export { default as CardForm } from './card-form';
 export { default as CardSettingsGroup } from './card-settings-group';
 export { default as CardListRow } from './card-sortable-list/card-list-row';
 export { default as CardSortableList } from './card-sortable-list';
+export { default as CellList } from './cell-list';
 export { default as IntegrationIcon } from './integration-icon';
 export { default as CategoryAutocomplete } from './category-autocomplete';
 export { default as CollapsibleGroup } from './collapsible-group';

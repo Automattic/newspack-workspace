@@ -15,7 +15,7 @@ import { TableCard } from 'newspack-components';
 
 ## When to use it
 
-Every DataViews list that isn't on a full-width page goes in a `TableCard`. A shared `DataViews` inside the card switches to compact rows and the card's padding on its own; see the [DataViews README](../dataviews/README.md).
+Every DataViews list that isn't on a full-width page goes in a `TableCard`. A shared `DataViews` inside the card switches to the card's padding on its own; see the [DataViews README](../dataviews/README.md).
 
 ## Usage
 
@@ -29,7 +29,7 @@ const titleId = useId();
 <TableCard
 	title={ __( 'Price Schedule', 'newspack-plugin' ) }
 	titleId={ titleId }
-	actions={ <Button variant="secondary">{ __( 'Add Price', 'newspack-plugin' ) }</Button> }
+	actions={ <Button variant="tertiary" size="compact">{ __( 'Add Price', 'newspack-plugin' ) }</Button> }
 >
 	<div role="region" aria-labelledby={ titleId }>
 		<DataViews … />
@@ -77,7 +77,7 @@ node, so the shape follows from which props are passed:
 - `before` / `after` present — the slot sits in the padding and the table no
   longer touches that edge.
 
-A slot that appears conditionally (a See More button only when the table is
+A slot that appears conditionally (a "Show N more" button only when the table is
 long) therefore changes the card's shape with the condition. That can be the
 right call — a card with a footer control legitimately looks different from one
 without — but make it deliberately, knowing a data-size threshold can flip it.
@@ -95,10 +95,8 @@ bumping past it, re-check:
 - `Card.Title`'s default rendering (a `div`; this component swaps in a heading
   via `render`) and the global-CSS-defense rules that keep wp-admin's heading
   styles from restyling it.
-- That the card padding is still 24px — callers pad their outer table columns
-  with `$grid-unit-30` to match it, and the two values drift independently.
-- Every consumer, visually: the Price Schedule card (the one product surface
-  with a header — title, heading render, and the actions row), the impact table
-  (headerless; rendered by both the rule editor and the list page's catalog
-  panel), and the components-demo section, which is the cheapest place to
-  eyeball a bump.
+- That the card padding is still 24px — a Newspack `DataViews` inside the card
+  keeps the 24px list gutter to match it, and the two values drift independently.
+- Every consumer, visually: Group detail's Members and Invitations cards, the
+  rule editor's Price Schedule and Affected Products cards, and the
+  components-demo section, which is the cheapest place to eyeball a bump.

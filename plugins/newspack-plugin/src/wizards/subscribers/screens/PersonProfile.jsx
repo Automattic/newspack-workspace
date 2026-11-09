@@ -66,7 +66,7 @@ import { isNetworkSubscription, shouldShowPaymentMethods } from '../network';
 
 const { useParams, useLocation } = Router;
 
-// Cancelled subscriptions are folded away behind a "View more" toggle whenever
+// Cancelled subscriptions are folded away behind a "Show N more" toggle whenever
 // the reader still holds a live plan — a past cancellation next to a current
 // plan is history, not status. A fully churned reader keeps everything visible,
 // since hiding it would leave the profile looking empty. This mirrors the
@@ -564,9 +564,9 @@ export default function PersonProfile() {
 								onClick={ () => setShowCancelled( value => ! value ) }
 								aria-expanded={ showCancelled }
 								// When collapsed, the accessible name extends the visible
-								// "View N more" with what it reveals (WCAG 2.5.3 wants the
+								// "Show N more" with what it reveals (WCAG 2.5.3 wants the
 								// visible label to be a substring of the accessible name).
-								// When expanded, the visible "View less" is unambiguous on
+								// When expanded, the visible "Show less" is unambiguous on
 								// its own, so no override — the visible text is the name.
 								aria-label={
 									showCancelled
@@ -574,8 +574,8 @@ export default function PersonProfile() {
 										: sprintf(
 												// translators: %d is the number of hidden cancelled subscriptions.
 												_n(
-													'View %d more cancelled subscription',
-													'View %d more cancelled subscriptions',
+													'Show %d more cancelled subscription',
+													'Show %d more cancelled subscriptions',
 													hiddenCount,
 													'newspack-plugin'
 												),
@@ -584,9 +584,12 @@ export default function PersonProfile() {
 								}
 							>
 								{ showCancelled
-									? __( 'View less', 'newspack-plugin' )
-									: // translators: %d is the number of hidden cancelled subscriptions.
-									  sprintf( __( 'View %d more', 'newspack-plugin' ), hiddenCount ) }
+									? __( 'Show less', 'newspack-plugin' )
+									: sprintf(
+											// translators: %d is the number of hidden cancelled subscriptions.
+											_n( 'Show %d more', 'Show %d more', hiddenCount, 'newspack-plugin' ),
+											hiddenCount
+									  ) }
 							</Button>
 						</HStack>
 					) }

@@ -11,15 +11,15 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { useState, useMemo, useId } from '@wordpress/element';
 import {
 	Button,
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
-// Not the Newspack wrapper: with-wizard-screen/style.scss gives `.newspack-dataviews`
-// a -48px page bleed that hangs this embedded table past the form column.
+// The unframed table stays on core DataViews: outside a card, the Newspack wrapper
+// would give the catalog modal's table the 48px list gutter.
 import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Field, View } from '@wordpress/dataviews';
 
@@ -27,6 +27,7 @@ import type { Field, View } from '@wordpress/dataviews';
  * Internal dependencies
  */
 import { TableCard } from '../../../../../packages/components/src';
+import NewspackDataViews from '../../../../../packages/components/src/dataviews';
 import { cycleMarkerNote, formatPrice, formatSegment } from './impact-format';
 
 /** Rows shown before the publisher asks for the rest. */
@@ -151,7 +152,7 @@ export default function ImpactTable( {
 
 	const fieldIds = useMemo( () => [ 'regular', ...columns.map( col => col.key ) ], [ columns ] );
 
-	// DataViews' own pagination is off; the See More slice is what shortens the table.
+	// DataViews' own pagination is off; the Show more slice is what shortens the table.
 	const perPage = Math.max( baseline.length, 1 );
 
 	const [ view, setView ] = useState< View >( () => ( {
@@ -159,7 +160,8 @@ export default function ImpactTable( {
 		page: 1,
 		search: '',
 		filters: [],
-		layout: { density: 'compact', enableMoving: false },
+		// The catalog-wide table in the modal holds every product, so it keeps compact rows.
+		layout: { enableMoving: false, ...( framed ? {} : { density: 'compact' } ) },
 		titleField: 'product',
 		fields: fieldIds,
 	} ) );
@@ -193,19 +195,26 @@ export default function ImpactTable( {
 				aria-controls={ tableId }
 				onClick={ () => setExpanded( ! expanded ) }
 			>
-				{ expanded ? __( 'See Less', 'newspack-plugin' ) : __( 'See More', 'newspack-plugin' ) }
+				{ expanded
+					? __( 'Show less', 'newspack-plugin' )
+					: sprintf(
+							// translators: %d: the number of products the toggle reveals.
+							_n( 'Show %d more', 'Show %d more', sorted.length - ROW_LIMIT, 'newspack-plugin' ),
+							sorted.length - ROW_LIMIT
+					  ) }
 			</Button>
 		</HStack>
 	) : null;
 
+	const Views = framed ? NewspackDataViews : DataViews;
 	const table = (
 		<div
 			id={ tableId }
-			className={ `newspack-pricing-rules__impact-table${ framed ? ' newspack-pricing-rules__impact-table--framed' : '' }` }
+			className={ `newspack-pricing-rules__impact-table${ framed ? '' : ' newspack-pricing-rules__impact-table--unframed' }` }
 			role="region"
 			aria-label={ __( 'Resulting prices by product and reader segment', 'newspack-plugin' ) }
 		>
-			<DataViews
+			<Views
 				data={ data }
 				fields={ fields }
 				view={ tableView }
@@ -216,7 +225,7 @@ export default function ImpactTable( {
 				empty={ <p className="newspack-pricing-rules__muted">{ __( 'No products to show.', 'newspack-plugin' ) }</p> }
 			>
 				<DataViews.Layout />
-			</DataViews>
+			</Views>
 		</div>
 	);
 
@@ -232,7 +241,9 @@ export default function ImpactTable( {
 				</p>
 			) }
 			{ framed ? (
-				<TableCard after={ seeMore ?? undefined }>{ table }</TableCard>
+				<TableCard separator title={ __( 'Affected Products', 'newspack-plugin' ) } after={ seeMore ?? undefined }>
+					{ table }
+				</TableCard>
 			) : (
 				<>
 					{ table }
