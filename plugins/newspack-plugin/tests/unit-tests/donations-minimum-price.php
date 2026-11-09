@@ -154,4 +154,52 @@ class Newspack_Test_Donations_Minimum_Price extends WP_UnitTestCase {
 		$this->assertSame( '90', $this->product_minimum( self::CHILD_MONTH ) );
 		$this->assertSame( '1200', $this->product_minimum( self::CHILD_YEAR ) );
 	}
+
+	/**
+	 * Newspack can write products a minimum the saved settings don't hold, as the
+	 * product repair in get_donation_product() does with the default settings.
+	 * Those products still follow, because they match what Newspack last wrote.
+	 */
+	public function test_products_keep_following_after_newspack_writes_a_minimum_the_settings_lack() {
+		$this->save_settings( '88' );
+		Donations::update_donation_product();
+		$this->assertNotSame( '88', $this->product_minimum( self::CHILD_YEAR ), 'The repair writes the default minimum.' );
+
+		$this->save_settings( '88' );
+
+		$this->assertSame( '88', $this->product_minimum( self::CHILD_YEAR ) );
+	}
+
+	/**
+	 * Setting a product's minimum to the global minimum makes it follow again.
+	 */
+	public function test_product_set_to_the_global_minimum_follows_it_again() {
+		$this->save_settings( '88' );
+		$this->set_product_minimum( self::CHILD_YEAR, '1200' );
+		$this->save_settings( '90' );
+
+		$this->set_product_minimum( self::CHILD_YEAR, '90' );
+		$this->save_settings( '95' );
+
+		$this->assertSame( '95', $this->product_minimum( self::CHILD_YEAR ) );
+	}
+
+	/**
+	 * Clearing a product's minimum puts the global minimum back as the product
+	 * is saved, rather than leaving it with no minimum until the next settings
+	 * save, and it follows the global minimum from then on.
+	 */
+	public function test_clearing_a_product_minimum_restores_the_global_minimum_on_save() {
+		$this->save_settings( '88' );
+		$this->set_product_minimum( self::CHILD_YEAR, '1200' );
+		$this->save_settings( '90' );
+
+		$product = wc_get_product( self::CHILD_YEAR );
+		$product->update_meta_data( '_min_price', '' );
+		$product->save();
+		$this->assertSame( '90', $this->product_minimum( self::CHILD_YEAR ) );
+
+		$this->save_settings( '95' );
+		$this->assertSame( '95', $this->product_minimum( self::CHILD_YEAR ) );
+	}
 }

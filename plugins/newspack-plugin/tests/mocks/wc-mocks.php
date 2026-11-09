@@ -838,10 +838,13 @@ class WC_Product {
 	 * Persist the product back into the mock store. The object is already held by
 	 * reference, so this only matters for a product built and saved without being
 	 * registered first; it mirrors WC_Product::save() returning the product ID.
+	 * Fires the before-save action WC_Data::save() fires, so code that adjusts a
+	 * product as it is saved runs here too.
 	 *
 	 * @return int The product ID.
 	 */
 	public function save() {
+		do_action( 'woocommerce_before_product_object_save', $this, null );
 		global $products_database;
 		$products_database[ $this->get_id() ] = $this;
 		return $this->get_id();

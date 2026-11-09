@@ -20,7 +20,7 @@ class Donations {
 	const DONATION_PAGE_ID_OPTION          = 'newspack_donation_page_id';
 	const DONATION_SETTINGS_OPTION         = 'newspack_donations_settings';
 	const DONATION_BILLING_FIELDS_OPTION   = 'newspack_donations_billing_fields';
-	const SYNCED_MIN_PRICE_META            = '_newspack_synced_min_price';
+	private const SYNCED_MIN_PRICE_META    = '_newspack_synced_min_price';
 	const DONATION_ORDER_META_KEYS         = [
 		'referer_tags'       => [
 			'label' => 'Post Tags',
@@ -77,6 +77,7 @@ class Donations {
 		add_filter( 'option_woocommerce_subscriptions_order_button_text', [ __CLASS__, 'order_button_text' ], 9 );
 
 		add_filter( 'render_block', [ __CLASS__, 'prevent_rendering_donate_block' ], 10, 2 );
+		add_action( 'woocommerce_before_product_object_save', [ __CLASS__, 'restore_cleared_minimum_price' ] );
 	}
 
 	/**
@@ -634,28 +635,63 @@ class Donations {
 	}
 
 	/**
-	 * Whether a donation product's minimum price still follows the global minimum donation.
+	 * The global minimum donation as of the last settings save.
 	 *
-	 * The product's minimum price is what checkout enforces, so it must not be
-	 * overwritten once someone has set it on the product directly. A product
-	 * follows the global setting while its minimum matches the value Newspack last
-	 * wrote to it. Products saved before Newspack recorded that value are compared
-	 * with the global minimum saved at the time.
+	 * @return mixed
+	 */
+	private static function get_saved_minimum_donation() {
+		$saved_settings = get_option( self::DONATION_SETTINGS_OPTION, [] );
+		return $saved_settings['minimumDonation'] ?? self::get_donation_default_settings()['minimumDonation'];
+	}
+
+	/**
+	 * Whether a donation product's minimum price follows the global minimum donation.
+	 *
+	 * The product's minimum price is what checkout enforces, so a minimum someone
+	 * set on the product directly must survive settings saves. A product follows
+	 * the global minimum while its own is empty, equals the value Newspack last
+	 * wrote to it, or equals the global minimum from the last settings save.
+	 *
+	 * Two consequences: a product set directly to exactly the global minimum
+	 * follows it again, and a product saved before Newspack recorded what it wrote
+	 * is treated as set directly if its minimum drifted from the global one for
+	 * any other reason. Clearing a product's minimum makes it follow again.
 	 *
 	 * @param \WC_Product $product          Donation product.
-	 * @param mixed       $previous_minimum Global minimum donation before the current save.
+	 * @param mixed       $previous_minimum Global minimum donation from the last settings save.
 	 * @return bool
 	 */
 	private static function product_follows_minimum_donation( $product, $previous_minimum ) {
-		$current_minimum = $product->get_meta( '_min_price', true );
+		$current_minimum = $product->get_meta( '_min_price', true, 'edit' );
 		if ( '' === $current_minimum || null === $current_minimum ) {
 			return true;
 		}
-		$last_written = $product->get_meta( self::SYNCED_MIN_PRICE_META, true );
-		if ( '' === $last_written || null === $last_written ) {
-			$last_written = $previous_minimum;
+		if ( (float) $current_minimum === (float) $previous_minimum ) {
+			return true;
 		}
-		return (float) $current_minimum === (float) $last_written;
+		$last_written = $product->get_meta( self::SYNCED_MIN_PRICE_META, true, 'edit' );
+		return '' !== $last_written && null !== $last_written && (float) $current_minimum === (float) $last_written;
+	}
+
+	/**
+	 * Give a donation product the global minimum donation when its own minimum is cleared.
+	 *
+	 * Clearing the field is how a product goes back to following the global
+	 * minimum. Without this, the product would accept any amount at checkout
+	 * until the next donation settings save.
+	 *
+	 * @param \WC_Product $product Product about to be saved.
+	 */
+	public static function restore_cleared_minimum_price( $product ) {
+		if ( 'yes' !== $product->get_meta( '_nyp', true, 'edit' ) || '' !== (string) $product->get_meta( '_min_price', true, 'edit' ) ) {
+			return;
+		}
+		if ( ! in_array( $product->get_id(), self::get_legacy_donation_product_ids(), true ) ) {
+			return;
+		}
+		$minimum_donation = wc_format_decimal( self::get_saved_minimum_donation() );
+		$product->update_meta_data( '_min_price', $minimum_donation );
+		$product->update_meta_data( self::SYNCED_MIN_PRICE_META, $minimum_donation );
 	}
 
 	/**
@@ -670,10 +706,9 @@ class Donations {
 		$price_tier_index = $configuration['tiered'] ? 1 : 3;
 
 		$minimum_donation = wc_format_decimal( $configuration['minimumDonation'] );
-		// Callers write the products before saving the settings, so this is the
-		// global minimum as it stood before this save.
-		$saved_settings   = get_option( self::DONATION_SETTINGS_OPTION, [] );
-		$previous_minimum = $saved_settings['minimumDonation'] ?? $defaults['minimumDonation'];
+		// set_donation_settings() calls this before updating the option, so this is
+		// the minimum from the last settings save, not the one being saved.
+		$previous_minimum = self::get_saved_minimum_donation();
 
 		// Parent product.
 		$parent_product = self::get_parent_donation_product();
