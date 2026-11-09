@@ -599,8 +599,8 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 						__next40pxDefaultSize
 						__nextHasNoMarginBottom
 					>
-						<ToggleGroupControlOption value="publish" label={ __( 'Published', 'newspack-plugin' ) } />
-						<ToggleGroupControlOption value="draft" label={ __( 'Draft', 'newspack-plugin' ) } />
+						<ToggleGroupControlOption value="publish" label={ __( 'Active', 'newspack-plugin' ) } />
+						<ToggleGroupControlOption value="draft" label={ __( 'Inactive', 'newspack-plugin' ) } />
 					</ToggleGroupControl>
 					<SelectControl
 						label={ __( 'Applies to', 'newspack-plugin' ) }

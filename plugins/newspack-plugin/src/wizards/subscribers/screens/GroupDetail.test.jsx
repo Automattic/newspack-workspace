@@ -30,7 +30,7 @@ jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
 jest.mock( '../../../../packages/components/src/wizard/store', () => ( { WIZARD_STORE_NAMESPACE: 'test/group-detail' } ) );
 
-jest.mock( '../data/use-avatars', () => ( { SHOW_AVATARS: false, useAvatars: () => ( { avatars: {}, loading: false } ) } ) );
+const mockPush = jest.fn();
 
 jest.mock( '../../../../packages/components/src', () => {
 	const el = require( '@wordpress/element' ).createElement;
@@ -38,11 +38,12 @@ jest.mock( '../../../../packages/components/src', () => {
 		DataViews: require( '../../../../packages/components/src/dataviews' ).default,
 		Button: ( { children, onClick, disabled, 'aria-expanded': ariaExpanded } ) =>
 			el( 'button', { onClick, disabled, 'aria-expanded': ariaExpanded }, children ),
-		Divider: () => null,
 		Modal: ( { title, children } ) => el( 'div', { role: 'dialog', 'aria-label': title }, children ),
 		Notice: ( { noticeText, children } ) => el( 'div', null, noticeText, children ),
+		StatusIndicator: require( '../../../../packages/components/src/status-indicator' ).default,
+		TableCard: require( '../../../../packages/components/src/table-card' ).default,
 		Waiting: () => null,
-		Router: { useParams: () => ( { id: '7' } ) },
+		Router: { useHistory: () => ( { push: mockPush } ), useParams: () => ( { id: '7' } ) },
 	};
 } );
 
@@ -111,15 +112,13 @@ describe( 'the header', () => {
 		expect( sectionName ).toEqual( [ { label: 'Groups', url: '#/groups' }, { label: 'Team plan (Olive Owner)' } ] );
 	} );
 
-	// ARIA does not let a plain span carry a name, so an aria-label there is
-	// silently dropped; the owner phrasing has to be real, hidden text.
-	it( 'tells screen readers who owns the group', async () => {
+	it( 'leaves the owner to the breadcrumb and the members table', async () => {
 		await renderDetail( group() );
 
-		const { sectionTitle } = setHeaderData.mock.calls.at( -1 )[ 0 ];
+		const { sectionTitle, sectionDescription } = setHeaderData.mock.calls.at( -1 )[ 0 ];
 		const { container } = render( createElement( sectionTitle ) );
-		expect( container.querySelector( '.screen-reader-text' ).textContent ).toBe( 'Owned by Olive Owner' );
-		expect( container.querySelector( '[aria-hidden="true"]' ).textContent ).toBe( '(Olive Owner)' );
+		expect( container.textContent ).not.toContain( 'Olive Owner' );
+		expect( sectionDescription ).toBeUndefined();
 	} );
 } );
 
@@ -201,17 +200,51 @@ describe( 'the invite link', () => {
 } );
 
 describe( 'the members table', () => {
-	// The email sits under the name as its own field, so the search only reaches it
-	// if that field opts in, and the name alone labels the row.
-	it( 'finds a member by the email shown under their name', async () => {
+	const largeGroup = () =>
+		group( {
+			memberList: [
+				...group().memberList,
+				...Array.from( { length: 10 }, ( _, index ) => ( {
+					id: 10 + index,
+					name: `Reader ${ index }`,
+					email: `reader${ index }@example.test`,
+					role: 'member',
+					joinedAt: '2026-01-02T00:00:00Z',
+					editUrl: '',
+				} ) ),
+			],
+		} );
+
+	it( 'leaves the search out while every member fits on one page', async () => {
 		await renderDetail( group() );
 
-		expect( screen.getByRole( 'checkbox', { name: 'Mel Member' } ) ).toBeTruthy();
+		expect( screen.queryByRole( 'searchbox' ) ).toBeNull();
+	} );
+
+	it( 'finds a member by email without showing the email', async () => {
+		await renderDetail( largeGroup() );
+
+		expect( screen.queryByText( 'mel@example.com' ) ).toBeNull();
 
 		fireEvent.change( screen.getByRole( 'searchbox' ), { target: { value: 'mel@example' } } );
 
 		await waitFor( () => expect( screen.queryByText( 'Olive Owner' ) ).toBeNull() );
 		expect( screen.getByText( 'Mel Member' ) ).toBeTruthy();
-		expect( screen.getByText( 'mel@example.com' ) ).toBeTruthy();
+	} );
+
+	it( "opens a member's profile from their name, returning to the group", async () => {
+		mockPush.mockClear();
+		await renderDetail( group() );
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Mel Member' } ) );
+
+		expect( mockPush ).toHaveBeenCalledWith( `/subscribers/2?from=${ encodeURIComponent( '#/groups/7' ) }` );
+	} );
+
+	it( 'shows the members as a compact table in a card', async () => {
+		await renderDetail( group() );
+
+		expect( screen.getByRole( 'heading', { level: 2, name: /Members/ } ) ).toBeTruthy();
+		expect( document.querySelector( '.newspack-table-card .newspack-dataviews--in-card .has-compact-density' ) ).not.toBeNull();
 	} );
 } );

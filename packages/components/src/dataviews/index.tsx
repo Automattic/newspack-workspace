@@ -7,8 +7,8 @@
 /**
  * WordPress dependencies
  */
-import { useMemo } from '@wordpress/element';
-import { DataViews as BaseDataViews } from '@wordpress/dataviews';
+import { useContext, useMemo } from '@wordpress/element';
+import { DataViews as BaseDataViews, type View } from '@wordpress/dataviews';
 import { Stack } from '@wordpress/ui';
 
 /**
@@ -20,6 +20,7 @@ import classnames from 'classnames';
  * Internal dependencies
  */
 import { columnShareWidth, evenColumns, titleColumnWidth, withoutColumnStyles } from './even-columns';
+import { TableCardContext } from '../table-card/context';
 import './style.scss';
 
 type DataViewsProps< Item > = React.ComponentProps< typeof BaseDataViews< Item > > & {
@@ -30,29 +31,60 @@ type DataViewsProps< Item > = React.ComponentProps< typeof BaseDataViews< Item >
 	 * defaults (elements but no `filterBy`) stays behind "Add filter".
 	 */
 	inlineFilters?: boolean;
+	/**
+	 * Offer the view options (layout, columns, density, page size). Turn off
+	 * for a short, fixed list whose columns are not worth changing.
+	 */
+	viewOptions?: boolean;
 };
 
-function InlineFiltersLayout( { header, search, searchLabel }: { header?: React.ReactNode; search: boolean; searchLabel?: string } ) {
+function ToolbarLayout( {
+	header,
+	search,
+	searchLabel,
+	inlineFilters,
+	viewOptions,
+}: {
+	header?: React.ReactNode;
+	search: boolean;
+	searchLabel?: string;
+	inlineFilters: boolean;
+	viewOptions: boolean;
+} ) {
 	return (
 		<>
 			<Stack direction="row" justify="space-between" align="flex-start" gap="xs" className="dataviews__view-actions">
 				<Stack direction="row" align="center" gap="sm" wrap="wrap" className="dataviews__search">
 					{ search && <BaseDataViews.Search label={ searchLabel } /> }
-					<BaseDataViews.Filters />
+					{ inlineFilters ? <BaseDataViews.Filters /> : <BaseDataViews.FiltersToggle /> }
 				</Stack>
 				<Stack direction="row" align="center" gap="xs" className="newspack-dataviews__view-config">
-					<BaseDataViews.LayoutSwitcher />
-					<BaseDataViews.ViewConfig />
+					{ viewOptions && (
+						<>
+							<BaseDataViews.LayoutSwitcher />
+							<BaseDataViews.ViewConfig />
+						</>
+					) }
 					{ header }
 				</Stack>
 			</Stack>
+			{ ! inlineFilters && <BaseDataViews.FiltersToggled className="dataviews-filters__container" /> }
 			<BaseDataViews.Layout />
 			<BaseDataViews.Footer />
 		</>
 	);
 }
 
-function DataViews( { className, inlineFilters = false, fields, children, view, onChangeView, ...props }: DataViewsProps< unknown > ) {
+function DataViews( {
+	className,
+	inlineFilters = false,
+	viewOptions = true,
+	fields,
+	children,
+	view,
+	onChangeView,
+	...props
+}: DataViewsProps< unknown > ) {
 	// A row without its title can't be told apart from the next, so the title is
 	// never offered as a field to hide, and a stored view that hid it shows it again.
 	// A primary filter is always on show, so the toggle has nothing left to hide.
@@ -64,7 +96,19 @@ function DataViews( { className, inlineFilters = false, fields, children, view, 
 			} ),
 		[ fields, inlineFilters, view.titleField ]
 	);
-	const titledView = useMemo( () => ( view.titleField && view.showTitle === false ? { ...view, showTitle: true } : view ), [ view ] );
+	// A table inside a card defaults to compact rows; a view that sets its own density keeps it.
+	const isInCard = useContext( TableCardContext );
+	const cardView = useMemo(
+		() =>
+			isInCard && 'table' === view.type && ! view.layout?.density
+				? ( { ...view, layout: { ...view.layout, density: 'compact' } } as View )
+				: view,
+		[ isInCard, view ]
+	);
+	const titledView = useMemo(
+		() => ( cardView.titleField && cardView.showTitle === false ? { ...cardView, showTitle: true } : cardView ),
+		[ cardView ]
+	);
 	const evenView = useMemo( () => evenColumns( titledView ), [ titledView ] );
 	const columnWidths = useMemo( () => {
 		const widths: Record< string, string > = {};
@@ -80,12 +124,18 @@ function DataViews( { className, inlineFilters = false, fields, children, view, 
 	}, [ titledView ] );
 	const layout =
 		children ??
-		( inlineFilters ? (
-			<InlineFiltersLayout header={ props.header } search={ props.search ?? true } searchLabel={ props.searchLabel } />
+		( inlineFilters || ! viewOptions ? (
+			<ToolbarLayout
+				header={ props.header }
+				search={ props.search ?? true }
+				searchLabel={ props.searchLabel }
+				inlineFilters={ inlineFilters }
+				viewOptions={ viewOptions }
+			/>
 		) : undefined );
 
 	return (
-		<div className={ classnames( 'newspack-dataviews', className ) } style={ columnWidths }>
+		<div className={ classnames( 'newspack-dataviews', { 'newspack-dataviews--in-card': isInCard }, className ) } style={ columnWidths }>
 			<BaseDataViews
 				{ ...props }
 				view={ evenView }

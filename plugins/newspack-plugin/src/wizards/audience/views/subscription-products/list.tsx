@@ -23,10 +23,10 @@ import { Badge } from '@wordpress/ui';
 /**
  * Internal dependencies
  */
-import { DataViews, Router, StatusIndicator, WizardBanner } from '../../../../../packages/components/src';
+import { DataViews, Router, StatusBadge, StatusIndicator, WizardBanner } from '../../../../../packages/components/src';
 import { formatCount } from '../../../../../packages/components/src/breadcrumbs/format-count';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
-import { postStatus } from '../../post-status';
+import { audienceStatusLabel, postStatus } from '../../post-status';
 import { PolicyChips, EffectivePrice } from './policy-cells';
 import PromoUrlModal from './promo-url-modal';
 
@@ -173,7 +173,7 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 	// Filter elements derived from the loaded data.
 	const statusElements = useMemo( () => {
 		const seen = new Map< string, string >();
-		data.forEach( item => seen.set( item.status, item.status_label ) );
+		data.forEach( item => seen.set( item.status, audienceStatusLabel( item.status, item.status_label ) ) );
 		return Array.from( seen, ( [ value, label ] ) => ( { value, label } ) );
 	}, [ data ] );
 
@@ -347,7 +347,9 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				id: 'status',
 				label: __( 'Status', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.status,
-				render: ( { item } ) => <StatusIndicator status={ postStatus( item.status ) }>{ item.status_label }</StatusIndicator>,
+				render: ( { item } ) => (
+					<StatusBadge status={ postStatus( item.status ) }>{ audienceStatusLabel( item.status, item.status_label ) }</StatusBadge>
+				),
 				elements: statusElements,
 				filterBy: { operators: [ 'is' ] },
 			},

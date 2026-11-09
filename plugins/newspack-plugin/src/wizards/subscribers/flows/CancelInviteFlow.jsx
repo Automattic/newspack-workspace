@@ -1,5 +1,5 @@
 /**
- * Flow — cancel a pending or expired email invitation.
+ * Flow — cancel pending or expired email invitations.
  *
  * Cancelling removes the invitation and invalidates the join link already sitting
  * in the recipient's inbox, so it is destructive from their point of view even
@@ -10,41 +10,74 @@
  * WordPress dependencies.
  */
 import { createInterpolateElement } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 
 /**
  * Internal dependencies.
  */
 import ConfirmFlow from './ConfirmFlow';
+import eachInvite from './each-invite';
 
-export default function CancelInviteFlow( { invite, actions, onClose, onDone } ) {
-	const email = invite?.email || __( 'this recipient', 'newspack-plugin' );
+/**
+ * Confirm and cancel one or more pending invitations.
+ *
+ * @param {Object}   props         Component props.
+ * @param {Array}    props.invites The invitations to cancel, each carrying `email`.
+ * @param {Object}   props.actions The group write calls.
+ * @param {Function} props.onClose Close without cancelling.
+ * @param {Function} props.onDone  Report the outcome and refresh.
+ */
+export default function CancelInviteFlow( { invites, actions, onClose, onDone } ) {
+	const list = invites || [];
+	const count = list.length;
+	const email = list[ 0 ]?.email || __( 'this recipient', 'newspack-plugin' );
 
 	const cancel = async () => {
-		await actions.cancelInvite( invite.email );
-		onDone( __( 'Invitation cancelled.', 'newspack-plugin' ) );
+		const { done, failed } = await eachInvite( list, actions.cancelInvite );
+		if ( failed ) {
+			/* translators: 1: number of invitations cancelled. 2: number selected. */
+			onDone( sprintf( __( '%1$d of %2$d invitations cancelled. Try the rest again.', 'newspack-plugin' ), done, count ) );
+			return;
+		}
+		onDone(
+			1 === count
+				? __( 'Invitation cancelled.', 'newspack-plugin' )
+				: /* translators: %d: number of invitations cancelled. */
+				  sprintf( _n( '%d invitation cancelled.', '%d invitations cancelled.', done, 'newspack-plugin' ), done )
+		);
 	};
 
 	return (
 		<ConfirmFlow
-			title={ __( 'Cancel invitation', 'newspack-plugin' ) }
-			cancelLabel={ __( 'Keep invitation', 'newspack-plugin' ) }
-			confirmLabel={ __( 'Cancel invitation', 'newspack-plugin' ) }
+			title={ 1 === count ? __( 'Cancel invitation', 'newspack-plugin' ) : __( 'Cancel invitations', 'newspack-plugin' ) }
+			cancelLabel={ 1 === count ? __( 'Keep invitation', 'newspack-plugin' ) : __( 'Keep invitations', 'newspack-plugin' ) }
+			confirmLabel={ 1 === count ? __( 'Cancel invitation', 'newspack-plugin' ) : __( 'Cancel invitations', 'newspack-plugin' ) }
 			isDestructive
 			onCancel={ onClose }
 			onConfirm={ cancel }
 		>
-			{ createInterpolateElement(
-				/* translators: <email/> is replaced with the recipient's email address. */
-				__(
-					"Cancel the invitation to <email/>? The link in their email stops working and they can't join unless you invite them again.",
-					'newspack-plugin'
-				),
-				// The address is a React token, never interpolated into the format
-				// string: createInterpolateElement parses its input as markup, so an
-				// address — or a translation that mangles the tag — would crash the modal.
-				{ email: <strong>{ email }</strong> }
-			) }
+			{ 1 === count
+				? createInterpolateElement(
+						/* translators: <email/> is replaced with the recipient's email address. */
+						__(
+							"Cancel the invitation to <email/>? The link in their email stops working and they can't join unless you invite them again.",
+							'newspack-plugin'
+						),
+						// The address is a React token, never interpolated into the format
+						// string: createInterpolateElement parses its input as markup, so an
+						// address — or a translation that mangles the tag — would crash the modal.
+						{ email: <strong>{ email }</strong> }
+				  )
+				: sprintf(
+						/* translators: %d: number of invitations. */
+						_n(
+							"Cancel %d invitation? The link in the email stops working and they can't join unless you invite them again.",
+							"Cancel %d invitations? The links in their emails stop working and they can't join unless you invite them again.",
+							count,
+							'newspack-plugin'
+						),
+						count
+				  ) }
 		</ConfirmFlow>
 	);
 }

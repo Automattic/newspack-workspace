@@ -336,8 +336,8 @@ export default function ProductForm( {
 								label={ __( 'Status', 'newspack-plugin' ) }
 								value={ status }
 								options={ [
-									{ label: __( 'Published', 'newspack-plugin' ), value: 'publish' },
-									{ label: __( 'Draft', 'newspack-plugin' ), value: 'draft' },
+									{ label: __( 'Active', 'newspack-plugin' ), value: 'publish' },
+									{ label: __( 'Inactive', 'newspack-plugin' ), value: 'draft' },
 								] }
 								onChange={ setStatus }
 								__next40pxDefaultSize

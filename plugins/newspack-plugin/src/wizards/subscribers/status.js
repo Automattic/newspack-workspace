@@ -23,8 +23,8 @@ export const STATUS_INDICATORS = {
 	cancelled: 'cancelled',
 };
 
-// The profile card and the person header still badge a single status, where an
-// attention marker is what a badge is for.
+// The badge colours for the profile and group headers and the subscription cards.
+// The lists reach the same colours through StatusBadge and STATUS_INDICATORS.
 /** @type {Record< string, import('../../../packages/components/src/types').BadgeIntent >} */
 export const STATUS_BADGE_INTENT = {
 	active: 'stable',

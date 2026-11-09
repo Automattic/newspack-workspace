@@ -16,7 +16,7 @@ import type { Field } from '@wordpress/dataviews';
 /**
  * Internal dependencies.
  */
-import { StatusIndicator } from '../../../../../../../packages/components/src';
+import { StatusBadge } from '../../../../../../../packages/components/src';
 import { ALL_SUBSCRIPTIONS_FILTER_VALUE, allSubscriptionsLabel } from '../../constants';
 import { discountLabel, excludedLabel, subscriptionNames, subscriptionsSummary, targetingBaseLabel, targetingLabel } from './discount';
 import type { DiscountCurrency, DiscountRule } from './types';
@@ -93,9 +93,9 @@ export function discountFields( currency: DiscountCurrency, subscriptions: Subsc
 			filterBy: { operators: [ 'isAny' ] },
 			getValue: ( { item } ) => ( item.active ? 'active' : 'inactive' ),
 			render: ( { item } ) => (
-				<StatusIndicator status={ item.active ? 'active' : 'draft' }>
+				<StatusBadge status={ item.active ? 'active' : 'draft' }>
 					{ item.active ? __( 'Active', 'newspack-plugin' ) : __( 'Inactive', 'newspack-plugin' ) }
-				</StatusIndicator>
+				</StatusBadge>
 			),
 		},
 		{

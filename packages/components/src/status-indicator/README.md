@@ -5,10 +5,32 @@ glyph is tinted by what the status means, so a column can be scanned by color;
 the label stays in the text color so the column reads as calmly as the rest of
 the row.
 
-A badge is an attention marker. In a column where every row carries one it marks
-nothing and adds a block of color to each row, so a tinted glyph carries the
-color there, and a badge is kept for the rare row that genuinely stands out,
-such as a group with a seat request waiting on payment.
+## Glyph or badge
+
+The words decide. A publishing status comes from WordPress and says where an
+item is in its publishing life; a state says whether something is running.
+
+- **Publishing statuses** (Published, Draft, Scheduled, Sent) use this component.
+  Newsletters, Rolling Coverage and Story Budget show them.
+- **States** (Active, Inactive, On hold, Cancelled, Failed) use `StatusBadge`. The
+  screens under the Audience menu label their items by state, so they show
+  badges: a rule or a plan reads Active or Inactive, not Published or Draft. Two
+  screens keep the glyph by choice: Emails, and the invitations table on a group's
+  detail screen.
+
+An item shows its status the same way in its list, its header and its cards.
+
+```jsx
+import { StatusBadge } from 'newspack-components';
+
+<StatusBadge status="active">{ __( 'Active', 'newspack-plugin' ) }</StatusBadge>;
+```
+
+`StatusBadge` takes the same status names and tones as this component, so a field
+can move between the two without remapping. It maps each tone to a badge color:
+success to `stable`, info to `informational`, warning to `medium`, error to
+`high` and neutral to `draft`. A badge that isn't a status (a "Complimentary"
+marker, a "Default" label) stays a plain `Badge`.
 
 ## Importing
 
