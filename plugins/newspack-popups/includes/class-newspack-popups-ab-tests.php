@@ -200,10 +200,11 @@ final class Newspack_Popups_AB_Tests {
 
 	/**
 	 * Store the moment a prompt's test started, if this is that moment: the
-	 * first time a control and a challenger are both published. A later pause
-	 * and resume keeps the first start, since the results count from it. Nothing
-	 * is recorded with the flag off, when readers aren't split, or for a test
-	 * that has ended.
+	 * first time a control and a challenger are both published. Once recorded,
+	 * pausing and republishing a version keeps it, since the results count from
+	 * it; a test with no record yet, such as one already running before starts
+	 * were recorded, gets one at its next publish. Nothing is recorded with the
+	 * flag off, when readers aren't split, or for a test that has ended.
 	 *
 	 * @param int $post_id A published prompt's ID.
 	 */
@@ -213,6 +214,10 @@ final class Newspack_Popups_AB_Tests {
 		}
 		$test_id = trim( (string) get_post_meta( $post_id, self::META_TEST_ID, true ) );
 		if ( '' === $test_id || ! in_array( get_post_meta( $post_id, self::META_VARIANT, true ), self::VALID_VARIANTS, true ) ) {
+			return;
+		}
+		$existing = get_term_by( 'slug', $test_id, self::TAXONOMY );
+		if ( $existing && '' !== (string) get_term_meta( $existing->term_id, self::TERM_META_STARTED, true ) ) {
 			return;
 		}
 		$live = get_posts(
@@ -236,7 +241,8 @@ final class Newspack_Popups_AB_Tests {
 		if ( is_wp_error( $term ) ) {
 			return;
 		}
-		// Unique, so a second request racing this one leaves the first start.
+		// Unique, which is a read before the insert rather than a lock: two
+		// requests at once can each add a row, and reads return the first.
 		add_term_meta( $term->term_id, self::TERM_META_STARTED, gmdate( 'Y-m-d\TH:i:s\Z' ), true );
 	}
 
@@ -638,12 +644,14 @@ final class Newspack_Popups_AB_Tests {
 	 *                 comes from the control prompt, or DEFAULT_CONTROL_SHARE without
 	 *                 one. `started_at` is when the split began, ISO 8601 UTC, or
 	 *                 null while a control and a challenger aren't both published.
-	 *                 It is the start recorded when both first went live; a test
-	 *                 from before starts were recorded falls back to the later of
-	 *                 the control's publish date and the earliest challenger's.
-	 *                 Readers see the control alone before the split, so an
-	 *                 earlier date would count traffic the test never split. `variants` maps the letter to
-	 *                 `[ 'id', 'title', 'status', 'status_label', 'edit_link', 'eligible' ]`,
+	 *                 It is the start recorded when the split began (a resume
+	 *                 with a new challenger records a new one); a test with no
+	 *                 record falls back to the later of the control's publish
+	 *                 date and the earliest challenger's. Readers see the
+	 *                 control alone before the split, so an earlier date would
+	 *                 count traffic the test never split. `variants` maps the
+	 *                 letter to `[ 'id', 'title', 'status', 'status_label',
+	 *                 'edit_link', 'eligible' ]`,
 	 *                 where `eligible` is false for a manual or custom placement
 	 *                 and for an overlay set to Manual only.
 	 *                 `duplicates` lists the other prompts carrying a letter, as
@@ -1472,8 +1480,9 @@ final class Newspack_Popups_AB_Tests {
 	 * becomes version B with the same placement and other settings.
 	 *
 	 * A prompt that is already version A of a test with no other version, such
-	 * as one whose B was trashed, resumes that test: it keeps its ID and results,
-	 * takes the new name, goal and split, and gets a new B.
+	 * as one whose B was trashed, resumes that test: it keeps its ID, takes the
+	 * new name, goal and split, and gets a new B. Its start is cleared, and
+	 * publishing the new B records a new one.
 	 *
 	 * A new test claims A before B is made, so a second start on the same prompt
 	 * fails instead of making a second test, and a failure after that removes the
@@ -1529,6 +1538,12 @@ final class Newspack_Popups_AB_Tests {
 				return $renamed;
 			}
 			$test_id = $existing;
+			// Readers saw A alone while the test had no B, so the new B's split
+			// is a new start; publishing it records one.
+			$term = get_term_by( 'slug', $test_id, self::TAXONOMY );
+			if ( $term ) {
+				delete_term_meta( $term->term_id, self::TERM_META_STARTED );
+			}
 		} else {
 			$test_id = self::claim_new_test( $prompt->ID, $name );
 			if ( is_wp_error( $test_id ) ) {

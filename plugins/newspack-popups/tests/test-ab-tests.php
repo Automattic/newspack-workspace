@@ -237,6 +237,23 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * Resuming a test with a new challenger starts it again: readers saw the
+	 * control alone while it had none, so the old start would count that gap.
+	 */
+	public function test_resuming_with_a_new_challenger_records_a_new_start() {
+		$a     = $this->create_test_variant( 'rerun', 'a' );
+		$old_b = $this->create_test_variant( 'rerun', 'b' );
+		$this->set_recorded_start( 'rerun', '2026-10-01T00:00:00Z' );
+		wp_trash_post( $old_b );
+
+		$resumed = Newspack_Popups_AB_Tests::start_test( $a, Newspack_Popups_AB_Tests::get_test_name( 'rerun' ), 'donation', 50 );
+		$this->assertIsArray( $resumed );
+		$this->assertNull( $this->recorded_start( 'rerun' ) );
+		wp_publish_post( $resumed['version_b']['id'] );
+		$this->assertStartedNow( 'rerun' );
+	}
+
+	/**
 	 * Nothing is recorded until a control and a challenger are both live.
 	 */
 	public function test_no_start_is_recorded_for_a_control_alone() {
