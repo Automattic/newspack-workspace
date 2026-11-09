@@ -82,6 +82,22 @@ describe( 'Donate block editor', () => {
 
 		fireEvent.click( await screen.findByLabelText( 'Configure manually' ) );
 
+		// toStrictEqual, because the cleared key must be present: toEqual and
+		// toHaveBeenLastCalledWith also pass for { manual: true } alone.
 		expect( setAttributes.mock.calls.at( -1 )[ 0 ] ).toStrictEqual( { manual: true, minimumDonation: undefined } );
+	} );
+
+	// The sidebar warns against the minimum the front end uses: a manual block's
+	// own, or the site-wide one when it has none. Some saved amounts sit below
+	// both, so the warning shows either way.
+	it.each( [
+		[ 'without its own minimum', {}, SITE_DONATION_SETTINGS.minimumDonation ],
+		[ 'with its own minimum', { minimumDonation: 1200 }, 1200 ],
+	] )( 'warns a manual block %s against the minimum the front end uses', async ( label, blockMinimum, expectedMinimum ) => {
+		renderEdit( { manual: true, ...blockMinimum } );
+
+		const warnings = await screen.findAllByText( `minimum donation amount ($${ expectedMinimum })`, { exact: false } );
+
+		expect( warnings.length ).toBeGreaterThan( 0 );
 	} );
 } );

@@ -8,6 +8,8 @@ import { render, screen } from '@testing-library/react';
  */
 import AmountValueInput from './AmountValueInput';
 
+const SITE_MINIMUM_DONATION = 20;
+
 const AMOUNTS = {
 	once: [ 9, 20, 90, 10 ],
 	month: [ 7, 15, 30, 10 ],
@@ -15,14 +17,16 @@ const AMOUNTS = {
 };
 
 // The preview shows the amounts the editor hands it, already raised to the
-// block's minimum, and takes its floor from that same minimum. Raising them to
-// the site-wide minimum would show a manual block's form differently than the
-// front end renders it.
+// block's minimum, and takes its floor from the minimum it is given. Raising
+// them to the site-wide minimum would show a manual block's form differently
+// than the front end renders it.
 describe( 'AmountValueInput', () => {
 	it.each( [
-		[ 'a manual block with its own lower minimum', { minimumDonation: 5 }, 5, 10 ],
-		[ 'a manual block following the site minimum', {}, 20, 25 ],
-	] )( "shows the given amount for %s, with the block's minimum as its floor", ( label, blockMinimum, minimumDonation, amount ) => {
+		// An amount below the site minimum: raising it would show the site minimum.
+		[ 'a block minimum below the site minimum', { minimumDonation: 5 }, 5, 10 ],
+		// No block minimum: reading the floor from the block would leave it empty.
+		[ 'a floor the block does not store', {}, SITE_MINIMUM_DONATION, 25 ],
+	] )( 'shows the given amount and floor for %s', ( label, blockMinimum, minimumDonation, amount ) => {
 		const amounts = { ...AMOUNTS, month: [ 7, 15, 30, amount ] };
 		render(
 			<AmountValueInput
@@ -31,7 +35,7 @@ describe( 'AmountValueInput', () => {
 				id="amount-input"
 				label="Amount"
 				attributes={ { manual: true, amounts, ...blockMinimum } }
-				settings={ { amounts, minimumDonation: 20 } }
+				settings={ { amounts, minimumDonation: SITE_MINIMUM_DONATION } }
 				amounts={ amounts }
 				minimumDonation={ minimumDonation }
 				setAttributes={ jest.fn() }
