@@ -1399,6 +1399,100 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Test taxonomy rules carry the REST route the token field searches.
+	 */
+	public function test_taxonomy_rules_carry_rest_endpoint() {
+		$this->assertSame( '/wp/v2/categories', Content_Rules::get_content_rules()['category']['endpoint'] );
+
+		register_taxonomy(
+			'np_test_custom_base',
+			'post',
+			[
+				'show_in_rest' => true,
+				'rest_base'    => 'custom-base',
+			] 
+		);
+		$offer = function( $taxonomies ) {
+			$taxonomies[] = [
+				'slug'        => 'np_test_custom_base',
+				'label'       => 'Custom',
+				'description' => '',
+			];
+			return $taxonomies;
+		};
+		add_filter( 'newspack_content_gate_supported_taxonomies', $offer );
+		$rules = Content_Rules::get_content_rules();
+		remove_filter( 'newspack_content_gate_supported_taxonomies', $offer );
+		unregister_taxonomy( 'np_test_custom_base' );
+
+		$this->assertSame( '/wp/v2/custom-base', $rules['np_test_custom_base']['endpoint'] );
+	}
+
+	/**
+	 * Test only stored rules the editor doesn't offer are described.
+	 */
+	public function test_unoffered_rules_lists_only_stored_unoffered_slugs() {
+		register_taxonomy(
+			'np_test_section',
+			'post',
+			[
+				'show_in_rest' => true,
+				'labels'       => [ 'name' => 'Test Sections' ],
+			] 
+		);
+		$gates = [
+			[
+				'content_rules' => [
+					[
+						'slug'  => 'post_types',
+						'value' => [ 'post' ],
+					],
+					[
+						'slug'  => 'category',
+						'value' => [ 1 ],
+					],
+				],
+			],
+			[
+				'content_rules' => [
+					[
+						'slug'  => 'specific_posts',
+						'value' => [ 1 ],
+					],
+					[
+						'slug'  => 'np_test_section',
+						'value' => [ 2 ],
+					],
+					[
+						'slug'  => 'gone_taxonomy',
+						'value' => [ 3 ],
+					],
+				],
+			],
+		];
+		$extra = Content_Rules::get_unoffered_content_rules( $gates );
+		unregister_taxonomy( 'np_test_section' );
+
+		$this->assertSame( [ 'np_test_section', 'gone_taxonomy' ], array_keys( $extra ) );
+		$this->assertSame(
+			[
+				'name'     => 'Test Sections',
+				'default'  => [],
+				'endpoint' => '/wp/v2/np_test_section',
+			],
+			$extra['np_test_section']
+		);
+		$this->assertSame(
+			[
+				'name'        => 'gone_taxonomy',
+				'default'     => [],
+				'unavailable' => true,
+			],
+			$extra['gone_taxonomy']
+		);
+	}
+
+	/**
 	 * Test the posts-search REST endpoint returns published posts of supported post types.
 	 */
 	public function test_posts_search_endpoint_returns_published_posts() {

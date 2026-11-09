@@ -100,6 +100,8 @@ class Audience_Content_Gates extends Wizard {
 					'api'                                 => '/' . NEWSPACK_API_NAMESPACE . '/wizard/' . $this->slug,
 					'available_access_rules'              => Access_Rules::get_access_rules_for_client(),
 					'available_content_rules'             => Content_Rules::get_content_rules(),
+					// Rules stored on gates (any status) that the editor doesn't offer, so it can show them.
+					'extra_content_rules'                 => Content_Rules::get_unoffered_content_rules( Content_Gate::get_gates() ),
 					'edit_gate_layout_url'                => Content_Gate::get_edit_gate_layout_url(),
 					'presave_checks_enabled'              => Content_Gate::get_presave_checks_enabled(),
 					'default_gate_status'                 => Content_Gate::get_default_new_gate_status(),

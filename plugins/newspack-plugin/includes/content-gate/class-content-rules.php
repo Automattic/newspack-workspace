@@ -69,6 +69,11 @@ class Content_Rules {
 				'default'     => [],
 				'description' => $taxonomy['description'],
 			];
+			// The route respects a custom rest_base; the token field prefers it over a guess.
+			$endpoint = \rest_get_route_for_taxonomy_items( $taxonomy['slug'] );
+			if ( $endpoint ) {
+				$content_rules[ $taxonomy['slug'] ]['endpoint'] = $endpoint;
+			}
 		}
 
 		$content_rules[ self::PUBLISHED_AGE_RULE ] = [
@@ -91,6 +96,52 @@ class Content_Rules {
 		];
 
 		return $content_rules;
+	}
+
+	/**
+	 * Describe the rules stored on gates that the editor doesn't offer.
+	 *
+	 * A gate can hold a rule for a taxonomy that isn't on the offered list (for
+	 * example one created by the Memberships migration), or for one that no longer
+	 * exists. The editor needs a name and a term endpoint to show these.
+	 *
+	 * @param array $gates Gates, as returned by Content_Gate::get_gates().
+	 *
+	 * @return array[] Rule definitions keyed by slug. Unregistered slugs are flagged `unavailable`.
+	 */
+	public static function get_unoffered_content_rules( array $gates ): array {
+		$known = array_merge(
+			array_keys( self::get_content_rules() ),
+			array_keys( self::get_premium_newsletter_rules() ),
+			[ 'specific_posts', self::PUBLISHED_AGE_RULE ]
+		);
+		$extra = [];
+		foreach ( $gates as $gate ) {
+			foreach ( $gate['content_rules'] ?? [] as $rule ) {
+				$slug = $rule['slug'] ?? '';
+				if ( ! is_string( $slug ) || '' === $slug || in_array( $slug, $known, true ) || isset( $extra[ $slug ] ) ) {
+					continue;
+				}
+				$taxonomy = \get_taxonomy( $slug );
+				if ( ! $taxonomy ) {
+					$extra[ $slug ] = [
+						'name'        => $slug,
+						'default'     => [],
+						'unavailable' => true,
+					];
+					continue;
+				}
+				$extra[ $slug ] = [
+					'name'    => $taxonomy->labels->name,
+					'default' => [],
+				];
+				$endpoint       = \rest_get_route_for_taxonomy_items( $slug );
+				if ( $endpoint ) {
+					$extra[ $slug ]['endpoint'] = $endpoint;
+				}
+			}
+		}
+		return $extra;
 	}
 
 	/**
