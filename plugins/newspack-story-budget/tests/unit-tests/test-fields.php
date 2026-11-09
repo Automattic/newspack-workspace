@@ -426,6 +426,7 @@ class TestFields extends WP_UnitTestCase {
 		global $wpdb;
 		$post_id = self::create_post();
 		$wpdb->update( $wpdb->posts, [ 'post_modified_gmt' => '2026-01-01 00:00:00' ], [ 'ID' => $post_id ] ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		delete_post_meta( $post_id, Abstract_Field::FIELD_PREFIX . '_modified' );
 		clean_post_cache( $post_id );
 		$post_modified = strtotime( '2026-01-01 00:00:00 UTC' );
 		$field         = Fields::get_field( 'last_modified' );
