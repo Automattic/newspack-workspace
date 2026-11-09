@@ -510,7 +510,7 @@ class Admin_Shell_Preferences_Test extends WP_UnitTestCase {
 			[ 'status', 'date', 'author', 'send_list', 'public_page' ],
 			Admin_Shell_Preferences::get_preferences()['newsletters-list']['fields']
 		);
-		$this->assertSame( 2, get_user_meta( $this->editor_id, $key, true )[ Admin_Shell_Preferences::PREFS_VERSION_KEY ] );
+		$this->assertSame( Admin_Shell_Preferences::PREFS_VERSION, get_user_meta( $this->editor_id, $key, true )[ Admin_Shell_Preferences::PREFS_VERSION_KEY ] );
 	}
 
 	/**
@@ -531,7 +531,7 @@ class Admin_Shell_Preferences_Test extends WP_UnitTestCase {
 			[ 'status', 'date', 'author', 'send_list', 'public_page' ],
 			Admin_Shell_Preferences::get_preferences()['newsletters-list']['fields']
 		);
-		$this->assertSame( 2, get_user_meta( $this->editor_id, $key, true )[ Admin_Shell_Preferences::PREFS_VERSION_KEY ] );
+		$this->assertSame( Admin_Shell_Preferences::PREFS_VERSION, get_user_meta( $this->editor_id, $key, true )[ Admin_Shell_Preferences::PREFS_VERSION_KEY ] );
 	}
 
 	/**
@@ -602,5 +602,40 @@ class Admin_Shell_Preferences_Test extends WP_UnitTestCase {
 		$stored = get_user_meta( $this->editor_id, Admin_Shell_Preferences::get_user_meta_key( 'newsletters-list' ), true );
 		$this->assertSame( Admin_Shell_Preferences::PREFS_VERSION, $stored[ Admin_Shell_Preferences::PREFS_VERSION_KEY ] );
 		$this->assertSame( [ 'author', 'status' ], Admin_Shell_Preferences::get_preferences()['newsletters-list']['fields'] );
+	}
+
+	/**
+	 * A saved comfortable density becomes balanced, once.
+	 */
+	public function test_version_two_view_switches_comfortable_density_to_balanced() {
+		$key = Admin_Shell_Preferences::get_user_meta_key( 'newsletters-list' );
+		update_user_meta(
+			$this->editor_id,
+			$key,
+			[
+				'fields'                                   => [ 'status', 'date' ],
+				'layout'                                   => [ 'density' => 'comfortable' ],
+				Admin_Shell_Preferences::PREFS_VERSION_KEY => 2,
+			]
+		);
+
+		$this->assertSame( 'balanced', Admin_Shell_Preferences::get_preferences()['newsletters-list']['layout']['density'] );
+		$this->assertSame( 'balanced', get_user_meta( $this->editor_id, $key, true )['layout']['density'] );
+	}
+
+	/**
+	 * A density chosen after the migration is left alone.
+	 */
+	public function test_current_view_keeps_comfortable_density() {
+		update_user_meta(
+			$this->editor_id,
+			Admin_Shell_Preferences::get_user_meta_key( 'newsletters-list' ),
+			[
+				'layout'                                   => [ 'density' => 'comfortable' ],
+				Admin_Shell_Preferences::PREFS_VERSION_KEY => Admin_Shell_Preferences::PREFS_VERSION,
+			]
+		);
+
+		$this->assertSame( 'comfortable', Admin_Shell_Preferences::get_preferences()['newsletters-list']['layout']['density'] );
 	}
 }
