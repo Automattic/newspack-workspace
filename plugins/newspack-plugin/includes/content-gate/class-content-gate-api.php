@@ -800,8 +800,8 @@ class Content_Gate_API {
 	 * @param array  $rules The rules.
 	 * @param string $type The type of rules to sanitize.
 	 *
-	 * @return array|\WP_Error The sanitized rules, or an error when an access rule or a
-	 *                         published-age content rule holds an invalid value.
+	 * @return array|\WP_Error The sanitized rules, or an error when an access rule holds an
+	 *                         invalid value or a content rule can't be read.
 	 */
 	public static function sanitize_rules( $rules, $type = 'access' ) {
 		if ( ! is_array( $rules ) ) {
@@ -817,12 +817,12 @@ class Content_Gate_API {
 		$sanitized_rules = [];
 		foreach ( $rules as $rule ) {
 			$sanitized = self::sanitize_content_rule( $rule );
-			if ( ! is_wp_error( $sanitized ) ) {
-				$sanitized_rules[] = $sanitized;
-			} elseif ( Content_Rules::PUBLISHED_AGE_RULE === ( $rule['slug'] ?? '' ) ) {
-				// Dropping an age rule would widen an AND gate from the archive to every post.
+			if ( is_wp_error( $sanitized ) ) {
+				// Dropping a rule would widen the gate (an AND gate to every post, an OR gate
+				// to nothing it was meant to cover), so the save fails instead.
 				return $sanitized;
 			}
+			$sanitized_rules[] = $sanitized;
 		}
 		return $sanitized_rules;
 	}
@@ -1021,11 +1021,24 @@ class Content_Gate_API {
 	/**
 	 * Sanitize content rule.
 	 *
+	 * A slug that isn't on the offered list is kept when it names a registered taxonomy,
+	 * since the Memberships migration writes rules for any taxonomy straight to post meta
+	 * and a later save must not lose them. Any other slug fails, naming it, so the
+	 * operator can remove it.
+	 *
 	 * @param array $content_rule The content rule.
 	 *
-	 * @return mixed|\WP_Error The sanitized content rule or error if invalid.
+	 * @return array|\WP_Error The sanitized content rule or error if invalid.
 	 */
 	public static function sanitize_content_rule( $content_rule ) {
+		$content_rule = is_array( $content_rule ) ? $content_rule : [];
+		$slug         = isset( $content_rule['slug'] ) && is_scalar( $content_rule['slug'] ) ? sanitize_text_field( (string) $content_rule['slug'] ) : '';
+		if ( '' === $slug ) {
+			return self::unavailable_content_rule_error( $slug );
+		}
+		if ( isset( $content_rule['value'] ) && ! is_array( $content_rule['value'] ) ) {
+			return new \WP_Error( 'invalid_content_rule_value', __( 'Invalid content rule value.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
 		// Include-only: the rule's own comparison sets the direction, so it never carries `exclusion`.
 		if ( Content_Rules::PUBLISHED_AGE_RULE === ( $content_rule['slug'] ?? '' ) ) {
 			$value = Content_Rules::sanitize_published_age_value( $content_rule['value'] ?? null );
@@ -1042,22 +1055,26 @@ class Content_Gate_API {
 		$newsletter_rules     = Content_Rules::get_premium_newsletter_rules();
 		$newsletter_rules_arr = ( is_array( $newsletter_rules ) && ! is_wp_error( $newsletter_rules ) ) ? $newsletter_rules : [];
 		$rules                = array_merge( $rules, $newsletter_rules_arr );
-		$slug                 = sanitize_text_field( $content_rule['slug'] );
 
-		if ( empty( $slug ) || ! isset( $rules[ $slug ] ) ) {
-			return new \WP_Error( 'invalid_content_rule_slug', __( 'Invalid content rule slug.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		if ( ! isset( $rules[ $slug ] ) ) {
+			// Not offered by the picker: keep it only if the taxonomy is registered.
+			if ( ! get_taxonomy( $slug ) ) {
+				return self::unavailable_content_rule_error( $slug );
+			}
+			$rules[ $slug ] = [];
 		}
 
-		$rule = $rules[ $slug ];
+		$rule  = $rules[ $slug ];
+		$input = $content_rule['value'] ?? [];
 		if ( ! empty( $rule['options'] ) ) {
 			$allowed = array_column( $rule['options'], 'value' );
-			$invalid = array_diff( $content_rule['value'], $allowed );
+			$invalid = array_diff( $input, $allowed );
 			if ( ! empty( $invalid ) ) {
 				return new \WP_Error( 'invalid_content_rule_value', __( 'Invalid content rule value.', 'newspack-plugin' ), [ 'status' => 400 ] );
 			}
 		}
 
-		$value     = array_values( array_filter( array_map( 'sanitize_text_field', $content_rule['value'] ) ) );
+		$value     = array_values( array_filter( array_map( 'sanitize_text_field', $input ) ) );
 		$exclusion = isset( $content_rule['exclusion'] ) ? boolval( $content_rule['exclusion'] ) : false;
 
 		$sanitized_rule = [
@@ -1069,6 +1086,25 @@ class Content_Gate_API {
 		}
 
 		return $sanitized_rule;
+	}
+
+	/**
+	 * The error for a content rule whose slug isn't offered and isn't a registered taxonomy.
+	 *
+	 * @param string $slug The rule slug.
+	 *
+	 * @return \WP_Error
+	 */
+	private static function unavailable_content_rule_error( $slug ) {
+		return new \WP_Error(
+			'invalid_content_rule_slug',
+			sprintf(
+				/* translators: %s: content rule slug. */
+				__( 'The content rule "%s" isn\'t available on this site. Remove it to save the gate.', 'newspack-plugin' ),
+				$slug
+			),
+			[ 'status' => 400 ]
+		);
 	}
 
 	/**

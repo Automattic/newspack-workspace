@@ -8,6 +8,7 @@
 use Newspack\Access_Rules;
 use Newspack\Content_Gate;
 use Newspack\Content_Gate_API;
+use Newspack\Content_Rules;
 use Newspack\Institution;
 
 /**
@@ -38,12 +39,22 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 		// test about the operator writing the gate. The ones about what an unauthorized
 		// caller may learn set their own user.
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		// A taxonomy the content-rule picker doesn't offer, as one a migration can write rules for.
+		register_taxonomy(
+			'np_test_section',
+			'post',
+			[
+				'public'       => true,
+				'show_in_rest' => true,
+			]
+		);
 	}
 
 	/**
 	 * Teardown.
 	 */
 	public function tear_down() {
+		unregister_taxonomy( 'np_test_section' );
 		$registry_property = new ReflectionProperty( Access_Rules::class, 'rules' );
 		$registry_property->setValue( null, $this->registered_rules_snapshot );
 		parent::tear_down();
@@ -349,6 +360,147 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 			],
 			$sanitized_gate['custom_access']['access_rules']
 		);
+	}
+
+	/**
+	 * A rule for a registered taxonomy the picker doesn't offer is kept, so a gate a
+	 * migration wrote rules for doesn't lose them on its next save.
+	 */
+	public function test_sanitize_content_rule_keeps_registered_unoffered_taxonomy() {
+		$this->assertSame(
+			[
+				'slug'      => 'np_test_section',
+				'value'     => [ '12' ],
+				'exclusion' => true,
+			],
+			Content_Gate_API::sanitize_content_rule(
+				[
+					'slug'      => 'np_test_section',
+					'value'     => [ '12', '0', '' ],
+					'exclusion' => true,
+				]
+			)
+		);
+	}
+
+	/**
+	 * A slug that is no offered rule and no registered taxonomy is refused by name.
+	 */
+	public function test_sanitize_content_rule_rejects_unknown_slug_naming_it() {
+		$result = Content_Gate_API::sanitize_content_rule(
+			[
+				'slug'  => 'not_a_taxonomy',
+				'value' => [ '1' ],
+			]
+		);
+		$this->assertWPError( $result );
+		$this->assertSame( 'invalid_content_rule_slug', $result->get_error_code() );
+		$this->assertStringContainsString( 'not_a_taxonomy', $result->get_error_message() );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+	}
+
+	/**
+	 * A rule missing its slug, or with a non-array value, is refused rather than read.
+	 */
+	public function test_sanitize_content_rule_rejects_malformed_rule() {
+		$no_slug = Content_Gate_API::sanitize_content_rule( [ 'value' => [ '1' ] ] );
+		$this->assertWPError( $no_slug );
+		$this->assertSame( 'invalid_content_rule_slug', $no_slug->get_error_code() );
+
+		$bad_value = Content_Gate_API::sanitize_content_rule(
+			[
+				'slug'  => 'category',
+				'value' => '1',
+			]
+		);
+		$this->assertWPError( $bad_value );
+		$this->assertSame( 'invalid_content_rule_value', $bad_value->get_error_code() );
+	}
+
+	/**
+	 * Dropping an unreadable content rule would widen an AND gate, so the set fails.
+	 */
+	public function test_sanitize_rules_returns_error_instead_of_dropping() {
+		$result = Content_Gate_API::sanitize_rules(
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post' ],
+				],
+				[
+					'slug'  => 'not_a_taxonomy',
+					'value' => [ '1' ],
+				],
+			],
+			'content'
+		);
+		$this->assertWPError( $result );
+	}
+
+	/**
+	 * Create a gate holding the given content rules, matched with `any`, as the
+	 * Memberships migration writes them.
+	 *
+	 * @param array $rules The content rules.
+	 *
+	 * @return int The gate ID.
+	 */
+	private function create_gate_with_content_rules( $rules ) {
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'Migrated gate' ] );
+		Content_Rules::update_gate_content_rules( $gate_id, $rules );
+		Content_Rules::update_gate_content_rules_match( $gate_id, 'any' );
+		return $gate_id;
+	}
+
+	/**
+	 * The gates list toggles status by posting the whole gate back; a migrated
+	 * taxonomy rule must come through that unchanged either way.
+	 */
+	public function test_status_toggle_keeps_migrated_taxonomy_rule() {
+		$stored  = [
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post' ],
+			],
+			[
+				'slug'  => 'np_test_section',
+				'value' => [ '12' ],
+			],
+		];
+		$gate_id = $this->create_gate_with_content_rules( $stored );
+
+		foreach ( [ 'draft', 'publish' ] as $status ) {
+			$sanitized = Content_Gate_API::sanitize_gate(
+				array_merge( Content_Gate::get_gate( $gate_id ), [ 'status' => $status ] ),
+				$this->gate_update_request( $gate_id )
+			);
+			$this->assertIsArray( $sanitized, "Saving with status '{$status}' must not fail." );
+			$this->assertSame( $stored, $sanitized['content_rules'], "Rules must survive a save with status '{$status}'." );
+		}
+	}
+
+	/**
+	 * A rule for a taxonomy that's gone can't be published, but its gate can still be
+	 * switched off.
+	 */
+	public function test_unregistered_taxonomy_rule_blocks_publish_not_switch_off() {
+		$gate_id = $this->create_gate_with_content_rules(
+			[
+				[
+					'slug'  => 'gone_taxonomy',
+					'value' => [ '5' ],
+				],
+			]
+		);
+		$gate    = Content_Gate::get_gate( $gate_id );
+
+		$off = Content_Gate_API::sanitize_gate( array_merge( $gate, [ 'status' => 'draft' ] ), $this->gate_update_request( $gate_id ) );
+		$this->assertIsArray( $off );
+		$this->assertArrayNotHasKey( 'content_rules', $off );
+
+		$on = Content_Gate_API::sanitize_gate( array_merge( $gate, [ 'status' => 'publish' ] ), $this->gate_update_request( $gate_id ) );
+		$this->assertWPError( $on );
+		$this->assertStringContainsString( 'gone_taxonomy', $on->get_error_message() );
 	}
 
 	/**

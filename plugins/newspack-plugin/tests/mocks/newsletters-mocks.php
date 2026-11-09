@@ -151,6 +151,15 @@ if ( ! class_exists( 'Newspack_Newsletters' ) ) {
 			self::$is_service_provider_configured = true;
 		}
 
+		/**
+		 * The configured ESP's lists. Empty, so no newsletter content rule is offered.
+		 *
+		 * @return array
+		 */
+		public static function get_esp_lists() {
+			return [];
+		}
+
 		public static function service_provider() {
 			return get_option( 'newspack_newsletters_service_provider', false );
 		}
