@@ -145,9 +145,10 @@ class Gate_Integration {
 		if ( ! Content_Gate::did_restrict_post( $collection_id ) ) {
 			return false;
 		}
-		// The same inline gate the loop staged. Empty for an overlay layout.
+		// The inline gate, without the fade: there's no teaser above it to fade
+		// out, so the fade would cover the intro instead. Empty for an overlay layout.
 		echo '<div class="entry-content">';
-		echo Content_Gate::get_inline_gate_html( $collection_id ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Rendered gate layout, as for posts.
+		echo Content_Gate::get_inline_gate_html( $collection_id, false ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Rendered gate layout, as for posts.
 		echo '</div>';
 		// Classic themes print the overlay gate from get_footer. Block themes
 		// print it after a post content block, which this template doesn't have.

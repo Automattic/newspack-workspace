@@ -338,6 +338,22 @@ class Test_Gate_Integration extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * With no teaser above it, the gate skips the fade that would cover the intro.
+	 */
+	public function test_single_gate_has_no_fade() {
+		update_post_meta( $this->layout_id, 'inline_fade', true );
+		update_post_meta( $this->layout_id, 'visible_paragraphs', 2 );
+		$this->assertStringContainsString( 'linear-gradient', Content_Gate::get_inline_gate_content_for_post( $this->layout_id ), 'The layout fades on posts.' );
+		$this->go_to_collection();
+
+		[ $rendered, $output ] = $this->render_single_gate();
+
+		$this->assertTrue( $rendered );
+		$this->assertStringContainsString( 'newspack-content-gate__inline-gate', $output );
+		$this->assertStringNotContainsString( 'linear-gradient', $output );
+	}
+
+	/**
 	 * An overlay gate prints here only when no footer hook will print it (block themes).
 	 */
 	public function test_single_gate_renders_overlay_without_footer_hook() {

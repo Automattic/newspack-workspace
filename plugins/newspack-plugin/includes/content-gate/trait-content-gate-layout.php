@@ -237,11 +237,14 @@ trait Content_Gate_Layout {
 	/**
 	 * Get the inline gate content with fade effect.
 	 *
-	 * @param int $gate_layout_id The gate layout ID.
+	 * @param int  $gate_layout_id The gate layout ID.
+	 * @param bool $with_fade      Whether to apply the layout's fade. The fade
+	 *                             sits over the teaser above the gate, so a
+	 *                             gate printed without a teaser turns it off.
 	 *
 	 * @return string The inline gate HTML content.
 	 */
-	public static function get_inline_gate_content_for_post( $gate_layout_id ) {
+	public static function get_inline_gate_content_for_post( $gate_layout_id, $with_fade = true ) {
 		$gate_layout_post = \get_post( $gate_layout_id );
 
 		// Get style, defaulting if post doesn't exist or meta is not set.
@@ -276,7 +279,7 @@ trait Content_Gate_Layout {
 		}
 
 		// Apply inline fade.
-		if ( $visible_paragraphs > 0 && $inline_fade ) {
+		if ( $with_fade && $visible_paragraphs > 0 && $inline_fade ) {
 			$gate_content = '<div style="pointer-events: none; height: 10em; margin-top: -10em; width: 100%; position: absolute; background: linear-gradient(180deg, rgba(255,255,255,0) 14%, rgba(255,255,255,1) 76%); max-width: 100%;"></div>' . $gate_content;
 		}
 
@@ -377,9 +380,11 @@ trait Content_Gate_Layout {
 	 * @param int|null $post_id Post ID to resolve the gate layout for. Pass
 	 *                          explicitly outside a singular main-query view
 	 *                          (e.g. a REST callback); see get_inline_gate_html().
+	 * @param bool     $with_fade Whether to apply the layout's fade; see
+	 *                            get_inline_gate_content_for_post().
 	 */
-	public static function get_inline_gate_content( $post_id = null ) {
-		return self::get_inline_gate_content_for_post( self::get_gate_layout_id( $post_id ) );
+	public static function get_inline_gate_content( $post_id = null, $with_fade = true ) {
+		return self::get_inline_gate_content_for_post( self::get_gate_layout_id( $post_id ), $with_fade );
 	}
 
 	/**
@@ -412,11 +417,13 @@ trait Content_Gate_Layout {
 	 * through to false and get_post( false ) resolves to whatever the global
 	 * $post happens to be instead of "no gate layout".
 	 *
-	 * @param int|null $post_id Post ID to resolve the gate layout for.
+	 * @param int|null $post_id   Post ID to resolve the gate layout for.
+	 * @param bool     $with_fade Whether to apply the layout's fade; see
+	 *                            get_inline_gate_content_for_post().
 	 * @return string
 	 */
-	public static function get_inline_gate_html( $post_id = null ) {
-		return self::annotate_gate_ctas( apply_filters( 'newspack_gate_content', self::get_inline_gate_content( $post_id ) ) );
+	public static function get_inline_gate_html( $post_id = null, $with_fade = true ) {
+		return self::annotate_gate_ctas( apply_filters( 'newspack_gate_content', self::get_inline_gate_content( $post_id, $with_fade ) ) );
 	}
 
 	/**
