@@ -28,7 +28,7 @@ interface TableCardProps {
 	titleId?: string;
 	heading?: 1 | 2 | 3 | 4 | 5 | 6;
 	actions?: React.ReactNode;
-	/** A line under the title, inside the header; the actions sit centred beside both. */
+	/** A line under the title, inside the header; the actions sit centered beside both. */
 	description?: React.ReactNode;
 	before?: React.ReactNode;
 	after?: React.ReactNode;
