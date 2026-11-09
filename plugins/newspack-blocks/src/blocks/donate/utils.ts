@@ -101,6 +101,20 @@ export const getMinimumDonation = ( value: unknown ): number | undefined => {
 	return Number.isFinite( minimum ) ? minimum : undefined;
 };
 
+/**
+ * Whether the editor should give a block the site-wide minimum donation.
+ *
+ * A manual block's own minimum is what its form enforces, so once set it is
+ * kept. Other blocks don't use their minimum on the front end, so they track
+ * the site-wide value and start from it when manual mode is turned on.
+ *
+ * @param attributes                 Block attributes.
+ * @param attributes.manual          Whether the block is configured manually.
+ * @param attributes.minimumDonation The block's stored minimum.
+ */
+export const usesSiteMinimumDonation = ( { manual, minimumDonation }: { manual?: boolean; minimumDonation?: unknown } ): boolean =>
+	! manual || getMinimumDonation( minimumDonation ) === undefined;
+
 export const getMigratedAmount = (
 	frequency: DonationFrequencySlug,
 	amounts: [ number, number, number ],

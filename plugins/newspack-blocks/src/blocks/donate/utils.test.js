@@ -1,4 +1,22 @@
-import { getColorForContrast, getMinimumDonation } from './utils';
+import { getColorForContrast, getMinimumDonation, usesSiteMinimumDonation } from './utils';
+
+describe( 'usesSiteMinimumDonation', () => {
+	// A manual block's own minimum is what its form enforces. Replacing it on
+	// load was the bug that kept resetting publishers' per-block minimums.
+	it.each( [ 1200, '1200', 0 ] )( 'keeps a manual block minimum of %p', minimumDonation => {
+		expect( usesSiteMinimumDonation( { manual: true, minimumDonation } ) ).toBe( false );
+	} );
+
+	it.each( [ undefined, '' ] )( 'fills in a manual block minimum of %p', minimumDonation => {
+		expect( usesSiteMinimumDonation( { manual: true, minimumDonation } ) ).toBe( true );
+	} );
+
+	// Without manual mode the front end ignores the block's minimum, so it should
+	// track the site-wide value for whenever manual mode is turned on.
+	it.each( [ undefined, false ] )( 'refreshes the minimum when manual is %p', manual => {
+		expect( usesSiteMinimumDonation( { manual, minimumDonation: 5 } ) ).toBe( true );
+	} );
+} );
 
 describe( 'getMinimumDonation', () => {
 	it.each( [

@@ -30,7 +30,7 @@ import { Icon, formatListBullets, grid } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { getMigratedAmount, getMinimumDonation } from '../utils';
+import { getMigratedAmount, getMinimumDonation, usesSiteMinimumDonation } from '../utils';
 import type { DonationSettings, DonationFrequencySlug, DonationAmountsArray, EditState, EditProps } from '../types';
 import TierBasedLayout from './TierBasedLayout';
 import FrequencyBasedLayout from './FrequencyBasedLayout';
@@ -85,9 +85,9 @@ const Edit = ( { attributes, setAttributes }: EditProps ) => {
 					setAttributes( { disabledFrequencies: donationSettings.disabledFrequencies } );
 				}
 
-				// Only a block with no minimum of its own takes the site-wide one.
-				// lodash's isEmpty() is true for every number, so it can't make this check.
-				if ( getMinimumDonation( attributes.minimumDonation ) === undefined ) {
+				// Not isEmpty(), which is true for every number and so replaced every
+				// manual block's own minimum.
+				if ( usesSiteMinimumDonation( attributes ) ) {
 					setAttributes( { minimumDonation: getMinimumDonation( donationSettings.minimumDonation ) } );
 				}
 
@@ -367,7 +367,7 @@ const Edit = ( { attributes, setAttributes }: EditProps ) => {
 									label={ __( 'Minimum donation', 'newspack-blocks' ) }
 									min={ 1 }
 									onChange={ ( value: string ) => setAttributes( { minimumDonation: getMinimumDonation( value ) } ) }
-									value={ attributes.minimumDonation }
+									value={ attributes.minimumDonation ?? '' }
 								/>
 							</>
 						) : (
