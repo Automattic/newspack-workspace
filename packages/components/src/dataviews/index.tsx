@@ -19,7 +19,7 @@ import classnames from 'classnames';
 /**
  * Internal dependencies
  */
-import { ACTIONS_COLUMN_SHARE, columnShareWidth, evenColumns, titleColumnWidth, withoutColumnStyles } from './even-columns';
+import { columnShareWidth, evenColumns, titleColumnWidth, withoutColumnStyles } from './even-columns';
 import { TableCardContext } from '../table-card/context';
 import './style.scss';
 
@@ -75,8 +75,6 @@ function ToolbarLayout( {
 	);
 }
 
-const MANY_COLUMNS = 5;
-
 function DataViews( {
 	className,
 	inlineFilters = false,
@@ -100,12 +98,11 @@ function DataViews( {
 	);
 	const isInCard = useContext( TableCardContext );
 	const titledView = useMemo( () => ( view.titleField && view.showTitle === false ? { ...view, showTitle: true } : view ), [ view ] );
-	const reserved = props.actions?.length ? ACTIONS_COLUMN_SHARE : 0;
-	const evenView = useMemo( () => evenColumns( titledView, reserved ), [ titledView, reserved ] );
+	const evenView = useMemo( () => evenColumns( titledView ), [ titledView ] );
 	const columnWidths = useMemo( () => {
 		const widths: Record< string, string > = {};
-		const titleWidth = titleColumnWidth( titledView, reserved );
-		const columnWidth = columnShareWidth( titledView, reserved );
+		const titleWidth = titleColumnWidth( titledView );
+		const columnWidth = columnShareWidth( titledView );
 		if ( titleWidth ) {
 			widths[ '--newspack-dataviews-title-width' ] = titleWidth;
 		}
@@ -113,7 +110,7 @@ function DataViews( {
 			widths[ '--newspack-dataviews-column-width' ] = columnWidth;
 		}
 		return Object.keys( widths ).length ? ( widths as React.CSSProperties ) : undefined;
-	}, [ titledView, reserved ] );
+	}, [ titledView ] );
 	const layout =
 		children ??
 		( inlineFilters || ! viewOptions ? (
@@ -127,11 +124,7 @@ function DataViews( {
 		) : undefined );
 
 	return (
-		<div className={ classnames(
-				'newspack-dataviews',
-				{ 'newspack-dataviews--in-card': isInCard, 'newspack-dataviews--many-columns': ( evenView.fields ?? [] ).length >= MANY_COLUMNS },
-				className
-			) } style={ columnWidths }>
+		<div className={ classnames( 'newspack-dataviews', { 'newspack-dataviews--in-card': isInCard }, className ) } style={ columnWidths }>
 			<BaseDataViews
 				{ ...props }
 				view={ evenView }
@@ -153,5 +146,5 @@ function DataViews( {
 // implementation's concrete one.
 export default DataViews as < Item >( props: DataViewsProps< Item > ) => React.JSX.Element;
 
-export { ACTIONS_COLUMN_SHARE, columnShareWidth, evenColumns, titleColumnWidth, withoutColumnStyles } from './even-columns';
+export { columnShareWidth, evenColumns, titleColumnWidth, withoutColumnStyles } from './even-columns';
 export type { Action, Field, View } from '@wordpress/dataviews';

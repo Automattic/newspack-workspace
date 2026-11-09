@@ -19,10 +19,6 @@
 	width: var(--newspack-dataviews-title-width, auto);
 }
 
-.newspack-dataviews.newspack-dataviews--many-columns .dataviews-view-table {
-	--newspack-dataviews-column-min-width: 20ch;
-}
-
 .newspack-dataviews .dataviews-view-table {
 	--newspack-dataviews-cell-padding: var(--wpds-dimension-padding-md, #{wp-vars.$grid-unit-15});
 	--newspack-dataviews-column-min-width: 30ch;
@@ -67,6 +63,11 @@
 	tbody td > :has(> .dataviews-view-table__primary-column-content) {
 		min-width: max(calc(var(--newspack-dataviews-column-width, 0px) - 2 * var(--newspack-dataviews-cell-padding)), var(--newspack-dataviews-column-min-width));
 	}
+}
+
+.newspack-dataviews .newspack-cell-list:has(> :nth-child(2), > :first-child > :nth-child(2)),
+.newspack-dataviews .newspack-dataviews__stack:has(> :nth-child(2)) {
+	margin-block-start: var(--newspack-dataviews-stack-gap);
 }
 
 .newspack-dataviews__view-config {

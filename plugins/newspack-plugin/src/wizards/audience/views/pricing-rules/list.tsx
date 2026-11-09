@@ -28,6 +28,7 @@ import { DataViews, Router, StatusBadge, WizardBanner } from '../../../../../pac
 import { formatCount } from '../../../../../packages/components/src/breadcrumbs/format-count';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import ScopeSummary from '../../components/scope-summary';
+import { scopeTargeting } from './scope';
 import { targetingLabel } from '../subscriptions/tabs/discounts/discount';
 import CatalogImpact from './catalog-impact';
 import PricingRulesOnboarding from './onboarding';
@@ -92,11 +93,12 @@ function readerSegmentNames( conditions: PricingRuleRow[ 'conditions' ], map: Re
 	return ids.map( id => map[ Number( id ) ] ?? `#${ id }` );
 }
 
-const SCOPE_TARGETING = { product_ids: 'products', category: 'category', all_products: 'all' } as const;
-
 /** The rule's scope in the shape the Audience lists share. */
 function scopeOf( item: PricingRuleRow ) {
-	const targeting = SCOPE_TARGETING[ item.scope_type as keyof typeof SCOPE_TARGETING ] ?? 'all';
+	const targeting = scopeTargeting( item.scope_type );
+	if ( ! targeting ) {
+		return null;
+	}
 	return {
 		targeting,
 		product_ids: 'products' === targeting ? item.scope_ids : [],
@@ -104,6 +106,14 @@ function scopeOf( item: PricingRuleRow ) {
 		excluded_product_ids: [] as number[],
 	};
 }
+
+/**
+ * Whether a view change is the filter bar's Reset rather than a chip's remove button:
+ * it clears the search, or every one of several filters, which no single remove can.
+ * The toolbar Reset then lands on the default view, like "Reset view".
+ */
+const isFilterBarReset = ( current: View, next: View ): boolean =>
+	! next.search && ! next.filters?.length && ( !! current.search || ( current.filters?.length ?? 0 ) > 1 );
 
 /** Whether the view matches the default one, so "Reset view" has nothing to do. */
 const isDefaultView = ( view: View ): boolean =>
@@ -265,6 +275,9 @@ export default function PricingRulesList() {
 				label: __( 'Applies to', 'newspack-plugin' ),
 				getValue: ( { item } ) => {
 					const scope = scopeOf( item );
+					if ( ! scope ) {
+						return item.scope_label;
+					}
 					const names =
 						'products' === scope.targeting
 							? scope.product_ids.map( id => scopeNames.products[ id ] )
@@ -273,6 +286,9 @@ export default function PricingRulesList() {
 				},
 				render: ( { item } ) => {
 					const scope = scopeOf( item );
+					if ( ! scope ) {
+						return <span>{ item.scope_label }</span>;
+					}
 					return (
 						<ScopeSummary
 							targeting={ scope.targeting }
@@ -322,7 +338,7 @@ export default function PricingRulesList() {
 				render: ( { item } ) => {
 					const names = readerSegmentNames( item.conditions, segmentMap );
 					return names.length ? (
-						<Stack direction="column" align="flex-start" gap="sm" className="newspack-pricing-rules__segments">
+						<Stack direction="column" align="flex-start" gap="sm" className="newspack-pricing-rules__segments newspack-dataviews__stack">
 							{ names.map( ( name, index ) => (
 								<span key={ index } className="newspack-pricing-rules__segment" title={ name } dir="auto">
 									{ name }
@@ -439,7 +455,7 @@ export default function PricingRulesList() {
 				data={ processedData }
 				fields={ fields }
 				view={ view }
-				onChangeView={ setView }
+				onChangeView={ next => setView( isFilterBarReset( view, next ) ? { ...next, filters: [ DEFAULT_STATUS_FILTER ] } : next ) }
 				onReset={ isDefaultView( view ) ? false : () => setView( DEFAULT_VIEW ) }
 				actions={ actions }
 				paginationInfo={ paginationInfo }

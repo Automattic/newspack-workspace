@@ -86,7 +86,7 @@ export default function ScopeSummary( {
 		return <>{ base }</>;
 	}
 	return (
-		<Stack direction="column" gap="sm" align="flex-start">
+		<Stack direction="column" gap="sm" align="flex-start" className="newspack-dataviews__stack">
 			{ base }
 			<NamesTooltip muted label={ excluded } names={ namesOf( excludedProductIds, productNames ) } />
 		</Stack>

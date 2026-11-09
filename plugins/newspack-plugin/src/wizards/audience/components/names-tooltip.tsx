@@ -48,7 +48,7 @@ export default function NamesTooltip( { label, names, muted }: NamesTooltipProps
 				variant="unstyled"
 				className="newspack-info-button__popup"
 				portal={ <Popover.Portal className="newspack-info-button__portal" container={ getWpCompatOverlaySlot() } /> }
-				positioner={ <Popover.Positioner className="newspack-info-button__positioner" side="bottom" sideOffset={ 4 } /> }
+				positioner={ <Popover.Positioner className="newspack-info-button__positioner" side="bottom" align="start" sideOffset={ 4 } /> }
 			>
 				<VisuallyHidden render={ <Popover.Title /> }>{ label }</VisuallyHidden>
 				<Popover.Description>{ list }</Popover.Description>

@@ -6,8 +6,6 @@
 import { DataViews } from 'newspack-components';
 ```
 
-Column widths are shares of the table. When the list has row actions, `ACTIONS_COLUMN_SHARE` of the width is held back for the actions column, so the shares do not add up to more than the table and push the last column under it.
-
 ## Lists of names in a cell
 
 - **Title cell:** the first two names, then a muted "+N more <noun>" with a tooltip listing the rest.
