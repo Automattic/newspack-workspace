@@ -95,11 +95,19 @@ describe( 'Ads list date columns', () => {
 		expect( renderText( 'start_date', adWithMeta( { start_date: '2026-08-04T23:59:59' } ) ) ).toBe( 'August 4, 2026' );
 	} );
 
-	it( 'renders nothing when the date is unset', () => {
+	it( 'renders a dash when the date is unset', () => {
 		configureSite( -4 );
 
-		expect( renderText( 'start_date', adWithMeta( {} ) ) ).toBe( '' );
-		expect( renderText( 'expiry_date', adWithMeta( { expiry_date: '' } ) ) ).toBe( '' );
+		expect( fieldById( 'start_date' ).render( { item: adWithMeta( {} ) } ).props.children ).toBe( '\u2014' );
+		expect( fieldById( 'expiry_date' ).render( { item: adWithMeta( { expiry_date: '' } ) } ).props.children ).toBe( '\u2014' );
+	} );
+
+	it( 'groups counts for the locale and shows a dash for an empty price or placement', () => {
+		const item = { id: 1, meta: { tracking_impressions: 3120, tracking_clicks: 12 } };
+		expect( fieldById( 'impressions' ).render( { item } ) ).toBe( ( 3120 ).toLocaleString() );
+		expect( fieldById( 'clicks' ).render( { item } ) ).toBe( '12' );
+		expect( fieldById( 'price' ).render( { item } ).props.children ).toBe( '\u2014' );
+		expect( fieldById( 'ad_placement' ).render( { item } ).props.children ).toBe( '\u2014' );
 	} );
 
 	it( 'gives each column its own hint about what the date means', () => {

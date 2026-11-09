@@ -10,7 +10,7 @@ import { createInterpolateElement } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { dateI18n, getSettings as getDateSettings, gmdateI18n } from '@wordpress/date';
 
-import { StatusIndicator } from 'newspack-components';
+import { formatCount, StatusIndicator } from 'newspack-components';
 
 import { getAdminUrl, getCurrency } from '../../admin-globals';
 import { formatPostDate } from '../../utils/format-date';
@@ -71,6 +71,8 @@ const formatDate = value => {
 	return gmdateI18n( adDateFormat(), `${ ymd }T00:00:00Z` );
 };
 
+const renderEmpty = () => <span className="newspack-newsletters-list__empty">&mdash;</span>;
+
 const editUrl = item => `${ getAdminUrl() }post.php?post=${ item.id }&action=edit`;
 
 const getTitle = item => item?.title?.raw ?? item?.title?.rendered ?? '';
@@ -93,7 +95,7 @@ const renderTitle = ( { item } ) => {
 
 const renderAdvertiser = ( { item } ) => {
 	const advertiser = advertiserNames( item );
-	return advertiser ? <span className="newspack-newsletters-list__secondary">{ advertiser }</span> : null;
+	return advertiser ? <span className="newspack-newsletters-list__secondary">{ advertiser }</span> : renderEmpty();
 };
 
 const renderStatus = ( { item } ) => {
@@ -127,17 +129,16 @@ const renderStatus = ( { item } ) => {
 const renderTerms =
 	taxonomy =>
 	( { item } ) => {
-		const terms = termsForTaxonomy( item, taxonomy );
-		return terms
+		const names = termsForTaxonomy( item, taxonomy )
 			.map( term => term?.name )
-			.filter( Boolean )
-			.join( ', ' );
+			.filter( Boolean );
+		return names.length ? names.join( ', ' ) : renderEmpty();
 	};
 
 const renderAdDate = ( value, hint ) => {
 	const formatted = formatDate( value );
 	if ( ! formatted ) {
-		return '';
+		return renderEmpty();
 	}
 	return (
 		<Tooltip text={ hint }>
@@ -149,8 +150,8 @@ const renderAdDate = ( value, hint ) => {
 const renderStartDate = ( { item } ) => renderAdDate( item?.meta?.start_date, startDateHint() );
 const renderExpiryDate = ( { item } ) => renderAdDate( item?.meta?.expiry_date, expiryDateHint() );
 
-const renderImpressions = ( { item } ) => String( item?.meta?.tracking_impressions ?? 0 );
-const renderClicks = ( { item } ) => String( item?.meta?.tracking_clicks ?? 0 );
+const renderImpressions = ( { item } ) => formatCount( item?.meta?.tracking_impressions ?? 0 );
+const renderClicks = ( { item } ) => formatCount( item?.meta?.tracking_clicks ?? 0 );
 const CURRENCY_LAYOUTS = {
 	left: ( symbol, amount ) => `${ symbol }${ amount }`,
 	right: ( symbol, amount ) => `${ amount }${ symbol }`,
@@ -171,14 +172,14 @@ export const formatPrice = price => {
 const renderPrice = ( { item } ) => {
 	const price = item?.meta?.price;
 	if ( ! price ) {
-		return '';
+		return renderEmpty();
 	}
 	return formatPrice( price );
 };
 
 const renderDate = ( { item } ) => {
 	const formatted = formatPostDate( item );
-	return formatted ? <span className="newspack-dataviews__date">{ formatted }</span> : null;
+	return formatted ? <span className="newspack-dataviews__date">{ formatted }</span> : renderEmpty();
 };
 
 export function getFields( { advertisers = [], placements = [] } = {} ) {
