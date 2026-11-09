@@ -430,12 +430,14 @@ class TestFields extends WP_UnitTestCase {
 		$post_modified = strtotime( '2026-01-01 00:00:00 UTC' );
 		$field         = Fields::get_field( 'last_modified' );
 
-		update_post_meta( $post_id, Abstract_Field::FIELD_PREFIX . '_modified', $post_modified + 600 );
-		$this->assertEquals( $post_modified + 600, $field->get_value( $post_id ), 'A later story field save sets the last modified time.' );
+		$saved_at = time();
+		Fields::get_field( 'description' )->update_value( $post_id, 'A note for the desk' );
+		clean_post_cache( $post_id );
+		$this->assertGreaterThanOrEqual( $saved_at, $field->get_value( $post_id ), 'A story field save sets the last modified time.' );
+		$this->assertEquals( '2026-01-01 00:00:00', get_post_field( 'post_modified_gmt', $post_id ), 'The post keeps its own modified date.' );
 
 		update_post_meta( $post_id, Abstract_Field::FIELD_PREFIX . '_modified', $post_modified - 600 );
 		$this->assertEquals( $post_modified, $field->get_value( $post_id ), 'A later post edit sets the last modified time.' );
-		$this->assertEquals( '2026-01-01 00:00:00', get_post_field( 'post_modified_gmt', $post_id ), 'The post keeps its own modified date.' );
 	}
 
 	/**
