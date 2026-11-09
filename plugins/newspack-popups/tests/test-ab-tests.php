@@ -128,10 +128,10 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * A test starts when the split does: once both the control and a challenger
-	 * are published, which is the later of the two dates.
+	 * A test recorded before starts were stored starts when the split did: the
+	 * later of the control's and the challenger's publish dates.
 	 */
-	public function test_get_tests_started_at_is_when_both_arms_were_published() {
+	public function test_get_tests_started_at_falls_back_to_publish_dates_without_a_record() {
 		$this->create_test_variant(
 			'dates',
 			'a',
@@ -150,7 +150,170 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 				'post_date'     => '2026-10-01 00:00:00',
 			]
 		);
+		$this->forget_start( 'dates' );
 		$this->assertSame( '2026-10-05T00:00:00Z', Newspack_Popups_AB_Tests::get_tests()[0]['started_at'] );
+	}
+
+	/**
+	 * Publishing the challenger starts the test then, not at the prompts'
+	 * publish dates.
+	 */
+	public function test_publishing_the_challenger_records_the_start() {
+		$this->create_test_variant( 'go', 'a', null, $this->backdated() );
+		$b = $this->create_test_variant( 'go', 'b', null, [ 'post_status' => 'draft' ] );
+		$this->assertNull( Newspack_Popups_AB_Tests::get_tests()[0]['started_at'] );
+		wp_publish_post( $b );
+		$this->assertStartedNow( 'go' );
+	}
+
+	/**
+	 * A challenger published before its control starts the test when the
+	 * control goes live.
+	 */
+	public function test_publishing_the_control_last_records_the_start() {
+		$a = $this->create_test_variant( 'late-a', 'a', null, [ 'post_status' => 'draft' ] );
+		$this->create_test_variant( 'late-a', 'b', null, $this->backdated() );
+		$this->assertNull( $this->recorded_start( 'late-a' ) );
+		wp_publish_post( $a );
+		$this->assertStartedNow( 'late-a' );
+	}
+
+	/**
+	 * A scheduled challenger starts the test when it goes live, which is when
+	 * cron publishes it.
+	 */
+	public function test_a_scheduled_challenger_records_the_start_when_it_goes_live() {
+		$this->create_test_variant( 'sched', 'a', null, $this->backdated() );
+		$future = gmdate( 'Y-m-d H:i:s', time() + 3 * DAY_IN_SECONDS );
+		$b      = $this->create_test_variant(
+			'sched',
+			'b',
+			null,
+			[
+				'post_status'   => 'future',
+				'post_date_gmt' => $future,
+				'post_date'     => $future,
+			]
+		);
+		$this->assertNull( $this->recorded_start( 'sched' ) );
+		// What cron's check_and_publish_future_post() calls once the date arrives.
+		wp_publish_post( $b );
+		$this->assertSame( 'publish', get_post_status( $b ) );
+		$this->assertStartedNow( 'sched' );
+	}
+
+	/**
+	 * Two prompts published weeks ago start a test when they are put in one,
+	 * so its results don't read as weeks old.
+	 */
+	public function test_putting_two_live_prompts_in_a_test_records_the_start() {
+		$a = $this->createPopup( null, null, $this->backdated() );
+		$b = $this->createPopup( null, null, $this->backdated() );
+		update_post_meta( $a, Newspack_Popups_AB_Tests::META_TEST_ID, 'joined' );
+		update_post_meta( $a, Newspack_Popups_AB_Tests::META_VARIANT, 'a' );
+		update_post_meta( $b, Newspack_Popups_AB_Tests::META_TEST_ID, 'joined' );
+		$this->assertNull( $this->recorded_start( 'joined' ) );
+		update_post_meta( $b, Newspack_Popups_AB_Tests::META_VARIANT, 'b' );
+		$this->assertStartedNow( 'joined' );
+	}
+
+	/**
+	 * Unpublishing and republishing the challenger keeps the first start, since
+	 * the results still count from then.
+	 */
+	public function test_republishing_keeps_the_first_start() {
+		$this->create_test_variant( 'again', 'a' );
+		$b = $this->create_test_variant( 'again', 'b' );
+		$this->set_recorded_start( 'again', '2026-10-01T00:00:00Z' );
+		wp_update_post(
+			[
+				'ID'          => $b,
+				'post_status' => 'draft',
+			]
+		);
+		$this->assertNull( Newspack_Popups_AB_Tests::get_tests()[0]['started_at'] );
+		wp_publish_post( $b );
+		$this->assertSame( '2026-10-01T00:00:00Z', Newspack_Popups_AB_Tests::get_tests()[0]['started_at'] );
+	}
+
+	/**
+	 * Nothing is recorded until a control and a challenger are both live.
+	 */
+	public function test_no_start_is_recorded_for_a_control_alone() {
+		$this->create_test_variant( 'alone', 'a' );
+		$this->create_test_variant( 'alone', 'b', null, [ 'post_status' => 'draft' ] );
+		$this->assertNull( $this->recorded_start( 'alone' ) );
+	}
+
+	/**
+	 * With the flag off readers aren't split, so publishing records no start.
+	 */
+	public function test_no_start_is_recorded_with_the_flag_off() {
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
+		$this->create_test_variant( 'off', 'a' );
+		$this->create_test_variant( 'off', 'b' );
+		remove_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
+		$this->assertNull( $this->recorded_start( 'off' ) );
+	}
+
+	/**
+	 * Post fields for a prompt published on a fixed past day.
+	 *
+	 * @return array
+	 */
+	private function backdated() {
+		return [
+			'post_date_gmt' => '2026-09-01 00:00:00',
+			'post_date'     => '2026-09-01 00:00:00',
+		];
+	}
+
+	/**
+	 * The start stored on a test's term, or null.
+	 *
+	 * @param string $test_id Test ID.
+	 * @return string|null
+	 */
+	private function recorded_start( $test_id ) {
+		$term = get_term_by( 'slug', $test_id, Newspack_Popups_AB_Tests::TAXONOMY );
+		$meta = $term ? get_term_meta( $term->term_id, Newspack_Popups_AB_Tests::TERM_META_STARTED, true ) : '';
+		return '' === $meta ? null : $meta;
+	}
+
+	/**
+	 * Store a start on a test's term, as a test recorded on that day would have.
+	 *
+	 * @param string $test_id Test ID.
+	 * @param string $started ISO 8601 UTC.
+	 */
+	private function set_recorded_start( $test_id, $started ) {
+		$term = get_term_by( 'slug', $test_id, Newspack_Popups_AB_Tests::TAXONOMY );
+		update_term_meta( $term->term_id, Newspack_Popups_AB_Tests::TERM_META_STARTED, $started );
+	}
+
+	/**
+	 * Remove a test's recorded start, as for a test from before starts were stored.
+	 *
+	 * @param string $test_id Test ID.
+	 */
+	private function forget_start( $test_id ) {
+		$term = get_term_by( 'slug', $test_id, Newspack_Popups_AB_Tests::TAXONOMY );
+		if ( $term ) {
+			delete_term_meta( $term->term_id, Newspack_Popups_AB_Tests::TERM_META_STARTED );
+		}
+	}
+
+	/**
+	 * Assert a test's start was recorded within the last minute, and is the one listed.
+	 *
+	 * @param string $test_id Test ID.
+	 */
+	private function assertStartedNow( $test_id ) { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid -- Matches PHPUnit's assertion names.
+		$recorded = $this->recorded_start( $test_id );
+		$this->assertMatchesRegularExpression( '/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/', (string) $recorded );
+		$this->assertLessThan( 60, abs( time() - strtotime( $recorded ) ) );
+		$rows = array_values( array_filter( Newspack_Popups_AB_Tests::get_tests(), fn( $test ) => $test_id === $test['test_id'] ) );
+		$this->assertSame( $recorded, $rows[0]['started_at'] );
 	}
 
 	/**
