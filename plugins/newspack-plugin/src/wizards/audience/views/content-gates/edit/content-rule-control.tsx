@@ -48,6 +48,23 @@ export default function ContentRuleControl( { slug, value, exclusion, onChange, 
 		return null;
 	}
 	if ( isStatic ) {
+		// No REST route to look the names up: a taxonomy that isn't show_in_rest. Print the raw IDs rather than guess an endpoint.
+		const hasNoLookup = ! rule.endpoint && ! ( rule.options && rule.options.length > 0 ) && ! [ 'category', 'post_tag' ].includes( slug );
+		if ( hasNoLookup ) {
+			return (
+				<p>
+					<strong>
+						{ sprintf(
+							// translators: 1: rule name, 2: includes or excludes
+							__( '%1$s %2$s:', 'newspack-plugin' ),
+							rule.name,
+							exclusion ? __( 'exclude', 'newspack-plugin' ) : __( 'include', 'newspack-plugin' )
+						) }
+					</strong>{ ' ' }
+					{ value.join( ', ' ) }
+				</p>
+			);
+		}
 		return rule.options && rule.options.length > 0 ? (
 			<p>
 				<strong>
