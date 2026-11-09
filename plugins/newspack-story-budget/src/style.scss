@@ -125,6 +125,9 @@ body.toplevel_page_newspack-story-budget {
 				color: inherit !important;
 			}
 		}
+		&__no-value {
+			color: var(--wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700});
+		}
 		&__empty-value {
 			color: #a0a0a0;
 			font-style: italic;

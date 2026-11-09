@@ -36,7 +36,7 @@ export default ( {
 	showPostLinks = false,
 	popoverProps,
 	truncate = true,
-	emptyValue = '--',
+	emptyValue = <span className="newspack-story-budget__field__no-value">&mdash;</span>,
 } ) => {
 	const { canEditStory, isLoadingStory, fieldError } = useSelect(
 		select => ( {
