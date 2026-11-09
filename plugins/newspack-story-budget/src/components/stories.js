@@ -7,7 +7,7 @@ import debounce from 'lodash/debounce';
 /**
  * WordPress dependencies.
  */
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { applyFilters } from '@wordpress/hooks';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { useEffect, useState, useMemo, useCallback } from '@wordpress/element';
@@ -30,6 +30,13 @@ import { update } from '@wordpress/icons';
 import utils from '../utils';
 import { NAMESPACE as storeNamespace } from '../store/constants';
 import { useStoryFields, useStoryActions, useView } from '../hooks';
+
+const countLabel = ( count, formatted ) =>
+	sprintf(
+		/* translators: %s: number of stories in the list. */
+		_n( '%s story', '%s stories', count, 'newspack-story-budget' ),
+		formatted
+	);
 
 export default () => {
 	const { stories, isLoading, isRefreshing, progress, errors, canManage, canRefreshStories } = useSelect( select => ( {
@@ -173,6 +180,7 @@ export default () => {
 			data={ isLoading ? [] : currentStories }
 			paginationInfo={ paginationInfo }
 			defaultLayouts={ defaultLayouts }
+			countLabel={ countLabel }
 		>
 			<div className="dataviews__view-actions newspack-story-budget__toolbar">
 				<div className="dataviews__search newspack-story-budget__filters">
@@ -213,7 +221,7 @@ export default () => {
 				</div>
 			</div>
 			<BaseDataViews.Layout />
-			<BaseDataViews.Footer />
+			<DataViews.Footer />
 		</DataViews>
 	);
 };

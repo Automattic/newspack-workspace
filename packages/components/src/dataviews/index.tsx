@@ -7,7 +7,7 @@
 /**
  * WordPress dependencies
  */
-import { useContext, useMemo } from '@wordpress/element';
+import { createContext, useContext, useMemo } from '@wordpress/element';
 import { DataViews as BaseDataViews } from '@wordpress/dataviews';
 import { Stack } from '@wordpress/ui';
 
@@ -23,6 +23,17 @@ import { columnShareWidth, evenColumns, titleColumnWidth, withoutColumnStyles } 
 import CountFooter, { type CountLabel } from './count-footer';
 import { TableCardContext } from '../table-card/context';
 import './style.scss';
+
+const FooterContext = createContext< React.ReactNode >( undefined );
+
+/**
+ * The list's footer, for a list that passes its own `children` layout: the
+ * named count from `countLabel` when the list has one, otherwise core's footer.
+ */
+function Footer() {
+	const footer = useContext( FooterContext );
+	return <>{ footer ?? <BaseDataViews.Footer /> }</>;
+}
 
 type DataViewsProps< Item > = React.ComponentProps< typeof BaseDataViews< Item > > & {
 	className?: string;
@@ -167,7 +178,7 @@ function DataViews( {
 				onChangeView={ nextView => onChangeView( withoutColumnStyles( nextView ) ) }
 				fields={ shownFields }
 			>
-				{ layout }
+				{ children ? <FooterContext.Provider value={ footer }>{ children }</FooterContext.Provider> : layout }
 			</BaseDataViews>
 		</div>
 	);
@@ -180,7 +191,9 @@ function DataViews( {
 // typing for `data`, `fields`, `actions`, `getItemId`, etc. The assertion
 // is verified by the compiler: the generic signature is assignable to the
 // implementation's concrete one.
-export default DataViews as < Item >( props: DataViewsProps< Item > ) => React.JSX.Element;
+export default Object.assign( DataViews, { Footer } ) as ( < Item >( props: DataViewsProps< Item > ) => React.JSX.Element ) & {
+	Footer: typeof Footer;
+};
 
 export { columnShareWidth, evenColumns, titleColumnWidth, withoutColumnStyles } from './even-columns';
 export type { Action, Field, View } from '@wordpress/dataviews';

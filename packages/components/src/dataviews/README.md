@@ -75,7 +75,7 @@ DataViews' footer counts rows as "6 items". Give the list a `countLabel` so the 
 
 - The footer shows under the same conditions as core's: a count when a row has a bulk action, pagination when there is more than one page.
 - Without `countLabel`, or with infinite scroll, core's own footer and "N items" stay.
-- A list that passes its own `children` layout renders its own footer, so `countLabel` has no effect there.
+- A list that passes its own `children` layout renders `<DataViews.Footer />` where core's `<DataViews.Footer />` would go. It shows the named count when the list has a `countLabel`, and core's footer otherwise.
 
 ## Dates and times
 

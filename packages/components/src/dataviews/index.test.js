@@ -174,5 +174,23 @@ describe( 'DataViews', () => {
 
 			expect( container.querySelector( '.dataviews-footer' ) ).not.toBeInTheDocument();
 		} );
+
+		it( 'names the count in a custom layout that renders DataViews.Footer', () => {
+			const { container } = renderDataViews( {
+				actions: bulkActions,
+				countLabel: memberLabel,
+				data: rows( 6 ),
+				paginationInfo: { totalItems: 6, totalPages: 1 },
+				children: <DataViews.Footer />,
+			} );
+
+			expect( footerCount( container ) ).toBe( '6 members' );
+		} );
+
+		it( 'keeps core’s count in a custom layout without a label', () => {
+			const { container } = renderDataViews( { actions: bulkActions, children: <DataViews.Footer /> } );
+
+			expect( footerCount( container ) ).toBe( '1 item' );
+		} );
 	} );
 } );
