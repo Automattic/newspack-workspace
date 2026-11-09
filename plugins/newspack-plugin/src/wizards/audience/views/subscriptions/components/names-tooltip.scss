@@ -1,4 +1,35 @@
-.newspack-names-tooltip.components-button.is-link {
-	flex-shrink: 0;
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
+.newspack-names-tooltip {
+	background: none;
+	border: 0;
+	color: inherit;
+	cursor: pointer;
+	font: inherit;
+	padding: 0;
+	text-align: left;
+	text-decoration: underline dotted;
+	text-underline-offset: 0.2em;
 	white-space: nowrap;
+
+	&:hover {
+		color: var( --wp-admin-theme-color );
+	}
+
+	&:focus-visible {
+		outline: var( --wp-admin-border-width-focus, 1.5px ) solid var( --wp-admin-theme-color );
+		outline-offset: 2px;
+	}
+
+	&.is-muted {
+		color: var( --wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700} );
+		font-size: wp-vars.$helptext-font-size;
+		font-weight: wp-vars.$font-weight-regular;
+		line-height: wp-vars.$default-line-height;
+
+		&:hover {
+			color: var( --wp-admin-theme-color );
+		}
+	}
 }

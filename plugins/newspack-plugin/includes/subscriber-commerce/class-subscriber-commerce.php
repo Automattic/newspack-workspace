@@ -152,8 +152,59 @@ class Subscriber_Commerce {
 			'category_ids'             => $sanitize_ids( $rule['category_ids'] ?? [] ),
 			'excluded_product_ids'     => $sanitize_ids( $rule['excluded_product_ids'] ?? [] ),
 			'active'                   => ! empty( $rule['active'] ),
-			'created_at'               => $created_at ? $created_at : gmdate( 'Y-m-d' ),
+			'created_at'               => $created_at ? $created_at : wp_date( 'Y-m-d' ),
 		];
+	}
+
+	/**
+	 * The names a list of rules needs to render its rows, keyed by ID.
+	 *
+	 * Sent with the rules so a list renders finished rows from one response
+	 * instead of naming IDs through follow-up requests.
+	 *
+	 * @param array[] $rules Sanitized rules.
+	 *
+	 * @return array{products: array<int,string>, categories: array<int,string>, subscriptions: array<int,string>}
+	 */
+	public static function get_rule_names( array $rules ): array {
+		$product_ids      = [];
+		$category_ids     = [];
+		$subscription_ids = [];
+		foreach ( $rules as $rule ) {
+			$product_ids      = array_merge( $product_ids, $rule['product_ids'] ?? [], $rule['excluded_product_ids'] ?? [] );
+			$category_ids     = array_merge( $category_ids, $rule['category_ids'] ?? [] );
+			$subscription_ids = array_merge( $subscription_ids, $rule['subscription_product_ids'] ?? [] );
+		}
+
+		$product_name = function ( $id ) {
+			$product = function_exists( 'wc_get_product' ) ? wc_get_product( $id ) : null;
+			return $product ? $product->get_name() : '';
+		};
+
+		$names = [
+			'products'      => [],
+			'categories'    => [],
+			'subscriptions' => [],
+		];
+		foreach ( array_unique( array_map( 'absint', $product_ids ) ) as $id ) {
+			$name = $product_name( $id );
+			if ( '' !== $name ) {
+				$names['products'][ $id ] = $name;
+			}
+		}
+		foreach ( array_unique( array_map( 'absint', $subscription_ids ) ) as $id ) {
+			$name = $product_name( $id );
+			if ( '' !== $name ) {
+				$names['subscriptions'][ $id ] = $name;
+			}
+		}
+		foreach ( array_unique( array_map( 'absint', $category_ids ) ) as $id ) {
+			$term = get_term( $id, Product_Targeting::PRODUCT_CATEGORY_TAXONOMY );
+			if ( $term && ! is_wp_error( $term ) ) {
+				$names['categories'][ $id ] = $term->name;
+			}
+		}
+		return $names;
 	}
 
 	/**

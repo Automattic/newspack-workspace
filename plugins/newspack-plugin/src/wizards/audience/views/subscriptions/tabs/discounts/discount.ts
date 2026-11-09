@@ -122,8 +122,7 @@ export function subscriptionNames( ids: number[], options: { id: number; name: s
  * The rule's audience, split for the list's Subscription column.
  *
  * A rule can cover dozens of subscriptions, so the cell names a couple and
- * counts the rest. The parts are separate because the cell is one line: the
- * names truncate and the count must not.
+ * counts the rest.
  *
  * `more` counts everything the cell does not name, whether it was capped away
  * or could not be resolved, so the two are never separate numbers. Where
@@ -132,15 +131,17 @@ export function subscriptionNames( ids: number[], options: { id: number; name: s
  * @param ids     The rule's subscription product ids.
  * @param options Known subscription products.
  */
-export function subscriptionsSummary( ids: number[], options: { id: number; name: string }[] ): { named: string; more: string; hidden: string[] } {
+export function subscriptionsSummary( ids: number[], options: { id: number; name: string }[] ): { shown: string[]; more: string; hidden: string[] } {
 	const names = subscriptionNames( ids, options );
 	if ( ! names.length ) {
 		return {
-			named: sprintf(
-				/* translators: %d: number of subscriptions whose subscribers get the discount. */
-				_n( '%d subscription', '%d subscriptions', ids.length, 'newspack-plugin' ),
-				ids.length
-			),
+			shown: [
+				sprintf(
+					/* translators: %d: number of subscriptions whose subscribers get the discount. */
+					_n( '%d subscription', '%d subscriptions', ids.length, 'newspack-plugin' ),
+					ids.length
+				),
+			],
 			more: '',
 			hidden: [],
 		};
@@ -148,12 +149,12 @@ export function subscriptionsSummary( ids: number[], options: { id: number; name
 	const shown = names.slice( 0, MAX_NAMED_ITEMS );
 	const remaining = ids.length - shown.length;
 	return {
-		named: shown.join( ', ' ),
+		shown,
 		hidden: names.slice( shown.length ),
 		more: remaining
 			? sprintf(
-					/* translators: %d: number of further subscriptions the rule covers beyond the ones named beside this. */
-					_n( '+%d more', '+%d more', remaining, 'newspack-plugin' ),
+					/* translators: %d: number of further subscriptions the rule covers beyond the ones named above this. */
+					_n( '+%d more subscription', '+%d more subscriptions', remaining, 'newspack-plugin' ),
 					remaining
 			  )
 			: '',

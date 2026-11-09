@@ -40,20 +40,6 @@
 		font-weight: normal;
 	}
 
-	&__subscriptions {
-		align-items: baseline;
-		display: flex;
-		gap: wp-vars.$grid-unit-05;
-		min-width: 0;
-	}
-
-	&__subscriptions-named {
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
 	&__preview {
 		border-collapse: collapse;
 		width: 100%;

@@ -258,8 +258,10 @@ class Subscriber_Discounts_Admin {
 	 * @return array
 	 */
 	private static function response_payload() {
+		$rules = Subscriber_Discounts::get_rules();
 		return [
-			'rules'    => Subscriber_Discounts::get_rules(),
+			'rules'    => $rules,
+			'names'    => Subscriber_Commerce::get_rule_names( $rules ),
 			'settings' => Subscriber_Discounts::get_settings(),
 			'currency' => self::get_currency(),
 		];

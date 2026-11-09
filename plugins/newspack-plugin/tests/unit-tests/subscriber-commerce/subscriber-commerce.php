@@ -181,7 +181,7 @@ class Test_Subscriber_Commerce extends \WP_UnitTestCase {
 				'created_at' => '2026-13-99',
 			]
 		);
-		$this->assertSame( gmdate( 'Y-m-d' ), $rule['created_at'] );
+		$this->assertSame( wp_date( 'Y-m-d' ), $rule['created_at'] );
 	}
 
 	/**

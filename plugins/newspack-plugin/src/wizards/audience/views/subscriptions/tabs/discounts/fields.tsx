@@ -9,7 +9,6 @@
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
-import { dateI18n, getSettings as getDateSettings } from '@wordpress/date';
 import { decodeEntities } from '@wordpress/html-entities';
 import type { Field } from '@wordpress/dataviews';
 
@@ -17,6 +16,7 @@ import type { Field } from '@wordpress/dataviews';
  * Internal dependencies.
  */
 import NamesTooltip from '../../components/names-tooltip';
+import { fmtDate } from '../../../../../subscribers/format';
 import { StatusBadge } from '../../../../../../../packages/components/src';
 import { ALL_SUBSCRIPTIONS_FILTER_VALUE, allSubscriptionsLabel } from '../../constants';
 import { discountLabel, excludedLabel, subscriptionNames, subscriptionsSummary, targetingBaseLabel, targetingLabel } from './discount';
@@ -36,7 +36,8 @@ type Subscription = { id: number; name: string };
 export function discountFields(
 	currency: DiscountCurrency,
 	subscriptions: Subscription[],
-	productNames: Record< number, string > = {}
+	productNames: Record< number, string > = {},
+	categoryNames: Record< number, string > = {}
 ): Field< DiscountRule >[] {
 	return [
 		{
@@ -54,19 +55,20 @@ export function discountFields(
 			getValue: ( { item } ) => ( 'all' === item.subscription_targeting ? [ ALL_SUBSCRIPTIONS_FILTER_VALUE ] : item.subscription_product_ids ),
 			render: ( { item } ) => {
 				if ( 'all' === item.subscription_targeting ) {
-					return <span className="newspack-subscriber-discounts__subscriptions">{ allSubscriptionsLabel() }</span>;
+					return <span>{ allSubscriptionsLabel() }</span>;
 				}
-				const { named, more, hidden } = subscriptionsSummary( item.subscription_product_ids, subscriptions );
+				const { shown, more, hidden } = subscriptionsSummary( item.subscription_product_ids, subscriptions );
 				return (
-					<span className="newspack-subscriber-discounts__subscriptions">
-						{ /* The clipped names stay in the DOM, so a screen reader reads the
-						     whole string and `title` shows it on hover. Neither reaches the
-						     subscriptions the count stands for — the editor drawer lists those. */ }
-						<span className="newspack-subscriber-discounts__subscriptions-named" title={ named }>
-							{ named }
-						</span>
-						{ more && <NamesTooltip label={ more } names={ hidden } /> }
-					</span>
+					<div>
+						{ shown.map( name => (
+							<div key={ name }>{ name }</div>
+						) ) }
+						{ more && (
+							<div>
+								<NamesTooltip muted label={ more } names={ hidden } />
+							</div>
+						) }
+					</div>
 				);
 			},
 		},
@@ -116,13 +118,13 @@ export function discountFields(
 			getValue: ( { item } ) => targetingLabel( item ),
 			render: ( { item } ) => {
 				const excluded = excludedLabel( item );
-				const namesOf = ( ids: number[] ) => ids.map( id => productNames[ id ] ).filter( Boolean );
-				const base =
-					'products' === item.targeting ? (
-						<NamesTooltip label={ targetingBaseLabel( item ) } names={ namesOf( item.product_ids ) } />
-					) : (
-						targetingBaseLabel( item )
-					);
+				const namesOf = ( ids: number[], names: Record< number, string > ) => ids.map( id => names[ id ] ).filter( Boolean );
+				let base: React.ReactNode = targetingBaseLabel( item );
+				if ( 'products' === item.targeting ) {
+					base = <NamesTooltip label={ targetingBaseLabel( item ) } names={ namesOf( item.product_ids, productNames ) } />;
+				} else if ( 'category' === item.targeting ) {
+					base = <NamesTooltip label={ targetingBaseLabel( item ) } names={ namesOf( item.category_ids, categoryNames ) } />;
+				}
 				if ( ! excluded ) {
 					return base;
 				}
@@ -130,7 +132,7 @@ export function discountFields(
 					<span className="newspack-subscriber-discounts__applies-to">
 						{ base }
 						<span className="newspack-subscriber-discounts__applies-to-excluded">
-							<NamesTooltip label={ excluded } names={ namesOf( item.excluded_product_ids ) } />
+							<NamesTooltip muted label={ excluded } names={ namesOf( item.excluded_product_ids, productNames ) } />
 						</span>
 					</span>
 				);
@@ -140,12 +142,7 @@ export function discountFields(
 			id: 'created_at',
 			label: __( 'Created', 'newspack-plugin' ),
 			getValue: ( { item } ) => item.created_at,
-			render: ( { item } ) =>
-				item.created_at ? (
-					<span className="newspack-dataviews__date">{ dateI18n( getDateSettings().formats.date, item.created_at ) }</span>
-				) : (
-					''
-				),
+			render: ( { item } ) => ( item.created_at ? <span className="newspack-dataviews__date">{ fmtDate( item.created_at ) }</span> : '' ),
 		},
 	];
 }

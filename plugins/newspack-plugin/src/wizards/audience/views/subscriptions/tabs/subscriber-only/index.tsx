@@ -10,7 +10,6 @@
  */
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { useEffect, useMemo, useState } from '@wordpress/element';
-import { dateI18n, getSettings as getDateSettings } from '@wordpress/date';
 import { useDispatch } from '@wordpress/data';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import { Stack } from '@wordpress/ui';
@@ -27,10 +26,10 @@ import type { Action, Field, View } from '../../../../../../../packages/componen
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../../packages/components/src/wizard/store';
 import Router from '../../../../../../../packages/components/src/proxied-imports/router';
 import { formatCount } from '../../../../../../../packages/components/src/breadcrumbs/format-count';
+import { fmtDate } from '../../../../../subscribers/format';
 import { registerTab } from '../registry';
-import { ALL_SUBSCRIPTIONS_FILTER_VALUE, allSubscriptionsLabel, SEARCH_ENDPOINTS } from '../../constants';
+import { ALL_SUBSCRIPTIONS_FILTER_VALUE, allSubscriptionsLabel } from '../../constants';
 import { useRestrictions } from './use-restrictions';
-import { useNames } from '../../use-names';
 import NamesTooltip from '../../components/names-tooltip';
 import { excludedLabel, leadingProductNames, moreProductsLabel, scopeLabel } from './labels';
 import RestrictionEditor from './restriction-editor';
@@ -54,7 +53,18 @@ const { useLocation } = Router;
 const SECTION_LABEL = __( 'Subscriber-only products', 'newspack-plugin' );
 
 function SubscriberOnlyProducts() {
-	const { restrictions, settings, loading, saving, error, saveRestriction, deleteRestriction, setActive, saveSettings } = useRestrictions();
+	const {
+		restrictions,
+		names: ruleNames,
+		settings,
+		loading,
+		saving,
+		error,
+		saveRestriction,
+		deleteRestriction,
+		setActive,
+		saveSettings,
+	} = useRestrictions();
 	const [ editing, setEditing ] = useState< Partial< Restriction > | null >( null );
 	const [ deleting, setDeleting ] = useState< Restriction | null >( null );
 	const [ settingsOpen, setSettingsOpen ] = useState( false );
@@ -62,13 +72,10 @@ function SubscriberOnlyProducts() {
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const { pathname } = useLocation();
 
-	// Resolve the IDs the rules store into names for the list.
-	const productIds = useMemo( () => restrictions.flatMap( rule => rule.product_ids || [] ), [ restrictions ] );
-	const categoryIds = useMemo( () => restrictions.flatMap( rule => rule.category_ids || [] ), [ restrictions ] );
+	const productNames = ruleNames.products;
+	const categoryNames = ruleNames.categories;
+	const subscriptionNames = ruleNames.subscriptions;
 	const subscriptionIds = useMemo( () => restrictions.flatMap( rule => rule.subscription_product_ids || [] ), [ restrictions ] );
-	const productNames = useNames( SEARCH_ENDPOINTS.products, productIds );
-	const categoryNames = useNames( SEARCH_ENDPOINTS.productCategories, categoryIds );
-	const subscriptionNames = useNames( SEARCH_ENDPOINTS.subscriptions, subscriptionIds );
 
 	const fields: Field< Restriction >[] = useMemo(
 		() => [
@@ -101,7 +108,7 @@ function SubscriberOnlyProducts() {
 							) }
 							{ remaining > 0 && (
 								<div className="newspack-subscriber-only__muted">
-									<NamesTooltip label={ moreProductsLabel( remaining ) } names={ hidden } />
+									<NamesTooltip muted label={ moreProductsLabel( remaining ) } names={ hidden } />
 								</div>
 							) }
 						</div>
@@ -171,11 +178,7 @@ function SubscriberOnlyProducts() {
 				label: __( 'Created', 'newspack-plugin' ),
 				getValue: ( { item }: { item: Restriction } ) => item.created_at,
 				render: ( { item }: { item: Restriction } ) =>
-					item.created_at ? (
-						<span className="newspack-dataviews__date">{ dateI18n( getDateSettings().formats.date, item.created_at ) }</span>
-					) : (
-						''
-					),
+					item.created_at ? <span className="newspack-dataviews__date">{ fmtDate( item.created_at ) }</span> : '',
 				enableSorting: true,
 			},
 		],

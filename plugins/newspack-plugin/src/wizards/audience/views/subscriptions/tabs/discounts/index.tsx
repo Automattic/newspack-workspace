@@ -26,7 +26,7 @@ import EmptyState from '../../../../../../../packages/components/src/empty-state
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../../packages/components/src/wizard/store';
 import Router from '../../../../../../../packages/components/src/proxied-imports/router';
 import { SEARCH_ENDPOINTS, WIZARD_ENDPOINT } from '../../constants';
-import { useNames } from '../../use-names';
+import { EMPTY_RULE_NAMES } from '../../types';
 import { registerTab } from '../registry';
 import { DISCOUNTS_ENDPOINT } from './constants';
 import { DEFAULT_CURRENCY } from './discount';
@@ -54,6 +54,7 @@ const DEFAULT_VIEW: View = {
 function SubscriberDiscounts() {
 	const [ payload, setPayload ] = useState< DiscountsPayload >( {
 		rules: [],
+		names: EMPTY_RULE_NAMES,
 		settings: { apply_on_sale: true, apply_at_checkout: false },
 		currency: DEFAULT_CURRENCY,
 	} );
@@ -141,29 +142,20 @@ function SubscriberDiscounts() {
 		}
 	}, [ isLoading, editingId, editingRule, history, baseUrl ] );
 
-	// The picker's one page of suggestions names most subscriptions, but not a
-	// trashed one and not the overflow on a store with more than a page of
-	// them. Resolving the ids the rules actually hold covers both, and is what
-	// keeps a row from counting a subscription it could have named.
-	const ruleSubscriptionIds = useMemo(
-		() => [ ...new Set( payload.rules.flatMap( rule => rule.subscription_product_ids || [] ) ) ],
-		[ payload.rules ]
-	);
-	const resolvedNames = useNames( SEARCH_ENDPOINTS.subscriptions, ruleSubscriptionIds );
+	const productNames = payload.names?.products;
+	const categoryNames = payload.names?.categories;
+	const ruleSubscriptionNames = payload.names?.subscriptions;
 
 	const namedSubscriptions = useMemo( () => {
 		const byId = new Map< number, string >( subscriptionOptions.map( option => [ option.id, option.name ] ) );
-		Object.entries( resolvedNames ).forEach( ( [ id, name ] ) => byId.set( Number( id ), name ) );
+		Object.entries( ruleSubscriptionNames || {} ).forEach( ( [ id, name ] ) => byId.set( Number( id ), decodeEntities( name ) ) );
 		return [ ...byId ].map( ( [ id, name ] ) => ( { id, name } ) );
-	}, [ subscriptionOptions, resolvedNames ] );
+	}, [ subscriptionOptions, ruleSubscriptionNames ] );
 
-	const ruleProductIds = useMemo(
-		() => payload.rules.flatMap( rule => [ ...( rule.product_ids || [] ), ...( rule.excluded_product_ids || [] ) ] ),
-		[ payload.rules ]
+	const fields = useMemo(
+		() => discountFields( currency, namedSubscriptions, productNames, categoryNames ),
+		[ currency, namedSubscriptions, productNames, categoryNames ]
 	);
-	const productNames = useNames( SEARCH_ENDPOINTS.products, ruleProductIds );
-
-	const fields = useMemo( () => discountFields( currency, namedSubscriptions, productNames ), [ currency, namedSubscriptions, productNames ] );
 
 	const actions: Action< DiscountRule >[] = useMemo(
 		() => [
@@ -303,7 +295,6 @@ function SubscriberDiscounts() {
 					defaultLayouts={ { table: {} } }
 					isLoading={ isLoading }
 					getItemId={ ( item: DiscountRule ) => item.id }
-					onClickItem={ ( item: DiscountRule ) => history.push( `${ baseUrl }/edit/${ item.id }` ) }
 					search
 					inlineFilters
 				/>
