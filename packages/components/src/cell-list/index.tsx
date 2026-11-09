@@ -1,0 +1,61 @@
+/**
+ * CellList
+ */
+
+/**
+ * WordPress dependencies.
+ */
+import { __ } from '@wordpress/i18n';
+import { useId, useState } from '@wordpress/element';
+import { Button } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
+
+type CellListProps = {
+	/** The items, one per line. Each needs a key. */
+	children: React.ReactNode[];
+	/** How many items show before "See more". */
+	limit?: number;
+	/** Whether the list starts open. */
+	defaultExpanded?: boolean;
+	/** Called with the new state when the list opens or closes. */
+	onToggle?: ( isExpanded: boolean ) => void;
+};
+
+/**
+ * A list of items inside a table cell, one per line: the first few, then a
+ * "See more" toggle for the rest.
+ *
+ * The toggle stops its click, so a clickable row doesn't open as well. DataViews
+ * remounts cells when its fields are rebuilt, which resets this component; a list
+ * that has to stay open across that keeps its state outside, through
+ * `defaultExpanded` and `onToggle`.
+ */
+const CellList = ( { children: items, limit = 2, defaultExpanded = false, onToggle }: CellListProps ) => {
+	const [ isExpanded, setIsExpanded ] = useState( defaultExpanded );
+	const listId = useId();
+	const canCollapse = items.length > limit;
+	const shown = canCollapse && ! isExpanded ? items.slice( 0, limit ) : items;
+	return (
+		<Stack direction="column" gap="sm" align="flex-start" className="newspack-cell-list">
+			<Stack direction="column" gap="sm" align="flex-start" id={ listId }>
+				{ shown }
+			</Stack>
+			{ canCollapse && (
+				<Button
+					variant="link"
+					aria-expanded={ isExpanded }
+					aria-controls={ listId }
+					onClick={ ( event: React.MouseEvent ) => {
+						event.stopPropagation();
+						setIsExpanded( ! isExpanded );
+						onToggle?.( ! isExpanded );
+					} }
+				>
+					{ isExpanded ? __( 'See less', 'newspack-plugin' ) : __( 'See more', 'newspack-plugin' ) }
+				</Button>
+			) }
+		</Stack>
+	);
+};
+
+export default CellList;

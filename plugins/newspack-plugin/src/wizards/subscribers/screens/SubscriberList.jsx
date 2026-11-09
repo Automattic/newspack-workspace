@@ -16,7 +16,7 @@
 /**
  * WordPress dependencies.
  */
-import { createPortal, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from '@wordpress/element';
+import { createPortal, useEffect, useLayoutEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -25,7 +25,7 @@ import { Badge, Stack } from '@wordpress/ui';
 /**
  * Internal dependencies.
  */
-import { Button, DataViews, Router, StatusBadge, Waiting } from '../../../../packages/components/src';
+import { Button, CellList, DataViews, Router, StatusBadge, Waiting } from '../../../../packages/components/src';
 import { formatCount } from '../../../../packages/components/src/breadcrumbs/format-count';
 import './style.scss';
 import LoadFailureNotice from '../components/LoadFailureNotice';
@@ -110,17 +110,14 @@ const managedOnValues = item => {
 
 const { useHistory, useLocation } = Router;
 
-const COLLAPSED_PLAN_COUNT = 2;
-
 /**
  * The Subscription cell: a subscriber's plans, the first two shown, with a
  * toggle for the rest.
  *
- * 8px between subscriptions so each reads as a distinct block. A group entry is
- * tagged "(Group)"; the subscriber's role in it is L1 information (profile card,
- * group members table). The plan name links to that subscription while the row
- * resolves to the person, so the two affordances stay distinct — see links.jsx.
- * The toggle stops its click for the same reason.
+ * A group entry is tagged "(Group)"; the subscriber's role in it is L1
+ * information (profile card, group members table). The plan name links to that
+ * subscription while the row resolves to the person, so the two affordances stay
+ * distinct — see links.jsx.
  *
  * The open rows live in `expandedIds`, outside the cell: DataViews remounts every
  * cell when the fields are rebuilt (avatars and plans arrive after the first paint),
@@ -131,43 +128,17 @@ const COLLAPSED_PLAN_COUNT = 2;
  * @param {Set}    props.expandedIds The ids of the rows that are open.
  * @param {*}      props.id          This row's id.
  */
-const PlanEntries = ( { entries, expandedIds, id } ) => {
-	const [ isExpanded, setIsExpanded ] = useState( () => expandedIds.has( id ) );
-	const listId = useId();
-	const canCollapse = entries.length > COLLAPSED_PLAN_COUNT;
-	const shown = canCollapse && ! isExpanded ? entries.slice( 0, COLLAPSED_PLAN_COUNT ) : entries;
-	return (
-		<VStack spacing={ 2 } alignment="left">
-			<VStack spacing={ 2 } alignment="left" id={ listId }>
-				{ shown.map( ( e, i ) => (
-					<div key={ i }>
-						<SubscriptionLink href={ e.editUrl }>{ e.planName || e.plan }</SubscriptionLink>
-						{ e.role && <>&nbsp;{ `(${ GROUP_LABEL })` }</> }
-						{ e.site && <>&nbsp;{ `(${ e.site })` }</> }
-					</div>
-				) ) }
-			</VStack>
-			{ canCollapse && (
-				<Button
-					variant="link"
-					aria-expanded={ isExpanded }
-					aria-controls={ listId }
-					onClick={ event => {
-						event.stopPropagation();
-						if ( isExpanded ) {
-							expandedIds.delete( id );
-						} else {
-							expandedIds.add( id );
-						}
-						setIsExpanded( ! isExpanded );
-					} }
-				>
-					{ isExpanded ? __( 'See less', 'newspack-plugin' ) : __( 'See more', 'newspack-plugin' ) }
-				</Button>
-			) }
-		</VStack>
-	);
-};
+const PlanEntries = ( { entries, expandedIds, id } ) => (
+	<CellList defaultExpanded={ expandedIds.has( id ) } onToggle={ isExpanded => ( isExpanded ? expandedIds.add( id ) : expandedIds.delete( id ) ) }>
+		{ entries.map( ( e, i ) => (
+			<div key={ i }>
+				<SubscriptionLink href={ e.editUrl }>{ e.planName || e.plan }</SubscriptionLink>
+				{ e.role && <>&nbsp;{ `(${ GROUP_LABEL })` }</> }
+				{ e.site && <>&nbsp;{ `(${ e.site })` }</> }
+			</div>
+		) ) }
+	</CellList>
+);
 
 const DEFAULT_VIEW = {
 	type: 'table',

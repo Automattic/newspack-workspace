@@ -33,6 +33,7 @@ jest.mock( '../../../../packages/components/src/wizard/store', () => ( { WIZARD_
 // router at module scope, so the proxy has to answer here too.
 let mockDataViewsProps = null;
 jest.mock( '../../../../packages/components/src', () => ( {
+	CellList: jest.requireActual( '../../../../packages/components/src/cell-list' ).default,
 	DataViews: props => {
 		mockDataViewsProps = props;
 		return null;
