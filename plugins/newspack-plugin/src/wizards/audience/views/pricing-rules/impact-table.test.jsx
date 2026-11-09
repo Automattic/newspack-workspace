@@ -240,9 +240,16 @@ describe( 'ImpactTable', () => {
 		expect( screen.queryByText( /c1 is the initial purchase/ ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'renders without the Newspack DataViews page wrapper when unframed', () => {
+	it( 'renders through the Newspack DataViews wrapper at the default density in its card', () => {
+		const { container } = render( <ImpactTable baseline={ [ row() ] } segmentGroups={ [] } currency={ CURRENCY } /> );
+		expect( container.querySelector( '.newspack-dataviews' ) ).not.toBeNull();
+		expect( container.querySelector( '.has-compact-density' ) ).toBeNull();
+	} );
+
+	it( 'renders on core DataViews with compact rows when unframed', () => {
 		const { container } = render( <ImpactTable baseline={ [ row() ] } segmentGroups={ [] } currency={ CURRENCY } framed={ false } /> );
 		expect( container.querySelector( '.newspack-dataviews' ) ).toBeNull();
+		expect( container.querySelector( '.has-compact-density' ) ).not.toBeNull();
 	} );
 
 	it( 'offers no way to hide or move a column, but keeps sorting', async () => {

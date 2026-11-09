@@ -19,8 +19,7 @@ import {
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
 // The unframed table stays on core DataViews: outside a card, the Newspack wrapper
-// takes the page bleed (with-wizard-screen/style.scss), which hangs this embedded
-// table past the form column.
+// would give the catalog modal's table the 48px list gutter.
 import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Field, View } from '@wordpress/dataviews';
 
@@ -161,18 +160,15 @@ export default function ImpactTable( {
 		page: 1,
 		search: '',
 		filters: [],
-		layout: { enableMoving: false },
+		// The catalog-wide table in the modal holds every product, so it keeps compact rows.
+		layout: { enableMoving: false, ...( framed ? {} : { density: 'compact' } ) },
 		titleField: 'product',
 		fields: fieldIds,
 	} ) );
 
 	// perPage and the segment columns follow the data; in view state, an effect
 	// would land them a paint late.
-	// The catalog-wide table in the modal holds every product, so it keeps compact rows.
-	const tableView = useMemo(
-		() => ( { ...view, perPage, fields: fieldIds, layout: { ...view.layout, density: framed ? 'balanced' : 'compact' } } ) as View,
-		[ view, perPage, fieldIds, framed ]
-	);
+	const tableView = useMemo( () => ( { ...view, perPage, fields: fieldIds } ), [ view, perPage, fieldIds ] );
 
 	const { data: sorted, paginationInfo } = useMemo( () => filterSortAndPaginate( baseline, tableView, fields ), [ baseline, tableView, fields ] );
 
@@ -208,7 +204,7 @@ export default function ImpactTable( {
 	const table = (
 		<div
 			id={ tableId }
-			className="newspack-pricing-rules__impact-table"
+			className={ `newspack-pricing-rules__impact-table${ framed ? '' : ' newspack-pricing-rules__impact-table--unframed' }` }
 			role="region"
 			aria-label={ __( 'Resulting prices by product and reader segment', 'newspack-plugin' ) }
 		>

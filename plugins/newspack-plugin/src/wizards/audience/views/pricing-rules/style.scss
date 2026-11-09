@@ -83,7 +83,7 @@
 		width: 100%;
 	}
 
-	&__impact-table:not(:has(.newspack-dataviews)) {
+	&__impact-table--unframed {
 		.dataviews-view-table tr {
 			th:first-child,
 			td:first-child {
