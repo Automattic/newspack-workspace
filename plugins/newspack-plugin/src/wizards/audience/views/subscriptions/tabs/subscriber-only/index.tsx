@@ -20,13 +20,12 @@ import { __experimentalHStack as HStack, CheckboxControl } from '@wordpress/comp
 /**
  * Internal dependencies.
  */
-import { Button, CellList, DataViews, Modal, Notice, StatusBadge, Waiting } from '../../../../../../../packages/components/src';
+import { Button, CellList, DataViews, formatSiteDate, Modal, Notice, StatusBadge, Waiting } from '../../../../../../../packages/components/src';
 import EmptyState from '../../../../../../../packages/components/src/empty-state';
 import type { Action, Field, View } from '../../../../../../../packages/components/src/dataviews';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../../packages/components/src/wizard/store';
 import Router from '../../../../../../../packages/components/src/proxied-imports/router';
 import { formatCount } from '../../../../../../../packages/components/src/breadcrumbs/format-count';
-import { fmtDate } from '../../../../../subscribers/format';
 import { registerTab } from '../registry';
 import { ALL_SUBSCRIPTIONS_FILTER_VALUE, allSubscriptionsLabel } from '../../constants';
 import { useRestrictions } from './use-restrictions';
@@ -163,7 +162,7 @@ function SubscriberOnlyProducts() {
 				label: __( 'Created', 'newspack-plugin' ),
 				getValue: ( { item }: { item: Restriction } ) => item.created_at,
 				render: ( { item }: { item: Restriction } ) =>
-					item.created_at ? <span className="newspack-dataviews__date">{ fmtDate( item.created_at ) }</span> : '',
+					item.created_at ? <span className="newspack-dataviews__date">{ formatSiteDate( item.created_at ) }</span> : '',
 				enableSorting: true,
 			},
 		],

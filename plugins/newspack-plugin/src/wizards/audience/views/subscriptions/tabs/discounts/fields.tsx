@@ -17,8 +17,7 @@ import type { Field } from '@wordpress/dataviews';
  */
 import NamesSummary from '../../../../components/names-summary';
 import ScopeSummary from '../../../../components/scope-summary';
-import { fmtDate } from '../../../../../subscribers/format';
-import { StatusBadge } from '../../../../../../../packages/components/src';
+import { formatSiteDate, StatusBadge } from '../../../../../../../packages/components/src';
 import { ALL_SUBSCRIPTIONS_FILTER_VALUE, allSubscriptionsLabel } from '../../constants';
 import { discountLabel, subscriptionNames, subscriptionsSummary, targetingLabel } from './discount';
 import type { DiscountCurrency, DiscountRule } from './types';
@@ -121,7 +120,8 @@ export function discountFields(
 			id: 'created_at',
 			label: __( 'Created', 'newspack-plugin' ),
 			getValue: ( { item } ) => item.created_at,
-			render: ( { item } ) => ( item.created_at ? <span className="newspack-dataviews__date">{ fmtDate( item.created_at ) }</span> : '' ),
+			render: ( { item } ) =>
+				item.created_at ? <span className="newspack-dataviews__date">{ formatSiteDate( item.created_at ) }</span> : '',
 		},
 	];
 }
