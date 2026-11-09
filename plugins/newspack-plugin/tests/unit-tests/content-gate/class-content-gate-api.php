@@ -504,6 +504,37 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Sanitization runs before the route's permission check, so a caller who can't
+	 * manage gates must not learn from an error whether a taxonomy slug is registered.
+	 */
+	public function test_unreadable_content_rule_error_is_hidden_from_unauthorized_caller() {
+		$payload = [
+			'status'        => 'publish',
+			'content_rules' => [
+				[
+					'slug'  => 'not_a_taxonomy',
+					'value' => [ '1' ],
+				],
+			],
+		];
+
+		wp_set_current_user( 0 );
+		$anonymous = Content_Gate_API::sanitize_gate( $payload );
+		$this->assertIsArray( $anonymous );
+		$this->assertArrayNotHasKey( 'content_rules', $anonymous );
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'subscriber' ] ) );
+		$subscriber = Content_Gate_API::sanitize_gate( $payload );
+		$this->assertIsArray( $subscriber );
+		$this->assertArrayNotHasKey( 'content_rules', $subscriber );
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		$admin = Content_Gate_API::sanitize_gate( $payload );
+		$this->assertWPError( $admin );
+		$this->assertStringContainsString( 'not_a_taxonomy', $admin->get_error_message() );
+	}
+
+	/**
 	 * Create a published gate holding an institution rule whose stored value is a
 	 * legacy free-text string, as a site that saved one before the value shape was
 	 * enforced still holds today.

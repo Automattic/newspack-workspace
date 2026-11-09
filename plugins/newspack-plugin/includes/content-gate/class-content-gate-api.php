@@ -201,6 +201,11 @@ class Content_Gate_API {
 			// unreadable rule can still be turned off. Any other save carrying one fails.
 			if ( ! is_wp_error( $sanitized_content_rules ) ) {
 				$sanitized['content_rules'] = $sanitized_content_rules;
+			} elseif ( ! self::caller_can_manage_gates() ) {
+				// Sanitization runs ahead of the route's `permission_callback`, and the error
+				// names a slug, which would tell an unauthorized caller whether a taxonomy is
+				// registered. Leave the stored rules alone; the request fails on permissions.
+				unset( $sanitized['content_rules'] );
 			} elseif ( 'publish' === ( $gate['status'] ?? 'publish' ) || ! self::content_rules_are_unchanged( $gate['content_rules'], $gate_id ) ) {
 				return $sanitized_content_rules;
 			}
