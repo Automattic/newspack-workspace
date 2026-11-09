@@ -240,10 +240,11 @@ describe( 'the members table', () => {
 		expect( mockPush ).toHaveBeenCalledWith( `/subscribers/2?from=${ encodeURIComponent( '#/groups/7' ) }` );
 	} );
 
-	it( 'shows the members as a compact table in a card', async () => {
+	it( 'shows the members as a table in a card, at the default density', async () => {
 		await renderDetail( group() );
 
 		expect( screen.getByRole( 'heading', { level: 2, name: /Members/ } ) ).toBeTruthy();
-		expect( document.querySelector( '.newspack-table-card .newspack-dataviews--in-card .has-compact-density' ) ).not.toBeNull();
+		expect( document.querySelector( '.newspack-table-card .newspack-dataviews--in-card .dataviews-view-table' ) ).not.toBeNull();
+		expect( document.querySelector( '.newspack-dataviews--in-card .has-compact-density' ) ).toBeNull();
 	} );
 } );

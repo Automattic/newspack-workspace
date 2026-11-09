@@ -42,10 +42,11 @@ import { STATUS_INDICATORS, STATUS_LABELS, displayStatuses, statusRank } from '.
 
 // A subscriber's group memberships, in the shape the column helpers expect
 // ([{ group, role }]). The endpoint embeds them flat on the item as
-// item.groups = [{ id, plan, status, role, editUrl, isComplimentary }].
+// item.groups = [{ id, plan, planName, status, role, editUrl, isComplimentary }]:
+// `plan` is the group's own name, `planName` the plan its members subscribe to.
 const groupEntriesOf = item =>
 	( item.groups || [] ).map( g => ( {
-		group: { plan: g.plan, status: g.status, editUrl: g.editUrl, isComplimentary: !! g.isComplimentary },
+		group: { plan: g.plan, planName: g.planName || g.plan, status: g.status, editUrl: g.editUrl, isComplimentary: !! g.isComplimentary },
 		role: g.role,
 	} ) );
 
@@ -55,7 +56,8 @@ const groupEntriesOf = item =>
 // `groupEntries` is the subscriber's [{ group, role }] memberships.
 const planEntries = ( item, groupEntries ) => {
 	const cohorts = ( groupEntries || [] ).map( ( { group, role } ) => ( {
-		plan: group.plan,
+		plan: group.planName,
+		planName: group.planName,
 		status: group.status,
 		editUrl: group.editUrl,
 		isComplimentary: group.isComplimentary,

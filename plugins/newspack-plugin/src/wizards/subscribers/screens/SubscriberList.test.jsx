@@ -536,6 +536,21 @@ describe( 'the network subscription rows', () => {
 		expect( container.textContent ).toBe( 'All-Access Premium\u00a0(Riverbend Daily)' );
 	} );
 
+	it( 'names a group membership by the plan it is sold on, not the group', async () => {
+		await mount();
+		const item = {
+			...subscriber( 1 ),
+			groups: [
+				{ id: 5, plan: 'Acme Team', planName: 'Team Plan', status: 'active', role: 'member', editUrl: '/edit/5', isComplimentary: false },
+			],
+		};
+		const { container } = render( field( 'plans' ).render( { item } ) );
+
+		expect( container.querySelector( 'a' ).textContent ).toBe( 'Team Plan' );
+		expect( container.textContent ).toBe( 'Team Plan\u00a0(Group)' );
+		expect( field( 'plans' ).getValue( { item } ) ).toEqual( [ 'Team Plan' ] );
+	} );
+
 	it( 'shows two subscriptions and toggles the rest', async () => {
 		await mount();
 		const item = {

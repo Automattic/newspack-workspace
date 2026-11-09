@@ -501,18 +501,16 @@ class Subscribers_Wizard extends Wizard {
 	 * nobody on page 1 holds would simply not be offered. This endpoint supplies
 	 * the whole set instead.
 	 *
-	 * Names, not IDs: the `plan` filter on /subscribers matches display names,
-	 * because a group's plan is its configured group name while an individual plan
-	 * is its product's name. The two are only comparable as strings. Names are
-	 * deduplicated, so two groups sharing a name are one option matching the
-	 * members of both.
+	 * Names, not IDs: the `plan` filter on /subscribers matches display names, the
+	 * names the Subscription column shows. Group and individual plans alike show
+	 * their product's name (see group_plan_name()). Names are deduplicated, so the
+	 * groups sold on one product are one option matching the members of all of them.
 	 *
 	 * The contract every option has to meet — pinned by a round-trip test — is that
 	 * filtering on it returns the readers whose Subscription column shows it. It is
-	 * what excludes a group's own product from the options (see is_group_product())
-	 * and a variable subscription's parent (see subscription_product_names()).
+	 * what excludes a variable subscription's parent (see subscription_product_names()).
 	 *
-	 * Scope: the plans the site currently offers, plus every configured group name,
+	 * Scope: the plans the site currently offers, plus the plan of every group,
 	 * plus the plans readers hold on other network sites. Those come from the
 	 * network index (see network_subscription_index()), which every request to
 	 * this endpoint reads again. A reader can still hold a plan that isn't listed —
@@ -535,7 +533,7 @@ class Subscribers_Wizard extends Wizard {
 		$names = [];
 
 		foreach ( $this->get_group_subscriptions() as $group ) {
-			$names[] = (string) $group['settings']['name'];
+			$names[] = $this->group_plan_name( $group['subscription'], $group['settings'] );
 		}
 		foreach ( $this->subscription_product_names() as $product_name ) {
 			$names[] = $product_name;
@@ -567,8 +565,7 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
-	 * The names of the site's published, non-group subscription products, variations
-	 * included.
+	 * The names of the site's published subscription products, variations included.
 	 *
 	 * Variations are listed alongside their parent because a subscription bought on
 	 * a variation resolves to that variation (see individual_plan_name(), via
@@ -578,8 +575,6 @@ class Subscribers_Wizard extends Wizard {
 	 * Restricted to published products to match the filter's other half:
 	 * product_ids_for_names() resolves a name back to `publish` products only, so an
 	 * unpublished product's name would be an option that matches nobody.
-	 *
-	 * Group products are dropped: see is_group_product().
 	 *
 	 * @return string[] Product names, in no particular order and possibly duplicated.
 	 */
@@ -608,7 +603,7 @@ class Subscribers_Wizard extends Wizard {
 			// _product_id) and return rows whose Subscription column shows something
 			// else — the round-trip this endpoint promises. Only its variations are
 			// listed, below.
-			if ( ! $product->is_type( 'variable-subscription' ) && ! $this->is_group_product( $product ) ) {
+			if ( ! $product->is_type( 'variable-subscription' ) ) {
 				$names[] = (string) $product->get_name();
 			}
 			if ( ! $product->is_type( 'variable-subscription' ) ) {
@@ -623,7 +618,7 @@ class Subscribers_Wizard extends Wizard {
 			// endpoint exists to avoid.
 			foreach ( $product->get_children() as $variation_id ) {
 				$variation = \wc_get_product( $variation_id );
-				if ( ! $variation || $this->is_group_product( $variation ) ) {
+				if ( ! $variation ) {
 					continue;
 				}
 				// get_children() returns private variations as well as published ones,
@@ -642,31 +637,19 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
-	 * Whether a product is sold as a group subscription.
+	 * The plan name a group's members see in the Subscription column: the product
+	 * the group is sold on, which is what they subscribe to. The group's own name
+	 * belongs to the group screens and the Group role column. Falls back to the
+	 * group's name when the product is gone.
 	 *
-	 * Such a product must not become a filter option. Every member of a group
-	 * displays the group's own name in the Subscription column, so filtering on the
-	 * product behind it would return only the owners — the customers of record on
-	 * those subscriptions — while every other member of every group on that product
-	 * stayed hidden, and not one returned row would show the name that was filtered
-	 * on. The group names themselves are listed instead, which is what members see.
+	 * @param \WC_Subscription $subscription The group subscription.
+	 * @param array            $settings     The group's resolved settings.
 	 *
-	 * Read from the product's own settings, which is where group enablement lives:
-	 * a variation carries its own setting and does not inherit the parent's (see
-	 * Group_Subscription_Settings::get_group_subscription_ids), so parents and
-	 * variations are both checked individually. A product that isn't itself a group
-	 * product stays listed even if one subscription on it was flagged as a group by
-	 * hand, since the product is still sold — and displayed — as an individual plan.
-	 *
-	 * @param \WC_Product $product The product (or variation).
-	 *
-	 * @return bool
+	 * @return string
 	 */
-	private function is_group_product( \WC_Product $product ): bool {
-		if ( ! class_exists( '\Newspack\Group_Subscription_Settings' ) ) {
-			return false;
-		}
-		return ! empty( Group_Subscription_Settings::get_product_settings( $product )['enabled'] );
+	private function group_plan_name( $subscription, array $settings ): string {
+		$product_name = trim( $this->individual_plan_name( $subscription ) );
+		return '' !== $product_name ? $product_name : trim( (string) $settings['name'] );
 	}
 
 	/**
@@ -2146,6 +2129,7 @@ class Subscribers_Wizard extends Wizard {
 				$entry        = [
 					'id'              => (int) $subscription->get_id(),
 					'plan'            => (string) $group['settings']['name'],
+					'planName'        => $this->group_plan_name( $subscription, $group['settings'] ),
 					'status'          => self::map_subscription_status( $subscription->get_status() ),
 					'editUrl'         => $this->subscription_edit_url( $subscription ),
 					'isComplimentary' => Complimentary_Access::is_complimentary_order( $subscription ),
@@ -2637,12 +2621,11 @@ class Subscribers_Wizard extends Wizard {
 		$ids           = [];
 		$cancelled_ids = [];
 
-		// Group plans, matched by the group's configured name. Trimmed on both sides
-		// because api_get_plans() offers the trimmed name: a buyer who typed
-		// "Acme Team " would otherwise get an option matching nobody. Members inherit
-		// their group's status, so a cancelled group is cancelled for every one of them.
+		// Group plans, matched by the name their members see (group_plan_name()).
+		// Members inherit their group's status, so a cancelled group is cancelled for
+		// every one of them.
 		foreach ( $this->get_group_subscriptions() as $group ) {
-			if ( ! in_array( trim( (string) $group['settings']['name'] ), $plan_names, true ) ) {
+			if ( ! in_array( $this->group_plan_name( $group['subscription'], $group['settings'] ), $plan_names, true ) ) {
 				continue;
 			}
 			$members = array_map( 'intval', Group_Subscription::get_all_members( $group['subscription'] ) );
@@ -2840,31 +2823,7 @@ class Subscribers_Wizard extends Wizard {
 				$ids[] = (int) $post_id;
 			}
 		}
-		$ids = array_values( array_unique( $ids ) );
-
-		// api_get_plans() excludes group products from the options (see
-		// is_group_product()), so resolving one here would make the two halves
-		// disagree. They collide by default rather than rarely: an unnamed group falls
-		// back to its product's name
-		// (Group_Subscription_Settings::get_subscription_settings()), so a product
-		// "Team Plan" with one unnamed group and one renamed group would match the
-		// renamed group's owner when filtering on "Team Plan".
-		if ( ! function_exists( 'wc_get_product' ) ) {
-			return $ids;
-		}
-		return array_values(
-			array_filter(
-				$ids,
-				function ( $product_id ) {
-					// Only a confirmed group product is dropped. A product WooCommerce
-					// cannot hydrate is kept: the name matched a real published product
-					// post, and dropping what cannot be classified would silently narrow
-					// the filter instead of widening it.
-					$product = \wc_get_product( $product_id );
-					return ! $product || ! $this->is_group_product( $product );
-				}
-			)
-		);
+		return array_values( array_unique( $ids ) );
 	}
 
 	/**
