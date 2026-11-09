@@ -73,7 +73,8 @@ export const getAllStories = state => Object.values( state.stories );
 
 export const getStories = createSelector(
 	state => {
-		const { search, view, fields } = state;
+		const { search, fields } = state;
+		const view = getView( state );
 
 		let stories;
 
@@ -92,7 +93,7 @@ export const getStories = createSelector(
 		}
 		return stories;
 	},
-	state => [ state.search.stories, state.stories, state.view.search, state.view.filters, state.view.sort ]
+	state => [ state.search.stories, state.stories, state.fields, state.view ]
 );
 
 export const getStory = ( state, id ) => state.stories[ id ];
