@@ -120,7 +120,9 @@ describe( 'DataViews', () => {
 	describe( 'countLabel', () => {
 		const bulkActions = [ { id: 'remove', label: 'Remove', supportsBulk: true, callback: () => {} } ];
 		const rows = count => Array.from( { length: count }, ( _, index ) => ( { id: index + 1, title: `Row ${ index + 1 }` } ) );
-		const memberLabel = ( count, formatted ) => sprintf( _n( '%s member', '%s members', count ), formatted );
+		const memberLabel = ( count, formatted ) =>
+			// translators: %s is the number of members.
+			sprintf( _n( '%s member', '%s members', count ), formatted );
 		const footerCount = container => container.querySelector( '.dataviews-footer__item-count' )?.textContent;
 
 		it( 'names a single item in the singular', () => {

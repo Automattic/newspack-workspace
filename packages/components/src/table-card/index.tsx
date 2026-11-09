@@ -45,7 +45,18 @@ interface TableCardProps {
 /** `0` is a renderable slot value; the falsy leftovers of `cond && <X />` are not. */
 const isRenderable = ( node: React.ReactNode ) => node !== undefined && node !== null && node !== '' && typeof node !== 'boolean';
 
-export default function TableCard( { title, titleId, heading = 3, actions, description, before, after, separator = true, className, children }: TableCardProps ) {
+export default function TableCard( {
+	title,
+	titleId,
+	heading = 3,
+	actions,
+	description,
+	before,
+	after,
+	separator = true,
+	className,
+	children,
+}: TableCardProps ) {
 	const TitleTag = `h${ heading }` as const;
 	const hasTitle = isRenderable( title );
 	const hasActions = isRenderable( actions );
@@ -63,7 +74,10 @@ export default function TableCard( { title, titleId, heading = 3, actions, descr
 		<TableCardContext.Provider value={ true }>
 			<Card.Root className={ classnames( 'newspack-table-card', { 'newspack-table-card--separated': hasHeader && separator }, className ) }>
 				{ hasHeader && (
-					<Card.Header className="newspack-table-card__header" render={ hasActions || hasDescription ? <Stack { ...rowProps } /> : undefined }>
+					<Card.Header
+						className="newspack-table-card__header"
+						render={ hasActions || hasDescription ? <Stack { ...rowProps } /> : undefined }
+					>
 						{ hasDescription ? (
 							<Stack direction="column" gap="xs">
 								{ titleNode }

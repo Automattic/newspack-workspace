@@ -24,10 +24,7 @@ const percent = ( share: number ) => `${ Number( share.toFixed( 2 ) ) }%`;
  * @return The other columns, the fitted ones, the title's share (0 when it
  *         isn't shown), and the share each other column gets.
  */
-function getShares(
-	view: View,
-	fitColumns: string[] = []
-): { columns: string[]; fitted: string[]; titleShare: number; columnShare: number } {
+function getShares( view: View, fitColumns: string[] = [] ): { columns: string[]; fitted: string[]; titleShare: number; columnShare: number } {
 	const hasTitle = Boolean( view.titleField ) && view.showTitle !== false;
 	const shown = ( view.fields ?? [] ).filter( id => id !== view.titleField );
 	const fitted = shown.filter( id => fitColumns.includes( id ) );
