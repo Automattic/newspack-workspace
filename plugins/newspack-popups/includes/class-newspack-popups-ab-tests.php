@@ -1538,12 +1538,6 @@ final class Newspack_Popups_AB_Tests {
 				return $renamed;
 			}
 			$test_id = $existing;
-			// Readers saw A alone while the test had no B, so the new B's split
-			// is a new start; publishing it records one.
-			$term = get_term_by( 'slug', $test_id, self::TAXONOMY );
-			if ( $term ) {
-				delete_term_meta( $term->term_id, self::TERM_META_STARTED );
-			}
 		} else {
 			$test_id = self::claim_new_test( $prompt->ID, $name );
 			if ( is_wp_error( $test_id ) ) {
@@ -1560,6 +1554,14 @@ final class Newspack_Popups_AB_Tests {
 				self::delete_test_term( $test_id );
 			}
 			return new WP_Error( 'newspack_popups_ab_version_b', __( 'Could not create version B. Try again.', 'newspack-popups' ), [ 'status' => 500 ] );
+		}
+		if ( $resuming ) {
+			// Readers saw A alone while the test had no B, so the new B's split
+			// is a new start; publishing it records one.
+			$term = get_term_by( 'slug', $test_id, self::TAXONOMY );
+			if ( $term ) {
+				delete_term_meta( $term->term_id, self::TERM_META_STARTED );
+			}
 		}
 		// The registered sanitizer would rewrite a legacy ID (`footer_test` to
 		// `footer-test`) and put B in a different test, so this copy skips it.
