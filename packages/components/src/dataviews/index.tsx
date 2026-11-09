@@ -55,12 +55,6 @@ type DataViewsProps< Item > = React.ComponentProps< typeof BaseDataViews< Item >
 	 */
 	countLabel?: CountLabel;
 	/**
-	 * Lay the list out as inside a `TableCard`: no page gutter and no negative
-	 * margins. For a table in a container that brings its own padding, such as
-	 * a modal.
-	 */
-	embedded?: boolean;
-	/**
 	 * Field ids whose table columns shrink to their content, such as a status
 	 * badge or a count, instead of taking an even share of the width. The column
 	 * is as wide as its widest cell or its header label, whichever is wider.
@@ -116,7 +110,6 @@ function DataViews( {
 	view,
 	onChangeView,
 	countLabel,
-	embedded = false,
 	fitColumns,
 	...props
 }: DataViewsProps< unknown > ) {
@@ -131,7 +124,7 @@ function DataViews( {
 			} ),
 		[ fields, inlineFilters, view.titleField ]
 	);
-	const isInCard = useContext( TableCardContext ) || embedded;
+	const isInCard = useContext( TableCardContext );
 	const titledView = useMemo( () => ( view.titleField && view.showTitle === false ? { ...view, showTitle: true } : view ), [ view ] );
 	const evenView = useMemo( () => evenColumns( titledView, fitColumns ), [ titledView, fitColumns ] );
 	const columnWidths = useMemo( () => {

@@ -23,14 +23,6 @@ Inside a `TableCard`, the list:
 - keeps the card's 24px side padding instead of the page's 48px gutter, so the first column lines up with the card title
 - drops the negative margins a list gets on a page that isn't full width
 
-A table that sits in a container with its own padding, such as a modal, takes `embedded`. It lays out as inside a `TableCard`, with no page gutter and no negative margins, so it keeps the wrapper's column widths without being pushed in from the container's edges:
-
-```jsx
-<Modal title={ __( 'Affected Products', 'newspack-plugin' ) } size="large">
-	<DataViews embedded { ...props } />
-</Modal>
-```
-
 Rows keep the default density wherever the list sits. Set `layout.density: 'compact'` on the view only when the list holds a lot of data, such as a table of every product in the catalog.
 
 ```jsx
