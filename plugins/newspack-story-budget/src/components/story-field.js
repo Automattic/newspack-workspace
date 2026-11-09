@@ -84,7 +84,11 @@ export default ( {
 
 	const renderValue = text => {
 		if ( field.slug === 'status' ) {
-			return <StatusIndicator { ...getStatusIndicatorProps( value ) }>{ text }</StatusIndicator>;
+			return (
+				<StatusIndicator { ...getStatusIndicatorProps( field.options?.find( option => option.value === value )?.icon ) }>
+					{ text }
+				</StatusIndicator>
+			);
 		}
 		const wpStatusProps = field.slug === 'wp_status' && getWpStatusIndicatorProps( value );
 		return wpStatusProps ? <StatusIndicator { ...wpStatusProps }>{ text }</StatusIndicator> : text;

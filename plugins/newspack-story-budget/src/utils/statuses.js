@@ -4,31 +4,33 @@
 import { check, search } from '@wordpress/icons';
 
 /**
- * How each default story status draws in a `StatusIndicator`.
+ * How each glyph name a story status can ask for draws in a `StatusIndicator`.
  *
- * Fact-checking and Approved have no fitting name in the shared vocabulary,
- * so they pass their own glyph; the check circle stays with Published.
+ * Search and check have no name in the shared vocabulary, so they pass their
+ * own glyph. The names match `Statuses::ICONS` in PHP.
  */
 const STORY_STATUS_INDICATORS = {
-	writing: { status: 'draft' },
-	editing: { status: 'pending' },
-	factcheck: { icon: search },
-	approved: { icon: check },
-	published: { status: 'active' },
+	draft: { status: 'draft' },
+	pending: { status: 'pending' },
+	scheduled: { status: 'scheduled' },
+	search: { icon: search },
+	check: { icon: check },
+	active: { status: 'active' },
 };
 
-const CUSTOM_STATUS_INDICATOR = { status: 'progress' };
+const NEUTRAL_STATUS_INDICATOR = { status: 'pending', tone: 'neutral' };
 
 /**
  * The `StatusIndicator` props for a story status.
  *
- * Statuses are filterable through `newspack_story_budget_statuses`, so a slug
- * outside the defaults draws as a stage in progress.
+ * Statuses are filterable through `newspack_story_budget_statuses`, and each
+ * names its glyph with `icon`. A status without one, or with a name outside
+ * the list, draws a neutral glyph that implies no state.
  *
- * @param {string} slug The story status slug.
+ * @param {string} icon The glyph name from the status.
  * @return {Object} `status` or `icon` props for `StatusIndicator`.
  */
-export const getStatusIndicatorProps = slug => STORY_STATUS_INDICATORS[ slug ] || CUSTOM_STATUS_INDICATOR;
+export const getStatusIndicatorProps = icon => STORY_STATUS_INDICATORS[ icon ] || NEUTRAL_STATUS_INDICATOR;
 
 /**
  * How each WordPress post status a story can have draws in a `StatusIndicator`.
