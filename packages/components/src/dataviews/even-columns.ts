@@ -43,9 +43,9 @@ function getShares(
  * Without it the browser hands all spare width to the title column, so a short
  * title still fills half the table. DataViews never sizes the title column, so a
  * caller that renders DataViews itself must also apply `titleColumnWidth` and
- * `columnShareWidth`, as the shared DataViews component does. The widths follow whichever columns the
- * viewer has switched on, so they are worked out on every render and never
- * stored with the view.
+ * `columnShareWidth`, as the shared DataViews component does. The widths follow
+ * whichever columns the viewer has switched on, so they are worked out on every
+ * render and never stored with the view.
  *
  * Columns named in `fitColumns`, such as a status or a count, shrink to their
  * content and take no share, so the other columns split the space they free.
