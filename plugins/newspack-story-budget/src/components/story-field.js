@@ -9,6 +9,7 @@ import { __experimentalInspectorPopoverHeader as InspectorPopoverHeader } from '
 import { useSelect, useDispatch } from '@wordpress/data';
 import { useState, useMemo } from '@wordpress/element';
 import classnames from 'classnames';
+import { StatusIndicator } from 'newspack-components';
 
 /**
  * Internal dependencies.
@@ -16,6 +17,7 @@ import classnames from 'classnames';
 import { NAMESPACE as storeNamespace } from '../store/constants';
 import StoryFieldControl from './story-field-control';
 import utils from '../utils';
+import { getStatusIndicatorProps } from '../utils/statuses';
 import { useStory, useStoryField } from '../hooks';
 
 const DEFAULT_POPOVER_PROPS = {
@@ -80,6 +82,9 @@ export default ( {
 		return null;
 	}
 
+	const renderValue = text =>
+		field.slug === 'status' ? <StatusIndicator { ...getStatusIndicatorProps( value ) }>{ text }</StatusIndicator> : text;
+
 	const fieldClassName = classnames( 'newspack-story-budget__field', {
 		'newspack-story-budget__field--date': [ 'date', 'datetime' ].includes( field.type ),
 	} );
@@ -92,7 +97,7 @@ export default ( {
 						<span className="newspack-story-budget__field__value">{ collapsedValue || displayValue }</span>
 					</Tooltip>
 				) : (
-					<span className="newspack-story-budget__field__value">{ displayValue !== null ? displayValue : emptyValue }</span>
+					<span className="newspack-story-budget__field__value">{ displayValue !== null ? renderValue( displayValue ) : emptyValue }</span>
 				) }
 			</div>
 		);
@@ -121,7 +126,7 @@ export default ( {
 						{ displayValue === null ? (
 							<span className="newspack-story-budget__field__empty-value">{ __( 'Click to set', 'newspack-story-budget' ) }</span>
 						) : (
-							collapsedValue || displayValue
+							collapsedValue || renderValue( displayValue )
 						) }
 					</Button>
 				) }
