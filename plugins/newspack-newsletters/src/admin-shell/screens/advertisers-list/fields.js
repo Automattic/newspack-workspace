@@ -27,13 +27,6 @@ export function getFields( { onEdit } = {} ) {
 					event.stopPropagation();
 					onEdit( item );
 				} }
-				style={ {
-					background: 'none',
-					border: 'none',
-					cursor: 'pointer',
-					padding: 0,
-					textAlign: 'left',
-				} }
 			>
 				<strong>{ label }</strong>
 			</button>

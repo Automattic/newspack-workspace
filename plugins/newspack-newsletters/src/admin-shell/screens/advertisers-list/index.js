@@ -41,6 +41,8 @@ const DEFAULT_VIEW = {
 
 const DEFAULT_LAYOUTS = { table: {} };
 
+const FIT_COLUMNS = [ 'count' ];
+
 const PERSIST_OPTIONS = {
 	fieldIds: FIELD_IDS,
 	layoutTypes: Object.keys( DEFAULT_LAYOUTS ),
@@ -134,6 +136,7 @@ export default function AdvertisersListScreen() {
 						)
 					}
 					className="newspack-newsletters-list newspack-newsletters-advertisers-list"
+					fitColumns={ FIT_COLUMNS }
 					data={ data }
 					fields={ fields }
 					view={ view }

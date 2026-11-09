@@ -202,6 +202,17 @@ body.newspack-newsletters-admin-screen .dataviews-view-table a:not(.newspack-new
 }
 
 .newspack-newsletters-list {
+	button#{&}__title {
+		background: none;
+		border: 0;
+		color: inherit;
+		cursor: pointer;
+		font: inherit;
+		margin: 0;
+		padding: 0;
+		text-align: left;
+	}
+
 	&__status-tip {
 		background: none;
 		border: 0;
