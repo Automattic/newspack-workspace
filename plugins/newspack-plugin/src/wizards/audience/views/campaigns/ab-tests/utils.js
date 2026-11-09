@@ -50,8 +50,9 @@ export const getTestStatus = test => {
 const getSortRank = test => {
 	const status = getTestStatus( test );
 	const rank = STATUS_ORDER.indexOf( status ) * 2;
-	// The list's cached results, so the order is right on first render and
-	// cards never move once their own results load.
+	// The list's cached results rather than the card's own, so cards never
+	// move once their results load. A cache miss ranks a test as plain
+	// running until a later load.
 	return 'running' === status && getRecommendation( test, test.cached_stats ).winner ? rank - 1 : rank;
 };
 

@@ -103,16 +103,17 @@ final class Newspack_Popups_AB_Dashboard {
 	public static function get_list_data() {
 		$provider  = self::get_provider();
 		$available = self::availability( $provider );
+		$slug      = self::provider_slug( $provider );
 		$tests     = Newspack_Popups_AB_Tests::get_tests();
 		foreach ( $tests as $index => $test ) {
-			$tests[ $index ]['cached_stats'] = true === $available ? self::get_cached_stats( $test, $provider ) : null;
+			$tests[ $index ]['cached_stats'] = true === $available ? self::get_cached_stats( $test, (string) $slug ) : null;
 		}
 		return [
 			'tests'      => $tests,
 			'prompts'    => Newspack_Popups_AB_Tests::get_prompt_start_states(),
 			'provider'   => [
 				'available' => true === $available,
-				'slug'      => self::provider_slug( $provider ),
+				'slug'      => $slug,
 				'reason'    => is_wp_error( $available ) ? $available->get_error_message() : null,
 			],
 			'thresholds' => [
@@ -414,16 +415,16 @@ final class Newspack_Popups_AB_Dashboard {
 	 * without asking the provider. The list uses them only to sort, so a miss
 	 * costs a test its place among the tests ready to end, never a request.
 	 *
-	 * @param array                             $test     Test, from get_tests().
-	 * @param Newspack_Popups_AB_Stats_Provider $provider Provider.
+	 * @param array  $test Test, from get_tests().
+	 * @param string $slug Provider slug, as provider_slug() gives it.
 	 * @return array|null `variants`, `comparisons` and `flags` as get_stats() gives
 	 *                    them, or null for an ended or unstarted test or a miss.
 	 */
-	private static function get_cached_stats( $test, $provider ) {
+	private static function get_cached_stats( $test, $slug ) {
 		if ( 'ended' === ( $test['status'] ?? '' ) || null === self::get_window( $test ) ) {
 			return null;
 		}
-		$cached = self::read_cached_counts( self::cache_key( $test, (string) self::provider_slug( $provider ) ) );
+		$cached = self::read_cached_counts( self::cache_key( $test, $slug ) );
 		if ( ! $cached ) {
 			return null;
 		}
