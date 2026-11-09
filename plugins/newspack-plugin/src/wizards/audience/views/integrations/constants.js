@@ -7,7 +7,11 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { dateI18n, getSettings } from '@wordpress/date';
+
+/**
+ * Internal dependencies
+ */
+import { formatSiteDateTime } from '../../../../../packages/components/src/dataviews/format-date';
 
 export const API_BASE = '/newspack/v1/wizard/newspack-audience-integrations/settings';
 
@@ -51,6 +55,5 @@ export function formatTimestamp( gmt ) {
 	if ( ! gmt ) {
 		return '';
 	}
-	const dateFormat = getSettings().formats.datetime || 'F j, Y, g:i a';
-	return dateI18n( dateFormat, `${ gmt }+00:00` );
+	return formatSiteDateTime( `${ gmt }+00:00` );
 }
