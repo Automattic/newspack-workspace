@@ -26,7 +26,7 @@ Rows keep the default density wherever the list sits. Set `layout.density: 'comp
 
 ## Dates and times
 
-Every date or time in a list follows the site's Settings › General: its date format, time format and timezone. Format them with the helpers rather than `formats.datetime`, which core hard-codes as `F j, Y g:i a` whatever the site uses, or DataViews' built-in `date`/`datetime` field types, which format with it.
+Every date or time in a list follows the site's Settings › General: its date format, time format and timezone. Format them with the helpers rather than `formats.datetime`, which core hard-codes as `F j, Y g:i a` whatever the site uses, or DataViews' built-in `datetime` field type, which formats with it.
 
 ```jsx
 import { formatSiteDate, formatSiteDateTime, formatSiteTime } from 'newspack-components';
