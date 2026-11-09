@@ -49,6 +49,12 @@ type DataViewsProps< Item > = React.ComponentProps< typeof BaseDataViews< Item >
 	 * a modal.
 	 */
 	embedded?: boolean;
+	/**
+	 * Field ids whose table columns shrink to their content, such as a status
+	 * badge or a count, instead of taking an even share of the width. The column
+	 * is as wide as its widest cell or its header label, whichever is wider.
+	 */
+	fitColumns?: string[];
 };
 
 function ToolbarLayout( {
@@ -100,6 +106,7 @@ function DataViews( {
 	onChangeView,
 	countLabel,
 	embedded = false,
+	fitColumns,
 	...props
 }: DataViewsProps< unknown > ) {
 	// A row without its title can't be told apart from the next, so the title is
@@ -115,10 +122,10 @@ function DataViews( {
 	);
 	const isInCard = useContext( TableCardContext ) || embedded;
 	const titledView = useMemo( () => ( view.titleField && view.showTitle === false ? { ...view, showTitle: true } : view ), [ view ] );
-	const evenView = useMemo( () => evenColumns( titledView ), [ titledView ] );
+	const evenView = useMemo( () => evenColumns( titledView, fitColumns ), [ titledView, fitColumns ] );
 	const columnWidths = useMemo( () => {
 		const widths: Record< string, string > = {};
-		const titleWidth = titleColumnWidth( titledView );
+		const titleWidth = titleColumnWidth( titledView, fitColumns );
 		const columnWidth = columnShareWidth( titledView );
 		if ( titleWidth ) {
 			widths[ '--newspack-dataviews-title-width' ] = titleWidth;
@@ -127,7 +134,7 @@ function DataViews( {
 			widths[ '--newspack-dataviews-column-width' ] = columnWidth;
 		}
 		return Object.keys( widths ).length ? ( widths as React.CSSProperties ) : undefined;
-	}, [ titledView ] );
+	}, [ titledView, fitColumns ] );
 	const footer =
 		countLabel && ! evenView.infiniteScrollEnabled ? (
 			<CountFooter

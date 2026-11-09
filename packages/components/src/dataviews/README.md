@@ -39,6 +39,21 @@ Rows keep the default density wherever the list sits. Set `layout.density: 'comp
 </TableCard>
 ```
 
+## Column widths
+
+In a table, the title takes an even share of the width and never less than 30%, and every other visible column splits the rest evenly. A text cell can grow to a 30ch readable minimum before it wraps.
+
+A short column, such as a status badge or a count, doesn't need an even share. Name it in `fitColumns` and it shrinks to its content:
+
+```jsx
+<DataViews fitColumns={ [ 'status', 'active_subscriptions' ] } { ...props } />
+```
+
+- A fitted column is as wide as its widest cell or its header label, whichever is wider, plus the cell padding. The header label never wraps.
+- Fitted columns take no share and skip the 30ch minimum. The other columns split the space they free, and the title is still never narrower than any of them.
+- An id for a column the viewer has switched off is ignored.
+- Keep it for content with a known, short width. A column of free text stays on an even share.
+
 ## Naming the count
 
 DataViews' footer counts rows as "6 items". Give the list a `countLabel` so the count names what it holds: "6 members", or "10 of 1,200 subscribers" when the page shows only part of the list.

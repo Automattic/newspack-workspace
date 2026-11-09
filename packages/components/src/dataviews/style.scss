@@ -78,6 +78,14 @@
 		margin-bottom: var(--newspack-dataviews-stack-gap);
 	}
 
+	tbody td[style*="width: 1%"] > .dataviews-view-table__cell-content-wrapper {
+		min-width: 0;
+	}
+
+	thead th[style*="width: 1%"] {
+		white-space: nowrap;
+	}
+
 	tbody td > :has(> .dataviews-view-table__primary-column-content) {
 		min-width: max(calc(var(--newspack-dataviews-column-width, 0px) - 2 * var(--newspack-dataviews-cell-padding)), var(--newspack-dataviews-column-min-width));
 	}
