@@ -23,3 +23,29 @@ Rows keep the default density wherever the list sits. Set `layout.density: 'comp
 	<DataViews { ...props } />
 </TableCard>
 ```
+
+## Dates and times
+
+Every date or time in a list follows the site's Settings › General: its date format, time format and timezone. Format them with the helpers rather than `formats.datetime`, which core hard-codes as `F j, Y g:i a` whatever the site uses, or DataViews' built-in `date`/`datetime` field types, which format with it.
+
+```jsx
+import { formatSiteDate, formatSiteDateTime, formatSiteTime } from 'newspack-components';
+
+render: ( { item } ) => <span className="newspack-dataviews__date">{ formatSiteDateTime( item.created_at ) }</span>,
+```
+
+| Helper | Output |
+| --- | --- |
+| `formatSiteDate( value )` | The site's date format |
+| `formatSiteDateTime( value )` | The site's date format, then its time format |
+| `formatSiteTime( value )` | The site's time format |
+
+Each takes:
+
+- **A bare `YYYY-MM-DD` date.** Treated as a calendar day, so it shows the same day in every browser and timezone.
+- **An ISO 8601 string.** Respects its offset and shows the instant in the site's timezone. Append `Z` or `+00:00` to a GMT value that has none.
+- **A MySQL `YYYY-MM-DD HH:MM:SS` string without an offset.** Read as site time, like a post's `date`.
+- **A Unix timestamp in seconds**, as a number or a numeric string.
+- **A `Date`.**
+
+An empty or invalid value returns `''`. The time keeps AM/PM when the site's time format has it; never force a 24-hour format.
