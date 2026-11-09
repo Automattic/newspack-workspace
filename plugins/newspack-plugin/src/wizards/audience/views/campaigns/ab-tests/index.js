@@ -10,16 +10,14 @@ import { useEffect, useMemo, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { speak } from '@wordpress/a11y';
 import { Button, Notice } from '@wordpress/components';
-// Not the Newspack wrapper, which brings a table layout and a page bleed; this
-// tab lists cards, and uses DataViews only for its search and filter row.
-import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
+import { DataViews as BaseDataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 import { chartBar } from '@wordpress/icons';
 import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import { EmptyState, Waiting, withWizardScreen } from '../../../../../../packages/components/src';
+import { DataViews, EmptyState, Waiting, withWizardScreen } from '../../../../../../packages/components/src';
 import StartTestModal from './start-test-modal';
 import TestCard from './test-card';
 import { REST_BASE, STATUS_ORDER, getPickerPrompts, getStatusLabel, getTestStatus, openVersionB, sortTests } from './utils';
@@ -173,22 +171,24 @@ const ABTests = props => {
 	} else {
 		content = (
 			<>
-				<div className="newspack-ab-tests__toolbar">
-					<DataViews
-						data={ data.tests }
-						fields={ FIELDS }
-						view={ view }
-						onChangeView={ next => setView( withStatusFilter( next ) ) }
-						paginationInfo={ { totalItems: shownTests.length, totalPages: 1 } }
-						defaultLayouts={ { table: {} } }
-						getItemId={ item => item.test_id }
-					>
+				<DataViews
+					className="newspack-campaigns__toolbar"
+					data={ data.tests }
+					fields={ FIELDS }
+					view={ view }
+					onChangeView={ next => setView( withStatusFilter( next ) ) }
+					paginationInfo={ { totalItems: shownTests.length, totalPages: 1 } }
+					defaultLayouts={ { table: {} } }
+					getItemId={ item => item.test_id }
+				>
+					{ /* Search and filters only: this tab lists cards, not rows. */ }
+					<Stack direction="row" justify="space-between" align="flex-start" gap="xs" className="dataviews__view-actions">
 						<Stack direction="row" align="center" gap="sm" wrap="wrap" className="dataviews__search">
-							<DataViews.Search label={ __( 'Search tests', 'newspack-plugin' ) } />
-							<DataViews.Filters />
+							<BaseDataViews.Search label={ __( 'Search tests', 'newspack-plugin' ) } />
+							<BaseDataViews.Filters />
 						</Stack>
-					</DataViews>
-				</div>
+					</Stack>
+				</DataViews>
 				{ shownTests.length === 0 ? (
 					<p className="newspack-ab-tests__no-match">{ getNoMatchText( view ) }</p>
 				) : (
