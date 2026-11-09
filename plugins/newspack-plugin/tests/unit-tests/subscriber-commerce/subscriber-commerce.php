@@ -185,6 +185,26 @@ class Test_Subscriber_Commerce extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Category names come back as plain text, since WordPress stores "&" in a
+	 * term name as "&amp;" and the lists render the names as text.
+	 */
+	public function test_get_rule_names_decodes_category_names() {
+		if ( ! taxonomy_exists( 'product_cat' ) ) {
+			register_taxonomy( 'product_cat', 'product', [ 'hierarchical' => true ] );
+		}
+		$category_id = $this->factory->term->create(
+			[
+				'taxonomy' => 'product_cat',
+				'name'     => 'Arts & Culture',
+			]
+		);
+
+		$names = Subscriber_Commerce::get_rule_names( [ [ 'category_ids' => [ $category_id ] ] ] );
+
+		$this->assertSame( 'Arts & Culture', $names['categories'][ $category_id ] );
+	}
+
+	/**
 	 * A rule that says nothing about its audience means the subscriptions it
 	 * names, so every rule stored before the "all subscriptions" mode existed
 	 * keeps exactly the reach it had.

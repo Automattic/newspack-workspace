@@ -176,9 +176,18 @@ class Subscriber_Commerce {
 			$subscription_ids = array_merge( $subscription_ids, $rule['subscription_product_ids'] ?? [] );
 		}
 
-		$product_name = function ( $id ) {
+		$product_ids      = array_unique( array_map( 'absint', $product_ids ) );
+		$category_ids     = array_unique( array_map( 'absint', $category_ids ) );
+		$subscription_ids = array_unique( array_map( 'absint', $subscription_ids ) );
+		_prime_post_caches( array_merge( $product_ids, $subscription_ids ), true, true );
+		_prime_term_caches( $category_ids );
+
+		$decode       = function ( $name ) {
+			return html_entity_decode( (string) $name, ENT_QUOTES, get_bloginfo( 'charset' ) );
+		};
+		$product_name = function ( $id ) use ( $decode ) {
 			$product = function_exists( 'wc_get_product' ) ? wc_get_product( $id ) : null;
-			return $product ? $product->get_name() : '';
+			return $product ? $decode( $product->get_name() ) : '';
 		};
 
 		$names = [
@@ -186,22 +195,22 @@ class Subscriber_Commerce {
 			'categories'    => [],
 			'subscriptions' => [],
 		];
-		foreach ( array_unique( array_map( 'absint', $product_ids ) ) as $id ) {
+		foreach ( $product_ids as $id ) {
 			$name = $product_name( $id );
 			if ( '' !== $name ) {
 				$names['products'][ $id ] = $name;
 			}
 		}
-		foreach ( array_unique( array_map( 'absint', $subscription_ids ) ) as $id ) {
+		foreach ( $subscription_ids as $id ) {
 			$name = $product_name( $id );
 			if ( '' !== $name ) {
 				$names['subscriptions'][ $id ] = $name;
 			}
 		}
-		foreach ( array_unique( array_map( 'absint', $category_ids ) ) as $id ) {
+		foreach ( $category_ids as $id ) {
 			$term = get_term( $id, Product_Targeting::PRODUCT_CATEGORY_TAXONOMY );
 			if ( $term && ! is_wp_error( $term ) ) {
-				$names['categories'][ $id ] = $term->name;
+				$names['categories'][ $id ] = $decode( $term->name );
 			}
 		}
 		return $names;
