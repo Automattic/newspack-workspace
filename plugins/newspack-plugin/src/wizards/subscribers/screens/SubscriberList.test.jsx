@@ -572,6 +572,21 @@ describe( 'the network subscription rows', () => {
 		expect( toggle.textContent ).toBe( 'See less' );
 	} );
 
+	it( 'keeps an open row open when DataViews remounts the cell', async () => {
+		await mount();
+		const item = {
+			...subscriber( 1 ),
+			subscriptions: [ 7, 8, 9 ].map( id => ( { ...localSubscription, id, plan: `Plan ${ id }`, editUrl: `/edit/${ id }` } ) ),
+		};
+		const first = render( field( 'plans' ).render( { item } ) );
+		fireEvent.click( first.getByRole( 'button', { name: 'See more' } ) );
+		first.unmount();
+
+		const { container } = render( field( 'plans' ).render( { item } ) );
+
+		expect( container.querySelectorAll( 'a' ) ).toHaveLength( 3 );
+	} );
+
 	it( 'leaves the toggle out for two subscriptions or fewer', async () => {
 		await mount();
 		const item = { ...subscriber( 1 ), subscriptions: [ localSubscription, { ...localSubscription, id: 8, plan: 'Print' } ] };

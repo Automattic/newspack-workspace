@@ -30,8 +30,8 @@ import { Stack } from '@wordpress/ui';
  */
 import { Grid, SectionHeader, Divider, useUnsavedChangesDialog } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
-import { PolicyLinks, EffectivePrice } from './policy-cells';
-import { gateLinks } from './item-links';
+import { EffectivePrice } from './policy-cells';
+import { gateLinks, ruleLinks } from './item-links';
 
 const BASE_PATH = '/newspack/v1/wizard/newspack-audience-subscription-products/products';
 const CONVENTION_SLUGS = [ 'private-subscriptions', 'free-subscriptions' ];
@@ -572,11 +572,13 @@ export default function ProductForm( {
 									</span>
 									<VStack spacing={ 3 }>
 										{ policyRows.map( row => (
-											<HStack key={ row.key } alignment="center" spacing={ 3 } justify="flex-start">
+											<HStack key={ row.key } alignment="top" spacing={ 3 } justify="flex-start">
 												{ row.label && (
 													<span className="newspack-subscription-products__policy-plan-label">{ row.label }</span>
 												) }
-												<PolicyLinks policy={ row.policy } />
+												<VStack spacing={ 2 } alignment="left">
+													{ ruleLinks( row.policy ) }
+												</VStack>
 												<EffectivePrice policy={ row.policy } currency={ currency } />
 											</HStack>
 										) ) }

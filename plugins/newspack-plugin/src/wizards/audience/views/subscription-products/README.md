@@ -15,8 +15,8 @@ subscription count, category, status. Table + grid, search, filters (type /
 status / category), client-side `filterSortAndPaginate`, row action → edit modal.
 
 **Layer 2 (policy stack + effective price).** Each product (and, for variable
-subscriptions, **each variation**) shows the applied pricing policies as chips —
-each linking to the rule's edit view — plus base → effective price. No winner is
+subscriptions, **each variation**) lists the applied pricing policies as links —
+each handing off to the rule's edit view — plus base → effective price. No winner is
 singled out: different rules can win at different cycles, so the schedule popover
 carries only per-cycle amounts.
 
@@ -43,7 +43,7 @@ split the concept into two deliberately-distinct columns:
 - **Unlocks** — which content *gates* this product satisfies. A reverse lookup into the
   Access control feature: each `np_content_gate`'s `custom_access.access_rules` has a
   `subscription` rule listing product IDs; `get_product_gate_map()` inverts that so each
-  product row shows the gates it unlocks (chips linking to the gate). Named "Unlocks",
+  product row lists the gates it unlocks, each handing off to the gate. Named "Unlocks",
   not "Access", to stay clearly distinct from "Access control" while relating to it.
 
 This pairing is the cross-feature tie-in the RSM model wants: one view shows both *how a
@@ -119,7 +119,7 @@ The page covers the full Newspack subscription model, not just flat products:
   subscriptions to define a plan-**switching** set (Block Club's "Plan Options"). They're
   surfaced as a `grouped` row type; the list includes a grouped product only when it
   bundles ≥1 subscription child (`group_has_subscription_children`). A grouped product
-  isn't priced itself, so its Price cell shows the **bundled plan chips**, its policy is
+  isn't priced itself, so its Price cell lists the **bundled plans**, its policy is
   empty, and `active_subscriptions` **aggregates** (deduped) across the bundled children.
   Create: the Add modal's "Plan group (switching)" type offers a checkbox picker of
   existing subscriptions → `WC_Product_Grouped::set_children()`.

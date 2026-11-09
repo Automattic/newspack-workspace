@@ -6,13 +6,13 @@
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
-import { useId, useState } from '@wordpress/element';
+import { Children, useId, useState } from '@wordpress/element';
 import { Button } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
 
 type CellListProps = {
 	/** The items, one per line. Each needs a key. */
-	children: React.ReactNode[];
+	children: React.ReactNode;
 	/** How many items show before "See more". */
 	limit?: number;
 	/** Whether the list starts open. */
@@ -30,7 +30,8 @@ type CellListProps = {
  * that has to stay open across that keeps its state outside, through
  * `defaultExpanded` and `onToggle`.
  */
-const CellList = ( { children: items, limit = 2, defaultExpanded = false, onToggle }: CellListProps ) => {
+const CellList = ( { children, limit = 2, defaultExpanded = false, onToggle }: CellListProps ) => {
+	const items = Children.toArray( children );
 	const [ isExpanded, setIsExpanded ] = useState( defaultExpanded );
 	const listId = useId();
 	const canCollapse = items.length > limit;

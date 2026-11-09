@@ -3,8 +3,9 @@
  *
  * These read only the `policy` field of a product row, which comes from the PHP
  * integration seam (Subscription_Policy_Resolver) — now backed by the live
- * pricing-rule engine. The rule links list every applied rule; the schedule popover carries only per-cycle amounts (no winner
- * attribution — segment 0 is the headline effective price).
+ * pricing-rule engine. The rule links list every applied rule; the schedule
+ * popover carries only per-cycle amounts (no winner attribution — segment 0 is
+ * the headline effective price).
  */
 
 /**
