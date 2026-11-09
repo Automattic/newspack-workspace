@@ -290,7 +290,26 @@ describe( 'A/B Tests tab', () => {
 		mockRoutes( listResponse( [ test( 'man', { a: prompt( 1, { eligible: false } ), b: prompt( 2 ) } ) ] ) );
 		render( <ABTests /> );
 		const card = await screen.findByRole( 'region', { name: 'Test man' } );
-		expect( within( card ).getByText( /^Version A uses a manual or custom placement, or is an overlay set to Manual only/ ) ).toBeInTheDocument();
+		expect(
+			within( card ).getByText(
+				"Version A is on a manual or custom placement, or is an overlay set to Manual only, so its results can't be measured. Move it to a placement Newspack controls, or end the test."
+			)
+		).toBeInTheDocument();
+		// A notice instead of the answer, never both.
+		expect( within( card ).queryByText( 'Result' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'names every ineligible version in one notice', async () => {
+		mockRoutes(
+			listResponse( [ test( 'two', { a: prompt( 14 ), b: prompt( 15, { eligible: false } ), c: prompt( 16, { eligible: false } ) } ) ] )
+		);
+		render( <ABTests /> );
+		const card = await screen.findByRole( 'region', { name: 'Test two' } );
+		expect(
+			within( card ).getByText(
+				"Versions B and C are on manual or custom placements, or are overlays set to Manual only, so their results can't be measured. Move them to placements Newspack controls, or end the test."
+			)
+		).toBeInTheDocument();
 	} );
 
 	it( 'renames a test and updates its card', async () => {
@@ -380,19 +399,64 @@ describe( 'Ended tests', () => {
 	it( 'offers no End Test on a test whose versions are not all published', async () => {
 		const unready = test(
 			'una',
-			{ a: prompt( 10 ), b: prompt( 11, { status: 'draft', eligible: false } ) },
+			{ a: prompt( 10 ), b: prompt( 11, { status: 'draft', eligible: false } ), c: prompt( 17, { eligible: false } ) },
 			{ started_at: '2026-10-01T00:00:00Z', status: 'active' }
 		);
 		mockRoutes( listResponse( [ unready ] ) );
 		render( <ABTests /> );
 		const card = await screen.findByRole( 'region', { name: 'Test una' } );
 		expect( within( card ).queryByRole( 'button', { name: /End Test/ } ) ).not.toBeInTheDocument();
+		// Nor tells the publisher to end it.
+		expect(
+			within( card ).getByText(
+				"Versions B and C are on manual or custom placements, or are overlays set to Manual only, so their results can't be measured. Move them to placements Newspack controls."
+			)
+		).toBeInTheDocument();
+	} );
+
+	it( 'asks for no placement change on an ended test', async () => {
+		const moved = test(
+			'mov',
+			{ a: prompt( 12, { status: 'draft', status_label: 'Draft' } ), b: prompt( 13, { eligible: false } ) },
+			{ started_at: '2026-09-30T00:00:00Z', status: 'ended', ended_at: '2026-10-29T12:00:00Z', kept: 'b' }
+		);
+		mockRoutes( listResponse( [ moved ] ) );
+		render( <ABTests location={ { search: '?test=mov' } } /> );
+		const card = await screen.findByRole( 'region', { name: 'Test mov' } );
+		expect( await within( card ).findByText( /^Ended .+\. Kept B\.$/ ) ).toBeInTheDocument();
+		expect( within( card ).queryByText( /Move it to a placement/ ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'says there are no active tests when every test has ended', async () => {
 		mockRoutes( listResponse( [ ended() ] ) );
 		render( <ABTests /> );
 		expect( await screen.findByText( 'No active tests.' ) ).toBeInTheDocument();
+	} );
+
+	it( 'leads a running card with the answer', async () => {
+		mockRoutes( listResponse( [ running() ] ) );
+		render( <ABTests /> );
+		const card = await screen.findByRole( 'region', { name: 'Test run' } );
+		expect( await within( card ).findByText( 'B wins. 2.69% of readers who saw B converted, against 1.90% for A.' ) ).toBeInTheDocument();
+		expect( within( card ).getByText( 'Result' ) ).toBeInTheDocument();
+		expect( card.querySelector( '.newspack-ab-tests__bars' ) ).toHaveAttribute( 'aria-hidden', 'true' );
+	} );
+
+	it( 'folds the logged-out caution into the answer instead of a notice', async () => {
+		mockRoutes(
+			listResponse( [ running() ] ),
+			{},
+			{
+				...stats,
+				comparisons: { b: { confidence: 85, label: 'directional' } },
+				flags: { young_test: false, high_anonymous: true, days_running: 20 },
+			}
+		);
+		render( <ABTests /> );
+		const card = await screen.findByRole( 'region', { name: 'Test run' } );
+		expect( await within( card ).findByText( 'No winner yet. B is ahead, 2.69% against 1.90%.' ) ).toBeInTheDocument();
+		expect( within( card ).getByText( 'More readers are needed. Some may have seen both versions on different devices.' ) ).toBeInTheDocument();
+		expect( within( card ).queryByText( 'Most readers are logged out.' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'says nothing matched a search', async () => {

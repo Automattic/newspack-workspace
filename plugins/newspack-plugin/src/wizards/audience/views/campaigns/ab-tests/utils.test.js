@@ -3,6 +3,7 @@ import {
 	formatConfidence,
 	formatLift,
 	getRecommendation,
+	getVerdict,
 	getStatusIntent,
 	getTestStatus,
 	latestOnly,
@@ -173,5 +174,129 @@ describe( 'getRecommendation', () => {
 
 	it( 'names A the winner when the challenger is reliably worse', () => {
 		expect( getRecommendation( twoVersions, result( { lift: -21 } ) ) ).toEqual( { letter: 'a', winner: true } );
+	} );
+} );
+
+describe( 'getVerdict', () => {
+	const published = { status: 'publish' };
+	const twoVersions = { variants: { a: published, b: published } };
+	const result = ( { label = 'reliable', rates = { a: 1.9, b: 2.69 }, young = false, anonymous = false, days = 20, readers = 8000 } = {} ) => ( {
+		source: { state: 'ok' },
+		variants: Object.fromEntries(
+			Object.entries( rates ).map( ( [ letter, rate ] ) => [
+				letter,
+				{ readers, rate, lift: letter === 'a' || null === rate ? null : ( ( rate - rates.a ) / rates.a ) * 100 },
+			] )
+		),
+		comparisons: Object.fromEntries(
+			Object.keys( rates )
+				.filter( letter => letter !== 'a' )
+				.map( letter => [ letter, { confidence: 99, label } ] )
+		),
+		flags: { young_test: young, high_anonymous: anonymous, days_running: days },
+	} );
+
+	it( 'names a reliable winner once the test is old enough', () => {
+		const verdict = getVerdict( twoVersions, 'running', result() );
+		expect( verdict.answer ).toBe( 'B wins. 2.69% of readers who saw B converted, against 1.90% for A.' );
+		expect( verdict.detail ).toBeNull();
+		expect( verdict.bars.rows ).toEqual( [
+			{ letter: 'a', width: 70.6 },
+			{ letter: 'b', width: 100 },
+		] );
+	} );
+
+	it( 'holds back a reliable result while the test is young', () => {
+		const verdict = getVerdict( twoVersions, 'running', result( { young: true, days: 6 } ) );
+		expect( verdict.answer ).toBe( 'B is ahead, 2.69% against 1.90%.' );
+		expect( verdict.detail ).toBe( 'The result looks reliable, but the test is 6 days old. Let it run a full two weeks before ending it.' );
+	} );
+
+	it( 'names no winner on an early signal, and adds the logged-out caution only when it applies', () => {
+		const early = getVerdict( twoVersions, 'running', result( { label: 'directional', rates: { a: 2.98, b: 3.83 } } ) );
+		expect( early.answer ).toBe( 'No winner yet. B is ahead, 3.83% against 2.98%.' );
+		expect( early.detail ).toBe( 'More readers are needed.' );
+		const anonymous = getVerdict( twoVersions, 'running', result( { label: 'collecting', anonymous: true } ) );
+		expect( anonymous.detail ).toBe( 'More readers are needed. Some may have seen both versions on different devices.' );
+	} );
+
+	it( 'says when two versions are even', () => {
+		const verdict = getVerdict( twoVersions, 'running', result( { label: 'collecting', rates: { a: 2, b: 2 } } ) );
+		expect( verdict.answer ).toBe( 'No winner yet. A and B are even, at 2.00%.' );
+	} );
+
+	it( 'says it is too early, with faint bars, before any reader is counted', () => {
+		const verdict = getVerdict( twoVersions, 'running', result( { label: 'collecting', readers: 0 } ) );
+		expect( verdict.answer ).toBe( 'Too early to tell.' );
+		expect( verdict.detail ).toBe( 'The test started today, so there are no results yet.' );
+		expect( verdict.bars.placeholder ).toBe( true );
+	} );
+
+	it( 'compares the leader with A when a test has three versions', () => {
+		const three = { variants: { a: published, b: published, c: published } };
+		const verdict = getVerdict( three, 'running', result( { label: 'directional', rates: { a: 1.9, b: 2.1, c: 2.5 } } ) );
+		expect( verdict.answer ).toBe( 'No winner yet. C is ahead, 2.50% against 1.90%.' );
+		expect( verdict.bars.rows.map( row => row.letter ) ).toEqual( [ 'a', 'b', 'c' ] );
+	} );
+
+	it( 'compares A with the best challenger when A leads', () => {
+		const three = { variants: { a: published, b: published, c: published } };
+		const verdict = getVerdict( three, 'running', result( { label: 'directional', rates: { a: 3, b: 2.1, c: 2.5 } } ) );
+		expect( verdict.answer ).toBe( 'No winner yet. A is ahead, 3.00% against 2.50%.' );
+	} );
+
+	it( 'asks for the unpublished versions on a draft', () => {
+		const draft = { variants: { a: published, b: { status: 'draft' } } };
+		expect( getVerdict( draft, 'draft', null ) ).toEqual( {
+			answer: 'Not started.',
+			detail: 'Publish version B to start the test.',
+			bars: null,
+		} );
+	} );
+
+	it( 'says which version an ended test kept, with its numbers when there are any', () => {
+		const ended = { ...twoVersions, status: 'ended', kept: 'b', ended_at: '2026-10-29T12:00:00Z' };
+		const verdict = getVerdict( ended, 'ended', result() );
+		expect( verdict.answer ).toMatch( /^Ended .+\. Kept B\.$/ );
+		expect( verdict.detail ).toBe( 'B converted 2.69% of readers, against 1.90% for A.' );
+		expect( getVerdict( ended, 'ended', null ).detail ).toBeNull();
+	} );
+
+	it( 'names A the winner when every challenger is reliably worse', () => {
+		const verdict = getVerdict( twoVersions, 'running', result( { rates: { a: 2.69, b: 1.9 } } ) );
+		expect( verdict.answer ).toBe( 'A wins. 2.69% of readers who saw A converted, against 1.90% for B.' );
+	} );
+
+	it( 'agrees with the End Test recommendation on whether there is a winner', () => {
+		expect( getVerdict( twoVersions, 'running', result() ).answer ).toMatch( /^B wins\./ );
+		expect( getRecommendation( twoVersions, result() ) ).toEqual( { letter: 'b', winner: true } );
+		const young = result( { young: true, days: 6 } );
+		expect( getVerdict( twoVersions, 'running', young ).answer ).not.toMatch( /wins/ );
+		expect( getRecommendation( twoVersions, young ) ).toEqual( { letter: 'a', winner: false } );
+	} );
+
+	it( 'says nothing on a running card when the stats source is unavailable', () => {
+		expect( getVerdict( twoVersions, 'running', { ...result(), source: { state: 'unavailable' } } ) ).toBeNull();
+	} );
+
+	it( 'compares a kept A with the best challenger', () => {
+		const ended = { ...twoVersions, status: 'ended', kept: 'a', ended_at: '2026-10-29T12:00:00Z' };
+		expect( getVerdict( ended, 'ended', result() ).detail ).toBe( 'A converted 1.90% of readers, against 2.69% for B.' );
+	} );
+
+	it( 'gives an ended test no numbers or bars it cannot back', () => {
+		const ended = { ...twoVersions, status: 'ended', kept: 'b', ended_at: '2026-10-29T12:00:00Z' };
+		const uncounted = getVerdict( ended, 'ended', result( { rates: { a: 1.9, b: null } } ) );
+		expect( uncounted.detail ).toBeNull();
+		expect( uncounted.bars ).toBeNull();
+		// Nothing converted: the numbers stand, but faint "no data yet" bars would not.
+		const flat = getVerdict( ended, 'ended', result( { rates: { a: 0, b: 0 } } ) );
+		expect( flat.detail ).toBe( 'B converted 0.00% of readers, against 0.00% for A.' );
+		expect( flat.bars ).toBeNull();
+	} );
+
+	it( 'leaves incomplete and needs-attention cards to their notice', () => {
+		expect( getVerdict( twoVersions, 'incomplete', result() ) ).toBeNull();
+		expect( getVerdict( twoVersions, 'needs-attention', result() ) ).toBeNull();
 	} );
 } );
