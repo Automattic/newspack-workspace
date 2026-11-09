@@ -97,10 +97,7 @@ function DataViews( {
 		[ fields, inlineFilters, view.titleField ]
 	);
 	const isInCard = useContext( TableCardContext );
-	const titledView = useMemo(
-		() => ( view.titleField && view.showTitle === false ? { ...view, showTitle: true } : view ),
-		[ view ]
-	);
+	const titledView = useMemo( () => ( view.titleField && view.showTitle === false ? { ...view, showTitle: true } : view ), [ view ] );
 	const evenView = useMemo( () => evenColumns( titledView ), [ titledView ] );
 	const columnWidths = useMemo( () => {
 		const widths: Record< string, string > = {};
