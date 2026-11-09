@@ -89,6 +89,22 @@ describe( 'TableCard', () => {
 		expect( screen.queryByRole( 'button' ) ).not.toBeInTheDocument();
 	} );
 
+	it( 'stacks a description under the title, with the actions beside them', () => {
+		render(
+			<TableCard title="Members" description="2 invitations pending" actions={ <button>Add members</button> }>
+				<table aria-label="Members" />
+			</TableCard>
+		);
+		const heading = screen.getByRole( 'heading', { name: 'Members' } );
+		const description = screen.getByText( '2 invitations pending' );
+		const action = screen.getByRole( 'button', { name: 'Add members' } );
+
+		expect( heading ).not.toContainElement( description );
+		expect( heading.parentElement ).toContainElement( description );
+		expect( heading.parentElement ).not.toContainElement( action );
+		expect( heading.parentElement.parentElement ).toContainElement( action );
+	} );
+
 	it( 'orders before, table, after within the card body', () => {
 		render(
 			<TableCard before={ <p>Stats row</p> } after={ <button>Show 12 more</button> }>

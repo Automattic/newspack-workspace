@@ -51,6 +51,9 @@ const titleId = useId();
 - `actions` — controls rendered in the card header: opposite the title when
   there is one, end-aligned on their own otherwise. A header renders when
   either `title` or `actions` is renderable (same falsy rules as `title`).
+- `description` — a line under the title, inside the header, such as a status
+  note. The title and description stack 4px apart (`Stack` gap `xs`), with the
+  actions centred beside them. Pass it styled; the card adds no type styles.
 - `before` / `after` — content rendered inside the card padding, above and
   below the table: stats rows, notes, footer actions. Slot children stretch to
   the card's full content width; wrap a lone control in a `Stack` from

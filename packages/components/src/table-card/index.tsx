@@ -28,6 +28,8 @@ interface TableCardProps {
 	titleId?: string;
 	heading?: 1 | 2 | 3 | 4 | 5 | 6;
 	actions?: React.ReactNode;
+	/** A line under the title, inside the header; the actions stay level with the title. */
+	description?: React.ReactNode;
 	before?: React.ReactNode;
 	after?: React.ReactNode;
 	/** Draw a line between the header and the table, which then starts right under it. */
@@ -40,25 +42,33 @@ interface TableCardProps {
 /** `0` is a renderable slot value; the falsy leftovers of `cond && <X />` are not. */
 const isRenderable = ( node: React.ReactNode ) => node !== undefined && node !== null && node !== '' && typeof node !== 'boolean';
 
-export default function TableCard( { title, titleId, heading = 3, actions, before, after, separator = false, className, children }: TableCardProps ) {
+export default function TableCard( { title, titleId, heading = 3, actions, description, before, after, separator = false, className, children }: TableCardProps ) {
 	const TitleTag = `h${ heading }` as const;
 	const hasTitle = isRenderable( title );
 	const hasActions = isRenderable( actions );
+	const hasDescription = isRenderable( description );
+	const rowProps = { direction: 'row', justify: hasTitle ? 'space-between' : 'end', align: 'center' } as const;
+	const titleNode = hasTitle && <Card.Title render={ <TitleTag id={ titleId } /> }>{ title }</Card.Title>;
+	/* Its own row, so several actions don't scatter across the header's space-between. */
+	const actionsNode = hasActions && (
+		<Stack direction="row" gap="sm" align="center">
+			{ actions }
+		</Stack>
+	);
 	return (
 		<TableCardContext.Provider value={ true }>
 			<Card.Root className={ classnames( 'newspack-table-card', { 'newspack-table-card--separated': separator }, className ) }>
 				{ ( hasTitle || hasActions ) && (
-					<Card.Header
-						className="newspack-table-card__header"
-						render={ hasActions ? <Stack direction="row" justify={ hasTitle ? 'space-between' : 'end' } align="center" /> : undefined }
-					>
-						{ hasTitle && <Card.Title render={ <TitleTag id={ titleId } /> }>{ title }</Card.Title> }
-						{ /* Its own row, so several actions don't scatter across the header's space-between. */ }
-						{ hasActions && (
-							<Stack direction="row" gap="sm" align="center">
-								{ actions }
+					<Card.Header className="newspack-table-card__header" render={ hasActions || hasDescription ? <Stack { ...rowProps } /> : undefined }>
+						{ hasDescription ? (
+							<Stack direction="column" gap="xs">
+								{ titleNode }
+								<div className="newspack-table-card__description">{ description }</div>
 							</Stack>
+						) : (
+							titleNode
 						) }
+						{ actionsNode }
 					</Card.Header>
 				) }
 				<Card.Content render={ <Stack direction="column" gap="lg" /> }>

@@ -422,7 +422,7 @@ function GroupDetailView() {
 						<span className="newspack-subscribers__seat-count">{ `(${ seatUsageText( group ) })` }</span>
 					</>
 				}
-				before={ invitesNote && <span className="newspack-subscribers__muted">{ invitesNote }</span> }
+				description={ invitesNote && <span className="newspack-subscribers__muted">{ invitesNote }</span> }
 				actions={
 					<>
 						<Button
