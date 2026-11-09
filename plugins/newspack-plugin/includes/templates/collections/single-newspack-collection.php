@@ -41,7 +41,7 @@ get_header();
 
 			echo wp_kses_post( Template_Helper::render_separator( 'is-latest-collection' ) );
 
-			// A gated Collection shows the teaser and the gate in place of its sections.
+			// A gated Collection shows the gate in place of its sections.
 			$is_gated = Gate_Integration::render_single_gate( $collection_id );
 
 			// Get posts in this collection organized by sections.

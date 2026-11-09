@@ -282,6 +282,30 @@ class Test_Archive_Gate extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Jetpack's Infinite Scroll can't append more Collections below an archive gate.
+	 */
+	public function test_infinite_scroll_off_on_gated_archive() {
+		Gate_Integration::init();
+		$this->go_to_archive();
+		$this->assertNotNull( Content_Restriction_Control::get_archive_gate(), 'Setup: the archive is gated.' );
+
+		$this->assertFalse( apply_filters( 'infinite_scroll_archive_supported', true, [] ) );
+	}
+
+	/**
+	 * On an archive no gate covers, Infinite Scroll keeps the answer it was given.
+	 */
+	public function test_infinite_scroll_unchanged_on_ungated_archive() {
+		Gate_Integration::init();
+		Content_Gate::update_gate_settings( $this->gate_id, [ 'archive_rules' => [] ] );
+		$this->go_to_archive();
+		$this->assertNull( Content_Restriction_Control::get_archive_gate(), 'Setup: the archive is open.' );
+
+		$this->assertTrue( apply_filters( 'infinite_scroll_archive_supported', true, [] ) );
+		$this->assertFalse( apply_filters( 'infinite_scroll_archive_supported', false, [] ) );
+	}
+
+	/**
 	 * A stored archive rule stops applying when its post type is no longer offered.
 	 */
 	public function test_post_type_no_longer_offered_is_not_gated() {

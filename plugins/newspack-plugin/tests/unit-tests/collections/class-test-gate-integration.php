@@ -260,8 +260,8 @@ class Test_Gate_Integration extends \WP_UnitTestCase {
 
 	/**
 	 * On the Collection's own page, code that runs before the loop (a block or
-	 * widget in the header) gets no PDF, and the gate doesn't print without the
-	 * teaser the loop stages.
+	 * widget in the header) gets no PDF, and the gate doesn't print until the
+	 * loop has restricted the Collection.
 	 */
 	public function test_ctas_hidden_before_the_loop_on_gated_single() {
 		$this->go_to( get_permalink( $this->collection_id ) );
@@ -269,7 +269,7 @@ class Test_Gate_Integration extends \WP_UnitTestCase {
 
 		$this->assertSame( [ 'Subscribe' ], wp_list_pluck( Query_Helper::get_ctas( $this->collection_id ), 'label' ) );
 		[ $rendered, $output ] = $this->render_single_gate();
-		$this->assertFalse( $rendered, 'Without the staged teaser, the_content() would print the whole body.' );
+		$this->assertFalse( $rendered, 'The loop has not restricted the Collection yet.' );
 		$this->assertSame( '', $output );
 	}
 
@@ -304,7 +304,24 @@ class Test_Gate_Integration extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The single page prints the teaser and the inline gate, and hides the PDF.
+	 * A theme or plugin passing something other than a list of buttons gets it back.
+	 */
+	public function test_filter_ctas_passes_through_non_array() {
+		$this->assertSame( 'not-a-list', Gate_Integration::filter_ctas( 'not-a-list', $this->collection_id ) );
+	}
+
+	/**
+	 * A REST filter handed something other than a response gets it back.
+	 */
+	public function test_filter_rest_response_passes_through_non_response() {
+		$error = new \WP_Error( 'np_test_error', 'Not a response.' );
+
+		$this->assertSame( $error, Gate_Integration::filter_rest_response( $error, get_post( $this->collection_id ) ) );
+	}
+
+	/**
+	 * The single page prints the inline gate and none of the Collection's body,
+	 * which only the intro's excerpt stands in for, and hides the PDF.
 	 */
 	public function test_single_gate_renders_inline_gate() {
 		$this->go_to_collection();
@@ -316,6 +333,7 @@ class Test_Gate_Integration extends \WP_UnitTestCase {
 		$this->assertStringContainsString( '<div class="entry-content">', $output );
 		$this->assertStringContainsString( 'newspack-content-gate__inline-gate', $output );
 		$this->assertStringContainsString( self::LAYOUT_TEXT, $output );
+		$this->assertStringNotContainsString( 'Collection body text.', $output, 'No teaser: the intro already shows the excerpt.' );
 		$this->assertSame( [ 'Subscribe' ], wp_list_pluck( Query_Helper::get_ctas( $this->collection_id ), 'label' ) );
 	}
 
@@ -332,6 +350,7 @@ class Test_Gate_Integration extends \WP_UnitTestCase {
 		$this->assertTrue( $rendered );
 		$this->assertStringNotContainsString( 'newspack-content-gate__overlay-gate', $output, 'The footer hook prints the overlay, not this.' );
 		$this->assertStringNotContainsString( 'newspack-content-gate__inline-gate', $output, 'An overlay layout has no inline gate.' );
+		$this->assertStringNotContainsString( 'Collection body text.', $output, 'No teaser under an overlay either.' );
 
 		// Block theme: nothing else prints it.
 		remove_action( 'get_footer', [ Content_Gate::class, 'render_overlay_gate' ], 1 );

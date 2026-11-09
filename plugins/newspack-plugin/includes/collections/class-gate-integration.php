@@ -32,6 +32,22 @@ class Gate_Integration {
 		add_filter( 'newspack_content_gate_supported_archive_post_types', [ __CLASS__, 'add_archive_support' ] );
 		add_filter( 'newspack_collections_ctas', [ __CLASS__, 'filter_ctas' ], 10, 2 );
 		add_filter( 'rest_prepare_' . Post_Type::get_post_type(), [ __CLASS__, 'filter_rest_response' ], 10, 2 );
+		add_filter( 'infinite_scroll_archive_supported', [ __CLASS__, 'disable_infinite_scroll_on_gated_archive' ] );
+	}
+
+	/**
+	 * Keep Jetpack's Infinite Scroll off a gated archive, so it can't append more
+	 * Collections below the gate.
+	 *
+	 * @param mixed $supported Whether Infinite Scroll runs on this archive.
+	 *
+	 * @return mixed False on a gated archive, otherwise the value given.
+	 */
+	public static function disable_infinite_scroll_on_gated_archive( $supported ) {
+		if ( Content_Restriction_Control::get_archive_gate() ) {
+			return false;
+		}
+		return $supported;
 	}
 
 	/**
@@ -61,13 +77,15 @@ class Gate_Integration {
 	/**
 	 * Hide a gated Collection's own buttons (files and custom links).
 	 *
-	 * @param array $ctas    The Collection's buttons.
+	 * Anything other than a non-empty list comes back unchanged.
+	 *
+	 * @param mixed $ctas    The Collection's buttons.
 	 * @param int   $post_id Collection post ID.
 	 *
-	 * @return array
+	 * @return mixed
 	 */
-	public static function filter_ctas( array $ctas, int $post_id ): array {
-		if ( empty( $ctas ) || ! self::is_collection_gated( $post_id ) ) {
+	public static function filter_ctas( $ctas, $post_id ) {
+		if ( ! is_array( $ctas ) || empty( $ctas ) || ! self::is_collection_gated( (int) $post_id ) ) {
 			return $ctas;
 		}
 		return array_values(
@@ -84,14 +102,18 @@ class Gate_Integration {
 	 * Remove the raw button data from a gated Collection's REST response.
 	 *
 	 * The raw meta holds attachment IDs and link URLs. The `ctas` field is
-	 * covered by {@see self::filter_ctas()}.
+	 * covered by {@see self::filter_ctas()}. Anything other than a response for a
+	 * post comes back unchanged.
 	 *
-	 * @param \WP_REST_Response $response The response.
-	 * @param \WP_Post          $post     The Collection.
+	 * @param \WP_REST_Response|mixed $response The response.
+	 * @param \WP_Post|mixed          $post     The Collection.
 	 *
-	 * @return \WP_REST_Response
+	 * @return \WP_REST_Response|mixed
 	 */
-	public static function filter_rest_response( \WP_REST_Response $response, \WP_Post $post ): \WP_REST_Response {
+	public static function filter_rest_response( $response, $post ) {
+		if ( ! $response instanceof \WP_REST_Response || ! $post instanceof \WP_Post ) {
+			return $response;
+		}
 		$data     = $response->get_data();
 		$meta_key = Collection_Meta::$prefix . 'ctas';
 		if ( ! is_array( $data['meta'] ?? null ) || ! array_key_exists( $meta_key, $data['meta'] ) ) {
@@ -106,24 +128,26 @@ class Gate_Integration {
 	}
 
 	/**
-	 * Print the teaser and the gate on a gated single Collection page.
+	 * Print the gate on a gated single Collection page.
 	 *
 	 * Called by the single Collection template inside its loop, which skips
-	 * the section lists when this returns true.
+	 * the section lists when this returns true. No teaser: the intro above
+	 * already shows the excerpt, and a Collection's body is never shown to
+	 * a reader with access either.
 	 *
 	 * @param int $collection_id Collection post ID.
 	 *
 	 * @return bool Whether the gate was printed.
 	 */
 	public static function render_single_gate( int $collection_id ): bool {
-		// Not is_collection_gated(): this needs the teaser and gate the loop
-		// staged. Without them, the_content() would print the whole body.
+		// Not is_collection_gated(), which fails closed before the loop has
+		// decided: print the gate only once the loop restricted the Collection.
 		if ( ! Content_Gate::did_restrict_post( $collection_id ) ) {
 			return false;
 		}
-		// The content filters swap in the teaser and add the inline gate.
+		// The same inline gate the loop staged. Empty for an overlay layout.
 		echo '<div class="entry-content">';
-		the_content();
+		echo Content_Gate::get_inline_gate_html( $collection_id ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Rendered gate layout, as for posts.
 		echo '</div>';
 		// Classic themes print the overlay gate from get_footer. Block themes
 		// print it after a post content block, which this template doesn't have.
