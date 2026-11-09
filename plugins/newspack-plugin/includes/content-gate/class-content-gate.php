@@ -241,6 +241,17 @@ class Content_Gate {
 	private static bool $overlay_gate_output = false;
 
 	/**
+	 * What {@see self::restrict_post()} decided for the post being read, keyed
+	 * by post ID: true when it restricted the post as the article, false when it
+	 * decided not to (an entitled reader, or a view metering let through). A
+	 * post it hasn't decided on has no entry. Read through
+	 * {@see self::get_article_restriction()}.
+	 *
+	 * @var array<int, bool>
+	 */
+	private static array $article_restriction = [];
+
+	/**
 	 * Initialize hooks and filters.
 	 */
 	public static function init() {
@@ -992,6 +1003,7 @@ class Content_Gate {
 			// standing would hand a subscriber a stub of the post they paid for.
 			// The restricted branch below overwrites the entry for the same reason.
 			unset( self::$restricted_content[ $post->ID ] );
+			self::$article_restriction[ $post->ID ] = false;
 			return;
 		}
 
@@ -1031,6 +1043,10 @@ class Content_Gate {
 			'gate'   => $gate_html,
 			'source' => self::STAGED_BY_ARTICLE,
 		];
+		// Recorded with the staged entry rather than at the decision, so
+		// did_restrict_post() never answers true before the teaser and gate it
+		// promises exist. Until then the post reads as undecided.
+		self::$article_restriction[ $post->ID ] = true;
 	}
 
 	/**
@@ -2182,18 +2198,36 @@ class Content_Gate {
 	}
 
 	/**
-	 * Whether {@see self::restrict_post()} restricted this post as the article
-	 * being read on this request.
+	 * What {@see self::restrict_post()} decided for the post being read on this
+	 * request.
 	 *
-	 * That decision already accounts for metering, so a view metering lets
-	 * through answers false. Not {@see self::has_staged_restriction()}, which
-	 * also counts the teasers a listing stages for the posts it shows.
+	 * The decision already accounts for metering. Callers that need an answer
+	 * before the loop has reached the post should treat null as "ask
+	 * {@see self::is_post_restricted()}", so they fail closed.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return bool|null True if it restricted the post as the article, false if
+	 *                   it decided not to (for example, a view metering let
+	 *                   through), or null if it hasn't decided: the loop hasn't
+	 *                   reached the post, or restrict_post() stopped first.
+	 */
+	public static function get_article_restriction( int $post_id ): ?bool {
+		return self::$article_restriction[ $post_id ] ?? null;
+	}
+
+	/**
+	 * Whether {@see self::restrict_post()} restricted this post as the article
+	 * being read on this request, and staged its teaser and gate.
+	 *
+	 * A view metering lets through, and a post not decided yet, answer false.
+	 * Not {@see self::has_staged_restriction()}, which also counts the teasers a
+	 * listing stages for the posts it shows.
 	 *
 	 * @param int $post_id Post ID.
 	 * @return bool
 	 */
 	public static function did_restrict_post( int $post_id ): bool {
-		return self::STAGED_BY_ARTICLE === ( self::$restricted_content[ $post_id ]['source'] ?? '' );
+		return true === self::get_article_restriction( $post_id );
 	}
 
 	/**

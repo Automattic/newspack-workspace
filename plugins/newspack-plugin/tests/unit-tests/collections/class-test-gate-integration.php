@@ -170,6 +170,7 @@ class Test_Gate_Integration extends \WP_UnitTestCase {
 			'is_content_locked'   => false,
 			'overlay_gate_output' => false,
 			'restricted_content'  => [],
+			'article_restriction' => [],
 			'pending_gates'       => [],
 		];
 		foreach ( $values as $property => $value ) {
@@ -258,6 +259,31 @@ class Test_Gate_Integration extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * On the Collection's own page, code that runs before the loop (a block or
+	 * widget in the header) gets no PDF, and the gate doesn't print without the
+	 * teaser the loop stages.
+	 */
+	public function test_ctas_hidden_before_the_loop_on_gated_single() {
+		$this->go_to( get_permalink( $this->collection_id ) );
+		$this->assertNull( Content_Gate::get_article_restriction( $this->collection_id ), 'Setup: the loop has not decided yet.' );
+
+		$this->assertSame( [ 'Subscribe' ], wp_list_pluck( Query_Helper::get_ctas( $this->collection_id ), 'label' ) );
+		[ $rendered, $output ] = $this->render_single_gate();
+		$this->assertFalse( $rendered, 'Without the staged teaser, the_content() would print the whole body.' );
+		$this->assertSame( '', $output );
+	}
+
+	/**
+	 * Before the loop, an admin still gets all of the Collection's buttons.
+	 */
+	public function test_ctas_shown_before_the_loop_for_editor() {
+		$this->go_to( get_permalink( $this->collection_id ) );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$this->assertSame( [ self::PDF_LABEL, 'Subscribe' ], wp_list_pluck( Query_Helper::get_ctas( $this->collection_id ), 'label' ) );
+	}
+
+	/**
 	 * REST hides the PDF from a restricted reader, in both the ctas field and the raw meta.
 	 */
 	public function test_rest_hides_raw_cta_meta_when_restricted() {
@@ -285,6 +311,7 @@ class Test_Gate_Integration extends \WP_UnitTestCase {
 
 		[ $rendered, $output ] = $this->render_single_gate();
 
+		$this->assertTrue( Content_Gate::get_article_restriction( $this->collection_id ), 'The loop restricted the Collection.' );
 		$this->assertTrue( $rendered );
 		$this->assertStringContainsString( '<div class="entry-content">', $output );
 		$this->assertStringContainsString( 'newspack-content-gate__inline-gate', $output );
@@ -315,7 +342,8 @@ class Test_Gate_Integration extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A view metering lets through keeps the whole page, buttons included.
+	 * Before the loop decides, a metered reader gets no PDF. Once metering lets
+	 * the view through, the whole page shows, buttons included.
 	 */
 	public function test_metered_view_keeps_full_page() {
 		Content_Gate::update_gate_settings(
@@ -345,7 +373,11 @@ class Test_Gate_Integration extends \WP_UnitTestCase {
 		$this->set_current_user_role( 'subscriber' );
 		$this->assertNotEmpty( Content_Gate::is_post_restricted( $this->collection_id ), 'Setup: the gate restricts this reader.' );
 
-		$this->go_to_collection();
+		$this->go_to( get_permalink( $this->collection_id ) );
+		$this->assertNotContains( self::PDF_LABEL, wp_list_pluck( Query_Helper::get_ctas( $this->collection_id ), 'label' ), 'Before the loop decides, the PDF stays hidden.' );
+
+		the_post();
+		$this->assertFalse( Content_Gate::get_article_restriction( $this->collection_id ), 'The loop decided not to restrict this view.' );
 		[ $rendered, $output ] = $this->render_single_gate();
 
 		$this->assertFalse( $rendered );

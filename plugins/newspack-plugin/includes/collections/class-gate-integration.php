@@ -37,9 +37,12 @@ class Gate_Integration {
 	/**
 	 * Whether a gate keeps the current reader from a Collection.
 	 *
-	 * On the Collection's own page this is whether the page was gated, which
-	 * already accounts for metering. Anywhere else, such as a list of
-	 * Collections or REST, it is whether a gate restricts the Collection.
+	 * On the Collection's own page, once the loop has decided whether to gate
+	 * it, this is that decision, which accounts for metering. Before then
+	 * (a block or widget in the header, say), and anywhere else, such as a
+	 * list of Collections or REST, it is whether a gate restricts the
+	 * Collection. So an answer asked for too early hides the buttons rather
+	 * than showing them.
 	 *
 	 * @param int $collection_id Collection post ID.
 	 *
@@ -47,7 +50,10 @@ class Gate_Integration {
 	 */
 	public static function is_collection_gated( int $collection_id ): bool {
 		if ( is_singular( Post_Type::get_post_type() ) && get_queried_object_id() === $collection_id ) {
-			return Content_Gate::did_restrict_post( $collection_id );
+			$decision = Content_Gate::get_article_restriction( $collection_id );
+			if ( null !== $decision ) {
+				return $decision;
+			}
 		}
 		return (bool) Content_Gate::is_post_restricted( $collection_id );
 	}
@@ -110,7 +116,9 @@ class Gate_Integration {
 	 * @return bool Whether the gate was printed.
 	 */
 	public static function render_single_gate( int $collection_id ): bool {
-		if ( ! self::is_collection_gated( $collection_id ) ) {
+		// Not is_collection_gated(): this needs the teaser and gate the loop
+		// staged. Without them, the_content() would print the whole body.
+		if ( ! Content_Gate::did_restrict_post( $collection_id ) ) {
 			return false;
 		}
 		// The content filters swap in the teaser and add the inline gate.

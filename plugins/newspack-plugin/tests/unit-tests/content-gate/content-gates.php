@@ -1067,6 +1067,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		$this->set_content_gate_property( 'is_gated', false );
 		$this->set_content_gate_property( 'is_content_locked', false );
 		$this->set_content_gate_property( 'restricted_content', [] );
+		$this->set_content_gate_property( 'article_restriction', [] );
 		$this->set_content_gate_property( 'pending_gates', [] );
 	}
 
