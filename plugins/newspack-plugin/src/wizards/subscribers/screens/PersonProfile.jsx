@@ -66,7 +66,7 @@ import { isNetworkSubscription, shouldShowPaymentMethods } from '../network';
 
 const { useParams, useLocation } = Router;
 
-// Cancelled subscriptions are folded away behind a "View more" toggle whenever
+// Cancelled subscriptions are folded away behind a "Show N more" toggle whenever
 // the reader still holds a live plan — a past cancellation next to a current
 // plan is history, not status. A fully churned reader keeps everything visible,
 // since hiding it would leave the profile looking empty. This mirrors the
