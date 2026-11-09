@@ -75,6 +75,13 @@ final class Newspack_Popups_AB_Tests {
 	private static $tests_config = null;
 
 	/**
+	 * Test IDs of prompts being deleted in this request, by prompt ID.
+	 *
+	 * @var string[]
+	 */
+	private static $deleting_test_ids = [];
+
+	/**
 	 * Initialize hooks.
 	 */
 	public static function init() {
@@ -103,6 +110,11 @@ final class Newspack_Popups_AB_Tests {
 		foreach ( [ 'added_post_meta', 'updated_post_meta' ] as $hook ) {
 			add_action( $hook, [ __CLASS__, 'record_start_for_meta' ], 10, 3 );
 		}
+
+		// Not gated on the flag: these only remove the feature's own reader
+		// meta, and a site that turned the flag off still wants it gone.
+		add_action( 'before_delete_post', [ __CLASS__, 'note_deleting_test_prompt' ] );
+		add_action( 'deleted_post', [ __CLASS__, 'drop_buckets_after_delete' ] );
 	}
 
 	/**
@@ -157,6 +169,56 @@ final class Newspack_Popups_AB_Tests {
 		if ( Newspack_Popups::NEWSPACK_POPUPS_CPT === get_post_type( $post_id ) ) {
 			self::invalidate_has_tests();
 		}
+	}
+
+	/**
+	 * Remember the Test ID of a prompt about to be deleted. Its meta is gone by
+	 * the time the delete finishes, and the buckets wait until then so a delete
+	 * that fails partway leaves them in place.
+	 *
+	 * @param int $post_id Post ID.
+	 */
+	public static function note_deleting_test_prompt( $post_id ) {
+		if ( Newspack_Popups::NEWSPACK_POPUPS_CPT !== get_post_type( $post_id ) ) {
+			return;
+		}
+		$test_id = (string) get_post_meta( $post_id, self::META_TEST_ID, true );
+		if ( '' !== $test_id ) {
+			self::$deleting_test_ids[ (int) $post_id ] = $test_id;
+		}
+	}
+
+	/**
+	 * Drop a test's buckets once its last prompt is deleted. Trashed prompts
+	 * still count, since restoring one brings the test back.
+	 *
+	 * @param int $post_id Post ID.
+	 */
+	public static function drop_buckets_after_delete( $post_id ) {
+		$post_id = (int) $post_id;
+		if ( ! isset( self::$deleting_test_ids[ $post_id ] ) ) {
+			return;
+		}
+		$test_id = self::$deleting_test_ids[ $post_id ];
+		unset( self::$deleting_test_ids[ $post_id ] );
+		if ( empty( self::get_test_prompt_ids( $test_id ) ) ) {
+			self::delete_buckets( $test_id );
+		}
+	}
+
+	/**
+	 * Remove every reader's stored bucket for a test.
+	 *
+	 * One DELETE, but core then clears each affected reader's meta cache, so the
+	 * cost grows with the number of logged-in readers the test saw.
+	 *
+	 * @param string $test_id Test ID.
+	 */
+	private static function delete_buckets( $test_id ) {
+		if ( '' === $test_id ) {
+			return;
+		}
+		delete_metadata( 'user', 0, self::USER_META_BUCKET_PREFIX . $test_id, '', true );
 	}
 
 	/**
@@ -1345,6 +1407,9 @@ final class Newspack_Popups_AB_Tests {
 			}
 		}
 		self::invalidate_has_tests();
+		// Last, so a test that failed to end keeps splitting readers as before.
+		// The term keeps the ID from being reused, so no later test reads these.
+		self::delete_buckets( $test_id );
 
 		foreach ( self::get_tests() as $row ) {
 			if ( $test_id === $row['test_id'] ) {
