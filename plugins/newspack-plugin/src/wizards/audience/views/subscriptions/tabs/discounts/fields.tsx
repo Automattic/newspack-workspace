@@ -9,16 +9,17 @@
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
-import { dateI18n, getSettings as getDateSettings } from '@wordpress/date';
 import { decodeEntities } from '@wordpress/html-entities';
 import type { Field } from '@wordpress/dataviews';
 
 /**
  * Internal dependencies.
  */
-import { StatusBadge } from '../../../../../../../packages/components/src';
+import NamesSummary from '../../../../components/names-summary';
+import ScopeSummary from '../../../../components/scope-summary';
+import { formatSiteDate, StatusBadge } from '../../../../../../../packages/components/src';
 import { ALL_SUBSCRIPTIONS_FILTER_VALUE, allSubscriptionsLabel } from '../../constants';
-import { discountLabel, excludedLabel, subscriptionNames, subscriptionsSummary, targetingBaseLabel, targetingLabel } from './discount';
+import { discountLabel, subscriptionNames, subscriptionsSummary, targetingLabel } from './discount';
 import type { DiscountCurrency, DiscountRule } from './types';
 
 type Subscription = { id: number; name: string };
@@ -32,7 +33,12 @@ type Subscription = { id: number; name: string };
  *                      as trashed ones. The filter narrows rules already on
  *                      screen, so it offers that same set.
  */
-export function discountFields( currency: DiscountCurrency, subscriptions: Subscription[] ): Field< DiscountRule >[] {
+export function discountFields(
+	currency: DiscountCurrency,
+	subscriptions: Subscription[],
+	productNames: Record< number, string > = {},
+	categoryNames: Record< number, string > = {}
+): Field< DiscountRule >[] {
 	return [
 		{
 			id: 'subscription',
@@ -49,20 +55,10 @@ export function discountFields( currency: DiscountCurrency, subscriptions: Subsc
 			getValue: ( { item } ) => ( 'all' === item.subscription_targeting ? [ ALL_SUBSCRIPTIONS_FILTER_VALUE ] : item.subscription_product_ids ),
 			render: ( { item } ) => {
 				if ( 'all' === item.subscription_targeting ) {
-					return <span className="newspack-subscriber-discounts__subscriptions">{ allSubscriptionsLabel() }</span>;
+					return <span>{ allSubscriptionsLabel() }</span>;
 				}
-				const { named, more } = subscriptionsSummary( item.subscription_product_ids, subscriptions );
-				return (
-					<span className="newspack-subscriber-discounts__subscriptions">
-						{ /* The clipped names stay in the DOM, so a screen reader reads the
-						     whole string and `title` shows it on hover. Neither reaches the
-						     subscriptions the count stands for — the editor drawer lists those. */ }
-						<span className="newspack-subscriber-discounts__subscriptions-named" title={ named }>
-							{ named }
-						</span>
-						{ more && <span className="newspack-subscriber-discounts__subscriptions-more">{ more }</span> }
-					</span>
-				);
+				const { shown, more, hidden } = subscriptionsSummary( item.subscription_product_ids, subscriptions );
+				return <NamesSummary shown={ shown } more={ more } hidden={ hidden } />;
 			},
 		},
 		{
@@ -109,29 +105,23 @@ export function discountFields( currency: DiscountCurrency, subscriptions: Subsc
 			label: __( 'Applies to', 'newspack-plugin' ),
 			enableGlobalSearch: true,
 			getValue: ( { item } ) => targetingLabel( item ),
-			render: ( { item } ) => {
-				const excluded = excludedLabel( item );
-				if ( ! excluded ) {
-					return targetingBaseLabel( item );
-				}
-				return (
-					<span className="newspack-subscriber-discounts__applies-to">
-						{ targetingBaseLabel( item ) }
-						<span className="newspack-subscriber-discounts__applies-to-excluded">{ excluded }</span>
-					</span>
-				);
-			},
+			render: ( { item } ) => (
+				<ScopeSummary
+					targeting={ item.targeting }
+					productIds={ item.product_ids }
+					categoryIds={ item.category_ids }
+					excludedProductIds={ item.excluded_product_ids }
+					productNames={ productNames }
+					categoryNames={ categoryNames }
+				/>
+			),
 		},
 		{
 			id: 'created_at',
 			label: __( 'Created', 'newspack-plugin' ),
 			getValue: ( { item } ) => item.created_at,
 			render: ( { item } ) =>
-				item.created_at ? (
-					<span className="newspack-dataviews__date">{ dateI18n( getDateSettings().formats.date, item.created_at ) }</span>
-				) : (
-					''
-				),
+				item.created_at ? <span className="newspack-dataviews__date">{ formatSiteDate( item.created_at ) }</span> : '',
 		},
 	];
 }

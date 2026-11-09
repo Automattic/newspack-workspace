@@ -163,9 +163,11 @@ class Subscriber_Only_Products_API {
 	 * @return \WP_REST_Response
 	 */
 	public static function api_get_rules() {
+		$rules = Subscriber_Only_Products::get_rules();
 		return rest_ensure_response(
 			[
-				'restrictions' => Subscriber_Only_Products::get_rules(),
+				'restrictions' => $rules,
+				'names'        => Subscriber_Commerce::get_rule_names( $rules ),
 				'settings'     => Subscriber_Only_Products::get_settings(),
 			]
 		);

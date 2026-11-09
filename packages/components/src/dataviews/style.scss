@@ -47,12 +47,22 @@
 		}
 	}
 
+	tbody td:not(.dataviews-view-table__checkbox-column, .dataviews-view-table__actions-column) .dataviews-view-table__cell-content-wrapper {
+		align-items: flex-start;
+		padding-block-start: var(--newspack-dataviews-stack-gap);
+	}
+
 	.dataviews-title-field {
 		&,
 		a,
 		button.components-button.is-link {
+			line-height: inherit;
 			white-space: normal;
 		}
+	}
+
+	.newspack-cell-list button.components-button.is-link {
+		line-height: inherit;
 	}
 
 	.dataviews-column-primary__media + .dataviews-view-table__primary-column-content > .dataviews-title-field:not(:last-child) {

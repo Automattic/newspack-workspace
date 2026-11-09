@@ -47,6 +47,7 @@ import './style.scss';
 import LoadFailureNotice from '../components/LoadFailureNotice';
 import { useRetryFocus } from '../use-retry-focus';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
+import { worthCollapsing } from '../../../../packages/components/src/cell-list/collapse';
 import SubscriptionCard from '../components/SubscriptionCard';
 import PaymentMethodsList, { cardLabel } from '../components/PaymentMethodsList';
 import ChangePaymentMethodFlow from '../flows/ChangePaymentMethodFlow';
@@ -488,7 +489,8 @@ export default function PersonProfile() {
 	}, [ subscriber ] );
 
 	const liveCards = useMemo( () => cards.filter( card => 'cancelled' !== card.status ), [ cards ] );
-	const collapsedCards = HIDE_CANCELLED_WHEN_LIVE && liveCards.length > 0 ? liveCards : cards;
+	const foldCancelled = HIDE_CANCELLED_WHEN_LIVE && liveCards.length > 0 && worthCollapsing( cards.length - liveCards.length );
+	const collapsedCards = foldCancelled ? liveCards : cards;
 	const hiddenCount = cards.length - collapsedCards.length;
 	const visibleCards = showCancelled ? cards : collapsedCards;
 

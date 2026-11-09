@@ -27,6 +27,9 @@ import {
 import { DataViews, Router, StatusBadge, WizardBanner } from '../../../../../packages/components/src';
 import { formatCount } from '../../../../../packages/components/src/breadcrumbs/format-count';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
+import ScopeSummary from '../../components/scope-summary';
+import { scopeTargeting } from './scope';
+import { targetingLabel } from '../subscriptions/tabs/discounts/discount';
 import CatalogImpact from './catalog-impact';
 import PricingRulesOnboarding from './onboarding';
 import { intentLabel, pathOptions } from './recipes';
@@ -35,6 +38,13 @@ import { RULES_API_PATH as API_PATH, IMPACT_PREVIEW_API_PATH } from './constants
 
 const { useHistory } = Router;
 
+/**
+ * Inactive rules stay out of the way until someone asks for them. The chip can
+ * be removed to show every rule, and Reset view brings it back; the REST already
+ * excludes trash.
+ */
+const DEFAULT_STATUS_FILTER = { field: 'status', operator: 'isNot' as const, value: 'inactive' };
+
 const DEFAULT_VIEW: View = {
 	type: 'table',
 	page: 1,
@@ -42,7 +52,7 @@ const DEFAULT_VIEW: View = {
 	sort: { field: 'title', direction: 'asc' },
 	search: '',
 	fields: [ 'status', 'strategy', 'scope', 'priority', 'goal', 'reader_segments' ],
-	filters: [], // Show all statuses by default; the REST already excludes trash.
+	filters: [ DEFAULT_STATUS_FILTER ],
 	layout: {},
 	titleField: 'title',
 };
@@ -83,6 +93,37 @@ function readerSegmentNames( conditions: PricingRuleRow[ 'conditions' ], map: Re
 	return ids.map( id => map[ Number( id ) ] ?? `#${ id }` );
 }
 
+/** The rule's scope in the shape the Audience lists share. */
+function scopeOf( item: PricingRuleRow ) {
+	const targeting = scopeTargeting( item.scope_type );
+	if ( ! targeting ) {
+		return null;
+	}
+	return {
+		targeting,
+		product_ids: 'products' === targeting ? item.scope_ids : [],
+		category_ids: 'category' === targeting ? item.scope_ids : [],
+		excluded_product_ids: [] as number[],
+	};
+}
+
+/**
+ * Whether a view change is the filter bar's Reset rather than a chip's remove button
+ * or a cleared search box: it clears the filters together with the search, or every
+ * one of several filters, which no single action can. The toolbar Reset then lands
+ * on the default view, like "Reset view". With the default chip as the only filter
+ * and no search, Reset and the chip's remove button look the same, so both remove it.
+ */
+const isFilterBarReset = ( current: View, next: View ): boolean => {
+	const before = current.filters?.length ?? 0;
+	return ! next.search && ! next.filters?.length && before > 0 && ( !! current.search || before > 1 );
+};
+
+/** Whether the view matches the default one, so "Reset view" has nothing to do. */
+const isDefaultView = ( view: View ): boolean =>
+	JSON.stringify( [ view.filters, view.search, view.sort, view.fields, view.perPage ] ) ===
+	JSON.stringify( [ DEFAULT_VIEW.filters, DEFAULT_VIEW.search, DEFAULT_VIEW.sort, DEFAULT_VIEW.fields, DEFAULT_VIEW.perPage ] );
+
 export default function PricingRulesList() {
 	const { setHeaderData, addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const history = useHistory();
@@ -97,6 +138,10 @@ export default function PricingRulesList() {
 	// Remounts the card so its cached product sample cannot outlive a trash.
 	const [ statsVersion, setStatsVersion ] = useState( 0 );
 	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
+	const [ scopeNames, setScopeNames ] = useState< { products: Record< number, string >; categories: Record< number, string > } >( {
+		products: {},
+		categories: {},
+	} );
 	const [ segmentMap, setSegmentMap ] = useState< Record< number, string > >( {} );
 	const [ currency, setCurrency ] = useState< PricingRulesCurrency >( { code: '', symbol: '', decimals: 2 } );
 
@@ -121,6 +166,7 @@ export default function PricingRulesList() {
 			.then( response => {
 				setData( response.rules || [] );
 				setCurrency( response.currency );
+				setScopeNames( response.names ?? { products: {}, categories: {} } );
 				// Capture the reader_segment id→label options so the list can name segments.
 				const seg = ( response.conditions || [] ).find( c => c.id === 'reader_segment' );
 				const map: Record< number, string > = {};
@@ -195,7 +241,7 @@ export default function PricingRulesList() {
 	);
 
 	const statusElements = useMemo( () => {
-		const present = new Set( data.map( ruleState ) );
+		const present = new Set( [ ...data.map( ruleState ), DEFAULT_STATUS_FILTER.value ] );
 		return ( Object.keys( RULE_STATE_LABEL ) as RuleState[] )
 			.filter( state => present.has( state ) )
 			.map( state => ( { value: state, label: RULE_STATE_LABEL[ state ] } ) );
@@ -231,13 +277,33 @@ export default function PricingRulesList() {
 			{
 				id: 'scope',
 				label: __( 'Applies to', 'newspack-plugin' ),
-				getValue: ( { item } ) => item.scope_label,
-				render: ( { item } ) => (
-					<span>
-						{ item.scope_label }
-						{ item.scope_ids.length ? ` (${ item.scope_ids.length })` : '' }
-					</span>
-				),
+				getValue: ( { item } ) => {
+					const scope = scopeOf( item );
+					if ( ! scope ) {
+						return item.scope_label;
+					}
+					const names =
+						'products' === scope.targeting
+							? scope.product_ids.map( id => scopeNames.products[ id ] )
+							: scope.category_ids.map( id => scopeNames.categories[ id ] );
+					return [ targetingLabel( scope ), ...names ].filter( Boolean ).join( ' ' );
+				},
+				render: ( { item } ) => {
+					const scope = scopeOf( item );
+					if ( ! scope ) {
+						return <span>{ item.scope_label }</span>;
+					}
+					return (
+						<ScopeSummary
+							targeting={ scope.targeting }
+							productIds={ scope.product_ids }
+							categoryIds={ scope.category_ids }
+							excludedProductIds={ [] }
+							productNames={ scopeNames.products }
+							categoryNames={ scopeNames.categories }
+						/>
+					);
+				},
 				enableSorting: false,
 			},
 			{ id: 'priority', label: __( 'Priority', 'newspack-plugin' ), getValue: ( { item } ) => item.priority },
@@ -250,7 +316,7 @@ export default function PricingRulesList() {
 					return <StatusBadge status={ RULE_STATE_STATUS[ state ] }>{ RULE_STATE_LABEL[ state ] }</StatusBadge>;
 				},
 				elements: statusElements,
-				filterBy: { operators: [ 'is' ] },
+				filterBy: { operators: [ 'is', 'isNot' ] },
 			},
 			{
 				id: 'goal',
@@ -297,7 +363,7 @@ export default function PricingRulesList() {
 				enableSorting: false,
 			},
 		],
-		[ statusElements, history, segmentMap, currency ]
+		[ statusElements, history, segmentMap, currency, scopeNames ]
 	);
 
 	const actions: Action< PricingRuleRow >[] = useMemo(
@@ -393,7 +459,8 @@ export default function PricingRulesList() {
 				data={ processedData }
 				fields={ fields }
 				view={ view }
-				onChangeView={ setView }
+				onChangeView={ next => setView( isFilterBarReset( view, next ) ? { ...next, filters: [ DEFAULT_STATUS_FILTER ] } : next ) }
+				onReset={ isDefaultView( view ) ? false : () => setView( DEFAULT_VIEW ) }
 				actions={ actions }
 				paginationInfo={ paginationInfo }
 				defaultLayouts={ { table: {} } }

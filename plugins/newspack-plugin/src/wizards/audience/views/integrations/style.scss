@@ -34,6 +34,14 @@
 	padding: 0;
 	text-align: left;
 
+	&.is-truncated {
+		display: block;
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
 	&:hover {
 		color: var( --wp-admin-theme-color );
 		text-decoration: underline;

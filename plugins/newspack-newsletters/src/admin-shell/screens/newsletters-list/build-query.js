@@ -49,6 +49,7 @@ const BASE_FIELDS = [
 	'tags',
 	'newspack_newsletters_status',
 	'newspack_newsletters_author',
+	'newspack_newsletters_send_list',
 ];
 
 export function buildQueryParams( view = {} ) {

@@ -6,6 +6,13 @@
 import { DataViews } from 'newspack-components';
 ```
 
+## Lists of names in a cell
+
+- **Title cell:** the first two names, then a muted "+N more <noun>" that opens a popover listing the rest.
+- **Every other cell:** a [`CellList`](../cell-list/README.md): two names, then "Show N more" / "Show less".
+- Exclusions go under the list as a muted "N excluded" line that opens a popover listing the excluded names.
+- In both kinds of cell, a single leftover name shows inline rather than behind "+1 more" or "Show 1 more".
+
 ## Where a list sits
 
 - **Full-width page:** render `DataViews` directly. The list runs edge to edge with the page gutter.

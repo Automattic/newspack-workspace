@@ -87,6 +87,7 @@ interface PricingRuleConditionVocab {
 
 interface PricingRulesResponse {
 	rules: PricingRuleRow[];
+	names?: { products: Record< number, string >; categories: Record< number, string > };
 	currency: PricingRulesCurrency;
 	strategies: PricingRulesVocabItem[];
 	scopes: PricingRulesVocabItem[];

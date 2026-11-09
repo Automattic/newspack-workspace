@@ -1,12 +1,12 @@
 # CellList
 
-A list of items inside a table cell, one per line: the first two, then "Show N more" / "Show less" for the rest. The count tells the reader how much is hidden before they open it.
+A list of items inside a table cell, one per line: the first two, then "Show N more" / "Show less" for the rest. The count tells the reader how much is hidden before they open it. When only one item would be hidden, it shows inline and there is no toggle, because "Show 1 more" saves nothing.
 
 ```jsx
 import { CellList } from 'newspack-components';
 ```
 
-Use it for any cell that holds several named things, such as plans, gates or rules. Show each item as plain text, or as a link when it has its own screen. Don't put the items in badges: a badge marks a state, such as Active or Failed (see the [StatusIndicator README](../status-indicator/README.md)).
+Use it for every cell that lists several named things, such as plans, gates or rules, except the title column (see the [DataViews README](../dataviews/README.md)). Show each item as plain text, or as a link when it has its own screen. Don't put the items in badges: a badge marks a state, such as Active or Failed (see the [StatusIndicator README](../status-indicator/README.md)).
 
 ```jsx
 <CellList>
@@ -21,7 +21,7 @@ Use it for any cell that holds several named things, such as plans, gates or rul
 ## Props
 
 - `children`: the items, one per line. Each needs a `key`.
-- `limit`: how many items show before "Show N more". Defaults to `2`.
+- `limit`: how many items show before "Show N more". Defaults to `2`. A list one item over the limit shows every item.
 - `defaultExpanded`: whether the list starts open.
 - `onToggle`: called with the new state when the list opens or closes.
 

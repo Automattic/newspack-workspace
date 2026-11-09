@@ -115,7 +115,14 @@ export const ScheduledActions = ( { integrationId } ) => {
 			{
 				id: 'email',
 				label: __( 'Email', 'newspack-plugin' ),
-				render: ( { item } ) => ( item.email ? <DetailsLink onClick={ () => openDetails( item ) }>{ item.email }</DetailsLink> : '—' ),
+				render: ( { item } ) =>
+					item.email ? (
+						<DetailsLink onClick={ () => openDetails( item ) } title={ item.email }>
+							{ item.email }
+						</DetailsLink>
+					) : (
+						'—'
+					),
 				enableSorting: false,
 			},
 			{

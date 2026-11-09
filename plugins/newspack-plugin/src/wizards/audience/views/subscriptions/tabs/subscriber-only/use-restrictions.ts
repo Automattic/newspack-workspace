@@ -16,6 +16,8 @@ import { useCallback, useEffect, useState } from '@wordpress/element';
  * Internal dependencies.
  */
 import { WIZARD_ENDPOINT } from '../../constants';
+import { EMPTY_RULE_NAMES } from '../../types';
+import type { RuleNames } from '../../types';
 import type { Restriction, RestrictionSettings } from './types';
 
 const RULES_PATH = `${ WIZARD_ENDPOINT }/restrictions`;
@@ -23,11 +25,13 @@ const SETTINGS_PATH = `${ WIZARD_ENDPOINT }/restriction-settings`;
 
 interface RestrictionsResponse {
 	restrictions: Restriction[];
+	names: RuleNames;
 	settings: RestrictionSettings;
 }
 
 export function useRestrictions() {
 	const [ restrictions, setRestrictions ] = useState< Restriction[] >( [] );
+	const [ names, setNames ] = useState< RuleNames >( EMPTY_RULE_NAMES );
 	const [ settings, setSettings ] = useState< RestrictionSettings >( { hide_from_product_lists: false } );
 	const [ loading, setLoading ] = useState( true );
 	const [ saving, setSaving ] = useState( false );
@@ -35,6 +39,7 @@ export function useRestrictions() {
 
 	const apply = useCallback( ( response: RestrictionsResponse ) => {
 		setRestrictions( response.restrictions || [] );
+		setNames( response.names || EMPTY_RULE_NAMES );
 		setSettings( response.settings || { hide_from_product_lists: false } );
 	}, [] );
 
@@ -82,5 +87,5 @@ export function useRestrictions() {
 
 	const saveSettings = useCallback( ( next: RestrictionSettings ) => mutate( SETTINGS_PATH, 'POST', { ...next } ), [ mutate ] );
 
-	return { restrictions, settings, loading, saving, error, saveRestriction, deleteRestriction, setActive, saveSettings, reload: load };
+	return { restrictions, names, settings, loading, saving, error, saveRestriction, deleteRestriction, setActive, saveSettings, reload: load };
 }
