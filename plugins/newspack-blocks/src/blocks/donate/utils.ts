@@ -87,9 +87,9 @@ export const getColorForContrast = ( color?: string ): string => {
  * Read a minimum donation as a number, or undefined when none is set.
  *
  * Blocks saved before minimums were stored as numbers carry them as strings,
- * so both forms count. Only a missing or unreadable value is "not set": the
- * editor fills that in from the site-wide minimum, and treating a real
- * minimum as unset would replace the block's own on the next save.
+ * so both forms count. Only a missing or unreadable value is "not set", which
+ * leaves the block following the site-wide minimum; reading a real minimum as
+ * unset would drop the block's own.
  *
  * @param value Stored or entered minimum.
  */
@@ -102,18 +102,19 @@ export const getMinimumDonation = ( value: unknown ): number | undefined => {
 };
 
 /**
- * Whether the editor should drop a block's stored minimum donation on load.
+ * Attributes that switch a block's manual mode.
  *
  * A block follows the site-wide minimum until someone types one of its own.
- * Only manual blocks use their minimum on the front end, so the others drop
- * any stored one, and turning manual mode on starts out following.
+ * Switching clears the stored minimum, so a block turned manual starts out
+ * following rather than enforcing one left over from a preset or an earlier
+ * editor. A block without manual mode doesn't use its minimum.
  *
- * @param attributes                 Block attributes.
- * @param attributes.manual          Whether the block is configured manually.
- * @param attributes.minimumDonation The block's stored minimum.
+ * @param manual Whether the block is manual now.
  */
-export const dropsMinimumDonation = ( { manual, minimumDonation }: { manual?: boolean; minimumDonation?: unknown } ): boolean =>
-	! manual && minimumDonation !== undefined;
+export const toggleManualMode = ( manual?: boolean ): { manual: boolean; minimumDonation: undefined } => ( {
+	manual: ! manual,
+	minimumDonation: undefined,
+} );
 
 export const getMigratedAmount = (
 	frequency: DonationFrequencySlug,

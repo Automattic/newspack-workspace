@@ -1,16 +1,10 @@
-import { dropsMinimumDonation, getColorForContrast, getMinimumDonation } from './utils';
+import { getColorForContrast, getMinimumDonation, toggleManualMode } from './utils';
 
-describe( 'dropsMinimumDonation', () => {
-	// A manual block's minimum is what its form enforces, so loading the editor
-	// must never change it. Without one, the block follows the site-wide minimum.
-	it.each( [ 1200, '1200', 0, undefined ] )( 'keeps a manual block minimum of %p', minimumDonation => {
-		expect( dropsMinimumDonation( { manual: true, minimumDonation } ) ).toBe( false );
-	} );
-
-	// Only manual blocks use their minimum on the front end. Dropping it from the
-	// others means turning manual mode on starts out following the site minimum.
-	it.each( [ undefined, false ] )( 'drops a stored minimum when manual is %p', manual => {
-		expect( dropsMinimumDonation( { manual, minimumDonation: 5 } ) ).toBe( true );
+describe( 'toggleManualMode', () => {
+	// A block without manual mode can carry a minimum from a preset or an earlier
+	// editor. Turning manual mode on must start it following the site-wide one.
+	it( 'clears the stored minimum when manual mode is turned on', () => {
+		expect( toggleManualMode( false ) ).toStrictEqual( { manual: true, minimumDonation: undefined } );
 	} );
 } );
 
@@ -24,8 +18,8 @@ describe( 'getMinimumDonation', () => {
 		expect( getMinimumDonation( value ) ).toBe( expected );
 	} );
 
-	// An unset minimum is what lets the editor fill in the site-wide value. A
-	// number must never count as unset, or the block's own minimum is replaced.
+	// An unset minimum leaves the block following the site-wide one. A number
+	// must never count as unset, or the block's own minimum is dropped.
 	it.each( [ undefined, null, '', 'abc' ] )( 'treats %p as no minimum', value => {
 		expect( getMinimumDonation( value ) ).toBeUndefined();
 	} );

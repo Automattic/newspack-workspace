@@ -30,7 +30,7 @@ import { Icon, formatListBullets, grid } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { dropsMinimumDonation, getMigratedAmount, getMinimumDonation } from '../utils';
+import { getMigratedAmount, getMinimumDonation, toggleManualMode } from '../utils';
 import type { DonationSettings, DonationFrequencySlug, DonationAmountsArray, EditState, EditProps } from '../types';
 import TierBasedLayout from './TierBasedLayout';
 import FrequencyBasedLayout from './FrequencyBasedLayout';
@@ -83,10 +83,6 @@ const Edit = ( { attributes, setAttributes }: EditProps ) => {
 
 				if ( isEmpty( attributes.disabledFrequencies ) ) {
 					setAttributes( { disabledFrequencies: donationSettings.disabledFrequencies } );
-				}
-
-				if ( dropsMinimumDonation( attributes ) ) {
-					setAttributes( { minimumDonation: undefined } );
 				}
 
 				// Migrate old attributes.
@@ -209,6 +205,7 @@ const Edit = ( { attributes, setAttributes }: EditProps ) => {
 	const componentProps = {
 		attributes,
 		amounts,
+		minimumDonation,
 		availableFrequencies,
 		settings,
 		setAttributes,
@@ -268,7 +265,7 @@ const Edit = ( { attributes, setAttributes }: EditProps ) => {
 					<PanelBody title={ __( 'Suggested Donations', 'newspack-blocks' ) }>
 						<ToggleControl
 							checked={ Boolean( isManual ) }
-							onChange={ () => setAttributes( { manual: ! attributes.manual } ) }
+							onChange={ () => setAttributes( toggleManualMode( attributes.manual ) ) }
 							label={ __( 'Configure manually', 'newspack-blocks' ) }
 						/>
 						{ isManual ? (
