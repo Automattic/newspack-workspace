@@ -15,7 +15,7 @@ import { TableCard } from 'newspack-components';
 
 ## When to use it
 
-Every DataViews list that isn't on a full-width page goes in a `TableCard`. A shared `DataViews` inside the card switches to compact rows and the card's padding on its own; see the [DataViews README](../dataviews/README.md).
+Every DataViews list that isn't on a full-width page goes in a `TableCard`. A shared `DataViews` inside the card switches to the card's padding on its own; see the [DataViews README](../dataviews/README.md).
 
 ## Usage
 
