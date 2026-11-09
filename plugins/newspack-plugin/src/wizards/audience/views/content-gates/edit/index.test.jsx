@@ -41,6 +41,9 @@ window.newspackAudienceContentGates = {
 	presave_checks_enabled: false,
 	default_gate_status: 'draft',
 	available_access_rules: {},
+	available_archive_rules: {
+		post_type_archives: { name: 'Archive pages', default: [], options: [ { value: 'newspack_collection', label: 'Collections' } ] },
+	},
 	edit_gate_layout_url: 'https://example.test/wp-admin/post.php',
 };
 const Edit = require( './index' ).default;
@@ -50,6 +53,9 @@ const mockStoredRules = [ [ { slug: 'subscription', value: [ 50 ] } ] ];
 const mockEditedRules = [ [ { slug: 'subscription', value: [ 51 ] } ] ];
 
 jest.mock( './content-rules', () => () => null );
+jest.mock( './archive-rules', () => ( { onChange } ) => (
+	<button onClick={ () => onChange( [ { slug: 'post_type_archives', value: [ 'newspack_collection' ] } ] ) }>Pick Collections</button>
+) );
 jest.mock( './registration', () => () => null );
 jest.mock( './custom-access', () => ( { customAccess, onChange } ) => (
 	<>
@@ -176,6 +182,36 @@ describe( 'Content gate editor', () => {
 		await act( async () => {} );
 
 		expect( headerAction( 'Set to Active' ) ).toBeDefined();
+	} );
+} );
+
+describe( 'Archive rules', () => {
+	const ARCHIVE_ONLY_GATE = {
+		...STORED_GATE,
+		content_rules: [],
+		archive_rules: [ { slug: 'post_type_archives', value: [ 'newspack_collection' ] } ],
+	};
+
+	it( 'enables Save for a gate with archive rules and no content rules', async () => {
+		await renderEdit();
+		await act( async () => {
+			dispatch( WIZARD_STORE_NAMESPACE ).setAPIDataForWizard( {
+				slug: AUDIENCE_CONTENT_GATES_WIZARD_SLUG,
+				data: { gates: [ ARCHIVE_ONLY_GATE ], config: {} },
+			} );
+		} );
+		await runHeaderAction( 'Rename' );
+		fireEvent.change( screen.getByRole( 'textbox', { name: /gate name/i } ), { target: { value: 'Edited title' } } );
+		expect( headerAction( 'Save' ).disabled ).toBe( false );
+	} );
+
+	it( 'sends archive_rules in the save payload', async () => {
+		await renderEdit();
+		fireEvent.click( screen.getByRole( 'heading', { name: 'Archive pages' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Pick Collections' } ) );
+		await runHeaderAction( 'Save' );
+
+		expect( savedGate().archive_rules ).toEqual( [ { slug: 'post_type_archives', value: [ 'newspack_collection' ] } ] );
 	} );
 } );
 
