@@ -39,6 +39,13 @@ class Admin_Shell_Preferences {
 	const ROUTE         = 'admin-shell/preferences';
 	const USER_META_KEY_PREFIX = 'newspack_newsletters_admin_view_prefs_';
 
+	/**
+	 * Stored with every saved screen so a one-time migration of older saves
+	 * never runs again over a view the user has since arranged.
+	 */
+	const PREFS_VERSION_KEY = 'prefs_version';
+	const PREFS_VERSION     = 1;
+
 	const SCREEN_KEYS = [ 'newsletters-list', 'ads-list', 'advertisers-list', 'layouts-list' ];
 
 	/**
@@ -232,6 +239,7 @@ class Admin_Shell_Preferences {
 		}
 
 		$screen_key = $request->get_param( 'screen' );
+		$sanitized[ self::PREFS_VERSION_KEY ] = self::PREFS_VERSION;
 		update_user_meta( get_current_user_id(), self::get_user_meta_key( $screen_key ), $sanitized );
 
 		return rest_ensure_response( self::get_preferences() );
@@ -262,12 +270,37 @@ class Admin_Shell_Preferences {
 			if ( ! is_array( $raw ) ) {
 				continue;
 			}
+			if ( 'newsletters-list' === $screen_key ) {
+				$raw = self::migrate_newsletters_list_prefs( $raw );
+			}
 			$sanitized = self::sanitize_prefs( $raw );
 			if ( ! empty( $sanitized ) ) {
 				$prefs[ $screen_key ] = $sanitized;
 			}
 		}
 		return $prefs;
+	}
+
+	/**
+	 * Move Author to the front of the Newsletters list's saved columns, once.
+	 *
+	 * The default order now puts Author straight after the subject, and a saved
+	 * view otherwise keeps the old order for good. Only the position of `author`
+	 * changes; the rest of the saved view is left as it is.
+	 *
+	 * @param array $raw Stored preferences for the Newsletters list.
+	 * @return array The preferences, migrated and saved when they were older.
+	 */
+	private static function migrate_newsletters_list_prefs( array $raw ): array {
+		if ( (int) ( $raw[ self::PREFS_VERSION_KEY ] ?? 0 ) >= self::PREFS_VERSION ) {
+			return $raw;
+		}
+		if ( isset( $raw['fields'] ) && is_array( $raw['fields'] ) && in_array( 'author', $raw['fields'], true ) ) {
+			$raw['fields'] = array_merge( [ 'author' ], array_values( array_diff( $raw['fields'], [ 'author' ] ) ) );
+		}
+		$raw[ self::PREFS_VERSION_KEY ] = self::PREFS_VERSION;
+		update_user_meta( get_current_user_id(), self::get_user_meta_key( 'newsletters-list' ), $raw );
+		return $raw;
 	}
 
 	/**
