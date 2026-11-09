@@ -20,6 +20,8 @@ import { SyncActivityDetails } from './sync-activity-details';
 import { useRunAction } from './use-run-action';
 import { DetailsLink } from './details-link';
 
+const FIT_COLUMNS = [ 'status' ];
+
 const DEFAULT_VIEW = {
 	type: 'table',
 	page: 1,
@@ -245,6 +247,7 @@ export const SyncActivity = ( { integrationId } ) => {
 	return (
 		<>
 			<DataViews
+				fitColumns={ FIT_COLUMNS }
 				countLabel={ ( count, formatted ) =>
 					sprintf(
 						/* translators: %s: number of sync activity entries. */

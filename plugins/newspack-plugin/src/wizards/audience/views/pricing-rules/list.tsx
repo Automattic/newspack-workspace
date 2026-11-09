@@ -36,6 +36,8 @@ import { intentLabel, pathOptions } from './recipes';
 import { pricingModelSentence } from './model-sentence';
 import { RULES_API_PATH as API_PATH, IMPACT_PREVIEW_API_PATH } from './constants';
 
+const FIT_COLUMNS = [ 'status' ];
+
 const { useHistory } = Router;
 
 /**
@@ -256,7 +258,7 @@ export default function PricingRulesList() {
 				getValue: ( { item } ) => item.title,
 				render: ( { item } ) => (
 					<Button variant="link" onClick={ () => history.push( `/edit/${ item.id }` ) }>
-						<strong>{ item.title || `#${ item.id }` }</strong>
+						{ item.title || `#${ item.id }` }
 					</Button>
 				),
 			},
@@ -456,6 +458,7 @@ export default function PricingRulesList() {
 				</WizardBanner>
 			) }
 			<DataViews
+				fitColumns={ FIT_COLUMNS }
 				countLabel={ ( count, formatted ) =>
 					sprintf(
 						/* translators: %s: number of pricing rules. */

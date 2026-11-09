@@ -65,6 +65,17 @@ export const useStoryField = ( storyId, fieldSlug ) => {
 	}, [ field, fieldsProps ] );
 };
 
+const DATE_TYPES = [ 'date', 'datetime' ];
+
+// A field that is not filterable stays out of "Add filter", except dates,
+// which DataViews filters with its own date operators.
+const getFilterBy = field => {
+	if ( field.is_filterable && field.is_filterable !== 'no' ) {
+		return { operators: getFilterByOperators( field ), isPrimary: field.is_filterable === 'always' };
+	}
+	return DATE_TYPES.includes( field.type ) ? undefined : false;
+};
+
 /**
  * Hook to get the fields for DataViews.
  *
@@ -94,13 +105,7 @@ export const useStoryFields = ( { allowEdit } ) => {
 					enableHiding: ! field.always_visible_in_table,
 					enableSorting: field.is_sortable,
 					elements: getFieldElements( field ),
-					filterBy:
-						field.is_filterable && field.is_filterable !== 'no'
-							? {
-									operators: getFilterByOperators( field ),
-									isPrimary: field.is_filterable === 'always',
-							  }
-							: undefined,
+					filterBy: getFilterBy( field ),
 					render: applyFilters(
 						'newspack-story-budget.table-row-field',
 						value => <TableRowField story={ value.item } field={ field } allowEdit={ allowEdit } />,

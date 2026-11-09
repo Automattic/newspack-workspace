@@ -43,7 +43,10 @@ const createStub = () => {
 
 // The date helpers are plain functions whose output the list tests assert on, so
 // they are the real ones rather than stubs.
-const dateHelpers = require( 'newspack-components/src/dataviews/format-date' );
+const dateHelpers = {
+	...require( 'newspack-components/src/dataviews/format-date' ),
+	...require( 'newspack-components/src/breadcrumbs/format-count' ),
+};
 
 const stubs = new Map();
 

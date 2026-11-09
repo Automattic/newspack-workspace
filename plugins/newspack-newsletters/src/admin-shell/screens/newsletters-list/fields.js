@@ -5,9 +5,8 @@
  * field so sent/scheduled is never re-derived client-side.
  */
 
-import { ExternalLink, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
-import { createInterpolateElement } from '@wordpress/element';
-import { __, sprintf } from '@wordpress/i18n';
+import { ExternalLink, Tooltip, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { __ } from '@wordpress/i18n';
 import { envelope, globe } from '@wordpress/icons';
 
 import { CellList, formatSiteDateTime, StatusIndicator } from 'newspack-components';
@@ -15,7 +14,6 @@ import { CellList, formatSiteDateTime, StatusIndicator } from 'newspack-componen
 import UserRow, { avatarPropsFromAuthor } from '../../../components/user-row';
 import { useLockedPost } from '../../hooks/use-locked-posts';
 import { getAdminUrl } from '../../admin-globals';
-import { isManualProvider } from '../../../utils/service-provider';
 import { formatPostDate } from '../../utils/format-date';
 import { termsForTaxonomy } from '../../utils/terms';
 import { statusKindLabel, STATUS_KIND_LABELS } from './status-label';
@@ -27,9 +25,7 @@ export const STATUS_KIND_STATUSES = {
 	trash: 'trash',
 };
 
-const renderStatusDate = timestamp => <span className="newspack-dataviews__date">{ formatSiteDateTime( timestamp ) }</span>;
-
-const withDate = ( template, timestamp ) => createInterpolateElement( sprintf( template, '<date />' ), { date: renderStatusDate( timestamp ) } );
+const renderEmpty = () => <span className="newspack-newsletters-list__empty">&mdash;</span>;
 
 const editUrl = item => `${ getAdminUrl() }post.php?post=${ item.id }&action=edit`;
 
@@ -63,7 +59,7 @@ const TitleCell = ( { item } ) => {
 	return (
 		<VStack className="newspack-newsletters-list__title-cell" spacing={ 1 }>
 			<a className="newspack-newsletters-list__title" href={ editUrl( item ) } onClickCapture={ event => event.stopPropagation() }>
-				<strong>{ title }</strong>
+				{ title }
 			</a>
 			{ lock && renderLock( lock ) }
 		</VStack>
@@ -74,36 +70,25 @@ const renderStatus = ( { item } ) => {
 	const status = item?.newspack_newsletters_status || {};
 	const kind = status.kind || 'draft';
 	const statusName = STATUS_KIND_STATUSES[ kind ] || STATUS_KIND_STATUSES.draft;
+	const indicator = <StatusIndicator status={ statusName }>{ statusKindLabel( kind ) }</StatusIndicator>;
 
-	let label;
-	if ( 'sent' === kind && status.sent_at ) {
-		// The manual provider publishes rather than sends through an ESP, so the date reads "Published %s".
-		let dateFormat;
-		if ( isManualProvider() ) {
-			/* translators: %s: formatted publish date */
-			dateFormat = __( 'Published %s', 'newspack-newsletters' );
-		} else {
-			/* translators: %s: formatted send date */
-			dateFormat = __( 'Sent %s', 'newspack-newsletters' );
-		}
-		label = withDate( dateFormat, status.sent_at );
-	} else if ( 'scheduled' === kind && status.scheduled_at ) {
-		label = withDate(
-			/* translators: %s: formatted scheduled date */
-			__( 'Scheduled for %s', 'newspack-newsletters' ),
-			status.scheduled_at
-		);
-	} else {
-		label = statusKindLabel( kind );
+	const timestamp = { sent: status.sent_at, scheduled: status.scheduled_at }[ kind ];
+	if ( ! timestamp ) {
+		return indicator;
 	}
-
-	return <StatusIndicator status={ statusName }>{ label }</StatusIndicator>;
+	return (
+		<Tooltip text={ formatSiteDateTime( timestamp ) }>
+			<button type="button" className="newspack-newsletters-list__status-tip" onClick={ event => event.stopPropagation() }>
+				{ indicator }
+			</button>
+		</Tooltip>
+	);
 };
 
 const renderSendList = ( { item } ) => {
 	const id = item?.meta?.send_list_id || '';
 	if ( ! id ) {
-		return <span className="newspack-newsletters-list__empty">&mdash;</span>;
+		return renderEmpty();
 	}
 	const sublistId = item?.meta?.send_sublist_id || '';
 	const names = item?.newspack_newsletters_send_list;
@@ -123,7 +108,7 @@ const renderSendList = ( { item } ) => {
 const renderAuthor = ( { item } ) => {
 	const author = item?.newspack_newsletters_author;
 	if ( ! author ) {
-		return '';
+		return renderEmpty();
 	}
 	return <UserRow { ...avatarPropsFromAuthor( author ) } label={ author.name || '' } />;
 };
@@ -135,8 +120,10 @@ const termNames = ( item, taxonomy ) =>
 
 const renderTerms =
 	taxonomy =>
-	( { item } ) =>
-		termNames( item, taxonomy ).join( ', ' );
+	( { item } ) => {
+		const names = termNames( item, taxonomy );
+		return names.length ? names.join( ', ' ) : renderEmpty();
+	};
 
 const renderPublicPage = ( { item } ) => {
 	const isPublic = !! item?.meta?.is_public;
@@ -160,7 +147,7 @@ const renderPublicPage = ( { item } ) => {
 
 const renderDate = ( { item } ) => {
 	const formatted = formatPostDate( item );
-	return formatted ? <span className="newspack-dataviews__date">{ formatted }</span> : null;
+	return formatted ? <span className="newspack-dataviews__date">{ formatted }</span> : renderEmpty();
 };
 
 export function getFields( { authors = [], categories = [], tags = [], sendLists = [] } = {} ) {

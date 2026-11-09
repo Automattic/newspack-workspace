@@ -471,7 +471,7 @@ export const getGateSummarySections = (
 				) )
 			) : (
 				<p>
-					<strong>{ __( 'N/A', 'newspack-plugin' ) }</strong>
+					<span>—</span>
 				</p>
 			),
 	} );
@@ -499,7 +499,7 @@ export const getGateSummarySections = (
 					) }
 					{ ! gate.registration?.active && (
 						<p>
-							<strong>{ __( 'N/A', 'newspack-plugin' ) }</strong>
+							<span>—</span>
 						</p>
 					) }
 				</>
@@ -529,10 +529,10 @@ export const getGateSummarySections = (
 						) }
 					</p>
 				) }
-				{ /* Only when the column has nothing else: N/A beside a metering line reads as a contradiction. */ }
+				{ /* Only when the column has nothing else: a dash beside a metering line reads as a contradiction. */ }
 				{ ! showsAccessRules && ! showsPaidMetering && (
 					<p>
-						<strong>{ __( 'N/A', 'newspack-plugin' ) }</strong>
+						<span>—</span>
 					</p>
 				) }
 			</>
@@ -557,7 +557,7 @@ export const getGateSummarySections = (
 				</>
 			) : (
 				<p>
-					<strong>{ __( 'N/A', 'newspack-plugin' ) }</strong>
+					<span>—</span>
 				</p>
 			),
 		} );

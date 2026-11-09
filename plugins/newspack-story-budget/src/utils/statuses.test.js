@@ -1,20 +1,41 @@
+import { check, search } from '@wordpress/icons';
+
 import { statusGlyph } from 'newspack-components/src/status-indicator';
 
 import { getStatusIndicatorProps, getWpStatusIndicatorProps } from './statuses';
 
-const glyphOf = slug => {
-	const props = getStatusIndicatorProps( slug );
+const glyphOf = icon => {
+	const props = getStatusIndicatorProps( icon );
 	return props.icon || statusGlyph( props.status );
 };
 
 describe( 'getStatusIndicatorProps', () => {
-	it( 'draws each default status, and a custom one, with its own glyph', () => {
-		const glyphs = [ 'writing', 'editing', 'factcheck', 'approved', 'published', 'custom-status' ].map( glyphOf );
+	it( 'keeps the glyph each default status has always had', () => {
+		expect( getStatusIndicatorProps( 'draft' ) ).toEqual( { status: 'draft' } );
+		expect( getStatusIndicatorProps( 'pending' ) ).toEqual( { status: 'pending' } );
+		expect( getStatusIndicatorProps( 'search' ) ).toEqual( { icon: search } );
+		expect( getStatusIndicatorProps( 'check' ) ).toEqual( { icon: check } );
+		expect( getStatusIndicatorProps( 'active' ) ).toEqual( { status: 'active' } );
+	} );
+
+	it( 'draws each named glyph differently', () => {
+		const glyphs = [ 'draft', 'pending', 'scheduled', 'search', 'check', 'active' ].map( glyphOf );
 		expect( new Set( glyphs ).size ).toBe( glyphs.length );
 	} );
 
-	it( 'draws a status added through the filter as a stage in progress', () => {
-		expect( getStatusIndicatorProps( 'legal-review' ) ).toEqual( { status: 'progress' } );
+	it( 'draws a custom status that names a glyph with it', () => {
+		expect( getStatusIndicatorProps( 'scheduled' ) ).toEqual( { status: 'scheduled' } );
+	} );
+
+	it( 'draws a status without a glyph, or with an unknown one, as a plain dot', () => {
+		const neutral = getStatusIndicatorProps( undefined );
+		expect( neutral.status ).toBeUndefined();
+		expect( neutral.icon ).toBeTruthy();
+		expect( getStatusIndicatorProps( '' ) ).toBe( neutral );
+		expect( getStatusIndicatorProps( 'rocket' ) ).toBe( neutral );
+		[ 'draft', 'pending', 'scheduled', 'search', 'check', 'active' ].forEach( icon => {
+			expect( glyphOf( icon ) ).not.toBe( neutral.icon );
+		} );
 	} );
 } );
 

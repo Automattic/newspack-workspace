@@ -121,11 +121,11 @@ export function getFields( { renamingId = null, onRenameCommit, onRenameCancel, 
 		const label = raw || __( '(no title)', 'newspack-newsletters' );
 		// Prebuilts aren't editable; only user-owned layouts link to the editor.
 		if ( item?.is_prebuilt ) {
-			return <strong>{ label }</strong>;
+			return label;
 		}
 		return (
 			<a className="newspack-newsletters-list__title" href={ editUrl( item ) } onClickCapture={ event => event.stopPropagation() }>
-				<strong>{ label }</strong>
+				{ label }
 			</a>
 		);
 	};

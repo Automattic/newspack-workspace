@@ -33,6 +33,7 @@ const DEFAULT_VIEW = {
 	filters: [],
 	titleField: 'title',
 	fields: [ 'status', 'date', 'author', 'send_list', 'public_page' ],
+	layout: { density: 'balanced' },
 };
 
 const DEFAULT_LAYOUTS = { table: {} };

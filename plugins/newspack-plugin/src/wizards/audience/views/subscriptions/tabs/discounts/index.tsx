@@ -37,6 +37,8 @@ import type { DiscountRule, DiscountsPayload } from './types';
 
 import './style.scss';
 
+const FIT_COLUMNS = [ 'status' ];
+
 const { useHistory, useLocation, useRouteMatch } = Router;
 
 const DEFAULT_VIEW: View = {
@@ -286,6 +288,7 @@ function SubscriberDiscounts() {
 				</div>
 			) : (
 				<DataViews
+					fitColumns={ FIT_COLUMNS }
 					countLabel={ ( count, formatted ) =>
 						sprintf(
 							/* translators: %s: number of discounts. */
