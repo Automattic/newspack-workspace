@@ -383,7 +383,7 @@ class Newsletters_List_REST {
 
 	/**
 	 * Distinct non-empty `send_list_id` meta values across in-scope
-	 * newsletters. Friendly-name resolution deferred; raw IDs ship.
+	 * newsletters, labelled with the stored list name where the site has one.
 	 *
 	 * @param string $user_scope_sql User-scope WHERE fragment.
 	 * @return array<array{id: string, label: string}>
@@ -412,7 +412,7 @@ class Newsletters_List_REST {
 			static function ( $id ) {
 				return [
 					'id'    => (string) $id,
-					'label' => (string) $id,
+					'label' => self::resolve_send_list_name( (string) $id ) ?? (string) $id,
 				];
 			},
 			$ids ? $ids : []
@@ -493,29 +493,19 @@ class Newsletters_List_REST {
 	 * A send list's name from the lists already stored on this site.
 	 *
 	 * Never asks the service provider: it reads the stored subscription lists
-	 * (`Subscription_Lists`), keyed by the ID a newsletter records, and builds
-	 * that map once per request.
+	 * (`Subscription_Lists`), keyed by the ID a newsletter records.
 	 *
 	 * @param string $id Send list or sublist ID.
 	 * @return string|null The name, or null when the site doesn't store one.
 	 */
 	private static function resolve_send_list_name( string $id ): ?string {
-		static $names = null;
-		if ( null === $names ) {
-			$names = [];
-			foreach ( Subscription_Lists::get_all() as $list ) {
-				$name = (string) $list->get_remote_name();
-				if ( '' === $name ) {
-					continue;
-				}
-				$names[ (string) $list->get_public_id() ] = $name;
-				$remote_id                                = (string) $list->get_remote_id();
-				if ( '' !== $remote_id ) {
-					$names[ $remote_id ] = $name;
-				}
+		foreach ( Subscription_Lists::get_all() as $list ) {
+			$name = (string) $list->get_remote_name();
+			if ( '' !== $name && in_array( $id, [ (string) $list->get_public_id(), (string) $list->get_remote_id() ], true ) ) {
+				return $name;
 			}
 		}
-		return $names[ $id ] ?? null;
+		return null;
 	}
 
 	/**

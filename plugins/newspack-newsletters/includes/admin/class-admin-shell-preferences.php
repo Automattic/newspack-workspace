@@ -284,9 +284,9 @@ class Admin_Shell_Preferences {
 	/**
 	 * Move Author to the front of the Newsletters list's saved columns, once.
 	 *
-	 * The default order now puts Author straight after the subject, and a saved
-	 * view otherwise keeps the old order for good. Only the position of `author`
-	 * changes; the rest of the saved view is left as it is.
+	 * A view saved before `prefs_version` 1 gets Author as its first saved
+	 * column, straight after the subject, so it matches the default order. Only
+	 * the position of `author` changes; the rest of the saved view is left as it is.
 	 *
 	 * @param array $raw Stored preferences for the Newsletters list.
 	 * @return array The preferences, migrated and saved when they were older.
