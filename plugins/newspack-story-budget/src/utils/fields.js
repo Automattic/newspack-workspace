@@ -3,7 +3,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { select } from '@wordpress/data';
-import { formatSiteDate, formatSiteDateTime } from 'newspack-components';
+import { formatCount, formatSiteDate, formatSiteDateTime } from 'newspack-components';
 import { NAMESPACE as storeNamespace } from '../store/constants';
 
 export const getFieldElements = field => {
@@ -94,6 +94,9 @@ export const getDisplayValue = ( field, value ) => {
 	}
 	if ( Array.isArray( value ) ) {
 		return value.join( ', ' );
+	}
+	if ( 'number' === field.type && ! field.options?.length && Number.isFinite( Number( value ) ) ) {
+		return formatCount( value );
 	}
 	return value;
 };

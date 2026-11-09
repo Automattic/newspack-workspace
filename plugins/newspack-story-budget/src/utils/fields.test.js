@@ -109,7 +109,13 @@ describe( 'fields utils', () => {
 			expect( getDisplayValue( field, 'Hello World' ) ).toBe( 'Hello World' );
 
 			const numField = { type: 'number', slug: 'priority' };
-			expect( getDisplayValue( numField, 123 ) ).toBe( 123 );
+			expect( getDisplayValue( numField, 123 ) ).toBe( '123' );
+		} );
+
+		it( 'should group a number for the locale', () => {
+			expect( getDisplayValue( { type: 'number', slug: 'word_count' }, 2418 ) ).toBe( ( 2418 ).toLocaleString() );
+			expect( getDisplayValue( { type: 'number', slug: 'word_count' }, 0 ) ).toBe( '0' );
+			expect( getDisplayValue( { type: 'number', slug: 'word_count' }, null ) ).toBeNull();
 		} );
 
 		it( 'should handle text fields with falsy non-empty values', () => {
