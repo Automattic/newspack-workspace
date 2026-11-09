@@ -254,6 +254,24 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * A resume that can't create the new challenger keeps the recorded start.
+	 */
+	public function test_a_failed_resume_keeps_the_start() {
+		$a     = $this->create_test_variant( 'retry', 'a' );
+		$old_b = $this->create_test_variant( 'retry', 'b' );
+		$this->set_recorded_start( 'retry', '2026-10-01T00:00:00Z' );
+		wp_trash_post( $old_b );
+		add_filter( 'wp_insert_post_empty_content', '__return_true' );
+
+		$resumed = Newspack_Popups_AB_Tests::start_test( $a, Newspack_Popups_AB_Tests::get_test_name( 'retry' ), 'donation', 50 );
+
+		remove_filter( 'wp_insert_post_empty_content', '__return_true' );
+		$this->assertWPError( $resumed );
+		$this->assertSame( 'newspack_popups_ab_version_b', $resumed->get_error_code() );
+		$this->assertSame( '2026-10-01T00:00:00Z', $this->recorded_start( 'retry' ) );
+	}
+
+	/**
 	 * Nothing is recorded until a control and a challenger are both live.
 	 */
 	public function test_no_start_is_recorded_for_a_control_alone() {
