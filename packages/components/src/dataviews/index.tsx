@@ -7,7 +7,7 @@
 /**
  * WordPress dependencies
  */
-import { useContext, useMemo } from '@wordpress/element';
+import { createContext, useContext, useMemo } from '@wordpress/element';
 import { DataViews as BaseDataViews } from '@wordpress/dataviews';
 import { Stack } from '@wordpress/ui';
 
@@ -20,8 +20,20 @@ import classnames from 'classnames';
  * Internal dependencies
  */
 import { columnShareWidth, evenColumns, titleColumnWidth, withoutColumnStyles } from './even-columns';
+import CountFooter, { type CountLabel } from './count-footer';
 import { TableCardContext } from '../table-card/context';
 import './style.scss';
+
+const FooterContext = createContext< React.ReactNode >( undefined );
+
+/**
+ * The list's footer, for a list that passes its own `children` layout: the
+ * named count from `countLabel` when the list has one, otherwise core's footer.
+ */
+function Footer() {
+	const footer = useContext( FooterContext );
+	return <>{ footer ?? <BaseDataViews.Footer /> }</>;
+}
 
 type DataViewsProps< Item > = React.ComponentProps< typeof BaseDataViews< Item > > & {
 	className?: string;
@@ -36,6 +48,18 @@ type DataViewsProps< Item > = React.ComponentProps< typeof BaseDataViews< Item >
 	 * for a short, fixed list whose columns are not worth changing.
 	 */
 	viewOptions?: boolean;
+	/**
+	 * Names the footer count with the list's own noun instead of core's "N
+	 * items". Receives the count and the count formatted for the locale:
+	 * `( count, formatted ) => sprintf( _n( '%s member', '%s members', count, 'newspack-plugin' ), formatted )`.
+	 */
+	countLabel?: CountLabel;
+	/**
+	 * Field ids whose table columns shrink to their content, such as a status
+	 * badge or a count, instead of taking an even share of the width. The column
+	 * is as wide as its widest cell or its header label, whichever is wider.
+	 */
+	fitColumns?: string[];
 };
 
 function ToolbarLayout( {
@@ -44,12 +68,14 @@ function ToolbarLayout( {
 	searchLabel,
 	inlineFilters,
 	viewOptions,
+	footer,
 }: {
 	header?: React.ReactNode;
 	search: boolean;
 	searchLabel?: string;
 	inlineFilters: boolean;
 	viewOptions: boolean;
+	footer?: React.ReactNode;
 } ) {
 	return (
 		<>
@@ -70,7 +96,7 @@ function ToolbarLayout( {
 			</Stack>
 			{ ! inlineFilters && <BaseDataViews.FiltersToggled className="dataviews-filters__container" /> }
 			<BaseDataViews.Layout />
-			<BaseDataViews.Footer />
+			{ footer ?? <BaseDataViews.Footer /> }
 		</>
 	);
 }
@@ -83,6 +109,8 @@ function DataViews( {
 	children,
 	view,
 	onChangeView,
+	countLabel,
+	fitColumns,
 	...props
 }: DataViewsProps< unknown > ) {
 	// A row without its title can't be told apart from the next, so the title is
@@ -98,10 +126,10 @@ function DataViews( {
 	);
 	const isInCard = useContext( TableCardContext );
 	const titledView = useMemo( () => ( view.titleField && view.showTitle === false ? { ...view, showTitle: true } : view ), [ view ] );
-	const evenView = useMemo( () => evenColumns( titledView ), [ titledView ] );
+	const evenView = useMemo( () => evenColumns( titledView, fitColumns ), [ titledView, fitColumns ] );
 	const columnWidths = useMemo( () => {
 		const widths: Record< string, string > = {};
-		const titleWidth = titleColumnWidth( titledView );
+		const titleWidth = titleColumnWidth( titledView, fitColumns );
 		const columnWidth = columnShareWidth( titledView );
 		if ( titleWidth ) {
 			widths[ '--newspack-dataviews-title-width' ] = titleWidth;
@@ -110,16 +138,28 @@ function DataViews( {
 			widths[ '--newspack-dataviews-column-width' ] = columnWidth;
 		}
 		return Object.keys( widths ).length ? ( widths as React.CSSProperties ) : undefined;
-	}, [ titledView ] );
+	}, [ titledView, fitColumns ] );
+	const footer =
+		countLabel && ! evenView.infiniteScrollEnabled ? (
+			<CountFooter
+				countLabel={ countLabel }
+				view={ evenView }
+				data={ props.data }
+				actions={ props.actions }
+				paginationInfo={ props.paginationInfo }
+				isLoading={ props.isLoading }
+			/>
+		) : undefined;
 	const layout =
 		children ??
-		( inlineFilters || ! viewOptions ? (
+		( inlineFilters || ! viewOptions || footer ? (
 			<ToolbarLayout
 				header={ props.header }
 				search={ props.search ?? true }
 				searchLabel={ props.searchLabel }
 				inlineFilters={ inlineFilters }
 				viewOptions={ viewOptions }
+				footer={ footer }
 			/>
 		) : undefined );
 
@@ -131,7 +171,7 @@ function DataViews( {
 				onChangeView={ nextView => onChangeView( withoutColumnStyles( nextView ) ) }
 				fields={ shownFields }
 			>
-				{ layout }
+				{ children ? <FooterContext.Provider value={ footer }>{ children }</FooterContext.Provider> : layout }
 			</BaseDataViews>
 		</div>
 	);
@@ -144,7 +184,9 @@ function DataViews( {
 // typing for `data`, `fields`, `actions`, `getItemId`, etc. The assertion
 // is verified by the compiler: the generic signature is assignable to the
 // implementation's concrete one.
-export default DataViews as < Item >( props: DataViewsProps< Item > ) => React.JSX.Element;
+export default Object.assign( DataViews, { Footer } ) as ( < Item >( props: DataViewsProps< Item > ) => React.JSX.Element ) & {
+	Footer: typeof Footer;
+};
 
 export { columnShareWidth, evenColumns, titleColumnWidth, withoutColumnStyles } from './even-columns';
 export type { Action, Field, View } from '@wordpress/dataviews';

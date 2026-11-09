@@ -6,6 +6,7 @@
  */
 
 use Newspack_Story_Budget\Fields;
+use Newspack_Story_Budget\Fields\Abstract_Field;
 use Newspack_Story_Budget\Fields\Editable_Field;
 use Newspack_Story_Budget\Fields\Read_Only_Field;
 use Newspack_Story_Budget\Fields\Taxonomy_Field;
@@ -416,5 +417,39 @@ class TestFields extends WP_UnitTestCase {
 				sprintf( 'Array version should have the same key "%s" as the object version.', $slug )
 			);
 		}
+	}
+
+	/**
+	 * Saving a story field counts as a modification, without touching the post's own modified date.
+	 */
+	public function test_last_modified_follows_story_field_saves() {
+		global $wpdb;
+		$post_id = self::create_post();
+		$wpdb->update( $wpdb->posts, [ 'post_modified_gmt' => '2026-01-01 00:00:00' ], [ 'ID' => $post_id ] ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		delete_post_meta( $post_id, Abstract_Field::FIELD_PREFIX . '_modified' );
+		clean_post_cache( $post_id );
+		$post_modified = strtotime( '2026-01-01 00:00:00 UTC' );
+		$field         = Fields::get_field( 'last_modified' );
+
+		$saved_at = time();
+		Fields::get_field( 'description' )->update_value( $post_id, 'A note for the desk' );
+		clean_post_cache( $post_id );
+		$this->assertGreaterThanOrEqual( $saved_at, $field->get_value( $post_id ), 'A story field save sets the last modified time.' );
+		$this->assertEquals( '2026-01-01 00:00:00', get_post_field( 'post_modified_gmt', $post_id ), 'The post keeps its own modified date.' );
+
+		update_post_meta( $post_id, Abstract_Field::FIELD_PREFIX . '_modified', $post_modified - 600 );
+		$this->assertEquals( $post_modified, $field->get_value( $post_id ), 'A later post edit sets the last modified time.' );
+	}
+
+	/**
+	 * WP Status carries the labels WordPress registers for each post status a story can have.
+	 */
+	public function test_wp_status_options_use_post_status_labels() {
+		$options = Fields::get_field( 'wp_status' )->to_array()['options'];
+		$labels  = array_column( $options, 'label', 'value' );
+
+		$this->assertSame( [ 'publish', 'pending', 'draft', 'future', 'private' ], array_keys( $labels ) );
+		$this->assertSame( get_post_status_object( 'publish' )->label, $labels['publish'] );
+		$this->assertSame( get_post_status_object( 'future' )->label, $labels['future'] );
 	}
 }

@@ -31,6 +31,44 @@ Rows keep the default density wherever the list sits. Set `layout.density: 'comp
 </TableCard>
 ```
 
+## Column widths
+
+In a table, the title takes an even share of the width and never less than 30%, and every other visible column splits the rest evenly. A text cell can grow to a 30ch readable minimum before it wraps.
+
+A short column, such as a status badge or a count, doesn't need an even share. Name it in `fitColumns` and it shrinks to its content:
+
+```jsx
+<DataViews fitColumns={ [ 'status', 'active_subscriptions' ] } { ...props } />
+```
+
+- A fitted column is as wide as its widest cell or its header label, whichever is wider, plus the cell padding. The header label never wraps.
+- Fitted columns take no share and skip the 30ch minimum. The other columns split the space they free, and the title is still never narrower than any of them.
+- An id for a column the viewer has switched off is ignored.
+- Keep it for content with a known, short width. A column of free text stays on an even share.
+
+## Naming the count
+
+DataViews' footer counts rows as "6 items". Give the list a `countLabel` so the count names what it holds: "6 members", or "10 of 1,200 subscribers" when the page shows only part of the list.
+
+`countLabel( count, formatted )` receives the total and the total formatted for the site's locale, and returns the phrase. Use `_n()` so the noun follows the count:
+
+```jsx
+<DataViews
+	countLabel={ ( count, formatted ) =>
+		sprintf(
+			/* translators: %s: number of members in the group. */
+			_n( '%s member', '%s members', count, 'newspack-plugin' ),
+			formatted
+		)
+	}
+	{ ...props }
+/>
+```
+
+- The footer shows under the same conditions as core's: a count when a row has a bulk action, pagination when there is more than one page.
+- Without `countLabel`, or with infinite scroll, core's own footer and "N items" stay.
+- A list that passes its own `children` layout renders `<DataViews.Footer />` where core's `<DataViews.Footer />` would go. It shows the named count when the list has a `countLabel`, and core's footer otherwise.
+
 ## Dates and times
 
 Every date or time in a list follows the site's Settings › General: its date format, time format and timezone. Format them with the helpers rather than `formats.datetime`, which core hard-codes as `F j, Y g:i a` whatever the site uses, or DataViews' built-in `datetime` field type, which formats with it.

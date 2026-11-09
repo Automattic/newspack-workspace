@@ -34,7 +34,7 @@ import { useGroup, useGroupActions } from '../data/use-group';
 import { fmtDate } from '../format';
 import { GROUP_LABEL, GROUP_LABEL_PLURAL, ROLE_LABELS, ROLE_RANK } from '../labels';
 import { STATUS_LABELS, STATUS_BADGE_INTENT } from '../status';
-import { seatCountText, seatsRemaining } from '../flows/capacity';
+import { pendingInvitesText, seatsRemaining, seatUsageText } from '../flows/capacity';
 
 import AddMembersFlow from '../flows/AddMembersFlow';
 import AdjustSeatsFlow from '../flows/AdjustSeatsFlow';
@@ -374,6 +374,7 @@ function GroupDetailView() {
 	const hasSeats = seatsRemaining( group ) > 0;
 	const canInvite = isActive( group ) && hasSeats;
 	const hasLink = !! group.inviteLink?.active;
+	const invitesNote = pendingInvitesText( group );
 
 	const copyInviteLink = async () => {
 		let url = '';
@@ -414,13 +415,13 @@ function GroupDetailView() {
 			{ roleError && <Notice isError noticeText={ roleError } /> }
 			<TableCard
 				heading={ 2 }
-				separator
 				title={
 					<>
 						{ __( 'Members', 'newspack-plugin' ) }{ ' ' }
-						<span className="newspack-subscribers__seat-count">{ `(${ seatCountText( group ) })` }</span>
+						<span className="newspack-subscribers__seat-count">{ `(${ seatUsageText( group ) })` }</span>
 					</>
 				}
+				description={ invitesNote && <span className="newspack-subscribers__muted">{ invitesNote }</span> }
 				actions={
 					<>
 						<Button
@@ -500,6 +501,13 @@ function GroupDetailView() {
 				}
 			>
 				<DataViews
+					countLabel={ ( count, formatted ) =>
+						sprintf(
+							/* translators: %s: number of members in the group. */
+							_n( '%s member', '%s members', count, 'newspack-plugin' ),
+							formatted
+						)
+					}
 					className={
 						isSearchable
 							? 'newspack-subscribers__members-dataviews'
@@ -522,8 +530,15 @@ function GroupDetailView() {
 			</TableCard>
 
 			{ inviteRows.length > 0 && (
-				<TableCard heading={ 2 } separator title={ __( 'Invitations', 'newspack-plugin' ) }>
+				<TableCard heading={ 2 } title={ __( 'Invitations', 'newspack-plugin' ) }>
 					<DataViews
+						countLabel={ ( count, formatted ) =>
+							sprintf(
+								/* translators: %s: number of invitations sent for the group. */
+								_n( '%s invitation', '%s invitations', count, 'newspack-plugin' ),
+								formatted
+							)
+						}
 						className="newspack-subscribers__no-toolbar"
 						data={ processedInvites }
 						fields={ inviteFields }

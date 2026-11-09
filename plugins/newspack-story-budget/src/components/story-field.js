@@ -9,6 +9,7 @@ import { __experimentalInspectorPopoverHeader as InspectorPopoverHeader } from '
 import { useSelect, useDispatch } from '@wordpress/data';
 import { useState, useMemo } from '@wordpress/element';
 import classnames from 'classnames';
+import { StatusIndicator } from 'newspack-components';
 
 /**
  * Internal dependencies.
@@ -16,6 +17,7 @@ import classnames from 'classnames';
 import { NAMESPACE as storeNamespace } from '../store/constants';
 import StoryFieldControl from './story-field-control';
 import utils from '../utils';
+import { getStatusIndicatorProps, getWpStatusIndicatorProps } from '../utils/statuses';
 import { useStory, useStoryField } from '../hooks';
 
 const DEFAULT_POPOVER_PROPS = {
@@ -33,6 +35,8 @@ export default ( {
 	saveInPlace = false,
 	showPostLinks = false,
 	popoverProps,
+	truncate = true,
+	emptyValue = <span className="newspack-story-budget__field__no-value">&mdash;</span>,
 } ) => {
 	const { canEditStory, isLoadingStory, fieldError } = useSelect(
 		select => ( {
@@ -57,9 +61,11 @@ export default ( {
 		return field ? utils.fields.getDisplayValue( field, value ) : null;
 	}, [ field, value ] );
 
+	const isLongValue = !! displayValue && displayValue.length > 70;
+
 	const collapsedValue = useMemo( () => {
-		return displayValue && displayValue.length > 70 ? `${ displayValue.slice( 0, 67 ) }...` : null;
-	}, [ displayValue ] );
+		return truncate && isLongValue ? `${ displayValue.slice( 0, 67 ) }...` : null;
+	}, [ displayValue, truncate, isLongValue ] );
 
 	const canEdit = useMemo( () => allowEdit && canEditStory && field.is_editable, [ allowEdit, canEditStory, field ] );
 
@@ -72,6 +78,18 @@ export default ( {
 		return customRender;
 	}
 
+	if ( ! canEdit && displayValue === null && emptyValue === null ) {
+		return null;
+	}
+
+	const renderValue = text => {
+		if ( field.slug === 'status' ) {
+			return <StatusIndicator { ...getStatusIndicatorProps( value ) }>{ text }</StatusIndicator>;
+		}
+		const wpStatusProps = field.slug === 'wp_status' && getWpStatusIndicatorProps( value );
+		return wpStatusProps ? <StatusIndicator { ...wpStatusProps }>{ text }</StatusIndicator> : text;
+	};
+
 	const fieldClassName = classnames( 'newspack-story-budget__field', {
 		'newspack-story-budget__field--date': [ 'date', 'datetime' ].includes( field.type ),
 	} );
@@ -79,12 +97,12 @@ export default ( {
 	if ( ! canEdit ) {
 		return (
 			<div className={ fieldClassName }>
-				{ collapsedValue ? (
+				{ isLongValue ? (
 					<Tooltip text={ displayValue } delay={ 300 } placement="bottom-start" className="newspack-story-budget__field__value-tooltip">
-						<span className="newspack-story-budget__field__value">{ collapsedValue }</span>
+						<span className="newspack-story-budget__field__value">{ collapsedValue || displayValue }</span>
 					</Tooltip>
 				) : (
-					<span className="newspack-story-budget__field__value">{ displayValue !== null ? displayValue : '--' }</span>
+					<span className="newspack-story-budget__field__value">{ displayValue !== null ? renderValue( displayValue ) : emptyValue }</span>
 				) }
 			</div>
 		);
@@ -113,7 +131,7 @@ export default ( {
 						{ displayValue === null ? (
 							<span className="newspack-story-budget__field__empty-value">{ __( 'Click to set', 'newspack-story-budget' ) }</span>
 						) : (
-							collapsedValue || displayValue
+							collapsedValue || renderValue( displayValue )
 						) }
 					</Button>
 				) }

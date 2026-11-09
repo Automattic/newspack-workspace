@@ -50,7 +50,14 @@ const titleId = useId();
   under the `SectionHeader` (`h2`) most wizard screens use.
 - `actions` — controls rendered in the card header: opposite the title when
   there is one, end-aligned on their own otherwise. A header renders when
-  either `title` or `actions` is renderable (same falsy rules as `title`).
+  `title`, `description` or `actions` is renderable (same falsy rules as `title`).
+- `description` — a line under the title, inside the header, such as a status
+  note. The title and description stack 4px apart (`Stack` gap `xs`), with the
+  actions centred beside them. Pass it styled; the card adds no type styles.
+- `separator` — a line between the header and the table, which then starts
+  right under it. On by default whenever the card has a header (a `title`,
+  `description` or `actions`), so a list never runs into the content above it;
+  a card with no header gets no line. Pass `separator={ false }` to leave it out.
 - `before` / `after` — content rendered inside the card padding, above and
   below the table: stats rows, notes, footer actions. Slot children stretch to
   the card's full content width; wrap a lone control in a `Stack` from
@@ -68,10 +75,11 @@ Whether the table touches the card's top and bottom edges is decided by
 upstream `:first-child`/`:last-child` rules, and absent slots render no DOM
 node, so the shape follows from which props are passed:
 
-- No `title`, no `actions`, no `before`, no `after` — the table is flush to
+- No `title`, no `description`, no `actions`, no `before`, no `after` — the table is flush to
   all four card edges.
-- `title` or `actions` present — a header sits above; the table is inset from
-  the top by the card's header→content gap token (upstream's
+- `title`, `description` or `actions` present — a header sits above, with a
+  separator line under it unless `separator={ false }`. Without the line, the
+  table is inset from the top by the card's header→content gap token (upstream's
   `.header + .content` rule zeroes the content's own top padding and reconciles
   the header's bottom padding to that gap with a compensating margin).
 - `before` / `after` present — the slot sits in the padding and the table no

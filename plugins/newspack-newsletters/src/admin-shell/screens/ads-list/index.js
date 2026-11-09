@@ -4,7 +4,7 @@
 
 import { Button } from '@wordpress/components';
 import { useCallback, useEffect, useMemo, useRef, useState } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { emailAd } from 'newspack-icons';
 
 import { DataViews, EmptyState } from 'newspack-components';
@@ -186,6 +186,13 @@ export default function AdsListScreen() {
 		<>
 			<HeaderCount count={ paginationInfo.totalItems } />
 			<DataViews
+				countLabel={ ( count, formatted ) =>
+					sprintf(
+						/* translators: %s: number of ads. */
+						_n( '%s ad', '%s ads', count, 'newspack-newsletters' ),
+						formatted
+					)
+				}
 				className="newspack-newsletters-list newspack-newsletters-ads-list"
 				data={ data }
 				fields={ fields }

@@ -9,7 +9,7 @@
 
 import { Button } from '@wordpress/components';
 import { useCallback, useMemo, useState } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { store } from '@wordpress/icons';
 
 import { DataViews, EmptyState } from 'newspack-components';
@@ -126,6 +126,13 @@ export default function AdvertisersListScreen() {
 				</EmptyState.Root>
 			) : (
 				<DataViews
+					countLabel={ ( count, formatted ) =>
+						sprintf(
+							/* translators: %s: number of advertisers. */
+							_n( '%s advertiser', '%s advertisers', count, 'newspack-newsletters' ),
+							formatted
+						)
+					}
 					className="newspack-newsletters-list newspack-newsletters-advertisers-list"
 					data={ data }
 					fields={ fields }

@@ -4,7 +4,7 @@
 
 import { Button } from '@wordpress/components';
 import { useMemo, useState } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { envelope } from '@wordpress/icons';
 
 import { DataViews, EmptyState } from 'newspack-components';
@@ -32,7 +32,7 @@ const DEFAULT_VIEW = {
 	search: '',
 	filters: [],
 	titleField: 'title',
-	fields: [ 'author', 'status', 'date', 'send_list', 'public_page' ],
+	fields: [ 'status', 'date', 'author', 'send_list', 'public_page' ],
 };
 
 const DEFAULT_LAYOUTS = { table: {} };
@@ -109,6 +109,13 @@ export default function NewslettersListScreen() {
 			<HeaderCount count={ paginationInfo.totalItems } />
 			<LockedPostsContext.Provider value={ locks }>
 				<DataViews
+					countLabel={ ( count, formatted ) =>
+						sprintf(
+							/* translators: %s: number of newsletters. */
+							_n( '%s newsletter', '%s newsletters', count, 'newspack-newsletters' ),
+							formatted
+						)
+					}
 					className="newspack-newsletters-list"
 					data={ data }
 					fields={ fields }

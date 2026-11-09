@@ -499,31 +499,51 @@ class Admin_Shell_Preferences_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A Newsletters list view saved before prefs_version 1 gets Author moved to
-	 * the first saved column, and the migration is recorded so it runs once.
+	 * A Newsletters list view saved before any migration gets Author just before
+	 * Send list, and the migration is recorded so it runs once.
 	 */
-	public function test_older_newsletters_view_moves_author_first() {
+	public function test_unversioned_newsletters_view_moves_author_before_send_list() {
 		$key = Admin_Shell_Preferences::get_user_meta_key( 'newsletters-list' );
-		update_user_meta( $this->editor_id, $key, [ 'fields' => [ 'status', 'date', 'send_list', 'author' ] ] );
+		update_user_meta( $this->editor_id, $key, [ 'fields' => [ 'status', 'date', 'send_list', 'public_page', 'author' ] ] );
 
 		$this->assertSame(
-			[ 'author', 'status', 'date', 'send_list' ],
+			[ 'status', 'date', 'author', 'send_list', 'public_page' ],
 			Admin_Shell_Preferences::get_preferences()['newsletters-list']['fields']
 		);
-		$this->assertSame( Admin_Shell_Preferences::PREFS_VERSION, get_user_meta( $this->editor_id, $key, true )[ Admin_Shell_Preferences::PREFS_VERSION_KEY ] );
+		$this->assertSame( 2, get_user_meta( $this->editor_id, $key, true )[ Admin_Shell_Preferences::PREFS_VERSION_KEY ] );
 	}
 
 	/**
-	 * A view saved at the current prefs_version keeps the order its owner chose,
-	 * Author last included.
+	 * A view version 1 moved Author to the front of gets it just before Send list.
 	 */
-	public function test_current_newsletters_view_keeps_its_order() {
+	public function test_version_one_newsletters_view_moves_author_before_send_list() {
+		$key = Admin_Shell_Preferences::get_user_meta_key( 'newsletters-list' );
+		update_user_meta(
+			$this->editor_id,
+			$key,
+			[
+				'fields'                                   => [ 'author', 'status', 'date', 'send_list', 'public_page' ],
+				Admin_Shell_Preferences::PREFS_VERSION_KEY => 1,
+			]
+		);
+
+		$this->assertSame(
+			[ 'status', 'date', 'author', 'send_list', 'public_page' ],
+			Admin_Shell_Preferences::get_preferences()['newsletters-list']['fields']
+		);
+		$this->assertSame( 2, get_user_meta( $this->editor_id, $key, true )[ Admin_Shell_Preferences::PREFS_VERSION_KEY ] );
+	}
+
+	/**
+	 * With Send list hidden, Author moves to the end of the saved columns.
+	 */
+	public function test_version_one_view_without_send_list_moves_author_last() {
 		update_user_meta(
 			$this->editor_id,
 			Admin_Shell_Preferences::get_user_meta_key( 'newsletters-list' ),
 			[
-				'fields'                                   => [ 'status', 'date', 'author' ],
-				Admin_Shell_Preferences::PREFS_VERSION_KEY => Admin_Shell_Preferences::PREFS_VERSION,
+				'fields'                                   => [ 'author', 'status', 'date' ],
+				Admin_Shell_Preferences::PREFS_VERSION_KEY => 1,
 			]
 		);
 
@@ -531,5 +551,56 @@ class Admin_Shell_Preferences_Test extends WP_UnitTestCase {
 			[ 'status', 'date', 'author' ],
 			Admin_Shell_Preferences::get_preferences()['newsletters-list']['fields']
 		);
+	}
+
+	/**
+	 * A version 1 view whose owner has since moved Author off the front keeps
+	 * their order.
+	 */
+	public function test_version_one_view_arranged_since_keeps_its_order() {
+		update_user_meta(
+			$this->editor_id,
+			Admin_Shell_Preferences::get_user_meta_key( 'newsletters-list' ),
+			[
+				'fields'                                   => [ 'status', 'author', 'date', 'send_list' ],
+				Admin_Shell_Preferences::PREFS_VERSION_KEY => 1,
+			]
+		);
+
+		$this->assertSame(
+			[ 'status', 'author', 'date', 'send_list' ],
+			Admin_Shell_Preferences::get_preferences()['newsletters-list']['fields']
+		);
+	}
+
+	/**
+	 * A view saved at the current prefs_version keeps the order its owner chose,
+	 * Author first included.
+	 */
+	public function test_current_newsletters_view_keeps_its_order() {
+		update_user_meta(
+			$this->editor_id,
+			Admin_Shell_Preferences::get_user_meta_key( 'newsletters-list' ),
+			[
+				'fields'                                   => [ 'author', 'status', 'date', 'send_list' ],
+				Admin_Shell_Preferences::PREFS_VERSION_KEY => 2,
+			]
+		);
+
+		$this->assertSame(
+			[ 'author', 'status', 'date', 'send_list' ],
+			Admin_Shell_Preferences::get_preferences()['newsletters-list']['fields']
+		);
+	}
+
+	/**
+	 * A save stamps the current version, so the migration never reorders it.
+	 */
+	public function test_a_save_stamps_the_current_version() {
+		rest_do_request( $this->make_request( 'newsletters-list', [ 'fields' => [ 'author', 'status' ] ] ) );
+
+		$stored = get_user_meta( $this->editor_id, Admin_Shell_Preferences::get_user_meta_key( 'newsletters-list' ), true );
+		$this->assertSame( Admin_Shell_Preferences::PREFS_VERSION, $stored[ Admin_Shell_Preferences::PREFS_VERSION_KEY ] );
+		$this->assertSame( [ 'author', 'status' ], Admin_Shell_Preferences::get_preferences()['newsletters-list']['fields'] );
 	}
 }

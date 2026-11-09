@@ -116,6 +116,8 @@ const DEFAULT_VIEW: View & { fields: string[] } = {
 	titleField: 'name',
 };
 
+const FIT_COLUMNS = [ 'status', 'active_subscriptions' ];
+
 export default function SubscriptionProductsList( { scope = 'subscriptions' }: { scope?: Scope } ) {
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const history = useHistory();
@@ -439,6 +441,7 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				</Notice>
 			) }
 			<DataViews
+				countLabel={ SCOPE_COUNT_LABELS[ scope ] }
 				className="newspack-subscription-products__dataviews"
 				data={ processedData }
 				fields={ visibleFields }
@@ -449,6 +452,7 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				defaultLayouts={ { table: {}, grid: {} } }
 				isLoading={ isLoading }
 				getItemId={ ( item: SubscriptionProduct ) => String( item.id ) }
+				fitColumns={ FIT_COLUMNS }
 				search
 				inlineFilters
 			/>

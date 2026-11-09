@@ -5,7 +5,7 @@
 /**
  * WordPress dependencies.
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { useState, useEffect, useCallback, useMemo, Fragment } from '@wordpress/element';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
@@ -430,6 +430,13 @@ const Emails = () => {
 				</Stack>
 			) }
 			<DataViews
+				countLabel={ ( count, formatted ) =>
+					sprintf(
+						/* translators: %s: number of emails. */
+						_n( '%s email', '%s emails', count, 'newspack-plugin' ),
+						formatted
+					)
+				}
 				className="newspack-emails"
 				data={ processedData }
 				fields={ fields }

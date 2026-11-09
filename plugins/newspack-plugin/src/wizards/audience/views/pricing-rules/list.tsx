@@ -456,6 +456,13 @@ export default function PricingRulesList() {
 				</WizardBanner>
 			) }
 			<DataViews
+				countLabel={ ( count, formatted ) =>
+					sprintf(
+						/* translators: %s: number of pricing rules. */
+						_n( '%s rule', '%s rules', count, 'newspack-plugin' ),
+						formatted
+					)
+				}
 				data={ processedData }
 				fields={ fields }
 				view={ view }

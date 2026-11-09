@@ -4,6 +4,11 @@
 import { render, screen } from '@testing-library/react';
 
 /**
+ * WordPress dependencies
+ */
+import { _n, sprintf } from '@wordpress/i18n';
+
+/**
  * Internal dependencies
  */
 import DataViews from '.';
@@ -110,5 +115,72 @@ describe( 'DataViews', () => {
 
 		expect( container.querySelector( 'input[type="search"]' ) ).not.toBeInTheDocument();
 		expect( filterChips( container ) ).toEqual( [ 'Plan', 'Status' ] );
+	} );
+
+	describe( 'countLabel', () => {
+		const bulkActions = [ { id: 'remove', label: 'Remove', supportsBulk: true, callback: () => {} } ];
+		const rows = count => Array.from( { length: count }, ( _, index ) => ( { id: index + 1, title: `Row ${ index + 1 }` } ) );
+		const memberLabel = ( count, formatted ) =>
+			// translators: %s is the number of members.
+			sprintf( _n( '%s member', '%s members', count ), formatted );
+		const footerCount = container => container.querySelector( '.dataviews-footer__item-count' )?.textContent;
+
+		it( 'names a single item in the singular', () => {
+			const { container } = renderDataViews( { actions: bulkActions, countLabel: memberLabel } );
+
+			expect( footerCount( container ) ).toBe( '1 member' );
+		} );
+
+		it( 'names several items in the plural', () => {
+			const { container } = renderDataViews( {
+				actions: bulkActions,
+				countLabel: memberLabel,
+				data: rows( 6 ),
+				paginationInfo: { totalItems: 6, totalPages: 1 },
+			} );
+
+			expect( footerCount( container ) ).toBe( '6 members' );
+		} );
+
+		it( 'counts the page against the named total when the list spans pages', () => {
+			const { container } = renderDataViews( {
+				actions: bulkActions,
+				countLabel: memberLabel,
+				data: rows( 10 ),
+				paginationInfo: { totalItems: 1200, totalPages: 120 },
+			} );
+
+			expect( footerCount( container ) ).toBe( '10 of 1,200 members' );
+		} );
+
+		it( 'keeps core’s count when no label is set', () => {
+			const { container } = renderDataViews( { actions: bulkActions } );
+
+			expect( footerCount( container ) ).toBe( '1 item' );
+		} );
+
+		it( 'shows no count when no row has a bulk action, as core does', () => {
+			const { container } = renderDataViews( { countLabel: memberLabel } );
+
+			expect( container.querySelector( '.dataviews-footer' ) ).not.toBeInTheDocument();
+		} );
+
+		it( 'names the count in a custom layout that renders DataViews.Footer', () => {
+			const { container } = renderDataViews( {
+				actions: bulkActions,
+				countLabel: memberLabel,
+				data: rows( 6 ),
+				paginationInfo: { totalItems: 6, totalPages: 1 },
+				children: <DataViews.Footer />,
+			} );
+
+			expect( footerCount( container ) ).toBe( '6 members' );
+		} );
+
+		it( 'keeps core’s count in a custom layout without a label', () => {
+			const { container } = renderDataViews( { actions: bulkActions, children: <DataViews.Footer /> } );
+
+			expect( footerCount( container ) ).toBe( '1 item' );
+		} );
 	} );
 } );

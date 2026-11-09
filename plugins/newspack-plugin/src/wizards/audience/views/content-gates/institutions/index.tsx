@@ -5,7 +5,7 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { Fragment, useState, useEffect, useCallback, useMemo } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
@@ -282,6 +282,13 @@ export default function Institutions() {
 	return (
 		<>
 			<DataViews
+				countLabel={ ( count, formatted ) =>
+					sprintf(
+						/* translators: %s: number of institutions. */
+						_n( '%s institution', '%s institutions', count, 'newspack-plugin' ),
+						formatted
+					)
+				}
 				className="newspack-institutions"
 				data={ processedData }
 				fields={ fields }

@@ -260,6 +260,13 @@ function SubscriberOnlyProducts() {
 				// The DataViews wrapper isn't generic — its props resolve to `unknown`,
 				// so the typed definitions above are cast at the boundary.
 				<DataViews
+					countLabel={ ( count, formatted ) =>
+						sprintf(
+							/* translators: %s: number of restrictions. */
+							_n( '%s restriction', '%s restrictions', count, 'newspack-plugin' ),
+							formatted
+						)
+					}
 					data={ processedData }
 					fields={ fields as unknown as Field< unknown >[] }
 					view={ view as View }

@@ -60,11 +60,18 @@ export const getFilterByOperators = field => {
 	return [ 'isAny', 'isNone' ];
 };
 
+/**
+ * Whether a field has no value. Only null, undefined and an empty string count:
+ * 0 and false are values, shown as "0" and "No".
+ *
+ * @param {*} value The field value.
+ * @return {boolean} Whether the value is empty.
+ */
+export const isEmptyValue = value => value === null || value === undefined || value === '';
+
 export const getDisplayValue = ( field, value ) => {
 	if (
-		value === null ||
-		value === undefined ||
-		value === '' ||
+		isEmptyValue( value ) ||
 		( Array.isArray( value ) && ! value.length ) ||
 		( [ 'date', 'datetime', 'text', 'longtext' ].includes( field.type ) && ! value )
 	) {
@@ -83,7 +90,7 @@ export const getDisplayValue = ( field, value ) => {
 		return formatSiteDateTime( value );
 	}
 	if ( field.type === 'boolean' ) {
-		return value ? 'Yes' : 'No';
+		return value ? __( 'Yes', 'newspack-story-budget' ) : __( 'No', 'newspack-story-budget' );
 	}
 	if ( Array.isArray( value ) ) {
 		return value.join( ', ' );

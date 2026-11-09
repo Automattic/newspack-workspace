@@ -286,6 +286,13 @@ function SubscriberDiscounts() {
 				</div>
 			) : (
 				<DataViews
+					countLabel={ ( count, formatted ) =>
+						sprintf(
+							/* translators: %s: number of discounts. */
+							_n( '%s discount', '%s discounts', count, 'newspack-plugin' ),
+							formatted
+						)
+					}
 					data={ processedData }
 					fields={ fields }
 					view={ view }

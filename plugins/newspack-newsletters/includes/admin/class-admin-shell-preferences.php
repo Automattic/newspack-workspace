@@ -44,7 +44,7 @@ class Admin_Shell_Preferences {
 	 * never runs again over a view the user has since arranged.
 	 */
 	const PREFS_VERSION_KEY = 'prefs_version';
-	const PREFS_VERSION     = 1;
+	const PREFS_VERSION     = 2;
 
 	const SCREEN_KEYS = [ 'newsletters-list', 'ads-list', 'advertisers-list', 'layouts-list' ];
 
@@ -282,21 +282,32 @@ class Admin_Shell_Preferences {
 	}
 
 	/**
-	 * Move Author to the front of the Newsletters list's saved columns, once.
+	 * Bring the Newsletters list's saved column order up to date, once.
 	 *
-	 * A view saved before `prefs_version` 1 gets Author as its first saved
-	 * column, straight after the subject, so it matches the default order. Only
-	 * the position of `author` changes; the rest of the saved view is left as it is.
+	 * Version 1 moved Author to the front of the saved columns. Version 2 moves
+	 * it from there to just before Send list, or to the end when Send list is
+	 * hidden, to match the default order. A view the user has arranged since,
+	 * with Author anywhere but first, keeps its order, and only the position of
+	 * `author` ever changes.
 	 *
 	 * @param array $raw Stored preferences for the Newsletters list.
 	 * @return array The preferences, migrated and saved when they were older.
 	 */
 	private static function migrate_newsletters_list_prefs( array $raw ): array {
-		if ( (int) ( $raw[ self::PREFS_VERSION_KEY ] ?? 0 ) >= self::PREFS_VERSION ) {
+		$version = (int) ( $raw[ self::PREFS_VERSION_KEY ] ?? 0 );
+		if ( $version >= self::PREFS_VERSION ) {
 			return $raw;
 		}
 		if ( isset( $raw['fields'] ) && is_array( $raw['fields'] ) && in_array( 'author', $raw['fields'], true ) ) {
-			$raw['fields'] = array_merge( [ 'author' ], array_values( array_diff( $raw['fields'], [ 'author' ] ) ) );
+			$others = array_values( array_diff( $raw['fields'], [ 'author' ] ) );
+			if ( $version < 1 ) {
+				$raw['fields'] = array_merge( [ 'author' ], $others );
+			}
+			if ( 'author' === reset( $raw['fields'] ) ) {
+				$position      = array_search( 'send_list', $others, true );
+				$position      = false === $position ? count( $others ) : $position;
+				$raw['fields'] = array_merge( array_slice( $others, 0, $position ), [ 'author' ], array_slice( $others, $position ) );
+			}
 		}
 		$raw[ self::PREFS_VERSION_KEY ] = self::PREFS_VERSION;
 		update_user_meta( get_current_user_id(), self::get_user_meta_key( 'newsletters-list' ), $raw );

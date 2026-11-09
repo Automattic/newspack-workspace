@@ -1,6 +1,6 @@
 import { getSettings, setSettings } from '@wordpress/date';
 
-import { getDataViewsType, getDisplayValue, getFilterByOperators } from './fields';
+import { getDataViewsType, getDisplayValue, getFilterByOperators, isEmptyValue } from './fields';
 
 describe( 'fields utils', () => {
 	describe( 'getDataViewsType', () => {
@@ -20,6 +20,17 @@ describe( 'fields utils', () => {
 	describe( 'getFilterByOperators', () => {
 		it( 'leaves out "is not all", which DataViews labels the same as "is none of"', () => {
 			expect( getFilterByOperators( { is_multiple: true } ) ).not.toContain( 'isNotAll' );
+		} );
+	} );
+
+	describe( 'isEmptyValue', () => {
+		it( 'treats only null, undefined and an empty string as empty', () => {
+			expect( isEmptyValue( null ) ).toBe( true );
+			expect( isEmptyValue( undefined ) ).toBe( true );
+			expect( isEmptyValue( '' ) ).toBe( true );
+			expect( isEmptyValue( 0 ) ).toBe( false );
+			expect( isEmptyValue( false ) ).toBe( false );
+			expect( isEmptyValue( 'draft' ) ).toBe( false );
 		} );
 	} );
 

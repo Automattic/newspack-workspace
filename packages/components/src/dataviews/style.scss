@@ -49,7 +49,15 @@
 
 	tbody td:not(.dataviews-view-table__checkbox-column, .dataviews-view-table__actions-column) .dataviews-view-table__cell-content-wrapper {
 		align-items: flex-start;
-		padding-block-start: var(--newspack-dataviews-stack-gap);
+		min-height: var(--wpds-typography-line-height-sm, #{wp-vars.$font-line-height-small});
+	}
+
+	tbody td.dataviews-view-table__checkbox-column .dataviews-view-table__cell-content-wrapper,
+	tbody td.dataviews-view-table__actions-column .dataviews-item-actions,
+	tbody td .dataviews-view-table__cell-content-wrapper:has(> .newspack-status-badge) {
+		align-items: center;
+		height: var(--wpds-typography-line-height-sm, #{wp-vars.$font-line-height-small});
+		min-height: 0;
 	}
 
 	.dataviews-title-field {
@@ -68,6 +76,14 @@
 	.dataviews-column-primary__media + .dataviews-view-table__primary-column-content > .dataviews-title-field:not(:last-child) {
 		min-height: 0;
 		margin-bottom: var(--newspack-dataviews-stack-gap);
+	}
+
+	tbody td[style*="width: 1%"] > .dataviews-view-table__cell-content-wrapper {
+		min-width: 0;
+	}
+
+	thead th[style*="width: 1%"] {
+		white-space: nowrap;
 	}
 
 	tbody td > :has(> .dataviews-view-table__primary-column-content) {

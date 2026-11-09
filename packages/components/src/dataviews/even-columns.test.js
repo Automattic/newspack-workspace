@@ -39,6 +39,42 @@ describe( 'evenColumns', () => {
 	it( 'leaves a grid alone', () => {
 		const grid = { type: 'grid', titleField: 'name', fields: [ 'status' ] };
 		expect( evenColumns( grid ) ).toBe( grid );
+		expect( evenColumns( grid, [ 'status' ] ) ).toBe( grid );
+	} );
+
+	it( 'shrinks fitted columns to their content and splits the rest between the others', () => {
+		const view = { type: 'table', titleField: 'name', fields: [ 'status', 'price', 'count', 'unlocks' ] };
+		expect( evenColumns( view, [ 'status', 'count' ] ).layout.styles ).toEqual( {
+			status: { width: '1%' },
+			price: { width: '33.33%' },
+			count: { width: '1%' },
+			unlocks: { width: '33.33%' },
+		} );
+		expect( titleColumnWidth( view, [ 'status', 'count' ] ) ).toBe( '33.33%' );
+	} );
+
+	it( 'never gives the title less than another column when columns are fitted', () => {
+		const view = { type: 'table', titleField: 'name', fields: [ 'status', 'price', 'count', 'unlocks', 'rules', 'effective' ] };
+		const fit = [ 'status', 'count' ];
+		expect( titleColumnWidth( view, fit ) ).toBe( '30%' );
+		expect( evenColumns( view, fit ).layout.styles.price ).toEqual( { width: '17.5%' } );
+	} );
+
+	it( 'ignores a fitted column the viewer has switched off', () => {
+		const view = { type: 'table', titleField: 'name', fields: [ 'price', 'unlocks' ] };
+		expect( evenColumns( view, [ 'status' ] ).layout.styles ).toEqual( {
+			price: { width: '33.33%' },
+			unlocks: { width: '33.33%' },
+		} );
+	} );
+
+	it( 'leaves the title its natural width when every other column is fitted', () => {
+		const view = { type: 'table', titleField: 'name', fields: [ 'status', 'count' ] };
+		expect( evenColumns( view, [ 'status', 'count' ] ).layout.styles ).toEqual( {
+			status: { width: '1%' },
+			count: { width: '1%' },
+		} );
+		expect( titleColumnWidth( view, [ 'status', 'count' ] ) ).toBeUndefined();
 	} );
 } );
 
