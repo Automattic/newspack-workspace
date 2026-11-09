@@ -98,24 +98,34 @@ export const getStories = createSelector(
 export const getStory = ( state, id ) => state.stories[ id ];
 
 export const getView = createSelector(
-	state => ( {
-		...applyFilters( 'newspack-story-budget.defaultView', {
-			type: 'table',
-			search: '',
-			page: 1,
-			perPage: 10,
-			fields: [],
-			filters: [],
-			sort: {
-				field: 'last_modified',
-				direction: 'desc',
-			},
-			layout: {
-				density: 'compact',
-			},
-		} ),
-		...state.view,
-	} ),
+	state => {
+		const view = {
+			...applyFilters( 'newspack-story-budget.defaultView', {
+				type: 'table',
+				search: '',
+				page: 1,
+				perPage: 10,
+				titleField: 'name',
+				descriptionField: 'description',
+				fields: [],
+				filters: [],
+				sort: {
+					field: 'last_modified',
+					direction: 'desc',
+				},
+				layout: {
+					density: 'compact',
+				},
+			} ),
+			...state.view,
+		};
+		// The title and description render in the primary column, so a view saved
+		// while they had columns of their own would show them twice.
+		return {
+			...view,
+			fields: ( view.fields || [] ).filter( field => field !== view.titleField && field !== view.descriptionField ),
+		};
+	},
 	state => [ state.view ]
 );
 

@@ -7,6 +7,11 @@ import { error } from '@wordpress/icons';
 import { useMemo } from '@wordpress/element';
 
 /**
+ * External dependencies.
+ */
+import classnames from 'classnames';
+
+/**
  * Internal dependencies.
  */
 import { NAMESPACE as storeNamespace } from '../store/constants';
@@ -24,11 +29,19 @@ export default function TableRowField( { story, field, allowEdit = false } ) {
 
 	const view = useView();
 
-	const fieldIdx = useMemo( () => view.fields.findIndex( f => f === field.slug ), [ view.fields, field.slug ] );
+	const isPrimary = useMemo(
+		() => ( view.titleField ? field.slug === view.titleField : view.fields.findIndex( f => f === field.slug ) === 0 ),
+		[ view.titleField, view.fields, field.slug ]
+	);
+	const isDescription = field.slug === view.descriptionField;
 
 	return (
-		<div className="newspack-story-budget__table-row-field">
-			{ fieldIdx === 0 && isLoadingStory ? (
+		<div
+			className={ classnames( 'newspack-story-budget__table-row-field', {
+				'newspack-story-budget__table-row-field--description': isDescription,
+			} ) }
+		>
+			{ isPrimary && isLoadingStory ? (
 				<Spinner
 					style={ {
 						width: '12px',
@@ -36,9 +49,17 @@ export default function TableRowField( { story, field, allowEdit = false } ) {
 					} }
 				/>
 			) : (
-				<StoryField fieldId={ field.slug } storyId={ story.id } allowEdit={ allowEdit } saveInPlace showPostLinks />
+				<StoryField
+					fieldId={ field.slug }
+					storyId={ story.id }
+					allowEdit={ allowEdit }
+					saveInPlace
+					showPostLinks
+					truncate={ allowEdit || ! isDescription }
+					emptyValue={ isDescription ? null : undefined }
+				/>
 			) }
-			{ fieldIdx === 0 && ! isLoadingStory && storyError && (
+			{ isPrimary && ! isLoadingStory && storyError && (
 				<Tooltip text={ storyError }>
 					<span className="newspack-story-budget__table-row-field-error">
 						<Icon icon={ error } />

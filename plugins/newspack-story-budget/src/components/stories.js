@@ -11,8 +11,8 @@ import { __ } from '@wordpress/i18n';
 import { applyFilters } from '@wordpress/hooks';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { useEffect, useState, useMemo, useCallback } from '@wordpress/element';
-import { DataViews } from '@wordpress/dataviews/wp';
-import { evenColumns, withoutColumnStyles } from 'newspack-components';
+import { DataViews as BaseDataViews } from '@wordpress/dataviews';
+import { DataViews } from 'newspack-components';
 import {
 	__experimentalHStack as HStack,
 	__experimentalVStack as VStack,
@@ -167,8 +167,8 @@ export default () => {
 		<DataViews
 			isLoading={ isLoading }
 			fields={ dataViewFields }
-			view={ evenColumns( view ) }
-			onChangeView={ nextView => setView( withoutColumnStyles( nextView ) ) }
+			view={ view }
+			onChangeView={ setView }
 			actions={ actions }
 			data={ isLoading ? [] : currentStories }
 			paginationInfo={ paginationInfo }
@@ -176,12 +176,12 @@ export default () => {
 		>
 			<div className="dataviews__view-actions newspack-story-budget__toolbar">
 				<div className="dataviews__search newspack-story-budget__filters">
-					<DataViews.Search />
-					<DataViews.Filters />
+					<BaseDataViews.Search />
+					<BaseDataViews.Filters />
 				</div>
 				<div className="newspack-story-budget__view-config">
-					<DataViews.LayoutSwitcher />
-					<DataViews.ViewConfig />
+					<BaseDataViews.LayoutSwitcher />
+					<BaseDataViews.ViewConfig />
 					<HStack className="newspack-story-budget__header-actions">
 						{ canRefreshStories && (
 							<Button
@@ -212,8 +212,8 @@ export default () => {
 					</HStack>
 				</div>
 			</div>
-			<DataViews.Layout />
-			<DataViews.Footer />
+			<BaseDataViews.Layout />
+			<BaseDataViews.Footer />
 		</DataViews>
 	);
 };

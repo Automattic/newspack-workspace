@@ -1,8 +1,6 @@
-/* stylelint-disable no-invalid-position-at-import-rule */
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/mixins" as wp-mixins;
 @use "~@wordpress/base-styles/variables" as wp-vars;
-@import "@wordpress/dataviews/build-style/style.css";
 
 body.toplevel_page_newspack-story-budget {
 	background: #fff;
@@ -493,19 +491,22 @@ div[role="menuitem"] {
 	margin-inline-start: wp-vars.$grid-unit-10;
 }
 
-@container dataviews-wrapper (min-width: 431px) {
-	.newspack-story-budget__content .dataviews-wrapper > * {
-		/* stylelint-disable-next-line plugin-wpds/no-setting-wpds-custom-properties -- restores the 48px list gutter DataViews used before it moved to this token. */
-		--wpds-dimension-padding-2xl: #{wp-vars.$grid-unit-60};
-	}
-}
+.newspack-story-budget__table-row-field--description {
+	color: var(--wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700});
+	font-size: wp-vars.$helptext-font-size;
+	font-weight: wp-vars.$font-weight-regular;
+	line-height: wp-vars.$default-line-height;
 
-.newspack-story-budget__content .dataviews-view-table thead th:has(.dataviews-view-table-header-button) {
-	&:first-child {
-		padding-left: calc(var(--wpds-dimension-padding-2xl, #{wp-vars.$grid-unit-30}) - var(--wpds-dimension-padding-sm, #{wp-vars.$grid-unit-10}));
+	.newspack-story-budget__field__value {
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+		padding-block: 0;
 	}
 
-	&:last-child {
-		padding-right: calc(var(--wpds-dimension-padding-2xl, #{wp-vars.$grid-unit-30}) - var(--wpds-dimension-padding-sm, #{wp-vars.$grid-unit-10}));
+	.newspack-story-budget__field__button {
+		font-size: inherit;
+		font-weight: inherit;
 	}
 }
