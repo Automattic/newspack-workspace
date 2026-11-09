@@ -95,17 +95,25 @@ final class Newspack_Popups_AB_Dashboard {
 	 * What the tab loads: every test, what the cards need to read them, and the
 	 * prompts a test can start from, for the tab's picker and the Campaigns menu.
 	 *
+	 * Each test carries `cached_stats`, so the tab can sort tests that are ready
+	 * to end first without a stats request per test.
+	 *
 	 * @return array
 	 */
 	public static function get_list_data() {
 		$provider  = self::get_provider();
 		$available = self::availability( $provider );
+		$slug      = self::provider_slug( $provider );
+		$tests     = Newspack_Popups_AB_Tests::get_tests();
+		foreach ( $tests as $index => $test ) {
+			$tests[ $index ]['cached_stats'] = true === $available ? self::get_cached_stats( $test, (string) $slug ) : null;
+		}
 		return [
-			'tests'      => Newspack_Popups_AB_Tests::get_tests(),
+			'tests'      => $tests,
 			'prompts'    => Newspack_Popups_AB_Tests::get_prompt_start_states(),
 			'provider'   => [
 				'available' => true === $available,
-				'slug'      => self::provider_slug( $provider ),
+				'slug'      => $slug,
 				'reason'    => is_wp_error( $available ) ? $available->get_error_message() : null,
 			],
 			'thresholds' => [
@@ -350,13 +358,9 @@ final class Newspack_Popups_AB_Dashboard {
 	private static function fetch_counts( $provider, $test, $window, $refresh ) {
 		$key = self::cache_key( $test, (string) self::provider_slug( $provider ) );
 		if ( ! $refresh ) {
-			$cached = get_transient( $key );
-			if ( is_array( $cached ) && isset( $cached['counts'], $cached['fetched_at'] ) ) {
-				return [
-					'counts'     => $cached['counts'],
-					'fetched_at' => $cached['fetched_at'],
-					'cached'     => true,
-				];
+			$cached = self::read_cached_counts( $key );
+			if ( $cached ) {
+				return $cached + [ 'cached' => true ];
 			}
 		}
 		try {
@@ -386,6 +390,49 @@ final class Newspack_Popups_AB_Dashboard {
 			'counts'     => $counts,
 			'fetched_at' => $fetched_at,
 			'cached'     => false,
+		];
+	}
+
+	/**
+	 * Counts the stats route cached for a key, if any are still there.
+	 *
+	 * @param string $key Transient key from cache_key().
+	 * @return array|null `[ 'counts', 'fetched_at' ]`, or null on a miss.
+	 */
+	private static function read_cached_counts( $key ) {
+		$cached = get_transient( $key );
+		if ( ! is_array( $cached ) || ! isset( $cached['counts'], $cached['fetched_at'] ) ) {
+			return null;
+		}
+		return [
+			'counts'     => $cached['counts'],
+			'fetched_at' => $cached['fetched_at'],
+		];
+	}
+
+	/**
+	 * A running test's results from whatever the stats route last cached,
+	 * without asking the provider. The list uses them only to sort, so a miss
+	 * costs a test its place among the tests ready to end, never a request.
+	 *
+	 * @param array  $test Test, from get_tests().
+	 * @param string $slug Provider slug, as provider_slug() gives it.
+	 * @return array|null `variants`, `comparisons` and `flags` as get_stats() gives
+	 *                    them, or null for an ended or unstarted test or a miss.
+	 */
+	private static function get_cached_stats( $test, $slug ) {
+		if ( 'ended' === ( $test['status'] ?? '' ) || null === self::get_window( $test ) ) {
+			return null;
+		}
+		$cached = self::read_cached_counts( self::cache_key( $test, $slug ) );
+		if ( ! $cached ) {
+			return null;
+		}
+		$variants = self::merge_counts( $test['variants'], $cached['counts']['variants'] ?? [] );
+		return [
+			'variants'    => $variants,
+			'comparisons' => self::compare( $variants ),
+			'flags'       => self::compute_flags( $test, $variants ),
 		];
 	}
 

@@ -598,6 +598,64 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * The list reads what the stats route cached, and never asks the provider.
+	 */
+	public function test_list_carries_cached_stats_without_asking_the_provider() {
+		$this->as_admin();
+		$this->create_running_test();
+		$stub    = $this->use_provider( $this->counts( 5000, 100, 5000, 200 ) );
+		$fetched = $this->stats_request( 't' )->get_data();
+		$data    = Newspack_Popups_AB_Dashboard::get_list_data();
+		$this->assertCount( 1, $stub->calls );
+		$cached = $data['tests'][0]['cached_stats'];
+		$this->assertSame( [ 'variants', 'comparisons', 'flags' ], array_keys( $cached ) );
+		$this->assertSame( $fetched['variants'], $cached['variants'] );
+		$this->assertSame( $fetched['comparisons'], $cached['comparisons'] );
+		$this->assertSame( 'reliable', $cached['comparisons']['b']['label'] );
+		$this->assertSame( $fetched['flags'], $cached['flags'] );
+	}
+
+	/**
+	 * Nothing cached yet: no stats, and still no request to the provider.
+	 */
+	public function test_list_has_no_cached_stats_before_the_stats_route_runs() {
+		$this->create_running_test();
+		$stub = $this->use_provider( $this->counts( 5000, 100, 5000, 200 ) );
+		$data = Newspack_Popups_AB_Dashboard::get_list_data();
+		$this->assertNull( $data['tests'][0]['cached_stats'] );
+		$this->assertCount( 0, $stub->calls );
+	}
+
+	/**
+	 * A provider that can't answer now gets no cached stats in the list.
+	 */
+	public function test_list_has_no_cached_stats_when_the_provider_is_unavailable() {
+		$this->as_admin();
+		$this->create_running_test();
+		$this->use_provider( $this->counts( 5000, 100, 5000, 200 ) );
+		$this->stats_request( 't' );
+		remove_all_filters( 'newspack_popups_ab_stats_provider' );
+		$this->use_provider( $this->counts( 5000, 100, 5000, 200 ), new WP_Error( 'down', 'Down.' ) );
+		$data = Newspack_Popups_AB_Dashboard::get_list_data();
+		$this->assertNull( $data['tests'][0]['cached_stats'] );
+	}
+
+	/**
+	 * An ended test sorts last whatever its results, so the list skips its cache.
+	 */
+	public function test_list_has_no_cached_stats_for_an_ended_test() {
+		$this->as_admin();
+		$this->create_running_test();
+		$this->use_provider( $this->counts( 5000, 100, 5000, 200 ) );
+		$this->stats_request( 't' );
+		$this->assertNotWPError( Newspack_Popups_AB_Tests::end_test( 't', 'b' ) );
+		Newspack_Popups_AB_Tests::reset_config_cache();
+		$data = Newspack_Popups_AB_Dashboard::get_list_data();
+		$this->assertSame( 'ended', $data['tests'][0]['status'] );
+		$this->assertNull( $data['tests'][0]['cached_stats'] );
+	}
+
+	/**
 	 * Editors can manage prompts but not read the results.
 	 */
 	public function test_list_route_requires_manage_options() {

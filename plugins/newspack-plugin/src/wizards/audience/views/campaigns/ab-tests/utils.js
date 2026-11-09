@@ -13,10 +13,10 @@ export const DASH = '—';
 export const REST_BASE = '/newspack-popups/v1/ab-tests';
 
 /**
- * Card order: running tests, then those needing attention, drafts, tests
- * still missing a version, and ended tests last.
+ * Card order, and the Status filter's: what needs the publisher first, ended
+ * tests last.
  */
-export const STATUS_ORDER = [ 'running', 'needs-attention', 'draft', 'incomplete', 'ended' ];
+export const STATUS_ORDER = [ 'needs-attention', 'incomplete', 'draft', 'running', 'ended' ];
 
 /**
  * A test's state from its variants' post statuses.
@@ -41,11 +41,26 @@ export const getTestStatus = test => {
 };
 
 /**
+ * A test's place in the card order. A running test with a winner the card
+ * would name goes ahead of the other running tests: it is ready to end.
+ *
+ * @param {Object} test A test from the list route.
+ * @return {number} Rank, lowest first.
+ */
+const getSortRank = test => {
+	const status = getTestStatus( test );
+	const rank = STATUS_ORDER.indexOf( status ) * 2;
+	// The list's cached results rather than the card's own, so cards never
+	// move once their results load. A cache miss ranks a test as plain
+	// running until a later load.
+	return 'running' === status && getRecommendation( test, test.cached_stats ).winner ? rank - 1 : rank;
+};
+
+/**
  * @param {Object[]} tests Tests from the list route.
  * @return {Object[]} The tests in card order.
  */
-export const sortTests = tests =>
-	[ ...tests ].sort( ( a, b ) => STATUS_ORDER.indexOf( getTestStatus( a ) ) - STATUS_ORDER.indexOf( getTestStatus( b ) ) );
+export const sortTests = tests => [ ...tests ].sort( ( a, b ) => getSortRank( a ) - getSortRank( b ) );
 
 /**
  * @param {string} status From getTestStatus().
