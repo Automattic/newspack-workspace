@@ -18,9 +18,16 @@ describe( 'CellList', () => {
 		expect( screen.queryByRole( 'button' ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'shows the first two, then opens and closes the rest', () => {
+	it( 'shows a single leftover item inline instead of behind a toggle', () => {
 		render( <CellList>{ items( 3 ) }</CellList> );
-		const toggle = screen.getByRole( 'button', { name: 'Show 1 more' } );
+
+		expect( screen.getByText( 'Item 3' ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'button' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'shows the first two, then opens and closes the rest', () => {
+		render( <CellList>{ items( 4 ) }</CellList> );
+		const toggle = screen.getByRole( 'button', { name: 'Show 2 more' } );
 
 		expect( screen.queryByText( 'Item 3' ) ).not.toBeInTheDocument();
 		expect( toggle ).toHaveAttribute( 'aria-expanded', 'false' );
@@ -38,7 +45,7 @@ describe( 'CellList', () => {
 		const onToggle = jest.fn();
 		render(
 			<CellList defaultExpanded onToggle={ onToggle }>
-				{ items( 3 ) }
+				{ items( 4 ) }
 			</CellList>
 		);
 
@@ -52,11 +59,11 @@ describe( 'CellList', () => {
 		render(
 			// eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
 			<div onClick={ onRowClick }>
-				<CellList>{ items( 3 ) }</CellList>
+				<CellList>{ items( 4 ) }</CellList>
 			</div>
 		);
 
-		fireEvent.click( screen.getByRole( 'button', { name: 'Show 1 more' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Show 2 more' } ) );
 		expect( onRowClick ).not.toHaveBeenCalled();
 	} );
 } );

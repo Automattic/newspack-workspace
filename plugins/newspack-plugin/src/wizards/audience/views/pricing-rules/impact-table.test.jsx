@@ -54,6 +54,13 @@ describe( 'ImpactTable', () => {
 		expect( toggle() ).toHaveAttribute( 'aria-expanded', 'false' );
 	} );
 
+	it( 'shows a single extra row inline instead of behind a button', () => {
+		render( <ImpactTable baseline={ sample( 11 ) } segmentGroups={ [] } currency={ CURRENCY } /> );
+
+		expect( bodyRows() ).toBe( 11 );
+		expect( toggle() ).toBeNull();
+	} );
+
 	it( 'reveals the rest and flips the label when the button is used', () => {
 		render( <ImpactTable baseline={ sample( 25 ) } segmentGroups={ [] } currency={ CURRENCY } /> );
 		fireEvent.click( toggle() );

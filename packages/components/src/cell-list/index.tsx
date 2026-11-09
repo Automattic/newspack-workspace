@@ -10,6 +10,11 @@ import { Children, useId, useState } from '@wordpress/element';
 import { Button } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
 
+/**
+ * Internal dependencies.
+ */
+import { worthCollapsing } from './collapse';
+
 type CellListProps = {
 	/** The items, one per line. Each needs a key. */
 	children: React.ReactNode;
@@ -23,7 +28,8 @@ type CellListProps = {
 
 /**
  * A list of items inside a table cell, one per line: the first few, then a
- * "Show N more" toggle for the rest.
+ * "Show N more" toggle for the rest. A single leftover item shows inline, since
+ * a toggle that reveals one item saves nothing.
  *
  * The toggle stops its click, so a clickable row doesn't open as well. DataViews
  * remounts cells when its fields are rebuilt, which resets this component; a list
@@ -34,7 +40,7 @@ const CellList = ( { children, limit = 2, defaultExpanded = false, onToggle }: C
 	const items = Children.toArray( children );
 	const [ isExpanded, setIsExpanded ] = useState( defaultExpanded );
 	const listId = useId();
-	const canCollapse = items.length > limit;
+	const canCollapse = worthCollapsing( items.length - limit );
 	const shown = canCollapse && ! isExpanded ? items.slice( 0, limit ) : items;
 	return (
 		<Stack direction="column" gap="sm" align="flex-start" className="newspack-cell-list">

@@ -28,6 +28,7 @@ import type { Field, View } from '@wordpress/dataviews';
  */
 import { TableCard } from '../../../../../packages/components/src';
 import NewspackDataViews from '../../../../../packages/components/src/dataviews';
+import { worthCollapsing } from '../../../../../packages/components/src/cell-list/collapse';
 import { cycleMarkerNote, formatPrice, formatSegment } from './impact-format';
 
 /** Rows shown before the publisher asks for the rest. */
@@ -183,7 +184,7 @@ export default function ImpactTable( {
 	}
 
 	// Sliced after the sort, so collapsing keeps the current top rows.
-	const canCollapse = collapsible && sorted.length > ROW_LIMIT;
+	const canCollapse = collapsible && worthCollapsing( sorted.length - ROW_LIMIT );
 	const data = canCollapse && ! expanded ? sorted.slice( 0, ROW_LIMIT ) : sorted;
 
 	const seeMore = canCollapse ? (
