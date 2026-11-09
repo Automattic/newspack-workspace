@@ -109,13 +109,14 @@ describe( 'the header', () => {
 		await renderDetail( group() );
 
 		const { sectionName } = setHeaderData.mock.calls.at( -1 )[ 0 ];
-		expect( sectionName ).toEqual( [ { label: 'Groups', url: '#/groups' }, { label: 'Team plan (Olive Owner)' } ] );
+		expect( sectionName ).toEqual( [ { label: 'Groups', url: '#/groups' }, { label: 'Team plan' } ] );
 	} );
 
-	it( 'leaves the owner to the breadcrumb and the members table', async () => {
+	it( 'leaves the owner to the members table', async () => {
 		await renderDetail( group() );
 
-		const { sectionTitle } = setHeaderData.mock.calls.at( -1 )[ 0 ];
+		const { sectionName, sectionTitle } = setHeaderData.mock.calls.at( -1 )[ 0 ];
+		expect( JSON.stringify( sectionName ) ).not.toContain( 'Olive Owner' );
 		const { container } = render( createElement( sectionTitle ) );
 		expect( container.textContent ).not.toContain( 'Olive Owner' );
 	} );
