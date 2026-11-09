@@ -102,10 +102,16 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 			'post_date_gmt' => $started . ' 00:00:00',
 			'post_date'     => $started . ' 00:00:00',
 		];
-		return [
+		$ids  = [
 			'a' => $this->create_test_variant( $test_id, 'a', $dates ),
 			'b' => $this->create_test_variant( $test_id, 'b', $dates ),
 		];
+		// Recorded with the flag on only; backdated to the day the test stands for.
+		$term = get_term_by( 'slug', $test_id, Newspack_Popups_AB_Tests::TAXONOMY );
+		if ( $term ) {
+			update_term_meta( $term->term_id, Newspack_Popups_AB_Tests::TERM_META_STARTED, $started . 'T00:00:00Z' );
+		}
+		return $ids;
 	}
 
 	/**

@@ -63,6 +63,11 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 		}
 		update_post_meta( $ids['a'], Newspack_Popups_AB_Tests::META_GOAL, 'donation' );
 		update_post_meta( $ids['a'], Newspack_Popups_AB_Tests::META_CONTROL_SHARE, 60 );
+		// Recorded with the flag on only; backdated to the day the test stands for.
+		$term = get_term_by( 'slug', $test_id, Newspack_Popups_AB_Tests::TAXONOMY );
+		if ( $term ) {
+			update_term_meta( $term->term_id, Newspack_Popups_AB_Tests::TERM_META_STARTED, '2026-10-01T00:00:00Z' );
+		}
 		return $ids;
 	}
 

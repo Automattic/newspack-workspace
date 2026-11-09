@@ -41,6 +41,12 @@ final class Newspack_Popups_AB_Tests {
 	const TERM_META_ENDED = 'newspack_popups_ab_ended';
 
 	/**
+	 * Term meta on a test's term: when it started, ISO 8601 UTC, written once
+	 * when a control and a challenger are first both published.
+	 */
+	const TERM_META_STARTED = 'newspack_popups_ab_started';
+
+	/**
 	 * Term meta on an ended test's term: the final results, written once.
 	 */
 	const TERM_META_FINAL_COUNTS = 'newspack_popups_ab_final_counts';
@@ -87,6 +93,15 @@ final class Newspack_Popups_AB_Tests {
 		}
 		foreach ( [ 'added_post_meta', 'updated_post_meta', 'deleted_post_meta' ] as $hook ) {
 			add_action( $hook, [ __CLASS__, 'invalidate_has_tests_for_meta' ], 10, 3 );
+		}
+
+		// A status hook rather than the A/B routes: the Campaigns wizard, batch
+		// publish, wp-admin and cron all publish prompts without going through
+		// them. The meta hooks cover a prompt that joins a test while already
+		// live, which an editor save does after the status change.
+		add_action( 'transition_post_status', [ __CLASS__, 'record_start_on_publish' ], 10, 3 );
+		foreach ( [ 'added_post_meta', 'updated_post_meta' ] as $hook ) {
+			add_action( $hook, [ __CLASS__, 'record_start_for_meta' ], 10, 3 );
 		}
 	}
 
@@ -155,6 +170,107 @@ final class Newspack_Popups_AB_Tests {
 		if ( self::META_TEST_ID === $meta_key ) {
 			self::invalidate_has_tests_for_post( $object_id );
 		}
+	}
+
+	/**
+	 * Record a test's start when one of its prompts goes live.
+	 *
+	 * @param string  $new_status New status.
+	 * @param string  $old_status Old status.
+	 * @param WP_Post $post       Post.
+	 */
+	public static function record_start_on_publish( $new_status, $old_status, $post ) {
+		if ( 'publish' === $new_status && 'publish' !== $old_status && Newspack_Popups::NEWSPACK_POPUPS_CPT === $post->post_type ) {
+			self::maybe_record_start( $post->ID );
+		}
+	}
+
+	/**
+	 * Record a test's start when a live prompt is given a Test ID or a version.
+	 *
+	 * @param int    $meta_id   Meta ID.
+	 * @param int    $object_id Post ID.
+	 * @param string $meta_key  Meta key.
+	 */
+	public static function record_start_for_meta( $meta_id, $object_id, $meta_key ) {
+		if ( ( self::META_TEST_ID === $meta_key || self::META_VARIANT === $meta_key ) && 'publish' === get_post_status( $object_id ) && Newspack_Popups::NEWSPACK_POPUPS_CPT === get_post_type( $object_id ) ) {
+			self::maybe_record_start( $object_id );
+		}
+	}
+
+	/**
+	 * Store the moment a prompt's test started, if this is that moment: the
+	 * first time a control and a challenger are both published. Once recorded,
+	 * pausing and republishing a version keeps it, since the results count from
+	 * it; a test with no record yet, such as one already running before starts
+	 * were recorded, gets one at its next publish. Nothing is recorded with the
+	 * flag off, when readers aren't split, or for a test that has ended.
+	 *
+	 * @param int $post_id A published prompt's ID.
+	 */
+	private static function maybe_record_start( $post_id ) {
+		if ( ! self::is_enabled() ) {
+			return;
+		}
+		$test_id = trim( (string) get_post_meta( $post_id, self::META_TEST_ID, true ) );
+		if ( '' === $test_id || ! in_array( get_post_meta( $post_id, self::META_VARIANT, true ), self::VALID_VARIANTS, true ) ) {
+			return;
+		}
+		$existing = get_term_by( 'slug', $test_id, self::TAXONOMY );
+		if ( $existing && '' !== (string) get_term_meta( $existing->term_id, self::TERM_META_STARTED, true ) ) {
+			return;
+		}
+		$live = get_posts(
+			[
+				'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+				'post_status'    => 'publish',
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Prompts in one test.
+				'fields'         => 'ids',
+				'meta_key'       => self::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- The Test ID lives in meta.
+				'meta_value'     => $test_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- The Test ID lives in meta.
+			]
+		);
+		$letters = array_map( fn( $id ) => (string) get_post_meta( $id, self::META_VARIANT, true ), $live );
+		if ( ! in_array( 'a', $letters, true ) || empty( array_intersect( array_diff( self::VALID_VARIANTS, [ 'a' ] ), $letters ) ) ) {
+			return;
+		}
+		if ( null !== self::get_ended_record( $test_id ) ) {
+			return;
+		}
+		$term = self::ensure_term( $test_id, $test_id );
+		if ( is_wp_error( $term ) ) {
+			return;
+		}
+		// Unique, which is a read before the insert rather than a lock: two
+		// requests at once can each add a row, and reads return the first.
+		add_term_meta( $term->term_id, self::TERM_META_STARTED, gmdate( 'Y-m-d\TH:i:s\Z' ), true );
+	}
+
+	/**
+	 * Recorded starts by Test ID, for the tests that have one.
+	 *
+	 * @param string[] $test_ids Test IDs.
+	 * @return array<string,string> Test ID => ISO 8601 UTC.
+	 */
+	private static function get_recorded_starts( array $test_ids ) {
+		if ( empty( $test_ids ) ) {
+			return [];
+		}
+		$terms  = get_terms(
+			[
+				'taxonomy'   => self::TAXONOMY,
+				'slug'       => $test_ids,
+				'hide_empty' => false,
+			]
+		);
+		$starts = [];
+		foreach ( is_array( $terms ) ? $terms : [] as $term ) {
+			$started = get_term_meta( $term->term_id, self::TERM_META_STARTED, true );
+			if ( is_string( $started ) && '' !== $started ) {
+				$starts[ (string) $term->slug ] = $started;
+			}
+		}
+		return $starts;
 	}
 
 	/**
@@ -526,12 +642,16 @@ final class Newspack_Popups_AB_Tests {
 	 * @return array[] Ordered by Test ID. Each `[ 'test_id', 'name', 'goal', 'goal_label',
 	 *                 'control_share', 'started_at', 'variants', 'duplicates', 'prompt_count' ]`. `control_share`
 	 *                 comes from the control prompt, or DEFAULT_CONTROL_SHARE without
-	 *                 one. `started_at` is when the split began: the later of the
-	 *                 control's publish date and the earliest challenger's, ISO 8601
-	 *                 UTC, or null until both are published. Readers see the control
-	 *                 alone before then, so an earlier date would count traffic the
-	 *                 test never split. `variants` maps the letter to
-	 *                 `[ 'id', 'title', 'status', 'status_label', 'edit_link', 'eligible' ]`,
+	 *                 one. `started_at` is when the split began, ISO 8601 UTC, or
+	 *                 null while a control and a challenger aren't both published.
+	 *                 It is the start recorded when the split began (a resume
+	 *                 with a new challenger records a new one); a test with no
+	 *                 record falls back to the later of the control's publish
+	 *                 date and the earliest challenger's. Readers see the
+	 *                 control alone before the split, so an earlier date would
+	 *                 count traffic the test never split. `variants` maps the
+	 *                 letter to `[ 'id', 'title', 'status', 'status_label',
+	 *                 'edit_link', 'eligible' ]`,
 	 *                 where `eligible` is false for a manual or custom placement
 	 *                 and for an overlay set to Manual only.
 	 *                 `duplicates` lists the other prompts carrying a letter, as
@@ -580,6 +700,7 @@ final class Newspack_Popups_AB_Tests {
 
 		$labels = self::get_goal_labels();
 		$names  = self::get_test_names( array_map( 'strval', array_keys( $grouped ) ) );
+		$starts = self::get_recorded_starts( array_map( 'strval', array_keys( $grouped ) ) );
 		$tests  = [];
 		foreach ( $grouped as $test_id => $letters ) {
 			ksort( $letters );
@@ -596,6 +717,7 @@ final class Newspack_Popups_AB_Tests {
 				'prompt_count'  => $prompt_counts[ $test_id ],
 			];
 			$published_at = [];
+			$live         = [];
 			$control_goal = null;
 			foreach ( $letters as $variant => $candidates ) {
 				// Two prompts on one letter: this page reports the first published
@@ -633,15 +755,23 @@ final class Newspack_Popups_AB_Tests {
 					$test['goal'] = $goal;
 				}
 
-				if ( 'publish' === $kept->post_status && '0000-00-00 00:00:00' !== $kept->post_date_gmt ) {
-					$published_at[ $variant ] = gmdate( 'Y-m-d\TH:i:s\Z', strtotime( $kept->post_date_gmt . ' UTC' ) );
+				if ( 'publish' === $kept->post_status ) {
+					$live[] = $variant;
+					if ( '0000-00-00 00:00:00' !== $kept->post_date_gmt ) {
+						$published_at[ $variant ] = gmdate( 'Y-m-d\TH:i:s\Z', strtotime( $kept->post_date_gmt . ' UTC' ) );
+					}
 				}
 			}
 			if ( null !== $control_goal ) {
 				$test['goal'] = $control_goal;
 			}
 			$test['goal_label'] = $labels[ $test['goal'] ] ?? '';
-			$test['started_at'] = self::get_started_at( $published_at );
+			// A start counts only while a control and a challenger are both live, so a
+			// paused test reads as not started. Liveness comes from the status, not the
+			// dates: wp_publish_post(), which the Campaigns wizard uses, leaves a
+			// published draft's GMT date empty.
+			$splitting          = in_array( 'a', $live, true ) && count( $live ) > 1;
+			$test['started_at'] = $splitting ? ( $starts[ $test_id ] ?? self::get_started_at( $published_at ) ) : null;
 			$test['status']     = 'active';
 			$tests[]            = $test;
 		}
@@ -1350,8 +1480,9 @@ final class Newspack_Popups_AB_Tests {
 	 * becomes version B with the same placement and other settings.
 	 *
 	 * A prompt that is already version A of a test with no other version, such
-	 * as one whose B was trashed, resumes that test: it keeps its ID and results,
-	 * takes the new name, goal and split, and gets a new B.
+	 * as one whose B was trashed, resumes that test: it keeps its ID, takes the
+	 * new name, goal and split, and gets a new B. Its start is cleared, and
+	 * publishing the new B records a new one.
 	 *
 	 * A new test claims A before B is made, so a second start on the same prompt
 	 * fails instead of making a second test, and a failure after that removes the
@@ -1423,6 +1554,14 @@ final class Newspack_Popups_AB_Tests {
 				self::delete_test_term( $test_id );
 			}
 			return new WP_Error( 'newspack_popups_ab_version_b', __( 'Could not create version B. Try again.', 'newspack-popups' ), [ 'status' => 500 ] );
+		}
+		if ( $resuming ) {
+			// Readers saw A alone while the test had no B, so the new B's split
+			// is a new start; publishing it records one.
+			$term = get_term_by( 'slug', $test_id, self::TAXONOMY );
+			if ( $term ) {
+				delete_term_meta( $term->term_id, self::TERM_META_STARTED );
+			}
 		}
 		// The registered sanitizer would rewrite a legacy ID (`footer_test` to
 		// `footer-test`) and put B in a different test, so this copy skips it.
