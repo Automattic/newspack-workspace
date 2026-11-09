@@ -25,7 +25,7 @@ describe( 'ContentRules', () => {
 	it( 'renders no Other rules section when every rule is offered', () => {
 		setup( { rules: [ { slug: 'category', value: [ '1' ] } ] } );
 		expect( screen.queryByText( 'Other rules' ) ).toBeNull();
-		expect( screen.queryByText( 'Remove' ) ).toBeNull();
+		expect( screen.queryByRole( 'button', { name: /^Remove/ } ) ).toBeNull();
 	} );
 
 	it( 'lists a stored-only rule and removes it', () => {
@@ -38,7 +38,7 @@ describe( 'ContentRules', () => {
 		} );
 		expect( screen.getByText( 'Other rules' ) ).toBeTruthy();
 		expect( screen.getByText( 'np_section' ) ).toBeTruthy();
-		fireEvent.click( screen.getByText( 'Remove' ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Remove Sections rule' } ) );
 		expect( onChange ).toHaveBeenCalledWith( [ { slug: 'category', value: [ '1' ] } ] );
 	} );
 
@@ -49,7 +49,7 @@ describe( 'ContentRules', () => {
 		} );
 		expect( screen.getByText( 'gone (no longer on this site): 7, 9' ) ).toBeTruthy();
 		expect( screen.getByText( "A gate can't be published while it has a rule that's no longer on this site." ) ).toBeTruthy();
-		fireEvent.click( screen.getByText( 'Remove' ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Remove gone rule' } ) );
 		expect( onChange ).toHaveBeenCalledWith( [] );
 	} );
 } );

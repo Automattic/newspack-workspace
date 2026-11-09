@@ -3,7 +3,7 @@
  */
 import { Button, CardDivider } from '@wordpress/components';
 import { Fragment, useCallback } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
@@ -96,7 +96,16 @@ export default function ContentRules( { rules, onChange, isNewsletter = false }:
 									) : (
 										<UnavailableRule slug={ rule.slug } value={ rule.value } />
 									) }
-									<Button variant="link" isDestructive onClick={ () => handleRemove( rule.slug ) }>
+									<Button
+										variant="link"
+										isDestructive
+										label={ sprintf(
+											// translators: %s: content rule name.
+											__( 'Remove %s rule', 'newspack-plugin' ),
+											config?.name || rule.slug
+										) }
+										onClick={ () => handleRemove( rule.slug ) }
+									>
 										{ __( 'Remove', 'newspack-plugin' ) }
 									</Button>
 								</div>
