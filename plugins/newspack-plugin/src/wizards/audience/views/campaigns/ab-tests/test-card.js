@@ -2,7 +2,7 @@
  * WordPress dependencies
  */
 import { useEffect, useId, useRef, useState } from '@wordpress/element';
-import { __, _n, sprintf } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { speak } from '@wordpress/a11y';
 import apiFetch from '@wordpress/api-fetch';
 import { decodeEntities } from '@wordpress/html-entities';
@@ -16,10 +16,22 @@ import { Badge, Stack } from '@wordpress/ui';
  */
 import { Card } from '../../../../../../packages/components/src';
 import ResultsTable from './results-table';
+import ResultSection from './result-section';
 import RenameModal from './rename-modal';
 import StartTestModal from './start-test-modal';
 import EndTestModal from './end-test-modal';
-import { REST_BASE, canEndTest, formatDay, formatList, getStatusIntent, getStatusLabel, getTestStatus, openVersionB, splitSummary } from './utils';
+import {
+	REST_BASE,
+	canEndTest,
+	formatDay,
+	formatList,
+	getStatusIntent,
+	getStatusLabel,
+	getTestStatus,
+	getVerdict,
+	openVersionB,
+	splitSummary,
+} from './utils';
 
 // How long after a test ends its results become final: the server's
 // SETTLE_SECONDS, which the footer copy also names as two days.
@@ -285,18 +297,11 @@ const TestCard = ( { test, data, onRenamed, onEnded, isTarget = false } ) => {
 					</span>
 				) }
 			</p>
-			{ isEnded && (
-				<p className="newspack-ab-tests__verdict">
-					{ sprintf(
-						// Translators: %1$s is the date the test ended, %2$s the letter of the version kept, such as "B".
-						__( 'Ended %1$s. Kept %2$s.', 'newspack-plugin' ),
-						formatDay( test.ended_at ),
-						String( test.kept ).toUpperCase()
-					) }
-				</p>
-			) }
 		</div>
 	);
+
+	// Incomplete and Needs attention cards say what to fix in a notice instead.
+	const verdict = getVerdict( test, status, hasStats ? stats : null );
 
 	const notices = [];
 	if ( duplicates.length > 0 ) {
@@ -347,18 +352,48 @@ const TestCard = ( { test, data, onRenamed, onEnded, isTarget = false } ) => {
 		);
 	}
 	if ( ineligible.length > 0 ) {
+		const endable = canEndTest( test );
+		let message;
+		if ( ineligible.length > 1 ) {
+			message = endable
+				? sprintf(
+						// Translators: %s is a list of version letters, such as "A and B".
+						__(
+							"Versions %s are on manual or custom placements, or are overlays set to Manual only, so their results can't be measured. Move them to placements Newspack controls, or end the test.",
+							'newspack-plugin'
+						),
+						formatList( ineligible.map( letter => letter.toUpperCase() ) )
+				  )
+				: sprintf(
+						// Translators: %s is a list of version letters, such as "A and B".
+						__(
+							"Versions %s are on manual or custom placements, or are overlays set to Manual only, so their results can't be measured. Move them to placements Newspack controls.",
+							'newspack-plugin'
+						),
+						formatList( ineligible.map( letter => letter.toUpperCase() ) )
+				  );
+		} else {
+			message = endable
+				? sprintf(
+						// Translators: %s is a version letter, such as "B".
+						__(
+							"Version %s is on a manual or custom placement, or is an overlay set to Manual only, so its results can't be measured. Move it to a placement Newspack controls, or end the test.",
+							'newspack-plugin'
+						),
+						ineligible[ 0 ].toUpperCase()
+				  )
+				: sprintf(
+						// Translators: %s is a version letter, such as "B".
+						__(
+							"Version %s is on a manual or custom placement, or is an overlay set to Manual only, so its results can't be measured. Move it to a placement Newspack controls.",
+							'newspack-plugin'
+						),
+						ineligible[ 0 ].toUpperCase()
+				  );
+		}
 		notices.push(
-			<Notice key="ineligible" status="warning" isDismissible={ false } spokenMessage="">
-				{ sprintf(
-					// Translators: %s is a list of version letters, such as "A" or "A and B".
-					_n(
-						"Version %s uses a manual or custom placement, or is an overlay set to Manual only, which A/B tests don't support, so its results aren't reliable. Change its placement or turn off Manual only in the prompt editor.",
-						"Versions %s use a manual or custom placement, or are overlays set to Manual only, which A/B tests don't support, so their results aren't reliable. Change their placement or turn off Manual only in the prompt editor.",
-						ineligible.length,
-						'newspack-plugin'
-					),
-					formatList( ineligible.map( letter => letter.toUpperCase() ) )
-				) }
+			<Notice key="ineligible" status="error" isDismissible={ false } spokenMessage="">
+				{ message }
 			</Notice>
 		);
 	}
@@ -396,20 +431,6 @@ const TestCard = ( { test, data, onRenamed, onEnded, isTarget = false } ) => {
 			</p>
 		);
 	}
-	if ( hasStats && status !== 'incomplete' && ! isEnded && stats.flags?.young_test ) {
-		notices.push(
-			<Notice key="young" status="info" isDismissible={ false } spokenMessage="">
-				{ data.copy?.young_test }
-			</Notice>
-		);
-	}
-	if ( hasStats && status !== 'incomplete' && ! isEnded && stats.flags?.high_anonymous ) {
-		notices.push(
-			<Notice key="anonymous" status="info" isDismissible={ false } spokenMessage="">
-				{ data.copy?.high_anonymous }
-			</Notice>
-		);
-	}
 	if ( error ) {
 		notices.push(
 			<Notice key="error" status="error" isDismissible={ false } politeness={ wasRefresh ? 'assertive' : 'polite' }>
@@ -432,6 +453,11 @@ const TestCard = ( { test, data, onRenamed, onEnded, isTarget = false } ) => {
 					<Stack direction="column" gap="lg">
 						{ notices }
 					</Stack>
+				</CardBody>
+			) }
+			{ verdict && (
+				<CardBody className="newspack-ab-tests__summary">
+					<ResultSection verdict={ verdict } />
 				</CardBody>
 			) }
 			<CardBody className="newspack-ab-tests__results">

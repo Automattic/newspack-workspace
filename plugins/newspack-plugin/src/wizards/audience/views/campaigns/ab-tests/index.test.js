@@ -290,7 +290,11 @@ describe( 'A/B Tests tab', () => {
 		mockRoutes( listResponse( [ test( 'man', { a: prompt( 1, { eligible: false } ), b: prompt( 2 ) } ) ] ) );
 		render( <ABTests /> );
 		const card = await screen.findByRole( 'region', { name: 'Test man' } );
-		expect( within( card ).getByText( /^Version A uses a manual or custom placement, or is an overlay set to Manual only/ ) ).toBeInTheDocument();
+		expect(
+			within( card ).getByText( /^Version A is on a manual or custom placement, or is an overlay set to Manual only/ )
+		).toBeInTheDocument();
+		// A notice instead of the answer, never both.
+		expect( within( card ).queryByText( 'Result' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'renames a test and updates its card', async () => {
@@ -393,6 +397,32 @@ describe( 'Ended tests', () => {
 		mockRoutes( listResponse( [ ended() ] ) );
 		render( <ABTests /> );
 		expect( await screen.findByText( 'No active tests.' ) ).toBeInTheDocument();
+	} );
+
+	it( 'leads a running card with the answer', async () => {
+		mockRoutes( listResponse( [ running() ] ) );
+		render( <ABTests /> );
+		const card = await screen.findByRole( 'region', { name: 'Test run' } );
+		expect( await within( card ).findByText( 'B wins. 2.69% of readers who saw B converted, against 1.90% for A.' ) ).toBeInTheDocument();
+		expect( within( card ).getByText( 'Result' ) ).toBeInTheDocument();
+		expect( card.querySelector( '.newspack-ab-tests__bars' ) ).toHaveAttribute( 'aria-hidden', 'true' );
+	} );
+
+	it( 'folds the logged-out caution into the answer instead of a notice', async () => {
+		mockRoutes(
+			listResponse( [ running() ] ),
+			{},
+			{
+				...stats,
+				comparisons: { b: { confidence: 85, label: 'directional' } },
+				flags: { young_test: false, high_anonymous: true, days_running: 20 },
+			}
+		);
+		render( <ABTests /> );
+		const card = await screen.findByRole( 'region', { name: 'Test run' } );
+		expect( await within( card ).findByText( 'No winner yet. B is ahead, 2.69% against 1.90%.' ) ).toBeInTheDocument();
+		expect( within( card ).getByText( 'More readers are needed. Some may have seen both versions on different devices.' ) ).toBeInTheDocument();
+		expect( within( card ).queryByText( 'Most readers are logged out.' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'says nothing matched a search', async () => {

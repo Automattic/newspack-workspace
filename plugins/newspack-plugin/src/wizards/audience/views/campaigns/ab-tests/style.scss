@@ -79,9 +79,83 @@
 		color: var(--wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700});
 	}
 
-	&__verdict {
-		margin: wp-vars.$grid-unit-10 0 0;
-		font-weight: 500;
+	&__result {
+		// The card body has no padding; line the section up with the table's cells.
+		padding: wp-vars.$grid-unit-20 wp-vars.$grid-unit-30;
+	}
+
+	&__result-label {
+		color: var(--wpds-color-foreground-content-neutral, #{wp-colors.$gray-900});
+		font-size: wp-vars.$font-size-x-small;
+		font-weight: var(--wpds-typography-font-weight-emphasis, #{wp-vars.$font-weight-medium});
+		line-height: wp-vars.$default-line-height;
+		text-transform: uppercase;
+	}
+
+	&__answer,
+	&__detail {
+		margin: 0;
+	}
+
+	&__answer {
+		font-weight: wp-vars.$font-weight-medium;
+	}
+
+	&__detail {
+		color: var(--wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700});
+	}
+
+	// One row per version from a shared left edge, the leader filling the track.
+	&__bars {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr);
+		align-items: center;
+		gap: wp-vars.$grid-unit-05 wp-vars.$grid-unit-15;
+
+		&.is-placeholder .newspack-ab-tests__bar {
+			opacity: 0.3;
+		}
+	}
+
+	&__bars-row {
+		display: contents;
+	}
+
+	&__bars-letter {
+		font-size: wp-vars.$font-size-x-small;
+		font-weight: var(--wpds-typography-font-weight-emphasis, #{wp-vars.$font-weight-medium});
+	}
+
+	&__bars-track {
+		display: flex;
+	}
+
+	&__bar {
+		height: wp-vars.$grid-unit-15;
+		border-start-end-radius: var(--wpds-border-radius-sm, 2px);
+		border-end-end-radius: var(--wpds-border-radius-sm, 2px);
+
+		// The same colors as the table's swatches, so the key reads across both.
+		&.is-variant-a {
+			background: colors.$primary-600;
+		}
+
+		&.is-variant-b {
+			background: colors.$primary-300;
+		}
+
+		&.is-variant-c {
+			background: colors.$primary-050;
+		}
+
+		&.is-variant-d {
+			background: wp-colors.$gray-400;
+		}
+
+		@media (forced-colors: active) {
+			forced-color-adjust: none;
+			background: CanvasText;
+		}
 	}
 
 	// The kept version on an ended test. DataViews offers no row class, so the

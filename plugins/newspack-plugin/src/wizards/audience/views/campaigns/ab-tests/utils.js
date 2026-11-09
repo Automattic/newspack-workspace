@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies
  */
-import { __, _x, sprintf } from '@wordpress/i18n';
+import { __, _n, _x, sprintf } from '@wordpress/i18n';
 import { addQueryArgs } from '@wordpress/url';
 import { dateI18n, getSettings } from '@wordpress/date';
 
@@ -282,12 +282,39 @@ export const canEndTest = test => {
 };
 
 /**
+ * The version a Reliable result names as the winner, however young the test.
+ *
+ * A Reliable result for a challenger that converts worse than A is A winning,
+ * but only once every challenger is Reliable: until then a weaker one could
+ * still be the best.
+ *
+ * @param {Object}  test  The test.
+ * @param {?Object} stats Its stats, or null.
+ * @return {?string} The winning letter, or null.
+ */
+const getReliableWinner = ( test, stats ) => {
+	if ( ! stats || stats.source?.state === 'unavailable' ) {
+		return null;
+	}
+	const reliable = Object.keys( stats.comparisons || {} ).filter(
+		letter => test.variants?.[ letter ] && stats.comparisons[ letter ]?.label === 'reliable' && stats.variants?.[ letter ]
+	);
+	const better = reliable.filter( letter => ( stats.variants[ letter ].lift ?? 0 ) > 0 );
+	if ( better.length > 0 ) {
+		return better.reduce( ( top, letter ) => ( stats.variants[ letter ].rate > stats.variants[ top ].rate ? letter : top ) );
+	}
+	if ( reliable.length > 0 && reliable.length === Object.keys( test.variants ).length - 1 ) {
+		return 'a';
+	}
+	return null;
+};
+
+/**
  * Which version the End Test modal recommends keeping, and why.
  *
  * Only a Reliable result names a winner, and only once the test is past the
- * server's young-test age: early results swing. A Reliable result for a
- * challenger that converts worse than A is A winning. Anything else recommends
- * A, the version readers saw before the test.
+ * server's young-test age: early results swing. Anything else recommends A,
+ * the version readers saw before the test.
  *
  * @param {Object}  test  The test.
  * @param {?Object} stats Its stats, or null.
@@ -295,27 +322,188 @@ export const canEndTest = test => {
  *                                               whether a reliable winner backs it.
  */
 export const getRecommendation = ( test, stats ) => {
-	const fallback = { letter: 'a', winner: false };
-	if ( ! stats || stats.source?.state === 'unavailable' ) {
-		return fallback;
-	}
 	// The server's young-test flag, so the two never disagree about the age.
-	if ( stats.flags?.young_test !== false ) {
-		return fallback;
+	const winner = stats?.flags?.young_test === false ? getReliableWinner( test, stats ) : null;
+	return winner ? { letter: winner, winner: true } : { letter: 'a', winner: false };
+};
+
+/**
+ * The version a verdict sets against another: A, or when it is A, the best of
+ * the rest.
+ *
+ * @param {string}   letter  The version named.
+ * @param {string[]} letters The versions with a rate.
+ * @param {Object}   rates   Letter => rate.
+ * @return {?string} The other letter, or null.
+ */
+const getCounterpart = ( letter, letters, rates ) => {
+	if ( letter !== 'a' && letters.includes( 'a' ) ) {
+		return 'a';
 	}
-	const reliable = Object.keys( stats.comparisons || {} ).filter(
-		letter => test.variants?.[ letter ] && stats.comparisons[ letter ]?.label === 'reliable' && stats.variants?.[ letter ]
+	const rest = letters.filter( other => other !== letter );
+	return rest.length ? rest.reduce( ( top, other ) => ( rates[ other ] > rates[ top ] ? other : top ) ) : null;
+};
+
+/**
+ * One bar per version, as a share of the leader's rate.
+ *
+ * @param {string[]} letters The test's versions.
+ * @param {Object}   rates   Letter => rate, for the versions with one.
+ * @return {{ placeholder: boolean, rows: Object[] }} Each row's `letter` and `width` in percent.
+ */
+const getBars = ( letters, rates ) => {
+	const top = Math.max( 0, ...Object.values( rates ) );
+	if ( top <= 0 ) {
+		return { placeholder: true, rows: letters.map( letter => ( { letter, width: 100 } ) ) };
+	}
+	return {
+		placeholder: false,
+		rows: letters.map( letter => ( { letter, width: Math.round( ( ( rates[ letter ] ?? 0 ) / top ) * 1000 ) / 10 } ) ),
+	};
+};
+
+/**
+ * What a card's Result section says: a one-line verdict, an optional detail
+ * and the bars. Only a Reliable result past the young-test age names a winner,
+ * so a publisher is never nudged to end a test early.
+ *
+ * @param {Object}  test   The test.
+ * @param {string}  status From getTestStatus().
+ * @param {?Object} stats  Its stats, or null when they are not loaded or not available.
+ * @return {?{ answer: string, detail: ?string, bars: ?Object }} Null when the card shows a notice or nothing yet.
+ */
+export const getVerdict = ( test, status, stats ) => {
+	const letters = Object.keys( test.variants || {} ).sort();
+	if ( status === 'draft' ) {
+		const unpublished = letters.filter( letter => test.variants[ letter ].status !== 'publish' ).map( letter => letter.toUpperCase() );
+		return {
+			answer: __( 'Not started.', 'newspack-plugin' ),
+			detail: sprintf(
+				// Translators: %s is a version letter or a list of them, such as "B" or "B and C".
+				_n( 'Publish version %s to start the test.', 'Publish versions %s to start the test.', unpublished.length, 'newspack-plugin' ),
+				formatList( unpublished )
+			),
+			bars: null,
+		};
+	}
+	if ( status !== 'running' && status !== 'ended' ) {
+		return null;
+	}
+
+	const usable = stats && stats.source?.state !== 'unavailable' ? stats : null;
+	const counted = letters.filter(
+		letter => ( usable?.variants?.[ letter ]?.readers ?? 0 ) > 0 && null !== ( usable.variants[ letter ].rate ?? null )
 	);
-	const better = reliable.filter( letter => ( stats.variants[ letter ].lift ?? 0 ) > 0 );
-	if ( better.length > 0 ) {
-		const best = better.reduce( ( top, letter ) => ( stats.variants[ letter ].rate > stats.variants[ top ].rate ? letter : top ) );
-		return { letter: best, winner: true };
+	const rates = Object.fromEntries( counted.map( letter => [ letter, Number( usable.variants[ letter ].rate ) ] ) );
+
+	if ( status === 'ended' ) {
+		const kept = String( test.kept || '' ).toLowerCase();
+		const answer = sprintf(
+			// Translators: %1$s is the date the test ended, %2$s the letter of the version kept, such as "B".
+			__( 'Ended %1$s. Kept %2$s.', 'newspack-plugin' ),
+			formatDay( test.ended_at ),
+			kept.toUpperCase()
+		);
+		const other = counted.includes( kept ) ? getCounterpart( kept, counted, rates ) : null;
+		if ( ! other ) {
+			return { answer, detail: null, bars: null };
+		}
+		return {
+			answer,
+			detail: sprintf(
+				// Translators: %1$s is the kept version's letter, %2$s its conversion rate, %3$s the other rate, %4$s the other version's letter.
+				__( '%1$s converted %2$s of readers, against %3$s for %4$s.', 'newspack-plugin' ),
+				kept.toUpperCase(),
+				formatRate( rates[ kept ] ),
+				formatRate( rates[ other ] ),
+				other.toUpperCase()
+			),
+			bars: getBars( letters, rates ),
+		};
 	}
-	// Every reliable challenger converts worse than A, so A is the winner.
-	if ( reliable.length > 0 && reliable.length === Object.keys( test.variants ).length - 1 ) {
-		return { letter: 'a', winner: true };
+
+	if ( ! usable ) {
+		return null;
 	}
-	return fallback;
+	if ( counted.length < 2 ) {
+		return {
+			answer: __( 'Too early to tell.', 'newspack-plugin' ),
+			detail: __( 'The test started today, so there are no results yet.', 'newspack-plugin' ),
+			bars: { placeholder: true, rows: letters.map( letter => ( { letter, width: 100 } ) ) },
+		};
+	}
+
+	const bars = getBars( letters, rates );
+	const winner = getReliableWinner( test, usable );
+	if ( winner && counted.includes( winner ) ) {
+		const other = getCounterpart( winner, counted, rates );
+		if ( usable.flags?.young_test === false ) {
+			return {
+				answer: sprintf(
+					// Translators: %1$s is the winning version's letter, %2$s its conversion rate, %3$s the other rate, %4$s the other version's letter.
+					__( '%1$s wins. %2$s of readers who saw %1$s converted, against %3$s for %4$s.', 'newspack-plugin' ),
+					winner.toUpperCase(),
+					formatRate( rates[ winner ] ),
+					formatRate( rates[ other ] ),
+					other.toUpperCase()
+				),
+				detail: null,
+				bars,
+			};
+		}
+		const days = Math.max( 0, Number( usable.flags?.days_running ) || 0 );
+		return {
+			answer: sprintf(
+				// Translators: %1$s is the leading version's letter, %2$s its conversion rate, %3$s the other version's rate.
+				__( '%1$s is ahead, %2$s against %3$s.', 'newspack-plugin' ),
+				winner.toUpperCase(),
+				formatRate( rates[ winner ] ),
+				formatRate( rates[ other ] )
+			),
+			detail: sprintf(
+				// Translators: %d is the number of days the test has run.
+				_n(
+					'The result looks reliable, but the test is %d day old. Let it run a full two weeks before ending it.',
+					'The result looks reliable, but the test is %d days old. Let it run a full two weeks before ending it.',
+					days,
+					'newspack-plugin'
+				),
+				days
+			),
+			bars,
+		};
+	}
+
+	const leader = counted.reduce( ( top, letter ) => ( rates[ letter ] > rates[ top ] ? letter : top ) );
+	const other = getCounterpart( leader, counted, rates );
+	const detail = usable.flags?.high_anonymous
+		? __( 'More readers are needed. Some may have seen both versions on different devices.', 'newspack-plugin' )
+		: __( 'More readers are needed.', 'newspack-plugin' );
+	if ( rates[ leader ] === rates[ other ] ) {
+		const [ first, second ] = [ leader, other ].sort();
+		return {
+			answer: sprintf(
+				// Translators: %1$s and %2$s are version letters, %3$s their shared conversion rate.
+				__( 'No winner yet. %1$s and %2$s are even, at %3$s.', 'newspack-plugin' ),
+				first.toUpperCase(),
+				second.toUpperCase(),
+				formatRate( rates[ leader ] )
+			),
+			detail,
+			bars,
+		};
+	}
+	return {
+		answer: sprintf(
+			// Translators: %1$s is the leading version's letter, %2$s its conversion rate, %3$s the other version's rate.
+			__( 'No winner yet. %1$s is ahead, %2$s against %3$s.', 'newspack-plugin' ),
+			leader.toUpperCase(),
+			formatRate( rates[ leader ] ),
+			formatRate( rates[ other ] )
+		),
+		detail,
+		bars,
+	};
 };
 
 /**
