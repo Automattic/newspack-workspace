@@ -4,6 +4,7 @@
 import { __, sprintf } from '@wordpress/i18n';
 import { useMemo, useState } from '@wordpress/element';
 import { decodeEntities } from '@wordpress/html-entities';
+import { VisuallyHidden } from '@wordpress/ui';
 // Not the Newspack wrapper: with-wizard-screen/style.scss gives `.newspack-dataviews`
 // a page bleed that would hang this table past its card.
 import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
@@ -26,8 +27,9 @@ const FIELD_IDS = [ 'version', 'prompt', 'readers', 'rate', 'lift', 'confidence'
  * @param {string}  props.status From getTestStatus().
  * @param {?Object} props.stats  Its stats, or null.
  * @param {Object}  props.labels Confidence label key => text.
+ * @param {?string} props.kept   On an ended test, the letter of the version kept.
  */
-const ResultsTable = ( { test, status, stats, labels } ) => {
+const ResultsTable = ( { test, status, stats, labels, kept = null } ) => {
 	const rows = useMemo( () => {
 		return Object.keys( test.variants ).map( letter => {
 			const row = stats?.variants?.[ letter ] || null;
@@ -50,9 +52,13 @@ const ResultsTable = ( { test, status, stats, labels } ) => {
 				filterBy: false,
 				getValue: ( { item } ) => item.letter,
 				render: ( { item } ) => (
-					<span className="newspack-ab-tests__version">
+					// The class lets the stylesheet tint the kept version's row, which
+					// DataViews gives no way to mark directly.
+					<span className={ `newspack-ab-tests__version${ item.letter === kept ? ' is-kept' : '' }` }>
 						<span className={ `newspack-ab-tests__swatch is-variant-${ item.letter }` } aria-hidden="true" />
 						{ item.letter.toUpperCase() }
+						{ /* The tint is faint and color-only; this says it to screen readers too. */ }
+						{ item.letter === kept && <VisuallyHidden render={ <span /> }>{ ` ${ __( '(kept)', 'newspack-plugin' ) }` }</VisuallyHidden> }
 					</span>
 				),
 			},
@@ -126,7 +132,7 @@ const ResultsTable = ( { test, status, stats, labels } ) => {
 				render: ( { item } ) => formatConfidence( item.comparison, labels ),
 			},
 		],
-		[ stats, status, labels ]
+		[ stats, status, labels, kept ]
 	);
 
 	const [ view, setView ] = useState( {

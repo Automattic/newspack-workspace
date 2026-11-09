@@ -277,7 +277,43 @@ final class Newspack_Popups_API {
 					],
 				]
 			);
+			register_rest_route(
+				'newspack-popups/v1',
+				'/ab-tests/(?P<test_id>[a-z0-9_-]+)/end',
+				[
+					'methods'             => \WP_REST_Server::CREATABLE,
+					'callback'            => [ __CLASS__, 'api_end_ab_test' ],
+					'permission_callback' => [ __CLASS__, 'end_ab_test_permission_callback' ],
+					'args'                => [
+						'keep' => [
+							'type'     => 'string',
+							'enum'     => Newspack_Popups_AB_Tests::VALID_VARIANTS,
+							'required' => true,
+						],
+					],
+				]
+			);
 		}
+	}
+
+	/**
+	 * End a test, keeping one version.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function api_end_ab_test( $request ) {
+		return rest_ensure_response( Newspack_Popups_AB_Tests::end_test( $request->get_param( 'test_id' ), $request->get_param( 'keep' ) ) );
+	}
+
+	/**
+	 * Permission to end a test: may the user change every prompt in it.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return bool
+	 */
+	public static function end_ab_test_permission_callback( $request ) {
+		return Newspack_Popups_AB_Tests::can_end_test( get_current_user_id(), (string) $request->get_param( 'test_id' ) );
 	}
 
 	/**

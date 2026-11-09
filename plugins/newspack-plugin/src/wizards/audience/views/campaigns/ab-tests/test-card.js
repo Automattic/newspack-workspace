@@ -18,7 +18,12 @@ import { Card } from '../../../../../../packages/components/src';
 import ResultsTable from './results-table';
 import RenameModal from './rename-modal';
 import StartTestModal from './start-test-modal';
-import { REST_BASE, formatList, getStatusIntent, getStatusLabel, getTestStatus, openVersionB, splitSummary } from './utils';
+import EndTestModal from './end-test-modal';
+import { REST_BASE, canEndTest, formatDay, formatList, getStatusIntent, getStatusLabel, getTestStatus, openVersionB, splitSummary } from './utils';
+
+// How long after a test ends its results become final: the server's
+// SETTLE_SECONDS, which the footer copy also names as two days.
+const SETTLE_MS = 2 * 24 * 60 * 60 * 1000;
 
 /**
  * @param {Object} variants Variants keyed by letter.
@@ -36,9 +41,10 @@ const getMissingVersionHint = variants =>
  * @param {Object}   props.test      A test from the list route.
  * @param {Object}   props.data      The rest of the list route's response.
  * @param {Function} props.onRenamed Called with the test ID and its new name.
- * @param {boolean}  props.isTarget  Whether the page was opened to show this test.
+ * @param {Function} props.onEnded   Called with the ended test the end route returns.
+ * @param {boolean}  props.isTarget  Whether the page was opened, or the test just ended, to show this test.
  */
-const TestCard = ( { test, data, onRenamed, isTarget = false } ) => {
+const TestCard = ( { test, data, onRenamed, onEnded, isTarget = false } ) => {
 	const [ stats, setStats ] = useState( null );
 	const [ loading, setLoading ] = useState( false );
 	const [ error, setError ] = useState( null );
@@ -53,7 +59,10 @@ const TestCard = ( { test, data, onRenamed, isTarget = false } ) => {
 	const letters = Object.keys( test.variants );
 	const duplicates = test.duplicates || [];
 	const hasStarted = !! test.started_at;
-	const canLoadStats = !! data.provider?.available && hasStarted;
+	const isEnded = status === 'ended';
+	// An ended test's results are kept on the server once taken, so they load
+	// whether or not the stats source is connected now.
+	const canLoadStats = hasStarted && ( isEnded || !! data.provider?.available );
 	const hasStats = hasStarted && stats && stats.source.state !== 'unavailable';
 	const ineligible = letters.filter( letter => false === test.variants[ letter ].eligible );
 	// Scheduled counts as live: readers see it once the date comes.
@@ -65,7 +74,32 @@ const TestCard = ( { test, data, onRenamed, isTarget = false } ) => {
 		status === 'draft' ? letters.find( letter => test.variants[ letter ].status !== 'publish' && test.variants[ letter ].edit_link ) : null;
 
 	let footer = null;
-	if ( hasStats && stats.source.state === 'collecting' ) {
+	if ( isEnded ) {
+		// Only over numbers: an ended test whose source can't answer shows dashes.
+		if ( hasStats && stats.source.final ) {
+			footer = sprintf(
+				// Translators: %1$s is the date the test started, %2$s the date it ended.
+				__( 'Final results from %1$s to %2$s.', 'newspack-plugin' ),
+				formatDay( test.started_at ),
+				formatDay( test.ended_at )
+			);
+		} else if ( hasStats && Date.now() < new Date( test.ended_at ).getTime() + SETTLE_MS ) {
+			footer = sprintf(
+				// Translators: %1$s is the date the test started, %2$s the date it ended.
+				__( 'Results from %1$s to %2$s. They become final two days after the test ends.', 'newspack-plugin' ),
+				formatDay( test.started_at ),
+				formatDay( test.ended_at )
+			);
+		} else if ( hasStats ) {
+			// Settled, but the source hasn't answered with numbers to keep yet.
+			footer = sprintf(
+				// Translators: %1$s is the date the test started, %2$s the date it ended.
+				__( 'Results from %1$s to %2$s.', 'newspack-plugin' ),
+				formatDay( test.started_at ),
+				formatDay( test.ended_at )
+			);
+		}
+	} else if ( hasStats && stats.source.state === 'collecting' ) {
 		// Until a reader is counted, the start date tells more than the fetch time.
 		footer = sprintf(
 			// Translators: %s is a date.
@@ -94,10 +128,11 @@ const TestCard = ( { test, data, onRenamed, isTarget = false } ) => {
 	// Centered, because the page header is sticky from 782px up and would cover
 	// a heading scrolled to the top.
 	useEffect( () => {
-		if ( isTarget ) {
-			headingRef.current?.scrollIntoView?.( { block: 'center' } );
-			headingRef.current?.focus( { preventScroll: true } );
+		if ( ! isTarget ) {
+			return;
 		}
+		headingRef.current?.scrollIntoView?.( { block: 'center' } );
+		headingRef.current?.focus( { preventScroll: true } );
 	}, [ isTarget ] );
 
 	const load = refresh => {
@@ -115,14 +150,30 @@ const TestCard = ( { test, data, onRenamed, isTarget = false } ) => {
 			.finally( () => setLoading( false ) );
 	};
 
+	// Again once the test ends: its results now stop at the day it ended, not
+	// today, so the counts already on the card no longer match.
 	useEffect( () => {
 		if ( canLoadStats ) {
 			load( false );
 		}
-	}, [] );
+	}, [ isEnded ] );
 
 	let mainAction = null;
-	if ( canCreateVersionB ) {
+	if ( canEndTest( test ) ) {
+		mainAction = (
+			<Button
+				variant="secondary"
+				onClick={ () => setModal( 'end' ) }
+				aria-label={ sprintf(
+					// Translators: %s is the test name.
+					__( 'End Test: %s', 'newspack-plugin' ),
+					name
+				) }
+			>
+				{ __( 'End Test', 'newspack-plugin' ) }
+			</Button>
+		);
+	} else if ( canCreateVersionB ) {
 		mainAction = (
 			<Button
 				variant="secondary"
@@ -170,7 +221,7 @@ const TestCard = ( { test, data, onRenamed, isTarget = false } ) => {
 		>
 			{ ( { onClose } ) => (
 				<MenuGroup>
-					{ canLoadStats && (
+					{ canLoadStats && ! isEnded && (
 						<MenuItem
 							disabled={ loading }
 							onClick={ () => {
@@ -225,7 +276,7 @@ const TestCard = ( { test, data, onRenamed, isTarget = false } ) => {
 					<span className="newspack-ab-tests__setup-key">{ __( 'Goal:', 'newspack-plugin' ) }</span>{ ' ' }
 					<span className="newspack-ab-tests__setup-value">{ test.goal_label || __( 'Not set', 'newspack-plugin' ) }</span>
 				</span>
-				{ status !== 'incomplete' && (
+				{ status !== 'incomplete' && ! isEnded && (
 					<span>
 						<span className="newspack-ab-tests__setup-key">{ __( 'Split:', 'newspack-plugin' ) }</span>{ ' ' }
 						<span className="newspack-ab-tests__setup-value">
@@ -234,6 +285,16 @@ const TestCard = ( { test, data, onRenamed, isTarget = false } ) => {
 					</span>
 				) }
 			</p>
+			{ isEnded && (
+				<p className="newspack-ab-tests__verdict">
+					{ sprintf(
+						// Translators: %1$s is the date the test ended, %2$s the letter of the version kept, such as "B".
+						__( 'Ended %1$s. Kept %2$s.', 'newspack-plugin' ),
+						formatDay( test.ended_at ),
+						String( test.kept ).toUpperCase()
+					) }
+				</p>
+			) }
 		</div>
 	);
 
@@ -316,7 +377,9 @@ const TestCard = ( { test, data, onRenamed, isTarget = false } ) => {
 			</Stack>
 		);
 	}
-	if ( stats?.source?.reason ) {
+	// The page already says when no stats source is connected; an ended
+	// card, which loads its results regardless, needn't say it again.
+	if ( stats?.source?.reason && ! ( stats.source.state === 'unavailable' && ! data.provider?.available ) ) {
 		notices.push(
 			<Notice key="source" status={ stats.source.state === 'unavailable' ? 'warning' : 'info' } isDismissible={ false } spokenMessage="">
 				{ stats.source.reason }
@@ -333,14 +396,14 @@ const TestCard = ( { test, data, onRenamed, isTarget = false } ) => {
 			</p>
 		);
 	}
-	if ( hasStats && status !== 'incomplete' && stats.flags?.young_test ) {
+	if ( hasStats && status !== 'incomplete' && ! isEnded && stats.flags?.young_test ) {
 		notices.push(
 			<Notice key="young" status="info" isDismissible={ false } spokenMessage="">
 				{ data.copy?.young_test }
 			</Notice>
 		);
 	}
-	if ( hasStats && status !== 'incomplete' && stats.flags?.high_anonymous ) {
+	if ( hasStats && status !== 'incomplete' && ! isEnded && stats.flags?.high_anonymous ) {
 		notices.push(
 			<Notice key="anonymous" status="info" isDismissible={ false } spokenMessage="">
 				{ data.copy?.high_anonymous }
@@ -372,7 +435,13 @@ const TestCard = ( { test, data, onRenamed, isTarget = false } ) => {
 				</CardBody>
 			) }
 			<CardBody className="newspack-ab-tests__results">
-				<ResultsTable test={ test } status={ status } stats={ hasStats ? stats : null } labels={ data.labels || {} } />
+				<ResultsTable
+					test={ test }
+					status={ status }
+					stats={ hasStats ? stats : null }
+					labels={ data.labels || {} }
+					kept={ isEnded ? test.kept : null }
+				/>
 			</CardBody>
 			{ footer && (
 				<CardBody className="newspack-ab-tests__footer">
@@ -395,6 +464,20 @@ const TestCard = ( { test, data, onRenamed, isTarget = false } ) => {
 						decodeEntities( test.variants.a.title )
 					) }
 					onCreated={ openVersionB }
+					onClose={ () => setModal( null ) }
+				/>
+			) }
+			{ modal === 'end' && (
+				<EndTestModal
+					test={ test }
+					stats={ hasStats ? stats : null }
+					onEnded={ ended => {
+						setModal( null );
+						// End Test is gone from an ended card, so the modal has
+						// nowhere to return focus to.
+						setFocusHeading( true );
+						onEnded( ended );
+					} }
 					onClose={ () => setModal( null ) }
 				/>
 			) }

@@ -134,6 +134,13 @@ final class Newspack_Popups_AB_Dashboard {
 	const YOUNG_TEST_DAYS = 14;
 
 	/**
+	 * How long after a test ends before its results are final. GA4 can take up
+	 * to two days to finish processing a day's events. The A/B tab's footer
+	 * copy says "two days" and mirrors this value.
+	 */
+	const SETTLE_SECONDS = 2 * DAY_IN_SECONDS;
+
+	/**
 	 * Share of logged-out readers at which per-browser assignment is flagged.
 	 */
 	const HIGH_ANONYMOUS_SHARE = 0.8;
@@ -191,18 +198,49 @@ final class Newspack_Popups_AB_Dashboard {
 			'fetched_at' => null,
 			'cached'     => false,
 			'unit'       => 'readers',
+			// Whether these are an ended test's final results.
+			'final'      => false,
 		];
 		$counts    = [];
+		$ended     = 'ended' === ( $test['status'] ?? '' );
+		$final     = $ended ? Newspack_Popups_AB_Tests::get_final_counts( $test['test_id'] ) : null;
 
-		if ( is_wp_error( $available ) ) {
+		if ( $final ) {
+			// An ended test's results were taken once and never change, so the
+			// provider isn't asked again, or even whether it is still connected.
+			$counts               = $final['counts'];
+			$source['state']      = 'collecting';
+			$source['reason']     = null;
+			$source['fetched_at'] = $final['fetched_at'];
+			$source['cached']     = true;
+			$source['final']      = true;
+			$source['unit']       = in_array( $counts['unit'] ?? '', [ 'readers', 'events' ], true ) ? $counts['unit'] : 'readers';
+		} elseif ( is_wp_error( $available ) ) {
 			$source['state']  = 'unavailable';
 			$source['reason'] = $available->get_error_message();
 		} elseif ( null !== $window ) {
 			$result = self::fetch_counts( $provider, $test, $window, (bool) $refresh );
+			// What gets frozen must have been fetched after the end date settled;
+			// a copy cached before that is asked for again, once. If that fails,
+			// the cached copy is still shown, just not frozen.
+			$settled_copy = true;
+			if ( $ended && self::has_settled( $test ) && ! is_wp_error( $result )
+				&& strtotime( $result['fetched_at'] ) < strtotime( $test['ended_at'] ) + self::SETTLE_SECONDS ) {
+				$fresh        = self::fetch_counts( $provider, $test, $window, true );
+				$settled_copy = ! is_wp_error( $fresh );
+				$result       = $settled_copy ? $fresh : $result;
+			}
 			if ( is_wp_error( $result ) ) {
 				$source['state']  = 'unavailable';
 				$source['reason'] = $result->get_error_message();
 			} else {
+				// Stats sources keep counting a day's readers for a day or two after
+				// it, so results are only final once the end date has settled, and
+				// "no data yet" is never final.
+				if ( $ended && $settled_copy && self::has_settled( $test ) && ! empty( $result['counts']['variants'] ) ) {
+					Newspack_Popups_AB_Tests::store_final_counts( $test['test_id'], $result['counts'], $result['fetched_at'] );
+					$source['final'] = true;
+				}
 				$counts               = $result['counts'];
 				$source['fetched_at'] = $result['fetched_at'];
 				$source['cached']     = $result['cached'];
@@ -269,7 +307,19 @@ final class Newspack_Popups_AB_Dashboard {
 	}
 
 	/**
-	 * The reporting window: the day the split began through today, UTC.
+	 * Whether an ended test's results can be taken as final: its end date is far
+	 * enough behind that the stats source has finished counting it.
+	 *
+	 * @param array $test One entry of Newspack_Popups_AB_Tests::get_tests().
+	 * @return bool
+	 */
+	public static function has_settled( $test ) {
+		return ! empty( $test['ended_at'] ) && strtotime( $test['ended_at'] ) + self::SETTLE_SECONDS <= time();
+	}
+
+	/**
+	 * The reporting window: the day the split began through today, or through
+	 * the day it ended for an ended test, UTC.
 	 *
 	 * @param array $test One entry of Newspack_Popups_AB_Tests::get_tests().
 	 * @return array|null `[ 'start', 'end' ]` as Y-m-d, or null until both arms are published.
@@ -280,7 +330,7 @@ final class Newspack_Popups_AB_Dashboard {
 		}
 		return [
 			'start' => gmdate( 'Y-m-d', strtotime( $test['started_at'] ) ),
-			'end'   => gmdate( 'Y-m-d' ),
+			'end'   => gmdate( 'Y-m-d', empty( $test['ended_at'] ) ? time() : strtotime( $test['ended_at'] ) ),
 		];
 	}
 
@@ -439,7 +489,8 @@ final class Newspack_Popups_AB_Dashboard {
 	private static function compute_flags( $test, $variants ) {
 		$days_running = null;
 		if ( ! empty( $test['started_at'] ) ) {
-			$days_running = (int) floor( ( time() - strtotime( $test['started_at'] ) ) / DAY_IN_SECONDS );
+			$until        = empty( $test['ended_at'] ) ? time() : strtotime( $test['ended_at'] );
+			$days_running = (int) floor( ( $until - strtotime( $test['started_at'] ) ) / DAY_IN_SECONDS );
 		}
 		$readers         = array_sum( array_column( $variants, 'readers' ) );
 		$logged_in       = array_sum( array_column( $variants, 'logged_in_readers' ) );
