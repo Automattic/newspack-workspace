@@ -195,6 +195,46 @@ trait Content_Gate_Layout {
 	}
 
 	/**
+	 * Get the default gate content for an archive page.
+	 *
+	 * @return string
+	 */
+	protected static function get_default_archive_gate_content() {
+		return '<!-- wp:paragraph --><p>' . __( 'This page is only available to members.', 'newspack-plugin' ) . '</p><!-- /wp:paragraph -->';
+	}
+
+	/**
+	 * Get the gate HTML that takes the place of an archive page's list.
+	 *
+	 * Always inline, whatever the layout's `style`: an overlay covers content the
+	 * reader scrolls into, and an archive gate leaves no content behind it. No fade
+	 * either, since there's no teaser above the gate to fade out.
+	 *
+	 * @param int $gate_layout_id The gate layout ID.
+	 *
+	 * @return string The gate HTML.
+	 */
+	public static function get_archive_gate_html( int $gate_layout_id ): string {
+		// Checked before get_post(): given 0, it returns the global post, which on an
+		// archive is the first item in the list.
+		$gate_layout_post = $gate_layout_id ? \get_post( $gate_layout_id ) : null;
+		if ( $gate_layout_post ) {
+			/** This filter is documented in includes/content-gate/trait-content-gate-layout.php */
+			$gate_content = \apply_filters( 'newspack_gate_layout_content', \get_the_content( null, false, $gate_layout_post ), $gate_layout_id );
+		} else {
+			$gate_content = self::get_default_archive_gate_content();
+		}
+
+		$gate_content_classes = [ 'newspack-content-gate__gate', 'newspack-content-gate__inline-gate', 'newspack-content-gate__archive-gate' ];
+		if ( self::is_block_theme() ) {
+			$gate_content_classes[] = 'is-layout-constrained';
+		}
+		$gate_content = '<div class="' . esc_attr( implode( ' ', $gate_content_classes ) ) . '">' . $gate_content . '</div>';
+
+		return self::annotate_gate_ctas( \apply_filters( 'newspack_gate_content', $gate_content ) );
+	}
+
+	/**
 	 * Get the inline gate content with fade effect.
 	 *
 	 * @param int $gate_layout_id The gate layout ID.

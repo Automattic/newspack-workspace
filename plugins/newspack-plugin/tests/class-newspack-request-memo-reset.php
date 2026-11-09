@@ -6,6 +6,7 @@
  */
 
 use Newspack\Access_Rules;
+use Newspack\Content_Restriction_Control;
 use Newspack\User_Gate_Access;
 use PHPUnit\Runner\BeforeTestHook;
 
@@ -52,6 +53,13 @@ class Newspack_Request_Memo_Reset implements BeforeTestHook {
 		Access_Rules::flush_product_options_memos();
 		Access_Rules::flush_one_time_purchase_memo();
 		User_Gate_Access::reset_memo();
+
+		// Keyed by user alone, not by post, so an entry left by one test would answer
+		// any later test's archive request for the same user. Private, like the other
+		// gate-lookup caches (see Trait_Restriction_Cache_Test), so reset by reflection.
+		$archive_gate_map = new \ReflectionProperty( Content_Restriction_Control::class, 'archive_gate_map' );
+		$archive_gate_map->setAccessible( true );
+		$archive_gate_map->setValue( null, [] );
 
 		// Every full or filtered run has these stores. A run scoped to files that don't
 		// create them at file scope may lack them; leave them absent there rather than

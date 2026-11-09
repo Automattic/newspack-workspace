@@ -1985,8 +1985,10 @@ class Content_Gate {
 	public static function get_frontend_script_conditions() {
 		// is_singular() first, matching enqueue_content_banner_assets(): during a
 		// preview on an archive, has_gate() would otherwise scan the gate list and have
-		// the result thrown away by the very next operand.
-		$renders_gate = is_singular() && self::has_gate() && self::is_post_restricted();
+		// the result thrown away by the very next operand. A gated post type archive
+		// renders a gate too, in place of its list.
+		$renders_gate = ( is_singular() && self::has_gate() && self::is_post_restricted() )
+			|| null !== Content_Restriction_Control::get_archive_gate();
 		$is_preview   = Content_Gate\Gate_Preview::is_preview_request();
 		return [
 			'enqueue'      => $renders_gate || $is_preview,
@@ -2118,7 +2120,9 @@ class Content_Gate {
 	 * }
 	 */
 	public static function get_gate_metadata() {
-		$post_id = self::get_gate_post_id();
+		// get_archive_gate() is null everywhere but a gated post type archive.
+		$archive_gate = Content_Restriction_Control::get_archive_gate();
+		$post_id      = $archive_gate ? $archive_gate['gate_id'] : self::get_gate_post_id();
 		return [
 			'gate_post_id' => $post_id,
 			'logged_in'    => \is_user_logged_in() ? 'yes' : 'no',
@@ -2918,6 +2922,13 @@ class Content_Gate {
 	 * @return bool
 	 */
 	public static function disable_popups( $disabled ) {
+		// First, so no Metering check runs on an archive. Metering assumes a single
+		// post: it falls back to get_the_ID(), which on an archive is the first item
+		// in the list, and its logged-in check records views in user meta. Metering
+		// doesn't apply to an archive gate anyway.
+		if ( Content_Restriction_Control::get_archive_gate() ) {
+			return true;
+		}
 		if (
 			is_singular() &&
 			self::has_gate() &&
