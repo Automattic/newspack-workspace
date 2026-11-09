@@ -27,6 +27,7 @@ export function leadingProductNames( restriction: Restriction, nameOf: ( id: num
 	const names = ( restriction.product_ids || [] ).map( nameOf ).filter( Boolean ) as string[];
 	return {
 		shown: names.slice( 0, MAX_NAMED_ITEMS ),
+		hidden: names.slice( MAX_NAMED_ITEMS ),
 		remaining: Math.max( 0, names.length - MAX_NAMED_ITEMS ),
 	};
 }

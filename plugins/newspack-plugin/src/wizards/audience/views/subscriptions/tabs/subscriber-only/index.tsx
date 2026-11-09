@@ -10,6 +10,7 @@
  */
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { useEffect, useMemo, useState } from '@wordpress/element';
+import { dateI18n, getSettings as getDateSettings } from '@wordpress/date';
 import { useDispatch } from '@wordpress/data';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import { Stack } from '@wordpress/ui';
@@ -20,7 +21,7 @@ import { __experimentalHStack as HStack, CheckboxControl } from '@wordpress/comp
 /**
  * Internal dependencies.
  */
-import { Button, DataViews, Modal, Notice, StatusBadge, Waiting } from '../../../../../../../packages/components/src';
+import { Button, CellList, DataViews, Modal, Notice, StatusBadge, Waiting } from '../../../../../../../packages/components/src';
 import EmptyState from '../../../../../../../packages/components/src/empty-state';
 import type { Action, Field, View } from '../../../../../../../packages/components/src/dataviews';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../../packages/components/src/wizard/store';
@@ -30,6 +31,7 @@ import { registerTab } from '../registry';
 import { ALL_SUBSCRIPTIONS_FILTER_VALUE, allSubscriptionsLabel, SEARCH_ENDPOINTS } from '../../constants';
 import { useRestrictions } from './use-restrictions';
 import { useNames } from '../../use-names';
+import NamesTooltip from '../../components/names-tooltip';
 import { excludedLabel, leadingProductNames, moreProductsLabel, scopeLabel } from './labels';
 import RestrictionEditor from './restriction-editor';
 import type { Restriction, RestrictionSettings } from './types';
@@ -89,7 +91,7 @@ function SubscriberOnlyProducts() {
 							</div>
 						);
 					}
-					const { shown, remaining } = leadingProductNames( item, id => productNames[ id ] );
+					const { shown, hidden, remaining } = leadingProductNames( item, id => productNames[ id ] );
 					return (
 						<div>
 							{ shown.length ? (
@@ -97,7 +99,11 @@ function SubscriberOnlyProducts() {
 							) : (
 								<div className="newspack-subscriber-only__muted">{ __( 'No products', 'newspack-plugin' ) }</div>
 							) }
-							{ remaining > 0 && <div className="newspack-subscriber-only__muted">{ moreProductsLabel( remaining ) }</div> }
+							{ remaining > 0 && (
+								<div className="newspack-subscriber-only__muted">
+									<NamesTooltip label={ moreProductsLabel( remaining ) } names={ hidden } />
+								</div>
+							) }
 						</div>
 					);
 				},
@@ -121,7 +127,16 @@ function SubscriberOnlyProducts() {
 						return <span>{ allSubscriptionsLabel() }</span>;
 					}
 					const names = ( item.subscription_product_ids || [] ).map( id => subscriptionNames[ id ] ).filter( Boolean );
-					return <span>{ names.length ? names.join( ', ' ) : __( 'No subscriptions', 'newspack-plugin' ) }</span>;
+					if ( ! names.length ) {
+						return <span>{ __( 'No subscriptions', 'newspack-plugin' ) }</span>;
+					}
+					return (
+						<CellList>
+							{ names.map( ( name, index ) => (
+								<span key={ `${ name }-${ index }` }>{ name }</span>
+							) ) }
+						</CellList>
+					);
 				},
 			},
 			{
@@ -155,7 +170,12 @@ function SubscriberOnlyProducts() {
 				id: 'created_at',
 				label: __( 'Created', 'newspack-plugin' ),
 				getValue: ( { item }: { item: Restriction } ) => item.created_at,
-				render: ( { item }: { item: Restriction } ) => <span className="newspack-dataviews__date">{ item.created_at }</span>,
+				render: ( { item }: { item: Restriction } ) =>
+					item.created_at ? (
+						<span className="newspack-dataviews__date">{ dateI18n( getDateSettings().formats.date, item.created_at ) }</span>
+					) : (
+						''
+					),
 				enableSorting: true,
 			},
 		],
