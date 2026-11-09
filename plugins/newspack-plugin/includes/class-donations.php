@@ -590,6 +590,13 @@ class Donations {
 		// Filter incoming object with array_intersect_key, so that is contains only valid keys.
 		$configuration = wp_parse_args( array_intersect_key( $args, $defaults ), $defaults );
 
+		// A cleared minimum would remove the floor from every donation product that
+		// follows it, so clearing the field keeps the minimum saved before.
+		if ( ! is_numeric( $configuration['minimumDonation'] ) ) {
+			$saved_minimum                    = self::get_saved_minimum_donation();
+			$configuration['minimumDonation'] = is_numeric( $saved_minimum ) ? $saved_minimum : $defaults['minimumDonation'];
+		}
+
 		if ( self::is_platform_wc() ) {
 			$ready = self::is_woocommerce_suite_active();
 			if ( is_wp_error( $ready ) ) {
@@ -652,10 +659,11 @@ class Donations {
 	 * the global minimum while its own is empty, equals the value Newspack last
 	 * wrote to it, or equals the global minimum from the last settings save.
 	 *
-	 * Two consequences: a product set directly to exactly the global minimum
-	 * follows it again, and a product saved before Newspack recorded what it wrote
-	 * is treated as set directly if its minimum drifted from the global one for
-	 * any other reason. Clearing a product's minimum makes it follow again.
+	 * So a product set directly follows again once its minimum and the global one
+	 * are equal, whichever of them changed to match. A product saved before
+	 * Newspack recorded what it wrote is treated as set directly if its minimum
+	 * drifted from the global one for any other reason. Clearing a product's
+	 * minimum makes it follow again.
 	 *
 	 * @param \WC_Product $product          Donation product.
 	 * @param mixed       $previous_minimum Global minimum donation from the last settings save.

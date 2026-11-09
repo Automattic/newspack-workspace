@@ -1,11 +1,12 @@
 <?php
 /**
- * Tests for how donation settings saves write each donation product's minimum price.
+ * Tests for how each donation product's minimum price follows the global minimum donation.
  *
  * @package Newspack\Tests
  */
 
 use Newspack\Donations;
+use Newspack\WooCommerce_Products;
 
 require_once __DIR__ . '/../mocks/wc-mocks.php';
 
@@ -13,7 +14,8 @@ require_once __DIR__ . '/../mocks/wc-mocks.php';
  * A donation product follows the global "Minimum donation" setting until
  * someone sets that product's minimum directly. After that, saving donation or
  * payment settings must leave the product's own minimum alone, because that
- * minimum is what checkout enforces.
+ * minimum is what checkout enforces. Clearing the product's minimum, or setting
+ * it to the global one, makes it follow again.
  *
  * @group donations
  */
@@ -72,6 +74,7 @@ class Newspack_Test_Donations_Minimum_Price extends WP_UnitTestCase {
 		Donations::reset_legacy_donation_product_ids_cache();
 		$GLOBALS['products_database'] = [];
 		delete_option( Donations::DONATION_SETTINGS_OPTION );
+		delete_option( Donations::NEWSPACK_READER_REVENUE_PLATFORM );
 		parent::tearDown();
 	}
 
@@ -163,7 +166,7 @@ class Newspack_Test_Donations_Minimum_Price extends WP_UnitTestCase {
 	public function test_products_keep_following_after_newspack_writes_a_minimum_the_settings_lack() {
 		$this->save_settings( '88' );
 		Donations::update_donation_product();
-		$this->assertNotSame( '88', $this->product_minimum( self::CHILD_YEAR ), 'The repair writes the default minimum.' );
+		$this->assertSame( '5', $this->product_minimum( self::CHILD_YEAR ), 'The repair writes the default minimum.' );
 
 		$this->save_settings( '88' );
 
@@ -187,7 +190,7 @@ class Newspack_Test_Donations_Minimum_Price extends WP_UnitTestCase {
 	/**
 	 * Clearing a product's minimum puts the global minimum back as the product
 	 * is saved, rather than leaving it with no minimum until the next settings
-	 * save, and it follows the global minimum from then on.
+	 * save.
 	 */
 	public function test_clearing_a_product_minimum_restores_the_global_minimum_on_save() {
 		$this->save_settings( '88' );
@@ -197,9 +200,63 @@ class Newspack_Test_Donations_Minimum_Price extends WP_UnitTestCase {
 		$product = wc_get_product( self::CHILD_YEAR );
 		$product->update_meta_data( '_min_price', '' );
 		$product->save();
-		$this->assertSame( '90', $this->product_minimum( self::CHILD_YEAR ) );
 
-		$this->save_settings( '95' );
-		$this->assertSame( '95', $this->product_minimum( self::CHILD_YEAR ) );
+		$this->assertSame( '90', $this->product_minimum( self::CHILD_YEAR ) );
+	}
+
+	/**
+	 * Products the restore on save must leave alone. Flagged donation products
+	 * never follow the global minimum, and the grouped parent has none.
+	 */
+	public function products_left_alone_provider() {
+		return [
+			'pay-what-you-want product' => [ 'pay-what-you-want' ],
+			'flagged donation product'  => [ 'flagged' ],
+			'grouped donation parent'   => [ 'parent' ],
+		];
+	}
+
+	/**
+	 * Restoring the minimum on save applies only to the donation products that
+	 * follow the global minimum, though the hook runs on every product save.
+	 *
+	 * @dataProvider products_left_alone_provider
+	 *
+	 * @param string $kind Which product to save.
+	 */
+	public function test_saving_another_product_without_a_minimum_leaves_it_without_one( $kind ) {
+		$this->save_settings( '88' );
+		$product_id = self::PARENT_ID;
+		if ( 'parent' !== $kind ) {
+			$product_id = 9400;
+			wc_create_mock_product(
+				[
+					'id'   => $product_id,
+					'type' => 'simple',
+					'meta' => [ '_nyp' => 'yes' ],
+				]
+			);
+		}
+		if ( 'flagged' === $kind ) {
+			update_post_meta( $product_id, WooCommerce_Products::DONATION_FLAG_META_KEY, 'yes' );
+		}
+
+		wc_get_product( $product_id )->save();
+
+		$this->assertSame( '', $this->product_minimum( $product_id ) );
+	}
+
+	/**
+	 * Clearing the global minimum keeps the one saved before, so it can't remove
+	 * the floor from every donation product that follows it. The platform is set
+	 * so the save skips the WooCommerce product writes this suite can't run.
+	 */
+	public function test_saving_a_blank_global_minimum_keeps_the_saved_one() {
+		Donations::set_platform_slug( 'nrh' );
+		Donations::set_donation_settings( [ 'minimumDonation' => '88' ] );
+
+		Donations::set_donation_settings( [ 'minimumDonation' => '' ] );
+
+		$this->assertSame( '88', get_option( Donations::DONATION_SETTINGS_OPTION )['minimumDonation'] );
 	}
 }
