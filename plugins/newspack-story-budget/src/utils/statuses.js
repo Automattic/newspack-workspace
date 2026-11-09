@@ -18,14 +18,20 @@ const STORY_STATUS_INDICATORS = {
 	active: { status: 'active' },
 };
 
-const NEUTRAL_STATUS_INDICATOR = { status: 'pending', tone: 'neutral' };
+const dot = (
+	<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false">
+		<circle cx="12" cy="12" r="3" fill="currentColor" />
+	</svg>
+);
+
+const NEUTRAL_STATUS_INDICATOR = { icon: dot };
 
 /**
  * The `StatusIndicator` props for a story status.
  *
  * Statuses are filterable through `newspack_story_budget_statuses`, and each
  * names its glyph with `icon`. A status without one, or with a name outside
- * the list, draws a neutral glyph that implies no state.
+ * the list, draws a plain dot that implies no state.
  *
  * @param {string} icon The glyph name from the status.
  * @return {Object} `status` or `icon` props for `StatusIndicator`.

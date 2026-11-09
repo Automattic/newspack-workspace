@@ -27,12 +27,15 @@ describe( 'getStatusIndicatorProps', () => {
 		expect( getStatusIndicatorProps( 'scheduled' ) ).toEqual( { status: 'scheduled' } );
 	} );
 
-	it( 'draws a status without a glyph, or with an unknown one, neutrally', () => {
-		const neutral = { status: 'pending', tone: 'neutral' };
-		expect( getStatusIndicatorProps( undefined ) ).toEqual( neutral );
-		expect( getStatusIndicatorProps( '' ) ).toEqual( neutral );
-		expect( getStatusIndicatorProps( 'rocket' ) ).toEqual( neutral );
-		expect( glyphOf( 'rocket' ) ).not.toBe( glyphOf( 'active' ) );
+	it( 'draws a status without a glyph, or with an unknown one, as a plain dot', () => {
+		const neutral = getStatusIndicatorProps( undefined );
+		expect( neutral.status ).toBeUndefined();
+		expect( neutral.icon ).toBeTruthy();
+		expect( getStatusIndicatorProps( '' ) ).toBe( neutral );
+		expect( getStatusIndicatorProps( 'rocket' ) ).toBe( neutral );
+		[ 'draft', 'pending', 'scheduled', 'search', 'check', 'active' ].forEach( icon => {
+			expect( glyphOf( icon ) ).not.toBe( neutral.icon );
+		} );
 	} );
 } );
 
