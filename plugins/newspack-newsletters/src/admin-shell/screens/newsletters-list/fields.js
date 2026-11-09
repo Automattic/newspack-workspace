@@ -59,7 +59,7 @@ const TitleCell = ( { item } ) => {
 	return (
 		<VStack className="newspack-newsletters-list__title-cell" spacing={ 1 }>
 			<a className="newspack-newsletters-list__title" href={ editUrl( item ) } onClickCapture={ event => event.stopPropagation() }>
-				<strong>{ title }</strong>
+				{ title }
 			</a>
 			{ lock && renderLock( lock ) }
 		</VStack>

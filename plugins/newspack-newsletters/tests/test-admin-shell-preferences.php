@@ -574,7 +574,7 @@ class Admin_Shell_Preferences_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A view saved at the current prefs_version keeps the order its owner chose,
+	 * A view already past the Author reorder keeps the order its owner chose,
 	 * Author first included.
 	 */
 	public function test_current_newsletters_view_keeps_its_order() {

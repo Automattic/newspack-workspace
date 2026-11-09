@@ -11,7 +11,7 @@ export function getFields( { onEdit } = {} ) {
 	const renderName = ( { item } ) => {
 		const label = item?.name || __( '(no name)', 'newspack-newsletters' );
 		if ( ! onEdit ) {
-			return <strong>{ label }</strong>;
+			return label;
 		}
 		// Render as a button-style link so keyboard users can activate
 		// the Edit modal from the column directly. The DataView's
@@ -28,7 +28,7 @@ export function getFields( { onEdit } = {} ) {
 					onEdit( item );
 				} }
 			>
-				<strong>{ label }</strong>
+				{ label }
 			</button>
 		);
 	};
