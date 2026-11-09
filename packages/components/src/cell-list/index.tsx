@@ -5,7 +5,7 @@
 /**
  * WordPress dependencies.
  */
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { Children, useId, useState } from '@wordpress/element';
 import { Button } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
@@ -13,7 +13,7 @@ import { Stack } from '@wordpress/ui';
 type CellListProps = {
 	/** The items, one per line. Each needs a key. */
 	children: React.ReactNode;
-	/** How many items show before "See more". */
+	/** How many items show before "Show N more". */
 	limit?: number;
 	/** Whether the list starts open. */
 	defaultExpanded?: boolean;
@@ -23,7 +23,7 @@ type CellListProps = {
 
 /**
  * A list of items inside a table cell, one per line: the first few, then a
- * "See more" toggle for the rest.
+ * "Show N more" toggle for the rest.
  *
  * The toggle stops its click, so a clickable row doesn't open as well. DataViews
  * remounts cells when its fields are rebuilt, which resets this component; a list
@@ -52,7 +52,13 @@ const CellList = ( { children, limit = 2, defaultExpanded = false, onToggle }: C
 						onToggle?.( ! isExpanded );
 					} }
 				>
-					{ isExpanded ? __( 'See less', 'newspack-plugin' ) : __( 'See more', 'newspack-plugin' ) }
+					{ isExpanded
+						? __( 'Show less', 'newspack-plugin' )
+						: sprintf(
+								// translators: %d: the number of items the toggle reveals.
+								_n( 'Show %d more', 'Show %d more', items.length - limit, 'newspack-plugin' ),
+								items.length - limit
+						  ) }
 				</Button>
 			) }
 		</Stack>

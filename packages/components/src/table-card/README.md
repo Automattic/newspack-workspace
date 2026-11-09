@@ -77,7 +77,7 @@ node, so the shape follows from which props are passed:
 - `before` / `after` present — the slot sits in the padding and the table no
   longer touches that edge.
 
-A slot that appears conditionally (a See More button only when the table is
+A slot that appears conditionally (a "Show N more" button only when the table is
 long) therefore changes the card's shape with the condition. That can be the
 right call — a card with a footer control legitimately looks different from one
 without — but make it deliberately, knowing a data-size threshold can flip it.

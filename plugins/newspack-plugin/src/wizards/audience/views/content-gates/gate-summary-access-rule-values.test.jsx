@@ -259,11 +259,11 @@ describe( 'gate summary, long rule values', () => {
 
 		const toggle = screen.getByRole( 'button' );
 		const shown = toggle.closest( 'p' ).textContent.match( /Institution \d+/g ).length;
-		expect( toggle ).toHaveTextContent( `+ ${ INSTITUTIONS.length - shown } more` );
+		expect( toggle ).toHaveTextContent( `Show ${ INSTITUTIONS.length - shown } more` );
 		expect( linesFor( toggle.closest( 'p' ).textContent.length ) ).toBeLessThanOrEqual( 2 );
 		const withOneMore = `Institutional access: ${ INSTITUTIONS.slice( 0, shown + 1 )
 			.map( formatAccessRuleOptionLabel )
-			.join( ' or ' ) } + ${ INSTITUTIONS.length - shown - 1 } more`;
+			.join( ' or ' ) } Show ${ INSTITUTIONS.length - shown - 1 } more`;
 		expect( linesFor( withOneMore.length ) ).toBeGreaterThan( 2 );
 	} );
 

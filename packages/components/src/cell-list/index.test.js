@@ -20,7 +20,7 @@ describe( 'CellList', () => {
 
 	it( 'shows the first two, then opens and closes the rest', () => {
 		render( <CellList>{ items( 3 ) }</CellList> );
-		const toggle = screen.getByRole( 'button', { name: 'See more' } );
+		const toggle = screen.getByRole( 'button', { name: 'Show 1 more' } );
 
 		expect( screen.queryByText( 'Item 3' ) ).not.toBeInTheDocument();
 		expect( toggle ).toHaveAttribute( 'aria-expanded', 'false' );
@@ -28,7 +28,7 @@ describe( 'CellList', () => {
 
 		fireEvent.click( toggle );
 		expect( screen.getByText( 'Item 3' ) ).toBeInTheDocument();
-		expect( toggle ).toHaveTextContent( 'See less' );
+		expect( toggle ).toHaveTextContent( 'Show less' );
 
 		fireEvent.click( toggle );
 		expect( screen.queryByText( 'Item 3' ) ).not.toBeInTheDocument();
@@ -43,7 +43,7 @@ describe( 'CellList', () => {
 		);
 
 		expect( screen.getByText( 'Item 3' ) ).toBeInTheDocument();
-		fireEvent.click( screen.getByRole( 'button', { name: 'See less' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Show less' } ) );
 		expect( onToggle ).toHaveBeenCalledWith( false );
 	} );
 
@@ -56,7 +56,7 @@ describe( 'CellList', () => {
 			</div>
 		);
 
-		fireEvent.click( screen.getByRole( 'button', { name: 'See more' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Show 1 more' } ) );
 		expect( onRowClick ).not.toHaveBeenCalled();
 	} );
 } );

@@ -1,6 +1,6 @@
 # CellList
 
-A list of items inside a table cell, one per line: the first two, then "See more" / "See less" for the rest.
+A list of items inside a table cell, one per line: the first two, then "Show N more" / "Show less" for the rest. The count tells the reader how much is hidden before they open it.
 
 ```jsx
 import { CellList } from 'newspack-components';
@@ -21,7 +21,7 @@ Use it for any cell that holds several named things, such as plans, gates or rul
 ## Props
 
 - `children`: the items, one per line. Each needs a `key`.
-- `limit`: how many items show before "See more". Defaults to `2`.
+- `limit`: how many items show before "Show N more". Defaults to `2`.
 - `defaultExpanded`: whether the list starts open.
 - `onToggle`: called with the new state when the list opens or closes.
 

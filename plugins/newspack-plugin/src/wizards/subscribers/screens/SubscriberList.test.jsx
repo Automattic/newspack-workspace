@@ -559,7 +559,7 @@ describe( 'the network subscription rows', () => {
 			subscriptions: [ 7, 8, 9 ].map( id => ( { ...localSubscription, id, plan: `Plan ${ id }`, editUrl: `/edit/${ id }` } ) ),
 		};
 		const { container, getByRole } = render( field( 'plans' ).render( { item } ) );
-		const toggle = getByRole( 'button', { name: 'See more' } );
+		const toggle = getByRole( 'button', { name: 'Show 1 more' } );
 
 		expect( container.querySelectorAll( 'a' ) ).toHaveLength( 2 );
 		expect( toggle.getAttribute( 'aria-expanded' ) ).toBe( 'false' );
@@ -569,7 +569,7 @@ describe( 'the network subscription rows', () => {
 
 		expect( container.querySelectorAll( 'a' ) ).toHaveLength( 3 );
 		expect( toggle.getAttribute( 'aria-expanded' ) ).toBe( 'true' );
-		expect( toggle.textContent ).toBe( 'See less' );
+		expect( toggle.textContent ).toBe( 'Show less' );
 	} );
 
 	it( 'keeps an open row open when DataViews remounts the cell', async () => {
@@ -579,7 +579,7 @@ describe( 'the network subscription rows', () => {
 			subscriptions: [ 7, 8, 9 ].map( id => ( { ...localSubscription, id, plan: `Plan ${ id }`, editUrl: `/edit/${ id }` } ) ),
 		};
 		const first = render( field( 'plans' ).render( { item } ) );
-		fireEvent.click( first.getByRole( 'button', { name: 'See more' } ) );
+		fireEvent.click( first.getByRole( 'button', { name: 'Show 1 more' } ) );
 		first.unmount();
 
 		const { container } = render( field( 'plans' ).render( { item } ) );

@@ -11,7 +11,7 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { useState, useMemo, useId } from '@wordpress/element';
 import {
 	Button,
@@ -152,7 +152,7 @@ export default function ImpactTable( {
 
 	const fieldIds = useMemo( () => [ 'regular', ...columns.map( col => col.key ) ], [ columns ] );
 
-	// DataViews' own pagination is off; the See More slice is what shortens the table.
+	// DataViews' own pagination is off; the Show more slice is what shortens the table.
 	const perPage = Math.max( baseline.length, 1 );
 
 	const [ view, setView ] = useState< View >( () => ( {
@@ -195,7 +195,13 @@ export default function ImpactTable( {
 				aria-controls={ tableId }
 				onClick={ () => setExpanded( ! expanded ) }
 			>
-				{ expanded ? __( 'See Less', 'newspack-plugin' ) : __( 'See More', 'newspack-plugin' ) }
+				{ expanded
+					? __( 'Show less', 'newspack-plugin' )
+					: sprintf(
+							// translators: %d: the number of products the toggle reveals.
+							_n( 'Show %d more', 'Show %d more', sorted.length - ROW_LIMIT, 'newspack-plugin' ),
+							sorted.length - ROW_LIMIT
+					  ) }
 			</Button>
 		</HStack>
 	) : null;
