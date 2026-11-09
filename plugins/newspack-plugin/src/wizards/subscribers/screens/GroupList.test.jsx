@@ -47,8 +47,6 @@ jest.mock( '../../../../packages/components/src', () => ( {
 	Router: { useHistory: () => ( { push: jest.fn() } ), useLocation: () => ( { pathname: '/' } ) },
 } ) );
 
-jest.mock( '../data/use-avatars', () => ( { SHOW_AVATARS: false, useAvatars: () => ( { avatars: {}, loading: false } ) } ) );
-
 let headerCalls = [];
 
 register(

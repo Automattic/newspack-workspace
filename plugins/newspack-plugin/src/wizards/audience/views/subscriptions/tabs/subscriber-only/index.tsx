@@ -35,6 +35,8 @@ import RestrictionEditor from './restriction-editor';
 import type { Restriction, RestrictionSettings } from './types';
 import './style.scss';
 
+const FIT_COLUMNS = [ 'status' ];
+
 const DEFAULT_VIEW = {
 	type: 'table' as const,
 	page: 1,
@@ -260,6 +262,7 @@ function SubscriberOnlyProducts() {
 				// The DataViews wrapper isn't generic — its props resolve to `unknown`,
 				// so the typed definitions above are cast at the boundary.
 				<DataViews
+					fitColumns={ FIT_COLUMNS }
 					countLabel={ ( count, formatted ) =>
 						sprintf(
 							/* translators: %s: number of restrictions. */

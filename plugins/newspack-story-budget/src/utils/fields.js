@@ -3,7 +3,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { select } from '@wordpress/data';
-import { formatSiteDate, formatSiteDateTime } from 'newspack-components';
+import { formatCount, formatSiteDate, formatSiteDateTime } from 'newspack-components';
 import { NAMESPACE as storeNamespace } from '../store/constants';
 
 export const getFieldElements = field => {
@@ -69,6 +69,8 @@ export const getFilterByOperators = field => {
  */
 export const isEmptyValue = value => value === null || value === undefined || value === '';
 
+const COUNT_FIELDS = [ 'word_count', 'image_count' ];
+
 export const getDisplayValue = ( field, value ) => {
 	if (
 		isEmptyValue( value ) ||
@@ -94,6 +96,9 @@ export const getDisplayValue = ( field, value ) => {
 	}
 	if ( Array.isArray( value ) ) {
 		return value.join( ', ' );
+	}
+	if ( COUNT_FIELDS.includes( field.slug ) && Number.isFinite( Number( value ) ) ) {
+		return formatCount( value );
 	}
 	return value;
 };

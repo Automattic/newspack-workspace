@@ -235,6 +235,7 @@ class Fields {
 				'description'        => __( 'The user who published the story online.', 'newspack-story-budget' ),
 				'is_editable'        => false,
 				'is_sortable'        => true,
+				'is_filterable'      => 'yes',
 				'name'               => __( 'Published by', 'newspack-story-budget' ),
 				'post_save_callback' => [ __CLASS__, 'get_published_user' ],
 				'slug'               => 'published_by',
