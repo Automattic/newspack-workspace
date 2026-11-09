@@ -590,11 +590,18 @@ class Donations {
 		// Filter incoming object with array_intersect_key, so that is contains only valid keys.
 		$configuration = wp_parse_args( array_intersect_key( $args, $defaults ), $defaults );
 
-		// A cleared minimum would remove the floor from every donation product that
-		// follows it, so clearing the field keeps the minimum saved before.
+		// A cleared minimum would remove the floor from every donation product and
+		// Donate block that follows it, so clearing the field keeps the minimum
+		// saved before. A site whose saved minimum is blank too gets the default;
+		// entering 0 is how to have no minimum.
 		if ( ! is_numeric( $configuration['minimumDonation'] ) ) {
-			$saved_minimum                    = self::get_saved_minimum_donation();
-			$configuration['minimumDonation'] = is_numeric( $saved_minimum ) ? $saved_minimum : $defaults['minimumDonation'];
+			$saved_minimum = self::get_saved_minimum_donation();
+			if ( is_numeric( $saved_minimum ) ) {
+				$configuration['minimumDonation'] = $saved_minimum;
+			} else {
+				$configuration['minimumDonation'] = $defaults['minimumDonation'];
+				Logger::log( 'Minimum donation was blank; saving the default minimum donation instead.' );
+			}
 		}
 
 		if ( self::is_platform_wc() ) {

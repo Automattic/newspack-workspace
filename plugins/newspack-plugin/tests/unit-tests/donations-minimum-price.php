@@ -205,14 +205,15 @@ class Newspack_Test_Donations_Minimum_Price extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Products the restore on save must leave alone. Flagged donation products
-	 * never follow the global minimum, and the grouped parent has none.
+	 * Products the restore on save must leave alone, each with the meta it is
+	 * registered with and whether it is flagged as a donation. Flagged donation
+	 * products never follow the global minimum, and the grouped parent has none.
 	 */
 	public function products_left_alone_provider() {
 		return [
-			'pay-what-you-want product' => [ 'pay-what-you-want' ],
-			'flagged donation product'  => [ 'flagged' ],
-			'grouped donation parent'   => [ 'parent' ],
+			'pay-what-you-want product' => [ 9400, [ '_nyp' => 'yes' ], false ],
+			'flagged donation product'  => [ 9400, [ '_nyp' => 'yes' ], true ],
+			'grouped donation parent'   => [ self::PARENT_ID, null, false ],
 		];
 	}
 
@@ -222,22 +223,22 @@ class Newspack_Test_Donations_Minimum_Price extends WP_UnitTestCase {
 	 *
 	 * @dataProvider products_left_alone_provider
 	 *
-	 * @param string $kind Which product to save.
+	 * @param int        $product_id Product to save.
+	 * @param array|null $meta       Meta to register the product with, or null if setUp() registered it.
+	 * @param bool       $flagged    Whether the product is flagged as a donation.
 	 */
-	public function test_saving_another_product_without_a_minimum_leaves_it_without_one( $kind ) {
+	public function test_saving_another_product_without_a_minimum_leaves_it_without_one( $product_id, $meta, $flagged ) {
 		$this->save_settings( '88' );
-		$product_id = self::PARENT_ID;
-		if ( 'parent' !== $kind ) {
-			$product_id = 9400;
+		if ( null !== $meta ) {
 			wc_create_mock_product(
 				[
 					'id'   => $product_id,
 					'type' => 'simple',
-					'meta' => [ '_nyp' => 'yes' ],
+					'meta' => $meta,
 				]
 			);
 		}
-		if ( 'flagged' === $kind ) {
+		if ( $flagged ) {
 			update_post_meta( $product_id, WooCommerce_Products::DONATION_FLAG_META_KEY, 'yes' );
 		}
 
@@ -247,16 +248,35 @@ class Newspack_Test_Donations_Minimum_Price extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Clearing the global minimum keeps the one saved before, so it can't remove
-	 * the floor from every donation product that follows it. The platform is set
-	 * so the save skips the WooCommerce product writes this suite can't run.
+	 * The global minimum saved before a blank one comes in, and the minimum the
+	 * save should keep.
 	 */
-	public function test_saving_a_blank_global_minimum_keeps_the_saved_one() {
+	public function blank_global_minimum_provider() {
+		return [
+			'a minimum is saved'         => [ '88', '88' ],
+			// Sites could save a blank minimum before saves were guarded against it.
+			'the saved minimum is blank' => [ '', 5.0 ],
+		];
+	}
+
+	/**
+	 * Clearing the global minimum keeps the one saved before, or the default if
+	 * that is blank too, so it can't remove the floor that donation products and
+	 * Donate blocks follow. RevEngine is the platform here because on WooCommerce
+	 * the save stops at the required-plugins check, which fails in this suite,
+	 * before the option is written.
+	 *
+	 * @dataProvider blank_global_minimum_provider
+	 *
+	 * @param string       $saved_minimum    Global minimum saved before.
+	 * @param string|float $expected_minimum Global minimum the save should keep.
+	 */
+	public function test_saving_a_blank_global_minimum_keeps_a_floor( $saved_minimum, $expected_minimum ) {
 		Donations::set_platform_slug( 'nrh' );
-		Donations::set_donation_settings( [ 'minimumDonation' => '88' ] );
+		update_option( Donations::DONATION_SETTINGS_OPTION, [ 'minimumDonation' => $saved_minimum ] );
 
 		Donations::set_donation_settings( [ 'minimumDonation' => '' ] );
 
-		$this->assertSame( '88', get_option( Donations::DONATION_SETTINGS_OPTION )['minimumDonation'] );
+		$this->assertSame( $expected_minimum, get_option( Donations::DONATION_SETTINGS_OPTION )['minimumDonation'] );
 	}
 }
