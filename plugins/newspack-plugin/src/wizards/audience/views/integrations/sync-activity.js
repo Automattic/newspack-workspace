@@ -247,8 +247,8 @@ export const SyncActivity = ( { integrationId } ) => {
 			<DataViews
 				countLabel={ ( count, formatted ) =>
 					sprintf(
-						/* translators: %s: number of readers with sync activity. */
-						_n( '%s reader', '%s readers', count, 'newspack-plugin' ),
+						/* translators: %s: number of sync activity entries. */
+						_n( '%s entry', '%s entries', count, 'newspack-plugin' ),
 						formatted
 					)
 				}
