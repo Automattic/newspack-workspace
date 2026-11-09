@@ -1021,7 +1021,7 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 			[ 'plan' => [ 'Digital Monthly' ] ],
 			[
 				'status' => [ 'active', 'cancelled' ],
-				'plan'   => [ 'Acme Team' ],
+				'plan'   => [ 'Team Plan' ],
 			],
 		];
 
@@ -1653,6 +1653,35 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 				$this->assertContains( $plan_name, $displayed, "A row returned for '$plan_name' displays that plan, rather than some other name." );
 			}
 		}
+	}
+
+	/**
+	 * A group whose product has been deleted falls back to its own name, on the
+	 * plans endpoint and the filter alike, so its members stay filterable.
+	 */
+	public function test_a_group_without_its_product_round_trips_under_its_own_name() {
+		$this->login_admin();
+
+		$owner  = $this->create_reader( 'OrphanOwner' );
+		$member = $this->create_reader( 'OrphanMember' );
+		$group  = $this->create_group_subscription( $owner ); // "Acme Team" on "Team Plan".
+		add_user_meta( $member, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $group->get_id() );
+		// Without the product, only the subscription's own setting keeps it a group.
+		$group->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+		$group->save();
+		global $products_database;
+		unset( $products_database[ $this->group_product_ids['Team Plan'] ] );
+		wp_delete_post( $this->group_product_ids['Team Plan'], true );
+
+		$plan_names = $this->dispatch_plans()->get_data()['items'];
+		$this->assertContains( 'Acme Team', $plan_names );
+		$this->assertNotContains( 'Team Plan', $plan_names );
+
+		$matched = array_column( $this->dispatch( [ 'plan' => [ 'Acme Team' ] ] )->get_data()['items'], 'id' );
+		sort( $matched );
+		$expected = [ $owner, $member ];
+		sort( $expected );
+		$this->assertSame( $expected, $matched );
 	}
 
 	/**

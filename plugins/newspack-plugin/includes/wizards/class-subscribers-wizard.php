@@ -533,7 +533,7 @@ class Subscribers_Wizard extends Wizard {
 		$names = [];
 
 		foreach ( $this->get_group_subscriptions() as $group ) {
-			$names[] = $this->group_plan_name( $group['subscription'], $group['settings'] );
+			$names[] = $group['plan_name'];
 		}
 		foreach ( $this->subscription_product_names() as $product_name ) {
 			$names[] = $product_name;
@@ -605,8 +605,6 @@ class Subscribers_Wizard extends Wizard {
 			// listed, below.
 			if ( ! $product->is_type( 'variable-subscription' ) ) {
 				$names[] = (string) $product->get_name();
-			}
-			if ( ! $product->is_type( 'variable-subscription' ) ) {
 				continue;
 			}
 			// One product load per variation. The bound is the site's whole
@@ -654,13 +652,14 @@ class Subscribers_Wizard extends Wizard {
 
 	/**
 	 * Every group-enabled subscription on the site, each paired with its resolved
-	 * settings, keyed by subscription ID. Memoized for the request.
+	 * settings and the plan name its members see (group_plan_name()), keyed by
+	 * subscription ID. Memoized for the request.
 	 *
 	 * The HPOS-safe site-wide query get_group_subscription_ids() can over-report
 	 * under product inheritance, so each candidate is re-checked against its own
 	 * settings — the authority on group membership.
 	 *
-	 * @return array<int,array{subscription:\WC_Subscription,settings:array}>
+	 * @return array<int,array{subscription:\WC_Subscription,settings:array,plan_name:string}>
 	 */
 	private function get_group_subscriptions() {
 		if ( null !== $this->group_subscriptions_cache ) {
@@ -680,6 +679,7 @@ class Subscribers_Wizard extends Wizard {
 				$groups[ (int) $subscription->get_id() ] = [
 					'subscription' => $subscription,
 					'settings'     => $settings,
+					'plan_name'    => $this->group_plan_name( $subscription, $settings ),
 				];
 			}
 		}
@@ -2015,7 +2015,9 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
-	 * A reader's group memberships, shaped as { id, plan, status, role, editUrl }.
+	 * A reader's group memberships, shaped as { id, plan, status, role, editUrl },
+	 * where `plan` is the group's own name. List-path entries add `planName`, the
+	 * plan the Subscription column shows (group_plan_name()), and `isComplimentary`.
 	 *
 	 * On the list path (`$detailed` false) this reads from the per-request
 	 * membership index — built once by walking the site's groups — because the
@@ -2106,7 +2108,8 @@ class Subscribers_Wizard extends Wizard {
 
 	/**
 	 * Build (once per request) a map of user ID → their group memberships, each
-	 * shaped as { id, plan, status, role, editUrl }.
+	 * shaped as { id, plan, planName, status, isComplimentary, role, editUrl }:
+	 * `plan` is the group's own name, `planName` the plan its members subscribe to.
 	 *
 	 * Iterating the site's (few, memoized) groups and reading each group's people
 	 * once is far cheaper than resolving every subscriber's owned/managed/member
@@ -2129,7 +2132,7 @@ class Subscribers_Wizard extends Wizard {
 				$entry        = [
 					'id'              => (int) $subscription->get_id(),
 					'plan'            => (string) $group['settings']['name'],
-					'planName'        => $this->group_plan_name( $subscription, $group['settings'] ),
+					'planName'        => $group['plan_name'],
 					'status'          => self::map_subscription_status( $subscription->get_status() ),
 					'editUrl'         => $this->subscription_edit_url( $subscription ),
 					'isComplimentary' => Complimentary_Access::is_complimentary_order( $subscription ),
@@ -2621,11 +2624,12 @@ class Subscribers_Wizard extends Wizard {
 		$ids           = [];
 		$cancelled_ids = [];
 
-		// Group plans, matched by the name their members see (group_plan_name()).
-		// Members inherit their group's status, so a cancelled group is cancelled for
-		// every one of them.
-		foreach ( $this->get_group_subscriptions() as $group ) {
-			if ( ! in_array( $this->group_plan_name( $group['subscription'], $group['settings'] ), $plan_names, true ) ) {
+		// Group plans, matched by the name their members see (group_plan_name()),
+		// sanitized like the submitted names. Members inherit their group's status, so
+		// a cancelled group is cancelled for every one of them.
+		$groups = $this->get_group_subscriptions();
+		foreach ( $groups as $group ) {
+			if ( ! in_array( sanitize_text_field( $group['plan_name'] ), $plan_names, true ) ) {
 				continue;
 			}
 			$members = array_map( 'intval', Group_Subscription::get_all_members( $group['subscription'] ) );
@@ -2654,6 +2658,9 @@ class Subscribers_Wizard extends Wizard {
 			$per_product = max( 1, intdiv( self::FILTER_INCLUDE_CAP, count( $product_ids ) ) );
 			foreach ( $product_ids as $product_id ) {
 				$subscription_ids = \wcs_get_subscriptions_for_product( $product_id, 'ids', [ 'limit' => $per_product ] );
+				// A group on this product was matched with all its members above; its
+				// subscription's holder alone may not be one of them (a gifted group).
+				$subscription_ids = array_filter( $subscription_ids, fn( $id ) => ! isset( $groups[ (int) $id ] ) );
 				foreach ( array_chunk( $subscription_ids, self::FILTER_SCAN_CHUNK ) as $chunk ) {
 					$subscriptions = array_filter( array_map( 'wcs_get_subscription', $chunk ) );
 					self::prime_gift_recipients( $subscriptions );
