@@ -846,6 +846,53 @@ class WC_Product {
 		$products_database[ $this->get_id() ] = $this;
 		return $this->get_id();
 	}
+	/**
+	 * Setters Donations::update_donation_product() calls on an existing product.
+	 * They store into the same data the getters above read, so a test can run
+	 * that method against mock products and read the results back.
+	 *
+	 * @param string $value Product name.
+	 */
+	public function set_name( $value ) {
+		$this->data['name'] = $value;
+	}
+	public function set_regular_price( $value ) {
+		$this->data['regular_price'] = $value;
+	}
+	public function set_children( $value ) {
+		$this->data['children'] = $value;
+	}
+	public function set_status( $value ) {
+		$this->data['status'] = $value;
+	}
+	public function set_virtual( $value ) {
+		$this->data['virtual'] = $value;
+	}
+	public function set_downloadable( $value ) {
+		$this->data['downloadable'] = $value;
+	}
+	public function set_catalog_visibility( $value ) {
+		$this->data['catalog_visibility'] = $value;
+	}
+	public function set_sold_individually( $value ) {
+		$this->data['sold_individually'] = $value;
+	}
+}
+
+if ( ! function_exists( 'wc_format_decimal' ) ) {
+	/**
+	 * Minimal stand-in for WooCommerce's wc_format_decimal(): normalizes a numeric
+	 * value to a string without trailing zeros, which is all the donation code needs.
+	 *
+	 * @param mixed $number Number to format.
+	 * @return string
+	 */
+	function wc_format_decimal( $number ) {
+		if ( '' === $number || null === $number ) {
+			return '';
+		}
+		return (string) ( 0 + $number );
+	}
 }
 
 class WC_Cart {
