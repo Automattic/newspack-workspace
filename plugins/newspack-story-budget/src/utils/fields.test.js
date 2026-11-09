@@ -43,6 +43,12 @@ describe( 'fields utils', () => {
 			expect( getDisplayValue( field, [] ) ).toBeNull();
 		} );
 
+		it( 'should show the label of an option rather than its value', () => {
+			const field = { type: 'text', slug: 'wp_status', options: [ { value: 'publish', label: 'Published' } ] };
+			expect( getDisplayValue( field, 'publish' ) ).toBe( 'Published' );
+			expect( getDisplayValue( field, 'inherit' ) ).toBe( 'inherit' );
+		} );
+
 		it( 'should show 0 and false rather than an empty value', () => {
 			expect( getDisplayValue( { type: 'integer', slug: 'images' }, 0 ) ).toBe( 0 );
 			expect( getDisplayValue( { type: 'boolean', slug: 'locked' }, false ) ).toBe( 'No' );

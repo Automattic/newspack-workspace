@@ -17,7 +17,7 @@ import { StatusIndicator } from 'newspack-components';
 import { NAMESPACE as storeNamespace } from '../store/constants';
 import StoryFieldControl from './story-field-control';
 import utils from '../utils';
-import { getStatusIndicatorProps } from '../utils/statuses';
+import { getStatusIndicatorProps, getWpStatusIndicatorProps } from '../utils/statuses';
 import { useStory, useStoryField } from '../hooks';
 
 const DEFAULT_POPOVER_PROPS = {
@@ -82,8 +82,13 @@ export default ( {
 		return null;
 	}
 
-	const renderValue = text =>
-		field.slug === 'status' ? <StatusIndicator { ...getStatusIndicatorProps( value ) }>{ text }</StatusIndicator> : text;
+	const renderValue = text => {
+		if ( field.slug === 'status' ) {
+			return <StatusIndicator { ...getStatusIndicatorProps( value ) }>{ text }</StatusIndicator>;
+		}
+		const wpStatusProps = field.slug === 'wp_status' && getWpStatusIndicatorProps( value );
+		return wpStatusProps ? <StatusIndicator { ...wpStatusProps }>{ text }</StatusIndicator> : text;
+	};
 
 	const fieldClassName = classnames( 'newspack-story-budget__field', {
 		'newspack-story-budget__field--date': [ 'date', 'datetime' ].includes( field.type ),

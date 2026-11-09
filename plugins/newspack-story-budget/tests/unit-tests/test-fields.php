@@ -437,4 +437,16 @@ class TestFields extends WP_UnitTestCase {
 		$this->assertEquals( $post_modified, $field->get_value( $post_id ), 'A later post edit sets the last modified time.' );
 		$this->assertEquals( '2026-01-01 00:00:00', get_post_field( 'post_modified_gmt', $post_id ), 'The post keeps its own modified date.' );
 	}
+
+	/**
+	 * WP Status carries the labels WordPress registers for each post status a story can have.
+	 */
+	public function test_wp_status_options_use_post_status_labels() {
+		$options = Fields::get_field( 'wp_status' )->to_array()['options'];
+		$labels  = array_column( $options, 'label', 'value' );
+
+		$this->assertSame( [ 'publish', 'pending', 'draft', 'future', 'private' ], array_keys( $labels ) );
+		$this->assertSame( get_post_status_object( 'publish' )->label, $labels['publish'] );
+		$this->assertSame( get_post_status_object( 'future' )->label, $labels['future'] );
+	}
 }

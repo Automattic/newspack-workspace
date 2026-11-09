@@ -278,8 +278,9 @@ class Fields {
 			[
 				'description'             => __( 'The status of the post in WordPress.', 'newspack-story-budget' ),
 				'get_value_callback'      => [ __CLASS__, 'get_post_wp_status' ],
+				'options'                 => [ __CLASS__, 'get_post_wp_status_options' ],
 				'is_editable'             => false,
-				'is_filterable'           => 'always',
+				'is_filterable'           => 'yes',
 				'name'                    => __( 'WP Status', 'newspack-story-budget' ),
 				'show_in_table'           => true,
 				'slug'                    => 'wp_status',
@@ -788,6 +789,24 @@ class Fields {
 			require_once ABSPATH . 'wp-admin/includes/post.php';
 		}
 		return (bool) \wp_check_post_lock( $post_id );
+	}
+
+	/**
+	 * The WordPress post statuses a story can have, with the labels WordPress
+	 * registers for them.
+	 *
+	 * @return array[] Options with `value` and `label`.
+	 */
+	public static function get_post_wp_status_options() {
+		$options = [];
+		foreach ( Budgets::STORY_POST_STATUSES as $status ) {
+			$status_object = \get_post_status_object( $status );
+			$options[]     = [
+				'value' => $status,
+				'label' => $status_object ? $status_object->label : $status,
+			];
+		}
+		return $options;
 	}
 
 	/**

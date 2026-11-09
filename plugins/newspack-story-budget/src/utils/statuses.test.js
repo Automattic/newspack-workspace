@@ -1,6 +1,6 @@
 import { statusGlyph } from 'newspack-components/src/status-indicator';
 
-import { getStatusIndicatorProps } from './statuses';
+import { getStatusIndicatorProps, getWpStatusIndicatorProps } from './statuses';
 
 const glyphOf = slug => {
 	const props = getStatusIndicatorProps( slug );
@@ -15,5 +15,18 @@ describe( 'getStatusIndicatorProps', () => {
 
 	it( 'draws a status added through the filter as a stage in progress', () => {
 		expect( getStatusIndicatorProps( 'legal-review' ) ).toEqual( { status: 'progress' } );
+	} );
+} );
+
+describe( 'getWpStatusIndicatorProps', () => {
+	it( 'draws each post status a story can have with its own publishing glyph', () => {
+		const glyphs = [ 'publish', 'future', 'draft', 'pending', 'private' ].map( slug => statusGlyph( getWpStatusIndicatorProps( slug ).status ) );
+		expect( new Set( glyphs ).size ).toBe( glyphs.length );
+		expect( getWpStatusIndicatorProps( 'publish' ) ).toEqual( { status: 'active' } );
+		expect( getWpStatusIndicatorProps( 'future' ) ).toEqual( { status: 'scheduled' } );
+	} );
+
+	it( 'leaves a status without a glyph as text', () => {
+		expect( getWpStatusIndicatorProps( 'custom-status' ) ).toBeUndefined();
 	} );
 } );
