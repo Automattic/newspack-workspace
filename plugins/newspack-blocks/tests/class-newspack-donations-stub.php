@@ -41,5 +41,38 @@ if ( ! class_exists( __NAMESPACE__ . '\Donations' ) ) {
 			self::$stub_calls[] = $product_id;
 			return in_array( (int) $product_id, self::$stub_donation_product_ids, true );
 		}
+
+		/**
+		 * Site-wide donation settings the stub returns. Set by the test.
+		 *
+		 * @var array
+		 */
+		public static $stub_donation_settings = [];
+
+		/**
+		 * Whether the stub reports the RevEngine platform, which makes the Donate
+		 * block treat Name Your Price as available. Set by the test.
+		 *
+		 * @var bool
+		 */
+		public static $stub_is_platform_nrh = false;
+
+		/**
+		 * Site-wide donation settings.
+		 *
+		 * @return array
+		 */
+		public static function get_donation_settings() {
+			return self::$stub_donation_settings;
+		}
+
+		/**
+		 * Whether the donation platform is RevEngine.
+		 *
+		 * @return bool
+		 */
+		public static function is_platform_nrh() {
+			return self::$stub_is_platform_nrh;
+		}
 	}
 }
