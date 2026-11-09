@@ -6,6 +6,7 @@
  */
 
 import { Tooltip } from '@wordpress/components';
+import { createInterpolateElement } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { dateI18n, getSettings as getDateSettings, gmdateI18n } from '@wordpress/date';
 
@@ -108,10 +109,13 @@ const renderStatus = ( { item } ) => {
 		// Scheduled has two sources: a `future` post reports its publish instant,
 		// while a published ad with a future start date reports a day anchor.
 		const formatStart = 'future' === item?.status ? formatInstant : formatDayAnchor;
-		label = sprintf(
-			/* translators: %s: formatted start date */
-			__( 'Starts %s', 'newspack-newsletters' ),
-			formatStart( status.starts_at )
+		label = createInterpolateElement(
+			sprintf(
+				/* translators: %s: formatted start date */
+				__( 'Starts %s', 'newspack-newsletters' ),
+				'<date />'
+			),
+			{ date: <span className="newspack-dataviews__date">{ formatStart( status.starts_at ) }</span> }
 		);
 	} else {
 		label = statusKindLabel( kind );
@@ -137,7 +141,7 @@ const renderAdDate = ( value, hint ) => {
 	}
 	return (
 		<Tooltip text={ hint }>
-			<span>{ formatted }</span>
+			<span className="newspack-dataviews__date">{ formatted }</span>
 		</Tooltip>
 	);
 };
@@ -172,7 +176,10 @@ const renderPrice = ( { item } ) => {
 	return formatPrice( price );
 };
 
-const renderDate = ( { item } ) => formatPostDate( item );
+const renderDate = ( { item } ) => {
+	const formatted = formatPostDate( item );
+	return formatted ? <span className="newspack-dataviews__date">{ formatted }</span> : null;
+};
 
 export function getFields( { advertisers = [], placements = [] } = {} ) {
 	const statusLabels = STATUS_KIND_LABELS();

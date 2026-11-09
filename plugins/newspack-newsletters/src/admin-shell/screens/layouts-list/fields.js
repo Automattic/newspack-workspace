@@ -187,7 +187,7 @@ export function getFields( { renamingId = null, onRenameCommit, onRenameCancel, 
 			getValue: ( { item } ) => item?.modified || '',
 			render: ( { item } ) => {
 				const formatted = formatPostDate( item, 'modified', { kind: 'date' } );
-				return formatted ? <span>{ formatted }</span> : null;
+				return formatted ? <span className="newspack-dataviews__date">{ formatted }</span> : null;
 			},
 		},
 	];

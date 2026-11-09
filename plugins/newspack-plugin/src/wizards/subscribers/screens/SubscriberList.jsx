@@ -363,7 +363,7 @@ export default function SubscriberList() {
 				label: __( 'Last payment', 'newspack-plugin' ),
 				// Not server-sortable in this slice.
 				enableSorting: false,
-				render: ( { item } ) => <span>{ item.lastPayment ? fmtDate( item.lastPayment ) : '—' }</span>,
+				render: ( { item } ) => <span className="newspack-dataviews__date">{ item.lastPayment ? fmtDate( item.lastPayment ) : '—' }</span>,
 			},
 			{
 				id: 'memberSince',
@@ -373,7 +373,9 @@ export default function SubscriberList() {
 				render: ( { item } ) =>
 					item.memberSince ? (
 						<div>
-							<div>{ fmtDate( item.memberSince ) }</div>
+							<div>
+								<span className="newspack-dataviews__date">{ fmtDate( item.memberSince ) }</span>
+							</div>
 							<div className="newspack-subscribers__muted">{ fmtRelative( item.memberSince ) }</div>
 						</div>
 					) : (
@@ -391,7 +393,9 @@ export default function SubscriberList() {
 				render: ( { item } ) =>
 					item.lastSeen ? (
 						<div>
-							<div>{ fmtDate( item.lastSeen ) }</div>
+							<div>
+								<span className="newspack-dataviews__date">{ fmtDate( item.lastSeen ) }</span>
+							</div>
 							<div className="newspack-subscribers__muted">{ fmtRelative( item.lastSeen ) }</div>
 						</div>
 					) : (

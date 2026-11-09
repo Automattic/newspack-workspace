@@ -6,6 +6,7 @@
  */
 
 import { ExternalLink, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { createInterpolateElement } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { envelope, globe } from '@wordpress/icons';
 import { dateI18n, getSettings as getDateSettings } from '@wordpress/date';
@@ -35,6 +36,10 @@ const formatDate = timestamp => {
 	const format = settings.formats?.datetime || 'M j, Y g:ia';
 	return dateI18n( format, timestamp * 1000 );
 };
+
+const renderStatusDate = timestamp => <span className="newspack-dataviews__date">{ formatDate( timestamp ) }</span>;
+
+const withDate = ( template, timestamp ) => createInterpolateElement( sprintf( template, '<date />' ), { date: renderStatusDate( timestamp ) } );
 
 const editUrl = item => `${ getAdminUrl() }post.php?post=${ item.id }&action=edit`;
 
@@ -91,12 +96,12 @@ const renderStatus = ( { item } ) => {
 			/* translators: %s: formatted send date */
 			dateFormat = __( 'Sent %s', 'newspack-newsletters' );
 		}
-		label = sprintf( dateFormat, formatDate( status.sent_at ) );
+		label = withDate( dateFormat, status.sent_at );
 	} else if ( 'scheduled' === kind && status.scheduled_at ) {
-		label = sprintf(
+		label = withDate(
 			/* translators: %s: formatted scheduled date */
 			__( 'Scheduled for %s', 'newspack-newsletters' ),
-			formatDate( status.scheduled_at )
+			status.scheduled_at
 		);
 	} else {
 		label = statusKindLabel( kind );
@@ -152,7 +157,10 @@ const renderPublicPage = ( { item } ) => {
 	);
 };
 
-const renderDate = ( { item } ) => formatPostDate( item );
+const renderDate = ( { item } ) => {
+	const formatted = formatPostDate( item );
+	return formatted ? <span className="newspack-dataviews__date">{ formatted }</span> : null;
+};
 
 export function getFields( { authors = [], categories = [], tags = [], sendLists = [] } = {} ) {
 	const statusLabels = STATUS_KIND_LABELS();

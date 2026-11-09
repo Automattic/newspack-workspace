@@ -155,6 +155,7 @@ function SubscriberOnlyProducts() {
 				id: 'created_at',
 				label: __( 'Created', 'newspack-plugin' ),
 				getValue: ( { item }: { item: Restriction } ) => item.created_at,
+				render: ( { item }: { item: Restriction } ) => <span className="newspack-dataviews__date">{ item.created_at }</span>,
 				enableSorting: true,
 			},
 		],

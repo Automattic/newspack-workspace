@@ -16,6 +16,17 @@
 		align-self: start;
 	}
 
+	&__segments {
+		min-width: 0;
+	}
+
+	&__segment {
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
 	&__goal-section {
 		display: flex;
 		flex-direction: column;
