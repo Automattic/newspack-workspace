@@ -68,11 +68,6 @@
 		max-width: 40ch;
 	}
 
-	.dataviews-title-field--clickable:focus:not(:focus-visible) {
-		box-shadow: none;
-		color: inherit;
-	}
-
 	&__preview-more td {
 		color: wp-colors.$gray-700;
 		font-style: italic;

@@ -8,13 +8,6 @@
 	padding: 0 var(--newspack-wizard-section-space);
 }
 
-.newspack-subscriber-only__muted {
-	color: var(--wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700});
-	font-size: wp-vars.$helptext-font-size;
-	font-weight: wp-vars.$font-weight-regular;
-	line-height: wp-vars.$default-line-height;
-}
-
 // Rule editor: a right-edge slide-in panel rather than a centered modal, so the
 // list stays visible while a rule is edited.
 .newspack-subscriptions-drawer__overlay {

@@ -127,7 +127,7 @@ export function subscriptionNames( ids: number[], options: { id: number; name: s
  *
  * `more` counts everything the cell does not name, whether it was capped away
  * or could not be resolved, so the two are never separate numbers. Where
- * nothing resolves, `named` carries the count rather than going blank.
+ * nothing resolves, `shown` carries the count rather than going blank.
  *
  * @param ids     The rule's subscription product ids.
  * @param options Known subscription products.

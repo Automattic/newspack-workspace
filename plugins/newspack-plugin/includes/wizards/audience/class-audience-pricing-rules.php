@@ -4,8 +4,9 @@
  *
  * Page shell for the DataViews-based pricing-rules manager. The rule CRUD REST
  * is owned by the standalone woocommerce-dynamic-pricing plugin
- * (wc-dynamic-pricing/v1/rules); this wizard only registers the admin page and
- * mounts the React app, which consumes that REST via @wordpress/api-fetch.
+ * (wc-dynamic-pricing/v1/rules); this wizard registers the admin page, mounts
+ * the React app that consumes that REST via @wordpress/api-fetch, and adds the
+ * names of the products and categories the rules target to the rules response.
  *
  * @package Newspack
  */

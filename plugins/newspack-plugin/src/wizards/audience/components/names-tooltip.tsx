@@ -21,7 +21,7 @@ type NamesTooltipProps = {
 /**
  * A count in a list cell that lists what it stands for.
  *
- * Built on `Popover`, like `InfoButton`, so it opens on hover, focus and tap, and
+ * Built on `Popover`, like `InfoButton`, so it opens on hover, click, tap or Enter, and
  * the names are part of the trigger's accessible name at all times. The popup
  * opens below the trigger so it never covers the cell's own names. Renders the
  * label alone when there are no names to list.
@@ -29,7 +29,7 @@ type NamesTooltipProps = {
 export default function NamesTooltip( { label, names, muted }: NamesTooltipProps ) {
 	const className = muted ? 'newspack-names-tooltip is-muted' : 'newspack-names-tooltip';
 	if ( ! names.length ) {
-		return <span className={ muted ? className : undefined }>{ label }</span>;
+		return <span className={ muted ? 'newspack-names-tooltip__text' : undefined }>{ label }</span>;
 	}
 	const list = names.join( ', ' );
 	return (
