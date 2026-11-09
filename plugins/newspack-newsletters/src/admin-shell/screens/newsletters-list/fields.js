@@ -9,9 +9,8 @@ import { ExternalLink, __experimentalVStack as VStack } from '@wordpress/compone
 import { createInterpolateElement } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { envelope, globe } from '@wordpress/icons';
-import { dateI18n, getSettings as getDateSettings } from '@wordpress/date';
 
-import { StatusIndicator } from 'newspack-components';
+import { CellList, formatSiteDateTime, StatusIndicator } from 'newspack-components';
 
 import UserRow, { avatarPropsFromAuthor } from '../../../components/user-row';
 import { useLockedPost } from '../../hooks/use-locked-posts';
@@ -28,16 +27,7 @@ export const STATUS_KIND_STATUSES = {
 	trash: 'trash',
 };
 
-const formatDate = timestamp => {
-	if ( ! timestamp ) {
-		return '';
-	}
-	const settings = getDateSettings();
-	const format = settings.formats?.datetime || 'M j, Y g:ia';
-	return dateI18n( format, timestamp * 1000 );
-};
-
-const renderStatusDate = timestamp => <span className="newspack-dataviews__date">{ formatDate( timestamp ) }</span>;
+const renderStatusDate = timestamp => <span className="newspack-dataviews__date">{ formatSiteDateTime( timestamp ) }</span>;
 
 const withDate = ( template, timestamp ) => createInterpolateElement( sprintf( template, '<date />' ), { date: renderStatusDate( timestamp ) } );
 
@@ -112,11 +102,22 @@ const renderStatus = ( { item } ) => {
 
 const renderSendList = ( { item } ) => {
 	const id = item?.meta?.send_list_id || '';
-	const sublistId = item?.meta?.send_sublist_id || '';
 	if ( ! id ) {
 		return <span className="newspack-newsletters-list__empty">&mdash;</span>;
 	}
-	return <code className="newspack-newsletters-list__send-list">{ sublistId ? `${ id } / ${ sublistId }` : id }</code>;
+	const sublistId = item?.meta?.send_sublist_id || '';
+	const names = item?.newspack_newsletters_send_list;
+	const labels = [ names?.list || id ];
+	if ( sublistId ) {
+		labels.push( names?.sublist || sublistId );
+	}
+	return (
+		<CellList>
+			{ labels.map( ( label, index ) => (
+				<span key={ index }>{ label }</span>
+			) ) }
+		</CellList>
+	);
 };
 
 const renderAuthor = ( { item } ) => {

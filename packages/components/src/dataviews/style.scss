@@ -6,7 +6,7 @@
 .newspack-dataviews {
 	--newspack-dataviews-stack-gap: calc((var(--wpds-dimension-size-md, #{wp-vars.$grid-unit-40}) - var(--wpds-typography-line-height-sm, #{wp-vars.$font-line-height-small})) / 2);
 
-	.newspack-wizard__content--full-width & {
+	.newspack-wizard__content--full-width &:not(.newspack-dataviews--in-card) {
 		margin-top: calc(-1 * var(--newspack-page-dataviews-offset, #{wp-vars.$grid-unit-20}));
 	}
 }
@@ -42,17 +42,27 @@
 			margin-inline: auto;
 		}
 
-		&:has(.newspack-status-indicator, .newspack-dataviews__date) {
+		&:has(.newspack-status-indicator, .newspack-status-badge, .newspack-dataviews__date) {
 			max-width: none;
 		}
+	}
+
+	tbody td:not(.dataviews-view-table__checkbox-column, .dataviews-view-table__actions-column) .dataviews-view-table__cell-content-wrapper {
+		align-items: flex-start;
+		padding-block-start: var(--newspack-dataviews-stack-gap);
 	}
 
 	.dataviews-title-field {
 		&,
 		a,
 		button.components-button.is-link {
+			line-height: inherit;
 			white-space: normal;
 		}
+	}
+
+	.newspack-cell-list button.components-button.is-link {
+		line-height: inherit;
 	}
 
 	.dataviews-column-primary__media + .dataviews-view-table__primary-column-content > .dataviews-title-field:not(:last-child) {
@@ -70,12 +80,13 @@
 }
 
 .newspack-dataviews .newspack-dataviews__date,
-.newspack-dataviews .dataviews-view-table .newspack-status-indicator {
+.newspack-dataviews .dataviews-view-table .newspack-status-indicator,
+.newspack-dataviews .dataviews-view-table .newspack-status-badge {
 	white-space: nowrap;
 }
 
 @container dataviews-wrapper (min-width: 431px) {
-	.newspack-dataviews .dataviews-wrapper > * {
+	.newspack-dataviews:not(.newspack-dataviews--in-card) .dataviews-wrapper > * {
 		/* stylelint-disable-next-line plugin-wpds/no-setting-wpds-custom-properties -- restores the 48px list gutter DataViews used before it moved to this token. */
 		--wpds-dimension-padding-2xl: #{wp-vars.$grid-unit-60};
 	}

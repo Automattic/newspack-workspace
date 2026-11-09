@@ -1,3 +1,5 @@
+import { getSettings, setSettings } from '@wordpress/date';
+
 import { getDataViewsType, getDisplayValue, getFilterByOperators } from './fields';
 
 describe( 'fields utils', () => {
@@ -30,36 +32,28 @@ describe( 'fields utils', () => {
 			expect( getDisplayValue( field, [] ) ).toBeNull();
 		} );
 
-		it( 'should format date values', () => {
-			const field = { type: 'date', slug: 'published_date' };
-			const originalDateFormat = Intl.DateTimeFormat;
-			Intl.DateTimeFormat = jest.fn().mockImplementation( () => ( {
-				format: () => '2025-06-05',
-			} ) );
+		describe( 'on a site with its own formats and timezone', () => {
+			const defaults = getSettings();
 
-			const timestamp = 1717612800; // 2025-06-05 UTC
-			const result = getDisplayValue( field, timestamp );
+			beforeEach( () =>
+				setSettings( {
+					...defaults,
+					formats: { ...defaults.formats, date: 'd/m/Y', time: 'g:i a' },
+					timezone: { ...defaults.timezone, string: 'Pacific/Auckland', offset: 13 },
+				} )
+			);
+			afterEach( () => setSettings( defaults ) );
 
-			Intl.DateTimeFormat = originalDateFormat;
+			// 2025-06-05 22:30 UTC is 10:30 am the next day in Auckland.
+			const timestamp = Date.UTC( 2025, 5, 5, 22, 30 ) / 1000;
 
-			expect( result ).not.toBeNull();
-			expect( typeof result ).toBe( 'string' );
-		} );
+			it( 'formats a date in the site date format and timezone', () => {
+				expect( getDisplayValue( { type: 'date', slug: 'publish_date' }, timestamp ) ).toBe( '06/06/2025' );
+			} );
 
-		it( 'should format datetime values', () => {
-			const field = { type: 'datetime', slug: 'published_datetime' };
-			const originalDateFormat = Intl.DateTimeFormat;
-			Intl.DateTimeFormat = jest.fn().mockImplementation( () => ( {
-				format: () => '2025-06-05, 10:30 AM',
-			} ) );
-
-			const timestamp = 1717650000; // 2025-06-05, 10:30 AM UTC
-			const result = getDisplayValue( field, timestamp );
-
-			Intl.DateTimeFormat = originalDateFormat;
-
-			expect( result ).not.toBeNull();
-			expect( typeof result ).toBe( 'string' );
+			it( 'formats a datetime in the site date and time formats, keeping am and pm', () => {
+				expect( getDisplayValue( { type: 'datetime', slug: 'last_modified' }, timestamp ) ).toBe( '06/06/2025 10:30 am' );
+			} );
 		} );
 
 		it( 'should format boolean values', () => {

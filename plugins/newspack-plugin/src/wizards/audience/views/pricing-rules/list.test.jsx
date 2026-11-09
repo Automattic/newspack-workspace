@@ -17,8 +17,7 @@ import apiFetch from '@wordpress/api-fetch';
 /**
  * Internal dependencies
  */
-import PricingRulesList, { ACTIVE_STATE_STATUS } from './list';
-import { statusGlyph } from '../../../../../packages/components/src/status-indicator';
+import PricingRulesList, { ruleState } from './list';
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
@@ -447,15 +446,12 @@ describe( 'the Pricing Rules list', () => {
 	} );
 } );
 
-describe( 'ACTIVE_STATE_STATUS', () => {
-	it( 'names every window state a rule can be in', () => {
-		expect( Object.keys( ACTIVE_STATE_STATUS ).sort() ).toEqual( [ 'active', 'ended', 'scheduled' ] );
-	} );
-
-	// The column offers the three as separate filters, and the glyph is the only thing
-	// telling them apart: nothing here is tinted.
-	it( 'gives no two states the same mark', () => {
-		const glyphs = Object.values( ACTIVE_STATE_STATUS ).map( name => statusGlyph( name ) );
-		expect( new Set( glyphs ).size ).toBe( glyphs.length );
+describe( 'ruleState', () => {
+	// A published rule outside its window changes no prices, so Status can't call it Active.
+	it( 'reads a published rule by its window and a draft as inactive', () => {
+		expect( ruleState( { status: 'publish', active_state: 'active' } ) ).toBe( 'active' );
+		expect( ruleState( { status: 'publish', active_state: 'scheduled' } ) ).toBe( 'scheduled' );
+		expect( ruleState( { status: 'publish', active_state: 'ended' } ) ).toBe( 'ended' );
+		expect( ruleState( { status: 'draft', active_state: 'active' } ) ).toBe( 'inactive' );
 	} );
 } );

@@ -83,17 +83,21 @@ describe( 'subscriptionsSummary', () => {
 	];
 
 	it( 'names the subscriptions, decoded, in rule order', () => {
-		expect( subscriptionsSummary( [ 10 ], options ) ).toEqual( { named: 'Digital Monthly', more: '' } );
-		expect( subscriptionsSummary( [ 11, 10 ], options ) ).toEqual( { named: 'Print & Digital, Digital Monthly', more: '' } );
+		expect( subscriptionsSummary( [ 10 ], options ) ).toEqual( { shown: [ 'Digital Monthly' ], more: '', hidden: [] } );
+		expect( subscriptionsSummary( [ 11, 10 ], options ) ).toEqual( { shown: [ 'Print & Digital', 'Digital Monthly' ], more: '', hidden: [] } );
 	} );
 
 	it( 'falls back to a count when no name is known', () => {
-		expect( subscriptionsSummary( [ 99 ], options ) ).toEqual( { named: '1 subscription', more: '' } );
-		expect( subscriptionsSummary( [ 98, 99 ], [] ) ).toEqual( { named: '2 subscriptions', more: '' } );
+		expect( subscriptionsSummary( [ 99 ], options ) ).toEqual( { shown: [ '1 subscription' ], more: '', hidden: [] } );
+		expect( subscriptionsSummary( [ 98, 99 ], [] ) ).toEqual( { shown: [ '2 subscriptions' ], more: '', hidden: [] } );
 	} );
 
 	it( 'counts the ids it cannot name alongside the ones it can', () => {
-		expect( subscriptionsSummary( [ 10, 98, 99 ], options ) ).toEqual( { named: 'Digital Monthly', more: '+2 more' } );
+		expect( subscriptionsSummary( [ 10, 98, 99 ], options ) ).toEqual( {
+			shown: [ 'Digital Monthly' ],
+			more: '+2 more subscriptions',
+			hidden: [],
+		} );
 	} );
 
 	it( 'names at most two subscriptions, however many the rule covers', () => {
@@ -103,7 +107,7 @@ describe( 'subscriptionsSummary', () => {
 				many.map( option => option.id ),
 				many
 			)
-		).toEqual( { named: 'Subscription 1, Subscription 2', more: '+47 more' } );
+		).toEqual( expect.objectContaining( { shown: [ 'Subscription 1', 'Subscription 2' ], more: '+47 more subscriptions' } ) );
 	} );
 
 	// The count is rendered in its own element, so it has to be one number
@@ -115,7 +119,11 @@ describe( 'subscriptionsSummary', () => {
 			{ id: 3, name: 'Print Weekend' },
 			{ id: 4, name: 'Print Daily' },
 		];
-		expect( subscriptionsSummary( [ 1, 2, 3, 4, 98, 99 ], known ) ).toEqual( { named: 'Digital Monthly, Digital Annual', more: '+4 more' } );
+		expect( subscriptionsSummary( [ 1, 2, 3, 4, 98, 99 ], known ) ).toEqual( {
+			shown: [ 'Digital Monthly', 'Digital Annual' ],
+			more: '+4 more subscriptions',
+			hidden: [ 'Print Weekend', 'Print Daily' ],
+		} );
 	} );
 } );
 

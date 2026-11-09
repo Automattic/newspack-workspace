@@ -13,6 +13,7 @@ import { useLayoutEffect, useRef, useState } from '@wordpress/element';
 /**
  * Internal dependencies.
  */
+import { worthCollapsing } from '../../../../../packages/components/src/cell-list/collapse';
 import ContentRuleControl from './edit/content-rule-control';
 import {
 	findAccessRuleOption,
@@ -71,6 +72,8 @@ const CollapsibleValues = ( { values, ruleName }: { values: string[]; ruleName: 
 	// Keeps an existing toggle mounted while a layout change re-measures from every
 	// value, so a keyboard user's focus is not dropped.
 	const [ holdToggle, setHoldToggle ] = useState( false );
+	// A single value that would not fit shows in full instead of behind a toggle.
+	const [ showAll, setShowAll ] = useState( false );
 	const [ width, setWidth ] = useState( 0 );
 	const layoutKey = `${ values.join( '\n' ) }|${ width }`;
 	const measuredKey = useRef( layoutKey );
@@ -88,11 +91,12 @@ const CollapsibleValues = ( { values, ruleName }: { values: string[]; ruleName: 
 	// Settles in a few passes whatever the list length: one state update per value
 	// would hit React's nested-update limit on a long list and crash the screen.
 	useLayoutEffect( () => {
-		if ( isExpanded ) {
+		if ( isExpanded || ( showAll && measuredKey.current === layoutKey ) ) {
 			return;
 		}
 		if ( measuredKey.current !== layoutKey ) {
 			measuredKey.current = layoutKey;
+			setShowAll( false );
 			if ( visibleCount !== values.length ) {
 				setHoldToggle( true );
 				setVisibleCount( values.length );
@@ -142,11 +146,17 @@ const CollapsibleValues = ( { values, ruleName }: { values: string[]; ruleName: 
 		}
 		setHoldToggle( false );
 		// At least one fewer than shown, so a toggle that pushes the line over makes room for itself.
-		setVisibleCount( Math.max( 1, Math.min( fitting, visibleCount - 1 ) ) );
+		const nextCount = Math.max( 1, Math.min( fitting, visibleCount - 1 ) );
+		if ( ! worthCollapsing( values.length - nextCount ) ) {
+			setShowAll( true );
+			setVisibleCount( values.length );
+			return;
+		}
+		setVisibleCount( nextCount );
 	} );
 
 	const hiddenCount = isExpanded ? 0 : values.length - visibleCount;
-	if ( hiddenCount < 1 && ! isExpanded && ! holdToggle ) {
+	if ( ( hiddenCount < 1 || showAll ) && ! isExpanded && ! holdToggle ) {
 		return (
 			<span ref={ ref } tabIndex={ -1 }>
 				{ values.join( VALUE_SEPARATOR ) }
@@ -169,7 +179,7 @@ const CollapsibleValues = ( { values, ruleName }: { values: string[]; ruleName: 
 						  )
 						: sprintf(
 								// translators: 1: number of hidden values, 2: access rule name, e.g. "Institutional access".
-								_n( '%1$d more for %2$s', '%1$d more for %2$s', hiddenCount, 'newspack-plugin' ),
+								_n( 'Show %1$d more for %2$s', 'Show %1$d more for %2$s', hiddenCount, 'newspack-plugin' ),
 								hiddenCount,
 								ruleName
 						  )
@@ -180,7 +190,7 @@ const CollapsibleValues = ( { values, ruleName }: { values: string[]; ruleName: 
 					? __( 'Show less', 'newspack-plugin' )
 					: sprintf(
 							// translators: %d: number of hidden values.
-							_n( '+ %d more', '+ %d more', hiddenCount, 'newspack-plugin' ),
+							_n( 'Show %d more', 'Show %d more', hiddenCount, 'newspack-plugin' ),
 							hiddenCount
 					  ) }
 			</Button>

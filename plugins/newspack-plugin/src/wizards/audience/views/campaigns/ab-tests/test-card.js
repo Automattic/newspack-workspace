@@ -6,7 +6,6 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 import { speak } from '@wordpress/a11y';
 import apiFetch from '@wordpress/api-fetch';
 import { decodeEntities } from '@wordpress/html-entities';
-import { dateI18n, getSettings } from '@wordpress/date';
 import { Button, CardBody, DropdownMenu, MenuGroup, MenuItem, Notice, Spinner } from '@wordpress/components';
 import { moreVertical } from '@wordpress/icons';
 import { Badge, Stack } from '@wordpress/ui';
@@ -15,6 +14,7 @@ import { Badge, Stack } from '@wordpress/ui';
  * Internal dependencies
  */
 import { Card } from '../../../../../../packages/components/src';
+import { formatSiteDate, formatSiteDateTime } from '../../../../../../packages/components/src/dataviews/format-date';
 import ResultsTable from './results-table';
 import ResultSection from './result-section';
 import RenameModal from './rename-modal';
@@ -116,13 +116,13 @@ const TestCard = ( { test, data, onRenamed, onEnded, isTarget = false } ) => {
 		footer = sprintf(
 			// Translators: %s is a date.
 			__( 'Started %s. Results refresh every hour.', 'newspack-plugin' ),
-			dateI18n( getSettings().formats.date, test.started_at )
+			formatSiteDate( test.started_at )
 		);
 	} else if ( stats?.source?.fetched_at ) {
 		footer = sprintf(
 			// Translators: %s is a date and time.
 			__( 'Updated %s. Results refresh every hour.', 'newspack-plugin' ),
-			dateI18n( getSettings().formats.datetime, stats.source.fetched_at )
+			formatSiteDateTime( stats.source.fetched_at )
 		);
 	}
 

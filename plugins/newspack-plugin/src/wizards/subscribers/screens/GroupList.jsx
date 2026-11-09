@@ -28,7 +28,7 @@ import { Badge } from '@wordpress/ui';
 /**
  * Internal dependencies.
  */
-import { Button, DataViews, Router, StatusIndicator, Waiting } from '../../../../packages/components/src';
+import { Button, DataViews, Router, StatusBadge, Waiting } from '../../../../packages/components/src';
 import { fmtDate } from '../format';
 import './style.scss';
 import LoadFailureNotice from '../components/LoadFailureNotice';
@@ -186,9 +186,7 @@ export default function GroupList() {
 				elements: Object.entries( STATUS_LABELS ).map( ( [ value, label ] ) => ( { value, label } ) ),
 				filterBy: { operators: [ 'is', 'isNot' ] },
 				getValue: ( { item } ) => item.status,
-				render: ( { item } ) => (
-					<StatusIndicator status={ STATUS_INDICATORS[ item.status ] }>{ STATUS_LABELS[ item.status ] }</StatusIndicator>
-				),
+				render: ( { item } ) => <StatusBadge status={ STATUS_INDICATORS[ item.status ] }>{ STATUS_LABELS[ item.status ] }</StatusBadge>,
 			},
 			{
 				id: 'createdAt',

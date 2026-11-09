@@ -497,4 +497,39 @@ class Admin_Shell_Preferences_Test extends WP_UnitTestCase {
 		$this->assertArrayNotHasKey( 'layout', $prefs['newsletters-list'] );
 		$this->assertIsString( wp_json_encode( $prefs ) );
 	}
+
+	/**
+	 * A Newsletters list view saved before prefs_version 1 gets Author moved to
+	 * the first saved column, and the migration is recorded so it runs once.
+	 */
+	public function test_older_newsletters_view_moves_author_first() {
+		$key = Admin_Shell_Preferences::get_user_meta_key( 'newsletters-list' );
+		update_user_meta( $this->editor_id, $key, [ 'fields' => [ 'status', 'date', 'send_list', 'author' ] ] );
+
+		$this->assertSame(
+			[ 'author', 'status', 'date', 'send_list' ],
+			Admin_Shell_Preferences::get_preferences()['newsletters-list']['fields']
+		);
+		$this->assertSame( Admin_Shell_Preferences::PREFS_VERSION, get_user_meta( $this->editor_id, $key, true )[ Admin_Shell_Preferences::PREFS_VERSION_KEY ] );
+	}
+
+	/**
+	 * A view saved at the current prefs_version keeps the order its owner chose,
+	 * Author last included.
+	 */
+	public function test_current_newsletters_view_keeps_its_order() {
+		update_user_meta(
+			$this->editor_id,
+			Admin_Shell_Preferences::get_user_meta_key( 'newsletters-list' ),
+			[
+				'fields'                                   => [ 'status', 'date', 'author' ],
+				Admin_Shell_Preferences::PREFS_VERSION_KEY => Admin_Shell_Preferences::PREFS_VERSION,
+			]
+		);
+
+		$this->assertSame(
+			[ 'status', 'date', 'author' ],
+			Admin_Shell_Preferences::get_preferences()['newsletters-list']['fields']
+		);
+	}
 }

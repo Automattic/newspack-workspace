@@ -94,7 +94,7 @@ export default function ImpactStats( {
 	const tiles: Tile[] = [
 		{
 			id: 'products',
-			label: __( 'Products affected', 'newspack-plugin' ),
+			label: __( 'Affected products', 'newspack-plugin' ),
 			...bounded( totalMatching, countLimited, countBound ),
 			description: productsDescription,
 			actionLabel: __( 'View Affected Products', 'newspack-plugin' ),

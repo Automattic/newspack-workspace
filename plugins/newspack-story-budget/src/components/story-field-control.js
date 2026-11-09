@@ -13,8 +13,13 @@ import {
 	TextareaControl,
 } from '@wordpress/components';
 import { useId } from '@wordpress/element';
+import { dateI18n, getDate } from '@wordpress/date';
 
 const EMPTY_STRING = '';
+
+// The list shows these timestamps in the site timezone, so the picker works in
+// site time too, or it would show another day when the browser's zone differs.
+const toSiteDateString = value => ( value ? dateI18n( 'Y-m-d\\TH:i:s', value * 1000 ) : null );
 
 export default ( { field, value, onChange = () => {}, ...props } ) => {
 	const componentId = useId();
@@ -29,8 +34,8 @@ export default ( { field, value, onChange = () => {}, ...props } ) => {
 		label: field.title,
 		hideLabelFromVision: true,
 		onChange: val => {
-			if ( field.type === 'date' || field.type === 'datetime' ) {
-				val = parseInt( new Date( val ).getTime() / 1000 );
+			if ( ( field.type === 'date' || field.type === 'datetime' ) && val ) {
+				val = parseInt( getDate( val ).getTime() / 1000 );
 			}
 			if ( field.type === 'number' && val !== '' ) {
 				if ( field.is_multiple ) {
@@ -120,11 +125,11 @@ export default ( { field, value, onChange = () => {}, ...props } ) => {
 	}
 
 	if ( field.type === 'date' ) {
-		return <DatePicker currentDate={ new Date( value * 1000 ) } { ...controlProps } />;
+		return <DatePicker currentDate={ toSiteDateString( value ) } { ...controlProps } />;
 	}
 
 	if ( field.type === 'datetime' ) {
-		return <DateTimePicker currentDate={ new Date( value * 1000 ) } { ...controlProps } />;
+		return <DateTimePicker currentDate={ toSiteDateString( value ) } { ...controlProps } />;
 	}
 
 	if ( field.type === 'longtext' ) {

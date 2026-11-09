@@ -8,6 +8,7 @@ import { __experimentalVStack as VStack, __experimentalHStack as HStack, Dropdow
 import { __experimentalInspectorPopoverHeader as InspectorPopoverHeader } from '@wordpress/block-editor';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { useState, useMemo } from '@wordpress/element';
+import classnames from 'classnames';
 
 /**
  * Internal dependencies.
@@ -71,9 +72,13 @@ export default ( {
 		return customRender;
 	}
 
+	const fieldClassName = classnames( 'newspack-story-budget__field', {
+		'newspack-story-budget__field--date': [ 'date', 'datetime' ].includes( field.type ),
+	} );
+
 	if ( ! canEdit ) {
 		return (
-			<div className="newspack-story-budget__field">
+			<div className={ fieldClassName }>
 				{ collapsedValue ? (
 					<Tooltip text={ displayValue } delay={ 300 } placement="bottom-start" className="newspack-story-budget__field__value-tooltip">
 						<span className="newspack-story-budget__field__value">{ collapsedValue }</span>
@@ -90,7 +95,7 @@ export default ( {
 		// the table row, which may trigger bulk edit selection and stop the
 		// popover from opening.
 		// eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
-		<div className="newspack-story-budget__field" onClick={ e => e.stopPropagation() }>
+		<div className={ fieldClassName } onClick={ e => e.stopPropagation() }>
 			<Dropdown
 				open={ isOpen }
 				popoverProps={ popoverProps || DEFAULT_POPOVER_PROPS }

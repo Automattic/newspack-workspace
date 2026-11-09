@@ -12,7 +12,7 @@ import { Stack } from '@wordpress/ui';
 /**
  * Internal dependencies
  */
-import { DataViews, Drawer, StatusIndicator } from '../../../../../packages/components/src';
+import { DataViews, Drawer, StatusBadge } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { API_BASE, STATUS_MAP, formatTimestamp } from './constants';
 import { ScheduledActionDetails } from './scheduled-action-details';
@@ -115,7 +115,14 @@ export const ScheduledActions = ( { integrationId } ) => {
 			{
 				id: 'email',
 				label: __( 'Email', 'newspack-plugin' ),
-				render: ( { item } ) => ( item.email ? <DetailsLink onClick={ () => openDetails( item ) }>{ item.email }</DetailsLink> : '—' ),
+				render: ( { item } ) =>
+					item.email ? (
+						<DetailsLink onClick={ () => openDetails( item ) } title={ item.email }>
+							{ item.email }
+						</DetailsLink>
+					) : (
+						'—'
+					),
 				enableSorting: false,
 			},
 			{
@@ -131,9 +138,9 @@ export const ScheduledActions = ( { integrationId } ) => {
 					// A status Action Scheduler grows later is one to look at, not a deliberate stop.
 					const mapped = STATUS_MAP[ item.status ] || { label: item.status, status: 'attention' };
 					return (
-						<StatusIndicator status={ mapped.status } tone={ mapped.tone }>
+						<StatusBadge status={ mapped.status } tone={ mapped.tone }>
 							{ mapped.label }
-						</StatusIndicator>
+						</StatusBadge>
 					);
 				},
 				enableSorting: true,

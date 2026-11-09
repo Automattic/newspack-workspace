@@ -102,7 +102,7 @@
 			}
 		}
 		&:not(.newspack-wizard__content--full-width) {
-			.newspack-dataviews {
+			.newspack-dataviews:not(.newspack-dataviews--in-card) {
 				margin-left: -24px;
 				margin-right: -24px;
 				@media (min-width: 380px) {

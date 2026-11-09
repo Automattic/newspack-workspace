@@ -20,17 +20,17 @@ import { __experimentalHStack as HStack, CheckboxControl } from '@wordpress/comp
 /**
  * Internal dependencies.
  */
-import { Button, DataViews, Modal, Notice, StatusIndicator, Waiting } from '../../../../../../../packages/components/src';
+import { Button, CellList, DataViews, formatSiteDate, Modal, Notice, StatusBadge, Waiting } from '../../../../../../../packages/components/src';
 import EmptyState from '../../../../../../../packages/components/src/empty-state';
 import type { Action, Field, View } from '../../../../../../../packages/components/src/dataviews';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../../packages/components/src/wizard/store';
 import Router from '../../../../../../../packages/components/src/proxied-imports/router';
 import { formatCount } from '../../../../../../../packages/components/src/breadcrumbs/format-count';
 import { registerTab } from '../registry';
-import { ALL_SUBSCRIPTIONS_FILTER_VALUE, allSubscriptionsLabel, SEARCH_ENDPOINTS } from '../../constants';
+import { ALL_SUBSCRIPTIONS_FILTER_VALUE, allSubscriptionsLabel } from '../../constants';
 import { useRestrictions } from './use-restrictions';
-import { useNames } from '../../use-names';
-import { excludedLabel, leadingProductNames, moreProductsLabel, scopeLabel } from './labels';
+import ScopeSummary from '../../../../components/scope-summary';
+import { scopeLabel } from './labels';
 import RestrictionEditor from './restriction-editor';
 import type { Restriction, RestrictionSettings } from './types';
 import './style.scss';
@@ -52,7 +52,18 @@ const { useLocation } = Router;
 const SECTION_LABEL = __( 'Subscriber-only products', 'newspack-plugin' );
 
 function SubscriberOnlyProducts() {
-	const { restrictions, settings, loading, saving, error, saveRestriction, deleteRestriction, setActive, saveSettings } = useRestrictions();
+	const {
+		restrictions,
+		names: ruleNames,
+		settings,
+		loading,
+		saving,
+		error,
+		saveRestriction,
+		deleteRestriction,
+		setActive,
+		saveSettings,
+	} = useRestrictions();
 	const [ editing, setEditing ] = useState< Partial< Restriction > | null >( null );
 	const [ deleting, setDeleting ] = useState< Restriction | null >( null );
 	const [ settingsOpen, setSettingsOpen ] = useState( false );
@@ -60,13 +71,10 @@ function SubscriberOnlyProducts() {
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const { pathname } = useLocation();
 
-	// Resolve the IDs the rules store into names for the list.
-	const productIds = useMemo( () => restrictions.flatMap( rule => rule.product_ids || [] ), [ restrictions ] );
-	const categoryIds = useMemo( () => restrictions.flatMap( rule => rule.category_ids || [] ), [ restrictions ] );
+	const productNames = ruleNames.products;
+	const categoryNames = ruleNames.categories;
+	const subscriptionNames = ruleNames.subscriptions;
 	const subscriptionIds = useMemo( () => restrictions.flatMap( rule => rule.subscription_product_ids || [] ), [ restrictions ] );
-	const productNames = useNames( SEARCH_ENDPOINTS.products, productIds );
-	const categoryNames = useNames( SEARCH_ENDPOINTS.productCategories, categoryIds );
-	const subscriptionNames = useNames( SEARCH_ENDPOINTS.subscriptions, subscriptionIds );
 
 	const fields: Field< Restriction >[] = useMemo(
 		() => [
@@ -79,28 +87,17 @@ function SubscriberOnlyProducts() {
 					'products' === item.targeting
 						? ( item.product_ids || [] ).map( id => productNames[ id ] || '' ).join( ' ' )
 						: scopeLabel( item, id => categoryNames[ id ] ),
-				render: ( { item }: { item: Restriction } ) => {
-					const excluded = excludedLabel( item );
-					if ( 'products' !== item.targeting ) {
-						return (
-							<div>
-								<div>{ scopeLabel( item, id => categoryNames[ id ] ) }</div>
-								{ excluded && <div className="newspack-subscriber-only__muted">{ excluded }</div> }
-							</div>
-						);
-					}
-					const { shown, remaining } = leadingProductNames( item, id => productNames[ id ] );
-					return (
-						<div>
-							{ shown.length ? (
-								shown.map( name => <div key={ name }>{ name }</div> )
-							) : (
-								<div className="newspack-subscriber-only__muted">{ __( 'No products', 'newspack-plugin' ) }</div>
-							) }
-							{ remaining > 0 && <div className="newspack-subscriber-only__muted">{ moreProductsLabel( remaining ) }</div> }
-						</div>
-					);
-				},
+				render: ( { item }: { item: Restriction } ) => (
+					<ScopeSummary
+						asTitle
+						targeting={ item.targeting }
+						productIds={ item.product_ids }
+						categoryIds={ item.category_ids }
+						excludedProductIds={ item.excluded_product_ids }
+						productNames={ productNames }
+						categoryNames={ categoryNames }
+					/>
+				),
 			},
 			{
 				id: 'availableTo',
@@ -121,7 +118,16 @@ function SubscriberOnlyProducts() {
 						return <span>{ allSubscriptionsLabel() }</span>;
 					}
 					const names = ( item.subscription_product_ids || [] ).map( id => subscriptionNames[ id ] ).filter( Boolean );
-					return <span>{ names.length ? names.join( ', ' ) : __( 'No subscriptions', 'newspack-plugin' ) }</span>;
+					if ( ! names.length ) {
+						return <span>{ __( 'No subscriptions', 'newspack-plugin' ) }</span>;
+					}
+					return (
+						<CellList>
+							{ names.map( ( name, index ) => (
+								<span key={ `${ name }-${ index }` }>{ name }</span>
+							) ) }
+						</CellList>
+					);
 				},
 			},
 			{
@@ -146,16 +152,17 @@ function SubscriberOnlyProducts() {
 				filterBy: { operators: [ 'isAny' as const ] },
 				getValue: ( { item }: { item: Restriction } ) => ( item.active ? 'active' : 'inactive' ),
 				render: ( { item }: { item: Restriction } ) => (
-					<StatusIndicator status={ item.active ? 'active' : 'draft' }>
+					<StatusBadge status={ item.active ? 'active' : 'draft' }>
 						{ item.active ? __( 'Active', 'newspack-plugin' ) : __( 'Inactive', 'newspack-plugin' ) }
-					</StatusIndicator>
+					</StatusBadge>
 				),
 			},
 			{
 				id: 'created_at',
 				label: __( 'Created', 'newspack-plugin' ),
 				getValue: ( { item }: { item: Restriction } ) => item.created_at,
-				render: ( { item }: { item: Restriction } ) => <span className="newspack-dataviews__date">{ item.created_at }</span>,
+				render: ( { item }: { item: Restriction } ) =>
+					item.created_at ? <span className="newspack-dataviews__date">{ formatSiteDate( item.created_at ) }</span> : '',
 				enableSorting: true,
 			},
 		],

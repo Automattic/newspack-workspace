@@ -11,6 +11,17 @@
  */
 import { Card, Stack } from '@wordpress/ui';
 
+/**
+ * External dependencies
+ */
+import classnames from 'classnames';
+
+/**
+ * Internal dependencies
+ */
+import { TableCardContext } from './context';
+import './style.scss';
+
 interface TableCardProps {
 	title?: React.ReactNode;
 	/** Id for the heading, so a caller's region can name itself via `aria-labelledby`. */
@@ -19,6 +30,8 @@ interface TableCardProps {
 	actions?: React.ReactNode;
 	before?: React.ReactNode;
 	after?: React.ReactNode;
+	/** Draw a line between the header and the table, which then starts right under it. */
+	separator?: boolean;
 	className?: string;
 	/** Rendered edge-to-edge via `Card.FullBleed`. */
 	children: React.ReactNode;
@@ -27,30 +40,33 @@ interface TableCardProps {
 /** `0` is a renderable slot value; the falsy leftovers of `cond && <X />` are not. */
 const isRenderable = ( node: React.ReactNode ) => node !== undefined && node !== null && node !== '' && typeof node !== 'boolean';
 
-export default function TableCard( { title, titleId, heading = 3, actions, before, after, className, children }: TableCardProps ) {
+export default function TableCard( { title, titleId, heading = 3, actions, before, after, separator = false, className, children }: TableCardProps ) {
 	const TitleTag = `h${ heading }` as const;
 	const hasTitle = isRenderable( title );
 	const hasActions = isRenderable( actions );
 	return (
-		<Card.Root className={ className }>
-			{ ( hasTitle || hasActions ) && (
-				<Card.Header
-					render={ hasActions ? <Stack direction="row" justify={ hasTitle ? 'space-between' : 'end' } align="center" /> : undefined }
-				>
-					{ hasTitle && <Card.Title render={ <TitleTag id={ titleId } /> }>{ title }</Card.Title> }
-					{ /* Its own row, so several actions don't scatter across the header's space-between. */ }
-					{ hasActions && (
-						<Stack direction="row" gap="sm" align="center">
-							{ actions }
-						</Stack>
-					) }
-				</Card.Header>
-			) }
-			<Card.Content render={ <Stack direction="column" gap="lg" /> }>
-				{ before }
-				<Card.FullBleed>{ children }</Card.FullBleed>
-				{ after }
-			</Card.Content>
-		</Card.Root>
+		<TableCardContext.Provider value={ true }>
+			<Card.Root className={ classnames( 'newspack-table-card', { 'newspack-table-card--separated': separator }, className ) }>
+				{ ( hasTitle || hasActions ) && (
+					<Card.Header
+						className="newspack-table-card__header"
+						render={ hasActions ? <Stack direction="row" justify={ hasTitle ? 'space-between' : 'end' } align="center" /> : undefined }
+					>
+						{ hasTitle && <Card.Title render={ <TitleTag id={ titleId } /> }>{ title }</Card.Title> }
+						{ /* Its own row, so several actions don't scatter across the header's space-between. */ }
+						{ hasActions && (
+							<Stack direction="row" gap="sm" align="center">
+								{ actions }
+							</Stack>
+						) }
+					</Card.Header>
+				) }
+				<Card.Content render={ <Stack direction="column" gap="lg" /> }>
+					{ before }
+					<Card.FullBleed>{ children }</Card.FullBleed>
+					{ after }
+				</Card.Content>
+			</Card.Root>
+		</TableCardContext.Provider>
 	);
 }
