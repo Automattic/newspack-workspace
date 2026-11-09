@@ -20,6 +20,7 @@ import classnames from 'classnames';
  * Internal dependencies
  */
 import { columnShareWidth, evenColumns, titleColumnWidth, withoutColumnStyles } from './even-columns';
+import CountFooter, { type CountLabel } from './count-footer';
 import { TableCardContext } from '../table-card/context';
 import './style.scss';
 
@@ -36,6 +37,12 @@ type DataViewsProps< Item > = React.ComponentProps< typeof BaseDataViews< Item >
 	 * for a short, fixed list whose columns are not worth changing.
 	 */
 	viewOptions?: boolean;
+	/**
+	 * Names the footer count with the list's own noun instead of core's "N
+	 * items". Receives the count and the count formatted for the locale:
+	 * `( count, formatted ) => sprintf( _n( '%s member', '%s members', count, 'newspack-plugin' ), formatted )`.
+	 */
+	countLabel?: CountLabel;
 };
 
 function ToolbarLayout( {
@@ -44,12 +51,14 @@ function ToolbarLayout( {
 	searchLabel,
 	inlineFilters,
 	viewOptions,
+	footer,
 }: {
 	header?: React.ReactNode;
 	search: boolean;
 	searchLabel?: string;
 	inlineFilters: boolean;
 	viewOptions: boolean;
+	footer?: React.ReactNode;
 } ) {
 	return (
 		<>
@@ -70,7 +79,7 @@ function ToolbarLayout( {
 			</Stack>
 			{ ! inlineFilters && <BaseDataViews.FiltersToggled className="dataviews-filters__container" /> }
 			<BaseDataViews.Layout />
-			<BaseDataViews.Footer />
+			{ footer ?? <BaseDataViews.Footer /> }
 		</>
 	);
 }
@@ -83,6 +92,7 @@ function DataViews( {
 	children,
 	view,
 	onChangeView,
+	countLabel,
 	...props
 }: DataViewsProps< unknown > ) {
 	// A row without its title can't be told apart from the next, so the title is
@@ -111,15 +121,27 @@ function DataViews( {
 		}
 		return Object.keys( widths ).length ? ( widths as React.CSSProperties ) : undefined;
 	}, [ titledView ] );
+	const footer =
+		countLabel && ! evenView.infiniteScrollEnabled ? (
+			<CountFooter
+				countLabel={ countLabel }
+				view={ evenView }
+				data={ props.data }
+				actions={ props.actions }
+				paginationInfo={ props.paginationInfo }
+				isLoading={ props.isLoading }
+			/>
+		) : undefined;
 	const layout =
 		children ??
-		( inlineFilters || ! viewOptions ? (
+		( inlineFilters || ! viewOptions || footer ? (
 			<ToolbarLayout
 				header={ props.header }
 				search={ props.search ?? true }
 				searchLabel={ props.searchLabel }
 				inlineFilters={ inlineFilters }
 				viewOptions={ viewOptions }
+				footer={ footer }
 			/>
 		) : undefined );
 

@@ -439,6 +439,7 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				</Notice>
 			) }
 			<DataViews
+				countLabel={ SCOPE_COUNT_LABELS[ scope ] }
 				className="newspack-subscription-products__dataviews"
 				data={ processedData }
 				fields={ visibleFields }

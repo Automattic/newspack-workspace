@@ -502,6 +502,13 @@ function GroupDetailView() {
 				}
 			>
 				<DataViews
+					countLabel={ ( count, formatted ) =>
+						sprintf(
+							/* translators: %s: number of members in the group. */
+							_n( '%s member', '%s members', count, 'newspack-plugin' ),
+							formatted
+						)
+					}
 					className={
 						isSearchable
 							? 'newspack-subscribers__members-dataviews'
@@ -526,6 +533,13 @@ function GroupDetailView() {
 			{ inviteRows.length > 0 && (
 				<TableCard heading={ 2 } separator title={ __( 'Invitations', 'newspack-plugin' ) }>
 					<DataViews
+						countLabel={ ( count, formatted ) =>
+							sprintf(
+								/* translators: %s: number of invitations sent for the group. */
+								_n( '%s invitation', '%s invitations', count, 'newspack-plugin' ),
+								formatted
+							)
+						}
 						className="newspack-subscribers__no-toolbar"
 						data={ processedInvites }
 						fields={ inviteFields }

@@ -7,7 +7,7 @@
 import { getBlockType, registerBlockType } from '@wordpress/blocks';
 import { registerCoreBlocks } from '@wordpress/block-library';
 import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 
 import { DataViews } from 'newspack-components';
 
@@ -272,6 +272,13 @@ export default function LayoutsListScreen() {
 		<>
 			<HeaderCount count={ paginationInfo.totalItems } />
 			<DataViews
+				countLabel={ ( count, formatted ) =>
+					sprintf(
+						/* translators: %s: number of layouts. */
+						_n( '%s layout', '%s layouts', count, 'newspack-newsletters' ),
+						formatted
+					)
+				}
 				className="newspack-newsletters-list newspack-newsletters-layouts-list"
 				data={ data }
 				fields={ fields }

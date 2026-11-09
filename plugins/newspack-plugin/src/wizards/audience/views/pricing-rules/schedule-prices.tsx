@@ -6,7 +6,7 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { useState, useMemo, useEffect, useCallback, useId, useRef } from '@wordpress/element';
 import { Button } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
@@ -244,6 +244,13 @@ export default function SchedulePrices( { steps, onChange, publicize, calcTypes,
 				) : (
 					<div ref={ tableRef } className="newspack-pricing-rules__schedule-table" role="region" aria-labelledby={ titleId }>
 						<DataViews
+							countLabel={ ( count, formatted ) =>
+								sprintf(
+									/* translators: %s: number of scheduled prices. */
+									_n( '%s price', '%s prices', count, 'newspack-plugin' ),
+									formatted
+								)
+							}
 							data={ data }
 							fields={ fields }
 							view={ tableView }

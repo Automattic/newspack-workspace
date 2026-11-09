@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { useState, useEffect, useCallback, useMemo } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
@@ -187,6 +187,13 @@ export const ScheduledActions = ( { integrationId } ) => {
 	return (
 		<>
 			<DataViews
+				countLabel={ ( count, formatted ) =>
+					sprintf(
+						/* translators: %s: number of scheduled actions. */
+						_n( '%s scheduled action', '%s scheduled actions', count, 'newspack-plugin' ),
+						formatted
+					)
+				}
 				className="newspack-integration-logs"
 				data={ data }
 				fields={ fields }

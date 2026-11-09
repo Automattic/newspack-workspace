@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { useState, useEffect, useCallback, useMemo, useRef } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
@@ -245,6 +245,13 @@ export const SyncActivity = ( { integrationId } ) => {
 	return (
 		<>
 			<DataViews
+				countLabel={ ( count, formatted ) =>
+					sprintf(
+						/* translators: %s: number of readers with sync activity. */
+						_n( '%s reader', '%s readers', count, 'newspack-plugin' ),
+						formatted
+					)
+				}
 				className="newspack-integration-logs"
 				data={ data }
 				fields={ fields }

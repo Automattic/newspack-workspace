@@ -31,6 +31,29 @@ Rows keep the default density wherever the list sits. Set `layout.density: 'comp
 </TableCard>
 ```
 
+## Naming the count
+
+DataViews' footer counts rows as "6 items". Give the list a `countLabel` so the count names what it holds: "6 members", or "10 of 1,200 subscribers" when the page shows only part of the list.
+
+`countLabel( count, formatted )` receives the total and the total formatted for the site's locale, and returns the phrase. Use `_n()` so the noun follows the count:
+
+```jsx
+<DataViews
+	countLabel={ ( count, formatted ) =>
+		sprintf(
+			/* translators: %s: number of members in the group. */
+			_n( '%s member', '%s members', count, 'newspack-plugin' ),
+			formatted
+		)
+	}
+	{ ...props }
+/>
+```
+
+- The footer shows under the same conditions as core's: a count when a row has a bulk action, pagination when there is more than one page.
+- Without `countLabel`, or with infinite scroll, core's own footer and "N items" stay.
+- A list that passes its own `children` layout renders its own footer, so `countLabel` has no effect there.
+
 ## Dates and times
 
 Every date or time in a list follows the site's Settings › General: its date format, time format and timezone. Format them with the helpers rather than `formats.datetime`, which core hard-codes as `F j, Y g:i a` whatever the site uses, or DataViews' built-in `datetime` field type, which formats with it.

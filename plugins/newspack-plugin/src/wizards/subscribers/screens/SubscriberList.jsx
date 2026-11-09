@@ -596,6 +596,13 @@ export default function SubscriberList() {
 				/>
 			) }
 			<DataViews
+				countLabel={ ( count, formatted ) =>
+					sprintf(
+						/* translators: %s: number of subscribers. */
+						_n( '%s subscriber', '%s subscribers', count, 'newspack-plugin' ),
+						formatted
+					)
+				}
 				data={ items }
 				fields={ fields }
 				view={ view }
