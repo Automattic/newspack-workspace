@@ -38,8 +38,8 @@ import { RULES_API_PATH as API_PATH, IMPACT_PREVIEW_API_PATH } from './constants
 const { useHistory } = Router;
 
 /**
- * Inactive rules stay out of the way until someone asks for them. Clearing the
- * Status filter returns to this rather than to every rule; the REST already
+ * Inactive rules stay out of the way until someone asks for them. The chip can
+ * be removed to show every rule, and Reset view brings it back; the REST already
  * excludes trash.
  */
 const DEFAULT_STATUS_FILTER = { field: 'status', operator: 'isNot' as const, value: 'inactive' };
@@ -105,11 +105,10 @@ function scopeOf( item: PricingRuleRow ) {
 	};
 }
 
-/** The view, with the default Status filter put back if it was cleared. */
-const withStatusFilter = ( next: View ): View => {
-	const filters = ( next.filters ?? [] ).filter( filter => filter.field !== 'status' || ( filter.value !== undefined && filter.value !== '' ) );
-	return filters.some( filter => filter.field === 'status' ) ? { ...next, filters } : { ...next, filters: [ ...filters, DEFAULT_STATUS_FILTER ] };
-};
+/** Whether the view matches the default one, so "Reset view" has nothing to do. */
+const isDefaultView = ( view: View ): boolean =>
+	JSON.stringify( [ view.filters, view.search, view.sort, view.fields, view.perPage ] ) ===
+	JSON.stringify( [ DEFAULT_VIEW.filters, DEFAULT_VIEW.search, DEFAULT_VIEW.sort, DEFAULT_VIEW.fields, DEFAULT_VIEW.perPage ] );
 
 export default function PricingRulesList() {
 	const { setHeaderData, addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
@@ -440,7 +439,8 @@ export default function PricingRulesList() {
 				data={ processedData }
 				fields={ fields }
 				view={ view }
-				onChangeView={ next => setView( withStatusFilter( next ) ) }
+				onChangeView={ setView }
+				onReset={ isDefaultView( view ) ? false : () => setView( DEFAULT_VIEW ) }
 				actions={ actions }
 				paginationInfo={ paginationInfo }
 				defaultLayouts={ { table: {} } }
