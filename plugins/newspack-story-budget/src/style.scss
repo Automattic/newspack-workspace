@@ -160,9 +160,12 @@ body.toplevel_page_newspack-story-budget {
 	&__table-row-field {
 		margin: 0 -8px;
 		position: relative;
-		.newspack-story-budget__field__button,
-		.newspack-story-budget__field__value {
+		.newspack-story-budget__field__button {
+			margin-block: -4px;
 			padding: 4px 8px;
+		}
+		.newspack-story-budget__field__value {
+			padding: 0 8px;
 		}
 		.newspack-story-budget__table-row-field-error {
 			fill: wp-colors.$alert-red;

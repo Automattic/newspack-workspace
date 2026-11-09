@@ -31,6 +31,8 @@ import utils from '../utils';
 import { NAMESPACE as storeNamespace } from '../store/constants';
 import { useStoryFields, useStoryActions, useView } from '../hooks';
 
+const FIT_COLUMNS = [ 'is_locked', 'status', 'word_count', 'image_count', 'wp_status' ];
+
 const countLabel = ( count, formatted ) =>
 	sprintf(
 		/* translators: %s: number of stories in the list. */
@@ -181,6 +183,7 @@ export default () => {
 			paginationInfo={ paginationInfo }
 			defaultLayouts={ defaultLayouts }
 			countLabel={ countLabel }
+			fitColumns={ FIT_COLUMNS }
 		>
 			<div className="dataviews__view-actions newspack-story-budget__toolbar">
 				<div className="dataviews__search newspack-story-budget__filters">
