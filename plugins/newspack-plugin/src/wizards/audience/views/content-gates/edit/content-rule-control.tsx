@@ -17,12 +17,17 @@ import {
  * Internal dependencies
  */
 import ContentRuleControlTokenField from './content-rule-control-tokenfield';
+import UnavailableRule from './unavailable-rule';
+import { getContentRuleConfig } from '../utils';
 import { Grid } from '../../../../../../packages/components/src';
 import PublishedAgeRuleControl from '../../../../../content-gate/components/published-age-rule-control';
 import { PUBLISHED_AGE_RULE, formatPublishedAge } from '../../../../../content-gate/utils/published-age';
 
 export default function ContentRuleControl( { slug, value, exclusion, onChange, onChangeExclusion, isStatic = false }: GateRuleControlProps ) {
-	const rule = window.newspackAudienceContentGates.available_content_rules[ slug ];
+	const rule = getContentRuleConfig( slug );
+	if ( rule?.unavailable ) {
+		return <UnavailableRule slug={ slug } value={ value } showHelp={ ! isStatic } />;
+	}
 	if ( rule && PUBLISHED_AGE_RULE === slug ) {
 		return isStatic ? (
 			<p>

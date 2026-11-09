@@ -16,6 +16,7 @@ import { addQueryArgs } from '@wordpress/url';
 /**
  * Internal dependencies.
  */
+import { getContentRuleConfig } from '../utils';
 import { mergeTokenSelection, normalizeRuleIds, selectedTokenLabels } from './content-rule-tokens';
 
 const debounce = ( func: ( search?: string ) => void, wait: number ) => {
@@ -27,7 +28,7 @@ const debounce = ( func: ( search?: string ) => void, wait: number ) => {
 };
 
 export default function ContentRuleControlTokenField( { slug, value, exclusion, onChange, isStatic = false }: GateRuleControlProps ) {
-	const rule = useMemo( () => window.newspackAudienceContentGates.available_content_rules[ slug ], [ slug ] );
+	const rule = useMemo( () => getContentRuleConfig( slug ), [ slug ] );
 
 	const [ savedItems, setSavedItems ] = useState< { value: string; label: string }[] >( [] );
 	const [ suggestions, setSuggestions ] = useState< { value: string; label: string }[] >( [] );

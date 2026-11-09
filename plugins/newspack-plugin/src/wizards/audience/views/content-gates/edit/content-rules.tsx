@@ -1,13 +1,17 @@
 /**
  * WordPress dependencies.
  */
-import { CardDivider } from '@wordpress/components';
+import { Button, CardDivider } from '@wordpress/components';
 import { Fragment, useCallback } from '@wordpress/element';
+import { __ } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
  */
 import ContentRule from './content-rule';
+import ContentRuleControl from './content-rule-control';
+import UnavailableRule from './unavailable-rule';
+import { getContentRuleConfig } from '../utils';
 
 const availableContentRules = window.newspackAudienceContentGates.available_content_rules || {};
 
@@ -44,6 +48,10 @@ export default function ContentRules( { rules, onChange, isNewsletter = false }:
 		[ onChange, rules ]
 	);
 
+	const handleRemove = useCallback( ( slug: string ) => onChange( rules.filter( r => r.slug !== slug ) ), [ rules, onChange ] );
+
+	const otherRules = rules.filter( r => ! availableContentRules[ r.slug ] );
+
 	return (
 		<>
 			{ Object.keys( availableContentRules ).map( ( slug, index ) => {
@@ -65,6 +73,38 @@ export default function ContentRules( { rules, onChange, isNewsletter = false }:
 					</Fragment>
 				);
 			} ) }
+			{ otherRules.length > 0 && (
+				<>
+					<CardDivider />
+					<div className="newspack-content-gates__other-rules">
+						<h4>{ __( 'Other rules', 'newspack-plugin' ) }</h4>
+						<p className="description">
+							{ __( "These rules were set up outside this screen. They still apply, but can't be edited here.", 'newspack-plugin' ) }
+						</p>
+						{ otherRules.map( rule => {
+							const config = getContentRuleConfig( rule.slug );
+							return (
+								<div key={ rule.slug }>
+									{ config && ! config.unavailable ? (
+										<ContentRuleControl
+											slug={ rule.slug }
+											value={ rule.value }
+											exclusion={ rule.exclusion }
+											onChange={ () => {} }
+											isStatic
+										/>
+									) : (
+										<UnavailableRule slug={ rule.slug } value={ rule.value } />
+									) }
+									<Button variant="link" isDestructive onClick={ () => handleRemove( rule.slug ) }>
+										{ __( 'Remove', 'newspack-plugin' ) }
+									</Button>
+								</div>
+							);
+						} ) }
+					</div>
+				</>
+			) }
 		</>
 	);
 }

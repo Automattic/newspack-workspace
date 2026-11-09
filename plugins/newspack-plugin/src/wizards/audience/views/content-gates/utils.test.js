@@ -3,6 +3,7 @@
  */
 import {
 	filterGates,
+	getContentRuleConfig,
 	getGateStatusBadgeIntent,
 	getMeteringCount,
 	getMeteringDescription,
@@ -574,5 +575,27 @@ describe( 'gate toolbar filters', () => {
 				'access'
 			)
 		).toEqual( [ 'paid' ] );
+	} );
+} );
+
+describe( 'getContentRuleConfig', () => {
+	afterEach( () => {
+		delete window.newspackAudienceContentGates;
+	} );
+
+	it( 'prefers the available config, falls back to the extra one, and returns undefined for unknown slugs', () => {
+		window.newspackAudienceContentGates = {
+			available_content_rules: { category: { name: 'Categories', default: [] }, both: { name: 'Offered', default: [] } },
+			extra_content_rules: { np_section: { name: 'Sections', default: [] }, both: { name: 'Extra', default: [] } },
+		};
+		expect( getContentRuleConfig( 'category' ).name ).toBe( 'Categories' );
+		expect( getContentRuleConfig( 'both' ).name ).toBe( 'Offered' );
+		expect( getContentRuleConfig( 'np_section' ).name ).toBe( 'Sections' );
+		expect( getContentRuleConfig( 'nope' ) ).toBeUndefined();
+	} );
+
+	it( 'tolerates missing config maps', () => {
+		window.newspackAudienceContentGates = {};
+		expect( getContentRuleConfig( 'category' ) ).toBeUndefined();
 	} );
 } );

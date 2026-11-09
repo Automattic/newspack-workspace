@@ -437,3 +437,14 @@ export const getGatesSubTitle = ( isNewsletter = false ) =>
 				'newspack-plugin'
 		  )
 		: __( 'Choose which content to restrict and how readers get access to it.', 'newspack-plugin' );
+
+/**
+ * Resolve a content rule's config. Offered rules win; rules that are only stored on a
+ * gate (not offered by the editor) come from `extra_content_rules`.
+ *
+ * @param slug The rule slug.
+ */
+export const getContentRuleConfig = ( slug: string ): ( ContentRule & { unavailable?: boolean } ) | undefined => {
+	const globals = window.newspackAudienceContentGates;
+	return globals?.available_content_rules?.[ slug ] ?? globals?.extra_content_rules?.[ slug ];
+};
