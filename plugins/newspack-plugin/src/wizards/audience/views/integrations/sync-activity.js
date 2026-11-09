@@ -141,7 +141,11 @@ export const SyncActivity = ( { integrationId } ) => {
 				id: 'email',
 				label: __( 'Reader', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.email,
-				render: ( { item } ) => <DetailsLink onClick={ () => openDetails( item ) }>{ item.email }</DetailsLink>,
+				render: ( { item } ) => (
+					<DetailsLink onClick={ () => openDetails( item ) } title={ item.email }>
+						{ item.email }
+					</DetailsLink>
+				),
 				enableSorting: false,
 			},
 			{
