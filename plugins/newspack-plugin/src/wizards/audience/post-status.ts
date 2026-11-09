@@ -1,9 +1,6 @@
 /**
- * The shared status name for each WordPress post status the Audience lists surface.
- *
- * Pricing rules reads its statuses from a plugin outside this repo and builds its
- * filter elements from the rows themselves, so an unrecognised status can reach a
- * column and draw the draft mark alongside Draft.
+ * The shared status name for each WordPress post status the Audience lists surface,
+ * and the label they show for it.
  */
 
 /**

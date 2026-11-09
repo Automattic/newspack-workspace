@@ -28,7 +28,7 @@ export const STATUS_INDICATORS = {
 	cancelled: 'cancelled',
 };
 
-// The badge colours for the headers and subscription cards, which take an intent
+// The badge colors for the headers and subscription cards, which take an intent
 // rather than a component. Derived so they always match StatusBadge in the lists.
 /** @type {Record< string, import('../../../packages/components/src/types').BadgeIntent >} */
 export const STATUS_BADGE_INTENT = Object.fromEntries(

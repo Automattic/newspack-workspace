@@ -11,7 +11,6 @@ The words decide. A publishing status comes from WordPress and says where an
 item is in its publishing life; a state says whether something is running.
 
 - **Publishing statuses** (Published, Draft, Scheduled, Sent) use this component.
-  Newsletters, Rolling Coverage and Story Budget show them.
 - **States** (Active, Inactive, On hold, Cancelled, Failed) use `StatusBadge`. The
   screens under the Audience menu label their items by state, so they show
   badges: a rule or a plan reads Active or Inactive, not Published or Draft. Two

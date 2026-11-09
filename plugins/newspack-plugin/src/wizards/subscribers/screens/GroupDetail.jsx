@@ -282,9 +282,13 @@ function GroupDetailView() {
 		[ group, changeRole, roleBusy ]
 	);
 
+	// A search the reader can no longer see would keep the table filtered with no way
+	// to clear it, so it stops applying once the members fit on one page.
+	const shownMembersView = useMemo( () => ( isSearchable ? membersView : { ...membersView, search: '' } ), [ isSearchable, membersView ] );
+
 	const { data: processedMembers, paginationInfo: membersPagination } = useMemo(
-		() => filterSortAndPaginate( memberRows, membersView, memberFields ),
-		[ memberRows, membersView, memberFields ]
+		() => filterSortAndPaginate( memberRows, shownMembersView, memberFields ),
+		[ memberRows, shownMembersView, memberFields ]
 	);
 
 	const inviteRows = useMemo( () => group?.invites || [], [ group ] );
@@ -513,7 +517,7 @@ function GroupDetailView() {
 					}
 					data={ processedMembers }
 					fields={ memberFields }
-					view={ membersView }
+					view={ shownMembersView }
 					onChangeView={ setMembersView }
 					actions={ memberActions }
 					paginationInfo={ membersPagination }
@@ -540,6 +544,7 @@ function GroupDetailView() {
 						defaultLayouts={ { table: {} } }
 						getItemId={ item => item.id }
 						search={ false }
+						viewOptions={ false }
 					/>
 				</TableCard>
 			) }

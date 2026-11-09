@@ -33,10 +33,15 @@ export default function CancelInviteFlow( { invites, actions, onClose, onDone } 
 	const email = list[ 0 ]?.email || __( 'this recipient', 'newspack-plugin' );
 
 	const cancel = async () => {
-		const { done, failed } = await eachInvite( list, actions.cancelInvite );
+		const { done, failed, firstError } = await eachInvite( list, actions.cancelInvite );
 		if ( failed ) {
-			/* translators: 1: number of invitations cancelled. 2: number selected. */
-			onDone( sprintf( __( '%1$d of %2$d invitations cancelled. Try the rest again.', 'newspack-plugin' ), done, count ) );
+			const partial = sprintf(
+				/* translators: 1: number of invitations cancelled. 2: number selected. */
+				_n( '%1$d of %2$d invitation cancelled.', '%1$d of %2$d invitations cancelled.', count, 'newspack-plugin' ),
+				done,
+				count
+			);
+			onDone( `${ partial } ${ firstError?.message || __( 'Try the rest again.', 'newspack-plugin' ) }` );
 			return;
 		}
 		onDone(

@@ -33,10 +33,30 @@ export default function ResendInviteFlow( { invites, actions, onClose, onDone } 
 	const email = list[ 0 ]?.email || __( 'this recipient', 'newspack-plugin' );
 
 	const resend = async () => {
-		const { done, failed } = await eachInvite( list, actions.invite );
+		// A resend that returns without an error is not a delivered email: the new
+		// invitation replaces the old one before the send, so an unsent one leaves the
+		// recipient with no working link and has to count as a failure.
+		const resendOne = async address => {
+			const invite = await actions.invite( address );
+			if ( false === invite?.email_sent ) {
+				throw new Error(
+					sprintf(
+						/* translators: %s: email address the invitation was addressed to. */
+						__( '%s: the invitation was created but the email could not be sent.', 'newspack-plugin' ),
+						address
+					)
+				);
+			}
+		};
+		const { done, failed, firstError } = await eachInvite( list, resendOne );
 		if ( failed ) {
-			/* translators: 1: number of invitations resent. 2: number selected. */
-			onDone( sprintf( __( '%1$d of %2$d invitations resent. Try the rest again.', 'newspack-plugin' ), done, count ) );
+			const partial = sprintf(
+				/* translators: 1: number of invitations resent. 2: number selected. */
+				_n( '%1$d of %2$d invitation resent.', '%1$d of %2$d invitations resent.', count, 'newspack-plugin' ),
+				done,
+				count
+			);
+			onDone( `${ partial } ${ firstError?.message || __( 'Try the rest again.', 'newspack-plugin' ) }` );
 			return;
 		}
 		onDone(

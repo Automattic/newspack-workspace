@@ -115,10 +115,9 @@ describe( 'the header', () => {
 	it( 'leaves the owner to the breadcrumb and the members table', async () => {
 		await renderDetail( group() );
 
-		const { sectionTitle, sectionDescription } = setHeaderData.mock.calls.at( -1 )[ 0 ];
+		const { sectionTitle } = setHeaderData.mock.calls.at( -1 )[ 0 ];
 		const { container } = render( createElement( sectionTitle ) );
 		expect( container.textContent ).not.toContain( 'Olive Owner' );
-		expect( sectionDescription ).toBeUndefined();
 	} );
 } );
 

@@ -28,7 +28,7 @@ const TONE_INTENTS: Record< StatusTone, BadgeIntent > = {
 };
 
 /**
- * The badge colour for a status, from the same tones `StatusIndicator` uses.
+ * The badge color for a status, from the same tones `StatusIndicator` uses.
  *
  * @param status The status, from the shared vocabulary.
  * @param tone   Overrides the status's own tone.

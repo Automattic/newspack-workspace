@@ -16,7 +16,7 @@
 /**
  * WordPress dependencies.
  */
-import { createPortal, useEffect, useId, useLayoutEffect, useMemo, useState } from '@wordpress/element';
+import { createPortal, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -120,11 +120,17 @@ const COLLAPSED_PLAN_COUNT = 2;
  * resolves to the person, so the two affordances stay distinct — see links.jsx.
  * The toggle stops its click for the same reason.
  *
- * @param {Object} props         Component props.
- * @param {Array}  props.entries The plan entries to list, already filtered.
+ * The open rows live in `expandedIds`, outside the cell: DataViews remounts every
+ * cell when the fields are rebuilt (avatars and plans arrive after the first paint),
+ * which would otherwise fold an open row back up.
+ *
+ * @param {Object} props             Component props.
+ * @param {Array}  props.entries     The plan entries to list, already filtered.
+ * @param {Set}    props.expandedIds The ids of the rows that are open.
+ * @param {*}      props.id          This row's id.
  */
-const PlanEntries = ( { entries } ) => {
-	const [ isExpanded, setIsExpanded ] = useState( false );
+const PlanEntries = ( { entries, expandedIds, id } ) => {
+	const [ isExpanded, setIsExpanded ] = useState( () => expandedIds.has( id ) );
 	const listId = useId();
 	const canCollapse = entries.length > COLLAPSED_PLAN_COUNT;
 	const shown = canCollapse && ! isExpanded ? entries.slice( 0, COLLAPSED_PLAN_COUNT ) : entries;
@@ -146,6 +152,11 @@ const PlanEntries = ( { entries } ) => {
 					aria-controls={ listId }
 					onClick={ event => {
 						event.stopPropagation();
+						if ( isExpanded ) {
+							expandedIds.delete( id );
+						} else {
+							expandedIds.add( id );
+						}
 						setIsExpanded( ! isExpanded );
 					} }
 				>
@@ -174,6 +185,7 @@ export default function SubscriberList() {
 	// Opening a profile unmounts the list; the saved view brings the reader back
 	// to the filters, search, sort and page they left.
 	const [ view, setView ] = useState( () => getSavedListView() || DEFAULT_VIEW );
+	const expandedPlans = useRef( new Set() );
 	useEffect( () => {
 		saveListView( view );
 	}, [ view ] );
@@ -321,7 +333,7 @@ export default function SubscriberList() {
 					if ( entries.length === 0 ) {
 						return <span>—</span>;
 					}
-					return <PlanEntries entries={ entries } />;
+					return <PlanEntries entries={ entries } expandedIds={ expandedPlans.current } id={ item.id } />;
 				},
 			},
 			{
