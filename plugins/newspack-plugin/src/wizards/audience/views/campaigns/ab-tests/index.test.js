@@ -299,6 +299,19 @@ describe( 'A/B Tests tab', () => {
 		expect( within( card ).queryByText( 'Result' ) ).not.toBeInTheDocument();
 	} );
 
+	it( 'names every ineligible version in one notice', async () => {
+		mockRoutes(
+			listResponse( [ test( 'two', { a: prompt( 14 ), b: prompt( 15, { eligible: false } ), c: prompt( 16, { eligible: false } ) } ) ] )
+		);
+		render( <ABTests /> );
+		const card = await screen.findByRole( 'region', { name: 'Test two' } );
+		expect(
+			within( card ).getByText(
+				"Versions B and C are on manual or custom placements, or are overlays set to Manual only, so their results can't be measured. Move them to placements Newspack controls, or end the test."
+			)
+		).toBeInTheDocument();
+	} );
+
 	it( 'renames a test and updates its card', async () => {
 		mockRoutes( listResponse( [ test( 'inc', { a: prompt( 1 ) } ) ] ), {
 			'/newspack-popups/v1/ab-tests/inc/name': () => Promise.resolve( { test_id: 'inc', name: 'Year-end appeal' } ),
@@ -386,7 +399,7 @@ describe( 'Ended tests', () => {
 	it( 'offers no End Test on a test whose versions are not all published', async () => {
 		const unready = test(
 			'una',
-			{ a: prompt( 10 ), b: prompt( 11, { status: 'draft', eligible: false } ) },
+			{ a: prompt( 10 ), b: prompt( 11, { status: 'draft', eligible: false } ), c: prompt( 17, { eligible: false } ) },
 			{ started_at: '2026-10-01T00:00:00Z', status: 'active' }
 		);
 		mockRoutes( listResponse( [ unready ] ) );
@@ -396,20 +409,7 @@ describe( 'Ended tests', () => {
 		// Nor tells the publisher to end it.
 		expect(
 			within( card ).getByText(
-				"Version B is on a manual or custom placement, or is an overlay set to Manual only, so its results can't be measured. Move it to a placement Newspack controls."
-			)
-		).toBeInTheDocument();
-	} );
-
-	it( 'names every ineligible version in one notice', async () => {
-		mockRoutes(
-			listResponse( [ test( 'two', { a: prompt( 14 ), b: prompt( 15, { eligible: false } ), c: prompt( 16, { eligible: false } ) } ) ] )
-		);
-		render( <ABTests /> );
-		const card = await screen.findByRole( 'region', { name: 'Test two' } );
-		expect(
-			within( card ).getByText(
-				"Versions B and C are on manual or custom placements, or are overlays set to Manual only, so their results can't be measured. Move them to placements Newspack controls, or end the test."
+				"Versions B and C are on manual or custom placements, or are overlays set to Manual only, so their results can't be measured. Move them to placements Newspack controls."
 			)
 		).toBeInTheDocument();
 	} );
