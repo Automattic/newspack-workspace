@@ -99,6 +99,10 @@
 				padding-right: wp-vars.$grid-unit-10;
 			}
 		}
+
+		.dataviews-view-table thead tr th:first-child:has(.dataviews-view-table-header-button) {
+			padding-left: 0;
+		}
 	}
 
 	&__impact-table,

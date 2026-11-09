@@ -253,9 +253,9 @@ describe( 'ImpactTable', () => {
 		expect( container.querySelector( '.has-compact-density' ) ).toBeNull();
 	} );
 
-	it( 'renders on core DataViews with compact rows when unframed', () => {
+	it( 'renders through the wrapper, embedded with compact rows, when unframed', () => {
 		const { container } = render( <ImpactTable baseline={ [ row() ] } segmentGroups={ [] } currency={ CURRENCY } framed={ false } /> );
-		expect( container.querySelector( '.newspack-dataviews' ) ).toBeNull();
+		expect( container.querySelector( '.newspack-dataviews.newspack-dataviews--in-card' ) ).not.toBeNull();
 		expect( container.querySelector( '.has-compact-density' ) ).not.toBeNull();
 	} );
 

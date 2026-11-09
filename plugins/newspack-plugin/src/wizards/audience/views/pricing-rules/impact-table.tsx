@@ -18,8 +18,6 @@ import {
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
-// The unframed table stays on core DataViews: outside a card, the Newspack wrapper
-// would give the catalog modal's table the 48px list gutter.
 import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Field, View } from '@wordpress/dataviews';
 
@@ -207,7 +205,6 @@ export default function ImpactTable( {
 		</HStack>
 	) : null;
 
-	const Views = framed ? NewspackDataViews : DataViews;
 	const table = (
 		<div
 			id={ tableId }
@@ -215,7 +212,8 @@ export default function ImpactTable( {
 			role="region"
 			aria-label={ __( 'Resulting prices by product and reader segment', 'newspack-plugin' ) }
 		>
-			<Views
+			<NewspackDataViews
+				embedded={ ! framed }
 				data={ data }
 				fields={ fields }
 				view={ tableView }
@@ -226,7 +224,7 @@ export default function ImpactTable( {
 				empty={ <p className="newspack-pricing-rules__muted">{ __( 'No products to show.', 'newspack-plugin' ) }</p> }
 			>
 				<DataViews.Layout />
-			</Views>
+			</NewspackDataViews>
 		</div>
 	);
 

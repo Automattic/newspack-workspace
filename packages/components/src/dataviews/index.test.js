@@ -117,6 +117,18 @@ describe( 'DataViews', () => {
 		expect( filterChips( container ) ).toEqual( [ 'Plan', 'Status' ] );
 	} );
 
+	it( 'lays an embedded list out as inside a card, with no page gutter', () => {
+		const { container } = renderDataViews( { embedded: true } );
+
+		expect( container.querySelector( '.newspack-dataviews' ) ).toHaveClass( 'newspack-dataviews--in-card' );
+	} );
+
+	it( 'keeps the page gutter by default', () => {
+		const { container } = renderDataViews();
+
+		expect( container.querySelector( '.newspack-dataviews' ) ).not.toHaveClass( 'newspack-dataviews--in-card' );
+	} );
+
 	describe( 'countLabel', () => {
 		const bulkActions = [ { id: 'remove', label: 'Remove', supportsBulk: true, callback: () => {} } ];
 		const rows = count => Array.from( { length: count }, ( _, index ) => ( { id: index + 1, title: `Row ${ index + 1 }` } ) );

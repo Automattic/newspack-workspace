@@ -43,6 +43,12 @@ type DataViewsProps< Item > = React.ComponentProps< typeof BaseDataViews< Item >
 	 * `( count, formatted ) => sprintf( _n( '%s member', '%s members', count, 'newspack-plugin' ), formatted )`.
 	 */
 	countLabel?: CountLabel;
+	/**
+	 * Lay the list out as inside a `TableCard`: no page gutter and no negative
+	 * margins. For a table in a container that brings its own padding, such as
+	 * a modal.
+	 */
+	embedded?: boolean;
 };
 
 function ToolbarLayout( {
@@ -93,6 +99,7 @@ function DataViews( {
 	view,
 	onChangeView,
 	countLabel,
+	embedded = false,
 	...props
 }: DataViewsProps< unknown > ) {
 	// A row without its title can't be told apart from the next, so the title is
@@ -106,7 +113,7 @@ function DataViews( {
 			} ),
 		[ fields, inlineFilters, view.titleField ]
 	);
-	const isInCard = useContext( TableCardContext );
+	const isInCard = useContext( TableCardContext ) || embedded;
 	const titledView = useMemo( () => ( view.titleField && view.showTitle === false ? { ...view, showTitle: true } : view ), [ view ] );
 	const evenView = useMemo( () => evenColumns( titledView ), [ titledView ] );
 	const columnWidths = useMemo( () => {
