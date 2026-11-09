@@ -69,6 +69,8 @@ export const getFilterByOperators = field => {
  */
 export const isEmptyValue = value => value === null || value === undefined || value === '';
 
+const COUNT_FIELDS = [ 'word_count', 'image_count' ];
+
 export const getDisplayValue = ( field, value ) => {
 	if (
 		isEmptyValue( value ) ||
@@ -95,7 +97,7 @@ export const getDisplayValue = ( field, value ) => {
 	if ( Array.isArray( value ) ) {
 		return value.join( ', ' );
 	}
-	if ( 'number' === field.type && ! field.options?.length && Number.isFinite( Number( value ) ) ) {
+	if ( COUNT_FIELDS.includes( field.slug ) && Number.isFinite( Number( value ) ) ) {
 		return formatCount( value );
 	}
 	return value;
