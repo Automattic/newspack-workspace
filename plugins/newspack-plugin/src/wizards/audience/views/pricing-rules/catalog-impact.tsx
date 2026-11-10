@@ -119,7 +119,7 @@ export default function CatalogImpact( { stats }: CatalogImpactProps ) {
 								baseline={ detail.sample }
 								segmentGroups={ detail.segment_groups ?? [] }
 								currency={ detail.currency }
-								framed={ false }
+								title={ null }
 								collapsible={ false }
 							/>
 						</>

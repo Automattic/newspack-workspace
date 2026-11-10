@@ -13,11 +13,12 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
  */
 import ImpactTable from './impact-table';
 
-// A stand-in makes framing observable and still renders the `after` slot the
-// Show more button lives in.
+// A stand-in makes the card and its heading observable and still renders the
+// `after` slot the Show more button lives in.
 jest.mock( '../../../../../packages/components/src', () => ( {
-	TableCard: ( { children, after } ) => (
+	TableCard: ( { title, children, after } ) => (
 		<div data-testid="table-card">
+			{ title && <h3>{ title }</h3> }
 			{ children }
 			{ after }
 		</div>
@@ -254,12 +255,6 @@ describe( 'ImpactTable', () => {
 		expect( container.querySelector( '.has-compact-density' ) ).toBeNull();
 	} );
 
-	it( 'renders on core DataViews at the default density when unframed', () => {
-		const { container } = render( <ImpactTable baseline={ [ row() ] } segmentGroups={ [] } currency={ CURRENCY } framed={ false } /> );
-		expect( container.querySelector( '.newspack-dataviews' ) ).toBeNull();
-		expect( container.querySelector( '.has-compact-density' ) ).toBeNull();
-	} );
-
 	it( 'offers no way to hide or move a column, but keeps sorting', async () => {
 		render( <ImpactTable baseline={ [ row() ] } segmentGroups={ [] } currency={ CURRENCY } /> );
 		fireEvent.click( screen.getByRole( 'button', { name: 'Regular' } ) );
@@ -321,10 +316,11 @@ describe( 'ImpactTable', () => {
 		expect( screen.getByTestId( 'table-card' ) ).toBeInTheDocument();
 	} );
 
-	it( 'drops the card when unframed, so a modal supplies the frame', () => {
-		render( <ImpactTable baseline={ sample( 3 ) } segmentGroups={ [] } currency={ CURRENCY } framed={ false } /> );
+	it( 'keeps the card without a heading when the title is left out', () => {
+		render( <ImpactTable baseline={ sample( 3 ) } segmentGroups={ [] } currency={ CURRENCY } title={ null } /> );
 
-		expect( screen.queryByTestId( 'table-card' ) ).not.toBeInTheDocument();
+		expect( screen.getByTestId( 'table-card' ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'heading' ) ).not.toBeInTheDocument();
 		expect( bodyRows() ).toBe( 3 );
 	} );
 

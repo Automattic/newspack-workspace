@@ -18,8 +18,6 @@ import {
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
-// The unframed table stays on core DataViews: outside a card, the Newspack wrapper
-// would give the catalog modal's table the 48px list gutter.
 import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Field, View } from '@wordpress/dataviews';
 
@@ -75,7 +73,8 @@ interface ImpactTableProps {
 	// The editor carries this note in its section header instead, where it can
 	// appear before the preview has loaded.
 	showCycleNote?: boolean;
-	framed?: boolean;
+	// A modal already titles the list, so its card goes without a heading.
+	title?: string | null;
 	collapsible?: boolean;
 }
 
@@ -84,7 +83,7 @@ export default function ImpactTable( {
 	segmentGroups,
 	currency,
 	showCycleNote = true,
-	framed = true,
+	title = __( 'Affected Products', 'newspack-plugin' ),
 	collapsible = true,
 }: ImpactTableProps ) {
 	const hasSegments = segmentGroups.length > 0;
@@ -205,15 +204,14 @@ export default function ImpactTable( {
 		</HStack>
 	) : null;
 
-	const Views = framed ? NewspackDataViews : DataViews;
 	const table = (
 		<div
 			id={ tableId }
-			className={ `newspack-pricing-rules__impact-table${ framed ? '' : ' newspack-pricing-rules__impact-table--unframed' }` }
+			className="newspack-pricing-rules__impact-table"
 			role="region"
 			aria-label={ __( 'Resulting prices by product and reader segment', 'newspack-plugin' ) }
 		>
-			<Views
+			<NewspackDataViews
 				data={ data }
 				fields={ fields }
 				view={ tableView }
@@ -224,7 +222,7 @@ export default function ImpactTable( {
 				empty={ <p className="newspack-pricing-rules__muted">{ __( 'No products to show.', 'newspack-plugin' ) }</p> }
 			>
 				<DataViews.Layout />
-			</Views>
+			</NewspackDataViews>
 		</div>
 	);
 
@@ -239,16 +237,9 @@ export default function ImpactTable( {
 					) }
 				</p>
 			) }
-			{ framed ? (
-				<TableCard title={ __( 'Affected Products', 'newspack-plugin' ) } after={ seeMore ?? undefined }>
-					{ table }
-				</TableCard>
-			) : (
-				<>
-					{ table }
-					{ seeMore }
-				</>
-			) }
+			<TableCard title={ title } after={ seeMore ?? undefined }>
+				{ table }
+			</TableCard>
 		</VStack>
 	);
 }
