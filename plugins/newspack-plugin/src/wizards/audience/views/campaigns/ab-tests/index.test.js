@@ -233,7 +233,8 @@ describe( 'A/B Tests tab', () => {
 		expect( within( card ).getByText( '1.90%' ) ).toBeInTheDocument();
 		expect( within( card ).getByText( '220 of 8,190' ) ).toBeInTheDocument();
 		expect( within( card ).getByText( '+12.3%' ) ).toBeInTheDocument();
-		expect( within( card ).getByText( '99.1% Reliable' ) ).toBeInTheDocument();
+		expect( within( card ).getByText( '99.1%' ) ).toBeInTheDocument();
+		expect( within( card ).getByText( 'Reliable' ) ).toBeInTheDocument();
 		expect( within( card ).getByText( /^Updated .*\. Results refresh every hour\.$/ ) ).toBeInTheDocument();
 	} );
 

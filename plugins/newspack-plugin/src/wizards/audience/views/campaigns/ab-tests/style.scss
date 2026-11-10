@@ -243,6 +243,13 @@
 			th:nth-child(2) {
 				width: 32%;
 			}
+
+			tbody td .dataviews-view-table__cell-content-wrapper {
+				align-items: flex-start;
+				min-height: var(--wpds-typography-line-height-sm, #{wp-vars.$font-line-height-small});
+				white-space: normal;
+				overflow-wrap: anywhere;
+			}
 		}
 	}
 

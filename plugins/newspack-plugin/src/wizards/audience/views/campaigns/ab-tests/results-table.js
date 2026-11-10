@@ -129,7 +129,19 @@ const ResultsTable = ( { test, status, stats, labels, kept = null } ) => {
 				enableHiding: false,
 				filterBy: false,
 				getValue: ( { item } ) => item.comparison?.confidence ?? -1,
-				render: ( { item } ) => formatConfidence( item.comparison, labels ),
+				render: ( { item } ) => {
+					const confidence = item.comparison?.confidence;
+					if ( confidence === null || confidence === undefined ) {
+						return formatConfidence( item.comparison, labels );
+					}
+					const label = labels?.[ item.comparison.label ];
+					return (
+						<span className="newspack-ab-tests__rate">
+							{ `${ Number( confidence ).toFixed( 1 ) }%` }
+							{ label && <span className="newspack-ab-tests__muted">{ label }</span> }
+						</span>
+					);
+				},
 			},
 		],
 		[ stats, status, labels, kept ]
