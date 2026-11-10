@@ -246,6 +246,64 @@ class Newspack_Test_UI_Palette extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A green brand pushes success darker on a light base and leaves error alone.
+	 */
+	public function test_green_brand_pushes_success_darker() {
+		$steps = Newspack_UI_Palette::status_steps( '#ffffff', '#00a32a' );
+		$index = array_search( $steps['success']['text'], Newspack_UI_Palette::SUCCESS_TEXT_STEPS, true );
+
+		$this->assertGreaterThan( 0, $index );
+		$this->assertSame( $steps['success']['mark'], Newspack_UI_Palette::SUCCESS_MARK_STEPS[ $index ] );
+		$this->assertGreaterThanOrEqual( 0.08, abs( Newspack_UI_Palette::oklab_lightness( $steps['success']['text'] ) - Newspack_UI_Palette::oklab_lightness( '#00a32a' ) ) );
+		$this->assertSame( '#b32d2e', $steps['error']['text'] );
+	}
+
+	/**
+	 * A green brand already darker than the success step leaves success alone.
+	 */
+	public function test_dark_green_brand_leaves_success() {
+		$this->assertSame( '#007017', Newspack_UI_Palette::status_steps( '#ffffff', '#004d1a' )['success']['text'] );
+	}
+
+	/**
+	 * On a dark base a green brand moves success lighter.
+	 */
+	public function test_dark_base_green_brand_moves_success_lighter() {
+		$green = Newspack_UI_Palette::status_steps( '#1e1e1e', '#00a32a' );
+		$blue  = Newspack_UI_Palette::status_steps( '#1e1e1e', '#003da5' );
+
+		$this->assertGreaterThan( Newspack_UI_Palette::oklab_lightness( $blue['success']['text'] ), Newspack_UI_Palette::oklab_lightness( $green['success']['text'] ) );
+		$this->assertGreaterThanOrEqual( 60, Newspack_UI_Palette::lc( $green['success']['text'], '#1e1e1e' ) );
+	}
+
+	/**
+	 * Light bases with a tint, where Neutral's success text falls short.
+	 *
+	 * @return array[]
+	 */
+	public function data_tinted_bases() {
+		return [
+			'cream'     => [ '#f5f0e6' ],
+			'parchment' => [ '#e6d8bd' ],
+			'mid grey'  => [ '#cccccc' ],
+		];
+	}
+
+	/**
+	 * Success text reaches Lc 60 and its mark Lc 25 on a tinted light base.
+	 *
+	 * @dataProvider data_tinted_bases
+	 *
+	 * @param string $base Base.
+	 */
+	public function test_success_meets_lc_60_on_tinted_base( $base ) {
+		$steps = Newspack_UI_Palette::status_steps( $base, '#003da5' );
+
+		$this->assertGreaterThanOrEqual( 60, Newspack_UI_Palette::lc( $steps['success']['text'], $base ) );
+		$this->assertGreaterThanOrEqual( 25, Newspack_UI_Palette::lc( $steps['success']['mark'], $base ) );
+	}
+
+	/**
 	 * A dark base picks light steps.
 	 */
 	public function test_dark_base_picks_light_steps() {
@@ -570,6 +628,75 @@ class Newspack_Test_UI_Palette extends WP_UnitTestCase {
 						'tint' => '#3e392f',
 					],
 					'notice'  => [ 'tint' => '#323232' ],
+				],
+			],
+			'grass'      => [
+				'#ffffff',
+				'#00a32a',
+				'#1e1e1e',
+				[
+					'error'   => [
+						'text' => '#b32d2e',
+						'edge' => '#d63638',
+						'tint' => '#fcf0f1',
+					],
+					'success' => [
+						'text' => '#00450c',
+						'mark' => '#005c12',
+						'tint' => '#edfaef',
+					],
+					'warning' => [
+						'text' => '#755100',
+						'mark' => '#bd8600',
+						'tint' => '#fcf9e8',
+					],
+					'notice'  => [ 'tint' => '#f7f7f7' ],
+				],
+			],
+			'grass-dark' => [
+				'#1e1e1e',
+				'#00a32a',
+				'#ffffff',
+				[
+					'error'   => [
+						'text' => '#facfd2',
+						'edge' => '#d63638',
+						'tint' => '#332422',
+					],
+					'success' => [
+						'text' => '#edfaef',
+						'mark' => '#b8e6bf',
+						'tint' => '#2e322f',
+					],
+					'warning' => [
+						'text' => '#fcf9e8',
+						'mark' => '#dba617',
+						'tint' => '#312d23',
+					],
+					'notice'  => [ 'tint' => '#252525' ],
+				],
+			],
+			'parchment'  => [
+				'#e6d8bd',
+				'#003da5',
+				'#1e1e1e',
+				[
+					'error'   => [
+						'text' => '#8a2424',
+						'edge' => '#b32d2e',
+						'tint' => '#e3cbb3',
+					],
+					'success' => [
+						'text' => '#005c12',
+						'mark' => '#007017',
+						'tint' => '#d6d4b1',
+					],
+					'warning' => [
+						'text' => '#755100',
+						'mark' => '#bd8600',
+						'tint' => '#e3d3ac',
+					],
+					'notice'  => [ 'tint' => '#dfd1b7' ],
 				],
 			],
 		];
