@@ -13,18 +13,6 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
  */
 import ImpactTable from './impact-table';
 
-// A stand-in makes the card and its heading observable and still renders the
-// `after` slot the Show more button lives in.
-jest.mock( '../../../../../packages/components/src', () => ( {
-	TableCard: ( { title, children, after } ) => (
-		<div data-testid="table-card">
-			{ title && <h3>{ title }</h3> }
-			{ children }
-			{ after }
-		</div>
-	),
-} ) );
-
 const CURRENCY = { code: 'USD', symbol: '$', decimals: 2 };
 
 const row = ( over = {} ) => ( {
@@ -251,7 +239,7 @@ describe( 'ImpactTable', () => {
 
 	it( 'renders through the Newspack DataViews wrapper at the default density in its card', () => {
 		const { container } = render( <ImpactTable baseline={ [ row() ] } segmentGroups={ [] } currency={ CURRENCY } /> );
-		expect( container.querySelector( '.newspack-dataviews' ) ).not.toBeNull();
+		expect( container.querySelector( '.newspack-table-card .newspack-dataviews--in-card' ) ).not.toBeNull();
 		expect( container.querySelector( '.has-compact-density' ) ).toBeNull();
 	} );
 
@@ -310,17 +298,19 @@ describe( 'ImpactTable', () => {
 		expect( screen.getByRole( 'region', { name: 'Resulting prices by product and reader segment' } ) ).toBeInTheDocument();
 	} );
 
-	it( 'frames itself in a card by default', () => {
-		render( <ImpactTable baseline={ sample( 3 ) } segmentGroups={ [] } currency={ CURRENCY } /> );
+	it( 'frames itself in a headed card by default', () => {
+		const { container } = render( <ImpactTable baseline={ sample( 3 ) } segmentGroups={ [] } currency={ CURRENCY } /> );
 
-		expect( screen.getByTestId( 'table-card' ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'heading', { name: 'Affected Products', level: 3 } ) ).toBeInTheDocument();
+		expect( container.querySelector( '.newspack-table-card--separated' ) ).not.toBeNull();
 	} );
 
-	it( 'keeps the card without a heading when the title is left out', () => {
-		render( <ImpactTable baseline={ sample( 3 ) } segmentGroups={ [] } currency={ CURRENCY } title={ null } /> );
+	it( 'keeps the card without a heading or separator when the title is left out', () => {
+		const { container } = render( <ImpactTable baseline={ sample( 3 ) } segmentGroups={ [] } currency={ CURRENCY } title={ null } /> );
 
-		expect( screen.getByTestId( 'table-card' ) ).toBeInTheDocument();
-		expect( screen.queryByRole( 'heading' ) ).not.toBeInTheDocument();
+		expect( container.querySelector( '.newspack-table-card' ) ).not.toBeNull();
+		expect( container.querySelector( '.newspack-table-card__header' ) ).toBeNull();
+		expect( container.querySelector( '.newspack-table-card--separated' ) ).toBeNull();
 		expect( bodyRows() ).toBe( 3 );
 	} );
 
