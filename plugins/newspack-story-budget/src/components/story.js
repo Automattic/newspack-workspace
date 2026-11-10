@@ -14,7 +14,7 @@ import {
 } from '@wordpress/components';
 import { notAllowed } from '@wordpress/icons';
 import { useSelect, useDispatch } from '@wordpress/data';
-import { useEffect, useState, useCallback, useMemo } from '@wordpress/element';
+import { useEffect, useRef, useState, useCallback, useMemo } from '@wordpress/element';
 
 /**
  * Internal dependencies.
@@ -36,11 +36,27 @@ export default ( { storyId, onCancel } ) => {
 	const [ editedStory, setEditedStory ] = useState( story );
 	const [ isIframeLoading, setIsIframeLoading ] = useState( true );
 
-	const { saveStory, clearErrors } = useDispatch( storeNamespace );
+	const { saveStory, clearErrors, fetchStory } = useDispatch( storeNamespace );
+
+	const hasMetadata = !! story?.metadata;
+	const hasEdited = useRef( false );
 
 	useEffect( () => {
 		clearErrors( storyId );
+		hasEdited.current = false;
 	}, [ storyId ] );
+
+	useEffect( () => {
+		if ( ! hasMetadata ) {
+			fetchStory( storyId );
+		}
+	}, [ storyId, hasMetadata ] );
+
+	useEffect( () => {
+		if ( ! hasEdited.current ) {
+			setEditedStory( story );
+		}
+	}, [ story ] );
 
 	const handleSave = useCallback( async () => {
 		clearErrors( storyId );
@@ -55,6 +71,7 @@ export default ( { storyId, onCancel } ) => {
 	const handleFieldChange = useCallback(
 		newStory => {
 			clearErrors( storyId );
+			hasEdited.current = true;
 			setEditedStory( newStory );
 		},
 		[ clearErrors, storyId ]
@@ -166,7 +183,7 @@ export default ( { storyId, onCancel } ) => {
 							{ canEditStory ? __( 'Cancel', 'newspack-story-budget' ) : __( 'Close', 'newspack-story-budget' ) }
 						</Button>
 						<Spacer />
-						{ ! isLoadingStory && canEditStory && story.metadata.edit_url && (
+						{ ! isLoadingStory && canEditStory && story.metadata?.edit_url && (
 							<Button variant="link" href={ story.metadata.edit_url } target="_blank">
 								{ __( 'Edit post', 'newspack-story-budget' ) }
 							</Button>

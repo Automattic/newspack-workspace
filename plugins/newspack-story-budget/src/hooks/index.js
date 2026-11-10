@@ -67,8 +67,8 @@ export const useStoryField = ( storyId, fieldSlug ) => {
 
 const DATE_TYPES = [ 'date', 'datetime' ];
 
-// A field that is not filterable stays out of "Add filter", except dates,
-// which DataViews filters with its own date operators.
+// A field that is not filterable stays out of "Add filter", except dates:
+// DataViews offers its date operators and utils/stories.js applies them.
 const getFilterBy = field => {
 	if ( field.is_filterable && field.is_filterable !== 'no' ) {
 		return { operators: getFilterByOperators( field ), isPrimary: field.is_filterable === 'always' };
