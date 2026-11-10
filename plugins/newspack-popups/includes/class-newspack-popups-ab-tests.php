@@ -75,11 +75,11 @@ final class Newspack_Popups_AB_Tests {
 	private static $tests_config = null;
 
 	/**
-	 * Test IDs of prompts being deleted in this request, by prompt ID.
+	 * Test IDs that a meta write in progress is removing, by meta ID.
 	 *
 	 * @var string[]
 	 */
-	private static $deleting_test_ids = [];
+	private static $leaving_test_ids = [];
 
 	/**
 	 * Initialize hooks.
@@ -111,10 +111,15 @@ final class Newspack_Popups_AB_Tests {
 			add_action( $hook, [ __CLASS__, 'record_start_for_meta' ], 10, 3 );
 		}
 
-		// Not gated on the flag: these only remove the feature's own reader
-		// meta, and a site that turned the flag off still wants it gone.
-		add_action( 'before_delete_post', [ __CLASS__, 'note_deleting_test_prompt' ] );
-		add_action( 'deleted_post', [ __CLASS__, 'drop_buckets_after_delete' ] );
+		// Meta hooks rather than post ones, so one rule covers every way a
+		// prompt leaves a test: End Test clearing its Test ID, an editor clearing
+		// or changing it, and wp_delete_post(), which removes meta row by row.
+		// Not gated on the flag: they only remove the feature's own reader meta,
+		// and a site that turned the flag off still wants it gone.
+		add_action( 'update_post_meta', [ __CLASS__, 'note_leaving_test_id' ], 10, 3 );
+		add_action( 'delete_post_meta', [ __CLASS__, 'note_leaving_test_id' ], 10, 3 );
+		add_action( 'updated_post_meta', [ __CLASS__, 'drop_buckets_of_empty_tests' ], 10, 3 );
+		add_action( 'deleted_post_meta', [ __CLASS__, 'drop_buckets_of_empty_tests' ], 10, 3 );
 	}
 
 	/**
@@ -172,37 +177,52 @@ final class Newspack_Popups_AB_Tests {
 	}
 
 	/**
-	 * Remember the Test ID of a prompt about to be deleted. Its meta is gone by
-	 * the time the delete finishes, and the buckets wait until then so a delete
-	 * that fails partway leaves them in place.
+	 * Remember the Test ID a meta write is about to remove or replace. The value
+	 * is read here because the after-hooks only see the new one.
 	 *
-	 * @param int $post_id Post ID.
+	 * @param int|int[] $meta_ids Meta ID, or IDs for a delete.
+	 * @param int       $object_id Post ID, or 0 for a delete across all posts.
+	 * @param string    $meta_key  Meta key.
 	 */
-	public static function note_deleting_test_prompt( $post_id ) {
-		if ( Newspack_Popups::NEWSPACK_POPUPS_CPT !== get_post_type( $post_id ) ) {
+	public static function note_leaving_test_id( $meta_ids, $object_id, $meta_key ) {
+		if ( self::META_TEST_ID !== $meta_key ) {
 			return;
 		}
-		$test_id = (string) get_post_meta( $post_id, self::META_TEST_ID, true );
-		if ( '' !== $test_id ) {
-			self::$deleting_test_ids[ (int) $post_id ] = $test_id;
+		foreach ( (array) $meta_ids as $meta_id ) {
+			$meta = get_metadata_by_mid( 'post', $meta_id );
+			if ( $meta && '' !== (string) $meta->meta_value ) {
+				self::$leaving_test_ids[ (int) $meta_id ] = (string) $meta->meta_value;
+			}
 		}
 	}
 
 	/**
-	 * Drop a test's buckets once its last prompt is deleted. Trashed prompts
-	 * still count, since restoring one brings the test back.
+	 * Drop a test's buckets once no prompt carries its ID. Trashed prompts still
+	 * count, since restoring one brings the test back.
 	 *
-	 * @param int $post_id Post ID.
+	 * A reader request already in progress can write one bucket back after this
+	 * runs. Nothing reads it unless a later test takes the same ID, which a named
+	 * test's term prevents.
+	 *
+	 * @param int|int[] $meta_ids Meta ID, or IDs for a delete.
+	 * @param int       $object_id Post ID.
+	 * @param string    $meta_key  Meta key.
 	 */
-	public static function drop_buckets_after_delete( $post_id ) {
-		$post_id = (int) $post_id;
-		if ( ! isset( self::$deleting_test_ids[ $post_id ] ) ) {
+	public static function drop_buckets_of_empty_tests( $meta_ids, $object_id, $meta_key ) {
+		if ( self::META_TEST_ID !== $meta_key ) {
 			return;
 		}
-		$test_id = self::$deleting_test_ids[ $post_id ];
-		unset( self::$deleting_test_ids[ $post_id ] );
-		if ( empty( self::get_test_prompt_ids( $test_id ) ) ) {
-			self::delete_buckets( $test_id );
+		$test_ids = [];
+		foreach ( (array) $meta_ids as $meta_id ) {
+			if ( isset( self::$leaving_test_ids[ (int) $meta_id ] ) ) {
+				$test_ids[] = self::$leaving_test_ids[ (int) $meta_id ];
+				unset( self::$leaving_test_ids[ (int) $meta_id ] );
+			}
+		}
+		foreach ( array_unique( $test_ids ) as $test_id ) {
+			if ( empty( self::get_test_prompt_ids( $test_id ) ) ) {
+				self::delete_buckets( $test_id );
+			}
 		}
 	}
 
@@ -1401,15 +1421,15 @@ final class Newspack_Popups_AB_Tests {
 			}
 			$drafted[ $prompt_id ] = $status;
 		}
+		// Clearing the last prompt's Test ID also drops every reader's bucket,
+		// so it stays after the drafts: a test that failed to end keeps
+		// splitting readers as before.
 		foreach ( $prompt_ids as $prompt_id ) {
 			foreach ( self::META_KEYS as $meta_key ) {
 				delete_post_meta( $prompt_id, $meta_key );
 			}
 		}
 		self::invalidate_has_tests();
-		// Last, so a test that failed to end keeps splitting readers as before.
-		// The term keeps the ID from being reused, so no later test reads these.
-		self::delete_buckets( $test_id );
 
 		foreach ( self::get_tests() as $row ) {
 			if ( $test_id === $row['test_id'] ) {

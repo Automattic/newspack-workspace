@@ -817,6 +817,35 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * Clearing the Test ID on the last prompt drops the buckets, like deleting it.
+	 */
+	public function test_clearing_the_last_test_id_drops_the_buckets() {
+		$ids    = $this->create_running_test();
+		$reader = $this->bucket_reader( 't', 'a' );
+
+		delete_post_meta( $ids['b'], Newspack_Popups_AB_Tests::META_TEST_ID );
+		$this->assertSame( 'a', $this->stored_bucket( $reader, 't' ), 'A still carries the test.' );
+
+		update_post_meta( $ids['a'], Newspack_Popups_AB_Tests::META_TEST_ID, '' );
+		$this->assertSame( '', $this->stored_bucket( $reader, 't' ) );
+	}
+
+	/**
+	 * Moving the last prompt to another Test ID drops the old test's buckets
+	 * and leaves the new one's alone.
+	 */
+	public function test_changing_the_last_test_id_drops_the_old_buckets() {
+		$ids   = $this->create_running_test();
+		$old   = $this->bucket_reader( 't', 'a' );
+		$other = $this->bucket_reader( 'u', 'b' );
+
+		update_post_meta( $ids['a'], Newspack_Popups_AB_Tests::META_TEST_ID, 'u' );
+		update_post_meta( $ids['b'], Newspack_Popups_AB_Tests::META_TEST_ID, 'u' );
+		$this->assertSame( '', $this->stored_bucket( $old, 't' ) );
+		$this->assertSame( 'b', $this->stored_bucket( $other, 'u' ) );
+	}
+
+	/**
 	 * With the flag off nothing reads the buckets, and deleting the last
 	 * prompt still drops them.
 	 */
