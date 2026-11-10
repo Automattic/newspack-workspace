@@ -219,10 +219,21 @@ describe( 'Archive rules', () => {
 		expect( savedGate().archive_rules ).toEqual( [ { slug: 'post_type_archives', value: [ 'newspack_collection' ] } ] );
 	} );
 
+	it( 'keeps unsaved archive pages when Choose specific content is clicked again', async () => {
+		await renderEdit();
+		fireEvent.click( screen.getByRole( 'heading', { name: 'Choose specific content' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Pick Collections' } ) );
+		fireEvent.click( screen.getByRole( 'heading', { name: 'Choose specific content' } ) );
+		await runHeaderAction( 'Save' );
+
+		expect( savedGate().archive_rules ).toEqual( [ { slug: 'post_type_archives', value: [ 'newspack_collection' ] } ] );
+	} );
+
 	describe( 'on a gate that restricts all posts and archive pages', () => {
+		// gone_cpt stands for an archive the site no longer offers, such as a module switched off.
 		const ALL_POSTS_AND_ARCHIVE_GATE = {
 			...STORED_GATE,
-			archive_rules: [ { slug: 'post_type_archives', value: [ 'newspack_collection' ] } ],
+			archive_rules: [ { slug: 'post_type_archives', value: [ 'newspack_collection', 'gone_cpt' ] } ],
 		};
 		const renderArchiveGate = async () => {
 			await renderEdit();
@@ -239,7 +250,7 @@ describe( 'Archive rules', () => {
 			expect( screen.getByRole( 'button', { name: 'Pick Collections' } ) ).toBeInTheDocument();
 		} );
 
-		it( 'leaves archive pages out of the save once Restrict all posts is chosen', async () => {
+		it( 'leaves every archive page out of the save once Restrict all posts is chosen', async () => {
 			await renderArchiveGate();
 			fireEvent.click( screen.getByRole( 'heading', { name: 'Restrict all posts' } ) );
 			await runHeaderAction( 'Save' );
@@ -257,21 +268,21 @@ describe( 'Archive rules', () => {
 		} );
 	} );
 
-	it( 'keeps an archive choice the site no longer offers when saving under Restrict all posts', async () => {
+	it( 'opens a gate with an archive choice the site no longer offers without changing it', async () => {
 		const unofferedRules = [ { slug: 'post_type_archives', value: [ 'gone_cpt' ] } ];
-		await renderEdit();
-		await act( async () => {
-			dispatch( WIZARD_STORE_NAMESPACE ).setAPIDataForWizard( {
-				slug: AUDIENCE_CONTENT_GATES_WIZARD_SLUG,
-				data: { gates: [ { ...STORED_GATE, archive_rules: unofferedRules } ], config: {} },
-			} );
+		const dormantGate = { ...STORED_GATE, archive_rules: unofferedRules };
+		// Stored from the first render, so opening the gate is what runs the editor's setup.
+		apiFetch.mockImplementation( ( { method = 'GET', data } ) =>
+			Promise.resolve( method === 'GET' ? { gates: [ dormantGate ], config: {} } : data.gate )
+		);
+		dispatch( WIZARD_STORE_NAMESPACE ).setAPIDataForWizard( {
+			slug: AUDIENCE_CONTENT_GATES_WIZARD_SLUG,
+			data: { gates: [ dormantGate ], config: {} },
 		} );
+		await renderEdit();
 		expect( screen.queryByRole( 'button', { name: 'Pick Collections' } ) ).toBeNull();
 		expect( headerAction( 'Save' ).disabled ).toBe( true );
 
-		// Choosing Restrict all posts again sets aside only the choices the site offers.
-		fireEvent.click( screen.getByRole( 'heading', { name: 'Choose specific content' } ) );
-		fireEvent.click( screen.getByRole( 'heading', { name: 'Restrict all posts' } ) );
 		await runHeaderAction( 'Rename' );
 		fireEvent.change( screen.getByRole( 'textbox', { name: /gate name/i } ), { target: { value: 'Edited title' } } );
 		await runHeaderAction( 'Save' );

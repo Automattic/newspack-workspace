@@ -570,20 +570,31 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		title,
 	] );
 
-	// Update content rules. "Restrict all posts" doesn't gate archive pages, so switching to it
-	// sets the archive choice aside with the specific rules, and switching back restores both.
-	// Choices the site doesn't offer right now stay, as they do everywhere in this editor.
+	// Update content rules.
 	useEffect( () => {
 		if ( contentType === 'all' ) {
 			savedCustomRules.current = contentRules;
-			savedArchiveRules.current = archiveRules;
 			setContentRules( DEFAULT_GATE.content_rules );
-			setArchiveRules( filterArchiveRules( archiveRules, false ) );
 		} else if ( contentType === 'custom' ) {
 			setContentRules( savedCustomRules.current );
-			setArchiveRules( savedArchiveRules.current );
 		}
 	}, [ contentType ] );
+
+	// "Restrict all posts" never gates archive pages, so choosing it sets every archive choice
+	// aside, including any the site doesn't offer right now, and choosing specific content again
+	// restores them. Only a click does this: opening a saved gate leaves its choices as stored.
+	const chooseContentType = ( next: 'all' | 'custom' ) => {
+		if ( next === contentType ) {
+			return;
+		}
+		if ( next === 'all' ) {
+			savedArchiveRules.current = archiveRules;
+			setArchiveRules( [] );
+		} else {
+			setArchiveRules( savedArchiveRules.current );
+		}
+		setContentType( next );
+	};
 
 	// Display API errors as notices.
 	useEffect( () => {
@@ -704,8 +715,8 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 						) }
 						icon={ isNewsletter ? envelope : postList }
 						isActive={ contentType === 'all' }
-						onEnable={ () => setContentType( 'all' ) }
-						onHeaderClick={ () => setContentType( 'all' ) }
+						onEnable={ () => chooseContentType( 'all' ) }
+						onHeaderClick={ () => chooseContentType( 'all' ) }
 					/>
 					<CardSettingsGroup
 						title={ sprintf(
@@ -720,8 +731,8 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 						) }
 						icon={ settings }
 						isActive={ contentType === 'custom' }
-						onEnable={ () => setContentType( 'custom' ) }
-						onHeaderClick={ () => setContentType( 'custom' ) }
+						onEnable={ () => chooseContentType( 'custom' ) }
+						onHeaderClick={ () => chooseContentType( 'custom' ) }
 					>
 						<ContentRules
 							rules={ contentRules }

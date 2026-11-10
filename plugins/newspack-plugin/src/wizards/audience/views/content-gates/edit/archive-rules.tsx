@@ -3,7 +3,7 @@
  */
 import { CardBody, CheckboxControl, ToggleControl } from '@wordpress/components';
 import { useCallback, useState } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { Stack } from '@wordpress/ui';
 
 /**
@@ -84,9 +84,13 @@ export default function ArchiveRules( { rules, onChange }: ArchiveRulesProps ) {
 						) }
 					</fieldset>
 					<p className="description newspack-content-gate__archive-note">
-						{ __(
-							"This doesn't restrict the items in the list, and Match any rule doesn't apply to it. Use the other rules to restrict items.",
-							'newspack-plugin'
+						{ sprintf(
+							// translators: %s is the label of the "Match any rule" toggle below this row.
+							__(
+								'This doesn’t restrict the items in the list, and “%s” doesn’t apply to it. Use the other rules to restrict items.',
+								'newspack-plugin'
+							),
+							__( 'Match any rule', 'newspack-plugin' )
 						) }
 					</p>
 				</Stack>
