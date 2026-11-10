@@ -83,7 +83,15 @@
 		width: 100%;
 	}
 
+	&__price-step {
+		white-space: nowrap;
+	}
+
 	&__impact-table--unframed {
+		.dataviews-view-table tbody td .dataviews-view-table__cell-content-wrapper {
+			white-space: normal;
+		}
+
 		.dataviews-view-table tr {
 			th:first-child,
 			td:first-child {

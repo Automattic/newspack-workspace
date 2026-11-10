@@ -59,7 +59,7 @@ function ResultingCell( { row, currency }: { row?: CatalogImpactRow; currency: P
 	return (
 		<>
 			{ row.segments.map( ( seg, i ) => (
-				<span key={ i } className={ seg.changed ? 'is-changed' : undefined }>
+				<span key={ i } className={ `newspack-pricing-rules__price-step${ seg.changed ? ' is-changed' : '' }` }>
 					{ i > 0 ? ' → ' : '' }
 					{ formatSegment( seg, currency ) }
 				</span>
