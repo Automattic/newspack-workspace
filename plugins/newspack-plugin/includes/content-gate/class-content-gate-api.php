@@ -237,9 +237,6 @@ class Content_Gate_API {
 			} elseif ( self::caller_can_manage_gates() ) {
 				return $sanitized_archive_rules;
 			}
-			// Otherwise leave archive_rules out. Sanitization runs ahead of the route's
-			// `permission_callback`, so the error must not answer an unauthorized caller;
-			// the request fails on permissions instead.
 		}
 		if ( isset( $gate['registration'] ) ) {
 			$sanitized_registration = self::sanitize_registration( $gate['registration'], self::registration_wall_is_live( $gate['registration'], $sanitized, $gate_id ) );
@@ -890,8 +887,9 @@ class Content_Gate_API {
 		foreach ( $rules as $rule ) {
 			$sanitized = self::sanitize_content_rule( $rule );
 			if ( is_wp_error( $sanitized ) ) {
-				// Dropping a rule would widen the gate (an AND gate to every post, an OR gate
-				// to nothing it was meant to cover), so the save fails instead.
+				// Dropping a rule would change what the gate covers without the operator asking:
+				// an AND gate widens to what the remaining rules match, and an OR gate stops
+				// covering what that rule brought in. So the save fails instead.
 				return $sanitized;
 			}
 			$sanitized_rules[] = $sanitized;
@@ -1096,8 +1094,9 @@ class Content_Gate_API {
 	 * A slug that isn't on the offered list is kept when it names a registered taxonomy,
 	 * since the Memberships migration writes rules for any taxonomy straight to post meta
 	 * and a later save must not lose them. Any other slug fails, naming it, so the
-	 * operator can remove it. For a rule with options, a value that isn't registered
-	 * right now is kept too, while a registered one that isn't offered fails.
+	 * operator can remove it. For the post types rule, a post type that isn't registered
+	 * right now is kept too, while a registered one that isn't offered fails. Any other
+	 * rule with options fails on a value that isn't offered.
 	 *
 	 * @param array $content_rule The content rule.
 	 *
@@ -1110,8 +1109,8 @@ class Content_Gate_API {
 			return self::unavailable_content_rule_error( $slug );
 		}
 		// Include-only: the rule's own comparison sets the direction, so it never carries `exclusion`.
-		// Ahead of the list check below, which would hide this rule's own message.
-		if ( Content_Rules::PUBLISHED_AGE_RULE === ( $content_rule['slug'] ?? '' ) ) {
+		// Ahead of the non-array value check below, so a malformed value gets this rule's own message.
+		if ( Content_Rules::PUBLISHED_AGE_RULE === $slug ) {
 			$value = Content_Rules::sanitize_published_age_value( $content_rule['value'] ?? null );
 			if ( is_wp_error( $value ) ) {
 				return $value;
@@ -1144,15 +1143,18 @@ class Content_Gate_API {
 		$input = $content_rule['value'] ?? [];
 		if ( ! empty( $rule['options'] ) ) {
 			$allowed = array_column( $rule['options'], 'value' );
-			// A value that isn't registered right now is kept: it matches no post being
-			// read, and applies again if it comes back, as when the Collections module is
-			// turned off and on. One that is registered but not offered is refused.
-			$invalid = array_filter(
-				array_diff( $input, $allowed ),
-				function ( $value ) {
-					return post_type_exists( $value );
-				}
-			);
+			$invalid = array_diff( $input, $allowed );
+			if ( 'post_types' === $slug ) {
+				// A post type that isn't registered right now is kept: it matches no post
+				// being read, and applies again if it comes back, as when the Collections
+				// module is turned off and on. One that is registered but not offered is refused.
+				$invalid = array_filter(
+					$invalid,
+					function ( $value ) {
+						return post_type_exists( $value );
+					}
+				);
+			}
 			if ( ! empty( $invalid ) ) {
 				return new \WP_Error(
 					'invalid_content_rule_value',
