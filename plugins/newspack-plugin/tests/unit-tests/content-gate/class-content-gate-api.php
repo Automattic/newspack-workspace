@@ -475,6 +475,22 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The offered-list check reads the value as it will be stored, so surrounding
+	 * whitespace doesn't hide a registered post type that isn't offered.
+	 */
+	public function test_sanitize_content_rule_rejects_unoffered_post_type_with_whitespace() {
+		$result = Content_Gate_API::sanitize_content_rule(
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post', ' attachment ' ],
+			]
+		);
+		$this->assertWPError( $result );
+		$this->assertSame( 'invalid_content_rule_value', $result->get_error_code() );
+		$this->assertStringContainsString( 'aren\'t available on this site: attachment.', $result->get_error_message() );
+	}
+
+	/**
 	 * A gate covering Collections can still be published after the Collections module
 	 * is turned off and its post type is no longer registered.
 	 */

@@ -887,9 +887,8 @@ class Content_Gate_API {
 		foreach ( $rules as $rule ) {
 			$sanitized = self::sanitize_content_rule( $rule );
 			if ( is_wp_error( $sanitized ) ) {
-				// Dropping a rule would change what the gate covers without the operator asking:
-				// an AND gate widens to what the remaining rules match, and an OR gate stops
-				// covering what that rule brought in. So the save fails instead.
+				// Dropping a rule would change what the gate covers without the operator asking,
+				// so the save fails instead.
 				return $sanitized;
 			}
 			$sanitized_rules[] = $sanitized;
@@ -1093,8 +1092,9 @@ class Content_Gate_API {
 	 *
 	 * A slug that isn't on the offered list is kept when it names a registered taxonomy,
 	 * since the Memberships migration writes rules for any taxonomy straight to post meta
-	 * and a later save must not lose them. Any other slug fails, naming it, so the
-	 * operator can remove it. For the post types rule, a post type that isn't registered
+	 * and a later save must not lose them. The premium newsletter rule (`newsletters`) is
+	 * kept the same way, so a save never asks the ESP for its lists. Any other slug fails,
+	 * naming it, so the operator can remove it. For the post types rule, a post type that isn't registered
 	 * right now is kept too, while a registered one that isn't offered fails. Any other
 	 * rule with options fails on a value that isn't offered.
 	 *
@@ -1124,15 +1124,13 @@ class Content_Gate_API {
 			return new \WP_Error( 'invalid_content_rule_value', __( 'Invalid content rule value.', 'newspack-plugin' ), [ 'status' => 400 ] );
 		}
 
-		$rules                = Content_Rules::get_content_rules();
-		$newsletter_rules     = Content_Rules::get_premium_newsletter_rules();
-		$newsletter_rules_arr = ( is_array( $newsletter_rules ) && ! is_wp_error( $newsletter_rules ) ) ? $newsletter_rules : [];
-		$rules                = array_merge( $rules, $newsletter_rules_arr );
+		$rules = Content_Rules::get_content_rules();
 
 		if ( ! isset( $rules[ $slug ] ) ) {
-			// The premium newsletter rule is offered only while the ESP answers for its
-			// lists. It has no options to check, so a gate's own copy of it survives an
-			// ESP failure. Any other slug is kept only if the taxonomy is registered.
+			// The premium newsletter rule is named here rather than read from
+			// get_premium_newsletter_rules(), which asks the ESP for its lists, so a save
+			// behaves the same whether or not they load. It has no options to check.
+			// Any other slug is kept only if the taxonomy is registered.
 			if ( 'newsletters' !== $slug && ! get_taxonomy( $slug ) ) {
 				return self::unavailable_content_rule_error( $slug );
 			}
@@ -1141,19 +1139,15 @@ class Content_Gate_API {
 
 		$rule  = $rules[ $slug ];
 		$input = $content_rule['value'] ?? [];
+		$value = array_values( array_filter( array_map( 'sanitize_text_field', $input ) ) );
 		if ( ! empty( $rule['options'] ) ) {
 			$allowed = array_column( $rule['options'], 'value' );
-			$invalid = array_diff( $input, $allowed );
+			$invalid = array_diff( $value, $allowed );
 			if ( 'post_types' === $slug ) {
 				// A post type that isn't registered right now is kept: it matches no post
 				// being read, and applies again if it comes back, as when the Collections
 				// module is turned off and on. One that is registered but not offered is refused.
-				$invalid = array_filter(
-					$invalid,
-					function ( $value ) {
-						return post_type_exists( $value );
-					}
-				);
+				$invalid = array_filter( $invalid, 'post_type_exists' );
 			}
 			if ( ! empty( $invalid ) ) {
 				return new \WP_Error(
@@ -1162,14 +1156,13 @@ class Content_Gate_API {
 						/* translators: 1: content rule name, 2: comma-separated values. */
 						__( 'The content rule "%1$s" includes values that aren\'t available on this site: %2$s.', 'newspack-plugin' ),
 						$rule['name'] ?? $slug,
-						implode( ', ', array_map( 'sanitize_text_field', $invalid ) )
+						implode( ', ', $invalid )
 					),
 					[ 'status' => 400 ]
 				);
 			}
 		}
 
-		$value     = array_values( array_filter( array_map( 'sanitize_text_field', $input ) ) );
 		$exclusion = isset( $content_rule['exclusion'] ) ? boolval( $content_rule['exclusion'] ) : false;
 
 		$sanitized_rule = [
