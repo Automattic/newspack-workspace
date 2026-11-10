@@ -42,11 +42,23 @@ export default ( { storyId, onCancel } ) => {
 	const hasMetadata = !! story?.metadata;
 	const hasEdited = useRef( false );
 	const fetchedFor = useRef( null );
+	const sawLoading = useRef( false );
+	const [ fetchDone, setFetchDone ] = useState( false );
 
 	useEffect( () => {
 		clearErrors( storyId );
 		hasEdited.current = false;
+		sawLoading.current = false;
+		setFetchDone( false );
 	}, [ storyId ] );
+
+	useEffect( () => {
+		if ( isLoadingStory ) {
+			sawLoading.current = true;
+		} else if ( sawLoading.current ) {
+			setFetchDone( true );
+		}
+	}, [ isLoadingStory, storyId ] );
 
 	useEffect( () => {
 		if ( hasStory && ! hasMetadata && fetchedFor.current !== storyId ) {
@@ -80,7 +92,7 @@ export default ( { storyId, onCancel } ) => {
 		[ clearErrors, storyId ]
 	);
 
-	const isAwaitingMetadata = ! hasMetadata && ! storyError;
+	const isAwaitingMetadata = ! hasMetadata && ! fetchDone;
 
 	const canPreview = useMemo( () => {
 		return story?.metadata?.can_preview && ! utils.sites.isRemoteSite();
@@ -175,7 +187,7 @@ export default ( { storyId, onCancel } ) => {
 						padding: '16px',
 					} }
 				>
-					<StoryFieldPanel fields={ fields } story={ story } onChange={ handleFieldChange } />
+					<StoryFieldPanel fields={ fields } story={ editedStory ?? story } onChange={ handleFieldChange } />
 				</div>
 				{ ( canEditStory || onCancel ) && (
 					<HStack expanded direction="row-reverse" justify="end" style={ { padding: '16px', boxSizing: 'border-box' } }>

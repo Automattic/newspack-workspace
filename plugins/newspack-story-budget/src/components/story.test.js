@@ -6,11 +6,12 @@ const mockFetchStory = jest.fn();
 const mockSaveStory = jest.fn();
 let mockStory;
 let mockError;
+let mockLoading;
 
 jest.mock( '@wordpress/data', () => ( {
 	useSelect: jest.fn( callback =>
 		callback( () => ( {
-			isLoadingStory: () => false,
+			isLoadingStory: () => mockLoading,
 			canEditStory: () => true,
 			getStoryError: () => mockError,
 		} ) )
@@ -52,16 +53,22 @@ jest.mock( '../utils', () => ( {
 	default: { sites: { isRemoteSite: () => false } },
 } ) );
 
-jest.mock( './story-field-panel', () => ( { onChange } ) => (
-	<button type="button" onClick={ () => onChange( { id: 12, title: 'Edited' } ) }>
-		Change title
-	</button>
+jest.mock( './story-field-panel', () => ( { story, onChange } ) => (
+	<>
+		<button type="button" onClick={ () => onChange( { ...story, title: 'Edited' } ) }>
+			Change title
+		</button>
+		<button type="button" onClick={ () => onChange( { ...story, slug: 'edited-slug' } ) }>
+			Change slug
+		</button>
+	</>
 ) );
 
 describe( 'Story', () => {
 	beforeEach( () => {
 		jest.clearAllMocks();
 		mockError = null;
+		mockLoading = false;
 		mockStory = { id: 12, title: 'A story' };
 	} );
 
@@ -107,7 +114,7 @@ describe( 'Story', () => {
 		rerender( <Story storyId={ 12 } /> );
 		fireEvent.click( screen.getByRole( 'button', { name: 'Save' } ) );
 
-		expect( mockSaveStory ).toHaveBeenCalledWith( 12, { id: 12, title: 'Edited' } );
+		expect( mockSaveStory ).toHaveBeenCalledWith( 12, { id: 12, title: 'Edited', metadata: {} } );
 	} );
 
 	it( 'shows a spinner, not the preview-unavailable notice, while metadata loads', () => {
@@ -118,10 +125,39 @@ describe( 'Story', () => {
 	} );
 
 	it( 'shows the fetch error when no preview will load', () => {
+		mockLoading = true;
+		const { rerender } = render( <Story storyId={ 12 } /> );
+		mockLoading = false;
 		mockError = 'Could not load the story';
-		render( <Story storyId={ 12 } /> );
+		rerender( <Story storyId={ 12 } /> );
 
 		expect( screen.getByText( 'Could not load the story' ) ).toBeTruthy();
 		expect( screen.getByText( 'Preview is unavailable' ) ).toBeTruthy();
+	} );
+
+	it( 'does not show the spinner again after a failed fetch and a field edit', () => {
+		mockLoading = true;
+		const { rerender } = render( <Story storyId={ 12 } /> );
+		mockLoading = false;
+		mockError = 'Could not load the story';
+		rerender( <Story storyId={ 12 } /> );
+		mockError = null;
+		fireEvent.click( screen.getByRole( 'button', { name: 'Change title' } ) );
+		rerender( <Story storyId={ 12 } /> );
+
+		expect( screen.queryByTestId( 'spinner' ) ).toBeNull();
+		expect( screen.getByText( 'Preview is unavailable' ) ).toBeTruthy();
+	} );
+
+	it( 'keeps an earlier edit when a later edit follows a store update', () => {
+		mockStory = { id: 12, title: 'A story', metadata: {} };
+		const { rerender } = render( <Story storyId={ 12 } /> );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Change title' } ) );
+		mockStory = { id: 12, title: 'Refreshed', metadata: {} };
+		rerender( <Story storyId={ 12 } /> );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Change slug' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Save' } ) );
+
+		expect( mockSaveStory ).toHaveBeenCalledWith( 12, { id: 12, title: 'Edited', slug: 'edited-slug', metadata: {} } );
 	} );
 } );
