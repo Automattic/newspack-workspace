@@ -1541,17 +1541,8 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		wp_cache_delete( $prompt_id, 'post_meta' );
 		self::assertSame( 'footer_test', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
 
-		// Sent back as stored, the way the editor sends its whole meta object.
-		$response = $this->save_prompt_as(
-			$prompt_id,
-			'administrator',
-			[
-				'meta' => [
-					'frequency'                            => 'once',
-					Newspack_Popups_AB_Tests::META_TEST_ID => 'footer_test',
-				],
-			]
-		);
+		// save_prompt_as() sends the stored Test ID back, as the editor does.
+		$response = $this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ 'frequency' => 'once' ] ] );
 		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
 		self::assertSame( 'once', get_post_meta( $prompt_id, 'frequency', true ) );
 		self::assertSame( 'footer_test', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
