@@ -577,11 +577,12 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 
 	/**
 	 * A draft that fails puts back what was drafted and leaves the test running,
-	 * so it can be ended again.
+	 * so it can be ended again, and its readers keep their buckets.
 	 */
 	public function test_a_failed_draft_leaves_the_test_running() {
 		$this->sign_in();
-		$ids = $this->create_running_test( 't', [ 'a', 'b', 'c' ] );
+		$ids    = $this->create_running_test( 't', [ 'a', 'b', 'c' ] );
+		$reader = $this->bucket_reader( 't', 'b' );
 		// A backslash in a title: the record must still match to be removed.
 		wp_update_post(
 			[
@@ -601,12 +602,14 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 		$response = $this->end_request( 't', 'a' );
 		remove_filter( 'wp_insert_post_empty_content', $fail, 10 );
 
+		$this->assertSame( 2, $attempts, 'The end reached the second draft.' );
 		$this->assertGreaterThanOrEqual( 400, $response->get_status() );
 		foreach ( $ids as $id ) {
 			$this->assertSame( 'publish', get_post_status( $id ) );
 			$this->assertSame( 't', get_post_meta( $id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
 		}
 		$this->assertSame( 'active', $this->rows( 't' )[0]['status'] );
+		$this->assertSame( 'b', $this->stored_bucket( $reader, 't' ) );
 		$this->assertSame( 200, $this->end_request( 't', 'a' )->get_status() );
 	}
 
@@ -717,6 +720,132 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 		$this->assertSame( '2026-10-20', $stub->calls[0]['end'] );
 		$this->assertSame( '2026-10-20', $stats['window']['end'] );
 		$this->assertSame( 19, $stats['flags']['days_running'] );
+	}
+
+	/**
+	 * Give a reader a stored bucket in a test.
+	 *
+	 * @param string $test_id Test ID.
+	 * @param string $bucket  Variant letter.
+	 * @return int Reader ID.
+	 */
+	private function bucket_reader( $test_id, $bucket = 'a' ) {
+		$reader_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		update_user_meta( $reader_id, Newspack_Popups_AB_Tests::USER_META_BUCKET_PREFIX . $test_id, $bucket );
+		return $reader_id;
+	}
+
+	/**
+	 * A reader's stored bucket, read through the meta cache, so a test that
+	 * reads it before the drop also catches a stale cache.
+	 *
+	 * @param int    $reader_id Reader ID.
+	 * @param string $test_id   Test ID.
+	 * @return string Stored bucket, or '' when none.
+	 */
+	private function stored_bucket( $reader_id, $test_id ) {
+		return (string) get_user_meta( $reader_id, Newspack_Popups_AB_Tests::USER_META_BUCKET_PREFIX . $test_id, true );
+	}
+
+	/**
+	 * Ending a test drops every reader's bucket in it, and only in it.
+	 */
+	public function test_ending_drops_the_test_buckets_for_every_reader() {
+		$this->sign_in();
+		$this->create_running_test();
+		$this->create_running_test( 'other' );
+		$first  = $this->bucket_reader( 't', 'a' );
+		$second = $this->bucket_reader( 't', 'b' );
+		$other  = $this->bucket_reader( 'other', 'b' );
+
+		$this->assertSame( 200, $this->end_request( 't', 'a' )->get_status() );
+		$this->assertSame( '', $this->stored_bucket( $first, 't' ) );
+		$this->assertSame( '', $this->stored_bucket( $second, 't' ) );
+		$this->assertSame( 'b', $this->stored_bucket( $other, 'other' ) );
+	}
+
+	/**
+	 * Deleting the last prompt that carries a test's ID drops its buckets.
+	 */
+	public function test_deleting_every_prompt_drops_the_buckets() {
+		$ids    = $this->create_running_test();
+		$reader = $this->bucket_reader( 't', 'b' );
+
+		wp_delete_post( $ids['b'], true );
+		$this->assertSame( 'b', $this->stored_bucket( $reader, 't' ), 'A still carries the test.' );
+
+		wp_delete_post( $ids['a'], true );
+		$this->assertSame( '', $this->stored_bucket( $reader, 't' ) );
+	}
+
+	/**
+	 * A trashed prompt still holds the test's ID, so trashing keeps the buckets
+	 * until the trash is emptied.
+	 */
+	public function test_trashing_keeps_the_buckets_until_the_trash_is_emptied() {
+		$ids    = $this->create_running_test();
+		$reader = $this->bucket_reader( 't', 'a' );
+
+		wp_trash_post( $ids['a'] );
+		wp_trash_post( $ids['b'] );
+		$this->assertSame( 'a', $this->stored_bucket( $reader, 't' ) );
+
+		wp_delete_post( $ids['a'], true );
+		$this->assertSame( 'a', $this->stored_bucket( $reader, 't' ), 'B, in the trash, still carries the test.' );
+		wp_delete_post( $ids['b'], true );
+		$this->assertSame( '', $this->stored_bucket( $reader, 't' ) );
+	}
+
+	/**
+	 * Clearing the Test ID on the last prompt drops the buckets, like deleting it.
+	 */
+	public function test_clearing_the_last_test_id_drops_the_buckets() {
+		$ids    = $this->create_running_test();
+		$reader = $this->bucket_reader( 't', 'a' );
+
+		delete_post_meta( $ids['b'], Newspack_Popups_AB_Tests::META_TEST_ID );
+		$this->assertSame( 'a', $this->stored_bucket( $reader, 't' ), 'A still carries the test.' );
+
+		update_post_meta( $ids['a'], Newspack_Popups_AB_Tests::META_TEST_ID, '' );
+		$this->assertSame( '', $this->stored_bucket( $reader, 't' ) );
+	}
+
+	/**
+	 * Moving the last prompt to another Test ID drops the old test's buckets
+	 * and leaves the new one's alone.
+	 */
+	public function test_changing_the_last_test_id_drops_the_old_buckets() {
+		$ids   = $this->create_running_test();
+		$old   = $this->bucket_reader( 't', 'a' );
+		$other = $this->bucket_reader( 'u', 'b' );
+
+		update_post_meta( $ids['a'], Newspack_Popups_AB_Tests::META_TEST_ID, 'u' );
+		update_post_meta( $ids['b'], Newspack_Popups_AB_Tests::META_TEST_ID, 'u' );
+		$this->assertSame( '', $this->stored_bucket( $old, 't' ) );
+		$this->assertSame( 'b', $this->stored_bucket( $other, 'u' ) );
+	}
+
+	/**
+	 * With the flag off nothing reads the buckets, and deleting the last
+	 * prompt still drops them.
+	 */
+	public function test_deleting_every_prompt_drops_the_buckets_with_the_flag_off() {
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
+		$ids    = $this->create_running_test();
+		$reader = $this->bucket_reader( 't', 'b' );
+		wp_delete_post( $ids['a'], true );
+		wp_delete_post( $ids['b'], true );
+		$this->assertSame( '', $this->stored_bucket( $reader, 't' ) );
+	}
+
+	/**
+	 * Deleting a prompt outside any test leaves every bucket alone.
+	 */
+	public function test_deleting_an_untested_prompt_keeps_the_buckets() {
+		$this->create_running_test();
+		$reader = $this->bucket_reader( 't', 'a' );
+		wp_delete_post( $this->createPopup(), true );
+		$this->assertSame( 'a', $this->stored_bucket( $reader, 't' ) );
 	}
 
 	/**
