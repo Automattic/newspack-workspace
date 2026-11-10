@@ -106,5 +106,6 @@ bumping past it, re-check:
 - That the card padding is still 24px — a Newspack `DataViews` inside the card
   keeps the 24px list gutter to match it, and the two values drift independently.
 - Every consumer, visually: Group detail's Members and Invitations cards, the
-  rule editor's Price Schedule and Affected Products cards, and the
+  rule editor's Price Schedule and Affected Products cards, the Pricing Rules
+  list's Affected Products modal (a card with no header), and the
   components-demo section, which is the cheapest place to eyeball a bump.

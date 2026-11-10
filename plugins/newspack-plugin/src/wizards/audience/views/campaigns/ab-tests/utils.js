@@ -119,6 +119,21 @@ export const formatLift = lift => {
 };
 
 /**
+ * Confidence split into the percentage and its label.
+ *
+ * @param {?Object} comparison A comparison from the stats route.
+ * @param {Object}  labels     Label key => text.
+ * @return {{percent: ?string, label: string}} The percentage, or null without a confidence, and the label.
+ */
+export const confidenceParts = ( comparison, labels = {} ) => {
+	const confidence = comparison?.confidence;
+	return {
+		percent: confidence === null || confidence === undefined ? null : `${ Number( confidence ).toFixed( 1 ) }%`,
+		label: ( comparison && labels?.[ comparison.label ] ) || '',
+	};
+};
+
+/**
  * Confidence as text: the percentage then the label, or the label alone.
  *
  * @param {?Object} comparison A comparison from the stats route.
@@ -129,11 +144,11 @@ export const formatConfidence = ( comparison, labels = {} ) => {
 	if ( ! comparison ) {
 		return DASH;
 	}
-	const label = labels[ comparison.label ] || '';
-	if ( comparison.confidence === null || comparison.confidence === undefined ) {
+	const { percent, label } = confidenceParts( comparison, labels );
+	if ( ! percent ) {
 		return label || DASH;
 	}
-	return `${ Number( comparison.confidence ).toFixed( 1 ) }% ${ label }`.trim();
+	return `${ percent } ${ label }`.trim();
 };
 
 /**
