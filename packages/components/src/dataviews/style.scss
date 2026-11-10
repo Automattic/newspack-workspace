@@ -117,12 +117,3 @@
 		padding-right: calc(var(--wpds-dimension-padding-2xl, #{wp-vars.$grid-unit-30}) - var(--wpds-dimension-padding-sm, #{wp-vars.$grid-unit-10}));
 	}
 }
-
-.newspack-dataviews .dataviews-view-table tbody td.dataviews-view-table__actions-column--sticky {
-	box-shadow: inset 0 var(--wpds-border-width-xs, 1px) 0 var(--wpds-color-stroke-surface-neutral-weak, #f0f0f0);
-}
-
-.newspack-dataviews .dataviews-view-table tbody tr.is-selected td.dataviews-view-table__actions-column--sticky,
-.newspack-dataviews .dataviews-view-table tbody tr.is-selected + tr td.dataviews-view-table__actions-column--sticky {
-	box-shadow: inset 0 var(--wpds-border-width-xs, 1px) 0 var(--wpds-color-stroke-surface-brand, color-mix(in oklab, var(--wp-admin-theme-color, #3858e9) 40%, #fff));
-}
