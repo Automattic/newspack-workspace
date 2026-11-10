@@ -1017,6 +1017,7 @@ final class Newspack_Popups {
 				'custom_placements'            => Newspack_Popups_Custom_Placements::get_custom_placements(),
 				'overlay_placements'           => Newspack_Popups_Model::get_overlay_placements(),
 				'is_block_theme'               => Newspack_Popups_Model::is_block_theme(),
+				'site_background_available'    => Newspack_Popups_Model::site_background_available(),
 				'popup_size_options'           => Newspack_Popups_Model::get_popup_size_options(),
 				'available_archive_page_types' => Newspack_Popups_Model::get_available_archive_page_types(),
 				'taxonomy'                     => self::NEWSPACK_POPUPS_TAXONOMY,

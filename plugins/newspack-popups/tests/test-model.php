@@ -755,6 +755,7 @@ class ModelTest extends WP_UnitTestCase {
 			],
 		];
 		Newspack_Popups_Model::set_block_theme_override( $is_block_theme );
+		add_filter( 'newspack_ui_theme_style_active', '__return_true' );
 		try {
 			self::assertSame( $expected, Newspack_Popups_Model::uses_site_background( $popup ) );
 			if ( $expected ) {
@@ -766,6 +767,32 @@ class ModelTest extends WP_UnitTestCase {
 				self::assertStringStartsWith( 'background-color:' . $background . ';', Newspack_Popups_Model::container_style( $popup ) );
 			}
 		} finally {
+			remove_filter( 'newspack_ui_theme_style_active', '__return_true' );
+			Newspack_Popups_Model::set_block_theme_override( null );
+		}
+	}
+
+	/**
+	 * Tests that a block theme without the newspack-ui Theme style keeps the prompt's own background.
+	 */
+	public function test_uses_site_background_requires_theme_style() {
+		$popup = [
+			'options' => [
+				'placement'        => 'center',
+				'background_color' => '#FFFFFF',
+			],
+		];
+		if ( ! class_exists( '\\Newspack\\Newspack_UI_Theme_Style' ) ) {
+			eval( 'namespace Newspack; class Newspack_UI_Theme_Style { public static function is_active() { return (bool) \apply_filters( "newspack_ui_theme_style_active", false ); } }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged
+		}
+		Newspack_Popups_Model::set_block_theme_override( true );
+		add_filter( 'newspack_ui_theme_style_active', '__return_false' );
+		try {
+			self::assertFalse( Newspack_Popups_Model::site_background_available() );
+			self::assertFalse( Newspack_Popups_Model::uses_site_background( $popup ) );
+			self::assertStringStartsWith( 'background-color:#FFFFFF;', Newspack_Popups_Model::container_style( $popup ) );
+		} finally {
+			remove_filter( 'newspack_ui_theme_style_active', '__return_false' );
 			Newspack_Popups_Model::set_block_theme_override( null );
 		}
 	}

@@ -219,10 +219,10 @@ export const updateEditorColors = ( backgroundColor, placement ) => {
  *
  * @param {string} backgroundColor color string
  * @param {string} placement       Placement of the prompt.
- * @return {boolean} True on block themes for an overlay on the default white background.
+ * @return {boolean} True when the site supplies the colors, for an overlay on the default white background.
  */
 export const usesSiteBackground = ( backgroundColor, placement ) =>
-	Boolean( window.newspack_popups_data?.is_block_theme ) &&
+	Boolean( window.newspack_popups_data?.site_background_available ) &&
 	isOverlayPlacement( placement ) &&
 	/^#?(fff|ffffff|ffffff[0-9a-f]{2})$/i.test( String( backgroundColor ).trim() );
 

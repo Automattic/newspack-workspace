@@ -1809,6 +1809,23 @@ final class Newspack_Popups_Model {
 	}
 
 	/**
+	 * Whether the site can supply the background and text colors of an overlay prompt.
+	 *
+	 * Needs a block theme, and the newspack-ui Theme style when newspack-plugin provides it, so the content inside follows the same colors.
+	 *
+	 * @return bool
+	 */
+	public static function site_background_available(): bool {
+		if ( ! self::is_block_theme() ) {
+			return false;
+		}
+		if ( class_exists( '\\Newspack\\Newspack_UI_Theme_Style' ) ) {
+			return \Newspack\Newspack_UI_Theme_Style::is_active();
+		}
+		return true;
+	}
+
+	/**
 	 * Whether an overlay prompt takes the site's background and text colors.
 	 *
 	 * On block themes, an overlay left on the default white background follows the
@@ -1818,7 +1835,7 @@ final class Newspack_Popups_Model {
 	 * @return bool
 	 */
 	public static function uses_site_background( array $popup ): bool {
-		return self::is_block_theme()
+		return self::site_background_available()
 			&& self::is_overlay( $popup )
 			&& [ 255, 255, 255 ] === self::parse_hex_channels( $popup['options']['background_color'] ?? '' );
 	}
