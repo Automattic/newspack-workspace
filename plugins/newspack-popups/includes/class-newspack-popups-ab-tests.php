@@ -105,16 +105,17 @@ final class Newspack_Popups_AB_Tests {
 
 		// A status hook rather than the A/B routes: the Campaigns wizard, batch
 		// publish, wp-admin and cron all publish prompts without going through
-		// them. The meta hooks cover a prompt that joins a test while already
-		// live, which an editor save does after the status change.
+		// them. The meta hooks cover a Test ID or version written straight onto a
+		// live prompt, as WP-CLI or custom code can; starting or resuming a test
+		// is recorded here instead, once both versions are published.
 		add_action( 'transition_post_status', [ __CLASS__, 'record_start_on_publish' ], 10, 3 );
 		foreach ( [ 'added_post_meta', 'updated_post_meta' ] as $hook ) {
 			add_action( $hook, [ __CLASS__, 'record_start_for_meta' ], 10, 3 );
 		}
 
 		// Meta hooks rather than post ones, so one rule covers every way a
-		// prompt leaves a test: End Test clearing its Test ID, an editor clearing
-		// or changing it, and deleting the prompt, whose meta goes with it.
+		// prompt leaves a test: End Test clearing its Test ID and deleting the
+		// prompt, whose meta goes with it.
 		// Not gated on the flag: they only remove the feature's own reader meta,
 		// and a site that turned the flag off still wants it gone.
 		add_action( 'update_post_meta', [ __CLASS__, 'note_leaving_test_id' ], 10, 3 );
@@ -551,6 +552,12 @@ final class Newspack_Popups_AB_Tests {
 	 * route ignores an error from this filter and would record an empty autosave,
 	 * so there the A/B keys are dropped whatever their value.
 	 *
+	 * The Test ID and version are dropped from every save, for every user. They
+	 * belong to starting, resuming and ending a test, which write them directly,
+	 * and no editor control sets them. The editor still sends them back as loaded,
+	 * so a tab opened before one of those actions would otherwise undo it: take
+	 * version A out of the test it just joined, or put an ended test back.
+	 *
 	 * @param stdClass|WP_Error $prepared_post Post prepared for the database.
 	 * @param WP_REST_Request   $request       Request.
 	 * @return stdClass|WP_Error
@@ -563,6 +570,11 @@ final class Newspack_Popups_AB_Tests {
 
 		$post_id     = isset( $prepared_post->ID ) ? (int) $prepared_post->ID : 0;
 		$is_autosave = str_ends_with( $request->get_route(), '/autosaves' );
+
+		// Dropped before the permission check below, which would otherwise refuse a
+		// restricted user's save over a stale value the save can't write anyway.
+		unset( $meta[ self::META_TEST_ID ], $meta[ self::META_VARIANT ] );
+		$request->set_param( 'meta', $meta );
 
 		// A validity rule, not a permission, so it runs before the permission branch
 		// and applies to administrators too. It reads the values the save would
@@ -580,9 +592,6 @@ final class Newspack_Popups_AB_Tests {
 		$changes   = function ( $meta_key ) use ( $effective, $stored ) {
 			return $effective( $meta_key ) !== $stored( $meta_key );
 		};
-		// The ID the save would store, so a value the sanitizer empties reads as
-		// clearing the test rather than as a new one.
-		$test_id = self::sanitize_test_id( $effective( self::META_TEST_ID ) );
 		// The rule refuses the save that creates a violation, not every later save
 		// of a prompt already in one. A tested prompt can reach a manual placement
 		// past this guard (the Campaigns wizard writes placement directly, and a
@@ -590,15 +599,13 @@ final class Newspack_Popups_AB_Tests {
 		// whole meta object on every save, so checking the stored state too would
 		// refuse a frequency edit with an error about a field the editor may have
 		// disabled for that user. The editor's notice asks for the fix instead.
-		// An ID sent back as stored is unchanged here as it is for the write below,
-		// even where the current sanitizer would spell it differently.
 		// Only while the flag is on: with it off a stored test has no effect, and
-		// the panel that could clear the Test ID is not registered.
+		// the panel's notice is not registered.
 		if (
 			self::is_enabled()
 			&& ! $is_autosave
-			&& ( ( $changes( self::META_TEST_ID ) && $test_id !== $stored( self::META_TEST_ID ) ) || $changes( 'placement' ) || $changes( 'manual_only' ) )
-			&& '' !== $test_id
+			&& ( $changes( 'placement' ) || $changes( 'manual_only' ) )
+			&& '' !== $stored( self::META_TEST_ID )
 			&& ! self::is_eligible_placement( $effective( 'placement' ), rest_sanitize_boolean( $effective( 'manual_only' ) ) )
 		) {
 			return new WP_Error(
@@ -608,15 +615,6 @@ final class Newspack_Popups_AB_Tests {
 					: __( 'A/B tests only work on prompts that Newspack places for you. Choose another placement.', 'newspack-popups' ),
 				[ 'status' => 400 ]
 			);
-		}
-
-		// A Test ID sent back unchanged is left out of the write. Core re-sanitizes
-		// a submitted value before comparing it with the stored one, so an ID stored
-		// under an earlier, looser sanitizer would otherwise be rewritten on one
-		// variant by any save and split its test; only a deliberate edit normalizes it.
-		if ( array_key_exists( self::META_TEST_ID, $meta ) && is_scalar( $meta[ self::META_TEST_ID ] ) && ! $changes( self::META_TEST_ID ) ) {
-			unset( $meta[ self::META_TEST_ID ] );
-			$request->set_param( 'meta', $meta );
 		}
 
 		if ( self::can_manage_tests( get_current_user_id(), $post_id ) ) {
