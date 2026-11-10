@@ -40,12 +40,25 @@
 	visibility: hidden;
 }
 
+.newspack-subscribers__owner-role {
+	color: var(--wpds-color-foreground-content-success-weak, currentcolor);
+	font-weight: var(--wpds-typography-font-weight-emphasis, #{wp-vars.$font-weight-medium});
+}
+
+.newspack-subscribers__manager-role {
+	color: var(--wpds-color-foreground-content-success-weak, currentcolor);
+}
+
 .newspack-subscribers__email,
 .newspack-subscribers__muted {
 	color: var(--wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700});
 	font-size: wp-vars.$helptext-font-size;
 	line-height: wp-vars.$default-line-height;
 	font-weight: wp-vars.$font-weight-regular;
+}
+
+.newspack-dataviews .newspack-subscribers__muted:not(:first-child) {
+	margin-top: var(--newspack-dataviews-stack-gap);
 }
 
 // Center the loading spinner in the content area while data resolves.
@@ -100,6 +113,19 @@
 	flex-shrink: 0;
 	object-fit: cover;
 	background: wp-colors.$gray-100;
+}
+
+.dataviews-column-primary__media:has( > .newspack-subscribers__avatar ) {
+	align-self: center;
+	border-radius: 50%;
+
+	&::after {
+		display: none;
+	}
+
+	> .newspack-subscribers__avatar {
+		display: block;
+	}
 }
 
 // Profile header avatar, portaled into the wizard section header, top-right.
@@ -170,32 +196,9 @@
 	}
 }
 
-// Custom section header row: heading (+ light-gray seat count) on the left,
-// actions on the right. Matches the SectionHeader title type scale.
-.newspack-subscribers__section-head {
-	margin-block: wp-vars.$grid-unit-30 wp-vars.$grid-unit-15;
-}
-
-.newspack-subscribers__section-title {
-	font-size: wp-vars.$font-size-x-large;
-	font-weight: wp-vars.$font-weight-medium;
-	line-height: wp-vars.$font-line-height-x-large;
-	margin: 0;
-}
-
-// A standalone section heading (no surrounding flex row) carries both classes;
-// this beats section-title's margin reset so section-head's block spacing applies.
-.newspack-subscribers__section-title.newspack-subscribers__section-head {
-	margin-block: wp-vars.$grid-unit-30 wp-vars.$grid-unit-15;
-}
-
-// Seat count beside the "Members" heading: same size/line-height as the title,
-// lighter weight and gray so it reads as secondary.
 .newspack-subscribers__seat-count {
 	color: wp-colors.$gray-700;
-	font-size: wp-vars.$font-size-x-large;
 	font-weight: normal;
-	line-height: wp-vars.$font-line-height-x-large;
 }
 
 .newspack-subscribers__note-card.newspack-card--core {
@@ -291,49 +294,8 @@
 	}
 }
 
-.newspack-subscribers__profile {
-	// Inline (non-full-width) DataViews inherit a -48px horizontal bleed from the
-	// wizard content style; cancel it so the member/invitation tables align with
-	// the rest of the section.
-	.newspack-dataviews {
-		margin-left: 0 !important;
-		margin-right: 0 !important;
-	}
-
-	// Tighten the default 48px edge padding on the group detail tables.
-	.dataviews-view-table {
-		tr td:first-child,
-		tr th:first-child {
-			padding-left: wp-vars.$grid-unit-15 !important;
-		}
-		tr td:last-child,
-		tr th:last-child {
-			padding-right: wp-vars.$grid-unit-15 !important;
-		}
-	}
-
-	// The footer ships its own 48px horizontal padding; tighten it to match the
-	// table cells so the pagination and bulk-action bar line up with the content.
-	.dataviews-footer {
-		padding-left: wp-vars.$grid-unit-15 !important;
-		padding-right: wp-vars.$grid-unit-15 !important;
-	}
-
-	// These fixed profile tables have no search or actions, so drop the now-empty
-	// DataViews view-actions toolbar. Column-header sorting still works. The
-	// members table opts back in below, since it has search.
-	.dataviews__view-actions {
-		display: none;
-	}
-}
-
-// The members table enables search, so restore its view-actions toolbar (hidden
-// for the other fixed profile tables above) and drop its horizontal padding so
-// the search field lines up with the table edge.
-.newspack-subscribers__members-dataviews .dataviews__view-actions {
-	display: flex;
-	padding-left: 0 !important;
-	padding-right: 0 !important;
+.newspack-subscribers__no-toolbar .dataviews__view-actions {
+	display: none;
 }
 
 .newspack-subscribers__modal-text {
@@ -490,28 +452,4 @@
 
 .newspack-subscribers__card-value {
 	margin: 0;
-}
-
-// WordPress 7.1's Menu fades in with a transition on a wrapper element, which
-// only reaches its visible state once Ariakit stamps `data-enter` on the menu
-// surface inside it. That attribute never arrives here: the surface settles with
-// `data-open` and `data-side` and nothing else, so the wrapper is left at the
-// transition's starting frame — `opacity: 0`, shifted 4px — for as long as the
-// menu is open. The menu is fully mounted and clickable the whole time, which is
-// why it reads as present to everything except a person looking at the screen.
-//
-// Anyone whose browser reports `prefers-reduced-motion: reduce` is unaffected,
-// because the whole transition sits behind `@media not (prefers-reduced-motion)`
-// and they get the final state directly. That is the only reason this is not
-// visible to everyone, and it is why the bug looks intermittent between testers.
-//
-// The row-action menu is the only route to "Make manager", so without this the
-// screen cannot promote a member at all. The menu renders in a portal on `body`,
-// outside any wizard container, so there is no ancestor to scope to and `:has()`
-// is the only way to reach the wrapper from the menu it holds. `!important`
-// overrides the emotion rule, which otherwise wins on specificity. Removing the
-// transition costs the fade; keeping it costs the menu.
-div:has( > [role="menu"][data-open] ) {
-	opacity: 1 !important;
-	transform: none !important;
 }

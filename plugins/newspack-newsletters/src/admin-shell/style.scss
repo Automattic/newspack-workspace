@@ -2,9 +2,6 @@
 @use "~@wordpress/base-styles/variables" as wp-vars;
 @use "~newspack-components/colors/colors.module" as np-colors;
 
-/* stylelint-disable-next-line no-invalid-position-at-import-rule */
-@import "@wordpress/dataviews/build-style/style.css";
-
 @mixin inline-icon {
 	fill: currentcolor;
 	flex-shrink: 0;
@@ -197,17 +194,6 @@ body.newspack-newsletters-admin-screen .dataviews-view-table a:not(.newspack-new
 	}
 }
 
-// The funnel toggle is permanently disabled once a primary filter pins
-// the filter row open (core can't hide the row anymore) — drop it.
-body.newspack-newsletters-admin-screen .dataviews-filters__visibility-toggle:disabled,
-body.newspack-newsletters-admin-screen .dataviews-filters__visibility-toggle[aria-disabled="true"] {
-	display: none;
-}
-
-.newspack-newsletters-admin .dataviews-filters-toggle__count {
-	display: none;
-}
-
 // Muted item count portalled next to the breadcrumbs page title.
 .newspack-newsletters-header-count {
 	color: wp-colors.$gray-700;
@@ -216,6 +202,48 @@ body.newspack-newsletters-admin-screen .dataviews-filters__visibility-toggle[ari
 }
 
 .newspack-newsletters-list {
+	button#{&}__title {
+		background: none;
+		border: 0;
+		color: inherit;
+		cursor: pointer;
+		font: inherit;
+		margin: 0;
+		padding: 0;
+		text-align: left;
+
+		&:hover {
+			color: var(--wp-admin-theme-color);
+		}
+
+		&:focus-visible {
+			outline: var(--wpds-border-width-focus, var(--wp-admin-border-width-focus, #{wp-vars.$border-width-focus-fallback})) solid var(--wpds-color-stroke-focus, var(--wp-admin-theme-color));
+			outline-offset: 2px;
+		}
+	}
+
+	&__status-tip {
+		background: none;
+		border: 0;
+		color: inherit;
+		cursor: pointer;
+		font: inherit;
+		padding: 0;
+		text-align: left;
+		text-decoration: underline dotted;
+		text-underline-offset: 0.2em;
+		white-space: nowrap;
+
+		&:hover {
+			color: var(--wp-admin-theme-color);
+		}
+
+		&:focus-visible {
+			outline: var(--wpds-border-width-focus, var(--wp-admin-border-width-focus, #{wp-vars.$border-width-focus-fallback})) solid var(--wpds-color-stroke-focus, var(--wp-admin-theme-color));
+			outline-offset: 2px;
+		}
+	}
+
 	&__title-cell,
 	&__locked {
 		min-width: 0;
@@ -385,12 +413,6 @@ body.newspack-newsletters-admin-screen .dataviews-filters__visibility-toggle[ari
 	.components-modal__screen-overlay.newspack-newsletters-quick-edit-modal__overlay.is-animating-out .components-modal__frame {
 		animation: none;
 	}
-}
-
-// newspack-plugin's global commons bundle ships dataviews 10.x CSS that wrongly pins __col-first-data to 1%.
-// TODO: remove once newspack-plugin ships dataviews 16 — this override then degrades to a no-op.
-.dataviews-view-table col.dataviews-view-table__col-first-data {
-	width: auto !important;
 }
 
 // Trim the WP icon's 4px viewBox padding to its visible 16px footprint.

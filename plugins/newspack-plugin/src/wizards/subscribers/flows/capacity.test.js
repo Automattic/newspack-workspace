@@ -7,7 +7,7 @@
  * it explicitly.
  */
 
-import { seatCountText, seatsRemaining, normalizeEmails } from './capacity';
+import { normalizeEmails, pendingInvites, pendingInvitesText, seatCountText, seatsRemaining, seatUsageText } from './capacity';
 
 describe( 'seatsRemaining', () => {
 	it( 'subtracts the committed seats from a capped limit', () => {
@@ -32,20 +32,61 @@ describe( 'seatsRemaining', () => {
 } );
 
 describe( 'seatCountText', () => {
-	it( 'counts committed seats (members + invites) so it agrees with seatsRemaining', () => {
-		// 3 members + 2 pending invites = 5 reserved of 5 → full. Counting members
-		// only would read "3 / 5" while Add/Invite are (correctly) disabled.
+	it( 'counts members only, not the invitations holding seats', () => {
 		const group = { members: 3, seatsReserved: 5, seatLimit: 5 };
-		expect( seatCountText( group ) ).toBe( '5 / 5' );
+		expect( seatCountText( group ) ).toBe( '3 / 5' );
 		expect( seatsRemaining( group ) ).toBe( 0 );
 	} );
 
-	it( 'shows committed of Unlimited when the limit is 0', () => {
-		expect( seatCountText( { members: 3, seatsReserved: 4, seatLimit: 0 } ) ).toBe( '4 / Unlimited' );
+	it( 'shows members of Unlimited when the limit is 0', () => {
+		expect( seatCountText( { members: 3, seatsReserved: 4, seatLimit: 0 } ) ).toBe( '3 / Unlimited' );
+	} );
+} );
+
+describe( 'pendingInvites', () => {
+	it( 'is the seats reserved beyond the members', () => {
+		expect( pendingInvites( { members: 6, seatsReserved: 8, seatLimit: 8 } ) ).toBe( 2 );
 	} );
 
-	it( 'falls back to the member count when seatsReserved is absent (L0 list)', () => {
-		expect( seatCountText( { members: 3, seatLimit: 5 } ) ).toBe( '3 / 5' );
+	it( 'is 0 without seatsReserved (L0 list)', () => {
+		expect( pendingInvites( { members: 3, seatLimit: 5 } ) ).toBe( 0 );
+	} );
+} );
+
+describe( 'seatUsageText', () => {
+	it( 'counts members against the limit', () => {
+		expect( seatUsageText( { members: 6, seatsReserved: 8, seatLimit: 8 } ) ).toBe( '6 of 8 seats used' );
+	} );
+
+	it( 'uses the singular for a one-seat group', () => {
+		expect( seatUsageText( { members: 1, seatsReserved: 1, seatLimit: 1 } ) ).toBe( '1 of 1 seat used' );
+	} );
+
+	it( 'says there is no limit for an uncapped group', () => {
+		expect( seatUsageText( { members: 1, seatsReserved: 3, seatLimit: 0 } ) ).toBe( '1 seat used, no limit' );
+		expect( seatUsageText( { members: 4, seatsReserved: 4, seatLimit: 0 } ) ).toBe( '4 seats used, no limit' );
+	} );
+} );
+
+describe( 'pendingInvitesText', () => {
+	it( 'is empty with nothing pending', () => {
+		expect( pendingInvitesText( { members: 6, seatsReserved: 6, seatLimit: 8 } ) ).toBe( '' );
+	} );
+
+	it( 'counts pending invitations while seats are free', () => {
+		expect( pendingInvitesText( { members: 5, seatsReserved: 6, seatLimit: 8 } ) ).toBe( '1 invitation pending' );
+		expect( pendingInvitesText( { members: 4, seatsReserved: 6, seatLimit: 8 } ) ).toBe( '2 invitations pending' );
+	} );
+
+	it( 'explains the block when invitations hold the last free seats', () => {
+		expect( pendingInvitesText( { members: 6, seatsReserved: 8, seatLimit: 8 } ) ).toBe(
+			'2 invitations are pending. Cancel one to free a seat.'
+		);
+		expect( pendingInvitesText( { members: 7, seatsReserved: 8, seatLimit: 8 } ) ).toBe( '1 invitation is pending. Cancel it to free a seat.' );
+	} );
+
+	it( 'never reports a block for an uncapped group', () => {
+		expect( pendingInvitesText( { members: 6, seatsReserved: 8, seatLimit: 0 } ) ).toBe( '2 invitations pending' );
 	} );
 } );
 

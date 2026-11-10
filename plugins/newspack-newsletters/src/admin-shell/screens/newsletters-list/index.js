@@ -3,12 +3,11 @@
  */
 
 import { Button } from '@wordpress/components';
-import { DataViews } from '@wordpress/dataviews/wp';
 import { useMemo, useState } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { envelope } from '@wordpress/icons';
 
-import { EmptyState, evenColumns, withoutColumnStyles } from 'newspack-components';
+import { DataViews, EmptyState } from 'newspack-components';
 import { getAdminUrl, getCptSlug } from '../../admin-globals';
 import LoadingState from '../../components/loading-state';
 import HeaderCount from '../../components/header-count';
@@ -33,7 +32,8 @@ const DEFAULT_VIEW = {
 	search: '',
 	filters: [],
 	titleField: 'title',
-	fields: [ 'status', 'date', 'send_list', 'author', 'public_page' ],
+	fields: [ 'status', 'date', 'author', 'send_list', 'public_page' ],
+	layout: { density: 'balanced' },
 };
 
 const DEFAULT_LAYOUTS = { table: {} };
@@ -110,18 +110,25 @@ export default function NewslettersListScreen() {
 			<HeaderCount count={ paginationInfo.totalItems } />
 			<LockedPostsContext.Provider value={ locks }>
 				<DataViews
+					countLabel={ ( count, formatted ) =>
+						sprintf(
+							/* translators: %s: number of newsletters. */
+							_n( '%s newsletter', '%s newsletters', count, 'newspack-newsletters' ),
+							formatted
+						)
+					}
 					className="newspack-newsletters-list"
 					data={ data }
 					fields={ fields }
-					view={ evenColumns( view ) }
-					onChangeView={ nextView => setView( withoutColumnStyles( nextView ) ) }
+					view={ view }
+					onChangeView={ setView }
 					actions={ actions }
 					paginationInfo={ paginationInfo }
 					defaultLayouts={ DEFAULT_LAYOUTS }
 					isLoading={ isLoading }
 					getItemId={ item => String( item.id ) }
-					search
 					config={ DATAVIEWS_CONFIG }
+					inlineFilters
 					header={
 						<ItemsPerPage value={ view.perPage } onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) } />
 					}

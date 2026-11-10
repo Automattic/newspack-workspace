@@ -263,7 +263,4 @@ type Institution = {
 		np_institution_ip_range: string;
 		np_institution_reader_data: string;
 	};
-	_embedded?: {
-		'wp:featuredmedia'?: Array<{ source_url: string }>;
-	};
 };

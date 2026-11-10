@@ -5,9 +5,9 @@
 /**
  * WordPress dependencies.
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { useState, useEffect, useCallback, useMemo, Fragment } from '@wordpress/element';
-import { DataViews as WPDataViews, filterSortAndPaginate } from '@wordpress/dataviews';
+import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
 import { Notice } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
@@ -45,11 +45,6 @@ interface EmailItem {
 	chip: 'auth-account' | 'reader-revenue';
 	source: 'newspack' | 'woocommerce';
 }
-
-// The bundled @wordpress/dataviews types (v10) predate `isDestructive`,
-// which the WP-core-provided runtime DataViews does support — extend the
-// Action type locally so destructive styling can be declared.
-type EmailAction = Action< EmailItem > & { isDestructive?: boolean };
 
 interface EmailSettings {
 	newspack_emails: EmailItem[];
@@ -267,7 +262,7 @@ const Emails = () => {
 				getValue: ( { item }: { item: EmailItem } ) => item.label,
 				render: ( { item }: { item: EmailItem } ) => (
 					<a href={ item.edit_link } className="newspack-emails__name-link">
-						<strong>{ item.label }</strong>
+						{ item.label }
 					</a>
 				),
 			},
@@ -336,7 +331,7 @@ const Emails = () => {
 		[ isNewspackPlatform ]
 	);
 
-	const actions: EmailAction[] = [
+	const actions: Action< EmailItem >[] = [
 		{
 			id: 'edit',
 			label: __( 'Edit', 'newspack-plugin' ),
@@ -376,7 +371,6 @@ const Emails = () => {
 		{
 			id: 'reset',
 			label: __( 'Reset', 'newspack-plugin' ),
-			isDestructive: true,
 			// Source guard on reset only — WC emails aren't customized
 			// through the post editor, so reset has no meaning for them.
 			isEligible: ( item: EmailItem ) => item.source === 'newspack',
@@ -436,6 +430,13 @@ const Emails = () => {
 				</Stack>
 			) }
 			<DataViews
+				countLabel={ ( count, formatted ) =>
+					sprintf(
+						/* translators: %s: number of emails. */
+						_n( '%s email', '%s emails', count, 'newspack-plugin' ),
+						formatted
+					)
+				}
 				className="newspack-emails"
 				data={ processedData }
 				fields={ fields }
@@ -446,20 +447,8 @@ const Emails = () => {
 				defaultLayouts={ { grid: {} } }
 				isLoading={ isFetching }
 				getItemId={ ( item: EmailItem ) => String( item.post_id ) }
-			>
-				<Stack direction="row" justify="space-between" align="flex-start" gap="sm" className="dataviews__view-actions">
-					<Stack direction="row" align="center" gap="xl" wrap="wrap" className="dataviews__search">
-						<WPDataViews.Search />
-						<WPDataViews.Filters />
-					</Stack>
-					<Stack direction="row" align="center" gap="xs">
-						<WPDataViews.LayoutSwitcher />
-						<WPDataViews.ViewConfig />
-					</Stack>
-				</Stack>
-				<WPDataViews.Layout />
-				<WPDataViews.Footer />
-			</DataViews>
+				inlineFilters
+			/>
 		</Fragment>
 	);
 };

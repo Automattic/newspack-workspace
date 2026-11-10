@@ -41,6 +41,13 @@ const createStub = () => {
 	} );
 };
 
+// The date helpers are plain functions whose output the list tests assert on, so
+// they are the real ones rather than stubs.
+const dateHelpers = {
+	...require( 'newspack-components/src/dataviews/format-date' ),
+	...require( 'newspack-components/src/breadcrumbs/format-count' ),
+};
+
 const stubs = new Map();
 
 module.exports = new Proxy(
@@ -52,6 +59,9 @@ module.exports = new Proxy(
 			// keeps default-import shape consistent with the real ESM.
 			if ( prop === '__esModule' ) {
 				return true;
+			}
+			if ( Object.prototype.hasOwnProperty.call( dateHelpers, prop ) ) {
+				return dateHelpers[ prop ];
 			}
 			if ( ! stubs.has( prop ) ) {
 				stubs.set( prop, createStub() );

@@ -73,7 +73,7 @@ describe( 'CatalogImpact', () => {
 		render( <CatalogImpact stats={ stats() } /> );
 
 		expect( screen.getByText( '33' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Products affected' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Affected products' ) ).toBeInTheDocument();
 	} );
 
 	it( 'fetches nothing until the table is asked for', () => {
@@ -264,7 +264,7 @@ describe( 'CatalogImpact', () => {
 
 		const section = container.querySelector( '.newspack-pricing-rules__impact' );
 		const button = screen.getByRole( 'button', { name: 'View Affected Products' } );
-		const tile = screen.getByText( 'Products affected' ).closest( '.newspack-stat-card' );
+		const tile = screen.getByText( 'Affected products' ).closest( '.newspack-stat-card' );
 
 		expect( section.tagName ).toBe( 'SECTION' );
 		expect( button.tagName ).toBe( 'BUTTON' );

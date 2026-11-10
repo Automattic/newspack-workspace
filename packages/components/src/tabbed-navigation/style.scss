@@ -18,12 +18,19 @@
 	border-bottom: var( --wpds-border-width-xs, #{wp-vars.$border-width} ) solid var( --wpds-color-stroke-surface-neutral-weak, #{wp-colors.$gray-100} );
 	width: 100%;
 
-	/* stylelint-disable-next-line plugin-wpds/no-setting-wpds-custom-properties -- deliberate Newspack brand override of the indicator token. */
+	/* stylelint-disable-next-line plugin-wpds/no-setting-wpds-custom-properties -- deliberate Newspack brand override of the link variant's active underline. */
 	--wpds-color-stroke-interactive-neutral-strong: #{np-colors.$primary-600};
 
 	[role="tablist"] {
 		max-width: 100%;
 		overflow-x: auto;
+
+		> [role="presentation"] {
+			/* stylelint-disable plugin-wpds/no-setting-wpds-custom-properties -- deliberate Newspack brand override of the indicator token. */
+			--wpds-color-foreground-interactive-neutral: #{np-colors.$primary-600};
+			--wpds-color-foreground-interactive-neutral-active: #{np-colors.$primary-600};
+			/* stylelint-enable plugin-wpds/no-setting-wpds-custom-properties */
+		}
 	}
 
 	a[role="tab"] {
@@ -53,7 +60,7 @@
 		}
 
 		// Square the component's focus ring corners.
-		&::after {
+		&:focus-visible::after {
 			border-radius: 0;
 		}
 

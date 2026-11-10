@@ -1,12 +1,35 @@
 # StatusIndicator
 
-A status glyph followed by its label, for the Status column of a DataView. Both
-are tinted by what the status means, so a column can be scanned by color.
+A status glyph followed by its label, for the Status column of a DataView. The
+glyph is tinted by what the status means, so a column can be scanned by color;
+the label stays in the text color so the column reads as calmly as the rest of
+the row.
 
-A badge is an attention marker. In a column where every row carries one it marks
-nothing and adds a block of color to each row, so a tinted glyph and label carry
-the color there, and a badge is kept for the rare row that genuinely stands out,
-such as a group with a seat request waiting on payment.
+## Glyph or badge
+
+The words decide. A publishing status comes from WordPress and says where an
+item is in its publishing life; a state says whether something is running.
+
+- **Publishing statuses** (Published, Draft, Scheduled, Sent) use this component.
+- **States** (Active, Inactive, On hold, Cancelled, Failed) use `StatusBadge`. The
+  screens under the Audience menu label their items by state, so they show
+  badges: a rule or a plan reads Active or Inactive, not Published or Draft. Two
+  screens keep the glyph by choice: Emails, and the invitations table on a group's
+  detail screen.
+
+An item shows its status the same way in its list, its header and its cards.
+
+```jsx
+import { StatusBadge } from 'newspack-components';
+
+<StatusBadge status="active">{ __( 'Active', 'newspack-plugin' ) }</StatusBadge>;
+```
+
+`StatusBadge` takes the same status names and tones as this component, so a field
+can move between the two without remapping. It maps each tone to a badge color:
+success to `stable`, info to `informational`, warning to `medium`, error to
+`high` and neutral to `draft`. A badge that isn't a status (a "Complimentary"
+marker, a "Default" label) stays a plain `Badge`.
 
 ## Importing
 
@@ -66,7 +89,7 @@ takes the props of a `div`.
 | `done` | check circle | success | Finished successfully: a sent newsletter, a completed sync. |
 | `scheduled` | clock | info | Waiting for a date to arrive. |
 | `draft` | half circle | neutral | Not live yet, or switched off. |
-| `pending` | part-filled circle | info | Waiting on something outside the publisher's hands. |
+| `pending` | part-filled circle | neutral | Waiting on something outside the publisher's hands. |
 | `attention` | exclamation circle | warning | Live but needing a look, usually a payment. |
 | `error` | error | error | Failed, and the one state that asks the reader to act. |
 | `progress` | update | info | Running right now. |
@@ -95,9 +118,9 @@ exported for the columns that want to assert it directly.
 ## Color
 
 Each tone is the design system's `--wpds-color-foreground-content-<tone>-weak`
-token, applied to the glyph and label through a
-`newspack-status-indicator--<tone>` modifier. A screen that loads no token sheet
-still reads correctly: the status falls back to the text color. Each tone has
+token, applied to the glyph through a `newspack-status-indicator--<tone>`
+modifier. The label is never tinted. A screen that loads no token sheet still
+reads correctly: the glyph falls back to the text color. Each tone has
 its own rule in `style.scss`, so a tone added to `StatusTone` in `statuses.ts`
 needs a rule too, or it renders untinted without any error.
 
@@ -107,16 +130,18 @@ a failure next to a deliberate stop can pass `tone="neutral"` to the stop, as
 Scheduled Actions does, so only the failure reads red.
 
 Amber is kept for `attention` alone, so it always means "look at this". States
-still in flight (`scheduled`, `pending`, `progress`) share blue and are told
-apart by their glyphs.
+on their way (`scheduled`, `progress`) share blue and are told apart by their
+glyphs. `pending` is grey, like `draft`: it waits on something else, so
+nothing is moving yet.
 
-Color backs the glyph and label up; it does not replace them. The glyph does the
+Color backs the glyph up; it does not replace it. The glyph does the
 separating on its own, so no status leans on color to carry its meaning, and two
 statuses may share a tone where the glyphs tell them apart (`scheduled` and
-`progress`, or `draft` and `trash`). `private` has no tone: it is live, and
-tinting it like `active` would make the two read alike. A status drawn with a
-glyph passed through `icon` is never tinted, since a classifying field has no
-lifecycle to color. `statusTone` is exported alongside `statusGlyph` for tests.
+`progress`, or `draft`, `pending` and `trash`). `private` has no tone: it is
+live, and tinting it like `active` would make the two read alike. A status drawn
+with a glyph passed through `icon` is never tinted, since a classifying field has
+no lifecycle to color. `statusTone` is exported alongside `statusGlyph` for
+tests.
 
 `tone` overrides a status's own tone for a screen where the state means
 something narrower than its glyph suggests. Scheduled Actions uses it for

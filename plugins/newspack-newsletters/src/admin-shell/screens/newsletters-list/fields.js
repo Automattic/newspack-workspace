@@ -5,17 +5,15 @@
  * field so sent/scheduled is never re-derived client-side.
  */
 
-import { ExternalLink, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
-import { __, sprintf } from '@wordpress/i18n';
+import { ExternalLink, Tooltip, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { __ } from '@wordpress/i18n';
 import { envelope, globe } from '@wordpress/icons';
-import { dateI18n, getSettings as getDateSettings } from '@wordpress/date';
 
-import { StatusIndicator } from 'newspack-components';
+import { CellList, formatSiteDateTime, StatusIndicator } from 'newspack-components';
 
 import UserRow, { avatarPropsFromAuthor } from '../../../components/user-row';
 import { useLockedPost } from '../../hooks/use-locked-posts';
 import { getAdminUrl } from '../../admin-globals';
-import { isManualProvider } from '../../../utils/service-provider';
 import { formatPostDate } from '../../utils/format-date';
 import { termsForTaxonomy } from '../../utils/terms';
 import { statusKindLabel, STATUS_KIND_LABELS } from './status-label';
@@ -27,14 +25,7 @@ export const STATUS_KIND_STATUSES = {
 	trash: 'trash',
 };
 
-const formatDate = timestamp => {
-	if ( ! timestamp ) {
-		return '';
-	}
-	const settings = getDateSettings();
-	const format = settings.formats?.datetime || 'M j, Y g:ia';
-	return dateI18n( format, timestamp * 1000 );
-};
+const renderEmpty = () => <span className="newspack-newsletters-list__empty">&mdash;</span>;
 
 const editUrl = item => `${ getAdminUrl() }post.php?post=${ item.id }&action=edit`;
 
@@ -68,7 +59,7 @@ const TitleCell = ( { item } ) => {
 	return (
 		<VStack className="newspack-newsletters-list__title-cell" spacing={ 1 }>
 			<a className="newspack-newsletters-list__title" href={ editUrl( item ) } onClickCapture={ event => event.stopPropagation() }>
-				<strong>{ title }</strong>
+				{ title }
 			</a>
 			{ lock && renderLock( lock ) }
 		</VStack>
@@ -79,45 +70,45 @@ const renderStatus = ( { item } ) => {
 	const status = item?.newspack_newsletters_status || {};
 	const kind = status.kind || 'draft';
 	const statusName = STATUS_KIND_STATUSES[ kind ] || STATUS_KIND_STATUSES.draft;
+	const indicator = <StatusIndicator status={ statusName }>{ statusKindLabel( kind ) }</StatusIndicator>;
 
-	let label;
-	if ( 'sent' === kind && status.sent_at ) {
-		// The manual provider publishes rather than sends through an ESP, so the date reads "Published %s".
-		let dateFormat;
-		if ( isManualProvider() ) {
-			/* translators: %s: formatted publish date */
-			dateFormat = __( 'Published %s', 'newspack-newsletters' );
-		} else {
-			/* translators: %s: formatted send date */
-			dateFormat = __( 'Sent %s', 'newspack-newsletters' );
-		}
-		label = sprintf( dateFormat, formatDate( status.sent_at ) );
-	} else if ( 'scheduled' === kind && status.scheduled_at ) {
-		label = sprintf(
-			/* translators: %s: formatted scheduled date */
-			__( 'Scheduled for %s', 'newspack-newsletters' ),
-			formatDate( status.scheduled_at )
-		);
-	} else {
-		label = statusKindLabel( kind );
+	const timestamp = { sent: status.sent_at, scheduled: status.scheduled_at }[ kind ];
+	if ( ! timestamp ) {
+		return indicator;
 	}
-
-	return <StatusIndicator status={ statusName }>{ label }</StatusIndicator>;
+	return (
+		<Tooltip text={ formatSiteDateTime( timestamp ) }>
+			<button type="button" className="newspack-newsletters-list__status-tip" onClick={ event => event.stopPropagation() }>
+				{ indicator }
+			</button>
+		</Tooltip>
+	);
 };
 
 const renderSendList = ( { item } ) => {
 	const id = item?.meta?.send_list_id || '';
-	const sublistId = item?.meta?.send_sublist_id || '';
 	if ( ! id ) {
-		return <span className="newspack-newsletters-list__empty">&mdash;</span>;
+		return renderEmpty();
 	}
-	return <code className="newspack-newsletters-list__send-list">{ sublistId ? `${ id } / ${ sublistId }` : id }</code>;
+	const sublistId = item?.meta?.send_sublist_id || '';
+	const names = item?.newspack_newsletters_send_list;
+	const labels = [ names?.list || id ];
+	if ( sublistId ) {
+		labels.push( names?.sublist || sublistId );
+	}
+	return (
+		<CellList>
+			{ labels.map( ( label, index ) => (
+				<span key={ index }>{ label }</span>
+			) ) }
+		</CellList>
+	);
 };
 
 const renderAuthor = ( { item } ) => {
 	const author = item?.newspack_newsletters_author;
 	if ( ! author ) {
-		return '';
+		return renderEmpty();
 	}
 	return <UserRow { ...avatarPropsFromAuthor( author ) } label={ author.name || '' } />;
 };
@@ -129,8 +120,10 @@ const termNames = ( item, taxonomy ) =>
 
 const renderTerms =
 	taxonomy =>
-	( { item } ) =>
-		termNames( item, taxonomy ).join( ', ' );
+	( { item } ) => {
+		const names = termNames( item, taxonomy );
+		return names.length ? names.join( ', ' ) : renderEmpty();
+	};
 
 const renderPublicPage = ( { item } ) => {
 	const isPublic = !! item?.meta?.is_public;
@@ -152,7 +145,10 @@ const renderPublicPage = ( { item } ) => {
 	);
 };
 
-const renderDate = ( { item } ) => formatPostDate( item );
+const renderDate = ( { item } ) => {
+	const formatted = formatPostDate( item );
+	return formatted ? <span className="newspack-dataviews__date">{ formatted }</span> : renderEmpty();
+};
 
 export function getFields( { authors = [], categories = [], tags = [], sendLists = [] } = {} ) {
 	const statusLabels = STATUS_KIND_LABELS();

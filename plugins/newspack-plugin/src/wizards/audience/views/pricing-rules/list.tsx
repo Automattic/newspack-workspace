@@ -9,6 +9,7 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 import { useState, useEffect, useCallback, useMemo, useRef } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
+import { Stack } from '@wordpress/ui';
 import { addQueryArgs } from '@wordpress/url';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View, RenderModalProps } from '@wordpress/dataviews';
@@ -23,17 +24,28 @@ import {
 /**
  * Internal dependencies
  */
-import { DataViews, Router, StatusIndicator, WizardBanner } from '../../../../../packages/components/src';
+import { DataViews, Router, StatusBadge, WizardBanner } from '../../../../../packages/components/src';
 import { formatCount } from '../../../../../packages/components/src/breadcrumbs/format-count';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
+import ScopeSummary from '../../components/scope-summary';
+import { scopeTargeting } from './scope';
+import { targetingLabel } from '../subscriptions/tabs/discounts/discount';
 import CatalogImpact from './catalog-impact';
 import PricingRulesOnboarding from './onboarding';
-import { postStatus } from '../../post-status';
-import { intentLabel } from './recipes';
+import { intentLabel, pathOptions } from './recipes';
 import { pricingModelSentence } from './model-sentence';
 import { RULES_API_PATH as API_PATH, IMPACT_PREVIEW_API_PATH } from './constants';
 
+const FIT_COLUMNS = [ 'status' ];
+
 const { useHistory } = Router;
+
+/**
+ * Inactive rules stay out of the way until someone asks for them. The chip can
+ * be removed to show every rule, and Reset view brings it back; the REST already
+ * excludes trash.
+ */
+const DEFAULT_STATUS_FILTER = { field: 'status', operator: 'isNot' as const, value: 'inactive' };
 
 const DEFAULT_VIEW: View = {
 	type: 'table',
@@ -42,7 +54,7 @@ const DEFAULT_VIEW: View = {
 	sort: { field: 'title', direction: 'asc' },
 	search: '',
 	fields: [ 'status', 'strategy', 'scope', 'priority', 'goal', 'reader_segments' ],
-	filters: [], // Show all statuses by default; the REST already excludes trash.
+	filters: [ DEFAULT_STATUS_FILTER ],
 	layout: {},
 	titleField: 'title',
 };
@@ -51,13 +63,28 @@ const DEFAULT_VIEW: View = {
 // hold the whole screen behind the spinner indefinitely.
 const STATS_GATE_TIMEOUT_MS = 8000;
 
-export const ACTIVE_STATE_STATUS = { active: 'active', scheduled: 'scheduled', ended: 'ended' } as const;
+export const RULE_STATE_STATUS = { active: 'active', scheduled: 'scheduled', ended: 'ended', inactive: 'draft' } as const;
 
-const ACTIVE_STATE_LABEL: Record< PricingRuleRow[ 'active_state' ], string > = {
+type RuleState = keyof typeof RULE_STATE_STATUS;
+
+const RULE_STATE_LABEL: Record< RuleState, string > = {
 	active: __( 'Active', 'newspack-plugin' ),
 	scheduled: __( 'Scheduled', 'newspack-plugin' ),
 	ended: __( 'Ended', 'newspack-plugin' ),
+	inactive: __( 'Inactive', 'newspack-plugin' ),
 };
+
+/**
+ * Whether a rule is changing prices now: a draft is inactive, and a published rule
+ * is active, scheduled or ended depending on its date window.
+ *
+ * @param item The rule row.
+ * @return The rule's state.
+ */
+export const ruleState = ( item: PricingRuleRow ): RuleState => ( 'publish' === item.status ? item.active_state ?? 'active' : 'inactive' );
+
+/** Filter value for a rule with no reader segment, which applies to every reader. */
+const ANY_READER = 'any';
 
 /** Map a rule's reader_segment condition (segment ids) to names via the vocab id→label map. */
 function readerSegmentNames( conditions: PricingRuleRow[ 'conditions' ], map: Record< number, string > ): string[] {
@@ -67,6 +94,37 @@ function readerSegmentNames( conditions: PricingRuleRow[ 'conditions' ], map: Re
 	}
 	return ids.map( id => map[ Number( id ) ] ?? `#${ id }` );
 }
+
+/** The rule's scope in the shape the Audience lists share. */
+function scopeOf( item: PricingRuleRow ) {
+	const targeting = scopeTargeting( item.scope_type );
+	if ( ! targeting ) {
+		return null;
+	}
+	return {
+		targeting,
+		product_ids: 'products' === targeting ? item.scope_ids : [],
+		category_ids: 'category' === targeting ? item.scope_ids : [],
+		excluded_product_ids: [] as number[],
+	};
+}
+
+/**
+ * Whether a view change is the filter bar's Reset rather than a chip's remove button
+ * or a cleared search box: it clears the filters together with the search, or every
+ * one of several filters, which no single action can. The toolbar Reset then lands
+ * on the default view, like "Reset view". With the default chip as the only filter
+ * and no search, Reset and the chip's remove button look the same, so both remove it.
+ */
+const isFilterBarReset = ( current: View, next: View ): boolean => {
+	const before = current.filters?.length ?? 0;
+	return ! next.search && ! next.filters?.length && before > 0 && ( !! current.search || before > 1 );
+};
+
+/** Whether the view matches the default one, so "Reset view" has nothing to do. */
+const isDefaultView = ( view: View ): boolean =>
+	JSON.stringify( [ view.filters, view.search, view.sort, view.fields, view.perPage ] ) ===
+	JSON.stringify( [ DEFAULT_VIEW.filters, DEFAULT_VIEW.search, DEFAULT_VIEW.sort, DEFAULT_VIEW.fields, DEFAULT_VIEW.perPage ] );
 
 export default function PricingRulesList() {
 	const { setHeaderData, addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
@@ -82,6 +140,10 @@ export default function PricingRulesList() {
 	// Remounts the card so its cached product sample cannot outlive a trash.
 	const [ statsVersion, setStatsVersion ] = useState( 0 );
 	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
+	const [ scopeNames, setScopeNames ] = useState< { products: Record< number, string >; categories: Record< number, string > } >( {
+		products: {},
+		categories: {},
+	} );
 	const [ segmentMap, setSegmentMap ] = useState< Record< number, string > >( {} );
 	const [ currency, setCurrency ] = useState< PricingRulesCurrency >( { code: '', symbol: '', decimals: 2 } );
 
@@ -106,6 +168,7 @@ export default function PricingRulesList() {
 			.then( response => {
 				setData( response.rules || [] );
 				setCurrency( response.currency );
+				setScopeNames( response.names ?? { products: {}, categories: {} } );
 				// Capture the reader_segment id→label options so the list can name segments.
 				const seg = ( response.conditions || [] ).find( c => c.id === 'reader_segment' );
 				const map: Record< number, string > = {};
@@ -180,9 +243,10 @@ export default function PricingRulesList() {
 	);
 
 	const statusElements = useMemo( () => {
-		const seen = new Map< string, string >();
-		data.forEach( item => seen.set( item.status, item.status_label ) );
-		return Array.from( seen, ( [ value, label ] ) => ( { value, label } ) );
+		const present = new Set( [ ...data.map( ruleState ), DEFAULT_STATUS_FILTER.value ] );
+		return ( Object.keys( RULE_STATE_LABEL ) as RuleState[] )
+			.filter( state => present.has( state ) )
+			.map( state => ( { value: state, label: RULE_STATE_LABEL[ state ] } ) );
 	}, [ data ] );
 
 	const fields: Field< PricingRuleRow >[] = useMemo(
@@ -194,7 +258,7 @@ export default function PricingRulesList() {
 				getValue: ( { item } ) => item.title,
 				render: ( { item } ) => (
 					<Button variant="link" onClick={ () => history.push( `/edit/${ item.id }` ) }>
-						<strong>{ item.title || `#${ item.id }` }</strong>
+						{ item.title || `#${ item.id }` }
 					</Button>
 				),
 			},
@@ -215,50 +279,78 @@ export default function PricingRulesList() {
 			{
 				id: 'scope',
 				label: __( 'Applies to', 'newspack-plugin' ),
-				getValue: ( { item } ) => item.scope_label,
-				render: ( { item } ) => (
-					<span>
-						{ item.scope_label }
-						{ item.scope_ids.length ? ` (${ item.scope_ids.length })` : '' }
-					</span>
-				),
+				getValue: ( { item } ) => {
+					const scope = scopeOf( item );
+					if ( ! scope ) {
+						return item.scope_label;
+					}
+					const names =
+						'products' === scope.targeting
+							? scope.product_ids.map( id => scopeNames.products[ id ] )
+							: scope.category_ids.map( id => scopeNames.categories[ id ] );
+					return [ targetingLabel( scope ), ...names ].filter( Boolean ).join( ' ' );
+				},
+				render: ( { item } ) => {
+					const scope = scopeOf( item );
+					if ( ! scope ) {
+						return <span>{ item.scope_label }</span>;
+					}
+					return (
+						<ScopeSummary
+							targeting={ scope.targeting }
+							productIds={ scope.product_ids }
+							categoryIds={ scope.category_ids }
+							excludedProductIds={ [] }
+							productNames={ scopeNames.products }
+							categoryNames={ scopeNames.categories }
+						/>
+					);
+				},
 				enableSorting: false,
 			},
 			{ id: 'priority', label: __( 'Priority', 'newspack-plugin' ), getValue: ( { item } ) => item.priority },
 			{
 				id: 'status',
 				label: __( 'Status', 'newspack-plugin' ),
-				getValue: ( { item } ) => item.status,
-				render: ( { item } ) => <StatusIndicator status={ postStatus( item.status ) }>{ item.status_label }</StatusIndicator>,
+				getValue: ( { item } ) => ruleState( item ),
+				render: ( { item } ) => {
+					const state = ruleState( item );
+					return <StatusBadge status={ RULE_STATE_STATUS[ state ] }>{ RULE_STATE_LABEL[ state ] }</StatusBadge>;
+				},
 				elements: statusElements,
-				filterBy: { operators: [ 'is' ] },
-			},
-			{
-				id: 'active_window',
-				label: __( 'Active window', 'newspack-plugin' ),
-				getValue: ( { item } ) => item.active_state,
-				render: ( { item } ) => (
-					<StatusIndicator status={ ACTIVE_STATE_STATUS[ item.active_state ] ?? 'ended' }>
-						{ ACTIVE_STATE_LABEL[ item.active_state ] ?? item.active_state }
-					</StatusIndicator>
-				),
-				enableSorting: false,
+				filterBy: { operators: [ 'is', 'isNot' ] },
 			},
 			{
 				id: 'goal',
 				label: __( 'Goal', 'newspack-plugin' ),
-				getValue: ( { item } ) => intentLabel( item.intent ),
+				getValue: ( { item } ) => item.intent,
 				render: ( { item } ) => <span>{ intentLabel( item.intent ) }</span>,
+				elements: pathOptions().map( ( { value, label } ) => ( { value, label } ) ),
+				filterBy: { operators: [ 'isAny' ] },
 				enableSorting: false,
 			},
 			{
 				id: 'reader_segments',
 				label: __( 'Reader segments', 'newspack-plugin' ),
-				getValue: ( { item } ) => readerSegmentNames( item.conditions, segmentMap ).join( ', ' ),
+				getValue: ( { item } ) => {
+					const ids = item.conditions.reader_segment;
+					return Array.isArray( ids ) && ids.length ? ids.map( String ) : [ ANY_READER ];
+				},
+				elements: [
+					{ value: ANY_READER, label: __( 'Any reader', 'newspack-plugin' ) },
+					...Object.entries( segmentMap ).map( ( [ value, label ] ) => ( { value, label } ) ),
+				],
+				filterBy: { operators: [ 'isAny' ] },
 				render: ( { item } ) => {
 					const names = readerSegmentNames( item.conditions, segmentMap );
 					return names.length ? (
-						<span>{ names.join( ', ' ) }</span>
+						<Stack direction="column" align="flex-start" gap="sm" className="newspack-pricing-rules__segments">
+							{ names.map( ( name, index ) => (
+								<span key={ index } className="newspack-pricing-rules__segment" title={ name } dir="auto">
+									{ name }
+								</span>
+							) ) }
+						</Stack>
 					) : (
 						<span className="newspack-pricing-rules__muted">{ __( 'Any reader', 'newspack-plugin' ) }</span>
 					);
@@ -273,7 +365,7 @@ export default function PricingRulesList() {
 				enableSorting: false,
 			},
 		],
-		[ statusElements, history, segmentMap, currency ]
+		[ statusElements, history, segmentMap, currency, scopeNames ]
 	);
 
 	const actions: Action< PricingRuleRow >[] = useMemo(
@@ -366,16 +458,26 @@ export default function PricingRulesList() {
 				</WizardBanner>
 			) }
 			<DataViews
+				fitColumns={ FIT_COLUMNS }
+				countLabel={ ( count, formatted ) =>
+					sprintf(
+						/* translators: %s: number of pricing rules. */
+						_n( '%s rule', '%s rules', count, 'newspack-plugin' ),
+						formatted
+					)
+				}
 				data={ processedData }
 				fields={ fields }
 				view={ view }
-				onChangeView={ setView }
+				onChangeView={ next => setView( isFilterBarReset( view, next ) ? { ...next, filters: [ DEFAULT_STATUS_FILTER ] } : next ) }
+				onReset={ isDefaultView( view ) ? false : () => setView( DEFAULT_VIEW ) }
 				actions={ actions }
 				paginationInfo={ paginationInfo }
 				defaultLayouts={ { table: {} } }
 				isLoading={ isLoading }
 				getItemId={ ( item: PricingRuleRow ) => String( item.id ) }
 				search
+				inlineFilters
 			/>
 			{ stats?.supported && <CatalogImpact key={ statsVersion } stats={ stats } /> }
 		</div>

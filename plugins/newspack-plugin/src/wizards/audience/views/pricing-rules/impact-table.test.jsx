@@ -6,7 +6,7 @@
 /**
  * External dependencies
  */
-import { render, screen, fireEvent, waitForElementToBeRemoved } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 /**
  * Internal dependencies
@@ -14,7 +14,7 @@ import { render, screen, fireEvent, waitForElementToBeRemoved } from '@testing-l
 import ImpactTable from './impact-table';
 
 // A stand-in makes framing observable and still renders the `after` slot the
-// See More button lives in.
+// Show more button lives in.
 jest.mock( '../../../../../packages/components/src', () => ( {
 	TableCard: ( { children, after } ) => (
 		<div data-testid="table-card">
@@ -43,15 +43,22 @@ const row = ( over = {} ) => ( {
 const sample = count => Array.from( { length: count }, ( _, i ) => row( { product_id: i + 1, name: `Product ${ i + 1 }`, regular: count - i } ) );
 
 const bodyRows = () => screen.getAllByRole( 'row' ).length - 1;
-const toggle = () => screen.queryByRole( 'button', { name: /See (More|Less)/ } );
+const toggle = () => screen.queryByRole( 'button', { name: /^Show (\d+ more|less)$/ } );
 
 describe( 'ImpactTable', () => {
-	it( 'shows the first ten of a longer sample behind a See More button', () => {
+	it( 'shows the first ten of a longer sample behind a Show more button', () => {
 		render( <ImpactTable baseline={ sample( 25 ) } segmentGroups={ [] } currency={ CURRENCY } /> );
 
 		expect( bodyRows() ).toBe( 10 );
-		expect( toggle() ).toHaveTextContent( 'See More' );
+		expect( toggle() ).toHaveTextContent( /^Show \d+ more$/ );
 		expect( toggle() ).toHaveAttribute( 'aria-expanded', 'false' );
+	} );
+
+	it( 'shows a single extra row inline instead of behind a button', () => {
+		render( <ImpactTable baseline={ sample( 11 ) } segmentGroups={ [] } currency={ CURRENCY } /> );
+
+		expect( bodyRows() ).toBe( 11 );
+		expect( toggle() ).toBeNull();
 	} );
 
 	it( 'reveals the rest and flips the label when the button is used', () => {
@@ -59,7 +66,7 @@ describe( 'ImpactTable', () => {
 		fireEvent.click( toggle() );
 
 		expect( bodyRows() ).toBe( 25 );
-		expect( toggle() ).toHaveTextContent( 'See Less' );
+		expect( toggle() ).toHaveTextContent( 'Show less' );
 		expect( toggle() ).toHaveAttribute( 'aria-expanded', 'true' );
 	} );
 
@@ -69,7 +76,7 @@ describe( 'ImpactTable', () => {
 		fireEvent.click( toggle() );
 
 		expect( bodyRows() ).toBe( 10 );
-		expect( toggle() ).toHaveTextContent( 'See More' );
+		expect( toggle() ).toHaveTextContent( /^Show \d+ more$/ );
 		expect( toggle() ).toHaveAttribute( 'aria-expanded', 'false' );
 	} );
 
@@ -83,7 +90,7 @@ describe( 'ImpactTable', () => {
 		// The header menu renders over a backdrop that hides the table from the
 		// accessibility tree, so the rows only read once it has gone.
 		fireEvent.keyDown( ascending, { key: 'Escape' } );
-		await waitForElementToBeRemoved( () => screen.queryByRole( 'menu' ) );
+		await waitFor( () => expect( screen.queryByRole( 'menu' ) ).not.toBeInTheDocument() );
 
 		expect( bodyRows() ).toBe( 10 );
 		// Ascending by regular puts the last-listed products first.
@@ -113,7 +120,7 @@ describe( 'ImpactTable', () => {
 		rerender( <ImpactTable baseline={ sample( 25 ) } segmentGroups={ [] } currency={ CURRENCY } /> );
 
 		expect( bodyRows() ).toBe( 10 );
-		expect( toggle() ).toHaveTextContent( 'See More' );
+		expect( toggle() ).toHaveTextContent( /^Show \d+ more$/ );
 	} );
 
 	it( 'returns to the collapsed view when a different set of products arrives', () => {
@@ -124,7 +131,7 @@ describe( 'ImpactTable', () => {
 		rerender( <ImpactTable baseline={ sample( 30 ) } segmentGroups={ [] } currency={ CURRENCY } /> );
 
 		expect( bodyRows() ).toBe( 10 );
-		expect( toggle() ).toHaveTextContent( 'See More' );
+		expect( toggle() ).toHaveTextContent( /^Show \d+ more$/ );
 	} );
 
 	// The publisher watching their own edit reprice the same products has not asked
@@ -138,7 +145,7 @@ describe( 'ImpactTable', () => {
 		rerender( <ImpactTable baseline={ repriced } segmentGroups={ [] } currency={ CURRENCY } /> );
 
 		expect( bodyRows() ).toBe( 25 );
-		expect( toggle() ).toHaveTextContent( 'See Less' );
+		expect( toggle() ).toHaveTextContent( 'Show less' );
 	} );
 
 	it( 'renders one row per product with its regular and resulting price', () => {
@@ -240,9 +247,16 @@ describe( 'ImpactTable', () => {
 		expect( screen.queryByText( /c1 is the initial purchase/ ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'renders without the Newspack DataViews page wrapper', () => {
+	it( 'renders through the Newspack DataViews wrapper at the default density in its card', () => {
 		const { container } = render( <ImpactTable baseline={ [ row() ] } segmentGroups={ [] } currency={ CURRENCY } /> );
+		expect( container.querySelector( '.newspack-dataviews' ) ).not.toBeNull();
+		expect( container.querySelector( '.has-compact-density' ) ).toBeNull();
+	} );
+
+	it( 'renders on core DataViews with compact rows when unframed', () => {
+		const { container } = render( <ImpactTable baseline={ [ row() ] } segmentGroups={ [] } currency={ CURRENCY } framed={ false } /> );
 		expect( container.querySelector( '.newspack-dataviews' ) ).toBeNull();
+		expect( container.querySelector( '.has-compact-density' ) ).not.toBeNull();
 	} );
 
 	it( 'offers no way to hide or move a column, but keeps sorting', async () => {
@@ -313,7 +327,7 @@ describe( 'ImpactTable', () => {
 		expect( bodyRows() ).toBe( 3 );
 	} );
 
-	it( 'renders every row and no See More when collapsing is off', () => {
+	it( 'renders every row and no Show more when collapsing is off', () => {
 		render( <ImpactTable baseline={ sample( 25 ) } segmentGroups={ [] } currency={ CURRENCY } collapsible={ false } /> );
 
 		expect( bodyRows() ).toBe( 25 );

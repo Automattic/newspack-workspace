@@ -78,3 +78,12 @@ export interface SubscriptionsTabComponent {
 	 */
 	rendersLeafCrumb?: boolean;
 }
+
+/** The names a list's rows need, by ID, sent with the rules. */
+export interface RuleNames {
+	products: Record< number, string >;
+	categories: Record< number, string >;
+	subscriptions: Record< number, string >;
+}
+
+export const EMPTY_RULE_NAMES: RuleNames = { products: {}, categories: {}, subscriptions: {} };

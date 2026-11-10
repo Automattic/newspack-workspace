@@ -28,17 +28,18 @@ import { Badge } from '@wordpress/ui';
 /**
  * Internal dependencies.
  */
-import { Button, DataViews, Router, StatusIndicator, Waiting } from '../../../../packages/components/src';
+import { Button, DataViews, Router, StatusBadge, Waiting } from '../../../../packages/components/src';
 import { fmtDate } from '../format';
 import './style.scss';
 import LoadFailureNotice from '../components/LoadFailureNotice';
 import { useRetryFocus } from '../use-retry-focus';
-import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { useGroups } from '../data/use-groups';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
 import { STATUS_INDICATORS, STATUS_LABELS } from '../status';
 import { GROUP_LABEL_PLURAL, groupCountLabel, groupLoadFailedLabel } from '../labels';
 import { SubscriptionLink } from '../links';
+
+const FIT_COLUMNS = [ 'status' ];
 
 const { useHistory } = Router;
 
@@ -52,10 +53,9 @@ const DEFAULT_VIEW = {
 	// subscription is reachable — see the owner field below for why the title
 	// cell can't carry that link.
 	fields: [ 'status', 'product', 'members', 'createdAt' ],
-	// Hide cancelled groups by default: they add noise with little value. Still
-	// reachable by ticking "Cancelled" in the Status filter (or clearing it).
-	// A group awaiting its first payment sits in `pending`, so it stays visible.
-	filters: [ { field: 'status', operator: 'isAny', value: [ 'active', 'pending', 'on-hold' ] } ],
+	// Hide cancelled groups by default: they add noise with little value.
+	// Clearing the Status filter brings them back.
+	filters: [ { field: 'status', operator: 'isNot', value: 'cancelled' } ],
 	layout: {},
 	titleField: 'owner',
 };
@@ -77,19 +77,6 @@ export default function GroupList() {
 			history.push( `/groups/${ item.id }` );
 		}
 	};
-
-	// Resolve owner avatar URLs, keyed by group id. The table renders immediately
-	// with the avatar placeholder and each avatar fills in as it resolves.
-	const ownerEmails = useMemo( () => groups.map( g => g.owner?.email ), [ groups ] );
-	const { avatars: avatarsByEmail } = useAvatars( ownerEmails );
-	const avatars = useMemo( () => {
-		const byId = {};
-		groups.forEach( g => {
-			const email = g.owner?.email;
-			byId[ g.id ] = email ? avatarsByEmail[ email ] : undefined;
-		} );
-		return byId;
-	}, [ groups, avatarsByEmail ] );
 
 	// Subscription filter options come from the loaded groups, which are the full
 	// set, not from /plans: that endpoint also lists individual plans, which match
@@ -115,39 +102,21 @@ export default function GroupList() {
 				// onClickItem regardless of where the key originated, so a link nested
 				// here would resolve to two destinations at once. The subscription's
 				// link lives in the `product` column instead.
-				render: ( { item } ) => {
-					const details = (
-						<div>
-							<HStack spacing={ 2 } justify="flex-start" alignment="center" expanded={ false }>
-								<span>{ item.owner?.name || '—' }</span>
-								{ item.seatRequest && (
-									<Badge intent="medium">
-										{ item.seatRequest.status === 'awaiting-payment'
-											? __( 'Awaiting payment', 'newspack-plugin' )
-											: __( 'Seat increase requested', 'newspack-plugin' ) }
-									</Badge>
-								) }
-							</HStack>
-							{ item.plan && item.plan !== item.product && <div className="newspack-subscribers__muted">{ item.plan }</div> }
-						</div>
-					);
-					return (
-						<div data-group-id={ item.id }>
-							{ SHOW_AVATARS ? (
-								<HStack spacing={ 3 } justify="flex-start" alignment="center">
-									{ avatars[ item.id ] ? (
-										<img className="newspack-subscribers__avatar" src={ avatars[ item.id ] } alt="" width={ 32 } height={ 32 } />
-									) : (
-										<span className="newspack-subscribers__avatar" aria-hidden="true" />
-									) }
-									{ details }
-								</HStack>
-							) : (
-								details
+				render: ( { item } ) => (
+					<div data-group-id={ item.id }>
+						<HStack spacing={ 2 } justify="flex-start" alignment="center" expanded={ false }>
+							<span>{ item.owner?.name || '—' }</span>
+							{ item.seatRequest && (
+								<Badge intent="medium">
+									{ item.seatRequest.status === 'awaiting-payment'
+										? __( 'Awaiting payment', 'newspack-plugin' )
+										: __( 'Seat increase requested', 'newspack-plugin' ) }
+								</Badge>
 							) }
-						</div>
-					);
-				},
+						</HStack>
+						{ item.plan && item.plan !== item.product && <div className="newspack-subscribers__muted">{ item.plan }</div> }
+					</div>
+				),
 				enableSorting: true,
 			},
 			{
@@ -185,21 +154,19 @@ export default function GroupList() {
 				id: 'status',
 				label: __( 'Status', 'newspack-plugin' ),
 				elements: Object.entries( STATUS_LABELS ).map( ( [ value, label ] ) => ( { value, label } ) ),
-				filterBy: { operators: [ 'isAny' ] },
+				filterBy: { operators: [ 'is', 'isNot' ] },
 				getValue: ( { item } ) => item.status,
-				render: ( { item } ) => (
-					<StatusIndicator status={ STATUS_INDICATORS[ item.status ] }>{ STATUS_LABELS[ item.status ] }</StatusIndicator>
-				),
+				render: ( { item } ) => <StatusBadge status={ STATUS_INDICATORS[ item.status ] }>{ STATUS_LABELS[ item.status ] }</StatusBadge>,
 			},
 			{
 				id: 'createdAt',
 				label: __( 'Created', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.createdAt,
-				render: ( { item } ) => <span>{ fmtDate( item.createdAt ) }</span>,
+				render: ( { item } ) => <span className="newspack-dataviews__date">{ fmtDate( item.createdAt ) }</span>,
 				enableSorting: true,
 			},
 		],
-		[ avatars, productElements ]
+		[ productElements ]
 	);
 
 	// The group name and the owner's email have no column of their own, so they
@@ -295,6 +262,8 @@ export default function GroupList() {
 		// eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
 		<div className="newspack-subscribers__clickable-rows" onClick={ onRowClick }>
 			<DataViews
+				fitColumns={ FIT_COLUMNS }
+				countLabel={ groupCountLabel }
 				data={ processedData }
 				fields={ fields }
 				view={ view }

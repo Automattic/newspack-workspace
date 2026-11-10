@@ -1,24 +1,25 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { useState, useEffect, useCallback, useMemo } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { addQueryArgs } from '@wordpress/url';
 import { Spinner } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
-import { DataViews as WPDataViews } from '@wordpress/dataviews';
 
 /**
  * Internal dependencies
  */
-import { DataViews, Drawer, StatusIndicator } from '../../../../../packages/components/src';
+import { DataViews, Drawer, StatusBadge } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { API_BASE, STATUS_MAP, formatTimestamp } from './constants';
 import { ScheduledActionDetails } from './scheduled-action-details';
 import { useRunAction } from './use-run-action';
 import { DetailsLink } from './details-link';
+
+const FIT_COLUMNS = [ 'status' ];
 
 const DEFAULT_VIEW = {
 	type: 'table',
@@ -30,6 +31,8 @@ const DEFAULT_VIEW = {
 	filters: [],
 	layout: {},
 };
+
+const PER_PAGE_CONFIG = { perPageSizes: [ 10, 25, 50, 100 ] };
 
 const ORDERBY_MAP = {
 	timestamp: 'scheduled_date_gmt',
@@ -104,13 +107,24 @@ export const ScheduledActions = ( { integrationId } ) => {
 			{
 				id: 'timestamp',
 				label: __( 'Timestamp', 'newspack-plugin' ),
-				render: ( { item } ) => <DetailsLink onClick={ () => openDetails( item ) }>{ formatTimestamp( item.timestamp ) }</DetailsLink>,
+				render: ( { item } ) => (
+					<DetailsLink onClick={ () => openDetails( item ) }>
+						<span className="newspack-dataviews__date">{ formatTimestamp( item.timestamp ) }</span>
+					</DetailsLink>
+				),
 				enableSorting: true,
 			},
 			{
 				id: 'email',
 				label: __( 'Email', 'newspack-plugin' ),
-				render: ( { item } ) => ( item.email ? <DetailsLink onClick={ () => openDetails( item ) }>{ item.email }</DetailsLink> : '—' ),
+				render: ( { item } ) =>
+					item.email ? (
+						<DetailsLink onClick={ () => openDetails( item ) } title={ item.email }>
+							{ item.email }
+						</DetailsLink>
+					) : (
+						'—'
+					),
 				enableSorting: false,
 			},
 			{
@@ -126,9 +140,9 @@ export const ScheduledActions = ( { integrationId } ) => {
 					// A status Action Scheduler grows later is one to look at, not a deliberate stop.
 					const mapped = STATUS_MAP[ item.status ] || { label: item.status, status: 'attention' };
 					return (
-						<StatusIndicator status={ mapped.status } tone={ mapped.tone }>
+						<StatusBadge status={ mapped.status } tone={ mapped.tone }>
 							{ mapped.label }
-						</StatusIndicator>
+						</StatusBadge>
 					);
 				},
 				enableSorting: true,
@@ -175,6 +189,14 @@ export const ScheduledActions = ( { integrationId } ) => {
 	return (
 		<>
 			<DataViews
+				fitColumns={ FIT_COLUMNS }
+				countLabel={ ( count, formatted ) =>
+					sprintf(
+						/* translators: %s: number of scheduled actions. */
+						_n( '%s scheduled action', '%s scheduled actions', count, 'newspack-plugin' ),
+						formatted
+					)
+				}
 				className="newspack-integration-logs"
 				data={ data }
 				fields={ fields }
@@ -186,16 +208,9 @@ export const ScheduledActions = ( { integrationId } ) => {
 				isLoading={ isLoading }
 				getItemId={ item => item.id }
 				search
-			>
-				<Stack direction="row" align="flex-start" gap="sm" className="dataviews__view-actions">
-					<Stack direction="row" align="center" gap="xl" wrap="wrap" className="dataviews__search">
-						<WPDataViews.Search />
-						<WPDataViews.Filters />
-					</Stack>
-				</Stack>
-				<WPDataViews.Layout />
-				<WPDataViews.Footer />
-			</DataViews>
+				config={ PER_PAGE_CONFIG }
+				inlineFilters
+			/>
 			<Drawer.Root isOpen={ isDetailsOpen } size="x-large" onRequestClose={ () => setIsDetailsOpen( false ) }>
 				<Drawer.Header>
 					<Drawer.Title>{ __( 'Action Details', 'newspack-plugin' ) }</Drawer.Title>

@@ -3,12 +3,11 @@
  */
 
 import { Button } from '@wordpress/components';
-import { DataViews } from '@wordpress/dataviews/wp';
 import { useCallback, useEffect, useMemo, useRef, useState } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { emailAd } from 'newspack-icons';
 
-import { EmptyState, evenColumns, withoutColumnStyles } from 'newspack-components';
+import { DataViews, EmptyState } from 'newspack-components';
 import { getAdminUrl } from '../../admin-globals';
 import LoadingState from '../../components/loading-state';
 import HeaderCount from '../../components/header-count';
@@ -32,6 +31,7 @@ const DEFAULT_VIEW = {
 	search: '',
 	filters: [],
 	titleField: 'title',
+	descriptionField: 'advertiser',
 	fields: [ 'status', 'start_date', 'expiry_date', 'ad_placement', 'impressions', 'clicks', 'price' ],
 };
 
@@ -186,18 +186,25 @@ export default function AdsListScreen() {
 		<>
 			<HeaderCount count={ paginationInfo.totalItems } />
 			<DataViews
+				countLabel={ ( count, formatted ) =>
+					sprintf(
+						/* translators: %s: number of ads. */
+						_n( '%s ad', '%s ads', count, 'newspack-newsletters' ),
+						formatted
+					)
+				}
 				className="newspack-newsletters-list newspack-newsletters-ads-list"
 				data={ data }
 				fields={ fields }
-				view={ evenColumns( view ) }
-				onChangeView={ nextView => setView( withoutColumnStyles( nextView ) ) }
+				view={ view }
+				onChangeView={ setView }
 				actions={ actions }
 				paginationInfo={ paginationInfo }
 				defaultLayouts={ DEFAULT_LAYOUTS }
 				isLoading={ isLoading }
 				getItemId={ item => String( item.id ) }
-				search
 				config={ DATAVIEWS_CONFIG }
+				inlineFilters
 				header={ <ItemsPerPage value={ view.perPage } onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) } /> }
 			/>
 			{ quickEditItem && (

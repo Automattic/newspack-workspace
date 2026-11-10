@@ -45,7 +45,7 @@ const { useHistory, useLocation } = Router;
 function publicizeHelp( publicize: boolean ): string {
 	return publicize
 		? __( "The rule's name and the regular-vs-adjusted comparison appear on the product page, cart, and checkout.", 'newspack-plugin' )
-		: __( 'The adjusted price applies with no explanation to the reader.', 'newspack-plugin' );
+		: __( 'Readers see the new price without an explanation.', 'newspack-plugin' );
 }
 
 /**
@@ -54,10 +54,10 @@ function publicizeHelp( publicize: boolean ): string {
  */
 function strategyHelp( id: string, fallback: string ): string {
 	if ( 'simple_price' === id ) {
-		return __( 'One price for matching products. Fixed once the rule is created.', 'newspack-plugin' );
+		return __( 'One price for matching products. You can’t change it after the rule is created.', 'newspack-plugin' );
 	}
 	if ( 'stepped_by_cycle' === id ) {
-		return __( 'Different prices for the purchase and renewals. Fixed once the rule is created.', 'newspack-plugin' );
+		return __( 'Different prices for the purchase and renewals. You can’t change it after the rule is created.', 'newspack-plugin' );
 	}
 	return fallback;
 }
@@ -552,7 +552,7 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 
 	const goalDescription = [
 		__( 'The goal presets who qualifies, whether the price locks in at purchase, and which products the rule covers.', 'newspack-plugin' ),
-		! isNew && __( 'It is set when the rule is created; create a new rule to use a different one.', 'newspack-plugin' ),
+		! isNew && __( 'You can’t change it after the rule is created.', 'newspack-plugin' ),
 	]
 		.filter( Boolean )
 		.join( ' ' );
@@ -567,11 +567,7 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 			<Divider alignment="full-width" variant="tertiary" />
 
 			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader
-					title={ __( 'Rule Details', 'newspack-plugin' ) }
-					description={ __( 'Its name and status, and which products it applies to.', 'newspack-plugin' ) }
-					noMargin
-				/>
+				<SectionHeader title={ __( 'Rule Details', 'newspack-plugin' ) } noMargin />
 				<VStack spacing={ 6 } className="newspack-pricing-rules__details">
 					{ recipe?.isCustom && (
 						<TextControl
@@ -599,12 +595,11 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 						__next40pxDefaultSize
 						__nextHasNoMarginBottom
 					>
-						<ToggleGroupControlOption value="publish" label={ __( 'Published', 'newspack-plugin' ) } />
-						<ToggleGroupControlOption value="draft" label={ __( 'Draft', 'newspack-plugin' ) } />
+						<ToggleGroupControlOption value="publish" label={ __( 'Active', 'newspack-plugin' ) } />
+						<ToggleGroupControlOption value="draft" label={ __( 'Inactive', 'newspack-plugin' ) } />
 					</ToggleGroupControl>
 					<SelectControl
 						label={ __( 'Applies to', 'newspack-plugin' ) }
-						help={ __( 'Which products this rule targets.', 'newspack-plugin' ) }
 						value={ scopeType }
 						options={ vocab.scopes.map( s => ( { label: s.label, value: s.id } ) ) }
 						onChange={ st => {
@@ -635,7 +630,7 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 				<SectionHeader
 					title={ __( 'Eligibility', 'newspack-plugin' ) }
 					description={ __(
-						'Gate whether this rule applies to a given purchase. All set conditions must pass; empty = no restrictions.',
+						'A reader must meet every condition you set. With none set, the rule applies to everyone.',
 						'newspack-plugin'
 					) }
 					noMargin
@@ -656,11 +651,7 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 			<Divider alignment="full-width" variant="tertiary" />
 
 			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader
-					title={ __( 'Scheduling & Behavior', 'newspack-plugin' ) }
-					description={ __( 'When the rule is active, its priority, and how it composes with other rules.', 'newspack-plugin' ) }
-					noMargin
-				/>
+				<SectionHeader title={ __( 'Schedule', 'newspack-plugin' ) } noMargin />
 				<VStack spacing={ 6 }>
 					{ recipe?.isCustom && (
 						<TextControl
@@ -718,14 +709,7 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 
 			<VStack spacing={ 6 }>
 				<Grid columns={ 2 } gutter={ 32 } noMargin>
-					<SectionHeader
-						title={ __( 'Pricing', 'newspack-plugin' ) }
-						description={ __(
-							'What matching products cost under this rule, how long that price holds, and whether readers are told why.',
-							'newspack-plugin'
-						) }
-						noMargin
-					/>
+					<SectionHeader title={ __( 'Pricing', 'newspack-plugin' ) } noMargin />
 					<VStack spacing={ 6 }>
 						{ hasModelChoice && (
 							<ToggleGroupControl
@@ -838,7 +822,7 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 								] }
 								onChange={ setCycleAnchor }
 								help={ __(
-									'Anchors a stepped or cycle-limited schedule. “First applies” starts the schedule when the subscriber becomes eligible; “Subscription start” counts from their original signup.',
+									'Sets where cycle 1 starts. “First applies” counts from when the reader becomes eligible; “Subscription start” counts from their original signup.',
 									'newspack-plugin'
 								) }
 								__next40pxDefaultSize
