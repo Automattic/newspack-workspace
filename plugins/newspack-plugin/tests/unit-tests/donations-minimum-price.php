@@ -91,7 +91,8 @@ class Newspack_Test_Donations_Minimum_Price extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Set a product's minimum price directly, as an admin does on the product screen.
+	 * Write a product's minimum price without saving the product, so only the
+	 * next settings save sees the change.
 	 *
 	 * @param int    $product_id Product ID.
 	 * @param string $minimum    Minimum price.
@@ -107,8 +108,9 @@ class Newspack_Test_Donations_Minimum_Price extends WP_UnitTestCase {
 	 * @param string $minimum    Minimum price.
 	 */
 	private function save_product_minimum( $product_id, $minimum ) {
-		$this->set_product_minimum( $product_id, $minimum );
-		wc_get_product( $product_id )->save();
+		$product = wc_get_product( $product_id );
+		$product->update_meta_data( '_min_price', $minimum );
+		$product->save();
 	}
 
 	/**
@@ -214,6 +216,22 @@ class Newspack_Test_Donations_Minimum_Price extends WP_UnitTestCase {
 		$this->save_settings( '95' );
 
 		$this->assertSame( '88', $this->product_minimum( self::CHILD_YEAR ) );
+	}
+
+	/**
+	 * Saving a product with the minimum Newspack last wrote, typed differently,
+	 * keeps it following: the product screen stores a typed "88.00" as is. Here
+	 * the global minimum changes without a product write, so only that record
+	 * keeps the product following.
+	 */
+	public function test_product_saved_with_its_synced_minimum_typed_differently_still_follows() {
+		$this->save_settings( '88' );
+		$this->save_product_minimum( self::CHILD_YEAR, '88.00' );
+		update_option( Donations::DONATION_SETTINGS_OPTION, [ 'minimumDonation' => '90' ] );
+
+		$this->save_settings( '95' );
+
+		$this->assertSame( '95', $this->product_minimum( self::CHILD_YEAR ) );
 	}
 
 	/**
