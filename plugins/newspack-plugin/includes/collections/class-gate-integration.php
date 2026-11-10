@@ -135,8 +135,7 @@ class Gate_Integration {
 	 * already shows the excerpt, and a Collection's body is never shown to
 	 * a reader with access either.
 	 *
-	 * restrict_post() already rendered the layout for its staged entry. This renders it
-	 * again without the fade, so the staged copy can't be reused.
+	 * restrict_post() staged the layout with the fade, so this renders it again without it.
 	 *
 	 * @param int $collection_id Collection post ID.
 	 *
@@ -164,9 +163,9 @@ class Gate_Integration {
 	/**
 	 * Offer the Collection post type to content gates as an archive.
 	 *
-	 * @param string[] $post_types Post types whose archive a gate can restrict.
+	 * @param mixed $post_types Post types whose archive a gate can restrict. A non-array passes through.
 	 *
-	 * @return string[] The post types, or whatever a filter handed in that wasn't a list.
+	 * @return mixed The post types, or whatever a filter handed in that wasn't a list.
 	 */
 	public static function add_archive_support( $post_types ) {
 		if ( ! is_array( $post_types ) ) {

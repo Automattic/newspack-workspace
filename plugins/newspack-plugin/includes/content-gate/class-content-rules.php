@@ -119,7 +119,6 @@ class Content_Rules {
 	public static function get_unoffered_content_rules( array $gates ): array {
 		// The newsletter rule's slug is named here rather than read from
 		// get_premium_newsletter_rules(), which asks the ESP for its lists.
-		// The other known slugs are already keys of get_content_rules().
 		$known = array_merge( array_keys( self::get_content_rules() ), [ 'newsletters' ] );
 		$extra = [];
 		foreach ( $gates as $gate ) {

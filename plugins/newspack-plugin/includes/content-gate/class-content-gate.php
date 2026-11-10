@@ -2964,14 +2964,13 @@ class Content_Gate {
 	}
 
 	/**
-	 * Disable popups if rendering a restricted post.
+	 * Disable popups (Campaigns) on a restricted post or a gated archive.
 	 *
 	 * @param bool $disabled Whether popups are disabled.
 	 *
 	 * @return bool
 	 */
 	public static function disable_popups( $disabled ) {
-		// On a gated archive, Campaigns stand down.
 		if ( Content_Restriction_Control::get_archive_gate() ) {
 			return true;
 		}
