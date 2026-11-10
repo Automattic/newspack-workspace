@@ -1131,8 +1131,10 @@ class Content_Gate_API {
 		$rules                = array_merge( $rules, $newsletter_rules_arr );
 
 		if ( ! isset( $rules[ $slug ] ) ) {
-			// Not offered by the picker: keep it only if the taxonomy is registered.
-			if ( ! get_taxonomy( $slug ) ) {
+			// The premium newsletter rule is offered only while the ESP answers for its
+			// lists. It has no options to check, so a gate's own copy of it survives an
+			// ESP failure. Any other slug is kept only if the taxonomy is registered.
+			if ( 'newsletters' !== $slug && ! get_taxonomy( $slug ) ) {
 				return self::unavailable_content_rule_error( $slug );
 			}
 			$rules[ $slug ] = [];

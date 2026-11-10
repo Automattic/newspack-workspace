@@ -50,7 +50,9 @@ export default function ContentRules( { rules, onChange, isNewsletter = false }:
 
 	const handleRemove = useCallback( ( slug: string ) => onChange( rules.filter( r => r.slug !== slug ) ), [ rules, onChange ] );
 
-	const otherRules = rules.filter( r => ! availableContentRules[ r.slug ] );
+	// The newsletter rule is offered only while the ESP answers for its lists, but it is
+	// never an "Other rule": the newsletter wizard owns it and it has nothing to show here.
+	const otherRules = rules.filter( r => 'newsletters' !== r.slug && ! availableContentRules[ r.slug ] );
 
 	return (
 		<>

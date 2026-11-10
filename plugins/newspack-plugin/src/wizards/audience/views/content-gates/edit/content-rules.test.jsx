@@ -28,6 +28,11 @@ describe( 'ContentRules', () => {
 		expect( screen.queryByRole( 'button', { name: /^Remove/ } ) ).toBeNull();
 	} );
 
+	it( 'never files the newsletters rule under Other rules', () => {
+		setup( { rules: [ { slug: 'newsletters', value: [ 'list-1' ] } ] } );
+		expect( screen.queryByText( 'Other rules' ) ).toBeNull();
+	} );
+
 	it( 'lists a stored-only rule and removes it', () => {
 		const onChange = setup( {
 			extra: { np_section: { name: 'Sections', endpoint: '/wp/v2/np_section', default: [] } },

@@ -1518,6 +1518,46 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The premium newsletter rule isn't offered while the ESP fails to list its lists, but a
+	 * gate's own copy of it still saves, as a draft and as a publish.
+	 */
+	public function test_sanitize_gate_keeps_newsletters_rule_when_esp_lists_fail() {
+		require_once dirname( __DIR__, 2 ) . '/mocks/newsletters-mocks.php';
+		\Newspack_Newsletters::$esp_lists_fixture = new \WP_Error( 'esp_down', 'The ESP is down.' );
+		$this->assertSame( [], Content_Rules::get_premium_newsletter_rules() );
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+
+		try {
+			foreach ( [ 'draft', 'publish' ] as $status ) {
+				$sanitized = Content_Gate_API::sanitize_gate(
+					[
+						'status'        => $status,
+						'content_rules' => [
+							[
+								'slug'  => 'newsletters',
+								'value' => [ 'list-1' ],
+							],
+						],
+					]
+				);
+				$this->assertNotWPError( $sanitized, $status );
+				$this->assertSame(
+					[
+						[
+							'slug'  => 'newsletters',
+							'value' => [ 'list-1' ],
+						],
+					],
+					$sanitized['content_rules'],
+					$status
+				);
+			}
+		} finally {
+			\Newspack_Newsletters::$esp_lists_fixture = [];
+		}
+	}
+
+	/**
 	 * Test the posts-search REST endpoint returns published posts of supported post types.
 	 */
 	public function test_posts_search_endpoint_returns_published_posts() {

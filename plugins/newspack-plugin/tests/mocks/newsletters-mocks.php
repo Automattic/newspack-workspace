@@ -160,13 +160,20 @@ if ( ! class_exists( 'Newspack_Newsletters' ) ) {
 		public static $esp_lists_calls = 0;
 
 		/**
-		 * The configured ESP's lists. Empty, so no newsletter content rule is offered.
+		 * What get_esp_lists() returns. Set a WP_Error to simulate the ESP failing.
 		 *
-		 * @return array
+		 * @var array|\WP_Error
+		 */
+		public static $esp_lists_fixture = [];
+
+		/**
+		 * The configured ESP's lists. Empty unless a test sets $esp_lists_fixture.
+		 *
+		 * @return array|\WP_Error
 		 */
 		public static function get_esp_lists() {
 			++self::$esp_lists_calls;
-			return [];
+			return self::$esp_lists_fixture;
 		}
 
 		public static function service_provider() {
