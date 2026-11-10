@@ -101,6 +101,17 @@ class Newspack_Test_Donations_Minimum_Price extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Set a product's minimum price and save the product, as the product screen does.
+	 *
+	 * @param int    $product_id Product ID.
+	 * @param string $minimum    Minimum price.
+	 */
+	private function save_product_minimum( $product_id, $minimum ) {
+		$this->set_product_minimum( $product_id, $minimum );
+		wc_get_product( $product_id )->save();
+	}
+
+	/**
 	 * The minimum price stored on a product.
 	 *
 	 * @param int $product_id Product ID.
@@ -183,6 +194,23 @@ class Newspack_Test_Donations_Minimum_Price extends WP_UnitTestCase {
 		$this->save_settings( '90' );
 
 		$this->set_product_minimum( self::CHILD_YEAR, '88' );
+		$this->save_settings( '95' );
+
+		$this->assertSame( '88', $this->product_minimum( self::CHILD_YEAR ) );
+	}
+
+	/**
+	 * Saving a product set directly forgets what Newspack last wrote to it, so
+	 * setting it back to that value before the next settings save still counts
+	 * as set directly. Here the global minimum changes without a product write,
+	 * as the setup wizard's save does.
+	 */
+	public function test_product_set_away_and_back_between_settings_saves_keeps_it() {
+		$this->save_settings( '88' );
+		$this->save_product_minimum( self::CHILD_YEAR, '1200' );
+		update_option( Donations::DONATION_SETTINGS_OPTION, [ 'minimumDonation' => '90' ] );
+
+		$this->save_product_minimum( self::CHILD_YEAR, '88' );
 		$this->save_settings( '95' );
 
 		$this->assertSame( '88', $this->product_minimum( self::CHILD_YEAR ) );
