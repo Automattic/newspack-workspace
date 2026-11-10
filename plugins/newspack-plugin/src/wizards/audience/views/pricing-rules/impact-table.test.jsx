@@ -150,7 +150,8 @@ describe( 'ImpactTable', () => {
 
 	it( 'renders one row per product with its regular and resulting price', () => {
 		render( <ImpactTable baseline={ [ row() ] } segmentGroups={ [] } currency={ CURRENCY } /> );
-		expect( screen.getByRole( 'link', { name: 'Monthly' } ) ).toHaveAttribute( 'href', 'https://example.test/edit/1' );
+		expect( screen.getByText( 'Monthly' ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'link', { name: 'Monthly' } ) ).not.toBeInTheDocument();
 		expect( screen.getByText( '$10.00' ) ).toBeInTheDocument();
 		expect( screen.getByText( '$5.00' ) ).toBeInTheDocument();
 	} );
@@ -253,10 +254,10 @@ describe( 'ImpactTable', () => {
 		expect( container.querySelector( '.has-compact-density' ) ).toBeNull();
 	} );
 
-	it( 'renders on core DataViews with compact rows when unframed', () => {
+	it( 'renders on core DataViews at the default density when unframed', () => {
 		const { container } = render( <ImpactTable baseline={ [ row() ] } segmentGroups={ [] } currency={ CURRENCY } framed={ false } /> );
 		expect( container.querySelector( '.newspack-dataviews' ) ).toBeNull();
-		expect( container.querySelector( '.has-compact-density' ) ).not.toBeNull();
+		expect( container.querySelector( '.has-compact-density' ) ).toBeNull();
 	} );
 
 	it( 'offers no way to hide or move a column, but keeps sorting', async () => {

@@ -117,8 +117,7 @@ export default function ImpactTable( {
 				label: __( 'Product', 'newspack-plugin' ),
 				enableHiding: false,
 				getValue: ( { item }: { item: CatalogImpactRow } ) => item.name,
-				render: ( { item }: { item: CatalogImpactRow } ) =>
-					item.edit_link ? <a href={ item.edit_link }>{ item.name }</a> : <span>{ item.name }</span>,
+				render: ( { item }: { item: CatalogImpactRow } ) => <span>{ item.name }</span>,
 			},
 			{
 				id: 'regular',
@@ -161,8 +160,7 @@ export default function ImpactTable( {
 		page: 1,
 		search: '',
 		filters: [],
-		// The catalog-wide table in the modal holds every product, so it keeps compact rows.
-		layout: { enableMoving: false, ...( framed ? {} : { density: 'compact' } ) },
+		layout: { enableMoving: false },
 		titleField: 'product',
 		fields: fieldIds,
 	} ) );
