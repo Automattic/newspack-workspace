@@ -835,6 +835,14 @@ class WC_Product {
 		$this->meta[ $key ] = $value;
 	}
 	/**
+	 * Drop a meta value in memory, as WC_Data::delete_meta_data() does before a save().
+	 *
+	 * @param string $key Meta key.
+	 */
+	public function delete_meta_data( $key ) {
+		unset( $this->meta[ $key ] );
+	}
+	/**
 	 * Persist the product back into the mock store. The object is already held by
 	 * reference, so this only matters for a product built and saved without being
 	 * registered first; it mirrors WC_Product::save() returning the product ID.

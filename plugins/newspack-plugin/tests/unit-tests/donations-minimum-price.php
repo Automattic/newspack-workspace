@@ -174,6 +174,21 @@ class Newspack_Test_Donations_Minimum_Price extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A product set directly keeps its minimum even when it matches a value
+	 * Newspack wrote to it before it was set directly.
+	 */
+	public function test_product_set_back_to_an_earlier_synced_minimum_keeps_it() {
+		$this->save_settings( '88' );
+		$this->set_product_minimum( self::CHILD_YEAR, '1200' );
+		$this->save_settings( '90' );
+
+		$this->set_product_minimum( self::CHILD_YEAR, '88' );
+		$this->save_settings( '95' );
+
+		$this->assertSame( '88', $this->product_minimum( self::CHILD_YEAR ) );
+	}
+
+	/**
 	 * Setting a product's minimum to the global minimum makes it follow again.
 	 */
 	public function test_product_set_to_the_global_minimum_follows_it_again() {

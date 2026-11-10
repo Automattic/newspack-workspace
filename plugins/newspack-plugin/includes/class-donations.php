@@ -672,6 +672,10 @@ class Donations {
 	 * drifted from the global one for any other reason. Clearing a product's
 	 * minimum makes it follow again.
 	 *
+	 * A save that finds a product set directly forgets what Newspack last wrote
+	 * to it, so a later minimum that happens to equal that old value still counts
+	 * as set directly.
+	 *
 	 * @param \WC_Product $product          Donation product.
 	 * @param mixed       $previous_minimum Global minimum donation from the last settings save.
 	 * @return bool
@@ -776,6 +780,8 @@ class Donations {
 			if ( self::product_follows_minimum_donation( $child_product, $previous_minimum ) ) {
 				$child_product->update_meta_data( '_min_price', $minimum_donation );
 				$child_product->update_meta_data( self::SYNCED_MIN_PRICE_META, $minimum_donation );
+			} else {
+				$child_product->delete_meta_data( self::SYNCED_MIN_PRICE_META );
 			}
 			$child_product->update_meta_data( '_hide_nyp_minimum', 'yes' );
 			$child_product->update_meta_data( '_nyp', 'yes' );
