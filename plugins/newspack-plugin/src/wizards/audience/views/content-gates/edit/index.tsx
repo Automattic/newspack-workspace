@@ -600,6 +600,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 						{
 							...gate,
 							content_rules: contentRules,
+							archive_rules: archiveRules,
 							auto_signup: autoSignup,
 							hide_lists: hideLists,
 							registration,

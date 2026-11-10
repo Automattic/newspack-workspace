@@ -1,7 +1,7 @@
 /**
  * External dependencies
  */
-import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 /**
@@ -212,6 +212,26 @@ describe( 'Archive rules', () => {
 		await runHeaderAction( 'Save' );
 
 		expect( savedGate().archive_rules ).toEqual( [ { slug: 'post_type_archives', value: [ 'newspack_collection' ] } ] );
+	} );
+
+	describe( 'with pre-save checks on', () => {
+		beforeEach( () => {
+			window.newspackAudienceContentGates.presave_checks_enabled = true;
+		} );
+		afterEach( () => {
+			window.newspackAudienceContentGates.presave_checks_enabled = false;
+		} );
+
+		it( 'lists unsaved archive pages in the confirmation summary', async () => {
+			await renderEdit();
+			fireEvent.click( screen.getByRole( 'heading', { name: 'Archive pages' } ) );
+			fireEvent.click( screen.getByRole( 'button', { name: 'Pick Collections' } ) );
+			await runHeaderAction( 'Save' );
+
+			const panel = within( screen.getByRole( 'dialog' ) );
+			expect( panel.getByRole( 'heading', { name: 'Archive pages' } ) ).toBeInTheDocument();
+			expect( panel.getByText( 'Collections' ) ).toBeInTheDocument();
+		} );
 	} );
 } );
 
