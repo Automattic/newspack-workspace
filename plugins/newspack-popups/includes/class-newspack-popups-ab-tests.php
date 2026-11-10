@@ -106,15 +106,15 @@ final class Newspack_Popups_AB_Tests {
 		// A status hook rather than the A/B routes: the Campaigns wizard, batch
 		// publish, wp-admin and cron all publish prompts without going through
 		// them. The meta hooks cover a prompt that joins a test while already
-		// live, which an editor save does after the status change.
+		// live, which starting or resuming a test on a published prompt does.
 		add_action( 'transition_post_status', [ __CLASS__, 'record_start_on_publish' ], 10, 3 );
 		foreach ( [ 'added_post_meta', 'updated_post_meta' ] as $hook ) {
 			add_action( $hook, [ __CLASS__, 'record_start_for_meta' ], 10, 3 );
 		}
 
 		// Meta hooks rather than post ones, so one rule covers every way a
-		// prompt leaves a test: End Test clearing its Test ID, an editor clearing
-		// or changing it, and deleting the prompt, whose meta goes with it.
+		// prompt leaves a test: End Test clearing its Test ID and deleting the
+		// prompt, whose meta goes with it.
 		// Not gated on the flag: they only remove the feature's own reader meta,
 		// and a site that turned the flag off still wants it gone.
 		add_action( 'update_post_meta', [ __CLASS__, 'note_leaving_test_id' ], 10, 3 );
@@ -551,10 +551,11 @@ final class Newspack_Popups_AB_Tests {
 	 * route ignores an error from this filter and would record an empty autosave,
 	 * so there the A/B keys are dropped whatever their value.
 	 *
-	 * The Test ID and version are dropped from every save, for every user. No
-	 * editor control sets them; starting, resuming and ending a test write them
-	 * directly. A save carrying them is an editor tab that loaded the prompt before
-	 * a test started, and writing its values would take the prompt out of the test.
+	 * The Test ID and version are dropped from every save, for every user. They
+	 * belong to starting, resuming and ending a test, which write them directly,
+	 * and no editor control sets them. The editor still sends them back as loaded,
+	 * so a tab opened before one of those actions would otherwise undo it: take
+	 * version A out of the test it just joined, or put an ended test back.
 	 *
 	 * @param stdClass|WP_Error $prepared_post Post prepared for the database.
 	 * @param WP_REST_Request   $request       Request.
@@ -569,8 +570,8 @@ final class Newspack_Popups_AB_Tests {
 		$post_id     = isset( $prepared_post->ID ) ? (int) $prepared_post->ID : 0;
 		$is_autosave = str_ends_with( $request->get_route(), '/autosaves' );
 
-		// Dropped before anything below reads them, so the placement rule judges the
-		// test the prompt is in, not the empty one a stale tab sends back.
+		// Dropped before the permission check below, which would otherwise refuse a
+		// restricted user's save over a stale value the save can't write anyway.
 		unset( $meta[ self::META_TEST_ID ], $meta[ self::META_VARIANT ] );
 		$request->set_param( 'meta', $meta );
 

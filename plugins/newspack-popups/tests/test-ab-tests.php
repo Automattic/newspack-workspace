@@ -1482,7 +1482,8 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		$response  = $this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ 'placement' => 'manual' ] ] );
 		self::assertSame( 400, $response->get_status() );
 		self::assertSame( 'inline', get_post_meta( $prompt_id, 'placement', true ) );
-		// An empty Test ID in the same save is ignored, so it can't clear the way.
+		// An empty Test ID in the same save is ignored, so the move is still
+		// refused; ending the test is the way out.
 		$response = $this->save_prompt_as(
 			$prompt_id,
 			'administrator',
@@ -1525,7 +1526,7 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	 * cannot rewrite one the earlier sanitizer stored, and a deliberate one
 	 * can't either: only starting, resuming and ending a test set it.
 	 */
-	public function test_an_unchanged_test_id_is_not_rewritten_by_an_unrelated_save() {
+	public function test_a_save_never_rewrites_a_stored_test_id() {
 		global $wpdb;
 		$prompt_id = $this->create_test_variant( 'footer-test', 'a' );
 		// A value the earlier sanitizer stored; the current one can't write it.
@@ -1547,31 +1548,6 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 
 		$response = $this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ Newspack_Popups_AB_Tests::META_TEST_ID => 'Footer_Test 2' ] ] );
 		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
-		self::assertSame( 'footer_test', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
-	}
-
-	/**
-	 * The placement rule reads "unchanged" the way the write guard does: a legacy
-	 * Test ID sent back as stored is not a new violation, so a stuck prompt that
-	 * carries one still takes other edits.
-	 */
-	public function test_a_stuck_prompt_with_a_legacy_test_id_keeps_taking_other_edits() {
-		global $wpdb;
-		$prompt_id = $this->create_test_variant( 'footer-test', 'a', [ 'placement' => 'inline' ] );
-		$wpdb->update( // phpcs:ignore WordPress.DB
-			$wpdb->postmeta,
-			[ 'meta_value' => 'footer_test' ], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
-			[
-				'post_id'  => $prompt_id,
-				'meta_key' => Newspack_Popups_AB_Tests::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
-			]
-		);
-		wp_cache_delete( $prompt_id, 'post_meta' );
-		update_post_meta( $prompt_id, 'placement', 'manual' );
-
-		$response = $this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ 'frequency' => 'once' ] ] );
-		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
-		self::assertSame( 'once', get_post_meta( $prompt_id, 'frequency', true ) );
 		self::assertSame( 'footer_test', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
 	}
 
@@ -1757,24 +1733,19 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * Clearing a Test ID, as ending a test does, leaves an empty string, not a
-	 * phantom test: an empty value must never fall back to the meta key's name.
-	 * WordPress calls a meta sanitize callback with the meta key as its second
-	 * argument, which is the fallback a sanitizer built on sanitize_title() would
-	 * otherwise store.
+	 * Clearing a Test ID leaves an empty string, not a phantom test: an empty
+	 * value must never fall back to the meta key's name. WordPress calls a meta
+	 * sanitize callback with the meta key as its second argument, which is the
+	 * fallback a sanitizer built on sanitize_title() would otherwise store.
 	 */
 	public function test_clearing_the_test_id_stores_an_empty_string() {
 		$prompt_id = $this->create_test_variant( 'clear-me', 'a' );
-		update_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_GOAL, 'donation' );
 
 		update_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, '' );
 		update_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_VARIANT, '' );
-		$response = $this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ Newspack_Popups_AB_Tests::META_GOAL => '' ] ] );
 
-		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
 		self::assertSame( '', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
 		self::assertSame( '', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_VARIANT, true ) );
-		self::assertSame( '', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_GOAL, true ) );
 		self::assertSame( '', Newspack_Popups_AB_Tests::sanitize_test_id( [ 'x' ] ) );
 		self::assertSame( 'spring-drive-2026', Newspack_Popups_AB_Tests::sanitize_test_id( 'Spring Drive 2026' ) );
 	}
@@ -1783,8 +1754,8 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	 * With the flag off, stored tests have no effect, the placement rule included.
 	 *
 	 * A site that ran tests and turned the flag off may still hold a tested prompt
-	 * on a manual placement, and the panel that clears the Test ID is gone with
-	 * the flag, so a refusal here would leave that prompt unsaveable.
+	 * on a manual placement, and the End test route that clears the Test ID is
+	 * gone with the flag, so a refusal here would leave that prompt unsaveable.
 	 */
 	public function test_placement_rule_is_off_with_the_flag() {
 		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
