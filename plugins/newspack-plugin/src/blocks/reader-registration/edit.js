@@ -13,7 +13,6 @@ import { sprintf, __ } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
 import { useBlockProps, RichText, InspectorControls, useInnerBlocksProps, InnerBlocks } from '@wordpress/block-editor';
 import { Spinner, Notice, TextControl, ToggleControl, PanelBody, Button } from '@wordpress/components';
-import { Icon, check } from '@wordpress/icons';
 
 /**
  * Internal dependencies
@@ -343,9 +342,6 @@ export default function ReaderRegistrationEdit( {
 				{ editedState === 'registration' && (
 					<div className="newspack-registration newspack-ui">
 						<div className="newspack-ui__box newspack-ui__box--success newspack-ui__box--x-large newspack-ui__box--text-center">
-							<span className="newspack-ui__icon newspack-ui__icon--success">
-								<Icon icon={ check } />
-							</span>
 							<div { ...innerBlocksProps } />
 						</div>
 					</div>

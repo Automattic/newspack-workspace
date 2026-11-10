@@ -272,9 +272,6 @@ function render_block( $attrs, $content ) {
 		elseif ( $registered ) :
 			?>
 			<div class="newspack-ui__box newspack-ui__box--success newspack-ui__box--text-center">
-				<span class="newspack-ui__icon newspack-ui__icon--success">
-					<?php Newspack_UI_Icons::print_svg( 'check' ); ?>
-				</span>
 				<?php echo $success_registration_markup; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 			</div>
 		<?php else : ?>
@@ -381,9 +378,6 @@ function render_block( $attrs, $content ) {
 				</div>
 			</form>
 			<div class="newspack-registration__registration-success newspack-registration--hidden newspack-ui__box newspack-ui__box--x-large newspack-ui__box--success newspack-ui__box--text-center">
-				<span class="newspack-ui__icon newspack-ui__icon--success">
-					<?php Newspack_UI_Icons::print_svg( 'check' ); ?>
-				</span>
 				<?php echo $success_registration_markup; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 			</div>
 		<?php endif; ?>
