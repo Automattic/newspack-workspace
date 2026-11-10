@@ -57,16 +57,14 @@ function ResultingCell( { row, currency }: { row?: CatalogImpactRow; currency: P
 		return <>{ formatPrice( row.adjusted, currency ) }</>;
 	}
 	return (
-		<>
+		<span className="newspack-pricing-rules__price-steps">
 			{ row.segments.map( ( seg, i ) => (
 				<Fragment key={ i }>
 					{ i > 0 && ' → ' }
-					<span className={ `newspack-pricing-rules__price-step${ seg.changed ? ' is-changed' : '' }` }>
-						{ formatSegment( seg, currency ) }
-					</span>
+					<span className={ seg.changed ? 'is-changed' : undefined }>{ formatSegment( seg, currency ) }</span>
 				</Fragment>
 			) ) }
-		</>
+		</span>
 	);
 }
 
