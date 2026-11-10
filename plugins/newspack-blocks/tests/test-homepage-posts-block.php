@@ -814,9 +814,10 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
-	 * A label with no `link` renders as an unlinked span, without an "undefined
-	 * array key" warning on the way (NPPM-3051). PHPUnit converts warnings to
-	 * exceptions here, so the warning itself fails the test.
+	 * `display_tag_labels()` passes a label with no `link` through, and it renders
+	 * as an unlinked span. This suite loads the test stub rather than the plugin,
+	 * so this checks the blocks caller against the stub's copy of the NPPM-3051
+	 * logic; the plugin's own suite pins the fix itself.
 	 */
 	public function test_display_tag_labels_renders_flag_only_label_as_span() {
 		ob_start();
