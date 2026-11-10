@@ -169,12 +169,10 @@ class Test_Archive_Gate extends \WP_UnitTestCase {
 	 * Paid-access settings whose one rule no test account meets: an email domain
 	 * the factory's addresses don't use.
 	 *
-	 * @param array $metering Metering settings.
-	 *
 	 * @return array
 	 */
-	private function get_paid_access_settings( array $metering = [] ) {
-		$settings = [
+	private function get_paid_access_settings() {
+		return [
 			'active'       => true,
 			'access_rules' => [
 				[
@@ -185,10 +183,6 @@ class Test_Archive_Gate extends \WP_UnitTestCase {
 				],
 			],
 		];
-		if ( $metering ) {
-			$settings['metering'] = $metering;
-		}
-		return $settings;
 	}
 
 	/**

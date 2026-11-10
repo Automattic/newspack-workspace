@@ -1521,7 +1521,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	 * A gate's own copy of the premium newsletter rule saves whether or not the ESP can list
 	 * its lists, as a draft and as a publish, and a save never asks the ESP.
 	 */
-	public function test_sanitize_gate_keeps_newsletters_rule_when_esp_lists_fail() {
+	public function test_sanitize_gate_keeps_newsletters_rule_without_asking_the_esp() {
 		require_once dirname( __DIR__, 2 ) . '/mocks/newsletters-mocks.php';
 		\Newspack_Newsletters::$esp_lists_fixture = new \WP_Error( 'esp_down', 'The ESP is down.' );
 		\Newspack_Newsletters::$esp_lists_calls   = 0;
