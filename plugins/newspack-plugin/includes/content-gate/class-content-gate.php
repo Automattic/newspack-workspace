@@ -2971,10 +2971,7 @@ class Content_Gate {
 	 * @return bool
 	 */
 	public static function disable_popups( $disabled ) {
-		// First, so no Metering check runs on an archive. Metering assumes a single
-		// post: it falls back to get_the_ID(), which on an archive is the first item
-		// in the list, and its logged-in check records views in user meta. Metering
-		// doesn't apply to an archive gate anyway.
+		// On a gated archive, Campaigns stand down.
 		if ( Content_Restriction_Control::get_archive_gate() ) {
 			return true;
 		}

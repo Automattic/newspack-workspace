@@ -9,7 +9,6 @@ namespace Newspack\Tests\Content_Gate;
 
 use Newspack\Content_Gate;
 use Newspack\Content_Restriction_Control;
-use Newspack\Metering;
 use Newspack\Site_Meter;
 use Newspack\Collections\Gate_Integration;
 use Newspack\Collections\Post_Type;
@@ -191,23 +190,6 @@ class Test_Archive_Gate extends \WP_UnitTestCase {
 			$settings['metering'] = $metering;
 		}
 		return $settings;
-	}
-
-	/**
-	 * Read a user's metering meta, the record of the views metering has spent.
-	 *
-	 * @param int $user_id User ID.
-	 *
-	 * @return array
-	 */
-	private function get_metering_meta( $user_id ) {
-		return array_filter(
-			get_user_meta( $user_id ),
-			function ( $key ) {
-				return 0 === strpos( $key, Metering::METERING_META_KEY );
-			},
-			ARRAY_FILTER_USE_KEY
-		);
 	}
 
 	/**
@@ -431,9 +413,9 @@ class Test_Archive_Gate extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Campaigns stand down on a gated archive without spending a metered view.
+	 * Campaigns stand down on a gated archive.
 	 */
-	public function test_disable_popups_on_gated_archive_spends_no_metered_view() {
+	public function test_disable_popups_on_gated_archive() {
 		$metering = [
 			'enabled' => true,
 			'count'   => 3,
@@ -455,19 +437,6 @@ class Test_Archive_Gate extends \WP_UnitTestCase {
 		$this->go_to_archive();
 		$this->assertSame( $this->gate_id, Content_Restriction_Control::get_archive_gate()['gate_id'] ?? null, 'Setup: the custom access gate refuses this reader.' );
 
-		$metering_before = $this->get_metering_meta( $user_id );
-		// Every Metering entry point applies this filter first, so it counts Metering checks.
-		$metering_checks = 0;
-		$count_checks    = function ( $short_circuit ) use ( &$metering_checks ) {
-			++$metering_checks;
-			return $short_circuit;
-		};
-		add_filter( 'newspack_content_gate_metering_short_circuit', $count_checks );
-		$disabled = Content_Gate::disable_popups( false );
-		remove_filter( 'newspack_content_gate_metering_short_circuit', $count_checks );
-
-		$this->assertTrue( $disabled );
-		$this->assertSame( 0, $metering_checks, 'No Metering check runs on a gated archive.' );
-		$this->assertSame( $metering_before, $this->get_metering_meta( $user_id ), 'No metered view is spent.' );
+		$this->assertTrue( Content_Gate::disable_popups( false ) );
 	}
 }

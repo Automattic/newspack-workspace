@@ -4186,9 +4186,13 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		Content_Gate::update_gate_settings( $this->gate_ids[0], [ 'archive_rules' => $rules ] );
 		$this->assertSame( $rules, Content_Gate::get_gate( $this->gate_ids[0] )['archive_rules'] );
 
-		$created = Content_Gate::create_gate( [ 'title' => 'Archive Gate' ] );
+		$created = Content_Gate::create_gate(
+			[
+				'title'         => 'Archive Gate',
+				'archive_rules' => $rules,
+			]
+		);
 		$this->gate_ids[] = $created;
-		Content_Gate::update_gate_settings( $created, [ 'archive_rules' => $rules ] );
 		$this->assertSame( $rules, Content_Gate::get_gate( $created )['archive_rules'] );
 	}
 
@@ -4283,6 +4287,28 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 			],
 			Content_Restriction_Control::get_available_archive_post_types()
 		);
+
+		remove_filter( 'newspack_content_gate_supported_archive_post_types', $filter );
+		unregister_post_type( 'np_archive_cpt' );
+	}
+
+	/**
+	 * A gate covers an archive only when its rule names a post type that is offered right now.
+	 */
+	public function test_gate_matches_archive_only_for_offered_post_types() {
+		register_post_type(
+			'np_archive_cpt',
+			[
+				'public'      => true,
+				'has_archive' => true,
+				'labels'      => [ 'name' => 'Archive CPT' ],
+			]
+		);
+		$filter = function () {
+			return [ 'post', 'np_archive_cpt' ];
+		};
+		add_filter( 'newspack_content_gate_supported_archive_post_types', $filter );
+
 		$this->assertTrue(
 			Content_Rules::gate_matches_archive(
 				[
@@ -4294,6 +4320,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 				[ 'np_archive_cpt' ]
 			)
 		);
+		// "post" has no archive page of its own, so it isn't offered and doesn't match.
 		$this->assertFalse(
 			Content_Rules::gate_matches_archive(
 				[
@@ -4311,9 +4338,26 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A gate with archive rules and no content rules restricts no posts.
+	 * A gate with archive rules and no content rules restricts no posts, not even those
+	 * of the post type its archive rule names. Kept because the editor now allows
+	 * archive-only saves, so the archive values must never feed post matching.
 	 */
 	public function test_gate_with_only_archive_rules_matches_no_posts() {
+		register_post_type(
+			'np_archive_cpt',
+			[
+				'public'       => true,
+				'show_in_rest' => true,
+				'has_archive'  => true,
+				'labels'       => [ 'name' => 'Archive CPT' ],
+			]
+		);
+		$filter = function () {
+			return [ 'np_archive_cpt' ];
+		};
+		add_filter( 'newspack_content_gate_supported_archive_post_types', $filter );
+		$archive_post_id = $this->factory->post->create( [ 'post_type' => 'np_archive_cpt' ] );
+
 		$gate_id          = Content_Gate::create_gate( [ 'title' => 'Archive Only' ] );
 		$this->gate_ids[] = $gate_id;
 		Content_Gate::update_gate_settings(
@@ -4325,23 +4369,22 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 				'archive_rules' => [
 					[
 						'slug'  => 'post_type_archives',
-						'value' => [ 'newspack_collection' ],
+						'value' => [ 'np_archive_cpt' ],
 					],
 				],
 				'registration'  => [
 					'active'               => true,
-					'metering'             => [
-						'enabled' => false,
-						'count'   => 0,
-						'period'  => 'month',
-					],
 					'require_verification' => false,
-					'gate_id'              => 0,
 				],
 			]
 		);
 		$this->reset_restriction_cache();
-		$ids = wp_list_pluck( Content_Restriction_Control::get_post_gates( $this->post_ids[0] ), 'id' );
-		$this->assertNotContains( $gate_id, $ids );
+		foreach ( [ $this->post_ids[0], $archive_post_id ] as $post_id ) {
+			$ids = wp_list_pluck( Content_Restriction_Control::get_post_gates( $post_id ), 'id' );
+			$this->assertNotContains( $gate_id, $ids );
+		}
+
+		remove_filter( 'newspack_content_gate_supported_archive_post_types', $filter );
+		unregister_post_type( 'np_archive_cpt' );
 	}
 }

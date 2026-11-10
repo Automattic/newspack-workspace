@@ -248,14 +248,35 @@ class Test_Gate_Integration extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * An editor sees all of a gated Collection's buttons.
+	 * Staff see all of a gated Collection's buttons, off the Collection's page and
+	 * on it before the loop has decided.
+	 *
+	 * @dataProvider provide_staff_roles
+	 *
+	 * @param string $role          The role the reader logs in as.
+	 * @param bool   $on_collection Whether the request is the Collection's own page.
 	 */
-	public function test_ctas_shown_to_editor() {
-		$this->set_current_user_role( 'editor' );
+	public function test_staff_see_every_cta( $role, $on_collection ) {
+		if ( $on_collection ) {
+			$this->go_to( get_permalink( $this->collection_id ) );
+		}
+		$this->set_current_user_role( $role );
 
 		$ctas = Query_Helper::get_ctas( $this->collection_id );
 
 		$this->assertSame( [ self::PDF_LABEL, 'Subscribe' ], wp_list_pluck( $ctas, 'label' ) );
+	}
+
+	/**
+	 * Roles and places for test_staff_see_every_cta().
+	 *
+	 * @return array[]
+	 */
+	public function provide_staff_roles() {
+		return [
+			'editor, elsewhere'              => [ 'editor', false ],
+			'administrator, before the loop' => [ 'administrator', true ],
+		];
 	}
 
 	/**
@@ -271,16 +292,6 @@ class Test_Gate_Integration extends \WP_UnitTestCase {
 		[ $rendered, $output ] = $this->render_single_gate();
 		$this->assertFalse( $rendered, 'The loop has not restricted the Collection yet.' );
 		$this->assertSame( '', $output );
-	}
-
-	/**
-	 * Before the loop, an admin still gets all of the Collection's buttons.
-	 */
-	public function test_ctas_shown_before_the_loop_for_editor() {
-		$this->go_to( get_permalink( $this->collection_id ) );
-		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
-
-		$this->assertSame( [ self::PDF_LABEL, 'Subscribe' ], wp_list_pluck( Query_Helper::get_ctas( $this->collection_id ), 'label' ) );
 	}
 
 	/**
