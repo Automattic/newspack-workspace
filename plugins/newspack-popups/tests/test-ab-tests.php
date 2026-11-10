@@ -767,10 +767,10 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		self::assertArrayHasKey( 'sticky-test', $buckets );
 		$assigned = $buckets['sticky-test'];
 		self::assertContains( $assigned, [ 'a', 'b' ] );
-		self::assertSame( $assigned, get_user_meta( $user_id, 'newspack_popups_ab_bucket_sticky-test', true ) );
+		self::assertSame( $assigned, get_user_meta( $user_id, Newspack_Popups_AB_Tests::bucket_meta_key( 'sticky-test' ), true ) );
 
 		// A changed control share must not re-bucket an already-assigned reader.
-		update_user_meta( $user_id, 'newspack_popups_ab_bucket_sticky-test', 'b' );
+		update_user_meta( $user_id, Newspack_Popups_AB_Tests::bucket_meta_key( 'sticky-test' ), 'b' );
 		$buckets = Newspack_Popups_AB_Tests::get_logged_in_buckets( Newspack_Popups_AB_Tests::get_tests_config() );
 		self::assertSame( 'b', $buckets['sticky-test'] );
 
@@ -809,7 +809,7 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		$challenger_id = $this->create_test_variant( 'three-arm-test', 'c' );
 
 		$user_id  = self::factory()->user->create();
-		$meta_key = 'newspack_popups_ab_bucket_three-arm-test';
+		$meta_key = Newspack_Popups_AB_Tests::bucket_meta_key( 'three-arm-test' );
 		wp_set_current_user( $user_id );
 		update_user_meta( $user_id, $meta_key, 'c' );
 
@@ -844,13 +844,42 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		$this->create_test_variant( 'invalid-bucket-test', 'b' );
 
 		$user_id  = self::factory()->user->create();
-		$meta_key = 'newspack_popups_ab_bucket_invalid-bucket-test';
+		$meta_key = Newspack_Popups_AB_Tests::bucket_meta_key( 'invalid-bucket-test' );
 		wp_set_current_user( $user_id );
 		update_user_meta( $user_id, $meta_key, 'not-a-variant' );
 
 		$buckets = Newspack_Popups_AB_Tests::get_logged_in_buckets( Newspack_Popups_AB_Tests::get_tests_config() );
 		self::assertContains( $buckets['invalid-bucket-test'], [ 'a', 'b' ] );
 		self::assertSame( $buckets['invalid-bucket-test'], get_user_meta( $user_id, $meta_key, true ) );
+
+		wp_set_current_user( 0 );
+	}
+
+	/**
+	 * A reader's bucket belongs to this site: one stored by another site in the
+	 * network, or under the unprefixed key, is not read or overwritten.
+	 */
+	public function test_logged_in_bucket_is_scoped_to_the_site() {
+		global $wpdb;
+		$this->create_test_variant( 'shared-id-test', 'a', null, [], 50 );
+		$this->create_test_variant( 'shared-id-test', 'b' );
+
+		$user_id    = self::factory()->user->create();
+		$other_site = $wpdb->base_prefix . '99_' . Newspack_Popups_AB_Tests::USER_META_BUCKET_PREFIX . 'shared-id-test';
+		$unprefixed = Newspack_Popups_AB_Tests::USER_META_BUCKET_PREFIX . 'shared-id-test';
+		wp_set_current_user( $user_id );
+		$config   = Newspack_Popups_AB_Tests::get_tests_config();
+		$computed = Newspack_Popups_AB_Tests::compute_bucket( (string) $user_id, 'shared-id-test', $config['shared-id-test'] );
+		$other    = 'a' === $computed ? 'b' : 'a';
+		update_user_meta( $user_id, $other_site, $other );
+		update_user_meta( $user_id, $unprefixed, $other );
+
+		$buckets = Newspack_Popups_AB_Tests::get_logged_in_buckets( $config );
+		self::assertSame( $computed, $buckets['shared-id-test'], 'Another site\'s bucket must not be read.' );
+		self::assertSame( $wpdb->get_blog_prefix() . $unprefixed, Newspack_Popups_AB_Tests::bucket_meta_key( 'shared-id-test' ) );
+		self::assertSame( $computed, get_user_meta( $user_id, Newspack_Popups_AB_Tests::bucket_meta_key( 'shared-id-test' ), true ) );
+		self::assertSame( $other, get_user_meta( $user_id, $other_site, true ) );
+		self::assertSame( $other, get_user_meta( $user_id, $unprefixed, true ) );
 
 		wp_set_current_user( 0 );
 	}

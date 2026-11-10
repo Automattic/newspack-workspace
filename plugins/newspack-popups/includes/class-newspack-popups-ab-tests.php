@@ -25,6 +25,7 @@ final class Newspack_Popups_AB_Tests {
 
 	const META_KEYS = [ self::META_TEST_ID, self::META_VARIANT, self::META_GOAL, self::META_CONTROL_SHARE ];
 
+	// Not the whole key: bucket_meta_key() puts the site's table prefix in front.
 	const USER_META_BUCKET_PREFIX = 'newspack_popups_ab_bucket_';
 
 	/**
@@ -238,7 +239,24 @@ final class Newspack_Popups_AB_Tests {
 		if ( '' === $test_id ) {
 			return;
 		}
-		delete_metadata( 'user', 0, self::USER_META_BUCKET_PREFIX . $test_id, '', true );
+		delete_metadata( 'user', 0, self::bucket_meta_key( $test_id ), '', true );
+	}
+
+	/**
+	 * The user meta key that holds a reader's bucket for a test on this site.
+	 *
+	 * User meta is shared by every site in a network, so the key carries this
+	 * site's table prefix, as core's per-site user options do. Two sites can then
+	 * use the same Test ID, and ending one test leaves the other's readers alone.
+	 * Raw user meta rather than get_user_option(), which falls back to the
+	 * unprefixed key that every site shares.
+	 *
+	 * @param string $test_id Test ID.
+	 * @return string Meta key.
+	 */
+	public static function bucket_meta_key( $test_id ) {
+		global $wpdb;
+		return $wpdb->get_blog_prefix() . self::USER_META_BUCKET_PREFIX . $test_id;
 	}
 
 	/**
@@ -2213,7 +2231,7 @@ final class Newspack_Popups_AB_Tests {
 		$client_id = self::get_client_id();
 		$buckets   = [];
 		foreach ( $tests_config as $test_id => $config ) {
-			$meta_key = self::USER_META_BUCKET_PREFIX . $test_id;
+			$meta_key = self::bucket_meta_key( $test_id );
 			$stored   = get_user_meta( $user_id, $meta_key, true );
 			$bucket   = $stored;
 			if ( ! in_array( $bucket, $config['variants'], true ) ) {
