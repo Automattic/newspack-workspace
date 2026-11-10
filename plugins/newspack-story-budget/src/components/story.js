@@ -13,7 +13,7 @@ import {
 	Notice,
 } from '@wordpress/components';
 import { notAllowed } from '@wordpress/icons';
-import { useSelect, useDispatch } from '@wordpress/data';
+import { select as dataSelect, useSelect, useDispatch } from '@wordpress/data';
 import { useEffect, useRef, useState, useCallback, useMemo } from '@wordpress/element';
 
 /**
@@ -76,6 +76,11 @@ export default ( { storyId, onCancel } ) => {
 	const handleSave = useCallback( async () => {
 		clearErrors( storyId );
 		await saveStory( storyId, editedStory );
+		const stored = dataSelect( storeNamespace );
+		if ( ! stored.getStoryError( storyId ) ) {
+			hasEdited.current = false;
+			setEditedStory( stored.getStory( storyId ) );
+		}
 	}, [ clearErrors, storyId, editedStory, saveStory ] );
 
 	const handleCancel = useCallback( () => {
@@ -92,7 +97,7 @@ export default ( { storyId, onCancel } ) => {
 		[ clearErrors, storyId ]
 	);
 
-	const isAwaitingMetadata = ! hasMetadata && ! fetchDone;
+	const isAwaitingMetadata = ! hasMetadata && ( isLoadingStory || ! fetchDone );
 
 	const canPreview = useMemo( () => {
 		return story?.metadata?.can_preview && ! utils.sites.isRemoteSite();
