@@ -87,7 +87,7 @@ if ( ! class_exists( __NAMESPACE__ . '\Tag_Labels' ) ) {
 			}
 
 			// Return nothing rather than an empty wrapper: theme CSS changes the category's
-			// layout whenever a `.tag-labels` follows it (`.cat-links:has( + .tag-labels )`).
+			// layout whenever a `.newspack-tag-labels` follows it (`.cat-links:has( + .newspack-tag-labels )`).
 			if ( '' === $labels_html ) {
 				return '';
 			}
