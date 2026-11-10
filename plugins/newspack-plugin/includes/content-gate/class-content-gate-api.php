@@ -1093,10 +1093,11 @@ class Content_Gate_API {
 	 * A slug that isn't on the offered list is kept when it names a registered taxonomy,
 	 * since the Memberships migration writes rules for any taxonomy straight to post meta
 	 * and a later save must not lose them. The premium newsletter rule (`newsletters`) is
-	 * kept the same way, so a save never asks the ESP for its lists. Any other slug fails,
-	 * naming it, so the operator can remove it. For the post types rule, a post type that isn't registered
-	 * right now is kept too, while a registered one that isn't offered fails. Any other
-	 * rule with options fails on a value that isn't offered.
+	 * kept too, recognized by its slug so a save never asks the ESP for its lists. Any
+	 * other slug fails, naming it, so the operator can remove it. For the post types
+	 * rule, a post type that isn't registered right now is kept too, while a registered
+	 * one that isn't offered fails. Any other rule with options fails on a value that
+	 * isn't offered.
 	 *
 	 * @param array $content_rule The content rule.
 	 *
