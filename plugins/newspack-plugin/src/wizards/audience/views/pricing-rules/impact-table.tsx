@@ -12,7 +12,7 @@
  * WordPress dependencies
  */
 import { __, _n, sprintf } from '@wordpress/i18n';
-import { useState, useMemo, useId } from '@wordpress/element';
+import { Fragment, useState, useMemo, useId } from '@wordpress/element';
 import {
 	Button,
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -59,10 +59,12 @@ function ResultingCell( { row, currency }: { row?: CatalogImpactRow; currency: P
 	return (
 		<>
 			{ row.segments.map( ( seg, i ) => (
-				<span key={ i } className={ `newspack-pricing-rules__price-step${ seg.changed ? ' is-changed' : '' }` }>
-					{ i > 0 ? ' → ' : '' }
-					{ formatSegment( seg, currency ) }
-				</span>
+				<Fragment key={ i }>
+					{ i > 0 && ' → ' }
+					<span className={ `newspack-pricing-rules__price-step${ seg.changed ? ' is-changed' : '' }` }>
+						{ formatSegment( seg, currency ) }
+					</span>
+				</Fragment>
 			) ) }
 		</>
 	);
