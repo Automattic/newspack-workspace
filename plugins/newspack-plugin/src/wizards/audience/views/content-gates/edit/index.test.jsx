@@ -219,6 +219,43 @@ describe( 'Archive rules', () => {
 		expect( savedGate().archive_rules ).toEqual( [ { slug: 'post_type_archives', value: [ 'newspack_collection' ] } ] );
 	} );
 
+	it( 'keeps unsaved archive pages through a switch to Restrict all posts and back', async () => {
+		await renderEdit();
+		fireEvent.click( screen.getByRole( 'heading', { name: 'Choose specific content' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Pick Collections' } ) );
+		fireEvent.click( screen.getByRole( 'heading', { name: 'Restrict all posts' } ) );
+		fireEvent.click( screen.getByRole( 'heading', { name: 'Choose specific content' } ) );
+		await runHeaderAction( 'Save' );
+
+		expect( savedGate().archive_rules ).toEqual( [ { slug: 'post_type_archives', value: [ 'newspack_collection' ] } ] );
+	} );
+
+	it( 'forgets the previous gate’s archive pages when the editor resets to a blank gate', async () => {
+		const archiveGate = { ...STORED_GATE, archive_rules: [ { slug: 'post_type_archives', value: [ 'newspack_collection' ] } ] };
+		apiFetch.mockImplementation( ( { method = 'GET', data } ) =>
+			Promise.resolve( method === 'GET' ? { gates: [ archiveGate ], config: {} } : data.gate )
+		);
+		dispatch( WIZARD_STORE_NAMESPACE ).setAPIDataForWizard( {
+			slug: AUDIENCE_CONTENT_GATES_WIZARD_SLUG,
+			data: { gates: [ archiveGate ], config: {} },
+		} );
+		const renderAt = params => (
+			<MemoryRouter>
+				<Edit match={ { params } } updateGatesData={ updateGatesData } />
+			</MemoryRouter>
+		);
+		const { rerender } = render( renderAt( { id: String( archiveGate.id ) } ) );
+		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Pick Collections' } ) ).toBeInTheDocument() );
+
+		// A gate ID that no longer exists, reached without leaving the editor, resets it to a blank gate.
+		await act( async () => rerender( renderAt( { id: '99' } ) ) );
+		await act( async () => rerender( renderAt( { id: 'new', type: 'all' } ) ) );
+		fireEvent.click( screen.getByRole( 'heading', { name: 'Choose specific content' } ) );
+		await runHeaderAction( 'Save' );
+
+		expect( savedGate().archive_rules ).toEqual( [] );
+	} );
+
 	it( 'keeps unsaved archive pages when Choose specific content is clicked again', async () => {
 		await renderEdit();
 		fireEvent.click( screen.getByRole( 'heading', { name: 'Choose specific content' } ) );

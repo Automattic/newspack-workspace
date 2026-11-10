@@ -454,6 +454,10 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 			setContentRules( DEFAULT_GATE.content_rules );
 			setContentRulesMatch( 'all' );
 			setArchiveRules( [] );
+			// The editor can stay mounted across this reset, so drop the rules set aside for the
+			// previous gate, or choosing specific content would bring them back.
+			savedCustomRules.current = DEFAULT_GATE.content_rules;
+			savedArchiveRules.current = [];
 			setAutoSignup( 'default' );
 			setHideLists( false );
 			setRegistration( DEFAULT_GATE.registration );
