@@ -57,7 +57,7 @@ function RepublishButtonEdit( { attributes, setAttributes } ) {
 					/>
 				</PanelBody>
 			</InspectorControls>
-			{ /* `wp-block` lets the editor center and size these like other blocks. */ }
+			{ /* `wp-block` on the buttons container and license lets the editor center and size them like other blocks. */ }
 			<div className="wp-block wp-block-buttons is-layout-flex">
 				<div className="wp-block-button">
 					<div { ...blockProps }>
