@@ -177,8 +177,8 @@ final class Newspack_Popups_AB_Tests {
 	}
 
 	/**
-	 * Remember the Test ID a meta write is about to remove or replace. The value
-	 * is read here because the after-hooks only see the new one.
+	 * Remember the Test ID a meta write is about to remove or replace. It is read
+	 * here because by the after-hooks the row has been replaced or removed.
 	 *
 	 * @param int|int[] $meta_ids  Meta ID, or IDs for a delete.
 	 * @param int       $object_id Post ID, or 0 for a delete across all posts.
