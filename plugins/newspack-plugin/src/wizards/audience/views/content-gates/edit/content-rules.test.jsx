@@ -53,7 +53,7 @@ describe( 'ContentRules', () => {
 			rules: [ { slug: 'gone', value: [ '7', '9' ] } ],
 		} );
 		expect( screen.getByText( 'gone (no longer on this site): 7, 9' ) ).toBeTruthy();
-		expect( screen.getByText( 'Remove this rule to publish the gate or change its rules.' ) ).toBeTruthy();
+		expect( screen.getByText( "Remove this rule to save the gate while it's active, or to change its rules." ) ).toBeTruthy();
 		fireEvent.click( screen.getByRole( 'button', { name: 'Remove gone rule' } ) );
 		expect( onChange ).toHaveBeenCalledWith( [] );
 	} );

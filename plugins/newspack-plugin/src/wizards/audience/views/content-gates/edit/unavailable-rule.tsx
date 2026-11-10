@@ -18,7 +18,11 @@ export default function UnavailableRule( { slug, value, showHelp = true }: { slu
 					ids
 				) }
 			</p>
-			{ showHelp && <p className="description">{ __( 'Remove this rule to publish the gate or change its rules.', 'newspack-plugin' ) }</p> }
+			{ showHelp && (
+				<p className="description">
+					{ __( "Remove this rule to save the gate while it's active, or to change its rules.", 'newspack-plugin' ) }
+				</p>
+			) }
 		</>
 	);
 }
