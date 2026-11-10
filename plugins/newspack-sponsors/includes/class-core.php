@@ -48,6 +48,7 @@ final class Core {
 	 */
 	public function __construct() {
 		add_action( 'init', [ __CLASS__, 'init' ] );
+		add_action( 'wp_loaded', [ __CLASS__, 'maybe_flush_rewrite_rules' ] );
 		add_filter( 'newspack_ads_should_show_ads', [ __CLASS__, 'suppress_ads' ], 10, 2 );
 		add_filter( 'newspack_ads_ad_targeting', [ __CLASS__, 'ad_targeting' ], 10, 2 );
 		add_action( 'pre_get_posts', [ __CLASS__, 'ensure_only_sponsors' ] );
@@ -126,18 +127,17 @@ final class Core {
 		self::register_meta();
 		self::register_tax();
 		self::create_shadow_relationship();
-		self::maybe_flush_rewrite_rules();
 	}
 
 	/**
-	 * Flush rewrite rules once so sites drop the sponsor archive rule stored
-	 * before the taxonomy stopped having archives. A stale rule would keep
-	 * serving the homepage at /newspack_spnsrs_tax/<slug>/ instead of a 404.
+	 * Flush rewrite rules once, so a stored sponsor archive rule is dropped
+	 * and /newspack_spnsrs_tax/<slug>/ returns a 404 instead of the homepage.
+	 * Runs on `wp_loaded` so the option is only set once the flush has happened.
 	 */
 	public static function maybe_flush_rewrite_rules() {
 		$option_name = 'newspack_sponsors_has_flushed_tax_rewrite_rules';
 		if ( ! get_option( $option_name ) ) {
-			flush_rewrite_rules(); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.flush_rewrite_rules_flush_rewrite_rules
+			flush_rewrite_rules( false ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.flush_rewrite_rules_flush_rewrite_rules
 			update_option( $option_name, true );
 		}
 	}
@@ -371,9 +371,9 @@ final class Core {
 			'archives'              => __( 'Sponsors', 'newspack-sponsors' ),
 		];
 
-		// `public` stays true because the Content Loop, Carousel and RSS feed
-		// filters only list public taxonomies. Sponsor terms have no front-end
-		// archive, so they are not publicly queryable and get no rewrite rule.
+		// `public` is true so the Content Loop, Carousel and RSS feed filters list
+		// sponsors. Sponsor terms have no front-end archive, so they are not
+		// publicly queryable and get no rewrite rule.
 		$tax_args = [
 			'capabilities'       => [
 				'manage_terms' => '',
