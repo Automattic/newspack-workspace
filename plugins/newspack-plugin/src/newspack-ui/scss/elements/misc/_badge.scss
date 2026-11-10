@@ -53,7 +53,7 @@ $status-dot-margin-end: calc((1.25em - #{$status-dot-size}) / 2);
 	color: var(--newspack-ui-color-text-muted);
 	cursor: default;
 	display: inline-flex;
-	font-family: var(--newspack-ui-font-family);
+	font-family: var(--newspack-ui-font-family-body);
 	font-size: var(--newspack-ui-font-size-caption);
 	font-weight: var(--newspack-ui-font-weight-strong);
 	height: var(--newspack-ui-spacer-4);
@@ -130,7 +130,7 @@ $status-dot-margin-end: calc((1.25em - #{$status-dot-size}) / 2);
 	align-items: baseline;
 	color: var(--newspack-ui-color-text);
 	display: inline-flex;
-	font-family: var(--newspack-ui-font-family);
+	font-family: var(--newspack-ui-font-family-body);
 	font-size: inherit;
 	font-weight: var(--newspack-ui-font-weight-regular);
 	gap: $status-dot-gap;
@@ -191,10 +191,10 @@ $status-dot-margin-end: calc((1.25em - #{$status-dot-size}) / 2);
 .newspack-ui__status--live::before,
 .newspack-ui__badge--dot.newspack-ui__badge--pulse::before {
 	@media ( prefers-reduced-motion: reduce ) {
-		box-shadow: 0 0 0 var(--newspack-ui-spacer-half) color-mix(in srgb, var(--newspack-ui-badge-dot-color, var(--newspack-ui-status-color, var(--newspack-ui-color-text-subtle))) 22%, transparent);
+		box-shadow: 0 0 0 var(--newspack-ui-spacer-half) color-mix(in oklab, var(--newspack-ui-badge-dot-color, var(--newspack-ui-status-color, var(--newspack-ui-color-text-subtle))) 22%, transparent);
 
 		@media ( forced-colors: active ) {
-			box-shadow: 0 0 0 var(--newspack-ui-spacer-half) color-mix(in srgb, CanvasText 22%, transparent);
+			box-shadow: 0 0 0 var(--newspack-ui-spacer-half) color-mix(in oklab, CanvasText 22%, transparent);
 		}
 	}
 }

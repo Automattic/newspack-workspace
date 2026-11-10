@@ -4,7 +4,7 @@
 // stylelint-disable-next-line selector-id-pattern
 #newspack_modal_checkout_container {
 	outline: none;
-	background: var(--newspack-ui-color-neutral-0, np-colors.$neutral-000);
+	background: var(--newspack-ui-color-surface, np-colors.$neutral-000);
 	margin: 0;
 	padding: var(--newspack-ui-spacer-4, 20px) var(--newspack-ui-spacer-5, 24px) var(--newspack-ui-spacer-5, 24px);
 
@@ -69,7 +69,7 @@
 
 	// Required fields.
 	.woocommerce form .form-row .required {
-		color: var(--newspack-ui-color-error-50, np-colors.$error-500);
+		color: var(--newspack-ui-color-error-text, np-colors.$error-600);
 	}
 
 	// Billing & Shipping fields
@@ -350,20 +350,20 @@
 
 				&.short,
 				&.bad {
-					color: var(--newspack-ui-color-error-50, np-colors.$error-500);
+					color: var(--newspack-ui-color-error-text, #{np-colors.$error-600});
 				}
 
 				&.good {
-					color: var(--newspack-ui-color-warning-40, np-colors.$warning-400);
+					color: var(--newspack-ui-color-warning-text, #{np-colors.$warning-600});
 				}
 
 				&.strong {
-					color: var(--newspack-ui-color-success-50, np-colors.$success-500);
+					color: var(--newspack-ui-color-success-text, #{np-colors.$success-600});
 				}
 			}
 
 			.woocommerce-password-hint {
-				color: var(--newspack-ui-color-neutral-60, np-colors.$neutral-600);
+				color: var(--newspack-ui-color-text-subtle, np-colors.$neutral-600);
 				font-size: var(--newspack-ui-font-size-xs, 14px);
 				line-height: var(--newspack-ui-line-height-xs, 1.4286);
 			}
@@ -443,7 +443,7 @@
 		p:first-of-type {
 			align-items: center;
 			display: flex;
-			gap: var(--newspack-ui-spacer-base, np-colors.$neutral-900);
+			gap: var(--newspack-ui-spacer-base, 8px);
 
 			input,
 			button {
@@ -639,10 +639,10 @@
 
 		.wc-stripe-elements-field,
 		.wc-stripe-iban-element-field {
-			border: 1px solid var(--newspack-ui-color-input-border, np-colors.$neutral-500);
-			border-radius: var(--newspack-ui-radius-control, 8px);
+			border: var(--newspack-ui-field-border-width, 1px) solid var(--newspack-ui-field-border-color, var(--newspack-ui-color-input-border, np-colors.$neutral-500));
+			border-radius: var(--newspack-ui-field-radius, var(--newspack-ui-radius-control, 8px));
 			display: block;
-			font-family: var(--newspack-ui-font-family, system-ui);
+			font-family: var(--newspack-ui-font-family, system-ui, sans-serif);
 			font-size: var(--newspack-ui-font-size-s, 16px);
 			line-height: var(--newspack-ui-line-height-s, 1.5);
 			padding: calc(var(--newspack-ui-spacer-2, 12px) - 1px) calc(var(--newspack-ui-spacer-3, 16px) - 1px);
@@ -660,6 +660,7 @@
 		}
 
 		&:has(div.stripe-source-errors[role="alert"]:not(:empty)) {
+			--newspack-ui-field-border-color: var(--newspack-ui-color-error, #{np-colors.$error-600});
 			--newspack-ui-color-input-border: var(--newspack-ui-color-error, #{np-colors.$error-600});
 			--newspack-ui-color-input-border-hover: var(--newspack-ui-color-error, #{np-colors.$error-600});
 
@@ -675,7 +676,7 @@
 			.woocommerce_error {
 				background: transparent;
 				color: var(--newspack-ui-color-error-text, np-colors.$error-600);
-				font-family: var(--newspack-ui-font-family, system-ui);
+				font-family: var(--newspack-ui-font-family-body, var(--newspack-ui-font-family, system-ui, sans-serif));
 				font-size: var(--newspack-ui-font-size-xs, 14px);
 				line-height: var(--newspack-ui-line-height-xs, 1.4286);
 				padding: 0;
@@ -866,7 +867,7 @@
 	}
 
 	.woocommerce .first-payment-date {
-		font-family: var(--newspack-ui-font-family, system-ui);
+		font-family: var(--newspack-ui-font-family-body, var(--newspack-ui-font-family, system-ui, sans-serif));
 	}
 
 	// Errors
@@ -923,7 +924,7 @@
 
 		// Privacy Policy
 		.woocommerce-privacy-policy-text {
-			color: var(--newspack-ui-color-neutral-60, np-colors.$neutral-600);
+			color: var(--newspack-ui-color-text-subtle, np-colors.$neutral-600);
 		}
 
 		.woocommerce-terms-and-conditions {
@@ -940,9 +941,9 @@
 	p#newspack_subscription_confirmation_field,
 	//Terms and Conditions checkbox
 	.woocommerce-terms-and-conditions-wrapper > p.form-row {
-		--newspack-ui-color-input-border: var(--newspack-ui-color-neutral-60, #{np-colors.$neutral-600});
+		--newspack-ui-color-input-border: var(--newspack-ui-color-text-subtle, #{np-colors.$neutral-600});
 
-		background: var(--newspack-ui-color-neutral-5, np-colors.$neutral-050);
+		background: var(--newspack-ui-color-surface-subtle, np-colors.$neutral-050);
 		border-color: var(--newspack-ui-color-border, np-colors.$neutral-300);
 		box-shadow: none;
 		font-size: var(--newspack-ui-font-size-xs, 14px);
@@ -1020,7 +1021,7 @@
 		.woocommerce-message,
 		.woocommerce-error,
 		.woocommerce-info {
-			font-family: var(--newspack-ui-font-family, system-ui);
+			font-family: var(--newspack-ui-font-family-body, var(--newspack-ui-font-family, system-ui, sans-serif));
 			list-style-type: none;
 			margin: 0;
 

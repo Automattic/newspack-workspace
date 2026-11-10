@@ -513,10 +513,7 @@ class My_Account_UI_V1 {
 
 		ob_start();
 		?>
-		<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--align-center newspack-ui__stack--gap-half">
-			<span class="newspack-ui__icon newspack-ui__icon--large newspack-ui__icon--success">
-				<?php Newspack_UI_Icons::print_svg( 'published' ); ?>
-			</span>
+		<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--align-center">
 			<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-1">
 				<h2 class="newspack-ui__font--m"><?php esc_html_e( 'Your account deletion has been requested.', 'newspack-plugin' ); ?></h2>
 				<p class="newspack-ui__color-text-gray"><?php esc_html_e( 'We just sent instructions on how to delete your account to', 'newspack-plugin' ); ?> <strong><?php echo esc_html( $user->user_email ); ?></strong>.</p>

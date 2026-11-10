@@ -69,24 +69,24 @@
 		"shadow": {
 			"presets": [
 				{
-					"name": "Elevation 1",
+					"name": "Raised",
 					"slug": "elevation-1",
-					"shadow": "0 1px 10px #0000001a"
+					"shadow": "0 0 0 1px var(--wp--custom--elevation--edge), 0 1px 2px color-mix( in oklab, var(--wp--custom--elevation--ink) calc( var(--wp--custom--elevation--strength) * 6% ), transparent ), 0 2px 6px -2px color-mix( in oklab, var(--wp--custom--elevation--ink) calc( var(--wp--custom--elevation--strength) * 6% ), transparent )"
 				},
 				{
-					"name": "Elevation 2",
+					"name": "Menu",
 					"slug": "elevation-2",
-					"shadow": "0 2px 20px #00000026"
+					"shadow": "0 0 0 1px var(--wp--custom--elevation--edge), 0 1px 2px color-mix( in oklab, var(--wp--custom--elevation--ink) calc( var(--wp--custom--elevation--strength) * 8% ), transparent ), 0 6px 16px -4px color-mix( in oklab, var(--wp--custom--elevation--ink) calc( var(--wp--custom--elevation--strength) * 14% ), transparent )"
 				},
 				{
-					"name": "Elevation 3",
+					"name": "Floating",
 					"slug": "elevation-3",
-					"shadow": "0 3px 30px #00000033"
+					"shadow": "0 0 0 1px var(--wp--custom--elevation--edge), 0 1px 3px color-mix( in oklab, var(--wp--custom--elevation--ink) calc( var(--wp--custom--elevation--strength) * 8% ), transparent ), 0 12px 28px -8px color-mix( in oklab, var(--wp--custom--elevation--ink) calc( var(--wp--custom--elevation--strength) * 20% ), transparent )"
 				},
 				{
-					"name": "Elevation 4",
+					"name": "Dialog",
 					"slug": "elevation-4",
-					"shadow": "0 0 20px #0000001a, 0 25px 30px #00000026"
+					"shadow": "0 0 0 1px var(--wp--custom--elevation--edge), 0 2px 6px color-mix( in oklab, var(--wp--custom--elevation--ink) calc( var(--wp--custom--elevation--strength) * 8% ), transparent ), 0 24px 48px -12px color-mix( in oklab, var(--wp--custom--elevation--ink) calc( var(--wp--custom--elevation--strength) * 24% ), transparent )"
 				},
 				{
 					"name": "inset 1",
@@ -266,7 +266,13 @@
 		"useRootPaddingAwareAlignments": true,
 		"custom": {
 			"button": {
-				"mix": "var(--wp--preset--color--base)"
+				"mix": "var(--wp--preset--color--base)",
+				"outline": "var(--wp--preset--color--accent)"
+			},
+			"elevation": {
+				"ink": "color-mix( in oklab, var(--wp--preset--color--contrast) 60%, #000 )",
+				"edge": "transparent",
+				"strength": "1"
 			},
 			"state": {
 				"hover": "85%",
@@ -436,7 +442,7 @@
 						},
 						"color": {
 							"background": "var(--wp--preset--color--base)",
-							"text": "var(--wp--preset--color--accent)"
+							"text": "var(--wp--custom--button--outline)"
 						},
 						"spacing": {
 							"padding": {

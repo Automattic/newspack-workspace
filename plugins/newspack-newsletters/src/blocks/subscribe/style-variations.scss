@@ -33,7 +33,7 @@
 	// covers a block with no style class and one that carries `is-style-default`,
 	// which the style picker wrote before Legacy existed.
 	&:not(.is-style-legacy) {
-		font-family: var(--newspack-ui-font-family, system-ui, sans-serif);
+		font-family: var(--newspack-ui-font-family-body, var(--newspack-ui-font-family, system-ui, sans-serif));
 		font-size: var(--newspack-ui-font-size-s, 16px);
 		font-weight: 400;
 		line-height: var(--newspack-ui-line-height-s, 1.5);
@@ -66,6 +66,7 @@
 
 			label,
 			.list-label {
+				font-family: var(--newspack-ui-font-family-control, inherit);
 				font-size: var(--newspack-ui-font-size-s, 16px);
 				font-weight: 400;
 				line-height: var(--newspack-ui-line-height-s, 1.5);
@@ -79,7 +80,7 @@
 				// Each list is its own card, with or without a description. Only the
 				// Legacy style puts the lists in one box.
 				li {
-					background: var(--newspack-ui-color-neutral-0, #fff);
+					background: var(--newspack-ui-color-surface, #fff);
 					border: 1px solid var(--newspack-ui-color-border, #ddd);
 					border-radius: var(--newspack-ui-radius-surface, 12px);
 					margin: 0;
@@ -141,9 +142,9 @@
 					}
 
 					&:checked {
-						background: var(--newspack-ui-color-neutral-90, #1e1e1e);
+						background: var(--newspack-ui-color-mark, #1e1e1e);
 						border-color: transparent;
-						color: var(--newspack-ui-color-neutral-0, #fff);
+						color: var(--newspack-ui-color-on-mark, #fff);
 					}
 
 					&:disabled {
@@ -153,14 +154,15 @@
 					}
 
 					&:checked:disabled {
-						background: var(--newspack-ui-color-neutral-60, #6c6c6c);
-						border-color: var(--newspack-ui-color-neutral-60, #6c6c6c);
+						background: var(--newspack-ui-color-text-subtle, #6c6c6c);
+						border-color: var(--newspack-ui-color-text-subtle, #6c6c6c);
+						color: var(--newspack-ui-color-surface, #fff);
 					}
 				}
 			}
 
 			.list-title {
-				color: var(--newspack-ui-color-neutral-90, #1e1e1e);
+				color: var(--newspack-ui-color-text, #1e1e1e);
 				font-size: inherit;
 				font-weight: 600;
 				line-height: inherit;
@@ -168,6 +170,7 @@
 
 			.list-description {
 				color: var(--newspack-ui-color-text-muted, #5d5d5d);
+				font-family: var(--newspack-ui-font-family-body, inherit);
 				font-size: var(--newspack-ui-font-size-xs, 14px);
 				line-height: var(--newspack-ui-line-height-xs, 1.4286);
 			}
@@ -178,6 +181,7 @@
 			gap: var(--newspack-ui-spacer-2, 12px);
 
 			label {
+				font-family: var(--newspack-ui-font-family-control, inherit);
 				font-size: inherit;
 				font-weight: 600;
 				line-height: inherit;
@@ -199,11 +203,13 @@
 
 		input[type="email"],
 		input[type="text"] {
-			background: var(--newspack-ui-color-neutral-0, #fff);
-			border: 1px solid var(--newspack-ui-color-input-border, #949494);
-			border-radius: var(--newspack-ui-radius-control, 8px);
-			color: var(--newspack-ui-color-neutral-90, #1e1e1e);
-			font-family: inherit;
+			background: var(--newspack-ui-field-bg, #fff);
+			border-color: var(--newspack-ui-field-border-color, var(--newspack-ui-color-input-border, #949494));
+			border-radius: var(--newspack-ui-field-radius, var(--newspack-ui-radius-control, 8px));
+			border-style: solid;
+			border-width: var(--newspack-ui-field-border-width, 1px);
+			color: var(--newspack-ui-field-ink, #1e1e1e);
+			font-family: var(--newspack-ui-field-font-family, inherit);
 			font-size: inherit;
 			font-weight: inherit;
 			line-height: inherit;
@@ -213,7 +219,7 @@
 				box-shadow var(--newspack-ui-duration-color, 150ms) var(--newspack-ui-ease-color, ease);
 
 			&::placeholder {
-				color: var(--newspack-ui-color-neutral-60, #6c6c6c);
+				color: var(--newspack-ui-field-ink-subtle, var(--newspack-ui-color-text-subtle, #6c6c6c));
 			}
 
 			&:hover:not(:disabled, :focus) {
@@ -228,7 +234,7 @@
 				-webkit-text-fill-color: currentcolor;
 				background: var(--newspack-ui-color-input-bg-disabled, #f0f0f0);
 				border-color: var(--newspack-ui-color-input-border-disabled, #ddd);
-				color: var(--newspack-ui-color-neutral-60, #6c6c6c);
+				color: var(--newspack-ui-color-text-subtle, #6c6c6c);
 				cursor: not-allowed;
 				opacity: 1;
 			}
@@ -241,14 +247,17 @@
 			border-radius: var(--newspack-ui-radius-button, 8px);
 			cursor: pointer;
 			display: inline-flex;
-			font-family: inherit;
 			font-size: var(--newspack-ui-font-size-s, 16px);
-			font-weight: var(--newspack-ui-font-weight-strong, 600);
 			justify-content: center;
 			line-height: var(--newspack-ui-line-height-s, 1.5);
 			margin-top: calc(var(--newspack-ui-spacer-2, 12px) - var(--newspack-ui-spacer-base, 8px));
 			min-height: var(--newspack-ui-spacer-9, 48px);
 			padding: var(--newspack-ui-spacer-2, 12px) var(--newspack-ui-spacer-4, 20px);
+
+			&:where(:not(.wp-element-button)) {
+				font-family: inherit;
+				font-weight: var(--newspack-ui-font-weight-strong, 600);
+			}
 
 			@media ( min-width: 782px ) {
 				margin-top: 0;
@@ -288,7 +297,7 @@
 
 			&__message {
 				p {
-					color: var(--newspack-ui-color-neutral-90, #1e1e1e);
+					color: var(--newspack-ui-color-text, #1e1e1e);
 					font-size: inherit;
 					font-weight: 600;
 					line-height: inherit;
@@ -392,7 +401,7 @@
 
 			ul li,
 			&__list {
-				background: var(--newspack-ui-color-neutral-0, #fff);
+				background: var(--newspack-ui-color-surface, #fff);
 				border: 1px solid var(--newspack-ui-color-border, #ddd);
 				border-radius: var(--newspack-ui-radius-surface, 12px);
 				display: flex;

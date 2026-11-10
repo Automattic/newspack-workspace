@@ -53,7 +53,7 @@
 	left: 0;
 	width: 100%;
 	height: 100%;
-	background-color: rgba(0, 0, 0, 0.75);
+	background-color: var(--newspack-ui-color-overlay-50, var(--wp--custom--color--overlay-50, #00000080));
 }
 
 #republication-tracker-tool-modal-content {

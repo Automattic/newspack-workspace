@@ -90,12 +90,12 @@
 
 			&.style-icon-text,
 			&.style-text {
-				background: var(--newspack-ui-color-neutral-0, var(--wp--preset--color--base));
-				border: 1px solid var(--newspack-ui-color-neutral-30, var(--wp--preset--color--base-3));
+				background: var(--newspack-ui-color-surface, var(--wp--preset--color--base));
+				border: 1px solid var(--newspack-ui-color-border, var(--wp--preset--color--base-3));
 				border-radius: var(--wp--custom--border--radius-medium);
 				box-shadow: none;
-				color: var(--newspack-ui-color-neutral-90, var(--wp--preset--color--contrast));
-				font-family: var(--newspack-ui-font-family, var(--wp--preset--font-family--inter, system-ui, sans-serif));
+				color: var(--newspack-ui-color-text, var(--wp--preset--color--contrast));
+				font-family: var(--newspack-ui-font-family-control, var(--wp--preset--font-family--inter, system-ui, sans-serif));
 				font-size: var(--wp--preset--font-size--x-small);
 				font-weight: 600;
 				gap: var(--wp--custom--spacing--10);
@@ -106,13 +106,13 @@
 
 				@include motion.hover {
 					&:hover {
-						background: color-mix(in oklab, currentcolor var(--wp--custom--state--fill), var(--newspack-ui-color-neutral-0, var(--wp--preset--color--base)));
+						background: color-mix(in oklab, currentcolor var(--wp--custom--state--fill), var(--newspack-ui-color-surface, var(--wp--preset--color--base)));
 						border-color: var(--newspack-ui-color-text-muted, var(--wp--preset--color--contrast-2));
 					}
 				}
 
 				&:active {
-					background: color-mix(in oklab, currentcolor var(--wp--custom--state--fill-hover), var(--newspack-ui-color-neutral-0, var(--wp--preset--color--base)));
+					background: color-mix(in oklab, currentcolor var(--wp--custom--state--fill-hover), var(--newspack-ui-color-surface, var(--wp--preset--color--base)));
 					transform: scale(motion.$press-scale);
 
 					@include motion.reduced-motion {

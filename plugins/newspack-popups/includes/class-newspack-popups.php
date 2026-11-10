@@ -1016,6 +1016,8 @@ final class Newspack_Popups {
 				'preview_archive'              => self::preview_archive_permalink(),
 				'custom_placements'            => Newspack_Popups_Custom_Placements::get_custom_placements(),
 				'overlay_placements'           => Newspack_Popups_Model::get_overlay_placements(),
+				'is_block_theme'               => Newspack_Popups_Model::is_block_theme(),
+				'site_background_available'    => Newspack_Popups_Model::site_background_available(),
 				'popup_size_options'           => Newspack_Popups_Model::get_popup_size_options(),
 				'available_archive_page_types' => Newspack_Popups_Model::get_available_archive_page_types(),
 				'taxonomy'                     => self::NEWSPACK_POPUPS_TAXONOMY,
@@ -1215,7 +1217,7 @@ final class Newspack_Popups {
 		update_post_meta( $post_id, 'close_button_background_color', '#00000000' );
 		update_post_meta( $post_id, 'enable_close_button_background', false );
 		update_post_meta( $post_id, 'overlay_color', '#000000' );
-		update_post_meta( $post_id, 'overlay_opacity', 30 );
+		update_post_meta( $post_id, 'overlay_opacity', 50 );
 		update_post_meta( $post_id, 'overlay_size', $overlay_size );
 		update_post_meta( $post_id, 'no_overlay_background', false );
 		update_post_meta( $post_id, 'placement', $placement );

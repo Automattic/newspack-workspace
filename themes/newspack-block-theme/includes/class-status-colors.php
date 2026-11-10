@@ -11,7 +11,7 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Derives error, success and warning colors that stay readable on the site's
- * base color and keeps them out of the way of a red brand.
+ * base color and keeps error and success out of the way of a red or green brand.
  *
  * The newspack-ui "Theme" style is meant to derive the same colors, so
  * tests/test-status-colors.php pins the rule with fixed vectors; change them
@@ -24,11 +24,11 @@ final class Status_Colors {
 
 	const ERROR_DARK_STEPS = [ '#d63638', '#facfd2', '#fcf0f1' ];
 
-	const SUCCESS_TEXT_STEPS = [ '#007017' ];
+	const SUCCESS_TEXT_STEPS = [ '#007017', '#005c12', '#00450c' ];
 
-	const SUCCESS_MARK_STEPS = [ '#008a20', '#007017' ];
+	const SUCCESS_MARK_STEPS = [ '#008a20', '#007017', '#005c12' ];
 
-	const SUCCESS_DARK_STEPS = [ '#008a20', '#b8e6bf' ];
+	const SUCCESS_DARK_STEPS = [ '#008a20', '#b8e6bf', '#edfaef' ];
 
 	const WARNING_TEXT_STEPS = [ '#755100' ];
 
@@ -38,11 +38,13 @@ final class Status_Colors {
 
 	const RED = '#d63638';
 
-	const RED_HUE_THRESHOLD = 25;
+	const GREEN = '#008a20';
 
-	const RED_NEAR_HUE = 12;
+	const BRAND_HUE_THRESHOLD = 25;
 
-	const RED_LIGHTNESS_MARGIN = 0.02;
+	const BRAND_NEAR_HUE = 12;
+
+	const BRAND_LIGHTNESS_MARGIN = 0.02;
 
 	const MIN_CHROMA = 0.04;
 
@@ -131,7 +133,7 @@ final class Status_Colors {
 	 * Text reaches APCA Lc 60 on the base and marks (borders, edges) Lc 25. On a
 	 * light base each role starts at its default step and moves only darker; on a
 	 * dark base it takes the lightest scale steps. A red brand moves error away
-	 * from the brand's lightness.
+	 * from the brand's lightness, and a green brand moves success the same way.
 	 * On a light base each tint is the role's default tint multiplied over the
 	 * base; on a dark base it is 12% of the mark over the base.
 	 *
@@ -148,20 +150,8 @@ final class Status_Colors {
 		$contrast_hex = self::normalize_hex( $contrast_hex );
 		$dark         = self::is_dark( $base );
 
-		$text_steps = $dark ? self::ERROR_DARK_STEPS : self::ERROR_TEXT_STEPS;
-		$start      = self::pick( $text_steps, $base, self::TEXT_LC );
-		$index      = self::move_from_brand( $text_steps, $start, $brand_hex, $dark );
-		$index      = self::pick( $text_steps, $base, self::TEXT_LC, $index );
-		if ( $dark ) {
-			$edge_start = self::pick( self::ERROR_DARK_STEPS, $base, self::MARK_LC );
-			$edge       = self::ERROR_DARK_STEPS[ min( $edge_start + $index - $start, count( self::ERROR_DARK_STEPS ) - 1 ) ];
-		} else {
-			$edge = self::ERROR_EDGE_STEPS[ self::pick( self::ERROR_EDGE_STEPS, $base, self::MARK_LC, $index ) ];
-		}
-		$error_text = $text_steps[ $index ];
-
-		$success_text = self::first( $dark ? self::SUCCESS_DARK_STEPS : self::SUCCESS_TEXT_STEPS, $base, self::TEXT_LC );
-		$success_mark = self::first( $dark ? self::SUCCESS_DARK_STEPS : self::SUCCESS_MARK_STEPS, $base, self::MARK_LC );
+		[ $error_text, $edge ]           = self::role_steps( self::ERROR_TEXT_STEPS, self::ERROR_EDGE_STEPS, self::ERROR_DARK_STEPS, self::RED, $base, $brand_hex, $dark );
+		[ $success_text, $success_mark ] = self::role_steps( self::SUCCESS_TEXT_STEPS, self::SUCCESS_MARK_STEPS, self::SUCCESS_DARK_STEPS, self::GREEN, $base, $brand_hex, $dark );
 		$warning_text = self::first( $dark ? self::WARNING_DARK_STEPS : self::WARNING_TEXT_STEPS, $base, self::TEXT_LC );
 		$warning_mark = self::first( $dark ? self::WARNING_DARK_STEPS : self::WARNING_MARK_STEPS, $base, self::MARK_LC );
 
@@ -302,7 +292,7 @@ final class Status_Colors {
 	 * @param string $base The base hex color.
 	 * @return bool
 	 */
-	private static function is_dark( string $base ): bool {
+	public static function is_dark( string $base ): bool {
 		return '#ffffff' === Contrast::get_text_color( $base );
 	}
 
@@ -339,35 +329,67 @@ final class Status_Colors {
 	}
 
 	/**
-	 * Move the error step away from a red brand.
+	 * The text and mark of a status role.
 	 *
-	 * @param string[] $steps The error text steps, in the order they are tried.
+	 * The text reaches Lc 60 on the base, after moving away from a brand of the
+	 * role's hue. On a light base the mark starts at the text's step on a scale
+	 * one step lighter; on a dark base it moves as far as the text did.
+	 *
+	 * @param string[] $text_steps The text steps on a light base, in the order they are tried.
+	 * @param string[] $mark_steps The mark steps on a light base, one step lighter than the text steps.
+	 * @param string[] $dark_steps The text and mark steps on a dark base.
+	 * @param string   $hue        The hex color of the role's hue.
+	 * @param string   $base       The base hex color.
+	 * @param string   $brand      The brand hex color.
+	 * @param bool     $dark       Whether the base is dark.
+	 * @return string[] The text and the mark.
+	 */
+	private static function role_steps( array $text_steps, array $mark_steps, array $dark_steps, string $hue, string $base, string $brand, bool $dark ): array {
+		$steps = $dark ? $dark_steps : $text_steps;
+		$start = self::pick( $steps, $base, self::TEXT_LC );
+		$index = self::move_from_brand( $steps, $start, $brand, $dark, $hue );
+		$index = self::pick( $steps, $base, self::TEXT_LC, $index );
+		if ( $dark ) {
+			$mark_start = self::pick( $dark_steps, $base, self::MARK_LC );
+			$mark       = $dark_steps[ min( $mark_start + $index - $start, count( $dark_steps ) - 1 ) ];
+		} else {
+			$mark = $mark_steps[ self::pick( $mark_steps, $base, self::MARK_LC, $index ) ];
+		}
+
+		return [ $steps[ $index ], $mark ];
+	}
+
+	/**
+	 * Move a status text step away from a brand of the role's hue.
+	 *
+	 * @param string[] $steps The text steps, in the order they are tried.
 	 * @param int      $index The chosen step.
 	 * @param string   $brand The brand hex color.
 	 * @param bool     $dark  Whether the base is dark.
+	 * @param string   $hue   The hex color of the role's hue.
 	 * @return int The step index after the move, clamped to the scale.
 	 */
-	private static function move_from_brand( array $steps, int $index, string $brand, bool $dark ): int {
+	private static function move_from_brand( array $steps, int $index, string $brand, bool $dark, string $hue ): int {
 		$brand_lab = Button_States::to_oklab( $brand );
 		if ( null === $brand_lab || hypot( $brand_lab[1], $brand_lab[2] ) < self::MIN_CHROMA ) {
 			return $index;
 		}
 
-		$distance = abs( self::oklch_hue( $brand ) - self::oklch_hue( self::RED ) );
+		$distance = abs( self::oklch_hue( $brand ) - self::oklch_hue( $hue ) );
 		$distance = min( $distance, 360 - $distance );
-		if ( $distance > self::RED_HUE_THRESHOLD ) {
+		if ( $distance > self::BRAND_HUE_THRESHOLD ) {
 			return $index;
 		}
 
 		$step_lightness = self::oklab_lightness( $steps[ $index ] );
 		$near           = $dark
-			? $brand_lab[0] <= $step_lightness + self::RED_LIGHTNESS_MARGIN
-			: $brand_lab[0] >= $step_lightness - self::RED_LIGHTNESS_MARGIN;
+			? $brand_lab[0] <= $step_lightness + self::BRAND_LIGHTNESS_MARGIN
+			: $brand_lab[0] >= $step_lightness - self::BRAND_LIGHTNESS_MARGIN;
 		if ( ! $near ) {
 			return $index;
 		}
 
-		return min( $index + ( $distance <= self::RED_NEAR_HUE ? 2 : 1 ), count( $steps ) - 1 );
+		return min( $index + ( $distance <= self::BRAND_NEAR_HUE ? 2 : 1 ), count( $steps ) - 1 );
 	}
 }
 

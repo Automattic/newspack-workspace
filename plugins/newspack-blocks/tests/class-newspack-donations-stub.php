@@ -32,6 +32,23 @@ if ( ! class_exists( __NAMESPACE__ . '\Donations' ) ) {
 		public static $stub_calls = [];
 
 		/**
+		 * Donation settings.
+		 *
+		 * @return array
+		 */
+		public static function get_donation_settings() {
+			return [
+				'tiered'              => false,
+				'platform'            => 'wc',
+				'disabledFrequencies' => [
+					'once'  => false,
+					'month' => false,
+					'year'  => false,
+				],
+			];
+		}
+
+		/**
 		 * Whether the given product ID is a donation product.
 		 *
 		 * @param int $product_id Product ID to check.

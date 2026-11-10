@@ -18,6 +18,11 @@ final class Content_Banner_Style {
 	const STYLES = [ 'light', 'dark', 'theme' ];
 
 	/**
+	 * The render style of banners on a site that uses the site Theme. Never stored, so it is not in self::STYLES.
+	 */
+	const SITE_STYLE = 'site';
+
+	/**
 	 * Whether the active theme supports the Theme style.
 	 *
 	 * The Theme style follows the classic theme's buttons, so it is only offered
@@ -27,6 +32,15 @@ final class Content_Banner_Style {
 	 */
 	public static function supports_theme_style(): bool {
 		return 'newspack-theme' === get_template();
+	}
+
+	/**
+	 * Whether banners render with the site Theme, which replaces the stored style.
+	 *
+	 * @return bool
+	 */
+	public static function uses_site_theme(): bool {
+		return Newspack_UI_Theme_Style::is_active();
 	}
 
 	/**
@@ -48,9 +62,12 @@ final class Content_Banner_Style {
 	 *
 	 * @param mixed $style The stored style.
 	 *
-	 * @return string One of self::STYLES.
+	 * @return string One of self::STYLES, or self::SITE_STYLE when the site Theme is in use.
 	 */
 	public static function get_render_style( mixed $style ): string {
+		if ( self::uses_site_theme() ) {
+			return self::SITE_STYLE;
+		}
 		$style = self::sanitize_style( $style );
 		if ( 'theme' === $style && ! self::supports_theme_style() ) {
 			return self::DEFAULT_STYLE;
@@ -76,16 +93,18 @@ final class Content_Banner_Style {
 	 * Get the variant class for the banner's subscribe button.
 	 *
 	 * The Theme style sets its own button colors in the banner stylesheet, so
-	 * it takes no variant class.
+	 * it takes no variant class. The site style uses the primary button, which
+	 * the site Theme colors.
 	 *
-	 * @param string $style The style the banner renders with.
+	 * @param string $style The style the banner renders with, one of self::STYLES or self::SITE_STYLE.
 	 *
 	 * @return string The button variant class.
 	 */
 	public static function get_button_class( string $style ): string {
 		return match ( $style ) {
-			'dark'  => 'newspack-ui__button--primary-light',
-			'theme' => '',
+			'dark'           => 'newspack-ui__button--primary-light',
+			'theme'          => '',
+			self::SITE_STYLE => 'newspack-ui__button--primary',
 			default => 'newspack-ui__button--primary',
 		};
 	}
@@ -93,29 +112,42 @@ final class Content_Banner_Style {
 	/**
 	 * Get the inline CSS custom properties for a banner.
 	 *
-	 * Text on each color is black or white, whichever reads better. An empty
-	 * color sets nothing, so the stylesheet's defaults apply.
+	 * Text on each color is the picked text color, or black or white, whichever
+	 * reads better. An empty color sets nothing, so the stylesheet's defaults
+	 * apply. Light and Dark print nothing; the Theme and site styles print the
+	 * colors that are picked.
 	 *
-	 * @param string $style            The style the banner renders with.
-	 * @param string $background_color The banner background color.
-	 * @param string $button_color     The button background color.
+	 * @param string $style             The style the banner renders with, one of self::STYLES or self::SITE_STYLE.
+	 * @param string $background_color  The banner background color.
+	 * @param string $button_color      The button background color.
+	 * @param string $text_color        The banner text color.
+	 * @param string $button_text_color The button text color.
+	 * @param string $stored_style      The style stored for the banner. The site style only prints colors when it is Theme.
 	 *
 	 * @return string The declarations, or an empty string.
 	 */
-	public static function get_inline_style( string $style, string $background_color, string $button_color ): string {
-		if ( 'theme' !== $style ) {
+	public static function get_inline_style( string $style, string $background_color, string $button_color, string $text_color = '', string $button_text_color = '', string $stored_style = self::DEFAULT_STYLE ): string {
+		if ( ! self::has_options( $style, $stored_style ) ) {
 			return '';
 		}
-		$properties       = [];
-		$background_color = self::sanitize_color( $background_color );
-		$button_color     = self::sanitize_color( $button_color );
+		$properties        = [];
+		$background_color  = self::sanitize_color( $background_color );
+		$button_color      = self::sanitize_color( $button_color );
+		$text_color        = self::sanitize_color( $text_color );
+		$button_text_color = self::sanitize_color( $button_text_color );
 		if ( $background_color ) {
-			$properties['--newspack-content-banner-bg']  = $background_color;
-			$properties['--newspack-content-banner-ink'] = newspack_get_color_contrast( $background_color );
+			$properties['--newspack-content-banner-bg'] = $background_color;
+		}
+		$ink = $text_color ? $text_color : ( $background_color ? newspack_get_color_contrast( $background_color ) : '' );
+		if ( $ink ) {
+			$properties['--newspack-content-banner-ink'] = $ink;
 		}
 		if ( $button_color ) {
-			$properties['--newspack-content-banner-button-bg']  = $button_color;
-			$properties['--newspack-content-banner-button-ink'] = newspack_get_color_contrast( $button_color );
+			$properties['--newspack-content-banner-button-bg'] = $button_color;
+		}
+		$button_ink = $button_text_color ? $button_text_color : ( $button_color ? newspack_get_color_contrast( $button_color ) : '' );
+		if ( $button_ink ) {
+			$properties['--newspack-content-banner-button-ink'] = $button_ink;
 		}
 		$declarations = [];
 		foreach ( $properties as $property => $value ) {
@@ -125,24 +157,68 @@ final class Content_Banner_Style {
 	}
 
 	/**
+	 * Whether a banner's colors and shadow apply. Light and Dark never take them. The site style takes them
+	 * only when the stored style is Theme, which the block theme wizard stores whenever one is set.
+	 *
+	 * @param string $style        The style the banner renders with.
+	 * @param string $stored_style The style stored for the banner.
+	 *
+	 * @return bool
+	 */
+	public static function has_options( string $style, string $stored_style = self::DEFAULT_STYLE ): bool {
+		return 'theme' === $style || ( self::SITE_STYLE === $style && 'theme' === self::sanitize_style( $stored_style ) );
+	}
+
+	/**
+	 * Get the class that removes a banner's shadow.
+	 *
+	 * @param string $style        The style the banner renders with.
+	 * @param bool   $shadow       Whether the banner has a shadow.
+	 * @param string $stored_style The style stored for the banner.
+	 *
+	 * @return string The class, or an empty string.
+	 */
+	public static function get_shadow_class( string $style, bool $shadow, string $stored_style = self::DEFAULT_STYLE ): string {
+		return ! $shadow && self::has_options( $style, $stored_style ) ? 'has-no-shadow' : '';
+	}
+
+	/**
 	 * Get the data the wizard previews need.
 	 *
 	 * @return array{
 	 *     supports_theme_style: bool,
+	 *     uses_site_theme: bool,
 	 *     theme_button_bg: string,
 	 *     theme_button_ink: string,
 	 *     theme_font_heading: string,
 	 *     theme_font_body: string,
+	 *     site_bg: string,
+	 *     site_text: string,
+	 *     site_button_bg: string,
+	 *     site_button_ink: string,
 	 * }
 	 */
 	public static function get_wizard_data(): array {
 		$data = [
 			'supports_theme_style' => self::supports_theme_style(),
+			'uses_site_theme'      => self::uses_site_theme(),
 			'theme_button_bg'      => '',
 			'theme_button_ink'     => '',
 			'theme_font_heading'   => '',
 			'theme_font_body'      => '',
+			'site_bg'              => '',
+			'site_text'            => '',
+			'site_button_bg'       => '',
+			'site_button_ink'      => '',
 		];
+		if ( $data['uses_site_theme'] ) {
+			$properties              = Newspack_UI_Theme_Style::get_site_properties();
+			$neutral                 = Newspack_UI_Palette::NEUTRAL_DEFAULTS;
+			$data['site_bg']         = self::sanitize_color( $properties['--newspack-ui-color-base'] ?? $neutral['base'] );
+			$data['site_text']       = self::sanitize_color( $properties['--newspack-ui-color-contrast'] ?? $neutral['contrast'] );
+			$data['site_button_bg']  = self::sanitize_color( $properties['--newspack-ui-color-button-bg'] ?? $data['site_text'] );
+			$data['site_button_ink'] = self::sanitize_color( $properties['--newspack-ui-color-button-text'] ?? $data['site_bg'] );
+		}
 		if ( ! $data['supports_theme_style'] ) {
 			return $data;
 		}
