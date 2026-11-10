@@ -6,7 +6,7 @@
  * WordPress dependencies.
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { CardBody, CardDivider } from '@wordpress/components';
+import { CardDivider } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
 import { useDispatch } from '@wordpress/data';
 import { createInterpolateElement, useCallback, useEffect, useRef, useState } from '@wordpress/element';
@@ -53,7 +53,11 @@ type ContentGateEditProps = {
 	isNewsletter?: boolean;
 };
 
-const getContentTypeFromRules = ( rules: GateContentRule[] ): 'all' | 'custom' | undefined => {
+const getContentTypeFromRules = ( rules: GateContentRule[], archiveRules: GateArchiveRule[] = [] ): 'all' | 'custom' | undefined => {
+	// Archive pages are offered only under "Choose specific content".
+	if ( archiveRules.length > 0 ) {
+		return 'custom';
+	}
 	if ( rules.length === 0 ) {
 		return undefined;
 	}
@@ -139,7 +143,6 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 	const [ isDeleting, setIsDeleting ] = useState< boolean >( false );
 	const [ contentRules, setContentRules ] = useState< GateContentRule[] >( gate.content_rules );
 	const [ archiveRules, setArchiveRules ] = useState< GateArchiveRule[] >( gate.archive_rules ?? [] );
-	const [ archiveOpen, setArchiveOpen ] = useState< boolean >( false );
 	const [ contentRulesMatch, setContentRulesMatch ] = useState< 'all' | 'any' >( gate.content_rules_match || 'all' );
 	const [ autoSignup, setAutoSignup ] = useState< AutoSignupMode >( gate.auto_signup ?? 'default' );
 	const [ hideLists, setHideLists ] = useState< boolean >( gate.hide_lists ?? false );
@@ -157,6 +160,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 	const isSaving = useRef( false );
 	const gatesRef = useRef< Gate[] >( gates ?? [] );
 	const savedCustomRules = useRef< GateContentRule[] >( gate.content_rules );
+	const savedArchiveRules = useRef< GateArchiveRule[] >( gate.archive_rules ?? [] );
 	// The stored gate as last copied into the form, serialized for comparison.
 	const syncedGate = useRef< string | null >( null );
 
@@ -474,15 +478,16 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		setAutoSignup( matchedGate.auto_signup ?? 'default' );
 		setHideLists( matchedGate.hide_lists ?? false );
 		savedCustomRules.current = matchedGate.content_rules;
+		savedArchiveRules.current = matchedGate.archive_rules ?? [];
 		setRegistration( matchedGate.registration );
 		setCustomAccess( matchedGate.custom_access );
 		setStatus( matchedGate.status );
-		setContentType( getContentTypeFromRules( matchedGate.content_rules ) );
+		setContentType( getContentTypeFromRules( matchedGate.content_rules, matchedGate.archive_rules ) );
 		resetError();
 	}, [ gates, id, isDeleting, isFetching, isSaving, isNew ] );
 
-	// Offer the card where the site has archive pages to gate, or where the gate already has a rule.
-	const showArchiveCard =
+	// Offer the row where the site has archive pages to gate, or where the gate already has a rule.
+	const showArchiveRow =
 		! isNewsletter &&
 		( archiveRules.length > 0 ||
 			Object.values( window.newspackAudienceContentGates?.available_archive_rules ?? {} ).some( rule => rule.options?.length ) );
@@ -566,13 +571,17 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		title,
 	] );
 
-	// Update content rules.
+	// Update content rules. "Restrict all posts" doesn't gate archive pages, so switching to it
+	// sets the archive choice aside with the specific rules, and switching back restores both.
 	useEffect( () => {
 		if ( contentType === 'all' ) {
 			savedCustomRules.current = contentRules;
+			savedArchiveRules.current = archiveRules;
 			setContentRules( DEFAULT_GATE.content_rules );
+			setArchiveRules( [] );
 		} else if ( contentType === 'custom' ) {
 			setContentRules( savedCustomRules.current );
+			setArchiveRules( savedArchiveRules.current );
 		}
 	}, [ contentType ] );
 
@@ -714,7 +723,12 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 						onEnable={ () => setContentType( 'custom' ) }
 						onHeaderClick={ () => setContentType( 'custom' ) }
 					>
-						<ContentRules rules={ contentRules } onChange={ setContentRules } isNewsletter={ isNewsletter } />
+						<ContentRules
+							rules={ contentRules }
+							onChange={ setContentRules }
+							isNewsletter={ isNewsletter }
+							archiveRow={ showArchiveRow && <ArchiveRules rules={ archiveRules } onChange={ setArchiveRules } /> }
+						/>
 						<CardDivider />
 						<MatchLogicToggle
 							value={ contentRulesMatch }
@@ -722,23 +736,6 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 							onChange={ setContentRulesMatch }
 						/>
 					</CardSettingsGroup>
-					{ showArchiveCard && (
-						<CardSettingsGroup
-							title={ __( 'Archive pages', 'newspack-plugin' ) }
-							description={ __( 'Show the gate in place of the list on these pages.', 'newspack-plugin' ) }
-							icon={ postList }
-							isActive={ archiveOpen || archiveRules.length > 0 }
-							onEnable={ () => setArchiveOpen( true ) }
-							onHeaderClick={ () => setArchiveOpen( true ) }
-						>
-							<CardBody size="small">
-								<ArchiveRules rules={ archiveRules } onChange={ setArchiveRules } />
-								<p className="description newspack-content-gate__archive-note">
-									{ __( "This doesn't restrict the items in the list. Use the rules above for that.", 'newspack-plugin' ) }
-								</p>
-							</CardBody>
-						</CardSettingsGroup>
-					) }
 				</Stack>
 			</Grid>
 			<Divider alignment="full-width" variant="tertiary" />

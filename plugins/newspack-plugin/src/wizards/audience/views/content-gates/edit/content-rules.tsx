@@ -19,9 +19,11 @@ interface ContentRulesProps {
 	rules: GateContentRule[];
 	onChange: ( rules: GateContentRule[] ) => void;
 	isNewsletter?: boolean;
+	// A row placed after the post type and taxonomy rules, ahead of the include-only ones.
+	archiveRow?: React.ReactNode;
 }
 
-export default function ContentRules( { rules, onChange, isNewsletter = false }: ContentRulesProps ) {
+export default function ContentRules( { rules, onChange, isNewsletter = false, archiveRow }: ContentRulesProps ) {
 	const handleToggle = useCallback(
 		( slug: string ) => {
 			const hasRule = rules.find( r => r.slug === slug );
@@ -54,27 +56,34 @@ export default function ContentRules( { rules, onChange, isNewsletter = false }:
 	// never an "Other rule": the newsletter wizard owns it and it has nothing to show here.
 	const otherRules = rules.filter( r => 'newsletters' !== r.slug && ! availableContentRules[ r.slug ] );
 
+	const rows: { key: string; node: React.ReactNode }[] = Object.keys( availableContentRules ).map( slug => ( {
+		key: slug,
+		node: (
+			<ContentRule
+				config={ availableContentRules[ slug ] }
+				enabled={ rules.map( r => r.slug ).includes( slug ) }
+				rule={ rules.find( r => r.slug === slug ) }
+				slug={ slug }
+				onChange={ handleChange( slug ) }
+				onChangeExclusion={ handleChangeExclusion( slug ) }
+				onToggle={ handleToggle }
+				isNewsletter={ isNewsletter }
+			/>
+		),
+	} ) );
+	if ( archiveRow ) {
+		const firstIncludeOnly = rows.findIndex( row => availableContentRules[ row.key ].include_only );
+		rows.splice( firstIncludeOnly === -1 ? rows.length : firstIncludeOnly, 0, { key: 'archive_rules', node: archiveRow } );
+	}
+
 	return (
 		<>
-			{ Object.keys( availableContentRules ).map( ( slug, index ) => {
-				const ruleConfig = availableContentRules[ slug ];
-				const rule = rules.find( r => r.slug === slug );
-				return (
-					<Fragment key={ slug }>
-						<ContentRule
-							config={ ruleConfig }
-							enabled={ rules.map( r => r.slug ).includes( slug ) }
-							rule={ rule }
-							slug={ slug }
-							onChange={ handleChange( slug ) }
-							onChangeExclusion={ handleChangeExclusion( slug ) }
-							onToggle={ handleToggle }
-							isNewsletter={ isNewsletter }
-						/>
-						{ index < Object.keys( availableContentRules ).length - 1 && <CardDivider key={ index } /> }
-					</Fragment>
-				);
-			} ) }
+			{ rows.map( ( row, index ) => (
+				<Fragment key={ row.key }>
+					{ row.node }
+					{ index < rows.length - 1 && <CardDivider /> }
+				</Fragment>
+			) ) }
 			{ otherRules.length > 0 && (
 				<>
 					<CardDivider />

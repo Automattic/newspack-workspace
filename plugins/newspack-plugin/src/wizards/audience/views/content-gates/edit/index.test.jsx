@@ -52,7 +52,12 @@ const Edit = require( './index' ).default;
 const mockStoredRules = [ [ { slug: 'subscription', value: [ 50 ] } ] ];
 const mockEditedRules = [ [ { slug: 'subscription', value: [ 51 ] } ] ];
 
-jest.mock( './content-rules', () => () => null );
+jest.mock(
+	'./content-rules',
+	() =>
+		( { archiveRow } ) =>
+			archiveRow || null
+);
 jest.mock( './archive-rules', () => ( { onChange } ) => (
 	<button onClick={ () => onChange( [ { slug: 'post_type_archives', value: [ 'newspack_collection' ] } ] ) }>Pick Collections</button>
 ) );
@@ -207,11 +212,49 @@ describe( 'Archive rules', () => {
 
 	it( 'sends archive_rules in the save payload', async () => {
 		await renderEdit();
-		fireEvent.click( screen.getByRole( 'heading', { name: 'Archive pages' } ) );
+		fireEvent.click( screen.getByRole( 'heading', { name: 'Choose specific content' } ) );
 		fireEvent.click( screen.getByRole( 'button', { name: 'Pick Collections' } ) );
 		await runHeaderAction( 'Save' );
 
 		expect( savedGate().archive_rules ).toEqual( [ { slug: 'post_type_archives', value: [ 'newspack_collection' ] } ] );
+	} );
+
+	describe( 'on a gate that restricts all posts and archive pages', () => {
+		const ALL_POSTS_AND_ARCHIVE_GATE = {
+			...STORED_GATE,
+			archive_rules: [ { slug: 'post_type_archives', value: [ 'newspack_collection' ] } ],
+		};
+		const renderArchiveGate = async () => {
+			await renderEdit();
+			await act( async () => {
+				dispatch( WIZARD_STORE_NAMESPACE ).setAPIDataForWizard( {
+					slug: AUDIENCE_CONTENT_GATES_WIZARD_SLUG,
+					data: { gates: [ ALL_POSTS_AND_ARCHIVE_GATE ], config: {} },
+				} );
+			} );
+		};
+
+		it( 'opens on Choose specific content, where the archive pages are offered', async () => {
+			await renderArchiveGate();
+			expect( screen.getByRole( 'button', { name: 'Pick Collections' } ) ).toBeInTheDocument();
+		} );
+
+		it( 'leaves archive pages out of the save once Restrict all posts is chosen', async () => {
+			await renderArchiveGate();
+			fireEvent.click( screen.getByRole( 'heading', { name: 'Restrict all posts' } ) );
+			await runHeaderAction( 'Save' );
+
+			expect( savedGate().archive_rules ).toEqual( [] );
+		} );
+
+		it( 'restores the archive pages on switching back to Choose specific content', async () => {
+			await renderArchiveGate();
+			fireEvent.click( screen.getByRole( 'heading', { name: 'Restrict all posts' } ) );
+			fireEvent.click( screen.getByRole( 'heading', { name: 'Choose specific content' } ) );
+			await runHeaderAction( 'Save' );
+
+			expect( savedGate().archive_rules ).toEqual( ALL_POSTS_AND_ARCHIVE_GATE.archive_rules );
+		} );
 	} );
 
 	describe( 'with pre-save checks on', () => {
@@ -224,7 +267,7 @@ describe( 'Archive rules', () => {
 
 		it( 'lists unsaved archive pages in the confirmation summary', async () => {
 			await renderEdit();
-			fireEvent.click( screen.getByRole( 'heading', { name: 'Archive pages' } ) );
+			fireEvent.click( screen.getByRole( 'heading', { name: 'Choose specific content' } ) );
 			fireEvent.click( screen.getByRole( 'button', { name: 'Pick Collections' } ) );
 			await runHeaderAction( 'Save' );
 
