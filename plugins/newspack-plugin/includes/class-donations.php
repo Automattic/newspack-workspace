@@ -77,7 +77,7 @@ class Donations {
 		add_filter( 'option_woocommerce_subscriptions_order_button_text', [ __CLASS__, 'order_button_text' ], 9 );
 
 		add_filter( 'render_block', [ __CLASS__, 'prevent_rendering_donate_block' ], 10, 2 );
-		add_action( 'woocommerce_before_product_object_save', [ __CLASS__, 'track_minimum_price_on_save' ] );
+		add_action( 'woocommerce_before_product_object_save', [ __CLASS__, 'sync_minimum_price_on_save' ] );
 	}
 
 	/**
@@ -673,8 +673,9 @@ class Donations {
 	 * minimum makes it follow again.
 	 *
 	 * Newspack forgets what it last wrote once a product's minimum is set
-	 * directly, as the product saves or at the next settings save, so a later
-	 * minimum that happens to equal that old value still counts as set directly.
+	 * directly, as the product saves or at the next settings save that writes the
+	 * donation products, so a later minimum that happens to equal that old value
+	 * still counts as set directly.
 	 *
 	 * @param \WC_Product $product          Donation product.
 	 * @param mixed       $previous_minimum Global minimum donation from the last settings save.
@@ -693,23 +694,25 @@ class Donations {
 	}
 
 	/**
-	 * Keep a donation product's synced-minimum record true to its minimum as it saves.
+	 * Restore a cleared minimum, or forget the synced minimum once one is set directly, as a donation product is saved.
 	 *
 	 * Clearing the field is how a product goes back to following the global
 	 * minimum, so a cleared minimum gets the global one back; without that, the
-	 * product would accept any amount at checkout until the next donation
-	 * settings save. A minimum that differs from what Newspack last wrote was set
-	 * directly, so the record is forgotten, and setting the product back to that
-	 * old value later still counts as set directly.
+	 * product would accept any amount at checkout until the next settings save
+	 * that writes the donation products. A minimum that differs from what
+	 * Newspack last wrote was set directly, so the record is forgotten, and
+	 * setting the product back to that old value later still counts as set
+	 * directly.
 	 *
 	 * @param \WC_Product $product Product about to be saved.
 	 */
-	public static function track_minimum_price_on_save( $product ) {
+	public static function sync_minimum_price_on_save( $product ) {
 		if ( 'yes' !== $product->get_meta( '_nyp', true, 'edit' ) ) {
 			return;
 		}
 		$current_minimum = (string) $product->get_meta( '_min_price', true, 'edit' );
 		$last_written    = (string) $product->get_meta( self::SYNCED_MIN_PRICE_META, true, 'edit' );
+		// A set minimum with no record, or one matching the record, needs nothing.
 		if ( '' !== $current_minimum && ( '' === $last_written || (float) $current_minimum === (float) $last_written ) ) {
 			return;
 		}
