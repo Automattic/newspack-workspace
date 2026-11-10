@@ -551,6 +551,11 @@ final class Newspack_Popups_AB_Tests {
 	 * route ignores an error from this filter and would record an empty autosave,
 	 * so there the A/B keys are dropped whatever their value.
 	 *
+	 * The Test ID and version are dropped from every save, for every user. No
+	 * editor control sets them; starting, resuming and ending a test write them
+	 * directly. A save carrying them is an editor tab that loaded the prompt before
+	 * a test started, and writing its values would take the prompt out of the test.
+	 *
 	 * @param stdClass|WP_Error $prepared_post Post prepared for the database.
 	 * @param WP_REST_Request   $request       Request.
 	 * @return stdClass|WP_Error
@@ -563,6 +568,11 @@ final class Newspack_Popups_AB_Tests {
 
 		$post_id     = isset( $prepared_post->ID ) ? (int) $prepared_post->ID : 0;
 		$is_autosave = str_ends_with( $request->get_route(), '/autosaves' );
+
+		// Dropped before anything below reads them, so the placement rule judges the
+		// test the prompt is in, not the empty one a stale tab sends back.
+		unset( $meta[ self::META_TEST_ID ], $meta[ self::META_VARIANT ] );
+		$request->set_param( 'meta', $meta );
 
 		// A validity rule, not a permission, so it runs before the permission branch
 		// and applies to administrators too. It reads the values the save would
@@ -580,9 +590,6 @@ final class Newspack_Popups_AB_Tests {
 		$changes   = function ( $meta_key ) use ( $effective, $stored ) {
 			return $effective( $meta_key ) !== $stored( $meta_key );
 		};
-		// The ID the save would store, so a value the sanitizer empties reads as
-		// clearing the test rather than as a new one.
-		$test_id = self::sanitize_test_id( $effective( self::META_TEST_ID ) );
 		// The rule refuses the save that creates a violation, not every later save
 		// of a prompt already in one. A tested prompt can reach a manual placement
 		// past this guard (the Campaigns wizard writes placement directly, and a
@@ -590,15 +597,13 @@ final class Newspack_Popups_AB_Tests {
 		// whole meta object on every save, so checking the stored state too would
 		// refuse a frequency edit with an error about a field the editor may have
 		// disabled for that user. The editor's notice asks for the fix instead.
-		// An ID sent back as stored is unchanged here as it is for the write below,
-		// even where the current sanitizer would spell it differently.
 		// Only while the flag is on: with it off a stored test has no effect, and
-		// the panel that could clear the Test ID is not registered.
+		// the panel's notice is not registered.
 		if (
 			self::is_enabled()
 			&& ! $is_autosave
-			&& ( ( $changes( self::META_TEST_ID ) && $test_id !== $stored( self::META_TEST_ID ) ) || $changes( 'placement' ) || $changes( 'manual_only' ) )
-			&& '' !== $test_id
+			&& ( $changes( 'placement' ) || $changes( 'manual_only' ) )
+			&& '' !== $stored( self::META_TEST_ID )
 			&& ! self::is_eligible_placement( $effective( 'placement' ), rest_sanitize_boolean( $effective( 'manual_only' ) ) )
 		) {
 			return new WP_Error(
@@ -608,15 +613,6 @@ final class Newspack_Popups_AB_Tests {
 					: __( 'A/B tests only work on prompts that Newspack places for you. Choose another placement.', 'newspack-popups' ),
 				[ 'status' => 400 ]
 			);
-		}
-
-		// A Test ID sent back unchanged is left out of the write. Core re-sanitizes
-		// a submitted value before comparing it with the stored one, so an ID stored
-		// under an earlier, looser sanitizer would otherwise be rewritten on one
-		// variant by any save and split its test; only a deliberate edit normalizes it.
-		if ( array_key_exists( self::META_TEST_ID, $meta ) && is_scalar( $meta[ self::META_TEST_ID ] ) && ! $changes( self::META_TEST_ID ) ) {
-			unset( $meta[ self::META_TEST_ID ] );
-			$request->set_param( 'meta', $meta );
 		}
 
 		if ( self::can_manage_tests( get_current_user_id(), $post_id ) ) {
