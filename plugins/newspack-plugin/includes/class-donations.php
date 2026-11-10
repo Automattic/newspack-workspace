@@ -673,9 +673,9 @@ class Donations {
 	 * minimum makes it follow again.
 	 *
 	 * Newspack forgets what it last wrote once a product's minimum is set
-	 * directly, as the product saves or at the next settings save that writes the
-	 * donation products, so a later minimum that happens to equal that old value
-	 * still counts as set directly.
+	 * directly, as the product saves or the next time Newspack writes the donation
+	 * products, so a later minimum that happens to equal that old value still
+	 * counts as set directly.
 	 *
 	 * @param \WC_Product $product          Donation product.
 	 * @param mixed       $previous_minimum Global minimum donation from the last settings save.
@@ -694,12 +694,12 @@ class Donations {
 	}
 
 	/**
-	 * Restore a cleared minimum, or forget the synced minimum once one is set directly, as a donation product is saved.
+	 * Restore a cleared minimum, or forget the synced-minimum record once a minimum is set directly, as one of the legacy donation products is saved.
 	 *
 	 * Clearing the field is how a product goes back to following the global
 	 * minimum, so a cleared minimum gets the global one back; without that, the
-	 * product would accept any amount at checkout until the next settings save
-	 * that writes the donation products. A minimum that differs from what
+	 * product would accept any amount at checkout until the next time Newspack
+	 * writes the donation products. A minimum that differs from what
 	 * Newspack last wrote was set directly, so the record is forgotten, and
 	 * setting the product back to that old value later still counts as set
 	 * directly.

@@ -91,8 +91,9 @@ class Newspack_Test_Donations_Minimum_Price extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Write a product's minimum price without saving the product, so only the
-	 * next settings save sees the change.
+	 * Change a product's minimum price without saving the product, so the save
+	 * hook doesn't run. The mock store returns this same object, so the change
+	 * sticks, and the next settings save is the first code to act on it.
 	 *
 	 * @param int    $product_id Product ID.
 	 * @param string $minimum    Minimum price.
