@@ -6,7 +6,7 @@
  * WordPress dependencies.
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { CardDivider } from '@wordpress/components';
+import { CardBody, CardDivider } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
 import { useDispatch } from '@wordpress/data';
 import { createInterpolateElement, useCallback, useEffect, useRef, useState } from '@wordpress/element';
@@ -730,10 +730,12 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 							onEnable={ () => setArchiveOpen( true ) }
 							onHeaderClick={ () => setArchiveOpen( true ) }
 						>
-							<ArchiveRules rules={ archiveRules } onChange={ setArchiveRules } />
-							<p className="newspack-content-gate__archive-note">
-								{ __( "This doesn't restrict the items in the list. Use the rules above for that.", 'newspack-plugin' ) }
-							</p>
+							<CardBody size="small">
+								<ArchiveRules rules={ archiveRules } onChange={ setArchiveRules } />
+								<p className="description newspack-content-gate__archive-note">
+									{ __( "This doesn't restrict the items in the list. Use the rules above for that.", 'newspack-plugin' ) }
+								</p>
+							</CardBody>
 						</CardSettingsGroup>
 					) }
 				</Stack>
