@@ -12,7 +12,7 @@ import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 /**
  * Internal dependencies
  */
-import { DASH, formatConfidence, formatLift, formatRate, getCountLabel } from './utils';
+import { DASH, confidenceParts, formatConfidence, formatLift, formatRate, getCountLabel } from './utils';
 
 // The stylesheet sets column widths by position, which holds because columns
 // can't be moved; reordering this list moves those widths with it.
@@ -130,14 +130,13 @@ const ResultsTable = ( { test, status, stats, labels, kept = null } ) => {
 				filterBy: false,
 				getValue: ( { item } ) => item.comparison?.confidence ?? -1,
 				render: ( { item } ) => {
-					const confidence = item.comparison?.confidence;
-					if ( confidence === null || confidence === undefined ) {
+					const { percent, label } = confidenceParts( item.comparison, labels );
+					if ( ! percent ) {
 						return formatConfidence( item.comparison, labels );
 					}
-					const label = labels?.[ item.comparison.label ];
 					return (
 						<span className="newspack-ab-tests__rate">
-							{ `${ Number( confidence ).toFixed( 1 ) }%` }
+							{ percent }
 							{ label && <span className="newspack-ab-tests__muted">{ label }</span> }
 						</span>
 					);

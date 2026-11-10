@@ -125,15 +125,23 @@ export const formatLift = lift => {
  * @param {Object}  labels     Label key => text.
  * @return {string} Formatted.
  */
+export const confidenceParts = ( comparison, labels = {} ) => {
+	const confidence = comparison?.confidence;
+	return {
+		percent: confidence === null || confidence === undefined ? null : `${ Number( confidence ).toFixed( 1 ) }%`,
+		label: ( comparison && labels?.[ comparison.label ] ) || '',
+	};
+};
+
 export const formatConfidence = ( comparison, labels = {} ) => {
 	if ( ! comparison ) {
 		return DASH;
 	}
-	const label = labels[ comparison.label ] || '';
-	if ( comparison.confidence === null || comparison.confidence === undefined ) {
+	const { percent, label } = confidenceParts( comparison, labels );
+	if ( ! percent ) {
 		return label || DASH;
 	}
-	return `${ Number( comparison.confidence ).toFixed( 1 ) }% ${ label }`.trim();
+	return `${ percent } ${ label }`.trim();
 };
 
 /**
