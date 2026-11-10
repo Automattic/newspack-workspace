@@ -38,8 +38,10 @@ export default ( { storyId, onCancel } ) => {
 
 	const { saveStory, clearErrors, fetchStory } = useDispatch( storeNamespace );
 
+	const hasStory = !! story;
 	const hasMetadata = !! story?.metadata;
 	const hasEdited = useRef( false );
+	const fetchedFor = useRef( null );
 
 	useEffect( () => {
 		clearErrors( storyId );
@@ -47,10 +49,11 @@ export default ( { storyId, onCancel } ) => {
 	}, [ storyId ] );
 
 	useEffect( () => {
-		if ( ! hasMetadata ) {
+		if ( hasStory && ! hasMetadata && fetchedFor.current !== storyId ) {
+			fetchedFor.current = storyId;
 			fetchStory( storyId );
 		}
-	}, [ storyId, hasMetadata ] );
+	}, [ storyId, hasStory, hasMetadata ] );
 
 	useEffect( () => {
 		if ( ! hasEdited.current ) {
@@ -77,6 +80,8 @@ export default ( { storyId, onCancel } ) => {
 		[ clearErrors, storyId ]
 	);
 
+	const isAwaitingMetadata = ! hasMetadata && ! storyError;
+
 	const canPreview = useMemo( () => {
 		return story?.metadata?.can_preview && ! utils.sites.isRemoteSite();
 	}, [ story?.metadata?.can_preview, utils.sites.isRemoteSite ] );
@@ -97,7 +102,7 @@ export default ( { storyId, onCancel } ) => {
 	return (
 		<HStack alignment="stretch" spacing="0" className="newspack-story-budget__story">
 			<VStack style={ { flexGrow: 1, position: 'relative' } }>
-				{ ! canPreview && (
+				{ ! isAwaitingMetadata && ! canPreview && (
 					<VStack
 						style={ {
 							position: 'absolute',
@@ -126,7 +131,7 @@ export default ( { storyId, onCancel } ) => {
 						) }
 					</VStack>
 				) }
-				{ canPreview && isIframeLoading && (
+				{ ( isAwaitingMetadata || ( canPreview && isIframeLoading ) ) && (
 					<VStack
 						style={ {
 							position: 'absolute',
@@ -157,7 +162,7 @@ export default ( { storyId, onCancel } ) => {
 				) }
 			</VStack>
 			<VStack justify="top" className="newspack-story-budget__sidebar">
-				{ ! isIframeLoading && storyError && (
+				{ ( ! canPreview || ! isIframeLoading ) && storyError && (
 					<Notice className="newspack-story-budget__error" isDismissible={ false } status="error">
 						{ storyError }
 					</Notice>
