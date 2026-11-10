@@ -823,7 +823,7 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		Newspack_Blocks::display_tag_labels( [ [ 'flag' => 'Opinion' ] ] );
 		$html = ob_get_clean();
 
-		self::assertStringContainsString( '<span class="tag-label flag">Opinion</span>', $html );
+		self::assertStringContainsString( '<span class="newspack-tag-label tag-label flag">Opinion</span>', $html );
 		self::assertStringNotContainsString( '<a ', $html, 'A label without a link must not render an anchor.' );
 	}
 

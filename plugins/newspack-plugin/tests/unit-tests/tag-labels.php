@@ -85,7 +85,7 @@ class Test_Tag_Labels extends WP_UnitTestCase {
 		$html = Tag_Labels::generate_html( $this->make_labels(), true, [ 'cat-links', 'tag-labels' ], [ 'tag-label', 'flag' ], 'span' );
 
 		self::assertSame(
-			'<span class="cat-links tag-labels"><a class="tag-label flag" href="https://example.com/tag/breaking/" rel="tag">Breaking</a></span><!-- .tag-labels -->',
+			'<span class="cat-links tag-labels"><a class="tag-label flag" href="https://example.com/tag/breaking/" rel="tag">Breaking</a></span><!-- .newspack-tag-labels -->',
 			$html
 		);
 	}
@@ -116,7 +116,7 @@ class Test_Tag_Labels extends WP_UnitTestCase {
 		$html = Tag_Labels::generate_html( $this->make_labels(), true, [ 'tag-labels' ], [ 'tag-label', 'flag' ], 'div' );
 
 		self::assertStringStartsWith( '<div class="tag-labels">', $html );
-		self::assertStringEndsWith( '</div><!-- .tag-labels -->', $html );
+		self::assertStringEndsWith( '</div><!-- .newspack-tag-labels -->', $html );
 	}
 
 	/**
@@ -146,7 +146,7 @@ class Test_Tag_Labels extends WP_UnitTestCase {
 		$html = Tag_Labels::generate_html( $this->make_labels(), true, [ 'tag-labels' ], [ 'tag-label', 'flag' ], $outer_element );
 
 		self::assertStringStartsWith( '<span class="tag-labels">', $html );
-		self::assertStringEndsWith( '</span><!-- .tag-labels -->', $html );
+		self::assertStringEndsWith( '</span><!-- .newspack-tag-labels -->', $html );
 	}
 
 	/**
@@ -168,7 +168,7 @@ class Test_Tag_Labels extends WP_UnitTestCase {
 		$html = Tag_Labels::generate_html( $labels );
 
 		self::assertSame(
-			'<span class="tag-labels"><a class="tag-label flag" href="https://example.com/tag/breaking/" rel="tag">Breaking</a><span class="tag-label flag">Opinion</span></span><!-- .tag-labels -->',
+			'<span class="newspack-tag-labels tag-labels"><a class="newspack-tag-label tag-label flag" href="https://example.com/tag/breaking/" rel="tag">Breaking</a><span class="newspack-tag-label tag-label flag">Opinion</span></span><!-- .newspack-tag-labels -->',
 			$html
 		);
 	}
@@ -179,7 +179,7 @@ class Test_Tag_Labels extends WP_UnitTestCase {
 	public function test_generate_html_without_links_renders_spans() {
 		$html = Tag_Labels::generate_html( $this->make_labels(), false );
 
-		self::assertStringContainsString( '<span class="tag-label flag">Breaking</span>', $html );
+		self::assertStringContainsString( '<span class="newspack-tag-label tag-label flag">Breaking</span>', $html );
 		self::assertStringNotContainsString( '<a ', $html );
 	}
 
@@ -241,7 +241,7 @@ class Test_Tag_Labels extends WP_UnitTestCase {
 		$labels = [ $entry, $this->make_labels()[0] ];
 
 		self::assertSame(
-			'<span class="tag-labels"><a class="tag-label flag" href="https://example.com/tag/breaking/" rel="tag">Breaking</a></span><!-- .tag-labels -->',
+			'<span class="newspack-tag-labels tag-labels"><a class="newspack-tag-label tag-label flag" href="https://example.com/tag/breaking/" rel="tag">Breaking</a></span><!-- .newspack-tag-labels -->',
 			Tag_Labels::generate_html( $labels )
 		);
 	}
@@ -259,7 +259,7 @@ class Test_Tag_Labels extends WP_UnitTestCase {
 		];
 
 		self::assertSame(
-			'<span class="tag-labels"><span class="tag-label flag">Empty link</span><a class="tag-label flag" href="https://example.com/tag/breaking/" rel="tag">Breaking</a></span><!-- .tag-labels -->',
+			'<span class="newspack-tag-labels tag-labels"><span class="newspack-tag-label tag-label flag">Empty link</span><a class="newspack-tag-label tag-label flag" href="https://example.com/tag/breaking/" rel="tag">Breaking</a></span><!-- .newspack-tag-labels -->',
 			Tag_Labels::generate_html( $labels )
 		);
 	}
