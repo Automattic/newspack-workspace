@@ -850,19 +850,23 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 
 	/**
 	 * Emptying a test drops only this site's buckets: another site in the network
-	 * using the same Test ID keeps its readers' assignments.
+	 * using the same Test ID, and the unprefixed key every site used to share,
+	 * keep their rows.
 	 */
 	public function test_emptying_a_test_keeps_another_sites_buckets() {
 		global $wpdb;
 		$ids        = $this->create_running_test();
 		$reader     = $this->bucket_reader( 't', 'a' );
 		$other_site = $wpdb->base_prefix . '99_' . Newspack_Popups_AB_Tests::USER_META_BUCKET_PREFIX . 't';
+		$unprefixed = Newspack_Popups_AB_Tests::USER_META_BUCKET_PREFIX . 't';
 		update_user_meta( $reader, $other_site, 'b' );
+		update_user_meta( $reader, $unprefixed, 'b' );
 		foreach ( $ids as $id ) {
 			wp_delete_post( $id, true );
 		}
 		$this->assertSame( '', $this->stored_bucket( $reader, 't' ) );
 		$this->assertSame( 'b', get_user_meta( $reader, $other_site, true ) );
+		$this->assertSame( 'b', get_user_meta( $reader, $unprefixed, true ) );
 	}
 
 	/**
