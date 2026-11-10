@@ -448,3 +448,21 @@ export const getContentRuleConfig = ( slug: string ): ( ContentRule & { unavaila
 	const globals = window.newspackAudienceContentGates;
 	return globals?.available_content_rules?.[ slug ] ?? globals?.extra_content_rules?.[ slug ];
 };
+
+/**
+ * A gate's archive rules, narrowed to the values the site offers right now or to the rest.
+ * A value the site stops offering, such as the Collections archive while that module is off,
+ * stays stored so the choice returns with the module, but it doesn't switch the row on.
+ *
+ * @param rules   The gate's archive rules.
+ * @param offered True for the values the site offers, false for the others.
+ */
+export const filterArchiveRules = ( rules: GateArchiveRule[] = [], offered: boolean ): GateArchiveRule[] => {
+	const available = window.newspackAudienceContentGates?.available_archive_rules ?? {};
+	return rules
+		.map( rule => {
+			const values = ( available[ rule.slug ]?.options ?? [] ).map( option => option.value );
+			return { ...rule, value: rule.value.filter( value => values.includes( value ) === offered ) };
+		} )
+		.filter( rule => rule.value.length > 0 );
+};

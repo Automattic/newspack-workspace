@@ -35,7 +35,7 @@ import ContentRules from './content-rules';
 import MatchLogicToggle from './match-logic-toggle';
 import Registration from './registration';
 import CustomAccess from './custom-access';
-import { getEditGateLayoutUrl, getGatesSubTitle, getGateStatus, getGateStatusBadgeIntent } from '../utils';
+import { filterArchiveRules, getEditGateLayoutUrl, getGatesSubTitle, getGateStatus, getGateStatusBadgeIntent } from '../utils';
 import { getGateSummarySections } from '../gate-summary';
 import { useAccessRuleOptions } from '../use-access-rule-options';
 import SavePanel from './save-panel';
@@ -54,8 +54,9 @@ type ContentGateEditProps = {
 };
 
 const getContentTypeFromRules = ( rules: GateContentRule[], archiveRules: GateArchiveRule[] = [] ): 'all' | 'custom' | undefined => {
-	// Archive pages are offered only under "Choose specific content".
-	if ( archiveRules.length > 0 ) {
+	// Archive pages are offered only under "Choose specific content". A choice the site no
+	// longer offers doesn't count, so it can't open the gate on a row with nothing to show.
+	if ( filterArchiveRules( archiveRules, true ).length > 0 ) {
 		return 'custom';
 	}
 	if ( rules.length === 0 ) {
@@ -486,11 +487,9 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		resetError();
 	}, [ gates, id, isDeleting, isFetching, isSaving, isNew ] );
 
-	// Offer the row where the site has archive pages to gate, or where the gate already has a rule.
+	// Offer the row only where the site has archive pages to gate.
 	const showArchiveRow =
-		! isNewsletter &&
-		( archiveRules.length > 0 ||
-			Object.values( window.newspackAudienceContentGates?.available_archive_rules ?? {} ).some( rule => rule.options?.length ) );
+		! isNewsletter && Object.values( window.newspackAudienceContentGates?.available_archive_rules ?? {} ).some( rule => rule.options?.length );
 
 	const hasUnusableAgeRule = contentRules.some(
 		rule => PUBLISHED_AGE_RULE === rule.slug && ! isUsableAgeDuration( normalizeAgeDuration( rule.value ) )
@@ -573,12 +572,13 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 
 	// Update content rules. "Restrict all posts" doesn't gate archive pages, so switching to it
 	// sets the archive choice aside with the specific rules, and switching back restores both.
+	// Choices the site doesn't offer right now stay, as they do everywhere in this editor.
 	useEffect( () => {
 		if ( contentType === 'all' ) {
 			savedCustomRules.current = contentRules;
 			savedArchiveRules.current = archiveRules;
 			setContentRules( DEFAULT_GATE.content_rules );
-			setArchiveRules( [] );
+			setArchiveRules( filterArchiveRules( archiveRules, false ) );
 		} else if ( contentType === 'custom' ) {
 			setContentRules( savedCustomRules.current );
 			setArchiveRules( savedArchiveRules.current );

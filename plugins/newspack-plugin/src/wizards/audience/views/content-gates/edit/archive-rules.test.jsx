@@ -83,9 +83,22 @@ describe( 'ArchiveRules', () => {
 		expect( onChange ).toHaveBeenCalledWith( [ { slug: 'post_type_archives', value: [ 'gone_cpt' ] } ] );
 	} );
 
-	it( 'renders nothing without options', () => {
+	it( 'stays off for a stored value the site no longer offers', () => {
+		withOptions( COLLECTIONS );
+		renderRules( [ { slug: 'post_type_archives', value: [ 'gone_cpt' ] } ] );
+		expect( toggle() ).not.toBeChecked();
+	} );
+
+	it( 'switching off keeps values the site no longer offers', () => {
+		withOptions( COLLECTIONS );
+		const { onChange } = renderRules( [ { slug: 'post_type_archives', value: [ 'newspack_collection', 'gone_cpt' ] } ] );
+		fireEvent.click( toggle() );
+		expect( onChange ).toHaveBeenCalledWith( [ { slug: 'post_type_archives', value: [ 'gone_cpt' ] } ] );
+	} );
+
+	it( 'renders nothing when the site offers no archive pages, even for a gate that stores one', () => {
 		withOptions( [] );
-		const { container } = renderRules( [] );
+		const { container } = renderRules( [ COLLECTIONS_RULE ] );
 		expect( container ).toBeEmptyDOMElement();
 	} );
 } );

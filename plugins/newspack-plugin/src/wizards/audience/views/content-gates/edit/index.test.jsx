@@ -251,10 +251,32 @@ describe( 'Archive rules', () => {
 			await renderArchiveGate();
 			fireEvent.click( screen.getByRole( 'heading', { name: 'Restrict all posts' } ) );
 			fireEvent.click( screen.getByRole( 'heading', { name: 'Choose specific content' } ) );
-			await runHeaderAction( 'Save' );
 
-			expect( savedGate().archive_rules ).toEqual( ALL_POSTS_AND_ARCHIVE_GATE.archive_rules );
+			// Nothing left to save means the form matches the stored gate again.
+			expect( headerAction( 'Save' ).disabled ).toBe( true );
 		} );
+	} );
+
+	it( 'keeps an archive choice the site no longer offers when saving under Restrict all posts', async () => {
+		const unofferedRules = [ { slug: 'post_type_archives', value: [ 'gone_cpt' ] } ];
+		await renderEdit();
+		await act( async () => {
+			dispatch( WIZARD_STORE_NAMESPACE ).setAPIDataForWizard( {
+				slug: AUDIENCE_CONTENT_GATES_WIZARD_SLUG,
+				data: { gates: [ { ...STORED_GATE, archive_rules: unofferedRules } ], config: {} },
+			} );
+		} );
+		expect( screen.queryByRole( 'button', { name: 'Pick Collections' } ) ).toBeNull();
+		expect( headerAction( 'Save' ).disabled ).toBe( true );
+
+		// Choosing Restrict all posts again sets aside only the choices the site offers.
+		fireEvent.click( screen.getByRole( 'heading', { name: 'Choose specific content' } ) );
+		fireEvent.click( screen.getByRole( 'heading', { name: 'Restrict all posts' } ) );
+		await runHeaderAction( 'Rename' );
+		fireEvent.change( screen.getByRole( 'textbox', { name: /gate name/i } ), { target: { value: 'Edited title' } } );
+		await runHeaderAction( 'Save' );
+
+		expect( savedGate().archive_rules ).toEqual( unofferedRules );
 	} );
 
 	describe( 'with pre-save checks on', () => {

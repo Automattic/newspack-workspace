@@ -1,14 +1,15 @@
 /**
  * WordPress dependencies.
  */
-import {
-	CardBody,
-	CheckboxControl,
-	ToggleControl,
-	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
-} from '@wordpress/components';
+import { CardBody, CheckboxControl, ToggleControl } from '@wordpress/components';
 import { useCallback, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
+import { Stack } from '@wordpress/ui';
+
+/**
+ * Internal dependencies
+ */
+import { filterArchiveRules } from '../utils';
 
 interface ArchiveRulesProps {
 	rules: GateArchiveRule[];
@@ -24,7 +25,7 @@ export default function ArchiveRules( { rules, onChange }: ArchiveRulesProps ) {
 	const available = window.newspackAudienceContentGates?.available_archive_rules ?? {};
 	// Keeps the row open while no box is ticked, so unticking the last one doesn't collapse it.
 	const [ isOpen, setIsOpen ] = useState( false );
-	const enabled = isOpen || rules.length > 0;
+	const enabled = isOpen || filterArchiveRules( rules, true ).length > 0;
 
 	const handleToggle = useCallback(
 		( slug: string, optionValue: string, checked: boolean ) => {
@@ -47,14 +48,14 @@ export default function ArchiveRules( { rules, onChange }: ArchiveRulesProps ) {
 		( on: boolean ) => {
 			setIsOpen( on );
 			if ( ! on ) {
-				onChange( [] );
+				onChange( filterArchiveRules( rules, false ) );
 			}
 		},
-		[ onChange ]
+		[ rules, onChange ]
 	);
 
 	const groups = Object.entries( available ).filter( ( [ , config ] ) => config.options?.length );
-	if ( ! groups.length && ! rules.length ) {
+	if ( ! groups.length ) {
 		return null;
 	}
 
@@ -62,13 +63,13 @@ export default function ArchiveRules( { rules, onChange }: ArchiveRulesProps ) {
 		<CardBody size="small">
 			<ToggleControl
 				label={ __( 'Archive pages', 'newspack-plugin' ) }
-				help={ __( 'Show the gate in place of the list on these pages.', 'newspack-plugin' ) }
+				help={ __( 'Show the gate in place of the list of items on these pages.', 'newspack-plugin' ) }
 				checked={ enabled }
 				onChange={ handleEnable }
 			/>
 			{ enabled && (
-				// The class sibling rule controls use, so the options sit as far below the toggle.
-				<VStack className="newspack-content-gates__content-rule-control" spacing={ 2 }>
+				// Sibling rule controls' class, so the options sit as far below the toggle as theirs do.
+				<Stack className="newspack-content-gates__content-rule-control" direction="column" gap="sm">
 					<fieldset className="newspack-content-gate__archive-rules">
 						<legend className="screen-reader-text">{ __( 'Archive pages to gate', 'newspack-plugin' ) }</legend>
 						{ groups.map( ( [ slug, config ] ) =>
@@ -83,9 +84,12 @@ export default function ArchiveRules( { rules, onChange }: ArchiveRulesProps ) {
 						) }
 					</fieldset>
 					<p className="description newspack-content-gate__archive-note">
-						{ __( "This doesn't restrict the items in the list. Use the other rules for that.", 'newspack-plugin' ) }
+						{ __(
+							"This doesn't restrict the items in the list, and Match any rule doesn't apply to it. Use the other rules to restrict items.",
+							'newspack-plugin'
+						) }
 					</p>
-				</VStack>
+				</Stack>
 			) }
 		</CardBody>
 	);
