@@ -128,7 +128,9 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 	const [ hasError, setHasError ] = useState( false );
 	const [ view, setView ] = useState< View >( () => ( {
 		...DEFAULT_VIEW,
-		fields: DEFAULT_VIEW.fields.filter( field => scope === 'subscriptions' || ( field !== 'policies' && field !== 'effective_price' ) ),
+		fields: DEFAULT_VIEW.fields
+			.map( field => ( scope === 'groups' && field === 'price' ? 'bundled' : field ) )
+			.filter( field => scope === 'subscriptions' || ( field !== 'policies' && field !== 'effective_price' ) ),
 	} ) );
 
 	const globals = window.newspackAudienceSubscriptionProducts;
@@ -231,14 +233,6 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				// Sort by the numeric base price; render the human label.
 				getValue: ( { item } ) => ( item.base_price === null ? -1 : item.base_price ),
 				render: ( { item } ) => {
-					// Grouped products aren't priced themselves — show what they bundle instead.
-					if ( item.type === 'grouped' ) {
-						return item.bundled_products.length ? (
-							<CellList>{ bundledLinks( item.bundled_products ) }</CellList>
-						) : (
-							<span className="newspack-subscription-products__muted">&mdash;</span>
-						);
-					}
 					// A complimentary product isn't sold, so its $0 price would read as a free plan.
 					if ( item.is_complimentary ) {
 						return <span>{ __( 'Complimentary', 'newspack-plugin' ) }</span>;
@@ -383,10 +377,13 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 	// Applied-rule + effective-price columns only apply to subscription products —
 	// donations and plan bundles are engine-excluded, so they never carry a rule.
 	// Hide the two columns (and their column-picker entries) outside that scope.
-	const visibleFields = useMemo(
-		() => ( scope === 'subscriptions' ? fields : fields.filter( field => field.id !== 'policies' && field.id !== 'effective_price' ) ),
-		[ fields, scope ]
-	);
+	const visibleFields = useMemo( () => {
+		if ( scope === 'subscriptions' ) {
+			return fields;
+		}
+		const hidden = scope === 'groups' ? [ 'policies', 'effective_price', 'price' ] : [ 'policies', 'effective_price' ];
+		return fields.filter( field => ! hidden.includes( field.id ) );
+	}, [ fields, scope ] );
 
 	const { data: processedData, paginationInfo } = useMemo(
 		() => filterSortAndPaginate( scopedData, view, visibleFields ),
