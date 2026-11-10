@@ -35,6 +35,18 @@
 	}
 }
 
+// Override the theme block spacing between the Republish Button block and its license.
+.entry .entry-content,
+.wp-block-group .wp-block-group__inner-container {
+	> .wp-block-buttons:has( + .wp-block-republication-tracker-tool-republish-button__license ) {
+		margin-bottom: 0;
+	}
+
+	> .wp-block-republication-tracker-tool-republish-button__license {
+		margin-top: 0.5em;
+	}
+}
+
 .site-main .republish-article {
 	&__content {
 		margin-top: 32px;
