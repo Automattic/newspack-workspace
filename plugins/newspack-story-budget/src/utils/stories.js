@@ -1,6 +1,10 @@
-import { dateI18n } from '@wordpress/date';
+import { dateI18n, getDate } from '@wordpress/date';
 
 const DATE_TYPES = [ 'date', 'datetime' ];
+const DATE_OPERATORS = [ 'on', 'notOn', 'before', 'after', 'beforeInc', 'afterInc', 'between', 'inThePast', 'over' ];
+const RELATIVE_OPERATORS = [ 'inThePast', 'over' ];
+
+const toFilterDay = value => ( /^\d{4}-\d{2}-\d{2}$/.test( value ) ? value : dateI18n( 'Y-m-d', getDate( value ) ) );
 
 const toSiteDay = timestamp => {
 	const seconds = Number( timestamp );
@@ -25,8 +29,14 @@ const subtractFromNow = ( amount, unit ) => {
 	return date;
 };
 
-const matchesDate = ( timestamp, operator, value ) => {
+const matchesDate = ( timestamp, operator, rawValue ) => {
 	const day = toSiteDay( timestamp );
+	let value = rawValue;
+	if ( 'between' === operator ) {
+		value = rawValue.map( toFilterDay );
+	} else if ( ! RELATIVE_OPERATORS.includes( operator ) ) {
+		value = toFilterDay( rawValue );
+	}
 	switch ( operator ) {
 		case 'on':
 			return day === value;
@@ -70,7 +80,7 @@ export const filter = ( stories, fields, view ) => {
 	for ( const { operator, value, field } of view.filters ) {
 		const fieldObject = fields.find( f => f.slug === field );
 
-		if ( DATE_TYPES.includes( fieldObject?.type ) ) {
+		if ( DATE_TYPES.includes( fieldObject?.type ) && DATE_OPERATORS.includes( operator ) ) {
 			if ( hasDateValue( operator, value ) ) {
 				stories = stories.filter( story => matchesDate( story?.[ field ], operator, value ) );
 			}

@@ -146,7 +146,7 @@ describe( 'stories utils', () => {
 		} );
 
 		describe( 'date fields', () => {
-			const { getSettings, setSettings } = require( '@wordpress/date' );
+			const { getDate, getSettings, setSettings } = require( '@wordpress/date' );
 			const defaults = getSettings();
 			const fields = [
 				{ slug: 'last_modified', type: 'datetime', is_filterable: 'no' },
@@ -163,7 +163,10 @@ describe( 'stories utils', () => {
 				filter( list, fields, { filters: [ { field: 'last_modified', operator, value } ] } ).map( s => s.id );
 
 			beforeEach( () => setSettings( { ...defaults, timezone: { ...defaults.timezone, string: 'UTC', offset: 0 } } ) );
-			afterEach( () => setSettings( defaults ) );
+			afterEach( () => {
+				jest.useRealTimers();
+				setSettings( defaults );
+			} );
 
 			it( 'filters on and not on a day, keeping empty values only for not on', () => {
 				expect( ids( 'on', '2025-06-06' ) ).toEqual( [ 2 ] );
@@ -202,7 +205,36 @@ describe( 'stories utils', () => {
 				expect( ids( 'over', { value: 5, unit: 'days' } ) ).toEqual( [ 1 ] );
 				expect( ids( 'over', { value: 1, unit: 'months' } ) ).toEqual( [] );
 				expect( ids( 'inThePast', { value: 1, unit: 'years' } ) ).toEqual( [ 1, 2, 3 ] );
-				jest.useRealTimers();
+			} );
+
+			it( 'reads the ISO instant the datetime control sends as a site day, west and east of UTC', () => {
+				const control = day => getDate( day + 'T00:00' ).toISOString();
+				const zones = [
+					[ 'America/Los_Angeles', -7 ],
+					[ 'Pacific/Auckland', 12 ],
+				];
+				zones.forEach( ( [ string, offset ] ) => {
+					setSettings( { ...defaults, timezone: { ...defaults.timezone, string, offset } } );
+					const list = [
+						{ id: 1, last_modified: Date.parse( control( '2025-06-06' ) ) / 1000 + 3600 },
+						{ id: 2, last_modified: Date.parse( control( '2025-06-07' ) ) / 1000 + 3600 },
+						{ id: 3, last_modified: Date.parse( control( '2025-06-05' ) ) / 1000 + 3600 },
+					];
+					expect( ids( 'on', control( '2025-06-06' ), list ) ).toEqual( [ 1 ] );
+					expect( ids( 'notOn', control( '2025-06-06' ), list ) ).toEqual( [ 2, 3 ] );
+					expect( ids( 'beforeInc', control( '2025-06-06' ), list ) ).toEqual( [ 1, 3 ] );
+					expect( ids( 'between', [ control( '2025-06-05' ), control( '2025-06-06' ) ], list ) ).toEqual( [ 1, 3 ] );
+				} );
+			} );
+
+			it( 'leaves isAny to a filterable date field', () => {
+				const list = [
+					{ id: 1, publish_date: '2025-06-05' },
+					{ id: 2, publish_date: '2025-06-06' },
+				];
+				const filterable = [ { slug: 'publish_date', type: 'date', is_filterable: 'yes' } ];
+				const view = { filters: [ { field: 'publish_date', operator: 'isAny', value: [ '2025-06-06' ] } ] };
+				expect( filter( list, filterable, view ).map( s => s.id ) ).toEqual( [ 2 ] );
 			} );
 
 			it( 'filters a date field the same way', () => {
