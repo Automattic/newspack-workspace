@@ -105,8 +105,9 @@ final class Newspack_Popups_AB_Tests {
 
 		// A status hook rather than the A/B routes: the Campaigns wizard, batch
 		// publish, wp-admin and cron all publish prompts without going through
-		// them. The meta hooks cover a prompt that joins a test while already
-		// live, which starting or resuming a test on a published prompt does.
+		// them. The meta hooks cover a Test ID or version written straight onto a
+		// live prompt, as WP-CLI or custom code can; starting or resuming a test
+		// is recorded here instead, when its draft B is published.
 		add_action( 'transition_post_status', [ __CLASS__, 'record_start_on_publish' ], 10, 3 );
 		foreach ( [ 'added_post_meta', 'updated_post_meta' ] as $hook ) {
 			add_action( $hook, [ __CLASS__, 'record_start_for_meta' ], 10, 3 );

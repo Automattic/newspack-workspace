@@ -1483,7 +1483,7 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		self::assertSame( 400, $response->get_status() );
 		self::assertSame( 'inline', get_post_meta( $prompt_id, 'placement', true ) );
 		// An empty Test ID in the same save is ignored, so the move is still
-		// refused; ending the test is the way out.
+		// refused; ending a running test is the way out.
 		$response = $this->save_prompt_as(
 			$prompt_id,
 			'administrator',
@@ -1541,7 +1541,17 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		wp_cache_delete( $prompt_id, 'post_meta' );
 		self::assertSame( 'footer_test', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
 
-		$response = $this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ 'frequency' => 'once' ] ] );
+		// Sent back as stored, the way the editor sends its whole meta object.
+		$response = $this->save_prompt_as(
+			$prompt_id,
+			'administrator',
+			[
+				'meta' => [
+					'frequency'                            => 'once',
+					Newspack_Popups_AB_Tests::META_TEST_ID => 'footer_test',
+				],
+			]
+		);
 		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
 		self::assertSame( 'once', get_post_meta( $prompt_id, 'frequency', true ) );
 		self::assertSame( 'footer_test', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
