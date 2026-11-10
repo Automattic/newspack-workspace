@@ -137,10 +137,10 @@ describe( 'gate summary sign-up and visibility', () => {
 		expect( text ).toContain( 'Hidden from readers: No' );
 	} );
 
-	it( 'shows N/A while paid access is off, as the editor has no sign-up step then', () => {
+	it( 'shows a dash while paid access is off, as the editor has no sign-up step then', () => {
 		const gate = { ...buildGate(), auto_signup: 'on', hide_lists: true };
 
-		expect( signUpAndVisibilityText( gate ) ).toBe( 'N/A' );
+		expect( signUpAndVisibilityText( gate ) ).toBe( '—' );
 	} );
 
 	it( 'leaves the section out of a content gate', () => {

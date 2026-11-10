@@ -61,7 +61,7 @@ const CRITERIA = [
 
 const PLACEMENT = 'center';
 
-let segmentDescription, splitCriteriaMessage, promptDetails, promptStatus, warningForPopup, isOverlay, placementForPopup;
+let segmentDescription, splitCriteriaMessage, promptDetails, promptStatus, abTestBadge, warningForPopup, isOverlay, placementForPopup;
 
 beforeAll( async () => {
 	window.newspackAudienceCampaigns = {
@@ -70,9 +70,8 @@ beforeAll( async () => {
 		overlay_placements: [ PLACEMENT, 'top', 'bottom' ],
 		custom_placements: {},
 	};
-	( { segmentDescription, splitCriteriaMessage, promptDetails, promptStatus, warningForPopup, isOverlay, placementForPopup } = await import(
-		'./utils'
-	) );
+	( { segmentDescription, splitCriteriaMessage, promptDetails, promptStatus, abTestBadge, warningForPopup, isOverlay, placementForPopup } =
+		await import( './utils' ) );
 } );
 
 describe( 'segmentDescription', () => {
@@ -196,11 +195,22 @@ describe( 'splitCriteriaMessage', () => {
 	} );
 } );
 
-describe( 'promptDetails', () => {
-	it( 'names the A/B test and the variant when the prompt is in one', () => {
-		expect( describePrompt( overlay( { ab_test_id: 'hero', ab_variant: 'b' } ) ) ).toContain( 'A/B test: hero (variant B)' );
+describe( 'abTestBadge', () => {
+	it( 'labels each published version of a running test', () => {
+		expect( abTestBadge( overlay( { ab_test_id: 'hero', ab_variant: 'a' } ) ) ).toEqual( { label: 'A/B test · A', intent: 'informational' } );
+		expect( abTestBadge( overlay( { ab_test_id: 'hero', ab_variant: 'b' } ) ) ).toEqual( { label: 'A/B test · B', intent: 'informational' } );
 	} );
 
+	it( 'gives no badge to a prompt outside a running test', () => {
+		expect( abTestBadge( overlay() ) ).toBeNull();
+	} );
+
+	it( 'gives no badge to a draft version of a running test', () => {
+		expect( abTestBadge( overlay( { ab_test_id: 'hero', ab_variant: 'c', status: 'draft' } ) ) ).toBeNull();
+	} );
+} );
+
+describe( 'promptDetails', () => {
 	it( 'leads with the placement and the frequency', () => {
 		expect( promptDetails( overlay() ).map( ( { label } ) => label ) ).toEqual( [ 'Placement:', 'Frequency:' ] );
 	} );
@@ -211,8 +221,10 @@ describe( 'promptDetails', () => {
 		expect( details.find( ( { label } ) => 'Frequency:' === label ).value ).toBe( 'Custom' );
 	} );
 
-	it( 'says nothing about A/B tests when the prompt is in none', () => {
-		expect( describePrompt( overlay() ) ).not.toContain( 'A/B test' );
+	// The A/B badge says which version a prompt is, and the test ID is an
+	// internal key rather than the name publishers see.
+	it( 'leaves the A/B test out of the details', () => {
+		expect( describePrompt( overlay( { ab_test_id: 'hero', ab_variant: 'b' } ) ) ).not.toContain( 'A/B test' );
 	} );
 
 	it( 'renders a description from valid taxonomy arrays', () => {
@@ -268,7 +280,7 @@ describe( 'promptStatus', () => {
 	it.each( [
 		[ 'publish', 'Active', 'stable' ],
 		[ 'draft', 'Inactive', 'draft' ],
-		[ 'pending', 'Pending Review', 'low' ],
+		[ 'pending', 'Pending Review', 'draft' ],
 		[ 'future', 'Scheduled', 'informational' ],
 		[ 'trash', 'Trash', 'draft' ],
 	] )( 'labels a %s prompt', ( status, label, intent ) => {

@@ -34,7 +34,7 @@ jest.mock( '../../../../../packages/components/src', () => {
 	};
 } );
 
-jest.mock( './policy-cells', () => ( { PolicyChips: () => null, EffectivePrice: () => null } ) );
+jest.mock( './policy-cells', () => ( { PolicyLinks: () => null, EffectivePrice: () => null } ) );
 
 let headerCalls = [];
 let notices = [];

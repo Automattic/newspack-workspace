@@ -16,7 +16,7 @@
 /**
  * WordPress dependencies.
  */
-import { createPortal, useEffect, useLayoutEffect, useMemo, useState } from '@wordpress/element';
+import { createPortal, useEffect, useLayoutEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -25,7 +25,7 @@ import { Badge, Stack } from '@wordpress/ui';
 /**
  * Internal dependencies.
  */
-import { Button, DataViews, Router, StatusIndicator, Waiting } from '../../../../packages/components/src';
+import { Button, CellList, DataViews, Router, StatusBadge, Waiting } from '../../../../packages/components/src';
 import { formatCount } from '../../../../packages/components/src/breadcrumbs/format-count';
 import './style.scss';
 import LoadFailureNotice from '../components/LoadFailureNotice';
@@ -40,12 +40,15 @@ import { GROUP_LABEL, ROLE_LABELS, groupRoleLabel } from '../labels';
 import { SubscriptionLink } from '../links';
 import { STATUS_INDICATORS, STATUS_LABELS, displayStatuses, statusRank } from '../status';
 
+const FIT_COLUMNS = [ 'status' ];
+
 // A subscriber's group memberships, in the shape the column helpers expect
 // ([{ group, role }]). The endpoint embeds them flat on the item as
-// item.groups = [{ id, plan, status, role, editUrl, isComplimentary }].
+// item.groups = [{ id, plan, planName, status, role, editUrl, isComplimentary }]:
+// `plan` is the group's own name, `planName` the plan its members subscribe to.
 const groupEntriesOf = item =>
 	( item.groups || [] ).map( g => ( {
-		group: { plan: g.plan, status: g.status, editUrl: g.editUrl, isComplimentary: !! g.isComplimentary },
+		group: { plan: g.plan, planName: g.planName || g.plan, status: g.status, editUrl: g.editUrl, isComplimentary: !! g.isComplimentary },
 		role: g.role,
 	} ) );
 
@@ -55,7 +58,8 @@ const groupEntriesOf = item =>
 // `groupEntries` is the subscriber's [{ group, role }] memberships.
 const planEntries = ( item, groupEntries ) => {
 	const cohorts = ( groupEntries || [] ).map( ( { group, role } ) => ( {
-		plan: group.plan,
+		plan: group.planName,
+		planName: group.planName,
 		status: group.status,
 		editUrl: group.editUrl,
 		isComplimentary: group.isComplimentary,
@@ -108,6 +112,36 @@ const managedOnValues = item => {
 
 const { useHistory, useLocation } = Router;
 
+/**
+ * The Subscription cell: a subscriber's plans, the first two shown, with a
+ * toggle for the rest.
+ *
+ * A group entry is tagged "(Group)"; the subscriber's role in it is L1
+ * information (profile card, group members table). The plan name links to that
+ * subscription while the row resolves to the person, so the two affordances stay
+ * distinct — see links.jsx.
+ *
+ * The open rows live in `expandedIds`, outside the cell: DataViews remounts every
+ * cell when the fields are rebuilt (avatars and plans arrive after the first paint),
+ * which would otherwise fold an open row back up.
+ *
+ * @param {Object} props             Component props.
+ * @param {Array}  props.entries     The plan entries to list, already filtered.
+ * @param {Set}    props.expandedIds The ids of the rows that are open.
+ * @param {*}      props.id          This row's id.
+ */
+const PlanEntries = ( { entries, expandedIds, id } ) => (
+	<CellList defaultExpanded={ expandedIds.has( id ) } onToggle={ isExpanded => ( isExpanded ? expandedIds.add( id ) : expandedIds.delete( id ) ) }>
+		{ entries.map( ( e, i ) => (
+			<div key={ i }>
+				<SubscriptionLink href={ e.editUrl }>{ e.planName || e.plan }</SubscriptionLink>
+				{ e.role && <>&nbsp;{ `(${ GROUP_LABEL })` }</> }
+				{ e.site && <>&nbsp;{ `(${ e.site })` }</> }
+			</div>
+		) ) }
+	</CellList>
+);
+
 const DEFAULT_VIEW = {
 	type: 'table',
 	page: 1,
@@ -118,12 +152,15 @@ const DEFAULT_VIEW = {
 	filters: [],
 	layout: {},
 	titleField: 'name',
+	descriptionField: 'email',
+	...( SHOW_AVATARS ? { mediaField: 'avatar' } : {} ),
 };
 
 export default function SubscriberList() {
 	// Opening a profile unmounts the list; the saved view brings the reader back
 	// to the filters, search, sort and page they left.
 	const [ view, setView ] = useState( () => getSavedListView() || DEFAULT_VIEW );
+	const expandedPlans = useRef( new Set() );
 	useEffect( () => {
 		saveListView( view );
 	}, [ view ] );
@@ -204,29 +241,34 @@ export default function SubscriberList() {
 				label: __( 'Subscriber', 'newspack-plugin' ),
 				enableGlobalSearch: true,
 				enableSorting: true,
-				getValue: ( { item } ) => `${ item.name } ${ item.email }`,
-				render: ( { item } ) => {
-					const details = (
-						<div>
-							<div>{ item.name }</div>
-							<div className="newspack-subscribers__email">{ item.email }</div>
-						</div>
-					);
-					if ( ! SHOW_AVATARS ) {
-						return <div data-subscriber-id={ item.id }>{ details }</div>;
-					}
-					return (
-						<HStack data-subscriber-id={ item.id } spacing={ 3 } justify="flex-start" alignment="center">
-							{ avatars[ item.id ] ? (
-								<img className="newspack-subscribers__avatar" src={ avatars[ item.id ] } alt="" width={ 32 } height={ 32 } />
-							) : (
-								<span className="newspack-subscribers__avatar" aria-hidden="true" />
-							) }
-							{ details }
-						</HStack>
-					);
-				},
+				// The avatar takes its accessible name from this field, and row clicks find the reader through it.
+				enableHiding: false,
+				getValue: ( { item } ) => item.name,
+				render: ( { item } ) => <span data-subscriber-id={ item.id }>{ item.name }</span>,
 			},
+			{
+				id: 'email',
+				label: __( 'Email', 'newspack-plugin' ),
+				enableGlobalSearch: true,
+				enableSorting: false,
+				getValue: ( { item } ) => item.email,
+				render: ( { item } ) => <span className="newspack-subscribers__email">{ item.email }</span>,
+			},
+			...( SHOW_AVATARS
+				? [
+						{
+							id: 'avatar',
+							label: __( 'Avatar', 'newspack-plugin' ),
+							enableSorting: false,
+							render: ( { item } ) =>
+								avatars[ item.id ] ? (
+									<img className="newspack-subscribers__avatar" src={ avatars[ item.id ] } alt="" width={ 32 } height={ 32 } />
+								) : (
+									<span className="newspack-subscribers__avatar" aria-hidden="true" />
+								),
+						},
+				  ]
+				: [] ),
 			{
 				id: 'status',
 				label: __( 'Status', 'newspack-plugin' ),
@@ -243,9 +285,9 @@ export default function SubscriberList() {
 				render: ( { item } ) => (
 					<Stack direction="column" align="flex-start" gap="sm">
 						{ subscriberStatuses( item, groupEntriesOf( item ) ).map( status => (
-							<StatusIndicator key={ status } status={ STATUS_INDICATORS[ status ] }>
+							<StatusBadge key={ status } status={ STATUS_INDICATORS[ status ] }>
 								{ STATUS_LABELS[ status ] }
-							</StatusIndicator>
+							</StatusBadge>
 						) ) }
 					</Stack>
 				),
@@ -266,22 +308,7 @@ export default function SubscriberList() {
 					if ( entries.length === 0 ) {
 						return <span>—</span>;
 					}
-					// 8px between subscriptions so each reads as a distinct block. A
-					// group entry is tagged "(Group)"; the subscriber's role in it is
-					// L1 information (profile card, group members table). The plan
-					// name links to that subscription while the row resolves to the
-					// person, so the two affordances stay distinct — see links.jsx.
-					return (
-						<VStack spacing={ 2 } alignment="left">
-							{ entries.map( ( e, i ) => (
-								<div key={ i }>
-									<SubscriptionLink href={ e.editUrl }>{ e.planName || e.plan }</SubscriptionLink>
-									{ e.role && <>&nbsp;{ `(${ GROUP_LABEL })` }</> }
-									{ e.site && <>&nbsp;{ `(${ e.site })` }</> }
-								</div>
-							) ) }
-						</VStack>
-					);
+					return <PlanEntries entries={ entries } expandedIds={ expandedPlans.current } id={ item.id } />;
 				},
 			},
 			{
@@ -356,7 +383,7 @@ export default function SubscriberList() {
 				label: __( 'Last payment', 'newspack-plugin' ),
 				// Not server-sortable in this slice.
 				enableSorting: false,
-				render: ( { item } ) => <span>{ item.lastPayment ? fmtDate( item.lastPayment ) : '—' }</span>,
+				render: ( { item } ) => <span className="newspack-dataviews__date">{ item.lastPayment ? fmtDate( item.lastPayment ) : '—' }</span>,
 			},
 			{
 				id: 'memberSince',
@@ -366,7 +393,9 @@ export default function SubscriberList() {
 				render: ( { item } ) =>
 					item.memberSince ? (
 						<div>
-							<div>{ fmtDate( item.memberSince ) }</div>
+							<div>
+								<span className="newspack-dataviews__date">{ fmtDate( item.memberSince ) }</span>
+							</div>
 							<div className="newspack-subscribers__muted">{ fmtRelative( item.memberSince ) }</div>
 						</div>
 					) : (
@@ -384,7 +413,9 @@ export default function SubscriberList() {
 				render: ( { item } ) =>
 					item.lastSeen ? (
 						<div>
-							<div>{ fmtDate( item.lastSeen ) }</div>
+							<div>
+								<span className="newspack-dataviews__date">{ fmtDate( item.lastSeen ) }</span>
+							</div>
 							<div className="newspack-subscribers__muted">{ fmtRelative( item.lastSeen ) }</div>
 						</div>
 					) : (
@@ -453,9 +484,10 @@ export default function SubscriberList() {
 		[ avatars, planElements, managedOnElements ]
 	);
 
-	// DataViews only makes the title cell clickable; delegate clicks from the
-	// rest of the row to the same target, ignoring genuinely interactive elements
-	// (the title button, selection checkbox, links).
+	// DataViews only makes the title cell and the avatar clickable; delegate
+	// clicks from the rest of the row to the same target, ignoring genuinely
+	// interactive elements (the title and avatar buttons, selection checkbox,
+	// links).
 	//
 	// DEPENDS ON DATAVIEWS INTERNAL MARKUP: the row is located by the
 	// `dataviews-view-table__row` class, which DataViews owns and could rename on
@@ -566,6 +598,14 @@ export default function SubscriberList() {
 				/>
 			) }
 			<DataViews
+				fitColumns={ FIT_COLUMNS }
+				countLabel={ ( count, formatted ) =>
+					sprintf(
+						/* translators: %s: number of subscribers. */
+						_n( '%s subscriber', '%s subscribers', count, 'newspack-plugin' ),
+						formatted
+					)
+				}
 				data={ items }
 				fields={ fields }
 				view={ view }

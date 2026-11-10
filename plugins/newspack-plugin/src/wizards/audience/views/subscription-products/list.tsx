@@ -23,11 +23,12 @@ import { Badge } from '@wordpress/ui';
 /**
  * Internal dependencies
  */
-import { DataViews, Router, StatusIndicator, WizardBanner } from '../../../../../packages/components/src';
+import { CellList, DataViews, Router, StatusBadge, StatusIndicator, WizardBanner } from '../../../../../packages/components/src';
 import { formatCount } from '../../../../../packages/components/src/breadcrumbs/format-count';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
-import { postStatus } from '../../post-status';
-import { PolicyChips, EffectivePrice } from './policy-cells';
+import { audienceStatusLabel, postStatus } from '../../post-status';
+import { PolicyLinks, EffectivePrice } from './policy-cells';
+import { bundledLinks, gateLinks } from './item-links';
 import PromoUrlModal from './promo-url-modal';
 
 const { useHistory } = Router;
@@ -106,7 +107,7 @@ const DEFAULT_VIEW: View & { fields: string[] } = {
 	//  - `category`: 4 of 6 sampled publishers leave subscription products uncategorized.
 	//  - `availability`: derived heuristic (placeholder for a real entitlement field), and
 	//    mostly "Public" for most publishers — low signal density for a default slot.
-	fields: [ 'price', 'active_subscriptions', 'unlocks', 'status', 'policies', 'effective_price' ],
+	fields: [ 'status', 'price', 'active_subscriptions', 'unlocks', 'policies', 'effective_price' ],
 	// Default to published only. The REST query returns every non-trashed status, so
 	// draft/private/pending products remain reachable behind the Status filter without
 	// cluttering the default view with "(TEST COPY)" drafts and hidden strategy products.
@@ -114,6 +115,8 @@ const DEFAULT_VIEW: View & { fields: string[] } = {
 	layout: {},
 	titleField: 'name',
 };
+
+const FIT_COLUMNS = [ 'status', 'active_subscriptions' ];
 
 export default function SubscriptionProductsList( { scope = 'subscriptions' }: { scope?: Scope } ) {
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
@@ -173,7 +176,7 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 	// Filter elements derived from the loaded data.
 	const statusElements = useMemo( () => {
 		const seen = new Map< string, string >();
-		data.forEach( item => seen.set( item.status, item.status_label ) );
+		data.forEach( item => seen.set( item.status, audienceStatusLabel( item.status, item.status_label ) ) );
 		return Array.from( seen, ( [ value, label ] ) => ( { value, label } ) );
 	}, [ data ] );
 
@@ -197,7 +200,7 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 							className="newspack-subscription-products__name-link"
 							onClick={ () => history.push( `/edit/${ item.id }` ) }
 						>
-							<strong>{ item.name }</strong>
+							{ item.name }
 						</Button>
 						{ item.is_complimentary && (
 							<>
@@ -231,13 +234,7 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 					// Grouped products aren't priced themselves — show what they bundle instead.
 					if ( item.type === 'grouped' ) {
 						return item.bundled_products.length ? (
-							<div className="newspack-subscription-products__bundled">
-								{ item.bundled_products.map( bundled => (
-									<Badge key={ bundled.id } intent="none">
-										{ bundled.name }
-									</Badge>
-								) ) }
-							</div>
+							<CellList>{ bundledLinks( item.bundled_products ) }</CellList>
 						) : (
 							<span className="newspack-subscription-products__muted">&mdash;</span>
 						);
@@ -270,13 +267,7 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				enableSorting: false,
 				render: ( { item } ) =>
 					item.bundled_products.length ? (
-						<div className="newspack-subscription-products__bundled">
-							{ item.bundled_products.map( bundled => (
-								<Badge key={ bundled.id } intent="none">
-									{ bundled.name }
-								</Badge>
-							) ) }
-						</div>
+						<CellList>{ bundledLinks( item.bundled_products ) }</CellList>
 					) : (
 						<span className="newspack-subscription-products__muted">&mdash;</span>
 					),
@@ -325,20 +316,13 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 			{
 				id: 'unlocks',
 				label: __( 'Unlocks', 'newspack-plugin' ),
-				// Content gates this product unlocks (Access control). Sortable/searchable by
-				// gate titles; rendered as chips linking to the gate editor.
+				// Content gates this product unlocks (Access control), searchable by title.
 				getValue: ( { item } ) => item.unlocks_label,
 				enableGlobalSearch: true,
 				enableSorting: false,
 				render: ( { item } ) =>
 					item.unlocks.length ? (
-						<div className="newspack-subscription-products__unlocks">
-							{ item.unlocks.map( gate => (
-								<Badge key={ gate.id } intent="none">
-									{ gate.title }
-								</Badge>
-							) ) }
-						</div>
+						<CellList>{ gateLinks( item.unlocks ) }</CellList>
 					) : (
 						<span className="newspack-subscription-products__muted">{ __( 'Nothing gated', 'newspack-plugin' ) }</span>
 					),
@@ -347,7 +331,9 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				id: 'status',
 				label: __( 'Status', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.status,
-				render: ( { item } ) => <StatusIndicator status={ postStatus( item.status ) }>{ item.status_label }</StatusIndicator>,
+				render: ( { item } ) => (
+					<StatusBadge status={ postStatus( item.status ) }>{ audienceStatusLabel( item.status, item.status_label ) }</StatusBadge>
+				),
 				elements: statusElements,
 				filterBy: { operators: [ 'is' ] },
 			},
@@ -355,7 +341,7 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				id: 'policies',
 				label: __( 'Applied rules', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.policy?.policies?.map( p => p.label ).join( ', ' ) || '',
-				render: ( { item } ) => <PolicyChips policy={ item.policy } />,
+				render: ( { item } ) => <PolicyLinks policy={ item.policy } />,
 				enableSorting: false,
 			},
 			{
@@ -455,6 +441,7 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				</Notice>
 			) }
 			<DataViews
+				countLabel={ SCOPE_COUNT_LABELS[ scope ] }
 				className="newspack-subscription-products__dataviews"
 				data={ processedData }
 				fields={ visibleFields }
@@ -465,7 +452,9 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				defaultLayouts={ { table: {}, grid: {} } }
 				isLoading={ isLoading }
 				getItemId={ ( item: SubscriptionProduct ) => String( item.id ) }
+				fitColumns={ FIT_COLUMNS }
 				search
+				inlineFilters
 			/>
 		</div>
 	);

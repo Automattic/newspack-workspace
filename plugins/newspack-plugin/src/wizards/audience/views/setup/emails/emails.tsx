@@ -5,9 +5,9 @@
 /**
  * WordPress dependencies.
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { useState, useEffect, useCallback, useMemo, Fragment } from '@wordpress/element';
-import { DataViews as WPDataViews, filterSortAndPaginate } from '@wordpress/dataviews';
+import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
 import { Notice } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
@@ -45,11 +45,6 @@ interface EmailItem {
 	chip: 'auth-account' | 'reader-revenue';
 	source: 'newspack' | 'woocommerce';
 }
-
-// The bundled @wordpress/dataviews types (v10) predate `isDestructive`,
-// which the WP-core-provided runtime DataViews does support — extend the
-// Action type locally so destructive styling can be declared.
-type EmailAction = Action< EmailItem > & { isDestructive?: boolean };
 
 interface EmailSettings {
 	newspack_emails: EmailItem[];
@@ -267,7 +262,7 @@ const Emails = () => {
 				getValue: ( { item }: { item: EmailItem } ) => item.label,
 				render: ( { item }: { item: EmailItem } ) => (
 					<a href={ item.edit_link } className="newspack-emails__name-link">
-						<strong>{ item.label }</strong>
+						{ item.label }
 					</a>
 				),
 			},
@@ -336,7 +331,7 @@ const Emails = () => {
 		[ isNewspackPlatform ]
 	);
 
-	const actions: EmailAction[] = [
+	const actions: Action< EmailItem >[] = [
 		{
 			id: 'edit',
 			label: __( 'Edit', 'newspack-plugin' ),
@@ -376,7 +371,6 @@ const Emails = () => {
 		{
 			id: 'reset',
 			label: __( 'Reset', 'newspack-plugin' ),
-			isDestructive: true,
 			// Source guard on reset only — WC emails aren't customized
 			// through the post editor, so reset has no meaning for them.
 			isEligible: ( item: EmailItem ) => item.source === 'newspack',
@@ -398,39 +392,6 @@ const Emails = () => {
 	];
 
 	const { data: processedData, paginationInfo } = useMemo( () => filterSortAndPaginate( data, view, fields ), [ data, view, fields ] );
-
-	// The `preview` media field belongs to the grid view (each card
-	// renders the iframe as its top tile). DataViews v14 also renders
-	// the media field as a leading thumbnail in table view, where the
-	// EmailPreview iframe is too constrained to actually show
-	// content — leaving an empty rounded square next to every row.
-	// Strip `mediaField` from the view passed to DataViews when
-	// the user has switched to table layout; the underlying state
-	// keeps the value so toggling back to grid restores the tile.
-	const effectiveView = useMemo< View >( () => {
-		if ( 'table' === view.type ) {
-			const { mediaField: _stripped, ...rest } = view;
-			return rest as View;
-		}
-		return view;
-	}, [ view ] );
-
-	// Normalize the view DataViews hands back before persisting it.
-	// `effectiveView` strips `mediaField` while in table layout, so
-	// without this a table→grid toggle would store a grid view that
-	// lost its preview tile, leaving grid cards with no media field.
-	// Grid always carries `mediaField: 'preview'`; table never does
-	// (it's stripped in `effectiveView` regardless, but drop it here
-	// too so the persisted state stays canonical). This keeps a
-	// grid→table→grid round-trip lossless.
-	const handleChangeView = useCallback( ( nextView: View ) => {
-		if ( 'grid' === nextView.type ) {
-			setView( { ...nextView, mediaField: 'preview' } );
-			return;
-		}
-		const { mediaField: _stripped, ...rest } = nextView;
-		setView( rest as View );
-	}, [] );
 
 	if ( false === pluginsReady ) {
 		return (
@@ -469,30 +430,25 @@ const Emails = () => {
 				</Stack>
 			) }
 			<DataViews
+				countLabel={ ( count, formatted ) =>
+					sprintf(
+						/* translators: %s: number of emails. */
+						_n( '%s email', '%s emails', count, 'newspack-plugin' ),
+						formatted
+					)
+				}
 				className="newspack-emails"
 				data={ processedData }
 				fields={ fields }
-				view={ effectiveView }
-				onChangeView={ handleChangeView }
+				view={ view }
+				onChangeView={ setView }
 				actions={ actions }
 				paginationInfo={ paginationInfo }
-				defaultLayouts={ { table: {}, grid: {} } }
+				defaultLayouts={ { grid: {} } }
 				isLoading={ isFetching }
 				getItemId={ ( item: EmailItem ) => String( item.post_id ) }
-			>
-				<Stack direction="row" justify="space-between" align="flex-start" gap="sm" className="dataviews__view-actions">
-					<Stack direction="row" align="center" gap="xl" wrap="wrap" className="dataviews__search">
-						<WPDataViews.Search />
-						<WPDataViews.Filters />
-					</Stack>
-					<Stack direction="row" align="center" gap="xs">
-						<WPDataViews.LayoutSwitcher />
-						<WPDataViews.ViewConfig />
-					</Stack>
-				</Stack>
-				<WPDataViews.Layout />
-				<WPDataViews.Footer />
-			</DataViews>
+				inlineFilters
+			/>
 		</Fragment>
 	);
 };

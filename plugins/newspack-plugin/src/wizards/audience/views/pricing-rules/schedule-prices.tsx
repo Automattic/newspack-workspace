@@ -10,9 +10,7 @@ import { __ } from '@wordpress/i18n';
 import { useState, useMemo, useEffect, useCallback, useId, useRef } from '@wordpress/element';
 import { Button } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
-// Not the Newspack wrapper: with-wizard-screen/style.scss gives `.newspack-dataviews`
-// a -48px page bleed that hangs this embedded table past the form column.
-import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
+import { DataViews as CoreDataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
 import { currencyDollar } from '@wordpress/icons';
 
@@ -20,6 +18,7 @@ import { currencyDollar } from '@wordpress/icons';
  * Internal dependencies
  */
 import { ConfirmDialog, TableCard } from '../../../../../packages/components/src';
+import DataViews from '../../../../../packages/components/src/dataviews';
 import EmptyState from '../../../../../packages/components/src/empty-state';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { byCycle, cycleRange, priceSummary } from './schedule-format';
@@ -141,7 +140,7 @@ export default function SchedulePrices( { steps, onChange, publicize, calcTypes,
 		page: 1,
 		search: '',
 		filters: [],
-		layout: { density: 'compact', enableMoving: false },
+		layout: { enableMoving: false },
 		titleField: 'cycles',
 		fields: fieldIds,
 	} ) );
@@ -217,7 +216,7 @@ export default function SchedulePrices( { steps, onChange, publicize, calcTypes,
 				titleId={ titleId }
 				actions={
 					rows.length > 0 && (
-						<Button ref={ addRef } variant="secondary" size="compact" onClick={ add }>
+						<Button ref={ addRef } variant="tertiary" size="compact" onClick={ add }>
 							{ __( 'Add Price', 'newspack-plugin' ) }
 						</Button>
 					)
@@ -253,7 +252,7 @@ export default function SchedulePrices( { steps, onChange, publicize, calcTypes,
 							defaultLayouts={ { table: {} } }
 							getItemId={ ( item: SchedulePriceRow ) => item.id }
 						>
-							<DataViews.Layout />
+							<CoreDataViews.Layout />
 						</DataViews>
 					</div>
 				) }

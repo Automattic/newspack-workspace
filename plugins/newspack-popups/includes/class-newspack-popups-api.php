@@ -195,6 +195,229 @@ final class Newspack_Popups_API {
 				]
 			);
 		}
+
+		if ( Newspack_Popups_AB_Tests::is_enabled() ) {
+			register_rest_route(
+				'newspack-popups/v1',
+				'/ab-tests',
+				[
+					[
+						'methods'             => \WP_REST_Server::READABLE,
+						'callback'            => [ __CLASS__, 'api_list_ab_tests' ],
+						'permission_callback' => [ __CLASS__, 'permission_callback' ],
+					],
+					[
+						'methods'             => \WP_REST_Server::CREATABLE,
+						'callback'            => [ __CLASS__, 'api_start_ab_test' ],
+						'permission_callback' => [ __CLASS__, 'start_ab_test_permission_callback' ],
+						'args'                => [
+							'prompt_id'     => [
+								'type'     => 'integer',
+								'required' => true,
+								'minimum'  => 1,
+							],
+							'name'          => [
+								'type'     => 'string',
+								'required' => true,
+							],
+							'goal'          => [
+								'type'     => 'string',
+								'required' => true,
+								'enum'     => Newspack_Popups_AB_Tests::VALID_GOALS,
+							],
+							'control_share' => [
+								'type'    => 'integer',
+								'default' => 50,
+								'minimum' => 20,
+								'maximum' => 80,
+							],
+						],
+					],
+				]
+			);
+			register_rest_route(
+				'newspack-popups/v1',
+				// Underscores too: the save guard keeps a legacy Test ID as stored.
+				'/ab-tests/(?P<test_id>[a-z0-9_-]+)',
+				[
+					'methods'             => \WP_REST_Server::READABLE,
+					'callback'            => [ __CLASS__, 'api_get_ab_test_prompts' ],
+					'permission_callback' => [ __CLASS__, 'prompt_editor_permission_callback' ],
+				]
+			);
+			register_rest_route(
+				'newspack-popups/v1',
+				// Underscores too, for the same legacy IDs as the route above.
+				'/ab-tests/(?P<test_id>[a-z0-9_-]+)/stats',
+				[
+					'methods'             => \WP_REST_Server::READABLE,
+					'callback'            => [ __CLASS__, 'api_get_ab_test_stats' ],
+					'permission_callback' => [ __CLASS__, 'permission_callback' ],
+					'args'                => [
+						'refresh' => [
+							'type'    => 'boolean',
+							'default' => false,
+						],
+					],
+				]
+			);
+			register_rest_route(
+				'newspack-popups/v1',
+				// Underscores too, so a legacy test the page lists can be renamed.
+				'/ab-tests/(?P<test_id>[a-z0-9_-]+)/name',
+				[
+					'methods'             => \WP_REST_Server::EDITABLE,
+					'callback'            => [ __CLASS__, 'api_rename_ab_test' ],
+					'permission_callback' => [ __CLASS__, 'rename_ab_test_permission_callback' ],
+					'args'                => [
+						'name' => [
+							'type'     => 'string',
+							'required' => true,
+						],
+					],
+				]
+			);
+			register_rest_route(
+				'newspack-popups/v1',
+				'/ab-tests/(?P<test_id>[a-z0-9_-]+)/end',
+				[
+					'methods'             => \WP_REST_Server::CREATABLE,
+					'callback'            => [ __CLASS__, 'api_end_ab_test' ],
+					'permission_callback' => [ __CLASS__, 'end_ab_test_permission_callback' ],
+					'args'                => [
+						'keep' => [
+							'type'     => 'string',
+							'enum'     => Newspack_Popups_AB_Tests::VALID_VARIANTS,
+							'required' => true,
+						],
+					],
+				]
+			);
+		}
+	}
+
+	/**
+	 * End a test, keeping one version.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function api_end_ab_test( $request ) {
+		return rest_ensure_response( Newspack_Popups_AB_Tests::end_test( $request->get_param( 'test_id' ), $request->get_param( 'keep' ) ) );
+	}
+
+	/**
+	 * Permission to end a test: may the user change every prompt in it.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return bool
+	 */
+	public static function end_ab_test_permission_callback( $request ) {
+		return Newspack_Popups_AB_Tests::can_end_test( get_current_user_id(), (string) $request->get_param( 'test_id' ) );
+	}
+
+	/**
+	 * The prompts in an A/B test, for the editor's "other prompts in this test" list.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response
+	 */
+	public static function api_get_ab_test_prompts( $request ) {
+		return rest_ensure_response( Newspack_Popups_AB_Tests::get_test_prompts( $request->get_param( 'test_id' ) ) );
+	}
+
+	/**
+	 * Start an A/B test on a prompt, creating its version B as a draft.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function api_start_ab_test( $request ) {
+		$result = Newspack_Popups_AB_Tests::start_test(
+			(int) $request->get_param( 'prompt_id' ),
+			$request->get_param( 'name' ),
+			$request->get_param( 'goal' ),
+			(int) $request->get_param( 'control_share' )
+		);
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		$response = rest_ensure_response( $result );
+		$response->set_status( 201 );
+		return $response;
+	}
+
+	/**
+	 * Permission to start a test: may the user change the prompt's A/B settings
+	 * and edit prompts, since the start creates version B.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return bool
+	 */
+	public static function start_ab_test_permission_callback( $request ) {
+		$prompt_id = (int) $request->get_param( 'prompt_id' );
+		return $prompt_id > 0
+			&& self::prompt_editor_permission_callback()
+			&& Newspack_Popups_AB_Tests::can_manage_tests( get_current_user_id(), $prompt_id );
+	}
+
+	/**
+	 * Rename an A/B test. Only its display name changes.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function api_rename_ab_test( $request ) {
+		$name = Newspack_Popups_AB_Tests::rename_test( $request->get_param( 'test_id' ), $request->get_param( 'name' ) );
+		if ( is_wp_error( $name ) ) {
+			return $name;
+		}
+		return rest_ensure_response(
+			[
+				'test_id' => Newspack_Popups_AB_Tests::resolve_test_id( $request->get_param( 'test_id' ) ),
+				'name'    => $name,
+			]
+		);
+	}
+
+	/**
+	 * Permission to rename a test: may the user change every prompt in it.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return bool
+	 */
+	public static function rename_ab_test_permission_callback( $request ) {
+		return Newspack_Popups_AB_Tests::can_rename_test( get_current_user_id(), (string) $request->get_param( 'test_id' ) );
+	}
+
+	/**
+	 * Every A/B test and what the Campaigns A/B Tests tab needs to show them.
+	 *
+	 * @return WP_REST_Response
+	 */
+	public static function api_list_ab_tests() {
+		return rest_ensure_response( Newspack_Popups_AB_Dashboard::get_list_data() );
+	}
+
+	/**
+	 * Stats for one A/B test, for the A/B Tests tab.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function api_get_ab_test_stats( $request ) {
+		return rest_ensure_response( Newspack_Popups_AB_Dashboard::get_stats( $request->get_param( 'test_id' ), (bool) $request->get_param( 'refresh' ) ) );
+	}
+
+	/**
+	 * Permission for routes the prompt editor calls: anyone who can edit prompts,
+	 * which is wider than `permission_callback()`'s administrators.
+	 *
+	 * @return bool
+	 */
+	public static function prompt_editor_permission_callback() {
+		$post_type = get_post_type_object( Newspack_Popups::NEWSPACK_POPUPS_CPT );
+		return $post_type && current_user_can( $post_type->cap->edit_posts );
 	}
 
 	/**

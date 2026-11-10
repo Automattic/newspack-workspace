@@ -13,7 +13,7 @@
 import { render, screen } from '@testing-library/react';
 import { setSettings } from '@wordpress/date';
 
-import { getFields, STATUS_KIND_STATUSES } from './fields';
+import { formatPrice, getFields, STATUS_KIND_STATUSES } from './fields';
 import { statusGlyph } from 'newspack-components/src/status-indicator';
 
 const L10N = {
@@ -95,11 +95,19 @@ describe( 'Ads list date columns', () => {
 		expect( renderText( 'start_date', adWithMeta( { start_date: '2026-08-04T23:59:59' } ) ) ).toBe( 'August 4, 2026' );
 	} );
 
-	it( 'renders nothing when the date is unset', () => {
+	it( 'renders a dash when the date is unset', () => {
 		configureSite( -4 );
 
-		expect( renderText( 'start_date', adWithMeta( {} ) ) ).toBe( '' );
-		expect( renderText( 'expiry_date', adWithMeta( { expiry_date: '' } ) ) ).toBe( '' );
+		expect( fieldById( 'start_date' ).render( { item: adWithMeta( {} ) } ).props.children ).toBe( '\u2014' );
+		expect( fieldById( 'expiry_date' ).render( { item: adWithMeta( { expiry_date: '' } ) } ).props.children ).toBe( '\u2014' );
+	} );
+
+	it( 'groups counts for the locale and shows a dash for an empty price or placement', () => {
+		const item = { id: 1, meta: { tracking_impressions: 3120, tracking_clicks: 12 } };
+		expect( fieldById( 'impressions' ).render( { item } ) ).toBe( ( 3120 ).toLocaleString() );
+		expect( fieldById( 'clicks' ).render( { item } ) ).toBe( '12' );
+		expect( fieldById( 'price' ).render( { item } ).props.children ).toBe( '\u2014' );
+		expect( fieldById( 'ad_placement' ).render( { item } ).props.children ).toBe( '\u2014' );
 	} );
 
 	it( 'gives each column its own hint about what the date means', () => {
@@ -126,12 +134,21 @@ describe( 'Ads list date columns', () => {
 describe( 'Ads list status column dates', () => {
 	afterEach( () => configureSite( 0 ) );
 
-	// `newspack-components` is stubbed for these tests, so read the label off the
-	// StatusIndicator's props rather than rendering it.
-	const statusLabel = ( status, postStatus = 'publish' ) =>
-		fieldById( 'status' ).render( {
+	const renderLabel = ( status, postStatus = 'publish' ) => {
+		const { children } = fieldById( 'status' ).render( {
 			item: { id: 1, meta: {}, status: postStatus, newspack_newsletters_ad_status: status },
-		} ).props.children;
+		} ).props;
+		return render( <div>{ children }</div> ).container;
+	};
+	const statusLabel = ( status, postStatus ) => renderLabel( status, postStatus ).textContent;
+
+	it( 'keeps the start date on one line', () => {
+		configureSite( 0 );
+
+		const label = renderLabel( { kind: 'scheduled', starts_at: Date.UTC( 2026, 7, 4, 12 ) / 1000 } );
+
+		expect( label.querySelector( '.newspack-dataviews__date' ) ).toHaveTextContent( 'August 4, 2026' );
+	} );
 
 	it( 'drops the clock time when the site date format carries one', () => {
 		configureSite( -4, 'F j, Y, g:i a' );
@@ -170,15 +187,10 @@ describe( 'Ads list status column dates', () => {
 		expect( label ).toBe( 'Starts August 4, 2026' );
 	} );
 
-	it.each( [
-		[ 'New York', -4 ],
-		[ 'Kiritimati', 14 ],
-	] )( 'dates an expired ad by its stored expiry day in %s', ( _label, offset ) => {
-		configureSite( offset );
-
+	it( 'leaves the expiry date to its own column', () => {
 		const label = statusLabel( { kind: 'expired', expires_at: Date.UTC( 2026, 7, 4, 12 ) / 1000 } );
 
-		expect( label ).toBe( 'Expired August 4, 2026' );
+		expect( label ).toBe( 'Expired' );
 	} );
 } );
 
@@ -197,5 +209,25 @@ describe( 'STATUS_KIND_STATUSES', () => {
 
 	it( 'reads an expired ad as its window closing, not a deliberate stop', () => {
 		expect( STATUS_KIND_STATUSES.expired ).toBe( 'ended' );
+	} );
+} );
+
+describe( 'formatPrice', () => {
+	afterEach( () => {
+		delete window.newspackNewslettersAdmin;
+	} );
+
+	it( 'puts the store currency where the store puts it', () => {
+		window.newspackNewslettersAdmin = { currency: { symbol: '£', position: 'left', decimals: 2, decimalSeparator: '.', thousandSeparator: ',' } };
+		expect( formatPrice( 1250 ) ).toBe( '£1,250.00' );
+
+		window.newspackNewslettersAdmin = {
+			currency: { symbol: '€', position: 'right_space', decimals: 2, decimalSeparator: ',', thousandSeparator: '.' },
+		};
+		expect( formatPrice( 1250.5 ) ).toBe( '1.250,50\u00a0€' );
+	} );
+
+	it( 'shows a plain number without a store', () => {
+		expect( formatPrice( 1250 ) ).toBe( '1250' );
 	} );
 } );

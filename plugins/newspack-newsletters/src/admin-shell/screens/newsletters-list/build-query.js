@@ -29,7 +29,6 @@ const FIELD_TO_QUERY_PARAM = {
 const SORT_FIELD_TO_ORDERBY = {
 	title: 'title',
 	date: 'date',
-	send_date: 'date',
 	author: 'author',
 };
 
@@ -50,6 +49,7 @@ const BASE_FIELDS = [
 	'tags',
 	'newspack_newsletters_status',
 	'newspack_newsletters_author',
+	'newspack_newsletters_send_list',
 ];
 
 export function buildQueryParams( view = {} ) {
