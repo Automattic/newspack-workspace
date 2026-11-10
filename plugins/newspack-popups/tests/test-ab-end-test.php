@@ -731,7 +731,7 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 	 */
 	private function bucket_reader( $test_id, $bucket = 'a' ) {
 		$reader_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
-		update_user_meta( $reader_id, Newspack_Popups_AB_Tests::USER_META_BUCKET_PREFIX . $test_id, $bucket );
+		update_user_meta( $reader_id, Newspack_Popups_AB_Tests::bucket_meta_key( $test_id ), $bucket );
 		return $reader_id;
 	}
 
@@ -744,7 +744,7 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 	 * @return string Stored bucket, or '' when none.
 	 */
 	private function stored_bucket( $reader_id, $test_id ) {
-		return (string) get_user_meta( $reader_id, Newspack_Popups_AB_Tests::USER_META_BUCKET_PREFIX . $test_id, true );
+		return (string) get_user_meta( $reader_id, Newspack_Popups_AB_Tests::bucket_meta_key( $test_id ), true );
 	}
 
 	/**
@@ -846,6 +846,23 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 		$reader = $this->bucket_reader( 't', 'a' );
 		wp_delete_post( $this->createPopup(), true );
 		$this->assertSame( 'a', $this->stored_bucket( $reader, 't' ) );
+	}
+
+	/**
+	 * Emptying a test drops only this site's buckets: another site in the network
+	 * using the same Test ID keeps its readers' assignments.
+	 */
+	public function test_emptying_a_test_keeps_another_sites_buckets() {
+		global $wpdb;
+		$ids        = $this->create_running_test();
+		$reader     = $this->bucket_reader( 't', 'a' );
+		$other_site = $wpdb->base_prefix . '99_' . Newspack_Popups_AB_Tests::USER_META_BUCKET_PREFIX . 't';
+		update_user_meta( $reader, $other_site, 'b' );
+		foreach ( $ids as $id ) {
+			wp_delete_post( $id, true );
+		}
+		$this->assertSame( '', $this->stored_bucket( $reader, 't' ) );
+		$this->assertSame( 'b', get_user_meta( $reader, $other_site, true ) );
 	}
 
 	/**
