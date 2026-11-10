@@ -2,14 +2,14 @@
 # This file is distributed under the GPL2.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack 6.56.2\n"
+"Project-Id-Version: Newspack 6.56.5\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-plugin\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-26T22:17:41+00:00\n"
+"POT-Creation-Date: 2026-11-10T18:41:18+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-plugin\n"
@@ -441,7 +441,7 @@ msgstr ""
 
 #: includes/class-newspack-ui.php:986
 #: includes/plugins/woocommerce-subscriptions/class-woocommerce-subscriptions.php:1207
-#: includes/plugins/woocommerce/class-woocommerce-connection.php:774
+#: includes/plugins/woocommerce/class-woocommerce-connection.php:792
 #: dist/audience-wizards.0a9f0c6b9c6330d5c497.js:81
 #: dist/audience-wizards.0a9f0c6b9c6330d5c497.js:201
 #: dist/audience-wizards.0a9f0c6b9c6330d5c497.js:275
@@ -4816,7 +4816,7 @@ msgstr ""
 
 #: includes/optional-modules/class-rss.php:625
 #: includes/plugins/woocommerce-subscriptions/class-woocommerce-subscriptions.php:1205
-#: includes/plugins/woocommerce/class-woocommerce-connection.php:772
+#: includes/plugins/woocommerce/class-woocommerce-connection.php:790
 msgid "Daily"
 msgstr ""
 
@@ -5295,14 +5295,14 @@ msgid "the contact email to your site (same as the \"From\" email address)"
 msgstr ""
 
 #: includes/plugins/woocommerce-subscriptions/class-card-expiry-warning.php:274
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:132
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:142
 #: includes/reader-activation/class-reader-activation-emails.php:68
 #: includes/reader-revenue/class-reader-revenue-emails.php:87
 msgid "the site title"
 msgstr ""
 
 #: includes/plugins/woocommerce-subscriptions/class-card-expiry-warning.php:278
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:136
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:146
 #: includes/reader-activation/class-reader-activation-emails.php:72
 #: includes/reader-revenue/class-reader-revenue-emails.php:91
 msgid "the site url"
@@ -5438,7 +5438,7 @@ msgid "A payment method was added, but the next payment date could not be schedu
 msgstr ""
 
 #: includes/plugins/woocommerce-subscriptions/class-woocommerce-subscriptions.php:1206
-#: includes/plugins/woocommerce/class-woocommerce-connection.php:773
+#: includes/plugins/woocommerce/class-woocommerce-connection.php:791
 #: dist/audience-wizards.0a9f0c6b9c6330d5c497.js:81
 #: dist/audience-wizards.0a9f0c6b9c6330d5c497.js:201
 #: dist/newsletters-wizards.9d7325adea43870d1639.js:52
@@ -5446,7 +5446,7 @@ msgid "Weekly"
 msgstr ""
 
 #: includes/plugins/woocommerce-subscriptions/class-woocommerce-subscriptions.php:1208
-#: includes/plugins/woocommerce/class-woocommerce-connection.php:775
+#: includes/plugins/woocommerce/class-woocommerce-connection.php:793
 msgid "Yearly"
 msgstr ""
 
@@ -5542,40 +5542,40 @@ msgstr ""
 msgid "This %s is not active, so new invitations can't be issued."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:125
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:135
 msgid "Group Subscription Invitation"
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:126
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:136
 msgid "Email sent to invite a reader to join a group subscription."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:128
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:138
 msgid "This email will be sent when a reader is invited to join a group subscription."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:129
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:139
 msgid "Sent to invite a reader to join a group subscription."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:140
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:150
 msgid "the invitation acceptance link"
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:144
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:154
 msgid "the sender name"
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:148
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:158
 msgid "the sender email address"
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:152
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:162
 msgid "the recipient email address"
 msgstr ""
 
 #. translators: %s: number of weeks.
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:185
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:195
 #, php-format
 msgid "%s week"
 msgid_plural "%s weeks"
@@ -5583,7 +5583,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %s: number of days.
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:191
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:201
 #, php-format
 msgid "%s day"
 msgid_plural "%s days"
@@ -5591,7 +5591,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %s: number of hours.
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:197
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:207
 #, php-format
 msgid "%s hour"
 msgid_plural "%s hours"
@@ -5599,134 +5599,134 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %s: number of minutes.
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:202
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:212
 #, php-format
 msgid "%s minute"
 msgid_plural "%s minutes"
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:412
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:465
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:527
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:579
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1250
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:422
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:475
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:537
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:594
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1314
 msgid "Invalid subscription."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:420
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:473
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:430
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:483
 msgid "You do not have permission to manage this group subscription."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:533
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:543
 msgid "Subscription is not active."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:543
 #: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:553
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:563
 msgid "Invite link not found."
 msgstr ""
 
 #. translators: %s: lowercase singular group label (e.g. "group", "team").
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:586
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:750
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:601
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:814
 #, php-format
 msgid "This %s is no longer active."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:592
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1263
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:609
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1327
 #: includes/reader-activation/class-reader-activation.php:1886
 msgid "Invalid email address."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:599
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:616
 msgid "User is already a member of this group subscription."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:602
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:619
 msgid "This account is not eligible for group membership."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:626
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:643
 msgid "You have reached the group member limit for this subscription. Please remove some members or cancel pending invitations before inviting more group members."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:781
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1183
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:845
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1247
 msgid "Invalid or expired invitation."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:784
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:848
 msgid "This invitation has expired."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:789
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:853
 msgid "No user found for this email address."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:807
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:871
 msgid "Could not add this user to the group."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:973
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1037
 msgid "New user registration failed."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1128
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1192
 msgid "Could not add the current user to the group."
 msgstr ""
 
 #. translators: %s: lowercase singular group label (e.g. "group", "team").
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1165
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1229
 #, php-format
 msgid "This invitation link is no longer valid. Ask the %s's owner or manager to send you a new invitation."
 msgstr ""
 
 #. translators: %s: lowercase singular group label (e.g. "group", "team").
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1170
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1234
 #, php-format
 msgid "You already have access through this %s."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1176
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1240
 msgid "Sign in to continue with this invitation."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1177
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1241
 msgid "This link is no longer valid. Please contact the group manager."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1178
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1242
 msgid "This group already has the maximum number of members. Please contact the group manager."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1179
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1243
 msgid "We couldn't add you to the group. Please contact the group manager."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1180
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1244
 msgid "Please log in or register an account to join the group."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1181
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1245
 msgid "Invalid invitation link."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1182
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1246
 msgid "This invitation is for a different email address."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1184
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1248
 msgid "Could not create your account. Please try again."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1188
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1252
 msgid "You have successfully joined the group!"
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1191
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1255
 msgid "There was a problem with your invitation."
 msgstr ""
 
@@ -6164,21 +6164,21 @@ msgstr ""
 msgid "The card will be automatically saved to your active subscriptions and set as your default payment method."
 msgstr ""
 
-#: includes/plugins/woocommerce/class-woocommerce-connection.php:623
+#: includes/plugins/woocommerce/class-woocommerce-connection.php:641
 #: dist/newspack-wizards.e2d80d2941754bf186f9.js:47
 msgid "Card"
 msgstr ""
 
 #. translators: 1: card brand, e.g. "Visa". 2: the card's last four digits.
 #. translators: 1: card brand (e.g. "Visa"), 2: the card's last four digits.
-#: includes/plugins/woocommerce/class-woocommerce-connection.php:653
+#: includes/plugins/woocommerce/class-woocommerce-connection.php:671
 #: dist/subscribers.js:18
 #: src/wizards/subscribers/components/PaymentMethodsList.jsx:100
 #, php-format,js-format
 msgid "%1$s ending in %2$s"
 msgstr ""
 
-#: includes/plugins/woocommerce/class-woocommerce-connection.php:755
+#: includes/plugins/woocommerce/class-woocommerce-connection.php:773
 #: includes/wizards/audience/class-audience-subscription-products.php:1926
 #: dist/audience-wizards.0a9f0c6b9c6330d5c497.js:275
 #: dist/audience-wizards.0a9f0c6b9c6330d5c497.js:279
@@ -6186,7 +6186,7 @@ msgstr ""
 msgid "One-time"
 msgstr ""
 
-#: includes/plugins/woocommerce/class-woocommerce-connection.php:843
+#: includes/plugins/woocommerce/class-woocommerce-connection.php:861
 #: includes/reader-activation/class-my-account.php:509
 #: includes/reader-activation/class-reader-activation.php:338
 #: src/blocks/my-account-button/class-my-account-button-block.php:75
@@ -6196,34 +6196,34 @@ msgstr ""
 msgid "My Account"
 msgstr ""
 
-#: includes/plugins/woocommerce/class-woocommerce-connection.php:923
+#: includes/plugins/woocommerce/class-woocommerce-connection.php:941
 msgid "Restart Donation"
 msgstr ""
 
-#: includes/plugins/woocommerce/class-woocommerce-connection.php:923
+#: includes/plugins/woocommerce/class-woocommerce-connection.php:941
 msgid "Restart Subscription"
 msgstr ""
 
-#: includes/plugins/woocommerce/class-woocommerce-connection.php:931
+#: includes/plugins/woocommerce/class-woocommerce-connection.php:949
 msgid "Donation Cancelled"
 msgstr ""
 
-#: includes/plugins/woocommerce/class-woocommerce-connection.php:931
+#: includes/plugins/woocommerce/class-woocommerce-connection.php:949
 #: includes/wizards/newspack/class-email-preview.php:227
 msgid "Subscription Cancelled"
 msgstr ""
 
-#: includes/plugins/woocommerce/class-woocommerce-connection.php:935
+#: includes/plugins/woocommerce/class-woocommerce-connection.php:953
 msgid "recurring donation"
 msgstr ""
 
-#: includes/plugins/woocommerce/class-woocommerce-connection.php:935
+#: includes/plugins/woocommerce/class-woocommerce-connection.php:953
 #: includes/wizards/newspack/class-email-preview.php:228
 msgid "subscription"
 msgstr ""
 
 #. Translators: %s is the user's billing first and last name – or company name.
-#: includes/plugins/woocommerce/class-woocommerce-connection.php:1190
+#: includes/plugins/woocommerce/class-woocommerce-connection.php:1208
 #, php-format
 msgid "%s's Team"
 msgstr ""
@@ -7325,7 +7325,7 @@ msgstr ""
 #. translators: %s: the group label, e.g. "Group".
 #. translators: %s is the type of content to restrict.
 #: includes/plugins/woocommerce/my-account/templates/v1/group.php:185
-#: includes/wizards/class-subscribers-wizard.php:2513
+#: includes/wizards/class-subscribers-wizard.php:2514
 #: dist/audience-wizards.0a9f0c6b9c6330d5c497.js:105
 #: dist/newsletters-wizards.9d7325adea43870d1639.js:76
 #: dist/subscribers.js:17
@@ -7939,13 +7939,13 @@ msgstr ""
 #: dist/commons.js:122
 #: dist/commons.js:132
 #: dist/other-scripts/corrections-modal.js:7
-#: packages/components/dist/cjs/section-header/index.js:193
+#: packages/components/dist/cjs/section-header/index.js:198
 #: packages/components/dist/cjs/utils/editor-toolbar-back-button.js:32
 #: packages/components/dist/cjs/utils/editor-toolbar-back-button.js:35
-#: packages/components/dist/esm/section-header/index.js:185
+#: packages/components/dist/esm/section-header/index.js:190
 #: packages/components/dist/esm/utils/editor-toolbar-back-button.js:24
 #: packages/components/dist/esm/utils/editor-toolbar-back-button.js:27
-#: packages/components/src/section-header/index.js:174
+#: packages/components/src/section-header/index.js:177
 #: src/other-scripts/corrections-modal/index.js:375
 msgid "Go back"
 msgstr ""
@@ -8230,7 +8230,7 @@ msgstr ""
 msgid "I have read and accept the {{Terms & Conditions}}."
 msgstr ""
 
-#: includes/reader-activation/class-reader-data.php:233
+#: includes/reader-activation/class-reader-data.php:269
 msgid "Reader data cannot be changed while switched into this account."
 msgstr ""
 
@@ -10396,7 +10396,7 @@ msgstr ""
 #. translators: 1: number of groups. 2: the group label, e.g. "Groups". Word order only; the noun already carries number.
 #. translators: %1$s is subscribe message, %2$s is sign in link
 #. translators: 1: number of groups. 2: the group label, e.g. "Groups".
-#: includes/wizards/class-subscribers-wizard.php:2509
+#: includes/wizards/class-subscribers-wizard.php:2510
 #: dist/commons.js:137
 #: dist/subscribers.js:12
 #: src/blocks/content-gate/countdown-box/edit.jsx:111
@@ -10406,7 +10406,7 @@ msgid "%1$s %2$s"
 msgstr ""
 
 #. translators: %s: the group label, e.g. "Group".
-#: includes/wizards/class-subscribers-wizard.php:2511
+#: includes/wizards/class-subscribers-wizard.php:2512
 #: dist/subscribers.js:13
 #: src/wizards/subscribers/labels.js:60
 #, php-format,js-format
@@ -10414,7 +10414,7 @@ msgid "%s role"
 msgstr ""
 
 #. translators: 1: the group label, e.g. "Groups". 2: the error message.
-#: includes/wizards/class-subscribers-wizard.php:2515
+#: includes/wizards/class-subscribers-wizard.php:2516
 #: dist/subscribers.js:18
 #: src/wizards/subscribers/labels.js:87
 #, php-format,js-format
@@ -10422,7 +10422,7 @@ msgid "Could not load %1$s: %2$s"
 msgstr ""
 
 #. translators: 1: the group label, e.g. "Group". 2: the group name.
-#: includes/wizards/class-subscribers-wizard.php:2517
+#: includes/wizards/class-subscribers-wizard.php:2518
 #: dist/subscribers.js:98
 #: src/wizards/subscribers/labels.js:102
 #, php-format,js-format

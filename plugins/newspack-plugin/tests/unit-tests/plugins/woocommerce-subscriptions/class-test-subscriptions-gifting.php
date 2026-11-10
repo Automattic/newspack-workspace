@@ -5,10 +5,12 @@
  * @package Newspack\Tests
  */
 
+use Newspack\WooCommerce_Connection;
 use Newspack\WooCommerce_Subscriptions_Gifting;
 
 require_once NEWSPACK_ABSPATH . 'tests/mocks/wc-mocks.php';
 require_once NEWSPACK_ABSPATH . 'tests/mocks/wcs-gifting-mock.php';
+require_once NEWSPACK_ABSPATH . 'tests/mocks/wcsg-recipient-addresses-mock.php';
 
 /**
  * Test who holds a gifted subscription: the recipient, not the purchaser.
@@ -38,6 +40,82 @@ class Newspack_Test_Subscriptions_Gifting extends WP_UnitTestCase {
 		$subscriptions_database  = [];
 		WCS_Gifting::$recipients = [];
 		parent::tear_down();
+	}
+
+	/**
+	 * List each gift under its recipient, as Gifting does.
+	 *
+	 * @param array $subscriptions Subscriptions keyed by ID.
+	 * @param int   $user_id       User ID.
+	 *
+	 * @return array
+	 */
+	public function list_gifts_for_recipient( $subscriptions, $user_id ): array {
+		foreach ( WCS_Gifting::$recipients as $subscription_id => $recipient_id ) {
+			if ( (int) $recipient_id === (int) $user_id ) {
+				$subscriptions[ $subscription_id ] = wcs_get_subscription( $subscription_id );
+			}
+		}
+		return $subscriptions;
+	}
+
+	/**
+	 * Create an active subscription the purchaser gave to the recipient.
+	 *
+	 * @param int $purchaser_id Purchaser user ID.
+	 * @param int $recipient_id Recipient user ID.
+	 *
+	 * @return \WC_Subscription
+	 */
+	private function create_gift( int $purchaser_id, int $recipient_id ): \WC_Subscription {
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id' => $purchaser_id,
+				'status'      => 'active',
+			]
+		);
+		WCS_Gifting::$recipients[ $subscription->get_id() ] = $recipient_id;
+		add_filter( 'wcs_get_users_subscriptions', [ $this, 'list_gifts_for_recipient' ], 10, 2 );
+		return $subscription;
+	}
+
+	/**
+	 * Load the billing edit-address endpoint, where Gifting filters the
+	 * subscription list.
+	 */
+	private function view_billing_address_page(): void {
+		add_filter( 'wcs_get_users_subscriptions', 'WCSG_Recipient_Addresses::get_users_subscriptions', 100, 2 );
+		set_query_var( 'edit-address', 'billing' );
+	}
+
+	/**
+	 * Gifting hides a recipient's gifts from the billing address form so the
+	 * form can't change the purchaser's billing details. The recipient still
+	 * holds the gift on that page, so reader data refreshed there keeps it.
+	 */
+	public function test_recipient_holds_gift_on_billing_address_page() {
+		$purchaser_id = $this->factory()->user->create();
+		$recipient_id = $this->factory()->user->create();
+		$subscription = $this->create_gift( $purchaser_id, $recipient_id );
+
+		$this->view_billing_address_page();
+
+		$this->assertSame( [ $subscription->get_id() ], WooCommerce_Connection::get_active_subscriptions_for_user( $recipient_id ) );
+	}
+
+	/**
+	 * Looking up what the recipient holds leaves Gifting's own billing-page
+	 * list as it was, so the address form still can't reach the gift.
+	 */
+	public function test_billing_address_form_still_hides_the_gift_after_a_lookup() {
+		$purchaser_id = $this->factory()->user->create();
+		$recipient_id = $this->factory()->user->create();
+		$this->create_gift( $purchaser_id, $recipient_id );
+		$this->view_billing_address_page();
+
+		WooCommerce_Connection::get_active_subscriptions_for_user( $recipient_id );
+
+		$this->assertSame( [], wcs_get_users_subscriptions( $recipient_id ) );
 	}
 
 	/**

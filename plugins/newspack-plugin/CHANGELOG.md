@@ -1,3 +1,25 @@
+## newspack [6.56.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.4...newspack@6.56.5) (2026-11-10)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.12.1
+
+## newspack [6.56.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.3...newspack@6.56.4) (2026-11-04)
+
+
+### Bug Fixes
+
+* **group-subscription:** fire an action when an invite is created ([#1462](https://github.com/Automattic/newspack-workspace/issues/1462)) ([9cf9d8a](https://github.com/Automattic/newspack-workspace/commit/9cf9d8a186da9cbae543c91ea6814e21dc2e8226))
+* **reader-data:** cut REST requests per logged-in page view ([#1445](https://github.com/Automattic/newspack-workspace/issues/1445)) ([f77098e](https://github.com/Automattic/newspack-workspace/commit/f77098ecdd7fedb6e5c9159d0e59bd97265a9b42))
+
+## newspack [6.56.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.2...newspack@6.56.3) (2026-11-04)
+
+
+### Bug Fixes
+
+* **gifting:** count received gifts on the billing page (NPPD-2561) ([#1476](https://github.com/Automattic/newspack-workspace/issues/1476)) ([62ce6e8](https://github.com/Automattic/newspack-workspace/commit/62ce6e87c98cffa4aae26ef904f35f70ce62ef85))
+
 ## newspack [6.56.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.1...newspack@6.56.2) (2026-10-27)
 
 
