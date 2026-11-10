@@ -250,6 +250,10 @@
 				white-space: normal;
 				overflow-wrap: anywhere;
 			}
+
+			.dataviews-view-table__cell-align-end .newspack-ab-tests__rate {
+				align-items: flex-end;
+			}
 		}
 	}
 
