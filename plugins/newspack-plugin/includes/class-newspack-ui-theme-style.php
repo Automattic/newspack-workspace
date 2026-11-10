@@ -263,7 +263,7 @@ class Newspack_UI_Theme_Style {
 	 * @return string The length, or an empty string when the style does not print one.
 	 */
 	public static function get_button_radius(): string {
-		return self::get_radius_properties( self::get_global_styles() )['--newspack-ui-radius-button'] ?? '';
+		return self::get_site_properties()['--newspack-ui-radius-button'] ?? '';
 	}
 
 	/**
