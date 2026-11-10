@@ -25,6 +25,7 @@ final class Newspack_Popups_AB_Tests {
 
 	const META_KEYS = [ self::META_TEST_ID, self::META_VARIANT, self::META_GOAL, self::META_CONTROL_SHARE ];
 
+	// Not the whole key: bucket_meta_key() puts the site's table prefix in front.
 	const USER_META_BUCKET_PREFIX = 'newspack_popups_ab_bucket_';
 
 	/**
