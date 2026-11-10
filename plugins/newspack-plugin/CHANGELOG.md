@@ -1,3 +1,10 @@
+## newspack [6.56.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.4...newspack@6.56.5) (2026-11-10)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.12.1
+
 ## newspack [6.56.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.3...newspack@6.56.4) (2026-11-04)
 
 
