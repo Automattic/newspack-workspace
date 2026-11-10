@@ -12,14 +12,12 @@
  * WordPress dependencies
  */
 import { __, _n, sprintf } from '@wordpress/i18n';
-import { useState, useMemo, useId } from '@wordpress/element';
+import { Fragment, useState, useMemo, useId } from '@wordpress/element';
 import {
 	Button,
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
-// The unframed table stays on core DataViews: outside a card, the Newspack wrapper
-// would give the catalog modal's table the 48px list gutter.
 import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Field, View } from '@wordpress/dataviews';
 
@@ -57,14 +55,14 @@ function ResultingCell( { row, currency }: { row?: CatalogImpactRow; currency: P
 		return <>{ formatPrice( row.adjusted, currency ) }</>;
 	}
 	return (
-		<>
+		<span className="newspack-pricing-rules__price-steps">
 			{ row.segments.map( ( seg, i ) => (
-				<span key={ i } className={ seg.changed ? 'is-changed' : undefined }>
-					{ i > 0 ? ' → ' : '' }
-					{ formatSegment( seg, currency ) }
-				</span>
+				<Fragment key={ i }>
+					{ i > 0 && ' → ' }
+					<span className={ seg.changed ? 'is-changed' : undefined }>{ formatSegment( seg, currency ) }</span>
+				</Fragment>
 			) ) }
-		</>
+		</span>
 	);
 }
 
@@ -75,7 +73,8 @@ interface ImpactTableProps {
 	// The editor carries this note in its section header instead, where it can
 	// appear before the preview has loaded.
 	showCycleNote?: boolean;
-	framed?: boolean;
+	// A modal already titles the list, so its card goes without a heading.
+	title?: string | null;
 	collapsible?: boolean;
 }
 
@@ -84,7 +83,7 @@ export default function ImpactTable( {
 	segmentGroups,
 	currency,
 	showCycleNote = true,
-	framed = true,
+	title = __( 'Affected Products', 'newspack-plugin' ),
 	collapsible = true,
 }: ImpactTableProps ) {
 	const hasSegments = segmentGroups.length > 0;
@@ -117,8 +116,7 @@ export default function ImpactTable( {
 				label: __( 'Product', 'newspack-plugin' ),
 				enableHiding: false,
 				getValue: ( { item }: { item: CatalogImpactRow } ) => item.name,
-				render: ( { item }: { item: CatalogImpactRow } ) =>
-					item.edit_link ? <a href={ item.edit_link }>{ item.name }</a> : <span>{ item.name }</span>,
+				render: ( { item }: { item: CatalogImpactRow } ) => <span>{ item.name }</span>,
 			},
 			{
 				id: 'regular',
@@ -161,8 +159,7 @@ export default function ImpactTable( {
 		page: 1,
 		search: '',
 		filters: [],
-		// The catalog-wide table in the modal holds every product, so it keeps compact rows.
-		layout: { enableMoving: false, ...( framed ? {} : { density: 'compact' } ) },
+		layout: { enableMoving: false },
 		titleField: 'product',
 		fields: fieldIds,
 	} ) );
@@ -207,15 +204,15 @@ export default function ImpactTable( {
 		</HStack>
 	) : null;
 
-	const Views = framed ? NewspackDataViews : DataViews;
 	const table = (
 		<div
 			id={ tableId }
-			className={ `newspack-pricing-rules__impact-table${ framed ? '' : ' newspack-pricing-rules__impact-table--unframed' }` }
+			className="newspack-pricing-rules__impact-table"
 			role="region"
 			aria-label={ __( 'Resulting prices by product and reader segment', 'newspack-plugin' ) }
 		>
-			<Views
+			<NewspackDataViews
+				fitColumns={ [ 'regular' ] }
 				data={ data }
 				fields={ fields }
 				view={ tableView }
@@ -226,7 +223,7 @@ export default function ImpactTable( {
 				empty={ <p className="newspack-pricing-rules__muted">{ __( 'No products to show.', 'newspack-plugin' ) }</p> }
 			>
 				<DataViews.Layout />
-			</Views>
+			</NewspackDataViews>
 		</div>
 	);
 
@@ -241,16 +238,9 @@ export default function ImpactTable( {
 					) }
 				</p>
 			) }
-			{ framed ? (
-				<TableCard title={ __( 'Affected Products', 'newspack-plugin' ) } after={ seeMore ?? undefined }>
-					{ table }
-				</TableCard>
-			) : (
-				<>
-					{ table }
-					{ seeMore }
-				</>
-			) }
+			<TableCard title={ title } after={ seeMore ?? undefined }>
+				{ table }
+			</TableCard>
 		</VStack>
 	);
 }

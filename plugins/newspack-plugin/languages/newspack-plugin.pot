@@ -2,14 +2,14 @@
 # This file is distributed under the GPL2.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack 6.56.4\n"
+"Project-Id-Version: Newspack 6.56.5\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-plugin\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-04T20:45:35+00:00\n"
+"POT-Creation-Date: 2026-11-10T18:41:18+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-plugin\n"
@@ -7939,13 +7939,13 @@ msgstr ""
 #: dist/commons.js:122
 #: dist/commons.js:132
 #: dist/other-scripts/corrections-modal.js:7
-#: packages/components/dist/cjs/section-header/index.js:193
+#: packages/components/dist/cjs/section-header/index.js:198
 #: packages/components/dist/cjs/utils/editor-toolbar-back-button.js:32
 #: packages/components/dist/cjs/utils/editor-toolbar-back-button.js:35
-#: packages/components/dist/esm/section-header/index.js:185
+#: packages/components/dist/esm/section-header/index.js:190
 #: packages/components/dist/esm/utils/editor-toolbar-back-button.js:24
 #: packages/components/dist/esm/utils/editor-toolbar-back-button.js:27
-#: packages/components/src/section-header/index.js:174
+#: packages/components/src/section-header/index.js:177
 #: src/other-scripts/corrections-modal/index.js:375
 msgid "Go back"
 msgstr ""

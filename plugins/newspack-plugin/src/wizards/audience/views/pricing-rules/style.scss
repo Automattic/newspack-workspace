@@ -83,22 +83,8 @@
 		width: 100%;
 	}
 
-	&__impact-table--unframed {
-		.dataviews-view-table tr {
-			th:first-child,
-			td:first-child {
-				padding-left: wp-vars.$grid-unit-10;
-
-				.dataviews-view-table-header-button {
-					margin-left: 0;
-				}
-			}
-
-			th:last-child,
-			td:last-child {
-				padding-right: wp-vars.$grid-unit-10;
-			}
-		}
+	&__price-steps {
+		white-space: nowrap;
 	}
 
 	&__impact-table,
