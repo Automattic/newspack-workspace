@@ -113,7 +113,7 @@ final class Newspack_Popups_AB_Tests {
 
 		// Meta hooks rather than post ones, so one rule covers every way a
 		// prompt leaves a test: End Test clearing its Test ID, an editor clearing
-		// or changing it, and wp_delete_post(), which removes meta row by row.
+		// or changing it, and deleting the prompt, whose meta goes with it.
 		// Not gated on the flag: they only remove the feature's own reader meta,
 		// and a site that turned the flag off still wants it gone.
 		add_action( 'update_post_meta', [ __CLASS__, 'note_leaving_test_id' ], 10, 3 );
@@ -180,7 +180,7 @@ final class Newspack_Popups_AB_Tests {
 	 * Remember the Test ID a meta write is about to remove or replace. The value
 	 * is read here because the after-hooks only see the new one.
 	 *
-	 * @param int|int[] $meta_ids Meta ID, or IDs for a delete.
+	 * @param int|int[] $meta_ids  Meta ID, or IDs for a delete.
 	 * @param int       $object_id Post ID, or 0 for a delete across all posts.
 	 * @param string    $meta_key  Meta key.
 	 */
@@ -204,8 +204,8 @@ final class Newspack_Popups_AB_Tests {
 	 * runs. Nothing reads it unless a later test takes the same ID, which a named
 	 * test's term prevents.
 	 *
-	 * @param int|int[] $meta_ids Meta ID, or IDs for a delete.
-	 * @param int       $object_id Post ID.
+	 * @param int|int[] $meta_ids  Meta ID, or IDs for a delete.
+	 * @param int       $object_id Post ID, or 0 for a delete across all posts.
 	 * @param string    $meta_key  Meta key.
 	 */
 	public static function drop_buckets_of_empty_tests( $meta_ids, $object_id, $meta_key ) {
