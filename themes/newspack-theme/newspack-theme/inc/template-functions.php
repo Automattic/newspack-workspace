@@ -228,7 +228,11 @@ function newspack_body_classes( $classes ) {
 		$reserved_category_classes = array( 'cat-links' );
 
 		foreach ( ( get_the_category( $page_id ) ) as $category ) {
-			$classes[] = 'newspack-cat-' . sanitize_html_class( $category->category_nicename, $category->term_id );
+			$category_class = sanitize_html_class( $category->category_nicename, $category->term_id );
+			if ( is_numeric( $category_class ) || ! trim( $category_class, '-' ) ) {
+				$category_class = $category->term_id;
+			}
+			$classes[] = 'newspack-cat-' . $category_class;
 
 			$legacy_class = 'cat-' . $category->category_nicename;
 			if ( ! in_array( $legacy_class, $reserved_category_classes, true ) ) {
