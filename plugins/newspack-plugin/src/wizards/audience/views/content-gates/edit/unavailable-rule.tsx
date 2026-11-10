@@ -18,11 +18,7 @@ export default function UnavailableRule( { slug, value, showHelp = true }: { slu
 					ids
 				) }
 			</p>
-			{ showHelp && (
-				<p className="description">
-					{ __( "A gate can't be published while it has a rule that's no longer on this site.", 'newspack-plugin' ) }
-				</p>
-			) }
+			{ showHelp && <p className="description">{ __( 'Remove this rule to publish the gate or change its rules.', 'newspack-plugin' ) }</p> }
 		</>
 	);
 }

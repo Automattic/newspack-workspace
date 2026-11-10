@@ -3,6 +3,7 @@
  */
 import { CheckboxControl } from '@wordpress/components';
 import { useCallback } from '@wordpress/element';
+import { __ } from '@wordpress/i18n';
 
 interface ArchiveRulesProps {
 	rules: GateArchiveRule[];
@@ -38,7 +39,8 @@ export default function ArchiveRules( { rules, onChange }: ArchiveRulesProps ) {
 	}
 
 	return (
-		<>
+		<fieldset className="newspack-content-gate__archive-rules">
+			<legend className="screen-reader-text">{ __( 'Archive pages', 'newspack-plugin' ) }</legend>
 			{ groups.map( ( [ slug, config ] ) =>
 				( config.options ?? [] ).map( option => (
 					<CheckboxControl
@@ -49,6 +51,6 @@ export default function ArchiveRules( { rules, onChange }: ArchiveRulesProps ) {
 					/>
 				) )
 			) }
-		</>
+		</fieldset>
 	);
 }
