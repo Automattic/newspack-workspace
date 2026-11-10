@@ -41,6 +41,7 @@ export default ( { storyId, onCancel } ) => {
 	const hasStory = !! story;
 	const hasMetadata = !! story?.metadata;
 	const hasEdited = useRef( false );
+	const editCount = useRef( 0 );
 	const fetchedFor = useRef( null );
 	const sawLoading = useRef( false );
 	const [ fetchDone, setFetchDone ] = useState( false );
@@ -75,9 +76,10 @@ export default ( { storyId, onCancel } ) => {
 
 	const handleSave = useCallback( async () => {
 		clearErrors( storyId );
+		const editsAtSave = editCount.current;
 		await saveStory( storyId, editedStory );
 		const stored = dataSelect( storeNamespace );
-		if ( ! stored.getStoryError( storyId ) ) {
+		if ( ! stored.getStoryError( storyId ) && editCount.current === editsAtSave ) {
 			hasEdited.current = false;
 			setEditedStory( stored.getStory( storyId ) );
 		}
@@ -92,6 +94,7 @@ export default ( { storyId, onCancel } ) => {
 		newStory => {
 			clearErrors( storyId );
 			hasEdited.current = true;
+			editCount.current += 1;
 			setEditedStory( newStory );
 		},
 		[ clearErrors, storyId ]

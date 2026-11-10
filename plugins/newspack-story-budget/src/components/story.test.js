@@ -188,15 +188,29 @@ describe( 'Story', () => {
 	it( 'follows the server copy after a successful save', async () => {
 		mockStory = { id: 12, title: 'A story', metadata: {} };
 		mockServerStory = { id: 12, title: 'Sanitised', metadata: {} };
-		const { rerender } = render( <Story storyId={ 12 } /> );
+		render( <Story storyId={ 12 } /> );
 		fireEvent.click( screen.getByRole( 'button', { name: 'Change title' } ) );
 		await act( async () => {
 			fireEvent.click( screen.getByRole( 'button', { name: 'Save' } ) );
 		} );
-		mockStory = mockServerStory;
-		rerender( <Story storyId={ 12 } /> );
 
 		expect( screen.getByTestId( 'panel-title' ).textContent ).toBe( 'Sanitised' );
+	} );
+
+	it( 'keeps an edit made while the save was in flight', async () => {
+		mockStory = { id: 12, title: 'A story', metadata: {} };
+		mockServerStory = { id: 12, title: 'Sanitised', metadata: {} };
+		const { rerender } = render( <Story storyId={ 12 } /> );
+		mockSaveStory.mockImplementationOnce( async () => {
+			fireEvent.click( screen.getByRole( 'button', { name: 'Change title' } ) );
+			mockStory = mockServerStory;
+			rerender( <Story storyId={ 12 } /> );
+		} );
+		await act( async () => {
+			fireEvent.click( screen.getByRole( 'button', { name: 'Save' } ) );
+		} );
+
+		expect( screen.getByTestId( 'panel-title' ).textContent ).toBe( 'Edited' );
 	} );
 
 	it( 'keeps the edit when the save fails', async () => {
