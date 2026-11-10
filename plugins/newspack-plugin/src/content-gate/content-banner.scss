@@ -213,6 +213,7 @@ body.newspack-has-countdown-banner:has(.newspack-countdown-banner__cta.is-style-
 		&.is-style-site {
 			--newspack-content-banner-message-color: var(--newspack-content-banner-ink, var(--newspack-ui-color-text-muted));
 			--newspack-content-banner__cta__content__links--color: var(--newspack-content-banner-ink, var(--newspack-ui-color-text-muted));
+			--newspack-ui-elevation-edge: transparent;
 			background: var(--newspack-content-banner-bg, var(--newspack-ui-color-surface));
 			border-top: 1px solid var(--newspack-ui-color-border);
 			color: var(--newspack-content-banner-ink, var(--newspack-ui-color-text));
