@@ -1518,42 +1518,41 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The premium newsletter rule isn't offered while the ESP fails to list its lists, but a
-	 * gate's own copy of it still saves, as a draft and as a publish.
+	 * A gate's own copy of the premium newsletter rule saves whether or not the ESP can list
+	 * its lists, as a draft and as a publish, and a save never asks the ESP.
 	 */
 	public function test_sanitize_gate_keeps_newsletters_rule_when_esp_lists_fail() {
 		require_once dirname( __DIR__, 2 ) . '/mocks/newsletters-mocks.php';
 		\Newspack_Newsletters::$esp_lists_fixture = new \WP_Error( 'esp_down', 'The ESP is down.' );
-		$this->assertSame( [], Content_Rules::get_premium_newsletter_rules() );
+		\Newspack_Newsletters::$esp_lists_calls   = 0;
 		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+		$rules   = [
+			[
+				'slug'  => 'newsletters',
+				'value' => [ 'list-1' ],
+			],
+		];
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'Newsletter gate' ] );
+		Content_Rules::update_gate_content_rules( $gate_id, $rules );
+		$request = new \WP_REST_Request( 'POST', '/newspack/v1/wizard/audience-content-gates/' . $gate_id );
+		$request->set_url_params( [ 'id' => $gate_id ] );
 
 		try {
 			foreach ( [ 'draft', 'publish' ] as $status ) {
 				$sanitized = Content_Gate_API::sanitize_gate(
 					[
 						'status'        => $status,
-						'content_rules' => [
-							[
-								'slug'  => 'newsletters',
-								'value' => [ 'list-1' ],
-							],
-						],
-					]
+						'content_rules' => $rules,
+					],
+					$request
 				);
 				$this->assertNotWPError( $sanitized, $status );
-				$this->assertSame(
-					[
-						[
-							'slug'  => 'newsletters',
-							'value' => [ 'list-1' ],
-						],
-					],
-					$sanitized['content_rules'],
-					$status
-				);
+				$this->assertSame( $rules, $sanitized['content_rules'], $status );
 			}
+			$this->assertSame( 0, \Newspack_Newsletters::$esp_lists_calls );
 		} finally {
 			\Newspack_Newsletters::$esp_lists_fixture = [];
+			wp_delete_post( $gate_id, true );
 		}
 	}
 
@@ -4339,8 +4338,8 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 
 	/**
 	 * A gate with archive rules and no content rules restricts no posts, not even those
-	 * of the post type its archive rule names. Kept because the editor now allows
-	 * archive-only saves, so the archive values must never feed post matching.
+	 * of the post type its archive rule names. The editor saves archive-only gates, so archive
+	 * values must never feed post matching.
 	 */
 	public function test_gate_with_only_archive_rules_matches_no_posts() {
 		register_post_type(

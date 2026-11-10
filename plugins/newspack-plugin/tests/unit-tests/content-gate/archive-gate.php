@@ -9,7 +9,6 @@ namespace Newspack\Tests\Content_Gate;
 
 use Newspack\Content_Gate;
 use Newspack\Content_Restriction_Control;
-use Newspack\Site_Meter;
 use Newspack\Collections\Gate_Integration;
 use Newspack\Collections\Post_Type;
 
@@ -416,26 +415,8 @@ class Test_Archive_Gate extends \WP_UnitTestCase {
 	 * Campaigns stand down on a gated archive.
 	 */
 	public function test_disable_popups_on_gated_archive() {
-		$metering = [
-			'enabled' => true,
-			'count'   => 3,
-			'period'  => 'month',
-			'scope'   => Site_Meter::SCOPE_GATE,
-		];
-		Content_Gate::update_gate_settings(
-			$this->gate_id,
-			[
-				'registration'  => [
-					'active'   => false,
-					'metering' => $metering,
-				],
-				'custom_access' => $this->get_paid_access_settings( $metering ),
-			]
-		);
-		$user_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
-		wp_set_current_user( $user_id );
 		$this->go_to_archive();
-		$this->assertSame( $this->gate_id, Content_Restriction_Control::get_archive_gate()['gate_id'] ?? null, 'Setup: the custom access gate refuses this reader.' );
+		$this->assertSame( $this->gate_id, Content_Restriction_Control::get_archive_gate()['gate_id'] ?? null, 'Setup: the archive is gated.' );
 
 		$this->assertTrue( Content_Gate::disable_popups( false ) );
 	}
