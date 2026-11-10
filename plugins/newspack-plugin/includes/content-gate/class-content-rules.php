@@ -182,7 +182,7 @@ class Content_Rules {
 	 *
 	 * @return array The archive rules, keyed by slug.
 	 */
-	public static function get_archive_rules() {
+	public static function get_archive_rules(): array {
 		return [
 			self::POST_TYPE_ARCHIVES_RULE => [
 				'name'    => __( 'Archive pages', 'newspack-plugin' ),
@@ -199,7 +199,7 @@ class Content_Rules {
 	 *
 	 * @return array The archive rules, without any that have an empty value.
 	 */
-	public static function get_gate_archive_rules( $post_id ) {
+	public static function get_gate_archive_rules( int $post_id ): array {
 		$rules = \get_post_meta( $post_id, 'archive_rules', true );
 		if ( ! is_array( $rules ) ) {
 			return [];
@@ -220,7 +220,7 @@ class Content_Rules {
 	 * @param int   $post_id Gate post ID.
 	 * @param array $rules   Array of archive rules.
 	 */
-	public static function update_gate_archive_rules( $post_id, $rules ) {
+	public static function update_gate_archive_rules( int $post_id, array $rules ): void {
 		\update_post_meta( $post_id, 'archive_rules', $rules );
 	}
 
@@ -235,7 +235,7 @@ class Content_Rules {
 	 *
 	 * @return bool
 	 */
-	public static function gate_matches_archive( $archive_rules, $post_types ) {
+	public static function gate_matches_archive( array $archive_rules, array $post_types ): bool {
 		$offered = wp_list_pluck( Content_Restriction_Control::get_available_archive_post_types(), 'value' );
 		foreach ( $archive_rules as $rule ) {
 			if ( self::POST_TYPE_ARCHIVES_RULE !== ( $rule['slug'] ?? '' ) || ! is_array( $rule['value'] ?? null ) ) {

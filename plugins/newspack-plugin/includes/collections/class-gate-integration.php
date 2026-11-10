@@ -28,7 +28,7 @@ class Gate_Integration {
 	/**
 	 * Set up hooks.
 	 */
-	public static function init() {
+	public static function init(): void {
 		add_filter( 'newspack_content_gate_supported_archive_post_types', [ __CLASS__, 'add_archive_support' ] );
 		add_filter( 'newspack_collections_ctas', [ __CLASS__, 'filter_ctas' ], 10, 2 );
 		add_filter( 'rest_prepare_' . Post_Type::get_post_type(), [ __CLASS__, 'filter_rest_response' ], 10, 2 );
@@ -135,6 +135,9 @@ class Gate_Integration {
 	 * already shows the excerpt, and a Collection's body is never shown to
 	 * a reader with access either.
 	 *
+	 * restrict_post() already rendered the layout for its staged entry. This renders it
+	 * again without the fade, so the staged copy can't be reused.
+	 *
 	 * @param int $collection_id Collection post ID.
 	 *
 	 * @return bool Whether the gate was printed.
@@ -163,9 +166,12 @@ class Gate_Integration {
 	 *
 	 * @param string[] $post_types Post types whose archive a gate can restrict.
 	 *
-	 * @return string[]
+	 * @return string[] The post types, or whatever a filter handed in that wasn't a list.
 	 */
 	public static function add_archive_support( $post_types ) {
+		if ( ! is_array( $post_types ) ) {
+			return $post_types;
+		}
 		$post_types[] = Post_Type::get_post_type();
 		return $post_types;
 	}
@@ -182,8 +188,8 @@ class Gate_Integration {
 		if ( ! $archive_gate ) {
 			return false;
 		}
-		// Claim the once-per-request render lock before rendering, as every gate
-		// render path does, so nothing else renders a second gate on this page.
+		// The lock is claimed for parity with the other gate render paths. Nothing
+		// on an archive reads it today.
 		Content_Gate::mark_gate_as_rendered();
 		echo Content_Gate::get_archive_gate_html( $archive_gate['gate_layout_id'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Rendered gate layout, as for posts.
 		return true;
