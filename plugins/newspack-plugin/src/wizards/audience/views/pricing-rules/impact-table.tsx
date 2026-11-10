@@ -212,6 +212,7 @@ export default function ImpactTable( {
 			aria-label={ __( 'Resulting prices by product and reader segment', 'newspack-plugin' ) }
 		>
 			<NewspackDataViews
+				fitColumns={ [ 'regular' ] }
 				data={ data }
 				fields={ fields }
 				view={ tableView }
