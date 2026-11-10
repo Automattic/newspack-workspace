@@ -577,11 +577,12 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 
 	/**
 	 * A draft that fails puts back what was drafted and leaves the test running,
-	 * so it can be ended again.
+	 * so it can be ended again, and its readers keep their buckets.
 	 */
 	public function test_a_failed_draft_leaves_the_test_running() {
 		$this->sign_in();
-		$ids = $this->create_running_test( 't', [ 'a', 'b', 'c' ] );
+		$ids    = $this->create_running_test( 't', [ 'a', 'b', 'c' ] );
+		$reader = $this->bucket_reader( 't', 'b' );
 		// A backslash in a title: the record must still match to be removed.
 		wp_update_post(
 			[
@@ -601,12 +602,14 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 		$response = $this->end_request( 't', 'a' );
 		remove_filter( 'wp_insert_post_empty_content', $fail, 10 );
 
+		$this->assertSame( 2, $attempts, 'The end reached the second draft.' );
 		$this->assertGreaterThanOrEqual( 400, $response->get_status() );
 		foreach ( $ids as $id ) {
 			$this->assertSame( 'publish', get_post_status( $id ) );
 			$this->assertSame( 't', get_post_meta( $id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
 		}
 		$this->assertSame( 'active', $this->rows( 't' )[0]['status'] );
+		$this->assertSame( 'b', $this->stored_bucket( $reader, 't' ) );
 		$this->assertSame( 200, $this->end_request( 't', 'a' )->get_status() );
 	}
 
@@ -733,8 +736,8 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * A reader's stored bucket, read through the meta cache so a stale cache
-	 * fails the assertion too.
+	 * A reader's stored bucket, read through the meta cache, so a test that
+	 * reads it before the drop also catches a stale cache.
 	 *
 	 * @param int    $reader_id Reader ID.
 	 * @param string $test_id   Test ID.
@@ -759,29 +762,6 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 		$this->assertSame( '', $this->stored_bucket( $first, 't' ) );
 		$this->assertSame( '', $this->stored_bucket( $second, 't' ) );
 		$this->assertSame( 'b', $this->stored_bucket( $other, 'other' ) );
-	}
-
-	/**
-	 * A draft that fails partway leaves the test running, so its readers keep
-	 * their buckets.
-	 */
-	public function test_a_failed_draft_keeps_the_buckets() {
-		$this->sign_in();
-		$this->create_running_test( 't', [ 'a', 'b', 'c' ] );
-		$reader   = $this->bucket_reader( 't', 'b' );
-		$attempts = 0;
-		$fail     = function ( $maybe_empty, $postarr ) use ( &$attempts ) {
-			if ( 'draft' === ( $postarr['post_status'] ?? '' ) && ++$attempts === 2 ) {
-				return true;
-			}
-			return $maybe_empty;
-		};
-		add_filter( 'wp_insert_post_empty_content', $fail, 10, 2 );
-		$response = $this->end_request( 't', 'a' );
-		remove_filter( 'wp_insert_post_empty_content', $fail, 10 );
-
-		$this->assertGreaterThanOrEqual( 400, $response->get_status() );
-		$this->assertSame( 'b', $this->stored_bucket( $reader, 't' ) );
 	}
 
 	/**
