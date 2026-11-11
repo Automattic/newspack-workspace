@@ -6,6 +6,7 @@
  * @group reader-data-trust
  */
 
+use Newspack\Access_Rules;
 use Newspack\Donations;
 use Newspack\Reader_Data;
 use Newspack\Reader_Data_Trust;
@@ -334,5 +335,57 @@ class Newspack_Test_Reader_Data_Trust_Donor extends WP_UnitTestCase {
 		$this->assertNull( Reader_Data_Trust::get_trusted_value( $this->user_id, 'is_donor' ) );
 		$this->assertSame( '', (string) get_user_meta( $this->user_id, Reader_Data::get_meta_key_name( 'is_donor' ), true ) );
 		$this->assertFalse( Reader_Data_Trust::has_valid_mark( $this->user_id, 'is_donor' ) );
+	}
+
+	/**
+	 * Cancelling one recurring donation keeps donor status while another donation remains.
+	 */
+	public function test_cancellation_keeps_donor_with_a_remaining_donation() {
+		$this->set_tracking( true );
+		$this->create_donation_order();
+		$this->create_recurring_donation( 'cancelled' );
+
+		Reader_Data::set_is_former_donor( time(), [ 'user_id' => $this->user_id ] );
+
+		$this->assertSame( 'true', Reader_Data_Trust::get_trusted_value( $this->user_id, 'is_donor' ) );
+		$this->assertTrue( Access_Rules::has_reader_data( $this->user_id, 'is_donor=true' ) );
+	}
+
+	/**
+	 * Cancelling a reader's only donation makes them a non-donor.
+	 */
+	public function test_cancellation_of_only_donation_stores_false() {
+		$this->set_tracking( true );
+		$this->create_recurring_donation( 'cancelled' );
+
+		Reader_Data::set_is_former_donor( time(), [ 'user_id' => $this->user_id ] );
+
+		$this->assertSame( 'false', Reader_Data_Trust::get_trusted_value( $this->user_id, 'is_donor' ) );
+		$this->assertSame( 'true', Reader_Data::get_data( $this->user_id, 'is_former_donor' ) );
+	}
+
+	/**
+	 * A status cached earlier in the request is not reused by the handler.
+	 */
+	public function test_cancellation_ignores_a_status_cached_earlier_in_the_request() {
+		$this->set_tracking( true );
+		$this->create_recurring_donation( 'cancelled' );
+		$this->seed_donor_memo( true );
+
+		Reader_Data::set_is_former_donor( time(), [ 'user_id' => $this->user_id ] );
+
+		$this->assertSame( 'false', Reader_Data::get_data( $this->user_id, 'is_donor' ) );
+	}
+
+	/**
+	 * Without server-side tracking the handler stores `false`, as before.
+	 */
+	public function test_cancellation_without_tracking_stores_false() {
+		$this->set_tracking( false );
+		$this->create_donation_order();
+
+		Reader_Data::set_is_former_donor( time(), [ 'user_id' => $this->user_id ] );
+
+		$this->assertSame( 'false', Reader_Data::get_data( $this->user_id, 'is_donor' ) );
 	}
 }

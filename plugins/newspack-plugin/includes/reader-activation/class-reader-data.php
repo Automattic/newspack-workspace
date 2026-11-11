@@ -872,11 +872,20 @@ final class Reader_Data {
 	/**
 	 * Set the user as a former donor.
 	 *
+	 * Cancelling one recurring donation doesn't end a reader's other donations, so
+	 * `is_donor` takes the status recomputed from their orders where the platform
+	 * can compute one. Elsewhere it is `false`, as the event implies.
+	 *
 	 * @param int   $timestamp Timestamp.
 	 * @param array $data      Data.
 	 */
 	public static function set_is_former_donor( $timestamp, $data ) {
-		self::update_item( $data['user_id'], 'is_donor', false );
+		$user_id = (int) $data['user_id'];
+		// One handler request can run several queued events, so a status cached
+		// before this cancellation could be stale.
+		Donations::reset_donor_status_cache( $user_id );
+		$is_donor = Donations::compute_is_donor( $user_id );
+		self::update_item( $data['user_id'], 'is_donor', is_bool( $is_donor ) ? $is_donor : false );
 		self::update_item( $data['user_id'], 'is_former_donor', true );
 	}
 
