@@ -1949,6 +1949,20 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * Turning Manual only off brings a dropped overlay's test back the same way.
+	 */
+	public function test_turning_manual_only_off_restores_its_test() {
+		$this->create_test_variant( 'manual-only-back', 'a', [ 'placement' => 'center' ] );
+		$b_id = $this->create_test_variant( 'manual-only-back', 'b', [ 'placement' => 'center' ] );
+		update_post_meta( $b_id, 'manual_only', true );
+		self::assertSame( [], Newspack_Popups_AB_Tests::get_tests_config() );
+
+		self::assertNotWPError( Newspack_Popups_Model::set_popup_options( $b_id, [ 'manual_only' => false ] ) );
+
+		self::assertArrayHasKey( 'manual-only-back', Newspack_Popups_AB_Tests::get_tests_config() );
+	}
+
+	/**
 	 * Two prompts can share a version letter, and only the one on an ineligible
 	 * placement renders as untested, even though the letter stays in the config.
 	 */

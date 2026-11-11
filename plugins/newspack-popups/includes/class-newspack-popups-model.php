@@ -202,7 +202,9 @@ final class Newspack_Popups_Model {
 		// leaves every option as it was.
 		$placement_error = Newspack_Popups_AB_Tests::get_placement_change_error( $id, array_intersect_key( $options, array_flip( [ 'placement', 'manual_only' ] ) ) );
 		if ( $placement_error ) {
-			return $placement_error;
+			// The wizard renders error messages as HTML. The editor shows the same
+			// message as text, so the shared helper leaves it unescaped.
+			return new \WP_Error( $placement_error->get_error_code(), esc_html( $placement_error->get_error_message() ), $placement_error->get_error_data() );
 		}
 		foreach ( $options as $key => $value ) {
 			switch ( $key ) {

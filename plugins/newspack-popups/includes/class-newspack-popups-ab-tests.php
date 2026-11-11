@@ -91,10 +91,12 @@ final class Newspack_Popups_AB_Tests {
 		add_filter( 'rest_pre_insert_' . Newspack_Popups::NEWSPACK_POPUPS_CPT, [ __CLASS__, 'guard_rest_ab_meta' ], 10, 2 );
 
 		// Anything that can add or remove a test invalidates the flag. Scoped to the
-		// prompts CPT and to the test-id meta key: a news site saves posts constantly,
-		// and invalidating on those would reinstate the per-request query this exists
-		// to avoid. Meta hooks are covered separately because update_post_meta() can
-		// set a test id without firing save_post.
+		// prompts CPT and to the meta keys that decide whether a prompt is in a test:
+		// a news site saves posts constantly, and invalidating on those would
+		// reinstate the per-request query this exists to avoid. Meta hooks are
+		// covered separately because update_post_meta() can set a test id without
+		// firing save_post, and the placement keys because get_tests_config() leaves
+		// out a version on an ineligible placement, so moving it changes the answer.
 		add_action( 'save_post_' . Newspack_Popups::NEWSPACK_POPUPS_CPT, [ __CLASS__, 'invalidate_has_tests' ] );
 		foreach ( [ 'deleted_post', 'trashed_post', 'untrashed_post' ] as $hook ) {
 			add_action( $hook, [ __CLASS__, 'invalidate_has_tests_for_post' ] );
@@ -261,9 +263,10 @@ final class Newspack_Popups_AB_Tests {
 	}
 
 	/**
-	 * Drop the flag when a prompt's test-id meta changes, or a placement that
-	 * get_tests_config() checks: a test whose only challenger it left out
-	 * records no tests, and moving that version back must bring the test back.
+	 * Drop the flag when a prompt's Test ID, placement or Manual only meta
+	 * changes, since all three decide whether get_tests_config() counts it: a
+	 * test whose only challenger it left out records no tests, and moving that
+	 * version back must bring the test back.
 	 *
 	 * @param int    $meta_id   Meta ID.
 	 * @param int    $object_id Post ID.
@@ -1931,8 +1934,8 @@ final class Newspack_Popups_AB_Tests {
 		return new WP_Error(
 			'newspack_popups_ab_ineligible_placement',
 			self::is_eligible_placement( $placement )
-				? esc_html__( 'A/B tests only work on prompts that Newspack places for you. Turn off Manual only.', 'newspack-popups' )
-				: esc_html__( 'A/B tests only work on prompts that Newspack places for you. Choose another placement.', 'newspack-popups' ),
+				? __( 'A/B tests only work on prompts that Newspack places for you. Turn off Manual only.', 'newspack-popups' )
+				: __( 'A/B tests only work on prompts that Newspack places for you. Choose another placement.', 'newspack-popups' ),
 			[
 				'status' => 400,
 				// Without a level, the Campaigns wizard shows the error as unrecoverable.
