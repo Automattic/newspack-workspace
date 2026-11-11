@@ -1372,7 +1372,7 @@ final class Newspack_Popups_AB_Tests {
 			return $term;
 		}
 		// A paused test lists no start, since readers aren't split, but its results
-		// still count from the one recorded when it first ran.
+		// still count from the one recorded when this run started.
 		$started_at = $test['started_at'] ?? ( self::get_recorded_starts( [ $test_id ] )[ $test_id ] ?? null );
 		$record     = [
 			'ended_at'      => gmdate( 'Y-m-d\TH:i:s\Z' ),
