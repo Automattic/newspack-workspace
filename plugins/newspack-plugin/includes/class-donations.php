@@ -795,7 +795,7 @@ class Donations {
 				$child_product->update_meta_data( '_min_price', $minimum_donation );
 				$child_product->update_meta_data( self::SYNCED_MIN_PRICE_META, $minimum_donation );
 			} else {
-				// Set directly: forget what Newspack wrote, so matching it later no longer counts as following on its own.
+				// Set directly: forget what Newspack wrote, so matching it later no longer keeps the product following on its own.
 				$child_product->delete_meta_data( self::SYNCED_MIN_PRICE_META );
 			}
 			$child_product->update_meta_data( '_hide_nyp_minimum', 'yes' );
