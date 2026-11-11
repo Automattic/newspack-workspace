@@ -302,11 +302,13 @@ final class Reader_Data_Trust {
 	/**
 	 * Whether a stored value equals a reader-data rule value.
 	 *
-	 * Values are stored JSON-encoded, so the stored side is decoded and compared by
-	 * type: strings exactly, whether the rule value is bare or JSON-quoted,
-	 * booleans as `true`/`false`, numbers numerically.
-	 * Arrays, objects and null never match. A stored value that is not JSON is
-	 * compared as the raw string. Callers trim the rule value.
+	 * A rule value equal to the raw stored value always matches, as every rule did
+	 * before values were decoded, so a rule on a list such as
+	 * `active_memberships=[5]` keeps matching. Beyond that, the stored side is
+	 * JSON-decoded and compared by type: strings exactly, whether the rule value
+	 * is bare or JSON-quoted, booleans as `true`/`false`, numbers numerically.
+	 * Arrays, objects and null match only by the raw form. Callers trim the rule
+	 * value.
 	 *
 	 * @param string $stored     Raw stored value.
 	 * @param string $rule_value Rule value.
@@ -314,9 +316,12 @@ final class Reader_Data_Trust {
 	 * @return bool
 	 */
 	public static function values_match( string $stored, string $rule_value ): bool {
+		if ( $stored === $rule_value ) {
+			return true;
+		}
 		$decoded = json_decode( $stored, true );
 		if ( null === $decoded && JSON_ERROR_NONE !== json_last_error() ) {
-			return $stored === $rule_value;
+			return false;
 		}
 		if ( is_string( $decoded ) ) {
 			if ( $decoded === $rule_value ) {

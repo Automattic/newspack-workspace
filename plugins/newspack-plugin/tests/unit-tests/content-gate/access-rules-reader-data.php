@@ -111,18 +111,33 @@ class Newspack_Test_Access_Rules_Reader_Data extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Arrays, objects and null never match.
+	 * Arrays, objects and null match only by their raw stored form, as every rule
+	 * did before values were decoded.
 	 */
-	public function test_array_value_never_matches() {
+	public function test_array_value_matches_only_by_raw_form() {
 		Reader_Data::update_item( $this->uid, 'active_subscriptions', [ 1, 2 ] );
 		Reader_Data::update_item( $this->uid, 'plan', [ 'tier' => 'gold' ] );
 		Reader_Data::update_item( $this->uid, 'note', 'null' );
 
-		$this->assertFalse( Access_Rules::has_reader_data( $this->uid, 'active_subscriptions=[1,2]' ) );
+		$this->assertTrue( Access_Rules::has_reader_data( $this->uid, 'active_subscriptions=[1,2]' ) );
+		$this->assertFalse( Access_Rules::has_reader_data( $this->uid, 'active_subscriptions=[2,1]' ) );
+		$this->assertFalse( Access_Rules::has_reader_data( $this->uid, 'active_subscriptions=[1, 2]' ) );
 		$this->assertFalse( Access_Rules::has_reader_data( $this->uid, 'active_subscriptions=1' ) );
-		$this->assertFalse( Access_Rules::has_reader_data( $this->uid, 'plan={"tier":"gold"}' ) );
-		$this->assertFalse( Access_Rules::has_reader_data( $this->uid, 'note=null' ) );
+		$this->assertTrue( Access_Rules::has_reader_data( $this->uid, 'plan={"tier":"gold"}' ) );
+		$this->assertFalse( Access_Rules::has_reader_data( $this->uid, 'plan=gold' ) );
+		$this->assertTrue( Access_Rules::has_reader_data( $this->uid, 'note=null' ) );
 		$this->assertFalse( Access_Rules::has_reader_data( $this->uid, 'note=' ) );
+	}
+
+	/**
+	 * A list-valued rule written before decoding keeps matching, and still needs the mark.
+	 */
+	public function test_list_rule_keeps_matching_and_needs_the_mark() {
+		Reader_Data::update_item( $this->uid, 'active_memberships', [ 5 ] );
+		$this->assertTrue( Access_Rules::has_reader_data( $this->uid, 'active_memberships=[5]' ) );
+
+		Reader_Data::update_item( $this->uid, 'active_memberships', [ 5 ], false );
+		$this->assertFalse( Access_Rules::has_reader_data( $this->uid, 'active_memberships=[5]' ) );
 	}
 
 	/**
@@ -196,7 +211,10 @@ class Newspack_Test_Access_Rules_Reader_Data extends WP_UnitTestCase {
 		$this->assertFalse( Reader_Data_Trust::values_match( '"5"', '5.0' ) );
 		$this->assertFalse( Reader_Data_Trust::values_match( '5', '' ) );
 		$this->assertFalse( Reader_Data_Trust::values_match( '[]', '' ) );
-		$this->assertFalse( Reader_Data_Trust::values_match( '{}', '{}' ) );
+		$this->assertTrue( Reader_Data_Trust::values_match( '{}', '{}' ) );
+		$this->assertTrue( Reader_Data_Trust::values_match( '[5]', '[5]' ) );
+		$this->assertFalse( Reader_Data_Trust::values_match( '[5]', '5' ) );
+		$this->assertFalse( Reader_Data_Trust::values_match( 'premium', '"premium"' ) );
 	}
 
 	/**
