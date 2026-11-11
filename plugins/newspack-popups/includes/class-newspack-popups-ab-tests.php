@@ -91,10 +91,12 @@ final class Newspack_Popups_AB_Tests {
 		add_filter( 'rest_pre_insert_' . Newspack_Popups::NEWSPACK_POPUPS_CPT, [ __CLASS__, 'guard_rest_ab_meta' ], 10, 2 );
 
 		// Anything that can add or remove a test invalidates the flag. Scoped to the
-		// prompts CPT and to the test-id meta key: a news site saves posts constantly,
-		// and invalidating on those would reinstate the per-request query this exists
-		// to avoid. Meta hooks are covered separately because update_post_meta() can
-		// set a test id without firing save_post.
+		// prompts CPT and to the meta keys that decide whether a prompt is in a test:
+		// a news site saves posts constantly, and invalidating on those would
+		// reinstate the per-request query this exists to avoid. Meta hooks are
+		// covered separately because update_post_meta() can set a test id without
+		// firing save_post, and the placement keys because get_tests_config() leaves
+		// out a version on an ineligible placement, so moving it changes the answer.
 		add_action( 'save_post_' . Newspack_Popups::NEWSPACK_POPUPS_CPT, [ __CLASS__, 'invalidate_has_tests' ] );
 		foreach ( [ 'deleted_post', 'trashed_post', 'untrashed_post' ] as $hook ) {
 			add_action( $hook, [ __CLASS__, 'invalidate_has_tests_for_post' ] );
@@ -261,14 +263,17 @@ final class Newspack_Popups_AB_Tests {
 	}
 
 	/**
-	 * Drop the flag when a prompt's test-id meta changes.
+	 * Drop the flag when a prompt's Test ID, placement or Manual only meta
+	 * changes, since all three decide whether get_tests_config() counts it: a
+	 * test whose only challenger it left out records no tests, and moving that
+	 * version back must bring the test back.
 	 *
 	 * @param int    $meta_id   Meta ID.
 	 * @param int    $object_id Post ID.
 	 * @param string $meta_key  Meta key.
 	 */
 	public static function invalidate_has_tests_for_meta( $meta_id, $object_id, $meta_key ) {
-		if ( self::META_TEST_ID === $meta_key ) {
+		if ( in_array( $meta_key, [ self::META_TEST_ID, 'placement', 'manual_only' ], true ) ) {
 			self::invalidate_has_tests_for_post( $object_id );
 		}
 	}
@@ -577,44 +582,12 @@ final class Newspack_Popups_AB_Tests {
 		$request->set_param( 'meta', $meta );
 
 		// A validity rule, not a permission, so it runs before the permission branch
-		// and applies to administrators too. It reads the values the save would
-		// leave in place: a key the request omits keeps its stored value. A
-		// non-scalar reads as empty here; the meta schema refuses it on its own.
-		$stored    = function ( $meta_key ) use ( $post_id ) {
-			return $post_id ? (string) get_post_meta( $post_id, $meta_key, true ) : '';
-		};
-		$effective = function ( $meta_key ) use ( $meta, $stored ) {
-			if ( ! array_key_exists( $meta_key, $meta ) ) {
-				return $stored( $meta_key );
+		// and applies to administrators too.
+		if ( ! $is_autosave ) {
+			$placement_error = self::get_placement_change_error( $post_id, array_intersect_key( $meta, array_flip( [ 'placement', 'manual_only' ] ) ) );
+			if ( $placement_error ) {
+				return $placement_error;
 			}
-			return is_scalar( $meta[ $meta_key ] ) ? (string) $meta[ $meta_key ] : '';
-		};
-		$changes   = function ( $meta_key ) use ( $effective, $stored ) {
-			return $effective( $meta_key ) !== $stored( $meta_key );
-		};
-		// The rule refuses the save that creates a violation, not every later save
-		// of a prompt already in one. A tested prompt can reach a manual placement
-		// past this guard (the Campaigns wizard writes placement directly, and a
-		// save while the flag is off is not checked), and the editor sends the
-		// whole meta object on every save, so checking the stored state too would
-		// refuse a frequency edit with an error about a field the editor may have
-		// disabled for that user. The editor's notice asks for the fix instead.
-		// Only while the flag is on: with it off a stored test has no effect, and
-		// the panel's notice is not registered.
-		if (
-			self::is_enabled()
-			&& ! $is_autosave
-			&& ( $changes( 'placement' ) || $changes( 'manual_only' ) )
-			&& '' !== $stored( self::META_TEST_ID )
-			&& ! self::is_eligible_placement( $effective( 'placement' ), rest_sanitize_boolean( $effective( 'manual_only' ) ) )
-		) {
-			return new WP_Error(
-				'newspack_popups_ab_ineligible_placement',
-				self::is_eligible_placement( $effective( 'placement' ) )
-					? __( 'A/B tests only work on prompts that Newspack places for you. Turn off Manual only.', 'newspack-popups' )
-					: __( 'A/B tests only work on prompts that Newspack places for you. Choose another placement.', 'newspack-popups' ),
-				[ 'status' => 400 ]
-			);
 		}
 
 		if ( self::can_manage_tests( get_current_user_id(), $post_id ) ) {
@@ -1891,6 +1864,19 @@ final class Newspack_Popups_AB_Tests {
 	}
 
 	/**
+	 * Whether a saved prompt's stored placement lets it be part of a test.
+	 *
+	 * @param int $prompt_id Prompt ID.
+	 * @return bool
+	 */
+	private static function is_eligible_prompt( $prompt_id ) {
+		return self::is_eligible_placement(
+			get_post_meta( $prompt_id, 'placement', true ),
+			rest_sanitize_boolean( get_post_meta( $prompt_id, 'manual_only', true ) )
+		);
+	}
+
+	/**
 	 * Why a prompt with this placement can't be part of a test.
 	 *
 	 * @param string $placement   Placement value.
@@ -1904,6 +1890,58 @@ final class Newspack_Popups_AB_Tests {
 		return self::is_eligible_placement( $placement )
 			? __( 'Overlays set to Manual only can’t be A/B tested.', 'newspack-popups' )
 			: __( 'Prompts on manual or custom placements can’t be A/B tested.', 'newspack-popups' );
+	}
+
+	/**
+	 * The error for a save that would move a tested prompt where a test can't run.
+	 *
+	 * Shared by the two paths that write a prompt's placement: the editor's REST
+	 * save and Newspack_Popups_Model::set_popup_options(), which the Campaigns
+	 * wizard uses. It refuses a save that changes the placement or Manual only to
+	 * an ineligible result, including a move from one ineligible placement to
+	 * another, but not a save that leaves both as stored. The editor sends the
+	 * whole meta object on every save, so checking the stored state too would
+	 * refuse a frequency edit with an error about a field the editor may have
+	 * disabled for that user. The editor's notice asks for the fix instead, and
+	 * get_tests_config() leaves the prompt out of its test until then. Only while
+	 * the flag is on: with it off a stored test has no effect, and the panel's
+	 * notice is not registered.
+	 *
+	 * @param int   $post_id Prompt ID, or 0 for a prompt not yet saved.
+	 * @param array $values  The save's 'placement' and 'manual_only' values. A key
+	 *                       left out keeps its stored value. A non-scalar placement
+	 *                       reads as empty, since each write path refuses one;
+	 *                       Manual only is read as the wizard stores it.
+	 * @return WP_Error|null
+	 */
+	public static function get_placement_change_error( $post_id, $values ) {
+		if ( ! self::is_enabled() || ! $post_id || '' === (string) get_post_meta( $post_id, self::META_TEST_ID, true ) ) {
+			return null;
+		}
+
+		$stored_placement   = (string) get_post_meta( $post_id, 'placement', true );
+		$stored_manual_only = rest_sanitize_boolean( get_post_meta( $post_id, 'manual_only', true ) );
+		$placement          = $stored_placement;
+		if ( array_key_exists( 'placement', $values ) ) {
+			$placement = is_scalar( $values['placement'] ) ? (string) $values['placement'] : '';
+		}
+		$manual_only = array_key_exists( 'manual_only', $values ) ? rest_sanitize_boolean( $values['manual_only'] ) : $stored_manual_only;
+
+		if ( ( $placement === $stored_placement && $manual_only === $stored_manual_only ) || self::is_eligible_placement( $placement, $manual_only ) ) {
+			return null;
+		}
+
+		return new WP_Error(
+			'newspack_popups_ab_ineligible_placement',
+			self::is_eligible_placement( $placement )
+				? __( 'A/B tests only work on prompts that Newspack places for you. Turn off Manual only.', 'newspack-popups' )
+				: __( 'A/B tests only work on prompts that Newspack places for you. Choose another placement.', 'newspack-popups' ),
+			[
+				'status' => 400,
+				// Without a level, the Campaigns wizard shows the error as unrecoverable.
+				'level'  => 'notice',
+			]
+		);
 	}
 
 	/**
@@ -1993,7 +2031,12 @@ final class Newspack_Popups_AB_Tests {
 		if ( ! $test_id || ! in_array( $variant, self::VALID_VARIANTS, true ) ) {
 			return null;
 		}
-		if ( $validate && ! isset( self::get_tests_config()[ $test_id ] ) ) {
+		// A version the config left out, such as one on an ineligible placement in a
+		// test that still runs without it, renders as untested: no reader is ever
+		// bucketed to it, so carrying its test would hide it from everyone. The
+		// prompt's own check covers a second prompt with the same letter, which
+		// keeps that letter in the config.
+		if ( $validate && ( ! self::is_eligible_prompt( $popup_id ) || ! in_array( $variant, self::get_tests_config()[ $test_id ]['variants'] ?? [], true ) ) ) {
 			return null;
 		}
 		return [
@@ -2062,6 +2105,13 @@ final class Newspack_Popups_AB_Tests {
 		foreach ( $prompt_ids as $prompt_id ) {
 			$fields = self::get_popup_ab_fields( $prompt_id );
 			if ( ! $fields ) {
+				continue;
+			}
+			// The save guards refuse a move to an ineligible placement, but a direct
+			// meta write, such as one from WP-CLI, or a save while the flag was off
+			// can still land one there. Leaving the prompt out stops readers being
+			// split around a slot that a block or shortcode places on its own.
+			if ( ! self::is_eligible_prompt( $prompt_id ) ) {
 				continue;
 			}
 			$test_id = $fields['test_id'];
