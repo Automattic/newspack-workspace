@@ -6,6 +6,7 @@
  */
 
 use Newspack\Access_Rules;
+use Newspack\Donations;
 use Newspack\Reader_Data_Trust;
 use Newspack\User_Gate_Access;
 use PHPUnit\Runner\BeforeTestHook;
@@ -54,6 +55,7 @@ class Newspack_Request_Memo_Reset implements BeforeTestHook {
 		Access_Rules::flush_one_time_purchase_memo();
 		User_Gate_Access::reset_memo();
 		Reader_Data_Trust::reset_cache();
+		Donations::reset_donor_status_cache();
 
 		// Every full or filtered run has these stores. A run scoped to files that don't
 		// create them at file scope may lack them; leave them absent there rather than

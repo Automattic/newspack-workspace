@@ -74,19 +74,10 @@ final class Reader_Data_Trust {
 	private static $cache = [];
 
 	/**
-	 * Per-request donor status by user ID, so a value update_item() refuses to
-	 * store does not repeat the order lookup on every rule evaluation.
-	 *
-	 * @var array<int, bool|null>
-	 */
-	private static $donor_cache = [];
-
-	/**
 	 * Clear the per-request caches.
 	 */
 	public static function reset_cache(): void {
-		self::$cache       = [];
-		self::$donor_cache = [];
+		self::$cache = [];
 	}
 
 	/**
@@ -227,7 +218,28 @@ final class Reader_Data_Trust {
 	}
 
 	/**
+	 * The resolver for a key whose value the server can derive from its own
+	 * records, so a value it never wrote can be recomputed instead of dropped.
+	 *
+	 * @param string $key Reader data key.
+	 *
+	 * @return callable|null Takes a user ID and returns a bool, or null when it
+	 *                       cannot answer. Null when the key has no resolver.
+	 */
+	private static function get_derived_value_resolver( string $key ): ?callable {
+		$resolvers = [
+			'is_donor' => [ Donations::class, 'compute_is_donor' ],
+		];
+		return $resolvers[ $key ] ?? null;
+	}
+
+	/**
 	 * The stored value of a trusted key, if the server wrote it.
+	 *
+	 * For a key with a derived-value resolver, an unset or unmarked value is
+	 * recomputed and, when the resolver answers, stored with a mark through
+	 * Reader_Data::update_item(). So this getter can write user meta and fire
+	 * `newspack_reader_data_updated`.
 	 *
 	 * @param int    $user_id User ID.
 	 * @param string $key     Reader data key.
@@ -239,14 +251,13 @@ final class Reader_Data_Trust {
 		if ( $user_id <= 0 || ! self::is_trusted_key( $key ) ) {
 			return null;
 		}
-		$value  = Reader_Data::get_data( $user_id, $key );
-		$is_set = is_string( $value ) && '' !== $value;
-		if ( 'is_donor' === $key && ( ! $is_set || ! self::has_valid_mark( $user_id, $key ) ) ) {
-			// Donor status is derived from orders and subscriptions, so a value the
-			// server never wrote can be recomputed from them instead of dropped.
-			$computed = self::compute_is_donor( $user_id );
-			// A stored `true` can come from a source outside WooCommerce, such as an
-			// ESP's donor field, so a lookup that finds no donation leaves it in place.
+		$value    = Reader_Data::get_data( $user_id, $key );
+		$is_set   = is_string( $value ) && '' !== $value;
+		$resolver = self::get_derived_value_resolver( $key );
+		if ( $resolver && ( ! $is_set || ! self::has_valid_mark( $user_id, $key ) ) ) {
+			$computed = call_user_func( $resolver, $user_id );
+			// A stored `true` can come from a source the resolver cannot see, such as
+			// an ESP's donor field, so a resolver that answers `false` leaves it in place.
 			if ( false === $computed && $is_set && true === json_decode( $value ) ) {
 				return null;
 			}
@@ -286,91 +297,6 @@ final class Reader_Data_Trust {
 			return false;
 		}
 		return ! self::has_valid_mark( $user_id, $key );
-	}
-
-	/**
-	 * Whether the user is a donor, according to their orders and subscriptions.
-	 *
-	 * A recurring donor counts only through an active subscription, so a former
-	 * recurring donor (whose parent, renewal, switch and resubscribe orders
-	 * remain) is not a donor. Only one-time donation orders count.
-	 *
-	 * That holds only while WooCommerce Subscriptions is active, because only it can
-	 * tell a subscription's orders from a one-time donation's. With it inactive, a
-	 * former recurring donor's retained orders count as one-time donations, and the
-	 * stored result keeps matching after the plugin is reactivated.
-	 *
-	 * @param int $user_id User ID.
-	 *
-	 * @return bool|null Null when the platform does not track donors server-side,
-	 *                   or when the order lookup is unavailable and nothing could be checked.
-	 */
-	public static function compute_is_donor( int $user_id ): ?bool {
-		if ( $user_id <= 0 || ! Donations::has_server_side_donor_tracking() ) {
-			return null;
-		}
-		if ( ! array_key_exists( $user_id, self::$donor_cache ) ) {
-			self::$donor_cache[ $user_id ] = self::lookup_is_donor( $user_id );
-		}
-		return self::$donor_cache[ $user_id ];
-	}
-
-	/**
-	 * Look up the user's donor status, uncached.
-	 *
-	 * @param int $user_id User ID.
-	 *
-	 * @return bool|null Null when the order lookup is unavailable.
-	 */
-	private static function lookup_is_donor( int $user_id ): ?bool {
-		/**
-		 * Filters the computed donor status. A boolean replaces the WooCommerce
-		 * lookup; any other return value is ignored.
-		 *
-		 * @param bool|null $is_donor Donor status, or null to compute it.
-		 * @param int       $user_id  User ID.
-		 */
-		$filtered = apply_filters( 'newspack_reader_data_compute_is_donor', null, $user_id );
-		if ( is_bool( $filtered ) ) {
-			return $filtered;
-		}
-
-		if ( ! function_exists( 'wc_get_orders' ) ) {
-			return null;
-		}
-
-		if ( function_exists( 'wcs_get_users_subscriptions' ) ) {
-			foreach ( \wcs_get_users_subscriptions( $user_id ) as $subscription ) {
-				if ( ! $subscription->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES ) ) {
-					continue;
-				}
-				foreach ( $subscription->get_items() as $item ) {
-					if ( Donations::is_donation_product( $item->get_product_id() ) ) {
-						return true;
-					}
-				}
-			}
-		}
-
-		$orders = \wc_get_orders(
-			[
-				'customer_id' => $user_id,
-				'status'      => WooCommerce_Connection::ACTIVE_ORDER_STATUSES,
-				'limit'       => -1,
-				'return'      => 'objects',
-			]
-		);
-		foreach ( $orders as $order ) {
-			if ( ! Donations::is_donation_order( $order ) ) {
-				continue;
-			}
-			if ( function_exists( 'wcs_order_contains_subscription' ) && \wcs_order_contains_subscription( $order, 'any' ) ) {
-				continue;
-			}
-			return true;
-		}
-
-		return false;
 	}
 
 	/**

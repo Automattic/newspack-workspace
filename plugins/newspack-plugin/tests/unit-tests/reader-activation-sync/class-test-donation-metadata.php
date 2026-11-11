@@ -432,4 +432,59 @@ class Test_Donation_Metadata extends WP_UnitTestCase {
 		$this->assertSame( 'Yearly Donor', $metadata['Donor_Status'] );
 		$this->assertSame( '20.00', $metadata['Current_Recurring_Donation'] );
 	}
+
+	/**
+	 * Create a one-time donation order for the test user.
+	 *
+	 * @param string $status     Order status.
+	 * @param int    $product_id Product ID. Defaults to the one-time donation product.
+	 *
+	 * @return WC_Order
+	 */
+	private function create_one_time_donation_order( $status, $product_id = null ) {
+		return wc_create_order(
+			[
+				'customer_id' => self::$user_id,
+				'status'      => $status,
+				'items'       => [ new WC_Order_Item_Product( [ 'product_id' => $product_id ?? self::$donation_once_product_id ] ) ],
+			]
+		);
+	}
+
+	public function test_paid_one_time_donation_in_processing_makes_a_donor() {
+		$this->create_one_time_donation_order( 'processing' );
+
+		$metadata = ( new Donation( self::$user_id ) )->get_metadata();
+		$this->assertSame( 'Donor', $metadata['Donor_Status'] );
+	}
+
+	public function test_unpaid_one_time_donation_does_not_make_a_donor() {
+		$this->create_one_time_donation_order( 'on-hold' );
+
+		$metadata = ( new Donation( self::$user_id ) )->get_metadata();
+		$this->assertSame( '', $metadata['Donor_Status'] );
+	}
+
+	public function test_any_flagged_donation_product_makes_a_one_time_donor() {
+		$flagged_product_id = self::factory()->post->create( [ 'post_type' => 'product' ] );
+		update_post_meta( $flagged_product_id, \Newspack\WooCommerce_Products::DONATION_FLAG_META_KEY, wc_bool_to_string( true ) );
+		Donations::reset_flagged_donation_product_ids_cache();
+		$this->create_one_time_donation_order( 'completed', $flagged_product_id );
+
+		$metadata = ( new Donation( self::$user_id ) )->get_metadata();
+		$this->assertSame( 'Donor', $metadata['Donor_Status'] );
+	}
+
+	public function test_cancelled_recurring_donation_outranks_a_one_time_gift() {
+		$this->create_donation_subscription(
+			[
+				'status'         => 'cancelled',
+				'billing_period' => 'month',
+			]
+		);
+		$this->create_one_time_donation_order( 'completed' );
+
+		$metadata = ( new Donation( self::$user_id ) )->get_metadata();
+		$this->assertSame( 'Ex-Monthly Donor', $metadata['Donor_Status'] );
+	}
 }

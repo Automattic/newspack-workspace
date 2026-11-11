@@ -6,6 +6,7 @@
  * @group reader-data-trust
  */
 
+use Newspack\Donations;
 use Newspack\Reader_Data;
 use Newspack\Reader_Data_Trust;
 use Newspack\WooCommerce_Products;
@@ -13,7 +14,7 @@ use Newspack\WooCommerce_Products;
 require_once __DIR__ . '/../mocks/wc-mocks.php';
 
 /**
- * Tests for Reader_Data_Trust::compute_is_donor() and its use in get_trusted_value().
+ * Tests for Donations::compute_is_donor() and its use in get_trusted_value().
  *
  * @group reader-data-trust
  */
@@ -50,6 +51,7 @@ class Newspack_Test_Reader_Data_Trust_Donor extends WP_UnitTestCase {
 		// ignore the `_subscription_renewal` meta these fixtures rely on.
 		unset( $GLOBALS['teams_mock_is_renewal'] );
 		Reader_Data_Trust::reset_cache();
+		Donations::reset_donor_status_cache();
 	}
 
 	/**
@@ -59,6 +61,7 @@ class Newspack_Test_Reader_Data_Trust_Donor extends WP_UnitTestCase {
 		remove_all_filters( 'newspack_has_server_side_donor_tracking' );
 		remove_all_filters( 'newspack_reader_data_compute_is_donor' );
 		Reader_Data_Trust::reset_cache();
+		Donations::reset_donor_status_cache();
 		parent::tear_down();
 	}
 
@@ -70,6 +73,7 @@ class Newspack_Test_Reader_Data_Trust_Donor extends WP_UnitTestCase {
 	private function set_tracking( $on ) {
 		add_filter( 'newspack_has_server_side_donor_tracking', $on ? '__return_true' : '__return_false' );
 		Reader_Data_Trust::reset_cache();
+		Donations::reset_donor_status_cache();
 	}
 
 	/**
@@ -126,7 +130,7 @@ class Newspack_Test_Reader_Data_Trust_Donor extends WP_UnitTestCase {
 	 * @param bool|null $is_donor Lookup result.
 	 */
 	private function seed_donor_memo( $is_donor ) {
-		$memo = new ReflectionProperty( Reader_Data_Trust::class, 'donor_cache' );
+		$memo = new ReflectionProperty( Donations::class, 'donor_status_cache' );
 		$memo->setAccessible( true );
 		$memo->setValue( null, [ $this->user_id => $is_donor ] );
 	}
@@ -138,7 +142,35 @@ class Newspack_Test_Reader_Data_Trust_Donor extends WP_UnitTestCase {
 		$this->set_tracking( true );
 		$this->create_donation_order();
 
-		$this->assertTrue( Reader_Data_Trust::compute_is_donor( $this->user_id ) );
+		$this->assertTrue( Donations::compute_is_donor( $this->user_id ) );
+	}
+
+	/**
+	 * A one-time donation counts once paid, and not before.
+	 */
+	public function test_one_time_donation_counts_once_paid() {
+		$this->set_tracking( true );
+		$this->create_donation_order_with_status( 'on-hold' );
+		$this->assertFalse( Donations::compute_is_donor( $this->user_id ) );
+
+		Donations::reset_donor_status_cache();
+		$this->create_donation_order_with_status( 'processing' );
+		$this->assertTrue( Donations::compute_is_donor( $this->user_id ) );
+	}
+
+	/**
+	 * Create a donation order in the given status.
+	 *
+	 * @param string $status Order status.
+	 */
+	private function create_donation_order_with_status( $status ) {
+		wc_create_order(
+			[
+				'customer_id' => $this->user_id,
+				'status'      => $status,
+				'items'       => [ new WC_Order_Item_Product( [ 'product_id' => $this->donation_product_id ] ) ],
+			]
+		);
 	}
 
 	/**
@@ -148,7 +180,7 @@ class Newspack_Test_Reader_Data_Trust_Donor extends WP_UnitTestCase {
 		$this->set_tracking( true );
 		$this->create_recurring_donation( 'active' );
 
-		$this->assertTrue( Reader_Data_Trust::compute_is_donor( $this->user_id ) );
+		$this->assertTrue( Donations::compute_is_donor( $this->user_id ) );
 	}
 
 	/**
@@ -158,7 +190,7 @@ class Newspack_Test_Reader_Data_Trust_Donor extends WP_UnitTestCase {
 		$this->set_tracking( true );
 		$this->create_recurring_donation( 'cancelled' );
 
-		$this->assertFalse( Reader_Data_Trust::compute_is_donor( $this->user_id ) );
+		$this->assertFalse( Donations::compute_is_donor( $this->user_id ) );
 	}
 
 	/**
@@ -169,7 +201,7 @@ class Newspack_Test_Reader_Data_Trust_Donor extends WP_UnitTestCase {
 		$subscription = $this->create_recurring_donation( 'cancelled' );
 		$this->create_donation_order( [ '_subscription_switch' => $subscription->get_id() ] );
 
-		$this->assertFalse( Reader_Data_Trust::compute_is_donor( $this->user_id ) );
+		$this->assertFalse( Donations::compute_is_donor( $this->user_id ) );
 	}
 
 	/**
@@ -180,7 +212,7 @@ class Newspack_Test_Reader_Data_Trust_Donor extends WP_UnitTestCase {
 		$subscription = $this->create_recurring_donation( 'cancelled' );
 		$this->create_donation_order( [ '_subscription_resubscribe' => $subscription->get_id() ] );
 
-		$this->assertFalse( Reader_Data_Trust::compute_is_donor( $this->user_id ) );
+		$this->assertFalse( Donations::compute_is_donor( $this->user_id ) );
 	}
 
 	/**
@@ -189,7 +221,7 @@ class Newspack_Test_Reader_Data_Trust_Donor extends WP_UnitTestCase {
 	public function test_user_without_orders_recomputed_false() {
 		$this->set_tracking( true );
 
-		$this->assertFalse( Reader_Data_Trust::compute_is_donor( $this->user_id ) );
+		$this->assertFalse( Donations::compute_is_donor( $this->user_id ) );
 	}
 
 	/**
@@ -198,7 +230,7 @@ class Newspack_Test_Reader_Data_Trust_Donor extends WP_UnitTestCase {
 	public function test_no_server_tracking_returns_null() {
 		$this->set_tracking( false );
 
-		$this->assertNull( Reader_Data_Trust::compute_is_donor( $this->user_id ) );
+		$this->assertNull( Donations::compute_is_donor( $this->user_id ) );
 	}
 
 	/**
@@ -210,8 +242,8 @@ class Newspack_Test_Reader_Data_Trust_Donor extends WP_UnitTestCase {
 		$this->create_donation_order();
 		$wc_mocks_get_orders_calls = 0;
 
-		Reader_Data_Trust::compute_is_donor( $this->user_id );
-		Reader_Data_Trust::compute_is_donor( $this->user_id );
+		Donations::compute_is_donor( $this->user_id );
+		Donations::compute_is_donor( $this->user_id );
 
 		$this->assertSame( 1, $wc_mocks_get_orders_calls );
 	}
@@ -283,7 +315,7 @@ class Newspack_Test_Reader_Data_Trust_Donor extends WP_UnitTestCase {
 		$this->set_tracking( true );
 		add_filter( 'newspack_reader_data_compute_is_donor', '__return_true' );
 
-		$this->assertNull( Reader_Data_Trust::compute_is_donor( 0 ) );
+		$this->assertNull( Donations::compute_is_donor( 0 ) );
 		$this->assertNull( Reader_Data_Trust::get_trusted_value( 0, 'is_donor' ) );
 		$this->assertSame( 0, (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->usermeta} WHERE user_id = 0" ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	}
@@ -298,7 +330,7 @@ class Newspack_Test_Reader_Data_Trust_Donor extends WP_UnitTestCase {
 		$this->set_tracking( true );
 		$this->seed_donor_memo( null );
 
-		$this->assertNull( Reader_Data_Trust::compute_is_donor( $this->user_id ) );
+		$this->assertNull( Donations::compute_is_donor( $this->user_id ) );
 		$this->assertNull( Reader_Data_Trust::get_trusted_value( $this->user_id, 'is_donor' ) );
 		$this->assertSame( '', (string) get_user_meta( $this->user_id, Reader_Data::get_meta_key_name( 'is_donor' ), true ) );
 		$this->assertFalse( Reader_Data_Trust::has_valid_mark( $this->user_id, 'is_donor' ) );

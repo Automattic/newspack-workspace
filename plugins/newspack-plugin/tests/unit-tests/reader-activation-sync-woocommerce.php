@@ -217,4 +217,28 @@ class Newspack_Test_RAS_Sync_WooCommerce extends WP_UnitTestCase {
 		$this->assertEquals( $completed_order_data['total'], $contact_data['metadata']['last_payment_amount'] );
 		$this->assertEquals( $completed_order_data['date_paid'], $contact_data['metadata']['last_payment_date'] );
 	}
+
+	/**
+	 * A reader whose only donation is a paid one-time gift of any flagged donation
+	 * product, still in processing, syncs that order's payment, as gate access
+	 * counts it.
+	 */
+	public function test_payment_metadata_from_a_processing_one_time_donation() {
+		$donation_product_id = self::factory()->post->create( [ 'post_type' => 'product' ] );
+		update_post_meta( $donation_product_id, \Newspack\WooCommerce_Products::DONATION_FLAG_META_KEY, wc_bool_to_string( true ) );
+		\Newspack\Donations::reset_flagged_donation_product_ids_cache();
+		self::$current_order = false;
+		\wc_create_order(
+			[
+				'customer_id' => self::$user_id,
+				'status'      => 'processing',
+				'total'       => 25,
+				'items'       => [ new WC_Order_Item_Product( [ 'product_id' => $donation_product_id ] ) ],
+			]
+		);
+
+		$contact_data = Sync\WooCommerce::get_contact_from_customer( self::$user_id );
+
+		$this->assertEquals( 25, $contact_data['metadata']['last_payment_amount'] );
+	}
 }
