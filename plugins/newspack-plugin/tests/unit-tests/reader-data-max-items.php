@@ -6,6 +6,7 @@
  */
 
 use Newspack\Reader_Data;
+use Newspack\Reader_Data_Trust;
 
 /**
  * Tests for the Reader_Data max items cap and its filter.
@@ -136,5 +137,32 @@ class Newspack_Test_Reader_Data_Max_Items extends WP_UnitTestCase {
 
 		self::assertTrue( $result, 'Raising the cap via the filter should allow writing an item beyond MAX_ITEMS.' );
 		self::assertSame( 'value', Reader_Data::get_data( $user_id, 'beyond_cap' ) );
+	}
+
+	/**
+	 * A read-only key is stored for a reader at the cap, marked as the server's.
+	 * Refusing it would leave a trusted key unset, which an exclusion rule reads
+	 * as passing.
+	 */
+	public function test_read_only_key_is_exempt_from_the_cap() {
+		$user_id = $this->create_user_at_cap();
+
+		$result = Reader_Data::update_item( $user_id, 'is_newsletter_subscriber', true );
+
+		self::assertTrue( $result );
+		self::assertSame( 'true', Reader_Data_Trust::get_trusted_value( $user_id, 'is_newsletter_subscriber' ) );
+		self::assertTrue( Reader_Data::validate_item( $user_id, 'newsletter_subscribed_lists', [ 'a' ] ), 'A preview agrees.' );
+	}
+
+	/**
+	 * A key the browser can write still counts against the cap.
+	 */
+	public function test_browser_writable_key_is_not_exempt() {
+		$user_id = $this->create_user_at_cap();
+
+		$result = Reader_Data::update_item( $user_id, 'utm_source', 'x' );
+
+		self::assertWPError( $result );
+		self::assertSame( 'too_many_items', $result->get_error_code() );
 	}
 }

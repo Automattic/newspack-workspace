@@ -48,9 +48,13 @@ class Test_Contact_Pull_Retries extends WP_UnitTestCase {
 
 	/**
 	 * Fill the reader to the data-key cap so any further write is rejected
-	 * with the deterministic `too_many_items` error.
+	 * with the deterministic `too_many_items` error. Read-only incoming fields
+	 * are exempt from the cap, so the pulled field becomes one whose key the
+	 * browser also writes, which is not read-only.
 	 */
 	private function fill_reader_to_cap() {
+		update_option( 'newspack_integration_incoming_fields_retry_mock', [ 'referrer' => [ 'name' => 'Referrer' ] ] );
+		Failing_Sample_Integration::$pull_data = [ 'referrer' => 'gold' ];
 		for ( $i = 0; $i < Reader_Data::MAX_ITEMS; $i++ ) {
 			Reader_Data::update_item( $this->user_id, "filler_{$i}", '"x"' );
 		}

@@ -477,15 +477,27 @@ final class Reader_Data {
 			return new \WP_Error( 'invalid_value', __( 'Invalid value.', 'newspack' ), [ 'status' => 400 ] );
 		}
 
+		$is_new_key = ! in_array( $key, $user_keys, true );
+
+		// Read-only keys have no cap by default. Only the server writes them and
+		// the browser cannot add to them, so they don't grow without bound, and a
+		// refused write would leave a trusted key unset, which an exclusion rule
+		// reads as passing. The read-only list is read only when the exemption
+		// can matter: a new key for a reader already at the default cap.
+		$at_default_cap    = $is_new_key && count( $user_keys ) >= self::MAX_ITEMS;
+		$default_max_items = $at_default_cap && in_array( $key, self::get_read_only_keys(), true ) ? PHP_INT_MAX : self::MAX_ITEMS;
+
 		/**
 		 * Filter the maximum number of items per user.
 		 *
-		 * @param int    $max_items Maximum number of items.
+		 * @param int    $max_items Maximum number of items. PHP_INT_MAX for a new
+		 *                          read-only key once the reader holds MAX_ITEMS
+		 *                          keys, MAX_ITEMS otherwise.
 		 * @param int    $user_id   User ID.
 		 * @param string $key       Key.
 		 * @param string $value     Value.
 		 */
-		$max_items = apply_filters( 'newspack_reader_data_max_items', self::MAX_ITEMS, $user_id, $key, $value );
+		$max_items = apply_filters( 'newspack_reader_data_max_items', $default_max_items, $user_id, $key, $value );
 
 		// The cap bounds how many keys a reader accumulates, so only a NEW key
 		// can breach it — refreshing an already-stored item doesn't grow the
@@ -493,7 +505,7 @@ final class Reader_Data {
 		// their stored fields could never be updated again, and since a rejected
 		// write is permanent-class on the pull path, every re-pull would fail
 		// with no operator remedy short of deleting reader data.
-		if ( ! in_array( $key, $user_keys, true ) && count( $user_keys ) >= $max_items ) {
+		if ( $is_new_key && count( $user_keys ) >= $max_items ) {
 			return new \WP_Error( 'too_many_items', __( 'Too many items.', 'newspack' ), [ 'status' => 400 ] );
 		}
 

@@ -255,10 +255,13 @@ class Test_RAS_Integrations_Backfill_Pull extends WP_UnitTestCase {
 		Integrations::register( new Failing_Sample_Integration( 'pull_cli_other', 'Pull CLI Other' ) );
 		Integrations::enable( 'pull_cli_other' );
 		// Distinct incoming fields, so the two integrations write different keys.
-		update_option( 'newspack_integration_incoming_fields_pull_cli_other', [ 'field_b' => [ 'name' => 'Field B' ] ] );
+		// Read-only fields are exempt from the cap, so both use keys the browser
+		// also writes, which are not read-only.
+		update_option( 'newspack_integration_incoming_fields_pull_cli_mock', [ 'referrer' => [ 'name' => 'Referrer' ] ] );
+		update_option( 'newspack_integration_incoming_fields_pull_cli_other', [ 'utm_source' => [ 'name' => 'UTM source' ] ] );
 		Failing_Sample_Integration::$pull_data = [
-			'field_a' => 'gold',
-			'field_b' => 'silver',
+			'referrer'   => 'gold',
+			'utm_source' => 'silver',
 		];
 
 		$dry_user = $this->create_reader();
@@ -283,7 +286,7 @@ class Test_RAS_Integrations_Backfill_Pull extends WP_UnitTestCase {
 
 		$this->assertSame( 1, $wet_tally['errors'], 'The second integration really does breach the cap.' );
 		$this->assertSame( $wet_tally, $dry_tally, 'The preview must report the same tally as the real run.' );
-		$this->assertFalse( Reader_Data::get_data( $dry_user, 'field_a' ), 'The preview still persists nothing.' );
+		$this->assertFalse( Reader_Data::get_data( $dry_user, 'referrer' ), 'The preview still persists nothing.' );
 	}
 
 	public function test_active_only_skips_readers_without_active_subscription() {
@@ -335,6 +338,10 @@ class Test_RAS_Integrations_Backfill_Pull extends WP_UnitTestCase {
 	 */
 	public function test_reader_data_write_failure_tallies_error() {
 		$user_a = $this->create_reader();
+		// Read-only incoming fields are exempt from the cap, so pull one whose key
+		// the browser also writes, which is not read-only.
+		update_option( 'newspack_integration_incoming_fields_pull_cli_mock', [ 'referrer' => [ 'name' => 'Referrer' ] ] );
+		Failing_Sample_Integration::$pull_data = [ 'referrer' => 'gold' ];
 		// Fill the reader to the data-key cap so the pull's write is rejected.
 		for ( $i = 0; $i < Reader_Data::MAX_ITEMS; $i++ ) {
 			Reader_Data::update_item( $user_a, "filler_{$i}", '"x"' );
