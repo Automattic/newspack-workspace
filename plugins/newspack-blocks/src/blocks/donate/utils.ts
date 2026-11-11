@@ -83,6 +83,39 @@ export const getColorForContrast = ( color?: string ): string => {
 	return Math.abs( whiteLc ) > Math.abs( blackLc ) ? whiteColor : blackColor;
 };
 
+/**
+ * Read a minimum donation as a number, or undefined when none is set.
+ *
+ * Blocks saved before minimums were stored as numbers carry them as strings,
+ * so both forms count. Only a missing or unreadable value is "not set", which
+ * leaves the block following the site-wide minimum; reading a real minimum as
+ * unset would drop the block's own.
+ *
+ * @param value Stored or entered minimum.
+ */
+export const getMinimumDonation = ( value: unknown ): number | undefined => {
+	if ( value === undefined || value === null || value === '' ) {
+		return undefined;
+	}
+	const minimum = Number( value );
+	return Number.isFinite( minimum ) ? minimum : undefined;
+};
+
+/**
+ * Attributes that switch a block's manual mode.
+ *
+ * A block follows the site-wide minimum until someone types one of its own.
+ * Switching clears the stored minimum, so a block turned manual starts out
+ * following rather than enforcing one left over from a preset or an earlier
+ * editor. A block without manual mode doesn't use its minimum.
+ *
+ * @param manual Whether the block is manual now.
+ */
+export const toggleManualMode = ( manual?: boolean ): { manual: boolean; minimumDonation: undefined } => ( {
+	manual: ! manual,
+	minimumDonation: undefined,
+} );
+
 export const getMigratedAmount = (
 	frequency: DonationFrequencySlug,
 	amounts: [ number, number, number ],
