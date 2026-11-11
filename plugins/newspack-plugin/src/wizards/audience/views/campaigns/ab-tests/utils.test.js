@@ -45,7 +45,7 @@ describe( 'getStatusIntent', () => {
 } );
 
 describe( 'formatLift', () => {
-	it( 'shows a sign on any lift, and a dash when there is nothing to compare', () => {
+	it( 'shows a sign on a nonzero lift, and a dash when there is nothing to compare', () => {
 		expect( formatLift( 41.6 ) ).toBe( '+41.6%' );
 		expect( formatLift( -3.25 ) ).toBe( '-3.3%' );
 		expect( formatLift( null ) ).toBe( '—' );
@@ -86,7 +86,7 @@ describe( 'percentages in the page’s language', () => {
 		expect( formatLift( -3.25 ) ).toMatch( /^-3,3\s%$/ );
 	} );
 
-	it( 'falls back to a shorter tag when Intl rejects the site’s locale', () => {
+	it( 'falls back to a shorter tag when Intl rejects the page’s locale', () => {
 		setLang( 'pt-PT-ao90' );
 		expect( formatRate( 2.6912 ) ).toBe( '2,69%' );
 	} );
