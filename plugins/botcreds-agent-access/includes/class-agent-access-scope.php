@@ -188,6 +188,7 @@ class Agent_Access_Scope {
 		$all_types = get_post_types( array(), 'objects' );
 
 		foreach ( $slugs as $slug ) {
+			if ( Agent_Access_Authors::SCOPE === $slug ) { $routes[] = '/agent-access/v1/authors/*'; continue; }
 			// Literal route pattern (starts with /) — pass through as-is.
 			if ( '/' === $slug[0] ) {
 				$routes[] = $slug;
@@ -377,7 +378,7 @@ class Agent_Access_Scope {
 				$clean[] = $slug;
 				continue;
 			}
-			$s = sanitize_key( $slug );
+			$s = '*' === $slug ? '*' : sanitize_key( $slug );
 			if ( '' !== $s ) {
 				$clean[] = $s;
 			}
@@ -546,7 +547,9 @@ class Agent_Access_Scope {
 		$all_types = get_post_types( array(), 'objects' );
 		$labels    = array();
 		foreach ( $scope as $slug ) {
-			if ( self::ALL_CUSTOM_ENDPOINTS === $slug ) {
+			if ( Agent_Access_Authors::SCOPE === $slug ) {
+				$labels[] = __( 'Author assignment', 'botcreds-agent-access' );
+			} elseif ( self::ALL_CUSTOM_ENDPOINTS === $slug ) {
 				$labels[] = __( 'All custom endpoints', 'botcreds-agent-access' );
 			} elseif ( isset( $all_types[ $slug ] ) ) {
 				$labels[] = $all_types[ $slug ]->labels->singular_name ?? ucfirst( $slug );

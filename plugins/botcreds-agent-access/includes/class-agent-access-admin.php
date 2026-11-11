@@ -593,7 +593,7 @@ class Agent_Access_Admin {
 		$routes_id = wp_unique_id( 'agent-access-custom-routes-' );
 		// Preserve grants for post types whose plugins are temporarily inactive.
 		foreach ( $scope as $slug ) {
-			if ( is_string( $slug ) && '' !== $slug && '/' !== $slug[0] && ! in_array( $slug, array( '*', '__read_only__', Agent_Access_Yoast_SEO::SCOPE, Agent_Access_Yoast_SEO::LEGACY_SCOPE, Agent_Access_Scope::ALL_CUSTOM_ENDPOINTS ), true ) && ! in_array( $slug, $known_types, true ) ) {
+			if ( is_string( $slug ) && '' !== $slug && '/' !== $slug[0] && ! in_array( $slug, array( '*', '__read_only__', Agent_Access_Yoast_SEO::SCOPE, Agent_Access_Yoast_SEO::LEGACY_SCOPE, Agent_Access_Authors::SCOPE, Agent_Access_Scope::ALL_CUSTOM_ENDPOINTS ), true ) && ! in_array( $slug, $known_types, true ) ) {
 				$types[] = array( 'slug' => $slug, 'label' => $slug );
 			}
 		}
@@ -624,6 +624,14 @@ class Agent_Access_Admin {
 		<p class="description"><?php esc_html_e( 'Earlier SEO grant: an administrator must save this selection again to enable access across all authors.', 'botcreds-agent-access' ); ?></p>
 		<?php endif; ?>
 		<p class="agent-access-scope-summary" aria-live="polite"><?php echo esc_html( $read_only ? __( 'Read only — writes disabled.', 'botcreds-agent-access' ) : ( $seo_only ? __( 'Yoast SEO only — all authors; no content edits or publishing.', 'botcreds-agent-access' ) : ( $full ? __( 'Full write access — within this user’s permissions.', 'botcreds-agent-access' ) : __( 'Selected access — writes limited to the selections below.', 'botcreds-agent-access' ) ) ) ); ?></p>
+		<?php if ( Agent_Access_Authors::can_assign( $user_id ) ) : ?>
+		<div class="agent-access-control-row">
+		<label><input type="checkbox" name="scope_assign_authors" class="agent-access-scope-authors" value="1" <?php checked( in_array( Agent_Access_Authors::SCOPE, $scope, true ) ); ?> <?php disabled( $read_only || $seo_only ); ?>> <?php esc_html_e( 'Allow author assignment', 'botcreds-agent-access' ); ?></label>
+		<?php $this->render_help_tooltip( __( 'Author assignment', 'botcreds-agent-access' ), __( 'Requires Co-Authors Plus. Allows ordered user and guest bylines through /agent-access/v1/authors/{id}, only on content this account can already edit and within its content scope. Does not grant editing of other authors’ posts. Existing content permissions remain unchanged. Assign the byline last: handing off ownership can remove editing access. Read-only and SEO-only modes override this permission.', 'botcreds-agent-access' ) ); ?>
+		</div>
+		<?php elseif ( in_array( Agent_Access_Authors::SCOPE, $scope, true ) ) : ?>
+		<p><?php esc_html_e( 'Author assignment — managed by an administrator.', 'botcreds-agent-access' ); ?></p>
+		<?php endif; ?>
 		<fieldset class="agent-access-scoped-options">
 			<legend class="agent-access-scope-heading"><?php esc_html_e( 'WordPress content', 'botcreds-agent-access' ); ?></legend>
 			<?php foreach ( $types as $type ) : ?>
@@ -691,8 +699,15 @@ class Agent_Access_Admin {
 			}
 			return array( Agent_Access_Yoast_SEO::SCOPE );
 		}
+		$author_grant = array();
+		if ( isset( $_POST['scope_assign_authors'] ) ) {
+			if ( '1' !== $_POST['scope_assign_authors'] || ! Agent_Access_Authors::can_assign( $user_id ) ) {
+				return new WP_Error( 'author_grant_forbidden', __( 'Only a signed-in user-managing administrator may enable author assignment for another user.', 'botcreds-agent-access' ) );
+			}
+			$author_grant[] = Agent_Access_Authors::SCOPE;
+		}
 		if ( ! empty( $_POST['scope_full'] ) ) {
-			return array( '*' );
+			return array_merge( array( '*' ), $author_grant );
 		}
 		$raw_types = isset( $_POST['scope_types'] ) ? wp_unslash( $_POST['scope_types'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Strict type/allowlist validation below rejects malformed grants without widening them.
 		$raw_custom = isset( $_POST['scope_custom_routes'] ) ? wp_unslash( $_POST['scope_custom_routes'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Each line is strictly validated below, not transformed into a different grant.
@@ -701,7 +716,7 @@ class Agent_Access_Admin {
 		if ( ! is_array( $raw_types ) || ! is_string( $raw_custom ) ) {
 			return new WP_Error( 'invalid_scope', __( 'Invalid scope settings.', 'botcreds-agent-access' ) );
 		}
-		$clean = array();
+		$clean = $author_grant;
 		foreach ( $raw_types as $slug ) {
 			if ( ! is_string( $slug ) || '' === $slug ) {
 				return new WP_Error( 'invalid_scope', __( 'Invalid scope settings.', 'botcreds-agent-access' ) );
@@ -710,7 +725,7 @@ class Agent_Access_Admin {
 				if ( ! Agent_Access_Scope::is_valid_custom_pattern( $slug ) ) {
 					return new WP_Error( 'invalid_scope', __( 'Use custom route prefixes such as /newspack-workflows/v1/*; core WordPress routes belong in the content scope.', 'botcreds-agent-access' ) );
 				}
-			} elseif ( '*' !== $slug && ( sanitize_key( $slug ) !== $slug || '__read_only__' === $slug || Agent_Access_Yoast_SEO::SCOPE === $slug || Agent_Access_Yoast_SEO::LEGACY_SCOPE === $slug || Agent_Access_Scope::ALL_CUSTOM_ENDPOINTS === $slug ) ) {
+			} elseif ( '*' !== $slug && ( sanitize_key( $slug ) !== $slug || '__read_only__' === $slug || Agent_Access_Authors::SCOPE === $slug || Agent_Access_Yoast_SEO::SCOPE === $slug || Agent_Access_Yoast_SEO::LEGACY_SCOPE === $slug || Agent_Access_Scope::ALL_CUSTOM_ENDPOINTS === $slug ) ) {
 				return new WP_Error( 'invalid_scope', __( 'Invalid scope settings.', 'botcreds-agent-access' ) );
 			}
 			$clean[] = $slug;

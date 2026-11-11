@@ -104,10 +104,15 @@ class Agent_Access_API {
 	public function get_connection_info( $password, $user_id = null ) {
 		$user = $user_id ? get_userdata( (int) $user_id ) : wp_get_current_user();
 
-		return array(
+		$info = array(
 			'site_url' => home_url( '/' ),
 			'username' => $user->user_login,
 			'password' => $password,
 		);
+		$existing = $this->get_existing_password( $user->ID );
+		if ( $existing && in_array( Agent_Access_Authors::SCOPE, Agent_Access_Scope::get( $user->ID, $existing['uuid'] ), true ) ) {
+			$info['author_assignment'] = 'Co-Authors Plus: GET /wp-json/agent-access/v1/authors/{post_id}/available?search=NAME for current author IDs; POST {"authors":[ID,...]} to /wp-json/agent-access/v1/authors/{post_id}. Ordered byline only, on already-editable content within scope. Assign last: handing off ownership may remove editing access. Do not use core author or CAP native write endpoints.';
+		}
+		return $info;
 	}
 }

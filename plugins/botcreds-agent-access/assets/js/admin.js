@@ -94,6 +94,8 @@
 			var seo = checklist.querySelector('.agent-access-scope-seo-only');
 			var seoMode = !!(seo && seo.checked);
 			if (seo) seo.disabled = readMode;
+			var authors = checklist.querySelector('.agent-access-scope-authors');
+			if (authors) authors.disabled = readMode || seoMode;
 			var fullMode = !seoMode && !!(full && full.checked);
 			var inactive = readMode || seoMode || fullMode;
 			if (full) full.disabled = readMode || seoMode;
@@ -124,7 +126,7 @@
 
 	/** Collect only effective controls; disabled fieldsets must not submit grants. */
 	function collectScopeFromChecklist(container) {
-		var data = { scope_read_only: '', scope_seo_only: '', scope_full: '', scope_all_custom: '', scope_types: [], scope_custom_routes: '' };
+		var data = { scope_assign_authors: '', scope_read_only: '', scope_seo_only: '', scope_full: '', scope_all_custom: '', scope_types: [], scope_custom_routes: '' };
 		if (!container) return data;
 		if (container.querySelector('.agent-access-scope-read-only:checked')) {
 			data.scope_read_only = '1';
@@ -134,6 +136,7 @@
 			data.scope_seo_only = '1';
 			return data;
 		}
+		if (container.querySelector('.agent-access-scope-authors:checked:not(:disabled)')) data.scope_assign_authors = '1';
 		if (container.querySelector('.agent-access-scope-full:checked')) {
 			data.scope_full = '1';
 			return data;
@@ -150,7 +153,7 @@
 
 	function encodeScopeParams(data) {
 		var parts = [];
-		['scope_read_only', 'scope_seo_only', 'scope_full', 'scope_all_custom', 'scope_custom_routes'].forEach(function (key) {
+		['scope_assign_authors', 'scope_read_only', 'scope_seo_only', 'scope_full', 'scope_all_custom', 'scope_custom_routes'].forEach(function (key) {
 			if (data[key]) parts.push(key + '=' + encodeURIComponent(data[key]));
 		});
 		data.scope_types.forEach(function (type) {
