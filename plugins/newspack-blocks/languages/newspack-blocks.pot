@@ -2,14 +2,14 @@
 # This file is distributed under the same license as the Newspack Blocks plugin.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Blocks 4.36.8\n"
+"Project-Id-Version: Newspack Blocks 4.36.9\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-blocks\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-10T18:39:11+00:00\n"
+"POT-Creation-Date: 2026-11-11T01:11:38+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-blocks\n"
@@ -617,17 +617,17 @@ msgstr ""
 msgid "Could not retrieve donation settings."
 msgstr ""
 
-#: src/blocks/donate/frontend/class-newspack-blocks-donate-renderer-base.php:115
+#: src/blocks/donate/frontend/class-newspack-blocks-donate-renderer-base.php:117
 #: dist/editor.js:52
 msgid "One-time"
 msgstr ""
 
-#: src/blocks/donate/frontend/class-newspack-blocks-donate-renderer-base.php:116
+#: src/blocks/donate/frontend/class-newspack-blocks-donate-renderer-base.php:118
 #: dist/editor.js:52
 msgid "Monthly"
 msgstr ""
 
-#: src/blocks/donate/frontend/class-newspack-blocks-donate-renderer-base.php:117
+#: src/blocks/donate/frontend/class-newspack-blocks-donate-renderer-base.php:119
 #: dist/editor.js:52
 msgid "Annually"
 msgstr ""
@@ -2082,6 +2082,10 @@ msgstr ""
 
 #: dist/editor.js:55
 msgid "Minimum donation"
+msgstr ""
+
+#: dist/editor.js:55
+msgid "Leave empty to use the site-wide minimum donation."
 msgstr ""
 
 #: dist/editor.js:55

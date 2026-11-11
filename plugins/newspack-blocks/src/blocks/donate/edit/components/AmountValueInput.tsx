@@ -8,6 +8,7 @@ const AmountValueInput = ( {
 	attributes,
 	settings,
 	amounts,
+	minimumDonation,
 	setAttributes,
 	setSettings,
 	disabled,
@@ -23,7 +24,7 @@ const AmountValueInput = ( {
 	const onChange = ( { value, frequency }: { value: string; frequency: DonationFrequencySlug } ) => {
 		const subject = attributes.manual ? attributes : settings;
 		subject.amounts[ frequency ][ tierIndex ] = parseFloat( value );
-		const update: Partial< DonateBlockAttributes > = {
+		const update: Pick< DonateBlockAttributes, 'amounts' > = {
 			amounts: {
 				[ frequency ]: subject.amounts[ frequency ],
 				...subject.amounts,
@@ -36,15 +37,14 @@ const AmountValueInput = ( {
 			setSettings( update );
 		}
 	};
-	const amount = amounts[ frequencySlug ][ tierIndex ];
-	const value = settings.minimumDonation && ! ignoreMinimumAmount ? Math.max( amount, settings.minimumDonation ) : amount;
+	const value = amounts[ frequencySlug ][ tierIndex ];
 
 	return (
 		<span key={ `${ frequencySlug }-${ tierIndex }` }>
 			{ label && <label htmlFor={ id }>{ label }</label> }
 			<input
 				type="number"
-				min={ ignoreMinimumAmount ? undefined : attributes.minimumDonation }
+				min={ ignoreMinimumAmount ? undefined : minimumDonation }
 				onChange={ evt =>
 					onChange( {
 						value: evt.target.value,

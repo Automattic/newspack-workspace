@@ -1,3 +1,10 @@
+## @automattic/newspack-blocks [4.36.9](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.8...newspack-blocks@4.36.9) (2026-11-11)
+
+
+### Bug Fixes
+
+* **donations:** stop overwriting per-block and per-product minimums ([#1550](https://github.com/Automattic/newspack-workspace/issues/1550)) ([5d79d59](https://github.com/Automattic/newspack-workspace/commit/5d79d59d4c492b13c2dab53f6569240c4b87ea99))
+
 ## @automattic/newspack-blocks [4.36.8](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.7...newspack-blocks@4.36.8) (2026-11-10)
 
 
