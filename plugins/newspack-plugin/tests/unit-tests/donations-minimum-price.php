@@ -91,13 +91,27 @@ class Newspack_Test_Donations_Minimum_Price extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Set a product's minimum price directly, as an admin does on the product screen.
+	 * Change a product's minimum price without saving the product, so the save
+	 * hook doesn't run. The mock store returns this same object, so the change
+	 * sticks, and the next settings save is the first code to act on it.
 	 *
 	 * @param int    $product_id Product ID.
 	 * @param string $minimum    Minimum price.
 	 */
 	private function set_product_minimum( $product_id, $minimum ) {
 		wc_get_product( $product_id )->update_meta_data( '_min_price', $minimum );
+	}
+
+	/**
+	 * Set a product's minimum price and save the product, as the product screen does.
+	 *
+	 * @param int    $product_id Product ID.
+	 * @param string $minimum    Minimum price.
+	 */
+	private function save_product_minimum( $product_id, $minimum ) {
+		$product = wc_get_product( $product_id );
+		$product->update_meta_data( '_min_price', $minimum );
+		$product->save();
 	}
 
 	/**
@@ -189,6 +203,63 @@ class Newspack_Test_Donations_Minimum_Price extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Saving a product set directly forgets what Newspack last wrote to it, so
+	 * matching that value again no longer keeps the product following on its
+	 * own. Here the global minimum changes without a product write, as the setup
+	 * wizard's save does, so the product keeps the minimum it was set back to.
+	 */
+	public function test_product_set_away_and_back_between_settings_saves_keeps_it() {
+		$this->save_settings( '88' );
+		$this->save_product_minimum( self::CHILD_YEAR, '1200' );
+		update_option( Donations::DONATION_SETTINGS_OPTION, [ 'minimumDonation' => '90' ] );
+
+		$this->save_product_minimum( self::CHILD_YEAR, '88' );
+		$this->save_settings( '95' );
+
+		$this->assertSame( '88', $this->product_minimum( self::CHILD_YEAR ) );
+	}
+
+	/**
+	 * Saving a product set directly with Name Your Price off still forgets what
+	 * Newspack last wrote, so turning Name Your Price back on with that old value
+	 * no longer keeps the product following on its own. Here the global minimum
+	 * changes without a product write, as the setup wizard's save does, so the old
+	 * value doesn't match the global minimum either and the product keeps it.
+	 */
+	public function test_product_set_directly_with_name_your_price_off_forgets_the_synced_minimum() {
+		$this->save_settings( '88' );
+		$product = wc_get_product( self::CHILD_YEAR );
+		$product->update_meta_data( '_nyp', 'no' );
+		$product->update_meta_data( '_min_price', '1200' );
+		$product->save();
+		update_option( Donations::DONATION_SETTINGS_OPTION, [ 'minimumDonation' => '90' ] );
+
+		$product = wc_get_product( self::CHILD_YEAR );
+		$product->update_meta_data( '_nyp', 'yes' );
+		$product->update_meta_data( '_min_price', '88' );
+		$product->save();
+		$this->save_settings( '95' );
+
+		$this->assertSame( '88', $this->product_minimum( self::CHILD_YEAR ) );
+	}
+
+	/**
+	 * Saving a product with the minimum Newspack last wrote, typed differently,
+	 * keeps it following: the product screen stores a typed "88.00" as is. Here
+	 * the global minimum changes without a product write, so only that record
+	 * keeps the product following.
+	 */
+	public function test_product_saved_with_its_synced_minimum_typed_differently_still_follows() {
+		$this->save_settings( '88' );
+		$this->save_product_minimum( self::CHILD_YEAR, '88.00' );
+		update_option( Donations::DONATION_SETTINGS_OPTION, [ 'minimumDonation' => '90' ] );
+
+		$this->save_settings( '95' );
+
+		$this->assertSame( '95', $this->product_minimum( self::CHILD_YEAR ) );
+	}
+
+	/**
 	 * Setting a product's minimum to the global minimum makes it follow again.
 	 */
 	public function test_product_set_to_the_global_minimum_follows_it_again() {
@@ -212,9 +283,7 @@ class Newspack_Test_Donations_Minimum_Price extends WP_UnitTestCase {
 		$this->set_product_minimum( self::CHILD_YEAR, '1200' );
 		$this->save_settings( '90' );
 
-		$product = wc_get_product( self::CHILD_YEAR );
-		$product->update_meta_data( '_min_price', '' );
-		$product->save();
+		$this->save_product_minimum( self::CHILD_YEAR, '' );
 
 		$this->assertSame( '90', $this->product_minimum( self::CHILD_YEAR ) );
 	}
