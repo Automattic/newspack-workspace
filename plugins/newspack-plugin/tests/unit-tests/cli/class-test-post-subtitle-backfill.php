@@ -156,4 +156,74 @@ class Test_Post_Subtitle_Backfill extends WP_UnitTestCase {
 		$this->assertSame( '<script>alert(1)</script><b>Bold</b> subtitle', $this->stored_subtitle( $post_id ) );
 		$this->assertStringContainsString( 'No posts carry a non-empty newspack_post_subtitle value.', $output );
 	}
+
+	/**
+	 * A literal backslash in the sanitized value survives the write.
+	 *
+	 * WordPress's update_post_meta() unslashes its value before saving, on the
+	 * assumption that a caller is passing on already-slashed request data. A write that
+	 * skips wp_slash() first would have this silently strip every backslash.
+	 */
+	public function test_preserves_a_literal_backslash_when_live() {
+		$post_id = self::factory()->post->create();
+		$this->seed_raw_subtitle( $post_id, '<script>x</script>C:\\Temp' );
+
+		$this->run_backfill( [ 'live' => true ] );
+
+		$this->assertSame( 'xC:\\Temp', $this->stored_subtitle( $post_id ) );
+	}
+
+	/**
+	 * A revision keeps its own raw value; update_post_meta() on a revision ID redirects
+	 * the write to its parent post, so writing through a revision would overwrite the
+	 * parent's current value instead of the revision's own.
+	 */
+	public function test_excludes_revisions() {
+		$parent_id   = self::factory()->post->create();
+		$revision_id = self::factory()->post->create(
+			[
+				'post_type'   => 'revision',
+				'post_parent' => $parent_id,
+			]
+		);
+		$this->seed_raw_subtitle( $revision_id, '<script>alert(1)</script><b>Bold</b> subtitle' );
+
+		$output = $this->run_backfill( [ 'live' => true ] );
+
+		$this->assertSame( '<script>alert(1)</script><b>Bold</b> subtitle', $this->stored_subtitle( $revision_id ) );
+		$this->assertStringContainsString( 'No posts carry a non-empty newspack_post_subtitle value.', $output );
+	}
+
+	/**
+	 * A non-string stored value (corrupted or written outside the registered `string`
+	 * type) is scanned but skipped, rather than cast to the literal string "Array" and
+	 * written back.
+	 */
+	public function test_skips_a_non_string_meta_value() {
+		global $wpdb;
+		$post_id = self::factory()->post->create();
+		$wpdb->delete( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->postmeta,
+			[
+				'post_id'  => $post_id,
+				'meta_key' => 'newspack_post_subtitle',
+			]
+		);
+		$serialized = serialize( [ 'unexpected' => 'array' ] ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize
+		$wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->postmeta,
+			[
+				'post_id'    => $post_id,
+				'meta_key'   => 'newspack_post_subtitle',
+				'meta_value' => $serialized, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			]
+		);
+		wp_cache_delete( $post_id, 'post_meta' );
+
+		$output = $this->run_backfill( [ 'live' => true ] );
+
+		$this->assertSame( $serialized, $this->stored_subtitle( $post_id ) );
+		$this->assertStringContainsString( 'Scanned 1 post(s) with a non-empty subtitle.', $output );
+		$this->assertStringContainsString( 'Every stored subtitle already matches what the sanitizer produces.', $output );
+	}
 }

@@ -87,14 +87,17 @@ class Post_Subtitle_Backfill {
 			foreach ( $chunk as $post_id ) {
 				++$scanned;
 				$raw = \get_post_meta( $post_id, 'newspack_post_subtitle', true );
-				if ( '' === $raw ) {
+				if ( ! is_string( $raw ) || '' === $raw ) {
 					continue;
 				}
 				$sanitized = $sanitizer( $raw );
 				if ( $sanitized === $raw ) {
 					continue;
 				}
-				if ( ! $dry_run && ! \update_post_meta( $post_id, 'newspack_post_subtitle', $sanitized ) ) {
+				// update_post_meta() unslashes its value before saving (it assumes the
+				// caller is passing on already-slashed request data), so a literal
+				// backslash in the sanitized string would otherwise be silently dropped.
+				if ( ! $dry_run && ! \update_post_meta( $post_id, 'newspack_post_subtitle', wp_slash( $sanitized ) ) ) {
 					$failed[] = $post_id;
 					continue;
 				}
@@ -147,7 +150,7 @@ class Post_Subtitle_Backfill {
 	 * @return callable|null A callable taking the raw value and returning the sanitized
 	 *                        one, or null when neither is available.
 	 */
-	private static function resolve_sanitizer() {
+	private static function resolve_sanitizer(): ?callable {
 		if ( function_exists( 'newspack_sanitize_post_subtitle' ) ) {
 			return 'newspack_sanitize_post_subtitle';
 		}
@@ -158,12 +161,20 @@ class Post_Subtitle_Backfill {
 	}
 
 	/**
-	 * IDs of every non-trashed post carrying a non-empty `newspack_post_subtitle`.
+	 * IDs of every non-trashed, non-revision post carrying a non-empty
+	 * `newspack_post_subtitle`.
 	 *
 	 * A direct query rather than `WP_Query`/`get_posts()` with a `meta_query`: the
 	 * command's whole job is "every row with this meta key", which a meta_query would
 	 * express as a join anyway, and here the join can also filter out empty values and
 	 * trashed posts in one pass.
+	 *
+	 * Revisions are excluded: `update_post_meta()` on a revision ID redirects the write
+	 * to its parent post, which would overwrite the parent's current value with the
+	 * revision's (possibly older) one.
+	 *
+	 * Run once per site on a multisite install — `$wpdb->posts`/`$wpdb->postmeta`
+	 * resolve to the current blog's tables, not the whole network.
 	 *
 	 * @return int[]|null Post IDs, or null when the query itself failed (reported by
 	 *                     $wpdb->last_error), so an operator never mistakes a failed read
@@ -176,7 +187,8 @@ class Post_Subtitle_Backfill {
 			"SELECT DISTINCT p.ID
 			FROM {$wpdb->posts} p
 			INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
-			WHERE pm.meta_key = 'newspack_post_subtitle' AND pm.meta_value != '' AND p.post_status != 'trash'
+			WHERE pm.meta_key = 'newspack_post_subtitle' AND pm.meta_value != ''
+			AND p.post_status != 'trash' AND p.post_type != 'revision'
 			ORDER BY p.ID"
 		);
 
