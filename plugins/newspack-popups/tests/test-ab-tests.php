@@ -1930,4 +1930,47 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		self::assertNotWPError( Newspack_Popups_Model::set_popup_options( $prompt_id, [ 'placement' => 'manual' ] ) );
 		self::assertSame( 'manual', get_post_meta( $prompt_id, 'placement', true ) );
 	}
+
+	/**
+	 * Moving a dropped version back brings its test back. Dropping the only
+	 * challenger records that there are no tests, so a placement change has to
+	 * clear that record as a Test ID change does.
+	 */
+	public function test_moving_a_dropped_version_back_restores_its_test() {
+		$this->create_test_variant( 'moved-back', 'a', [ 'placement' => 'inline' ] );
+		$b_id = $this->create_test_variant( 'moved-back', 'b', [ 'placement' => 'inline' ] );
+		update_post_meta( $b_id, 'placement', 'manual' );
+		self::assertSame( [], Newspack_Popups_AB_Tests::get_tests_config() );
+		self::assertSame( '0', get_option( Newspack_Popups_AB_Tests::OPTION_HAS_TESTS ) );
+
+		self::assertNotWPError( Newspack_Popups_Model::set_popup_options( $b_id, [ 'placement' => 'inline' ] ) );
+
+		self::assertArrayHasKey( 'moved-back', Newspack_Popups_AB_Tests::get_tests_config() );
+	}
+
+	/**
+	 * Two prompts can share a version letter, and only the one on an ineligible
+	 * placement renders as untested, even though the letter stays in the config.
+	 */
+	public function test_an_ineligible_duplicate_version_renders_untested() {
+		$this->create_test_variant( 'duplicate-b', 'a', [ 'placement' => 'inline' ] );
+		$eligible_id   = $this->create_test_variant( 'duplicate-b', 'b', [ 'placement' => 'inline' ] );
+		$ineligible_id = $this->create_test_variant( 'duplicate-b', 'b', [ 'placement' => 'inline' ] );
+		update_post_meta( $ineligible_id, 'placement', 'manual' );
+
+		self::assertSame( [ 'a', 'b' ], Newspack_Popups_AB_Tests::get_tests_config()['duplicate-b']['variants'] );
+		self::assertNull( Newspack_Popups_AB_Tests::get_popup_ab_fields( $ineligible_id, true ) );
+		self::assertNotNull( Newspack_Popups_AB_Tests::get_popup_ab_fields( $eligible_id, true ) );
+	}
+
+	/**
+	 * The wizard stores Manual only through wp_validate_boolean(), which reads a
+	 * non-empty array as true, so the check reads it the same way.
+	 */
+	public function test_wizard_save_reads_an_array_manual_only_as_stored() {
+		$prompt_id = $this->create_test_variant( 'wizard-array', 'a', [ 'placement' => 'center' ] );
+
+		self::assertWPError( Newspack_Popups_Model::set_popup_options( $prompt_id, [ 'manual_only' => [ '1' ] ] ) );
+		self::assertFalse( rest_sanitize_boolean( get_post_meta( $prompt_id, 'manual_only', true ) ) );
+	}
 }
