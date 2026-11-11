@@ -36,6 +36,13 @@ class Newspack_Test_Reader_Data_Trust_Donor extends WP_UnitTestCase {
 	private $donation_product_id;
 
 	/**
+	 * One-time order page size before the test changed it.
+	 *
+	 * @var int
+	 */
+	private $default_page_size;
+
+	/**
 	 * Set up.
 	 */
 	public function set_up() {
@@ -51,6 +58,9 @@ class Newspack_Test_Reader_Data_Trust_Donor extends WP_UnitTestCase {
 		// The teams tests leave this override set, and it makes the renewal mock
 		// ignore the `_subscription_renewal` meta these fixtures rely on.
 		unset( $GLOBALS['teams_mock_is_renewal'] );
+		$property = new ReflectionProperty( Donations::class, 'one_time_orders_page_size' );
+		$property->setAccessible( true );
+		$this->default_page_size = $property->getValue();
 		Reader_Data_Trust::reset_cache();
 		Donations::reset_donor_status_cache();
 	}
@@ -61,7 +71,7 @@ class Newspack_Test_Reader_Data_Trust_Donor extends WP_UnitTestCase {
 	public function tear_down() {
 		global $wc_mocks_orders_ignore_page;
 		$wc_mocks_orders_ignore_page = false;
-		$this->set_one_time_orders_page_size( 20 );
+		$this->set_one_time_orders_page_size( $this->default_page_size );
 		remove_all_filters( 'newspack_has_server_side_donor_tracking' );
 		remove_all_filters( 'newspack_reader_data_compute_is_donor' );
 		Reader_Data_Trust::reset_cache();
