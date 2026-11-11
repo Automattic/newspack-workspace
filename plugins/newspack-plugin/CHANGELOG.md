@@ -1,3 +1,10 @@
+## newspack [6.56.7](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.6...newspack@6.56.7) (2026-11-11)
+
+
+### Bug Fixes
+
+* **sync:** count newer one-time gifts in last donation fields ([#1459](https://github.com/Automattic/newspack-workspace/issues/1459)) ([2c5e462](https://github.com/Automattic/newspack-workspace/commit/2c5e4624ae21905dc7f878c3dde681ba510ef8e7))
+
 ## newspack [6.56.6](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.5...newspack@6.56.6) (2026-11-11)
 
 
