@@ -828,6 +828,25 @@ class Donations {
 	private static $donor_status_cache = [];
 
 	/**
+	 * One-time donation orders are fetched in pages of this many. Tests shrink it
+	 * to exercise the walk.
+	 *
+	 * @var int
+	 */
+	private static $one_time_orders_page_size = 20;
+
+	/**
+	 * The one-time donation walk gives up after this many pages. It runs on every
+	 * email-provider sync of a reader with no donation subscription, and on a
+	 * gate check, so a long order history must not load in full. Fifty pages of
+	 * twenty covers a reader's 1,000 most recent paid orders; a one-time
+	 * donation older than that is not found.
+	 *
+	 * @var int
+	 */
+	const ONE_TIME_ORDERS_MAX_PAGES = 50;
+
+	/**
 	 * Clear the per-request donor status, for one user or for all of them.
 	 *
 	 * Call it before reading a status that an order or subscription change in the
@@ -931,19 +950,19 @@ class Donations {
 		if ( $user_id <= 0 || ! function_exists( 'wc_get_orders' ) ) {
 			return null;
 		}
-		$per_page     = 20;
-		$page         = 1;
-		$seen_any_new = true;
-		$seen_ids     = [];
-		while ( $seen_any_new ) {
+		$per_page = max( 1, (int) self::$one_time_orders_page_size );
+		$seen_ids = [];
+		for ( $page = 1; $page <= self::ONE_TIME_ORDERS_MAX_PAGES; $page++ ) {
+			// `date` alone is not unique: orders created in the same second, as
+			// imports make, could straddle a page boundary and be skipped.
 			$orders = \wc_get_orders(
 				[
 					'customer_id' => $user_id,
 					'status'      => WooCommerce_Connection::ACTIVE_ORDER_STATUSES,
 					'limit'       => $per_page,
-					'page'        => $page++,
+					'page'        => $page,
 					'order'       => 'DESC',
-					'orderby'     => 'date',
+					'orderby'     => 'date ID',
 					'return'      => 'objects',
 				]
 			);
@@ -964,7 +983,7 @@ class Donations {
 				}
 				return $order;
 			}
-			if ( count( $orders ) < $per_page ) {
+			if ( ! $seen_any_new || count( $orders ) < $per_page ) {
 				break;
 			}
 		}

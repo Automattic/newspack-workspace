@@ -59,6 +59,9 @@ class Newspack_Test_Reader_Data_Trust_Donor extends WP_UnitTestCase {
 	 * Tear down.
 	 */
 	public function tear_down() {
+		global $wc_mocks_orders_ignore_page;
+		$wc_mocks_orders_ignore_page = false;
+		$this->set_one_time_orders_page_size( 20 );
 		remove_all_filters( 'newspack_has_server_side_donor_tracking' );
 		remove_all_filters( 'newspack_reader_data_compute_is_donor' );
 		Reader_Data_Trust::reset_cache();
@@ -144,6 +147,78 @@ class Newspack_Test_Reader_Data_Trust_Donor extends WP_UnitTestCase {
 		$this->create_donation_order();
 
 		$this->assertTrue( Donations::compute_is_donor( $this->user_id ) );
+	}
+
+	/**
+	 * A one-time donation behind full pages of newer orders is still found, and
+	 * a store that ignores `page` ends the walk instead of looping.
+	 */
+	public function test_one_time_donation_walk_pages_and_is_bounded() {
+		global $wc_mocks_get_orders_calls, $wc_mocks_orders_ignore_page;
+		$this->set_tracking( true );
+		$this->set_one_time_orders_page_size( 5 );
+		$this->create_donation_order_at( '2026-01-01 00:00:00', $this->donation_product_id );
+		// Twelve newer orders for another product push the donation onto page 3.
+		for ( $i = 0; $i < 12; $i++ ) {
+			$this->create_donation_order_at( '2026-02-01 00:00:00', 999 );
+		}
+
+		$wc_mocks_get_orders_calls = 0;
+		$this->assertTrue( Donations::compute_is_donor( $this->user_id ), 'A donation on a later page counts.' );
+		$this->assertSame( 3, $wc_mocks_get_orders_calls, 'The walk stops on the page that holds the donation.' );
+
+		Donations::reset_donor_status_cache();
+		$wc_mocks_orders_ignore_page = true;
+		$wc_mocks_get_orders_calls   = 0;
+		$this->assertFalse( Donations::compute_is_donor( $this->user_id ), 'A store that repeats page 1 never reaches the donation.' );
+		$this->assertSame( 2, $wc_mocks_get_orders_calls, 'A page with nothing new ends the walk.' );
+	}
+
+	/**
+	 * The walk stops at its page ceiling, so a donation older than the
+	 * ceiling covers is not found.
+	 */
+	public function test_one_time_donation_walk_stops_at_the_page_ceiling() {
+		global $wc_mocks_get_orders_calls;
+		$this->set_tracking( true );
+		$this->set_one_time_orders_page_size( 1 );
+		$this->create_donation_order_at( '2026-01-01 00:00:00', $this->donation_product_id );
+		for ( $i = 0; $i < Donations::ONE_TIME_ORDERS_MAX_PAGES; $i++ ) {
+			$this->create_donation_order_at( '2026-02-01 00:00:00', 999 );
+		}
+
+		$wc_mocks_get_orders_calls = 0;
+		$this->assertFalse( Donations::compute_is_donor( $this->user_id ) );
+		$this->assertSame( Donations::ONE_TIME_ORDERS_MAX_PAGES, $wc_mocks_get_orders_calls );
+	}
+
+	/**
+	 * Set the one-time donation walk's page size.
+	 *
+	 * @param int $size Orders per page.
+	 */
+	private function set_one_time_orders_page_size( $size ) {
+		$property = new ReflectionProperty( Donations::class, 'one_time_orders_page_size' );
+		$property->setAccessible( true );
+		$property->setValue( null, $size );
+	}
+
+	/**
+	 * Create a completed order for one product at a fixed creation time.
+	 *
+	 * @param string $when       Creation and paid date, `Y-m-d H:i:s`.
+	 * @param int    $product_id Product ID.
+	 */
+	private function create_donation_order_at( $when, $product_id ) {
+		wc_create_order(
+			[
+				'customer_id'  => $this->user_id,
+				'status'       => 'completed',
+				'date_paid'    => $when,
+				'date_created' => $when,
+				'items'        => [ new WC_Order_Item_Product( [ 'product_id' => $product_id ] ) ],
+			]
+		);
 	}
 
 	/**
