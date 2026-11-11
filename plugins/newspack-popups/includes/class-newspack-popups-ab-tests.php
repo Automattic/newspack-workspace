@@ -1321,7 +1321,11 @@ final class Newspack_Popups_AB_Tests {
 	}
 
 	/**
-	 * End a running test, keeping one version.
+	 * End a test, keeping one version.
+	 *
+	 * A test that never ran ends the same way: while B is still a draft, or
+	 * after it was deleted, this is how a prompt leaves the test, since an
+	 * editor save can't clear its Test ID.
 	 *
 	 * The order matters, because nothing here is a transaction. The record goes
 	 * first. Core's unique write is a read before the insert, not a lock, so two
@@ -1363,14 +1367,6 @@ final class Newspack_Popups_AB_Tests {
 		if ( ! is_string( $keep ) || ! isset( $test['variants'][ $keep ] ) ) {
 			return new WP_Error( 'newspack_popups_ab_keep', __( 'Choose a version this test has.', 'newspack-popups' ), [ 'status' => 400 ] );
 		}
-		$running = isset( $test['variants']['a'] ) && count( $test['variants'] ) > 1;
-		foreach ( $test['variants'] as $variant ) {
-			$running = $running && 'publish' === $variant['status'];
-		}
-		if ( ! $running ) {
-			return new WP_Error( 'newspack_popups_ab_not_running', __( 'Only a running test can be ended.', 'newspack-popups' ), [ 'status' => 409 ] );
-		}
-
 		$term = self::ensure_term( $test_id, $test['name'] );
 		if ( is_wp_error( $term ) ) {
 			return $term;

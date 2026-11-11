@@ -317,12 +317,12 @@ export const openVersionB = result => {
 };
 
 /**
- * Whether a test can be ended from its card: it is splitting readers now,
- * which is the server's rule too. A Needs Attention test qualifies only while
- * every version is still published.
+ * Whether a test is splitting readers now, so its card leads with End Test.
+ * A Needs Attention test qualifies only while every version is still
+ * published.
  *
  * @param {Object} test The test.
- * @return {boolean} Endable.
+ * @return {boolean} Splitting readers.
  */
 export const canEndTest = test => {
 	const status = getTestStatus( test );
@@ -331,6 +331,17 @@ export const canEndTest = test => {
 	}
 	return Object.values( test.variants ).every( variant => variant.status === 'publish' );
 };
+
+/**
+ * Whether a test that isn't splitting readers can still be ended, from its
+ * card's menu. The server ends any test that hasn't ended, and since an editor
+ * save can't clear a prompt's Test ID, ending is how a prompt leaves a test
+ * that never ran.
+ *
+ * @param {Object} test The test.
+ * @return {boolean} Endable from the menu.
+ */
+export const canEndTestFromMenu = test => getTestStatus( test ) !== 'ended' && Object.keys( test?.variants || {} ).length > 0 && ! canEndTest( test );
 
 /**
  * The version a Reliable result names as the winner, however young the test.

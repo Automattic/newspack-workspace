@@ -1,5 +1,6 @@
 import {
 	canEndTest,
+	canEndTestFromMenu,
 	formatConfidence,
 	formatLift,
 	formatRate,
@@ -210,6 +211,22 @@ describe( 'canEndTest', () => {
 			{ status: 'ended', variants: { a: version(), b: version() } },
 		];
 		expect( tests.map( canEndTest ) ).toEqual( [ true, true, false, false, false, false ] );
+	} );
+} );
+
+describe( 'canEndTestFromMenu', () => {
+	const version = ( status = 'publish', eligible = true ) => ( { status, eligible } );
+	it( 'offers ending every test that has not ended but is not splitting readers', () => {
+		const tests = [
+			{ variants: { a: version(), b: version() } }, // Running: End Test is in the header.
+			{ variants: { a: version(), b: version( 'publish', false ) } }, // Needs attention, still splitting.
+			{ variants: { a: version(), b: version( 'draft', false ) } }, // Needs attention, not splitting.
+			{ variants: { a: version(), b: version( 'draft' ) } }, // Draft.
+			{ variants: { a: version() } }, // Incomplete.
+			{ variants: { b: version( 'draft' ) } }, // Incomplete, A gone.
+			{ status: 'ended', variants: { a: version(), b: version() } },
+		];
+		expect( tests.map( canEndTestFromMenu ) ).toEqual( [ false, false, true, true, true, true, false ] );
 	} );
 } );
 

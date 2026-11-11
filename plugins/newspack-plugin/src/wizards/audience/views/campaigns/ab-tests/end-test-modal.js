@@ -12,7 +12,7 @@ import apiFetch from '@wordpress/api-fetch';
  * Internal dependencies
  */
 import Modal from '../../../../../../packages/components/src/modal';
-import { REST_BASE, formatRate, getRecommendation } from './utils';
+import { REST_BASE, canEndTest, formatRate, getRecommendation } from './utils';
 
 /**
  * What an option says about its version: the prompt's title, then its rate,
@@ -81,12 +81,48 @@ const EndTestModal = ( { test, stats, onEnded, onClose } ) => {
 	// The selection follows the recommendation, which can change as the card's
 	// results arrive, until the user picks a version.
 	const [ picked, setPicked ] = useState( null );
-	const keep = picked ?? recommendation.letter;
+	const letters = Object.keys( test.variants ).sort();
+	// A test left with one version, such as A after B was deleted, has nothing to choose.
+	const keep = 1 === letters.length ? letters[ 0 ] : picked ?? recommendation.letter;
 	const [ isBusy, setIsBusy ] = useState( false );
 	const [ error, setError ] = useState( '' );
 	const formRef = useRef( null );
-	const letters = Object.keys( test.variants ).sort();
 	const name = test.name || test.test_id;
+	// Ending never publishes anything, so a test that isn't splitting readers
+	// can't promise the kept version stays published.
+	const isRunning = canEndTest( test );
+
+	let intro;
+	if ( isRunning ) {
+		intro = sprintf(
+			// Translators: %s is the test name.
+			_n(
+				'Choose which version of “%s” to keep. It stays published for every reader, and the other version moves to draft.',
+				'Choose which version of “%s” to keep. It stays published for every reader, and the other versions move to draft.',
+				letters.length - 1,
+				'newspack-plugin'
+			),
+			name
+		);
+	} else if ( 1 === letters.length ) {
+		intro = sprintf(
+			// Translators: %1$s is a version letter such as "A", %2$s is the test name.
+			__( 'Version %1$s stays as it is and leaves “%2$s”. The test moves to Ended.', 'newspack-plugin' ),
+			letters[ 0 ].toUpperCase(),
+			name
+		);
+	} else {
+		intro = sprintf(
+			// Translators: %s is the test name.
+			_n(
+				'“%s” isn’t running. Choose which version to keep. It stays as it is, and the other version moves to draft.',
+				'“%s” isn’t running. Choose which version to keep. It stays as it is, and the other versions move to draft.',
+				letters.length - 1,
+				'newspack-plugin'
+			),
+			name
+		);
+	}
 
 	// Start on the selected option, where the arrow keys move from, rather than
 	// on whichever element the modal's own focus-on-mount settles on.
@@ -123,40 +159,31 @@ const EndTestModal = ( { test, stats, onEnded, onClose } ) => {
 							{ error }
 						</Notice>
 					) }
-					<p className="newspack-ab-tests__intro">
-						{ sprintf(
-							// Translators: %s is the test name.
-							_n(
-								'Choose which version of “%s” to keep. It stays published for every reader, and the other version moves to draft.',
-								'Choose which version of “%s” to keep. It stays published for every reader, and the other versions move to draft.',
-								letters.length - 1,
-								'newspack-plugin'
-							),
-							name
-						) }
-					</p>
-					<RadioControl
-						label={ __( 'Version to keep', 'newspack-plugin' ) }
-						selected={ keep }
-						onChange={ setPicked }
-						disabled={ isBusy }
-						options={ letters.map( letter => ( {
-							value: letter,
-							label:
-								recommendation.letter === letter
-									? sprintf(
-											// Translators: %s is a version letter such as "B".
-											__( 'Keep %s (Recommended)', 'newspack-plugin' ),
-											letter.toUpperCase()
-									  )
-									: sprintf(
-											// Translators: %s is a version letter such as "A".
-											__( 'Keep %s', 'newspack-plugin' ),
-											letter.toUpperCase()
-									  ),
-							description: describeOption( { letter, test, stats, recommendation } ),
-						} ) ) }
-					/>
+					<p className="newspack-ab-tests__intro">{ intro }</p>
+					{ letters.length > 1 && (
+						<RadioControl
+							label={ __( 'Version to keep', 'newspack-plugin' ) }
+							selected={ keep }
+							onChange={ setPicked }
+							disabled={ isBusy }
+							options={ letters.map( letter => ( {
+								value: letter,
+								label:
+									recommendation.letter === letter
+										? sprintf(
+												// Translators: %s is a version letter such as "B".
+												__( 'Keep %s (Recommended)', 'newspack-plugin' ),
+												letter.toUpperCase()
+										  )
+										: sprintf(
+												// Translators: %s is a version letter such as "A".
+												__( 'Keep %s', 'newspack-plugin' ),
+												letter.toUpperCase()
+										  ),
+								description: describeOption( { letter, test, stats, recommendation } ),
+							} ) ) }
+						/>
+					) }
 					<Stack justify="flex-end" align="center" gap="lg">
 						<Button variant="secondary" onClick={ onClose } disabled={ isBusy } __next40pxDefaultSize>
 							{ __( 'Cancel', 'newspack-plugin' ) }
