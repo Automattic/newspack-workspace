@@ -93,9 +93,9 @@ export default function RangeRuleControl( {
 
 	return (
 		<>
-			{ /* The group is always rendered, unlike AccessRuleValueNotice's: the first
-			     keystroke clears the "not set" notice, and wrapping the inputs only while
-			     a notice shows would rebuild them mid-entry and drop the editor's focus. */ }
+			{ /* The group is always rendered: the first keystroke clears the "not set"
+			     notice, and wrapping the inputs only while a notice shows would rebuild
+			     them mid-entry and drop the editor's focus. */ }
 			<Stack role="group" aria-label={ config.name } align="flex-start" gap="sm">
 				<div className="newspack-range-rule__field">
 					<TextControl

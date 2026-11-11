@@ -2,7 +2,7 @@
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { CheckboxControl, SelectControl, ToggleControl } from '@wordpress/components';
+import { CheckboxControl, Notice, SelectControl, ToggleControl } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { Badge, Stack } from '@wordpress/ui';
@@ -547,6 +547,14 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 															__next40pxDefaultSize
 															__nextHasNoMarginBottom
 														/>
+													) }
+													{ checked && option.is_access_rule && (
+														<Notice status="warning" isDismissible={ false } spokenMessage="">
+															{ __(
+																'Content gates can use this field. If readers can edit it in the email provider’s subscription preferences, it shouldn’t decide who sees content.',
+																'newspack-plugin'
+															) }
+														</Notice>
 													) }
 												</div>
 											);

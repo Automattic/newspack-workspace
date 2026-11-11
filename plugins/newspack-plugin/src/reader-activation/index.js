@@ -2,7 +2,7 @@
 
 window.newspack_ras_config = window.newspack_ras_config || {};
 
-import Store from './store.js';
+import Store, { NEWSLETTER_SIGNUP_CLIENT_KEY } from './store.js';
 import { getPendingCheckout, setPendingCheckout } from './checkout.js';
 import { EVENTS, on, off, emit } from './events.js';
 import { getCookie, setCookie, generateID, debugLog } from './utils.js';
@@ -414,13 +414,65 @@ function attachAuthCookiesListener() {
 }
 
 /**
- * Set the reader as newsletter subscriber once a newsletter form is submitted.
+ * Ask the server to re-check the logged-in reader's newsletter status and load
+ * the result into the store. A failed or rate-limited check is ignored.
+ *
+ * The request is sent with `keepalive` so it outlives a form that submits by
+ * leaving the page. Its answer only reaches the store while this page is still
+ * open; otherwise what lasts is the follow-up check the server queues when the
+ * provider does not yet show a subscription.
  */
-function attachNewsletterFormListener() {
+function checkNewsletterSubscription() {
+	const apiNonce = getApiNonce();
+	const apiUrl = window.newspack_reader_data?.api_url;
+	if ( ! window.newspack_ras_config?.is_logged_in || ! apiUrl || ! apiNonce ) {
+		return;
+	}
+	fetch( `${ apiUrl }/newsletter-check`, {
+		method: 'POST',
+		keepalive: true,
+		credentials: 'same-origin',
+		headers: { 'X-WP-Nonce': apiNonce },
+	} )
+		.then( res => ( 200 === res.status ? res.json() : null ) )
+		.then( body => {
+			if ( ! body ) {
+				return;
+			}
+			const items = {};
+			for ( const [ key, value ] of Object.entries( body?.items || {} ) ) {
+				// rehydrate() cannot store a null, and a key the server omitted stays as it was.
+				if ( null !== value && undefined !== value ) {
+					items[ key ] = value;
+				}
+			}
+			store.rehydrate( items );
+		} )
+		.catch( () => {
+			// Ignored on purpose, see above.
+		} );
+}
+
+/**
+ * Record that a newsletter form was submitted in this browser.
+ *
+ * Only the browser-side hint is written here. The subscriber flag itself is
+ * set by the server. A form with `.newspack-subscribe-form` (a generic class
+ * for third-party forms, Gravity Forms included) also asks the server to
+ * re-check it when submitted by a logged-in reader.
+ */
+export function attachNewsletterFormListener() {
 	const newspackForms = [ '.newspack-newsletters-subscribe' ];
 
-	// newspack-subscribe-form is a generic class that can be added to any 3rd party form. Once it's submitted, we consider the reader a newsletter subscriber.
 	const thirdPartyForms = [ '.mc4wp-form', '.newspack-subscribe-form' ];
+
+	const markSignup = () => {
+		try {
+			store.set( NEWSLETTER_SIGNUP_CLIENT_KEY, Math.floor( Date.now() / 1000 ), false );
+		} catch ( err ) {
+			// A storage failure must not interrupt the form submission.
+		}
+	};
 
 	const attachHandler = ( el, eventToListenTo = 'submit' ) => {
 		const form = 'FORM' === el.tagName ? el : el.querySelector( 'form' );
@@ -428,7 +480,10 @@ function attachNewsletterFormListener() {
 			return;
 		}
 		form.addEventListener( eventToListenTo, () => {
-			store.set( 'is_newsletter_subscriber', true );
+			markSignup();
+			if ( form.matches( '.newspack-subscribe-form' ) || el.matches( '.newspack-subscribe-form' ) ) {
+				checkNewsletterSubscription();
+			}
 		} );
 	};
 
@@ -453,7 +508,18 @@ function attachNewsletterFormListener() {
 	document.addEventListener( 'gform/post_render', event => {
 		if ( window.gform?.utils?.addAsyncFilter && gformIds.includes( event.detail?.formId ) ) {
 			gform.utils.addAsyncFilter( 'gform/submission/pre_submission', async data => {
-				store.set( 'is_newsletter_subscriber', true );
+				markSignup();
+				// The server hook only covers Gravity Forms feeds it knows how to read,
+				// so a form with the generic class asks for a check the same way other
+				// third-party forms do. The server queues a follow-up check, which
+				// covers a provider that has not received the signup yet.
+				try {
+					if ( data?.form?.matches?.( '.newspack-subscribe-form' ) ) {
+						checkNewsletterSubscription();
+					}
+				} catch ( err ) {
+					// Nothing here may interrupt the form submission.
+				}
 				return data;
 			} );
 		}

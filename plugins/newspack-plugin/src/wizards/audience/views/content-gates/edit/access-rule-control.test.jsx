@@ -267,3 +267,38 @@ describe( 'AccessRuleControl, a rule whose value would let everyone through', ()
 		expect( screen.queryByText( /grants access to everyone/ ) ).not.toBeInTheDocument();
 	} );
 } );
+
+describe( 'AccessRuleControl reader data rule', () => {
+	const renderReaderData = ( value, onChange = jest.fn() ) => {
+		window.newspackAudienceContentGates = {
+			available_access_rules: { reader_data: { name: 'Reader data', has_options: false, trusted_keys: [ 'plan' ] } },
+		};
+		render( <AccessRuleControl slug="reader_data" value={ value } onChange={ onChange } /> );
+		return onChange;
+	};
+
+	it( 'says a key the browser can also set matches no reader, and still lets the value change', () => {
+		const onChange = renderReaderData( 'utm_source=x' );
+
+		expect( screen.getByRole( 'note' ) ).toHaveTextContent( /The browser can also set utm_source, so this rule matches no reader/ );
+		fireEvent.change( screen.getByRole( 'textbox' ), { target: { value: 'utm_source=y' } } );
+		expect( onChange ).toHaveBeenCalledWith( 'utm_source=y' );
+	} );
+
+	it( 'says nothing about a key the server sets', () => {
+		renderReaderData( 'plan=x' );
+
+		expect( screen.queryByRole( 'note' ) ).not.toBeInTheDocument();
+	} );
+} );
+
+describe( 'AccessRuleControl untrusted boolean field', () => {
+	it( 'says the field matches no reader even though it has no control', () => {
+		window.newspackAudienceContentGates = {
+			available_access_rules: { flag: { name: 'Flag', is_boolean: true, is_untrusted: true } },
+		};
+		render( <AccessRuleControl slug="flag" value={ true } onChange={ jest.fn() } /> );
+
+		expect( screen.getByText( /can also set this field’s value, so this rule matches no reader/ ) ).toBeInTheDocument();
+	} );
+} );

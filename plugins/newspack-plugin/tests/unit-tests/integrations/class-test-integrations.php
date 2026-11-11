@@ -1745,6 +1745,42 @@ class Test_Integrations extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The settings response tells the client which inbound fields content gates can use.
+	 *
+	 * @group integrations
+	 */
+	public function test_settings_config_flags_inbound_access_rule_fields() {
+		Sample_Integration::$declared_settings_fields = [
+			[
+				'key'     => 'incoming_metadata_fields',
+				'type'    => 'metadata',
+				'default' => [],
+			],
+		];
+		$integration = new class( 'access-flag-test', 'Access Flag Test' ) extends Sample_Integration {
+			/**
+			 * Two inbound fields, one registered for content gates.
+			 *
+			 * @return array
+			 */
+			public function get_available_incoming_fields() {
+				return [
+					( new Incoming_Field( 'GATED' ) )->set_is_access_rule( true ),
+					new Incoming_Field( 'PLAIN' ),
+				];
+			}
+		};
+
+		$config  = $integration->get_settings_config();
+		$fields  = array_combine( array_column( $config, 'key' ), $config );
+		$options = array_column( $fields['incoming_metadata_fields']['options'], 'is_access_rule', 'value' );
+
+		$this->assertTrue( $options['GATED'] );
+		$this->assertFalse( $options['PLAIN'] );
+		Sample_Integration::$declared_settings_fields = [];
+	}
+
+	/**
 	 * Incoming metadata payloads keep per-field operators; outgoing stays a key list.
 	 *
 	 * @group integrations
