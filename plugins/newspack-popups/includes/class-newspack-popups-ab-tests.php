@@ -1673,6 +1673,12 @@ final class Newspack_Popups_AB_Tests {
 		update_post_meta( $version_b, self::META_TEST_ID, $test_id );
 		remove_filter( 'sanitize_post_meta_' . self::META_TEST_ID . '_for_' . Newspack_Popups::NEWSPACK_POPUPS_CPT, $keep_stored, PHP_INT_MAX );
 		update_post_meta( $version_b, self::META_VARIANT, 'b' );
+		// duplicate_popup() leaves the end date behind, which Duplicate relies on.
+		// B needs it: when A expires it reverts to draft, and B would run on alone.
+		$end_date = (string) get_post_meta( $prompt->ID, 'expiration_date', true );
+		if ( '' !== $end_date ) {
+			update_post_meta( $version_b, 'expiration_date', $end_date );
+		}
 		update_post_meta( $prompt->ID, self::META_VARIANT, 'a' );
 		update_post_meta( $prompt->ID, self::META_GOAL, $goal );
 		update_post_meta( $prompt->ID, self::META_CONTROL_SHARE, self::sanitize_control_share( $control_share ) );
