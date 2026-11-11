@@ -24,9 +24,9 @@ defined( 'ABSPATH' ) || exit;
 class Post_Subtitle_Backfill {
 
 	/**
-	 * Re-sanitizes every stored `newspack_post_subtitle` value.
+	 * Re-sanitizes every stored `newspack_post_subtitle` row.
 	 *
-	 * Reads each stored value and re-saves it through the theme's own sanitizer — the
+	 * Reads each stored row and re-saves it through the theme's own sanitizer — the
 	 * same function `register_post_meta()` already runs on every new write. A value
 	 * already sanitized comes back identical and is left alone, which is what makes a
 	 * second run report nothing left to change.
@@ -35,7 +35,9 @@ class Post_Subtitle_Backfill {
 	 * permanently deleted, and restoring it returns it to this command's scope on the
 	 * next run.
 	 *
-	 * Dry-run by default; pass --live to write.
+	 * Dry-run by default; pass --live to write. A live run with any write failure exits
+	 * non-zero after reporting, so a caller chaining this command notices rather than
+	 * treating a partial cleanup as done.
 	 *
 	 * ## OPTIONS
 	 *
@@ -66,12 +68,12 @@ class Post_Subtitle_Backfill {
 			WP_CLI::line( '' );
 		}
 
-		$post_ids = self::get_subtitle_post_ids();
-		if ( null === $post_ids ) {
+		$rows = self::get_subtitle_meta_rows();
+		if ( null === $rows ) {
 			WP_CLI::error( 'Could not read the stored subtitle values. Aborting rather than reporting an empty set.' );
 		}
 
-		if ( empty( $post_ids ) ) {
+		if ( empty( $rows ) ) {
 			WP_CLI::success( 'No posts carry a non-empty newspack_post_subtitle value. Nothing to do.' );
 			return;
 		}
@@ -80,13 +82,15 @@ class Post_Subtitle_Backfill {
 		$failed  = [];
 		$scanned = 0;
 
-		// Read and write a chunk at a time, so the meta cache neither grows with the site
-		// nor is thrown away between reading a post and writing it.
-		foreach ( array_chunk( $post_ids, 200 ) as $chunk ) {
-			\update_meta_cache( 'post', $chunk );
-			foreach ( $chunk as $post_id ) {
+		// Chunk only to bound memory on a very large scan; each row is read and written
+		// straight from the query result, so there is no cache to warm first.
+		foreach ( array_chunk( $rows, 200 ) as $chunk ) {
+			foreach ( $chunk as $row ) {
 				++$scanned;
-				$raw = \get_post_meta( $post_id, 'newspack_post_subtitle', true );
+				// get_post_meta() would maybe_unserialize() this for us; reading the
+				// column directly skips that, so a value stored as a serialized array
+				// needs the same unserialize before the is_string() guard can see it.
+				$raw = \maybe_unserialize( $row->meta_value );
 				if ( ! is_string( $raw ) || '' === $raw ) {
 					continue;
 				}
@@ -94,14 +98,16 @@ class Post_Subtitle_Backfill {
 				if ( $sanitized === $raw ) {
 					continue;
 				}
-				// update_post_meta() unslashes its value before saving (it assumes the
-				// caller is passing on already-slashed request data), so a literal
-				// backslash in the sanitized string would otherwise be silently dropped.
-				if ( ! $dry_run && ! \update_post_meta( $post_id, 'newspack_post_subtitle', wp_slash( $sanitized ) ) ) {
-					$failed[] = $post_id;
+				// update_metadata_by_mid() targets one row by its own meta_id, unlike
+				// update_post_meta(), which replaces every row sharing this post and key —
+				// the only way to fix one duplicate row without clobbering the others. It
+				// also never unslashes its value (update_post_meta() does), so, unlike that
+				// call, this one must NOT wp_slash() first.
+				if ( ! $dry_run && ! \update_metadata_by_mid( 'post', $row->meta_id, $sanitized ) ) {
+					$failed[] = $row->post_id;
 					continue;
 				}
-				$changed[] = $post_id;
+				$changed[] = $row->post_id;
 			}
 			\WP_CLI\Utils\wp_clear_object_cache();
 		}
@@ -109,7 +115,7 @@ class Post_Subtitle_Backfill {
 		WP_CLI::line( '' );
 		WP_CLI::line( $dry_run ? '=== DRY RUN SUMMARY ===' : '=== BACKFILL SUMMARY ===' );
 		WP_CLI::line( '' );
-		WP_CLI::line( sprintf( 'Scanned %d post(s) with a non-empty subtitle.', $scanned ) );
+		WP_CLI::line( sprintf( 'Scanned %d subtitle row(s).', $scanned ) );
 
 		if ( empty( $changed ) && empty( $failed ) ) {
 			WP_CLI::success( 'Every stored subtitle already matches what the sanitizer produces. Nothing to change.' );
@@ -127,14 +133,22 @@ class Post_Subtitle_Backfill {
 		}
 
 		if ( ! empty( $failed ) ) {
-			WP_CLI::warning( sprintf( 'update_post_meta() failed for: %s', self::format_post_id_list( $failed ) ) );
+			WP_CLI::warning( sprintf( 'update_metadata_by_mid() failed for: %s', self::format_post_id_list( $failed ) ) );
 		}
 
 		WP_CLI::line( '' );
 		if ( $dry_run ) {
 			WP_CLI::line( sprintf( '%d row(s) would change. Pass --live to write.', count( $changed ) ) );
-		} else {
-			WP_CLI::success( sprintf( '%d row(s) updated.', count( $changed ) ) );
+			return;
+		}
+
+		WP_CLI::success( sprintf( '%d row(s) updated.', count( $changed ) ) );
+
+		// A warning line is easy to miss, and a row left unsanitized can't be told apart
+		// from one this pass already cleaned. Exit non-zero so a caller chaining this
+		// command notices an incomplete run instead of treating it as done.
+		if ( ! empty( $failed ) ) {
+			WP_CLI::halt( 1 );
 		}
 	}
 
@@ -161,13 +175,20 @@ class Post_Subtitle_Backfill {
 	}
 
 	/**
-	 * IDs of every non-trashed, non-revision post carrying a non-empty
-	 * `newspack_post_subtitle`.
+	 * Every non-empty `newspack_post_subtitle` row on a non-trashed, non-revision post.
 	 *
 	 * A direct query rather than `WP_Query`/`get_posts()` with a `meta_query`: the
 	 * command's whole job is "every row with this meta key", which a meta_query would
 	 * express as a join anyway, and here the join can also filter out empty values and
 	 * trashed posts in one pass.
+	 *
+	 * Every row, not one per post: WordPress allows more than one `newspack_post_subtitle`
+	 * row on the same post (a plugin conflict, a direct database edit, or any other write
+	 * that bypassed the `single => true` registration meant to prevent it). Collapsing to
+	 * one row per post, the way `get_post_meta( $id, $key, true )` or a `DISTINCT p.ID`
+	 * query would, hides a second unsanitized row behind a first clean one, or — worse,
+	 * once written — collapses both rows into whichever one was read. Returning every row
+	 * with its own `meta_id` lets the caller read, sanitize, and write each one on its own.
 	 *
 	 * Revisions are excluded: `update_post_meta()` on a revision ID redirects the write
 	 * to its parent post, which would overwrite the parent's current value with the
@@ -176,23 +197,33 @@ class Post_Subtitle_Backfill {
 	 * Run once per site on a multisite install — `$wpdb->posts`/`$wpdb->postmeta`
 	 * resolve to the current blog's tables, not the whole network.
 	 *
-	 * @return int[]|null Post IDs, or null when the query itself failed (reported by
-	 *                     $wpdb->last_error), so an operator never mistakes a failed read
-	 *                     for a store with nothing to sanitize.
+	 * @return object[]|null Rows with `meta_id`, `post_id`, and the raw `meta_value`, or
+	 *                        null when the query itself failed (reported by
+	 *                        $wpdb->last_error), so an operator never mistakes a failed
+	 *                        read for a store with nothing to sanitize.
 	 */
-	private static function get_subtitle_post_ids(): ?array {
+	private static function get_subtitle_meta_rows(): ?array {
 		global $wpdb;
 
-		$post_ids = $wpdb->get_col( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			"SELECT DISTINCT p.ID
+		$rows = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			"SELECT pm.meta_id, pm.post_id, pm.meta_value
 			FROM {$wpdb->posts} p
 			INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
 			WHERE pm.meta_key = 'newspack_post_subtitle' AND pm.meta_value != ''
 			AND p.post_status != 'trash' AND p.post_type != 'revision'
-			ORDER BY p.ID"
+			ORDER BY p.ID, pm.meta_id"
 		);
 
-		return $wpdb->last_error ? null : array_map( 'intval', (array) $post_ids );
+		if ( $wpdb->last_error ) {
+			return null;
+		}
+
+		foreach ( (array) $rows as $row ) {
+			$row->meta_id = (int) $row->meta_id;
+			$row->post_id = (int) $row->post_id;
+		}
+
+		return (array) $rows;
 	}
 
 	/**

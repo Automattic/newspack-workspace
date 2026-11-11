@@ -55,7 +55,8 @@ class Test_Post_Subtitle_Backfill extends WP_UnitTestCase {
 
 	/**
 	 * The stored value, read past the meta cache — the same row the command itself
-	 * reads and writes.
+	 * reads and writes. Only meaningful when the post has a single subtitle row; use
+	 * stored_subtitles() for a post seeded with more than one.
 	 *
 	 * @param int $post_id Post ID.
 	 *
@@ -69,6 +70,47 @@ class Test_Post_Subtitle_Backfill extends WP_UnitTestCase {
 				$post_id
 			)
 		);
+	}
+
+	/**
+	 * Every stored value for a post, ordered by meta_id — for a post seeded with more
+	 * than one `newspack_post_subtitle` row.
+	 *
+	 * @param int $post_id Post ID.
+	 *
+	 * @return string[]
+	 */
+	private function stored_subtitles( int $post_id ): array {
+		global $wpdb;
+		return $wpdb->get_col( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			$wpdb->prepare(
+				"SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = 'newspack_post_subtitle' ORDER BY meta_id",
+				$post_id
+			)
+		);
+	}
+
+	/**
+	 * Adds a second (or further) `newspack_post_subtitle` row to a post without
+	 * touching any row seed_raw_subtitle() already wrote — the duplicate-row shape
+	 * WordPress allows even though this meta key is registered `single => true`.
+	 *
+	 * @param int    $post_id Post ID.
+	 * @param string $value   Raw meta value.
+	 *
+	 * @return void
+	 */
+	private function seed_additional_raw_subtitle( int $post_id, string $value ) {
+		global $wpdb;
+		$wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->postmeta,
+			[
+				'post_id'    => $post_id,
+				'meta_key'   => 'newspack_post_subtitle',
+				'meta_value' => $value, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			]
+		);
+		wp_cache_delete( $post_id, 'post_meta' );
 	}
 
 	/**
@@ -128,7 +170,7 @@ class Test_Post_Subtitle_Backfill extends WP_UnitTestCase {
 		$output = $this->run_backfill( [ 'live' => true ] );
 
 		$this->assertSame( '<b>Already clean</b>', $this->stored_subtitle( $post_id ) );
-		$this->assertStringContainsString( 'Scanned 1 post(s) with a non-empty subtitle.', $output );
+		$this->assertStringContainsString( 'Scanned 1 subtitle row(s).', $output );
 		$this->assertStringContainsString( 'Every stored subtitle already matches what the sanitizer produces.', $output );
 	}
 
@@ -223,7 +265,47 @@ class Test_Post_Subtitle_Backfill extends WP_UnitTestCase {
 		$output = $this->run_backfill( [ 'live' => true ] );
 
 		$this->assertSame( $serialized, $this->stored_subtitle( $post_id ) );
-		$this->assertStringContainsString( 'Scanned 1 post(s) with a non-empty subtitle.', $output );
+		$this->assertStringContainsString( 'Scanned 1 subtitle row(s).', $output );
 		$this->assertStringContainsString( 'Every stored subtitle already matches what the sanitizer produces.', $output );
+	}
+
+	/**
+	 * A post with two `newspack_post_subtitle` rows — a shape WordPress allows even
+	 * though this meta key is registered `single => true` — has each row sanitized by
+	 * its own meta_id, rather than one row's read value overwriting both on write.
+	 */
+	public function test_sanitizes_duplicate_subtitle_rows_independently() {
+		$post_id = self::factory()->post->create();
+		$this->seed_raw_subtitle( $post_id, '<b>Already clean</b>' );
+		$this->seed_additional_raw_subtitle( $post_id, '<script>alert(1)</script><b>Bold</b> subtitle' );
+
+		$output = $this->run_backfill( [ 'live' => true ] );
+
+		$this->assertSame(
+			[ '<b>Already clean</b>', 'alert(1)<b>Bold</b> subtitle' ],
+			$this->stored_subtitles( $post_id ),
+			'The already-clean row must survive untouched and the dirty row must be sanitized, not collapsed into one value.'
+		);
+		$this->assertStringContainsString( 'Scanned 2 subtitle row(s).', $output );
+	}
+
+	/**
+	 * A failed write is reported, and the command exits non-zero rather than letting
+	 * WP-CLI report success while an unsanitized row remains stored.
+	 */
+	public function test_exits_nonzero_when_a_write_fails() {
+		$post_id = self::factory()->post->create();
+		$this->seed_raw_subtitle( $post_id, '<script>alert(1)</script><b>Bold</b> subtitle' );
+
+		add_filter( 'update_post_metadata_by_mid', '__return_false' );
+		try {
+			$output = $this->run_backfill( [ 'live' => true ] );
+		} finally {
+			remove_filter( 'update_post_metadata_by_mid', '__return_false' );
+		}
+
+		$this->assertSame( '<script>alert(1)</script><b>Bold</b> subtitle', $this->stored_subtitle( $post_id ), 'A failed write must not be reported as changed.' );
+		$this->assertStringContainsString( 'update_metadata_by_mid() failed for: ' . $post_id, $output );
+		$this->assertSame( 1, WP_CLI::$halt_code );
 	}
 }
