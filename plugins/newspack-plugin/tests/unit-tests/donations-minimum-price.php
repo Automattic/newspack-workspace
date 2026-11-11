@@ -222,8 +222,9 @@ class Newspack_Test_Donations_Minimum_Price extends WP_UnitTestCase {
 	/**
 	 * Saving a product set directly with Name Your Price off still forgets what
 	 * Newspack last wrote, so turning Name Your Price back on with that old value
-	 * no longer keeps it following on its own. Here the global minimum changes
-	 * without a product write, as the setup wizard's save does.
+	 * no longer keeps the product following on its own. Here the global minimum
+	 * changes without a product write, as the setup wizard's save does, so the old
+	 * value doesn't match the global minimum either and the product keeps it.
 	 */
 	public function test_product_set_directly_with_name_your_price_off_forgets_the_synced_minimum() {
 		$this->save_settings( '88' );
