@@ -1,3 +1,10 @@
+## newspack [6.56.8](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.7...newspack@6.56.8) (2026-11-11)
+
+
+### Bug Fixes
+
+* **donations:** keep a product minimum set back to an earlier value ([#1564](https://github.com/Automattic/newspack-workspace/issues/1564)) ([1004950](https://github.com/Automattic/newspack-workspace/commit/1004950369da06f99f4cecdbe87ecd556cf859f7))
+
 ## newspack [6.56.7](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.6...newspack@6.56.7) (2026-11-11)
 
 

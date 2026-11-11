@@ -672,9 +672,10 @@ class Donations {
 	 * drifted from the global one for any other reason. Clearing a product's
 	 * minimum makes it follow again.
 	 *
-	 * A save that finds a product set directly forgets what Newspack last wrote
-	 * to it, so a later minimum that happens to equal that old value still counts
-	 * as set directly.
+	 * Newspack forgets what it last wrote once a product's minimum is set
+	 * directly, as the product is saved or the next time Newspack writes the
+	 * donation products, so matching that old value later no longer keeps the
+	 * product following on its own.
 	 *
 	 * @param \WC_Product $product          Donation product.
 	 * @param mixed       $previous_minimum Global minimum donation from the last settings save.
@@ -693,19 +694,32 @@ class Donations {
 	}
 
 	/**
-	 * Give a donation product the global minimum donation when its own minimum is cleared.
+	 * Restore a cleared minimum, or forget the synced-minimum record once a minimum is set directly, as one of the legacy donation products is saved.
 	 *
 	 * Clearing the field is how a product goes back to following the global
-	 * minimum. Without this, the product would accept any amount at checkout
-	 * until the next donation settings save.
+	 * minimum, so a cleared minimum gets the global one back while Name Your
+	 * Price is on; without that, the product would accept any amount at checkout
+	 * until the next time Newspack writes the donation products. A minimum that
+	 * differs from what Newspack last wrote was set directly, so the record is
+	 * forgotten whether or not Name Your Price is on, and matching that old value
+	 * later no longer keeps the product following on its own.
 	 *
 	 * @param \WC_Product $product Product about to be saved.
 	 */
 	public static function restore_cleared_minimum_price( $product ) {
-		if ( 'yes' !== $product->get_meta( '_nyp', true, 'edit' ) || '' !== (string) $product->get_meta( '_min_price', true, 'edit' ) ) {
+		$current_minimum = (string) $product->get_meta( '_min_price', true, 'edit' );
+		if ( '' !== $current_minimum ) {
+			$last_written = (string) $product->get_meta( self::SYNCED_MIN_PRICE_META, true, 'edit' );
+			// A set minimum with no record, or one matching the record, needs nothing.
+			if ( '' === $last_written || (float) $current_minimum === (float) $last_written ) {
+				return;
+			}
+			if ( in_array( $product->get_id(), self::get_legacy_donation_product_ids(), true ) ) {
+				$product->delete_meta_data( self::SYNCED_MIN_PRICE_META );
+			}
 			return;
 		}
-		if ( ! in_array( $product->get_id(), self::get_legacy_donation_product_ids(), true ) ) {
+		if ( 'yes' !== $product->get_meta( '_nyp', true, 'edit' ) || ! in_array( $product->get_id(), self::get_legacy_donation_product_ids(), true ) ) {
 			return;
 		}
 		$minimum_donation = wc_format_decimal( self::get_saved_minimum_donation() );
@@ -781,6 +795,7 @@ class Donations {
 				$child_product->update_meta_data( '_min_price', $minimum_donation );
 				$child_product->update_meta_data( self::SYNCED_MIN_PRICE_META, $minimum_donation );
 			} else {
+				// Set directly: forget what Newspack wrote, so matching it later no longer keeps the product following on its own.
 				$child_product->delete_meta_data( self::SYNCED_MIN_PRICE_META );
 			}
 			$child_product->update_meta_data( '_hide_nyp_minimum', 'yes' );
