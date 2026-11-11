@@ -19,8 +19,8 @@ const test = {
 	test_id: 'donate',
 	name: 'Donate banner',
 	variants: {
-		a: { id: 1, title: 'Donate banner: one-time ask' },
-		b: { id: 2, title: 'Donate banner: monthly ask' },
+		a: { id: 1, title: 'Donate banner: one-time ask', status: 'publish' },
+		b: { id: 2, title: 'Donate banner: monthly ask', status: 'publish' },
 	},
 };
 
@@ -86,6 +86,44 @@ describe( 'EndTestModal', () => {
 		fireEvent.click( screen.getByRole( 'button', { name: 'End Test' } ) );
 		await waitFor( () => expect( onEnded ).toHaveBeenCalledWith( ended ) );
 		expect( apiFetch ).toHaveBeenCalledWith( { path: '/newspack-popups/v1/ab-tests/donate/end', method: 'POST', data: { keep: 'a' } } );
+	} );
+
+	it( 'promises nothing is published when the test is not running', () => {
+		const draft = { ...test, variants: { a: { ...test.variants.a, status: 'publish' }, b: { ...test.variants.b, status: 'draft' } } };
+		render( <EndTestModal test={ draft } stats={ null } onEnded={ jest.fn() } onClose={ jest.fn() } /> );
+		expect(
+			screen.getByText(
+				'“Donate banner” isn’t running. Choose which version to keep. It stays as it is, and the other version moves to draft.'
+			)
+		).toBeInTheDocument();
+		expect( screen.queryByText( /stays published/ ) ).not.toBeInTheDocument();
+		expect( option( 'Keep A (Recommended)' ) ).toBeChecked();
+	} );
+
+	it( 'ends a test with one version without asking which to keep', async () => {
+		apiFetch.mockResolvedValueOnce( { test_id: 'donate', status: 'ended' } );
+		const onEnded = jest.fn();
+		const onlyB = { ...test, variants: { b: { ...test.variants.b, status: 'draft' } } };
+		render( <EndTestModal test={ onlyB } stats={ null } onEnded={ onEnded } onClose={ jest.fn() } /> );
+		expect( screen.getByText( 'Version B stays as it is and leaves “Donate banner”. The test moves to Ended.' ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'radio' ) ).not.toBeInTheDocument();
+		fireEvent.click( screen.getByRole( 'button', { name: 'End Test' } ) );
+		await waitFor( () => expect( onEnded ).toHaveBeenCalled() );
+		expect( apiFetch ).toHaveBeenCalledWith( { path: '/newspack-popups/v1/ab-tests/donate/end', method: 'POST', data: { keep: 'b' } } );
+	} );
+
+	it( 'preselects a version the test has when A was deleted', async () => {
+		apiFetch.mockResolvedValueOnce( { test_id: 'donate', status: 'ended' } );
+		const onEnded = jest.fn();
+		const bAndC = {
+			...test,
+			variants: { b: test.variants.b, c: { id: 3, title: 'Donate banner: annual ask', status: 'publish' } },
+		};
+		render( <EndTestModal test={ bAndC } stats={ null } onEnded={ onEnded } onClose={ jest.fn() } /> );
+		expect( screen.getByRole( 'radio', { checked: true } ) ).toHaveAccessibleName( expect.stringMatching( /^Keep B/ ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'End Test' } ) );
+		await waitFor( () => expect( onEnded ).toHaveBeenCalled() );
+		expect( apiFetch ).toHaveBeenCalledWith( { path: '/newspack-popups/v1/ab-tests/donate/end', method: 'POST', data: { keep: 'b' } } );
 	} );
 
 	it( 'shows the error and stays open when ending fails', async () => {

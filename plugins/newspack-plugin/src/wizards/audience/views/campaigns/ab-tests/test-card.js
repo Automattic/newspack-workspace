@@ -23,6 +23,7 @@ import EndTestModal from './end-test-modal';
 import {
 	REST_BASE,
 	canEndTest,
+	canEndTestFromMenu,
 	formatDay,
 	formatList,
 	getStatusIntent,
@@ -253,6 +254,21 @@ const TestCard = ( { test, data, onRenamed, onEnded, isTarget = false } ) => {
 							) }
 						</MenuItem>
 					) ) }
+					{ canEndTestFromMenu( test ) && (
+						<MenuItem
+							aria-label={ sprintf(
+								// Translators: %s is the test name.
+								__( 'End Test: %s', 'newspack-plugin' ),
+								name
+							) }
+							onClick={ () => {
+								onClose();
+								setModal( 'end' );
+							} }
+						>
+							{ __( 'End Test', 'newspack-plugin' ) }
+						</MenuItem>
+					) }
 					<MenuItem
 						aria-label={ sprintf(
 							// Translators: %s is the test name.

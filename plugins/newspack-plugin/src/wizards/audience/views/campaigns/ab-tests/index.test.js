@@ -201,6 +201,16 @@ describe( 'A/B Tests tab', () => {
 		expect( document.body.textContent ).not.toMatch( /control|challenger/ );
 	} );
 
+	it( 'offers End Test from the menu of a test that is not running', async () => {
+		mockRoutes( listResponse( [ test( 'drf', { a: prompt( 2 ), b: prompt( 3, { status: 'draft', status_label: 'Draft' } ) } ) ] ) );
+		render( <ABTests /> );
+		const card = await screen.findByRole( 'region', { name: 'Test drf' } );
+		fireEvent.click( within( card ).getByRole( 'button', { name: 'Test actions: Test drf' } ) );
+		fireEvent.click( screen.getByRole( 'menuitem', { name: 'End Test: Test drf' } ) );
+		const dialog = await screen.findByRole( 'dialog', { name: 'End Test' } );
+		expect( within( dialog ).getByText( /^“Test drf” isn’t running\./ ) ).toBeInTheDocument();
+	} );
+
 	it( 'offers Create Version B only while A is the test’s only prompt', async () => {
 		mockRoutes( listResponse( [ test( 'two', { a: prompt( 1 ) }, { prompt_count: 2 } ), test( 'noa', { b: prompt( 2 ) } ) ] ) );
 		render( <ABTests /> );
@@ -269,6 +279,8 @@ describe( 'A/B Tests tab', () => {
 		expect( screen.getByRole( 'menuitem', { name: 'Edit Version A' } ) ).toBeInTheDocument();
 		expect( screen.getByRole( 'menuitem', { name: 'Edit Version B' } ) ).toBeInTheDocument();
 		expect( screen.getByRole( 'menuitem', { name: 'Rename: Test run' } ) ).toBeInTheDocument();
+		// A running test's End Test is in the header, not the menu.
+		expect( screen.queryByRole( 'menuitem', { name: /End Test/ } ) ).not.toBeInTheDocument();
 		fireEvent.click( screen.getByRole( 'menuitem', { name: 'Refresh Results' } ) );
 		await waitFor( () => expect( apiFetch ).toHaveBeenCalledWith( { path: '/newspack-popups/v1/ab-tests/run/stats?refresh=1' } ) );
 	} );
@@ -412,6 +424,10 @@ describe( 'Ended tests', () => {
 		render( <ABTests /> );
 		const card = await screen.findByRole( 'region', { name: 'Test una' } );
 		expect( within( card ).queryByRole( 'button', { name: /End Test/ } ) ).not.toBeInTheDocument();
+		// It can still be ended, from the menu.
+		fireEvent.click( within( card ).getByRole( 'button', { name: 'Test actions: Test una' } ) );
+		expect( screen.getByRole( 'menuitem', { name: 'End Test: Test una' } ) ).toBeInTheDocument();
+		fireEvent.keyDown( document.activeElement, { key: 'Escape' } );
 		// Nor tells the publisher to end it.
 		expect(
 			within( card ).getByText(
