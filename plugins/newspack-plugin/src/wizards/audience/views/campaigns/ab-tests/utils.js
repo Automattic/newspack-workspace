@@ -101,22 +101,42 @@ export const getStatusIntent = status => {
 };
 
 /**
+ * A percentage in the site's language, so the decimal mark and the percent
+ * sign's place match the translated sentence around it: "2,69 %" in French,
+ * "%2,69" in Turkish. The language comes from the page, as formatCount() reads
+ * it, and the same fallback applies to locale tags Intl rejects.
+ *
+ * @param {number} percent  Value out of 100.
+ * @param {number} decimals Digits after the decimal mark, always shown.
+ * @param {Object} options  More Intl.NumberFormat options.
+ * @return {string} Formatted.
+ */
+const formatPercent = ( percent, decimals, options = {} ) => {
+	const formatOptions = { style: 'percent', minimumFractionDigits: decimals, maximumFractionDigits: decimals, ...options };
+	const value = Number( percent ) / 100;
+	const lang = ( typeof document !== 'undefined' && document.documentElement.lang ) || '';
+	const subtags = lang.replace( /_/g, '-' ).split( '-' ).filter( Boolean );
+	while ( subtags.length ) {
+		try {
+			return new Intl.NumberFormat( subtags.join( '-' ), formatOptions ).format( value );
+		} catch {
+			subtags.pop();
+		}
+	}
+	return new Intl.NumberFormat( undefined, formatOptions ).format( value );
+};
+
+/**
  * @param {?number} rate Conversions per hundred readers.
  * @return {string} Formatted.
  */
-export const formatRate = rate => ( rate === null || rate === undefined ? DASH : `${ Number( rate ).toFixed( 2 ) }%` );
+export const formatRate = rate => ( rate === null || rate === undefined ? DASH : formatPercent( rate, 2 ) );
 
 /**
  * @param {?number} lift Percent change against A.
  * @return {string} Formatted, always signed.
  */
-export const formatLift = lift => {
-	if ( lift === null || lift === undefined ) {
-		return DASH;
-	}
-	const value = Number( lift );
-	return `${ value < 0 ? '-' : '+' }${ Math.abs( value ).toFixed( 1 ) }%`;
-};
+export const formatLift = lift => ( lift === null || lift === undefined ? DASH : formatPercent( lift, 1, { signDisplay: 'always' } ) );
 
 /**
  * Confidence split into the percentage and its label.
@@ -128,7 +148,7 @@ export const formatLift = lift => {
 export const confidenceParts = ( comparison, labels = {} ) => {
 	const confidence = comparison?.confidence;
 	return {
-		percent: confidence === null || confidence === undefined ? null : `${ Number( confidence ).toFixed( 1 ) }%`,
+		percent: confidence === null || confidence === undefined ? null : formatPercent( confidence, 1 ),
 		label: ( comparison && labels?.[ comparison.label ] ) || '',
 	};
 };

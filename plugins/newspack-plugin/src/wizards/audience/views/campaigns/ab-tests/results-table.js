@@ -12,6 +12,7 @@ import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 /**
  * Internal dependencies
  */
+import { formatCount } from '../../../../../../packages/components/src/breadcrumbs/format-count';
 import { DASH, confidenceParts, formatConfidence, formatLift, formatRate, getCountLabel } from './utils';
 
 // The stylesheet sets column widths by position, which holds because columns
@@ -88,7 +89,7 @@ const ResultsTable = ( { test, status, stats, labels, kept = null } ) => {
 				filterBy: false,
 				type: 'integer',
 				getValue: ( { item } ) => item.row?.readers ?? -1,
-				render: ( { item } ) => ( item.row ? Number( item.row.readers ).toLocaleString() : DASH ),
+				render: ( { item } ) => ( item.row ? formatCount( item.row.readers ) : DASH ),
 			},
 			{
 				id: 'rate',
@@ -105,8 +106,8 @@ const ResultsTable = ( { test, status, stats, labels, kept = null } ) => {
 								{ sprintf(
 									// Translators: %1$s is a number of conversions, %2$s a number of readers, such as "87 of 2,071".
 									__( '%1$s of %2$s', 'newspack-plugin' ),
-									Number( item.row.conversions ).toLocaleString(),
-									Number( item.row.readers ).toLocaleString()
+									formatCount( item.row.conversions ),
+									formatCount( item.row.readers )
 								) }
 							</span>
 						</span>

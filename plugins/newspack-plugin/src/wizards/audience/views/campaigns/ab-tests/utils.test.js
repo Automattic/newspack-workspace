@@ -2,6 +2,7 @@ import {
 	canEndTest,
 	formatConfidence,
 	formatLift,
+	formatRate,
 	getRecommendation,
 	getVerdict,
 	getStatusIntent,
@@ -52,6 +53,37 @@ describe( 'formatConfidence', () => {
 		expect( formatConfidence( { confidence: 99.12, label: 'reliable' }, labels ) ).toBe( '99.1% Reliable' );
 		expect( formatConfidence( { confidence: null, label: 'collecting' }, labels ) ).toBe( 'Too early' );
 		expect( formatConfidence( null, labels ) ).toBe( '—' );
+	} );
+} );
+
+describe( 'percentages in the site’s language', () => {
+	const setLang = lang => {
+		document.documentElement.lang = lang;
+	};
+	afterEach( () => setLang( '' ) );
+
+	it( 'uses the site’s decimal mark and percent sign placement', () => {
+		setLang( 'fr-FR' );
+		expect( formatRate( 2.6912 ) ).toMatch( /^2,69\s%$/ );
+		expect( formatConfidence( { confidence: 99.12, label: 'reliable' }, { reliable: 'Fiable' } ) ).toMatch( /^99,1\s% Fiable$/ );
+		setLang( 'tr-TR' );
+		expect( formatRate( 2.6912 ) ).toBe( '%2,69' );
+	} );
+
+	it( 'keeps the sign on a lift in any language', () => {
+		setLang( 'de-DE' );
+		expect( formatLift( 41.6 ) ).toMatch( /^\+41,6\s%$/ );
+		expect( formatLift( -3.25 ) ).toMatch( /^-3,3\s%$/ );
+	} );
+
+	it( 'falls back to a shorter tag when Intl rejects the site’s locale', () => {
+		setLang( 'pt-PT-ao90' );
+		expect( formatRate( 2.6912 ) ).toBe( '2,69%' );
+	} );
+
+	it( 'shows the decimals even for a whole number', () => {
+		setLang( 'en-US' );
+		expect( formatRate( 3 ) ).toBe( '3.00%' );
 	} );
 } );
 
