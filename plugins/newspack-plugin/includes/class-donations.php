@@ -20,6 +20,7 @@ class Donations {
 	const DONATION_PAGE_ID_OPTION          = 'newspack_donation_page_id';
 	const DONATION_SETTINGS_OPTION         = 'newspack_donations_settings';
 	const DONATION_BILLING_FIELDS_OPTION   = 'newspack_donations_billing_fields';
+	private const SYNCED_MIN_PRICE_META    = '_newspack_synced_min_price';
 	const DONATION_ORDER_META_KEYS         = [
 		'referer_tags'       => [
 			'label' => 'Post Tags',
@@ -76,6 +77,7 @@ class Donations {
 		add_filter( 'option_woocommerce_subscriptions_order_button_text', [ __CLASS__, 'order_button_text' ], 9 );
 
 		add_filter( 'render_block', [ __CLASS__, 'prevent_rendering_donate_block' ], 10, 2 );
+		add_action( 'woocommerce_before_product_object_save', [ __CLASS__, 'restore_cleared_minimum_price' ] );
 	}
 
 	/**
@@ -588,6 +590,20 @@ class Donations {
 		// Filter incoming object with array_intersect_key, so that is contains only valid keys.
 		$configuration = wp_parse_args( array_intersect_key( $args, $defaults ), $defaults );
 
+		// A cleared minimum would remove the floor from every donation product and
+		// Donate block that follows it, so clearing the field keeps the minimum
+		// saved before. A site whose saved minimum is blank too gets the default.
+		// A numeric 0 is saved as is and means no minimum.
+		if ( ! is_numeric( $configuration['minimumDonation'] ) ) {
+			$saved_minimum = self::get_saved_minimum_donation();
+			if ( is_numeric( $saved_minimum ) ) {
+				$configuration['minimumDonation'] = $saved_minimum;
+			} else {
+				$configuration['minimumDonation'] = $defaults['minimumDonation'];
+				Logger::log( 'Minimum donation was blank; saving the default minimum donation instead.' );
+			}
+		}
+
 		if ( self::is_platform_wc() ) {
 			$ready = self::is_woocommerce_suite_active();
 			if ( is_wp_error( $ready ) ) {
@@ -633,6 +649,71 @@ class Donations {
 	}
 
 	/**
+	 * The global minimum donation as of the last settings save.
+	 *
+	 * @return mixed
+	 */
+	private static function get_saved_minimum_donation() {
+		$saved_settings = get_option( self::DONATION_SETTINGS_OPTION, [] );
+		return $saved_settings['minimumDonation'] ?? self::get_donation_default_settings()['minimumDonation'];
+	}
+
+	/**
+	 * Whether a donation product's minimum price follows the global minimum donation.
+	 *
+	 * The product's minimum price is what checkout enforces, so a minimum someone
+	 * set on the product directly must survive settings saves. A product follows
+	 * the global minimum while its own is empty, equals the value Newspack last
+	 * wrote to it, or equals the global minimum from the last settings save.
+	 *
+	 * So a product set directly follows again once its minimum and the global one
+	 * are equal, whichever of them changed to match. A product saved before
+	 * Newspack recorded what it wrote is treated as set directly if its minimum
+	 * drifted from the global one for any other reason. Clearing a product's
+	 * minimum makes it follow again.
+	 *
+	 * A save that finds a product set directly forgets what Newspack last wrote
+	 * to it, so a later minimum that happens to equal that old value still counts
+	 * as set directly.
+	 *
+	 * @param \WC_Product $product          Donation product.
+	 * @param mixed       $previous_minimum Global minimum donation from the last settings save.
+	 * @return bool
+	 */
+	private static function product_follows_minimum_donation( $product, $previous_minimum ) {
+		$current_minimum = $product->get_meta( '_min_price', true, 'edit' );
+		if ( '' === $current_minimum || null === $current_minimum ) {
+			return true;
+		}
+		if ( (float) $current_minimum === (float) $previous_minimum ) {
+			return true;
+		}
+		$last_written = $product->get_meta( self::SYNCED_MIN_PRICE_META, true, 'edit' );
+		return '' !== $last_written && null !== $last_written && (float) $current_minimum === (float) $last_written;
+	}
+
+	/**
+	 * Give a donation product the global minimum donation when its own minimum is cleared.
+	 *
+	 * Clearing the field is how a product goes back to following the global
+	 * minimum. Without this, the product would accept any amount at checkout
+	 * until the next donation settings save.
+	 *
+	 * @param \WC_Product $product Product about to be saved.
+	 */
+	public static function restore_cleared_minimum_price( $product ) {
+		if ( 'yes' !== $product->get_meta( '_nyp', true, 'edit' ) || '' !== (string) $product->get_meta( '_min_price', true, 'edit' ) ) {
+			return;
+		}
+		if ( ! in_array( $product->get_id(), self::get_legacy_donation_product_ids(), true ) ) {
+			return;
+		}
+		$minimum_donation = wc_format_decimal( self::get_saved_minimum_donation() );
+		$product->update_meta_data( '_min_price', $minimum_donation );
+		$product->update_meta_data( self::SYNCED_MIN_PRICE_META, $minimum_donation );
+	}
+
+	/**
 	 * Create missing donations products.
 	 *
 	 * @param array $args Info that will be used to create the products.
@@ -642,6 +723,11 @@ class Donations {
 		$configuration = wp_parse_args( $args, $defaults );
 
 		$price_tier_index = $configuration['tiered'] ? 1 : 3;
+
+		$minimum_donation = wc_format_decimal( $configuration['minimumDonation'] );
+		// set_donation_settings() calls this before updating the option, so this is
+		// the minimum from the last settings save, not the one being saved.
+		$previous_minimum = self::get_saved_minimum_donation();
 
 		// Parent product.
 		$parent_product = self::get_parent_donation_product();
@@ -691,7 +777,12 @@ class Donations {
 			$child_product->set_price( $price );
 			$child_product->set_regular_price( $price );
 			$child_product->update_meta_data( '_suggested_price', $price );
-			$child_product->update_meta_data( '_min_price', wc_format_decimal( $configuration['minimumDonation'] ) );
+			if ( self::product_follows_minimum_donation( $child_product, $previous_minimum ) ) {
+				$child_product->update_meta_data( '_min_price', $minimum_donation );
+				$child_product->update_meta_data( self::SYNCED_MIN_PRICE_META, $minimum_donation );
+			} else {
+				$child_product->delete_meta_data( self::SYNCED_MIN_PRICE_META );
+			}
 			$child_product->update_meta_data( '_hide_nyp_minimum', 'yes' );
 			$child_product->update_meta_data( '_nyp', 'yes' );
 			$child_product->set_virtual( true );
