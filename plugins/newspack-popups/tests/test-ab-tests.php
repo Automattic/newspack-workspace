@@ -272,6 +272,56 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * Version B ends when version A does, or A's expiry would leave B running alone.
+	 */
+	public function test_version_b_gets_the_end_date_of_version_a() {
+		$a = $this->createPopup();
+		update_post_meta( $a, 'expiration_date', '2099-12-31T00:00:00' );
+
+		$started = Newspack_Popups_AB_Tests::start_test( $a, 'Spring drive', 'donation', 50 );
+
+		$this->assertIsArray( $started );
+		$this->assertSame( '2099-12-31T00:00:00', get_post_meta( $started['version_b']['id'], 'expiration_date', true ) );
+	}
+
+	/**
+	 * The B made for an Incomplete test gets A's end date too.
+	 */
+	public function test_a_resumed_test_gives_version_b_the_end_date_of_version_a() {
+		$a     = $this->create_test_variant( 'ending', 'a' );
+		$old_b = $this->create_test_variant( 'ending', 'b' );
+		wp_trash_post( $old_b );
+		update_post_meta( $a, 'expiration_date', '2099-12-31T00:00:00' );
+
+		$resumed = Newspack_Popups_AB_Tests::start_test( $a, Newspack_Popups_AB_Tests::get_test_name( 'ending' ), 'donation', 50 );
+
+		$this->assertIsArray( $resumed );
+		$this->assertSame( '2099-12-31T00:00:00', get_post_meta( $resumed['version_b']['id'], 'expiration_date', true ) );
+	}
+
+	/**
+	 * A version A with no end date gives B none.
+	 */
+	public function test_version_b_has_no_end_date_when_version_a_has_none() {
+		$started = Newspack_Popups_AB_Tests::start_test( $this->createPopup(), 'Open ended', 'donation', 50 );
+
+		$this->assertIsArray( $started );
+		$this->assertFalse( metadata_exists( 'post', $started['version_b']['id'], 'expiration_date' ) );
+	}
+
+	/**
+	 * Duplicate still leaves the end date behind; only a test's B copies it.
+	 */
+	public function test_duplicate_leaves_the_end_date_behind() {
+		$original = $this->createPopup();
+		update_post_meta( $original, 'expiration_date', '2099-12-31T00:00:00' );
+
+		$copy = Newspack_Popups::duplicate_popup( $original );
+
+		$this->assertFalse( metadata_exists( 'post', $copy, 'expiration_date' ) );
+	}
+
+	/**
 	 * Nothing is recorded until a control and a challenger are both live.
 	 */
 	public function test_no_start_is_recorded_for_a_control_alone() {
