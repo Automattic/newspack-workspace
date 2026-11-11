@@ -204,9 +204,9 @@ class Newspack_Test_Donations_Minimum_Price extends WP_UnitTestCase {
 
 	/**
 	 * Saving a product set directly forgets what Newspack last wrote to it, so
-	 * setting it back to that value before the next settings save still counts
-	 * as set directly. Here the global minimum changes without a product write,
-	 * as the setup wizard's save does.
+	 * matching that value again no longer keeps the product following on its
+	 * own. Here the global minimum changes without a product write, as the setup
+	 * wizard's save does, so the product keeps the minimum it was set back to.
 	 */
 	public function test_product_set_away_and_back_between_settings_saves_keeps_it() {
 		$this->save_settings( '88' );
@@ -214,6 +214,28 @@ class Newspack_Test_Donations_Minimum_Price extends WP_UnitTestCase {
 		update_option( Donations::DONATION_SETTINGS_OPTION, [ 'minimumDonation' => '90' ] );
 
 		$this->save_product_minimum( self::CHILD_YEAR, '88' );
+		$this->save_settings( '95' );
+
+		$this->assertSame( '88', $this->product_minimum( self::CHILD_YEAR ) );
+	}
+
+	/**
+	 * A product saved with Name Your Price turned off still forgets what
+	 * Newspack last wrote once its minimum is set directly, so turning Name Your
+	 * Price back on with that old value doesn't make it follow.
+	 */
+	public function test_product_set_directly_with_name_your_price_off_forgets_the_synced_minimum() {
+		$this->save_settings( '88' );
+		$product = wc_get_product( self::CHILD_YEAR );
+		$product->update_meta_data( '_nyp', 'no' );
+		$product->update_meta_data( '_min_price', '1200' );
+		$product->save();
+		update_option( Donations::DONATION_SETTINGS_OPTION, [ 'minimumDonation' => '90' ] );
+
+		$product = wc_get_product( self::CHILD_YEAR );
+		$product->update_meta_data( '_nyp', 'yes' );
+		$product->update_meta_data( '_min_price', '88' );
+		$product->save();
 		$this->save_settings( '95' );
 
 		$this->assertSame( '88', $this->product_minimum( self::CHILD_YEAR ) );
@@ -259,9 +281,7 @@ class Newspack_Test_Donations_Minimum_Price extends WP_UnitTestCase {
 		$this->set_product_minimum( self::CHILD_YEAR, '1200' );
 		$this->save_settings( '90' );
 
-		$product = wc_get_product( self::CHILD_YEAR );
-		$product->update_meta_data( '_min_price', '' );
-		$product->save();
+		$this->save_product_minimum( self::CHILD_YEAR, '' );
 
 		$this->assertSame( '90', $this->product_minimum( self::CHILD_YEAR ) );
 	}

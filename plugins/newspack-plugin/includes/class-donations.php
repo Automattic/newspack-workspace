@@ -77,7 +77,7 @@ class Donations {
 		add_filter( 'option_woocommerce_subscriptions_order_button_text', [ __CLASS__, 'order_button_text' ], 9 );
 
 		add_filter( 'render_block', [ __CLASS__, 'prevent_rendering_donate_block' ], 10, 2 );
-		add_action( 'woocommerce_before_product_object_save', [ __CLASS__, 'sync_minimum_price_on_save' ] );
+		add_action( 'woocommerce_before_product_object_save', [ __CLASS__, 'restore_cleared_minimum_price' ] );
 	}
 
 	/**
@@ -673,9 +673,9 @@ class Donations {
 	 * minimum makes it follow again.
 	 *
 	 * Newspack forgets what it last wrote once a product's minimum is set
-	 * directly, as the product saves or the next time Newspack writes the donation
-	 * products, so a later minimum that happens to equal that old value still
-	 * counts as set directly.
+	 * directly, as the product is saved or the next time Newspack writes the
+	 * donation products, so matching that old value later no longer keeps the
+	 * product following on its own.
 	 *
 	 * @param \WC_Product $product          Donation product.
 	 * @param mixed       $previous_minimum Global minimum donation from the last settings save.
@@ -697,30 +697,29 @@ class Donations {
 	 * Restore a cleared minimum, or forget the synced-minimum record once a minimum is set directly, as one of the legacy donation products is saved.
 	 *
 	 * Clearing the field is how a product goes back to following the global
-	 * minimum, so a cleared minimum gets the global one back; without that, the
-	 * product would accept any amount at checkout until the next time Newspack
-	 * writes the donation products. A minimum that differs from what
-	 * Newspack last wrote was set directly, so the record is forgotten, and
-	 * setting the product back to that old value later still counts as set
-	 * directly.
+	 * minimum, so a cleared minimum gets the global one back while Name Your
+	 * Price is on; without that, the product would accept any amount at checkout
+	 * until the next time Newspack writes the donation products. A minimum that
+	 * differs from what Newspack last wrote was set directly, so the record is
+	 * forgotten whether or not Name Your Price is on, and matching that old value
+	 * later no longer keeps the product following on its own.
 	 *
 	 * @param \WC_Product $product Product about to be saved.
 	 */
-	public static function sync_minimum_price_on_save( $product ) {
-		if ( 'yes' !== $product->get_meta( '_nyp', true, 'edit' ) ) {
-			return;
-		}
+	public static function restore_cleared_minimum_price( $product ) {
 		$current_minimum = (string) $product->get_meta( '_min_price', true, 'edit' );
-		$last_written    = (string) $product->get_meta( self::SYNCED_MIN_PRICE_META, true, 'edit' );
-		// A set minimum with no record, or one matching the record, needs nothing.
-		if ( '' !== $current_minimum && ( '' === $last_written || (float) $current_minimum === (float) $last_written ) ) {
-			return;
-		}
-		if ( ! in_array( $product->get_id(), self::get_legacy_donation_product_ids(), true ) ) {
-			return;
-		}
 		if ( '' !== $current_minimum ) {
-			$product->delete_meta_data( self::SYNCED_MIN_PRICE_META );
+			$last_written = (string) $product->get_meta( self::SYNCED_MIN_PRICE_META, true, 'edit' );
+			// A set minimum with no record, or one matching the record, needs nothing.
+			if ( '' === $last_written || (float) $current_minimum === (float) $last_written ) {
+				return;
+			}
+			if ( in_array( $product->get_id(), self::get_legacy_donation_product_ids(), true ) ) {
+				$product->delete_meta_data( self::SYNCED_MIN_PRICE_META );
+			}
+			return;
+		}
+		if ( 'yes' !== $product->get_meta( '_nyp', true, 'edit' ) || ! in_array( $product->get_id(), self::get_legacy_donation_product_ids(), true ) ) {
 			return;
 		}
 		$minimum_donation = wc_format_decimal( self::get_saved_minimum_donation() );
@@ -796,7 +795,7 @@ class Donations {
 				$child_product->update_meta_data( '_min_price', $minimum_donation );
 				$child_product->update_meta_data( self::SYNCED_MIN_PRICE_META, $minimum_donation );
 			} else {
-				// Set directly: forget what Newspack wrote, so matching it later isn't read as following.
+				// Set directly: forget what Newspack wrote, so matching it later no longer counts as following on its own.
 				$child_product->delete_meta_data( self::SYNCED_MIN_PRICE_META );
 			}
 			$child_product->update_meta_data( '_hide_nyp_minimum', 'yes' );
